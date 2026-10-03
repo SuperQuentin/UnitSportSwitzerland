@@ -64,7 +64,7 @@ public static class FreighterMeshBuilder
         CrewDoor => new[] { ("Door0", Vector3.Back, 2.19f) },
         ParaDoorL => new[] { ("Door1", Vector3.Up, -2.6f) },
         ParaDoorR => new[] { ("Door2", Vector3.Up, 2.6f) },
-        RampDoor => new[] { ("Door3", Vector3.Right, RampTravel), ("Door3b", Vector3.Right, UpperDoorOpen) },
+        RampDoor => new[] { ("Door3", Vector3.Right, RampTravel), ("Door3/Toes", Vector3.Right, -Mathf.Pi), ("Door3b", Vector3.Right, UpperDoorOpen) },
         _ => System.Array.Empty<(string, Vector3, float)>(),
     };
 
@@ -734,9 +734,22 @@ public static class FreighterMeshBuilder
             var at = new Vector3(0, FloorY + s * Mathf.Sin(RampClosedAngle) + 0.01f, RampHingeZ - s * Mathf.Cos(RampClosedAngle));
             part.Box(at, new Vector3(2.6f, 0.025f, 0.06f), Track, tilt);
         }
-        var toe = new Vector3(0, RampTop(RampClosedEndZ) - 0.06f, RampClosedEndZ - 0.12f);
-        part.Box(toe, new Vector3(2.4f, 0.04f, 0.3f), Metal, tilt);
-        return part.ToNode("Door3", bm, gm);
+        var node = part.ToNode("Door3", bm, gm);
+        // the toes: two plates hinged at the lip, folded back on the ramp's top face while it is shut
+        var lip = new Vector3(0, RampTop(RampClosedEndZ), RampClosedEndZ);
+        var toes = new AircraftPart(lip, Basis.Identity);
+        var back = new Vector3(0, Mathf.Sin(RampClosedAngle), Mathf.Cos(RampClosedAngle));   // up the ramp, authored
+        foreach (float x in new[] { -0.75f, 0.75f })
+        {
+            var mid = lip + back * (ToeLength * 0.5f) + new Vector3(x, 0.04f, 0);
+            toes.Box(mid, new Vector3(1.2f, 0.05f, ToeLength), Metal, tilt);
+            for (int i = 1; i < 5; i++)
+                toes.Box(lip + back * (ToeLength * i / 5f) + new Vector3(x, 0.075f, 0), new Vector3(1.1f, 0.02f, 0.05f), Track, tilt);
+        }
+        var toeNode = toes.ToNode("Toes", bm, gm);
+        toeNode.Position -= node.Position;
+        node.AddChild(toeNode);
+        return node;
     }
 
     private static Node3D UpperDoorLeaf(Material bm, Material gm)

@@ -121,12 +121,19 @@ public static class FreighterLayout
     /// <summary>The ramp's top face from the hinge to its end, shut: length and angle up aft.</summary>
     public static float RampLength => new Vector2(RampHingeZ - RampClosedEndZ, RampTop(RampClosedEndZ) - FloorY).Length();
     public static float RampClosedAngle => Mathf.Atan2(RampTop(RampClosedEndZ) - FloorY, RampHingeZ - RampClosedEndZ);
-    /// <summary>Open, the angle down aft that puts its lip on the ground.</summary>
-    public static float RampOpenAngle => -Mathf.Asin(FloorY / RampLength);
+    /// <summary>
+    /// The ramp's toes: plates hinged at its lip, folded back on it while shut, unfolded along it when
+    /// it opens. With them the slope is 11°, not 17°: a car's hull box does not pitch with a deck (it
+    /// stays level at 0.45 m), and at 17° its nose met the hold's floor at the hinge (#420).
+    /// </summary>
+    public const float ToeLength = 2.0f;
+
+    /// <summary>Open, the angle down aft that puts its toes' ends on the ground.</summary>
+    public static float RampOpenAngle => -Mathf.Asin(FloorY / (RampLength + ToeLength));
     /// <summary>How far the ramp turns about its hinge from shut to open, radians (its lip going down).</summary>
     public static float RampTravel => RampClosedAngle - RampOpenAngle;
-    /// <summary>The open ramp's lip on the ground, authored z.</summary>
-    public static float RampToeZ => RampHingeZ - RampLength * Mathf.Cos(RampOpenAngle);
+    /// <summary>The open ramp's toes' ends on the ground, authored z.</summary>
+    public static float RampToeZ => RampHingeZ - (RampLength + ToeLength) * Mathf.Cos(RampOpenAngle);
     /// <summary>The hold's rear wall, over the ramp's end: nothing to walk into in the tail cone.</summary>
     public const float RearWallZ = RampClosedEndZ - 0.05f;
 

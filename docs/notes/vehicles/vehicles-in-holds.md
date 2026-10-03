@@ -47,6 +47,7 @@
   in; reversed out; `shots` windowed: `test_output/progress/418-*.png`, the real map with `--chunks`,
   `--at 2591340,1118700` = Sion airfield). `tools/holdnetcheck.sh` (net: B ties its car in A's hold, A
   taxis, flies at 110 m/s banked, lands; B parks it there, A taxis; B back in and out; both peers 0.1 cm).
+- **The military freighter** (#420) is the first game carrier: its hold between the troop benches, the ramp with toes at 11° (`--freightercheck car`; see the player note `airliners`). A car's hull box does not pitch on a deck ramp: keep carrier ramps under ~12°.
 - **Limits**: a vehicle driving out of a *moving* carrier keeps only its own speed (no carrier
   velocity added); trucks with trailers and articulated buses are carried by the cab's section only;
   carried rides are ground vehicles (no planes, boats in holds); the hold platform of the test carrier

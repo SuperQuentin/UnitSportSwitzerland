@@ -105,6 +105,11 @@
   the controls, the ramp opened in flight, walked into the hold at 73 m/s, the controls again;
   `shots` windowed: `test_output/freighter/`); `tools/freighternetcheck.sh` (net: B sees A's ramp go down,
   walks up the parked one's ramp, shuts it by its button, A sees it shut).
+  **Vehicles in the hold** (#418's carrying, merged): the hold is a `CargoBay` between the benches; a
+  car drives up the open ramp, is carried, ties down with the handbrake and reverses out
+  (`--freightercheck car`, quick). The ramp has **toes** (`Door3/Toes`, 2 m, unfolded with it) so the
+  slope is 11°: a car's hull box does not pitch on a deck (level from 0.45 m up), and at the leaf's own
+  17° its nose met the hold's floor at the hinge and it stopped halfway.
 - **HUD**: the configuration (flaps, gear, brakes, warnings) is on a second line: on one line it ran
   under the corner's key hints (seen on the freighter, the A320's too).
 - **Not done**: no AI; the freighter sounds like a turbofan (no turboprop profile yet); the BR plane's

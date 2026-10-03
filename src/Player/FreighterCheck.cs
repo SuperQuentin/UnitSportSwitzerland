@@ -26,7 +26,9 @@ namespace UnitSport.Player;
 public partial class FreighterCheck : Node
 {
     public static bool Requested => CmdArgs.Has("--freightercheck");
-    private static bool Shots => CmdArgs.Value("--freightercheck") == "shots";
+    private static bool Shots => CmdArgs.Value("--freightercheck") is "shots" or "carshots";
+    /// <summary><c>car</c>: a car driven up the ramp into the hold instead (#418's carrying, the freighter's CargoBay).</summary>
+    private static bool CarMode => CmdArgs.Value("--freightercheck") is "car" or "carshots";
 
     private readonly System.Func<FootPlayer?> _player;
     private int _failures, _shot;
@@ -122,6 +124,7 @@ public partial class FreighterCheck : Node
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
         }
         if (_player() is not { } me || !me.IsOnFloor()) { Finish("no player"); return; }
+        if (CarMode) { await CarStage(me); Finish(null); return; }
         Expect(me.SetRide(RideKind.Freighter), "at the controls of the military freighter");
         await Seconds(2);
         if (me.Vehicle is not Airliner jet) { Finish("not an airliner"); return; }
@@ -219,6 +222,61 @@ public partial class FreighterCheck : Node
         Expect(await ToCockpit(me) && me.TryInteract() && await Until(() => me.Vehicle is Airliner && me.SeatIndex == 0, 6), $"back at the controls in flight ({me.Ride})");
         await Shot("controls_in_flight");
         Finish(null);
+    }
+
+    /// <summary>
+    /// A parked freighter, its ramp down: a car drives up the ramp into the hold, is carried (its
+    /// <c>DeckOn</c> the freighter), tied down with the handbrake, then reverses down the ramp and out.
+    /// </summary>
+    private async Task CarStage(FootPlayer me)
+    {
+        if (VehicleManager.Instance is not { } vehicles || me.Origin is not { } origin) { Expect(false, "no vehicles"); return; }
+        float yaw = me.Rotation.Y;
+        var spot = me.GlobalPosition + new Basis(Vector3.Up, yaw) * Vector3.Forward * 45f;
+        var jet = new Airliner(RideKind.Freighter, AirlinerCatalog.Freighter) { DoorsOpen = 1 << RampDoor };
+        vehicles.Park(new VehicleState(RideKind.Freighter, origin.ToGlobal(spot), yaw, Vector3.Zero, 400f, false, false, 0f, VehicleState.Now,
+            Flags: jet.PackFlags()));
+        if (!await Until(() => Parked() is { Asleep: true, Posed: true }, 20)) { Expect(false, "the freighter never came to rest"); return; }
+        var carrier = Parked()!;
+        string key = FootPlayer.KeyOf(carrier);
+        Expect(carrier.BusDoors == 1 << RampDoor, $"a parked freighter, its ramp down (doors {carrier.BusDoors})");
+        var car = Rideable.Create((RideKind)CarCatalog.First)!;
+        Expect(me.SetRide(car.Kind), $"in a {car.Label}");
+        await Seconds(1);
+        me.PlaceAt(Spot(0f, 0.3f, RampToeZ - 7f), carrier.Rotation.Y);
+        await Seconds(1.5);
+        await Shot("car_behind_the_ramp");
+        float throttle = 0.9f, brake = 0f;
+        bool handbrake = false;
+        me.RideControls = () => new RideInput(throttle, brake, 0f, false, handbrake);
+        bool inside = await Until(() =>
+        {
+            if (me.GroundSpeed > 3f) throttle = 0f; else if (me.GroundSpeed < 1.5f) throttle = 0.9f;
+            return me.DeckOn == key && Local(me).Z > RampHingeZ + 3f;
+        }, 40);
+        throttle = 0f;
+        brake = 1f;
+        await Until(() => me.GroundSpeed < 0.2f, 10);
+        var l = Local(me);
+        Expect(inside && Mathf.Abs(l.Y - FloorY) < 0.3f, $"drove up the ramp into the hold: carried by '{me.DeckOn}' at {Where(me)}");
+        brake = 0f;
+        handbrake = true;
+        Expect(await Until(() => me.TiedDown, 5), "the handbrake tied it down in the hold");
+        handbrake = false;
+        await Shot("car_in_the_hold");
+        // reverse out: the brake pedal at a standstill is reverse
+        brake = 0.4f;
+        bool outside = await Until(() =>
+        {
+            brake = me.GroundSpeed > 3f ? 0f : 0.4f;
+            return me.DeckOn == "" && Local(me).Z < RampToeZ - 4f;
+        }, 40);
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false, true);
+        await Seconds(2);
+        l = Local(me);
+        Expect(outside && Mathf.Abs(l.Y) < 0.3f, $"reversed down the ramp onto the ground at {Where(me)}, not carried ('{me.DeckOn}')");
+        await Shot("car_out_of_the_hold");
+        me.RideControls = null;
     }
 
     private void Finish(string? why)
