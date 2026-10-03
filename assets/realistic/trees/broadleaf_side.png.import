@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://wnfy2lkjmpci"
 path.s3tc="res://.godot/imported/broadleaf_side.png-5c9f87c7c7a13c7d7c23ed35ab4e39e5.s3tc.ctex"
+path.etc2="res://.godot/imported/broadleaf_side.png-5c9f87c7c7a13c7d7c23ed35ab4e39e5.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/realistic/trees/broadleaf_side.png"
-dest_files=["res://.godot/imported/broadleaf_side.png-5c9f87c7c7a13c7d7c23ed35ab4e39e5.s3tc.ctex"]
+dest_files=["res://.godot/imported/broadleaf_side.png-5c9f87c7c7a13c7d7c23ed35ab4e39e5.s3tc.ctex", "res://.godot/imported/broadleaf_side.png-5c9f87c7c7a13c7d7c23ed35ab4e39e5.etc2.ctex"]
 
 [params]
 

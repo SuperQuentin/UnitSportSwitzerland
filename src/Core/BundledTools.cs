@@ -6,11 +6,30 @@ namespace UnitSport.Core;
 /// </summary>
 public static class BundledTools
 {
-    public static string Resolve(string tool)
+    /// <summary>
+    /// <c>bin/</c> beside the game executable. Not <see cref="AppContext.BaseDirectory"/>: an export
+    /// keeps its assemblies in <c>data_*_x86_64/</c>, so that would miss the shipped tools.
+    /// </summary>
+    private static readonly string BinDir = Path.Combine(
+        Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory, "bin");
+
+    /// <summary>The macOS release ships Apple Silicon tools only: an Intel Mac uses PATH (Homebrew).</summary>
+    private static readonly bool Usable = !OperatingSystem.IsMacOS()
+        || System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64;
+
+    public static string Resolve(string tool) => Bundled(tool) ?? tool;
+
+    /// <summary>The shipped copy, made executable (an archive may have dropped the bit), or null.</summary>
+    private static string? Bundled(string tool)
     {
-        string file = OperatingSystem.IsWindows() ? tool + ".exe" : tool;
-        string bundled = Path.Combine(AppContext.BaseDirectory, "bin", file);
-        return File.Exists(bundled) ? bundled : tool;
+        string path = Path.Combine(BinDir, OperatingSystem.IsWindows() ? tool + ".exe" : tool);
+        if (!Usable || !File.Exists(path)) return null;
+        if (!OperatingSystem.IsWindows())
+        {
+            try { File.SetUnixFileMode(path, File.GetUnixFileMode(path) | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute); }
+            catch (Exception) { }   // read-only install: the archive's own bit has to do
+        }
+        return path;
     }
 
     /// <summary>
@@ -20,7 +39,7 @@ public static class BundledTools
     /// </summary>
     public static string[] YtDlpJsArgs()
     {
-        string qjs = Path.Combine(AppContext.BaseDirectory, "bin", OperatingSystem.IsWindows() ? "qjs.exe" : "qjs");
-        return File.Exists(qjs) ? new[] { "--js-runtimes", "quickjs:" + Path.GetFullPath(qjs) } : Array.Empty<string>();
+        string? qjs = Bundled("qjs");
+        return qjs != null ? new[] { "--js-runtimes", "quickjs:" + Path.GetFullPath(qjs) } : Array.Empty<string>();
     }
 }

@@ -163,6 +163,8 @@ public partial class VehicleBody : CharacterBody3D
             _flight.Control = s.Throttle;
             // a vehicle left running keeps turning; one left in the air is already up to speed
             _flight.Spool = s.EngineOn ? 1f : 0f;
+            // an airliner left running idles; its levers are in its own state (#414)
+            if (Ride is Airliner idling) _flight.Spool = idling.State.Spool = s.EngineOn ? idling.Spec.IdleSpool : 0f;
         }
 
         var replication = new SceneReplicationConfig();
@@ -199,10 +201,10 @@ public partial class VehicleBody : CharacterBody3D
             _visual.Name = "Visual";
             AddChild(_visual);
             Hurtbox.Fit(_visual);
-            if (Ride is Helicopter or Plane or IEngined)
+            if (Ride is Helicopter or Plane or Airliner or IEngined)
             {
                 var profile = Ride is IEngined parked ? parked.Sound
-                    : Ride is Helicopter ? EngineProfile.Turboshaft : EngineProfile.PistonAero;
+                    : Ride is Helicopter ? EngineProfile.Turboshaft : Ride is Airliner ? EngineProfile.Turbofan : EngineProfile.PistonAero;
                 _engineSound = new EngineSynth(profile, spatial: true, seed: (int)Math.Max(1, Owner));
                 AddChild(_engineSound);
             }
@@ -578,7 +580,7 @@ public partial class VehicleBody : CharacterBody3D
             _engineSound.Set(0f, 0f, 0.2f, EngineOn && !Wrecked && !_asleep && Ride is not Steamer ? 0.1f : 0f);
         else if (_engineSound != null)
         {
-            _engineSound.Set(spool, spool, 0.5f, spool * 0.7f);
+            _engineSound.Set(spool, spool, Ride is Airliner ? Mathf.Clamp((spool - 0.3f) / 0.7f, 0f, 1f) : 0.5f, spool * 0.7f);
         }
 
         // the fire burns out after half a minute; the smoke lingers until the wreck is cleared

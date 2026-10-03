@@ -27,7 +27,11 @@ public enum RideKind
     Speedboat = 122,
     /// <summary>The CGN Belle Époque paddle steamer (#303), walkable.</summary>
     Steamer = 123,
-    // The next other mount is 124.
+    /// <summary>Play as a feral pigeon (#217, <see cref="Player.Pigeon"/>). Not a boat: a new boat must skip 124.</summary>
+    Pigeon = 124,
+    /// <summary>The Airbus A320 (#414, #416): an <see cref="Player.Airliner"/>, walkable.</summary>
+    A320 = 125,
+    // The next other mount is 126 (the AN-124 #419 and the military freighter #420 come next).
 }
 
 /// <summary>
@@ -423,7 +427,7 @@ public abstract class Rideable
     /// Twin) folds open on its own page like the cars.
     /// </remarks>
     public static readonly Rideable[] All =
-        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane() };
+        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane(), new Pigeon() };
 
     /// <summary>
     /// A fresh instance for one rider.
@@ -443,10 +447,12 @@ public abstract class Rideable
         RideKind.Paraglider => new Canopy(paraglider: true),
         RideKind.Helicopter => new Helicopter(),
         RideKind.Plane => new Plane(),
+        RideKind.Pigeon => new Pigeon(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),
         _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),
         _ when HeavyCatalog.For(kind) is { } heavy => new Truck(heavy),
         _ when Boat.For(kind) is { } boat => boat,
+        _ when Airliner.For(kind) is { } airliner => airliner,
         _ => null,
     };
 }

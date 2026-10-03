@@ -193,7 +193,7 @@ public partial class BrManager
                 inv.Add(ItemId.WoodPlanks, 15);
             }
             FootPlayer.StayDown = _ => InMatch && _state.Phase == BrPhase.Playing;
-            Permissions.SetRidesLocked(true);
+            Permissions.SetInMatch(true);
         }
     }
 
@@ -229,7 +229,7 @@ public partial class BrManager
         LeaveHold(LocalPlayer());
         ShowHidden();
         FootPlayer.StayDown = null;
-        Permissions.SetRidesLocked(false);
+        Permissions.SetInMatch(false);
         StopSpectating();
         Inventory()?.EndMatch();
         Waypoint = null;

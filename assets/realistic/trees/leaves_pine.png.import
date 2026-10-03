@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://dhr68rxqbew6x"
 path.s3tc="res://.godot/imported/leaves_pine.png-d6435e86a835c211598099efaf4d05d0.s3tc.ctex"
+path.etc2="res://.godot/imported/leaves_pine.png-d6435e86a835c211598099efaf4d05d0.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/realistic/trees/leaves_pine.png"
-dest_files=["res://.godot/imported/leaves_pine.png-d6435e86a835c211598099efaf4d05d0.s3tc.ctex"]
+dest_files=["res://.godot/imported/leaves_pine.png-d6435e86a835c211598099efaf4d05d0.s3tc.ctex", "res://.godot/imported/leaves_pine.png-d6435e86a835c211598099efaf4d05d0.etc2.ctex"]
 
 [params]
 
