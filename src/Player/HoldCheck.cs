@@ -210,7 +210,12 @@ public partial class HoldCheck : Node
         Expect(walked && me.Aboard && Mathf.Abs(l.Y - FloorY) < 0.35f, $"walked into the hold in flight, on the floor {Where(me)}");
         Expect(me.GlobalPosition.Y > y0 - 200f, $"it flew on by itself ({me.GlobalPosition.Y - y0:+0;-0} m, {speed:F0} m/s)");
         await Until(() => !Drawn || Rig()?.DoorOpen(RampDoor) >= 1f, 10);
-        await Shot("hold_in_flight_ramp_open");
+        await Shot("hold_in_flight_looking_forward");
+        // aft, down the hold to the open ramp and the sky behind
+        me.TurnView(Mathf.Pi);
+        await Seconds(0.5);
+        await Shot("hold_in_flight_ramp_open_looking_aft");
+        me.TurnView(Mathf.Pi);
         Expect(await ToCockpit(me) && me.TryInteract() && await Until(() => me.Vehicle is Airliner && me.SeatIndex == 0, 6), $"back at the controls in flight ({me.Ride})");
         await Shot("controls_in_flight");
         Finish(null);

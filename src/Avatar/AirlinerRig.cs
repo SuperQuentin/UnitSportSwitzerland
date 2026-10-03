@@ -176,6 +176,13 @@ public partial class AirlinerRig : Node3D
         Lit(_landingL, landing); Lit(_landingR, landing);
     }
 
+    /// <summary>Puts every part where <paramref name="look"/> has it at once, as the first <see cref="Show"/> does.</summary>
+    public void Snap(in AirlinerLook look)
+    {
+        _fresh = true;
+        Show(look, 0f);
+    }
+
     /// <summary>Door leaves open now, 0..1, for the deck (#416): a leaf half open is not a way in yet.</summary>
     public float DoorOpen(int door) => door >= 0 && door < _doorAt.Length ? _doorAt[door] : 0f;
 
