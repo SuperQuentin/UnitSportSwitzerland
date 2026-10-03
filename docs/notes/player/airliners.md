@@ -97,7 +97,12 @@
   skin at 1.45 m from the ground (the ramp's on both walls by the hinge and on both flanks). G at the
   controls on the ground works the ramp and the crew door; **the ramp and the para doors open in flight
   below 150 kt** (`Airliner.MayOpen`, `DropSpeed`): walk off the open ramp (out of the aboard box) and
-  fall with the aircraft's speed. Flies with the shared model (`AirlinerCatalog.Freighter`, conventional).
+  fall with the aircraft's speed. **Opened in the air the ramp stops level with the hold floor**
+  (its toes stay folded; on the ground it goes down onto them), eased between the two at 0.25/s:
+  `AirlinerLook.Airborne` (pose bit 19; a copy of a parked one flying hands off counts as airborne
+  above `Airliner.FlyingSpeed` 30 m/s, its state being stale there), each door part has an `AirAngle`
+  (`FreighterMeshBuilder.DoorMotions`), and the deck switches the down slope (deck bit 4) for a level
+  slab (bit 5) by `FreighterLayout.DeckDoors`. Flies with the shared model (`AirlinerCatalog.Freighter`, conventional).
   Checks: `--flycheck freighter --world flat` (quick: take-off flaps 50 %, flaps up in the climb,
   re-extended on approach; the circuit now fails a flaps overspeed held 3 s, measured touchdown
   2.35 m/s); `--freightercheck [shots] --world fixture` (quick: G lowers the ramp, the flight deck, the
@@ -112,6 +117,11 @@
   17° its nose met the hold's floor at the hinge and it stopped halfway.
 - **HUD**: the configuration (flaps, gear, brakes, warnings) is on a second line: on one line it ran
   under the corner's key hints (seen on the freighter, the A320's too).
-- **Not done**: no AI; the freighter sounds like a turbofan (no turboprop profile yet); the BR plane's
-  ramp shows fully down in flight, not level; wings and tail do not collide in flight; the visual does not pitch with a
+- **Sound**: the freighter has its own voice, `EngineProfile.Turboprop` (`EngineSynth.TurbopropVoice`,
+  numbers in pure `Audio/TurbopropTone`, `TurbopropToneTests`): four-blade props governed at 1,020 rpm
+  from 55 % spool (68 Hz blade pass, 740 rpm at ground idle), two of them 1.2 % apart so they beat
+  about once a second, a 10-harmonic sawtooth buzz and tip rasp louder with the blade load (thrust),
+  the core's whine 1.1-1.65 kHz; `Airliner.Sound` picks it (cockpit `PlayerFeel._turboprop`, remote,
+  parked). `--soundcheck` renders `engine_turboprop_*.wav`.
+- **Not done**: no AI; the BR plane keeps its old drone sample (`SfxSynth.Engine`), not the turboprop voice; wings and tail do not collide in flight; the visual does not pitch with a
   sloping taxiway; no wind; no fuel burn or engine start in Arcade (only in Light sim).

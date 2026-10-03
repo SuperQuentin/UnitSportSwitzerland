@@ -24,9 +24,9 @@
 - **Server**: `Jump()` RPC marks `BrEntrant.Jumped` (logs a jump well before the doors); at doors-close + 1 s
   everyone left is marked. `Survived` counts from GO.
 - **Look** (#420): the military freighter players fly (`AirlinerRig.CreateFreighter`, the player note
-  `airliners`): `BrPlane` shows it gear up, propellers turning, ramp and para doors open, its model's
+  `airliners`): `BrPlane` shows it gear up, propellers turning, the ramp open level with the hold floor (as for a drop) and the para doors open, its model's
   fuselage middle on the flight line (`BrPlane.Middle`; the hold's `Carrier` point 1.2 m under it is
-  0.5 m over the hold floor); jumpers leave from the open ramp's lip (`BrPlane.Ramp`). Engine drone
+  0.5 m over the hold floor); jumpers leave from the level ramp's lip (`BrPlane.Ramp`). Engine drone
   from `SfxSynth.Engine` at 0.55 pitch, slight wing rock. `CargoPlaneMeshBuilder` is gone. Maps draw the line dashed, the jump
   stretch solid, the plane as an arrow, until the doors close.
 - **Checked**: loopback on a generated world and on real regions (Altdorf at 3349 m, Mendrisio):
