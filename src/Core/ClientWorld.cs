@@ -611,7 +611,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Loot.BankProbe.Role != null
-            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
+            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null
@@ -640,6 +640,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
         if (Birds.BirdNetProbe.Role != null) AddChild(new Birds.BirdNetProbe(items));
         if (Birds.PigeonNetProbe.Role != null) AddChild(new Birds.PigeonNetProbe(items));
+        if (Player.AirlinerNetProbe.Role != null) AddChild(new Player.AirlinerNetProbe(items));
         if (Items.UseAnimProbe.Role != null) AddChild(new Items.UseAnimProbe(items));
         if (Items.PhotoProbe.Requested) AddChild(new Items.PhotoProbe(items));
         if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
