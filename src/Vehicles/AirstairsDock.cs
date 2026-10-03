@@ -23,19 +23,23 @@ public static class AirstairsDock
     public static (Vector3 Edge, Vector3 Out)? LocalSill(VehicleDeck deck, int door)
     {
         var middle = deck.Aboard.GetCenter();
+        var half = deck.Aboard.Size * 0.5f;
         foreach (var box in deck.Boxes)
         {
             if (box.Part != DeckPart.DoorStep || box.Door != door) continue;
             var top = box.Centre + box.Basis.Y * (box.Size.Y * 0.5f);
-            var away = (top - middle) with { Y = 0 };
+            // out of the cabin, measured against its size: a door well forward in a long fuselage is
+            // still out through its side (the cabin's short axis), not out through its nose
+            var off = (top - middle) with { Y = 0 };
+            var away = new Vector3(off.X / Mathf.Max(half.X, 0.1f), 0, off.Z / Mathf.Max(half.Z, 0.1f));
             // the box's level axis that points most out of the cabin
             var ax = box.Basis.X with { Y = 0 };
             var az = box.Basis.Z with { Y = 0 };
             bool alongX = Mathf.Abs(ax.Normalized().Dot(away)) >= Mathf.Abs(az.Normalized().Dot(away));
             var axis = (alongX ? ax : az).Normalized();
-            float half = (alongX ? box.Size.X : box.Size.Z) * 0.5f;
+            float depth = (alongX ? box.Size.X : box.Size.Z) * 0.5f;
             if (axis.Dot(away) < 0f) axis = -axis;
-            return (top + axis * half, axis);
+            return (top + axis * depth, axis);
         }
         return null;
     }
