@@ -18,6 +18,77 @@
 - **Junction ends joined** (`LaneGraph.JoinTrimmedEnds`, #85): the road generator trims roads back from
   their junction polygon, so ends at a junction do not share a key; unjoined, every such junction was a
   dead end and cars turned round on the spot mid-junction. Ends nothing else meets, ≤ 18 m apart and
-  pointing at each other, get a straight connector edge (Mollendruz tile: 400 dead ends → 36).
+  pointing at each other, get a straight connector edge (`LaneEdge.Connector`; Mollendruz tile: 400 dead ends → 36).
   `Degree`/`Leaving` also look in the 8 neighbouring snap cells (two ends 0.1 m apart can round apart).
+- **Approaches** (#353, `LaneApproach`, records `LANE` in `road-format-v3`, built in `turn-lanes`):
+  `LaneGraph.Build` ties every `LANE` record (and, in an older tile, every signalised `SGNL`
+  approach, as one lane with all its movements) to the edge end nearest its stop point, within
+  15 m, driven into the junction along the arm (`LaneEdge.ApproachAtEnd/AtStart`, with the stop
+  line's distance before that end; the nearest record wins an end). `Traffic.Approach` looks up to
+  110 m ahead along the route's legs. Once per approach a car takes its next turn (`WayPast` /
+  `TurnOf`: 15 m into the road it takes, past a junction connector; at lights as the plan names
+  it, else through within 45 deg), the lane whose arrows show it (`LaneFor`, fewest other moves)
+  and the group for it (a pocket's arrow, else the main head). **Lanes**: it moves from its usual
+  line onto the original lane's centre over the 15 m before the furthest lane starts, then rides
+  the lane its own branches from (`Parent`: the next car lane beside it that starts further back)
+  until its own opens, then moves over its taper (a pocket appearing at once beside a closing
+  hatch: over 12 m, from 3.6 m before it opens); `Vehicle.Lane` follows at max(1.2, 0.35 x speed)
+  m/s and goes back to its usual line past the junction. Pockets at junctions without lights
+  (#123) are driven too. **Routing** (`NextRoad`) drops a turn the approach bans (OSM
+  restrictions) unless nothing else is left.
+- **Traffic lights** (#353, plans `traffic-signals`): the group is read on `ClockSync.ServerNow`,
+  so every peer's traffic stops for the same red. Red or red+yellow: stop 0.5 m short of the
+  lane's line (a pocket behind a bike box: 4 m further back); yellow: stop if it can at 3 m/s²,
+  else clear it (`ClearingAmber`, kept while it turns red); a car that first sees a red it cannot
+  stop for at 6 m/s² (just spawned or turned in) clears it too. The yield bits are ignored on a
+  signalised approach (`GiveWay`). On green a left turn from a shared lane waits at the line while
+  a car on the opposite approach is moving within 40 m of its line (`Oncoming`), and **a queue
+  does not block the junction**: within 30 m of the line, a car that can still stop at 4 m/s²
+  waits while a car stands (< 2 m/s, its way) within 7 m of the point 6 m into the road it takes
+  (`RoomPast`, on the `_byX` window). Racers ignore lights (`traffic-and-races`).
+- **`--trafficcheck --at E,N`**: the camera stays over the point (45 m up, 15 m south), the
+  traffic lives around it; `--dense` adds a car within 300 m of it 4 times a second (up to the
+  asked count), `--seconds N` runs longer. At the end: the tick cost (`perf-traffic-tick`) and,
+  per approach (the 15 nearest, then any with a pocket left, a wait or a red run): stopped at red,
+  entered on red (cleared yellow apart), on green (crossed without lights), lefts from the pocket,
+  permissive lefts that waited, waits for room, and per lane the cars and their offset at the
+  line; then totals. Fails on a red run. Final runs (logs `test_output/final/`), Geneva copy
+  (D:, `traffic-signals`), `--traffic 300`, **no red run in any**:
+  - `--at 2499901,1118599` (OSM lights), four 40 s runs: 13-17 stops at red, 2-3 yellows cleared,
+    14 crossings each; `--dense`, three runs: 31-41 stops, 8-10 yellows cleared, 0-2 waits for room.
+  - inferred lights at 2499883,1116759, two dense runs: 12 and 21 stops at red.
+  - `--at 2499641,1118692` (lights, L|T|R pocket approach), dense 150 s: 108 stops, 5 lefts from a
+    pocket, 1 permissive wait, 3 waits for room; through cars cross the line at +5.0 m (their lane +5.0).
+  - #123 pockets without lights, dense 120 s: Geneva 2499916,1118335, 5 lefts from pockets,
+    through cars in their lane (worst lag 0.00 m); Valais 2584437,1110600: 15 through cars in
+    their lane, none turned left there. The probe gives crossings from the original lane's
+    centre (`LaneCentre`), like the lanes; a car's `Lane` counts from its usual line
+    (`KeepRight`), 0.8 m right of that centre where a bike lane narrows the lane.
+  Screenshots from above (windowed `--trafficcheck,<png>`): cars queued at the red of the
+  Geneva junction and in the through lane past the pocket.
+- **Queue capture** (windowed `--trafficcheck,<png> --at E,N`, from 15 s): it picks the car
+  group (main head or pocket arrow) of a signalised approach within 120 m whose light is red,
+  turns green in 3-6 s (`SignalPlan.State` on `ClockSync.ServerNow`, as the cars read it) and has
+  the most cars standing (at least 3), looks straight down on that arm (50 m up, 22 m back from
+  the line) and saves `<png>_1_red` 2.5 s before the green, then `_2_green2s`, `_3_green4s`,
+  `_4_green6s`, logging per shot the aspect, cars standing and crossings since. **`--feed`**
+  (capture only, not the game's traffic): the car cap is `--traffic` past the settings' 150 for
+  that run, and every 0.4 s a car is spawned 40-250 m before the line of one of the signalised
+  approaches within 60 m, in turn, routed through it (`Traffic.SpawnInto`, back over the junctions
+  upstream; `LaneGraph.Entering`). Without it, queues of 3 rarely form within 150 s (15-25 cars at
+  red over 603 approaches). Run (`test_output/353/`, Geneva copy, `--traffic 300 --dense --feed
+  --seconds 60`): at 2499901,1118599 a queue of 3 at the line, then the lead van over it at +2 s
+  and the lane moving; also at 2499641,1118692.
+- **Waiting at a red is not being stuck** (found by the capture): a car standing 20 s at a red was
+  culled as stuck (it vanished from the line, 9 in a fed 60 s run); `Stuck` no longer counts while
+  `AtRed`, and a car held by the lights does not turn round behind a standing queue (`Stale`).
+  A wait on green (for room, for a gap) still counts: the way out of a gridlock.
+- **Two clients, same lights** (`tools/signalnetcheck.sh`, tier 2): traffic is local, the shared
+  part is the plan and the server clock (the lamps' `State`, #350). `--signalnetcheck [E,N]`
+  (`World/SignalNetProbe`) on the server and two clients logs every group's aspect each 0.5 s of
+  `ClockSync.ServerNow`, the wall clock beside it; the script compares per instant and measures
+  each client's clock error. Flat fixture, a crossroads plan built in code (`tools/test.sh net`,
+  31 s): 40 instants over 5 aspect changes, all identical on the three peers, skew 1.1 ms.
+  `CHUNKS=<Geneva copy> JUNCTION=2499901,1118599` (the real record, 16 groups): 40 instants over
+  4 changes, identical, skew 3.1 ms.
 - Around a race the cars behave like drivers who see it coming: `traffic-and-races`.

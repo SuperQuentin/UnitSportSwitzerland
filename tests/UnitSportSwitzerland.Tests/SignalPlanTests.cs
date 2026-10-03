@@ -197,6 +197,19 @@ public class SignalPlanTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void KerbsideBikeLane_IsHeldFromTheRightTurn_OnlyByARealPhase()
+    {
+        // left pockets everywhere: the right arrows have their own phases, the bike green runs with them red
+        var held = SignalPlan.Build([Arm(N, true, true), Arm(E, true, true), Arm(S, true, true, bike: true), Arm(W, true, true)]);
+        AssertValid(held);
+        Assert.True(held.ThroughWithRightHeld(S));
+        // no left pocket: the right pocket goes green with its approach; the bike's 3 s lead is no phase (#351: layout (b))
+        var with = SignalPlan.Build([Arm(N), Arm(E), Arm(S, right: true, bike: true), Arm(W)]);
+        AssertValid(with);
+        Assert.False(with.ThroughWithRightHeld(S));
+    }
+
+    [Fact]
     public void State_IsAFunctionOfTheClock()
     {
         var a = SignalPlan.Build([Arm(N, true), Arm(E), Arm(S, true), Arm(W)], seed: 12345);

@@ -30,8 +30,8 @@
   same side. Its lane line dashed then solid, right arrows; without a left pocket the original
   lane gets straight (+ left) arrows; with one, the through lane's arrow loses its right.
 - **Stop line** (SSV 6.10, 0.50 m white, `SignalStopLine`) across all approach lanes, set back
-  `SignalStopSetback` 3 m from the mouth (behind a #120 red bike crossing; #292 moves it behind a
-  pedestrian crossing) plus the mouth's skew (`MouthSkew`: a skewed mouth's far corner). Lane
+  `SignalStopSetback` 4.5 m from the mouth (behind a #120 red bike crossing, room for #292's
+  pedestrian crossing, and the 4 m a driver needs before a roadside head) plus the mouth's skew (`MouthSkew`: a skewed mouth's far corner). Lane
   dividers start at it; arrows count from it. No guide line across the junction (`Across`).
 - **Record** (`SGNL`, `RoadSignal`, `road-format-v3`): per arm heading, in/out, pockets,
   pedestrians (every car arm), 50 km/h in a locality (density >= 0.4) else 60, crossing width,
@@ -72,8 +72,90 @@
   decides: agree 75, rule only 83, OSM only 240 (OSM signals Ts and crossings of lesser roads the
   rule never takes): the rule is a fallback for regions without data, not a substitute. Martigny-Riddes (E 2581-2585 N 1110-1114): none (no crossing of two main roads
   that dense). Screenshots from above at LV95 2499901,1118599 and 2499132,1116455.
+- **Poles and heads** (#350). Build (`PoleWish`, `PlacePole`): per arm a pole on each kerb
+  `PoleAlong` 0.6 m past the mouth, `PoleClear` 0.5 m out from the kerb, stepping 0.4 m out (6
+  tries) until clear of carriageways and junctions (`PriorityPlanner.Clearance`), widening strips
+  (`OnPavement`) and buildings; foot at the road height plus the kerb where there is a sidewalk.
+  The right pole of an approach is `Main` (main head, pocket arrows, flashers), the left one
+  `Second` only when the approach has a pocket (main head and left arrow, never the right
+  arrow); both carry the arm's pedestrian head, facing across. No pole on a link inside a
+  junction. The approach's 3.02/3.03 (fallback) moves onto its main pole, plate top 2.25 m.
+  `SGNL` version 2 stores the poles (`SignalPole`, 22 B); version 1 still reads. Geneva: 1,489
+  poles, 259 rejected (no clear spot), 390 signs moved. Runtime: `SignalBuilder` (worker) bakes
+  RAL 7001 poles, RAL 9017 housings, black backboards with a white border and brackets into the
+  road mesh, pole collision (4 m columns), and the lens layout; car heads lower edge 2.35 m, 3.35 m
+  above a pedestrian head (lower edge 2.3 m), 0.55 m apart, left arrow / main / right arrow as
+  the driver sees them, the flasher beside the green. `SignalLamps` (a child of the `ChunkNode`)
+  draws the lenses as one `MultiMesh` per shape (round, left/right arrow, pedestrian square),
+  unshaded so they glow at night, and recolours a junction's instances only when one of its
+  groups changes (`UntilChange`) or a flasher blinks (0.5 s, on the server clock); otherwise one
+  comparison per junction per frame, no allocation. Tier 0 `SignalBuilderTests` (layout,
+  facings, the second pole's missing right arrow, 2-lens Geneva heads, flashers). Screenshots:
+  driver's view by day and night at LV95 2499901,1118599.
+- **Bikes at signals** (#351). A signalised left pocket (not a merged strip) carries a 1.50 m
+  left-turn bike lane between it and the through lane (`LeftBikeLane`: the widening grows by it,
+  the hatch opens to the through lane's edge, yellow dashes both sides from where the pocket opens,
+  a bike symbol). Where the street the left turn goes into has no bike lane or path on its
+  departing side: a **bike box** (SSV 6.26; 4.0 m, ASTRA 2021) in front of the pocket and the bike
+  lane: the cars' white line 4 m behind, a 0.30 m yellow line in front, a symbol in it, the
+  pocket's arrows behind it; the through lane keeps its line. Where it has one: a 0.30 m yellow
+  **advanced bike stop line** 3.0 m ahead across the bike lane. A **bike signal** (group with a
+  3 s lead green, #349) on approaches with a separated path (read from the street's built end
+  piece: the line's own sides do not know a street's paths), or a painted lane kerbside of a
+  right pocket (layout (a)); its head is a half-size three-lens head (100 mm lenses,
+  `Shape.Bike`) on the main pole, lower edge 1.05 m, below the priority sign. Screenshots from
+  above and from the driver's seat at LV95 2499901,1118599. #406: the left-turn bike lane's edges
+  run on to its own line (box or advanced line), solid over the `TurnSolid` 10 m before the cars'
+  line; where it has an advanced line the cars' stop line stops at its edges instead of crossing it.
+  Bike lanes across the junction: straight, red only on a conflict in the same phase
+  (`bike-infrastructure`).
+- **Right pocket beside a painted bike lane** (#351). `ApproachLayout` is the one place the lanes'
+  offsets are worked out (`Lane` per lane, `open` along the taper); paint, stop lines, poles,
+  crossings and #353's lane records read it (tier 0 `ApproachLayoutTests`). Same width
+  (3 m pocket + the lane), two orders: **(a)** kerbside, the pocket between the through lane and
+  the bike lane (bike signal); **(b)** the bike lane between the through lane and the pocket
+  (Velostreifen zwischen den Fahrstreifen): yellow lines both sides, solid along the storage,
+  1 m / 1 m dashes over the taper where cars cross it, a symbol, the stop line across it; #120's
+  lane paint skips the pocket's reach. Each approach picks by `Fnv` of its TLM uuid:part and end
+  (`ApproachKey`): stable. A path keeps (a). **(a) needs a protected phase**: the plan is built,
+  and where the approach's bike group is not green for >= `MinGreen` with its right-turn group red
+  (`SignalPlan.ThroughWithRightHeld`; the 3 s lead alone does not count, a right turn without a
+  group of its own never), (b) is forced (`Forced`) and the plan rebuilt; the pockets' lane paint
+  waits for it (`EmitRightLanes`). Fixed on the way: (a)'s lane line, stop bar and arrows stood a
+  bike lane too far out; a street that got paths has no painted lane, so a pocket there no longer
+  widens for one (read from the painted lines).
+- **Crossings at a widened arm** (#351, `SquareCrossing`): at traffic lights, where the road a
+  #120 crossing crosses is widened by its pockets (or the crossing comes from a widened arm), it
+  runs square across that road, edge to widened edge, between its stop line and the junction
+  (behind an advanced bike line), its ends joined straight (an end inside the widened span moves
+  out along its own lane or path); a layout (b) lane crosses from its own place. Was: the narrow
+  mouth's curve from a shifted end, skewed over the stop line (LV95 2499132,1116455, rule-only
+  copy). Sides now move out only for their own street's widenings, up to 10 m (was any strip of
+  the tile, up to 6 m: a left + right pocket reached the next arm's corner and pushed that arm's
+  sidewalk 6 m out onto it).
+- **Bike numbers** (`test351` copies): Geneva centre 286 junctions, 13 left-turn bike lanes (3
+  boxes, 10 advanced lines), 217 approaches with a bike signal, 97 right pockets; beside a painted
+  lane (a) 2, (b) by hash 0, (b) forced 1. Rule-only copy: 163 junctions, (a) 1, (b) 1, forced 1.
+  Martigny-Riddes: no signalised junction, all 0. Rebuild byte-identical. Screenshots from above:
+  (a) LV95 2500713,1115381, (b) 2500569,1117717, an advanced line 2499495,1117708, the crossing
+  before and after. `--street-svg` now draws the widenings and the white and yellow paint.
+- **Lanes and traffic** (#353): every signalised approach has a `LANE` record at its stop line
+  (`signal`/`arm` point at this record; `turn-lanes` has the lanes), with the turns OSM forbids
+  there; traffic drives them and obeys the plans (`traffic-trains`). Its lanes' offsets are
+  `ApproachLayout`'s, so layout (b) (the bike lane between the through lane and the right pocket)
+  and the through lane 4.5 m out beside a left pocket and its left-turn bike lane are in the
+  records; their records are written once the plan has settled forced (b) (Geneva copy, forced
+  (b) at LV95 2500582,1117717: through +0.00, bike +2.50, right pocket +4.75 m; a 3 m left pocket
+  with its bike lane at 2499908,1118588: pocket 0, bike +2.25, through +4.50). A pocket's lane stops
+  behind a bike box (4 m). The stats print where the inferred junctions are (Geneva: 2498980,1118876
+  2498984,1118880 2498764,1118281 2499883,1116759 2500741,1117395 2500084,1118518).
+- **Test region** (#386, `signal-test-region`): `RoadGen --test-region test_output/signal-region`
+  builds seven designed junctions (ideal with lanes / paths, mismatched room, a narrow arm, a T, a
+  close pair) through this pipeline in ~2 s; the clean place to look at and test lights before
+  Geneva (tier 0 `SignalTestRegionTests`, `--signal-check`, windowed `--trafficcheck` at each).
 - **Not done**: one record for a junction of several nodes (the internal links are only kept
-  clean); OSM `turn:lanes` and restrictions not read yet (#347 has them); thin median (optional); crossings of divided roads
-  (several nodes); 3-lane roads; a #120 red bike crossing drawn for the narrow mouth runs skewed
-  across a widened arm's stop line (2499132,1116455; #351 reworks bikes at signals); heads and
-  poles (#350); traffic obeying them (#353).
+  clean); OSM `turn:lanes` not read yet, restrictions only for the lane records (a left pocket is
+  still built where the left turn is forbidden: 10 in Geneva); thin median (optional); crossings of divided roads
+  (several nodes); 3-lane roads; at a compact junction a left + right pocket's mouth reaches into
+  the next arm's sidewalk corner (it stands on the widening, over part of the crossing:
+  2499132,1116455); 300 mm overhead heads (#354); rejected poles are dropped, not moved along the kerb.

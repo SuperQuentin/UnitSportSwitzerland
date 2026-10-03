@@ -28,7 +28,20 @@ public static partial class TileRewriter
     /// bike crossing there (#120, about 2 m) with a metre to spare. #292 moves it back behind a
     /// pedestrian crossing.
     /// </summary>
-    private const double SignalStopSetback = 3.0;
+    private const double SignalStopSetback = 4.5;
+
+    /// <summary>
+    /// Signal poles (#350) stand this far past the mouth along their arm, at the kerb plus
+    /// <see cref="PoleClear"/>, stepping out by <see cref="PoleStep"/> up to <see cref="PoleTries"/>
+    /// times until clear of every carriageway, widening and building. With the stop line
+    /// <see cref="SignalStopSetback"/> back that leaves the 4 m a driver needs to see a roadside
+    /// head (Kanton Bern Handbuch Markierung).
+    /// </summary>
+    private const double PoleAlong = 0.6, PoleClear = 0.5, PoleStep = 0.4;
+    private const int PoleTries = 6;
+
+    /// <summary>A priority sign on a signal pole (#350) has its plate's top this high: below the heads' 2.35 m (SSV Art. 71).</summary>
+    private const float SignOnPoleTop = 2.25f;
 
     /// <summary>
     /// A link this short between two signalised junction nodes is inside one junction (a large
@@ -62,7 +75,10 @@ public static partial class TileRewriter
         public int Junctions, Inferred, FromData, Arms, Approaches, LeftPockets, RightPockets, StopLines, Groups, TwoLensPedestrian, Invalid;
         /// <summary>Where OSM decides, what the inference rule would have said: both, rule only, OSM only (#348 tuning).</summary>
         public int RuleAndOsm, RuleOnly, OsmOnly, InternalArms;
+        public int Poles, PolesRejected, SignsOnPoles, BikeSignals;
         public readonly List<string> InvalidExamples = new();
+        /// <summary>Where the first inferred junctions are (LV95), to look at them (#353).</summary>
+        public readonly List<string> InferredAt = new();
         public readonly SortedDictionary<int, int> Cycles = new();
 
         public string Format()
@@ -72,7 +88,8 @@ public static partial class TileRewriter
             sb.Append(c, $"    traffic lights (#348): {Junctions:N0} junctions ({Inferred:N0} inferred, {FromData:N0} from data), {Arms:N0} arms, {Approaches:N0} approaches, ");
             sb.Append(c, $"{LeftPockets:N0} with a left-turn pocket, {RightPockets:N0} with a right-turn pocket, {StopLines:N0} stop lines without a left pocket, {Groups:N0} signal groups, ");
             sb.Append(c, $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key} x{kv.Value}"))}, invalid plans {Invalid:N0}").AppendLine();
-            sb.Append(c, $"      where OSM decides, the inference rule agrees on {RuleAndOsm:N0}, adds {RuleOnly:N0} OSM does not have, misses {OsmOnly:N0}; {InternalArms:N0} arms inside a junction of several nodes").AppendLine();
+            sb.Append(c, $"      where OSM decides, the inference rule agrees on {RuleAndOsm:N0}, adds {RuleOnly:N0} OSM does not have, misses {OsmOnly:N0}; {InternalArms:N0} arms inside a junction of several nodes; inferred at LV95 {string.Join(" ", InferredAt)}").AppendLine();
+            sb.Append(c, $"      poles (#350) {Poles:N0}, rejected (no clear spot) {PolesRejected:N0}, priority signs moved onto a pole {SignsOnPoles:N0}, approaches with a bike signal {BikeSignals:N0} (#351)").AppendLine();
             foreach (var x in InvalidExamples) sb.Append("      invalid: ").Append(x).AppendLine();
             return sb.ToString();
         }
@@ -167,11 +184,16 @@ public static partial class TileRewriter
         return r;
     }
 
-    private static void EmitSignals(PriorityResult priority, RoadGenResult result, Dictionary<(int Node, int Arm), (bool Left, bool Right)> pockets,
+    private static void EmitSignals(PriorityResult priority, RoadGenResult result, Dictionary<(int Node, int Arm), ArmLanes> pockets,
+        Func<int, LinkEnd, bool, RoadSide> bikeSideAt,
         HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadPaint>> paint,
-        Dictionary<TileId, List<RoadSignal>> signals, Cantons? cantons, UrbanField field, SignalStats stats)
+        Dictionary<TileId, List<RoadSignal>> signals, Cantons? cantons, UrbanField field, Footprints buildings,
+        Dictionary<TileId, List<RoadAreaProp>> areas, Dictionary<TileId, List<RoadPointProp>> signs, SignalStats stats,
+        Dictionary<TileId, List<RoadApproach>> approaches, Restrictions? restrictions, LaneStats laneStats,
+        Dictionary<(int Link, LinkEnd End), double> stopsAt, Dictionary<int, (SignalPlan Plan, int[] PlanArm)> plans)
     {
         var net = result.Network;
+        PriorityPlanner.Clearance? clearance = null;
         var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
         foreach (var (junction, plan) in priority.Plans)
         {
@@ -180,7 +202,12 @@ public static partial class TileRewriter
             if (!block.Contains(home) || !wanted.Contains(home)) continue;
 
             var arms = new List<SignalArm>();
+            var kerbside = new List<(int Index, ApproachLayout Lanes)>();   // layout (a) bike lanes (#351)
             var stops = new List<float>();
+            var wantPoles = new List<PoleWish>();
+            var approachArms = new List<(int Arm, int PlanArm, float[] Stop)>();   // their lane records (#353)
+            var armInPlan = new int[junction.Arms.Count];   // each junction arm's index in the plan, -1 none (#406)
+            Array.Fill(armInPlan, -1);
             // 50 km/h inside a locality: the yellow lasts 3 s (#349)
             bool urban = field.Density(junction.Centre.X, junction.Centre.Y) >= UrbanField.UrbanAt;
             for (int i = 0; i < junction.Arms.Count && i < plan.Arms.Count; i++)
@@ -191,29 +218,65 @@ public static partial class TileRewriter
                 bool inside = Internal(link, junction.NodeId, signalNodes);
                 bool approach = plan.Arms[i].Approach && !inside, leaves = PriorityPlanner.Leaves(info, plan.Arms[i].End);
                 if (inside) stats.InternalArms++;
-                var (pocket, rightPocket) = pockets.GetValueOrDefault((junction.NodeId, i));
+                var layout = pockets.GetValueOrDefault((junction.NodeId, i))?.Approach;
+                bool pocket = layout is { LeftPocket: > 0 }, rightPocket = layout is { Right: true };
                 var u = Vec2.FromHeading(arm.OutwardHeading);
                 var right = u.Perp;   // the approaching driver's right (they drive along -u)
                 var mid = (arm.Left + arm.Right) * 0.5;
                 double half = arm.HalfWidth;
                 // the approach lanes: from the centre (a one-way road: its left edge) to the right
-                // edge, and on over the through lane a pocket moved out
-                double from = info.Attributes.OneWay != 0 ? -half : 0, to = half + (pocket ? TurnLane : 0) + (rightPocket ? TurnLane : 0);
+                // edge, widened by its pockets (#351: the lanes' offsets come from their layout)
+                double from = info.Attributes.OneWay != 0 ? -half : 0, to = layout is null ? half : half + layout.Edge() - layout.Half;
                 var bar = mid + u * (MouthSkew(junction, arm) + SignalStopSetback + SignalStopLine * 0.5);
                 if (approach && !pocket && block.Contains(source.Tile))
                 {
+                    // across the approach's own lane: a right pocket and the bike lane beside it have their own
+                    double through = layout is null ? half : half + layout.Through().To - layout.Half;
                     Get(paint, source.Tile).Add(new RoadPaint
                     {
                         Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.White, Width = SignalStopLine,
-                        Vertices = Local(source.Tile, [bar + right * (from + 0.1), bar + right * (half - 0.1)], source.SampleHeight, 0f),
+                        Vertices = Local(source.Tile, [bar + right * (from + 0.1), bar + right * (through - 0.1)], source.SampleHeight, 0f),
                     });
                     stats.StopLines++;
                 }
                 var stop = bar + right * ((from + to) * 0.5);
-                if (approach) stops.AddRange(Local(home, [stop], source.SampleHeight, 0f));
+                if (approach)
+                {
+                    var local = Local(home, [stop], source.SampleHeight, 0f);
+                    stops.AddRange(local);
+                    approachArms.Add((i, arms.Count, local));
+                    // its painted bike lane stops at the line, solid before it (#406)
+                    stopsAt[(plan.Arms[i].LinkId, plan.Arms[i].End)] = MouthSkew(junction, arm) + SignalStopSetback;
+                }
                 else stops.AddRange([float.NaN, float.NaN, float.NaN]);
+                // poles (#350): on the approach's right the main heads, on its left a second head
+                // where the approach has more than one lane; a pedestrian head on both kerbs
+                double along = MouthSkew(junction, arm) + PoleAlong;
+                var drawnRight = plan.Arms[i].End == LinkEnd.End;   // +Perp(u) is the segment's right side when it ends here
+                var sides = CrossSectionPlanner.Attributes(source.Line);
+                var rightSide = drawnRight ? sides.Right : sides.Left;
+                var leftSide = drawnRight ? sides.Left : sides.Right;
+                // none on a link inside a junction of several nodes: its ends are the junction's own
+                var mainFlags = inside ? 0 : (approach ? SignalPoleFlags.Main : 0) | SignalPoleFlags.Pedestrian;
+                var secondFlags = inside ? 0 : (approach && (pocket || rightPocket) ? SignalPoleFlags.Second : 0) | SignalPoleFlags.Pedestrian;
+                wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, right, to, u, -right,
+                    rightSide.OuterDm > 0 ? rightSide.KerbCm / 100f : 0f, mainFlags, plan.Arms[i].LinkId));
+                // the left kerb stands out by the exit widening of the opposite approach's pocket (#123):
+                // measured from the old edge, every spot tried was on that strip (#386)
+                double exitWidening = pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0;
+                wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, -right, half + exitWidening, u, right,
+                    leftSide.OuterDm > 0 ? leftSide.KerbCm / 100f : 0f, secondFlags, -1));
+                // a bike head (#351) beside a separated path, or a kerbside bike lane a right pocket's cars
+                // cross (layout (a)); a bike lane between the pocket and the through lane (b) goes with the
+                // cars. The path or lane as built at the arm's end (the line's own sides do not know a
+                // street's paths, #120)
+                bool path = bikeSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, drawnRight).HasTrack;
+                bool bikeSignal = approach && (path || layout is { KerbsideBike: true });
+                if (bikeSignal) stats.BikeSignals++;
+                if (approach && !path && layout is { KerbsideBike: true }) kerbside.Add((arms.Count, layout));
+                armInPlan[i] = arms.Count;
                 arms.Add(new SignalArm(arm.OutwardHeading, approach, leaves, pocket, rightPocket, Pedestrians: true,
-                    BikeSignal: false, SpeedKmh: urban ? 50 : 60, CrossingM: (float)(to - from + (info.Attributes.OneWay != 0 ? 0 : half)),
+                    BikeSignal: bikeSignal, SpeedKmh: urban ? 50 : 60, CrossingM: (float)(to - from + (info.Attributes.OneWay != 0 ? 0 : half)),
                     Rank: (byte)Math.Clamp(PriorityPlanner.Rank(info) / 4, 1, 255)));
                 stats.Arms++;
                 if (approach) stats.Approaches++;
@@ -225,6 +288,22 @@ public static partial class TileRewriter
             bool amber = PedestrianAmber(cantons?.CodeAt(junction.Centre.X, junction.Centre.Y));
             uint seed = (uint)(long)Math.Round(junction.Centre.X) * 73856093u ^ (uint)(long)Math.Round(junction.Centre.Y) * 19349663u;
             var signalPlan = SignalPlan.Build(arms, seed, amber);
+            // layout (a) only where the plan gives the kerbside bike lane a phase with the right arrow
+            // red; else the weave must come before the line: layout (b), and the plan again (#351)
+            for (bool forced = true; forced;)
+            {
+                forced = false;
+                foreach (var (index, lanes) in kerbside)
+                {
+                    if (lanes.BikeBetween || signalPlan.ThroughWithRightHeld(index)) continue;
+                    lanes.BikeBetween = lanes.Forced = true;
+                    arms[index] = arms[index] with { BikeSignal = false };
+                    stats.BikeSignals--;
+                    signalPlan = SignalPlan.Build(arms, seed, amber);
+                    forced = true;
+                    break;
+                }
+            }
             if (signalPlan.Validate() is { Count: > 0 } errors)
             {
                 stats.Invalid++;
@@ -236,14 +315,102 @@ public static partial class TileRewriter
 
             var anchors = Anchors(junction, net);
             var centre = Local(home, [junction.Centre], p => HeightAt(anchors, p), 0f);
-            Get(signals, home).Add(new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops.ToArray(), Plan = signalPlan });
+            clearance ??= new PriorityPlanner.Clearance(result.Ribbons, result.Junctions);
+            var poles = new List<SignalPole>();
+            foreach (var wish in wantPoles)
+            {
+                if (wish.Flags == SignalPoleFlags.None) continue;
+                if (PlacePole(wish, home, clearance, buildings, areas) is not { } pole) { stats.PolesRejected++; continue; }
+                poles.Add(pole);
+                stats.Poles++;
+                // the approach's priority sign (#121, for when the lights are off) on the main pole, below the heads
+                if (wish.SignLink >= 0 && priority.SignsOf.TryGetValue(wish.SignLink, out var signSpots))
+                    foreach (var (signTile, index) in signSpots)
+                    {
+                        if (!signs.TryGetValue(signTile, out var list) || index >= list.Count) continue;
+                        var sign = list[index];
+                        if (Math.Abs(Math.IEEERemainder(sign.Heading - pole.CarHeading, 2 * Math.PI)) > 0.5) continue;
+                        list[index] = sign with
+                        {
+                            X = (float)(pole.X + home.MinE - signTile.MinE), Y = pole.Y, Z = (float)(pole.Z + signTile.MaxN - home.MaxN),
+                            Height = SignOnPoleTop,
+                        };
+                        stats.SignsOnPoles++;
+                    }
+            }
+            plans[junction.NodeId] = (signalPlan, armInPlan);   // the bike crossings' conflicts (#406)
+            Get(signals, home).Add(new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops.ToArray(), Plan = signalPlan, Poles = poles });
+            foreach (var (i, planArm, stopAt) in approachArms)
+                Get(approaches, home).Add(SignalApproach(junction, i, net, (short)(Get(signals, home).Count - 1), (byte)planArm, stopAt,
+                    signalPlan, pockets.GetValueOrDefault((junction.NodeId, i)), restrictions, laneStats));
             stats.Junctions++;
-            if (priority.SignalsFromData.Contains(junction.NodeId)) stats.FromData++; else stats.Inferred++;
+            if (priority.SignalsFromData.Contains(junction.NodeId)) stats.FromData++;
+            else
+            {
+                stats.Inferred++;
+                if (stats.InferredAt.Count < 8) stats.InferredAt.Add(string.Create(CultureInfo.InvariantCulture, $"{junction.Centre.X:F0},{junction.Centre.Y:F0}"));
+            }
             stats.Groups += signalPlan.Groups.Count;
             if (!amber) stats.TwoLensPedestrian++;
             int cycle = (int)MathF.Round(signalPlan.Cycle);
             stats.Cycles[cycle] = stats.Cycles.GetValueOrDefault(cycle) + 1;
         }
+    }
+
+    /// <summary>
+    /// A pole wanted beside an arm (#350): the arm's plan index, its source line, the point on the
+    /// arm's axis it stands beside, the way out to its kerb and the kerb's distance, the way its
+    /// car heads and its pedestrian head face (plan view), the kerb height, what it carries, and
+    /// the link whose priority sign moves onto it (-1 none).
+    /// </summary>
+    private sealed record PoleWish(byte Arm, Source Source, Vec2 Axis, Vec2 Out, double Kerb, Vec2 CarFacing, Vec2 PedFacing,
+        float KerbHeight, SignalPoleFlags Flags, int SignLink);
+
+    /// <summary>The first spot out from the kerb that is clear of carriageways, widenings and buildings, in the home tile's frame; null when none is.</summary>
+    private static SignalPole? PlacePole(PoleWish wish, TileId home, PriorityPlanner.Clearance clearance, Footprints buildings,
+        Dictionary<TileId, List<RoadAreaProp>> areas)
+    {
+        if (wish.Flags == SignalPoleFlags.None) return null;
+        for (int k = 0; k < PoleTries; k++)
+        {
+            var at = wish.Axis + wish.Out * (wish.Kerb + PoleClear + k * PoleStep);
+            if (!clearance.IsClear(at, RoadSigns.PoleDiameter) || buildings.Contains(at) || OnPavement(at, areas)) continue;
+            float road = wish.Source.SampleHeight(wish.Axis + wish.Out * wish.Kerb);
+            var local = Local(home, [at], _ => road + wish.KerbHeight, 0f);
+            return new SignalPole(local[0], local[1], local[2], Heading(wish.CarFacing), Heading(wish.PedFacing), wish.Arm, wish.Flags);
+        }
+        return null;
+    }
+
+    /// <summary>Radians about +Y, 0 facing -Z (north), facing along a plan-view direction (as the signs).</summary>
+    private static float Heading(Vec2 facing) => (float)Math.Atan2(-facing.X, facing.Y);
+
+    /// <summary>Whether a point stands on a widening strip (#123/#348) of its tile.</summary>
+    private static bool OnPavement(Vec2 p, Dictionary<TileId, List<RoadAreaProp>> areas)
+    {
+        var tile = TileId.FromLv95(p.X, p.Y);
+        if (!areas.TryGetValue(tile, out var list)) return false;
+        double x = p.X - tile.MinE, z = tile.MaxN - p.Y;
+        foreach (var a in list)
+        {
+            if (a.Type != AreaPropType.Pavement) continue;
+            var v = a.Vertices;
+            for (int t = 0; t + 2 < a.Indices.Length; t += 3)
+            {
+                int i0 = a.Indices[t] * 3, i1 = a.Indices[t + 1] * 3, i2 = a.Indices[t + 2] * 3;
+                if (InTriangle2(x, z, v[i0], v[i0 + 2], v[i1], v[i1 + 2], v[i2], v[i2 + 2])) return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool InTriangle2(double px, double pz, double ax, double az, double bx, double bz, double cx, double cz)
+    {
+        double d1 = (px - bx) * (az - bz) - (ax - bx) * (pz - bz);
+        double d2 = (px - cx) * (bz - cz) - (bx - cx) * (pz - cz);
+        double d3 = (px - ax) * (cz - az) - (cx - ax) * (pz - az);
+        bool neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;
+        return !(neg && pos);
     }
 
     /// <summary>

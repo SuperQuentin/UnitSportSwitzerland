@@ -183,6 +183,12 @@ src/Avatar/HumanMeshBuilder.Sw net tools/swimnetcheck.sh
 src/Player/Boat          net    tools/boatnetcheck.sh
 src/Player/FootPlayer.Bo net    tools/boatnetcheck.sh
 src/Vehicles/VehicleBody net    tools/boatnetcheck.sh
+# traffic lights (#353): two clients and the server log the same group states on the server clock
+# (a crossroads plan built in code, flat fixture; CHUNKS= JUNCTION=E,N for a real record)
+src/World/SignalNetProbe net    tools/signalnetcheck.sh
+src/Terrain/SignalLamps  net    tools/signalnetcheck.sh
+src/Net/ClockSync        net    tools/signalnetcheck.sh
+tools/TerrainFormat/SignalPlan net tools/signalnetcheck.sh
 src/Player/Steamer       net    tools/steamernetcheck.sh
 src/Player/FootPlayer.St net    tools/steamernetcheck.sh
 src/Player/FootPlayer.De net    tools/steamernetcheck.sh
