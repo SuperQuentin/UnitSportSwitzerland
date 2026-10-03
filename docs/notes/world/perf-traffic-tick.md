@@ -20,6 +20,17 @@ PR #258, `--perflog`, static camera over traffic at Mollendruz, 2 runs each (phy
 | 35 | 0.76, 0.77 | 0.70, 0.61 |
 | 150 | 2.16, 1.93 | 1.57, 1.55 |
 
+## #353: lanes and lights
+`--trafficcheck` times the car and train steps itself (`Traffic.TickCost`, from 10 s; no allocation
+per tick). Geneva copy, `--traffic 300 --at 2499901,1118599`, 40 s, mean / p50 / p99 µs (cars):
+before (e132720, pocket heuristic) 619/569/1257 (56), 655/632/1339 (61), 649/619/1258 (61);
+after (lane records, room check) 631/587/1435 (56), 688/654/1542 (60), 634/631/1507 (59),
+653/648/1368 (60), and the final build 661/612/1409 (54), 681/626/1736 (58), 673/651/1468 (58)
+(one run with a 3.2 ms p99 hitch left out): ~11 µs per car both, the mean within noise, p99 ~+10 %. The approach lookup
+walks the route's legs (110 m), the lane, turn and group are chosen once per approach, `RoomPast`
+walks `_byX` only on green within 30 m of a line; routing's restriction filter runs at junction
+choices, not per tick.
+
 ## Same logic, preserved
 - Sampling: the samples were only ever read for obstacles inside the skip radius. They are now taken at
   the first such obstacle, so the result is identical. If the radius changes (the #159 branch raises

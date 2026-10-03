@@ -81,6 +81,13 @@
   are #299's (`WaterSurface`, by the camera).
 - **Items holstered**: `ItemController.UsablePlayer` is null and `HeldItemVisual` hides the hand
   while `IsSwimming`; the stack stays selected.
+- **Hulls overhead** (#378, `OutFromUnderHull` after the swim's slide, `ClearOfHull` on the
+  stroke, in `FootPlayer.Boat.cs`): against a vehicle's hull that overhangs the swimmer, facing
+  down (come up under a ship's bottom, a boat's bow dropping on the swell), it strokes out across
+  the hull toward its nearer side at 1.5 m/s at least; under a flare (the steamer's topsides) the
+  stroke loses what drives it in under it. Stroking into the steamer's side, the flare slid the
+  swimmer down and held its head under for 3 s; the buoyancy held one that came up under the
+  hull against its bottom for good.
 - **For boats (#302)**: `IsSwimming`, `StartSwimming(at, velocity)` (gets off any ride, false when
   no water or a seated passenger), `StartSwimmingAtSurface(at)`, `SwimDepth`, `HeadUnderwater`,
   `Air`. Boarding from the water: whatever boards calls `ApplyRide`, which ends the swim.

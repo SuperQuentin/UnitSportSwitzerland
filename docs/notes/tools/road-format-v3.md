@@ -77,6 +77,20 @@
   `CornerPlanner`: height = kerb, Solid when kerbed):
   `count u32`, per prop `type u8, variant u8, flags u16, height f32 (raise above the vertices,
   e.g. 0.12 kerb), vertexCount u16, indexCount u16`, xyz vertices, u16 indices.
+- **`SGNL`** traffic lights (#349/#350): `RoadSignal` in `SignalPlan.cs`, rules in `traffic-signals`.
+- **`LANE`** lanes per approach (#353, `RoadApproach.cs`): one record per approach with a #123
+  left pocket (lights or not), a #348 right pocket, or lights, in the junction's home tile.
+  `count u32, version u8` (1; a reader skips a version it does not know, a build before #353 the
+  tag), per record `x, y, z f32` (the stop line's middle as `SGNL` stores it, else the middle of
+  the approach lanes at the pocket's stop bar), `heading f32` (the arm's outward heading, as
+  `SignalArm`), `signal i16` (index into the tile's `SGNL` records, -1 none), `arm u8` (plan arm),
+  `banned u8` (`SignalMoves` an OSM restriction forbids), `laneCentre f32` (the original lane's
+  centre right of the segment's centre line), `laneCount u8`, lanes left to right of 18 B:
+  `offset, fullFrom, taperFrom, stopBehind f32, moves u8, kind u8` (offset right of the original
+  lane at the line; full width from `fullFrom` m before the line; opens or starts moving at
+  `taperFrom`; stops `stopBehind` behind the line, a bike box 4 m, an advanced bike line -3 m;
+  `Car` or `Bike`). Geneva: 815 records, +1.46 KB/tile raw, 0.75 deflated alone. Tier 0:
+  `TerrainFormatTests.Road_lane_section_*`.
 - **Varying along a link** (a sidewalk width per sample, OSM lanes changing mid-line): the
   stage splits the segment; attributes are per segment. Segments already meet end to end at
   tile seams and junction trims.

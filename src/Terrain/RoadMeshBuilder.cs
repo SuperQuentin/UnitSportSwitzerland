@@ -72,6 +72,7 @@ public static class RoadMeshBuilder
         IslandBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);     // roundabout islands (#122)
         PavementBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // turn lane widenings (#123)
         RoadSignBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // junction signs (#121)
+        SignalBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);     // traffic-light poles and heads (#350)
         RoadStreetBuilder.Append(tile, vertices, colors, uvs, uv2s, indices); // sidewalks (#119)
 
         return vertices.Count == 0

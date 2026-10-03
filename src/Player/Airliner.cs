@@ -7,8 +7,8 @@ namespace UnitSport.Player;
 public enum AirlinerCommand { FlapsDown, FlapsUp, Gear, Speedbrake, ParkingBrake, Lights, Engines, Autopilot }
 
 /// <summary>
-/// A heavy aircraft as a ride (#414): the A320 now, the AN-124 and the military freighter later
-/// (#419, #420). Flown by <see cref="AirlinerFlight"/> (its <see cref="State"/>), on the yaw-only body
+/// A heavy aircraft as a ride (#414): the A320 and the military freighter (#420), the AN-124 later
+/// (#419). Flown by <see cref="AirlinerFlight"/> (its <see cref="State"/>), on the yaw-only body
 /// that stands on its main wheels; <see cref="Flyer.Fly"/> maps that state onto the
 /// <see cref="FlightMotion"/> every craft shares. Unlike the light plane it collides as drawn (its
 /// fuselage box, <see cref="HullBoxes"/>), keeps its flaps, gear and brakes when parked
@@ -48,10 +48,14 @@ public sealed class Airliner : Flyer
     public static Airliner? For(RideKind kind) => kind switch
     {
         RideKind.A320 => new Airliner(kind, AirlinerCatalog.A320),
+        RideKind.Freighter => new Airliner(kind, AirlinerCatalog.Freighter),
         _ => null,
     };
 
-    public static bool IsAirliner(RideKind kind) => kind == RideKind.A320;
+    public static bool IsAirliner(RideKind kind) => kind is RideKind.A320 or RideKind.Freighter;
+
+    /// <summary>Every airliner kind, in the picker's order.</summary>
+    public static readonly RideKind[] Kinds = { RideKind.A320, RideKind.Freighter };
 
     public override RideKind Kind => _kind;
     public override string Label => Spec.Name;
@@ -75,73 +79,136 @@ public sealed class Airliner : Flyer
     public override float MaxFov => 78f;
     public override float FovSpeed => 160f;
 
-    // ---- the hull: the fuselage's constant section, so a tail-down rotation never touches it ----
-    private static readonly Aabb Fuselage = new(
-        new Vector3(-A320Layout.HalfWidth, A320Layout.BellyY, -A320Layout.BarrelFront + 0.6f),
-        new Vector3(A320Layout.HalfWidth * 2f, A320Layout.HalfHeight * 2f, A320Layout.BarrelFront - 0.6f - A320Layout.BarrelRear + 3f));
+    // ---- what each type is: its hull, its deck, its seats, its doors (#416, #420) ----
 
-    public override (Aabb Lower, Aabb Upper)? HullBoxes => (Fuselage, new Aabb(Fuselage.Position, Vector3.Zero));
+    /// <summary>One type's body as the walk and the collision see it, built once per kind from its layout.</summary>
+    private sealed record Shape(
+        Aabb Fuselage, (Vector3 Centre, Vector3 Size) Parked, (Vector3 Centre, Vector3 Size) Wing,
+        VehicleDeck[] Decks, SeatAnchor[] Seats, Vector3 Entry, int Doors, int GDoors, string GDoorsName,
+        System.Func<int, Vector3?> Stand);
+
+    private static Shape? _a320, _freighter;
+    private Shape Body => Kind == RideKind.Freighter ? _freighter ??= FreighterShape() : _a320 ??= A320Shape();
+
+    private static Shape A320Shape()
+    {
+        // the hull: the fuselage's constant section, so a tail-down rotation never touches it
+        var fuselage = new Aabb(
+            new Vector3(-A320Layout.HalfWidth, A320Layout.BellyY, -A320Layout.BarrelFront + 0.6f),
+            new Vector3(A320Layout.HalfWidth * 2f, A320Layout.HalfHeight * 2f, A320Layout.BarrelFront - 0.6f - A320Layout.BarrelRear + 3f));
+        // parked it stands on its gear: the box reaches the ground, and runs forward past the front doors
+        float front = -(A320Layout.ForwardDoorZ + 1.2f), rear = fuselage.End.Z;
+        var parked = (new Vector3(0, A320Layout.TopY * 0.5f, (front + rear) * 0.5f), new Vector3(fuselage.Size.X, A320Layout.TopY, rear - front));
+        var wing = (new Vector3(0, A320Layout.WingRootY, -(A320Layout.WingRootLeadingZ + A320Layout.WingTipTrailingZ) * 0.5f),
+            new Vector3(A320Layout.WingTipX * 2f, 0.5f, A320Layout.WingRootLeadingZ - A320Layout.WingRootTrailingZ));
+        var seats = A320Deck.Seats;
+        Vector3? Stand(int i)
+        {
+            if (i < 0 || i >= seats.Length) return null;
+            var hip = seats[i].Hip;
+            // the aisle beside a passenger's row; behind a pilot's seat, on its side of the pedestal
+            return i < 2
+                ? new Vector3(hip.X * 0.9f, seats[i].Floor + 0.05f, -(A320Layout.CockpitWallZ + 0.4f))
+                : new Vector3(0f, seats[i].Floor + 0.05f, hip.Z);
+        }
+        return new Shape(fuselage, parked, wing, new[] { A320Deck.Deck }, seats,
+            AircraftMeshBuilder.Flip(new Vector3(A320Layout.HalfWidth, 0f, A320Layout.ForwardDoorZ)), A320Layout.DoorCount,
+            1 | 4, "doors", Stand);
+    }
+
+    private static Shape FreighterShape()
+    {
+        // the hull: the hold's section from the ramp's hinge to the flight deck, short of the nose and the tail
+        var fuselage = new Aabb(
+            new Vector3(-FreighterLayout.HalfWidth, FreighterLayout.BellyY, -FreighterLayout.BarrelFront - 1.0f),
+            new Vector3(FreighterLayout.HalfWidth * 2f, FreighterLayout.TopY - FreighterLayout.BellyY, FreighterLayout.BarrelFront + 1.0f - FreighterLayout.RampHingeZ));
+        float front = -(FreighterLayout.BarrelFront + 1.0f), rear = -FreighterLayout.RampHingeZ;
+        var parked = (new Vector3(0, FreighterLayout.TopY * 0.5f, (front + rear) * 0.5f), new Vector3(FreighterLayout.SponsonOutX * 2f, FreighterLayout.TopY, rear - front));
+        var wing = (new Vector3(0, FreighterLayout.WingRootY, -(FreighterLayout.WingRootLeadingZ + FreighterLayout.WingRootTrailingZ) * 0.5f),
+            new Vector3(FreighterLayout.WingTipX * 2f, FreighterLayout.WingRootThickness, FreighterLayout.WingRootLeadingZ - FreighterLayout.WingRootTrailingZ));
+        return new Shape(fuselage, parked, wing, new[] { FreighterDeck.Deck }, FreighterDeck.Seats,
+            AircraftMeshBuilder.Flip(new Vector3(FreighterLayout.HalfWidth, 0f, FreighterLayout.CrewDoorZ)), FreighterLayout.DoorCount,
+            1 << FreighterLayout.RampDoor | 1 << FreighterLayout.CrewDoor, "ramp", FreighterDeck.StandSpot);
+    }
+
+    public override (Aabb Lower, Aabb Upper)? HullBoxes => (Body.Fuselage, new Aabb(Body.Fuselage.Position, Vector3.Zero));
 
     /// <summary>
     /// Parked it stands on its gear: the box reaches the ground, or it would sink to its belly; and it
     /// runs forward past the front doors (the nose's taper), where a player gets in.
     /// </summary>
-    public override (Vector3 Centre, Vector3 Size) ParkedBox
-    {
-        get
-        {
-            float front = -(A320Layout.ForwardDoorZ + 1.2f), rear = Fuselage.End.Z;
-            return (new Vector3(0, A320Layout.TopY * 0.5f, (front + rear) * 0.5f), new Vector3(Fuselage.Size.X, A320Layout.TopY, rear - front));
-        }
-    }
+    public override (Vector3 Centre, Vector3 Size) ParkedBox => Body.Parked;
 
-    /// <summary>The wing, parked: something to walk under, not through (at the root's underside).</summary>
+    /// <summary>The wing, parked: something to walk under, not through (at the root's height).</summary>
     public override IEnumerable<(Transform3D Pose, Vector3 Centre, Vector3 Size)> ExtraBoxes()
     {
-        float y = A320Layout.WingRootY;
-        yield return (Transform3D.Identity, new Vector3(0, y, -(A320Layout.WingRootLeadingZ + A320Layout.WingTipTrailingZ) * 0.5f),
-            new Vector3(A320Layout.WingTipX * 2f, 0.5f, A320Layout.WingRootLeadingZ - A320Layout.WingRootTrailingZ));
+        yield return (Transform3D.Identity, Body.Wing.Centre, Body.Wing.Size);
     }
 
-    /// <summary>The cabin and the cockpit, walkable (#416): one deck, the drawn aircraft's frame.</summary>
-    public override VehicleDeck[] Decks => Kind == RideKind.A320 ? new[] { A320Deck.Deck } : System.Array.Empty<VehicleDeck>();
+    /// <summary>The cabin and the cockpit (the A320, #416), the hold and the flight deck (the freighter, #420): one deck in the drawn aircraft's frame.</summary>
+    public override VehicleDeck[] Decks => Kind == RideKind.A320 && _probeHold != null ? A320ProbeDecks : Body.Decks;
 
-    /// <summary>The captain's seat flies; the first officer's, then the cabin, row by row (#416).</summary>
-    public override SeatAnchor[] Seats => Kind == RideKind.A320 ? A320Deck.Seats : System.Array.Empty<SeatAnchor>();
+    private static VehicleDeck[]? _a320ProbeDecks;
+    private static VehicleDeck[] A320ProbeDecks => _a320ProbeDecks ??= new[] { A320Deck.Deck, _probeHold! };
 
-    /// <summary>The aisle beside a passenger's row; behind a pilot's seat, on its side of the pedestal.</summary>
-    public override Vector3? StandSpot(int i)
+    /// <summary>
+    /// A hold the checks give the A320 (#418, <c>HoldNetProbe.TestHold</c>), set on every peer of the
+    /// check before any A320 is made: a test carrier besides the freighter's own hold (#420).
+    /// Null in the game: an A320 carries no vehicles.
+    /// </summary>
+    public static VehicleDeck? ProbeHold
     {
-        if (Kind != RideKind.A320 || i < 0 || i >= Seats.Length) return null;
-        var hip = Seats[i].Hip;
-        return i < 2
-            ? new Vector3(hip.X * 0.9f, Seats[i].Floor + 0.05f, -(A320Layout.CockpitWallZ + 0.4f))
-            : new Vector3(0f, Seats[i].Floor + 0.05f, hip.Z);
+        get => _probeHold;
+        set { _probeHold = value; _a320ProbeDecks = null; }
     }
+    private static VehicleDeck? _probeHold;
+
+    /// <summary>The captain's seat flies; the first officer's, then the cabin row by row or the troop seats (#416, #420).</summary>
+    public override SeatAnchor[] Seats => Body.Seats;
+
+    /// <summary>Where one stands for seat <paramref name="i"/>: the aisle beside it, behind a pilot's seat.</summary>
+    public override Vector3? StandSpot(int i) => Body.Stand(i);
 
     /// <summary>With people aboard and nobody flying it, it stands on its brakes (a passenger cannot taxi it).</summary>
     public override bool Driverless => true;
 
+    /// <summary>How many doors it has (bits of <see cref="DoorsOpen"/>).</summary>
+    public int DoorCount => Body.Doors;
+
+    /// <summary>The doors G works at the controls on the ground: the A320's left ones, the freighter's ramp and crew door.</summary>
+    public int GDoors => Body.GDoors;
+    public string GDoorsName => Body.GDoorsName;
+
     /// <summary>The doors open only standing still: a door is not opened rolling, let alone flying.</summary>
     public bool MayOpenDoors => State.OnGround && State.Velocity.Length() < 1f;
 
-    /// <summary>A door's leaf, open or shut (#416). Shutting always works; opening only stopped.</summary>
+    /// <summary>
+    /// Whether door <paramref name="door"/> may open now: stopped on the ground, or for the freighter's
+    /// ramp and para doors in flight below <see cref="DropSpeed"/> (a drop, #420).
+    /// </summary>
+    public bool MayOpen(int door) => MayOpenDoors
+        || Kind == RideKind.Freighter && door != FreighterLayout.CrewDoor && !State.OnGround && State.Ias < DropSpeed;
+
+    /// <summary>The freighter's ramp and para doors open in flight below this indicated airspeed, m/s (150 kt).</summary>
+    public const float DropSpeed = 77f;
+
+    /// <summary>A door's leaf, open or shut (#416). Shutting always works; opening only when <see cref="MayOpen"/> allows.</summary>
     public void ToggleDoor(int door)
     {
-        if (door < 0 || door >= A320Layout.DoorCount) return;
+        if (door < 0 || door >= DoorCount) return;
         byte bit = (byte)(1 << door);
-        if ((DoorsOpen & bit) == 0 && !MayOpenDoors) return;
+        if ((DoorsOpen & bit) == 0 && !MayOpen(door)) return;
         DoorsOpen ^= bit;
     }
 
-    public override Vector3 EntryPoint => AircraftMeshBuilder.Flip(new Vector3(A320Layout.HalfWidth, 0f, A320Layout.ForwardDoorZ));
+    public override Vector3 EntryPoint => Body.Entry;
     public override bool ExitLeft => true;
 
     public override Node3D BuildVisual(int riderIndex, Outfit outfit = default) => BuildParkedVisual(riderIndex);
 
     public override Node3D BuildParkedVisual(int riderIndex)
     {
-        var rig = AirlinerRig.CreateA320(Color.FromHsv((riderIndex * 0.37f) % 1f, 0.65f, 0.7f));
+        var rig = Kind == RideKind.Freighter ? AirlinerRig.CreateFreighter() : AirlinerRig.CreateA320(Color.FromHsv((riderIndex * 0.37f) % 1f, 0.65f, 0.7f));
         rig.Show(Look(State), 0f);
         return rig;
     }
@@ -310,9 +377,10 @@ public sealed class Airliner : Flyer
         State.Gear = State.GearDown && !State.GearBroken ? 1f : 0f;
         State.SpeedBrake = bits >> 5 & 3;
         State.ParkingBrake = (bits & 1 << 17) != 0;
-        // left running (#415): its engines still turn, so a Sim pilot need not start them again
+        // left running (#415): its engines still turn, so a Sim pilot need not start them again;
+        // Arcade has no start at all, so it is always running (a parked one with its doors open, #417, was not)
         bool running = (bits & 1 << 18) != 0;
-        if (running || bits == 0 && Handling == AirlinerHandling.Arcade)
+        if (running || Handling == AirlinerHandling.Arcade)
         {
             State.Lit = Spec.Engines;
             State.Starting = State.Battery = true;

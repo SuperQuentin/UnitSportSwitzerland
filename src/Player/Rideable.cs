@@ -16,7 +16,7 @@ public enum RideKind
     Plane = 7,
     // 8..63 are cars: CarCatalog.All[kind - CarCatalog.First]. The catalog is append-only.
     // 64..95 are motorbikes: MotorbikeCatalog.All[kind - MotorbikeCatalog.First], append-only too;
-    // entries 32 onwards continue at 128..191 (MotorbikeCatalog.First2, #410).
+    // entries 32 onwards continue at 129..192 (MotorbikeCatalog.First2, #410).
     // 96..119 are trucks and buses: HeavyCatalog.All[kind - HeavyCatalog.First], append-only too.
     /// <summary>
     /// Not a mount: a trailer standing in the world on its own (<c>Vehicles.VehicleState.Train</c>
@@ -32,8 +32,12 @@ public enum RideKind
     Pigeon = 124,
     /// <summary>The Airbus A320 (#414, #416): an <see cref="Player.Airliner"/>, walkable.</summary>
     A320 = 125,
-    // 126 and 127 are kept for the AN-124 (#419) and the military freighter (#420).
-    // 128..191 are motorbikes again (the second range, MotorbikeCatalog.First2). The next other mount is 192.
+    /// <summary>A mobile airstairs truck (#417): <see cref="Player.Airstairs"/>, docks to aircraft doors.</summary>
+    Airstairs = 126,
+    /// <summary>The military cargo plane (#420, the Battle Royale's model): an <see cref="Player.Airliner"/>, walkable, a ramp and a hold.</summary>
+    Freighter = 127,
+    // 128 is the AN-124 (#419). 129..192 are motorbikes again (the second range, MotorbikeCatalog.First2).
+    // The next other mount is 193.
 }
 
 /// <summary>
@@ -290,6 +294,12 @@ public abstract class Rideable
     public bool Walkable => Decks.Length > 0;
 
     /// <summary>
+    /// A walkable vehicle is driven from its wheel inside (#384, E from outside only with the
+    /// setting on); false for one whose deck is not where its wheel is (airstairs, #417).
+    /// </summary>
+    public virtual bool DrivenFromInside => Walkable;
+
+    /// <summary>
     /// Where one stands to take seat <paramref name="i"/> and is put on standing up from it, in its
     /// section's node frame; null: beside it toward the aisle, the way a bus's seats are (#416: an
     /// airliner's window seat is two seats from its aisle, a pilot stands behind the seat).
@@ -321,6 +331,13 @@ public abstract class Rideable
     /// bike's hand-typed box was 1.1 m tall and centred 0.55 m up while the bike stands 1.0 m.
     /// </summary>
     public virtual (Vector3 Centre, Vector3 Size) ParkedBox => Measured(Kind, BuildParkedVisual);
+
+    /// <summary>
+    /// A new collision shape for the hull of the vehicle standing empty in the world, node space,
+    /// when a box (<see cref="ParkedBox"/>) is too coarse: a ship's hull tapering to its bow (#378).
+    /// Null: the box.
+    /// </summary>
+    public virtual Shape3D? BuildParkedHull() => null;
 
     private static readonly System.Collections.Generic.Dictionary<object, (Vector3, Vector3)> _measured = new();
 
@@ -457,6 +474,7 @@ public abstract class Rideable
         RideKind.Helicopter => new Helicopter(),
         RideKind.Plane => new Plane(),
         RideKind.Pigeon => new Pigeon(),
+        RideKind.Airstairs => new Airstairs(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),
         _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),
         _ when HeavyCatalog.For(kind) is { } heavy => new Truck(heavy),

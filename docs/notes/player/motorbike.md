@@ -110,8 +110,8 @@
 
 ## More brands, a second RideKind range, folders, wheelies (#410)
 
-- **RideKind**: 64..95 filled up with the Africa Twins; entries 32 onwards take **128..191**
-  (`MotorbikeCatalog.First2`; the next other mount is 192). `For` / `IsMotorbike` map both ranges;
+- **RideKind**: 64..95 filled up with the Africa Twins; entries 32 onwards take **129..192**
+  (`MotorbikeCatalog.First2`; the next other mount is 193; 128 is the AN-124). `For` / `IsMotorbike` map both ranges;
   probes take `All[n].Kind`, never `First + n`.
 - **Generated entries**: `tools/motorbikes/gen_catalog.py` reads `docs/data/yamaha_fazer_r3_tmax_specs.json`,
   `yamaha_tenere_tracer_kawasaki_versys_specs.json`, `ktm_honda_cb500_specs.json` (same keys as the Africa

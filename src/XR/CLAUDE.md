@@ -11,4 +11,5 @@ touches its topic; search with `grep -ril <word> docs/notes/xr`.
 - `monitor` — What the PC screen shows in VR: first person, both eyes (headset frusta), third person (chase cam, own body on a spectator-only layer) or off; F7, `--vrmonitor`; headset-only / spectator-only render layers
 - `skiing` — Body skiing: lean to steer, crouch to tuck, pole push; merged in `RidePhysics`
 - `air-link` — Streaming to a Quest over Air Link / Link: why it smears (ASW on missed frames, encoder vs aliasing and dither), headset MSAA/scale/VRS settings, PS1 finish off in VR (`xr_smooth`), Link app and Oculus Debug Tool settings
+- `vr-action-map` — Every player action with its keyboard / pad binding, its VR way today and the VR target; design rules R1-R6 (hands for physical, one meaning per control, right stick = action pad when mounted, body first, nothing unreachable, prompts per device); coherence findings
 - `roadmap` — What phase 1 covers and what comes next (replicated head and hands, items, teleport, asymmetric roles)

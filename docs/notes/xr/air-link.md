@@ -18,7 +18,11 @@ Quest. The two ways the picture breaks:
   `Scaling3DScale`, VRS foveation (`VrFoveation`, `VrsMode.XR`; GPUs with variable rate shading,
   else ignored). Settings → Video → Virtual reality. OpenXR's own `FoveationLevel` is for the
   Compatibility renderer only, so it is not used.
-- `xr/openxr/submit_depth_buffer=true`: the runtime gets depth for its reprojection.
+- **No `xr/openxr/submit_depth_buffer`** (left off): with it, the headset's depth target is the
+  OpenXR swapchain image, created without the storage flag. MSAA plus any shader reading depth
+  (`hint_depth_texture`: the water, underwater) makes Forward+ resolve depth into it with a compute
+  shader: `Image ... needs the TEXTURE_USAGE_STORAGE_BIT`, a null uniform set, and the game dies
+  silently once in the world (the title, without water, still works).
 - **PS1 finish off** (`xr_smooth` global, set by `XrSession`): no vertex snap, no colour dither,
   colour steps kept (`common/retro.gdshaderinc`, which every PS1 body uses). The dissolve dithers
   (sightline, tree LOD) stay: they are functional.

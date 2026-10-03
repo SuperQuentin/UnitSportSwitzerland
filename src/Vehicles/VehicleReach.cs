@@ -78,7 +78,7 @@ public static class VehicleReach
     /// steamer) only with <see cref="Core.GameSettings.BoardWalkableFromOutside"/> on; off, it is
     /// walked aboard and driven from inside.
     /// </summary>
-    public static bool FromOutside(VehicleBody v) => Core.GameSettings.Current.BoardWalkableFromOutside || !v.Ride.Walkable;
+    public static bool FromOutside(VehicleBody v) => Core.GameSettings.Current.BoardWalkableFromOutside || !v.Ride.DrivenFromInside;
 
     /// <summary>The door of <paramref name="v"/> nearest <paramref name="point"/> if the player can reach it, or the whole machine when it has none.</summary>
     private static VehicleAim? At(FootPlayer player, VehicleBody v, Vector3 point)

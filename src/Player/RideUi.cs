@@ -235,9 +235,12 @@ public partial class RideUi : CanvasLayer
             Rideable.Create((RideKind)(BoatCatalog.First + i))!.Blurb, true,
             $"{BoatCatalog.First + i}|{b.Name}", () => Rideable.Create((RideKind)(BoatCatalog.First + i))?.BuildParkedVisual(0))).ToList());
         // the airliners (#414): big, so they wait on a runway or an apron
-        var airliners = new[] { RideKind.A320 };
+        var airliners = Airliner.Kinds;
         AddTab(bar, pages, "Aircraft", airliners.Select(k => NewCard(k, Rideable.Create(k)!.Label, Rideable.Create(k)!.Blurb, true,
             $"{k}|{Rideable.Create(k)!.Label}", () => Rideable.Create(k)?.BuildParkedVisual(0))).ToList());
+        // ground equipment at an airport (#417): the airstairs that dock to an airliner's doors
+        AddTab(bar, pages, "Airport", new List<Card> { NewCard(RideKind.Airstairs, "Airstairs", new Airstairs().Blurb, true,
+            $"{RideKind.Airstairs}|Airstairs", () => new Airstairs().BuildParkedVisual(0)) });
         // trailers are not mounts: each card couples one behind the truck being driven, or leaves it
         // in the world ahead to back onto (RideKind.Trailer + its index, decoded in Choose)
         AddTab(bar, pages, "Trailers", TrailerCatalog.All.Select((t, i) => NewCard((RideKind)(TrailerRow + i), t.Label,

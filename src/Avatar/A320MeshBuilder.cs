@@ -115,54 +115,6 @@ public static class A320MeshBuilder
         return new Basis(x, y, x.Cross(y));
     }
 
-    /// <summary>
-    /// A moving part: geometry authored in the aircraft's frame, stored in the hinge node's own frame. The
-    /// node sits at <paramref name="pivotAuth"/> (flipped) turned by <paramref name="basis"/>.
-    /// </summary>
-    private sealed class Part
-    {
-        public readonly MeshScratch S = new();
-        private readonly Vector3 _pivot;
-        private readonly Basis _basis, _inverse;
-
-        public Part(Vector3 pivotAuth, Basis basis)
-        {
-            _pivot = Flip(pivotAuth);
-            _basis = basis;
-            _inverse = basis.Inverse();
-        }
-
-        /// <summary>Authored point of the aircraft to the scratch's coordinates (flipped again by Build).</summary>
-        public Vector3 P(Vector3 auth) => Flip(_inverse * (Flip(auth) - _pivot));
-
-        public Vector3[] P(Vector3[] ring)
-        {
-            var r = new Vector3[ring.Length];
-            for (int i = 0; i < r.Length; i++) r[i] = P(ring[i]);
-            return r;
-        }
-
-        public void Loft(Vector3[][] rings, Color[] edges, Color cap)
-        {
-            var local = new Vector3[rings.Length][];
-            for (int i = 0; i < rings.Length; i++) local[i] = P(rings[i]);
-            S.Loft(local, edges, cap);
-        }
-
-        public void Tube(Vector3 a, Vector3 b, float ra, float rb, Color c, int sides = 8) => S.Tube(P(a), P(b), ra, rb, c, sides);
-
-        public void Box(Vector3 centre, Vector3 size, Color c) => S.Box(P(centre), size, c);
-
-        public Node3D ToNode(string name, Material body, Material glass)
-        {
-            var node = new Node3D { Name = name, Transform = new Transform3D(_basis, _pivot) };
-            var mi = new MeshInstance3D { Name = name + "Mesh", Mesh = S.Build() };
-            node.AddChild(mi);
-            MeshScratch.Paint(mi, body, glass);
-            return node;
-        }
-    }
-
     // ---- the fuselage ---------------------------------------------------------------------
 
     /// <summary>Heights (authored y) of the skin's rows, belly to crown; row k lies between Levels[k] and Levels[k + 1].</summary>
@@ -675,7 +627,7 @@ public static class A320MeshBuilder
         var yAxis = d;
         var xAxis = Vector3.Right;
         var basis = new Basis(xAxis, yAxis, xAxis.Cross(yAxis));
-        var part = new Part((p0 + p1) * 0.5f, basis);
+        var part = new AircraftPart((p0 + p1) * 0.5f, basis);
         Vector3[] Ring(float y) => new[] { FinPt(y, RudderF, 1), FinPt(y, 1f, 1), FinPt(y, 1f, -1), FinPt(y, RudderF, -1) };
         part.Loft(new[] { Ring(RudderFrom), Ring(RudderTo) }, new[] { tail, tail, tail, tail }, tail);
         return part.ToNode("Rudder", bm, gm);
@@ -694,13 +646,13 @@ public static class A320MeshBuilder
     // ---- moving wing surfaces ----------------------------------------------------------------------
 
     /// <summary>A part on a hinge line from <paramref name="inboard"/> to <paramref name="outboard"/>, its local +X pointing to the aircraft's right.</summary>
-    private static Part XPart(int sg, Vector3 inboard, Vector3 outboard)
+    private static AircraftPart XPart(int sg, Vector3 inboard, Vector3 outboard)
     {
         var a = Flip(inboard);
         var b = Flip(outboard);
         // left wing (sg = +1, node −X): inboard is the more-right end; right wing: outboard is
         var along = sg > 0 ? a - b : b - a;
-        return new Part((inboard + outboard) * 0.5f, HingeBasis(along));
+        return new AircraftPart((inboard + outboard) * 0.5f, HingeBasis(along));
     }
 
     private static Node3D Flap(string name, int sg, float x0, float x1, Material bm, Material gm)
@@ -739,7 +691,7 @@ public static class A320MeshBuilder
     private static Node3D MainGear(string name, int sg, Material bm, Material gm)
     {
         var hinge = new Vector3(sg * MainHinge.X, MainHinge.Y, MainHinge.Z);
-        var part = new Part(hinge, Basis.Identity);
+        var part = new AircraftPart(hinge, Basis.Identity);
         float z = MainHinge.Z, gx = sg * MainGearX;
         var axle = new Vector3(gx, MainWheelRadius, z);
         part.Tube(hinge, new Vector3(gx, 1.45f, z), 0.15f, 0.12f, Grey, 8);
@@ -759,7 +711,7 @@ public static class A320MeshBuilder
 
     private static Node3D NoseGear(Material bm, Material gm)
     {
-        var part = new Part(NoseHinge, Basis.Identity);
+        var part = new AircraftPart(NoseHinge, Basis.Identity);
         var axle = new Vector3(0, NoseWheelRadius, NoseGearZ);
         part.Tube(NoseHinge, new Vector3(0, 1.1f, NoseGearZ + 0.1f), 0.12f, 0.1f, Grey, 8);
         part.Tube(new Vector3(0, 1.1f, NoseGearZ + 0.1f), axle, 0.07f, 0.07f, Belly, 8);
@@ -798,7 +750,7 @@ public static class A320MeshBuilder
         float z0 = zc - DoorWidth / 2, z1 = zc + DoorWidth / 2;
         float yPivot = 4.2f;
         var pivot = new Vector3(Po(z1, Mathf.Clamp((yPivot - CentreY) / HalfHeight, -1f, 1f), sg).X, FloorY, z1);
-        var part = new Part(pivot, Basis.Identity);
+        var part = new AircraftPart(pivot, Basis.Identity);
 
         Vector3[] Ring(float z)
         {

@@ -72,7 +72,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.846f, 1.947f, 1.556f, 1.333f, 1.19f, 1.083f }, Primary = 1.7f, FinalDrive = 3.5538f,
             RefZeroTo100 = 0f, RefTopKmh = 217f,
         },
-        // ---- 128 ----
+        // ---- 129 ----
         // Yamaha FZS1000 Fazer (2001-05). docs/data/yamaha_fazer_r3_tmax_specs.json "FZS1000-2001" (FZS1000 Fazer).
         // 998 cc inline four, 143 PS at 10,000 rpm, 106 N·m at 7,500; 6 gears 2.846-1.083, primary 1.700, final 2.730; kerb 231 kg; wheelbase 1450 mm; rake 26.0°, trail 104 mm; 120/70ZR17 + 180/55ZR17.
         // https://en.wikipedia.org/wiki/Yamaha_FZ1
@@ -100,7 +100,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1300f, 58.3f), (3750f, 86.9f), (7500f, 106f), (8750f, 105.3f), (10000f, 100.4f), (11500f, 85.4f) },
             Gears = new[] { 2.846f, 1.947f, 1.556f, 1.333f, 1.19f, 1.083f }, Primary = 1.7f, FinalDrive = 2.73f,
         },
-        // ---- 129 ----
+        // ---- 130 ----
         // Yamaha FZ6 Fazer (FZ6-S) (2004-06). docs/data/yamaha_fazer_r3_tmax_specs.json "FZ6-2004" (FZ6-S (half-fairing Fazer)).
         // 600 cc inline four, 98 PS at 12,000 rpm, 63.1 N·m at 10,000; 6 gears 2.846-1.083, primary 1.955, final 2.875; kerb 208 kg; wheelbase 1440 mm; rake 25.0°, trail 97.5 mm; 120/70ZR17 + 180/55ZR17.
         // https://en.wikipedia.org/wiki/Yamaha_FZ6
@@ -128,7 +128,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1300f, 34.7f), (5000f, 51.7f), (10000f, 63.1f), (11000f, 61.4f), (12000f, 57.4f), (13500f, 48.8f) },
             Gears = new[] { 2.846f, 1.947f, 1.556f, 1.333f, 1.19f, 1.083f }, Primary = 1.955f, FinalDrive = 2.875f,
         },
-        // ---- 130 ----
+        // ---- 131 ----
         // Yamaha FZ6 Fazer S2 (2007-10). docs/data/yamaha_fazer_r3_tmax_specs.json "FZ6-S2-2007" (FZ6 Fazer S2 (4-piston monoblock calipers, optional ABS)).
         // 600 cc inline four, 98 PS at 12,000 rpm, 63.1 N·m at 10,000; 6 gears 2.846-1.083, primary 1.955, final 2.875; kerb 208 kg; wheelbase 1440 mm; rake 25.0°, trail 97.5 mm; 120/70ZR17 + 180/55ZR17.
         // https://en.wikipedia.org/wiki/Yamaha_FZ6
@@ -156,7 +156,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1300f, 34.7f), (5000f, 51.7f), (10000f, 63.1f), (11000f, 61.4f), (12000f, 57.4f), (13500f, 48.8f) },
             Gears = new[] { 2.846f, 1.947f, 1.556f, 1.333f, 1.19f, 1.083f }, Primary = 1.955f, FinalDrive = 2.875f,
         },
-        // ---- 131 ----
+        // ---- 132 ----
         // Yamaha FZ1 Fazer (FZ1-S) (2006-15). docs/data/yamaha_fazer_r3_tmax_specs.json "FZ1-FAZER-2006" (FZ1 Fazer (FZ1-S)).
         // 998 cc inline four, 150 PS at 11,000 rpm, 106 N·m at 8,000; 6 gears 2.846-1.083, primary 1.700, final 2.989; kerb 221 kg; wheelbase 1460 mm; rake 25.0°, trail 109 mm; 120/70ZR17 + 190/50ZR17.
         // Reference: 246 km/h (claimed (motorcyclespecs.co.za 246.1 km/h, test not named; Wikipedia 260 km/h)), 0-100 - s.
@@ -187,7 +187,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.846f, 1.947f, 1.556f, 1.333f, 1.19f, 1.083f }, Primary = 1.7f, FinalDrive = 2.989f,
             RefZeroTo100 = 0f, RefTopKmh = 246f,
         },
-        // ---- 132 ----
+        // ---- 133 ----
         // Yamaha FZ8 / Fazer8 (2010-15). docs/data/yamaha_fazer_r3_tmax_specs.json "FZ8-2010" (FZ8-S Fazer8).
         // 779 cc inline four, 93 PS at 9,900 rpm, 71.0 N·m at 8,100; 6 gears 2.692-1.208, primary 1.700, final 2.754; kerb 215 kg; wheelbase 1460 mm; rake 25.0°, trail 109 mm; 120/70ZR17 + 180/55ZR17.
         // https://en.wikipedia.org/wiki/Yamaha_FZ8_and_FAZER8
@@ -215,7 +215,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1300f, 39.1f), (4050f, 58.2f), (8100f, 71f), (9000f, 69.8f), (9900f, 65.9f), (11400f, 56f) },
             Gears = new[] { 2.692f, 2.063f, 1.762f, 1.522f, 1.35f, 1.208f }, Primary = 1.7f, FinalDrive = 2.7536f,
         },
-        // ---- 133 ----
+        // ---- 134 ----
         // Yamaha YZF-R3 (2016). docs/data/yamaha_fazer_r3_tmax_specs.json "YZFR3-2016" (YZF-R3 (321 cc, ABS)).
         // 321 cc 180° parallel twin, 42 PS at 10,750 rpm, 30 N·m at 9,000; 6 gears 2.5-0.8, primary 3.043, final 3.071; kerb 169 kg; wheelbase 1380 mm; rake 25.0°, trail 95 mm; 110/70-17 + 140/70-17.
         // https://global.yamaha-motor.com/jp/news/2015/0223/yzf-r3.html
@@ -243,7 +243,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1200f, 16.5f), (4500f, 24.6f), (9000f, 30f), (9875f, 29.3f), (10750f, 27.4f), (11550f, 23.3f) },
             Gears = new[] { 2.5f, 1.823f, 1.347f, 1.086f, 0.92f, 0.8f }, Primary = 3.043f, FinalDrive = 3.071f,
         },
-        // ---- 134 ----
+        // ---- 135 ----
         // Yamaha TMAX 500 (XP500) (2001-07). docs/data/yamaha_fazer_r3_tmax_specs.json "TMAX500-2001" (TMAX 500 first generation).
         // 499 cc 360° parallel twin, 38 PS at 7,500 rpm, 45 N·m at 4,500; CVT 2.025-0.728, primary 2.659, final 2.262; kerb 225 kg; wheelbase 1575 mm; rake 28.0°, trail 95 mm; 120/70R14 + 160/60R15.
         // https://global.yamaha-motor.com/jp/news/2004/0714/tmax.html
@@ -273,7 +273,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.025f }, Primary = 2.659f, FinalDrive = 2.262f,
             Cvt = true, CvtHigh = 0.728f, CvtRpm = 7500f,
         },
-        // ---- 135 ----
+        // ---- 136 ----
         // Yamaha TMAX 500 (XP500) (2008-11). docs/data/yamaha_fazer_r3_tmax_specs.json "TMAX500-2008" (TMAX 500 second generation (aluminium frame)).
         // 499 cc 360° parallel twin, 44 PS at 7,500 rpm, 45 N·m at 6,500; CVT 2.025-0.728, primary 2.659, final 2.262; kerb 222 kg; wheelbase 1580 mm; rake 25.0°, trail 92 mm; 120/70R15 + 160/60R15.
         // https://global.yamaha-motor.com/jp/news/2008/0604/tmax.html
@@ -303,7 +303,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.025f }, Primary = 2.659f, FinalDrive = 2.262f,
             Cvt = true, CvtHigh = 0.728f, CvtRpm = 7500f,
         },
-        // ---- 136 ----
+        // ---- 137 ----
         // Yamaha TMAX 530 (XP530) (2012-16). docs/data/yamaha_fazer_r3_tmax_specs.json "TMAX530-2012" (TMAX 530 (ABS optional)).
         // 530 cc 360° parallel twin, 46 PS at 6,750 rpm, 52.3 N·m at 5,250; CVT 2.041-0.758, primary 1.000, final 6.034; kerb 217 kg; wheelbase 1580 mm; rake 25.0°, trail 92 mm; 120/70R15 + 160/60R15.
         // https://global.yamaha-motor.com/jp/news/2013/0515/tmax.html
@@ -332,7 +332,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.041f }, Primary = 1f, FinalDrive = 6.034f,
             Cvt = true, CvtHigh = 0.758f, CvtRpm = 6750f,
         },
-        // ---- 137 ----
+        // ---- 138 ----
         // Yamaha TMAX 530 SX / DX (XP530-A) (2017-19). docs/data/yamaha_fazer_r3_tmax_specs.json "TMAX530-SX-DX-2017" (TMAX 530 SX (standard) and DX (premium)).
         // 530 cc 360° parallel twin, 46 PS at 6,750 rpm, 53.0 N·m at 5,250; CVT 2.041-0.758, primary 1.000, final 6.034; kerb 216 kg; wheelbase 1580 mm; rake 26.0°, trail 98 mm; 120/70R15 + 160/60R15.
         // https://en.wikipedia.org/wiki/Yamaha_TMAX
@@ -361,7 +361,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.041f }, Primary = 1f, FinalDrive = 6.034f,
             Cvt = true, CvtHigh = 0.758f, CvtRpm = 6750f,
         },
-        // ---- 138 ----
+        // ---- 139 ----
         // Yamaha TMAX 560 (2020-21). docs/data/yamaha_fazer_r3_tmax_specs.json "TMAX560-2020" (TMAX 560 and TMAX 560 Tech MAX).
         // 561 cc 360° parallel twin, 48 PS at 7,500 rpm, 56 N·m at 5,250; CVT 2.041-0.758, primary 1.000, final 5.771; kerb 218 kg; wheelbase 1575 mm; rake 26.0°, trail 98 mm; 120/70R15 + 160/60R15.
         // https://motor-fan.jp/article/781416/2/
@@ -391,7 +391,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.041f }, Primary = 1f, FinalDrive = 5.771f,
             Cvt = true, CvtHigh = 0.758f, CvtRpm = 7500f,
         },
-        // ---- 139 ----
+        // ---- 140 ----
         // Yamaha TMAX 560 (2022+). docs/data/yamaha_fazer_r3_tmax_specs.json "TMAX560-2022" (TMAX 560 / Tech MAX (2022 update)).
         // 561 cc 360° parallel twin, 48 PS at 7,500 rpm, 56 N·m at 5,250; CVT 2.041-0.758, primary 1.000, final 5.771; kerb 218 kg; wheelbase 1575 mm; rake 26.0°, trail 98 mm; 120/70R15 + 160/60R15.
         // https://motor-fan.jp/article/781416/2/
@@ -421,7 +421,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.041f }, Primary = 1f, FinalDrive = 5.771f,
             Cvt = true, CvtHigh = 0.758f, CvtRpm = 7500f,
         },
-        // ---- 140 ----
+        // ---- 141 ----
         // Yamaha XT1200Z Super Ténéré (2010-13). docs/data/yamaha_tenere_tracer_kawasaki_versys_specs.json "XT1200Z-2010" (XT1200Z (2010-2013)).
         // 1199 cc 270° parallel twin, 110 PS at 7,250 rpm, 114.1 N·m at 6,000; 6 gears 2.769-0.929, primary 1.466, final 2.987; kerb 261 kg; wheelbase 1540 mm; rake 28.0°, trail 125 mm; 110/80R19 + 150/70R17.
         // Reference: 210 km/h (claimed (motorradundreisen database)), 0-100 3.7 s.
@@ -452,7 +452,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.769f, 2.063f, 1.571f, 1.25f, 1.042f, 0.929f }, Primary = 1.466f, FinalDrive = 2.987f,
             RefZeroTo100 = 3.7f, RefTopKmh = 210f,
         },
-        // ---- 141 ----
+        // ---- 142 ----
         // Yamaha XT1200Z Super Ténéré (2014-21). docs/data/yamaha_tenere_tracer_kawasaki_versys_specs.json "XT1200Z-2014" (XT1200Z standard (2014-2021)).
         // 1199 cc 270° parallel twin, 112 PS at 7,250 rpm, 117 N·m at 6,000; 6 gears 2.769-0.929, primary 1.466, final 2.987; kerb 257 kg; wheelbase 1540 mm; rake 28.0°, trail 126 mm; 110/80R19 + 150/70R17.
         // Reference: 210 km/h (claimed (motorradundreisen database)), 0-100 - s.
@@ -483,7 +483,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.769f, 2.063f, 1.571f, 1.25f, 1.042f, 0.929f }, Primary = 1.466f, FinalDrive = 2.987f,
             RefZeroTo100 = 0f, RefTopKmh = 210f,
         },
-        // ---- 142 ----
+        // ---- 143 ----
         // Yamaha XT1200ZE Super Ténéré (2014-21). docs/data/yamaha_tenere_tracer_kawasaki_versys_specs.json "XT1200ZE-2014" (XT1200ZE electronic suspension (2014-2021)).
         // 1199 cc 270° parallel twin, 112 PS at 7,250 rpm, 117 N·m at 6,000; 6 gears 2.769-0.929, primary 1.466, final 2.987; kerb 266 kg; wheelbase 1540 mm; rake 28.0°, trail 126 mm; 110/80R19 + 150/70R17.
         // Reference: 210 km/h (claimed (motorradundreisen database)), 0-100 - s.
@@ -513,7 +513,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.769f, 2.063f, 1.571f, 1.25f, 1.042f, 0.929f }, Primary = 1.466f, FinalDrive = 2.987f,
             RefZeroTo100 = 0f, RefTopKmh = 210f,
         },
-        // ---- 143 ----
+        // ---- 144 ----
         // Yamaha MT-09 Tracer (2015-17). docs/data/yamaha_tenere_tracer_kawasaki_versys_specs.json "MT09TRACER-2015" (MT-09 Tracer ABS (2015-2017)).
         // 847 cc CP3 triple, 115 PS at 10,000 rpm, 87.5 N·m at 8,500; 6 gears 2.666-1.037, primary 1.680, final 2.812; kerb 210 kg; wheelbase 1440 mm; rake 24.0°, trail 100 mm; 120/70ZR17 + 180/55ZR17.
         // https://bikebros.co.jp/catalog/2/43_7/
@@ -541,7 +541,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1250f, 48.1f), (4250f, 71.8f), (8500f, 87.5f), (9250f, 85.8f), (10000f, 80.8f), (11000f, 68.7f) },
             Gears = new[] { 2.666f, 2f, 1.619f, 1.38f, 1.19f, 1.037f }, Primary = 1.68f, FinalDrive = 2.812f,
         },
-        // ---- 144 ----
+        // ---- 145 ----
         // Yamaha Tracer 900 (2018-20). docs/data/yamaha_tenere_tracer_kawasaki_versys_specs.json "TRACER900-2018" (Tracer 900 (2018-2020)).
         // 847 cc CP3 triple, 115 PS at 10,000 rpm, 87.5 N·m at 8,500; 6 gears 2.666-1.037, primary 1.680, final 2.812; kerb 210 kg; wheelbase 1440 mm; rake 24.0°, trail 100 mm; 120/70ZR17 + 180/55ZR17.
         // https://bikebros.co.jp/catalog/2/999_125/13734/
@@ -570,7 +570,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1250f, 48.1f), (4250f, 71.8f), (8500f, 87.5f), (9250f, 85.8f), (10000f, 80.8f), (11000f, 68.7f) },
             Gears = new[] { 2.666f, 2f, 1.619f, 1.38f, 1.19f, 1.037f }, Primary = 1.68f, FinalDrive = 2.812f,
         },
-        // ---- 145 ----
+        // ---- 146 ----
         // Yamaha Tracer 900 GT (2018-20). docs/data/yamaha_tenere_tracer_kawasaki_versys_specs.json "TRACER900GT-2018" (Tracer 900 GT (2018-2020)).
         // 847 cc CP3 triple, 115 PS at 10,000 rpm, 87.5 N·m at 8,500; 6 gears 2.666-1.037, primary 1.680, final 2.812; kerb 215 kg; wheelbase 1500 mm; rake 24.0°, trail 100 mm; 120/70ZR17 + 180/55ZR17.
         // https://bikebros.co.jp/catalog/2/999_125/13734/
@@ -598,7 +598,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1250f, 48.1f), (4250f, 71.8f), (8500f, 87.5f), (9250f, 85.8f), (10000f, 80.8f), (11000f, 68.7f) },
             Gears = new[] { 2.666f, 2f, 1.619f, 1.38f, 1.19f, 1.037f }, Primary = 1.68f, FinalDrive = 2.812f,
         },
-        // ---- 146 ----
+        // ---- 147 ----
         // Yamaha Tracer 700 (2016-19). docs/data/yamaha_tenere_tracer_kawasaki_versys_specs.json "TRACER700-2016" (Tracer 700 (2016-2019)).
         // 689 cc 270° parallel twin, 75 PS at 9,000 rpm, 68 N·m at 6,500; 6 gears 2.846-0.964, primary 1.925, final 2.812; kerb 196 kg; wheelbase 1460 mm; rake 24.0°, trail 90 mm; 120/70ZR17 + 180/55ZR17.
         // https://en.wikipedia.org/wiki/Yamaha_Tracer_700
@@ -626,7 +626,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1200f, 37.4f), (3250f, 55.8f), (6500f, 68f), (7750f, 64.5f), (9000f, 58.4f), (9800f, 49.6f) },
             Gears = new[] { 2.846f, 2.125f, 1.632f, 1.3f, 1.091f, 0.964f }, Primary = 1.925f, FinalDrive = 2.812f,
         },
-        // ---- 147 ----
+        // ---- 148 ----
         // Yamaha Tracer 7 (2020+). docs/data/yamaha_tenere_tracer_kawasaki_versys_specs.json "TRACER7-2020" (Tracer 7 (2020+), GT see notes).
         // 689 cc 270° parallel twin, 73 PS at 8,750 rpm, 68 N·m at 6,500; 6 gears 2.846-0.964, primary 1.925, final 2.812; kerb 196 kg; wheelbase 1460 mm; rake 24.8°, trail 90 mm; 120/70ZR17 + 180/55ZR17.
         // Reference: 200 km/h (claimed (inSella data sheet)), 0-100 - s.
@@ -657,7 +657,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.846f, 2.125f, 1.632f, 1.3f, 1.091f, 0.964f }, Primary = 1.925f, FinalDrive = 2.812f,
             RefZeroTo100 = 0f, RefTopKmh = 200f,
         },
-        // ---- 148 ----
+        // ---- 149 ----
         // Yamaha Tracer 9 (2021+). docs/data/yamaha_tenere_tracer_kawasaki_versys_specs.json "TRACER9-2021" (Tracer 9 (2021+)).
         // 890 cc CP3 triple, 119 PS at 10,000 rpm, 93 N·m at 7,000; 6 gears 2.571-1.037, primary 1.680, final 2.812; kerb 213 kg; wheelbase 1500 mm; rake 25.0°, trail 108 mm; 120/70ZR17 + 180/55ZR17.
         // https://www.bikebros.co.jp/catalog/2/999_126/16369/
@@ -685,7 +685,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1250f, 51.2f), (3500f, 76.3f), (7000f, 93f), (8500f, 90.1f), (10000f, 83.6f), (11000f, 71f) },
             Gears = new[] { 2.571f, 1.947f, 1.619f, 1.38f, 1.19f, 1.037f }, Primary = 1.68f, FinalDrive = 2.812f,
         },
-        // ---- 149 ----
+        // ---- 150 ----
         // Yamaha Tracer 9 GT (2021+). docs/data/yamaha_tenere_tracer_kawasaki_versys_specs.json "TRACER9GT-2021" (Tracer 9 GT (2021+)).
         // 890 cc CP3 triple, 119 PS at 10,000 rpm, 93 N·m at 7,000; 6 gears 2.571-1.037, primary 1.680, final 2.812; kerb 220 kg; wheelbase 1500 mm; rake 25.0°, trail 108 mm; 120/70ZR17 + 180/55ZR17.
         // Reference: 214.1 km/h (measured (inSella, Italy, 2022 Tracer 9 GT)), 0-100 3.1 s.
@@ -716,7 +716,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.571f, 1.947f, 1.619f, 1.38f, 1.19f, 1.037f }, Primary = 1.68f, FinalDrive = 2.812f,
             RefZeroTo100 = 3.1f, RefTopKmh = 214.1f,
         },
-        // ---- 150 ----
+        // ---- 151 ----
         // Yamaha Tracer 9 GT+ (2023+). docs/data/yamaha_tenere_tracer_kawasaki_versys_specs.json "TRACER9GTPLUS-2023" (Tracer 9 GT+ (2023+)).
         // 890 cc CP3 triple, 119 PS at 10,000 rpm, 93 N·m at 7,000; 6 gears 2.571-1.037, primary 1.680, final 2.812; kerb 223 kg; wheelbase 1500 mm; rake 25.0°, trail 108 mm; 120/70ZR17 + 180/55ZR17.
         // https://www.bikebros.co.jp/catalog/2/999_126/16369/
@@ -744,7 +744,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1250f, 51.2f), (3500f, 76.3f), (7000f, 93f), (8500f, 90.1f), (10000f, 83.6f), (11000f, 71f) },
             Gears = new[] { 2.571f, 1.947f, 1.619f, 1.38f, 1.19f, 1.037f }, Primary = 1.68f, FinalDrive = 2.812f,
         },
-        // ---- 151 ----
+        // ---- 152 ----
         // Kawasaki Versys 650 (2007-09). docs/data/yamaha_tenere_tracer_kawasaki_versys_specs.json "KLE650-2007" (Versys (2007-2009)).
         // 649 cc 180° parallel twin, 64 PS at 8,000 rpm, 61 N·m at 6,800; 6 gears 2.438-0.852, primary 2.095, final 2.873; kerb 206 kg; wheelbase 1415 mm; rake 25.0°, trail 108 mm; 120/70ZR17 + 160/60ZR17.
         // https://www.ultimatespecs.com/motorcycles-specs/kawasaki/kawasaki-versys-2007
@@ -773,7 +773,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1200f, 33.6f), (3400f, 50f), (6800f, 61f), (7400f, 59.7f), (8000f, 56.1f), (8800f, 47.7f) },
             Gears = new[] { 2.438f, 1.714f, 1.333f, 1.111f, 0.966f, 0.852f }, Primary = 2.095f, FinalDrive = 2.8726f,
         },
-        // ---- 152 ----
+        // ---- 153 ----
         // Kawasaki Versys 650 (2010-14). docs/data/yamaha_tenere_tracer_kawasaki_versys_specs.json "KLE650-2010" (Versys 650 (2010-2014)).
         // 649 cc 180° parallel twin, 64 PS at 8,000 rpm, 61 N·m at 6,800; 6 gears 2.438-0.852, primary 2.095, final 2.975; kerb 206 kg; wheelbase 1415 mm; rake 25.0°, trail 108 mm; 120/70ZR17 + 160/60ZR17.
         // Reference: 186 km/h (claimed (database figure)), 0-100 - s.
@@ -804,7 +804,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.438f, 1.714f, 1.333f, 1.111f, 0.966f, 0.852f }, Primary = 2.095f, FinalDrive = 2.975f,
             RefZeroTo100 = 0f, RefTopKmh = 186f,
         },
-        // ---- 153 ----
+        // ---- 154 ----
         // Kawasaki Versys 650 (2015-21). docs/data/yamaha_tenere_tracer_kawasaki_versys_specs.json "KLE650-2015" (Versys 650 (2015-2021)).
         // 649 cc 180° parallel twin, 70 PS at 8,500 rpm, 64 N·m at 7,000; 6 gears 2.438-0.852, primary 2.095, final 3.067; kerb 216 kg; wheelbase 1415 mm; rake 25.0°, trail 110 mm; 120/70ZR17 + 160/60ZR17.
         // Reference: 186 km/h (claimed (database figure; Kawasaki quoted about 185 per MOTORRAD online)), 0-100 - s.
@@ -835,7 +835,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.438f, 1.714f, 1.333f, 1.111f, 0.966f, 0.852f }, Primary = 2.095f, FinalDrive = 3.067f,
             RefZeroTo100 = 0f, RefTopKmh = 186f,
         },
-        // ---- 154 ----
+        // ---- 155 ----
         // Kawasaki Versys 650 (2022+). docs/data/yamaha_tenere_tracer_kawasaki_versys_specs.json "KLE650-2022" (Versys 650 (2022+)).
         // 649 cc 180° parallel twin, 67 PS at 8,500 rpm, 61 N·m at 7,000; 6 gears 2.438-0.852, primary 2.095, final 3.067; kerb 219 kg; wheelbase 1415 mm; rake 25.0°, trail 108 mm; 120/70ZR17 + 160/60ZR17.
         // Reference: 186 km/h (claimed (database figure)), 0-100 - s.
@@ -866,7 +866,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.438f, 1.714f, 1.333f, 1.111f, 0.966f, 0.852f }, Primary = 2.095f, FinalDrive = 3.067f,
             RefZeroTo100 = 0f, RefTopKmh = 186f,
         },
-        // ---- 155 ----
+        // ---- 156 ----
         // KTM 690 SMC (2008-11). docs/data/ktm_honda_cb500_specs.json "690SMC-2008" (690 SMC, 654 cc, EU 66 PS).
         // 654 cc single, 66 PS at 7,500 rpm, 64 N·m at 6,000; 6 gears 2.5-0.87, primary 2.194, final 2.625; kerb 152 kg; wheelbase 1480 mm; rake 27.0°, trail 100.0 mm; 120/70ZR17 + 160/60ZR17.
         // Reference: 180 km/h (claimed (motorradundreisen.de database, original source not stated)), 0-100 - s.
@@ -897,7 +897,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.5f, 1.75f, 1.333f, 1.095f, 0.957f, 0.87f }, Primary = 2.194f, FinalDrive = 2.625f,
             RefZeroTo100 = 0f, RefTopKmh = 180f,
         },
-        // ---- 156 ----
+        // ---- 157 ----
         // KTM 690 SMC R (2012-18). docs/data/ktm_honda_cb500_specs.json "690SMCR-2012" (690 SMC R, 67 hp (A2-restricted version available)).
         // 690 cc single, 67 PS at 7,500 rpm, 68 N·m at 6,000; 6 gears 2.5-0.87, primary 2.194, final 2.625; kerb 152 kg; wheelbase 1480 mm; rake 27.0°, trail 100.0 mm; 120/70R17 + 160/60R17.
         // Reference: 180 km/h (claimed (motorradundreisen.de database, 2015 model year)), 0-100 - s.
@@ -928,7 +928,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 2.5f, 1.75f, 1.333f, 1.095f, 0.957f, 0.87f }, Primary = 2.194f, FinalDrive = 2.625f,
             RefZeroTo100 = 0f, RefTopKmh = 180f,
         },
-        // ---- 157 ----
+        // ---- 158 ----
         // KTM 690 SMC R (2019-25). docs/data/ktm_honda_cb500_specs.json "690SMCR-2019" (690 SMC R, 693 cc LC4 (Euro 4/5)).
         // 693 cc single, 75 PS at 8,000 rpm, 73.5 N·m at 6,500; 6 gears 2.5-0.87, primary 2.194, final 2.625; kerb 160 kg; wheelbase 1480 mm; rake 27.0°, trail 100.0 mm; 120/70ZR17 + 160/60ZR17.
         // https://www.manualslib.com/manual/4116433/Ktm-690-Smc-R-2023.html?page=114
@@ -957,7 +957,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1500f, 40.4f), (3250f, 60.3f), (6500f, 73.5f), (7250f, 71.1f), (8000f, 65.9f), (8800f, 56f) },
             Gears = new[] { 2.5f, 1.75f, 1.35f, 1.095f, 0.957f, 0.87f }, Primary = 2.194f, FinalDrive = 2.625f,
         },
-        // ---- 158 ----
+        // ---- 159 ----
         // KTM 125 Duke (2011-16). docs/data/ktm_honda_cb500_specs.json "125DUKE-2011" (125 Duke (A1, 15 hp)).
         // 125 cc single, 15 PS at 10,500 rpm, 12 N·m at 8,000; 6 gears 2.833-0.917, primary 3.273, final 3.214; kerb 139 kg; wheelbase 1367 mm; rake 25.0°, trail 100.0 mm; 110/70-17 + 150/60-17.
         // https://www.manualslib.com/manual/584624/Ktm-125-Duke-Eu.html?page=160
@@ -986,7 +986,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1500f, 6.6f), (4000f, 9.8f), (8000f, 12f), (9250f, 11.3f), (10500f, 10.2f), (11300f, 8.6f) },
             Gears = new[] { 2.833f, 2.067f, 1.556f, 1.238f, 1.045f, 0.917f }, Primary = 3.273f, FinalDrive = 3.214f,
         },
-        // ---- 159 ----
+        // ---- 160 ----
         // KTM 390 Duke (2017-23). docs/data/ktm_honda_cb500_specs.json "390DUKE-2017" (390 Duke (373 cc, 44 hp)).
         // 373 cc single, 44 PS at 9,500 rpm, 35 N·m at 7,250; 6 gears 2.667-0.84, primary 2.667, final 3.000; kerb 163 kg; wheelbase 1357 mm; rake 25.0°, trail 100.0 mm; 110/70R17 + 150/60R17.
         // https://www.manualslib.com/manual/1292831/Ktm-390-Duke-2017.html?page=219
@@ -1015,7 +1015,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1500f, 19.2f), (3625f, 28.7f), (7250f, 35f), (8375f, 34.5f), (9500f, 32.6f), (10300f, 27.7f) },
             Gears = new[] { 2.667f, 1.857f, 1.421f, 1.143f, 0.957f, 0.84f }, Primary = 2.667f, FinalDrive = 3f,
         },
-        // ---- 160 ----
+        // ---- 161 ----
         // KTM 390 Duke (2024-26). docs/data/ktm_honda_cb500_specs.json "390DUKE-2024" (390 Duke (399 cc, Euro 5)).
         // 399 cc single, 45 PS at 8,500 rpm, 39 N·m at 7,000; 6 gears 2.667-0.84, primary 2.606, final 3.000; kerb 165 kg; wheelbase 1357 mm; rake 24.0°, trail 100.0 mm; 110/70R17 + 150/60R17.
         // https://www.manualslib.com/manual/3308061/Ktm-390-Duke-2024.html?page=112
@@ -1044,7 +1044,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1500f, 21.5f), (3500f, 32f), (7000f, 39f), (7750f, 38.8f), (8500f, 37.1f), (9300f, 31.5f) },
             Gears = new[] { 2.667f, 1.857f, 1.421f, 1.143f, 0.957f, 0.84f }, Primary = 2.606f, FinalDrive = 3f,
         },
-        // ---- 161 ----
+        // ---- 162 ----
         // KTM 690 Duke / 690 Duke R (2016-19). docs/data/ktm_honda_cb500_specs.json "690DUKE-2016" (690 Duke (74 hp); the 690 Duke R shares chassis and engine with a taller seat and WP Performance suspension).
         // 693 cc single, 75 PS at 8,000 rpm, 74 N·m at 6,500; 6 gears 2.5-0.87, primary 2.194, final 2.500; kerb 163 kg; wheelbase 1466 mm; rake 26.5°, trail 100.0 mm; 120/70ZR17 + 160/60ZR17.
         // https://www.manualslib.com/manual/1147185/Ktm-2016-690-Duke-R.html?page=176
@@ -1073,7 +1073,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1500f, 40.7f), (3250f, 60.7f), (6500f, 74f), (7250f, 71.3f), (8000f, 65.9f), (8800f, 56f) },
             Gears = new[] { 2.5f, 1.75f, 1.333f, 1.095f, 0.957f, 0.87f }, Primary = 2.194f, FinalDrive = 2.5f,
         },
-        // ---- 162 ----
+        // ---- 163 ----
         // KTM 790 Duke (2018-20). docs/data/ktm_honda_cb500_specs.json "790DUKE-2018" (790 Duke (105 hp)).
         // 799 cc 75° parallel twin, 106 PS at 9,000 rpm, 87 N·m at 8,000; 6 gears 2.846-0.957, primary 1.923, final 2.562; kerb 183 kg; wheelbase 1475 mm; rake 24.0°, trail 98 mm; 120/70ZR17 + 180/55ZR17.
         // https://www.manualslib.com/manual/1422392/Ktm-790-Duke-2018.html?page=251
@@ -1102,7 +1102,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1200f, 47.9f), (4000f, 71.3f), (8000f, 87f), (8500f, 86.7f), (9000f, 83.1f), (9800f, 70.6f) },
             Gears = new[] { 2.846f, 2f, 1.55f, 1.273f, 1.083f, 0.957f }, Primary = 1.923f, FinalDrive = 2.562f,
         },
-        // ---- 163 ----
+        // ---- 164 ----
         // KTM 890 Duke R (2020-23). docs/data/ktm_honda_cb500_specs.json "890DUKER-2020" (890 Duke R (121 hp)).
         // 890 cc 75° parallel twin, 123 PS at 9,250 rpm, 99 N·m at 7,750; 6 gears 2.846-0.957, primary 1.923, final 2.412; kerb 180 kg; wheelbase 1482 mm; rake 24.3°, trail 99.7 mm; 120/70ZR17 + 180/55ZR17.
         // https://www.manualslib.com/manual/1877555/Ktm-890-Duke-R-Us-2020.html?page=278
@@ -1131,7 +1131,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1200f, 54.5f), (3875f, 81.2f), (7750f, 99f), (8500f, 98f), (9250f, 93.2f), (10050f, 79.2f) },
             Gears = new[] { 2.846f, 2f, 1.55f, 1.273f, 1.083f, 0.957f }, Primary = 1.923f, FinalDrive = 2.412f,
         },
-        // ---- 164 ----
+        // ---- 165 ----
         // KTM 1290 Super Duke R (2020-23). docs/data/ktm_honda_cb500_specs.json "1290SDR-2020" (1290 Super Duke R (180 hp)).
         // 1301 cc 75° V-twin, 183 PS at 9,500 rpm, 140 N·m at 8,000; 6 gears 2.917-0.963, primary 1.900, final 2.235; kerb 205 kg; wheelbase 1497 mm; rake 25.2°, trail 108 mm; 120/70ZR17 + 200/55ZR17.
         // https://www.manualslib.com/manual/2025162/Ktm-1290-Super-Duke-R-Us-2020.html?page=315
@@ -1160,7 +1160,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1200f, 77f), (4000f, 114.8f), (8000f, 140f), (8750f, 140f), (9500f, 134.9f), (10300f, 114.7f) },
             Gears = new[] { 2.917f, 2.133f, 1.667f, 1.35f, 1.125f, 0.963f }, Primary = 1.9f, FinalDrive = 2.235f,
         },
-        // ---- 165 ----
+        // ---- 166 ----
         // Honda CB500 (1994-03). docs/data/ktm_honda_cb500_specs.json "CB500-PC26-1994" (CB500 naked parallel twin (CB500S half-faired from 1998)).
         // 498 cc 180° parallel twin, 58 PS at 9,500 rpm, 47 N·m at 8,000; 6 gears 3.461-1.13, primary 1.947, final 2.666; kerb 187 kg; wheelbase 1430 mm; rake 25.0°, trail 100.0 mm; 110/80-17 + 130/80-17.
         // Reference: 193 km/h (claimed (Wikipedia infobox, citing Haynes; not a road test)), 0-100 - s.
@@ -1189,7 +1189,7 @@ public static partial class MotorbikeCatalog
             Gears = new[] { 3.461f, 2.235f, 1.75f, 1.478f, 1.28f, 1.13f }, Primary = 1.947f, FinalDrive = 2.666f,
             RefZeroTo100 = 0f, RefTopKmh = 193f,
         },
-        // ---- 166 ----
+        // ---- 167 ----
         // Honda CB500F (2013-15). docs/data/ktm_honda_cb500_specs.json "CB500F-2013" (CB500F / CB500FA (ABS)).
         // 471 cc 180° parallel twin, 48 PS at 8,500 rpm, 43 N·m at 7,000; 6 gears 3.285-1.043, primary 2.029, final 2.733; kerb 190 kg; wheelbase 1410 mm; rake 25.5°, trail 103 mm; 120/70ZR17 + 160/60ZR17.
         // https://hondanews.com/en-US/powersports/releases/release-62b05965c2cd490a8879a9f74b1c9965-2013-honda-cb500f-cb500f-abs-specifications
@@ -1218,7 +1218,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1200f, 23.7f), (3500f, 35.3f), (7000f, 43f), (7750f, 42f), (8500f, 39.3f), (9300f, 33.4f) },
             Gears = new[] { 3.285f, 2.105f, 1.6f, 1.3f, 1.15f, 1.043f }, Primary = 2.029f, FinalDrive = 2.733f,
         },
-        // ---- 167 ----
+        // ---- 168 ----
         // Honda CB500F (2019-21). docs/data/ktm_honda_cb500_specs.json "CB500F-2019" (CB500F / CB500FA (ABS), 2019 revision).
         // 471 cc 180° parallel twin, 48 PS at 8,500 rpm, 43 N·m at 6,500; 6 gears 3.285-1.043, primary 2.029, final 2.733; kerb 187 kg; wheelbase 1410 mm; rake 25.5°, trail 102 mm; 120/70ZR17 + 160/60ZR17.
         // https://www.bike-parts.fr/thumbs/pdf_url/img/owner_manuals/owner_CB500FK_FAK_EN/2500_2500/0153.pdf
@@ -1247,7 +1247,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1200f, 23.7f), (3250f, 35.3f), (6500f, 43f), (7500f, 42f), (8500f, 39.3f), (9300f, 33.4f) },
             Gears = new[] { 3.285f, 2.105f, 1.6f, 1.3f, 1.15f, 1.043f }, Primary = 2.029f, FinalDrive = 2.733f,
         },
-        // ---- 168 ----
+        // ---- 169 ----
         // Honda CB500X (2019-21). docs/data/ktm_honda_cb500_specs.json "CB500X-2019" (CB500X / CB500XA (ABS), 2019 revision).
         // 471 cc 180° parallel twin, 48 PS at 8,600 rpm, 43 N·m at 6,500; 6 gears 3.285-1.043, primary 2.029, final 2.733; kerb 195 kg; wheelbase 1445 mm; rake 27.5°, trail 108 mm; 110/80R19 + 160/60R17.
         // https://www.bike-parts.fr/thumbs/pdf_url/img/owner_manuals/owner_CB500XK_XAK_EN/2500_2500/0151.pdf
@@ -1275,7 +1275,7 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1200f, 23.7f), (3250f, 35.3f), (6500f, 43f), (7550f, 41.8f), (8600f, 38.9f), (9400f, 33f) },
             Gears = new[] { 3.285f, 2.105f, 1.6f, 1.3f, 1.15f, 1.043f }, Primary = 2.029f, FinalDrive = 2.733f,
         },
-        // ---- 169 ----
+        // ---- 170 ----
         // Honda CB500 Hornet (2024-26). docs/data/ktm_honda_cb500_specs.json "CB500HORNET-2024" (CB500 Hornet (EU, ABS)).
         // 471 cc 180° parallel twin, 48 PS at 8,600 rpm, 43 N·m at 6,500; 6 gears 3.285-1.043, primary 2.029, final 2.733; kerb 188 kg; wheelbase 1410 mm; rake 25.5°, trail 101 mm; 120/70R17 + 160/60-17.
         // https://hondanews.com/en-US/releases/release-cf005034e20eb27505fd8e6bbb024c57-2026-honda-cb500-hornet-specifications

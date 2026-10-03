@@ -41,7 +41,13 @@ public readonly record struct VehicleState(
     // the live station its radio was left on (Audio.Live.Stations id, 0 = off; #179)
     int Radio = 0,
     // the CD in its stereo (Items.RadioPlay, empty = none; #211)
-    string Cd = "")
+    string Cd = "",
+    // parked in a hold (#418): the vehicle carrying it (a FootPlayer's name, or "v:" and a parked
+    // vehicle's), the section, and where it stands in that section's frame; it goes where that goes
+    string Carrier = "",
+    int CarrierSection = 0,
+    Vector3 CarrierPos = default,
+    float CarrierYaw = 0f)
 {
     /// <summary>The ride this state is: a car with its preset and parts, a truck with its trailer, a lone trailer.</summary>
     public Rideable? CreateRide()
@@ -59,6 +65,8 @@ public readonly record struct VehicleState(
             airliner.UnpackFlags(Flags);
             return airliner;
         }
+        // airstairs at the height they were left (#417)
+        if (Kind == RideKind.Airstairs) { var stairs = new Airstairs(); stairs.UnpackFlags(Flags); return stairs; }
         return CarSetups.Ride(Kind, Setup, Tuning);
     }
 
@@ -91,6 +99,13 @@ public readonly record struct VehicleState(
         ["radio"] = Radio,
         ["cd"] = Cd,
         };
+        if (Carrier != "")
+        {
+            d["carrier"] = Carrier;
+            d["csec"] = CarrierSection;
+            d["cpos"] = CarrierPos;
+            d["cyaw"] = CarrierYaw;
+        }
         Position.Write(d);
         return d;
     }
@@ -122,7 +137,14 @@ public readonly record struct VehicleState(
         // from another peer: an unknown station reads as off
         d.TryGetValue("radio", out var radio) && Audio.Live.Stations.For(radio.AsInt32()) != null ? radio.AsInt32() : 0,
         // from another peer: anything but a well-formed play reads as no CD
-        d.TryGetValue("cd", out var cd) && Items.RadioPlay.Decode(cd.AsString()) is { } play ? play.Encode() : "");
+        d.TryGetValue("cd", out var cd) && Items.RadioPlay.Decode(cd.AsString()) is { } play ? play.Encode() : "",
+        d.TryGetValue("carrier", out var carrier) ? carrier.AsString() : "",
+        d.TryGetValue("csec", out var csec) ? Mathf.Clamp(csec.AsInt32(), 0, 15) : 0,
+        d.TryGetValue("cpos", out var cpos) ? cpos.AsVector3().LimitLength(100f) : default,
+        d.TryGetValue("cyaw", out var cyaw) ? cyaw.AsSingle() : 0f);
+
+    /// <summary>Parked in a hold (#418): carried by <see cref="Carrier"/>.</summary>
+    public bool InHold => Carrier != "";
 
     /// <summary>
     /// In <see cref="DoorsOpen"/> of a car just got out of: the driver's door is only open because

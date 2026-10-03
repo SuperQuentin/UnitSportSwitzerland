@@ -25,6 +25,9 @@ is every `FootPlayer` (local, remote, race NPCs) with its `WorldVelocity`; `--dr
 
 ## Racer side (`AutoPilot.Traffic`)
 
+- **Traffic lights and lanes** (#353, `traffic-trains`): a racer ignores them, as it ignores yield
+  lines; traffic stops at red and moves into pocket lanes (cars at a red light stand still: a
+  racer passes them as standing traffic). Traffic waiting for a race (`Holding`) still holds at a green.
 - Traffic joining: `Crossing` reads each car's lane 6 s ahead (`Traffic.CarView.Path`) and slows to
   stop 10 m short of where it comes onto the route (not for a car `Holding` for the race).
 - Traffic gets more room than a rival (+0.3 m clear, +0.4 m beside), a follow gap +4 m and a follow
