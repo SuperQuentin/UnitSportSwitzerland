@@ -110,9 +110,13 @@ public partial class AirstairsCheck : Node
 
         // ---- an A320 parked 40 m ahead (north), nose north; L1 and L2 open ----------------------
         var start = me.GlobalPosition;
-        var planeAt = start + new Vector3(0, 0, -45f);
+        // the scene turned to --stairsheading (degrees from north, clockwise): along a real runway or apron
+        float yaw = -Mathf.DegToRad(float.TryParse(CmdArgs.Value("--stairsheading"), System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out float heading) ? heading : 0f);
+        var turn = new Basis(Vector3.Up, yaw);
+        var planeAt = start + turn * new Vector3(0, 0, -45f);
         var origin = vehicles.Origin;
-        vehicles.Place(new VehicleState(RideKind.A320, origin.ToGlobal(planeAt), 0f, Vector3.Zero, 400f, true, false, 0f, VehicleState.Now,
+        vehicles.Place(new VehicleState(RideKind.A320, origin.ToGlobal(planeAt), yaw, Vector3.Zero, 400f, true, false, 0f, VehicleState.Now,
             // parked as a pilot leaves one: gear down and the rest in its flags (flags 0 read as "fresh")
             Flags: Airliner.For(RideKind.A320)!.PackFlags()), "a320_check");
         bool posed = await Until(() => Body("a320_check") is { Posed: true }, 10);
@@ -140,7 +144,7 @@ public partial class AirstairsCheck : Node
         h1 = (l1.Ride as Airstairs)?.Height ?? 0f;
         var stairsXf = l1.GlobalTransform.Orthonormalized();
         await Shot("docked-l1", stairsXf * new Vector3(-9f, 4.5f, 7f), stairsXf * new Vector3(0, 2.2f, -1.5f));
-        await Shot("a320-with-stairs", planeAt + new Vector3(-38f, 12f, 22f), planeAt + new Vector3(-3f, 3f, -2f));
+        await Shot("a320-with-stairs", planeAt + turn * new Vector3(-38f, 12f, 22f), planeAt + turn * new Vector3(-3f, 3f, -2f));
 
         // ---- walked from the ground up the stairs, through L1, into the cabin ----------------
         me.DebugLaunch(stairsXf * new Vector3(0, 0.2f, 8f), Vector3.Zero);
@@ -192,7 +196,7 @@ public partial class AirstairsCheck : Node
             if (to.Length() < 2.5f) { letGo = true; return new RideInput(0f, 0f, 0f, false); }
             float yawTo = Mathf.Atan2(-to.X, -to.Z);
             float e = MathX.WrapAngle(yawTo - me.Rotation.Y);
-            return new RideInput(me.GroundSpeed < 1.2f ? 0.5f : 0f, 0f, Mathf.Clamp(-e * 2.5f, -1f, 1f), false);
+            return new RideInput(me.GroundSpeed < 1.2f ? 0.8f : 0f, 0f, Mathf.Clamp(-e * 2.5f, -1f, 1f), false);
         };
         double nextLog = 0;
         var near = new List<AirstairsDock.Sill>();
@@ -203,7 +207,7 @@ public partial class AirstairsCheck : Node
                 nextLog = Time.GetTicksMsec() / 1000.0 + 2;
                 AirstairsDock.SillsNear(GetTree(), me.GlobalPosition, 15f, near);
                 var ap = AirstairsDock.Approach(me.GlobalTransform.Orthonormalized(), near);
-                GD.Print($"[stairs]   driving: at {me.GlobalPosition} yaw {me.Rotation.Y:F2} (dock {dockAt}, {dockYaw:F2}), speed {me.GroundSpeed:F2}, sills {near.Count}, approach {ap?.Door}, lip off {(AirstairsDock.Lip(me.GlobalTransform) - AirstairsDock.Lip(new Transform3D(new Basis(Vector3.Up, dockYaw), dockAt))).Length():F2}, target {driving.TargetHeight:F2}");
+                GD.Print($"[stairs]   driving: at {me.GlobalPosition} yaw {me.Rotation.Y:F2} (dock {dockAt}, {dockYaw:F2}), speed {me.GroundSpeed:F2}, sills {near.Count}, approach {ap?.Door}, hits [{string.Join(" ", Enumerable.Range(0, me.GetSlideCollisionCount()).Select(k => $"{(me.GetSlideCollision(k).GetCollider() as Node)?.Name} n{me.GetSlideCollision(k).GetNormal()}"))}], lip off {(AirstairsDock.Lip(me.GlobalTransform) - AirstairsDock.Lip(new Transform3D(new Basis(Vector3.Up, dockYaw), dockAt))).Length():F2}, target {driving.TargetHeight:F2}");
             }
             return driving.Docked != null && Mathf.Abs(driving.Height - DockH()) < 0.01f;
         }, 40);
@@ -215,7 +219,7 @@ public partial class AirstairsCheck : Node
         Expect(me.TryInteract() && await Until(() => me.Ride == RideKind.OnFoot, 5), "got out: parked");
         bool parked = await Until(() => Stairs().Any(s => s.StairsDockedAt is { Door: 2 }), 6);
         Expect(parked, $"parked, it stays docked at L2 ({string.Join(", ", Stairs().Select(s => $"{s.Name}: {s.StairsDockedAt?.Door}"))})");
-        await Shot("both-docked", planeAt + new Vector3(-30f, 9f, 14f), planeAt + new Vector3(-3f, 3f, 0f));
+        await Shot("both-docked", planeAt + turn * new Vector3(-30f, 9f, 14f), planeAt + turn * new Vector3(-3f, 3f, 0f));
 
         // ---- the A320 taken and taxied away: the stairs are shoved clear ----------------------
         var before = Stairs().ToDictionary(s => s.Name.ToString(), s => s.GlobalPosition);
@@ -261,7 +265,7 @@ public partial class AirstairsCheck : Node
         }).ToList();
         Expect(rolled && shoved.All(s => s.Pushed > 2f && s.Clear),
             $"taxied {moved:F0} m away, the stairs shoved clear ({string.Join(", ", shoved.Select(s => $"{s.Name} pushed {s.Pushed:F1} m, now {s.Side:F1} m off the centreline, {s.Aft:F1} m aft"))})");
-        await Shot("taxied-away", from + new Vector3(-35f, 14f, 10f), from + new Vector3(0, 2f, -20f));
+        await Shot("taxied-away", from + turn * new Vector3(-35f, 14f, 10f), from + turn * new Vector3(0, 2f, -20f));
         Input.ActionRelease(PlayerInput.Jump);
         Finish(null);
     }
