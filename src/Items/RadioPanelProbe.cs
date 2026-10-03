@@ -71,7 +71,10 @@ public partial class RadioPanelProbe : Node
             await Use();
             Check(RadioUi.Instance?.IsOpen == true, "Use opens the radio's panel");
             Check(Visible(RadioUi.LibraryLabel) && !RowsShown(), "on the player view: the library button, no CD row");
-            Check(PanelRect() is { } r && !r.HasPoint(GetViewport().GetVisibleRect().Size / 2f), $"the middle of the screen is free ({PanelRect()})");
+            await Wait(0.2);
+            var cursor = Input.MouseMode == Input.MouseModeEnum.Visible && DisplayServer.GetName() != "headless"
+                ? GetViewport().GetMousePosition() : GetViewport().GetVisibleRect().Size / 2f;
+            Check(PanelRect() is { } r && !r.HasPoint(cursor), $"the cursor is not on the player ({cursor} vs {PanelRect()})");
             State("open");
             if (esc)
             {
@@ -107,6 +110,8 @@ public partial class RadioPanelProbe : Node
     private async Task Library(Inventory inv)
     {
         await Use();
+        await Wait(0.3);
+        Shot("radiopanel_player.png");
         Check(Press(RadioUi.LibraryLabel) && RowsShown(), "the library button shows the CDs");
         await Wait(0.3);
         var row = Buttons().FirstOrDefault(b => b.IsVisibleInTree() && b.TooltipText == "Play");
@@ -115,12 +120,23 @@ public partial class RadioPanelProbe : Node
         await Wait(0.5);
         Check(!Silent(inv), $"pressing \"{row?.Text}\" plays it");
         Check(RadioUi.Instance?.IsOpen == true && RowsShown(), "and the library stays open");
+        Shot("radiopanel_library.png");
         Check(Press("■  Stop"), "Stop");
         await Wait(0.5);
         Check(Silent(inv), "Stop silences it");
         Check(Press(RadioUi.PlayerLabel) && !RowsShown(), "back to the player");
         await Key(Godot.Key.Escape);
         Check(RadioUi.Instance?.IsOpen != true, "Esc closes it");
+    }
+
+    /// <summary>A screenshot into test_output/ when windowed (headless has no image).</summary>
+    private void Shot(string file)
+    {
+        if (DisplayServer.GetName() == "headless") return;
+        string path = ProjectSettings.GlobalizePath("res://test_output/" + file);
+        DirAccess.MakeDirRecursiveAbsolute(path.GetBaseDir());
+        GetViewport().GetTexture().GetImage().SavePng(path);
+        Log($"screenshot {path}");
     }
 
     private static IEnumerable<Button> Buttons() =>

@@ -321,7 +321,8 @@ public partial class RadioUi : CanvasLayer
         }
         float pw = Mathf.Min(PlayerWidth, screen.X - 2 * Gutter);
         float ph = _panel.GetCombinedMinimumSize().Y;
-        float lift = Mathf.Clamp(PlayerLift, Gutter, Mathf.Max(Gutter, screen.Y - ph - Gutter));
+        // on a short screen it would still reach the middle: down to the bottom gutter instead
+        float lift = screen.Y - PlayerLift - ph >= screen.Y / 2 ? PlayerLift : Gutter;
         _panel.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
         _panel.OffsetLeft = -pw / 2;
         _panel.OffsetRight = pw / 2;
@@ -413,7 +414,19 @@ public partial class RadioUi : CanvasLayer
         UpdateNow();
         // always the player first: the list is one step deeper (#392)
         ShowLibrary(false);
-        Callable.From(Fit).CallDeferred();   // its height is known once laid out
+        Callable.From(() => { Fit(); CursorAbove(); }).CallDeferred();   // its height is known once laid out
+    }
+
+    /// <summary>
+    /// The freed cursor appears in the middle of the screen; on a short screen that can be on the
+    /// player. Put it above, where a click means "back to the world", never "play the CD under it".
+    /// </summary>
+    private void CursorAbove()
+    {
+        if (!IsOpen || _libraryShown || DisplayServer.GetName() == "headless") return;
+        var rect = _panel.GetGlobalRect();
+        var at = GetViewport().GetMousePosition();
+        if (rect.Grow(8).HasPoint(at)) Input.WarpMouse(new Vector2(rect.GetCenter().X, Mathf.Max(8, rect.Position.Y - 60)));
     }
 
     public void Close()
@@ -859,9 +872,9 @@ public partial class RadioUi : CanvasLayer
         {
             _nowTitle.Text = "Nothing playing";
             _nowMeta.Text = locked ? "The driver picks the music."
-                : _target == Target.Car ? "Pick a station or a CD below."
                 : _target == Target.Church && CdLibrary.Instance is { RatBeatId: > 0 } ? "Chess Type Beat is loaded: press Play."
-                : "Pick a CD below.";
+                : _libraryShown ? (_target == Target.Car ? "Pick a station or a CD below." : "Pick a CD below.")
+                : "Press Play, or pick a CD in the Library.";
             _bar.Value = 0;
             _time.Text = "";
         }
@@ -879,13 +892,13 @@ public partial class RadioUi : CanvasLayer
         _prev.Disabled = _next.Disabled = _playStop.Disabled = locked;
         string closeKey = _target switch
         {
-            Target.Car => KeyName(PlayerInput.RadioPanel),
-            Target.Held => KeyName(PlayerInput.UseItem),
-            _ => KeyName(PlayerInput.InteractMount),
+            Target.Car => ", " + KeyName(PlayerInput.RadioPanel),
+            Target.Held => "",   // its Use is a click: the click outside
+            _ => ", " + KeyName(PlayerInput.InteractMount),
         };
         _footer.Text = PlayerInput.LastDevice == InputDevice.Gamepad
             ? (_libraryShown ? "D-pad choose · A play · Y player · B close" : "D-pad choose · A press · Y library · B close")
-            : (_libraryShown ? "Up / Down choose · Enter play · / search · Esc close" : $"/ library · Esc, {closeKey} or a click outside close");
+            : (_libraryShown ? "Up / Down choose · Enter play · / search · Esc close" : $"/ library · Esc{closeKey} or a click outside close");
         Highlight();
     }
 
