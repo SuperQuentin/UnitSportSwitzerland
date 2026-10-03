@@ -20,6 +20,11 @@ public static partial class TileRewriter
         public readonly Dictionary<int, RoadAttrFlags> Yield = new();
         /// <summary>The guide lines written through junctions; a turn pocket (#123) replaces the one on its side.</summary>
         public readonly HashSet<RoadPaint> Guides = new();
+        /// <summary>Each guide by (junction node, side 0 = first main arm's left / 1 = its right): a bike crossing (#120) replaces it.</summary>
+        public readonly Dictionary<(int Node, int Side), (TileId Tile, RoadPaint Paint)> GuideAt = new();
+        /// <summary>A yielding link's Wartelinie rows, and its signs (tile, index in the tile's props): a path crossing (#120) moves them back.</summary>
+        public readonly Dictionary<int, List<(TileId Tile, RoadPaint Paint)>> TeethOf = new();
+        public readonly Dictionary<int, List<(TileId Tile, int Index)>> SignsOf = new();
 
         public RoadAttrFlags FlagsOf(int linkId) => Yield.GetValueOrDefault(linkId);
     }
@@ -100,6 +105,7 @@ public static partial class TileRewriter
                 });
                 stats.TeethRows++;
                 stats.Teeth += RoadPaintGeometry.Runs(paint[source.Tile][^1]).Count;
+                Get(priority.TeethOf, row.LinkId).Add((source.Tile, paint[source.Tile][^1]));
             }
 
             if (plan.CentreLine is { } line && counted)
@@ -117,8 +123,9 @@ public static partial class TileRewriter
                     stats.CentreLines++;
 
                     // the edges through the junction: dashed across a joining road's mouth
-                    foreach (var (guide, dashed) in plan.Guides)
+                    for (int side = 0; side < plan.Guides.Count; side++)
                     {
+                        var (guide, dashed) = plan.Guides[side];
                         if (!dashed && plan.CentreUrban) continue;   // no edge lines in towns
                         var g = new RoadPaint
                         {
@@ -129,6 +136,7 @@ public static partial class TileRewriter
                         };
                         Get(paint, home).Add(g);
                         priority.Guides.Add(g);
+                        priority.GuideAt[(junction.NodeId, side)] = (home, g);
                         stats.Guides++;
                     }
                 }
@@ -158,6 +166,7 @@ public static partial class TileRewriter
                 float heading = (float)Math.Atan2(-sign.Facing.X, sign.Facing.Y);
                 list.Add(new RoadPointProp(sign.Type, sign.Variant, PropFlags.Solid, local[0], road + kerb, local[2],
                     heading, lower + RoadSigns.PlateHeight(sign.Type, sign.Variant)));
+                Get(priority.SignsOf, sign.LinkId).Add((source.Tile, list.Count - 1));
                 stats.Place(sign.Type);
             }
         }
@@ -166,7 +175,7 @@ public static partial class TileRewriter
     /// <summary>Mirror of PaintEmitter's bridge lift: a deck is drawn this far above its line.</summary>
     private const float PaintBridgeLift = 0.15f;
 
-    private static List<T> Get<T>(Dictionary<TileId, List<T>> d, TileId id)
+    private static List<T> Get<TKey, T>(Dictionary<TKey, List<T>> d, TKey id) where TKey : notnull
     {
         if (!d.TryGetValue(id, out var l)) d[id] = l = new List<T>();
         return l;

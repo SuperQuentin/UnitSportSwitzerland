@@ -30,7 +30,9 @@
   - Nave furniture: chancel `Dais` (collision ramp at its front), altar lifted onto it, cross,
     lectern, pews facing the altar, and the pastor rat (`FurnitureType.PastorRat`, the "Dorime" rat,
     box-built in `InteriorMeshBuilder`) beside the altar, or at the step if the dais has no room (#241).
-    Chapels planned by the generic Sacral rules get one too.
+    Chapels planned by the generic Sacral rules get one too. Beside it the church radio
+    (`FurnitureType.ChurchRadio`, `RadioByRat`, layout v12); the rat and the front-pew people are
+    figures since #370 (`docs/notes/items/church-radio.md`).
     The pew row nearest the altar is a `FrontPew`: chibi people in cat-ear headbands with pixel
     kawaii faces (6 eye and 5 mouth maps, one 17x17 grid), built in `InteriorMeshBuilder.Congregation.cs`,
     varied by a hash of the pew's position so every peer builds the same people.

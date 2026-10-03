@@ -114,6 +114,28 @@ public partial class BrManager
                 yield return (m.Name, ZonePoint(body.GlobalPosition), new Vector2(-Mathf.Sin(body.NetYaw), Mathf.Cos(body.NetYaw)));
     }
 
+    /// <summary>How far the minimap's radar picks up other entrants (#359).</summary>
+    public const float RadarRange = 80f;
+
+    /// <summary>
+    /// Living opponents within <see cref="RadarRange"/> of me, as map points, for the minimap's radar
+    /// (#359): not team-mates (they have their arrows), and not anyone hidden under a camo net or
+    /// inside a hay hideout (<see cref="Build.Gadgets.Hidden"/>).
+    /// </summary>
+    public IEnumerable<Vector2> Nearby()
+    {
+        if (Origin == null || !InMatch || GetNodeOrNull<FootPlayer>("../Players/" + Me) is not { } me) yield break;
+        var mates = _state.MatesOf(Me).Select(m => m.Peer).ToHashSet();
+        foreach (var e in _state.Entrants)
+        {
+            if (!e.Alive || e.Peer == Me || mates.Contains(e.Peer)) continue;
+            if (GetNodeOrNull<FootPlayer>("../Players/" + e.Peer) is not { } body) continue;
+            var d = body.GlobalPosition - me.GlobalPosition;
+            if (new Vector2(d.X, d.Z).Length() > RadarRange || Build.Gadgets.Hidden(body.GlobalPosition)) continue;
+            yield return ZonePoint(body.GlobalPosition);
+        }
+    }
+
     /// <summary>Spectating: the player watched, else 0.</summary>
     public long Watching => _spectator is { Current: true } ? _watching : 0;
 
@@ -166,6 +188,9 @@ public partial class BrManager
                 inv.BeginMatch();
                 inv.Add(ItemId.Knife, 1);
                 inv.Add(ItemId.Bandage, 3);
+                // building (#274): a hammer and enough planks for a first wall or two
+                inv.Add(ItemId.Hammer, 1);
+                inv.Add(ItemId.WoodPlanks, 15);
             }
             FootPlayer.StayDown = _ => InMatch && _state.Phase == BrPhase.Playing;
             Permissions.SetRidesLocked(true);

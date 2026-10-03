@@ -120,6 +120,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         if (!Online)
         {
             var state = vehicle.Capture();
+            vehicle.Retire();
             vehicle.QueueFree();
             granted(state);
             return;
@@ -256,7 +257,10 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     {
         var claim = _pendingClaim;
         _pendingClaim = null;
-        claim?.Invoke(VehicleState.FromDict(data));
+        var state = VehicleState.FromDict(data);
+        // the server's despawn of it may come after this: out of the way of its new driver until then
+        if (claim != null) GetNodeOrNull<VehicleBody>(state.Name)?.Retire();
+        claim?.Invoke(state);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -267,7 +271,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     {
         if (!Multiplayer.IsServer()) return;
         long sender = Multiplayer.GetRemoteSenderId();
-        if (GetNodeOrNull<VehicleBody>(name) is not { Wrecked: false, Ride: Player.Car or Player.Truck { IsBus: true } } vehicle) return;
+        if (GetNodeOrNull<VehicleBody>(name) is not { Wrecked: false, Ride: Player.Car or Player.Truck { IsBus: true } or Player.Steamer } vehicle) return;
         // the server's copy of the asker: only someone standing at the car works its doors
         var asker = GetTree().GetNodesInGroup(Player.FootPlayer.Group).OfType<Player.FootPlayer>()
             .FirstOrDefault(p => p.Name == sender.ToString());
@@ -275,7 +279,8 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         var gap = (asker.GlobalPosition - vehicle.GlobalPosition) with { Y = 0 };
         // a car's doors from its side; a bus's buttons are along its whole length (#162)
         var box = vehicle.Ride.ParkedBox.Size;
-        float half = vehicle.Ride is Player.Truck ? Mathf.Max(box.X, box.Z) * 0.5f : box.X * 0.5f;
+        // (and a ship's gangways, #384)
+        float half = vehicle.Ride is Player.Truck or Player.Steamer ? Mathf.Max(box.X, box.Z) * 0.5f : box.X * 0.5f;
         if (gap.Length() - half > DoorReach) return;
         int authority = vehicle.GetMultiplayerAuthority();
         if (authority == 1) vehicle.ToggleDoor(bit);

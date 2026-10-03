@@ -3,6 +3,18 @@ using UnitSport.Terrain.Format;
 
 namespace UnitSport.Terrain;
 
+/// <summary>What a tile draws, for the debug menu's layer switches (#339).</summary>
+[Flags]
+public enum TileLayers
+{
+    None = 0,
+    Ground = 1,
+    Roads = 2,
+    Buildings = 4,
+    Trees = 8,
+    Water = 16,
+}
+
 /// <summary>
 /// Scene-side representation of one terrain tile: a MeshInstance3D and optionally a
 /// StaticBody3D with a HeightMapShape3D. Positioned at the tile's NW corner in world space.
@@ -15,6 +27,27 @@ public partial class ChunkNode : Node3D
     public MeshInstance3D? Ground => _meshInstance;
     private MeshInstance3D? _roadInstance;
     private StaticBody3D? _body;
+
+    /// <summary>The layers the debug menu hid (<see cref="ChunkManager.SetDebugHidden"/>); nothing in play.</summary>
+    private TileLayers _hidden;
+
+    private bool Shows(TileLayers layer) => (_hidden & layer) == 0;
+
+    /// <summary>
+    /// Hides the selected layers of this tile and shows the others, now and for the meshes it
+    /// builds later. Trees go through their instance count, which their own visibility already
+    /// answers for (an empty slot is hidden).
+    /// </summary>
+    public void HideLayers(TileLayers hidden)
+    {
+        if (hidden == _hidden) return;
+        _hidden = hidden;
+        if (_meshInstance != null) _meshInstance.Visible = Shows(TileLayers.Ground);
+        if (_roadInstance != null) _roadInstance.Visible = Shows(TileLayers.Roads);
+        if (_buildingInstance != null) _buildingInstance.Visible = Shows(TileLayers.Buildings);
+        if (_waterInstance != null) _waterInstance.Visible = Shows(TileLayers.Water);
+        ApplyTreeDensity();
+    }
 
     // ---- ArrayMesh construction ---------------------------------------------------------
     //
@@ -51,6 +84,23 @@ public partial class ChunkNode : Node3D
         return mesh;
     }
 
+    /// <summary>
+    /// The tile's piers (#377) as one more surface of its roads mesh, with their own (prop)
+    /// material; a new mesh when the tile has no roads drawn.
+    /// </summary>
+    public static ArrayMesh WithPiers(ArrayMesh? roads, PierMeshBuilder.MeshData data, Material material)
+    {
+        using var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
+        arrays[(int)Mesh.ArrayType.Color] = data.Colors;
+        arrays[(int)Mesh.ArrayType.Index] = data.Indices;
+        if (roads == null) return Finish(arrays, material);
+        roads.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        roads.SurfaceSetMaterial(roads.GetSurfaceCount() - 1, material);
+        return roads;
+    }
+
     private static Godot.Collections.Array RoadArrays(RoadMeshBuilder.MeshData data)
     {
         var arrays = new Godot.Collections.Array();
@@ -81,8 +131,12 @@ public partial class ChunkNode : Node3D
         using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
+        arrays[(int)Mesh.ArrayType.TexUV] = data.Uvs;
         arrays[(int)Mesh.ArrayType.Index] = data.Indices;
-        return Finish(arrays, material);
+        var mesh = Finish(arrays, material);
+        // the shader lifts crests above the still surface (#299): grow the bounds by the most a wave moves
+        mesh.CustomAabb = mesh.GetAabb().Grow(WaterMeshBuilder.WaveMargin);
+        return mesh;
     }
 
     /// <summary>
@@ -114,7 +168,7 @@ public partial class ChunkNode : Node3D
         {
             // the ground, its roads and its water never cast sun shadows (lit styles): millions
             // of triangles under the cascades, for shade the cel light already gives the slopes
-            _meshInstance = new MeshInstance3D { CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+            _meshInstance = new MeshInstance3D { CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = Shows(TileLayers.Ground) };
             AddChild(_meshInstance);
         }
         Swap(_meshInstance, mesh);
@@ -124,7 +178,7 @@ public partial class ChunkNode : Node3D
     {
         if (_roadInstance == null)
         {
-            _roadInstance = new MeshInstance3D { Name = "Roads", CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+            _roadInstance = new MeshInstance3D { Name = "Roads", CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = Shows(TileLayers.Roads) };
             AddChild(_roadInstance);
         }
         Swap(_roadInstance, mesh);
@@ -137,7 +191,7 @@ public partial class ChunkNode : Node3D
     {
         if (_buildingInstance == null)
         {
-            _buildingInstance = new MeshInstance3D { Name = "Buildings" };
+            _buildingInstance = new MeshInstance3D { Name = "Buildings", Visible = Shows(TileLayers.Buildings) };
             AddChild(_buildingInstance);
         }
         Swap(_buildingInstance, mesh);
@@ -429,7 +483,8 @@ public partial class ChunkNode : Node3D
     {
         foreach (var node in new[] { _coniferInstance, _broadleafInstance, _coniferFarInstance, _broadleafFarInstance })
             if (node?.Multimesh is { } multi)
-                multi.VisibleInstanceCount = _treeDensity >= 1f ? -1 : (int)Math.Ceiling(multi.InstanceCount * _treeDensity);
+                multi.VisibleInstanceCount = !Shows(TileLayers.Trees) ? 0
+                    : _treeDensity >= 1f ? -1 : (int)Math.Ceiling(multi.InstanceCount * _treeDensity);
     }
 
     private void Fill(ref MultiMeshInstance3D? node, string name, MultiMesh? multi)
@@ -659,7 +714,7 @@ public partial class ChunkNode : Node3D
     {
         if (_waterInstance == null)
         {
-            _waterInstance = new MeshInstance3D { Name = "Water", CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+            _waterInstance = new MeshInstance3D { Name = "Water", CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = Shows(TileLayers.Water) };
             AddChild(_waterInstance);
         }
         Swap(_waterInstance, mesh);

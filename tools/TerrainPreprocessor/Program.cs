@@ -24,6 +24,16 @@ string? tilesFile = null;
 string? coverOverrides = File.Exists("docs/data/cover_overrides.json") ? "docs/data/cover_overrides.json" : null;
 bool coverOnly = false;
 bool coarseOnly = false, horizonOnly = false, photosOnly = false;
+// lake and river beds + the .water level layer (#298): standalone with --water, and after every
+// cover pass; --bathy points at the swissBATHY3D zips (without it every bed is synthetic)
+bool waterOnly = false;
+string? bathyDir = null;
+// boat landings and harbour jetties (#377): standalone with --landings, and after every water pass
+// run with --tlm (the piers stand on the beds and the still water)
+bool landingsOnly = false;
+// --landings-file: write landings.json elsewhere (reading a live region without touching it)
+string? landingsFile = null;
+var pngCrops = new List<(double E, double N, int Size)>();
 bool force = false, fresh = false;
 string? franceBox = null;
 // optional OpenStreetMap overlay (#118): a region-wide intermediate for the road network stage
@@ -55,6 +65,18 @@ for (int i = 0; i < args.Length; i++)
         case "--features-only": featuresOnly = true; break;
         case "--coarse": coarseOnly = true; break;
         case "--horizon": horizonOnly = true; break;
+        case "--water": waterOnly = true; break;
+        case "--landings": landingsOnly = true; break;
+        case "--landings-file": landingsFile = args[++i]; break;
+        case "--bathy": bathyDir = args[++i]; break;
+        case "--png-crop":
+        {
+            var p = args[++i].Split(',');
+            pngCrops.Add((double.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture),
+                double.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture),
+                p.Length > 2 ? int.Parse(p[2]) : 1500));
+            break;
+        }
         case "--photos": photosOnly = true; break;
         case "--verify": verify = true; break;
         case "--france": franceBox = args[++i]; break;
@@ -115,6 +137,31 @@ if (horizonOnly)
     }
     return HorizonStage.Run(outDir, jobs);
 }
+
+// ---- water: beds into the .terr heights, the still level into .water ----------------------
+if (waterOnly)
+{
+    if (outDir == null)
+    {
+        Console.Error.WriteLine("--water requires --out <chunk dir>");
+        return 2;
+    }
+    int wrc = WaterStage.Run(outDir, WaterOptions());
+    return wrc != 0 || tlmGpkg == null ? wrc : LandingStage.Run(outDir, tlmGpkg);
+}
+
+// ---- landings: piers and jetties from swissTLM3D over the built beds and water -------------
+if (landingsOnly)
+{
+    if (outDir == null || tlmGpkg == null)
+    {
+        Console.Error.WriteLine("--landings requires --out <chunk dir> and --tlm <swisstlm3d .gpkg>");
+        return 2;
+    }
+    return LandingStage.Run(outDir, tlmGpkg, landingsFile);
+}
+
+WaterStage.Options WaterOptions() => new() { Jobs = jobs, BathyDir = bathyDir, PngDir = pngDir, Crops = pngCrops };
 
 // ---- coarse companion tiles: decimate what is already built -----------------------------
 // Standalone because it needs nothing but the .terr files themselves. A region built before
@@ -392,6 +439,13 @@ int RunFeatures(TerrainManifest existing)
             int rc = BuildingStage.Run(buildingsGpkg, gwrPath, outDir!, batch);
             if (rc != 0) return rc;
         }
+    }
+    // the cover says where the water is, so the beds follow every cover pass (whole region: the
+    // water bodies and their depths are region-wide)
+    if (doCover)
+    {
+        int wrc = WaterStage.Run(outDir!, WaterOptions());
+        return wrc != 0 ? wrc : LandingStage.Run(outDir!, tlmGpkg!);
     }
     return 0;
 }

@@ -391,7 +391,8 @@ public static class LootTables
         for (int i = 0; i < layout.Furniture.Count; i++)
         {
             var f = layout.Furniture[i];
-            if (!IsLootable(f.Type)) continue;
+            // a shop's counter is its till and its shop: E opens the shop, never a search (#273)
+            if (!IsLootable(f.Type) || (f.Type == FurnitureType.ShopCounter && layout.Shop != ShopType.None)) continue;
             double p = Chance(layout.Kind, f.Type, AbundanceFor(layout, f.Type), item, now, layout.RoomOf(f)?.Type);
             none *= 1 - p;
             var g = groups.GetValueOrDefault(f.Type, (0, 0, 1));

@@ -45,8 +45,13 @@ public partial class VehicleBody : CharacterBody3D
     [Export] public byte DoorsOpen { get; set; }
     /// <summary>A truck's joints as its authority rolls it on (#162), for the copies: its trailer swings where it does.</summary>
     [Export] public Vector3 TrainAngles { get; set; }
+    /// <summary>A boat's height over the waves (#302, <see cref="Boat.Heave"/>): copies draw it on their own waves.</summary>
+    [Export] public float Heave { get; set; } = Boat.NoHeave;
 
     public ChunkManager? Terrain { get; set; }
+
+    /// <summary>At rest and not simulated until someone claims it (a heartbeat replicates it).</summary>
+    public bool Asleep => _asleep;
 
     /// <summary>This peer's origin, to put the position on the wire.</summary>
     public WorldOrigin Origin { get; private set; } = null!;
@@ -66,7 +71,7 @@ public partial class VehicleBody : CharacterBody3D
     public long Owner { get; private set; }
 
     /// <summary>A parked bus's doors, one bit each (#162: open, they can be walked through; anyone works them by their buttons).</summary>
-    public byte BusDoors => Ride is Truck { IsBus: true } ? DoorsOpen : (byte)0;
+    public byte BusDoors => Ride is Truck { IsBus: true } or Steamer ? DoorsOpen : (byte)0;
 
     /// <summary>A car's rig, for finding the door a player is at; null for anything else, or headless.</summary>
     public CarRig? Rig => _visual as CarRig;
@@ -151,6 +156,7 @@ public partial class VehicleBody : CharacterBody3D
         FloorMaxAngle = Mathf.DegToRad(50f);
 
         _motion = new RideMotion { Speed = MathX.FlatLength(s.Velocity), Yaw = s.Yaw };
+        if (Ride is Boat boat) BeginBoat(boat, s);
         if (Ride is Flyer flyer)
         {
             flyer.Begin(ref _flight, s.Velocity, s.Yaw);
@@ -160,7 +166,7 @@ public partial class VehicleBody : CharacterBody3D
         }
 
         var replication = new SceneReplicationConfig();
-        foreach (var prop in Net.NetPlace.Properties.Concat(new[] { ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool", ".:DoorsOpen", ".:TrainAngles" }))
+        foreach (var prop in Net.NetPlace.Properties.Concat(new[] { ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool", ".:DoorsOpen", ".:TrainAngles", ".:Heave" }))
             replication.AddProperty(prop);
         // states that change a few times per life of a vehicle go reliably on change; the motion
         // at 20 Hz while it moves (every frame before, for a bike standing in a field for hours)
@@ -182,6 +188,9 @@ public partial class VehicleBody : CharacterBody3D
             Position = Origin.ToWorld(s.Position);
             _asleep = true;
             sync.ReplicationInterval = 2f;
+            // a boat it placed (the steamer at its pier, #303): its height over the still water, so
+            // every peer draws it riding its own copy of the waves (the server never simulates it)
+            if (Ride is Boat && World.WaterField.TryGetStill(Position, out float still, out _)) Heave = Position.Y - still;
         }
 
         if (!Headless)
@@ -198,20 +207,21 @@ public partial class VehicleBody : CharacterBody3D
                 AddChild(_engineSound);
             }
         }
-        else if (Ride is Truck or ParkedTrailer)
+        else if (Ride is Truck or ParkedTrailer or Boat { Walkable: true })
         {
             // Headless (the server, a check) nothing is drawn, but the frame the model would stand in
             // still matters: a parked bus's decks are walked in it, and its guests found by it
             // (#162). Its box rests on whatever it touches, a metre off the road at a door on a
             // crest; the frame is posed on the ground axle by axle, as the model is.
             _visual = new Node3D { Name = "Visual" };
-            int sections = Ride is Truck train ? train.Train.Count : ((ParkedTrailer)Ride).Bodies.Count;
+            // (a walkable boat, #303: one section, posed by DrawBoat as its model is)
+            int sections = Ride is Truck train ? train.Train.Count : Ride is ParkedTrailer lone ? lone.Bodies.Count : 1;
             for (int k = 1; k < sections; k++) _visual.AddChild(new Node3D { Name = $"Section{k}" });
             AddChild(_visual);
         }
 
         _wasWrecked = Wrecked;
-        if (Wrecked)
+        if (Wrecked && !Drowned)
         {
             Char();
             // A fresh wreck (a crash just now) goes up where every peer can see it. One spawned
@@ -253,6 +263,20 @@ public partial class VehicleBody : CharacterBody3D
         else Terrain.RemoveAnchor(this);
     }
 
+    /// <summary>
+    /// Claimed: out of the world at once, until it is freed (offline, at the end of the frame;
+    /// online, when the server's despawn arrives). The driver who took it stands where its box is,
+    /// and a step against it shoved the bus they had just got into up onto its roof (#323).
+    /// </summary>
+    public void Retire()
+    {
+        CollisionLayer = 0;
+        CollisionMask = 0;
+        Visible = false;
+        SetPhysicsProcess(false);
+        RemoveFromGroup(Group);
+    }
+
     /// <summary>What this vehicle is right now, for handing it to a driver.</summary>
     /// <remarks>
     /// Heading from the body's own yaw, which is replicated: the server captures vehicles it
@@ -262,7 +286,8 @@ public partial class VehicleBody : CharacterBody3D
         Rotation.Y, Velocity, Health, EngineOn, Wrecked,
         _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning,
         Ride is Truck { IsBus: true } ? (byte)0 : DoorsOpen, _initial.Setup,
-        _initial.Train, _initial.Angles,
+        // a boat's attitude as it floats now (#302; the replicated one, which the server has too)
+        _initial.Train, Ride is Boat ? new Basis(Tilt).GetEuler() : _initial.Angles,
         // a bus's doors as they are now, where a truck keeps them
         Ride is Truck { IsBus: true } ? (_initial.Flags & ~(15 << 4)) | ((DoorsOpen & 15) << 4) : _initial.Flags, _initial.Load,
         _initial.Radio, _initial.Cd);
@@ -282,7 +307,7 @@ public partial class VehicleBody : CharacterBody3D
     /// <summary>Opens or shuts one door. The authority's call: others ask <see cref="VehicleManager.ToggleDoor"/>.</summary>
     public void ToggleDoor(byte bit)
     {
-        if (Wrecked || Ride is not (Car or Truck { IsBus: true })) return;
+        if (Wrecked || Ride is not (Car or Truck { IsBus: true } or Steamer)) return;
         DoorsOpen ^= (byte)(bit & 15);
         _shutDriverIn = 0f;   // a door someone chose to leave open stays open
     }
@@ -329,12 +354,14 @@ public partial class VehicleBody : CharacterBody3D
         bool onFloor = IsOnFloor();
         if (Wrecked) StepWreck(dt, onFloor);
         else if (Ride is Flyer flyer) StepFlyer(dt, onFloor, flyer);
+        else if (Ride is Boat boat) StepBoat(dt, boat);   // #302, VehicleBody.Boat.cs
         else if (Ride.Driverless) StepDriverless(dt, onFloor);
         else StepRolling(dt, onFloor);
         _place.Publish(GlobalPosition);
 
         // at rest long enough: sleep, and stop asking for collision
-        bool still = onFloor && Velocity.LengthSquared() < 0.04f && _flight.Spool < 0.05f;
+        // (a boat: barely moving on water too flat to move it, or aground)
+        bool still = Ride is Boat ? _boatCalm : onFloor && Velocity.LengthSquared() < 0.04f && _flight.Spool < 0.05f;
         _restTime = still ? _restTime + dt : 0f;
         if (_restTime > 1f)
         {
@@ -476,7 +503,12 @@ public partial class VehicleBody : CharacterBody3D
     {
         float dt = (float)delta;
 
-        if (Wrecked && !_wasWrecked) { _wasWrecked = true; Char(); Detonate(); }
+        if (Wrecked && !_wasWrecked)
+        {
+            _wasWrecked = true;
+            // sunk (#299): a wreck on the bed, neither burnt nor blown up under water
+            if (!Drowned) { Char(); Detonate(); }
+        }
         if (Wrecked) WreckAge += delta;
 
         if (_shutDriverIn > 0f && (_shutDriverIn -= dt) <= 0f) DoorsOpen &= unchecked((byte)~CarRig.DriverDoor);
@@ -492,6 +524,7 @@ public partial class VehicleBody : CharacterBody3D
 
         if (!IsMultiplayerAuthority() && Ride is Flyer remoteFlyer)
             remoteFlyer.Pose(_visual, Rotation.Y, new FlightMotion { Attitude = new Basis(Tilt) });
+        if (Ride is Boat afloat) DrawBoat(afloat, dt);
 
         if (Ride is Bicycle)
         {
@@ -542,7 +575,7 @@ public partial class VehicleBody : CharacterBody3D
         }
         if (_engineSound != null && Ride is IEngined)
             // ticking over while it rolls; a car at rest is asleep and silent
-            _engineSound.Set(0f, 0f, 0.2f, EngineOn && !Wrecked && !_asleep ? 0.1f : 0f);
+            _engineSound.Set(0f, 0f, 0.2f, EngineOn && !Wrecked && !_asleep && Ride is not Steamer ? 0.1f : 0f);
         else if (_engineSound != null)
         {
             _engineSound.Set(spool, spool, 0.5f, spool * 0.7f);
@@ -635,6 +668,9 @@ public partial class VehicleBody : CharacterBody3D
         // a little of the momentum survives the blast
         Velocity = Velocity * 0.4f + Vector3.Up * 4f;
     }
+
+    /// <summary>Under water (#299): every peer asks its own <see cref="World.WaterField"/>, which they share.</summary>
+    private bool Drowned => World.WaterField.IsUnderwater(GlobalPosition + Vector3.Up * 0.5f);
 
     private void Detonate()
     {

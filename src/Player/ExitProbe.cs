@@ -14,7 +14,8 @@ namespace UnitSport.Player;
 ///
 /// Fails when the player ends up on the vehicle, off the ground, or inside its box, or when a
 /// truck's parked box is wider than its body (it used to be as wide as its mirrors). A bus's
-/// driver (#162) gets up into its aisle instead: there it fails unless on the floor, under the roof.
+/// driver (#162) gets up into its aisle instead: there it fails unless on the floor, under the roof,
+/// then takes the wheel again and fails if the bus is lifted off the ground doing it (#323).
 /// Read the <c>[exitcheck]</c> lines.
 /// </summary>
 public partial class ExitProbe : Node, Core.IOriginShiftAware
@@ -82,8 +83,49 @@ public partial class ExitProbe : Node, Core.IOriginShiftAware
         int exits = kinds.Count * 2;
         // up from the wheel of a city bus going along: it rolls on driverless, its driver aboard (#162)
         if (FindSpot(me, _spot + new Vector3(30f, 0, 0)) is { } road) { exits++; await Rolling(me, HeavyCatalog.All[2].Kind, road); }
+        // E from outside a parked bus, both ways of the walkable boarding setting (#384)
+        if (FindSpot(me, _spot + new Vector3(60f, 0, 0)) is { } outside) { exits++; await Outside(me, outside); }
         Log(_failed == 0 ? $"RESULT: ok, {exits} exits" : $"RESULT: FAIL {_failed} of {exits} exits");
         GetTree().Quit(_failed == 0 ? 0 : 1);
+    }
+
+    /// <summary>
+    /// E from outside a parked city bus, both ways of "Get in buses and ships from outside" (#384):
+    /// off, it does nothing (walk aboard instead); on (the default), it puts the player at the wheel.
+    /// </summary>
+    private async Task Outside(FootPlayer me, Vector3 at)
+    {
+        var kind = HeavyCatalog.All[2].Kind;
+        var ride = Rideable.Create(kind)!;
+        if (VehicleManager.Instance is not { } vehicles || me.Terrain?.Origin is not { } origin) { Fail("outside", "no vehicles"); return; }
+        var state = new VehicleState(kind, origin.ToGlobal(at with { Y = Ground(me, at) }), 0f, Vector3.Zero, ride.MaxHealth,
+            EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0);
+        string? name = vehicles.Place(state, "veh_exit_outside");
+        VehicleBody? bus = null;
+        for (int i = 0; i < 100 && (bus = name == null ? null : vehicles.GetNodeOrNull<VehicleBody>(name)) is not { Posed: true }; i++) await Wait(0.1);
+        if (bus == null) { Fail("outside", "the parked bus never came"); return; }
+        // beside the front door, a little aft of it: ahead of it is its button, which E would press
+        var spot = bus.ToGlobal(new Vector3(0, 0, ride.EntryPoint.Z + 1.1f)) + bus.GlobalTransform.Basis.X.Normalized() * (ride.ParkedBox.Size.X * 0.5f + 0.7f);
+        var settings = GameSettings.Current;
+        bool was = settings.BoardWalkableFromOutside;
+
+        settings.BoardWalkableFromOutside = false;
+        me.GlobalPosition = spot with { Y = Ground(me, spot) + 0.2f };
+        me.Velocity = Vector3.Zero;
+        await Wait(1.5);
+        bool offered = VehicleReach.Find(me)?.Vehicle == bus;
+        me.TryInteract();
+        await Wait(1.5);
+        if (offered || me.Ride != RideKind.OnFoot) Fail("outside", $"setting off: E from beside the door still {(offered ? "offers" : "takes")} the bus (ride {me.Ride})");
+        else Log("ok   outside, setting off: E beside the bus's door does nothing; walk aboard and drive from inside");
+
+        settings.BoardWalkableFromOutside = true;
+        Log($"  outside: E would {VehicleReach.Find(me)?.Action ?? "do nothing"}; {me.GlobalPosition.DistanceTo(bus.ToGlobal(ride.EntryPoint)):F2} m from its entry, entry {ride.EntryPoint}");
+        bool took = me.TryGetIn();
+        for (int i = 0; i < 50 && me.Ride != kind; i++) await Wait(0.1);
+        if (!took || me.Ride != kind || me.SeatIndex != 0) Fail("outside", $"setting on: E beside the door did not put the player at the wheel (ride {me.Ride})");
+        else Log("ok   outside, setting on (the default): E beside the bus's door puts the player at the wheel");
+        settings.BoardWalkableFromOutside = was;
     }
 
     /// <summary>
@@ -191,6 +233,7 @@ public partial class ExitProbe : Node, Core.IOriginShiftAware
         }
         if (ok) Log($"ok   {name}: {what}");
         else Fail(name, (onTop ? "ON TOP: " : ride.Walkable ? "NOT IN THE AISLE: " : over ? "INSIDE: " : agl >= 0.8f ? "OFF THE GROUND: " : "") + what);
+        if (ok && ride.Walkable && me.DeckOn != "" && await BackIn(me, name)) parked = null;   // driven again: it is the player's now
         Clean(walls, parked);
         await Wait(0.3);
     }
@@ -278,6 +321,35 @@ public partial class ExitProbe : Node, Core.IOriginShiftAware
         string what = $"got up at {speed * 3.6f:F0} km/h, the bus rolled at up to {worst * 3.6f:F0} km/h";
         if (lost == null) Log($"ok   {name}: {what}, aboard the whole way");
         else Fail(name, $"{what}; LOST {lost}");
+    }
+
+    /// <summary>
+    /// Back at the wheel from the aisle (#323): the bus must stay on the ground, not be taken up and
+    /// dropped. Every physics frame for two seconds, the driven body's height over the ground; then
+    /// on foot again where it stands (the bus gone with it). False when it never took the wheel.
+    /// </summary>
+    private async Task<bool> BackIn(FootPlayer me, string name)
+    {
+        float aisle = me.GlobalPosition.Y - Ground(me, me.GlobalPosition);
+        if (!me.TryGetIn()) { Fail(name, "back in: E at the wheel did nothing"); return false; }
+        for (int i = 0; i < 300 && me.Ride == RideKind.OnFoot; i++) await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        if (me.Ride == RideKind.OnFoot) { Fail(name, "back in: never took the wheel"); return false; }
+        float start = me.GlobalPosition.Y - Ground(me, me.GlobalPosition), high = float.MinValue;
+        int at = 0;
+        for (int frame = 0; frame < 120; frame++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            float agl = me.GlobalPosition.Y - Ground(me, me.GlobalPosition);
+            if (agl > high) { high = agl; at = frame; }
+        }
+        float settled = me.GlobalPosition.Y - Ground(me, me.GlobalPosition);
+        string what = $"back in: {start:F2} m over the ground at once, {high:F2} m at frame {at}, {settled:F2} m settled (aisle {aisle:F2} m)";
+        if (Mathf.Max(high, start) - settled > 0.25f) Fail(name, $"DROPPED {what}");
+        else Log($"ok   {name}: {what}");
+        // on foot where it stands; the next case conjures its own vehicle 30 m on
+        me.Velocity = Vector3.Zero;
+        for (int i = 0; i < 30 && !me.SetRide(RideKind.OnFoot); i++) await Wait(0.1);
+        return true;
     }
 
     private void Fail(string name, string why)

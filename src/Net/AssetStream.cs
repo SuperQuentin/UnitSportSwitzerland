@@ -60,6 +60,18 @@ public enum AssetKind
     /// compressed, so it goes out as is.
     /// </summary>
     Cd = 10,
+
+    /// <summary>
+    /// .water, the still water level of a tile (#298), already deflate-compressed inside the
+    /// format. Only tiles with water have one; an older server answers "missing".
+    /// </summary>
+    Water = 11,
+
+    /// <summary>
+    /// landings.json, the region's boat landings and harbour jetties (#377). Not tile-scoped, like
+    /// <see cref="Places"/>: fetched once during sync; an older server answers "missing".
+    /// </summary>
+    Landings = 12,
 }
 
 /// <summary>
@@ -106,6 +118,8 @@ public static class AssetStream
         AssetKind.Buildings => BuildingFormat.FileName(id),
         AssetKind.Holes => HoleFormat.FileName(id),
         AssetKind.Cd => $"{id.E}.ogg",
+        AssetKind.Water => WaterFormat.FileName(id),
+        AssetKind.Landings => LandingIndex.FileName,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -113,7 +127,7 @@ public static class AssetStream
     /// True for kinds whose format already compresses its own payload, so deflating again
     /// only burns CPU to add a few bytes.
     /// </summary>
-    public static bool IsAlreadyCompressed(AssetKind kind) => kind is AssetKind.Cover or AssetKind.Cd;
+    public static bool IsAlreadyCompressed(AssetKind kind) => kind is AssetKind.Cover or AssetKind.Cd or AssetKind.Water;
 
     /// <summary>Deflates a payload, returning null when the result is not smaller.</summary>
     public static byte[]? TryCompress(byte[] payload)

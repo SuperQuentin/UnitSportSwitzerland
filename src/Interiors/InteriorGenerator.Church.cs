@@ -38,7 +38,7 @@ public static partial class InteriorGenerator
         {
             var fp = BuildingFootprint.Compute(tile, index, roads, grid);
             if (fp == null) return null;
-            layout = Generate(fp, tile.Buildings[index]);
+            layout = Generate(fp, tile.Buildings[index], Loot.ShopTables.IsRural(tile.Buildings.Count));
         }
         layout.Group = GroupPrint(tile, index);
         return layout;
@@ -469,6 +469,7 @@ public static partial class InteriorGenerator
             AddLifted(l, 0, RatPiece, rat, 2, placed, up ? lift : 0);
             break;
         }
+        RadioByRat(l, 0, nave, placed, off, blocked, hasDais ? placed[0] : null);
 
         // pews in two blocks either side of the aisle, facing the altar
         const float aisle = 1.6f, sideAisle = 0.9f, pewD = 0.55f, pitch = 1.05f;

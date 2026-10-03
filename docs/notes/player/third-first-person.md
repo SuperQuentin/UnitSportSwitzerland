@@ -5,7 +5,8 @@
   (`_viewYaw`), not the body: first person sets the body to it every render frame (the old
   behaviour exactly), third person lets the body turn to face its travel (`FaceTravel` — toward
   the input while there is some, else the velocity) and orbits a spring-arm camera
-  (`UpdateThirdPersonCamera`) from above the right shoulder in **global** space — parented to the
+  (`UpdateThirdPersonCamera`, a 0.2 m sphere sweep `ArmHit`, not a ray: a ray grazing door frames
+  indoors flickered hit/miss and shook the lens) from above the right shoulder in **global** space — parented to the
   turning body it would swing round every direction change. Movement is relative to the view, so
   forward is into the screen in both. Both cameras update in `_Process`, not physics, or look lags
   the mouse by up to a physics tick. The local body is the same `HumanMeshBuilder` figure remote

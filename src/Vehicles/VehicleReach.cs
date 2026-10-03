@@ -56,7 +56,7 @@ public static class VehicleReach
         var query = PhysicsRayQueryParameters3D.Create(from, from + forward * (AimRange + from.DistanceTo(chest)), uint.MaxValue,
             new Godot.Collections.Array<Rid> { player.GetRid() });
         var hit = player.GetWorld3D().DirectSpaceState.IntersectRay(query);
-        if (hit.Count > 0 && VehicleOf(hit["collider"].AsGodotObject() as Node) is { } aimed && vehicles.Enterable(aimed)
+        if (hit.Count > 0 && VehicleOf(hit["collider"].AsGodotObject() as Node) is { } aimed && vehicles.Enterable(aimed) && FromOutside(aimed)
             && At(player, aimed, hit["position"].AsVector3()) is { } pointed)
             return pointed;
 
@@ -65,13 +65,20 @@ public static class VehicleReach
         float bestD = float.MaxValue;
         foreach (var node in vehicles.GetChildren())
         {
-            if (node is not VehicleBody v || !vehicles.Enterable(v)) continue;
+            if (node is not VehicleBody v || !vehicles.Enterable(v) || !FromOutside(v)) continue;
             float hull = HullDistance(v, v.Ride.ParkedBox, chest);
             if (hull > DoorReach + 0.5f || hull >= bestD) continue;
             if (At(player, v, chest) is { } here) { best = here; bestD = hull; }
         }
         return best;
     }
+
+    /// <summary>
+    /// Whether E from outside may take this vehicle (#384): always, but a walkable one (a bus, the
+    /// steamer) only with <see cref="Core.GameSettings.BoardWalkableFromOutside"/> on; off, it is
+    /// walked aboard and driven from inside.
+    /// </summary>
+    public static bool FromOutside(VehicleBody v) => Core.GameSettings.Current.BoardWalkableFromOutside || !v.Ride.Walkable;
 
     /// <summary>The door of <paramref name="v"/> nearest <paramref name="point"/> if the player can reach it, or the whole machine when it has none.</summary>
     private static VehicleAim? At(FootPlayer player, VehicleBody v, Vector3 point)
@@ -123,7 +130,7 @@ public static class VehicleReach
         if (target == _outlined && (target == null || GodotObject.IsInstanceValid(target))) return;
         if (_outlined != null && GodotObject.IsInstanceValid(_outlined)) Items.Highlight.Set(_outlined, false);
         _outlined = target;
-        // a door sits flush in the body, which hides its rim: it glows as well
-        if (target != null) Items.Highlight.Set(target, true, tint: aim is { HasDoor: true });
+        // a door flush in the body: its edge is drawn over the body (the stencil border, #401)
+        if (target != null) Items.Highlight.Set(target, true);
     }
 }

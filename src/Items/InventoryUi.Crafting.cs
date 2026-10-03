@@ -8,7 +8,7 @@ namespace UnitSport.Items;
 /// The panel's third column (#271): every recipe, the ones you cannot make greyed out with what is
 /// missing in red. Make crafts one; shift-click crafts as many as the ingredients allow. Each one
 /// takes the recipe's seconds, shown on the bar under the header; closing the panel stops it.
-/// Station: hands always, a workbench within reach (<see cref="CraftStations"/>).
+/// Station: hands always, a workbench or a fire within reach (<see cref="CraftStations"/>), named in the header.
 /// </summary>
 public partial class InventoryUi
 {
@@ -26,6 +26,7 @@ public partial class InventoryUi
     private ProgressBar _craftBar = null!;
     private Station _station = Station.Hands;
     private InventoryStore? _store;
+    private float _stationPoll;
 
     // what is being made: the recipe, how many batches are left, time into the current one
     private Recipe? _making;
@@ -118,8 +119,9 @@ public partial class InventoryUi
     private void RefreshCrafting()
     {
         if (_recipeRows.Count == 0) return;
-        _station = CraftStations.At(_items.UsablePlayer);
-        _stationLine.Text = (_station & Station.Workbench) != 0 ? "At a workbench" : "By hand";
+        var spot = CraftStations.Where(_items.UsablePlayer);
+        _station = spot.Here;
+        _stationLine.Text = spot.Label;
 
         foreach (var row in _recipeRows)
         {
@@ -176,6 +178,13 @@ public partial class InventoryUi
     /// <summary>Runs from <see cref="_Process"/>: advances the batch being made, crafts it when its time is up.</summary>
     private void ProcessCrafting(float dt)
     {
+        // a campfire lit or burnt out, a bench walked up to: the rows follow what is in reach
+        _stationPoll -= dt;
+        if (IsOpen && _stationPoll <= 0f && _recipeRows.Count > 0)
+        {
+            _stationPoll = 1f;
+            if (CraftStations.Where(_items.UsablePlayer).Label != _stationLine.Text) RefreshCrafting();
+        }
         if (_making is not { } r) return;
         if (!IsOpen) { StopMaking(); return; }
 

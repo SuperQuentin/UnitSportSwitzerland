@@ -144,10 +144,18 @@ public sealed class FixtureChunkSource : IChunkSource
     public Task<ChunkGrid?> LoadChunkAsync(TileId id, CancellationToken ct = default)
     {
         if (!_tiles.Contains(id)) return Task.FromResult<ChunkGrid?>(null);
-        // bilinear between the lattice's 10 m points
-        var l = Lattice(id);
         int size = ChunkFormat.GridSize;
         var q = new ushort[size * size];
+        if (_course.Terrain is { } terrain)
+        {
+            // a course whose ground is a function (the lake's river and drop-off): every metre of it
+            for (int r = 0; r < size; r++)
+                for (int c = 0; c < size; c++)
+                    q[r * size + c] = ChunkFormat.Quantize(terrain(id.MinE + c - _startE, id.MaxN - r - _startN));
+            return Task.FromResult<ChunkGrid?>(Grid(id, q, 1));
+        }
+        // bilinear between the lattice's 10 m points
+        var l = Lattice(id);
         for (int r = 0; r < size; r++)
         {
             int r0 = Math.Min(r / LatticeStride, LatticeSize - 2);
@@ -182,12 +190,66 @@ public sealed class FixtureChunkSource : IChunkSource
     public Task<BuildingTile?> LoadBuildingsAsync(TileId id, CancellationToken ct = default) =>
         Task.FromResult(_tiles.Contains(id) ? new BuildingTile { Id = id, Buildings = new() } : null);
 
-    /// <summary>All open ground (grass), the cover's zero class.</summary>
-    public Task<byte[]?> LoadCoverAsync(TileId id, CancellationToken ct = default) =>
-        Task.FromResult(_tiles.Contains(id) ? new byte[CoverFormat.Size * CoverFormat.Size] : null);
+    /// <summary>The course's cover; all open ground (grass, the cover's zero class) by default.</summary>
+    public Task<byte[]?> LoadCoverAsync(TileId id, CancellationToken ct = default)
+    {
+        if (!_tiles.Contains(id)) return Task.FromResult<byte[]?>(null);
+        var cover = new byte[CoverFormat.Size * CoverFormat.Size];
+        if (_course.Cover is { } fn)
+            for (int r = 0; r < CoverFormat.Size; r++)
+                for (int c = 0; c < CoverFormat.Size; c++)
+                    cover[r * CoverFormat.Size + c] = (byte)fn(id.MinE + c - _startE, id.MaxN - r - _startN);
+        return Task.FromResult<byte[]?>(cover);
+    }
+
+    /// <summary>The course's still water (#299), every 2 m; null for a course with none.</summary>
+    public Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default)
+    {
+        if (!_tiles.Contains(id) || _course.Water is not { } water) return Task.FromResult<WaterTile?>(null);
+        int n = WaterTile.Size;
+        var level = new float[n * n];
+        var fetch = new float[n * n];
+        bool any = false;
+        for (int r = 0; r < n; r++)
+            for (int c = 0; c < n; c++)
+            {
+                var (l, f) = water(id.MinE + c * WaterTile.Stride - _startE, id.MaxN - r * WaterTile.Stride - _startN);
+                level[r * n + c] = (float)l;
+                fetch[r * n + c] = (float)f;
+                any |= !double.IsNaN(l);
+            }
+        return Task.FromResult(any ? new WaterTile { Level = level, FetchM = fetch } : null);
+    }
 
     public Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default) =>
         Task.FromResult(_tiles.Contains(id) ? (_trees.TryGetValue(id, out var t) ? t : new()) : null);
 
     public Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default) => Task.FromResult<HorizonIndex?>(null);
+
+    /// <summary>The course's stops and jetties (#377), planned over its own ground and water as the preprocessor plans the real ones.</summary>
+    public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default)
+    {
+        if (_course.Stops.Count == 0 && _course.Jetties.Count == 0) return Task.FromResult<LandingIndex?>(null);
+        return Task.Run(() =>
+        {
+            var shore = new Shore(_course, _startE, _startN);
+            var index = new LandingIndex();
+            foreach (var (name, x, y) in _course.Stops)
+                if (LandingPlanner.PlanLanding(name, _startE + x, _startN + y, shore) is { } landing) index.Landings.Add(landing);
+            int k = 0;
+            foreach (var line in _course.Jetties)
+                if (LandingPlanner.PlanJetty($"fixture-{k++}", line.Select(p => (_startE + p.X, _startN + p.Y, p.Z)).ToList(), shore) is { } jetty)
+                    index.Jetties.Add(jetty);
+            return (LandingIndex?)index;
+        }, ct);
+    }
+
+    /// <summary>The course's ground and water for the pier planner, in LV95.</summary>
+    private sealed class Shore(FixtureCourse course, double startE, double startN) : IShoreSampler
+    {
+        public double Ground(double e, double n) => course.Ground(e - startE, n - startN);
+
+        public double Level(double e, double n) =>
+            course.Water is { } water ? water(e - startE, n - startN).Level : double.NaN;
+    }
 }

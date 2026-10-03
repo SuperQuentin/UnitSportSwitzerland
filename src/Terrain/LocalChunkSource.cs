@@ -99,6 +99,18 @@ public sealed class LocalChunkSource : IChunkSource
         }, ct);
     }
 
+    /// <summary>The preprocessor's <c>.water</c> layer (#298), on the runtime's 2 m lattice; null where the tile has no water file.</summary>
+    public Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default)
+    {
+        return Task.Run(() =>
+        {
+            string path = Path.Combine(_dir, WaterFormat.FileName(id));
+            if (!File.Exists(path)) return (WaterTile?)null;
+            using var fs = File.OpenRead(path);
+            return WaterFormat.Decode(fs).ToTile();
+        }, ct);
+    }
+
     public Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default)
     {
         return Task.Run(() =>
@@ -118,6 +130,24 @@ public sealed class LocalChunkSource : IChunkSource
             if (!File.Exists(path)) return (HorizonIndex?)null;
             using var fs = File.OpenRead(path);
             return HorizonFormat.Decode(fs);
+        }, ct);
+    }
+
+    public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => ReadLandingsAsync(_dir, ct);
+
+    /// <summary><c>landings.json</c> in a directory, or null; a file that does not parse is logged and skipped.</summary>
+    public static Task<LandingIndex?> ReadLandingsAsync(string dir, CancellationToken ct = default)
+    {
+        return Task.Run(() =>
+        {
+            string path = Path.Combine(dir, LandingIndex.FileName);
+            if (!File.Exists(path)) return (LandingIndex?)null;
+            try { return LandingIndex.FromJson(File.ReadAllText(path)); }
+            catch (Exception e)
+            {
+                Godot.GD.PushWarning($"[landings] {path} does not parse: {e.Message}");
+                return null;
+            }
         }, ct);
     }
 

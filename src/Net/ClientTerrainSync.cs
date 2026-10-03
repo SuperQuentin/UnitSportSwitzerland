@@ -40,6 +40,9 @@ public sealed partial class ClientTerrainSync : Node
     /// <summary>Raised once the town index has been cached, so the Tab search can reload.</summary>
     public event Action? PlacesReceived;
 
+    /// <summary>The server's landings (#377) arrived and are in the cache. Any thread.</summary>
+    public event Action<LandingIndex>? LandingsReceived;
+
     /// <summary>The far-horizon file arrived from the server and is in the cache.</summary>
     public event Action? HorizonReceived;
 
@@ -57,6 +60,7 @@ public sealed partial class ClientTerrainSync : Node
         finally { IndexFinished = true; }
         if (!merged) return;
         await SyncPlacesAsync(ct).ConfigureAwait(false);
+        await SyncLandingsAsync(ct).ConfigureAwait(false);
         await SyncHorizonAsync(ct).ConfigureAwait(false);
     }
 
@@ -95,6 +99,9 @@ public sealed partial class ClientTerrainSync : Node
             Status?.Invoke("Server terrain index is unreadable — playing with local tiles only.");
             return false;
         }
+
+        int dropped = DropChangedTiles(manifest);
+        if (dropped > 0) GD.Print($"[stream] {dropped} cached tiles changed on the server; they stream again");
 
         // The continuation above runs on the thread pool, and what follows unloads tiles (real
         // ones replacing generated ground): main thread only.
@@ -152,6 +159,25 @@ public sealed partial class ClientTerrainSync : Node
             });
 
     /// <summary>
+    /// Pulls the server's landings (#377): the piers its world has, and where its steamer lies.
+    /// A few KB; a server without them (or an older one) leaves the local ones, if any.
+    /// </summary>
+    private Task SyncLandingsAsync(CancellationToken ct) =>
+        SyncFileAsync(AssetKind.Landings, LandingIndex.FileName, "landings",
+            "server has no landings; piers only where this client's own data has them", ct, bytes =>
+            {
+                LandingIndex index;
+                try { index = LandingIndex.FromJson(Encoding.UTF8.GetString(bytes)); }
+                catch (Exception e)
+                {
+                    GD.PushWarning($"[stream] the server's landings do not parse: {e.Message}");
+                    return;
+                }
+                GD.Print($"[stream] landings received: {index.Landings.Count} landings, {index.Jetties.Count} jetties");
+                LandingsReceived?.Invoke(index);
+            });
+
+    /// <summary>
     /// Fetches one region-wide file (tile 0,0 of <paramref name="kind"/>), writes it into the cache
     /// dir as <paramref name="fileName"/> and calls <paramref name="onDone"/>; logs and returns when
     /// the server has none or the write fails.
@@ -187,6 +213,42 @@ public sealed partial class ClientTerrainSync : Node
 
     /// <summary>Filename of the cached copy of the server's index.</summary>
     public const string CachedIndexFile = "server-manifest.json";
+
+    /// <summary>
+    /// The cache is keyed by file name only, so a tile the server rebuilt would be served from the
+    /// old copy for ever. The last server index is still on disk: a tile whose height range
+    /// changed since (#298 dug the lake beds, which lowered every lake tile's minimum) loses its
+    /// cached height files and water layer, so it streams again. Returns how many tiles changed.
+    /// </summary>
+    private static int DropChangedTiles(TerrainManifest fresh)
+    {
+        try
+        {
+            string dir = Core.TerrainPaths.FindCacheDir();
+            string path = Path.Combine(dir, CachedIndexFile);
+            if (!File.Exists(path)) return 0;
+            var before = new Dictionary<TileId, ManifestTile>();
+            foreach (var t in TerrainManifest.FromJson(File.ReadAllText(path)).Tiles) before[t.Id] = t;
+
+            int changed = 0;
+            foreach (var t in fresh.Tiles)
+            {
+                if (!before.TryGetValue(t.Id, out var old) || (old.Min == t.Min && old.Max == t.Max)) continue;
+                changed++;
+                foreach (string name in new[] { ChunkFormat.ChunkFileName(t.Id), ChunkFormat.CoarseFileName(t.Id), WaterFormat.FileName(t.Id) })
+                {
+                    string file = Path.Combine(dir, name);
+                    if (File.Exists(file)) File.Delete(file);
+                }
+            }
+            return changed;
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"[stream] could not compare the cached server index: {e.Message}");
+            return 0;
+        }
+    }
 
     private void SaveCachedIndex(byte[] json)
     {

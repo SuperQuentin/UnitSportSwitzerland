@@ -22,7 +22,8 @@ namespace UnitSport.Interiors;
 /// </summary>
 public static partial class InteriorMeshBuilder
 {
-    public sealed record MeshData(Vector3[] Vertices, Color[] Colors, Vector3[] Collision);
+    /// <summary>The static soup, its collision, and the figures that move (a church's rat and congregation, #370).</summary>
+    public sealed record MeshData(Vector3[] Vertices, Color[] Colors, Vector3[] Collision, Figure[]? Figures = null);
 
     private sealed class Scratch
     {
@@ -138,10 +139,11 @@ public static partial class InteriorMeshBuilder
             }
         }
 
+        var figures = new List<Figure>();
         foreach (var p in l.Furniture)
-            Furniture(s, p, l.FloorY(p.Floor) + p.Lift);
+            Furniture(s, p, l.FloorY(p.Floor) + p.Lift, figures);
 
-        return new MeshData(s.V.ToArray(), s.C.ToArray(), s.Col.ToArray());
+        return new MeshData(s.V.ToArray(), s.C.ToArray(), s.Col.ToArray(), figures.ToArray());
     }
 
     /// <summary>
@@ -202,6 +204,15 @@ public static partial class InteriorMeshBuilder
 
     // ---- rooms -------------------------------------------------------------------------------
 
+    /// <summary>
+    /// How far each wall, floor and ceiling piece runs past its neat edge. Pieces that only touch
+    /// (a panel beside a doorway, the lintel over it, two rooms' reveals meeting at the shared wall
+    /// line) leave T-junctions, and those rasterise as hairline cracks onto the dark void the
+    /// interior floats in; the interior's far-from-origin coordinates make it worse. Overlapping by
+    /// a few millimetres closes them; the overlap is coplanar and the same colour, so it is unseen.
+    /// </summary>
+    private const float Seam = 0.006f;
+
     private static void Room(Scratch s, RoomPlan r, float y0, float clear, List<RectPlan> holes, List<RectPlan> ceilingHoles)
     {
         var (floorCol, wallCol, ceilCol) = Palette(r.Type);
@@ -209,12 +220,18 @@ public static partial class InteriorMeshBuilder
         var inner = new RectPlan(r.X0 + t, r.Z0 + t, r.X1 - t, r.Z1 - t);
         float top = y0 + clear;
 
-        foreach (var piece in Subtract(inner, holes))
+        foreach (var cut in Subtract(inner, holes))
+        {
+            var piece = cut.Grow(Seam);
             s.Quad(new(piece.X0, y0, piece.Z0), new(piece.X1, y0, piece.Z0),
                 new(piece.X1, y0, piece.Z1), new(piece.X0, y0, piece.Z1), floorCol);
-        foreach (var piece in Subtract(inner, ceilingHoles))
+        }
+        foreach (var cut in Subtract(inner, ceilingHoles))
+        {
+            var piece = cut.Grow(Seam);
             s.Quad(new(piece.X0, top, piece.Z0), new(piece.X0, top, piece.Z1),
                 new(piece.X1, top, piece.Z1), new(piece.X1, top, piece.Z0), ceilCol);
+        }
 
         for (int side = 0; side < 4; side++)
             Wall(s, r, (Side)side, inner, y0, clear, wallCol);
@@ -243,6 +260,7 @@ public static partial class InteriorMeshBuilder
         void Panel(float u0, float u1, float ya, float yb)
         {
             if (u1 - u0 < 1e-3f || yb - ya < 1e-3f) return;
+            u0 -= Seam; u1 += Seam; ya -= Seam; yb += Seam;
             s.WallQuad(P(u0, ya), P(u1, ya), P(u1, yb), P(u0, yb), col, y0, clear);
         }
 
@@ -257,7 +275,9 @@ public static partial class InteriorMeshBuilder
 
             // reveals: to the shared wall line for a doorway (the neighbour closes the rest),
             // deeper for an exterior opening so it reads as a real wall's thickness
-            float depth = o.Kind is OpeningKind.Door or OpeningKind.Arch ? InteriorGenerator.WallInset : InteriorGenerator.WallInset + 0.22f;
+            // (a doorway's reveal runs a hair past that line, into the neighbour's, so the two meet
+            // without a crack)
+            float depth = o.Kind is OpeningKind.Door or OpeningKind.Arch ? InteriorGenerator.WallInset + Seam : InteriorGenerator.WallInset + 0.22f;
             var reveal = col * 0.9f;
             reveal.A = 1;
             Vector3 R(float u, float y, float d) => OnWall(side, inner, u, y, d);
@@ -410,7 +430,90 @@ public static partial class InteriorMeshBuilder
         return new MeshData(s.V.ToArray(), s.C.ToArray(), Array.Empty<Vector3>());
     }
 
-    private static void Furniture(Scratch s, FurniturePlan p, float y0)
+    /// <summary>PAUSA's block letters, 3x5, top row first.</summary>
+    private static readonly string[] PausaFont =
+    {
+        "111101111100100",   // P
+        "010101111101101",   // A
+        "101101101101111",   // U
+        "111100111001111",   // S
+        "010101111101101",   // A
+    };
+
+    /// <summary>
+    /// A PAUSA vending machine (#273), front to +Z: a tall red cabinet, a white band with the
+    /// wordmark in red block letters, a glass front over four rows of spirals with goods in them,
+    /// the keypad column on the right (LCD, keys, coin slot) and the pickup flap at the bottom.
+    /// Vertex-coloured boxes only, like every other piece. In the Selecta style, not its name or logo.
+    /// </summary>
+    private static void Vending(FurniturePlan p, float w, float d, float H, Action<Vector3, Vector3, Color> box)
+    {
+        void B(float xa, float ya, float za, float xb, float yb, float zb, Color col) =>
+            box(new Vector3(xa, ya, za), new Vector3(xb, yb, zb), col);
+        var red = C(0.80f, 0.08f, 0.10f);
+        var deep = C(0.52f, 0.05f, 0.07f);
+        var white = C(0.95f, 0.95f, 0.93f);
+        var dark = C(0.08f, 0.08f, 0.09f);
+        var steel = C(0.62f, 0.64f, 0.66f);
+        float f = d;   // the front face
+
+        B(-w, 0.06f, -d, w, H, d, red);                              // the cabinet
+        foreach (float fx in new[] { -w + 0.04f, w - 0.12f })      // feet
+            B(fx, 0, -d + 0.05f, fx + 0.08f, 0.06f, d - 0.05f, dark);
+        B(-w, H - 0.27f, f, w, H - 0.04f, f + 0.012f, white);        // the white band
+        // the wordmark, centred on the band
+        const float px = 0.034f;
+        float x0 = -(PausaFont.Length * 4 - 1) * px / 2, yTop = H - 0.07f;
+        for (int l = 0; l < PausaFont.Length; l++)
+            for (int row = 0; row < 5; row++)
+                for (int col = 0; col < 3; col++)
+                    if (PausaFont[l][row * 3 + col] == '1')
+                    {
+                        float x = x0 + (l * 4 + col) * px, y = yTop - (row + 1) * px;
+                        B(x, y, f + 0.012f, x + px, y + px, f + 0.02f, red);
+                    }
+
+        // the window: four rows of six spirals, the goods in them, glass over it all
+        float wx0 = -w + 0.06f, wx1 = w * 0.38f, wy0 = 0.46f, wy1 = H - 0.33f;
+        B(wx0 - 0.02f, wy0 - 0.02f, f, wx1 + 0.02f, wy1 + 0.02f, f + 0.01f, deep);    // the frame
+        B(wx0, wy0, f + 0.01f, wx1, wy1, f + 0.012f, C(0.16f, 0.16f, 0.18f));          // the dark back
+        float rowH = (wy1 - wy0) / 4, colW = (wx1 - wx0) / 6;
+        for (int r = 0; r < 4; r++)
+        {
+            float y = wy1 - (r + 1) * rowH;
+            B(wx0, y, f + 0.012f, wx1, y + 0.012f, f + 0.06f, steel);                   // the shelf
+            for (int c = 0; c < 6; c++)
+            {
+                float x = wx0 + c * colW;
+                float hue = (float)Math.Abs((p.X * 3.7 + p.Z * 1.3 + r * 0.29 + c * 0.17) % 1.0);
+                var goods = Color.FromHsv(hue, 0.65f, 0.85f).SrgbToLinear();
+                B(x + 0.012f, y + 0.02f, f + 0.02f, x + colW - 0.012f, y + rowH * 0.62f, f + 0.045f, goods);   // the packet
+                for (int k = 0; k < 3; k++)                                                                  // the spiral's turns
+                    B(x + colW * (0.2f + 0.3f * k), y + 0.012f, f + 0.012f, x + colW * (0.2f + 0.3f * k) + 0.008f, y + rowH * 0.7f, f + 0.055f, steel);
+                B(x + colW * 0.3f, y + 0.002f, f + 0.06f, x + colW * 0.7f, y + 0.014f, f + 0.065f, white);  // the code label
+            }
+        }
+        B(wx0, wy0, f + 0.065f, wx1, wy1, f + 0.07f, Glass);
+
+        // the keypad column: LCD, twelve keys, the coin slot, the return button
+        float kx0 = w * 0.46f, kx1 = w - 0.06f;
+        B(kx0, 0.5f, f, kx1, H - 0.33f, f + 0.01f, C(0.20f, 0.20f, 0.22f));
+        B(kx0 + 0.03f, 1.22f, f + 0.01f, kx1 - 0.03f, 1.32f, f + 0.018f, C(0.30f, 0.52f, 0.36f));   // the LCD
+        float kw = (kx1 - kx0 - 0.08f) / 3;
+        for (int k = 0; k < 12; k++)
+        {
+            float kx = kx0 + 0.04f + (k % 3) * kw, ky = 1.15f - (k / 3) * 0.055f;
+            B(kx + 0.006f, ky - 0.04f, f + 0.01f, kx + kw - 0.006f, ky, f + 0.022f, k == 9 ? C(0.85f, 0.70f, 0.15f) : steel);
+        }
+        B((kx0 + kx1) / 2 - 0.006f, 0.82f, f + 0.01f, (kx0 + kx1) / 2 + 0.006f, 0.9f, f + 0.02f, dark);   // the coin slot
+        B((kx0 + kx1) / 2 - 0.035f, 0.66f, f + 0.01f, (kx0 + kx1) / 2 + 0.035f, 0.74f, f + 0.03f, dark);  // the change cup
+
+        // the pickup flap, and its push plate
+        B(-w + 0.08f, 0.12f, f, w * 0.38f, 0.38f, f + 0.012f, C(0.14f, 0.14f, 0.15f));
+        B(-w + 0.1f, 0.3f, f + 0.012f, w * 0.36f, 0.36f, f + 0.02f, C(0.30f, 0.30f, 0.32f));
+    }
+
+    private static void Furniture(Scratch s, FurniturePlan p, float y0, List<Figure> figures)
     {
         // authored with its back to -Z, centred on the origin, then turned and moved
         var basis = new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2);
@@ -707,6 +810,9 @@ public static partial class InteriorMeshBuilder
                 B(-0.35f, H + 0.06f, -d + 0.1f, 0.35f, H + 0.4f, -d + 0.15f, dark);   // a terminal
                 break;
             }
+            case FurnitureType.VendingMachine:
+                Vending(p, w, d, H, (a, b, col) => B(a.X, a.Y, a.Z, b.X, b.Y, b.Z, col));
+                break;
             case FurnitureType.ShopCounter:
 
                 B(-w, 0, -d, w, H, d, C(0.62f, 0.44f, 0.30f));
@@ -718,8 +824,7 @@ public static partial class InteriorMeshBuilder
                 B(-w, 0.42f, -d, w, H, -d + 0.08f, wood);
                 B(-w, 0, -d, -w + 0.06f, 0.42f, d, darkWood);
                 B(w - 0.06f, 0, -d, w, 0.42f, d, darkWood);
-                if (p.Type == FurnitureType.FrontPew)
-                    Congregation(p, w, d, (a, b, col) => B(a.X, a.Y, a.Z, b.X, b.Y, b.Z, col));
+                if (p.Type == FurnitureType.FrontPew) Congregation(p, w, d, y0, figures);
                 break;
             case FurnitureType.Car:
                 var paint = C(0.62f, 0.14f, 0.12f);
@@ -783,51 +888,11 @@ public static partial class InteriorMeshBuilder
                 break;
             }
             case FurnitureType.PastorRat:
-            {
-                // the Dorime rat (#241): robe, mitre, arms spread in blessing, facing +Z
-                float k = H / 1.35f;
-                void R(float xa, float ya, float za, float xb, float yb, float zb, Color col) =>
-                    B(xa * k, ya * k, za * k, xb * k, yb * k, zb * k, col);
-                var robe = C(0.93f, 0.93f, 0.90f);
-                var shade = C(0.80f, 0.80f, 0.78f);
-                var gilt = C(0.80f, 0.64f, 0.28f);
-                var fur = C(0.80f, 0.55f, 0.32f);
-                var pink = C(0.88f, 0.64f, 0.62f);
-                // feet and tail
-                R(-0.12f, 0, 0.08f, -0.04f, 0.05f, 0.20f, pink);
-                R(0.04f, 0, 0.08f, 0.12f, 0.05f, 0.20f, pink);
-                R(-0.02f, 0.03f, -0.22f, 0.02f, 0.06f, -0.12f, pink);
-                // the robe, flaring to the hem, the gold belt and the cross on the chest
-                R(-0.24f, 0.04f, -0.16f, 0.24f, 0.36f, 0.16f, robe);
-                R(-0.20f, 0.36f, -0.13f, 0.20f, 0.88f, 0.13f, robe);
-                R(-0.21f, 0.60f, -0.14f, 0.21f, 0.65f, 0.14f, gilt);
-                R(-0.015f, 0.68f, 0.13f, 0.015f, 0.84f, 0.15f, gilt);
-                R(-0.06f, 0.77f, 0.13f, 0.06f, 0.80f, 0.15f, gilt);
-                // wide sleeves held out, the cloth hanging under them, little pink hands
-                foreach (float sx in new[] { -1f, 1f })
-                {
-                    float a = sx * 0.20f, b = sx * 0.42f;
-                    R(Math.Min(a, b), 0.66f, -0.10f, Math.Max(a, b), 0.84f, 0.10f, robe);
-                    float c = sx * 0.27f;
-                    R(Math.Min(c, b), 0.30f, -0.04f, Math.Max(c, b), 0.66f, 0.04f, shade);
-                    float e = sx * 0.45f;
-                    R(Math.Min(b, e), 0.72f, -0.03f, Math.Max(b, e), 0.78f, 0.03f, pink);
-                }
-                // the head: snout, pink nose, black eyes, round ears
-                R(-0.15f, 0.86f, -0.11f, 0.15f, 1.10f, 0.08f, fur);
-                R(-0.09f, 0.88f, 0.08f, 0.09f, 1.02f, 0.20f, fur);
-                R(-0.03f, 0.95f, 0.20f, 0.03f, 0.99f, 0.23f, pink);
-                R(-0.13f, 1.00f, 0.08f, -0.095f, 1.045f, 0.095f, dark);
-                R(0.095f, 1.00f, 0.08f, 0.13f, 1.045f, 0.095f, dark);
-                R(-0.25f, 1.04f, -0.05f, -0.11f, 1.18f, -0.01f, pink);
-                R(0.11f, 1.04f, -0.05f, 0.25f, 1.18f, -0.01f, pink);
-                // the mitre, its gold band and stripe
-                R(-0.09f, 1.10f, -0.06f, 0.09f, 1.29f, 0.06f, robe);
-                R(-0.05f, 1.29f, -0.04f, 0.05f, 1.35f, 0.04f, robe);
-                R(-0.095f, 1.10f, -0.065f, 0.095f, 1.13f, 0.065f, gilt);
-                R(-0.015f, 1.13f, 0.06f, 0.015f, 1.33f, 0.07f, gilt);
+                figures.Add(Rat(p, y0, dark));
                 break;
-            }
+            case FurnitureType.ChurchRadio:
+                ChurchRadio(w, d, H, (a, b, col) => B(a.X, a.Y, a.Z, b.X, b.Y, b.Z, col));
+                break;
             case FurnitureType.Bell:
             {
                 var bronze = C(0.55f, 0.42f, 0.22f);

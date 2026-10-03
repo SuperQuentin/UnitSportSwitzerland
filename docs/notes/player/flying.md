@@ -10,7 +10,10 @@
   - **Base jump**: not a mount. On foot, Jump while falling (vy < −3) with > 12 m under you →
     **wingsuit** (lift/drag polar, point mass; a fall pulls out into a glide on its own). A bare
     polar porpoises for ever (measured −36 m/s dive → 13:1 zoom → repeat), so sink is damped toward
-    the polar's steady glide: settles at **133 km/h, 2.7:1, 13 m/s sink**. Jump again → **parachute**
+    the polar's steady glide: settles at **133 km/h, 2.7:1, 13 m/s sink**. **Look to fly**: `LookSteers`, the
+    mouse/right-stick yaw is the heading (banks toward it, 45° off = full bank), look pitch sets the
+    lift (−0.35 rad trim, −0.9 dive, +0.05 flare), the camera is the look; the stick still overrides.
+    Lift × 1/cos(bank) so turns do not sink. Jump again → **parachute**
     (glide 2.1, 4.2 m/s sink, opening shock from 145 to 36 km/h in 1 s); touching ground → on foot.
     Wingsuit touching ground over 12 m/s = SPLAT. Proximity (< 20 m AGL at > 30 m/s) is scored.
   - **Look banks the suit** (`Flyer.LookBank`, wingsuit and canopies 0.6, in the air only): the free

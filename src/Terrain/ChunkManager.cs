@@ -364,6 +364,11 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         public bool HolesLoaded;
         public byte[]? Cover;
         public bool CoverLoaded;
+        /// <summary>
+        /// The tile's still water (#299; null: none, or not kept). Kept where the cover is (tiles
+        /// drawn finer than the coarse stride) and on a server; see <see cref="TryGetWaterLevel"/>.
+        /// </summary>
+        public WaterLayer? Water;
         public ChunkNode? Node;
 
         /// <summary>Cancels the build in flight, if any. Bumping Generation orphans its results.</summary>
@@ -399,7 +404,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         ChunkNode.TreeMeshes? Trees, ArrayMesh? Water,
         Vector3[][]? RoadCollisionFaces = null, long[]? StageMs = null,
         Interiors.DoorSpot[]? Doors = null,
-        List<(float[] Points, int Count, float Half, float Height)>? Bores = null);
+        List<(float[] Points, int Count, float Half, float Height)>? Bores = null,
+        WaterLayer? WaterLayer = null);
 
     private Material? _roadMaterial;
     private Material? _buildingMaterial;
@@ -471,6 +477,31 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// taken by <see cref="ApplySettings"/>. Each build reads it once, when it starts.
     /// </summary>
     public Styles.MeshDetail Detail { get; private set; } = Styles.MeshDetail.Low;
+
+    /// <summary>
+    /// Material of the piers and jetties (#377), a <see cref="Styles.MaterialRole.Prop"/> one; null:
+    /// they are not drawn (their collision still is).
+    /// </summary>
+    public Material? PierMaterial { get; set; }
+
+    /// <summary>
+    /// The landings changed (#377: <c>landings.json</c> streamed in after the tiles round the player
+    /// were built): the tiles <paramref name="affected"/> selects build their roads (the piers' mesh)
+    /// and their collision (the piers' faces) again. The old ones stay until the new ones land.
+    /// </summary>
+    public void RebuildPiers(Func<TileId, bool> affected)
+    {
+        int tiles = 0;
+        foreach (var (id, state) in _chunks)
+        {
+            if (!affected(id)) continue;
+            state.HasRoads = false;
+            state.HasCollision = false;
+            tiles++;
+        }
+        _sinceEval = double.MaxValue;
+        if (tiles > 0) GD.Print($"[terrain] {tiles} tiles build their piers");
+    }
 
     /// <summary>
     /// Builds every tile's meshes again, in place: ground, roads, buildings, trees and water, for
@@ -759,6 +790,59 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         Horizon.EnsureCoverage(minE, maxE, minN, maxN);
     }
 
+    // ---- debug menu (#339) -------------------------------------------------------------
+
+    /// <summary>The tile layers the debug menu hid on every tile; none in play.</summary>
+    public TileLayers HiddenLayers { get; private set; }
+
+    private bool _hideReal, _hideGenerated;
+
+    /// <summary>
+    /// Hides tile layers, and whole tiles by where their data comes from, on every loaded tile and
+    /// every tile built later. The horizon and the near trees are the caller's: they are nodes of
+    /// their own. Main thread.
+    /// </summary>
+    public void SetDebugHidden(TileLayers layers, bool real, bool generated)
+    {
+        HiddenLayers = layers;
+        _hideReal = real;
+        _hideGenerated = generated;
+        foreach (var (id, state) in _chunks)
+            if (state.Node != null) ApplyDebugHidden(id, state.Node);
+    }
+
+    private void ApplyDebugHidden(TileId id, ChunkNode node)
+    {
+        node.HideLayers(HiddenLayers);
+        node.Visible = !(IsGenerated(id) ? _hideGenerated : _hideReal);
+    }
+
+    /// <summary>
+    /// Stops the rings following the anchors: what is loaded stays loaded, at the stride it has,
+    /// so the camera can leave and look at it from outside. Builds already queued still commit.
+    /// </summary>
+    public bool FreezeRings
+    {
+        get => _freezeRings;
+        set
+        {
+            _freezeRings = value;
+            _sinceEval = double.MaxValue;
+        }
+    }
+
+    private bool _freezeRings;
+
+    /// <summary>Every loaded tile and the stride its ground is drawn at (-1: not built yet), for the debug overlay.</summary>
+    public void ListTiles(List<(TileId Id, int Stride)> into)
+    {
+        into.Clear();
+        foreach (var (id, state) in _chunks) into.Add((id, state.ActiveStride));
+    }
+
+    /// <summary>The stride a loaded tile's ground is drawn at; -1 when it is not loaded or not built yet.</summary>
+    public int StrideAt(TileId id) => _chunks.TryGetValue(id, out var state) ? state.ActiveStride : -1;
+
     /// <summary>Real or generated: whether the rings may ask for a tile.</summary>
     private bool IsAvailable(TileId id) => _available.Contains(id) || _fallback?.Covers(id) == true;
 
@@ -959,6 +1043,43 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         return true;
     }
 
+    /// <summary>
+    /// The still water level at a point (#299): the altitude of the water surface at rest, without
+    /// waves (<see cref="World.WaterField.TryLevelAt"/> adds them). False where there is no water, or
+    /// the tile's water is not loaded (far tiles drop it with their cover; a server has it only from
+    /// a source layer, never the legacy one, which needs the cover). On a legacy tile (#298 not
+    /// there yet) the level is the terrain + 0.12 m, so the water there is 0.12 m deep.
+    /// </summary>
+    public bool TryGetWaterLevel(Vector3 worldPos, out float stillLevel) =>
+        TryGetWater(worldPos, out stillLevel, out _);
+
+    /// <summary>
+    /// <see cref="TryGetWaterLevel"/> plus the wave scale there, 0..1 (fetch x depth), the factor the
+    /// water mesh bakes into its vertices: what <see cref="World.WaterField"/> multiplies the waves by.
+    /// </summary>
+    public bool TryGetWater(Vector3 worldPos, out float stillLevel, out float waveScale)
+    {
+        stillLevel = 0f;
+        waveScale = 0f;
+        if (_origin == null) return false;
+        var (e, n) = _origin.ToLv95(worldPos);
+        var id = TileId.FromLv95(e, n);
+        return _chunks.TryGetValue(id, out var state) && state.Water is { } water
+            && water.TrySample(e - id.MinE, id.MaxN - n, out stillLevel, out waveScale);
+    }
+
+    /// <summary>
+    /// Where something put down here rests (#299): the ground, or the still water surface where
+    /// there is water over it. <see cref="TryGetHeight"/> is the terrain, which under a lake is now
+    /// its bed: spawns, respawns, drops, birds and the void rescue want this one.
+    /// </summary>
+    public bool TryGetSurface(Vector3 worldPos, out float height)
+    {
+        if (!TryGetHeight(worldPos, out height)) return false;
+        if (TryGetWaterLevel(worldPos, out float still) && still > height) height = still;
+        return true;
+    }
+
     public bool TryGetHeight(Vector3 worldPos, out float height)
     {
         height = 0f;
@@ -1059,7 +1180,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         // idle and capped the whole loader at MaxConcurrentBuilds per interval — 24 tiles a
         // second however fast the disk actually is.
         _sinceEval += delta;
-        if (_sinceEval >= EvalInterval || committed > 0)
+        if (!_freezeRings && (_sinceEval >= EvalInterval || committed > 0))
         {
             _sinceEval = 0;
             EvaluateRings();
@@ -1133,6 +1254,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             bool keepCover = result.Stride > 0 && result.Stride < ChunkFormat.CoarseStride;
             state.Cover = keepCover ? result.Cover : null;
             state.CoverLoaded = keepCover;
+            // a server keeps every tile's water (it holds only the tiles round players); a client the fine ones
+            state.Water = keepCover || !BuildMeshes ? result.WaterLayer : null;
 
             // An interim result is the terrain half of a build whose roads and buildings are
             // still being assembled on the worker. The tile must stay marked pending, or the
@@ -1195,12 +1318,16 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         dist = Math.Min(dist, LodPolicy.Distance(result.Id, _origin!.TileAt(anchor.GlobalPosition)));
                     node.SetTreeDensity(Lod.TreeDensity(dist));
                 }
-                if (result.Water != null)
-                    EnsureNode(result.Id, state).SetWater(result.Water);
                 state.HasBuildings = true;
                 state.PendingBuildings = false;
             }
-            state.ActiveStride = result.Stride;
+            // near tiles' water comes with their buildings, far tiles' (flat, #299) on its own
+            if (result.Water != null)
+                EnsureNode(result.Id, state).SetWater(result.Water);
+            // not from an interim whose surface was held back for the tail: the old stride is
+            // still what is drawn, and a cancelled tail must leave the tile wanting the new one
+            if (!result.Interim || result.Mesh != null || result.Stride == 0)
+                state.ActiveStride = result.Stride;
             // a single commit past a frame is worth knowing about: it is what a hitch IS
             double took = clock.Elapsed.TotalMilliseconds - t0;
             CommitLogged?.Invoke(result.Id, result.Stride, result.Interim ? "ground" : "tail", took);
@@ -1334,6 +1461,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 Name = $"Chunk_{id}",
                 Position = _origin!.ToWorld(id.MinE, id.MaxN, 0),
             };
+            ApplyDebugHidden(id, state.Node);
             AddChild(state.Node);
         }
         return state.Node;
@@ -1462,11 +1590,15 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     continue;
 
                 Interlocked.Increment(ref _buildsInFlight);
-                // Collision on a road tile needs the road tile even when its roads are already
-                // drawn: the floor is blended toward them. The usual way to get here is exactly
-                // that - flying over an area (roads, no collision) and then dropping on foot.
+                // Ground rebuilt under roads that are already drawn still needs the road tile:
+                // collision blends its floor toward them, and a near-field mesh is lowered under
+                // them. The usual ways to get here are flying over an area (roads, no collision)
+                // and then dropping on foot, and flying away and back: the tile coarsens with its
+                // roads kept (out to RoadMaxDist), and refined without the road tile its stride-1
+                // ground came back unblended, burying the roads it had been lowered under.
+                bool nearMesh = needMesh && want.Stride <= TerrainMeshBuilder.MaxHoleStride;
                 StartBuild(id, state, want.Stride, needCollision, needRoads, needBuildings,
-                    roadsForCollision: needCollision && want.Roads, fine: fine);
+                    roadsForBlend: (needCollision || nearMesh) && want.Roads, fine: fine);
             }
         }
     }
@@ -1600,6 +1732,18 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         clock.Restart();
     }
 
+    /// <summary>
+    /// A tile's still water (#299): the source's water layer when it has one (fixture courses, #298's
+    /// file), else the legacy layer derived from the cover raster, which needs the full grid. Null
+    /// when the tile has no water, or when only a coarse grid and no source layer is at hand.
+    /// </summary>
+    private static async Task<WaterLayer?> LoadWaterLayerAsync(IChunkSource source, TileId id, ChunkGrid grid,
+        byte[]? cover, CancellationToken ct)
+    {
+        if (await source.LoadWaterAsync(id, ct) is { } tile) return WaterLayer.Create(tile, grid);
+        return cover != null && grid.Stride == 1 ? WaterLayer.FromCover(grid, cover) : null;
+    }
+
     private static void Release(BuildResult r)
     {
         r.Mesh?.Dispose();
@@ -1610,7 +1754,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     private void StartBuild(TileId id, ChunkState state, int stride, bool wantCollision,
-        bool wantRoads, bool wantBuildings, bool roadsForCollision = false, bool fine = false)
+        bool wantRoads, bool wantBuildings, bool roadsForBlend = false, bool fine = false)
     {
         if (fine) Interlocked.Increment(ref _fineBuildsInFlight);
         state.PendingStride = stride;
@@ -1644,6 +1788,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         bool holesLoaded = state.HolesLoaded;
         var cachedCover = state.Cover;
         bool coverLoaded = state.CoverLoaded;
+        var cachedWater = state.Water;
+        // a coarser mesh is on screen: the new one can wait for its road blend (see the interim publish)
+        bool groundShown = state.ActiveStride > 0 && state.Node != null;
         var source = _source!;
         bool buildMesh = BuildMeshes && stride > 0;
         bool streaming = Streaming?.Invoke() == true;
@@ -1652,6 +1799,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         var buildingMaterial = _buildingMaterial;
         var waterMaterial = _waterMaterial;
         var treeMaterial = _treeMaterial;
+        var pierMaterial = PierMaterial;
+        // the landings as of now (#377): their piers ride in the roads mesh and the road collision
+        var landings = World.Landings.Current;
         var detail = Detail;
 
         Task.Run(async () =>
@@ -1683,6 +1833,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // a headless server draws nothing: holes and the 1 MB cover raster are for meshes
                 var holes = holesLoaded || !BuildMeshes ? cachedHoles : await source.LoadHolesAsync(id, ct);
                 var cover = coverLoaded || !BuildMeshes ? cachedCover : await source.LoadCoverAsync(id, ct);
+                // still water (#299): the source's layer, else the legacy one from the cover
+                var waterLayer = cachedWater ?? await LoadWaterLayerAsync(source, id, grid, cover, ct);
                 Lap(StAux, stageMs, clock);
                 ct.ThrowIfCancellationRequested();
 
@@ -1711,7 +1863,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // for the (cached) road tile beats publishing bare terrain, which sits the whole
                 // drape offset - 0.35 m plus - under every road and path, so the player walked
                 // around sunk to the ankles in them.
-                bool blendsRoads = wantRoads || roadsForCollision;
+                bool blendsRoads = wantRoads || roadsForBlend;
                 bool publishInterimCollision = wantCollision && (!blendsRoads || streaming);
                 var collision = publishInterimCollision ? TerrainMeshBuilder.BuildCollisionMap(grid, holes) : null;
                 Lap(StCollision, stageMs, clock);
@@ -1727,10 +1879,17 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // waiting for the tail. Trying instead to render a *coarse* tile from the height
                 // grid alone was measurably worse — it adds a second serialised stage per tile
                 // and both stages compete for the same six streaming slots.
-                if (mesh != null || publishInterimCollision)
+                // Except when the tile already shows ground and this one will be lowered under
+                // its roads in the tail: refining it here drew the bare surface over the roads
+                // for half a second on the way back to an area, and the coarser mesh it replaces
+                // is no hole. It is held back and goes out with the tail instead.
+                bool nearField = stride <= TerrainMeshBuilder.MaxHoleStride;
+                var heldMesh = groundShown && blendsRoads && nearField ? mesh : null;
+                var interimMesh = heldMesh == null ? mesh : null;
+                if (interimMesh != null || publishInterimCollision)
                     _ready.Enqueue(new BuildResult(id, stride, generation, grid, Interim: true,
-                        mesh, publishInterimCollision ? collision : null, null, false, holes, cover,
-                        null, null, false, null, null));
+                        interimMesh, publishInterimCollision ? collision : null, null, false, holes, cover,
+                        null, null, false, null, null, WaterLayer: waterLayer));
 
                 ArrayMesh? roads = null;
                 RoadTile? roadTile = null;
@@ -1749,11 +1908,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         ct.ThrowIfCancellationRequested();
                         roads = ChunkNode.ToArrayMesh(roadData, roadMaterial, RoadPaintBuilder.Build(roadTile));
                     }
+                    // the piers and jetties standing in the tile (#377): one more surface
+                    if (pierMaterial != null && PierMeshBuilder.Build(landings, id, grid, mesh: true, collision: false) is { Mesh: { } pierData })
+                        roads = ChunkNode.WithPiers(roads, pierData, pierMaterial);
                     Lap(StRoadMesh, stageMs, clock);
                 }
-                else if (roadsForCollision)
+                else if (roadsForBlend)
                 {
-                    // only for the collision blend below; the roads already drawn stay as they
+                    // only for the collision and mesh blends below; the roads already drawn stay as they
                     // are, since the result says it did not request them
                     roadTile = await source.LoadRoadsAsync(id, ct);
                     ct.ThrowIfCancellationRequested();
@@ -1780,12 +1942,21 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
                     // watercourses ride in the road tile but are meshed here, so a stream gets
                     // the water material instead of being drawn as a narrow blue road
-                    if (cover != null && waterMaterial != null
-                        && WaterMeshBuilder.Build(grid, cover, roadTile, detail) is { } waterData)
+                    if (waterMaterial != null
+                        && WaterMeshBuilder.Build(waterLayer, roadTile, stride, detail) is { } waterData)
                     {
                         ct.ThrowIfCancellationRequested();
                         water = ChunkNode.ToArrayMesh(waterData, waterMaterial);
                     }
+                    Lap(StWater, stageMs, clock);
+                }
+                else if (buildMesh && waterMaterial != null && waterLayer is { Legacy: false }
+                    && WaterMeshBuilder.Build(waterLayer, null, stride, detail) is { } farWater)
+                {
+                    // a far tile with a source water layer (#298's lakes over their beds): a flat
+                    // surface at the still level as coarse as its ground, or the lake is a pit
+                    ct.ThrowIfCancellationRequested();
+                    water = ChunkNode.ToArrayMesh(farWater, waterMaterial);
                     Lap(StWater, stageMs, clock);
                 }
 
@@ -1834,7 +2005,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // or the mesh z-fights the road ribbon. The mesh is patched, not rebuilt: only
                 // the vertices under corridors move (measured ~33% of all worker time when it
                 // rebuilt every vertex of a stride-1 tile a second time).
-                bool nearField = stride <= TerrainMeshBuilder.MaxHoleStride;
                 bool visualBlend = surfaceCore != null && roadTile != null && nearField;
 
                 // one corridor pass, applied twice at different clearances
@@ -1860,6 +2030,15 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 }
                 else if (wantCollision && !publishInterimCollision)
                     blendedCollision = TerrainMeshBuilder.BuildCollisionMap(grid, holes); // no road tile after all
+                // piers and jetties (#377) are walked on like a bridge deck and stop a boat
+                if (wantCollision && PierMeshBuilder.Build(landings, id, grid, mesh: false, collision: true) is { Faces.Length: > 0 } piers)
+                {
+                    var cells = ChunkNode.SplitByCell(piers.Faces);
+                    if (bridgeCollision == null) bridgeCollision = cells;
+                    else
+                        for (int c = 0; c < cells.Length; c++)
+                            if (cells[c].Length > 0) bridgeCollision[c] = [.. bridgeCollision[c], .. cells[c]];
+                }
 
                 ArrayMesh? tailMesh = null;
                 if (visualBlend)
@@ -1884,12 +2063,19 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     }
                 }
 
+                // a held-back surface goes out now: as it is when the tail found nothing to blend
+                if (heldMesh != null)
+                {
+                    if (tailMesh == null) tailMesh = heldMesh;
+                    else heldMesh.Dispose();
+                }
+
                 Lap(StTail, stageMs, clock);
                 ct.ThrowIfCancellationRequested();
                 _ready.Enqueue(new BuildResult(id, stride, generation, grid, Interim: false,
                     tailMesh, blendedCollision, roads, wantRoads,
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
-                    bridgeCollision, stageMs, doors, bores));
+                    bridgeCollision, stageMs, doors, bores, waterLayer));
             }
             catch (OperationCanceledException)
             {

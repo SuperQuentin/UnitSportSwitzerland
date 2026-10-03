@@ -28,6 +28,12 @@
   and velocity turned with it), its velocity is the vehicle frame's, its mask is `DeckLayer` only,
   its capsule 0.2 m (a bus aisle is 57 cm between seats). Walking out of the box steps off, with the
   vehicle's speed added: jumping off a moving bus keeps its speed. Boarding one takes it away.
+- **E from outside** (#384, `GameSettings.BoardWalkableFromOutside`, Settings -> Vehicles "Get in
+  buses and ships from outside", `--boardwalkable on|off`): on (the default), E beside a parked
+  walkable vehicle puts you at its wheel; off, `VehicleReach` offers none (`VehicleReach.FromOutside`)
+  and you walk aboard by a door, gangway or ladder and take the wheel inside (`TryDeckSeat`). Other
+  vehicles keep E. `--exitcheck` covers both on a parked city bus (standing aft of its front door: E
+  ahead of it is its button).
 - **The vehicle's velocity is measured from where it is drawn**, level, smoothed (`DeckSet.Velocity`).
   A copy's published velocity is not its motion: one standing bus read 33 m/s, and the passenger
   boarding it shot through the roof.
@@ -66,6 +72,13 @@
   host's) a round trip later. A walker on it is carried on at its last speed (`_deckWait`) and
   boards its new form, whose velocity starts from the one it publishes (measured after). There is a
   ~0.4 m jump along the aisle at that moment.
+- **Back at the wheel of a parked bus** (#323): the claim takes the parked body out of the physics at
+  once (`VehicleBody.Retire`: no layer, hidden; online the server's despawn can come after the
+  grant), and `EnterVehicle` drops the decks itself (`FreeDeck` zeroes their layer before the
+  `QueueFree`), not in the next `_Process`. In between, a physics step stood the bus just got into
+  on its own parked deck, then on its roof (2.8 m), and it fell. `EnterVehicle` also puts a ground
+  vehicle back where it stood after `ApplyRide`'s lift of a body that grew (0.73 m for a bus).
+  `--exitcheck` takes the wheel again after every bus exit and fails on any lift.
 - **Seats and the wheel** (#158's seats): E aboard takes the seat whose **place to stand** is nearest
   (`AisleSpot`: beside it toward the aisle; the wheel's by the front door), not the nearest hip
   (the driver's seat is up on its platform: a passenger seat beside it came out nearer). A parked
@@ -109,5 +122,23 @@
   on the server; `--avatars … --cockpit --heavy N --deck [--door]` draws the deck. Test traps met:
   both clients spawn on one spot (b was inside a's bus and was carried off), a headless client has
   no parked models (the parked vehicle's own node is the frame then).
-- **Limits**: buses only; no hand on a pole is drawn; the ~0.4 m jump when the vehicle changes hands
+- **Tilting decks, ships** (#303, the steamer): the carry was already the section's whole transform
+  (`delta = now * from⁻¹` applied to the position, so a walker rises and falls with the spot of a
+  pitching, rolling deck; heading and velocity turn with its yaw only, the capsule stays upright) and
+  `DeckPos` is in the full frame, so every peer draws the walker on the same spot of a tilted deck
+  (`--steamernet`: 3 cm apart under way in a gamey swell). New: on a boat the stumble reads the
+  **deck's own velocity under the walker** (from the carry, `_deckSpotVel`, so the roll swinging a
+  walker high on the ship counts) and **the deck's heel and trim** as a slope gravity pushes down
+  (`g · (up.x, 0, up.z)`, shared and gripped like the rest); `MaxDeckTilt` for checks. At ±1.3° in a
+  gamey lake the grip takes it all (the steamer is heavy): the stumble stays 0.
+- **The deck's reach is its size** (`DeckReachOf`): decks are built for a walkable vehicle within
+  `max(30 m, its decks' farthest corner from its middle + 10 m)`, the same for door buttons. A walker
+  at the bow of the 76 m steamer is 37 m from its middle and had no deck under them at 30.
+- **A floor plan aboard** (`VehicleDeck.Plan`, `DeckBuilder.PlanAt`, `VehicleDeck.Contains`): a
+  polygon inside the aboard box; a ship's tapering hull, out past the rail at the bow, is not aboard.
+  `DeckBuilder.Wall` lays a rotated wall or rail between two plan points (a hull that tapers).
+- **Getting into a vehicle leaves the decks at once** (`LeaveDecksNow` in `ApplyRide`): the deck bodies
+  used to go at the next frame, and for a physics step the steamer just taken from its own deck had its
+  hull inside that deck's boxes (and the walker's mask was still the deck layer): the solver shot it into the sky.
+- **Limits**: buses and the steamer only; no hand on a pole is drawn; the ~0.4 m jump when the vehicle changes hands
   under a walker; a rolling parked train's trailer boxes take its pose only once it is at rest (#173).

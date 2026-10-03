@@ -319,7 +319,8 @@ void fragment() {{
         float dt = (float)delta;
 
         var id = (ItemId)_player.HeldItemId;
-        bool onFoot = _player.Ride == RideKind.OnFoot && !_player.RidingAlong;
+        // holstered swimming (#301), and limp after a crash: the hand it hung from is not drawn (#380)
+        bool onFoot = _player.Ride == RideKind.OnFoot && !_player.RidingAlong && !_player.IsSwimming && !_player.Ragdolled;
         if (id != _shown || HeldData != _shownData)
         {
             if (id != _shown)
@@ -368,6 +369,8 @@ void fragment() {{
                 * RadioBounce(0.7f);
         }
         else _inHand.Visible = false;
+        StepSparkles(_inHand.Visible, dt);
+        StepTorch(id == ItemId.Torch && any, dt);
 
         // --- in front of the local camera ---
         if (!_player.IsMultiplayerAuthority()) return;
@@ -434,6 +437,53 @@ void fragment() {{
             _print.Position = new Vector3(0, Mathf.Lerp(0.03f, -0.045f, u), 0.001f);
             _print.Rotation = new Vector3(-0.12f * u, 0, 0);
         }
+    }
+
+    private OmniLight3D? _torchLight;
+    private float _torchT;
+
+    /// <summary>The name of a held torch's light: probes look for it.</summary>
+    public const string TorchLightName = "TorchLight";
+
+    /// <summary>
+    /// A torch in the hand lights the world round it (#272), on every copy of the player: it follows
+    /// the replicated <see cref="FootPlayer.HeldItemId"/>, so others see it with no extra state.
+    /// </summary>
+    private void StepTorch(bool lit, float dt)
+    {
+        if (lit && _torchLight == null)
+        {
+            _torchLight = new OmniLight3D
+            {
+                Name = TorchLightName, TopLevel = true, LightColor = new Color(1f, 0.66f, 0.32f),
+                LightEnergy = 1.4f, OmniRange = 7f, ShadowEnabled = false,
+            };
+            AddChild(_torchLight);
+        }
+        if (_torchLight == null) return;
+        _torchLight.Visible = lit;
+        if (!lit) return;
+        _torchT += dt;
+        _torchLight.LightEnergy = 1.4f + 0.25f * Mathf.Sin(_torchT * 13f) + 0.15f * Mathf.Sin(_torchT * 29f);
+        // at the flame on the figure's hand; with no figure drawn, about where a hand would hold it up
+        _torchLight.GlobalPosition = _inHand.Visible && _inHand.IsInsideTree()
+            ? _inHand.GlobalTransform * new Vector3(0, 0.42f, 0)
+            : _player.GlobalPosition + Vector3.Up * 1.7f;
+    }
+
+    private RadioSparkles? _sparkles;
+
+    /// <summary>A playing radio in the figure's hand sparkles (#387); anything else in the hand, at once nothing.</summary>
+    private void StepSparkles(bool shown, float dt)
+    {
+        if (!shown || _shown != ItemId.Radio || RadioPlay.Decode(_player.HeldRadio) is not { } play)
+        {
+            _sparkles?.Off();
+            return;
+        }
+        if (_sparkles == null) _inHand.AddChild(_sparkles = new RadioSparkles());
+        bool beating = RadioBody.BeatOf(play.CdId, play.StartedAt, Net.ClockSync.ServerNow, out float phase, out int beat, out _, out _);
+        _sparkles.Step(true, beating, phase, beat, dt);
     }
 
     /// <summary>A playing radio in the hand bounces to its beat (#261), a little less than on the ground; identity otherwise.</summary>

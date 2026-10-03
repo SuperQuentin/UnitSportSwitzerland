@@ -87,6 +87,7 @@ public partial class Ambience : Node, IOriginShiftAware
     // --- brook ---
     private readonly BrookSynth _brookSynth = new(new Random(7));
     private AudioStreamPlayer3D _brook = null!;
+    private AirBed _air = null!;
     private AudioStreamGeneratorPlayback? _brookPb;
     private Vector2[] _push = [];
     private readonly Dictionary<TileId, List<RoadSegment>?> _water = new();
@@ -123,6 +124,9 @@ public partial class Ambience : Node, IOriginShiftAware
             Bus = SfxBus.Name, UnitSize = 6f, MaxDistance = 140f,
         };
         AddChild(_brook);
+        // the wind and the leaves under everything else (#375)
+        _air = new AirBed();
+        AddChild(_air);
 
         // bells are the expensive renders (a church bell is ~150k samples x 20 partials); doing
         // them off the main thread keeps the first frames smooth. Only plain float arrays cross.
@@ -214,6 +218,7 @@ public partial class Ambience : Node, IOriginShiftAware
             _queue.Clear();
             _brookGoal = 0;
             PumpBrook(delta, default);
+            _air?.Step(delta, default, 0f, 0f, 0f);
             return;
         }
 
@@ -240,6 +245,7 @@ public partial class Ambience : Node, IOriginShiftAware
             }
 
         PumpBrook(delta, pos);
+        _air.Step(delta, pos, _wooded, _altitude, Volume);
     }
 
     private WorldOrigin? ResolveOrigin()
@@ -289,7 +295,7 @@ public partial class Ambience : Node, IOriginShiftAware
             _birdSet = Enumerable.Range(0, AmbienceDsp.SpeciesCount).OrderBy(_ => r.Next()).Take(2 + r.Next(2)).ToArray();
         }
 
-        if (_chunks.TryGetHeight(pos, out float h)) { _ground = h; _altitude = h; }
+        if (_chunks.TryGetSurface(pos, out float h)) { _ground = h; _altitude = h; }
         else { _ground = pos.Y - 1.5f; _altitude = pos.Y; }
 
         int known = 0, pasture = 0, wooded = 0;
@@ -552,14 +558,14 @@ public partial class Ambience : Node, IOriginShiftAware
             }
         }
 
-        // mapped water cover (lakes and wide rivers the raster does see): a soft lapping instead
+        // still water (lakes and wide rivers, World/WaterField): a soft lapping instead, at the surface
         for (int r = 1; r <= 4; r++)
             for (int k = 0; k < 8; k++)
             {
                 float d = r * 15f, a = k * Mathf.Tau / 8f + r * 0.4f;
                 var p = pos + new Vector3(Mathf.Cos(a) * d, 0, Mathf.Sin(a) * d);
                 if (d >= best) continue;
-                if (_chunks.TryGetCover(p, out var c) && c == CoverClass.Water && _chunks.TryGetHeight(p, out float y))
+                if (World.WaterField.TryLevelAt(p, out float y))
                 {
                     best = d; bestPos = new Vector3(p.X, y, p.Z); bestWidth = 12f; lake = true;
                 }

@@ -14,16 +14,42 @@
 
 src/Net/                 quick  --interestcheck
 src/Audio/Cd/            quick  --beatcheck
+src/Audio/               quick  --earscheck --world fixture --view third
+src/Items/Radio          quick  --radiopanelcheck --world fixture
+src/Player/FootPlayer.Ears quick --earscheck --world fixture --view third
 src/Avatar/              quick  --meshcheck
 src/Avatar/              quick  --outfitcheck
+src/Avatar/              quick  --emotecheck
+src/Player/EmoteWheel    quick  --emotewheelcheck --world fixture
+src/Player/FootPlayer.cs quick  --emotewheelcheck --world fixture
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
 src/World/TimeCommand    quick  --chatcheck
 src/Core/                quick  --origincheck
 src/Terrain/             quick  --origincheck
+# #298: a generated lake (Haut-Lac, inside the fill round the default spawn) has its bed 10 m+ under
+# the level the runtime reads, and collision is the bed
+src/Terrain/ProceduralWorld quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
+src/Terrain/WaterProbe   quick  --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
+tools/TerrainFormat/Water quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 src/Items/               quick  --invcheck
 src/Crafting/            quick  --invcheck
+src/Crafting/            quick  --campfirecheck --systems ui,physics
+src/Items/PlacedObjects  quick  --campfirecheck --systems ui,physics
+src/Items/FlagGhost      quick  --campfirecheck --systems ui,physics
+src/Items/Placeables     quick  --campfirecheck --systems ui,physics
+src/Build/               quick  --buildcheck --systems ui,physics,build
+src/Build/               net    tools/buildnetcheck.sh
+src/Build/Gadget         quick  --gadgetcheck --systems ui,physics,build
+src/Build/Gadget         net    tools/gadgetnetcheck.sh
+src/BattleRoyale/BrPrefab quick  --prefabcheck --systems ui,physics,build
+src/BattleRoyale/BrStruct quick  --prefabcheck --systems ui,physics,build
 src/Loot/                quick  --lootchancecheck
+src/Loot/                quick  --shopcheck
+src/Interiors/           quick  --shopcheck
+src/Interiors/Church     quick  --churchstagecheck
+src/Audio/Cd/CdLibrary   quick  --churchstagecheck
+src/Items/Item           quick  --shopcheck
 src/Occasions/           quick  --occasioncheck
 src/Occasions/           quick  --huntcheck
 src/Player/              quick  --setupcheck
@@ -50,6 +76,9 @@ src/Ui/                  quick  --menucheck --systems ui
 src/Core/GameShell       quick  --menucheck --systems ui
 src/Core/Systems         quick  --menucheck --systems ui
 src/Core/ClientWorld     quick  --leavecheck --world fixture
+src/Core/Debug           quick  --debugcheck --systems ui
+src/Styles/StyleKit      quick  --debugcheck --systems ui
+src/Terrain/ChunkNode    quick  --debugcheck --systems ui
 src/BattleRoyale/        quick  --brcheck
 src/Combat/              quick  --brcheck
 
@@ -60,20 +89,114 @@ src/Player/RaceRoute     quick  --drivecheck --chunks fixture:hairpin --traffic 
 src/Player/RaceLine      quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
 src/Player/DriveProbe    quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
 src/World/LaneGraph      quick  --drivecheck --chunks fixture:hairpin --traffic 0 --car 4
+# the water (#299): layer, waves, /seastate, a car wading and sinking, on the lake course
+src/World/Wa             quick  --watercheck --chunks fixture:lake
+src/World/SeaState       quick  --watercheck --chunks fixture:lake
+src/Terrain/Water        quick  --watercheck --chunks fixture:lake
+src/Terrain/Fixture/     quick  --watercheck --chunks fixture:lake
+src/Terrain/ChunkManager quick  --watercheck --chunks fixture:lake
+src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
+src/Vehicles/VehicleBody quick  --watercheck --chunks fixture:lake
+# swimming (#301): walk in, swim, waves, dive, climb out, wade out, drown, a sunk car's driver, high dives, a wingsuit
+src/Player/FootPlayer.Sw quick  --swimcheck --chunks fixture:lake
+src/Player/FootPlayer.Wa quick  --swimcheck --chunks fixture:lake
+src/Player/FootPlayer.cs quick  --swimcheck --chunks fixture:lake
+src/Player/SwimCheck     quick  --swimcheck --chunks fixture:lake
+src/Player/AirReserve    quick  --swimcheck --chunks fixture:lake
+src/Player/PlayerFeel    quick  --swimcheck --chunks fixture:lake
+src/Avatar/HumanMeshBuilder.Sw quick --swimcheck --chunks fixture:lake
+src/World/Wa             quick  --swimcheck --chunks fixture:lake
+# boats (#302): float, plane, top speed, turn, beach, gamey, parked drift and sleep, boarding from the water
+src/Player/Boat          quick  --boatcheck jetski --chunks fixture:lake
+src/Player/Boat          quick  --boatcheck speedboat --chunks fixture:lake
+src/Player/FootPlayer.Bo quick  --boatcheck jetski --chunks fixture:lake
+src/Player/FootPlayer.Bo quick  --boatcheck speedboat --chunks fixture:lake
+src/Vehicles/VehicleBody quick  --boatcheck speedboat --chunks fixture:lake
+src/Avatar/BoatMesh      quick  --boatcheck jetski --chunks fixture:lake
+# the paddle steamer (#303): draught, telegraph, slow way on and long stop, walking its tilting decks in a swell, stairs, saloon, gangway, bow, overboard and back, a seat
+src/Player/Steamer       quick  --steamercheck --chunks fixture:lake
+src/Player/FootPlayer.St quick  --steamercheck --chunks fixture:lake
+src/Player/FootPlayer.De quick  --steamercheck --chunks fixture:lake
+src/Player/Boat          quick  --steamercheck --chunks fixture:lake
+src/Avatar/SteamerMesh   quick  --steamercheck --chunks fixture:lake
+src/Avatar/VehicleDeck   quick  --steamercheck --chunks fixture:lake
+src/Vehicles/VehicleBody quick  --steamercheck --chunks fixture:lake
+src/World/SteamerBerth   quick  --steamercheck --chunks fixture:lake
+# water small fixes (#380): wading paces, a crash ragdoll into the lake, foam on the waves and hull slaps (drawn windowed only), the sounds rendered
+src/Player/Ragdoll       quick  --swimcheck --chunks fixture:lake
+src/Player/FootPlayer.Cr quick  --swimcheck --chunks fixture:lake
+src/Player/Wading        quick  --swimcheck --chunks fixture:lake
+src/Items/HeldItemVisual quick  --swimcheck --chunks fixture:lake
+src/Loot/Gathering       quick  --swimcheck --chunks fixture:lake
+src/Avatar/WakeFoam      quick  --boatcheck speedboat --chunks fixture:lake
+src/Avatar/HullSlap      quick  --boatcheck speedboat --chunks fixture:lake
+shaders/wake_foam        quick  --boatcheck speedboat --chunks fixture:lake
+src/Audio/SfxSynth       quick  --soundcheck test_output/soundcheck
+src/Audio/EngineSynth    quick  --soundcheck test_output/soundcheck
+src/Audio/Soundcheck     quick  --soundcheck test_output/soundcheck
+src/Audio/ChipVoice      quick  --soundcheck test_output/soundcheck
+src/Audio/Nes2A03Voice   quick  --soundcheck test_output/soundcheck
+src/Audio/Sid6581Voice   quick  --soundcheck test_output/soundcheck
+src/Audio/Ym2612Voice    quick  --soundcheck test_output/soundcheck
+# piers and landings (#377): the fixture's landing planned like the real ones, the steamer at its berth, pier -> plank -> deck and back, a boat's driver onto a jetty
+src/World/Landings       quick  --steamercheck pier --chunks fixture:lake
+src/World/SteamerBerth   quick  --steamercheck pier --chunks fixture:lake
+src/Terrain/PierMesh     quick  --steamercheck pier --chunks fixture:lake
+src/Terrain/ChunkManager quick  --steamercheck pier --chunks fixture:lake
+src/Terrain/Fixture/     quick  --steamercheck pier --chunks fixture:lake
+src/Player/FootPlayer.Pi quick  --steamercheck pier --chunks fixture:lake
+src/Player/SteamerCheck  quick  --steamercheck pier --chunks fixture:lake
+tools/TerrainFormat/Land quick  --steamercheck pier --chunks fixture:lake
+# the tilting gangway plank and the marina boats (#383)
+src/World/GangwayFit     quick  --steamercheck pier --chunks fixture:lake
+src/World/MarinaBoats    quick  --steamercheck pier --chunks fixture:lake
+src/Avatar/SteamerMesh   quick  --steamercheck pier --chunks fixture:lake
+# the hull's boarding ladder and the walkable E setting (#384)
+src/Vehicles/VehicleReac quick  --steamercheck walk --chunks fixture:lake
+src/Core/GameSettings    quick  --exitcheck --world fixture
 
 src/Net/                 net    @netsmoke
 src/Core/ServerWorld     net    @netsmoke
 src/Core/ClientWorld     net    @netsmoke
+src/Core/Debug           net    tools/debugcheck.sh
 @rpc                     net    @netsmoke
 src/Items/ThrowHits      net    tools/bonkcheck.sh
 src/Items/ItemEvents     net    tools/bonkcheck.sh
 src/Items/DroppedItem    net    tools/bonkcheck.sh
 src/Player/FootPlayer.B  net    tools/bonkcheck.sh
+src/Crafting/            net    tools/campfirecheck.sh
+src/Items/PlacedObjects  net    tools/campfirecheck.sh
+src/Items/HeldItemVisual net    tools/campfirecheck.sh
+src/World/Wa             net    tools/watercheck.sh
+src/World/SeaState       net    tools/watercheck.sh
+src/Net/ChatManager      net    tools/watercheck.sh
+src/Terrain/Water        net    tools/watercheck.sh
+src/Loot/Shop            net    tools/shopcheck.sh
+src/Items/Bank           net    tools/shopcheck.sh
+src/Interiors/BankSigns  net    tools/shopcheck.sh
+src/Terrain/ProceduralWorld.Settlements  net  tools/shopcheck.sh
+src/Player/FootPlayer.Sw net    tools/swimnetcheck.sh
+src/Player/SwimNet       net    tools/swimnetcheck.sh
+src/Player/Ragdoll       net    tools/swimnetcheck.sh
+src/Player/FootPlayer.Cr net    tools/swimnetcheck.sh
+src/Avatar/HumanMeshBuilder.Sw net tools/swimnetcheck.sh
+src/Player/Boat          net    tools/boatnetcheck.sh
+src/Player/FootPlayer.Bo net    tools/boatnetcheck.sh
+src/Vehicles/VehicleBody net    tools/boatnetcheck.sh
+src/Player/Steamer       net    tools/steamernetcheck.sh
+src/Player/FootPlayer.St net    tools/steamernetcheck.sh
+src/Player/FootPlayer.De net    tools/steamernetcheck.sh
+src/Avatar/SteamerMesh   net    tools/steamernetcheck.sh
+src/Avatar/VehicleDeck   net    tools/steamernetcheck.sh
+src/Vehicles/VehicleBody net    tools/steamernetcheck.sh
+src/Vehicles/PassengerSe net    tools/steamernetcheck.sh
+tools/steamernetcheck    net    tools/steamernetcheck.sh
 
 src/BattleRoyale/        full   tools/brcheck.sh
 src/Combat/              full   tools/pvpcheck.sh
 src/Items/Weapons        full   tools/pvpcheck.sh
 src/Items/               full   tools/gunshotcheck.sh
+src/Items/Radio          full   tools/sparklecheck.sh
 src/Items/               full   tools/placedcheck.sh
 src/Items/               full   tools/plantcheck.sh
 src/Items/               full   tools/useanimcheck.sh
@@ -94,3 +217,8 @@ src/Player/Pigeon        net    tools/pigeonnetcheck.sh
 src/Player/FootPlayer.Pi net    tools/pigeonnetcheck.sh
 src/Birds/BirdNet        net    tools/pigeonnetcheck.sh
 src/Birds/PigeonNet      net    tools/pigeonnetcheck.sh
+src/World/Wa             full   tools/waterparity.sh
+shaders/common/waves     full   tools/waterparity.sh
+shaders/body/water       full   tools/waterparity.sh
+src/Player/Emote         net    tools/emotenetcheck.sh
+src/Avatar/HumanMeshBuilder.Emotes net tools/emotenetcheck.sh

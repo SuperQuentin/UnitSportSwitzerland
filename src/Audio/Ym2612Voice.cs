@@ -182,7 +182,7 @@ public sealed class Ym2612Voice : IChipVoice
         float y = dac - _dcX + 0.995f * _dcY;
         _dcX = dac; _dcY = y;
 
-        float o = Math.Clamp(y * 1.25f, -0.8f, 0.8f) * f.Level;
+        float o = Math.Clamp(y * 1.25f, -0.8f, 0.8f) * f.Level * f.SteamGate;
         return float.IsFinite(o) ? o : 0f;
     }
 

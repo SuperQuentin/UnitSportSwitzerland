@@ -51,6 +51,8 @@ public static class Interest
         RideKind.Helicopter => 11f,
         RideKind.Plane => 10f,
         _ when CarCatalog.IsCar(kind) => 4.4f,
+        RideKind.Jetski => 3.4f,
+        RideKind.Speedboat => 7f,
         _ => 2.1f,   // 64+: motorbikes and whatever is appended after them
     };
 

@@ -52,7 +52,8 @@ public partial class PlayerFeel : Node3D
     private ColorRect _linesRect = null!;
     private CanvasLayer _screen = null!;
     private Label _speedLabel = null!, _popup = null!;
-    private ProgressBar _boostBar = null!, _healthBar = null!, _rpmBar = null!;
+    private ProgressBar _boostBar = null!, _healthBar = null!, _rpmBar = null!, _airBar = null!;
+    private StyleBoxFlat _airFill = null!;
     private Label _driftLabel = null!;
     private StyleBoxFlat _rpmFill = null!;
     private Label _engineLabel = null!, _hint = null!;
@@ -96,7 +97,7 @@ public partial class PlayerFeel : Node3D
         AddChild(_engine);
         for (int i = 0; i < _voices.Length; i++)
         {
-            _voices[i] = new AudioStreamPlayer { Name = $"Voice{i}", Bus = SfxBus.Name };
+            _voices[i] = new AudioStreamPlayer { Name = $"Voice{i}", Bus = SfxBus.Player };
             AddChild(_voices[i]);
         }
 
@@ -125,6 +126,14 @@ public partial class PlayerFeel : Node3D
             AddTrauma(0.18f);
         };
         _player.SlideStarted += () => Play(SfxSynth.WhooshBank, 0.45f, 0.7f);
+        // in the water (#301): the plunge, each stroke, a breath after a long time under
+        _player.Splashed += strength =>
+        {
+            Play(SfxSynth.SplashBank, 0.35f + 0.65f * strength, 1.15f - 0.3f * strength);
+            AddTrauma(strength * 0.35f);
+        };
+        _player.Stroked += () => Play(SfxSynth.StrokeBank, 0.22f, 0.9f + (float)_rng.NextDouble() * 0.2f);
+        _player.Gasped += () => Play(SfxSynth.GaspBank, 0.55f, 1f);
         _player.Mantled += () =>
         {
             Play(SfxSynth.StepsBank, 0.6f, 0.75f);   // hands on the lip
@@ -229,6 +238,7 @@ public partial class PlayerFeel : Node3D
             RideKind.Skis => (9f, 22f),        // 32 → 80 km/h
             _ when CarCatalog.IsCar(ride) => (15f, 40f),   // 54 → 144 km/h
             _ when MotorbikeCatalog.IsMotorbike(ride) => (15f, 45f),   // 54 → 162 km/h
+            _ when Boat.IsBoat(ride) => (9f, 20f),   // 32 → 72 km/h: fast on the water
             _ => (4.8f, 9f),                   // above a run: only slides and launches get here
         };
         return Mathf.Clamp((speed - calm) / (fast - calm), 0f, 1.5f);
@@ -320,8 +330,14 @@ public partial class PlayerFeel : Node3D
             {
                 _stepAccum -= 1f;
                 float run = Mathf.Clamp(speed / _player.RunSpeed, 0f, 1f);
-                Play(Surfaces.Steps(SurfaceUnderfoot()), 0.22f + 0.45f * run,
-                    0.9f + (float)_rng.NextDouble() * 0.2f);
+                // wading (#380): a slosh a stride instead of the ground's step, louder deeper; both
+                // under the world, never on top of it: a step is there, not a drum (#375)
+                if (_player.WadeDepth > 0.06f)
+                    Play(SfxSynth.WadeBank, (0.13f + 0.2f * run) * Wading.StrideVolume(_player.WadeDepth) + 0.05f,
+                        1.05f - 0.15f * Mathf.Clamp(_player.WadeDepth, 0f, 1f) + (float)_rng.NextDouble() * 0.1f);
+                else
+                    Play(Surfaces.Steps(SurfaceUnderfoot()), 0.14f + 0.3f * run,
+                        0.9f + (float)_rng.NextDouble() * 0.2f);
             }
         }
         else _stepAccum = 0.6f;   // the first step after stopping lands promptly
@@ -341,7 +357,10 @@ public partial class PlayerFeel : Node3D
             }
             _carEngine.Set(engine.Rpm01, engine.Throttle, Mathf.Clamp(engine.Throttle * 0.8f + 0.2f * engine.Rpm01, 0f, 1f),
                 // half what it was: at 0.75 a car at redline drowned every other sound in the game
-                _player.EngineOn ? 0.15f + 0.22f * engine.Rpm01 : 0f);
+                !_player.EngineOn ? 0f
+                // a steam engine at STOP is silent (#303)
+                : engine is Steamer ? (engine.Rpm01 > 0.02f ? 0.18f + 0.25f * engine.Rpm01 : 0f)
+                : 0.15f + 0.22f * engine.Rpm01);
         }
         else _carEngine?.Set(0, 0, 0, 0);
 
@@ -411,7 +430,7 @@ public partial class PlayerFeel : Node3D
 
     private AudioStreamPlayer Loop(AudioStream stream)
     {
-        var p = new AudioStreamPlayer { Stream = stream, VolumeDb = -80f, Autoplay = true, Bus = SfxBus.Name };
+        var p = new AudioStreamPlayer { Stream = stream, VolumeDb = -80f, Autoplay = true, Bus = SfxBus.Player };
         AddChild(p);
         return p;
     }
@@ -470,7 +489,7 @@ public partial class PlayerFeel : Node3D
     private void OnLanded(float fall)
     {
         float hard = Mathf.Clamp((fall - 2f) / 9f, 0f, 1f);
-        Play(Surfaces.Landing(SurfaceUnderfoot()), 0.25f + 0.75f * hard, 1.15f - 0.35f * hard);
+        Play(Surfaces.Landing(SurfaceUnderfoot()), 0.2f + 0.6f * hard, 1.15f - 0.35f * hard);
         SteeringWheel.Knock(hard * 0.7f);
         AddTrauma(hard * 0.65f);
 
@@ -485,7 +504,8 @@ public partial class PlayerFeel : Node3D
     {
         // on foot only: time spent flying a plane is not a jump
         // and neither is being thrown through a windscreen (#214)
-        if (_player.Ride != RideKind.OnFoot || _player.Ragdolled) _airTime = 0;
+        // nor is swimming (#301)
+        if (_player.Ride != RideKind.OnFoot || _player.Ragdolled || _player.IsSwimming) _airTime = 0;
         else if (!grounded) _airTime += dt;
         else if (!_wasGrounded)
         {
@@ -737,6 +757,20 @@ public partial class PlayerFeel : Node3D
         _healthBar.AddThemeStyleboxOverride("background", new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0.5f) });
         _screen.AddChild(_healthBar);
 
+        // the air reserve (#301), just above health: only while it is not full
+        _airBar = new ProgressBar
+        {
+            MinValue = 0, MaxValue = FootPlayer.AirMax, Step = 0.01, ShowPercentage = false,
+            MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false,
+        };
+        _airBar.SetAnchorsPreset(Control.LayoutPreset.BottomLeft);
+        _airBar.OffsetLeft = 18; _airBar.OffsetRight = 218;
+        _airBar.OffsetTop = -44; _airBar.OffsetBottom = -34;
+        _airFill = new StyleBoxFlat { BgColor = new Color(0.35f, 0.75f, 1f) };
+        _airBar.AddThemeStyleboxOverride("fill", _airFill);
+        _airBar.AddThemeStyleboxOverride("background", new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0.5f) });
+        _screen.AddChild(_airBar);
+
         _engineLabel = HudLabel(16);
         _engineLabel.SetAnchorsPreset(Control.LayoutPreset.BottomRight);
         _engineLabel.GrowHorizontal = Control.GrowDirection.Begin;
@@ -854,6 +888,26 @@ public partial class PlayerFeel : Node3D
                 if (c.Gear < 0) sb.Append('R'); else sb.Append(c.Gear);
                 sb.Append($"    {c.Rpm:0} rpm").Append(wear);
             }
+            else if (_player.Vehicle is Steamer steamer)
+            {
+                // the bridge: the log in knots, the telegraph's order, the shaft
+                var s = steamer.State;
+                sb.Append($"{speed / 0.5144f:0.0} kn  {speed * 3.6f:0} km/h    ").Append(Telegraph.Name(steamer.Order));
+                sb.Append($"    {steamer.Rpm:0} rpm");
+                if (s.Shaft < -0.01f) sb.Append(" ASTERN");
+                if (s.Grounded) sb.Append("    AGROUND");
+                if (steamer.DoorsOpen != 0) sb.Append("    GANGWAY OPEN");
+            }
+            else if (_player.Vehicle is Boat boat)
+            {
+                // a boat's log reads knots; km/h beside it, the engine, and what the hull is doing
+                var s = boat.State;
+                sb.Append($"{speed / 0.5144f:0} kn  {speed * 3.6f:0} km/h    {boat.Rpm:0} rpm");
+                if (s.Gear < 0 && boat.Throttle > 0.02f) sb.Append("    ASTERN");
+                if (s.Airborne > 0.15f) sb.Append("    AIR");
+                else if (s.Grounded) sb.Append("    AGROUND");
+                else if (boat.Spec.LiftShare > 0f && boat.Spec.Planing(s.WaterSpeed) > 0.8f) sb.Append("    PLANING");
+            }
             else if (_player.Vehicle is IEngined e)
                 sb.Append($"{speed * 3.6f:0} km/h    {e.Gear}    {e.Rpm:0} rpm");
             else
@@ -872,6 +926,16 @@ public partial class PlayerFeel : Node3D
         // health only when it is not full: a bar that is always full is clutter
         _healthBar.Visible = _player.Health < FootPlayer.MaxHealth - 0.5f;
         _healthBar.Value = _player.Health;
+        // air: shown while it is not full, blinking once it runs low
+        float air = _player.Air;
+        _airBar.Visible = air < FootPlayer.AirMax - 0.05f;
+        if (_airBar.Visible)
+        {
+            _airBar.Value = air;
+            bool low = air < FootPlayer.AirMax * 0.25f;
+            var colour = low && Mathf.PosMod(_time * 3f, 1f) < 0.5f ? new Color(1f, 0.35f, 0.25f) : new Color(0.35f, 0.75f, 1f);
+            if (_airFill.BgColor != colour) _airFill.BgColor = colour;
+        }
         _hurtFlash.Color = _hurtFlash.Color with { A = Mathf.MoveToward(_hurtFlash.Color.A, 0f, 1.2f * dt) };
 
         var vehicle = _player.Vehicle;
@@ -919,6 +983,10 @@ public partial class PlayerFeel : Node3D
 
         switch (ride)
         {
+            case RideKind.OnFoot when _player.IsSwimming:
+                // the first moments in the water (#301): how to go down and up
+                if (_player.SwimTime < 5f) text = InputHints.Format("{crouch_slide}  dive     {jump}  up · climb out");
+                break;
             case RideKind.OnFoot:
                 // mirrors FootPlayer's deploy test: falling, and more than 12 m of air below
                 if (!_player.IsOnFloor() && _player.Velocity.Y < -3f && _player.Terrain != null

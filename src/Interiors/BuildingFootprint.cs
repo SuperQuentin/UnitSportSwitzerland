@@ -30,6 +30,8 @@ public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outw
     public BuildingKind Kind { get; init; }
     /// <summary>A bank (<see cref="BuildingFootprint.IsBank"/>): a sign over the door, a teller desk inside.</summary>
     public bool Bank { get; init; }
+    /// <summary>What it sells, if it is a shop (#273, <see cref="BuildingFootprint.ShopOf"/>): a sign over the door, a counter inside.</summary>
+    public Loot.ShopType Shop { get; init; }
 }
 
 /// <summary>
@@ -74,6 +76,14 @@ public static class BuildingFootprint
     public static bool IsBank(Footprint fp) =>
         fp.Kind == BuildingKind.Commercial && fp.Width * fp.Depth >= 60f && Math.Min(fp.Width, fp.Depth) >= 6f
         && (uint)InteriorGenerator.StableHash(fp.Key + "|bank") % 5 == 0;
+
+    /// <summary>
+    /// A building's shop (#273), the same pure function of the tile as <see cref="IsBank"/>, so the
+    /// server's plan (<see cref="InteriorLayout.Shop"/>) and every client's door sign agree.
+    /// <paramref name="rural"/>: its tile is countryside (<see cref="Loot.ShopTables.IsRural"/>).
+    /// </summary>
+    public static Loot.ShopType ShopOf(Footprint fp, bool rural) =>
+        Loot.ShopTables.TypeFor(fp.Key.ToString(), fp.Kind, fp.Width * fp.Depth, IsBank(fp), rural);
 
     /// <summary>Rooms need somewhere to stand; a 1.5 m shed is still entered, as a 3 m box.</summary>
     public const float MinSide = 3.0f;
@@ -148,7 +158,11 @@ public static class BuildingFootprint
         for (int i = 0; i < doors.Length; i++)
         {
             var fp = Compute(tile, i, roadIndex, grid);
-            doors[i] = (fp?.Door ?? default) with { Kind = tile.Buildings[i].Kind, Bank = fp != null && IsBank(fp) };
+            doors[i] = (fp?.Door ?? default) with
+            {
+                Kind = tile.Buildings[i].Kind, Bank = fp != null && IsBank(fp),
+                Shop = fp != null ? ShopOf(fp, Loot.ShopTables.IsRural(tile.Buildings.Count)) : Loot.ShopType.None,
+            };
         }
         return doors;
     }

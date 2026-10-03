@@ -134,17 +134,42 @@ public enum RoadAttrFlags : ushort
 public enum BikeKind : byte
 {
     None = 0,
-    Lane = 1,    // painted lane on the carriageway (yellow dashes)
-    Track = 2,   // separated path beside it
+    Lane = 1,    // painted lane on the carriageway (yellow dashes), BikeDm wide, inside the carriageway
+    Track = 2,   // separated path beside it, at the sidewalk's height
     Shared = 3,  // shared lane, symbol only
+    TrackMid = 4,// separated path beside it, halfway between the road and the sidewalk
 }
 
 /// <summary>
 /// Cross-section of one side of a carriageway, outward from its edge. Left and right are in the
 /// segment's drawing direction. Widths in decimetres, kerb height in centimetres; 0 = none.
+/// With a separated path (<see cref="BikeKind.Track"/>/<see cref="BikeKind.TrackMid"/>) the bands
+/// run outward: verge (<see cref="VergeDm"/>, grass), path (<see cref="BikeDm"/>), buffer
+/// (<see cref="BufferDm"/>, grass), sidewalk; <see cref="RoadStreetSection"/> lays them out.
 /// </summary>
 public readonly record struct RoadSide(
-    byte SidewalkDm = 0, BikeKind Bike = BikeKind.None, byte BikeDm = 0, byte KerbCm = 0, byte VergeDm = 0);
+    byte SidewalkDm = 0, BikeKind Bike = BikeKind.None, byte BikeDm = 0, byte KerbCm = 0, byte VergeDm = 0,
+    byte BufferDm = 0, ushort ShiftStartCm = 0, ushort ShiftEndCm = 0)
+{
+    /// <summary>
+    /// How far out from the ribbon's edge the side starts, at <paramref name="t"/> (0 the segment's
+    /// first point, 1 its last, by plan length), metres: a turn lane's widening (#123) lies between
+    /// (<see cref="ShiftStartCm"/>, <see cref="ShiftEndCm"/>, varying linearly; #120).
+    /// </summary>
+    public float ShiftAt(double t) => (float)((ShiftStartCm + (ShiftEndCm - ShiftStartCm) * Math.Clamp(t, 0, 1)) / 100.0);
+
+    /// <summary>Everything beside the ribbon on this side, metres: the shift (at its widest) and the bands.</summary>
+    public float Reach => OuterDm / 10f + Math.Max(ShiftStartCm, ShiftEndCm) / 100f;
+
+    /// <summary>A separated bike path beside the carriageway.</summary>
+    public bool HasTrack => Bike is BikeKind.Track or BikeKind.TrackMid && BikeDm > 0;
+
+    /// <summary>A painted bike lane inside the carriageway.</summary>
+    public bool HasLane => Bike == BikeKind.Lane && BikeDm > 0;
+
+    /// <summary>Everything beside the carriageway on this side, in decimetres: verge, path, buffer, sidewalk.</summary>
+    public int OuterDm => SidewalkDm + VergeDm + (HasTrack ? BikeDm + BufferDm : 0);
+}
 
 /// <summary>
 /// The v3 per-segment attribute record (24 bytes on disk). Everything zero means "not decided":
@@ -166,7 +191,10 @@ public readonly record struct RoadAttributes(
     RoadSide Left = default,
     RoadSide Right = default)
 {
-    public const int RecordSize = 24;
+    /// <summary>Bytes written per record: the v3 24 and each side's shift (#120: 2 x 2 ushort).</summary>
+    public const int RecordSize = 32;
+    /// <summary>The shortest record a reader accepts (before #120's shifts).</summary>
+    public const int BaseRecordSize = 24;
     public bool Has(RoadAttrFlags f) => (Flags & f) != 0;
 }
 
@@ -182,6 +210,12 @@ public enum RoadTileFlags : ushort
     /// output, the only safe input for the stage: a second pass would trim trimmed roads.
     /// </summary>
     Network = 1 << 1,
+    /// <summary>
+    /// The bike fields of every <see cref="RoadSide"/> were planned (#120). A tile without it
+    /// (written before #120) holds OSM's raw cycleway tags there, which nothing was laid out
+    /// around: the decoder clears them.
+    /// </summary>
+    Bikes = 1 << 2,
 }
 
 /// <summary>Road paint (#116). Colour is stored separately, so a type does not fix it.</summary>
@@ -199,6 +233,8 @@ public enum PaintType : byte
     GiveWayLine = 9,
     RailGroove = 10,
     Hatch = 11,
+    /// <summary>Coloured surface of a bike lane or path where it crosses a roadway (#120): a wide polyline.</summary>
+    BikeCrossing = 12,
 }
 
 /// <summary><see cref="PaintType.Arrow"/> variant bits; combine for a combined arrow.</summary>
@@ -324,6 +360,19 @@ public enum AreaPropType : byte
     SplitterIsland = 2, // raised island at a roundabout entry (#122)
     Sidewalk = 3,     // a sidewalk patch not carried by a segment, e.g. a junction corner (#119)
     Pavement = 4,     // flush carriageway beside a segment: a turn lane's widening (#123); Height 0
+    BikePath = 5,     // a bike path carried through a junction where no road joins (#120); Height = its level
+    Grass = 6,        // a grass strip beside such a path (#120)
+    Kerb = 7,         // a sloped kerb strip beside such a path (#120): its vertices carry the slope, Height 0
+}
+
+/// <summary>Area props that are part of a street's side, drawn and solid like a sidewalk slab.</summary>
+public static class StreetAreas
+{
+    public static bool Is(AreaPropType t) => t is AreaPropType.Sidewalk or AreaPropType.BikePath or AreaPropType.Grass or AreaPropType.Kerb;
+
+    /// <summary>Solid: a raised patch, or a sloped kerb strip (raised by its vertices, Height 0).</summary>
+    public static bool IsSolid(RoadAreaProp a) =>
+        Is(a.Type) && (a.Flags & PropFlags.Solid) != 0 && (a.Height > 0 || a.Type == AreaPropType.Kerb);
 }
 
 /// <summary>A raised surface: a triangulated polygon lifted by <see cref="Height"/> with a kerb face.</summary>

@@ -22,7 +22,8 @@ changed is how you get there.
 - **The views (`DoorPortals`).** Each open link has a doorway "tunnel" on both sides (a quad plus
   a short box behind it, so the near plane clipping the mouth while stepping through still shows
   the other side). The two nearest in view, on the camera's side, get a portal each: a camera at
-  `map * mainCamera`, full resolution, in a `SubViewport` sampled in screen space
+  `map * mainCamera`, full resolution (the window's 3D pixels), with the screen's MSAA/FXAA/TAA copied,
+  in a `SubViewport` sampled in screen space
   (`door_portal.gdshader`, `source_color`). Each of those can see one more doorway through its
   own, which gets a nested portal: through a house with two doors, or out of one door and into
   the house across the street. Past that, a doorway shows a dark hall.
@@ -57,9 +58,17 @@ changed is how you get there.
 - **Third person.** `FootPlayer.UpdateThirdPersonCamera` asks `ArmThroughDoor`: an arm crossing
   an open doorway is ray-tested on this side up to the sill, then in the other space, and the lens
   is placed in the other space. The portal logic finds the viewer's side from the camera's height.
+  It goes through only if the lens gets at least `MinPastSill` (0.6 m) past the sill; short of
+  that the doorway is a wall (#388): a lens just past it sat in the reveal, under the lintel or
+  against the open leaf, seeing the leaf and a dark doorway. An open house leaf has a camera-only
+  collider (`DoorLeaf.CameraOnlyLayer`, in `CameraMask`) so the arm stops on it, never in it.
 - **The screen's camera never stands in a doorway** (#78), whatever placed it (first person,
   the arm, a ride, the free camera). Within 1 m of an open doorway its near plane drops from 8 cm
-  to 5 mm (reversed depth keeps the distance sharp). In the slab `DoorLink.LensSlabMin`..`LensSlabMax`
+  toward 5 mm, only as far as the lens's distance to the nearer quad needs, and the far plane drops
+  with it to keep `far / near` at most `MaxDepthRatio` (2·10⁶, the usual 8 cm / 160 km); the portal
+  cameras take both. At 5 mm and 160 km (#388) the depth range collapsed and nothing was drawn
+  but the background: the whole screen sky-coloured on the street by an open door, in first person
+  too. In the slab `DoorLink.LensSlabMin`..`LensSlabMax`
   (both quads plus how far the near plane's corners reach, ~1.3 cm), inside the opening widened as
   much, the near plane would cut the quad: the view went black or showed the wall behind.
   `DoorPortals.KeepOutOfDoorways` snaps it to the nearer side (through the map only within the
@@ -70,6 +79,16 @@ changed is how you get there.
   stepping through) made a lens up to 30 cm in front of a doorway black, its portal camera as
   close behind the far doorway drawing that dark hall. "Behind" is behind the quad's mouth
   (`OutsideQuadOffset` out on the facade), not the doorway plane.
+- **In view** (`DoorPortals.InView`): within 2 m of the opening's nearest point (not its sill's
+  middle), or the view's middle on the opening, or one of 3×3 points of it in the frustum. A lens
+  0.6 m behind a doorway up by the lintel is 2 m from the sill, saw the doorway fill the screen
+  with none of the old five points in its frustum, and the doorway showed its dark hall (#388).
+- **Check:** `--interiorcheck,shot.png --doorcam` (windowed, real map) after walking in poses the
+  third-person camera at 4 depths × 5 angles inside and outside the door, then walks in and out
+  backwards with it trailing; every picture must not be one flat colour (≥ 90 % of one coarse
+  colour) or mostly black (≥ 40 % near black). Saves the poses (and bad walk frames, all with
+  `--film`); `--doorcam-trace` prints the lens, the arm and whether the doorway has its portal
+  on every walk frame. Run it per `--style`: the old code fails ~30 pictures in PS1.
 - **Linked spaces.** `InteriorManager.Linked(a, b)`: an interior and the outside see each other
   while one of its doors is open. It drives remote visibility and the synchroniser filter, so
   players are seen (and move) through the doorway.

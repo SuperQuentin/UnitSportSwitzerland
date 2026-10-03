@@ -43,7 +43,7 @@ public sealed class CachingChunkSource : IChunkSource
 
     public double HitRate => Hits + Misses == 0 ? 0 : (double)Hits / (Hits + Misses);
 
-    private enum AssetSlot { Chunk, Coarse, Roads, Holes, Buildings, Cover, Trees }
+    private enum AssetSlot { Chunk, Coarse, Roads, Holes, Buildings, Cover, Trees, Water }
 
     private sealed class Entry
     {
@@ -80,6 +80,10 @@ public sealed class CachingChunkSource : IChunkSource
     public Task<byte[]?> LoadCoverAsync(TileId id, CancellationToken ct = default) =>
         GetAsync(AssetSlot.Cover, id, () => _inner.LoadCoverAsync(id, ct), c => c.LongLength + 32);
 
+    public Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default) =>
+        GetAsync(AssetSlot.Water, id, () => _inner.LoadWaterAsync(id, ct),
+            w => 64 + w.Level.LongLength * 4 + (w.FetchM?.LongLength ?? 0) * 4);
+
     public Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default) =>
         GetAsync(AssetSlot.Trees, id, () => _inner.LoadTreesAsync(id, ct),
             t => 64 + t.Count * 17L);
@@ -100,6 +104,9 @@ public sealed class CachingChunkSource : IChunkSource
     }
 
     private Task<HorizonIndex?>? _horizon;
+
+    /// <summary>Not cached: read once at boot and when a server sends its own.</summary>
+    public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => _inner.LoadLandingsAsync(ct);
 
     private static long Weigh(ChunkGrid g) => g.Heights.LongLength * 2 + 64;
     private static long Weigh(RoadTile t)

@@ -2,7 +2,7 @@
 
 ## Rule
 
-- **The pigeon is a `Flyer` worn like the paraglider** (`RideKind.Pigeon` = 121, `Player/Pigeon.cs`), not a
+- **The pigeon is a `Flyer` worn like the paraglider** (`RideKind.Pigeon` = 124, `Player/Pigeon.cs`), not a
   vehicle: nothing is left in the world when you change back. Its motion is `Player/PigeonFlight.cs`, pure
   maths linked into the tier-0 tests (`PigeonFlightTests`); keep it free of nodes. Three modes travel in
   `FlightMotion` (`Spool` = wing beat 0..1, `Control` = `PigeonFlight.Mode`), which `Flyer.WritePose` already

@@ -30,6 +30,7 @@ public partial class BuildingSounds : Node
     private readonly Random _rng = new();
     private readonly List<(double At, Vector3 Where, SfxBank Bank, float Pitch, float Db)> _queue = new();
     private double _clock;
+    private float _streetGain;
 
     public override void _Ready()
     {
@@ -79,15 +80,18 @@ public partial class BuildingSounds : Node
             Occupant(o, wall);
         }
 
-        // a shut door keeps the street out: it fades with the door's swing and stops once latched
-        if (street is { Open: > 0.02f } s)
+        // a shut door keeps the street out: it fades with the door's swing and stops once latched;
+        // eased, so walking in or out through the door fades it rather than clicking it on or off
+        float want = street is { Open: > 0.02f } s ? s.Open : 0f;
+        _streetGain += (want - _streetGain) * (1f - Mathf.Exp(-(float)dt / 0.12f));
+        if (street is { } at) _street.GlobalPosition = at.At;
+        if (_streetGain > 0.01f)
         {
             if (!_street.Playing) _street.Play();
-            _street.GlobalPosition = s.At;
-            _street.VolumeDb = -6f + Mathf.LinearToDb(s.Open);
-            _street.AttenuationFilterCutoffHz = Mathf.Lerp(450f, 8000f, s.Open);
+            _street.VolumeDb = -6f + Mathf.LinearToDb(_streetGain);
+            _street.AttenuationFilterCutoffHz = Mathf.Lerp(450f, 8000f, _streetGain);
         }
-        else if (_street.Playing) _street.Stop();
+        else if (_street.Playing && want == 0f) _street.Stop();
     }
 
     /// <summary>One thing heard from inside: a walk across a room, a knock, an inner door.</summary>

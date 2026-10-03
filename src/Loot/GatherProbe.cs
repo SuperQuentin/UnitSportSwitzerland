@@ -85,7 +85,8 @@ public partial class GatherProbe : Node
                     if (water == null && c is CoverClass.Open or CoverClass.Wetland
                         && (CoverClass)cover[row * size + col + 2] == CoverClass.Water
                         && (CoverClass)cover[row * size + col + 4] == CoverClass.Water)
-                        water = (World(id, grid, col, row), World(id, grid, col + 3, row));
+                        // in it, wading: water is only collected standing in it (#380)
+                        water = (World(id, grid, col + 3, row), World(id, grid, col + 5, row));
                     // rock in the middle of a rock field, so the step ahead is rock too
                     if (stone == null && c is CoverClass.Scree or CoverClass.Rock or CoverClass.LooseScree or CoverClass.Quarry
                         && (CoverClass)cover[row * size + col + 3] == c && (CoverClass)cover[(row + 3) * size + col] == c

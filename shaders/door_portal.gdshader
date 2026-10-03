@@ -1,5 +1,7 @@
 shader_type spatial;
-render_mode unshaded, cull_disabled;
+render_mode unshaded, cull_disabled, fog_disabled;
+// fog_disabled: the portal camera's picture is already fogged; fogging the quad again made the
+// room seen through a doorway hazier than the same room seen from inside
 
 // An open doorway (Interiors/DoorPortals): what a portal camera sees on the other side of the
 // door, drawn in screen space so the picture lines up with the view through the hole. The portal
@@ -14,9 +16,12 @@ render_mode unshaded, cull_disabled;
 
 #include "res://shaders/portal_clip.gdshaderinc"
 
-uniform sampler2D view : source_color, filter_nearest;
+// The portal's picture is an HDR viewport (#388): linear already, not tonemapped (the screen's
+// camera tonemaps this quad), at the portal environment's exposure, which view_gain undoes.
+uniform sampler2D view : filter_nearest;
 // In a headset (#244): one picture per eye, each from that eye's own frustum; `view` is the left.
-uniform sampler2D view_right : source_color, filter_nearest;
+uniform sampler2D view_right : filter_nearest;
+uniform float view_gain = 1.0;
 uniform bool stereo = false;
 uniform bool live = false;
 uniform vec3 dark : source_color = vec3(0.07, 0.06, 0.05);
@@ -40,8 +45,8 @@ void fragment() {
     if (!live) {
         ALBEDO = dark;
     } else if (stereo && VIEW_INDEX == VIEW_RIGHT) {
-        ALBEDO = texture(view_right, SCREEN_UV).rgb;
+        ALBEDO = texture(view_right, SCREEN_UV).rgb * view_gain;
     } else {
-        ALBEDO = texture(view, SCREEN_UV).rgb;
+        ALBEDO = texture(view, SCREEN_UV).rgb * view_gain;
     }
 }

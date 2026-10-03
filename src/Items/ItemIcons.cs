@@ -1034,6 +1034,27 @@ public static class ItemIcons
             "..kkk...........",
         };
 
+        // building (#274): a claw hammer, steel head top right, wooden handle down to the left
+        d[ItemId.Hammer] = new[]
+        {
+            "................",
+            "................",
+            "..........kkk...",
+            ".........kwagk..",
+            "........kwaaggk.",
+            ".......kkkagGGk.",
+            "......kNnkkGGk..",
+            ".....kNnk..kk...",
+            "....kNnk........",
+            "...kNnk.........",
+            "..kNnk..........",
+            ".kNnk...........",
+            ".knk............",
+            "..k.............",
+            "................",
+            "................",
+        };
+
         d[ItemId.Ammo9mm] = new[]
         {
             "................",
@@ -1190,6 +1211,323 @@ public static class ItemIcons
             "..kOkkkkkkkkOk..",
             "..kkOOOOOOOOkk..",
             "...kk......kk...",
+        };
+
+        // ---- fire and placeables (#272) ----
+        d[ItemId.Fondue] = new[]
+        {
+            "..........k.....",
+            "..........gk....",
+            ".........kgk....",
+            "........kgk.....",
+            ".kkkkkkkgkkkkk..",
+            "kllllyyygyyyyyk.",
+            "kryyyyyyyyyyYrk.",
+            ".krrrrrrrrrrRk..",
+            ".krwrrrwrrrrRk..",
+            ".krrrrrrrrrrRk..",
+            "..krrrwrrrwRk...",
+            "...kRRRRRRRk....",
+            "....kkkkkkk.....",
+        };
+
+        d[ItemId.HotChocolate] = new[]
+        {
+            "...a...a........",
+            "....a...a.......",
+            "...a...a........",
+            ".kkkkkkkkk......",
+            ".kNnnnnnNkkk....",
+            ".kwwwwwwwk..k...",
+            ".kwwrrwwwk..k...",
+            ".kwwrrwwwk..k...",
+            ".kwwwwwwak.k....",
+            ".kwwwwwwakk.....",
+            "..kaaaaak.......",
+            "...kkkkk........",
+        };
+
+        d[ItemId.ToastedBread] = new[]
+        {
+            "...kkkkkkkkk....",
+            "..kNNNNNNNNNk...",
+            ".kNnttttttttNk..",
+            ".kNtnttttnttNk..",
+            ".kNttttnttttNk..",
+            "..kNtnttttnNk...",
+            "..kNttttnttNk...",
+            "..kNttntttnNk...",
+            "..kNtttttttNk...",
+            "..kNNNNNNNNNk...",
+            "...kkkkkkkkk....",
+        };
+
+        d[ItemId.Campfire] = new[]
+        {
+            ".......o........",
+            "......oyo.......",
+            ".....oyly.o.....",
+            "....ooyllyoo....",
+            "....oyllllyo....",
+            ".....oyllyo.....",
+            "...kNnNkkNnNk...",
+            "..knNnNnnNnNnk..",
+            ".kgakNnNNnNkagk.",
+            "kgaGkkkkkkkkGagk",
+            ".kGgkgaGgakgGk..",
+            "..kkk.kkk.kkk...",
+        };
+
+        d[ItemId.Torch] = new[]
+        {
+            "..........o.....",
+            ".........oyo....",
+            "........oylyo...",
+            "........oyly....",
+            ".........oo.....",
+            "........kNNk....",
+            ".......kNNk.....",
+            "......knnk......",
+            ".....knnk.......",
+            "....knnk........",
+            "...knnk.........",
+            "..knnk..........",
+            "..kkk...........",
+        };
+
+        d[ItemId.FieldWorkbench] = new[]
+        {
+            "..........kkk...",
+            "..........kgk...",
+            ".kkkkkkkkkkgkkk.",
+            ".kttttttttttttk.",
+            ".kNnnnnnnnnnnNk.",
+            ".kkkkkkkkkkkkkk.",
+            "..knk......knk..",
+            "..knk......knk..",
+            "..knkkkkkkkknk..",
+            "..knNNNNNNNNnk..",
+            "..knkkkkkkkknk..",
+            "..knk......knk..",
+            "..kkk......kkk..",
+        };
+
+        // ---- gadgets (#275, drawn in #359) ----
+        // two posts and the cable between them, the pulley on it
+        d[ItemId.Zipline] = new[]
+        {
+            "................",
+            ".kk.............",
+            ".kNkk...........",
+            ".kNkgkkk........",
+            ".kNk...gkkk.....",
+            ".kNk......gkkk..",
+            ".kNk......kak.kk",
+            ".kNk......kgk.kN",
+            ".kNk.......k..kN",
+            ".kNk..........kN",
+            ".kNk..........kN",
+            ".kNk..........kN",
+            ".kNk..........kN",
+            "kkkkk........kkk",
+            "eeeeeeeeeeeeeeee",
+            "................",
+        };
+
+        // two ropes and wooden rungs
+        d[ItemId.RopeLadder] = new[]
+        {
+            "...gg......gg...",
+            "...kTk....kTk...",
+            "...kTkkkkkkTk...",
+            "...kTnnnnnnTk...",
+            "...kTkkkkkkTk...",
+            "...kTk....kTk...",
+            "...kTkkkkkkTk...",
+            "...kTnnnnnnTk...",
+            "...kTkkkkkkTk...",
+            "...kTk....kTk...",
+            "...kTkkkkkkTk...",
+            "...kTnnnnnnTk...",
+            "...kTkkkkkkTk...",
+            "...kTk....kTk...",
+            "...ktk....ktk...",
+            "................",
+        };
+
+        // the mat in its tyre rim on plank legs
+        d[ItemId.Trampoline] = new[]
+        {
+            "................",
+            "................",
+            "................",
+            ".....kkkkkk.....",
+            "...kkddddddkk...",
+            "..kddGGGGGGddk..",
+            ".kdGGGyyyyGGGdk.",
+            ".kdGGyGGGGyGGdk.",
+            ".kdGGGyyyyGGGdk.",
+            "..kddGGGGGGddk..",
+            "...kkddddddkk...",
+            "...kNk....kNk...",
+            "...kNk....kNk...",
+            "...kkk....kkk...",
+            "................",
+            "................",
+        };
+
+        // the pad and its chevrons pointing up
+        d[ItemId.LaunchPad] = new[]
+        {
+            "................",
+            "................",
+            ".......kk.......",
+            "......kyyk......",
+            ".....kyyyyk.....",
+            "......kyyk......",
+            ".....kkyykk.....",
+            "....kyykkyyk....",
+            "...kkkkkkkkkk...",
+            "..kcccccccccck..",
+            ".kcCCCCCCCCCCck.",
+            ".kGGGGGGGGGGGGk.",
+            ".kGgGgGgGgGgGGk.",
+            "..kkkkkkkkkkkk..",
+            "................",
+            "................",
+        };
+
+        // the patched net on its four poles
+        d[ItemId.CamoNet] = new[]
+        {
+            "................",
+            "................",
+            "..kkkkkkkkkkkk..",
+            ".keEneEnEeneEek.",
+            ".kEneEeEnEeEnek.",
+            ".knEeEnEeEneEnk.",
+            "..kkkkkkkkkkkk..",
+            "..kN........Nk..",
+            "..kN........Nk..",
+            "..kN........Nk..",
+            "..kN........Nk..",
+            "..kN........Nk..",
+            "..kN........Nk..",
+            ".kkkk......kkkk.",
+            "................",
+            "................",
+        };
+
+        // a bale hut with its dark doorway
+        d[ItemId.HayHideout] = new[]
+        {
+            "................",
+            "................",
+            "..kkkkkkkkkkkk..",
+            ".kyyyyyyyyyyyyk.",
+            ".kYYYYYYYYYYYYk.",
+            ".kyyyyyyyyyyyyk.",
+            ".kyyykkkkkkyyyk.",
+            ".kYYYkddddkYYYk.",
+            ".kyyykddddkyyyk.",
+            ".kyyykddddkyyyk.",
+            ".kYYYkddddkYYYk.",
+            ".kyyykddddkyyyk.",
+            ".kyyykddddkyyyk.",
+            ".kkkkkkkkkkkkkk.",
+            "................",
+            "................",
+        };
+
+        // ---- shops and PAUSA machines (#273) ----
+        d[ItemId.IceTea] = new[]
+        {
+            "......kkkk......",
+            "......krrk......",
+            "......kRRk......",
+            ".....kkkkkk.....",
+            "....koooooOk....",
+            "....kooooOOk....",
+            "....kyyyyyYk....",
+            "....kylyyyYk....",
+            "....kyyeyyYk....",
+            "....kyyyyyYk....",
+            "....kooooOOk....",
+            "....koooOOOk....",
+            "....kOOOOOOk....",
+            ".....kkkkkk.....",
+        };
+
+        d[ItemId.IsotonicDrink] = new[]
+        {
+            "......kkkk......",
+            "......kwwk......",
+            "......kaak......",
+            ".....kkkkkk.....",
+            "....kCcccbBk....",
+            "....kccccbBk....",
+            "....kwwwwwwk....",
+            "....kwwyywwk....",
+            "....kwyywwwk....",
+            "....kwwwwwwk....",
+            "....kccccbBk....",
+            "....kcccbbBk....",
+            "....kBBBBBBk....",
+            ".....kkkkkk.....",
+        };
+
+        d[ItemId.Crisps] = new[]
+        {
+            "...kkkkkkkkkk...",
+            "...kGaGaGaGak...",
+            "..kyyyyyyyyyyk..",
+            "..kyllyyyyyyYk..",
+            "..krrrrrrrrrRk..",
+            "..kyyyTTTTyyYk..",
+            "..kyyTtttTyyYk..",
+            "..kyyyTTTTyyYk..",
+            "..krrrrrrrrrRk..",
+            "..kyyyyyyyyyYk..",
+            "..kYYYYYYYYYYk..",
+            "...kGaGaGaGak...",
+            "...kkkkkkkkkk...",
+        };
+
+        d[ItemId.GummyBears] = new[]
+        {
+            "....kk....kk....",
+            "...krrk..krrk...",
+            "...krrkkkkrrk...",
+            "....krrrrrrk....",
+            "...krwrrrrwrk...",
+            "...krrrrrrrrk...",
+            "....krrrrrrk....",
+            "..kkkrrrrrrkkk..",
+            ".krrkrrqrrrkrrk.",
+            ".kRRkrrrrrrkRRk.",
+            "..kkkrrrrrrkkk..",
+            "....krrrrrrk....",
+            "...krrrkkrrrk...",
+            "...kRRk..kRRk...",
+            "....kk....kk....",
+        };
+
+        // the red handle with the white cross, the big blade out
+        d[ItemId.SwissArmyKnife] = new[]
+        {
+            "................",
+            "..........kk....",
+            ".........kwak...",
+            "........kwak....",
+            ".......kwak.....",
+            "......kaGk......",
+            "..kkkkkkkkkkk...",
+            ".krrrrrrrrrrRk..",
+            ".krrrrwrrrrrRk..",
+            ".krrrwwwrrrrRk..",
+            ".krrrrwrrrrrRk..",
+            ".kRRRRRRRRRRRk..",
+            "..kkkkkkkkkkk...",
         };
 
         return d;

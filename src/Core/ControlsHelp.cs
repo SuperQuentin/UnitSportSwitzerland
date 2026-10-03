@@ -51,9 +51,18 @@ public partial class ControlsHelp : CanvasLayer
             new("Take the radio you point at into your hand", PlayerInput.UseItem),
             new("Pick a hotbar slot", Keys: "1–6 / Wheel", Pad: "D-pad →"),
             new("Quick wheel (hold)", PlayerInput.QuickWheel),
+            new("Emote wheel: dances and gestures (hold; tap: stop / again)", PlayerInput.EmoteWheel),
             new("Inventory", PlayerInput.Inventory),
             new("Gather stone, water, wood (hold)", PlayerInput.Gather),
             new("Bird journal", PlayerInput.BirdJournal),
+        }),
+        ("Building (hammer in hand)", new Row[]
+        {
+            new("Build the piece shown", PlayerInput.UseItem),
+            new("Take back your own piece", Keys: "{aim_item} + {use_item}", Pad: "LB + RB"),
+            new("Next piece", Keys: "{aim_item} + {next_item}", Pad: "LB + D-pad →"),
+            new("Turn the piece", PlayerInput.BuildTurn),
+            new("Change the material", Keys: "{aim_item} + {build_turn}", Pad: "LB + D-pad ↑"),
         }),
         ("Riding and driving", new Row[]
         {
@@ -95,6 +104,14 @@ public partial class ControlsHelp : CanvasLayer
             new("Bus: kneel", PlayerInput.Kneel),
             new("Bus: destination display", PlayerInput.Destination),
         }),
+        ("Paddle steamer", new Row[]
+        {
+            new("Telegraph: one step ahead / astern (FULL ASTERN .. STOP .. FULL AHEAD)", Keys: "{move_forward} / {move_back}", Pad: "Left stick up / down"),
+            new("Wheel (the rudder needs way on)", Keys: "{move_left} / {move_right}", Pad: "Left stick"),
+            new("Whistle (hold)", PlayerInput.Horn),
+            new("Gangways, stopped", PlayerInput.CarDoor),
+            new("Walk aboard by a gangway; E at the wheel in the wheelhouse drives, E at a seat sits", PlayerInput.InteractMount),
+        }),
         ("Flying", new Row[]
         {
             new("Pitch and roll", Keys: Wasd, Pad: "Left stick"),
@@ -116,6 +133,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Chat / command", Keys: "Enter or /", Pad: "—"),
             new("This screen", PlayerInput.Help),
             new("Performance overlay / log", Keys: "F3 / F4", Pad: "—"),
+            new("Debug menu (offline or admin)", PlayerInput.DebugMenu),
         }),
     };
 

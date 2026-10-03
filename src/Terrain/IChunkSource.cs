@@ -39,6 +39,14 @@ public interface IChunkSource
     /// <summary>Ground-cover raster for a tile; null when unclassified.</summary>
     Task<byte[]?> LoadCoverAsync(TileId id, CancellationToken ct = default);
 
+    /// <summary>
+    /// The tile's still water (#299): level per 2 m sample, NaN where dry, optional fetch. Null when
+    /// the source has no water layer for it; the runtime then derives the legacy layer from the
+    /// cover raster (<see cref="WaterLayer.FromCover"/>). The preprocessor's water file (#298)
+    /// answers here; decorators forward it.
+    /// </summary>
+    Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default) => Task.FromResult<WaterTile?>(null);
+
     /// <summary>Tree instances for a tile; null when the tile has none.</summary>
     Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default);
 
@@ -47,4 +55,10 @@ public interface IChunkSource
     /// before it existed, in which case the world simply ends at the last LOD ring as it used to.
     /// </summary>
     Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// The region's boat landings and harbour jetties (#377, <c>landings.json</c>); null when the
+    /// region has none or was built before them. Decorators forward it.
+    /// </summary>
+    Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => Task.FromResult<LandingIndex?>(null);
 }

@@ -93,7 +93,7 @@ public partial class TargetDrone : AnimatableBody3D, Core.IOriginShiftAware
         var p = _centre + new Vector3(Mathf.Cos(_angle), 0, Mathf.Sin(_angle)) * _radius;
         // a slow climb and dive around the circuit, never into the hillside
         p.Y = _centre.Y + 25f * Mathf.Sin(_angle * 2f);
-        if (_terrain != null && _terrain.TryGetHeight(p, out float ground))
+        if (_terrain != null && _terrain.TryGetSurface(p, out float ground))
             p.Y = Mathf.Max(p.Y, ground + MinClearance);
         return p;
     }

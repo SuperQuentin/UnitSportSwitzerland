@@ -21,9 +21,10 @@ namespace UnitSport.Player;
 /// <b>Layout</b> (#210): the menus' glass panel, sized to the window. Tabs (Mounts, Cars,
 /// Motorbikes, Trucks and buses, Trailers) over a scrolling grid of cards, each with a thumbnail
 /// rendered from the real model (<see cref="RideThumbs"/>); beside it a live <see cref="RideStage"/>
-/// showing the card under the pointer or the pad's focus: its doors swing open and its lamps come
-/// on while it is pointed at, and shut again when the pointer leaves. Under the stage: the name, the
-/// blurb, the car preset or the load, and why a choice was refused.
+/// showing the selected card: its doors swing open and its lamps come on. A click selects (amber
+/// border) and hovering never changes the selection, so the car preset and the load beside it can
+/// be set before pressing Ride (or double-clicking the card; on a pad, focus selects and A rides).
+/// Under the stage: the name, the blurb, the car preset or the load, and why a choice was refused.
 /// </para>
 ///
 /// <para>
@@ -48,6 +49,7 @@ public partial class RideUi : CanvasLayer
         public Button Button = null!;
         public TextureRect Thumb = null!;
         public Label Badge = null!;
+        public StyleBox Normal = null!, Hot = null!, Picked = null!;
     }
 
     private sealed class Tab
@@ -75,11 +77,13 @@ public partial class RideUi : CanvasLayer
     private RideStage _stage = null!;
     private TextureRect _stageView = null!;
     private Card? _shown;      // on the stage
-    private Card? _pointed;    // under the pointer or focused: the stage's doors and lamps are open while set
+    private Card? _selected;   // clicked or focused: on the stage, doors and lamps open, what Ride takes
     private float _juiceDelay;
     /// <summary>The turn a pointed-at vehicle swings to: nose and the driver's open door towards you.</summary>
     private const float PresentYaw = 0.35f;
     private float _spin;
+    /// <summary>Seconds left of swinging the selected vehicle to face you; then the slow turntable.</summary>
+    private float _present;
     private bool _dragging;
 
     /// <summary>Resolved per press, never captured: in multiplayer the player node is respawned.</summary>
@@ -173,7 +177,7 @@ public partial class RideUi : CanvasLayer
                 false, "OnFoot", () => new MeshInstance3D
                 {
                     Mesh = HumanMeshBuilder.Build(HumanPalette.ForRider(0)),
-                    MaterialOverride = HumanMeshBuilder.Material(),
+                    MaterialOverride = HumanMeshBuilder.FigureMaterial(),
                 }),
         };
         foreach (var ride in Rideable.All)
@@ -191,6 +195,10 @@ public partial class RideUi : CanvasLayer
         AddTab(bar, pages, "Trucks and buses", HeavyCatalog.All.Select(h => NewCard(h.Kind, h.Label,
             h.Blurb + (h.Look.Operator.Length > 0 ? $" ({h.Look.Operator} colours)" : ""), true,
             $"{h.Kind}|{h}", () => HeavyRig.Create(h, 0, 0.5f))).ToList());
+        // the boats (#302): picked on the water (or by it: it starts afloat at the surface)
+        AddTab(bar, pages, "Boats", BoatCatalog.All.Select((b, i) => NewCard((RideKind)(BoatCatalog.First + i), b.Name,
+            Rideable.Create((RideKind)(BoatCatalog.First + i))!.Blurb, true,
+            $"{BoatCatalog.First + i}|{b.Name}", () => Rideable.Create((RideKind)(BoatCatalog.First + i))?.BuildParkedVisual(0))).ToList());
         // trailers are not mounts: each card couples one behind the truck being driven, or leaves it
         // in the world ahead to back onto (RideKind.Trailer + its index, decoded in Choose)
         AddTab(bar, pages, "Trailers", TrailerCatalog.All.Select((t, i) => NewCard((RideKind)(TrailerRow + i), t.Label,
@@ -249,13 +257,18 @@ public partial class RideUi : CanvasLayer
             PivotOffset = new Vector2(CardW, CardH) * 0.5f,
         };
         var normal = UiTheme.Flat(new Color(0.10f, 0.115f, 0.14f, 0.7f), 10, 8, 8, new Color(1, 1, 1, 0.07f), 1);
-        var hot = UiTheme.Flat(new Color(0.14f, 0.16f, 0.19f, 0.9f), 10, 8, 8, new Color(UiTheme.Amber, 0.8f), 2);
+        var hot = UiTheme.Flat(new Color(0.14f, 0.16f, 0.19f, 0.9f), 10, 8, 8, new Color(1, 1, 1, 0.3f), 1);
+        var picked = UiTheme.Flat(new Color(0.17f, 0.16f, 0.13f, 0.95f), 10, 8, 8, UiTheme.Amber, 3);
+        card.Normal = normal; card.Hot = hot; card.Picked = picked;
         b.AddThemeStyleboxOverride("normal", normal);
         b.AddThemeStyleboxOverride("hover", hot);
-        b.AddThemeStyleboxOverride("pressed", hot);
-        b.AddThemeStyleboxOverride("hover_pressed", hot);
-        b.AddThemeStyleboxOverride("focus", UiTheme.Flat(new Color(0, 0, 0, 0), 10, 8, 8, UiTheme.Amber, 2));
+        b.AddThemeStyleboxOverride("pressed", picked);
+        b.AddThemeStyleboxOverride("hover_pressed", picked);
+        b.AddThemeStyleboxOverride("focus", UiTheme.Flat(new Color(0, 0, 0, 0), 10, 8, 8, new Color(UiTheme.Amber, 0.5f), 1));
         b.AddThemeStyleboxOverride("disabled", normal);
+        // the mouse never "presses" a card (that would ride on the first click); it selects through
+        // GuiInput below. Enter / pad A still press it, and that rides the focused (= selected) card.
+        b.ButtonMask = 0;
 
         var inside = UiKit.VBox(3);
         inside.MouseFilter = Control.MouseFilterEnum.Ignore;
@@ -281,11 +294,18 @@ public partial class RideUi : CanvasLayer
         card.Badge = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextFaint);
         inside.AddChild(card.Badge);
 
-        b.Pressed += () => Choose(card.Kind);
-        b.MouseEntered += () => Point(card);
-        b.FocusEntered += () => Point(card);
-        b.MouseExited += () => Unpoint(card);
-        b.FocusExited += () => Unpoint(card);
+        b.Pressed += () => { Select(card); Choose(card.Kind); };
+        b.GuiInput += e =>
+        {
+            if (e is not InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } mb) return;
+            Select(card);
+            if (mb.DoubleClick) Choose(card.Kind);
+        };
+        b.FocusEntered += () => Select(card);
+        // hover only pops the card; it never changes the selection or the stage
+        b.MouseEntered += () => b.CreateTween().TweenProperty(b, "scale", Vector2.One * 1.04f, 0.12f)
+            .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
+        b.MouseExited += () => b.CreateTween().TweenProperty(b, "scale", Vector2.One, 0.15f);
         card.Button = b;
     }
 
@@ -306,7 +326,7 @@ public partial class RideUi : CanvasLayer
         // dragging on the stage turns the vehicle round, like a showroom turntable
         _stageView.GuiInput += e =>
         {
-            if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left } mb) _dragging = mb.Pressed;
+            if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left } mb) { _dragging = mb.Pressed; _present = 0; }
             else if (e is InputEventMouseMotion mm && _dragging) _stage.Yaw += mm.Relative.X * 0.012f;
         };
         frame.AddChild(_stageView);
@@ -354,7 +374,7 @@ public partial class RideUi : CanvasLayer
         _status = UiKit.Text("", UiTheme.FontSmall, UiTheme.Bad, wrap: true);
         side.AddChild(_status);
         _go = UiKit.Button("Ride", primary: true);
-        _go.Pressed += () => { if (_shown != null) Choose(_shown.Kind); };
+        _go.Pressed += () => { if (_selected != null) Choose(_selected.Kind); };
         side.AddChild(_go);
     }
 
@@ -394,7 +414,7 @@ public partial class RideUi : CanvasLayer
         _status.Text = "";
         if (!IsOpen) return;   // the stage and the thumbnails are drawn only while the menu is up
         RequestThumbs(tab);
-        if (tab.Cards.Count > 0) Show(tab.Cards[0]);
+        if (tab.Cards.Count > 0) Select(tab.Cards[0]);
         // a pad drives the cards by focus; a mouse by pointing, so focus would point at the first card unasked
         if (PlayerInput.LastDevice == InputDevice.Gamepad) PlayerInput.FocusFirst(tab.Scroll);
     }
@@ -427,7 +447,7 @@ public partial class RideUi : CanvasLayer
         bool pad = PlayerInput.LastDevice == InputDevice.Gamepad;
         _hint.Text = InputHints.Format(pad
             ? "LB / RB switch tabs · (A) ride · {ride_menu} / (B) closes. Vehicles stay where you get off ({interact_mount}); {interact_mount} next to one gets back in."
-            : "Tab / Shift+Tab or click a tab · click a card or 1–9 to ride · drag the preview to turn it · {ride_menu} / Esc closes. "
+            : "Tab / Shift+Tab or click a tab · click a card to select it, then Ride (or double-click, or 1–9) · drag the preview to turn it · {ride_menu} / Esc closes. "
               + "Vehicles stay where you get off ({interact_mount}); {interact_mount} next to one gets back in.");
 
         bool locked = !Permissions.CanSpawnVehicles;
@@ -455,23 +475,25 @@ public partial class RideUi : CanvasLayer
     // the stage
     // ------------------------------------------------------------------------------------
 
-    /// <summary>The pointer (or the pad's focus) arrives on a card: it goes on the stage, doors and lamps open.</summary>
-    private void Point(Card card)
+    /// <summary>A card is clicked (or focused on a pad): amber border, on the stage, doors and lamps open.</summary>
+    private void Select(Card card)
     {
-        _pointed = card;
-        if (_shown != card) Show(card);
+        if (_selected == card) return;
+        if (_selected != null) Mark(_selected, false);
+        _selected = card;
+        Mark(card, true);
+        _status.Text = "";
+        Show(card);
+        _stage.Juice = 0;
         _juiceDelay = 0.12f;   // a beat for the eye to land before the doors swing
-        card.Button.CreateTween().TweenProperty(card.Button, "scale", Vector2.One * 1.04f, 0.12f)
-            .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
+        _present = 2.5f;
     }
 
-    /// <summary>It leaves: the doors shut and the lamps go out; the vehicle stays on the stage.</summary>
-    private void Unpoint(Card card)
+    private static void Mark(Card card, bool picked)
     {
-        card.Button.CreateTween().TweenProperty(card.Button, "scale", Vector2.One, 0.15f);
-        if (_pointed != card) return;
-        _pointed = null;
-        _stage.Juice = 0;
+        card.Button.AddThemeStyleboxOverride("normal", picked ? card.Picked : card.Normal);
+        card.Button.AddThemeStyleboxOverride("hover", picked ? card.Picked : card.Hot);
+        card.Button.AddThemeStyleboxOverride("disabled", picked ? card.Picked : card.Normal);
     }
 
     private void Show(Card card)
@@ -500,11 +522,11 @@ public partial class RideUi : CanvasLayer
     {
         if (!IsOpen) return;
         float dt = (float)delta;
-        if (_pointed != null && _juiceDelay > 0 && (_juiceDelay -= dt) <= 0) _stage.Juice = 1;
+        if (_selected != null && _juiceDelay > 0 && (_juiceDelay -= dt) <= 0) _stage.Juice = 1;
         if (_dragging) return;
-        if (_pointed != null)
+        if (_selected != null && (_present -= dt) > 0)
         {
-            // pointed at: it swings round to show its face, the doors and the lamps
+            // just selected: it swings round to show its face, the doors and the lamps
             float target = _stage.Yaw + Mathf.AngleDifference(_stage.Yaw, PresentYaw);
             _stage.Yaw = Mathf.Lerp(_stage.Yaw, target, MathX.Damp(4f, dt));
             _spin = 0;
@@ -592,6 +614,7 @@ public partial class RideUi : CanvasLayer
         var current = ActivePlayer?.Invoke()?.Ride ?? RideKind.OnFoot;
         int tab = _tabs.FindIndex(t => t.Cards.Any(c => c.Kind == current));
         SelectTab(tab >= 0 ? tab : _tab);
+        if (tab >= 0) Select(_tabs[tab].Cards.First(c => c.Kind == current));
         ApplyShotArgs();
     }
 
@@ -601,7 +624,7 @@ public partial class RideUi : CanvasLayer
         if (CmdArgs.Int("--ridemenu") is not int tab) return;
         SelectTab(tab);
         if (CmdArgs.Int("--ridemenu", 2) is int card && card < _tabs[_tab].Cards.Count)
-            Point(_tabs[_tab].Cards[card]);
+            Select(_tabs[_tab].Cards[card]);
     }
 
     public void Close()
@@ -609,7 +632,8 @@ public partial class RideUi : CanvasLayer
         _panel.Visible = false;
         _stage.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
         _stage.Juice = 0;
-        _pointed = null;
+        if (_selected != null) Mark(_selected, false);
+        _selected = null;
         _dragging = false;
         UiFocus.Set(this, false);
         Core.MouseCapture.Capture();

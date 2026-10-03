@@ -97,6 +97,8 @@ public partial class InventoryUi : CanvasLayer
     private (ItemStack[] Slots, ItemStack Carried) _paintSnapshot;
     private readonly List<int> _paintSlots = new();
     private int _pickedOnPress = -1;
+    /// <summary>The slot the cursor stack was last picked from: Esc puts it back there (#391).</summary>
+    private int _carriedFrom = -1;
     private int _lastClickSlot = -1;
     private double _lastClickTime;
 
@@ -380,6 +382,7 @@ public partial class InventoryUi : CanvasLayer
             worn.AddChild(button);
         }
         gear.AddChild(worn);
+        gear.AddChild(BuildBodyRows());
         right.AddChild(UiKit.Card(gear, 0.55f, 14));
 
         // the item under the pointer (or the focused slot)
@@ -591,6 +594,84 @@ public partial class InventoryUi : CanvasLayer
         Refresh();
     }
 
+    private static readonly string[] EyeNames = { "Brown", "Blue", "Green", "Violet", "Red", "Amber", "Grey", "Black" };
+    private static readonly string[] HairColourNames =
+        { "Black", "Dark brown", "Brown", "Auburn", "Red", "Ginger", "Blonde", "Platinum", "Grey", "Teal", "Blue", "Pink" };
+
+    private readonly Label[] _bodyValues = new Label[6];
+
+    /// <summary>
+    /// "Body" (#394): who your figure is, each part stepped with ‹ and ›: build, face, eyes, skin,
+    /// hair and its colour. Saved in the settings and sent to everyone (<c>FootPlayer.AppearanceBits</c>).
+    /// </summary>
+    private Control BuildBodyRows()
+    {
+        var box = UiKit.VBox(4);
+        box.AddChild(UiKit.Section("Body"));
+        var grid = new GridContainer { Columns = 4 };
+        grid.AddThemeConstantOverride("h_separation", Gap);
+        grid.AddThemeConstantOverride("v_separation", 2);
+        string[] labels = { "Build", "Face", "Eyes", "Skin", "Hair", "Colour" };
+        for (int i = 0; i < labels.Length; i++)
+        {
+            int part = i;
+            var name = UiKit.Text(labels[i], UiTheme.FontSmall, UiTheme.TextDim);
+            name.CustomMinimumSize = new Vector2(56, 0);
+            var back = UiKit.Button("‹");
+            var next = UiKit.Button("›");
+            _bodyValues[i] = UiKit.Text("", UiTheme.FontSmall, UiTheme.Text);
+            _bodyValues[i].CustomMinimumSize = new Vector2(96, 0);
+            _bodyValues[i].HorizontalAlignment = HorizontalAlignment.Center;
+            back.Pressed += () => StepBody(part, -1);
+            next.Pressed += () => StepBody(part, 1);
+            grid.AddChild(name);
+            grid.AddChild(back);
+            grid.AddChild(_bodyValues[i]);
+            grid.AddChild(next);
+        }
+        box.AddChild(grid);
+        // the network id (and with it the figure of someone who never chose) changes on joining a server
+        box.VisibilityChanged += () => { if (box.IsVisibleInTree()) ShowBody(CurrentAppearance()); };
+        ShowBody(CurrentAppearance());
+        return box;
+    }
+
+    /// <summary>What the player looks like now: their choice, or the figure their network id gives them.</summary>
+    private Avatar.Appearance CurrentAppearance() =>
+        Avatar.Appearance.Unpack(GameSettings.Current.AppearanceBits)
+        ?? Avatar.Appearance.For(IsInsideTree() && Multiplayer.HasMultiplayerPeer() ? Multiplayer.GetUniqueId() : 1);
+
+    private void StepBody(int part, int by)
+    {
+        var a = CurrentAppearance();
+        a = part switch
+        {
+            0 => a with { Build = (Avatar.BodyBuild)Mathf.PosMod((int)a.Build + by, Avatar.Appearance.Builds) },
+            1 => a with { Face = Mathf.PosMod(a.Face + by, Avatar.FaceAtlas.Count) },
+            2 => a with { Eyes = Mathf.PosMod(a.Eyes + by, Avatar.Appearance.EyeColours.Length) },
+            3 => a with { Skin = Mathf.PosMod(a.Skin + by, Avatar.Appearance.SkinTones.Length) },
+            4 => a with { Hair = (Avatar.HairStyle)Mathf.PosMod((int)a.Hair + by, Avatar.Appearance.HairStyles) },
+            _ => a with { HairColour = Mathf.PosMod(a.HairColour + by, Avatar.Appearance.HairColours.Length) },
+        };
+        GameSettings.Current.AppearanceBits = a.Pack();
+        GameSettings.Current.Save();
+        ShowBody(a);
+    }
+
+    private void ShowBody(Avatar.Appearance a)
+    {
+        if (_bodyValues[0] == null) return;
+        _bodyValues[0].Text = a.Build.ToString();
+        _bodyValues[1].Text = char.ToUpperInvariant(Avatar.FaceAtlas.Name(a.Face)[0]) + Avatar.FaceAtlas.Name(a.Face)[1..];
+        _bodyValues[2].Text = EyeNames[Mathf.PosMod(a.Eyes, EyeNames.Length)];
+        _bodyValues[3].Text = $"Tone {Mathf.PosMod(a.Skin, Avatar.Appearance.SkinTones.Length) + 1}";
+        _bodyValues[4].Text = a.Hair.ToString();
+        _bodyValues[5].Text = HairColourNames[Mathf.PosMod(a.HairColour, HairColourNames.Length)];
+        _bodyValues[2].AddThemeColorOverride("font_color", a.EyeColour.Lightened(0.2f));
+        _bodyValues[3].AddThemeColorOverride("font_color", a.SkinColour);
+        _bodyValues[5].AddThemeColorOverride("font_color", a.HairTint.Lightened(0.15f));
+    }
+
     private void Inspect(int slot)
     {
         if (slot < 0 || !Inv.IsOpen(slot)) return;
@@ -751,6 +832,17 @@ public partial class InventoryUi : CanvasLayer
                 return false;   // motion is never consumed: the buttons need their hover
             }
 
+            case InputEventMouseButton { Pressed: true } w when w.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown:
+            {
+                // over the hotbar row, the wheel picks the slot in hand as it does in the world
+                if (SlotAt(w.Position) is var row and >= 0 && row < Inventory.HotbarSize)
+                {
+                    Inv.Cycle(w.ButtonIndex == MouseButton.WheelDown ? 1 : -1);
+                    return true;
+                }
+                return false;
+            }
+
             case InputEventMouseButton { Pressed: true } b when b.ButtonIndex is MouseButton.Left or MouseButton.Right or MouseButton.Middle:
             {
                 int slot = SlotAt(b.Position);
@@ -778,7 +870,8 @@ public partial class InventoryUi : CanvasLayer
                 _lastClickSlot = slot;
                 _lastClickTime = now;
 
-                if (left && b.ShiftPressed && Inv.Carried.IsEmpty) Inv.QuickMove(slot);
+                // shift-click sends the slot across (hotbar <-> pack), with or without a stack on the cursor (#391)
+                if (b.ShiftPressed) Inv.QuickMove(slot);
                 else if (doubleClick && !Inv.Carried.IsEmpty && slot != Inventory.BagSlot && !Inventory.IsWearSlot(slot))
                 {
                     EndPaint(commit: false);
@@ -790,6 +883,7 @@ public partial class InventoryUi : CanvasLayer
                     else Inv.SecondaryClick(slot);
                     // released over another slot, this becomes a drag and drop
                     _pickedOnPress = Inv.Carried.IsEmpty ? -1 : slot;
+                    if (_pickedOnPress >= 0) _carriedFrom = slot;
                 }
                 else
                 {
@@ -810,7 +904,13 @@ public partial class InventoryUi : CanvasLayer
                 int slot = SlotAt(b.Position);
                 if (_paintButton == b.ButtonIndex)
                 {
-                    EndPaint(commit: true);
+                    // dragged off the panel without spreading over a second slot: it falls (#391)
+                    if (slot == -1 && _paintSlots.Count == 1 && OutsidePanel(b.Position))
+                    {
+                        EndPaint(commit: false);
+                        DropCarried(one: b.ButtonIndex == MouseButton.Right);
+                    }
+                    else EndPaint(commit: true);
                     return true;
                 }
                 if (_pickedOnPress >= 0)
@@ -893,8 +993,10 @@ public partial class InventoryUi : CanvasLayer
             if (!e.IsPressed() || e.IsEcho()) return;
             if (e.IsActionPressed("ui_cancel") && !Inv.Carried.IsEmpty)
             {
-                // B first puts the carried stack back, then closes
+                // Esc / B first puts the carried stack back where it was picked from (#391), then closes
+                if (_carriedFrom >= 0 && Inv.IsOpen(_carriedFrom) && Inv[_carriedFrom].IsEmpty) Inv.PrimaryClick(_carriedFrom);
                 if (Inv.ReturnCarried() is { IsEmpty: false } left && !_items.DropStack(null, left)) Inv.Bin(left);
+                _carriedFrom = -1;
             }
             else if (e.IsActionPressed(PlayerInput.Inventory) || e.IsActionPressed(PlayerInput.Menu)
                      || e.IsActionPressed("ui_cancel"))
@@ -933,13 +1035,16 @@ public partial class InventoryUi : CanvasLayer
         if (IsOpen)
         {
             if (HandlePanelMouse(e)) GetViewport().SetInputAsHandled();
-            else if (e is InputEventKey { Pressed: true, Echo: false } k && _hover >= 0)
+            else if (e is InputEventKey { Pressed: true, Echo: false } k)
             {
-                // a number key over a slot swaps it with that hotbar slot, Q drops, as in Minecraft
-                if ((int)k.PhysicalKeycode - (int)Key.Key1 is var n && n >= 0 && n < Inventory.HotbarSize)
+                // as in Minecraft, through the actions (#391): a slot key over a slot swaps it with
+                // that hotbar slot; Q drops the hovered slot (Ctrl: all), else the cursor stack
+                if (_hover >= 0 && PlayerInput.SlotPressed(k) is var n and >= 0 && n < Inventory.HotbarSize)
                     Inv.SwapWithHotbar(_hover, n);
-                else if (k.PhysicalKeycode == Key.Q)
+                else if (k.IsActionPressed(PlayerInput.DropItem) && _hover >= 0 && !Inv[_hover].IsEmpty)
                     DropSlot(_hover, all: k.CtrlPressed);
+                else if (k.IsActionPressed(PlayerInput.DropItem) && !Inv.Carried.IsEmpty)
+                    DropCarried(one: !k.CtrlPressed);
                 else return;
                 GetViewport().SetInputAsHandled();
             }
@@ -958,7 +1063,7 @@ public partial class InventoryUi : CanvasLayer
                 CloseWheel(true);
                 break;
             case InputEventKey { Pressed: true } key
-                when (int)key.PhysicalKeycode - (int)Key.Key1 is var n && n >= 0 && n < Inventory.HotbarSize:
+                when PlayerInput.SlotPressed(key) is var n && n >= 0 && n < Inventory.HotbarSize:
                 _wheel.Highlight = n;
                 CloseWheel(true);
                 break;

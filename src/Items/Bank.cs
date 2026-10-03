@@ -216,6 +216,39 @@ public partial class Bank : Node
 
     private string Account(long peer) => NameOf?.Invoke(peer) ?? $"Rider{peer}";
 
+    // ---- the card (#273, Loot/ShopService) -------------------------------------------------------
+
+    /// <summary>
+    /// A card payment in a shop: takes <paramref name="amount"/> from the peer's account, or from
+    /// this machine's offline (where the client plays the server). No overdraft: false, and nothing
+    /// taken, when the balance does not cover it. Only the server (or an offline client) calls this.
+    /// </summary>
+    public bool Charge(long peer, int amount, out long balance)
+    {
+        string who = _server ? Account(peer) : LocalName;
+        long had = _accounts.GetValueOrDefault(who);
+        if (amount <= 0 || amount > had)
+        {
+            balance = had;
+            GD.Print($"[bank] {who} card payment of {amount} CHF declined (balance {had})");
+            return false;
+        }
+        balance = had - amount;
+        if (balance == 0) _accounts.Remove(who);
+        else _accounts[who] = balance;
+        SaveAccounts(_server ? ServerFile : LocalFile);
+        GD.Print($"[bank] {who} paid {amount} CHF by card, balance {balance}");
+        if (!_server) Report(balance);
+        return true;
+    }
+
+    /// <summary>Client: the server says the account now holds this (after a card payment).</summary>
+    public void Report(long balance)
+    {
+        Balance = balance;
+        BalanceChanged?.Invoke(0);
+    }
+
     // ---- admin ----------------------------------------------------------------------------------
 
     /// <summary>

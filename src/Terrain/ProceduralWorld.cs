@@ -90,6 +90,8 @@ public sealed partial class ProceduralWorld
         public double P, Q;       // the height before lakes and channels is P + Q f
         public double Lake;       // how far into a lake, 0..1; water above 0.5
         public double Level;      // that lake's level, where Lake > 0
+        public double MaxDepth;   // the deepest that lake's bed gets (#298), where Lake > 0
+        public double Fetch;      // that lake's size (√area), for the waves
         public double Valley;     // how much of the strongest valley floor is here, 0..1
         public double Floor;      // that valley's floor level, where Valley > 0
     }
@@ -219,14 +221,44 @@ public sealed partial class ProceduralWorld
         };
 
         // lakes: a ragged shore, but no lake where the heightmap has none
-        double lake = relief.LakeWeight(e, n, out double level);
+        double lake = LakeField(e, n, out double level, out int lakeId);
         if (lake > 0)
         {
-            lake = Math.Clamp(lake + 0.6 * lake * (1 - lake) * Noise.Fbm(x / 400, y / 400, 3, 41), 0, 1);
             c.Lake = lake;
             c.Level = level;
+            c.MaxDepth = relief.LakeMaxDepth[lakeId];
+            c.Fetch = Math.Sqrt(relief.LakeAreaM2[lakeId]);
         }
         return c;
+    }
+
+    /// <summary>How far into a lake a point is, 0..1 (water above 0.5): the relief's lake weight with a ragged shore.</summary>
+    private static double LakeField(double e, double n, out double level, out int lakeId)
+    {
+        double lake = Relief.Instance.LakeWeight(e, n, out level, out lakeId);
+        if (lake <= 0) return 0;
+        double x = e - NoiseE, y = n - NoiseN;
+        return Math.Clamp(lake + 0.6 * lake * (1 - lake) * Noise.Fbm(x / 400, y / 400, 3, 41), 0, 1);
+    }
+
+    /// <summary>
+    /// A tile's still water at its 11x11 horizon samples (#298): the lake level where a sample is in
+    /// a lake, 0 elsewhere; null when none is. The horizon heights are the beds, so it draws the
+    /// higher of the two. Lakes only (a river is narrower than the 100 m lattice), and from the lake
+    /// field alone, a few microseconds a tile, so the generated horizon cache does not need it.
+    /// </summary>
+    public static ushort[]? HorizonWater(TileId id)
+    {
+        const int side = HorizonFormat.SamplesPerSide;
+        ushort[]? levels = null;
+        for (int r = 0; r < side; r++)
+            for (int c = 0; c < side; c++)
+            {
+                double e = id.MinE + c * HorizonFormat.SpacingM, n = id.MaxN - r * HorizonFormat.SpacingM;
+                if (LakeField(e, n, out double level, out _) < 0.5) continue;
+                (levels ??= new ushort[HorizonFormat.SamplesPerTile])[r * side + c] = ChunkFormat.Quantize(level);
+            }
+        return levels;
     }
 
     /// <summary>
@@ -242,6 +274,8 @@ public sealed partial class ProceduralWorld
             Q = a.Q + (b.Q - a.Q) * t,
             Lake = a.Lake + (b.Lake - a.Lake) * t,
             Level = Math.Max(a.Level, b.Level),
+            MaxDepth = Math.Max(a.MaxDepth, b.MaxDepth),
+            Fetch = Math.Max(a.Fetch, b.Fetch),
             Valley = a.Valley + (b.Valley - a.Valley) * t,
             Floor = a.Valley >= b.Valley ? a.Floor : b.Floor,
         };
@@ -345,7 +379,7 @@ public sealed partial class ProceduralWorld
         {
             // low ground near a lake is lifted clear of it, then the shore comes down to the level
             h += Math.Max(0, c.Level + 0.5 - h) * SmoothStep(0.05, 0.3, c.Lake);
-            if (c.Lake >= 0.5) return c.Level;
+            if (c.Lake >= 0.5) return c.Level - LakeDepth(c);
             h = c.Level + (h - c.Level) * SmoothStep(0.5, 0.3, c.Lake);
         }
 
@@ -355,10 +389,29 @@ public sealed partial class ProceduralWorld
             // (only ever down: a channel whose bed is above the ground here is not dug at all)
             double carve = (1 - SmoothStep(f.Half, f.Bank, f.Dr)) * f.Keep * (1 - SmoothStep(0.3, 0.5, c.Lake));
             double bed = f.Level - f.Depth;
-            if (h > bed) h -= (h - bed) * carve;
+            if (h > bed)
+            {
+                h -= (h - bed) * carve;
+                // #298: the flat bottom is the water's level; the river's own channel lies below it
+                if (f.Dr < f.Half && f.Wet > 0) h -= RiverDepth(f) * carve;
+            }
         }
         return h;
     }
+
+    /// <summary>
+    /// How far into a lake the weight is, in metres from the shore: the weight runs from 0.5 on the
+    /// shore to 1 over half a 500 m relief cell.
+    /// </summary>
+    private const double LakeShoreScaleM = 500;
+
+    /// <summary>The lake's depth below its level (#298): <see cref="WaterBed"/>'s shelf and drop-off, from the weight.</summary>
+    private static double LakeDepth(in Coarse c) =>
+        WaterBed.Depth((c.Lake - 0.5) * LakeShoreScaleM, double.PositiveInfinity, c.MaxDepth);
+
+    /// <summary>A river's depth below its flat bottom (#298): <see cref="WaterBed"/>'s channel across the flat bottom's width.</summary>
+    private static double RiverDepth(in Fine f) =>
+        WaterBed.Depth(f.Half - f.Dr, f.Half, WaterBed.MaxMaxDepthM);
 
     /// <summary>Terrain height in metres at an LV95 position.</summary>
     public double Height(double e, double n) => Height(null, e, n);
@@ -577,6 +630,50 @@ public sealed partial class ProceduralWorld
             }
         }
         return cells;
+    }
+
+    /// <summary>
+    /// The tile's still water (#298), on the runtime's 2 m lattice: wherever the cover says Water,
+    /// a lake's level, else the river's (its flat bottom, the channel lies below it), else the
+    /// ground (a scrap of water the fields do not explain). Fetch: the lake's size, the river's
+    /// width. A sample whose ground stands above that level is dry: the cover is classified from
+    /// 10 m fields and the shore from 5 m ones, so they disagree by a metre or two on a shore.
+    /// Null when the tile is dry.
+    /// </summary>
+    public WaterTile? BuildWater(TileId id, Blend? blend = null)
+    {
+        var cells = BuildCover(id, blend);
+        int n = WaterTile.Size;
+        float[]? level = null, fetch = null;
+        int wet = 0;
+        blend?.PrepareLattice();
+        var lattice = LatticeFor(id, fine: true);
+        for (int r = 0; r < n; r++)
+            for (int c = 0; c < n; c++)
+            {
+                int col = c * WaterTile.Stride, row = r * WaterTile.Stride;
+                if ((CoverClass)cells[row * CoverFormat.Size + col] != CoverClass.Water) continue;
+                if (level == null)
+                {
+                    level = new float[n * n];
+                    fetch = new float[n * n];
+                    Array.Fill(level, float.NaN);
+                }
+                double e = id.MinE + col, nn = id.MaxN - row;
+                var coarse = SampleCoarse(lattice, e, nn);
+                var fine = FineNear(e, nn);
+                double l, f;
+                if (coarse.Lake > 0.3) (l, f) = (coarse.Level, coarse.Fetch);
+                else if (fine.Dr < fine.Bank) (l, f) = (fine.Level - fine.Depth, 2 * fine.Half);
+                else (l, f) = (Height(lattice, e, nn), 10);
+                double ground = Height(lattice, e, nn);
+                if (blend != null) ground += blend.Correction(e, nn, ground);
+                if (ground > l) continue;
+                wet++;
+                level[r * n + c] = (float)l;
+                fetch![r * n + c] = (float)f;
+            }
+        return wet == 0 ? null : new WaterTile { Level = level!, FetchM = fetch };
     }
 
     /// <summary>Everything a cover class is decided from, at one point.</summary>

@@ -23,6 +23,12 @@ public sealed class HostedServer
     public string LogPath { get; }
     public bool Running => Alive(Pid);
 
+    /// <summary>
+    /// A secret only this client and its server know (<c>--host-token</c>): sent back after
+    /// joining, it makes the host an admin of their own server without a password.
+    /// </summary>
+    public string HostToken { get; } = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
+
     public HostedServer(string name, int port)
     {
         Name = name;
@@ -38,7 +44,7 @@ public sealed class HostedServer
         // an exported game is the executable plus its pack; the editor and `godot --path .` need the project named
         if (!OS.HasFeature("template")) { args.Add("--path"); args.Add(ProjectSettings.GlobalizePath("res://")); }
         args.Add("--");
-        args.AddRange(new[] { "--server", "--port", Port.ToString(), "--server-name", Name, "--parent-pid", OS.GetProcessId().ToString() });
+        args.AddRange(new[] { "--server", "--port", Port.ToString(), "--server-name", Name, "--parent-pid", OS.GetProcessId().ToString(), "--host-token", HostToken });
         // the status port answers the client that waits for the server to be up; hidden from the
         // LAN, it answers only on loopback
         if (!lanVisible) { args.Add("--query-bind"); args.Add("127.0.0.1"); }
@@ -48,7 +54,7 @@ public sealed class HostedServer
         if (!System.IO.File.Exists(System.IO.Path.Combine(chunks, "manifest.json"))) args.Add("--generated-world");
 
         Pid = OS.CreateProcess(OS.GetExecutablePath(), args.ToArray(), openConsole: false);
-        GD.Print($"[host] started server pid {Pid}: {string.Join(' ', args)}");
+        GD.Print($"[host] started server pid {Pid}: {string.Join(' ', args).Replace(HostToken, "***")}");
         return Pid > 0 ? null : "Could not start the server process.";
     }
 

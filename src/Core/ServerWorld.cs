@@ -20,6 +20,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private MultiplayerSpawner? _spawner;
     private Vehicles.VehicleManager? _vehicles;
     private Items.RadioManager? _radios;
+    private Interiors.ChurchRadios? _churchRadios;
     private Items.DroppedItems? _dropped;
     private PlayerRegistry? _registry;
     private ChatManager? _chat;
@@ -27,6 +28,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Interiors.InteriorManager? _interiors;
     private WorldOrigin? _origin;
     private Items.PlacedObjects? _placed;
+    private Build.Structures? _structures;
     private Occasions.OccasionManager? _occasions;
     private World.RaceNpcs? _npcs;
     private BattleRoyale.BrManager? _br;
@@ -92,7 +94,14 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = false };
         _chunks.Initialize(source, origin, manifest, null);
         if (fallback != null) _chunks.UseFallback(fallback, source.Invalidate);
+        // the landings (#377): where the steamer lies; the piers are the clients' (no collision here)
+        World.Landings.Use(await World.Landings.LoadAsync(source));
         AddChild(_chunks);
+        // the water (#299): the server answers water queries too, and owns the sea state
+        World.WaterField.Bind(_chunks);
+        if (World.SeaStateCommand.FromArgs(args, out string seaError) is { } sea) World.WaterField.SetSeaState(sea);
+        else if (seaError.Length > 0) GD.PushWarning($"[water] {seaError}");
+        GD.Print($"[server] sea state {World.SeaStateCommand.Describe(World.WaterField.SeaState)}");
 
         _players = new Node3D { Name = "Players" };
         _players.AddToGroup(OriginShifter.ContainerGroup);
@@ -121,11 +130,17 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _dropped = Items.DroppedItems.Create(this, origin);
         _dropped.PlayerPositions = _vehicles.PlayerPositions;
         Audio.Cd.CdLibrary.Create(this, server: true);
+        // the radio by the pastor rat in every church (#370)
+        _churchRadios = Interiors.ChurchRadios.Create(this);
         Net.ClockSync.Create(this);
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
         Audio.Live.WebRadio.Create(this);
         // an Africa Twin in front of one building at Riddes, put back each time its tile loads
         AddChild(new World.AfricaTwinEgg(_chunks));
+        // the paddle steamer at the Nyon landing (#303), put back each time its tile loads
+        AddChild(new World.SteamerBerth(_chunks));
+        // jetskis and speedboats along the harbour jetties (#383), put back a while after they are taken
+        AddChild(new World.MarinaBoats(_chunks));
 
         // gunfire: clients send their rounds here to be relayed; the server flies none of them
         Combat.CombatManager.Create(this, null, origin, server: true);
@@ -137,6 +152,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         // loot in those interiors: the server rolls it and remembers what was taken
         Loot.LootService.Create(this);
+        // shops and vending machines (#273): the server keeps what was sold and charges the card
+        Loot.ShopService.Create(this);
 
         // occasions run on the server's calendar and are replicated, so every player shares one
         _occasions = Occasions.OccasionManager.Create(this);
@@ -145,7 +162,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // data the client's Tab search uses and a client cannot ask to be moved anywhere else.
         var places = LoadPlaces();
 
-        _registry = new PlayerRegistry(PlayerRegistry.ParseAdminPassword());
+        _registry = new PlayerRegistry(PlayerRegistry.ParseAdminPassword(), PlayerRegistry.ParseHostToken());
         _chat = ChatManager.CreateServer(_registry, _players, origin, places);
         AddChild(_chat);
 
@@ -201,6 +218,27 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
         _placed.NameOf = _chat.NameOfPeer;
         _chat.NameAssigned += bank.SendBalance;
+        // built structures (#274): checked, kept and saved here; match ones cleared after the match
+        if (Systems.On(Systems.Build))
+        {
+            _structures = Build.Structures.Create(this, origin, server: true);
+            _structures.NameOf = _chat.NameOfPeer;
+            _structures.InMatch = br.Playing;
+            _structures.MatchRunning = () => br.State.Running;
+            _structures.GroundAt = p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null;
+            // a match piece that comes down leaves a pile of some of its materials (#276)
+            var crates = _brCrates;
+            _structures.Rubble = (at, stacks) =>
+            {
+                if (crates == null) return;
+                var (e, n) = origin.ToLv95(at);
+                var pile = new BattleRoyale.Crate { Style = BattleRoyale.CrateStyle.Pile, E = e, N = n, Alt = BattleRoyale.BrCrates.Ground, Label = "the rubble" };
+                pile.SetStacks(stacks);
+                crates.Spawn(new[] { pile });
+            };
+            br.Structures = _structures;
+        }
+        br.Placed = _placed;
 
         // a vehicle out of nothing is an admin's, or the one a race put you on (Core/Permissions)
         // (a wreck cannot be driven and burns out: no loophole, and race NPCs' wrecks park through
@@ -220,6 +258,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
             {
                 SuggestedOriginLv95 = new Lv95Point { E = origin.E, N = origin.N },
             }.ToJson());
+        // the landings this server uses (#377), whatever its chunk directory holds
+        if (World.Landings.Current is { } landings && (landings.Landings.Count > 0 || landings.Jetties.Count > 0))
+            _streamer.LandingsOverride = System.Text.Encoding.UTF8.GetBytes(landings.ToJson());
         if (ParseStreamBandwidth() is { } megabytesPerSecond)
         {
             _streamer.BytesPerSecondPerPeer = (int)(megabytesPerSecond * 1024 * 1024);
@@ -347,12 +388,15 @@ public partial class ServerWorld : Node3D, IOriginContainer
         if (node is Node3D player)
             _chunks!.AddAnchor(player);
         _interiors?.SendTableTo(id);
+        _churchRadios?.SendTo(id);
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
+        _structures?.SendTo(id);
         _br?.SendTo(id);
         _brCrates?.SendTo(id);
         _chat?.SendWorldTimeTo(id);
+        _chat?.SendSeaStateTo(id);
     }
 
     private void OnPeerDisconnected(long id)

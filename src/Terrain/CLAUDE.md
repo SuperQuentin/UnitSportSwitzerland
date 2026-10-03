@@ -8,16 +8,18 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 ## Architecture
 
 - `roads-merged-into-terrain-collision` — Roads are merged into terrain collision, not just draped over it
-- `sidewalks-tunnels-runtime` — #119 runtime: sidewalk slabs + chamfered kerb collision, blend under slabs/caps/bores, road depth bias, tunnel mouths (punch at surface ends only), bore floor/wall collision, safety nets skip bores and cut ramps, checks
+- `sidewalks-tunnels-runtime` — #119 runtime: sidewalk slabs + chamfered kerb collision, blend under slabs/caps/bores, road depth bias, tunnel mouths (punch at surface ends only), bore floor/wall collision, safety nets skip bores and cut ramps, checks; #120 side profiles (grass, bike path, sloped kerbs) from `RoadStreetSection`
 - `road-embankments-walls` — Road embankments (#125): level cross-section, 2:3 fill / 1:1 cut clamp in RoadBlend, retaining walls planned in RoadGen (LPRP), 40 cm crown with a cover over the heightfield step, cost
 - `road-railings` — Road railings (#126): guardrails on fill-wall crowns, above drops and as back-to-back median beams; fences; RailingBuilder mesh and collision strip, racing-line obstacle
 - `surface-patterns` — Surface patterns: `CoverPalette` writes a `SurfacePattern` code into vertex-colour alpha in quarter steps (0 none,...
-- `water` — Water: built at runtime from the Water cover class, not a separate file — swissALTI3D already models lakes/rivers as...
+- `water` — Water: its own mesh on the tile's still water layer (2 m near, 4 m far, wave scale in UV.x, no collision); legacy tiles from the cover; PS1 translucent, wave-displaced (#299)
+- `water-level-layer` — In-memory still water per tile (#299): `WaterTile` (501² levels, NaN dry, optional fetch) from `IChunkSource.LoadWaterAsync`, `WaterLayer` (+ wave scale), legacy from cover, `ChunkManager.TryGetWaterLevel`; the shape #298 fills
 - `windows` — Windows: `BuildingMeshBuilder` bakes facade UVs (metres along the wall, storey index) from the *triangle* normal;... fake rooms behind the glass, occupancy cues
 - `building-types` — Building types: `BuildingTypes` groups a tile's solids (a church's nave + bell tower) at runtime; one church interior, every...
 - `building-triangles` — read building triangles with `b.Tri(t)`; wall/roof split is `BuildingTriangles.RoofNormalY`, never a local copy
 - `cellars-and-room-variety` — Cellars (`Below`, `FloorY`), shelters with blast doors, basement program (laundry, guest room, cinema, carnotzet, music room), new room/furniture types, logical room order, plan v8 (#213)
-- `door-portals` — Doors open (shared, auto-close) and you walk (or drive, garages and barns) through them: `DoorLink` map, portal camera + clip plane, sill crossing, vehicles, linked spaces, building sounds
+- `door-portals` — Doors open (shared, auto-close) and you walk (or drive, garages and barns) through them: `DoorLink` map, portal camera + clip plane, sill crossing, third-person arm through doors, near/far by a doorway, `--doorcam` check, vehicles, linked spaces, building sounds
+- `interior-light` — Rooms lit by the hour in every style (#388): one interior body + PS1/Cartoon/Realistic wrappers, `RoomLights` table (window daylight, sun patches, lamps), indoor ambient, portals tonemapped once
 - `perf-door-portals` — `DoorPortals`/`DoorwayGhosts`/`DoorLights` allocate nothing per frame (reused lists, static `StringName`s, `live` written on change, ghosts scanned at 10 Hz); interior `ArrayMesh` built on the worker, collision a frame later
 - `runtime` — Runtime: (`src/`): `Terrain/ChunkManager` streams LOD rings around anchors (workers build arrays, main thread...
 - `coarse-tiles` — Coarse tiles: every `.terr` has a `.terrc` companion — the same grid point-decimated at stride 10 (51x51, 5.2 KB...
@@ -31,6 +33,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `road-markings` (tools note) — v3 road paint: `RoadPaintBuilder` draws the `.road` PANT layer as a second road surface (style 6, depth bias, dither fade)
 - `data-location` — Data location: `--chunks` > `UNITSPORT_CHUNKS` > `terrain_location.json` (MapSetup's drive picker) > `terrain_chunks/`; game and server alike
 - `perf-lod-trees` — Ring strides by screen-space error, trees thinned by ring (`VisibleInstanceCount`), shared unit tree meshes, free every replaced mesh
+- `landings` (world) — `PierMeshBuilder`: a tile's piers and jetties as one more roads-mesh surface (Prop role) and road collision cells; `IChunkSource.LoadLandingsAsync`; `ChunkManager.RebuildPiers` when the landings change
 - `perf-collision-commits` — Collision is queued and committed one 4x4 cell piece a frame, nearest a body first; a new collision layer must go through that queue
 - `perf-ring-key` — `EvaluateRings` compares its inputs in `RingKeyChanged()` (no string key); a new desired-set input goes there
 
@@ -40,7 +43,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 
 ## Gotchas
 
-- `collision-build-load-road-tile` — A collision build must load the road tile even when the roads are already drawn
+- `collision-build-load-road-tile` — A collision or near-field mesh rebuild must load the road tile even when the roads are already drawn (or the ground swallows them after flying away and back)
 - `road-s-collision-core-takes` — A road's collision core takes the height at the cell's perpendicular foot on the centreline, nearest segment wins
 - `concavepolygonshape3d-one-sided-collision-unless` — `ConcavePolygonShape3D` is one-sided for collision unless told otherwise, and geometry that "looks right" can still...
 - `flat-shaded-quad-mesh-bilinear` — A flat-shaded quad mesh is NOT a bilinear surface, and a height query must match whichever one is actually on screen

@@ -39,6 +39,9 @@ public sealed record WorldLaunch
     /// <summary>The server is the one this client started from the menu (<see cref="Net.HostedServer"/>).</summary>
     public bool Hosted { get; init; }
 
+    /// <summary>When <see cref="Hosted"/>: the secret that makes this client its server's admin.</summary>
+    public string? HostToken { get; init; }
+
     /// <summary>Booted from the command line, with no title screen in front of it.</summary>
     public bool FromCommandLine { get; init; }
 

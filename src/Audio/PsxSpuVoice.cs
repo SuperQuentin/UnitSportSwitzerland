@@ -100,7 +100,8 @@ public sealed class PsxSpuVoice : IChipVoice
         x = MathF.Round(x * 16384f) / 16384f;
 
         float wet = Reverb(x);
-        float y = (x + 0.15f * wet) * level;
+        // the SPU's small-room tail only where there is a room: outdoors it read as an echo
+        float y = (x + (0.03f + 0.12f * ReverbZones.Enclosure) * wet) * level;
         if (!float.IsFinite(y)) y = 0f;
         return Math.Clamp(y, -1f, 1f);
     }

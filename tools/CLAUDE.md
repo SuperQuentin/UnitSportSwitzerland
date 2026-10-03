@@ -25,6 +25,8 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `buildings` — Buildings: swissBUILDINGS3D 3.0 LoD2 TINs -> `tools/export_buildings.py` (GDAL, the only step needing it) ->...
 - `france` — France (cross-border): IGN BD TOPO® via the Géoplateforme WFS (`data.geopf.fr`, Licence Ouverte 2.0) ->...
 - `land-cover` — Land cover: six TLM area layers are rasterised onto the 501x501 vertex lattice -> `.cover` (deflate, ~2 KB/tile) ->...
+- `landings` (world) — `--landings [--landings-file F]`: boat landings and jetties into `landings.json` (`LandingPlanner`: a head at the steamer's plank height, a neck or a ramp from a TLM `Steg`, moved out for water; jetties over the water), after every water pass given `--tlm`
+- `bathymetry` — #298: lake and river beds in `.terr` (swissBATHY3D where surveyed, `WaterBed` shelf/drop-off/channel elsewhere, gap fill toward the survey), the still level in `.water` (USWL, u16 level + fetch), `--water`/`--bathy`, seams by 600 m windows, horizon.bin v2 water section (lakes drawn as water from afar), checks and Petit Lac numbers
 - `land-use-polygon-never-overwrite` — A land-use polygon must never overwrite Water in the cover raster
 - `vineyards-live-nutzungsareal-bodenbedeckung` — Vineyards live in `nutzungsareal`, not `bodenbedeckung`
 - `trees` — Trees: come from three sources into one `.trees` file, told apart by `Kind`: 0/1 random scatter in the wooded...
@@ -36,8 +38,9 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `road-widths-lanes-oneway` — #117: per-carriageway width (TLM nominal / lanes / OSM), lanes, one-way order (roundabout, partner, OSM ramps, connectivity), priority; motorway median measured (TLM 2.3 m vs OSM 9.9 m) -> carriageways shifted outward; region stats
 - `junction-priority` — #121: main road per junction (importance, owner, width, straightness), Wartelinie teeth, 3.02/3.03 signs (sizes from RoadSigns), centre line through, yield bits for traffic; region stats, checks
 - `roundabouts` — #122: flagged rings fitted to a circle and rebuilt as arcs before the graph, arms moved onto them, grassed raised island (APRP, kerb, collision, blend hold) or flush mini disc; checks
-- `turn-lanes` — #123: left-turn pockets on main-road approaches as a flush APRP Pavement strip (taper + storage) plus an exit taper with a hatched median past the junction, edge line cut, divider, arrows; blend holds the strip as road; rejects and checks
+- `turn-lanes` — #123: left-turn pockets on main-road approaches as a flush APRP Pavement strip (taper + storage) plus an exit taper with a hatched median past the junction, edge line cut, divider, arrows; #325 close junctions: exit and next pocket merged (2+1 kept), town lines on the Urban copy; blend holds the strip as road; rejects and checks
 - `urban-streets` — #119 build side: UrbanField (walls, local + city scale), RoadHeights (rural +8 cm, town ground − kerb), StreetPlanner sidewalks (facade rays, medians, splits), CornerPlanner, ramp shoulders, TownPaving/TunnelRoof cover, tram PavedBed, cost, --street-svg
+- `bike-infrastructure` — #120: candidates (Major/Road, Minor on Veloland; rural parallel-alternative rule), Radstreifen widths, looser Kernfahrbahn, five path layouts per street (strokes), sloped kerbs, symbols, red crossings at main-road junctions, Wartelinie/sign moves, format (BufferDm, TrackMid, OuterDm), cost, Nyon test region
 - `tlm-road-attribute-domains` — swissTLM3D `kreisel`, `verkehrsbedeutung`, `eigentuemer`, `stufe` value domains (SELECT DISTINCT counts) and where each goes in v3
 
 ## Commands

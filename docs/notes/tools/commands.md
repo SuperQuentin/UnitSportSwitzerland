@@ -17,6 +17,13 @@
   — 6,699 tiles in 10 s, 3,207 MB read -> 33 MB written, every tile verified bit-identical.
 - Far horizon (needed once for a region built before it existed; a normal build and `--coarse` emit
   it): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --horizon --jobs 8`
+- Lake and river beds + the `.water` level layer (#298, `bathymetry`; also runs at the end of every
+  `--cover` pass): `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --water --bathy ressources/data/bathy3d [--dump-png DIR] [--png-crop E,N[,size]]`
+  (without `--bathy` every bed is synthetic; re-runnable, the level is read back from `.water`).
+  Survey download: `python tools/swiss_data.py swissbathy3d --bbox E0 N0 E1 N1`.
+- Landings and jetties (#377, `world/landings`; also after every water pass given `--tlm`):
+  `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --tlm <tlm.gpkg> --landings [--landings-file <path>]`
+  (reads the built `.terr`/`.water`/`.road`, writes `landings.json`; under a second).
 - Buildings export (needs GDAL, install: `gdal-setup`): `python tools/export_buildings.py --bbox 2578500 1108500 2586500 1115500`
 - Features: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --features-only --tlm <tlm.gpkg> --route-keys ressources/data/routes/route_keys.sqlite --cover --buildings ressources/data/buildings3d/buildings.gpkg --gwr ressources/data/gwr/data.sqlite`
 - Roads preprocessing: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --roads-only --tlm ressources/data/tlm3d/SWISSTLM3D_2026_LV95_LN02.gpkg --route-keys ressources/data/routes/route_keys.sqlite`

@@ -147,6 +147,16 @@ public sealed class NetworkChunkSource : IChunkSource
             .ConfigureAwait(false);
     }
 
+    /// <summary>The <c>.water</c> layer (#298): shipped, cached, else streamed like the cover.</summary>
+    public async Task<WaterTile?> LoadWaterAsync(TileId id, CancellationToken ct = default)
+    {
+        if (await _local.LoadWaterAsync(id, ct).ConfigureAwait(false) is { } local) return local;
+
+        return await ObtainAsync(AssetKind.Water, id, ct,
+            bytes => { using var ms = new MemoryStream(bytes); return WaterFormat.Decode(ms).ToTile(); })
+            .ConfigureAwait(false);
+    }
+
     public async Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default)
     {
         if (await _local.LoadTreesAsync(id, ct).ConfigureAwait(false) is { } local) return local;
@@ -173,6 +183,11 @@ public sealed class NetworkChunkSource : IChunkSource
             return HorizonFormat.Decode(fs);
         }, ct).ConfigureAwait(false);
     }
+
+    /// <summary>The shipped landings first, else the server's, pulled into the cache during sync (#377).</summary>
+    public async Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) =>
+        await _local.LoadLandingsAsync(ct).ConfigureAwait(false)
+        ?? await LocalChunkSource.ReadLandingsAsync(_cacheDirectory, ct).ConfigureAwait(false);
 
     // ---- cache and fetch ------------------------------------------------------------------
 
