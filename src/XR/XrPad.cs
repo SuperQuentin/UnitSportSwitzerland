@@ -10,8 +10,9 @@ namespace UnitSport.XR;
 /// <para>
 /// Layout (docs/notes/xr/controls.md):
 /// left stick = left stick, walking where the head looks on foot; A B X Y = A B X Y;
-/// left stick click = L3 (sprint); right stick left/right = snap turn (<see cref="XrRig"/>),
-/// up = D-pad up, down = D-pad right; right stick click = R3, held = recentre.
+/// left stick click = L3 (sprint); right stick on foot: left/right = snap turn (<see cref="XrRig"/>),
+/// up = D-pad up, down = D-pad right; mounted: the D-pad, each way its own (#436);
+/// right stick click = R3, held = recentre.
 /// Triggers are the triggers when mounted (throttle, brake) and the shoulders on foot (use and
 /// aim an item, the way a hand would); the grips are the shoulders. The left menu button is
 /// Start, held it is Back (the inventory).
@@ -31,7 +32,7 @@ internal sealed class XrPad
     private float _menuHeld;
     private bool _menuLong;
     private bool _r3Was;
-    private bool _dpadUpWas, _dpadDownWas;
+    private bool _dpadUpWas, _dpadDownWas, _dpadLeftWas, _dpadRightWas;
 
     /// <summary>Set by the rig while the right stick is held for a recentre: R3 is not sent then.</summary>
     public bool RecentreHeld { get; set; }
@@ -101,11 +102,19 @@ internal sealed class XrPad
         Button(JoyButton.Y, _left.IsButtonPressed("by_button"));
         Button(JoyButton.LeftStick, _left.IsButtonPressed("primary_click"));
 
-        // --- right stick up / down: the two D-pad directions that matter most ---
+        // --- right stick: on foot, up / down are the two D-pad directions that matter most (left /
+        // right snap-turn, XrRig); mounted, where the head is the look, it is the whole D-pad (#436):
+        // up engine, right lights, left roof / horn / couple / speedbrake, down tune ---
         var r = _right.GetVector2("primary");
-        bool up = Hysteresis(r.Y, ref _dpadUpWas), down = Hysteresis(-r.Y, ref _dpadDownWas);
+        // the stronger axis only, so a diagonal never presses two directions
+        bool vertical = Mathf.Abs(r.Y) >= Mathf.Abs(r.X);
+        bool up = Hysteresis(vertical ? r.Y : 0f, ref _dpadUpWas), down = Hysteresis(vertical ? -r.Y : 0f, ref _dpadDownWas);
+        bool left = Hysteresis(shoulders || vertical ? 0f : -r.X, ref _dpadLeftWas);
+        bool right = Hysteresis(shoulders || vertical ? 0f : r.X, ref _dpadRightWas);
         Button(JoyButton.DpadUp, up);
-        Button(JoyButton.DpadRight, down);
+        Button(JoyButton.DpadDown, !shoulders && down);
+        Button(JoyButton.DpadLeft, left);
+        Button(JoyButton.DpadRight, shoulders ? down : right);
 
         // --- R3: a tap is the view switch; a hold belongs to the rig's recentre ---
         bool r3 = _right.IsButtonPressed("primary_click");
@@ -149,7 +158,7 @@ internal sealed class XrPad
 
     /// <summary>
     /// The controller input that <see cref="Update"/> replays as this pad event, right now; null
-    /// when none does (D-pad ← / ↓, Guide, the triggers' axes on foot). The reverse of the layout
+    /// when none does (D-pad ← / ↓ on foot, Guide, the triggers' axes on foot). The reverse of the layout
     /// above (#435): change the two together.
     /// </summary>
     public static XrControl? Control(InputEvent e) => e switch
@@ -166,7 +175,9 @@ internal sealed class XrPad
             JoyButton.LeftStick => XrControl.LeftStickClick,
             JoyButton.RightStick => XrControl.RightStickClick,
             JoyButton.DpadUp => XrControl.RightStickUp,
-            JoyButton.DpadRight => XrControl.RightStickDown,
+            JoyButton.DpadRight => TriggersAsShoulders ? XrControl.RightStickDown : XrControl.RightStickRight,
+            JoyButton.DpadDown when !TriggersAsShoulders => XrControl.RightStickDown,
+            JoyButton.DpadLeft when !TriggersAsShoulders => XrControl.RightStickLeft,
             JoyButton.Start => XrControl.Menu,
             JoyButton.Back => XrControl.MenuHold,
             _ => null,

@@ -299,7 +299,7 @@ public partial class SettingsScreen : Screen
         }, "Meta Quest over Link (OpenXR). Changing it restarts the game");
         UiKit.OptionRow(rows, "Monitor view in VR", Enum.GetValues<XR.MonitorView>().Select(XR.XrMonitor.Label).ToArray(),
             (int)GameSettings.Current.VrMonitor, i => GameSettings.Current.VrMonitor = (XR.MonitorView)i,
-            "What the computer screen shows while you play in the headset (F7 cycles it)");
+            "What the computer screen shows while you play in the headset (F8 cycles it)");
         // the headset's picture (#244, docs/notes/xr/air-link.md)
         int[] samples = { 0, 2, 4, 8 };
         UiKit.OptionRow(rows, "VR anti-aliasing", new[] { "Off", "MSAA 2x", "MSAA 4x", "MSAA 8x" },

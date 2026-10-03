@@ -54,9 +54,9 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | throttle / brake / steer | W S A D / RT LT stick | ok: triggers; **wheel by grip** | keep |
 | tuck_boost / trick / boost | Shift F Q / X RB LB | ok: X, grips | keep |
 | engine_toggle | Z / D-pad ↑ | ok: R stick ↑ | keep (R3) |
-| lights_toggle | L / D-pad → | gap (R stick ↓ gives D-pad →, labelled "next item") | R stick → |
-| roof / horn / couple | O H / D-pad ← | gap | R stick ← |
-| tune | T / D-pad ↓ | gap | R stick ↓ |
+| lights_toggle | L / D-pad → | ok: R stick → (#436) | keep |
+| roof / horn / couple | O H / D-pad ← | ok: R stick ← (#436) | keep |
+| tune | T / D-pad ↓ | ok: R stick ↓ (#436) | keep |
 | radio next / prev / panel | U P R / — | gap | **reach to the dash radio**: grip = panel, poke ← → |
 | take_wheel (passenger) | F / RB | ambiguous (free grip) | **grip the wheel** from the passenger seat |
 | shift up / down, clutch | Shift Ctrl C / RB LB B | ok: grips, B | keep |
@@ -64,14 +64,14 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | retarder | ' ; / — | gap | **stalk by hand** |
 | bus kneel / destination | K N / — | gap | **dash buttons by poke** |
 | steamer whistle | H / D-pad ← | gap | **pull the cord** |
-| look_behind | B / — | dead binding (never read) | head turn; remove the action |
+| look_behind | B / wheel button | ok: turn your head; held on a keyboard or wheel the view turns round (#436) | keep |
 
 ## Flying
 
 | Action | Kb / Pad | VR now | VR target |
 |---|---|---|---|
 | pitch / roll | WASD / L stick | ok | + optional yoke / stick grab |
-| throttle / climb / descend | Shift Space Ctrl / RT LT A B | gap: triggers dead (raw device-0 read) | **R / L trigger, analog** |
+| throttle / climb / descend | Shift Space Ctrl / RT LT A B | ok: R / L trigger, analog (#436) | keep |
 | fire / pigeon drop | LMB / RB | ok: R trigger | keep |
 | airliner flaps | F6 F7 / LB RB | ok: grips | + **flap lever by hand** |
 | speedbrake / gear / park brake | / G . / D-pad ← X — | partial: X only | **cockpit levers by hand** |
@@ -92,13 +92,17 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | chat | Enter, / | gap: no keyboard | laser key grid on the `XrUi` panel |
 | watch | — | — | **Swiss watch** on the left wrist (time, altitude, speed); a look opens the wrist menu |
 
-## Coherence findings (what violates the rules today)
+## Coherence findings (what violated the rules)
+
+Status after #436: 1, 2, 5, 6 fixed; 3 and 9 kept on purpose (below); 4 and 7 go to the hands
+work (#437, #438); 8 fixed by #435.
 
 1. Flight, GPX replay and the garage read `Input.GetJoyAxis(0, Trigger*)` raw (`FootPlayer.FlyPhysics`,
    `Gpx/PlaybackCamera`, `Vehicles/GarageUi`): they skip the input map and VR's parsed pad (R2).
 2. D-pad ← and ↓ cannot be reached in VR, and R stick ↓ sends D-pad →, which is "next item" on foot
    but "lights" mounted (R3).
-3. R stick ↑ is the emote wheel on foot and the engine mounted (R2).
+3. R stick ↑ is the emote wheel on foot and the engine mounted. Kept: one meaning per context is
+   what R2 asks, and the two contexts never overlap.
 4. A free grip is take_wheel / trick / boost; a grip should mean "grab what is near" (R1).
 5. The VR monitor's F7 swallows the keyboard's flaps_down (`XrMonitor`).
 6. `look_behind` is bound, listed in F1 and in the wheel presets, but never read.
@@ -106,4 +110,6 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 8. In VR, prompts show Xbox names (`PlayerInput` pins `Gamepad`), and about 20 UI strings type keys
    by hand (R6).
 9. `VendingUi` and `RadioUi` read logical keycodes; `LockPickUi`, `ShopUi` and crafting read raw
-   Shift (physical-key rule, `core/key-hints`).
+   Shift (physical-key rule, `core/key-hints`). Kept: the vending code and the radio's `/` and
+   Ctrl+F are typed characters, so the printed letter is the right one; Shift sits in the same
+   place on every layout, and the pad paths (sprint, the catalogue's X / Y) already exist.

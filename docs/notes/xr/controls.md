@@ -12,8 +12,10 @@ The full per-action design and rules: `xr/vr-action-map`.
   - Left stick: move. On foot it is rotated to the **head's** yaw, so forward is where you look.
   - A, B, X, Y: the pad's A, B, X, Y.
   - L3: sprint.
-  - Right stick X: snap turn. Right stick up: D-pad up (engine). Right stick down: D-pad right
-    (next item).
+  - Right stick on foot: X snap turn, up D-pad up (emote wheel, the hammer's turn), down D-pad
+    right (next item). Mounted, where the head is the look, it is the whole D-pad (#436): up
+    engine, right lights, left roof / horn / couple / speedbrake, down tune. Only the stronger
+    axis counts, so a diagonal presses one direction.
   - R3 tap: view (cockpit body). R3 hold: recentre.
   - Left menu tap: Start. Left menu hold: Back (inventory).
 - **Triggers and grips.**
@@ -37,9 +39,10 @@ The full per-action design and rules: `xr/vr-action-map`.
     not a hand-driven swing: door state is binary on the network.
 - **Pigeon (#217).** As a pigeon the triggers stay shoulders (right = drop), A flaps, B dives, the eye is
   the bird's (level), snap turn works perched or walking (`player/pigeon`).
-- **Flight gap.** In `FootPlayer`, flight reads `Input.GetJoyAxis(0, Trigger*)` directly, and
-  parsed events do not set that. In an aircraft, climb and descend come from A and B
-  (Jump / Crouch) only.
+- **Analog triggers (#436).** Parsed events do not set `Input.GetJoyAxis`, so code that wants a
+  trigger's pull reads the pad-only actions `PlayerInput.TriggerRight` / `TriggerLeft` (flight's
+  lever and climb, the GPX camera) and the garage reads `look_left` / `look_right`. In an aircraft
+  the VR triggers climb and descend, analog, as a pad's do.
 - **UI.** `XR/XrUi` draws the game's UI on a 1.5 m panel 1.7 m ahead. The panel follows the head's
   yaw lazily and has no depth test.
   - It draws every `CanvasLayer` by attaching the layer's canvas to a SubViewport in the

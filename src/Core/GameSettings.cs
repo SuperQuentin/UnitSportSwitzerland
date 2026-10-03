@@ -214,7 +214,7 @@ public sealed class GameSettings
     /// </summary>
     public bool VrMode { get; set; }
 
-    /// <summary>What the monitor shows while in VR (<see cref="XR.XrMonitor"/>); F7 cycles it.</summary>
+    /// <summary>What the monitor shows while in VR (<see cref="XR.XrMonitor"/>); F8 cycles it.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public XR.MonitorView VrMonitor { get; set; } = XR.MonitorView.FirstPerson;
 

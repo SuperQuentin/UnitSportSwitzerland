@@ -3,7 +3,7 @@
 - **Where it lives.** `XR/XrMonitor` is a CanvasLayer at layer -100, under the HUD and the menus,
   which the monitor shows as well.
 - **Choosing a view.** `GameSettings.VrMonitor` is set in Settings → Video → *Monitor view in VR*.
-  F7 cycles it while in VR. `--vrmonitor off|first|eyes|third` sets it for one run.
+  F8 cycles it while in VR (not F7: the airliner flaps, #436). `--vrmonitor off|first|eyes|third` sets it for one run.
 - **The four views:**
   - **First person** (default): the window's own camera, i.e. the game's camera with the head
     written into it. One picture of what the player sees, head jitter included.

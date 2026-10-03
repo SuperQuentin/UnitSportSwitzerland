@@ -5,7 +5,7 @@ namespace UnitSport.XR;
 /// <summary>A physical input on the VR controllers, as <c>XrPad</c> uses it.</summary>
 public enum XrControl
 {
-    LeftStick, RightStick, LeftStickClick, RightStickClick, RightStickUp, RightStickDown,
+    LeftStick, RightStick, LeftStickClick, RightStickClick, RightStickUp, RightStickDown, RightStickLeft, RightStickRight,
     LeftTrigger, RightTrigger, LeftGrip, RightGrip,
     A, B, X, Y, Menu, MenuHold,
 }
@@ -79,6 +79,8 @@ public static class XrControlNames
         XrControl.RightStickClick => $"R {stick} click",
         XrControl.RightStickUp => $"R {stick} ↑",
         XrControl.RightStickDown => $"R {stick} ↓",
+        XrControl.RightStickLeft => $"R {stick} ←",
+        XrControl.RightStickRight => $"R {stick} →",
         _ => null,
     };
 }

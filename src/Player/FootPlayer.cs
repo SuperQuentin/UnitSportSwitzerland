@@ -597,6 +597,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     /// <summary>Free look while riding. Steering owns the body's yaw, so the eyes get their own.</summary>
     private float _lookYaw;
+    private bool _lookingBehind;
     /// <summary>Seconds since the mouse or the right stick last looked: the cockpit's look springs back only once they let go.</summary>
     private float _lookIdle;
     /// <summary>Seconds without mouse or stick look before a vehicle's chase camera swings back behind it.</summary>
@@ -3105,6 +3106,24 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void ApplyStickLook(float dt)
     {
+        // look behind (B, or a wheel button bound to it), mounted: held, the view turns round
+        // (over the shoulder from a cockpit); let go, it is ahead again. Not in VR, where you
+        // turn your head, nor under a canopy, whose free look banks it.
+        bool behind = (_ride != null && !LookSteersRide || RidingWith != 0) && !XR.XrSession.Active
+                      && _ride is not Flyer { LookBank: > 0f } && PlayerInput.Held(PlayerInput.LookBehind);
+        if (behind)
+        {
+            _lookYaw = InCockpit ? 2.4f : Mathf.Pi;
+            _lookIdle = 0f;
+            _lookingBehind = true;
+            return;
+        }
+        if (_lookingBehind)
+        {
+            _lookingBehind = false;
+            _lookYaw = 0f;
+        }
+
         var look = PlayerInput.LookRate * LookScale;
         if (look == Vector2.Zero) return;
         _lookIdle = 0f;
@@ -3629,8 +3648,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (FlyerIntoWater(flyer)) return;
         bool typing = UiFocus.TextEntryActive;
-        float tr = typing ? 0f : Mathf.Max(0f, Input.GetJoyAxis(0, JoyAxis.TriggerRight));
-        float tl = typing ? 0f : Mathf.Max(0f, Input.GetJoyAxis(0, JoyAxis.TriggerLeft));
+        // analog through the input map: any pad, and the VR triggers (#436); 0 while typing (Blocked)
+        float tr = PlayerInput.Strength(PlayerInput.TriggerRight);
+        float tl = PlayerInput.Strength(PlayerInput.TriggerLeft);
         bool jumpDown = PlayerInput.Held(PlayerInput.Jump);
         bool action = jumpDown && !_jumpHeld;
         _jumpHeld = jumpDown;

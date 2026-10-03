@@ -123,6 +123,12 @@ public partial class PlayerInput : Node
     public const string CarDoor = "car_door";
     /// <summary>The travel picker (<see cref="Player.RideUi"/>): mounts, equipment and, for an admin, vehicles.</summary>
     public const string RideMenu = "ride_menu";
+    /// <summary>
+    /// The pad's analog triggers alone, 0..1, for code that wants the pull itself (flight's lever,
+    /// the GPX camera). Through the input map rather than <c>Input.GetJoyAxis(0, …)</c>, so any
+    /// pad works, and so do the VR controllers, which replay as a pad (#436).
+    /// </summary>
+    public const string TriggerRight = "trigger_right", TriggerLeft = "trigger_left";
     /// <summary>The controls overlay (<see cref="ControlsHelp"/>), built from the live bindings.</summary>
     public const string Help = "help";
     /// <summary>The debug menu (<see cref="DebugMenu"/>): overlays, terrain layers, view modes. Offline or as an admin.</summary>
@@ -481,6 +487,8 @@ public partial class PlayerInput : Node
         Bind(FlyUp, Keys(Key.Space, Key.E), Button(JoyButton.A), Axis(JoyAxis.TriggerRight, 1));
         Bind(FlyDown, Keys(Key.Shift, Key.Q), Button(JoyButton.B), Axis(JoyAxis.TriggerLeft, 1));
         Bind(FlyBoost, Keys(Key.Ctrl), Button(JoyButton.LeftStick));
+        Bind(TriggerRight, Axis(JoyAxis.TriggerRight, 1));
+        Bind(TriggerLeft, Axis(JoyAxis.TriggerLeft, 1));
 
         // E only ever acts on what is in front of you (get in or out, search, a door). The
         // travel picker has its own key: sharing E made the picker pop up whenever you pressed
