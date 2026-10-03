@@ -162,7 +162,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // data the client's Tab search uses and a client cannot ask to be moved anywhere else.
         var places = LoadPlaces();
 
-        _registry = new PlayerRegistry(PlayerRegistry.ParseAdminPassword());
+        _registry = new PlayerRegistry(PlayerRegistry.ParseAdminPassword(), PlayerRegistry.ParseHostToken());
         _chat = ChatManager.CreateServer(_registry, _players, origin, places);
         AddChild(_chat);
 

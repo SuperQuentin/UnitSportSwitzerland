@@ -386,6 +386,7 @@ public partial class GameShell : Node
                 Endpoint = endpoint,
                 PlayerName = PlayerName,
                 Hosted = true,
+                HostToken = _hosted.HostToken,
                 ServerName = _hosted.Name,
             });
             return;

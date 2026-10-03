@@ -1263,6 +1263,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // a request, not a claim.
         string requested = Launch.PlayerName;
         _chat?.AnnounceName(requested.Length > 0 ? requested : $"Rider{Multiplayer.GetUniqueId()}");
+        // hosted from the menu: the player who started the server runs it
+        if (Launch.HostToken is { } token) _chat?.ClaimHost(token);
 
         // Fire and forget: the world is already playable on local tiles while this runs.
         _ = _terrainSync?.SyncAsync();
