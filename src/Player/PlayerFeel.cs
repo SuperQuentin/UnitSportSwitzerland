@@ -330,9 +330,14 @@ public partial class PlayerFeel : Node3D
             {
                 _stepAccum -= 1f;
                 float run = Mathf.Clamp(speed / _player.RunSpeed, 0f, 1f);
+                // wading (#380): a slosh a stride instead of the ground's step, louder deeper; both
                 // under the world, never on top of it: a step is there, not a drum (#375)
-                Play(Surfaces.Steps(SurfaceUnderfoot()), 0.14f + 0.3f * run,
-                    0.9f + (float)_rng.NextDouble() * 0.2f);
+                if (_player.WadeDepth > 0.06f)
+                    Play(SfxSynth.WadeBank, (0.13f + 0.2f * run) * Wading.StrideVolume(_player.WadeDepth) + 0.05f,
+                        1.05f - 0.15f * Mathf.Clamp(_player.WadeDepth, 0f, 1f) + (float)_rng.NextDouble() * 0.1f);
+                else
+                    Play(Surfaces.Steps(SurfaceUnderfoot()), 0.14f + 0.3f * run,
+                        0.9f + (float)_rng.NextDouble() * 0.2f);
             }
         }
         else _stepAccum = 0.6f;   // the first step after stopping lands promptly

@@ -75,9 +75,25 @@
   `--boatcheck jetski|speedboat[,shots] --chunks fixture:lake` (quick; `shots` windowed: pictures
   in `test_output/boats/`); `tools/boatnetcheck.sh` (net; `SHOTS=1`: B's view in
   `test_output/boatnet_B_*.png`).
+- **Foam on the waves (#380)**: the wake, spray and jet (and the steamer's wake, bow wave and
+  churn) are drawn by `shaders/wake_foam.gdshader` through `Avatar/WakeFoam` (one shared material per
+  kind, every style): a patch sits on the surface over its own centre (the rest point found by three
+  fixed-point steps of `water_wave_displace`, as `WaterField.TryLevelAt` does) laid on the tangent
+  plane, 6 cm over it (the water mesh is the waves joined by straight lines every 2 m) and 4 cm toward
+  the eye; a spray speck faces the camera and is gone under the surface. The still level and wave
+  scale are per-instance uniforms written only on change (`WakeFoam.OnSurface`/`Water`). The flat
+  wake used to cut through crests and hang over troughs. Not checked headless (no particles, no
+  shader compile there): `--boatcheck speedboat,shots,wake --style ps1|cartoon` (windowed) puts the
+  speedboat at half ahead across a gamey swell and takes `wake_swell_*` pictures into
+  `test_output/boats/<style>/`, and logs the hull slaps.
+- **Water slapping the hull (#380)** (`Avatar/HullSlap`, on `BoatRig` and `SteamerRig`, every peer from
+  the hull it draws and its own waves): the water's height up the forward hull is watched frame to
+  frame; climbing it faster than 0.1 m/s slaps (`SfxSynth.HullSlapBank`: the skin's knock, the smack,
+  the wash), as loud as it climbed fast (full at 1.7 m/s), then 0.12-0.32 s before the next. Within
+  120 m of the ears (`Audio/Ears`) only. Measured (speedboat): calm idle 0.2 faint laps a second, gamey idle 0.8
+  (strength 0.03), gamey half ahead 1.2 at 0.2. The steamer's is pitched 0.55 and carries further.
 - **At a jetty** (#377, `world/landings`): harbour jetties are solid decks; getting out beside one steps
   onto it instead of into the water (`FootPlayer.Pier.cs`, `--steamercheck pier|nyon`).
 - **Not done**: boats placed at the real harbours (the jetties are there, nothing parks at them); a hull's collision box does not pitch (the
-  hull boxes do, a parked boat's box stays level); wake foam lies where it was dropped, not on the
-  moving waves; no water hiss/slap sound; boats in races have no water courses (the mount words
+  hull boxes do, a parked boat's box stays level); no hiss of a hull running through the water; boats in races have no water courses (the mount words
   `jetski`/`boat` parse); the jetski's rider is the motorbike rider (helmet).

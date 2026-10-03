@@ -38,5 +38,8 @@
 - **Sound**: `SfxSynth.BoneBreakBank` (2-4 cracks with a knock, a thump, a grinding crunch) and `GlassBank`
   (bang, craze, shard pings), played as `AudioStreamPlayer3D` on every peer from its own ragdoll's impacts
   (> 7 m/s into a surface = a bone, at most `MaxBreaks`, damage on the owner; softer = a thud).
+- **In water (#380)**: buoyancy and drag per point from the water's surface and motion
+  (`Ragdoll.WaterProbe`); in deep water the body floats limp, then the owner comes round swimming
+  (`swimming`). Probe: `FootPlayer.DebugThrow(at, launch)` throws a player on foot as a crash does.
 - Not done: the car's windscreen mesh stays whole (only shard particles fly); NPC drivers keep the old flat throw; the VR blink is untested on a real headset (`--xrsim` does not draw it).
 - Checks: `--ride car,19,out.png --wall 70 --crashshots 0.4,1.6,4` (see `commands`), `tools/crashnetcheck.sh`.

@@ -145,6 +145,7 @@ public partial class FootPlayer
     {
         if (_sliding) { _sliding = false; SetBodyHeight(StandHeight); }
         _swimming = true;
+        WadeDepth = 0f;
         SwimTime = 0f;
         _swimLunge = 0f;
         _fallSpeed = 0f;
@@ -178,6 +179,7 @@ public partial class FootPlayer
     private void LeaveWater()
     {
         EndSwim();
+        WadeDepth = 0f;
         _air = AirReserve.Full;
     }
 
@@ -187,12 +189,13 @@ public partial class FootPlayer
     /// </summary>
     private bool SwimPhysics(float dt, bool onFloor)
     {
-        if (Indoors) { EndSwim(); return false; }
+        if (Indoors) { EndSwim(); WadeDepth = 0f; return false; }
         bool wet = WaterField.TryLevelAt(GlobalPosition, out float level);
         float sub = wet ? level - GlobalPosition.Y : float.NegativeInfinity;
         if (!_swimming)
         {
             TickAir(dt, false, false);
+            StepWade(wet, sub);   // #380, FootPlayer.Wade.cs
             if (!wet) return false;
             bool fallingIn = !onFloor && Velocity.Y < -1f && sub > 0.05f && DepthAt(level) > SwimEnter;
             if (sub <= SwimEnter && !fallingIn) return false;
@@ -458,18 +461,65 @@ public partial class FootPlayer
         return true;
     }
 
-    /// <summary>A crash ragdoll that went into deep water: it stops tumbling and floats, swimming.</summary>
-    private bool RagdollIntoWater()
+    /// <summary>
+    /// A crash ragdoll floats limp at the surface at least this long (s), and at most this long,
+    /// before it comes round; and it comes round after <see cref="RagdollWaterMax"/> in deep water whatever.
+    /// </summary>
+    private const float RagdollFloatMin = 2.5f, RagdollFloatMax = 6f, RagdollWaterMax = 10f;
+
+    /// <summary>Seconds the crash ragdoll has been in deep water, and floating at its surface (owner); 0 out of it.</summary>
+    private float _ragdollInWater, _ragdollAfloat;
+    private bool _ragdollWet;
+    private Ragdoll.WaterProbe? _ragdollWater;
+
+    /// <summary>The ragdoll's view of the water (#380): the surface over a point and the water's motion there.</summary>
+    private static bool RagdollWaterAt(Vector3 p, out float level, out Vector3 flow)
     {
-        if (_ragdoll == null || _ragdoll.Age < 0.25f) return false;
+        flow = Vector3.Zero;
+        if (!WaterField.TryLevelAt(p, out level)) return false;
+        flow = WaterField.Velocity(p.X, p.Z, WaterField.Now);
+        return true;
+    }
+
+    /// <summary>
+    /// A crash ragdoll in deep water (#380): it plunges, comes back up and floats limp, buoyed and
+    /// carried by the water (<see cref="Ragdoll"/>), the same on every peer. The owner comes round
+    /// swimming once it has floated <see cref="RagdollFloatMin"/> and drifts with the water, or after
+    /// <see cref="RagdollFloatMax"/> whatever it does. True once it swims.
+    /// </summary>
+    private bool RagdollIntoWater(float dt)
+    {
+        if (_ragdoll == null) return false;
         var pelvis = _ragdoll.Pelvis;
-        if (!WaterField.TryLevelAt(pelvis, out float level) || level - pelvis.Y < 0.2f) return false;
-        if (Terrain != null && Terrain.TryGetHeight(pelvis, out float bed) && level - bed < SwimEnter) return false;
-        var velocity = _ragdoll.Velocity;
+        bool deep = _ragdoll.Age >= 0.25f && WaterField.TryLevelAt(pelvis, out float level) && level - pelvis.Y > -0.3f
+                    && !(Terrain != null && Terrain.TryGetHeight(pelvis, out float bed) && level - bed < SwimEnter);
+        if (!deep) { _ragdollInWater = _ragdollAfloat = 0f; return false; }
+        _ragdollInWater += dt;
+        // the hips back up by the surface (a plunge goes a couple of metres down first)
+        WaterField.TryLevelAt(pelvis, out level);
+        float down = level - pelvis.Y;
+        if (down < 0.6f) _ragdollAfloat += dt;
+        else if (down > 1f) _ragdollAfloat = 0f;
+        float settled = (_ragdoll.Velocity - _ragdoll.Flow).Length();
+        bool round = _ragdollInWater >= RagdollWaterMax || _ragdollAfloat >= RagdollFloatMax
+                     || (_ragdollAfloat >= RagdollFloatMin && settled < 0.9f);
+        if (!round) return false;
+        var velocity = _ragdoll.Flow with { Y = 0f };
+        _ragdollInWater = _ragdollAfloat = 0f;
         EndRagdoll();
-        _stunTimer = Mathf.Max(_stunTimer, 1.2f);
+        _stunTimer = Mathf.Max(_stunTimer, 0.8f);
         StartSwimming(pelvis with { Y = Mathf.Min(pelvis.Y - 0.95f, level - SwimFloat) }, velocity);
         return true;
+    }
+
+    /// <summary>The ragdoll going into the water: spray and the splash, by how fast (every peer, its own copy).</summary>
+    private void RagdollSplash()
+    {
+        if (_ragdoll == null) return;
+        bool wet = _ragdoll.Wet >= 4;
+        if (wet && !_ragdollWet && WaterField.TryLevelAt(_ragdoll.Pelvis, out float level))
+            SplashAt(_ragdoll.Pelvis with { Y = level }, Mathf.Clamp(_ragdoll.Velocity.Length() / 14f, 0.25f, 1f), sound: true);
+        _ragdollWet = wet;
     }
 
     // ---- splash and sound ------------------------------------------------------------------

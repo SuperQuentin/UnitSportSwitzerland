@@ -319,7 +319,8 @@ void fragment() {{
         float dt = (float)delta;
 
         var id = (ItemId)_player.HeldItemId;
-        bool onFoot = _player.Ride == RideKind.OnFoot && !_player.RidingAlong && !_player.IsSwimming;   // holstered swimming (#301)
+        // holstered swimming (#301), and limp after a crash: the hand it hung from is not drawn (#380)
+        bool onFoot = _player.Ride == RideKind.OnFoot && !_player.RidingAlong && !_player.IsSwimming && !_player.Ragdolled;
         if (id != _shown || HeldData != _shownData)
         {
             if (id != _shown)

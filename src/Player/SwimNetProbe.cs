@@ -17,6 +17,8 @@ namespace UnitSport.Player;
 /// <item>B floats 7 m away, looking at A, and checks A's copy at each step: the swim pose and the
 /// right style (crawl, tread, under water), and the depth: the copy's feet as far under the surface
 /// as A says its own are.</item>
+/// <item>A is thrown limp into the lake as from a crash (#380): B sees A's copy go limp, its own
+/// copy of the ragdoll float with its hips as deep as A's, and then A swimming.</item>
 /// </list>
 /// Windowed (<c>SHOTS=1</c>), B saves its view of A to <c>test_output/swimnet_B_*.png</c>. Scratch inventory.
 /// </summary>
@@ -110,6 +112,36 @@ public partial class SwimNetProbe : ChatProbe
         Say($"surfaced {F(me.SwimDepth)}");
         await Heard("B", "seen surfaced", 8);
         me.WalkControls = null;
+        await Ragdoll(me);
+    }
+
+    /// <summary>A: thrown from 4 m up into B's view, limp; it says how deep its hips float once back up from the plunge.</summary>
+    private async Task Ragdoll(FootPlayer me)
+    {
+        WaterField.TryLevelAt(At(AX, -3), out float level);
+        me.DebugThrow(At(AX, -3) with { Y = level + 4f }, North * 3f + Vector3.Up * 3f);
+        Expect(me.Ragdolled, "A is thrown limp");
+        Say("thrown 0");
+        bool wet = false, up = false;
+        double start = Time.GetTicksMsec() / 1000.0;
+        while (me.Ragdolled && Time.GetTicksMsec() / 1000.0 - start < 14)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (me.RagdollPelvis is not { } hip || !WaterField.TryLevelAt(hip, out level)) continue;
+            float sub = level - hip.Y;
+            if (sub > 0.8f) wet = true;
+            if (wet && !up && sub < 0.5f)
+            {
+                up = true;
+                await Seconds(0.4);
+                if (me.RagdollPelvis is { } h && WaterField.TryLevelAt(h, out level)) Say($"afloat {F(level - h.Y)}");
+            }
+        }
+        Expect(up, "A's ragdoll came back up from the plunge");
+        Expect(await Until(() => me.IsSwimming, 4), "and A swims");
+        await Seconds(1.0);
+        Say($"rescued {F(me.SwimDepth)}");
+        await Heard("B", "seen rescued", 8);
     }
 
     // ---- B: the watcher --------------------------------------------------------------------
@@ -128,6 +160,35 @@ public partial class SwimNetProbe : ChatProbe
         // held at depth by crouching on and off: the underwater stroke, or sculling upright between
         await Watch("under", null, under: true, null);
         await Watch("surfaced", null, under: false, "surfaced");
+        await WatchRagdoll();
+        await Watch("rescued", null, under: false, "rescued");
+    }
+
+    /// <summary>B: A's copy limp, its ragdoll floating as deep as A's own, then (the next Watch) swimming.</summary>
+    private async Task WatchRagdoll()
+    {
+        if (!await Until(() => _heard.Any(l => l.Contains("SW A thrown ")), 40)) { Fail("A was never thrown"); return; }
+        Expect(await Until(() => Copy() is { Ragdolled: true }, 3), "A's copy goes limp (PoseRagdoll)");
+        if (!await Until(() => _heard.Any(l => l.Contains("SW A afloat ")), 12)) { Fail("A never said 'afloat'"); return; }
+        string line = _heard.Last(l => l.Contains("SW A afloat "));
+        float said = Float(line[(line.LastIndexOf(' ') + 1)..]);
+        float depth = float.NaN;
+        bool ok = await Until(() =>
+        {
+            if (Copy() is not { Ragdolled: true } a || a.RagdollPelvis is not { } hip || !WaterField.TryLevelAt(hip, out float level)) return false;
+            depth = level - hip.Y;
+            return Mathf.Abs(depth - said) < 0.45f;
+        }, 2);
+        Expect(ok, $"A's copy floats limp: its hips {F(depth)} m under this peer's surface (A says {F(said)})");
+        if (DisplayServer.GetName() != "headless" && Copy() is { } c)
+        {
+            var to = c.GlobalPosition - (Me!.GlobalPosition + Vector3.Up * 1.68f);
+            Me.LookYaw = YawOf(to with { Y = 0 });
+            Me.LookPitch = Mathf.Atan2(to.Y, new Vector2(to.X, to.Z).Length());
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            GD.Print($"{Log} shot {Shot("B_ragdoll")}");
+        }
+        Say("seen afloat");
     }
 
     /// <summary>A's copy here, the one player node that is not ours.</summary>

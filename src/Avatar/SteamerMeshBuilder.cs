@@ -840,6 +840,8 @@ public partial class SteamerRig : Node3D
         {
             rig.AddWater();
             rig.AddSound();
+            // the bow's forefoot at the waterline: a big hull's slap is low and carries (#380)
+            rig._slap = new HullSlap(rig, new Vector3(0, SteamerLines.Draught, -SteamerLines.WaterlineHalf + 5f), 0.55f, 1f, 20f);
         }
         return rig;
     }
@@ -914,10 +916,11 @@ public partial class SteamerRig : Node3D
             {
                 Size = new Vector2(size, size),
                 Orientation = flat ? PlaneMesh.OrientationEnum.Y : PlaneMesh.OrientationEnum.Z,
-                Material = new StandardMaterial3D
+                // foam on the moving waves, in every style (#380); the smoke as it was
+                Material = flat ? WakeFoam.Material(true) : new StandardMaterial3D
                 {
                     ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                    BillboardMode = flat ? BaseMaterial3D.BillboardModeEnum.Disabled : BaseMaterial3D.BillboardModeEnum.Particles,
+                    BillboardMode = BaseMaterial3D.BillboardModeEnum.Particles,
                     CullMode = BaseMaterial3D.CullModeEnum.Disabled,
                     VertexColorUseAsAlbedo = true,
                     Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
@@ -958,10 +961,16 @@ public partial class SteamerRig : Node3D
         _whistle = new AudioStreamPlayer3D
         {
             Name = "Whistle", Stream = Audio.SfxSynth.Whistle, Position = BoatMeshBuilder.Flip(SteamerMeshBuilder.WhistleAt),
-            UnitSize = 60f, MaxDistance = 4000f, VolumeDb = 2f, Bus = Audio.SfxBus.Name,
+            UnitSize = 60f, MaxDistance = 4000f, VolumeDb = WhistleDb, Bus = Audio.SfxBus.Name,
         };
         AddChild(_whistle);
     }
+
+    private const float WhistleDb = 2f;
+    private HullSlap? _slap;
+    private bool _blowing;
+    private float _blowFor = 10f;
+    private Vector2 _shownWhistle;
 
     private float _shownChurn = -1f, _shownChurn2 = -1f, _shownWake = -1f, _shownBow = -1f, _shownSmoke = -1f, _soundLevel = -1f, _soundPitch = -1f;
 
@@ -999,13 +1008,13 @@ public partial class SteamerRig : Node3D
         Set(_wake, afloat ? Mathf.Clamp((speed - 0.5f) / 6f, 0f, 1f) : 0f, ref _shownWake);
         Set(_bowWave!, afloat ? Mathf.Clamp((speed - 2f) / 6f, 0f, 1f) : 0f, ref _shownBow);
         Set(_smoke!, 0.15f + 0.85f * work, ref _shownSmoke);
-        if (_shownWake > 0f) OnSurface(_wake, _wakeAnchor);
-        if (_shownBow > 0f) OnSurface(_bowWave!, _bowAnchor);
-        if (_shownChurn > 0f) for (int i = 0; i < 2; i++) OnSurface(_churn[i]!, _churnAnchor[i]);
+        if (_shownWake > 0f) WakeFoam.OnSurface(_wake, GlobalTransform * _wakeAnchor, 0.04f, ref _foamWater[0]);
+        if (_shownBow > 0f) WakeFoam.OnSurface(_bowWave!, GlobalTransform * _bowAnchor, 0.04f, ref _foamWater[1]);
+        if (_shownChurn > 0f) for (int i = 0; i < 2; i++) WakeFoam.OnSurface(_churn[i]!, GlobalTransform * _churnAnchor[i], 0.04f, ref _foamWater[2 + i]);
 
         if (_paddles != null)
         {
-            float level = Mathf.Round(work * 20f) / 20f, pitch = Mathf.Round((0.35f + 0.85f * work) * 20f) / 20f;
+            float level = Mathf.Round(work * 20f) / 20f, pitch = Mathf.Round(Audio.SfxSynth.PaddlePitch(work) * 40f) / 40f;
             if (level != _soundLevel)
             {
                 _soundLevel = level;
@@ -1015,18 +1024,30 @@ public partial class SteamerRig : Node3D
             }
             if (pitch != _soundPitch) { _soundPitch = pitch; _paddles.PitchScale = pitch; }
         }
-        if (_whistle != null && whistle != _whistle.Playing)
+        _slap?.Tick(dt);
+        if (_whistle != null)
         {
-            if (whistle) _whistle.Play(); else _whistle.Stop();
+            // blown up to its note and let die away, never started or cut dead (#380)
+            if (whistle != _blowing) { _blowing = whistle; _blowFor = 0f; }
+            else _blowFor += dt;
+            var (gain, wpitch) = Audio.SfxSynth.WhistleShape(whistle ? _blowFor : -1f, whistle ? 0f : _blowFor);
+            if (gain > 0.001f)
+            {
+                if (!_whistle.Playing) _whistle.Play();
+                if (gain != _shownWhistle.X) _whistle.VolumeDb = WhistleDb + Mathf.LinearToDb(gain);
+                if (wpitch != _shownWhistle.Y) _whistle.PitchScale = wpitch;
+                _shownWhistle = new Vector2(gain, wpitch);
+            }
+            else if (_whistle.Playing)
+            {
+                _whistle.Stop();
+                _shownWhistle = Vector2.Zero;
+            }
         }
     }
 
-    /// <summary>Puts an emitter at its anchor on the hull (rig space) on the water's surface there.</summary>
-    private void OnSurface(GpuParticles3D p, Vector3 anchor)
-    {
-        var at = GlobalTransform * anchor;
-        if (World.WaterField.TryLevelAt(at, out float level)) p.GlobalPosition = at with { Y = level + 0.04f };
-    }
+    /// <summary>What each foam emitter (wake, bow wave, both churns) was last told of the water under it.</summary>
+    private readonly Vector2[] _foamWater = new Vector2[4];
 
     private static void Set(GpuParticles3D p, float amount, ref float shown)
     {

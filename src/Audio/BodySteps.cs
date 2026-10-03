@@ -59,12 +59,16 @@ public partial class BodySteps : Node
         if (_accum < 1f) return;
         _accum -= 1f;
         float run = Mathf.Clamp(_speed / _body.RunSpeed, 0f, 1f);
-        var surface = _body.Terrain is { } chunks ? Surfaces.At(chunks, at, _body.Indoors, _body) : Surface.Grass;
-        var (stream, pitch, db) = Surfaces.Steps(surface).Pick(_rng);
-        _voice.GlobalPosition = at + Vector3.Up * 0.05f;
+        // wading (#380): a slosh a stride from the water's surface instead of the ground's step
+        float wade = World.WaterField.TryLevelAt(at, out float level) ? level - at.Y : 0f;
+        bool wet = wade > 0.06f;
+        var bank = wet ? SfxSynth.WadeBank
+            : Surfaces.Steps(_body.Terrain is { } chunks ? Surfaces.At(chunks, at, _body.Indoors, _body) : Surface.Grass);
+        var (stream, pitch, db) = bank.Pick(_rng);
+        _voice.GlobalPosition = wet ? at with { Y = level } : at + Vector3.Up * 0.05f;
         _voice.Stream = stream;
         _voice.PitchScale = pitch * (0.92f + 0.16f * (float)_rng.NextDouble());
-        _voice.VolumeDb = db + Mathf.LinearToDb(0.3f + 0.4f * run);
+        _voice.VolumeDb = db + Mathf.LinearToDb(wet ? (0.3f + 0.3f * run) * Wading.StrideVolume(wade) + 0.08f : 0.3f + 0.4f * run);
         _voice.Play();
     }
 }

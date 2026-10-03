@@ -647,22 +647,99 @@ public static class SfxSynth
         return s;
     });
 
-    /// <summary>A breath taken after a long time under: a rough inhaled rush, rising.</summary>
+    /// <summary>
+    /// A breath taken after a long time under: a rough inhaled rush, rising, through an open mouth
+    /// (two formants over breathy noise, 350 Hz - 4 kHz). The first version was low-passed noise
+    /// with a quarter of its energy under 100 Hz: wind on a microphone, not a breath (#380).
+    /// </summary>
     public static SfxBank GaspBank => _gaspBank ??= SfxBank.Build("gasp", 3, 0.6f, 303, (rng, n) =>
     {
         float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.12f;
         var air = Noise(rng, n);
         var s = new float[n];
-        float lo = 0f, hi = 0f, open = J();
+        float lo = 0f, hp = 0f, f1a = 0f, f1b = 0f, f2a = 0f, f2b = 0f;
+        float open = J(), f1 = 750f * J(), f2 = 1650f * J();
         for (int i = 0; i < n; i++)
         {
             float x = (float)i / n;
-            // the band opens as the breath goes in: a vowel-less "haah" pulled inward
-            float a = Mathf.Lerp(0.04f, 0.16f, x) * open * 0.5f + 0.02f;
-            lo += a * (air[i] - lo);
-            hi += 0.35f * (lo - hi);
+            // the band opens as the breath goes in: a "haah" pulled inward
+            lo += Coef(Mathf.Lerp(1500f, 3800f, Mathf.Min(1f, x * 2f)) * open) * (air[i] - lo);
+            hp += Coef(350f) * (lo - hp);
+            float breath = lo - hp;
+            Resonate(breath, f1 * (1f + 0.1f * x), 0.985f, ref f1a, ref f1b);
+            Resonate(breath, f2, 0.98f, ref f2a, ref f2b);
             float env = Mathf.Min(1f, x * 6f) * Mathf.Pow(1f - x, 1.6f);
-            s[i] = (lo - hi * 0.6f) * 4.5f * env;
+            s[i] = (breath * 1.2f + f1a * 0.05f + f2a * 0.035f) * env;
+        }
+        return s;
+    });
+
+    // ---- wading and hulls (#380) ---------------------------------------------------------------
+
+    private static SfxBank? _wadeBank, _hullSlapBank;
+
+    /// <summary>
+    /// A stride through water up to the knees or the waist: the leg pushing a slosh of water ahead of
+    /// it (low, swelling band of noise), the foot lifting out (a short bright slap) and a few bubbles
+    /// gulping as the water closes behind (rising chirps). The caller scales volume by depth.
+    /// </summary>
+    public static SfxBank WadeBank => _wadeBank ??= SfxBank.Build("wade", 6, 0.6f, 380, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.15f;
+        var slosh = BandPass(Noise(rng, n), Coef(110f * J()), Coef(1300f * J()));
+        var slap = BandPass(Noise(rng, n), Coef(900f), Coef(5000f));
+        float swell = 0.09f * J(), slapAt = 0.04f * J();
+        int bubbles = 2 + rng.Next(3);
+        var bubbleAt = new float[bubbles];
+        var bubbleHz = new float[bubbles];
+        for (int b = 0; b < bubbles; b++)
+        {
+            bubbleAt[b] = 0.16f + 0.28f * (float)rng.NextDouble();
+            bubbleHz[b] = 380f + 520f * (float)rng.NextDouble();
+        }
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float body = Mathf.Min(1f, t / swell) * Mathf.Exp(-Mathf.Max(0f, t - swell) * 7f);
+            float v = slosh[i] * 2.4f * body;
+            float ts = t - slapAt;
+            if (ts > 0f) v += slap[i] * 1.1f * Mathf.Exp(-ts * 55f) * Mathf.Min(1f, ts * 900f);
+            for (int b = 0; b < bubbles; b++)
+            {
+                float tb = t - bubbleAt[b];
+                if (tb <= 0f || tb > 0.08f) continue;
+                // a bubble's note rises as it closes (Minnaert), ringing out in a few tens of ms
+                float hz = bubbleHz[b] * (1f + 2.5f * tb);
+                v += Mathf.Sin(Mathf.Tau * hz * tb) * Mathf.Exp(-tb * 60f) * 0.35f;
+            }
+            s[i] = v;
+        }
+        return s;
+    });
+
+    /// <summary>
+    /// Water slapping a hull: the hollow knock of the hull's skin (a damped low tone), the bright
+    /// smack of the water meeting it, and the wash running off. Pitch it down for a big hull.
+    /// </summary>
+    public static SfxBank HullSlapBank => _hullSlapBank ??= SfxBank.Build("hull_slap", 6, 0.7f, 381, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.15f;
+        var smack = BandPass(Noise(rng, n), Coef(700f * J()), Coef(6000f));
+        var wash = BandPass(Noise(rng, n), Coef(250f * J()), Coef(2200f * J()));
+        float knockHz = 120f * J(), knockDecay = 26f * J(), washDecay = 7f * J();
+        var s = new float[n];
+        float phase = 0f;
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            float attack = Mathf.Min(1f, t * 1500f);
+            // the skin's note sags a little as it rings out
+            phase += Mathf.Tau * knockHz * (1f - 0.12f * Mathf.Min(1f, t * 10f)) / Rate;
+            float knock = (Mathf.Sin(phase) + 0.3f * Mathf.Sin(phase * 2.7f)) * Mathf.Exp(-t * knockDecay);
+            float hit = smack[i] * 2.2f * Mathf.Exp(-t * 60f);
+            float run = wash[i] * 1.5f * Mathf.Min(1f, t * 40f) * Mathf.Exp(-t * washDecay);
+            s[i] = attack * (knock * 0.7f + hit) + run;
         }
         return s;
     });
@@ -672,14 +749,16 @@ public static class SfxSynth
     private static AudioStreamWav? _paddles, _whistle;
 
     /// <summary>
-    /// The paddle wheels' churn, looping: a low rumble of thrown water with a float slapping into it
+    /// The paddle wheels' churn, looping: a rumble of thrown water with a float slapping into it
     /// eight times a second (two seconds, sixteen slaps, so the loop's seam keeps time). The player
-    /// sets the pitch from the shaft's speed: 12 floats at 46 rpm slap ~9 times a second.
+    /// sets the pitch from the shaft's speed (<see cref="PaddlePitch"/>): 12 floats at 46 rpm slap
+    /// ~9 times a second. Bright enough to stay a splash when played at a third of its pitch (#380:
+    /// the first version, 20-180 Hz and 140 Hz-1.2 kHz, was a rumble even at full speed).
     /// </summary>
     public static AudioStreamWav Paddles => _paddles ??= Loop(2.0f, 303, (rng, n) =>
     {
-        var rumble = BandPass(Noise(rng, n), 0.006f, 0.05f);
-        var slap = BandPass(Noise(rng, n), 0.04f, 0.3f);
+        var rumble = BandPass(Noise(rng, n), Coef(45f), Coef(420f));
+        var slap = BandPass(Noise(rng, n), Coef(260f), Coef(4500f));
         var s = new float[n];
         for (int i = 0; i < n; i++)
         {
@@ -691,6 +770,30 @@ public static class SfxSynth
         }
         return s;
     });
+
+    /// <summary>
+    /// The paddles' playback pitch at a shaft speed (0..1): the slaps come as often as the floats
+    /// enter the water, 12 a turn at 46 rpm (9.2 a second at full, the loop's 8 at pitch 1). The
+    /// first mapping (0.35 + 0.85 shaft) slapped twice too fast at DEAD SLOW (4.5 a second for 2.3).
+    /// </summary>
+    public static float PaddlePitch(float shaft) => Mathf.Max(0.3f, 1.15f * Mathf.Abs(shaft));
+
+    /// <summary>
+    /// The whistle's shape over a blast (#380): <paramref name="on"/> seconds since the valve opened
+    /// (negative: it is shut), <paramref name="off"/> seconds since it shut. The note comes up to
+    /// speed over a quarter second as the pressure builds (from 6 % flat), and sags and dies over a
+    /// third of a second when it shuts; a loop started and stopped dead clicked. (gain 0..1, pitch).
+    /// </summary>
+    public static (float Gain, float Pitch) WhistleShape(float on, float off)
+    {
+        if (on >= 0f)
+        {
+            float k = Mathf.Clamp(on / 0.25f, 0f, 1f);
+            return (k * (2f - k), Mathf.Lerp(0.94f, 1f, k * (2f - k)));
+        }
+        float r = Mathf.Clamp(off / 0.35f, 0f, 1f);
+        return ((1f - r) * (1f - r), Mathf.Lerp(1f, 0.95f, r));
+    }
 
     /// <summary>
     /// A steamer's whistle, looping while it blows: a deep chime of three pipes (a minor chord, every

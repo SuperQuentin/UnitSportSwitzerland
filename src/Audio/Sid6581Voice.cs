@@ -162,7 +162,7 @@ public sealed class Sid6581Voice : IChipVoice
         _dcX = _low;
         _dcY = y;
 
-        float o = Math.Clamp(y * 0.8f, -0.8f, 0.8f) * f.Level;
+        float o = Math.Clamp(y * 0.8f, -0.8f, 0.8f) * f.Level * f.SteamGate;
         return float.IsNaN(o) ? 0f : o;
     }
 }
