@@ -2443,6 +2443,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is Boat boarded && state.Angles != default) boarded.State.Attitude = Quaternion.FromEuler(state.Angles);
         // an airliner's gear, flaps, brakes and doors as they were left (#414)
         if (_ride is Airliner parked) parked.UnpackFlags(state.Flags);
+        // airstairs at the height they were left, docked or not (#417)
+        if (_ride is Airstairs stood) stood.UnpackFlags(state.Flags);
         // the steamer's gangways as they were left (#303)
         if (_ride is Steamer berthed) berthed.DoorsOpen = (byte)(state.DoorsOpen & 3);
         EngineOn = true;
@@ -2474,7 +2476,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Train: _ride is Truck t ? t.TrailerCode : 0,
             // a truck's joints; a boat's attitude (Euler, #302), so it is parked as it floated
             Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler() : default,
-            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
+            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
             Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd);
     }
 
@@ -3883,6 +3885,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is Truck driving) PrepareTruck(driving);
         _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft), dt, ref _motion);
         if (_ride is Truck driven && AfterTruckStep(driven)) return;
+        // airstairs let go by an aircraft's door line up with it and raise the platform (#417)
+        if (_ride is Airstairs stairs) DockStairs(stairs, input, dt);
         if (_ride is Car)
         {
             // doors: once seated every door shuts, sooner if the car pulls away before then
