@@ -233,6 +233,10 @@ src/Player/Airstairs     quick  --stairscheck --world fixture --traffic 0 --airl
 src/Player/FootPlayer.Ai quick  --stairscheck --world fixture --traffic 0 --airliner arcade
 src/Vehicles/Airstairs   quick  --stairscheck --world fixture --traffic 0 --airliner arcade
 src/Vehicles/VehicleBody.Ai quick  --stairscheck --world fixture --traffic 0 --airliner arcade
+src/Player/StairsNet     net    tools/stairsnetcheck.sh
+src/Player/Airstairs     net    tools/stairsnetcheck.sh
+src/Avatar/Airstairs     net    tools/stairsnetcheck.sh
+src/Player/FootPlayer.De net    tools/stairsnetcheck.sh
 src/Player/Airliner      net    tools/airlinernetcheck.sh
 src/Avatar/AirlinerRig   net    tools/airlinernetcheck.sh
 src/Avatar/A320Deck      net    tools/airlinernetcheck.sh
