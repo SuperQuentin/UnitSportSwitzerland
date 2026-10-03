@@ -161,6 +161,9 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         if (_progress >= 1) Complete();
     }
 
+    /// <summary>The feet this deep in the water (m, <see cref="FootPlayer.WadeDepth"/>) to fill a bottle from it.</summary>
+    public const float WadeToGather = 0.05f;
+
     private FootPlayer? Eligible()
     {
         var p = PlayerOverride?.Invoke() ?? _items.UsablePlayer;
@@ -305,15 +308,12 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         var tile = _origin.TileAt(feet);
         EnsureLoaded(tile);
 
-        // water: a lake or river in reach (World/WaterField), its surface about the height of the
-        // feet (not under a bridge, not over the head)
-        foreach (float d in new[] { 0.6f, 1.4f, 2.2f })
-        {
-            var at = feet + fwd * d;
-            if (World.WaterField.TryLevelAt(at, out float h) && feet.Y - h < 2.5f && h - feet.Y < 1f)
-                return (Resource.Water, "water", CoverClass.Water);
-        }
-        if (NearStream(tile, feet, ahead)) return (Resource.Water, "water", CoverClass.Water);
+        // water: only standing in it, wading (#380): not from a boat's deck, a pier, a bridge or the
+        // shore (the prompt showed over any water in reach, aboard the steamer included). A mapped
+        // stream (a line, no surface to stand in) from its bank, on the ground.
+        if (p.WadeDepth > WadeToGather) return (Resource.Water, "water", CoverClass.Water);
+        if (p.DeckOn == "" && !World.WaterField.TryLevelAt(feet, out _) && NearStream(tile, feet, ahead))
+            return (Resource.Water, "water", CoverClass.Water);
 
         // a running occasion: its hunt spot by a door, or a pumpkin patch underfoot
         if (Occasions.OccasionHunt.Instance?.SpotNear(feet, ahead) is { } hunt)

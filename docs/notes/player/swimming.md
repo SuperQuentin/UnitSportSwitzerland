@@ -54,6 +54,12 @@
   from its own waves and the copy's stride speed `Anim.X`), and a slosh a stride
   (`SfxSynth.WadeBank`: in place of the ground's footstep, the owner's in `PlayerFeel`, others' in
   `Audio/BodySteps`, #375).
+- **Collecting water (#380)**: `Loot.Gathering` offers water only to a player standing in it, its
+  feet more than `Gathering.WadeToGather` (5 cm) under the surface (`WadeDepth`): never from the
+  shore, a pier, the steamer's deck or a boat (the prompt used to show over any water in reach),
+  never swimming (`UsablePlayer`). A mapped stream (a line, no water layer) still from its bank.
+  `--swimcheck` (wade step) checks the shore, three depths and a swimmer; `--boatcheck` a boat.
+  `GatherProbe` (real map) stands in the water now.
 - **Air** (`Player/AirReserve.cs`, plain C#, `SwimTests`): 45 s with the eye under, 1.7x on a
   sprint stroke, refills 9 s/s with the head out, empty = 15 health at once then each second
   (`DamageCause.Drown`, appended). Knocked out in the water the body floats face down, then wakes
