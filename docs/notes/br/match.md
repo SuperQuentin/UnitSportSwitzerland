@@ -19,7 +19,14 @@
   - Stores where it stood (LV95).
   - `Inventory.BeginMatch()`, then a knife + 3 bandages.
   - Sets `FootPlayer.StayDown` (an eliminated player stays down).
-  - `Permissions.SetRidesLocked(true)`: `RideUi.Open` refuses, so you ride only what you find.
+  - `Permissions.SetInMatch(true)`: no admin or free-roam advantage, admin or not (#425):
+    - `RideUi.Open` refuses, so you ride only what you find (also no pigeon, paraglider, wingsuit from the menu).
+    - The fly camera (T) is refused (walking back from it would drop the body where it flew); a player on it
+      at Board is put back into its body where it stands (`ClientWorld.OnPermissionsChanged`).
+    - `Permissions.AdminTools` is false: no debug menu (hidden ground is a wallhack), no item catalogue.
+    - Server side, for a living entrant (`BrManager.Playing`): `/spawn` (sender), `/give`, `/money`,
+      `/clear <player>` (target), `/tp` and `/bring` (either side) are refused (`ChatManager.RefusedInMatch`),
+      `/tpall` skips entrants, and `VehicleManager.MayPark` refuses an admin's conjured vehicle.
   - Is carried in the plane's hold until it jumps (`plane` note).
 - **Client at Release**: undoes all of that. `Inventory.EndMatch()`, `Respawn` if eliminated, then
   teleport back. Cash is never lost to a knockout in a match.

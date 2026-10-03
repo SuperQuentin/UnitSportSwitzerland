@@ -54,6 +54,11 @@ public readonly record struct VehicleState(
             truck.UnpackFlags(Flags);
             return truck;
         }
+        if (Airliner.For(Kind) is { } airliner)
+        {
+            airliner.UnpackFlags(Flags);
+            return airliner;
+        }
         return CarSetups.Ride(Kind, Setup, Tuning);
     }
 

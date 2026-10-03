@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Local release: next semver from commits since the last tag, Windows export, GitHub release.
+# Local release: next semver from commits since the last tag, Windows + Linux + macOS exports, GitHub release.
 # Usage: tools/release.sh [--dry-run]   (Git Bash or WSL, on a main in sync with origin/main; GODOT=godot on WSL)
 # The build runs in a temporary worktree of the released commit, so your working files are never touched.
-# Needs: gh (logged in), dotnet, Godot mono + export templates, export_presets.cfg in the repo root, zip or PowerShell.
+# Needs: gh (logged in), dotnet, Godot mono + export templates (windows, linux, macos), export_presets.cfg in the repo root
+# ("Linux" and "macOS" presets are added when missing), curl, unzip, tar, xz, zip or PowerShell.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
@@ -56,26 +57,89 @@ cp export_presets.cfg "$WT/"
 cd "$WT"
 sed -i "s|^config/name=.*|&\\nconfig/version=\"$V\"|" project.godot
 
-mkdir -p build/windows
+ensure_preset() { # name, platform, extra option lines: appended to the (gitignored, per machine) export_presets.cfg when missing
+  local f="$REPO/export_presets.cfg" n excl
+  grep -q "^name=\"$1\"" "$f" && return
+  n=$(grep -c '^\[preset\.[0-9]*\]$' "$f"); excl=$(sed -n 's/^exclude_filter="\(.*\)"$/\1/p' "$f" | head -1)
+  echo "Adding preset.$n \"$1\" to export_presets.cfg"
+  printf '\n[preset.%s]\n\nname="%s"\nplatform="%s"\nrunnable=false\ndedicated_server=false\ncustom_features=""\nexport_filter="all_resources"\ninclude_filter=""\nexclude_filter="%s"\nexport_path=""\npatches=PackedStringArray()\nencryption_include_filters=""\nencryption_exclude_filters=""\nseed=0\nencrypt_pck=false\nencrypt_directory=false\nscript_export_mode=2\n\n[preset.%s.options]\n\ncustom_template/debug=""\ncustom_template/release=""\ndotnet/include_scripts_content=false\ndotnet/include_debug_symbols=false\ndotnet/embed_build_outputs=false\n%s\n' \
+    "$n" "$1" "$2" "$excl" "$n" "$3" >> "$f"
+}
+ensure_preset "Linux" "Linux" 'binary_format/embed_pck=false
+binary_format/architecture="x86_64"
+texture_format/s3tc_bptc=true
+texture_format/etc2_astc=false'
+ensure_preset "macOS" "macOS" 'binary_format/architecture="universal"
+texture_format/s3tc_bptc=true
+texture_format/etc2_astc=true
+application/bundle_identifier="ch.unitsport.switzerland"
+codesign/codesign=1
+notarization/notarization=0'
+cp "$REPO/export_presets.cfg" .
+
+# yt-dlp + its QuickJS runtime (else 403s) + ffmpeg (CD burning, GPX video export) ship in bin/ beside the
+# executable (BundledTools), one set per platform, cached in $OUT/tools/<platform>/ between releases; delete it to refresh
+TOOLS="$REPO/$OUT/tools"
+YT=https://github.com/yt-dlp/yt-dlp/releases/latest/download QJ=https://github.com/quickjs-ng/quickjs/releases/latest/download
+FF=https://github.com/BtbN/FFmpeg-Builds/releases/download/latest
+get() { [ -s "$1" ] || curl -fsSL -o "$1" "$2"; }
+fetch_tools() { # platform, bin dir
+  local t="$TOOLS/$1"; mkdir -p "$t" "$2"
+  case $1 in
+    windows) # LGPL ffmpeg (BtbN, libvorbis included)
+      get "$t/yt-dlp.exe" $YT/yt-dlp.exe; get "$t/qjs.exe" $QJ/qjs-windows-x86_64.exe
+      [ -s "$t/ffmpeg.exe" ] || { get "$t/ffmpeg.zip" $FF/ffmpeg-master-latest-win64-lgpl.zip; unzip -qjo "$t/ffmpeg.zip" '*/bin/ffmpeg.exe' -d "$t"; }
+      cp "$t/yt-dlp.exe" "$t/qjs.exe" "$t/ffmpeg.exe" "$2/" ;;
+    linux) # x86_64, LGPL ffmpeg (BtbN)
+      get "$t/yt-dlp" $YT/yt-dlp_linux; get "$t/qjs" $QJ/qjs-linux-x86_64
+      [ -s "$t/ffmpeg" ] || { get "$t/ffmpeg.tar.xz" $FF/ffmpeg-master-latest-linux64-lgpl.tar.xz; tar -xJf "$t/ffmpeg.tar.xz" -C "$t" --wildcards --strip-components=2 '*/bin/ffmpeg'; }
+      cp "$t/yt-dlp" "$t/qjs" "$t/ffmpeg" "$2/" ;;
+    macos) # yt-dlp universal; qjs and ffmpeg (martin-riedl.de, GPL, libvorbis) Apple Silicon only: Intel Macs use PATH
+      get "$t/yt-dlp" $YT/yt-dlp_macos; get "$t/qjs" $QJ/qjs-darwin-arm64
+      [ -s "$t/ffmpeg" ] || { get "$t/ffmpeg.zip" https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip; unzip -qjo "$t/ffmpeg.zip" ffmpeg -d "$t"; }
+      cp "$t/yt-dlp" "$t/qjs" "$t/ffmpeg" "$2/" ;;
+  esac
+}
+# tar.gz with Unix modes set explicitly (NTFS has none): $1 archive, $2 dir, then the paths to mark executable
+tarball() {
+  local out=$1 dir=$2; shift 2
+  local all; all=$(cd "$dir" && ls -A); printf '%s\n' "$@" > "$dir.exec"
+  tar -cf "${out%.gz}" -C "$dir" --owner=0 --group=0 --mode=a+rX,u+w --exclude-from="$dir.exec" $all
+  tar -rf "${out%.gz}" -C "$dir" --owner=0 --group=0 --mode=0755 "$@"
+  gzip -f "${out%.gz}"
+}
+export_preset() { # preset, output file
+  "$GODOT" --headless --path . --export-release "$1" "$2"
+  [ -e "$2" ] || { echo "Export \"$1\" failed"; exit 1; }
+}
+
 dotnet build UnitSportSwitzerland.csproj -c Release
 "$GODOT" --headless --path . --import || true
-"$GODOT" --headless --path . --export-release "Windows Desktop" build/windows/UnitSportSwitzerland.exe
-[ -f build/windows/UnitSportSwitzerland.exe ] || { echo "Export failed"; exit 1; }
+rm -rf build; mkdir -p build/windows build/linux build/macos
+ASSETS=()
 
-# yt-dlp + its QuickJS runtime (else 403s) + LGPL ffmpeg (CD burning, GPX video export) ship in bin/, cached between releases; delete the cache to refresh
-TOOLS="$REPO/$OUT/tools"; mkdir -p "$TOOLS" build/windows/bin
-[ -f "$TOOLS/yt-dlp.exe" ] || curl -fsSL -o "$TOOLS/yt-dlp.exe" https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe
-[ -f "$TOOLS/qjs.exe" ] || curl -fsSL -o "$TOOLS/qjs.exe" https://github.com/quickjs-ng/quickjs/releases/latest/download/qjs-windows-x86_64.exe
-if [ ! -f "$TOOLS/ffmpeg.exe" ]; then
-  curl -fsSL -o "$TOOLS/ffmpeg.zip" https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip
-  if command -v unzip >/dev/null; then unzip -qjo "$TOOLS/ffmpeg.zip" '*/bin/ffmpeg.exe' -d "$TOOLS"
-  else powershell -NoProfile -Command "Add-Type -A System.IO.Compression.FileSystem; \$z=[IO.Compression.ZipFile]::OpenRead('$TOOLS/ffmpeg.zip'); \$e=\$z.Entries|?{\$_.FullName -like '*/bin/ffmpeg.exe'}; [IO.Compression.ZipFileExtensions]::ExtractToFile(\$e,'$TOOLS/ffmpeg.exe',\$true); \$z.Dispose()"; fi
-fi
-cp "$TOOLS/yt-dlp.exe" "$TOOLS/ffmpeg.exe" "$TOOLS/qjs.exe" build/windows/bin/
-
+export_preset "Windows Desktop" build/windows/UnitSportSwitzerland.exe
+fetch_tools windows build/windows/bin
 ZIP="$REPO/$OUT/UnitSportSwitzerland-v$V-windows.zip"; rm -f "$ZIP"
 if command -v zip >/dev/null; then (cd build/windows && zip -qr "$ZIP" .)
 else powershell -NoProfile -Command "Compress-Archive -Path 'build/windows/*' -DestinationPath '$(cygpath -w "$ZIP" 2>/dev/null || echo "$ZIP")'"; fi
+ASSETS+=("$ZIP")
 
-gh release create "v$V" "$ZIP" --target "$SHA" --title "v$V" --notes-file "$REPO/$OUT/notes.md"
+export_preset "Linux" build/linux/UnitSportSwitzerland.x86_64
+fetch_tools linux build/linux/bin
+TGZ="$REPO/$OUT/UnitSportSwitzerland-v$V-linux-x86_64.tar.gz"
+tarball "$TGZ" build/linux UnitSportSwitzerland.x86_64 bin/yt-dlp bin/qjs bin/ffmpeg
+ASSETS+=("$TGZ")
+
+# Godot can only write a macOS export as a .zip off a Mac; unpacked here so the tools go inside the bundle
+# (Contents/MacOS/bin, next to the executable) and the exec bits are set. Unsigned: first launch needs xattr -cr.
+export_preset "macOS" build/macos.zip
+unzip -qo build/macos.zip -d build/macos
+APP=$(cd build/macos && ls -d *.app | head -1)
+fetch_tools macos "build/macos/$APP/Contents/MacOS/bin"
+TGZ="$REPO/$OUT/UnitSportSwitzerland-v$V-macos.tar.gz"
+tarball "$TGZ" build/macos $(cd build/macos && find "$APP/Contents/MacOS" -type f)
+ASSETS+=("$TGZ")
+
+gh release create "v$V" "${ASSETS[@]}" --target "$SHA" --title "v$V" --notes-file "$REPO/$OUT/notes.md"
 echo "Released v$V"

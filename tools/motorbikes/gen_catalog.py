@@ -297,7 +297,7 @@ def entry(e, index):
     assumed.append(f'livery from "{e.get("livery_main_colour")}"')
 
     cc = e.get('displacement_cc')
-    kind = 64 + index if index < 32 else 124 + index - 32
+    kind = 64 + index if index < 32 else 128 + index - 32
     lay_txt = {'Inline4Bike': 'inline four', 'ParallelTwin180': '180° parallel twin', 'ParallelTwin270': '270° parallel twin',
                'ParallelTwin360': '360° parallel twin', 'Triple': 'CP3 triple', 'Single': 'single',
                'VTwin75': '75° V-twin' if shape == 'VTwin' else '75° parallel twin'}[layout]

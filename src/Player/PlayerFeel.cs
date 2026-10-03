@@ -28,7 +28,7 @@ public partial class PlayerFeel : Node3D
 
     // --- audio ---
     private AudioStreamPlayer _hiss = null!, _tyre = null!, _scrape = null!;
-    private EngineSynth _rotor = null!, _engine = null!;
+    private EngineSynth _rotor = null!, _engine = null!, _jet = null!;
     private AudioStreamPlayer _squeal = null!;
     private double _beep;
     private int _puffs;
@@ -93,6 +93,8 @@ public partial class PlayerFeel : Node3D
         _squeal = Loop(SfxSynth.Squeal);
         _rotor = new EngineSynth(EngineProfile.Turboshaft, spatial: false, seed: 1);
         _engine = new EngineSynth(EngineProfile.PistonAero, spatial: false, seed: 2);
+        _jet = new EngineSynth(EngineProfile.Turbofan, spatial: false, seed: 4);
+        AddChild(_jet);
         AddChild(_rotor);
         AddChild(_engine);
         for (int i = 0; i < _voices.Length; i++)
@@ -195,7 +197,7 @@ public partial class PlayerFeel : Node3D
         {
             // someone else's camera is on screen (the fly camera): nothing of this belongs there
             SetLoop(_hiss, 0, 1); SetLoop(_tyre, 0, 1); SetLoop(_scrape, 0, 1); SetLoop(_squeal, 0, 1);
-            _rotor.Set(0, 0, 0, 0); _engine.Set(0, 0, 0, 0); _carEngine?.Set(0, 0, 0, 0);
+            _rotor.Set(0, 0, 0, 0); _engine.Set(0, 0, 0, 0); _jet.Set(0, 0, 0, 0); _carEngine?.Set(0, 0, 0, 0);
             _spray.Emitting = _dust.Emitting = _smoke.Emitting = false;
             return;
         }
@@ -259,6 +261,10 @@ public partial class PlayerFeel : Node3D
         bool plane = ride == RideKind.Plane;
         _engine.Set(Mathf.Clamp((flight.Spool - 0.15f) / 0.85f, 0f, 1f), flight.Control, flight.Control,
             plane && flight.Spool > 0.02f ? 0.35f + 0.45f * flight.Spool : 0f);
+        // an airliner's fans (#414): heard from the cockpit, far quieter than from outside
+        bool jet = _player.Vehicle is Airliner;
+        _jet.Set(flight.Spool, flight.Control, Mathf.Clamp((flight.Spool - 0.3f) / 0.7f, 0f, 1f),
+            jet && flight.Spool > 0.02f ? 0.18f + 0.32f * flight.Spool : 0f);
 
         // Proximity: a wingsuit fast and low is the whole point of one. Time spent under 20 m at
         // speed pays out as a named popup once the pilot climbs out of it (or lands).
@@ -821,6 +827,40 @@ public partial class PlayerFeel : Node3D
         label.Text = shown;
     }
 
+    /// <summary>
+    /// An airliner's HUD line (#414) until the cockpit's screens show it (#421): speed in knots, altitude
+    /// and vertical speed in feet, the levers' N1, the flaps, the gear, the brakes.
+    /// </summary>
+    private void AppendAirliner(System.Text.StringBuilder sb, Airliner a)
+    {
+        var s = a.State;
+        const float Knot = 0.514444f, Foot = 0.3048f;
+        float altitude = _player.Origin is { } o ? (float)o.ToGlobal(_player.GlobalPosition).Alt : _player.GlobalPosition.Y;
+        sb.Append($"{s.Ias / Knot:0} kt    {altitude / Foot:0} ft    {s.Velocity.Y / Foot * 60f:+0;-0;0} fpm");
+        sb.Append($"    N1 {s.Spool * 100f:0}%");
+        if (s.Reverse > 0.05f) sb.Append(" REV");
+        sb.Append("    FLAPS ").Append(a.Spec.FlapNames[s.FlapLever]);
+        if (Mathf.Abs(s.Flaps - s.FlapLever) > 0.02f) sb.Append('~');
+        sb.Append(s.GearBroken ? "    GEAR DAMAGED" : s.Gear >= 1f ? "    GEAR DOWN" : s.Gear <= 0f ? "    GEAR UP" : "    GEAR MOVING");
+        if (s.SpeedBrake > 0) sb.Append(s.SpeedBrake == 1 ? "    SPD BRK ½" : "    SPD BRK FULL");
+        if (s.ParkingBrake) sb.Append("    PARK BRK");
+        else if (s.Braking > 0.05f) sb.Append("    BRAKES");
+        if (!s.OnGround && s.Alpha > s.AlphaStall - 0.04f) sb.Append("    STALL");
+        if (s.Ias > a.Spec.FlapLimit[s.FlapLever] && s.FlapLever > 0) sb.Append("    FLAPS OVERSPEED");
+        else if (s.Ias > a.Spec.Vmo) sb.Append("    OVERSPEED");
+        if (!s.OnGround && s.Gear < 1f && _player.Clearance < 230f && s.Velocity.Y < 0f) sb.Append("    TOO LOW GEAR");
+        if (Airliner.Handling != AirlinerHandling.Sim) return;
+        // light sim (#415), on a line of its own: what is running, the autopilot's targets, the fuel and the trim
+        sb.Append('\n');
+        if (s.Lit < a.Spec.Engines)
+            sb.Append(s.Starting ? (s.Apu < 1f ? $"APU {s.Apu * 100f:0}%    " : $"START ENG {Mathf.FloorToInt(s.Lit) + 1}    ") : "ENGINES OFF    ");
+        if (s.Autopilot)
+            sb.Append($"AP HDG {Mathf.PosMod(-Mathf.RadToDeg(s.ApHeading), 360f):000} ALT {s.ApAltitude / Foot:0} SPD {s.ApSpeed / Knot:0}    ");
+        sb.Append($"FUEL {s.Fuel:0} kg");
+        if (s.Fuel <= 0f) sb.Append(" EMPTY");
+        if (!a.Spec.FlyByWire) sb.Append($"    TRIM {Mathf.RadToDeg(s.TrimAlpha):0.0}");
+    }
+
     private static void AppendRetarder(System.Text.StringBuilder sb, Truck t)
     {
         int level = t.Box.RetarderLevel;
@@ -868,6 +908,8 @@ public partial class PlayerFeel : Node3D
                 while (lead < wear.Length && char.IsWhiteSpace(wear[lead])) lead++;
                 sb.Append(wear, lead, wear.Length - lead);
             }
+            else if (_player.Vehicle is Airliner jetliner)
+                AppendAirliner(sb, jetliner);
             else if (_player.IsFlying)
             {
                 sb.Append($"{speed * 3.6f:0} km/h    {_player.Clearance:0} m");

@@ -1,7 +1,7 @@
 # Church radio and the rat dance (#370)
 
 - **The CD.** `assets/audio/chess_type_beat.ogg` (LFS, not openly licensed: `assets/ASSETS.md`) is
-  shipped. `CdLibrary.EnsureRatBeat` (server, or offline game) copies it out of the pck to
+  shipped. `CdLibrary.EnsureRatBeat` (server, or offline game) copies it out of the pck (its `.import` is `importer="keep"`, so the export packs the raw `.ogg`: imported as an AudioStream, only the converted resource was packed and the beat was missing) to
   `user://cds/_bundled/Chess Type Beat.ogg` and burns it through the fixture queue (ffmpeg + the
   beat analyser) once; `CdInfo.Source = "bundled:chess_type_beat"` marks it, and `CdLibrary.Note` gives it the measured grid (132.5 bpm, first hit 0.10 s: the analyser hears 67 bpm, off the grid), and every peer knows
   `CdLibrary.RatBeatId` from the library list. `CdLibrary.IsRatBeat(cd)`.

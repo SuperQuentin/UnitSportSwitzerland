@@ -16,7 +16,7 @@ public enum RideKind
     Plane = 7,
     // 8..63 are cars: CarCatalog.All[kind - CarCatalog.First]. The catalog is append-only.
     // 64..95 are motorbikes: MotorbikeCatalog.All[kind - MotorbikeCatalog.First], append-only too;
-    // entries 32 onwards continue at 124..187 (MotorbikeCatalog.First2, #410).
+    // entries 32 onwards continue at 128..191 (MotorbikeCatalog.First2, #410).
     // 96..119 are trucks and buses: HeavyCatalog.All[kind - HeavyCatalog.First], append-only too.
     /// <summary>
     /// Not a mount: a trailer standing in the world on its own (<c>Vehicles.VehicleState.Train</c>
@@ -28,7 +28,12 @@ public enum RideKind
     Speedboat = 122,
     /// <summary>The CGN Belle Époque paddle steamer (#303), walkable.</summary>
     Steamer = 123,
-    // 124..187 are motorbikes again (the second range, MotorbikeCatalog.First2). The next other mount is 188.
+    /// <summary>Play as a feral pigeon (#217, <see cref="Player.Pigeon"/>). Not a boat: a new boat must skip 124.</summary>
+    Pigeon = 124,
+    /// <summary>The Airbus A320 (#414, #416): an <see cref="Player.Airliner"/>, walkable.</summary>
+    A320 = 125,
+    // 126 and 127 are kept for the AN-124 (#419) and the military freighter (#420).
+    // 128..191 are motorbikes again (the second range, MotorbikeCatalog.First2). The next other mount is 192.
 }
 
 /// <summary>
@@ -284,6 +289,13 @@ public abstract class Rideable
 
     public bool Walkable => Decks.Length > 0;
 
+    /// <summary>
+    /// Where one stands to take seat <paramref name="i"/> and is put on standing up from it, in its
+    /// section's node frame; null: beside it toward the aisle, the way a bus's seats are (#416: an
+    /// airliner's window seat is two seats from its aisle, a pilot stands behind the seat).
+    /// </summary>
+    public virtual Vector3? StandSpot(int i) => null;
+
     /// <summary>Seat <paramref name="i"/>'s hip in this ride's node frame, the train straight: for picking the nearest seat.</summary>
     public virtual Vector3 SeatPosition(int i) => Seats[i].Hip;
 
@@ -424,7 +436,7 @@ public abstract class Rideable
     /// Twin) folds open on its own page like the cars.
     /// </remarks>
     public static readonly Rideable[] All =
-        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane() };
+        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane(), new Pigeon() };
 
     /// <summary>
     /// A fresh instance for one rider.
@@ -444,10 +456,12 @@ public abstract class Rideable
         RideKind.Paraglider => new Canopy(paraglider: true),
         RideKind.Helicopter => new Helicopter(),
         RideKind.Plane => new Plane(),
+        RideKind.Pigeon => new Pigeon(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),
         _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),
         _ when HeavyCatalog.For(kind) is { } heavy => new Truck(heavy),
         _ when Boat.For(kind) is { } boat => boat,
+        _ when Airliner.For(kind) is { } airliner => airliner,
         _ => null,
     };
 }

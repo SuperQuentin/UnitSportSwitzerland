@@ -234,6 +234,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         foreach (var m in _worldMaterials) FogUniforms.Apply(m);
         // a named handler, unsubscribed in _ExitTree: the event is static and outlives this world
         GameSettings.Changed += OnSettingsChanged;
+        Permissions.Changed += OnPermissionsChanged;
         StyleCommand.RebuildRequested += OnRebuildRequested;
         StyleKit.Chosen += OnStyleChosen;
 
@@ -606,12 +607,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.BoatCheck.Role is { } boatRole) AddChild(new Player.BoatCheck(boatRole, () => LocalPlayer));
         if (Player.SteamerCheck.Role is { } steamerRole) AddChild(new Player.SteamerCheck(steamerRole, () => LocalPlayer));
         if (Player.SwimCheck.Requested) AddChild(new Player.SwimCheck(() => LocalPlayer));
+        if (Player.CabinCheck.Requested) AddChild(new Player.CabinCheck(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Loot.BankProbe.Role != null
-            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
+            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null
@@ -639,6 +641,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.WheelProbe.WatchRole != null) AddChild(new Player.WheelProbe { Name = "WheelProbe" });
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
         if (Birds.BirdNetProbe.Role != null) AddChild(new Birds.BirdNetProbe(items));
+        if (Birds.PigeonNetProbe.Role != null) AddChild(new Birds.PigeonNetProbe(items));
+        if (Player.AirlinerNetProbe.Role != null) AddChild(new Player.AirlinerNetProbe(items));
         if (Items.UseAnimProbe.Role != null) AddChild(new Items.UseAnimProbe(items));
         if (Items.PhotoProbe.Requested) AddChild(new Items.PhotoProbe(items));
         if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
@@ -1050,6 +1054,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     private void Toast(string message) => _items?.Ui.Toast(message);
 
+    /// <summary>Boarding a Battle Royale on the fly camera (#425): back into the body, where it stands.</summary>
+    private void OnPermissionsChanged()
+    {
+        if (Permissions.InMatch && !_onFoot && _chunks != null && LocalPlayer is { } body) EnterFootMode(body, inPlace: true);
+    }
+
     /// <summary>
     /// Leaving to the title frees this world: everything static it subscribed to lets go here,
     /// or the next world's events would call into freed nodes (<c>docs/notes/ui/teardown.md</c>).
@@ -1059,6 +1069,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         World.WaterField.Bind(null);
         World.WaterField.SetSeaState(0f);
         GameSettings.Changed -= OnSettingsChanged;
+        Permissions.Changed -= OnPermissionsChanged;
         StyleCommand.RebuildRequested -= OnRebuildRequested;
         StyleKit.Chosen -= OnStyleChosen;
         NearTrees.Forget();
@@ -1462,10 +1473,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     yield return (PlayerInput.InteractMount, at.Action);
                     if (at is { HasDoor: true, DoorOpen: true }) yield return (PlayerInput.CarDoor, "Close the door");
                 }
-                yield return (PlayerInput.RideMenu, "Travel");
+                if (!Permissions.InMatch) yield return (PlayerInput.RideMenu, "Travel");
                 yield return (PlayerInput.Inventory, "Inventory");
                 yield return (PlayerInput.Teleport, "Map");
-                yield return (PlayerInput.ToggleMode, "Fly camera");
+                if (!Permissions.InMatch) yield return (PlayerInput.ToggleMode, "Fly camera");
             }
         }
         yield return (PlayerInput.Help, "All controls");
@@ -1516,6 +1527,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // flying out of a house would leave the camera in the void under the terrain
         if (_onFoot && LocalPlayer is { Indoors: true }) return;
 
+        // a Battle Royale is played on equal terms (#425): no scouting from the sky, and walking back
+        // from the camera must not drop the body where it flew
+        if (Permissions.InMatch)
+        {
+            if (_onFoot) Toast("No fly camera in a Battle Royale match.");
+            else if (LocalPlayer is { } body) EnterFootMode(body, inPlace: true);
+            return;
+        }
+
         if (!_onFoot)
         {
             FootPlayer? player = LocalPlayer;
@@ -1556,14 +1576,18 @@ public partial class ClientWorld : Node3D, IOriginContainer
         EnterFootMode(player);
     }
 
-    private void EnterFootMode(FootPlayer player)
+    /// <param name="inPlace">Back into the body where it stands, instead of dropping it under the fly camera.</param>
+    private void EnterFootMode(FootPlayer player, bool inPlace = false)
     {
-        var pos = _spectator!.GlobalPosition;
-        float ground = _chunks!.TryGetSurface(pos, out float h) ? h : pos.Y;
-        player.GlobalPosition = new Vector3(pos.X, ground + 1f, pos.Z);
-        player.Velocity = Vector3.Zero;
+        if (!inPlace)
+        {
+            var pos = _spectator!.GlobalPosition;
+            float ground = _chunks!.TryGetSurface(pos, out float h) ? h : pos.Y;
+            player.GlobalPosition = new Vector3(pos.X, ground + 1f, pos.Z);
+            player.Velocity = Vector3.Zero;
+        }
         player.Camera.Current = true;
-        _chunks.RemoveAnchor(_spectator);
+        _chunks!.RemoveAnchor(_spectator!);
         _chunks.AddAnchor(player);
         _onFoot = true;
         player.CarRadioTuned -= OnCarRadioTuned;

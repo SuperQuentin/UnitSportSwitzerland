@@ -91,14 +91,14 @@ public sealed record MotorbikeSpec
 /// <summary>
 /// Every motorbike. <b>Append-only</b>: a bike's <see cref="RideKind"/> is <c>First + its index
 /// here</c>, replicated as an int, so inserting or reordering renumbers every bike after it on every
-/// peer. Motorbikes own <see cref="RideKind"/> 64..95 (the first 32 entries) and then 124..187
-/// (#410: the Africa Twins filled the first range); the next other mount is 188.
+/// peer. Motorbikes own <see cref="RideKind"/> 64..95 (the first 32 entries) and then 128..191
+/// (#410: the Africa Twins filled the first range); the next other mount is 192.
 /// </summary>
 public static partial class MotorbikeCatalog
 {
     public const int First = 64, Last = 95;
     /// <summary>The second range, entries 32 onwards.</summary>
-    public const int First2 = 124, Last2 = 187;
+    public const int First2 = 128, Last2 = 191;
     private const int FirstRangeSize = Last - First + 1;
 
     public static readonly IReadOnlyList<MotorbikeSpec> All = Number(new[]

@@ -797,7 +797,19 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _flight.Velocity = velocity;
         Velocity = velocity;
         // pointed where it is going: a dive is a dive, not level flight with a sink rate
-        if (_ride is Plane && velocity.LengthSquared() > 1f)
+        if (_ride is Airliner airliner && velocity.LengthSquared() > 1f)
+        {
+            // flying: gear up, the attitude along the path with the angle of attack that carries it
+            airliner.State.OnGround = false;
+            airliner.State.GearDown = false;
+            airliner.State.Gear = 0f;
+            airliner.State.Lever = airliner.State.Spool = 0.6f;
+            airliner.State.Velocity = velocity;
+            airliner.State.Attitude = Flyer.Orient(velocity, Vector3.Up, Vector3.Forward) * new Basis(Vector3.Right, 0.05f);
+            airliner.State.PathTarget = Mathf.Asin(Mathf.Clamp(velocity.Normalized().Y, -1f, 1f));
+            airliner.Begin(ref _flight, velocity, Rotation.Y);
+        }
+        else if (_ride is Plane && velocity.LengthSquared() > 1f)
         {
             _flight.Attitude = Flyer.Orient(velocity, Vector3.Up, Vector3.Forward);
             _flight.Airspeed = velocity.Length();
@@ -1390,7 +1402,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void FitHull(Rideable? ride)
     {
-        bool wants = ride is { IsVehicle: true } and not Flyer && _visual != null;
+        // a craft flies as its capsule, except an airliner, which is too big not to collide as drawn (#414)
+        bool wants = ride is { IsVehicle: true } && (ride is not Flyer || ride.HullBoxes != null) && _visual != null;
         if (!wants)
         {
             // out of the body now, not at the end of the frame: the next physics step is a walker's
@@ -1641,7 +1654,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
         bool heli = craft is Helicopter;
-        var profile = heli ? Audio.EngineProfile.Turboshaft : Audio.EngineProfile.PistonAero;
+        bool jet = craft is Airliner;
+        var profile = heli ? Audio.EngineProfile.Turboshaft : jet ? Audio.EngineProfile.Turbofan : Audio.EngineProfile.PistonAero;
         if (_remoteEngine?.Profile != profile)
         {
             _remoteEngine?.QueueFree();
@@ -1650,6 +1664,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         float spool = Anim.X, control = Anim.Y;
         if (heli) _remoteEngine.Set(spool, spool, 0.35f, 0.3f + 0.6f * spool);
+        else if (jet) _remoteEngine.Set(spool, control, Mathf.Clamp((spool - 0.3f) / 0.7f, 0f, 1f), spool > 0.02f ? 0.5f + 0.5f * spool : 0f);
         else _remoteEngine.Set(Mathf.Clamp((spool - 0.15f) / 0.85f, 0f, 1f), control, control,
             spool > 0.02f ? 0.35f + 0.45f * spool : 0f);
     }
@@ -2426,6 +2441,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _flight.Control = state.Throttle;
         // a boat as it floated: its attitude (#302)
         if (_ride is Boat boarded && state.Angles != default) boarded.State.Attitude = Quaternion.FromEuler(state.Angles);
+        // an airliner's gear, flaps, brakes and doors as they were left (#414)
+        if (_ride is Airliner parked) parked.UnpackFlags(state.Flags);
         // the steamer's gangways as they were left (#303)
         if (_ride is Steamer berthed) berthed.DoorsOpen = (byte)(state.DoorsOpen & 3);
         EngineOn = true;
@@ -2457,7 +2474,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Train: _ride is Truck t ? t.TrailerCode : 0,
             // a truck's joints; a boat's attitude (Euler, #302), so it is parked as it floated
             Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler() : default,
-            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
+            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
             Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd);
     }
 
@@ -2984,6 +3001,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
+        if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && SeatIndex == 0 && AirlinerEngines())
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && _ride is { HasEngine: true } && SeatIndex == 0)
         {
             EngineOn = !EngineOn;
@@ -3000,6 +3022,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
 
         if (_ride is Truck truck && HandleTruckInput(@event, truck))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (_ride is Airliner airliner && HandleAirlinerInput(@event, airliner))
         {
             GetViewport().SetInputAsHandled();
             return;
@@ -3601,12 +3629,25 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Effort: PlayerInput.Held(PlayerInput.TuckBoost),
             ViewYaw: _viewYaw,
             Engine: EngineOn || !flyer.HasEngine,
-            ViewPitch: _pitch);
+            ViewPitch: _pitch,
+            Brake: jumpDown ? 1f : 0f);
 
         Clearance = Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground)
             ? GlobalPosition.Y - ground : 999f;
+        // no origin (the flat test world): its Y is the height, so a climb still thins the air and an autopilot sees it
+        float altitude = Origin is { } here ? (float)here.ToGlobal(GlobalPosition).Alt : GlobalPosition.Y;
 
-        var ev = flyer.Fly(input, new FlightEnv(onFloor, Clearance), dt, ref _flight);
+        if (flyer is Pigeon) PigeonStep(input, dt);
+        if (flyer is Airliner trimmed)
+            trimmed.TrimHeld = typing ? 0f : PlayerInput.Strength(PlayerInput.TrimNoseUp) - PlayerInput.Strength(PlayerInput.TrimNoseDown);
+        var ev = flyer.Fly(input, new FlightEnv(onFloor, Clearance, altitude), dt, ref _flight);
+        // an airliner's hard landing or belly scrape: the airframe pays for it (#414)
+        if (flyer is Airliner hurt && hurt.TakeDamage() is > 0f and var damage)
+        {
+            VehicleHealth -= damage;
+            Impacted?.Invoke(Mathf.Min(4f + damage * 0.2f, 14f));
+            if (VehicleHealth <= 0f) ev = FlightEvent.Crashed;
+        }
         Rotation = new Vector3(0, _flight.Yaw, 0);
 
         if (ev == FlightEvent.None)
@@ -3623,6 +3664,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             float impact = IsOnFloor()
                 ? Mathf.Max(MathX.FlatLength(lost), -_flight.Velocity.Y - 6f)
                 : lost.Length();
+            // an airliner judges its own touchdowns (AirlinerFlight.Touchdown); at 65 m/s the step that
+            // meets the runway stops short and reads as a 6 m/s knock. On the floor only a wall counts.
+            if (flyer is Airliner && IsOnFloor()) impact = IsOnWall() ? MathX.FlatLength(lost) : 0f;
             if (_settle > 0f)
             {
                 _settle -= dt;
@@ -3693,6 +3737,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private void UpdateFlightCamera(float dt, Flyer flyer)
     {
         if (_camera == null) return;
+        if (flyer is Pigeon pigeon && PigeonEye(dt, pigeon)) return;
 
         Vector3 fwd;
         if (flyer.LookSteers)
