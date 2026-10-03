@@ -370,8 +370,9 @@ public static class AirlinerFlight
             // high speed: the nose comes up on its own past VMO
             float over = s.Ias - spec.Vmo * 1.02f;
             if (over > 0f) qCmd = Mathf.Max(qCmd, over * 0.01f);
-            // alpha floor: near the stall the thrust goes to full whatever the levers say
-            if (alpha > alphaProt - 0.01f) s.Lever = 1f;
+            // alpha floor: near the stall the thrust goes to full whatever the levers say; not with
+            // no airflow to speak of (dropped onto its wheels, the "alpha" of falling straight down is 90°)
+            if (alpha > alphaProt - 0.01f && speed > spec.StallSpeed(s.Mass, 0) * 0.5f) s.Lever = 1f;
             if (alpha > alphaProt || pitch > PitchUp || pitch < PitchDown) s.PathTarget = gamma;
         }
         qCmd = Mathf.Clamp(qCmd, -spec.MaxPitchRate * 1.5f, spec.MaxPitchRate * 1.5f);
