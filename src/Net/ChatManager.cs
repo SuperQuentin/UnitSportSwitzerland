@@ -391,6 +391,19 @@ public partial class ChatManager : Node
         RpcId(1, MethodName.SubmitName, name);
     }
 
+    /// <summary>Hosting from the menu: proves to the server this client is its host.</summary>
+    public void ClaimHost(string token) => RpcId(1, MethodName.SubmitHostToken, token);
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void SubmitHostToken(string token)
+    {
+        if (_registry is null) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        if (!_registry.TryClaimHost(sender, token))
+            GD.PushWarning($"[admin] wrong host token from peer {sender} ({NameOf(sender)})");
+    }
+
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void SubmitLine(string text)
