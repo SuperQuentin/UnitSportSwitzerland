@@ -197,6 +197,7 @@ public partial class InteractCheck : Node
                         RadioUi.Instance?.Close();
                         me.DanceId = 0;
                     }
+                    else Check(true, "E not pressed: the parked car is at hand (it would get in)");
                     Look(me, radio.GlobalPosition);
                 }
                 Next();
