@@ -74,9 +74,10 @@ road out 2 (J3b S, J4 stem); `--signal-check` ok, 106 lanes, bad 0.
   every plan valid, the T's stem without straight on. The tier-3-free target for signal and lane
   checks: `--signal-check --chunks test_output/signal-region [--at E,N --list]`.
 - Screenshots from above: `--shot-queue` with `x,g130,0,-90,0,...` per junction (x = E - 2913000),
-  `--chunks test_output/signal-region --traffic 150 --generated off --time 13 --nohud`. Settle a
-  close shot in J3's town stretch 30 s or more: the roads there are lowered to the ground less a
-  kerb and show grass over them until the tile's road blend (the build tail) is in.
+  `--chunks test_output/signal-region --traffic 150 --generated off --time 13 --nohud`. J3's town
+  stretch (roads lowered to the ground less a kerb) showed grass over its junction in a close shot
+  taken after the camera had come from J2; with 150b790 ("roads swallowed by the terrain after
+  flying away and back", cherry-picked onto this branch) the same queue draws it right.
 - `--trafficcheck,<png> --at <junction> --traffic 300 --dense --feed --seconds 60 --chunks
   test_output/signal-region --generated off` at each junction (#386, logs in `test_output/386/`):
   **no red run anywhere**. Stops at red / lefts from a pocket / waits for room: J1 215/11/5,
