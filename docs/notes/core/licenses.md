@@ -11,8 +11,8 @@
   "Bundesamt für Strassen, Kanton, Stiftung SchweizMobil" (`terms_by`); IGN BD TOPO is Licence
   Ouverte 2.0; OSM is ODbL (`docs/notes/tools/osm-odbl-licence.md`); Godot, GodotSharp and the SDK
   are MIT; `addons/godot_ai` is MIT (it ships: the plugin's game helper is an autoload); `icon.svg`
-  is the Godot logo, CC BY 4.0, Andrea Calabró. yt-dlp (Unlicense) and FFmpeg (LGPL/GPL) are not
-  bundled; a server runs them for radio CDs if installed.
+  is the Godot logo, CC BY 4.0, Andrea Calabró. yt-dlp (Unlicense), QuickJS-ng (MIT) and FFmpeg (LGPL on
+  Windows/Linux, GPL on macOS) ship in `bin/` of a release as separate programs (`docs/notes/general/local-release.md`).
 - **Not settled**: Licence Ouverte also asks for the date of the data's last update, which the
   French import does not record (it reads the live WFS); BFS's own terms page is JavaScript-only
   and could not be read. Build-only tools (Spectre.Console MIT, Microsoft.Data.Sqlite MIT,

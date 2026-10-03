@@ -58,18 +58,23 @@ public static class Permissions
     }
 
     /// <summary>
-    /// The travel menu is closed for this player: a Battle Royale match rides only what it finds
-    /// (#183). Raises <see cref="Changed"/>.
+    /// This player is in a Battle Royale match, admin or not, so it plays on equal terms (#183, #425):
+    /// the travel menu is closed (it rides only what it finds), and so are the fly camera, the debug
+    /// menu and the item catalogue (<see cref="AdminTools"/>). The server refuses the admin commands
+    /// that would touch an entrant on its own side. Raises <see cref="Changed"/>.
     /// </summary>
-    public static bool RidesLocked { get; private set; }
+    public static bool InMatch { get; private set; }
 
-    public static void SetRidesLocked(bool locked)
+    public static void SetInMatch(bool inMatch)
     {
-        if (RidesLocked == locked) return;
-        RidesLocked = locked;
+        if (InMatch == inMatch) return;
+        InMatch = inMatch;
         Changed?.Invoke();
     }
 
+    /// <summary>The debug menu and the item catalogue may be offered: alone, or as a server's admin, never in a match.</summary>
+    public static bool AdminTools => !InMatch && (!Online || IsAdmin);
+
     /// <summary>A new vehicle may be conjured from the travel menu.</summary>
-    public static bool CanSpawnVehicles => !Online || IsAdmin;
+    public static bool CanSpawnVehicles => !InMatch && (!Online || IsAdmin);
 }

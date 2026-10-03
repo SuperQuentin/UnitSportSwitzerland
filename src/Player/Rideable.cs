@@ -27,7 +27,13 @@ public enum RideKind
     Speedboat = 122,
     /// <summary>The CGN Belle Époque paddle steamer (#303), walkable.</summary>
     Steamer = 123,
-    // The next other mount is 124.
+    /// <summary>Play as a feral pigeon (#217, <see cref="Player.Pigeon"/>). Not a boat: a new boat must skip 124.</summary>
+    Pigeon = 124,
+    /// <summary>The Airbus A320 (#414, #416): an <see cref="Player.Airliner"/>, walkable.</summary>
+    A320 = 125,
+    /// <summary>A mobile airstairs truck (#417): <see cref="Player.Airstairs"/>, docks to aircraft doors.</summary>
+    Airstairs = 126,
+    // The military freighter (#420) is 127, the AN-124 (#419) 128; the next other mount is 129.
 }
 
 /// <summary>
@@ -283,6 +289,19 @@ public abstract class Rideable
 
     public bool Walkable => Decks.Length > 0;
 
+    /// <summary>
+    /// A walkable vehicle is driven from its wheel inside (#384, E from outside only with the
+    /// setting on); false for one whose deck is not where its wheel is (airstairs, #417).
+    /// </summary>
+    public virtual bool DrivenFromInside => Walkable;
+
+    /// <summary>
+    /// Where one stands to take seat <paramref name="i"/> and is put on standing up from it, in its
+    /// section's node frame; null: beside it toward the aisle, the way a bus's seats are (#416: an
+    /// airliner's window seat is two seats from its aisle, a pilot stands behind the seat).
+    /// </summary>
+    public virtual Vector3? StandSpot(int i) => null;
+
     /// <summary>Seat <paramref name="i"/>'s hip in this ride's node frame, the train straight: for picking the nearest seat.</summary>
     public virtual Vector3 SeatPosition(int i) => Seats[i].Hip;
 
@@ -430,7 +449,7 @@ public abstract class Rideable
     /// Twin) folds open on its own page like the cars.
     /// </remarks>
     public static readonly Rideable[] All =
-        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane() };
+        { new Bicycle(), new Skis(), new Canopy(paraglider: true), new Helicopter(), new Plane(), new Pigeon() };
 
     /// <summary>
     /// A fresh instance for one rider.
@@ -450,10 +469,13 @@ public abstract class Rideable
         RideKind.Paraglider => new Canopy(paraglider: true),
         RideKind.Helicopter => new Helicopter(),
         RideKind.Plane => new Plane(),
+        RideKind.Pigeon => new Pigeon(),
+        RideKind.Airstairs => new Airstairs(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),
         _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),
         _ when HeavyCatalog.For(kind) is { } heavy => new Truck(heavy),
         _ when Boat.For(kind) is { } boat => boat,
+        _ when Airliner.For(kind) is { } airliner => airliner,
         _ => null,
     };
 }

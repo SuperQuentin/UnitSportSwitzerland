@@ -19,6 +19,9 @@ src/Items/Radio          quick  --radiopanelcheck --world fixture
 src/Player/FootPlayer.Ears quick --earscheck --world fixture --view third
 src/Avatar/              quick  --meshcheck
 src/Avatar/              quick  --outfitcheck
+src/Avatar/              quick  --emotecheck
+src/Player/EmoteWheel    quick  --emotewheelcheck --world fixture
+src/Player/FootPlayer.cs quick  --emotewheelcheck --world fixture
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
 src/World/TimeCommand    quick  --chatcheck
@@ -208,6 +211,31 @@ src/Vehicles/            full   tools/decknetcheck.sh
 src/Avatar/              full   tools/decknetcheck.sh
 src/Net/                 full   tools/loadtest.sh 4 testsh 60
 tools/lib/               quick  tools/lib/guard_selftest.sh
+src/Player/Pigeon        quick  --flycheck pigeon --world flat
+src/Player/FlightCheck   quick  --flycheck pigeon --world flat
+src/Player/FlightCheck   quick  --flycheck a320 --world flat
+src/Player/Airliner      quick  --flycheck a320 --world flat
+src/Player/Airliner      quick  --flycheck a320 --world flat --airliner sim
+src/Avatar/AirlinerRig   quick  --flycheck a320 --world flat
+src/Avatar/A320          quick  --flycheck a320 --world flat
+src/Avatar/A320          quick  --cabincheck --world fixture --traffic 0
+src/Player/CabinCheck    quick  --cabincheck --world fixture --traffic 0
+src/Player/Airliner      quick  --cabincheck --world fixture --traffic 0
+src/Player/FootPlayer.De quick  --cabincheck --world fixture --traffic 0
+src/Avatar/Airstairs     quick  --stairscheck --world fixture --traffic 0 --airliner arcade
+src/Player/Airstairs     quick  --stairscheck --world fixture --traffic 0 --airliner arcade
+src/Player/FootPlayer.Ai quick  --stairscheck --world fixture --traffic 0 --airliner arcade
+src/Vehicles/Airstairs   quick  --stairscheck --world fixture --traffic 0 --airliner arcade
+src/Vehicles/VehicleBody.Ai quick  --stairscheck --world fixture --traffic 0 --airliner arcade
+src/Player/Airliner      net    tools/airlinernetcheck.sh
+src/Avatar/AirlinerRig   net    tools/airlinernetcheck.sh
+src/Avatar/A320Deck      net    tools/airlinernetcheck.sh
+src/Player/Pigeon        net    tools/pigeonnetcheck.sh
+src/Player/FootPlayer.Pi net    tools/pigeonnetcheck.sh
+src/Birds/BirdNet        net    tools/pigeonnetcheck.sh
+src/Birds/PigeonNet      net    tools/pigeonnetcheck.sh
 src/World/Wa             full   tools/waterparity.sh
 shaders/common/waves     full   tools/waterparity.sh
 shaders/body/water       full   tools/waterparity.sh
+src/Player/Emote         net    tools/emotenetcheck.sh
+src/Avatar/HumanMeshBuilder.Emotes net tools/emotenetcheck.sh

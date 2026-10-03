@@ -196,6 +196,9 @@ public partial class FootPlayer
         // exception from the vehicle's hull come the frame the vehicle does — in between, the parked
         // bus closed round a player not excepted from it, and shoved them out onto its roof
         if (_deckWait > 0f && !Aboard) _deckScan = 0;
+        // airstairs whose platform moved (#417): their deck is built again at its new height
+        foreach (var set in _decks.Values)
+            if (set.Ride is Airstairs && set.Sections.Count > 0 && !ReferenceEquals(set.Sections[0].Deck, set.Ride.Decks[0])) _deckScan = 0;
         _deckScan -= dt;
         if (_deckScan <= 0) { _deckScan = 0.5; ScanDecks(); }
 
@@ -317,7 +320,8 @@ public partial class FootPlayer
         foreach (var host in near)
         {
             string key = KeyOf(host);
-            if (_decks.TryGetValue(key, out var known) && known.Host == host) continue;
+            if (_decks.TryGetValue(key, out var known) && known.Host == host
+                && (known.Ride is not Airstairs || ReferenceEquals(known.Sections[0].Deck, known.Ride.Decks[0]))) continue;
             if (known != null) FreeDeck(known);
             _decks[key] = BuildDeck(host, key, RideOfHost(host)!);
         }
@@ -517,7 +521,8 @@ public partial class FootPlayer
         // A turn shows as the velocity turning: the push out of a bend comes with it.
         var velocity = VelocityOfHost(set.Host);
         // a ship's deck (#303): the spot the walker stands on, which its roll and pitch swing about too
-        bool tilting = set.Ride is Boat;
+        // and an airliner's cabin pitches and banks with it (#416)
+        bool tilting = set.Ride is Boat or Airliner;
         if (tilting && _deckSpotValid) velocity = _deckSpotVel;
         if (!_deckFrameValid) { _deckFrameVel = velocity; _deckAccel = Vector3.Zero; _hardFor = 0f; }
         var smooth = _deckFrameVel.Lerp(velocity, MathX.Damp(8f, dt));
@@ -681,6 +686,7 @@ public partial class FootPlayer
     {
         if (_ride is Truck { IsBus: true } bus) bus.ToggleDoor(door);
         else if (_ride is Steamer steamer && door is >= 0 and < Steamer.GangwayCount) steamer.DoorsOpen ^= (byte)(1 << door);
+        else if (_ride is Airliner jet) jet.ToggleDoor(door);
     }
 
     // ---- seats and the wheel from the aisle ------------------------------------------------------
@@ -745,6 +751,7 @@ public partial class FootPlayer
     {
         if (seat < 0 || seat >= ride.Seats.Length || SectionFrame(host, ride.Seats[seat].Section) is not { } frame) return null;
         var s = ride.Seats[seat];
+        if (ride.StandSpot(seat) is { } own) return frame.GlobalTransform * own;
         // the driver's corner is a block to the walk: out past it, by the front door
         float step = seat == 0 ? 0.8f : 0.55f;
         var local = new Vector3(s.Hip.X - Mathf.Sign(s.Hip.X) * step, s.Floor + 0.05f, s.Hip.Z);

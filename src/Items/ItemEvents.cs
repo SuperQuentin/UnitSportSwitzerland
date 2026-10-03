@@ -230,8 +230,8 @@ public partial class ItemEvents : Node
         bool pump = weapon == null || weapon.Id == ItemId.Shotgun;
         var (stream, pitch, db) = SfxSynth.Shotgun.Pick(_rng);
         Sound3D(e.Position, stream, pitch * (weapon?.Pitch ?? 1f), db - (pump ? 1f : 3f), unitSize: 18f, maxDistance: 1500f);
-        LightPulse(e.Position, new Color(1f, 0.78f, 0.45f), energy: 6f, range: 7f, time: 0.07f);
-        if (!e.Local) Glow(e.Position, new Color(1f, 0.85f, 0.5f), size: 0.35f, time: 0.05f);   // in the owner's own view it is a hard-edged square on the lens
+        LightPulse(e.Position, new Color(1f, 0.78f, 0.45f), energy: 2.5f, range: 3f, time: 0.05f);
+        if (!e.Local) Glow(e.Position, new Color(1f, 0.85f, 0.5f), size: 0.25f, time: 0.04f);   // in the owner's own view it is a hard-edged square on the lens
 
         // the shooter racks the next shell: its body rocks back now, the slide handle and its clack
         // follow one cycle later. The owner's own viewmodel was already driven by ItemController.

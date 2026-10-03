@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://bwh0dkxbuan1"
 path.s3tc="res://.godot/imported/bark_oak_normal.jpg-4bc4b8bf78a1d996c2ccbfd91dab71bf.s3tc.ctex"
+path.etc2="res://.godot/imported/bark_oak_normal.jpg-4bc4b8bf78a1d996c2ccbfd91dab71bf.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/realistic/trees/bark_oak_normal.jpg"
-dest_files=["res://.godot/imported/bark_oak_normal.jpg-4bc4b8bf78a1d996c2ccbfd91dab71bf.s3tc.ctex"]
+dest_files=["res://.godot/imported/bark_oak_normal.jpg-4bc4b8bf78a1d996c2ccbfd91dab71bf.s3tc.ctex", "res://.godot/imported/bark_oak_normal.jpg-4bc4b8bf78a1d996c2ccbfd91dab71bf.etc2.ctex"]
 
 [params]
 

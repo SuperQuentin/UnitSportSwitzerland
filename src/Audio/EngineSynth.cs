@@ -10,6 +10,8 @@ public enum EngineLayout { Inline4, Inline4Turbo, Rotary, RotaryTurbo, Boxer4Tur
 public sealed record EngineProfile
 {
     public bool Turbine { get; init; }
+    /// <summary>A turbofan (#414): the fan's whine over the jet's roar, both from the spool; no rotor.</summary>
+    public bool Jet { get; init; }
     /// <summary>
     /// A steam engine (#380): each "firing" is a puff of exhaust steam up the funnel, and nothing
     /// burns or breathes in between. <see cref="MaxRpm"/> then counts beats (four a turn for two
@@ -41,6 +43,8 @@ public sealed record EngineProfile
 
     /// <summary>A light helicopter's turboshaft and two-blade rotor.</summary>
     public static readonly EngineProfile Turboshaft = new() { Turbine = true };
+    /// <summary>An airliner's high-bypass turbofans (#414): fan tone 700 Hz at idle to 2.4 kHz at take-off.</summary>
+    public static readonly EngineProfile Turbofan = new() { Jet = true, WhineIdleHz = 700f, WhineMaxHz = 2400f };
 
     /// <summary>A high-revving naturally aspirated four with a short pipe: 900 to 7,800 rpm.</summary>
     public static readonly EngineProfile Inline4Na = new() { Cylinders = 4, IdleRpm = 900, MaxRpm = 7800, PipeM = 0.7f };
@@ -281,7 +285,8 @@ public partial class EngineSynth : Node3D
         };
         if (f.Level < 1e-4f && _tLevel < 1e-4f) return 0f;   // silent: skip the model
 
-        if (Profile.Turbine) Turbine(ref f);
+        if (Profile.Jet) Jet(ref f);
+        else if (Profile.Turbine) Turbine(ref f);
         else if (Profile.Steam) SteamBeat(ref f);
         else Piston(ref f, prevThrottle);
 
@@ -426,6 +431,36 @@ public partial class EngineSynth : Node3D
         f.Noise = 0.85f;
 
         f.Core = Mathf.Tanh((hiss * puff * (1.4f + 0.8f * _load) + x * 0.8f + leak) * 1.6f) * 0.7f;
+    }
+
+    /// <summary>
+    /// A turbofan: the fan's blade-pass tone and its second harmonic rising with the spool, a low
+    /// rumble, and the jet's broadband roar, which grows far faster than the tone (with the thrust:
+    /// <c>_load</c>). Idle is mostly whine; take-off mostly roar.
+    /// </summary>
+    private void Jet(ref EngineFrame f)
+    {
+        var p = Profile;
+        float spool = _rpm;
+        float toneHz = Mathf.Lerp(p.WhineIdleHz, p.WhineMaxHz, spool);
+        f.ToneHz = toneHz;
+        f.SubHz = 38f;
+        float n = WhiteNoise();
+        // the roar: noise low-passed higher as it grows, and a second, darker band under it
+        _bodyLp += Dsp.Coef(220f + 700f * _load) * (n - _bodyLp);
+        _tipLp += Dsp.Coef(90f) * (n - _tipLp);
+        _whinePhase = (_whinePhase + toneHz / Dsp.Rate) % 1f;
+        _whine2Phase = (_whine2Phase + toneHz * 2.01f / Dsp.Rate) % 1f;
+        _subPhase = (_subPhase + 38f / Dsp.Rate) % 1f;
+        float whine = Mathf.Sin(Mathf.Tau * _whinePhase) + 0.4f * Mathf.Sin(Mathf.Tau * _whine2Phase);
+        float roar = _load * _load * 0.85f + spool * 0.12f;
+        f.Noise = 0.4f + 0.5f * _load;
+        f.Pulse = 0f;
+        f.Core = _bodyLp * 4.5f * roar
+               + _tipLp * 6f * roar * 0.6f
+               + Mathf.Sin(Mathf.Tau * _subPhase) * 0.12f * spool
+               + whine * 0.09f * (0.25f + 0.75f * spool);
+        f.Core = Mathf.Tanh(f.Core * 1.2f) * 0.8f;
     }
 
     private void Turbine(ref EngineFrame f)

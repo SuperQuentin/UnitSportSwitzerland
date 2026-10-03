@@ -65,6 +65,13 @@ public static class BrCheck
         var s = new ZoneSchedule(7, 6000, 1);
         Expect(s.At(0).Phase == 0 && s.At(0).Dps == 0, "no damage while looting");
         Expect(s.At(s.Duration + 1).Over, "the zone is over once the last shrink ends");
+        // /br zone (#425): from the loot time or a wait, the next shrink; none while shrinking or over
+        double first = s.NextShrinkAt(0) ?? -1, wait2 = first;
+        while (wait2 < s.Duration && s.At(wait2) is not { Phase: 2, Shrinking: false }) wait2 += 1;
+        double second = s.NextShrinkAt(wait2) ?? -1;
+        Expect(s.At(first) is { Phase: 1, Shrinking: true } && !s.At(first - 0.01).Shrinking && s.NextShrinkAt(first + 1) is null
+            && s.At(second) is { Phase: 2, Shrinking: true } && !s.At(second - 0.01).Shrinking && s.NextShrinkAt(s.Duration + 1) is null,
+            FormattableString.Invariant($"/br zone: the next shrink from the loot time ({first:F0} s) and from phase 2's wait ({second:F0} s), none while shrinking or over"));
     }
 
     private static double FlightMinutes(float side)

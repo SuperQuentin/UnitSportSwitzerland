@@ -64,7 +64,13 @@ public partial class LeaveCheck : Node
             if (_shell.InWorld && _wait > (_sessions[_index].Hosted ? 40 : 6))
             {
                 _hostedPid = _shell.HostedPid;
-                if (_sessions[_index].Hosted) GD.Print($"[leavecheck] hosting, server pid {_hostedPid}");
+                if (_sessions[_index].Hosted)
+                {
+                    GD.Print($"[leavecheck] hosting, server pid {_hostedPid}");
+                    // the player who hosts runs the server (#411)
+                    if (!Permissions.IsAdmin) { Fail("the host is not an admin of its own server"); return; }
+                    GD.Print("[leavecheck] ok   the host is an admin");
+                }
                 GD.Print($"[leavecheck] in world {_index} ({_sessions[_index].Mode}), {Performance.GetMonitor(Performance.Monitor.ObjectNodeCount)} nodes");
                 _shell.LeaveWorld(null);
                 _entering = false;

@@ -90,6 +90,15 @@ public partial class PlayerInput : Node
     /// <summary>The retarder stalk: 0 off, 1 exhaust brake, 2-4 the retarder.</summary>
     public const string RetarderUp = "retarder_up";
     public const string RetarderDown = "retarder_down";
+    /// <summary>An airliner's flap lever a notch down / up, its speedbrake, its parking brake (#414). The gear is <see cref="CarDoor"/> in the air.</summary>
+    public const string FlapsDown = "flaps_down";
+    public const string FlapsUp = "flaps_up";
+    public const string Speedbrake = "speedbrake";
+    public const string ParkingBrake = "parking_brake";
+    /// <summary>An airliner's autopilot and autothrust on / off, and its pitch trim held (Light sim, #415).</summary>
+    public const string Autopilot = "autopilot";
+    public const string TrimNoseDown = "trim_nose_down";
+    public const string TrimNoseUp = "trim_nose_up";
 
     // --- free-fly camera ---
     public const string FlyUp = "fly_up";
@@ -121,6 +130,8 @@ public partial class PlayerInput : Node
     public const string AimItem = "aim_item";
     public const string Inventory = "inventory";
     public const string QuickWheel = "quick_wheel";
+    /// <summary>Hold on foot for the emote wheel (<see cref="Player.EmoteWheel"/>, #404): dances and gestures, any time.</summary>
+    public const string EmoteWheel = "emote_wheel";
     /// <summary>Drops one of the item in hand on the ground; with Ctrl, the whole stack (#206).</summary>
     public const string DropItem = "drop_item";
     public const string NextItem = "next_item";
@@ -435,6 +446,13 @@ public partial class PlayerInput : Node
         Bind(GearNeutral, Keys(Key.Key0));
         Bind(RetarderUp, Keys(Key.Apostrophe));
         Bind(RetarderDown, Keys(Key.Semicolon));
+        Bind(FlapsDown, Keys(Key.F7), Button(JoyButton.RightShoulder));
+        Bind(FlapsUp, Keys(Key.F6), Button(JoyButton.LeftShoulder));
+        Bind(Speedbrake, Keys(Key.Slash), Button(JoyButton.DpadLeft));
+        Bind(ParkingBrake, Keys(Key.Period));
+        Bind(Autopilot, Keys(Key.Y));
+        Bind(TrimNoseDown, Keys(Key.Home));
+        Bind(TrimNoseUp, Keys(Key.End));
 
         Bind(FlyUp, Keys(Key.Space, Key.E), Button(JoyButton.A), Axis(JoyAxis.TriggerRight, 1));
         Bind(FlyDown, Keys(Key.Shift, Key.Q), Button(JoyButton.B), Axis(JoyAxis.TriggerLeft, 1));
@@ -468,6 +486,9 @@ public partial class PlayerInput : Node
         Bind(AimItem, Mouse(MouseButton.Right), Button(JoyButton.LeftShoulder));
         Bind(Inventory, Keys(Key.I, Key.Tab), Button(JoyButton.Back));
         Bind(QuickWheel, Keys(Key.X), Button(JoyButton.DpadLeft));
+        // B only looks behind when mounted; D-pad up is the engine in a vehicle and turns the
+        // hammer's piece, so the emote wheel does not open with the hammer in hand
+        Bind(EmoteWheel, Keys(Key.B), Button(JoyButton.DpadUp));
         // Minecraft's key: Q only means "down" in the fly camera and in the air, never on foot
         Bind(DropItem, Keys(Key.Q));
         // pad X is tuck/sprint only when mounted, so on foot it is free, as RB/LB are for items

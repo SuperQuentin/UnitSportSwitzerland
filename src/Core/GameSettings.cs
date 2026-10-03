@@ -133,6 +133,12 @@ public sealed class GameSettings
     /// aboard by a door, a gangway or a ladder and take the wheel from inside. Other vehicles keep E.
     /// </summary>
     public bool BoardWalkableFromOutside { get; set; } = true;
+    /// <summary>
+    /// How airliners fly (#414, #415): Arcade (protections on every type, wings level when the stick is
+    /// let go, ready to taxi) or Light sim (engine start, autopilot, trim, fuel; conventional types can stall).
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Player.AirlinerHandling Airliner { get; set; } = Player.AirlinerHandling.Arcade;
     /// <summary>How trucks and buses are shifted (#70): automatic, sequential, with the clutch, H-pattern.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public Player.HeavyShift HeavyGearbox { get; set; } = Player.HeavyShift.Automatic;
@@ -393,6 +399,7 @@ public sealed class GameSettings
                 case "--tyrewear": TyreWear = v is "on" or "1" or "true"; break;
                 case "--brakewear": BrakeWear = v is "on" or "1" or "true"; break;
                 case "--boardwalkable": BoardWalkableFromOutside = v is "on" or "1" or "true"; break;
+                case "--airliner" when Enum.TryParse<Player.AirlinerHandling>(v, true, out var ah): Airliner = ah; break;
                 case "--gearbox":
                     HeavyGearbox = v.ToLowerInvariant() switch
                     {

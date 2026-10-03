@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://r6w38oylfe5e"
 path.s3tc="res://.godot/imported/Snow006_1K-JPG_Color.jpg-292b1b7c149be37e8310dfc937ae171c.s3tc.ctex"
+path.etc2="res://.godot/imported/Snow006_1K-JPG_Color.jpg-292b1b7c149be37e8310dfc937ae171c.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/realistic/textures/Snow006_1K-JPG_Color.jpg"
-dest_files=["res://.godot/imported/Snow006_1K-JPG_Color.jpg-292b1b7c149be37e8310dfc937ae171c.s3tc.ctex"]
+dest_files=["res://.godot/imported/Snow006_1K-JPG_Color.jpg-292b1b7c149be37e8310dfc937ae171c.s3tc.ctex", "res://.godot/imported/Snow006_1K-JPG_Color.jpg-292b1b7c149be37e8310dfc937ae171c.etc2.ctex"]
 
 [params]
 

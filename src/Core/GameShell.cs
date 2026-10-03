@@ -79,7 +79,7 @@ public partial class GameShell : Node
         {
             "--name", "--chunks", "--landings", "--cache", "--title", "--nocapture", "--rings", "--horizon", "--fog", "--detail",
             "--generated", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--voice", "--time",
-            "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--perflog",
+            "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--airliner", "--perflog",
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world",
             "--menu", "--settings", "--licenses", "--controls", "--multiplayer", "--solo", "--uishot", "--menucheck", "--leavecheck",
             "--leave-restart", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot",
@@ -386,6 +386,7 @@ public partial class GameShell : Node
                 Endpoint = endpoint,
                 PlayerName = PlayerName,
                 Hosted = true,
+                HostToken = _hosted.HostToken,
                 ServerName = _hosted.Name,
             });
             return;

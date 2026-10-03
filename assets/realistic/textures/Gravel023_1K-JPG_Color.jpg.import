@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://dfapa2s5thucl"
 path.s3tc="res://.godot/imported/Gravel023_1K-JPG_Color.jpg-5d7edd76f2c5c774e8cee8045544ba67.s3tc.ctex"
+path.etc2="res://.godot/imported/Gravel023_1K-JPG_Color.jpg-5d7edd76f2c5c774e8cee8045544ba67.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/realistic/textures/Gravel023_1K-JPG_Color.jpg"
-dest_files=["res://.godot/imported/Gravel023_1K-JPG_Color.jpg-5d7edd76f2c5c774e8cee8045544ba67.s3tc.ctex"]
+dest_files=["res://.godot/imported/Gravel023_1K-JPG_Color.jpg-5d7edd76f2c5c774e8cee8045544ba67.s3tc.ctex", "res://.godot/imported/Gravel023_1K-JPG_Color.jpg-5d7edd76f2c5c774e8cee8045544ba67.etc2.ctex"]
 
 [params]
 

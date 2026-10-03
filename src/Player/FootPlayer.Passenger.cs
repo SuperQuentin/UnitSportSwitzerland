@@ -31,7 +31,9 @@ public partial class FootPlayer
 
     /// <summary>A bus's doors, one bit each: its own while driving it, from the published pose on a copy (the server's too).</summary>
     public byte BusDoors => _ride is Truck own ? own.DoorsOpen : _ride is Steamer gangways ? gangways.DoorsOpen
-        : Ride == RideKind.OnFoot ? (byte)0 : Ride == RideKind.Steamer ? Steamer.DoorsOf(Anim) : (byte)((Mathf.RoundToInt(Anim.W) >> 4) & 15);
+        : _ride is Airliner jet ? jet.DoorsOpen
+        : Ride == RideKind.OnFoot ? (byte)0 : Ride == RideKind.Steamer ? Steamer.DoorsOf(Anim)
+        : Airliner.IsAirliner(Ride) ? Airliner.LookOf(Anim).Doors : (byte)((Mathf.RoundToInt(Anim.W) >> 4) & 15);
 
     /// <summary>One's own vehicle with nobody at the wheel: no input, it rolls on under its own physics.</summary>
     public bool RollingDriverless => _ride != null && SeatIndex != 0;
