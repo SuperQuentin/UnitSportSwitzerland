@@ -64,5 +64,21 @@
   **Limits**: flaps or gear past their speed take damage. The parked state keeps "engines running"
   (flags bit 18). HUD: APU %, START ENG n, ENGINES OFF, AP targets, FUEL, TRIM. Check:
   `--flycheck a320 --world flat --airliner sim` (the start, then 25 s on the autopilot: held within 16 m).
+- **Walkable A320** (#416, `Avatar/A320Deck.cs` from `A320Layout`, `walk-aboard`): one deck in the
+  drawn aircraft's frame (it tilts with the attitude, like a ship's), floor at the sills (3.3 m),
+  walls with four door holes (leaf `DoorShut`, a sill out through the skin `DoorStep`), ceiling and
+  bins, 27 rows of 3-3 seat blocks, galleys and lavatories solid, the cockpit wall with its doorway,
+  pilot seats, pedestal and panel. Seats: 0 captain (flies), 1 first officer, then the cabin row by
+  row (164). `Airliner.StandSpot`: where one stands for a seat (`Rideable.StandSpot`, used by
+  `AisleSpot`): the aisle beside the row, behind a pilot's seat; a bus's "beside, toward the aisle"
+  put a window seat's spot in the seat block. Doors: `Airliner.ToggleDoor` (open only stopped on the
+  ground, shut any time), buttons inside and on the skin; G at the controls on the ground works L1 and
+  L2; replicated in the pose bits (driven) and `VehicleBody.DoorsOpen` (parked, flags bits 13-16).
+  `Driverless`: stood up from its seat it stays the player's aircraft and flies on hands off (the law
+  holds its path), carrying its walkers at 120 m/s. A parked one's frame is `Posed` by `ApplyPose`.
+  No airstairs yet (#417): E from outside takes the controls (`BoardWalkableFromOutside`).
+  Checks: `--cabincheck [shots] --world fixture` (quick: doors, stand up, aisle, sit, the controls,
+  then the same walked in flight; `shots` windowed: `test_output/cabin/`); `tools/airlinernetcheck.sh`
+  B walks in A's flying A320, both peers put B at the same spot (measured 1 cm at 116 m/s).
 - **Not done**: no AI; wings and tail do not collide in flight; the visual does not pitch with a
   sloping taxiway; no wind; no fuel burn or engine start in Arcade (only in Light sim).
