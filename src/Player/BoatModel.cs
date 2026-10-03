@@ -350,6 +350,31 @@ public static class BoatDynamics
     /// <summary>A hull on gravel or sand, sliding: its friction coefficient.</summary>
     public const float GroundFriction = 0.5f;
 
+    /// <summary>The mooring's spring, rad/s: about a 13 s swing back to the spot, critically damped.</summary>
+    public const float MoorRate = 0.5f;
+    /// <summary>The mooring's pull at most, m/s²: shoved far off, it comes back slowly, not flung.</summary>
+    public const float MoorPull = 0.6f;
+    /// <summary>The mooring's turn back to its heading, rad/s, and its most, rad/s².</summary>
+    public const float MoorTurnRate = 0.5f, MoorTwist = 0.3f;
+
+    /// <summary>
+    /// A boat moored (#378): pulled softly back to its spot (<paramref name="spot"/>, the centre of
+    /// mass's place on the level) and its heading (<paramref name="yaw"/>) against the waves' drift
+    /// and whatever shoved it, as lines to a berth or an anchor would. Level only: it still heaves,
+    /// pitches and rolls on the swell. The same for a 300 kg jetski and a 518 t steamer (an
+    /// acceleration, not a force). After <see cref="Step"/>, for a boat nobody drives.
+    /// </summary>
+    public static void Moor(ref BoatState b, Vector3 spot, float yaw, float dt)
+    {
+        var off = new Vector3(b.Position.X - spot.X, 0f, b.Position.Z - spot.Z);
+        var flat = new Vector3(b.Velocity.X, 0f, b.Velocity.Z);
+        var pull = (-MoorRate * MoorRate * off - 2f * MoorRate * flat).LimitLength(MoorPull);
+        b.Velocity += pull * dt;
+        float turn = Mathf.AngleDifference(b.Yaw(yaw), yaw);
+        float twist = Mathf.Clamp(MoorTurnRate * MoorTurnRate * turn - 2f * MoorTurnRate * b.Spin.Y, -MoorTwist, MoorTwist);
+        b.Spin += new Vector3(0f, twist * dt, 0f);
+    }
+
     /// <summary>
     /// The body that carries the boat stands on the ground (its keel is on a beach, a slipway):
     /// the hull drags on it, slowing along the ground at μ g whatever the hull's columns felt.

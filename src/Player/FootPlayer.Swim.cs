@@ -250,6 +250,7 @@ public partial class FootPlayer
         var wish = lookSteers
             ? (yaw * new Basis(Vector3.Right, _pitch) * new Vector3(input.X, 0, input.Y)).Normalized() * pace
             : flat * pace;
+        wish = ClearOfHull(wish);   // #378, FootPlayer.Boat.cs
 
         // --- climbing out: push into a ledge in reach and the mantle pulls you up --------
         _wallCoyote = Mathf.Max(0f, _wallCoyote - dt);
@@ -318,6 +319,7 @@ public partial class FootPlayer
         float vyBefore = v.Y;
         Velocity = v;
         MoveAndSlide();
+        OutFromUnderHull();   // #378, FootPlayer.Boat.cs
 
         // a plunge into shallow water ends on the bed: as hard as the water has not braked it
         bool floor = IsOnFloor();

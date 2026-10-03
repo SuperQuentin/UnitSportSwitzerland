@@ -122,8 +122,8 @@ the steamer AI (#379) reads.
 
 ## Not done / decisions
 
-- The steamer is not moored: parked, it floats where it was put and sleeps in a calm; in a swell it
-  drifts like any parked boat (a mooring spring is `VehicleBody.Boat.cs`, #378's file).
+- The steamer is moored where it was put (#378, `player/boats`, "Moored"): a parked boat at rest moors
+  itself; `VehicleBody.Moor(GlobalPos, yaw)` puts one on a berth. No lines are drawn.
 - The plank tilts in the calm the berth was planned for; in a swell the parked ship heaves and the
   plank follows the head on each peer's own waves, its foot staying on the face's edge.
 - Jetties' widths are assumed (2.2 m): TLM has no width.
