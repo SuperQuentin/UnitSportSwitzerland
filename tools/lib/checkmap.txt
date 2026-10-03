@@ -19,6 +19,9 @@ src/Items/Radio          quick  --radiopanelcheck --world fixture
 src/Player/FootPlayer.Ears quick --earscheck --world fixture --view third
 src/Avatar/              quick  --meshcheck
 src/Avatar/              quick  --outfitcheck
+src/Avatar/              quick  --emotecheck
+src/Player/EmoteWheel    quick  --emotewheelcheck --world fixture
+src/Player/FootPlayer.cs quick  --emotewheelcheck --world fixture
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
 src/World/TimeCommand    quick  --chatcheck
@@ -203,3 +206,5 @@ tools/lib/               quick  tools/lib/guard_selftest.sh
 src/World/Wa             full   tools/waterparity.sh
 shaders/common/waves     full   tools/waterparity.sh
 shaders/body/water       full   tools/waterparity.sh
+src/Player/Emote         net    tools/emotenetcheck.sh
+src/Avatar/HumanMeshBuilder.Emotes net tools/emotenetcheck.sh

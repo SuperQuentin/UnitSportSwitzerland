@@ -116,7 +116,8 @@ public enum Headwear
 /// <paramref name="PrevMove"/> is the move before (-1 none) and <paramref name="MoveBlend"/> how far
 /// the figure has flowed out of it into <paramref name="Move"/> (0..1): a move change is a short
 /// crossfade on the beat, not a cut (#261). A move at or past <see cref="HumanMeshBuilder.GroupMoves"/>
-/// is one of the crowd moves danced together (<see cref="HumanMeshBuilder.GroupPogo"/>, <see cref="HumanMeshBuilder.GroupJump"/>).
+/// is one of the crowd moves danced together (<see cref="HumanMeshBuilder.GroupPogo"/>, <see cref="HumanMeshBuilder.GroupJump"/>);
+/// one at or past <see cref="HumanMeshBuilder.EmoteMoves"/> is an emote off the wheel (#404), whatever the style.
 /// </summary>
 public readonly record struct DanceParams(Audio.Cd.MusicStyle Style, int Move, float BeatPhase, float BarPhase, int Bar, float Weight,
     int PrevMove = -1, float MoveBlend = 1f);
@@ -1166,6 +1167,8 @@ public static partial class HumanMeshBuilder
         Pogo, JumpTogether,
         // #370: the rat dance, only to the chess type beat
         RatSwing, RatArmPump, RatHeadBob, RatHop,
+        // #404: new dances (also in the style tables) and gestures (emote wheel only)
+        Ymca, ChickenDance, CabbagePatch, SwimDance, Wave, Cheer, Salute, Shrug,
     }
 
     /// <summary>
@@ -1184,7 +1187,7 @@ public static partial class HumanMeshBuilder
         // Pop
         new[] { DanceMove.SideStepClap, DanceMove.HipSway, DanceMove.ClapBackbeat, DanceMove.Carlton,
             DanceMove.Macarena, DanceMove.DiscoPoint, DanceMove.Floss, DanceMove.OrangeJustice,
-            DanceMove.GangnamStyle },
+            DanceMove.GangnamStyle, DanceMove.Ymca },
         // Rock
         new[] { DanceMove.Headbang, DanceMove.AirGuitar, DanceMove.FistPump, DanceMove.Bounce,
             DanceMove.ClapBackbeat, DanceMove.ArmWave, DanceMove.Pogo },
@@ -1193,13 +1196,14 @@ public static partial class HumanMeshBuilder
             DanceMove.Robot, DanceMove.Sprinkler, DanceMove.ArmWave, DanceMove.Pogo },
         // HipHop
         new[] { DanceMove.Bounce, DanceMove.ShoulderLean, DanceMove.Twerk, DanceMove.Dab,
-            DanceMove.Griddy, DanceMove.Moonwalk, DanceMove.RunningMan, DanceMove.Floss },
+            DanceMove.Griddy, DanceMove.Moonwalk, DanceMove.RunningMan, DanceMove.Floss, DanceMove.CabbagePatch },
         // Chill
         new[] { DanceMove.Sway, DanceMove.HipSway, DanceMove.ArmWave, DanceMove.ClapBackbeat,
-            DanceMove.Moonwalk, DanceMove.Bounce },
+            DanceMove.Moonwalk, DanceMove.Bounce, DanceMove.SwimDance },
         // Folk
         new[] { DanceMove.FolkClap, DanceMove.HandsOnHipsSkip, DanceMove.SideStepClap,
-            DanceMove.HipSway, DanceMove.ClapBackbeat, DanceMove.Macarena, DanceMove.GangnamStyle },
+            DanceMove.HipSway, DanceMove.ClapBackbeat, DanceMove.Macarena, DanceMove.GangnamStyle,
+            DanceMove.ChickenDance },
         // RatDance (#370): the chess type beat, whatever it was analysed as; RatSwing first, the crowd's move
         new[] { DanceMove.RatSwing, DanceMove.RatArmPump, DanceMove.RatHeadBob, DanceMove.RatHop },
     };
@@ -1252,6 +1256,7 @@ public static partial class HumanMeshBuilder
     {
         if (index == GroupPogo) return DanceMove.Pogo;
         if (index == GroupJump) return DanceMove.JumpTogether;
+        if (index >= EmoteMoves) return EmoteMove(index - EmoteMoves);
         var table = DanceTable[DanceStyleIndex(style)];
         return table[((index % table.Length) + table.Length) % table.Length];
     }
@@ -1269,7 +1274,7 @@ public static partial class HumanMeshBuilder
         ch.ArmBlend = 1f;
         Planted(ref ch, 0.098f, 0f);
         EvalMove(move, t, mv, ref ch);
-        if (move is not (DanceMove.Pogo or DanceMove.JumpTogether)) Groove(ref ch, t, mv);
+        if (move is not (DanceMove.Pogo or DanceMove.JumpTogether or DanceMove.Salute)) Groove(ref ch, t, mv);
         return ch;
     }
 
@@ -1655,6 +1660,14 @@ public static partial class HumanMeshBuilder
             case DanceMove.RatArmPump: RatArmPump(ref ch, t, mv); break;
             case DanceMove.RatHeadBob: RatHeadBob(ref ch, t, mv); break;
             case DanceMove.RatHop: RatHop(ref ch, t, mv); break;
+            case DanceMove.Ymca: Ymca(ref ch, t, mv); break;
+            case DanceMove.ChickenDance: ChickenDance(ref ch, t, mv); break;
+            case DanceMove.CabbagePatch: CabbagePatch(ref ch, t, mv); break;
+            case DanceMove.SwimDance: SwimDance(ref ch, t, mv); break;
+            case DanceMove.Wave: Wave(ref ch, t, mv); break;
+            case DanceMove.Cheer: Cheer(ref ch, t, mv); break;
+            case DanceMove.Salute: Salute(ref ch, t, mv); break;
+            case DanceMove.Shrug: Shrug(ref ch, t, mv); break;
         }
     }
 

@@ -51,6 +51,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Take the radio you point at into your hand", PlayerInput.UseItem),
             new("Pick a hotbar slot", Keys: "1–6 / Wheel", Pad: "D-pad →"),
             new("Quick wheel (hold)", PlayerInput.QuickWheel),
+            new("Emote wheel: dances and gestures (hold; tap: stop / again)", PlayerInput.EmoteWheel),
             new("Inventory", PlayerInput.Inventory),
             new("Gather stone, water, wood (hold)", PlayerInput.Gather),
             new("Bird journal", PlayerInput.BirdJournal),
