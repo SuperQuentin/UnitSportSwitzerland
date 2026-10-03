@@ -94,6 +94,7 @@
   (strength 0.03), gamey half ahead 1.2 at 0.2. The steamer's is pitched 0.55 and carries further.
 - **At a jetty** (#377, `world/landings`): harbour jetties are solid decks; getting out beside one steps
   onto it instead of into the water (`FootPlayer.Pier.cs`, `--steamercheck pier|nyon`).
-- **Not done**: boats placed at the real harbours (the jetties are there, nothing parks at them); a hull's collision box does not pitch (the
+- **At the harbours** (#383, `world/landings`): jetskis and speedboats moored along the jetties (`World.MarinaBoats`), server-placed, put back a while after being taken.
+- **Not done**: a hull's collision box does not pitch (the
   hull boxes do, a parked boat's box stays level); no hiss of a hull running through the water; boats in races have no water courses (the mount words
   `jetski`/`boat` parse); the jetski's rider is the motorbike rider (helmet).

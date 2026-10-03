@@ -98,6 +98,13 @@ public sealed class Landing
     public List<double[]> Bollards { get; set; } = new();
 }
 
+/// <summary>
+/// A boat's place alongside a jetty (#383): LV95 of the boat's keel, its heading (degrees from grid
+/// north), which boat (<see cref="Speedboat"/> or a jetski), the jetty's side (+1 left of its line,
+/// -1 right) and a name every peer and every restart gives it alike.
+/// </summary>
+public readonly record struct BoatBerth(string Id, double E, double N, double Heading, bool Speedboat, int Side);
+
 /// <summary>A harbour jetty from swissTLM3D (<c>tlm_bauten_verkehrsbaute_lin</c>, <c>objektart = Hafensteg</c>).</summary>
 public sealed class Jetty
 {
@@ -105,6 +112,68 @@ public sealed class Jetty
     public string Id { get; set; } = "";
 
     public required PierRibbon Ribbon { get; set; }
+
+    /// <summary>Metres between boat places along a jetty, and kept clear at its ends.</summary>
+    public const double SlotSpacing = 9, SlotEnds = 4;
+
+    /// <summary>Boats parked at a jetty at most.</summary>
+    public const int MaxBoats = 4;
+
+    /// <summary>
+    /// Every place a boat could lie along this jetty (#383): every <see cref="SlotSpacing"/> metres
+    /// from <see cref="SlotEnds"/> in, either side, the boat's side 0.4 m off the deck's edge, lying
+    /// along it. Pure geometry: whether there is water enough there is the runtime's to say.
+    /// </summary>
+    public List<BoatBerth> BoatSlots()
+    {
+        var slots = new List<BoatBerth>();
+        var p = Ribbon.Points;
+        if (p.Count < 2) return slots;
+        var cum = new double[p.Count];
+        for (int i = 1; i < p.Count; i++) cum[i] = cum[i - 1] + Math.Sqrt(Sq(p[i][0] - p[i - 1][0]) + Sq(p[i][1] - p[i - 1][1]));
+        double total = cum[^1];
+        int seg = 0, k = 0;
+        for (double at = SlotEnds; at <= total - SlotEnds; at += SlotSpacing, k++)
+        {
+            while (seg < p.Count - 2 && cum[seg + 1] < at) seg++;
+            double len = cum[seg + 1] - cum[seg];
+            if (len < 1e-6) continue;
+            double t = (at - cum[seg]) / len;
+            double ue = (p[seg + 1][0] - p[seg][0]) / len, un = (p[seg + 1][1] - p[seg][1]) / len;
+            double ce = p[seg][0] + (p[seg + 1][0] - p[seg][0]) * t, cn = p[seg][1] + (p[seg + 1][1] - p[seg][1]) * t;
+            foreach (int side in new[] { 1, -1 })
+            {
+                uint h = Hash($"{Id}/{k}/{side}");
+                bool speedboat = h % 5 < 2;
+                double off = Ribbon.Width * 0.5 + 0.4 + (speedboat ? 1.2 : 0.65);
+                // left of the line: (-un, ue)
+                double e = ce - un * off * side, n = cn + ue * off * side;
+                double heading = Math.Atan2(ue, un) * 180 / Math.PI + ((h >> 3 & 1) == 0 ? 0 : 180);
+                slots.Add(new BoatBerth($"m{Hash(Id):x8}_{k}{(side > 0 ? 'l' : 'r')}", Math.Round(e, 3), Math.Round(n, 3),
+                    Math.Round((heading + 360) % 360, 2), speedboat, side));
+            }
+        }
+        return slots;
+    }
+
+    /// <summary>The places that get a boat (#383): one slot in three, by its name's hash, at most <see cref="MaxBoats"/>.</summary>
+    public List<BoatBerth> BoatBerths()
+    {
+        var chosen = new List<BoatBerth>();
+        foreach (var b in BoatSlots())
+            if (Hash(b.Id + "/boat") % 3 == 0 && chosen.Count < MaxBoats) chosen.Add(b);
+        return chosen;
+    }
+
+    private static double Sq(double v) => v * v;
+
+    /// <summary>FNV-1a of a name: the same on every peer and every run.</summary>
+    private static uint Hash(string s)
+    {
+        uint h = 2166136261;
+        foreach (char c in s) { h ^= c; h *= 16777619; }
+        return h;
+    }
 }
 
 /// <summary>
@@ -163,6 +232,28 @@ public sealed class LandingIndex
     public Landing? Find(string name) =>
         Landings.FirstOrDefault(l => l.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
         ?? Landings.FirstOrDefault(l => l.Name.StartsWith(name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The jetties grouped into harbours (#383): jetties within <paramref name="reach"/> metres of
+    /// one another (any two of their points) are one harbour. Ordered as the jetties are.
+    /// </summary>
+    public List<List<Jetty>> Harbours(double reach = 120)
+    {
+        var parent = Enumerable.Range(0, Jetties.Count).ToArray();
+        int Root(int i) { while (parent[i] != i) i = parent[i] = parent[parent[i]]; return i; }
+        for (int i = 0; i < Jetties.Count; i++)
+            for (int j = i + 1; j < Jetties.Count; j++)
+                if (Near(Jetties[i], Jetties[j], reach)) parent[Root(i)] = Root(j);
+        return Enumerable.Range(0, Jetties.Count).GroupBy(Root).Select(g => g.Select(i => Jetties[i]).ToList()).ToList();
+    }
+
+    private static bool Near(Jetty a, Jetty b, double reach)
+    {
+        foreach (var p in a.Ribbon.Points)
+            foreach (var q in b.Ribbon.Points)
+                if ((p[0] - q[0]) * (p[0] - q[0]) + (p[1] - q[1]) * (p[1] - q[1]) < reach * reach) return true;
+        return false;
+    }
 
     /// <summary>The landing nearest an LV95 point, or null when there are none.</summary>
     public Landing? Nearest(double e, double n) =>

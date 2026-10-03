@@ -31,7 +31,7 @@ public static class Lake
     public const double LandingX = ShoreX + 110, LandingY = 260;
 
     /// <summary>A harbour jetty (#377) straight out from the beach, for parking boats.</summary>
-    public const double JettyY = -60, JettyLength = 40;
+    public const double JettyY = -60, JettyLength = 90;
 
     /// <summary>The lake's fetch for the waves: a big lake (a 2 km crossing and more in the long axis).</summary>
     public const double LakeFetch = 3000;

@@ -19,11 +19,14 @@ the steamer AI (#379) reads.
 - **The plan** (`tools/TerrainFormat/LandingPlanner.cs`, pure, `LandingTests`):
   - the ship lies along the shore (or across a Steg's end), its port side to the pier;
   - **the head**: 10 m along the ship from 3.6 m aft of its centre of mass (clear of the paddle box,
-    which ends 3.25 m aft), 5 m deep, its deck **1.08 m over the still water**: the steamer's open plank
-    (main deck 3.0 m over a keel floating 1.64 m deep, down 0.3 m) lands on it 1.4 cm *into* the deck,
-    never a lip on it (`--steamercheck` measures it); the face 4.6 m from the ship's centreline;
+    which ends 3.25 m aft), 5 m deep, its face **5.65 m from the ship's centreline**: the gangway's
+    plank (#383) runs from its hinge on the deck's edge (4.35 m) to the face's top edge, tilting to the
+    head's deck whatever its height within 1 in 2.5 (0.52 m up or down from the ship's main deck,
+    1.36 m over the water); a head of its own neck sits 1.06 m over the water (the plank as built);
   - **a Steg ending within 12 m of the stop** (`FindRoadEnd`, the built `.road` files): no neck of its
-    own; a ramp from the Steg's end (its drawn deck height) to the head at 1:5, rails both sides;
+    own; the head meets the Steg's end **at the Steg's own height** (its drawn deck) when the plank can
+    tilt to it, so there is no ramp (Nyon: the head 1.58 m over the water, the plank rising 0.21 m to
+    it); past the plank's tilt, the head as high or low as it goes and a ramp from the Steg at 1:5;
   - **otherwise a neck**: 3 m wide from the head's back toward the nearest dry ground, ramping to the
     quay, ending 2 cm under the ground 1.5-6 m inland (buried, not a lip), rails both sides;
   - **water for the hull**: the head moves out in 2 m steps (to 80 m) until the whole hull (±35 m,
@@ -57,6 +60,14 @@ the steamer AI (#379) reads.
   fog like the rest): every style, restyled live. Collision faces join the tile's **road cells**
   (`bridgeCollision`), so they go through the one-piece-a-frame queue (`perf-collision-commits`) and
   `HasCollisionAt` counts them. The server builds no collision (none of its own anyway).
+- **The gangway's plank** (`World/GangwayFit`, #383): an open plank whose hinge faces a pier's head
+  (straight out along the ship's beam, within its length) runs to that head's face, its foot flush with
+  the head's deck; elsewhere (a quay, open water) it is the plank as built, 1.3 m out and 0.3 m down.
+  Worked out each frame from the ship as drawn and the landings, which every peer has alike, so every
+  peer lays the same plank under its own copy: the rig draws it (`SteamerMeshBuilder.PlankMesh`, one mesh
+  per centimetre of run and drop, kept) and the walker's deck box follows (`PlankBox`, laid again only on
+  a centimetre's change, `FootPlayer.FitPlank`). The outside gangway buttons are reached from 1.9 m (a
+  pier's face is 1.3 m off the hull), and the server takes a parked steamer's gangway toggle.
 - **The steamer at Nyon** (`World/SteamerBerth`): with the landing "Nyon (lac)" having a fitting berth,
   it lies there (`AtPier`: the keel 1.64 m under the still level once the water has loaded, heading
   `Yaw(berth)`), **its port gangway open** (`DoorsOpen` bit 0); without landings it falls back to the
@@ -64,6 +75,15 @@ the steamer AI (#379) reads.
 - **Boats at jetties** (`FootPlayer.Pier.cs`): getting out of a boat looks for a deck or dry ground
   beside it (rays either side, up to 2.6 m past its side, a static body standing out of the water,
   room to stand): the driver steps onto the jetty instead of swimming.
+- **Marina boats** (#383, `World/MarinaBoats`, server, or the client offline): `Jetty.BoatSlots` are
+  places every 9 m from 4 m in, both sides, the boat's side 0.4 m off the deck's edge, lying along it;
+  `BoatBerths` keeps one in three by an FNV hash of its name (`m<jetty hash>_<k><l|r>`), at most 4 a
+  jetty, 2 in 5 speedboats, the rest jetskis, bow either way: the same on every peer and every restart.
+  When a jetty's tile enters the rings, each place with 0.7 m of water gets an ordinary parked boat
+  (`veh_marina_<id>`, keel at its draught under the still level); one taken is put back
+  `RespawnSeconds` (180) later, once nothing lies within 4 m of its place and nobody within 40 m. They
+  get #378's mooring spring with every parked boat. Region: 89 jetties (`LandingIndex.Harbours`: the
+  jetties within 120 m of one another are a harbour).
 
 ## API for #379 (the steamer AI)
 
@@ -77,33 +97,35 @@ the steamer AI (#379) reads.
 - Placing or aiming: `Landings.KeelWorld(berth, origin, SteamerBerth.FloatDraught)`,
   `Landings.Yaw(berth)`, `Landings.Bow(berth)`; `SteamerBerth.AtPier(chunks, origin, berth)` (null
   until the water there has loaded), `SteamerBerth.Place(vehicles, origin, keel, yaw, name, gangways)`.
-  Coming alongside: the face is 4.6 m off the centreline to port, the head spans stations 41.6-51.6
+  Coming alongside: the face is 5.65 m off the centreline to port, the head spans stations 41.6-51.6
   (the gangway at 43.2-45.2 lands on it), nothing is in the way of the paddle box forward of it.
+- Boats: `Landings.BoatBerths()` (every jetty's), `Jetty.BoatSlots()` / `BoatBerths()`
+  (`BoatBerth`: id, LV95 of the keel, heading, speedboat or jetski, side), `LandingIndex.Harbours()`.
 
 ## Checks
 
 - `tools/test.sh unit` (`LandingTests`: the head at the plank's height, the neck to the quay and its
-  ramps, a Steg's ramp, moving out for water, too shallow, no shore, a jetty, the numbers against
-  `SteamerLines`, the file round trip and one tile per ribbon, the fixture lake's landing).
+  ramps, a head at a Steg's height, a Steg too high (a ramp), moving out for water, too shallow, no
+  shore, a jetty, boat places and the chosen ones, harbours, the numbers against `SteamerLines`, the
+  file round trip and one tile per ribbon, the fixture lake's landing).
 - Streaming checked by hand: a server on `fixture:lake`, a client on the flat fixture: `[stream] landings
   received: 1 landings, 1 jetties`, `[terrain] 1 tiles build their piers`, `--leavecheck` ok.
 - `--steamercheck pier --chunks fixture:lake` (quick, ~1 min): the fixture's landing (a stop on the
-  shelf, a 130 m neck), the steamer at its berth, the plank's foot against the deck (−0.017 m), the
-  walk along the neck, over the plank onto the main deck and back, a speedboat alongside the fixture's
-  jetty and its driver stepping out onto it. `shots` windowed with `--style ps1|cartoon`:
-  `test_output/steamer/<style>/pier_moored|pier_player|gangway|jetty_boat.png`.
+  shelf, a 130 m neck), the steamer at its berth, the plank fitted to the head (foot ±0.000 m), the
+  walk along the neck, over the plank onto the main deck and back; the fixture jetty's marina boats at
+  their places, a speedboat at a free place and its driver stepping out onto the jetty, one boat taken
+  and put back, a count per harbour. `shots` windowed with `--style ps1|cartoon`:
+  `test_output/steamer/<style>/pier_moored|pier_player|gangway|jetty_boat|marina.png`.
 - `--steamercheck nyon[,shots] --chunks <real tiles> [--landings <file>] --at 2507900,1137600
-  --occasion none --rings 5` (tier 3): the same at Nyon, starting on the Steg and down its ramp, and a
-  Port de Nyon jetty. Measured: plank's foot −0.014 m, draught 1.65 m, steps out 1.6 m from the helm.
+  --occasion none --rings 5` (tier 3): the same at Nyon, from the Steg straight onto the head and up
+  the plank (it rises 0.21 m, 9°), and Port de Nyon's jetties and boats.
 
 ## Not done / decisions
 
 - The steamer is not moored: parked, it floats where it was put and sleeps in a calm; in a swell it
   drifts like any parked boat (a mooring spring is `VehicleBody.Boat.cs`, #378's file).
-- The plank is fixed (0.3 m down), so the head sits at 1.08 m over the water whatever the real pier's
-  height (Nyon's Steg ends 1.6 m up: a 2 m ramp joins them). An adjustable gangway would let the head
-  be the Steg's height.
-- Jetties' widths are assumed (2.2 m): TLM has no width. Their boats are not placed (no parked boats
-  at harbours yet); the API lists no boat berths along them.
+- The plank tilts in the calm the berth was planned for; in a swell the parked ship heaves and the
+  plank follows the head on each peer's own waves, its foot staying on the face's edge.
+- Jetties' widths are assumed (2.2 m): TLM has no width.
 - Geneva's quays (Pâquis, Mont-Blanc, Molard...) are landings too and get the same head; Molard and
   Châteaubriand moved out 60-70 m for water.

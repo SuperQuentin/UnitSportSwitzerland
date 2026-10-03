@@ -22,7 +22,8 @@ namespace UnitSport.Player;
 /// standing there in the swell (carried by the tilting deck, the stumble feels the heel), down the
 /// stairs, along the side deck into the saloon, the gangway's gate opened by its button and out on
 /// the plank, forward to the bow (38 m from the middle: the deck is still built), over the rail into
-/// the water swimming, back up the gangway's ladder, and into a saloon seat and up again.</item>
+/// the water swimming, back up the boarding ladder on the hull (#384), and into a saloon seat and up
+/// again; then E from a quay alongside both ways of "Get in buses and ships from outside" (#384).</item>
 /// </list>
 /// <c>pier</c> (#377): the fixture's landing, the steamer at its berth, a walk from the pier over the
 /// gangway onto the deck and back, a speedboat's driver stepping out onto a jetty (<see cref="Piers"/>);
@@ -274,36 +275,45 @@ public partial class SteamerCheck : Node
         Expect(off < 1.0f && turn < 3f, F($"the steamer lies at the berth ({off:F2} m, {turn:F1}° off)"));
         Expect((steamer.BusDoors & (1 << berth.Side)) != 0, $"its gangway on the pier side stands open (gates {steamer.BusDoors})");
 
-        // the plank's foot against the head's deck
+        // the plank (#383): tilted from its hinge to the head's face, its foot flush with the head's deck
         float deckY = origin.ToWorld(berth.E, berth.N, berth.Deck).Y;
         float side = berth.Side == 0 ? 1f : -1f;   // authored x: + port
-        var plankFoot = Deck(me, side * (SteamerMeshBuilder.PlankEdge + SteamerMeshBuilder.PlankOut), SteamerMeshBuilder.DeckY - SteamerMeshBuilder.PlankDrop, 44.2f)!.Value;
+        var (run, drop) = GangwayFit.Of(Frame(me)!.GlobalTransform, berth.Side);
+        var plankFoot = Deck(me, side * (SteamerMeshBuilder.PlankEdge + run), SteamerMeshBuilder.DeckY - drop, 44.2f)!.Value;
         var space = me.GetWorld3D().DirectSpaceState;
         Vector3? DeckHit(Vector3 at)
         {
             var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(at + Vector3.Up * 3f, at + Vector3.Down * 3f, 1));
             return hit.Count > 0 ? hit["position"].AsVector3() : null;
         }
-        var onHead = Deck(me, side * (SteamerMeshBuilder.PlankEdge + SteamerMeshBuilder.PlankOut + 1.2f), SteamerMeshBuilder.DeckY, 44.2f)!.Value;
+        var onHead = Deck(me, side * (SteamerMeshBuilder.PlankEdge + run + 1.2f), SteamerMeshBuilder.DeckY, 44.2f)!.Value;
         bool solid = await Until(() => DeckHit(onHead) is { } h && Mathf.Abs(h.Y - deckY) < 0.1f, 30);
-        Log(F($"the plank's foot {plankFoot.Y - deckY:+0.000;-0.000} m against the head's deck; the deck beside it hit at {(DeckHit(onHead)?.Y ?? float.NaN) - deckY:+0.000;-0.000} m"));
+        Log(F($"the plank: {run:F2} m out, {drop:+0.00;-0.00} m down ({Mathf.RadToDeg(Mathf.Atan2(drop, run)):F0}°), its foot {plankFoot.Y - deckY:+0.000;-0.000;0.000} m against the head's deck; the deck beside it hit at {(DeckHit(onHead)?.Y ?? float.NaN) - deckY:+0.000;-0.000} m"));
         Expect(solid, "the pier's head is solid where the gangway lands");
-        Expect(plankFoot.Y - deckY < 0.01f && plankFoot.Y - deckY > -0.06f, "the plank's foot is flush with the deck (in it, not a lip on it)");
+        Expect(Mathf.Abs(run - (float)(LandingPlanner.Default.FaceOffset - SteamerMeshBuilder.PlankEdge)) < 0.15f,
+            "the plank reaches the head's face (it was fitted to the pier, not the plank as built)");
+        Expect(Mathf.Abs(plankFoot.Y - deckY) < 0.012f, "the plank's foot is flush with the head's deck");
 
-        // on the way to the head, 12 m from it: on the pier's own neck, or on the surveyed pier (a
-        // road the roads draw, #377) before the ramp down to the head
-        var neck = landing.Ribbons.First(r => r.Rails);
+        // on the way to the head: 12 m along the pier's own neck, or 8 m back on the surveyed pier (a
+        // road the roads draw, #377), across any ramp from it to the head
+        var head = landing.Ribbons.First(r => !r.Rails);
+        var hc = new[] { (head.Points[0][0] + head.Points[1][0]) / 2, (head.Points[0][1] + head.Points[1][1]) / 2 };
+        // square from the ship toward the pier (its port side: left of the bow)
+        double hdg = berth.Heading * Math.PI / 180, ax = -Math.Cos(hdg) * side, ay = Math.Sin(hdg) * side;
+        var backMid = new[] { hc[0] + ax * head.Width / 2, hc[1] + ay * head.Width / 2, head.Points[0][2] };
+        var neck = landing.Ribbons.FirstOrDefault(r => r.Rails);
         double D(double[] p) => (p[0] - berth.E) * (p[0] - berth.E) + (p[1] - berth.N) * (p[1] - berth.N);
-        var near = D(neck.Points[0]) < D(neck.Points[^1]) ? neck.Points[0] : neck.Points[^1];
-        var far = near == neck.Points[0] ? neck.Points[^1] : neck.Points[0];
+        var near = neck == null ? backMid : D(neck.Points[0]) < D(neck.Points[^1]) ? neck.Points[0] : neck.Points[^1];
+        var far = neck == null ? backMid : near == neck.Points[0] ? neck.Points[^1] : neck.Points[0];
         double len = Math.Sqrt((far[0] - near[0]) * (far[0] - near[0]) + (far[1] - near[1]) * (far[1] - near[1]));
         bool surveyed = len < 12;
         double[] start = surveyed
-            ? new[] { far[0] + (far[0] - near[0]) / len * 8, far[1] + (far[1] - near[1]) / len * 8, far[2] }
+            ? new[] { far[0] + ax * 8, far[1] + ay * 8, far[2] }
             : new[] { near[0] + (far[0] - near[0]) * 12 / len, near[1] + (far[1] - near[1]) * 12 / len, near[2] + (far[2] - near[2]) * 12 / len };
+        Log(F($"the head's deck {head.Points[0][2] - berth.Level:F2} m over the water; {(neck == null ? "no ramp: the head meets the surveyed pier at its height" : $"a {(surveyed ? "ramp" : "neck")} of {len:F1} m")}"));
         var neckSpot = origin.ToWorld(start[0], start[1], start[2] + 0.3);
         var headBack = origin.ToWorld(near[0], near[1], near[2] + 0.3);
-        var path = surveyed ? new[] { origin.ToWorld(far[0], far[1], far[2]), headBack, Vector3.Zero } : new[] { headBack, Vector3.Zero };
+        var path = surveyed && neck != null ? new[] { origin.ToWorld(far[0], far[1], far[2]), headBack, Vector3.Zero } : new[] { headBack, Vector3.Zero };
         await Until(() => chunks.HasCollisionAt(neckSpot), 30);
         me.Velocity = Vector3.Zero;
         me.GlobalPosition = neckSpot;
@@ -323,7 +333,7 @@ public partial class SteamerCheck : Node
 
         // along the neck to the head, beside the gangway
         path[^1] = onHead;
-        Expect(await WalkTo(me, path), $"along the {(surveyed ? "surveyed pier and down the ramp" : "neck")} to the head, by the gangway ({WhereText(me)})");
+        Expect(await WalkTo(me, path), $"along the {(surveyed ? (neck == null ? "surveyed pier" : "surveyed pier and its ramp") : "neck")} to the head, by the gangway ({WhereText(me)})");
         await Wait(0.5);
         Expect(!me.Aboard && Mathf.Abs(me.GlobalPosition.Y - deckY) < 0.15f, F($"on the head's deck ({me.GlobalPosition.Y - deckY:+0.00;-0.00} m), not aboard"));
         await Shot("pier_player", () =>
@@ -335,7 +345,8 @@ public partial class SteamerCheck : Node
             var target = me.GlobalPosition + Vector3.Up * 1.3f - towardPier * 3f + bow * 1.5f;
             return new Transform3D(Basis.LookingAt(target - eye, Vector3.Up), eye);
         });
-        await Shot("gangway", () => OnShip(me, side * 9.5f, SteamerMeshBuilder.DeckY + 1.4f, 49.5f, side * 4.6f, SteamerMeshBuilder.DeckY - 0.4f, 44.2f));
+        // the plank edge-on from aft along the face, low: its tilt from the deck's edge to the head
+        await Shot("gangway", () => OnShip(me, side * 5.3f, SteamerMeshBuilder.DeckY + 0.55f, 48.2f, side * 4.9f, SteamerMeshBuilder.DeckY, 43.6f));
 
         // over the plank onto the main deck
         float d = SteamerMeshBuilder.DeckY;
@@ -347,33 +358,45 @@ public partial class SteamerCheck : Node
         await Wait(0.8);
         Expect(!me.Aboard && me.IsOnFloor() && Mathf.Abs(me.GlobalPosition.Y - deckY) < 0.15f, F($"back on the pier's head ({me.GlobalPosition.Y - deckY:+0.00;-0.00} m), ashore"));
 
-        await JettyBoat(me, landing);
+        await JettyBoat(me, landing, neckSpot);
     }
 
-    /// <summary>A speedboat brought alongside the jetty nearest the landing; its driver steps out onto the jetty, not into the lake.</summary>
-    private async Task JettyBoat(FootPlayer me, Landing landing)
+    /// <summary>
+    /// The harbour by the landing (#383): its jetty's marina boats moored at their places, a speedboat
+    /// brought alongside a free place whose driver steps out onto the jetty (#377), one marina boat
+    /// taken and put back, and the boats counted per harbour.
+    /// </summary>
+    private async Task JettyBoat(FootPlayer me, Landing landing, Vector3 away)
     {
-        var origin = me.Terrain!.Origin!;
+        var chunks = me.Terrain!;
+        var origin = chunks.Origin!;
+        var vehicles = VehicleManager.Instance!;
         var jetty = Landings.Current.Jetties.MinBy(j => Math.Abs(j.Ribbon.Points[0][0] - landing.E) + Math.Abs(j.Ribbon.Points[0][1] - landing.N));
-        if (jetty == null) { Expect(false, "a jetty near the landing"); return; }
-        var pts = jetty.Ribbon.Points;
-        // two thirds along it (out over the water), and its direction there
-        int i = Math.Clamp(pts.Count * 2 / 3, 1, pts.Count - 1);
-        var p0 = origin.ToWorld(pts[i - 1][0], pts[i - 1][1], pts[i - 1][2]);
-        var p1 = origin.ToWorld(pts[i][0], pts[i][1], pts[i][2]);
-        var along = ((p1 - p0) with { Y = 0 }).Normalized();
-        var beside = new Vector3(along.Z, 0, -along.X);
-        float jettyDeck = (p0.Y + p1.Y) * 0.5f;
-        var mid = (p0 + p1) * 0.5f;
-        Log(F($"jetty {jetty.Id}: {pts.Count} points, deck {jettyDeck:F2} (world), the boat by its point {i}"));
-        // standing on the jetty, then into a speedboat put in the water alongside
-        if (!await Until(() => me.Terrain!.HasCollisionAt(mid), 40)) Log("  the jetty's tile has no collision yet");
+        if (jetty == null || MarinaBoats.Instance == null) { Expect(false, "a jetty near the landing, and the marina boats"); return; }
+        bool Wet(BoatBerth b) => chunks.TryGetWater(origin.ToWorld(b.E, b.N, 0), out float l, out _)
+            && chunks.TryGetHeight(origin.ToWorld(b.E, b.N, 0), out float bed) && l - bed >= MarinaBoats.MinDepth;
+        var berths = jetty.BoatBerths();
+        VehicleBody? At(BoatBerth b) => vehicles.GetNodeOrNull<VehicleBody>(MarinaBoats.Prefix + b.Id);
+        await Until(() => berths.All(b => !Wet(b) || At(b) != null), 30);
+        int wet = berths.Count(Wet), moored = berths.Count(b => At(b) != null);
+        float worst = berths.Where(b => At(b) != null).Select(b => MathX.FlatDistance(At(b)!.GlobalPosition, origin.ToWorld(b.E, b.N, 0))).DefaultIfEmpty(0f).Max();
+        Log(F($"jetty {jetty.Id}: {jetty.BoatSlots().Count} places, {berths.Count} chosen, {wet} with water enough: {moored} boats moored ({berths.Count(b => b.Speedboat && At(b) != null)} speedboats), {worst:F2} m off their places at most"));
+        Expect(moored == wet && moored > 0 && worst < 1.5f, "the jetty's marina boats lie at their places");
+
+        // a free place with water, as far from the moored boats as there is
+        var free = jetty.BoatSlots().Where(s => !berths.Any(b => b.Id == s.Id) && Wet(s))
+            .OrderByDescending(s => berths.Select(b => (s.E - b.E) * (s.E - b.E) + (s.N - b.N) * (s.N - b.N)).DefaultIfEmpty(1e9).Min()).FirstOrDefault();
+        if (free.Id == null) { Expect(false, "a free place along the jetty"); return; }
+        var water = origin.ToWorld(free.E, free.N, 0);
+        var (deckSpot, along) = OnRibbon(jetty.Ribbon, origin, water);
+        float jettyDeck = deckSpot.Y;
+        Log(F($"a speedboat at the free place {free.Id}, the jetty's deck {jettyDeck:F2} (world)"));
+        if (!await Until(() => chunks.HasCollisionAt(deckSpot), 40)) Log("  the jetty's tile has no collision yet");
         me.Velocity = Vector3.Zero;
-        me.GlobalPosition = mid + Vector3.Up * 0.3f;
+        me.GlobalPosition = deckSpot + Vector3.Up * 0.3f;
         await Until(() => me.IsOnFloor(), 8);
         await Wait(0.5);
         if (!me.SetRide(RideKind.Speedboat)) { Expect(false, $"a speedboat from the jetty ({WhereText(me)}, {me.WalkState})"); return; }
-        var water = mid + beside * ((float)jetty.Ribbon.Width * 0.5f + 1.5f);
         WaterField.TryLevelAt(water, out float level);
         float yaw = Mathf.Atan2(-along.X, -along.Z);
         me.PlaceBoat(water with { Y = level - 0.25f }, yaw);
@@ -382,16 +405,73 @@ public partial class SteamerCheck : Node
         me.RideControls = null;
         me.ExitVehicle();
         await Wait(1.2);
-        Log(F($"out of the boat: swimming {me.IsSwimming}, on the floor {me.IsOnFloor()}, {me.GlobalPosition.Y - jettyDeck:+0.00;-0.00} m off the jetty's deck, {MathX.FlatDistance(me.GlobalPosition, mid):F1} m from its middle"));
+        Log(F($"out of the boat: swimming {me.IsSwimming}, on the floor {me.IsOnFloor()}, {me.GlobalPosition.Y - jettyDeck:+0.00;-0.00} m off the jetty's deck, {MathX.FlatDistance(me.GlobalPosition, deckSpot):F1} m from the spot beside the boat"));
         Expect(!me.IsSwimming && me.IsOnFloor() && Mathf.Abs(me.GlobalPosition.Y - jettyDeck) < 0.25f, "the driver steps out of the boat onto the jetty, not into the water");
-        var boat = VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().FirstOrDefault(v => v.Kind == RideKind.Speedboat);
+        var boat = vehicles.GetChildren().OfType<VehicleBody>().Where(v => v.Kind == RideKind.Speedboat).MinBy(v => v.GlobalPosition.DistanceTo(water));
+        var beside = new Vector3(along.Z, 0, -along.X);
         await Shot("jetty_boat", () =>
         {
             var at = boat?.GlobalPosition ?? water;
-            var eye = at + beside * 12f - along * 7f + Vector3.Up * 4.5f;
-            var target = (at + mid) * 0.5f + Vector3.Up * 0.8f;
+            var side = (at - deckSpot) with { Y = 0 };
+            side = side.LengthSquared() > 0.01f ? side.Normalized() : beside;
+            var eye = at + side * 12f - along * 7f + Vector3.Up * 4.5f;
+            var target = (at + deckSpot) * 0.5f + Vector3.Up * 0.8f;
             return new Transform3D(Basis.LookingAt(target - eye, Vector3.Up), eye);
         });
+
+        // the whole harbour from above its jetties
+        var harbour = Landings.Current.Harbours().First(h => h.Contains(jetty));
+        double he = harbour.SelectMany(j => j.Ribbon.Points).Average(p => p[0]), hn = harbour.SelectMany(j => j.Ribbon.Points).Average(p => p[1]);
+        var centre = origin.ToWorld(he, hn, 0);
+        if (WaterField.TryLevelAt(centre, out float hl)) centre.Y = hl;
+        else centre.Y = jettyDeck;
+        await Shot("marina", () =>
+        {
+            var eye = centre + new Vector3(-0.6f, 0, 0.8f).Normalized() * 70f + Vector3.Up * 28f;
+            return new Transform3D(Basis.LookingAt(centre - eye, Vector3.Up), eye);
+        });
+
+        // one taken away comes back once its place is clear and nobody is near
+        if (berths.FirstOrDefault(b => At(b) != null) is { Id: not null } taken)
+        {
+            double was = MarinaBoats.RespawnSeconds;
+            MarinaBoats.RespawnSeconds = 2;
+            vehicles.Claim(At(taken)!, _ => { });
+            await Wait(0.5);
+            Expect(At(taken) == null, $"a marina boat taken away ({taken.Id})");
+            me.Velocity = Vector3.Zero;
+            me.GlobalPosition = away;
+            bool back = await Until(() => At(taken) != null, 20);
+            MarinaBoats.RespawnSeconds = was;
+            Expect(back, "and put back at its place a while later, nobody near");
+        }
+
+        // a count per harbour, of the jetties seen
+        foreach (var h in Landings.Current.Harbours())
+        {
+            var places = h.SelectMany(j => j.BoatBerths()).ToList();
+            int n = places.Count(b => At(b) != null);
+            if (n == 0) continue;
+            Log(F($"harbour of {h.Count} jetties at {h[0].Ribbon.Points[0][0]:F0}/{h[0].Ribbon.Points[0][1]:F0}: {n} boats moored of {places.Count} places"));
+        }
+    }
+
+    /// <summary>The point of a ribbon's deck nearest a world point (world, on the deck), and the ribbon's direction there.</summary>
+    private static (Vector3 At, Vector3 Along) OnRibbon(PierRibbon r, Core.WorldOrigin origin, Vector3 to)
+    {
+        Vector3 best = default, dir = Vector3.Forward;
+        float bestD = float.MaxValue;
+        for (int i = 1; i < r.Points.Count; i++)
+        {
+            var a = origin.ToWorld(r.Points[i - 1][0], r.Points[i - 1][1], r.Points[i - 1][2]);
+            var b = origin.ToWorld(r.Points[i][0], r.Points[i][1], r.Points[i][2]);
+            var ab = (b - a) with { Y = 0 };
+            float t = ab.LengthSquared() < 1e-6f ? 0f : Mathf.Clamp(((to - a) with { Y = 0 }).Dot(ab) / ab.LengthSquared(), 0f, 1f);
+            var p = a.Lerp(b, t);
+            float d = MathX.FlatDistance(p, to);
+            if (d < bestD) { bestD = d; best = p; dir = ab.Normalized(); }
+        }
+        return (best, dir);
     }
 
     /// <summary>Walks to world points in turn (level); false if it never got there.</summary>
@@ -626,12 +706,21 @@ public partial class SteamerCheck : Node
         bool swimming = await Until(() => me.IsSwimming, 8);
         me.WalkControls = () => (Vector3.Zero, false);
         Expect(swimming && !me.Aboard, $"over the rail: in the water, swimming (#301), not carried ({WhereText(me)})");
-        // back up the gangway's ladder
-        if (Deck(me, SteamerMeshBuilder.DeckHalf(SteamerMeshBuilder.Z(44.2f)) + 1.8f, d, 44.2f) is { } foot) me.StartSwimmingAtSurface(foot);
+        // back up the boarding ladder on the hull (#384), forward climbing it as a rope ladder
+        float lx = SteamerMeshBuilder.LadderX, la = SteamerMeshBuilder.LadderAt;
+        if (Deck(me, lx + 1.2f, d, la) is { } foot) me.StartSwimmingAtSurface(foot);
         await Wait(0.5);
-        Expect(me.IsSwimming && me.TryInteract(), "E swimming beside the gangway");
-        bool aboard = await Until(() => me.Aboard && !me.IsSwimming, 6);
-        Expect(aboard && Mathf.Abs(Where(me).Y - d) < 0.3f, $"climbs its ladder onto the deck ({WhereText(me)})");
+        Expect(me.IsSwimming && me.TryInteract() && me.OnShipLadder, $"E swimming by the ladder gets onto it ({WhereText(me)})");
+        me.ForceLadderClimb = 1f;
+        await Wait(0.5);
+        await Shot("ladder_climb", () => OnShip(me, lx + 7f, SteamerMeshBuilder.DeckY + 0.6f, la + 6f, lx, SteamerMeshBuilder.DeckY - 0.6f, la));
+        float midway = Where(me).Y;
+        bool aboard = await Until(() => me.Aboard && !me.IsSwimming && !me.OnShipLadder, 8);
+        me.ForceLadderClimb = null;
+        await Wait(0.5);
+        Log(F($"on the ladder: {midway:F2} m over the keel after 0.5 s of climbing"));
+        Expect(aboard && Mathf.Abs(Where(me).Y - d) < 0.3f, $"climbs the ladder over the rail onto the deck ({WhereText(me)})");
+        await Shot("ladder", () => OnShip(me, lx + 9f, SteamerMeshBuilder.DeckY + 1.2f, la + 7f, lx, SteamerMeshBuilder.DeckY - 0.4f, la));
     }
 
     private async Task Seat(FootPlayer me)
@@ -650,51 +739,64 @@ public partial class SteamerCheck : Node
     }
 
     /// <summary>
-    /// E from a quay beside the parked steamer, both ways of the setting "Board ships on deck": off (the
-    /// default) it takes the wheel, as a bus; on, it puts the player on deck by the gangway.
+    /// E from a quay beside the parked steamer, both ways of "Get in buses and ships from outside"
+    /// (#384): on (the default) it takes the wheel, as a bus; off it does nothing, and the player walks
+    /// aboard by the gangway (its button opens it) instead.
     /// </summary>
     private async Task Boarding(FootPlayer me)
     {
         await SeaState("calm", 0f);
         await Wait(3);
         var settings = GameSettings.Current;
-        bool was = settings.BoardShipsOnDeck;
+        bool was = settings.BoardWalkableFromOutside;
         float d = SteamerMeshBuilder.DeckY, top = d - SteamerMeshBuilder.PlankDrop;
-        float inner = SteamerMeshBuilder.PlankEdge + 0.5f, outer = inner + 7f;
-        var size = new Vector3(outer - inner, 8f, 8.4f);
+        float inner = SteamerMeshBuilder.PlankEdge + SteamerMeshBuilder.PlankOut, outer = inner + 7f;
+        var size = new Vector3(outer - inner, 8f, 14f);
         var quay = new StaticBody3D { Name = "TestQuay" };
         quay.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = size } });
         quay.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = size }, MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.55f, 0.55f, 0.52f) } });
         GetTree().CurrentScene.AddChild(quay);
-        // on the quay at the port gangway, the ship as it lies now
-        async Task<bool> OnQuay()
+        // on the quay at the port gangway (or along it, out of the buttons' reach), the ship as it lies now
+        async Task<bool> OnQuay(float at, float x)
         {
             if (Frame(me) is not { } f) return false;
             var t = f.GlobalTransform;
             quay.GlobalTransform = new Transform3D(new Basis(Vector3.Up, t.Basis.GetEuler().Y),
                 t * BoatMeshBuilder.Flip(new Vector3((inner + outer) * 0.5f, top - size.Y * 0.5f, SteamerMeshBuilder.Z(44.2f))));
-            me.GlobalPosition = t * BoatMeshBuilder.Flip(new Vector3(SteamerMeshBuilder.PlankEdge + 1.6f, top + 0.05f, SteamerMeshBuilder.Z(44.2f)));
+            me.GlobalPosition = t * BoatMeshBuilder.Flip(new Vector3(x, top + 0.05f, SteamerMeshBuilder.Z(at)));
             me.Velocity = Vector3.Zero;
             await Wait(1.5);
             return !me.Aboard && me.Ride == RideKind.OnFoot;
         }
 
-        settings.BoardShipsOnDeck = false;
-        Expect(await OnQuay(), $"on a quay beside the port gangway ({WhereText(me)})");
+        settings.BoardWalkableFromOutside = true;
+        Expect(await OnQuay(44.2f, inner + 0.3f), $"on a quay beside the port gangway ({WhereText(me)})");
+        Log($"  E would: {VehicleReach.Find(me)?.Action ?? "nothing"} ({(Parked() is { } pk ? pk.Name : "no parked steamer")}, enterable {(Parked() is { } pp && VehicleManager.Instance!.Enterable(pp))})");
         Expect(me.TryInteract() && await Until(() => me.Ride == RideKind.Steamer && me.SeatIndex == 0, 5),
-            "\"Board ships on deck\" off (the default): E from the quay takes the wheel, as a bus");
+            "\"Get in buses and ships from outside\" on (the default): E from the quay takes the wheel, as a bus");
         me.ExitVehicle();
         await Until(() => me.Aboard, 8);
 
-        settings.BoardShipsOnDeck = true;
-        Expect(await OnQuay(), $"back on the quay ({WhereText(me)})");
-        bool aboard = me.TryInteract() && await Until(() => me.Ride == RideKind.OnFoot && me.Aboard, 6);
+        settings.BoardWalkableFromOutside = false;
+        Expect(await OnQuay(49f, inner + 0.3f), $"back on the quay, along the ship ({WhereText(me)})");
+        me.TryInteract();
+        await Wait(2);
+        Expect(me.Ride == RideKind.OnFoot && !me.Aboard, $"off: E from the quay does nothing to the ship ({me.Ride}, {WhereText(me)})");
+        // so walk aboard: the gangway's button opens it, over the plank onto the deck
+        var parked = Parked();
+        Expect(await Walk(me, new[] { (inner + 0.45f, 43.1f) }, top), $"to the gangway's outside button ({WhereText(me)})");
+        await Wait(0.5);
+        if (me.ButtonInReach() == null && parked?.Visual is { } pv)
+            foreach (var b in parked.Ride.Decks[0].Buttons)
+                Log(F($"  button {b.Door} at {b.At} normal {b.Normal}, chest {pv.GlobalTransform.AffineInverse() * (me.GlobalPosition + Vector3.Up * 1.1f)} (node)"));
+        // shut, as someone aboard may have left it: its button outside, reached from the quay, opens it
+        if ((parked?.BusDoors & 1) == 1) parked!.ToggleDoor(1);
+        await Wait(0.5);
+        Expect(me.ButtonInReach() is { Door: 0 } && me.TryInteract() && await Until(() => (parked?.BusDoors & 1) == 1, 3), $"its button, reached from the quay, opens the gangway (gates {parked?.BusDoors})");
+        Expect(await Walk(me, new[] { (inner + 0.4f, 44.2f), (3.4f, 44.2f), (2.4f, 44.2f) }, d), $"over the plank ({WhereText(me)})");
         await Wait(1);
-        var w = Where(me);
-        Expect(aboard && Mathf.Abs(w.Y - d) < 0.25f && w.At > SteamerMeshBuilder.GangFrom - 0.5f && w.At < SteamerMeshBuilder.GangTo + 0.5f,
-            F($"\"Board ships on deck\" on: E from the quay puts the player on deck at the gangway ({WhereText(me)})"));
-        await Shot("board_on_deck", () => OnShip(me, 2.4f, d + 1.7f, 38.8f, 3.9f, d + 0.9f, 44.4f));
-        settings.BoardShipsOnDeck = was;
+        Expect(me.Aboard && Mathf.Abs(Where(me).Y - d) < 0.25f, $"off: walked aboard by the gangway instead ({WhereText(me)})");
+        settings.BoardWalkableFromOutside = was;
         quay.QueueFree();
     }
 

@@ -46,15 +46,25 @@ public static class LandingPlanner
     public sealed record Options
     {
         /// <summary>
-        /// The head's deck over the still water: the steamer's plank lands on it. Its keel floats
-        /// 1.64 m under the surface, its main deck is 3.0 m over the keel and the open plank runs
-        /// down 0.3 m (<c>SteamerMeshBuilder.DeckY</c>, <c>PlankDrop</c>): 1.06 m, plus 2 cm so the
-        /// plank's foot is in the deck rather than a lip on it.
+        /// The steamer's main deck over the still water: its keel floats 1.64 m under the surface, the
+        /// deck is 3.0 m over the keel (<c>SteamerMeshBuilder.DeckY</c>). Its gangway plank (#383) tilts
+        /// from the deck's edge to the head's face, so a head may stand up to <see cref="PlankRise"/>
+        /// over or under this.
         /// </summary>
-        public double DeckOverWater { get; init; } = 1.08;
+        public double ShipDeckOverWater { get; init; } = 1.36;
 
-        /// <summary>The ship's centreline to the head's face: its hull is 4.25 m half-beam, the plank reaches 5.65 m.</summary>
-        public double FaceOffset { get; init; } = 4.6;
+        /// <summary>The head's deck over the water where nothing else sets it (a neck of its own): the plank 0.3 m down.</summary>
+        public double DeckOverWater { get; init; } = 1.06;
+
+        /// <summary>How far the plank tilts up or down over its 1.3 m: 0.52 m, 1 in 2.5.</summary>
+        public double PlankRise { get; init; } = 0.52;
+
+        /// <summary>
+        /// The ship's centreline to the head's face: the plank's hinge on the deck's edge (4.35 m) plus
+        /// its reach (1.3 m). The plank runs from the hinge to the face's top edge, whatever the head's
+        /// height, so its foot is flush with the head's deck there (#383).
+        /// </summary>
+        public double FaceOffset { get; init; } = 5.65;
 
         /// <summary>The head starts this far aft of the ship's centre of mass (its paddle box ends 3.25 m aft of it) and runs <see cref="HeadLength"/> aft.</summary>
         public double HeadAft { get; init; } = 3.6;
@@ -145,12 +155,15 @@ public static class LandingPlanner
         // the stop on the quay's edge: the nearest water a metre deep
         var (se, sn) = (e, n);
         double ne, nn;
-        double ramp = 0;
+        double ramp = 0, headDeck = double.NaN;
         if (road is { } r)
         {
-            // the head beyond the surveyed pier's end, across it, a ramp between them
+            // the head beyond the surveyed pier's end, across it, at the pier's own height when the
+            // plank can tilt to it (#383); a ramp between them only when it cannot
             (ne, nn) = (r.DirE, r.DirN);
-            ramp = Math.Max(1.0, Math.Abs(r.Deck - (s.Level(r.E, r.N) + o.DeckOverWater)) / o.MaxRamp);
+            double ship = s.Level(r.E, r.N) + o.ShipDeckOverWater;
+            headDeck = Math.Clamp(r.Deck, ship - o.PlankRise, ship + o.PlankRise);
+            ramp = Math.Abs(r.Deck - headDeck) < 0.005 ? 0 : Math.Abs(r.Deck - headDeck) / o.MaxRamp;
             (se, sn) = (r.E, r.N);
         }
         else
@@ -167,7 +180,7 @@ public static class LandingPlanner
         // the bow along the shore, the port side (left of the bow) to the pier: left(b) = -n
         double be = -nn, bn = ne;
         double level = s.Level(se, sn);
-        double deck = level + o.DeckOverWater;
+        double deck = double.IsNaN(headDeck) ? level + o.DeckOverWater : headDeck;
 
         // moved out until the hull floats
         double extend = 0, depth = 0;
@@ -217,12 +230,16 @@ public static class LandingPlanner
         {
             // the ramp from the surveyed pier's end: its deck there, down to the head's at the slope,
             // then level out to the head (when the head was moved out for water)
-            var pts = new List<double[]> { P(rd.E, rd.N, rd.Deck) };
+            // (none when the head meets the pier's end at its own height)
             double run = Dist(rd.E, rd.N, pe0, pn0);
-            double slope = Math.Min(run, Math.Abs(rd.Deck - deck) / o.MaxRamp);
-            if (slope < run - 0.05) pts.Add(P(rd.E + ne * slope, rd.N + nn * slope, deck));
-            pts.Add(P(pe0, pn0, deck));
-            landing.Ribbons.Add(new PierRibbon { Kind = PierKind.Pier, Width = rd.Width, Rails = true, Points = pts });
+            if (run > 0.05)
+            {
+                var pts = new List<double[]> { P(rd.E, rd.N, rd.Deck) };
+                double slope = Math.Min(run, Math.Abs(rd.Deck - deck) / o.MaxRamp);
+                if (slope > 0.05 && slope < run - 0.05) pts.Add(P(rd.E + ne * slope, rd.N + nn * slope, deck));
+                pts.Add(P(pe0, pn0, deck));
+                landing.Ribbons.Add(new PierRibbon { Kind = PierKind.Pier, Width = rd.Width, Rails = true, Points = pts });
+            }
             return landing;
         }
         // the neck: from the head's back toward the shore, onto the quay

@@ -143,6 +143,13 @@ src/Terrain/Fixture/     quick  --steamercheck pier --chunks fixture:lake
 src/Player/FootPlayer.Pi quick  --steamercheck pier --chunks fixture:lake
 src/Player/SteamerCheck  quick  --steamercheck pier --chunks fixture:lake
 tools/TerrainFormat/Land quick  --steamercheck pier --chunks fixture:lake
+# the tilting gangway plank and the marina boats (#383)
+src/World/GangwayFit     quick  --steamercheck pier --chunks fixture:lake
+src/World/MarinaBoats    quick  --steamercheck pier --chunks fixture:lake
+src/Avatar/SteamerMesh   quick  --steamercheck pier --chunks fixture:lake
+# the hull's boarding ladder and the walkable E setting (#384)
+src/Vehicles/VehicleReac quick  --steamercheck walk --chunks fixture:lake
+src/Core/GameSettings    quick  --exitcheck --world fixture
 
 src/Net/                 net    @netsmoke
 src/Core/ServerWorld     net    @netsmoke

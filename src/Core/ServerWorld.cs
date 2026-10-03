@@ -139,6 +139,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         AddChild(new World.AfricaTwinEgg(_chunks));
         // the paddle steamer at the Nyon landing (#303), put back each time its tile loads
         AddChild(new World.SteamerBerth(_chunks));
+        // jetskis and speedboats along the harbour jetties (#383), put back a while after they are taken
+        AddChild(new World.MarinaBoats(_chunks));
 
         // gunfire: clients send their rounds here to be relayed; the server flies none of them
         Combat.CombatManager.Create(this, null, origin, server: true);
