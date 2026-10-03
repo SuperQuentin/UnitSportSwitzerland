@@ -9,7 +9,7 @@ using static UnitSport.Avatar.FreighterLayout;
 namespace UnitSport.Player;
 
 /// <summary>
-/// <c>--holdcheck [shots]</c> offline on <c>--world fixture</c> (#420): the military freighter walked,
+/// <c>--freightercheck [shots]</c> offline on <c>--world fixture</c> (#420): the military freighter walked,
 /// on the ground and in flight, on the real deck mechanism (<c>walk-aboard</c>).
 /// <list type="bullet">
 /// <item>at the controls, stopped: G lowers the ramp and opens the crew door;</item>
@@ -21,21 +21,21 @@ namespace UnitSport.Player;
 /// <item>put up at 600 m at 65 m/s: the ramp opens in flight (a drop), E stands up, the walk aft into
 /// the hold is carried along on the floor; back at the controls.</item>
 /// </list>
-/// Windowed with <c>shots</c>: <c>test_output/hold/*.png</c> at each stage. RESULT line at the end.
+/// Windowed with <c>shots</c>: <c>test_output/freighter/*.png</c> at each stage. RESULT line at the end.
 /// </summary>
-public partial class HoldCheck : Node
+public partial class FreighterCheck : Node
 {
-    public static bool Requested => CmdArgs.Has("--holdcheck");
-    private static bool Shots => CmdArgs.Value("--holdcheck") == "shots";
+    public static bool Requested => CmdArgs.Has("--freightercheck");
+    private static bool Shots => CmdArgs.Value("--freightercheck") == "shots";
 
     private readonly System.Func<FootPlayer?> _player;
     private int _failures, _shot;
 
-    public HoldCheck(System.Func<FootPlayer?> player) => _player = player;
+    public FreighterCheck(System.Func<FootPlayer?> player) => _player = player;
 
     private void Expect(bool ok, string what)
     {
-        GD.Print($"[hold] {(ok ? "ok  " : "FAIL")} {what}");
+        GD.Print($"[freightercheck] {(ok ? "ok  " : "FAIL")} {what}");
         if (!ok) _failures++;
     }
 
@@ -56,11 +56,11 @@ public partial class HoldCheck : Node
     {
         if (!Shots) return;
         for (int i = 0; i < 3; i++) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-        string dir = ProjectSettings.GlobalizePath("res://test_output/hold");
+        string dir = ProjectSettings.GlobalizePath("res://test_output/freighter");
         System.IO.Directory.CreateDirectory(dir);
         string path = System.IO.Path.Combine(dir, $"{++_shot:00}-{name}.png");
         GetViewport().GetTexture().GetImage().SavePng(path);
-        GD.Print($"[hold] wrote {path}");
+        GD.Print($"[freightercheck] wrote {path}");
     }
 
     private static bool Drawn => DisplayServer.GetName() != "headless";
@@ -131,10 +131,10 @@ public partial class HoldCheck : Node
 
         // G at the controls, stopped: the ramp down and the crew door open
         await Until(() => jet.MayOpenDoors, 8);
-        GD.Print($"[hold] before G: on the ground {jet.State.OnGround}, gear down {jet.State.GearDown}, may open {jet.MayOpenDoors}, {jet.State.Velocity.Length():F2} m/s");
+        GD.Print($"[freightercheck] before G: on the ground {jet.State.OnGround}, gear down {jet.State.GearDown}, may open {jet.MayOpenDoors}, {jet.State.Velocity.Length():F2} m/s");
         Key(PlayerInput.CarDoor);
         await Seconds(0.5);
-        GD.Print($"[hold] after G: doors {jet.DoorsOpen}, gear down {jet.State.GearDown}");
+        GD.Print($"[freightercheck] after G: doors {jet.DoorsOpen}, gear down {jet.State.GearDown}");
         await Until(() => !Drawn || Rig()?.DoorOpen(RampDoor) >= 1f, 12);
         Expect(jet.DoorsOpen == (1 << RampDoor | 1 << CrewDoor) && (!Drawn || Rig()?.DoorOpen(RampDoor) >= 1f && Rig()?.DoorOpen(CrewDoor) >= 1f),
             $"G lowered the ramp and opened the crew door (doors {jet.DoorsOpen})");
@@ -225,7 +225,7 @@ public partial class HoldCheck : Node
     {
         if (why != null) Expect(false, why);
         if (_player() is { } p) p.WalkControls = null;
-        GD.Print(_failures == 0 ? "[hold] RESULT: ok" : $"[hold] RESULT: FAILED ({_failures})");
+        GD.Print(_failures == 0 ? "[freightercheck] RESULT: ok" : $"[freightercheck] RESULT: FAILED ({_failures})");
         GetTree().Quit(_failures == 0 ? 0 : 1);
     }
 }

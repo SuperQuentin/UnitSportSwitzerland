@@ -100,10 +100,10 @@
   fall with the aircraft's speed. Flies with the shared model (`AirlinerCatalog.Freighter`, conventional).
   Checks: `--flycheck freighter --world flat` (quick: take-off flaps 50 %, flaps up in the climb,
   re-extended on approach; the circuit now fails a flaps overspeed held 3 s, measured touchdown
-  2.35 m/s); `--holdcheck [shots] --world fixture` (quick: G lowers the ramp, the flight deck, the
+  2.35 m/s); `--freightercheck [shots] --world fixture` (quick: G lowers the ramp, the flight deck, the
   stairs, a troop seat, down the ramp onto the ground and back up, the para and crew door buttons,
   the controls, the ramp opened in flight, walked into the hold at 73 m/s, the controls again;
-  `shots` windowed: `test_output/hold/`); `tools/freighternetcheck.sh` (net: B sees A's ramp go down,
+  `shots` windowed: `test_output/freighter/`); `tools/freighternetcheck.sh` (net: B sees A's ramp go down,
   walks up the parked one's ramp, shuts it by its button, A sees it shut).
 - **HUD**: the configuration (flaps, gear, brakes, warnings) is on a second line: on one line it ran
   under the corner's key hints (seen on the freighter, the A320's too).
