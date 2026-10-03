@@ -142,7 +142,7 @@ public partial class FootPlayer
         else if (Carrier == HoldOnLadder) Release(GlobalPosition, Vector3.Zero);
     }
 
-    private const float LadderClimbSpeed = 1.6f;
+    private const float LadderClimbSpeed = 1.1f;
 
     /// <summary>
     /// The boarding ladder of a walkable ship nearest this player within <paramref name="reach"/>

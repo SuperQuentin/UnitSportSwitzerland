@@ -27,6 +27,12 @@ public partial class MarinaBoats : Node
     /// <summary>Nobody within this of a place when a boat is put back there, m: it does not appear under someone's nose.</summary>
     public const float ClearOfPlayers = 40f;
 
+    /// <summary>
+    /// A boat is put at its place only with a player within this, m: the rings reach harbours 10 km off,
+    /// and a hundred boats floating out of sight are work for nothing.
+    /// </summary>
+    public const float PlaceRadius = 1500f;
+
     /// <summary>Water a place needs, m (a speedboat draws 0.28 m).</summary>
     public const float MinDepth = 0.7f;
 
@@ -97,6 +103,7 @@ public partial class MarinaBoats : Node
     {
         double now = Time.GetTicksMsec() / 1000.0;
         int placed = 0;
+        var players = vehicles.PlayerPositions?.Invoke().ToList();
         foreach (var id in _berths.Keys.ToList())
         {
             var (berth, empty) = _berths[id];
@@ -110,6 +117,7 @@ public partial class MarinaBoats : Node
             if (double.IsNaN(empty)) { _berths[id] = (berth, now); continue; }
             if (now - empty < RespawnSeconds && !double.IsNegativeInfinity(empty)) continue;
             var at = origin.ToWorld(berth.E, berth.N, 0);
+            if (players != null && !players.Any(p => MathX.FlatDistance(p, at) < PlaceRadius)) continue;
             if (!_chunks.TryGetWater(at, out float level, out _) || !_chunks.TryGetHeight(at, out float bed) || level - bed < MinDepth) continue;
             if (!double.IsNegativeInfinity(empty) && !Clear(vehicles, at)) continue;
             var kind = berth.Speedboat ? RideKind.Speedboat : RideKind.Jetski;

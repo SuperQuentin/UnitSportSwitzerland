@@ -345,7 +345,8 @@ public partial class SteamerCheck : Node
             var target = me.GlobalPosition + Vector3.Up * 1.3f - towardPier * 3f + bow * 1.5f;
             return new Transform3D(Basis.LookingAt(target - eye, Vector3.Up), eye);
         });
-        await Shot("gangway", () => OnShip(me, side * 9.5f, SteamerMeshBuilder.DeckY + 1.4f, 49.5f, side * 4.6f, SteamerMeshBuilder.DeckY - 0.4f, 44.2f));
+        // the plank edge-on from aft along the face, low: its tilt from the deck's edge to the head
+        await Shot("gangway", () => OnShip(me, side * 5.3f, SteamerMeshBuilder.DeckY + 0.55f, 48.2f, side * 4.9f, SteamerMeshBuilder.DeckY, 43.6f));
 
         // over the plank onto the main deck
         float d = SteamerMeshBuilder.DeckY;
@@ -711,13 +712,13 @@ public partial class SteamerCheck : Node
         await Wait(0.5);
         Expect(me.IsSwimming && me.TryInteract() && me.OnShipLadder, $"E swimming by the ladder gets onto it ({WhereText(me)})");
         me.ForceLadderClimb = 1f;
-        await Wait(0.9);
+        await Wait(0.5);
         await Shot("ladder_climb", () => OnShip(me, lx + 7f, SteamerMeshBuilder.DeckY + 0.6f, la + 6f, lx, SteamerMeshBuilder.DeckY - 0.6f, la));
         float midway = Where(me).Y;
         bool aboard = await Until(() => me.Aboard && !me.IsSwimming && !me.OnShipLadder, 8);
         me.ForceLadderClimb = null;
         await Wait(0.5);
-        Log(F($"on the ladder: {midway:F2} m over the keel after 0.9 s of climbing, a pose {me.PoseKind} on the way"));
+        Log(F($"on the ladder: {midway:F2} m over the keel after 0.5 s of climbing"));
         Expect(aboard && Mathf.Abs(Where(me).Y - d) < 0.3f, $"climbs the ladder over the rail onto the deck ({WhereText(me)})");
         await Shot("ladder", () => OnShip(me, lx + 9f, SteamerMeshBuilder.DeckY + 1.2f, la + 7f, lx, SteamerMeshBuilder.DeckY - 0.4f, la));
     }
