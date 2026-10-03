@@ -36,6 +36,12 @@ public sealed class AirlinerSpec
     /// <summary>Seconds from idle to full spool.</summary>
     public required float SpoolTime { get; init; }
 
+    /// <summary>Seconds one engine takes to light and reach idle from the APU's air (#415).</summary>
+    public float EngineStartTime { get; init; } = 35f;
+    /// <summary>Fuel flow per engine at idle, kg/s, and per newton of its thrust (#415).</summary>
+    public float IdleFuelFlow { get; init; } = 0.09f;
+    public float FuelPerNewton { get; init; } = 0.0000095f;
+
     public required float Cd0 { get; init; }
     public required float InducedK { get; init; }
     /// <summary>Lift coefficient per radian of angle of attack.</summary>

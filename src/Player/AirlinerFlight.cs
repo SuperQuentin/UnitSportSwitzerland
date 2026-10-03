@@ -39,6 +39,9 @@ public static class AirlinerFlight
     /// <param name="Brake">Wheel brakes, 0..1.</param>
     /// <param name="EnginesOff">The engines are switched off (inverted so <c>new Controls()</c> is a pilot with engines on).</param>
     /// <param name="NoPilot">Nobody at the controls: brakes set, stick centred.</param>
+    /// <param name="StartToggle">Sim (#415): start the engines from cold (battery, APU, one engine after the other), or shut them down.</param>
+    /// <param name="AutopilotToggle">Sim (#415): engage the autopilot and autothrust on what it is flying now, or disengage them.</param>
+    /// <param name="Trim">Sim, conventional types (#415): pitch trim held, −1 nose down .. +1 nose up.</param>
     public readonly record struct Controls(
         Vector2 Stick = default,
         float LeverUp = 0f,
@@ -50,7 +53,10 @@ public static class AirlinerFlight
         bool ParkingToggle = false,
         bool EnginesOff = false,
         bool NoPilot = false,
-        AirlinerHandling Handling = AirlinerHandling.Arcade);
+        AirlinerHandling Handling = AirlinerHandling.Arcade,
+        bool StartToggle = false,
+        bool AutopilotToggle = false,
+        float Trim = 0f);
 
     /// <param name="OnFloor">The body stands on something (runway, grass, a roof).</param>
     /// <param name="Altitude">Above sea level, m: the air's density.</param>
@@ -93,6 +99,22 @@ public static class AirlinerFlight
         public float LastGamma;
 
         public bool OnGround;
+
+        // ---- light sim (#415) ----
+        /// <summary>Systems powered (battery on), the APU's run-up 0..1, engines running (a count, fractional while one starts).</summary>
+        public bool Battery;
+        public float Apu, Lit;
+        /// <summary>Starting (true) or shutting down: where <see cref="Lit"/> is heading.</summary>
+        public bool Starting;
+        /// <summary>Fuel aboard, kg (part of <see cref="Mass"/>).</summary>
+        public float Fuel;
+        /// <summary>Autopilot and autothrust engaged, and what they hold: heading (yaw), altitude above sea level, indicated airspeed.</summary>
+        public bool Autopilot;
+        public float ApHeading, ApAltitude, ApSpeed;
+        /// <summary>Seconds the stick has been held hard over with the autopilot on: past 1 s it disconnects.</summary>
+        public float ApOverride;
+        /// <summary>The angle of attack the trim holds hands-off (conventional types in Sim).</summary>
+        public float TrimAlpha;
         /// <summary>Sink last airborne step, m/s (positive down): what the touchdown is judged by.</summary>
         public float LastSink;
         /// <summary>Damage not yet taken by the vehicle's health (<see cref="Airliner.TakeDamage"/>).</summary>
@@ -116,7 +138,18 @@ public static class AirlinerFlight
         GearDown = true,
         Gear = 1f,
         OnGround = true,
+        Battery = enginesRunning,
+        Lit = enginesRunning ? spec.Engines : 0f,
+        Starting = enginesRunning,
+        Fuel = spec.FuelCapacity * SpawnFuel,
+        TrimAlpha = TakeoffTrim,
     };
+
+    /// <summary>Share of the tanks full at spawn (part of the operating mass), and the trim a cold aircraft is left at.</summary>
+    public const float SpawnFuel = 0.45f, TakeoffTrim = 0.09f;
+
+    /// <summary>Seconds the APU takes to come up (#415).</summary>
+    public const float ApuTime = 10f;
 
     public static Vector3 Heading(float yaw) => new(-Mathf.Sin(yaw), 0, -Mathf.Cos(yaw));
 
@@ -181,12 +214,15 @@ public static class AirlinerFlight
         bool reverseAsked = !c.NoPilot && env.OnFloor && wheels && s.Lever <= 0.001f && c.LeverDown > 0.5f;
         s.Reverse = Mathf.MoveToward(s.Reverse, reverseAsked ? 1f : 0f, (reverseAsked ? 1.4f : 1f) * dt);
 
+        bool sim = c.Handling == AirlinerHandling.Sim;
+        bool running = sim ? Systems(spec, ref s, c, dt) : !c.EnginesOff;
+        if (!sim) s.Lit = running ? spec.Engines : 0f;
         float idle = spec.IdleSpool;
-        float spoolTarget = !c.EnginesOff ? idle + (1f - idle) * Mathf.Max(s.Lever, s.Reverse) : 0f;
-        float spoolRate = !c.EnginesOff ? (1f - idle) / spec.SpoolTime : 0.06f;
-        if (spoolTarget < s.Spool && !c.EnginesOff) spoolRate *= 1.3f;
-        // a turbine cold below idle takes its time to light up to it (starting is #415's)
-        if (!c.EnginesOff && s.Spool < idle) spoolRate = idle / 20f;
+        float spoolTarget = running ? idle + (1f - idle) * Mathf.Max(s.Lever, s.Reverse) : 0f;
+        float spoolRate = running ? (1f - idle) / spec.SpoolTime : 0.06f;
+        if (spoolTarget < s.Spool && running) spoolRate *= 1.3f;
+        // a turbine cold below idle takes its time to light up to it
+        if (running && s.Spool < idle) spoolRate = idle / 20f;
         s.Spool = Mathf.MoveToward(s.Spool, spoolTarget, spoolRate * dt);
 
         if (c.FlapsDelta != 0) s.FlapLever = Mathf.Clamp(s.FlapLever + c.FlapsDelta, 0, spec.FlapSettings - 1);
@@ -221,9 +257,12 @@ public static class AirlinerFlight
         float cd = spec.Cd0 + spec.InducedK * cl * cl + cdFlaps + spec.GearCd * s.Gear + spec.SpoilerCd * s.Spoilers;
 
         float lapse = Mathf.Max(0.35f, 1f - spec.ThrustLapse * speed) * Mathf.Pow(rho / SeaLevelDensity, 0.7f);
-        float thrust = spec.Engines * spec.StaticThrust * ThrustShare(spec, s.Spool) * lapse
+        // only the engines running push (one still starting does not yet)
+        float lit = sim ? Mathf.Floor(s.Lit + 0.001f) : spec.Engines;
+        float thrust = lit * spec.StaticThrust * ThrustShare(spec, s.Spool) * lapse
             * Mathf.Lerp(1f, -spec.ReverseShare, s.Reverse);
         s.Thrust = thrust;
+        if (sim) Burn(spec, ref s, thrust, lit, env, speed, dt);
 
         var flow = speed > 0.5f ? v / speed : -att.Z;
         var liftDir = att.Y - flow * att.Y.Dot(flow);
@@ -250,9 +289,118 @@ public static class AirlinerFlight
             s.OnGround = false;
             s.LastSink = -v.Y;
             s.Velocity = v + accel * dt;
-            Fly(spec, ref s, c, stick, alpha, beta, q, protect, arcade, dt);
+            if (sim) Limits(spec, ref s, dt);
+            Fly(spec, ref s, c, stick, alpha, beta, q, protect, arcade, env.Altitude, dt);
         }
         return ev;
+    }
+
+    /// <summary>Trim wheel's travel, rad of trimmed alpha a second; static stability, 1/s.</summary>
+    private const float TrimRate = 0.02f, PitchStability = 0.7f;
+
+    /// <summary>
+    /// Battery, APU and engine start (#415, Sim). The start toggle from cold: battery on, the APU comes
+    /// up (<see cref="ApuTime"/>), then the engines light one after the other
+    /// (<see cref="AirlinerSpec.EngineStartTime"/> each). Toggled again: they shut down, the APU off.
+    /// Out of fuel, they flame out. Returns whether any engine runs.
+    /// </summary>
+    private static bool Systems(AirlinerSpec spec, ref State s, in Controls c, float dt)
+    {
+        if (c.StartToggle)
+        {
+            s.Starting = !s.Starting;
+            if (s.Starting) s.Battery = true;
+        }
+        bool fuel = s.Fuel > 0f;
+        if (s.Starting && fuel)
+        {
+            // the APU first, then its bleed air spins up each engine in turn; all running, it is not needed
+            bool allLit = s.Lit >= spec.Engines;
+            s.Apu = Mathf.MoveToward(s.Apu, allLit ? 0f : 1f, dt / ApuTime);
+            if (s.Apu >= 1f && !allLit) s.Lit = Mathf.MoveToward(s.Lit, spec.Engines, dt / spec.EngineStartTime);
+        }
+        else
+        {
+            s.Lit = 0f;
+            s.Apu = Mathf.MoveToward(s.Apu, 0f, dt / ApuTime);
+            if (!fuel) s.Starting = false;
+        }
+        return s.Lit >= 1f;
+    }
+
+    /// <summary>Fuel burnt (#415, Sim) by the running engines from their thrust; refuelled stopped on the ground with them off.</summary>
+    private static void Burn(AirlinerSpec spec, ref State s, float thrust, float lit, in Env env, float speed, float dt)
+    {
+        if (lit > 0f)
+        {
+            float perEngine = Mathf.Abs(thrust) / lit;
+            float burn = Mathf.Min(lit * (spec.IdleFuelFlow + spec.FuelPerNewton * perEngine) * dt, s.Fuel);
+            s.Fuel -= burn;
+            s.Mass -= burn;
+        }
+        else if (env.OnFloor && speed < 0.5f && s.Fuel < spec.FuelCapacity)
+        {
+            float add = Mathf.Min(RefuelRate * dt, spec.FuelCapacity - s.Fuel);
+            s.Fuel += add;
+            s.Mass += add;
+        }
+    }
+
+    /// <summary>Refuelling stopped with the engines off, kg/s (#415).</summary>
+    public const float RefuelRate = 150f;
+
+    /// <summary>Flying the flaps or the gear past their speeds (#415, Sim): the airframe takes it.</summary>
+    private static void Limits(AirlinerSpec spec, ref State s, float dt)
+    {
+        int notch = Mathf.Clamp(Mathf.CeilToInt(s.Flaps - 0.05f), 0, spec.FlapSettings - 1);
+        float over = s.Ias - spec.FlapLimit[notch] - 2.5f;
+        if (notch > 0 && over > 0f) s.Damage += over * 0.8f * dt;
+        if (s.Gear > 0.05f && s.Ias > spec.GearLimit + 2.5f) s.Damage += (s.Ias - spec.GearLimit - 2.5f) * 0.8f * dt;
+    }
+
+    /// <summary>
+    /// The autopilot and autothrust (#415, Sim): engaged on what it is flying, it holds a heading, an
+    /// altitude and a speed. The stick turns the selected heading (sideways) and altitude (fore and
+    /// aft), the levers the selected speed; held hard over for a second, the stick disconnects it.
+    /// Returns the stick the law is flown with: the autopilot's.
+    /// </summary>
+    private static Vector2 Autopilot(AirlinerSpec spec, ref State s, in Controls c, Vector2 stick, float altitude, float dt)
+    {
+        if (c.AutopilotToggle)
+        {
+            s.Autopilot = !s.Autopilot;
+            if (s.Autopilot)
+            {
+                s.ApHeading = s.Yaw;
+                s.ApAltitude = Mathf.Round(altitude / 30.48f) * 30.48f;
+                s.ApSpeed = s.Ias;
+                s.ApOverride = 0f;
+            }
+        }
+        if (!s.Autopilot) return stick;
+        s.ApOverride = stick.Length() > 0.95f ? s.ApOverride + dt : 0f;
+        if (s.ApOverride > 1f) { s.Autopilot = false; return stick; }
+
+        // the knobs: the stick turns them, the levers the speed
+        int flaps = Mathf.Clamp(Mathf.RoundToInt(s.Flaps), 0, spec.FlapSettings - 1);
+        s.ApHeading = Mathf.Wrap(s.ApHeading - stick.X * 0.35f * dt, -Mathf.Pi, Mathf.Pi);
+        s.ApAltitude = Mathf.Max(s.ApAltitude + stick.Y * 20f * dt, 300f);
+        s.ApSpeed = Mathf.Clamp(s.ApSpeed + (c.LeverUp - c.LeverDown) * 2.5f * dt,
+            spec.StallSpeed(s.Mass, flaps) * 1.25f, Mathf.Min(spec.Vmo, spec.FlapLimit[flaps]) - 3f);
+
+        // autothrust: the levers chase the speed (the lever keys turned the knob instead)
+        float leverRate = Mathf.Clamp((s.ApSpeed - s.Ias) * 0.08f - s.Velocity.Y * 0.01f, -1f, 1f) * 0.5f;
+        s.Lever = Mathf.Clamp(s.Lever + leverRate * dt, 0f, 1f);
+
+        // heading: a bank toward it, at most 25°; altitude: a vertical speed toward it, at most ~2000 fpm
+        float bank = BankOf(s.Attitude);
+        float err = Mathf.AngleDifference(s.Yaw, s.ApHeading);
+        float wantBank = Mathf.Clamp(-err * 1.6f, -0.44f, 0.44f);   // + err: the heading is to the left
+        float roll = Mathf.Clamp((wantBank - bank) * 2.5f, -1f, 1f);
+        float speed = Mathf.Max(s.Velocity.Length(), 1f);
+        float vs = Mathf.Clamp((s.ApAltitude - altitude) * 0.08f, -10f, 10f);
+        s.PathTarget = Mathf.Asin(Mathf.Clamp(vs / speed, -0.2f, 0.2f));
+        return new Vector2(roll, 0f);
     }
 
     private static float Gamma(Vector3 v) => v.LengthSquared() > 1f ? Mathf.Asin(Mathf.Clamp(v.Y / v.Length(), -1f, 1f)) : 0f;
@@ -337,8 +485,13 @@ public static class AirlinerFlight
 
     /// <summary>In the air: the stick's law, the protections, the nose into the airflow.</summary>
     private static void Fly(AirlinerSpec spec, ref State s, in Controls c, Vector2 stick, float alpha, float beta, float q,
-        bool protect, bool arcade, float dt)
+        bool protect, bool arcade, float altitude, float dt)
     {
+        bool sim = !arcade;
+        if (sim) stick = Autopilot(spec, ref s, c, stick, altitude, dt);
+        // a conventional aircraft flown by hand in Sim: the trim, not a law, decides what it does hands-off
+        bool manual = sim && !spec.FlyByWire && !s.Autopilot;
+        if (sim) s.TrimAlpha = Mathf.Clamp(s.TrimAlpha + c.Trim * TrimRate * dt, -0.05f, 0.2f);
         var att = s.Attitude.Orthonormalized();
         var v = s.Velocity;
         float speed = Mathf.Max(v.Length(), 1f);
@@ -354,7 +507,14 @@ public static class AirlinerFlight
         float clampedBank = Mathf.Clamp(bank, -1.4f, 1.4f);
         float turnPitch = G / speed * Mathf.Tan(clampedBank) * Mathf.Sin(clampedBank);
         float qCmd;
-        if (Mathf.Abs(stick.Y) > 0.05f)
+        if (manual)
+        {
+            // static stability: the nose seeks the trimmed angle of attack, so letting go returns to the
+            // trimmed speed; a turn needs back pressure; the stick adds to it
+            qCmd = stick.Y * spec.MaxPitchRate * 2.5f + (s.TrimAlpha - alpha) * PitchStability - gammaRate * 0.3f;
+            s.PathTarget = gamma;
+        }
+        else if (Mathf.Abs(stick.Y) > 0.05f)
         {
             s.PathTarget = gamma;
             qCmd = stick.Y * spec.MaxPitchRate + turnPitch;
@@ -380,6 +540,7 @@ public static class AirlinerFlight
         // roll: the stick asks a roll rate; let go, arcade rolls level, the law holds the bank to 33°
         float pCmd;
         if (Mathf.Abs(stick.X) > 0.05f) pCmd = stick.X * spec.MaxRollRate;
+        else if (manual) pCmd = 0f;
         else if (arcade) pCmd = Mathf.Clamp(-bank * 0.6f, -0.09f, 0.09f);
         else if (protect && Mathf.Abs(bank) > BankHold) pCmd = -(bank - Mathf.Sign(bank) * BankHold) * 0.6f;
         else pCmd = 0f;
