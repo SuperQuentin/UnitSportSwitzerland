@@ -338,7 +338,7 @@ public static class AirlinerFlight
             s.Fuel -= burn;
             s.Mass -= burn;
         }
-        else if (env.OnFloor && speed < 0.5f && s.Fuel < spec.FuelCapacity)
+        else if (env.OnFloor && speed < 0.5f && !s.Starting && s.Fuel < spec.FuelCapacity)
         {
             float add = Mathf.Min(RefuelRate * dt, spec.FuelCapacity - s.Fuel);
             s.Fuel += add;

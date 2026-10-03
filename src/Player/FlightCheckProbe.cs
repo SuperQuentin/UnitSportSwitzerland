@@ -118,8 +118,24 @@ public partial class FlightCheckProbe : Node
             case "a320":
                 // a whole circuit on the real keys: take-off, climb, a 180° turn, approach, landing, stop (#414)
                 p.SetRide(RideKind.A320);
+                // --heading deg (true, 0 north, 90 east): lined up on a real runway (GVA 05 is 46°)
+                if (CmdArgs.Value("--heading") is { } h && float.TryParse(h, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float deg)
+                    && p.Vehicle is Airliner lined)
+                {
+                    float yaw = -Mathf.DegToRad(deg);
+                    p.Rotation = new Vector3(0, yaw, 0);
+                    lined.State.Yaw = yaw;
+                    lined.State.Attitude = new Basis(Vector3.Up, yaw);
+                }
                 Engine.TimeScale = 4.0;
                 _circuit = new AirlinerCircuit();
+                // windowed with a picture: one per phase, <name>_<phase>.png beside it
+                if (_shot != null)
+                    _circuit.Snap = phase =>
+                    {
+                        string path = _shot.Replace(".png", $"_{phase}.png");
+                        if (GetViewport().GetTexture().GetImage().SavePng(path) == Error.Ok) GD.Print($"[flycheck] wrote {path}");
+                    };
                 break;
         }
         _from = _origin.ToGlobal(p.GlobalPosition);

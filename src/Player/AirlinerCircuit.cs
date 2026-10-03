@@ -13,14 +13,20 @@ namespace UnitSport.Player;
 /// </summary>
 public sealed class AirlinerCircuit
 {
-    private enum Phase { Roll, Climb, Turn, Approach, Flare, Rollout }
+    private enum Phase { Start, Roll, Climb, Autopilot, Turn, Approach, Flare, Rollout }
 
-    private Phase _phase = Phase.Roll;
+    private Phase _phase = Phase.Start;
+    private float _apFrom = float.NaN, _apWorst, _fuelAt;
     private float _startYaw = float.NaN, _turnedAt, _lastReport, _touchSink, _maxAgl;
     private bool _flapsSet, _gearUp, _gearDown;
     private float _healthAt, _lastHealth = float.MaxValue;
 
     public readonly record struct Outcome(bool Ok, string Text);
+
+    /// <summary>Windowed with a picture path: called once a few seconds into each phase with its name, to save the view.</summary>
+    public System.Action<string>? Snap;
+    private Phase _snapped = (Phase)(-1);
+    private float _phaseAt;
 
     private static void Axis(string negative, string positive, float value)
     {
@@ -61,8 +67,16 @@ public sealed class AirlinerCircuit
             return Mathf.Clamp((wantBank - bank) * 2.5f, -1f, 1f);
         }
 
+        bool sim = Airliner.Handling == AirlinerHandling.Sim;
         switch (_phase)
         {
+            case Phase.Start:
+                // Light sim (#415): cold and dark, so the start first: battery, APU, each engine
+                brake = true;
+                if (!sim || s.Lit >= spec.Engines) { _phase = Phase.Roll; _fuelAt = s.Fuel; break; }
+                if (!s.Starting) jet.Command(AirlinerCommand.Engines);
+                if (t > 150f) return new Outcome(false, $"engines never started (APU {s.Apu:F2}, running {s.Lit:F1})");
+                break;
             case Phase.Roll:
                 if (!_flapsSet) { jet.Command(AirlinerCommand.FlapsDown); jet.Command(AirlinerCommand.FlapsDown); _flapsSet = true; }
                 lever = 1f;
@@ -76,7 +90,27 @@ public sealed class AirlinerCircuit
                 stickY = FlyVs(Mathf.Clamp((300f - agl) * 0.08f, -4f, 9f));
                 lever = agl < 200f ? 1f : HoldSpeed(82f);
                 stickX = Heading(_startYaw);
-                if (agl > 280f) { _phase = Phase.Turn; _turnedAt = t; }
+                if (agl > 280f) { _phase = sim ? Phase.Autopilot : Phase.Turn; _turnedAt = t; }
+                break;
+            case Phase.Autopilot:
+                // Light sim: the autopilot holds the altitude and the heading for 25 s, hands off
+                if (float.IsNaN(_apFrom))
+                {
+                    _apFrom = t;
+                    jet.Command(AirlinerCommand.Autopilot);
+                    break;
+                }
+                float altitude = p.Origin is { } o ? (float)o.ToGlobal(p.GlobalPosition).Alt : agl;
+                if (t - _apFrom > 3f) _apWorst = Mathf.Max(_apWorst, Mathf.Abs(altitude - s.ApAltitude));
+                if (!s.Autopilot && t - _apFrom > 0.5f) return new Outcome(false, "the autopilot did not engage");
+                if (t - _apFrom > 25f)
+                {
+                    GD.Print($"[flycheck] a320 autopilot held its altitude within {_apWorst:F1} m for 22 s");
+                    if (_apWorst > 30f) return new Outcome(false, $"the autopilot lost {_apWorst:F0} m");
+                    jet.Command(AirlinerCommand.Autopilot);
+                    _phase = Phase.Turn;
+                    _turnedAt = t;
+                }
                 break;
             case Phase.Turn:
                 stickY = FlyVs(Mathf.Clamp((300f - agl) * 0.08f, -4f, 4f));
@@ -114,7 +148,8 @@ public sealed class AirlinerCircuit
                 if (s.Velocity.Length() < 0.5f)
                 {
                     float damage = _healthAt - p.VehicleHealth;
-                    string text = $"landed and stopped: touchdown sink {_touchSink:F2} m/s, peak {_maxAgl:F0} m agl, damage {damage:F0}";
+                    string text = $"landed and stopped: touchdown sink {_touchSink:F2} m/s, peak {_maxAgl:F0} m agl, damage {damage:F0}"
+                        + (sim ? $", fuel burnt {_fuelAt - s.Fuel:F0} kg" : "");
                     return new Outcome(_touchSink < spec.HardLanding && damage < 1f, text);
                 }
                 break;
@@ -128,6 +163,13 @@ public sealed class AirlinerCircuit
         if (lever is > -0.05f and < 0.05f) { Input.ActionRelease(PlayerInput.Sprint); Input.ActionRelease(PlayerInput.CrouchSlide); }
         hold(PlayerInput.Jump, brake);
 
+        if (_phase != _snapped && _phaseAt < 0f) _phaseAt = t;
+        if (_phase != _snapped && t - _phaseAt > (_phase == Phase.Roll ? 18f : 4f))
+        {
+            _snapped = _phase;
+            Snap?.Invoke(_phase.ToString().ToLowerInvariant());
+        }
+        if (_phase == _snapped) _phaseAt = -1f;
         if (p.VehicleHealth < _lastHealth - 0.01f)
             GD.Print($"[flycheck] a320 damage {_lastHealth - p.VehicleHealth:F1} in {_phase} at {t:F1} s: ias {s.Ias / 0.5144f:0} kt, vs {vs:F1}, agl {agl:F1}, ground {s.OnGround}, gear {s.Gear:F2}");
         _lastHealth = p.VehicleHealth;
