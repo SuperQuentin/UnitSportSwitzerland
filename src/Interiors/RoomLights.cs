@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Interiors;
 
@@ -43,10 +44,13 @@ public static class RoomLights
                     var (c, n) = WindowFrame(r, o, y0);
                     lights.Add(Light(c, 0, n.X, n.Z, o.Width / 2, (o.Top - o.Bottom) / 2, r, y0, top));
                 }
-                // the lamp hangs a little under the ceiling, in the middle of the room
-                var lamp = new Vector3((r.X0 + r.X1) / 2, top - 0.3f, (r.Z0 + r.Z1) / 2);
-                float reach = Mathf.Max(3.5f, 0.75f * Mathf.Max(r.Width, r.Depth));
-                lights.Add(Light(lamp, 1, reach, windows ? 0 : 1, 0, 0, r, y0, top));
+                // the lamp hangs in the middle of the room, where its fixture is drawn (#434); in
+                // an abandoned house none works
+                if (Lit(l, r))
+                {
+                    float reach = Mathf.Max(3.5f, 0.75f * Mathf.Max(r.Width, r.Depth));
+                    lights.Add(Light(LampAt(l, r, y0), 1, reach, windows ? 0 : 1, 0, 0, r, y0, top));
+                }
                 for (int s = 0; s < Math.Max(1, r.Span) && f + s < floors; s++)
                     byFloor[f + s].AddRange(lights);
             }
@@ -67,6 +71,55 @@ public static class RoomLights
             }
         }
         return new Table(ImageTexture.CreateFromImage(image), l.FloorY(0), l.StoreyHeight, floors);
+    }
+
+    /// <summary>What hangs from a room's ceiling (#434, drawn by <c>InteriorMeshBuilder.Fixture</c>).</summary>
+    public enum Lamp { Hidden, Shade, Chandelier, Bulb, Wire, Panel, Industrial }
+
+    /// <summary>
+    /// The room's lamp: nothing drawn in a church (its light stays), a panel in an office, a shop or
+    /// a school, an enamel shade over a workshop or a store, else by the house's mood: a chandelier
+    /// in a fancy house's grand rooms, a bare bulb in half a messy house's rooms, the cord alone in
+    /// an abandoned one, a cloth shade everywhere else.
+    /// </summary>
+    public static Lamp LampOf(InteriorLayout l, RoomPlan r)
+    {
+        if (r.Type is RoomType.Nave or RoomType.Belfry or RoomType.Porch) return Lamp.Hidden;
+        if (l.Mood == InteriorMood.Abandoned) return Lamp.Wire;
+        if (r.Type is RoomType.Office or RoomType.Classroom or RoomType.Shop or RoomType.BankHall or RoomType.Vault
+            || r.Type == RoomType.Lobby && l.Kind is not (BuildingKind.House or BuildingKind.Apartment or BuildingKind.Other))
+            return Lamp.Panel;
+        if (r.Type is RoomType.Workshop or RoomType.Garage or RoomType.Barn or RoomType.Storage or RoomType.Shelter)
+            return Lamp.Industrial;
+        if (l.Mood == InteriorMood.Fancy && r.Type is RoomType.Living or RoomType.Dining or RoomType.Hall or RoomType.Study
+            or RoomType.Bedroom or RoomType.GuestRoom or RoomType.Landing or RoomType.Lobby)
+            return Lamp.Chandelier;
+        if (r.Type is RoomType.Cellar or RoomType.Laundry or RoomType.Pantry or RoomType.Carnotzet
+            || l.Mood == InteriorMood.Messy && Core.Fnv.Unit(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{l.Key}|{r.X0:F1}|{r.Z0:F1}")) < 0.5)
+            return Lamp.Bulb;
+        return Lamp.Shade;
+    }
+
+    /// <summary>Whether a room's lamp gives light: not in an abandoned house.</summary>
+    public static bool Lit(InteriorLayout l, RoomPlan r) => l.Mood != InteriorMood.Abandoned;
+
+    /// <summary>
+    /// Where the room's lamp is (the bulb, or the chandelier's middle), interior-local: in the
+    /// middle of the room, hung lower under a high ceiling, never below 2.15 m off the floor.
+    /// </summary>
+    public static Vector3 LampAt(InteriorLayout l, RoomPlan r, float y0)
+    {
+        float clear = l.ClearOf(r);
+        float drop = LampOf(l, r) switch
+        {
+            Lamp.Panel => 0.05f,
+            Lamp.Chandelier => r.Span > 1 ? 1.5f : 0.55f,
+            Lamp.Industrial => 0.6f,
+            Lamp.Hidden => 0.3f,
+            _ => 0.5f,
+        };
+        drop = Mathf.Max(0.05f, Mathf.Min(drop, clear - 2.15f));
+        return new Vector3((r.X0 + r.X1) / 2, y0 + clear - drop, (r.Z0 + r.Z1) / 2);
     }
 
     private static float[] Light(Vector3 c, float kind, float a, float b, float d, float e, RoomPlan r, float y0, float top) =>

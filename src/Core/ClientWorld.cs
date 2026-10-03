@@ -610,6 +610,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.BoatCheck.Role is { } boatRole) AddChild(new Player.BoatCheck(boatRole, () => LocalPlayer));
         if (Player.SteamerCheck.Role is { } steamerRole) AddChild(new Player.SteamerCheck(steamerRole, () => LocalPlayer));
         if (Player.SwimCheck.Requested) AddChild(new Player.SwimCheck(() => LocalPlayer));
+        if (Interiors.MoodShots.Requested) AddChild(new Interiors.MoodShots(() => LocalPlayer));
         if (Player.CabinCheck.Requested) AddChild(new Player.CabinCheck(() => LocalPlayer));
         if (Player.AirstairsCheck.Requested) AddChild(new Player.AirstairsCheck(() => LocalPlayer));
 

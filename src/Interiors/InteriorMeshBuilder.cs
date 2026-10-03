@@ -122,7 +122,10 @@ public static partial class InteriorMeshBuilder
             float y0 = l.FloorY(f);
             var above = HolesOf(f + 1);
             foreach (var room in floor.Rooms)
-                Room(s, room, y0, l.ClearOf(room), floor.Holes, HolesOf(f + room.Span));
+            {
+                Room(s, room, y0, l.ClearOf(room), floor.Holes, HolesOf(f + room.Span), l);
+                Fixture(s, l, room, y0);
+            }
             if (floor.Flight is { } flight) Flight(s, flight, y0, h);
             foreach (var r in floor.Rails)
                 s.Box(new Vector3(Math.Min(r.X0, r.X1) - 0.03f, y0, Math.Min(r.Z0, r.Z1)),
@@ -143,6 +146,7 @@ public static partial class InteriorMeshBuilder
         foreach (var p in l.Furniture)
             Furniture(s, p, l.FloorY(p.Floor) + p.Lift, figures);
 
+        Weather(s, l.Mood);
         return new MeshData(s.V.ToArray(), s.C.ToArray(), s.Col.ToArray(), figures.ToArray());
     }
 
@@ -213,9 +217,10 @@ public static partial class InteriorMeshBuilder
     /// </summary>
     private const float Seam = 0.006f;
 
-    private static void Room(Scratch s, RoomPlan r, float y0, float clear, List<RectPlan> holes, List<RectPlan> ceilingHoles)
+    private static void Room(Scratch s, RoomPlan r, float y0, float clear, List<RectPlan> holes, List<RectPlan> ceilingHoles,
+        InteriorLayout l)
     {
-        var (floorCol, wallCol, ceilCol) = Palette(r.Type);
+        var (floorCol, wallCol, ceilCol) = MoodPalette(l, r.Type, Palette(r.Type));
         const float t = InteriorGenerator.WallInset;
         var inner = new RectPlan(r.X0 + t, r.Z0 + t, r.X1 - t, r.Z1 - t);
         float top = y0 + clear;
@@ -235,6 +240,7 @@ public static partial class InteriorMeshBuilder
 
         for (int side = 0; side < 4; side++)
             Wall(s, r, (Side)side, inner, y0, clear, wallCol);
+        if (Grand(l, r.Type)) Cornice(s, inner, y0 + clear, ceilCol);
     }
 
     /// <summary>Maps (along, height, depth-out-of-the-room) on one wall to interior space.</summary>
@@ -529,7 +535,8 @@ public static partial class InteriorMeshBuilder
         // anyway; hung and wall-mounted pieces are overhead, and the chancel step has its own
         bool solid = p.Type is not (FurnitureType.Rug or FurnitureType.Plant or FurnitureType.Bell
             or FurnitureType.Cross or FurnitureType.Dais or FurnitureType.AcousticFoam or FurnitureType.CinemaScreen
-            or FurnitureType.GuitarStand);
+            or FurnitureType.GuitarStand or FurnitureType.Painting or FurnitureType.Mirror)
+            && p.Type < FurnitureType.Cobweb;   // clutter (#434) is walked over and through
         // the drum kit's stool stays out of it, so the drummer can sit there (#433)
         if (solid) CollisionBox(s, at, basis, new Vector3(-w, 0, p.Type == FurnitureType.DrumKit ? -0.28f : -d), new Vector3(w, H, d));
 
@@ -538,6 +545,7 @@ public static partial class InteriorMeshBuilder
         var white = C(0.92f, 0.92f, 0.90f);
         var metal = C(0.62f, 0.64f, 0.66f);
         var dark = C(0.12f, 0.12f, 0.13f);
+        if (MoodPiece(s, p, at, basis)) return;
         switch (p.Type)
         {
             case FurnitureType.Bed:

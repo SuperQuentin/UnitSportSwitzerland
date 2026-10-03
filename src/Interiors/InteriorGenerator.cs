@@ -72,8 +72,22 @@ public static partial class InteriorGenerator
             || fp.Width < 4.5f || fp.Depth < 4.5f || fp.Width * fp.Depth < 25f;
 
         int below = single ? 0 : Cellars(layout.Key, b.Kind, n);
-        if (single || !TryCored(layout, fp, b.Kind, n, below, bank, rng)
-            && (below == 0 || !TryCored(layout, fp, b.Kind, n, 0, bank, rng)))
+        // how the house is kept (#434): its own dice, so nothing else in the plan moves
+        layout.Mood = MoodOf(layout.Key, b.Kind, rural, bank || layout.Shop != Loot.ShopType.None);
+        bool cored = false;
+        if (!single && Tall(layout, b.Kind, n))
+        {
+            // a fancy house's living room two storeys tall: tried first from the same seed, and
+            // forgotten (the entry as it was) when the floor above cannot be fitted round it
+            float entryX = layout.EntryX, entryWidth = layout.EntryWidth;
+            var trial = new Random(StableHash(fp.Key.ToString()));
+            if (TryCored(layout, fp, b.Kind, n, below, bank, trial, tall: true)) { cored = true; rng = trial; }
+            else { layout.EntryX = entryX; layout.EntryWidth = entryWidth; }
+        }
+        if (!single && !cored)
+            cored = TryCored(layout, fp, b.Kind, n, below, bank, rng)
+                || below > 0 && TryCored(layout, fp, b.Kind, n, 0, bank, rng);
+        if (!cored)
         {
             layout.Below = 0;
             SingleRoom(layout, b.Kind, fp.Door.Height, rng);
@@ -159,7 +173,9 @@ public static partial class InteriorGenerator
 
     private sealed record Item(RoomType Type, float Weight);
 
-    private static bool TryCored(InteriorLayout l, Footprint fp, BuildingKind kind, int above, int below, bool bank, Random rng)
+    /// <param name="tall">Make the ground floor's living (or dining) room two storeys tall (#434), when it spans its side.</param>
+    private static bool TryCored(InteriorLayout l, Footprint fp, BuildingKind kind, int above, int below, bool bank, Random rng,
+        bool tall = false)
     {
         float W = l.Width, D = l.Depth, h = l.StoreyHeight;
         float hw = W / 2, hd = D / 2;
@@ -210,6 +226,7 @@ public static partial class InteriorGenerator
 
         float clear = h - Slab;
         l.Floors.Clear();
+        RectPlan? lofty = null;
         for (int f = 0; f < floors; f++)
         {
             int level = f - below;
@@ -256,6 +273,9 @@ public static partial class InteriorGenerator
             var sides = new List<RectPlan>();
             if (c0 - -hw >= 2.0f) sides.Add(new RectPlan(-hw, -hd, c0, hd));
             if (hw - c1 >= 2.0f) sides.Add(new RectPlan(c1, -hd, hw, hd));
+            // the storey over a double-height room leaves its rectangle empty: what is left of
+            // that side, before and behind it, if deep enough to be rooms
+            if (level == 1 && lofty is { } v) sides = AroundLofty(sides, v);
             // a core with no room beside it is just a corridor: the single-room plan does better
             if (sides.Count == 0) return false;
             float sideArea = sides.Sum(s => (s.X1 - s.X0) * (s.Z1 - s.Z0));
@@ -318,6 +338,11 @@ public static partial class InteriorGenerator
                 }
             }
 
+            if (tall && level == 0 && f + 1 < floors)
+            {
+                lofty = Lofty(floor, sides);
+                if (lofty == null) return false;
+            }
             if (!Connect(floor, walkLeft, walkRight, c0, c1, clear)) return false;
             if (level >= 0) AddWindows(l, floor, level);
             l.Floors.Add(floor);
@@ -968,7 +993,7 @@ public static partial class InteriorGenerator
                 if (r.Type == RoomType.Classroom) Desks(l, f, r, placed, blocked);
                 if (r.Type == RoomType.Vault) { Vault(l, f, r, placed, blocked, rng); continue; }
 
-                foreach (var p in Pieces(r.Type, r, rng, l.Kind, vending && f == l.Below))
+                foreach (var p in Pieces(r.Type, r, rng, l.Kind, vending && f == l.Below).Concat(MoodPieces(l.Mood, r.Type, r)))
                     TryPlace(l, f, r, p, placed, blocked, rng);
                 if (vending && l.Furniture.Count > 0 && l.Furniture[^1].Type == FurnitureType.VendingMachine) vending = false;
             }
@@ -976,6 +1001,7 @@ public static partial class InteriorGenerator
         if (l.IsBank) Counter(l, rooms, rng);
         if (l.Shop != Loot.ShopType.None) ShopCounter(l, rooms, rng);
         Secure(l, rooms);
+        Neglect(l, rooms);
     }
 
     /// <summary>

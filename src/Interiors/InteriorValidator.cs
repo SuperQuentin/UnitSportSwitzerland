@@ -101,8 +101,8 @@ public static class InteriorValidator
                 if (room == null) { errors.Add($"{p.Type} on floor {p.Floor} is in no room"); continue; }
                 if (rect.X0 < room.X0 || rect.X1 > room.X1 || rect.Z0 < room.Z0 || rect.Z1 > room.Z1)
                     errors.Add($"{p.Type} on floor {p.Floor} pokes through a wall");
-                // stood on (a rug, the chancel step) or overhead (a bell, a cross on the wall)
-                if (p.Type is not (FurnitureType.Rug or FurnitureType.Dais) && p.Lift < 1.5f)
+                // stood on (a rug, the chancel step, a stain, #434) or overhead (a bell, a cross on the wall)
+                if (p.Type is not (FurnitureType.Rug or FurnitureType.Dais or FurnitureType.DirtPatch) && p.Lift < 1.5f)
                 {
                     foreach (var o in room.Openings.Where(o => o.Kind is OpeningKind.Door or OpeningKind.Entry or OpeningKind.Arch))
                         if (Doorway(room, o).Overlaps(rect)) errors.Add($"{p.Type} on floor {p.Floor} blocks a doorway");

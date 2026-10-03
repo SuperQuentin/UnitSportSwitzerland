@@ -110,7 +110,17 @@ public enum FurnitureType
     VendingMachine,
     // #370: the church radio by the pastor rat
     ChurchRadio,
+    // #434: what makes a house fancy (paintings, a fireplace, a mirror) or let go (clutter, cobwebs)
+    Painting, Fireplace, Mirror, Cobweb, Trash, ClothesPile, Papers, DirtPatch, Bottles, FallenChair, Plank,
 }
+
+/// <summary>
+/// How a building is kept (#434), one roll per building from its own seed: most are lived in,
+/// some are fancy (a double-height living room, chandeliers, paintings, a fireplace), some messy
+/// (clothes, trash, papers on the floor) and a few abandoned (cobwebs, dirt, half the furniture
+/// gone, no lamp working). Stored in the plan, so every peer draws the same house.
+/// </summary>
+public enum InteriorMood { Lived, Fancy, Messy, Abandoned }
 
 public sealed class FurniturePlan
 {
@@ -159,7 +169,7 @@ public sealed class EntrancePlan
 public sealed class InteriorLayout
 {
     /// <summary>Bumped whenever the generator changes enough that old plans should be regenerated.</summary>
-    public const int CurrentVersion = 13; // 13: the home cinema's seats face the screen (#433); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
+    public const int CurrentVersion = 14; // 14: moods, double-height fancy living rooms, clutter (#434); 13: the home cinema's seats face the screen (#433); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";
@@ -201,6 +211,8 @@ public sealed class InteriorLayout
     /// <see cref="FloorY"/>(i), and the entrances are on floor <see cref="Below"/>.
     /// </summary>
     public int Below { get; set; }
+    /// <summary>How the building is kept (#434).</summary>
+    public InteriorMood Mood { get; set; }
     public List<FurniturePlan> Furniture { get; set; } = new();
     /// <summary>Every way in. Empty on single-door plans, which use the fields above instead.</summary>
     public List<EntrancePlan> Entrances { get; set; } = new();

@@ -156,12 +156,30 @@ public partial class LootProbe : Node
                     seats += chairs.Count;
                     seatsFacing += chairs.Count(Faces);
                 }
+        // #434: how houses are kept, the double-height living rooms, the clutter
+        foreach (var g in layouts.Where(l => l.Kind is BuildingKind.House or BuildingKind.Apartment).GroupBy(l => l.Kind))
+        {
+            int count = g.Count();
+            GD.Print($"[rooms] {g.Key,-18}" + string.Join(" ", Enum.GetValues<InteriorMood>().Select(m => $"{m} {100.0 * g.Count(l => l.Mood == m) / count:F0}%"))
+                + $", double-height rooms {g.Count(l => l.Floors.Any(f => f.Rooms.Any(r => r.Span > 1)))}"
+                + $" of {g.Count(l => l.Mood == InteriorMood.Fancy && l.Floors.Count - l.Below >= 2)} fancy with 2+ storeys");
+        }
+        foreach (var mood in new[] { InteriorMood.Lived, InteriorMood.Fancy, InteriorMood.Messy, InteriorMood.Abandoned })
+        {
+            var ofMood = layouts.Where(l => l.Mood == mood && l.Kind == BuildingKind.House).ToList();
+            if (ofMood.Count == 0) continue;
+            GD.Print($"[rooms] {mood} houses: {(double)ofMood.Sum(l => l.Furniture.Count(f => f.Type < FurnitureType.Painting)) / ofMood.Count:F1} pieces, "
+                + $"{(double)ofMood.Sum(l => l.Furniture.Count(f => f.Type >= FurnitureType.Cobweb)) / ofMood.Count:F1} clutter, "
+                + $"{(double)ofMood.Sum(l => l.Furniture.Count(f => f.Type is FurnitureType.Painting or FurnitureType.Fireplace or FurnitureType.Mirror)) / ofMood.Count:F1} art");
+        }
         GD.Print($"[rooms] {cinemas} home cinema(s): the sofa faces the screen in {facing}, {seatsFacing} of {seats} seats do");
         if (cinemas > 0 && facing < cinemas * 0.9) { GD.Print("[rooms] FAIL: home cinema sofas not facing their screen"); ok = false; }
         // a few plans to look at: banks, cellars with a shelter, a block of flats
         string svgDir = ProjectSettings.GlobalizePath("res://test_output/rooms");
         Directory.CreateDirectory(svgDir);
         foreach (var l in banks.Concat(layouts.Where(l => l.Kind == BuildingKind.House && l.Below > 0).Take(6))
+            .Concat(layouts.Where(l => l.Floors.Any(f => f.Rooms.Any(r => r.Span > 1 && r.Type != RoomType.Nave))).Take(3))
+            .Concat(layouts.Where(l => l.Mood == InteriorMood.Abandoned && l.Kind == BuildingKind.House).Take(2))
             .Concat(layouts.Where(l => l.Kind == BuildingKind.Apartment && l.Below > 0).Take(2)))
             File.WriteAllText(Path.Combine(svgDir, $"{(l.IsBank ? "Bank" : l.Kind.ToString())}_{l.Key}.svg"), InteriorValidator.ToSvg(l));
         GD.Print($"[rooms] plans written to {svgDir}");
