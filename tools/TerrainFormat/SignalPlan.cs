@@ -121,6 +121,38 @@ public sealed class SignalPlan
         return Cycle - c + list[0].To;
     }
 
+    /// <summary>
+    /// Whether an approach's bike group (else its through group) is green for at least
+    /// <see cref="MinGreen"/> while its right-turn group is red (or red and yellow): a phase that
+    /// keeps right-turning cars off a kerbside bike lane (#351). The bike group's lead green
+    /// (<see cref="BikeLead"/>) alone is not one; a right turn with no group of its own never is.
+    /// </summary>
+    public bool ThroughWithRightHeld(int arm)
+    {
+        int bike = -1, through = -1, right = -1;
+        for (int g = 0; g < Groups.Count; g++)
+        {
+            var group = Groups[g];
+            if (group.Arm != arm) continue;
+            if (group.Kind == SignalGroupKind.Bike) bike = g;
+            else if (group.Kind == SignalGroupKind.RightArrow) right = g;
+            else if (group.Kind == SignalGroupKind.Car && (group.Moves & SignalMoves.Through) != 0) through = g;
+            else if (group.Kind == SignalGroupKind.Car && group.Moves == SignalMoves.Right) right = g;
+        }
+        int go = bike >= 0 ? bike : through;
+        if (go < 0) return true;
+        if (right < 0) return false;   // the right turn shares the through lane's green
+        double held = 0;
+        foreach (var a in Groups[go].Intervals)
+        {
+            if (a.Aspect != SignalAspect.Green) continue;
+            foreach (var b in Groups[right].Intervals)
+                if (b.Aspect is SignalAspect.Red or SignalAspect.RedAmber)
+                    held += Math.Max(0, Math.Min(a.To, b.To) - Math.Max(a.From, b.From));
+        }
+        return held >= MinGreen - 1e-3;
+    }
+
     // ---- movements and conflicts -------------------------------------------------------------
 
     public readonly record struct Movement(int From, int To, SignalMoves Turn, int Group);
@@ -690,11 +722,35 @@ public sealed class SignalPlan
     }
 }
 
+/// <summary>What a signal pole carries (#350): the heads for its arm's approach, and a pedestrian head.</summary>
+[Flags]
+public enum SignalPoleFlags : byte
+{
+    None = 0,
+    /// <summary>Near side, on the approach's right: the main head, its pockets' arrows, the flashers.</summary>
+    Main = 1,
+    /// <summary>On the approach's left (the other kerb, or a median): the main head and the left arrow, never the right arrow.</summary>
+    Second = 2,
+    /// <summary>A pedestrian head for the crossing of its arm, facing across.</summary>
+    Pedestrian = 4,
+}
+
+/// <summary>
+/// A signal pole (#350), tile-local like the record it belongs to: its foot (on the sidewalk or
+/// the verge), the heading its car heads face (toward the approaching drivers) and its pedestrian
+/// head faces (across the crossing), as <see cref="RoadPointProp.Heading"/> (radians about +Y, 0
+/// facing -Z), and the plan arm it serves.
+/// </summary>
+public readonly record struct SignalPole(float X, float Y, float Z, float CarHeading, float PedHeading, byte Arm, SignalPoleFlags Flags)
+{
+    public const int RecordSize = 22;
+}
+
 /// <summary>
 /// A signalised junction in a <c>.road</c> tile (#349, section <c>SGNL</c>): its centre and,
 /// per arm, the middle of the stop line across its approach lanes (tile-local, NaN where nothing
-/// approaches), and its plan. Heads and poles (#350) and lane records (#353) come later as a
-/// new section version.
+/// approaches), its plan, and (version 2, #350) its poles. The lanes of each approach (#353) are
+/// in their own section, <c>LANE</c> (<see cref="RoadApproach"/>).
 /// </summary>
 public sealed class RoadSignal
 {
@@ -704,8 +760,10 @@ public sealed class RoadSignal
     /// <summary>Arm count × 3: the stop line's middle per arm.</summary>
     public required float[] Stops { get; init; }
     public required SignalPlan Plan { get; init; }
+    public List<SignalPole> Poles { get; init; } = new();
 
-    public const byte SectionVersion = 1;
+    /// <summary>2 adds the poles (#350); 1 is still read.</summary>
+    public const byte SectionVersion = 2;
 
     [Flags]
     private enum ArmBits : byte { In = 1, Out = 2, LeftPocket = 4, RightPocket = 8, Pedestrians = 16, Bike = 32 }
@@ -748,6 +806,13 @@ public sealed class RoadSignal
                     w.Write((ushort)MathF.Round(iv.To * 10));
                 }
             }
+            w.Write(checked((ushort)s.Poles.Count));
+            foreach (var pole in s.Poles)
+            {
+                w.Write(pole.X); w.Write(pole.Y); w.Write(pole.Z);
+                w.Write(pole.CarHeading); w.Write(pole.PedHeading);
+                w.Write(pole.Arm); w.Write((byte)pole.Flags);
+            }
         }
     }
 
@@ -755,7 +820,8 @@ public sealed class RoadSignal
     public static List<RoadSignal>? Read(BinaryReader r)
     {
         uint n = r.ReadUInt32();
-        if (r.ReadByte() != SectionVersion) return null;
+        byte version = r.ReadByte();
+        if (version is < 1 or > SectionVersion) return null;
         var list = new List<RoadSignal>((int)n);
         for (uint k = 0; k < n; k++)
         {
@@ -787,7 +853,12 @@ public sealed class RoadSignal
                     group.Intervals.Add(new SignalInterval((SignalAspect)r.ReadByte(), r.ReadUInt16() / 10f, r.ReadUInt16() / 10f));
                 plan.Groups.Add(group);
             }
-            list.Add(new RoadSignal { X = x, Y = y, Z = z, Stops = stops, Plan = plan });
+            var poles = new List<SignalPole>();
+            if (version >= 2)
+                for (int i = r.ReadUInt16(); i > 0; i--)
+                    poles.Add(new SignalPole(r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle(),
+                        r.ReadByte(), (SignalPoleFlags)r.ReadByte()));
+            list.Add(new RoadSignal { X = x, Y = y, Z = z, Stops = stops, Plan = plan, Poles = poles });
         }
         return list;
     }

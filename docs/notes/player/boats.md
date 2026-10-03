@@ -48,6 +48,26 @@
   (Stokes drift + orbital flow: ~0.1 m/s gamey), runs aground, and **sleeps** when its speed and spin
   are small and the swell where it floats is under 6 cm (calm). Its attitude rides in `Tilt`, its
   height over the waves in `Heave`; parked boats' attitude travels as `VehicleState.Angles` (Euler).
+- **Moored** (#378, `BoatDynamics.Moor`, after the driverless step): pulled softly back to its spot
+  and heading against the drift, as lines to a berth would: a critically damped spring (0.5 rad/s, a
+  ~13 s swing back), at most 0.6 m/s² (shoved far off, it comes back slowly, not flung), the heading
+  likewise (0.5 rad/s, 0.3 rad/s²); level only, so it still heaves, pitches and rolls (and its
+  collision with it). An acceleration, not a force: the same for a jetski and the 518 t steamer. A
+  boat left in the world moors itself where it comes to rest (under 0.6 m/s; one left running moors
+  where it stops); `VehicleBody.Moor(GlobalPos, yaw)` / `Unmoor()` for a berth or #379's AI steamer
+  at a landing (the spot is origin-free). Taking the wheel ends it (the parked body goes; parked
+  again, it moors where it is left). Measured: `BoatTests` with 0.16 m/s of drift, 60 s gamey: jetski
+  0.89 m off at worst, speedboat 0.66 m, steamer 0.28 m (free: 8 m); `--boatcheck` a minute moored
+  gamey within 1 m (speedboat 0.36 m, heading 1°).
+- **Its collision is where it is drawn** (#378, `VehicleBody.PoseHull`, from `DrawBoat`): the hull's
+  shape (the parked box, the steamer's shaped hull) takes the drawn frame's pose every frame, heave,
+  pitch and roll, on every peer: the authority from its model, a copy on its own waves at the sent
+  height and attitude. A headless peer (the server, checks) poses an empty `Visual` frame the same
+  way, for every boat now (it was the walkable steamer only). Only the shape moves inside the body,
+  never the body (nothing for Jolt to sweep), and only when its middle or far corner moved a
+  centimetre (a boat asleep in a calm costs nothing). A level box let the bow rise through a
+  swimmer's head and left a player standing on air beside a rolled hull. Swimmers under a hull or a
+  flare are stroked out from under it (`swimming`, "Hulls overhead").
 - **What others see** (`what-others-see-what-owner`): the owner sends `Anim = (rpm, thrust share,
   Heave, wet + 2·airborne)`. **`Heave` = the body's height over the mean surface under the hull's
   centreline** (`Boat.TrySurface`, three points). A remote copy (`FootPlayer._Process`,
@@ -73,8 +93,11 @@
 - **Checks**: `tools/test.sh unit` (`BoatTests`: floats level, rights itself, hump and plane and top
   speed, turns without capsizing, a jet does not steer off throttle, gamey, parked drift, beaching);
   `--boatcheck jetski|speedboat[,shots] --chunks fixture:lake` (quick; `shots` windowed: pictures
-  in `test_output/boats/`); `tools/boatnetcheck.sh` (net; `SHOTS=1`: B's view in
-  `test_output/boatnet_B_*.png`).
+  in `test_output/boats/`, `hull_touch`/`hull_side` with the collision box drawn in magenta);
+  `tools/boatnetcheck.sh` (net; `SHOTS=1`: B's view in `test_output/boatnet_B_*.png`). Both swim into
+  a parked boat's side in the gamey swell (`Player/HullTouch`, #378): the collision box within 3 cm of
+  the drawn hull at every corner, tilted with it, the swimmer's contacts on it as drawn, not pushed
+  under; `boatnetcheck` does it on B, against A's boat as B draws it.
 - **Foam on the waves (#380)**: the wake, spray and jet (and the steamer's wake, bow wave and
   churn) are drawn by `shaders/wake_foam.gdshader` through `Avatar/WakeFoam` (one shared material per
   kind, every style): a patch sits on the surface over its own centre (the rest point found by three
@@ -104,6 +127,5 @@
 - **At a jetty** (#377, `world/landings`): harbour jetties are solid decks; getting out beside one steps
   onto it instead of into the water (`FootPlayer.Pier.cs`, `--steamercheck pier|nyon`).
 - **At the harbours** (#383, `world/landings`): jetskis and speedboats moored along the jetties (`World.MarinaBoats`), server-placed, put back a while after being taken.
-- **Not done**: a hull's collision box does not pitch (the
-  hull boxes do, a parked boat's box stays level); no hiss of a hull running through the water; boats in races have no water courses (the mount words
+- **Not done**: boats placed at the real harbours (the jetties are there, nothing parks at them); no hiss of a hull running through the water; boats in races have no water courses (the mount words
   `jetski`/`boat` parse); the jetski's rider is the motorbike rider (helmet).
