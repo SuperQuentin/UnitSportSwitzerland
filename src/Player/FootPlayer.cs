@@ -3915,6 +3915,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
         if (_ride is Truck driving) PrepareTruck(driving);
         _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft), dt, ref _motion);
+        // a wheelie taken over the top (#410): the bike goes on its back, the rider off it
+        if (_ride is Motorbike { LoopedOut: true })
+        {
+            ThrowFromVehicle(_motion.Speed, loopOut: true);
+            return;
+        }
         if (_ride is Truck driven && AfterTruckStep(driven)) return;
         // airstairs let go by an aircraft's door line up with it and raise the platform (#417)
         if (_ride is Airstairs stairs) DockStairs(stairs, input, dt);

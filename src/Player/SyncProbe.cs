@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Godot;
 using UnitSport.Core;
 using UnitSport.Terrain;
@@ -87,6 +88,9 @@ public partial class SyncProbe : Node
     private static readonly double[] StageEnd = { 3, 5, 6.5, 8, 9.5, 15.5, 18.5, 25.5, 32.5, 39.5, 45.5, 52.5 };
     private double _stageStart;
     private int _ownerPoseKind;
+    // a motorbike's wheelie (#410): the owner's pitch last frame, the highest seen, the worst fresh mismatch
+    private float? _ownerPitch;
+    private float _pitchMax, _pitchErr;
 
     public override void _PhysicsProcess(double delta)
     {
@@ -149,6 +153,8 @@ public partial class SyncProbe : Node
             }
         }
         else if (_ownerPose != null && _mirror.Ride != _ownerKind && !_copiedLastFrame) _kindMismatch++;
+        if (_copiedLastFrame && _ownerPitch is { } op && _mirror.Visual is Avatar.Motorcyclist seenBike && _mirror.Ride == _ownerKind)
+            _pitchErr = Math.Max(_pitchErr, Mathf.Abs(op - seenBike.Pitch));
         if (_copiedLastFrame && _ownerSwitches is { } sw && _mirror.Visual is Avatar.CarRig mirrorCar
             && (mirrorCar.RoofOpen != sw.Roof || mirrorCar.Headlights != sw.Lights))
             _switchMismatch++;
@@ -177,6 +183,8 @@ public partial class SyncProbe : Node
             _ => null,
         };
         _ownerCadence = _owner.Visual is Avatar.Cyclist cc ? cc.CadenceRpm : 0f;
+        _ownerPitch = _owner.Visual is Avatar.Motorcyclist ob ? ob.Pitch : null;
+        _pitchMax = Math.Max(_pitchMax, _ownerPitch ?? 0f);
         _ownerSwitches = _owner.Visual is Avatar.CarRig oc2 ? (oc2.RoofOpen, oc2.Headlights) : null;
         _ownerCockpit = _owner.Visual is Avatar.CarRig oc3 ? (oc3.WheelTurn, oc3.Throttle, oc3.BrakeLights) : null;
         if (_ownerSwitches is { } now)
@@ -257,15 +265,20 @@ public partial class SyncProbe : Node
                     Handbrake: _t % 2.5 < 0.35);
                 break;
             case "moto":
-                // a motorbike weaving: lean both ways, the bars and wheels on the mirror
+                // a motorbike weaving: lean both ways, the bars and wheels on the mirror; every 3 s a
+                // short pulled wheelie (#410), its pitch on the mirror too
                 Mount(RideKind.OnFoot);
                 Mount((RideKind)MotorbikeCatalog.First);
-                _owner!.RideControls = () => new RideInput(0.5f, 0f, Mathf.Sin((float)_t * 1.4f) * 0.8f, false);
+                _owner!.RideControls = () =>
+                {
+                    bool pull = (_t - _stageStart) % 3.0 is > 0.5 and < 1.1;
+                    return new RideInput(pull ? 0.8f : 0.5f, 0f, Mathf.Sin((float)_t * 1.4f) * 0.8f, pull);
+                };
                 break;
             case "africa":
                 // the last Africa Twin (CRF1100L Adventure Sports ES DCT): its own mesh, the DCT shifting itself
                 Mount(RideKind.OnFoot);
-                Mount((RideKind)(MotorbikeCatalog.First + MotorbikeCatalog.All.Count - 1));
+                Mount(MotorbikeCatalog.All.Last(b => b.Label.Contains("Africa Twin")).Kind);
                 _owner!.RideControls = () => new RideInput(0.6f, 0f, Mathf.Sin((float)_t * 1.2f) * 0.8f, false);
                 break;
             case "heli":
@@ -305,7 +318,8 @@ public partial class SyncProbe : Node
         GD.Print($"[synccheck] cockpit: {_cockpitFrames} fresh frames, steering wheel up to {Mathf.RadToDeg(_cockpitTurnMax):F0}° "
             + $"off by {Mathf.RadToDeg(_cockpitTurnErr):F3}°, frames where the wheel or a pedal differed: {_cockpitMismatch} (must be 0), "
             + $"without a driver: {_driverless} (must be 0)");
-        bool ok = _switchSeen == 7 && _switchMismatch == 0 && _cockpitFrames > 20 && _cockpitMismatch == 0 && _driverless == 0 && _samples > 200 && _basisErr < MaxBasisErr && _handErr < MaxHandErr && _crankErr < MaxCrankErr
+        GD.Print($"[synccheck] wheelie: owner up to {Mathf.RadToDeg(_pitchMax):F0}° (> 8), mirror off by {Mathf.RadToDeg(_pitchErr):F2}° on fresh frames (< 3)");
+        bool ok = _pitchMax > Mathf.DegToRad(8f) && _pitchErr < Mathf.DegToRad(3f) && _switchSeen == 7 && _switchMismatch == 0 && _cockpitFrames > 20 && _cockpitMismatch == 0 && _driverless == 0 && _samples > 200 && _basisErr < MaxBasisErr && _handErr < MaxHandErr && _crankErr < MaxCrankErr
             && _freshBasis < FreshErr && _freshHand < FreshErr && _freshCrank < FreshCrank
             && _byStage.ContainsKey("bike") && _byStage.ContainsKey("moto") && _byStage.ContainsKey("africa") && _byStage.ContainsKey("plane");
         GD.Print($"[synccheck] max pose {_basisErr:F3} (< {MaxBasisErr}), hand {_handErr:F3} m (< {MaxHandErr}), "
