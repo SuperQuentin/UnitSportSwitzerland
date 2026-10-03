@@ -136,7 +136,11 @@ public sealed class Steamer : Boat
     /// </summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
         new(State.Shaft, Mathf.Clamp(Mathf.Abs(State.Thrust) / Mathf.Max(1f, Spec.StaticThrust), 0f, 1f), Heave,
-            Mathf.Clamp(State.Wet, 0f, 1f) * 0.99f + (State.Airborne > 0.1f ? 2f : 0f) + (Whistling ? 4f : 0f) + (DoorsOpen & 3) * 8f);
+            Mathf.Clamp(State.Wet, 0f, 1f) * 0.99f + (State.Airborne > 0.1f ? 2f : 0f) + (Whistling ? 4f : 0f) + (DoorsOpen & 3) * 8f
+            + 32f * HelmSteps(HelmNow));
+
+    /// <summary>The steamer's helm back out of a published pose's W (above its 32: #380), -1..1.</summary>
+    public static float WheelOf(Vector4 pose) => Mathf.FloorToInt(pose.W / 32f) / 50f - 1f;
 
     /// <summary>The gangways' bits in a published pose's W.</summary>
     public static byte DoorsOf(Vector4 pose) => (byte)(Mathf.FloorToInt(pose.W / 8f) & 3);
@@ -155,12 +159,18 @@ public sealed class Steamer : Boat
         _lastAt = at;
         _hasLast = true;
         if (visual is SteamerRig rig)
+        {
             rig.Animate(pose.X, _speed, AfloatOf(pose), WhistleOf(pose), pose.X * Telegraph.Max, DoorsOf(pose), dt);
+            rig.Steer(WheelOf(pose), dt);
+        }
     }
 
     public override void Animate(Node3D visual, in RideMotion motion, float dt)
     {
         if (visual is SteamerRig rig)
+        {
             rig.Animate(State.Shaft, Mathf.Abs(State.WaterSpeed), State.Airborne <= 0.1f && State.Wet > 0.05f, Whistling, Order, DoorsOpen, dt);
+            rig.Steer(HelmNow, dt);
+        }
     }
 }
