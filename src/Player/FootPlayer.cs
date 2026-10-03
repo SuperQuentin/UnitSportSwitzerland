@@ -480,10 +480,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     [Export] public int ItemAction { get; set; }
 
     /// <summary>
-    /// 0 not dancing, 1 dancing to the nearest playing radio. Replicated like <see cref="ItemAction"/>;
-    /// toggled by the owner with E beside a radio (<see cref="TryInteract"/>). The beat itself is
-    /// never replicated: every peer reads it off the radio and the shared clock
-    /// (<c>Items.RadioBody.BeatAt</c>), which is what keeps everyone on the same step.
+    /// 0 not dancing, 1 dancing to the nearest playing radio, 2 and up the emote
+    /// <c>DanceId - 2</c> of the emote wheel (#404, <see cref="Avatar.HumanMeshBuilder.EmoteName"/>).
+    /// Replicated like <see cref="ItemAction"/>; toggled by the owner with E beside a radio
+    /// (<see cref="TryInteract"/>) or picked on the wheel (<see cref="EmoteWheel"/>). The beat itself
+    /// is never replicated: every peer reads it off the radio and the shared clock
+    /// (<c>Items.RadioBody.BeatAt</c>), or, for an emote with no music near, off the shared clock
+    /// alone at <see cref="FreeBpm"/>, which is what keeps everyone on the same step.
     /// </summary>
     [Export] public int DanceId { get; set; }
 
@@ -507,6 +510,18 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>How many are dancing to the same music, counted twice a second (#261).</summary>
     private int _danceCrowd;
     private double _danceCrowdAt;
+    /// <summary>The emote before the current one and when it changed, for the crossfade between two picks (#404).</summary>
+    private int _emoteDrawn = -1, _emotePrev = -1;
+    private double _emoteSince;
+
+    /// <summary>First <see cref="DanceId"/> that is an emote (#404).</summary>
+    public const int EmoteDanceBase = 2;
+    /// <summary>The tempo an emote keeps with no music near: the shared clock's, so every peer agrees.</summary>
+    public const float FreeBpm = 120f;
+    /// <summary>The dance this peer drew last frame (the owner's own or a remote copy's), null at rest: for the probes.</summary>
+    public Avatar.DanceParams? DrawnDance { get; private set; }
+    /// <summary>The emote being played (0-based catalog index), or -1.</summary>
+    public int Emote => DanceId >= EmoteDanceBase ? DanceId - EmoteDanceBase : -1;
 
     /// <summary>An item asking for a narrower view (binoculars, a camera's viewfinder); null for the normal FOV.</summary>
     public float? FovOverride { get; set; }
@@ -1701,10 +1716,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void PublishFootPose(float dt)
     {
-        if (_swimming) { PublishSwimPose(dt); return; }
         // The owner decides when the dance is over: out of earshot, or doing anything else.
         // Remotes only ease out on what they receive.
         if (DanceId != 0 && !DanceAllowed()) DanceId = 0;
+        if (_swimming) { PublishSwimPose(dt); return; }
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
         float speed = MathX.FlatLength(Velocity);
 
@@ -1737,11 +1752,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// Whether the owner may go on dancing: on foot, upright, and a radio still playing within a
     /// little more than the radius that let it start (hysteresis, so the edge of earshot does not
     /// flicker). Outdoors, or indoors to the chess type beat (#370): the rat dance goes anywhere.
+    /// An emote off the wheel (#404) needs no music at all.
     /// </summary>
     private bool DanceAllowed() =>
-        Ride == RideKind.OnFoot && !KnockedOut && !_sliding
-        && Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius * 1.15f) is { } music
-        && (!Indoors || Audio.Cd.CdLibrary.IsRatBeat(music.CdId));
+        CanEmote
+        && (DanceId >= EmoteDanceBase
+            || Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius * 1.15f) is { } music
+            && (!Indoors || Audio.Cd.CdLibrary.IsRatBeat(music.CdId)));
+
+    /// <summary>On foot and free to move the body: what an emote (#404), or any dance, needs.</summary>
+    public bool CanEmote => Ride == RideKind.OnFoot && !KnockedOut && !_sliding && !_swimming && !_carried && _deadTimer <= 0;
 
     /// <summary>Indoors, the chess type beat heard here (#370): E dances, as outdoors to any music.</summary>
     public bool RatBeatHere(bool heard) =>
@@ -1762,10 +1782,19 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             // a remote copy tolerates a wider ring: its position lags the owner's a little
             music = Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius * 1.3f);
-            want = music != null;
+            want = music != null || Emote >= 0;
+        }
+        // an emote (#404) keeps its own move through the ease-out, music or not
+        if (Emote >= 0 && Emote != _emoteDrawn)
+        {
+            _emotePrev = _danceWeight > 0.001f ? _emoteDrawn : -1;
+            _emoteDrawn = Emote;
+            _emoteSince = Time.GetTicksMsec() / 1000.0;
         }
         _danceWeight = Mathf.MoveToward(_danceWeight, want ? 1f : 0f, dt * 4f);
         if (music != null) _danceMusic = music;
+        if (DanceId == 1) _emoteDrawn = -1;
+        if (_emoteDrawn >= 0) return StepEmote(music);
         if (_danceWeight <= 0.001f || _danceMusic is not { } m || !IsInstanceValid(m.Source) || !m.Source.IsInsideTree()
             || !m.BeatAt(Net.ClockSync.ServerNow, out float phase, out int beat, out int bar, out var style))
         {
@@ -1791,6 +1820,36 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // beats into this slot: the first one flows out of the last move instead of cutting to the next
         float into = (bar - slot * Avatar.HumanMeshBuilder.BarsPerMove) * 4 + (beat - bar * 4) + phase;
         return new Avatar.DanceParams(style, move, phase, barPhase, bar, _danceWeight, prev, Mathf.Clamp(into / 0.9f, 0f, 1f));
+    }
+
+    /// <summary>
+    /// The pose for an emote off the wheel (#404): the nearby music's beat when there is some,
+    /// else <see cref="FreeBpm"/> off the shared clock; a new pick flows out of the last one over a
+    /// quarter second. Nothing here is per-peer, so every copy dances the same step.
+    /// </summary>
+    private Avatar.DanceParams? StepEmote(Items.RadioManager.Music? music)
+    {
+        if (_danceWeight <= 0.001f)
+        {
+            _emoteDrawn = _emotePrev = -1;
+            _danceWeight = 0f;
+            return null;
+        }
+        double now = Net.ClockSync.ServerNow;
+        float phase; int beat, bar;
+        var style = Audio.Cd.MusicStyle.Pop;
+        if (music is not { } m || !IsInstanceValid(m.Source) || !m.BeatAt(now, out phase, out beat, out bar, out style))
+        {
+            double beats = now * FreeBpm / 60.0;
+            beat = (int)System.Math.Floor(beats);
+            phase = (float)(beats - beat);
+            bar = (int)System.Math.Floor(beats / 4.0);
+        }
+        float barPhase = (beat - bar * 4 + phase) / 4f;
+        int move = Avatar.HumanMeshBuilder.EmoteMoves + _emoteDrawn;
+        int prev = _emotePrev >= 0 ? Avatar.HumanMeshBuilder.EmoteMoves + _emotePrev : -1;
+        float blend = Mathf.Clamp((float)(Time.GetTicksMsec() / 1000.0 - _emoteSince) / 0.25f, 0f, 1f);
+        return new Avatar.DanceParams(style, move, phase, barPhase, bar, _danceWeight, prev, blend);
     }
 
     /// <summary>A move forced on every dancer on this machine (a probe's screenshot), -1 for none.</summary>
@@ -1834,7 +1893,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         int n = 0;
         float r = Items.RadioManager.DanceRadius * 1.3f;
         foreach (var node in GetTree().GetNodesInGroup(Group))
-            if (node is FootPlayer p && p.DanceId != 0 && p.Ride == RideKind.OnFoot && p.GlobalPosition.DistanceTo(at) < r)
+            if (node is FootPlayer p && p.DanceId == 1 && p.Ride == RideKind.OnFoot && p.GlobalPosition.DistanceTo(at) < r)
                 n++;
         return n;
     }
@@ -1859,7 +1918,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (PoseKind == PoseSwim) { ApplySwimFigure(); return; }
         float dt = (float)GetProcessDeltaTime();
         StepArmPose(dt);
-        var dance = StepDance(dt);
+        var dance = DrawnDance = StepDance(dt);
         var arm = _itemArmCur;
         float blend = _itemArmBlend;
         // dancing, the hands are the dance's, unless the item is actually being aimed or used
