@@ -55,7 +55,7 @@ public partial class AvatarPreview : Node3D
 
     public override void _Ready()
     {
-        var material = HumanMeshBuilder.Material();
+        var material = HumanMeshBuilder.FigureMaterial();
 
         AddChild(new DirectionalLight3D
         {
@@ -181,7 +181,7 @@ public partial class AvatarPreview : Node3D
                         rig.AddChild(new MeshInstance3D
                         {
                             Mesh = SeatedFigure.Build(HumanPalette.ForRider(i + 2), rig.Seats[i]),
-                            MaterialOverride = HumanMeshBuilder.Material(),
+                            MaterialOverride = HumanMeshBuilder.FigureMaterial(),
                             Transform = SeatedFigure.FrameOf(rig, rig.Seats[i]),
                         });
             _mirrorRig = rig.MirrorsOn ? rig : null;
@@ -252,7 +252,7 @@ public partial class AvatarPreview : Node3D
                     rig.AddChild(new MeshInstance3D
                     {
                         Mesh = SeatedFigure.Build(HumanPalette.ForRider(i + 2), rig.Seats[i]),
-                        MaterialOverride = HumanMeshBuilder.Material(),
+                        MaterialOverride = HumanMeshBuilder.FigureMaterial(),
                         Transform = SeatedFigure.FrameOf(rig, rig.Seats[i]),
                     });
             _mirrorRig = rig.MirrorsOn ? rig : null;
@@ -533,8 +533,8 @@ public partial class AvatarPreview : Node3D
     }
 
     /// <summary>
-    /// "--bodies [page]" (#394): the refined figures. <c>builds</c> (default): today's figure, then
-    /// slim, curvy and broad in the same jersey; <c>looks</c>: six styled looks; <c>faces</c>: every
+    /// "--bodies [page]" (#394): the figures. <c>builds</c> (default): every build in the same
+    /// jersey; <c>crowd</c>: ten seeded figures, as NPCs and players who never chose get them; <c>looks</c>: six styled looks; <c>faces</c>: every
     /// face close up; <c>heads</c>: the looks' heads and hair; <c>walk</c>: the builds mid-stride. Long lens, turned
     /// three-quarters (or by --view degrees).
     /// </summary>
@@ -674,8 +674,15 @@ public partial class AvatarPreview : Node3D
                     figures.Add(($"{b}", () => HumanMeshBuilder.BuildBodyStride(look, 1.6f, 0.15f)));
                 }
                 break;
+            case "crowd":
+                // what everyone who never chose gets: the figure from their seed (Appearance.ForSeed)
+                for (int i = 0; i < 10; i++)
+                {
+                    int seed = i;
+                    figures.Add(($"seed {seed}", () => HumanMeshBuilder.Build(HumanPalette.ForRider(seed))));
+                }
+                break;
             default:
-                figures.Add(("today", () => HumanMeshBuilder.Build(HumanPalette.ForRider(0) with { Skin = skin })));
                 foreach (var b in Enum.GetValues<BodyBuild>())
                 {
                     bool masc = b >= BodyBuild.Broad;
@@ -693,15 +700,7 @@ public partial class AvatarPreview : Node3D
         // front in the dark under the turntable's one sun, and faces are what this page is for
         AddChild(new DirectionalLight3D { Rotation = new Vector3(Mathf.DegToRad(-15), Mathf.DegToRad(20), 0), LightEnergy = 0.7f });
 
-        Material material = HumanMeshBuilder.FigureMaterial();
-        // --outline: an ink line round the figure (a lit style only: it follows the normals); a copy,
-        // the shared figure material is never modified
-        if (CmdArgs.Has("--outline"))
-        {
-            var inked = (ShaderMaterial)material.Duplicate();
-            inked.NextPass = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/figure_outline.gdshader") };
-            material = inked;
-        }
+        var material = HumanMeshBuilder.FigureMaterial();
         float yaw = _viewDegrees == 90 ? Mathf.Pi - 0.45f : Mathf.DegToRad(_viewDegrees);
         for (int i = 0; i < figures.Count; i++)
         {

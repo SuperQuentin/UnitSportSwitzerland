@@ -365,8 +365,10 @@ public sealed class MeshScratch
         if (volume > 0f)
             for (int i = first; i < _indices.Count; i += 3)
                 (_indices[i + 1], _indices[i + 2]) = (_indices[i + 2], _indices[i + 1]);
-        // a lit style's figure (#394: the lofted torso and head): each face its own flat normal, out
-        // of the face; every band quad and cap triangle has vertices of its own, so this is exact
+        // a lit style's figure (#394: the lofted torso, head and boots): the caps flat, each face out of
+        // itself; the bands round, every ring point's normal straight out from its ring's middle, so
+        // the cel light rolls round the trunk and the Cartoon ink outline (which pushes along the
+        // normals) closes over the edges instead of cracking open at each facet
         if (Smooth)
         {
             while (_normals.Count < _vertices.Count) _normals.Add(NoNormal);
@@ -379,6 +381,32 @@ public sealed class MeshScratch
                 for (int k = 0; k < 3; k++)
                     if (_indices[i + k] >= firstVertex) _normals[_indices[i + k]] = n;
             }
+            for (int k = 0; k + 1 < sections.Count; k++)
+            {
+                var ca = Middle(sections[k]);
+                var cb = Middle(sections[k + 1]);
+                for (int i = 0; i < m; i++)
+                {
+                    int j = (i + 1) % m, v = firstVertex + (k * m + i) * 4;
+                    Radial(v, sections[k][i], ca);
+                    Radial(v + 1, sections[k][j], ca);
+                    Radial(v + 2, sections[k + 1][j], cb);
+                    Radial(v + 3, sections[k + 1][i], cb);
+                }
+            }
+        }
+
+        void Radial(int v, Vector3 p, Vector3 middle)
+        {
+            var n = p - middle;
+            if (n.LengthSquared() > 1e-12f) _normals[v] = n.Normalized();
+        }
+
+        static Vector3 Middle(Vector3[] ring)
+        {
+            var sum = Vector3.Zero;
+            foreach (var p in ring) sum += p;
+            return sum / ring.Length;
         }
     }
 

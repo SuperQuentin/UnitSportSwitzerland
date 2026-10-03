@@ -101,15 +101,15 @@ public partial class Cyclist : Node3D
     public static Cyclist CreateWithTint(Color tint) => new()
     {
         Name = "Cyclist",
-        _palette = HumanPalette.Default with { Jersey = tint, Helmet = tint },
+        _palette = (HumanPalette.Default with { Jersey = tint, Helmet = tint }).With(Appearance.ForSeed((int)tint.ToRgba32())),
         _bikePalette = BikePalette.Default with { Accent = tint },
     };
 
     public override void _Ready()
     {
         var bikePalette = _bikePalette;
-        // clothes may carry a finish only the figure shader draws (#251)
-        Material material = _palette.Outfit.IsEmpty ? HumanMeshBuilder.Material() : HumanMeshBuilder.FigureMaterial();
+        // clothes may carry a finish, and the face is drawn, only by the figure shader (#251, #394)
+        Material material = HumanMeshBuilder.FigureMaterial();
 
         AddChild(new MeshInstance3D
         {
