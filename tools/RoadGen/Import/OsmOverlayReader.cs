@@ -7,12 +7,15 @@ using UnitSport.Terrain.Format;
 /// Reads <c>osm_overlay.tsv</c> (written by <c>TerrainPreprocessor --osm-overlay</c>, format in
 /// docs/notes/tools/osm-overlay.md) and turns the rows covering a piece of a TLM line into v3
 /// attributes. Every per-side and per-direction column is already in TLM drawing order.
+/// <c>turn_lanes_fwd</c>/<c>turn_lanes_bwd</c> (#347) come parsed per lane (<see cref="TurnLanes"/>):
+/// forward = traffic in TLM drawing order, each list left to right as its drivers see it.
 /// </summary>
 public sealed class OsmOverlayReader
 {
     public sealed record Row(double From, double To, string Highway, string OneWay, string Lanes,
         string LanesFwd, string LanesBwd, string Width, string SidewalkLeft, string SidewalkRight,
-        string CyclewayLeft, string CyclewayRight, bool Roundabout, bool Tram);
+        string CyclewayLeft, string CyclewayRight, bool Roundabout, bool Tram,
+        TurnMove[] TurnLanesFwd, TurnMove[] TurnLanesBwd);
 
     private readonly Dictionary<(string Uuid, int Part), List<Row>> _rows = new();
 
@@ -30,7 +33,7 @@ public sealed class OsmOverlayReader
             var key = (c[0], int.Parse(c[1], CultureInfo.InvariantCulture));
             if (!reader._rows.TryGetValue(key, out var list)) reader._rows[key] = list = new List<Row>();
             list.Add(new Row(D(c[2]), D(c[3]), c[6], c[7], c[8], c[9], c[10], c[11],
-                c[12], c[13], c[14], c[15], c[18] == "1", c[19] == "1"));
+                c[12], c[13], c[14], c[15], c[18] == "1", c[19] == "1", TurnLanes.Parse(c[16]), TurnLanes.Parse(c[17])));
             reader.RowCount++;
         }
         return reader;

@@ -80,6 +80,7 @@ public static partial class TileRewriter
         public readonly CrossSectionPlanner.Stats Carriageways = new();
         public readonly RoundaboutShaper.Stats Roundabouts = new();
         public readonly TurnLaneStats TurnLanes = new();
+        public readonly SignalStats Signals = new();
         /// <summary>Terrain under each shifted carriageway vertex vs under the TLM line it came from.</summary>
         public HeightAudit Shifted = HeightAudit.Empty;
         public int MaxBytes;
@@ -105,7 +106,7 @@ public static partial class TileRewriter
                     urban     {Urban:N0} ({UrbanKm:F1} km)   roundabout {Roundabout:N0}
                     OSM       {Osm:N0} ({OsmKm:F1} km) on {OsmTiles} tiles flagged OSM
                     bytes     {Bytes / 1024.0:F0} KB, {(double)Bytes / Math.Max(1, tiles) / 1024:F1} KB/tile, max {MaxBytes / 1024.0:F1} KB ({MaxBytesTile}), deflated on the wire {(double)DeflatedBytes / Math.Max(1, tiles) / 1024:F1} KB/tile
-                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Priority.Format() + "\n" + TurnLanes.Format() + "\n" + Bikes.Format();
+                """) + "\n" + FormatParts(tiles) + "\n" + Paint.Format(tiles) + "\n" + Carriageways.Format() + "\n" + Roundabouts.Format() + "\n" + Rail.Format() + "\n" + Priority.Format() + "\n" + TurnLanes.Format() + "\n" + Signals.Format() + "\n" + Bikes.Format();
         }
     }
 
@@ -241,6 +242,11 @@ public static partial class TileRewriter
         if (rewritten.Count > 0) log($"  skipping {rewritten.Count} rewritten tiles with no raw input");
 
         var overlay = options.OsmOverlay is { } overlayPath ? OsmOverlayReader.TryLoad(overlayPath) : null;
+        var cantons = Cantons.Find();   // pedestrian heads per canton (#348)
+        // OSM traffic signals (#347), beside the overlay
+        var signalSites = SignalSites.From(options.OsmOverlay is { } nodesBeside
+            ? OsmNodesReader.TryLoad(Path.Combine(Path.GetDirectoryName(nodesBeside) ?? ".", OsmNodesReader.FileName)) : null);
+        if (signalSites is not null) log($"  OSM traffic signals: {signalSites.Count:N0} junction signals");
         if (overlay is not null) log($"  OSM overlay: {overlay.RowCount:N0} rows from {options.OsmOverlay}");
 
         var wanted = new HashSet<TileId>(targets);
@@ -320,6 +326,7 @@ public static partial class TileRewriter
             var caps = new Dictionary<TileId, List<RoadJunction>>();
             var paint = new Dictionary<TileId, List<RoadPaint>>();
             var signs = new Dictionary<TileId, List<RoadPointProp>>();
+            var signalRecords = new Dictionary<TileId, List<RoadSignal>>();   // traffic lights (#348)
             var bikeBridges = new Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>>();   // paths through junctions (#120)
 
             // the full-res terrain of the block and its halo: the height audit and the walls (#125)
@@ -342,7 +349,10 @@ public static partial class TileRewriter
                     Analyze: options.Measure,
                     JoinNearEnds: MayJoinNearEnd));
                 netStats.Priority.NearEndsJoined += result.NearEndsJoined;
-                var priority = PlanPriority(result);
+                // traffic lights: from OSM where the overlay covers a junction, else where two main
+                // roads cross in a dense core (#348)
+                var priority = PlanPriority(result, j => Lights(j, result.Network, field, signalSites,
+                    block.Contains(TileId.FromLv95(j.Centre.X, j.Centre.Y)) ? netStats.Signals : null), netStats.Signals);
                 var bikeLayouts = BikePlanner.StrokeLayouts(result.Network, BikeStrokeKey);   // one path layout per street (#120)
                 var trackPaint = new List<(RoadSegment Segment, TileId Tile, bool Start, bool End)>();
                 var lanePaint = new List<(RoadSegment Segment, TileId Tile, double Station, bool Start, bool End)>();
@@ -502,7 +512,11 @@ public static partial class TileRewriter
                 }
 
                 EmitPriority(priority, result, block, wanted, grids, buildings, paint, signs, netStats.Priority);
-                EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs, netStats.TurnLanes);
+                var openings = new List<PocketOpening>();
+                var pockets = EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs, netStats.TurnLanes, openings);
+                var openingsOf = openings.GroupBy(o => o.Segment, ReferenceEqualityComparer.Instance)
+                    .ToDictionary(g => (RoadSegment)g.Key!, g => g.ToList(), ReferenceEqualityComparer.Instance);
+                EmitSignals(priority, result, pockets, block, wanted, paint, signalRecords, cantons, field, netStats.Signals);
 
                 // now the streets are cut into their sidewalk pieces (#119); a side that would stand on
                 // a turn lane's widening (#123) moves out past it (#120)
@@ -512,13 +526,17 @@ public static partial class TileRewriter
                     var strips = islands.TryGetValue(tileId, out var props)
                         ? props.Where(a => a.Type == AreaPropType.Pavement).ToList() : [];
                     for (int i = list.Count - 1; i >= 0; i--)
-                        if (streetPieces.TryGetValue(list[i], out var pieces))
-                        {
-                            var final = strips.Count == 0 ? pieces : pieces.SelectMany(x => ShiftOffPavement(x, strips, netStats.Bikes)).ToList();
-                            finalPieces[list[i]] = final;
-                            list.RemoveAt(i);
-                            list.InsertRange(i, final);
-                        }
+                    {
+                        bool cut = openingsOf.TryGetValue(list[i], out var opened);
+                        if (!streetPieces.TryGetValue(list[i], out var pieces) && !cut) continue;
+                        pieces ??= [list[i]];
+                        var final = strips.Count == 0 ? pieces : pieces.SelectMany(x => ShiftOffPavement(x, strips, netStats.Bikes)).ToList();
+                        // a gap in the grass where a left-turn pocket opens, for cyclists to reach it (#352)
+                        if (cut) final = CutVerges(list[i], tileId, final, opened!, block.Contains(tileId) && wanted.Contains(tileId) ? netStats.Bikes : null);
+                        finalPieces[list[i]] = final;
+                        list.RemoveAt(i);
+                        list.InsertRange(i, final);
+                    }
                 }
 
                 // the paths' paint on their final pieces, and the crossings at the junctions (#120)
@@ -569,6 +587,7 @@ public static partial class TileRewriter
                         .. Unbridged(id, CornerPlanner.Plan(id, segments, junctions, facades, cornerStats, isl), bridges, netStats.Bikes),   // sidewalk corners (#119)
                         .. bridges.Select(x => x.Band)],
                     PointProps = pointProps,
+                    Signals = signalRecords.TryGetValue(id, out var sg) ? sg : new List<RoadSignal>(),
                 };
                 rails.ClearTrackZones(tile.Paint, id);
                 var bytes = Encode(tile);
@@ -735,6 +754,90 @@ public static partial class TileRewriter
             });
         }
         return pieces.Count > 0 ? pieces : [seg];
+    }
+
+    /// <summary>How long the gap in the grass verge is (#352), along the road, just before the pocket opens.</summary>
+    private const double VergeCutM = 4.0;
+
+    /// <summary>
+    /// Where a left-turn pocket opens beside a separated bike path behind a grass verge (#352; #120
+    /// layouts 2, 4, 5), the piece of the approach's right side over the <see cref="VergeCutM"/>
+    /// just before that point (upstream) loses its verge: the path takes the verge's width, so the
+    /// bands outside stay where they were, and the kerb to the carriageway is the path's sloped
+    /// kerb (ASTRA "A") a cyclist rides over to cross into the pocket. Layouts without a verge (1,
+    /// 3) have that kerb already. The pieces are consecutive slices of <paramref name="whole"/>;
+    /// the shift past a widening (#120) and the yield bits (#121) carry over.
+    /// </summary>
+    /// <param name="bikes">Null for a halo tile: cut alike, counted by its own block.</param>
+    private static List<RoadSegment> CutVerges(RoadSegment whole, TileId tile, List<RoadSegment> pieces, List<PocketOpening> openings, BikePlanner.Stats? bikes)
+    {
+        double total = RoadPaintGeometry.Length(whole.Points);
+        foreach (var opening in openings)
+        {
+            bool right = opening.AtEnd;   // the approach drives toward the end: its right is the drawing's right
+            double d0 = opening.FromMouth, d1 = opening.FromMouth + VergeCutM;
+            double a0 = opening.AtEnd ? total - d1 : d0, a1 = opening.AtEnd ? total - d0 : d1;
+            if (a0 < 0.5 || a1 > total - 0.5) { if (bikes is not null) bikes.VergeCutsRejected++; continue; }
+            var result = new List<RoadSegment>();
+            double start = 0;
+            bool cut = false;
+            foreach (var piece in pieces)
+            {
+                double len = RoadPaintGeometry.Length(piece.Points), end = start + len;
+                var side = right ? piece.Attributes.Right : piece.Attributes.Left;
+                double l0 = Math.Max(0, a0 - start), l1 = Math.Min(len, a1 - start);
+                // the gap may span two pieces; a sliver where one ends is no overlap
+                if (l1 - l0 < 0.5 || !side.HasTrack || side.VergeDm == 0)
+                {
+                    result.Add(piece);
+                    start = end;
+                    continue;
+                }
+                var parts = new List<(double From, double To, bool Cut)>();
+                if (l0 > 0.05) parts.Add((0, l0, false));
+                parts.Add((l0, l1, true));
+                if (len - l1 > 0.05) parts.Add((l1, len, false));
+                for (int k = 0; k < parts.Count; k++)
+                {
+                    var (from, to, isCut) = parts[k];
+                    var points = StreetPlanner.Slice(piece, from, k + 1 == parts.Count ? double.PositiveInfinity : to);
+                    if (points.Length < 6) continue;
+                    var a = piece.Attributes;
+                    var flags = a.Flags;
+                    if (k > 0) flags &= ~RoadAttrFlags.YieldAtStart;
+                    if (k + 1 < parts.Count) flags &= ~RoadAttrFlags.YieldAtEnd;
+                    RoadSide Part(RoadSide s, bool open) => s with
+                    {
+                        ShiftStartCm = (ushort)Math.Round(s.ShiftAt(from / len) * 100),
+                        ShiftEndCm = (ushort)Math.Round(s.ShiftAt(to / len) * 100),
+                        VergeDm = open ? (byte)0 : s.VergeDm,
+                        BikeDm = open ? (byte)Math.Min(255, s.BikeDm + s.VergeDm) : s.BikeDm,
+                    };
+                    result.Add(new RoadSegment
+                    {
+                        Class = piece.Class, Surface = piece.Surface, Flags = piece.Flags, Width = piece.Width, Points = points,
+                        Attributes = a with
+                        {
+                            Flags = flags,
+                            Left = Part(a.Left, isCut && !right),
+                            Right = Part(a.Right, isCut && right),
+                        },
+                    });
+                }
+                if (!cut && bikes is not null && bikes.VergeCutsAt.Count < 3)
+                {
+                    var mid = StreetPlanner.Slice(piece, (l0 + l1) * 0.5, (l0 + l1) * 0.5 + 0.01);
+                    if (mid.Length >= 3)
+                        bikes.VergeCutsAt.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                            $"{tile.MinE + mid[0]:F0},{tile.MaxN - mid[2]:F0}"));
+                }
+                cut = true;
+                start = end;
+            }
+            if (cut && bikes is not null) bikes.VergeCuts++;
+            pieces = result;
+        }
+        return pieces;
     }
 
     /// <summary>A side without its painted bike lane.</summary>

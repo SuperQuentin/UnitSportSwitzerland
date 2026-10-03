@@ -7,7 +7,7 @@
   each main-road arm (`Role.Main` at a `Kind.Main` junction) that is a two-way, paved, at-grade
   Major or Road, with a yielding car road (class up to Lane) leaving to the approaching driver's
   left at more than 30 deg from straight on. A yielding road to the right as well makes the new
-  lane's arrows straight + right. No OSM `turn:lanes` (none in the test region; not read yet).
+  lane's arrows straight + right. No OSM `turn:lanes` yet: `OsmOverlayReader` parses it per lane since #347 (`TurnLanes`), the planner does not use it (#348).
 - **Shape**: the ribbon keeps one width per segment, so the approach widens by one 3 m lane on
   the driver's right as a flush `APRP` `Pavement` strip (new `AreaPropType.Pavement = 4`,
   Height 0) along the segment's edge: a taper, then storage to the junction mouth, as long as
@@ -69,7 +69,7 @@
   strip's height as road core, so the heightfield collision carries it like a ribbon.
 - **Not done**: lane-level topology in the format (which lane goes where); traffic still drives
   the original lane and so turns left from it, and goes straight from it too. Right-turn lanes,
-  pockets across a tile seam, OSM `turn:lanes`. Roads with 3 lanes (8 m, lane lines at ±1.33 m,
+  pockets across a tile seam, OSM `turn:lanes` (read, not used: #348). Roads with 3 lanes (8 m, lane lines at ±1.33 m,
   no centre line) still get a pocket laid out for 2 lanes of half the width: the hatch covers a
   lane and a half (seen at LV95 2506561,1138202).
 - **In town** (#325): a built-up stretch's lines are laid on an Urban-flagged copy of the segment
