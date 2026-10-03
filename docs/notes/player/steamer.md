@@ -48,7 +48,7 @@
   down each side of the hull just aft of the gangways (`SteamerMeshBuilder.LadderAt` 46.0, from 0.75 m
   under the waterline to the rail). E swimming within 3.5 m of its foot gets onto it (`TryClimbAboard`):
   carried in the ship's frame as drawn (`FootPlayer.Carrier`, the gadget ladder's way, #275), forward
-  climbs at 1.6 m/s, back down, Jump lets go into the water; at the top over the rail onto the deck,
+  climbs at 1.1 m/s, back down, Jump lets go into the water; at the top over the rail onto the deck,
   aboard as soon as its deck is here. Others see the climbing pose (`CarriedPose` 2, `PoseClimb`); it
   works under way (`steamernetcheck`). E from outside a parked one takes the wheel (as a bus) with
   **Get in buses and ships from outside** on (the default; Settings -> Vehicles,

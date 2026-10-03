@@ -77,7 +77,8 @@
   `test_output/boatnet_B_*.png`).
 - **At a jetty** (#377, `world/landings`): harbour jetties are solid decks; getting out beside one steps
   onto it instead of into the water (`FootPlayer.Pier.cs`, `--steamercheck pier|nyon`).
-- **Not done**: boats placed at the real harbours (the jetties are there, nothing parks at them); a hull's collision box does not pitch (the
+- **At the harbours** (#383, `world/landings`): jetskis and speedboats moored along the jetties (`World.MarinaBoats`), server-placed, put back a while after being taken.
+- **Not done**: a hull's collision box does not pitch (the
   hull boxes do, a parked boat's box stays level); wake foam lies where it was dropped, not on the
   moving waves; no water hiss/slap sound; boats in races have no water courses (the mount words
   `jetski`/`boat` parse); the jetski's rider is the motorbike rider (helmet).
