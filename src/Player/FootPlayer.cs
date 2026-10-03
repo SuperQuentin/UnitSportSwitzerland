@@ -599,6 +599,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private float _lookYaw;
     /// <summary>Seconds since the mouse or the right stick last looked: the cockpit's look springs back only once they let go.</summary>
     private float _lookIdle;
+    /// <summary>Seconds without mouse or stick look before a vehicle's chase camera swings back behind it.</summary>
+    private const float ChaseRecentreDelay = 5f;
     /// <summary>Cockpit: the head's sway from the car's accelerations, eased (node space: +X right, +Z back).</summary>
     private Vector3 _headSway;
 
@@ -3749,7 +3751,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         else
         {
-            _lookYaw = Mathf.MoveToward(_lookYaw, 0f, 1.2f * dt);
+            _lookIdle += dt;
+            // a look that banks the craft (canopies) comes straight back, or a flick would be a long turn
+            if (flyer.LookBank > 0f || _lookIdle > ChaseRecentreDelay) _lookYaw = Mathf.MoveToward(_lookYaw, 0f, 1.2f * dt);
             var nose = flyer.CameraForward(_flight);
             _camFwd = _camFwd.Lerp(nose, MathX.Damp(3.5f, dt));
             if (_camFwd.LengthSquared() < 1e-4f) _camFwd = nose;
@@ -4118,8 +4122,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
-        // the free look springs back to centre, so letting go of the mouse puts the road ahead
-        _lookYaw = Mathf.MoveToward(_lookYaw, 0f, 1.2f * dt);
+        // the free look springs back to centre once the mouse or stick has left it alone a while,
+        // so a look around is held but the road ahead comes back
+        if (_lookIdle > ChaseRecentreDelay) _lookYaw = Mathf.MoveToward(_lookYaw, 0f, 1.2f * dt);
 
         if (!_thirdPerson && ShowroomYaw == null)
         {
