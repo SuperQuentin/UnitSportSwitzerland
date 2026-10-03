@@ -12,48 +12,71 @@ namespace UnitSport.Avatar;
 public static class FaceAtlas
 {
     /// <summary>The vertex-alpha finish id that marks a face band (after the clothes' 1..10).</summary>
-    public const int FinishId = 11;
+    public const int FinishId = (int)Finish.Face;
 
     private const int Cell = 16, Cells = 4;
 
     /// <summary>
     /// Faces as the left half of a 16×16 cell, mirrored onto the right. Keys: <c>.</c> clear,
-    /// <c>k</c> line, <c>w</c> eye white, <c>i</c>/<c>d</c> iris and its dark, <c>h</c> highlight,
-    /// <c>m</c> mouth, <c>b</c> blush, <c>n</c> nose, <c>f</c> freckle.
+    /// <c>k</c> line, <c>w</c> eye white, <c>i</c>/<c>d</c> iris and its dark (keyed magenta: the
+    /// eye colour is the face band's vertex colour), <c>h</c> highlight, <c>m</c> mouth, <c>b</c>
+    /// blush, <c>n</c> nose, <c>f</c> freckle, <c>s</c> stubble.
     /// </summary>
-    private static readonly (string Name, Color Iris, string[] Rows)[] Faces =
+    private static readonly (string Name, string[] Rows)[] Faces =
     {
-        ("anime", new Color(0.56f, 0.30f, 0.86f), new[]
+        ("anime", new[]
         {
             "........", "........", "........", "..kkk...", "........",
             "kkkkkk..", "..whid..", "..wiid..", "..widd..", "...kk...",
             ".bb.....", "........", ".......m", "........", "........", "........",
         }),
-        ("calm", new Color(0.42f, 0.55f, 0.28f), new[]
+        ("calm", new[]
         {
             "........", "........", "........", "........", "..kkk...",
             "........", ".kkkkk..", "..wddk..", "...kk...", "........",
             "........", "........", ".......k", "........", "........", "........",
         }),
-        ("sharp", new Color(0.10f, 0.10f, 0.12f), new[]
+        ("sharp", new[]
         {
             "........", "........", "........", ".kk.....", "..kkk...",
             ".kkkkk..", ".kwwwk..", ".kwkwk..", "..kkk...", "..k.k...",
             "........", "........", "......kk", "........", "........", "........",
         }),
-        ("cute", new Color(0.25f, 0.55f, 0.95f), new[]
+        ("cute", new[]
         {
             "........", "........", "........", "........", "........",
             "..kkk...", ".kddhk..", ".kiiik..", "..kkk...", "........",
             ".bbb....", "........", "......k.", ".......k", "........", "........",
         }),
-        ("freckles", new Color(0.45f, 0.30f, 0.18f), new[]
+        ("freckles", new[]
         {
             "........", "........", "........", "..kk....", "........",
             ".kkkk...", ".kwdk...", ".kwdk...", "........", ".f.f....",
             "..f.....", ".......n", "........", "......mm", "........", "........",
         }),
+        // #394 feedback: masculine faces, heavier brows and smaller eyes
+        ("stern", new[]
+        {
+            "........", "........", "........", ".kkkk...", "..kkkk..",
+            "........", ".kkkk...", "..wdk...", "........", "........",
+            ".......n", "........", "......kk", "........", "........", "........",
+        }),
+        ("grin", new[]
+        {
+            "........", "........", "........", "........", "..kkk...",
+            "........", ".kkkk...", ".kwik...", "..kk....", "........",
+            ".......n", "........", ".....k..", "......kw", "........", "........",
+        }),
+        ("stubble", new[]
+        {
+            "........", "........", "........", "........", ".kkk....",
+            "........", ".kkkk...", "..dk....", "........", "........",
+            ".......n", ".s.....s", "......kk", "s.s.s.s.", ".s.s.s.s", "..s.s.s.",
+        }),
     };
+
+    /// <summary>The faces' names, in atlas order.</summary>
+    public static string Name(int index) => Faces[Mathf.PosMod(index, Faces.Length)].Name;
 
     public static int Count => Faces.Length;
 
@@ -77,7 +100,7 @@ public static class FaceAtlas
         var line = new Color(0.10f, 0.07f, 0.10f);
         for (int f = 0; f < Faces.Length; f++)
         {
-            var (_, iris, rows) = Faces[f];
+            var (_, rows) = Faces[f];
             int ox = f % Cells * Cell, oy = f / Cells * Cell;
             for (int y = 0; y < Cell; y++)
                 for (int x = 0; x < Cell / 2; x++)
@@ -86,8 +109,10 @@ public static class FaceAtlas
                     {
                         'k' => line,
                         'w' => new Color(0.97f, 0.96f, 0.94f),
-                        'i' => iris,
-                        'd' => iris.Darkened(0.5f),
+                        // the iris is keyed, not coloured: the shader draws it in the figure's eye colour
+                        'i' => new Color(1f, 0f, 1f),
+                        'd' => new Color(0.55f, 0f, 0.55f),
+                        's' => new Color(0.36f, 0.30f, 0.28f),
                         'h' => Colors.White,
                         'm' => new Color(0.50f, 0.14f, 0.18f),
                         'b' => new Color(0.96f, 0.56f, 0.62f),

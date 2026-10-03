@@ -546,6 +546,7 @@ public partial class AvatarPreview : Node3D
         var figures = new List<(string Name, Func<ArrayMesh> Mesh)>();
         void Add(string name, BodyLook look) => figures.Add((name, () => HumanMeshBuilder.BuildBody(look)));
 
+        var black = new Color(0.08f, 0.08f, 0.10f);
         var looks = new (string Name, BodyLook Look)[]
         {
             ("coat", new BodyLook(BodyBuild.Slim, new Color(0.96f, 0.86f, 0.74f))
@@ -553,68 +554,138 @@ public partial class AvatarPreview : Node3D
                 Top = new Color(0.09f, 0.08f, 0.11f), SleeveTo = 2f, TopFrom = 1.2f, Bottom = new Color(0.10f, 0.09f, 0.12f),
                 LegTo = 2f, Shoes = new Color(0.08f, 0.08f, 0.09f), BootFrom = 1.55f, Platform = 1.6f,
                 Gloves = new Color(0.12f, 0.11f, 0.13f), GloveFrom = 1.85f, Hair = new Color(0.20f, 0.72f, 0.74f),
-                HairStyle = HairStyle.Bob, Face = 2,
+                HairStyle = HairStyle.SideSwept, Face = 2, Eyes = new Color(0.20f, 0.75f, 0.70f), BottomPattern = Finish.Studs,
             }),
-            ("jacket", new BodyLook(BodyBuild.Broad, new Color(0.95f, 0.80f, 0.42f))
+            ("jacket", new BodyLook(BodyBuild.Lean, new Color(0.95f, 0.80f, 0.42f))
             {
                 Top = new Color(0.42f, 0.55f, 0.36f), SleeveTo = 2f, Bottom = new Color(0.22f, 0.32f, 0.55f), LegTo = 2f,
                 Shoes = new Color(0.20f, 0.18f, 0.18f), Belt = new Color(0.60f, 0.70f, 0.50f),
-                Hair = new Color(0.86f, 0.52f, 0.20f), HairStyle = HairStyle.Spiky, Face = 1,
+                Hair = new Color(0.86f, 0.52f, 0.20f), HairStyle = HairStyle.Spiky, Face = 1, Eyes = new Color(0.30f, 0.45f, 0.20f),
             }),
             ("punk", new BodyLook(BodyBuild.Curvy, new Color(0.93f, 0.90f, 0.92f))
             {
-                Top = new Color(0.08f, 0.08f, 0.10f), TopFrom = 2.6f, SleeveTo = 0f, Bottom = new Color(0.07f, 0.07f, 0.09f),
-                LegTo = 0.28f, Legwear = new Color(0.16f, 0.24f, 0.42f), Shoes = new Color(0.06f, 0.06f, 0.07f),
-                BootFrom = 1.15f, Platform = 2.6f, Gloves = new Color(0.08f, 0.08f, 0.10f), GloveFrom = 1.55f,
-                Belt = new Color(0.75f, 0.75f, 0.78f), Hair = new Color(0.12f, 0.45f, 0.75f), HairStyle = HairStyle.Spiky, Face = 2,
+                Top = black, TopFrom = 2.6f, SleeveTo = 0f, Bottom = new Color(0.07f, 0.07f, 0.09f),
+                LegTo = 0.28f, Legwear = new Color(0.20f, 0.30f, 0.55f), LegPattern = Finish.Checker, Shoes = new Color(0.06f, 0.06f, 0.07f),
+                BootFrom = 1.15f, Platform = 2.6f, Gloves = black, GloveFrom = 1.55f,
+                Belt = new Color(0.75f, 0.75f, 0.78f), Hair = new Color(0.12f, 0.45f, 0.75f), HairStyle = HairStyle.Mohawk, Face = 2,
+                Eyes = new Color(0.85f, 0.20f, 0.40f),
             }),
             ("hoodie", new BodyLook(BodyBuild.Curvy, new Color(0.95f, 0.70f, 0.60f))
             {
                 Top = new Color(0.20f, 0.13f, 0.26f), SleeveTo = 2f, TopFrom = 1.6f, Bottom = new Color(0.16f, 0.11f, 0.22f), LegTo = 2f,
-                Shoes = new Color(0.12f, 0.10f, 0.14f), Hair = new Color(0.10f, 0.08f, 0.12f), HairStyle = HairStyle.Long, Face = 0,
+                Shoes = new Color(0.12f, 0.10f, 0.14f), Hair = new Color(0.10f, 0.08f, 0.12f), HairStyle = HairStyle.BluntBangs, Face = 0,
+                Eyes = new Color(0.55f, 0.30f, 0.86f),
             }),
             ("crop", new BodyLook(BodyBuild.Slim, new Color(0.92f, 0.76f, 0.52f))
             {
                 Top = new Color(0.16f, 0.22f, 0.18f), TopFrom = 2.55f, SleeveTo = 0.35f, Bottom = new Color(0.24f, 0.16f, 0.30f), LegTo = 2f,
                 Waistband = 1.75f, Shoes = new Color(0.14f, 0.12f, 0.16f), Gloves = new Color(0.22f, 0.15f, 0.26f), GloveFrom = 1.85f,
-                Hair = new Color(0.86f, 0.10f, 0.08f), HairStyle = HairStyle.Ponytail, Face = 1,
+                Hair = new Color(0.86f, 0.10f, 0.08f), HairStyle = HairStyle.Ponytail, Face = 1, Eyes = new Color(0.75f, 0.55f, 0.15f),
             }),
             ("sporty", new BodyLook(BodyBuild.Curvy, new Color(0.80f, 0.56f, 0.38f))
             {
                 Top = new Color(0.12f, 0.24f, 0.20f), SleeveTo = 0f, TopFrom = 2.1f, Bottom = new Color(0.12f, 0.24f, 0.20f), LegTo = 0.25f,
-                Shoes = new Color(0.95f, 0.95f, 0.95f), Hair = new Color(0.45f, 0.14f, 0.10f), HairStyle = HairStyle.Bob, Face = 3,
+                Shoes = new Color(0.95f, 0.95f, 0.95f), Hair = new Color(0.45f, 0.14f, 0.10f), HairStyle = HairStyle.Twintails, Face = 3,
+                Eyes = new Color(0.25f, 0.55f, 0.95f),
+            }),
+        };
+        // #394 feedback: the masculine side of the wardrobe
+        var guys = new (string Name, BodyLook Look)[]
+        {
+            ("skater", new BodyLook(BodyBuild.Lean, new Color(0.88f, 0.70f, 0.56f))
+            {
+                Top = new Color(0.85f, 0.85f, 0.82f), TopPattern = Finish.Stripes, SleeveTo = 0.5f, TopFrom = 1.6f,
+                Bottom = new Color(0.45f, 0.42f, 0.30f), LegTo = 1.6f, Shoes = new Color(0.15f, 0.15f, 0.18f), BootFrom = 1.8f,
+                Hair = new Color(0.30f, 0.20f, 0.12f), HairStyle = HairStyle.Shaggy, Face = 6, Eyes = new Color(0.35f, 0.25f, 0.15f),
+            }),
+            ("biker", new BodyLook(BodyBuild.Stocky, new Color(0.78f, 0.58f, 0.44f))
+            {
+                Top = black, TopPattern = Finish.Studs, SleeveTo = 0f, TopFrom = 1.5f, Bottom = new Color(0.18f, 0.22f, 0.32f), LegTo = 2f,
+                Shoes = black, BootFrom = 1.5f, Platform = 1.5f, Gloves = black, GloveFrom = 1.8f, Belt = new Color(0.55f, 0.55f, 0.58f),
+                Hair = new Color(0.85f, 0.15f, 0.20f), HairStyle = HairStyle.Mohawk, Face = 7, Eyes = new Color(0.30f, 0.35f, 0.40f),
+            }),
+            ("smart", new BodyLook(BodyBuild.Broad, new Color(0.62f, 0.42f, 0.30f))
+            {
+                Top = new Color(0.85f, 0.82f, 0.74f), SleeveTo = 2f, TopFrom = 1.7f, Bottom = new Color(0.20f, 0.22f, 0.26f), LegTo = 2f,
+                Shoes = new Color(0.30f, 0.18f, 0.10f), Belt = new Color(0.30f, 0.18f, 0.10f),
+                Hair = new Color(0.08f, 0.06f, 0.05f), HairStyle = HairStyle.Quiff, Face = 5, Eyes = new Color(0.25f, 0.15f, 0.08f),
+            }),
+            ("runner", new BodyLook(BodyBuild.Lean, new Color(0.95f, 0.80f, 0.66f))
+            {
+                Top = new Color(0.20f, 0.45f, 0.85f), SleeveTo = 0f, TopFrom = 1.75f, Bottom = black, LegTo = 0.3f,
+                Shoes = new Color(0.95f, 0.60f, 0.15f), Hair = new Color(0.75f, 0.60f, 0.35f), HairStyle = HairStyle.Short, Face = 6,
+                Eyes = new Color(0.30f, 0.55f, 0.85f),
+            }),
+            ("goth", new BodyLook(BodyBuild.Lean, new Color(0.94f, 0.88f, 0.86f))
+            {
+                Top = black, SleeveTo = 2f, TopFrom = 1.1f, Bottom = black, LegTo = 2f, Shoes = black, BootFrom = 1.3f, Platform = 2f,
+                Gloves = black, GloveFrom = 1.8f, Hair = new Color(0.06f, 0.05f, 0.08f), HairStyle = HairStyle.Long, Face = 2,
+                Eyes = new Color(0.60f, 0.10f, 0.15f),
+            }),
+            ("grunge", new BodyLook(BodyBuild.Broad, new Color(0.90f, 0.72f, 0.58f))
+            {
+                Top = new Color(0.65f, 0.15f, 0.12f), TopPattern = Finish.Tartan, SleeveTo = 2f, TopFrom = 1.5f,
+                Bottom = new Color(0.30f, 0.38f, 0.55f), LegTo = 2f, Shoes = new Color(0.25f, 0.20f, 0.15f), BootFrom = 1.6f,
+                Hair = new Color(0.55f, 0.40f, 0.20f), HairStyle = HairStyle.Bun, Face = 7, Eyes = new Color(0.40f, 0.50f, 0.30f),
             }),
         };
 
         float spacing = 0.95f, lookAtY = 0.92f, height = 2.1f;
+        void Heads() { spacing = 0.42f; lookAtY = 1.68f; height = 0.55f; }
         switch (page)
         {
             case "looks":
                 foreach (var (name, look) in looks) Add(name, look);
                 break;
+            case "guys":
+                foreach (var (name, look) in guys) Add(name, look);
+                break;
             case "faces":
                 // every face, bald so nothing hides it, heads only in frame
                 for (int f = 0; f < FaceAtlas.Count; f++)
-                    Add($"face {f}", looks[f % looks.Length].Look with { Face = f, HairStyle = HairStyle.None });
-                spacing = 0.42f; lookAtY = 1.68f; height = 0.55f;
+                    Add(FaceAtlas.Name(f), (f < 5 ? looks[f] : guys[f - 5]).Look with { Face = f, HairStyle = HairStyle.None });
+                Heads();
                 break;
+            case "eyes":
+                // one face, the eye colour its own choice
+                foreach (var c in new[] { "6b3e1f", "3a78d8", "3f8f4a", "8e4fd8", "d83a5c", "d8a83a", "8a9aa8", "1a1a1a" })
+                    Add(c, looks[3].Look with { Face = 0, Eyes = new Color(c), HairStyle = HairStyle.Short, Hair = new Color(0.12f, 0.1f, 0.12f) });
+                Heads();
+                break;
+            case "hair":
+            case "hair2":
+            {
+                // every style, half on each page, in one face and colour so the shapes compare
+                var all = Enum.GetValues<HairStyle>().Where(h => h != HairStyle.None).ToArray();
+                int firstHalf = (all.Length + 1) / 2;
+                foreach (var h in page == "hair" ? all.Take(firstHalf) : all.Skip(firstHalf))
+                    Add(h.ToString(), looks[4].Look with { HairStyle = h, Face = 1 });
+                Heads();
+                break;
+            }
             case "heads":
-                // the looks' heads and hair close up
-                foreach (var (name, look) in looks) Add(name, look);
-                spacing = 0.42f; lookAtY = 1.68f; height = 0.55f;
+                foreach (var (name, look) in looks.Concat(guys)) Add(name, look);
+                Heads();
                 break;
             case "walk":
                 foreach (var b in Enum.GetValues<BodyBuild>())
-                    foreach (float phase in new[] { 0.1f, 0.35f })
-                    {
-                        var look = looks[(int)b * 2].Look;
-                        figures.Add(($"{b} {phase}", () => HumanMeshBuilder.BuildBodyStride(look, 1.6f, phase)));
-                    }
+                {
+                    var look = (b < BodyBuild.Broad ? looks[(int)b * 2] : guys[(int)b - 2]).Look;
+                    figures.Add(($"{b}", () => HumanMeshBuilder.BuildBodyStride(look, 1.6f, 0.15f)));
+                }
                 break;
             default:
                 figures.Add(("today", () => HumanMeshBuilder.Build(HumanPalette.ForRider(0) with { Skin = skin })));
                 foreach (var b in Enum.GetValues<BodyBuild>())
-                    Add(b.ToString(), jersey with { Build = b, Face = (int)b, HairStyle = (HairStyle)((int)b + 1), Hair = new Color(0.25f, 0.15f, 0.09f) });
+                {
+                    bool masc = b >= BodyBuild.Broad;
+                    Add(b.ToString(), jersey with
+                    {
+                        Build = b, Face = masc ? 5 + (int)b - 2 : (int)b,
+                        HairStyle = masc ? (HairStyle)((int)HairStyle.Short + (int)b - 2) : (HairStyle)((int)b + 1),
+                        Hair = new Color(0.25f, 0.15f, 0.09f),
+                    });
+                }
                 break;
         }
 
@@ -622,7 +693,15 @@ public partial class AvatarPreview : Node3D
         // front in the dark under the turntable's one sun, and faces are what this page is for
         AddChild(new DirectionalLight3D { Rotation = new Vector3(Mathf.DegToRad(-15), Mathf.DegToRad(20), 0), LightEnergy = 0.7f });
 
-        var material = HumanMeshBuilder.FigureMaterial();
+        Material material = HumanMeshBuilder.FigureMaterial();
+        // --outline: an ink line round the figure (a lit style only: it follows the normals); a copy,
+        // the shared figure material is never modified
+        if (CmdArgs.Has("--outline"))
+        {
+            var inked = (ShaderMaterial)material.Duplicate();
+            inked.NextPass = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/figure_outline.gdshader") };
+            material = inked;
+        }
         float yaw = _viewDegrees == 90 ? Mathf.Pi - 0.45f : Mathf.DegToRad(_viewDegrees);
         for (int i = 0; i < figures.Count; i++)
         {

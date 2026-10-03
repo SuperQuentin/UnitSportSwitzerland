@@ -8,7 +8,9 @@
 //   1 rainbow, 2 disco ball, 3 galaxy, 4 holographic, 5 glitch, 6 lava, 7 neon,
 //   8 tartan, 9 fishnet, 10 lace;
 //   11 the pixel face (#394, Avatar.FaceAtlas): the atlas at UV, its clear pixels discarded so
-//      the head's skin behind shows through.
+//      the head's skin behind shows through; its magenta pixels are the iris, drawn in the
+//      vertex colour (the eye colour) at their brightness;
+//   12 checker, 13 stripes, 14 studs (#394).
 // Alpha 1 everywhere else, so every other mesh drawn with this is unchanged. Patterns are laid
 // out in the mesh's own space (origin at the feet), so they move with the figure.
 
@@ -69,7 +71,26 @@ void fragment() {
         if (face.a < 0.5) {
             discard;
         }
-        ALBEDO = face.rgb;
+        // magenta is the iris key: (k, 0, k), k its shade
+        bool iris = face.g < 0.02 && abs(face.r - face.b) < 0.02 && face.r > 0.05;
+        ALBEDO = iris ? base * min(1.0, face.r * 1.4) : face.rgb;
+    } else if (v_fx >= 12 && v_fx <= 14) {
+        vec3 p = v_pos;
+        if (v_fx == 12) {
+            // checker: squares the size of a hand's width, the colour and near black
+            float c = mod(floor(around(p) * 30.0) + floor(p.y * 30.0), 2.0);
+            ALBEDO = c < 0.5 ? base : base * 0.18;
+        } else if (v_fx == 13) {
+            // stripes round the body: a dark band in every three
+            ALBEDO = fract(p.y * 16.0) < 0.36 ? base * 0.2 : base;
+        } else {
+            // studs: bright metal dots in a grid on the dark cloth
+            vec2 g = fract(vec2(around(p) * 22.0, p.y * 22.0)) - 0.5;
+            if (length(g) < 0.2) {
+                ALBEDO = vec3(0.82, 0.82, 0.86);
+                ROUGHNESS = 0.3;
+            }
+        }
     } else {
         // a facet's own normal (view space), for the effects that change with the angle
         vec3 fn = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));
