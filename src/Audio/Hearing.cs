@@ -1,17 +1,24 @@
 using Godot;
 using UnitSport.Interiors;
+using UnitSport.Player;
 
 namespace UnitSport.Audio;
 
 /// <summary>
 /// Where a long-playing source (a radio, a car stereo) is heard from, and how muffled, for the
-/// listener on this machine (#261). A speaker that uses it is <c>TopLevel</c> and is placed here
-/// every frame rather than riding its parent.
+/// ears on this machine (<see cref="Ears"/>, #261, #375). A speaker that uses it is
+/// <c>TopLevel</c> and is placed here every frame rather than riding its parent.
 ///
 /// <list type="bullet">
-/// <item><b>Same space, a wall between</b>: one ray from the ear to the source, a few times a
-/// second. A building, the terrain or a rock in the way take the highs and some level off.
-/// Bodies (players, the holder's own capsule) do not count.</item>
+/// <item><b>In the cabin</b>: the stereo of the car the ears sit in plays from the dash, clear and
+/// wide, whoever drives. A radio one carries plays where it hangs, panned softly.</item>
+/// <item><b>Same space, something between</b>: five rays from the ears to the source and around
+/// it, a few times a second; the share that is blocked sets how much is lost. A pillar or the
+/// radio's own table takes a little, a building takes the highs and ~10 dB. Inside one building
+/// the room's reflections fill in behind an obstacle, so it never goes past a mild dulling.
+/// Bodies do not count.</item>
+/// <item><b>Through a car's shell</b>: a stereo in a closed car (driven or parked) one is not in
+/// is the bass thump through the glass; the ears in a closed car hear every other radio through it too.</item>
 /// <item><b>The other space</b>: an interior is 3 km under its building, so a radio in a room is
 /// silent in the street, and the street's radio silent in the room. Through a door this client
 /// has linked (<see cref="DoorLink"/>), the source is moved through the doorway's own map and is
@@ -24,25 +31,39 @@ namespace UnitSport.Audio;
 public sealed class Hearing
 {
     private const double PollSeconds = 0.2;
-    /// <summary>Through a wall in the same space.</summary>
-    private const float WallDb = -9f, WallCutoff = 900f;
+    /// <summary>Fully behind a wall outdoors, and fully behind something inside one building.</summary>
+    private const float WallDb = -10f, WallCutoff = 700f, RoomDb = -4f, RoomCutoff = 2400f;
+    /// <summary>A closed car's shell between the source and the ears.</summary>
+    private const float ShellDb = -10f, ShellCutoff = 900f;
     /// <summary>From the other space, door shut (or no door near) and wide open.</summary>
     private const float ShutDb = -15f, ShutCutoff = 420f, OpenDb = -3f, OpenCutoff = 4500f;
+    /// <summary>The dash, from the ears: a little down and ahead, so the cabin stereo sits centred.</summary>
+    private static readonly Vector3 Dash = new(0f, -0.3f, -0.75f);
 
     /// <summary>The terrain height at a point, when known (set by the client world).</summary>
     public static Func<Vector3, float?>? Ground { get; set; }
 
     private readonly float _clearCutoff;
     private Vector3 _offset;
-    private bool _ready, _occluded;
+    private bool _ready;
+    private float _blocked;
     private double _poll;
     private float _db, _cut, _wantDb, _wantCut;
 
     /// <summary>The extra level this frame, dB (0 = in the open), for the speaker to add to its own.</summary>
     public float Db => _db;
 
-    /// <summary>What the last frame decided, for probes: "open", "wall", "door", "walls".</summary>
+    /// <summary>
+    /// What the last frame decided, for probes: "open", "own", "cabin", "shell", "wall", "room",
+    /// "door", "walls".
+    /// </summary>
     public string Path { get; private set; } = "open";
+
+    /// <summary>Where the source sits on its parent, taken at <see cref="Attach"/>. For the probes.</summary>
+    public Vector3 Offset => _offset;
+
+    /// <summary>The share of the occlusion rays blocked at the last poll, 0..1. For the probes.</summary>
+    public float Blocked => _blocked;
 
     public Hearing(float clearCutoff)
     {
@@ -64,30 +85,66 @@ public sealed class Hearing
         if (!_ready || speaker.GetParent() is not Node3D parent || !parent.IsInsideTree()) return;
         var source = parent.GlobalTransform * _offset;
         var heard = source;
-        var ear = speaker.GetViewport()?.GetCamera3D();
-        if (ear != null)
+        float panning = 1f;
+        if (Ears.FrameOf(speaker) is { } ear)
         {
-            var listener = ear.GlobalPosition;
-            bool srcIn = InteriorManager.InInteriorSpace(source), earIn = InteriorManager.InInteriorSpace(listener);
-            if (srcIn == earIn)
+            var listener = ear.Origin;
+            if (Ears.Cabin is { } cabin && parent == cabin)
             {
-                _poll -= dt;
-                if (_poll <= 0)
-                {
-                    _poll = PollSeconds;
-                    _occluded = Occluded(parent, listener, source);
-                }
-                Path = _occluded ? "wall" : "open";
-                _wantDb = _occluded ? WallDb : 0f;
-                _wantCut = _occluded ? WallCutoff : _clearCutoff;
+                // the stereo of the car the ears sit in: the dash, in front, all of it
+                Path = "cabin";
+                heard = ear * Dash;
+                panning = 0.35f;
+                _wantDb = 0f;
+                _wantCut = _clearCutoff;
+            }
+            else if (Ears.Body is { } body && parent == body)
+            {
+                // a radio in one's own hand or on one's back: right there, never behind anything
+                Path = "own";
+                panning = 0.45f;
+                _wantDb = 0f;
+                _wantCut = _clearCutoff;
             }
             else
             {
-                heard = Across(source, listener, srcIn, out float open);
-                Path = open >= 0 ? "door" : "walls";
-                open = Mathf.Max(open, 0f);
-                _wantDb = Mathf.Lerp(ShutDb, OpenDb, open);
-                _wantCut = Mathf.Lerp(ShutCutoff, OpenCutoff, open * open);
+                bool srcIn = InteriorManager.InInteriorSpace(source), earIn = InteriorManager.InInteriorSpace(listener);
+                if (srcIn == earIn)
+                {
+                    _poll -= dt;
+                    if (_poll <= 0)
+                    {
+                        _poll = PollSeconds;
+                        _blocked = Blocking(parent, listener, source);
+                    }
+                    // inside one building the room fills in behind a pillar: never more than a dulling
+                    bool room = srcIn && earIn;
+                    // one ray of five clipping a corner is a dulling, not a wall
+                    Path = _blocked >= 0.4f ? room ? "room" : "wall" : "open";
+                    _wantDb = (room ? RoomDb : WallDb) * _blocked;
+                    _wantCut = LogLerp(_clearCutoff, room ? RoomCutoff : WallCutoff, _blocked);
+                }
+                else
+                {
+                    heard = Across(source, listener, srcIn, out float open);
+                    Path = open >= 0 ? "door" : "walls";
+                    open = Mathf.Max(open, 0f);
+                    _wantDb = Mathf.Lerp(ShutDb, OpenDb, open);
+                    _wantCut = Mathf.Lerp(ShutCutoff, OpenCutoff, open * open);
+                }
+                if (InClosedCar(parent))
+                {
+                    // the stereo of a closed car one is not in: the thump through the glass
+                    Path = "shell";
+                    _wantDb += ShellDb;
+                    _wantCut = Mathf.Min(_wantCut, ShellCutoff);
+                }
+                if (Ears.Shut > 0f)
+                {
+                    // sat in a closed car oneself: every other radio comes through the shell
+                    _wantDb += ShellDb * 0.8f * Ears.Shut;
+                    _wantCut = LogLerp(_wantCut, Mathf.Min(_wantCut, 1400f), Ears.Shut);
+                }
             }
         }
         else
@@ -103,29 +160,69 @@ public sealed class Hearing
         _cut = Mathf.Exp(Mathf.Lerp(Mathf.Log(_cut), Mathf.Log(_wantCut), k));
         speaker.GlobalPosition = heard;
         speaker.AttenuationFilterCutoffHz = _cut;
+        speaker.PanningStrength = panning;
     }
+
+    private static float LogLerp(float a, float b, float t) => Mathf.Exp(Mathf.Lerp(Mathf.Log(a), Mathf.Log(b), t));
+
+    /// <summary>Whether the source is a stereo in a closed car: a driver's body at the wheel, or a parked one.</summary>
+    private static bool InClosedCar(Node3D parent) => parent switch
+    {
+        FootPlayer p => p.Ride != RideKind.OnFoot && FootPlayer.ClosedCabin(p.Ride),
+        Vehicles.VehicleBody v => FootPlayer.ClosedCabin(v.Kind),
+        _ => false,
+    };
 
     private static readonly Core.RayQuery OccluderRay = new();
     private static readonly Godot.Collections.Array<Rid> OccluderExclude = new();
 
-    /// <summary>Anything solid on the line, other than a body or the source's own (the radio's box, the parked car its stereo is in).</summary>
-    private static bool Occluded(Node3D source3D, Vector3 listener, Vector3 source)
+    /// <summary>
+    /// The share (0..1) of five rays, from the ears to the source and to points 0.4-0.8 m around
+    /// it (four around it and one over the top), that something solid stops: one slim pillar blocks one or two, a wall all five. A hit
+    /// near the source (the table a radio stands on, the car its stereo is in) or near the ears
+    /// does not count, nor does a body or the source's own collider.
+    /// </summary>
+    private static float Blocking(Node3D source3D, Vector3 listener, Vector3 source)
     {
         var space = source3D.GetWorld3D()?.DirectSpaceState;
-        if (space == null || listener.DistanceSquaredTo(source) < 1f) return false;
+        if (space == null || listener.DistanceSquaredTo(source) < 1f) return 0f;
+        var dir = (source - listener).Normalized();
+        var side = dir.Cross(Vector3.Up);
+        side = side.LengthSquared() > 1e-4f ? side.Normalized() : Vector3.Right;
+        var up = side.Cross(dir).Normalized();
+        int blocked = 0;
+        for (int i = 0; i < 5; i++)
+        {
+            var target = i switch
+            {
+                0 => source,
+                1 => source + side * 0.4f,
+                2 => source - side * 0.4f,
+                3 => source + up * 0.4f,
+                // over the top rather than under: under is the ground the source stands on
+                _ => source + up * 0.8f,
+            };
+            if (Stopped(space, source3D, listener, target)) blocked++;
+        }
+        return blocked / 5f;
+    }
+
+    private static bool Stopped(PhysicsDirectSpaceState3D space, Node3D source3D, Vector3 listener, Vector3 target)
+    {
         // one query and one exclude array for every source, refilled per call (#221)
         var exclude = OccluderExclude;
         exclude.Clear();
         if (source3D is CollisionObject3D own) exclude.Add(own.GetRid());
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < 4; i++)
         {
             OccluderRay.Forget();   // the array changed in place since the last cast
-            var hit = OccluderRay.Cast(space, listener, source, uint.MaxValue, exclude);
+            var hit = OccluderRay.Cast(space, listener, target, uint.MaxValue, exclude);
             if (hit.Count == 0) return false;
             var at = hit["position"].AsVector3();
-            if (at.DistanceTo(source) < 0.15f) return false;   // touching it: whatever it lies on
-            // a person in the way (the holder's own capsule under a third-person camera) is no wall
-            if (hit["collider"].AsGodotObject() is Player.FootPlayer body) { exclude.Add(body.GetRid()); continue; }
+            // touching the source (whatever it stands on) or the ears (one's own collar): no wall
+            if (at.DistanceTo(target) < 0.35f || at.DistanceTo(listener) < 0.3f) return false;
+            // a person in the way is no wall
+            if (hit["collider"].AsGodotObject() is FootPlayer body) { exclude.Add(body.GetRid()); continue; }
             return true;
         }
         return false;

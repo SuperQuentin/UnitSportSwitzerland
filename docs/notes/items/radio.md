@@ -92,3 +92,7 @@
   picks up, plays A in the hand, burns and plays a personal CD (`--radiopersonal <wav>`); a windowed
   watcher must hear each in sync (0.1 s) from the right file (`LoadedLength`), and silence for the
   personal CD. Takes ~3.5 min. Read the RESULT lines.
+- **Use again closes the held radio's panel** (#375): until the mouse moves after opening, a left
+  click is the Use key (`RadioUi._Input`), not a click on the list. The cursor comes back in the
+  middle of the screen, on the first CD, and the click meant to close used to start it (the chess
+  type beat). `--radiopanelcheck --world fixture` (quick tier).

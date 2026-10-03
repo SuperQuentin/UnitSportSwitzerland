@@ -52,8 +52,8 @@
   (1.9 / 1.6 / 0.8 m/s, Game) and 1.00 / 0.78 / 0.23 of the run (1.3 m/s at the waist). No slide
   deeper than the knees. Spray round the shins and foam left on the waves (`WakeFoam`, every peer
   from its own waves and the copy's stride speed `Anim.X`), and a slosh a stride
-  (`SfxSynth.WadeBank`: the owner's footstep is replaced in `PlayerFeel`, remotes heard spatially at
-  the stride cadence).
+  (`SfxSynth.WadeBank`: in place of the ground's footstep, the owner's in `PlayerFeel`, others' in
+  `Audio/BodySteps`, #375).
 - **Air** (`Player/AirReserve.cs`, plain C#, `SwimTests`): 45 s with the eye under, 1.7x on a
   sprint stroke, refills 9 s/s with the head out, empty = 15 health at once then each second
   (`DamageCause.Drown`, appended). Knocked out in the water the body floats face down, then wakes

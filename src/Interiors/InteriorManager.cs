@@ -548,7 +548,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     /// <summary>A door opened or shut: its sound on both sides, and the interior behind it.</summary>
     private void DoorMoved(string door, bool open)
     {
-        var listener = GetViewport()?.GetCamera3D()?.GlobalPosition;
+        var listener = Audio.Ears.Of(this);
         if (_links.TryGetValue(door, out var link))
         {
             _sounds?.Door(link.Outside.Origin + link.Outside.Basis.Z * 0.3f, open);
@@ -988,8 +988,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             Maintain();
         }
 
-        if (_sounds != null && GetViewport()?.GetCamera3D() is { } ear)
-            _sounds.Tick(delta, ear.GlobalPosition, _occupied, StreetSource(ear.GlobalPosition));
+        if (_sounds != null && Audio.Ears.Of(this) is { } ear)
+            _sounds.Tick(delta, ear, _occupied, StreetSource(ear));
 
         UpdatePrompt(delta);
     }

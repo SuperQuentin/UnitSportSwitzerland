@@ -48,9 +48,10 @@ public sealed class HullSlap
     public bool Tick(float dt)
     {
         _wait -= dt;
-        if (dt <= 0f || !_rig.IsInsideTree() || _rig.GetViewport()?.GetCamera3D() is not { } cam) return false;
+        // heard from the body's ears, not the camera (#375)
+        if (dt <= 0f || !_rig.IsInsideTree() || Audio.Ears.Of(_rig) is not { } ear) return false;
         var at = _rig.GlobalTransform * _at;
-        if (cam.GlobalPosition.DistanceSquaredTo(at) > Range * Range || !World.WaterField.TryLevelAt(at, out float level))
+        if (ear.DistanceSquaredTo(at) > Range * Range || !World.WaterField.TryLevelAt(at, out float level))
         {
             _last = float.NaN;
             return false;

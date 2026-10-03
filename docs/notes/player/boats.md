@@ -90,7 +90,7 @@
   the hull it draws and its own waves): the water's height up the forward hull is watched frame to
   frame; climbing it faster than 0.1 m/s slaps (`SfxSynth.HullSlapBank`: the skin's knock, the smack,
   the wash), as loud as it climbed fast (full at 1.7 m/s), then 0.12-0.32 s before the next. Within
-  120 m of the camera only. Measured (speedboat): calm idle 0.2 faint laps a second, gamey idle 0.8
+  120 m of the ears (`Audio/Ears`) only. Measured (speedboat): calm idle 0.2 faint laps a second, gamey idle 0.8
   (strength 0.03), gamey half ahead 1.2 at 0.2. The steamer's is pitched 0.55 and carries further.
 - **At a jetty** (#377, `world/landings`): harbour jetties are solid decks; getting out beside one steps
   onto it instead of into the water (`FootPlayer.Pier.cs`, `--steamercheck pier|nyon`).

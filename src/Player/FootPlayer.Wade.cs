@@ -21,7 +21,7 @@ public partial class FootPlayer
 
     private GpuParticles3D? _wadeSpray, _wadeFoam;
     private Vector2 _wadeSprayWater, _wadeFoamWater;
-    private float _shownWadeSpray = -1f, _shownWadeFoam = -1f, _wadeStep;
+    private float _shownWadeSpray = -1f, _shownWadeFoam = -1f;
 
     /// <summary>The owner's depth this physics step (from <see cref="SwimPhysics"/>), and no sliding deeper than the knees.</summary>
     private void StepWade(bool wet, float sub)
@@ -32,7 +32,7 @@ public partial class FootPlayer
 
     /// <summary>
     /// Per frame, every peer: spray round the legs of a wader and foam left on the water, and on a
-    /// remote copy its strides heard (the owner hears its own through <c>PlayerFeel</c>).
+    /// remote copy its strides are heard through <c>Audio.BodySteps</c> (the owner's through <c>PlayerFeel</c>).
     /// </summary>
     private void TickWade(float dt)
     {
@@ -52,12 +52,6 @@ public partial class FootPlayer
         var ahead = speed > 0.1f ? (owner ? Velocity with { Y = 0 } : -GlobalTransform.Basis.Z).Normalized() * 0.18f : Vector3.Zero;
         if (spray > 0f) WakeFoam.OnSurface(_wadeSpray!, GlobalPosition + ahead, 0.02f, ref _wadeSprayWater);
         if (foam > 0f) WakeFoam.OnSurface(_wadeFoam!, GlobalPosition + ahead * 0.5f, 0.01f, ref _wadeFoamWater);
-
-        if (owner || depth <= 0.06f || speed < 0.4f) { _wadeStep = 0.6f; return; }
-        _wadeStep += HumanMeshBuilder.Cadence(speed) * dt;
-        if (_wadeStep < 1f) return;
-        _wadeStep -= 1f;
-        PlayWaterAt(GlobalPosition with { Y = level }, Audio.SfxSynth.WadeBank, Mathf.LinearToDb(0.15f + 0.5f * Wading.StrideVolume(depth)));
     }
 
     private static void SetEmitting(GpuParticles3D p, float amount, ref float shown)
