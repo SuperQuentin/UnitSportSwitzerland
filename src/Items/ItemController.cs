@@ -369,11 +369,9 @@ public partial class ItemController : Node
             Click();
             GetViewport().SetInputAsHandled();
         }
-        else if (e is InputEventKey key)
+        else if (PlayerInput.SlotPressed(e) is var slot and >= 0 && slot < Inventory.HotbarSize)
         {
-            // physical 1..6, so the hotbar keys are the same keys on AZERTY
-            int slot = (int)key.PhysicalKeycode - (int)Key.Key1;
-            if (slot < 0 || slot >= Inventory.HotbarSize) return;
+            // the slot_1..6 actions (physical keys: the same keys on AZERTY; rebindable, #391)
             _inventory.Select(slot);
             Click();
             GetViewport().SetInputAsHandled();
