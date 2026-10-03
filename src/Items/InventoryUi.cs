@@ -563,9 +563,8 @@ public partial class InventoryUi : CanvasLayer
 
     private void RefreshDropHint()
     {
-        bool pad = PlayerInput.LastDevice == InputDevice.Gamepad;
         _dropHint.Text = !IsOpen || Inv.Carried.IsEmpty ? ""
-            : pad ? "(B) put it back" : "Click outside the panel to drop it on the ground  ·  right click: drop one";
+            : InputHints.Pad ? InputHints.Format("{ui_cancel} put it back") : "Click outside the panel to drop it on the ground  ·  right click: drop one";
     }
 
     private static string Chf(long amount) =>
@@ -574,10 +573,12 @@ public partial class InventoryUi : CanvasLayer
     /// <summary>The key reference under the slots, for the device in hand.</summary>
     private void OnDeviceChanged()
     {
-        _controlsHint.Text = PlayerInput.LastDevice == InputDevice.Gamepad
-            ? "(A) pick up / put down   (X) take half / put one   (Y) send across   (B) put back, then close"
-            : "LMB pick up / put down   RMB half / one   Shift+LMB send across   Drag to spread   Double-click gather\n"
-              + $"1–6 over a slot: into hotbar   Q drop one, Ctrl+Q stack   MMB use   {InputHints.Label(PlayerInput.Inventory)} / Esc close";
+        _controlsHint.Text = InputHints.Pad
+            ? $"{InputHints.Button(JoyButton.A)} pick up / put down   {InputHints.Button(JoyButton.X)} take half / put one   "
+              + $"{InputHints.Button(JoyButton.Y)} send across   {InputHints.Button(JoyButton.B)} put back, then close"
+            : $"LMB pick up / put down   RMB half / one   {InputHints.Keyboard(Key.Shift)}+LMB send across   Drag to spread   Double-click gather\n"
+              + $"1–6 over a slot: into hotbar   {InputHints.Label(PlayerInput.DropItem)} drop one, {InputHints.Keyboard(Key.Ctrl)}+{InputHints.Label(PlayerInput.DropItem)} stack   MMB use   "
+              + InputHints.Format("{inventory} / {menu} close");
         RefreshMoney();
         RefreshDropHint();
     }

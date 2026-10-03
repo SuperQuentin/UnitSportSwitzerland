@@ -4,7 +4,9 @@ The full per-action design and rules: `xr/vr-action-map`.
 
 - **How it works.** `XR/XrPad` replays the controllers as joypad events (`Input.ParseInputEvent`,
   device 7). Every `PlayerInput` action is bound to "any device", so all of them work unchanged.
-  - `PlayerInput._Input` pins `LastDevice` to Gamepad in VR, so prompts show pad glyphs.
+  - `PlayerInput._Input` pins `LastDevice` to Gamepad in VR (pad-only behaviour); prompts ask
+    `PlayerInput.HintDevice`, which is VR, and name the real controller (#435, `core/key-hints`).
+    `XrPad.Control` is the reverse of the layout below: change the two together.
   - `PlayerInput.Rumble` routes to `XrSession.Rumble`, which pulses both hands.
 - **Layout.**
   - Left stick: move. On foot it is rotated to the **head's** yaw, so forward is where you look.

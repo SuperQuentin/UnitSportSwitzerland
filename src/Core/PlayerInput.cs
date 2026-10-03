@@ -7,6 +7,11 @@ public enum InputDevice
 {
     KeyboardMouse,
     Gamepad,
+    /// <summary>
+    /// The VR controllers (#435). Never <see cref="PlayerInput.LastDevice"/> (they replay as a pad,
+    /// so pad-only behaviour holds); only <see cref="PlayerInput.HintDevice"/>, so prompts name them.
+    /// </summary>
+    VR,
 }
 
 /// <summary>
@@ -169,8 +174,27 @@ public partial class PlayerInput : Node
 
     private static InputDevice _lastDevice = InputDevice.KeyboardMouse;
 
-    /// <summary>Raised when the player switches between keyboard and pad, so on-screen key hints can follow.</summary>
+    /// <summary>
+    /// Raised when the player switches between keyboard and pad, or when what a VR control is
+    /// called changes (<see cref="HintsChanged"/>), so on-screen key hints can follow.
+    /// </summary>
     public static event Action? DeviceChanged;
+
+    /// <summary>
+    /// The device prompts name (#435): <see cref="InputDevice.VR"/> while the headset is on, where
+    /// <see cref="LastDevice"/> stays Gamepad because the controllers replay as a pad.
+    /// </summary>
+    public static InputDevice HintDevice => XR.XrSession.Active ? InputDevice.VR : _lastDevice;
+
+    /// <summary>
+    /// What a control is called changed without a device switch (the VR controller was recognised,
+    /// the VR triggers changed role on mounting): forget the hints and tell whoever shows them.
+    /// </summary>
+    public static void HintsChanged()
+    {
+        InputHints.Invalidate();
+        DeviceChanged?.Invoke();
+    }
 
     // Per-frame reads: a string action converts to a new StringName on every call (#221).
     private static readonly StringName NLeft = MoveLeft, NRight = MoveRight, NForward = MoveForward, NBack = MoveBack,
@@ -301,8 +325,8 @@ public partial class PlayerInput : Node
     {
         // the steering wheel is read through SDL; Godot's copy of it is not a pad
         if (e is InputEventJoypadButton or InputEventJoypadMotion && _ignoredPads.Contains(e.Device)) return;
-        // VR replays the controllers as a pad, and points at the UI panel with mouse events:
-        // the prompts stay on pad glyphs either way (#186)
+        // VR replays the controllers as a pad, and points at the UI panel with mouse events: it
+        // stays a pad for pad-only behaviour either way (#186); prompts ask HintDevice (#435)
         if (XR.XrSession.Active)
         {
             LastDevice = InputDevice.Gamepad;

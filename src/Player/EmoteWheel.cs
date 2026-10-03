@@ -191,7 +191,8 @@ public partial class EmoteWheel : CanvasLayer
             for (int p = 0; p < pages.Length; p++)
                 DrawCircle(centre + new Vector2((p - (pages.Length - 1) * 0.5f) * 16f, outer + 48f), 4f,
                     p == Page ? UiTheme.Amber : UiTheme.TextFaint);
-            string hint = PlayerInput.LastDevice == InputDevice.Gamepad ? "D-pad ← → : page" : "Wheel or Q / E : page";
+            string hint = InputHints.Pad ? InputHints.Format("{ui_left} {ui_right} : page")
+                : $"Wheel or {InputHints.Keyboard(Key.Q)} / {InputHints.Keyboard(Key.E)} : page";
             DrawString(font, centre + new Vector2(-150f, outer + 72f), hint, HorizontalAlignment.Center, 300,
                 UiTheme.FontTiny, UiTheme.TextFaint);
         }
