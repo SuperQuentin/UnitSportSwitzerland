@@ -27,13 +27,15 @@ public static partial class TileRewriter
         public int AtSignals, RightPockets, RightRejected;
         public int LeftBikeLanes, BikeBoxes, AdvancedBikeLines, KerbsideBike, BetweenBike, BetweenForced;
         public int Candidates, Placed, Merged, Short, Building, OtherLine, Ground, Seam, NoSegment, NoExit, Arrows, Stripes, StopBars, SignsMoved, BesideBike, LeadIns;
+        /// <summary>Hatched medians left out as too narrow or too short (#406).</summary>
+        public int HatchesSkipped;
         /// <summary>Pockets placed per storage length, metres.</summary>
         public readonly SortedDictionary<double, int> Storage = new();
         /// <summary>Where the right pockets beside a bike lane are, by layout (#351): up to 5 junctions each.</summary>
         public readonly SortedDictionary<string, List<string>> LayoutExamples = new();
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets ({RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes, {SignsMoved:N0} signs moved off the widening, {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120); " +
+            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets ({RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120); " +
             $"rejected (approach or exit): too short {Short:N0}, building {Building:N0}, another line {OtherLine:N0}, ground off the road {Ground:N0}, tile seam {Seam:N0}, no segment {NoSegment:N0}, no main road out {NoExit:N0}\n") +
             string.Concat(LayoutExamples.Select(kv => $"      right pockets beside a bike lane, layout {kv.Key} at LV95 {string.Join("; ", kv.Value)}\n"));
 
@@ -96,6 +98,24 @@ public static partial class TileRewriter
     /// <summary>The lead-in that widens a narrow approach for that runs at 1:6 (a town street), at least this long.</summary>
     private const double LeadInMin = 6, LeadInPerMetre = 6;
     private const double HatchStep = 2.5, HatchWidth = 0.3;
+
+    /// <summary>
+    /// A hatched median narrower than this at its widest, or shorter than <see cref="HatchMinLength"/>,
+    /// is left out (#406, the user's rule): the widening keeps only its centre line.
+    /// </summary>
+    private const double HatchMinWidth = 1.5, HatchMinLength = 20;
+
+    /// <summary>
+    /// How far from an exit arm's mouth its hatched median starts (#406): at traffic lights the
+    /// middle of the stop line of that arm's own left pocket (behind its bike box, if it has one),
+    /// else of the stop line across its approach, so no hatch reaches further into the junction;
+    /// without lights the mouth (no stop line across that arm). <paramref name="facing"/> is the
+    /// left pocket on the exit arm, if any.
+    /// </summary>
+    private static double ExitStop(PocketPlan? exiting, PocketPlan? facing) =>
+        exiting is not { ExitStopLine: true } p ? 0
+        : SignalStopSetback + p.ExitSkew + SignalStopLine * 0.5
+          + (facing is { Dropped: false, BikeBox: true, In.ApproachWay.HasLeftBikeLane: true } ? BikeBoxDepth : 0);
 
     private static double Sq(double v) => v * v;
 
@@ -200,8 +220,13 @@ public static partial class TileRewriter
                 var departure = SlotOf(outSeg, outAtEnd ? -1 : 1);
                 // a slot holds one approach and one exit; a second would be another arm on the same segment
                 if (approach.Approach is not null || departure.Exit is not null) { stats.NoSegment++; continue; }
+                // the exit arm's own stop line (#406: the departing side's hatch stops in line with it)
+                bool exitStop = signal && plan.Arms[exit].Approach && !Internal(net.Links[plan.Arms[exit].LinkId], junction.NodeId, signalNodes);
                 var pocket = new PocketPlan(home, approach, inAtEnd, departure, outAtEnd, right)
-                    { Node = junction.NodeId, Arm = i, ExitArm = exit, Signal = signal, Skew = signal ? MouthSkew(junction, junction.Arms[i]) : 0, BikeBox = box };
+                {
+                    Node = junction.NodeId, Arm = i, ExitArm = exit, Signal = signal, Skew = signal ? MouthSkew(junction, junction.Arms[i]) : 0, BikeBox = box,
+                    ExitStopLine = exitStop, ExitSkew = exitStop ? MouthSkew(junction, junction.Arms[exit]) : 0,
+                };
                 if (rightPlan is not null) rightPlan.Left = pocket;
                 approach.Approach = departure.Exit = pocket;
                 pockets.Add(pocket);
@@ -249,6 +274,9 @@ public static partial class TileRewriter
 
         // what each arm got, for the signal plans and poles (#348), bike crossings (#351) and lane records (#353)
         var placed = new Dictionary<(int Node, int Arm), ArmLanes>();
+        var leftPocketAt = pockets.Where(p => !p.Dropped).ToDictionary(p => (p.Node, p.Arm));
+        double StopBefore(PocketPlan? exiting) =>
+            ExitStop(exiting, exiting is null ? null : leftPocketAt.GetValueOrDefault((exiting.Node, exiting.ExitArm)));
         ArmLanes Arm(int node, int arm, TileId home) =>
             placed.TryGetValue((node, arm), out var l) ? l : placed[(node, arm)] = new ArmLanes(home) { Turns = turns.GetValueOrDefault((node, arm)) };
         foreach (var pocket in pockets)
@@ -263,23 +291,21 @@ public static partial class TileRewriter
             armLanes.AdvancedBikeLine = approach.HasLeftBikeLane && !pocket.BikeBox;
             armLanes.PlacedLeft(approach, inSlot.Storage, inSlot.Merged, pocket.RightTurn && right is null, pocket.Signal);
             if (pocket.ExitArm >= 0) Arm(pocket.Node, pocket.ExitArm, pocket.Home).ExitWidening = departure.MouthWidth(far: outSlot.Merged);
-            if (!approach.Emitted)
+            if (!approach.Emitted) approach.Emit(Get(paint, inSlot.Tile), Get(areas, inSlot.Tile), stripOwners);
+            if (!approach.Painted)
             {
-                approach.Emit(Get(paint, inSlot.Tile), Get(areas, inSlot.Tile), stripOwners);
                 // with a right-turn pocket beside it, the through lane goes straight only
                 bool rightTurn = pocket.RightTurn && right is null;
                 approach.StopShift = pocket.Skew;
                 approach.BikeBox = pocket.BikeBox;
-                if (inSlot.Merged) approach.Through(Get(paint, inSlot.Tile), inSlot.Storage, rightTurn, stats, pocket.Signal);
+                // a merged strip's hatch runs to the junction before, up to its stop line there (#406)
+                if (inSlot.Merged) approach.Through(Get(paint, inSlot.Tile), inSlot.Storage, rightTurn, stats, pocket.Signal, StopBefore(inSlot.Exit));
                 else approach.Pocket(Get(paint, inSlot.Tile), rightTurn, stats, pocket.Signal);
             }
-            if (!departure.Emitted)
-            {
-                departure.Emit(Get(paint, outSlot.Tile), Get(areas, outSlot.Tile), stripOwners);
-                // a merged strip is painted by the pocket at its other end
-                if (outSlot.Merged) departure.Through(Get(paint, outSlot.Tile), outSlot.Storage, outSlot.Approach!.RightTurn, stats);
-                else departure.Median(Get(paint, outSlot.Tile), stats);
-            }
+            if (!departure.Emitted) departure.Emit(Get(paint, outSlot.Tile), Get(areas, outSlot.Tile), stripOwners);
+            // a merged strip is painted by the pocket at its other end, as its approach (#406: it was
+            // painted here when this pocket came first, without the lights' stop line)
+            if (!outSlot.Merged && !departure.Painted) departure.Median(Get(paint, outSlot.Tile), stats, StopBefore(pocket));
             Across(approach, departure, exitFar: outSlot.Merged, inSlot.Tile, Get(areas, inSlot.Tile), Get(paint, pocket.Home),
                 pocket.Home, priority.Guides, joined: pocket.RightTurn, guide: !pocket.Signal);
             // a sign beside the old edge (#121's 3.03) would now stand on the widening
@@ -475,6 +501,9 @@ public static partial class TileRewriter
         public double Skew { get; init; }
         /// <summary>A bike box in front of the pocket and its bike lane, else an advanced bike stop line (#351).</summary>
         public bool BikeBox { get; init; }
+        /// <summary>The exit arm has a stop line across its own approach (traffic lights), and its mouth's skew (#406).</summary>
+        public bool ExitStopLine { get; init; }
+        public double ExitSkew { get; init; }
     }
 
     /// <summary>
@@ -916,6 +945,7 @@ public static partial class TileRewriter
         /// </summary>
         public void Pocket(List<RoadPaint> paint, bool rightTurn, TurnLaneStats stats, bool signal = false)
         {
+            Painted = true;
             double storage = _length - _taper;
             SolidCentre(paint);
             Hatch(paint, stats, storage, _length, d => (_pocket + _bikeLeft) * Math.Clamp((_length - d) / _taper, 0, 1));
@@ -926,12 +956,14 @@ public static partial class TileRewriter
         /// A merged strip (#325), from the pocket's mouth to the junction before: the through lane
         /// stays out all along; the left-turn lane, <paramref name="storage"/> m long, opens over
         /// <see cref="TurnEntry"/> out of a lane-wide hatched median that runs on to the junction
-        /// before (its exit's median, which no longer closes). The centre line is solid all along.
+        /// before (its exit's median, which no longer closes), up to <paramref name="farStop"/> short
+        /// of that junction's mouth (its stop line, #406). The centre line is solid all along.
         /// </summary>
-        public void Through(List<RoadPaint> paint, double storage, bool rightTurn, TurnLaneStats stats, bool signal = false)
+        public void Through(List<RoadPaint> paint, double storage, bool rightTurn, TurnLaneStats stats, bool signal, double farStop)
         {
+            Painted = true;
             SolidCentre(paint);
-            Hatch(paint, stats, storage, _length, d => _pocket * Math.Clamp((d - storage) / TurnEntry, 0, 1));
+            Hatch(paint, stats, storage, _length - farStop, d => _pocket * Math.Clamp((d - storage) / TurnEntry, 0, 1));
             Lanes(paint, storage, storage + TurnEntry, rightTurn, stats, signal);
         }
 
@@ -1104,13 +1136,18 @@ public static partial class TileRewriter
         /// The exit: the through lane comes out of the junction on the strip and eases back over
         /// the taper. Between the centre line and the lane's left edge, a hatched median a lane
         /// wide at the mouth, closing where the lane is back in place; the centre line is solid
-        /// along it.
+        /// along it. At traffic lights the hatch starts in line with the stop line across the arm's
+        /// own approach (<paramref name="near"/> from the mouth, #406), not in the junction.
         /// </summary>
-        public void Median(List<RoadPaint> paint, TurnLaneStats stats)
+        public void Median(List<RoadPaint> paint, TurnLaneStats stats, double near)
         {
+            Painted = true;
             SolidCentre(paint);
-            Hatch(paint, stats, 0, _length, d => _pocket * Math.Clamp(1 - d / _length, 0, 1));
+            Hatch(paint, stats, near, _length, d => _pocket * Math.Clamp(1 - d / _length, 0, 1));
         }
+
+        /// <summary>Set once its lane markings are painted (a merged strip is painted once, by the pocket it leads to).</summary>
+        public bool Painted { get; private set; }
 
         /// <summary>The dashed centre line along the widening turned solid: no overtaking into the junction (#120: drawn where the road has none).</summary>
         private void SolidCentre(List<RoadPaint> paint)
@@ -1128,39 +1165,57 @@ public static partial class TileRewriter
 
         /// <summary>
         /// A hatched median between the centre line and <paramref name="border"/> (an offset that
-        /// closes to 0 at <paramref name="far"/>), from <paramref name="near"/> to
-        /// <paramref name="far"/> metres from the mouth: the solid border, and stripes at 45
-        /// degrees from the centre line outward and away from the mouth.
+        /// closes to 0 at one end), from <paramref name="near"/> to <paramref name="far"/> metres from
+        /// the mouth: the solid border, a solid line across its wide end (#406: a Sperrfläche is
+        /// enclosed all round), and stripes at 45 degrees from the centre line outward and away from
+        /// the mouth, cut at the ends. Left out, the centre line alone, where it would be narrower
+        /// than <see cref="HatchMinWidth"/> or shorter than <see cref="HatchMinLength"/> (#406).
         /// </summary>
         private void Hatch(List<RoadPaint> paint, TurnLaneStats stats, double near, double far, Func<double, double> border)
         {
-            var line = new List<float>();
-            foreach (double dist in _dists.Where(x => x >= near - 1e-6 && x <= far + 1e-6))
-                line.AddRange(Point(dist, border(dist)));
-            paint.Add(new RoadPaint
+            double wideEnd = border(near) >= border(far) ? near : far;
+            if (border(wideEnd) < HatchMinWidth || far - near < HatchMinLength) { stats.HatchesSkipped++; return; }
+            void Solid(List<float> line) => paint.Add(new RoadPaint
             {
                 Shape = PaintShape.Polyline, Type = PaintType.WhiteSolid, Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
                 Vertices = line.ToArray(),
             });
+            var line = new List<float>();
+            line.AddRange(Point(near, border(near)));
+            foreach (double dist in _dists.Where(x => x > near + 1e-3 && x < far - 1e-3))
+                line.AddRange(Point(dist, border(dist)));
+            line.AddRange(Point(far, border(far)));
+            Solid(line);
+            Solid([.. Point(wideEnd, 0), .. Point(wideEnd, border(wideEnd))]);
 
             var v = new List<float>();
             var idx = new List<ushort>();
             double h = HatchWidth * Math.Sqrt(0.5);   // half the stripe's width, along the road
-            for (double d0 = near + 0.6; d0 < far; d0 += HatchStep)
+            // each stripe edge (d0 + t, t), t metres out from the centre line: where it enters the
+            // median (the centre line, or the closing line at its near end) and where it meets the
+            // border (border(d0 + t) = t, by bisection), or the closing line at its far end
+            (double From, double To)? Edge(double d0)
             {
-                if (border(far) > far - d0) break;   // a lane-wide median (#325) stops a stripe short of its end
-                // where the stripe meets the border: border(d1) = d1 - d0, by bisection
-                double lo = d0, hi = far;
+                double t0 = Math.Max(0, near - d0), tMax = far - d0;
+                if (tMax <= t0 || border(d0 + t0) <= t0) return null;
+                if (border(far) > tMax) return (t0, tMax);
+                double lo = t0, hi = tMax;
                 for (int k = 0; k < 40; k++)
                 {
                     double mid = (lo + hi) * 0.5;
-                    if (border(mid) > mid - d0) lo = mid; else hi = mid;
+                    if (border(d0 + mid) > mid) lo = mid; else hi = mid;
                 }
-                double d1 = lo;
-                if (d1 - d0 < 0.4) continue;   // where the border is still near the centre line
+                return (t0, lo);
+            }
+            // stripes keep their phase from near + 0.6; those starting before the wide near end come in through its closing line
+            double first = near + 0.6 - Math.Ceiling(border(near) / HatchStep) * HatchStep;
+            for (double d0 = first; d0 < far; d0 += HatchStep)
+            {
+                if (Edge(d0 - h) is not { } a || Edge(d0 + h) is not { } c) continue;
+                if (Math.Max(a.To - a.From, c.To - c.From) < 0.4) continue;   // where the border is still near the centre line
                 ushort b = (ushort)(v.Count / 3);
-                v.AddRange(Point(d0 - h, 0)); v.AddRange(Point(d1 - h, border(d1 - h)));
-                v.AddRange(Point(d1 + h, border(d1 + h))); v.AddRange(Point(d0 + h, 0));
+                v.AddRange(Point(d0 - h + a.From, a.From)); v.AddRange(Point(d0 - h + a.To, a.To));
+                v.AddRange(Point(d0 + h + c.To, c.To)); v.AddRange(Point(d0 + h + c.From, c.From));
                 idx.AddRange([b, (ushort)(b + 1), (ushort)(b + 2), b, (ushort)(b + 2), (ushort)(b + 3)]);
                 stats.Stripes++;
             }
