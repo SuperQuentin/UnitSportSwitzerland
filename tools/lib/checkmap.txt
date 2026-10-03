@@ -222,6 +222,11 @@ src/Avatar/A320          quick  --cabincheck --world fixture --traffic 0
 src/Player/CabinCheck    quick  --cabincheck --world fixture --traffic 0
 src/Player/Airliner      quick  --cabincheck --world fixture --traffic 0
 src/Player/FootPlayer.De quick  --cabincheck --world fixture --traffic 0
+src/Avatar/Airstairs     quick  --stairscheck --world fixture --traffic 0 --airliner arcade
+src/Player/Airstairs     quick  --stairscheck --world fixture --traffic 0 --airliner arcade
+src/Player/FootPlayer.Ai quick  --stairscheck --world fixture --traffic 0 --airliner arcade
+src/Vehicles/Airstairs   quick  --stairscheck --world fixture --traffic 0 --airliner arcade
+src/Vehicles/VehicleBody.Ai quick  --stairscheck --world fixture --traffic 0 --airliner arcade
 src/Player/Airliner      net    tools/airlinernetcheck.sh
 src/Avatar/AirlinerRig   net    tools/airlinernetcheck.sh
 src/Avatar/A320Deck      net    tools/airlinernetcheck.sh

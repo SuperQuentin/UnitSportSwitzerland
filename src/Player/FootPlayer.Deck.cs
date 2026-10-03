@@ -200,6 +200,9 @@ public partial class FootPlayer
         // exception from the vehicle's hull come the frame the vehicle does — in between, the parked
         // bus closed round a player not excepted from it, and shoved them out onto its roof
         if (_deckWait > 0f && !Aboard) _deckScan = 0;
+        // airstairs whose platform moved (#417): their deck is built again at its new height
+        foreach (var set in _decks.Values)
+            if (set.Ride is Airstairs && set.Sections.Count > 0 && !ReferenceEquals(set.Sections[0].Deck, set.Ride.Decks[0])) _deckScan = 0;
         _deckScan -= dt;
         if (_deckScan <= 0) { _deckScan = 0.5; ScanDecks(); }
         PlaceDecks(dt);
@@ -330,7 +333,8 @@ public partial class FootPlayer
         foreach (var host in near)
         {
             string key = KeyOf(host);
-            if (_decks.TryGetValue(key, out var known) && known.Host == host) continue;
+            if (_decks.TryGetValue(key, out var known) && known.Host == host
+                && (known.Ride is not Airstairs || ReferenceEquals(known.Sections[0].Deck, known.Ride.Decks[0]))) continue;
             if (known != null) FreeDeck(known);
             _decks[key] = BuildDeck(host, key, RideOfHost(host)!);
         }

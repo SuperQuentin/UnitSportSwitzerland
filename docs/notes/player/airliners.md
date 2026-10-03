@@ -76,7 +76,7 @@
   L2; replicated in the pose bits (driven) and `VehicleBody.DoorsOpen` (parked, flags bits 13-16).
   `Driverless`: stood up from its seat it stays the player's aircraft and flies on hands off (the law
   holds its path), carrying its walkers at 120 m/s. A parked one's frame is `Posed` by `ApplyPose`.
-  No airstairs yet (#417): E from outside takes the controls (`BoardWalkableFromOutside`).
+  Airstairs dock to its doors (#417, vehicles note `airstairs`); E from outside still takes the controls (`BoardWalkableFromOutside`).
   Checks: `--cabincheck [shots] --world fixture` (quick: doors, stand up, aisle, sit, the controls,
   then the same walked in flight; `shots` windowed: `test_output/cabin/`); `tools/airlinernetcheck.sh`
   B walks in A's flying A320, both peers put B at the same spot (measured 1 cm at 116 m/s).

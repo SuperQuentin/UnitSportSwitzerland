@@ -343,6 +343,8 @@ public partial class VehicleBody : CharacterBody3D
                 if (clear && !gone) RemoveCollisionExceptionWith(body);
                 return clear;
             });
+        // airstairs in the way of an aircraft taxiing off are shoved clear, asleep or not (#417)
+        if (Ride is Airstairs) PushAirstairs(dt);
         if (_asleep || _inHold) return;
 
         // Parked in a garage or a barn: down where the interiors are, on a floor that is only there
@@ -533,6 +535,8 @@ public partial class VehicleBody : CharacterBody3D
         // in a hold (#418): where the carrier is drawn now, before anything is drawn from it
         if (_inHold && !Wrecked) FollowCarrier(dt);
 
+        // airstairs: posed where they stand, the platform at the sill they are docked at (#417)
+        if (Ride is Airstairs stairs) StandAirstairs(stairs, dt);
         if (_visual == null) return;
         if (_visual is CarRig doors) doors.DoorsOpen = DoorsOpen;
         else if (_visual is HeavyRig bus && Ride is Truck { IsBus: true })

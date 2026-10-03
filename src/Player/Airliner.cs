@@ -325,9 +325,10 @@ public sealed class Airliner : Flyer
         State.Gear = State.GearDown && !State.GearBroken ? 1f : 0f;
         State.SpeedBrake = bits >> 5 & 3;
         State.ParkingBrake = (bits & 1 << 17) != 0;
-        // left running (#415): its engines still turn, so a Sim pilot need not start them again
+        // left running (#415): its engines still turn, so a Sim pilot need not start them again;
+        // Arcade has no start at all, so it is always running (a parked one with its doors open, #417, was not)
         bool running = (bits & 1 << 18) != 0;
-        if (running || bits == 0 && Handling == AirlinerHandling.Arcade)
+        if (running || Handling == AirlinerHandling.Arcade)
         {
             State.Lit = Spec.Engines;
             State.Starting = State.Battery = true;
