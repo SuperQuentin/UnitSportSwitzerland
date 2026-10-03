@@ -31,7 +31,8 @@ public enum RideKind
     Pigeon = 124,
     /// <summary>The Airbus A320 (#414, #416): an <see cref="Player.Airliner"/>, walkable.</summary>
     A320 = 125,
-    // 126 is the A320's airstairs (#417).
+    /// <summary>A mobile airstairs truck (#417): <see cref="Player.Airstairs"/>, docks to aircraft doors.</summary>
+    Airstairs = 126,
     /// <summary>The military cargo plane (#420, the Battle Royale's model): an <see cref="Player.Airliner"/>, walkable, a ramp and a hold.</summary>
     Freighter = 127,
     // 128 is the AN-124 (#419); the next other mount is 129.
@@ -291,6 +292,12 @@ public abstract class Rideable
     public bool Walkable => Decks.Length > 0;
 
     /// <summary>
+    /// A walkable vehicle is driven from its wheel inside (#384, E from outside only with the
+    /// setting on); false for one whose deck is not where its wheel is (airstairs, #417).
+    /// </summary>
+    public virtual bool DrivenFromInside => Walkable;
+
+    /// <summary>
     /// Where one stands to take seat <paramref name="i"/> and is put on standing up from it, in its
     /// section's node frame; null: beside it toward the aisle, the way a bus's seats are (#416: an
     /// airliner's window seat is two seats from its aisle, a pilot stands behind the seat).
@@ -458,6 +465,7 @@ public abstract class Rideable
         RideKind.Helicopter => new Helicopter(),
         RideKind.Plane => new Plane(),
         RideKind.Pigeon => new Pigeon(),
+        RideKind.Airstairs => new Airstairs(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),
         _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),
         _ when HeavyCatalog.For(kind) is { } heavy => new Truck(heavy),

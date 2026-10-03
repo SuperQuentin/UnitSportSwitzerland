@@ -12,4 +12,4 @@
   sample to upgrade one sound. **No wind loop**: a synthesised one was tried and removed at the
   user's request — shaped noise reads as hiss, not air; wind needs a real recording. Shake goes through `Camera3D.HOffset/VOffset` (trauma², decaying),
   which no camera placement code writes, so it never fights the rigs. Speed lines are
-  `shaders/speed_lines.gdshader` on a CanvasLayer at 4. Settings → Feel: volume, shake, speed lines.
+  `shaders/speed_lines.gdshader` on a CanvasLayer at 4; never in an `Airliner` (cruise is calm). Settings → Feel: volume, shake, speed lines.

@@ -219,6 +219,8 @@ public partial class PlayerFeel : Node3D
         // boosting always shows them: the meter was earned, and spending it should look like it
         float lines = Mathf.Clamp((excite - 0.35f) / 0.65f, 0f, 1f);
         if (_player.Boosting) lines = Mathf.Max(lines, 0.75f);
+        // an airliner cruising at 250 km/h is calm, not a rush
+        if (_player.Vehicle is Airliner) lines = 0f;
         _lines.SetShaderParameter(IntensityParam, GameSettings.Current.SpeedLines ? lines : 0f);
 
         if (_player.Boosting && !_wasBoosting)

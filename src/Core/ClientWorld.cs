@@ -610,6 +610,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.CabinCheck.Requested) AddChild(new Player.CabinCheck(() => LocalPlayer));
         if (Player.FreighterCheck.Requested) AddChild(new Player.FreighterCheck(() => LocalPlayer));
         if (Player.HoldCheck.Requested) AddChild(new Player.HoldCheck(() => LocalPlayer));
+        if (Player.AirstairsCheck.Requested) AddChild(new Player.AirstairsCheck(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.

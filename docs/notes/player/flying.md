@@ -17,8 +17,8 @@
     (glide 2.1, 4.2 m/s sink, opening shock from 145 to 36 km/h in 1 s); touching ground → on foot.
     Wingsuit touching ground over 12 m/s = SPLAT. Proximity (< 20 m AGL at > 30 m/s) is scored.
   - **Look banks the suit** (`Flyer.LookBank`, wingsuit and canopies 0.6, in the air only): the free
-    look (mouse, right stick) adds `-lookYaw/0.8 × 0.6` to the stick's X. The look recentres at
-    1.2 rad/s, so a flick is a nudge and a held look a gentle turn (BrProbe: 11° in 1.5 s).
+    look (mouse, right stick) adds `-lookYaw/0.8 × 0.6` to the stick's X. On these craft the look recentres at
+    1.2 rad/s at once (every other chase camera, ride or craft, waits `ChaseRecentreDelay` 5 s without look input), so a flick is a nudge and a held look a gentle turn (BrProbe: 11° in 1.5 s).
   - **Carried** (`FootPlayer.Carrier`, the BR cargo plane): no physics, collision off, hidden;
     `Leap(at, velocity, ride)` lets go. It takes one still `MoveAndSlide` first: the body still
     thought it stood on the floor it boarded from, and the wingsuit "landed" at 3 km (SPLAT).
