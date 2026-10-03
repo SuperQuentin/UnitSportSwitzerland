@@ -518,8 +518,16 @@ public static partial class TileRewriter
                 EmitPriority(priority, result, block, wanted, grids, buildings, paint, signs, netStats.Priority);
                 var bikeBetween = new List<(RoadSegment Segment, bool Right, (double From, double To) Along)>();
                 var stripOwners = new Dictionary<RoadAreaProp, RoadSegment>(ReferenceEqualityComparer.Instance);
+                // a street side at a link's end as its street was planned (#406: a corner beside a sidewalk or path)
+                RoadSide StreetSideAt(int linkId, LinkEnd end, bool right)
+                {
+                    if (!segmentOf.TryGetValue(linkId, out var so)) return default;
+                    var ends = streetPieces.TryGetValue(so.Item1, out var cut) && cut.Count > 0 ? cut : [so.Item1];
+                    var piece = end == LinkEnd.Start ? ends[0] : ends[^1];
+                    return right ? piece.Attributes.Right : piece.Attributes.Left;
+                }
                 var pockets = EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs,
-                    bikeBetween, stripOwners, netStats.TurnLanes);
+                    bikeBetween, stripOwners, netStats.TurnLanes, StreetSideAt);
                 // the bike side of a link's end piece (#351): its separated path, else its painted lane
                 RoadSide BikeSideAt(int linkId, LinkEnd end, bool right)
                 {

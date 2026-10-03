@@ -29,13 +29,15 @@ public static partial class TileRewriter
         public int Candidates, Placed, Merged, Short, Building, OtherLine, Ground, Seam, NoSegment, NoExit, Arrows, Stripes, StopBars, SignsMoved, BesideBike, LeadIns;
         /// <summary>Hatched medians left out as too narrow or too short (#406).</summary>
         public int HatchesSkipped;
+        /// <summary>Kerb corners paved beside a widening (#406), and those whose outline did not work out.</summary>
+        public int Corners, CornersRejected, CornersInTown;
         /// <summary>Pockets placed per storage length, metres.</summary>
         public readonly SortedDictionary<double, int> Storage = new();
         /// <summary>Where the right pockets beside a bike lane are, by layout (#351): up to 5 junctions each.</summary>
         public readonly SortedDictionary<string, List<string>> LayoutExamples = new();
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets ({RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120); " +
+            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets ({RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {Corners:N0} corners rounded beside a widening ({CornersRejected:N0} failed, {CornersInTown:N0} left square beside a sidewalk or path, #406), {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120); " +
             $"rejected (approach or exit): too short {Short:N0}, building {Building:N0}, another line {OtherLine:N0}, ground off the road {Ground:N0}, tile seam {Seam:N0}, no segment {NoSegment:N0}, no main road out {NoExit:N0}\n") +
             string.Concat(LayoutExamples.Select(kv => $"      right pockets beside a bike lane, layout {kv.Key} at LV95 {string.Join("; ", kv.Value)}\n"));
 
@@ -128,7 +130,7 @@ public static partial class TileRewriter
         HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, ChunkGrid>? grids, Footprints buildings,
         Dictionary<TileId, List<RoadPaint>> paint, Dictionary<TileId, List<RoadAreaProp>> areas,
         Dictionary<TileId, List<RoadPointProp>> signs, List<(RoadSegment Segment, bool Right, (double From, double To) Along)> bikeBetween,
-        Dictionary<RoadAreaProp, RoadSegment> stripOwners, TurnLaneStats stats)
+        Dictionary<RoadAreaProp, RoadSegment> stripOwners, TurnLaneStats stats, Func<int, LinkEnd, bool, RoadSide> streetSide)
     {
         var net = result.Network;
         var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
@@ -290,7 +292,12 @@ public static partial class TileRewriter
             approach.Layout = armLanes.Approach = LanesOf(approach, right);
             armLanes.AdvancedBikeLine = approach.HasLeftBikeLane && !pocket.BikeBox;
             armLanes.PlacedLeft(approach, inSlot.Storage, inSlot.Merged, pocket.RightTurn && right is null, pocket.Signal);
-            if (pocket.ExitArm >= 0) Arm(pocket.Node, pocket.ExitArm, pocket.Home).ExitWidening = departure.MouthWidth(far: outSlot.Merged);
+            if (pocket.ExitArm >= 0)
+            {
+                var exitLanes = Arm(pocket.Node, pocket.ExitArm, pocket.Home);
+                exitLanes.ExitWidening = departure.MouthWidth(far: outSlot.Merged);
+                (exitLanes.ExitWay, exitLanes.ExitFar) = (departure, outSlot.Merged);
+            }
             if (!approach.Emitted) approach.Emit(Get(paint, inSlot.Tile), Get(areas, inSlot.Tile), stripOwners);
             if (!approach.Painted)
             {
@@ -330,7 +337,189 @@ public static partial class TileRewriter
             stats.SignsMoved += r.Way.PushOut(Get(signs, tile));
             stats.RightPockets++;
         }
+        Corners(priority, net, placed, block, wanted, areas, stats, streetSide);
         return placed;
+    }
+
+    /// <summary>
+    /// Kerb corners at widened arms (#406): the junction polygon rounds each corner between two
+    /// arms' original edges (<see cref="JunctionBuilder"/>), so where a pocket's strip or an exit's
+    /// widening stands out past an edge the corner was square (a right turn out of a right pocket
+    /// could not be driven). Each corner beside a widening gets a flush pavement patch: from the
+    /// junction's own corner out to the widened edges, rounded as the junction polygon rounds an
+    /// unwidened one (a quadratic curve with the widened edges' meeting point as its control, each
+    /// end a kerb allowance past it: <see cref="JunctionOptions.KerbFactor"/> of the arm's half width).
+    /// </summary>
+    private static void Corners(PriorityResult priority, RoadNetwork net, Dictionary<(int Node, int Arm), ArmLanes> placed,
+        HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadAreaProp>> areas, TurnLaneStats stats,
+        Func<int, LinkEnd, bool, RoadSide> streetSide)
+    {
+        var kerb = new JunctionOptions();
+        double Kerb(double half) => Math.Clamp(kerb.KerbFactor * half, kerb.MinKerb, kerb.MaxKerb);
+        foreach (var (junction, plan) in priority.Plans)
+        {
+            int n = junction.Arms.Count;
+            if (n < 3 || plan.Arms.Count != n || !Enumerable.Range(0, n).Any(i => placed.ContainsKey((junction.NodeId, i)))) continue;
+            var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
+            if (!block.Contains(home) || !wanted.Contains(home)) continue;
+            var anchors = Anchors(junction, net);
+            for (int i = 0; i < n; i++)
+            {
+                // arm i's approach side (its left looking out) faces arm j's departing side (its right)
+                int j = (i + 1) % n;
+                var ai = junction.Arms[i];
+                var aj = junction.Arms[j];
+                var inWay = placed.GetValueOrDefault((junction.NodeId, i)) is { } li ? li.RightWay?.Way ?? li.LeftWay : null;
+                var outLanes = placed.GetValueOrDefault((junction.NodeId, j));
+                var outWay = outLanes?.ExitWay;
+                if (inWay is null && outWay is null) continue;
+                if (net.Links[ai.LinkId].Tag is not Source si || net.Links[aj.LinkId].Tag is not Source sj) continue;
+                // in town a sidewalk or path runs round the corner (#119, #120): its corner would have to
+                // follow the new kerb too, not done (#406): the corner stays square there
+                var ei = plan.Arms[i].End;
+                var ej = plan.Arms[j].End;
+                if (streetSide(ai.LinkId, ei, ei == LinkEnd.End).OuterDm > 0 || streetSide(aj.LinkId, ej, ej != LinkEnd.End).OuterDm > 0)
+                {
+                    stats.CornersInTown++;
+                    continue;
+                }
+                Vec2 ui = Vec2.FromHeading(ai.OutwardHeading), uj = Vec2.FromHeading(aj.OutwardHeading);
+                (Vec2 P, float Y) EdgeI(double d) => inWay?.OuterEdge(d) ?? (ai.Left + ui * d, si.SampleHeight(ai.Left + ui * d));
+                (Vec2 P, float Y) EdgeJ(double d) => outWay?.OuterEdge(d, outLanes!.ExitFar) ?? (aj.Right + uj * d, sj.SampleHeight(aj.Right + uj * d));
+                if (CornerPatch(junction, i, EdgeI, EdgeJ, Kerb(ai.HalfWidth), Kerb(aj.HalfWidth), anchors) is not { } patches)
+                {
+                    stats.CornersRejected++;
+                    continue;
+                }
+                if (patches.Count == 0) continue;
+                foreach (var patch in patches)
+                {
+                    var outline = patch.Select(p => p.P).ToList();
+                    var tris = Junctions.EarClip.Triangulate(outline);
+                    if (tris.Count != 3 * (outline.Count - 2)) { stats.CornersRejected++; continue; }
+                    var v = new float[patch.Count * 3];
+                    for (int k = 0; k < patch.Count; k++)
+                        (v[k * 3], v[k * 3 + 1], v[k * 3 + 2]) = ((float)(patch[k].P.X - home.MinE), patch[k].Y, (float)(home.MaxN - patch[k].P.Y));
+                    Get(areas, home).Add(new RoadAreaProp
+                    {
+                        Type = AreaPropType.Pavement, Flags = PropFlags.None, Height = 0f,
+                        Vertices = v, Indices = tris.Select(t => (ushort)t).ToArray(),
+                    });
+                }
+                stats.Corners++;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The pavement of one corner (#406), as LV95 outlines with heights, between arm i's approach
+    /// edge and arm j's departing edge (<c>edge(d)</c>: the widened edge <c>d</c> metres out from
+    /// the mouth). The widened edges meet at a corner point; the kerb rounds it as the junction
+    /// polygon rounds its own corners (a quadratic curve with the corner point as its control,
+    /// each end a kerb allowance past it), so a patch fills the corner point's side of that curve.
+    /// A second patch fills what lies between the junction polygon's corner, the two mouths and
+    /// the corner point (a widening that stops at its mouth short of the corner point leaves a
+    /// notch); where both widened edges meet past both mouths the strips overlap there and only
+    /// the part inside the mouths is needed. None when the edges do not meet near the junction
+    /// (a straight road's two sides carried on); null when an outline is not simple.
+    /// </summary>
+    private static List<List<(Vec2 P, float Y)>>? CornerPatch(Junction junction, int i, Func<double, (Vec2 P, float Y)> edgeI,
+        Func<double, (Vec2 P, float Y)> edgeJ, double kerbI, double kerbJ, List<(Vec2 At, float Height)> anchors)
+    {
+        int n = junction.Arms.Count, j = (i + 1) % n;
+        Vec2 ai = junction.Arms[i].Left, aj = junction.Arms[j].Right;
+        var mi = edgeI(0).P;
+        var mj = edgeJ(0).P;
+        // the widened edges as lines near the mouths (a taper leans in a little)
+        var ei = (edgeI(5).P - mi).Normalized();
+        var ej = (edgeJ(5).P - mj).Normalized();
+        double den = ei.Cross(ej);
+        if (Math.Abs(den) < 0.2) return [];   // within ~12 degrees of parallel: the two sides of a road carried on
+        double ci = (mj - mi).Cross(ej) / den, cj = (mj - mi).Cross(ei) / den;
+        var c = mi + ei * ci;
+        double reach = Math.Max(junction.Arms[i].Trim, junction.Arms[j].Trim) * 1.5 + 10;
+        if (c.DistanceTo(junction.Centre) > reach || ci < -reach || cj < -reach) return [];
+        float yc = (edgeI(Math.Max(ci, 0)).Y + edgeJ(Math.Max(cj, 0)).Y) * 0.5f;
+        // the kerb's ends: an allowance past the corner point along each widened edge, never inside the mouth
+        var (fi, fyi) = edgeI(Math.Max(ci + kerbI, 0));
+        var (fj, fyj) = edgeJ(Math.Max(cj + kerbJ, 0));
+        var round = new List<(Vec2 P, float Y)> { (c, yc) };
+        for (int k = 0; k <= 8; k++)
+        {
+            double t = k / 8.0, mt = 1 - t;
+            round.Add((fi * (mt * mt) + c * (2 * mt * t) + fj * (t * t), (float)(fyi + (fyj - fyi) * t)));
+        }
+        // the junction polygon's own corner, from arm j's right end back to arm i's left end
+        var ring = junction.Boundary;
+        int ri = Nearest(ring, ai), rj = Nearest(ring, aj);
+        var back = new List<(Vec2 P, float Y)>();
+        for (int k = rj; k != ri; k = (k - 1 + ring.Count) % ring.Count) back.Add((ring[k], HeightAt(anchors, ring[k])));
+        back.Add((ai, HeightAt(anchors, ai)));
+        // between the junction, the mouths and the corner point; where the mouths' edges cross
+        // (both widened edges meet past both mouths) only the part inside them
+        var inner = new List<(Vec2 P, float Y)>();
+        if (SegmentsCross(ai, mi, mj, aj) is { } x) inner.Add((x, HeightAt(anchors, x)));
+        else inner.AddRange([edgeI(0), (c, yc), edgeJ(0)]);
+        inner.AddRange(back);
+        var patches = new List<List<(Vec2 P, float Y)>>();
+        foreach (var patch in (ReadOnlySpan<List<(Vec2 P, float Y)>>)[round, inner])
+        {
+            var clean = Clean(patch);
+            if (clean.Count < 3 || Area(clean) < 0.05) continue;   // nothing there (a widening ending right at the corner point)
+            if (!Simple(clean)) return null;
+            patches.Add(clean);
+        }
+        return patches;
+
+        static int Nearest(List<Vec2> ring, Vec2 p)
+        {
+            int best = 0;
+            for (int k = 1; k < ring.Count; k++) if (ring[k].DistanceSquaredTo(p) < ring[best].DistanceSquaredTo(p)) best = k;
+            return best;
+        }
+    }
+
+    private static double Area(List<(Vec2 P, float Y)> poly)
+    {
+        double area = 0;
+        for (int k = 0; k < poly.Count; k++) area += poly[k].P.Cross(poly[(k + 1) % poly.Count].P);
+        return Math.Abs(area) * 0.5;
+    }
+
+    /// <summary>Consecutive points under 2 cm apart are one.</summary>
+    private static List<(Vec2 P, float Y)> Clean(List<(Vec2 P, float Y)> poly)
+    {
+        var result = new List<(Vec2 P, float Y)>(poly.Count);
+        foreach (var p in poly)
+            if (result.Count == 0 || result[^1].P.DistanceTo(p.P) > 0.02) result.Add(p);
+        while (result.Count > 2 && result[0].P.DistanceTo(result[^1].P) <= 0.02) result.RemoveAt(result.Count - 1);
+        return result;
+    }
+
+    /// <summary>A polygon with at least 3 distinct points and no two edges crossing.</summary>
+    private static bool Simple(List<(Vec2 P, float Y)> poly)
+    {
+        var p = Clean(poly).Select(q => q.P).ToList();
+        int n = p.Count;
+        if (n < 3) return false;
+        for (int a = 0; a < n; a++)
+            for (int b = a + 2; b < n; b++)
+            {
+                if (a == 0 && b == n - 1) continue;
+                if (SegmentsCross(p[a], p[(a + 1) % n], p[b], p[(b + 1) % n]) is not null) return false;
+            }
+        return true;
+    }
+
+    /// <summary>Where segment a-b crosses segment c-d strictly inside both, or null.</summary>
+    private static Vec2? SegmentsCross(Vec2 a, Vec2 b, Vec2 c, Vec2 d)
+    {
+        var r = b - a;
+        var s = d - c;
+        double den = r.Cross(s);
+        if (Math.Abs(den) < 1e-12) return null;
+        double t = (c - a).Cross(s) / den, u = (c - a).Cross(r) / den;
+        return t > 1e-6 && t < 1 - 1e-6 && u > 1e-6 && u < 1 - 1e-6 ? a + r * t : null;
     }
 
     /// <summary>
@@ -391,6 +580,9 @@ public static partial class TileRewriter
         public bool Signal;
         /// <summary>The departing side's widening at the mouth (a left pocket's through lane carried on, #123), metres.</summary>
         public double ExitWidening;
+        /// <summary>That widening (#406: the corner beside it), seen from its far end when it is a strip merged with the next pocket (#325).</summary>
+        public Widening? ExitWay;
+        public bool ExitFar;
         /// <summary>A yellow advanced bike stop line <see cref="AdvancedBikeLine"/> ahead of the cars' (#351).</summary>
         public bool AdvancedBikeLine;
         /// <summary>The right-turn pocket, its lanes painted after the signal plan (#351).</summary>
@@ -690,6 +882,17 @@ public static partial class TileRewriter
 
         /// <summary>The widening's width at the mouth (or at its far end, for a merged strip seen from the junction it leaves).</summary>
         public double MouthWidth(bool far = false) => Widen(far ? _length : 0);
+
+        /// <summary>
+        /// The strip's outer edge <paramref name="dist"/> metres out from the mouth (from its far end
+        /// for a merged strip seen from the junction it leaves, #325): LV95 plan and road height.
+        /// </summary>
+        public (Vec2 P, float Y) OuterEdge(double dist, bool far = false)
+        {
+            double d = far ? _length - dist : dist;
+            var p = Point(d, _half + _base + Widen(d));
+            return (new Vec2(_tile.MinE + p[0], _tile.MaxN - p[2]), p[1]);
+        }
 
         /// <summary>The along-segment metres the widening covers, mouth to its far end.</summary>
         public (double From, double To) AlongRange() => _atEnd ? (_total - Reach, _total) : (0, Reach);
