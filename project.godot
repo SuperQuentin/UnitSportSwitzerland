@@ -40,8 +40,8 @@ enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
 
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="mobile"
-scaling_3d/scale=0.75
 lights_and_shadows/directional_shadow/size.mobile=4096
+scaling_3d/scale=0.75
 
 [shader_globals]
 
