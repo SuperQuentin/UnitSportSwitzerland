@@ -104,7 +104,22 @@ public sealed class Airliner : Flyer
     }
 
     /// <summary>The cabin and the cockpit, walkable (#416): one deck, the drawn aircraft's frame.</summary>
-    public override VehicleDeck[] Decks => Kind == RideKind.A320 ? new[] { A320Deck.Deck } : System.Array.Empty<VehicleDeck>();
+    public override VehicleDeck[] Decks => Kind == RideKind.A320 ? A320Decks : System.Array.Empty<VehicleDeck>();
+
+    private static VehicleDeck[]? _a320Decks;
+    private static VehicleDeck[] A320Decks => _a320Decks ??= ProbeHold is { } hold ? new[] { A320Deck.Deck, hold } : new[] { A320Deck.Deck };
+
+    /// <summary>
+    /// A hold the checks give the A320 (#418, <c>HoldNetProbe.TestHold</c>), set on every peer of the
+    /// check before any A320 is made: a test carrier until the freighters (#419, #420) have their own.
+    /// Null in the game: an A320 carries no vehicles.
+    /// </summary>
+    public static VehicleDeck? ProbeHold
+    {
+        get => _probeHold;
+        set { _probeHold = value; _a320Decks = null; }
+    }
+    private static VehicleDeck? _probeHold;
 
     /// <summary>The captain's seat flies; the first officer's, then the cabin, row by row (#416).</summary>
     public override SeatAnchor[] Seats => Kind == RideKind.A320 ? A320Deck.Seats : System.Array.Empty<SeatAnchor>();

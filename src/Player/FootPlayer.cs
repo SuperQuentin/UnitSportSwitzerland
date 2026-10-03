@@ -2455,6 +2455,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         CarRadio = state.Radio;
         CarCd = state.Cd;
         _placed = true;
+        // parked in a hold (#418): carried again from the spot it stands on, still tied down
+        ResumeHold(state);
     }
 
     /// <summary>The vehicle as it is right now, to hand to the world.</summary>
@@ -2462,9 +2464,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         var heading = -GlobalTransform.Basis.Z with { Y = 0 };
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
+        var hold = HoldPlace;
         var velocity = _ride is Flyer
             ? _flight.Velocity
             : _ride is Boat afloat ? afloat.State.Velocity
+            // parked in a hold (#418): it stands still in the carrier, whatever the carrier does
+            : hold.Key != "" ? Vector3.Zero
             : heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed + Vector3.Up * Velocity.Y;
         return new VehicleState((RideKind)RideKindId, Origin!.ToGlobal(GlobalPosition),
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
@@ -2475,7 +2480,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // a truck's joints; a boat's attitude (Euler, #302), so it is parked as it floated
             Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler() : default,
             Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
-            Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd);
+            Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd,
+            Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw);
     }
 
     /// <summary>
@@ -2574,6 +2580,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (OnlineSeats && (SeatIndex > 0 || Riders.Any())) PassengerService.Instance!.HostLeaving(state);
         else Vehicles?.Park(state);
         SeatIndex = 0;
+        // out of the hold's frame (#418): the parked vehicle stays carried, the driver walks
+        if (InHoldRide && Aboard) LeaveHold();
 
         ApplyRide(RideKind.OnFoot, state.Velocity + right * 2f);
         if (aisle is { } spot) StandIn(spot, state.Velocity, (door, right, side, frame, vehicle));
@@ -3151,6 +3159,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // does not walk the player around.
         if (_ride != null)
         {
+            // tied down in a hold (#418, FootPlayer.Hold.cs): it goes where the carrier goes, nothing else
+            if (HoldPhysics(dt)) return;
             if (_ride is Flyer flyer) FlyPhysics(dt, onFloor, flyer);
             else if (_ride is Boat boat) BoatPhysics(dt, boat);   // #302, FootPlayer.Boat.cs
             else RidePhysics(dt, onFloor);
@@ -3649,6 +3659,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (VehicleHealth <= 0f) ev = FlightEvent.Crashed;
         }
         Rotation = new Vector3(0, _flight.Yaw, 0);
+        // a carrier (#418): the vehicles driven into its hold, or up its ramp, are not in its hull's way
+        if (HasHolds(flyer)) IgnoreGuests();
 
         if (ev == FlightEvent.None)
         {
@@ -3801,6 +3813,20 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     }
     private readonly List<(Vector3, Vector3)> _otherVehicles = new();
 
+    /// <summary>The controls of a ground ride this step: a script's (<see cref="RideControls"/>), else the pedals, stick and wheel.</summary>
+    private RideInput RideInputNow()
+    {
+        var stick = PlayerInput.Move;
+        return RideControls?.Invoke() ?? new RideInput(
+            Throttle: Mathf.Max(PlayerInput.Strength(PlayerInput.Throttle), Mathf.Max(0f, -stick.Y)),
+            Brake: Mathf.Max(PlayerInput.Strength(PlayerInput.Brake), Mathf.Max(0f, stick.Y)),
+            Steer: SteerInput(),
+            Effort: PlayerInput.Held(PlayerInput.TuckBoost),
+            // Space is a hop on a bike and the handbrake in a car, as is a wheel's lever
+            Handbrake: _ride is { CanHop: false } && (PlayerInput.Held(PlayerInput.Jump) || PlayerInput.WheelHandbrake > 0.5f),
+            WheelAngle: _ride is { WheelLock: > 0f } wheeled ? PlayerInput.WheelAngle(wheeled.WheelLock) : float.NaN);
+    }
+
     private void RidePhysics(float dt, bool onFloor)
     {
         // a bus: people walking in it or up to its doors are not in its hull's way (#162)
@@ -3810,14 +3836,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // Triggers are analog, and the vehicles already take 0..1: half a trigger is half the
         // watts. Pushing the stick forward or back does the same, for anyone who expects it to.
         var stick = PlayerInput.Move;
-        var input = RideControls?.Invoke() ?? new RideInput(
-            Throttle: Mathf.Max(PlayerInput.Strength(PlayerInput.Throttle), Mathf.Max(0f, -stick.Y)),
-            Brake: Mathf.Max(PlayerInput.Strength(PlayerInput.Brake), Mathf.Max(0f, stick.Y)),
-            Steer: SteerInput(),
-            Effort: PlayerInput.Held(PlayerInput.TuckBoost),
-            // Space is a hop on a bike and the handbrake in a car, as is a wheel's lever
-            Handbrake: _ride is { CanHop: false } && (PlayerInput.Held(PlayerInput.Jump) || PlayerInput.WheelHandbrake > 0.5f),
-            WheelAngle: _ride is { WheelLock: > 0f } wheeled ? PlayerInput.WheelAngle(wheeled.WheelLock) : float.NaN);
+        var input = RideInputNow();
 
         // skiing with the body in VR (#186): lean, pole and tuck on top of the sticks
         if (_ride is Skis && XR.XrSession.Active && RideControls == null)
@@ -4092,13 +4111,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var basis = new Basis(Vector3.Up, _airSpin) * new Basis(Vector3.Right, _airPitch + _truckPitch)
             * new Basis(Vector3.Back, roll);
         // a truck pitches about its wheels on the ground, not about a rider's middle
+        // and in a hold (#418) the whole body leans with the carrier's floor
         if (_ride is Truck)
         {
-            _visual.Transform = new Transform3D(basis, Vector3.Zero);
+            _visual.Transform = new Transform3D(_holdTilt * basis, Vector3.Zero);
             return;
         }
         var pivot = Vector3.Up * (_bailTimer > 0 ? 0.3f : 0.9f);
-        _visual.Transform = new Transform3D(basis, pivot - basis * pivot);
+        _visual.Transform = new Transform3D(_holdTilt, Vector3.Zero) * new Transform3D(basis, pivot - basis * pivot);
     }
 
     private void UpdateRideCamera(float dt)
