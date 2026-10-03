@@ -256,6 +256,17 @@ public class AirlinerTests
     }
 
     [Fact]
+    public void Dropped_onto_its_wheels_it_does_not_spool_up()
+    {
+        // put in the world a metre up (a body that grew): falling straight down reads as 90° of alpha
+        var sim = new Sim(AirlinerCatalog.A320);
+        sim.Pos = new Vector3(0, 1f, 0);
+        sim.Run(5f, _ => new Controls());
+        Assert.Equal(0f, sim.S.Lever);
+        Assert.True(sim.Pos.Length() < 0.1f, $"rolled {sim.Pos.Length():0.00} m");
+    }
+
+    [Fact]
     public void Nobody_aboard_it_stays_put()
     {
         var sim = new Sim(AirlinerCatalog.A320);
