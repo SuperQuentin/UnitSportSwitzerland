@@ -27,8 +27,8 @@ public partial class DebugMenu : CanvasLayer
 {
     private const double ReadoutSeconds = 0.25;
 
-    /// <summary>The menu may be offered: alone, or as a server's admin.</summary>
-    public static bool Allowed => !Permissions.Online || Permissions.IsAdmin;
+    /// <summary>The menu may be offered: alone, or as a server's admin, never in a Battle Royale match (hidden ground is a wallhack).</summary>
+    public static bool Allowed => Permissions.AdminTools;
 
     private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
