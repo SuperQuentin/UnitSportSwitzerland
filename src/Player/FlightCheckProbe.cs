@@ -5,7 +5,7 @@ using UnitSport.Terrain;
 namespace UnitSport.Player;
 
 /// <summary>
-/// <c>godot --path . -- --flycheck wingsuit|glide|paraglider|heli|plane[,out.png] [--at E,N]</c>
+/// <c>godot --path . -- --flycheck wingsuit|glide|paraglider|heli|plane|pigeon[,out.png] [--at E,N] [--world flat]</c>
 ///
 /// <para>
 /// Flies one craft through a scripted sortie with the real input actions and prints what the
@@ -16,7 +16,8 @@ namespace UnitSport.Player;
 /// </summary>
 public partial class FlightCheckProbe : Node
 {
-    private readonly ChunkManager _chunks;
+    /// <summary>Null on <c>--world flat</c> (TestWorld): the ground is the plane.</summary>
+    private readonly ChunkManager? _chunks;
     private readonly WorldOrigin _origin;
     private readonly string _kind;
     private readonly string? _shot;
@@ -26,8 +27,9 @@ public partial class FlightCheckProbe : Node
     /// <summary>Where the sortie started, kept in LV95: the origin may move under it (#185).</summary>
     private GlobalPos _from;
     private string _last = "";
+    private float _walk, _peak;
 
-    public FlightCheckProbe(ChunkManager chunks, WorldOrigin origin, string kind, string? shot)
+    public FlightCheckProbe(ChunkManager? chunks, WorldOrigin origin, string kind, string? shot)
     {
         _chunks = chunks;
         _origin = origin;
@@ -53,17 +55,18 @@ public partial class FlightCheckProbe : Node
 
         if (_player == null)
         {
-            if (!_chunks.TryGetHeight(at, out float g)) return;
+            if (!TestWorld.TryGround(_chunks, at, out float g)) return;
             _player = new FootPlayer { Name = "Probe", Terrain = _chunks };
             AddChild(_player);
             _player.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
+            if (_chunks == null) _player.DebugLaunch(_player.GlobalPosition, Vector3.Zero);   // flat world: no terrain to wait for
             _player.Announced += (text, good) => { _last = text; GD.Print($"[flycheck] announce: {text}"); };
             _player.Impacted += lost => { if (lost >= 8) _crashed = true; };
             return;
         }
         if (!_started)
         {
-            if (!_chunks.HasCollisionAt(at) || !_player.IsOnFloor()) return;
+            if (_chunks != null && !_chunks.HasCollisionAt(at) || !_player.IsOnFloor()) return;
             Begin();
             _started = true;
             return;
@@ -85,7 +88,7 @@ public partial class FlightCheckProbe : Node
         }
     }
 
-    private float Agl(Vector3 p) => _chunks.TryGetHeight(p, out float g) ? p.Y - g : float.NaN;
+    private float Agl(Vector3 p) => TestWorld.TryGround(_chunks, p, out float g) ? p.Y - g : float.NaN;
 
     /// <summary>Puts the pilot where the sortie starts.</summary>
     private void Begin()
@@ -104,6 +107,9 @@ public partial class FlightCheckProbe : Node
                 break;
             case "heli":
                 p.SetRide(RideKind.Helicopter);
+                break;
+            case "pigeon":
+                p.SetRide(RideKind.Pigeon);
                 break;
             case "plane":
                 p.SetRide(RideKind.Plane);
@@ -143,6 +149,24 @@ public partial class FlightCheckProbe : Node
                 Hold(PlayerInput.MoveForward, t > 6 && t < 16);   // cruise
                 if (t > 22) End("hovering");
                 break;
+            case "pigeon":
+                // walk, take off and climb flapping, glide, dive, let go to land (#217)
+                Hold(PlayerInput.MoveForward, t < 2);
+                Hold(PlayerInput.Jump, t > 2.5 && t < 7);
+                Hold(PlayerInput.CrouchSlide, t > 10 && t < 10.6);
+                if (t > 1.8 && t < 1.9) _walk = MathX.FlatLength(_player!.Flight.Velocity);
+                _peak = Mathf.Max(_peak, Agl(_player!.GlobalPosition));
+                if (t > 11 && _player.IsOnFloor() && _player.Ride == RideKind.Pigeon && Pigeon.ModeOf(_player.Flight) == PigeonFlight.Mode.Ground)
+                {
+                    // in VR (--xrsim) the camera is the bird's eye, level: no roll on the head
+                    var cam = _player.Camera.GlobalTransform;
+                    float eye = cam.Origin.DistanceTo(_player.GlobalPosition), roll = Mathf.Abs(cam.Basis.X.Y);
+                    GD.Print($"[flycheck] pigeon walked {_walk:F2} m/s, peak {_peak:F1} m agl, camera {eye:F2} m from the body, roll {roll:F3}{(XR.XrSession.Active ? " (VR)" : "")}");
+                    if (_walk is < 0.8f or > 1.5f || _peak < 8f || XR.XrSession.Active && (eye > 0.5f || roll > 0.01f)) _crashed = true;
+                    End("landed, walking");
+                }
+                if (t > 40) End("still airborne");
+                break;
             case "plane":
                 Hold(PlayerInput.Sprint, t < 3);                  // throttle lever up
                 Hold(PlayerInput.MoveBack, t > 6 && t < 7.5);     // pull up
@@ -159,7 +183,7 @@ public partial class FlightCheckProbe : Node
         var p = _player!.GlobalPosition;
         float dist = (float)_origin.ToGlobal(p).HorizontalDistanceTo(_from);
         float drop = (float)_from.Alt - p.Y;
-        bool under = _chunks.TryGetHeight(p, out float g) && p.Y < g - 1.5f;
+        bool under = TestWorld.TryGround(_chunks, p, out float g) && p.Y < g - 1.5f;
         GD.Print($"[flycheck] END {how}: {dist:F0} m flown, {drop:F0} m lost"
             + (drop > 1 ? $", overall glide {dist / drop:F1}" : "") + $", now {_player.Ride}");
         bool ok = !_crashed && !under;
@@ -176,7 +200,7 @@ public partial class FlightCheckProbe : Node
     private void Finish(int code)
     {
         foreach (var a in new[] { PlayerInput.Jump, PlayerInput.MoveForward, PlayerInput.MoveBack,
-                     PlayerInput.MoveRight, PlayerInput.Sprint })
+                     PlayerInput.MoveRight, PlayerInput.Sprint, PlayerInput.CrouchSlide })
             Input.ActionRelease(a);
         _done = true;
         GetTree().Quit(code);

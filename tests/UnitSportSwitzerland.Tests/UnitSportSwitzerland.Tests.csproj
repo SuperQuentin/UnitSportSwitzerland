@@ -45,6 +45,7 @@
     <Compile Include="..\..\src\Player\AirReserve.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\Wading.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\CmdArgs.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\PigeonFlight.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Build\BuildGrid.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrPrefabs.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
