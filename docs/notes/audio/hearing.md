@@ -31,3 +31,8 @@
   speaker's `_Ready`; a position set after it is lost and the sound comes from the parent's origin.
   The church radio played from the middle of the nave that way (#375, `ChurchRadios.SpeakerAt`,
   checked by `--churchstagecheck`).
+- **Trap: anything placed from `Ears.Frame` must process after `Ears` (`Ears.Priority`).** A door
+  teleports the ears 3 km; a speaker placed from the previous frame's ear sits 3 km from the
+  listener for one frame, a dropout heard as a click walking through a door with a radio playing
+  inside. `Hearing.Attach` sets the speaker's `ProcessPriority` to `Ears.Priority + 1`. The street
+  heard through an interior's front door (`BuildingSounds`) eases in and out rather than Play/Stop.

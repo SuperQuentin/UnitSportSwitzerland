@@ -52,6 +52,12 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     /// <summary>Where interiors live: far below the lowest ground in Switzerland (193 m).</summary>
     public const float InteriorBaseY = -3000f;
 
+    /// <summary>
+    /// A falling item or radio below this fell through everything and settles where it is: well
+    /// under the interiors, so one thrown inside a room still flies (#388).
+    /// </summary>
+    public const float LostBelowY = InteriorBaseY - 2000f;
+
     private const float DoorReach = 1.6f;
     private const float ExitReach = 1.8f;
     /// <summary>Server-side check: generous, since the player's position is a relayed copy.</summary>
@@ -1133,6 +1139,16 @@ public partial class InteriorNode : Node3D
 
     public InteriorLayout Layout { get; private init; } = null!;
 
+    /// <summary>This interior's material: its light table and its frame (#388).</summary>
+    private ShaderMaterial? _lit;
+
+    public override void _Notification(int what)
+    {
+        // the shader lights in the interior's own frame: world -> local, kept through origin shifts
+        if (_lit != null && (what == NotificationTransformChanged || what == NotificationEnterTree) && IsInsideTree())
+            _lit.SetShaderParameter("interior_frame", new Projection(GlobalTransform.AffineInverse()));
+    }
+
     /// <summary>
     /// The interior a point far underground is in: the one whose plan contains it (a metre of
     /// slack), else the nearest. Nearest alone is wrong just outside a doorway, where the
@@ -1241,7 +1257,18 @@ public partial class InteriorNode : Node3D
         ArrayMesh? mesh = null)
     {
         var node = new InteriorNode { Name = "Interior_" + layout.Key, Transform = placement, Layout = layout };
-        var room = new MeshInstance3D { Name = "Mesh", Mesh = mesh ?? BuildMesh(data, material) };
+        // lit by its own windows and lamps (#388): its own material, holding the building's light
+        // table, for the rooms and everything in them (leaves, figures, lock doors)
+        var lit = Styles.StyleKit.Material(Styles.MaterialRole.Interior);
+        var lights = RoomLights.Build(layout);
+        lit.SetShaderParameter("room_lights", lights.Texture);
+        lit.SetShaderParameter("floor_base", lights.FloorBase);
+        lit.SetShaderParameter("storey_height", lights.StoreyHeight);
+        lit.SetShaderParameter("floor_count", lights.Floors);
+        node._lit = lit;
+        node.SetNotifyTransform(true);
+        material = lit;
+        var room = new MeshInstance3D { Name = "Mesh", Mesh = mesh ?? BuildMesh(data, material), MaterialOverride = lit };
         node.AddChild(room);
         if (mesh == null) node.AddBody(data.Collision);
         // a church's rat and congregation, which dance to the chess type beat (#370)

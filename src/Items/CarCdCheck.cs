@@ -97,6 +97,8 @@ public partial class CarCdCheck : Node
 
     private static bool Press(string text)
     {
+        // the CDs and stations are in the library, one button past the player (#392)
+        if (PanelButton(text) == null && PanelButton(RadioUi.LibraryLabel) is { } library) library.EmitSignal(BaseButton.SignalName.Pressed);
         if (PanelButton(text) is not { } b) { GD.Print($"[carcdcheck] no button \"{text}\" on the panel"); return false; }
         b.EmitSignal(BaseButton.SignalName.Pressed);
         return true;

@@ -7,8 +7,9 @@ namespace UnitSport.Occasions;
 
 /// <summary>
 /// Decides what the local player wears and writes it to the replicated
-/// <see cref="FootPlayer.HeadwearId"/> (the hat) and <see cref="FootPlayer.OutfitBits"/> (the
-/// clothes in the body slots, #251), so every other player sees the same figure.
+/// <see cref="FootPlayer.HeadwearId"/> (the hat), <see cref="FootPlayer.OutfitBits"/> (the
+/// clothes in the body slots, #251) and <see cref="FootPlayer.AppearanceBits"/> (the figure itself,
+/// #394), so every other player sees the same figure.
 ///
 /// <para>
 /// A hat the player chose to wear (in the head slot, a hunt find) comes first; else, with nothing
@@ -54,5 +55,8 @@ public partial class OccasionHats : Node
         if (p.HeadwearId != (int)hat) p.HeadwearId = (int)hat;
         long outfit = _inventory.Outfit.Bits;
         if (p.OutfitBits != outfit) p.OutfitBits = outfit;
+        // and who the figure is (#394), as chosen in the inventory's Body row
+        int appearance = Core.GameSettings.Current.AppearanceBits;
+        if (p.AppearanceBits != appearance) p.AppearanceBits = appearance;
     }
 }

@@ -121,6 +121,9 @@ public partial class UseAnimProbe : ChatProbe
         for (int i = 1; i < Outfit.Length; i++) inv.Wear(Inventory.HotbarSize + i);
         Expect(inv.Outfit.Bits == Dressed.Bits, "every piece is in its body slot");
         Expect(await Until(() => me.OutfitBits == Dressed.Bits, 5), "the outfit is published on A's player");
+        // and a figure of A's choosing (#394), as the Body row sets it (in memory: the probe saves nothing)
+        Core.GameSettings.Current.AppearanceBits = Chosen;
+        Expect(await Until(() => me.AppearanceBits == Chosen, 5), "the appearance is published on A's player");
         Say("dressed");
         // dressed on a bike too: B must see the cyclist in the same clothes
         await Heard("B", "seen", 60);
@@ -141,6 +144,9 @@ public partial class UseAnimProbe : ChatProbe
 
     private static readonly Avatar.Outfit Dressed = Avatar.Outfit.Of(Outfit);
 
+    /// <summary>The figure A chooses, and so the one B must draw: a stocky one with a mohawk, the grin, red eyes.</summary>
+    private static readonly int Chosen = new Avatar.Appearance(Avatar.BodyBuild.Stocky, 6, 4, 6, Avatar.HairStyle.Mohawk, 10).Pack();
+
     private async Task RunB(FootPlayer me)
     {
         Say("ready");
@@ -160,6 +166,7 @@ public partial class UseAnimProbe : ChatProbe
         Shot("hat_on_3p_remote");
         // the clothes (#251): one replicated long, drawn here from it
         Expect(await Until(() => a.OutfitBits == Dressed.Bits, 60), "A's outfit arrived as OutfitBits");
+        Expect(await Until(() => a.AppearanceBits == Chosen, 60), "A's chosen figure arrived as AppearanceBits");
         await Seconds(0.8);
         Shot("outfit_3p_remote");
         Say("seen");

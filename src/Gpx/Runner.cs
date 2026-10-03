@@ -185,7 +185,7 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
             // a car recorded by the drive check: the same rig the player drives
             // with someone at the wheel in the runner's colour: the glass shows the seat
             _car = UnitSport.Avatar.CarRig.Create(car.Body, car.Wheelbase, car.Gauges,
-                UnitSport.Avatar.HumanPalette.Default with { Jersey = Tint });
+                (UnitSport.Avatar.HumanPalette.Default with { Jersey = Tint }).With(UnitSport.Avatar.Appearance.ForSeed((int)Tint.ToRgba32())));
             _steerRatio = car.SteerRatio;
             _carMounts = CarMounts(car);
             Avatar.AddChild(_car);
@@ -204,12 +204,13 @@ public partial class Runner : Node3D, Core.IOriginShiftAware
             // the avatar agree. One mesh, one material, one draw call — a race can have a dozen
             // of these on screen and each is a few hundred triangles. The mesh is rebuilt each
             // frame from the gait, which is the same cost again and buys legs that actually run.
-            _palette = UnitSport.Avatar.HumanPalette.Default with { Jersey = Tint, Helmet = Tint };
+            // a figure of its own from the tint, so a field of ghosts is not one person cloned (#394)
+            _palette = (UnitSport.Avatar.HumanPalette.Default with { Jersey = Tint, Helmet = Tint }).With(UnitSport.Avatar.Appearance.ForSeed((int)Tint.ToRgba32()));
             _body = new MeshInstance3D
             {
                 Name = "Body",
                 Mesh = UnitSport.Avatar.HumanMeshBuilder.BuildStride(_palette, 0f, 0f),
-                MaterialOverride = UnitSport.Avatar.HumanMeshBuilder.Material(),
+                MaterialOverride = UnitSport.Avatar.HumanMeshBuilder.FigureMaterial(),
             };
             Avatar.AddChild(_body);
         }

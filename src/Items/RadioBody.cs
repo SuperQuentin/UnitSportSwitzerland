@@ -150,6 +150,7 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
             _speaker = new RadioSpeaker { Name = "Speaker" };
             AddChild(_speaker);
             AddChild(new ImpactFx { Name = "Impact", Size = BodyW });
+            AddChild(_sparkles = new RadioSparkles());
         }
     }
 
@@ -171,7 +172,7 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
         _lastPos = GlobalPosition;
         _lastVel = LinearVelocity;
         _restTime = LinearVelocity.LengthSquared() < 0.05f * 0.05f ? _restTime + delta : 0;
-        if (Sleeping || _restTime > RestFor || _age > SettleAfter || Position.Y < -500)
+        if (Sleeping || _restTime > RestFor || _age > SettleAfter || Position.Y < Interiors.InteriorManager.LostBelowY)
         {
             Settled = true;
             Freeze = true;
@@ -189,15 +190,21 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
         _speaker.On = Playing;
         _speaker.Length = Length > 0 ? Length : Cd?.Duration ?? 0;
 
-        // it bounces to the music it is actually making (not while the CD is still downloading)
+        // it bounces and sparkles to the music it is actually making (not while the CD is still downloading)
+        float phase = 0;
+        int beat = 0;
+        bool beating = _speaker.Playing && BeatAt(ClockSync.ServerNow, out phase, out beat, out _, out _);
+        _sparkles?.Step(_speaker.Playing, beating, phase, beat, (float)delta);
         _visual ??= GetNodeOrNull<MeshInstance3D>("Visual");
         if (_visual == null) return;
-        _visual.Transform = _speaker.Playing && BeatAt(ClockSync.ServerNow, out float phase, out int beat, out _, out _)
-            ? Bounce(phase, beat, BodyH * 0.5f, 1f)
-            : Transform3D.Identity;
+        _visual.Transform = beating ? Bounce(phase, beat, BodyH * 0.5f, 1f) : Transform3D.Identity;
     }
 
     private MeshInstance3D? _visual;
+    private RadioSparkles? _sparkles;
+
+    /// <summary>The glints round it while it plays, on peers that draw it. For the probes.</summary>
+    public RadioSparkles? Sparkles => _sparkles;
 
     /// <summary>
     /// A boombox's dance (#261), as a transform about its centre: squashed flat on the beat, then

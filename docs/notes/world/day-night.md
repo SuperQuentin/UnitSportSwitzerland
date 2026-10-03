@@ -19,10 +19,12 @@
   keeps its own clock from its settings, as before.
 - **Indoors** (#134): interior glass (`ps1_interior`, vertex alpha 0) is `world_sky * 1.3` plus a
   dark moonlit blue at night, so a room's windows show noon, sunset, blue hour and night. Rooms
-  are lit, so characters in them are too: `DayNight` keeps a second environment (room daylight by
-  day, warm lamps at night, never dimmed) and `DayNight.EnvironmentAt(camera position)` hands it to
+  are lit by the hour (#388, `terrain/interior-light`: daylight and sun patches through the
+  windows, lamps at night), so characters in them are too: `DayNight` keeps a second environment
+  (the hour's tint × 0.86 by day, warm lamps at night) and `DayNight.EnvironmentAt(camera position)` hands it to
   any camera in the interiors' band under the terrain. It goes by where the **camera** is: the
-  screen's camera (set each frame by `DayNight`) and each portal camera (`DoorPortals.Aim`), so a
+  screen's camera (set each frame by `DayNight`) and each portal camera (`DoorPortals.Aim`, the
+  untonemapped copies from `PortalEnvironmentAt`), so a
   player seen through an open door from the street is room-lit and one seen out of a door from
   inside is night-lit.
 - **Open doors light the street at night** (`Interiors/DoorLights`): the four open doors nearest

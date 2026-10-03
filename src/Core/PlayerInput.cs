@@ -124,11 +124,22 @@ public partial class PlayerInput : Node
     /// <summary>Drops one of the item in hand on the ground; with Ctrl, the whole stack (#206).</summary>
     public const string DropItem = "drop_item";
     public const string NextItem = "next_item";
+    /// <summary>Hotbar slots 1-6 (#391): select on foot, swap the hovered slot in the inventory, pick in the quick wheel. Same keys as the truck's gates, never at the same time.</summary>
+    public static readonly StringName[] Slots = { "slot_1", "slot_2", "slot_3", "slot_4", "slot_5", "slot_6" };
     public const string PrevItem = "prev_item";
     /// <summary>Opens the field journal of birds seen and bagged (<see cref="Birds.BirdJournal"/>).</summary>
     public const string BirdJournal = "bird_journal";
     /// <summary>The hammer in hand (#359): turns the piece; with Aim, changes its material. R, or D-pad up on a pad.</summary>
     public const string BuildTurn = "build_turn";
+
+    /// <summary>Which hotbar slot action <paramref name="e"/> presses (0-based), or -1.</summary>
+    public static int SlotPressed(InputEvent e)
+    {
+        if (e.IsEcho()) return -1;
+        for (int s = 0; s < Slots.Length; s++)
+            if (e.IsActionPressed(Slots[s])) return s;
+        return -1;
+    }
 
     /// <summary>Right-stick turn rate at full deflection and sensitivity 1, radians per second.</summary>
     public const float StickTurnRate = 3.0f;
@@ -462,6 +473,7 @@ public partial class PlayerInput : Node
         // pad X is tuck/sprint only when mounted, so on foot it is free, as RB/LB are for items
         Bind(Gather, Keys(Key.G), Button(JoyButton.X));
         Bind(NextItem, Mouse(MouseButton.WheelDown), Button(JoyButton.DpadRight));
+        for (int s = 0; s < Slots.Length; s++) Bind(Slots[s], Keys(Key.Key1 + s));
         Bind(PrevItem, Mouse(MouseButton.WheelUp));
         Bind(BirdJournal, Keys(Key.J));
         // R is the travel picker on foot, D-pad up the engine in a vehicle: with the hammer in hand
@@ -495,7 +507,7 @@ public partial class PlayerInput : Node
     /// Creates the action if absent and adds any binding it does not already have. A binding the
     /// player (or a future rebind screen) has already changed is left alone.
     /// </summary>
-    private static void Bind(string action, params InputEvent[][] groups)
+    private static void Bind(StringName action, params InputEvent[][] groups)
     {
         if (!InputMap.HasAction(action)) InputMap.AddAction(action, 0.2f);
         foreach (var group in groups)

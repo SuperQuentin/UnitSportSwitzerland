@@ -12,19 +12,26 @@
 - **Replication**: `Outfit` packs 6 bits of `Garment.Code` per slot (1-63, 0 = nothing) into a
   `long`: `FootPlayer.OutfitBits`, OnChange like `HeadwearId`, written on the owner by
   `Occasions.OccasionHats` from `Inventory.Outfit`. **Codes are per slot and never reused or renumbered.**
-- **Drawing**: `HumanPalette.Outfit` (init property). Empty → `AppendRig` is unchanged; otherwise
-  `HumanMeshBuilder.Clothing.cs` `AppendDressed` draws the body from the rig joints with garment
-  colours (so every pose, dance, seated passenger and ragdoll gets them), skirts with the open
-  `MeshScratch.Skirt` (double-sided, hem follows the knees/ankles, optional slit), stripes as
-  geometry bands (`Banded`), mask faces as 15×7 pixel art (`MaskFaces`). Head clothes replace a hat;
-  an occasion hat shows only with the head slot empty.
+- **Drawing** (#394, the new body: `body-shape`): `HumanPalette.Outfit` (init property).
+  `HumanMeshBuilder.Clothing.cs` `Dress` turns the outfit into the body's own colours and lengths
+  (`BodyLook`: the top's hem, neckline and sleeve, the bottom's waistband and leg, legwear,
+  boots' height and platform, gloves), so trousers, sleeves and tights are the body's surface in
+  the garment's colour. What does not follow the skin is laid over it on the body's real surfaces
+  (`Torso.Surface`/`Front`, `LimbBand`, `Head.Point`): prints, collars, straps, a hood, a jacket
+  over a blouse, belts, chains, cuffs, sock tops, buckles, skirts (an open `MeshScratch.Skirt`
+  whose start radius clears each build's hips, `ConeStart`; double-sided, hem follows the
+  knees/ankles, optional slit), headwear on the head or its hair (`Head.Top(hair)`), glasses,
+  masks with their 15×7 pixel faces (`MaskFaces`), piercings. Holed legwear (fishnet, lace) is
+  drawn over the skin, never as it. Head clothes replace a hat; an occasion hat shows only with
+  the head slot empty; under a full-face helmet nothing on the head is drawn.
 - **Finishes**: `Garments.Fx` puts the finish id in the colour's alpha (`1 - id/255`); everything else
   in the game has alpha 1. `HumanMeshBuilder.FigureMaterial()` (`shaders/body/avatar.gdshaderinc`, the visual
   style's `MaterialRole.Figure` wrapper: `avatar` in PS1, `cartoon_avatar` toon and rim, `real_avatar`
   GGX) reproduces
   `Material()` for alpha 1 and decodes rainbow, disco, galaxy, holo, glitch, lava, neon, and the
-  patterns tartan, fishnet (discard over skin), lace. Only meshes that carry a figure use it (walker,
-  passenger, ragdoll, the rides below, preview); the shared `Material()` is untouched. Specials put the finish on all three
+  patterns tartan, fishnet (discard over skin), lace, checker, stripes, studs (12-14, #394); 11 is
+  the pixel face (`face-atlas`). Every mesh that carries a figure must use it (#394: the face only draws there); the shared
+  `Material()` is untouched. Specials put the finish on all three
   colours, patterns only on A. Effects that need an angle compute a facet normal from derivatives:
   `MeshScratch` writes no normals.
 - **Checks**: `--outfitcheck` (headless: data, packing, every look built in six poses, finish alpha
