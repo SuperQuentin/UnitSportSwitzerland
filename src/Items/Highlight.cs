@@ -131,8 +131,9 @@ public static class Highlight
 
     /// <summary>
     /// What the view points at within reach of the body: a ray along the view first (it may hit the
-    /// item's collider), else the item closest to the view's centre inside a narrow cone, else one
-    /// right at the player's feet — standing on something and not seeing it outlined would be odd.
+    /// item's collider), else the item closest to the view's centre inside a narrow cone, if nothing
+    /// stands between the eye and it. Never something merely near the player (#390): E and Use act on
+    /// what the player looks at, so a radio at the feet no longer takes E from the door in front.
     /// </summary>
     public static Node3D? Find(FootPlayer player)
     {
@@ -148,8 +149,8 @@ public static class Highlight
             && struck.GlobalPosition.DistanceTo(chest) < reach + 0.4f)
             return struck;
 
-        Node3D? best = null, nearest = null;
-        float bestAngle = 0.32f, nearestDist = 1.1f;
+        Node3D? best = null;
+        float bestAngle = 0.32f;
         foreach (var item in Candidates())
         {
             float d = item.GlobalPosition.DistanceTo(chest);
@@ -158,10 +159,18 @@ public static class Highlight
             // nearer things get a little more slack: they cover more of the screen
             float slack = angle - 0.08f * (reach - d) / reach;
             if (slack < bestAngle) { bestAngle = slack; best = item; }
-            float flat = new Vector2(item.GlobalPosition.X - player.GlobalPosition.X, item.GlobalPosition.Z - player.GlobalPosition.Z).Length();
-            if (flat < nearestDist) { nearestDist = flat; nearest = item; }
         }
-        return best ?? nearest;
+        return best != null && InSight(player, from, best) ? best : null;
+    }
+
+    /// <summary>Nothing between the eye and <paramref name="item"/> (a wall, a car): one ray, only for the cone's pick.</summary>
+    private static bool InSight(FootPlayer player, Vector3 from, Node3D item)
+    {
+        var to = item.GlobalPosition + Vector3.Up * 0.1f;
+        var hit = Ray.Cast(player.GetWorld3D().DirectSpaceState, from, to, uint.MaxValue, player.SelfExclude);
+        if (hit.Count == 0 || Candidate(hit["collider"].AsGodotObject() as Node) == item) return true;
+        // the ground it rests on, grazed just short of it, does not hide it
+        return hit["position"].AsVector3().DistanceTo(to) < 0.3f;
     }
 
     private static IEnumerable<Node3D> Candidates()

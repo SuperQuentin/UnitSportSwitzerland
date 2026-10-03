@@ -19,7 +19,8 @@
   pack panel has "Drop on the ground" (whole stack). E picks up what is pointed at (room checked first;
   the item flies into the hand as a local ghost, `ItemController.FlyToHand`).
 - **Pointing + outline** (`Highlight.cs`): every frame `ItemController` picks the target (`Highlight.Find`:
-  view ray first, else smallest angle in a ~18 deg cone within 2.6 m of the chest, else one at the feet)
+  view ray first, else smallest angle in a ~18 deg cone within 2.6 m of the chest, if a ray from the eye reaches it;
+  never one merely at the feet, #390)
   among dropped items and radios. The border is an inverted hull as `MaterialOverlay`, pushed from the
   mesh's AABB centre (not normals: flat-shaded items would crack), width scaled by view distance, pulsing;
   `instance uniform center` so one material serves all. E on a pointed radio opens its panel.
