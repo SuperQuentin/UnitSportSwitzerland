@@ -122,6 +122,9 @@ public partial class ControlsHelp : CanvasLayer
             new("Speedbrake: retracted, half, full", PlayerInput.Speedbrake),
             new("Parking brake", PlayerInput.ParkingBrake),
             new("Landing lights", PlayerInput.LightsToggle),
+            new("Light sim: start the engines / shut them down", PlayerInput.EngineToggle),
+            new("Light sim: autopilot on / off (then the stick turns the heading and altitude, the levers the speed)", PlayerInput.Autopilot),
+            new("Light sim: pitch trim nose down / up (AN-124, military freighter)", Keys: "{trim_nose_down} / {trim_nose_up}", Pad: "—"),
         }),
         ("Flying", new Row[]
         {

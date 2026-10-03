@@ -51,5 +51,18 @@
   actions with analog strengths: take-off, gear up, climb to 600 m, a 180° turn, approach with the
   flaps and gear as the speed allows, flare, brakes and reversers to a stop; fails on a hard landing,
   damage or a crash. Runs at `Engine.TimeScale` 4.
+- **Light sim** (#415, `--airliner sim`, all in `AirlinerFlight`, `AirlinerSimTests`): spawned cold and
+  dark; **Z** runs the start: battery, APU 10 s, then each engine 35 s from its bleed air (A320: one
+  running at 45 s, both at 80 s; thrust only from engines running), the APU off once all run; Z again
+  shuts down. **Fuel**: 45 % at spawn, burnt per engine from its thrust (A320 TOGA 8.25 t/h), the mass
+  falls with it, empty tanks flame the engines out; stopped on the ground with them off (not starting)
+  it refuels at 150 kg/s. **Autopilot + autothrust** (Y): engaged on the heading, altitude (to 100 ft)
+  and speed it flies; while on, the stick turns the selected heading (0.35 rad/s) and altitude (20 m/s),
+  the levers the speed; a full stick for 1 s disconnects. Banks at most 25°, ~2000 fpm. **Trim**
+  (Home/End, conventional types only): hand-flown they have no path law, the nose seeks the trimmed
+  angle of attack (static stability, 0.7/s; the stick 2.5× the arcade rate), roll is neutral, they stall.
+  **Limits**: flaps or gear past their speed take damage. The parked state keeps "engines running"
+  (flags bit 18). HUD: APU %, START ENG n, ENGINES OFF, AP targets, FUEL, TRIM. Check:
+  `--flycheck a320 --world flat --airliner sim` (the start, then 25 s on the autopilot: held within 16 m).
 - **Not done**: no AI; wings and tail do not collide in flight; the visual does not pitch with a
-  sloping taxiway; no wind; no fuel burn or engine start in Arcade (#415 adds them in Sim).
+  sloping taxiway; no wind; no fuel burn or engine start in Arcade (only in Light sim).

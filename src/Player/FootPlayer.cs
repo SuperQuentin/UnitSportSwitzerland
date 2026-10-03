@@ -3001,6 +3001,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
+        if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && SeatIndex == 0 && AirlinerEngines())
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         if (@event.IsActionPressed(PlayerInput.EngineToggle) && !@event.IsEcho() && _ride is { HasEngine: true } && SeatIndex == 0)
         {
             EngineOn = !EngineOn;
@@ -3633,6 +3638,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         float altitude = Origin is { } here ? (float)here.ToGlobal(GlobalPosition).Alt : GlobalPosition.Y;
 
         if (flyer is Pigeon) PigeonStep(input, dt);
+        if (flyer is Airliner trimmed)
+            trimmed.TrimHeld = typing ? 0f : PlayerInput.Strength(PlayerInput.TrimNoseUp) - PlayerInput.Strength(PlayerInput.TrimNoseDown);
         var ev = flyer.Fly(input, new FlightEnv(onFloor, Clearance, altitude), dt, ref _flight);
         // an airliner's hard landing or belly scrape: the airframe pays for it (#414)
         if (flyer is Airliner hurt && hurt.TakeDamage() is > 0f and var damage)

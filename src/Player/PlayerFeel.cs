@@ -849,6 +849,16 @@ public partial class PlayerFeel : Node3D
         if (s.Ias > a.Spec.FlapLimit[s.FlapLever] && s.FlapLever > 0) sb.Append("    FLAPS OVERSPEED");
         else if (s.Ias > a.Spec.Vmo) sb.Append("    OVERSPEED");
         if (!s.OnGround && s.Gear < 1f && _player.Clearance < 230f && s.Velocity.Y < 0f) sb.Append("    TOO LOW GEAR");
+        if (Airliner.Handling != AirlinerHandling.Sim) return;
+        // light sim (#415), on a line of its own: what is running, the autopilot's targets, the fuel and the trim
+        sb.Append('\n');
+        if (s.Lit < a.Spec.Engines)
+            sb.Append(s.Starting ? (s.Apu < 1f ? $"APU {s.Apu * 100f:0}%    " : $"START ENG {Mathf.FloorToInt(s.Lit) + 1}    ") : "ENGINES OFF    ");
+        if (s.Autopilot)
+            sb.Append($"AP HDG {Mathf.PosMod(-Mathf.RadToDeg(s.ApHeading), 360f):000} ALT {s.ApAltitude / Foot:0} SPD {s.ApSpeed / Knot:0}    ");
+        sb.Append($"FUEL {s.Fuel:0} kg");
+        if (s.Fuel <= 0f) sb.Append(" EMPTY");
+        if (!a.Spec.FlyByWire) sb.Append($"    TRIM {Mathf.RadToDeg(s.TrimAlpha):0.0}");
     }
 
     private static void AppendRetarder(System.Text.StringBuilder sb, Truck t)

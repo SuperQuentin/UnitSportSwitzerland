@@ -215,6 +215,7 @@ src/Player/Pigeon        quick  --flycheck pigeon --world flat
 src/Player/FlightCheck   quick  --flycheck pigeon --world flat
 src/Player/FlightCheck   quick  --flycheck a320 --world flat
 src/Player/Airliner      quick  --flycheck a320 --world flat
+src/Player/Airliner      quick  --flycheck a320 --world flat --airliner sim
 src/Avatar/AirlinerRig   quick  --flycheck a320 --world flat
 src/Avatar/A320          quick  --flycheck a320 --world flat
 src/Player/Airliner      net    tools/airlinernetcheck.sh

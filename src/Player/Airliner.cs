@@ -4,7 +4,7 @@ using UnitSport.Avatar;
 namespace UnitSport.Player;
 
 /// <summary>A pressed airliner control (#414): one step's edges, consumed by the next <see cref="Airliner.Fly"/>.</summary>
-public enum AirlinerCommand { FlapsDown, FlapsUp, Gear, Speedbrake, ParkingBrake, Lights }
+public enum AirlinerCommand { FlapsDown, FlapsUp, Gear, Speedbrake, ParkingBrake, Lights, Engines, Autopilot }
 
 /// <summary>
 /// A heavy aircraft as a ride (#414): the A320 now, the AN-124 and the military freighter later
@@ -32,13 +32,17 @@ public sealed class Airliner : Flyer
     public byte DoorsOpen;
 
     private int _flapsDelta;
-    private bool _gear, _speedbrake, _parking;
+    private bool _gear, _speedbrake, _parking, _engines, _autopilot;
+
+    /// <summary>The pitch trim held this step, −1 nose down .. +1 nose up (Sim, conventional types, #415).</summary>
+    public float TrimHeld;
 
     public Airliner(RideKind kind, AirlinerSpec spec)
     {
         _kind = kind;
         Spec = spec;
-        State = AirlinerFlight.Parked(spec, 0f);
+        // in Sim a fresh one is cold and dark: start it (#415); Arcade hands it over ready to taxi
+        State = AirlinerFlight.Parked(spec, 0f, enginesRunning: Handling == AirlinerHandling.Arcade);
     }
 
     public static Airliner? For(RideKind kind) => kind switch
@@ -122,6 +126,8 @@ public sealed class Airliner : Flyer
             case AirlinerCommand.Speedbrake: _speedbrake = !_speedbrake; break;
             case AirlinerCommand.ParkingBrake: _parking = !_parking; break;
             case AirlinerCommand.Lights: LandingLights = !LandingLights; break;
+            case AirlinerCommand.Engines: _engines = !_engines; break;
+            case AirlinerCommand.Autopilot: _autopilot = !_autopilot; break;
         }
     }
 
@@ -151,9 +157,12 @@ public sealed class Airliner : Flyer
             ParkingToggle: _parking,
             EnginesOff: !input.Engine,
             NoPilot: !input.Piloted,
-            Handling: Handling);
+            Handling: Handling,
+            StartToggle: _engines,
+            AutopilotToggle: _autopilot,
+            Trim: TrimHeld);
         _flapsDelta = 0;
-        _gear = _speedbrake = _parking = false;
+        _gear = _speedbrake = _parking = _engines = _autopilot = false;
         var ev = AirlinerFlight.Step(Spec, ref State, c, new AirlinerFlight.Env(env.OnFloor, env.Altitude), dt);
         ToMotion(ref m);
         return ev == AirlinerFlight.Event.Crashed ? FlightEvent.Crashed : FlightEvent.None;
@@ -219,7 +228,8 @@ public sealed class Airliner : Flyer
             | (s.Reverse > 0.5f ? 1 << 8 : 0)
             | ((int)LightsFor(s) & 15) << 9
             | (DoorsOpen & 15) << 13
-            | (s.ParkingBrake ? 1 << 17 : 0);
+            | (s.ParkingBrake ? 1 << 17 : 0)
+            | (s.Lit >= Spec.Engines ? 1 << 18 : 0);
     }
 
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight)
@@ -269,6 +279,13 @@ public sealed class Airliner : Flyer
         State.Gear = State.GearDown && !State.GearBroken ? 1f : 0f;
         State.SpeedBrake = bits >> 5 & 3;
         State.ParkingBrake = (bits & 1 << 17) != 0;
+        // left running (#415): its engines still turn, so a Sim pilot need not start them again
+        bool running = (bits & 1 << 18) != 0;
+        if (running || bits == 0 && Handling == AirlinerHandling.Arcade)
+        {
+            State.Lit = Spec.Engines;
+            State.Starting = State.Battery = true;
+        }
         DoorsOpen = (byte)(bits >> 13 & 15);
     }
 }

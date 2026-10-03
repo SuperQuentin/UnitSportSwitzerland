@@ -95,6 +95,10 @@ public partial class PlayerInput : Node
     public const string FlapsUp = "flaps_up";
     public const string Speedbrake = "speedbrake";
     public const string ParkingBrake = "parking_brake";
+    /// <summary>An airliner's autopilot and autothrust on / off, and its pitch trim held (Light sim, #415).</summary>
+    public const string Autopilot = "autopilot";
+    public const string TrimNoseDown = "trim_nose_down";
+    public const string TrimNoseUp = "trim_nose_up";
 
     // --- free-fly camera ---
     public const string FlyUp = "fly_up";
@@ -446,6 +450,9 @@ public partial class PlayerInput : Node
         Bind(FlapsUp, Keys(Key.F6), Button(JoyButton.LeftShoulder));
         Bind(Speedbrake, Keys(Key.Slash), Button(JoyButton.DpadLeft));
         Bind(ParkingBrake, Keys(Key.Period));
+        Bind(Autopilot, Keys(Key.Y));
+        Bind(TrimNoseDown, Keys(Key.Home));
+        Bind(TrimNoseUp, Keys(Key.End));
 
         Bind(FlyUp, Keys(Key.Space, Key.E), Button(JoyButton.A), Axis(JoyAxis.TriggerRight, 1));
         Bind(FlyDown, Keys(Key.Shift, Key.Q), Button(JoyButton.B), Axis(JoyAxis.TriggerLeft, 1));
