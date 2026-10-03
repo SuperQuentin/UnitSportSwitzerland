@@ -33,7 +33,9 @@ public enum RideKind
     A320 = 125,
     /// <summary>A mobile airstairs truck (#417): <see cref="Player.Airstairs"/>, docks to aircraft doors.</summary>
     Airstairs = 126,
-    // The military freighter (#420) is 127, the AN-124 (#419) 128; the next other mount is 129.
+    /// <summary>The military cargo plane (#420, the Battle Royale's model): an <see cref="Player.Airliner"/>, walkable, a ramp and a hold.</summary>
+    Freighter = 127,
+    // 128 is the AN-124 (#419); the next other mount is 129.
 }
 
 /// <summary>

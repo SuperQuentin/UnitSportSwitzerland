@@ -841,7 +841,8 @@ public partial class PlayerFeel : Node3D
         sb.Append($"{s.Ias / Knot:0} kt    {altitude / Foot:0} ft    {s.Velocity.Y / Foot * 60f:+0;-0;0} fpm");
         sb.Append($"    N1 {s.Spool * 100f:0}%");
         if (s.Reverse > 0.05f) sb.Append(" REV");
-        sb.Append("    FLAPS ").Append(a.Spec.FlapNames[s.FlapLever]);
+        // the configuration on a line of its own: one line ran under the corner's key hints (#420)
+        sb.Append("\nFLAPS ").Append(a.Spec.FlapNames[s.FlapLever]);
         if (Mathf.Abs(s.Flaps - s.FlapLever) > 0.02f) sb.Append('~');
         sb.Append(s.GearBroken ? "    GEAR DAMAGED" : s.Gear >= 1f ? "    GEAR DOWN" : s.Gear <= 0f ? "    GEAR UP" : "    GEAR MOVING");
         if (s.SpeedBrake > 0) sb.Append(s.SpeedBrake == 1 ? "    SPD BRK ½" : "    SPD BRK FULL");

@@ -1040,6 +1040,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
     }
 
+    /// <summary>Turns the view (a probe's look around, e.g. aft down a hold), radians, + left.</summary>
+    public void TurnView(float by) => _viewYaw += by;
+
     /// <summary>
     /// A teleport that also turns a mount: the body at <paramref name="at"/>, stopped, facing
     /// <paramref name="yaw"/>, put down on the ground once it is there. Setting <c>Rotation</c> alone
@@ -2444,7 +2447,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a boat as it floated: its attitude (#302)
         if (_ride is Boat boarded && state.Angles != default) boarded.State.Attitude = Quaternion.FromEuler(state.Angles);
         // an airliner's gear, flaps, brakes and doors as they were left (#414)
-        if (_ride is Airliner parked) parked.UnpackFlags(state.Flags);
+        if (_ride is Airliner parked)
+        {
+            parked.UnpackFlags(state.Flags);
+            // the model was built before the flags: its doors, gear and flaps as left, not swinging there (#420)
+            if (_visual is Avatar.AirlinerRig rig) rig.Snap(parked.Look(parked.State));
+        }
         // airstairs at the height they were left, docked or not (#417)
         if (_ride is Airstairs stood) stood.UnpackFlags(state.Flags);
         // the steamer's gangways as they were left (#303)
