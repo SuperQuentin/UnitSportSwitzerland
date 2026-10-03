@@ -1038,14 +1038,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
     }
 
+    /// <summary>Turns the view (a probe's look around, e.g. aft down a hold), radians, + left.</summary>
+    public void TurnView(float by) => _viewYaw += by;
+
     /// <summary>
     /// A teleport that also turns a mount: the body at <paramref name="at"/>, stopped, facing
     /// <paramref name="yaw"/>, put down on the ground once it is there. Setting <c>Rotation</c> alone
     /// does not turn a ridden vehicle: its step writes the rotation back from its own heading.
     /// </summary>
-    /// <summary>Turns the view (a probe's look around, e.g. aft down a hold), radians, + left.</summary>
-    public void TurnView(float by) => _viewYaw += by;
-
     public void PlaceAt(Vector3 at, float yaw)
     {
         RequestReplacement();
