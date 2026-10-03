@@ -15,7 +15,8 @@ public enum RideKind
     Helicopter = 6,
     Plane = 7,
     // 8..63 are cars: CarCatalog.All[kind - CarCatalog.First]. The catalog is append-only.
-    // 64..95 are motorbikes: MotorbikeCatalog.All[kind - MotorbikeCatalog.First], append-only too.
+    // 64..95 are motorbikes: MotorbikeCatalog.All[kind - MotorbikeCatalog.First], append-only too;
+    // entries 32 onwards continue at 128..191 (MotorbikeCatalog.First2, #410).
     // 96..119 are trucks and buses: HeavyCatalog.All[kind - HeavyCatalog.First], append-only too.
     /// <summary>
     /// Not a mount: a trailer standing in the world on its own (<c>Vehicles.VehicleState.Train</c>
@@ -31,7 +32,8 @@ public enum RideKind
     Pigeon = 124,
     /// <summary>The Airbus A320 (#414, #416): an <see cref="Player.Airliner"/>, walkable.</summary>
     A320 = 125,
-    // The next other mount is 126 (the AN-124 #419 and the military freighter #420 come next).
+    // 126 and 127 are kept for the AN-124 (#419) and the military freighter (#420).
+    // 128..191 are motorbikes again (the second range, MotorbikeCatalog.First2). The next other mount is 192.
 }
 
 /// <summary>
