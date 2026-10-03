@@ -89,22 +89,41 @@ public partial class HoldCheck : Node
 
     private int _shot;
 
+    /// <summary>The carrier the pictures are taken of, from a camera of their own beside it (the chase camera ends up in the fuselage).</summary>
+    private VehicleBody? _filmed;
+    private Camera3D? _spectator;
+
     private async Task Shot(string name)
     {
         if (!Shots) return;
+        Camera3D? was = null;
+        if (_filmed != null && IsInstanceValid(_filmed))
+        {
+            // off the left side and behind, a little above the hold: the ramp, the car in it and the aircraft over it
+            was = GetViewport().GetCamera3D();
+            _spectator ??= new Camera3D { Fov = 60f, Far = 20000f };
+            if (_spectator.GetParent() == null) AddChild(_spectator);
+            var eye = Point(_filmed, 13f, 4.5f, -22f);
+            _spectator.GlobalPosition = eye;
+            _spectator.LookAt(Point(_filmed, 0f, 0.8f, -2f), Vector3.Up);
+            _spectator.MakeCurrent();
+        }
         for (int i = 0; i < 3; i++) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         string dir = ProjectSettings.GlobalizePath("res://test_output/progress");
         System.IO.Directory.CreateDirectory(dir);
         string path = System.IO.Path.Combine(dir, $"418-{++_shot:00}-{name}.png");
         GetViewport().GetTexture().GetImage().SavePng(path);
         GD.Print($"[hold] wrote {path}");
+        if (was != null && IsInstanceValid(was)) was.MakeCurrent();
     }
 
     private static VehicleBody? Carrier() =>
         VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().FirstOrDefault(v => v.Kind == RideKind.A320 && !v.Wrecked && !v.IsQueuedForDeletion());
 
-    private static VehicleBody? ParkedCar() =>
-        VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().FirstOrDefault(v => v.Kind != RideKind.A320 && !v.IsQueuedForDeletion());
+    /// <summary>The car parked in the hold (the real map has vehicles placed of its own: the one carried, or else the nearest of its kind).</summary>
+    private VehicleBody? ParkedCar() => VehicleManager.Instance?.GetChildren().OfType<VehicleBody>()
+        .Where(v => v.Kind == (RideKind)CarCatalog.First && !v.IsQueuedForDeletion())
+        .OrderBy(v => v.InHold ? 0 : 1).ThenBy(v => _player() is { } p ? v.GlobalPosition.DistanceTo(p.GlobalPosition) : 0f).FirstOrDefault();
 
     /// <summary>The carrier's frame now (its drawn rig, or headless its own node).</summary>
     private static Transform3D Frame(VehicleBody carrier) => FootPlayer.HoldFrame(carrier, 0);
@@ -118,7 +137,7 @@ public partial class HoldCheck : Node
     private static string F(Vector3 v) => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"({v.X:F2}, {v.Y:F2}, {v.Z:F2})");
 
     /// <summary>Moves the carrier by hand for <paramref name="seconds"/>: ahead at a speed, turning, pitched and rolled; checks <paramref name="each"/> every step.</summary>
-    private async Task Fly(VehicleBody carrier, double seconds, float speed, float turnRate, float pitch, float roll, System.Action each)
+    private async Task Fly(VehicleBody carrier, double seconds, float speed, float turnRate, float pitch, float roll, System.Action each, string? shot = null)
     {
         var start = carrier.GlobalTransform;
         float yaw = start.Basis.GetEuler().Y;
@@ -137,6 +156,11 @@ public partial class HoldCheck : Node
             carrier.GlobalTransform = new Transform3D(basis, at);
             // measured as it is drawn: after the carrier and its cargo have moved this frame
             _onFrame = each;
+            if (shot != null && t > seconds * 0.45)
+            {
+                await Shot(shot);
+                shot = null;
+            }
         }
         _onFrame = null;
         // landed back where it took off, the circuit closed (the fixture's ground is one tile: never off its edge)
@@ -170,6 +194,7 @@ public partial class HoldCheck : Node
             Flags: jet.PackFlags()));
         if (!await Until(() => Carrier() is { Asleep: true, Posed: true }, 20)) { Finish("the carrier never came to rest"); return; }
         var carrier = Carrier()!;
+        _filmed = carrier;
         Expect(carrier.Ride.Decks.Any(d => d.CargoBays.Length > 0) && carrier.BusDoors == 1 << RampDoor,
             $"the carrier has the test hold, its ramp down (doors {carrier.BusDoors})");
 
@@ -231,9 +256,8 @@ public partial class HoldCheck : Node
             var now = Local(carrier, me.GlobalPosition);
             worst = Mathf.Max(worst, now.DistanceTo(tied));
             carried &= me.DeckOn == FootPlayer.KeyOf(carrier) && me.TiedDown;
-        });
+        }, "car-carried-in-flight-cartoon");
         Expect(carried && worst < 0.05f, $"carried 360 m, turning, pitched and rolled: never off its spot by more than {worst * 100f:F1} cm");
-        await Shot("car-carried-moving-cartoon");
 
         // out of it: the parked car is carried
         me.RideControls = null;
@@ -244,6 +268,7 @@ public partial class HoldCheck : Node
         Expect(parked.Carrier == FootPlayer.KeyOf(carrier) && parked.Capture().Carrier == parked.Carrier,
             $"got out: the parked car stands in the hold, carried by '{parked.Carrier}' at {F(parked.CarrierPos)}");
         var standing = Local(carrier, parked.GlobalPosition);
+        await Shot("car-parked-in-hold-cartoon");
         worst = 0f;
         await Fly(carrier, 3, 30f, -0.2f, 0.1f, -0.2f, () => worst = Mathf.Max(worst, Local(carrier, parked.GlobalPosition).DistanceTo(standing)));
         Expect(worst < 0.05f, $"the parked car goes where the carrier goes (off its spot by {worst * 100f:F1} cm at most)");
