@@ -127,6 +127,18 @@ public sealed class GameSettings
     public bool TyreWear { get; set; }
     /// <summary>Cars' brakes heat up and fade, and their pads wear (off by default).</summary>
     public bool BrakeWear { get; set; }
+    /// <summary>
+    /// E from outside a parked walkable vehicle (a bus, a coach, the steamer: anything with decks)
+    /// boards it and puts you at its wheel (on, the default, #384). Off: E does nothing there; you walk
+    /// aboard by a door, a gangway or a ladder and take the wheel from inside. Other vehicles keep E.
+    /// </summary>
+    public bool BoardWalkableFromOutside { get; set; } = true;
+    /// <summary>
+    /// How airliners fly (#414, #415): Arcade (protections on every type, wings level when the stick is
+    /// let go, ready to taxi) or Light sim (engine start, autopilot, trim, fuel; conventional types can stall).
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Player.AirlinerHandling Airliner { get; set; } = Player.AirlinerHandling.Arcade;
     /// <summary>How trucks and buses are shifted (#70): automatic, sequential, with the clutch, H-pattern.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public Player.HeavyShift HeavyGearbox { get; set; } = Player.HeavyShift.Automatic;
@@ -185,6 +197,12 @@ public sealed class GameSettings
     /// Empty until then; <c>--name</c> overrides it for one run without saving.
     /// </summary>
     public string PlayerName { get; set; } = "";
+
+    /// <summary>
+    /// The player's figure (#394): <see cref="Avatar.Appearance.Pack"/>ed, 0 until one is chosen in
+    /// the inventory's Body row (till then the figure comes from the player's network id).
+    /// </summary>
+    public int AppearanceBits { get; set; }
 
     /// <summary>GPX files replayed recently, newest first (the Play solo track picker lists them).</summary>
     public List<string> RecentGpx { get; set; } = new();
@@ -380,6 +398,8 @@ public sealed class GameSettings
                 case "--profile" when Enum.TryParse<RideProfile>(v, true, out var rp): RideProfile = rp; break;
                 case "--tyrewear": TyreWear = v is "on" or "1" or "true"; break;
                 case "--brakewear": BrakeWear = v is "on" or "1" or "true"; break;
+                case "--boardwalkable": BoardWalkableFromOutside = v is "on" or "1" or "true"; break;
+                case "--airliner" when Enum.TryParse<Player.AirlinerHandling>(v, true, out var ah): Airliner = ah; break;
                 case "--gearbox":
                     HeavyGearbox = v.ToLowerInvariant() switch
                     {

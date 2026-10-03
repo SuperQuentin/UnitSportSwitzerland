@@ -50,6 +50,7 @@ public static class Interest
         RideKind.Paraglider => 11f,
         RideKind.Helicopter => 11f,
         RideKind.Plane => 10f,
+        RideKind.A320 => 37f,
         _ when CarCatalog.IsCar(kind) => 4.4f,
         RideKind.Jetski => 3.4f,
         RideKind.Speedboat => 7f,

@@ -10,6 +10,14 @@ public enum EngineLayout { Inline4, Inline4Turbo, Rotary, RotaryTurbo, Boxer4Tur
 public sealed record EngineProfile
 {
     public bool Turbine { get; init; }
+    /// <summary>A turbofan (#414): the fan's whine over the jet's roar, both from the spool; no rotor.</summary>
+    public bool Jet { get; init; }
+    /// <summary>
+    /// A steam engine (#380): each "firing" is a puff of exhaust steam up the funnel, and nothing
+    /// burns or breathes in between. <see cref="MaxRpm"/> then counts beats (four a turn for two
+    /// double-acting cylinders), so the beat is rpm / 60 Hz.
+    /// </summary>
+    public bool Steam { get; init; }
     public int Cylinders { get; init; } = 4;
     public float IdleRpm { get; init; } = 800f;
     public float MaxRpm { get; init; } = 2700f;
@@ -35,6 +43,8 @@ public sealed record EngineProfile
 
     /// <summary>A light helicopter's turboshaft and two-blade rotor.</summary>
     public static readonly EngineProfile Turboshaft = new() { Turbine = true };
+    /// <summary>An airliner's high-bypass turbofans (#414): fan tone 700 Hz at idle to 2.4 kHz at take-off.</summary>
+    public static readonly EngineProfile Turbofan = new() { Jet = true, WhineIdleHz = 700f, WhineMaxHz = 2400f };
 
     /// <summary>A high-revving naturally aspirated four with a short pipe: 900 to 7,800 rpm.</summary>
     public static readonly EngineProfile Inline4Na = new() { Cylinders = 4, IdleRpm = 900, MaxRpm = 7800, PipeM = 0.7f };
@@ -198,7 +208,8 @@ public partial class EngineSynth : Node3D
         }
         else
         {
-            _player = new AudioStreamPlayer { Stream = gen, Bus = SfxBus.Name };
+            // non-positional is always the local body's own machine: the Player bus, inside the cabin glass
+            _player = new AudioStreamPlayer { Stream = gen, Bus = SfxBus.Player };
             AddChild(_player);
             _player.Play();
             _playback = (AudioStreamGeneratorPlayback)_player.GetStreamPlayback();
@@ -270,11 +281,13 @@ public partial class EngineSynth : Node3D
         var f = new EngineFrame
         {
             Rpm01 = _rpm, Throttle = _throttle, Load = _load,
-            Level = _level * volume, Turbine = Profile.Turbine,
+            Level = _level * volume, Turbine = Profile.Turbine, Steam = Profile.Steam,
         };
         if (f.Level < 1e-4f && _tLevel < 1e-4f) return 0f;   // silent: skip the model
 
-        if (Profile.Turbine) Turbine(ref f);
+        if (Profile.Jet) Jet(ref f);
+        else if (Profile.Turbine) Turbine(ref f);
+        else if (Profile.Steam) SteamBeat(ref f);
         else Piston(ref f, prevThrottle);
 
         // DC blocker: pulse trains are one-sided and would otherwise sit off centre
@@ -370,6 +383,86 @@ public partial class EngineSynth : Node3D
         if (p.PropBlades > 0) f.Core = Mathf.Tanh(f.Core * 0.75f + propVoice) * 0.85f;
     }
 
+    /// <summary>
+    /// A steam engine's exhaust (#380): a chuff a beat, a burst of hiss with a sharp onset that dies
+    /// away before the next, coloured by the funnel (the pipe comb), over the faint leak of the
+    /// glands. Measured before (the piston model): at full ahead the beat was a 2 dB dip in a steady
+    /// roar of intake noise, a petrol engine idling at 3 Hz. The chip voices get the funnel's note as
+    /// their tone (the beat itself, 0.3-3 Hz, is below anything an oscillator can play).
+    /// </summary>
+    private void SteamBeat(ref EngineFrame f)
+    {
+        var p = Profile;
+        float rpm = Mathf.Lerp(p.IdleRpm, p.MaxRpm, _rpm);
+        float beatHz = rpm / 60f * p.Cylinders / 2f;
+        float funnel = 343f / (2f * p.PipeM);
+        f.ToneHz = funnel * 2f;
+        f.SubHz = funnel;
+
+        _phase += 1f / (_period * Dsp.Rate / beatHz);
+        if (_phase >= 1f)
+        {
+            _phase -= 1f;
+            _cyl = (_cyl + 1) % _cylGain.Length;
+            // a double-acting cylinder's two ends do not quite match: alternate beats differ
+            _period = 1f + WhiteNoise() * 0.02f;
+            _cylAmp = _cylGain[_cyl] * (_cyl % 2 == 0 ? 1f : 0.82f) * (1f + WhiteNoise() * 0.08f);
+            f.PulseStart = 1f;
+        }
+        // seconds since the beat: a 6 ms onset, then a decay short enough to leave a gap before the next
+        float since = _phase / beatHz;
+        float tau = Mathf.Clamp(0.32f / beatHz, 0.035f, 0.15f);
+        _pulseEnv = Mathf.Min(1f, since / 0.006f) * Mathf.Exp(-since / tau);
+        f.Pulse = _pulseEnv;
+        float puff = _pulseEnv * _cylAmp;
+
+        // the steam's hiss, 250 Hz - 4 kHz, brighter the harder it works
+        float n = WhiteNoise();
+        _intakeLp += Dsp.Coef(2500f + 1500f * _load) * (n - _intakeLp);
+        _intakeHp += Dsp.Coef(250f) * (_intakeLp - _intakeHp);
+        float hiss = _intakeLp - _intakeHp;
+        // the funnel's whoomp: the puff's low part ringing in the stack
+        _bodyLp += Dsp.Coef(300f) * (n - _bodyLp);
+        float echo = _comb[_combPos];
+        float x = _bodyLp * puff * 3f + echo * 0.6f;
+        _comb[_combPos] = x;
+        _combPos = (_combPos + 1) % _comb.Length;
+        float leak = hiss * 0.05f;
+        f.Noise = 0.85f;
+
+        f.Core = Mathf.Tanh((hiss * puff * (1.4f + 0.8f * _load) + x * 0.8f + leak) * 1.6f) * 0.7f;
+    }
+
+    /// <summary>
+    /// A turbofan: the fan's blade-pass tone and its second harmonic rising with the spool, a low
+    /// rumble, and the jet's broadband roar, which grows far faster than the tone (with the thrust:
+    /// <c>_load</c>). Idle is mostly whine; take-off mostly roar.
+    /// </summary>
+    private void Jet(ref EngineFrame f)
+    {
+        var p = Profile;
+        float spool = _rpm;
+        float toneHz = Mathf.Lerp(p.WhineIdleHz, p.WhineMaxHz, spool);
+        f.ToneHz = toneHz;
+        f.SubHz = 38f;
+        float n = WhiteNoise();
+        // the roar: noise low-passed higher as it grows, and a second, darker band under it
+        _bodyLp += Dsp.Coef(220f + 700f * _load) * (n - _bodyLp);
+        _tipLp += Dsp.Coef(90f) * (n - _tipLp);
+        _whinePhase = (_whinePhase + toneHz / Dsp.Rate) % 1f;
+        _whine2Phase = (_whine2Phase + toneHz * 2.01f / Dsp.Rate) % 1f;
+        _subPhase = (_subPhase + 38f / Dsp.Rate) % 1f;
+        float whine = Mathf.Sin(Mathf.Tau * _whinePhase) + 0.4f * Mathf.Sin(Mathf.Tau * _whine2Phase);
+        float roar = _load * _load * 0.85f + spool * 0.12f;
+        f.Noise = 0.4f + 0.5f * _load;
+        f.Pulse = 0f;
+        f.Core = _bodyLp * 4.5f * roar
+               + _tipLp * 6f * roar * 0.6f
+               + Mathf.Sin(Mathf.Tau * _subPhase) * 0.12f * spool
+               + whine * 0.09f * (0.25f + 0.75f * spool);
+        f.Core = Mathf.Tanh(f.Core * 1.2f) * 0.8f;
+    }
+
     private void Turbine(ref EngineFrame f)
     {
         var p = Profile;
@@ -402,13 +495,24 @@ public partial class EngineSynth : Node3D
 }
 
 /// <summary>
-/// The "Sfx" audio bus every game sound is routed through, with a reverb on it whose settings
-/// <see cref="ReverbZones"/> eases toward the surroundings. Created in code at boot so the
-/// project needs no bus layout resource.
+/// The mix (#375), created in code at boot so the project needs no bus layout resource:
+/// <code>
+/// Master  [hard limiter, -1 dB ceiling]
+///  |- Sfx     the world: other bodies, vehicles, ambience, impacts   [cabin low-pass, reverb]
+///  |- Player  this body: own steps, landings, own engine and foley  [reverb, drier]
+///  '- Music   radios, car stereos, live stations                     [reverb, drier]
+/// </code>
+/// <see cref="ReverbZones"/> eases the three reverbs toward the room the ears are in;
+/// <see cref="Ears.Shut"/> closes the cabin filter over the world when sitting in a car, so the
+/// street goes dull behind the glass while one's own engine and stereo stay clear. The Player
+/// bus is the Sfx slider too.
 /// </summary>
 public static class SfxBus
 {
     public const string Name = "Sfx";
+
+    /// <summary>The local body's own sounds (#375): never behind the cabin glass, less room on them.</summary>
+    public const string Player = "Player";
 
     /// <summary>
     /// The music bus (#261): radios, car stereos, live stations. Its own slider in Settings, and its
@@ -423,6 +527,12 @@ public static class SfxBus
     /// <summary>The music bus's reverb, or null before <see cref="Ensure"/>.</summary>
     public static AudioEffectReverb? MusicReverb { get; private set; }
 
+    /// <summary>The player bus's reverb, or null before <see cref="Ensure"/>.</summary>
+    public static AudioEffectReverb? PlayerReverb { get; private set; }
+
+    /// <summary>The world bus's cabin low-pass (20 kHz open), or null before <see cref="Ensure"/>.</summary>
+    public static AudioEffectLowPassFilter? Cabin { get; private set; }
+
     /// <summary>
     /// A volume slider position as decibels. Hearing is logarithmic: a LINEAR 5 % is only -26 dB,
     /// which still fills a room — that is why "even at 5 % it is too loud". Square law (40·log10)
@@ -434,64 +544,88 @@ public static class SfxBus
     public static float SliderGain(float v) => v * v;
 
     /// <summary>
-    /// The one place volume is applied: Master for everything, Sfx for the effects and ambience
-    /// routed through it. Per-sound code no longer multiplies by the settings, so nothing can
-    /// escape the slider or be scaled twice.
+    /// The one place volume is applied: Master for everything, Sfx (and Player) for the effects and
+    /// ambience routed through them. Per-sound code no longer multiplies by the settings, so
+    /// nothing can escape the slider or be scaled twice.
     /// </summary>
     public static void ApplyVolumes()
     {
         var s = Core.GameSettings.Current;
         AudioServer.SetBusVolumeDb(0, SliderDb(s.MasterVolume));
         AudioServer.SetBusMute(0, s.MasterVolume <= 0.001f);
-        int idx = AudioServer.GetBusIndex(Name);
-        if (idx >= 0)
+        foreach (var (bus, v) in new[] { (Name, s.SfxVolume), (Player, s.SfxVolume), (Music, s.MusicVolume) })
         {
-            AudioServer.SetBusVolumeDb(idx, SliderDb(s.SfxVolume));
-            AudioServer.SetBusMute(idx, s.SfxVolume <= 0.001f);
-        }
-        int music = AudioServer.GetBusIndex(Music);
-        if (music >= 0)
-        {
-            AudioServer.SetBusVolumeDb(music, SliderDb(s.MusicVolume));
-            AudioServer.SetBusMute(music, s.MusicVolume <= 0.001f);
+            int idx = AudioServer.GetBusIndex(bus);
+            if (idx < 0) continue;
+            AudioServer.SetBusVolumeDb(idx, SliderDb(v) + (bus == Name ? _cabinDb : 0f));
+            AudioServer.SetBusMute(idx, v <= 0.001f);
         }
     }
 
     private static bool _subscribed;
+    private static float _cabinHz = 20000f, _cabinDb;
 
-    /// <summary>Creates the bus once (idempotent). Call before creating any player.</summary>
+    /// <summary>Creates the buses once (idempotent). Call before creating any player.</summary>
     public static void Ensure()
     {
-        int idx = AudioServer.GetBusIndex(Name);
-        if (idx < 0)
-        {
-            AudioServer.AddBus();
-            idx = AudioServer.BusCount - 1;
-            AudioServer.SetBusName(idx, Name);
-            AudioServer.SetBusSend(idx, "Master");
-            AudioServer.AddBusEffect(idx, new AudioEffectReverb
-            {
-                RoomSize = 0.3f, Damping = 0.5f, Wet = 0f, Dry = 1f, Spread = 1f, Hipass = 0.1f,
-            });
-        }
-        for (int e = 0; e < AudioServer.GetBusEffectCount(idx); e++)
-            if (AudioServer.GetBusEffect(idx, e) is AudioEffectReverb r) Reverb = r;
+        // the master only catches peaks: a stack of engines, a boom and a radio must not clip
+        if (Find<AudioEffectHardLimiter>(0) == null)
+            AudioServer.AddBusEffect(0, new AudioEffectHardLimiter { CeilingDb = -1f, PreGainDb = 0f, Release = 0.1f });
 
-        int music = AudioServer.GetBusIndex(Music);
-        if (music < 0)
-        {
-            AudioServer.AddBus();
-            music = AudioServer.BusCount - 1;
-            AudioServer.SetBusName(music, Music);
-            AudioServer.SetBusSend(music, "Master");
-            AudioServer.AddBusEffect(music, new AudioEffectReverb
-            {
-                RoomSize = 0.3f, Damping = 0.5f, Wet = 0f, Dry = 1f, Spread = 1f, Hipass = 0.15f,
-            });
-        }
-        for (int e = 0; e < AudioServer.GetBusEffectCount(music); e++)
-            if (AudioServer.GetBusEffect(music, e) is AudioEffectReverb r) MusicReverb = r;
+        int sfx = Bus(Name);
+        if (Find<AudioEffectLowPassFilter>(sfx) == null)
+            AudioServer.AddBusEffect(sfx, new AudioEffectLowPassFilter { CutoffHz = 20000f, Resonance = 0.5f }, 0);
+        Cabin = Find<AudioEffectLowPassFilter>(sfx);
+        Reverb = Find<AudioEffectReverb>(sfx) ?? AddReverb(sfx, 0.1f);
+        PlayerReverb = Find<AudioEffectReverb>(Bus(Player)) ?? AddReverb(Bus(Player), 0.12f);
+        MusicReverb = Find<AudioEffectReverb>(Bus(Music)) ?? AddReverb(Bus(Music), 0.15f);
+        // the filter costs nothing while it is off
+        AudioServer.SetBusEffectEnabled(sfx, 0, _cabinHz < 19000f);
         ApplyVolumes();
         if (!_subscribed) { _subscribed = true; Core.GameSettings.Changed += ApplyVolumes; }
+    }
+
+    /// <summary>
+    /// How far shut in a cabin the ears are (0 open .. 1 closed car): the world loses its highs and
+    /// ~8 dB, the Player and Music buses do not. Cheap to call every frame: it writes only on change.
+    /// </summary>
+    public static void SetCabin(float shut)
+    {
+        if (Cabin == null) return;
+        // log-space sweep from open air to the ~1.4 kHz of a closed car
+        float hz = shut <= 0.001f ? 20000f : Mathf.Exp(Mathf.Lerp(Mathf.Log(20000f), Mathf.Log(1400f), shut));
+        float db = -8f * shut;
+        if (Mathf.Abs(hz - _cabinHz) < 20f && Mathf.Abs(db - _cabinDb) < 0.05f) return;
+        _cabinHz = hz; _cabinDb = db;
+        Cabin.CutoffHz = hz;
+        int sfx = AudioServer.GetBusIndex(Name);
+        if (sfx < 0) return;
+        AudioServer.SetBusEffectEnabled(sfx, 0, hz < 19000f);
+        AudioServer.SetBusVolumeDb(sfx, SliderDb(Core.GameSettings.Current.SfxVolume) + db);
+    }
+
+    private static int Bus(string name)
+    {
+        int idx = AudioServer.GetBusIndex(name);
+        if (idx >= 0) return idx;
+        AudioServer.AddBus();
+        idx = AudioServer.BusCount - 1;
+        AudioServer.SetBusName(idx, name);
+        AudioServer.SetBusSend(idx, "Master");
+        return idx;
+    }
+
+    private static AudioEffectReverb AddReverb(int bus, float hipass)
+    {
+        var r = new AudioEffectReverb { RoomSize = 0.2f, Damping = 0.7f, Wet = 0f, Dry = 1f, Spread = 1f, Hipass = hipass };
+        AudioServer.AddBusEffect(bus, r);
+        return r;
+    }
+
+    private static T? Find<T>(int bus) where T : AudioEffect
+    {
+        for (int e = 0; e < AudioServer.GetBusEffectCount(bus); e++)
+            if (AudioServer.GetBusEffect(bus, e) is T t) return t;
+        return null;
     }
 }

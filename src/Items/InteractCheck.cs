@@ -16,7 +16,8 @@ namespace UnitSport.Items;
 /// passenger door, aimed at it, the door (with its border); E opens it, E again gets in.</item>
 /// <item>A radio playing in the hand, then put away: on the back (replicated <c>BackItemId</c>), still
 /// playing (<c>HeldRadio</c>), bouncing.</item>
-/// <item>A playing radio on the ground: pointed at, Use takes it into the hand with its CD.</item>
+/// <item>A playing radio on the ground: with the back to it, not pointed at and E leaves it alone (#390);
+/// pointed at, Use takes it into the hand with its CD.</item>
 /// <item>Dancing to the carried radio: the crowd moves forced (Pogo, JumpTogether) to see the feet leave the ground.</item>
 /// </list>
 /// Without a CD in the library the music steps are reported and skipped.
@@ -28,7 +29,7 @@ public partial class InteractCheck : Node
     private readonly Inventory _inventory;
     private double _t, _since = -1, _stepAt;
     private int _step;
-    private bool _steppedDown, _failed;
+    private bool _steppedDown, _failed, _lookedAway;
     private VehicleBody? _car;
     private readonly List<string> _notes = new();
 
@@ -176,9 +177,29 @@ public partial class InteractCheck : Node
                     Next();
                 }
                 break;
-            case 13 when InStep > 2.5:
+            case 13 when InStep > (_lookedAway ? 0.7 : 2.5):
                 var radio = RadioManager.Instance?.Nearest(me.GlobalPosition, 4f);
-                if (radio != null) Look(me, radio.GlobalPosition);
+                if (!_lookedAway)
+                {
+                    // first with the back to it: within reach, but not looked at (#390)
+                    if (radio != null) { Look(me, me.GlobalPosition * 2 - radio.GlobalPosition); me.LookPitch = 0; }
+                    _lookedAway = true;
+                    _stepAt = _t;
+                    break;
+                }
+                if (radio != null)
+                {
+                    Check(Highlight.Pointed is not RadioBody, $"a radio {radio.GlobalPosition.DistanceTo(me.GlobalPosition):F1} m away, behind the view, is not pointed at");
+                    if (VehicleReach.Find(me) == null)
+                    {
+                        me.TryInteract();
+                        Check(RadioUi.Instance?.IsOpen != true, "E does not open a radio the player is not looking at");
+                        RadioUi.Instance?.Close();
+                        me.DanceId = 0;
+                    }
+                    else Check(true, "E not pressed: the parked car is at hand (it would get in)");
+                    Look(me, radio.GlobalPosition);
+                }
                 Next();
                 break;
             case 14 when InStep > 0.7:
@@ -216,7 +237,7 @@ public partial class InteractCheck : Node
                 break;
             case 17 when InStep > 1.5:
                 var hidden = RadioManager.Instance?.Nearest(_farSide, 1.5f);
-                Check(hidden?.Speaker is { HeardThrough: "wall" }, $"a radio behind the car is heard through it ({hidden?.Speaker?.HeardThrough ?? "no speaker"})");
+                Check(hidden?.Speaker is { HeardThrough: "wall" }, $"a radio behind the car is heard through it ({hidden?.Speaker?.HeardThrough ?? "no speaker"}, {hidden?.Speaker?.HeardBlocked:0.0} blocked)");
                 Shoot("interact_hearing.png");
                 me.GlobalPosition = _farSide + ((_farSide - _car.GlobalPosition) with { Y = 0 }).Normalized() * 2.5f + Vector3.Up * 0.3f;
                 me.Velocity = Vector3.Zero;
@@ -228,7 +249,7 @@ public partial class InteractCheck : Node
                 break;
             case 19 when InStep > 1.5:
                 var clear = RadioManager.Instance?.Nearest(_farSide, 1.5f);
-                Check(clear?.Speaker is { HeardThrough: "open" }, $"walked round, it is heard in the open ({clear?.Speaker?.HeardThrough ?? "no speaker"})");
+                Check(clear?.Speaker is { HeardThrough: "open" }, $"walked round, it is heard in the open ({clear?.Speaker?.HeardThrough ?? "no speaker"}, {clear?.Speaker?.HeardBlocked:0.0} blocked)");
                 Finish(_failed ? string.Join("; ", _notes) : "all steps");
                 break;
         }

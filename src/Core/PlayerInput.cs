@@ -70,6 +70,8 @@ public partial class PlayerInput : Node
     // --- trucks and buses (#70) ---
     /// <summary>Couple or uncouple a trailer (<see cref="Player.Truck.Couple"/>).</summary>
     public const string Couple = "couple";
+    /// <summary>A steamer's whistle (#303), held: it blows as long as it is held. H, like coupling a truck.</summary>
+    public const string Horn = "horn";
     /// <summary>A passenger moves into the free driver's seat (#158).</summary>
     public const string TakeWheel = "take_wheel";
     /// <summary>A bus kneels (lowers its door side) or rises.</summary>
@@ -88,6 +90,15 @@ public partial class PlayerInput : Node
     /// <summary>The retarder stalk: 0 off, 1 exhaust brake, 2-4 the retarder.</summary>
     public const string RetarderUp = "retarder_up";
     public const string RetarderDown = "retarder_down";
+    /// <summary>An airliner's flap lever a notch down / up, its speedbrake, its parking brake (#414). The gear is <see cref="CarDoor"/> in the air.</summary>
+    public const string FlapsDown = "flaps_down";
+    public const string FlapsUp = "flaps_up";
+    public const string Speedbrake = "speedbrake";
+    public const string ParkingBrake = "parking_brake";
+    /// <summary>An airliner's autopilot and autothrust on / off, and its pitch trim held (Light sim, #415).</summary>
+    public const string Autopilot = "autopilot";
+    public const string TrimNoseDown = "trim_nose_down";
+    public const string TrimNoseUp = "trim_nose_up";
 
     // --- free-fly camera ---
     public const string FlyUp = "fly_up";
@@ -119,14 +130,27 @@ public partial class PlayerInput : Node
     public const string AimItem = "aim_item";
     public const string Inventory = "inventory";
     public const string QuickWheel = "quick_wheel";
+    /// <summary>Hold on foot for the emote wheel (<see cref="Player.EmoteWheel"/>, #404): dances and gestures, any time.</summary>
+    public const string EmoteWheel = "emote_wheel";
     /// <summary>Drops one of the item in hand on the ground; with Ctrl, the whole stack (#206).</summary>
     public const string DropItem = "drop_item";
     public const string NextItem = "next_item";
+    /// <summary>Hotbar slots 1-6 (#391): select on foot, swap the hovered slot in the inventory, pick in the quick wheel. Same keys as the truck's gates, never at the same time.</summary>
+    public static readonly StringName[] Slots = { "slot_1", "slot_2", "slot_3", "slot_4", "slot_5", "slot_6" };
     public const string PrevItem = "prev_item";
     /// <summary>Opens the field journal of birds seen and bagged (<see cref="Birds.BirdJournal"/>).</summary>
     public const string BirdJournal = "bird_journal";
     /// <summary>The hammer in hand (#359): turns the piece; with Aim, changes its material. R, or D-pad up on a pad.</summary>
     public const string BuildTurn = "build_turn";
+
+    /// <summary>Which hotbar slot action <paramref name="e"/> presses (0-based), or -1.</summary>
+    public static int SlotPressed(InputEvent e)
+    {
+        if (e.IsEcho()) return -1;
+        for (int s = 0; s < Slots.Length; s++)
+            if (e.IsActionPressed(Slots[s])) return s;
+        return -1;
+    }
 
     /// <summary>Right-stick turn rate at full deflection and sensitivity 1, radians per second.</summary>
     public const float StickTurnRate = 3.0f;
@@ -408,6 +432,8 @@ public partial class PlayerInput : Node
         // which only mean tuck and slide elsewhere), the clutch takes C / B, and the H-pattern's
         // gates the number keys, which only pick hotbar slots on foot.
         Bind(Couple, Keys(Key.H), Button(JoyButton.DpadLeft));
+        // a steamer has nothing to couple: its whistle takes the same key
+        Bind(Horn, Keys(Key.H), Button(JoyButton.DpadLeft));
         // a passenger never does tricks: the trick keys are free in a seat
         Bind(TakeWheel, Keys(Key.F), Button(JoyButton.RightShoulder));
         Bind(Kneel, Keys(Key.K));
@@ -420,6 +446,13 @@ public partial class PlayerInput : Node
         Bind(GearNeutral, Keys(Key.Key0));
         Bind(RetarderUp, Keys(Key.Apostrophe));
         Bind(RetarderDown, Keys(Key.Semicolon));
+        Bind(FlapsDown, Keys(Key.F7), Button(JoyButton.RightShoulder));
+        Bind(FlapsUp, Keys(Key.F6), Button(JoyButton.LeftShoulder));
+        Bind(Speedbrake, Keys(Key.Slash), Button(JoyButton.DpadLeft));
+        Bind(ParkingBrake, Keys(Key.Period));
+        Bind(Autopilot, Keys(Key.Y));
+        Bind(TrimNoseDown, Keys(Key.Home));
+        Bind(TrimNoseUp, Keys(Key.End));
 
         Bind(FlyUp, Keys(Key.Space, Key.E), Button(JoyButton.A), Axis(JoyAxis.TriggerRight, 1));
         Bind(FlyDown, Keys(Key.Shift, Key.Q), Button(JoyButton.B), Axis(JoyAxis.TriggerLeft, 1));
@@ -453,11 +486,15 @@ public partial class PlayerInput : Node
         Bind(AimItem, Mouse(MouseButton.Right), Button(JoyButton.LeftShoulder));
         Bind(Inventory, Keys(Key.I, Key.Tab), Button(JoyButton.Back));
         Bind(QuickWheel, Keys(Key.X), Button(JoyButton.DpadLeft));
+        // B only looks behind when mounted; D-pad up is the engine in a vehicle and turns the
+        // hammer's piece, so the emote wheel does not open with the hammer in hand
+        Bind(EmoteWheel, Keys(Key.B), Button(JoyButton.DpadUp));
         // Minecraft's key: Q only means "down" in the fly camera and in the air, never on foot
         Bind(DropItem, Keys(Key.Q));
         // pad X is tuck/sprint only when mounted, so on foot it is free, as RB/LB are for items
         Bind(Gather, Keys(Key.G), Button(JoyButton.X));
         Bind(NextItem, Mouse(MouseButton.WheelDown), Button(JoyButton.DpadRight));
+        for (int s = 0; s < Slots.Length; s++) Bind(Slots[s], Keys(Key.Key1 + s));
         Bind(PrevItem, Mouse(MouseButton.WheelUp));
         Bind(BirdJournal, Keys(Key.J));
         // R is the travel picker on foot, D-pad up the engine in a vehicle: with the hammer in hand
@@ -491,7 +528,7 @@ public partial class PlayerInput : Node
     /// Creates the action if absent and adds any binding it does not already have. A binding the
     /// player (or a future rebind screen) has already changed is left alone.
     /// </summary>
-    private static void Bind(string action, params InputEvent[][] groups)
+    private static void Bind(StringName action, params InputEvent[][] groups)
     {
         if (!InputMap.HasAction(action)) InputMap.AddAction(action, 0.2f);
         foreach (var group in groups)

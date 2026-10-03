@@ -57,15 +57,12 @@
   loopback (`tools/boatnetcheck.sh`, gamey): the copy's pitch against B's surface slope correlates
   0.98 / 0.90 / 0.99 (idle / running / parked) where A's own boat does 1.00 / 0.93 / 0.99 on A's;
   keel depth under the surface 0.276 m on B, 0.277 m on A.
-- **For the steamer (#303)**: everything is a `BoatSpec`: columns (`PlaningHull(…, HullShape)` or
-  any list: a 70 m hull is more columns, e.g. 14 × 4), mass, inertia (or the box default), centre
-  of mass, drive (`BoatDrive`; paddles are a new value: thrust at two side points), `LiftShare` 0
-  for a displacement hull, `WindArea`. The hull's pose is `BoatState.Attitude` about
-  `Boat.Pivot`; a deck (`Rideable.Decks`, `DeckBuilder`) built in the visual's frame is carried by
-  the posed visual, so its sections pitch and roll with the hull (the deck system reads the visual's
-  transform every frame: `SectionFrame` is the posed `_visual`, `walk-aboard`). Trap for #303: a headless
-  peer has no visual for a parked boat, so its deck frame there is the level body; give it an empty
-  posed frame as `VehicleBody` does for a parked bus. Cost: one `WaterField.TryLevelAt` per column per substep.
+- **The steamer (#303)** is built on this model: `BoatDrive.Paddle` (two wheels on one shaft that
+  reverses through stop at the engine's pace), `LinearDrag` per kg (a 500 t hull at the small boats'
+  0.05 could not make 3 m/s), `RudderAt` (a rudder away from the thrust), see `steamer`. A boat's body
+  is not lifted when its capsule grows (`ApplyRide`: a steamer taken from its deck rose 2.8 m and fell
+  back in), and a shove faster than the model is never adopted as its velocity (only ever slower).
+  Cost: one `WaterField.TryLevelAt` per column per substep (the steamer: 56 columns).
 - **Measured** (`--boatcheck`, calm unless said): jetski draft 0.23 m, on the plane in 1.4 s, top
   82 km/h (spec 81), bow up 7° over the hump, running trim 2-3°, circle 59 m at 64 km/h banked 11°;
   speedboat draft 0.28 m, plane 3.2 s, top 70.5 km/h (38 kn), hump 6.6°, trim 3°, circle 55 m at
@@ -78,7 +75,35 @@
   `--boatcheck jetski|speedboat[,shots] --chunks fixture:lake` (quick; `shots` windowed: pictures
   in `test_output/boats/`); `tools/boatnetcheck.sh` (net; `SHOTS=1`: B's view in
   `test_output/boatnet_B_*.png`).
-- **Not done**: boats parked at real harbours (Nyon); a hull's collision box does not pitch (the
-  hull boxes do, a parked boat's box stays level); wake foam lies where it was dropped, not on the
-  moving waves; no water hiss/slap sound; boats in races have no water courses (the mount words
+- **Foam on the waves (#380)**: the wake, spray and jet (and the steamer's wake, bow wave and
+  churn) are drawn by `shaders/wake_foam.gdshader` through `Avatar/WakeFoam` (one shared material per
+  kind, every style): a patch sits on the surface over its own centre (the rest point found by three
+  fixed-point steps of `water_wave_displace`, as `WaterField.TryLevelAt` does) laid on the tangent
+  plane, 6 cm over it (the water mesh is the waves joined by straight lines every 2 m) and 4 cm toward
+  the eye; a spray speck faces the camera and is gone under the surface. The still level and wave
+  scale are per-instance uniforms written only on change (`WakeFoam.OnSurface`/`Water`). The flat
+  wake used to cut through crests and hang over troughs. Not checked headless (no particles, no
+  shader compile there): `--boatcheck speedboat,shots,wake --style ps1|cartoon` (windowed) puts the
+  speedboat at half ahead across a gamey swell and takes `wake_swell_*` pictures into
+  `test_output/boats/<style>/`, and logs the hull slaps.
+- **Water slapping the hull (#380)** (`Avatar/HullSlap`, on `BoatRig` and `SteamerRig`, every peer from
+  the hull it draws and its own waves): the water's height up the forward hull is watched frame to
+  frame; climbing it faster than 0.1 m/s slaps (`SfxSynth.HullSlapBank`: the skin's knock, the smack,
+  the wash), as loud as it climbed fast (full at 1.7 m/s), then 0.12-0.32 s before the next. Within
+  120 m of the ears (`Audio/Ears`) only. Measured (speedboat): calm idle 0.2 faint laps a second, gamey idle 0.8
+  (strength 0.03), gamey half ahead 1.2 at 0.2. The steamer's is pitched 0.55 and carries further.
+- **The wheel turns (#380)**: the runabout's rim is its own node (`BoatMeshBuilder.RunaboutWheel`,
+  `BoatRig.Steer`), turned `Wheel.Lock` (2.4 rad) at full helm, the driver's hands with it (one
+  figure per 0.06 rad, kept); the steamer's wheelhouse wheel likewise (`SteamerMeshBuilder.HelmWheelMesh`,
+  `SteamerRig.Steer`, 3.6 rad). The helm (`Boat.HelmNow`, -1..1 from `State.Helm`) travels in the
+  pose's W as a whole number 0..100: `+ 4 × HelmSteps` for a boat (wet and airborne below it,
+  decoded with `PosMod`), `+ 32 ×` for the steamer (above its whistle and gangway bits);
+  `Boat.HelmOf` / `Steamer.WheelOf`. `--boatcheck` checks the owner's wheel turns (and pictures it
+  straight and hard over with `shots,wake`); `tools/boatnetcheck.sh` checks B's copy turns as A's.
+  The jetski has no wheel (bars on the rider's mesh, not turned).
+- **At a jetty** (#377, `world/landings`): harbour jetties are solid decks; getting out beside one steps
+  onto it instead of into the water (`FootPlayer.Pier.cs`, `--steamercheck pier|nyon`).
+- **At the harbours** (#383, `world/landings`): jetskis and speedboats moored along the jetties (`World.MarinaBoats`), server-placed, put back a while after being taken.
+- **Not done**: a hull's collision box does not pitch (the
+  hull boxes do, a parked boat's box stays level); no hiss of a hull running through the water; boats in races have no water courses (the mount words
   `jetski`/`boat` parse); the jetski's rider is the motorbike rider (helmet).

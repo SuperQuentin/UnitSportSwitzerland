@@ -8,7 +8,8 @@ no GI or screen-space effects. Realistic+ (phase 4) borrows all of it.
 
 - **Shaders:** `real_*` wrappers (`STYLE_LIT` + `STYLE_REAL`) over the role bodies, lit by
   Godot's own PBR light (no custom `light()`): terrain, road, building, water, tree, tree-far.
-  Prop and path borrow Cartoon's; interior and snowfall stay PS1's.
+  Prop and path borrow Cartoon's; snowfall stays PS1's. `real_interior` is unshaded, with plaster
+  and procedural floorboards (`terrain/interior-light`).
 - **Textures tint the vertex colours, never replace them** (`style_tinted`): the texture brings
   the grain, the baked cover colour keeps the land readable and every style's palette the same.
   The texture is divided by its own last mip, so it averages to 1.

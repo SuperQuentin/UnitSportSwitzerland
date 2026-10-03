@@ -198,7 +198,7 @@ public sealed class ChatCompleter
                 bool admin = Permissions.IsAdmin;
                 options = argIndex switch
                 {
-                    0 => admin ? ["join", "leave", "status", "open", "start", "cancel"] : ["join", "leave", "status"],
+                    0 => admin ? ["join", "leave", "status", "open", "start", "zone", "cancel"] : ["join", "leave", "status"],
                     _ when admin && words[1].ToLowerInvariant() == "open" => ["here", "short", "normal", "long", "5", "6", "7"],
                     _ => [],
                 };

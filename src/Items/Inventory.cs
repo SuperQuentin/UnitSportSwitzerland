@@ -182,19 +182,8 @@ public sealed class Inventory
         Notify();
     }
 
-    /// <summary>Next/previous hotbar slot that holds something, skipping empties so a scroll always lands on an item.</summary>
-    public void Cycle(int direction)
-    {
-        for (int step = 1; step <= HotbarSize; step++)
-        {
-            int slot = ((Selected + direction * step) % HotbarSize + HotbarSize) % HotbarSize;
-            if (!_slots[slot].IsEmpty || step == HotbarSize)
-            {
-                Select(slot);
-                return;
-            }
-        }
-    }
+    /// <summary>Next/previous hotbar slot, empty ones included (an empty slot is how you put the item away).</summary>
+    public void Cycle(int direction) => Select(Selected + direction);
 
     private static int MaxStack(ItemId id) => ItemDefs.Get(id)?.MaxStack ?? 1;
 

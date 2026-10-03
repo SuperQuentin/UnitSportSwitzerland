@@ -22,7 +22,8 @@ namespace UnitSport.Interiors;
 /// </summary>
 public static partial class InteriorMeshBuilder
 {
-    public sealed record MeshData(Vector3[] Vertices, Color[] Colors, Vector3[] Collision);
+    /// <summary>The static soup, its collision, and the figures that move (a church's rat and congregation, #370).</summary>
+    public sealed record MeshData(Vector3[] Vertices, Color[] Colors, Vector3[] Collision, Figure[]? Figures = null);
 
     private sealed class Scratch
     {
@@ -138,10 +139,11 @@ public static partial class InteriorMeshBuilder
             }
         }
 
+        var figures = new List<Figure>();
         foreach (var p in l.Furniture)
-            Furniture(s, p, l.FloorY(p.Floor) + p.Lift);
+            Furniture(s, p, l.FloorY(p.Floor) + p.Lift, figures);
 
-        return new MeshData(s.V.ToArray(), s.C.ToArray(), s.Col.ToArray());
+        return new MeshData(s.V.ToArray(), s.C.ToArray(), s.Col.ToArray(), figures.ToArray());
     }
 
     /// <summary>
@@ -511,7 +513,7 @@ public static partial class InteriorMeshBuilder
         B(-w + 0.1f, 0.3f, f + 0.012f, w * 0.36f, 0.36f, f + 0.02f, C(0.30f, 0.30f, 0.32f));
     }
 
-    private static void Furniture(Scratch s, FurniturePlan p, float y0)
+    private static void Furniture(Scratch s, FurniturePlan p, float y0, List<Figure> figures)
     {
         // authored with its back to -Z, centred on the origin, then turned and moved
         var basis = new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2);
@@ -822,8 +824,7 @@ public static partial class InteriorMeshBuilder
                 B(-w, 0.42f, -d, w, H, -d + 0.08f, wood);
                 B(-w, 0, -d, -w + 0.06f, 0.42f, d, darkWood);
                 B(w - 0.06f, 0, -d, w, 0.42f, d, darkWood);
-                if (p.Type == FurnitureType.FrontPew)
-                    Congregation(p, w, d, (a, b, col) => B(a.X, a.Y, a.Z, b.X, b.Y, b.Z, col));
+                if (p.Type == FurnitureType.FrontPew) Congregation(p, w, d, y0, figures);
                 break;
             case FurnitureType.Car:
                 var paint = C(0.62f, 0.14f, 0.12f);
@@ -887,51 +888,11 @@ public static partial class InteriorMeshBuilder
                 break;
             }
             case FurnitureType.PastorRat:
-            {
-                // the Dorime rat (#241): robe, mitre, arms spread in blessing, facing +Z
-                float k = H / 1.35f;
-                void R(float xa, float ya, float za, float xb, float yb, float zb, Color col) =>
-                    B(xa * k, ya * k, za * k, xb * k, yb * k, zb * k, col);
-                var robe = C(0.93f, 0.93f, 0.90f);
-                var shade = C(0.80f, 0.80f, 0.78f);
-                var gilt = C(0.80f, 0.64f, 0.28f);
-                var fur = C(0.80f, 0.55f, 0.32f);
-                var pink = C(0.88f, 0.64f, 0.62f);
-                // feet and tail
-                R(-0.12f, 0, 0.08f, -0.04f, 0.05f, 0.20f, pink);
-                R(0.04f, 0, 0.08f, 0.12f, 0.05f, 0.20f, pink);
-                R(-0.02f, 0.03f, -0.22f, 0.02f, 0.06f, -0.12f, pink);
-                // the robe, flaring to the hem, the gold belt and the cross on the chest
-                R(-0.24f, 0.04f, -0.16f, 0.24f, 0.36f, 0.16f, robe);
-                R(-0.20f, 0.36f, -0.13f, 0.20f, 0.88f, 0.13f, robe);
-                R(-0.21f, 0.60f, -0.14f, 0.21f, 0.65f, 0.14f, gilt);
-                R(-0.015f, 0.68f, 0.13f, 0.015f, 0.84f, 0.15f, gilt);
-                R(-0.06f, 0.77f, 0.13f, 0.06f, 0.80f, 0.15f, gilt);
-                // wide sleeves held out, the cloth hanging under them, little pink hands
-                foreach (float sx in new[] { -1f, 1f })
-                {
-                    float a = sx * 0.20f, b = sx * 0.42f;
-                    R(Math.Min(a, b), 0.66f, -0.10f, Math.Max(a, b), 0.84f, 0.10f, robe);
-                    float c = sx * 0.27f;
-                    R(Math.Min(c, b), 0.30f, -0.04f, Math.Max(c, b), 0.66f, 0.04f, shade);
-                    float e = sx * 0.45f;
-                    R(Math.Min(b, e), 0.72f, -0.03f, Math.Max(b, e), 0.78f, 0.03f, pink);
-                }
-                // the head: snout, pink nose, black eyes, round ears
-                R(-0.15f, 0.86f, -0.11f, 0.15f, 1.10f, 0.08f, fur);
-                R(-0.09f, 0.88f, 0.08f, 0.09f, 1.02f, 0.20f, fur);
-                R(-0.03f, 0.95f, 0.20f, 0.03f, 0.99f, 0.23f, pink);
-                R(-0.13f, 1.00f, 0.08f, -0.095f, 1.045f, 0.095f, dark);
-                R(0.095f, 1.00f, 0.08f, 0.13f, 1.045f, 0.095f, dark);
-                R(-0.25f, 1.04f, -0.05f, -0.11f, 1.18f, -0.01f, pink);
-                R(0.11f, 1.04f, -0.05f, 0.25f, 1.18f, -0.01f, pink);
-                // the mitre, its gold band and stripe
-                R(-0.09f, 1.10f, -0.06f, 0.09f, 1.29f, 0.06f, robe);
-                R(-0.05f, 1.29f, -0.04f, 0.05f, 1.35f, 0.04f, robe);
-                R(-0.095f, 1.10f, -0.065f, 0.095f, 1.13f, 0.065f, gilt);
-                R(-0.015f, 1.13f, 0.06f, 0.015f, 1.33f, 0.07f, gilt);
+                figures.Add(Rat(p, y0, dark));
                 break;
-            }
+            case FurnitureType.ChurchRadio:
+                ChurchRadio(w, d, H, (a, b, col) => B(a.X, a.Y, a.Z, b.X, b.Y, b.Z, col));
+                break;
             case FurnitureType.Bell:
             {
                 var bronze = C(0.55f, 0.42f, 0.22f);

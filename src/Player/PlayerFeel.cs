@@ -28,7 +28,7 @@ public partial class PlayerFeel : Node3D
 
     // --- audio ---
     private AudioStreamPlayer _hiss = null!, _tyre = null!, _scrape = null!;
-    private EngineSynth _rotor = null!, _engine = null!;
+    private EngineSynth _rotor = null!, _engine = null!, _jet = null!;
     private AudioStreamPlayer _squeal = null!;
     private double _beep;
     private int _puffs;
@@ -93,11 +93,13 @@ public partial class PlayerFeel : Node3D
         _squeal = Loop(SfxSynth.Squeal);
         _rotor = new EngineSynth(EngineProfile.Turboshaft, spatial: false, seed: 1);
         _engine = new EngineSynth(EngineProfile.PistonAero, spatial: false, seed: 2);
+        _jet = new EngineSynth(EngineProfile.Turbofan, spatial: false, seed: 4);
+        AddChild(_jet);
         AddChild(_rotor);
         AddChild(_engine);
         for (int i = 0; i < _voices.Length; i++)
         {
-            _voices[i] = new AudioStreamPlayer { Name = $"Voice{i}", Bus = SfxBus.Name };
+            _voices[i] = new AudioStreamPlayer { Name = $"Voice{i}", Bus = SfxBus.Player };
             AddChild(_voices[i]);
         }
 
@@ -195,7 +197,7 @@ public partial class PlayerFeel : Node3D
         {
             // someone else's camera is on screen (the fly camera): nothing of this belongs there
             SetLoop(_hiss, 0, 1); SetLoop(_tyre, 0, 1); SetLoop(_scrape, 0, 1); SetLoop(_squeal, 0, 1);
-            _rotor.Set(0, 0, 0, 0); _engine.Set(0, 0, 0, 0); _carEngine?.Set(0, 0, 0, 0);
+            _rotor.Set(0, 0, 0, 0); _engine.Set(0, 0, 0, 0); _jet.Set(0, 0, 0, 0); _carEngine?.Set(0, 0, 0, 0);
             _spray.Emitting = _dust.Emitting = _smoke.Emitting = false;
             return;
         }
@@ -217,6 +219,8 @@ public partial class PlayerFeel : Node3D
         // boosting always shows them: the meter was earned, and spending it should look like it
         float lines = Mathf.Clamp((excite - 0.35f) / 0.65f, 0f, 1f);
         if (_player.Boosting) lines = Mathf.Max(lines, 0.75f);
+        // an airliner cruising at 250 km/h is calm, not a rush
+        if (_player.Vehicle is Airliner) lines = 0f;
         _lines.SetShaderParameter(IntensityParam, GameSettings.Current.SpeedLines ? lines : 0f);
 
         if (_player.Boosting && !_wasBoosting)
@@ -259,6 +263,10 @@ public partial class PlayerFeel : Node3D
         bool plane = ride == RideKind.Plane;
         _engine.Set(Mathf.Clamp((flight.Spool - 0.15f) / 0.85f, 0f, 1f), flight.Control, flight.Control,
             plane && flight.Spool > 0.02f ? 0.35f + 0.45f * flight.Spool : 0f);
+        // an airliner's fans (#414): heard from the cockpit, far quieter than from outside
+        bool jet = _player.Vehicle is Airliner;
+        _jet.Set(flight.Spool, flight.Control, Mathf.Clamp((flight.Spool - 0.3f) / 0.7f, 0f, 1f),
+            jet && flight.Spool > 0.02f ? 0.18f + 0.32f * flight.Spool : 0f);
 
         // Proximity: a wingsuit fast and low is the whole point of one. Time spent under 20 m at
         // speed pays out as a named popup once the pilot climbs out of it (or lands).
@@ -330,8 +338,14 @@ public partial class PlayerFeel : Node3D
             {
                 _stepAccum -= 1f;
                 float run = Mathf.Clamp(speed / _player.RunSpeed, 0f, 1f);
-                Play(Surfaces.Steps(SurfaceUnderfoot()), 0.22f + 0.45f * run,
-                    0.9f + (float)_rng.NextDouble() * 0.2f);
+                // wading (#380): a slosh a stride instead of the ground's step, louder deeper; both
+                // under the world, never on top of it: a step is there, not a drum (#375)
+                if (_player.WadeDepth > 0.06f)
+                    Play(SfxSynth.WadeBank, (0.13f + 0.2f * run) * Wading.StrideVolume(_player.WadeDepth) + 0.05f,
+                        1.05f - 0.15f * Mathf.Clamp(_player.WadeDepth, 0f, 1f) + (float)_rng.NextDouble() * 0.1f);
+                else
+                    Play(Surfaces.Steps(SurfaceUnderfoot()), 0.14f + 0.3f * run,
+                        0.9f + (float)_rng.NextDouble() * 0.2f);
             }
         }
         else _stepAccum = 0.6f;   // the first step after stopping lands promptly
@@ -351,7 +365,10 @@ public partial class PlayerFeel : Node3D
             }
             _carEngine.Set(engine.Rpm01, engine.Throttle, Mathf.Clamp(engine.Throttle * 0.8f + 0.2f * engine.Rpm01, 0f, 1f),
                 // half what it was: at 0.75 a car at redline drowned every other sound in the game
-                _player.EngineOn ? 0.15f + 0.22f * engine.Rpm01 : 0f);
+                !_player.EngineOn ? 0f
+                // a steam engine at STOP is silent (#303)
+                : engine is Steamer ? (engine.Rpm01 > 0.02f ? 0.18f + 0.25f * engine.Rpm01 : 0f)
+                : 0.15f + 0.22f * engine.Rpm01);
         }
         else _carEngine?.Set(0, 0, 0, 0);
 
@@ -421,7 +438,7 @@ public partial class PlayerFeel : Node3D
 
     private AudioStreamPlayer Loop(AudioStream stream)
     {
-        var p = new AudioStreamPlayer { Stream = stream, VolumeDb = -80f, Autoplay = true, Bus = SfxBus.Name };
+        var p = new AudioStreamPlayer { Stream = stream, VolumeDb = -80f, Autoplay = true, Bus = SfxBus.Player };
         AddChild(p);
         return p;
     }
@@ -480,7 +497,7 @@ public partial class PlayerFeel : Node3D
     private void OnLanded(float fall)
     {
         float hard = Mathf.Clamp((fall - 2f) / 9f, 0f, 1f);
-        Play(Surfaces.Landing(SurfaceUnderfoot()), 0.25f + 0.75f * hard, 1.15f - 0.35f * hard);
+        Play(Surfaces.Landing(SurfaceUnderfoot()), 0.2f + 0.6f * hard, 1.15f - 0.35f * hard);
         SteeringWheel.Knock(hard * 0.7f);
         AddTrauma(hard * 0.65f);
 
@@ -812,6 +829,40 @@ public partial class PlayerFeel : Node3D
         label.Text = shown;
     }
 
+    /// <summary>
+    /// An airliner's HUD line (#414) until the cockpit's screens show it (#421): speed in knots, altitude
+    /// and vertical speed in feet, the levers' N1, the flaps, the gear, the brakes.
+    /// </summary>
+    private void AppendAirliner(System.Text.StringBuilder sb, Airliner a)
+    {
+        var s = a.State;
+        const float Knot = 0.514444f, Foot = 0.3048f;
+        float altitude = _player.Origin is { } o ? (float)o.ToGlobal(_player.GlobalPosition).Alt : _player.GlobalPosition.Y;
+        sb.Append($"{s.Ias / Knot:0} kt    {altitude / Foot:0} ft    {s.Velocity.Y / Foot * 60f:+0;-0;0} fpm");
+        sb.Append($"    N1 {s.Spool * 100f:0}%");
+        if (s.Reverse > 0.05f) sb.Append(" REV");
+        sb.Append("    FLAPS ").Append(a.Spec.FlapNames[s.FlapLever]);
+        if (Mathf.Abs(s.Flaps - s.FlapLever) > 0.02f) sb.Append('~');
+        sb.Append(s.GearBroken ? "    GEAR DAMAGED" : s.Gear >= 1f ? "    GEAR DOWN" : s.Gear <= 0f ? "    GEAR UP" : "    GEAR MOVING");
+        if (s.SpeedBrake > 0) sb.Append(s.SpeedBrake == 1 ? "    SPD BRK ½" : "    SPD BRK FULL");
+        if (s.ParkingBrake) sb.Append("    PARK BRK");
+        else if (s.Braking > 0.05f) sb.Append("    BRAKES");
+        if (!s.OnGround && s.Alpha > s.AlphaStall - 0.04f) sb.Append("    STALL");
+        if (s.Ias > a.Spec.FlapLimit[s.FlapLever] && s.FlapLever > 0) sb.Append("    FLAPS OVERSPEED");
+        else if (s.Ias > a.Spec.Vmo) sb.Append("    OVERSPEED");
+        if (!s.OnGround && s.Gear < 1f && _player.Clearance < 230f && s.Velocity.Y < 0f) sb.Append("    TOO LOW GEAR");
+        if (Airliner.Handling != AirlinerHandling.Sim) return;
+        // light sim (#415), on a line of its own: what is running, the autopilot's targets, the fuel and the trim
+        sb.Append('\n');
+        if (s.Lit < a.Spec.Engines)
+            sb.Append(s.Starting ? (s.Apu < 1f ? $"APU {s.Apu * 100f:0}%    " : $"START ENG {Mathf.FloorToInt(s.Lit) + 1}    ") : "ENGINES OFF    ");
+        if (s.Autopilot)
+            sb.Append($"AP HDG {Mathf.PosMod(-Mathf.RadToDeg(s.ApHeading), 360f):000} ALT {s.ApAltitude / Foot:0} SPD {s.ApSpeed / Knot:0}    ");
+        sb.Append($"FUEL {s.Fuel:0} kg");
+        if (s.Fuel <= 0f) sb.Append(" EMPTY");
+        if (!a.Spec.FlyByWire) sb.Append($"    TRIM {Mathf.RadToDeg(s.TrimAlpha):0.0}");
+    }
+
     private static void AppendRetarder(System.Text.StringBuilder sb, Truck t)
     {
         int level = t.Box.RetarderLevel;
@@ -859,6 +910,8 @@ public partial class PlayerFeel : Node3D
                 while (lead < wear.Length && char.IsWhiteSpace(wear[lead])) lead++;
                 sb.Append(wear, lead, wear.Length - lead);
             }
+            else if (_player.Vehicle is Airliner jetliner)
+                AppendAirliner(sb, jetliner);
             else if (_player.IsFlying)
             {
                 sb.Append($"{speed * 3.6f:0} km/h    {_player.Clearance:0} m");
@@ -878,6 +931,16 @@ public partial class PlayerFeel : Node3D
                 sb.Append($"{speed * 3.6f:0} km/h    ");
                 if (c.Gear < 0) sb.Append('R'); else sb.Append(c.Gear);
                 sb.Append($"    {c.Rpm:0} rpm").Append(wear);
+            }
+            else if (_player.Vehicle is Steamer steamer)
+            {
+                // the bridge: the log in knots, the telegraph's order, the shaft
+                var s = steamer.State;
+                sb.Append($"{speed / 0.5144f:0.0} kn  {speed * 3.6f:0} km/h    ").Append(Telegraph.Name(steamer.Order));
+                sb.Append($"    {steamer.Rpm:0} rpm");
+                if (s.Shaft < -0.01f) sb.Append(" ASTERN");
+                if (s.Grounded) sb.Append("    AGROUND");
+                if (steamer.DoorsOpen != 0) sb.Append("    GANGWAY OPEN");
             }
             else if (_player.Vehicle is Boat boat)
             {

@@ -33,6 +33,7 @@
   the ground, a roof or a car (the splat rides on it); a player it was not meant for is passed
   through. Splats are an alpha-scissor quad (works in the Compatibility renderer, unlike `Decal`) that
   shrinks away after 40 s.
+  A player playing the pigeon (#217) drops through the same broadcast, server-checked, with its name (`player/pigeon`).
 - **Snapshot rates**: flying every tick (8 Hz), walking and swimming every 4th, perched and dead every
   8th (1 Hz); a puppet is dropped after 4.5 s unheard.
 - **Check**: `TOWN=1 [WINDOWED=1] SERVER_ARGS= UNITSPORT_CHUNKS=<dir> tools/birdnetcheck.sh E,N` —

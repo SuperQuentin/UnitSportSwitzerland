@@ -87,6 +87,7 @@ public partial class Ambience : Node, IOriginShiftAware
     // --- brook ---
     private readonly BrookSynth _brookSynth = new(new Random(7));
     private AudioStreamPlayer3D _brook = null!;
+    private AirBed _air = null!;
     private AudioStreamGeneratorPlayback? _brookPb;
     private Vector2[] _push = [];
     private readonly Dictionary<TileId, List<RoadSegment>?> _water = new();
@@ -123,6 +124,9 @@ public partial class Ambience : Node, IOriginShiftAware
             Bus = SfxBus.Name, UnitSize = 6f, MaxDistance = 140f,
         };
         AddChild(_brook);
+        // the wind and the leaves under everything else (#375)
+        _air = new AirBed();
+        AddChild(_air);
 
         // bells are the expensive renders (a church bell is ~150k samples x 20 partials); doing
         // them off the main thread keeps the first frames smooth. Only plain float arrays cross.
@@ -214,6 +218,7 @@ public partial class Ambience : Node, IOriginShiftAware
             _queue.Clear();
             _brookGoal = 0;
             PumpBrook(delta, default);
+            _air?.Step(delta, default, 0f, 0f, 0f);
             return;
         }
 
@@ -240,6 +245,7 @@ public partial class Ambience : Node, IOriginShiftAware
             }
 
         PumpBrook(delta, pos);
+        _air.Step(delta, pos, _wooded, _altitude, Volume);
     }
 
     private WorldOrigin? ResolveOrigin()

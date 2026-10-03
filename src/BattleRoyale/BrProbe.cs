@@ -13,6 +13,7 @@ namespace UnitSport.BattleRoyale;
 /// <item>A logs in as admin, opens a lobby and starts the match once B has joined.</item>
 /// <item>Both are dropped in the region with an empty pack, a knife and bandages; the travel menu is locked.</item>
 /// <item>B stands outside the zone until it hurts, then next to A.</item>
+/// <item>A, an admin, gets no fly camera, debug menu, catalogue or <c>/spawn</c> in the match (#425), and forces the zone to close (<c>/br zone</c>).</item>
 /// <item>A stabs B until it is down.</item>
 /// <item>B must stay down (eliminated, no revive), spectate, and see the kill in its feed.</item>
 /// <item>Both see A win; after the results both are back where they started, with their own packs.</item>
@@ -65,6 +66,7 @@ public partial class BrProbe : ChatProbe
         if (Br!.State.Entrants.Count < 2) { Fail("B never joined"); return; }
         Chat.Send("/br start");
         if (!await Dropped()) return;
+        await NoAdminTools(Me!);
 
         // the loot (#194): crates and vehicles came with the drop; a supply crate, emptied
         var me = Me!;
@@ -115,6 +117,24 @@ public partial class BrProbe : ChatProbe
         Expect(await Until(() => b.Down != 0, 3), "B is down");
         await LootDeathBox(me);
         await Ended();
+    }
+
+    /// <summary>
+    /// An admin in the match plays on equal terms (#425): no fly camera, debug menu, catalogue or
+    /// <c>/spawn</c>. Then <c>/br zone</c> ends the loot time: the zone closes at once.
+    /// </summary>
+    private async Task NoAdminTools(FootPlayer me)
+    {
+        Expect(Permissions.IsAdmin && !DebugMenu.Allowed && !CatalogueUi.Allowed && !Permissions.CanSpawnVehicles,
+            "an admin in the match: no debug menu, catalogue or vehicle spawning");
+        GetParent<ClientWorld>().ToggleMode();
+        await Seconds(0.3);
+        Expect(me.IsViewing, $"T is refused: no fly camera in the match ({GetViewport().GetCamera3D()?.GetPath()})");
+        Chat!.Send("/spawn knife");
+        Expect(await Until(() => _heard.Any(l => l.Contains(ChatManager.NotInMatch)), 5), "/spawn is refused in the match");
+        Expect(Br!.ZoneNow is { Phase: 0, Shrinking: false }, $"the zone waits while looting (phase {Br.ZoneNow?.Phase})");
+        Chat.Send("/br zone");
+        Expect(await Until(() => Br.ZoneNow is { Shrinking: true }, 5), $"/br zone: the zone closes at once (phase {Br.ZoneNow?.Phase})");
     }
 
     private async Task RunB()
@@ -223,7 +243,7 @@ public partial class BrProbe : ChatProbe
         if (!await Until(() => Br!.InMatch, 60)) { Fail("never dropped"); return false; }
         Expect(_items.Inventory.InMatch && _items.Inventory.Contains(ItemId.Knife) && !_items.Inventory.Contains(ItemId.Binoculars),
             "a match pack: a knife, nothing from free roam");
-        Expect(Permissions.RidesLocked, "the travel menu is locked");
+        Expect(Permissions.InMatch, "the travel menu is locked");
         if (!await Flown()) return false;
         await Seconds(4.0);
         var s = Br!.State;
@@ -264,7 +284,7 @@ public partial class BrProbe : ChatProbe
         if (!await Until(() => !Br!.InMatch, 40)) { Expect(false, "released after the results"); return; }
         Expect(!_items.Inventory.InMatch && _items.Inventory.Contains(ItemId.Binoculars) && !_items.Inventory.Contains(ItemId.Knife),
             "the free-roam pack is back, the knife is gone");
-        Expect(!Permissions.RidesLocked, "the travel menu is open again");
+        Expect(!Permissions.InMatch, "the travel menu is open again");
         Expect(await Until(() => BrCrates.Instance?.All.Any() != true && Vehicles() == 0, 10),
             $"the match's crates and vehicles are gone ({BrCrates.Instance?.All.Count()} crates, {Vehicles()} vehicles)");
         await Seconds(5.0);

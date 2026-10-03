@@ -52,6 +52,12 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     /// <summary>Where interiors live: far below the lowest ground in Switzerland (193 m).</summary>
     public const float InteriorBaseY = -3000f;
 
+    /// <summary>
+    /// A falling item or radio below this fell through everything and settles where it is: well
+    /// under the interiors, so one thrown inside a room still flies (#388).
+    /// </summary>
+    public const float LostBelowY = InteriorBaseY - 2000f;
+
     private const float DoorReach = 1.6f;
     private const float ExitReach = 1.8f;
     /// <summary>Server-side check: generous, since the player's position is a relayed copy.</summary>
@@ -548,7 +554,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     /// <summary>A door opened or shut: its sound on both sides, and the interior behind it.</summary>
     private void DoorMoved(string door, bool open)
     {
-        var listener = GetViewport()?.GetCamera3D()?.GlobalPosition;
+        var listener = Audio.Ears.Of(this);
         if (_links.TryGetValue(door, out var link))
         {
             _sounds?.Door(link.Outside.Origin + link.Outside.Basis.Z * 0.3f, open);
@@ -988,8 +994,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             Maintain();
         }
 
-        if (_sounds != null && GetViewport()?.GetCamera3D() is { } ear)
-            _sounds.Tick(delta, ear.GlobalPosition, _occupied, StreetSource(ear.GlobalPosition));
+        if (_sounds != null && Audio.Ears.Of(this) is { } ear)
+            _sounds.Tick(delta, ear, _occupied, StreetSource(ear));
 
         UpdatePrompt(delta);
     }
@@ -1027,7 +1033,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             if (p.Indoors && _current != null)
             {
                 door = ExitAt(p)?.Door;
-                if (door == null) text = Loot.LootService.Instance?.PromptFor(p);
+                if (door == null) text = ChurchRadios.PromptFor(p) ?? Loot.LootService.Instance?.PromptFor(p);
             }
             else if (!p.Indoors) door = OutsideDoorInReach(p.GlobalPosition);
             if (door != null)
@@ -1132,6 +1138,16 @@ public partial class InteriorNode : Node3D
     private readonly Dictionary<string, DoorLeaf> _shutters = new();
 
     public InteriorLayout Layout { get; private init; } = null!;
+
+    /// <summary>This interior's material: its light table and its frame (#388).</summary>
+    private ShaderMaterial? _lit;
+
+    public override void _Notification(int what)
+    {
+        // the shader lights in the interior's own frame: world -> local, kept through origin shifts
+        if (_lit != null && (what == NotificationTransformChanged || what == NotificationEnterTree) && IsInsideTree())
+            _lit.SetShaderParameter("interior_frame", new Projection(GlobalTransform.AffineInverse()));
+    }
 
     /// <summary>
     /// The interior a point far underground is in: the one whose plan contains it (a metre of
@@ -1241,8 +1257,22 @@ public partial class InteriorNode : Node3D
         ArrayMesh? mesh = null)
     {
         var node = new InteriorNode { Name = "Interior_" + layout.Key, Transform = placement, Layout = layout };
-        node.AddChild(new MeshInstance3D { Name = "Mesh", Mesh = mesh ?? BuildMesh(data, material) });
+        // lit by its own windows and lamps (#388): its own material, holding the building's light
+        // table, for the rooms and everything in them (leaves, figures, lock doors)
+        var lit = Styles.StyleKit.Material(Styles.MaterialRole.Interior);
+        var lights = RoomLights.Build(layout);
+        lit.SetShaderParameter("room_lights", lights.Texture);
+        lit.SetShaderParameter("floor_base", lights.FloorBase);
+        lit.SetShaderParameter("storey_height", lights.StoreyHeight);
+        lit.SetShaderParameter("floor_count", lights.Floors);
+        node._lit = lit;
+        node.SetNotifyTransform(true);
+        material = lit;
+        var room = new MeshInstance3D { Name = "Mesh", Mesh = mesh ?? BuildMesh(data, material), MaterialOverride = lit };
+        node.AddChild(room);
         if (mesh == null) node.AddBody(data.Collision);
+        // a church's rat and congregation, which dance to the chess type beat (#370)
+        if (data.Figures is { Length: > 0 } figures) node.AddChild(ChurchStage.Create(node, figures, material, room));
 
         // the front doors, shut: the way out is to open one, not to walk into the void
         foreach (var e in layout.AllEntrances())

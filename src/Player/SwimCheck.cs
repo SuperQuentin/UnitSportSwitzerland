@@ -18,8 +18,13 @@ namespace UnitSport.Player;
 /// <item>A car sinks: the driver comes out swimming at the surface.</item>
 /// <item>A 30 m drop into deep water costs nothing, into 1.6 m of water it hurts; a wingsuit
 /// opened over the lake comes down swimming, uncrashed.</item>
+/// <item>Wading (#380): ankle deep the walk keeps its pace, knee deep it slows a little, waist deep
+/// a lot (a run more than a walk).</item>
+/// <item>A crash ragdoll thrown into the lake (#380) plunges, floats limp at the surface on a chop,
+/// then comes round swimming.</item>
 /// </list>
-/// Prints <c>[swimcheck] RESULT: ok</c> or <c>RESULT: FAILED (n)</c>.
+/// <c>--swimonly a,b</c> runs only those steps (walkin swimout dive climb wadeout drown car highdive
+/// wingsuit wade ragdoll). Prints <c>[swimcheck] RESULT: ok</c> or <c>RESULT: FAILED (n)</c>.
 /// </summary>
 public partial class SwimCheck : Node
 {
@@ -132,15 +137,20 @@ public partial class SwimCheck : Node
 
         try
         {
-            await WalkIn();
-            await SwimOut();
-            await Dive();
-            await ClimbOut();
-            await WadeOut();
-            await Drown();
-            await CarSinks();
-            await HighDives();
-            await Wingsuit();
+            // --swimonly wade,ragdoll (#380): only those steps, for pictures or a quick look
+            var only = CmdArgs.Value("--swimonly")?.Split(',');
+            bool Step(string name) => only == null || Array.IndexOf(only, name) >= 0;
+            if (Step("walkin")) await WalkIn();
+            if (Step("swimout")) await SwimOut();
+            if (Step("dive")) await Dive();
+            if (Step("climb")) await ClimbOut();
+            if (Step("wadeout")) await WadeOut();
+            if (Step("drown")) await Drown();
+            if (Step("car")) await CarSinks();
+            if (Step("highdive")) await HighDives();
+            if (Step("wingsuit")) await Wingsuit();
+            if (Step("wade")) await Wade();
+            if (Step("ragdoll")) await RagdollIntoLake();
         }
         catch (Exception e) { _failures++; GD.PrintErr($"[swimcheck] FAIL exception {e}"); }
         ReleaseAll();
@@ -174,6 +184,8 @@ public partial class SwimCheck : Node
     }
 
     private float Sub => Level - _me.GlobalPosition.Y;
+
+    private Loot.Gathering? Gather => GetTree().Root.FindChild("Gathering", true, false) as Loot.Gathering;
 
     // ---- the checks ---------------------------------------------------------------------
 
@@ -481,7 +493,138 @@ public partial class SwimCheck : Node
         Expect(_me.Health >= health - 0.5f && !_me.KnockedOut, $"uncrashed (health {health:F0} -> {_me.Health:F0})");
     }
 
+    /// <summary>Course x (metres from the start) on the beach's shelf where the still water is <paramref name="depth"/> deep along y.</summary>
+    private static double ShelfAt(float depth, double y)
+    {
+        for (double x = Lake.ShoreX; x < Lake.ShoreX + 160; x += 0.5)
+            if (Level - Bed(At(x, y)) >= depth) return x;
+        return Lake.ShoreX + 160;
+    }
+
+    private async Task Wade()
+    {
+        Log("-- wading: slower with depth (#380)");
+        _me.LookYaw = YawOf(East) + 1.25f;
+        _me.LookPitch = -0.3f;
+        var north = (At(0, 100) - At(0, 0)).Normalized();
+        float walk = 0f, run = 0f;
+        // water is collected standing in it, never from the shore (#380)
+        await StandAt(Lake.ShoreX - 3, -60);
+        _me.LookYaw = YawOf(East);
+        await Wait(0.6);
+        Expect(Gather?.Target != Loot.Gathering.Resource.Water, $"on the dry beach facing the lake: no water offered ({Gather?.Target})");
+        if (ShotsMode)
+        {
+            await Shot("gather_shore_none", null, null);
+            _me.LookYaw = YawOf(East) + 1.25f;
+        }
+        foreach (var (name, depth) in new[] { ("ankle", 0.12f), ("knee", Wading.Knee), ("waist", 1.0f) })
+        {
+            double x = ShelfAt(depth, -60);
+            foreach (bool running in new[] { false, true })
+            {
+                // along the shelf, so the depth stays as it is
+                await StandAt(x, -60);
+                _wish = north;
+                _run = running;
+                await Wait(1.2);
+                var from = _me.GlobalPosition;
+                float wade = _me.WadeDepth;
+                await Wait(2.5);
+                float pace = (_me.GlobalPosition - from).Slide(Vector3.Up).Length() / 2.5f;
+                float full = running ? _me.RunSpeed : _me.WalkSpeed;
+                Log($"{name} deep ({wade:F2} m over the feet), {(running ? "running" : "walking")}: {pace:F2} m/s, {pace / full:F2} of its pace on land");
+                Expect(!_me.IsSwimming, $"{name} deep: still on its feet");
+                if (!running && Gather != null)
+                    Expect(Gather.Target == Loot.Gathering.Resource.Water, $"{name} deep: water offered ({Gather.Target})");
+                if (name == "ankle") Expect(pace > full * 0.92f, $"ankle deep: the pace is kept ({pace / full:F2})");
+                else if (name == "knee") Expect(pace > full * 0.68f && pace < full * 0.93f, $"knee deep: a little slower ({pace / full:F2})");
+                else
+                {
+                    Expect(pace < full * (running ? 0.35f : 0.55f), $"waist deep: much slower ({pace / full:F2})");
+                    if (running) run = pace; else walk = pace;
+                }
+                if (ShotsMode && !running && name != "ankle")
+                {
+                    if (name == "knee") { _wish = Vector3.Zero; await Wait(0.5); await Shot("gather_wading", null, null); _wish = north; }
+                    await Shot($"wade_{name}", null, null);
+                    WaterField.TryLevelAt(_me.GlobalPosition, out float level);
+                    await CloseShot($"wade_{name}_side", _me.GlobalPosition + north * 0.6f + Vector3.Up * 0.9f, level);
+                }
+            }
+        }
+        Expect(run < walk * 2.2f, $"waist deep a run gains little on a walk ({run:F2} against {walk:F2} m/s)");
+        ReleaseAll();
+    }
+
+    private async Task RagdollIntoLake()
+    {
+        Log("-- a crash ragdoll into the lake (#380)");
+        await SeaState("chop", 0.35f);
+        await StandAt(0, 0);
+        var from = At(Lake.ShoreX + 400, 20, Level + 4f);
+        _me.DebugThrow(from, East * 9f + Vector3.Up * 3f);
+        Expect(_me.Ragdolled, "thrown: limp");
+        double t = 0, wetAt = -1, swimAt = -1, upAt = -1;
+        float deepest = 0f, lo = float.MaxValue, hi = float.MinValue, travel = 0f;
+        Vector3? settled = null;
+        bool shot = false;
+        double start = Time.GetTicksMsec() / 1000.0;
+        while (t < 14)
+        {
+            await Wait(0.05);
+            t = Time.GetTicksMsec() / 1000.0 - start;
+            if (!_me.Ragdolled) { swimAt = t; break; }
+            if (_me.RagdollPelvis is not { } hip || !WaterField.TryLevelAt(hip, out float level)) continue;
+            float sub = level - hip.Y;
+            if (wetAt < 0 && sub > 0f) wetAt = t;
+            if (wetAt < 0) continue;
+            deepest = Mathf.Max(deepest, sub);
+            // back up from the plunge: the hips by the surface again, rising no more
+            if (upAt < 0 && t - wetAt > 0.3 && sub < 0.6f) upAt = t;
+            if (upAt < 0 || t - upAt < 0.5) continue;
+            // floating: the hips' depth under the moving surface, and how far it drifts
+            lo = Mathf.Min(lo, sub);
+            hi = Mathf.Max(hi, sub);
+            settled ??= hip;
+            travel = (hip - settled.Value).Slide(Vector3.Up).Length();
+            if (ShotsMode && !shot && t - upAt > 1.0)
+            {
+                shot = true;
+                await Shot("ragdoll_float", null, null, settle: 0);
+                await CloseShot("ragdoll_float_close", hip, level);
+            }
+        }
+        Log($"in the water after {wetAt:F1} s, the hips {deepest:F2} m down at the deepest, back up after {upAt - wetAt:F1} s; afloat they ride {lo:F2}..{hi:F2} m under the surface, drifting {travel:F2} m; swimming after {swimAt:F1} s");
+        Expect(wetAt > 0, "the body goes into the lake");
+        Expect(deepest > 0.35f, $"it plunges under ({deepest:F2} m)");
+        Expect(upAt > 0 && upAt - wetAt < 5, $"and comes back up ({upAt - wetAt:F1} s)");
+        Expect(lo > -0.25f && hi < 0.75f, $"floating limp at the surface on the chop (hips {lo:F2}..{hi:F2} m under)");
+        Expect(swimAt > 0 && swimAt - upAt >= 2.2, $"afloat a while as a ragdoll before coming round ({swimAt - upAt:F1} s)");
+        Expect(swimAt > 0 && swimAt - wetAt < 9, "then swims");
+        await Wait(1.5);
+        Expect(_me.IsSwimming && !_me.HeadUnderwater, $"swimming at the surface (feet {_me.SwimDepth:F2} m down)");
+        Expect(Gather?.Target != Loot.Gathering.Resource.Water, $"swimming: no water offered ({Gather?.Target})");
+        await SeaState("calm", 0f);
+    }
+
     // ---- screenshots ----------------------------------------------------------------------
+
+    /// <summary>From a camera of its own, 3.5 m off and a metre over the water, looking at <paramref name="at"/>.</summary>
+    private async Task CloseShot(string name, Vector3 at, float level)
+    {
+        var before = GetViewport().GetCamera3D();
+        var side = (East.Cross(Vector3.Up) * 2.6f + East * -2.3f);
+        var eye = at + side with { Y = 0f };
+        eye.Y = level + 1.1f;
+        var cam = new Camera3D { Fov = 55f };
+        AddChild(cam);
+        cam.GlobalTransform = new Transform3D(Basis.LookingAt(at with { Y = Mathf.Max(at.Y, level) - 0.1f } - eye, Vector3.Up), eye);
+        cam.MakeCurrent();
+        await Shot(name, null, null, settle: 0);
+        before?.MakeCurrent();
+        cam.QueueFree();
+    }
 
     private async Task Shot(string name, float? yaw, float? pitch, double settle = 0.35)
     {

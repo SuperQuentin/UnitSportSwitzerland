@@ -51,6 +51,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Take the radio you point at into your hand", PlayerInput.UseItem),
             new("Pick a hotbar slot", Keys: "1–6 / Wheel", Pad: "D-pad →"),
             new("Quick wheel (hold)", PlayerInput.QuickWheel),
+            new("Emote wheel: dances and gestures (hold; tap: stop / again)", PlayerInput.EmoteWheel),
             new("Inventory", PlayerInput.Inventory),
             new("Gather stone, water, wood (hold)", PlayerInput.Gather),
             new("Bird journal", PlayerInput.BirdJournal),
@@ -102,6 +103,28 @@ public partial class ControlsHelp : CanvasLayer
             new("Bus: doors", PlayerInput.CarDoor),
             new("Bus: kneel", PlayerInput.Kneel),
             new("Bus: destination display", PlayerInput.Destination),
+        }),
+        ("Paddle steamer", new Row[]
+        {
+            new("Telegraph: one step ahead / astern (FULL ASTERN .. STOP .. FULL AHEAD)", Keys: "{move_forward} / {move_back}", Pad: "Left stick up / down"),
+            new("Wheel (the rudder needs way on)", Keys: "{move_left} / {move_right}", Pad: "Left stick"),
+            new("Whistle (hold)", PlayerInput.Horn),
+            new("Gangways, stopped", PlayerInput.CarDoor),
+            new("Walk aboard by a gangway; E at the wheel in the wheelhouse drives, E at a seat sits", PlayerInput.InteractMount),
+        }),
+        ("Airliners", new Row[]
+        {
+            new("Thrust levers forward / back (held back at idle on the ground: reverse)", Keys: "{sprint} / {crouch_slide}", Pad: "RT / LT"),
+            new("Pitch and roll; on the ground: steer the nose wheel", Keys: "{move_forward}{move_left}{move_back}{move_right}", Pad: "Left stick"),
+            new("Wheel brakes (hold)", PlayerInput.Jump),
+            new("Flaps a notch down / up", Keys: "{flaps_down} / {flaps_up}", Pad: "RB / LB"),
+            new("Gear up / down (in the air)", PlayerInput.CarDoor),
+            new("Speedbrake: retracted, half, full", PlayerInput.Speedbrake),
+            new("Parking brake", PlayerInput.ParkingBrake),
+            new("Landing lights", PlayerInput.LightsToggle),
+            new("Light sim: start the engines / shut them down", PlayerInput.EngineToggle),
+            new("Light sim: autopilot on / off (then the stick turns the heading and altitude, the levers the speed)", PlayerInput.Autopilot),
+            new("Light sim: pitch trim nose down / up (AN-124, military freighter)", Keys: "{trim_nose_down} / {trim_nose_up}", Pad: "—"),
         }),
         ("Flying", new Row[]
         {

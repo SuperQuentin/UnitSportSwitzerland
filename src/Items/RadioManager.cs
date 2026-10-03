@@ -174,6 +174,13 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
             best = new Music(radio, radio.CdId, radio.StartedAt);
             bestDist = radio.GlobalPosition.DistanceTo(point);
         }
+        // the church radio (#370), inside the church this player is in
+        if (Interiors.ChurchRadios.Instance?.Music(point, bestDist) is { } church
+            && (!heard || church.Source is RadioSpeaker { Playing: true }))
+        {
+            best = church;
+            bestDist = church.Source.GlobalPosition.DistanceTo(point);
+        }
         if (Players == null) return best;
         double now = ClockSync.ServerNow;
         foreach (var p in Players())
@@ -218,7 +225,7 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
     /// How long a CD lasts, as far as this side can trust it: the library's word for a shared CD,
     /// the player's (bounded) for a personal one; negative when the CD cannot be played here.
     /// </summary>
-    private static float TrustedLength(int cdId, float claimed)
+    internal static float TrustedLength(int cdId, float claimed)
     {
         if (cdId > 0) return CdLibrary.Instance?.All.GetValueOrDefault(cdId) is { } cd ? cd.Duration : -1f;
         if (cdId < 0 && float.IsFinite(claimed) && claimed > 0) return Math.Min(claimed, CdBurner.MaxSeconds + 1);

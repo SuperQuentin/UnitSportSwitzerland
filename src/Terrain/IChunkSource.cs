@@ -55,4 +55,10 @@ public interface IChunkSource
     /// before it existed, in which case the world simply ends at the last LOD ring as it used to.
     /// </summary>
     Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// The region's boat landings and harbour jetties (#377, <c>landings.json</c>); null when the
+    /// region has none or was built before them. Decorators forward it.
+    /// </summary>
+    Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => Task.FromResult<LandingIndex?>(null);
 }

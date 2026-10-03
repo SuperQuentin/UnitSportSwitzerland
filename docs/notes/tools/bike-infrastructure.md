@@ -74,6 +74,15 @@
   painted bike lane moves out too: lanes are painted per final piece (`PaintEmitter.BikeLanes`),
   offset along a steady shift, as their own geometry along a taper (no symbol there); beside a
   layout (b) right pocket (#351) the pocket paints it instead (`skipLeft/skipRight`).
+  **Verge gap** (#352, `CutVerges`): where a placed left-turn pocket's lane appears (the hatch's
+  end, or a merged strip's entry; `PocketOpening`), the approach's right side loses its grass
+  verge over the 4 m just upstream (`VergeCutM`): the path takes the verge's width (the bands
+  outside stay put) and its sloped kerb (ASTRA "A") meets the carriageway, so a cyclist can drop
+  onto the road and cross to the pocket. In every final piece the range overlaps (a sliver under
+  0.5 m is none; that was a bug: a cut starting exactly at a piece boundary was counted and not
+  made); shift and yield bits carry over. Layouts 1/3 already have that kerb. Geneva centre: 34
+  gaps, checked in the data with `--dump-street` (now printing each side's bands) at three of
+  them and seen from above at LV95 2498957,1118110.
   A pocket beside a bike lane is widened so its lanes are full width along the solid centre
   line, with a 1:6 lead-in before it (`turn-lanes`); a street that got paths has no painted lane
   and gets no such widening (#351: the pocket reads the painted lines, not the line's own sides).

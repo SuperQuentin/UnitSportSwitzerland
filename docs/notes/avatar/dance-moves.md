@@ -17,6 +17,7 @@
 | Pop | 6 | Floss |
 | Pop | 7 | OrangeJustice |
 | Pop | 8 | GangnamStyle |
+| Pop | 9 | Ymca (#404) |
 | Rock (MoveCount 7) | 0 | Headbang |
 | Rock | 1 | AirGuitar |
 | Rock | 2 | FistPump |
@@ -40,12 +41,14 @@
 | HipHop | 5 | Moonwalk |
 | HipHop | 6 | RunningMan |
 | HipHop | 7 | Floss |
+| HipHop | 8 | CabbagePatch (#404) |
 | Chill (MoveCount 6) | 0 | Sway |
 | Chill | 1 | HipSway |
 | Chill | 2 | ArmWave |
 | Chill | 3 | ClapBackbeat |
 | Chill | 4 | Moonwalk |
 | Chill | 5 | Bounce |
+| Chill | 6 | SwimDance (#404) |
 | Folk (MoveCount 7) | 0 | FolkClap |
 | Folk | 1 | HandsOnHipsSkip |
 | Folk | 2 | SideStepClap |
@@ -53,11 +56,25 @@
 | Folk | 4 | ClapBackbeat |
 | Folk | 5 | Macarena |
 | Folk | 6 | GangnamStyle |
+| Folk | 7 | ChickenDance (#404) |
 
-`MoveCount`: Pop 9, Rock 6, Electronic 7, HipHop 8, Chill 6, Folk 7. Tempo coverage: Sway/HipSway 60-110, ArmWave 60-130, Bounce 70-200, Headbang 90-200, FistPump 110-200, everything else inside 70-170, so 60-200 BPM is covered.
+| RatDance (MoveCount 4, #370) | 0 | RatSwing |
+| RatDance | 1 | RatArmPump |
+| RatDance | 2 | RatHeadBob |
+| RatDance | 3 | RatHop |
+
+`RatDance` is never analysed: `RadioBody.BeatOf` reports it for the chess type beat
+(`docs/notes/items/church-radio.md`), and its crowd slot is `RatSwing`, not Pogo/JumpTogether.
+
+`MoveCount`: Pop 10, Rock 7, Electronic 8, HipHop 9, Chill 7, Folk 8, RatDance 4. Tempo coverage: Sway/HipSway 60-110, ArmWave 60-130, Bounce 70-200, Headbang 90-200, FistPump 110-200, everything else inside 70-170, so 60-200 BPM is covered.
 
 Crowd moves (#261), outside the tables: `Move = HumanMeshBuilder.GroupPogo` (1000) is **Pogo**,
 `GroupJump` (1001) is **JumpTogether**.
+
+Emotes (#404), outside the tables too: `Move = HumanMeshBuilder.EmoteMoves` (2000) + the index in
+`EmoteTable` (`HumanMeshBuilder.Emotes.cs`, append only) is that emote whatever the style. Four
+gestures are emote-only (`Wave`, `Cheer`, `Salute`, `Shrug`); the rest of the catalog reuses the
+moves above. The wheel and the free clock: `docs/notes/player/emote-wheel.md`.
 
 ## Picking, flowing and crowds (#261)
 
@@ -426,6 +443,32 @@ Crowd moves (#261), outside the tables: `Move = HumanMeshBuilder.GroupPogo` (100
   - Arms: `AKIMBO` both, with `up += 0.02*Hop(b)`.
   - Legs: standing leg `Planted(0.11, 0.04)` with `ankle.y += 0.04*Hop(b)` (off the ground mid-hop); lifted leg: `ankle.y += 0.14*Hop(b)`, `ankle.z += 0.10*Hop(b)`, toe down `liftFrac = Hop(b)`; LegFit.
 - **Moving variant:** legs walk (no hops). `kMov = 0.5`: `AKIMBO` hands, torso roll and twist only, bounce `py` clamped.
+
+## Moves added by #404 (code: `HumanMeshBuilder.Emotes.cs`)
+
+Authored like the others, numbers against the bone lengths; joint values are in the code, here the shape.
+
+- **Ymca** (Village People, 1978): one letter a beat, snapped in over 0.3 beat (`DSm`) and held. Y
+  arms up and out `(s*0.30, 0.38, 0.05)`; M hands resting on the head `(-s*0.10, 0.34, 0.04)`,
+  elbows flared (hint `(s, 0.2, 0)`); C both arms curved to `+X` (rig-R up-out, rig-L across the
+  chest at `(+0.24, -0.04, 0.30)`) with `phi = 0.12`; A straight arms meeting in a peak
+  `(-s*0.15, 0.47, 0.06)` (0.497 m: nearly full reach, so it reads straighter than M). 70-140 BPM.
+- **ChickenDance**: a section per beat, two hits in each (`DDip(frac(2b))`): beak (hands in front at
+  shoulder height bobbing), wings (wrists at the armpits, the elbow hint flapping), tail (squat
+  `py = -0.16`, `theta = 0.30`, hips wiggling `px = 0.06*sinT(2b)`), claps; sections crossfade over
+  0.15 beat with `Mix`. 90-140 BPM.
+- **CabbagePatch**: fists together (a fist's width apart) stirring a flat circle in front of the
+  chest, one turn per two beats, radius 0.16 x 0.08; hips the other way, twist with the hands. 80-120 BPM.
+- **SwimDance** (the Swim, 1964): a front-crawl windmill 0.44 m round each shoulder, one arm per
+  beat (the other half a cycle behind), `theta = 0.18`, the head rolling to breathe. 90-140 BPM.
+- **Wave** (gesture): the figure's right hand (rig-L) raised by `ArmChain(0.25, 0.30; pi/2 + 0.45*sinT(c), 0)`,
+  the forearm swinging through the vertical once a beat; the other arm hangs.
+- **Cheer** (gesture): both arms up in a V `(s*0.26, 0.34..0.40, 0.06)` pumping on the beat, a 10 cm
+  jump on beats 1 and 3 (`Air(b, 0.2, 0.85)`), looking up.
+- **Salute** (gesture): rig-L wrist at the brow `o(-0.02, 0.24, 0.16)`, elbow out, heels together,
+  held; the only move with no groove under it.
+- **Shrug** (gesture): once a bar, shoulders up 7 cm and hands out at the waist over beat 1, held,
+  let go over beats 3-4, the head tilting.
 
 ## Implementation hints
 

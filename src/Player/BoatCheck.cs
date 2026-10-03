@@ -36,6 +36,8 @@ public partial class BoatCheck : Node
     private readonly Func<FootPlayer?> _local;
     private readonly RideKind _kind;
     private readonly bool _shots;
+    /// <summary><c>shots,wake</c>: only the pictures of the wake on a gamey swell (#380).</summary>
+    private readonly bool _wakeOnly;
     private readonly string _name;
     private int _failures;
     private Action? _each;
@@ -49,6 +51,7 @@ public partial class BoatCheck : Node
         _name = parts[0] == "speedboat" ? "speedboat" : "jetski";
         _kind = _name == "speedboat" ? RideKind.Speedboat : RideKind.Jetski;
         _shots = parts.Length > 1 && parts[1] == "shots" && DisplayServer.GetName() != "headless";
+        _wakeOnly = _shots && parts.Length > 2 && parts[2] == "wake";
         Name = "BoatCheck";
     }
 
@@ -140,6 +143,12 @@ public partial class BoatCheck : Node
         if (me.Vehicle is not Boat boat) { Finish("not in a boat"); return; }
         var spec = boat.Spec;
         if (_shots) AddChild(_cam = new Camera3D { Name = "BoatCheckCamera", Fov = 60f });
+        if (_wakeOnly)
+        {
+            await WakeShots(me);
+            Finish(null);
+            return;
+        }
 
         await Calm(me, boat);
         await Plane(me, boat);
@@ -180,6 +189,9 @@ public partial class BoatCheck : Node
         Expect(draft > 0.1f && draft < 0.5f, $"floats at its draft ({draft:F2} m)");
         Expect(Mathf.Abs(Deg(s.Pitch)) < 4f && Mathf.Abs(Deg(s.Roll)) < 2f, "floats level in a calm");
         Expect(s.Velocity.Length() < 0.2f, "lies still in a calm");
+        // water is collected wading, never from a boat (#380)
+        if (GetTree().Root.FindChild("Gathering", true, false) is Loot.Gathering gather)
+            Expect(gather.Target != Loot.Gathering.Resource.Water, $"aboard: no water offered ({gather.Target})");
         await Shot("idle_calm", () => Look(me, side: 1f, back: 0.6f, up: 0.3f, distance: 1.7f));
     }
 
@@ -251,6 +263,82 @@ public partial class BoatCheck : Node
         Log(string.Create(CultureInfo.InvariantCulture, $"aground {Mathf.Abs(fromShore):F1} m {(fromShore < 0 ? "up the beach from" : "short of")} the waterline, {s.Velocity.Length():F2} m/s, bow {Deg(s.Pitch):F1}°"));
         Expect(stopped && fromShore > -12f, "runs aground on the beach and stops");
         me.RideControls = Helm(me, 0f);
+    }
+
+    // ---- the wake on the waves (#380), pictures only -------------------------------------------
+
+    /// <summary>Half ahead across a gamey swell: the wake's foam from above and from low aft, riding the waves.</summary>
+    private async Task WakeShots(FootPlayer me)
+    {
+        var at = At(Lake.ShoreX + 1100, -200);
+        float heading = West + 0.7f;
+        // the water slapping the hull (#380): how often and how hard, idle and under way
+        async Task Slaps(string what, float throttle, double seconds)
+        {
+            me.RideControls = Helm(me, throttle, hold: heading);
+            await Wait(2);
+            var slap = FindRig(me)?.Slap;
+            int n0 = slap?.Count ?? 0;
+            float s0 = slap?.Sum ?? 0f;
+            await Wait(seconds);
+            if (slap != null)
+                Log(string.Create(CultureInfo.InvariantCulture,
+                    $"hull slaps, {what}: {(slap.Count - n0) / seconds:F1} a second, mean strength {(slap.Sum - s0) / Mathf.Max(1, slap.Count - n0):F2}, {me.BoatMotion.WaterSpeed * 3.6f:F0} km/h"));
+        }
+        WaterField.TryLevelAt(at, out float level);
+        me.PlaceBoat(at with { Y = level - 0.2f }, heading);
+        await Slaps("calm, idle", 0f, 5);
+        // aboard, over the water: no "collect water" prompt (#380), the player's own view
+        await Shot("no_gather_prompt", null);
+        // the wheel straight, then hard over to starboard (#380): turned on the driver's own peer
+        Transform3D AtWheel()
+        {
+            var b = me.GlobalTransform.Basis;
+            var right = (b.X with { Y = 0 }).Normalized();
+            var aft = (b.Z with { Y = 0 }).Normalized();
+            var wheel = me.GlobalPosition + Vector3.Up * 0.98f + right * 0.46f - aft * 0.6f;
+            var eye = wheel + Vector3.Up * 0.5f + aft * 0.45f + right * 0.8f;
+            return new Transform3D(Basis.LookingAt(wheel - eye, Vector3.Up), eye);
+        }
+        await Shot("wheel_straight", AtWheel);
+        me.RideControls = () => new RideInput(0.12f, 0f, 1f, false);
+        await Wait(2);
+        if (FindRig(me) is { } wheeled)
+        {
+            Log(string.Create(CultureInfo.InvariantCulture, $"helm {(me.Vehicle as Boat)?.HelmNow:F2}: wheel turned {wheeled.WheelTurn:F2} rad"));
+            Expect(Mathf.Abs(wheeled.WheelTurn) > 1.5f, $"the wheel turns with the helm ({wheeled.WheelTurn:F2} rad)");
+            await Shot("wheel_hard_over", AtWheel);
+        }
+        me.RideControls = Helm(me, 0f);
+        me.PlaceBoat(at with { Y = level - 0.2f }, heading);
+        await SeaState("gamey", 1f);
+        await Slaps("gamey, idle", 0f, 6);
+        await Slaps("gamey, half ahead", 0.5f, 8);
+        Log(string.Create(CultureInfo.InvariantCulture, $"wake: {me.BoatMotion.WaterSpeed * 3.6f:F0} km/h through a gamey swell"));
+        await Shot("wake_swell_high", () => Look(me, side: 0.45f, back: 1f, up: 0.75f, distance: 3.6f));
+        await Shot("wake_swell_low", () => Look(me, side: 0.9f, back: 1f, up: 0.14f, distance: 2.6f));
+        await Wait(1.5);
+        await Shot("wake_swell_aft", () => Look(me, side: 0.1f, back: 1f, up: 0.3f, distance: 2.2f));
+        // from just over the water off the wake's side, looking along it: it goes over the crests and into the troughs
+        await Shot("wake_swell_water", () =>
+        {
+            var side = (me.GlobalTransform.Basis.X with { Y = 0 }).Normalized();
+            var aft = (me.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
+            var eye = me.GlobalPosition + side * 7f + aft * 26f;
+            eye.Y = (WaterField.TryLevelAt(eye, out float w) ? w : eye.Y) + 1.1f;
+            var target = me.GlobalPosition + aft * 9f;
+            target.Y = eye.Y - 1.2f;
+            return new Transform3D(Basis.LookingAt(target - eye, Vector3.Up), eye);
+        });
+        me.RideControls = Helm(me, 0f);
+    }
+
+    private static Avatar.BoatRig? FindRig(Node n)
+    {
+        if (n is Avatar.BoatRig r) return r;
+        foreach (var c in n.GetChildren())
+            if (FindRig(c) is { } found) return found;
+        return null;
     }
 
     // ---- gamey ---------------------------------------------------------------------------------

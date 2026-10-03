@@ -85,6 +85,23 @@ public partial class ChunkNode : Node3D
         return mesh;
     }
 
+    /// <summary>
+    /// The tile's piers (#377) as one more surface of its roads mesh, with their own (prop)
+    /// material; a new mesh when the tile has no roads drawn.
+    /// </summary>
+    public static ArrayMesh WithPiers(ArrayMesh? roads, PierMeshBuilder.MeshData data, Material material)
+    {
+        using var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
+        arrays[(int)Mesh.ArrayType.Color] = data.Colors;
+        arrays[(int)Mesh.ArrayType.Index] = data.Indices;
+        if (roads == null) return Finish(arrays, material);
+        roads.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        roads.SurfaceSetMaterial(roads.GetSurfaceCount() - 1, material);
+        return roads;
+    }
+
     private static Godot.Collections.Array RoadArrays(RoadMeshBuilder.MeshData data)
     {
         var arrays = new Godot.Collections.Array();

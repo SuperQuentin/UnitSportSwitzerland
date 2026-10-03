@@ -7,9 +7,10 @@ namespace UnitSport.Audio.Cd;
 /// <summary>
 /// The broad feel of a track, decided once by <see cref="BeatAnalyzer"/> when the CD is burnt.
 /// Picks which dance moves the figures draw from (<c>Avatar.HumanMeshBuilder.ApplyDance</c>).
-/// Replicated as an int: append only.
+/// Replicated as an int: append only. <see cref="RatDance"/> is never analysed: the dance takes it
+/// for the chess type beat (<see cref="CdLibrary.RatBeatId"/>, #370).
 /// </summary>
-public enum MusicStyle { Pop = 0, Rock = 1, Electronic = 2, HipHop = 3, Chill = 4, Folk = 5 }
+public enum MusicStyle { Pop = 0, Rock = 1, Electronic = 2, HipHop = 3, Chill = 4, Folk = 5, RatDance = 6 }
 
 /// <summary>
 /// One burnt CD: the facts every peer needs to play it in time and dance to it. The audio itself
@@ -20,7 +21,9 @@ public enum MusicStyle { Pop = 0, Rock = 1, Electronic = 2, HipHop = 3, Chill = 
 /// <param name="Bpm">Tempo.</param>
 /// <param name="BeatOffset">Seconds from the start of the file to the first beat.</param>
 /// <param name="Energy">0..1, loudness of the track overall.</param>
-public sealed record CdInfo(int Id, string Title, float Duration, float Bpm, float BeatOffset, MusicStyle Style, float Energy)
+/// <param name="Source">Where a CD the game burns itself comes from (<see cref="CdLibrary.RatBeatSource"/>), else empty.</param>
+public sealed record CdInfo(int Id, string Title, float Duration, float Bpm, float BeatOffset, MusicStyle Style, float Energy,
+    string Source = "")
 {
     internal static readonly JsonSerializerOptions Json = new()
     {
@@ -40,12 +43,13 @@ public sealed record CdInfo(int Id, string Title, float Duration, float Bpm, flo
     public Godot.Collections.Dictionary ToDict() => new()
     {
         ["id"] = Id, ["title"] = Title, ["duration"] = Duration, ["bpm"] = Bpm,
-        ["offset"] = BeatOffset, ["style"] = (int)Style, ["energy"] = Energy,
+        ["offset"] = BeatOffset, ["style"] = (int)Style, ["energy"] = Energy, ["source"] = Source,
     };
 
     public static CdInfo FromDict(Godot.Collections.Dictionary d) => new(
         d["id"].AsInt32(), d["title"].AsString(), d["duration"].AsSingle(), d["bpm"].AsSingle(),
-        d["offset"].AsSingle(), (MusicStyle)d["style"].AsInt32(), d["energy"].AsSingle());
+        d["offset"].AsSingle(), (MusicStyle)d["style"].AsInt32(), d["energy"].AsSingle(),
+        d.TryGetValue("source", out var source) ? source.AsString() : "");
 
     /// <summary>One line for the UI and the logs: "Title · 128 bpm · Electronic · 3:42".</summary>
     public string Describe() =>

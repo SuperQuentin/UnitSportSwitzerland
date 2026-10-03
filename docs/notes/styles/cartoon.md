@@ -8,8 +8,9 @@ Phase 2 of `docs/plans/visual-styles.md` (#238), from the prototype (#181). Brea
 pastel greens, a soft rim, strong aerial haze.
 
 - **Shaders:** `cartoon_*` wrappers (`STYLE_LIT` + `STYLE_CARTOON`) over the same role bodies as
-  PS1 (`role-bodies`): terrain, road, building, water, tree, tree-far, prop, path. Interior and
-  snowfall stay PS1's, unshaded: rooms float in the dark under the terrain, out of the sun.
+  PS1 (`role-bodies`): terrain, road, building, water, tree, tree-far, prop, path. Snowfall
+  stays PS1's. `cartoon_interior` is unshaded (rooms float in the dark under the terrain, out of
+  the sun) with the room light in soft bands and the pastel grade (`terrain/interior-light`).
 - **The cel light** (`shaders/common/style.gdshaderinc`): one smoothstep terminator on N·L, the
   sun's shadow as the same band, a faint rim; the shade side is the environment's cool ambient.
   **Near the terminator the shadow term is faded out**: faces nearly edge-on to the sun

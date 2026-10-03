@@ -38,6 +38,9 @@ public partial class FootPlayer
 
     public bool Aboard => DeckOn != "";
 
+    /// <summary>For checks: how many walkable vehicles' decks are built round this player now.</summary>
+    public int DeckSetsBuilt => _decks.Count;
+
     /// <summary>For checks: the three seats nearest, with their distances, in the vehicle this player walks about in.</summary>
     public string SeatsNearHere()
     {
@@ -53,8 +56,24 @@ public partial class FootPlayer
     /// <summary>Knocked down (a hard hit, a vehicle's hard brake): lying, no control, for a moment.</summary>
     public bool Stunned => _stunTimer > 0f;
 
-    /// <summary>Decks are built for walkable vehicles whose middle is this near, m.</summary>
+    /// <summary>Decks are built for walkable vehicles whose middle is this near, m (a bus's).</summary>
     private const float DeckReach = 30f;
+
+    /// <summary>
+    /// How near a walkable vehicle's middle must be for its decks to be built: <see cref="DeckReach"/>,
+    /// or its decks' farthest reach from the middle plus 10 m when that is more (#303: a walker at the
+    /// bow of a 76 m steamer is 38 m from its middle, and had no deck under them at 30).
+    /// </summary>
+    private static float DeckReachOf(Rideable ride)
+    {
+        float far = 0f;
+        foreach (var deck in ride.Decks)
+        {
+            var a = deck.Aboard;
+            far = Mathf.Max(far, new Vector2(Mathf.Max(Mathf.Abs(a.Position.X), Mathf.Abs(a.End.X)), Mathf.Max(Mathf.Abs(a.Position.Z), Mathf.Abs(a.End.Z))).Length());
+        }
+        return Mathf.Max(DeckReach, far + 10f);
+    }
     /// <summary>Aboard, the body is a person's width: a bus's aisle is 57 cm between its seats.</summary>
     private const float AboardRadius = 0.2f;
 
@@ -175,6 +194,9 @@ public partial class FootPlayer
         // exception from the vehicle's hull come the frame the vehicle does — in between, the parked
         // bus closed round a player not excepted from it, and shoved them out onto its roof
         if (_deckWait > 0f && !Aboard) _deckScan = 0;
+        // airstairs whose platform moved (#417): their deck is built again at its new height
+        foreach (var set in _decks.Values)
+            if (set.Ride is Airstairs && set.Sections.Count > 0 && !ReferenceEquals(set.Sections[0].Deck, set.Ride.Decks[0])) _deckScan = 0;
         _deckScan -= dt;
         if (_deckScan <= 0) { _deckScan = 0.5; ScanDecks(); }
 
@@ -204,6 +226,8 @@ public partial class FootPlayer
                 {
                     bool open = (doors >> box.Door & 1) != 0;
                     shape.Disabled = box.Part == DeckPart.DoorShut ? open : !open;
+                    // a steamer's open plank tilts to the pier's head alongside (#383), as it is drawn
+                    if (open && box.Part == DeckPart.DoorStep && set.Ride is Steamer) FitPlank(shape, box.Door, frame.GlobalTransform);
                 }
             }
         }
@@ -212,9 +236,19 @@ public partial class FootPlayer
         var now = section.GlobalTransform.Orthonormalized();
         if (_deckCarried)
         {
+            // the section's whole motion since the last frame: along, round, and (a ship's deck,
+            // #303) pitching and rolling, so the walker rises and falls with the spot they stand on
             var delta = now * _carriedFrom.AffineInverse();
             float turn = MathX.WrapAngle(YawOf(now) - YawOf(_carriedFrom));
-            GlobalPosition = delta * GlobalPosition;
+            var carried = delta * GlobalPosition;
+            if (dt > 0f)
+            {
+                // how the deck under the walker moves (a rolling deck swings a walker high on it)
+                var spot = ((carried - GlobalPosition) / dt) with { Y = 0 };
+                if (spot.Length() < 120f) _deckSpotVel = _deckSpotValid ? _deckSpotVel.Lerp(spot, 1f - Mathf.Exp(-10f * dt)) : spot;
+                _deckSpotValid = true;
+            }
+            GlobalPosition = carried;
             Rotation = new Vector3(0, Rotation.Y + turn, 0);
             _viewYaw += turn;
             // the velocity is the vehicle's frame's: it turns with it
@@ -226,6 +260,23 @@ public partial class FootPlayer
         DeckYaw = MathX.WrapAngle(Rotation.Y - YawOf(now));
     }
 
+    /// <summary>The plank's box laid as <see cref="World.GangwayFit"/> says, moved only when it changes (a centimetre).</summary>
+    private void FitPlank(CollisionShape3D shape, int door, Transform3D frame)
+    {
+        var (run, drop) = World.GangwayFit.Of(frame, door);
+        var key = (Mathf.RoundToInt(run * 100f), Mathf.RoundToInt(drop * 100f));
+        ulong id = shape.GetInstanceId();
+        if (_plankFits.TryGetValue(id, out var was) && was == key) return;
+        _plankFits[id] = key;
+        if (shape.Shape is not BoxShape3D b) return;
+        var box = SteamerMeshBuilder.PlankBox(door, key.Item1 / 100f, key.Item2 / 100f);
+        b.Size = box.Size;
+        shape.Transform = new Transform3D(box.Basis, box.Centre);
+    }
+
+    /// <summary>Each plank shape's fit as last laid (centimetres of run and drop), so it is moved only on a change.</summary>
+    private readonly Dictionary<ulong, (int, int)> _plankFits = new();
+
     /// <summary>
     /// The origin moved (#185, offline): the deck state kept in world space moves with it. The frame
     /// it was carried from, above all: stale, the next carry jumps the player by the whole shift.
@@ -235,6 +286,7 @@ public partial class FootPlayer
         _carriedFrom = shift.Apply(_carriedFrom);
         _deckWaitVelocity = shift.Direction(_deckWaitVelocity);
         _deckFrameVel = shift.Direction(_deckFrameVel);
+        _deckSpotVel = shift.Direction(_deckSpotVel);
         _deckAccel = shift.Direction(_deckAccel);
         _stumble = shift.Direction(_stumble);
         foreach (var set in _decks.Values)
@@ -251,10 +303,10 @@ public partial class FootPlayer
     {
         var near = new List<Node3D>();
         foreach (var p in GetTree().GetNodesInGroup(Group).OfType<FootPlayer>())
-            if (p != this && RideOfHost(p) is { Walkable: true } && p.GlobalPosition.DistanceTo(GlobalPosition) < DeckReach) near.Add(p);
+            if (p != this && RideOfHost(p) is { Walkable: true } walked && p.GlobalPosition.DistanceTo(GlobalPosition) < DeckReachOf(walked)) near.Add(p);
         foreach (var v in VehicleManager.Instance?.GetChildren().OfType<VehicleBody>() ?? Enumerable.Empty<VehicleBody>())
             // only once its frame stands on the ground (VehicleBody.Posed): a frame later it jumps there
-            if (RideOfHost(v) is { Walkable: true } && v.Posed && v.GlobalPosition.DistanceTo(GlobalPosition) < DeckReach) near.Add(v);
+            if (RideOfHost(v) is { Walkable: true } parked && v.Posed && v.GlobalPosition.DistanceTo(GlobalPosition) < DeckReachOf(parked)) near.Add(v);
 
         var keys = near.Select(KeyOf).ToHashSet();
         foreach (var gone in _decks.Keys.Where(k => !keys.Contains(k) || !IsInstanceValid(_decks[k].Host)).ToList())
@@ -266,7 +318,8 @@ public partial class FootPlayer
         foreach (var host in near)
         {
             string key = KeyOf(host);
-            if (_decks.TryGetValue(key, out var known) && known.Host == host) continue;
+            if (_decks.TryGetValue(key, out var known) && known.Host == host
+                && (known.Ride is not Airstairs || ReferenceEquals(known.Sections[0].Deck, known.Ride.Decks[0]))) continue;
             if (known != null) FreeDeck(known);
             _decks[key] = BuildDeck(host, key, RideOfHost(host)!);
         }
@@ -310,8 +363,21 @@ public partial class FootPlayer
         foreach (var other in set.Excepted) if (IsInstanceValid(other)) RemoveCollisionExceptionWith(other);
     }
 
+    /// <summary>Off any deck and every deck body out of the physics now (getting into a vehicle).</summary>
+    private void LeaveDecksNow()
+    {
+        if (Aboard) LeaveDeck(keepVelocity: false);
+        _deckWait = 0f;
+        _standInExit = null;
+        foreach (var set in _decks.Values)
+            foreach (var (_, body, _) in set.Sections)
+                if (IsInstanceValid(body)) { body.CollisionLayer = 0; body.ProcessMode = ProcessModeEnum.Disabled; }
+        ClearDecks();
+    }
+
     private void ClearDecks()
     {
+        _plankFits.Clear();
         if (_decks.Count == 0) return;
         foreach (var set in _decks.Values) FreeDeck(set);
         _decks.Clear();
@@ -335,7 +401,7 @@ public partial class FootPlayer
                     var frame = node.GlobalTransform.Orthonormalized();
                     var local = frame.AffineInverse() * GlobalPosition;
                     bool current = set.Key == DeckOn && deck.Section == DeckSection;
-                    if (deck.Aboard.Grow(current ? 0.15f : 0f).HasPoint(local)) return (set, deck, frame);
+                    if (deck.Contains(local, current ? 0.15f : 0f)) return (set, deck, frame);
                 }
             return null;
         }
@@ -384,6 +450,7 @@ public partial class FootPlayer
         DeckSection = section;
         _carriedFrom = frame;
         _deckCarried = true;
+        _deckSpotValid = false;
         _deckWait = 0f;
         _standInExit = null;
         _deckFrameValid = false;
@@ -417,6 +484,10 @@ public partial class FootPlayer
         // either raw read every step as a lurch (a standing passenger was knocked over at 3 km/h).
         // A turn shows as the velocity turning: the push out of a bend comes with it.
         var velocity = VelocityOfHost(set.Host);
+        // a ship's deck (#303): the spot the walker stands on, which its roll and pitch swing about too
+        // and an airliner's cabin pitches and banks with it (#416)
+        bool tilting = set.Ride is Boat or Airliner;
+        if (tilting && _deckSpotValid) velocity = _deckSpotVel;
         if (!_deckFrameValid) { _deckFrameVel = velocity; _deckAccel = Vector3.Zero; _hardFor = 0f; }
         var smooth = _deckFrameVel.Lerp(velocity, MathX.Damp(8f, dt));
         var accel = (smooth - _deckFrameVel) / dt;
@@ -437,6 +508,14 @@ public partial class FootPlayer
         float grip = full ? 2f : 1.5f;
         float cap = full ? 3f : 1f;
         _stumble -= _deckAccel * share * dt;
+        if (tilting)
+        {
+            // a deck heeled or trimmed is a slope: gravity along it pushes downhill, the feet take it back
+            var up = frame.Basis.Y.Normalized();
+            var downhill = new Vector3(up.X, 0f, up.Z) * Rideable.Gravity;
+            _stumble += downhill * share * dt;
+            MaxDeckTilt = Mathf.Max(MaxDeckTilt, Mathf.Acos(Mathf.Clamp(up.Y, -1f, 1f)));
+        }
         _stumble = _stumble.MoveToward(Vector3.Zero, grip * dt).LimitLength(cap);
         if (IsOnFloor() && _stumble.LengthSquared() > 1e-4f) MoveAndCollide(_stumble * dt);
         // knocked down by a hard brake, a sharp swerve, a crash: one that lasts, not a jolt
@@ -453,6 +532,16 @@ public partial class FootPlayer
 
     /// <summary>The stumble the vehicle's accelerations give a standing player, m/s, in the world's axes.</summary>
     private Vector3 _stumble;
+
+    /// <summary>For checks: the stumble now, m/s (world axes).</summary>
+    public Vector3 Stumble => _stumble;
+
+    /// <summary>For checks: the steepest a deck stood under this player since the last reset, rad (a ship's heel and trim).</summary>
+    public float MaxDeckTilt { get; set; }
+
+    /// <summary>The deck's own velocity under the walker (a ship's, #303), level, smoothed: from how the carry moved them.</summary>
+    private Vector3 _deckSpotVel;
+    private bool _deckSpotValid;
 
     /// <summary>For checks: the hardest acceleration of the vehicle felt aboard since the last reset, m/s².</summary>
     public float MaxDeckAccel { get; set; }
@@ -489,7 +578,7 @@ public partial class FootPlayer
                 if (bodies.Contains(p)) continue;
                 foreach (var deck in ride.Decks)
                     if (frameOf(deck.Section) is { } frame
-                        && deck.Aboard.Grow(1f).HasPoint(frame.GlobalTransform.AffineInverse() * p.GlobalPosition))
+                        && deck.Contains(frame.GlobalTransform.AffineInverse() * p.GlobalPosition, 1f))
                     {
                         near.Add(p);
                         break;
@@ -521,20 +610,28 @@ public partial class FootPlayer
             .Concat(VehicleManager.Instance?.GetChildren().OfType<VehicleBody>() ?? Enumerable.Empty<VehicleBody>());
         foreach (var host in hosts)
         {
-            if (host.GlobalPosition.DistanceTo(GlobalPosition) > DeckReach || RideOfHost(host) is not { Walkable: true } ride) continue;
+            if (RideOfHost(host) is not { Walkable: true } ride || host.GlobalPosition.DistanceTo(GlobalPosition) > DeckReachOf(ride)) continue;
             byte doors = DoorsOfHost(host);
             foreach (var deck in ride.Decks)
             {
                 if (SectionFrame(host, deck.Section) is not { } frame) continue;
                 foreach (var button in deck.Buttons)
                 {
-                    float d = (frame.GlobalTransform * button.At).DistanceTo(chest);
+                    var at = frame.GlobalTransform * button.At;
+                    float d = at.DistanceTo(chest);
+                    // a ship's gangway buttons outside are pressed from the pier its plank reaches
+                    // (1.3 m off the hull, #383): reached from that far, a bell-pull rather than a bus's push
+                    if (ride is Steamer && (frame.GlobalTransform.Basis * button.Normal).Dot(chest - at) > 0f)
+                        d -= ShipButtonReach - PassengerService.ButtonReach;
                     if (d < bestDist) { bestDist = d; best = (host, button.Door, (doors >> button.Door & 1) != 0); }
                 }
             }
         }
         return best;
     }
+
+    /// <summary>How far a ship's gangway button outside is reached from, m (a pier's face is 1.3 m off the hull).</summary>
+    private const float ShipButtonReach = 1.9f;
 
     /// <summary>E or G at a door's button: the door opens or shuts, whoever presses it. True when there was one.</summary>
     private bool TryDoorButton()
@@ -552,6 +649,8 @@ public partial class FootPlayer
     public void DoorPressed(int door)
     {
         if (_ride is Truck { IsBus: true } bus) bus.ToggleDoor(door);
+        else if (_ride is Steamer steamer && door is >= 0 and < Steamer.GangwayCount) steamer.DoorsOpen ^= (byte)(1 << door);
+        else if (_ride is Airliner jet) jet.ToggleDoor(door);
     }
 
     // ---- seats and the wheel from the aisle ------------------------------------------------------
@@ -616,6 +715,7 @@ public partial class FootPlayer
     {
         if (seat < 0 || seat >= ride.Seats.Length || SectionFrame(host, ride.Seats[seat].Section) is not { } frame) return null;
         var s = ride.Seats[seat];
+        if (ride.StandSpot(seat) is { } own) return frame.GlobalTransform * own;
         // the driver's corner is a block to the walk: out past it, by the front door
         float step = seat == 0 ? 0.8f : 0.55f;
         var local = new Vector3(s.Hip.X - Mathf.Sign(s.Hip.X) * step, s.Floor + 0.05f, s.Hip.Z);

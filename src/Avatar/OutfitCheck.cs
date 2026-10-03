@@ -52,7 +52,9 @@ public static class OutfitCheck
             foreach (var (pose, mesh) in meshes)
             {
                 built++;
-                if (Problem(mesh, g.Finish) is { } why) Fail($"{g.Item} {pose}: {why}");
+                // under a full-face helmet (#394) nothing on the head is drawn: it would poke through
+                var finish = pose == "motorbike" && g.Slot is WearSlot.Head or WearSlot.Eyes or WearSlot.Face or WearSlot.Ears ? Finish.None : g.Finish;
+                if (Problem(mesh, finish) is { } why) Fail($"{g.Item} {pose}: {why}");
             }
         }
 
@@ -64,6 +66,28 @@ public static class OutfitCheck
         });
         if (Problem(HumanMeshBuilder.BuildStride(palette with { Outfit = outfit }, 1.4f, 0.7f), Finish.Neon) is { } whole)
             Fail($"a figure dressed head to toe: {whole}");
+
+        // #394: every appearance packs and comes back, and every build wears every hair and face,
+        // dressed and not, under a hat and a helmet
+        if (Appearance.Unpack(0) != null) Fail("an unset appearance (0) unpacked to a figure");
+        for (int b = 0; b < Appearance.Builds; b++)
+            for (int h = 0; h < Appearance.HairStyles; h++)
+            {
+                var a = new Appearance((BodyBuild)b, h % FaceAtlas.Count, h % 8, (b + h) % 8, (HairStyle)h, h % 12);
+                if (Appearance.Unpack(a.Pack()) != a) Fail($"{a} did not survive packing");
+                var who = palette.With(a);
+                foreach (var (name, mesh) in new[]
+                {
+                    ("plain", HumanMeshBuilder.BuildStride(who, 2.5f, 0.4f)),
+                    ("dressed", HumanMeshBuilder.Build(who with { Outfit = outfit }, HumanPose.Running)),
+                    ("hat", HumanMeshBuilder.Build(who, hat: Headwear.WitchHat)),
+                    ("helmet", MotoRider(who)),
+                })
+                {
+                    built++;
+                    if (Problem(mesh, Finish.None) is { } why) Fail($"{a.Build} {a.Hair} {name}: {why}");
+                }
+            }
 
         GD.Print(failed == 0
             ? $"[outfitcheck] RESULT: ok — {Garments.All.Length} looks, {built} figures built (poses, wind, motorbike)"
@@ -93,7 +117,7 @@ public static class OutfitCheck
         foreach (var c in colours)
         {
             int id = Mathf.RoundToInt((1f - c.A) * 255f);
-            if (id < 0 || id > (int)Finish.Lace) return $"alpha {c.A} decodes to no finish ({id})";
+            if (id < 0 || id > (int)Finish.Studs) return $"alpha {c.A} decodes to no finish ({id})";
             if (id == (int)finish) seen = true;
         }
         return seen ? null : $"its {finish} finish is nowhere in the mesh";

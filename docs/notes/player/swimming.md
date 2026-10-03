@@ -27,9 +27,39 @@
   1.56 m of water 39 (on land 124). Wingsuit and canopies: `FlyerIntoWater` (first line of
   `FlyPhysics`) puts the pilot in the water swimming, "SPLASHDOWN", no crash. Bikes and skis
   deeper than the chest: off and swimming (`RideIntoWater`, in `WaterPhysics`). A crash ragdoll
-  that goes into deep water stops and floats (`RagdollIntoWater`, in `TickRagdoll`); it is not
-  simulated floating. A sunk car (`vehicles-sink`): the driver comes out at the surface swimming
+  in deep water floats as a ragdoll (#380, below), then comes round swimming. A sunk car (`vehicles-sink`): the driver comes out at the surface swimming
   (`StartSwimmingAtSurface`), passengers through `ThrownOut` → `SurfaceIfInWater`.
+- **A crash ragdoll in the water (#380)**: `Ragdoll.Step` takes a `WaterProbe` (the surface and
+  `WaterField.Velocity` over each point, asked once a frame, not per substep). Each point is buoyed
+  by the share of it under the surface (over 0.24 m) times its buoyancy over weight (chest 2.2,
+  waist 1.4, hips 1.1, shoulders 1.15, head 1, limbs 0.97: 1.08 all told) and dragged toward the
+  water's motion (`1.0 + 0.6 |v|` per second, the flow fading 1.5 m down). Measured (`--swimcheck`,
+  4 m up into 25 m of water on a chop): the hips plunge 1.8 m, are back up by the surface ~4 s after going in, float limp
+  face down 0.1-0.3 m under the moving surface and drift ~0.6 m. The first buoyancy (0.99 all told)
+  sank slowly and stayed 2 m down. **Coming round** (owner, `RagdollIntoWater` in `FootPlayer.Swim.cs`):
+  2.5 s floating by the surface (hips < 0.6 m under; a plunge past 1 m restarts the count) and moving
+  with the water (< 0.9 m/s off it), or 6 s floating, or 10 s in deep water, whatever it does; then
+  `StartSwimming` at the surface. A ragdoll in deep water never ends by resting (`_ragdollInWater`).
+  A splash where the hips go in, on every peer (`RagdollSplash`). **Remote peers** run their own copy
+  in their own waves (`TickRagdoll` passes the probe on every peer) and are steered onto the owner's
+  hips as on land; the owner's swim pose ends it. `tools/swimnetcheck.sh`: B's copy floats 0.30 m
+  under B's surface where A's floats 0.23 m under A's. Nothing is held in a limp hand
+  (`HeldItemVisual`: a held item hung in the air where the hand was, in any crash).
+- **Wading (#380)** (`FootPlayer.Wade.cs`, numbers in `Wading.cs`, unit-tested in `SwimTests`): the
+  feet's depth under the moving surface (`WadeDepth`, owner, set in `SwimPhysics` before the swim
+  test) slows the walk from 0.2 m to waist deep (1.05 m), a run more than a walk (drag grows with
+  speed): `--swimcheck` measures 1.00 / 0.85 / 0.43 of the walking pace at 0.13 / 0.49 / 0.99 m
+  (1.9 / 1.6 / 0.8 m/s, Game) and 1.00 / 0.78 / 0.23 of the run (1.3 m/s at the waist). No slide
+  deeper than the knees. Spray round the shins and foam left on the waves (`WakeFoam`, every peer
+  from its own waves and the copy's stride speed `Anim.X`), and a slosh a stride
+  (`SfxSynth.WadeBank`: in place of the ground's footstep, the owner's in `PlayerFeel`, others' in
+  `Audio/BodySteps`, #375).
+- **Collecting water (#380)**: `Loot.Gathering` offers water only to a player standing in it, its
+  feet more than `Gathering.WadeToGather` (5 cm) under the surface (`WadeDepth`): never from the
+  shore, a pier, the steamer's deck or a boat (the prompt used to show over any water in reach),
+  never swimming (`UsablePlayer`). A mapped stream (a line, no water layer) still from its bank.
+  `--swimcheck` (wade step) checks the shore, three depths and a swimmer; `--boatcheck` a boat.
+  `GatherProbe` (real map) stands in the water now.
 - **Air** (`Player/AirReserve.cs`, plain C#, `SwimTests`): 45 s with the eye under, 1.7x on a
   sprint stroke, refills 9 s/s with the head out, empty = 15 health at once then each second
   (`DamageCause.Drown`, appended). Knocked out in the water the body floats face down, then wakes
@@ -56,15 +86,20 @@
   `Air`. Boarding from the water: whatever boards calls `ApplyRide`, which ends the swim.
 - **Shared-file hooks** (for merges): `FootPlayer.cs` `_PhysicsProcess` (one line), `PublishFootPose`
   (one line), `ApplyFootPose` (one line), `FlyPhysics` (one line), `ApplyRide` (`LeaveWater()`),
+  `_Process` (`TickWade`, first line, #380), the walk's pace (`* WadePace(running)`, #380),
   `TickHealth` (`!_swimming`), `DamageCause.Drown`; `FootPlayer.Water.cs`, `.Passenger.cs`, `.Crash.cs`
   one call each.
 - **Limits**: legacy tiles (today's real map) have 0.12 m of water, so nobody swims there until
-  #298's beds; no wading slowdown in the shallows; the server does not know who swims (owner
+  #298's beds (and nobody wades: 0.12 m is under the 0.2 m the walk feels); the server does not know who swims (owner
   authority, like the walk); NPC drivers thrown into water float, they do not swim.
 - **Checks**: `--swimcheck --chunks fixture:lake` (quick, headless, ~2.5 min: walk in, sprint and
   easy stroke speeds, a gamey swell, look-down stroke, dive to the bed 7.4 m down, rise, float up,
   air refill, a pontoon climbed out onto, wading out, drowning and waking on the beach, a sunk
-  car's driver, high dives deep and shallow, a wingsuit onto the lake). `--swimcheck shots`
-  windowed: PNGs of each step in `test_output/swim/`. `tools/swimnetcheck.sh` (net: a loopback
-  server, A swims, B 7 m away must see A's copy in the swim pose, the right style and A's depth to
-  0.35 m at the surface, 1 m under water; `SHOTS=1` B windowed: `test_output/swimnet_B_*.png`).
+  car's driver, high dives deep and shallow, a wingsuit onto the lake, wading paces at three
+  depths, a crash ragdoll into the lake on a chop). `--swimonly wade,ragdoll` runs only those steps
+  (names in `SwimCheck`'s summary). `--swimcheck shots` windowed: PNGs of each step in
+  `test_output/swim/` (`wade_knee_side`, `wade_waist_side`, `ragdoll_float_close`).
+  `tools/swimnetcheck.sh` (net: a loopback server, A swims, B 7 m away must see A's copy in the swim
+  pose, the right style and A's depth to 0.35 m at the surface, 1 m under water; then A is thrown
+  limp into the lake (`DebugThrow`) and B sees the copy go limp, float as deep as A's to 0.45 m and
+  swim; `SHOTS=1` B windowed: `test_output/swimnet_B_*.png`).

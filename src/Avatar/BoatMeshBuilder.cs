@@ -143,10 +143,8 @@ public static class BoatMeshBuilder
         m.Tube(r0, r1, 0.018f, Chrome);
         m.Tube(l1, r1, 0.018f, Chrome);
         m.Box(new Vector3(0, top - 0.12f, ws - 0.12f), new Vector3(halfIn * 2f, 0.2f, 0.18f), Mahogany.Darkened(0.25f), new Basis(Vector3.Right, -0.35f));
-        // the wheel, at the driver's place on the right
-        var hub = new Vector3(HelmHip.X, 0.98f, HelmHip.Z + 0.45f);
-        m.Ring(hub, Wheel.Axis, 0.15f, 0.19f, 0.03f, Cream, 12);
-        m.Tube(hub, hub + Wheel.Axis * 0.25f, 0.025f, Chrome);
+        // the wheel's column, at the driver's place on the right (the rim turns: RunaboutWheel)
+        m.Tube(Wheel.Hub + Wheel.Axis * 0.04f, Wheel.Hub + Wheel.Axis * 0.25f, 0.025f, Chrome);
 
         // the seats: two buckets forward, a bench aft, cream leather
         foreach (float x in new[] { HelmHip.X, -HelmHip.X })
@@ -164,22 +162,43 @@ public static class BoatMeshBuilder
     }
 
     /// <summary>The driver's wheel: hub ahead of the hip, tilted back toward the driver.</summary>
-    private static class Wheel
+    public static class Wheel
     {
+        public static readonly Vector3 Hub = new(HelmHip.X, 0.98f, HelmHip.Z + 0.45f);
         public static readonly Vector3 Axis = new Vector3(0, 0.55f, -0.84f).Normalized();
+        /// <summary>The wheel's turn at full helm, rad: a little over a third of a turn each way.</summary>
+        public const float Lock = 2.4f;
     }
 
-    /// <summary>The driver at the wheel, author space.</summary>
-    public static ArrayMesh RunaboutDriver(HumanPalette palette)
+    /// <summary>
+    /// The wheel's rim and spokes, authored round its hub (#380): its node sits at the hub
+    /// (<see cref="Flip"/> of <see cref="Wheel.Hub"/>) and turns about the flipped <see cref="Wheel.Axis"/>.
+    /// </summary>
+    public static ArrayMesh RunaboutWheel()
     {
         var m = new MeshScratch();
-        var hub = new Vector3(HelmHip.X, 0.98f, HelmHip.Z + 0.45f);
+        m.Ring(Vector3.Zero, Wheel.Axis, 0.15f, 0.19f, 0.03f, Cream, 12);
+        // three spokes, so the turn shows
+        var across = Wheel.Axis.Cross(Vector3.Right).Normalized();
+        for (int i = 0; i < 3; i++)
+        {
+            var dir = across.Rotated(Wheel.Axis, Mathf.Tau * i / 3f);
+            m.Tube(dir * 0.03f, dir * 0.16f, 0.012f, Chrome, 4);
+        }
+        m.Tube(Vector3.Zero, Wheel.Axis * 0.04f, 0.035f, Chrome, 6);
+        return m.Build();
+    }
+
+    /// <summary>The driver at the wheel turned <paramref name="wheelTurn"/> rad (author space, about the wheel's axis).</summary>
+    public static ArrayMesh RunaboutDriver(HumanPalette palette, float wheelTurn = 0f)
+    {
+        var m = new MeshScratch();
         float floor = CockpitFloor + 0.04f;
-        var seat = new DriverSeat(HelmHip, SeatRecline, hub, Wheel.Axis, 0.17f,
+        var seat = new DriverSeat(HelmHip, SeatRecline, Wheel.Hub, Wheel.Axis, 0.17f,
             Throttle: new Vector3(HelmHip.X - 0.1f, floor, HelmHip.Z + 0.62f),
             Brake: new Vector3(HelmHip.X + 0.08f, floor, HelmHip.Z + 0.62f),
             Rest: new Vector3(HelmHip.X + 0.12f, floor, HelmHip.Z + 0.58f));
-        HumanMeshBuilder.AppendDriver(m, palette, seat, 0f, 0.3f, 0f);
+        HumanMeshBuilder.AppendDriver(m, palette, seat, wheelTurn, 0.3f, 0f);
         return m.Build();
     }
 
@@ -320,6 +339,8 @@ public static class BoatMeshBuilder
 public partial class BoatRig : Node3D
 {
     private MeshInstance3D? _driver;
+    private Node3D? _wheel;
+    private HumanPalette? _palette;
     private GpuParticles3D? _wake, _spray, _jet;
     private ParticleProcessMaterial? _sprayMat;
     private BoatSpec _spec = null!;
@@ -345,7 +366,15 @@ public partial class BoatRig : Node3D
         };
         rig.AddChild(hull);
         MeshScratch.Paint(hull, body, CarRig.GlassMaterial());
-        if (!jet) rig.AddChild(new MeshInstance3D { Name = "Flag", Mesh = BoatMeshBuilder.Flag(spec), MaterialOverride = body });
+        if (!jet)
+        {
+            rig.AddChild(new MeshInstance3D { Name = "Flag", Mesh = BoatMeshBuilder.Flag(spec), MaterialOverride = body });
+            // the wheel turns with the helm (#380)
+            rig._wheel = new Node3D { Name = "Wheel", Position = BoatMeshBuilder.Flip(BoatMeshBuilder.Wheel.Hub) };
+            rig._wheel.AddChild(new MeshInstance3D { Mesh = BoatMeshBuilder.RunaboutWheel(), MaterialOverride = body });
+            rig.AddChild(rig._wheel);
+            rig._palette = driver;
+        }
         if (driver != null)
         {
             rig._driver = new MeshInstance3D
@@ -356,7 +385,12 @@ public partial class BoatRig : Node3D
             };
             rig.AddChild(rig._driver);
         }
-        if (DisplayServer.GetName() != "headless") rig.AddWater(jet);
+        if (DisplayServer.GetName() != "headless")
+        {
+            rig.AddWater(jet);
+            // the forward hull at the waterline, where a wave meets it (#380)
+            rig._slap = new HullSlap(rig, new Vector3(0, 0.25f, -(spec.Length - spec.Shape.SternZ) * 0.7f), jet ? 1.15f : 1f, -2f, 6f);
+        }
         return rig;
     }
 
@@ -436,14 +470,8 @@ public partial class BoatRig : Node3D
             {
                 Size = new Vector2(size, size),
                 Orientation = flat ? PlaneMesh.OrientationEnum.Y : PlaneMesh.OrientationEnum.Z,
-                Material = new StandardMaterial3D
-                {
-                    ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                    BillboardMode = flat ? BaseMaterial3D.BillboardModeEnum.Disabled : BaseMaterial3D.BillboardModeEnum.Particles,
-                    CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-                    VertexColorUseAsAlbedo = true,
-                    Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-                },
+                // on the moving waves, in every style (#380)
+                Material = WakeFoam.Material(flat),
             },
             // left on the water where they fell, not dragged along with the boat
             LocalCoords = false,
@@ -471,6 +499,43 @@ public partial class BoatRig : Node3D
 
     private float _shownWake = -1f, _shownSpray = -1f, _shownJet = -1f;
 
+    // ---- the wheel (#380) ------------------------------------------------------------------------
+
+    private float _steer, _shownTurn = float.NaN;
+    private readonly Dictionary<int, ArrayMesh> _driverTurns = new();
+
+    /// <summary>The wheel's turn now, rad (+ is the helm to starboard).</summary>
+    public float WheelTurn => _steer * BoatMeshBuilder.Wheel.Lock;
+
+    /// <summary>
+    /// Per frame, every peer: the wheel (and the driver's hands on it) follows the helm, -1 full to
+    /// port .. 1 full to starboard (the owner's rudder, or a remote copy's from its pose), eased.
+    /// </summary>
+    public void Steer(float helm, float dt)
+    {
+        if (_wheel == null) return;
+        _steer = Mathf.Lerp(_steer, Mathf.Clamp(helm, -1f, 1f), 1f - Mathf.Exp(-10f * dt));
+        float turn = Mathf.Round(WheelTurn / 0.06f) * 0.06f;
+        if (turn == _shownTurn) return;
+        _shownTurn = turn;
+        _wheel.Basis = new Basis(BoatMeshBuilder.Flip(BoatMeshBuilder.Wheel.Axis), WheelSign * turn);
+        // the hands go round with the rim: one figure per 0.06 rad, kept
+        if (_driver != null && _palette is { } palette && DisplayServer.GetName() != "headless")
+        {
+            int key = Mathf.RoundToInt(turn / 0.06f);
+            if (!_driverTurns.TryGetValue(key, out var mesh))
+                _driverTurns[key] = mesh = BoatMeshBuilder.RunaboutDriver(palette, WheelSign * turn);
+            _driver.Mesh = mesh;
+        }
+    }
+
+    /// <summary>Which way about the wheel's axis a turn to starboard is (clockwise as the driver sees it).</summary>
+    private const float WheelSign = -1f;
+    private HullSlap? _slap;
+
+    /// <summary>The water slapping this hull (#380), null headless: for probes.</summary>
+    public HullSlap? Slap => _slap;
+
     /// <summary>
     /// Per frame: the wake by speed through the water while the hull is in it, spray by how hard it
     /// planes (and a moment after a slam), the jet's tail by thrust. Only changes are written.
@@ -478,25 +543,25 @@ public partial class BoatRig : Node3D
     public void Water(float speed, float wet, float thrust01, bool afloat)
     {
         if (_wake == null) return;
+        _slap?.Tick((float)GetProcessDeltaTime());
         float wake = afloat && wet > 0.05f ? Mathf.Clamp((speed - 1f) / 12f, 0f, 1f) : 0f;
         float spray = afloat && wet > 0.05f ? Mathf.Clamp((speed - 4f) / 14f, 0f, 1f) : 0f;
         float jet = afloat ? Mathf.Clamp(thrust01, 0f, 1f) * Mathf.Clamp(speed / 6f, 0.3f, 1f) : 0f;
         Set(_wake, wake, ref _shownWake);
         Set(_spray, spray, ref _shownSpray);
-        // foam lies on the water, not on the keel under it: the emitters ride the surface
-        if (wake > 0f) OnSurface(_wake, _wakeAnchor);
-        if (spray > 0f) OnSurface(_spray, _sprayAnchor);
-        if (_jet != null) Set(_jet, jet, ref _shownJet);
+        // foam lies on the water, not on the keel under it: the emitters ride the surface, and the
+        // foam they leave rides the waves (WakeFoam)
+        if (wake > 0f) WakeFoam.OnSurface(_wake, GlobalTransform * _wakeAnchor, 0.03f, ref _wakeWater);
+        if (spray > 0f) WakeFoam.OnSurface(_spray!, GlobalTransform * _sprayAnchor, 0.03f, ref _sprayWater);
+        if (_jet != null)
+        {
+            Set(_jet, jet, ref _shownJet);
+            if (jet > 0f) WakeFoam.Water(_jet, _jet.GlobalPosition, ref _jetWater);
+        }
     }
 
     private Vector3 _wakeAnchor, _sprayAnchor;
-
-    /// <summary>Puts an emitter at its anchor on the hull (rig space), lifted or lowered to the surface there.</summary>
-    private void OnSurface(GpuParticles3D p, Vector3 anchor)
-    {
-        var at = GlobalTransform * anchor;
-        if (World.WaterField.TryLevelAt(at, out float level)) p.GlobalPosition = at with { Y = level + 0.03f };
-    }
+    private Vector2 _wakeWater, _sprayWater, _jetWater;
 
     private static void Set(GpuParticles3D p, float amount, ref float shown)
     {

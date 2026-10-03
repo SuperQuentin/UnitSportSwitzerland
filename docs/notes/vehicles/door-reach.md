@@ -18,8 +18,8 @@
   the door of an own car).
 - **Order of E on foot outdoors**: a pointed dropped item, a pointed radio (panel), the vehicle/door
   at hand, a seat in a driven vehicle (passengers: now within 1.2 m of its hull or 3.5 m of a bus
-  door), a radio at the feet, the dance, an interior door.
+  door), an interior door, the dance. Nothing by radius alone (#390).
 - **Border**: `ItemController` calls `VehicleReach.Point(Find(...))` every frame when no world item
-  is pointed; the `Highlight` hull goes on the door's hinge node (`CarRig.DoorPivot`: panel and
+  is pointed; the `Highlight` border (stencil silhouette, #401) goes on the door's hinge node (`CarRig.DoorPivot`: panel and
   glass) or on the whole drawn machine (`VehicleBody.Visual`). The prompt bar says "Open the door" /
   "Get in the X", plus "Close the door" (G) at an open one.

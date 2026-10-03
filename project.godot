@@ -40,11 +40,16 @@ enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
 
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="mobile"
-scaling_3d/scale=0.75
 lights_and_shadows/directional_shadow/size.mobile=4096
+scaling_3d/scale=0.75
+textures/vram_compression/import_etc2_astc=true
 
 [shader_globals]
 
+world_disco_beat={
+"type": "float",
+"value": 0.0
+}
 xr_smooth={
 "type": "bool",
 "value": false
@@ -180,5 +185,4 @@ portal_clip_plane_3={
 
 [xr]
 
-openxr/submit_depth_buffer=true
 shaders/enabled=true

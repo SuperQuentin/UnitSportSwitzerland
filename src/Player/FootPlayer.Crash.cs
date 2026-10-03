@@ -85,6 +85,22 @@ public partial class FootPlayer
     }
 
     /// <summary>
+    /// Probes (#380): thrown from <paramref name="at"/> as if off a bike that hit something, on foot,
+    /// with <paramref name="launch"/>: the ragdoll, its replication and the crash camera as in a crash.
+    /// </summary>
+    internal void DebugThrow(Vector3 at, Vector3 launch)
+    {
+        if (!IsMultiplayerAuthority() || _ride != null) return;
+        if (_swimming) EndSwim();
+        GlobalPosition = at;
+        Velocity = Vector3.Zero;
+        var fwd = (launch with { Y = 0 }).Normalized();
+        Rotation = new Vector3(0, Mathf.Atan2(-fwd.X, -fwd.Z), 0);
+        StartRagdoll(PoseWorldJoints(), launch, 6f, false);
+        BeginCrashCamera(fwd);
+    }
+
+    /// <summary>
     /// The origin moved (#185) mid-crash: the ragdoll's points, the crash camera's spots and the
     /// last seat drawn are world positions kept across frames. (The ragdoll's mesh and the VR eye
     /// are top-level nodes, which the shifter moves itself.)
@@ -129,6 +145,8 @@ public partial class FootPlayer
         _ragdoll = new Ragdoll(joints, launch, axis.Normalized() * spin, GetRid(), RagdollMask);
         _ragdoll.Struck += OnRagdollStruck;
         _ragdollClock = 0f;
+        _ragdollInWater = _ragdollAfloat = 0f;
+        _ragdollWet = false;
         _crackCooldown = 0.15f;
         _bonesBroken = 0;
         if (IsMultiplayerAuthority())
@@ -176,7 +194,7 @@ public partial class FootPlayer
 
         _ragdollClock += dt;
         _crackCooldown -= dt;
-        _ragdoll.Step(dt * SlowMotion(_ragdollClock), GetWorld3D().DirectSpaceState, GroundAt);
+        _ragdoll.Step(dt * SlowMotion(_ragdollClock), GetWorld3D().DirectSpaceState, GroundAt, Indoors ? null : _ragdollWater ??= RagdollWaterAt);
         if (!IsMultiplayerAuthority())
         {
             // the owner's body is pinned to its hips, so the replicated position is where they are
@@ -184,19 +202,20 @@ public partial class FootPlayer
             _ragdoll.Shift(off.LengthSquared() > 64f ? off : off * MathX.Damp(2f, dt));
         }
 
-        // into deep water: it stops tumbling and floats (#301)
-        if (IsMultiplayerAuthority() && RagdollIntoWater()) return false;
+        // into the water: a splash on every peer; in deep water it floats limp, then comes round swimming (#301, #380)
+        RagdollSplash();
+        if (IsMultiplayerAuthority() && RagdollIntoWater(dt)) return false;
 
         var pelvis = _ragdoll.Pelvis;
         var points = _ragdoll.Points;
         Span<Vector3> local = stackalloc Vector3[HumanMeshBuilder.JointCount];
         // relative to the hips, and pre-flipped: the mesh builder turns everything a half turn on the way out
         for (int i = 0; i < local.Length; i++) local[i] = Flip(points[i] - pelvis);
-        _ragdollMesh.Mesh = HumanMeshBuilder.BuildJoints(FigurePalette(GetMultiplayerAuthority()), local, Hat);
+        _ragdollMesh.Mesh = HumanMeshBuilder.BuildJoints(FigurePalette(RiderIndex()), local, Hat);
         _ragdollMesh.GlobalTransform = new Transform3D(Basis.Identity, pelvis);
         if (_walker != null) _walker.Visible = false;
 
-        if (IsMultiplayerAuthority() && _ragdoll.Resting) EndRagdoll();
+        if (IsMultiplayerAuthority() && _ragdoll.Resting && _ragdollInWater <= 0f) EndRagdoll();
         return true;
     }
 

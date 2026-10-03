@@ -54,6 +54,13 @@ public readonly record struct VehicleState(
             truck.UnpackFlags(Flags);
             return truck;
         }
+        if (Airliner.For(Kind) is { } airliner)
+        {
+            airliner.UnpackFlags(Flags);
+            return airliner;
+        }
+        // airstairs at the height they were left (#417)
+        if (Kind == RideKind.Airstairs) { var stairs = new Airstairs(); stairs.UnpackFlags(Flags); return stairs; }
         return CarSetups.Ride(Kind, Setup, Tuning);
     }
 

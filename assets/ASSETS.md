@@ -32,3 +32,9 @@ pictures. Only CC0, MIT-style and Swiss open government data so far; nothing AI-
 | `bark_pine_*.jpg` | EZ-Tree's bark, from [TextureCan 588](https://www.texturecan.com/details/588/) | CC0 |
 | `bark_oak_*.jpg` | EZ-Tree's bark, from [Poly Haven bark_brown_02](https://polyhaven.com/a/bark_brown_02) | CC0 |
 | `*_side.png`, `*_top.png` | impostors baked from the two trees by the game (`--bake-impostors`) | as the trees |
+
+## `audio/`
+
+| File | Source | Licence |
+|---|---|---|
+| `chess_type_beat.ogg` | "Chess Type Beat" by The Vibe Guide ([YouTube](https://www.youtube.com/watch?v=EK2w6qA5zz8)), audio only, Vorbis q4; the church radio's track and the rat dance (#370) | **not an open licence**: all rights with the artist; added by the project owner, replace before any public release |

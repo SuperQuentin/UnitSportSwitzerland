@@ -118,6 +118,11 @@ public partial class SettingsScreen : Screen
             UiKit.ToggleRow(rows, "Brake wear and fade (cars)", s.BrakeWear, on => GameSettings.Current.BrakeWear = on);
             UiKit.OptionRow(rows, "Truck gearbox", new[] { "Automatic", "Sequential", "Sequential + clutch", "H-pattern + splitter", "H-pattern (auto splitter)" },
                 (int)s.HeavyGearbox, i => GameSettings.Current.HeavyGearbox = (Player.HeavyShift)i);
+            UiKit.OptionRow(rows, "Airliner handling", new[] { "Arcade", "Light sim" }, (int)s.Airliner,
+                i => GameSettings.Current.Airliner = (Player.AirlinerHandling)i,
+                "Arcade: protected, wings level on their own, ready to taxi. Light sim: engine start, autopilot, trim, fuel");
+            UiKit.ToggleRow(rows, "Get in buses and ships from outside", s.BoardWalkableFromOutside, on => GameSettings.Current.BoardWalkableFromOutside = on,
+                "On: E beside a bus, a coach or the steamer puts you at its wheel. Off: walk aboard and take the wheel inside");
             rows.AddChild(UiKit.Spacer(6));
             rows.AddChild(UiKit.Section("Cockpit"));
             UiKit.ToggleRow(rows, "Show your own body", s.CockpitBody, on => GameSettings.Current.CockpitBody = on, "V cycles it too");

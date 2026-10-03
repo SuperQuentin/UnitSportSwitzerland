@@ -40,6 +40,9 @@ public sealed partial class ClientTerrainSync : Node
     /// <summary>Raised once the town index has been cached, so the Tab search can reload.</summary>
     public event Action? PlacesReceived;
 
+    /// <summary>The server's landings (#377) arrived and are in the cache. Any thread.</summary>
+    public event Action<LandingIndex>? LandingsReceived;
+
     /// <summary>The far-horizon file arrived from the server and is in the cache.</summary>
     public event Action? HorizonReceived;
 
@@ -57,6 +60,7 @@ public sealed partial class ClientTerrainSync : Node
         finally { IndexFinished = true; }
         if (!merged) return;
         await SyncPlacesAsync(ct).ConfigureAwait(false);
+        await SyncLandingsAsync(ct).ConfigureAwait(false);
         await SyncHorizonAsync(ct).ConfigureAwait(false);
     }
 
@@ -152,6 +156,25 @@ public sealed partial class ClientTerrainSync : Node
                 int count = PlaceIndex.FromJson(System.Text.Encoding.UTF8.GetString(bytes)).Places.Count;
                 GD.Print($"[stream] place index received: {count} towns");
                 PlacesReceived?.Invoke();
+            });
+
+    /// <summary>
+    /// Pulls the server's landings (#377): the piers its world has, and where its steamer lies.
+    /// A few KB; a server without them (or an older one) leaves the local ones, if any.
+    /// </summary>
+    private Task SyncLandingsAsync(CancellationToken ct) =>
+        SyncFileAsync(AssetKind.Landings, LandingIndex.FileName, "landings",
+            "server has no landings; piers only where this client's own data has them", ct, bytes =>
+            {
+                LandingIndex index;
+                try { index = LandingIndex.FromJson(Encoding.UTF8.GetString(bytes)); }
+                catch (Exception e)
+                {
+                    GD.PushWarning($"[stream] the server's landings do not parse: {e.Message}");
+                    return;
+                }
+                GD.Print($"[stream] landings received: {index.Landings.Count} landings, {index.Jetties.Count} jetties");
+                LandingsReceived?.Invoke(index);
             });
 
     /// <summary>

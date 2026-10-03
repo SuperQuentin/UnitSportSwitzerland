@@ -20,6 +20,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private MultiplayerSpawner? _spawner;
     private Vehicles.VehicleManager? _vehicles;
     private Items.RadioManager? _radios;
+    private Interiors.ChurchRadios? _churchRadios;
     private Items.DroppedItems? _dropped;
     private PlayerRegistry? _registry;
     private ChatManager? _chat;
@@ -93,6 +94,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _chunks = new ChunkManager { Name = "Terrain", BuildMeshes = false, BuildCollision = false };
         _chunks.Initialize(source, origin, manifest, null);
         if (fallback != null) _chunks.UseFallback(fallback, source.Invalidate);
+        // the landings (#377): where the steamer lies; the piers are the clients' (no collision here)
+        World.Landings.Use(await World.Landings.LoadAsync(source));
         AddChild(_chunks);
         // the water (#299): the server answers water queries too, and owns the sea state
         World.WaterField.Bind(_chunks);
@@ -127,6 +130,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _dropped = Items.DroppedItems.Create(this, origin);
         _dropped.PlayerPositions = _vehicles.PlayerPositions;
         Audio.Cd.CdLibrary.Create(this, server: true);
+        // the radio by the pastor rat in every church (#370)
+        _churchRadios = Interiors.ChurchRadios.Create(this);
         Net.ClockSync.Create(this);
         // the traffic lights' group states on the server clock, for tools/signalnetcheck.sh (#353)
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: true));
@@ -134,6 +139,10 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Audio.Live.WebRadio.Create(this);
         // an Africa Twin in front of one building at Riddes, put back each time its tile loads
         AddChild(new World.AfricaTwinEgg(_chunks));
+        // the paddle steamer at the Nyon landing (#303), put back each time its tile loads
+        AddChild(new World.SteamerBerth(_chunks));
+        // jetskis and speedboats along the harbour jetties (#383), put back a while after they are taken
+        AddChild(new World.MarinaBoats(_chunks));
 
         // gunfire: clients send their rounds here to be relayed; the server flies none of them
         Combat.CombatManager.Create(this, null, origin, server: true);
@@ -155,7 +164,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // data the client's Tab search uses and a client cannot ask to be moved anywhere else.
         var places = LoadPlaces();
 
-        _registry = new PlayerRegistry(PlayerRegistry.ParseAdminPassword());
+        _registry = new PlayerRegistry(PlayerRegistry.ParseAdminPassword(), PlayerRegistry.ParseHostToken());
         _chat = ChatManager.CreateServer(_registry, _players, origin, places);
         AddChild(_chat);
 
@@ -235,8 +244,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         // a vehicle out of nothing is an admin's, or the one a race put you on (Core/Permissions)
         // (a wreck cannot be driven and burns out: no loophole, and race NPCs' wrecks park through
-        // the ordinary client simulating them)
-        _vehicles.MayPark = (peer, state) => state.Wrecked || _chat.IsAdminPeer(peer) || race.TakeIssued(peer);
+        // the ordinary client simulating them); never in a Battle Royale match, admin or not (#425)
+        _vehicles.MayPark = (peer, state) => state.Wrecked || (_chat.IsAdminPeer(peer) && !br.Playing(peer)) || race.TakeIssued(peer);
 
         // The operator's own command line. This is how the first admin gets granted.
         AddChild(new ServerConsole(_chat));
@@ -251,6 +260,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
             {
                 SuggestedOriginLv95 = new Lv95Point { E = origin.E, N = origin.N },
             }.ToJson());
+        // the landings this server uses (#377), whatever its chunk directory holds
+        if (World.Landings.Current is { } landings && (landings.Landings.Count > 0 || landings.Jetties.Count > 0))
+            _streamer.LandingsOverride = System.Text.Encoding.UTF8.GetBytes(landings.ToJson());
         if (ParseStreamBandwidth() is { } megabytesPerSecond)
         {
             _streamer.BytesPerSecondPerPeer = (int)(megabytesPerSecond * 1024 * 1024);
@@ -378,6 +390,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         if (node is Node3D player)
             _chunks!.AddAnchor(player);
         _interiors?.SendTableTo(id);
+        _churchRadios?.SendTo(id);
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
