@@ -269,7 +269,11 @@ public partial class SyncProbe : Node
                 // short pulled wheelie (#410), its pitch on the mirror too
                 Mount(RideKind.OnFoot);
                 Mount((RideKind)MotorbikeCatalog.First);
-                _owner!.RideControls = () => new RideInput(0.5f, 0f, Mathf.Sin((float)_t * 1.4f) * 0.8f, (_t - _stageStart) % 3.0 is > 0.5 and < 1.1);
+                _owner!.RideControls = () =>
+                {
+                    bool pull = (_t - _stageStart) % 3.0 is > 0.5 and < 1.1;
+                    return new RideInput(pull ? 0.8f : 0.5f, 0f, Mathf.Sin((float)_t * 1.4f) * 0.8f, pull);
+                };
                 break;
             case "africa":
                 // the last Africa Twin (CRF1100L Adventure Sports ES DCT): its own mesh, the DCT shifting itself
