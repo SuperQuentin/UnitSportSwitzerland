@@ -70,4 +70,41 @@ public class SwimTests
         var (_, _, longDip) = Run(ref air, 1f, under: false);
         Assert.Equal(1, longDip);
     }
+
+    // ---- wading (src/Player/Wading.cs, #380) ----------------------------------------------------
+
+    [Fact]
+    public void Ankle_deep_water_does_not_slow_the_walk()
+    {
+        Assert.Equal(1f, Wading.SpeedFactor(0f, false));
+        Assert.Equal(1f, Wading.SpeedFactor(Wading.Feel, true));
+        Assert.Equal(1f, Wading.SpeedFactor(float.NaN, false), 3);
+    }
+
+    [Fact]
+    public void Knee_deep_slows_a_little_and_waist_deep_a_lot_a_run_more_than_a_walk()
+    {
+        float kneeWalk = Wading.SpeedFactor(Wading.Knee, false), kneeRun = Wading.SpeedFactor(Wading.Knee, true);
+        float waistWalk = Wading.SpeedFactor(Wading.Waist, false), waistRun = Wading.SpeedFactor(Wading.Waist, true);
+        Assert.InRange(kneeWalk, 0.78f, 0.9f);
+        Assert.InRange(kneeRun, 0.7f, 0.85f);
+        Assert.InRange(waistWalk, 0.35f, 0.5f);
+        Assert.InRange(waistRun, 0.15f, 0.3f);
+        Assert.True(kneeRun < kneeWalk && waistRun < waistWalk);
+        // never faster deeper
+        for (float d = 0f; d < 1.3f; d += 0.01f)
+            Assert.True(Wading.SpeedFactor(d + 0.01f, true) <= Wading.SpeedFactor(d, true) + 1e-6f);
+    }
+
+    [Fact]
+    public void Spray_comes_from_moving_legs_in_the_water_most_by_the_knees()
+    {
+        Assert.Equal(0f, Wading.Spray(0.5f, 0f));
+        Assert.Equal(0f, Wading.Spray(0f, 3f));
+        Assert.True(Wading.Spray(0.5f, 2f) > Wading.Spray(0.15f, 2f));
+        Assert.True(Wading.Spray(0.5f, 2f) > Wading.Spray(1.2f, 2f));
+        Assert.True(Wading.Spray(0.5f, 3f) > Wading.Spray(0.5f, 1f));
+        Assert.Equal(0f, Wading.StrideVolume(0f));
+        Assert.True(Wading.StrideVolume(0.6f) > Wading.StrideVolume(0.1f));
+    }
 }

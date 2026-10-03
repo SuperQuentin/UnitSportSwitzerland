@@ -173,6 +173,11 @@ public partial class OriginShifter : Node
                 player.DopplerTracking = AudioStreamPlayer3D.DopplerTrackingEnum.Disabled;
                 player.DopplerTracking = mode;
                 break;
+            case AudioListener3D listener:
+                var listenerMode = listener.DopplerTracking;
+                listener.DopplerTracking = AudioListener3D.DopplerTrackingEnum.Disabled;
+                listener.DopplerTracking = listenerMode;
+                break;
             case Camera3D camera:
                 var cameraMode = camera.DopplerTracking;
                 camera.DopplerTracking = Camera3D.DopplerTrackingEnum.Disabled;
@@ -247,7 +252,8 @@ public partial class OriginShifter : Node
                 && PhysicsServer3D.BodyGetMode(body.GetRid()) == PhysicsServer3D.BodyMode.Kinematic)
                 pass.Kinematic.Add(body);
             if (spatial is AudioStreamPlayer3D { DopplerTracking: not AudioStreamPlayer3D.DopplerTrackingEnum.Disabled }
-                or Camera3D { DopplerTracking: not Camera3D.DopplerTrackingEnum.Disabled })
+                or Camera3D { DopplerTracking: not Camera3D.DopplerTrackingEnum.Disabled }
+                or AudioListener3D { DopplerTracking: not AudioListener3D.DopplerTrackingEnum.Disabled })
                 pass.Doppler.Add(spatial);
             // what it holds follows it, except TopLevel nodes and nodes under a plain Node
             Visit(spatial, pass, childrenAreGlobal: false);

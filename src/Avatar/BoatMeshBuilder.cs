@@ -356,7 +356,12 @@ public partial class BoatRig : Node3D
             };
             rig.AddChild(rig._driver);
         }
-        if (DisplayServer.GetName() != "headless") rig.AddWater(jet);
+        if (DisplayServer.GetName() != "headless")
+        {
+            rig.AddWater(jet);
+            // the forward hull at the waterline, where a wave meets it (#380)
+            rig._slap = new HullSlap(rig, new Vector3(0, 0.25f, -(spec.Length - spec.Shape.SternZ) * 0.7f), jet ? 1.15f : 1f, -2f, 6f);
+        }
         return rig;
     }
 
@@ -436,14 +441,8 @@ public partial class BoatRig : Node3D
             {
                 Size = new Vector2(size, size),
                 Orientation = flat ? PlaneMesh.OrientationEnum.Y : PlaneMesh.OrientationEnum.Z,
-                Material = new StandardMaterial3D
-                {
-                    ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                    BillboardMode = flat ? BaseMaterial3D.BillboardModeEnum.Disabled : BaseMaterial3D.BillboardModeEnum.Particles,
-                    CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-                    VertexColorUseAsAlbedo = true,
-                    Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-                },
+                // on the moving waves, in every style (#380)
+                Material = WakeFoam.Material(flat),
             },
             // left on the water where they fell, not dragged along with the boat
             LocalCoords = false,
@@ -470,6 +469,10 @@ public partial class BoatRig : Node3D
     }
 
     private float _shownWake = -1f, _shownSpray = -1f, _shownJet = -1f;
+    private HullSlap? _slap;
+
+    /// <summary>The water slapping this hull (#380), null headless: for probes.</summary>
+    public HullSlap? Slap => _slap;
 
     /// <summary>
     /// Per frame: the wake by speed through the water while the hull is in it, spray by how hard it
@@ -478,25 +481,25 @@ public partial class BoatRig : Node3D
     public void Water(float speed, float wet, float thrust01, bool afloat)
     {
         if (_wake == null) return;
+        _slap?.Tick((float)GetProcessDeltaTime());
         float wake = afloat && wet > 0.05f ? Mathf.Clamp((speed - 1f) / 12f, 0f, 1f) : 0f;
         float spray = afloat && wet > 0.05f ? Mathf.Clamp((speed - 4f) / 14f, 0f, 1f) : 0f;
         float jet = afloat ? Mathf.Clamp(thrust01, 0f, 1f) * Mathf.Clamp(speed / 6f, 0.3f, 1f) : 0f;
         Set(_wake, wake, ref _shownWake);
         Set(_spray, spray, ref _shownSpray);
-        // foam lies on the water, not on the keel under it: the emitters ride the surface
-        if (wake > 0f) OnSurface(_wake, _wakeAnchor);
-        if (spray > 0f) OnSurface(_spray, _sprayAnchor);
-        if (_jet != null) Set(_jet, jet, ref _shownJet);
+        // foam lies on the water, not on the keel under it: the emitters ride the surface, and the
+        // foam they leave rides the waves (WakeFoam)
+        if (wake > 0f) WakeFoam.OnSurface(_wake, GlobalTransform * _wakeAnchor, 0.03f, ref _wakeWater);
+        if (spray > 0f) WakeFoam.OnSurface(_spray!, GlobalTransform * _sprayAnchor, 0.03f, ref _sprayWater);
+        if (_jet != null)
+        {
+            Set(_jet, jet, ref _shownJet);
+            if (jet > 0f) WakeFoam.Water(_jet, _jet.GlobalPosition, ref _jetWater);
+        }
     }
 
     private Vector3 _wakeAnchor, _sprayAnchor;
-
-    /// <summary>Puts an emitter at its anchor on the hull (rig space), lifted or lowered to the surface there.</summary>
-    private void OnSurface(GpuParticles3D p, Vector3 anchor)
-    {
-        var at = GlobalTransform * anchor;
-        if (World.WaterField.TryLevelAt(at, out float level)) p.GlobalPosition = at with { Y = level + 0.03f };
-    }
+    private Vector2 _wakeWater, _sprayWater, _jetWater;
 
     private static void Set(GpuParticles3D p, float amount, ref float shown)
     {

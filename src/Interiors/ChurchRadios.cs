@@ -257,15 +257,25 @@ public partial class ChurchRadios : Node
         if (_speaker == null || !IsInstanceValid(_speaker) || _speakerPlan != plan || _speaker.GetParent() != node)
         {
             if (_speaker != null && IsInstanceValid(_speaker)) _speaker.QueueFree();
-            _speaker = new RadioSpeaker { Name = "ChurchRadio" };
-            node.AddChild(_speaker);
-            _speaker.Position = at;
+            _speaker = SpeakerAt(node, at);
             _speakerPlan = plan;
         }
         _speaker.CdId = p.CdId;
         _speaker.StartedAt = p.StartedAt;
         _speaker.Length = p.Length;
         _speaker.On = true;
+    }
+
+    /// <summary>
+    /// A speaker on <paramref name="node"/> at the radio's interior-local spot. The spot goes in
+    /// before AddChild: the speaker's <see cref="Audio.Hearing"/> takes its offset in _Ready, and a
+    /// spot set after left the sound at the interior's origin, the middle of the church (#375).
+    /// </summary>
+    public static RadioSpeaker SpeakerAt(Node3D node, Vector3 at)
+    {
+        var speaker = new RadioSpeaker { Name = "ChurchRadio", Position = at };
+        node.AddChild(speaker);
+        return speaker;
     }
 
     /// <summary>The church radio this player hears as music to dance to, if any.</summary>

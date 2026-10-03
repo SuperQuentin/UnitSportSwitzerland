@@ -64,6 +64,14 @@ public partial class ChurchStageProbe : Node3D
         _church = InteriorNode.Create(layout, data, Styles.StyleKit.Material(Styles.MaterialRole.Interior), Transform3D.Identity);
         AddChild(_church);
         _stage = _church.GetNode<ChurchStage>("ChurchStage");
+        // the music comes from the radio by the rat, not from the middle of the nave (#375)
+        if (ChurchRadios.RadioSpot(layout, out var spot))
+        {
+            var speaker = ChurchRadios.SpeakerAt(_church, spot);
+            Check(speaker.SourceOffset.DistanceTo(spot) < 0.01f, $"the church radio is heard from the radio ({speaker.SourceOffset} vs {spot})");
+            speaker.QueueFree();
+        }
+        else Check(false, "the church has a radio spot");
 
         _own = new Camera3D { Name = "Own", Fov = 70f, Position = new Vector3(0.4f, 1.6f, 2.0f) };
         AddChild(_own);

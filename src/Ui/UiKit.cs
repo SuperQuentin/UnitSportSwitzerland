@@ -198,6 +198,13 @@ public static class UiKit
             valueLabel.Text = describe(v);
             valueLabel.TooltipText = describe(v);
             if (!dragging) Commit(v, set);
+            else
+            {
+                // heard while dragging: the volume sliders take the value at once (bus volumes are
+                // cheap); everything else, and the save, waits for the release (#375)
+                set(v);
+                Audio.SfxBus.ApplyVolumes();
+            }
         };
         right.AddChild(slider);
         right.AddChild(valueLabel);

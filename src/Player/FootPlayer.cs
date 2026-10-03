@@ -1230,6 +1230,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         if (!IsMultiplayerAuthority())
             GD.Print($"[net] player {Name} came into view at {GlobalPosition.Round()} ({Global})");
+        // someone else walking past is heard, from their feet (#375)
+        if (!IsMultiplayerAuthority() && DisplayServer.GetName() != "headless") AddChild(new Audio.BodySteps(this));
 
         RefreshVisual();
 
@@ -1401,6 +1403,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public override void _Process(double delta)
     {
+        TickWade((float)delta);   // wading's spray and strides, every peer (#380, FootPlayer.Wade.cs)
         _punch *= Mathf.Exp(-12f * (float)delta);
         _jolt *= Mathf.Exp(-9f * (float)delta);
         if (IsMultiplayerAuthority())
@@ -3226,7 +3229,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // --- ordinary walking / running ----------------------------------------------
         if (!_sliding)
         {
-            float speed = (running ? RunSpeed : WalkSpeed) * moveAmount;
+            float speed = (running ? RunSpeed : WalkSpeed) * moveAmount * WadePace(running);   // wading (#380)
 
             // climbing costs speed: scale by how much of the move is uphill
             if (onFloor && direction != Vector3.Zero)
