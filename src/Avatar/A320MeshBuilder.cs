@@ -243,7 +243,14 @@ public static class A320MeshBuilder
     }
 
     private static Color RowColour(int k, Color tail) => k < 2 ? Belly : k == StripeRow ? tail : White;
-    private static Color InnerColour(int k) => k < 3 ? Hull : Cream;
+    private static readonly Color WallPaint = new(0.80f, 0.70f, 0.52f);
+    private static readonly Color CeilingPaint = new(1.0f, 0.90f, 0.62f);
+    private static readonly Color BinPaint = new(0.86f, 0.80f, 0.66f);
+    private static readonly Color DeckLining = new(0.20f, 0.21f, 0.24f);
+    private static readonly Color Frame = new(0.12f, 0.13f, 0.15f);
+
+    /// <summary>The colour of the skin's inner face: hull below the floor, wall panels in the cabin, dark lining on the flight deck.</summary>
+    private static Color InnerColour(int k, float z) => k < 3 ? Hull : z >= CockpitWallZ ? DeckLining : k >= 8 ? CeilingPaint : WallPaint;
 
     private static void Fuselage(MeshScratch m, Color tail)
     {
@@ -261,7 +268,7 @@ public static class A320MeshBuilder
         }
         var ring2 = new Vector3[12];
         for (int j = 0; j < 12; j++) ring2[j] = ring[j] + new Vector3(0, 0, -0.1f);
-        m.Loft(new[] { ring, ring2 }, Rep(Cream, 12), Cream);
+        m.Loft(new[] { ring, ring2 }, Rep(WallPaint, 12), WallPaint);
 
         // the APU exhaust at the very tip of the tail cone
         float tipY = CentreY + 1.9f;
@@ -292,8 +299,9 @@ public static class A320MeshBuilder
             }
         }
         // the flight deck: side windows, and the windscreen over the nose
-        if (k == 7) holes.Add(new Hole(15.2f, 17.3f, true));
-        if (k == 8) holes.Add(new Hole(16.0f, 17.3f, true));
+        // (separated by dark frames: the windscreen pillars)
+        if (k == 7) { holes.Add(new Hole(15.2f, 16.05f, true)); holes.Add(new Hole(16.17f, 16.7f, true)); holes.Add(new Hole(16.82f, 17.3f, true)); }
+        if (k == 8) { holes.Add(new Hole(16.0f, 16.7f, true)); holes.Add(new Hole(16.82f, 17.3f, true)); }
         holes.Sort((x, y) => x.From.CompareTo(y.From));
         return holes;
     }
@@ -314,11 +322,17 @@ public static class A320MeshBuilder
     private static void Slab(MeshScratch m, int sg, int k, float z0, float z1, Color c)
     {
         if (z1 - z0 < 0.02f) return;
+        if (z0 < CockpitWallZ - 0.001f && z1 > CockpitWallZ + 0.001f)
+        {
+            Slab(m, sg, k, z0, CockpitWallZ, c);
+            Slab(m, sg, k, CockpitWallZ, z1, c);
+            return;
+        }
         var zs = Zs(z0, z1);
         var rings = new Vector3[zs.Count][];
         for (int i = 0; i < zs.Count; i++)
             rings[i] = new[] { Po(zs[i], H[k], sg), Po(zs[i], H[k + 1], sg), Pi(zs[i], H[k + 1], sg), Pi(zs[i], H[k], sg) };
-        m.Loft(rings, new[] { c, c, InnerColour(k), c }, c);
+        m.Loft(rings, new[] { c, c, InnerColour(k, (z0 + z1) * 0.5f), c }, c);
     }
 
     private static void PaneRow(MeshScratch m, int sg, int k, float z0, float z1)
@@ -376,11 +390,11 @@ public static class A320MeshBuilder
                 float w = Mathf.Max(0.1f, InnerX(z, CeilingY + 0.05f) - 0.01f);
                 rings[i] = new[] { new Vector3(-w, CeilingY, z), new Vector3(w, CeilingY, z), new Vector3(w, CeilingY + 0.05f, z), new Vector3(-w, CeilingY + 0.05f, z) };
             }
-            m.Loft(rings, Rep(Cream, 4), Cream);
+            m.Loft(rings, Rep(CeilingPaint, 4), CeilingPaint);
         }
         // overhead bins, both sides
         foreach (int sg in new[] { 1, -1 })
-            Block(m, sg, -9.3f, 11.2f, 0.62f, 4.95f, 5.35f, Cream);
+            Block(m, sg, -9.3f, 11.2f, 0.95f, CeilingY - 0.5f, CeilingY, BinPaint);
 
         // seats: 27 rows of 3-3
         for (int r = 0; r < Rows; r++)
@@ -404,17 +418,17 @@ public static class A320MeshBuilder
         }
 
         // forward lavatory (left, +X), forward galley (right)
-        Block(m, 1, ForwardLavFrom, ForwardLavTo, 0.55f, FloorY, FloorY + 1.95f, Cream);
+        Block(m, 1, ForwardLavFrom, ForwardLavTo, 0.55f, FloorY, FloorY + 1.95f, WallPaint);
         LavDoor(m, 1, 0.55f, (ForwardLavFrom + ForwardLavTo) * 0.5f);
-        Block(m, -1, ForwardGalleyFrom, ForwardGalleyTo, 0.5f, FloorY, FloorY + 1.9f, Cream);
+        Block(m, -1, ForwardGalleyFrom, ForwardGalleyTo, 0.5f, FloorY, FloorY + 1.9f, WallPaint);
         for (int i = 0; i < 3; i++)
             m.Box(new Vector3(-0.5f + 0.006f, FloorY + 0.45f + i * 0.5f, (ForwardGalleyFrom + ForwardGalleyTo) * 0.5f), new Vector3(0.012f, 0.4f, 0.55f), UpholsteryDark);
         // aft lavatories and galleys, both sides
         foreach (int sg in new[] { 1, -1 })
         {
-            Block(m, sg, AftLavFrom, AftLavTo, 0.55f, FloorY, FloorY + 1.95f, Cream);
+            Block(m, sg, AftLavFrom, AftLavTo, 0.55f, FloorY, FloorY + 1.95f, WallPaint);
             LavDoor(m, sg, 0.55f, (AftLavFrom + AftLavTo) * 0.5f);
-            Block(m, sg, AftGalleyFrom, AftGalleyTo, 0.4f, FloorY, FloorY + 1.9f, Cream);
+            Block(m, sg, AftGalleyFrom, AftGalleyTo, 0.4f, FloorY, FloorY + 1.9f, WallPaint);
             for (int i = 0; i < 3; i++)
                 m.Box(new Vector3(sg * (0.4f - 0.006f), FloorY + 0.45f + i * 0.5f, (AftGalleyFrom + AftGalleyTo) * 0.5f), new Vector3(0.012f, 0.4f, 0.9f), UpholsteryDark);
         }
@@ -429,8 +443,8 @@ public static class A320MeshBuilder
     {
         // the wall behind it, with the door opening
         foreach (int sg in new[] { 1, -1 })
-            Block(m, sg, CockpitWallZ - 0.05f, CockpitWallZ + 0.05f, CockpitDoorWidth * 0.5f, FloorY, CeilingY, Cream);
-        m.Box(new Vector3(0, (FloorY + 1.9f + CeilingY) * 0.5f, CockpitWallZ), new Vector3(CockpitDoorWidth, CeilingY - FloorY - 1.9f, 0.1f), Cream);
+            Block(m, sg, CockpitWallZ - 0.05f, CockpitWallZ + 0.05f, CockpitDoorWidth * 0.5f, FloorY, CeilingY, WallPaint);
+        m.Box(new Vector3(0, (FloorY + 1.9f + CeilingY) * 0.5f, CockpitWallZ), new Vector3(CockpitDoorWidth, CeilingY - FloorY - 1.9f, 0.1f), WallPaint);
 
         // seats
         foreach (var hip in new[] { CaptainHip, FirstOfficerHip })
@@ -464,6 +478,7 @@ public static class A320MeshBuilder
             float x = (i % 3 - 1) * hw * 0.62f;
             m.Box(new Vector3(x, i < 3 ? 4.38f : 4.06f, panelZ - 0.065f), new Vector3(hw * 0.5f, 0.24f, 0.02f), Screen);
         }
+        m.Box(new Vector3(0, 5.05f, 17.12f), new Vector3(0.07f, 0.9f, 0.07f), Frame);
         float gw = Mathf.Min(0.95f, InnerX(16.7f, 4.68f) - 0.04f);
         m.Box(new Vector3(0, 4.64f, 16.7f), new Vector3(gw * 2, 0.06f, 0.4f), Dark);
     }

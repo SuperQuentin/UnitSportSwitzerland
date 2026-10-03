@@ -21,11 +21,19 @@ public partial class FootPlayer
             else airliner.Command(AirlinerCommand.Autopilot);
             return true;
         }
-        // G: the gear lever. On the ground it is locked down (weight on the wheels); the doors are #416's
+        // G: in the air the gear lever; on the ground (where the gear is locked down) the left-hand
+        // doors, the ones passengers use, stopped (#416)
         if (e.IsActionPressed(PlayerInput.CarDoor))
         {
-            if (airliner.State.OnGround && airliner.State.GearDown) Announced?.Invoke("Gear locked down on the ground", false);
-            else airliner.Command(AirlinerCommand.Gear);
+            if (!(airliner.State.OnGround && airliner.State.GearDown)) airliner.Command(AirlinerCommand.Gear);
+            else if (!airliner.MayOpenDoors && airliner.DoorsOpen == 0) Announced?.Invoke("Stop to open the doors", false);
+            else
+            {
+                const int left = 1 | 4;   // L1 and L2
+                bool open = (airliner.DoorsOpen & left) == 0;
+                for (int d = 0; d < Avatar.A320Layout.DoorCount; d++)
+                    if ((left >> d & 1) != 0 && ((airliner.DoorsOpen >> d & 1) != 0) != open) airliner.ToggleDoor(d);
+            }
             return true;
         }
         return false;

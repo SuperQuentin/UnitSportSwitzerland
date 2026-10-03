@@ -103,6 +103,37 @@ public sealed class Airliner : Flyer
             new Vector3(A320Layout.WingTipX * 2f, 0.5f, A320Layout.WingRootLeadingZ - A320Layout.WingRootTrailingZ));
     }
 
+    /// <summary>The cabin and the cockpit, walkable (#416): one deck, the drawn aircraft's frame.</summary>
+    public override VehicleDeck[] Decks => Kind == RideKind.A320 ? new[] { A320Deck.Deck } : System.Array.Empty<VehicleDeck>();
+
+    /// <summary>The captain's seat flies; the first officer's, then the cabin, row by row (#416).</summary>
+    public override SeatAnchor[] Seats => Kind == RideKind.A320 ? A320Deck.Seats : System.Array.Empty<SeatAnchor>();
+
+    /// <summary>The aisle beside a passenger's row; behind a pilot's seat, on its side of the pedestal.</summary>
+    public override Vector3? StandSpot(int i)
+    {
+        if (Kind != RideKind.A320 || i < 0 || i >= Seats.Length) return null;
+        var hip = Seats[i].Hip;
+        return i < 2
+            ? new Vector3(hip.X * 0.9f, Seats[i].Floor + 0.05f, -(A320Layout.CockpitWallZ + 0.4f))
+            : new Vector3(0f, Seats[i].Floor + 0.05f, hip.Z);
+    }
+
+    /// <summary>With people aboard and nobody flying it, it stands on its brakes (a passenger cannot taxi it).</summary>
+    public override bool Driverless => true;
+
+    /// <summary>The doors open only standing still: a door is not opened rolling, let alone flying.</summary>
+    public bool MayOpenDoors => State.OnGround && State.Velocity.Length() < 1f;
+
+    /// <summary>A door's leaf, open or shut (#416). Shutting always works; opening only stopped.</summary>
+    public void ToggleDoor(int door)
+    {
+        if (door < 0 || door >= A320Layout.DoorCount) return;
+        byte bit = (byte)(1 << door);
+        if ((DoorsOpen & bit) == 0 && !MayOpenDoors) return;
+        DoorsOpen ^= bit;
+    }
+
     public override Vector3 EntryPoint => AircraftMeshBuilder.Flip(new Vector3(A320Layout.HalfWidth, 0f, A320Layout.ForwardDoorZ));
     public override bool ExitLeft => true;
 

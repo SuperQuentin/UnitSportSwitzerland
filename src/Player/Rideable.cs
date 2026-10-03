@@ -287,6 +287,13 @@ public abstract class Rideable
 
     public bool Walkable => Decks.Length > 0;
 
+    /// <summary>
+    /// Where one stands to take seat <paramref name="i"/> and is put on standing up from it, in its
+    /// section's node frame; null: beside it toward the aisle, the way a bus's seats are (#416: an
+    /// airliner's window seat is two seats from its aisle, a pilot stands behind the seat).
+    /// </summary>
+    public virtual Vector3? StandSpot(int i) => null;
+
     /// <summary>Seat <paramref name="i"/>'s hip in this ride's node frame, the train straight: for picking the nearest seat.</summary>
     public virtual Vector3 SeatPosition(int i) => Seats[i].Hip;
 
