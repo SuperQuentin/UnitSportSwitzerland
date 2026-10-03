@@ -28,8 +28,8 @@ public partial class CatalogueUi : CanvasLayer
 
     private readonly ItemController _items;
 
-    /// <summary>The panel may be offered: alone, or as a server's admin. The server checks again.</summary>
-    public static bool Allowed => !Permissions.Online || Permissions.IsAdmin;
+    /// <summary>The panel may be offered: alone, or as a server's admin, never in a Battle Royale match. The server checks again.</summary>
+    public static bool Allowed => Permissions.AdminTools;
 
     public bool IsOpen => _panel.Visible;
 

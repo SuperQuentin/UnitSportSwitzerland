@@ -242,8 +242,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
 
         // a vehicle out of nothing is an admin's, or the one a race put you on (Core/Permissions)
         // (a wreck cannot be driven and burns out: no loophole, and race NPCs' wrecks park through
-        // the ordinary client simulating them)
-        _vehicles.MayPark = (peer, state) => state.Wrecked || _chat.IsAdminPeer(peer) || race.TakeIssued(peer);
+        // the ordinary client simulating them); never in a Battle Royale match, admin or not (#425)
+        _vehicles.MayPark = (peer, state) => state.Wrecked || (_chat.IsAdminPeer(peer) && !br.Playing(peer)) || race.TakeIssued(peer);
 
         // The operator's own command line. This is how the first admin gets granted.
         AddChild(new ServerConsole(_chat));

@@ -74,6 +74,18 @@ public sealed class ZoneSchedule
     public Vector2 CentreOf(int phase) => _centre[Math.Clamp(phase, 0, Phases)];
     public float RadiusOf(int phase) => _radius[Math.Clamp(phase, 0, Phases)];
 
+    /// <summary>
+    /// When the next shrink starts, if the zone is waiting at <paramref name="t"/>: from the loot time,
+    /// phase 1's (after its wait). Null while it shrinks or once it is over (<c>/br zone</c>, #425).
+    /// </summary>
+    public double? NextShrinkAt(double t)
+    {
+        var z = At(t);
+        if (z.Shrinking || z.Over) return null;
+        int i = Math.Max(z.Phase, 1);
+        return _start[i] + Wait[i] * _scale;
+    }
+
     public ZoneState At(double t)
     {
         if (t < _start[1])

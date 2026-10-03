@@ -156,7 +156,7 @@ public partial class ChatManager : Node
         // the catalogue is a panel on this screen; what it gives still goes through /spawn
         if (text.Trim().ToLowerInvariant() is "/catalogue" or "/catalog" or "/items")
         {
-            if (!CanUseCatalogue) LineReceived?.Invoke("The item catalogue is for admins on a server.", ChatKind.Error);
+            if (!CanUseCatalogue) LineReceived?.Invoke(Permissions.InMatch ? NotInMatch : "The item catalogue is for admins on a server.", ChatKind.Error);
             else if (CatalogueRequested is null) LineReceived?.Invoke("No catalogue here.", ChatKind.Error);
             else CatalogueRequested();
             return;
@@ -164,7 +164,7 @@ public partial class ChatManager : Node
         // the debug menu draws on this screen only; a server never hears of it (#339)
         if (text.Trim().ToLowerInvariant() == "/debug")
         {
-            if (!DebugMenu.Allowed) LineReceived?.Invoke("The debug menu is for admins on a server.", ChatKind.Error);
+            if (!DebugMenu.Allowed) LineReceived?.Invoke(Permissions.InMatch ? NotInMatch : "The debug menu is for admins on a server.", ChatKind.Error);
             else if (DebugRequested is null) LineReceived?.Invoke("No debug menu here.", ChatKind.Error);
             else DebugRequested();
             return;
@@ -232,7 +232,7 @@ public partial class ChatManager : Node
     public event Action? DebugRequested;
 
     /// <summary>Client: the catalogue is offered alone, or to an admin. The server re-checks every <c>/spawn</c> it sends.</summary>
-    public bool CanUseCatalogue => IsLocal || Permissions.IsAdmin;
+    public bool CanUseCatalogue => !Permissions.InMatch && (IsLocal || Permissions.IsAdmin);
 
     /// <summary>Client: an admin emptied this inventory (<c>/clear</c>).</summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
@@ -531,6 +531,20 @@ public partial class ChatManager : Node
     /// </summary>
     private bool IsAdmin(long peerId) =>
         peerId == ConsolePeerId || (_registry?.Find(peerId)?.IsAdmin ?? false);
+
+    /// <summary>Why an admin tool is refused to a Battle Royale entrant (#425).</summary>
+    public const string NotInMatch = "Not in a Battle Royale match: everyone plays it on equal terms.";
+
+    /// <summary>
+    /// <paramref name="peer"/> is a living Battle Royale entrant (#425): the admin commands that would
+    /// move, arm or pay one are refused, and <paramref name="sender"/> is told why.
+    /// </summary>
+    private bool RefusedInMatch(long sender, long peer)
+    {
+        if (BattleRoyale?.Playing(peer) != true) return false;
+        ReplyTo(sender, peer == sender ? NotInMatch : $"{NameOf(peer)} is in a Battle Royale match: everyone plays it on equal terms.", ChatKind.Error);
+        return true;
+    }
 
     /// <summary>
     /// Removes anything that would let one player's message forge another's, or break the
@@ -847,7 +861,9 @@ public partial class ChatManager : Node
     {
         if (!TryFindPlace(sender, query, out var place)) return;
 
-        Rpc(MethodName.ForceTeleport, place.E, place.N, place.Name);
+        // a Battle Royale is left alone (#425): its entrants stay where the match has them
+        foreach (int peer in Multiplayer.GetPeers())
+            if (BattleRoyale?.Playing(peer) != true) RpcId(peer, MethodName.ForceTeleport, place.E, place.N, place.Name);
         Broadcast($"{NameOf(sender)} moved everyone to {place.Name}", ChatKind.Admin);
     }
 
@@ -894,6 +910,7 @@ public partial class ChatManager : Node
         }
 
         if (!TryLocate(sender, name, out var target, out double e, out double n)) return;
+        if (RefusedInMatch(sender, sender) || RefusedInMatch(sender, target.PeerId)) return;
         if (target.PeerId == sender)
         {
             ReplyTo(sender, "You are already there.", ChatKind.Private);
@@ -918,6 +935,7 @@ public partial class ChatManager : Node
             ReplyTo(sender, $"No player matching '{name}'.", ChatKind.Error);
             return;
         }
+        if (RefusedInMatch(sender, sender) || RefusedInMatch(sender, target.PeerId)) return;
 
         if (!TryLocate(sender, me.Name, out _, out double e, out double n)) return;
 
@@ -1090,6 +1108,7 @@ public partial class ChatManager : Node
     /// </summary>
     private void CommandSpawn(long sender, string rest)
     {
+        if (RefusedInMatch(sender, sender)) return;
         if (!Items.ItemLookup.TryParse(rest, out var def, out int count, out string error))
         {
             ReplyTo(sender, error, ChatKind.Error);
@@ -1118,7 +1137,7 @@ public partial class ChatManager : Node
             ReplyTo(sender, "Usage: /give <player> <item> [count]", ChatKind.Error);
             return;
         }
-        if (Target(sender, parts[1]) is not { } target) return;
+        if (Target(sender, parts[1]) is not { } target || RefusedInMatch(sender, target.PeerId)) return;
         if (!Items.ItemLookup.TryParse(string.Join(' ', parts[2..]), out var def, out int count, out string error))
         {
             ReplyTo(sender, error, ChatKind.Error);
@@ -1145,7 +1164,7 @@ public partial class ChatManager : Node
                 ReplyTo(sender, "Clearing someone else's inventory is an admin command.", ChatKind.Error);
                 return;
             }
-            if (Target(sender, name) is not { } target) return;
+            if (Target(sender, name) is not { } target || RefusedInMatch(sender, target.PeerId)) return;
             peer = target.PeerId;
         }
         else if (sender == ConsolePeerId)
@@ -1178,6 +1197,7 @@ public partial class ChatManager : Node
             if (Target(sender, parts[2]) is not { } target) return;
             peer = target.PeerId;
         }
+        if (RefusedInMatch(sender, peer)) return;
 
         int cash = (int)Math.Clamp(amount, -MaxCashGrant, MaxCashGrant);
         RpcId(peer, MethodName.GrantCash, cash);

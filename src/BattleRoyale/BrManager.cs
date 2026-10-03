@@ -104,8 +104,9 @@ public partial class BrManager : Node
                 Broadcast("The Battle Royale was cancelled.");
                 Finish();
                 return "Cancelled.";
+            case "zone": return ForceShrink();
             default:
-                return "Usage: /br open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] · join · leave · start · cancel · status";
+                return "Usage: /br open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] · join · leave · start · zone · cancel · status";
         }
     }
 
@@ -120,6 +121,25 @@ public partial class BrManager : Node
                 + string.Join(", ", s.Entrants.Select(e => e.Name)) + ". /br join to play.",
             _ => $"Match in {s.AreaName}: {s.AliveCount} of {s.Entrants.Count} alive.",
         };
+    }
+
+    /// <summary>
+    /// <c>/br zone</c> (#425): the current wait ends now and the zone starts closing. The match's clock
+    /// moves on by what was left (<see cref="BrState.Started"/>, earlier), so every client's zone follows
+    /// from the one state message, as it always does.
+    /// </summary>
+    private string ForceShrink()
+    {
+        if (_state.Phase != BrPhase.Playing) return "No match is being played.";
+        double t = Now - _state.Started;
+        if (t < 0) return $"The plane's doors close in {-t:F0} s; the zone's clock starts then.";
+        var zone = new ZoneSchedule(_state.Seed, _state.Side, _state.Pace);
+        if (zone.NextShrinkAt(t) is not { } at) return zone.At(t).Over ? "The zone has closed for good." : "The zone is already closing.";
+        _state.Started -= at - t;
+        Push();
+        Broadcast($"The zone is closing now ({at - t:F0} s early)!");
+        GD.Print(FormattableString.Invariant($"[br] zone forced: phase {zone.At(at).Phase} shrinks {at - t:F0} s early"));
+        return "The zone is closing.";
     }
 
     private string Open(long sender, string[] words)
