@@ -223,9 +223,9 @@ public partial class HouseProps : Node
         if (Multiplayer.IsServer()) ServeTap(Multiplayer.GetRemoteSenderId(), plan, index);
     }
 
-    /// <summary>Only someone inside that building works its taps (offline, with no interiors, a probe's).</summary>
+    /// <summary>Only someone inside that building works its taps (offline: the building this machine is in, or a probe's with no interiors).</summary>
     private bool Inside(long peer, string plan) =>
-        plan.Length > 0 && (InteriorManager.Instance is { } im ? im.SpaceOf(peer) == plan : !Online);
+        plan.Length > 0 && (InteriorManager.Instance is { } im ? im.SpaceOf(peer) == plan || !Online && im.Current?.Key == plan : !Online);
 
     private void ServeTap(long peer, string plan, int index)
     {
@@ -266,7 +266,7 @@ public partial class HouseProps : Node
     {
         if (InteriorManager.Instance is not { } im) return !Online;
         if (im.SpaceOf(MyId) == plan) return true;
-        if (!Online) return false;
+        if (!Online) return im.Current?.Key == plan;
         foreach (long peer in Multiplayer.GetPeers())
             if (im.SpaceOf(peer) == plan) return true;
         return false;
