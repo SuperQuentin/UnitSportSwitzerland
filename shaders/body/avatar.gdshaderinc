@@ -6,9 +6,13 @@
 // writes none). Clothes may carry a finish in the vertex colour's ALPHA, 1 - id/255
 // (Avatar.Garments.Fx; ids are Avatar.Finish):
 //   1 rainbow, 2 disco ball, 3 galaxy, 4 holographic, 5 glitch, 6 lava, 7 neon,
-//   8 tartan, 9 fishnet, 10 lace.
+//   8 tartan, 9 fishnet, 10 lace;
+//   11 the pixel face (#394, Avatar.FaceAtlas): the atlas at UV, its clear pixels discarded so
+//      the head's skin behind shows through.
 // Alpha 1 everywhere else, so every other mesh drawn with this is unchanged. Patterns are laid
 // out in the mesh's own space (origin at the feet), so they move with the figure.
+
+uniform sampler2D face_atlas : source_color, filter_nearest, hint_default_transparent;
 
 varying vec3 v_pos;
 varying flat int v_fx;
@@ -60,6 +64,12 @@ void fragment() {
 #endif
     if (v_fx == 0) {
         // the plain figure
+    } else if (v_fx == 11) {
+        vec4 face = texture(face_atlas, UV);
+        if (face.a < 0.5) {
+            discard;
+        }
+        ALBEDO = face.rgb;
     } else {
         // a facet's own normal (view space), for the effects that change with the angle
         vec3 fn = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));

@@ -113,6 +113,13 @@ public partial class AvatarPreview : Node3D
             return;
         }
 
+        // "--bodies [builds|looks|faces|walk]" (#394): the refined figure next to the current one
+        if (CmdArgs.Has("--bodies"))
+        {
+            BuildBodies();
+            return;
+        }
+
         // "--outfits [page] [--walk]" (#251): figures in the clothes, turned toward the camera (or by
         // --view degrees). Page 0 (default) is whole outfits, gothic, kawaii and the finishes; a slot
         // name (top, bottom, legs, head, …) lines up every look for that slot. --walk strides them.
@@ -523,6 +530,124 @@ public partial class AvatarPreview : Node3D
         cam.LookAt(new Vector3(0, 0.95f, -(rows - 1) * 1.1f), Vector3.Up);
         cam.Current = true;
         GD.Print($"[outfits] page {page}: {looks.Count} figures");
+    }
+
+    /// <summary>
+    /// "--bodies [page]" (#394): the refined figures. <c>builds</c> (default): today's figure, then
+    /// slim, curvy and broad in the same jersey; <c>looks</c>: six styled looks; <c>faces</c>: every
+    /// face close up; <c>heads</c>: the looks' heads and hair; <c>walk</c>: the builds mid-stride. Long lens, turned
+    /// three-quarters (or by --view degrees).
+    /// </summary>
+    private void BuildBodies()
+    {
+        string page = CmdArgs.Value("--bodies", notFlag: true) ?? "builds";
+        var skin = new Color(0.90f, 0.74f, 0.62f);
+        var jersey = new BodyLook(BodyBuild.Slim, skin) { Top = new Color(0.85f, 0.24f, 0.20f), Bottom = new Color(0.16f, 0.17f, 0.20f) };
+        var figures = new List<(string Name, Func<ArrayMesh> Mesh)>();
+        void Add(string name, BodyLook look) => figures.Add((name, () => HumanMeshBuilder.BuildBody(look)));
+
+        var looks = new (string Name, BodyLook Look)[]
+        {
+            ("coat", new BodyLook(BodyBuild.Slim, new Color(0.96f, 0.86f, 0.74f))
+            {
+                Top = new Color(0.09f, 0.08f, 0.11f), SleeveTo = 2f, TopFrom = 1.2f, Bottom = new Color(0.10f, 0.09f, 0.12f),
+                LegTo = 2f, Shoes = new Color(0.08f, 0.08f, 0.09f), BootFrom = 1.55f, Platform = 1.6f,
+                Gloves = new Color(0.12f, 0.11f, 0.13f), GloveFrom = 1.85f, Hair = new Color(0.20f, 0.72f, 0.74f),
+                HairStyle = HairStyle.Bob, Face = 2,
+            }),
+            ("jacket", new BodyLook(BodyBuild.Broad, new Color(0.95f, 0.80f, 0.42f))
+            {
+                Top = new Color(0.42f, 0.55f, 0.36f), SleeveTo = 2f, Bottom = new Color(0.22f, 0.32f, 0.55f), LegTo = 2f,
+                Shoes = new Color(0.20f, 0.18f, 0.18f), Belt = new Color(0.60f, 0.70f, 0.50f),
+                Hair = new Color(0.86f, 0.52f, 0.20f), HairStyle = HairStyle.Spiky, Face = 1,
+            }),
+            ("punk", new BodyLook(BodyBuild.Curvy, new Color(0.93f, 0.90f, 0.92f))
+            {
+                Top = new Color(0.08f, 0.08f, 0.10f), TopFrom = 2.6f, SleeveTo = 0f, Bottom = new Color(0.07f, 0.07f, 0.09f),
+                LegTo = 0.28f, Legwear = new Color(0.16f, 0.24f, 0.42f), Shoes = new Color(0.06f, 0.06f, 0.07f),
+                BootFrom = 1.15f, Platform = 2.6f, Gloves = new Color(0.08f, 0.08f, 0.10f), GloveFrom = 1.55f,
+                Belt = new Color(0.75f, 0.75f, 0.78f), Hair = new Color(0.12f, 0.45f, 0.75f), HairStyle = HairStyle.Spiky, Face = 2,
+            }),
+            ("hoodie", new BodyLook(BodyBuild.Curvy, new Color(0.95f, 0.70f, 0.60f))
+            {
+                Top = new Color(0.20f, 0.13f, 0.26f), SleeveTo = 2f, TopFrom = 1.6f, Bottom = new Color(0.16f, 0.11f, 0.22f), LegTo = 2f,
+                Shoes = new Color(0.12f, 0.10f, 0.14f), Hair = new Color(0.10f, 0.08f, 0.12f), HairStyle = HairStyle.Long, Face = 0,
+            }),
+            ("crop", new BodyLook(BodyBuild.Slim, new Color(0.92f, 0.76f, 0.52f))
+            {
+                Top = new Color(0.16f, 0.22f, 0.18f), TopFrom = 2.55f, SleeveTo = 0.35f, Bottom = new Color(0.24f, 0.16f, 0.30f), LegTo = 2f,
+                Waistband = 1.75f, Shoes = new Color(0.14f, 0.12f, 0.16f), Gloves = new Color(0.22f, 0.15f, 0.26f), GloveFrom = 1.85f,
+                Hair = new Color(0.86f, 0.10f, 0.08f), HairStyle = HairStyle.Ponytail, Face = 1,
+            }),
+            ("sporty", new BodyLook(BodyBuild.Curvy, new Color(0.80f, 0.56f, 0.38f))
+            {
+                Top = new Color(0.12f, 0.24f, 0.20f), SleeveTo = 0f, TopFrom = 2.1f, Bottom = new Color(0.12f, 0.24f, 0.20f), LegTo = 0.25f,
+                Shoes = new Color(0.95f, 0.95f, 0.95f), Hair = new Color(0.45f, 0.14f, 0.10f), HairStyle = HairStyle.Bob, Face = 3,
+            }),
+        };
+
+        float spacing = 0.95f, lookAtY = 0.92f, height = 2.1f;
+        switch (page)
+        {
+            case "looks":
+                foreach (var (name, look) in looks) Add(name, look);
+                break;
+            case "faces":
+                // every face, bald so nothing hides it, heads only in frame
+                for (int f = 0; f < FaceAtlas.Count; f++)
+                    Add($"face {f}", looks[f % looks.Length].Look with { Face = f, HairStyle = HairStyle.None });
+                spacing = 0.42f; lookAtY = 1.68f; height = 0.55f;
+                break;
+            case "heads":
+                // the looks' heads and hair close up
+                foreach (var (name, look) in looks) Add(name, look);
+                spacing = 0.42f; lookAtY = 1.68f; height = 0.55f;
+                break;
+            case "walk":
+                foreach (var b in Enum.GetValues<BodyBuild>())
+                    foreach (float phase in new[] { 0.1f, 0.35f })
+                    {
+                        var look = looks[(int)b * 2].Look;
+                        figures.Add(($"{b} {phase}", () => HumanMeshBuilder.BuildBodyStride(look, 1.6f, phase)));
+                    }
+                break;
+            default:
+                figures.Add(("today", () => HumanMeshBuilder.Build(HumanPalette.ForRider(0) with { Skin = skin })));
+                foreach (var b in Enum.GetValues<BodyBuild>())
+                    Add(b.ToString(), jersey with { Build = b, Face = (int)b, HairStyle = (HairStyle)((int)b + 1), Hair = new Color(0.25f, 0.15f, 0.09f) });
+                break;
+        }
+
+        // a fill light from the camera's side: the PS1 style's stepped light leaves a figure's
+        // front in the dark under the turntable's one sun, and faces are what this page is for
+        AddChild(new DirectionalLight3D { Rotation = new Vector3(Mathf.DegToRad(-15), Mathf.DegToRad(20), 0), LightEnergy = 0.7f });
+
+        var material = HumanMeshBuilder.FigureMaterial();
+        float yaw = _viewDegrees == 90 ? Mathf.Pi - 0.45f : Mathf.DegToRad(_viewDegrees);
+        for (int i = 0; i < figures.Count; i++)
+        {
+            var mesh = figures[i].Mesh();
+            AddChild(new MeshInstance3D
+            {
+                Mesh = mesh,
+                MaterialOverride = material,
+                Position = new Vector3((i - (figures.Count - 1) * 0.5f) * spacing, 0, 0),
+                Rotation = new Vector3(0, yaw, 0),
+            });
+            GD.Print($"[bodies] {figures[i].Name}: {mesh.SurfaceGetArrayIndexLen(0) / 3} triangles");
+        }
+        // a long lens (docs/notes/avatar/judge-model-proportions-long-lens.md): framed to the row, or
+        // to the figures' height, whichever needs more distance
+        const float fov = 14f;
+        float half = Mathf.Tan(Mathf.DegToRad(fov * 0.5f));
+        var size = GetViewport().GetVisibleRect().Size;
+        float aspect = size.X / Mathf.Max(1f, size.Y);
+        float distance = Mathf.Max(figures.Count * spacing * 0.55f / (half * aspect), height * 0.55f / half);
+        var cam = new Camera3D { Fov = fov, Position = new Vector3(0, lookAtY + distance * 0.06f, distance), Far = distance * 3f };
+        AddChild(cam);
+        cam.LookAt(new Vector3(0, lookAtY, 0), Vector3.Up);
+        cam.Current = true;
+        GD.Print($"[bodies] page {page}: {figures.Count} figures");
     }
 
     private Node3D? _convoy;

@@ -327,6 +327,10 @@ public static class StyleKit
             case MaterialRole.Water when HasUniform(shader, "ssr_steps"):
                 m.SetShaderParameter("ssr_steps", Pick(style, l => l.Effects).Value && OnForwardPlus ? 24 : 0);
                 break;
+            // the figures' pixel faces (#394), in every style's avatar shader
+            case MaterialRole.Figure when HasUniform(shader, "face_atlas"):
+                m.SetShaderParameter("face_atlas", Avatar.FaceAtlas.Texture);
+                break;
         }
         // the realistic shaders' textures, wherever they are drawn (Realistic+ borrows them)
         if (from == VisualStyle.RealisticLow)
