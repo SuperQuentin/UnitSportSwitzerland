@@ -29,7 +29,9 @@ public enum RideKind
     Steamer = 123,
     /// <summary>Play as a feral pigeon (#217, <see cref="Player.Pigeon"/>). Not a boat: a new boat must skip 124.</summary>
     Pigeon = 124,
-    // The next other mount is 125.
+    /// <summary>The Airbus A320 (#414, #416): an <see cref="Player.Airliner"/>, walkable.</summary>
+    A320 = 125,
+    // The next other mount is 126 (the AN-124 #419 and the military freighter #420 come next).
 }
 
 /// <summary>
@@ -450,6 +452,7 @@ public abstract class Rideable
         _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),
         _ when HeavyCatalog.For(kind) is { } heavy => new Truck(heavy),
         _ when Boat.For(kind) is { } boat => boat,
+        _ when Airliner.For(kind) is { } airliner => airliner,
         _ => null,
     };
 }

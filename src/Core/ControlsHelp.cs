@@ -112,6 +112,17 @@ public partial class ControlsHelp : CanvasLayer
             new("Gangways, stopped", PlayerInput.CarDoor),
             new("Walk aboard by a gangway; E at the wheel in the wheelhouse drives, E at a seat sits", PlayerInput.InteractMount),
         }),
+        ("Airliners", new Row[]
+        {
+            new("Thrust levers forward / back (held back at idle on the ground: reverse)", Keys: "{sprint} / {crouch_slide}", Pad: "RT / LT"),
+            new("Pitch and roll; on the ground: steer the nose wheel", Keys: "{move_forward}{move_left}{move_back}{move_right}", Pad: "Left stick"),
+            new("Wheel brakes (hold)", PlayerInput.Jump),
+            new("Flaps a notch down / up", Keys: "{flaps_down} / {flaps_up}", Pad: "RB / LB"),
+            new("Gear up / down (in the air)", PlayerInput.CarDoor),
+            new("Speedbrake: retracted, half, full", PlayerInput.Speedbrake),
+            new("Parking brake", PlayerInput.ParkingBrake),
+            new("Landing lights", PlayerInput.LightsToggle),
+        }),
         ("Flying", new Row[]
         {
             new("Pitch and roll", Keys: Wasd, Pad: "Left stick"),

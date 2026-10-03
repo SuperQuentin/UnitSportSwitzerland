@@ -5,7 +5,7 @@ using UnitSport.Terrain;
 namespace UnitSport.Player;
 
 /// <summary>
-/// <c>godot --path . -- --flycheck wingsuit|glide|paraglider|heli|plane|pigeon[,out.png] [--at E,N] [--world flat]</c>
+/// <c>godot --path . -- --flycheck wingsuit|glide|paraglider|heli|plane|pigeon|a320[,out.png] [--at E,N] [--world flat] [--airliner arcade|sim]</c>
 ///
 /// <para>
 /// Flies one craft through a scripted sortie with the real input actions and prints what the
@@ -48,7 +48,7 @@ public partial class FlightCheckProbe : Node
     {
         if (_done) return;
         _wait += delta;
-        if (_wait > 150) { GD.Print("[flycheck] TIMEOUT"); Finish(2); return; }
+        if (_wait > (_kind == "a320" ? 900 : 150)) { GD.Print("[flycheck] TIMEOUT"); Finish(2); return; }
 
         var (e, n) = SpawnPoint.ParseTarget();
         var at = _origin.ToWorld(e, n, 0);
@@ -115,6 +115,12 @@ public partial class FlightCheckProbe : Node
                 p.SetRide(RideKind.Plane);
                 p.DebugLaunch(p.GlobalPosition + Vector3.Up * 400f, new Vector3(0, 0, -50));
                 break;
+            case "a320":
+                // a whole circuit on the real keys: take-off, climb, a 180° turn, approach, landing, stop (#414)
+                p.SetRide(RideKind.A320);
+                Engine.TimeScale = 4.0;
+                _circuit = new AirlinerCircuit();
+                break;
         }
         _from = _origin.ToGlobal(p.GlobalPosition);
         GD.Print($"[flycheck] {_kind}: start agl {Agl(p.GlobalPosition):F0} m");
@@ -167,6 +173,14 @@ public partial class FlightCheckProbe : Node
                 }
                 if (t > 40) End("still airborne");
                 break;
+            case "a320":
+                if (_player!.Vehicle is not Airliner jet) { _crashed = true; End("not in an airliner"); break; }
+                if (_circuit!.Step(jet, _player, Agl(_player.GlobalPosition), (float)t, Hold) is { } how)
+                {
+                    if (!how.Ok) _crashed = true;
+                    End(how.Text);
+                }
+                break;
             case "plane":
                 Hold(PlayerInput.Sprint, t < 3);                  // throttle lever up
                 Hold(PlayerInput.MoveBack, t > 6 && t < 7.5);     // pull up
@@ -197,10 +211,13 @@ public partial class FlightCheckProbe : Node
         Finish(ok ? 0 : 1);
     }
 
+    private AirlinerCircuit? _circuit;
+
     private void Finish(int code)
     {
+        Engine.TimeScale = 1.0;
         foreach (var a in new[] { PlayerInput.Jump, PlayerInput.MoveForward, PlayerInput.MoveBack,
-                     PlayerInput.MoveRight, PlayerInput.Sprint, PlayerInput.CrouchSlide })
+                     PlayerInput.MoveRight, PlayerInput.MoveLeft, PlayerInput.Sprint, PlayerInput.CrouchSlide })
             Input.ActionRelease(a);
         _done = true;
         GetTree().Quit(code);

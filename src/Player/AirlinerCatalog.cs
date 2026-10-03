@@ -48,6 +48,8 @@ public sealed class AirlinerSpec
     public required float[] FlapCd { get; init; }
     /// <summary>Highest speed each setting may be out at (VFE), m/s; the first entry is VMO.</summary>
     public required float[] FlapLimit { get; init; }
+    /// <summary>How far the flaps are down at each setting, rad (drawn only: a setting with slats alone is 0).</summary>
+    public required float[] FlapAngles { get; init; }
     /// <summary>Flap settings a second the flaps travel.</summary>
     public float FlapRate { get; init; } = 0.22f;
 
@@ -89,7 +91,7 @@ public sealed class AirlinerSpec
 /// <summary>Every heavy aircraft, append-only like the other catalogs.</summary>
 public static class AirlinerCatalog
 {
-    private const float Kt = 0.514444f;
+    private const float Kt = 0.514444f, Deg = Mathf.Pi / 180f;
 
     /// <summary>
     /// Airbus A320ceo with CFM56-5B (#416): 78 t MTOW, 122.6 m², 2 × 120 kN, 37.6 m long, 35.8 m
@@ -119,6 +121,7 @@ public static class AirlinerCatalog
         FlapClMax = new[] { 1.45f, 1.75f, 2.05f, 2.30f, 2.50f, 2.85f },
         FlapCd = new[] { 0f, 0.004f, 0.016f, 0.030f, 0.045f, 0.075f },
         FlapLimit = new[] { 350 * Kt, 230 * Kt, 215 * Kt, 200 * Kt, 185 * Kt, 177 * Kt },
+        FlapAngles = new[] { 0f, 0f, 10 * Deg, 15 * Deg, 20 * Deg, 40 * Deg },
         GearLimit = 250 * Kt,
         MaxPitchRate = 0.105f,
         MaxRollRate = 0.26f,
@@ -153,6 +156,7 @@ public static class AirlinerCatalog
         FlapClMax = new[] { 1.50f, 2.10f, 2.45f, 2.70f, 2.95f },
         FlapCd = new[] { 0f, 0.012f, 0.030f, 0.050f, 0.080f },
         FlapLimit = new[] { 310 * Kt, 220 * Kt, 200 * Kt, 185 * Kt, 170 * Kt },
+        FlapAngles = new[] { 0f, 15 * Deg, 25 * Deg, 30 * Deg, 40 * Deg },
         FlapRate = 0.15f,
         GearCd = 0.025f,
         GearLimit = 250 * Kt,
@@ -193,6 +197,7 @@ public static class AirlinerCatalog
         FlapClMax = new[] { 1.55f, 2.30f, 2.80f },
         FlapCd = new[] { 0f, 0.030f, 0.070f },
         FlapLimit = new[] { 290 * Kt, 180 * Kt, 145 * Kt },
+        FlapAngles = new[] { 0f, 20 * Deg, 40 * Deg },
         FlapRate = 0.12f,
         GearCd = 0.025f,
         GearLimit = 168 * Kt,
