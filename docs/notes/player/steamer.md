@@ -29,9 +29,17 @@
   the shaft stops. HUD: knots, km/h, the order, shaft rpm, ASTERN / AGROUND / GANGWAY OPEN. Chase
   camera 77 m back, 24 m up (a train's rule); first person from the helmsman's eye over the wheel
   (his own figure hidden then).
-- **Sounds**: the engine through `EngineSynth` (`Steamer.Sound`: two cylinders, four beats a turn,
-  silent at STOP), the paddles' churn (`SfxSynth.Paddles`, pitch by the shaft) and the whistle
-  (`SfxSynth.Whistle`, three pipes) on the rig. Not listened to by a person yet.
+- **Sounds**: the engine through `EngineSynth` (`Steamer.SteamEngine`, `Steam = true`: a chuff a
+  beat, four a turn, silent at STOP), the paddles' churn (`SfxSynth.Paddles`, pitch
+  `SfxSynth.PaddlePitch(shaft)`) and the whistle (`SfxSynth.Whistle`, three pipes, shaped by
+  `SfxSynth.WhistleShape`) on the rig; water slapping the bow (`HullSlap`, `boats`). **Checked by
+  their numbers, not by ear (#380)**: `--soundcheck <dir> --water-sounds` renders them as played
+  (`audio`). Found and fixed: the engine was the petrol model at 0.3-3 Hz, a steady roar of intake
+  noise with each beat a 2 dB dip (now chuffs 15-24 dB over the gap, beat 2.99 Hz at full ahead,
+  every voice); the paddles slapped twice too fast at DEAD SLOW (4.5 a second for 2.3) and were a
+  20-180 Hz rumble (now 2.4 / 4.6 / 9.1 slaps a second at a quarter / half / full shaft, splashier);
+  the whistle started and stopped dead (now a 0.25 s rise from 6 % flat, a 0.35 s sagging fall).
+  Still never heard by a person.
 - **Decks** (`SteamerMeshBuilder.Build`, one section, its frame the posed visual): the main deck
   (slabs as wide as the wider station), the bulwark rail as walls along the tapering hull
   (`DeckBuilder.Wall`), the forward saloon (13–29 m: walls, doorways forward and to both side decks, 32
@@ -84,4 +92,4 @@
 - **Not done**: mooring lines (parked, it floats free and drifts in a swell); a server-placed parked steamer only heaves on
   clients (no pitch/roll until a client claims it); the parked collision box is the hull only, level;
   no hands drawn on the wheel in first person; the telegraph handle on a remote copy follows the
-  shaft, not the order; the sounds were not listened to.
+  shaft, not the order; nobody has listened to the sounds by ear (`Sounds`).

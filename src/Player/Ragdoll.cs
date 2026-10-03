@@ -23,9 +23,22 @@ namespace UnitSport.Player;
 /// velocity, not the points); the remote copies are steered onto the owner's replicated
 /// position, so they land where the owner did without being kept in lockstep.
 /// </para>
+///
+/// <para>
+/// In water (#380) every point is buoyed up by what of it is under the surface and dragged toward the
+/// water's own motion, so a body thrown into a lake plunges, comes back up and floats chest up, low in
+/// the water, riding and drifting with the waves. The surface over each point is asked once a frame
+/// (<see cref="WaterProbe"/>), not every substep: the waves hardly move in a frame.
+/// </para>
 /// </summary>
 public sealed class Ragdoll
 {
+    /// <summary>
+    /// The water over a point: its surface's altitude and the surface's velocity there (the
+    /// <see cref="World.WaterField"/>); false where there is no water.
+    /// </summary>
+    public delegate bool WaterProbe(Vector3 point, out float level, out Vector3 flow);
+
     private const float Gravity = 9.8f;
     private const float Substep = 1f / 90f;
     private const int Iterations = 8;
@@ -43,11 +56,26 @@ public sealed class Ragdoll
     /// fell straight through the car it had come out of.)
     /// </summary>
     private const float VehicleGrace = 0.25f;
+    /// <summary>
+    /// Water drag on a submerged point, 1/s and 1/m (on its velocity relative to the water). A body
+    /// going in at 15 m/s is down to a few m/s within a body length, as a plunge is.
+    /// </summary>
+    private const float WaterDrag = 1.0f, WaterDragQuad = 0.6f;
+    /// <summary>How deep under its own point a body part is in the water: from half-in to wholly in over this, metres.</summary>
+    private const float PartDepth = 0.12f;
 
     private readonly Vector3[] _p = new Vector3[Avatar.HumanMeshBuilder.JointCount];
     private readonly Vector3[] _prev = new Vector3[Avatar.HumanMeshBuilder.JointCount];
     private readonly Vector3[] _start = new Vector3[Avatar.HumanMeshBuilder.JointCount];
     private readonly float[] _radius = new float[Avatar.HumanMeshBuilder.JointCount];
+    /// <summary>
+    /// Buoyancy over weight of each point, wholly under water: the chest (lungs) floats, the hips
+    /// about do, the head and the limbs sink a little. A body lies face up or down with its chest
+    /// at the surface and its legs hanging, as a person unconscious in water does.
+    /// </summary>
+    private readonly float[] _float = new float[Avatar.HumanMeshBuilder.JointCount];
+    private readonly float[] _level = new float[Avatar.HumanMeshBuilder.JointCount];
+    private readonly Vector3[] _flow = new Vector3[Avatar.HumanMeshBuilder.JointCount];
     private readonly List<(int A, int B, float Length, float Stiffness)> _sticks = new();
     private readonly List<(int A, int B, float Min)> _floors = new();
     private readonly Godot.Collections.Array<Rid> _exclude = new();
@@ -66,6 +94,10 @@ public sealed class Ragdoll
     public Vector3 Centre => (_p[(int)J.Hip] + _p[(int)J.Chest]) * 0.5f;
     /// <summary>Velocity of the hips over the last substep, m/s.</summary>
     public Vector3 Velocity => (_p[(int)J.Hip] - _prev[(int)J.Hip]) / Substep;
+    /// <summary>Points in water deeper than the body's own thickness, the last step: none on dry land.</summary>
+    public int Wet { get; private set; }
+    /// <summary>The surface's velocity at the hips, the last step (zero out of the water).</summary>
+    public Vector3 Flow => _flow[(int)J.Hip];
 
     /// <summary>A point hit something at this speed into the surface (m/s): a thud, or a bone.</summary>
     public event Action<Vector3, float>? Struck;
@@ -85,7 +117,16 @@ public sealed class Ragdoll
             var v = velocity + spin.Cross(joints[i] - centre);
             _prev[i] = joints[i] - v * Substep;
             _radius[i] = 0.07f;
+            _float[i] = 0.97f;
+            _level[i] = float.NaN;
         }
+        // all told 1.08: a body with its lungs full floats with a little of it out, and comes back
+        // up from a plunge at ~0.8 m/s (the first try, 0.99, sank slowly and stayed 2 m down)
+        _float[(int)J.Chest] = 2.2f;
+        _float[(int)J.Waist] = 1.4f;
+        _float[(int)J.Hip] = 1.1f;
+        _float[(int)J.ShoulderL] = _float[(int)J.ShoulderR] = 1.15f;
+        _float[(int)J.HeadBase] = _float[(int)J.HeadTop] = 1f;
         _radius[(int)J.HeadTop] = 0.11f;
         _radius[(int)J.HeadBase] = 0.1f;
         _radius[(int)J.Chest] = 0.13f;
@@ -153,8 +194,26 @@ public sealed class Ragdoll
 
     /// <summary>Advances <paramref name="dt"/> seconds in fixed substeps.</summary>
     /// <param name="ground">Terrain height under a point, or null (indoors, no data).</param>
-    public void Step(float dt, PhysicsDirectSpaceState3D space, Func<Vector3, float?> ground)
+    /// <param name="water">The water over a point (#380), or null: no water anywhere.</param>
+    public void Step(float dt, PhysicsDirectSpaceState3D space, Func<Vector3, float?> ground, WaterProbe? water = null)
     {
+        // the surface over each point, once a frame: a wave moves a few centimetres in one
+        int wet = 0;
+        for (int i = 0; i < _p.Length; i++)
+        {
+            if (water != null && water(_p[i], out float level, out var flow))
+            {
+                _level[i] = level;
+                _flow[i] = flow;
+                if (level - _p[i].Y > PartDepth) wet++;
+            }
+            else
+            {
+                _level[i] = float.NaN;
+                _flow[i] = Vector3.Zero;
+            }
+        }
+        Wet = wet;
         _accum = Mathf.Min(_accum + dt, Substep * 8);
         while (_accum >= Substep)
         {
@@ -177,6 +236,7 @@ public sealed class Ragdoll
         {
             _start[i] = _p[i];
             var v = (_p[i] - _prev[i]) * 0.999f;
+            if (!float.IsNaN(_level[i])) v = InWater(i, v);
             _prev[i] = _p[i];
             _p[i] += v + Vector3.Down * g;
         }
@@ -228,6 +288,23 @@ public sealed class Ragdoll
         if (Centre.DistanceTo(_restAt) > 0.12f) { _restAt = Centre; _still = 0f; }
         else _still += Substep;
         if ((Age > 1.2f && _still > 0.6f) || Age > 8f) Resting = true;
+    }
+
+    /// <summary>
+    /// A point's move this substep in water: buoyed up by the share of it under the surface, and
+    /// dragged toward the water's motion (the waves' orbit at the surface, dying away with depth).
+    /// </summary>
+    private Vector3 InWater(int i, Vector3 move)
+    {
+        float sub = _level[i] - _p[i].Y;
+        float share = Mathf.Clamp((sub + PartDepth) / (2f * PartDepth), 0f, 1f);
+        if (share <= 0f) return move;
+        var flow = _flow[i] * Mathf.Clamp(1f - (sub - 0.3f) / 1.5f, 0f, 1f);
+        var rel = move / Substep - flow;
+        rel *= Mathf.Exp(-(WaterDrag + WaterDragQuad * rel.Length()) * share * Substep);
+        var v = flow + rel;
+        v.Y += Gravity * _float[i] * share * Substep;
+        return v * Substep;
     }
 
     /// <summary>Nudges the middle joint of a limb by <paramref name="push"/> metres, away from the line between its ends.</summary>

@@ -299,7 +299,7 @@ public static class Surfaces
     public static SfxBank Steps(Surface s)
     {
         if (!StepBanks.TryGetValue(s, out var b))
-            StepBanks[s] = b = SfxBank.Build($"step_{s}", 8, 0.22f, 500 + (int)s * 101, (rng, n) => Make(s, rng, n, false));
+            StepBanks[s] = b = SfxBank.Build($"step_{s}", 10, 0.3f, 500 + (int)s * 101, (rng, n) => Make(s, rng, n, false));
         return b;
     }
 
@@ -381,15 +381,58 @@ public static class Surfaces
     }
 
     /// <summary>
-    /// One footstep or landing. A landing is the step with everything slowed (longer decays),
-    /// more material thrown up and a low body thump under it: a landing is a heavier step, so it
-    /// shares the surface's character instead of being one generic thud on every ground.
+    /// One footstep or landing (#375). A step is two contacts, the way a foot rolls: the heel
+    /// strikes, then 50-90 ms later the ball of the foot comes down, quieter and shorter; under
+    /// both, the weight of a body arriving on the ground (a short 60-110 Hz thump), which is what
+    /// makes a step sound like a person and not a tap. Each contact is the surface's own texture
+    /// (<see cref="Contact"/>). A landing is one heavy contact with everything slowed, more
+    /// material thrown up and a deeper thump: it shares the surface's character instead of being
+    /// one generic thud on every ground.
     /// </summary>
     private static float[] Make(Surface surf, Random rng, int n, bool land)
     {
+        if (land)
+        {
+            var s = Contact(surf, rng, n, 0.45f, 2.2f, true);
+            // the weight of the body coming down, whatever it came down on
+            float f0 = (surf is Surface.Rock or Surface.Asphalt or Surface.Ice ? 95f : 70f) * J(rng, 0.15f);
+            Tone(s, f0, f0 * 0.45f, 0.2f, 12f, 0.9f * (surf is Surface.Snow or Surface.Grass ? 0.6f : 1f));
+            return s;
+        }
+
+        var step = new float[n];
+        // soft ground spreads the roll out, a hard floor snaps it shut
+        float gap = (surf is Surface.Asphalt or Surface.Indoor or Surface.Wood or Surface.Ice ? 0.055f : 0.075f) * J(rng, 0.2f);
+        var heel = Contact(surf, rng, n, 1f, 1f, false);
+        var ball = Contact(surf, rng, n, 1.35f, 0.6f, false);
+        int at = (int)(gap * Rate);
+        float ballGain = 0.5f + 0.15f * (float)rng.NextDouble();
+        for (int i = 0; i < n; i++)
+        {
+            step[i] = heel[i];
+            if (i >= at) step[i] += ball[i - at] * ballGain;
+        }
+        // the body's weight: firm ground gives it back as a knock, snow and grass swallow most of it
+        float weight = surf switch
+        {
+            Surface.Snow or Surface.Grass or Surface.Forest => 0.35f,
+            Surface.Water => 0.2f,
+            Surface.Wood => 0.6f,
+            _ => 0.45f,
+        };
+        float fw = 95f * J(rng, 0.15f);
+        Tone(step, fw, fw * 0.6f, 0.05f, 38f * J(rng, 0.15f), weight);
+        Tone(step, fw * 0.9f, fw * 0.55f, 0.05f, 45f, weight * 0.5f, gap);
+        return step;
+    }
+
+    /// <summary>
+    /// One contact of a foot with <paramref name="surf"/>: <paramref name="slow"/> scales the
+    /// decays down (a landing lingers), <paramref name="more"/> the grains thrown up.
+    /// </summary>
+    private static float[] Contact(Surface surf, Random rng, int n, float slow, float more, bool land)
+    {
         var s = new float[n];
-        float slow = land ? 0.45f : 1f;      // decay multiplier
-        float more = land ? 2.2f : 1f;       // grain density multiplier
 
         switch (surf)
         {
@@ -436,10 +479,14 @@ public static class Surfaces
             }
             case Surface.Grass:
             {
-                var sw = BandPass(Noise(rng, n), Coef(180f), Coef(2200f * J(rng, 0.2f)));
-                float peak = (0.045f + 0.025f * (float)rng.NextDouble()) * (land ? 1.4f : 1f);
-                float width = 0.05f * J(rng, 0.1f);
-                Mix(s, sw, 5f, t => Mathf.Exp(-Mathf.Pow((t - peak) / width, 2f)));
+                // the blades: a soft swish as the sole presses them flat, and the crisp tick of
+                // stems bending and snapping under it (fine grains, not one smooth noise burst)
+                var sw = BandPass(Noise(rng, n), Coef(250f), Coef(2600f * J(rng, 0.2f)));
+                float peak = (0.02f + 0.02f * (float)rng.NextDouble()) / slow;
+                float width = 0.035f * J(rng, 0.15f) / slow;
+                Mix(s, sw, 3f, t => Mathf.Min(1f, t * 400f) * Mathf.Exp(-Mathf.Pow((t - peak) / width, 2f)));
+                var blades = Grains(rng, n, 1800f * more * J(rng, 0.2f), 30f * slow, 0.25f, 0.42f);
+                Mix(s, blades, 2.2f, t => 1f);
                 break;
             }
             case Surface.Forest:
@@ -495,12 +542,6 @@ public static class Surfaces
             }
         }
 
-        if (land)
-        {
-            // the weight of the body coming down, whatever it came down on
-            float f0 = (surf is Surface.Rock or Surface.Asphalt or Surface.Ice ? 95f : 70f) * J(rng, 0.15f);
-            Tone(s, f0, f0 * 0.45f, 0.2f, 12f, 0.9f * (surf is Surface.Snow or Surface.Grass ? 0.6f : 1f));
-        }
         return s;
     }
 }

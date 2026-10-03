@@ -83,11 +83,13 @@ public sealed class Steamer : Boat
     /// The steam engine, heard through <see cref="EngineSynth"/>: two double-acting cylinders, four
     /// exhaust beats a turn of the shaft (46 rpm: three a second), up a tall funnel.
     /// </summary>
-    public override EngineProfile Sound => _steam ??= new EngineProfile
+    public override EngineProfile Sound => SteamEngine;
+
+    /// <summary><see cref="Sound"/>, for <c>--soundcheck</c> too.</summary>
+    public static EngineProfile SteamEngine { get; } = new()
     {
-        Cylinders = 2, IdleRpm = 20f, MaxRpm = 4f * BoatCatalog.Steamer.MaxRpm, PipeM = 3.2f, Unevenness = 0.4f,
+        Steam = true, Cylinders = 2, IdleRpm = 20f, MaxRpm = 4f * BoatCatalog.Steamer.MaxRpm, PipeM = 3.2f, Unevenness = 0.4f,
     };
-    private EngineProfile? _steam;
 
     // ---- the telegraph ----------------------------------------------------------------------
 
