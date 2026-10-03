@@ -261,9 +261,11 @@ public class AirlinerTests
         // put in the world a metre up (a body that grew): falling straight down reads as 90° of alpha
         var sim = new Sim(AirlinerCatalog.A320);
         sim.Pos = new Vector3(0, 1f, 0);
+        sim.S.ParkingBrake = true;
         sim.Run(5f, _ => new Controls());
         Assert.Equal(0f, sim.S.Lever);
-        Assert.True(sim.Pos.Length() < 0.1f, $"rolled {sim.Pos.Length():0.00} m");
+        Assert.True(sim.S.Spool < AirlinerCatalog.A320.IdleSpool + 0.01f, $"spool {sim.S.Spool:0.00}");
+        Assert.True(Mathf.Abs(sim.Pos.Z) < 0.1f, $"rolled {sim.Pos.Z:0.00} m");
     }
 
     [Fact]
