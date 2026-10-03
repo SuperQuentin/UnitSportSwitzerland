@@ -7,11 +7,13 @@ using UnitSport.Player;
 namespace UnitSport.Items;
 
 /// <summary>
-/// <c>--radiopanelcheck</c> (#375), offline, <c>--world fixture</c>: a radio in the hand, Use
-/// (a left click) opens its panel, a second click closes it, then the mouse wheel goes through the
-/// hotbar; then again, closed with Esc. Nothing was chosen, so nothing may play: the second click
-/// used to land on the panel, on the CD row under the centred cursor, and start it (the chess type
-/// beat, first in the list). Read the <c>[radiopanel]</c> lines.
+/// <c>--radiopanelcheck</c> (#375, #392), offline, <c>--world fixture</c>: a radio in the hand, Use
+/// (a left click) opens its panel on the player view (no CD row shown, the screen's middle free), a
+/// second click there closes it, then the mouse wheel goes through the hotbar; then again, closed
+/// with Esc. Nothing was chosen, so nothing may play: the second click used to land on the CD row
+/// under the centred cursor and start it (the chess type beat, first in the list). Last, the
+/// library: its button shows the rows, a row plays, Play / Stop stops, the button goes back.
+/// Read the <c>[radiopanel]</c> lines.
 /// </summary>
 public partial class RadioPanelProbe : Node
 {
@@ -68,6 +70,11 @@ public partial class RadioPanelProbe : Node
         {
             await Use();
             Check(RadioUi.Instance?.IsOpen == true, "Use opens the radio's panel");
+            Check(Visible(RadioUi.LibraryLabel) && !RowsShown(), "on the player view: the library button, no CD row");
+            await Wait(0.2);
+            var cursor = Input.MouseMode == Input.MouseModeEnum.Visible && DisplayServer.GetName() != "headless"
+                ? GetViewport().GetMousePosition() : GetViewport().GetVisibleRect().Size / 2f;
+            Check(PanelRect() is { } r && !r.HasPoint(cursor), $"the cursor is not on the player ({cursor} vs {PanelRect()})");
             State("open");
             if (esc)
             {
@@ -78,7 +85,7 @@ public partial class RadioPanelProbe : Node
             {
                 await Click();
                 State("after a second Use");
-                Check(RadioUi.Instance?.IsOpen != true, "Use again (a click, the cursor not moved) closes it");
+                Check(RadioUi.Instance?.IsOpen != true, "a click off the player (where the cursor comes back) closes it");
                 if (RadioUi.Instance?.IsOpen == true) await Key(Godot.Key.Escape);
             }
             State("closed");
@@ -93,9 +100,62 @@ public partial class RadioPanelProbe : Node
             await Wait(0.5);
         }
 
+        await Library(inv);
+
         Log(_failed == 0 ? "RESULT: ok" : $"RESULT: FAIL {_failed}");
         GetTree().Quit(_failed == 0 ? 0 : 1);
     }
+
+    /// <summary>The library (#392): its button shows the rows, a row plays, Stop stops, the button goes back.</summary>
+    private async Task Library(Inventory inv)
+    {
+        await Use();
+        await Wait(0.3);
+        Shot("radiopanel_player.png");
+        Check(Press(RadioUi.LibraryLabel) && RowsShown(), "the library button shows the CDs");
+        await Wait(0.3);
+        var row = Buttons().FirstOrDefault(b => b.IsVisibleInTree() && b.TooltipText == "Play");
+        Check(row != null, "a CD row to play");
+        row?.EmitSignal(BaseButton.SignalName.Pressed);
+        await Wait(0.5);
+        Check(!Silent(inv), $"pressing \"{row?.Text}\" plays it");
+        Check(RadioUi.Instance?.IsOpen == true && RowsShown(), "and the library stays open");
+        Shot("radiopanel_library.png");
+        Check(Press("■  Stop"), "Stop");
+        await Wait(0.5);
+        Check(Silent(inv), "Stop silences it");
+        Check(Press(RadioUi.PlayerLabel) && !RowsShown(), "back to the player");
+        await Key(Godot.Key.Escape);
+        Check(RadioUi.Instance?.IsOpen != true, "Esc closes it");
+    }
+
+    /// <summary>A screenshot into test_output/ when windowed (headless has no image).</summary>
+    private void Shot(string file)
+    {
+        if (DisplayServer.GetName() == "headless") return;
+        string path = ProjectSettings.GlobalizePath("res://test_output/" + file);
+        DirAccess.MakeDirRecursiveAbsolute(path.GetBaseDir());
+        GetViewport().GetTexture().GetImage().SavePng(path);
+        Log($"screenshot {path}");
+    }
+
+    private static IEnumerable<Button> Buttons() =>
+        RadioUi.Instance?.FindChildren("*", nameof(Button), true, false).OfType<Button>() ?? Enumerable.Empty<Button>();
+
+    private static bool Visible(string text) => Buttons().Any(b => b.IsVisibleInTree() && b.Text == text);
+
+    private static bool Press(string text)
+    {
+        if (Buttons().FirstOrDefault(b => b.IsVisibleInTree() && b.Text == text) is not { } b) { Log($"no button \"{text}\""); return false; }
+        b.EmitSignal(BaseButton.SignalName.Pressed);
+        return true;
+    }
+
+    /// <summary>Any CD or station row on screen (their tooltip says what a press does).</summary>
+    private static bool RowsShown() => Buttons().Any(b => b.IsVisibleInTree() && b.TooltipText is "Play" or "Only the driver changes the music");
+
+    private static Rect2? PanelRect() =>
+        RadioUi.Instance?.GetChildren().OfType<PanelContainer>().FirstOrDefault() is { } p ? p.GetGlobalRect() : null;
 
     /// <summary>No radio stack holds a CD and no radio speaker sounds.</summary>
     private bool Silent(Inventory inv)

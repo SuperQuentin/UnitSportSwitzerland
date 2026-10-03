@@ -2278,12 +2278,6 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             PassengerService.Instance!.AskSeat(driven);
             return true;
         }
-        // a radio at your feet you were not looking at
-        if (Items.RadioManager.Instance?.Nearest(GlobalPosition, Items.RadioManager.Reach) is { } radio)
-        {
-            Items.RadioUi.Instance?.Open(radio);
-            return true;
-        }
         // a building's door in reach beats the dance: music next door must not lock you out
         if (IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true) return true;
         // music heard here: E starts the dance; stopping works for as long as it lasts

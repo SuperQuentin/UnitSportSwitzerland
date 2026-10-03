@@ -12,11 +12,11 @@
   The dedicated server never simulates (no ground): a radio whose thrower left is re-spawned by
   `ForgetOwner` server-owned and `Settled`. The **server** owns what plays (`State` synchronizer,
   authority 1: `CdId`, `StartedAt`, `Playing`, on-change and with the spawn for late joiners).
-- **Pointed at, Use (click) takes it straight into the hand (#261)**: `ItemController.TakeRadio` (the
+- **Pointed at, Use (click) with an empty hand takes it straight into the hand (#261, #390)**: `ItemController.TakeRadio` (the
   mesh flies to the hand, the server's pick-up as before, the stack keeps the CD/start/mode, the
-  slot is selected or swapped in from the pack). **E** on the pointed radio opens `RadioUi`; E with
-  none pointed opens the nearest within `RadioManager.Reach` 2.5 m, but only after the vehicle at
-  hand (`door-reach`). Use opens the panel on the radio in the hand, R on a car stereo (below).
+  slot is selected or swapped in from the pack). **E** on the pointed radio opens `RadioUi`, and only
+  then (#390): a radio merely within reach but not looked at no longer takes E from the door or the
+  dance, nor Use from a held tool (`core/input-conventions`). Use opens the panel on the radio in the hand, R on a car stereo (below).
 - **Carried, it keeps playing (#261)**: `Inventory.RadioSlot()` (the hand's radio, else the first
   with a CD, else the first) writes `FootPlayer.HeldRadio`; one not in the hand sets the replicated
   `FootPlayer.BackItemId` (OnChange) and is drawn on the back (`FootPlayer.Back.cs`, on the posed
@@ -26,15 +26,23 @@
   bottom face, springs up 3 cm and rocks to alternate sides; the world radio while its speaker
   really plays, the one in the hand (figure 0.7, viewmodel 0.45) and on the back from
   `RadioBody.BeatOf(cd, startedAt, clock)`.
-- **The panel is a music picker (#211)**, menu look (`UiTheme`/`UiKit`, glass 0.95, at most
-  700 x 660 px, re-fitted on resize): now playing (title, bpm/style, "CD n of m", elapsed / length
-  bar), previous / Play-Stop / next (round the list; on a station, the next station), the mode
-  button, a search box (words AND-matched on title and style, Enter plays the first hit, `/` or
+- **The panel is a music picker (#211) in two views (#392)**, menu look (`UiTheme`/`UiKit`, glass 0.95,
+  re-fitted on resize). **Player** (every open starts there): 540 px wide, as tall as its content, low
+  and centred 96 px above the bottom like a car stereo, so the screen's middle (where the freed cursor
+  appears) stays the world's. Header (Pick up for a world radio, close), now playing (title,
+  bpm/style, "CD n of m", elapsed / length bar), previous / Play-Stop / next (round the list; on a
+  station, the next station), the mode button, the volume and **Library ▸**. **Library** (that
+  button, pad Y, or `/` / Ctrl+F which also focus the search): centred, at most 700 x 660 px, the
+  same top plus a search box (words AND-matched on title and style, Enter plays the first hit, `/` or
   Ctrl+F focuses it), rows as focusable buttons under "Shared CDs" / "My CDs" (bin on your own)
   and, in a car, "Live stations". Playing row amber with a play mark. Arrows / D-pad move, Enter / A
   play, Esc / B close. Pick up (world radio), volume, burn box with "Just for me"; the burn line maps
   the burner's stages to a 3-step bar (Downloading / Analysing / Encoding), green when burnt, amber
-  on a refusal (`docs/notes/audio/cd-beat.md`).
+  on a refusal (`docs/notes/audio/cd-beat.md`). A row plays and the library stays open; ◂ Player
+  goes back. Play with nothing on, in the player, plays the first row (the list is built, hidden).
+  **Closing** (#392, `core/input-conventions`): Esc / B, the key that opened it (E for a world or
+  church radio, unless a text box has focus; Use from the pad for the held one, R for the car), or a
+  click outside the panel.
 - **Modes (`RadioMode`, `RadioQueue`)**: Play once / Repeat this CD / Play the list (shared by id,
   then mine by title) / Shuffle. Applied by **whoever owns the play state**: the server for a world
   radio (`RadioBody.Mode`, a 5th property on the `State` synchronizer; `RadioManager.Queue`:
@@ -92,7 +100,9 @@
   picks up, plays A in the hand, burns and plays a personal CD (`--radiopersonal <wav>`); a windowed
   watcher must hear each in sync (0.1 s) from the right file (`LoadedLength`), and silence for the
   personal CD. Takes ~3.5 min. Read the RESULT lines.
-- **Use again closes the held radio's panel** (#375): until the mouse moves after opening, a left
-  click is the Use key (`RadioUi._Input`), not a click on the list. The cursor comes back in the
-  middle of the screen, on the first CD, and the click meant to close used to start it (the chess
-  type beat). `--radiopanelcheck --world fixture` (quick tier).
+- **Use again closes the held radio's panel** (#375, #392): the cursor comes back in the middle of
+  the screen, and the click meant to close used to land on the first CD and start it (the chess type
+  beat). Since #392 the player view leaves the middle free, so that click is "outside" and closes;
+  the old "until the mouse moves" hack is gone. `--radiopanelcheck --world fixture` (quick tier) also
+  works the library (button, a row plays, Stop, back). `CarCdCheck.Press` opens the library when the
+  row it wants is not shown.

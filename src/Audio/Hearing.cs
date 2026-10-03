@@ -71,11 +71,15 @@ public sealed class Hearing
         _cut = _wantCut = clearCutoff;
     }
 
-    /// <summary>Call from the speaker's <c>_Ready</c>: takes its offset from the parent and goes top level.</summary>
+    /// <summary>
+    /// Call from the speaker's <c>_Ready</c>: takes its offset from the parent, goes top level, and
+    /// processes after <see cref="Ears"/> so it is placed from this frame's ear, not the last one.
+    /// </summary>
     public void Attach(AudioStreamPlayer3D speaker)
     {
         _offset = speaker.Position;
         speaker.TopLevel = true;
+        speaker.ProcessPriority = Ears.Priority + 1;
         _ready = true;
     }
 
