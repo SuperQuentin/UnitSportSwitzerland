@@ -84,6 +84,8 @@ public static class AirlinerFlight
         /// <summary>The brakes applied last step, 0..1, for the sound and the others.</summary>
         public float Braking;
 
+        /// <summary>The stick as the pilot holds it (x right, y back): what the drawn surfaces and the sidestick show.</summary>
+        public Vector2 Stick;
         /// <summary>Body pitch and roll rates, rad/s: the stick asks for them, the airframe gets there.</summary>
         public float PitchRate, RollRate;
         /// <summary>The flight path the law holds hands-off, rad.</summary>
@@ -171,6 +173,7 @@ public static class AirlinerFlight
         bool arcade = c.Handling == AirlinerHandling.Arcade;
         bool protect = arcade || spec.FlyByWire;
         var stick = !c.NoPilot ? c.Stick : Vector2.Zero;
+        s.Stick = stick;
 
         // ---- levers and systems ----------------------------------------------------------------
         if (!c.NoPilot) s.Lever = Mathf.Clamp(s.Lever + (c.LeverUp - c.LeverDown) * 0.5f * dt, 0f, 1f);

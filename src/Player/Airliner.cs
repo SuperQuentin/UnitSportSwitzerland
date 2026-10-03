@@ -78,9 +78,18 @@ public sealed class Airliner : Flyer
 
     public override (Aabb Lower, Aabb Upper)? HullBoxes => (Fuselage, new Aabb(Fuselage.Position, Vector3.Zero));
 
-    /// <summary>Parked it stands on its gear: the box reaches the ground, or it would sink to its belly.</summary>
-    public override (Vector3 Centre, Vector3 Size) ParkedBox =>
-        (Fuselage.GetCenter() with { Y = A320Layout.TopY * 0.5f }, Fuselage.Size with { Y = A320Layout.TopY });
+    /// <summary>
+    /// Parked it stands on its gear: the box reaches the ground, or it would sink to its belly; and it
+    /// runs forward past the front doors (the nose's taper), where a player gets in.
+    /// </summary>
+    public override (Vector3 Centre, Vector3 Size) ParkedBox
+    {
+        get
+        {
+            float front = -(A320Layout.ForwardDoorZ + 1.2f), rear = Fuselage.End.Z;
+            return (new Vector3(0, A320Layout.TopY * 0.5f, (front + rear) * 0.5f), new Vector3(Fuselage.Size.X, A320Layout.TopY, rear - front));
+        }
+    }
 
     /// <summary>The wing, parked: something to walk under, not through (at the root's underside).</summary>
     public override IEnumerable<(Transform3D Pose, Vector3 Centre, Vector3 Size)> ExtraBoxes()
@@ -186,7 +195,7 @@ public sealed class Airliner : Flyer
         Gear = s.Gear,
         Flaps = s.Flaps,
         Spoilers = s.Spoilers,
-        Stick = new Vector2(s.RollRate / Spec.MaxRollRate, s.PitchRate / Spec.MaxPitchRate).LimitLength(1f),
+        Stick = s.Stick,
         Spool = s.Spool,
         Lights = LightsFor(s),
         Doors = DoorsOpen,
