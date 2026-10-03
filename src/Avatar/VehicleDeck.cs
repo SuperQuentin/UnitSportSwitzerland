@@ -16,6 +16,23 @@ public readonly record struct DeckBox(Vector3 Centre, Vector3 Size, Basis Basis,
 public readonly record struct DeckButton(int Door, Vector3 At, Vector3 Normal);
 
 /// <summary>
+/// A hold (#418): a box in the section's node frame where a ground vehicle driven in is carried by
+/// this one (a freighter's hold, later a ferry's car deck). Its floor is the box's bottom.
+/// </summary>
+public readonly record struct CargoBay(Vector3 Centre, Vector3 Size)
+{
+    /// <summary>A vehicle standing at <paramref name="local"/> (its ground point, node frame) is in it (<see cref="Vehicles.CargoFit.Inside"/>).</summary>
+    public bool Contains(Vector3 local, float grow)
+    {
+        var p = local - Centre;
+        return Vehicles.CargoFit.Inside(p.X, p.Y, p.Z, Size.X, Size.Y, Size.Z, grow);
+    }
+
+    /// <summary>A hull this size (across, height, length) fits in it, driven in nose or tail first.</summary>
+    public bool Fits(Vector3 hull) => Vehicles.CargoFit.Fits(hull.X, hull.Y, hull.Z, Size.X, Size.Y, Size.Z);
+}
+
+/// <summary>
 /// A vehicle you can walk around in (#162), one section of it: what is solid (walls with real door
 /// holes, floors, ramps where the floor changes height, seats, poles), the volume that counts as
 /// aboard, and what a standing passenger can hold on to. Built with the vehicle's model, in the
@@ -30,6 +47,9 @@ public sealed record VehicleDeck(int Section, DeckBox[] Boxes, Aabb Aboard, Vect
 {
     /// <summary>The buttons anyone presses to open or shut a door, inside and out.</summary>
     public DeckButton[] Buttons { get; init; } = System.Array.Empty<DeckButton>();
+
+    /// <summary>The holds a ground vehicle can be driven into and carried in (#418).</summary>
+    public CargoBay[] CargoBays { get; init; } = System.Array.Empty<CargoBay>();
 
     /// <summary>
     /// The floor plan aboard, node frame (x, z), a polygon round its edge; null: the whole
@@ -155,6 +175,11 @@ public sealed class DeckBuilder
     /// <summary>A door's button at an authored point, facing authored <paramref name="normal"/>.</summary>
     public void Button(int door, Vector3 at, Vector3 normal) => _buttons.Add(new DeckButton(door, Node(at), Node(normal)));
 
+    private readonly List<CargoBay> _bays = new();
+
+    /// <summary>A hold vehicles are carried in (<see cref="VehicleDeck.CargoBays"/>): authored centre and size (x, y, length).</summary>
+    public void CargoBay(Vector3 centre, Vector3 size) => _bays.Add(new CargoBay(Node(centre), size));
+
     /// <summary>A pole or rail to hold, as an authored point on the floor plan.</summary>
     public void Hold(float x, float at) => _holds.Add(new Vector2(-x, -(_cg - at)));
 
@@ -167,6 +192,7 @@ public sealed class DeckBuilder
         return new VehicleDeck(section, _boxes.ToArray(), aboard, _holds.ToArray())
         {
             Buttons = _buttons.ToArray(),
+            CargoBays = _bays.ToArray(),
             Plan = _plan.Count >= 3 ? _plan.ToArray() : null,
         };
     }

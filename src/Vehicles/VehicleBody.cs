@@ -144,6 +144,8 @@ public partial class VehicleBody : CharacterBody3D
         AddChild(_place = new Net.NetPlace(Origin, s.Position));
         Rotation = new Vector3(0, s.Yaw, 0);
         Velocity = s.Velocity;
+        // parked in a hold (#418, VehicleBody.Hold.cs): carried, no physics of its own
+        BeginHold(s);
 
         var box = Ride.ParkedBox;
         // a ship's hull as drawn (#378), else the box
@@ -257,7 +259,11 @@ public partial class VehicleBody : CharacterBody3D
             }
     }
 
-    public override void _ExitTree() => SetAnchored(false);
+    public override void _ExitTree()
+    {
+        SetAnchored(false);
+        Unhook();
+    }
 
     /// <summary>
     /// A moving vehicle needs ground loaded under it with collision, like a player does, or an
@@ -292,7 +298,7 @@ public partial class VehicleBody : CharacterBody3D
     /// never simulated, so their flight state there is whatever they were parked with.
     /// </remarks>
     public VehicleState Capture() => new(Kind, Global,
-        Rotation.Y, Velocity, Health, EngineOn, Wrecked,
+        Rotation.Y, _inHold ? Vector3.Zero : Velocity, Health, EngineOn, Wrecked,
         _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning,
         Ride is Truck { IsBus: true } ? (byte)0 : DoorsOpen, _initial.Setup,
         // a boat's attitude as it floats now (#302; the replicated one, which the server has too)
@@ -300,7 +306,9 @@ public partial class VehicleBody : CharacterBody3D
         // a bus's doors as they are now, where a truck keeps them
         Ride is Truck { IsBus: true } ? (_initial.Flags & ~(15 << 4)) | ((DoorsOpen & 15) << 4)
             : Ride is Airliner ? (_initial.Flags & ~(15 << 13)) | ((DoorsOpen & 15) << 13) : _initial.Flags, _initial.Load,
-        _initial.Radio, _initial.Cd);
+        _initial.Radio, _initial.Cd,
+        // in a hold (#418): its carrier now (it may have changed hands since it was parked) and its spot
+        HoldPlace.Key, HoldPlace.Section, HoldPlace.Pos, HoldPlace.Yaw);
 
     /// <summary>The live station its radio plays, as the driver left it (spawn data only: nobody tunes a parked car).</summary>
     public int Radio => _initial.Radio;
@@ -333,7 +341,7 @@ public partial class VehicleBody : CharacterBody3D
         ReleaseIgnored();
         // airstairs in the way of an aircraft taxiing off are shoved clear, asleep or not (#417)
         if (Ride is Airstairs) PushAirstairs(dt);
-        if (_asleep) return;
+        if (_asleep || _inHold) return;
 
         // Parked in a garage or a barn: down where the interiors are, on a floor that is only there
         // while this peer has that interior built. Without it, hold still rather than fall; and the
@@ -525,6 +533,8 @@ public partial class VehicleBody : CharacterBody3D
         }
 
         if (_shutDriverIn > 0f && (_shutDriverIn -= dt) <= 0f) DoorsOpen &= unchecked((byte)~CarRig.DriverDoor);
+        // in a hold (#418): where the carrier is drawn now, before anything is drawn from it
+        if (_inHold && !Wrecked) FollowCarrier(dt);
 
         // airstairs: posed where they stand, the platform at the sill they are docked at (#417)
         if (Ride is Airstairs stairs) StandAirstairs(stairs, dt);
@@ -572,7 +582,8 @@ public partial class VehicleBody : CharacterBody3D
         }
         // a copy's trailer swings where its authority's does
         if (!IsMultiplayerAuthority() && Ride is Truck swung && TrainAngles != default) swung.SetAngles(TrainAngles);
-        StandOnGround(dt);
+        // in a hold it stands on the carrier's floor, not on the ground under it
+        if (!_inHold) StandOnGround(dt);
         // standing still, a parked truck's rigs were dressed with the same values every frame, the
         // sections found by name each time (#221): once at rest is enough, again if it moves or burns
         bool restDressed = _dressedAtRest == Wrecked && Velocity == Vector3.Zero;

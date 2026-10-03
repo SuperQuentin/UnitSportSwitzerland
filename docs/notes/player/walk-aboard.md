@@ -146,3 +146,4 @@
   hull inside that deck's boxes (and the walker's mask was still the deck layer): the solver shot it into the sky.
 - **Limits**: buses and the steamer only; no hand on a pole is drawn; the ~0.4 m jump when the vehicle changes hands
   under a walker; a rolling parked train's trailer boxes take its pose only once it is at rest (#173).
+- **Vehicles in holds** (#418): a deck's `CargoBays` carry ground vehicles driven into them the same way (decks built for drivers too, `DeckOn`/`DeckPos` for the vehicle): see the vehicles note `vehicles-in-holds`.

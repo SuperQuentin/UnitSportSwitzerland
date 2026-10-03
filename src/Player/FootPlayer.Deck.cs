@@ -122,13 +122,13 @@ public partial class FootPlayer
 
     // ---- hosts ---------------------------------------------------------------------------------
 
-    private static string KeyOf(Node3D host) => host is FootPlayer p ? p.Name.ToString() : "v:" + host.Name;
+    internal static string KeyOf(Node3D host) => host is FootPlayer p ? p.Name.ToString() : "v:" + host.Name;
 
     private Node3D? HostNamed(string key) => key.StartsWith("v:")
         ? VehicleManager.Instance?.GetNodeOrNull<VehicleBody>(key[2..])
         : GetParent()?.GetNodeOrNull<FootPlayer>(key);
 
-    private static Rideable? RideOfHost(Node3D host) => host switch
+    internal static Rideable? RideOfHost(Node3D host) => host switch
     {
         FootPlayer p when p.Ride != RideKind.OnFoot && !p.RidingAlong => VehicleOf(p),
         VehicleBody { Wrecked: false } v => v.Ride,
@@ -136,7 +136,7 @@ public partial class FootPlayer
     };
 
     /// <summary>The node whose transform is section <paramref name="k"/>'s frame, as drawn now.</summary>
-    private static Node3D? SectionFrame(Node3D host, int k) => host switch
+    internal static Node3D? SectionFrame(Node3D host, int k) => host switch
     {
         FootPlayer p => k == 0 ? p._visual : p.GetNodeOrNull<Node3D>($"Section{k}")?.GetNodeOrNull<Node3D>("Visual"),
         // a parked vehicle has no model on a headless peer (a check): its own node is its frame then
@@ -172,6 +172,12 @@ public partial class FootPlayer
     /// </summary>
     private void CarryOnDeck(float dt)
     {
+        // a car, a truck or a bike driven into a hold (#418, FootPlayer.Hold.cs): carried by the carrier
+        if (InHoldRide)
+        {
+            CarryInHold(dt);
+            return;
+        }
         if (_ride != null || RidingWith != 0)
         {
             if (Aboard) LeaveDeck(keepVelocity: false);
@@ -201,7 +207,40 @@ public partial class FootPlayer
             if (set.Ride is Airstairs && set.Sections.Count > 0 && !ReferenceEquals(set.Sections[0].Deck, set.Ride.Decks[0])) _deckScan = 0;
         _deckScan -= dt;
         if (_deckScan <= 0) { _deckScan = 0.5; ScanDecks(); }
+        PlaceDecks(dt);
 
+        if (!Aboard || !_decks.TryGetValue(DeckOn, out var mine) || SectionFrame(mine.Host, DeckSection) is not { } section) return;
+        var now = section.GlobalTransform.Orthonormalized();
+
+        if (_deckCarried)
+        {
+            // the section's whole motion since the last frame: along, round, and (a ship's deck,
+            // #303) pitching and rolling, so the walker rises and falls with the spot they stand on
+            var delta = now * _carriedFrom.AffineInverse();
+            float turn = MathX.WrapAngle(YawOf(now) - YawOf(_carriedFrom));
+            var carried = delta * GlobalPosition;
+            if (dt > 0f)
+            {
+                // how the deck under the walker moves (a rolling deck swings a walker high on it)
+                var spot = ((carried - GlobalPosition) / dt) with { Y = 0 };
+                if (spot.Length() < 120f) _deckSpotVel = _deckSpotValid ? _deckSpotVel.Lerp(spot, 1f - Mathf.Exp(-10f * dt)) : spot;
+                _deckSpotValid = true;
+            }
+            GlobalPosition = carried;
+            Rotation = new Vector3(0, Rotation.Y + turn, 0);
+            _viewYaw += turn;
+            // the velocity is the vehicle's frame's: it turns with it
+            Velocity = new Basis(Vector3.Up, turn) * Velocity;
+        }
+        _carriedFrom = now;
+        _deckCarried = true;
+        DeckPos = now.AffineInverse() * GlobalPosition;
+        DeckYaw = MathX.WrapAngle(Rotation.Y - YawOf(now));
+    }
+
+    /// <summary>Every deck built here put where its vehicle is drawn now, its door parts switched by the doors; each vehicle's level velocity measured.</summary>
+    private void PlaceDecks(float dt)
+    {
         foreach (var set in _decks.Values)
         {
             if (dt > 0f && SectionFrame(set.Host, 0) is { } first && IsInstanceValid(first) && first.IsInsideTree())
@@ -233,33 +272,6 @@ public partial class FootPlayer
                 }
             }
         }
-
-        if (!Aboard || !_decks.TryGetValue(DeckOn, out var mine) || SectionFrame(mine.Host, DeckSection) is not { } section) return;
-        var now = section.GlobalTransform.Orthonormalized();
-        if (_deckCarried)
-        {
-            // the section's whole motion since the last frame: along, round, and (a ship's deck,
-            // #303) pitching and rolling, so the walker rises and falls with the spot they stand on
-            var delta = now * _carriedFrom.AffineInverse();
-            float turn = MathX.WrapAngle(YawOf(now) - YawOf(_carriedFrom));
-            var carried = delta * GlobalPosition;
-            if (dt > 0f)
-            {
-                // how the deck under the walker moves (a rolling deck swings a walker high on it)
-                var spot = ((carried - GlobalPosition) / dt) with { Y = 0 };
-                if (spot.Length() < 120f) _deckSpotVel = _deckSpotValid ? _deckSpotVel.Lerp(spot, 1f - Mathf.Exp(-10f * dt)) : spot;
-                _deckSpotValid = true;
-            }
-            GlobalPosition = carried;
-            Rotation = new Vector3(0, Rotation.Y + turn, 0);
-            _viewYaw += turn;
-            // the velocity is the vehicle's frame's: it turns with it
-            Velocity = new Basis(Vector3.Up, turn) * Velocity;
-        }
-        _carriedFrom = now;
-        _deckCarried = true;
-        DeckPos = now.AffineInverse() * GlobalPosition;
-        DeckYaw = MathX.WrapAngle(Rotation.Y - YawOf(now));
     }
 
     /// <summary>The plank's box laid as <see cref="World.GangwayFit"/> says, moved only when it changes (a centimetre).</summary>
@@ -301,14 +313,17 @@ public partial class FootPlayer
     }
 
     /// <summary>Builds the decks of walkable vehicles that came near and frees those that left.</summary>
-    private void ScanDecks()
+    /// <param name="holdsOnly">Driving (#418): only the vehicles with a hold to drive into.</param>
+    private void ScanDecks(bool holdsOnly = false)
     {
         var near = new List<Node3D>();
         foreach (var p in GetTree().GetNodesInGroup(Group).OfType<FootPlayer>())
-            if (p != this && RideOfHost(p) is { Walkable: true } walked && p.GlobalPosition.DistanceTo(GlobalPosition) < DeckReachOf(walked)) near.Add(p);
+            if (p != this && RideOfHost(p) is { Walkable: true } walked && (!holdsOnly || HasHolds(walked))
+                && p.GlobalPosition.DistanceTo(GlobalPosition) < DeckReachOf(walked)) near.Add(p);
         foreach (var v in VehicleManager.Instance?.GetChildren().OfType<VehicleBody>() ?? Enumerable.Empty<VehicleBody>())
             // only once its frame stands on the ground (VehicleBody.Posed): a frame later it jumps there
-            if (RideOfHost(v) is { Walkable: true } parked && v.Posed && v.GlobalPosition.DistanceTo(GlobalPosition) < DeckReachOf(parked)) near.Add(v);
+            if (RideOfHost(v) is { Walkable: true } parked && (!holdsOnly || HasHolds(parked)) && v.Posed
+                && v.GlobalPosition.DistanceTo(GlobalPosition) < DeckReachOf(parked)) near.Add(v);
 
         var keys = near.Select(KeyOf).ToHashSet();
         foreach (var gone in _decks.Keys.Where(k => !keys.Contains(k) || !IsInstanceValid(_decks[k].Host)).ToList())
@@ -325,8 +340,7 @@ public partial class FootPlayer
             if (known != null) FreeDeck(known);
             _decks[key] = BuildDeck(host, key, RideOfHost(host)!);
         }
-        int priority = _decks.Count > 0 || RidingWith != 0 || Aboard ? 10 : 0;
-        if (ProcessPriority != priority) ProcessPriority = priority;
+        if (ProcessPriority != DeckPriority) ProcessPriority = DeckPriority;
     }
 
     private DeckSet BuildDeck(Node3D host, string key, Rideable ride)
@@ -585,6 +599,8 @@ public partial class FootPlayer
     // ---- the vehicle's side: players walking in it are not in the way of its hull ----------------
 
     private readonly HashSet<FootPlayer> _guests = new();
+    private readonly List<PhysicsBody3D> _guestBodies = new();
+    private Func<int, Node3D?>? _frameOfSection;
 
     /// <summary>
     /// The local host of a walkable vehicle, every physics step: the players walking up to its doors
@@ -595,9 +611,11 @@ public partial class FootPlayer
     /// </summary>
     private void IgnoreGuests()
     {
-        var bodies = new List<PhysicsBody3D> { this };
-        bodies.AddRange(_sections);
-        WatchGuests(this, _ride is { Walkable: true } ride && _visual != null ? ride : null, _guests, bodies, k => SectionFrame(this, k));
+        // one list and one delegate, not a new pair every physics step
+        _guestBodies.Clear();
+        _guestBodies.Add(this);
+        _guestBodies.AddRange(_sections);
+        WatchGuests(this, _ride is { Walkable: true } ride && _visual != null ? ride : null, _guests, _guestBodies, _frameOfSection ??= k => SectionFrame(this, k));
     }
 
     /// <summary>
@@ -614,7 +632,9 @@ public partial class FootPlayer
                 if (bodies.Contains(p)) continue;
                 foreach (var deck in ride.Decks)
                     if (frameOf(deck.Section) is { } frame
-                        && deck.Contains(frame.GlobalTransform.AffineInverse() * p.GlobalPosition, 1f))
+                        && (deck.Contains(frame.GlobalTransform.AffineInverse() * p.GlobalPosition, 1f)
+                            // a car driven into its hold (#418), or up the ramp to it
+                            || InAnyBay(deck, frame.GlobalTransform.AffineInverse() * p.GlobalPosition, 1.5f)))
                     {
                         near.Add(p);
                         break;
