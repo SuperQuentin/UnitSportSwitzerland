@@ -136,11 +136,31 @@ public static class MotorbikeMeshBuilder
         }
 
         bool adv = k.Style == MotoStyle.Adventure;
-        if (k.EngineShape == MotoEngineShape.VTwin) Twin(s, k); else Inline(s, k.EngineShape switch { MotoEngineShape.InlineFour => 4, MotoEngineShape.Triple => 3, MotoEngineShape.Single => 1, _ => 2 }, muffler: !adv);
+        bool scooter = k.Style == MotoStyle.Scooter;
+        bool moto = k.Style == MotoStyle.Supermoto;
+        // a scooter's engine is a housing under the seat (Scooter() draws it); the rest show their cylinders
+        if (scooter) { }
+        else if (k.EngineShape == MotoEngineShape.VTwin) Twin(s, k);
+        else Inline(s, k.EngineShape switch { MotoEngineShape.InlineFour => 4, MotoEngineShape.Triple => 3, MotoEngineShape.Single => 1, _ => 2 }, muffler: !adv && !moto);
 
         // --- frame: head stock to swingarm pivot ---
         s.Tube(headLow, top, 0.045f, k.Frame);
-        if (k.Style == MotoStyle.Naked)
+        if (scooter) { }   // the frame hides inside the bodywork
+        else if (moto)
+        {
+            // KTM: a thin steel trellis: two tubes from the head over the engine to the pivot, two under it, cross-braced
+            foreach (float x in new[] { -0.07f, 0.07f })
+            {
+                var over = new Vector3(x * 1.1f, k.Seat.Y - 0.14f, k.Seat.Z + 0.22f);
+                s.Tube(top + new Vector3(x * 0.6f, -0.05f, -0.04f), over, 0.014f, k.Frame, 4);
+                s.Tube(over, pivot + new Vector3(x * 1.6f, 0.06f, 0), 0.014f, k.Frame, 4);
+                s.Tube(over, new Vector3(x * 1.2f, k.Seat.Y - 0.1f, k.Seat.Z - 0.45f), 0.012f, k.Frame, 4);   // subframe
+                s.Tube(headLow + new Vector3(x * 0.5f, 0.0f, -0.02f), pivot + new Vector3(x * 1.6f, -0.1f, 0.04f), 0.014f, k.Frame, 4);
+                s.Tube(headLow + new Vector3(x * 0.5f, 0.12f, -0.02f), over, 0.011f, k.Frame, 4);
+            }
+            s.Tube(new Vector3(-0.08f, k.Seat.Y - 0.2f, k.Seat.Z + 0.3f), new Vector3(0.08f, k.Seat.Y - 0.2f, k.Seat.Z + 0.3f), 0.011f, k.Frame, 4);
+        }
+        else if (k.Style == MotoStyle.Naked)
         {
             // Monster: a short frame from the head onto the cylinder heads, the engine carries the rest
             foreach (float x in new[] { -0.09f, 0.09f })
@@ -173,6 +193,9 @@ public static class MotorbikeMeshBuilder
         var tankFront = top + new Vector3(0, -0.04f, -0.12f);
         var tankBack = new Vector3(0, seat.Y + 0.02f, seat.Z + 0.2f);
         if (adv) Adventure(s, k, tankFront, pivot);
+        else if (scooter) Scooter(s, k, pivot);
+        else if (moto) Supermoto(s, k, tankFront, pivot);
+        else if (k.Style == MotoStyle.SportTouring) Touring(s, k, tankFront, pivot);
         else if (k.Style != MotoStyle.Sport)
         {
             // the Monster's "bull" tank (an adventure bike's is the same idea, bigger): tall and broad at the front, swept down into the seat
@@ -253,6 +276,160 @@ public static class MotorbikeMeshBuilder
         s.Tube(new Vector3(-0.06f, 0.16f, -0.15f), new Vector3(-0.15f, 0.26f, -0.42f), 0.07f, 0.06f, Black, 7);
     }
 
+    /// <summary>
+    /// A Fazer / Tracer / Versys: a naked roadster's tank, but a long two-level seat with a pillion
+    /// step and grab rails, a short tail, and a frame-mounted half fairing round the twin headlights
+    /// with a screen whose height comes from the data. No lower fairing: the engine shows.
+    /// </summary>
+    private static void Touring(MeshScratch s, MotoLook k, Vector3 tankFront, Vector3 pivot)
+    {
+        var top = k.TopClamp;
+        var seat = k.Seat;
+        var tankBack = new Vector3(0, seat.Y + 0.02f, seat.Z + 0.22f);
+        s.Tube(tankFront + new Vector3(0, -0.02f, 0.02f), tankBack + new Vector3(0, 0.03f, 0), 0.15f, 0.11f, k.Paint, 8);
+        // radiator shrouds flanking the tank
+        foreach (float x in new[] { -1f, 1f })
+            s.Box(new Vector3(x * 0.17f, top.Y - 0.3f, top.Z - 0.12f), new Vector3(0.03f, 0.2f, 0.3f), k.Paint, new Basis(Vector3.Right, 0.3f));
+        // seat: rider's level, then the pillion's a step higher
+        s.Box(new Vector3(0, seat.Y - 0.025f, seat.Z + 0.02f), new Vector3(0.27f, 0.07f, 0.46f), k.SeatColor);
+        s.Box(new Vector3(0, seat.Y - 0.005f, seat.Z - 0.4f), new Vector3(0.25f, 0.07f, 0.34f), k.SeatColor);
+        // the short tail with its grab rails and light
+        s.Tube(new Vector3(0, seat.Y - 0.05f, seat.Z - 0.3f), new Vector3(0, seat.Y + 0.02f, seat.Z - 0.62f), 0.1f, 0.05f, k.Paint, 6);
+        s.Box(new Vector3(0, seat.Y - 0.01f, seat.Z - 0.64f), new Vector3(0.12f, 0.04f, 0.04f), new Color(0.8f, 0.05f, 0.05f));
+        foreach (float x in new[] { -0.12f, 0.12f })
+            s.Tube(new Vector3(x, seat.Y + 0.05f, seat.Z - 0.3f), new Vector3(x, seat.Y + 0.05f, seat.Z - 0.55f), 0.01f, Metal, 4);
+        foreach (float x in new[] { -0.1f, 0.1f })
+            s.Tube(pivot + new Vector3(x, 0.1f, 0.05f), new Vector3(x, seat.Y - 0.06f, seat.Z - 0.4f), 0.015f, k.Frame, 4);
+        // rear mudguard under the tail
+        s.Tube(new Vector3(0, seat.Y - 0.12f, seat.Z - 0.5f), k.RearAxle + new Vector3(0, k.RearRadius + 0.05f, -0.2f), 0.04f, 0.03f, Black, 5);
+
+        // half fairing: a frame-mounted cowl round two stacked headlights, flanks to the tank, a screen over
+        var face = new Vector3(0, top.Y - 0.1f, top.Z + 0.2f);
+        s.Tube(face, new Vector3(0, top.Y - 0.1f, top.Z - 0.1f), 0.11f, 0.17f, k.Paint, 8);
+        s.Box(face + new Vector3(0, 0, -0.01f), new Vector3(0.24f, 0.22f, 0.03f), k.Paint);
+        foreach (float x in new[] { -0.07f, 0.07f })
+        {
+            s.Box(face + new Vector3(x, 0.035f, 0.01f), new Vector3(0.1f, 0.05f, 0.03f), Lamp, new Basis(Vector3.Right, 0.25f));
+            s.Box(face + new Vector3(x, -0.04f, 0.01f), new Vector3(0.1f, 0.05f, 0.03f), Lamp, new Basis(Vector3.Right, 0.25f));
+        }
+        s.Box(face + new Vector3(0, -0.1f, 0.0f), new Vector3(0.22f, 0.03f, 0.04f), k.Trim);
+        foreach (float x in new[] { -1f, 1f })
+            s.Box(new Vector3(x * 0.19f, top.Y - 0.1f, top.Z - 0.02f), new Vector3(0.03f, 0.2f, 0.3f), k.Paint, new Basis(Vector3.Right, 0.2f));
+        float h = k.ScreenHeight;
+        var screenBase = face + new Vector3(0, 0.1f, -0.08f);
+        s.Box(screenBase + new Vector3(0, Mathf.Cos(0.5f), -Mathf.Sin(0.5f)) * (h * 0.5f), new Vector3(0.3f, h, 0.025f), Screen, new Basis(Vector3.Right, -0.5f));
+        // mirrors on stalks off the fairing
+        foreach (float x in new[] { -0.28f, 0.28f })
+        {
+            s.Tube(new Vector3(x * 0.6f, top.Y - 0.02f, top.Z + 0.06f), new Vector3(x, top.Y + 0.1f, top.Z + 0.04f), 0.008f, Black, 4);
+            s.Box(new Vector3(x, top.Y + 0.12f, top.Z + 0.04f), new Vector3(0.1f, 0.06f, 0.02f), Black);
+        }
+    }
+
+    /// <summary>
+    /// A KTM 690 SMC: tall and thin. A slim tank-and-shroud unit, one long flat seat from the tank
+    /// to a high pointed tail, a high silencer on the right and short wire-wheel mudguards.
+    /// The plate-style front and the high front mudguard are in <see cref="BuildFront"/>.
+    /// </summary>
+    private static void Supermoto(MeshScratch s, MotoLook k, Vector3 tankFront, Vector3 pivot)
+    {
+        var top = k.TopClamp;
+        var seat = k.Seat;
+        var tankBack = new Vector3(0, seat.Y + 0.02f, seat.Z + 0.3f);
+        // slim fuel tank, the radiator shrouds either side of it, the livery's trim stripe on them
+        s.Tube(tankFront + new Vector3(0, -0.06f, 0.0f), tankBack, 0.1f, 0.085f, k.Paint, 7);
+        foreach (float x in new[] { -1f, 1f })
+        {
+            s.Box(new Vector3(x * 0.1f, top.Y - 0.22f, top.Z - 0.12f), new Vector3(0.03f, 0.3f, 0.34f), k.Paint, new Basis(Vector3.Right, 0.35f));
+            s.Box(new Vector3(x * 0.116f, top.Y - 0.28f, top.Z - 0.1f), new Vector3(0.006f, 0.1f, 0.3f), k.Trim, new Basis(Vector3.Right, 0.35f));
+        }
+        // seat: long, flat and narrow, tank to tail
+        s.Box(new Vector3(0, seat.Y - 0.025f, seat.Z - 0.12f), new Vector3(0.18f, 0.06f, 0.9f), k.SeatColor);
+        // the tail: a slim plastic wedge rising to a point, number-plate holder on its end
+        var tailTip = new Vector3(0, seat.Y + 0.08f, seat.Z - 0.7f);
+        s.Tube(new Vector3(0, seat.Y - 0.07f, seat.Z - 0.3f), tailTip, 0.075f, 0.025f, k.Paint, 6);
+        s.Box(tailTip + new Vector3(0, -0.03f, -0.02f), new Vector3(0.1f, 0.04f, 0.03f), new Color(0.8f, 0.05f, 0.05f));
+        s.Tube(new Vector3(0, seat.Y - 0.1f, seat.Z - 0.5f), k.RearAxle + new Vector3(0, k.RearRadius + 0.05f, -0.15f), 0.018f, Black, 4);
+        // exhaust: the header swings round to the right and up to a high silencer beside the tail
+        s.Tube(new Vector3(0, 0.34f, 0.34f), new Vector3(-0.1f, 0.3f, 0.2f), 0.022f, Metal, 5);
+        var can0 = new Vector3(-0.13f, seat.Y - 0.3f, seat.Z + 0.15f);
+        s.Tube(new Vector3(-0.1f, 0.3f, 0.2f), can0, 0.022f, Metal, 5);
+        var can1 = new Vector3(-0.15f, seat.Y - 0.08f, seat.Z - 0.55f);
+        s.Tube(can0, can1, 0.05f, 0.055f, Metal, 8);
+        s.Tube(can1, can1 + new Vector3(-0.005f, 0.01f, -0.04f), 0.056f, Black, 8);
+    }
+
+    /// <summary>
+    /// A TMAX: a step-through maxi-scooter. Frame-mounted nose with twin lamps and a screen, a leg
+    /// shield down to a flat floorboard at footpeg height, a tall tunnel between the legs, a long
+    /// two-level seat over a big rear body, the engine and swingarm in a low housing, silencer on the right.
+    /// </summary>
+    private static void Scooter(MeshScratch s, MotoLook k, Vector3 pivot)
+    {
+        var top = k.TopClamp;
+        var seat = k.Seat;
+        var peg = k.Peg;
+        var rear = k.RearAxle;
+        float floorY = peg.Y - 0.03f;
+        float floorFront = Mathf.Min(peg.Z + 0.2f, k.FrontAxle.Z - k.FrontRadius - 0.1f);
+        float floorBack = peg.Z - 0.34f;
+        float floorMid = (floorFront + floorBack) * 0.5f;
+        float floorLen = floorFront - floorBack;
+
+        // --- floorboard, its skirts, the tunnel up between the rider's legs ---
+        s.Box(new Vector3(0, floorY, floorMid), new Vector3(0.44f, 0.03f, floorLen), k.Trim);
+        foreach (float x in new[] { -1f, 1f })
+            s.Box(new Vector3(x * 0.225f, floorY - 0.03f, floorMid), new Vector3(0.025f, 0.1f, floorLen), k.Paint);
+        var tunnelLow = new Vector3(0, floorY + 0.16f, floorFront - 0.06f);
+        var tunnelHigh = new Vector3(0, seat.Y - 0.06f, seat.Z + 0.3f);
+        s.Tube(tunnelLow, tunnelHigh, 0.085f, 0.09f, k.Paint, 6);
+
+        // --- leg shield from under the dash down to the floor, with side aprons ---
+        float shieldTopY = top.Y - 0.06f;
+        float shieldTopZ = top.Z - 0.1f;
+        float shieldBotZ = floorFront - 0.02f;
+        var shieldMid = new Vector3(0, (shieldTopY + floorY) * 0.5f, (shieldTopZ + shieldBotZ) * 0.5f);
+        float shieldTilt = Mathf.Atan2(shieldTopZ - shieldBotZ, shieldTopY - floorY);
+        s.Box(shieldMid, new Vector3(0.4f, shieldTopY - floorY, 0.03f), k.Paint, new Basis(Vector3.Right, shieldTilt));
+        foreach (float x in new[] { -1f, 1f })
+            s.Box(shieldMid + new Vector3(x * 0.2f, -0.08f, 0.04f), new Vector3(0.03f, 0.36f, 0.2f), k.Paint, new Basis(Vector3.Right, shieldTilt));
+
+        // --- nose: frame-mounted, twin lamps, a wide screen; the dash with its clocks behind it ---
+        var face = new Vector3(0, top.Y - 0.02f, top.Z + 0.2f);
+        s.Tube(face, new Vector3(0, top.Y - 0.02f, top.Z - 0.14f), 0.13f, 0.21f, k.Paint, 8);
+        s.Box(face + new Vector3(0, 0, -0.01f), new Vector3(0.28f, 0.26f, 0.03f), k.Paint);
+        foreach (float x in new[] { -0.085f, 0.085f })
+            s.Box(face + new Vector3(x, 0.02f, 0.01f), new Vector3(0.1f, 0.06f, 0.03f), Lamp, new Basis(Vector3.Right, 0.2f));
+        s.Box(face + new Vector3(0, -0.07f, 0.01f), new Vector3(0.18f, 0.03f, 0.03f), Black);
+        s.Box(new Vector3(0, top.Y + 0.1f, top.Z - 0.12f), new Vector3(0.34f, 0.08f, 0.24f), k.Paint);
+        s.Box(new Vector3(0, top.Y + 0.15f, top.Z - 0.15f), new Vector3(0.18f, 0.01f, 0.1f), Glass, new Basis(Vector3.Right, -0.3f));
+        float h = k.ScreenHeight;
+        var screenBase = new Vector3(0, top.Y + 0.14f, top.Z + 0.02f);
+        s.Box(screenBase + new Vector3(0, Mathf.Cos(0.55f), -Mathf.Sin(0.55f)) * (h * 0.5f), new Vector3(0.36f, h, 0.03f), Screen, new Basis(Vector3.Right, -0.55f));
+
+        // --- the big rear body: side covers hiding the engine, the wheel's top half, the tail ---
+        float bodyLow = rear.Y + 0.18f;
+        float bodyTop = seat.Y - 0.05f;
+        float bodyFront = seat.Z + 0.22f;
+        float bodyBack = rear.Z - 0.2f;
+        s.Box(new Vector3(0, (bodyLow + bodyTop) * 0.5f, (bodyFront + bodyBack) * 0.5f), new Vector3(0.34f, bodyTop - bodyLow, bodyFront - bodyBack), k.Paint);
+        s.Box(new Vector3(0, bodyLow + 0.02f, (bodyFront + bodyBack) * 0.5f), new Vector3(0.36f, 0.04f, bodyFront - bodyBack - 0.04f), k.Trim);
+        var tailA = new Vector3(0, (bodyLow + bodyTop) * 0.5f + 0.02f, bodyBack + 0.02f);
+        s.Tube(tailA, tailA + new Vector3(0, 0.0f, -0.18f), 0.14f, 0.07f, k.Paint, 8);
+        s.Box(tailA + new Vector3(0, 0.03f, -0.19f), new Vector3(0.18f, 0.04f, 0.03f), new Color(0.8f, 0.05f, 0.05f));
+        // seat: rider's level (narrow between the knees), pillion a step higher, grab handles
+        s.Box(new Vector3(0, seat.Y - 0.03f, seat.Z + 0.32f), new Vector3(0.2f, 0.07f, 0.3f), k.SeatColor);
+        s.Box(new Vector3(0, seat.Y - 0.03f, seat.Z - 0.0f), new Vector3(0.3f, 0.07f, 0.4f), k.SeatColor);
+        s.Box(new Vector3(0, seat.Y + 0.0f, seat.Z - 0.42f), new Vector3(0.28f, 0.07f, 0.36f), k.SeatColor);
+        foreach (float x in new[] { -0.12f, 0.12f })
+            s.Tube(new Vector3(x, seat.Y + 0.05f, seat.Z - 0.3f), new Vector3(x, seat.Y + 0.05f, seat.Z - 0.62f), 0.01f, Metal, 4);
+
+        // --- the engine / CVT housing low between floor and rear wheel, the silencer on the right (−X) ---
+        s.Box(new Vector3(0, bodyLow - 0.14f, seat.Z + 0.1f), new Vector3(0.26f, 0.26f, 0.56f), Black);
+        s.Ring(new Vector3(0.14f, bodyLow - 0.14f, seat.Z + 0.08f), Vector3.Right, 0f, 0.13f, 0.03f, Metal, 12);
+        s.Tube(new Vector3(-0.19f, rear.Y + 0.02f, seat.Z + 0.2f), new Vector3(-0.2f, rear.Y + 0.08f, rear.Z - 0.2f), 0.065f, 0.07f, new Color(0.22f, 0.22f, 0.24f), 8);
+    }
+
     private static void Fairing(MeshScratch s, MotoLook k)
     {
         var top = k.TopClamp;
@@ -296,8 +473,15 @@ public static class MotorbikeMeshBuilder
         }
         s.Box(top, new Vector3(0.26f, 0.03f, 0.08f), k.Trim);
         s.Box(low, new Vector3(0.26f, 0.04f, 0.08f), k.Trim);
-        // front mudguard over the tyre
-        s.Box(axle + up * (k.FrontRadius + 0.03f), new Vector3(0.14f, 0.02f, 0.28f), k.Paint);
+        // front mudguard over the tyre: a supermoto's rides high, on stays from the lower clamp
+        if (k.Style == MotoStyle.Supermoto)
+        {
+            var guard = axle + up * (k.FrontRadius + 0.13f);
+            s.Box(guard, new Vector3(0.14f, 0.02f, 0.36f), k.Paint, new Basis(Vector3.Right, 0.1f));
+            foreach (float x in new[] { -0.1f, 0.1f })
+                s.Tube(guard + new Vector3(x, 0, 0.0f), axle + up * 0.3f + new Vector3(x, 0, 0), 0.01f, Black, 4);
+        }
+        else s.Box(axle + up * (k.FrontRadius + 0.03f), new Vector3(0.14f, 0.02f, 0.28f), k.Paint);
 
         var grip = k.Grip - p;
         foreach (float side in new[] { -1f, 1f })
@@ -326,6 +510,25 @@ public static class MotorbikeMeshBuilder
                 var g = grip with { X = side * Mathf.Abs(grip.X) };
                 s.Box(g + new Vector3(side * 0.06f, 0.02f, 0.07f), new Vector3(0.14f, 0.07f, 0.02f), k.Paint, new Basis(Vector3.Up, side * -0.3f));
             }
+        if (k.Style == MotoStyle.Supermoto)
+        {
+            // a number-plate front: a tall flat plate on the fork with a small headlamp in it, and handguards
+            var plate = low + new Vector3(0, 0.1f, 0.1f);
+            s.Box(plate, new Vector3(0.28f, 0.26f, 0.02f), k.Paint, new Basis(Vector3.Right, 0.15f));
+            s.Box(plate + new Vector3(0, -0.02f, 0.015f), new Vector3(0.14f, 0.1f, 0.012f), Black);
+            s.Tube(plate + new Vector3(0, -0.02f, 0.02f), plate + new Vector3(0, -0.02f, 0.035f), 0.045f, Lamp, 8);
+            s.Box(top + new Vector3(0, 0.04f, 0.06f), new Vector3(0.1f, 0.06f, 0.02f), Black, new Basis(Vector3.Right, -0.4f));
+            foreach (float side in new[] { -1f, 1f })
+            {
+                var g = grip with { X = side * Mathf.Abs(grip.X) };
+                s.Box(g + new Vector3(side * 0.06f, 0.015f, 0.05f), new Vector3(0.12f, 0.05f, 0.02f), k.Trim, new Basis(Vector3.Up, side * -0.3f));
+            }
+        }
+        if (k.Style == MotoStyle.Scooter)
+        {
+            // the bars vanish into a handlebar cowl with the clocks; grips and levers stick out of it
+            s.Box(top + new Vector3(0, 0.06f, -0.14f), new Vector3(0.16f, 0.07f, 0.12f), k.Paint);
+        }
         if (k.Style == MotoStyle.Naked)
         {
             // the Monster's round headlight ahead of the clamps, and a clock above it
