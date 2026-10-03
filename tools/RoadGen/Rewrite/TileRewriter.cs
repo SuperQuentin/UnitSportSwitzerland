@@ -570,7 +570,8 @@ public static partial class TileRewriter
                 }
 
                 // the paths' paint on their final pieces, and the crossings at the junctions (#120)
-                var linkOf = segmentOf.ToDictionary(kv => kv.Value.Item1, kv => kv.Key, ReferenceEqualityComparer.Instance);
+                var linkOf = new Dictionary<RoadSegment, int>(ReferenceEqualityComparer.Instance);
+                foreach (var (link, so) in segmentOf) linkOf[so.Item1] = link;
                 foreach (var (segment, tileId, station, start, end) in lanePaint)
                 {
                     var pieces = finalPieces.TryGetValue(segment, out var cut) ? cut : [segment];
