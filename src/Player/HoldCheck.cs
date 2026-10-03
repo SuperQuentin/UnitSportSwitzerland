@@ -93,7 +93,8 @@ public partial class HoldCheck : Node
     private VehicleBody? _filmed;
     private Camera3D? _spectator;
 
-    private async Task Shot(string name)
+    /// <param name="at">Framed on this point (the car out behind), from the left and above; else the hold from behind.</param>
+    private async Task Shot(string name, Vector3? at = null)
     {
         if (!Shots) return;
         Camera3D? was = null;
@@ -103,9 +104,10 @@ public partial class HoldCheck : Node
             was = GetViewport().GetCamera3D();
             _spectator ??= new Camera3D { Fov = 60f, Far = 20000f };
             if (_spectator.GetParent() == null) AddChild(_spectator);
-            var eye = Point(_filmed, 13f, 4.5f, -22f);
+            var left = FootPlayer.HoldFrame(_filmed, 0).Basis.X;
+            var eye = at is { } p ? p - left * 9f + Vector3.Up * 3.5f + (Point(_filmed, 0f, 0f, -40f) - p).Normalized() * 6f : Point(_filmed, 13f, 4.5f, -22f);
             _spectator.GlobalPosition = eye;
-            _spectator.LookAt(Point(_filmed, 0f, 0.8f, -2f), Vector3.Up);
+            _spectator.LookAt(at is { } q ? q + Vector3.Up * 1.5f + (Point(_filmed, 0f, 0f, 0f) - q).Normalized() * 6f : Point(_filmed, 0f, 0.8f, -2f), Vector3.Up);
             _spectator.MakeCurrent();
         }
         for (int i = 0; i < 3; i++) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
@@ -291,11 +293,12 @@ public partial class HoldCheck : Node
         }, 40);
         brake = 0f;
         throttle = 0f;
-        me.RideControls = () => new RideInput(0f, 1f, 0f, false, true);
+        // the handbrake alone: a brake pedal at a standstill is reverse
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false, true);
         await Seconds(2);
         l = Local(carrier, me.GlobalPosition);
         Expect(outside && me.IsOnFloor() && Mathf.Abs(l.Y) < 0.3f, $"reversed down the ramp and out: on the ground behind it at {F(l)}, not carried ('{me.DeckOn}')");
-        await Shot("car-out-of-the-hold-cartoon");
+        await Shot("car-out-of-the-hold-cartoon", me.GlobalPosition);
         me.RideControls = null;
         Finish("");
     }

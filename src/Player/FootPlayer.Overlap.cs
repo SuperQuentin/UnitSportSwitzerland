@@ -65,6 +65,13 @@ public partial class FootPlayer
         if (push != Vector3.Zero) GlobalPosition += push.Normalized() * SeparateSpeed * dt;
     }
 
+    /// <summary>
+    /// <paramref name="cargo"/> rides in or on <paramref name="carrier"/> (a car in its hold, #418; a walker
+    /// on its deck): inside it on purpose. Never eased apart: the exception the carrier's guests get
+    /// (<see cref="WatchGuests"/>) would be taken back once "clear", and an A320 flew into the car in its hold.
+    /// </summary>
+    private static bool RidesIn(FootPlayer cargo, FootPlayer carrier) => cargo.DeckOn != "" && cargo.DeckOn == carrier.Name.ToString();
+
     /// <summary>Carrying capsules' centres closer than half the sum of their radii.</summary>
     private bool DeeplyInside(FootPlayer other)
     {
@@ -101,7 +108,7 @@ public partial class FootPlayer
             _overlapQuery.Transform = node.GlobalTransform;
             foreach (var hit in space.IntersectShape(_overlapQuery, 32))
                 if (hit["collider"].AsGodotObject() is FootPlayer other && other != this
-                    && !_overlapHits.Contains(other))
+                    && !_overlapHits.Contains(other) && !RidesIn(this, other) && !RidesIn(other, this))
                     _overlapHits.Add(other);
         }
     }

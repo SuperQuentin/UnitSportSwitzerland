@@ -241,3 +241,7 @@ shaders/common/waves     full   tools/waterparity.sh
 shaders/body/water       full   tools/waterparity.sh
 src/Player/Emote         net    tools/emotenetcheck.sh
 src/Avatar/HumanMeshBuilder.Emotes net tools/emotenetcheck.sh
+src/Player/FootPlayer.Hold net   tools/holdnetcheck.sh
+src/Player/HoldNetProbe  net    tools/holdnetcheck.sh
+src/Vehicles/VehicleBody.Hold net tools/holdnetcheck.sh
+src/Player/FootPlayer.Overlap net tools/holdnetcheck.sh
