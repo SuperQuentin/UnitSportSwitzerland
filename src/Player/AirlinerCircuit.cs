@@ -4,7 +4,7 @@ using UnitSport.Core;
 namespace UnitSport.Player;
 
 /// <summary>
-/// A scripted pilot for <c>--flycheck a320</c> (#414): flies one whole circuit on the real input
+/// A scripted pilot for <c>--flycheck a320|freighter</c> (#414, #420): flies one whole circuit on the real input
 /// actions, as a player's keys and sticks would (analog strengths for the stick), so what is checked
 /// is the game's own path from the keys to the model. Take-off at full thrust with flaps 1+F, gear
 /// up, climb to 300 m, a 180° turn at 160 kt, an approach on a 3° path with the gear and the flaps
@@ -22,6 +22,11 @@ public sealed class AirlinerCircuit
     private float _healthAt, _lastHealth = float.MaxValue;
 
     public readonly record struct Outcome(bool Ok, string Text);
+
+    /// <summary>The aircraft's name in the log lines (the check's kind).</summary>
+    private readonly string _name;
+
+    public AirlinerCircuit(string name = "a320") => _name = name;
 
     /// <summary>Windowed with a picture path: called once a few seconds into each phase with its name, to save the view.</summary>
     public System.Action<string>? Snap;
@@ -105,7 +110,7 @@ public sealed class AirlinerCircuit
                 if (!s.Autopilot && t - _apFrom > 0.5f) return new Outcome(false, "the autopilot did not engage");
                 if (t - _apFrom > 25f)
                 {
-                    GD.Print($"[flycheck] a320 autopilot held its altitude within {_apWorst:F1} m for 22 s");
+                    GD.Print($"[flycheck] {_name} autopilot held its altitude within {_apWorst:F1} m for 22 s");
                     if (_apWorst > 30f) return new Outcome(false, $"the autopilot lost {_apWorst:F0} m");
                     jet.Command(AirlinerCommand.Autopilot);
                     _phase = Phase.Turn;
@@ -171,12 +176,12 @@ public sealed class AirlinerCircuit
         }
         if (_phase == _snapped) _phaseAt = -1f;
         if (p.VehicleHealth < _lastHealth - 0.01f)
-            GD.Print($"[flycheck] a320 damage {_lastHealth - p.VehicleHealth:F1} in {_phase} at {t:F1} s: ias {s.Ias / 0.5144f:0} kt, vs {vs:F1}, agl {agl:F1}, ground {s.OnGround}, gear {s.Gear:F2}");
+            GD.Print($"[flycheck] {_name} damage {_lastHealth - p.VehicleHealth:F1} in {_phase} at {t:F1} s: ias {s.Ias / 0.5144f:0} kt, vs {vs:F1}, agl {agl:F1}, ground {s.OnGround}, gear {s.Gear:F2}");
         _lastHealth = p.VehicleHealth;
         if (t - _lastReport >= 5f)
         {
             _lastReport = t;
-            GD.Print($"[flycheck] a320 {_phase,-8} ias {s.Ias / 0.5144f,4:0} kt  agl {agl,5:0} m  vs {vs,5:0.0}  pitch {Mathf.RadToDeg(pitch),5:0.0}  bank {Mathf.RadToDeg(bank),5:0.0}"
+            GD.Print($"[flycheck] {_name} {_phase,-8} ias {s.Ias / 0.5144f,4:0} kt  agl {agl,5:0} m  vs {vs,5:0.0}  pitch {Mathf.RadToDeg(pitch),5:0.0}  bank {Mathf.RadToDeg(bank),5:0.0}"
                 + $"  N1 {s.Spool * 100f,3:0}%  flaps {spec.FlapNames[s.FlapLever]}  gear {s.Gear:0.0}");
         }
         if (!s.OnGround && agl < -0.5f) return new Outcome(false, "under the ground");

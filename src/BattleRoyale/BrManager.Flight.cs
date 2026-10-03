@@ -75,7 +75,7 @@ public partial class BrManager
             return false;
         }
         var f = PlaneFrame(flight, now);
-        var exit = f.At + new Basis(Vector3.Up, f.Yaw) * CargoPlaneMeshBuilder.Ramp + Vector3.Down * 2f;
+        var exit = f.At + new Basis(Vector3.Up, f.Yaw) * BrPlane.Ramp + Vector3.Down * 2f;
         var forward = f.Velocity.LengthSquared() > 1f ? f.Velocity.Normalized() : new Basis(Vector3.Up, f.Yaw) * Vector3.Forward;
         var velocity = forward * Math.Min(flight.Speed, ExitSpeed) + Vector3.Down * 4f;
         _aboard = false;

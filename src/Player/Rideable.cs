@@ -31,7 +31,10 @@ public enum RideKind
     Pigeon = 124,
     /// <summary>The Airbus A320 (#414, #416): an <see cref="Player.Airliner"/>, walkable.</summary>
     A320 = 125,
-    // The next other mount is 126 (the AN-124 #419 and the military freighter #420 come next).
+    // 126 is the A320's airstairs (#417).
+    /// <summary>The military cargo plane (#420, the Battle Royale's model): an <see cref="Player.Airliner"/>, walkable, a ramp and a hold.</summary>
+    Freighter = 127,
+    // 128 is the AN-124 (#419); the next other mount is 129.
 }
 
 /// <summary>
