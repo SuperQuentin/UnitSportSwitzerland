@@ -604,17 +604,20 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.EmoteWheelProbe.Requested) AddChild(new Player.EmoteWheelProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
         if (World.WaterCheck.Requested) AddChild(new World.WaterCheck(() => LocalPlayer));
+        if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: false));
         if (Player.BoatCheck.Role is { } boatRole) AddChild(new Player.BoatCheck(boatRole, () => LocalPlayer));
         if (Player.SteamerCheck.Role is { } steamerRole) AddChild(new Player.SteamerCheck(steamerRole, () => LocalPlayer));
         if (Player.SwimCheck.Requested) AddChild(new Player.SwimCheck(() => LocalPlayer));
         if (Player.CabinCheck.Requested) AddChild(new Player.CabinCheck(() => LocalPlayer));
+        if (Player.FreighterCheck.Requested) AddChild(new Player.FreighterCheck(() => LocalPlayer));
+        if (Player.HoldCheck.Requested) AddChild(new Player.HoldCheck(() => LocalPlayer));
         if (Player.AirstairsCheck.Requested) AddChild(new Player.AirstairsCheck(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Loot.BankProbe.Role != null
-            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
+            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null
@@ -644,6 +647,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Birds.BirdNetProbe.Role != null) AddChild(new Birds.BirdNetProbe(items));
         if (Birds.PigeonNetProbe.Role != null) AddChild(new Birds.PigeonNetProbe(items));
         if (Player.AirlinerNetProbe.Role != null) AddChild(new Player.AirlinerNetProbe(items));
+        if (Player.FreighterNetProbe.Role != null) AddChild(new Player.FreighterNetProbe(items));
+        if (Player.HoldNetProbe.Role != null) AddChild(new Player.HoldNetProbe(items));
         if (Items.UseAnimProbe.Role != null) AddChild(new Items.UseAnimProbe(items));
         if (Items.PhotoProbe.Requested) AddChild(new Items.PhotoProbe(items));
         if (Items.ShotgunProbe.Role != null) AddChild(new Items.ShotgunProbe(items));
@@ -1556,6 +1561,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _spectator.Current = true;
             _chunks.RemoveAnchor(player);
             _chunks.AddAnchor(_spectator);
+            // the ground under the body streams out as the camera flies off: left running, it
+            // falls, thuds and plays its sounds at the old spot. Frozen and hidden until we return.
+            SetBodyParked(player, true);
             _onFoot = false;
             GD.Print($"[world] spectator at {_spectator.GlobalPosition}");
         }
@@ -1580,6 +1588,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// <param name="inPlace">Back into the body where it stands, instead of dropping it under the fly camera.</param>
     private void EnterFootMode(FootPlayer player, bool inPlace = false)
     {
+        SetBodyParked(player, false);
         if (!inPlace)
         {
             var pos = _spectator!.GlobalPosition;
@@ -1594,6 +1603,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
         player.CarRadioTuned -= OnCarRadioTuned;
         player.CarRadioTuned += OnCarRadioTuned;
         GD.Print($"[world] on foot at {player.GlobalPosition}");
+    }
+
+    /// <summary>The body left behind by the fly camera: no physics, no sounds, not drawn.</summary>
+    private static void SetBodyParked(FootPlayer player, bool parked)
+    {
+        player.ProcessMode = parked ? ProcessModeEnum.Disabled : ProcessModeEnum.Inherit;
+        player.Visible = !parked;
     }
 
     private void OnCarRadioTuned(string station) => _items?.Ui.Toast($"Radio: {station}");

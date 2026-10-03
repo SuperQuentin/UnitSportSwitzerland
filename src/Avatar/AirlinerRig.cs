@@ -28,18 +28,27 @@ public enum AirlinerLights : byte { None = 0, Nav = 1, Beacon = 2, Strobe = 4, L
 /// </summary>
 public partial class AirlinerRig : Node3D
 {
+    /// <summary>Doors an airliner can have: one bit each in its pose and flags (bits 13-16).</summary>
+    public const int MaxDoors = 4;
+
     private AirlinerSpec _spec = AirlinerCatalog.A320;
     private Node3D? _flapInL, _flapInR, _flapOutL, _flapOutR, _aileronL, _aileronR, _spoilerL, _spoilerR,
-        _elevatorL, _elevatorR, _rudder, _gearL, _gearR, _gearNose, _fan0, _fan1;
-    private readonly Node3D?[] _doors = new Node3D?[A320Layout.DoorCount];
+        _elevatorL, _elevatorR, _rudder, _gearL, _gearR, _gearNose;
+    private Node3D?[] _fans = System.Array.Empty<Node3D?>();
+    private float[] _fanSign = System.Array.Empty<float>();
+    /// <summary>What each door moves: its hinge nodes, each about a local axis by an angle (fully open).</summary>
+    private readonly List<(int Door, Node3D Node, Vector3 Axis, float Angle)> _doorParts = new();
+    private readonly float[] _doorRate = { 0.4f, 0.4f, 0.4f, 0.4f };
     private Node3D? _navL, _navR, _navTail, _beaconTop, _beaconBottom, _strobeL, _strobeR, _landingL, _landingR;
     private float _stowL, _stowR, _stowNose;
-    private readonly float[] _doorOpen = new float[A320Layout.DoorCount];
+    /// <summary>Main legs that rise straight up to stow (the freighter's, into its sponsons), metres; 0 when they fold.</summary>
+    private float _gearLift;
+    private Vector3 _gearLDown, _gearRDown;
 
     // where the parts are now, eased toward the look
     private float _gear = 1f, _flaps, _spoilers, _fanSpin, _clock;
     private Vector2 _stick;
-    private readonly float[] _doorAt = new float[A320Layout.DoorCount];
+    private readonly float[] _doorAt = new float[MaxDoors];
     private bool _fresh = true;
 
     private const float Deg = Mathf.Pi / 180f;
@@ -50,23 +59,47 @@ public partial class AirlinerRig : Node3D
         var model = A320MeshBuilder.Build(tail);
         model.Name = "Model";
         rig.AddChild(model);
-        rig.Find(model);
+        rig.Find(model, 2);
+        rig._fanSign = new[] { 1f, -1f };
         rig._stowL = A320MeshBuilder.GearStowAngle("GearMainL");
         rig._stowR = A320MeshBuilder.GearStowAngle("GearMainR");
         rig._stowNose = A320MeshBuilder.GearStowAngle("GearNose");
-        for (int i = 0; i < A320Layout.DoorCount; i++) rig._doorOpen[i] = A320MeshBuilder.DoorOpenAngle(i);
+        for (int i = 0; i < A320Layout.DoorCount; i++)
+            if (model.GetNodeOrNull<Node3D>($"Door{i}") is { } door) rig._doorParts.Add((i, door, Vector3.Up, A320MeshBuilder.DoorOpenAngle(i)));
         return rig;
     }
 
-    private void Find(Node3D model)
+    /// <summary>The military cargo plane (#420): four propellers, mains rising into the sponsons, the ramp and its upper door.</summary>
+    public static AirlinerRig CreateFreighter()
+    {
+        var rig = new AirlinerRig { Name = "Freighter", _spec = AirlinerCatalog.Freighter };
+        var model = FreighterMeshBuilder.Build();
+        model.Name = "Model";
+        rig.AddChild(model);
+        rig.Find(model, FreighterLayout.EngineX.Length);
+        rig._fanSign = new[] { 1f, 1f, 1f, 1f };
+        rig._gearLift = FreighterMeshBuilder.GearLift;
+        rig._gearLDown = rig._gearL?.Position ?? Vector3.Zero;
+        rig._gearRDown = rig._gearR?.Position ?? Vector3.Zero;
+        rig._stowNose = FreighterMeshBuilder.NoseStowAngle;
+        for (int i = 0; i < FreighterLayout.DoorCount; i++)
+        {
+            rig._doorRate[i] = FreighterMeshBuilder.DoorRate(i);
+            foreach (var (name, axis, angle) in FreighterMeshBuilder.DoorMotions(i))
+                if (model.GetNodeOrNull<Node3D>(name) is { } part) rig._doorParts.Add((i, part, axis, angle));
+        }
+        return rig;
+    }
+
+    private void Find(Node3D model, int fans)
     {
         Node3D? N(string name) => model.GetNodeOrNull<Node3D>(name);
         _flapInL = N("FlapInL"); _flapInR = N("FlapInR"); _flapOutL = N("FlapOutL"); _flapOutR = N("FlapOutR");
         _aileronL = N("AileronL"); _aileronR = N("AileronR"); _spoilerL = N("SpoilerL"); _spoilerR = N("SpoilerR");
         _elevatorL = N("ElevatorL"); _elevatorR = N("ElevatorR"); _rudder = N("Rudder");
         _gearL = N("GearMainL"); _gearR = N("GearMainR"); _gearNose = N("GearNose");
-        _fan0 = N("Fan0"); _fan1 = N("Fan1");
-        for (int i = 0; i < _doors.Length; i++) _doors[i] = N($"Door{i}");
+        _fans = new Node3D?[fans];
+        for (int i = 0; i < fans; i++) _fans[i] = N($"Fan{i}");
         _navL = N("NavL"); _navR = N("NavR"); _navTail = N("NavTail");
         _beaconTop = N("BeaconTop"); _beaconBottom = N("BeaconBottom");
         _strobeL = N("StrobeL"); _strobeR = N("StrobeR"); _landingL = N("LandingL"); _landingR = N("LandingR");
@@ -99,7 +132,7 @@ public partial class AirlinerRig : Node3D
             _flaps = Mathf.MoveToward(_flaps, look.Flaps, _spec.FlapRate * 1.05f * dt);
             _spoilers = Mathf.MoveToward(_spoilers, look.Spoilers, 1.6f * dt);
             for (int i = 0; i < _doorAt.Length; i++)
-                _doorAt[i] = Mathf.MoveToward(_doorAt[i], (look.Doors >> i & 1) != 0 ? 1f : 0f, 0.4f * dt);
+                _doorAt[i] = Mathf.MoveToward(_doorAt[i], (look.Doors >> i & 1) != 0 ? 1f : 0f, _doorRate[i] * dt);
         }
         _stick = _stick.MoveToward(look.Stick, 3f * dt);
 
@@ -112,16 +145,24 @@ public partial class AirlinerRig : Node3D
         if (_rudder != null) _rudder.Rotation = new Vector3(0, _stick.X * 12f * Deg, 0);
 
         float stow = 1f - _gear;
-        if (_gearL != null) _gearL.Rotation = new Vector3(0, 0, stow * _stowL);
-        if (_gearR != null) _gearR.Rotation = new Vector3(0, 0, stow * _stowR);
+        if (_gearLift > 0f)
+        {
+            if (_gearL != null) _gearL.Position = _gearLDown + Vector3.Up * stow * _gearLift;
+            if (_gearR != null) _gearR.Position = _gearRDown + Vector3.Up * stow * _gearLift;
+        }
+        else
+        {
+            if (_gearL != null) _gearL.Rotation = new Vector3(0, 0, stow * _stowL);
+            if (_gearR != null) _gearR.Rotation = new Vector3(0, 0, stow * _stowR);
+        }
         if (_gearNose != null) _gearNose.Rotation = new Vector3(stow * _stowNose, 0, 0);
 
         _fanSpin = Mathf.Wrap(_fanSpin + look.Spool * 30f * dt, 0f, Mathf.Tau);
-        if (_fan0 != null) _fan0.Rotation = new Vector3(0, 0, _fanSpin);
-        if (_fan1 != null) _fan1.Rotation = new Vector3(0, 0, -_fanSpin);
+        for (int i = 0; i < _fans.Length; i++)
+            if (_fans[i] is { } fan) fan.Rotation = new Vector3(0, 0, _fanSign[i] * _fanSpin);
 
-        for (int i = 0; i < _doors.Length; i++)
-            if (_doors[i] is { } door) door.Rotation = new Vector3(0, _doorAt[i] * _doorOpen[i], 0);
+        foreach (var (door, node, axis, angle) in _doorParts)
+            node.Basis = new Basis(axis, _doorAt[door] * angle);
 
         bool nav = (look.Lights & AirlinerLights.Nav) != 0;
         Lit(_navL, nav); Lit(_navR, nav); Lit(_navTail, nav);
@@ -133,6 +174,13 @@ public partial class AirlinerRig : Node3D
         Lit(_strobeL, strobe); Lit(_strobeR, strobe);
         bool landing = (look.Lights & AirlinerLights.Landing) != 0;
         Lit(_landingL, landing); Lit(_landingR, landing);
+    }
+
+    /// <summary>Puts every part where <paramref name="look"/> has it at once, as the first <see cref="Show"/> does.</summary>
+    public void Snap(in AirlinerLook look)
+    {
+        _fresh = true;
+        Show(look, 0f);
     }
 
     /// <summary>Door leaves open now, 0..1, for the deck (#416): a leaf half open is not a way in yet.</summary>

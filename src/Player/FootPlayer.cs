@@ -599,6 +599,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private float _lookYaw;
     /// <summary>Seconds since the mouse or the right stick last looked: the cockpit's look springs back only once they let go.</summary>
     private float _lookIdle;
+    /// <summary>Seconds without mouse or stick look before a vehicle's chase camera swings back behind it.</summary>
+    private const float ChaseRecentreDelay = 5f;
     /// <summary>Cockpit: the head's sway from the car's accelerations, eased (node space: +X right, +Z back).</summary>
     private Vector3 _headSway;
 
@@ -1037,6 +1039,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             SetBodyHeight(StandHeight);
         }
     }
+
+    /// <summary>Turns the view (a probe's look around, e.g. aft down a hold), radians, + left.</summary>
+    public void TurnView(float by) => _viewYaw += by;
 
     /// <summary>
     /// A teleport that also turns a mount: the body at <paramref name="at"/>, stopped, facing
@@ -2442,7 +2447,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // a boat as it floated: its attitude (#302)
         if (_ride is Boat boarded && state.Angles != default) boarded.State.Attitude = Quaternion.FromEuler(state.Angles);
         // an airliner's gear, flaps, brakes and doors as they were left (#414)
-        if (_ride is Airliner parked) parked.UnpackFlags(state.Flags);
+        if (_ride is Airliner parked)
+        {
+            parked.UnpackFlags(state.Flags);
+            // the model was built before the flags: its doors, gear and flaps as left, not swinging there (#420)
+            if (_visual is Avatar.AirlinerRig rig) rig.Snap(parked.Look(parked.State));
+        }
         // airstairs at the height they were left, docked or not (#417)
         if (_ride is Airstairs stood) stood.UnpackFlags(state.Flags);
         // the steamer's gangways as they were left (#303)
@@ -2457,6 +2467,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         CarRadio = state.Radio;
         CarCd = state.Cd;
         _placed = true;
+        // parked in a hold (#418): carried again from the spot it stands on, still tied down
+        ResumeHold(state);
     }
 
     /// <summary>The vehicle as it is right now, to hand to the world.</summary>
@@ -2464,9 +2476,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         var heading = -GlobalTransform.Basis.Z with { Y = 0 };
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
+        var hold = HoldPlace;
         var velocity = _ride is Flyer
             ? _flight.Velocity
             : _ride is Boat afloat ? afloat.State.Velocity
+            // parked in a hold (#418): it stands still in the carrier, whatever the carrier does
+            : hold.Key != "" ? Vector3.Zero
             : heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed + Vector3.Up * Velocity.Y;
         return new VehicleState((RideKind)RideKindId, Origin!.ToGlobal(GlobalPosition),
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
@@ -2477,7 +2492,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // a truck's joints; a boat's attitude (Euler, #302), so it is parked as it floated
             Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler() : default,
             Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
-            Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd);
+            Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd,
+            Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw);
     }
 
     /// <summary>
@@ -2576,6 +2592,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (OnlineSeats && (SeatIndex > 0 || Riders.Any())) PassengerService.Instance!.HostLeaving(state);
         else Vehicles?.Park(state);
         SeatIndex = 0;
+        // out of the hold's frame (#418): the parked vehicle stays carried, the driver walks
+        if (InHoldRide && Aboard) LeaveHold();
 
         ApplyRide(RideKind.OnFoot, state.Velocity + right * 2f);
         if (aisle is { } spot) StandIn(spot, state.Velocity, (door, right, side, frame, vehicle));
@@ -3087,7 +3105,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void ApplyStickLook(float dt)
     {
-        var look = PlayerInput.LookRate * LookScale;
+        var look = PlayerInput.LookRate;
+        // on foot a steering wheel turns the view; mounted or seated it only steers
+        if (_ride == null && RidingWith == 0) look.X += PlayerInput.WheelLookRate;
+        look *= LookScale;
         if (look == Vector2.Zero) return;
         _lookIdle = 0f;
 
@@ -3153,6 +3174,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // does not walk the player around.
         if (_ride != null)
         {
+            // tied down in a hold (#418, FootPlayer.Hold.cs): it goes where the carrier goes, nothing else
+            if (HoldPhysics(dt)) return;
             if (_ride is Flyer flyer) FlyPhysics(dt, onFloor, flyer);
             else if (_ride is Boat boat) BoatPhysics(dt, boat);   // #302, FootPlayer.Boat.cs
             else RidePhysics(dt, onFloor);
@@ -3177,6 +3200,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
 
         var input = PlayerInput.Move;
+        // a steering wheel's pedals walk forward and back
+        if (input == Vector2.Zero) input.Y = PlayerInput.WheelWalk;
         if (_stunTimer > 0)
         {
             _stunTimer -= dt;
@@ -3651,6 +3676,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (VehicleHealth <= 0f) ev = FlightEvent.Crashed;
         }
         Rotation = new Vector3(0, _flight.Yaw, 0);
+        // a carrier (#418): the vehicles driven into its hold, or up its ramp, are not in its hull's way
+        if (HasHolds(flyer)) IgnoreGuests();
 
         if (ev == FlightEvent.None)
         {
@@ -3751,7 +3778,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         else
         {
-            _lookYaw = Mathf.MoveToward(_lookYaw, 0f, 1.2f * dt);
+            _lookIdle += dt;
+            // a look that banks the craft (canopies) comes straight back, or a flick would be a long turn
+            if (flyer.LookBank > 0f || _lookIdle > ChaseRecentreDelay) _lookYaw = Mathf.MoveToward(_lookYaw, 0f, 1.2f * dt);
             var nose = flyer.CameraForward(_flight);
             _camFwd = _camFwd.Lerp(nose, MathX.Damp(3.5f, dt));
             if (_camFwd.LengthSquared() < 1e-4f) _camFwd = nose;
@@ -3803,6 +3832,20 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     }
     private readonly List<(Vector3, Vector3)> _otherVehicles = new();
 
+    /// <summary>The controls of a ground ride this step: a script's (<see cref="RideControls"/>), else the pedals, stick and wheel.</summary>
+    private RideInput RideInputNow()
+    {
+        var stick = PlayerInput.Move;
+        return RideControls?.Invoke() ?? new RideInput(
+            Throttle: Mathf.Max(PlayerInput.Strength(PlayerInput.Throttle), Mathf.Max(0f, -stick.Y)),
+            Brake: Mathf.Max(PlayerInput.Strength(PlayerInput.Brake), Mathf.Max(0f, stick.Y)),
+            Steer: SteerInput(),
+            Effort: PlayerInput.Held(PlayerInput.TuckBoost),
+            // Space is a hop on a bike and the handbrake in a car, as is a wheel's lever
+            Handbrake: _ride is { CanHop: false } && (PlayerInput.Held(PlayerInput.Jump) || PlayerInput.WheelHandbrake > 0.5f),
+            WheelAngle: _ride is { WheelLock: > 0f } wheeled ? PlayerInput.WheelAngle(wheeled.WheelLock) : float.NaN);
+    }
+
     private void RidePhysics(float dt, bool onFloor)
     {
         // a bus: people walking in it or up to its doors are not in its hull's way (#162)
@@ -3812,14 +3855,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // Triggers are analog, and the vehicles already take 0..1: half a trigger is half the
         // watts. Pushing the stick forward or back does the same, for anyone who expects it to.
         var stick = PlayerInput.Move;
-        var input = RideControls?.Invoke() ?? new RideInput(
-            Throttle: Mathf.Max(PlayerInput.Strength(PlayerInput.Throttle), Mathf.Max(0f, -stick.Y)),
-            Brake: Mathf.Max(PlayerInput.Strength(PlayerInput.Brake), Mathf.Max(0f, stick.Y)),
-            Steer: SteerInput(),
-            Effort: PlayerInput.Held(PlayerInput.TuckBoost),
-            // Space is a hop on a bike and the handbrake in a car, as is a wheel's lever
-            Handbrake: _ride is { CanHop: false } && (PlayerInput.Held(PlayerInput.Jump) || PlayerInput.WheelHandbrake > 0.5f),
-            WheelAngle: _ride is { WheelLock: > 0f } wheeled ? PlayerInput.WheelAngle(wheeled.WheelLock) : float.NaN);
+        var input = RideInputNow();
 
         // skiing with the body in VR (#186): lean, pole and tuck on top of the sticks
         if (_ride is Skis && XR.XrSession.Active && RideControls == null)
@@ -3884,6 +3920,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
         if (_ride is Truck driving) PrepareTruck(driving);
         _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft), dt, ref _motion);
+        // a wheelie taken over the top (#410): the bike goes on its back, the rider off it
+        if (_ride is Motorbike { LoopedOut: true })
+        {
+            ThrowFromVehicle(_motion.Speed, loopOut: true);
+            return;
+        }
         if (_ride is Truck driven && AfterTruckStep(driven)) return;
         // airstairs let go by an aircraft's door line up with it and raise the platform (#417)
         if (_ride is Airstairs stairs) DockStairs(stairs, input, dt);
@@ -4096,13 +4138,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var basis = new Basis(Vector3.Up, _airSpin) * new Basis(Vector3.Right, _airPitch + _truckPitch)
             * new Basis(Vector3.Back, roll);
         // a truck pitches about its wheels on the ground, not about a rider's middle
+        // and in a hold (#418) the whole body leans with the carrier's floor
         if (_ride is Truck)
         {
-            _visual.Transform = new Transform3D(basis, Vector3.Zero);
+            _visual.Transform = new Transform3D(_holdTilt * basis, Vector3.Zero);
             return;
         }
         var pivot = Vector3.Up * (_bailTimer > 0 ? 0.3f : 0.9f);
-        _visual.Transform = new Transform3D(basis, pivot - basis * pivot);
+        _visual.Transform = new Transform3D(_holdTilt, Vector3.Zero) * new Transform3D(basis, pivot - basis * pivot);
     }
 
     private void UpdateRideCamera(float dt)
@@ -4122,8 +4165,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
-        // the free look springs back to centre, so letting go of the mouse puts the road ahead
-        _lookYaw = Mathf.MoveToward(_lookYaw, 0f, 1.2f * dt);
+        // the free look springs back to centre once the mouse or stick has left it alone a while,
+        // so a look around is held but the road ahead comes back
+        if (_lookIdle > ChaseRecentreDelay) _lookYaw = Mathf.MoveToward(_lookYaw, 0f, 1.2f * dt);
 
         if (!_thirdPerson && ShowroomYaw == null)
         {

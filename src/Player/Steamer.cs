@@ -66,6 +66,85 @@ public sealed class Steamer : Boat
     /// </summary>
     public override (Vector3 Centre, Vector3 Size) ParkedBox => (new Vector3(0, 3.4f, 0), new Vector3(8.7f, 4.4f, 2f * SteamerLines.SternZ));
 
+    /// <summary>
+    /// Parked, it collides as the hull is drawn (#378): the hull's own sections
+    /// (<see cref="SteamerMeshBuilder.HullSection"/>: the waterline's beam, the topsides flaring out to
+    /// the deck's edge, a fine bow, a rounded counter) from under the waterline (<see cref="HullLift"/>)
+    /// up, then straight up to the upper deck, as one convex shape. The box (<see cref="ParkedBox"/>) is
+    /// the hull's width over its whole length: a swimmer met an invisible wall 0.4 m off the side at
+    /// the foredeck and 3 m off the stem, and one who came up under the flare was held under it.
+    /// </summary>
+    public override Shape3D BuildParkedHull()
+    {
+        var points = new List<Vector3>();
+        foreach (float z in SteamerMeshBuilder.HullStations)
+            foreach (var p in ParkedSection(z))
+                points.Add(BoatMeshBuilder.Flip(new Vector3(p.X, p.Y, z)));
+        return new ConvexPolygonShape3D { Points = points.ToArray() };
+    }
+
+    /// <summary>The parked hull's bottom over the keel, m (<see cref="HullLift"/>, for static callers).</summary>
+    public const float ParkedLift = 1.2f;
+
+    /// <summary>
+    /// The parked hull's section at authored z: a closed convex polygon of (x, height over the keel),
+    /// the drawn section from <see cref="ParkedLift"/> up to the deck's edge, then up to the upper deck.
+    /// </summary>
+    public static Vector2[] ParkedSection(float z)
+    {
+        var profile = SteamerMeshBuilder.HullSection(z);
+        var side = new List<Vector2>();
+        for (int i = 0; i < profile.Length; i++)
+        {
+            var p = profile[i];
+            if (p.Y < ParkedLift)
+            {
+                // where the profile crosses the lift, from this point to the next one up
+                if (i + 1 < profile.Length && profile[i + 1].Y > ParkedLift)
+                {
+                    var q = profile[i + 1];
+                    side.Add(new Vector2(Mathf.Lerp(p.X, q.X, (ParkedLift - p.Y) / (q.Y - p.Y)), ParkedLift));
+                }
+                continue;
+            }
+            side.Add(p);
+        }
+        side.Add(new Vector2(side[^1].X, SteamerMeshBuilder.UpperY));
+        var ring = new List<Vector2>(side.Count * 2);
+        ring.AddRange(side);
+        for (int i = side.Count - 1; i >= 0; i--) ring.Add(side[i] with { X = -side[i].X });
+        return ring.ToArray();
+    }
+
+    /// <summary>
+    /// How far a point (node space, the parked hull's frame) is from the parked hull's surface, m,
+    /// negative inside: across its section there, interpolated between the stations; for checks.
+    /// </summary>
+    public static float ParkedHullDistance(Vector3 node)
+    {
+        var a = BoatMeshBuilder.Flip(node);   // authored: + toward the bow
+        var zs = SteamerMeshBuilder.HullStations;
+        if (a.Z <= zs[0] || a.Z >= zs[^1]) return Mathf.Max(zs[0] - a.Z, a.Z - zs[^1]);
+        int k = 0;
+        while (k + 2 < zs.Length && zs[k + 1] < a.Z) k++;
+        float f = (a.Z - zs[k]) / (zs[k + 1] - zs[k]);
+        var s0 = ParkedSection(zs[k]);
+        var s1 = ParkedSection(zs[k + 1]);
+        Vector2[] ring;
+        // sections with a different count of points (where the keel rises past the lift): the nearer one
+        if (s0.Length != s1.Length) ring = f < 0.5f ? s0 : s1;
+        else
+        {
+            ring = new Vector2[s0.Length];
+            for (int i = 0; i < ring.Length; i++) ring[i] = s0[i].Lerp(s1[i], f);
+        }
+        var p = new Vector2(a.X, a.Y);
+        float edge = float.MaxValue;
+        for (int i = 0, j = ring.Length - 1; i < ring.Length; j = i++)
+            edge = Mathf.Min(edge, p.DistanceTo(Geometry2D.GetClosestPointToSegment(p, ring[j], ring[i])));
+        return Geometry2D.IsPointInPolygon(p, ring) ? -edge : edge;
+    }
+
     public override SeatAnchor[] Seats => SteamerMeshBuilder.Parts().Seats;
 
     /// <summary>First person at the wheel: the helmsman's eye half risen off the stool, over the wheel and down the bow.</summary>

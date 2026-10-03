@@ -172,14 +172,15 @@ public static class PaintEmitter
     /// the carriageway's edge, through traffic taking its old place: along a steady shift its line
     /// is offset by it, along a taper drawn as its own geometry, with no symbol there.
     /// </summary>
-    public static void BikeLanes(RoadSegment seg, double station, List<RoadPaint> into, bool startsAtJunction, bool endsAtJunction)
+    public static void BikeLanes(RoadSegment seg, double station, List<RoadPaint> into, bool startsAtJunction, bool endsAtJunction,
+        bool skipLeft = false, bool skipRight = false)
     {
         if (seg.Surface != RoadSurface.Paved || seg.Class > RoadClass.Minor || seg.PointCount < 2) return;
         var a = seg.Attributes;
         foreach (bool right in (ReadOnlySpan<bool>)[false, true])
         {
             var side = right ? a.Right : a.Left;
-            if (!side.HasLane) continue;
+            if (!side.HasLane || (right ? skipRight : skipLeft)) continue;
             if (side.ShiftStartCm == side.ShiftEndCm) BikeLane(seg, right, station, into, startsAtJunction, endsAtJunction);
             else TaperLane(seg, right, into);
         }

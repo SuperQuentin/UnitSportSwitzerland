@@ -5,7 +5,7 @@ using UnitSport.Terrain;
 namespace UnitSport.Player;
 
 /// <summary>
-/// <c>godot --path . -- --flycheck wingsuit|glide|paraglider|heli|plane|pigeon|a320[,out.png] [--at E,N] [--world flat] [--airliner arcade|sim]</c>
+/// <c>godot --path . -- --flycheck wingsuit|glide|paraglider|heli|plane|pigeon|a320|freighter[,out.png] [--at E,N] [--world flat] [--airliner arcade|sim]</c>
 ///
 /// <para>
 /// Flies one craft through a scripted sortie with the real input actions and prints what the
@@ -48,7 +48,7 @@ public partial class FlightCheckProbe : Node
     {
         if (_done) return;
         _wait += delta;
-        if (_wait > (_kind == "a320" ? 900 : 150)) { GD.Print("[flycheck] TIMEOUT"); Finish(2); return; }
+        if (_wait > (Heavy ? 900 : 150)) { GD.Print("[flycheck] TIMEOUT"); Finish(2); return; }
 
         var (e, n) = SpawnPoint.ParseTarget();
         var at = _origin.ToWorld(e, n, 0);
@@ -116,8 +116,9 @@ public partial class FlightCheckProbe : Node
                 p.DebugLaunch(p.GlobalPosition + Vector3.Up * 400f, new Vector3(0, 0, -50));
                 break;
             case "a320":
-                // a whole circuit on the real keys: take-off, climb, a 180° turn, approach, landing, stop (#414)
-                p.SetRide(RideKind.A320);
+            case "freighter":
+                // a whole circuit on the real keys: take-off, climb, a 180° turn, approach, landing, stop (#414, #420)
+                p.SetRide(_kind == "freighter" ? RideKind.Freighter : RideKind.A320);
                 // --heading deg (true, 0 north, 90 east): lined up on a real runway (GVA 05 is 46°)
                 if (CmdArgs.Value("--heading") is { } h && float.TryParse(h, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float deg)
                     && p.Vehicle is Airliner lined)
@@ -128,7 +129,7 @@ public partial class FlightCheckProbe : Node
                     lined.State.Attitude = new Basis(Vector3.Up, yaw);
                 }
                 Engine.TimeScale = 4.0;
-                _circuit = new AirlinerCircuit();
+                _circuit = new AirlinerCircuit(_kind);
                 // windowed with a picture: one per phase, <name>_<phase>.png beside it
                 if (_shot != null)
                     _circuit.Snap = phase =>
@@ -190,6 +191,7 @@ public partial class FlightCheckProbe : Node
                 if (t > 40) End("still airborne");
                 break;
             case "a320":
+            case "freighter":
                 if (_player!.Vehicle is not Airliner jet) { _crashed = true; End("not in an airliner"); break; }
                 if (_circuit!.Step(jet, _player, Agl(_player.GlobalPosition), (float)t, Hold) is { } how)
                 {
@@ -228,6 +230,9 @@ public partial class FlightCheckProbe : Node
     }
 
     private AirlinerCircuit? _circuit;
+
+    /// <summary>A heavy aircraft's whole circuit: a long sortie (#414, #420).</summary>
+    private bool Heavy => _kind is "a320" or "freighter";
 
     private void Finish(int code)
     {

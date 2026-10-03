@@ -250,6 +250,28 @@ public partial class PlayerInput : Node
             ? float.NaN
             : SteeringWheel.GameAngle(lockToLock);
 
+    /// <summary>
+    /// On foot only: the pedals walk, brake back minus throttle forward (y back, as <see cref="Move"/>);
+    /// 0 without a wheel. Never in a vehicle, where the pedals drive.
+    /// </summary>
+    public static float WheelWalk => Blocked || !SteeringWheel.Active ? 0f : SteeringWheel.Brake - SteeringWheel.Throttle;
+
+    /// <summary>
+    /// On foot only: the wheel turned ±<see cref="SteeringWheel.PlainSpanDeg"/> turns the view like a
+    /// fully pushed right stick, x right, rad/s; a few degrees around centre do nothing. 0 without a
+    /// wheel. Never in a vehicle, where the wheel steers.
+    /// </summary>
+    public static float WheelLookRate
+    {
+        get
+        {
+            if (Blocked || !SteeringWheel.Active) return 0f;
+            float a = Mathf.Clamp(SteeringWheel.Angle / Mathf.DegToRad(SteeringWheel.PlainSpanDeg), -1f, 1f);
+            float m = Mathf.Max(0f, (Mathf.Abs(a) - 0.05f) / 0.95f);
+            return Mathf.Sign(a) * m * m * StickTurnRate * GameSettings.Current.StickSensitivity;
+        }
+    }
+
     /// <summary>The wheel's handbrake lever (or the button bound to it), 0..1.</summary>
     public static float WheelHandbrake => Blocked || !SteeringWheel.Active ? 0f : SteeringWheel.Handbrake;
 

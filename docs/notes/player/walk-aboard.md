@@ -22,7 +22,11 @@
   top level children of the player), put where the vehicle is drawn **every frame in `_Process`**,
   after the vehicles' copies moved (`ProcessPriority` 10), door parts switched by the vehicle's
   doors (`BusDoors`: own `Truck.DoorsOpen`, a copy's pose W bits, a parked bus's flags). The
-  player excepts the vehicle's own hull (and its sections): its deck is what stops it.
+  player excepts the vehicle's own hull (and its sections): its deck is what stops it. **Only while
+  at the deck** (#378, `ExceptHulls`, each physics step before the walk): aboard, waiting for it
+  (`_deckWait`), or within a metre of it, the vehicle's own rule for its guests (`WatchGuests`).
+  Excepted for as long as the deck was built (30 m and more), a swimmer swam through a parked
+  steamer's hull under its deck. Built excepted, so a deck arriving round a player still lets them be.
 - **Aboard** (`DeckPhysics`, each physics step): standing in a deck's aboard box. The player is then
   **carried** in `_Process` by the section's motion since the last frame (position, heading, view
   and velocity turned with it), its velocity is the vehicle frame's, its mask is `DeckLayer` only,
@@ -140,5 +144,6 @@
 - **Getting into a vehicle leaves the decks at once** (`LeaveDecksNow` in `ApplyRide`): the deck bodies
   used to go at the next frame, and for a physics step the steamer just taken from its own deck had its
   hull inside that deck's boxes (and the walker's mask was still the deck layer): the solver shot it into the sky.
-- **Limits**: buses and the steamer only; no hand on a pole is drawn; the ~0.4 m jump when the vehicle changes hands
+- **Limits**: buses, the steamer, the A320 and the military freighter (#420: its ramp is a `DoorStep` slope to the ground, its troop seats face across with `SeatAnchor.Yaw`, see `airliners`); no hand on a pole is drawn; the ~0.4 m jump when the vehicle changes hands
   under a walker; a rolling parked train's trailer boxes take its pose only once it is at rest (#173).
+- **Vehicles in holds** (#418): a deck's `CargoBays` carry ground vehicles driven into them the same way (decks built for drivers too, `DeckOn`/`DeckPos` for the vehicle): see the vehicles note `vehicles-in-holds`.

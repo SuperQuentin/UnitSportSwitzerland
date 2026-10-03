@@ -224,6 +224,50 @@ public static class SteamerMeshBuilder
 
     // ---- the hull --------------------------------------------------------------------------
 
+    /// <summary>The hull's stations, authored z (+ toward the bow), stern to stem.</summary>
+    public static readonly float[] HullStations = BuildStations();
+
+    private static float[] BuildStations()
+    {
+        var zs = new List<float> { -Bow, -37.2f, -36f, -35f, -33f, -30f };
+        for (float z = -26f; z <= 26f; z += 4f) zs.Add(z);
+        zs.AddRange(new[] { 30f, 33f, 35f, 36.3f, 37.3f, Bow });
+        return zs.ToArray();
+    }
+
+    /// <summary>
+    /// The hull's section at authored z, one side, keel to deck: (half-width, height over the keel)
+    /// of the keel, the turn of the bilge, the waterline's boot-top, the topsides and the deck's edge.
+    /// What is drawn (<see cref="Hull"/>) and what a parked ship collides as (#378).
+    /// </summary>
+    public static Vector2[] HullSection(float z)
+    {
+        float wl = SteamerLines.Draught, half = SteamerLines.WaterlineHalf;
+        float t = Mathf.Clamp((z + half) / (2f * half), 0f, 1f);
+        float hw = SteamerLines.Beam * 0.5f * SteamerLines.HalfBeam(t);
+        float keel = SteamerLines.KeelRise(t);
+        if (z > half)
+        {
+            float f = (z - half) / (Bow - half);
+            hw = Mathf.Lerp(hw, 0.05f, f);
+            keel = Mathf.Lerp(keel, DeckY - 0.4f, f);
+        }
+        else if (z < -half)
+        {
+            float f = (-half - z) / (Bow - half);
+            hw = Mathf.Lerp(hw, 0.4f, f);
+            keel = Mathf.Lerp(keel, 2.3f, f);
+        }
+        float dh = DeckHalf(z);
+        float ends = z > half ? (z - half) / (Bow - half) : z < -half ? (-half - z) / (Bow - half) : 0f;
+        float bilgeY = keel + SteamerLines.Bilge * 0.55f * (1f - ends);
+        float lowY = Mathf.Max(bilgeY + 0.05f, wl - 0.25f);
+        float highY = Mathf.Max(lowY + 0.05f, wl + 0.3f);
+        float deckY = Mathf.Max(DeckY, highY + 0.05f);
+        float highX = Mathf.Lerp(hw, dh, (highY - wl) / Mathf.Max(0.1f, deckY - wl));
+        return new[] { new Vector2(0, keel), new Vector2(hw * 0.82f, bilgeY), new Vector2(hw, lowY), new Vector2(highX, highY), new Vector2(dh, deckY) };
+    }
+
     /// <summary>
     /// The hull lofted stern to stem: keel, the turn of the bilge, the waterline's black boot-top,
     /// white topsides flaring to the deck's edge, the teak deck. Under the water it is the columns'
@@ -232,51 +276,27 @@ public static class SteamerMeshBuilder
     /// </summary>
     private static void Hull(MeshScratch m)
     {
-        float wl = SteamerLines.Draught, half = SteamerLines.WaterlineHalf;
-        var zs = new List<float> { -Bow, -37.2f, -36f, -35f, -33f, -30f };
-        for (float z = -26f; z <= 26f; z += 4f) zs.Add(z);
-        zs.AddRange(new[] { 30f, 33f, 35f, 36.3f, 37.3f, Bow });
         var rings = new List<Vector3[]>();
-        foreach (float z in zs)
+        foreach (float z in HullStations)
         {
-            float t = Mathf.Clamp((z + half) / (2f * half), 0f, 1f);
-            float hw = SteamerLines.Beam * 0.5f * SteamerLines.HalfBeam(t);
-            float keel = SteamerLines.KeelRise(t);
-            if (z > half)
-            {
-                float f = (z - half) / (Bow - half);
-                hw = Mathf.Lerp(hw, 0.05f, f);
-                keel = Mathf.Lerp(keel, DeckY - 0.4f, f);
-            }
-            else if (z < -half)
-            {
-                float f = (-half - z) / (Bow - half);
-                hw = Mathf.Lerp(hw, 0.4f, f);
-                keel = Mathf.Lerp(keel, 2.3f, f);
-            }
-            float dh = DeckHalf(z);
-            float ends = z > half ? (z - half) / (Bow - half) : z < -half ? (-half - z) / (Bow - half) : 0f;
-            float bilgeY = keel + SteamerLines.Bilge * 0.55f * (1f - ends);
-            float lowY = Mathf.Max(bilgeY + 0.05f, wl - 0.25f);
-            float highY = Mathf.Max(lowY + 0.05f, wl + 0.3f);
-            float deckY = Mathf.Max(DeckY, highY + 0.05f);
-            float highX = Mathf.Lerp(hw, dh, (highY - wl) / Mathf.Max(0.1f, deckY - wl));
+            var p = HullSection(z);
             rings.Add(new[]
             {
-                new Vector3(0, keel, z),
-                new Vector3(hw * 0.82f, bilgeY, z),
-                new Vector3(hw, lowY, z),
-                new Vector3(highX, highY, z),
-                new Vector3(dh, deckY, z),
-                new Vector3(-dh, deckY, z),
-                new Vector3(-highX, highY, z),
-                new Vector3(-hw, lowY, z),
-                new Vector3(-hw * 0.82f, bilgeY, z),
+                new Vector3(0, p[0].Y, z),
+                new Vector3(p[1].X, p[1].Y, z),
+                new Vector3(p[2].X, p[2].Y, z),
+                new Vector3(p[3].X, p[3].Y, z),
+                new Vector3(p[4].X, p[4].Y, z),
+                new Vector3(-p[4].X, p[4].Y, z),
+                new Vector3(-p[3].X, p[3].Y, z),
+                new Vector3(-p[2].X, p[2].Y, z),
+                new Vector3(-p[1].X, p[1].Y, z),
             });
         }
+        var zs = HullStations;
         m.Loft(rings, new[] { Bottom, Bottom, Boot, White, Teak, White, Boot, Bottom, Bottom }, White);
         // a gilt line under the deck's edge, standing a centimetre proud, and the rubbing strake
-        for (int i = 0; i + 1 < zs.Count; i++)
+        for (int i = 0; i + 1 < zs.Length; i++)
         {
             float z0 = zs[i], z1 = zs[i + 1];
             foreach (float side in new[] { 1f, -1f })

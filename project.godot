@@ -185,5 +185,4 @@ portal_clip_plane_3={
 
 [xr]
 
-openxr/submit_depth_buffer=true
 shaders/enabled=true

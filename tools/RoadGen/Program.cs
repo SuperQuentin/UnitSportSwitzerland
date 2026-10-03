@@ -49,6 +49,10 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
           --priority-check      junction priority self-check: main road, Wartelinie, signs (#121)
           --street-check        urban streets self-check: sidewalk widths against synthetic houses (#119)
           --dump-street E,N     corner patches and segment ends near a point, with heights (--chunks DIR)
+          --signal-check        validate every traffic-light plan of a region (--chunks DIR; --at E,N dumps the nearest)
+          --test-region DIR     the traffic-lights test region (#386): flat tiles, designed junctions, OSM signal
+                                 nodes, then the network stage; prints the junction table (--temp DIR: raw input,
+                                 default DIR_temp). Clears DIR first, only if this command wrote it
           --compare-v2 V2DIR --chunks V3DIR
                                  v3 tiles against a v2 build of the same region: same geometry,
                                  one-way agreement with the runtime inference, bytes per tile
@@ -120,6 +124,14 @@ else if (args.Contains("--street-check"))
 else if (args.Contains("--plan-check"))
 {
     return UnitSport.Tools.RoadGen.Network.CrossSectionPlanner.SelfCheck(Console.WriteLine) ? 0 : 2;
+}
+else if (args.Contains("--signal-check"))
+{
+    return SignalCheck.Run(ArgValue("--chunks") ?? "terrain_chunks", ArgValue("--at"), Console.WriteLine, args.Contains("--list"));
+}
+else if (ArgValue("--test-region") is { } regionDir)
+{
+    return UnitSport.Tools.RoadGen.TestRegion.SignalTestRegion.Run(regionDir, ArgValue("--temp"), Console.WriteLine);
 }
 else if (args.Contains("--priority-check"))
 {

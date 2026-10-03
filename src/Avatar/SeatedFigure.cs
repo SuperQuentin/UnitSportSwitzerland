@@ -49,6 +49,6 @@ public static class SeatedFigure
     {
         CarRig car => car.SeatFrame(seat),
         HeavyRig heavy => heavy.SeatFrame(seat),
-        _ => new Transform3D(Basis.Identity, seat.Hip),
+        _ => new Transform3D(seat.Yaw == 0f ? Basis.Identity : new Basis(Vector3.Up, seat.Yaw), seat.Hip),
     };
 }

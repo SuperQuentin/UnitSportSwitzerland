@@ -17,7 +17,8 @@ namespace UnitSport.Player;
 /// plane (time to plane, top speed); full helm at speed (turning circle, no capsize); slow into
 /// the beach, it runs aground and stops;</item>
 /// <item>gamey: flat out through the swell (pitch, air, roll; a jetski may throw its rider), then
-/// left parked: it floats on the waves and drifts; calm again, it sleeps; and it is claimed back.</item>
+/// left parked: it floats on the waves, moored to its spot for a minute; a swimmer stroking into its side meets its hull
+/// where it is drawn (#378); calm again, it sleeps; and it is claimed back.</item>
 /// </list>
 /// Prints <c>[boatcheck] RESULT: ok</c> or <c>RESULT: FAILED (n)</c>.
 /// </summary>
@@ -469,10 +470,13 @@ public partial class BoatCheck : Node
         await Wait(1);
         var parked = Nearest(me);
         if (parked == null) { Expect(false, "parked: it is left in the world"); return; }
-        var from = parked.GlobalPosition;
-        float lo = 1e9f, hi = -1e9f, off = 0f;
+        float lo = 1e9f, hi = -1e9f, off = 0f, away = 0f, moved = 0f, turned = 0f;
         var boat = (Boat)parked.Ride;
-        for (int i = 0; i < 150; i++)
+        var mooring = parked.MooringSpot;
+        float yaw = parked.Rotation.Y;
+        var from = parked.GlobalPosition;
+        // a minute moored in the swell (#378): it rides it, and stays on its spot and heading
+        for (int i = 0; i < 600; i++)
         {
             await Wait(0.1);
             if (!IsInstanceValid(parked)) break;
@@ -481,13 +485,19 @@ public partial class BoatCheck : Node
             hi = Mathf.Max(hi, y);
             if (boat.TrySurface(parked.GlobalPosition, parked.Rotation.Y, WaterField.Now, out float surface))
                 off = Mathf.Max(off, Mathf.Abs(surface - y - 0.25f));
+            if (mooring is { } at) away = Mathf.Max(away, MathX.FlatDistance(at, parked.GlobalPosition));
+            moved = Mathf.Max(moved, MathX.FlatDistance(from, parked.GlobalPosition));
+            turned = Mathf.Max(turned, Mathf.Abs(Mathf.RadToDeg(Mathf.AngleDifference(yaw, parked.Rotation.Y))));
         }
-        float drift = MathX.FlatDistance(from, parked.GlobalPosition);
-        Log(string.Create(CultureInfo.InvariantCulture, $"parked, gamey: heaves {hi - lo:F2} m, drifts {drift:F2} m in 15 s, keel within {off:F2} m of a 25 cm draft"));
+        if (!IsInstanceValid(parked)) { Expect(false, "parked: it is still there"); return; }
+        Log(string.Create(CultureInfo.InvariantCulture,
+            $"parked, gamey, 60 s: heaves {hi - lo:F2} m, keel within {off:F2} m of a 25 cm draft; moored: {away:F2} m off its spot at worst ({moved:F2} m from where it was), heading within {turned:F1}°"));
         Expect(hi - lo > 0.25f, "the parked boat rides the swell");
-        Expect(drift > 0.05f, "and drifts");
         Expect(off < 0.6f, "floating at the surface, neither sunk nor flying");
+        Expect(mooring != null && away < 1f, "moored: within a metre of its spot for a minute");
+        Expect(turned < 15f, "and of its heading");
         await Shot("parked_gamey", () => Look(parked, side: 1f, back: 0.4f, up: 0.25f, distance: 1.8f));
+        await HullContact(me, parked);
 
         await SeaState("calm", 0f);
         Expect(await Until(() => !IsInstanceValid(parked) || parked.Asleep, 40), "calm again, it sleeps");
@@ -498,6 +508,40 @@ public partial class BoatCheck : Node
         Expect(me.StartSwimmingAtSurface(parked.GlobalPosition + parked.GlobalTransform.Basis.X * (boat.ParkedBox.Size.X * 0.5f + 0.5f)), "swims beside it");
         await Wait(0.5);
         Expect(me.IsSwimming && me.TryGetIn() && await Until(() => me.Ride == _kind, 5), "boards it from the water, claimed like any vehicle");
+    }
+
+    /// <summary>
+    /// #378: a swimmer strokes into the parked boat's side in the gamey swell and meets the hull where
+    /// it is drawn: its collision box heaves, pitches and rolls with the drawn hull (a headless run
+    /// poses an empty frame), the contacts lie on that box, and it does not push the swimmer under.
+    /// </summary>
+    private async Task HullContact(FootPlayer me, VehicleBody parked)
+    {
+        if (_shots)
+        {
+            HullTouch.Overlay(parked);
+            me.ViewForCheck(true);   // the swimmer is in the picture (a first-person setting hides it)
+        }
+        var swim = HullTouch.Swim(this, me, parked, 10);
+        if (_shots)
+        {
+            // pictured once the swimmer is against it and the hull is well over on the swell
+            await Until(() => !IsInstanceValid(parked) || HullTouch.Hull(parked, out _, out var box, out _)
+                && Mathf.RadToDeg(box.Basis.Y.Normalized().AngleTo(Vector3.Up)) > 3f && me.GetSlideCollisionCount() > 0 && !me.HeadUnderwater, 6);
+            if (IsInstanceValid(parked))
+            {
+                // from the swimmer's side; then abeam from the other, at the water
+                float side = (me.GlobalPosition - parked.GlobalPosition).Dot(parked.GlobalTransform.Basis.X) < 0f ? -1f : 1f;
+                await Shot("hull_touch", () => Look(parked, side: side, back: -0.35f, up: 0.3f, distance: 1.4f));
+                await Shot("hull_side", () => Look(parked, side: -side, back: 0.02f, up: 0.04f, distance: 1.6f));
+            }
+        }
+        var touch = await swim;
+        Log($"swimming into it, gamey: {touch}");
+        Expect(touch.Frames > 100 && touch.WorstPose < 0.03f, "its collision box is posed as the hull is drawn");
+        Expect(touch.MaxTilt > 1.5f, $"the box pitches and rolls with it on the swell ({touch.MaxTilt:F1}°)");
+        Expect(touch.Contacts > 10 && touch.WorstOff < 0.08f, "a swimmer meets the hull where it is drawn");
+        Expect(touch.Deepest < 2.1f && touch.UnderFor < 1.5f, "and is not pushed under by it");
     }
 
     // ---- pictures -----------------------------------------------------------------------------

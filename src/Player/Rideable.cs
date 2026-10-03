@@ -15,7 +15,8 @@ public enum RideKind
     Helicopter = 6,
     Plane = 7,
     // 8..63 are cars: CarCatalog.All[kind - CarCatalog.First]. The catalog is append-only.
-    // 64..95 are motorbikes: MotorbikeCatalog.All[kind - MotorbikeCatalog.First], append-only too.
+    // 64..95 are motorbikes: MotorbikeCatalog.All[kind - MotorbikeCatalog.First], append-only too;
+    // entries 32 onwards continue at 129..192 (MotorbikeCatalog.First2, #410).
     // 96..119 are trucks and buses: HeavyCatalog.All[kind - HeavyCatalog.First], append-only too.
     /// <summary>
     /// Not a mount: a trailer standing in the world on its own (<c>Vehicles.VehicleState.Train</c>
@@ -33,7 +34,10 @@ public enum RideKind
     A320 = 125,
     /// <summary>A mobile airstairs truck (#417): <see cref="Player.Airstairs"/>, docks to aircraft doors.</summary>
     Airstairs = 126,
-    // The military freighter (#420) is 127, the AN-124 (#419) 128; the next other mount is 129.
+    /// <summary>The military cargo plane (#420, the Battle Royale's model): an <see cref="Player.Airliner"/>, walkable, a ramp and a hold.</summary>
+    Freighter = 127,
+    // 128 is the AN-124 (#419). 129..192 are motorbikes again (the second range, MotorbikeCatalog.First2).
+    // The next other mount is 193.
 }
 
 /// <summary>
@@ -327,6 +331,13 @@ public abstract class Rideable
     /// bike's hand-typed box was 1.1 m tall and centred 0.55 m up while the bike stands 1.0 m.
     /// </summary>
     public virtual (Vector3 Centre, Vector3 Size) ParkedBox => Measured(Kind, BuildParkedVisual);
+
+    /// <summary>
+    /// A new collision shape for the hull of the vehicle standing empty in the world, node space,
+    /// when a box (<see cref="ParkedBox"/>) is too coarse: a ship's hull tapering to its bow (#378).
+    /// Null: the box.
+    /// </summary>
+    public virtual Shape3D? BuildParkedHull() => null;
 
     private static readonly System.Collections.Generic.Dictionary<object, (Vector3, Vector3)> _measured = new();
 

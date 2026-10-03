@@ -20,7 +20,13 @@ namespace UnitSport.Player;
 /// accelerating or braking, <c>tan φ ≤ √(μ² − (a/g)²)</c>; braking hard stands the bike up.</item>
 /// </list>
 /// Both pitch limits are applied as the rider (and the electronics) would: short of the flip, never
-/// through it. Top speed is not a number here; it is where the power meets <c>½ρ·CdA·v³</c>.
+/// through it — unless the rider pulls a <b>wheelie</b> (#410): holding {tuck_boost} pulls back on the
+/// bars and turns the wheelie control off. The front then lifts wherever the drive passes
+/// <c>g·b/h</c>, and a tap of it on the throttle pops the clutch, a kick that hops even a 42 PS bike
+/// up. The bike then pivots on its rear contact, <see cref="Pitch"/>, with throttle lifting it and the
+/// rear brake bringing it down; past the balance point (CG over the rear contact) it loops out and
+/// throws the rider (Sim). In Game the throttle sets a wheelie angle and the drive holds it there.
+/// Top speed is not a number here; it is where the power meets <c>½ρ·CdA·v³</c>.
 /// </summary>
 public sealed class Motorbike : Rideable, IEngined
 {
@@ -37,10 +43,22 @@ public sealed class Motorbike : Rideable, IEngined
     private const float BankResponse = 4.5f, MaxYawRate = 1.5f, WalkingPace = 2f;
     /// <summary>Game: more lean, quicker roll-in, stronger brakes; the engine stays the real one.</summary>
     private const float ArcadeLean = 0.1f, ArcadeBankResponse = 6.5f, ArcadeBrake = 1.1f, ArcadeGrip = 1.15f;
+    /// <summary>How far back the rider shifts the CG pulling a wheelie, m.</summary>
+    private const float PullBack = 0.05f;
+    /// <summary>The bike's own radius of gyration about its CG, m, on top of the CG's lever about the rear contact.</summary>
+    private const float Gyration = 0.32f;
+    /// <summary>Pitch rate a clutch pop at full drive gives, rad/s (a kick of drive for a fraction of a second).</summary>
+    private const float ClutchPop = 2f;
+    /// <summary>Past the balance point by this much, rad, it is over: the rider is thrown off the back.</summary>
+    private const float LoopOutPast = 0.3f;
+    /// <summary>Rear brake alone, m/s²: all there is with the front in the air.</summary>
+    private const float RearBrakeDecel = 4.5f;
 
     public override RideKind Kind => Spec.Kind;
     public override string Label => Spec.Label;
-    public override string Blurb => Spec.Blurb;
+    public override string Blurb => Spec.Blurb + WheelieHint;
+    /// <summary>Added to every bike's blurb (#410).</summary>
+    public const string WheelieHint = ". Hold {tuck_boost} to pull a wheelie (tap it on the gas to pop the clutch)";
     public override bool IsVehicle => true;
     public override bool HasEngine => true;
     public override float MaxHealth => 120f;
@@ -75,6 +93,16 @@ public sealed class Motorbike : Rideable, IEngined
     public float PitchUse { get; private set; }
     public float SteerAngle { get; private set; }
     public float WheelSpin { get; private set; }
+    /// <summary>Front wheel up about the rear contact, radians (0 on both wheels). Replicated in the pose.</summary>
+    public float Pitch { get; private set; }
+    public float PitchRate { get; private set; }
+    /// <summary>The highest <see cref="Pitch"/> since mounting (checks).</summary>
+    public float MaxPitch { get; private set; }
+    /// <summary>Set when a wheelie goes over the top; the rider reads it and is thrown off the back.</summary>
+    public bool LoopedOut { get; private set; }
+    /// <summary>The pitch at which the CG stands over the rear contact (with the rider pulled back).</summary>
+    public float BalancePitch => Mathf.Atan2((1f - Spec.RearShare) * Wheelbase - PullBack, Spec.CgHeight);
+    private bool _pulled;
 
     public float Mass => Spec.WetMass + RiderMass;
     private float RearRadius => Spec.Look.RearRadius;
@@ -84,6 +112,8 @@ public sealed class Motorbike : Rideable, IEngined
     public float StoppieDecel => Gravity * Spec.RearShare * Wheelbase / Spec.CgHeight;
 
     private float _shift, _sinceShift;
+    /// <summary>The CVT's ratio now, between its high and low.</summary>
+    private float _cvt = float.MaxValue;
 
     /// <summary>What the wheels were on last step.</summary>
     public Surface Surface { get; private set; } = Surface.Asphalt;
@@ -132,7 +162,10 @@ public sealed class Motorbike : Rideable, IEngined
 
         if (!ground.OnFloor)
         {
-            // off a crest: the rear spins free and the air is all that acts
+            // off a crest: the rear spins free and the air is all that acts; a wheelie settles
+            // (the airborne trick pitch is the rider's, FootPlayer)
+            Pitch = Mathf.MoveToward(Pitch, 0f, 1.5f * dt);
+            PitchRate = 0f;
             Rpm = Mathf.Lerp(Rpm, Mathf.Lerp(s.IdleRpm, s.Redline, input.Throttle), MathX.Damp(6f, dt));
             v -= 0.5f * AirDensity * s.DragArea * v * v / m * dt;
             motion.Speed = Mathf.Max(0f, v);
@@ -142,25 +175,87 @@ public sealed class Motorbike : Rideable, IEngined
         }
 
         // --- engine: the wheel sets the rpm, a slipping clutch holds it up at a launch ---
-        float ratio = s.Primary * s.Gears[Gear - 1] * s.FinalDrive;
         float wheelRpm = v / RearRadius * 60f / Mathf.Tau;
+        if (s.Cvt)
+        {
+            // the variator holds the engine at the rpm the throttle asks for, within its range
+            float hold = Mathf.Lerp(s.LaunchRpm, s.CvtRpm, input.Throttle);
+            _cvt = Mathf.Clamp(hold / Mathf.Max(1f, wheelRpm * s.Primary * s.FinalDrive), s.CvtHigh, s.Gears[0]);
+        }
+        float ratio = s.Primary * (s.Cvt ? _cvt : s.Gears[Gear - 1]) * s.FinalDrive;
         Rpm = Mathf.Max(wheelRpm * ratio, Mathf.Lerp(s.IdleRpm, s.LaunchRpm, input.Throttle));
         float torque = Rpm >= s.Redline ? 0f : s.TorqueAt(Rpm);
         float drive = _shift > 0 ? 0f : input.Throttle * torque * ratio * Driveline / RearRadius;
 
         // --- the two-wheeler limits ---
-        float wheelie = WheelieAccel * PitchMargin;
+        // pulling back on the bars (#410) turns the wheelie control off: the drive is held by traction alone
+        bool pull = input.Effort;
+        float wheelie = pull ? float.MaxValue : WheelieAccel * PitchMargin;
         // traction is μ times the rear load, which grows with the acceleration itself:
-        // a = μ(g·a_f + a·h)/L  →  a = μ·g·a_f / (L − μ·h), a_f the CG to the front axle
-        float traction = grip * Gravity * s.RearShare * Wheelbase / Mathf.Max(0.3f, Wheelbase - grip * s.CgHeight);
+        // a = μ(g·a_f + a·h)/L  →  a = μ·g·a_f / (L − μ·h), a_f the CG to the front axle;
+        // never more than the whole weight on the rear, μ·g, which is what it has with the front up
+        float traction = Mathf.Min(grip * Gravity, grip * Gravity * s.RearShare * Wheelbase / Mathf.Max(0.3f, Wheelbase - grip * s.CgHeight));
         float driveAccel = Mathf.Min(drive / m, Mathf.Min(wheelie, traction));
         float stoppie = StoppieDecel * PitchMargin;
-        float brakeAccel = input.Brake * Mathf.Min(s.BrakeDecel * (arcade ? ArcadeBrake : 1f), Mathf.Min(stoppie, grip * Gravity));
-        PitchUse = driveAccel > 0.01f ? driveAccel / WheelieAccel : -brakeAccel / StoppieDecel;
+        // with the front in the air only the rear brake does anything
+        float brakeAccel = Pitch > 0f
+            ? input.Brake * Mathf.Min(RearBrakeDecel, grip * Gravity)
+            : input.Brake * Mathf.Min(s.BrakeDecel * (arcade ? ArcadeBrake : 1f), Mathf.Min(stoppie, grip * Gravity));
 
         float drag = 0.5f * AirDensity * s.DragArea * v * v / m * (1f - ground.Draft);
         float roll = v > 0.05f ? RollingResistance * Gravity : 0f;
-        float a = driveAccel - brakeAccel - drag - roll + SlopeAccel(ground.Grade);
+        float resist = drag + roll - SlopeAccel(ground.Grade);
+
+        // --- the wheelie: the bike pivots on its rear contact ---
+        // CG b ahead of and h above the rear contact; pitched by θ it sits at angle (α₀ − θ) from
+        // vertical, α₀ = atan(b/h). The contact accelerating at a gives, per unit mass,
+        // θ'' = (a·h' − g·b') / (r² + k²), h' = r·cos(α₀ − θ), b' = r·sin(α₀ − θ).
+        float b = (1f - s.RearShare) * Wheelbase - (pull ? PullBack : 0f);
+        float h = s.CgHeight;
+        float r2 = b * b + h * h, r = Mathf.Sqrt(r2), alpha0 = Mathf.Atan2(b, h);
+        float inertia = r2 + Gyration * Gyration;
+        float lever = alpha0 - Pitch;
+        float hp = r * Mathf.Cos(lever), bp = r * Mathf.Sin(lever);
+        // a clutch pop: pulling with the throttle open kicks the front up, in proportion to the drive on offer
+        if (pull && !_pulled && input.Throttle > 0.5f && _shift <= 0f)
+            PitchRate += ClutchPop * Mathf.Clamp(input.Throttle * torque * ratio * Driveline / RearRadius / (m * WheelieAccel), 0.6f, 1.2f);
+        _pulled = pull;
+        float english = float.NaN;
+        if (arcade && pull && Pitch > 0f)
+        {
+            // Game: the throttle picks a wheelie angle and the drive holds it there (a PD on the
+            // pitch), with the whole drive the gear has on offer; the brake still brings it down
+            float target = alpha0 * Mathf.Lerp(0.25f, 0.85f, input.Throttle);
+            float want = 6f * (target - Pitch) - 3.5f * PitchRate;
+            float hold = (want * inertia + Gravity * bp) / Mathf.Max(0.1f, hp) + brakeAccel + resist;
+            // (a shift's drive cut is let off: Game wheelies carry through the gears)
+            float full = Rpm >= s.Redline ? 0f : s.TorqueAt(Mathf.Max(wheelRpm * ratio, s.LaunchRpm)) * ratio * Driveline / RearRadius;
+            driveAccel = Mathf.Clamp(hold, 0f, Mathf.Min(full / m, traction));
+            english = want;
+        }
+        else if (!pull && Pitch > 0f)
+        {
+            // let go: the wheelie control (or the rider's wrist) eases the drive until the front
+            // comes down — g·b'/h' holds it where it is, so well under that
+            driveAccel = Mathf.Min(driveAccel, 0.6f * Gravity * bp / Mathf.Max(0.1f, hp));
+        }
+        PitchUse = driveAccel > 0.01f ? driveAccel / WheelieAccel : -brakeAccel / StoppieDecel;
+        float a = driveAccel - brakeAccel - resist;
+        float pitchAccel = (a * hp - Gravity * bp) / inertia;
+        // Game: what the drive cannot give (a 125 at a crawl), the rider's body makes up, a little
+        if (!float.IsNaN(english)) pitchAccel += Mathf.Clamp(english - pitchAccel, 0f, 2f);
+        if (LoopedOut) { }   // on its back: nothing more to integrate, the rider is being thrown
+        else if (Pitch > 0f || PitchRate > 0f || pitchAccel > 0f)
+        {
+            PitchRate += pitchAccel * dt;
+            Pitch += PitchRate * dt;
+            if (Pitch <= 0f) { Pitch = 0f; PitchRate = 0f; }   // the front wheel comes down
+        }
+        MaxPitch = Mathf.Max(MaxPitch, Pitch);
+        // Game never goes over: it stops at the balance point; Sim loops out a little past it
+        if (arcade && Pitch > alpha0) { Pitch = alpha0; PitchRate = Mathf.Min(PitchRate, 0f); }
+        else if (Pitch > alpha0 + LoopOutPast) LoopedOut = true;
+
         // stopped, it stays stopped: it does not roll backwards (a foot goes down)
         v = Mathf.Max(0f, v + a * dt);
         AccelX = a;
@@ -169,7 +264,8 @@ public sealed class Motorbike : Rideable, IEngined
 
         _shift = Mathf.Max(0f, _shift - dt);
         _sinceShift += dt;
-        if (s.Dct) ShiftDct(wheelRpm, input.Throttle);
+        if (s.Cvt) { }   // nothing to shift
+        else if (s.Dct) ShiftDct(wheelRpm, input.Throttle);
         // --- sequential box with a quickshifter: up near the redline, down when it bogs ---
         else if (Rpm > s.Redline * 0.97f && Gear < s.Gears.Length && input.Throttle > 0.2f) { Gear++; _shift = s.ShiftCut; }
         else if (Gear > 1 && wheelRpm * ratio < s.PeakRpm * 0.5f) Gear--;
@@ -201,14 +297,19 @@ public sealed class Motorbike : Rideable, IEngined
         if (visual is not Motorcyclist rig) return;
         rig.SteerAngle = SteerAngle;
         rig.WheelSpin = WheelSpin;
+        rig.Pitch = Pitch;
     }
 
     /// <summary>
     /// The lean is in the replicated body transform already; these are the parts: bar angle, the rear
-    /// wheel's spin RATE (each peer integrates its own, as the cars do), rpm for the engine, the brake.
+    /// wheel's spin RATE (each peer integrates its own, as the cars do), rpm for the engine, the brake
+    /// and the wheelie pitch together in w: the pitch, plus <see cref="BrakeFlag"/> while braking.
     /// </summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
-        new(SteerAngle, motion.Speed / RearRadius, Rpm01, Braking ? 1f : 0f);
+        new(SteerAngle, motion.Speed / RearRadius, Rpm01, Pitch + (Braking ? BrakeFlag : 0f));
+
+    /// <summary>Added to the pitch in the pose's w while braking; a pitch never reaches it.</summary>
+    private const float BrakeFlag = 10f;
 
     private float _remoteSpin;
 
@@ -219,7 +320,9 @@ public sealed class Motorbike : Rideable, IEngined
         rig.SteerAngle = pose.X;
         rig.WheelSpin = _remoteSpin;
         Rpm = Mathf.Lerp(Spec.IdleRpm, Spec.Redline, pose.Z);
-        Braking = pose.W > 0.5f;
+        Braking = pose.W >= BrakeFlag * 0.5f;
+        Pitch = Braking ? pose.W - BrakeFlag : pose.W;
+        rig.Pitch = Pitch;
     }
 
     /// <summary>
@@ -261,6 +364,14 @@ public sealed class Motorbike : Rideable, IEngined
                     + $"lean at 80 km/h {lean:F0}° r {radius:F0} m  shifts {run.Ups} up {run.Downs} down"
                     + (spec.Dct ? $", {hunts} reversals at 35% throttle" : "") + $"  {(ok ? "ok" : "FAILED")}");
                 if (!ok) failures++;
+
+                // wheelies (#410): a clutch pop lifts every bike's front; Game holds one at part throttle
+                var w = Wheelie(spec);
+                bool wOk = w.Pop > Mathf.DegToRad(3f) && (profile == Core.RideProfile.Sim || (w.Held && !w.Looped));
+                GD.Print($"[moto]        wheelie: pop {Mathf.RadToDeg(w.Pop):F0}°, held at 60% {(w.Held ? "yes" : "no")} (max {Mathf.RadToDeg(w.Max):F0}°, "
+                    + $"balance {Mathf.RadToDeg(w.Balance):F0}°{(w.Looped ? ", looped out" : "")}), power wheelie flat out {Mathf.RadToDeg(w.Power):F0}°"
+                    + $"{(w.PowerLooped ? " looped out" : "")}  {(wOk ? "ok" : "FAILED")}");
+                if (!wOk) failures++;
 
                 if (profile != Core.RideProfile.Sim) continue;
                 foreach (var ground in new[] { Surface.Gravel, Surface.Grass })
@@ -304,6 +415,31 @@ public sealed class Motorbike : Rideable, IEngined
             if (float.IsNaN(t200) && m.Speed >= 200f / 3.6f) t200 = t + CheckDt;
         }
         return (t100, t200, m.Speed * 3.6f, pitch, ups, downs);
+    }
+
+    /// <summary>
+    /// Wheelies at 25 km/h in first: the pitch a clutch pop at 60% throttle reaches (front down
+    /// again before the next); then pop and hold the pull at 60% for 5 s — still up at the end?
+    /// (max pitch, loop-out); then flat out with the pull held for 3 s from 25 km/h (power wheelie).
+    /// </summary>
+    private static (float Pop, bool Held, float Max, bool Looped, float Balance, float Power, bool PowerLooped) Wheelie(MotorbikeSpec spec)
+    {
+        var flat = new RideGround(true, 0f);
+        (Motorbike Bike, RideMotion Motion) Rolling()
+        {
+            var bike = new Motorbike(spec);
+            var motion = new RideMotion { Speed = 25f / 3.6f };
+            bike.Step(new RideInput(0f, 0f, 0f, false), flat, CheckDt, ref motion);
+            return (bike, motion);
+        }
+
+        var (a, ma) = Rolling();
+        for (float t = 0; t < 2f && !a.LoopedOut; t += CheckDt) a.Step(new RideInput(0.6f, 0f, 0f, t < 0.1f), flat, CheckDt, ref ma);
+        var (b, mb) = Rolling();
+        for (float t = 0; t < 5f && !b.LoopedOut; t += CheckDt) b.Step(new RideInput(0.6f, 0f, 0f, true), flat, CheckDt, ref mb);
+        var (c, mc) = Rolling();
+        for (float t = 0; t < 3f && !c.LoopedOut; t += CheckDt) c.Step(new RideInput(1f, 0f, 0f, true), flat, CheckDt, ref mc);
+        return (a.MaxPitch, b.Pitch > 0.1f, b.MaxPitch, b.LoopedOut, b.BalancePitch, c.MaxPitch, c.LoopedOut);
     }
 
     /// <summary>100-0 km/h on tarmac: distance and worst stoppie use (negative).</summary>

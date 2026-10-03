@@ -1,5 +1,7 @@
 # VR controls: Touch controllers as a virtual pad (#186)
 
+The full per-action design and rules: `xr/vr-action-map`.
+
 - **How it works.** `XR/XrPad` replays the controllers as joypad events (`Input.ParseInputEvent`,
   device 7). Every `PlayerInput` action is bound to "any device", so all of them work unchanged.
   - `PlayerInput._Input` pins `LastDevice` to Gamepad in VR, so prompts show pad glyphs.
