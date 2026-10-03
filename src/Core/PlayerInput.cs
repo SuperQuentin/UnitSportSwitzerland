@@ -90,6 +90,11 @@ public partial class PlayerInput : Node
     /// <summary>The retarder stalk: 0 off, 1 exhaust brake, 2-4 the retarder.</summary>
     public const string RetarderUp = "retarder_up";
     public const string RetarderDown = "retarder_down";
+    /// <summary>An airliner's flap lever a notch down / up, its speedbrake, its parking brake (#414). The gear is <see cref="CarDoor"/> in the air.</summary>
+    public const string FlapsDown = "flaps_down";
+    public const string FlapsUp = "flaps_up";
+    public const string Speedbrake = "speedbrake";
+    public const string ParkingBrake = "parking_brake";
 
     // --- free-fly camera ---
     public const string FlyUp = "fly_up";
@@ -437,6 +442,10 @@ public partial class PlayerInput : Node
         Bind(GearNeutral, Keys(Key.Key0));
         Bind(RetarderUp, Keys(Key.Apostrophe));
         Bind(RetarderDown, Keys(Key.Semicolon));
+        Bind(FlapsDown, Keys(Key.F7), Button(JoyButton.RightShoulder));
+        Bind(FlapsUp, Keys(Key.F6), Button(JoyButton.LeftShoulder));
+        Bind(Speedbrake, Keys(Key.Slash), Button(JoyButton.DpadLeft));
+        Bind(ParkingBrake, Keys(Key.Period));
 
         Bind(FlyUp, Keys(Key.Space, Key.E), Button(JoyButton.A), Axis(JoyAxis.TriggerRight, 1));
         Bind(FlyDown, Keys(Key.Shift, Key.Q), Button(JoyButton.B), Axis(JoyAxis.TriggerLeft, 1));

@@ -18,13 +18,15 @@ namespace UnitSport.Player;
 /// that takes a pilot working the collective — it falls.</param>
 /// <param name="ViewPitch">Where the camera looks up (+) or down (−), radians, for craft that
 /// follow the look in pitch too (the wingsuit). Null: no look pitch to follow (scripted pilots).</param>
+/// <param name="Brake">Wheel brakes held, 0..1 (Jump / A): an airliner's (#414).</param>
 public readonly record struct FlightInput(Vector2 Stick, float Up, float Down, float LeverUp,
     float LeverDown, bool Action, bool Effort, float ViewYaw, bool Engine = true, bool Piloted = true,
-    float? ViewPitch = null);
+    float? ViewPitch = null, float Brake = 0f);
 
 /// <param name="OnFloor">Touching walkable ground.</param>
 /// <param name="Clearance">Height above the terrain surface, m (buildings not counted).</param>
-public readonly record struct FlightEnv(bool OnFloor, float Clearance);
+/// <param name="Altitude">Above sea level, m: how thin the air is (an airliner's, #414).</param>
+public readonly record struct FlightEnv(bool OnFloor, float Clearance, float Altitude = 500f);
 
 /// <summary>What a flight step asks the player to do next.</summary>
 public enum FlightEvent

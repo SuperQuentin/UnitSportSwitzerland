@@ -95,6 +95,8 @@ public static class AirlinerFlight
         public float LastSink;
         /// <summary>Damage not yet taken by the vehicle's health (<see cref="Airliner.TakeDamage"/>).</summary>
         public float Damage;
+        /// <summary>Seconds left in which a touchdown is only settling onto the wheels (just put in the world), not a landing.</summary>
+        public float Settle;
 
         // ---- read-outs, written each step ----
         public float Alpha, Tas, Ias, Thrust;
@@ -231,9 +233,10 @@ public static class AirlinerFlight
         s.Ias = speed * Mathf.Sqrt(rho / SeaLevelDensity);
         var ev = Event.None;
 
+        s.Settle = Mathf.Max(0f, s.Settle - dt);
         if (env.OnFloor)
         {
-            if (!s.OnGround) ev = Touchdown(spec, ref s, att);
+            if (!s.OnGround && s.Settle <= 0f) ev = Touchdown(spec, ref s, att);
             s.OnGround = true;
             wheels = s.Gear > 0.95f && !s.GearBroken;
             Roll(spec, ref s, c, stick, force, accel, wheels, brake, q, protect, dt);
