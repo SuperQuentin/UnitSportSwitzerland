@@ -25,6 +25,13 @@ public partial class Ears : Node3D, Core.IOriginShiftAware
 {
     private const float TurnSeconds = 0.12f;
 
+    /// <summary>
+    /// The ears' process priority. Anything placed from <see cref="Frame"/> each frame runs after it
+    /// (<see cref="Hearing.Attach"/>): a door teleports the ears 3 km, and a speaker placed from the
+    /// last frame's ear is that far from the listener for a frame, a dropout you hear as a click.
+    /// </summary>
+    public const int Priority = 1000;
+
     public static Ears? Instance { get; private set; }
 
     private readonly Func<FootPlayer?> _body;
@@ -60,7 +67,7 @@ public partial class Ears : Node3D, Core.IOriginShiftAware
         Name = "Ears";
         Instance = this;
         TopLevel = true;
-        ProcessPriority = 1000;
+        ProcessPriority = Priority;
         // the ears move too: a car passing a car pitches by both speeds (the origin shifter resets it)
         _listener = new AudioListener3D { Name = "Listener", DopplerTracking = AudioListener3D.DopplerTrackingEnum.IdleStep };
         AddChild(_listener);

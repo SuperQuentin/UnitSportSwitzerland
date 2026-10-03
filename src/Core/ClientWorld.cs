@@ -597,6 +597,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.ExitProbe.Requested) AddChild(new Player.ExitProbe(() => LocalPlayer));
         if (Audio.EarsProbe.Requested) AddChild(new Audio.EarsProbe(() => LocalPlayer));
         if (Items.RadioPanelProbe.Requested) AddChild(new Items.RadioPanelProbe(() => LocalPlayer));
+        if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
         if (World.WaterCheck.Requested) AddChild(new World.WaterCheck(() => LocalPlayer));
         if (Player.BoatCheck.Role is { } boatRole) AddChild(new Player.BoatCheck(boatRole, () => LocalPlayer));
         if (Player.SteamerCheck.Role is { } steamerRole) AddChild(new Player.SteamerCheck(steamerRole, () => LocalPlayer));
@@ -1432,7 +1433,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 yield return (PlayerInput.InteractMount, $"Pick up {pointed.Label}");
             else if (Items.Highlight.Pointed is Items.RadioBody)
             {
-                yield return (PlayerInput.UseItem, "Take the radio");
+                if (Items.ItemController.Instance?.Inventory.Held.IsEmpty == true) yield return (PlayerInput.UseItem, "Take the radio");
                 yield return (PlayerInput.InteractMount, "Radio");
             }
             else if (p.Indoors)
@@ -1445,9 +1446,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             }
             else
             {
-                if (Vehicles.VehicleReach.Current == null && Items.RadioManager.Instance?.Nearest(p.GlobalPosition, Items.RadioManager.Reach) != null)
-                    yield return (PlayerInput.InteractMount, "Radio");
-                else if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p.GlobalPosition) == null
+                if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p.GlobalPosition) == null
                     && Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius, heard: p.DanceId == 0) != null)
                     yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");
                 if (Vehicles.VehicleReach.Current is { } at)
