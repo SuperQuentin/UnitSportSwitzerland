@@ -164,10 +164,11 @@ public static class StyleKit
             [MaterialRole.Precip] = "res://shaders/ps1_snowfall.gdshader",
             [MaterialRole.Figure] = "res://shaders/avatar.gdshader",
         },
-        // interiors and snowfall stay PS1's, unshaded on purpose: rooms float in the dark under
-        // the terrain, out of the sun
+        // snowfall stays PS1's; interiors are unshaded in every style (rooms float in the dark
+        // under the terrain, out of the sun) but lit by the hour and finished like the style (#388)
         [VisualStyle.Cartoon] = new()
         {
+            [MaterialRole.Interior] = "res://shaders/cartoon_interior.gdshader",
             [MaterialRole.Terrain] = "res://shaders/cartoon_terrain.gdshader",
             [MaterialRole.Road] = "res://shaders/cartoon_road.gdshader",
             [MaterialRole.Building] = "res://shaders/cartoon_building.gdshader",
@@ -178,9 +179,10 @@ public static class StyleKit
             [MaterialRole.Path] = "res://shaders/cartoon_path.gdshader",
             [MaterialRole.Figure] = "res://shaders/cartoon_avatar.gdshader",
         },
-        // prop and path borrow Cartoon's lit ones; interiors and snowfall stay PS1's
+        // prop and path borrow Cartoon's lit ones; snowfall stays PS1's
         [VisualStyle.RealisticLow] = new()
         {
+            [MaterialRole.Interior] = "res://shaders/real_interior.gdshader",
             [MaterialRole.Terrain] = "res://shaders/real_terrain.gdshader",
             [MaterialRole.Road] = "res://shaders/real_road.gdshader",
             [MaterialRole.Building] = "res://shaders/real_building.gdshader",
@@ -323,6 +325,11 @@ public static class StyleKit
             case MaterialRole.TreeFar:
                 m.SetShaderParameter("tree_near", TreeNear);
                 break;
+            // rooms light themselves; the lit styles' street is lit by Godot's sun and ambient,
+            // brighter than albedo at noon, so a room keeps up with it (#388)
+            case MaterialRole.Interior:
+                m.SetShaderParameter("light_gain", InteriorLightGain(style));
+                break;
             // the water's own screen-space reflections (#299): where the style has Forward+'s effects
             case MaterialRole.Water when HasUniform(shader, "ssr_steps"):
                 m.SetShaderParameter("ssr_steps", Pick(style, l => l.Effects).Value && OnForwardPlus ? 24 : 0);
@@ -338,6 +345,14 @@ public static class StyleKit
     }
 
     private static Shader? _debugShader;
+
+    /// <summary>A room's exposure next to the style's sunlit street (calibrated by eye, #388).</summary>
+    private static float InteriorLightGain(VisualStyle style) => Pick(style, l => l.Finish).Value switch
+    {
+        Finish.Realistic => 1.35f,
+        Finish.Cartoon => 1.15f,
+        _ => 1.0f,
+    };
 
     /// <summary>
     /// Draws every world material with <paramref name="shader"/> instead of its style's (the debug
@@ -372,6 +387,7 @@ public static class StyleKit
         ],
         MaterialRole.Road => [("tex_asphalt", RealTex + "Asphalt031_1K-JPG_Color.jpg"), ("tex_gravel", RealTex + "Gravel023_1K-JPG_Color.jpg")],
         MaterialRole.Building => [("tex_plaster", RealTex + "Plaster001_1K-JPG_Color.jpg"), ("tex_roof", RealTex + "RoofingTiles006_1K-JPG_Color.jpg")],
+        MaterialRole.Interior => [("tex_plaster", RealTex + "Plaster001_1K-JPG_Color.jpg")],
         MaterialRole.TreeFar =>
         [
             ("impostor_side_conifer", RealTrees + "conifer_side.png"), ("impostor_top_conifer", RealTrees + "conifer_top.png"),

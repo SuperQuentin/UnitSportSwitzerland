@@ -254,8 +254,14 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                     if (image.SavePng(_shot) == Error.Ok) GD.Print($"[interior] wrote {_shot}");
                 }
                 StairRay(interiors);
+                if (CmdArgs.Has("--doorcam")) { _step = 100; _t = 0; break; }
                 Input.ActionPress(PlayerInput.MoveForward);
                 Next();
+                break;
+
+            case 100:
+                if (DoorCam(interiors, delta) is not { } camDone) return;
+                Finish();
                 break;
 
             case 4:

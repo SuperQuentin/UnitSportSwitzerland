@@ -45,11 +45,15 @@ public partial class DayNight : Node
 
     private const float NoonElevation = 62f;
 
-    /// <summary>Daylight through the windows, as seen: noon's outdoor ambient, whatever the hour.</summary>
-    private static readonly Color RoomDaylight = new(0.86f, 0.89f, 0.93f);
+    /// <summary>
+    /// Daylight through the windows, as seen: the hour's outdoor light a little dimmed, as the
+    /// rooms' shader has it (<c>shaders/body/interior.gdshaderinc</c>, #388): an evening room is
+    /// orange, a blue-hour one blue.
+    /// </summary>
+    private static Color RoomDaylight(Color tint) => (tint * 0.86f) with { A = 1f };
 
     /// <summary>Ceiling lamps, as seen: what lights a character indoors at night.</summary>
-    private static readonly Color RoomLamp = new(0.96f, 0.90f, 0.78f);
+    private static readonly Color RoomLamp = new(0.92f, 0.82f, 0.66f);
 
     public DayNight(Godot.Environment? environment)
     {
@@ -66,8 +70,40 @@ public partial class DayNight : Node
     {
         _environment = environment;
         _indoor = environment?.Duplicate() as Godot.Environment;
+        _portalOutdoor = Flat(environment);
+        _portalIndoor = Flat(environment);
         _applied = null;   // a new environment is written at once, not at the palette's next change
     }
+
+    /// <summary>
+    /// Copies of the outdoor and indoor environments for the door portals' cameras (#388): no
+    /// tonemap, glow or colour adjustment, and half the exposure. A portal's picture is drawn on a
+    /// doorway quad in the screen's own 3D view, which tonemaps it once more: the screen's finish
+    /// must be applied once, there. The half exposure keeps highlights up to 2 in the portal's
+    /// HDR picture (<c>door_portal.gdshader</c> doubles it back).
+    /// </summary>
+    private Godot.Environment? _portalOutdoor, _portalIndoor;
+
+    /// <summary>What a portal camera's picture is scaled by (<see cref="Flat"/>).</summary>
+    public const float PortalExposure = 0.5f;
+
+    private static Godot.Environment? Flat(Godot.Environment? environment)
+    {
+        if (environment?.Duplicate() is not Godot.Environment flat) return null;
+        flat.TonemapMode = Godot.Environment.ToneMapper.Linear;
+        flat.TonemapExposure = PortalExposure;
+        flat.TonemapWhite = 1f;
+        flat.GlowEnabled = false;
+        flat.AdjustmentEnabled = false;
+        return flat;
+    }
+
+    /// <summary>
+    /// <see cref="EnvironmentAt"/> for a door portal's camera: the same light, without the screen's
+    /// finish (<see cref="Flat"/>). Null on a server.
+    /// </summary>
+    public static Godot.Environment? PortalEnvironmentAt(Vector3 at) =>
+        at.Y < Interiors.InteriorManager.InteriorBaseY + 1000f ? Instance?._portalIndoor : Instance?._portalOutdoor;
 
     /// <summary>
     /// The visual style's sun (<see cref="Styles.StyleKit.NewSun"/>), pointed and coloured here
@@ -111,12 +147,12 @@ public partial class DayNight : Node
     {
         Hour = TimeCommand.Advance(Hour, delta, MinutesPerDay);
         Apply((float)delta);
+        // The sun stays up while the camera is indoors (#388): a door portal's camera looking out
+        // shares it, and the street it saw from a room was sunless, a night at noon. The rooms
+        // light themselves (unshaded); a character in one is in its shell's shadow, but for the
+        // sun coming in at a window.
         if (GetViewport()?.GetCamera3D() is { } cam)
-        {
             cam.Environment = EnvironmentAt(cam.GlobalPosition);
-            // the rooms under the terrain are out of the sun (nothing down there casts its shadow)
-            if (Sun != null) Sun.Visible = cam.Environment == null;
-        }
     }
 
     /// <summary>"14:05", for the HUD and chat.</summary>
@@ -178,17 +214,23 @@ public partial class DayNight : Node
         _applied = applied;
         if (_environment != null)
             Styles.StyleKit.DriveEnvironment(_environment, Sun, shade, tint, sky, Night, SunElevationDeg, moved);
-        if (moved && _indoor != null)
+        if (_portalOutdoor != null)
+            Styles.StyleKit.DriveEnvironment(_portalOutdoor, null, shade, tint, sky, Night, SunElevationDeg, moved);
+        bool disco = Disco != _appliedDisco;
+        _appliedDisco = Disco;
+        if (_indoor != null) DriveIndoor(_indoor, tint, sky, moved, disco);
+        if (_portalIndoor != null) DriveIndoor(_portalIndoor, tint, sky, moved, disco);
+    }
+
+    private void DriveIndoor(Godot.Environment env, Color tint, Color sky, bool moved, bool disco)
+    {
+        if (moved)
         {
-            _indoor.BackgroundColor = sky;
-            _indoor.AmbientLightSource = Godot.Environment.AmbientSource.Color;
-            _indoor.AmbientLightColor = RoomDaylight.Lerp(RoomLamp, Night);
+            env.BackgroundColor = sky;
+            env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
+            env.AmbientLightColor = RoomDaylight(tint).Lerp(RoomLamp, Night);
         }
-        if ((moved || Disco != _appliedDisco) && _indoor != null)
-        {
-            _appliedDisco = Disco;
-            _indoor.AmbientLightEnergy = 1.0f - 0.8f * Disco;
-        }
+        if (moved || disco) env.AmbientLightEnergy = 1.0f - 0.8f * Disco;
     }
 
     /// <summary>
