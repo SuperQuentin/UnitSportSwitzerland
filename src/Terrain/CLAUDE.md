@@ -19,6 +19,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `building-triangles` — read building triangles with `b.Tri(t)`; wall/roof split is `BuildingTriangles.RoofNormalY`, never a local copy
 - `cellars-and-room-variety` — Cellars (`Below`, `FloorY`), shelters with blast doors, basement program (laundry, guest room, cinema, carnotzet, music room), new room/furniture types, logical room order, plan v8 (#213)
 - `door-portals` — Doors open (shared, auto-close) and you walk (or drive, garages and barns) through them: `DoorLink` map, portal camera + clip plane, sill crossing, vehicles, linked spaces, building sounds
+- `interior-light` — Rooms lit by the hour in every style (#388): one interior body + PS1/Cartoon/Realistic wrappers, `RoomLights` table (window daylight, sun patches, lamps), indoor ambient, portals tonemapped once
 - `perf-door-portals` — `DoorPortals`/`DoorwayGhosts`/`DoorLights` allocate nothing per frame (reused lists, static `StringName`s, `live` written on change, ghosts scanned at 10 Hz); interior `ArrayMesh` built on the worker, collision a frame later
 - `runtime` — Runtime: (`src/`): `Terrain/ChunkManager` streams LOD rings around anchors (workers build arrays, main thread...
 - `coarse-tiles` — Coarse tiles: every `.terr` has a `.terrc` companion — the same grid point-decimated at stride 10 (51x51, 5.2 KB...

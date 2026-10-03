@@ -171,7 +171,7 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
         _lastPos = GlobalPosition;
         _lastVel = LinearVelocity;
         _restTime = LinearVelocity.LengthSquared() < 0.05f * 0.05f ? _restTime + delta : 0;
-        if (Sleeping || _restTime > RestFor || _age > SettleAfter || Position.Y < -500)
+        if (Sleeping || _restTime > RestFor || _age > SettleAfter || Position.Y < Interiors.InteriorManager.LostBelowY)
         {
             Settled = true;
             Freeze = true;

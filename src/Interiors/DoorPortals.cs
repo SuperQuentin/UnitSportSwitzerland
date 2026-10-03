@@ -140,6 +140,9 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
         RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
         Size = new Vector2I(320, 240),
         HandleInputLocally = false,
+        // linear and unclamped (#388): the screen's camera tonemaps the doorway quad, so the
+        // picture must not be tonemapped and squeezed into 0..1 first
+        UseHdr2D = true,
     };
 
     /// <summary>A portal camera for a depth: the world, and that depth's doorway quads.</summary>
@@ -315,7 +318,15 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
     private readonly List<(float D, DoorLink Link)> _found = new();
     private HashSet<MeshInstance3D> _live = new(), _wasLive = new();
     private readonly HashSet<DoorLink> _openSet = new();
-    private static readonly StringName LiveParam = "live", ViewParam = "view", StereoParam = "stereo", ViewRightParam = "view_right";
+    private static readonly StringName LiveParam = "live", ViewParam = "view", StereoParam = "stereo", ViewRightParam = "view_right",
+        GainParam = "view_gain";
+
+    /// <summary>
+    /// What undoes a portal camera's exposure: its flat environment
+    /// (<see cref="World.DayNight.PortalEnvironmentAt"/>) halves the picture to keep its highlights;
+    /// with none (no day/night, the portal demo) it saw by the world's own.
+    /// </summary>
+    private static float Gain(Camera3D c) => c.Environment != null ? 1f / World.DayNight.PortalExposure : 1f;
     private static readonly StringName[] ClipEye = Enumerable.Range(0, 4).Select(i => new StringName($"portal_clip_eye_{i}")).ToArray();
     private static readonly StringName[] ClipPlane = Enumerable.Range(0, 4).Select(i => new StringName($"portal_clip_plane_{i}")).ToArray();
 
@@ -506,7 +517,7 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
                 AimEye(view, link, fromInside, map * xr.GetTransformForView(e, origin.GlobalTransform),
                     xr.GetProjectionForView(e, aspect, head.Near, far), head.Near, far, target.Y);
             var quad = (fromInside ? link.InsideQuads : link.OutsideQuads)[0];
-            if (quad != null) Show(quad, left.Port.GetTexture(), right.Port.GetTexture());
+            if (quad != null) Show(quad, Gain(left.Camera), left.Port.GetTexture(), right.Port.GetTexture());
             _shown.Add(link);
         }
     }
@@ -522,7 +533,7 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
         var c = view.Camera;
         // nudged back as in Aim: the clip tells the cameras apart by position
         c.GlobalTransform = lens.Translated(lens.Basis.Z.Normalized() * 0.05f * (view.Slot + 1));
-        c.Environment = World.DayNight.EnvironmentAt(c.GlobalPosition);
+        c.Environment = World.DayNight.PortalEnvironmentAt(c.GlobalPosition);
         float h = 2f * near / p.Y.Y, w = 2f * near / p.X.X;
         c.KeepAspect = Camera3D.KeepAspectEnum.Height;
         c.HOffset = c.VOffset = 0f;
@@ -546,7 +557,7 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
         // in that doorway's tunnel, and its picture would be the tunnel's dark hall.
         c.GlobalTransform = lens.Translated(lens.Basis.Z.Normalized() * 0.05f * (view.Slot + 1));
         // lit like the space it stands in: a view into a room shows its people lit by the room
-        c.Environment = World.DayNight.EnvironmentAt(c.GlobalPosition);
+        c.Environment = World.DayNight.PortalEnvironmentAt(c.GlobalPosition);
         c.Projection = screenCam.Projection;
         c.Fov = screenCam.Fov;
         c.Near = screenCam.Near;
@@ -560,7 +571,7 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
         view.Port.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
 
         var quad = (fromInside ? link.InsideQuads : link.OutsideQuads)[view.Depth - 1];
-        if (quad != null) Show(quad, view.Port.GetTexture());
+        if (quad != null) Show(quad, Gain(c), view.Port.GetTexture());
         if (view.Depth == 1) _shown.Add(link);
         // whatever is on the camera's side of the doorway it looks through is not in its picture:
         // the facade's closed shell looking out, other interiors in the shared space looking in
@@ -587,10 +598,11 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
     /// A quad's picture this frame; with <paramref name="right"/>, one per eye. <c>live</c> is
     /// written only when it turns on; <see cref="DarkenDropped"/> turns it off (#221).
     /// </summary>
-    private void Show(MeshInstance3D quad, Texture2D picture, Texture2D? right = null)
+    private void Show(MeshInstance3D quad, float gain, Texture2D picture, Texture2D? right = null)
     {
         if (quad.MaterialOverride is not ShaderMaterial m) return;
         if (_live.Add(quad) && !_wasLive.Contains(quad)) m.SetShaderParameter(LiveParam, true);
+        m.SetShaderParameter(GainParam, gain);
         m.SetShaderParameter(ViewParam, picture);
         m.SetShaderParameter(StereoParam, right != null);
         if (right != null) m.SetShaderParameter(ViewRightParam, right);
