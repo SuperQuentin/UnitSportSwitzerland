@@ -1561,6 +1561,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _spectator.Current = true;
             _chunks.RemoveAnchor(player);
             _chunks.AddAnchor(_spectator);
+            // the ground under the body streams out as the camera flies off: left running, it
+            // falls, thuds and plays its sounds at the old spot. Frozen and hidden until we return.
+            SetBodyParked(player, true);
             _onFoot = false;
             GD.Print($"[world] spectator at {_spectator.GlobalPosition}");
         }
@@ -1585,6 +1588,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// <param name="inPlace">Back into the body where it stands, instead of dropping it under the fly camera.</param>
     private void EnterFootMode(FootPlayer player, bool inPlace = false)
     {
+        SetBodyParked(player, false);
         if (!inPlace)
         {
             var pos = _spectator!.GlobalPosition;
@@ -1599,6 +1603,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
         player.CarRadioTuned -= OnCarRadioTuned;
         player.CarRadioTuned += OnCarRadioTuned;
         GD.Print($"[world] on foot at {player.GlobalPosition}");
+    }
+
+    /// <summary>The body left behind by the fly camera: no physics, no sounds, not drawn.</summary>
+    private static void SetBodyParked(FootPlayer player, bool parked)
+    {
+        player.ProcessMode = parked ? ProcessModeEnum.Disabled : ProcessModeEnum.Inherit;
+        player.Visible = !parked;
     }
 
     private void OnCarRadioTuned(string station) => _items?.Ui.Toast($"Radio: {station}");

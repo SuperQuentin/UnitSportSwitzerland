@@ -3105,7 +3105,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void ApplyStickLook(float dt)
     {
-        var look = PlayerInput.LookRate * LookScale;
+        var look = PlayerInput.LookRate;
+        // on foot a steering wheel turns the view; mounted or seated it only steers
+        if (_ride == null && RidingWith == 0) look.X += PlayerInput.WheelLookRate;
+        look *= LookScale;
         if (look == Vector2.Zero) return;
         _lookIdle = 0f;
 
@@ -3197,6 +3200,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
 
         var input = PlayerInput.Move;
+        // a steering wheel's pedals walk forward and back
+        if (input == Vector2.Zero) input.Y = PlayerInput.WheelWalk;
         if (_stunTimer > 0)
         {
             _stunTimer -= dt;
