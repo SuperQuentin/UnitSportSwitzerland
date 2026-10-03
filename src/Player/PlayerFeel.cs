@@ -835,7 +835,7 @@ public partial class PlayerFeel : Node3D
     {
         var s = a.State;
         const float Knot = 0.514444f, Foot = 0.3048f;
-        float altitude = _player.Origin is { } o ? (float)o.ToGlobal(_player.GlobalPosition).Alt : 0f;
+        float altitude = _player.Origin is { } o ? (float)o.ToGlobal(_player.GlobalPosition).Alt : _player.GlobalPosition.Y;
         sb.Append($"{s.Ias / Knot:0} kt    {altitude / Foot:0} ft    {s.Velocity.Y / Foot * 60f:+0;-0;0} fpm");
         sb.Append($"    N1 {s.Spool * 100f:0}%");
         if (s.Reverse > 0.05f) sb.Append(" REV");

@@ -3629,7 +3629,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         Clearance = Terrain != null && Terrain.TryGetHeight(GlobalPosition, out float ground)
             ? GlobalPosition.Y - ground : 999f;
-        float altitude = Origin is { } here ? (float)here.ToGlobal(GlobalPosition).Alt : 500f;
+        // no origin (the flat test world): its Y is the height, so a climb still thins the air and an autopilot sees it
+        float altitude = Origin is { } here ? (float)here.ToGlobal(GlobalPosition).Alt : GlobalPosition.Y;
 
         if (flyer is Pigeon) PigeonStep(input, dt);
         var ev = flyer.Fly(input, new FlightEnv(onFloor, Clearance, altitude), dt, ref _flight);
