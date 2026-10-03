@@ -32,6 +32,36 @@ public static partial class TileRewriter
         node < 0 || node >= net.Nodes.Count || net.Nodes[node].Degree != 2;
 
     /// <summary>
+    /// At traffic lights (#406): the line of a painted bike lane on the approach side of
+    /// <paramref name="piece"/> (right: the junction is at its end, else at its start), among the
+    /// paint added from index <paramref name="from"/> on, stops at the stop line
+    /// (<paramref name="stop"/>, metres along the piece: the crossing through the junction starts
+    /// there) and is solid between it and <paramref name="solid"/>, as the car lanes' lines are over
+    /// the last <see cref="TurnSolid"/> metres.
+    /// </summary>
+    private static void BikeLaneToStop(List<RoadPaint> paint, int from, RoadSegment piece, bool right, double stop, double solid)
+    {
+        double lo = Math.Min(stop, solid), hi = Math.Max(stop, solid);
+        for (int k = paint.Count - 1; k >= from; k--)
+        {
+            var p = paint[k];
+            if (p.Type != PaintType.YellowDashed || !ReferenceEquals(p.Segment, piece) || (p.Offset > 0) != right) continue;
+            double a = p.From, b = float.IsPositiveInfinity(p.To)
+                ? RoadPaintGeometry.Length(RoadPaintGeometry.Offset(piece, p.Offset)) : p.To;
+            if (b <= lo && right || a >= hi && !right) continue;   // all of it before the solid stretch
+            paint.RemoveAt(k);
+            void Part(PaintType type, float dash, double d0, double d1)
+            {
+                if (d1 - d0 > 0.3)
+                    paint.Insert(k, RoadPaint.AlongSegment(piece, type, p.Rgba, p.Width, dash, dash == 0 ? 0 : p.Gap, p.Offset, d0, d1, p.Variant));
+            }
+            // the dashed part keeps its phase where it starts; past the solid stretch it starts again
+            if (right) { Part(PaintType.YellowSolid, 0, Math.Max(a, lo), Math.Min(b, hi)); Part(PaintType.YellowDashed, p.Dash, a, Math.Min(b, lo)); }
+            else { Part(PaintType.YellowDashed, p.Dash, Math.Max(a, hi), b); Part(PaintType.YellowSolid, 0, Math.Max(a, lo), Math.Min(b, hi)); }
+        }
+    }
+
+    /// <summary>
     /// The paint of a street's separated paths, piece by piece: the yellow dashed line between a
     /// path at the sidewalk's height and the sidewalk (layouts 1 and 2), and a Velo symbol where
     /// the path starts or ends (a junction, or a stretch without it).

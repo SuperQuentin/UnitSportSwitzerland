@@ -189,7 +189,8 @@ public static partial class TileRewriter
         HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadPaint>> paint,
         Dictionary<TileId, List<RoadSignal>> signals, Cantons? cantons, UrbanField field, Footprints buildings,
         Dictionary<TileId, List<RoadAreaProp>> areas, Dictionary<TileId, List<RoadPointProp>> signs, SignalStats stats,
-        Dictionary<TileId, List<RoadApproach>> approaches, Restrictions? restrictions, LaneStats laneStats)
+        Dictionary<TileId, List<RoadApproach>> approaches, Restrictions? restrictions, LaneStats laneStats,
+        Dictionary<(int Link, LinkEnd End), double> stopsAt, Dictionary<int, (SignalPlan Plan, int[] PlanArm)> plans)
     {
         var net = result.Network;
         PriorityPlanner.Clearance? clearance = null;
@@ -205,6 +206,8 @@ public static partial class TileRewriter
             var stops = new List<float>();
             var wantPoles = new List<PoleWish>();
             var approachArms = new List<(int Arm, int PlanArm, float[] Stop)>();   // their lane records (#353)
+            var armInPlan = new int[junction.Arms.Count];   // each junction arm's index in the plan, -1 none (#406)
+            Array.Fill(armInPlan, -1);
             // 50 km/h inside a locality: the yellow lasts 3 s (#349)
             bool urban = field.Density(junction.Centre.X, junction.Centre.Y) >= UrbanField.UrbanAt;
             for (int i = 0; i < junction.Arms.Count && i < plan.Arms.Count; i++)
@@ -242,6 +245,8 @@ public static partial class TileRewriter
                     var local = Local(home, [stop], source.SampleHeight, 0f);
                     stops.AddRange(local);
                     approachArms.Add((i, arms.Count, local));
+                    // its painted bike lane stops at the line, solid before it (#406)
+                    stopsAt[(plan.Arms[i].LinkId, plan.Arms[i].End)] = MouthSkew(junction, arm) + SignalStopSetback;
                 }
                 else stops.AddRange([float.NaN, float.NaN, float.NaN]);
                 // poles (#350): on the approach's right the main heads, on its left a second head
@@ -269,6 +274,7 @@ public static partial class TileRewriter
                 bool bikeSignal = approach && (path || layout is { KerbsideBike: true });
                 if (bikeSignal) stats.BikeSignals++;
                 if (approach && !path && layout is { KerbsideBike: true }) kerbside.Add((arms.Count, layout));
+                armInPlan[i] = arms.Count;
                 arms.Add(new SignalArm(arm.OutwardHeading, approach, leaves, pocket, rightPocket, Pedestrians: true,
                     BikeSignal: bikeSignal, SpeedKmh: urban ? 50 : 60, CrossingM: (float)(to - from + (info.Attributes.OneWay != 0 ? 0 : half)),
                     Rank: (byte)Math.Clamp(PriorityPlanner.Rank(info) / 4, 1, 255)));
@@ -332,6 +338,7 @@ public static partial class TileRewriter
                         stats.SignsOnPoles++;
                     }
             }
+            plans[junction.NodeId] = (signalPlan, armInPlan);   // the bike crossings' conflicts (#406)
             Get(signals, home).Add(new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops.ToArray(), Plan = signalPlan, Poles = poles });
             foreach (var (i, planArm, stopAt) in approachArms)
                 Get(approaches, home).Add(SignalApproach(junction, i, net, (short)(Get(signals, home).Count - 1), (byte)planArm, stopAt,

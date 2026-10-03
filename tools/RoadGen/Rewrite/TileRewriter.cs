@@ -534,8 +534,10 @@ public static partial class TileRewriter
                 }
                 // the plans settle layout (a) or (b) of each right pocket beside a bike lane (#351) before
                 // the pockets' paint and the lane records (#353) read it
+                var stopsAt = new Dictionary<(int Link, LinkEnd End), double>();
+                var signalPlans = new Dictionary<int, (SignalPlan Plan, int[] PlanArm)>();
                 EmitSignals(priority, result, pockets, BikeSideAt, block, wanted, paint, signalRecords, cantons, field, buildings, islands, signs, netStats.Signals,
-                    approachRecords, restrictions, netStats.Lanes);
+                    approachRecords, restrictions, netStats.Lanes, stopsAt, signalPlans);
                 EmitRightLanes(pockets, paint, bikeBetween, netStats.TurnLanes);
                 EmitPocketApproaches(priority, result, pockets, approachRecords, restrictions, netStats.Lanes);
 
@@ -560,18 +562,32 @@ public static partial class TileRewriter
                 }
 
                 // the paths' paint on their final pieces, and the crossings at the junctions (#120)
+                var linkOf = segmentOf.ToDictionary(kv => kv.Value.Item1, kv => kv.Key, ReferenceEqualityComparer.Instance);
                 foreach (var (segment, tileId, station, start, end) in lanePaint)
                 {
                     var pieces = finalPieces.TryGetValue(segment, out var cut) ? cut : [segment];
                     // layout (b) of a right-turn pocket (#351): along its reach the pocket painted the bike lane
                     var between = bikeBetween.Where(b => ReferenceEquals(b.Segment, segment)).ToList();
+                    // at traffic lights the approach's lane stops at the stop line, solid over the
+                    // TurnSolid metres before it (#406): (segment metres, right side, stop line, solid from)
+                    var stops = new List<(bool Right, double Stop, double Solid)>();
+                    double total = pieces.Sum(x => RoadPaintGeometry.Length(x.Points));
+                    if (linkOf.TryGetValue(segment, out int linkId))
+                    {
+                        if (stopsAt.TryGetValue((linkId, LinkEnd.End), out double atEnd)) stops.Add((true, total - atEnd, total - atEnd - TurnSolid));
+                        if (stopsAt.TryGetValue((linkId, LinkEnd.Start), out double atStart)) stops.Add((false, atStart, atStart + TurnSolid));
+                    }
                     double s = station;
                     for (int i = 0; i < pieces.Count; i++)
                     {
                         double length = RoadPaintGeometry.Length(pieces[i].Points), mid = s - station + length * 0.5;
                         bool Inside(bool right) => between.Any(b => b.Right == right && mid > b.Along.From && mid < b.Along.To);
-                        PaintEmitter.BikeLanes(pieces[i], s, Get(paint, tileId), i == 0 && start, i == pieces.Count - 1 && end,
+                        var into = Get(paint, tileId);
+                        int before = into.Count;
+                        PaintEmitter.BikeLanes(pieces[i], s, into, i == 0 && start, i == pieces.Count - 1 && end,
                             skipLeft: Inside(false), skipRight: Inside(true));
+                        foreach (var (right, stop, solid) in stops)
+                            BikeLaneToStop(into, before, pieces[i], right, stop - (s - station), solid - (s - station));
                         s += length;
                     }
                 }

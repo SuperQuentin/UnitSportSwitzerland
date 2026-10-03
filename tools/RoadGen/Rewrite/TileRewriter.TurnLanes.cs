@@ -984,12 +984,20 @@ public static partial class TileRewriter
             double pocketBack = setback + (box ? BikeBoxDepth : 0);
             if (_bikeLeft > 0)
             {
-                // the left-turn bike lane (#351): yellow dashes both sides, from where the pocket opens
-                // to the line it stops at, and its symbol where riders come in
+                // the left-turn bike lane (#351): yellow lines both sides, from where the pocket opens
+                // to the line it stops at (the bike box, or its advanced line ahead of the cars'),
+                // dashed, then solid over the last TurnSolid metres before the cars' line (#406: as
+                // the car lanes' lines), and its symbol where riders come in
+                double bikeLine = box ? pocketBack : Math.Max(0.2, setback - AdvancedBikeLine);
+                double solidTo = pocketBack + TurnSolid;
+                void Edge(PaintType type, float dash, double o, double d0, double d1) =>
+                    paint.Add(RoadPaint.AlongSegment(_seg, type, PaintEmitter.Yellow, BikePlanner.LineWidth, dash, dash == 0 ? 0 : BikePlanner.Gap,
+                        _side * o, Math.Min(AlongOf(d0), AlongOf(d1)), Math.Max(AlongOf(d0), AlongOf(d1))));
                 foreach (double o in (ReadOnlySpan<double>)[pocket, through])
-                    paint.Add(RoadPaint.AlongSegment(_seg, PaintType.YellowDashed, PaintEmitter.Yellow, BikePlanner.LineWidth,
-                        BikePlanner.Dash, BikePlanner.Gap, _side * o, Math.Min(AlongOf(pocketBack), AlongOf(dashedTo)),
-                        Math.Max(AlongOf(pocketBack), AlongOf(dashedTo))));
+                {
+                    Edge(PaintType.YellowSolid, 0, o, bikeLine, solidTo);
+                    Edge(PaintType.YellowDashed, BikePlanner.Dash, o, solidTo, dashedTo);
+                }
                 BikeSymbol(paint, lanes.LeftBikeLane!.Value.Mid, dashedTo - 2);
                 stats.LeftBikeLanes++;
             }
@@ -1019,13 +1027,16 @@ public static partial class TileRewriter
             }
             else
             {
-                Bar(setback, 0.1, (signal ? lanes.Through().To : pocket) - 0.1, width, PaintEmitter.White);
                 if (_bikeLeft > 0)
                 {
+                    // the cars' line stops at the bike lane's edges (#406): riders go on to their own line
+                    Bar(setback, 0.1, pocket - 0.1, width, PaintEmitter.White);
+                    Bar(setback, through + 0.1, lanes.Through().To - 0.1, width, PaintEmitter.White);
                     // an advanced bike stop line across the bike lane, 3 m ahead of the cars'
                     Bar(Math.Max(0.2, setback - AdvancedBikeLine), pocket + 0.05, through - 0.05, BikeStopLine, PaintEmitter.Yellow);
                     stats.AdvancedBikeLines++;
                 }
+                else Bar(setback, 0.1, (signal ? lanes.Through().To : pocket) - 0.1, width, PaintEmitter.White);
             }
             stats.StopBars++;
 
