@@ -87,6 +87,24 @@
   the arms make); **10 left pockets were built where OSM forbids the left turn** (planning ignores
   restrictions). Valais copy (Martigny-Riddes): 13 records, all without lights. `--signal-check`
   checks them (exit 2 on a bad one) and lists those near `--at` (`--list`: every pocket approach).
+- **Junction polish (#406)**, user's spec, test region J1-J5: **hatches** end no further into the
+  junction than the stop line of the arm's own left pocket (behind its bike box; else the stop line
+  across the arm, at lights only: without lights at the mouth, as before), a merged strip's (#325)
+  at the junction before too; every hatch is **closed**: a solid line across its wide end (the
+  exit's at the stop line, the approach's where the pocket opens), stripes cut at it; a hatch
+  **narrower than 1.5 m or shorter than 20 m is left out** (centre line only; `HatchesSkipped`,
+  Geneva 1). **Rounded corners**: the junction polygon rounds only the original edges, so beside a
+  widening the corner was square (no drivable right turn out of a right pocket). `Corners` adds a
+  flush Pavement patch per widened corner: the widened edges' meeting point rounded as
+  `JunctionBuilder` rounds an unwidened corner (quadratic curve, control at that point, each end
+  `JunctionOptions` kerb (0.6 x half width) past it), plus the notch between the junction polygon,
+  the mouths and that point. Laid out before the signal poles (test region 19 placed / 35
+  rejected, was 21/33; Geneva 1,493 / 255, was 1,504 / 244). **Not in town**: where a sidewalk or
+  path runs round the corner (`OuterDm`), it stays square (the sidewalk corner, `CornerPlanner`,
+  would have to follow the new kerb: open question); test region 18 rounded, 8 square (J2, J3);
+  Geneva 31 rounded, 186 square, 2 failed outlines. Fixed on the way: a merged strip was painted
+  by whichever pocket came first, from the exiting one without the lights' stop line (J5b's west
+  approach: a 0.4 m bar at the mouth, no line across its TR lane).
 - **Not done**: right-turn lanes without lights,
   pockets across a tile seam, OSM `turn:lanes` (read, not used: #348). Roads with 3 lanes (8 m, lane lines at ±1.33 m,
   no centre line) still get a pocket laid out for 2 lanes of half the width: the hatch covers a

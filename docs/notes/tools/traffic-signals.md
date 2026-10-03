@@ -104,7 +104,11 @@
   piece: the line's own sides do not know a street's paths), or a painted lane kerbside of a
   right pocket (layout (a)); its head is a half-size three-lens head (100 mm lenses,
   `Shape.Bike`) on the main pole, lower edge 1.05 m, below the priority sign. Screenshots from
-  above and from the driver's seat at LV95 2499901,1118599.
+  above and from the driver's seat at LV95 2499901,1118599. #406: the left-turn bike lane's edges
+  run on to its own line (box or advanced line), solid over the `TurnSolid` 10 m before the cars'
+  line; where it has an advanced line the cars' stop line stops at its edges instead of crossing it.
+  Bike lanes across the junction: straight, red only on a conflict in the same phase
+  (`bike-infrastructure`).
 - **Right pocket beside a painted bike lane** (#351). `ApproachLayout` is the one place the lanes'
   offsets are worked out (`Lane` per lane, `open` along the taper); paint, stop lines, poles,
   crossings and #353's lane records read it (tier 0 `ApproachLayoutTests`). Same width

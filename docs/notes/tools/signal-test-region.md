@@ -68,10 +68,24 @@ road out 2 (J3b S, J4 stem); `--signal-check` ok, 106 lanes, bad 0.
   there and loses its painted lanes along its whole line (#120: a street with paths on half its
   urban stations drops its lanes), so J3's main-road arms have no kerbside lane.
 
+## Polish (#406)
+
+- User's review of J1 (`turn-lanes`, `bike-infrastructure`, `traffic-signals`): rounded corners at
+  widened arms (not in town: J2, J3 stay square), bike lanes straight through the lights, red only
+  where a car crosses in the same phase (J1 none: every crossing turn is a protected arrow held red;
+  J5a/J5b the merged strip's TR lane), solid bike lane edges before the line, the cars' stop line
+  stops at a bike lane with an advanced line, hatches closed, ending at the stop line, left out under
+  1.5 m x 20 m (none here). Before/after shots `test_output/406/{before,after}_J*_{45,80}m.png`.
+- Open: a lane whose approach and exit are far apart laterally (J1 east: 4.5 m, J5 north-south) runs
+  diagonally across the junction, over the next approach's setback zone and advanced bike line.
+
 ## Checks
 
-- Tier 0 `SignalTestRegionTests` (~2 s): builds it into a temp dir; every approach as designed,
-  every plan valid, the T's stem without straight on. The tier-3-free target for signal and lane
+- Tier 0 `SignalTestRegionTests` (~2 s, one build for the class): builds it into a temp dir; every
+  approach as designed, every plan valid, the T's stem without straight on; #406: every hatch closed
+  and at least 1.5 x 20 m (its closing line and border), no car stop line across a bike lane with an
+  advanced line, a rounded corner in every quadrant of J1, J3b, J5a, J5b, no red crossing at J1 and
+  one at J5a, J5b (all four fail on the region as built before #406). The tier-3-free target for signal and lane
   checks: `--signal-check --chunks test_output/signal-region [--at E,N --list]`.
 - Screenshots from above: `--shot-queue` with `x,g130,0,-90,0,...` per junction (x = E - 2913000),
   `--chunks test_output/signal-region --traffic 150 --generated off --time 13 --nohud`. J3's town

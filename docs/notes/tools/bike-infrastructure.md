@@ -54,7 +54,16 @@
   profile. Samples thinned to 2 cm on the outer edge (9 per band cost +23 KB/tile).
   3.03 signs that stood on a path move onto the buffer or sidewalk. At traffic lights, across a
   road widened by its pockets, the crossing runs square across the widened mouth, in front of the
-  stop line (#351, `traffic-signals`).
+  stop line (#351, `traffic-signals`). **At traffic lights a painted lane (#406)** runs instead
+  straight from where it ends at its approach's stop line (kerbside (a) or between (b)) to the
+  exit's lane at the far mouth (`Densify`, 2 m); red only where a car movement crosses it while
+  its riders have green in the built plan (`CrossedInPhase`: their bike group, else their
+  approach's through group; a movement crosses when exactly one end lies on the lane's side: in
+  from or out to a joining arm, or out of a layout (b) right pocket kerbside of the lane; greens
+  overlapping in the group intervals, so a protected arrow held red does not count), else only
+  its two dashed edges. Test region: 2 red (J5's shared TR lanes), 12 dashed; Geneva 67 / 18.
+  Paths and junctions without lights unchanged. A painted lane on a signalised approach stops at
+  the stop line and is solid over the `TurnSolid` 10 m before it (`BikeLaneToStop`).
 - **Turn lanes** (#123 pockets widen the approach on its right, through traffic moves into the
   widening): a side standing on a widening (`AreaPropType.Pavement`) moves out by it instead of
   being dropped (#123 dropped sidewalks there; 39 path pieces in Nyon). `ShiftOffPavement` probes
