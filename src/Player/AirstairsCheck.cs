@@ -266,7 +266,34 @@ public partial class AirstairsCheck : Node
         Expect(rolled && shoved.All(s => s.Pushed > 2f && s.Clear),
             $"taxied {moved:F0} m away, the stairs shoved clear ({string.Join(", ", shoved.Select(s => $"{s.Name} pushed {s.Pushed:F1} m, now {s.Side:F1} m off the centreline, {s.Aft:F1} m aft"))})");
         await Shot("taxied-away", from + turn * new Vector3(-35f, 14f, 10f), from + turn * new Vector3(0, 2f, -20f));
+        await Until(() => me.GroundSpeed < 0.5f, 30);
         Input.ActionRelease(PlayerInput.Jump);
+
+        // ---- parked stairs being raised with a player on the platform, then walked down -------
+        me.ExitVehicle();
+        await Until(() => me.Ride == RideKind.OnFoot, 5);
+        await Seconds(1);
+        var lift = Body("stairs_0");
+        if (lift?.Ride is not Airstairs raised) { Finish("no stairs to raise"); return; }
+        var lx = lift.GlobalTransform.Orthonormalized();
+        me.DebugLaunch(lx * new Vector3(0, raised.Height + 0.1f, -3f), Vector3.Zero);
+        bool onIt = await Until(() => me.IsOnFloor() && me.Aboard, 5);
+        float wasH = raised.Height;
+        raised.TargetHeight = 4.6f;
+        float worst = 0f;
+        bool risen = await Until(() =>
+        {
+            worst = Mathf.Max(worst, Mathf.Abs(me.GlobalPosition.Y - lift.GlobalPosition.Y - raised.Height));
+            return Mathf.Abs(raised.Height - 4.6f) < 0.001f;
+        }, 15);
+        await Seconds(1);
+        float stood = me.GlobalPosition.Y - lift.GlobalPosition.Y;
+        Expect(onIt && risen && me.Aboard && Mathf.Abs(stood - raised.Height) < 0.06f && worst < 0.12f,
+            $"parked stairs raised {wasH:F2} -> {raised.Height:F2} m with a player on the platform: carried up (stands {stood:F2} m, worst {worst * 100:F0} cm off)");
+        await Shot("raised-with-player", lx * new Vector3(-7f, 5.5f, 2f), me.GlobalPosition + Vector3.Up);
+        bool walkedDown = await WalkTo(me, () => lx * new Vector3(0, 0, 6.5f), 30);
+        Expect(walkedDown && !me.Aboard && me.GlobalPosition.Y - lift.GlobalPosition.Y < 0.3f,
+            $"walked down the raised flight to the ground ({me.GlobalPosition.Y - lift.GlobalPosition.Y:F2} m up)");
         Finish(null);
     }
 
