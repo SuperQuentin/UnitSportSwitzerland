@@ -147,6 +147,13 @@ public partial class BoatNetProbe : ChatProbe
             await Heard("B", $"seen {what}", 15);
         }
 
+        // hard over to starboard (#380): B must draw the wheel turned as A's is
+        me.RideControls = () => new RideInput(0.15f, 0f, 1f, false);
+        await Seconds(2.5);
+        float helm = me.Vehicle is Boat own ? own.HelmNow : 0f;
+        Say(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"helm {helm:F3}"));
+        await Heard("B", "seen helm", 10);
+
         // left floating: a parked boat, simulated here, drawn by B from what it is sent
         me.RideControls = () => new RideInput(0f, 0f, 0f, false);
         await Until(() => me.BoatMotion.Velocity.Length() < 0.5f, 20);
@@ -196,6 +203,19 @@ public partial class BoatNetProbe : ChatProbe
             ? (probe, c.GlobalPosition, c.GlobalRotation.Y, Mathf.Asin(Mathf.Clamp(-c.BodyPose.Basis.Z.Y, -1f, 1f))) : null;
         await Compare("idle", Drawn);
         await Compare("running", Drawn);
+
+        // the wheel hard over: A's copy here turns it as A does (#380)
+        if (!await Until(() => _heard.Any(l => l.Contains("BN A helm ")), 60)) { Fail("A never said 'helm'"); return; }
+        string said = _heard.Last(l => l.Contains("BN A helm "));
+        float want = Float(said[(said.LastIndexOf(' ') + 1)..]) * Avatar.BoatMeshBuilder.Wheel.Lock;
+        float seen = float.NaN;
+        bool turned = await Until(() =>
+        {
+            seen = Copy() is { } c && FindRig(c) is { } rig ? rig.WheelTurn : float.NaN;
+            return Mathf.Abs(seen - want) < 0.3f;
+        }, 4);
+        Expect(turned && Mathf.Abs(want) > 1f, $"A's copy turns its wheel with A's helm ({seen:F2} rad here, {want:F2} at A)");
+        Say("seen helm");
 
         VehicleBody? Parked()
         {
@@ -253,6 +273,14 @@ public partial class BoatNetProbe : ChatProbe
         Expect(touch.Contacts > 10 && touch.Off90 < 0.06f, $"B meets the hull where B draws it ({touch.Off90 * 100f:F1} cm, 90 %)");
         Expect(touch.Deepest < 2.1f && touch.UnderFor < 1.5f, "and is not pushed under by it");
         Say("touched");
+    }
+
+    private static Avatar.BoatRig? FindRig(Node n)
+    {
+        if (n is Avatar.BoatRig r) return r;
+        foreach (var c in n.GetChildren())
+            if (FindRig(c) is { } found) return found;
+        return null;
     }
 
     private async Task Compare(string what, Func<(Boat, Vector3, float, float)?> drawn)

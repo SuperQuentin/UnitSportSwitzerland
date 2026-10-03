@@ -83,8 +83,49 @@ public partial class ExitProbe : Node, Core.IOriginShiftAware
         int exits = kinds.Count * 2;
         // up from the wheel of a city bus going along: it rolls on driverless, its driver aboard (#162)
         if (FindSpot(me, _spot + new Vector3(30f, 0, 0)) is { } road) { exits++; await Rolling(me, HeavyCatalog.All[2].Kind, road); }
+        // E from outside a parked bus, both ways of the walkable boarding setting (#384)
+        if (FindSpot(me, _spot + new Vector3(60f, 0, 0)) is { } outside) { exits++; await Outside(me, outside); }
         Log(_failed == 0 ? $"RESULT: ok, {exits} exits" : $"RESULT: FAIL {_failed} of {exits} exits");
         GetTree().Quit(_failed == 0 ? 0 : 1);
+    }
+
+    /// <summary>
+    /// E from outside a parked city bus, both ways of "Get in buses and ships from outside" (#384):
+    /// off, it does nothing (walk aboard instead); on (the default), it puts the player at the wheel.
+    /// </summary>
+    private async Task Outside(FootPlayer me, Vector3 at)
+    {
+        var kind = HeavyCatalog.All[2].Kind;
+        var ride = Rideable.Create(kind)!;
+        if (VehicleManager.Instance is not { } vehicles || me.Terrain?.Origin is not { } origin) { Fail("outside", "no vehicles"); return; }
+        var state = new VehicleState(kind, origin.ToGlobal(at with { Y = Ground(me, at) }), 0f, Vector3.Zero, ride.MaxHealth,
+            EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0);
+        string? name = vehicles.Place(state, "veh_exit_outside");
+        VehicleBody? bus = null;
+        for (int i = 0; i < 100 && (bus = name == null ? null : vehicles.GetNodeOrNull<VehicleBody>(name)) is not { Posed: true }; i++) await Wait(0.1);
+        if (bus == null) { Fail("outside", "the parked bus never came"); return; }
+        // beside the front door, a little aft of it: ahead of it is its button, which E would press
+        var spot = bus.ToGlobal(new Vector3(0, 0, ride.EntryPoint.Z + 1.1f)) + bus.GlobalTransform.Basis.X.Normalized() * (ride.ParkedBox.Size.X * 0.5f + 0.7f);
+        var settings = GameSettings.Current;
+        bool was = settings.BoardWalkableFromOutside;
+
+        settings.BoardWalkableFromOutside = false;
+        me.GlobalPosition = spot with { Y = Ground(me, spot) + 0.2f };
+        me.Velocity = Vector3.Zero;
+        await Wait(1.5);
+        bool offered = VehicleReach.Find(me)?.Vehicle == bus;
+        me.TryInteract();
+        await Wait(1.5);
+        if (offered || me.Ride != RideKind.OnFoot) Fail("outside", $"setting off: E from beside the door still {(offered ? "offers" : "takes")} the bus (ride {me.Ride})");
+        else Log("ok   outside, setting off: E beside the bus's door does nothing; walk aboard and drive from inside");
+
+        settings.BoardWalkableFromOutside = true;
+        Log($"  outside: E would {VehicleReach.Find(me)?.Action ?? "do nothing"}; {me.GlobalPosition.DistanceTo(bus.ToGlobal(ride.EntryPoint)):F2} m from its entry, entry {ride.EntryPoint}");
+        bool took = me.TryGetIn();
+        for (int i = 0; i < 50 && me.Ride != kind; i++) await Wait(0.1);
+        if (!took || me.Ride != kind || me.SeatIndex != 0) Fail("outside", $"setting on: E beside the door did not put the player at the wheel (ride {me.Ride})");
+        else Log("ok   outside, setting on (the default): E beside the bus's door puts the player at the wheel");
+        settings.BoardWalkableFromOutside = was;
     }
 
     /// <summary>

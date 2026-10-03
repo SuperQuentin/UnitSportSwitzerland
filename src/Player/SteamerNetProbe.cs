@@ -16,10 +16,12 @@ namespace UnitSport.Player;
 /// <list type="bullet">
 /// <item>A (admin) takes the steamer out to deep water and opens its gangways; once B is aboard it
 /// shuts them, makes the lake gamey and rings FULL AHEAD; under way it measures where it draws B on
-/// its own (pitching, rolling) ship, then watches B go over the rail and swim.</item>
+/// its own (pitching, rolling) ship, then watches B go over the rail and swim, then climb back up
+/// the boarding ladder on its hull (#384) as the ship goes on: B in its climbing pose, then on deck.</item>
 /// <item>B builds itself a quay alongside A's steamer (piers are a follow-up), walks over the
 /// gangway's plank aboard, along the main deck, up the stairs, aft on the upper deck, and stands
-/// there under way; it measures where it stands on its copy of A's ship. Then over the rail.</item>
+/// there under way; it measures where it stands on its copy of A's ship. Then over the rail, and
+/// from the water up the hull's ladder under way, over the rail onto the deck.</item>
 /// </list>
 /// Both peers must agree where B is on the ship (the means of the two measures within 0.3 m), and B
 /// must be drawn on A's deck, steady, never through it. Windowed (<c>SHOTS=1</c>), A saves its view
@@ -225,6 +227,18 @@ public partial class SteamerNetProbe : ChatProbe
         WaterField.TryLevelAt(bb?.GlobalPosition ?? me.GlobalPosition, out float surface);
         Expect(swimming, F($"A sees B over the rail, swimming, off the deck ({fromShip:F0} m from the ship's middle, {(bb?.GlobalPosition.Y ?? 0) - surface:F2} m from the surface)"));
         Expect(swimming && Mathf.Abs((bb?.GlobalPosition.Y ?? 0) - surface + 1.4f) < 1.5f, "in the water, not carried along on the deck");
+
+        // back up the ladder on the hull, the ship going on (#384): A sees B climbing it, then aboard
+        if (await Heard("B", "climbing", 40))
+        {
+            bool climbing = await Until(() => B() is { PoseKind: FootPlayer.PoseClimb }, 6);
+            var onLadder = B();
+            float off = onLadder != null ? MathX.FlatDistance(onLadder.GlobalPosition, me.GlobalPosition) : -1f;
+            Expect(climbing, F($"A sees B climbing the hull's ladder ({off:F0} m from the ship's middle)"));
+            bool aboard = await Until(() => B() is { DeckOn: { Length: > 0 } on } && on == me.Name.ToString(), 20);
+            Expect(aboard, $"and then B on A's deck (DeckOn '{B()?.DeckOn}')");
+        }
+        else Fail("B never got onto the ladder");
         me.RideControls = () => new RideInput(0f, 0f, 0f, false);
         steamer.Order = 0;
         Say("done");
@@ -297,6 +311,23 @@ public partial class SteamerNetProbe : ChatProbe
         me.WalkControls = null;
         Expect(swimming && !me.Aboard, $"B goes over the rail into the water, swimming (#301), the ship going on without it");
         Say("swimming");
+        // by the ship's ladder (#384), as it goes on: onto it at once, and up
+        await Until(() => false, 3);
+        if (Ship() is { } h)
+        {
+            var by = Point(h, SteamerMeshBuilder.LadderX + 1.0f, SteamerMeshBuilder.LadderFoot + 0.7f, SteamerMeshBuilder.LadderAt);
+            me.StartSwimmingAtSurface(by);
+            bool on = me.TryInteract() && me.OnShipLadder;
+            Expect(on, $"B swimming by the hull's ladder gets onto it ({me.GlobalPosition})");
+            if (on)
+            {
+                me.ForceLadderClimb = 1f;
+                Say("climbing");
+                bool up = await Until(() => me.Aboard && !me.OnShipLadder, 12);
+                me.ForceLadderClimb = null;
+                Expect(up, $"B climbs it over the rail onto the deck, under way (aboard '{me.DeckOn}')");
+            }
+        }
         await Heard("A", "done", 30);
         Say("bye");
         quay.QueueFree();

@@ -47,6 +47,12 @@ public static class SteamerMeshBuilder
     public const float PlankOut = 1.3f, PlankDrop = 0.3f;
     /// <summary>Where the plank starts: the floor slab's edge amidships (4.3 + 0.05 m), flush with it.</summary>
     public const float PlankEdge = 4.35f;
+    /// <summary>
+    /// The boarding ladders (#384): a rope ladder down each side of the hull just aft of the gangway,
+    /// from the rail into the water, to climb aboard from it. Station, foot over the keel, out from the centreline.
+    /// </summary>
+    public const float LadderAt = 46.0f, LadderFoot = SteamerLines.Draught - 0.75f;
+    public static float LadderX => HalfAt(LadderAt) + 0.07f;
     /// <summary>The stairs: from the main deck here up to the upper deck's aft edge, either side.</summary>
     public const float StairFoot = 68.5f, StairX = 2.9f, StairWidth = 1.1f;
     /// <summary>The wheels' middle, as a station, and the paddle boxes either side of it.</summary>
@@ -168,20 +174,52 @@ public static class SteamerMeshBuilder
             Panel(g, x, GangFrom + 0.05f, x, GangTo - 0.05f, DeckY, RailHeight - 0.08f, White);
             g.Box(new Vector3(x, DeckY + RailHeight - 0.04f, Z((GangFrom + GangTo) * 0.5f)), new Vector3(0.1f, 0.08f, GangTo - GangFrom - 0.1f), Varnish);
             gates[door] = g.Build();
-            var p = new MeshScratch();
-            float edge = HalfAt((GangFrom + GangTo) * 0.5f);
-            var low = new Vector3(side * (PlankEdge + PlankOut), DeckY - PlankDrop, 0);
-            var high = new Vector3(side * PlankEdge, DeckY, 0);
-            var mid = (low + high) * 0.5f;
-            float run = (high - low).Length();
-            float tilt = Mathf.Atan2(PlankDrop, PlankOut) * side;
-            float zc = Z((GangFrom + GangTo) * 0.5f);
-            p.Box(new Vector3(mid.X, mid.Y - 0.05f, zc), new Vector3(run, 0.08f, GangTo - GangFrom - 0.3f), Teak, new Basis(Vector3.Back, -tilt));
-            foreach (float e in new[] { -1f, 1f })
-                p.Tube(new Vector3(low.X, low.Y + 0.9f, zc + e * 0.8f), new Vector3(high.X, high.Y + 0.9f, zc + e * 0.8f), 0.025f, White, 5);
-            planks[door] = p.Build();
+            planks[door] = PlankMesh(door, PlankOut, PlankDrop);
         }
         return new SteamerParts(m.Build(), WheelMesh(), gates, planks, LeverMesh(), seats.ToArray(), deck);
+    }
+
+    // ---- the gangway's plank (#383: it tilts to the pier alongside) ------------------------
+
+    private static readonly Dictionary<(int Door, int Run, int Drop), ArrayMesh> _plankMeshes = new();
+
+    /// <summary>
+    /// A gangway's plank from its hinge on the deck's edge <paramref name="run"/> out and
+    /// <paramref name="drop"/> down (negative: up to a higher pier), with its hand ropes; one mesh per
+    /// centimetre of each, kept. Main thread.
+    /// </summary>
+    public static ArrayMesh PlankMesh(int door, float run, float drop)
+    {
+        var key = (door, Mathf.RoundToInt(run * 100f), Mathf.RoundToInt(drop * 100f));
+        if (_plankMeshes.TryGetValue(key, out var known)) return known;
+        run = key.Item2 / 100f;
+        drop = key.Item3 / 100f;
+        float side = door == 0 ? 1f : -1f;
+        var p = new MeshScratch();
+        var low = new Vector3(side * (PlankEdge + run), DeckY - drop, 0);
+        var high = new Vector3(side * PlankEdge, DeckY, 0);
+        var mid = (low + high) * 0.5f;
+        float length = (high - low).Length();
+        float tilt = Mathf.Atan2(drop, run) * side;
+        float zc = Z((GangFrom + GangTo) * 0.5f);
+        p.Box(new Vector3(mid.X, mid.Y - 0.05f, zc), new Vector3(length, 0.08f, GangTo - GangFrom - 0.3f), Teak, new Basis(Vector3.Back, -tilt));
+        foreach (float e in new[] { -1f, 1f })
+            p.Tube(new Vector3(low.X, low.Y + 0.9f, zc + e * 0.8f), new Vector3(high.X, high.Y + 0.9f, zc + e * 0.8f), 0.025f, White, 5);
+        if (_plankMeshes.Count > 400) _plankMeshes.Clear();
+        return _plankMeshes[key] = p.Build();
+    }
+
+    /// <summary>
+    /// The plank to the walk (a <see cref="DeckPart.DoorStep"/>, node space): a ramp whose top edge is
+    /// the floor slab's edge at the hinge and whose foot is <paramref name="run"/> out, <paramref name="drop"/> down.
+    /// </summary>
+    public static DeckBox PlankBox(int door, float run, float drop)
+    {
+        float side = door == 0 ? 1f : -1f;
+        var dk = new DeckBuilder(Bow);
+        dk.RampAcross((GangFrom + GangTo) * 0.5f, side * (PlankEdge + run), DeckY - drop, side * PlankEdge, DeckY,
+            GangTo - GangFrom - 0.3f, DeckPart.DoorStep, door);
+        return dk.Build(0, new Aabb(Vector3.Zero, Vector3.One)).Boxes[0];
     }
 
     // ---- the hull --------------------------------------------------------------------------
@@ -659,16 +697,9 @@ public static class SteamerMeshBuilder
         dk.Along(HouseFrom - 0.2f, HouseTo + 0.2f, HouseTop, HouseTop + 0.12f, HouseHalf * 2f + 0.4f);
         m.Box(new Vector3(0, UpperY + 0.01f, zc), new Vector3(HouseHalf * 2f - 0.1f, 0.02f, len - 0.1f), Varnish.Lightened(0.15f));
 
-        // the wheel on its pedestal, the stool behind it
+        // the wheel on its pedestal (the wheel itself turns: HelmWheelMesh, #380), the stool behind it
         var hub = HelmWheel;
-        m.Ring(hub, Vector3.Back, HelmRadius - 0.05f, HelmRadius, 0.06f, Varnish, 16);
-        for (int i = 0; i < 8; i++)
-        {
-            float a = Mathf.Tau * i / 8f;
-            var dir = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0);
-            m.Tube(hub + dir * 0.08f, hub + dir * (HelmRadius + 0.14f), 0.022f, Varnish, 4);
-        }
-        m.Tube(hub + Vector3.Forward * 0.04f, hub + Vector3.Back * 0.35f, 0.07f, Brass, 6);
+        m.Tube(hub + Vector3.Back * 0.06f, hub + Vector3.Back * 0.35f, 0.07f, Brass, 6);
         m.Box(new Vector3(0, (UpperY + hub.Y - 0.1f) * 0.5f, hub.Z + 0.35f), new Vector3(0.36f, hub.Y - 0.1f - UpperY, 0.36f), Varnish);
         dk.Box(new Vector3(0, (UpperY + hub.Y) * 0.5f, hub.Z + 0.3f), new Vector3(0.4f, hub.Y - UpperY, 0.45f));
         m.Tube(HelmHip with { Y = UpperY }, HelmHip with { Y = HelmHip.Y - 0.1f }, 0.05f, Dark, 6);
@@ -694,6 +725,27 @@ public static class SteamerMeshBuilder
         foreach (float x in new[] { 0.075f, -0.075f })
             m.Box(new Vector3(x, 0.26f, 0), new Vector3(0.04f, 0.04f, 0.04f), Dark);
         m.Tube(new Vector3(0.1f, 0.26f, 0), new Vector3(-0.1f, 0.26f, 0), 0.012f, Brass, 4);
+        return m.Build();
+    }
+
+    /// <summary>The wheel turns this far at full helm, rad: half a turn and more each way.</summary>
+    public const float HelmLock = 3.6f;
+
+    /// <summary>
+    /// The wheelhouse wheel, authored round its hub (#380): rim, eight spokes with their handles, the
+    /// boss. Its node sits at <see cref="HelmWheel"/> and turns about the fore-and-aft axis.
+    /// </summary>
+    public static ArrayMesh HelmWheelMesh()
+    {
+        var m = new MeshScratch();
+        m.Ring(Vector3.Zero, Vector3.Back, HelmRadius - 0.05f, HelmRadius, 0.06f, Varnish, 16);
+        for (int i = 0; i < 8; i++)
+        {
+            float a = Mathf.Tau * i / 8f;
+            var dir = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0);
+            m.Tube(dir * 0.08f, dir * (HelmRadius + 0.14f), 0.022f, Varnish, 4);
+        }
+        m.Tube(Vector3.Forward * 0.04f, Vector3.Back * 0.06f, 0.07f, Brass, 6);
         return m.Build();
     }
 
@@ -772,6 +824,19 @@ public static class SteamerMeshBuilder
     /// <summary>The windlass and bitts on the open bow, the flagstaffs, the lifebuoys on the rails.</summary>
     private static void Fittings(MeshScratch m, DeckBuilder dk)
     {
+        // the boarding ladders (#384): rope sides hooked over the rail, a teak rung every 30 cm
+        var rope = new Color(0.78f, 0.7f, 0.52f);
+        foreach (float side in new[] { 1f, -1f })
+        {
+            float x = side * LadderX, z = Z(LadderAt);
+            foreach (float e in new[] { -0.26f, 0.26f })
+            {
+                m.Tube(new Vector3(x, LadderFoot, z + e), new Vector3(x, DeckY + RailHeight, z + e), 0.025f, rope, 5);
+                m.Tube(new Vector3(x, DeckY + RailHeight, z + e), new Vector3(x - side * 0.18f, DeckY + RailHeight, z + e), 0.025f, rope, 5);
+            }
+            for (float y = LadderFoot + 0.15f; y < DeckY + RailHeight - 0.1f; y += 0.3f)
+                m.Box(new Vector3(x + side * 0.02f, y, z), new Vector3(0.06f, 0.04f, 0.56f), Teak);
+        }
         var windlass = new Vector3(0, DeckY + 0.4f, Z(4.5f));
         m.Box(windlass, new Vector3(1.2f, 0.8f, 0.7f), Dark);
         m.Tube(windlass + new Vector3(-0.8f, 0.1f, 0), windlass + new Vector3(0.8f, 0.1f, 0), 0.22f, Brass, 8);
@@ -851,6 +916,11 @@ public partial class SteamerRig : Node3D
         }
         rig._lever = new MeshInstance3D { Name = "Telegraph", Mesh = parts.Lever, MaterialOverride = body, Position = BoatMeshBuilder.Flip(SteamerMeshBuilder.TelegraphAt + new Vector3(0, 0.12f, 0)) };
         rig.AddChild(rig._lever);
+        // the wheelhouse wheel turns with the helm (#380)
+        rig._helm = new Node3D { Name = "HelmWheel", Position = BoatMeshBuilder.Flip(SteamerMeshBuilder.HelmWheel) };
+        rig._helm.AddChild(new MeshInstance3D { Mesh = SteamerMeshBuilder.HelmWheelMesh(), MaterialOverride = body });
+        rig.AddChild(rig._helm);
+        rig._helmPalette = helmsman;
         if (helmsman != null)
         {
             rig._helmsman = new MeshInstance3D { Name = "Driver", Mesh = SteamerMeshBuilder.Helmsman(helmsman, 0f), MaterialOverride = body };
@@ -987,6 +1057,35 @@ public partial class SteamerRig : Node3D
     }
 
     private const float WhistleDb = 2f;
+
+    // ---- the wheelhouse wheel (#380) ----------------------------------------------------------------
+
+    private Node3D? _helm;
+    private HumanPalette? _helmPalette;
+    private float _steer, _shownHelm = float.NaN;
+    private readonly Dictionary<int, ArrayMesh> _helmsmanTurns = new();
+
+    /// <summary>The wheel's turn now, rad (+ is the helm to starboard).</summary>
+    public float WheelTurn => _steer * SteamerMeshBuilder.HelmLock;
+
+    /// <summary>Per frame, every peer: the wheel and the helmsman's hands follow the helm (-1 port .. 1 starboard), eased.</summary>
+    public void Steer(float helm, float dt)
+    {
+        if (_helm == null) return;
+        _steer = Mathf.Lerp(_steer, Mathf.Clamp(helm, -1f, 1f), 1f - Mathf.Exp(-6f * dt));
+        float turn = Mathf.Round(WheelTurn / 0.06f) * 0.06f;
+        if (turn == _shownHelm) return;
+        _shownHelm = turn;
+        // clockwise as the helmsman sees it, looking forward
+        _helm.Basis = new Basis(Vector3.Back, -turn);
+        if (_helmsman != null && _helmPalette is { } palette && DisplayServer.GetName() != "headless")
+        {
+            int key = Mathf.RoundToInt(turn / 0.06f);
+            if (!_helmsmanTurns.TryGetValue(key, out var mesh))
+                _helmsmanTurns[key] = mesh = SteamerMeshBuilder.Helmsman(palette, -turn);
+            _helmsman.Mesh = mesh;
+        }
+    }
     private HullSlap? _slap;
     private bool _blowing;
     private float _blowFor = 10f;
@@ -1021,6 +1120,14 @@ public partial class SteamerRig : Node3D
                 _planks[i].Visible = open;
             }
         }
+        // an open plank tilts to the pier's head alongside (#383), as the walk's does
+        for (int i = 0; i < 2; i++)
+            if (_planks[i].Visible && IsInsideTree())
+            {
+                var (run, drop) = World.GangwayFit.Of(GlobalTransform, i);
+                var mesh = SteamerMeshBuilder.PlankMesh(i, run, drop);
+                if (_planks[i].Mesh != mesh) _planks[i].Mesh = mesh;
+            }
         if (_wake == null) return;
         float work = Mathf.Abs(shaft);
         Set(_churn[0]!, afloat ? work : 0f, ref _shownChurn);

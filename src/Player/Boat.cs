@@ -150,10 +150,22 @@ public class Boat : Rideable, IEngined
 
     // ---- what other players see ------------------------------------------------------------
 
-    /// <summary>Engine, thrust share, <see cref="Heave"/>, and how much the hull has the water (+2 airborne).</summary>
+    /// <summary>
+    /// Engine, thrust share, <see cref="Heave"/>, and in W how much the hull has the water (0..1)
+    /// + 2 airborne + 4 × the helm (<see cref="HelmSteps"/>, #380).
+    /// </summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
         new(State.Rpm01, Mathf.Clamp(Mathf.Abs(State.Thrust) / Mathf.Max(1f, Spec.StaticThrust), 0f, 1f), Heave,
-            State.Wet + (State.Airborne > 0.1f ? 2f : 0f));
+            Mathf.Clamp(State.Wet, 0f, 1f) * 0.99f + (State.Airborne > 0.1f ? 2f : 0f) + 4f * HelmSteps(HelmNow));
+
+    /// <summary>The helm now, -1 full to port .. 1 full to starboard: the rudder or the jet's nozzle.</summary>
+    public float HelmNow => Spec.MaxSteer > 0f ? Mathf.Clamp(State.Helm / Spec.MaxSteer, -1f, 1f) : 0f;
+
+    /// <summary>The helm as a whole number 0..100 for a published pose (#380): the wheel drawn on every peer.</summary>
+    public static float HelmSteps(float helm) => Mathf.Round((Mathf.Clamp(helm, -1f, 1f) + 1f) * 50f);
+
+    /// <summary>A boat's helm back out of its pose's W (-1..1).</summary>
+    public static float HelmOf(Vector4 pose) => Mathf.FloorToInt(pose.W / 4f) / 50f - 1f;
 
     private Vector3 _lastAt;
     private bool _hasLast;
@@ -167,14 +179,21 @@ public class Boat : Rideable, IEngined
             _speed = Mathf.Lerp(_speed, new Vector2(at.X - _lastAt.X, at.Z - _lastAt.Z).Length() / dt, 1f - Mathf.Exp(-6f * dt));
         _lastAt = at;
         _hasLast = true;
-        if (visual is BoatRig rig) rig.Water(_speed, pose.W % 2f, pose.Y, pose.W < 2f);
+        if (visual is BoatRig rig)
+        {
+            rig.Water(_speed, Mathf.PosMod(pose.W, 2f), pose.Y, Mathf.PosMod(pose.W, 4f) < 2f);
+            rig.Steer(HelmOf(pose), dt);
+        }
     }
 
     /// <summary>Owner, each frame: the wake and spray from the live state.</summary>
     public override void Animate(Node3D visual, in RideMotion motion, float dt)
     {
         if (visual is BoatRig rig)
+        {
             rig.Water(Mathf.Abs(State.WaterSpeed), State.Wet, Mathf.Abs(State.Thrust) / Mathf.Max(1f, Spec.StaticThrust), State.Airborne <= 0.1f);
+            rig.Steer(HelmNow, dt);
+        }
     }
 }
 

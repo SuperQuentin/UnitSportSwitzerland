@@ -32,6 +32,12 @@
   and velocity turned with it), its velocity is the vehicle frame's, its mask is `DeckLayer` only,
   its capsule 0.2 m (a bus aisle is 57 cm between seats). Walking out of the box steps off, with the
   vehicle's speed added: jumping off a moving bus keeps its speed. Boarding one takes it away.
+- **E from outside** (#384, `GameSettings.BoardWalkableFromOutside`, Settings -> Vehicles "Get in
+  buses and ships from outside", `--boardwalkable on|off`): on (the default), E beside a parked
+  walkable vehicle puts you at its wheel; off, `VehicleReach` offers none (`VehicleReach.FromOutside`)
+  and you walk aboard by a door, gangway or ladder and take the wheel inside (`TryDeckSeat`). Other
+  vehicles keep E. `--exitcheck` covers both on a parked city bus (standing aft of its front door: E
+  ahead of it is its button).
 - **The vehicle's velocity is measured from where it is drawn**, level, smoothed (`DeckSet.Velocity`).
   A copy's published velocity is not its motion: one standing bus read 33 m/s, and the passenger
   boarding it shot through the roof.

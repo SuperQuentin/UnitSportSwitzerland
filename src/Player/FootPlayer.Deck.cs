@@ -225,6 +225,8 @@ public partial class FootPlayer
                 {
                     bool open = (doors >> box.Door & 1) != 0;
                     shape.Disabled = box.Part == DeckPart.DoorShut ? open : !open;
+                    // a steamer's open plank tilts to the pier's head alongside (#383), as it is drawn
+                    if (open && box.Part == DeckPart.DoorStep && set.Ride is Steamer) FitPlank(shape, box.Door, frame.GlobalTransform);
                 }
             }
         }
@@ -256,6 +258,23 @@ public partial class FootPlayer
         DeckPos = now.AffineInverse() * GlobalPosition;
         DeckYaw = MathX.WrapAngle(Rotation.Y - YawOf(now));
     }
+
+    /// <summary>The plank's box laid as <see cref="World.GangwayFit"/> says, moved only when it changes (a centimetre).</summary>
+    private void FitPlank(CollisionShape3D shape, int door, Transform3D frame)
+    {
+        var (run, drop) = World.GangwayFit.Of(frame, door);
+        var key = (Mathf.RoundToInt(run * 100f), Mathf.RoundToInt(drop * 100f));
+        ulong id = shape.GetInstanceId();
+        if (_plankFits.TryGetValue(id, out var was) && was == key) return;
+        _plankFits[id] = key;
+        if (shape.Shape is not BoxShape3D b) return;
+        var box = SteamerMeshBuilder.PlankBox(door, key.Item1 / 100f, key.Item2 / 100f);
+        b.Size = box.Size;
+        shape.Transform = new Transform3D(box.Basis, box.Centre);
+    }
+
+    /// <summary>Each plank shape's fit as last laid (centimetres of run and drop), so it is moved only on a change.</summary>
+    private readonly Dictionary<ulong, (int, int)> _plankFits = new();
 
     /// <summary>
     /// The origin moved (#185, offline): the deck state kept in world space moves with it. The frame
@@ -389,6 +408,7 @@ public partial class FootPlayer
 
     private void ClearDecks()
     {
+        _plankFits.Clear();
         if (_decks.Count == 0) return;
         foreach (var set in _decks.Values) FreeDeck(set);
         _decks.Clear();
@@ -628,13 +648,21 @@ public partial class FootPlayer
                 if (SectionFrame(host, deck.Section) is not { } frame) continue;
                 foreach (var button in deck.Buttons)
                 {
-                    float d = (frame.GlobalTransform * button.At).DistanceTo(chest);
+                    var at = frame.GlobalTransform * button.At;
+                    float d = at.DistanceTo(chest);
+                    // a ship's gangway buttons outside are pressed from the pier its plank reaches
+                    // (1.3 m off the hull, #383): reached from that far, a bell-pull rather than a bus's push
+                    if (ride is Steamer && (frame.GlobalTransform.Basis * button.Normal).Dot(chest - at) > 0f)
+                        d -= ShipButtonReach - PassengerService.ButtonReach;
                     if (d < bestDist) { bestDist = d; best = (host, button.Door, (doors >> button.Door & 1) != 0); }
                 }
             }
         }
         return best;
     }
+
+    /// <summary>How far a ship's gangway button outside is reached from, m (a pier's face is 1.3 m off the hull).</summary>
+    private const float ShipButtonReach = 1.9f;
 
     /// <summary>E or G at a door's button: the door opens or shuts, whoever presses it. True when there was one.</summary>
     private bool TryDoorButton()

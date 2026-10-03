@@ -51,11 +51,17 @@
   43.2–45.2 m): a gate (`DoorShut`), open a 1.3 m plank down 0.3 m to a quay alongside (`DoorStep`,
   its top edge the floor slab's edge), buttons inside and out. Seats: 0 the helm, then the saloon,
   then the upper deck. The floor plan (`VehicleDeck.Plan`) is the hull's edge plus the planks.
-- **Boarding**: walk over a gangway's plank from a quay at its foot; or swimming beside a gangway, E
-  climbs its ladder onto the deck (`TryClimbAboard`, whether the gate is open or not). E from outside a
-  parked one takes the wheel (as a bus) by default; with the setting **Board ships on deck** (Settings ->
-  Vehicles, `GameSettings.BoardShipsOnDeck`, off by default, `--boardondeck on`) it puts you on deck
-  inside the nearest gangway instead (`TryBoardOnDeck`; both ways covered by `--steamercheck`). E aboard at the wheel drives; at a seat sits
+- **Boarding**: walk over a gangway's plank from a quay or a pier at its foot (the plank tilts to a
+  pier's head, #383, `world/landings`); or from the water by a **boarding ladder** (#384): a rope ladder
+  down each side of the hull just aft of the gangways (`SteamerMeshBuilder.LadderAt` 46.0, from 0.75 m
+  under the waterline to the rail). E swimming within 3.5 m of its foot gets onto it (`TryClimbAboard`):
+  carried in the ship's frame as drawn (`FootPlayer.Carrier`, the gadget ladder's way, #275), forward
+  climbs at 1.1 m/s, back down, Jump lets go into the water; at the top over the rail onto the deck,
+  aboard as soon as its deck is here. Others see the climbing pose (`CarriedPose` 2, `PoseClimb`); it
+  works under way (`steamernetcheck`). E from outside a parked one takes the wheel (as a bus) with
+  **Get in buses and ships from outside** on (the default; Settings -> Vehicles,
+  `GameSettings.BoardWalkableFromOutside`, `--boardwalkable on|off`, #384, for every walkable vehicle);
+  off, E does nothing there: walk aboard and take the wheel inside (both ways in `--steamercheck`). E aboard at the wheel drives; at a seat sits
   (a parked one is taken driverless from that seat; E stands up). Over the rail: off the floor plan,
   you fall into the lake and swim (#301); the ship goes on.
 - **Parked** (`VehicleBody`): floats and drifts on the model like any boat; headless it gets an empty

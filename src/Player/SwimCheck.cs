@@ -185,6 +185,8 @@ public partial class SwimCheck : Node
 
     private float Sub => Level - _me.GlobalPosition.Y;
 
+    private Loot.Gathering? Gather => GetTree().Root.FindChild("Gathering", true, false) as Loot.Gathering;
+
     // ---- the checks ---------------------------------------------------------------------
 
     private async Task WalkIn()
@@ -506,6 +508,16 @@ public partial class SwimCheck : Node
         _me.LookPitch = -0.3f;
         var north = (At(0, 100) - At(0, 0)).Normalized();
         float walk = 0f, run = 0f;
+        // water is collected standing in it, never from the shore (#380)
+        await StandAt(Lake.ShoreX - 3, -60);
+        _me.LookYaw = YawOf(East);
+        await Wait(0.6);
+        Expect(Gather?.Target != Loot.Gathering.Resource.Water, $"on the dry beach facing the lake: no water offered ({Gather?.Target})");
+        if (ShotsMode)
+        {
+            await Shot("gather_shore_none", null, null);
+            _me.LookYaw = YawOf(East) + 1.25f;
+        }
         foreach (var (name, depth) in new[] { ("ankle", 0.12f), ("knee", Wading.Knee), ("waist", 1.0f) })
         {
             double x = ShelfAt(depth, -60);
@@ -523,6 +535,8 @@ public partial class SwimCheck : Node
                 float full = running ? _me.RunSpeed : _me.WalkSpeed;
                 Log($"{name} deep ({wade:F2} m over the feet), {(running ? "running" : "walking")}: {pace:F2} m/s, {pace / full:F2} of its pace on land");
                 Expect(!_me.IsSwimming, $"{name} deep: still on its feet");
+                if (!running && Gather != null)
+                    Expect(Gather.Target == Loot.Gathering.Resource.Water, $"{name} deep: water offered ({Gather.Target})");
                 if (name == "ankle") Expect(pace > full * 0.92f, $"ankle deep: the pace is kept ({pace / full:F2})");
                 else if (name == "knee") Expect(pace > full * 0.68f && pace < full * 0.93f, $"knee deep: a little slower ({pace / full:F2})");
                 else
@@ -532,6 +546,7 @@ public partial class SwimCheck : Node
                 }
                 if (ShotsMode && !running && name != "ankle")
                 {
+                    if (name == "knee") { _wish = Vector3.Zero; await Wait(0.5); await Shot("gather_wading", null, null); _wish = north; }
                     await Shot($"wade_{name}", null, null);
                     WaterField.TryLevelAt(_me.GlobalPosition, out float level);
                     await CloseShot($"wade_{name}_side", _me.GlobalPosition + north * 0.6f + Vector3.Up * 0.9f, level);
@@ -589,6 +604,7 @@ public partial class SwimCheck : Node
         Expect(swimAt > 0 && swimAt - wetAt < 9, "then swims");
         await Wait(1.5);
         Expect(_me.IsSwimming && !_me.HeadUnderwater, $"swimming at the surface (feet {_me.SwimDepth:F2} m down)");
+        Expect(Gather?.Target != Loot.Gathering.Resource.Water, $"swimming: no water offered ({Gather?.Target})");
         await SeaState("calm", 0f);
     }
 
