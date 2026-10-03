@@ -111,7 +111,7 @@ public static partial class TileRewriter
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<RoadSegment, List<RoadSegment>> finalPieces,
         Dictionary<(int Node, int Arm), ArmLanes> lanes, HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadPaint>> paint,
         Dictionary<TileId, List<RoadPointProp>> signs, Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges,
-        BikePlanner.Stats stats)
+        BikePlanner.Stats stats, Dictionary<(int Link, LinkEnd End), double> stopsAt, Dictionary<int, (SignalPlan Plan, int[] PlanArm)> signalPlans)
     {
         var net = result.Network;
         bool IsCar(int linkId) => net.Links[linkId].Tag is Source s && PriorityPlanner.IsCarRoad(s.Segment.Class)
@@ -147,6 +147,7 @@ public static partial class TileRewriter
                 if (-Math.Cos(a.OutwardHeading - b.OutwardHeading) < 0.5) continue;   // turns more than 60 degrees
                 Vec2 from = (a.Left + a.Right) * 0.5, to = (b.Left + b.Right) * 0.5;
                 var ua = Vec2.FromHeading(a.OutwardHeading);
+                var ub = Vec2.FromHeading(b.OutwardHeading);
                 var mainDir = (Vec2.FromHeading(b.OutwardHeading) - ua).Normalized();
 
                 // the bike side of an arm's end piece on its left or right looking outward
@@ -224,6 +225,24 @@ public static partial class TileRewriter
                         // through lane and a right pocket, not shifted out with the kerb)
                         xa = LaneShift(ia, k == 0, xa);
                         xb = LaneShift(ib, k != 0, xb);
+                        if (signalPlans.TryGetValue(junction.NodeId, out var lights))
+                        {
+                            // traffic lights (#406): straight from where the riders' lane ends at their
+                            // stop line to the exit's lane on the far side; red only where a car
+                            // movement crosses it while the riders have green, else its dashed edges
+                            int riders = k == 0 ? ia : ib;
+                            double stop = stopsAt.GetValueOrDefault((junction.Arms[riders].LinkId, plan.Arms[riders].End));
+                            Vec2 backA = k == 0 ? ua * stop : Vec2.Zero, backB = k == 0 ? Vec2.Zero : ub * stop;
+                            List<Vec2> Straight(double oa, double ob) => Densify(ca + da * oa + backA, cb + db * ob + backB, 2.0);
+                            bool crossed = CrossedInPhase(lights, riders, joined, lanes.GetValueOrDefault((junction.NodeId, riders))?.Approach);
+                            double ra = (lw + la - lw * 0.5) * 0.5, rb = (lw + lb - lw * 0.5) * 0.5;
+                            float band = (float)(Math.Min(la, lb) - lw * 1.5 - 2 * RedInset);
+                            if (crossed && band > 0.3f) Add(Straight(-ra + xa, -rb + xb), PaintType.BikeCrossing, PaintEmitter.Red, band, 0);
+                            Add(Straight(-lw * 0.5 + xa, -lw * 0.5 + xb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+                            Add(Straight(-la + xa, -lb + xb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+                            if (crossed) stats.SignalLanesRed++; else stats.SignalLanesDashed++;
+                            continue;
+                        }
                         square?.Place(Bezier, -(la + lw * 0.5) * 0.5, -(lb + lw * 0.5) * 0.5, xa, xb, (Math.Max(la, lb) + lw * 0.5) * 0.5);
                         if (joined.Count == 0)
                         {
@@ -259,7 +278,6 @@ public static partial class TileRewriter
                     }
                     else if (sa.HasTrack && sb.HasTrack)
                     {
-                        var ub = Vec2.FromHeading(b.OutwardHeading);
                         if (BridgePath(home, sa, sb, ua, ub, (oa, ob) => Bezier(oa + xa, ob + xb, simplify: false), p => HeightAt(anchors, p)) is { } bands)
                         {
                             Get(bridges, home).AddRange(bands);
@@ -269,6 +287,64 @@ public static partial class TileRewriter
                 }
             }
         }
+    }
+
+    /// <summary>Points every <paramref name="step"/> metres or less from <paramref name="a"/> to <paramref name="b"/>, both ends included (paint heights follow the junction).</summary>
+    private static List<Vec2> Densify(Vec2 a, Vec2 b, double step)
+    {
+        int n = Math.Max(1, (int)Math.Ceiling(a.DistanceTo(b) / step));
+        var line = new List<Vec2>(n + 1);
+        for (int i = 0; i <= n; i++) line.Add(a + (b - a) * ((double)i / n));
+        return line;
+    }
+
+    /// <summary>
+    /// Whether a car movement crosses a bike lane through a signalised junction while its riders
+    /// have green (#406). The riders come from arm <paramref name="from"/> (junction arm indices)
+    /// along the side where the <paramref name="joined"/> arms join; a movement crosses their way
+    /// when exactly one of its ends lies on that side: in from or out to a joined arm, or in from
+    /// the riders' own approach out of a right pocket kerbside of their lane (layout (b),
+    /// <paramref name="layout"/>). The riders go with their bike group, else their approach's
+    /// through group; two groups run together when their greens overlap in the built plan (a
+    /// protected arrow held red then does not count). An approach missing from the plan: red.
+    /// </summary>
+    private static bool CrossedInPhase((SignalPlan Plan, int[] PlanArm) lights, int from, List<int> joined, ApproachLayout? layout)
+    {
+        var (plan, armInPlan) = lights;
+        int pa = armInPlan[from];
+        if (pa < 0) return true;
+        var junctionArm = new int[plan.Arms.Count];
+        for (int j = 0; j < armInPlan.Length; j++) if (armInPlan[j] >= 0) junctionArm[armInPlan[j]] = j;
+        int riders = -1;
+        for (int g = 0; g < plan.Groups.Count && riders < 0; g++)
+            if (plan.Groups[g].Kind == SignalGroupKind.Bike && plan.Groups[g].Arm == pa) riders = g;
+        for (int g = 0; g < plan.Groups.Count && riders < 0; g++)
+            if (plan.Groups[g].Kind == SignalGroupKind.Car && plan.Groups[g].Arm == pa && (plan.Groups[g].Moves & SignalMoves.Through) != 0) riders = g;
+        for (int g = 0; g < plan.Groups.Count && riders < 0; g++)
+            if (plan.Groups[g].Kind == SignalGroupKind.Car && plan.Groups[g].Arm == pa) riders = g;
+        if (riders < 0) return true;
+        bool kerbsidePocket = layout is { BikeBetween: true, Right: true };
+        foreach (var m in plan.Movements())
+        {
+            if (plan.Groups[m.Group].Kind == SignalGroupKind.Bike) continue;
+            int jf = junctionArm[m.From], jt = junctionArm[m.To];
+            bool inside = joined.Contains(jf) || (jf == from && m.Turn == SignalMoves.Right && kerbsidePocket);
+            if (inside == joined.Contains(jt)) continue;
+            if (GreenTogether(plan, riders, m.Group)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Whether two groups of a plan are ever green at the same time.</summary>
+    private static bool GreenTogether(SignalPlan plan, int a, int b)
+    {
+        foreach (var x in plan.Groups[a].Intervals)
+        {
+            if (x.Aspect != SignalAspect.Green) continue;
+            foreach (var y in plan.Groups[b].Intervals)
+                if (y.Aspect == SignalAspect.Green && Math.Min(x.To, y.To) - Math.Max(x.From, y.From) > 0.05) return true;
+        }
+        return false;
     }
 
     /// <summary>

@@ -593,7 +593,8 @@ public static partial class TileRewriter
                 }
                 foreach (var (segment, tileId, start, end) in trackPaint)
                     EmitTrackPaint(finalPieces.TryGetValue(segment, out var pieces) ? pieces : [segment], start, end, Get(paint, tileId));
-                EmitBikeCrossings(priority, result, segmentOf, finalPieces, pockets, block, wanted, paint, signs, bikeBridges, netStats.Bikes);
+                EmitBikeCrossings(priority, result, segmentOf, finalPieces, pockets, block, wanted, paint, signs, bikeBridges, netStats.Bikes,
+                    stopsAt, signalPlans);
             }
 
             foreach (var id in block)
