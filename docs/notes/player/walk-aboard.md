@@ -22,7 +22,11 @@
   top level children of the player), put where the vehicle is drawn **every frame in `_Process`**,
   after the vehicles' copies moved (`ProcessPriority` 10), door parts switched by the vehicle's
   doors (`BusDoors`: own `Truck.DoorsOpen`, a copy's pose W bits, a parked bus's flags). The
-  player excepts the vehicle's own hull (and its sections): its deck is what stops it.
+  player excepts the vehicle's own hull (and its sections): its deck is what stops it. **Only while
+  at the deck** (#378, `ExceptHulls`, each physics step before the walk): aboard, waiting for it
+  (`_deckWait`), or within a metre of it, the vehicle's own rule for its guests (`WatchGuests`).
+  Excepted for as long as the deck was built (30 m and more), a swimmer swam through a parked
+  steamer's hull under its deck. Built excepted, so a deck arriving round a player still lets them be.
 - **Aboard** (`DeckPhysics`, each physics step): standing in a deck's aboard box. The player is then
   **carried** in `_Process` by the section's motion since the last frame (position, heading, view
   and velocity turned with it), its velocity is the vehicle frame's, its mask is `DeckLayer` only,

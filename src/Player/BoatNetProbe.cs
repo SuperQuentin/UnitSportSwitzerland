@@ -19,7 +19,8 @@ namespace UnitSport.Player;
 /// waves (pitch against the surface's slope under the hull, its height over the surface) and says so.</item>
 /// <item>B swims 30 m off and measures the same of A's copy against B's own copy of the waves at B's
 /// own time: the copy rides the waves B draws (its pitch follows B's surface as A's follows A's, its
-/// keel at A's depth under B's surface), and so does the boat left parked.</item>
+/// keel at A's depth under B's surface), and so does the boat left parked. Then B swims into the
+/// parked boat's side and meets its hull where B draws it (#378).</item>
 /// </list>
 /// Windowed (<c>SHOTS=1</c>), B saves its view of A's boat to <c>test_output/boatnet_B_*.png</c>.
 /// </summary>
@@ -177,6 +178,8 @@ public partial class BoatNetProbe : ChatProbe
             GD.Print($"{Log} after: swimming {me.IsSwimming}, {MathX.FlatDistance(me.GlobalPosition, still.GlobalPosition):F1} m from the boat, " +
                 $"{me.GlobalPosition.Y - still.GlobalPosition.Y:F2} m above its keel");
         await Heard("B", "seen parked", 15);
+        // B swims into it (#378): kept here, floating, until B has touched it
+        await Heard("B", "touched", 60);
     }
 
     // ---- B: the watcher ------------------------------------------------------------------------
@@ -225,6 +228,51 @@ public partial class BoatNetProbe : ChatProbe
         await Compare("parked", () => Parked() is { } v
             ? (probe, v.GlobalPosition with { Y = probe.RemoteY(v.GlobalPosition, v.Rotation.Y, v.Heave) }, v.Rotation.Y,
                 new BoatState { Attitude = v.Tilt }.Pitch) : null);
+        await Touch(me, Parked());
+    }
+
+    /// <summary>
+    /// #378: B swims into the side of A's parked boat, a copy here, and meets its hull where B draws it:
+    /// on B's own waves at the sent height, at the sent attitude (eased), not at the copy's level body.
+    /// </summary>
+    private async Task Touch(FootPlayer me, VehicleBody? copy)
+    {
+        if (copy == null) { Fail("A's parked boat is not here to swim to"); Say("touched"); return; }
+        bool shots = DisplayServer.GetName() != "headless";
+        if (shots) HullTouch.Overlay(copy);
+        var swim = HullTouch.Swim(this, me, copy, 10);
+        if (shots)
+        {
+            await Until(() => !IsInstanceValid(copy) || me.GetSlideCollisionCount() > 0
+                && HullTouch.Hull(copy, out _, out var box, out _) && Mathf.RadToDeg(box.Basis.Y.Normalized().AngleTo(Vector3.Up)) > 3f, 6);
+            if (IsInstanceValid(copy))
+            {
+                // from out on the water past the swimmer, a little above it, at the hull it touches
+                var before = GetViewport().GetCamera3D();
+                var cam = new Camera3D { Fov = 55f };
+                AddChild(cam);
+                var across = (copy.GlobalTransform.Basis.X with { Y = 0 }).Normalized();
+                if ((me.GlobalPosition - copy.GlobalPosition).Dot(across) < 0f) across = -across;
+                var aft = (copy.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
+                var target = (me.GlobalPosition + copy.GlobalPosition) * 0.5f + Vector3.Up * 1.2f;
+                var eye = target + across * 6.5f + aft * 3.5f + Vector3.Up * 2.2f;
+                cam.GlobalTransform = new Transform3D(Basis.LookingAt(target - eye, Vector3.Up), eye);
+                cam.MakeCurrent();
+                for (int i = 0; i < 4; i++) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                GD.Print($"{Log} shot {Shot("B_hull_touch")}");
+                before?.MakeCurrent();
+                cam.QueueFree();
+            }
+        }
+        var touch = await swim;
+        GD.Print($"{Log} swimming into A's parked boat here, gamey: {touch}");
+        Expect(touch.Frames > 100 && touch.WorstPose < 0.03f, "its collision box is posed as B draws it (B's waves, A's height over them and attitude)");
+        Expect(touch.MaxTilt > 1.5f, $"the box pitches and rolls with it here ({touch.MaxTilt:F1}°)");
+        // a copy's body follows the 20 Hz stream, swept there by Jolt over a step while its shape is re-posed
+        // each frame: a contact can be off by that step's jump (18 cm once), so the 90th percentile
+        Expect(touch.Contacts > 10 && touch.Off90 < 0.06f, $"B meets the hull where B draws it ({touch.Off90 * 100f:F1} cm, 90 %)");
+        Expect(touch.Deepest < 2.1f && touch.UnderFor < 1.5f, "and is not pushed under by it");
+        Say("touched");
     }
 
     private static Avatar.BoatRig? FindRig(Node n)

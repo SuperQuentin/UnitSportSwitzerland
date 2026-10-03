@@ -85,6 +85,8 @@ public partial class FootPlayer
         public required Rideable Ride;
         public readonly List<(VehicleDeck Deck, StaticBody3D Body, List<(CollisionShape3D Shape, DeckBox Box)> DoorParts)> Sections = new();
         public readonly List<CollisionObject3D> Excepted = new();
+        /// <summary>Those are excepted now: this player is at the deck (#378).</summary>
+        public bool HullExcepted;
         /// <summary>The vehicle's level velocity, measured from how its first section is drawn moving, smoothed.</summary>
         public Vector3 Velocity;
         public Vector3 LastPos;
@@ -353,7 +355,40 @@ public partial class FootPlayer
         if (host is CollisionObject3D hull) set.Excepted.Add(hull);
         set.Excepted.AddRange(host.GetChildren().OfType<CharacterBody3D>().Where(c => c.Name.ToString().StartsWith("Section")));
         foreach (var other in set.Excepted) AddCollisionExceptionWith(other);
+        set.HullExcepted = true;
         return set;
+    }
+
+    /// <summary>
+    /// The vehicle's own hull is out of the way only of a player at its deck (#378): aboard, waiting
+    /// for it, or within a metre of it, the vehicle's own rule for its guests (<see cref="WatchGuests"/>).
+    /// Excepted from the hull as long as the deck was built (30 m and more), a swimmer swam through a
+    /// parked steamer's hull, under its deck. Each physics step before the walk; built excepted, so
+    /// a deck arriving round a player still lets them be.
+    /// </summary>
+    private void ExceptHulls()
+    {
+        foreach (var set in _decks.Values)
+        {
+            bool near = set.Key == DeckOn || _deckWait > 0f || NearDeck(set);
+            if (near == set.HullExcepted) continue;
+            set.HullExcepted = near;
+            foreach (var other in set.Excepted)
+            {
+                if (!IsInstanceValid(other)) continue;
+                if (near) AddCollisionExceptionWith(other);
+                else RemoveCollisionExceptionWith(other);
+            }
+        }
+    }
+
+    private bool NearDeck(DeckSet set)
+    {
+        foreach (var (deck, _, _) in set.Sections)
+            if (SectionFrame(set.Host, deck.Section) is { } frame && IsInstanceValid(frame) && frame.IsInsideTree()
+                && deck.Contains(frame.GlobalTransform.Orthonormalized().AffineInverse() * GlobalPosition, 1f))
+                return true;
+        return false;
     }
 
     private void FreeDeck(DeckSet set)
@@ -390,6 +425,7 @@ public partial class FootPlayer
     /// </summary>
     private bool DeckPhysics(float dt)
     {
+        ExceptHulls();
         // which deck it stands in, if any: the one it is on first, a little stickier than the others
         // (a bus's two halves overlap only in the bellows)
         (DeckSet Set, VehicleDeck Deck, Transform3D Frame)? Inside()

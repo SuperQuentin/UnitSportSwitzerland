@@ -3,9 +3,10 @@
 # admin password, and two clients. A (admin) idles a speedboat in the swell, runs it slowly, then
 # leaves it floating; B swims 30 m off and must draw A's boat (driven, then parked) on B's own copy
 # of the waves at B's own time: its pitch following B's surface as A's follows A's, its keel as deep
-# under B's surface as A's is under A's. No terrain data needed.
+# under B's surface as A's is under A's. Then B swims into the parked boat's side and must meet its hull
+# where B draws it (#378). No terrain data needed.
 #   tools/boatnetcheck.sh             (GODOT = the editor executable, docs/notes/general/godot-exe.md)
-#   SHOTS=1 tools/boatnetcheck.sh     (B windowed: its view of A's boat in test_output/boatnet_B_*.png)
+#   SHOTS=1 tools/boatnetcheck.sh     (B windowed: its view of A's boat, and of itself at its hull, in test_output/boatnet_B_*.png)
 #   STYLE=ps1 SHOTS=1 ...             (that style for B)
 . "$(dirname "$0")/lib/guard.sh"
 set -u

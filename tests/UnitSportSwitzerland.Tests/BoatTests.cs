@@ -222,6 +222,56 @@ public class BoatTests
         Assert.True(worstRoll < 45f);
     }
 
+    /// <summary>The swell's drift for these tests: the Stokes drift of the gamey waves, a little more.</summary>
+    private sealed class DriftingLake : IBoatWater
+    {
+        private readonly Lake _lake = new(1f);
+        public Vector3 Current = new(0.15f, 0f, 0.05f);
+        public double T { get => _lake.T; set => _lake.T = value; }
+
+        public bool Surface(float x, float z, out float level, out Vector3 flow)
+        {
+            bool wet = _lake.Surface(x, z, out level, out flow);
+            flow += Current;
+            return wet;
+        }
+
+        public float Bed(float x, float z) => _lake.Bed(x, z);
+        public Vector3 Wind => Vector3.Zero;
+    }
+
+    [Theory]
+    [MemberData(nameof(Boats))]
+    [InlineData("Paddle steamer")]
+    public void Moored_it_stays_on_its_spot_in_a_gamey_sea(string name)
+    {
+        var s = BoatCatalog.All.First(x => x.Name == name);
+        float yaw = 0.7f;
+        var b = Afloat(s, yaw);
+        var spot = b.Position;
+        var lake = new DriftingLake();
+        var free = b;
+        var freeLake = new DriftingLake();
+        float worst = 0f, worstTurn = 0f, hi = -9f, lo = 9f;
+        for (float t = 0; t < 60f; t += Dt)
+        {
+            lake.T += Dt;
+            BoatDynamics.Step(s, ref b, default, lake, Dt);
+            BoatDynamics.Moor(ref b, spot, yaw, Dt);
+            freeLake.T += Dt;
+            BoatDynamics.Step(s, ref free, default, freeLake, Dt);
+            worst = Mathf.Max(worst, new Vector2(b.Position.X - spot.X, b.Position.Z - spot.Z).Length());
+            worstTurn = Mathf.Max(worstTurn, Mathf.Abs(Deg(Mathf.AngleDifference(b.Yaw(yaw), yaw))));
+            if (t > 10f) { hi = Mathf.Max(hi, b.Position.Y); lo = Mathf.Min(lo, b.Position.Y); }
+        }
+        float drifted = new Vector2(free.Position.X - spot.X, free.Position.Z - spot.Z).Length();
+        _out.WriteLine($"{name}, moored, gamey, 0.16 m/s of drift: off its spot {worst:F2} m at worst (free: {drifted:F1} m in 60 s), heading {worstTurn:F1}° off, heave {hi - lo:F2} m");
+        Assert.True(worst < 1f, $"stays within a metre of its spot ({worst:F2} m)");
+        Assert.True(worstTurn < 10f, $"and near its heading ({worstTurn:F1}°)");
+        Assert.True(drifted > 3f * worst, "a free one drifts off");
+        Assert.True(hi - lo > 0.1f, "it still rides the swell");
+    }
+
     [Theory]
     [MemberData(nameof(Boats))]
     public void Runs_aground_on_a_beach_and_stops_bow_up(string name)
