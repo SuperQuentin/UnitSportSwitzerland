@@ -19,7 +19,18 @@ public readonly record struct DeckButton(int Door, Vector3 At, Vector3 Normal);
 /// A hold (#418): a box in the section's node frame where a ground vehicle driven in is carried by
 /// this one (a freighter's hold, later a ferry's car deck). Its floor is the box's bottom.
 /// </summary>
-public readonly record struct CargoBay(Vector3 Centre, Vector3 Size);
+public readonly record struct CargoBay(Vector3 Centre, Vector3 Size)
+{
+    /// <summary>A vehicle standing at <paramref name="local"/> (its ground point, node frame) is in it (<see cref="Vehicles.CargoFit.Inside"/>).</summary>
+    public bool Contains(Vector3 local, float grow)
+    {
+        var p = local - Centre;
+        return Vehicles.CargoFit.Inside(p.X, p.Y, p.Z, Size.X, Size.Y, Size.Z, grow);
+    }
+
+    /// <summary>A hull this size (across, height, length) fits in it, driven in nose or tail first.</summary>
+    public bool Fits(Vector3 hull) => Vehicles.CargoFit.Fits(hull.X, hull.Y, hull.Z, Size.X, Size.Y, Size.Z);
+}
 
 /// <summary>
 /// A vehicle you can walk around in (#162), one section of it: what is solid (walls with real door

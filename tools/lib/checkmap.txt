@@ -237,6 +237,13 @@ src/Player/Airliner      net    tools/freighternetcheck.sh
 src/Player/FreighterNet  net    tools/freighternetcheck.sh
 src/Avatar/Freighter     net    tools/freighternetcheck.sh
 src/BattleRoyale/BrPlane quick  --flycheck freighter --world flat
+src/Player/FootPlayer.Hold quick --holdcheck --world fixture --traffic 0
+src/Player/HoldCheck     quick  --holdcheck --world fixture --traffic 0
+src/Player/FootPlayer.De quick  --holdcheck --world fixture --traffic 0
+src/Vehicles/VehicleBody quick  --holdcheck --world fixture --traffic 0
+src/Vehicles/VehicleState quick --holdcheck --world fixture --traffic 0
+src/Vehicles/CargoFit    quick  --holdcheck --world fixture --traffic 0
+src/Avatar/VehicleDeck   quick  --holdcheck --world fixture --traffic 0
 src/Player/Pigeon        net    tools/pigeonnetcheck.sh
 src/Player/FootPlayer.Pi net    tools/pigeonnetcheck.sh
 src/Birds/BirdNet        net    tools/pigeonnetcheck.sh
@@ -246,3 +253,7 @@ shaders/common/waves     full   tools/waterparity.sh
 shaders/body/water       full   tools/waterparity.sh
 src/Player/Emote         net    tools/emotenetcheck.sh
 src/Avatar/HumanMeshBuilder.Emotes net tools/emotenetcheck.sh
+src/Player/FootPlayer.Hold net   tools/holdnetcheck.sh
+src/Player/HoldNetProbe  net    tools/holdnetcheck.sh
+src/Vehicles/VehicleBody.Hold net tools/holdnetcheck.sh
+src/Player/FootPlayer.Overlap net tools/holdnetcheck.sh

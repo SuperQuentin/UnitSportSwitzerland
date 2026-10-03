@@ -146,7 +146,22 @@ public sealed class Airliner : Flyer
     }
 
     /// <summary>The cabin and the cockpit (the A320, #416), the hold and the flight deck (the freighter, #420): one deck in the drawn aircraft's frame.</summary>
-    public override VehicleDeck[] Decks => Body.Decks;
+    public override VehicleDeck[] Decks => Kind == RideKind.A320 && _probeHold != null ? A320ProbeDecks : Body.Decks;
+
+    private static VehicleDeck[]? _a320ProbeDecks;
+    private static VehicleDeck[] A320ProbeDecks => _a320ProbeDecks ??= new[] { A320Deck.Deck, _probeHold! };
+
+    /// <summary>
+    /// A hold the checks give the A320 (#418, <c>HoldNetProbe.TestHold</c>), set on every peer of the
+    /// check before any A320 is made: a test carrier besides the freighter's own hold (#420).
+    /// Null in the game: an A320 carries no vehicles.
+    /// </summary>
+    public static VehicleDeck? ProbeHold
+    {
+        get => _probeHold;
+        set { _probeHold = value; _a320ProbeDecks = null; }
+    }
+    private static VehicleDeck? _probeHold;
 
     /// <summary>The captain's seat flies; the first officer's, then the cabin row by row or the troop seats (#416, #420).</summary>
     public override SeatAnchor[] Seats => Body.Seats;

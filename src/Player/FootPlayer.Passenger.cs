@@ -100,7 +100,7 @@ public partial class FootPlayer
     {
         // a passenger's copy (and one walking about aboard) is placed from its vehicle's: after the
         // vehicle has moved this frame, on every peer
-        int priority = RidingWith != 0 || DeckOn != "" || _decks.Count > 0 ? 10 : 0;
+        int priority = DeckPriority;
         if (ProcessPriority != priority) ProcessPriority = priority;
         var at = WhereSeated();
         if (at is not { } s)
