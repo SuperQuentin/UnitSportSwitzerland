@@ -107,3 +107,41 @@
 - **Not verified**: a real two-process server + client session (`--synccheck` covers the
   replication path with an `africa` stage on the last Africa Twin); the XRV's exhaust layout and rim
   colours (the dataset marks them unverified; one silencer on the right is drawn).
+
+## More brands, a second RideKind range, folders, wheelies (#410)
+
+- **RideKind**: 64..95 filled up with the Africa Twins; entries 32 onwards take **124..187**
+  (`MotorbikeCatalog.First2`; the next other mount is 188). `For` / `IsMotorbike` map both ranges;
+  probes take `All[n].Kind`, never `First + n`.
+- **Generated entries**: `tools/motorbikes/gen_catalog.py` reads `docs/data/yamaha_fazer_r3_tmax_specs.json`,
+  `yamaha_tenere_tracer_kawasaki_versys_specs.json`, `ktm_honda_cb500_specs.json` (same keys as the Africa
+  Twin file plus `brand`, `family`, `drive`, `cvt`, `livery_main_colour`) and writes
+  `src/Player/MotorbikeCatalog.Brands.cs` (`Imported()`, concatenated after the hand-written 30).
+  Append-only: new files at the end of `DATASETS`, new variants at the end of their file. Each entry's
+  comment lists its sources and an "Assumed:" line. What the script assumes: per style (Sport, Naked,
+  SportTouring, Adventure, Supermoto, Scooter) the CG, rear share, CdA, grip, lean, brakes and riding
+  position; redline (peak-power rpm + 500..1,500), idle, launch, the torque curve between the published
+  peaks; a missing box borrowed from a sibling (`GEARS_FROM`) with the overall top gear **fitted** to the
+  claimed (else drag-limited) top speed at 105% of peak-power rpm; single gaps in `BORROW` / `FILL`; the
+  livery from the dataset's colour words. The Tracer 900 / 9 CdA is 0.59, fitted to the Tracer 9 GT's
+  measured 214 km/h. Every `livery_main_colour` is unverified.
+- **CVT** (`MotorbikeSpec.Cvt`, TMAX): the ratio runs from `Gears[0]` to `CvtHigh`, holding the engine at
+  `Lerp(LaunchRpm, CvtRpm, throttle)`; `Primary` / `FinalDrive` are the reductions around the belt
+  (TMAX 500: 2.659 and 2.262; 530/560: 1.0 and 6.034 / 5.771). No shifts.
+- **Sounds**: `EngineLayout.Single` (LC4), `ParallelTwin180` (CB500, R3, Versys), `ParallelTwin360` (TMAX),
+  `Triple` (CP3), `VTwin75` (LC8 and the LC8c parallel twin, 285-435), `Inline4Bike` (Fazer).
+- **Wheelies** (`Motorbike.Step`): hold {tuck_boost} (`RideInput.Effort`) to pull back: the wheelie
+  control is off (drive up to traction, capped at μ·g) and the rider's CG moves 5 cm back. A press on
+  >50% throttle pops the clutch, `PitchRate += 2·clamp(drive / (m·g·b/h), 0.6, 1.2)` rad/s. Then the bike
+  pivots on its rear contact: `θ'' = (a·h' − g·b') / (r² + 0.32²)` with the CG at `α₀ − θ` from vertical;
+  front up, only the rear brake works (4.5 m/s²). Let go and the drive is cut under `0.6·g·b'/h'` until the
+  front lands. **Sim**: past the balance point + 0.3 rad it loops out (`LoopedOut`) and
+  `FootPlayer.ThrowFromVehicle(loopOut: true)` drops the rider off the back ("LOOPED OUT!"; the bike is
+  parked upright where it was). **Game**: the throttle picks an angle (25-85% of the balance point) and a
+  PD on the pitch holds it with the full drive of the gear (shift cuts ignored), never past balance.
+  The pitch rides in the pose's w (`Pitch + 10` while braking) and `Motorcyclist.Pitch` turns a pivot at
+  the rear contact (a pillion does not pitch).
+- **Measured** (`--motocheck`, wheelie line): a clutch pop at 25 km/h lifts every bike 12-20° in Sim;
+  Game holds a 60% wheelie for 5 s on every bike; Sim flat out with the pull held loops every bike out
+  within 3 s. Generated bikes: FZS1000 0-100 2.98 s / 249 km/h, R3 5.57 s / 176, TMAX 560 5.35 s / 162,
+  XT1200Z 3.53 s (MOTORRAD 3.7) / 214, Tracer 9 GT 2.92 s (inSella 3.1) / 215 (214), Versys 650 4.3-4.6 s.

@@ -77,6 +77,7 @@ FILL = {
 GEARS_FROM = {
     'FZS600-1998': 'FZ6-2004', 'FZS600-2002': 'FZ6-2004', 'FZS1000-2001': 'FZ6-2004', 'FZ1-FAZER-2006': 'FZ6-2004',
     'KLE650-2007': 'KLE650-2015', 'KLE650-2010': 'KLE650-2015',
+    'CB500HORNET-2024': 'CB500F-2019',
 }
 # single fields a variant's object leaves null: (value, why)
 BORROW = {
@@ -214,8 +215,9 @@ def entry(e, index):
 
     mass = num(e.get('kerb_weight_kg'))
     if not mass and num(e.get('dry_weight_kg')):
-        mass = e['dry_weight_kg'] + 20
-        assumed.append(f'kerb {mass:.0f} kg = dry {e["dry_weight_kg"]} + 20 kg of fluids')
+        fuel = (num(e.get('fuel_capacity_l')) or 15) * 0.74
+        mass = round(e['dry_weight_kg'] + fuel + 4)
+        assumed.append(f'kerb {mass:.0f} kg = dry {e["dry_weight_kg"]} + a full tank ({fuel:.0f} kg) + 4 kg of other fluids')
     if not mass:
         raise ValueError(f"{e['id']}: no mass")
 
@@ -247,7 +249,12 @@ def entry(e, index):
         if not gears and e['id'] in GEARS_FROM:
             sib = BY_ID[GEARS_FROM[e['id']]]
             gears = sib['gear_ratios']
-            assumed.append(f'gear ratios borrowed from {sib["id"]} (spread only: the overall gearing is fitted below)')
+            if not primary and num(sib.get('primary_reduction')) and final:
+                # the final is the variant's own: the same engine's box and primary make the whole gearing
+                primary = sib['primary_reduction']
+                assumed.append(f'gear ratios and primary {primary} borrowed from {sib["id"]} (same engine)')
+            else:
+                assumed.append(f'gear ratios borrowed from {sib["id"]} (spread only: the overall gearing is fitted below)')
         if not gears:
             raise ValueError(f"{e['id']}: no gears")
         if not primary and e['id'] in PRIMARY:

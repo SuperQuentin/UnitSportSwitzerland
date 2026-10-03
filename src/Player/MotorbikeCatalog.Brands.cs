@@ -14,16 +14,16 @@ public static partial class MotorbikeCatalog
     {
         // ---- 94 ----
         // Yamaha FZS600 Fazer (1998-01). docs/data/yamaha_fazer_r3_tmax_specs.json "FZS600-1998" (FZS600 Fazer (5DM1/5DM4, Fazer S 2000+)).
-        // 599 cc inline four, 96 PS at 11,500 rpm, 61 N·m at 9,500; 6 gears 2.846-1.083, primary 1.700, final 3.554; kerb 209 kg; wheelbase 1415 mm; rake 24.0°, trail 88 mm; 110/70ZR17 + 160/60ZR17.
+        // 599 cc inline four, 96 PS at 11,500 rpm, 61 N·m at 9,500; 6 gears 2.846-1.083, primary 1.700, final 3.554; kerb 206 kg; wheelbase 1415 mm; rake 24.0°, trail 88 mm; 110/70ZR17 + 160/60ZR17.
         // Reference: 217 km/h (claimed (Wikipedia, 135 mph; ultimatespecs lists 225 km/h)), 0-100 - s.
         // https://en.wikipedia.org/wiki/Yamaha_FZS600_Fazer
         // https://www.ultimatespecs.com/motorcycles-specs/yamaha/yamaha-fzs-600-fazer-1998
-        // Assumed: redline 13,000; kerb 209 kg = dry 189 + 20 kg of fluids; gear ratios borrowed from FZ6-2004 (spread only: the overall gearing is fitted below); primary 1.700 and final 3.554: the overall top gear fitted to 217 km/h at 105% of the peak-power rpm; the sporttouring values (CG 0.66 m, 50% rear, CdA 0.46 m², grip 1.1, 48° lean, brakes 9.5 m/s², riding position), the torque curve between the peaks, idle 1300, launch 6300; livery from "metallic blue with silver-grey lower fairing and black frame (unverified)".
+        // Assumed: redline 13,000; kerb 206 kg = dry 189 + a full tank (13 kg) + 4 kg of other fluids; gear ratios borrowed from FZ6-2004 (spread only: the overall gearing is fitted below); primary 1.700 and final 3.554: the overall top gear fitted to 217 km/h at 105% of the peak-power rpm; the sporttouring values (CG 0.66 m, 50% rear, CdA 0.46 m², grip 1.1, 48° lean, brakes 9.5 m/s², riding position), the torque curve between the peaks, idle 1300, launch 6300; livery from "metallic blue with silver-grey lower fairing and black frame (unverified)".
         new MotorbikeSpec
         {
             Label = "Yamaha FZS600 Fazer (1998-01)",
             Brand = "Yamaha", Family = "Fazer",
-            Blurb = "599 cc inline four, 96 PS, 209 kg, half fairing, upright",
+            Blurb = "599 cc inline four, 96 PS, 206 kg, half fairing, upright",
             Engine = EngineLayout.Inline4Bike,
             Look = new MotoLook
             {
@@ -35,7 +35,7 @@ public static partial class MotorbikeCatalog
                 Paint = new Color(0.08f, 0.22f, 0.7f), Trim = new Color(0.9f, 0.9f, 0.92f), Frame = new Color(0.1f, 0.1f, 0.11f), Wheel = new Color(0.1f, 0.1f, 0.11f),
             },
             Colours = "not verified",
-            WetMass = 209f, CgHeight = 0.66f, RearShare = 0.5f, Grip = 1.1f, MaxLean = Mathf.DegToRad(48f),
+            WetMass = 206f, CgHeight = 0.66f, RearShare = 0.5f, Grip = 1.1f, MaxLean = Mathf.DegToRad(48f),
             DragArea = 0.46f, BrakeDecel = 9.5f,
             IdleRpm = 1300f, PeakRpm = 11500f, Redline = 13000f, LaunchRpm = 6300f,
             Torque = new (float, float)[] { (1300f, 33.6f), (4750f, 50f), (9500f, 61f), (10500f, 61f), (11500f, 58.6f), (13000f, 49.8f) },
@@ -44,16 +44,16 @@ public static partial class MotorbikeCatalog
         },
         // ---- 95 ----
         // Yamaha FZS600 Fazer (2002-03). docs/data/yamaha_fazer_r3_tmax_specs.json "FZS600-2002" (FZS600 Fazer Foxeye (5RT1)).
-        // 599 cc inline four, 96 PS at 11,500 rpm, 61 N·m at 9,500; 6 gears 2.846-1.083, primary 1.700, final 3.554; kerb 209 kg; wheelbase 1415 mm; rake 24.0°, trail 88 mm; 110/70ZR17 + 160/60ZR17.
+        // 599 cc inline four, 96 PS at 11,500 rpm, 61 N·m at 9,500; 6 gears 2.846-1.083, primary 1.700, final 3.554; kerb 208 kg; wheelbase 1415 mm; rake 24.0°, trail 88 mm; 110/70ZR17 + 160/60ZR17.
         // Reference: 217 km/h (claimed (Wikipedia, 135 mph; ultimatespecs lists 225 km/h)), 0-100 - s.
         // https://en.wikipedia.org/wiki/Yamaha_FZS600_Fazer
         // https://www.ultimatespecs.com/motorcycles-specs/yamaha/yamaha-fzs-600-fazer-1998
-        // Assumed: redline 13,000; kerb 209 kg = dry 189 + 20 kg of fluids; gear ratios borrowed from FZ6-2004 (spread only: the overall gearing is fitted below); primary 1.700 and final 3.554: the overall top gear fitted to 217 km/h at 105% of the peak-power rpm; the sporttouring values (CG 0.66 m, 50% rear, CdA 0.46 m², grip 1.1, 48° lean, brakes 9.5 m/s², riding position), the torque curve between the peaks, idle 1300, launch 6300; livery from "metallic silver/grey with dark frame and silver wheels (unverified)".
+        // Assumed: redline 13,000; kerb 208 kg = dry 189 + a full tank (15 kg) + 4 kg of other fluids; gear ratios borrowed from FZ6-2004 (spread only: the overall gearing is fitted below); primary 1.700 and final 3.554: the overall top gear fitted to 217 km/h at 105% of the peak-power rpm; the sporttouring values (CG 0.66 m, 50% rear, CdA 0.46 m², grip 1.1, 48° lean, brakes 9.5 m/s², riding position), the torque curve between the peaks, idle 1300, launch 6300; livery from "metallic silver/grey with dark frame and silver wheels (unverified)".
         new MotorbikeSpec
         {
             Label = "Yamaha FZS600 Fazer (2002-03)",
             Brand = "Yamaha", Family = "Fazer",
-            Blurb = "599 cc inline four, 96 PS, 209 kg, half fairing, upright",
+            Blurb = "599 cc inline four, 96 PS, 208 kg, half fairing, upright",
             Engine = EngineLayout.Inline4Bike,
             Look = new MotoLook
             {
@@ -65,7 +65,7 @@ public static partial class MotorbikeCatalog
                 Paint = new Color(0.66f, 0.67f, 0.7f), Trim = new Color(0.1f, 0.1f, 0.11f), Frame = new Color(0.1f, 0.1f, 0.11f), Wheel = new Color(0.1f, 0.1f, 0.11f),
             },
             Colours = "not verified",
-            WetMass = 209f, CgHeight = 0.66f, RearShare = 0.5f, Grip = 1.1f, MaxLean = Mathf.DegToRad(48f),
+            WetMass = 208f, CgHeight = 0.66f, RearShare = 0.5f, Grip = 1.1f, MaxLean = Mathf.DegToRad(48f),
             DragArea = 0.46f, BrakeDecel = 9.5f,
             IdleRpm = 1300f, PeakRpm = 11500f, Redline = 13000f, LaunchRpm = 6300f,
             Torque = new (float, float)[] { (1300f, 33.6f), (4750f, 50f), (9500f, 61f), (10500f, 61f), (11500f, 58.6f), (13000f, 49.8f) },
@@ -865,6 +865,444 @@ public static partial class MotorbikeCatalog
             Torque = new (float, float)[] { (1200f, 33.6f), (3500f, 50f), (7000f, 61f), (7750f, 59.3f), (8500f, 55.4f), (9300f, 47.1f) },
             Gears = new[] { 2.438f, 1.714f, 1.333f, 1.111f, 0.966f, 0.852f }, Primary = 2.095f, FinalDrive = 3.067f,
             RefZeroTo100 = 0f, RefTopKmh = 186f,
+        },
+        // ---- 151 ----
+        // KTM 690 SMC (2008-11). docs/data/ktm_honda_cb500_specs.json "690SMC-2008" (690 SMC, 654 cc, EU 66 PS).
+        // 654 cc single, 66 PS at 7,500 rpm, 64 N·m at 6,000; 6 gears 2.5-0.87, primary 2.194, final 2.625; kerb 152 kg; wheelbase 1480 mm; rake 27.0°, trail 100.0 mm; 120/70ZR17 + 160/60ZR17.
+        // Reference: 180 km/h (claimed (motorradundreisen.de database, original source not stated)), 0-100 - s.
+        // https://www.manualslib.com/manual/1148090/Ktm-690-Smc.html?page=161
+        // https://www.manualslib.com/manual/1148090/Ktm-690-Smc.html?page=162
+        // https://www.manualslib.com/manual/1148090/Ktm-690-Smc.html?page=166
+        // Assumed: redline 8,300; kerb 152 kg = dry 139.5 + a full tank (9 kg) + 4 kg of other fluids; rake / trail; the supermoto values (CG 0.7 m, 48% rear, CdA 0.48 m², grip 1.1, 50° lean, brakes 9.5 m/s², riding position), the torque curve between the peaks, idle 1500, launch 4100; livery from "KTM orange bodywork and tank shrouds with black seat and graphics, orange trellis frame, black wheels (approximate)".
+        new MotorbikeSpec
+        {
+            Label = "KTM 690 SMC (2008-11)",
+            Brand = "KTM", Family = "690 SMC",
+            Blurb = "654 cc single, 66 PS, 152 kg, light, tall, wire wheels",
+            Engine = EngineLayout.Single,
+            Look = new MotoLook
+            {
+                Style = MotoStyle.Supermoto, EngineShape = MotoEngineShape.Single, Spoked = true,
+                Wheelbase = 1.48f, RakeDeg = 27f, Trail = 0.1f, ForkLength = 0.82f,
+                FrontTyre = "120/70ZR17", RearTyre = "160/60ZR17", FrontTravel = 0.275f, RearTravel = 0.265f,
+                FrontDiscs = 1, FrontDiscMm = 320f, TankLitres = 12f, GroundClearance = 0.29f,
+                Seat = new Vector3(0, 0.9f, -0.15f), Grip = new Vector3(0.42f, 1.1f, 0.32f), Peg = new Vector3(0.17f, 0.42f, -0.05f),
+                Paint = new Color(0.95f, 0.42f, 0.02f), Trim = new Color(0.08f, 0.08f, 0.09f), Frame = new Color(0.1f, 0.1f, 0.11f), Wheel = new Color(0.1f, 0.1f, 0.11f),
+            },
+            Colours = "KTM orange / black supermoto colourway",
+            WetMass = 152f, CgHeight = 0.7f, RearShare = 0.48f, Grip = 1.1f, OffroadTyre = 0.15f, MaxLean = Mathf.DegToRad(50f),
+            DragArea = 0.48f, BrakeDecel = 9.5f,
+            IdleRpm = 1500f, PeakRpm = 7500f, Redline = 8300f, LaunchRpm = 4100f,
+            Torque = new (float, float)[] { (1500f, 35.2f), (3000f, 52.5f), (6000f, 64f), (6750f, 64f), (7500f, 61.8f), (8300f, 52.5f) },
+            Gears = new[] { 2.5f, 1.75f, 1.333f, 1.095f, 0.957f, 0.87f }, Primary = 2.194f, FinalDrive = 2.625f,
+            RefZeroTo100 = 0f, RefTopKmh = 180f,
+        },
+        // ---- 152 ----
+        // KTM 690 SMC R (2012-18). docs/data/ktm_honda_cb500_specs.json "690SMCR-2012" (690 SMC R, 67 hp (A2-restricted version available)).
+        // 690 cc single, 67 PS at 7,500 rpm, 68 N·m at 6,000; 6 gears 2.5-0.87, primary 2.194, final 2.625; kerb 152 kg; wheelbase 1480 mm; rake 27.0°, trail 100.0 mm; 120/70R17 + 160/60R17.
+        // Reference: 180 km/h (claimed (motorradundreisen.de database, 2015 model year)), 0-100 - s.
+        // https://www.manualslib.com/manual/804543/Ktm-690-Smc-R-2014.html?page=169
+        // https://www.manualslib.com/manual/804543/Ktm-690-Smc-R-2014.html?page=170
+        // https://www.manualslib.com/manual/804543/Ktm-690-Smc-R-2014.html?page=175
+        // Assumed: redline 8,300; kerb 152 kg = dry 139.0 + a full tank (9 kg) + 4 kg of other fluids; rake / trail; the supermoto values (CG 0.7 m, 48% rear, CdA 0.48 m², grip 1.1, 50° lean, brakes 9.5 m/s², riding position), the torque curve between the peaks, idle 1500, launch 4100; livery from "KTM orange bodywork and rear tail tank with black seat and graphics, orange trellis frame, black wheels (approximate)".
+        new MotorbikeSpec
+        {
+            Label = "KTM 690 SMC R (2012-18)",
+            Brand = "KTM", Family = "690 SMC",
+            Blurb = "690 cc single, 67 PS, 152 kg, light, tall, wire wheels",
+            Engine = EngineLayout.Single,
+            Look = new MotoLook
+            {
+                Style = MotoStyle.Supermoto, EngineShape = MotoEngineShape.Single, Spoked = true,
+                Wheelbase = 1.48f, RakeDeg = 27f, Trail = 0.1f, ForkLength = 0.82f,
+                FrontTyre = "120/70R17", RearTyre = "160/60R17", FrontTravel = 0.215f, RearTravel = 0.25f,
+                FrontDiscs = 1, FrontDiscMm = 320f, TankLitres = 12f, GroundClearance = 0.27f,
+                Seat = new Vector3(0, 0.89f, -0.15f), Grip = new Vector3(0.42f, 1.09f, 0.32f), Peg = new Vector3(0.17f, 0.42f, -0.05f),
+                Paint = new Color(0.95f, 0.42f, 0.02f), Trim = new Color(0.08f, 0.08f, 0.09f), Frame = new Color(0.1f, 0.1f, 0.11f), Wheel = new Color(0.1f, 0.1f, 0.11f),
+            },
+            Colours = "KTM orange / black supermoto colourway",
+            WetMass = 152f, CgHeight = 0.7f, RearShare = 0.48f, Grip = 1.1f, OffroadTyre = 0.15f, MaxLean = Mathf.DegToRad(50f),
+            DragArea = 0.48f, BrakeDecel = 9.5f,
+            IdleRpm = 1500f, PeakRpm = 7500f, Redline = 8300f, LaunchRpm = 4100f,
+            Torque = new (float, float)[] { (1500f, 37.4f), (3000f, 55.8f), (6000f, 68f), (6750f, 66.7f), (7500f, 62.7f), (8300f, 53.3f) },
+            Gears = new[] { 2.5f, 1.75f, 1.333f, 1.095f, 0.957f, 0.87f }, Primary = 2.194f, FinalDrive = 2.625f,
+            RefZeroTo100 = 0f, RefTopKmh = 180f,
+        },
+        // ---- 153 ----
+        // KTM 690 SMC R (2019-25). docs/data/ktm_honda_cb500_specs.json "690SMCR-2019" (690 SMC R, 693 cc LC4 (Euro 4/5)).
+        // 693 cc single, 75 PS at 8,000 rpm, 73.5 N·m at 6,500; 6 gears 2.5-0.87, primary 2.194, final 2.625; kerb 160 kg; wheelbase 1480 mm; rake 27.0°, trail 100.0 mm; 120/70ZR17 + 160/60ZR17.
+        // https://www.manualslib.com/manual/4116433/Ktm-690-Smc-R-2023.html?page=114
+        // https://www.manualslib.com/manual/4116433/Ktm-690-Smc-R-2023.html?page=118
+        // https://mcnews.com.au/?p=247552
+        // Assumed: redline 8,800; kerb 160 kg = dry 146.0 + a full tank (10 kg) + 4 kg of other fluids; rake / trail; the supermoto values (CG 0.7 m, 48% rear, CdA 0.48 m², grip 1.1, 50° lean, brakes 9.5 m/s², riding position), the torque curve between the peaks, idle 1500, launch 4400; livery from "KTM orange bodywork and tank shrouds with black seat, orange trellis frame, black wheels (approximate)".
+        new MotorbikeSpec
+        {
+            Label = "KTM 690 SMC R (2019-25)",
+            Brand = "KTM", Family = "690 SMC",
+            Blurb = "693 cc single, 75 PS, 160 kg, light, tall, wire wheels",
+            Engine = EngineLayout.Single,
+            Look = new MotoLook
+            {
+                Style = MotoStyle.Supermoto, EngineShape = MotoEngineShape.Single, Spoked = true,
+                Wheelbase = 1.48f, RakeDeg = 27f, Trail = 0.1f, ForkLength = 0.82f,
+                FrontTyre = "120/70ZR17", RearTyre = "160/60ZR17", FrontTravel = 0.215f, RearTravel = 0.24f,
+                FrontDiscs = 1, FrontDiscMm = 320f, TankLitres = 13.1f, GroundClearance = 0.237f,
+                Seat = new Vector3(0, 0.892f, -0.15f), Grip = new Vector3(0.42f, 1.092f, 0.32f), Peg = new Vector3(0.17f, 0.42f, -0.05f),
+                Paint = new Color(0.95f, 0.42f, 0.02f), Trim = new Color(0.08f, 0.08f, 0.09f), Frame = new Color(0.1f, 0.1f, 0.11f), Wheel = new Color(0.1f, 0.1f, 0.11f),
+            },
+            Colours = "KTM orange / black",
+            WetMass = 160f, CgHeight = 0.7f, RearShare = 0.48f, Grip = 1.1f, OffroadTyre = 0.15f, MaxLean = Mathf.DegToRad(50f),
+            DragArea = 0.48f, BrakeDecel = 9.5f,
+            IdleRpm = 1500f, PeakRpm = 8000f, Redline = 8800f, LaunchRpm = 4400f,
+            Torque = new (float, float)[] { (1500f, 40.4f), (3250f, 60.3f), (6500f, 73.5f), (7250f, 71.1f), (8000f, 65.9f), (8800f, 56f) },
+            Gears = new[] { 2.5f, 1.75f, 1.35f, 1.095f, 0.957f, 0.87f }, Primary = 2.194f, FinalDrive = 2.625f,
+        },
+        // ---- 154 ----
+        // KTM 125 Duke (2011-16). docs/data/ktm_honda_cb500_specs.json "125DUKE-2011" (125 Duke (A1, 15 hp)).
+        // 125 cc single, 15 PS at 10,500 rpm, 12 N·m at 8,000; 6 gears 2.833-0.917, primary 3.273, final 3.214; kerb 139 kg; wheelbase 1367 mm; rake 25.0°, trail 100.0 mm; 110/70-17 + 150/60-17.
+        // https://www.manualslib.com/manual/584624/Ktm-125-Duke-Eu.html?page=160
+        // https://www.manualslib.com/manual/584624/Ktm-125-Duke-Eu.html?page=161
+        // https://www.manualslib.com/manual/584624/Ktm-125-Duke-Eu.html?page=166
+        // Assumed: redline 11,300; kerb 139 kg = dry 127.0 + a full tank (8 kg) + 4 kg of other fluids; rake / trail; the naked values (CG 0.64 m, 50% rear, CdA 0.42 m², grip 1.12, 50° lean, brakes 9.8 m/s², riding position), the torque curve between the peaks, idle 1500, launch 5800; livery from "KTM orange trellis frame and orange tank shrouds with black fuel tank cover and black panels (approximate)".
+        new MotorbikeSpec
+        {
+            Label = "KTM 125 Duke (2011-16)",
+            Brand = "KTM", Family = "Duke",
+            Blurb = "125 cc single, 15 PS, 139 kg, upright bars",
+            Engine = EngineLayout.Single,
+            Look = new MotoLook
+            {
+                Style = MotoStyle.Naked, EngineShape = MotoEngineShape.Single,
+                Wheelbase = 1.367f, RakeDeg = 25f, Trail = 0.1f, ForkLength = 0.64f,
+                FrontTyre = "110/70-17", RearTyre = "150/60-17", FrontTravel = 0.16f, RearTravel = 0.16f,
+                FrontDiscs = 1, FrontDiscMm = 280f, TankLitres = 11f, GroundClearance = 0.17f,
+                Seat = new Vector3(0, 0.8f, -0.22f), Grip = new Vector3(0.38f, 1f, 0.3f), Peg = new Vector3(0.17f, 0.36f, -0.12f),
+                Paint = new Color(0.95f, 0.42f, 0.02f), Trim = new Color(0.08f, 0.08f, 0.09f), Frame = new Color(0.1f, 0.1f, 0.11f), Wheel = new Color(0.1f, 0.1f, 0.11f),
+            },
+            Colours = "Orange/black; white (early years)",
+            WetMass = 139f, CgHeight = 0.64f, RearShare = 0.5f, Grip = 1.12f, MaxLean = Mathf.DegToRad(50f),
+            DragArea = 0.42f, BrakeDecel = 9.8f,
+            IdleRpm = 1500f, PeakRpm = 10500f, Redline = 11300f, LaunchRpm = 5800f,
+            Torque = new (float, float)[] { (1500f, 6.6f), (4000f, 9.8f), (8000f, 12f), (9250f, 11.3f), (10500f, 10.2f), (11300f, 8.6f) },
+            Gears = new[] { 2.833f, 2.067f, 1.556f, 1.238f, 1.045f, 0.917f }, Primary = 3.273f, FinalDrive = 3.214f,
+        },
+        // ---- 155 ----
+        // KTM 390 Duke (2017-23). docs/data/ktm_honda_cb500_specs.json "390DUKE-2017" (390 Duke (373 cc, 44 hp)).
+        // 373 cc single, 44 PS at 9,500 rpm, 35 N·m at 7,250; 6 gears 2.667-0.84, primary 2.667, final 3.000; kerb 163 kg; wheelbase 1357 mm; rake 25.0°, trail 100.0 mm; 110/70R17 + 150/60R17.
+        // https://www.manualslib.com/manual/1292831/Ktm-390-Duke-2017.html?page=219
+        // https://www.manualslib.com/manual/1292831/Ktm-390-Duke-2017.html?page=220
+        // https://www.manualslib.com/manual/1292831/Ktm-390-Duke-2017.html?page=226
+        // Assumed: redline 10,300; kerb 163 kg = dry 149.0 + a full tank (10 kg) + 4 kg of other fluids; rake / trail; the naked values (CG 0.64 m, 50% rear, CdA 0.42 m², grip 1.12, 50° lean, brakes 9.8 m/s², riding position), the torque curve between the peaks, idle 1500, launch 5200; livery from "KTM orange trellis frame with orange tank shrouds and tail, black fuel tank and panels (approximate)".
+        new MotorbikeSpec
+        {
+            Label = "KTM 390 Duke (2017-23)",
+            Brand = "KTM", Family = "Duke",
+            Blurb = "373 cc single, 44 PS, 163 kg, upright bars",
+            Engine = EngineLayout.Single,
+            Look = new MotoLook
+            {
+                Style = MotoStyle.Naked, EngineShape = MotoEngineShape.Single,
+                Wheelbase = 1.357f, RakeDeg = 25f, Trail = 0.1f, ForkLength = 0.64f,
+                FrontTyre = "110/70R17", RearTyre = "150/60R17", FrontTravel = 0.142f, RearTravel = 0.15f,
+                FrontDiscs = 1, FrontDiscMm = 320f, TankLitres = 13.5f, GroundClearance = 0.175f,
+                Seat = new Vector3(0, 0.83f, -0.22f), Grip = new Vector3(0.38f, 1.03f, 0.3f), Peg = new Vector3(0.17f, 0.36f, -0.12f),
+                Paint = new Color(0.95f, 0.42f, 0.02f), Trim = new Color(0.08f, 0.08f, 0.09f), Frame = new Color(0.1f, 0.1f, 0.11f), Wheel = new Color(0.1f, 0.1f, 0.11f),
+            },
+            Colours = "Orange/black",
+            WetMass = 163f, CgHeight = 0.64f, RearShare = 0.5f, Grip = 1.12f, MaxLean = Mathf.DegToRad(50f),
+            DragArea = 0.42f, BrakeDecel = 9.8f,
+            IdleRpm = 1500f, PeakRpm = 9500f, Redline = 10300f, LaunchRpm = 5200f,
+            Torque = new (float, float)[] { (1500f, 19.2f), (3625f, 28.7f), (7250f, 35f), (8375f, 34.5f), (9500f, 32.6f), (10300f, 27.7f) },
+            Gears = new[] { 2.667f, 1.857f, 1.421f, 1.143f, 0.957f, 0.84f }, Primary = 2.667f, FinalDrive = 3f,
+        },
+        // ---- 156 ----
+        // KTM 390 Duke (2024-26). docs/data/ktm_honda_cb500_specs.json "390DUKE-2024" (390 Duke (399 cc, Euro 5)).
+        // 399 cc single, 45 PS at 8,500 rpm, 39 N·m at 7,000; 6 gears 2.667-0.84, primary 2.606, final 3.000; kerb 165 kg; wheelbase 1357 mm; rake 24.0°, trail 100.0 mm; 110/70R17 + 150/60R17.
+        // https://www.manualslib.com/manual/3308061/Ktm-390-Duke-2024.html?page=112
+        // https://www.manualslib.com/manual/3308061/Ktm-390-Duke-2024.html?page=115
+        // https://www.manualslib.com/manual/3308061/Ktm-390-Duke-2024.html?page=116
+        // Assumed: redline 9,300; rake / trail; the naked values (CG 0.64 m, 50% rear, CdA 0.42 m², grip 1.12, 50° lean, brakes 9.8 m/s², riding position), the torque curve between the peaks, idle 1500, launch 4700; livery from "KTM orange frame and tank shrouds with black tank cover, panels and wheels (approximate)".
+        new MotorbikeSpec
+        {
+            Label = "KTM 390 Duke (2024-26)",
+            Brand = "KTM", Family = "Duke",
+            Blurb = "399 cc single, 45 PS, 165 kg, upright bars",
+            Engine = EngineLayout.Single,
+            Look = new MotoLook
+            {
+                Style = MotoStyle.Naked, EngineShape = MotoEngineShape.Single,
+                Wheelbase = 1.357f, RakeDeg = 24f, Trail = 0.1f, ForkLength = 0.64f,
+                FrontTyre = "110/70R17", RearTyre = "150/60R17", FrontTravel = 0.15f, RearTravel = 0.15f,
+                FrontDiscs = 1, FrontDiscMm = 320f, TankLitres = 15f, GroundClearance = 0.175f,
+                Seat = new Vector3(0, 0.82f, -0.22f), Grip = new Vector3(0.38f, 1.02f, 0.3f), Peg = new Vector3(0.17f, 0.36f, -0.12f),
+                Paint = new Color(0.95f, 0.42f, 0.02f), Trim = new Color(0.08f, 0.08f, 0.09f), Frame = new Color(0.95f, 0.42f, 0.02f), Wheel = new Color(0.1f, 0.1f, 0.11f),
+            },
+            Colours = "Orange; Black",
+            WetMass = 165f, CgHeight = 0.64f, RearShare = 0.5f, Grip = 1.12f, MaxLean = Mathf.DegToRad(50f),
+            DragArea = 0.42f, BrakeDecel = 9.8f,
+            IdleRpm = 1500f, PeakRpm = 8500f, Redline = 9300f, LaunchRpm = 4700f,
+            Torque = new (float, float)[] { (1500f, 21.5f), (3500f, 32f), (7000f, 39f), (7750f, 38.8f), (8500f, 37.1f), (9300f, 31.5f) },
+            Gears = new[] { 2.667f, 1.857f, 1.421f, 1.143f, 0.957f, 0.84f }, Primary = 2.606f, FinalDrive = 3f,
+        },
+        // ---- 157 ----
+        // KTM 690 Duke / 690 Duke R (2016-19). docs/data/ktm_honda_cb500_specs.json "690DUKE-2016" (690 Duke (74 hp); the 690 Duke R shares chassis and engine with a taller seat and WP Performance suspension).
+        // 693 cc single, 75 PS at 8,000 rpm, 74 N·m at 6,500; 6 gears 2.5-0.87, primary 2.194, final 2.500; kerb 163 kg; wheelbase 1466 mm; rake 26.5°, trail 100.0 mm; 120/70ZR17 + 160/60ZR17.
+        // https://www.manualslib.com/manual/1147185/Ktm-2016-690-Duke-R.html?page=176
+        // https://www.manualslib.com/manual/1147185/Ktm-2016-690-Duke-R.html?page=177
+        // https://www.manualslib.com/manual/1147185/Ktm-2016-690-Duke-R.html?page=183
+        // Assumed: redline 8,800; kerb 163 kg = dry 148.5 + a full tank (10 kg) + 4 kg of other fluids; rake / trail; the naked values (CG 0.64 m, 50% rear, CdA 0.42 m², grip 1.12, 50° lean, brakes 9.8 m/s², riding position), the torque curve between the peaks, idle 1500, launch 4400; livery from "KTM orange trellis frame and orange tank shrouds with black fuel tank cover and black bodywork (approximate)".
+        new MotorbikeSpec
+        {
+            Label = "KTM 690 Duke / 690 Duke R (2016-19)",
+            Brand = "KTM", Family = "Duke",
+            Blurb = "693 cc single, 75 PS, 163 kg, upright bars",
+            Engine = EngineLayout.Single,
+            Look = new MotoLook
+            {
+                Style = MotoStyle.Naked, EngineShape = MotoEngineShape.Single,
+                Wheelbase = 1.466f, RakeDeg = 26.5f, Trail = 0.1f, ForkLength = 0.64f,
+                FrontTyre = "120/70ZR17", RearTyre = "160/60ZR17", FrontTravel = 0.135f, RearTravel = 0.135f,
+                FrontDiscs = 1, FrontDiscMm = 320f, TankLitres = 14f, GroundClearance = 0.192f,
+                Seat = new Vector3(0, 0.835f, -0.22f), Grip = new Vector3(0.38f, 1.035f, 0.3f), Peg = new Vector3(0.17f, 0.36f, -0.12f),
+                Paint = new Color(0.95f, 0.42f, 0.02f), Trim = new Color(0.08f, 0.08f, 0.09f), Frame = new Color(0.1f, 0.1f, 0.11f), Wheel = new Color(0.1f, 0.1f, 0.11f),
+            },
+            Colours = "Orange/black; white/black",
+            WetMass = 163f, CgHeight = 0.64f, RearShare = 0.5f, Grip = 1.12f, MaxLean = Mathf.DegToRad(50f),
+            DragArea = 0.42f, BrakeDecel = 9.8f,
+            IdleRpm = 1500f, PeakRpm = 8000f, Redline = 8800f, LaunchRpm = 4400f,
+            Torque = new (float, float)[] { (1500f, 40.7f), (3250f, 60.7f), (6500f, 74f), (7250f, 71.3f), (8000f, 65.9f), (8800f, 56f) },
+            Gears = new[] { 2.5f, 1.75f, 1.333f, 1.095f, 0.957f, 0.87f }, Primary = 2.194f, FinalDrive = 2.5f,
+        },
+        // ---- 158 ----
+        // KTM 790 Duke (2018-20). docs/data/ktm_honda_cb500_specs.json "790DUKE-2018" (790 Duke (105 hp)).
+        // 799 cc 75° parallel twin, 106 PS at 9,000 rpm, 87 N·m at 8,000; 6 gears 2.846-0.957, primary 1.923, final 2.562; kerb 183 kg; wheelbase 1475 mm; rake 24.0°, trail 98 mm; 120/70ZR17 + 180/55ZR17.
+        // https://www.manualslib.com/manual/1422392/Ktm-790-Duke-2018.html?page=251
+        // https://www.manualslib.com/manual/1422392/Ktm-790-Duke-2018.html?page=258
+        // https://www.manualslib.com/manual/1422392/Ktm-790-Duke-2018.html?page=259
+        // Assumed: redline 9,800; kerb 183 kg = dry 169.0 + a full tank (10 kg) + 4 kg of other fluids; the naked values (CG 0.64 m, 50% rear, CdA 0.42 m², grip 1.12, 50° lean, brakes 9.8 m/s², riding position), the torque curve between the peaks, idle 1200, launch 5000; livery from "KTM orange frame and subframe with black tank shrouds and bodywork (approximate)".
+        new MotorbikeSpec
+        {
+            Label = "KTM 790 Duke (2018-20)",
+            Brand = "KTM", Family = "Duke",
+            Blurb = "799 cc 75° parallel twin, 106 PS, 183 kg, upright bars",
+            Engine = EngineLayout.VTwin75,
+            Look = new MotoLook
+            {
+                Style = MotoStyle.Naked, EngineShape = MotoEngineShape.ParallelTwin,
+                Wheelbase = 1.475f, RakeDeg = 24f, Trail = 0.098f, ForkLength = 0.64f,
+                FrontTyre = "120/70ZR17", RearTyre = "180/55ZR17", FrontTravel = 0.14f, RearTravel = 0.15f,
+                FrontDiscs = 2, FrontDiscMm = 300f, TankLitres = 14f, GroundClearance = 0.186f,
+                Seat = new Vector3(0, 0.825f, -0.22f), Grip = new Vector3(0.38f, 1.025f, 0.3f), Peg = new Vector3(0.17f, 0.36f, -0.12f),
+                Paint = new Color(0.95f, 0.42f, 0.02f), Trim = new Color(0.08f, 0.08f, 0.09f), Frame = new Color(0.95f, 0.42f, 0.02f), Wheel = new Color(0.1f, 0.1f, 0.11f),
+            },
+            Colours = "Orange/black",
+            WetMass = 183f, CgHeight = 0.64f, RearShare = 0.5f, Grip = 1.12f, MaxLean = Mathf.DegToRad(50f),
+            DragArea = 0.42f, BrakeDecel = 9.8f,
+            IdleRpm = 1200f, PeakRpm = 9000f, Redline = 9800f, LaunchRpm = 5000f,
+            Torque = new (float, float)[] { (1200f, 47.9f), (4000f, 71.3f), (8000f, 87f), (8500f, 86.7f), (9000f, 83.1f), (9800f, 70.6f) },
+            Gears = new[] { 2.846f, 2f, 1.55f, 1.273f, 1.083f, 0.957f }, Primary = 1.923f, FinalDrive = 2.562f,
+        },
+        // ---- 159 ----
+        // KTM 890 Duke R (2020-23). docs/data/ktm_honda_cb500_specs.json "890DUKER-2020" (890 Duke R (121 hp)).
+        // 890 cc 75° parallel twin, 123 PS at 9,250 rpm, 99 N·m at 7,750; 6 gears 2.846-0.957, primary 1.923, final 2.412; kerb 180 kg; wheelbase 1482 mm; rake 24.3°, trail 99.7 mm; 120/70ZR17 + 180/55ZR17.
+        // https://www.manualslib.com/manual/1877555/Ktm-890-Duke-R-Us-2020.html?page=278
+        // https://www.manualslib.com/manual/1877555/Ktm-890-Duke-R-Us-2020.html?page=279
+        // https://www.manualslib.com/manual/1877555/Ktm-890-Duke-R-Us-2020.html?page=287
+        // Assumed: redline 10,050; kerb 180 kg = dry 166.0 + a full tank (10 kg) + 4 kg of other fluids; the naked values (CG 0.64 m, 50% rear, CdA 0.42 m², grip 1.12, 50° lean, brakes 9.8 m/s², riding position), the torque curve between the peaks, idle 1200, launch 5100; livery from "KTM orange frame with black tank shrouds and bodywork (approximate)".
+        new MotorbikeSpec
+        {
+            Label = "KTM 890 Duke R (2020-23)",
+            Brand = "KTM", Family = "Duke",
+            Blurb = "890 cc 75° parallel twin, 123 PS, 180 kg, upright bars",
+            Engine = EngineLayout.VTwin75,
+            Look = new MotoLook
+            {
+                Style = MotoStyle.Naked, EngineShape = MotoEngineShape.ParallelTwin,
+                Wheelbase = 1.482f, RakeDeg = 24.3f, Trail = 0.0997f, ForkLength = 0.64f,
+                FrontTyre = "120/70ZR17", RearTyre = "180/55ZR17", FrontTravel = 0.14f, RearTravel = 0.15f,
+                FrontDiscs = 2, FrontDiscMm = 320f, TankLitres = 14f, GroundClearance = 0.206f,
+                Seat = new Vector3(0, 0.834f, -0.22f), Grip = new Vector3(0.38f, 1.034f, 0.3f), Peg = new Vector3(0.17f, 0.36f, -0.12f),
+                Paint = new Color(0.95f, 0.42f, 0.02f), Trim = new Color(0.08f, 0.08f, 0.09f), Frame = new Color(0.95f, 0.42f, 0.02f), Wheel = new Color(0.1f, 0.1f, 0.11f),
+            },
+            Colours = "Orange/black",
+            WetMass = 180f, CgHeight = 0.64f, RearShare = 0.5f, Grip = 1.12f, MaxLean = Mathf.DegToRad(50f),
+            DragArea = 0.42f, BrakeDecel = 9.8f,
+            IdleRpm = 1200f, PeakRpm = 9250f, Redline = 10050f, LaunchRpm = 5100f,
+            Torque = new (float, float)[] { (1200f, 54.5f), (3875f, 81.2f), (7750f, 99f), (8500f, 98f), (9250f, 93.2f), (10050f, 79.2f) },
+            Gears = new[] { 2.846f, 2f, 1.55f, 1.273f, 1.083f, 0.957f }, Primary = 1.923f, FinalDrive = 2.412f,
+        },
+        // ---- 160 ----
+        // KTM 1290 Super Duke R (2020-23). docs/data/ktm_honda_cb500_specs.json "1290SDR-2020" (1290 Super Duke R (180 hp)).
+        // 1301 cc 75° V-twin, 183 PS at 9,500 rpm, 140 N·m at 8,000; 6 gears 2.917-0.963, primary 1.900, final 2.235; kerb 205 kg; wheelbase 1497 mm; rake 25.2°, trail 108 mm; 120/70ZR17 + 200/55ZR17.
+        // https://www.manualslib.com/manual/2025162/Ktm-1290-Super-Duke-R-Us-2020.html?page=315
+        // https://www.manualslib.com/manual/2025162/Ktm-1290-Super-Duke-R-Us-2020.html?page=316
+        // https://www.manualslib.com/manual/2025162/Ktm-1290-Super-Duke-R-Us-2020.html?page=324
+        // Assumed: redline 10,300; kerb 205 kg = dry 189.0 + a full tank (12 kg) + 4 kg of other fluids; the naked values (CG 0.64 m, 50% rear, CdA 0.42 m², grip 1.12, 50° lean, brakes 9.8 m/s², riding position), the torque curve between the peaks, idle 1200, launch 5200; livery from "KTM orange trellis frame with black tank shrouds and tail, black wheels (approximate)".
+        new MotorbikeSpec
+        {
+            Label = "KTM 1290 Super Duke R (2020-23)",
+            Brand = "KTM", Family = "Duke",
+            Blurb = "1301 cc 75° V-twin, 183 PS, 205 kg, upright bars",
+            Engine = EngineLayout.VTwin75,
+            Look = new MotoLook
+            {
+                Style = MotoStyle.Naked, EngineShape = MotoEngineShape.VTwin, VAngleDeg = 75f,
+                Wheelbase = 1.497f, RakeDeg = 25.2f, Trail = 0.108f, ForkLength = 0.64f,
+                FrontTyre = "120/70ZR17", RearTyre = "200/55ZR17", FrontTravel = 0.125f, RearTravel = 0.14f,
+                FrontDiscs = 2, FrontDiscMm = 320f, TankLitres = 16f, GroundClearance = 0.16f,
+                Seat = new Vector3(0, 0.835f, -0.22f), Grip = new Vector3(0.38f, 1.035f, 0.3f), Peg = new Vector3(0.17f, 0.36f, -0.12f),
+                Paint = new Color(0.95f, 0.42f, 0.02f), Trim = new Color(0.08f, 0.08f, 0.09f), Frame = new Color(0.1f, 0.1f, 0.11f), Wheel = new Color(0.1f, 0.1f, 0.11f),
+            },
+            Colours = "Orange/black",
+            WetMass = 205f, CgHeight = 0.64f, RearShare = 0.5f, Grip = 1.12f, MaxLean = Mathf.DegToRad(50f),
+            DragArea = 0.42f, BrakeDecel = 9.8f,
+            IdleRpm = 1200f, PeakRpm = 9500f, Redline = 10300f, LaunchRpm = 5200f,
+            Torque = new (float, float)[] { (1200f, 77f), (4000f, 114.8f), (8000f, 140f), (8750f, 140f), (9500f, 134.9f), (10300f, 114.7f) },
+            Gears = new[] { 2.917f, 2.133f, 1.667f, 1.35f, 1.125f, 0.963f }, Primary = 1.9f, FinalDrive = 2.235f,
+        },
+        // ---- 161 ----
+        // Honda CB500 (1994-03). docs/data/ktm_honda_cb500_specs.json "CB500-PC26-1994" (CB500 naked parallel twin (CB500S half-faired from 1998)).
+        // 498 cc 180° parallel twin, 58 PS at 9,500 rpm, 47 N·m at 8,000; 6 gears 3.461-1.13, primary 1.947, final 2.666; kerb 187 kg; wheelbase 1430 mm; rake 25.0°, trail 100.0 mm; 110/80-17 + 130/80-17.
+        // Reference: 193 km/h (claimed (Wikipedia infobox, citing Haynes; not a road test)), 0-100 - s.
+        // https://en.wikipedia.org/wiki/Honda_CB500_twin
+        // Assumed: redline 10,300; kerb 187 kg = dry 170.0 + a full tank (13 kg) + 4 kg of other fluids; rake / trail; the naked values (CG 0.64 m, 50% rear, CdA 0.42 m², grip 1.12, 50° lean, brakes 9.8 m/s², riding position), the torque curve between the peaks, idle 1200, launch 5200; livery from "Black tank and side covers with black frame and dark engine (approximate)".
+        new MotorbikeSpec
+        {
+            Label = "Honda CB500 (1994-03)",
+            Brand = "Honda", Family = "CB500",
+            Blurb = "498 cc 180° parallel twin, 58 PS, 187 kg, upright bars",
+            Engine = EngineLayout.ParallelTwin180,
+            Look = new MotoLook
+            {
+                Style = MotoStyle.Naked, EngineShape = MotoEngineShape.ParallelTwin,
+                Wheelbase = 1.43f, RakeDeg = 25f, Trail = 0.1f, ForkLength = 0.64f,
+                FrontTyre = "110/80-17", RearTyre = "130/80-17", FrontTravel = 0.14f, RearTravel = 0.14f,
+                FrontDiscs = 2, FrontDiscMm = 296f, TankLitres = 18f,
+                Seat = new Vector3(0, 0.775f, -0.22f), Grip = new Vector3(0.38f, 0.975f, 0.3f), Peg = new Vector3(0.17f, 0.36f, -0.12f),
+                Paint = new Color(0.08f, 0.08f, 0.09f), Trim = new Color(0.55f, 0.56f, 0.6f), Frame = new Color(0.1f, 0.1f, 0.11f), Wheel = new Color(0.1f, 0.1f, 0.11f),
+            },
+            Colours = "Black; red (typical)",
+            WetMass = 187f, CgHeight = 0.64f, RearShare = 0.5f, Grip = 1.12f, MaxLean = Mathf.DegToRad(50f),
+            DragArea = 0.42f, BrakeDecel = 9.8f,
+            IdleRpm = 1200f, PeakRpm = 9500f, Redline = 10300f, LaunchRpm = 5200f,
+            Torque = new (float, float)[] { (1200f, 25.9f), (4000f, 38.5f), (8000f, 47f), (8750f, 45.8f), (9500f, 42.7f), (10300f, 36.3f) },
+            Gears = new[] { 3.461f, 2.235f, 1.75f, 1.478f, 1.28f, 1.13f }, Primary = 1.947f, FinalDrive = 2.666f,
+            RefZeroTo100 = 0f, RefTopKmh = 193f,
+        },
+        // ---- 162 ----
+        // Honda CB500F (2013-15). docs/data/ktm_honda_cb500_specs.json "CB500F-2013" (CB500F / CB500FA (ABS)).
+        // 471 cc 180° parallel twin, 48 PS at 8,500 rpm, 43 N·m at 7,000; 6 gears 3.285-1.043, primary 2.029, final 2.733; kerb 190 kg; wheelbase 1410 mm; rake 25.5°, trail 103 mm; 120/70ZR17 + 160/60ZR17.
+        // https://hondanews.com/en-US/powersports/releases/release-62b05965c2cd490a8879a9f74b1c9965-2013-honda-cb500f-cb500f-abs-specifications
+        // https://www.bike-parts.fr/thumbs/pdf_url/img/owner_manuals/owner_CB500FG_FAG_EN/2500_2500/0130.pdf
+        // https://www.motorcyclespecs.co.za/model/Honda/honda_cb500F_13.html
+        // Assumed: redline 9,300; the naked values (CG 0.64 m, 50% rear, CdA 0.42 m², grip 1.12, 50° lean, brakes 9.8 m/s², riding position), the torque curve between the peaks, idle 1200, launch 4700; livery from "Pearl white tank shrouds and tail with black frame, black engine and black wheels (approximate); an all-black version was also sold".
+        new MotorbikeSpec
+        {
+            Label = "Honda CB500F (2013-15)",
+            Brand = "Honda", Family = "CB500",
+            Blurb = "471 cc 180° parallel twin, 48 PS, 190 kg, upright bars",
+            Engine = EngineLayout.ParallelTwin180,
+            Look = new MotoLook
+            {
+                Style = MotoStyle.Naked, EngineShape = MotoEngineShape.ParallelTwin,
+                Wheelbase = 1.41f, RakeDeg = 25.5f, Trail = 0.103f, ForkLength = 0.64f,
+                FrontTyre = "120/70ZR17", RearTyre = "160/60ZR17", FrontTravel = 0.109f, RearTravel = 0.119f,
+                FrontDiscs = 2, FrontDiscMm = 320f, TankLitres = 15.5f,
+                Seat = new Vector3(0, 0.784f, -0.22f), Grip = new Vector3(0.38f, 0.984f, 0.3f), Peg = new Vector3(0.17f, 0.36f, -0.12f),
+                Paint = new Color(0.92f, 0.92f, 0.9f), Trim = new Color(0.08f, 0.17f, 0.55f), Frame = new Color(0.1f, 0.1f, 0.11f), Wheel = new Color(0.1f, 0.1f, 0.11f),
+            },
+            Colours = "Black; Pearl White",
+            WetMass = 190.5f, CgHeight = 0.64f, RearShare = 0.5f, Grip = 1.12f, MaxLean = Mathf.DegToRad(50f),
+            DragArea = 0.42f, BrakeDecel = 9.8f,
+            IdleRpm = 1200f, PeakRpm = 8500f, Redline = 9300f, LaunchRpm = 4700f,
+            Torque = new (float, float)[] { (1200f, 23.7f), (3500f, 35.3f), (7000f, 43f), (7750f, 42f), (8500f, 39.3f), (9300f, 33.4f) },
+            Gears = new[] { 3.285f, 2.105f, 1.6f, 1.3f, 1.15f, 1.043f }, Primary = 2.029f, FinalDrive = 2.733f,
+        },
+        // ---- 163 ----
+        // Honda CB500F (2019-21). docs/data/ktm_honda_cb500_specs.json "CB500F-2019" (CB500F / CB500FA (ABS), 2019 revision).
+        // 471 cc 180° parallel twin, 48 PS at 8,500 rpm, 43 N·m at 6,500; 6 gears 3.285-1.043, primary 2.029, final 2.733; kerb 187 kg; wheelbase 1410 mm; rake 25.5°, trail 102 mm; 120/70ZR17 + 160/60ZR17.
+        // https://www.bike-parts.fr/thumbs/pdf_url/img/owner_manuals/owner_CB500FK_FAK_EN/2500_2500/0153.pdf
+        // https://www.bike-parts.fr/thumbs/pdf_url/img/owner_manuals/owner_CB500FG_FAG_EN/2500_2500/0130.pdf
+        // https://www.motorcyclespecs.co.za/model/Honda/Honda_CB500F_19.html
+        // Assumed: redline 9,300; the naked values (CG 0.64 m, 50% rear, CdA 0.42 m², grip 1.12, 50° lean, brakes 9.8 m/s², riding position), the torque curve between the peaks, idle 1200, launch 4700; livery from "Candy Chromosphere Red tank shrouds and tail with matt black frame, engine and wheels (approximate); a black version was also sold".
+        new MotorbikeSpec
+        {
+            Label = "Honda CB500F (2019-21)",
+            Brand = "Honda", Family = "CB500",
+            Blurb = "471 cc 180° parallel twin, 48 PS, 187 kg, upright bars",
+            Engine = EngineLayout.ParallelTwin180,
+            Look = new MotoLook
+            {
+                Style = MotoStyle.Naked, EngineShape = MotoEngineShape.ParallelTwin,
+                Wheelbase = 1.41f, RakeDeg = 25.5f, Trail = 0.102f, ForkLength = 0.64f,
+                FrontTyre = "120/70ZR17", RearTyre = "160/60ZR17", FrontTravel = 0.12f, RearTravel = 0.105f,
+                FrontDiscs = 2, FrontDiscMm = 320f, TankLitres = 17.1f, GroundClearance = 0.145f,
+                Seat = new Vector3(0, 0.785f, -0.22f), Grip = new Vector3(0.38f, 0.985f, 0.3f), Peg = new Vector3(0.17f, 0.36f, -0.12f),
+                Paint = new Color(0.78f, 0.06f, 0.07f), Trim = new Color(0.9f, 0.9f, 0.92f), Frame = new Color(0.1f, 0.1f, 0.11f), Wheel = new Color(0.1f, 0.1f, 0.11f),
+            },
+            Colours = "Matt Gunpowder Black Metallic; Candy Chromosphere Red; Pearl White (market dependent)",
+            WetMass = 187f, CgHeight = 0.64f, RearShare = 0.5f, Grip = 1.12f, MaxLean = Mathf.DegToRad(50f),
+            DragArea = 0.42f, BrakeDecel = 9.8f,
+            IdleRpm = 1200f, PeakRpm = 8500f, Redline = 9300f, LaunchRpm = 4700f,
+            Torque = new (float, float)[] { (1200f, 23.7f), (3250f, 35.3f), (6500f, 43f), (7500f, 42f), (8500f, 39.3f), (9300f, 33.4f) },
+            Gears = new[] { 3.285f, 2.105f, 1.6f, 1.3f, 1.15f, 1.043f }, Primary = 2.029f, FinalDrive = 2.733f,
+        },
+        // ---- 164 ----
+        // Honda CB500X (2019-21). docs/data/ktm_honda_cb500_specs.json "CB500X-2019" (CB500X / CB500XA (ABS), 2019 revision).
+        // 471 cc 180° parallel twin, 48 PS at 8,600 rpm, 43 N·m at 6,500; 6 gears 3.285-1.043, primary 2.029, final 2.733; kerb 195 kg; wheelbase 1445 mm; rake 27.5°, trail 108 mm; 110/80R19 + 160/60R17.
+        // https://www.bike-parts.fr/thumbs/pdf_url/img/owner_manuals/owner_CB500XK_XAK_EN/2500_2500/0151.pdf
+        // https://www.motorcyclespecs.co.za/model/Honda/honda_cb500x_21.html
+        // Assumed: redline 9,400; the adventure values (CG 0.74 m, 50% rear, CdA 0.55 m², grip 1.0, 45° lean, brakes 9.0 m/s², riding position), the torque curve between the peaks, idle 1200, launch 4700; livery from "Grand Prix Red front fairing, tank shrouds and tail with black frame, engine and wheels (approximate); black and white versions also sold".
+        new MotorbikeSpec
+        {
+            Label = "Honda CB500X (2019-21)",
+            Brand = "Honda", Family = "CB500",
+            Blurb = "471 cc 180° parallel twin, 48 PS, 195 kg, adventure tyres: grips on gravel and grass",
+            Engine = EngineLayout.ParallelTwin180,
+            Look = new MotoLook
+            {
+                Style = MotoStyle.Adventure, EngineShape = MotoEngineShape.ParallelTwin,
+                Wheelbase = 1.445f, RakeDeg = 27.5f, Trail = 0.108f, ForkLength = 0.84f,
+                FrontTyre = "110/80R19", RearTyre = "160/60R17", FrontTravel = 0.15f, RearTravel = 0.135f,
+                FrontDiscs = 2, FrontDiscMm = 310f, TankLitres = 17.5f, GroundClearance = 0.18f,
+                Seat = new Vector3(0, 0.83f, -0.2f), Grip = new Vector3(0.43f, 1.13f, 0.3f), Peg = new Vector3(0.19f, 0.42f, -0.05f),
+                Paint = new Color(0.78f, 0.06f, 0.07f), Trim = new Color(0.9f, 0.9f, 0.92f), Frame = new Color(0.1f, 0.1f, 0.11f), Wheel = new Color(0.1f, 0.1f, 0.11f),
+            },
+            Colours = "Grand Prix Red; Matt Gunpowder Black Metallic; Pearl White (market dependent)",
+            WetMass = 195f, CgHeight = 0.74f, RearShare = 0.5f, Grip = 1f, OffroadTyre = 0.3f, MaxLean = Mathf.DegToRad(45f),
+            DragArea = 0.55f, BrakeDecel = 9f,
+            IdleRpm = 1200f, PeakRpm = 8600f, Redline = 9400f, LaunchRpm = 4700f,
+            Torque = new (float, float)[] { (1200f, 23.7f), (3250f, 35.3f), (6500f, 43f), (7550f, 41.8f), (8600f, 38.9f), (9400f, 33f) },
+            Gears = new[] { 3.285f, 2.105f, 1.6f, 1.3f, 1.15f, 1.043f }, Primary = 2.029f, FinalDrive = 2.733f,
+        },
+        // ---- 165 ----
+        // Honda CB500 Hornet (2024-26). docs/data/ktm_honda_cb500_specs.json "CB500HORNET-2024" (CB500 Hornet (EU, ABS)).
+        // 471 cc 180° parallel twin, 48 PS at 8,600 rpm, 43 N·m at 6,500; 6 gears 3.285-1.043, primary 2.029, final 2.733; kerb 188 kg; wheelbase 1410 mm; rake 25.5°, trail 101 mm; 120/70R17 + 160/60-17.
+        // https://hondanews.com/en-US/releases/release-cf005034e20eb27505fd8e6bbb024c57-2026-honda-cb500-hornet-specifications
+        // https://bikesrepublic.com/featured/new-2024-honda-cb500-hornet-offers-twin-cylinder-fun-in-a-lightweight-package
+        // https://www.1000ps.com/en-gb/model/12210/honda-cb500-hornet
+        // Assumed: redline 9,400; gear ratios and primary 2.029 borrowed from CB500F-2019 (same engine); the naked values (CG 0.64 m, 50% rear, CdA 0.42 m², grip 1.12, 50° lean, brakes 9.8 m/s², riding position), the torque curve between the peaks, idle 1200, launch 4700; livery from "Matt black metallic tank shrouds and tail with black frame and wheels (approximate)".
+        new MotorbikeSpec
+        {
+            Label = "Honda CB500 Hornet (2024-26)",
+            Brand = "Honda", Family = "CB500",
+            Blurb = "471 cc 180° parallel twin, 48 PS, 188 kg, upright bars",
+            Engine = EngineLayout.ParallelTwin180,
+            Look = new MotoLook
+            {
+                Style = MotoStyle.Naked, EngineShape = MotoEngineShape.ParallelTwin,
+                Wheelbase = 1.41f, RakeDeg = 25.5f, Trail = 0.101f, ForkLength = 0.64f,
+                FrontTyre = "120/70R17", RearTyre = "160/60-17", FrontTravel = 0.119f, RearTravel = 0.119f,
+                FrontDiscs = 2, FrontDiscMm = 296f, TankLitres = 17f, GroundClearance = 0.145f,
+                Seat = new Vector3(0, 0.79f, -0.22f), Grip = new Vector3(0.38f, 0.99f, 0.3f), Peg = new Vector3(0.17f, 0.36f, -0.12f),
+                Paint = new Color(0.08f, 0.08f, 0.09f), Trim = new Color(0.55f, 0.56f, 0.6f), Frame = new Color(0.1f, 0.1f, 0.11f), Wheel = new Color(0.1f, 0.1f, 0.11f),
+            },
+            Colours = "Matt Ballistic Black Metallic; Pearl White (market dependent)",
+            WetMass = 188f, CgHeight = 0.64f, RearShare = 0.5f, Grip = 1.12f, MaxLean = Mathf.DegToRad(50f),
+            DragArea = 0.42f, BrakeDecel = 9.8f,
+            IdleRpm = 1200f, PeakRpm = 8600f, Redline = 9400f, LaunchRpm = 4700f,
+            Torque = new (float, float)[] { (1200f, 23.7f), (3250f, 35.3f), (6500f, 43f), (7550f, 41.8f), (8600f, 38.9f), (9400f, 33f) },
+            Gears = new[] { 3.285f, 2.105f, 1.6f, 1.3f, 1.15f, 1.043f }, Primary = 2.029f, FinalDrive = 2.733f,
         },
     };
 }

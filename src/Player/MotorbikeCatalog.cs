@@ -117,7 +117,7 @@ public static partial class MotorbikeCatalog
         {
             Label = "Yamaha YZF-R1 (2020+)",
             Brand = "Yamaha", Family = "YZF-R1",
-            Blurb = "998 cc crossplane four, 200 PS, 201 kg: {throttle} gas, {brake} brake, {move_left}/{move_right} lean. Wheelies if you let it",
+            Blurb = "998 cc crossplane four, 200 PS, 201 kg: {throttle} gas, {brake} brake, {move_left}/{move_right} lean",
             Engine = EngineLayout.Crossplane4,
             Look = new MotoLook
             {

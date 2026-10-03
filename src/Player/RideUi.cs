@@ -222,7 +222,7 @@ public partial class RideUi : CanvasLayer
             $"{c.Kind}|{c}", () => Rideable.Create(c.Kind)?.BuildParkedVisual(0))).ToList());
         // brand folders, then a model folder where a model comes in several variants (#410)
         var family = MotorbikeCatalog.All.Where(b => b.Family != "").GroupBy(b => (b.Brand, b.Family)).ToDictionary(g => g.Key, g => g.Count());
-        AddTab(bar, pages, "Motorbikes", MotorbikeCatalog.All.Select(b => NewCard(b.Kind, b.Label, b.Blurb, true,
+        AddTab(bar, pages, "Motorbikes", MotorbikeCatalog.All.Select(b => NewCard(b.Kind, b.Label, b.Blurb + Motorbike.WheelieHint, true,
             $"{b.Kind}|{b}", () => Rideable.Create(b.Kind)?.BuildParkedVisual(0))).ToList(),
             card => MotorbikeCatalog.For(card.Kind) is { } b && b.Brand != ""
                 ? family.GetValueOrDefault((b.Brand, b.Family)) > 1 ? new[] { b.Brand, b.Family } : new[] { b.Brand }

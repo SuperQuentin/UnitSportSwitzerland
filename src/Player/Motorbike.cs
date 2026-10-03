@@ -56,7 +56,9 @@ public sealed class Motorbike : Rideable, IEngined
 
     public override RideKind Kind => Spec.Kind;
     public override string Label => Spec.Label;
-    public override string Blurb => Spec.Blurb;
+    public override string Blurb => Spec.Blurb + WheelieHint;
+    /// <summary>Added to every bike's blurb (#410).</summary>
+    public const string WheelieHint = ". Hold {tuck_boost} to pull a wheelie (tap it on the gas to pop the clutch)";
     public override bool IsVehicle => true;
     public override bool HasEngine => true;
     public override float MaxHealth => 120f;
@@ -218,6 +220,7 @@ public sealed class Motorbike : Rideable, IEngined
         if (pull && !_pulled && input.Throttle > 0.5f && _shift <= 0f)
             PitchRate += ClutchPop * Mathf.Clamp(input.Throttle * torque * ratio * Driveline / RearRadius / (m * WheelieAccel), 0.6f, 1.2f);
         _pulled = pull;
+        float english = float.NaN;
         if (arcade && pull && Pitch > 0f)
         {
             // Game: the throttle picks a wheelie angle and the drive holds it there (a PD on the
@@ -228,6 +231,7 @@ public sealed class Motorbike : Rideable, IEngined
             // (a shift's drive cut is let off: Game wheelies carry through the gears)
             float full = Rpm >= s.Redline ? 0f : s.TorqueAt(Mathf.Max(wheelRpm * ratio, s.LaunchRpm)) * ratio * Driveline / RearRadius;
             driveAccel = Mathf.Clamp(hold, 0f, Mathf.Min(full / m, traction));
+            english = want;
         }
         else if (!pull && Pitch > 0f)
         {
@@ -238,6 +242,8 @@ public sealed class Motorbike : Rideable, IEngined
         PitchUse = driveAccel > 0.01f ? driveAccel / WheelieAccel : -brakeAccel / StoppieDecel;
         float a = driveAccel - brakeAccel - resist;
         float pitchAccel = (a * hp - Gravity * bp) / inertia;
+        // Game: what the drive cannot give (a 125 at a crawl), the rider's body makes up, a little
+        if (!float.IsNaN(english)) pitchAccel += Mathf.Clamp(english - pitchAccel, 0f, 2f);
         if (LoopedOut) { }   // on its back: nothing more to integrate, the rider is being thrown
         else if (Pitch > 0f || PitchRate > 0f || pitchAccel > 0f)
         {
