@@ -130,7 +130,7 @@ public static class VehicleReach
         if (target == _outlined && (target == null || GodotObject.IsInstanceValid(target))) return;
         if (_outlined != null && GodotObject.IsInstanceValid(_outlined)) Items.Highlight.Set(_outlined, false);
         _outlined = target;
-        // a door sits flush in the body, which hides its rim: it glows as well
-        if (target != null) Items.Highlight.Set(target, true, tint: aim is { HasDoor: true });
+        // a door flush in the body: its edge is drawn over the body (the stencil border, #401)
+        if (target != null) Items.Highlight.Set(target, true);
     }
 }

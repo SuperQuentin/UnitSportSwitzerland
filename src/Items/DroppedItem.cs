@@ -321,7 +321,7 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware
         _lastPos = GlobalPosition;
         _lastVel = LinearVelocity;
         _restTime = LinearVelocity.LengthSquared() < 0.05f * 0.05f && AngularVelocity.LengthSquared() < 0.2f ? _restTime + delta : 0;
-        if (Sleeping || _restTime > RestFor || _age > SettleAfter || Position.Y < -5000) Settle();
+        if (Sleeping || _restTime > RestFor || _age > SettleAfter || Position.Y < Interiors.InteriorManager.LostBelowY) Settle();
     }
 
     /// <summary>The state to respawn it from: where it lies now, what it is.</summary>

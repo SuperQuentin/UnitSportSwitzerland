@@ -29,6 +29,7 @@ public partial class ChurchStageProbe : Node3D
     private readonly HashSet<Vector3> _cuts = new();
     private int _shotHit = -1;
     private Transform3D[] _restParts = Array.Empty<Transform3D>();
+    private Items.RadioBody? _thrown;
 
     public ChurchStageProbe(string? shot) => _shot = shot;
 
@@ -73,6 +74,16 @@ public partial class ChurchStageProbe : Node3D
         }
         else Check(false, "the church has a radio spot");
 
+        // a radio thrown across a room flies like one thrown in the street (#388): it settled on
+        // its first tick anywhere below y -500, and every room is 3 km down
+        var origin = new WorldOrigin(0, 0);
+        float floorY = InteriorManager.InteriorBaseY;
+        var floor = new StaticBody3D { Name = "DeepFloor", Position = new Vector3(0, floorY, 0) };
+        floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(60, 0.2f, 60) }, Position = new Vector3(0, -0.1f, 0) });
+        AddChild(floor);
+        _thrown = Items.RadioBody.Create(new Items.RadioState("", 0, origin.ToGlobal(new Vector3(0, floorY + 1.2f, 0)), 0, new Vector3(8f, 2f, 0)), origin);
+        AddChild(_thrown);
+
         _own = new Camera3D { Name = "Own", Fov = 70f, Position = new Vector3(0.4f, 1.6f, 2.0f) };
         AddChild(_own);
         _own.LookAt(new Vector3(1.2f, 1.0f, 10.5f), Vector3.Up);
@@ -107,6 +118,12 @@ public partial class ChurchStageProbe : Node3D
         _t += delta;
         _total += delta;
         if (_total > 240) { Check(false, $"finished in time (stuck at step {_step})"); Finish(); return; }
+        if (_thrown != null && _total > 0.5)
+        {
+            Check(_thrown.Position.X > 2.5f, $"a radio thrown in interior space flies ({_thrown.Position.X:F2} m in 0.5 s, settled {_thrown.Settled})");
+            _thrown.QueueFree();
+            _thrown = null;
+        }
         var lib = CdLibrary.Instance!;
         switch (_step)
         {

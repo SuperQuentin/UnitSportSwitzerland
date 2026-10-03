@@ -1435,7 +1435,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 yield return (PlayerInput.InteractMount, $"Pick up {pointed.Label}");
             else if (Items.Highlight.Pointed is Items.RadioBody)
             {
-                yield return (PlayerInput.UseItem, "Take the radio");
+                if (Items.ItemController.Instance?.Inventory.Held.IsEmpty == true) yield return (PlayerInput.UseItem, "Take the radio");
                 yield return (PlayerInput.InteractMount, "Radio");
             }
             else if (p.Indoors)
@@ -1448,9 +1448,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             }
             else
             {
-                if (Vehicles.VehicleReach.Current == null && Items.RadioManager.Instance?.Nearest(p.GlobalPosition, Items.RadioManager.Reach) != null)
-                    yield return (PlayerInput.InteractMount, "Radio");
-                else if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p.GlobalPosition) == null
+                if (Interiors.InteriorManager.Instance?.OutsideDoorInReach(p.GlobalPosition) == null
                     && Items.RadioManager.Instance?.NearestMusic(p.GlobalPosition, Items.RadioManager.DanceRadius, heard: p.DanceId == 0) != null)
                     yield return (PlayerInput.InteractMount, p.DanceId == 0 ? "Dance" : "Stop dancing");
                 if (Vehicles.VehicleReach.Current is { } at)

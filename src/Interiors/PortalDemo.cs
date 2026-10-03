@@ -159,7 +159,7 @@ public partial class PortalDemo : Node3D
 
         // someone who walks in through A's front door
         _walker = new Node3D { Name = "Walker" };
-        _walkerMesh = new MeshInstance3D { MaterialOverride = Avatar.HumanMeshBuilder.Material() };
+        _walkerMesh = new MeshInstance3D { MaterialOverride = Avatar.HumanMeshBuilder.FigureMaterial() };
         _walker.AddChild(_walkerMesh);
         _walker.AddToGroup(DoorwayGhosts.Group);
         AddChild(_walker);

@@ -89,6 +89,8 @@ public partial class InventoryUiProbe : Node
         Expect(Inv.Carried.IsEmpty && Inv[dropSlot].IsEmpty && after > before && before >= 0,
             $"click outside drops {dropped} on the ground (dropped items {before} -> {after})");
 
+        await Keys();
+
         // 7: clothes (#251): carried onto their body slot, shift-clicked on, refused in the wrong one
         int top = Inventory.SlotOf(Avatar.WearSlot.Top), head = Inventory.SlotOf(Avatar.WearSlot.Head);
         int free = Enumerable.Range(pack, Inv.PackSize).First(i => Inv[i].IsEmpty);
@@ -106,7 +108,8 @@ public partial class InventoryUiProbe : Node
         await Frames(4);
         var dir = ProjectSettings.GlobalizePath("res://test_output");
         System.IO.Directory.CreateDirectory(dir);
-        GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, "invui_wearing.png"));
+        if (DisplayServer.GetName() != "headless")   // headless has no image to read: the probe stopped here
+            GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(dir, "invui_wearing.png"));
         await Click(top, MouseButton.Left);
         Expect(Inv.Carried.Id == ItemId.BuckleCorset && Inv[top].IsEmpty, "a click takes the corset off");
         Inv.ReturnCarried();
@@ -116,6 +119,74 @@ public partial class InventoryUiProbe : Node
         _items.Ui.Close();
         GD.Print(_failures == 0 ? "[invui] RESULT: ok" : $"[invui] RESULT: FAILED ({_failures})");
         GetTree().Quit(_failures == 0 ? 0 : 1);
+    }
+
+    /// <summary>
+    /// 6b (#391): the keys and the edge cases of the cursor stack — Q over a slot, Q with only a
+    /// cursor stack, a slot key over a pack slot, shift-click while carrying, a carried stack dragged
+    /// off the panel from a slot press, Esc putting a picked stack back where it came from.
+    /// </summary>
+    private async Task Keys()
+    {
+        int pack = Inventory.HotbarSize;
+        int Dropped() => DroppedItems.Instance?.GetChildCount() ?? -1;
+        int FreePack() => Enumerable.Range(pack, Inv.PackSize).First(i => Inv[i].IsEmpty);
+        var outside = new Vector2(6, 6);
+
+        // Q over a slot drops one
+        int s = FreePack();
+        Inv.Put(s, new ItemStack(ItemId.Bread, 5));
+        await Move(s);
+        await Key(Godot.Key.Q);
+        await Frames(10);
+        Expect(Inv[s].Count == 4, $"Q over a slot drops one ({Inv[s].Count} left)");
+
+        // Q with only a stack on the cursor, nothing hovered: one of it falls
+        await Click(s, MouseButton.Left);
+        Push(new InputEventMouseMotion { Position = outside, GlobalPosition = outside });
+        await Frames(2);
+        await Key(Godot.Key.Q);
+        await Frames(10);
+        Expect(Inv.Carried.Count == 3, $"Q with a cursor stack drops one ({Inv.Carried.Count} carried)");
+
+        // shift-click while carrying still sends the slot across, the cursor keeps its stack
+        int hot = Enumerable.Range(0, pack).First(i => Inv[i].IsEmpty);
+        Inv.Put(hot, new ItemStack(ItemId.Stone, 2));
+        await Click(hot, MouseButton.Left, shift: true);
+        Expect(Inv[hot].IsEmpty && Inv.Carried.Id == ItemId.Bread, "shift-click while carrying moves the slot to the pack");
+
+        // a press on an empty slot with the stack on the cursor, released off the panel: it falls
+        int empty = FreePack();
+        int before = Dropped();
+        await Press(empty, MouseButton.Left);
+        Push(new InputEventMouseMotion { Position = outside, GlobalPosition = outside });
+        await Frames(2);
+        Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = outside, GlobalPosition = outside });
+        await Frames(20);
+        Expect(Inv.Carried.IsEmpty && Inv[empty].IsEmpty && Dropped() > before, $"dragged off the panel, the cursor stack falls ({before} -> {Dropped()})");
+
+        // a slot key over a pack slot swaps it with that hotbar slot
+        int p = FreePack();
+        Inv.Put(p, new ItemStack(ItemId.Bread, 1));
+        var inTwo = Inv[1];
+        await Move(p);
+        await Key(Godot.Key.Key2);
+        Expect(Inv[1].Id == ItemId.Bread && Inv[p] == inTwo, "2 over a pack slot swaps it into hotbar slot 2");
+
+        // Esc with a picked stack: back in the slot it came from, the panel stays open
+        await Click(p, MouseButton.Left);
+        var picked = Inv.Carried;
+        await Key(Godot.Key.Escape);
+        Expect(_items.Ui.IsOpen && Inv.Carried.IsEmpty && (picked.IsEmpty ? Inv[p].IsEmpty : Inv[p] == picked),
+            "Esc puts the picked stack back in its slot, the panel stays open");
+    }
+
+    private async Task Key(Godot.Key key)
+    {
+        Push(new InputEventKey { PhysicalKeycode = key, Keycode = key, Pressed = true });
+        await Frames(2);
+        Push(new InputEventKey { PhysicalKeycode = key, Keycode = key, Pressed = false });
+        await Frames(2);
     }
 
     /// <summary>

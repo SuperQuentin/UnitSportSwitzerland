@@ -192,6 +192,12 @@ public sealed class GameSettings
     /// </summary>
     public string PlayerName { get; set; } = "";
 
+    /// <summary>
+    /// The player's figure (#394): <see cref="Avatar.Appearance.Pack"/>ed, 0 until one is chosen in
+    /// the inventory's Body row (till then the figure comes from the player's network id).
+    /// </summary>
+    public int AppearanceBits { get; set; }
+
     /// <summary>GPX files replayed recently, newest first (the Play solo track picker lists them).</summary>
     public List<string> RecentGpx { get; set; } = new();
 
