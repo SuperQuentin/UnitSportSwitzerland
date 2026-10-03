@@ -21,9 +21,14 @@
 - **Pointing + outline** (`Highlight.cs`): every frame `ItemController` picks the target (`Highlight.Find`:
   view ray first, else smallest angle in a ~18 deg cone within 2.6 m of the chest, if a ray from the eye reaches it;
   never one merely at the feet, #390)
-  among dropped items and radios. The border is an inverted hull as `MaterialOverlay`, pushed from the
-  mesh's AABB centre (not normals: flat-shaded items would crack), width scaled by view distance, pulsing;
-  `instance uniform center` so one material serves all. E on a pointed radio opens its panel.
+  among dropped items and radios. The border is a **stencil silhouette** (#401) as `MaterialOverlay`:
+  a pass that only writes stencil 77 over every mesh of the target (depth test off), then 8 next passes of
+  the same meshes nudged 2 px (at 1080 lines) on screen in 8 directions, drawn only off the mark and marking
+  what they draw (`stencil_mode read, write, compare_not_equal`): the outer edge only, constant width, no
+  lines between sub-meshes, no normals (flat-shaded corners do not crack). Pulled 15 cm toward the eye so a
+  flush car door's edge shows over the body (no more surface glow) while a hat in front still hides it.
+  Stencil is read in the transparent pass only: both passes are transparent, ordered by render priority
+  100 / 101. Another stencil user must not take 77. Replaced the inverted hull (lumpy, outlined every part). E on a pointed radio opens its panel.
 - **Throw** (`ThrowAim.cs`): items with `ItemDefs.Throwable` (Throw, Consume, Material, Wear use) — Aim
   shows the arc, Use winds up (0..1 over 1 s, ease-out; hum `SfxSynth.ChargeHum` rising in pitch, chime +
   shake at full), letting go of Use throws (`ReleasePower`), letting go of Aim cancels. Velocity: view
