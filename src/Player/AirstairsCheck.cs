@@ -135,6 +135,9 @@ public partial class AirstairsCheck : Node
         float h1 = (l1?.Ride as Airstairs)?.Height ?? 0f;
         Expect(placed == 1 && docked, $"stairs placed docked at L1 (placed {placed}, docked {l1?.StairsDockedAt?.Door}, platform {h1:F3} m, sill {sillY - (l1?.GlobalPosition.Y ?? 0f):F3} m)");
         if (l1 == null) { Finish("no stairs"); return; }
+        // settled on the ground (placed a hand's breadth up), the platform at the sill over it
+        await Seconds(3);
+        h1 = (l1.Ride as Airstairs)?.Height ?? 0f;
         var stairsXf = l1.GlobalTransform.Orthonormalized();
         await Shot("docked-l1", stairsXf * new Vector3(-9f, 4.5f, 7f), stairsXf * new Vector3(0, 2.2f, -1.5f));
         await Shot("a320-with-stairs", planeAt + new Vector3(-38f, 12f, 22f), planeAt + new Vector3(-3f, 3f, -2f));
@@ -153,7 +156,7 @@ public partial class AirstairsCheck : Node
         var local = AircraftMeshBuilder.Flip(Frame().AffineInverse() * me.GlobalPosition);
         Expect(inside && me.Aboard && me.DeckOn == "v:" + plane.Name && Mathf.Abs(local.Y - A320Layout.FloorY) < 0.3f,
             $"through L1 into the cabin (aboard {me.DeckOn}, at {local.X:F2}, {local.Y - A320Layout.FloorY:F2} over the floor, {local.Z:F2})");
-        await Shot("in-the-door", Cabin(-0.6f, A320Layout.ForwardDoorZ - 2.5f) + Vector3.Up * 1.2f, me.GlobalPosition + Vector3.Up * 1.2f);
+        await Shot("in-the-door", stairsXf * new Vector3(-2.2f, h1 + 1.7f, -1.2f), me.GlobalPosition + Vector3.Up * 1.1f);
         // and back down to the ground
         bool out1 = await WalkTo(me, () => stairsXf * new Vector3(0, 0, -3.0f), 15);
         GD.Print($"[stairs] out on the platform {out1}: at {stairsXf.AffineInverse() * me.GlobalPosition}, aboard '{me.DeckOn}', floor {me.IsOnFloor()}");
@@ -164,7 +167,9 @@ public partial class AirstairsCheck : Node
         // ---- a second truck driven to L2 from 8 m out, askew, let go: it docks ----------------
         var l2Local = AirstairsDock.LocalSill(deck, 2)!.Value;
         var f = Frame();
-        var (dockAt, dockYaw, dockH) = AirstairsDock.Pose(f * l2Local.Edge, (f.Basis * l2Local.Out) with { Y = 0 }, plane.GlobalPosition.Y);
+        var (dockAt, dockYaw, _) = AirstairsDock.Pose(f * l2Local.Edge, (f.Basis * l2Local.Out) with { Y = 0 }, plane.GlobalPosition.Y);
+        // the platform's height is over the ground the truck stands on (a sloping apron: not the aircraft's)
+        float DockH() => (f * l2Local.Edge).Y - me.GlobalPosition.Y + AirstairsLayout.DockAbove;
         var outward = new Vector3(Mathf.Sin(dockYaw), 0, Mathf.Cos(dockYaw));
         var side = new Vector3(outward.Z, 0, -outward.X);
         me.DebugLaunch(dockAt + outward * 8f + side * 1.2f + Vector3.Up * 0.3f, Vector3.Zero);
@@ -200,11 +205,11 @@ public partial class AirstairsCheck : Node
                 var ap = AirstairsDock.Approach(me.GlobalTransform.Orthonormalized(), near);
                 GD.Print($"[stairs]   driving: at {me.GlobalPosition} yaw {me.Rotation.Y:F2} (dock {dockAt}, {dockYaw:F2}), speed {me.GroundSpeed:F2}, sills {near.Count}, approach {ap?.Door}, lip off {(AirstairsDock.Lip(me.GlobalTransform) - AirstairsDock.Lip(new Transform3D(new Basis(Vector3.Up, dockYaw), dockAt))).Length():F2}, target {driving.TargetHeight:F2}");
             }
-            return driving.Docked != null && Mathf.Abs(driving.Height - dockH) < 0.01f;
+            return driving.Docked != null && Mathf.Abs(driving.Height - DockH()) < 0.01f;
         }, 40);
         var err = (me.GlobalPosition - dockAt) with { Y = 0 };
         Expect(lined && err.Length() < 0.05f && Mathf.Abs(MathX.WrapAngle(me.Rotation.Y - dockYaw)) < 0.02f,
-            $"driven to L2 and let go: docked (door {driving.Docked?.Door}, off by {err.Length():F3} m, {Mathf.RadToDeg(MathX.WrapAngle(me.Rotation.Y - dockYaw)):F1}°, platform {driving.Height:F3} for {dockH:F3})");
+            $"driven to L2 and let go: docked (door {driving.Docked?.Door}, off by {err.Length():F3} m, {Mathf.RadToDeg(MathX.WrapAngle(me.Rotation.Y - dockYaw)):F1}°, platform {driving.Height:F3} for {DockH():F3})");
         await Shot("driven-docked-l2", me.GlobalPosition + outward * 10f + side * 8f + Vector3.Up * 6f, me.GlobalPosition + Vector3.Up * 2.5f);
         me.RideControls = null;
         Expect(me.TryInteract() && await Until(() => me.Ride == RideKind.OnFoot, 5), "got out: parked");
