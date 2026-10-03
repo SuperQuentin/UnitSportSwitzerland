@@ -145,6 +145,10 @@
   with its bike lane at 2499908,1118588: pocket 0, bike +2.25, through +4.50). A pocket's lane stops
   behind a bike box (4 m). The stats print where the inferred junctions are (Geneva: 2498980,1118876
   2498984,1118880 2498764,1118281 2499883,1116759 2500741,1117395 2500084,1118518).
+- **Test region** (#386, `signal-test-region`): `RoadGen --test-region test_output/signal-region`
+  builds seven designed junctions (ideal with lanes / paths, mismatched room, a narrow arm, a T, a
+  close pair) through this pipeline in ~2 s; the clean place to look at and test lights before
+  Geneva (tier 0 `SignalTestRegionTests`, `--signal-check`, windowed `--trafficcheck` at each).
 - **Not done**: one record for a junction of several nodes (the internal links are only kept
   clean); OSM `turn:lanes` not read yet, restrictions only for the lane records (a left pocket is
   still built where the left turn is forbidden: 10 in Geneva); thin median (optional); crossings of divided roads

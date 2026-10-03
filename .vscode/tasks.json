@@ -91,6 +91,30 @@
             "problemMatcher": []
         },
         {
+            "label": "run: signal test region",
+            "detail": "Rebuild the traffic-lights test region (#386, RoadGen --test-region, ~2 s) and play at a junction, 150 cars",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
+            "args": ["--path", ".", "--", "--chunks", "test_output/signal-region", "--at", "${input:signalJunction}", "--traffic", "150",
+                "--generated", "off", "--title", "signal test region"],
+            "dependsOn": ["build", "data: signal test region"],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "run: fixture course",
+            "detail": "A test course built in code (--chunks fixture:<course>, docs/notes/general/testing.md), traffic on",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "osx": { "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot" },
+            "linux": { "command": "godot" },
+            "args": ["--path", ".", "--", "--chunks", "fixture:${input:fixtureCourse}", "--traffic", "150", "--title", "fixture ${input:fixtureCourse}"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
             "label": "run: editor",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
@@ -314,6 +338,14 @@
             "problemMatcher": []
         },
         {
+            "label": "data: signal test region",
+            "detail": "RoadGen --test-region: the traffic-lights test region (#386) into test_output/signal-region, junction table on stdout",
+            "type": "process",
+            "command": "dotnet",
+            "args": ["run", "--project", "tools/RoadGen", "-c", "Release", "--", "--test-region", "test_output/signal-region"],
+            "problemMatcher": "$msCompile"
+        },
+        {
             "label": "data: RoadGen demo",
             "detail": "Four hand-built junction scenes, no data needed",
             "type": "process",
@@ -333,6 +365,23 @@
         { "id": "shot", "type": "promptString", "description": "x,y,z,pitchDeg,yawDeg,seconds,out.png (world coords)", "default": "0,300,0,-20,0,6,test_output/shot.png" },
         { "id": "fly", "type": "promptString", "description": "x,y,z,yawDeg,speedMps,seconds (world coords)", "default": "0,1200,0,90,150,12" },
         { "id": "rideKind", "type": "pickString", "description": "Mount", "options": ["bike", "skis", "foot"], "default": "bike" },
-        { "id": "craft", "type": "pickString", "description": "Aircraft", "options": ["wingsuit", "glide", "paraglider", "heli", "plane"], "default": "wingsuit" }
+        { "id": "craft", "type": "pickString", "description": "Aircraft", "options": ["wingsuit", "glide", "paraglider", "heli", "plane"], "default": "wingsuit" },
+        {
+            // spawn on the grass 25 m south-west of each junction (J5: between the two) (docs/notes/tools/signal-test-region.md)
+            "id": "signalJunction", "type": "pickString", "description": "Junction of the signal test region",
+            "options": [
+                { "label": "J1 ideal crossroads, painted bike lanes (2910500,1322500)", "value": "2910475,1322475" },
+                { "label": "J2 ideal crossroads in town, separated bike paths (2911500,1322500)", "value": "2911475,1322475" },
+                { "label": "J3 mismatched room: L|T|R, L|TR, one lane, right pocket only (2912500,1322500)", "value": "2912475,1322475" },
+                { "label": "J3b a 4 m road across the main road (2913500,1322500)", "value": "2913475,1322475" },
+                { "label": "J4 T junction (2914500,1322500)", "value": "2914475,1322475" },
+                { "label": "J5 two lights 60 m apart (2915470,1322500 / 2915530,1322500)", "value": "2915500,1322470" }
+            ],
+            "default": "2910475,1322475"
+        },
+        {
+            "id": "fixtureCourse", "type": "pickString", "description": "Fixture course (Terrain/Fixture/FixtureCourse.Names)",
+            "options": ["flat", "straight", "hairpin", "narrow", "junction", "verge", "lake"], "default": "junction"
+        }
     ]
 }
