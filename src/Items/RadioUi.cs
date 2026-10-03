@@ -9,12 +9,16 @@ using UnitSport.Ui;
 namespace UnitSport.Items;
 
 /// <summary>
-/// The panel of a radio, the music picker (#211): what plays now (title, elapsed / length bar,
-/// previous, play/stop, next, and what happens when it ends), a search box over the CDs (the
-/// server's shared ones, then this player's own) and, in a car, the live stations; the volume;
-/// a box to burn a new CD from a link for everyone or for yourself only, with its progress; and
-/// for a radio lying in the world, pick it back up. In the menus' look (<see cref="UiTheme"/>),
-/// sized to the screen, driven by mouse, keyboard (arrows, Enter, / to search) or pad (D-pad, A, B).
+/// The panel of a radio, the music picker (#211), in two views (#392). The **player**, a small
+/// stereo low on the screen that every radio opens on: what plays now (title, elapsed / length
+/// bar, previous, play/stop, next, and what happens when it ends), the volume, and for a radio
+/// lying in the world, pick it back up. The **library**, one button (or pad Y, or / to search)
+/// deeper and centred: a search box over the CDs (the server's shared ones, then this player's
+/// own) and, in a car, the live stations; a box to burn a new CD from a link for everyone or for
+/// yourself only, with its progress. In the menus' look (<see cref="UiTheme"/>), driven by mouse,
+/// keyboard (arrows, Enter) or pad (D-pad, A, B). It closes on the key that opened it, Esc, or a
+/// click outside it: the cursor comes back in the middle of the screen, above the player, so the
+/// click that meant "close" can no longer start the CD under it (#375).
 ///
 /// <para>
 /// Three radios open it: one in the world (E beside it), the one in the hand (Use), and a car's
@@ -40,6 +44,10 @@ public partial class RadioUi : CanvasLayer
     /// <summary>Farther than this from the radio and the panel closes itself.</summary>
     private const float WalkAway = 4f;
     private const float MaxWidth = 700, MaxHeight = 660, Gutter = 16;
+    /// <summary>The player view: this wide, this far above the bottom of the screen (clear of the hotbar).</summary>
+    private const float PlayerWidth = 540, PlayerLift = 96;
+    /// <summary>The view toggle's two faces; the probes press them by text.</summary>
+    public const string LibraryLabel = "Library  ▸", PlayerLabel = "◂  Player";
 
     private enum Target { World, Held, Car, Church }
 
@@ -73,6 +81,9 @@ public partial class RadioUi : CanvasLayer
     private CheckBox _mine = null!;
     private ProgressBar _burnBar = null!;
     private Label _status = null!, _footer = null!;
+    private VBoxContainer _library = null!;
+    private Button _view = null!;
+    private bool _libraryShown;
 
     private readonly Dictionary<int, Button> _cdRows = new();
     private readonly Dictionary<int, Button> _stationRows = new();
@@ -129,9 +140,13 @@ public partial class RadioUi : CanvasLayer
 
         box.AddChild(NowPlayingCard());
 
+        // the library: everything to pick from and burn, shown on demand (#392)
+        _library = UiKit.VBox(10);
+        _library.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+
         // search over the list
         var search = UiKit.HBox(10);
-        box.AddChild(search);
+        _library.AddChild(search);
         _search = new LineEdit
         {
             PlaceholderText = "Search CDs   ( / )",
@@ -148,11 +163,9 @@ public partial class RadioUi : CanvasLayer
 
         (_scroll, _rows) = UiKit.ScrollPage(2);
         _scroll.CustomMinimumSize = new Vector2(0, 120);
-        box.AddChild(_scroll);
+        _library.AddChild(_scroll);
 
-        box.AddChild(UiKit.Line());
-
-        // volume: one for every radio this player hears
+        // volume: one for every radio this player hears; then the way into (or out of) the library
         var volume = UiKit.HBox(12);
         box.AddChild(volume);
         var volumeLabel = UiKit.Text("Volume", UiTheme.FontSmall, UiTheme.TextDim);
@@ -178,10 +191,17 @@ public partial class RadioUi : CanvasLayer
         _volumeValue.CustomMinimumSize = new Vector2(48, 0);
         _volumeValue.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
         volume.AddChild(_volumeValue);
+        _view = UiKit.Button(LibraryLabel, minWidth: 130);
+        _view.TooltipText = "All the CDs and stations, and burning a new CD";
+        _view.Pressed += () => ShowLibrary(!_libraryShown);
+        volume.AddChild(_view);
+
+        box.AddChild(_library);
+        _library.AddChild(UiKit.Line());
 
         // burning a CD from a link
         var burn = UiKit.HBox(10);
-        box.AddChild(burn);
+        _library.AddChild(burn);
         _link = new LineEdit
         {
             PlaceholderText = "Paste a YouTube link to burn a CD",
@@ -197,7 +217,7 @@ public partial class RadioUi : CanvasLayer
         burn.AddChild(burnButton);
 
         var status = UiKit.HBox(10);
-        box.AddChild(status);
+        _library.AddChild(status);
         _burnBar = Bar(6);
         _burnBar.CustomMinimumSize = new Vector2(120, 6);
         _burnBar.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
@@ -280,17 +300,50 @@ public partial class RadioUi : CanvasLayer
 
     private static string Percent(float v) => $"{Mathf.RoundToInt(v * 100)} %";
 
-    /// <summary>Centred, never wider or taller than the screen less a gutter.</summary>
+    /// <summary>
+    /// The library: centred, never wider or taller than the screen less a gutter. The player: as
+    /// tall as its content, low and centred like a car stereo, leaving the middle of the screen
+    /// (where the freed cursor appears) to the world.
+    /// </summary>
     private void Fit()
     {
         if (_panel == null) return;
         var screen = GetViewport().GetVisibleRect().Size;
-        float w = Mathf.Min(MaxWidth, screen.X - 2 * Gutter), h = Mathf.Min(MaxHeight, screen.Y - 2 * Gutter);
-        _panel.SetAnchorsPreset(Control.LayoutPreset.Center);
-        _panel.OffsetLeft = -w / 2;
-        _panel.OffsetRight = w / 2;
-        _panel.OffsetTop = -h / 2;
-        _panel.OffsetBottom = h / 2;
+        if (_libraryShown)
+        {
+            float w = Mathf.Min(MaxWidth, screen.X - 2 * Gutter), h = Mathf.Min(MaxHeight, screen.Y - 2 * Gutter);
+            _panel.SetAnchorsPreset(Control.LayoutPreset.Center);
+            _panel.OffsetLeft = -w / 2;
+            _panel.OffsetRight = w / 2;
+            _panel.OffsetTop = -h / 2;
+            _panel.OffsetBottom = h / 2;
+            return;
+        }
+        float pw = Mathf.Min(PlayerWidth, screen.X - 2 * Gutter);
+        float ph = _panel.GetCombinedMinimumSize().Y;
+        float lift = Mathf.Clamp(PlayerLift, Gutter, Mathf.Max(Gutter, screen.Y - ph - Gutter));
+        _panel.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
+        _panel.OffsetLeft = -pw / 2;
+        _panel.OffsetRight = pw / 2;
+        _panel.OffsetTop = -lift - ph;
+        _panel.OffsetBottom = -lift;
+    }
+
+    /// <summary>Switches between the player and the library (#392); the library focuses the row that plays.</summary>
+    public void ShowLibrary(bool on)
+    {
+        _libraryShown = on;
+        _library.Visible = on;
+        _view.Text = on ? PlayerLabel : LibraryLabel;
+        Fit();
+        if (!IsOpen) return;
+        if (on) { Rebuild(); FocusCurrent(); }
+        else
+        {
+            _search.ReleaseFocus();
+            _link.ReleaseFocus();
+            _playStop.CallDeferred(Control.MethodName.GrabFocus);
+        }
     }
 
     public override void _ExitTree()
@@ -353,36 +406,14 @@ public partial class RadioUi : CanvasLayer
         _volume.SetValueNoSignal(RadioSpeaker.UserVolume);
         _volumeValue.Text = Percent(RadioSpeaker.UserVolume);
         if (!_burning) ShowStatus("", UiTheme.TextDim, 0);
-        Fit();
         _panel.Visible = true;
         Input.MouseMode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
-        Rebuild();
+        Rebuild();   // hidden in the player, but Play with nothing on starts its first row
         UpdateNow();
-        FocusCurrent();
-        _mouseMoved = false;
-    }
-
-    /// <summary>
-    /// Whether the mouse moved since the panel opened. Until it does, a left click is the Use key
-    /// again and closes the panel: the cursor comes back in the middle of the screen, right on the
-    /// first CD of the list, and that click used to pick it (the chess type beat, #375).
-    /// </summary>
-    private bool _mouseMoved;
-
-    public override void _Input(InputEvent e)
-    {
-        if (!IsOpen) return;
-        if (e is InputEventMouseMotion motion)
-        {
-            if (motion.Relative.LengthSquared() > 4f) _mouseMoved = true;
-            return;
-        }
-        if (!_mouseMoved && _target == Target.Held && e is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true })
-        {
-            Close();
-            GetViewport().SetInputAsHandled();
-        }
+        // always the player first: the list is one step deeper (#392)
+        ShowLibrary(false);
+        Callable.From(Fit).CallDeferred();   // its height is known once laid out
     }
 
     public void Close()
@@ -846,9 +877,15 @@ public partial class RadioUi : CanvasLayer
         _mode.Text = RadioQueue.Label(now.Mode);
         _mode.Disabled = locked;
         _prev.Disabled = _next.Disabled = _playStop.Disabled = locked;
+        string closeKey = _target switch
+        {
+            Target.Car => KeyName(PlayerInput.RadioPanel),
+            Target.Held => KeyName(PlayerInput.UseItem),
+            _ => KeyName(PlayerInput.InteractMount),
+        };
         _footer.Text = PlayerInput.LastDevice == InputDevice.Gamepad
-            ? "D-pad choose · A play · B close"
-            : $"Up / Down choose · Enter play · / search · Esc{(_target == Target.Car ? " or " + KeyName(PlayerInput.RadioPanel) : "")} close";
+            ? (_libraryShown ? "D-pad choose · A play · Y player · B close" : "D-pad choose · A press · Y library · B close")
+            : (_libraryShown ? "Up / Down choose · Enter play · / search · Esc close" : $"/ library · Esc, {closeKey} or a click outside close");
         Highlight();
     }
 
@@ -929,9 +966,26 @@ public partial class RadioUi : CanvasLayer
             }
             return;
         }
-        // not E: it is a letter in the link box
-        if (e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu)
-            || _target == Target.Car && e.IsActionPressed(PlayerInput.RadioPanel))
+        // a text box has the keys: E is a letter in the link, Esc there still closes
+        bool typing = GetViewport().GuiGetFocusOwner() is LineEdit;
+        // pad Y flips between player and library; on the pad it is also interact, so it comes first
+        if (e is InputEventJoypadButton { ButtonIndex: JoyButton.Y })
+        {
+            ShowLibrary(!_libraryShown);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // the key that opened it closes it (#392): R the car, Use the one in the hand, E one in the world or church
+        bool openingKey = _target switch
+        {
+            Target.Car => e.IsActionPressed(PlayerInput.RadioPanel),
+            Target.Held => e is not InputEventMouseButton && e.IsActionPressed(PlayerInput.UseItem),
+            _ => e is InputEventKey && e.IsActionPressed(PlayerInput.InteractMount),
+        };
+        // a click outside the panel: back to the world (the GUI took every click on the panel)
+        bool outside = e is InputEventMouseButton { ButtonIndex: MouseButton.Left or MouseButton.Right } click
+                       && !_panel.GetGlobalRect().HasPoint(click.Position);
+        if (e.IsActionPressed("ui_cancel") || e.IsActionPressed(PlayerInput.Menu) || outside || openingKey && !typing)
         {
             Close();
             GetViewport().SetInputAsHandled();
@@ -939,6 +993,7 @@ public partial class RadioUi : CanvasLayer
         }
         if (e is InputEventKey { Keycode: Key.Slash } or InputEventKey { Keycode: Key.F, CtrlPressed: true })
         {
+            if (!_libraryShown) ShowLibrary(true);
             _search.GrabFocus();
             _search.SelectAll();
             GetViewport().SetInputAsHandled();
