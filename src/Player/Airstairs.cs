@@ -31,7 +31,7 @@ public sealed class Airstairs : Rideable
     public const float LiftRate = 0.45f;
     /// <summary>Top speed forward and in reverse, m/s (25 and 8 km/h).</summary>
     public const float TopSpeed = 6.9f, TopReverse = 2.2f;
-    private const float Accel = 1.3f, BrakeDecel = 4.5f, Drag = 0.25f, MaxSteer = 0.6f;
+    private const float Accel = 2.2f, BrakeDecel = 4.5f, Drag = 0.25f, MaxSteer = 0.6f;
 
     private float _steer;
     private float _signed;
