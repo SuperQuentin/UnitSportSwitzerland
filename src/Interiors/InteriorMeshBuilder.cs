@@ -530,7 +530,8 @@ public static partial class InteriorMeshBuilder
         bool solid = p.Type is not (FurnitureType.Rug or FurnitureType.Plant or FurnitureType.Bell
             or FurnitureType.Cross or FurnitureType.Dais or FurnitureType.AcousticFoam or FurnitureType.CinemaScreen
             or FurnitureType.GuitarStand);
-        if (solid) CollisionBox(s, at, basis, new Vector3(-w, 0, -d), new Vector3(w, H, d));
+        // the drum kit's stool stays out of it, so the drummer can sit there (#433)
+        if (solid) CollisionBox(s, at, basis, new Vector3(-w, 0, p.Type == FurnitureType.DrumKit ? -0.28f : -d), new Vector3(w, H, d));
 
         var wood = C(0.52f, 0.36f, 0.22f);
         var darkWood = C(0.34f, 0.22f, 0.14f);
@@ -582,6 +583,13 @@ public static partial class InteriorMeshBuilder
                 B(-w, 0, -d, w, 0.86f, d, white);
                 B(-w, 0.86f, -d, w, 0.9f, d, C(0.30f, 0.30f, 0.32f));
                 B(-w, 1.45f, -d, w, 2.1f, -d + 0.35f, white); // wall cupboards
+                {
+                    // the sink set in the worktop, and its tap (#433, Interiors.HouseProps.TapOf)
+                    float sx = HouseProps.CounterSinkX(p);
+                    B(sx - 0.25f, 0.9f, -d + 0.1f, sx + 0.25f, 0.905f, d - 0.08f, metal);
+                    B(sx - 0.02f, 0.9f, -d + 0.04f, sx + 0.02f, 1.15f, -d + 0.08f, metal);
+                    B(sx - 0.015f, 1.11f, -d + 0.08f, sx + 0.015f, 1.15f, -d + 0.2f, metal);
+                }
                 break;
             case FurnitureType.Stove:
                 B(-w, 0, -d, w, H, d, white * 0.95f);
@@ -600,10 +608,13 @@ public static partial class InteriorMeshBuilder
                 B(-0.08f, 0, -d, 0.08f, 0.75f, -d + 0.2f, white);
                 B(-w, 0.72f, -d, w, H, d, white);
                 B(-0.02f, H, -d + 0.02f, 0.02f, H + 0.2f, -d + 0.06f, metal);
+                B(-0.015f, H + 0.16f, -d + 0.06f, 0.015f, H + 0.2f, -d + 0.14f, metal);   // the spout
                 break;
             case FurnitureType.Bathtub:
                 B(-w, 0, -d, w, H, d, white);
                 B(-w + 0.06f, H, -d + 0.06f, w - 0.06f, H + 0.005f, d - 0.06f, C(0.72f, 0.84f, 0.90f));
+                B(-0.025f, H, -d + 0.02f, 0.025f, H + 0.18f, -d + 0.06f, metal);           // the tap
+                B(-0.02f, H + 0.14f, -d + 0.06f, 0.02f, H + 0.18f, -d + 0.17f, metal);
                 break;
             case FurnitureType.Shelf:
             case FurnitureType.Rack:

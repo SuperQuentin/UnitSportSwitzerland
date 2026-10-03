@@ -1033,7 +1033,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             if (p.Indoors && _current != null)
             {
                 door = ExitAt(p)?.Door;
-                if (door == null) text = ChurchRadios.PromptFor(p) ?? Loot.LootService.Instance?.PromptFor(p);
+                if (door == null) text = ChurchRadios.PromptFor(p) ?? HouseProps.PromptFor(p) ?? Loot.LootService.Instance?.PromptFor(p);
             }
             else if (!p.Indoors) door = OutsideDoorInReach(p.GlobalPosition);
             if (door != null)

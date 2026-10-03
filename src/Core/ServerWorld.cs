@@ -21,6 +21,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Vehicles.VehicleManager? _vehicles;
     private Items.RadioManager? _radios;
     private Interiors.ChurchRadios? _churchRadios;
+    private Interiors.HouseProps? _houseProps;
     private Items.DroppedItems? _dropped;
     private PlayerRegistry? _registry;
     private ChatManager? _chat;
@@ -132,6 +133,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Audio.Cd.CdLibrary.Create(this, server: true);
         // the radio by the pastor rat in every church (#370)
         _churchRadios = Interiors.ChurchRadios.Create(this);
+        _houseProps = Interiors.HouseProps.Create(this, client: false);
         Net.ClockSync.Create(this);
         // the traffic lights' group states on the server clock, for tools/signalnetcheck.sh (#353)
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: true));
@@ -391,6 +393,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
             _chunks!.AddAnchor(player);
         _interiors?.SendTableTo(id);
         _churchRadios?.SendTo(id);
+        _houseProps?.SendTo(id);
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);

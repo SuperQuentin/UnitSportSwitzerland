@@ -667,7 +667,12 @@ public static partial class InteriorGenerator
 
     // ---- furniture -----------------------------------------------------------------------------
 
-    private sealed record Piece(FurnitureType Type, float W, float D, float H, bool Wall);
+    /// <summary>
+    /// One piece to place. <paramref name="FaceTo"/>: a free-standing piece that turns to face the
+    /// last piece of that type already in the room (the cinema sofa its screen, #433), and stands
+    /// in front of it, seats in a row (<see cref="TryFacing"/>).
+    /// </summary>
+    private sealed record Piece(FurnitureType Type, float W, float D, float H, bool Wall, FurnitureType? FaceTo = null);
 
     /// <summary>A room's pieces: what any room of its type has, then what its building kind adds (<see cref="KindExtras"/>).</summary>
     private static IEnumerable<Piece> Pieces(RoomType t, RoomPlan r, Random rng, BuildingKind kind, bool vending = false) =>
@@ -848,9 +853,9 @@ public static partial class InteriorGenerator
         RoomType.HomeCinema => new[]
         {
             new Piece(FurnitureType.CinemaScreen, Math.Clamp(Math.Min(r.Width, r.Depth) - 0.8f, 1.6f, 3.0f), 0.12f, 2.1f, true),
-            new Piece(FurnitureType.Sofa, 2.0f, 0.9f, 0.8f, false),
-            new Piece(FurnitureType.Armchair, 0.85f, 0.85f, 0.9f, true),
-            new Piece(FurnitureType.Armchair, 0.85f, 0.85f, 0.9f, true),
+            new Piece(FurnitureType.Sofa, 2.0f, 0.9f, 0.8f, false, FurnitureType.CinemaScreen),
+            new Piece(FurnitureType.Armchair, 0.85f, 0.85f, 0.9f, false, FurnitureType.CinemaScreen),
+            new Piece(FurnitureType.Armchair, 0.85f, 0.85f, 0.9f, false, FurnitureType.CinemaScreen),
             new Piece(FurnitureType.Amplifier, 0.45f, 0.35f, 1.0f, true),
             new Piece(FurnitureType.Amplifier, 0.45f, 0.35f, 1.0f, true),
             new Piece(FurnitureType.Shelf, 1.0f, 0.35f, 1.0f, true),
@@ -1203,6 +1208,7 @@ public static partial class InteriorGenerator
         }
         else
         {
+            if (p.FaceTo is { } target && TryFacing(l, f, r, p, target, placed, blocked)) return;
             float cx = (r.X0 + r.X1) / 2, cz = (r.Z0 + r.Z1) / 2;
             bool rotate = r.Width < r.Depth && p.W > p.D;
             float w = rotate ? p.D : p.W, d = rotate ? p.W : p.D;
@@ -1219,6 +1225,43 @@ public static partial class InteriorGenerator
                         return;
                     }
         }
+    }
+
+    /// <summary>The way a piece's front looks once turned (authored facing +Z): 0 +Z, 1 +X, 2 -Z, 3 -X.</summary>
+    private static (float X, float Z) FrontOf(int turns) => (turns & 3) switch
+    {
+        0 => (0, 1), 1 => (1, 0), 2 => (0, -1), _ => (-1, 0),
+    };
+
+    /// <summary>
+    /// A free-standing piece facing the <paramref name="target"/> already in the room (#433): turned
+    /// to look at it, on the line out of its front 2-3.5 m away, the middle first and then to either
+    /// side, so a sofa sits square to the screen and the armchairs beside it. False when the target
+    /// is not in this room or nothing fits; the caller then falls back to the plain search.
+    /// </summary>
+    private static bool TryFacing(InteriorLayout l, int f, RoomPlan r, Piece p, FurnitureType target,
+        List<RectPlan> placed, List<RectPlan> blocked)
+    {
+        var t = l.Furniture.LastOrDefault(q => q.Floor == f && q.Type == target
+            && q.X > r.X0 && q.X < r.X1 && q.Z > r.Z0 && q.Z < r.Z1);
+        if (t == null) return false;
+        var (fx, fz) = FrontOf(t.Turns);
+        int turns = (t.Turns + 2) & 3;   // looking back at it
+        bool odd = (turns & 1) == 1;
+        float w = odd ? p.D : p.W, d = odd ? p.W : p.D;
+        // across the target's front, the seats' row runs this way
+        float sx = -fz, sz = fx;
+        foreach (float dist in new[] { 2.6f, 2.2f, 3.0f, 3.5f, 1.8f })
+            for (int k = 0; k < 9; k++)
+            {
+                float side = (k % 2 == 1 ? 1 : -1) * ((k + 1) / 2) * 0.35f;
+                float x = t.X + fx * (t.D / 2 + dist) + sx * side, z = t.Z + fz * (t.D / 2 + dist) + sz * side;
+                var rect = new RectPlan(x - w / 2, z - d / 2, x + w / 2, z + d / 2);
+                if (!Free(r, rect, placed, blocked, 0.12f)) continue;
+                Add(l, f, p, rect, turns, placed);
+                return true;
+            }
+        return false;
     }
 
     private static void Add(InteriorLayout l, int f, Piece p, RectPlan rect, int turns, List<RectPlan> placed)

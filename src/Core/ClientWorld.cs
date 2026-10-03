@@ -335,6 +335,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Audio.Cd.CdLibrary.Create(this, server: false);
         // the radio by the pastor rat in every church (#370)
         Interiors.ChurchRadios.Create(this);
+        // taps and instruments in houses (#433)
+        Interiors.HouseProps.Create(this, client: true);
         Net.ClockSync.Create(this);
         // live stations in cars (#179): offline this machine tunes them itself
         if (Systems.On(Systems.Audio))
@@ -640,6 +642,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
         if (Loot.BankProbe.Role != null) AddChild(new Loot.BankProbe(items, origin));
         if (Loot.ShopProbe.Role != null) AddChild(new Loot.ShopProbe(items, origin));
+        if (Interiors.HousePropsProbe.Role != null) AddChild(new Interiors.HousePropsProbe(items, origin));
         if (Player.WheelProbe.WatchRole != null) AddChild(new Player.WheelProbe { Name = "WheelProbe" });
         if (Items.PlacedProbe.Role != null) AddChild(new Items.PlacedProbe(items));
         if (Birds.BirdNetProbe.Role != null) AddChild(new Birds.BirdNetProbe(items));

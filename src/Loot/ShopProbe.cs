@@ -255,53 +255,6 @@ public partial class ShopProbe : ChatProbe
         Shops.Close();
     }
 
-    // walking in and standing at a counter: as BankProbe does
-
-    private async Task<bool> WalkIn(FootPlayer me, DoorIndex.Entry door)
-    {
-        var interiors = InteriorManager.Instance!;
-        string doorKey = door.Key.ToString();
-        var inward = -door.Outward;
-        if (me.Indoors) interiors.Leave(me);
-        me.LeaveInterior(door.World + door.Outward * 1.2f + Vector3.Up * 0.3f, Mathf.Atan2(-inward.X, -inward.Z));
-        me.Velocity = Vector3.Zero;
-        await Seconds(1.5);
-        await Until(() => me.IsOnFloor(), 10);
-        bool open = false;
-        for (int attempt = 0; attempt < 6 && !open; attempt++)
-        {
-            if (!interiors.IsOpen(doorKey)) me.TryInteract();
-            open = await Until(() => interiors.Links.TryGetValue(doorKey, out var lk) && lk.Passable && lk.Swing >= 1f, 5 + attempt * 2);
-        }
-        if (!open) { Fail($"the door {doorKey} never opened"); return false; }
-        Input.ActionPress(PlayerInput.MoveForward);
-        bool inside = await Until(() => me.Indoors && interiors.Current != null, 8);
-        await Seconds(0.4);
-        Input.ActionRelease(PlayerInput.MoveForward);
-        if (!inside) { Fail($"could not walk in through {doorKey}"); return false; }
-        await Seconds(1.0);
-        return true;
-    }
-
-    private async Task<bool> StandAt(FootPlayer me, InteriorLayout layout, InteriorNode node, int index, Func<int, bool> facing)
-    {
-        var f = layout.Furniture[index];
-        var turn = new Basis(Vector3.Up, f.Turns * Mathf.Pi / 2);
-        var front = turn * new Vector3(0, 0, f.D / 2 + 0.55f);
-        var face = node.GlobalTransform.Basis * -front;
-        float sign = _role == "B" ? 1f : -1f;
-        foreach (float offset in new[] { 0.3f, 0.15f, 0f, 0.45f })
-        {
-            var side = turn * new Vector3(sign * offset, 0, 0);
-            me.EnterInterior(layout.Key, node.GlobalTransform * (new Vector3(f.X, layout.FloorY(f.Floor) + 0.1f, f.Z) + front + side), Mathf.Atan2(-face.X, -face.Z));
-            me.Velocity = Vector3.Zero;
-            await Seconds(0.8);
-            if (InteriorManager.Instance?.Current?.Key == layout.Key && facing(index)) return true;
-        }
-        Fail($"could not stand in front of #{index} ({f.Type})");
-        return false;
-    }
-
     protected override string Shot(string name)
     {
         if (DisplayServer.GetName() == "headless") return "";

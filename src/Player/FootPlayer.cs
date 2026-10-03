@@ -1737,6 +1737,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // Remotes only ease out on what they receive.
         if (DanceId != 0 && !DanceAllowed()) DanceId = 0;
         if (_swimming) { PublishSwimPose(dt); return; }
+        if (PublishPlayingPose()) return;
         _airTime = IsOnFloor() ? 0f : _airTime + dt;
         float speed = MathX.FlatLength(Velocity);
 
@@ -1933,6 +1934,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _walkPalette = _walkPalette with { Outfit = new(OutfitBits) };
         }
         if (PoseKind == PoseSwim) { ApplySwimFigure(); return; }
+        if (PoseKind == PoseSeat) { ApplySeatFigure(); return; }
         float dt = (float)GetProcessDeltaTime();
         StepArmPose(dt);
         var dance = DrawnDance = StepDance(dt);
@@ -2332,6 +2334,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (_ride == null && !_mantling && _deadTimer <= 0 && TryVehicleAt()) return true;
             var interiors = Interiors.InteriorManager.Instance;
             if (Interiors.ChurchRadios.TryOpen(this)) return true;
+            // a tap, or an instrument to sit at (#433): before searching, so a piano's keys play it
+            if (_ride == null && !_mantling && _deadTimer <= 0 && Interiors.HouseProps.TryUse(this)) return true;
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             // the chess type beat in here: E dances to it, as outdoors (#370)
             if (interiors?.AtExit(this) != true && (DanceId != 0 || RatBeatHere(heard: true)))
@@ -3117,6 +3121,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         // held by the Battle Royale cargo plane (#207): it moves the body, nothing else does
         if (Carried()) return;
+        // sat at a house instrument (#433): held on its stool, facing the keys
+        if (HoldAtInstrument()) return;
         // drop onto the terrain surface once its height data is available
         if (!_placed && !Indoors)
         {

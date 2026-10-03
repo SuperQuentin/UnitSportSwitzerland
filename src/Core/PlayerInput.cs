@@ -138,6 +138,19 @@ public partial class PlayerInput : Node
     /// <summary>Hotbar slots 1-6 (#391): select on foot, swap the hovered slot in the inventory, pick in the quick wheel. Same keys as the truck's gates, never at the same time.</summary>
     public static readonly StringName[] Slots = { "slot_1", "slot_2", "slot_3", "slot_4", "slot_5", "slot_6" };
     public const string PrevItem = "prev_item";
+
+    // --- house instruments (#433), only while sat at one (Interiors.InstrumentUi) ---
+    /// <summary>
+    /// The thirteen keys of an octave, C to C, on a tracker's layout: the home row the white keys
+    /// (A S D F G H J K), the row above the black ones (W E, T Y U). A drum kit's pieces on the same keys.
+    /// </summary>
+    public static readonly StringName[] InstrumentKeys =
+    {
+        "instrument_0", "instrument_1", "instrument_2", "instrument_3", "instrument_4", "instrument_5", "instrument_6",
+        "instrument_7", "instrument_8", "instrument_9", "instrument_10", "instrument_11", "instrument_12",
+    };
+    public const string InstrumentOctaveDown = "instrument_octave_down";
+    public const string InstrumentOctaveUp = "instrument_octave_up";
     /// <summary>Opens the field journal of birds seen and bagged (<see cref="Birds.BirdJournal"/>).</summary>
     public const string BirdJournal = "bird_journal";
     /// <summary>The hammer in hand (#359): turns the piece; with Aim, changes its material. R, or D-pad up on a pad.</summary>
@@ -496,6 +509,11 @@ public partial class PlayerInput : Node
         Bind(NextItem, Mouse(MouseButton.WheelDown), Button(JoyButton.DpadRight));
         for (int s = 0; s < Slots.Length; s++) Bind(Slots[s], Keys(Key.Key1 + s));
         Bind(PrevItem, Mouse(MouseButton.WheelUp));
+        // sat at an instrument the letter keys are notes: nothing else reads them then (UiFocus)
+        Key[] notes = { Key.A, Key.W, Key.S, Key.E, Key.D, Key.F, Key.T, Key.G, Key.Y, Key.H, Key.U, Key.J, Key.K };
+        for (int k = 0; k < InstrumentKeys.Length; k++) Bind(InstrumentKeys[k], Keys(notes[k]));
+        Bind(InstrumentOctaveDown, Keys(Key.Z), Button(JoyButton.LeftShoulder));
+        Bind(InstrumentOctaveUp, Keys(Key.X), Button(JoyButton.RightShoulder));
         Bind(BirdJournal, Keys(Key.J));
         // R is the travel picker on foot, D-pad up the engine in a vehicle: with the hammer in hand
         // the item controller takes either first (Build.BuildTool)

@@ -138,6 +138,26 @@ public partial class LootProbe : Node
                 if (invalid++ < 8) GD.Print($"[rooms] invalid {l.Key} ({l.Kind}, {l.Below} below): {string.Join("; ", problems.Take(3))}");
             }
         GD.Print($"[rooms] {invalid} of {layouts.Count} plans fail validation");
+        // #433: a home cinema's seats look at its screen (turned to face it, and in front of it)
+        int cinemas = 0, facing = 0, seats = 0, seatsFacing = 0;
+        foreach (var l in layouts)
+            for (int fl = 0; fl < l.Floors.Count; fl++)
+                foreach (var r in l.Floors[fl].Rooms.Where(r => r.Type == RoomType.HomeCinema))
+                {
+                    bool In(FurniturePlan p) => p.Floor == fl && p.X > r.X0 && p.X < r.X1 && p.Z > r.Z0 && p.Z < r.Z1;
+                    var screen = l.Furniture.FirstOrDefault(p => p.Type == FurnitureType.CinemaScreen && In(p));
+                    if (screen == null) continue;
+                    cinemas++;
+                    var front = new Basis(Vector3.Up, screen.Turns * Mathf.Pi / 2) * Vector3.Back;
+                    bool Faces(FurniturePlan p) => p.Turns == ((screen.Turns + 2) & 3)
+                        && (p.X - screen.X) * front.X + (p.Z - screen.Z) * front.Z > 1f;
+                    var chairs = l.Furniture.Where(p => p.Type is FurnitureType.Sofa or FurnitureType.Armchair && In(p)).ToList();
+                    if (chairs.Any(p => p.Type == FurnitureType.Sofa && Faces(p))) facing++;
+                    seats += chairs.Count;
+                    seatsFacing += chairs.Count(Faces);
+                }
+        GD.Print($"[rooms] {cinemas} home cinema(s): the sofa faces the screen in {facing}, {seatsFacing} of {seats} seats do");
+        if (cinemas > 0 && facing < cinemas * 0.9) { GD.Print("[rooms] FAIL: home cinema sofas not facing their screen"); ok = false; }
         // a few plans to look at: banks, cellars with a shelter, a block of flats
         string svgDir = ProjectSettings.GlobalizePath("res://test_output/rooms");
         Directory.CreateDirectory(svgDir);

@@ -44,6 +44,16 @@ public static class Soundcheck
         foreach (var (name, samples) in Occasions.OccasionSounds.All())
             bad += Save(System.IO.Path.Combine(outDir, $"occasion_{name}.wav"), samples);
 
+        // the house instruments and the running tap (#433)
+        foreach (int midi in new[] { 36, 48, 60, 72, 84, 96 })
+        {
+            bad += Save(System.IO.Path.Combine(outDir, $"piano_{midi}.wav"), InstrumentSynth.Render(InstrumentKind.Piano, midi));
+            bad += Save(System.IO.Path.Combine(outDir, $"epiano_{midi}.wav"), InstrumentSynth.Render(InstrumentKind.Keyboard, midi));
+        }
+        for (int i = 0; i < InstrumentSynth.DrumNames.Length; i++)
+            bad += Save(System.IO.Path.Combine(outDir, $"drum_{InstrumentSynth.DrumNames[i].Replace(' ', '_')}.wav"), InstrumentSynth.Render(InstrumentKind.Drums, i));
+        bad += Save(System.IO.Path.Combine(outDir, "tap_water.wav"), Decode(InstrumentSynth.Water));
+
         var profiles = new (string name, EngineProfile p)[] { ("plane", EngineProfile.PistonAero), ("heli", EngineProfile.Turboshaft),
             ("inline4", EngineProfile.Inline4Na), ("rotary", EngineProfile.Rotary), ("boxer", EngineProfile.Boxer4Turbo),
             ("crossplane4", EngineProfile.Crossplane4), ("vtwin90", EngineProfile.VTwin90),
