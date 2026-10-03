@@ -14,6 +14,7 @@ public partial class FootPlayer
     [Export] public int BackItemId { get; set; }
 
     private MeshInstance3D? _backItem;
+    private RadioSparkles? _backSparkles;
 
     /// <summary>
     /// Hangs the back item on the figure's chest frame of this frame's pose, so it rides the
@@ -36,6 +37,7 @@ public partial class FootPlayer
                 Layers = _walker.Layers,
             };
             _backItem.AddChild(new MeshInstance3D { Name = "Straps", Mesh = StrapMesh(), MaterialOverride = ItemDefs.Material, Layers = _walker.Layers });
+            _backItem.AddChild(_backSparkles = new RadioSparkles { Layers = _walker.Layers });
             _walker.AddChild(_backItem);
         }
         _backItem.Visible = true;
@@ -54,11 +56,15 @@ public partial class FootPlayer
         var at = m.Chest + back * 0.18f - up * 0.07f;
         var frame = new Transform3D(basis.Scaled(Vector3.One * 0.85f), at);
 
-        // it dances on the back too, a little less than on the ground
-        if (RadioPlay.Decode(HeldRadio) is { } play
-            && RadioBody.BeatOf(play.CdId, play.StartedAt, Net.ClockSync.ServerNow, out float phase, out int beat, out _, out _))
-            frame *= RadioBody.Bounce(phase, beat, 0.11f, 0.55f);
+        // it dances (a little less than on the ground) and sparkles on the back too
+        float phase = 0;
+        int beat = 0;
+        var play = RadioPlay.Decode(HeldRadio);
+        bool playing = play.HasValue;
+        bool beating = playing && RadioBody.BeatOf(play!.Value.CdId, play.Value.StartedAt, Net.ClockSync.ServerNow, out phase, out beat, out _, out _);
+        if (beating) frame *= RadioBody.Bounce(phase, beat, 0.11f, 0.55f);
         _backItem.Transform = frame;
+        _backSparkles?.Step(playing, beating, phase, beat, (float)GetProcessDeltaTime());
     }
 
     private static ArrayMesh? _strapMesh;
