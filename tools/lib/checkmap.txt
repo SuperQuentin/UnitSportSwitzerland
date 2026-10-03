@@ -225,6 +225,18 @@ src/Player/FootPlayer.De quick  --cabincheck --world fixture --traffic 0
 src/Player/Airliner      net    tools/airlinernetcheck.sh
 src/Avatar/AirlinerRig   net    tools/airlinernetcheck.sh
 src/Avatar/A320Deck      net    tools/airlinernetcheck.sh
+src/Player/FlightCheck   quick  --flycheck freighter --world flat
+src/Player/Airliner      quick  --flycheck freighter --world flat
+src/Avatar/Freighter     quick  --flycheck freighter --world flat
+src/Avatar/AirlinerRig   quick  --holdcheck --world fixture --traffic 0
+src/Avatar/Freighter     quick  --holdcheck --world fixture --traffic 0
+src/Player/HoldCheck     quick  --holdcheck --world fixture --traffic 0
+src/Player/Airliner      quick  --holdcheck --world fixture --traffic 0
+src/Player/FootPlayer.De quick  --holdcheck --world fixture --traffic 0
+src/Player/Airliner      net    tools/freighternetcheck.sh
+src/Player/FreighterNet  net    tools/freighternetcheck.sh
+src/Avatar/Freighter     net    tools/freighternetcheck.sh
+src/BattleRoyale/BrPlane quick  --flycheck freighter --world flat
 src/Player/Pigeon        net    tools/pigeonnetcheck.sh
 src/Player/FootPlayer.Pi net    tools/pigeonnetcheck.sh
 src/Birds/BirdNet        net    tools/pigeonnetcheck.sh
