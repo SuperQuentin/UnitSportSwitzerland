@@ -32,6 +32,36 @@ public static partial class TileRewriter
         node < 0 || node >= net.Nodes.Count || net.Nodes[node].Degree != 2;
 
     /// <summary>
+    /// At traffic lights (#406): the line of a painted bike lane on the approach side of
+    /// <paramref name="piece"/> (right: the junction is at its end, else at its start), among the
+    /// paint added from index <paramref name="from"/> on, stops at the stop line
+    /// (<paramref name="stop"/>, metres along the piece: the crossing through the junction starts
+    /// there) and is solid between it and <paramref name="solid"/>, as the car lanes' lines are over
+    /// the last <see cref="TurnSolid"/> metres.
+    /// </summary>
+    private static void BikeLaneToStop(List<RoadPaint> paint, int from, RoadSegment piece, bool right, double stop, double solid)
+    {
+        double lo = Math.Min(stop, solid), hi = Math.Max(stop, solid);
+        for (int k = paint.Count - 1; k >= from; k--)
+        {
+            var p = paint[k];
+            if (p.Type != PaintType.YellowDashed || !ReferenceEquals(p.Segment, piece) || (p.Offset > 0) != right) continue;
+            double a = p.From, b = float.IsPositiveInfinity(p.To)
+                ? RoadPaintGeometry.Length(RoadPaintGeometry.Offset(piece, p.Offset)) : p.To;
+            if (b <= lo && right || a >= hi && !right) continue;   // all of it before the solid stretch
+            paint.RemoveAt(k);
+            void Part(PaintType type, float dash, double d0, double d1)
+            {
+                if (d1 - d0 > 0.3)
+                    paint.Insert(k, RoadPaint.AlongSegment(piece, type, p.Rgba, p.Width, dash, dash == 0 ? 0 : p.Gap, p.Offset, d0, d1, p.Variant));
+            }
+            // the dashed part keeps its phase where it starts; past the solid stretch it starts again
+            if (right) { Part(PaintType.YellowSolid, 0, Math.Max(a, lo), Math.Min(b, hi)); Part(PaintType.YellowDashed, p.Dash, a, Math.Min(b, lo)); }
+            else { Part(PaintType.YellowDashed, p.Dash, Math.Max(a, hi), b); Part(PaintType.YellowSolid, 0, Math.Max(a, lo), Math.Min(b, hi)); }
+        }
+    }
+
+    /// <summary>
     /// The paint of a street's separated paths, piece by piece: the yellow dashed line between a
     /// path at the sidewalk's height and the sidewalk (layouts 1 and 2), and a Velo symbol where
     /// the path starts or ends (a junction, or a stretch without it).
@@ -73,13 +103,15 @@ public static partial class TileRewriter
     /// carried through. A separated path on both arms crosses a joining road's mouth the same way,
     /// outside the carriageway, and that road's Wartelinie and 3.02 move back behind it; where none
     /// joins, the path runs on through the junction (<see cref="BridgePath"/>) instead of stopping at
-    /// a sidewalk corner.
+    /// a sidewalk corner. At traffic lights, where the road it crosses is widened by its pockets or
+    /// the crossing comes from a widened arm (#351), it runs square across that road's widened
+    /// mouth, between its stop line and the junction (<see cref="SquareCrossing"/>).
     /// </summary>
     private static void EmitBikeCrossings(PriorityResult priority, RoadGenResult result,
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<RoadSegment, List<RoadSegment>> finalPieces,
-        HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadPaint>> paint,
+        Dictionary<(int Node, int Arm), ArmLanes> lanes, HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadPaint>> paint,
         Dictionary<TileId, List<RoadPointProp>> signs, Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges,
-        BikePlanner.Stats stats)
+        BikePlanner.Stats stats, Dictionary<(int Link, LinkEnd End), double> stopsAt, Dictionary<int, (SignalPlan Plan, int[] PlanArm)> signalPlans)
     {
         var net = result.Network;
         bool IsCar(int linkId) => net.Links[linkId].Tag is Source s && PriorityPlanner.IsCarRoad(s.Segment.Class)
@@ -115,11 +147,17 @@ public static partial class TileRewriter
                 if (-Math.Cos(a.OutwardHeading - b.OutwardHeading) < 0.5) continue;   // turns more than 60 degrees
                 Vec2 from = (a.Left + a.Right) * 0.5, to = (b.Left + b.Right) * 0.5;
                 var ua = Vec2.FromHeading(a.OutwardHeading);
+                var ub = Vec2.FromHeading(b.OutwardHeading);
                 var mainDir = (Vec2.FromHeading(b.OutwardHeading) - ua).Normalized();
 
                 // the bike side of an arm's end piece on its left or right looking outward
                 // the side's shift off a turn lane's widening where the arm ends here (#123)
                 var endShift = new Dictionary<(int, bool), double>();
+                // a painted bike lane at the mouth (#351): looking outward the approach side is the
+                // left, where a layout (b) bike lane lies a pocket further in than the kerb
+                double LaneShift(int armIndex, bool armLeft, double shift) =>
+                    armLeft && lanes.GetValueOrDefault((junction.NodeId, armIndex))?.Approach is { BikeBetween: true } l
+                        ? l.BikeLane()!.Value.To - l.Half : shift;
                 RoadSide SideOf(int armIndex, bool armLeft)
                 {
                     var arm = junction.Arms[armIndex];
@@ -152,7 +190,7 @@ public static partial class TileRewriter
                         .ToList();
                     Vec2 da = (ca - from).Normalized(), db = (cb - to).Normalized();
                     // a curve through the junction, offset from the carriageway edge (+ outward, - inward) at each arm
-                    List<Vec2> Curve(double oa, double ob, bool simplify = true)
+                    List<Vec2> Bezier(double oa, double ob, bool simplify = true)
                     {
                         var pa = ca + da * oa;
                         var pb = cb + db * ob;
@@ -165,6 +203,13 @@ public static partial class TileRewriter
                         }
                         return simplify ? Polyline.Simplify(line, 0.02) : line;
                     }
+                    // at traffic lights, across a widened arm or from one: square across the arm it crosses (#351)
+                    SquareCrossing? square = plan.Kind == PriorityPlanner.Kind.Signal && joined.Count == 1
+                        ? SquareCrossing.For(junction, joined[0], lanes.GetValueOrDefault((junction.NodeId, joined[0])), from, xa, xb)
+                        : null;
+                    List<Vec2> Curve(double oa, double ob, bool simplify = true) =>
+                        square is null ? Bezier(oa, ob, simplify)
+                            : square.Line(ca + da * oa, ua, cb + db * ob, Vec2.FromHeading(b.OutwardHeading), oa - xa, ob - xb);
                     void Add(List<Vec2> line, PaintType type, uint rgba, float width, float dash) =>
                         Get(paint, home).Add(new RoadPaint
                         {
@@ -176,6 +221,29 @@ public static partial class TileRewriter
                     if (sa.HasLane && sb.HasLane)
                     {
                         double la = sa.BikeDm / 10.0, lb = sb.BikeDm / 10.0;
+                        // the bike lane where it reaches the mouth (#351: in layout (b) between the
+                        // through lane and a right pocket, not shifted out with the kerb)
+                        xa = LaneShift(ia, k == 0, xa);
+                        xb = LaneShift(ib, k != 0, xb);
+                        if (signalPlans.TryGetValue(junction.NodeId, out var lights))
+                        {
+                            // traffic lights (#406): straight from where the riders' lane ends at their
+                            // stop line to the exit's lane on the far side; red only where a car
+                            // movement crosses it while the riders have green, else its dashed edges
+                            int riders = k == 0 ? ia : ib;
+                            double stop = stopsAt.GetValueOrDefault((junction.Arms[riders].LinkId, plan.Arms[riders].End));
+                            Vec2 backA = k == 0 ? ua * stop : Vec2.Zero, backB = k == 0 ? Vec2.Zero : ub * stop;
+                            List<Vec2> Straight(double oa, double ob) => Densify(ca + da * oa + backA, cb + db * ob + backB, 2.0);
+                            bool crossed = CrossedInPhase(lights, riders, joined, lanes.GetValueOrDefault((junction.NodeId, riders))?.Approach);
+                            double ra = (lw + la - lw * 0.5) * 0.5, rb = (lw + lb - lw * 0.5) * 0.5;
+                            float band = (float)(Math.Min(la, lb) - lw * 1.5 - 2 * RedInset);
+                            if (crossed && band > 0.3f) Add(Straight(-ra + xa, -rb + xb), PaintType.BikeCrossing, PaintEmitter.Red, band, 0);
+                            Add(Straight(-lw * 0.5 + xa, -lw * 0.5 + xb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+                            Add(Straight(-la + xa, -lb + xb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+                            if (crossed) stats.SignalLanesRed++; else stats.SignalLanesDashed++;
+                            continue;
+                        }
+                        square?.Place(Bezier, -(la + lw * 0.5) * 0.5, -(lb + lw * 0.5) * 0.5, xa, xb, (Math.Max(la, lb) + lw * 0.5) * 0.5);
                         if (joined.Count == 0)
                         {
                             Add(Curve(-la + xa, -lb + xb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.Dash);
@@ -197,6 +265,7 @@ public static partial class TileRewriter
                     {
                         double ta = RoadStreetSection.TrackCentre(sa) + xa, tb = RoadStreetSection.TrackCentre(sb) + xb;
                         double ha = sa.BikeDm / 20.0 - lw * 0.5, hb = sb.BikeDm / 20.0 - lw * 0.5;
+                        square?.Place(Bezier, ta - xa, tb - xb, xa, xb, Math.Max(ha, hb) + lw * 0.5);
                         float red = (float)(Math.Min(sa.BikeDm, sb.BikeDm) / 10.0 - 2 * lw - 2 * RedInset);
                         if (red > 0.3f) Add(Curve(ta, tb), PaintType.BikeCrossing, PaintEmitter.Red, red, 0);
                         Add(Curve(ta - ha, tb - hb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
@@ -209,8 +278,7 @@ public static partial class TileRewriter
                     }
                     else if (sa.HasTrack && sb.HasTrack)
                     {
-                        var ub = Vec2.FromHeading(b.OutwardHeading);
-                        if (BridgePath(home, sa, sb, ua, ub, (oa, ob) => Curve(oa + xa, ob + xb, simplify: false), p => HeightAt(anchors, p)) is { } bands)
+                        if (BridgePath(home, sa, sb, ua, ub, (oa, ob) => Bezier(oa + xa, ob + xb, simplify: false), p => HeightAt(anchors, p)) is { } bands)
                         {
                             Get(bridges, home).AddRange(bands);
                             stats.PathsThrough++;
@@ -218,6 +286,156 @@ public static partial class TileRewriter
                     }
                 }
             }
+        }
+    }
+
+    /// <summary>Points every <paramref name="step"/> metres or less from <paramref name="a"/> to <paramref name="b"/>, both ends included (paint heights follow the junction).</summary>
+    private static List<Vec2> Densify(Vec2 a, Vec2 b, double step)
+    {
+        int n = Math.Max(1, (int)Math.Ceiling(a.DistanceTo(b) / step));
+        var line = new List<Vec2>(n + 1);
+        for (int i = 0; i <= n; i++) line.Add(a + (b - a) * ((double)i / n));
+        return line;
+    }
+
+    /// <summary>
+    /// Whether a car movement crosses a bike lane through a signalised junction while its riders
+    /// have green (#406). The riders come from arm <paramref name="from"/> (junction arm indices)
+    /// along the side where the <paramref name="joined"/> arms join; a movement crosses their way
+    /// when exactly one of its ends lies on that side: in from or out to a joined arm, or in from
+    /// the riders' own approach out of a right pocket kerbside of their lane (layout (b),
+    /// <paramref name="layout"/>). The riders go with their bike group, else their approach's
+    /// through group; two groups run together when their greens overlap in the built plan (a
+    /// protected arrow held red then does not count). An approach missing from the plan: red.
+    /// </summary>
+    private static bool CrossedInPhase((SignalPlan Plan, int[] PlanArm) lights, int from, List<int> joined, ApproachLayout? layout)
+    {
+        var (plan, armInPlan) = lights;
+        int pa = armInPlan[from];
+        if (pa < 0) return true;
+        var junctionArm = new int[plan.Arms.Count];
+        for (int j = 0; j < armInPlan.Length; j++) if (armInPlan[j] >= 0) junctionArm[armInPlan[j]] = j;
+        int riders = -1;
+        for (int g = 0; g < plan.Groups.Count && riders < 0; g++)
+            if (plan.Groups[g].Kind == SignalGroupKind.Bike && plan.Groups[g].Arm == pa) riders = g;
+        for (int g = 0; g < plan.Groups.Count && riders < 0; g++)
+            if (plan.Groups[g].Kind == SignalGroupKind.Car && plan.Groups[g].Arm == pa && (plan.Groups[g].Moves & SignalMoves.Through) != 0) riders = g;
+        for (int g = 0; g < plan.Groups.Count && riders < 0; g++)
+            if (plan.Groups[g].Kind == SignalGroupKind.Car && plan.Groups[g].Arm == pa) riders = g;
+        if (riders < 0) return true;
+        bool kerbsidePocket = layout is { BikeBetween: true, Right: true };
+        foreach (var m in plan.Movements())
+        {
+            if (plan.Groups[m.Group].Kind == SignalGroupKind.Bike) continue;
+            int jf = junctionArm[m.From], jt = junctionArm[m.To];
+            bool inside = joined.Contains(jf) || (jf == from && m.Turn == SignalMoves.Right && kerbsidePocket);
+            if (inside == joined.Contains(jt)) continue;
+            if (GreenTogether(plan, riders, m.Group)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Whether two groups of a plan are ever green at the same time.</summary>
+    private static bool GreenTogether(SignalPlan plan, int a, int b)
+    {
+        foreach (var x in plan.Groups[a].Intervals)
+        {
+            if (x.Aspect != SignalAspect.Green) continue;
+            foreach (var y in plan.Groups[b].Intervals)
+                if (y.Aspect == SignalAspect.Green && Math.Min(x.To, y.To) - Math.Max(x.From, y.From) > 0.05) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// A bike crossing at traffic lights across a joining arm that is widened by its pockets, or that
+    /// comes from a widened arm (#351). The #120 curve joins the two arms' lane or path ends through
+    /// the junction; drawn for the narrow mouth, from a widened arm's shifted end it ran skewed across
+    /// the joining arm's approach and over its stop line (seen at LV95 2499132,1116455). Here it runs
+    /// square across that arm, edge to widened edge, between its stop line and the junction (and
+    /// behind an advanced bike stop line there), the two ends joined to it straight.
+    /// </summary>
+    private sealed class SquareCrossing
+    {
+        private Vec2 _mid, _u, _n;
+        /// <summary>The arm's extent on each side, from its centre line: toward the approach's right (+n), and the departing side.</summary>
+        private double _in, _out;
+        /// <summary>Where the arm's stop line starts, and an advanced bike line, metres from the mouth along it.</summary>
+        private double _stop, _advanced = double.NaN;
+        /// <summary>Whether the first arm (a) lies on the approach's side of it.</summary>
+        private bool _aOnApproach;
+        /// <summary>The band's centre: its distance along the arm, and the offsets it was placed for.</summary>
+        private double _at, _centre;
+
+        public static SquareCrossing? For(Junction junction, int armIndex, ArmLanes? lanes, Vec2 fromA, double xa, double xb)
+        {
+            double widenIn = lanes?.Approach is { } l ? l.Edge() - l.Half : 0, widenOut = lanes?.ExitWidening ?? 0;
+            if (widenIn < 0.05 && widenOut < 0.05 && xa < 0.05 && xb < 0.05) return null;
+            var arm = junction.Arms[armIndex];
+            var u = Vec2.FromHeading(arm.OutwardHeading);
+            var mid = (arm.Left + arm.Right) * 0.5;
+            var c = new SquareCrossing
+            {
+                _mid = mid, _u = u, _n = u.Perp,
+                _in = arm.HalfWidth + widenIn, _out = arm.HalfWidth + widenOut,
+                _stop = MouthSkew(junction, arm) + SignalStopSetback,
+                _aOnApproach = u.Perp.Dot(fromA - mid) > 0,
+            };
+            if (lanes is { AdvancedBikeLine: true }) c._advanced = Math.Max(0.2, c._stop - AdvancedBikeLine);
+            return c;
+        }
+
+        /// <summary>
+        /// Places the band: where the #120 curve of its centre (<paramref name="ca"/>,
+        /// <paramref name="cb"/> from the edges, shifted by <paramref name="xa"/>, <paramref name="xb"/>)
+        /// crosses the arm's centre line, kept <paramref name="half"/> clear of the mouth, its stop
+        /// line and an advanced bike line (behind it when the band cannot fit in front).
+        /// </summary>
+        public void Place(Func<double, double, bool, List<Vec2>> bezier, double ca, double cb, double xa, double xb, double half)
+        {
+            _centre = (ca + cb) * 0.5;
+            var curve = bezier(ca + xa, cb + xb, false);
+            double at = 0;
+            for (int i = 1; i < curve.Count; i++)
+            {
+                double s0 = _n.Dot(curve[i - 1] - _mid), s1 = _n.Dot(curve[i] - _mid);
+                if (Math.Sign(s0) == Math.Sign(s1)) continue;
+                var p = curve[i - 1] + (curve[i] - curve[i - 1]) * (s0 / (s0 - s1));
+                at = _u.Dot(p - _mid);
+                break;
+            }
+            double lo = half + 0.1, hi = _stop - 0.2 - half;
+            if (!double.IsNaN(_advanced) && _advanced - BikeStopLine * 0.5 - 0.2 - half < lo)
+                lo = Math.Max(lo, _advanced + BikeStopLine * 0.5 + 0.2 + half);
+            _at = Math.Min(Math.Max(at, lo), hi);
+        }
+
+        /// <summary>
+        /// A line of the band: from <paramref name="pa"/> at the first arm, square across, to
+        /// <paramref name="pb"/> (outward along their arms <paramref name="ua"/>, <paramref name="ub"/>);
+        /// <paramref name="oa"/>, <paramref name="ob"/> its offsets from the edges.
+        /// </summary>
+        public List<Vec2> Line(Vec2 pa, Vec2 ua, Vec2 pb, Vec2 ub, double oa, double ob)
+        {
+            double at = _at + (oa + ob) * 0.5 - _centre;
+            var onApproach = _mid + _u * at + _n * _in;
+            var onExit = _mid + _u * at - _n * _out;
+            pa = Clear(pa, ua, _aOnApproach ? 1 : -1, at);
+            pb = Clear(pb, ub, _aOnApproach ? -1 : 1, at);
+            return _aOnApproach ? [pa, onApproach, onExit, pb] : [pa, onExit, onApproach, pb];
+        }
+
+        /// <summary>
+        /// An end that lies within the widened arm's span (a widening reaching into the next arm's
+        /// corner): moved out along its own arm's lane or path until it clears the widened edge by as
+        /// much as it stands off the crossing along the arm, so the band jogs out to it instead of
+        /// turning back.
+        /// </summary>
+        private Vec2 Clear(Vec2 p, Vec2 outward, int side, double at)
+        {
+            double edge = side > 0 ? _in : _out, lateral = side * _n.Dot(p - _mid), away = side * _n.Dot(outward);
+            double need = edge + Math.Max(1.0, Math.Abs(_u.Dot(p - _mid) - at));
+            return lateral >= need || away < 0.3 ? p : p + outward * ((need - lateral) / away);
         }
     }
 

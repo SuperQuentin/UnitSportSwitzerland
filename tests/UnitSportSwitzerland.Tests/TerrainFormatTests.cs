@@ -349,4 +349,91 @@ public class TerrainFormatTests
         Assert.Equal(1680.25f, back.Tiles[0].Max);
         Assert.Throws<InvalidDataException>(() => TerrainManifest.FromJson("null"));
     }
+
+    // ---- .road LANE (#353) --------------------------------------------------------------------
+
+    private static RoadTile LaneTile() => new()
+    {
+        Id = Id,
+        Segments = [new RoadSegment { Class = RoadClass.Road, Width = 6, Points = [0, 400, 0, 80, 400, 0] }],
+        Signals = [new RoadSignal
+        {
+            X = 90, Y = 400, Z = 0, Stops = [75, 400, 1.5f, float.NaN, float.NaN, float.NaN],
+            Plan = SignalPlan.Build([new SignalArm(Math.PI, true, true, LeftPocket: true), new SignalArm(0, false, true)]),
+        }],
+        Approaches =
+        [
+            new RoadApproach
+            {
+                X = 75, Y = 400, Z = 1.5f, Heading = (float)Math.PI, Signal = 0, SignalArm = 0, Banned = SignalMoves.Right, LaneCentre = 1.5f,
+                Lanes =
+                [
+                    new ApproachLane(0f, 15.5f, 15.5f, SignalMoves.Left, ApproachLaneKind.Car, 4f),
+                    new ApproachLane(2.25f, 15.5f, 15.5f, SignalMoves.Left, ApproachLaneKind.Bike, -3f),
+                    new ApproachLane(4.5f, 15.5f, 35.5f, SignalMoves.Through | SignalMoves.Right, ApproachLaneKind.Car),
+                ],
+            },
+            new RoadApproach { X = 5, Y = 401, Z = 6, Heading = 1.25f, LaneCentre = 1.2f, Lanes = [new ApproachLane(0f, 0f, 0f, SignalMoves.Left | SignalMoves.Through, ApproachLaneKind.Car)] },
+        ],
+    };
+
+    private static byte[] Encoded(RoadTile tile)
+    {
+        using var ms = new MemoryStream();
+        RoadCodec.Encode(tile, ms);
+        return ms.ToArray();
+    }
+
+    /// <summary>Where the LANE section's tag starts in an encoded tile (its version byte is 12 bytes on: tag, length, count).</summary>
+    private static int LaneTag(byte[] bytes)
+    {
+        var tag = System.Text.Encoding.ASCII.GetBytes("LANE");
+        for (int i = bytes.Length - 4; i >= 0; i--)
+            if (bytes.AsSpan(i, 4).SequenceEqual(tag)) return i;
+        throw new InvalidOperationException("no LANE section");
+    }
+
+    [Fact]
+    public void Road_lane_section_round_trips()
+    {
+        var tile = LaneTile();
+        var back = RoundTrip(s => RoadCodec.Encode(tile, s), RoadCodec.Decode);
+        Assert.Equal(2, back.Approaches.Count);
+        for (int k = 0; k < 2; k++)
+        {
+            var (a, b) = (tile.Approaches[k], back.Approaches[k]);
+            Assert.Equal((a.X, a.Y, a.Z, a.Heading, a.Signal, a.SignalArm, a.Banned, a.LaneCentre), (b.X, b.Y, b.Z, b.Heading, b.Signal, b.SignalArm, b.Banned, b.LaneCentre));
+            Assert.Equal(a.Lanes, b.Lanes);
+        }
+        Assert.Equal(-1, back.Approaches[1].Signal);
+        Assert.Single(back.Signals);
+        // a tile with no approach writes no section
+        Assert.DoesNotContain("LANE", System.Text.Encoding.ASCII.GetString(Encoded(new RoadTile { Id = Id, Segments = [] })));
+    }
+
+    [Fact]
+    public void Road_lane_section_of_a_newer_version_is_skipped_and_the_rest_still_reads()
+    {
+        var bytes = Encoded(LaneTile());
+        bytes[LaneTag(bytes) + 12] = RoadApproach.SectionVersion + 1;
+        var back = RoundTrip(s => s.Write(bytes), RoadCodec.Decode);
+        Assert.Empty(back.Approaches);
+        Assert.Single(back.Signals);
+        Assert.Single(back.Segments);
+    }
+
+    [Fact]
+    public void Road_lane_section_is_skipped_by_a_reader_that_does_not_know_it()
+    {
+        // what a build from before #353 sees: a tag it does not know, skipped by its length
+        var bytes = Encoded(LaneTile());
+        bytes[LaneTag(bytes) + 3] = (byte)'X';
+        var back = RoundTrip(s => s.Write(bytes), RoadCodec.Decode);
+        Assert.Empty(back.Approaches);
+        Assert.Single(back.Signals);
+        // and the older section version (0, never written) is refused like a newer one
+        bytes = Encoded(LaneTile());
+        bytes[LaneTag(bytes) + 12] = 0;
+        Assert.Empty(RoundTrip(s => s.Write(bytes), RoadCodec.Decode).Approaches);
+    }
 }

@@ -133,6 +133,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // the radio by the pastor rat in every church (#370)
         _churchRadios = Interiors.ChurchRadios.Create(this);
         Net.ClockSync.Create(this);
+        // the traffic lights' group states on the server clock, for tools/signalnetcheck.sh (#353)
+        if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: true));
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
         Audio.Live.WebRadio.Create(this);
         // an Africa Twin in front of one building at Riddes, put back each time its tile loads

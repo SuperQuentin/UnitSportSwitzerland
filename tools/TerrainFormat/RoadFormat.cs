@@ -437,6 +437,8 @@ public sealed class RoadTile
     public List<RoadAreaProp> AreaProps { get; init; } = new();
     /// <summary>Signalised junctions and their plans (#349, <c>SGNL</c>).</summary>
     public List<RoadSignal> Signals { get; init; } = new();
+    /// <summary>The lanes of each approach with a pocket or traffic lights (#353, <c>LANE</c>).</summary>
+    public List<RoadApproach> Approaches { get; init; } = new();
 }
 
 public static class RoadFormat

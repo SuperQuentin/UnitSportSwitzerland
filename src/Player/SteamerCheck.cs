@@ -706,6 +706,7 @@ public partial class SteamerCheck : Node
         bool swimming = await Until(() => me.IsSwimming, 8);
         me.WalkControls = () => (Vector3.Zero, false);
         Expect(swimming && !me.Aboard, $"over the rail: in the water, swimming (#301), not carried ({WhereText(me)})");
+        if (swimming && Parked() is { } ship) await HullContact(me, ship);
         // back up the boarding ladder on the hull (#384), forward climbing it as a rope ladder
         float lx = SteamerMeshBuilder.LadderX, la = SteamerMeshBuilder.LadderAt;
         if (Deck(me, lx + 1.2f, d, la) is { } foot) me.StartSwimmingAtSurface(foot);
@@ -721,6 +722,40 @@ public partial class SteamerCheck : Node
         Log(F($"on the ladder: {midway:F2} m over the keel after 0.5 s of climbing"));
         Expect(aboard && Mathf.Abs(Where(me).Y - d) < 0.3f, $"climbs the ladder over the rail onto the deck ({WhereText(me)})");
         await Shot("ladder", () => OnShip(me, lx + 9f, SteamerMeshBuilder.DeckY + 1.2f, la + 7f, lx, SteamerMeshBuilder.DeckY - 0.4f, la));
+    }
+
+    /// <summary>
+    /// #378: in the water beside the parked ship's foredeck on the gamey swell, the swimmer strokes into its side
+    /// and meets the hull's collision box where the hull is drawn (heave, pitch, roll), not pushed under.
+    /// </summary>
+    private async Task HullContact(FootPlayer me, VehicleBody ship)
+    {
+        if (_shots) HullTouch.Overlay(ship);
+        // at the surface off the foredeck, 1.2 m out from the hull's widest (it has come up from its plunge)
+        var swim = HullTouch.Swim(this, me, ship, 10, along: 20f);
+        if (_shots)
+        {
+            await Until(() => me.GetSlideCollisionCount() > 0 && !me.HeadUnderwater, 8);
+            float side = Mathf.Sign((me.GlobalPosition - ship.GlobalPosition).Dot(ship.GlobalTransform.Basis.X));
+            // beside the swimmer, from out on the water; then the whole ship abeam, at the water
+            await Shot("hull_touch", () =>
+            {
+                var across = (ship.GlobalTransform.Basis.X with { Y = 0 }).Normalized() * side;
+                var aft = (ship.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
+                var target = me.GlobalPosition + Vector3.Up * 1.4f;
+                var eye = target + across * 9f + aft * 4f + Vector3.Up * 2.2f;
+                return new Transform3D(Basis.LookingAt(target - eye, Vector3.Up), eye);
+            });
+            await Shot("hull_side", () => Look(me, side: side, back: 0.02f, up: 0.03f, distance: 0.75f));
+        }
+        var touch = await swim;
+        Log($"swimming into its side, gamey: {touch}");
+        Expect(touch.Frames > 100 && touch.WorstPose < 0.03f, "the hull's collision box is posed as the ship is drawn");
+        Expect(touch.MaxTilt > 0.3f, F($"the box pitches and rolls with it on the swell ({touch.MaxTilt:F1}°)"));
+        // one convex shape: the topsides' flare is drawn curving out, the shape's side is straight (~10 cm)
+        Expect(touch.Contacts > 10 && touch.WorstOff < 0.15f, "a swimmer meets the hull where it is drawn");
+        // against the flare a crest can wash over the swimmer for a moment (feet 2.6 m down once): not held under
+        Expect(touch.UnderFor < 1.5f, "and is not held under by it");
     }
 
     private async Task Seat(FootPlayer me)

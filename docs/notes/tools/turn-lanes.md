@@ -55,7 +55,7 @@
   notched dart head; left: the shaft jogs left near its end into an open corner head at 45 deg,
   within 0.55 m of the lane's middle. Two attempts from memory were wrong (the old Swiss
   branch arrow, then a guessed jog). The stop bar is a `StopLine` polyline.
-- **Beside a painted bike lane** (#120): along the solid centre line a car must pass a cyclist
+- **Beside a painted bike lane** (#120; as painted, #351: a street that got paths has none): along the solid centre line a car must pass a cyclist
   without crossing it, so every car lane beside the bike lane is 3.0 m (ZH Standards
   Veloverkehr): the pocket is the approach lane widened to 3.0 m (`_pocket`), the through lane
   3.0 m, the bike lane outside. The extra comes on over a 1:6 lead-in (at least 6 m) before the
@@ -67,8 +67,45 @@
 - **Runtime**: `src/Terrain/PavementBuilder.cs` draws the strip in the road's asphalt; the road
   blend (`HoldUnderPavement`, sharing `Rasterise` with `HoldUnderIsland`) holds its cells at the
   strip's height as road core, so the heightfield collision carries it like a ribbon.
-- **Not done**: lane-level topology in the format (which lane goes where); traffic still drives
-  the original lane and so turns left from it, and goes straight from it too. Right-turn lanes,
+- **Lane records** (#353, `TileRewriter.Lanes`, `LANE` in `road-format-v3`): `EmitTurnLanes`
+  returns each arm's `ArmLanes`: its `ApproachLayout` (#351, the one place lanes are laid side by
+  side) and its widenings as built. Every pocket approach (with or without lights) and every
+  signalised one gets a `RoadApproach` (`PocketLanes`): each lane's offset at the line is the
+  layout's (its centre from the original lane's), its lengths the widenings' actual sizes: the
+  pocket (full from the storage, appearing there, or over the 15 m entry of a merged strip), the
+  left-turn bike lane, the through lane (moving out from the taper's start plus the lead-in; 4.5 m
+  from the pocket beside a left-turn bike lane), then the right pocket and the painted bike lane
+  in the layout's order: (a) pocket then kerbside bike lane, (b) bike lane (straight on only) then
+  pocket. A lane the right pocket's opening moves (the layout's lane closed vs open) moves over
+  its taper too. Signalised records are written after the plan, which may force (b).
+  Moves from the arrows painted; turns banned by OSM restrictions (#347 `osm_nodes.tsv`, from-line
+  of the arm, to-line among the junction's arms, via within 30 m: `no_*` bans that turn, `only_*`
+  the others). Geneva: 824 records (732 at lights, 92 pockets without), car lanes 1,024, bike 23
+  (#351: a street that got paths has no painted lane, so far fewer kerbside bike lanes than #353's 171);
+  banned turns on 142 approaches (left 112, through 4, right 50) from 154 of 216 restrictions at a
+  recorded approach (62 to-lines not an arm: junctions of several nodes; 15 name another turn than
+  the arms make); **10 left pockets were built where OSM forbids the left turn** (planning ignores
+  restrictions). Valais copy (Martigny-Riddes): 13 records, all without lights. `--signal-check`
+  checks them (exit 2 on a bad one) and lists those near `--at` (`--list`: every pocket approach).
+- **Junction polish (#406)**, user's spec, test region J1-J5: **hatches** end no further into the
+  junction than the stop line of the arm's own left pocket (behind its bike box; else the stop line
+  across the arm, at lights only: without lights at the mouth, as before), a merged strip's (#325)
+  at the junction before too; every hatch is **closed**: a solid line across its wide end (the
+  exit's at the stop line, the approach's where the pocket opens), stripes cut at it; a hatch
+  **narrower than 1.5 m or shorter than 20 m is left out** (centre line only; `HatchesSkipped`,
+  Geneva 1). **Rounded corners**: the junction polygon rounds only the original edges, so beside a
+  widening the corner was square (no drivable right turn out of a right pocket). `Corners` adds a
+  flush Pavement patch per widened corner: the widened edges' meeting point rounded as
+  `JunctionBuilder` rounds an unwidened corner (quadratic curve, control at that point, each end
+  `JunctionOptions` kerb (0.6 x half width) past it), plus the notch between the junction polygon,
+  the mouths and that point. Laid out before the signal poles (test region 19 placed / 35
+  rejected, was 21/33; Geneva 1,493 / 255, was 1,504 / 244). **Not in town**: where a sidewalk or
+  path runs round the corner (`OuterDm`), it stays square (the sidewalk corner, `CornerPlanner`,
+  would have to follow the new kerb: open question); test region 18 rounded, 8 square (J2, J3);
+  Geneva 31 rounded, 186 square, 2 failed outlines. Fixed on the way: a merged strip was painted
+  by whichever pocket came first, from the exiting one without the lights' stop line (J5b's west
+  approach: a 0.4 m bar at the mouth, no line across its TR lane).
+- **Not done**: right-turn lanes without lights,
   pockets across a tile seam, OSM `turn:lanes` (read, not used: #348). Roads with 3 lanes (8 m, lane lines at ±1.33 m,
   no centre line) still get a pocket laid out for 2 lanes of half the width: the hatch covers a
   lane and a half (seen at LV95 2506561,1138202).
