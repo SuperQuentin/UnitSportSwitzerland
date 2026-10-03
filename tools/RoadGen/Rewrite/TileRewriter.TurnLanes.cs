@@ -122,6 +122,7 @@ public static partial class TileRewriter
         var rights = new List<RightPlan>();   // right-turn pockets at traffic lights (#348)
         var slots = new Dictionary<(RoadSegment, int), Slot>();
         var order = new List<Slot>();
+        var turns = new Dictionary<(int Node, int Arm), SignalMoves>();   // what each approach can do (#386)
         Slot SlotOf((RoadSegment Segment, TileId Tile, RoadSegment Painted) s, int side)
         {
             if (!slots.TryGetValue((s.Segment, side), out var slot))
@@ -163,6 +164,12 @@ public static partial class TileRewriter
                     if (signal && !PriorityPlanner.Leaves(info, plan.Arms[k].End)) continue;   // a one-way road in
                     if (d.X * v.Y - d.Y * v.X > 0) { left = true; leftArm = k; } else right = true;
                 }
+                // the turns the approach has, as the signal plans name them (#386)
+                var armsHere = ArmsOf(junction, net);
+                var can = SignalMoves.None;
+                for (int k = 0; k < armsHere.Count; k++)
+                    if (k != i && armsHere[k].Out) can |= SignalPlan.Turn(armsHere, i, k);
+                turns[(junction.NodeId, i)] = can;
                 // a bike box where the street the left turn goes into has no bike lane or path (#351)
                 bool box = false;
                 if (signal && leftArm >= 0 && segmentOf.TryGetValue(plan.Arms[leftArm].LinkId, out var into))
@@ -179,7 +186,7 @@ public static partial class TileRewriter
                     bool between = kerb.HasLane && !kerb.HasTrack
                         && BikePlanner.Fnv(ApproachKey(net.Links[arm.LinkId], arm.End, junction.Centre)) % 2 == 1;
                     rights.Add(rightPlan = new RightPlan(junction.NodeId, i, home, rightSeg, arm.End == LinkEnd.End, left)
-                        { Skew = MouthSkew(junction, junction.Arms[i]), BikeBetween = between, At = junction.Centre });
+                        { Skew = MouthSkew(junction, junction.Arms[i]), BikeBetween = between, At = junction.Centre, Through = (can & SignalMoves.Through) != 0 });
                 }
                 if (!left) continue;
                 stats.Candidates++;
@@ -243,7 +250,7 @@ public static partial class TileRewriter
         // what each arm got, for the signal plans and poles (#348), bike crossings (#351) and lane records (#353)
         var placed = new Dictionary<(int Node, int Arm), ArmLanes>();
         ArmLanes Arm(int node, int arm, TileId home) =>
-            placed.TryGetValue((node, arm), out var l) ? l : placed[(node, arm)] = new ArmLanes(home);
+            placed.TryGetValue((node, arm), out var l) ? l : placed[(node, arm)] = new ArmLanes(home) { Turns = turns.GetValueOrDefault((node, arm)) };
         foreach (var pocket in pockets)
         {
             if (pocket.Dropped) continue;
@@ -311,9 +318,10 @@ public static partial class TileRewriter
         {
             if (arm.RightWay is not { Way: { } way } r || arm.Approach is not { } layout) continue;
             var (seg, tile, _) = r.Segment;
-            // without a left pocket the approach's own lane carries straight on and turns left
-            way.RightLane(Get(paint, tile), stats, r.Left is { Dropped: false } ? (PaintArrow?)null
-                : r.LeftTurn ? PaintArrow.Straight | PaintArrow.Left : PaintArrow.Straight);
+            // without a left pocket the approach's own lane carries straight on and turns left, where
+            // it can: the stem of a T has no straight on (#386)
+            var own = (r.Through ? PaintArrow.Straight : 0) | (r.LeftTurn ? PaintArrow.Left : 0);
+            way.RightLane(Get(paint, tile), stats, r.Left is { Dropped: false } || own == 0 ? (PaintArrow?)null : own);
             // layout (b): the pocket paints the bike lane along its reach, where it does not move out with the kerb
             if (layout.BikeBetween) bikeBetween.Add((seg, way.Side > 0, way.AlongRange()));
             if (layout.Bike <= 0) continue;
@@ -361,6 +369,8 @@ public static partial class TileRewriter
         public bool AdvancedBikeLine;
         /// <summary>The right-turn pocket, its lanes painted after the signal plan (#351).</summary>
         public RightPlan? RightWay;
+        /// <summary>The turns the approach can make (#386): a lane's arrows never show one it cannot.</summary>
+        public SignalMoves Turns;
         public bool Left => Approach is { LeftPocket: > 0 };
         public bool Right => Approach is { Right: true };
 
@@ -443,6 +453,8 @@ public static partial class TileRewriter
         public bool BikeBetween { get; init; }
         /// <summary>The junction's centre, LV95.</summary>
         public Vec2 At { get; init; }
+        /// <summary>The approach has a straight-on exit (the stem of a T has none, #386).</summary>
+        public bool Through { get; init; }
     }
 
     /// <summary>Right-turn pockets, (taper, storage) in metres, longest first: shorter than a left pocket, beside its full width.</summary>

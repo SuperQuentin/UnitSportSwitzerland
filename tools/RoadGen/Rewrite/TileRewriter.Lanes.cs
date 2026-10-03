@@ -223,9 +223,12 @@ public static partial class TileRewriter
         // the own lane of a right pocket alone also turns left where the approach has a left turn
         var through = layout.Through();
         var (throughFull, throughFrom) = Moves(Opens(layout.Through(0), through));
-        var throughMoves = p.LeftWay is not null
+        // (#386: only the turns the approach has, so the stem of a T beside its right pocket turns left only)
+        var turns = p.Turns == 0 ? SignalMoves.Left | SignalMoves.Through | SignalMoves.Right : p.Turns;
+        SignalMoves Can(SignalMoves m) => (m & turns) != 0 ? m & turns : turns & ~SignalMoves.Right;
+        var throughMoves = Can(p.LeftWay is not null
             ? SignalMoves.Through | (p.ThroughRight ? SignalMoves.Right : 0)
-            : SignalMoves.Through | (p.RightWay is { LeftTurn: true } ? SignalMoves.Left : 0);
+            : SignalMoves.Through | (p.RightWay is { LeftTurn: true } ? SignalMoves.Left : 0));
         lanes.Add(new ApproachLane(O(through), throughFull, throughFrom, throughMoves, ApproachLaneKind.Car));
 
         // right of it, as the layout orders them: (a) the right pocket, then the painted bike lane
@@ -235,7 +238,7 @@ public static partial class TileRewriter
             if (layout.BikeLane() is not { } bike) return;
             var (full, from) = Moves(Opens(layout.BikeLane(0)!.Value, bike));
             // (b) lies between the through lane and the right-turning cars: it goes straight on
-            var moves = layout.BikeBetween ? SignalMoves.Through : SignalMoves.Through | SignalMoves.Right;
+            var moves = Can(layout.BikeBetween ? SignalMoves.Through : SignalMoves.Through | SignalMoves.Right);
             lanes.Add(new ApproachLane(O(bike), full, from, moves, ApproachLaneKind.Bike));
         }
         if (layout.BikeBetween) Bike();
