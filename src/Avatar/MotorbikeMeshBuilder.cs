@@ -67,9 +67,9 @@ public sealed record MotoLook
     public Vector3 TopClamp => FrontAxle + SteerAxis * ForkLength;
 }
 
-public enum MotoStyle { Sport, Naked, Adventure }
+public enum MotoStyle { Sport, Naked, Adventure, Supermoto, Scooter, SportTouring }
 
-public enum MotoEngineShape { InlineFour, VTwin, ParallelTwin }
+public enum MotoEngineShape { InlineFour, VTwin, ParallelTwin, Single, Triple }
 
 /// <summary>
 /// A motorcycle tyre size read off the sidewall: width mm / aspect % then the construction ("ZR",
@@ -136,7 +136,7 @@ public static class MotorbikeMeshBuilder
         }
 
         bool adv = k.Style == MotoStyle.Adventure;
-        if (k.EngineShape == MotoEngineShape.VTwin) Twin(s, k); else Inline(s, k.EngineShape == MotoEngineShape.InlineFour ? 4 : 2, muffler: !adv);
+        if (k.EngineShape == MotoEngineShape.VTwin) Twin(s, k); else Inline(s, k.EngineShape switch { MotoEngineShape.InlineFour => 4, MotoEngineShape.Triple => 3, MotoEngineShape.Single => 1, _ => 2 }, muffler: !adv);
 
         // --- frame: head stock to swingarm pivot ---
         s.Tube(headLow, top, 0.045f, k.Frame);
@@ -495,6 +495,8 @@ public partial class Motorcyclist : Node3D
     public float SteerAngle { get; set; }
     /// <summary>Accumulated wheel rotation, radians; positive rolls forward.</summary>
     public float WheelSpin { get; set; }
+    /// <summary>Wheelie (#410): front up about the rear tyre's contact, radians.</summary>
+    public float Pitch { get; set; }
 
     private MotoLook _look = new();
 
@@ -515,6 +517,8 @@ public partial class Motorcyclist : Node3D
 
     public SeatAnchor[] Seats => SeatsFor(_look);
     private Node3D _steer = null!, _frontSpin = null!, _rearSpin = null!;
+    /// <summary>Pivots on the rear contact for a wheelie; every part hangs off it.</summary>
+    private Node3D _pivot = null!;
     private Vector3 _steerAxis;
 
     public static Motorcyclist Create(MotoLook look, int riderIndex, bool rider = true, Outfit outfit = default)
@@ -535,25 +539,34 @@ public partial class Motorcyclist : Node3D
         bool dressed = rider is { Outfit.IsEmpty: false };
         // any rider has a face only the figure shader draws (#394)
         Material material = rider != null ? HumanMeshBuilder.FigureMaterial() : HumanMeshBuilder.Material();
-        AddChild(new MeshInstance3D { Name = "Body", Mesh = MotorbikeMeshBuilder.BuildBody(k, dressed ? null : rider), MaterialOverride = material });
+        // the rear contact, node space (rear is +Z); the frame under it sits back where it was
+        var contact = Flip(new Vector3(0, 0, k.RearAxle.Z));
+        _pivot = new Node3D { Name = "Pivot", Position = contact };
+        AddChild(_pivot);
+        var frame = new Node3D { Name = "Frame", Position = -contact };
+        _pivot.AddChild(frame);
+        _frame = frame;
+        _frame.AddChild(new MeshInstance3D { Name = "Body", Mesh = MotorbikeMeshBuilder.BuildBody(k, dressed ? null : rider), MaterialOverride = material });
         if (dressed)
         {
             _rider = rider;
             _riderMesh = new MeshInstance3D { Name = "Rider", Mesh = BuildRider(rider!), MaterialOverride = material };
-            AddChild(_riderMesh);
+            _frame.AddChild(_riderMesh);
         }
 
         _steerAxis = Flip(k.SteerAxis).Normalized();
         _steer = new Node3D { Name = "Front", Position = Flip(k.TopClamp) };
-        AddChild(_steer);
+        _frame.AddChild(_steer);
         _steer.AddChild(new MeshInstance3D { Mesh = MotorbikeMeshBuilder.BuildFront(k), MaterialOverride = material });
         _frontSpin = new Node3D { Name = "FrontWheel", Position = Flip(k.FrontAxle) - Flip(k.TopClamp) };
         _frontSpin.AddChild(new MeshInstance3D { Mesh = MotorbikeMeshBuilder.BuildWheel(k, front: true), MaterialOverride = material });
         _steer.AddChild(_frontSpin);
         _rearSpin = new Node3D { Name = "RearWheel", Position = Flip(k.RearAxle) };
         _rearSpin.AddChild(new MeshInstance3D { Mesh = MotorbikeMeshBuilder.BuildWheel(k, front: false), MaterialOverride = material });
-        AddChild(_rearSpin);
+        _frame.AddChild(_rearSpin);
     }
+
+    private Node3D _frame = null!;
 
     private HumanPalette? _rider;
     private MeshInstance3D? _riderMesh;
@@ -573,6 +586,8 @@ public partial class Motorcyclist : Node3D
         if (_rider is { } r && _riderMesh != null && HumanMeshBuilder.Flutters(r.Outfit))
             _riderMesh.Mesh = BuildRider(r with { Wind = _wind.Update(_riderMesh, (float)delta) });
         _steer.Basis = new Basis(_steerAxis, SteerAngle);
+        // + lifts the front (−Z) about the rear contact
+        _pivot.Rotation = new Vector3(Pitch, 0, 0);
         // top edge toward −Z (forward), as CarRig
         _frontSpin.Rotation = new Vector3(-WheelSpin * _look.RearRadius / _look.FrontRadius, 0, 0);
         _rearSpin.Rotation = new Vector3(-WheelSpin, 0, 0);

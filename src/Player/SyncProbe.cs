@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Godot;
 using UnitSport.Core;
 using UnitSport.Terrain;
@@ -265,7 +266,7 @@ public partial class SyncProbe : Node
             case "africa":
                 // the last Africa Twin (CRF1100L Adventure Sports ES DCT): its own mesh, the DCT shifting itself
                 Mount(RideKind.OnFoot);
-                Mount((RideKind)(MotorbikeCatalog.First + MotorbikeCatalog.All.Count - 1));
+                Mount(MotorbikeCatalog.All.Last(b => b.Label.Contains("Africa Twin")).Kind);
                 _owner!.RideControls = () => new RideInput(0.6f, 0f, Mathf.Sin((float)_t * 1.2f) * 0.8f, false);
                 break;
             case "heli":

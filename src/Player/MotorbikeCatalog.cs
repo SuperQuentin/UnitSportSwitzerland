@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using UnitSport.Audio;
 using UnitSport.Avatar;
@@ -16,6 +17,9 @@ public sealed record MotorbikeSpec
     public RideKind Kind { get; init; }
     public required string Label { get; init; }
     public required string Blurb { get; init; }
+    /// <summary>The picker's folders (#410): the brand, then the model when it comes in several variants.</summary>
+    public string Brand { get; init; } = "";
+    public string Family { get; init; } = "";
     /// <summary>Shape for the mesh: bodywork style, engine shape, tyre sizes, geometry, contact points, colours.</summary>
     public required MotoLook Look { get; init; }
     /// <summary>What it sounds like (<see cref="EngineProfile.For"/>, at this bike's idle and redline).</summary>
@@ -57,13 +61,22 @@ public sealed record MotorbikeSpec
     public bool Dct { get; init; }
     /// <summary>Clutchless up-shifts (a quickshifter): a short cut rather than a rider's clutch-and-lift.</summary>
     public bool QuickShifter { get; init; }
+    /// <summary>
+    /// A scooter's belt CVT (#410): the ratio runs from <c>Gears[0]</c> (low) to <see cref="CvtHigh"/>
+    /// on its own, holding the engine near <see cref="CvtRpm"/> under load; <see cref="Primary"/> and
+    /// <see cref="FinalDrive"/> are the fixed reductions around it.
+    /// </summary>
+    public bool Cvt { get; init; }
+    public float CvtHigh { get; init; }
+    /// <summary>The engine speed the variator holds flat out (peak power); part throttle holds less.</summary>
+    public float CvtRpm { get; init; }
 
     /// <summary>Published figures the model is checked against (<c>--motocheck</c>).</summary>
     public float RefZeroTo100 { get; init; }
     public float RefTopKmh { get; init; }
 
     /// <summary>Drive cut per up-shift, s. Every box shifts itself here (there is no clutch input); how long it takes is the difference.</summary>
-    public float ShiftCut => Dct ? 0.02f : QuickShifter ? 0.07f : 0.25f;
+    public float ShiftCut => Dct || Cvt ? 0.02f : QuickShifter ? 0.07f : 0.25f;
 
     public float TorqueAt(float rpm)
     {
@@ -78,11 +91,15 @@ public sealed record MotorbikeSpec
 /// <summary>
 /// Every motorbike. <b>Append-only</b>: a bike's <see cref="RideKind"/> is <c>First + its index
 /// here</c>, replicated as an int, so inserting or reordering renumbers every bike after it on every
-/// peer. Motorbikes own <see cref="RideKind"/> 64..95; the next other mount is 96.
+/// peer. Motorbikes own <see cref="RideKind"/> 64..95 (the first 32 entries) and then 124..187
+/// (#410: the Africa Twins filled the first range); the next other mount is 188.
 /// </summary>
-public static class MotorbikeCatalog
+public static partial class MotorbikeCatalog
 {
     public const int First = 64, Last = 95;
+    /// <summary>The second range, entries 32 onwards.</summary>
+    public const int First2 = 124, Last2 = 187;
+    private const int FirstRangeSize = Last - First + 1;
 
     public static readonly IReadOnlyList<MotorbikeSpec> All = Number(new[]
     {
@@ -98,7 +115,8 @@ public static class MotorbikeCatalog
         // lean on road tyres, braking 10.5 m/s² (~37 m from 100 km/h in tests), launch at 7,000 rpm.
         new MotorbikeSpec
         {
-            Label = "Sport bike (R1)",
+            Label = "Yamaha YZF-R1 (2020+)",
+            Brand = "Yamaha", Family = "YZF-R1",
             Blurb = "998 cc crossplane four, 200 PS, 201 kg: {throttle} gas, {brake} brake, {move_left}/{move_right} lean. Wheelies if you let it",
             Engine = EngineLayout.Crossplane4,
             Look = new MotoLook
@@ -130,7 +148,8 @@ public static class MotorbikeCatalog
         // 50° lean, braking 10 m/s², launch at 5,000 rpm.
         new MotorbikeSpec
         {
-            Label = "Naked bike (Monster)",
+            Label = "Ducati Monster (2021+)",
+            Brand = "Ducati", Family = "Monster",
             Blurb = "937 cc 90° V-twin, 111 hp, 188 kg, upright bars: {throttle} gas, {brake} brake, {move_left}/{move_right} lean",
             Engine = EngineLayout.VTwin90,
             Look = new MotoLook
@@ -181,6 +200,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda XRV650 Africa Twin (RD03, 1988-89)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "647 cc 52° V-twin, 57 PS, 221 kg, 21/17 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.VTwin52,
             Look = new MotoLook
@@ -210,6 +230,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda XRV650 Africa Twin (RD03, 1988, Japan)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "647 cc 52° V-twin, 52 PS, 221 kg, 21/17 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.VTwin52,
             Look = new MotoLook
@@ -241,6 +262,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda XRV750 Africa Twin (RD04, 1990-92)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "742 cc 52° V-twin, 59 PS, 236 kg, 21/17 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.VTwin52,
             Look = new MotoLook
@@ -271,6 +293,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda XRV750 Africa Twin 50 PS (RD04, 1990-92, Germany)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "742 cc 52° V-twin, 50 PS, 236 kg, 21/17 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.VTwin52,
             Look = new MotoLook
@@ -302,6 +325,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda XRV750 Africa Twin (RD07, 1993-95)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "742 cc 52° V-twin, 60 PS, 234 kg, 21/17 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.VTwin52,
             Look = new MotoLook
@@ -334,6 +358,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda XRV750 Africa Twin (RD07A, 1996-2003)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "742 cc 52° V-twin, 60 PS, 236 kg, 21/17 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.VTwin52,
             Look = new MotoLook
@@ -367,6 +392,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1000L Africa Twin (2016-17)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "998 cc 270° parallel twin, 95 PS, 228 kg, 21/18 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -398,6 +424,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1000L Africa Twin ABS (2016-17)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "998 cc 270° parallel twin, 95 PS, 232 kg, 21/18 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -428,6 +455,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1000L Africa Twin DCT (2016-17)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "998 cc 270° parallel twin, 95 PS, 242 kg, 21/18 spokes, DCT automatic. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -459,6 +487,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1000L Africa Twin (2018-19)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "998 cc 270° parallel twin, 95 PS, 230 kg, 21/18 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -489,6 +518,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1000L Africa Twin DCT (2018-19)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "998 cc 270° parallel twin, 95 PS, 240 kg, 21/18 spokes, DCT automatic. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -520,6 +550,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1000L2 Africa Twin Adventure Sports (2018-19)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "998 cc 270° parallel twin, 95 PS, 243 kg, 21/18 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -551,6 +582,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1000L2 Africa Twin Adventure Sports DCT (2018-19)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "998 cc 270° parallel twin, 95 PS, 253 kg, 21/18 spokes, DCT automatic. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -581,6 +613,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1000L2 Africa Twin Adventure Sports Type LD (2018-19, Japan)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "998 cc 270° parallel twin, 95 PS, 242 kg, 21/18 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -612,6 +645,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1100L Africa Twin (2020-21)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "1084 cc 270° parallel twin, 102 PS, 226 kg, 21/18 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -642,6 +676,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1100L Africa Twin DCT (2020-21)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "1084 cc 270° parallel twin, 102 PS, 236 kg, 21/18 spokes, DCT automatic. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -673,6 +708,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1100L Africa Twin Adventure Sports (2020-23)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "1084 cc 270° parallel twin, 102 PS, 238 kg, 21/18 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -704,6 +740,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1100L Africa Twin Adventure Sports DCT (2020-23)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "1084 cc 270° parallel twin, 102 PS, 248 kg, 21/18 spokes, DCT automatic. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -736,6 +773,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1100L Africa Twin Adventure Sports ES (2020-23)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "1084 cc 270° parallel twin, 102 PS, 240 kg, 21/18 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -767,6 +805,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1100L Africa Twin Adventure Sports ES DCT (2020-23)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "1084 cc 270° parallel twin, 102 PS, 250 kg, 21/18 spokes, DCT automatic. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -798,6 +837,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1100L Africa Twin (2022-23)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "1084 cc 270° parallel twin, 102 PS, 229 kg, 21/18 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -827,6 +867,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1100L Africa Twin DCT (2022-23)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "1084 cc 270° parallel twin, 102 PS, 240 kg, 21/18 spokes, DCT automatic. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -858,6 +899,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1100L Africa Twin (2024-26)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "1084 cc 270° parallel twin, 102 PS, 231 kg, 21/18 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -888,6 +930,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1100L Africa Twin DCT (2024-26)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "1084 cc 270° parallel twin, 102 PS, 242 kg, 21/18 spokes, DCT automatic. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -919,6 +962,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1100L Africa Twin ES (2024-26)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "1084 cc 270° parallel twin, 102 PS, 233 kg, 21/18 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -949,6 +993,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1100L Africa Twin ES DCT (2024-26)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "1084 cc 270° parallel twin, 102 PS, 244 kg, 21/18 spokes, DCT automatic. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -980,6 +1025,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1100L Africa Twin Adventure Sports ES (2024-26)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "1084 cc 270° parallel twin, 102 PS, 243 kg, 19/18 spokes. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -1012,6 +1058,7 @@ public static class MotorbikeCatalog
         new MotorbikeSpec
         {
             Label = "Honda CRF1100L Africa Twin Adventure Sports ES DCT (2024-26)",
+            Brand = "Honda", Family = "Africa Twin",
             Blurb = "1084 cc 270° parallel twin, 102 PS, 253 kg, 19/18 spokes, DCT automatic. Adventure tyres: grips on gravel and grass",
             Engine = EngineLayout.ParallelTwin270,
             Look = new MotoLook
@@ -1035,22 +1082,32 @@ public static class MotorbikeCatalog
             RefZeroTo100 = 3.44f, RefTopKmh = 202.8f,
         },
 
-    });
+    }.Concat(Imported()).ToArray());
 
     /// <summary>The spec for a motorbike kind, or null when the kind is not a motorbike.</summary>
     public static MotorbikeSpec? For(RideKind kind)
     {
-        int i = (int)kind - First;
+        int i = IndexOf(kind);
         return i >= 0 && i < All.Count ? All[i] : null;
     }
 
-    public static bool IsMotorbike(RideKind kind) => (int)kind >= First && (int)kind <= Last;
+    public static bool IsMotorbike(RideKind kind) => IndexOf(kind) >= 0;
+
+    /// <summary>The catalog index a kind stands for (whether or not that entry exists yet), or −1.</summary>
+    private static int IndexOf(RideKind kind)
+    {
+        int k = (int)kind;
+        return k >= First && k <= Last ? k - First : k >= First2 && k <= Last2 ? FirstRangeSize + k - First2 : -1;
+    }
+
+    private static RideKind KindAt(int index) =>
+        (RideKind)(index < FirstRangeSize ? First + index : First2 + index - FirstRangeSize);
 
     private static IReadOnlyList<MotorbikeSpec> Number(MotorbikeSpec[] bikes)
     {
-        if (bikes.Length > Last - First + 1)
-            throw new System.InvalidOperationException($"{bikes.Length} motorbikes overflow RideKind {First}..{Last}");
-        for (int i = 0; i < bikes.Length; i++) bikes[i] = bikes[i] with { Kind = (RideKind)(First + i) };
+        if (bikes.Length > FirstRangeSize + Last2 - First2 + 1)
+            throw new System.InvalidOperationException($"{bikes.Length} motorbikes overflow RideKind {First}..{Last} + {First2}..{Last2}");
+        for (int i = 0; i < bikes.Length; i++) bikes[i] = bikes[i] with { Kind = KindAt(i) };
         return bikes;
     }
 }

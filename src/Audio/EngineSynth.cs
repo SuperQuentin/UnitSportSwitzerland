@@ -4,7 +4,9 @@ using UnitSport.Core;
 namespace UnitSport.Audio;
 
 /// <summary>A car engine's layout, which is most of what it sounds like.</summary>
-public enum EngineLayout { Inline4, Inline4Turbo, Rotary, RotaryTurbo, Boxer4Turbo, Inline6Turbo, V6, V6Turbo, V8, Crossplane4, VTwin90, ParallelTwin270, VTwin52, Diesel6 }
+public enum EngineLayout { Inline4, Inline4Turbo, Rotary, RotaryTurbo, Boxer4Turbo, Inline6Turbo, V6, V6Turbo, V8, Crossplane4, VTwin90, ParallelTwin270, VTwin52, Diesel6,
+    // the motorbikes of #410
+    Single, ParallelTwin180, ParallelTwin360, Triple, VTwin75, Inline4Bike }
 
 /// <summary>How an engine is built, as far as its sound is concerned.</summary>
 public sealed record EngineProfile
@@ -81,6 +83,24 @@ public sealed record EngineProfile
     /// </summary>
     public static readonly EngineProfile VTwin52 = VTwin90 with { PipeM = 1.0f, Unevenness = 1.3f, Firing = new[] { 232f, 488f } };
 
+    /// <summary>A big single (KTM LC4 690): one bang every two turns, the thump of a supermoto. Short pipe.</summary>
+    public static readonly EngineProfile Single = new() { Cylinders = 1, IdleRpm = 1500, MaxRpm = 9000, PipeM = 0.85f, Unevenness = 0.4f };
+
+    /// <summary>A 180° parallel twin (CB500, R3, Versys 650): fires 180-540, a busier, flatter beat than a V.</summary>
+    public static readonly EngineProfile ParallelTwin180 = VTwin90 with { PipeM = 0.8f, Unevenness = 0.9f, Firing = new[] { 180f, 540f } };
+
+    /// <summary>A 360° parallel twin (TMAX): both pistons together, fired evenly 360-360, a smooth drone.</summary>
+    public static readonly EngineProfile ParallelTwin360 = VTwin90 with { PipeM = 1.0f, Unevenness = 0.3f, Firing = null };
+
+    /// <summary>Yamaha's CP3 crossplane triple (MT-09 / Tracer 9): three cylinders fired every 240°, the triple's howl.</summary>
+    public static readonly EngineProfile Triple = Inline4Na with { Cylinders = 3, PipeM = 0.75f, Unevenness = 0.7f };
+
+    /// <summary>KTM's 75° V-twin (LC8, 1290) and the 75°-offset parallel twin (LC8c, 790/890): fires 285-435.</summary>
+    public static readonly EngineProfile VTwin75 = VTwin90 with { PipeM = 0.85f, Unevenness = 1.1f, Firing = new[] { 285f, 435f } };
+
+    /// <summary>A flat-plane inline four from a bike (Fazer): even firing, high revs, a short 4-into-1 shriek.</summary>
+    public static readonly EngineProfile Inline4Bike = Inline4Na with { PipeM = 0.65f, Unevenness = 0.4f };
+
     /// <summary>A car's engine: the layout's voice, at that car's own idle and redline.</summary>
     public static EngineProfile For(EngineLayout layout, float idleRpm, float redline) => (layout switch
     {
@@ -94,6 +114,12 @@ public sealed record EngineProfile
         EngineLayout.VTwin90 => VTwin90,
         EngineLayout.ParallelTwin270 => ParallelTwin270,
         EngineLayout.VTwin52 => VTwin52,
+        EngineLayout.Single => Single,
+        EngineLayout.ParallelTwin180 => ParallelTwin180,
+        EngineLayout.ParallelTwin360 => ParallelTwin360,
+        EngineLayout.Triple => Triple,
+        EngineLayout.VTwin75 => VTwin75,
+        EngineLayout.Inline4Bike => Inline4Bike,
         // a truck or bus diesel: a big inline six at 550-2,200 rpm, fired evenly, through a long
         // pipe — the low, smooth drone of a Scania or an OM 470, not a car's rasp
         EngineLayout.Diesel6 => Inline4Na with { Cylinders = 6, PipeM = 2.4f, Unevenness = 0.3f },

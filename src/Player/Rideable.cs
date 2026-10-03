@@ -15,7 +15,8 @@ public enum RideKind
     Helicopter = 6,
     Plane = 7,
     // 8..63 are cars: CarCatalog.All[kind - CarCatalog.First]. The catalog is append-only.
-    // 64..95 are motorbikes: MotorbikeCatalog.All[kind - MotorbikeCatalog.First], append-only too.
+    // 64..95 are motorbikes: MotorbikeCatalog.All[kind - MotorbikeCatalog.First], append-only too;
+    // entries 32 onwards continue at 124..187 (MotorbikeCatalog.First2, #410).
     // 96..119 are trucks and buses: HeavyCatalog.All[kind - HeavyCatalog.First], append-only too.
     /// <summary>
     /// Not a mount: a trailer standing in the world on its own (<c>Vehicles.VehicleState.Train</c>
@@ -27,7 +28,7 @@ public enum RideKind
     Speedboat = 122,
     /// <summary>The CGN Belle Époque paddle steamer (#303), walkable.</summary>
     Steamer = 123,
-    // The next other mount is 124.
+    // 124..187 are motorbikes again (the second range, MotorbikeCatalog.First2). The next other mount is 188.
 }
 
 /// <summary>
