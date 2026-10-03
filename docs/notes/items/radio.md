@@ -12,11 +12,11 @@
   The dedicated server never simulates (no ground): a radio whose thrower left is re-spawned by
   `ForgetOwner` server-owned and `Settled`. The **server** owns what plays (`State` synchronizer,
   authority 1: `CdId`, `StartedAt`, `Playing`, on-change and with the spawn for late joiners).
-- **Pointed at, Use (click) takes it straight into the hand (#261)**: `ItemController.TakeRadio` (the
+- **Pointed at, Use (click) with an empty hand takes it straight into the hand (#261, #390)**: `ItemController.TakeRadio` (the
   mesh flies to the hand, the server's pick-up as before, the stack keeps the CD/start/mode, the
-  slot is selected or swapped in from the pack). **E** on the pointed radio opens `RadioUi`; E with
-  none pointed opens the nearest within `RadioManager.Reach` 2.5 m, but only after the vehicle at
-  hand (`door-reach`). Use opens the panel on the radio in the hand, R on a car stereo (below).
+  slot is selected or swapped in from the pack). **E** on the pointed radio opens `RadioUi`, and only
+  then (#390): a radio merely within reach but not looked at no longer takes E from the door or the
+  dance, nor Use from a held tool (`core/input-conventions`). Use opens the panel on the radio in the hand, R on a car stereo (below).
 - **Carried, it keeps playing (#261)**: `Inventory.RadioSlot()` (the hand's radio, else the first
   with a CD, else the first) writes `FootPlayer.HeldRadio`; one not in the hand sets the replicated
   `FootPlayer.BackItemId` (OnChange) and is drawn on the back (`FootPlayer.Back.cs`, on the posed
