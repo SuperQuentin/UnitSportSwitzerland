@@ -16,6 +16,10 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 - `heavy-cabin` — Truck cabs and bus driver's place and saloon (#157): hollow cabs with panes, derived seat and flat wheel (hands' reach at `MaxGrip`), air gauge and gear display, binnacle square to the dials, 2+2 bus seats, seat anchors for passengers
 - `cockpit-kit` — Wheel, column, dials, needles, lamps, pedals and mirrors of cars and heavies come from `CockpitKit` + a per-vehicle `CockpitSpec`; never copy them into a cabin; no static field built from another partial's statics (#221)
 - `item-arm-poses` — Held items pose the arms (ItemArmPose, replicated ItemAction) and the held mesh follows the hand basis
+- `body-shape` — The figure's body (#394): builds (`Physique`), lofted trunk (`Torso`, spine 0-4) and head (`Head`), limb `Zones`/`LimbBand`, hands, boots, hair and `HairCover`; no allocation per rebuild; `--bodies` pages
+- `face-atlas` — Pixel faces (#394): `FaceAtlas` drawn as text, `FaceBand` UVs, finish id 11, magenta iris painted in the eye colour; every figure mesh needs `FigureMaterial`
+- `appearance` — Who a figure is (#394): `Appearance` packed in `FootPlayer.AppearanceBits` from `GameSettings`, Body row in the inventory, `Register`/`ForRider` registry for rides, seeds for NPCs and ghosts
+- `cartoon-outline` — Cartoon's ink outline: a next pass on the figure material, round loft normals, `NoNormal` vertices left alone
 - `clothing` — Clothes (#251): Garments catalog, WearSlot, Outfit bits (OutfitBits), AppendDressed from the rig, open Skirt primitive, finishes in vertex alpha + FigureMaterial/avatar.gdshader; `--outfitcheck`, `--avatars … --outfits`
 
 ## Gotchas

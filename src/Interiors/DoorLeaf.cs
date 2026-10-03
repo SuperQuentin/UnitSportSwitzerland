@@ -98,8 +98,24 @@ public partial class DoorLeaf : Node3D
         };
         body.AddChild(leaf._shape);
         hinge.AddChild(body);
+
+        // open, nothing walks into it, but the third-person camera's arm must not end inside it:
+        // the lens sat in the leaf's thickness, a screen of brown (#388)
+        var lensStop = new StaticBody3D { Name = "LensStop", CollisionLayer = CameraOnlyLayer, CollisionMask = 0 };
+        leaf._lensStop = new CollisionShape3D
+        {
+            Shape = new BoxShape3D { Size = new Vector3(width, height, Thickness) },
+            Position = new Vector3(width / 2, height / 2, Thickness / 2),
+            Disabled = true,
+        };
+        lensStop.AddChild(leaf._lensStop);
+        hinge.AddChild(lensStop);
         return leaf;
     }
+
+    /// <summary>A physics layer only the camera arm sweeps (<c>FootPlayer.CameraMask</c>): an open leaf.</summary>
+    public const uint CameraOnlyLayer = 1u << 12;
+    private CollisionShape3D? _lensStop;
 
     /// <summary>
     /// A barn's pair, in world space on the facade doorway frame <paramref name="doorway"/>
@@ -190,6 +206,7 @@ public partial class DoorLeaf : Node3D
             foreach (var (hinge, sign) in _hinges)
                 hinge.Rotation = new Vector3(0, sign * s * _angle, 0);
         if (_shape != null) _shape.Disabled = swing > 0.02f;
+        if (_lensStop != null) _lensStop.Disabled = swing <= 0.02f;
         // from the first moment it opens, the portal behind shows the real pair swinging
         if (Shutter) Visible = swing <= 0f;
     }

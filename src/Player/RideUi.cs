@@ -177,7 +177,7 @@ public partial class RideUi : CanvasLayer
                 false, "OnFoot", () => new MeshInstance3D
                 {
                     Mesh = HumanMeshBuilder.Build(HumanPalette.ForRider(0)),
-                    MaterialOverride = HumanMeshBuilder.Material(),
+                    MaterialOverride = HumanMeshBuilder.FigureMaterial(),
                 }),
         };
         foreach (var ride in Rideable.All)

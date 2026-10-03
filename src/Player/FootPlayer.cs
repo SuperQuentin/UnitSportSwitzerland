@@ -444,8 +444,27 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     private long _poseOutfit;
 
+    /// <summary>
+    /// Who the figure is, an <see cref="Avatar.Appearance"/> packed into an int (#394): build, face,
+    /// eyes, skin, hair. 0 until the player chooses (the figure then comes from its rider index).
+    /// Replicated like <see cref="OutfitBits"/>; set on the owner by <c>Occasions.OccasionHats</c>
+    /// from <c>GameSettings.AppearanceBits</c>.
+    /// </summary>
+    [Export] public int AppearanceBits { get; set; }
+
+    private int _visualAppearance;
+
     /// <summary>The figure's colours with what it wears: the jersey of whoever owns it, the clothes it has on.</summary>
     private Avatar.HumanPalette FigurePalette(int rider) => Avatar.HumanPalette.ForRider(rider) with { Outfit = new(OutfitBits) };
+
+    /// <summary>
+    /// The index this figure's palette is made from: its owner's peer id, so a race's riders are told
+    /// apart by their jerseys. An NPC is offset from the client that asked for it (#394), so it gets a
+    /// figure of its own rather than that player's chosen one (<see cref="Avatar.Appearance.For"/>).
+    /// </summary>
+    private int RiderIndex() => Npc && NetId(Name) is long npcId && npcId < 0
+        ? unchecked((int)Net.PlayerReplication.NpcOwner(npcId) + 100 * (int)(1 + (-npcId) % 1000))
+        : GetMultiplayerAuthority();
 
     /// <summary>
     /// The figure's right hand in this node's local space, or null when no figure is drawn
@@ -1030,7 +1049,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// A chase camera in a forest shoved into the rider's head by a trunk it can see past is
     /// worse than a trunk briefly between lens and rider — the tree shader dissolves that anyway.
     /// </summary>
-    private uint CameraMask => CollisionMask & ~World.TreeColliders.Layer;
+    /// <summary>Probes: the third-person arm's last frame (how far it may reach, how far it is out, where it crosses a doorway).</summary>
+    internal (float Want, float Blend, float Through) DebugArm { get; private set; }
+
+    private uint CameraMask => (CollisionMask & ~World.TreeColliders.Layer) | Interiors.DoorLeaf.CameraOnlyLayer;
 
     public override void _Ready()
     {
@@ -1060,6 +1082,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
         replication.AddProperty(".:HeadwearId");
         replication.AddProperty(".:OutfitBits");
+        replication.AddProperty(".:AppearanceBits");
         replication.AddProperty(".:DanceId");
         replication.AddProperty(".:HeldRadio");
         replication.AddProperty(".:BackItemId");
@@ -1079,7 +1102,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:DeckYaw");
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:DanceId", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         Terrain ??= GetNodeOrNull<ChunkManager>("/root/Main/World/Terrain");
         if (Origin is { } start) NetGlobal = start.ToGlobal(Position);
@@ -1257,7 +1280,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var kind = (RideKind)RideKindId;
         // a car is redrawn when its preset or garage parts change too (the garage's live preview, a remote tune)
         if (!force && _visual != null && kind == _visualKind && TuningBits == _visualTuning && CarSetupId == _visualSetup && TrailerCode == _visualTrailer
-            && OutfitBits == _visualOutfit) return;
+            && OutfitBits == _visualOutfit && AppearanceBits == _visualAppearance) return;
 
         _visual?.QueueFree();
         _visual = null;
@@ -1267,6 +1290,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _visualSetup = CarSetupId;
         _visualTuning = TuningBits;
         _visualOutfit = OutfitBits;
+        _visualAppearance = AppearanceBits;
         if (!IsMultiplayerAuthority()) FitRemoteBody(kind);
         // the sections behind a truck's cab: their own bodies, whatever else is drawn
         FitSections(kind);
@@ -1274,8 +1298,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // below, and a bus's 12 m hull stayed on the walker, who was lifted onto its roof (#209)
         if (kind == RideKind.OnFoot) FitHull(null);
 
-        // an NPC keeps its jersey whoever simulates it: the colours of the client that asked for it
-        int rider = Npc && NetId(Name) is long npcId && npcId < 0 ? (int)Net.PlayerReplication.NpcOwner(npcId) : GetMultiplayerAuthority();
+        // an NPC keeps its colours whoever simulates it: they come from the client that asked for it
+        int rider = RiderIndex();
+        // the figure a player chose, found by every ride drawn from this index (#394)
+        if (!Npc) Avatar.Appearance.Register(rider, AppearanceBits);
 
         if (kind == RideKind.OnFoot)
         {
@@ -2021,13 +2047,21 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             exclude = WithShell(exclude, shell);
             var sill = from.Lerp(to, t);
             if (ArmHit(space, from, sill, exclude) is { } near) return Shorten(near);
+            float? farHit = ArmHit(space, map * from.Lerp(to, Mathf.Min(1f, t + 0.1f / span)), map * to, exclude);
+            // A lens that would stop just past the sill sits in the reveal, against the open leaf or
+            // under the lintel, seeing a leaf and a dark doorway (#388): the doorway is then a wall,
+            // and the lens stays on this side.
+            float lensAt = farHit is { } f ? t * span + 0.1f + f - margin : span;
+            if (lensAt - t * span < MinPastSill) return Shorten(t * span);
             through = t;
             across = map;
-            return ArmHit(space, map * from.Lerp(to, Mathf.Min(1f, t + 0.1f / span)), map * to, exclude) is { } far
-                ? Shorten(t * span + 0.1f + far) : 1f;
+            return farHit is { } far ? Shorten(t * span + 0.1f + far) : 1f;
         }
         return ArmHit(space, from, to, exclude) is { } hit ? Shorten(hit) : 1f;
     }
+
+    /// <summary>How far past a doorway's sill a camera arm must get to put the lens on the far side.</summary>
+    private const float MinPastSill = 0.6f;
 
     private const float ArmRadius = 0.2f;
     private static readonly SphereShape3D ArmBall = new() { Radius = ArmRadius };
@@ -2098,6 +2132,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (want < _armBlend - 0.02f) _armBlend = want;
         else if (want > _armBlend) _armBlend = Mathf.Lerp(_armBlend, want, MathX.Damp(3f, dt));
 
+        DebugArm = (want, _armBlend, through);
         var position = pivot.Lerp(wanted, _armBlend) + Vector3.Up * _landingDip * 0.5f;
         var lens = new Transform3D(view, position);
         _camera.GlobalTransform = _armBlend > through ? across * lens : lens;
@@ -2253,12 +2288,6 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (OnlineSeats && DrivenVehicleInReach(EnterReach) is { } driven)
         {
             PassengerService.Instance!.AskSeat(driven);
-            return true;
-        }
-        // a radio at your feet you were not looking at
-        if (Items.RadioManager.Instance?.Nearest(GlobalPosition, Items.RadioManager.Reach) is { } radio)
-        {
-            Items.RadioUi.Instance?.Open(radio);
             return true;
         }
         // a building's door in reach beats the dance: music next door must not lock you out

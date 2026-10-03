@@ -533,7 +533,8 @@ public partial class Motorcyclist : Node3D
         // a dressed rider (#251) is a mesh of their own, in the figure shader, rebuilt while a skirt
         // blows; the plain one stays baked into the bike's single body mesh
         bool dressed = rider is { Outfit.IsEmpty: false };
-        Material material = dressed ? HumanMeshBuilder.FigureMaterial() : HumanMeshBuilder.Material();
+        // any rider has a face only the figure shader draws (#394)
+        Material material = rider != null ? HumanMeshBuilder.FigureMaterial() : HumanMeshBuilder.Material();
         AddChild(new MeshInstance3D { Name = "Body", Mesh = MotorbikeMeshBuilder.BuildBody(k, dressed ? null : rider), MaterialOverride = material });
         if (dressed)
         {
