@@ -80,9 +80,20 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
     private const float NearZone = 1f;
     /// <summary>
     /// The near plane by a doorway: small enough that the jump across it is ~5 cm, not ~45 cm as
-    /// with the usual 8 cm. The reversed depth buffer keeps the far distance sharp.
+    /// with the usual 8 cm. Only as small as the lens's distance to the doorway needs.
     /// </summary>
     private const float DoorwayNear = 0.005f;
+
+    /// <summary>
+    /// The far plane over the near plane the depth buffer still resolves: the usual 8 cm and
+    /// 160 km. With the near plane at 5 mm on the street (far 160 km, a 3·10⁷ ratio) nothing
+    /// was drawn but the background: a whole screen of sky by an open door (#388). While the
+    /// near plane is cut, the far one is cut with it.
+    /// </summary>
+    private const float MaxDepthRatio = 2e6f;
+
+    /// <summary>The screen's camera's far plane cut for this frame (<see cref="MaxDepthRatio"/>), and how it was.</summary>
+    private (Camera3D Camera, float Far)? _restoreFar;
 
     /// <summary>One portal camera and the viewport it renders into.</summary>
     private sealed class View
@@ -263,6 +274,12 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
             if ((cam.CullMask & AllQuadLayers) != QuadLayers[0])
                 cam.CullMask = (cam.CullMask & ~AllQuadLayers) | QuadLayers[0];
             ClipFar(cam, cam.GlobalPosition.Y < InteriorManager.InteriorBaseY + 1000f);
+            // after ClipFar, which must never take this frame's cut for the camera's own far plane
+            if (_restore is { } r && r.Camera == cam && cam.Near < r.Near && cam.Far > cam.Near * MaxDepthRatio)
+            {
+                _restoreFar ??= (cam, cam.Far);
+                cam.Far = cam.Near * MaxDepthRatio;
+            }
         }
         var head = XR.XrSession.Rig?.Head;
         if (head != null && IsInstanceValid(head))
@@ -275,7 +292,9 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
                 return;
             }
         }
-        float far = cam == null ? 4000f : _shortened == cam ? _far : cam.Far;
+        // a portal camera takes the screen's near plane, so a far plane cut with it stays cut
+        // (MaxDepthRatio): the street seen from a lens in the doorway was the sky alone
+        float far = cam == null ? 4000f : _shortened == cam ? Mathf.Min(_far, cam.Near * MaxDepthRatio) : cam.Far;
 
         var direct = _direct;
         direct.Clear();
@@ -352,7 +371,11 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
             if (!Around(local, hw, top, DoorLink.LensSlabMin(NearZone), DoorLink.LensSlabMax(NearZone), NearZone)) continue;
 
             _restore ??= (cam, cam.Transform, cam.Near);
-            cam.Near = Mathf.Min(cam.Near, DoorwayNear);
+            // as small as the distance to the nearer quad needs: its corners must not reach it
+            float perNear = NearReach(cam) / Mathf.Max(cam.Near, 1e-4f) * 1.2f;
+            float gap = local.Z > DoorLink.OutsideQuadOffset ? local.Z - DoorLink.OutsideQuadOffset
+                : local.Z < DoorLink.InsideQuadOffset ? DoorLink.InsideQuadOffset - local.Z : 0f;
+            cam.Near = Mathf.Clamp(gap / perNear, DoorwayNear, cam.Near);
             float margin = NearReach(cam) * 1.2f;
             float min = DoorLink.LensSlabMin(margin), max = DoorLink.LensSlabMax(margin);
             if (!Around(local, hw, top, min, max, margin)) return;
@@ -420,6 +443,11 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
     /// <summary>Once the frame is drawn, the screen's camera goes back where whatever placed it put it.</summary>
     private void PutCameraBack()
     {
+        if (_restoreFar is { } f)
+        {
+            _restoreFar = null;
+            if (IsInstanceValid(f.Camera)) f.Camera.Far = f.Far;
+        }
         if (_restore is not { } r) return;
         _restore = null;
         if (!IsInstanceValid(r.Camera)) return;
@@ -448,7 +476,7 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
             if (inside ? local.Z > 0.3f : local.Z < -0.3f) continue;
             float d = local.Length();
             if (d >= Range || !InView(cam, lens, frame, inside ? l.InsideWidth : l.OutsideWidth,
-                    inside ? l.InsideHeight : l.OutsideHeight, d)) continue;
+                    inside ? l.InsideHeight : l.OutsideHeight)) continue;
             found.Add((d, l));
         }
         if (found.Count > 1) found.Sort(static (a, b) => a.D.CompareTo(b.D));
@@ -649,17 +677,28 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
     /// Whether a doorway is in a camera's view. <paramref name="lens"/> is where the camera is
     /// about to be, which for a nested view is not where it was last frame.
     /// </summary>
-    private static bool InView(Camera3D cam, Transform3D lens, Transform3D frame, float width, float height, float distance)
+    private static bool InView(Camera3D cam, Transform3D lens, Transform3D frame, float width, float height)
     {
-        if (distance < 2f) return true;
+        float hw = width / 2;
+        // Near the opening itself, not its sill's middle: a lens 0.6 m behind a doorway up by the
+        // lintel is 2 m from the sill, sees the doorway fill the screen with no sample point in its
+        // frustum, and the doorway drew its dark hall (#388).
+        var local = frame.AffineInverse() * lens.Origin;
+        var nearest = new Vector3(Mathf.Clamp(local.X, -hw, hw), Mathf.Clamp(local.Y, 0f, height), 0f);
+        if ((local - nearest).Length() < 2f) return true;
+        // the view's middle on the opening: it fills the screen
+        var forward = frame.Basis.Inverse() * -lens.Basis.Z;
+        if (Mathf.Abs(forward.Z) > 1e-4f)
+        {
+            float t = -local.Z / forward.Z;
+            var hit = local + forward * t;
+            if (t > 0f && Mathf.Abs(hit.X) <= hw && hit.Y >= 0f && hit.Y <= height) return true;
+        }
         var saved = cam.GlobalTransform;
         cam.GlobalTransform = lens;
-        float hw = width / 2;
         bool seen = false;
-        Span<Vector3> corners = stackalloc Vector3[] { new(0, height / 2, 0), new(-hw, 0, 0), new(hw, 0, 0),
-            new(-hw, height, 0), new(hw, height, 0) };
-        foreach (var p in corners)
-            if (cam.IsPositionInFrustum(frame * p)) { seen = true; break; }
+        for (int i = 0; i < 9 && !seen; i++)
+            seen = cam.IsPositionInFrustum(frame * new Vector3(hw * (i % 3 - 1), height * (i / 3) / 2f, 0f));
         cam.GlobalTransform = saved;
         return seen;
     }

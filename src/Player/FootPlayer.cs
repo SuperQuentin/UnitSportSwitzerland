@@ -1030,7 +1030,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// A chase camera in a forest shoved into the rider's head by a trunk it can see past is
     /// worse than a trunk briefly between lens and rider — the tree shader dissolves that anyway.
     /// </summary>
-    private uint CameraMask => CollisionMask & ~World.TreeColliders.Layer;
+    /// <summary>Probes: the third-person arm's last frame (how far it may reach, how far it is out, where it crosses a doorway).</summary>
+    internal (float Want, float Blend, float Through) DebugArm { get; private set; }
+
+    private uint CameraMask => (CollisionMask & ~World.TreeColliders.Layer) | Interiors.DoorLeaf.CameraOnlyLayer;
 
     public override void _Ready()
     {
@@ -2021,13 +2024,21 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             exclude = WithShell(exclude, shell);
             var sill = from.Lerp(to, t);
             if (ArmHit(space, from, sill, exclude) is { } near) return Shorten(near);
+            float? farHit = ArmHit(space, map * from.Lerp(to, Mathf.Min(1f, t + 0.1f / span)), map * to, exclude);
+            // A lens that would stop just past the sill sits in the reveal, against the open leaf or
+            // under the lintel, seeing a leaf and a dark doorway (#388): the doorway is then a wall,
+            // and the lens stays on this side.
+            float lensAt = farHit is { } f ? t * span + 0.1f + f - margin : span;
+            if (lensAt - t * span < MinPastSill) return Shorten(t * span);
             through = t;
             across = map;
-            return ArmHit(space, map * from.Lerp(to, Mathf.Min(1f, t + 0.1f / span)), map * to, exclude) is { } far
-                ? Shorten(t * span + 0.1f + far) : 1f;
+            return farHit is { } far ? Shorten(t * span + 0.1f + far) : 1f;
         }
         return ArmHit(space, from, to, exclude) is { } hit ? Shorten(hit) : 1f;
     }
+
+    /// <summary>How far past a doorway's sill a camera arm must get to put the lens on the far side.</summary>
+    private const float MinPastSill = 0.6f;
 
     private const float ArmRadius = 0.2f;
     private static readonly SphereShape3D ArmBall = new() { Radius = ArmRadius };
@@ -2098,6 +2109,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (want < _armBlend - 0.02f) _armBlend = want;
         else if (want > _armBlend) _armBlend = Mathf.Lerp(_armBlend, want, MathX.Damp(3f, dt));
 
+        DebugArm = (want, _armBlend, through);
         var position = pivot.Lerp(wanted, _armBlend) + Vector3.Up * _landingDip * 0.5f;
         var lens = new Transform3D(view, position);
         _camera.GlobalTransform = _armBlend > through ? across * lens : lens;
