@@ -41,7 +41,10 @@ public partial class MoodShots : Node
         return done();
     }
 
-    private sealed record Shot(string Name, InteriorLayout Layout, int Floor, RoomPlan Room, Vector3 Eye, Vector3 Look, int Tap = -1);
+    private sealed record Shot(string Name, InteriorLayout Layout, int Floor, RoomPlan Room, Vector3 Eye, Vector3 Look, int Tap = -1)
+    {
+        public DoorIndex.Entry Door { get; set; }
+    }
 
     private async Task Run()
     {
@@ -74,7 +77,9 @@ public partial class MoodShots : Node
             try { l = await interiors.GetOrCreate(d.Key.ToString()); } catch { }
             if (l == null) continue;
             looked++;
+            int before = shots.Count;
             Pick(shots, l);
+            foreach (var s in shots.Values) if (s.Layout == l) s.Door = d;
             if (shots.Count >= 7) break;
         }
         Log($"looked at {looked} houses: {string.Join(", ", shots.Values.Select(s => $"{s.Name} {s.Layout.Key} ({s.Layout.Mood}, {s.Room.Type})"))}");
@@ -85,6 +90,15 @@ public partial class MoodShots : Node
             var place = InteriorManager.PlacementFor(s.Layout, interiors.Origin!);
             var eye = place * s.Eye;
             var to = place.Basis * (s.Look - s.Eye);
+            // offline the free camera's way in (the shot queue's): stand at the front door, open
+            // it, wait for the building to be built behind it, then be in it
+            if (interiors.Current != null) { interiors.CameraInside(null); await Wait(0.5); }
+            me.GlobalPosition = s.Door.World + s.Door.Outward * 1.5f + Vector3.Up * 0.5f;
+            me.Velocity = Vector3.Zero;
+            string doorKey = s.Door.Key.ToString();
+            if (!await Until(() => { interiors.OpenDoorForCamera(s.Door.World, 4f); return interiors.BuiltLink(doorKey) != null; }, 30))
+            { Log($"{s.Name}: its door never opened"); continue; }
+            interiors.CameraInside(s.Layout.Key);
             me.EnterInterior(s.Layout.Key, eye - Vector3.Up * 1.6f, Mathf.Atan2(-to.X, -to.Z));
             me.Velocity = Vector3.Zero;
             if (!await Until(() => interiors.CurrentNode?.Layout.Key == s.Layout.Key, 20)) { Log($"{s.Name}: never got in"); continue; }
@@ -113,8 +127,9 @@ public partial class MoodShots : Node
             foreach (var r in l.Floors[f].Rooms)
             {
                 float y0 = l.FloorY(f);
-                if (r.Span > 1 && !shots.ContainsKey("fancy_tall")) shots["fancy_tall"] = Corner("fancy_tall", l, f, r, y0, 2.4f);
-                if (l.Mood == InteriorMood.Fancy && r.Type == RoomType.Living && !shots.ContainsKey("fancy")) shots["fancy"] = Corner("fancy", l, f, r, y0, 1.1f);
+                if (r.Span > 1 && r.Type != RoomType.Nave && !shots.ContainsKey("fancy_tall")) shots["fancy_tall"] = Corner("fancy_tall", l, f, r, y0, l.ClearOf(r) - 1.2f);
+                if (l.Mood == InteriorMood.Fancy && r.Span == 1 && r.Type is RoomType.Living or RoomType.Dining or RoomType.Bedroom or RoomType.Study
+                    && !shots.ContainsKey("fancy")) shots["fancy"] = Corner("fancy", l, f, r, y0, 1.6f);
                 if (l.Mood == InteriorMood.Messy && r.Type is RoomType.Bedroom or RoomType.Living && r.Area > 10 && !shots.ContainsKey("messy"))
                     shots["messy"] = Corner("messy", l, f, r, y0, 0.6f);
                 if (l.Mood == InteriorMood.Abandoned && r.Type is RoomType.Living or RoomType.Bedroom or RoomType.Kitchen && r.Area > 10

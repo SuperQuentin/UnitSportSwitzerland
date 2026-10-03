@@ -54,7 +54,7 @@ public static partial class InteriorMeshBuilder
     private static void Weather(Scratch s, InteriorMood mood)
     {
         if (mood is not (InteriorMood.Abandoned or InteriorMood.Messy)) return;
-        float grey = mood == InteriorMood.Abandoned ? 0.5f : 0.12f, dark = mood == InteriorMood.Abandoned ? 0.7f : 0.93f;
+        float grey = mood == InteriorMood.Abandoned ? 0.65f : 0.12f, dark = mood == InteriorMood.Abandoned ? 0.58f : 0.93f;
         var dust = C(0.55f, 0.50f, 0.42f);
         for (int i = 0; i < s.C.Count; i++)
         {
