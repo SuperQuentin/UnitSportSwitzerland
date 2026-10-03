@@ -189,6 +189,9 @@ public partial class BoatCheck : Node
         Expect(draft > 0.1f && draft < 0.5f, $"floats at its draft ({draft:F2} m)");
         Expect(Mathf.Abs(Deg(s.Pitch)) < 4f && Mathf.Abs(Deg(s.Roll)) < 2f, "floats level in a calm");
         Expect(s.Velocity.Length() < 0.2f, "lies still in a calm");
+        // water is collected wading, never from a boat (#380)
+        if (GetTree().Root.FindChild("Gathering", true, false) is Loot.Gathering gather)
+            Expect(gather.Target != Loot.Gathering.Resource.Water, $"aboard: no water offered ({gather.Target})");
         await Shot("idle_calm", () => Look(me, side: 1f, back: 0.6f, up: 0.3f, distance: 1.7f));
     }
 
@@ -285,6 +288,29 @@ public partial class BoatCheck : Node
         WaterField.TryLevelAt(at, out float level);
         me.PlaceBoat(at with { Y = level - 0.2f }, heading);
         await Slaps("calm, idle", 0f, 5);
+        // aboard, over the water: no "collect water" prompt (#380), the player's own view
+        await Shot("no_gather_prompt", null);
+        // the wheel straight, then hard over to starboard (#380): turned on the driver's own peer
+        Transform3D AtWheel()
+        {
+            var b = me.GlobalTransform.Basis;
+            var right = (b.X with { Y = 0 }).Normalized();
+            var aft = (b.Z with { Y = 0 }).Normalized();
+            var wheel = me.GlobalPosition + Vector3.Up * 0.98f + right * 0.46f - aft * 0.6f;
+            var eye = wheel + Vector3.Up * 0.5f + aft * 0.45f + right * 0.8f;
+            return new Transform3D(Basis.LookingAt(wheel - eye, Vector3.Up), eye);
+        }
+        await Shot("wheel_straight", AtWheel);
+        me.RideControls = () => new RideInput(0.12f, 0f, 1f, false);
+        await Wait(2);
+        if (FindRig(me) is { } wheeled)
+        {
+            Log(string.Create(CultureInfo.InvariantCulture, $"helm {(me.Vehicle as Boat)?.HelmNow:F2}: wheel turned {wheeled.WheelTurn:F2} rad"));
+            Expect(Mathf.Abs(wheeled.WheelTurn) > 1.5f, $"the wheel turns with the helm ({wheeled.WheelTurn:F2} rad)");
+            await Shot("wheel_hard_over", AtWheel);
+        }
+        me.RideControls = Helm(me, 0f);
+        me.PlaceBoat(at with { Y = level - 0.2f }, heading);
         await SeaState("gamey", 1f);
         await Slaps("gamey, idle", 0f, 6);
         await Slaps("gamey, half ahead", 0.5f, 8);

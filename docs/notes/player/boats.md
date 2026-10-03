@@ -92,6 +92,15 @@
   the wash), as loud as it climbed fast (full at 1.7 m/s), then 0.12-0.32 s before the next. Within
   120 m of the ears (`Audio/Ears`) only. Measured (speedboat): calm idle 0.2 faint laps a second, gamey idle 0.8
   (strength 0.03), gamey half ahead 1.2 at 0.2. The steamer's is pitched 0.55 and carries further.
+- **The wheel turns (#380)**: the runabout's rim is its own node (`BoatMeshBuilder.RunaboutWheel`,
+  `BoatRig.Steer`), turned `Wheel.Lock` (2.4 rad) at full helm, the driver's hands with it (one
+  figure per 0.06 rad, kept); the steamer's wheelhouse wheel likewise (`SteamerMeshBuilder.HelmWheelMesh`,
+  `SteamerRig.Steer`, 3.6 rad). The helm (`Boat.HelmNow`, -1..1 from `State.Helm`) travels in the
+  pose's W as a whole number 0..100: `+ 4 × HelmSteps` for a boat (wet and airborne below it,
+  decoded with `PosMod`), `+ 32 ×` for the steamer (above its whistle and gangway bits);
+  `Boat.HelmOf` / `Steamer.WheelOf`. `--boatcheck` checks the owner's wheel turns (and pictures it
+  straight and hard over with `shots,wake`); `tools/boatnetcheck.sh` checks B's copy turns as A's.
+  The jetski has no wheel (bars on the rider's mesh, not turned).
 - **At a jetty** (#377, `world/landings`): harbour jetties are solid decks; getting out beside one steps
   onto it instead of into the water (`FootPlayer.Pier.cs`, `--steamercheck pier|nyon`).
 - **Not done**: boats placed at the real harbours (the jetties are there, nothing parks at them); a hull's collision box does not pitch (the

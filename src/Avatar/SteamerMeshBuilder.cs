@@ -639,16 +639,9 @@ public static class SteamerMeshBuilder
         dk.Along(HouseFrom - 0.2f, HouseTo + 0.2f, HouseTop, HouseTop + 0.12f, HouseHalf * 2f + 0.4f);
         m.Box(new Vector3(0, UpperY + 0.01f, zc), new Vector3(HouseHalf * 2f - 0.1f, 0.02f, len - 0.1f), Varnish.Lightened(0.15f));
 
-        // the wheel on its pedestal, the stool behind it
+        // the wheel on its pedestal (the wheel itself turns: HelmWheelMesh, #380), the stool behind it
         var hub = HelmWheel;
-        m.Ring(hub, Vector3.Back, HelmRadius - 0.05f, HelmRadius, 0.06f, Varnish, 16);
-        for (int i = 0; i < 8; i++)
-        {
-            float a = Mathf.Tau * i / 8f;
-            var dir = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0);
-            m.Tube(hub + dir * 0.08f, hub + dir * (HelmRadius + 0.14f), 0.022f, Varnish, 4);
-        }
-        m.Tube(hub + Vector3.Forward * 0.04f, hub + Vector3.Back * 0.35f, 0.07f, Brass, 6);
+        m.Tube(hub + Vector3.Back * 0.06f, hub + Vector3.Back * 0.35f, 0.07f, Brass, 6);
         m.Box(new Vector3(0, (UpperY + hub.Y - 0.1f) * 0.5f, hub.Z + 0.35f), new Vector3(0.36f, hub.Y - 0.1f - UpperY, 0.36f), Varnish);
         dk.Box(new Vector3(0, (UpperY + hub.Y) * 0.5f, hub.Z + 0.3f), new Vector3(0.4f, hub.Y - UpperY, 0.45f));
         m.Tube(HelmHip with { Y = UpperY }, HelmHip with { Y = HelmHip.Y - 0.1f }, 0.05f, Dark, 6);
@@ -674,6 +667,27 @@ public static class SteamerMeshBuilder
         foreach (float x in new[] { 0.075f, -0.075f })
             m.Box(new Vector3(x, 0.26f, 0), new Vector3(0.04f, 0.04f, 0.04f), Dark);
         m.Tube(new Vector3(0.1f, 0.26f, 0), new Vector3(-0.1f, 0.26f, 0), 0.012f, Brass, 4);
+        return m.Build();
+    }
+
+    /// <summary>The wheel turns this far at full helm, rad: half a turn and more each way.</summary>
+    public const float HelmLock = 3.6f;
+
+    /// <summary>
+    /// The wheelhouse wheel, authored round its hub (#380): rim, eight spokes with their handles, the
+    /// boss. Its node sits at <see cref="HelmWheel"/> and turns about the fore-and-aft axis.
+    /// </summary>
+    public static ArrayMesh HelmWheelMesh()
+    {
+        var m = new MeshScratch();
+        m.Ring(Vector3.Zero, Vector3.Back, HelmRadius - 0.05f, HelmRadius, 0.06f, Varnish, 16);
+        for (int i = 0; i < 8; i++)
+        {
+            float a = Mathf.Tau * i / 8f;
+            var dir = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0);
+            m.Tube(dir * 0.08f, dir * (HelmRadius + 0.14f), 0.022f, Varnish, 4);
+        }
+        m.Tube(Vector3.Forward * 0.04f, Vector3.Back * 0.06f, 0.07f, Brass, 6);
         return m.Build();
     }
 
@@ -831,6 +845,11 @@ public partial class SteamerRig : Node3D
         }
         rig._lever = new MeshInstance3D { Name = "Telegraph", Mesh = parts.Lever, MaterialOverride = body, Position = BoatMeshBuilder.Flip(SteamerMeshBuilder.TelegraphAt + new Vector3(0, 0.12f, 0)) };
         rig.AddChild(rig._lever);
+        // the wheelhouse wheel turns with the helm (#380)
+        rig._helm = new Node3D { Name = "HelmWheel", Position = BoatMeshBuilder.Flip(SteamerMeshBuilder.HelmWheel) };
+        rig._helm.AddChild(new MeshInstance3D { Mesh = SteamerMeshBuilder.HelmWheelMesh(), MaterialOverride = body });
+        rig.AddChild(rig._helm);
+        rig._helmPalette = helmsman;
         if (helmsman != null)
         {
             rig._helmsman = new MeshInstance3D { Name = "Driver", Mesh = SteamerMeshBuilder.Helmsman(helmsman, 0f), MaterialOverride = body };
@@ -967,6 +986,35 @@ public partial class SteamerRig : Node3D
     }
 
     private const float WhistleDb = 2f;
+
+    // ---- the wheelhouse wheel (#380) ----------------------------------------------------------------
+
+    private Node3D? _helm;
+    private HumanPalette? _helmPalette;
+    private float _steer, _shownHelm = float.NaN;
+    private readonly Dictionary<int, ArrayMesh> _helmsmanTurns = new();
+
+    /// <summary>The wheel's turn now, rad (+ is the helm to starboard).</summary>
+    public float WheelTurn => _steer * SteamerMeshBuilder.HelmLock;
+
+    /// <summary>Per frame, every peer: the wheel and the helmsman's hands follow the helm (-1 port .. 1 starboard), eased.</summary>
+    public void Steer(float helm, float dt)
+    {
+        if (_helm == null) return;
+        _steer = Mathf.Lerp(_steer, Mathf.Clamp(helm, -1f, 1f), 1f - Mathf.Exp(-6f * dt));
+        float turn = Mathf.Round(WheelTurn / 0.06f) * 0.06f;
+        if (turn == _shownHelm) return;
+        _shownHelm = turn;
+        // clockwise as the helmsman sees it, looking forward
+        _helm.Basis = new Basis(Vector3.Back, -turn);
+        if (_helmsman != null && _helmPalette is { } palette && DisplayServer.GetName() != "headless")
+        {
+            int key = Mathf.RoundToInt(turn / 0.06f);
+            if (!_helmsmanTurns.TryGetValue(key, out var mesh))
+                _helmsmanTurns[key] = mesh = SteamerMeshBuilder.Helmsman(palette, -turn);
+            _helmsman.Mesh = mesh;
+        }
+    }
     private HullSlap? _slap;
     private bool _blowing;
     private float _blowFor = 10f;
