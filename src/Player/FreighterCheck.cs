@@ -219,6 +219,15 @@ public partial class FreighterCheck : Node
         await Seconds(0.5);
         await Shot("hold_in_flight_ramp_open_looking_aft");
         me.TurnView(Mathf.Pi);
+        // out onto the open ramp: level with the floor in the air (#420), walked on, not a slope down
+        bool onRamp = await WalkTo(me, 0f, RampHingeZ - 1.4f, 20);
+        l = Local(me);
+        Expect(onRamp && me.Aboard && Mathf.Abs(l.Y - FloorY) < 0.15f, $"on the ramp in flight, level with the floor {Where(me)}");
+        me.TurnView(Mathf.Pi);
+        await Seconds(0.5);
+        await Shot("on_the_level_ramp_in_flight");
+        me.TurnView(Mathf.Pi);
+        await WalkTo(me, 0f, 0f, 20);
         Expect(await ToCockpit(me) && me.TryInteract() && await Until(() => me.Vehicle is Airliner && me.SeatIndex == 0, 6), $"back at the controls in flight ({me.Ride})");
         await Shot("controls_in_flight");
         Finish(null);
