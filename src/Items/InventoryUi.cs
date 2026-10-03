@@ -97,6 +97,8 @@ public partial class InventoryUi : CanvasLayer
     private (ItemStack[] Slots, ItemStack Carried) _paintSnapshot;
     private readonly List<int> _paintSlots = new();
     private int _pickedOnPress = -1;
+    /// <summary>The slot the cursor stack was last picked from: Esc puts it back there (#391).</summary>
+    private int _carriedFrom = -1;
     private int _lastClickSlot = -1;
     private double _lastClickTime;
 
@@ -751,6 +753,17 @@ public partial class InventoryUi : CanvasLayer
                 return false;   // motion is never consumed: the buttons need their hover
             }
 
+            case InputEventMouseButton { Pressed: true } w when w.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown:
+            {
+                // over the hotbar row, the wheel picks the slot in hand as it does in the world
+                if (SlotAt(w.Position) is var row and >= 0 && row < Inventory.HotbarSize)
+                {
+                    Inv.Cycle(w.ButtonIndex == MouseButton.WheelDown ? 1 : -1);
+                    return true;
+                }
+                return false;
+            }
+
             case InputEventMouseButton { Pressed: true } b when b.ButtonIndex is MouseButton.Left or MouseButton.Right or MouseButton.Middle:
             {
                 int slot = SlotAt(b.Position);
@@ -778,7 +791,8 @@ public partial class InventoryUi : CanvasLayer
                 _lastClickSlot = slot;
                 _lastClickTime = now;
 
-                if (left && b.ShiftPressed && Inv.Carried.IsEmpty) Inv.QuickMove(slot);
+                // shift-click sends the slot across (hotbar <-> pack), with or without a stack on the cursor (#391)
+                if (b.ShiftPressed) Inv.QuickMove(slot);
                 else if (doubleClick && !Inv.Carried.IsEmpty && slot != Inventory.BagSlot && !Inventory.IsWearSlot(slot))
                 {
                     EndPaint(commit: false);
@@ -790,6 +804,7 @@ public partial class InventoryUi : CanvasLayer
                     else Inv.SecondaryClick(slot);
                     // released over another slot, this becomes a drag and drop
                     _pickedOnPress = Inv.Carried.IsEmpty ? -1 : slot;
+                    if (_pickedOnPress >= 0) _carriedFrom = slot;
                 }
                 else
                 {
@@ -810,7 +825,13 @@ public partial class InventoryUi : CanvasLayer
                 int slot = SlotAt(b.Position);
                 if (_paintButton == b.ButtonIndex)
                 {
-                    EndPaint(commit: true);
+                    // dragged off the panel without spreading over a second slot: it falls (#391)
+                    if (slot == -1 && _paintSlots.Count == 1 && OutsidePanel(b.Position))
+                    {
+                        EndPaint(commit: false);
+                        DropCarried(one: b.ButtonIndex == MouseButton.Right);
+                    }
+                    else EndPaint(commit: true);
                     return true;
                 }
                 if (_pickedOnPress >= 0)
@@ -893,8 +914,10 @@ public partial class InventoryUi : CanvasLayer
             if (!e.IsPressed() || e.IsEcho()) return;
             if (e.IsActionPressed("ui_cancel") && !Inv.Carried.IsEmpty)
             {
-                // B first puts the carried stack back, then closes
+                // Esc / B first puts the carried stack back where it was picked from (#391), then closes
+                if (_carriedFrom >= 0 && Inv.IsOpen(_carriedFrom) && Inv[_carriedFrom].IsEmpty) Inv.PrimaryClick(_carriedFrom);
                 if (Inv.ReturnCarried() is { IsEmpty: false } left && !_items.DropStack(null, left)) Inv.Bin(left);
+                _carriedFrom = -1;
             }
             else if (e.IsActionPressed(PlayerInput.Inventory) || e.IsActionPressed(PlayerInput.Menu)
                      || e.IsActionPressed("ui_cancel"))
@@ -933,13 +956,16 @@ public partial class InventoryUi : CanvasLayer
         if (IsOpen)
         {
             if (HandlePanelMouse(e)) GetViewport().SetInputAsHandled();
-            else if (e is InputEventKey { Pressed: true, Echo: false } k && _hover >= 0)
+            else if (e is InputEventKey { Pressed: true, Echo: false } k)
             {
-                // a number key over a slot swaps it with that hotbar slot, Q drops, as in Minecraft
-                if ((int)k.PhysicalKeycode - (int)Key.Key1 is var n && n >= 0 && n < Inventory.HotbarSize)
+                // as in Minecraft, through the actions (#391): a slot key over a slot swaps it with
+                // that hotbar slot; Q drops the hovered slot (Ctrl: all), else the cursor stack
+                if (_hover >= 0 && PlayerInput.SlotPressed(k) is var n and >= 0 && n < Inventory.HotbarSize)
                     Inv.SwapWithHotbar(_hover, n);
-                else if (k.PhysicalKeycode == Key.Q)
+                else if (k.IsActionPressed(PlayerInput.DropItem) && _hover >= 0 && !Inv[_hover].IsEmpty)
                     DropSlot(_hover, all: k.CtrlPressed);
+                else if (k.IsActionPressed(PlayerInput.DropItem) && !Inv.Carried.IsEmpty)
+                    DropCarried(one: !k.CtrlPressed);
                 else return;
                 GetViewport().SetInputAsHandled();
             }
@@ -958,7 +984,7 @@ public partial class InventoryUi : CanvasLayer
                 CloseWheel(true);
                 break;
             case InputEventKey { Pressed: true } key
-                when (int)key.PhysicalKeycode - (int)Key.Key1 is var n && n >= 0 && n < Inventory.HotbarSize:
+                when PlayerInput.SlotPressed(key) is var n && n >= 0 && n < Inventory.HotbarSize:
                 _wheel.Highlight = n;
                 CloseWheel(true);
                 break;
