@@ -401,9 +401,9 @@ public partial class ItemController : Node
             _throw.BeginCharge();
             return;
         }
-        // a click on the radio you point at takes it in the hand (#261); on anything else lying
-        // there, with nothing in the hand, picks it up (a held tool still does its own thing)
-        if (Highlight.Pointed is RadioBody radio && IsInstanceValid(radio))
+        // with nothing in the hand, a click on the radio you point at takes it in the hand (#261), on
+        // anything else lying there picks it up; a held tool still does its own thing (#390)
+        if (_inventory.Held.IsEmpty && Highlight.Pointed is RadioBody radio && IsInstanceValid(radio))
         {
             TakeRadio(player, radio);
             return;

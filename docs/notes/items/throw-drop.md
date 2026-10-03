@@ -19,7 +19,8 @@
   pack panel has "Drop on the ground" (whole stack). E picks up what is pointed at (room checked first;
   the item flies into the hand as a local ghost, `ItemController.FlyToHand`).
 - **Pointing + outline** (`Highlight.cs`): every frame `ItemController` picks the target (`Highlight.Find`:
-  view ray first, else smallest angle in a ~18 deg cone within 2.6 m of the chest, else one at the feet)
+  view ray first, else smallest angle in a ~18 deg cone within 2.6 m of the chest, if a ray from the eye reaches it;
+  never one merely at the feet, #390)
   among dropped items and radios. The border is a **stencil silhouette** (#401) as `MaterialOverlay`:
   a pass that only writes stencil 77 over every mesh of the target (depth test off), then 8 next passes of
   the same meshes nudged 2 px (at 1080 lines) on screen in 8 directions, drawn only off the mark and marking
