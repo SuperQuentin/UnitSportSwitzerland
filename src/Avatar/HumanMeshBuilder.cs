@@ -84,15 +84,27 @@ public sealed record HumanPalette(
     /// </summary>
     public Vector3 Wind { get; init; }
 
-    /// <summary>A deterministic jersey colour, so each rider in a race is distinguishable.</summary>
+    /// <summary>
+    /// Who the figure is (#394): build, face, eyes, hair. <see cref="Skin"/> is its skin tone; set
+    /// both with <see cref="With(Avatar.Appearance)"/>.
+    /// </summary>
+    public Appearance Appearance { get; init; } = Appearance.Default;
+
+    /// <summary>This palette on a figure of <paramref name="appearance"/>, its skin tone included.</summary>
+    public HumanPalette With(Appearance appearance) => this with { Appearance = appearance, Skin = appearance.SkinColour };
+
+    /// <summary>
+    /// A deterministic jersey colour, so each rider in a race is distinguishable, on the figure the
+    /// rider chose (<see cref="Appearance.Register"/>) or else one of its own from the index.
+    /// </summary>
     public static HumanPalette ForRider(int index)
     {
         float hue = (index * 0.37f) % 1f;      // golden-ratio stride keeps neighbours apart
-        return Default with
+        return (Default with
         {
             Jersey = Color.FromHsv(hue, 0.62f, 0.88f),
             Helmet = Color.FromHsv(hue, 0.25f, 0.95f),
-        };
+        }).With(Appearance.For(index));
     }
 }
 
@@ -323,18 +335,8 @@ public static partial class HumanMeshBuilder
     /// <remarks><paramref name="fullFace"/> false: no helmet, the bare head (a jetski's rider, #302).</remarks>
     public static void AppendRider(MeshScratch scratch, HumanPalette palette, Vector3 seat, Vector3 grip, Vector3 peg, bool fullFace = true)
     {
-        var rig = RiderRig(seat, grip, peg);
-        AppendRig(scratch, palette, rig, includeLegs: true, helmet: false);
-        if (!fullFace) return;
-        // a full-face helmet round the whole head, dark visor at the front (+Z); framed like
-        // AppendHat (side, up, forward), a right-handed basis, or the box renders inside out
-        var up = (rig.HeadTop - rig.HeadBase).Normalized();
-        var forward = (Vector3.Back - up * up.Dot(Vector3.Back)).Normalized();
-        var basis = new Basis(up.Cross(forward), up, forward);
-        var centre = (rig.HeadBase + rig.HeadTop) * 0.5f + up * 0.01f;
-        scratch.Box(centre, new Vector3(0.22f, 0.25f, 0.25f), palette.Helmet, basis);
-        scratch.Box(centre + forward * 0.13f + up * 0.02f, new Vector3(0.17f, 0.07f, 0.03f),
-            new Color(0.08f, 0.09f, 0.12f), basis);
+        // the full-face helmet is sized to the head it goes round (AppendRig)
+        AppendRig(scratch, palette, RiderRig(seat, grip, peg), includeLegs: true, helmet: false, fullFace: fullFace);
     }
 
     /// <summary>Camera mounts for <see cref="AppendRider"/>'s figure, flipped to face −Z like the mesh.</summary>
@@ -616,58 +618,6 @@ public static partial class HumanMeshBuilder
     /// </summary>
     public static bool SmoothFigures => Styles.StyleKit.Detail == Styles.MeshDetail.High;
 
-    private static void AppendRig(MeshScratch scratch, HumanPalette palette, Rig rig,
-        bool includeLegs, bool helmet, Headwear hat = Headwear.None, bool body = true, bool head = true)
-    {
-        // the figure only: a vehicle drawn into the same scratch keeps its own look
-        using var smoothing = scratch.Smoothing(SmoothFigures);
-        // dressed (#251): the clothes replace the jersey, shorts and shoes (HumanMeshBuilder.Clothing.cs)
-        if (!palette.Outfit.IsEmpty)
-        {
-            AppendDressed(scratch, palette, rig, includeLegs, helmet, hat, body, head);
-            return;
-        }
-        if (body)
-        {
-            // torso as a lozenge rather than a cylinder: shoulders wider than waist is most of
-            // what makes a figure read as a person from behind at fifty metres
-            scratch.Tube(rig.Hip, rig.Waist, 0.130f, 0.140f, palette.Shorts, 8);
-            scratch.Tube(rig.Waist, rig.Chest, 0.140f, 0.158f, palette.Jersey, 8);
-            scratch.Tube(rig.Chest, rig.Neck, 0.158f, 0.098f, palette.Jersey, 8);
-
-            // shoulder caps, so the arms do not appear to sprout from the ribs
-            scratch.Tube(rig.ShoulderL, rig.ShoulderR, 0.082f, palette.Jersey, 6);
-
-            Arm(scratch, palette, rig.ShoulderL, rig.ElbowL, rig.WristL);
-            Arm(scratch, palette, rig.ShoulderR, rig.ElbowR, rig.WristR);
-
-            if (includeLegs)
-            {
-                Leg(scratch, palette, rig.HipL, rig.KneeL, rig.AnkleL, rig.ToeL);
-                Leg(scratch, palette, rig.HipR, rig.KneeR, rig.AnkleR, rig.ToeR);
-            }
-        }
-        if (!head) return;
-
-        // The head follows the neck rather than a separately authored lean angle. Carrying its
-        // own angle meant the head tilted independently of the body the moment a pose changed,
-        // which is what left the cyclist's head hanging off the shoulders at an angle nothing
-        // else shared.
-        var headAxis = rig.HeadTop - rig.HeadBase;
-        var headBasis = UprightBasis(headAxis);
-        var headCentre = (rig.HeadBase + rig.HeadTop) * 0.5f;
-
-        scratch.Tube(rig.Neck, rig.HeadBase, 0.052f, palette.Skin, 6);
-        scratch.RoundedBox(headCentre,
-            new Vector3(0.150f, headAxis.Length() + 0.055f, 0.180f), palette.Skin, headBasis);
-
-        if (helmet)
-            scratch.Box(headCentre + headBasis.Y * 0.062f,
-                new Vector3(0.168f, 0.085f, 0.205f), palette.Helmet, headBasis);
-        else if (hat != Headwear.None)
-            AppendHat(scratch, hat, headCentre, headAxis);
-    }
-
     /// <summary>
     /// A hat on the head, built in the head's own frame so it follows the neck like the helmet
     /// does. The figure is authored facing +Z, so "forward" is +Z made square to the head.
@@ -677,42 +627,54 @@ public static partial class HumanMeshBuilder
         var up = axis.LengthSquared() > 1e-8f ? axis.Normalized() : Vector3.Up;
         var fwd = Vector3.Back - up * up.Dot(Vector3.Back);
         fwd = fwd.LengthSquared() > 1e-6f ? fwd.Normalized() : Vector3.Back;
-        var side = up.Cross(fwd);
+        var seat = centre + up * (axis.Length() * 0.5f + 0.0275f);
+        AppendHat(s, hat, seat, seat - up * 0.1225f, up.Cross(fwd), up, fwd, 1f);
+    }
+
+    /// <summary>
+    /// A hat whose band rests at <paramref name="top"/> (on the round head, a little above the
+    /// brow, where the head is as wide as the band), in the head's frame; <paramref name="centre"/>
+    /// is the middle of the head, for what goes round all of it; <paramref name="scale"/> scales the
+    /// hat's radii to the head (#394).
+    /// </summary>
+    internal static void AppendHat(MeshScratch s, Headwear hat, Vector3 top, Vector3 centre, Vector3 side, Vector3 up, Vector3 fwd, float scale)
+    {
         var frame = new Basis(side, up, fwd);
-        var top = centre + up * (axis.Length() * 0.5f + 0.0275f);
+        float k = scale;
 
         switch (hat)
         {
             case Headwear.WitchHat:
             {
                 var black = new Color(0.10f, 0.08f, 0.12f);
-                s.Tube(top - up * 0.005f, top + up * 0.012f, 0.21f, 0.20f, black, 10);   // brim
-                s.Tube(top, top + up * 0.05f, 0.105f, 0.095f, new Color(0.45f, 0.20f, 0.60f), 8);
+                s.Tube(top - up * 0.005f, top + up * 0.012f, 0.21f * k, 0.20f * k, black, 10);   // brim
+                s.Tube(top, top + up * 0.05f, 0.105f * k, 0.095f * k, new Color(0.45f, 0.20f, 0.60f), 8);
                 var knee = top + up * 0.20f - fwd * 0.02f;
-                s.Tube(top + up * 0.05f, knee, 0.095f, 0.05f, black, 8);
-                s.Tube(knee, knee + up * 0.08f - fwd * 0.10f, 0.05f, 0.006f, black, 6);   // the tip, bent back
+                s.Tube(top + up * 0.05f, knee, 0.095f * k, 0.05f * k, black, 8);
+                s.Tube(knee, knee + up * 0.08f - fwd * 0.10f, 0.05f * k, 0.006f, black, 6);   // the tip, bent back
                 break;
             }
             case Headwear.PumpkinHead:
             {
+                // round the whole head (the figure draws no face or hair under it)
                 var orange = new Color(0.93f, 0.44f, 0.07f);
-                var c = centre + up * 0.01f;
-                s.Tube(c - up * 0.12f, c, 0.12f, 0.155f, orange, 8);
-                s.Tube(c, c + up * 0.13f, 0.155f, 0.10f, orange, 8);
+                var c = centre + up * 0.01f * k;
+                s.Tube(c - up * 0.13f * k, c, 0.12f * k, 0.155f * k, orange, 8);
+                s.Tube(c, c + up * 0.14f * k, 0.155f * k, 0.10f * k, orange, 8);
                 var glow = new Color(1f, 0.85f, 0.25f);
-                s.Box(c + up * 0.04f + fwd * 0.145f + side * 0.055f, new Vector3(0.05f, 0.04f, 0.03f), glow, frame);
-                s.Box(c + up * 0.04f + fwd * 0.145f - side * 0.055f, new Vector3(0.05f, 0.04f, 0.03f), glow, frame);
-                s.Box(c - up * 0.045f + fwd * 0.145f, new Vector3(0.12f, 0.03f, 0.03f), glow, frame);
-                s.Tube(c + up * 0.12f, c + up * 0.19f, 0.02f, 0.014f, new Color(0.28f, 0.26f, 0.10f), 5);
+                s.Box(c + (up * 0.04f + fwd * 0.145f + side * 0.055f) * k, new Vector3(0.05f, 0.04f, 0.03f) * k, glow, frame);
+                s.Box(c + (up * 0.04f + fwd * 0.145f - side * 0.055f) * k, new Vector3(0.05f, 0.04f, 0.03f) * k, glow, frame);
+                s.Box(c + (-up * 0.045f + fwd * 0.145f) * k, new Vector3(0.12f, 0.03f, 0.03f) * k, glow, frame);
+                s.Tube(c + up * 0.13f * k, c + up * 0.20f * k, 0.02f, 0.014f, new Color(0.28f, 0.26f, 0.10f), 5);
                 break;
             }
             case Headwear.SantaHat:
             {
                 var red = new Color(0.80f, 0.10f, 0.12f);
                 var white = new Color(0.95f, 0.95f, 0.93f);
-                s.Tube(top - up * 0.03f, top + up * 0.02f, 0.11f, 0.11f, white, 10);   // fur trim
+                s.Tube(top - up * 0.03f, top + up * 0.02f, 0.11f * k, 0.11f * k, white, 10);   // fur trim
                 var bend = top + up * 0.15f - fwd * 0.04f;
-                s.Tube(top + up * 0.02f, bend, 0.10f, 0.05f, red, 8);
+                s.Tube(top + up * 0.02f, bend, 0.10f * k, 0.05f, red, 8);
                 var tip = bend - fwd * 0.11f - up * 0.05f;                             // flops over the back
                 s.Tube(bend, tip, 0.05f, 0.012f, red, 6);
                 s.Box(tip, new Vector3(0.055f, 0.055f, 0.055f), white, frame);
@@ -721,16 +683,17 @@ public static partial class HumanMeshBuilder
             case Headwear.ReindeerAntlers:
             {
                 var antler = new Color(0.45f, 0.30f, 0.16f);
-                foreach (float sgn in new[] { -1f, 1f })
+                foreach (float sgn in stackalloc[] { -1f, 1f })
                 {
-                    var root = top - up * 0.02f + side * sgn * 0.055f;
+                    var root = top - up * 0.02f + side * sgn * 0.055f * k;
                     var fork = root + up * 0.12f + side * sgn * 0.06f;
                     s.Tube(root, fork, 0.016f, 0.012f, antler, 5);
                     s.Tube(fork, fork + up * 0.08f + side * sgn * 0.04f - fwd * 0.02f, 0.012f, 0.006f, antler, 5);
                     s.Tube(fork, fork + up * 0.05f + fwd * 0.06f, 0.011f, 0.005f, antler, 5);
                     s.Tube(root + (fork - root) * 0.45f, root + (fork - root) * 0.45f + fwd * 0.06f + up * 0.03f, 0.010f, 0.005f, antler, 4);
                 }
-                s.Box(centre + fwd * 0.085f - up * 0.01f, new Vector3(0.04f, 0.04f, 0.035f), new Color(0.90f, 0.08f, 0.08f), frame);
+                // the red nose, on the face's nose (0.07 up the head, at its front)
+                s.Box(centre + fwd * 0.092f * k - up * 0.035f * k, new Vector3(0.04f, 0.04f, 0.035f), new Color(0.90f, 0.08f, 0.08f), frame);
                 break;
             }
         }
@@ -745,25 +708,6 @@ public static partial class HumanMeshBuilder
         var reference = Mathf.Abs(up.Dot(Vector3.Right)) > 0.95f ? Vector3.Forward : Vector3.Right;
         var right = reference.Cross(up).Normalized();
         return new Basis(right, up, right.Cross(up));
-    }
-
-    private static void Arm(MeshScratch s, HumanPalette p, Vector3 shoulder, Vector3 elbow, Vector3 wrist)
-    {
-        s.Tube(shoulder, elbow, 0.058f, 0.045f, p.Jersey, 6);   // sleeve
-        s.Tube(elbow, wrist, 0.045f, 0.033f, p.Skin, 6);
-        s.RoundedBox(wrist, new Vector3(0.055f, 0.075f, 0.085f), p.Skin, rings: 6, segments: 8);
-    }
-
-    private static void Leg(MeshScratch s, HumanPalette p, Vector3 hip, Vector3 knee,
-        Vector3 ankle, Vector3 toe)
-    {
-        s.Tube(hip, knee, 0.088f, 0.062f, p.Shorts, 6);
-        s.Tube(knee, ankle, 0.062f, 0.040f, p.Skin, 6);
-
-        // the foot points along ankle→toe, so it follows the pose without extra bookkeeping
-        var forward = (toe - ankle);
-        if (forward.LengthSquared() > 1e-6f)
-            s.Tube(ankle, toe, 0.048f, 0.038f, p.Shoes, 5);
     }
 
     // ---- bone lengths, taken from the standing rig so every pose is the same person ----

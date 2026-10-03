@@ -28,6 +28,12 @@ public enum Finish : byte
     Tartan = 8,
     Fishnet = 9,
     Lace = 10,
+    /// <summary>Not a cloth: the pixel face's band (#394, <see cref="FaceAtlas"/>); listed so no pattern takes its id.</summary>
+    Face = 11,
+    // #394: the references' cloth patterns
+    Checker = 12,
+    Stripes = 13,
+    Studs = 14,
 }
 
 /// <summary>How a garment is built out of tubes and boxes (<c>HumanMeshBuilder.Clothing.cs</c>).</summary>

@@ -444,8 +444,27 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     private long _poseOutfit;
 
+    /// <summary>
+    /// Who the figure is, an <see cref="Avatar.Appearance"/> packed into an int (#394): build, face,
+    /// eyes, skin, hair. 0 until the player chooses (the figure then comes from its rider index).
+    /// Replicated like <see cref="OutfitBits"/>; set on the owner by <c>Occasions.OccasionHats</c>
+    /// from <c>GameSettings.AppearanceBits</c>.
+    /// </summary>
+    [Export] public int AppearanceBits { get; set; }
+
+    private int _visualAppearance;
+
     /// <summary>The figure's colours with what it wears: the jersey of whoever owns it, the clothes it has on.</summary>
     private Avatar.HumanPalette FigurePalette(int rider) => Avatar.HumanPalette.ForRider(rider) with { Outfit = new(OutfitBits) };
+
+    /// <summary>
+    /// The index this figure's palette is made from: its owner's peer id, so a race's riders are told
+    /// apart by their jerseys. An NPC is offset from the client that asked for it (#394), so it gets a
+    /// figure of its own rather than that player's chosen one (<see cref="Avatar.Appearance.For"/>).
+    /// </summary>
+    private int RiderIndex() => Npc && NetId(Name) is long npcId && npcId < 0
+        ? unchecked((int)Net.PlayerReplication.NpcOwner(npcId) + 100 * (int)(1 + (-npcId) % 1000))
+        : GetMultiplayerAuthority();
 
     /// <summary>
     /// The figure's right hand in this node's local space, or null when no figure is drawn
@@ -1063,6 +1082,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         foreach (var prop in PoseProperties) replication.AddProperty(prop);
         replication.AddProperty(".:HeadwearId");
         replication.AddProperty(".:OutfitBits");
+        replication.AddProperty(".:AppearanceBits");
         replication.AddProperty(".:DanceId");
         replication.AddProperty(".:HeldRadio");
         replication.AddProperty(".:BackItemId");
@@ -1082,7 +1102,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:DeckYaw");
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:DanceId", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         Terrain ??= GetNodeOrNull<ChunkManager>("/root/Main/World/Terrain");
         if (Origin is { } start) NetGlobal = start.ToGlobal(Position);
@@ -1260,7 +1280,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var kind = (RideKind)RideKindId;
         // a car is redrawn when its preset or garage parts change too (the garage's live preview, a remote tune)
         if (!force && _visual != null && kind == _visualKind && TuningBits == _visualTuning && CarSetupId == _visualSetup && TrailerCode == _visualTrailer
-            && OutfitBits == _visualOutfit) return;
+            && OutfitBits == _visualOutfit && AppearanceBits == _visualAppearance) return;
 
         _visual?.QueueFree();
         _visual = null;
@@ -1270,6 +1290,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _visualSetup = CarSetupId;
         _visualTuning = TuningBits;
         _visualOutfit = OutfitBits;
+        _visualAppearance = AppearanceBits;
         if (!IsMultiplayerAuthority()) FitRemoteBody(kind);
         // the sections behind a truck's cab: their own bodies, whatever else is drawn
         FitSections(kind);
@@ -1277,8 +1298,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // below, and a bus's 12 m hull stayed on the walker, who was lifted onto its roof (#209)
         if (kind == RideKind.OnFoot) FitHull(null);
 
-        // an NPC keeps its jersey whoever simulates it: the colours of the client that asked for it
-        int rider = Npc && NetId(Name) is long npcId && npcId < 0 ? (int)Net.PlayerReplication.NpcOwner(npcId) : GetMultiplayerAuthority();
+        // an NPC keeps its colours whoever simulates it: they come from the client that asked for it
+        int rider = RiderIndex();
+        // the figure a player chose, found by every ride drawn from this index (#394)
+        if (!Npc) Avatar.Appearance.Register(rider, AppearanceBits);
 
         if (kind == RideKind.OnFoot)
         {

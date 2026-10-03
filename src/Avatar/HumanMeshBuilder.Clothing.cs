@@ -3,12 +3,14 @@ using Godot;
 namespace UnitSport.Avatar;
 
 /// <summary>
-/// The clothes (#251, docs/notes/avatar/clothing.md): a dressed figure is the same tubes and boxes
-/// as the plain one, with the jersey, shorts and shoes swapped for what is worn and the rest laid
-/// over the body 4-10 mm proud (closer and it z-fights at distance). Everything hangs off the rig's
-/// joints, so clothes follow every pose, the dances and the ragdoll without knowing about them.
-/// A garment's finish rides in its colours' alpha (<see cref="Garments.Fx"/>), so it costs nothing
-/// here: <c>shaders/avatar.gdshader</c> does the rest.
+/// The figure and its clothes (#251, #394; docs/notes/avatar/clothing.md). The body
+/// (<c>HumanMeshBuilder.Body.cs</c>) is coloured where the clothes are, so a sleeve, trousers or
+/// tights are the body's own surface in the garment's colour (<see cref="Dress"/>); what does not
+/// follow the skin (collars, prints, skirts, buckles, hoods, headwear, glasses) is then laid over it
+/// on the body's real surfaces, 4-10 mm proud (closer and it z-fights at distance). Everything
+/// hangs off the rig's joints, so clothes follow every pose, the dances and the ragdoll without
+/// knowing about them. A garment's finish rides in its colours' alpha (<see cref="Garments.Fx"/>),
+/// so it costs nothing here: <c>shaders/body/avatar.gdshaderinc</c> does the rest.
 /// </summary>
 public static partial class HumanMeshBuilder
 {
@@ -54,475 +56,506 @@ public static partial class HumanMeshBuilder
 
     private static bool IsTrousers(Garment? g) => g?.Shape is GarmentShape.Pants or GarmentShape.Cargo;
 
-    /// <summary><see cref="AppendRig"/> for a figure with something on.</summary>
-    private static void AppendDressed(MeshScratch s, HumanPalette p, Rig rig, bool includeLegs, bool helmet,
-        Headwear hat, bool body, bool head)
+    /// <summary>A finish that cuts holes (fishnet, lace): drawn over the skin, never as it.</summary>
+    private static bool Holed(Garment g) => g.Finish is Finish.Fishnet or Finish.Lace;
+
+    /// <summary>
+    /// The figure: its body in its appearance and clothes, then what lies over them. Every figure
+    /// is drawn here, walker, rider, driver, passenger, swimmer and ragdoll alike.
+    /// <paramref name="fullFace"/>: a full-face motorbike helmet round the head, its visor in front.
+    /// </summary>
+    private static void AppendRig(MeshScratch scratch, HumanPalette palette, Rig rig,
+        bool includeLegs, bool helmet, Headwear hat = Headwear.None, bool body = true, bool head = true, bool fullFace = false)
     {
-        var o = p.Outfit;
+        // the figure only: a vehicle drawn into the same scratch keeps its own look
+        using var smoothing = scratch.Smoothing(SmoothFigures);
+        var s = scratch;
+        var o = palette.Outfit;
         var top = o[WearSlot.Top];
         // a one-piece takes the bottom slot: the inventory never lets both on, and a packed
         // outfit from elsewhere draws the dress
         var bottom = top is { CoversBottom: true } ? null : o[WearSlot.Bottom];
+        var headwear = o[WearSlot.Head];
+        // head clothes replace an occasion hat; a helmet replaces both
+        if (helmet || fullFace || headwear != null) hat = Headwear.None;
+        var cover = fullFace || hat == Headwear.PumpkinHead ? HairCover.Head
+            : helmet || hat is Headwear.WitchHat or Headwear.SantaHat || headwear?.Shape == GarmentShape.Beanie ? HairCover.Hat
+            : HairCover.None;
+
+        var look = Dress(palette, o, top, bottom);
+        var fit = AppendBody(s, look, rig, includeLegs, body, head, cover);
+        var r = rig;
+
         if (body)
         {
-            AppendTorso(s, p, rig, top, bottom);
-            AppendArm(s, p, rig.ShoulderL, rig.ElbowL, rig.WristL, top, o[WearSlot.Hands]);
-            AppendArm(s, p, rig.ShoulderR, rig.ElbowR, rig.WristR, top, o[WearSlot.Hands]);
-            if (includeLegs)
+            if (top != null) TopDetail(s, fit, top);
+            if (bottom != null) BottomDetail(s, fit, bottom);
+            foreach (float side in stackalloc[] { -1f, 1f })
             {
-                AppendLeg(s, p, rig.HipL, rig.KneeL, rig.AnkleL, rig.ToeL, top, bottom, o[WearSlot.Legs], o[WearSlot.Feet]);
-                AppendLeg(s, p, rig.HipR, rig.KneeR, rig.AnkleR, rig.ToeR, top, bottom, o[WearSlot.Legs], o[WearSlot.Feet]);
+                bool left = side < 0;
+                var (shoulder, elbow, wrist) = left ? (r.ShoulderL, r.ElbowL, r.WristL) : (r.ShoulderR, r.ElbowR, r.WristR);
+                ArmDetail(s, fit.Shape, fit.Side * side, shoulder, elbow, wrist, side, top, o[WearSlot.Hands]);
+                if (includeLegs)
+                {
+                    var (hip, knee, ankle, toe) = left ? (r.HipL, r.KneeL, r.AnkleL, r.ToeL) : (r.HipR, r.KneeR, r.AnkleR, r.ToeR);
+                    LegDetail(s, fit.Shape, fit.Side * side, hip, knee, ankle, toe, bottom, o[WearSlot.Legs], o[WearSlot.Feet]);
+                }
             }
             // with the legs or without (a cyclist's are their own mesh, driven by the cranks)
-            AppendSkirt(s, rig, top, bottom, p.Wind);
+            AppendSkirt(s, fit, top, bottom, palette.Wind);
         }
         if (!head) return;
 
-        // the head exactly as AppendRig draws it
-        var headAxis = rig.HeadTop - rig.HeadBase;
-        var headBasis = UprightBasis(headAxis);
-        var headCentre = (rig.HeadBase + rig.HeadTop) * 0.5f;
-        s.Tube(rig.Neck, rig.HeadBase, 0.052f, p.Skin, 6);
-        s.RoundedBox(headCentre, new Vector3(0.150f, headAxis.Length() + 0.055f, 0.180f), p.Skin, headBasis);
-
-        if (o[WearSlot.Neck] is { } neck) AppendNeckwear(s, rig, neck);
-        if (helmet)
-            s.Box(headCentre + headBasis.Y * 0.062f, new Vector3(0.168f, 0.085f, 0.205f), p.Helmet, headBasis);
-        else if (o[WearSlot.Head] is { } headwear)
-            AppendHeadwear(s, headwear, headCentre, headAxis);
+        var h = fit.Head;
+        bool hair = look.HairStyle != HairStyle.None && cover != HairCover.Head;
+        var f = new Frame(h.Side, h.UpAxis, h.Fwd);
+        if (o[WearSlot.Neck] is { } neck) AppendNeckwear(s, fit, neck);
+        if (fullFace)
+        {
+            // a full-face helmet round the whole head, dark visor at the front
+            var centre = h.Centre(0.108f);
+            float hw = h.HalfWidth(false);
+            // chin (−0.035) to crown (0.25) is the head's height; a shell a couple of centimetres round it
+            s.Box(centre, new Vector3(2f * hw + 0.035f, (Head.Crown + 0.035f) * h.K + 0.035f, 0.185f * h.K + 0.04f), palette.Helmet, f.Basis);
+            s.Box(h.Point(0.10f, Mathf.Pi / 2f, 0f) + f.Fwd * (0.02f + 0.012f), new Vector3(0.17f, 0.07f, 0.03f), new Color(0.08f, 0.09f, 0.12f), f.Basis);
+        }
+        else if (helmet)
+        {
+            // a cycling helmet: a shell from the hat seat over the crown, a short peak at the front
+            var seat = h.Seat(hair);
+            float k = h.HatScale(hair);
+            var mid = seat + f.Up * 0.05f * k;
+            s.Tube(seat - f.Up * 0.012f * k, mid, 0.118f * k, 0.113f * k, palette.Helmet, 8);
+            s.Tube(mid, h.Top(hair) + f.Up * 0.02f * k, 0.113f * k, 0.055f * k, palette.Helmet, 8);
+            s.Box(seat + (f.Fwd * 0.112f + f.Up * 0.004f) * k, new Vector3(0.12f, 0.012f, 0.03f) * k, palette.Helmet, f.Basis);
+        }
+        else if (headwear != null)
+            AppendHeadwear(s, headwear, h, hair);
         else if (hat != Headwear.None)
-            AppendHat(s, hat, headCentre, headAxis);
+            AppendHat(s, hat, h.Seat(hair), h.Centre(0.11f), f.Side, f.Up, f.Fwd, h.HatScale(hair));
 
-        var f = Frame.Along(headAxis);
-        float half = headAxis.Length() * 0.5f + 0.0275f;   // the head box's half height
-        if (o[WearSlot.Face] is { } mask) AppendMask(s, mask, headCentre, f);
-        if (o[WearSlot.Eyes] is { } eyes) AppendGlasses(s, eyes, headCentre, f);
-        if (o[WearSlot.Ears] is { } ears) AppendPiercings(s, ears, headCentre, f, half);
+        if (cover == HairCover.Head) return;
+        if (o[WearSlot.Face] is { } mask) AppendMask(s, mask, h);
+        if (o[WearSlot.Eyes] is { } eyes) AppendGlasses(s, eyes, h);
+        if (o[WearSlot.Ears] is { } ears) AppendPiercings(s, ears, h);
+    }
+
+    /// <summary>
+    /// The body's look in these clothes: the appearance, the default jersey, shorts and shoes, and
+    /// over them each garment as the colours and lengths of the body's own surface.
+    /// </summary>
+    private static BodyLook Dress(HumanPalette p, Outfit o, Garment? top, Garment? bottom)
+    {
+        var a = p.Appearance;
+        var look = new BodyLook(a.Build, p.Skin)
+        {
+            Face = a.Face, Eyes = a.EyeColour, HairStyle = a.Hair, Hair = a.HairTint,
+            Top = p.Jersey, Bottom = p.Shorts, Shoes = p.Shoes,
+        };
+        if (o.IsEmpty) return look;
+
+        if (top != null)
+        {
+            var c = Cols.Of(top);
+            bool goth = top.Style == GarmentStyle.Gothic;
+            look = top.Shape switch
+            {
+                GarmentShape.TShirt or GarmentShape.PrintTee or GarmentShape.Polo => look with { Top = c.A, SleeveTo = 0.5f },
+                GarmentShape.Marcel => look with { Top = c.A, SleeveTo = 0f, TopTo = 3.45f },
+                GarmentShape.Corset => look with { Top = c.A, SleeveTo = 0f, TopFrom = 1.65f, TopTo = 3.15f },
+                GarmentShape.CropTop => look with { Top = c.A, TopFrom = 2.5f, SleeveTo = goth ? 0f : 0.38f },
+                GarmentShape.Longsleeve => look with { Top = c.A, SleeveTo = 2f },
+                GarmentShape.Hoodie => look with { Top = c.A, SleeveTo = 2f, TopFrom = 1.55f },
+                // the blouse under a short jacket: the jacket is laid over it (TopDetail)
+                GarmentShape.CroppedJacket => look with { Top = c.B, SleeveTo = 2f },
+                GarmentShape.Robe => look with { Top = c.A, SleeveTo = 1f, TopFrom = 1.5f },
+                GarmentShape.Dress => look with { Top = c.A, SleeveTo = 0.38f, TopFrom = 1.5f },
+                _ => look with { Top = c.A },
+            };
+            if (top.CoversBottom) look = look with { Bottom = c.A, LegTo = 0.08f };
+        }
+        if (bottom != null)
+        {
+            var c = Cols.Of(bottom);
+            look = look with
+            {
+                Bottom = c.A,
+                LegTo = bottom.Shape == GarmentShape.Shorts ? 0.55f : IsTrousers(bottom) ? 2f : 0.08f,
+            };
+        }
+
+        if (o[WearSlot.Legs] is { } legs && !IsTrousers(bottom))
+        {
+            var c = Cols.Of(legs);
+            look = look with
+            {
+                Legwear = c.A,
+                LegwearOver = Holed(legs),
+                LegwearFrom = legs.Shape switch
+                {
+                    GarmentShape.ThighHigh or GarmentShape.StripedThighHigh => 0.45f,
+                    GarmentShape.KneeSock => 1.1f,
+                    _ => 0.04f,
+                },
+            };
+        }
+
+        if (o[WearSlot.Feet] is { } feet)
+        {
+            var c = Cols.Of(feet);
+            look = feet.Shape switch
+            {
+                GarmentShape.Sneakers => look with { Shoes = c.A, Sole = c.B, BootFrom = 1.92f, Platform = 1.2f },
+                GarmentShape.PlatformBoots => look with { Shoes = c.A, Sole = Shade(c.A, 0.7f), BootFrom = 1.18f, Platform = 2.6f },
+                GarmentShape.CombatBoots => look with { Shoes = c.A, Sole = c.B, BootFrom = 1.66f, Platform = 1.4f },
+                GarmentShape.MaryJanes => look with
+                {
+                    Shoes = c.A, Sole = Shade(c.A, 0.8f), BootFrom = 1.97f,
+                    // frilly white ankle socks, unless there are stockings on or trousers over them
+                    Legwear = look.Legwear == null && !IsTrousers(bottom) ? c.B : look.Legwear,
+                    LegwearFrom = look.Legwear == null && !IsTrousers(bottom) ? 1.84f : look.LegwearFrom,
+                },
+                _ => look with { Shoes = c.A },
+            };
+        }
+
+        if (o[WearSlot.Hands] is { } hands)
+        {
+            var c = Cols.Of(hands);
+            look = hands.Shape switch
+            {
+                GarmentShape.Gloves => look with { Gloves = c.A, GloveFrom = 1.7f, Fingerless = false },
+                GarmentShape.Fingerless => look with { Gloves = c.A, GloveFrom = 1.76f, Fingerless = true },
+                GarmentShape.ArmWarmers or GarmentShape.StripedWarmers => look with { Gloves = c.A, GloveFrom = 1.05f, Fingerless = true },
+                GarmentShape.Paws => look with { Gloves = c.A, GloveFrom = 1.8f, Fingerless = false },
+                _ => look,
+            };
+        }
+        return look;
     }
 
     // ------------------------------------------------------------------------------------
-    // body
+    // trunk
     // ------------------------------------------------------------------------------------
 
-    /// <summary>The trunk: hips, belly, chest and the shoulder caps, in the top's and bottom's colours.</summary>
-    private static void AppendTorso(MeshScratch s, HumanPalette p, Rig r, Garment? top, Garment? bottom)
+    /// <summary>The trunk's frame at spine <paramref name="sp"/> as a basis (X its side, Y up it, Z out of its front).</summary>
+    private static Basis TrunkBasis(in Fit fit, float sp)
     {
-        var skin = p.Skin;
-        // the hips: the bottom's waistband, a one-piece's body, else the cycling shorts
-        Color pelvis = bottom != null ? Cols.Of(bottom).A : top is { CoversBottom: true } ? Cols.Of(top).A : p.Shorts;
-        s.Tube(r.Hip, r.Waist, 0.130f, 0.140f, pelvis, 8);
+        var (side, up, fwd) = fit.Torso.Frame(sp);
+        return new Basis(side, up, fwd);
+    }
 
-        if (bottom != null) AppendBottomDetail(s, r, bottom);
+    /// <summary>The trunk's flat front at <paramref name="sp"/>: how wide what is laid on it may be.</summary>
+    private static float FrontWidth(in Fit fit, float sp) => 2f * fit.Torso.Width(sp) * 0.62f;
 
-        if (top == null)
-        {
-            s.Tube(r.Waist, r.Chest, 0.140f, 0.158f, p.Jersey, 8);
-            s.Tube(r.Chest, r.Neck, 0.158f, 0.098f, p.Jersey, 8);
-            s.Tube(r.ShoulderL, r.ShoulderR, 0.082f, p.Jersey, 6);
-            return;
-        }
+    private const float Deg = Mathf.Pi / 180f;
 
+    /// <summary>What a top has besides its colours: prints, collars, straps, a hood, a jacket over a blouse.</summary>
+    private static void TopDetail(MeshScratch s, in Fit fit, Garment top)
+    {
         var c = Cols.Of(top);
-        var ft = Frame.Along(r.Chest - r.Waist);
-        var fn = Frame.Along(r.Neck - r.Chest);
-        // a point on the front of the belly-chest tube, t from the waist (0) to the chest (1), lifted proud
-        Vector3 Front(float t, float proud = 0.006f) =>
-            r.Waist.Lerp(r.Chest, t) + ft.Fwd * (Mathf.Lerp(0.140f, 0.158f, t) + proud);
-        Vector3 Upper(float t, float proud = 0.006f) =>
-            r.Chest.Lerp(r.Neck, t) + fn.Fwd * (Mathf.Lerp(0.158f, 0.098f, t) + proud);
-
-        void Trunk(Color mid, Color high, Color caps)
-        {
-            s.Tube(r.Waist, r.Chest, 0.140f, 0.158f, mid, 8);
-            s.Tube(r.Chest, r.Neck, 0.158f, 0.098f, high, 8);
-            s.Tube(r.ShoulderL, r.ShoulderR, 0.082f, caps, 6);
-        }
-
+        var t = fit.Torso;
         switch (top.Shape)
         {
-            case GarmentShape.TShirt:
-                Trunk(c.A, c.A, c.A);
-                break;
-
             case GarmentShape.PrintTee:
-                Trunk(c.A, c.A, c.A);
+            {
                 // the print on the chest: a block and a smaller one inside it (a band logo, a heart)
-                s.Box(Front(0.62f, 0.004f), new Vector3(0.13f, 0.11f, 0.012f), c.B, ft.Basis);
-                s.Box(Front(0.62f, 0.010f), new Vector3(0.06f, 0.05f, 0.012f), c.C, ft.Basis);
+                float w = Mathf.Min(0.13f, FrontWidth(fit, 2.62f) * 0.95f);
+                s.Box(t.Front(2.62f, 0.004f), new Vector3(w, 0.11f, 0.012f), c.B, TrunkBasis(fit, 2.62f));
+                s.Box(t.Front(2.62f, 0.010f), new Vector3(w * 0.46f, 0.05f, 0.012f), c.C, TrunkBasis(fit, 2.62f));
                 break;
+            }
 
             case GarmentShape.Polo:
-                Trunk(c.A, c.A, c.A);
                 // collar round the neck, the button placket, the small emblem on the chest
-                s.Tube(r.Chest.Lerp(r.Neck, 0.78f), r.Neck + fn.Up * 0.02f, 0.118f, 0.104f, c.C, 8);
-                s.Box(Upper(0.38f), new Vector3(0.028f, 0.10f, 0.012f), c.C, fn.Basis);
-                foreach (float t in new[] { 0.30f, 0.50f })
-                    s.Box(Upper(t, 0.012f), new Vector3(0.012f, 0.012f, 0.008f), c.B, fn.Basis);
-                s.Box(Front(0.88f) + ft.Side * 0.065f, new Vector3(0.030f, 0.018f, 0.012f), c.B, ft.Basis);
+                t.Band(s, 3.8f, 4f, c.C, 0.008f);
+                s.Box(t.Front(3.38f, 0.006f), new Vector3(0.028f, 0.10f, 0.012f), c.C, TrunkBasis(fit, 3.38f));
+                foreach (float sp in stackalloc[] { 3.30f, 3.50f })
+                    s.Box(t.Front(sp, 0.012f), new Vector3(0.012f, 0.012f, 0.008f), c.B, TrunkBasis(fit, sp));
+                s.Box(t.Surface(2.88f, 68f * Deg, 0.006f), new Vector3(0.030f, 0.018f, 0.012f), c.B, TrunkBasis(fit, 2.88f));
                 break;
 
             case GarmentShape.Marcel:
-                // a tank top: bare shoulders, a scoop neck, a strap over each shoulder
-                Trunk(c.A, skin, skin);
-                s.Tube(r.Chest, r.Chest.Lerp(r.Neck, 0.42f), 0.164f, 0.140f, c.A, 8);
-                foreach (float t in new[] { 0.28f, 0.72f })
+                // a strap over each shoulder from the scoop neck, front to back
+                foreach (float sgn in stackalloc[] { -1f, 1f })
                 {
-                    var at = r.ShoulderL.Lerp(r.ShoulderR, t);
-                    var along = (r.ShoulderR - r.ShoulderL).Normalized() * 0.014f;
-                    s.Tube(at - along, at + along, 0.088f, c.A, 6);
+                    float Mirror(float a) => sgn > 0 ? a : 180f - a;
+                    var front = t.Surface(3.45f, Mirror(62f) * Deg, 0.004f);
+                    var over = t.Surface(3.93f, Mirror(22f) * Deg, 0.008f);
+                    var back = t.Surface(3.45f, Mirror(298f) * Deg, 0.004f);
+                    s.Tube(front, over, 0.013f, c.A, 5);
+                    s.Tube(over, back, 0.013f, c.A, 5);
                 }
                 break;
 
             case GarmentShape.Corset:
-                // strapless: bare from the bust up, buckled straps across the front, a zip down the middle
-                Trunk(c.A, skin, skin);
-                s.Tube(r.Chest, r.Chest.Lerp(r.Neck, 0.24f), 0.164f, 0.150f, c.A, 8);
-                var strap = Shade(c.A, 1.6f);
-                foreach (float t in new[] { 0.12f, 0.38f, 0.64f, 0.90f })
-                {
-                    s.Box(Front(t, 0.004f), new Vector3(0.15f, 0.018f, 0.012f), strap, ft.Basis);
-                    s.Box(Front(t, 0.010f) + ft.Side * 0.035f, new Vector3(0.026f, 0.024f, 0.010f), c.B, ft.Basis);
-                }
-                s.Box(Front(0.55f, 0.008f), new Vector3(0.008f, 0.27f, 0.008f), c.B, ft.Basis);
-                break;
-
-            case GarmentShape.CropTop:
             {
-                bool goth = top.Style == GarmentStyle.Gothic;
-                // the belly bare, the top from half way up to a high neck
-                Trunk(skin, c.A, goth ? skin : c.A);
-                s.Tube(r.Waist.Lerp(r.Chest, 0.5f), r.Chest, 0.150f, 0.164f, c.A, 8);
-                if (goth)
+                // strapless: buckled straps round the waist, a zip down the middle
+                var strap = Shade(c.A, 1.6f);
+                foreach (float sp in stackalloc[] { 2.12f, 2.38f, 2.64f, 2.90f })
                 {
-                    // two chains slung across the bare belly from the hem
-                    for (int row = 0; row < 2; row++)
-                        for (int i = 0; i <= 8; i++)
-                        {
-                            float u = i / 8f * 2f - 1f;
-                            float sag = (1f - u * u) * (0.045f + row * 0.03f);
-                            var at = r.Waist.Lerp(r.Chest, 0.48f) + ft.Fwd * (0.152f - 0.01f * u * u)
-                                + ft.Side * u * 0.11f - ft.Up * sag;
-                            s.Box(at, new Vector3(0.013f, 0.013f, 0.013f), c.B, ft.Basis);
-                        }
+                    t.Band(s, sp - 0.035f, sp + 0.035f, strap, 0.005f);
+                    s.Box(t.Surface(sp, 62f * Deg, 0.011f), new Vector3(0.026f, 0.024f, 0.010f), c.B, TrunkBasis(fit, sp));
                 }
-                else
-                    AppendBow(s, Upper(0.15f, 0.012f), fn, 0.55f, c.C, c.C);
+                s.Box(t.Front(2.55f, 0.008f), new Vector3(0.008f, 0.27f, 0.008f), c.B, TrunkBasis(fit, 2.55f));
                 break;
             }
 
+            case GarmentShape.CropTop when top.Style == GarmentStyle.Gothic:
+                // two chains slung across the bare belly from the hem
+                for (int row = 0; row < 2; row++)
+                    for (int i = 0; i <= 8; i++)
+                    {
+                        float u = i / 8f * 2f - 1f;
+                        float sag = (1f - u * u) * (0.045f + row * 0.03f) / 0.255f;
+                        float sp = 2.48f - sag;
+                        s.Box(t.Surface(sp, (90f - u * 55f) * Deg, 0.006f), new Vector3(0.013f, 0.013f, 0.013f), c.B, TrunkBasis(fit, sp));
+                    }
+                break;
+
+            case GarmentShape.CropTop:
+                AppendBow(s, t.Front(3.15f, 0.012f), FrameAt(fit, 3.15f), 0.55f, c.C, c.C);
+                break;
+
             case GarmentShape.Longsleeve:
-                Banded(s, r.Waist, r.Chest, 0.140f, 0.158f, c.A, c.B, 5);
-                Banded(s, r.Chest, r.Neck, 0.158f, 0.098f, c.B, c.A, 3);
-                s.Tube(r.ShoulderL, r.ShoulderR, 0.082f, c.A, 6);
+                t.Stripes(s, 1.75f, 3.8f, 8, c.B);
                 break;
 
             case GarmentShape.Hoodie:
             {
-                Trunk(c.A, c.A, c.A);
                 // the hood lying behind the neck, the pocket, the drawstrings
-                s.Box(r.Neck - fn.Fwd * 0.085f + fn.Up * 0.005f, new Vector3(0.20f, 0.12f, 0.09f), Shade(c.A, 0.9f), fn.Basis);
-                s.Box(Front(0.22f, 0.004f), new Vector3(0.18f, 0.08f, 0.014f), Shade(c.A, 0.85f), ft.Basis);
-                foreach (float x in new[] { -0.03f, 0.03f })
-                    s.Box(Upper(0.55f, 0.008f) + fn.Side * x - fn.Up * 0.045f, new Vector3(0.008f, 0.08f, 0.008f), c.B, fn.Basis);
+                var (side, up, fwd) = t.Frame(3.9f);
+                var basis = new Basis(side, up, fwd);
+                s.Box(t.At(4f) - fwd * (fit.Shape.Neck + 0.05f) + up * 0.005f, new Vector3(0.20f, 0.12f, 0.09f), Shade(c.A, 0.9f), basis);
+                s.Box(t.Front(2.22f, 0.004f), new Vector3(Mathf.Min(0.18f, FrontWidth(fit, 2.22f) * 1.1f), 0.08f, 0.014f), Shade(c.A, 0.85f), TrunkBasis(fit, 2.22f));
+                foreach (float x in stackalloc[] { -0.03f, 0.03f })
+                    s.Box(t.Front(3.55f, 0.010f) + side * x - up * 0.045f, new Vector3(0.008f, 0.08f, 0.008f), c.B, basis);
                 break;
             }
 
             case GarmentShape.CroppedJacket:
             {
-                // a white blouse under a short blue jacket; jabot and brooch at the throat, a strap across
-                Trunk(c.B, c.A, c.A);
-                s.Tube(r.Waist.Lerp(r.Chest, 0.42f), r.Chest, 0.152f, 0.168f, c.A, 8);
-                s.Box(Upper(0.62f, 0.010f), new Vector3(0.055f, 0.075f, 0.022f), c.B, fn.Basis);
-                s.Box(Upper(0.72f, 0.024f), new Vector3(0.024f, 0.024f, 0.012f), c.C, fn.Basis);
-                s.Tube(Front(0.98f, 0.016f) - ft.Side * 0.075f, Front(0.45f, 0.020f) + ft.Side * 0.11f, 0.008f, Leather, 4);
-                s.Tube(Front(0.70f, 0.020f), Front(0.70f, 0.030f), 0.020f, new Color("e0b848"), 8);
+                // a short blue jacket over the white blouse; jabot and brooch at the throat, a strap across
+                t.Band(s, 2.42f, 4f, c.A, 0.006f);
+                s.Box(t.Front(3.62f, 0.016f), new Vector3(0.055f, 0.075f, 0.022f), c.B, TrunkBasis(fit, 3.62f));
+                s.Box(t.Front(3.72f, 0.030f), new Vector3(0.024f, 0.024f, 0.012f), c.C, TrunkBasis(fit, 3.72f));
+                s.Tube(t.Surface(2.98f, 120f * Deg, 0.022f), t.Surface(2.45f, 48f * Deg, 0.022f), 0.008f, Leather, 4);
+                s.Tube(t.Front(2.7f, 0.022f), t.Front(2.7f, 0.032f), 0.020f, new Color("e0b848"), 8);
                 break;
             }
 
             case GarmentShape.Robe:
-            case GarmentShape.Dress:
             {
-                Trunk(c.A, c.A, c.A);
-                if (top.Shape == GarmentShape.Robe)
-                {
-                    // a high collar standing behind the neck, a belt at the waist
-                    s.Box(r.Neck - fn.Fwd * 0.07f + fn.Up * 0.045f, new Vector3(0.21f, 0.10f, 0.02f), c.B, fn.Basis);
-                    s.Tube(r.Waist - ft.Up * 0.012f, r.Waist + ft.Up * 0.016f, 0.147f, c.C, 8);
-                }
-                else
-                {
-                    // a white collar, a bow at the chest
-                    s.Tube(r.Chest.Lerp(r.Neck, 0.80f), r.Neck + fn.Up * 0.015f, 0.112f, 0.100f, c.B, 8);
-                    AppendBow(s, Upper(0.25f, 0.012f), fn, 0.7f, c.C, c.C);
-                }
+                // a high collar standing behind the neck, a belt at the waist
+                var (side, up, fwd) = t.Frame(3.95f);
+                s.Box(t.At(4f) - fwd * (fit.Shape.Neck + 0.03f) + up * 0.045f, new Vector3(0.21f, 0.10f, 0.02f), c.B, new Basis(side, up, fwd));
+                t.Band(s, 1.92f, 2.06f, c.C, 0.008f);
                 break;
             }
 
-            default:
-                Trunk(c.A, c.A, c.A);
+            case GarmentShape.Dress:
+                // a white collar, a bow at the chest
+                t.Band(s, 3.8f, 4f, c.B, 0.008f);
+                AppendBow(s, t.Front(3.25f, 0.012f), FrameAt(fit, 3.25f), 0.7f, c.C, c.C);
                 break;
         }
     }
 
-    /// <summary>What sits on the hips with a bottom on: drawstrings, a belt, pockets.</summary>
-    private static void AppendBottomDetail(MeshScratch s, Rig r, Garment b)
+    private static Frame FrameAt(in Fit fit, float sp)
+    {
+        var (side, up, fwd) = fit.Torso.Frame(sp);
+        return new Frame(side, up, fwd);
+    }
+
+    /// <summary>What sits on the hips with a bottom on: drawstrings, a belt, rings, pockets are on the legs.</summary>
+    private static void BottomDetail(MeshScratch s, in Fit fit, Garment b)
     {
         var c = Cols.Of(b);
-        var f = Frame.Along(r.Waist - r.Hip);
-        Vector3 Front(float t, float proud) => r.Hip.Lerp(r.Waist, t) + f.Fwd * (Mathf.Lerp(0.130f, 0.140f, t) + proud);
+        var t = fit.Torso;
         switch (b.Shape)
         {
             case GarmentShape.Shorts:
-                foreach (float x in new[] { -0.02f, 0.02f })
-                    s.Box(Front(0.65f, 0.008f) + f.Side * x, new Vector3(0.008f, 0.07f, 0.008f), c.B, f.Basis);
+            {
+                var (side, _, _) = t.Frame(1.65f);
+                foreach (float x in stackalloc[] { -0.02f, 0.02f })
+                    s.Box(t.Front(1.65f, 0.008f) + side * x, new Vector3(0.008f, 0.07f, 0.008f), c.B, TrunkBasis(fit, 1.65f));
                 break;
+            }
             case GarmentShape.Pants:
             case GarmentShape.Cargo:
                 // a belt with its buckle
-                s.Tube(r.Waist - f.Up * 0.028f, r.Waist - f.Up * 0.004f, 0.146f, Shade(c.A, 0.55f), 8);
-                s.Box(Front(0.88f, 0.012f), new Vector3(0.035f, 0.026f, 0.010f), c.B, f.Basis);
+                t.Band(s, 1.86f, 1.98f, Shade(c.A, 0.55f), 0.007f);
+                s.Box(t.Front(1.92f, 0.013f), new Vector3(0.035f, 0.026f, 0.010f), c.B, TrunkBasis(fit, 1.92f));
                 break;
             case GarmentShape.SlitMaxi:
             case GarmentShape.HighLowSkirt:
+            {
                 // a belt slung low, rings at the hips
-                s.Tube(r.Waist - f.Up * 0.03f, r.Waist - f.Up * 0.008f, 0.150f, Shade(c.C, 1.4f), 8);
-                s.Box(Front(0.80f, 0.020f), new Vector3(0.034f, 0.028f, 0.010f), c.B, f.Basis);
-                foreach (float x in new[] { -1f, 1f })
-                    s.Ring(r.Hip.Lerp(r.Waist, 0.5f) + f.Side * x * 0.15f + f.Fwd * 0.03f, f.Side, 0.010f, 0.017f, 0.006f, c.B, 8);
+                t.Band(s, 1.82f, 1.94f, Shade(c.C, 1.4f), 0.022f);
+                s.Box(t.Front(1.88f, 0.030f), new Vector3(0.034f, 0.028f, 0.010f), c.B, TrunkBasis(fit, 1.88f));
+                var (side, _, _) = t.Frame(1.5f);
+                foreach (float a in stackalloc[] { 0f, Mathf.Pi })
+                    s.Ring(t.Surface(1.5f, a, 0.030f), side, 0.010f, 0.017f, 0.006f, c.B, 8);
                 break;
+            }
         }
     }
 
-    /// <summary>One arm: sleeve to whatever length the top has, then what is on the hand.</summary>
-    private static void AppendArm(MeshScratch s, HumanPalette p, Vector3 shoulder, Vector3 elbow, Vector3 wrist,
-        Garment? top, Garment? hands)
+    // ------------------------------------------------------------------------------------
+    // limbs
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>What an arm has besides its colours: puffed or bell sleeves, a jacket's sleeve, cuffs, stripes, paw pads.</summary>
+    private static void ArmDetail(MeshScratch s, Physique p, Vector3 outward, Vector3 shoulder, Vector3 elbow, Vector3 wrist,
+        float side, Garment? top, Garment? hands)
     {
-        var skin = p.Skin;
-        if (top == null)
-        {
-            s.Tube(shoulder, elbow, 0.058f, 0.045f, p.Jersey, 6);
-            s.Tube(elbow, wrist, 0.045f, 0.033f, skin, 6);
-        }
-        else
+        var down = (elbow - shoulder).Normalized();
+        if (top != null)
         {
             var c = Cols.Of(top);
             switch (top.Shape)
             {
-                case GarmentShape.TShirt:
-                case GarmentShape.PrintTee:
-                case GarmentShape.Polo:
-                    s.Tube(shoulder, elbow, 0.058f, 0.045f, skin, 6);
-                    s.Tube(shoulder, shoulder.Lerp(elbow, 0.55f), 0.064f, 0.056f, c.A, 6);
-                    s.Tube(elbow, wrist, 0.045f, 0.033f, skin, 6);
-                    break;
-                case GarmentShape.Marcel:
-                case GarmentShape.Corset:
-                    s.Tube(shoulder, elbow, 0.058f, 0.045f, skin, 6);
-                    s.Tube(elbow, wrist, 0.045f, 0.033f, skin, 6);
-                    break;
-                case GarmentShape.CropTop when top.Style == GarmentStyle.Gothic:
-                    s.Tube(shoulder, elbow, 0.058f, 0.045f, skin, 6);
-                    s.Tube(elbow, wrist, 0.045f, 0.033f, skin, 6);
-                    break;
-                case GarmentShape.CropTop:
+                case GarmentShape.CropTop when top.Style != GarmentStyle.Gothic:
                 case GarmentShape.Dress:
-                    // a short puffed sleeve
-                    s.Tube(shoulder, elbow, 0.058f, 0.045f, skin, 6);
-                    s.Tube(shoulder, shoulder.Lerp(elbow, 0.42f), 0.076f, 0.068f, c.A, 7);
-                    s.Tube(shoulder.Lerp(elbow, 0.40f), shoulder.Lerp(elbow, 0.46f), 0.064f, c.B, 7);
-                    s.Tube(elbow, wrist, 0.045f, 0.033f, skin, 6);
+                    // a short puffed sleeve with a band round its hem
+                    s.Tube(shoulder - down * 0.03f - outward * 0.005f, shoulder.Lerp(elbow, 0.42f), p.Deltoid + 0.014f, p.UpperArm + 0.016f, c.A, 8);
+                    LimbBand(s, shoulder, elbow, wrist, 0.38f, 0.46f, p, arm: true, 0.020f, c.B, 8);
                     break;
                 case GarmentShape.Longsleeve:
-                    Banded(s, shoulder, elbow, 0.058f, 0.045f, c.A, c.B, 3);
-                    Banded(s, elbow, wrist, 0.045f, 0.035f, c.B, c.A, 3);
+                    for (int i = 1; i < 6; i += 2) LimbBand(s, shoulder, elbow, wrist, i / 3f, (i + 1) / 3f, p, arm: true, 0.004f, c.B);
                     break;
                 case GarmentShape.Hoodie:
-                    s.Tube(shoulder, elbow, 0.060f, 0.047f, c.A, 6);
-                    s.Tube(elbow, wrist, 0.047f, 0.037f, c.A, 6);
-                    s.Tube(elbow.Lerp(wrist, 0.86f), wrist, 0.041f, c.B, 6);
+                    LimbBand(s, shoulder, elbow, wrist, 1.86f, 2f, p, arm: true, 0.006f, c.B);
                     break;
                 case GarmentShape.CroppedJacket:
-                    // puffed at the shoulder, gathered at the elbow, a white cuff
-                    s.Tube(shoulder, elbow, 0.072f, 0.056f, c.A, 7);
-                    s.Tube(elbow, wrist, 0.050f, 0.038f, c.A, 6);
-                    s.Tube(elbow.Lerp(wrist, 0.85f), wrist, 0.042f, c.B, 6);
+                    // puffed at the shoulder, the jacket's sleeve over the blouse's, a white cuff
+                    s.Tube(shoulder - down * 0.03f - outward * 0.005f, shoulder + down * 0.12f, p.Deltoid + 0.016f, p.UpperArm + 0.012f, c.A, 8);
+                    LimbBand(s, shoulder, elbow, wrist, 0.3f, 1.85f, p, arm: true, 0.007f, c.A);
+                    LimbBand(s, shoulder, elbow, wrist, 1.85f, 2f, p, arm: true, 0.010f, c.B);
                     break;
                 case GarmentShape.Robe:
                 {
                     // a bell sleeve flaring past the wrist, its lining showing
-                    s.Tube(shoulder, elbow, 0.062f, 0.050f, c.A, 7);
                     var past = wrist + (wrist - elbow).Normalized() * 0.03f;
-                    s.Skirt(elbow, past, 0.050f, 0.092f, c.A, 8);
-                    s.Skirt(elbow.Lerp(past, 0.92f), past, 0.082f, 0.088f, c.B, 8);
-                    s.Tube(elbow, wrist, 0.045f, 0.033f, skin, 6);
+                    s.Skirt(elbow, past, p.Elbow + 0.012f, p.Elbow + 0.055f, c.A, 8);
+                    s.Skirt(elbow.Lerp(past, 0.92f), past, p.Elbow + 0.046f, p.Elbow + 0.052f, c.B, 8);
                     break;
                 }
-                default:
-                    s.Tube(shoulder, elbow, 0.058f, 0.045f, c.A, 6);
-                    s.Tube(elbow, wrist, 0.045f, 0.033f, skin, 6);
+            }
+        }
+        if (hands == null) return;
+        var h = Cols.Of(hands);
+        switch (hands.Shape)
+        {
+            case GarmentShape.StripedWarmers:
+                for (int i = 1; i < 5; i += 2) LimbBand(s, shoulder, elbow, wrist, 1.05f + i * 0.19f, 1.05f + (i + 1) * 0.19f, p, arm: true, 0.006f, h.B);
+                break;
+            case GarmentShape.Fingerless:
+                LimbBand(s, shoulder, elbow, wrist, 1.70f, 1.78f, p, arm: true, 0.008f, h.B);
+                break;
+            case GarmentShape.Paws:
+            {
+                // a fat paw over the hand, pads on the palm
+                var f = HandFrameOf(elbow, wrist, side, p.Hand);
+                var basis = new Basis(f.Thumb, f.Along, f.Thumb.Cross(f.Along));
+                s.Box(f.Palm + f.Along * 0.02f * f.Scale, new Vector3(0.086f, 0.11f, 0.05f) * f.Scale, h.A, basis);
+                ReadOnlySpan<Vector2> pads = [new(-0.022f, 0.030f), new(0f, 0.036f), new(0.022f, 0.030f), new(0f, 0.004f)];
+                foreach (var pad in pads)
+                    s.Box(f.Palm + (f.Thumb * pad.X + f.Along * (pad.Y + 0.02f) + f.Inward * 0.027f) * f.Scale,
+                        new Vector3(0.016f, 0.016f, 0.008f) * f.Scale, h.B, basis);
+                break;
+            }
+        }
+    }
+
+    /// <summary>What a leg has besides its colours: a cargo pocket, the tops of stockings and socks, boots' buckles and collars.</summary>
+    private static void LegDetail(MeshScratch s, Physique p, Vector3 outward, Vector3 hip, Vector3 knee, Vector3 ankle, Vector3 toe,
+        Garment? bottom, Garment? legs, Garment? feet)
+    {
+        if (bottom?.Shape == GarmentShape.Cargo)
+        {
+            // a pocket on the outside of each thigh
+            var fl = Frame.Along(knee - hip);
+            var o = (outward - fl.Up * outward.Dot(fl.Up)).Normalized();
+            s.Box(hip.Lerp(knee, 0.5f) + o * (LegRadius(p, 0.5f) + 0.006f), new Vector3(0.012f, 0.10f, 0.08f), Cols.Of(bottom).B,
+                new Basis(fl.Up.Cross(o), fl.Up, o).Orthonormalized());
+        }
+        if (legs != null && !IsTrousers(bottom))
+        {
+            var c = Cols.Of(legs);
+            switch (legs.Shape)
+            {
+                case GarmentShape.ThighHigh:
+                    LimbBand(s, hip, knee, ankle, 0.43f, 0.52f, p, arm: false, 0.004f, c.C);
+                    break;
+                case GarmentShape.StripedThighHigh:
+                    for (int i = 1; i < 9; i += 2) LimbBand(s, hip, knee, ankle, 0.45f + i * 0.17f, 0.45f + (i + 1) * 0.17f, p, arm: false, 0.003f, c.B);
+                    break;
+                case GarmentShape.KneeSock:
+                    LimbBand(s, hip, knee, ankle, 1.08f, 1.2f, p, arm: false, 0.005f, c.B);
                     break;
             }
         }
-        s.RoundedBox(wrist, new Vector3(0.055f, 0.075f, 0.085f), skin, rings: 6, segments: 8);
-        if (hands != null) AppendHandwear(s, hands, elbow, wrist);
-    }
-
-    private static void AppendHandwear(MeshScratch s, Garment g, Vector3 elbow, Vector3 wrist)
-    {
-        var c = Cols.Of(g);
-        switch (g.Shape)
+        if (feet == null) return;
+        var b = Cols.Of(feet);
+        switch (feet.Shape)
         {
-            case GarmentShape.ArmWarmers:
-                s.Tube(elbow.Lerp(wrist, 0.05f), wrist, 0.050f, 0.038f, c.A, 6);
-                s.Box(wrist + new Vector3(0, 0.012f, 0), new Vector3(0.062f, 0.052f, 0.092f), c.A);
+            case GarmentShape.Sneakers:
+                LimbBand(s, hip, knee, ankle, 1.9f, 1.99f, p, arm: false, 0.016f, b.B);   // the collar
                 break;
-            case GarmentShape.StripedWarmers:
-                Banded(s, elbow.Lerp(wrist, 0.05f), wrist, 0.050f, 0.039f, c.A, c.B, 5);
+            case GarmentShape.PlatformBoots:
+                // knee-high, buckled three times up the shaft
+                foreach (float u in stackalloc[] { 0.22f, 0.48f, 0.74f })
+                {
+                    float t = 2f - 0.82f * u;
+                    LimbBand(s, hip, knee, ankle, t - 0.02f, t + 0.02f, p, arm: false, 0.018f, b.B);
+                }
                 break;
-            case GarmentShape.Fingerless:
-                s.Tube(elbow.Lerp(wrist, 0.75f), wrist, 0.040f, 0.038f, c.A, 6);
-                s.Box(wrist + new Vector3(0, 0.012f, 0), new Vector3(0.062f, 0.052f, 0.092f), c.A);
-                s.Box(wrist + new Vector3(0, 0.03f, 0), new Vector3(0.066f, 0.010f, 0.096f), c.B);
+            case GarmentShape.CombatBoots:
+                LimbBand(s, hip, knee, ankle, 1.66f, 1.70f, p, arm: false, 0.018f, b.B);
                 break;
-            case GarmentShape.Paws:
-                s.Tube(elbow.Lerp(wrist, 0.8f), wrist, 0.044f, 0.042f, c.A, 6);
-                s.Box(wrist, new Vector3(0.074f, 0.086f, 0.098f), c.A);
-                foreach (var pad in new[] { new Vector3(-0.022f, -0.028f, 0.05f), new Vector3(0, -0.032f, 0.05f), new Vector3(0.022f, -0.028f, 0.05f), new Vector3(0, -0.005f, 0.05f) })
-                    s.Box(wrist + pad, new Vector3(0.016f, 0.016f, 0.008f), c.B);
+            case GarmentShape.MaryJanes:
+            {
+                // the strap over the instep
+                var dir = toe - ankle;
+                if (dir.LengthSquared() < 1e-6f) break;
+                var at = ankle.Lerp(toe, 0.30f);
+                var along = dir.Normalized() * 0.008f;
+                s.Tube(at - along, at + along, 0.054f, b.A, 6);
                 break;
-            case GarmentShape.Gloves:
-                s.Tube(elbow.Lerp(wrist, 0.70f), wrist, 0.042f, 0.040f, c.A, 6);
-                s.Box(wrist, new Vector3(0.062f, 0.082f, 0.092f), c.A);
-                break;
+            }
         }
     }
 
     /// <summary>
-    /// One leg: thigh and shin in the bottom's colours (skin under a skirt), then socks and shoes
-    /// over them. Trousers hide the socks, so they are left out.
+    /// One leg in the clothes of <paramref name="p"/>, from free joints: a cyclist's, driven by the
+    /// cranks. The bare leg with the cycling shorts and shoes when nothing is worn.
     /// </summary>
-    private static void AppendLeg(MeshScratch s, HumanPalette p, Vector3 hip, Vector3 knee, Vector3 ankle, Vector3 toe,
-        Garment? top, Garment? bottom, Garment? legs, Garment? feet)
+    public static void AppendLeg(MeshScratch s, HumanPalette p, Vector3 hip, Vector3 knee, Vector3 ankle, Vector3 toe)
     {
-        var skin = p.Skin;
-        Color thigh, shin = skin;
-        if (bottom == null) thigh = top is { CoversBottom: true } ? skin : p.Shorts;
-        else if (IsTrousers(bottom)) thigh = shin = Cols.Of(bottom).A;
-        else thigh = skin;
-
-        s.Tube(hip, knee, 0.088f, 0.062f, thigh, 6);
-        s.Tube(knee, ankle, 0.062f, 0.040f, shin, 6);
-
-        if (bottom != null)
-        {
-            var c = Cols.Of(bottom);
-            if (bottom.Shape == GarmentShape.Shorts)
-                s.Tube(hip, hip.Lerp(knee, 0.6f), 0.096f, 0.082f, c.A, 6);
-            else if (bottom.Shape == GarmentShape.Cargo)
-            {
-                // a pocket on the outside of each thigh
-                var fl = Frame.Along(knee - hip);
-                var outward = hip.X < 0 ? -fl.Side : fl.Side;
-                s.Box(hip.Lerp(knee, 0.5f) + outward * 0.077f, new Vector3(0.012f, 0.10f, 0.08f), c.B, fl.Basis);
-            }
-        }
-
-        if (legs != null && !IsTrousers(bottom)) AppendLegwear(s, legs, hip, knee, ankle);
-        AppendFootwear(s, p, feet, legs, bottom, knee, ankle, toe);
+        using var smoothing = s.Smoothing(SmoothFigures);
+        var o = p.Outfit;
+        var top = o[WearSlot.Top];
+        var bottom = top is { CoversBottom: true } ? null : o[WearSlot.Bottom];
+        var look = Patterned(Dress(p, o, top, bottom));
+        var shape = Physique.Of(look.Build);
+        var outward = hip.X < 0 ? Vector3.Left : Vector3.Right;
+        DrawLeg(s, look, shape, hip, knee, ankle, toe, Vector3.Right);
+        LegDetail(s, shape, outward, hip, knee, ankle, toe, bottom, o[WearSlot.Legs], o[WearSlot.Feet]);
     }
 
-    private static void AppendLegwear(MeshScratch s, Garment g, Vector3 hip, Vector3 knee, Vector3 ankle)
+    /// <summary>The radius a cone from the waist must start at to clear the hips on its way to a hem of radius <paramref name="hem"/>.</summary>
+    private static float ConeStart(in Fit fit, Vector3 hemAt, float hem)
     {
-        var c = Cols.Of(g);
-        // radii of the bare leg, plus a few mm
-        float Thigh(float t) => Mathf.Lerp(0.088f, 0.062f, t) + 0.004f;
-        float Shin(float t) => Mathf.Lerp(0.062f, 0.040f, t) + 0.004f;
-        switch (g.Shape)
-        {
-            case GarmentShape.ThighHigh:
-                s.Tube(hip.Lerp(knee, 0.45f), knee, Thigh(0.45f), Thigh(1f), c.A, 6);
-                s.Tube(knee, ankle, Shin(0f), Shin(1f), c.A, 6);
-                s.Tube(hip.Lerp(knee, 0.43f), hip.Lerp(knee, 0.52f), Thigh(0.43f) + 0.003f, Thigh(0.52f) + 0.003f, c.C, 6);
-                break;
-            case GarmentShape.StripedThighHigh:
-                Banded(s, hip.Lerp(knee, 0.45f), knee, Thigh(0.45f), Thigh(1f), c.A, c.B, 3);
-                Banded(s, knee, ankle, Shin(0f), Shin(1f), c.A, c.B, 6);
-                break;
-            case GarmentShape.Fishnets:
-                s.Tube(hip.Lerp(knee, 0.04f), knee, Thigh(0.04f) - 0.001f, Thigh(1f) - 0.001f, c.A, 6);
-                s.Tube(knee, ankle, Shin(0f) - 0.001f, Shin(1f) - 0.001f, c.A, 6);
-                break;
-            case GarmentShape.KneeSock:
-                s.Tube(knee.Lerp(ankle, 0.1f), ankle, Shin(0.1f), Shin(1f), c.A, 6);
-                s.Tube(knee.Lerp(ankle, 0.08f), knee.Lerp(ankle, 0.2f), Shin(0.08f) + 0.004f, Shin(0.2f) + 0.004f, c.B, 6);
-                break;
-        }
-    }
-
-    private static void AppendFootwear(MeshScratch s, HumanPalette p, Garment? g, Garment? legs, Garment? bottom,
-        Vector3 knee, Vector3 ankle, Vector3 toe)
-    {
-        var dir = toe - ankle;
-        if (dir.LengthSquared() < 1e-6f) return;
-        if (g == null)
-        {
-            s.Tube(ankle, toe, 0.048f, 0.038f, p.Shoes, 5);
-            return;
-        }
-        var c = Cols.Of(g);
-        var ff = Frame.Facing(dir);
-        float len = dir.Length();
-        void Sole(float thick, Color colour, float extra) =>
-            s.Box(ankle.Lerp(toe, 0.5f) + dir.Normalized() * (extra * 0.3f) - ff.Up * (0.036f + thick * 0.5f - 0.012f),
-                new Vector3(0.094f, thick, len + extra), colour, ff.Basis);
-        switch (g.Shape)
-        {
-            case GarmentShape.Sneakers:
-                s.Tube(ankle, toe + dir.Normalized() * 0.03f, 0.053f, 0.042f, c.A, 6);
-                Sole(0.024f, c.B, 0.08f);
-                s.Tube(ankle, ankle + (knee - ankle).Normalized() * 0.04f, 0.050f, c.B, 6);   // the collar
-                break;
-            case GarmentShape.PlatformBoots:
-            {
-                s.Tube(ankle, toe + dir.Normalized() * 0.04f, 0.060f, 0.050f, c.A, 6);
-                Sole(0.05f, Shade(c.A, 0.7f), 0.10f);
-                // knee-high, buckled three times up the shaft
-                var top = ankle.Lerp(knee, 0.82f);
-                s.Tube(ankle, top, 0.054f, 0.070f, c.A, 7);
-                foreach (float t in new[] { 0.22f, 0.48f, 0.74f })
-                {
-                    var at = ankle.Lerp(top, t);
-                    var along = (top - ankle).Normalized() * 0.010f;
-                    s.Tube(at - along, at + along, Mathf.Lerp(0.054f, 0.070f, t) + 0.006f, c.B, 7);
-                }
-                break;
-            }
-            case GarmentShape.CombatBoots:
-            {
-                s.Tube(ankle, toe + dir.Normalized() * 0.035f, 0.058f, 0.048f, c.A, 6);
-                Sole(0.03f, c.B, 0.09f);
-                var top = ankle.Lerp(knee, 0.34f);
-                s.Tube(ankle, top, 0.052f, 0.058f, c.A, 7);
-                var along = (top - ankle).Normalized() * 0.006f;
-                s.Tube(top - along * 2f, top, 0.062f, c.B, 7);
-                break;
-            }
-            case GarmentShape.MaryJanes:
-            {
-                s.Tube(ankle, toe + dir.Normalized() * 0.02f, 0.050f, 0.040f, c.A, 6);
-                Sole(0.016f, Shade(c.A, 0.8f), 0.05f);
-                var strapAt = ankle.Lerp(toe, 0.30f);
-                var along = dir.Normalized() * 0.008f;
-                s.Tube(strapAt - along, strapAt + along, 0.054f, c.A, 6);
-                // frilly white ankle socks, unless there are stockings on
-                if (legs == null && !IsTrousers(bottom))
-                    s.Tube(ankle, ankle + (knee - ankle).Normalized() * 0.06f, 0.047f, 0.045f, c.B, 6);
-                break;
-            }
-            default:
-                s.Tube(ankle, toe, 0.050f, 0.040f, c.A, 5);
-                break;
-        }
+        var t = fit.Torso;
+        float waist = Mathf.Max(t.Width(2f), 0.075f) + 0.014f;
+        float length = Mathf.Max((hemAt - t.At(2f)).Length(), 0.05f);
+        float down = (t.At(2f) - t.At(1f)).Length() / length;   // how far down the cone the widest of the hips is
+        float hips = t.Width(1f) + 0.016f;
+        if (down >= 1f) return Mathf.Max(waist, hips);
+        // radius at the hips, straight from the start to the hem, must clear them
+        float needed = (hips - hem * down) / (1f - down);
+        return Mathf.Max(waist, needed);
     }
 
     /// <summary>
@@ -530,13 +563,16 @@ public static partial class HumanMeshBuilder
     /// the knees or the ankles so it swings with the stride, blown back by <paramref name="wind"/>
     /// (<see cref="HumanPalette.Wind"/>) and fluttering faster the harder it blows.
     /// </summary>
-    private static void AppendSkirt(MeshScratch s, Rig r, Garment? top, Garment? bottom, Vector3 wind)
+    private static void AppendSkirt(MeshScratch s, in Fit fit, Garment? top, Garment? bottom, Vector3 wind)
     {
+        var r = fit.Rig;
         var knees = (r.KneeL + r.KneeR) * 0.5f;
         var ankles = (r.AnkleL + r.AnkleR) * 0.5f;
         // how wide the legs are apart at the hem, so a stride does not poke through it
         float spreadK = (r.KneeL - r.KneeR).Length() * 0.5f;
         float spreadA = (r.AnkleL - r.AnkleR).Length() * 0.5f;
+        // hips wider than the old figure's (a curvy build) widen every hem with them
+        float extra = Mathf.Max(0f, fit.Torso.Width(1f) - 0.135f);
 
         // full streaming by ~50 km/h; a walk barely stirs it
         float speed = wind.Length();
@@ -552,8 +588,9 @@ public static partial class HumanMeshBuilder
             var shifted = hem + downwind * length * 0.65f * gust;
             return from + (shifted - from).Normalized() * length;
         }
+        var waist = r.Waist;
         void Cone(Vector3 from, Vector3 hem, float ra, float rb, Color colour, int sides, Vector3 gap = default, float gapAngle = 0f) =>
-            s.Skirt(from, Blown(r.Waist, hem) + (from - r.Waist), ra, rb, colour, sides, gap, gapAngle, ripple, phase);
+            s.Skirt(from, Blown(waist, hem) + (from - waist), ra, rb, colour, sides, gap, gapAngle, ripple, phase);
 
         if (top is { CoversBottom: true })
         {
@@ -561,17 +598,17 @@ public static partial class HumanMeshBuilder
             if (top.Shape == GarmentShape.Robe)
             {
                 var hem = ankles + Vector3.Up * 0.035f;
-                float rh = Mathf.Max(0.30f, spreadA + 0.07f);
-                Cone(r.Waist, hem, 0.148f, rh, c.A, 12);
-                Cone(r.Waist.Lerp(hem, 0.95f), hem, rh * 0.97f + 0.004f, rh + 0.004f, c.B, 12);
+                float rh = Mathf.Max(0.30f, spreadA + 0.07f) + extra;
+                Cone(waist, hem, ConeStart(fit, hem, rh), rh, c.A, 12);
+                Cone(waist.Lerp(hem, 0.95f), hem, rh * 0.97f + 0.004f, rh + 0.004f, c.B, 12);
             }
             else
             {
                 var hem = r.Hip.Lerp(knees, 0.85f);
-                float rh = Mathf.Max(0.29f, spreadK + 0.12f);
-                Cone(r.Waist, hem, 0.150f, rh, c.A, 12);
+                float rh = Mathf.Max(0.29f, spreadK + 0.12f) + extra;
+                Cone(waist, hem, ConeStart(fit, hem, rh), rh, c.A, 12);
                 // the petticoat frothing out under it
-                Cone(r.Waist.Lerp(hem, 0.78f), hem - Vector3.Up * 0.035f, rh * 0.9f, rh + 0.03f, c.B, 12);
+                Cone(waist.Lerp(hem, 0.78f), hem - Vector3.Up * 0.035f, rh * 0.9f, rh + 0.03f, c.B, 12);
             }
             return;
         }
@@ -581,37 +618,49 @@ public static partial class HumanMeshBuilder
         switch (bottom!.Shape)
         {
             case GarmentShape.PleatedSkirt:
-                Cone(r.Waist, r.Hip.Lerp(knees, 0.55f), 0.150f, Mathf.Max(0.25f, spreadK + 0.09f), b.A, 14);
+            {
+                var hem = r.Hip.Lerp(knees, 0.55f);
+                float rh = Mathf.Max(0.25f, spreadK + 0.09f) + extra;
+                Cone(waist, hem, ConeStart(fit, hem, rh), rh, b.A, 14);
                 break;
+            }
             case GarmentShape.RuffleMini:
             {
                 var hem = r.Hip.Lerp(knees, 0.40f);
-                float rh = Mathf.Max(0.22f, spreadK + 0.08f);
-                Cone(r.Waist, hem, 0.150f, rh, b.A, 12);
+                float rh = Mathf.Max(0.22f, spreadK + 0.08f) + extra;
+                Cone(waist, hem, ConeStart(fit, hem, rh), rh, b.A, 12);
                 // a second tier of ruffle under the first
-                Cone(r.Waist.Lerp(hem, 0.55f), hem - Vector3.Up * 0.045f, rh * 0.95f, rh + 0.035f, b.B, 12);
+                Cone(waist.Lerp(hem, 0.55f), hem - Vector3.Up * 0.045f, rh * 0.95f, rh + 0.035f, b.B, 12);
                 break;
             }
             case GarmentShape.HighLowSkirt:
+            {
                 // the axis leans back, so the hem rides high in front and trails low behind
-                Cone(r.Waist, r.Hip.Lerp(knees, 0.85f) + new Vector3(0, -0.04f, -0.14f), 0.152f, Mathf.Max(0.27f, spreadK + 0.11f), b.A, 14);
+                var hem = r.Hip.Lerp(knees, 0.85f) + new Vector3(0, -0.04f, -0.14f);
+                float rh = Mathf.Max(0.27f, spreadK + 0.11f) + extra;
+                Cone(waist, hem, ConeStart(fit, hem, rh), rh, b.A, 14);
                 break;
+            }
             case GarmentShape.SlitMaxi:
+            {
                 // to the ankles, with a slit up the front of the right leg (−X)
-                Cone(r.Waist, ankles + Vector3.Up * 0.05f, 0.152f, Mathf.Max(0.29f, spreadA + 0.08f), b.A, 14,
-                    gap: new Vector3(-0.55f, 0, 1f), gapAngle: 0.42f);
+                var hem = ankles + Vector3.Up * 0.05f;
+                float rh = Mathf.Max(0.29f, spreadA + 0.08f) + extra;
+                Cone(waist, hem, ConeStart(fit, hem, rh), rh, b.A, 14, gap: new Vector3(-0.55f, 0, 1f), gapAngle: 0.42f);
                 break;
+            }
             case GarmentShape.LongPleated:
             {
                 // to mid-calf, brown straps running down it front and back
-                var hem = Blown(r.Waist, r.Hip.Lerp(ankles, 0.80f));
-                float rh = Mathf.Max(0.29f, spreadK + 0.12f);
-                s.Skirt(r.Waist, hem, 0.150f, rh, b.A, 16, ripple: ripple, phase: phase);
-                var axis = Frame.Along(r.Waist - hem);
-                foreach (float a in new[] { -0.45f, 0.45f, Mathf.Pi - 0.45f, Mathf.Pi + 0.45f })
+                var hem = Blown(waist, r.Hip.Lerp(ankles, 0.80f));
+                float rh = Mathf.Max(0.29f, spreadK + 0.12f) + extra;
+                float ra = ConeStart(fit, hem, rh);
+                s.Skirt(waist, hem, ra, rh, b.A, 16, ripple: ripple, phase: phase);
+                var axis = Frame.Along(waist - hem);
+                foreach (float a in stackalloc[] { -0.45f, 0.45f, Mathf.Pi - 0.45f, Mathf.Pi + 0.45f })
                 {
                     var dir = axis.Fwd * Mathf.Cos(a) + axis.Side * Mathf.Sin(a);
-                    s.Tube(r.Waist + dir * 0.160f, hem + dir * (rh + 0.006f), 0.007f, b.B, 4);
+                    s.Tube(waist + dir * (ra + 0.008f), hem + dir * (rh + 0.006f), 0.007f, b.B, 4);
                 }
                 break;
             }
@@ -622,119 +671,103 @@ public static partial class HumanMeshBuilder
     public static bool Flutters(Outfit o) =>
         o[WearSlot.Top] is { CoversBottom: true } || IsSkirt(o[WearSlot.Bottom]);
 
-    /// <summary>
-    /// One leg in the clothes of <paramref name="p"/>, from free joints: a cyclist's, driven by the
-    /// cranks. The bare leg with the cycling shorts and shoes when nothing is worn.
-    /// </summary>
-    public static void AppendLeg(MeshScratch s, HumanPalette p, Vector3 hip, Vector3 knee, Vector3 ankle, Vector3 toe)
-    {
-        using var smoothing = s.Smoothing(SmoothFigures);
-        var o = p.Outfit;
-        if (o.IsEmpty)
-        {
-            Leg(s, p, hip, knee, ankle, toe);
-            return;
-        }
-        var top = o[WearSlot.Top];
-        var bottom = top is { CoversBottom: true } ? null : o[WearSlot.Bottom];
-        AppendLeg(s, p, hip, knee, ankle, toe, top, bottom, o[WearSlot.Legs], o[WearSlot.Feet]);
-    }
-
     // ------------------------------------------------------------------------------------
     // head and neck
     // ------------------------------------------------------------------------------------
 
-    private static void AppendNeckwear(MeshScratch s, Rig r, Garment g)
+    private static void AppendNeckwear(MeshScratch s, in Fit fit, Garment g)
     {
         var c = Cols.Of(g);
-        var axis = r.HeadBase - r.Neck;
+        var r = fit.Rig;
+        var axis = fit.Head.NeckTop - r.Neck;
         var f = Frame.Along(axis);
-        var lo = r.Neck.Lerp(r.HeadBase, 0.30f);
-        var hi = r.Neck.Lerp(r.HeadBase, 0.62f);
+        var lo = r.Neck.Lerp(fit.Head.NeckTop, 0.30f);
+        var hi = r.Neck.Lerp(fit.Head.NeckTop, 0.62f);
         var mid = (lo + hi) * 0.5f;
+        float neck = fit.Shape.Neck;
         switch (g.Shape)
         {
             case GarmentShape.SpikedChoker:
-                s.Tube(lo, hi, 0.060f, c.A, 8);
+                s.Tube(lo, hi, neck + 0.008f, c.A, 8);
                 for (int i = -3; i <= 3; i++)
                 {
                     float a = i * 0.42f;
                     var dir = f.Fwd * Mathf.Cos(a) + f.Side * Mathf.Sin(a);
-                    s.Tube(mid + dir * 0.055f, mid + dir * 0.085f, 0.008f, 0.0005f, c.B, 4);
+                    s.Tube(mid + dir * (neck + 0.004f), mid + dir * (neck + 0.034f), 0.008f, 0.0005f, c.B, 4);
                 }
                 break;
             case GarmentShape.HeartChoker:
-                s.Tube(lo, hi, 0.058f, c.A, 8);
-                AppendHeart(s, mid + f.Fwd * 0.066f - f.Up * 0.025f, f, 0.030f, c.B);
+                s.Tube(lo, hi, neck + 0.006f, c.A, 8);
+                AppendHeart(s, mid + f.Fwd * (neck + 0.014f) - f.Up * 0.025f, f, 0.030f, c.B);
                 break;
             case GarmentShape.BellCollar:
-                s.Tube(lo, hi, 0.060f, c.A, 8);
-                var bell = mid + f.Fwd * 0.07f - f.Up * 0.03f;
+            {
+                s.Tube(lo, hi, neck + 0.008f, c.A, 8);
+                var bell = mid + f.Fwd * (neck + 0.018f) - f.Up * 0.03f;
                 s.Tube(bell - f.Up * 0.02f, bell + f.Up * 0.01f, 0.022f, 0.012f, c.B, 8);
                 s.Box(bell - f.Up * 0.012f + f.Fwd * 0.02f, new Vector3(0.014f, 0.004f, 0.006f), new Color("3a2a10"), f.Basis);
                 break;
+            }
             case GarmentShape.Chain:
             {
                 // hangs from the base of the neck onto the chest, a small cross at the bottom
-                var ft = Frame.Along(r.Neck - r.Chest);
-                var start = r.Neck - ft.Up * 0.01f;
+                var t = fit.Torso;
                 for (int i = 0; i <= 10; i++)
                 {
                     float u = i / 10f * 2f - 1f;
-                    float a = u * 1.25f;
-                    var dir = ft.Fwd * Mathf.Cos(a) + ft.Side * Mathf.Sin(a);
-                    var at = start + dir * (0.085f + 0.035f * (1f - u * u)) - ft.Up * (0.075f * (1f - u * u));
-                    s.Box(at, new Vector3(0.011f, 0.011f, 0.011f), c.A, ft.Basis);
+                    float sp = 3.95f - 0.45f * (1f - u * u);
+                    s.Box(t.Surface(sp, (90f - u * 72f) * Deg, 0.007f), new Vector3(0.011f, 0.011f, 0.011f), c.A, TrunkBasis(fit, sp));
                 }
-                var cross = start + ft.Fwd * 0.128f - ft.Up * 0.105f;
-                s.Box(cross, new Vector3(0.010f, 0.045f, 0.008f), c.A, ft.Basis);
-                s.Box(cross + ft.Up * 0.008f, new Vector3(0.030f, 0.010f, 0.008f), c.A, ft.Basis);
+                var cross = t.Front(3.42f, 0.010f);
+                var basis = TrunkBasis(fit, 3.42f);
+                s.Box(cross, new Vector3(0.010f, 0.045f, 0.008f), c.A, basis);
+                s.Box(cross + basis.Y * 0.008f, new Vector3(0.030f, 0.010f, 0.008f), c.A, basis);
                 break;
             }
         }
     }
 
-    /// <summary>Clothes on the head (in place of a hat), built in the head's frame like <see cref="AppendHat"/>.</summary>
-    private static void AppendHeadwear(MeshScratch s, Garment g, Vector3 centre, Vector3 axis)
+    /// <summary>Clothes on the head (in place of a hat), on the head's real surface, over the hair when there is some.</summary>
+    private static void AppendHeadwear(MeshScratch s, Garment g, in Head head, bool hair)
     {
         var c = Cols.Of(g);
-        var f = Frame.Along(axis);
-        var (side, up, fwd) = (f.Side, f.Up, f.Fwd);
-        var top = centre + up * (axis.Length() * 0.5f + 0.0275f);
+        var (side, up, fwd) = (head.Side, head.UpAxis, head.Fwd);
+        var f = new Frame(side, up, fwd);
+        var top = head.Top(hair);
+        float hw = head.HalfWidth(hair);
+        float rx = hw / 0.075f;   // the old box head was 0.150 wide: offsets authored on it scale with this
+        var centre = head.Centre(0.11f);
+        var ears = head.Centre(0.095f);   // the cups' height (a local: the local functions cannot capture an in parameter)
+        float half = (top - centre).Dot(up);
 
         void Ears(Color outer, Color inner, float height)
         {
-            foreach (float sgn in new[] { -1f, 1f })
+            foreach (float sgn in stackalloc[] { -1f, 1f })
             {
-                var root = top - up * 0.012f + side * sgn * 0.052f + fwd * 0.005f;
+                var root = top - up * 0.014f + side * sgn * hw * 0.62f + fwd * 0.005f;
                 var tip = root + up * height + side * sgn * 0.016f;
                 s.Tube(root, tip, 0.036f, 0.003f, outer, 3);
                 s.Tube(root + fwd * 0.012f + up * 0.006f, tip + fwd * 0.006f - up * 0.016f, 0.020f, 0.002f, inner, 3);
             }
         }
 
-        float half = axis.Length() * 0.5f + 0.0275f;   // the head box's half height; it is 0.150 wide
-        // a band over the crown from ear to ear, hugging the box-shaped head (an arc would sink into its corners)
-        Vector3[] BandPath(float forward)
+        // a band over the crown from ear to ear
+        Vector3 BandPoint(int i, float forward)
         {
-            Vector3 P(float x, float y) => centre + fwd * forward + side * x + up * y;
-            return new[]
-            {
-                P(-0.085f, -0.01f), P(-0.085f, half - 0.03f), P(-0.055f, half + 0.012f), P(0f, half + 0.017f),
-                P(0.055f, half + 0.012f), P(0.085f, half - 0.03f), P(0.085f, -0.01f),
-            };
+            ReadOnlySpan<Vector2> path = [new(-1.0f, -0.10f), new(-1.0f, 0.70f), new(-0.62f, 1.02f), new(0f, 1.06f), new(0.62f, 1.02f), new(1.0f, 0.70f), new(1.0f, -0.10f)];
+            var p = path[i];
+            return centre + fwd * forward + side * p.X * (hw + 0.010f) + up * p.Y * half;
         }
         void Band(Color colour, float forward)
         {
-            var path = BandPath(forward);
-            for (int i = 0; i + 1 < path.Length; i++) s.Tube(path[i], path[i + 1], 0.010f, colour, 5);
+            for (int i = 0; i + 1 < 7; i++) s.Tube(BandPoint(i, forward), BandPoint(i + 1, forward), 0.010f, colour, 5);
         }
 
         void Cups(Color shell, Color cushion)
         {
-            foreach (float sgn in new[] { -1f, 1f })
+            foreach (float sgn in stackalloc[] { -1f, 1f })
             {
-                var at = centre + side * sgn * 0.080f;
+                var at = ears + side * sgn * (hw + 0.004f);
                 s.Tube(at, at + side * sgn * 0.030f, 0.044f, 0.040f, shell, 8);
                 s.Tube(at - side * sgn * 0.004f, at + side * sgn * 0.006f, 0.046f, cushion, 8);
             }
@@ -751,17 +784,17 @@ public static partial class HumanMeshBuilder
                 Cups(c.A, c.B);
                 Ears(c.A, c.C, 0.065f);
                 // the lit rim round each cup
-                foreach (float sgn in new[] { -1f, 1f })
-                    s.Ring(centre + side * sgn * 0.112f, side, 0.026f, 0.034f, 0.006f, Garments.Fx(g.C, Finish.Neon), 10);
+                foreach (float sgn in stackalloc[] { -1f, 1f })
+                    s.Ring(head.Centre(0.095f) + side * sgn * (hw + 0.036f), side, 0.026f, 0.034f, 0.006f, Garments.Fx(g.C, Finish.Neon), 10);
                 break;
             case GarmentShape.Headset:
             {
                 Band(c.A, 0f);
                 Cups(c.A, c.B);
                 // the boom mic round to the mouth
-                var root = centre + side * 0.105f - up * 0.02f;
-                var bend = root + fwd * 0.06f - up * 0.035f;
-                var mic = centre + fwd * 0.10f - up * 0.065f + side * 0.035f;
+                var root = head.Centre(0.075f) + side * (hw + 0.03f);
+                var mic = head.Point(0.04f, 62f * Deg, 0.028f);
+                var bend = root.Lerp(mic, 0.5f) + side * 0.02f + fwd * 0.01f;
                 s.Tube(root, bend, 0.005f, c.A, 4);
                 s.Tube(bend, mic, 0.005f, c.A, 4);
                 s.Box(mic, new Vector3(0.018f, 0.014f, 0.016f), c.C, f.Basis);
@@ -769,9 +802,9 @@ public static partial class HumanMeshBuilder
             }
             case GarmentShape.BunnyEars:
                 Band(c.A, 0.01f);
-                foreach (float sgn in new[] { -1f, 1f })
+                foreach (float sgn in stackalloc[] { -1f, 1f })
                 {
-                    var root = top - up * 0.01f + side * sgn * 0.035f;
+                    var root = top - up * 0.01f + side * sgn * 0.035f * rx;
                     var knee = root + up * 0.13f + side * sgn * 0.025f;
                     // the left one flops forward
                     var tip = sgn > 0 ? knee + fwd * 0.07f + up * 0.02f + side * 0.02f : knee + up * 0.10f + side * sgn * 0.01f;
@@ -781,9 +814,9 @@ public static partial class HumanMeshBuilder
                 }
                 break;
             case GarmentShape.Horns:
-                foreach (float sgn in new[] { -1f, 1f })
+                foreach (float sgn in stackalloc[] { -1f, 1f })
                 {
-                    var root = top - up * 0.01f + side * sgn * 0.048f + fwd * 0.035f;
+                    var root = top - up * 0.012f + side * sgn * 0.048f * rx + fwd * 0.035f;
                     var a = root + up * 0.05f + side * sgn * 0.022f;
                     var b = a + up * 0.035f + side * sgn * 0.005f - fwd * 0.03f;
                     var tip = b + up * 0.012f - fwd * 0.045f - side * sgn * 0.008f;
@@ -794,40 +827,45 @@ public static partial class HumanMeshBuilder
                 }
                 break;
             case GarmentShape.Bow:
-                AppendBow(s, top + fwd * 0.03f + side * 0.045f + up * 0.01f, f, 1.5f, c.A, c.B);
+                AppendBow(s, top + fwd * 0.03f + side * 0.045f * rx + up * 0.005f, f, 1.5f, c.A, c.B);
                 break;
             case GarmentShape.LaceHeadband:
-            {
                 Band(c.A, 0.035f);
                 // the white lace frill standing along the band's top, in front of it
-                var path = BandPath(0.035f);
-                for (int i = 1; i < path.Length - 1; i++)
-                    foreach (var at in new[] { path[i], (path[i] + path[i + 1]) * 0.5f })
-                        if (at.DistanceTo(path[^1]) > 0.05f)
+                for (int i = 1; i < 6; i++)
+                {
+                    var a = BandPoint(i, 0.035f);
+                    foreach (var at in stackalloc[] { a, (a + BandPoint(i + 1, 0.035f)) * 0.5f })
+                        if (at.DistanceTo(BandPoint(6, 0.035f)) > 0.05f)
                             s.Box(at + fwd * 0.012f + up * 0.012f, new Vector3(0.026f, 0.024f, 0.010f), c.B, f.Basis);
+                }
+                break;
+            case GarmentShape.Beanie:
+            {
+                var from = head.Centre(0.14f);
+                s.Tube(from + up * 0.01f, top + up * 0.04f, hw + 0.028f, (hw + 0.028f) * 0.62f, c.A, 8);
+                s.Tube(from, from + up * 0.04f, hw + 0.031f, hw + 0.030f, c.B, 8);
                 break;
             }
-            case GarmentShape.Beanie:
-                s.Tube(centre + up * 0.035f, top + up * 0.045f, 0.120f, 0.075f, c.A, 8);
-                s.Tube(centre + up * 0.025f, centre + up * 0.065f, 0.123f, 0.121f, c.B, 8);
-                break;
         }
     }
 
-    /// <summary>Glasses: rims on the front of the face, arms back to the ears.</summary>
-    private static void AppendGlasses(MeshScratch s, Garment g, Vector3 centre, Frame f)
+    /// <summary>Glasses: rims over the eyes, arms back to the ears.</summary>
+    private static void AppendGlasses(MeshScratch s, Garment g, in Head head)
     {
         var c = Cols.Of(g);
-        var eyes = centre + f.Up * 0.022f + f.Fwd * 0.098f;
-        const float apart = 0.036f;
+        var f = new Frame(head.Side, head.UpAxis, head.Fwd);
+        // the eyes sit at the atlas's rows 6-8: 0.10 up the head's profile
+        var eyes = head.Point(0.100f, Mathf.Pi / 2f, 0.014f);
+        float apart = 0.036f * head.K;
         // the arms, from the outer edge of the frame back past the ears
-        foreach (float sgn in new[] { -1f, 1f })
-            s.Tube(eyes + f.Side * sgn * 0.066f, centre + f.Up * 0.022f + f.Side * sgn * 0.078f - f.Fwd * 0.03f, 0.004f, c.A, 4);
+        foreach (float sgn in stackalloc[] { -1f, 1f })
+            s.Tube(eyes + f.Side * sgn * 0.066f, head.Ear(sgn) + f.Side * sgn * 0.006f + f.Up * 0.012f, 0.004f, c.A, 4);
         switch (g.Shape)
         {
             case GarmentShape.RoundGlasses:
             case GarmentShape.RoundShades:
-                foreach (float sgn in new[] { -1f, 1f })
+                foreach (float sgn in stackalloc[] { -1f, 1f })
                 {
                     var at = eyes + f.Side * sgn * apart;
                     s.Ring(at, f.Fwd, 0.022f, 0.029f, 0.006f, c.A, 10);
@@ -836,7 +874,7 @@ public static partial class HumanMeshBuilder
                 s.Tube(eyes + f.Side * (apart - 0.026f), eyes - f.Side * (apart - 0.026f), 0.004f, c.A, 4);
                 break;
             case GarmentShape.HeartShades:
-                foreach (float sgn in new[] { -1f, 1f })
+                foreach (float sgn in stackalloc[] { -1f, 1f })
                 {
                     var at = eyes + f.Side * sgn * apart;
                     AppendHeart(s, at, f, 0.046f, c.A);
@@ -850,7 +888,7 @@ public static partial class HumanMeshBuilder
                 s.Box(eyes + f.Up * 0.018f + f.Fwd * 0.002f, new Vector3(0.156f, 0.008f, 0.012f), c.A, f.Basis);
                 break;
             case GarmentShape.StarGlasses:
-                foreach (float sgn in new[] { -1f, 1f })
+                foreach (float sgn in stackalloc[] { -1f, 1f })
                 {
                     var at = eyes + f.Side * sgn * apart;
                     s.Tube(at - f.Fwd * 0.003f, at + f.Fwd * 0.003f, 0.032f, c.A, 5);
@@ -861,20 +899,23 @@ public static partial class HumanMeshBuilder
     }
 
     /// <summary>A face mask over the mouth and nose, loops round the ears, a pixel face printed on it.</summary>
-    private static void AppendMask(MeshScratch s, Garment g, Vector3 centre, Frame f)
+    private static void AppendMask(MeshScratch s, Garment g, in Head head)
     {
         var c = Cols.Of(g);
-        var front = centre - f.Up * 0.052f + f.Fwd * 0.093f;
+        var f = new Frame(head.Side, head.UpAxis, head.Fwd);
+        var front = head.Point(0.045f, Mathf.Pi / 2f, 0.012f);
         s.Box(front, new Vector3(0.140f, 0.080f, 0.014f), c.A, f.Basis);
-        foreach (float sgn in new[] { -1f, 1f })
+        foreach (float sgn in stackalloc[] { -1f, 1f })
         {
             // wrapping the cheeks, and the loop to the ear
-            s.Box(centre - f.Up * 0.052f + f.Side * sgn * 0.080f + f.Fwd * 0.058f, new Vector3(0.012f, 0.072f, 0.064f), c.A, f.Basis);
-            s.Tube(centre - f.Up * 0.03f + f.Side * sgn * 0.080f + f.Fwd * 0.03f, centre + f.Side * sgn * 0.080f - f.Fwd * 0.012f, 0.004f, c.A, 4);
+            var cheek = head.Point(0.045f, (sgn > 0 ? 28f : 152f) * Deg, 0.010f);
+            s.Box(cheek, new Vector3(0.012f, 0.072f, 0.064f), c.A, f.Basis);
+            s.Tube(cheek + f.Up * 0.02f, head.Ear(sgn) + f.Side * sgn * 0.004f, 0.004f, c.A, 4);
         }
         if (MaskFaces.TryGetValue(g.Face, out var rows))
             Pixels(s, rows, front + f.Fwd * 0.009f, f, 0.0086f, c.B, c.C);
     }
+
 
     /// <summary>
     /// The masks' faces as pixel art, 15×7, top row up, left column the viewer's left (the figure's
@@ -985,14 +1026,15 @@ public static partial class HumanMeshBuilder
     }
 
     /// <summary>Piercings: in both ears, and for some sets the nose or lip too.</summary>
-    private static void AppendPiercings(MeshScratch s, Garment g, Vector3 centre, Frame f, float half)
+    private static void AppendPiercings(MeshScratch s, Garment g, in Head head)
     {
         var c = Cols.Of(g);
-        foreach (float sgn in new[] { -1f, 1f })
+        var f = new Frame(head.Side, head.UpAxis, head.Fwd);
+        foreach (float sgn in stackalloc[] { -1f, 1f })
         {
-            var ear = centre + f.Side * sgn * 0.078f - f.Fwd * 0.012f;
-            var lobe = ear - f.Up * 0.035f;
-            var helix = ear + f.Up * 0.025f - f.Fwd * 0.006f;
+            var ear = head.Ear(sgn) + f.Side * sgn * 0.010f;
+            var lobe = ear - f.Up * 0.022f;
+            var helix = ear + f.Up * 0.020f - f.Fwd * 0.006f;
             var outward = f.Side * sgn;
             switch (g.Shape)
             {
@@ -1020,12 +1062,11 @@ public static partial class HumanMeshBuilder
                     break;
             }
         }
-        var nose = centre + f.Fwd * 0.096f - f.Up * 0.012f;
         if (g.Shape == GarmentShape.Industrial)
-            s.Ring(nose - f.Up * 0.012f, f.Fwd, 0.008f, 0.012f, 0.003f, c.A, 8);   // a septum ring
+            s.Ring(head.Point(0.062f, Mathf.Pi / 2f, 0.010f), f.Fwd, 0.008f, 0.012f, 0.003f, c.A, 8);   // a septum ring
         else if (g.Shape == GarmentShape.Spikes)
         {
-            var lip = centre + f.Fwd * 0.092f - f.Up * 0.075f;
+            var lip = head.Point(0.030f, Mathf.Pi / 2f, 0.004f);
             s.Tube(lip, lip + f.Fwd * 0.022f, 0.006f, 0.0005f, c.A, 4);
         }
     }
@@ -1034,15 +1075,6 @@ public static partial class HumanMeshBuilder
     // shared shapes
     // ------------------------------------------------------------------------------------
 
-    /// <summary>A tube in <paramref name="bands"/> stripes of two colours, the first at <paramref name="a"/>.</summary>
-    private static void Banded(MeshScratch s, Vector3 a, Vector3 b, float ra, float rb, Color one, Color two, int bands)
-    {
-        for (int i = 0; i < bands; i++)
-        {
-            float t0 = (float)i / bands, t1 = (float)(i + 1) / bands;
-            s.Tube(a.Lerp(b, t0), a.Lerp(b, t1), Mathf.Lerp(ra, rb, t0), Mathf.Lerp(ra, rb, t1), i % 2 == 0 ? one : two, 6);
-        }
-    }
 
     /// <summary>A bow facing <see cref="Frame.Fwd"/>: two loops and a knot; <paramref name="scale"/> 1 is 10 cm across.</summary>
     private static void AppendBow(MeshScratch s, Vector3 at, Frame f, float scale, Color loops, Color knot)
