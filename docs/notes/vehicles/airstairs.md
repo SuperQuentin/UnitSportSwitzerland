@@ -9,7 +9,7 @@
   the deck; `AirstairsRig` rebuilds the stairs' mesh in place only when the platform moved 2 cm).
   A low forward-control cab, the flight from the ground behind the chassis up to a platform over
   the cab (2.4-5.6 m), a canopy, a bridge plate in front. Admin picker tab **Airport**.
-- **Driving**: 25 km/h forward, 8 reverse, brake then reverse (as a car's automatic), bicycle-model
+- **Driving**: 25 km/h forward, 8 reverse, 2.2 m/s² (it climbs a 10% apron at 0.8 throttle; 1.3 did not), brake then reverse (as a car's automatic), bicycle-model
   steering. On the move the platform rides at 2.5 m. Nothing new is replicated: the platform's
   height travels in `Anim.X` (`WritePose`), parked in `VehicleState.Flags` (cm).
 - **The deck** (`AirstairsMeshBuilder.Deck(h)`, `walk-aboard`): the flight is one ramp from 4 cm under
@@ -51,7 +51,10 @@
   through L1 into the cabin and back down, a second truck driven at L2 from 8 m askew and let go
   (docks to the centimetre, parked stays docked), then the A320 taken and taxied 45 m: both stairs
   shoved clear. `shots` windowed (with `--style cartoon --chunks <tiles> --at E,N`):
-  `test_output/stairs/*.png` from a camera of its own.
-- **Not done**: no carrying a walker on stairs being driven (they would slide off; no aboard box);
+  `test_output/stairs/*.png` from a camera of its own; `--stairsheading deg` lays the scene along a
+  runway. Sion airport (LSGS) is around `--at 2591300,1118700 --stairsheading 250` (grass beside runway
+  25; 2593000,1118900 is a town field, the taxi runs into a building there).
+- **Not done**: a walker on another peer near stairs someone is *driving* gets their deck at the
+  shared seat instance's height (`VehicleOf`), not the driver's; no carrying a walker on stairs being driven (they would slide off; no aboard box);
   the stairs' parked collision keeps the height it was spawned at; the push is a shove sideways,
   not a physical contact (a stabiliser backing into L2 stairs is not covered); no tug or jet bridge.
