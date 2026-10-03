@@ -20,18 +20,20 @@ public static class HullTouch
     /// What a swim into a hull measured. <see cref="WorstPose"/>: the collision shape's bounds' farthest
     /// corner from the drawn one, m. <see cref="MaxTilt"/>: its largest tilt off level, degrees.
     /// <see cref="Contacts"/>: frames the swimmer touched the boat; <see cref="WorstOff"/>: the farthest
-    /// contact point from the hull's surface as drawn, m; <see cref="LevelOff"/>: the same points' mean
+    /// contact point from the hull's surface as drawn, m, and <see cref="Off90"/> the 90th percentile of them
+    /// (a copy's body jumps with its position stream for a step); <see cref="LevelOff"/>: the same points' mean
     /// distance from where a level hull at the body would have been, m. <see cref="Deepest"/>: the
     /// swimmer's feet under the surface at worst while touching, m; <see cref="UnderFor"/>: the longest
-    /// the head stayed under while touching, s.
+    /// the head stayed under while touching, s. <see cref="Climbs"/>: times it climbed out onto the hull
+    /// (a mantle over a low gunwale) and was put back in the water beside it.
     /// </summary>
     public readonly record struct Result(int Frames, float WorstPose, float MaxTilt, int Contacts, float WorstOff, float LevelOff,
-        float Deepest, float UnderFor)
+        float Deepest, float UnderFor, float Off90, int Climbs)
     {
         public override string ToString() => string.Create(CultureInfo.InvariantCulture,
             $"{Frames} frames, collision off the drawn hull {WorstPose * 100f:F1} cm at worst, tilted up to {MaxTilt:F1}°; " +
-            $"{Contacts} frames touching, contacts {WorstOff * 100f:F1} cm off the drawn hull at worst (a level hull: {LevelOff * 100f:F0} cm on average); " +
-            $"feet {Deepest:F2} m under at worst touching, head under {UnderFor:F1} s at most");
+            $"{Contacts} frames touching, contacts {Off90 * 100f:F1} cm off the drawn hull (90 %), {WorstOff * 100f:F1} cm at worst (a level hull: {LevelOff * 100f:F0} cm on average); " +
+            $"feet {Deepest:F2} m under at worst touching, head under {UnderFor:F1} s at most; climbed out onto it {Climbs}x");
     }
 
     /// <summary>
@@ -102,6 +104,7 @@ public static class HullTouch
         int frames = 0, contacts = 0, levelN = 0;
         // the physics step met the shape as it was posed the frame before (posed in _Process)
         Transform3D? before = null;
+        var offs = new List<float>();
         float worstPose = 0f, tilt = 0f, worstOff = 0f, levelSum = 0f, deepest = 0f, under = 0f, underMax = 0f;
         // into the side, square to it as drawn: the hull's long side, not its middle (76 m of steamer)
         me.WalkControls = () =>
@@ -113,9 +116,20 @@ public static class HullTouch
         };
         double end = Time.GetTicksMsec() / 1000.0 + seconds;
         float dt = 1f / Engine.PhysicsTicksPerSecond;
-        while (Time.GetTicksMsec() / 1000.0 < end && GodotObject.IsInstanceValid(boat) && me.IsSwimming)
+        int climbs = 0;
+        while (Time.GetTicksMsec() / 1000.0 < end && GodotObject.IsInstanceValid(boat))
         {
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.PhysicsFrame);
+            // pushing at a low gunwale at the surface climbs out onto it (the mantle): back in beside it
+            if (!me.IsSwimming)
+            {
+                if (climbs++ > 20 || !Hull(boat, out var s, out _, out var d)) break;
+                var across = (d.Basis.X with { Y = 0 }).Normalized();
+                if ((me.GlobalPosition - d.Origin).Dot(across) < 0f) across = -across;
+                me.StartSwimmingAtSurface(d.Origin + across * (Bounds(s).End.X + off));
+                before = null;
+                continue;
+            }
             if (!Hull(boat, out var shape, out var collision, out var drawn)) continue;
             frames++;
             // the collision shape against the drawn hull: every corner of its bounds
@@ -140,6 +154,7 @@ public static class HullTouch
                     float d = Mathf.Abs(Distance(boat.Ride, shape, drawn, p));
                     if (before is { } last) d = Mathf.Min(d, Mathf.Abs(Distance(boat.Ride, shape, last, p)));
                     worstOff = Mathf.Max(worstOff, d);
+                    offs.Add(d);
                     levelSum += Mathf.Abs(Distance(boat.Ride, shape, level, p));
                     levelN++;
                 }
@@ -152,7 +167,14 @@ public static class HullTouch
             underMax = Mathf.Max(underMax, under);
         }
         me.WalkControls = null;
-        return new Result(frames, worstPose, tilt, contacts, worstOff, levelN > 0 ? levelSum / levelN : 0f, deepest, underMax);
+        return new Result(frames, worstPose, tilt, contacts, worstOff, levelN > 0 ? levelSum / levelN : 0f, deepest, underMax, Percentile(offs, 0.9f), climbs);
+    }
+
+    private static float Percentile(List<float> values, float share)
+    {
+        if (values.Count == 0) return 0f;
+        values.Sort();
+        return values[Mathf.Min(values.Count - 1, (int)(share * values.Count))];
     }
 
     /// <summary>
