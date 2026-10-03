@@ -320,6 +320,32 @@
             "command": "dotnet",
             "args": ["run", "--project", "tools/RoadGen", "-c", "Release", "--", "--demo"],
             "problemMatcher": []
+        },
+
+        // -------------------------------------------------------------- release
+        // tools/release.sh on a synced main; needs gh, export templates and export_presets.cfg
+        // (docs/notes/general/local-release.md). Git Bash by full path: plain "bash" can be WSL.
+        {
+            "label": "release: dry run",
+            "detail": "Next version and changelog since the last v* tag, builds nothing",
+            "type": "process",
+            "command": "C:/Program Files/Git/bin/bash.exe",
+            "args": ["tools/release.sh", "--dry-run"],
+            "osx": { "command": "bash", "options": { "env": { "GODOT": "/Applications/Godot_mono.app/Contents/MacOS/Godot" } } },
+            "linux": { "command": "bash", "options": { "env": { "GODOT": "godot" } } },
+            "presentation": { "panel": "dedicated" },
+            "problemMatcher": []
+        },
+        {
+            "label": "release: build and publish",
+            "detail": "Export Windows Desktop, zip it and gh release create vX.Y.Z (public)",
+            "type": "process",
+            "command": "C:/Program Files/Git/bin/bash.exe",
+            "args": ["tools/release.sh"],
+            "osx": { "command": "bash", "options": { "env": { "GODOT": "/Applications/Godot_mono.app/Contents/MacOS/Godot" } } },
+            "linux": { "command": "bash", "options": { "env": { "GODOT": "godot" } } },
+            "presentation": { "focus": true, "panel": "dedicated" },
+            "problemMatcher": []
         }
     ],
     "inputs": [
