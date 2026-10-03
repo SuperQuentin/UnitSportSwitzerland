@@ -67,10 +67,14 @@ public sealed class PlayerRegistry
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly string? _adminPassword;
+    private readonly string? _hostToken;
 
-    public PlayerRegistry(string? adminPassword)
+    /// <param name="hostToken">From <c>--host-token</c>: the client that hosts this server
+    /// from its menu (<see cref="HostedServer"/>) proves it is the host with it.</param>
+    public PlayerRegistry(string? adminPassword, string? hostToken = null)
     {
         _adminPassword = string.IsNullOrWhiteSpace(adminPassword) ? null : adminPassword;
+        _hostToken = string.IsNullOrWhiteSpace(hostToken) ? null : hostToken;
         LoadAdmins();
 
         GD.Print(_adminPassword is null
@@ -156,6 +160,18 @@ public sealed class PlayerRegistry
         return true;
     }
 
+    /// <summary>The hosting client's token: makes it an admin for this session.</summary>
+    public bool TryClaimHost(long peerId, string token)
+    {
+        if (_hostToken is null) return false;
+        if (!_players.TryGetValue(peerId, out var player)) return false;
+        if (!FixedTimeEquals(token, _hostToken)) return false;
+
+        player.IsAdmin = true;
+        GD.Print($"[admin] peer {peerId} ({player.Name}) is the host");
+        return true;
+    }
+
     /// <summary>Adds a name to the persisted admin list and elevates them if online.</summary>
     public bool GrantAdmin(string name)
     {
@@ -234,6 +250,9 @@ public sealed class PlayerRegistry
 
     /// <summary>Reads "--admin-password &lt;pw&gt;" from the server command line.</summary>
     public static string? ParseAdminPassword() => CmdArgs.Value("--admin-password");
+
+    /// <summary>Reads "--host-token &lt;t&gt;", set by <see cref="HostedServer"/>.</summary>
+    public static string? ParseHostToken() => CmdArgs.Value("--host-token");
 
     /// <summary>Reads "--name &lt;n&gt;" from the client command line.</summary>
     public static string ParseRequestedName() => CmdArgs.Value("--name") ?? string.Empty;
