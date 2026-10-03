@@ -19,7 +19,7 @@ public sealed class AirlinerCircuit
     private float _apFrom = float.NaN, _apWorst, _fuelAt;
     private float _startYaw = float.NaN, _turnedAt, _lastReport, _touchSink, _maxAgl;
     private bool _flapsSet, _gearUp, _gearDown;
-    private float _healthAt, _lastHealth = float.MaxValue;
+    private float _healthAt, _lastHealth = float.MaxValue, _overspeed;
 
     public readonly record struct Outcome(bool Ok, string Text);
 
@@ -83,7 +83,12 @@ public sealed class AirlinerCircuit
                 if (t > 150f) return new Outcome(false, $"engines never started (APU {s.Apu:F2}, running {s.Lit:F1})");
                 break;
             case Phase.Roll:
-                if (!_flapsSet) { jet.Command(AirlinerCommand.FlapsDown); jet.Command(AirlinerCommand.FlapsDown); _flapsSet = true; }
+                if (!_flapsSet)
+                {
+                    // take-off flaps: the A320's 1+F, the freighter's 50 % (#420): the first notch with real lift
+                    for (int n = spec.FlapSettings > 3 ? 2 : 1; n > 0; n--) jet.Command(AirlinerCommand.FlapsDown);
+                    _flapsSet = true;
+                }
                 lever = 1f;
                 stickX = Heading(_startYaw);
                 if (s.Ias > spec.StallSpeed(s.Mass, s.FlapLever) * 1.08f && pitch < 0.2f) stickY = 0.8f;
@@ -92,6 +97,10 @@ public sealed class AirlinerCircuit
                 break;
             case Phase.Climb:
                 if (!_gearUp && agl > 40f) { jet.Command(AirlinerCommand.Gear); _gearUp = true; }
+                // flaps up a notch at a time once the speed is a good margin over the next one's stall
+                if (_gearUp && agl > 150f && s.FlapLever > 0 && Mathf.Abs(s.Flaps - s.FlapLever) < 0.05f
+                    && s.Ias > spec.StallSpeed(s.Mass, s.FlapLever - 1) * 1.25f)
+                    jet.Command(AirlinerCommand.FlapsUp);
                 stickY = FlyVs(Mathf.Clamp((300f - agl) * 0.08f, -4f, 9f));
                 lever = agl < 200f ? 1f : HoldSpeed(82f);
                 stickX = Heading(_startYaw);
@@ -175,6 +184,9 @@ public sealed class AirlinerCircuit
             Snap?.Invoke(_phase.ToString().ToLowerInvariant());
         }
         if (_phase == _snapped) _phaseAt = -1f;
+        // flown within the limits: flaps out above their speed for more than a moment fails the circuit
+        _overspeed = !s.OnGround && s.FlapLever > 0 && s.Ias > spec.FlapLimit[s.FlapLever] + 1f ? _overspeed + 1f / 60f : 0f;
+        if (_overspeed > 3f) return new Outcome(false, $"flaps {spec.FlapNames[s.FlapLever]} over their speed ({s.Ias / 0.5144f:0} kt > {spec.FlapLimit[s.FlapLever] / 0.5144f:0} kt) in {_phase}");
         if (p.VehicleHealth < _lastHealth - 0.01f)
             GD.Print($"[flycheck] {_name} damage {_lastHealth - p.VehicleHealth:F1} in {_phase} at {t:F1} s: ias {s.Ias / 0.5144f:0} kt, vs {vs:F1}, agl {agl:F1}, ground {s.OnGround}, gear {s.Gear:F2}");
         _lastHealth = p.VehicleHealth;
