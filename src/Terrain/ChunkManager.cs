@@ -1303,7 +1303,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             // near tiles' water comes with their buildings, far tiles' (flat, #299) on its own
             if (result.Water != null)
                 EnsureNode(result.Id, state).SetWater(result.Water);
-            state.ActiveStride = result.Stride;
+            // not from an interim whose surface was held back for the tail: the old stride is
+            // still what is drawn, and a cancelled tail must leave the tile wanting the new one
+            if (!result.Interim || result.Mesh != null || result.Stride == 0)
+                state.ActiveStride = result.Stride;
             // a single commit past a frame is worth knowing about: it is what a hitch IS
             double took = clock.Elapsed.TotalMilliseconds - t0;
             CommitLogged?.Invoke(result.Id, result.Stride, result.Interim ? "ground" : "tail", took);
@@ -1566,11 +1569,15 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     continue;
 
                 Interlocked.Increment(ref _buildsInFlight);
-                // Collision on a road tile needs the road tile even when its roads are already
-                // drawn: the floor is blended toward them. The usual way to get here is exactly
-                // that - flying over an area (roads, no collision) and then dropping on foot.
+                // Ground rebuilt under roads that are already drawn still needs the road tile:
+                // collision blends its floor toward them, and a near-field mesh is lowered under
+                // them. The usual ways to get here are flying over an area (roads, no collision)
+                // and then dropping on foot, and flying away and back: the tile coarsens with its
+                // roads kept (out to RoadMaxDist), and refined without the road tile its stride-1
+                // ground came back unblended, burying the roads it had been lowered under.
+                bool nearMesh = needMesh && want.Stride <= TerrainMeshBuilder.MaxHoleStride;
                 StartBuild(id, state, want.Stride, needCollision, needRoads, needBuildings,
-                    roadsForCollision: needCollision && want.Roads, fine: fine);
+                    roadsForBlend: (needCollision || nearMesh) && want.Roads, fine: fine);
             }
         }
     }
@@ -1726,7 +1733,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     private void StartBuild(TileId id, ChunkState state, int stride, bool wantCollision,
-        bool wantRoads, bool wantBuildings, bool roadsForCollision = false, bool fine = false)
+        bool wantRoads, bool wantBuildings, bool roadsForBlend = false, bool fine = false)
     {
         if (fine) Interlocked.Increment(ref _fineBuildsInFlight);
         state.PendingStride = stride;
@@ -1761,6 +1768,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         var cachedCover = state.Cover;
         bool coverLoaded = state.CoverLoaded;
         var cachedWater = state.Water;
+        // a coarser mesh is on screen: the new one can wait for its road blend (see the interim publish)
+        bool groundShown = state.ActiveStride > 0 && state.Node != null;
         var source = _source!;
         bool buildMesh = BuildMeshes && stride > 0;
         bool streaming = Streaming?.Invoke() == true;
@@ -1830,7 +1839,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // for the (cached) road tile beats publishing bare terrain, which sits the whole
                 // drape offset - 0.35 m plus - under every road and path, so the player walked
                 // around sunk to the ankles in them.
-                bool blendsRoads = wantRoads || roadsForCollision;
+                bool blendsRoads = wantRoads || roadsForBlend;
                 bool publishInterimCollision = wantCollision && (!blendsRoads || streaming);
                 var collision = publishInterimCollision ? TerrainMeshBuilder.BuildCollisionMap(grid, holes) : null;
                 Lap(StCollision, stageMs, clock);
@@ -1846,9 +1855,16 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // waiting for the tail. Trying instead to render a *coarse* tile from the height
                 // grid alone was measurably worse — it adds a second serialised stage per tile
                 // and both stages compete for the same six streaming slots.
-                if (mesh != null || publishInterimCollision)
+                // Except when the tile already shows ground and this one will be lowered under
+                // its roads in the tail: refining it here drew the bare surface over the roads
+                // for half a second on the way back to an area, and the coarser mesh it replaces
+                // is no hole. It is held back and goes out with the tail instead.
+                bool nearField = stride <= TerrainMeshBuilder.MaxHoleStride;
+                var heldMesh = groundShown && blendsRoads && nearField ? mesh : null;
+                var interimMesh = heldMesh == null ? mesh : null;
+                if (interimMesh != null || publishInterimCollision)
                     _ready.Enqueue(new BuildResult(id, stride, generation, grid, Interim: true,
-                        mesh, publishInterimCollision ? collision : null, null, false, holes, cover,
+                        interimMesh, publishInterimCollision ? collision : null, null, false, holes, cover,
                         null, null, false, null, null, WaterLayer: waterLayer));
 
                 ArrayMesh? roads = null;
@@ -1872,9 +1888,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     }
                     Lap(StRoadMesh, stageMs, clock);
                 }
-                else if (roadsForCollision)
+                else if (roadsForBlend)
                 {
-                    // only for the collision blend below; the roads already drawn stay as they
+                    // only for the collision and mesh blends below; the roads already drawn stay as they
                     // are, since the result says it did not request them
                     roadTile = await source.LoadRoadsAsync(id, ct);
                     ct.ThrowIfCancellationRequested();
@@ -1964,7 +1980,6 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // or the mesh z-fights the road ribbon. The mesh is patched, not rebuilt: only
                 // the vertices under corridors move (measured ~33% of all worker time when it
                 // rebuilt every vertex of a stride-1 tile a second time).
-                bool nearField = stride <= TerrainMeshBuilder.MaxHoleStride;
                 bool visualBlend = surfaceCore != null && roadTile != null && nearField;
 
                 // one corridor pass, applied twice at different clearances
@@ -2013,6 +2028,13 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         tailMesh = ChunkNode.ToArrayMesh(
                             TerrainMeshBuilder.FinishSurface(core, grid, stride, holes, portals), terrainMaterial!);
                     }
+                }
+
+                // a held-back surface goes out now: as it is when the tail found nothing to blend
+                if (heldMesh != null)
+                {
+                    if (tailMesh == null) tailMesh = heldMesh;
+                    else heldMesh.Dispose();
                 }
 
                 Lap(StTail, stageMs, clock);
