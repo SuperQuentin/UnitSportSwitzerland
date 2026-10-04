@@ -91,6 +91,8 @@ public partial class FootPlayer
         public Vector3 Velocity;
         public Vector3 LastPos;
         public bool Measured;
+        /// <summary>Airstairs (#417): the platform height its deck was built at.</summary>
+        public float StairsHeight = float.NaN;
     }
 
     private readonly Dictionary<string, DeckSet> _decks = new();
@@ -146,7 +148,12 @@ public partial class FootPlayer
 
     private static byte DoorsOfHost(Node3D host) => host switch
     {
+        // a freighter's open ramp: down on the ground, level in the air (#420)
+        FootPlayer { Ride: RideKind.Freighter } f => Avatar.FreighterLayout.DeckDoors(f.BusDoors,
+            f.Vehicle is Airliner own ? !own.State.OnGround : Airliner.LookOf(f.Anim).Airborne),
         FootPlayer p => p.BusDoors,
+        VehicleBody { Kind: RideKind.Freighter } parked => Avatar.FreighterLayout.DeckDoors(parked.BusDoors, parked.Ride is Airliner { State.OnGround: false }
+            || parked.Velocity.LengthSquared() > Airliner.FlyingSpeed * Airliner.FlyingSpeed),
         VehicleBody v => v.BusDoors,
         _ => 0,
     };
@@ -202,9 +209,10 @@ public partial class FootPlayer
         // exception from the vehicle's hull come the frame the vehicle does — in between, the parked
         // bus closed round a player not excepted from it, and shoved them out onto its roof
         if (_deckWait > 0f && !Aboard) _deckScan = 0;
-        // airstairs whose platform moved (#417): their deck is built again at its new height
+        // airstairs whose platform moved (#417): their deck follows it, a walker on it with it
         foreach (var set in _decks.Values)
-            if (set.Ride is Airstairs && set.Sections.Count > 0 && !ReferenceEquals(set.Sections[0].Deck, set.Ride.Decks[0])) _deckScan = 0;
+            if (set.Ride is Airstairs stairs && set.Sections.Count > 0 && !ReferenceEquals(set.Sections[0].Deck, stairs.Decks[0])
+                && !RaiseStairs(set, stairs)) _deckScan = 0;
         _deckScan -= dt;
         if (_deckScan <= 0) { _deckScan = 0.5; ScanDecks(); }
         PlaceDecks(dt);
@@ -272,6 +280,35 @@ public partial class FootPlayer
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Airstairs rising or sinking (#417): their deck's boxes moved in place to the new height (the
+    /// same boxes, so no body is made again under a walker), and a walker standing on them lifted with
+    /// the floor under their feet. False when the deck changed shape (the gate): built again then.
+    /// </summary>
+    private bool RaiseStairs(DeckSet set, Airstairs stairs)
+    {
+        var (old, body, doorParts) = set.Sections[0];
+        var deck = stairs.Decks[0];
+        if (old.Boxes.Length != deck.Boxes.Length || body.GetChildCount() != deck.Boxes.Length) return false;
+        for (int i = 0; i < deck.Boxes.Length; i++)
+            if (body.GetChild(i) is CollisionShape3D { Shape: BoxShape3D shape } node)
+            {
+                var b = deck.Boxes[i];
+                if (shape.Size != b.Size) shape.Size = b.Size;
+                node.Transform = new Transform3D(b.Basis, b.Centre);
+            }
+        if (DeckOn == set.Key && !float.IsNaN(set.StairsHeight) && SectionFrame(set.Host, 0) is { } frame)
+        {
+            // authored station = −node z; the floor under the walker there, before and after
+            float z = -(frame.GlobalTransform.AffineInverse() * GlobalPosition).Z;
+            float rise = AirstairsLayout.FloorAt(stairs.DeckHeight, z) - AirstairsLayout.FloorAt(set.StairsHeight, z);
+            if (rise > 0f) GlobalPosition += Vector3.Up * rise;
+        }
+        set.StairsHeight = stairs.DeckHeight;
+        set.Sections[0] = (deck, body, doorParts);
+        return true;
     }
 
     /// <summary>The plank's box laid as <see cref="World.GangwayFit"/> says, moved only when it changes (a centimetre).</summary>
@@ -348,6 +385,7 @@ public partial class FootPlayer
         // its velocity starts as the vehicle publishes it (level, sane), until its motion is measured
         var start = host switch { VehicleBody v => v.Velocity, FootPlayer p => p.WorldVelocity, _ => Vector3.Zero } with { Y = 0 };
         var set = new DeckSet { Host = host, Key = key, Ride = ride, Velocity = start.LimitLength(60f) };
+        if (ride is Airstairs built) set.StairsHeight = built.DeckHeight;
         foreach (var deck in ride.Decks)
         {
             var body = new StaticBody3D { Name = $"Deck_{key.Replace(':', '_')}_{deck.Section}", TopLevel = true, CollisionLayer = 0, CollisionMask = 0 };

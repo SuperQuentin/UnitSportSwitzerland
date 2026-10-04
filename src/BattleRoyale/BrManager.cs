@@ -133,7 +133,7 @@ public partial class BrManager : Node
         if (_state.Phase != BrPhase.Playing) return "No match is being played.";
         double t = Now - _state.Started;
         if (t < 0) return $"The plane's doors close in {-t:F0} s; the zone's clock starts then.";
-        var zone = new ZoneSchedule(_state.Seed, _state.Side, _state.Pace);
+        var zone = _state.Zone();
         if (zone.NextShrinkAt(t) is not { } at) return zone.At(t).Over ? "The zone has closed for good." : "The zone is already closing.";
         _state.Started -= at - t;
         Push();
@@ -259,7 +259,7 @@ public partial class BrManager : Node
                     Push();
                 }
                 // the zone has closed and someone is still standing (a draw cannot linger)
-                var zone = new ZoneSchedule(_state.Seed, _state.Side, _state.Pace);
+                var zone = _state.Zone();
                 Airdrops(zone);
                 if (_state.TeamsAlive <= 1 || Now - _state.Started > zone.Duration + 120) End();
                 break;
@@ -280,6 +280,8 @@ public partial class BrManager : Node
             return;
         }
         _state.Phase = BrPhase.Playing;
+        // the first circle is sized for who actually boards (docs/notes/br/zone.md)
+        _state.Field = _state.Entrants.Count;
         _state.AssignTeams();
         // everyone boards the cargo plane (#207); the zone's clock starts when its doors close
         _state.FlightStart = Now;
@@ -290,11 +292,11 @@ public partial class BrManager : Node
         Combat.PvpRules.Override = Allowed;
         SetMatchLoot(_state);
         SpawnLoot(_state.Area, _state.Seed);
-        var zone = new ZoneSchedule(_state.Seed, _state.Side, _state.Pace);
+        var zone = _state.Zone();
         Push();
         foreach (var e in _state.Entrants) RpcId(e.Peer, MethodName.Board);
-        Broadcast($"GO! {_state.Entrants.Count} players aboard the plane to {_state.AreaName}. Jump once the doors open over the region "
-            + $"(in {flight.OpensAt - Now:F0} s); the zone shows {ZoneSchedule.LootSeconds * zone.Scale / 60:F0} min after they close.");
+        Broadcast($"GO! {_state.Entrants.Count} players aboard the plane to {_state.AreaName}. Jump once the doors open over the zone "
+            + $"(in {flight.OpensAt - Now:F0} s); the zone ({zone.RadiusOf(0) * 2 / 1000:F1} km across) shows {ZoneSchedule.LootSeconds * zone.Scale / 60:F0} min after they close.");
         GD.Print(FormattableString.Invariant($"[br] go: {_state.Entrants.Count} players, plane at {flight.Altitude:F0} m, doors {flight.OpensAt - Now:F0}-{flight.ClosesAt - Now:F0} s"));
     }
 
@@ -312,7 +314,9 @@ public partial class BrManager : Node
         var horizon = _horizon is { IsCompletedSuccessfully: true } done ? done.Result : null;
         if (horizon == null) GD.PushWarning("[br] the terrain lattice is not loaded yet: the plane flies at its lowest");
         double e0 = _state.AreaE, n0 = _state.AreaN;
-        return BrFlight.AltitudeOver(_state.Seed, _state.Side, p => BrMapImage.Height(horizon, e0 + p.X, n0 + p.Y));
+        var zone = _state.Zone();
+        var line = new BrFlight(_state.Seed, _state.Side, 1f, 0, 0, zone.CentreOf(0), zone.RadiusOf(0));
+        return BrFlight.AltitudeOver(line, p => BrMapImage.Height(horizon, e0 + p.X, n0 + p.Y));
     }
 
     /// <summary>Server: out of the plane (#207). Recorded so every peer shows the body again; the jump itself is the client's.</summary>

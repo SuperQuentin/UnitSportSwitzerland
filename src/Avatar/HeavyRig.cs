@@ -72,6 +72,8 @@ public partial class HeavyRig : Node3D
     public CockpitView View { get; set; }
     /// <summary>The mirrors work (the setting); only ever for the local driver in the seat.</summary>
     public bool MirrorsOn { get; set; }
+    /// <summary>Under this the low-air lamp lights (bar); the airstairs' small gauge reads the platform instead (#417).</summary>
+    public float AirLowAt { get; set; } = HeavyDriveline.AirLow;
     /// <summary>The seats in this section, node space, the driver's first where there is one.</summary>
     public SeatAnchor[] Seats { get; private set; } = System.Array.Empty<SeatAnchor>();
     /// <summary>This section's deck, for walking about in it (#162); null when it has none.</summary>
@@ -116,6 +118,9 @@ public partial class HeavyRig : Node3D
             HeavyClass.Pickup => PickupMeshBuilder.Build(spec, section, load),
             _ => BusMeshBuilder.Build(spec, section, load),
         }, driver);
+
+    /// <summary>A rig from parts another builder made (the airstairs truck, #417).</summary>
+    public static HeavyRig Create(HeavyParts parts, HumanPalette? driver) => Assemble(parts, driver);
 
     public static HeavyRig CreateTrailer(TrailerSpec spec, int section, float load) =>
         Assemble(TrailerMeshBuilder.Build(spec, section, load), null);
@@ -286,7 +291,7 @@ public partial class HeavyRig : Node3D
                 _gearChars[i].Mesh = c.GearChars[i].TryGetValue(text[i], out var mesh) ? mesh : null;
         }
         _lamps[HeavyCockpit.LampSpringBrake].Visible = SpringBrakes;
-        _lamps[HeavyCockpit.LampLowAir].Visible = Air < HeavyDriveline.AirLow;
+        _lamps[HeavyCockpit.LampLowAir].Visible = Air < AirLowAt;
         _lamps[HeavyCockpit.LampLights].Visible = Headlights;
         _lamps[HeavyCockpit.LampRetarder].Visible = Retarder > 0;
         _lamps[HeavyCockpit.LampDoors].Visible = DoorsOpen != 0;

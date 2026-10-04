@@ -50,6 +50,6 @@
   - armour + held gun's rounds bottom left;
   - "Spectating X";
   - results table.
-- **Server flags**: `--brpace f` scales every match's timing (the loopback check runs at 0.08, short: 0.064).
+- **Server flags**: `--brpace f` scales every match's timing (the loopback check runs at 0.13, short: 0.104; its 2-player zone runs at half the timetable).
   `user://br/history.json` holds the last 5 region centres.
 - Not yet: teams, spectating for players who were never in the match, a warm-up in the hold during the lobby.
