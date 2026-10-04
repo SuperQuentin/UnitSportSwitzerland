@@ -75,6 +75,7 @@ public static class AirstairsMeshBuilder
     private static readonly Color Stripe = new(0.12f, 0.12f, 0.12f);
     private static readonly Color Beacon = new(1f, 0.5f, 0.05f);
     private static readonly Color Canopy = new(0.92f, 0.92f, 0.94f);
+    private static readonly Color Headliner = new(0.42f, 0.38f, 0.33f);
 
     /// <summary>The cab as its cockpit is derived from (<see cref="HeavyCabin.SeatFor"/>), authored.</summary>
     public static readonly CabFrame Frame = new()
@@ -135,7 +136,14 @@ public static class AirstairsMeshBuilder
         HeavyMesh.FrontPane(m, F - 0.03f, W - 0.12f, wl, wh);
         // the roof and its lining, the back wall with a small window
         m.Box(new Vector3(0, ct - wall * 0.5f, (cr + F) * 0.5f), new Vector3(W * 2f, wall, F - cr), Cab);
-        m.Box(new Vector3(0, ct - wall - 0.005f, (cr + F) * 0.5f), new Vector3((W - wall) * 2f, 0.01f, F - cr - 2f * wall), HeavyCabin.Lining);
+        // the headliner: a warm grey, not the trucks' pale one, which in a lit style's cool shade reads as
+        // the sky through an open roof; ribs across it and a dome lamp, so it reads as a ceiling
+        m.Box(new Vector3(0, ct - wall - 0.01f, (cr + F) * 0.5f), new Vector3((W - wall) * 2f, 0.02f, F - cr - 2f * wall), Headliner);
+        for (int i = 1; i <= 3; i++)
+            m.Box(new Vector3(0, ct - wall - 0.035f, cr + (F - cr) * i / 4f), new Vector3((W - wall) * 2f, 0.03f, 0.06f), HeavyMesh.Trim);
+        m.Box(new Vector3(0, ct - wall - 0.04f, cr + (F - cr) * 0.375f), new Vector3(0.22f, 0.03f, 0.12f), new Color(1f, 0.95f, 0.8f));
+        // a sun visor over the driver
+        m.Box(new Vector3(Frame.DriverX, ct - wall - 0.06f, F - 0.2f), new Vector3(0.5f, 0.02f, 0.22f), HeavyMesh.Trim);
         m.Box(new Vector3(0, (fl + wl) * 0.5f, cr + wall * 0.5f), new Vector3(W * 2f, wl - fl, wall), Cab);
         m.Box(new Vector3(0, (wh + ct) * 0.5f, cr + wall * 0.5f), new Vector3(W * 2f, ct - wh, wall), Cab);
         foreach (int side in new[] { 1, -1 })
