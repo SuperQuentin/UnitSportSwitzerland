@@ -65,7 +65,7 @@ public partial class PlayerInput : Node
     public const string Fire = "fire";
     /// <summary>In a car: headlights on/off, raising or folding pop-ups (<see cref="Player.Car.Headlights"/>).</summary>
     public const string LightsToggle = "lights_toggle";
-    /// <summary>In an open car: soft top down/up (<see cref="Player.Car.RoofOpen"/>).</summary>
+    /// <summary>In an open car: soft top down/up (<see cref="Player.Car.RoofOpen"/>); in one with hydraulics, bounce on/off (<see cref="Player.Car.Bouncing"/>).</summary>
     public const string RoofToggle = "roof_toggle";
     /// <summary>In a car, truck or bus: the next / previous live radio station, through off (#179).</summary>
     public const string RadioNext = "radio_next";

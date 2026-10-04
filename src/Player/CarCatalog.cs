@@ -587,6 +587,54 @@ public static class CarCatalog
             MaxSteer = 0.6f, DragArea = 0.6f,
             LockTurns = 2.5f, // lock to lock, est.
         },
+        // ---- 34: everyday Toyotas (#464) ----
+        new CarSpec
+        {
+            Label = "XP90 Yaris",
+            Style = DriveStyle.Grip,
+            Blurb = "2005 Toyota Yaris 1.3: a tall, light front-drive city hatch, and this one has lowrider hydraulics. {roof_toggle} makes it bounce",
+            Body = new CarBody
+            {
+                Shape = BodyShape.Hatchback, Length = 3.75f, Width = 1.695f, Height = 1.53f, WheelRadius = 0.29f,
+                Paint = new Color(0.62f, 0.78f, 0.9f), Rim = Silver, Hydraulics = true,
+            },
+            Engine = EngineLayout.Inline4,
+            // source: Toyota Yaris 1.3 VVT-i 3-door (XP90, 2SZ-FE 87 PS/6000, 121 Nm/4400, 5MT, 175/65R14, kerb ~1030 kg); Toyota claims 0-100 11.5 s, 170 km/h; ratios and final drive est.; curve fitted to published peaks
+            // Grip 1 rather than an eco tyre's ~0.9: at 0.9 neither car held the Game drift --driftcheck asks of every car
+            Mass = 1105f, FrontAxle = 0.935f, RearAxle = 1.525f, CgHeight = 0.56f, Grip = 1f,
+            // redline at the fuel cut: at 6,500 the 1-2 upshift fell under the downshift point and hunted
+            PeakKw = 64f, PeakRpm = 6000f, IdleRpm = 750f, Redline = 6800f,
+            Gears = new[] { 3.545f, 1.904f, 1.31f, 1.027f, 0.815f }, FinalDrive = 4.312f, Reverse = 3.25f,
+            Torque = new (float, float)[] { (1000f, 95f), (2000f, 108f), (3000f, 114f), (4000f, 119f), (4400f, 121f), (5000f, 118f), (6000f, 101.9f), (6500f, 92f), (6800f, 85f) },
+            Tyre = "175/65R14", BrakeDecel = 9f, Diff = Differential.Open,
+            RefZeroTo100 = 11.5f, RefTopKmh = 170f,
+            Drive = Drivetrain.Front,
+            MaxSteer = 0.62f, DragArea = 0.66f,
+            LockTurns = 3.1f, // lock to lock, est.: electric power steering
+        },
+        new CarSpec
+        {
+            Label = "XW20 Prius",
+            Style = DriveStyle.Grip,
+            Blurb = "2004 Toyota Prius: the hybrid that made hybrids normal, a 1.5 Atkinson four and an electric motor through a planetary e-CVT. Quiet, smooth, front drive",
+            Body = new CarBody
+            {
+                // the kamm-tailed liftback is nearest the raked fastback
+                Shape = BodyShape.Fastback, Length = 4.45f, Width = 1.725f, Height = 1.49f, WheelRadius = 0.31f,
+                Paint = new Color(0.55f, 0.6f, 0.58f), Rim = Silver,
+            },
+            Engine = EngineLayout.Inline4,
+            // source: Toyota Prius (XW20, 1NZ-FXE 78 PS/5000 + 50 kW motor 400 Nm, system 110 PS, e-CVT, 185/65R15, kerb ~1300 kg); Toyota claims 0-100 10.9 s, 170 km/h. The e-CVT is approximated by five close ratios (no CVT in the car model), the torque curve is the system's at the crank: the motor's pull low down, the engine's on top
+            Mass = 1375f, FrontAxle = 1.08f, RearAxle = 1.62f, CgHeight = 0.55f, Grip = 1f,
+            PeakKw = 82f, PeakRpm = 5000f, IdleRpm = 1000f, Redline = 5600f,
+            Gears = new[] { 3.1f, 1.95f, 1.4f, 1.08f, 0.86f }, FinalDrive = 4.113f, Reverse = 3.1f,
+            Torque = new (float, float)[] { (1000f, 200f), (2000f, 190f), (3000f, 175f), (4000f, 165f), (5000f, 156.6f), (5600f, 140f) },
+            Tyre = "185/65R15", BrakeDecel = 9.1f, Diff = Differential.Open,
+            RefZeroTo100 = 10.9f, RefTopKmh = 170f,
+            Drive = Drivetrain.Front,
+            MaxSteer = 0.6f, DragArea = 0.57f,
+            LockTurns = 3.3f, // lock to lock, est.: electric power steering
+        },
     });
 
     /// <summary>The spec for a car kind, or null when the kind is not a car.</summary>

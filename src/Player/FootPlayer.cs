@@ -2619,6 +2619,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var car = (Car)CarSetups.Ride(old.Kind, id, TuningBits)!;   // the garage parts stay on
         car.Headlights = old.Headlights;
         car.RoofOpen = old.RoofOpen;
+        car.Bouncing = old.Bouncing;
         _ride = car;
         CarSetupId = id;
         RefreshVisual();
@@ -3207,6 +3208,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (@event.IsActionPressed(PlayerInput.RoofToggle) && !@event.IsEcho() && _ride is Car { HasSoftTop: true } open)
         {
             open.RoofOpen = !open.RoofOpen;
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        // the same key pumps the hydraulics on a car that has them (#464)
+        if (@event.IsActionPressed(PlayerInput.RoofToggle) && !@event.IsEcho() && _ride is Car { HasHydraulics: true } hopper)
+        {
+            hopper.Bouncing = !hopper.Bouncing;
             GetViewport().SetInputAsHandled();
             return;
         }
