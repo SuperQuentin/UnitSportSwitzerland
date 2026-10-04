@@ -84,6 +84,7 @@ public partial class BrManager
         if (Instance == this) Instance = null;
         if (_server) Combat.PvpRules.HitRelayed -= OnHit;
         FootPlayer.StayDown = null;
+        Combat.PvpRules.Override = null;
     }
 
     public long Me => Multiplayer.GetUniqueId();
@@ -165,6 +166,9 @@ public partial class BrManager
             chat.Send("/br join");
         }
         SetMatchLoot(s);
+        // the server's rule for who may hurt whom, here too: aerial rounds are applied by their
+        // victim's own client (Combat/CombatManager), which must not take a team-mate's (#455)
+        Combat.PvpRules.Override = s.Phase == BrPhase.Playing ? Allowed : null;   // as the server sets it
         if (s.Phase != BrPhase.Idle && _mapFor != (s.AreaE, s.AreaN, s.Side)) BuildMap(s.Area);
         if (before != BrPhase.Ended && s.Phase == BrPhase.Ended && InMatch && (s.Winner == Me || s.WinnerTeam != 0 && s.Find(Me)?.Team == s.WinnerTeam))
         {
