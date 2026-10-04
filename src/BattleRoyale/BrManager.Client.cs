@@ -84,6 +84,7 @@ public partial class BrManager
         if (Instance == this) Instance = null;
         if (_server) Combat.PvpRules.HitRelayed -= OnHit;
         FootPlayer.StayDown = null;
+        FootPlayer.Regenerates = null;
         Combat.PvpRules.Override = null;
     }
 
@@ -197,6 +198,8 @@ public partial class BrManager
                 inv.Add(ItemId.WoodPlanks, 15);
             }
             FootPlayer.StayDown = _ => InMatch && _state.Phase == BrPhase.Playing;
+            // no regeneration in a match (#455): bandages and kits are the only way back
+            FootPlayer.Regenerates = _ => !(InMatch && _state.Phase == BrPhase.Playing);
             Permissions.SetInMatch(true);
         }
     }
@@ -233,6 +236,7 @@ public partial class BrManager
         LeaveHold(LocalPlayer());
         ShowHidden();
         FootPlayer.StayDown = null;
+        FootPlayer.Regenerates = null;
         Permissions.SetInMatch(false);
         StopSpectating();
         Inventory()?.EndMatch();
