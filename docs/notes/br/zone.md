@@ -1,14 +1,20 @@
 # Battle Royale zone (`src/BattleRoyale/ZoneSchedule.cs`, `ZoneWall.cs`)
 
-- **Deterministic from (seed, side, pace)**: every client builds the same `ZoneSchedule` from the
+- **Deterministic from (seed, side, pace, field)**: every client builds the same `ZoneSchedule` from the
   state message and reads it at `ClockSync.ServerNow - Started`. Nothing about the zone is ever sent
   while it moves. Coordinates are metres east/north of the region centre (`BrManager.ZonePoint` /
   `WorldPoint` convert).
-- **Circle 0**: radius 0.57 x side, so the square's corners are out from the start.
+- **Circle 0 follows the field** (#447): `BrState.Field` is the entrant count at GO (0 before: the
+  lobby builds the full circle). Radius = sqrt(field x 1.5 km² / pi) (`AreaPerPlayer`), at least
+  900 m (`MinRadius`), at most the full circle, 0.57 x side (the square's corners out from the start).
+  5 players: 1.5 km; 10: 2.2 km; 20: 3.1 km; a crowd: full. A smaller circle's centre is uniform
+  inside the full circle, clamped into the square. The region square itself is still sized at
+  `/br open` for the peers online (`region` note): the plane line, loot and airdrop counts cover it.
 - **Next centres**: circle i's centre is uniform in the disc of radius `r(i-1) - r(i)` around the
   previous centre, clamped into the square and pulled back inside the previous circle. So every
   circle lies inside the one before.
-- **Timetable**: the 6 km normal baseline below; times scale by `side / 6 km x pace` (short 0.8 / normal 1 / long 1.3).
+- **Timetable**: the 6 km normal baseline below; times scale by `r0 / 3,420 m x pace` (short 0.8 / normal 1 / long 1.3),
+  the same as `side / 6 km` for a full circle; a small field never under half (5 players on 5 km: about 20 min a round).
 
   | Phase | Wait | Shrink | End radius | Damage |
   |---|---|---|---|---|

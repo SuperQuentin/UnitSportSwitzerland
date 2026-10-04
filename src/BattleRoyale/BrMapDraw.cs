@@ -41,7 +41,7 @@ public static class BrMapDraw
             if (z.Phase > 0 && !z.Over) Dashed(c, toScreen(z.NextCentre), z.NextRadius * ppm, Next);
         }
 
-        // the cargo plane (#207) while it is over the region: its line, the stretch the doors are open, the plane
+        // the cargo plane (#207) until its doors close: its line, the stretch the doors are open, the plane
         if (br.State.Flight is { } flight && Net.ClockSync.ServerNow < flight.ClosesAt)
         {
             var (open, shut) = flight.JumpStretch;

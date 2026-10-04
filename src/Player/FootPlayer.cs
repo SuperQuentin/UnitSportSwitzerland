@@ -557,7 +557,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public bool InCockpit => !_thirdPerson && HasCockpit && ShowroomYaw == null && SeatIndex == 0;
 
     /// <summary>What is ridden has a driver's seat with a cockpit (#69 cars, #157 trucks and buses).</summary>
-    private bool HasCockpit => _ride is Car or Truck;
+    private bool HasCockpit => _ride is Car or Truck or Airstairs;
 
     private Rideable? _ride;
     private RideMotion _motion;

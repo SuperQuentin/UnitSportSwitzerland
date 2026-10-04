@@ -8,7 +8,7 @@ namespace UnitSport.BattleRoyale;
 
 /// <summary>
 /// <c>--brprobe A|B</c> with <c>--connect</c> (driven by <c>tools/brcheck.sh</c>): one whole match over loopback
-/// against a server started with <c>--admin-password brcheck --brpace 0.08</c> (a match in under two minutes).
+/// against a server started with <c>--admin-password brcheck --brpace 0.13</c> (a match in under two minutes).
 /// <list type="bullet">
 /// <item>A logs in as admin, opens a lobby and starts the match once B has joined.</item>
 /// <item>Both are dropped in the region with an empty pack, a knife and bandages; the travel menu is locked.</item>
@@ -154,8 +154,10 @@ public partial class BrProbe : ChatProbe
         bool hurt = await Until(() => me.Health < hp - 0.9f, 60);
         Expect(hurt, $"the zone hurts outside it ({hp:F1} -> {me.Health:F1}, phase {Br.ZoneNow?.Phase})");
         Shot("b_outside");
-        // back inside while A gets ready: the wait is long enough to die out there
-        if (Br.ZoneNow is { } safe) Br.Teleport(s.AreaE + safe.NextCentre.X, s.AreaN + safe.NextCentre.Y, "back in the zone");
+        // back inside while A gets ready: the wait is long enough to die out there, and a small field's
+        // zone (#447) closes fast, so where the last circle closes, as A does
+        var last = Br.Zone!.CentreOf(ZoneSchedule.Phases);
+        Br.Teleport(s.AreaE + last.X + 5, s.AreaN + last.Y, "back in the zone");   // never on top of A
 
         // next to A
         if (!await Until(() => _heard.Any(l => l.Contains("BR A posA")), 160)) { Expect(false, "A reported"); return; }
@@ -198,7 +200,11 @@ public partial class BrProbe : ChatProbe
         {
             Expect(ClockSync.ServerNow >= flight.OpensAt || !br.JumpOut(), "E before the doors open is refused");
             await Until(() => flight.DoorsOpen(ClockSync.ServerNow), 60);
+            var exit = flight.At(ClockSync.ServerNow);
             Expect(br.JumpOut() && me.Ride == RideKind.Wingsuit && !br.Aboard, "E with the doors open: out of the ramp in a wingsuit");
+            var zone = br.State.Zone();
+            Expect(exit.DistanceTo(zone.CentreOf(0)) <= zone.RadiusOf(0) + 5f,
+                Fmt($"the doors opened over the first circle: out {exit.DistanceTo(zone.CentreOf(0)):F0} m from its centre, radius {zone.RadiusOf(0):F0} m ({br.State.Field} players)"));
             Expect(me.IsViewing, $"the player's camera right after the jump ({GetViewport().GetCamera3D()?.GetPath()})");
             await Seconds(0.5);
             Expect(them != null && !them.Visible && br.State.Find(PeerOf("B"))?.Jumped == false, "B is still aboard: its body is hidden here");
