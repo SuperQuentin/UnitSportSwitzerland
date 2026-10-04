@@ -56,6 +56,8 @@ public partial class EmoteWheel : CanvasLayer
         _view.Visible = true;
         _view.QueueRedraw();
         _openedAt = Time.GetTicksMsec() / 1000.0;
+        // in VR the right hand aims, from where it is now (#437)
+        if (XR.XrSession.Active) XR.XrSession.ZeroHandAim();
         UiFocus.Set(this, true);
         GetViewport().SetInputAsHandled();
     }
@@ -131,6 +133,8 @@ public partial class EmoteWheel : CanvasLayer
         // the right stick aims directly; it has no captured-pointer drift to accumulate
         var stick = Input.GetVector(NLookLeft, NLookRight, NLookUp, NLookDown);
         if (stick.Length() > 0.5f) _aim = stick;
+        // in VR the right hand points at a slot, as a stick would (#437)
+        else if (XR.XrSession.Active) _aim = XR.XrSession.HandAim.LimitLength(1.2f);
         int count = _view.SlotsOnPage;
         int before = _view.Highlight;
         _view.Highlight = _aim.Length() < 0.35f

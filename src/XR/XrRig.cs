@@ -291,11 +291,12 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
 
         HandleSticks(player, calibrated, dt);
         // the hands first: a grip that holds the wheel or works a door is not a shoulder press
-        _hands.Update(player, dt);
+        _hands.Update(player, _camera.GlobalTransform, dt);
         _pad.LeftGripBusy = _hands.LeftBusy;
         _pad.RightGripBusy = _hands.RightBusy;
         _pad.Update(player, calibrated, uiActive: _ui.Pointing, dt);
         _wrist.Watch(_camera.GlobalTransform, _left, player, InWorld, dt);
+        UpdateHandAim();
         _ui.UpdatePanel(dt);
         UpdateSki(player, calibrated, dt);
         UpdateVignette(player, dt);
@@ -310,6 +311,21 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         // or the backdrop drifts away from the panel the headset would be looking at
         else if (XrSession.Simulated && _anchorIsBackdrop && Anchor != null)
             Anchor.GlobalTransform = _camera.GlobalTransform.Orthonormalized();
+    }
+
+    private Vector3 _aimZero;
+
+    /// <summary>The right hand across the view since it was zeroed, as a stick (<see cref="XrSession.HandAim"/>).</summary>
+    private void UpdateHandAim()
+    {
+        var local = _camera.GlobalTransform.AffineInverse() * _right.GlobalPosition;
+        if (XrSession.HandAimZeroAsked)
+        {
+            XrSession.HandAimZeroAsked = false;
+            _aimZero = local;
+        }
+        var d = local - _aimZero;
+        XrSession.HandAim = new Vector2(d.X, -d.Y) / 0.15f;
     }
 
     /// <summary>Puts the tracking space so the calibrated head sits on the anchor.</summary>

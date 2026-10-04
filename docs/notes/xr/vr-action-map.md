@@ -28,10 +28,10 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | look / turn | mouse, R stick | ok: head + snap 30° | snap angle 15/30/45 or smooth (setting) |
 | jump | Space / A | ok: A | keep |
 | crouch_slide | Ctrl, C / B | ok: B, or crouch for real (#437) | keep |
-| interact_mount | E / Y | ok: Y; doors, dropped items, radios by grip (#437) | grip seats, ladders, crates, loot too; Y ranged fallback |
+| interact_mount | E / Y | ok: Y; grip a door, an item, a radio, or reach out and grip what E would act on (#437) | keep |
 | ride_menu | R / Y with nothing near | ok: Y, wrist menu (#437) | keep |
 | car_door / gather | G / X (tap / hold) | ok: X; doors by grip | gather = **grip and pull** the resource |
-| emote_wheel | B / D-pad ↑ | gap: R stick ↑ (engine when mounted) | hold **L3** → radial aimed with the hand |
+| emote_wheel | B / D-pad ↑ | ok: hold R stick ↑, aim with the right hand (#437) | keep |
 | toggle_mode | T / D-pad ↓ | ok: wrist menu (#437) | keep |
 | climb ladder | W / S on a ladder | ok: stick | **hand over hand** grab; rocks too (stamina) |
 
@@ -41,7 +41,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 |---|---|---|---|
 | use_item / aim_item | LMB, RMB / RB, LB | ok: R / L trigger | camera and binoculars **raised to the eye** = aim |
 | drop_item | Q / — | ok: fling an empty squeeze, or the wrist menu (#437) | a real throw by release velocity |
-| next / prev_item, slot_1-6 | wheel, 1-6 / D-pad → | partial: R stick ↓ | **hip hotbar** (grip a slot) + R stick ↓ |
+| next / prev_item, slot_1-6 | wheel, 1-6 / D-pad → | ok: R stick ↓, grip at the right / left hip (#437) | slots shown at the hip |
 | inventory | I, Tab / Back | ok: Menu hold | keep |
 | quick_wheel | X / D-pad ← | gap | hold **R3** → radial |
 | build_turn, next piece | R, aim+wheel / D-pad ↑, LB+D-pad → | gap | **twist the hand** while aiming; R stick ←/→ steps the piece |

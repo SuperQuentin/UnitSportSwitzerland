@@ -42,6 +42,13 @@ The full per-action design and rules: `xr/vr-action-map`.
     not a hand-driven swing: door state is binary on the network.
   - **Things on the ground** (#437), on foot: a grip closing within 0.3 m of a dropped item picks it
     up (`ItemController.PickUp`), of a radio opens its panel, as E on the thing pointed at does.
+  - **Reaching out** (#437), on foot: a grip closing with the hand over 0.45 m from the eyes and in
+    front does what E does there (`FootPlayer.TryInteract(byHand: true)`): a seat, a ladder, a
+    crate, a cupboard, a car's or a building's door. Never the dance, which is not a thing.
+  - **Hip hotbar** (#437): a grip closing more than 0.75 m below the eyes and 0.12 m to a side
+    taps `next_item` (right hip) or `prev_item` (left hip).
+  - **Radial wheels aimed by hand** (#437): the emote wheel reads `XrSession.HandAim`, the right
+    hand's move across the view since the wheel opened (0.15 m = full), when the stick is idle.
   - **Fling to drop** (#437): a grip squeezed on nothing and let go with the hand moving over
     2.5 m/s in the play space (walking does not count) taps `drop_item`.
 - **Wrist menu (#437, `XR/XrWristMenu`).** The back of the left wrist (the controller's +X) turned
