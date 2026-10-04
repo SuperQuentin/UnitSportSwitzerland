@@ -145,13 +145,17 @@ public sealed class AirlinerCircuit
                 stickY = FlyVs(path);
                 lever = HoldSpeed(s.FlapLever == spec.FlapSettings - 1 ? vref : spec.FlapLimit[Mathf.Min(s.FlapLever + 1, spec.FlapSettings - 1)] - 12f);
                 stickX = Heading(_startYaw + Mathf.Pi);
-                if (agl < 14f && s.Gear >= 1f) _phase = Phase.Flare;
+                // a slow-pitching heavy (the AN-124, #419) starts its flare higher: at 14 m it touched down at 3.2 m/s
+                if (agl < (spec.MaxPitchRate < 0.08f ? 24f : 14f) && s.Gear >= 1f) _phase = Phase.Flare;
                 if (agl < 14f && s.Gear < 1f) return new Outcome(false, "approach without the gear down");
                 break;
             }
             case Phase.Flare:
-                stickY = FlyVs(-1.2f);
-                lever = -1f;
+                // the slow-pitching heavy pulls harder and keeps some thrust through its longer flare: at the
+                // others' gain and idle its sink grew from 1.4 to 3.2 m/s as it slowed
+                bool heavy = spec.MaxPitchRate < 0.08f;
+                stickY = heavy ? Mathf.Clamp((-1.0f - vs) * 0.4f, -0.6f, 0.9f) : FlyVs(-1.2f);
+                lever = heavy ? HoldSpeed(spec.StallSpeed(s.Mass, s.FlapLever) * 1.2f) : -1f;
                 stickX = Heading(_startYaw + Mathf.Pi);
                 if (s.OnGround) { _touchSink = s.LastSink; _phase = Phase.Rollout; }
                 break;
