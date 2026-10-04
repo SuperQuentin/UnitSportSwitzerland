@@ -106,32 +106,40 @@ public static class BrCheck
         return f.ClosesAt / 60.0;
     }
 
-    /// <summary>The cargo plane's line (#207): the doors open and close inside the square, long enough, seeded.</summary>
+    /// <summary>
+    /// The cargo plane's line (#207): the doors open and close over the square and the first circle (#447),
+    /// long enough, seeded.
+    /// </summary>
     private static void Flights()
     {
         int bad = 0;
         double shortest = double.MaxValue, longest = 0, slowest = 0;
         for (int seed = 1; seed <= 300; seed++)
             foreach (float side in new[] { 5000f, 6000f, 7000f })
-            {
-                var f = new BrFlight(seed, side, 1f, 100, 2000);
-                var g = new BrFlight(seed, side, 1f, 100, 2000);
-                var (open, shut) = f.JumpStretch;
-                float h = side * 0.5f + 1f;
-                bool inside = Math.Abs(open.X) <= h && Math.Abs(open.Y) <= h && Math.Abs(shut.X) <= h && Math.Abs(shut.Y) <= h;
-                float stretch = open.DistanceTo(shut);
-                bool outsideBefore = Math.Abs(f.From.X) > h - 2 || Math.Abs(f.From.Y) > h - 2;
-                if (!inside || !outsideBefore || stretch < side * 0.55f || f.From != g.From || f.Dir != g.Dir) bad++;
-                shortest = Math.Min(shortest, stretch / side);
-                longest = Math.Max(longest, stretch / side);
-                slowest = Math.Max(slowest, f.ClosesAt - f.Start);
-            }
-        Expect(bad == 0 && slowest < 150, FormattableString.Invariant($"plane lines: 900 seeded, doors open and close inside the square, a jump stretch of {shortest:F2}-{longest:F2} × the side, at most {slowest:F0} s to the doors closing ({bad} bad)"));
+                foreach (int field in new[] { 0, 2, 8 })
+                {
+                    var z = new ZoneSchedule(seed, side, 1f, field);
+                    Vector2 c = z.CentreOf(0);
+                    float r = z.RadiusOf(0);
+                    var f = new BrFlight(seed, side, 1f, 100, 2000, c, r);
+                    var g = new BrFlight(seed, side, 1f, 100, 2000, c, r);
+                    var (open, shut) = f.JumpStretch;
+                    float h = side * 0.5f + 1f;
+                    bool inside = Math.Abs(open.X) <= h && Math.Abs(open.Y) <= h && Math.Abs(shut.X) <= h && Math.Abs(shut.Y) <= h
+                                  && open.DistanceTo(c) <= r + 1f && shut.DistanceTo(c) <= r + 1f;
+                    float stretch = open.DistanceTo(shut);
+                    if (!inside || stretch < r * 1.1f || f.From.DistanceTo(open) < BrFlight.Lead - 1f || f.From != g.From || f.Dir != g.Dir) bad++;
+                    shortest = Math.Min(shortest, stretch / r);
+                    longest = Math.Max(longest, stretch / r);
+                    slowest = Math.Max(slowest, f.ClosesAt - f.Start);
+                }
+        Expect(bad == 0 && slowest < 150, FormattableString.Invariant($"plane lines: 2,700 seeded, doors open and close over the square and the first circle, a jump stretch of {shortest:F2}-{longest:F2} × its radius, at most {slowest:F0} s to the doors closing ({bad} bad)"));
         var fast = new BrFlight(3, 5000, 0.05f, 0, 0);
         Expect(fast.Speed == BrFlight.Cruise * 2 && fast.At(fast.OpensAt).DistanceTo(fast.JumpStretch.A) < 1f,
             FormattableString.Invariant($"a test pace flies 2 × faster; the plane is at the door point when they open"));
-        float alt = BrFlight.AltitudeOver(3, 6000, _ => 2900);
-        Expect(alt == 2900 + BrFlight.Clearance && BrFlight.AltitudeOver(3, 6000, _ => 300) == BrFlight.MinAltitude,
+        var six = new BrFlight(3, 6000, 1f, 0, 0);
+        float alt = BrFlight.AltitudeOver(six, _ => 2900);
+        Expect(alt == 2900 + BrFlight.Clearance && BrFlight.AltitudeOver(six, _ => 300) == BrFlight.MinAltitude,
             FormattableString.Invariant($"altitude: {BrFlight.Clearance:F0} m over the highest ground under the line, never under {BrFlight.MinAltitude:F0} m"));
     }
 
@@ -316,8 +324,9 @@ public static class BrCheck
         foreach (int seed in new[] { 5, 41, 77 })
         {
             var region = BrRegion.Pick(seed, 6000, places, tiles, new List<(double, double)>(), (0, 0));
-            float alt = BrFlight.AltitudeOver(seed, region.Side, p => BrMapImage.Height(horizonIndex, region.E + p.X, region.N + p.Y));
-            var line = new BrFlight(seed, region.Side, 1f, 0, alt);
+            var line = new BrFlight(seed, region.Side, 1f, 0, 0);
+            float alt = BrFlight.AltitudeOver(line, p => BrMapImage.Height(horizonIndex, region.E + p.X, region.N + p.Y));
+            line = new BrFlight(seed, region.Side, 1f, 0, alt);
             double top = Task.Run(async () =>
             {
                 var grids = new Dictionary<TileId, Terrain.Format.ChunkGrid?>();

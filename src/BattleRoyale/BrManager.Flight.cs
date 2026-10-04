@@ -10,7 +10,7 @@ namespace UnitSport.BattleRoyale;
 /// The cargo plane on a client (#207). Every client flies its own copy along <see cref="BrFlight"/>
 /// from the shared clock. An entrant boards at GO: the body is held in the hold
 /// (<see cref="FootPlayer.Carrier"/>) and hidden, and a chase camera circles the plane with the look.
-/// E jumps once the doors are open over the region, into a wingsuit at the ramp with the plane's
+/// E jumps once the doors are open over the zone's first circle, into a wingsuit at the ramp with the plane's
 /// speed (Space in the air then opens the parachute, as on any base jump). When the doors close,
 /// whoever is still aboard is pushed out. The server records each jump so every peer shows the body again.
 /// No "ground too near" push: right after the jump across the country, the ground a client holds under
