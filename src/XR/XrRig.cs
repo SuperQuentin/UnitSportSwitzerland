@@ -312,6 +312,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _pad.Update(player, calibrated, uiActive: _ui.Pointing, dt);
         _wrist.Watch(_camera.GlobalTransform, _left, player, InWorld, dt);
         UpdateHandAim();
+        ShareHands(player);
         _ui.UpdatePanel(dt);
         UpdateSki(player, calibrated, dt);
         UpdateVignette(player, dt);
@@ -329,6 +330,34 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     }
 
     private Vector3 _aimZero;
+    private FootPlayer? _handsOn;
+
+    /// <summary>
+    /// The real hands for the avatar (#439): on foot, each hand from the eyes in the body's yaw
+    /// frame, written on the player and replicated in its pose so every peer's figure reaches
+    /// where they are. Cleared off foot and when a hand is not tracked.
+    /// </summary>
+    private void ShareHands(FootPlayer? player)
+    {
+        if (_handsOn != null && _handsOn != player && IsInstanceValid(_handsOn)) _handsOn.VrHands = null;
+        _handsOn = player;
+        if (player == null) return;
+        // --xrhands with --xrsim: a fixed pose (right hand raised ahead, left at the hip) to see the figure take it
+        if (XrSession.Simulated && Core.CmdArgs.Has("--xrhands") && player.Ride == RideKind.OnFoot)
+        {
+            player.VrHands = new Avatar.HumanMeshBuilder.VrArms(new Vector3(0.25f, 0.15f, -0.45f), new Vector3(-0.25f, -0.75f, 0f));
+            return;
+        }
+        if (player.Ride != RideKind.OnFoot || player.RidingWith != 0 || !_left.GetHasTrackingData() || !_right.GetHasTrackingData())
+        {
+            player.VrHands = null;
+            return;
+        }
+        var eye = _camera.GlobalPosition;
+        var body = new Basis(Vector3.Up, player.GlobalRotation.Y).Inverse();
+        // the logical right hand uses: left-handed, the nodes are already swapped (#439)
+        player.VrHands = new Avatar.HumanMeshBuilder.VrArms(body * (_right.GlobalPosition - eye), body * (_left.GlobalPosition - eye));
+    }
 
     /// <summary>
     /// Flying with the arms (#438), as a stick added to the left one (up +y, right +x): the pigeon

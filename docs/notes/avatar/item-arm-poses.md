@@ -6,7 +6,12 @@
   the pose's and re-solves the elbows with `Limb.Solve`. Legs and gait are untouched. The item hand is
   the rig's -X wrist (the figure's right once the mesh faces -Z); pass `arm` + `armBlend` to
   `BuildStride` / `MountsFor` / `BuildPosed` / `MountsForPose`.
-- Nothing arm-related is sent. Every peer derives the pose from `HeldItemId` (kind via `ItemDefs`) plus
+- **VR hands (#439)** override every arm pose on foot while striding (not dancing): the figure's
+  wrists go to `FootPlayer.VrHands` (each hand from the eyes, body frame, replicated in `NetPose`),
+  measured from `HeadBase + (0, 0.1, 0.08)` and pulled back to arm's reach; elbows re-solved with
+  `Limb.Solve`; the item hand is the right hand. Keyed to 2 cm in `FootPoseKey`. `--xrsim --xrhands`
+  poses them (right hand raised ahead) for a screenshot with `--vrmonitor third`.
+- Nothing else arm-related is sent. Every peer derives the pose from `HeldItemId` (kind via `ItemDefs`) plus
   ONE replicated int, `FootPlayer.ItemAction` (0 idle, 1 aim, 2 use, 3 throw wind-up, 4 throw release: `throw-drop`), which the owner's
   `ItemController` writes (today: aim = 1). Idle held item = `Hold`; aim: `Shoot` -> `ShoulderAim`,
   `Optic`/`Photo` -> `TwoHandEye`; use: `Consume` -> `Mouth`, `Place` -> `Plant`.

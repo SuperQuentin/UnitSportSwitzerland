@@ -13,6 +13,8 @@
 # (tiles built in code). Never the real map in quick/net.
 
 src/Net/                 quick  --interestcheck
+src/Player/FootPlayer.cs  quick  --vrposecheck
+src/XR/                  quick  --vrposecheck
 src/Audio/Cd/            quick  --beatcheck
 src/Audio/               quick  --earscheck --world fixture --view third
 src/Items/Radio          quick  --radiopanelcheck --world fixture

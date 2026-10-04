@@ -4,7 +4,8 @@
 cockpit VR, first-person mounts, body skiing, haptics, `--xrsim`.
 
 **Next, in order** (the per-action target design is `vr-action-map`):
-1. **Avatar head and hands for everyone.** Replicate the head rotation and two hand positions
+1. **Avatar head and hands for everyone.** Hands: done on foot (#439, `avatar/item-arm-poses`); the
+   head's turn and the arms when mounted are still to do. Replicate the head rotation and two hand positions
    (local to the body, 30 Hz, near relay only), plus `IsVr`. Feed them to the `Limb.Solve` arm
    targets so flat players see VR players look, wave and point. Drive the local first-person arms
    the same way.

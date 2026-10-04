@@ -199,7 +199,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         get
         {
             bool train = TrainPose != Vector4.Zero;
-            var w = train ? _poseTrain : _poseBody;
+            var w = VrHands != null ? (train ? _poseTrainVr : _poseBodyVr) : train ? _poseTrain : _poseBody;
             var b = BodyPose.Basis;
             // the only scale a pose has is the landing squash, (1 + s/2, 1 - s, 1 + s/2) after the rotation
             var q = b.GetRotationQuaternion();
@@ -209,6 +209,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             float squash = 1f - b.Y.Length();
             w[7] = Mathf.Abs(squash) < 1e-5f ? 0f : squash;   // a ride's rounding is no squash
             if (train) { w[8] = TrainPose.X; w[9] = TrainPose.Y; w[10] = TrainPose.Z; }
+            if (VrHands is { } h)
+            {
+                // a VR player's hands (#439) after everything else: 14 floats, 17 on a train
+                int at = train ? PoseFloats + 3 : PoseFloats;
+                w[at] = h.Right.X; w[at + 1] = h.Right.Y; w[at + 2] = h.Right.Z;
+                w[at + 3] = h.Left.X; w[at + 4] = h.Left.Y; w[at + 5] = h.Left.Z;
+            }
             return w;
         }
         set
@@ -218,11 +225,58 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             var rot = new Basis(new Quaternion(value[0], value[1], value[2], value[3]).Normalized());
             BodyPose = new Transform3D(s == 0f ? rot : rot * Basis.FromScale(new Vector3(1f + s * 0.5f, 1f - s, 1f + s * 0.5f)),
                 new Vector3(value[4], value[5], value[6]));
-            TrainPose = value.Length >= PoseFloats + 3 ? new Vector4(value[8], value[9], value[10], 0f) : Vector4.Zero;
+            // the length says what follows the pose: 8 nothing, 11 a train, 14 VR hands, 17 both (#439)
+            bool train = value.Length is PoseFloats + 3 or PoseFloats + 9;
+            TrainPose = train ? new Vector4(value[8], value[9], value[10], 0f) : Vector4.Zero;
+            if (value.Length is PoseFloats + 6 or PoseFloats + 9)
+            {
+                int at = train ? PoseFloats + 3 : PoseFloats;
+                VrHands = new Avatar.HumanMeshBuilder.VrArms(new Vector3(value[at], value[at + 1], value[at + 2]),
+                    new Vector3(value[at + 3], value[at + 4], value[at + 5]));
+            }
+            else VrHands = null;
         }
     }
     private const int PoseFloats = 8;
-    private readonly float[] _poseBody = new float[PoseFloats], _poseTrain = new float[PoseFloats + 3];
+    private readonly float[] _poseBody = new float[PoseFloats], _poseTrain = new float[PoseFloats + 3],
+        _poseBodyVr = new float[PoseFloats + 6], _poseTrainVr = new float[PoseFloats + 9];
+
+    /// <summary>
+    /// A VR player's real hands (#439), relative to the eyes in the body's frame, written by the
+    /// owner's <see cref="XR.XrRig"/> on foot and null otherwise. Replicated inside <see cref="NetPose"/>;
+    /// every peer's figure puts its wrists there.
+    /// </summary>
+    public Avatar.HumanMeshBuilder.VrArms? VrHands { get; set; }
+
+    /// <summary>
+    /// <c>--vrposecheck</c> (#439): the pose with and without a train and VR hands, packed by one body
+    /// and unpacked by another, comes back the same; a short packet changes nothing.
+    /// </summary>
+    public static bool VrPoseSelfCheck()
+    {
+        bool ok = true;
+        var hands = new Avatar.HumanMeshBuilder.VrArms(new Vector3(0.25f, -0.4f, -0.35f), new Vector3(-0.3f, -0.55f, -0.1f));
+        foreach (bool train in new[] { false, true })
+            foreach (bool vr in new[] { false, true })
+            {
+                var a = new FootPlayer { BodyPose = new Transform3D(new Basis(Vector3.Up, 0.7f), new Vector3(0, 0.1f, 0)) };
+                if (train) a.TrainPose = new Vector4(0.1f, -0.2f, 0.3f, 0f);
+                if (vr) a.VrHands = hands;
+                var b = new FootPlayer { NetPose = (float[])a.NetPose.Clone() };
+                bool same = b.TrainPose.IsEqualApprox(a.TrainPose) && b.VrHands == a.VrHands
+                            && b.BodyPose.IsEqualApprox(a.BodyPose);
+                GD.Print($"[vrposecheck] train {train} vr {vr}: {a.NetPose.Length} floats, {(same ? "same" : "DIFFERENT")}");
+                ok &= same;
+                a.Free();
+                b.Free();
+            }
+        var c = new FootPlayer { VrHands = hands };
+        c.NetPose = new float[5];
+        bool kept = c.VrHands == hands;
+        GD.Print($"[vrposecheck] a short packet {(kept ? "changes nothing" : "CHANGED the hands")}");
+        c.Free();
+        return ok && kept;
+    }
 
     /// <summary>On foot: <see cref="PoseStride"/>, <see cref="PoseAir"/> or <see cref="PoseTucked"/>.</summary>
     [Export] public int PoseKind { get; set; }
@@ -1965,7 +2019,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _slidePose = null;
             _airPose = null;
         }
-        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), _stridePhase, arm, blend, dance, Hat, palette, smooth);
+        // VR hands (#439) keyed to 2 cm, so a hand held still does not rebuild the figure
+        var vr = PoseKind == PoseStride && dance == null ? VrHands : null;
+        if (vr is { } v) vr = new Avatar.HumanMeshBuilder.VrArms(SnapHand(v.Right), SnapHand(v.Left));
+        var key = new FootPoseKey(_walker, PoseKind, Mathf.Round(Anim.X * 100f), _stridePhase, arm, blend, dance, Hat, palette, smooth, vr);
         // the hand is placed from fresh mounts every time the pose changes, even while a throttled
         // mesh waits: what carries or aims an item stays exact (cheap: joint math, no mesh)
         if (key != _mountsKey)
@@ -1976,7 +2033,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 PoseTucked => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Tucked, arm, blend),
                 PoseAir => Avatar.HumanMeshBuilder.MountsForPose(Avatar.HumanPose.Running, arm, blend),
                 PoseHang or PoseClimb => Avatar.HumanMeshBuilder.MountsForPose(CarriedFigure(), arm, blend),
-                _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance),
+                _ => Avatar.HumanMeshBuilder.MountsFor(Anim.X, _stridePhase, arm, blend, dance, vr),
             };
         }
         if (key != _poseKey && !HoldRemoteFigure())
@@ -1991,7 +2048,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                     : _airPose ??= Avatar.HumanMeshBuilder.Build(palette, Avatar.HumanPose.Running, hat: Hat),
                 PoseHang or PoseClimb => Avatar.HumanMeshBuilder.BuildPosed(palette, CarriedFigure(), arm, blend, Hat, _poseMesh ??= new ArrayMesh()),
                 _ => Avatar.HumanMeshBuilder.BuildStride(palette, Anim.X, _stridePhase, hat: Hat, arm: arm, armBlend: blend,
-                    dance: dance, into: _poseMesh ??= new ArrayMesh()),
+                    dance: dance, into: _poseMesh ??= new ArrayMesh(), vr: vr),
             };
         }
         var mounts = _poseMounts;
@@ -2012,7 +2069,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>What the figure was last built from: the same key, the same mesh (#221).</summary>
     private readonly record struct FootPoseKey(MeshInstance3D Walker, int Kind, float Speed, float Phase,
         Avatar.ItemArmPose Arm, float Blend, Avatar.DanceParams? Dance, Avatar.Headwear Hat, Avatar.HumanPalette Palette,
-        bool Smooth);
+        bool Smooth, Avatar.HumanMeshBuilder.VrArms? Vr = null);
+
+    /// <summary>A VR hand to the 2 cm the figure is keyed on (#439).</summary>
+    private static Vector3 SnapHand(Vector3 p) => (p / 0.02f).Round() * 0.02f;
 
     private FootPoseKey _poseKey, _mountsKey;
     private Avatar.HumanMeshBuilder.GaitMounts _poseMounts;

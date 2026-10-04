@@ -31,8 +31,10 @@ public partial class Handshake : Node
     /// 8: shops and PAUSA vending machines: ShopService buy/sell/vend, card payment (#273).
     /// 9: structures sent by distance, PlacedObjects AskBurn/Burnt, hang and climb pose kinds (#359).
     /// 10: World/ChurchRadios (Ask*/Set), CdInfo's source, MusicStyle.RatDance (#370).
+    /// 12: FootPlayer.NetPose may carry a VR player's two hands after the pose (14 or 17 floats, #439).
+    /// (#453 takes 11 for the world clock; whichever lands second keeps its number above the other's.)
     /// </summary>
-    public const int Protocol = 10;
+    public const int Protocol = 12;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
