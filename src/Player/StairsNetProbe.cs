@@ -162,7 +162,20 @@ public partial class StairsNetProbe : ChatProbe
                 var l = FrameOf(a).AffineInverse() * me.GlobalPosition;
                 worst = Mathf.Max(worst, Mathf.Abs(l.Y - AirstairsLayout.FloorAt(ride.Height, -l.Z)));
             }
-            else worst = 99f;
+            else
+            {
+                if (worst < 99f)
+                {
+                    var l = FrameOf(a).AffineInverse() * me.GlobalPosition;
+                    GD.Print($"{Log} off the deck at frame {i}: local {l}, platform {ride.Height:F3} (deck {ride.DeckHeight:F3}), at door {ride.AtDoor}, decks {me.DeckSetsBuilt}, floor {me.IsOnFloor()}, v {me.Velocity}, {me.WalkState}");
+                }
+                worst = 99f;
+            }
+            if (i % 120 == 0)
+            {
+                var l = FrameOf(a).AffineInverse() * me.GlobalPosition;
+                GD.Print($"{Log}   t{i}: local {l}, platform {ride.Height:F3}, aboard '{me.DeckOn}', A at {a.GlobalPosition}");
+            }
             docked = _heard.Any(h => h.Contains("SN A docked"));
         }
         await Seconds(1.5);
