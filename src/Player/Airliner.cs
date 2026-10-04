@@ -7,8 +7,7 @@ namespace UnitSport.Player;
 public enum AirlinerCommand { FlapsDown, FlapsUp, Gear, Speedbrake, ParkingBrake, Lights, Engines, Autopilot }
 
 /// <summary>
-/// A heavy aircraft as a ride (#414): the A320 and the military freighter (#420), the AN-124 later
-/// (#419). Flown by <see cref="AirlinerFlight"/> (its <see cref="State"/>), on the yaw-only body
+/// A heavy aircraft as a ride (#414): the A320, the military freighter (#420) and the AN-124 (#419). Flown by <see cref="AirlinerFlight"/> (its <see cref="State"/>), on the yaw-only body
 /// that stands on its main wheels; <see cref="Flyer.Fly"/> maps that state onto the
 /// <see cref="FlightMotion"/> every craft shares. Unlike the light plane it collides as drawn (its
 /// fuselage box, <see cref="HullBoxes"/>), keeps its flaps, gear and brakes when parked
@@ -49,13 +48,14 @@ public sealed class Airliner : Flyer
     {
         RideKind.A320 => new Airliner(kind, AirlinerCatalog.A320),
         RideKind.Freighter => new Airliner(kind, AirlinerCatalog.Freighter),
+        RideKind.An124 => new Airliner(kind, AirlinerCatalog.An124),
         _ => null,
     };
 
-    public static bool IsAirliner(RideKind kind) => kind is RideKind.A320 or RideKind.Freighter;
+    public static bool IsAirliner(RideKind kind) => kind is RideKind.A320 or RideKind.Freighter or RideKind.An124;
 
     /// <summary>Every airliner kind, in the picker's order.</summary>
-    public static readonly RideKind[] Kinds = { RideKind.A320, RideKind.Freighter };
+    public static readonly RideKind[] Kinds = { RideKind.A320, RideKind.Freighter, RideKind.An124 };
 
     public override RideKind Kind => _kind;
     public override string Label => Spec.Name;
@@ -87,8 +87,13 @@ public sealed class Airliner : Flyer
         VehicleDeck[] Decks, SeatAnchor[] Seats, Vector3 Entry, int Doors, int GDoors, string GDoorsName,
         System.Func<int, Vector3?> Stand);
 
-    private static Shape? _a320, _freighter;
-    private Shape Body => Kind == RideKind.Freighter ? _freighter ??= FreighterShape() : _a320 ??= A320Shape();
+    private static Shape? _a320, _freighter, _an124;
+    private Shape Body => Kind switch
+    {
+        RideKind.Freighter => _freighter ??= FreighterShape(),
+        RideKind.An124 => _an124 ??= An124Shape(),
+        _ => _a320 ??= A320Shape(),
+    };
 
     private static Shape A320Shape()
     {
@@ -131,6 +136,21 @@ public sealed class Airliner : Flyer
             1 << FreighterLayout.RampDoor | 1 << FreighterLayout.CrewDoor, "ramp", FreighterDeck.StandSpot);
     }
 
+    private static Shape An124Shape()
+    {
+        // driven, a belly slab hinge to hinge under the kneeling floor: the hold stays open at both ends
+        // for what drives in (a fuselage box met a bus's nose on the ramp), cars pass under the belly
+        float low = An124Layout.FloorY - An124Layout.KneelDrop - 0.1f, front = An124Layout.NoseHingeZ, rear = An124Layout.RampHingeZ;
+        var belly = new Aabb(new Vector3(-An124Layout.HalfWidth * 0.9f, 1.5f, -front), new Vector3(An124Layout.HalfWidth * 1.8f, low - 1.5f, front - rear));
+        // parked it stands on that from the ground; the walls and the roof are extra boxes
+        var parked = (new Vector3(0, low * 0.5f, -(front + rear) * 0.5f), new Vector3(An124Layout.FairingOutX * 2f, low, front - rear));
+        var wing = (new Vector3(0, An124Layout.WingRootY, -(An124Layout.WingRootLeadingZ + An124Layout.WingRootTrailingZ) * 0.5f),
+            new Vector3(An124Layout.WingTipX * 2f, An124Layout.WingRootThickness, An124Layout.WingRootLeadingZ - An124Layout.WingRootTrailingZ));
+        return new Shape(belly, parked, wing, new[] { An124Deck.Deck }, An124Deck.Seats,
+            AircraftMeshBuilder.Flip(new Vector3(An124Layout.HalfWidth, 0f, An124Layout.CrewDoorZ)), An124Layout.DoorCount,
+            15, "cargo doors", An124Deck.StandSpot);
+    }
+
     public override (Aabb Lower, Aabb Upper)? HullBoxes => (Body.Fuselage, new Aabb(Body.Fuselage.Position, Vector3.Zero));
 
     /// <summary>
@@ -143,6 +163,12 @@ public sealed class Airliner : Flyer
     public override IEnumerable<(Transform3D Pose, Vector3 Centre, Vector3 Size)> ExtraBoxes()
     {
         yield return (Transform3D.Identity, Body.Wing.Centre, Body.Wing.Size);
+        if (Kind != RideKind.An124) yield break;
+        // the AN-124's flanks and roof over its parked box, hinge to hinge (its ends are the hold's way in)
+        float low = Body.Parked.Size.Y, z = Body.Parked.Centre.Z, len = Body.Parked.Size.Z, top = An124Layout.TopY;
+        foreach (int side in new[] { 1, -1 })
+            yield return (Transform3D.Identity, new Vector3(side * (An124Layout.HalfWidth - 0.25f), (low + top) * 0.5f, z), new Vector3(0.5f, top - low, len));
+        yield return (Transform3D.Identity, new Vector3(0, top - 0.3f, z), new Vector3(An124Layout.HalfWidth * 2f, 0.6f, len));
     }
 
     /// <summary>The cabin and the cockpit (the A320, #416), the hold and the flight deck (the freighter, #420): one deck in the drawn aircraft's frame.</summary>
@@ -192,6 +218,29 @@ public sealed class Airliner : Flyer
     /// <summary>The freighter's ramp and para doors open in flight below this indicated airspeed, m/s (150 kt).</summary>
     public const float DropSpeed = 77f;
 
+    /// <summary>The AN-124's kneeling as drawn now, 0 standing .. 1 knelt, eased from its door bit (#419).</summary>
+    public float KneelShown;
+    /// <summary>The kneeling moved this frame: a parked one's frame is posed again.</summary>
+    public bool KneelMoved;
+
+    /// <summary>Kneeling lowers the drawn frame, the deck in it and every sill (#419).</summary>
+    public override Vector3 PoseShift => Kind == RideKind.An124 ? Vector3.Down * (KneelShown * An124Layout.KneelDrop) : Vector3.Zero;
+
+    /// <summary>Knelt or kneeling, or rising: it holds its brakes and idles (it rises before it taxis).</summary>
+    public bool Kneeling => Kind == RideKind.An124 && (KneelShown > 0f || (DoorsOpen >> An124Layout.KneelDoor & 1) != 0);
+
+    private void EaseKneel(float dt)
+    {
+        if (Kind != RideKind.An124) return;
+        float target = (DoorsOpen >> An124Layout.KneelDoor & 1) != 0 ? 1f : 0f;
+        float was = KneelShown;
+        KneelShown = Mathf.MoveToward(KneelShown, target, An124MeshBuilder.DoorRate(An124Layout.KneelDoor) * dt);
+        KneelMoved = KneelShown != was;
+    }
+
+    /// <summary>The doors as the deck's parts see them: the AN-124's ramps have a slope for standing and one for kneeling.</summary>
+    public static byte DeckDoors(RideKind kind, byte doors) => kind == RideKind.An124 ? An124Deck.DeckDoors(doors) : doors;
+
     /// <summary>A door's leaf, open or shut (#416). Shutting always works; opening only when <see cref="MayOpen"/> allows.</summary>
     public void ToggleDoor(int door)
     {
@@ -208,7 +257,12 @@ public sealed class Airliner : Flyer
 
     public override Node3D BuildParkedVisual(int riderIndex)
     {
-        var rig = Kind == RideKind.Freighter ? AirlinerRig.CreateFreighter() : AirlinerRig.CreateA320(Color.FromHsv((riderIndex * 0.37f) % 1f, 0.65f, 0.7f));
+        var rig = Kind switch
+        {
+            RideKind.Freighter => AirlinerRig.CreateFreighter(),
+            RideKind.An124 => AirlinerRig.CreateAn124(),
+            _ => AirlinerRig.CreateA320(Color.FromHsv((riderIndex * 0.37f) % 1f, 0.65f, 0.7f)),
+        };
         rig.Show(Look(State), 0f);
         return rig;
     }
@@ -244,11 +298,13 @@ public sealed class Airliner : Flyer
     {
         // the body's word for how it moves: a wall, a slope, the solver (FootPlayer adopts real velocity)
         State.Velocity = m.Velocity;
+        // knelt (or rising) it stands on its brakes at idle: it rises before it taxis (#419)
+        bool knelt = Kneeling && State.OnGround;
         var c = new AirlinerFlight.Controls(
             Stick: input.Stick,
-            LeverUp: input.LeverUp,
-            LeverDown: input.LeverDown,
-            Brake: input.Brake,
+            LeverUp: knelt ? 0f : input.LeverUp,
+            LeverDown: knelt && State.Lever > 0f ? 1f : input.LeverDown,
+            Brake: knelt ? 1f : input.Brake,
             FlapsDelta: _flapsDelta,
             GearToggle: _gear,
             SpeedbrakeCycle: _speedbrake,
@@ -310,6 +366,7 @@ public sealed class Airliner : Flyer
 
     public override void AnimateFlight(Node3D visual, in FlightMotion m, float dt)
     {
+        EaseKneel(dt);
         if (visual is AirlinerRig rig) rig.Show(Look(State) with { Spool = m.Spool }, dt);
     }
 

@@ -44,6 +44,11 @@ public partial class AirlinerRig : Node3D
     /// <summary>Main legs that rise straight up to stow (the freighter's, into its sponsons), metres; 0 when they fold.</summary>
     private float _gearLift;
     private Vector3 _gearLDown, _gearRDown;
+    /// <summary>The AN-124's kneeling (#419): its door bit, how far the frame comes down, the parts whose open angle it changes.</summary>
+    private int _kneelDoor = -1;
+    private float _kneelDrop;
+    private Vector3 _noseDown;
+    private readonly List<(int Door, Node3D Node, Vector3 Axis, float Angle, float Kneel)> _kneelParts = new();
 
     // where the parts are now, eased toward the look
     private float _gear = 1f, _flaps, _spoilers, _fanSpin, _clock;
@@ -87,6 +92,35 @@ public partial class AirlinerRig : Node3D
             rig._doorRate[i] = FreighterMeshBuilder.DoorRate(i);
             foreach (var (name, axis, angle) in FreighterMeshBuilder.DoorMotions(i))
                 if (model.GetNodeOrNull<Node3D>(name) is { } part) rig._doorParts.Add((i, part, axis, angle));
+        }
+        return rig;
+    }
+
+    /// <summary>
+    /// The AN-124 (#419): four fans, mains rising into the fairings, the visor and nose ramp, the rear
+    /// ramp and doors, and kneeling: the frame comes down (<c>Airliner.PoseShift</c>), the legs rise
+    /// in it by as much so the wheels stay on the ground, and the ramps open less.
+    /// </summary>
+    public static AirlinerRig CreateAn124()
+    {
+        var rig = new AirlinerRig { Name = "An124", _spec = AirlinerCatalog.An124 };
+        var model = An124MeshBuilder.Build();
+        model.Name = "Model";
+        rig.AddChild(model);
+        rig.Find(model, An124Layout.EngineX.Length);
+        rig._fanSign = new[] { 1f, 1f, 1f, 1f };
+        rig._gearLift = An124MeshBuilder.GearLift;
+        rig._gearLDown = rig._gearL?.Position ?? Vector3.Zero;
+        rig._gearRDown = rig._gearR?.Position ?? Vector3.Zero;
+        rig._noseDown = rig._gearNose?.Position ?? Vector3.Zero;
+        rig._stowNose = An124MeshBuilder.NoseStow;
+        rig._kneelDoor = An124Layout.KneelDoor;
+        rig._kneelDrop = An124Layout.KneelDrop;
+        for (int i = 0; i < An124Layout.DoorCount; i++)
+        {
+            rig._doorRate[i] = An124MeshBuilder.DoorRate(i);
+            foreach (var (name, axis, angle, kneel) in An124MeshBuilder.DoorMotions(i))
+                if (model.GetNodeOrNull<Node3D>(name) is { } part) rig._kneelParts.Add((i, part, axis, angle, kneel));
         }
         return rig;
     }
@@ -145,10 +179,11 @@ public partial class AirlinerRig : Node3D
         if (_rudder != null) _rudder.Rotation = new Vector3(0, _stick.X * 12f * Deg, 0);
 
         float stow = 1f - _gear;
+        float kneelAt = _kneelDoor >= 0 ? _doorAt[_kneelDoor] : 0f, kneel = kneelAt * _kneelDrop;
         if (_gearLift > 0f)
         {
-            if (_gearL != null) _gearL.Position = _gearLDown + Vector3.Up * stow * _gearLift;
-            if (_gearR != null) _gearR.Position = _gearRDown + Vector3.Up * stow * _gearLift;
+            if (_gearL != null) _gearL.Position = _gearLDown + Vector3.Up * (stow * _gearLift + kneel);
+            if (_gearR != null) _gearR.Position = _gearRDown + Vector3.Up * (stow * _gearLift + kneel);
         }
         else
         {
@@ -156,6 +191,7 @@ public partial class AirlinerRig : Node3D
             if (_gearR != null) _gearR.Rotation = new Vector3(0, 0, stow * _stowR);
         }
         if (_gearNose != null) _gearNose.Rotation = new Vector3(stow * _stowNose, 0, 0);
+        if (_kneelDoor >= 0 && _gearNose != null) _gearNose.Position = _noseDown + Vector3.Up * kneel;
 
         _fanSpin = Mathf.Wrap(_fanSpin + look.Spool * 30f * dt, 0f, Mathf.Tau);
         for (int i = 0; i < _fans.Length; i++)
@@ -163,6 +199,8 @@ public partial class AirlinerRig : Node3D
 
         foreach (var (door, node, axis, angle) in _doorParts)
             node.Basis = new Basis(axis, _doorAt[door] * angle);
+        foreach (var (door, node, axis, angle, k) in _kneelParts)
+            node.Basis = new Basis(axis, _doorAt[door] * (angle + kneelAt * k));
 
         bool nav = (look.Lights & AirlinerLights.Nav) != 0;
         Lit(_navL, nav); Lit(_navR, nav); Lit(_navTail, nav);

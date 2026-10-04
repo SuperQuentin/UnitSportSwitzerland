@@ -138,8 +138,11 @@ public abstract class Flyer : Rideable
     {
         var attitude = m.Attitude == default ? Basis.Identity : m.Attitude;
         var local = new Basis(Vector3.Up, -bodyYaw) * attitude * Fix;
-        visual.Transform = new Transform3D(local, Pivot - local * Pivot);
+        visual.Transform = new Transform3D(local, Pivot - local * Pivot + PoseShift);
     }
+
+    /// <summary>How far the drawn frame (and the deck in it) sits off the body: the AN-124 kneeling (#419).</summary>
+    public virtual Vector3 PoseShift => Vector3.Zero;
 
     /// <summary>Forward for the chase camera, before the player's free look is added.</summary>
     public virtual Vector3 CameraForward(in FlightMotion m) =>

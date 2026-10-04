@@ -146,8 +146,9 @@ public partial class FootPlayer
 
     private static byte DoorsOfHost(Node3D host) => host switch
     {
-        FootPlayer p => p.BusDoors,
-        VehicleBody v => v.BusDoors,
+        // the AN-124's ramps have a slope for standing and one for kneeling (#419)
+        FootPlayer p => Airliner.DeckDoors(p.Ride, p.BusDoors),
+        VehicleBody v => Airliner.DeckDoors(v.Kind, v.BusDoors),
         _ => 0,
     };
 
