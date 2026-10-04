@@ -101,7 +101,7 @@ public partial class BrManager
         {
             if (_plane == null) AddChild(_plane = new BrPlane());
             var f = PlaneFrame(fl, now);
-            _plane.Fly(f.At, f.Yaw);
+            _plane.Fly(f.At, f.Yaw, fl.DoorsOpen(now));
         }
         else if (_plane != null)
         {
