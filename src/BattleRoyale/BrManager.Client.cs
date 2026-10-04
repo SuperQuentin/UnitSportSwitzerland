@@ -84,6 +84,7 @@ public partial class BrManager
         if (Instance == this) Instance = null;
         if (_server) Combat.PvpRules.HitRelayed -= OnHit;
         FootPlayer.StayDown = null;
+        FootPlayer.FlightFence = null;
     }
 
     public long Me => Multiplayer.GetUniqueId();
@@ -112,6 +113,45 @@ public partial class BrManager
         foreach (var m in _state.MatesOf(Me))
             if (m.Alive && GetNodeOrNull<FootPlayer>("../Players/" + m.Peer) is { } body)
                 yield return (m.Name, ZonePoint(body.GlobalPosition), new Vector2(-Mathf.Sin(body.NetYaw), Mathf.Cos(body.NetYaw)));
+    }
+
+    // ------------------------------------------------------------------------------------
+    // no gliding out of the zone (#485)
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>How far inside the edge the fence starts to hold a glider, m.</summary>
+    public const float FenceMargin = 15f;
+
+    /// <summary>How fast a glider outside the zone drifts back in, m/s.</summary>
+    private const float FenceDrift = 3f;
+
+    /// <summary>
+    /// The glide fence (<see cref="FootPlayer.FlightFence"/>): a wingsuit, parachute or paraglider in this
+    /// match never carries its pilot out of the current circle. Near the edge, the part of the speed
+    /// heading out is taken away, so the pilot slides along it; outside (the plane's line starts out of the
+    /// square), only the way in is left, with a gentle drift. Null where it does not apply.
+    /// </summary>
+    private Vector3? FenceGlide(FootPlayer p, Vector3 v)
+    {
+        if (!InMatch || _aboard || _state.Phase != BrPhase.Playing || p != LocalPlayer()
+            || p.Ride is not (RideKind.Wingsuit or RideKind.Parachute or RideKind.Paraglider) || ZoneNow is not { } z) return null;
+        return Fence(ZonePoint(p.GlobalPosition), v, z.Centre, z.Radius);
+    }
+
+    /// <summary>The fence's rule, pure: <paramref name="at"/> in zone metres (x east, y north), <paramref name="v"/> a world velocity (x east, z south).</summary>
+    public static Vector3? Fence(Vector2 at, Vector3 v, Vector2 centre, float radius)
+    {
+        var off = at - centre;
+        float d = off.Length();
+        if (d < 1f || d < radius - FenceMargin) return null;
+        var outward = off / d;
+        var flat = new Vector2(v.X, -v.Z);
+        float away = flat.Dot(outward);
+        bool outside = d > radius;
+        if (away <= 0f && !outside) return null;
+        if (away > 0f) flat -= outward * away;
+        if (outside) flat -= outward * FenceDrift;
+        return new Vector3(flat.X, v.Y, -flat.Y);
     }
 
     /// <summary>How far the minimap's radar picks up other entrants (#359).</summary>
@@ -193,6 +233,8 @@ public partial class BrManager
                 inv.Add(ItemId.WoodPlanks, 15);
             }
             FootPlayer.StayDown = _ => InMatch && _state.Phase == BrPhase.Playing;
+            // gliders stay inside the zone (#485)
+            FootPlayer.FlightFence = FenceGlide;
             Permissions.SetInMatch(true);
         }
     }
@@ -229,6 +271,7 @@ public partial class BrManager
         LeaveHold(LocalPlayer());
         ShowHidden();
         FootPlayer.StayDown = null;
+        FootPlayer.FlightFence = null;
         Permissions.SetInMatch(false);
         StopSpectating();
         Inventory()?.EndMatch();
