@@ -20,6 +20,8 @@ public partial class BrManager
     public const float RecallReach = 6f;
     /// <summary>Postauto stops per match.</summary>
     public const int RecallStops = 4;
+    /// <summary>The group the stops' signs are in.</summary>
+    public const string StopGroup = "br_postauto_stop";
 
     // ---- the stops ------------------------------------------------------------------------------
 
@@ -140,16 +142,17 @@ public partial class BrManager
     // ---- the signs ------------------------------------------------------------------------------
 
     private readonly List<Node3D> _stopSigns = new();
-    private float[]? _signsFor;
+    private float _signsFor;
 
-    /// <summary>Client: a yellow Postauto sign at each stop of this match, gone with it.</summary>
+    /// <summary>Client: a yellow Postauto sign at each stop of this match, gone with it (rebuilt only when the stops change).</summary>
     private void StopSigns()
     {
         var points = InMatch && _state.Running ? _state.RecallPoints : null;
-        if (points == _signsFor) return;
+        float key = points?.Sum() ?? 0f;
+        if (key == _signsFor && _stopSigns.Count == (points?.Length ?? 0) / 3) return;
         foreach (var s in _stopSigns) s.QueueFree();
         _stopSigns.Clear();
-        _signsFor = points;
+        _signsFor = key;
         if (points == null || Origin == null) return;
         foreach (var (at, alt) in Stops())
         {
@@ -163,6 +166,7 @@ public partial class BrManager
     private static Node3D BuildSign()
     {
         var root = new Node3D { Name = "PostautoStop" };
+        root.AddToGroup(StopGroup);
         static MeshInstance3D Box(Vector3 size, Vector3 at, Color c) => new()
         {
             Mesh = new BoxMesh { Size = size },

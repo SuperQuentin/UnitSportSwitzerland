@@ -439,7 +439,9 @@ public partial class BrProbe : ChatProbe
         var stop = br.NearestStop(here)!.Value;
         br.Teleport(br.State.AreaE + stop.At.X + 2, br.State.AreaN + stop.At.Y, "a Postauto stop");
         await Seconds(3.0);
-        Expect(GetParent().GetChildren().Count(n => n.Name.ToString().StartsWith("PostautoStop")) == BrManager.RecallStops, "the stops' signs stand in the world");
+        int signs = GetTree().GetNodesInGroup(BrManager.StopGroup).Count;
+        Expect(signs == BrManager.RecallStops, $"the stops' signs stand in the world ({signs})");
+        Expect(br.ZoneNow is { } zn && zn.Phase < BrManager.RecallBefore, $"still before zone {BrManager.RecallBefore} (zone {br.ZoneNow?.Phase})");
         _items.UseSlot(me, SlotOf(ItemId.Dogtag));
         Expect(await Until(() => br.State.Find(PeerOf("B"))?.Alive == true, 8), "the tag used at the stop: B is back in");
         Expect(await Until(() => CountOf(ItemId.Dogtag) == 0, 5), "the tag is spent");
@@ -522,8 +524,12 @@ public partial class BrProbe : ChatProbe
         Expect(me.Ride == RideKind.Wingsuit && !me.IsOnFloor(), $"dropped by wingsuit over the stop ({me.Ride})");
         Expect(CountOf(ItemId.Knife) == 1 && CountOf(ItemId.Bandage) == 2, "with a knife and two bandages");
         Shot("b_recalled");
-        me.Leap(me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);   // out of the wingsuit: the probe does not fly it down
-        Expect(await Until(() => me.IsOnFloor(), 40), "on the ground again");
+        // the probe does not fly the suit down: out of it, and set on the ground by the stop
+        me.Leap(me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);
+        var landed = Br.ZonePoint(me.GlobalPosition);
+        Br.Teleport(Br.State.AreaE + landed.X, Br.State.AreaN + landed.Y, "down from the suit");
+        Expect(await Until(() => me.IsOnFloor() && Mathf.Abs(me.Velocity.Y) < 1f, 40), "on the ground again");
+        await Seconds(1.5);
         Say("back");
         if (!await Until(() => Said("A", "recalled"), 30)) { Fail("A never said recalled"); return; }
         await Seconds(1.0);
