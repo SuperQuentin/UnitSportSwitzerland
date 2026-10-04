@@ -178,8 +178,8 @@ public sealed class HeavyTrain
     /// <summary>The train's mass, kg.</summary>
     public float Mass { get { float m = 0; foreach (var b in Bodies) m += b.Mass; return m; } }
 
-    /// <summary>Does the pivot of this section carry weight (a fifth wheel, a turntable, a bus joint) or only pull (a drawbar)?</summary>
-    private static bool Carries(Coupling c) => c is Coupling.FifthWheel or Coupling.Turntable or Coupling.BusJoint;
+    /// <summary>Does the pivot of this section carry weight (a fifth wheel, a turntable, a bus joint, a tow ball) or only pull (a drawbar)?</summary>
+    public static bool Carries(Coupling c) => c is Coupling.FifthWheel or Coupling.Turntable or Coupling.BusJoint or Coupling.Ball;
 
     /// <summary>
     /// Static axle loads, from the last section forward: each section rests on its axle groups and,

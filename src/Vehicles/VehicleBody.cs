@@ -689,7 +689,7 @@ public partial class VehicleBody : CharacterBody3D
             hull.GlobalTransform = poses[0] * new Transform3D(Basis.Identity, Ride.ParkedBox.Centre);
         // the extra boxes are the sections behind, in order — after a semi-trailer's own running
         // gear, which is part of its first section
-        bool gear = Ride is ParkedTrailer && bodies[0].Spec.Pivot != Coupling.Drawbar;
+        bool gear = Ride is ParkedTrailer { HasGearBox: true };
         int extra = 0;
         foreach (var (_, centre, _) in Ride.ExtraBoxes())
         {

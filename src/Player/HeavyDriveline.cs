@@ -40,8 +40,6 @@ public sealed class HeavyDriveline
     private readonly HeavySpec _s;
     private readonly float _wheelRadius;
 
-    /// <summary>Flywheel, clutch and crank, kg·m².</summary>
-    private const float EngineInertia = 3.5f;
     private const float Driveline = 0.9f;
     /// <summary>What the clutch holds fully closed, as a share of the engine's peak torque.</summary>
     private const float ClutchMargin = 1.6f;
@@ -53,8 +51,8 @@ public sealed class HeavyDriveline
         _s = spec;
         _wheelRadius = wheelRadius;
         EngineRpm = spec.IdleRpm;
-        // a converter pulls the engine down to about 1,900 rpm when the bus is held at full throttle
-        float stall = Mathf.Min(1900f, spec.Redline * 0.8f);
+        // a converter pulls the engine down to its stall speed (a bus's ~1,900 rpm) when held at full throttle
+        float stall = Mathf.Min(spec.StallRpm, spec.Redline * 0.8f);
         _converterK = stall * Mathf.Tau / 60f / Mathf.Sqrt(Mathf.Max(spec.TorqueAt(stall), 1f));
     }
 
@@ -284,7 +282,7 @@ public sealed class HeavyDriveline
         {
             Clutch = 0f;
             Locked = false;
-            omega += engine / EngineInertia * h;
+            omega += engine / _s.EngineInertia * h;
         }
         else if (Converter && !(Gear >= 2 && inOmega > 0.88f * omega && throttle < 0.97f))
         {
@@ -300,7 +298,7 @@ public sealed class HeavyDriveline
             if (Mathf.Abs(speed) < 0.3f && d.Brake > 0.1f && throttle < 0.02f) pump = 0f;
             float torqueRatio = sr < 0.85f ? 2f - sr / 0.85f : 1f;
             transmitted = pump * (sr < 1f ? torqueRatio : 1f);
-            omega += (engine - pump) / EngineInertia * h;
+            omega += (engine - pump) / _s.EngineInertia * h;
         }
         else
         {
@@ -320,7 +318,7 @@ public sealed class HeavyDriveline
             {
                 float slip = omega - inOmega;
                 float tc = capacity * Mathf.Sign(slip);
-                float next = omega + (engine - tc) / EngineInertia * h;
+                float next = omega + (engine - tc) / _s.EngineInertia * h;
                 if (Mathf.Sign(next - inOmega) != Mathf.Sign(slip) && capacity > Mathf.Abs(engine))
                 {
                     Locked = true;
@@ -499,13 +497,14 @@ public sealed class HeavyDriveline
     {
         float demand = Mathf.Clamp(d.Brake, 0f, 1f);
         float before = BrakePressure;
-        if (Arcade) BrakePressure = demand;
+        // Game, or hydraulic brakes (a pickup): no chambers to fill, no tank to draw
+        if (Arcade || !_s.AirBrakes) BrakePressure = demand;
         else
         {
             float tau = demand > BrakePressure ? 0.28f : 0.45f;
             BrakePressure += (demand - BrakePressure) * (1f - Mathf.Exp(-dt / tau));
         }
-        if (!Arcade)
+        if (!Arcade && _s.AirBrakes)
         {
             // every application draws the tank down; the compressor, turned by the engine, fills it
             if (BrakePressure > before) AirTank -= (BrakePressure - before) * 0.65f;
@@ -517,8 +516,10 @@ public sealed class HeavyDriveline
         bool springs = d.Handbrake || AirTank < AirSprings;
         if (springs != SpringBrakes)
         {
-            Event = springs ? (d.Handbrake ? "spring" : "air") : "release";
             SpringBrakes = springs;
+            // a hydraulic handbrake makes no hiss
+            if (!_s.AirBrakes) return;
+            Event = springs ? (d.Handbrake ? "spring" : "air") : "release";
             AirPuffs++;
         }
     }

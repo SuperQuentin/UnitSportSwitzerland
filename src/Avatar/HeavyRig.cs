@@ -24,6 +24,8 @@ public sealed record HeavyParts(ArrayMesh Body, ArrayMesh Head, ArrayMesh Tail, 
     public ArrayMesh? Glow { get; init; }
     /// <summary>What a walking player collides with inside and how far aboard reaches (#162), or null: not walkable.</summary>
     public VehicleDeck? Deck { get; init; }
+    /// <summary>Meshes carried on the body, each at its place, node space: a boat on its trailer (#463).</summary>
+    public (ArrayMesh Mesh, Vector3 At)[] Cargo { get; init; } = System.Array.Empty<(ArrayMesh, Vector3)>();
 }
 
 /// <summary>
@@ -111,6 +113,7 @@ public partial class HeavyRig : Node3D
         Assemble(spec.Class switch
         {
             HeavyClass.Tractor or HeavyClass.Rigid => TruckMeshBuilder.Build(spec, section, load),
+            HeavyClass.Pickup => PickupMeshBuilder.Build(spec, section, load),
             _ => BusMeshBuilder.Build(spec, section, load),
         }, driver);
 
@@ -137,6 +140,12 @@ public partial class HeavyRig : Node3D
         rig._body.AddChild(new MeshInstance3D { Name = "Headlamps", Mesh = p.Head, MaterialOverride = rig._head });
         rig._body.AddChild(new MeshInstance3D { Name = "Taillamps", Mesh = p.Tail, MaterialOverride = rig._tail });
         rig._body.AddChild(new MeshInstance3D { Name = "Reversing", Mesh = p.Reverse, MaterialOverride = rig._reverse });
+        for (int i = 0; i < p.Cargo.Length; i++)
+        {
+            var cargo = new MeshInstance3D { Name = $"Cargo{i}", Mesh = p.Cargo[i].Mesh, Position = p.Cargo[i].At };
+            MeshScratch.Paint(cargo, body, glass);
+            rig._body.AddChild(cargo);
+        }
 
         for (int i = 0; i < p.Doors.Length; i++)
         {

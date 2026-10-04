@@ -65,7 +65,7 @@ public static class CockpitCheck
     /// <summary>
     /// The trucks and buses (#157): the same fit from the cab (<see cref="HeavyCabin.SeatFor"/>), the
     /// eye between the dash and the top of the windscreen, the seat inside the walls, and the seats
-    /// a passenger can take (#158): a truck's cab two, a bus at least twenty.
+    /// a passenger can take (#158): a truck's cab two, the pickup's five (#463), a bus at least twenty.
     /// </summary>
     private static int CheckHeavy()
     {
@@ -106,7 +106,7 @@ public static class CockpitCheck
             }
             float pedals = f.Front - f.Nose - (seat.Throttle + DriverSeat.PedalHinge).Z;
             float wall = f.InnerHalf - (Mathf.Abs(seat.Hip.X) + 0.25f);
-            int wanted = spec.Class is HeavyClass.Tractor or HeavyClass.Rigid ? 1 : 20;
+            int wanted = spec.Class switch { HeavyClass.Tractor or HeavyClass.Rigid => 1, HeavyClass.Pickup => 4, _ => 20 };
 
             bool ok = head >= 0.05f && ahead >= 0.5f && overDash >= 0.1f && reach < 0.01f && pedals >= 0f && wall >= 0f
                 && glass && driver && seats >= wanted;

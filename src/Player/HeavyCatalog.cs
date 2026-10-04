@@ -32,6 +32,7 @@ public static class HeavyCatalog
     private static readonly Color MigrosOrange = new(1.0f, 0.40f, 0.0f);
     private static readonly Color VbzBlue = new(0.0f, 0.35f, 0.65f);
     private static readonly Color BernRed = new(0.80f, 0.07f, 0.12f);
+    private static readonly Color RaptorOrange = new(1.0f, 0.42f, 0.08f);
 
     public static readonly IReadOnlyList<HeavySpec> All = Number(new[]
     {
@@ -229,6 +230,45 @@ public static class HeavyCatalog
             Gears = new[] { 9.30f, 6.60f, 4.70f, 3.35f, 2.40f, 1.72f, 1.30f, 1.00f },
             Reverse = 8.5f, FinalDrive = 2.73f, ShiftTime = 0.45f,
             MaxSteer = 0.70f, LimiterKmh = 100f, Passengers = 53,
+        },
+
+        // ---- 101: a full-size pickup with a tow ball, for the boat trailers (#463) ----
+        new HeavySpec
+        {
+            Label = "Ford F-150 Raptor",
+            Blurb = "SuperCrew desert pickup, 3.5 L twin-turbo V6, 450 hp, 10-speed automatic, 4x4 on 35-inch tyres. A 50 mm tow ball: back it up to a boat trailer's coupler and {couple}",
+            Class = HeavyClass.Pickup,
+            Look = new HeavyLook { Paint = RaptorOrange, Accent = Black, Lower = Graphite, Cargo = Black },
+            Engine = EngineLayout.V6Turbo,
+            // source: Ford F-150 Raptor (P702, 2021+): 3.5 L EcoBoost HO V6, 450 hp (336 kW) at
+            // 5,850 rpm, 510 lb-ft (691 N·m) at 3,500; 10R80 10-speed automatic 4.696..0.636, reverse
+            // 4.866, 4.10 axle; 5,890 x 2,200 x 1,990 mm, wheelbase 3,686 (SuperCrew 5.5 ft bed),
+            // 315/70R17 tyres, track 1.86 m, ~2,600 kg, 3.7 t braked towing, governed 172 km/h.
+            // Assumed: the 57/43 split, CG height, the torque curve between the published points,
+            // the converter's stall, the engine's inertia and braking, the ball 0.55 m up on a drop
+            // hitch 0.12 m behind the bumper, a 600 kg bed load.
+            Sections = new[]
+            {
+                new SectionSpec
+                {
+                    Name = "pickup", Length = 5.89f, Width = 2.2f, Height = 1.99f, Mass = 2650f, CgAt = 2.55f, CgHeight = 0.75f,
+                    Axles = new[]
+                    {
+                        new AxleSpec(0.97f, 0, Steer: 1f, Driven: true, Tyre: "315/70R17"),
+                        new AxleSpec(4.656f, 1, Driven: true, Tyre: "315/70R17"),
+                    },
+                    HitchAt = 6.01f, HitchHeight = 0.55f, Hitch = Coupling.Ball,
+                    DragArea = 1.65f, Track = 1.86f,
+                    PayloadMax = 600f, PayloadAt = 4.9f, PayloadHeight = 1.15f,
+                },
+            },
+            PeakKw = 336f, PeakRpm = 5850f, IdleRpm = 650f, Redline = 6250f,
+            Torque = new (float, float)[] { (650f, 300f), (1500f, 560f), (2500f, 670f), (3500f, 691f), (4500f, 640f), (5850f, 548f), (6250f, 470f) },
+            EngineBrakeNm = 90f, EngineInertia = 0.3f, StallRpm = 2600f, AirBrakes = false,
+            Box = Transmission.TorqueConverter,
+            Gears = new[] { 4.696f, 2.985f, 2.146f, 1.769f, 1.520f, 1.275f, 1.000f, 0.854f, 0.689f, 0.636f },
+            Reverse = 4.866f, FinalDrive = 4.10f, ShiftTime = 0.25f,
+            MaxSteer = 0.6f, Grip = 0.92f, BrakeDecel = 8.5f, LimiterKmh = 172f, Passengers = 4,
         },
     });
 

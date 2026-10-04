@@ -43,7 +43,7 @@ public sealed class Truck : Rideable, IEngined
         var driven = System.Array.Find(spec.Sections.SelectMany(s => s.Axles).ToArray(), a => a.Driven) ?? spec.Sections[0].Axles[^1];
         WheelRadius = Tyre.Radius(driven.Tyre) * 0.97f;   // loaded: ~3% squat
         Box = new HeavyDriveline(spec, WheelRadius);
-        if (TrailerCatalog.For(trailerCode) is { } t && t.Couples == spec.Takes && t.Couples != Coupling.None)
+        if (TrailerCatalog.For(trailerCode) is { } t && spec.Accepts(t))
         {
             Trailer = t;
             TrailerCode = TrailerCatalog.Clean(trailerCode);
@@ -89,7 +89,7 @@ public sealed class Truck : Rideable, IEngined
 
     // ---- coupling --------------------------------------------------------------------------
 
-    public bool Accepts(TrailerSpec t) => Spec.Takes != Coupling.None && t.Couples == Spec.Takes;
+    public bool Accepts(TrailerSpec t) => Spec.Accepts(t);
 
     /// <summary>
     /// Hangs a trailer on the hitch, at the angles it stands at (<paramref name="angles"/>: its
@@ -126,6 +126,18 @@ public sealed class Truck : Rideable, IEngined
         TrailerCode = 0;
         Rebuild();
         return (code, at, yaw, angles);
+    }
+
+    /// <summary>
+    /// A boat trailer's boat launched or winched back aboard (#463): the same trailer, at the same
+    /// angles, its load the boat or nothing. False when the coupled trailer carries no boat.
+    /// </summary>
+    public bool SetBoatAboard(bool aboard)
+    {
+        if (Trailer is not { Boat: not 0 }) return false;
+        TrailerCode = TrailerCatalog.WithBoat(TrailerCode, aboard);
+        Rebuild();   // the same sections: the joints keep their angles
+        return true;
     }
 
     /// <summary>All the joint angles, for a parked vehicle's state.</summary>
@@ -277,13 +289,14 @@ public sealed class Truck : Rideable, IEngined
                 HeavyClass.Tractor => (2.55f, 1.25f),
                 HeavyClass.Rigid => (2.45f, 1.2f),
                 HeavyClass.Coach => (2.3f, 1.1f),
+                HeavyClass.Pickup => (1.68f, 2.9f),
                 _ => (2.05f, 1.2f),
             };
             // left-hand drive: the driver's left is −X
             return new Vector3(-(s.Width * 0.5f - 0.6f), y, -(Train.Bodies[0].CgAt - at));
         }
     }
-    public override float EyeHeight => 2.6f;
+    public override float EyeHeight => Spec.Class == HeavyClass.Pickup ? 1.8f : 2.6f;
     // behind the whole train and high enough to see over it: a semi's camera sits ~24 m back
     public override float ChaseDistance => 5f + TrainLength * 0.95f;
     public override float ChaseHeight => 3.5f + TrainLength * 0.28f;
@@ -332,7 +345,7 @@ public sealed class Truck : Rideable, IEngined
         get
         {
             var s = Spec.Sections[0];
-            float at = IsBus ? Spec.Look.Doors.FirstOrDefault().At : 1.4f;
+            float at = IsBus ? Spec.Look.Doors.FirstOrDefault().At : Spec.Class == HeavyClass.Pickup ? 2.6f : 1.4f;
             return new Vector3((IsBus ? 1f : -1f) * (s.Width * 0.5f + 0.4f), 0f, -(Train.Bodies[0].CgAt - at));
         }
     }

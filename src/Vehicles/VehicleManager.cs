@@ -166,6 +166,23 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     }
 
     /// <summary>
+    /// The nearest free vehicle of one kind within <paramref name="reach"/> of a point, measured from
+    /// its origin: a boat floating behind its trailer, to winch aboard (#463).
+    /// </summary>
+    public VehicleBody? NearestOfKind(Vector3 point, float reach, Player.RideKind kind)
+    {
+        VehicleBody? best = null;
+        float bestDist = reach;
+        foreach (var node in GetChildren())
+            if (node is VehicleBody { Wrecked: false } v && v.Ride.Kind == kind && Enterable(v))
+            {
+                float d = v.GlobalPosition.DistanceTo(point);
+                if (d < bestDist) { bestDist = d; best = v; }
+            }
+        return best;
+    }
+
+    /// <summary>
     /// The lone trailer whose pivot (kingpin, drawbar eye) is nearest a point, within
     /// <paramref name="reach"/> horizontally, and that <paramref name="fits"/> — for a truck backing
     /// its hitch under it.

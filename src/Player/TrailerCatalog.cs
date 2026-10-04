@@ -5,7 +5,8 @@ namespace UnitSport.Player;
 
 /// <summary>
 /// The trailers a truck can pick up (#70): three semi-trailers for the tractor's fifth wheel and a
-/// drawbar trailer for the rigid's hitch. Not mounts: a trailer is driven only behind a truck, so it
+/// drawbar trailer for the rigid's hitch; and a boat trailer for every boat that goes on the road
+/// (#463), on a tow ball: the pickup's, or the ball of the rigid's combination coupling. Not mounts: a trailer is driven only behind a truck, so it
 /// has no <see cref="RideKind"/> of its own, only a <see cref="Code"/>, which carries the load too.
 ///
 /// <para>
@@ -20,6 +21,8 @@ public static class TrailerCatalog
     private static readonly Color Aluminium = new(0.78f, 0.79f, 0.8f);
     private static readonly Color FuelRed = new(0.75f, 0.1f, 0.08f);
     private static readonly Color ForestGreen = new(0.16f, 0.3f, 0.18f);
+    private static readonly Color Galvanised = new(0.66f, 0.68f, 0.68f);
+    private static readonly Color BunkCarpet = new(0.15f, 0.17f, 0.3f);
 
     public static readonly IReadOnlyList<TrailerSpec> All = new[]
     {
@@ -135,14 +138,72 @@ public static class TrailerCatalog
                 },
             },
         },
+
+        // ---- 4: the jetski's road trailer (#463) ----
+        new TrailerSpec
+        {
+            Label = "Jetski trailer",
+            Blurb = "Galvanised single-axle trailer with the jetski on its bunks, 750 kg unbraked: on a tow ball. Back it into the lake and {car_door} to launch",
+            Body = TrailerBody.Boat, Couples = Coupling.Ball,
+            Paint = Galvanised, Accent = BunkCarpet, Frame = Galvanised,
+            Boat = RideKind.Jetski, BoatAt = 1.0f + BoatCatalog.Jetski.Length - BoatCatalog.Jetski.Shape.SternZ, BoatKeel = 0.6f,
+            // Assumed (a typical PWC trailer, ~4.4 m, 750 kg gross): tare 230 kg, 155/80R13 wheels,
+            // the axle placed for ~10% nose weight with the jetski aboard (350 kg dry, 50 kg of fuel),
+            // the bow 1.0 m behind the coupler, the keel on the bunks 0.6 m up.
+            Sections = new[]
+            {
+                new SectionSpec
+                {
+                    Name = "jetski trailer", Length = 4.45f, Width = 1.75f, Height = 1.75f, Mass = 230f, CgAt = 2.3f, CgHeight = 0.45f,
+                    Axles = new[] { new AxleSpec(2.95f, 1, Tyre: "155/80R13") },
+                    PivotAt = 0f, Pivot = Coupling.Ball, PivotHeight = 0.5f, MaxArticulation = 1.4f,
+                    DragArea = 0.6f, Track = 1.45f,
+                    PayloadMax = 400f, PayloadAt = 1.0f + BoatCatalog.Jetski.Length - BoatCatalog.Jetski.Shape.SternZ,
+                    PayloadHeight = 0.6f + BoatCatalog.Jetski.CentreHeight,
+                },
+            },
+        },
+
+        // ---- 5: the speedboat's road trailer (#463) ----
+        new TrailerSpec
+        {
+            Label = "Speedboat trailer",
+            Blurb = "Braked tandem trailer with the 7 m runabout on its bunks, 2.6 t: on a tow ball. Back it into the lake and {car_door} to launch",
+            Body = TrailerBody.Boat, Couples = Coupling.Ball,
+            Paint = Galvanised, Accent = BunkCarpet, Frame = Galvanised,
+            Boat = RideKind.Speedboat, BoatAt = 1.0f + BoatCatalog.Speedboat.Length - BoatCatalog.Speedboat.Shape.SternZ, BoatKeel = 0.55f,
+            // Assumed (a braked tandem for a 7 m boat, 2.6-2.7 t gross): 8 m, tare 750 kg, 185/70R14
+            // wheels 0.82 m apart, the pair placed for ~7% nose weight with the boat aboard (1.8 t
+            // without its crew), the bow 1.0 m behind the coupler, the keel on the bunks 0.55 m up.
+            Sections = new[]
+            {
+                new SectionSpec
+                {
+                    Name = "speedboat trailer", Length = 8.0f, Width = 2.4f, Height = 2.1f, Mass = 750f, CgAt = 4.6f, CgHeight = 0.5f,
+                    Axles = new[]
+                    {
+                        new AxleSpec(4.88f, 1, Tyre: "185/70R14"),
+                        new AxleSpec(5.70f, 1, Tyre: "185/70R14"),
+                    },
+                    PivotAt = 0f, Pivot = Coupling.Ball, PivotHeight = 0.5f, MaxArticulation = 1.4f,
+                    DragArea = 1.3f, Track = 1.9f,
+                    PayloadMax = 1800f, PayloadAt = 1.0f + BoatCatalog.Speedboat.Length - BoatCatalog.Speedboat.Shape.SternZ,
+                    PayloadHeight = 0.55f + BoatCatalog.Speedboat.CentreHeight,
+                },
+            },
+        },
     };
 
     // ---- trailer codes: which trailer and how full, in one replicated int ----
     // 0 = none; otherwise (index + 1) | (load percent << 8).
 
-    /// <summary>The code of a trailer at a load, 0..1.</summary>
-    public static int Code(int index, float load) =>
-        index < 0 || index >= All.Count ? 0 : (index + 1) | (Mathf.Clamp(Mathf.RoundToInt(load * 100f), 0, 100) << 8);
+    /// <summary>The code of a trailer at a load, 0..1. A boat trailer's boat is aboard or not: half or more is aboard.</summary>
+    public static int Code(int index, float load)
+    {
+        if (index < 0 || index >= All.Count) return 0;
+        if (All[index].Boat != 0) load = load >= 0.5f ? 1f : 0f;
+        return (index + 1) | (Mathf.Clamp(Mathf.RoundToInt(load * 100f), 0, 100) << 8);
+    }
 
     /// <summary>Which trailer a code names, or null for none (or one this build does not know).</summary>
     public static TrailerSpec? For(int code)
@@ -158,4 +219,18 @@ public static class TrailerCatalog
 
     /// <summary>A code from another peer, cleaned: an unknown trailer reads as none.</summary>
     public static int Clean(int code) => For(code) == null ? 0 : Code(Index(code), Load(code));
+
+    /// <summary>The boat a code's trailer has aboard (#463), or 0: a boat trailer that has launched it is empty.</summary>
+    public static RideKind BoatAboard(int code) => For(code) is { Boat: not 0 } t && Load(code) >= 0.5f ? t.Boat : 0;
+
+    /// <summary>The same code with the boat aboard or gone.</summary>
+    public static int WithBoat(int code, bool aboard) => For(code) == null ? 0 : Code(Index(code), aboard ? 1f : 0f);
+
+    /// <summary>The boat trailer that carries this kind of boat, or −1.</summary>
+    public static int TrailerFor(RideKind boat)
+    {
+        for (int i = 0; i < All.Count; i++)
+            if (All[i].Boat == boat && boat != 0) return i;
+        return -1;
+    }
 }

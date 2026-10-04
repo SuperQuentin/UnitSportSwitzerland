@@ -4,7 +4,7 @@ using UnitSport.Audio;
 namespace UnitSport.Player;
 
 /// <summary>What a heavy vehicle is: which trailers it takes, how it is drawn, how its box shifts.</summary>
-public enum HeavyClass { Tractor, Rigid, CityBus, ArticulatedBus, Coach }
+public enum HeavyClass { Tractor, Rigid, CityBus, ArticulatedBus, Coach, Pickup }
 
 /// <summary>
 /// How the automatic changes gear: an automated manual (a dry clutch the computer works, drive cut
@@ -25,6 +25,11 @@ public enum Coupling
     Turntable,
     /// <summary>An articulated bus's joint (Hübner turntable): carries the rear section's front, damped.</summary>
     BusJoint,
+    /// <summary>
+    /// A centre-axle trailer's coupler on a 50 mm tow ball (#463): carries the trailer's nose weight.
+    /// A pickup's ball, or the ball of a rigid truck's combination coupling.
+    /// </summary>
+    Ball,
 }
 
 /// <summary>
@@ -88,6 +93,12 @@ public sealed record SectionSpec
     public float PivotAt { get; init; } = float.NaN;
     /// <summary>How it hangs there. <see cref="Coupling.None"/> for the first section.</summary>
     public Coupling Pivot { get; init; }
+    /// <summary>
+    /// Height of the pivot above the ground with the section standing level, m; NaN: the hitch's it
+    /// hangs on (a kingpin is built for a fifth wheel's plate). A ball trailer's coupler is built
+    /// for a car's ball: on a truck's higher one it rides nose up.
+    /// </summary>
+    public float PivotHeight { get; init; } = float.NaN;
     /// <summary>Where the next section hangs on this one (fifth wheel, hitch, joint, turntable): metres behind the front; NaN when nothing can.</summary>
     public float HitchAt { get; init; } = float.NaN;
     /// <summary>Height of that point above the ground, m (a fifth wheel's plate, a hitch's jaw).</summary>
@@ -160,6 +171,12 @@ public sealed record HeavySpec
     public (float Rpm, float Nm)[] Torque { get; init; } = System.Array.Empty<(float, float)>();
     /// <summary>Exhaust / compression brake at the crank near the governed speed, N·m.</summary>
     public float EngineBrakeNm { get; init; }
+    /// <summary>Flywheel, clutch and crank, kg·m²: a truck diesel's is ten times a car engine's.</summary>
+    public float EngineInertia { get; init; } = 3.5f;
+    /// <summary>Where a torque converter holds the engine at full throttle against the brakes, rpm.</summary>
+    public float StallRpm { get; init; } = 1900f;
+    /// <summary>Air brakes (chamber lag, a tank, spring brakes); false: hydraulic, as on a pickup.</summary>
+    public bool AirBrakes { get; init; } = true;
     /// <summary>Hydrodynamic retarder at the prop shaft, N·m and kW (it fades at low speed).</summary>
     public float RetarderNm { get; init; }
     public float RetarderKw { get; init; }
@@ -190,6 +207,14 @@ public sealed record HeavySpec
     /// <summary>What can hang on the back: the last section's hitch.</summary>
     public Coupling Takes => Sections[^1].Hitch;
 
+    /// <summary>
+    /// Whether a trailer hangs on this vehicle: what its hitch takes, and a ball trailer on a rigid
+    /// truck's drawbar jaw too — a Swiss distribution truck's combination coupling carries a 50 mm
+    /// ball under the jaw (#463).
+    /// </summary>
+    public bool Accepts(TrailerSpec t) => Takes != Coupling.None
+        && (t.Couples == Takes || t.Couples == Coupling.Ball && Takes == Coupling.Drawbar);
+
     /// <summary>Crank torque at an rpm, N·m, from the published curve.</summary>
     public float TorqueAt(float rpm)
     {
@@ -210,7 +235,7 @@ public sealed record HeavySpec
 }
 
 /// <summary>What a trailer's body is: sets the mesh and how the load sits.</summary>
-public enum TrailerBody { Curtainsider, Tanker, Timber, SwapBody }
+public enum TrailerBody { Curtainsider, Tanker, Timber, SwapBody, Boat }
 
 /// <summary>A trailer as numbers: its sections (one for a semi, dolly and body for a drawbar trailer) and its look.</summary>
 public sealed record TrailerSpec
@@ -225,4 +250,15 @@ public sealed record TrailerSpec
     public Color Accent { get; init; } = new(0.2f, 0.2f, 0.22f);
     public Color Frame { get; init; } = new(0.12f, 0.12f, 0.13f);
     public string Operator { get; init; } = "";
+
+    /// <summary>
+    /// A boat trailer's boat (#463), 0 for none: its load is the boat, aboard (load 1) or launched
+    /// (load 0), and launched it is a boat of this kind in the water.
+    /// </summary>
+    public RideKind Boat { get; init; }
+    /// <summary>Where the boat's origin (its keel under its centre of mass) sits: metres behind the trailer's front, and height, m.</summary>
+    public float BoatAt { get; init; }
+    public float BoatKeel { get; init; }
+    /// <summary>The boat's bow (the winch post), metres behind the trailer's front.</summary>
+    public float BowAt => BoatCatalog.For((int)Boat) is { } b ? BoatAt - (b.Length - b.Shape.SternZ) : 0f;
 }

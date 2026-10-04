@@ -12,7 +12,8 @@ namespace UnitSport.Player;
 /// <para>
 /// It collides as its parts, not as one box round everything: a semi's body from its floor up
 /// and its running gear, with nothing under the nose, so a tractor's fifth wheel slides in under
-/// it; a dolly only round its axle and turntable, so a truck backs up to the drawbar's eye.
+/// it; a dolly only round its axle and turntable, so a truck backs up to the drawbar's eye; a boat
+/// trailer from its winch post back, its A-frame free, so a tow ball reaches the coupler (#463).
 /// </para>
 /// </summary>
 public sealed class ParkedTrailer : Rideable
@@ -58,6 +59,12 @@ public sealed class ParkedTrailer : Rideable
                 float axle = s.Axles[0].At;
                 return Box(cg, axle - 0.8f, axle + 0.8f, 0f, s.HitchHeight + 0.05f, s.Width);
             }
+            if (Spec.Boat != 0)
+            {
+                // the frame and the boat on it, down to the tyres; not the A-frame ahead of the winch post
+                float top = TrailerCatalog.BoatAboard(Code) != 0 ? s.Height : Spec.BoatKeel + 0.15f;
+                return Box(cg, Spec.BowAt, s.Length, 0f, top, s.Width);
+            }
             return Box(cg, 0f, s.Length, Floor - 0.1f, s.Height, s.Width);
         }
     }
@@ -79,10 +86,13 @@ public sealed class ParkedTrailer : Rideable
         return root;
     }
 
+    /// <summary>A semi's running gear is its first extra box: a box apart from its body's (<see cref="ExtraBoxes"/>).</summary>
+    public bool HasGearBox => Spec.Sections[0].Pivot is not (Coupling.Drawbar or Coupling.Ball);
+
     public override IEnumerable<(Transform3D Pose, Vector3 Centre, Vector3 Size)> ExtraBoxes()
     {
         var s0 = Spec.Sections[0];
-        if (s0.Pivot != Coupling.Drawbar)
+        if (HasGearBox)
         {
             // a semi's running gear under its body, from ahead of the first axle to the back
             float first = s0.Axles.Min(a => a.At);

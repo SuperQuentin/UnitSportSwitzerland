@@ -70,8 +70,12 @@ public readonly record struct VehicleState(
         return CarSetups.Ride(Kind, Setup, Tuning);
     }
 
-    /// <summary>How many vehicles this state is to the server's count: a train is a truck and a trailer.</summary>
-    public int Units => Kind != RideKind.Trailer && Train != 0 ? 2 : 1;
+    /// <summary>
+    /// How many vehicles this state is to the server's count: a train is a truck and a trailer, and a
+    /// boat on a trailer is a boat (#463) — launched, it is parked out of that count, and a boat
+    /// winched aboard is claimed into it.
+    /// </summary>
+    public int Units => (Kind != RideKind.Trailer && Train != 0 ? 2 : 1) + (TrailerCatalog.BoatAboard(Train) != 0 ? 1 : 0);
 
     public Godot.Collections.Dictionary ToDict()
     {

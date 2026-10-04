@@ -29,6 +29,8 @@ public partial class FootPlayer
     /// </summary>
     public float WadingDepth => _ride switch
     {
+        // a Raptor fords 0.8 m (#463)
+        Truck { Spec.Class: HeavyClass.Pickup } => 0.8f,
         Truck => 1.0f,
         Motorbike => 0.45f,
         Car => 0.55f,

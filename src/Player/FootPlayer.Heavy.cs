@@ -148,16 +148,16 @@ public partial class FootPlayer
         float zRear = b.CgAt - HeavyTrain.RearGroupAt(b.Spec);   // + forward of the CG
         float ground = GroundUnder(flat.Origin + forward * zRear, exclude);
         float pitch = 0f;
-        // a drawbar dolly stands on its own axle; anything on a fifth wheel, turntable or joint is
-        // carried at the front by the section ahead
-        if (b.Spec.Pivot is Coupling.FifthWheel or Coupling.Turntable or Coupling.BusJoint)
+        // a drawbar dolly stands on its own axle; anything on a fifth wheel, turntable, joint or
+        // tow ball is carried at the front by the section ahead
+        if (HeavyTrain.Carries(b.Spec.Pivot))
         {
             var parentWorld = k == 1
                 ? GlobalTransform * new Transform3D(new Basis(Vector3.Right, _truckPitch), Vector3.Zero)
                 : _sections[k - 2].GlobalTransform;
             var pin = parentWorld * new Vector3(0, parent.Spec.HitchHeight, -parent.HitchZ);
             float d = Mathf.Max(b.PivotZ - zRear, 0.5f);
-            pitch = Mathf.Clamp(Mathf.Atan2(pin.Y - ground, d) - Mathf.Atan2(parent.Spec.HitchHeight, d), -0.4f, 0.4f);
+            pitch = Mathf.Clamp(Mathf.Atan2(pin.Y - ground, d) - Mathf.Atan2(HeavyGround.LevelPivot(b.Spec, parent.Spec), d), -0.4f, 0.4f);
         }
         var basis = flat.Basis * new Basis(Vector3.Right, pitch);
         return new Transform3D(basis, flat.Origin with { Y = ground - zRear * Mathf.Sin(pitch) });
@@ -312,6 +312,7 @@ public partial class FootPlayer
             return true;
         }
         if (e.IsActionPressed(PlayerInput.LightsToggle)) { truck.Headlights = !truck.Headlights; return true; }
+        if (e.IsActionPressed(PlayerInput.CarDoor) && truck.Trailer is { Boat: not 0 }) { ToggleBoat(truck); return true; }
         if (!truck.IsBus) return false;
         bool stopped = GroundSpeed < 1f;
         if (e.IsActionPressed(PlayerInput.CarDoor) && truck.DoorCount > 0)
@@ -343,8 +344,8 @@ public partial class FootPlayer
     {
         if (truck.Trailer != null || truck.Spec.Takes == Coupling.None) return null;
         var hitch = ToGlobal(truck.HitchNode with { Y = 0 });
-        // a fifth wheel's jaws take a kingpin at an angle; a drawbar eye swings on the hitch
-        float tolerance = truck.Spec.Takes == Coupling.Drawbar ? 1.2f : 0.9f;
+        // a fifth wheel's jaws take a kingpin at an angle; a drawbar eye or a coupler swings on the hitch
+        float tolerance = truck.Spec.Takes is Coupling.Drawbar or Coupling.Ball ? 1.2f : 0.9f;
         return Vehicles?.NearestTrailer(hitch, CoupleReach, v =>
             truck.Accepts(v.Trailer!.Spec)
             && Mathf.Abs(MathX.WrapAngle(v.Rotation.Y - Rotation.Y)) < tolerance);
@@ -358,8 +359,12 @@ public partial class FootPlayer
         if (truck.Spec.Takes == Coupling.None) return;
         if (CoupleCandidate(truck) is not { } target)
         {
-            Announced?.Invoke(truck.Spec.Takes == Coupling.FifthWheel
-                ? "Back the fifth wheel under a trailer's kingpin" : "Back the hitch up to a drawbar trailer's eye", false);
+            Announced?.Invoke(truck.Spec.Takes switch
+            {
+                Coupling.FifthWheel => "Back the fifth wheel under a trailer's kingpin",
+                Coupling.Ball => "Back the tow ball up to a boat trailer's coupler",
+                _ => "Back the hitch up to a drawbar or boat trailer's coupling",
+            }, false);
             return;
         }
         Vehicles!.Claim(target, state =>
@@ -410,6 +415,90 @@ public partial class FootPlayer
         Vehicles.Park(new VehicleState(RideKind.Trailer, Origin!.ToGlobal(pos), Rotation.Y, Vector3.Zero, 400f, false, false, 0f,
             VehicleState.Now, Train: code));
         return true;
+    }
+
+    // ---- the boat trailer's boat (#463) ----------------------------------------------------------
+
+    /// <summary>
+    /// Where the coupled boat trailer's boat goes when it is launched, in world space, and its yaw:
+    /// slid back off the stern until its bow clears the trailer's back. Null without a boat trailer.
+    /// </summary>
+    public (Vector3 At, float Yaw, BoatSpec Boat)? BoatSpot(Truck truck)
+    {
+        if (truck.Trailer is not { Boat: not 0 } t || BoatCatalog.For((int)t.Boat) is not { } boat) return null;
+        int k = truck.SectionCount - 1;
+        var section = _sections.Count >= k && k >= 1 ? _sections[k - 1].GlobalTransform : GlobalTransform * truck.NodeLocal(k);
+        var s = t.Sections[^1];
+        float cg = truck.Train.Bodies[k].CgAt;
+        // node space, −Z forward: the trailer's back, then the boat's length from its bow to its origin
+        var at = section * new Vector3(0, 0, (s.Length - cg) + 0.5f + (boat.Length - boat.Shape.SternZ));
+        var fwd = -section.Basis.Z;
+        return (at, Mathf.Atan2(-fwd.X, -fwd.Z), boat);
+    }
+
+    /// <summary>
+    /// Water deep enough to float the boat at its launch spot: the surface's height there, or null.
+    /// The trailer is backed down a slipway (or a shore) until the stern is over it.
+    /// </summary>
+    private float? LaunchWater(Vector3 at, BoatSpec boat)
+    {
+        if (!World.WaterField.TryLevelAt(at, out float level)) return null;
+        float bed = Terrain != null && Terrain.TryGetHeight(at, out float g) ? g : float.NegativeInfinity;
+        // about the boat's draft: a hull floats off its bunks once the water reaches its chines
+        return level - bed >= boat.Depth * 0.55f ? level : null;
+    }
+
+    /// <summary>The coupled trailer's boat is aboard and its launch spot is deep enough to float it.</summary>
+    public bool CanLaunchBoat(Truck truck) =>
+        TrailerCatalog.BoatAboard(truck.TrailerCode) != 0 && BoatSpot(truck) is { } spot && LaunchWater(spot.At, spot.Boat) != null;
+
+    /// <summary>A parked boat of the trailer's kind near its launch spot, nobody aboard: what the winch can pull on.</summary>
+    public VehicleBody? BoatToWinch(Truck truck)
+    {
+        if (BoatSpot(truck) is not { } spot || TrailerCatalog.BoatAboard(truck.TrailerCode) != 0 || Vehicles == null) return null;
+        return Vehicles.NearestOfKind(spot.At, BoatReach, truck.Trailer!.Boat);
+    }
+
+    /// <summary>How far from its launch spot a boat may float and still be winched aboard, m.</summary>
+    private const float BoatReach = 6f;
+
+    /// <summary>
+    /// {car_door} with a boat trailer: launches its boat into the water behind it (a parked boat, the
+    /// trailer empty), or winches a boat of its kind floating there back aboard (claimed like getting
+    /// in, so two players cannot take one boat).
+    /// </summary>
+    public void ToggleBoat(Truck truck)
+    {
+        if (GroundSpeed > 1.5f) { Announced?.Invoke("Stop to launch or load the boat", false); return; }
+        if (BoatSpot(truck) is not { } spot || Vehicles == null) return;
+        if (TrailerCatalog.BoatAboard(truck.TrailerCode) != 0)
+        {
+            if (LaunchWater(spot.At, spot.Boat) is not { } level)
+            {
+                Announced?.Invoke("Back the trailer into the water to launch the boat", false);
+                return;
+            }
+            var kind = truck.Trailer!.Boat;
+            if (!truck.SetBoatAboard(false)) return;
+            Vehicles.Park(new VehicleState(kind, Origin!.ToGlobal(spot.At with { Y = level }), spot.Yaw, Vector3.Zero,
+                Rideable.Create(kind)?.MaxHealth ?? 100f, false, false, 0f, VehicleState.Now));
+            TrailerCode = truck.TrailerCode;
+            RefreshVisual(force: true);
+            Announced?.Invoke("LAUNCHED", true);
+            return;
+        }
+        if (BoatToWinch(truck) is not { } target)
+        {
+            Announced?.Invoke($"Float a {spot.Boat.Name.ToLowerInvariant()} up behind the trailer to winch it aboard", false);
+            return;
+        }
+        Vehicles.Claim(target, state =>
+        {
+            if (_ride is not Truck t || !t.SetBoatAboard(true)) { Vehicles?.Park(state); return; }
+            TrailerCode = t.TrailerCode;
+            RefreshVisual(force: true);
+            Announced?.Invoke("BOAT ABOARD", true);
+        });
     }
 
     /// <summary>Contacts the sections behind the cab have made since this player was made (for the probes).</summary>
