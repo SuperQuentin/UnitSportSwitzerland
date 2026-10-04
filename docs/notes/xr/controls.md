@@ -51,6 +51,23 @@ The full per-action design and rules: `xr/vr-action-map`.
     hand's move across the view since the wheel opened (0.15 m = full), when the stick is idle.
   - **Fling to drop** (#437): a grip squeezed on nothing and let go with the hand moving over
     2.5 m/s in the play space (walking does not count) taps `drop_item`.
+- **Cab and cockpit controls (#438, `XR/XrCabControls`).** Knobs in the driver's eye frame (the
+  rig's anchor before the head is written back), drawn in the headset only (amber: grip, blue:
+  poke). A grip closing within 0.09 m holds one; it takes that grip from the hands and the pad.
+  - Spring levers tap an action a notch at a time along their axis and spring back: truck
+    sequential lever (back up, forward down), retarder stalk (down more, up less), airliner flaps
+    (back more, forward less), speedbrake (each pull back a step), landing gear (either way).
+  - Hold levers hold an action while pushed: airliner trim wheel, steamer whistle cord.
+  - The H-pattern lever (trucks set to H-pattern) taps the gear of the gate it sits in
+    (`XrControlNames.GateOf`, unit tested): 1 3 5 ahead, 2 4 6 back, reverse left of 1.
+  - Pokes, the tip within 3.5 cm: bus kneel and destination, airliner parking brake and
+    autopilot, car radio previous / next / panel.
+  - Places are guesses at each dash, not its drawn switches. `--xrcab truck-h-bus|truck-seq|car|airliner|steamer`
+    builds a set round any view, for checks with `--xrsim`.
+- **Flying with the arms (#438, `XrRig.BodyFlight`)**, added to the left stick: the pigeon flaps
+  when both hands beat down faster than 1.6 m/s; the wingsuit, hands over 1 m apart, rolls toward
+  the lower hand; under a canopy each hand pulled down past the shoulder is a brake (one turns,
+  both slow and flare).
 - **Wrist menu (#437, `XR/XrWristMenu`).** The back of the left wrist (the controller's +X) turned
   toward the eyes, in view within 24° and 0.7 m, for 0.6 s opens a menu on the UI panel: travel,
   inventory, map, bird journal, drop the held item (on foot), fly camera / walk, controls,

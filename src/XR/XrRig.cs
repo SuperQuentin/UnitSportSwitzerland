@@ -47,6 +47,9 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     private XRController3D _left = null!, _right = null!;
     private XrPad _pad = null!;
     private XrWristMenu _wrist = null!;
+    private XrCabControls _cab = null!;
+    private Vector3 _prevLeftLocal, _prevRightLocal;
+    private float _flapCooldown;
 
     /// <summary>Following a camera in the world: not the title's backdrop, not before any camera.</summary>
     public bool InWorld => Anchor != null && !_anchorIsBackdrop;
@@ -158,6 +161,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         AddChild(_ui);
         _wrist = new XrWristMenu(this);
         AddChild(_wrist);
+        _cab = new XrCabControls(_left, _right);
+        AddChild(_cab);
         Notice = new XrNotice();
         AddChild(Notice);
         if (XrSession.Simulated) Notice.CallDeferred(XrNotice.MethodName.Show, "VR", "simulated");
@@ -290,10 +295,13 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         var calibrated = _calib * head;
 
         HandleSticks(player, calibrated, dt);
-        // the hands first: a grip that holds the wheel or works a door is not a shoulder press
-        _hands.Update(player, _camera.GlobalTransform, dt);
-        _pad.LeftGripBusy = _hands.LeftBusy;
-        _pad.RightGripBusy = _hands.RightBusy;
+        // the cab's levers, then the hands: a grip that holds a lever, the wheel or worked a door
+        // is not a shoulder press (#438)
+        _cab.Update(player, _lastAnchor);
+        _hands.Update(player, _camera.GlobalTransform, dt, _cab.LeftHeld, _cab.RightHeld);
+        _pad.LeftGripBusy = _hands.LeftBusy || _cab.LeftHeld;
+        _pad.RightGripBusy = _hands.RightBusy || _cab.RightHeld;
+        _pad.BodyStick = BodyFlight(player, dt);
         _pad.Update(player, calibrated, uiActive: _ui.Pointing, dt);
         _wrist.Watch(_camera.GlobalTransform, _left, player, InWorld, dt);
         UpdateHandAim();
@@ -314,6 +322,51 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     }
 
     private Vector3 _aimZero;
+
+    /// <summary>
+    /// Flying with the arms (#438), as a stick added to the left one (up +y, right +x): the pigeon
+    /// flaps when both hands beat down; the wingsuit, arms spread, rolls toward the lower hand; a
+    /// canopy's brakes are the hands pulled down, one to turn, both to slow and flare.
+    /// </summary>
+    private Vector2 BodyFlight(FootPlayer? player, float dt)
+    {
+        var head = _camera.Transform;
+        var l = _left.Position - head.Origin;
+        var r = _right.Position - head.Origin;
+        float vl = (_left.Position.Y - _prevLeftLocal.Y) / Mathf.Max(dt, 1e-3f);
+        float vr = (_right.Position.Y - _prevRightLocal.Y) / Mathf.Max(dt, 1e-3f);
+        _prevLeftLocal = _left.Position;
+        _prevRightLocal = _right.Position;
+        _flapCooldown -= dt;
+        if (player == null || player.RidingWith != 0 || !_left.GetHasTrackingData() || !_right.GetHasTrackingData())
+            return Vector2.Zero;
+
+        switch (player.Ride)
+        {
+            case RideKind.Pigeon:
+                // both wings beat down together, from about the shoulders
+                if (vl < -1.6f && vr < -1.6f && _flapCooldown <= 0f && Input.MouseMode == Input.MouseModeEnum.Captured)
+                {
+                    _flapCooldown = 0.3f;
+                    XrPad.Tap(Core.PlayerInput.Jump);
+                }
+                return Vector2.Zero;
+            case RideKind.Wingsuit:
+            {
+                // arms out: the lower hand is the wing that dips
+                if ((_left.Position - _right.Position).Length() < 1.0f) return Vector2.Zero;
+                return new Vector2(Mathf.Clamp((l.Y - r.Y) / 0.3f, -1f, 1f), 0f);
+            }
+            case RideKind.Parachute or RideKind.Paraglider:
+            {
+                // the toggles hang at the shoulders: pulled down, a brake
+                float bl = Mathf.Clamp((-l.Y - 0.3f) / 0.35f, 0f, 1f), br = Mathf.Clamp((-r.Y - 0.3f) / 0.35f, 0f, 1f);
+                return new Vector2(br - bl, -Mathf.Min(bl, br));
+            }
+            default:
+                return Vector2.Zero;
+        }
+    }
 
     /// <summary>The right hand across the view since it was zeroed, as a stick (<see cref="XrSession.HandAim"/>).</summary>
     private void UpdateHandAim()

@@ -37,6 +37,22 @@ public static class XrControlNames
         return XrController.Quest;
     }
 
+    /// <summary>
+    /// The H-pattern gate a gear knob moved by (<paramref name="across"/> right,
+    /// <paramref name="ahead"/> forward) sits in (#438): 1–6 in three columns, the odd ones ahead
+    /// (1 left, then 3, then 5), −1 reverse (a column left of 1, ahead), 0 neutral across the
+    /// middle or back left of 1. The knob starts in neutral between 3 and 4.
+    /// </summary>
+    public static int GateOf(float across, float ahead, float pitch, float throw_)
+    {
+        int row = ahead > throw_ ? 1 : ahead < -throw_ ? 2 : 0;
+        if (row == 0) return 0;
+        int column = (int)Math.Round(across / pitch);
+        if (column < -1) return row == 1 ? -1 : 0;
+        column = Math.Clamp(column + 1, 0, 2);
+        return column * 2 + row;
+    }
+
     public static string? Name(XrControl control, XrController controller) => control switch
     {
         XrControl.LeftTrigger => "L trigger",

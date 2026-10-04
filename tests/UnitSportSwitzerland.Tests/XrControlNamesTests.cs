@@ -56,4 +56,19 @@ public class XrControlNamesTests
             Assert.Equal(names.Count, names.Distinct().Count());
         }
     }
+
+    [Theory]
+    [InlineData(0f, 0f, 0)]          // rest: neutral
+    [InlineData(-0.06f, 0.08f, 1)]   // left column ahead
+    [InlineData(-0.06f, -0.08f, 2)]  // left column back
+    [InlineData(0f, 0.08f, 3)]
+    [InlineData(0f, -0.08f, 4)]
+    [InlineData(0.06f, 0.08f, 5)]
+    [InlineData(0.07f, -0.08f, 6)]
+    [InlineData(0.2f, 0.08f, 5)]     // far right stays in the last column
+    [InlineData(-0.13f, 0.08f, -1)]  // reverse, left of 1, ahead
+    [InlineData(-0.13f, -0.08f, 0)]
+    [InlineData(0.06f, 0.02f, 0)]    // across the middle
+    public void Gear_knob_gates(float across, float ahead, int gate) =>
+        Assert.Equal(gate, XrControlNames.GateOf(across, ahead, 0.06f, 0.05f));
 }

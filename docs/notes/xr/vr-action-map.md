@@ -57,13 +57,13 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | lights_toggle | L / D-pad → | ok: R stick → (#436) | keep |
 | roof / horn / couple | O H / D-pad ← | ok: R stick ← (#436) | keep |
 | tune | T / D-pad ↓ | ok: R stick ↓ (#436) | keep |
-| radio next / prev / panel | U P R / — | gap | **reach to the dash radio**: grip = panel, poke ← → |
+| radio next / prev / panel | U P R / — | ok: dash pokes (#438) | keep |
 | take_wheel (passenger) | F / RB | ambiguous (free grip) | **grip the wheel** from the passenger seat |
 | shift up / down, clutch | Shift Ctrl C / RB LB B | ok: grips, B | keep |
-| gear 1-6, R, N | 1-6 ` 0 / — | gap | **H-pattern lever by hand** (`XrLever`) |
-| retarder | ' ; / — | gap | **stalk by hand** |
-| bus kneel / destination | K N / — | gap | **dash buttons by poke** |
-| steamer whistle | H / D-pad ← | gap | **pull the cord** |
+| gear 1-6, R, N | 1-6 ` 0 / — | ok: H-pattern lever by hand (#438) | keep |
+| retarder | ' ; / — | ok: stalk by hand (#438) | keep |
+| bus kneel / destination | K N / — | ok: dash pokes (#438) | keep |
+| steamer whistle | H / D-pad ← | ok: R stick ←, or pull the cord (#438) | keep |
 | look_behind | B / wheel button | ok: turn your head; held on a keyboard or wheel the view turns round (#436) | keep |
 
 ## Flying
@@ -73,11 +73,11 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | pitch / roll | WASD / L stick | ok | + optional yoke / stick grab |
 | throttle / climb / descend | Shift Space Ctrl / RT LT A B | ok: R / L trigger, analog (#436) | keep |
 | fire / pigeon drop | LMB / RB | ok: R trigger | keep |
-| airliner flaps | F6 F7 / LB RB | ok: grips | + **flap lever by hand** |
-| speedbrake / gear / park brake | / G . / D-pad ← X — | partial: X only | **cockpit levers by hand** |
-| autopilot / trim | Y Home End / — | gap | **poke** AP, trim wheel by hand |
-| wingsuit / canopy | stick, Space | ok: stick, A | **arms spread** glide, lean steer; **pull the brake toggles** |
-| pigeon flap / dive | Space Ctrl / A B | ok: A B | + **flap the arms** |
+| airliner flaps | F6 F7 / LB RB | ok: grips, or the flap lever by hand (#438) | keep |
+| speedbrake / gear / park brake | / G . / D-pad ← X — | ok: levers and poke by hand (#438) | keep |
+| autopilot / trim | Y Home End / — | ok: AP poke, trim wheel by hand (#438) | keep |
+| wingsuit / canopy | stick, Space | ok: stick, A; arms roll the suit, hands pull the brakes (#438) | keep |
+| pigeon flap / dive | Space Ctrl / A B | ok: A B, flap the arms (#438) | keep |
 
 ## World, UI, others
 

@@ -81,7 +81,8 @@ internal sealed class XrHands
     public bool LeftBusy => _left.Busy;
     public bool RightBusy => _right.Busy;
 
-    public void Update(FootPlayer? player, Transform3D head, float dt)
+    /// <param name="leftClaimed">A cab lever holds this grip (#438): it takes nothing else.</param>
+    public void Update(FootPlayer? player, Transform3D head, float dt, bool leftClaimed = false, bool rightClaimed = false)
     {
         _head = head;
         var grip = WheelOf(player);
@@ -106,7 +107,7 @@ internal sealed class XrHands
             else if (closing) hand.Closed = true;
 
             if (hand.OnWheel && grip == null) LetGo(hand, buzz: false);
-            if (closing && !hand.Busy) TryTake(hand, player, grip);
+            if (closing && !hand.Busy && !(hand == _left ? leftClaimed : rightClaimed)) TryTake(hand, player, grip);
         }
         UpdateWheel(player, grip);
     }
