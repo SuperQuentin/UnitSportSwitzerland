@@ -38,7 +38,8 @@ public static class BrMapDraw
             float r = z.Radius * ppm;
             c.DrawArc(centre, r + reach * 0.5f, 0, Mathf.Tau, 128, Storm, reach);
             c.DrawArc(centre, r, 0, Mathf.Tau, 128, Edge, 2f);
-            if (z.Phase > 0 && !z.Over) Dashed(c, toScreen(z.NextCentre), z.NextRadius * ppm, Next);
+            // the next circle, from the loot time on (#477)
+            if (!z.Over) Dashed(c, toScreen(z.NextCentre), z.NextRadius * ppm, Next);
         }
 
         // the cargo plane (#207) until its doors close: its line, the stretch the doors are open, the plane

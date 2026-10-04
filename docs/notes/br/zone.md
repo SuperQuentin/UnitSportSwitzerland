@@ -13,6 +13,17 @@
 - **Next centres**: circle i's centre is uniform in the disc of radius `r(i-1) - r(i)` around the
   previous centre, clamped into the square and pulled back inside the previous circle. So every
   circle lies inside the one before.
+- **On the ground** (#477): at GO the server (`BrManager.GroundCentres`) draws each centre as above but
+  tries up to `ZoneSchedule.Tries` (12) seeded candidates, keeping the first whose disc has at most
+  `GoodEnough` (30 %) of bad ground, else the least bad. `ZoneSchedule.Badness`: 41 sunflower samples
+  over the disc, each on water (`BrMapImage.Wet`, the horizon lattice's water level) or on a slope over
+  35° (heights ±50 m) counts. The centres go out in `BrState.ZoneCentres` and every client builds its
+  zone from them (`ZoneSchedule(..., centres)`), so nobody needs the lattice and nobody disagrees.
+  Without the lattice (generated, fixture worlds) `ZoneCentres` is null: the seed's own zone.
+  `--brcheck`: a synthetic lake + cliff, circles on bad ground 533 → 35 of 800.
+- **The next circle while looting** (#477): `At` in phase 0 already gives the first shrink's circle as
+  `NextCentre`/`NextRadius`; the maps draw it dashed from the start, so a rotation can be planned
+  before the zone bites.
 - **Timetable**: the 6 km normal baseline below; times scale by `r0 / 3,420 m x pace` (short 0.8 / normal 1 / long 1.3),
   the same as `side / 6 km` for a full circle; a small field never under half (5 players on 5 km: about 20 min a round).
 
@@ -36,5 +47,4 @@
 - **Wall** (`ZoneWall`): an open `CylinderMesh` scaled to the radius, 3 km tall around the camera's
   height. Drawn by `shaders/br_zone_wall.gdshader`: unshaded, cull off, stripes about every 12 m,
   rising bands, stronger up close, Bayer-dithered. Hidden at radius 0.
-- Not yet: rejecting centres over lakes or steep slopes (the server and clients would need the same
-  height data); a terrain tint outside the circle (shader globals).
+- Not yet: glaciers (the lattice has no cover classes); a terrain tint outside the circle (shader globals).

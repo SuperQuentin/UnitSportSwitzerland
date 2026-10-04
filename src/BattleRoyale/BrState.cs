@@ -52,6 +52,11 @@ public sealed class BrState
     public int TeamSize { get; set; } = 1;
     /// <summary>Players at GO: the first circle is sized for them (<see cref="ZoneSchedule.FirstRadius"/>); 0 before GO.</summary>
     public int Field { get; set; }
+    /// <summary>
+    /// The zone's centres as the server chose them on the ground (#477), x then y, phase 0 first
+    /// (<see cref="ZoneSchedule.Centres"/>); null before GO, or for a zone drawn from the seed alone.
+    /// </summary>
+    public float[]? ZoneCentres { get; set; }
     /// <summary>The winning team, 0 in solo or with no winner.</summary>
     public int WinnerTeam { get; set; }
     public List<BrEntrant> Entrants { get; set; } = new();
@@ -95,13 +100,13 @@ public sealed class BrState
     /// <summary>This match's zone, the same on every peer; built once per (seed, side, pace, field).</summary>
     public ZoneSchedule Zone()
     {
-        var key = (Seed, Side, Pace, Field);
-        if (_zone == null || key != _zoneKey) (_zone, _zoneKey) = (new ZoneSchedule(Seed, Side, Pace, Field), key);
+        var key = (Seed, Side, Pace, Field, ZoneCentres);
+        if (_zone == null || key != _zoneKey) (_zone, _zoneKey) = (new ZoneSchedule(Seed, Side, Pace, Field, ZoneCentres), key);
         return _zone;
     }
 
     private ZoneSchedule? _zone;
-    private (int, float, float, int) _zoneKey;
+    private (int, float, float, int, float[]?) _zoneKey;
 
     /// <summary>The cargo plane's line, once the match has started.</summary>
     [JsonIgnore] public BrFlight? Flight => Running && FlightStart > 0 ? new BrFlight(this) : null;
