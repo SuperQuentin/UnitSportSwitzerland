@@ -378,13 +378,14 @@ public partial class FootPlayer
     /// for it, or within a metre of it, the vehicle's own rule for its guests (<see cref="WatchGuests"/>).
     /// Excepted from the hull as long as the deck was built (30 m and more), a swimmer swam through a
     /// parked steamer's hull, under its deck. Each physics step before the walk; built excepted, so
-    /// a deck arriving round a player still lets them be.
+    /// a deck arriving round a player still lets them be. Boats only: the walk onto
+    /// any other deck (airstairs, a bus) starts outside that metre (#417's stairs were blocked).
     /// </summary>
     private void ExceptHulls()
     {
         foreach (var set in _decks.Values)
         {
-            bool near = set.Key == DeckOn || _deckWait > 0f || NearDeck(set);
+            bool near = set.Ride is not Boat || set.Key == DeckOn || _deckWait > 0f || NearDeck(set);
             if (near == set.HullExcepted) continue;
             set.HullExcepted = near;
             foreach (var other in set.Excepted)
