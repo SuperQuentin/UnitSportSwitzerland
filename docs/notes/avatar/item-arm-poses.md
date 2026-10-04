@@ -19,7 +19,8 @@
   to tilt them.
 - `GaitMounts.HandBasis` / `FootPlayer.HandLocal` (a full transform) carry the item direction: the pose's
   direction blended from the forearm; `HeldItemVisual` in-hand mode uses it instead of identity.
-- The owner in 3P while aiming still gets the forced eye view (`ScopeView`); its own body is hidden.
+- The owner aiming an optic, a camera or a scoped rifle gets the forced eye view (`ScopeView`), its own body
+  hidden; an unscoped gun is aimed over the shoulder camera with the body shown (#460, `shotgun-feel`).
 - Check: `--synccheck` (fresh hand error must stay < 0.02); loopback `--server --generated-world` + two
   clients, one `--hold Shotgun --aim`, the other `--shot` at the holder (the remote copy shoulders it).
 - Use poses (#108): `ItemAction` 2 is set by `ItemController` for the length of an eat/drink/put-on-hat one-shot;

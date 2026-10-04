@@ -183,7 +183,7 @@ public partial class InventoryUi : CanvasLayer
         _root.AddChild(_viewfinder);
 
         // the shotgun's bead: a small open ring at the screen centre, where the front bead sits
-        _crosshair = new BeadReticle { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+        _crosshair = new Crosshair { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
         _crosshair.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _root.AddChild(_crosshair);
 
@@ -1095,7 +1095,8 @@ public partial class InventoryUi : CanvasLayer
 
         _binoculars.Visible = Scope == ItemUse.Optic;
         _viewfinder.Visible = Scope == ItemUse.Photo;
-        _crosshair.Visible = false;   // no reticle for the shotgun: the barrel is the aim
+        // a shouldered gun aims over the shoulder camera's centre (#460); VR aims down the barrel
+        _crosshair.Visible = Scope == ItemUse.Shoot && !XR.XrSession.Active;
         if (_binoculars.Visible && _binoculars.Material is ShaderMaterial sm)
         {
             sm.SetShaderParameter("aspect", _root.Size.X / Mathf.Max(1f, _root.Size.Y));
@@ -1316,15 +1317,26 @@ public partial class WheelView : Control
 /// A camera's viewfinder: thirds grid, corner brackets, focal length readout with a zoom scale,
 /// an autofocus brace that hunts after every zoom change, and shots / time / battery at the corners.
 /// </summary>
-/// <summary>The shotgun's aiming dot: a thin dark-edged ring around the centre, small enough to leave the front bead visible.</summary>
-public partial class BeadReticle : Control
+/// <summary>A shouldered gun's crosshair (#460): four dark-edged ticks round a gap and a centre dot, where the shot goes.</summary>
+public partial class Crosshair : Control
 {
+    private static readonly Color Edge = new(0, 0, 0, 0.6f), Line = new(1f, 0.95f, 0.85f, 0.95f);
+
     public override void _Draw()
     {
-        var c = Size / 2f;
-        DrawArc(c, 5.5f, 0f, Mathf.Tau, 28, new Color(0, 0, 0, 0.55f), 3.5f, true);
-        DrawArc(c, 5.5f, 0f, Mathf.Tau, 28, new Color(1f, 0.92f, 0.6f, 0.95f), 1.6f, true);
+        var c = (Size / 2f).Round();
+        for (int pass = 0; pass < 2; pass++)
+        {
+            var color = pass == 0 ? Edge : Line;
+            float width = pass == 0 ? 4f : 2f, grow = pass == 0 ? 1f : 0f;
+            foreach (var d in Dirs)
+                DrawLine(c + d * (Gap - grow), c + d * (Gap + Tick + grow), color, width);
+            DrawCircle(c, pass == 0 ? 2.5f : 1.5f, color);
+        }
     }
+
+    private const float Gap = 6f, Tick = 9f;
+    private static readonly Vector2[] Dirs = { Vector2.Up, Vector2.Down, Vector2.Left, Vector2.Right };
 
     public override void _Notification(int what)
     {
