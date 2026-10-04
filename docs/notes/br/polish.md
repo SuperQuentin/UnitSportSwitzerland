@@ -19,6 +19,16 @@
   (seeded shuffle, last team short), `SideOf` / `Hostile` (no friendly fire through `PvpRules.Override`),
   `TeamsAlive` ends the match, a side places when its last member is out, the winner's whole side wins
   (`WinnerTeam`). HUD: teams alive, your team-mates; maps: green arrows with names; compass row 3;
-  spectating starts with team-mates. Checked in `--brcheck` only: no loopback match in teams (two
-  probes in duos make one team, which ends the match at GO). Not yet: downed-not-out, revive, team chat,
-  joining as a group, boarding/jumping together.
+  spectating starts with team-mates. Not yet: downed-not-out, revive, team chat, boarding/jumping together.
+- **Picked teams** (#469): `/br team <name>` in the lobby (`BrEntrant.Party`, `PartyName`: trimmed, lower
+  case, letters and digits, ≤ 16; no name leaves the group). `AssignTeams` puts each group in one team
+  (split into several when bigger than `TeamSize`), then fills the places left with the shuffled rest,
+  short teams first; without groups it is the old plain shuffle. `/br status` shows `Name [group]`.
+- **One side alone plays on** (#469): `_sidesAtGo`; a match that boarded a single side (friends in one
+  squad, or one player started alone) ends only when it is out or the zone has closed, not at GO.
+- **Pings** (#469): `ping` action (middle mouse; middle-click on the full map). Client `PingCrosshair`
+  (camera ray, 2 km) / `PingMap` → server `RequestPing` (alive, in a team, ≤ 2.5 km from the body, one
+  per 1.5 s) → `Pinged` to every team member, out or not, sender included. Each client keeps one ping per
+  player for 8 s (`Pings`, local clock): a pink diamond with name and distance on screen (`BrHud`,
+  projected; a map ping stands on the ground where its tile is loaded), a pin on the minimap and full map
+  (`BrMapDraw.Overlays`), compass row 4, `BrSounds.Ping`. Loopback: `SQUAD=1 tools/brcheck.sh`.

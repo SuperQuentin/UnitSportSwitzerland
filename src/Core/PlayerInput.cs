@@ -111,6 +111,8 @@ public partial class PlayerInput : Node
     public const string CameraToggle = "camera_toggle";
     public const string ToggleMode = "toggle_mode";
     public const string Teleport = "teleport";
+    /// <summary>Battle Royale squads (#469): mark the point under the crosshair for your team-mates.</summary>
+    public const string Ping = "ping";
     public const string Menu = "menu";
     /// <summary>In a stopped car at a garage: open the tuning menu (<see cref="Vehicles.GarageUi"/>).</summary>
     public const string Tune = "tune";
@@ -492,6 +494,8 @@ public partial class PlayerInput : Node
         // The place search is a map in all but drawing, so it sits on M. A pad can open it but
         // not type in it, so it stays keyboard-only rather than trapping a controller player.
         Bind(Teleport, Keys(Key.M));
+        // mouse only: a pad has no button left that is free in a match
+        Bind(Ping, Mouse(MouseButton.Middle));
         Bind(Menu, Keys(Key.Escape), Button(JoyButton.Start));
         // Both share a key with something that cannot happen at the same moment: T drops to the
         // fly camera except in a stopped car at a garage, and G / X gathers only as a HOLD, where

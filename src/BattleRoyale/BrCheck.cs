@@ -253,6 +253,20 @@ public static class BrCheck
         var solo = Field(1, 3);
         Expect(solo.TeamsAlive == 3 && BrState.Hostile(solo.Entrants[0], solo.Entrants[1]), "solo: every player is a side of their own");
 
+        // picked teams (#469): a group shares a team, a big one is split, the rest fill in
+        var picked = new BrState { Seed = 99, TeamSize = 3 };
+        string[] parties = { "alp", "", "alp", "", "berg", "alp", "berg", "", "alp", "" };
+        for (int i = 0; i < parties.Length; i++)
+            picked.Entrants.Add(new BrEntrant { Peer = (i + 1) * 10, Name = $"P{i + 1}", Party = parties[i] });
+        picked.AssignTeams();
+        var alp = picked.Entrants.Where(e => e.Party == "alp").GroupBy(e => e.Team).Select(g => g.Count()).OrderDescending().ToList();
+        var berg = picked.Entrants.Where(e => e.Party == "berg").Select(e => e.Team).Distinct().ToList();
+        var teamSizes = picked.Entrants.GroupBy(e => e.Team).Select(g => g.Count()).ToList();
+        Expect(alp.SequenceEqual(new[] { 3, 1 }) && berg.Count == 1 && teamSizes.All(n => n <= 3) && teamSizes.Count == 4,
+            $"trios with groups: 'alp' (4) split 3+1, 'berg' together, nobody over 3 ({string.Join("/", teamSizes)})");
+        Expect(BrEntrant.PartyName("  Les Alpes!! ") == "lesalpes" && BrEntrant.PartyName("???") == "",
+            "team names: trimmed, lower case, letters and digits");
+
         // the stings: built, heard, short
         var bad = BrSounds.All().Where(x => x.Stream.Data.Length < 2000 || x.Stream.GetLength() > 6.0).Select(x => x.Name).ToList();
         Expect(bad.Count == 0, $"{BrSounds.All().Count()} stings synthesised, each under 6 s ({string.Join(", ", BrSounds.All().Select(x => $"{x.Name} {x.Stream.GetLength():F1} s"))})");

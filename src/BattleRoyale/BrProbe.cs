@@ -45,7 +45,8 @@ public partial class BrProbe : ChatProbe
         if (!await Joined(150, () => Br != null)) return;
         await Seconds(2.0);
         var start = Me!.Global;   // LV95: the match's flight moves the origin (#185)
-        if (_role == "A") await RunA(); else await RunB();
+        if (Squad) await (_role == "A" ? SquadA() : SquadB());
+        else if (_role == "A") await RunA(); else await RunB();
         if (_failures == 0) await Released(start);
         await Finish(1.0);
     }
@@ -347,6 +348,85 @@ public partial class BrProbe : ChatProbe
 
     /// <summary>"--brsites": the outdoor sites (#198) are checked too (a real-terrain run: tools/brcheck.sh with SITES=1).</summary>
     private static bool Sites => CmdArgs.Has("--brsites");
+
+    // ------------------------------------------------------------------------------------
+    // --brsquad (SQUAD=1 tools/brcheck.sh, #469): a duo picked in the lobby, pings
+    // ------------------------------------------------------------------------------------
+
+    private static bool Squad => CmdArgs.Has("--brsquad");
+
+    /// <summary>A: opens a duos lobby, picks team "alp", starts, then pings the ground ahead and a map point.</summary>
+    private async Task SquadA()
+    {
+        Chat!.Send("/login brcheck");
+        await Until(() => Permissions.IsAdmin, 10);
+        Chat.Send("/br open 5 short duos");
+        if (!await Until(() => Br!.State.Phase == BrPhase.Lobby, 20)) { Fail("no lobby"); return; }
+        Chat.Send("/br join");
+        Chat.Send("/br team alp");
+        for (int i = 0; i < 60 && Br!.State.Entrants.Count(e => e.Party == "alp") < 2; i++)
+        {
+            Say("lobby");
+            await Seconds(2.0);
+        }
+        if (Br!.State.Entrants.Count(e => e.Party == "alp") < 2) { Fail("B never joined team alp"); return; }
+        Chat.Send("/br start");
+        if (!await Dropped()) return;
+        var me = Me!;
+        Expect(Br.MyEntry is { Team: not 0 } mine && Br.State.Find(PeerOf("B"))?.Team == mine.Team,
+            "the team picked in the lobby: A and B together");
+        await Seconds(4.0);
+        Expect(Br.State.Phase == BrPhase.Playing, "one squad alone plays on (it used to end at GO)");
+        Say("landed");
+        if (!await Until(() => Said("B", "landed"), 60)) { Fail("B never landed"); return; }
+
+        // the ground a few metres ahead
+        me.LookPitch = -0.5f;
+        await Seconds(0.5);
+        Expect(Br.PingCrosshair(), "middle mouse pings what the crosshair is on");
+        Expect(await Until(() => Br.Pings.Any(p => p.Peer == Br.Me), 5), "the ping comes back to its sender");
+        if (Br.Pings.FirstOrDefault(p => p.Peer == Br.Me) is { Peer: not 0 } mine0 && Br.PingWorld(mine0) is { } spot)
+        {
+            var look = -me.Camera.GlobalTransform.Basis.Z with { Y = 0 };
+            var to = (spot - me.Camera.GlobalPosition) with { Y = 0 };
+            float off = Mathf.RadToDeg(look.AngleTo(to));
+            Expect(off < 20f, $"the ping is where the crosshair is ({off:F0}° off, {to.Length():F0} m)");
+            Expect(GetViewport().GetCamera3D() is { } cam && !cam.IsPositionBehind(spot), "and on screen");
+        }
+        Shot("a_ping");
+        Say("pinged");
+        if (!await Until(() => Said("B", "got ping"), 20)) Expect(false, "B got the ping");
+
+        // a map ping replaces it; a second one at once is refused (1.5 s apart)
+        await Seconds(2.0);
+        Expect(Br.PingMap(Vector2.Zero), "a middle-click on the map pings");
+        Expect(await Until(() => Br.Pings.Any(p => p.Peer == Br.Me && p.At.Length() < 2f), 5), "the map ping replaces the first");
+        Br.PingMap(new Vector2(500, 500));
+        await Seconds(2.0);
+        Expect(Br.Pings.Single(p => p.Peer == Br.Me).At.Length() < 2f, "a second ping within 1.5 s is refused");
+        Say("map pinged");
+        await Until(() => Said("B", "got map ping"), 20);
+        Chat.Send("/br cancel");
+    }
+
+    /// <summary>B: joins by itself, picks team "ALP" (any case), and must see A's pings.</summary>
+    private async Task SquadB()
+    {
+        if (!await Until(() => Br!.MyEntry != null, 90)) { Fail("never joined"); return; }
+        Chat!.Send("/br team ALP");
+        Expect(await Until(() => Br!.MyEntry?.Party == "alp", 10), "/br team: the name, made comparable");
+        if (!await Dropped()) return;
+        Say("landed");
+        if (!await Until(() => Said("A", "pinged"), 60)) { Fail("A never pinged"); return; }
+        bool got = await Until(() => Br!.Pings.Any(p => p.Peer == PeerOf("A")), 5);
+        Expect(got, $"A's ping is here ({string.Join(", ", Br!.Pings.Select(p => $"{p.Name} {p.At}"))})");
+        await Seconds(0.5);
+        Shot("b_ping");
+        Say("got ping");
+        if (!await Until(() => Said("A", "map pinged"), 30)) { Fail("A never pinged the map"); return; }
+        Expect(Br.Pings.Any(p => p.Peer == PeerOf("A") && p.At.Length() < 2f), "A's map ping replaced its first");
+        Say("got map ping");
+    }
 
     /// <summary>A: the sites exist; crack a bunker; shoot a supply crate open and loot the pile; fire a flare.</summary>
     private async Task TrySites(FootPlayer me)

@@ -114,6 +114,78 @@ public partial class BrManager
                 yield return (m.Name, ZonePoint(body.GlobalPosition), new Vector2(-Mathf.Sin(body.NetYaw), Mathf.Cos(body.NetYaw)));
     }
 
+    // ------------------------------------------------------------------------------------
+    // pings (#469): a point marked for the team, for a few seconds
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>A ping as this client keeps it: who, where (zone metres; altitude, NaN when marked on the map), until when (local seconds).</summary>
+    public readonly record struct BrPing(long Peer, string Name, Vector2 At, double Alt, double Until);
+
+    /// <summary>How long a ping shows.</summary>
+    public const double PingSeconds = 8;
+
+    private readonly List<BrPing> _pings = new();
+    private static readonly Core.RayQuery PingRay = new();
+
+    private static double LocalSeconds => Time.GetTicksMsec() / 1000.0;
+
+    /// <summary>The team's pings still showing, one per player at most.</summary>
+    public IReadOnlyList<BrPing> Pings
+    {
+        get
+        {
+            _pings.RemoveAll(p => p.Until < LocalSeconds);
+            return _pings;
+        }
+    }
+
+    /// <summary>Whether this player may ping now: alive in a running squad match, out of the plane.</summary>
+    public bool CanPing => InMatch && MeAlive && !_aboard && _state.Phase == BrPhase.Playing && MyEntry is { Team: not 0 };
+
+    /// <summary>Marks what the crosshair is on, up to 2 km out (the <c>ping</c> action). False when there is nothing to mark.</summary>
+    public bool PingCrosshair()
+    {
+        if (!CanPing || LocalPlayer() is not { } me || Origin == null) return false;
+        // the guns' aim: from the eye at what the crosshair is on, in either view
+        var (from, aim) = Items.ItemController.AimFrom(me, 2000f);
+        var hit = PingRay.Cast(me.GetWorld3D().DirectSpaceState, from, from + aim * 2000f, uint.MaxValue, me.SelfExclude);
+        if (hit.Count == 0) return false;
+        var at = Origin.ToGlobal(hit["position"].AsVector3());
+        RpcId(1, MethodName.RequestPing, at.E, at.N, at.Alt);
+        return true;
+    }
+
+    /// <summary>Marks a point of the full map (zone metres): on the ground when its tile is loaded here.</summary>
+    public bool PingMap(Vector2 zone)
+    {
+        if (!CanPing || Origin == null) return false;
+        var world = WorldPoint(zone, 0f);
+        double alt = LocalPlayer()?.Terrain is { } t && t.TryGetHeight(world, out float h) ? Origin.ToGlobal(world with { Y = h }).Alt : double.NaN;
+        RpcId(1, MethodName.RequestPing, _state.AreaE + zone.X, _state.AreaN + zone.Y, alt);
+        return true;
+    }
+
+    /// <summary>Where a ping stands in this world: its altitude, else the ground here; null when neither is known.</summary>
+    public Vector3? PingWorld(BrPing p)
+    {
+        if (Origin == null) return null;
+        if (double.IsFinite(p.Alt)) return Origin.ToWorld(_state.AreaE + p.At.X, _state.AreaN + p.At.Y, p.Alt);
+        var world = WorldPoint(p.At, 0f);
+        return LocalPlayer()?.Terrain is { } t && t.TryGetHeight(world, out float h) ? world with { Y = h } : null;
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Pinged(long from, double e, double n, double alt)
+    {
+        if (_server) return;
+        string name = _state.Find(from)?.Name ?? "?";
+        // one ping a player: a new one replaces the last
+        _pings.RemoveAll(p => p.Peer == from);
+        _pings.Add(new BrPing(from, name, new Vector2((float)(e - _state.AreaE), (float)(n - _state.AreaN)), alt, LocalSeconds + PingSeconds));
+        Effect(BrSounds.Ping, -6f);
+        GD.Print(FormattableString.Invariant($"[br] ping from {name} at {e:F0}/{n:F0}"));
+    }
+
     /// <summary>How far the minimap's radar picks up other entrants (#359).</summary>
     public const float RadarRange = 80f;
 
@@ -155,7 +227,7 @@ public partial class BrManager
             _zone = s.Zone();
             _zoneKey = key;
         }
-        if (s.Phase == BrPhase.Idle) _feed.Clear();
+        if (s.Phase == BrPhase.Idle) { _feed.Clear(); _pings.Clear(); }
         // "--br" (#231): join every lobby as it opens, and the one already open on arrival
         if (AutoJoin && s.Phase is BrPhase.Lobby or BrPhase.Countdown && s.Find(Me) == null && _autoJoined != s.Seed
             && GetNodeOrNull<ChatManager>("../" + ChatManager.NodeName) is { } chat)
@@ -375,6 +447,11 @@ public partial class BrManager
         if (_aboard && e.IsActionPressed(PlayerInput.InteractMount))
         {
             JumpOut();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        if (e.IsActionPressed(PlayerInput.Ping) && PingCrosshair())
+        {
             GetViewport().SetInputAsHandled();
             return;
         }
