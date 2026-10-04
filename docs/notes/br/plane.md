@@ -1,8 +1,10 @@
 # Battle Royale cargo plane (#207, part 5 of #177)
 
-- **Line** (`BrFlight`, pure, zone metres): a seeded angle and an offset up to 30 % of the half side.
-  It starts `Lead` 1.5 km before the square; the doors open on entering it and close `DoorMargin`
-  300 m before leaving it; the plane flies on 4 km and is gone. 80 m/s (×2 at most on a test pace).
+- **Line** (`BrFlight`, pure, zone metres): a seeded angle through the zone's first circle (sized for the
+  field, #447), offset up to 30 % of its radius from its centre. The doors open only over that circle
+  *and* the square, so nobody jumps before the zone; the plane starts `Lead` 1.5 km before that point.
+  They close `DoorMargin` 300 m (at most 20 % of the chord) before it leaves; the plane flies on 4 km and is gone.
+  `BrState.Zone()` (cached per seed/side/pace/field) gives every peer the same circle. 80 m/s (×2 at most on a test pace).
   Every peer rebuilds it from `Seed`, `FlightStart` and `FlightAlt` in `BrState` and `ClockSync.ServerNow`:
   nothing is sent while it flies. 5-7 km regions: 75-135 s to the doors closing; rounds 31-42 min.
 - **Altitude** (server, at GO): the highest point of the 100 m horizon lattice under the whole line
@@ -30,7 +32,7 @@
   from `SfxSynth.Engine` at 0.55 pitch, slight wing rock. `CargoPlaneMeshBuilder` is gone. Maps draw the line dashed, the jump
   stretch solid, the plane as an arrow, until the doors close.
 - **Checked**: loopback on a generated world and on real regions (Altdorf at 3349 m, Mendrisio):
-  boarding, hidden bodies on the remote peer, E refused before the doors, jump, push-out, look-to-turn.
+  boarding, hidden bodies on the remote peer, E refused before the doors, jump over the first circle, push-out, look-to-turn.
   Real-terrain runs under heavy machine load lost a client twice in five (once a native access
   violation, once an ENet drop while stream requests timed out); part 4b saw the same once, before the plane.
 - Not yet: a warm-up in the hold during the lobby, plane sound stings (part 6), seats or a visible hold interior.

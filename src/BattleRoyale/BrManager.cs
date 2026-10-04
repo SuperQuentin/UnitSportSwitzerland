@@ -295,7 +295,7 @@ public partial class BrManager : Node
         var zone = _state.Zone();
         Push();
         foreach (var e in _state.Entrants) RpcId(e.Peer, MethodName.Board);
-        Broadcast($"GO! {_state.Entrants.Count} players aboard the plane to {_state.AreaName}. Jump once the doors open over the region "
+        Broadcast($"GO! {_state.Entrants.Count} players aboard the plane to {_state.AreaName}. Jump once the doors open over the zone "
             + $"(in {flight.OpensAt - Now:F0} s); the zone ({zone.RadiusOf(0) * 2 / 1000:F1} km across) shows {ZoneSchedule.LootSeconds * zone.Scale / 60:F0} min after they close.");
         GD.Print(FormattableString.Invariant($"[br] go: {_state.Entrants.Count} players, plane at {flight.Altitude:F0} m, doors {flight.OpensAt - Now:F0}-{flight.ClosesAt - Now:F0} s"));
     }
@@ -314,7 +314,9 @@ public partial class BrManager : Node
         var horizon = _horizon is { IsCompletedSuccessfully: true } done ? done.Result : null;
         if (horizon == null) GD.PushWarning("[br] the terrain lattice is not loaded yet: the plane flies at its lowest");
         double e0 = _state.AreaE, n0 = _state.AreaN;
-        return BrFlight.AltitudeOver(_state.Seed, _state.Side, p => BrMapImage.Height(horizon, e0 + p.X, n0 + p.Y));
+        var zone = _state.Zone();
+        var line = new BrFlight(_state.Seed, _state.Side, 1f, 0, 0, zone.CentreOf(0), zone.RadiusOf(0));
+        return BrFlight.AltitudeOver(line, p => BrMapImage.Height(horizon, e0 + p.X, n0 + p.Y));
     }
 
     /// <summary>Server: out of the plane (#207). Recorded so every peer shows the body again; the jump itself is the client's.</summary>

@@ -92,8 +92,16 @@ public sealed class BrState
     }
     [JsonIgnore] public bool Running => Phase is BrPhase.Playing or BrPhase.Ended;
     [JsonIgnore] public BrArea Area => new(AreaE, AreaN, Side, AreaName);
-    /// <summary>This match's zone, the same on every peer.</summary>
-    public ZoneSchedule Zone() => new(Seed, Side, Pace, Field);
+    /// <summary>This match's zone, the same on every peer; built once per (seed, side, pace, field).</summary>
+    public ZoneSchedule Zone()
+    {
+        var key = (Seed, Side, Pace, Field);
+        if (_zone == null || key != _zoneKey) (_zone, _zoneKey) = (new ZoneSchedule(Seed, Side, Pace, Field), key);
+        return _zone;
+    }
+
+    private ZoneSchedule? _zone;
+    private (int, float, float, int) _zoneKey;
 
     /// <summary>The cargo plane's line, once the match has started.</summary>
     [JsonIgnore] public BrFlight? Flight => Running && FlightStart > 0 ? new BrFlight(this) : null;

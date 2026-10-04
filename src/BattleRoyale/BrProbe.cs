@@ -198,7 +198,11 @@ public partial class BrProbe : ChatProbe
         {
             Expect(ClockSync.ServerNow >= flight.OpensAt || !br.JumpOut(), "E before the doors open is refused");
             await Until(() => flight.DoorsOpen(ClockSync.ServerNow), 60);
+            var exit = flight.At(ClockSync.ServerNow);
             Expect(br.JumpOut() && me.Ride == RideKind.Wingsuit && !br.Aboard, "E with the doors open: out of the ramp in a wingsuit");
+            var zone = br.State.Zone();
+            Expect(exit.DistanceTo(zone.CentreOf(0)) <= zone.RadiusOf(0) + 5f,
+                Fmt($"the doors opened over the first circle: out {exit.DistanceTo(zone.CentreOf(0)):F0} m from its centre, radius {zone.RadiusOf(0):F0} m ({br.State.Field} players)"));
             Expect(me.IsViewing, $"the player's camera right after the jump ({GetViewport().GetCamera3D()?.GetPath()})");
             await Seconds(0.5);
             Expect(them != null && !them.Visible && br.State.Find(PeerOf("B"))?.Jumped == false, "B is still aboard: its body is hidden here");
