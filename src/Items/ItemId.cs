@@ -137,6 +137,14 @@ public enum ItemId
 
     // ---- gadgets (#275, docs/notes/build/gadgets.md): placed, to get up high or to hide ----
     Zipline = 180, RopeLadder = 181, Trampoline = 182, LaunchPad = 183, CamoNet = 184, HayHideout = 185,
+
+    // ---- Swiss match items (#478, Items/SwissItems): found in Battle Royale loot ----
+    /// <summary>Blown: heard far, it shows the blower who is near and everyone else where it was blown.</summary>
+    Alphorn = 190,
+    /// <summary>Shared: everyone standing round it is fed.</summary>
+    FonduePot = 191,
+    /// <summary>Thrown: a cloud that hides who is inside from the radar.</summary>
+    SmokeCanister = 192,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -177,4 +185,10 @@ public enum ItemUse
     Build,
     /// <summary>Use sets the gadget down where the ghost shows; Aim + Use takes your own back (<c>Build.GadgetTool</c>).</summary>
     Gadget,
+    /// <summary>Use blows it, a few seconds (<see cref="ItemId.Alphorn"/>, #478); it is not used up.</summary>
+    Horn,
+    /// <summary>Use sets it out for everyone near, after a few seconds (<see cref="ItemId.FonduePot"/>, #478).</summary>
+    Share,
+    /// <summary>Use throws it ahead, where it smokes (<see cref="ItemId.SmokeCanister"/>, #478).</summary>
+    Smoke,
 }

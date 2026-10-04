@@ -31,8 +31,9 @@ public partial class Handshake : Node
     /// 8: shops and PAUSA vending machines: ShopService buy/sell/vend, card payment (#273).
     /// 9: structures sent by distance, PlacedObjects AskBurn/Burnt, hang and climb pose kinds (#359).
     /// 10: World/ChurchRadios (Ask*/Set), CdInfo's source, MusicStyle.RatDance (#370).
+    /// 14: item events Horn/Fondue/Smoke, items Alphorn/FonduePot/SmokeCanister (#478); 11-13 are #452, #469, #475's.
     /// </summary>
-    public const int Protocol = 10;
+    public const int Protocol = 14;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
