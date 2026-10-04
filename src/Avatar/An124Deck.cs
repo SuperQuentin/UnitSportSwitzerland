@@ -29,6 +29,9 @@ public static class An124Deck
         return (byte)d;
     }
 
+    /// <summary>The kneeling button inside, this far ahead of the crew door (its own button is 0.25 ahead).</summary>
+    public const float KneelButtonAhead = 1.2f;
+
     private static float At(float z) => -z;
 
     private static VehicleDeck? _deck;
@@ -103,7 +106,7 @@ public static class An124Deck
         // visor at the front, the rear ramp at the back (both walls)
         var inL = new Vector3(-1, 0, 0);
         dk.Button(CrewDoor, new Vector3(inner - 0.05f, floor + 1.2f, doorFront + 0.25f), inL);
-        dk.Button(KneelDoor, new Vector3(inner - 0.05f, floor + 1.2f, doorFront + 0.75f), inL);
+        dk.Button(KneelDoor, new Vector3(inner - 0.05f, floor + 1.2f, doorFront + KneelButtonAhead), inL);
         // and outside by the door, for whoever stands on airstairs at its sill
         dk.Button(CrewDoor, new Vector3(OuterX(doorFront + 0.3f, floor + 1.2f) + 0.02f, floor + 1.2f, doorFront + 0.3f), -inL);
         foreach (int side in new[] { 1, -1 })
