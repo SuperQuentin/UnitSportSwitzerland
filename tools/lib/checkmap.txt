@@ -251,6 +251,23 @@ src/Player/Airliner      net    tools/freighternetcheck.sh
 src/Player/FreighterNet  net    tools/freighternetcheck.sh
 src/Avatar/Freighter     net    tools/freighternetcheck.sh
 src/BattleRoyale/BrPlane quick  --flycheck freighter --world flat
+src/Player/Airliner      quick  --flycheck an124 --world flat
+src/Avatar/An124         quick  --flycheck an124 --world flat
+src/Player/AirlinerCirc  quick  --flycheck an124 --world flat
+src/Avatar/An124         quick  --an124check --world fixture --traffic 0
+src/Player/An124Check    quick  --an124check --world fixture --traffic 0
+src/Player/Airliner      quick  --an124check --world fixture --traffic 0
+src/Avatar/AirlinerRig   quick  --an124check --world fixture --traffic 0
+src/Player/Flight.cs     quick  --an124check --world fixture --traffic 0
+src/Player/FootPlayer.De quick  --an124check --world fixture --traffic 0
+src/Avatar/An124         quick  --an124check bus --world fixture --traffic 0
+src/Player/An124Check    quick  --an124check bus --world fixture --traffic 0
+src/Player/FootPlayer.Hold quick --an124check bus --world fixture --traffic 0
+src/Player/An124Check    quick  --an124check car --world fixture --traffic 0
+src/Avatar/An124         net    tools/an124netcheck.sh
+src/Player/An124NetProbe net    tools/an124netcheck.sh
+src/Player/Airliner      net    tools/an124netcheck.sh
+src/Vehicles/VehicleManager net tools/an124netcheck.sh
 src/Player/FootPlayer.Hold quick --holdcheck --world fixture --traffic 0
 src/Player/HoldCheck     quick  --holdcheck --world fixture --traffic 0
 src/Player/FootPlayer.De quick  --holdcheck --world fixture --traffic 0
