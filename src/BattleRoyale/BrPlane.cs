@@ -6,7 +6,7 @@ namespace UnitSport.BattleRoyale;
 /// <summary>
 /// The cargo plane as every client sees it (#207): the military freighter's model (#420, the same
 /// aircraft players fly: <see cref="AirlinerRig.CreateFreighter"/>), gear up, propellers turning, the
-/// ramp and the para doors open, and its engines' drone; placed each frame by <see cref="BrManager"/>
+/// ramp and the para doors open only while <see cref="BrFlight.DoorsOpen"/> (over the zone, #447), and its engines' drone; placed each frame by <see cref="BrManager"/>
 /// from <see cref="BrFlight"/>. Only the model: its flight is the server's scripted line, nothing
 /// about it is networked.
 /// </summary>
@@ -21,11 +21,13 @@ public partial class BrPlane : Node3D
     /// <summary>Where the jumpers leave from, from the plane's position (the open ramp's lip, below and behind).</summary>
     public static readonly Vector3 Ramp = AircraftMeshBuilder.Flip(new Vector3(0, 0, FreighterLayout.RampToeZ)) - Middle;
 
-    private static readonly AirlinerLook Look = new()
+    private const byte JumpDoors = 1 << FreighterLayout.RampDoor | 1 << FreighterLayout.ParaDoorL | 1 << FreighterLayout.ParaDoorR;
+
+    /// <summary>The pose; <see cref="Fly"/> sets the doors. The rig's first show snaps to it, later ones ease.</summary>
+    private AirlinerLook _look = new()
     {
         Gear = 0f,
         Spool = 1f,
-        Doors = (byte)(1 << FreighterLayout.RampDoor | 1 << FreighterLayout.ParaDoorL | 1 << FreighterLayout.ParaDoorR),
         Lights = AirlinerLights.Nav | AirlinerLights.Beacon | AirlinerLights.Strobe,
     };
 
@@ -37,7 +39,6 @@ public partial class BrPlane : Node3D
         _rig.Name = "Body";
         _rig.Position = -Middle;
         AddChild(_rig);
-        _rig.Show(Look, 0f);
         // four turboprops: the piston loop pitched down, heard from kilometres away
         AddChild(new AudioStreamPlayer3D
         {
@@ -46,11 +47,15 @@ public partial class BrPlane : Node3D
         });
     }
 
-    public override void _Process(double delta) => _rig.Show(Look, (float)delta);
+    public override void _Process(double delta) => _rig.Show(_look, (float)delta);
 
-    /// <summary>Where it is and where it is heading; a slow wing rock so it does not look pinned to a rail.</summary>
-    public void Fly(Vector3 at, float yaw)
+    /// <summary>
+    /// Where it is and where it is heading, and whether the jump doors are open; a slow wing rock so it
+    /// does not look pinned to a rail.
+    /// </summary>
+    public void Fly(Vector3 at, float yaw, bool doorsOpen)
     {
+        _look.Doors = doorsOpen ? JumpDoors : (byte)0;
         _bank = 0.03f * Mathf.Sin((float)Time.GetTicksMsec() / 2300f);
         GlobalTransform = new Transform3D(Basis.FromEuler(new Vector3(0, yaw, _bank)), at);
     }
