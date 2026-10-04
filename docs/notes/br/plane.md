@@ -28,7 +28,7 @@
 - **Look** (#420): the military freighter players fly (`AirlinerRig.CreateFreighter`, the player note
   `airliners`): `BrPlane` shows it gear up, propellers turning, ramp and para doors swinging open `BrPlane.OpenLead` (~6.5 s, the ramp's travel) before the doors open, so they are fully open at the zone's edge, and shut when they close (snapped when the plane first shows), its model's
   fuselage middle on the flight line (`BrPlane.Middle`; the hold's `Carrier` point 1.2 m under it is
-  0.5 m over the hold floor); jumpers leave from the open ramp's lip (`BrPlane.Ramp`). Engine drone
+  0.5 m over the hold floor); jumpers leave from the level ramp's lip (`BrPlane.Ramp`). Engine drone
   from `SfxSynth.Engine` at 0.55 pitch, slight wing rock. `CargoPlaneMeshBuilder` is gone. Maps draw the line dashed, the jump
   stretch solid, the plane as an arrow, until the doors close.
 - **Checked**: loopback on a generated world and on real regions (Altdorf at 3349 m, Mendrisio):

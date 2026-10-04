@@ -18,8 +18,9 @@ public partial class BrPlane : Node3D
     /// <summary>The fuselage's middle, node space of the model: the plane's position is there (the hold, the camera).</summary>
     private static readonly Vector3 Middle = AircraftMeshBuilder.Flip(new Vector3(0, FreighterLayout.CentreY, (FreighterLayout.NoseZ + FreighterLayout.TailZ) * 0.5f));
 
-    /// <summary>Where the jumpers leave from, from the plane's position (the open ramp's lip, below and behind).</summary>
-    public static readonly Vector3 Ramp = AircraftMeshBuilder.Flip(new Vector3(0, 0, FreighterLayout.RampToeZ)) - Middle;
+    /// <summary>Where the jumpers leave from, from the plane's position: the lip of the ramp, open level with the hold floor in flight (#420).</summary>
+    public static readonly Vector3 Ramp =
+        AircraftMeshBuilder.Flip(new Vector3(0, FreighterLayout.FloorY, FreighterLayout.RampHingeZ - FreighterLayout.RampLength)) - Middle;
 
     private const byte JumpDoors = 1 << FreighterLayout.RampDoor | 1 << FreighterLayout.ParaDoorL | 1 << FreighterLayout.ParaDoorR;
 
@@ -32,6 +33,7 @@ public partial class BrPlane : Node3D
         Gear = 0f,
         Spool = 1f,
         Lights = AirlinerLights.Nav | AirlinerLights.Beacon | AirlinerLights.Strobe,
+        Airborne = true,
     };
 
     public BrPlane()

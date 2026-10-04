@@ -62,6 +62,9 @@ public sealed class Airliner : Flyer
     public override string Blurb =>
         "{sprint}/{crouch_slide} thrust levers, {move_forward}{move_back} pitch, {move_left}{move_right} roll and steer, {jump} brakes, {flaps_down}/{flaps_up} flaps, {car_door} gear, {speedbrake} speedbrake, {parking_brake} parking brake";
 
+    /// <summary>What its engines sound like: the A320's turbofans, the freighter's turboprops (#420).</summary>
+    public Audio.EngineProfile Sound => Kind == RideKind.Freighter ? Audio.EngineProfile.Turboprop : Audio.EngineProfile.Turbofan;
+
     public override bool IsVehicle => true;
     public override bool HasEngine => true;
     public override float MaxHealth => 400f;
@@ -192,6 +195,12 @@ public sealed class Airliner : Flyer
     /// <summary>The freighter's ramp and para doors open in flight below this indicated airspeed, m/s (150 kt).</summary>
     public const float DropSpeed = 77f;
 
+    /// <summary>
+    /// Faster than this it is flying, whatever its state says: another peer's copy of a parked aircraft
+    /// flying on hands off (its pilot stood up) never steps its flight, so its <c>OnGround</c> is stale (#420).
+    /// </summary>
+    public const float FlyingSpeed = 30f;
+
     /// <summary>A door's leaf, open or shut (#416). Shutting always works; opening only when <see cref="MayOpen"/> allows.</summary>
     public void ToggleDoor(int door)
     {
@@ -306,11 +315,12 @@ public sealed class Airliner : Flyer
         Spool = s.Spool,
         Lights = LightsFor(s),
         Doors = DoorsOpen,
+        Airborne = !s.OnGround,
     };
 
     public override void AnimateFlight(Node3D visual, in FlightMotion m, float dt)
     {
-        if (visual is AirlinerRig rig) rig.Show(Look(State) with { Spool = m.Spool }, dt);
+        if (visual is AirlinerRig rig) rig.Show(Look(State) with { Spool = m.Spool, Airborne = !State.OnGround || m.Velocity.LengthSquared() > FlyingSpeed * FlyingSpeed }, dt);
     }
 
     /// <summary>Bits of <see cref="WritePose"/>'s W and <see cref="PackFlags"/>: the levers, so remote copies travel the parts at the aircraft's own rates.</summary>
@@ -327,7 +337,8 @@ public sealed class Airliner : Flyer
             | ((int)LightsFor(s) & 15) << 9
             | (DoorsOpen & 15) << 13
             | (s.ParkingBrake ? 1 << 17 : 0)
-            | (s.Lit >= Spec.Engines ? 1 << 18 : 0);
+            | (s.Lit >= Spec.Engines ? 1 << 18 : 0)
+            | (s.OnGround ? 0 : 1 << 19);
     }
 
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight)
@@ -354,6 +365,7 @@ public sealed class Airliner : Flyer
             Spool = pose.X,
             Lights = (AirlinerLights)(bits >> 9 & 15),
             Doors = (byte)(bits >> 13 & 15),
+            Airborne = (bits & 1 << 19) != 0,
         };
     }
 

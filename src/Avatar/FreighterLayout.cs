@@ -90,6 +90,15 @@ public static class FreighterLayout
     // ---- doors: 0 the crew door (front left, folds down into steps), 1 and 2 the para doors (aft,
     // left and right), 3 the ramp with the upper door over it ----
     public const int DoorCount = 4, CrewDoor = 0, ParaDoorL = 1, ParaDoorR = 2, RampDoor = 3;
+    /// <summary>
+    /// The deck's own bits for the open ramp (#420): down to the ground (on the ground, 4) or level with
+    /// the floor (in the air, 5); the walk switches its slope or its level slab by them (<see cref="DeckDoors"/>).
+    /// </summary>
+    public const int RampDownDeck = 4, RampLevelDeck = 5;
+
+    /// <summary>The doors as the deck sees them: the open ramp's bit adds its down or level position.</summary>
+    public static byte DeckDoors(byte doors, bool airborne) =>
+        (doors & 1 << RampDoor) == 0 ? doors : (byte)(doors | 1 << (airborne ? RampLevelDeck : RampDownDeck));
     public const float CrewDoorZ = 5.05f, ParaDoorZ = -4.95f, DoorWidth = 0.9f, DoorHeight = 1.8f;
     /// <summary>Door <paramref name="i"/>'s centre station and side (+1 left / −1 right, authored x); the ramp has none.</summary>
     public static (float Z, int Side) Door(int i) => i switch

@@ -148,7 +148,12 @@ public partial class FootPlayer
 
     private static byte DoorsOfHost(Node3D host) => host switch
     {
+        // a freighter's open ramp: down on the ground, level in the air (#420)
+        FootPlayer { Ride: RideKind.Freighter } f => Avatar.FreighterLayout.DeckDoors(f.BusDoors,
+            f.Vehicle is Airliner own ? !own.State.OnGround : Airliner.LookOf(f.Anim).Airborne),
         FootPlayer p => p.BusDoors,
+        VehicleBody { Kind: RideKind.Freighter } parked => Avatar.FreighterLayout.DeckDoors(parked.BusDoors, parked.Ride is Airliner { State.OnGround: false }
+            || parked.Velocity.LengthSquared() > Airliner.FlyingSpeed * Airliner.FlyingSpeed),
         VehicleBody v => v.BusDoors,
         _ => 0,
     };

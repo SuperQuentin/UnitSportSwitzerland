@@ -1660,7 +1660,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         bool heli = craft is Helicopter;
         bool jet = craft is Airliner;
-        var profile = heli ? Audio.EngineProfile.Turboshaft : jet ? Audio.EngineProfile.Turbofan : Audio.EngineProfile.PistonAero;
+        var profile = heli ? Audio.EngineProfile.Turboshaft : craft is Airliner airliner ? airliner.Sound : Audio.EngineProfile.PistonAero;
         if (_remoteEngine?.Profile != profile)
         {
             _remoteEngine?.QueueFree();
