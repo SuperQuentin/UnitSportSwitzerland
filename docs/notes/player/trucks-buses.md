@@ -74,7 +74,10 @@
   trailer empty, a free boat of its kind within 6 m of that spot is claimed aboard
   (`VehicleManager.NearestOfKind`). The server's count (`VehicleState.Units`) counts a boat aboard as
   a vehicle, so launching is a park and winching a claim for anyone, not only an admin. The HUD
-  hint says when either works. Not done: no slipway driving physics (the trailer's wheels in water
+  hint says when either works. Controls on every device (`general/new-action-three-devices`):
+  couple H / D-pad ← / VR right stick ← (with #436, `XrPad`); launch / winch G / X / VR X; the
+  hints come from `InputHints`, so each device names its own control. VR target (`xr/vr-action-map`):
+  latch the coupler and crank the winch by hand. Not done: no slipway driving physics (the trailer's wheels in water
   are ordinary ground), the boat appears at its spot rather than sliding off; a sunk trailer is not
   wrecked.
 - **Walking in a bus** (#162): its deck, the joint's passage and hollow bellows, see `walk-aboard`.

@@ -101,6 +101,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Retarder stalk more / less", Keys: "{retarder_up} / {retarder_down}", Pad: "—"),
             new("Parking brake (hold)", PlayerInput.Jump),
             new("Bus: doors", PlayerInput.CarDoor),
+            new("Boat trailer: launch the boat / winch it aboard, stopped", PlayerInput.CarDoor),
             new("Bus: kneel", PlayerInput.Kneel),
             new("Bus: destination display", PlayerInput.Destination),
         }),

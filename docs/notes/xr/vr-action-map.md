@@ -64,6 +64,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | retarder | ' ; / — | gap | **stalk by hand** |
 | bus kneel / destination | K N / — | gap | **dash buttons by poke** |
 | steamer whistle | H / D-pad ← | gap | **pull the cord** |
+| couple a trailer (fifth wheel, drawbar, tow ball #463) | H / D-pad ← | R stick ← once #436 lands (until then gap) | keep from the seat; **on foot, grip the coupler's latch** to couple / drop a trailer standing on the hitch |
+| boat trailer: launch / winch the boat (#463) | G / X | ok: X (left controller) | + **grip and crank the winch handle** on the post |
 | look_behind | B / — | dead binding (never read) | head turn; remove the action |
 
 ## Flying
