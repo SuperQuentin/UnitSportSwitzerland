@@ -78,10 +78,10 @@ public partial class HoldCheck : Node
 
     private async Task<bool> Until(System.Func<bool> condition, double seconds)
     {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
+        double end = GameClock.Now + seconds;
         while (!condition())
         {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
+            if (GameClock.Now > end) return false;
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
         }
         return true;
@@ -174,7 +174,9 @@ public partial class HoldCheck : Node
     {
         await Seconds(2);
         // offline the world starts on the free camera: the player comes with the mode key
-        for (int i = 0; i < 1800 && (_player() is null || !_player()!.IsOnFloor()); i++)
+        // the world loads on threads: a wall-clock bound, as the runner's --fixed-fps outruns them
+        ulong deadline = Time.GetTicksMsec() + 30_000;
+        for (int i = 0; Time.GetTicksMsec() < deadline && (_player() is null || !_player()!.IsOnFloor()); i++)
         {
             if (_player() == null && i % 50 == 25)
             {

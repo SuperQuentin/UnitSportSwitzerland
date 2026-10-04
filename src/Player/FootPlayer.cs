@@ -1622,7 +1622,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // where the driver sits, in case the next update throws them through the windscreen
             _seenSeat = rig.DriverSeat;
             _seenSeatFrame = GlobalTransform * _visual.Transform * rig.DriverFrame;
-            _seenSeatAt = Time.GetTicksMsec() / 1000.0;
+            _seenSeatAt = GameClock.Now;
         }
         else if (_visual is Avatar.HeavyRig heavyRig) heavyRig.DriverShown = SeatIndex == 0;
         else if (_visual is Avatar.BoatRig boatRig) boatRig.DriverShown = SeatIndex == 0;

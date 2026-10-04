@@ -7,6 +7,8 @@
 #         full: the windowed / two-client / load scripts (tier 3), only under `test.sh full`.
 # check   "--flag [args]" runs `godot --headless --path . -- --flag [args]`; a tools/ path runs
 #         that script; "@netsmoke" is the runner's own headless server + client.
+#         quick-tier Godot checks run with --fixed-fps 60 (game time, docs/notes/general/fast-checks.md);
+#         "@realtime --flag ..." keeps one in real time.
 # Only list a check that ends by itself and prints a RESULT line or exits non-zero on failure.
 # Give each check the lightest world it works on (Core/Systems): `--world flat` (TestWorld, no
 # map), `--systems ui` (only what is named), `--world fixture` / `--chunks fixture:<course>`

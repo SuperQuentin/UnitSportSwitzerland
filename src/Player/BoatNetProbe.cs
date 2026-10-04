@@ -77,8 +77,8 @@ public partial class BoatNetProbe : ChatProbe
         var xs = new List<float>();
         var ys = new List<float>();
         var depths = new List<float>();
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
-        while (Time.GetTicksMsec() / 1000.0 < end)
+        double end = GameClock.Now + seconds;
+        while (GameClock.Now < end)
         {
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
             if (hull() is not { } h) continue;

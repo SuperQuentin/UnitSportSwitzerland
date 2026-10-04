@@ -1498,6 +1498,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (_chunks != null && GetViewport().GetCamera3D() is { } cam)
             _chunks.SetView(cam);
         TrackLoading(delta);
+        if (GameClock.Fixed) GameClock.Pace(Stage != LoadStage.Ready || _chunks is { Settled: false });
         if (_pendingFoot != null && !SpawnPending)
         {
             var player = _pendingFoot;

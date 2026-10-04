@@ -39,6 +39,9 @@ clients (6-10 GB): parallel agents ran the machine out of RAM. Measured now:
 
 - `GODOT` must point at the editor executable. On Windows use the full path of
   `Godot_v4.7.1-stable_mono_win64_console.exe` (the winget `godot` link hangs), see `godot-exe`.
+- **The quick tier runs on game time** (`--fixed-fps 60`, #461): ~4.5x faster in all (38 -> 8.6 min
+  for the 55 checks); the rules for timing in checks, `@realtime`, `TEST_REALTIME=1`: `fast-checks`.
+  The measured times in the tables below are real time, from before.
 - One PASS/FAIL table at the end; every log in `test_output/tests/`. Exit code 0 only if all passed.
 - Verdict: the check's last `RESULT` line (`FAIL` in it fails; exit 139 at shutdown is ignored,
   see `headless-exit-139`), else its exit code. A timeout (`TEST_TIMEOUT`, 600 s) is `TIMEOUT`.

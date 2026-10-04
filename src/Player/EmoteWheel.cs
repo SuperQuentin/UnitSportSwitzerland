@@ -55,7 +55,7 @@ public partial class EmoteWheel : CanvasLayer
         _view.Page = p.Emote >= 0 ? p.Emote / Avatar.HumanMeshBuilder.EmotesPerPage : _view.Page;
         _view.Visible = true;
         _view.QueueRedraw();
-        _openedAt = Time.GetTicksMsec() / 1000.0;
+        _openedAt = GameClock.Now;
         UiFocus.Set(this, true);
         GetViewport().SetInputAsHandled();
     }
@@ -116,7 +116,7 @@ public partial class EmoteWheel : CanvasLayer
             p.DanceId = FootPlayer.EmoteDanceBase + emote;
             _lastEmote = emote;
         }
-        else if (Time.GetTicksMsec() / 1000.0 - _openedAt < TapSeconds)
+        else if (GameClock.Now - _openedAt < TapSeconds)
         {
             // a tap: stop whatever dance is on, else the last emote again
             if (p.DanceId != 0) p.DanceId = 0;
