@@ -52,6 +52,8 @@ public sealed class BrState
     public int TeamSize { get; set; } = 1;
     /// <summary>Players at GO: the first circle is sized for them (<see cref="ZoneSchedule.FirstRadius"/>); 0 before GO.</summary>
     public int Field { get; set; }
+    /// <summary>The leaderboard's top lines when the lobby opened (#479), for the lobby HUD.</summary>
+    public List<string> Leaders { get; set; } = new();
     /// <summary>The winning team, 0 in solo or with no winner.</summary>
     public int WinnerTeam { get; set; }
     public List<BrEntrant> Entrants { get; set; } = new();

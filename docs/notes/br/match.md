@@ -52,4 +52,9 @@
   - results table.
 - **Server flags**: `--brpace f` scales every match's timing (the loopback check runs at 0.13, short: 0.104; its 2-player zone runs at half the timetable).
   `user://br/history.json` holds the last 5 region centres.
+- **Careers** (#479, `BrStats`, plain C#, unit-tested): at `End` the server folds every entrant into
+  `user://br/stats.json` (by display name, any case: matches, wins, top 5s, kills, damage, best place,
+  time survived; saved with `JsonStore.SaveAsync`) and tells each entrant their record in a private line.
+  `/br stats [name]`, `/br top` (10 by wins, then kills, then fewest matches). `BrState.Leaders` (top 3
+  when the lobby opens) shows on the lobby HUD. Names are not accounts: a renamed player starts afresh.
 - Not yet: teams, spectating for players who were never in the match, a warm-up in the hold during the lobby.

@@ -280,6 +280,13 @@ public partial class BrProbe : ChatProbe
         var s = Br!.State;
         Expect(s.Winner == PeerOf("A") && s.Find(s.Winner)?.Kills == 1, $"A won with one kill (winner {s.Find(s.Winner)?.Name})");
         Expect(_sawDrop && _heard.Any(l => l.Contains("supply drop is coming down")), "a supply drop came down, announced and on the map");
+        // careers (#479): each entrant hears its record; the winner tops the board
+        Expect(await Until(() => _heard.Any(l => l.Contains("Your Battle Royale record: 1 match")), 8), "the match went into my record");
+        if (_role == "A")
+        {
+            Chat!.Send("/br top");
+            Expect(await Until(() => _heard.Any(l => l.Contains("1. BRA — 1 win, 1 kill")), 8), "/br top: the winner leads the board");
+        }
         await Seconds(1.0);
         Shot($"{_role.ToLowerInvariant()}_results");
     }
