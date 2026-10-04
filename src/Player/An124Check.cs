@@ -224,10 +224,11 @@ public partial class An124Check : Node
         await Shot("ready_to_taxi", new Vector3(30f, 9f, 45f), new Vector3(0, 6f, 0f));
         if (!Shots) return;
         // a picture in flight: put up at 400 m, the gear up (G in the air)
-        me.DebugLaunch(me.GlobalPosition + Vector3.Up * 400f, -me.GlobalTransform.Basis.Z * 85f);
+        me.DebugLaunch(me.GlobalPosition + Vector3.Up * 600f, -me.GlobalTransform.Basis.Z * 115f);
         await Seconds(1);
         Key(PlayerInput.CarDoor);
-        await Seconds(14);
+        await Seconds(10);
+        GD.Print($"[an124check] in flight: {me.Ride}, {me.GroundSpeed:F0} m/s");
         await Shot("in_flight", new Vector3(45f, 14f, 40f), new Vector3(0, 6f, 0f));
     }
 
