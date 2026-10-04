@@ -391,8 +391,13 @@ public partial class BrProbe : ChatProbe
             var to = (spot - me.Camera.GlobalPosition) with { Y = 0 };
             float off = Mathf.RadToDeg(look.AngleTo(to));
             Expect(off < 20f, $"the ping is where the crosshair is ({off:F0}° off, {to.Length():F0} m)");
-            Expect(GetViewport().GetCamera3D() is { } cam && !cam.IsPositionBehind(spot), "and on screen");
+            var cam = GetViewport().GetCamera3D();
+            var px = cam?.UnprojectPosition(spot) ?? Vector2.Zero;
+            var size = GetViewport().GetVisibleRect().Size;
+            Expect(cam != null && !cam.IsPositionBehind(spot) && new Rect2(Vector2.Zero, size).HasPoint(px),
+                $"and on screen (at {px.X:F0},{px.Y:F0} of {size.X:F0}×{size.Y:F0})");
         }
+        await Seconds(0.5);   // a frame or two drawn with it
         Shot("a_ping");
         Say("pinged");
         if (!await Until(() => Said("B", "got ping"), 20)) Expect(false, "B got the ping");
