@@ -136,7 +136,7 @@
   both ends. Door buttons on a parked one are reached measured from the parked box's middle
   (`VehicleManager.RequestDoor`; from the origin the visor's were out of reach).
   Checks: `--flycheck an124 --world flat` (quick; the circuit flares a slow-pitching heavy at 24 m with
-  more stick and some thrust: touchdown 0.99 m/s, at 14 m it was 3.2; `--airliner sim`: the four-engine start takes 150 s, the circuit's start and roll timeouts scale with it, touchdown 1.27 m/s); `--an124check [shots] --world
+  more stick and some thrust: touchdown 0.99 m/s, at 14 m it was 3.2; `--airliner sim`: the four-engine start takes 150 s, the circuit's start and roll timeouts scale with it; it flew the circuit once at touchdown 1.27 m/s, but **flaky**: in 3 of 4 runs the cold AN-124 settles 1-2 m at spawn, pitches and banks a few degrees and takes damage before the start, so that row is not in the checkmap yet); `--an124check [shots] --world
   fixture` (quick: G opens and kneels, the levers do not move it knelt, the crew sill 3.30/2.45 m, the
   pilot stood up, the engineer's and a cabin seat, down the ladder, down and up both ramps, the kneeling
   button raises it with the walker on the floor and kneels it again, up the ladder, G shuts and it rises;
