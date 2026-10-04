@@ -33,7 +33,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | car_door / gather | G / X (tap / hold) | ok: X; doors by grip | gather = **grip and pull** the resource |
 | emote_wheel | B / D-pad ↑ | ok: hold R stick ↑, aim with the right hand (#437) | keep |
 | toggle_mode | T / D-pad ↓ | ok: wrist menu (#437) | keep |
-| climb ladder | W / S on a ladder | ok: stick | **hand over hand** grab; rocks too (stamina) |
+| climb ladder | W / S on a ladder | ok: stick; rock faces and walls hand over hand (#439, stamina) | keep |
 
 ## Items, building, inventory
 
@@ -84,13 +84,13 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | Action | Kb / Pad | VR now | VR target |
 |---|---|---|---|
 | menu | Esc / Start | ok: Menu tap | keep |
-| teleport (place search, BR map) | M / — | ok: wrist menu (#437) | + **hand-held 3D Swiss map** |
+| teleport (place search, BR map) | M / — | ok: wrist menu (#437), hand-held map with point and pull (#439) | keep |
 | help / debug | F1 F9 / — | help: wrist menu (#437); debug: gap | debug in the wrist menu for admins |
 | fly camera up / down / boost | Space Ctrl… / A B L3 | ok: A B L3 | keep |
 | BR jump out / spectate | E, ←→ / Y, D-pad | ok | spectate on R stick ←/→ |
 | loot, shop, lock, Simon, vending | mouse + keys | ok: laser + trigger | lock dial by **wrist twist** |
 | chat | Enter, / | gap: no keyboard | laser key grid on the `XrUi` panel |
-| watch | — | — | **Swiss watch** on the left wrist (time, altitude, speed); a look opens the wrist menu |
+| watch | — | ok: Swiss watch on the left wrist (#439) | keep |
 
 ## Coherence findings (what violated the rules)
 

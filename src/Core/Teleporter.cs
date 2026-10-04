@@ -23,6 +23,16 @@ public sealed partial class Teleporter : Node
     private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
 
+    /// <summary>The world's teleporter, for the VR hand map (#439).</summary>
+    public static Teleporter? Instance { get; private set; }
+
+    public override void _EnterTree() => Instance = this;
+
+    public override void _ExitTree()
+    {
+        if (Instance == this) Instance = null;
+    }
+
     public Teleporter(ChunkManager chunks, WorldOrigin origin)
     {
         _chunks = chunks;

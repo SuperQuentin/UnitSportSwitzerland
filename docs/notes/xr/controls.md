@@ -68,6 +68,22 @@ The full per-action design and rules: `xr/vr-action-map`.
   when both hands beat down faster than 1.6 m/s; the wingsuit, hands over 1 m apart, rolls toward
   the lower hand; under a canopy each hand pulled down past the shoulder is a brake (one turns,
   both slow and flare).
+- **Watch (#439, `XR/XrWatch`).** On the back of the left wrist (the controller's +X, where the
+  wrist-menu look aims): the world's time (`DayNight.Hour`), the altitude above the sea
+  (`FootPlayer.Global.Alt`) and the speed, a `Label3D` set twice a second and only on change. Hidden
+  while the controller is untracked; headset only.
+- **Hand-held map (#439, `XR/XrMap`).** The wrist menu's *Map in your hand* (on foot) builds a relief of
+  3 km round the player in the left hand (32 × 32 heights from `ChunkManager.TryGetHeight`, twice
+  exaggerated, snow above 2600 m, grey where no tile is loaded) with a red marker for you. The right
+  hand's ray on it shows a dot; the trigger travels there through `Core.Teleporter` (the place
+  search's teleport) and shuts the map. In a Battle Royale match it only shows, as M does there.
+  While the ray is on the map the right trigger is muted as a use.
+- **Climbing (#439, `XR/XrClimb`).** On foot, a grip closed with the hand touching a face steeper than
+  about 53° (a 12 cm ray along the hand) holds that point: the body hangs from it through
+  `FootPlayer.Carrier` (the climbing pose everyone sees, #359), moving the other way as the hand
+  moves. The newest hand carries; letting go with the last one releases with the push given (at
+  most 6 m/s). 15 s of holding and the hands slip; standing rests them. A grip on rock is not
+  also a grab or a shoulder.
 - **Wrist menu (#437, `XR/XrWristMenu`).** The back of the left wrist (the controller's +X) turned
   toward the eyes, in view within 24° and 0.7 m, for 0.6 s opens a menu on the UI panel: travel,
   inventory, map, bird journal, drop the held item (on foot), fly camera / walk, controls,
