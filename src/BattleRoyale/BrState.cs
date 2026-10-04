@@ -50,6 +50,8 @@ public sealed class BrState
     public long Winner { get; set; }
     /// <summary>Players per team (#231): 1 is solo (every <see cref="BrEntrant.Team"/> 0), 2 duos, 4 squads.</summary>
     public int TeamSize { get; set; } = 1;
+    /// <summary>Players at GO: the first circle is sized for them (<see cref="ZoneSchedule.FirstRadius"/>); 0 before GO.</summary>
+    public int Field { get; set; }
     /// <summary>The winning team, 0 in solo or with no winner.</summary>
     public int WinnerTeam { get; set; }
     public List<BrEntrant> Entrants { get; set; } = new();
@@ -90,6 +92,8 @@ public sealed class BrState
     }
     [JsonIgnore] public bool Running => Phase is BrPhase.Playing or BrPhase.Ended;
     [JsonIgnore] public BrArea Area => new(AreaE, AreaN, Side, AreaName);
+    /// <summary>This match's zone, the same on every peer.</summary>
+    public ZoneSchedule Zone() => new(Seed, Side, Pace, Field);
 
     /// <summary>The cargo plane's line, once the match has started.</summary>
     [JsonIgnore] public BrFlight? Flight => Running && FlightStart > 0 ? new BrFlight(this) : null;

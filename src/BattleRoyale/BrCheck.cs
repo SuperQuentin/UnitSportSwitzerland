@@ -28,6 +28,7 @@ public static class BrCheck
     {
         Zone();
         Durations();
+        FieldCircles();
         Flights();
         Regions();
         StateJson();
@@ -72,6 +73,31 @@ public static class BrCheck
         Expect(s.At(first) is { Phase: 1, Shrinking: true } && !s.At(first - 0.01).Shrinking && s.NextShrinkAt(first + 1) is null
             && s.At(second) is { Phase: 2, Shrinking: true } && !s.At(second - 0.01).Shrinking && s.NextShrinkAt(s.Duration + 1) is null,
             FormattableString.Invariant($"/br zone: the next shrink from the loot time ({first:F0} s) and from phase 2's wait ({second:F0} s), none while shrinking or over"));
+    }
+
+    /// <summary>The first circle follows the field at GO (#447): small for a few, the full circle for a crowd.</summary>
+    private static void FieldCircles()
+    {
+        float few = ZoneSchedule.FirstRadius(5000, 5), many = ZoneSchedule.FirstRadius(7000, 40);
+        Expect(ZoneSchedule.FirstRadius(6000, 0) == 6000 * 0.57f && many == 7000 * 0.57f && few < 5000 * 0.57f * 0.65f
+               && ZoneSchedule.FirstRadius(5000, 1) == ZoneSchedule.MinRadius,
+            FormattableString.Invariant($"first circle: 5 players {few:F0} m on 5 km, 40 players {many:F0} m on 7 km (full), unknown field full, at least {ZoneSchedule.MinRadius:F0} m"));
+        int bad = 0;
+        foreach (int field in new[] { 1, 2, 5, 9, 14, 20 })
+            for (int seed = 1; seed <= 100; seed++)
+            {
+                float side = BrRegion.SideFor(field);
+                var z = new ZoneSchedule(seed, side, 1, field);
+                // inside the full circle and the square, and the rest nested as ever
+                if (z.CentreOf(0).Length() + z.RadiusOf(0) > side * 0.57f + 0.01f
+                    || Math.Abs(z.CentreOf(0).X) > side * 0.5f || Math.Abs(z.CentreOf(0).Y) > side * 0.5f) bad++;
+                for (int i = 1; i <= ZoneSchedule.Phases; i++)
+                    if (z.CentreOf(i).DistanceTo(z.CentreOf(i - 1)) + z.RadiusOf(i) > z.RadiusOf(i - 1) + 0.01f) bad++;
+            }
+        var small = new ZoneSchedule(1, 5000, 1, 5);
+        double minutes = small.Duration / 60.0 + 2 + FlightMinutes(5000);
+        Expect(bad == 0 && minutes is >= 15 and <= 30,
+            FormattableString.Invariant($"field-sized circles: 600 inside the full circle and nested ({bad} bad); 5 players on 5 km: a round of {minutes:F0} min"));
     }
 
     private static double FlightMinutes(float side)

@@ -41,7 +41,7 @@ public partial class BrManager
     private BrMap? _map;
 
     private ZoneSchedule? _zone;
-    private (int Seed, float Side, float Pace) _zoneKey;
+    private (int Seed, float Side, float Pace, int Field) _zoneKey;
     private BrHud? _hud;
     private ZoneWall? _wall;
     private Camera3D? _spectator;
@@ -149,10 +149,10 @@ public partial class BrManager
         if (_server || BrState.FromJson(json) is not { } s) return;
         var before = _state.Phase;
         _state = s;
-        var key = (s.Seed, s.Side, s.Pace);
+        var key = (s.Seed, s.Side, s.Pace, s.Field);
         if (s.Phase != BrPhase.Idle && (_zone == null || key != _zoneKey))
         {
-            _zone = new ZoneSchedule(s.Seed, s.Side, s.Pace);
+            _zone = s.Zone();
             _zoneKey = key;
         }
         if (s.Phase == BrPhase.Idle) _feed.Clear();
