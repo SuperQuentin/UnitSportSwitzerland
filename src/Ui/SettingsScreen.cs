@@ -311,6 +311,19 @@ public partial class SettingsScreen : Screen
             i => GameSettings.Current.VrRenderScale = scales[i], "Of the eye size the headset asks for. Lower it if the picture stutters");
         UiKit.ToggleRow(rows, "VR foveated rendering", GameSettings.Current.VrFoveation, on => GameSettings.Current.VrFoveation = on,
             "Coarser shading towards the edge of each eye (GPUs with variable rate shading)");
+        // comfort (#439, docs/notes/xr/rig.md)
+        int[] snaps = { 0, 15, 30, 45 };
+        UiKit.OptionRow(rows, "VR turning", new[] { "Smooth", "Snap 15°", "Snap 30°", "Snap 45°" },
+            Math.Max(0, Array.IndexOf(snaps, GameSettings.Current.VrSnapDegrees)), i => GameSettings.Current.VrSnapDegrees = snaps[i],
+            "The right stick on foot. Snapping is easier on the stomach");
+        UiKit.OptionRow(rows, "VR walking", new[] { "Stick", "Teleport" }, GameSettings.Current.VrTeleport ? 1 : 0,
+            i => GameSettings.Current.VrTeleport = i == 1, "Teleport: push the stick forward, aim the arc, let go. No faster than walking");
+        float[] vignettes = { 0f, 0.5f, 1f };
+        int vig = Array.FindIndex(vignettes, v => Math.Abs(v - GameSettings.Current.VrVignette) < 0.01f);
+        UiKit.OptionRow(rows, "VR comfort vignette", new[] { "Off", "Light", "Full" }, vig < 0 ? 2 : vig,
+            i => GameSettings.Current.VrVignette = vignettes[i], "Narrows the view while the world moves and you do not");
+        UiKit.ToggleRow(rows, "VR left-handed", GameSettings.Current.VrLeftHanded, on => GameSettings.Current.VrLeftHanded = on,
+            "Swap the hands: the right controller moves, the left one uses and turns");
     }
 
     /// <summary>

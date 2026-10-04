@@ -27,7 +27,8 @@ namespace UnitSport.XR;
 public partial class XrRig : Node3D, Core.IOriginShiftAware
 {
     /// <summary>On foot, the right stick snaps the body round by this much.</summary>
-    private const float SnapTurn = Mathf.Pi / 6f;
+    /// <summary>A smooth turn at full right stick, radians per second (#439).</summary>
+    private const float SmoothTurnRate = 2.2f;
     /// <summary>Hold the right stick in this long to recentre on where the head is now.</summary>
     private const float RecentreHold = 0.8f;
 
@@ -48,6 +49,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     private XrPad _pad = null!;
     private XrWristMenu _wrist = null!;
     private XrCabControls _cab = null!;
+    private XrTeleport _teleport = null!;
+    private bool _leftHanded;
     private Vector3 _prevLeftLocal, _prevRightLocal;
     private float _flapCooldown;
 
@@ -163,6 +166,9 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         AddChild(_wrist);
         _cab = new XrCabControls(_left, _right);
         AddChild(_cab);
+        _teleport = new XrTeleport();
+        AddChild(_teleport);
+        ApplyHands();
         Notice = new XrNotice();
         AddChild(Notice);
         if (XrSession.Simulated) Notice.CallDeferred(XrNotice.MethodName.Show, "VR", "simulated");
@@ -201,6 +207,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     {
         _camera.Far = Core.GameSettings.Current.CameraFar;
         ApplyQuality();
+        ApplyHands();
     }
 
     /// <summary>
@@ -424,16 +431,39 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         GD.Print($"[xr] recentred at head height {head.Origin.Y:F2} m");
     }
 
+    /// <summary>
+    /// Left-handed play (#439): the controller nodes swap trackers, so the hand that moves and the
+    /// hand that uses are swapped everywhere at once; the prompts name the real hand (<see cref="XrProfile.Name"/>).
+    /// </summary>
+    private void ApplyHands()
+    {
+        bool swap = Core.GameSettings.Current.VrLeftHanded;
+        if (_left == null || swap == _leftHanded && _left.Tracker != "") return;
+        _leftHanded = swap;
+        _left.Tracker = swap ? "right_hand" : "left_hand";
+        _right.Tracker = swap ? "left_hand" : "right_hand";
+        Core.PlayerInput.HintsChanged();
+    }
+
     private void HandleSticks(FootPlayer? player, Transform3D calibrated, float dt)
     {
         var stick = _right.GetVector2("primary");
 
-        // snap turn, on foot only: in a vehicle the head is the free look; a pigeon (#217) snaps
+        // the moving hand's stick pushed forward aims a teleport, when the setting asks (#439)
+        _pad.SuppressMove = _teleport.Update(player, _left, _left.GetVector2("primary").Y, Blink, dt);
+
+        // turning on foot only: in a vehicle the head is the free look; a pigeon (#217) snaps
         // while perched or walking (PigeonSnap says no in the air)
         bool onFoot = player != null && player.Ride == RideKind.OnFoot && player.RidingWith == 0;
-        if ((onFoot || player?.Ride == RideKind.Pigeon) && Mathf.Abs(stick.X) > 0.7f && _snapArmed && !_ui.Pointing)
+        int snapDegrees = Core.GameSettings.Current.VrSnapDegrees;
+        if (onFoot && snapDegrees == 0 && !_ui.Pointing)
         {
-            float turn = -Mathf.Sign(stick.X) * SnapTurn;
+            // smooth, past a small deadzone (#439)
+            if (Mathf.Abs(stick.X) > 0.2f) player!.LookYaw -= stick.X * SmoothTurnRate * dt;
+        }
+        else if ((onFoot || player?.Ride == RideKind.Pigeon) && Mathf.Abs(stick.X) > 0.7f && _snapArmed && !_ui.Pointing)
+        {
+            float turn = -Mathf.Sign(stick.X) * Mathf.DegToRad(snapDegrees == 0 ? 30 : snapDegrees);
             if (onFoot) player!.LookYaw += turn;
             else player!.PigeonSnap(turn);
             _snapArmed = false;
@@ -531,6 +561,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
                 target = (Mathf.Clamp((speed - 1.5f) / 14f, 0f, 0.55f) + Mathf.Clamp((turn - 0.4f) / 2.5f, 0f, 0.45f)) * frame;
             }
         }
+        target *= Core.GameSettings.Current.VrVignette;
         _vignetteLevel = Mathf.Lerp(_vignetteLevel, target, MathX.Damp(6f, dt));
         _blink = Mathf.Max(0f, _blink - dt / BlinkSeconds);
         _vignette.Visible = _vignetteLevel > 0.02f || _blink > 0f;
