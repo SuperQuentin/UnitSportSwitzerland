@@ -57,7 +57,7 @@ public partial class AirstairsCheck : Node
     {
         if (!Shots || DisplayServer.GetName() == "headless") return;
         var was = GetViewport().GetCamera3D();
-        var cam = new Camera3D { Fov = 55f };
+        var cam = new Camera3D { Fov = 70f, Near = 0.05f };
         AddChild(cam);
         cam.GlobalPosition = eye;
         cam.LookAt(at, Vector3.Up);
@@ -214,6 +214,15 @@ public partial class AirstairsCheck : Node
         var err = (me.GlobalPosition - dockAt) with { Y = 0 };
         Expect(lined && err.Length() < 0.05f && Mathf.Abs(MathX.WrapAngle(me.Rotation.Y - dockYaw)) < 0.02f,
             $"driven to L2 and let go: docked (door {driving.Docked?.Door}, off by {err.Length():F3} m, {Mathf.RadToDeg(MathX.WrapAngle(me.Rotation.Y - dockYaw)):F1}°, platform {driving.Height:F3} for {DockH():F3})");
+        if (me.Visual is HeavyRig cab)
+        {
+            // the cab from the driver's seat: the wheel in the hands, the dials, the aircraft through the glass
+            cab.View = CockpitView.Body;
+            var eye = me.Visual.GlobalTransform * cab.EyeFrame;
+            await Shot("cab-driver-seat", eye.Origin, eye.Origin + eye.Basis * new Vector3(0.15f, -0.35f, -1f));
+            await Shot("cab-looking-up", eye.Origin, eye.Origin + eye.Basis * new Vector3(0.1f, 0.55f, -1f));
+            cab.View = CockpitView.Outside;
+        }
         await Shot("driven-docked-l2", me.GlobalPosition + outward * 10f + side * 8f + Vector3.Up * 6f, me.GlobalPosition + Vector3.Up * 2.5f);
         me.RideControls = null;
         Expect(me.TryInteract() && await Until(() => me.Ride == RideKind.OnFoot, 5), "got out: parked");
