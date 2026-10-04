@@ -33,8 +33,9 @@ public partial class Handshake : Node
     /// 10: World/ChurchRadios (Ask*/Set), CdInfo's source, MusicStyle.RatDance (#370).
     /// 12: BattleRoyale RequestPing/Pinged, BrEntrant.Party (#469); 11 is the world clock's (#452).
     /// 13: BattleRoyale ReportDowned/RequestRevive/Revived/OutNow/DownNews, BrEntrant.Downed (#475).
+    /// 15: BattleRoyale RequestRecall/Recalled/RecallNews, BrState.RecallPoints, ItemId.Dogtag (#480); 14 is #478's.
     /// </summary>
-    public const int Protocol = 13;
+    public const int Protocol = 15;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

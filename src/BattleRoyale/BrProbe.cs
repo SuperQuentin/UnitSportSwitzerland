@@ -415,6 +415,40 @@ public partial class BrProbe : ChatProbe
     }
 
     /// <summary>
+    /// A (#480): B goes out for good; A takes the dogtag from B's box to a Postauto stop and uses it: B is back.
+    /// </summary>
+    private async Task Recall(FootPlayer me)
+    {
+        var br = Br!;
+        if (!await Until(() => Said("B", "out"), 30)) { Fail("B never went out"); return; }
+        Expect(await Until(() => br.State.Find(PeerOf("B"))?.Alive == false, 10), "B is out");
+        Expect(br.Stops().Count() == BrManager.RecallStops, $"{br.Stops().Count()} Postauto stops in this squad match");
+        var crates = BrCrates.Instance!;
+        if (!await Until(() => crates.All.Any(c => c.Style == CrateStyle.DeathBox), 10)) { Expect(false, "B's death box appeared"); return; }
+        var box = crates.All.First(c => c.Style == CrateStyle.DeathBox);
+        Expect(box.Stacks().Any(st => st.Id == ItemId.Dogtag), $"the box holds B's dogtag ({string.Join(", ", box.Stacks().Select(st => st.Id))})");
+        await Until(() => crates.NearestTo(me)?.Id == box.Id, 10);
+        Expect(crates.TryOpen(me), "E opens B's box");
+        Loot.LootService.Instance?.TakeAll();
+        Expect(await Until(() => CountOf(ItemId.Dogtag) == 1, 10), "A carries the tag");
+        Loot.LootService.Instance?.Close();
+        Expect(br.CarryingTag, "the HUD knows a tag is carried");
+
+        // to the nearest stop, and the tag used there
+        var here = br.ZonePoint(me.GlobalPosition);
+        var stop = br.NearestStop(here)!.Value;
+        br.Teleport(br.State.AreaE + stop.At.X + 2, br.State.AreaN + stop.At.Y, "a Postauto stop");
+        await Seconds(3.0);
+        Expect(GetParent().GetChildren().Count(n => n.Name.ToString().StartsWith("PostautoStop")) == BrManager.RecallStops, "the stops' signs stand in the world");
+        _items.UseSlot(me, SlotOf(ItemId.Dogtag));
+        Expect(await Until(() => br.State.Find(PeerOf("B"))?.Alive == true, 8), "the tag used at the stop: B is back in");
+        Expect(await Until(() => CountOf(ItemId.Dogtag) == 0, 5), "the tag is spent");
+        Shot("a_stop");
+        Say("recalled");
+        if (!await Until(() => Said("B", "back"), 60)) Fail("B never landed back");
+    }
+
+    /// <summary>
     /// A (#475): B goes down; A walks over and holds Interact until B is up. Then B goes down again
     /// and A falls too: a team all down is out, and the match ends with nobody standing.
     /// </summary>
@@ -435,7 +469,8 @@ public partial class BrProbe : ChatProbe
         bool up = await Until(() => Br.State.Find(PeerOf("B"))?.Downed == false, BrManager.ReviveSeconds + 5);
         Br.ForceInteract = false;
         Expect(up, "after the hold, the server stands B up");
-        if (!await Until(() => Said("B", "down again"), 30)) { Fail("B never went down again"); return; }
+        await Recall(me);
+        if (!await Until(() => Said("B", "down again"), 60)) { Fail("B never went down again"); return; }
         await Until(() => Br.State.Find(PeerOf("B"))?.Downed == true, 5);   // the state, not just the chat
         me.TakeDamage(1000f, 0, DamageCause.Other);
         Expect(me.Eliminated && !me.Downed, "with B down, A falling is out at once: nobody to pick A up");
@@ -476,6 +511,21 @@ public partial class BrProbe : ChatProbe
         Say("down");
         Expect(await Until(() => !me.Downed, 20), "A revived B");
         Expect(Mathf.IsEqualApprox(me.Health, FootPlayer.RevivedHealth) && !me.Eliminated, $"up with {me.Health:F0} HP");
+
+        // respawn tickets (#480): out for good this time, A brings B back with the tag
+        await Seconds(1.0);
+        me.TakeDamage(1000f, 0, DamageCause.Other);
+        me.FinishDowned();
+        Expect(me.Eliminated, "out: B leaves a dogtag");
+        Say("out");
+        Expect(await Until(() => !me.Eliminated && Br.MeAlive, 40), "A recalled B: back in the match");
+        Expect(me.Ride == RideKind.Wingsuit && !me.IsOnFloor(), $"dropped by wingsuit over the stop ({me.Ride})");
+        Expect(CountOf(ItemId.Knife) == 1 && CountOf(ItemId.Bandage) == 2, "with a knife and two bandages");
+        Shot("b_recalled");
+        me.Leap(me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);   // out of the wingsuit: the probe does not fly it down
+        Expect(await Until(() => me.IsOnFloor(), 40), "on the ground again");
+        Say("back");
+        if (!await Until(() => Said("A", "recalled"), 30)) { Fail("A never said recalled"); return; }
         await Seconds(1.0);
         me.TakeDamage(1000f, 0, DamageCause.Other);
         Expect(me.Downed, "down again");

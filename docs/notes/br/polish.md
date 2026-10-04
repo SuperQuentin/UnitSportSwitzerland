@@ -44,3 +44,12 @@
   living are all down (`OutIfAllDown`, on going down and on any elimination) gets `OutNow` each, and their
   clients report the death as usual (death boxes included). `End` picks a standing winner. HUD: DOWN banner
   with the seconds left and a bar; mates marked "(down)" on maps and compass. Solo is unchanged.
+- **Respawn tickets** (#480, `BrManager.Recall.cs`): in squads, a player who goes out before zone
+  `RecallBefore` (4) while a team-mate stands leaves `ItemId.Dogtag` in the death box (`LeavesTag`; once per
+  player, `BrEntrant.Recalled`). At GO (once the roads are in) the server picks `RecallStops` (4) road points
+  spread over the first circle, farthest-point (`PickStops`, `BrState.RecallPoints`: x, y, alt). Clients put a
+  yellow Postauto sign there (`StopSigns`) and the maps a yellow "P"; carrying a tag shows a HUD hint and the
+  nearest stop on the compass (row 6). The tag used within 6 m of a stop (`ItemUse.Recall` → `TryRecall`) →
+  `RequestRecall` (server: standing, in a team, ≤ 10 m from a stop, before zone 4) brings back the team-mate
+  who went out last (`OutAt`): alive, unplaced; `Recalled` drops them by wingsuit 180 m over the stop with a
+  knife and two bandages; `RecallNews` spends the recaller's tag and feeds "A recalled B".

@@ -471,6 +471,14 @@ public partial class BrManager : Node
         {
             var roads = await BrLoot.RoadPoints(_source, area);
             if (match != _match || _state.Phase != BrPhase.Playing) return;
+            // the Postauto stops for recalls (#480), squads only
+            if (_state.TeamSize > 1)
+            {
+                var zone = _state.Zone();
+                _state.RecallPoints = PickStops(roads, area, zone.CentreOf(0), zone.RadiusOf(0), seed);
+                GD.Print($"[br] recall stops: {(_state.RecallPoints?.Length ?? 0) / 3}");
+                Push();
+            }
             var crates = BrLoot.RoadsideCrates(roads, area, seed);
             if (_crates != null) _crates.Seed = seed;
             _crates?.Spawn(crates);
@@ -635,6 +643,8 @@ public partial class BrManager : Node
         for (int i = 0; i < Math.Min(Math.Min(ids.Length, counts.Length), Items.Inventory.Size); i++)
             if (Items.ItemDefs.Get((Items.ItemId)ids[i]) is { } def && def.Id != Items.ItemId.Francs && counts[i] > 0)
                 stacks.Add(new Items.ItemStack(def.Id, Math.Min(counts[i], def.MaxStack)));
+        // a squad player's dogtag (#480): a team-mate can bring them back with it
+        if (LeavesTag(e)) stacks.Add(new Items.ItemStack(Items.ItemId.Dogtag, 1));
         if (stacks.Count == 0) return;
         var (pe, pn) = Origin.ToLv95(body.GlobalPosition);
         var box = new Crate { Style = CrateStyle.DeathBox, E = pe, N = pn, Alt = body.GlobalPosition.Y, Label = $"{e.Name}'s things" };
@@ -657,6 +667,7 @@ public partial class BrManager : Node
     private void Eliminate(BrEntrant e, long killer, BrOut cause)
     {
         e.Alive = false;
+        e.OutAt = Now;
         e.Downed = false;
         e.Survived = Now - _state.FlightStart;
         // a team places when its last member is out, all of them together (solo: at once)

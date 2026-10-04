@@ -489,6 +489,7 @@ public partial class BrManager
             }
         }
         ReviveTick(me, delta);
+        StopSigns();
 
         FlightTick(me);
 

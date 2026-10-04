@@ -130,6 +130,9 @@ public partial class BrHud : CanvasLayer
                 Banner(font, new Vector2(w * 0.5f, Size.Y * 0.62f), $"DOWN  ·  out in {left * Player.FootPlayer.BleedSeconds:F0} s  ·  a team-mate can revive you", 18, Danger);
                 Bar(new Vector2(w * 0.5f, Size.Y * 0.62f + 16), left, Danger);
             }
+            else if (s.Phase == BrPhase.Playing && br.InMatch && br.MeAlive && br.CarryingTag)
+                Text(font, new Vector2(w * 0.5f, Size.Y * 0.62f), $"Take the tag to a Postauto stop (yellow on the map), before zone {BrManager.RecallBefore}",
+                    15, BrMapDraw.Postauto, HorizontalAlignment.Center, shadow: true);
             else if (br.Reviving is { } rv)
             {
                 Banner(font, new Vector2(w * 0.5f, Size.Y * 0.62f), $"Reviving {rv.Name}…", 18, BrMapDraw.Mate);
