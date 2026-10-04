@@ -32,8 +32,9 @@ public partial class Handshake : Node
     /// 9: structures sent by distance, PlacedObjects AskBurn/Burnt, hang and climb pose kinds (#359).
     /// 10: World/ChurchRadios (Ask*/Set), CdInfo's source, MusicStyle.RatDance (#370).
     /// 12: BattleRoyale RequestPing/Pinged, BrEntrant.Party (#469); 11 is the world clock's (#452).
+    /// 13: BattleRoyale ReportDowned/RequestRevive/Revived/OutNow/DownNews, BrEntrant.Downed (#475).
     /// </summary>
-    public const int Protocol = 12;
+    public const int Protocol = 13;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

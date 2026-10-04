@@ -411,7 +411,36 @@ public partial class BrProbe : ChatProbe
         Expect(Br.Pings.Single(p => p.Peer == Br.Me).At.Length() < 2f, "a second ping within 1.5 s is refused");
         Say("map pinged");
         await Until(() => Said("B", "got map ping"), 20);
-        Chat.Send("/br cancel");
+        await Revive(me);
+    }
+
+    /// <summary>
+    /// A (#475): B goes down; A walks over and holds Interact until B is up. Then B goes down again
+    /// and A falls too: a team all down is out, and the match ends with nobody standing.
+    /// </summary>
+    private async Task Revive(FootPlayer me)
+    {
+        if (!await Until(() => Said("B", "down"), 30)) { Fail("B never went down"); return; }
+        var b = GetParent().GetNodeOrNull<FootPlayer>("Players/" + PeerOf("B"));
+        Expect(await Until(() => b?.Down == 2, 5), $"B's body is downed here (Down {b?.Down})");
+        Expect(Br!.State.Find(PeerOf("B"))?.Downed == true && Br.State.TeamsAlive == 1, "the server has B down; the team still counts");
+        var p = _heard.Last(l => l.Contains("BR B posB")).Split("posB ")[1].Split(' ');
+        Br.Teleport(double.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture) + 1.2,
+            double.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture), "next to B");
+        await Seconds(3.0);
+        Br.ForceInteract = true;
+        Expect(await Until(() => Br.Reviving != null, 4), $"holding Interact over B revives it ({Br.Reviving?.Name})");
+        await Seconds(1.0);
+        Shot("a_reviving");
+        bool up = await Until(() => Br.State.Find(PeerOf("B"))?.Downed == false, BrManager.ReviveSeconds + 5);
+        Br.ForceInteract = false;
+        Expect(up, "after the hold, the server stands B up");
+        if (!await Until(() => Said("B", "down again"), 30)) { Fail("B never went down again"); return; }
+        await Until(() => Br.State.Find(PeerOf("B"))?.Downed == true, 5);   // the state, not just the chat
+        me.TakeDamage(1000f, 0, DamageCause.Other);
+        Expect(me.Eliminated && !me.Downed, "with B down, A falling is out at once: nobody to pick A up");
+        Expect(await Until(() => Br.State.Phase == BrPhase.Ended, 15) && Br.State.Entrants.All(e => !e.Alive),
+            "a team all down is out: the match ends with nobody standing");
     }
 
     /// <summary>B: joins by itself, picks team "ALP" (any case), and must see A's pings.</summary>
@@ -431,6 +460,28 @@ public partial class BrProbe : ChatProbe
         if (!await Until(() => Said("A", "map pinged"), 30)) { Fail("A never pinged the map"); return; }
         Expect(Br.Pings.Any(p => p.Peer == PeerOf("A") && p.At.Length() < 2f), "A's map ping replaced its first");
         Say("got map ping");
+
+        // down, not out (#475): a team-mate stands, so 0 HP puts B down
+        var me = Me!;
+        await Seconds(1.0);
+        Say(Fmt($"posB {me.Global.E:F2} {me.Global.N:F2}"));
+        me.TakeDamage(1000f, 0, DamageCause.Other);
+        Expect(me.Downed && !me.Eliminated, "0 HP with a team-mate standing: down, not out");
+        Expect(await Until(() => Br.State.Find(Br.Me)?.Downed == true, 5), "the server has B down");
+        float bleed = me.BleedLeft;
+        await Seconds(2.0);
+        Expect(me.BleedLeft < bleed - 5f && me.Downed, $"bleeding out ({bleed:F0} -> {me.BleedLeft:F0})");
+        Expect(_items.UsablePlayer == null, "no items while down");
+        Shot("b_down");
+        Say("down");
+        Expect(await Until(() => !me.Downed, 20), "A revived B");
+        Expect(Mathf.IsEqualApprox(me.Health, FootPlayer.RevivedHealth) && !me.Eliminated, $"up with {me.Health:F0} HP");
+        await Seconds(1.0);
+        me.TakeDamage(1000f, 0, DamageCause.Other);
+        Expect(me.Downed, "down again");
+        Say("down again");
+        Expect(await Until(() => me.Eliminated, 15), "A fell too: the whole team down, B is out");
+        Expect(await Until(() => Br.State.Phase == BrPhase.Ended, 15), "the match ended");
     }
 
     /// <summary>A: the sites exist; crack a bunker; shoot a supply crate open and loot the pile; fire a flare.</summary>

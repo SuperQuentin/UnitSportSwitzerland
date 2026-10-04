@@ -107,7 +107,7 @@ public static class PlayerHits
     {
         var list = new List<FootPlayer>();
         foreach (var n in shooter.GetTree().GetNodesInGroup(FootPlayer.Group))
-            if (n is FootPlayer p && p != shooter && !p.Npc && p.Down == 0 && PeerOf(p) > 0 && p.IsInsideTree())
+            if (n is FootPlayer p && p != shooter && !p.Npc && p.Down != 1 && PeerOf(p) > 0 && p.IsInsideTree())   // downed (2) can be finished, #475
                 list.Add(p);
         return list;
     }

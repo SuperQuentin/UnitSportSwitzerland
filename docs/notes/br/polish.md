@@ -32,3 +32,15 @@
   player for 8 s (`Pings`, local clock): a pink diamond with name and distance on screen (`BrHud`,
   projected; a map ping stands on the ground where its tile is loaded), a pin on the minimap and full map
   (`BrMapDraw.Overlays`), compass row 4, `BrSounds.Ping`. Loopback: `SQUAD=1 tools/brcheck.sh`.
+- **Down, not out** (#475, `Player/FootPlayer.Downed.cs`): at 0 HP in a squad match with a team-mate
+  standing (`FootPlayer.CanBeDowned` ← `BrState.MateStanding`), `TryGoDown` instead of `Die`: `Down = 2`
+  (replicated; hit tests skip only 1, so a downed body can be finished), flat (`BodyPose`), crawling at
+  `CrawlSpeed` (no run, jump, slide), no items (`UsablePlayer`), no interact. `BleedLeft` 100 drains over
+  `BleedSeconds` 30 and with every hit; at 0 `BleedOut` = the ordinary `Die` + `Died`, the kill to whoever
+  downed them unless another finished them. Client `WentDown` → server `ReportDowned` (`BrEntrant.Downed`,
+  `DownedBy`, feed `A downed B`). A standing team-mate holds Interact within 2.2 m for `ReviveSeconds` 5
+  (`ReviveTick`, HUD bar) → `RequestRevive` (server: same team, both bodies within 3.5 m) → `Revived` →
+  `ReviveInPlace` (30 HP, where they lie; feed `A revived B`). `TeamsAlive` counts only the standing; a team whose
+  living are all down (`OutIfAllDown`, on going down and on any elimination) gets `OutNow` each, and their
+  clients report the death as usual (death boxes included). `End` picks a standing winner. HUD: DOWN banner
+  with the seconds left and a bar; mates marked "(down)" on maps and compass. Solo is unchanged.
