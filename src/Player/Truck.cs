@@ -330,12 +330,32 @@ public sealed class Truck : Rideable, IEngined
     {
         get
         {
+            if (Spec.Class == HeavyClass.Pickup) return PickupHull;
             if (Spec.Class != HeavyClass.Tractor) return null;
             var s = Spec.Sections[0];
             float cg = Train.Bodies[0].CgAt, cab = 2.35f;
             var chassis = new Aabb(new Vector3(-s.Width * 0.47f, 0f, cab - cg), new Vector3(s.Width * 0.94f, s.HitchHeight - 0.08f, s.Length - cab));
             var cabin = new Aabb(new Vector3(-s.Width * 0.5f, 0f, -cg), new Vector3(s.Width, s.Height, cab));
             return (chassis, cabin);
+        }
+    }
+
+    /// <summary>
+    /// The pickup (#463) collides as its body to the bonnet and bed rails, and above that only as its
+    /// cab: measured, the upper box ran the whole length to the roof, a wall over the bonnet and the
+    /// bed that stopped a trailer's nose and a walker alike.
+    /// </summary>
+    private (Aabb, Aabb) PickupHull
+    {
+        get
+        {
+            var s = Spec.Sections[0];
+            float cg = Train.Bodies[0].CgAt, w = s.Width - 0.1f;
+            var body = new Aabb(new Vector3(-w * 0.5f, 0f, -cg), new Vector3(w, Avatar.PickupMeshBuilder.BodyTop, s.Length));
+            float cab0 = Avatar.PickupMeshBuilder.CabFrom, cab1 = Avatar.PickupMeshBuilder.CabTo;
+            var cab = new Aabb(new Vector3(-w * 0.5f, Avatar.PickupMeshBuilder.BodyTop, cab0 - cg),
+                new Vector3(w, s.Height - Avatar.PickupMeshBuilder.BodyTop, cab1 - cab0));
+            return (body, cab);
         }
     }
 
@@ -391,8 +411,42 @@ public sealed class Truck : Rideable, IEngined
     /// <summary>Every seat of the truck's own sections (a bus's both halves), the driver's first (#158).</summary>
     public override SeatAnchor[] Seats => Model.Seats;
 
-    /// <summary>The bus's saloon, each half of it, for walking about in (#162); none on a truck.</summary>
-    public override VehicleDeck[] Decks => Model.Decks;
+    /// <summary>
+    /// The bus's saloon, each half of it, for walking about in (#162); none on a truck. With a boat
+    /// trailer, its cradle too (#463), numbered as the train's section.
+    /// </summary>
+    public override VehicleDeck[] Decks
+    {
+        get
+        {
+            if (Trailer == null) return Model.Decks;
+            var key = (Kind, TrailerCatalog.Index(TrailerCode));
+            if (_trainDecks.TryGetValue(key, out var known)) return known;
+            var decks = Model.Decks.Concat(TrailerDecks(Trailer, TrailerCode).Select(d => d with { Section = d.Section + OwnSections })).ToArray();
+            return _trainDecks[key] = decks;
+        }
+    }
+
+    private static readonly Dictionary<(RideKind, int), VehicleDeck[]> _trainDecks = new();
+    private static readonly Dictionary<int, VehicleDeck[]> _trailerDecks = new();
+
+    /// <summary>A trailer's own decks (a boat trailer's cradle), by its sections, read once from a throwaway build.</summary>
+    public static VehicleDeck[] TrailerDecks(TrailerSpec trailer, int code)
+    {
+        int index = TrailerCatalog.Index(code);
+        if (_trailerDecks.TryGetValue(index, out var known)) return known;
+        var decks = new List<VehicleDeck>();
+        for (int k = 0; k < trailer.Sections.Length; k++)
+        {
+            var rig = HeavyRig.CreateTrailer(trailer, k, 0f);
+            if (rig.Deck != null) decks.Add(rig.Deck);
+            rig.Free();
+        }
+        return _trailerDecks[index] = decks.ToArray();
+    }
+
+    /// <summary>The pickup's doors are a car's, worked one by one (#463); a bus's open together.</summary>
+    public bool CarDoors => Spec.Class == HeavyClass.Pickup;
 
     private static readonly Dictionary<RideKind, (SeatAnchor[] Seats, VehicleDeck[] Decks)> _models = new();
 

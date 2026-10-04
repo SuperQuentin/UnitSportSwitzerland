@@ -95,8 +95,19 @@ public partial class BoatTrailerCheck : Node
     /// <summary>Wheel per radian of joint while reversing (the sign: the trailer's way, the wheel's way).</summary>
     private static readonly float ReverseGain = CmdArgs.Float("--reversegain") ?? 3f;
 
+    /// <summary>The boat on the trailer stands at its spot in the trailer's frame, within a centimetre or two.</summary>
+    private bool Strapped(FootPlayer me, Truck truck, string when)
+    {
+        if (me.CarriedBoat(truck) is not { } boat) { Expect(false, $"{when}: no boat on the bunks"); return false; }
+        var frame = FootPlayer.HoldFrame(me, boat.CarrierSection);
+        float off = boat.GlobalPosition.DistanceTo(frame * boat.CarrierPos);
+        Expect(off < 0.05f, string.Create(CultureInfo.InvariantCulture, $"{when}: the boat rides its bunks ({off * 100f:F1} cm off its spot)"));
+        return true;
+    }
+
+    /// <summary>The boats of a kind floating free (not strapped to a trailer).</summary>
     private static IEnumerable<VehicleBody> Boats(RideKind kind) =>
-        VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().Where(v => !v.Wrecked && !v.IsQueuedForDeletion() && v.Ride.Kind == kind) ?? Enumerable.Empty<VehicleBody>();
+        VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().Where(v => !v.Wrecked && !v.IsQueuedForDeletion() && !v.InHold && v.Ride.Kind == kind) ?? Enumerable.Empty<VehicleBody>();
 
     private async Task Shot(string name)
     {
@@ -139,8 +150,12 @@ public partial class BoatTrailerCheck : Node
         if (me.Vehicle is not Truck truck) { Finish("not in the pickup"); return; }
         await Wait(1.0);
         int index = TrailerCatalog.TrailerFor(_boat);
-        Expect(me.SpawnTrailer(index, 1f) && truck.Trailer?.Boat == _boat, $"{TrailerCatalog.All[index].Label} on the ball, the {_boat} aboard");
+        Expect(me.SpawnTrailer(index, 1f) && truck.Trailer?.Boat == _boat, $"{TrailerCatalog.All[index].Label} on the ball");
+        Expect(await Until(() => me.CarriedBoat(truck) != null, 5), $"the {_boat} on its bunks: a parked boat of its own, carried");
+        if (me.CarriedBoat(truck) is { } strapped)
+            Expect(VehicleManager.Instance is { } vm && !vm.Enterable(strapped), "nobody gets into it on the trailer");
         await Wait(1.5);
+        Strapped(me, truck, "coupled");
         Expect(!me.CanLaunchBoat(truck), "on dry land: nothing to launch into");
         await Shot("1-slipway");
 
@@ -176,6 +191,7 @@ public partial class BoatTrailerCheck : Node
         Expect(wet, string.Create(CultureInfo.InvariantCulture, $"reversed {backed:F1} m down the ramp until the boat's water: joint {Mathf.RadToDeg(truck.Articulation[0]):F0}°"));
         if (!wet) { Finish(null); return; }
         Expect(me.Sinking <= 0f, "the pickup wades, it does not float off");
+        Strapped(me, truck, "backed down the ramp");
         await Shot("2-backed-in");
 
         // launch
@@ -183,7 +199,8 @@ public partial class BoatTrailerCheck : Node
         Log(string.Create(CultureInfo.InvariantCulture, $"  launching at {me.GroundSpeed * 3.6f:F1} km/h, can {me.CanLaunchBoat(truck)}"));
         me.ToggleBoat(truck);
         Expect(await Until(() => Boats(_boat).Count() == before + 1, 5), "launched: a parked boat in the water");
-        Expect(TrailerCatalog.BoatAboard(truck.TrailerCode) == 0 && TrailerCatalog.BoatAboard(me.TrailerCode) == 0, "the trailer is empty");
+        Expect(await Until(() => me.CarriedBoat(truck) == null, 2) && TrailerCatalog.BoatAboard(truck.TrailerCode) == 0 && TrailerCatalog.BoatAboard(me.TrailerCode) == 0,
+            "the trailer is empty, and weighs it");
         await Wait(4);
         var boat = Boats(_boat).OrderBy(v => v.GlobalPosition.DistanceTo(me.GlobalPosition)).FirstOrDefault();
         if (boat != null)
@@ -197,7 +214,7 @@ public partial class BoatTrailerCheck : Node
         // winch it back
         Expect(me.BoatToWinch(truck) != null, "the boat is within the winch's reach");
         me.ToggleBoat(truck);
-        Expect(await Until(() => TrailerCatalog.BoatAboard(truck.TrailerCode) == _boat, 5), "winched back aboard");
+        Expect(await Until(() => me.CarriedBoat(truck) != null && TrailerCatalog.BoatAboard(truck.TrailerCode) == _boat, 5), "winched back onto the bunks");
         Expect(await Until(() => Boats(_boat).Count() == before, 2), "and gone from the water");
 
         // pull out
@@ -210,9 +227,54 @@ public partial class BoatTrailerCheck : Node
         me.RideControls = null;
         Expect(up && me.Vehicle is Truck && me.Sinking <= 0f && !me.CanLaunchBoat(truck), string.Create(CultureInfo.InvariantCulture,
             $"pulled the boat out of the water: {Flat(me.GlobalPosition - foot):F1} m from where it started"));
+        Strapped(me, truck, "pulled out");
         await Shot("4-out");
+
+        // out: the whole train parked where it stands, the boat on it; back in, it is this driver's again
+        me.ExitVehicle();
+        await Wait(1.5);
+        var train = VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().FirstOrDefault(v => v.Ride is Truck);
+        var onTrain = Carried(_boat);
+        Expect(train != null && onTrain != null && onTrain.Carrier == "v:" + train.Name
+            && onTrain.GlobalPosition.DistanceTo(FootPlayer.HoldFrame(train, onTrain.CarrierSection) * onTrain.CarrierPos) < 0.05f,
+            $"parked: the boat rides the parked train ({onTrain?.Carrier})");
+        // its doors are a car's (#463): the driver's shut behind them; each opens on its own
+        if (train != null && VehicleManager.Instance is { } vehicles)
+        {
+            await Until(() => train.DoorsOpen == 0, 3);
+            Expect(train.DoorsOpen == 0, "the driver's door shut behind them");
+            foreach (byte bit in new byte[] { 1, 2, 4, 8 }) vehicles.ToggleDoor(train, bit);
+            Expect(train.DoorsOpen == 15, $"all four doors open ({train.DoorsOpen})");
+            me.TurnView(-0.9f);
+            await Wait(1.0);
+            await Shot("5-doors");
+            me.TurnView(0.9f);
+            foreach (byte bit in new byte[] { 1, 2, 4, 8 }) vehicles.ToggleDoor(train, bit);
+        }
+        Expect(me.TryGetIn() && await Until(() => me.Vehicle is Truck, 5), "back in the pickup");
+        if (me.Vehicle is not Truck again) { Finish(null); return; }
+        Expect(await Until(() => me.CarriedBoat(again) != null, 3), "the boat is this driver's trailer's again");
+
+        // the trailer dropped where it stands: the boat stays on it; coupled again, it comes along
+        Press(PlayerInput.Couple);
+        Expect(await Until(() => again.Trailer == null, 3), "trailer dropped");
+        await Wait(1.0);
+        var lone = VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().FirstOrDefault(v => v.Ride is ParkedTrailer);
+        Expect(lone != null && await Until(() => Carried(_boat)?.Carrier == "v:" + lone.Name, 3), $"the boat rides the lone trailer ({Carried(_boat)?.Carrier})");
+        Press(PlayerInput.Couple);
+        Expect(await Until(() => again.Trailer != null && me.CarriedBoat(again) != null, 4), "coupled again, the boat with it");
         Finish(null);
     }
+
+    private static void Press(string action)
+    {
+        Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = true });
+        Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = false });
+    }
+
+    /// <summary>The boat of a kind strapped to a trailer, whoever's.</summary>
+    private static VehicleBody? Carried(RideKind kind) =>
+        VehicleManager.Instance?.GetChildren().OfType<VehicleBody>().FirstOrDefault(v => !v.Wrecked && !v.IsQueuedForDeletion() && v.InHold && v.Ride.Kind == kind);
 
     private Net.ChatManager? Chat() => GetTree().Root.FindChild(Net.ChatManager.NodeName, true, false) as Net.ChatManager;
 

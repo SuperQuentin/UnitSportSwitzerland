@@ -1060,9 +1060,9 @@ public partial class PlayerFeel : Node3D
                 text = InputHints.Format("{couple}  COUPLE the trailer");
                 break;
             case var _ when _player.Heavy is { Trailer.Boat: not 0 } truck && _player.GroundSpeed < 1.5f
-                && (TrailerCatalog.BoatAboard(truck.TrailerCode) != 0 ? _player.CanLaunchBoat(truck) : _player.BoatToWinch(truck) != null):
-                // the boat trailer's stern is in the water, or a boat floats behind it (#463)
-                text = InputHints.Format(TrailerCatalog.BoatAboard(truck.TrailerCode) != 0 ? "{car_door}  LAUNCH the boat" : "{car_door}  WINCH the boat aboard");
+                && (_player.CanLaunchBoat(truck) || _player.BoatToWinch(truck) != null):
+                // the boat trailer's stern is in the water with its boat on, or a boat floats behind it (#463)
+                text = InputHints.Format(_player.CarriedBoat(truck) != null ? "{car_door}  LAUNCH the boat" : "{car_door}  WINCH the boat aboard");
                 break;
         }
 

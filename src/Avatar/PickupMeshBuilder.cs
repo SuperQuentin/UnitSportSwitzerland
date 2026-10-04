@@ -18,6 +18,17 @@ public static class PickupMeshBuilder
     private const float WsFoot = 1.75f, CabBack = 4.12f, Tailgate = 5.8f;
     /// <summary>Heights: the cab floor, the bonnet and window line, the roof.</summary>
     private const float Floor = 0.62f, Belt = 1.28f, Roof = 1.99f, Sill = 0.5f, BedFloor = 0.9f, BedRail = 1.3f;
+    /// <summary>The B-pillar between the doors, metres behind the bumper; the side glass's top.</summary>
+    private const float BPillar = 3.0f, GlassTop = 1.86f;
+
+    /// <summary>The hull (<c>Truck.HullBoxes</c>): the body up to the bonnet and bed rails, then only the cab, from behind the windscreen's rake.</summary>
+    public const float BodyTop = BedRail + 0.03f, CabFrom = WsFoot + 0.35f, CabTo = CabBack;
+
+    /// <summary>
+    /// The door bits (as a car's, <see cref="CarRig"/>): the driver's door is <see cref="CarRig.DriverDoor"/>
+    /// on this left-hand-drive cab, so getting in and out opens the right one.
+    /// </summary>
+    private static int DoorIndex(bool left, bool rear) => (rear ? 2 : 0) + (left ? 1 : 0);
 
     public static HeavyParts Build(HeavySpec spec, int section, float load)
     {
@@ -55,9 +66,7 @@ public static class PickupMeshBuilder
         Along(m, cg, WsFoot + wall, CabBack - wall, Floor, Floor + 0.01f, inner * 2f, HeavyCabin.FloorColour);
         // running boards under the doors
         Along(m, cg, WsFoot + 0.1f, CabBack - 0.1f, 0.36f, 0.42f, s.Width - 0.1f, Trim);
-        // the doors up to the window line, the cowl at the windscreen's foot
-        foreach (float sx in new[] { -1f, 1f })
-            Along(m, cg, WsFoot, CabBack, Floor, Belt + 0.04f, wall, look.Paint, sx * (bodyW * 0.5f - wall * 0.5f));
+        // the cowl at the windscreen's foot (the doors are leaves of their own, below)
         Along(m, cg, WsFoot - 0.05f, WsFoot + 0.12f, Floor, Belt + 0.03f, bodyW, look.Paint);
         // the raked windscreen, its pillars, the roof and the headlining
         const float wsTopAt = 2.5f, wsTop = 1.9f;
@@ -71,22 +80,39 @@ public static class PickupMeshBuilder
             m.Tube(new Vector3(sx * (half + 0.04f), Belt + 0.03f, Z(WsFoot + 0.1f)), new Vector3(sx * (half + 0.01f), Roof - 0.06f, Z(wsTopAt)), 0.05f, look.Paint, 4);
         Along(m, cg, wsTopAt - 0.05f, CabBack, Roof - 0.09f, Roof, bodyW - 0.06f, look.Paint);
         Along(m, cg, wsTopAt, CabBack - wall, Roof - 0.1f, Roof - 0.09f, inner * 2f, HeavyCabin.Lining);
-        // the side glass: a front door's pane under the pillar's rake, a rear door's square one, the B-pillar between
-        const float bPillar = 3.0f, glassTop = 1.86f;
+        // the fixed side: the B-pillar between the doors, the strip behind the rear one, the rail over them
         foreach (float sx in new[] { -1f, 1f })
         {
-            float x = sx * bodyW * 0.5f;
-            m.Pane(new[]
-            {
-                new Vector3(x, Belt + 0.04f, Z(WsFoot + 0.2f)), new Vector3(x, Belt + 0.04f, Z(bPillar - 0.05f)),
-                new Vector3(x, glassTop, Z(bPillar - 0.05f)), new Vector3(x, glassTop, Z(wsTopAt + 0.05f)),
-            }, PaneTint);
-            SidePane(m, x, Z(bPillar + 0.05f), Z(CabBack - 0.12f), Belt + 0.04f, glassTop);
             float xw = sx * (bodyW * 0.5f - wall * 0.5f);
-            Along(m, cg, bPillar - 0.05f, bPillar + 0.05f, Belt, Roof - 0.09f, wall, look.Paint, xw);
-            Along(m, cg, CabBack - 0.12f, CabBack, Belt, Roof - 0.09f, wall, look.Paint, xw);
-            Along(m, cg, wsTopAt, CabBack, glassTop, Roof - 0.09f, wall, look.Paint, xw);
+            Along(m, cg, BPillar - 0.05f, BPillar + 0.05f, Floor, Roof - 0.09f, wall, look.Paint, xw);
+            Along(m, cg, CabBack - 0.12f, CabBack, Floor, Roof - 0.09f, wall, look.Paint, xw);
+            Along(m, cg, wsTopAt, CabBack, GlassTop, Roof - 0.09f, wall, look.Paint, xw);
         }
+        // four doors, each a leaf hinged at its front edge and swinging out (#463): the panel to the
+        // window line, a dark handle, the glass to the rail (the front one's under the pillar's rake)
+        var leaves = new List<HeavyDoorLeaf>();
+        foreach (float sx in new[] { -1f, 1f })
+            foreach (bool rear in new[] { false, true })
+            {
+                float at0 = rear ? BPillar + 0.05f : WsFoot + 0.12f, at1 = rear ? CabBack - 0.12f : BPillar - 0.05f;
+                float xw = sx * (bodyW * 0.5f - wall * 0.5f), x = sx * bodyW * 0.5f;
+                var leaf = new MeshScratch();
+                Along(leaf, cg, at0 + 0.01f, at1 - 0.01f, Floor - 0.12f, Belt + 0.04f, wall, look.Paint, xw);
+                Along(leaf, cg, at1 - 0.32f, at1 - 0.12f, Belt - 0.12f, Belt - 0.08f, 0.03f, look.Accent, x + sx * 0.015f);
+                if (rear) SidePane(leaf, x, Z(at0 + 0.04f), Z(at1 - 0.04f), Belt + 0.04f, GlassTop);
+                else
+                    leaf.Pane(new[]
+                    {
+                        new Vector3(x, Belt + 0.04f, Z(at0 + 0.08f)), new Vector3(x, Belt + 0.04f, Z(at1 - 0.04f)),
+                        new Vector3(x, GlassTop, Z(at1 - 0.04f)), new Vector3(x, GlassTop, Z(wsTopAt + 0.05f)),
+                    }, PaneTint);
+                var pivot = new Vector3(x, 0f, Z(at0));
+                // node space: the left side is −X; front-hinged, a left door swings out with a negative turn
+                leaves.Add(new HeavyDoorLeaf(DoorIndex(sx > 0, rear), leaf.Build(pivot), new Vector3(-pivot.X, 0f, -pivot.Z), sx > 0 ? -1.15f : 1.15f)
+                {
+                    Centre = new Vector3(-x, (Floor + GlassTop) * 0.5f, -Z((at0 + at1) * 0.5f)),
+                });
+            }
         // the back wall and its window
         Along(m, cg, CabBack - wall, CabBack, Floor, 1.36f, bodyW, look.Paint);
         Along(m, cg, CabBack - wall, CabBack, 1.82f, Roof - 0.09f, bodyW, look.Paint);
@@ -155,10 +181,11 @@ public static class PickupMeshBuilder
             Lamp(rev, sx * (bodyW * 0.5f - 0.05f), 0.9f, Z(Tailgate + 0.04f), 0.1f, 0.12f, 0.04f, White);
         }
 
-        return new HeavyParts(m.Build(), head.Build(), tail.Build(), rev.Build(), Wheels(s, cg), System.Array.Empty<HeavyDoorLeaf>())
+        return new HeavyParts(m.Build(), head.Build(), tail.Build(), rev.Build(), Wheels(s, cg), leaves.ToArray())
         {
             Cockpit = cockpit,
             Seats = seats.ToArray(),
+            CarDoors = true,
         };
     }
 }

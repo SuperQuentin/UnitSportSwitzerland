@@ -84,7 +84,7 @@ public static class VehicleReach
     private static VehicleAim? At(FootPlayer player, VehicleBody v, Vector3 point)
     {
         var feet = player.GlobalPosition;
-        if (v.Rig is { DoorCount: > 0 } rig)
+        if (v.Doors is { } rig)
         {
             var (bit, _) = rig.NearestDoor(point);
             if (bit != 0 && Reaches(feet, rig.DoorCentre(bit))) return new VehicleAim(v, bit);
@@ -125,7 +125,7 @@ public static class VehicleReach
     {
         Current = aim;
         Node3D? target = aim is { } a && GodotObject.IsInstanceValid(a.Vehicle)
-            ? (a.HasDoor ? a.Vehicle.Rig?.DoorPivot(a.Door) : null) ?? a.Vehicle.Visual
+            ? (a.HasDoor ? a.Vehicle.Doors?.DoorPivot(a.Door) : null) ?? a.Vehicle.Visual
             : null;
         if (target == _outlined && (target == null || GodotObject.IsInstanceValid(target))) return;
         if (_outlined != null && GodotObject.IsInstanceValid(_outlined)) Items.Highlight.Set(_outlined, false);

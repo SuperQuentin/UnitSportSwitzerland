@@ -13,7 +13,8 @@ public static class TrailerMeshBuilder
 {
     private static readonly Color Log = new(0.5f, 0.34f, 0.2f);
 
-    public static HeavyParts Build(TrailerSpec spec, int section, float load)
+    /// <param name="boatShown">Draw a boat trailer's boat on it: the travel menu's preview. In the world the boat is a boat of its own, carried (#463).</param>
+    public static HeavyParts Build(TrailerSpec spec, int section, float load, bool boatShown = false)
     {
         var s = spec.Sections[section];
         float cg = Cg(s, load);
@@ -26,10 +27,14 @@ public static class TrailerMeshBuilder
         bool lampsAtRear = section == spec.Sections.Length - 1;
 
         var cargo = System.Array.Empty<(ArrayMesh, Vector3)>();
+        VehicleDeck? deck = null;
         if (s.Pivot == Coupling.Drawbar)
             Dolly(m, s, cg);
         else if (spec.Body == TrailerBody.Boat)
-            cargo = BoatTrailer(m, spec, s, cg, load);
+        {
+            cargo = BoatTrailer(m, spec, s, cg, boatShown && load >= 0.5f);
+            deck = Cradle(spec, section, cg);
+        }
         else
         {
             float floor = spec.Body == TrailerBody.Tanker ? 1.1f : 1.2f;
@@ -80,16 +85,35 @@ public static class TrailerMeshBuilder
         return new HeavyParts(m.Build(), head.Build(), tail.Build(), rev.Build(), Wheels(s, cg), System.Array.Empty<HeavyDoorLeaf>())
         {
             Cargo = cargo,
+            Deck = deck,
         };
     }
+
+    /// <summary>
+    /// A boat trailer's cradle (#463): a hold on the bunks for its own kind of boat only, its floor
+    /// at the keel. A boat parked there (<c>Vehicles.VehicleState.Carrier</c>) rides the trailer.
+    /// </summary>
+    private static VehicleDeck Cradle(TrailerSpec spec, int section, float cg)
+    {
+        var boat = BoatCatalog.For((int)spec.Boat)!;
+        var dk = new DeckBuilder(cg);
+        float floor = spec.BoatKeel - 0.1f, height = boat.Depth + 2f;
+        dk.CargoBay(new Vector3(0, floor + height * 0.5f, cg - (spec.BowAt + boat.Length * 0.5f)),
+            new Vector3(boat.Beam + 0.6f, height, boat.Length + 0.8f), spec.Boat);
+        return dk.BuildCargo(section);
+    }
+
+    /// <summary>Where a boat trailer's boat stands in its section's node frame: its keel on the bunks.</summary>
+    public static Vector3 BoatSpot(TrailerSpec spec, int section, float load) =>
+        new(0f, spec.BoatKeel, -(Cg(spec.Sections[section], load) - spec.BoatAt));
 
     /// <summary>
     /// A boat trailer (#463): the A-frame from the coupler on its ball, the jockey wheel cranked up,
     /// the side rails and cross members, the axles and their mudguards, the two carpeted bunks the
     /// hull's vee rests on, the keel rollers, the winch post at the bow and the light board at the
-    /// back. The boat, while aboard, is the hull it floats as (<see cref="BoatMeshBuilder"/>): cargo.
+    /// back. For the menu's preview only, the boat is drawn on it (<see cref="BoatMeshBuilder"/>): cargo.
     /// </summary>
-    private static (ArrayMesh, Vector3)[] BoatTrailer(MeshScratch m, TrailerSpec spec, SectionSpec s, float cg, float load)
+    private static (ArrayMesh, Vector3)[] BoatTrailer(MeshScratch m, TrailerSpec spec, SectionSpec s, float cg, bool boatShown)
     {
         var boat = BoatCatalog.For((int)spec.Boat)!;
         float r = Tyre.Radius(s.Axles[0].Tyre), tyreW = Tyre.Width(s.Axles[0].Tyre);
@@ -146,7 +170,7 @@ public static class TrailerMeshBuilder
         foreach (float sx in new[] { -1f, 1f })
             m.Tube(new Vector3(sx * railX, frameY - 0.05f, cg - (s.Length - 0.03f)), new Vector3(sx * railX, 0.6f, cg - (s.Length - 0.03f)), 0.025f, paint, 4);
 
-        if (load < 0.5f) return System.Array.Empty<(ArrayMesh, Vector3)>();
+        if (!boatShown) return System.Array.Empty<(ArrayMesh, Vector3)>();
         // the boat on its bunks: its origin (the keel under its centre of mass) at its place, node space
         var at0 = new Vector3(0, spec.BoatKeel, -(cg - spec.BoatAt));
         const float hue = 0.55f;   // a parked boat's colour for rider 0 (BoatRig)

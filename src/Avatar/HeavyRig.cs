@@ -8,7 +8,11 @@ namespace UnitSport.Avatar;
 public sealed record HeavyWheel(ArrayMesh Mesh, Vector3 Hub, float Steer);
 
 /// <summary>One leaf of a bus door: its mesh around its hinge, the hinge (node space), which door it belongs to, and how far it swings.</summary>
-public sealed record HeavyDoorLeaf(int Door, ArrayMesh Mesh, Vector3 Hinge, float OpenYaw);
+public sealed record HeavyDoorLeaf(int Door, ArrayMesh Mesh, Vector3 Hinge, float OpenYaw)
+{
+    /// <summary>The leaf's middle shut, node space: where a hand works a car door (#463).</summary>
+    public Vector3 Centre { get; init; }
+}
 
 /// <summary>What a <see cref="HeavyRig"/> is assembled from.</summary>
 public sealed record HeavyParts(ArrayMesh Body, ArrayMesh Head, ArrayMesh Tail, ArrayMesh Reverse,
@@ -24,6 +28,11 @@ public sealed record HeavyParts(ArrayMesh Body, ArrayMesh Head, ArrayMesh Tail, 
     public ArrayMesh? Glow { get; init; }
     /// <summary>What a walking player collides with inside and how far aboard reaches (#162), or null: not walkable.</summary>
     public VehicleDeck? Deck { get; init; }
+    /// <summary>
+    /// The leaves are car doors (the pickup, #463): one leaf a door, worked one by one from outside
+    /// (<see cref="IHingedDoors"/>); a bus's leaves open together from its buttons.
+    /// </summary>
+    public bool CarDoors { get; init; }
     /// <summary>Meshes carried on the body, each at its place, node space: a boat on its trailer (#463).</summary>
     public (ArrayMesh Mesh, Vector3 At)[] Cargo { get; init; } = System.Array.Empty<(ArrayMesh, Vector3)>();
 }
@@ -38,7 +47,7 @@ public sealed record HeavyParts(ArrayMesh Body, ArrayMesh Head, ArrayMesh Tail, 
 /// under the section's centre of mass — the same point its physics body turns about — facing −Z
 /// like every node. The owner sets the properties; <c>_Process</c> applies them.
 /// </summary>
-public partial class HeavyRig : Node3D
+public partial class HeavyRig : Node3D, IHingedDoors
 {
     public float SteerAngle { get; set; }
     public float WheelSpin { get; set; }
@@ -89,6 +98,37 @@ public partial class HeavyRig : Node3D
     private readonly List<(Node3D Pivot, Node3D Spin, float Steer)> _wheels = new();
     private readonly List<(Node3D Pivot, int Door, float OpenYaw)> _doors = new();
     private float[] _doorOpen = System.Array.Empty<float>();
+    /// <summary>Car doors (#463): each one's index, middle (node space) and hinge; empty on a bus.</summary>
+    private readonly List<(int Door, Vector3 Centre, Node3D Pivot)> _carDoors = new();
+
+    // ---- car doors worked one by one (IHingedDoors): the pickup's ----
+
+    public int DoorCount => _carDoors.Count;
+
+    public Vector3 DoorCentre(byte bit)
+    {
+        foreach (var d in _carDoors)
+            if (1 << d.Door == bit) return _body.ToGlobal(d.Centre);
+        return GlobalPosition;
+    }
+
+    public Node3D? DoorPivot(byte bit)
+    {
+        foreach (var d in _carDoors)
+            if (1 << d.Door == bit) return d.Pivot;
+        return null;
+    }
+
+    public (byte Bit, float Distance) NearestDoor(Vector3 point)
+    {
+        (byte Bit, float Distance) best = (0, float.MaxValue);
+        foreach (var d in _carDoors)
+        {
+            float dist = _body.ToGlobal(d.Centre).DistanceTo(point);
+            if (dist < best.Distance) best = ((byte)(1 << d.Door), dist);
+        }
+        return best;
+    }
     private float _kneel;
     private StandardMaterial3D _head = null!, _tail = null!, _reverse = null!, _glow = null!, _glass = null!;
     private Label3D? _display;
@@ -122,8 +162,8 @@ public partial class HeavyRig : Node3D
     /// <summary>A rig from parts another builder made (the airstairs truck, #417).</summary>
     public static HeavyRig Create(HeavyParts parts, HumanPalette? driver) => Assemble(parts, driver);
 
-    public static HeavyRig CreateTrailer(TrailerSpec spec, int section, float load) =>
-        Assemble(TrailerMeshBuilder.Build(spec, section, load), null);
+    public static HeavyRig CreateTrailer(TrailerSpec spec, int section, float load, bool boatShown = false) =>
+        Assemble(TrailerMeshBuilder.Build(spec, section, load, boatShown), null);
 
     private static HeavyRig Assemble(HeavyParts p, HumanPalette? driver)
     {
@@ -161,6 +201,7 @@ public partial class HeavyRig : Node3D
             pivot.AddChild(panel);
             rig._body.AddChild(pivot);
             rig._doors.Add((pivot, leaf.Door, leaf.OpenYaw));
+            if (p.CarDoors) rig._carDoors.Add((leaf.Door, leaf.Centre, pivot));
         }
         rig._doorOpen = new float[rig._doors.Count];
 

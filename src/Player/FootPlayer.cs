@@ -2443,6 +2443,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             DoorsOpen = (byte)(state.DoorsOpen | Avatar.CarRig.DriverDoor);
             _shutDriverIn = 1f;
         }
+        // the pickup's doors are a car's (#463): in through the driver's, which shuts behind
+        if (_ride is Truck { CarDoors: true } pickup)
+        {
+            pickup.DoorsOpen = (byte)((state.DoorsOpen | Avatar.CarRig.DriverDoor) & 15);
+            _shutDriverIn = 1f;
+        }
         _flight.Control = state.Throttle;
         // a boat as it floated: its attitude (#302)
         if (_ride is Boat boarded && state.Angles != default) boarded.State.Attitude = Quaternion.FromEuler(state.Angles);
@@ -2487,7 +2493,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
             wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now,
             Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true },
-            Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : _ride is Steamer gangways ? gangways.DoorsOpen : DoorsOpen, Setup: CarSetupId,
+            Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : _ride is Steamer gangways ? gangways.DoorsOpen
+                : _ride is Truck { CarDoors: true } pickupDoors ? pickupDoors.DoorsOpen : DoorsOpen, Setup: CarSetupId,
             Train: _ride is Truck t ? t.TrailerCode : 0,
             // a truck's joints; a boat's attitude (Euler, #302), so it is parked as it floated
             Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler() : default,
@@ -2554,7 +2561,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public bool TryToggleCarDoor(Vector3 hand)
     {
-        if (_ride != null || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
+        if (_ride != null || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Doors: { } rig } vehicle)
             return false;
         var (bit, distance) = rig.NearestDoor(hand);
         if (bit == 0 || distance > HandDoorReach) return false;
@@ -2582,7 +2589,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         bool grounded = IsOnFloor();
         var frame = GlobalTransform;
         // out of a car through the driver's door: it opens, and shuts behind (unless left open)
-        if (vehicle is Car && (state.DoorsOpen & Avatar.CarRig.DriverDoor) == 0)
+        if (vehicle is Car or Truck { CarDoors: true } && (state.DoorsOpen & Avatar.CarRig.DriverDoor) == 0)
             state = state with { DoorsOpen = (byte)(state.DoorsOpen | Avatar.CarRig.DriverDoor | VehicleState.DriverDoorShuts) };
 
         // a vehicle you can walk about in (#162): up from the seat into it, not out beside it
@@ -3935,6 +3942,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (_shutDriverIn > 0f && ((_shutDriverIn -= dt) <= 0f || _motion.Speed > DoorsShutSpeed))
                 _shutDriverIn = 0f;
             if (_shutDriverIn <= 0f) DoorsOpen = 0;
+        }
+        else if (_ride is Truck { CarDoors: true } pickup && _shutDriverIn > 0f && ((_shutDriverIn -= dt) <= 0f || _motion.Speed > DoorsShutSpeed))
+        {
+            _shutDriverIn = 0f;
+            pickup.DoorsOpen = 0;
         }
 
         // Boost: the reward for air and tricks, spent as raw acceleration on top of the model.

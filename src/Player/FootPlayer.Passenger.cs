@@ -69,6 +69,9 @@ public partial class FootPlayer
         if (who.Ride == RideKind.OnFoot) return null;
         // a copy's own airstairs: their platform is the driver's (Anim), not a shared one's (#417)
         if (who._remoteRide is Airstairs own && who.Ride == RideKind.Airstairs) return own;
+        // a copy's truck with its trailer as the owner coupled it (FitSections): a boat trailer's cradle
+        // is in it, which the boat on it follows (#463)
+        if (who._remoteRide is Truck train && train.Kind == who.Ride) return train;
         var key = (who.Ride, who.CarSetupId, who.TuningBits);
         if (_seatRides.TryGetValue(key, out var known)) return known;
         var made = CarSetups.Ride(who.Ride, who.CarSetupId, who.TuningBits);

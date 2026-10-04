@@ -291,7 +291,16 @@ public abstract class Rideable
     /// </summary>
     public virtual Avatar.VehicleDeck[] Decks => System.Array.Empty<Avatar.VehicleDeck>();
 
-    public bool Walkable => Decks.Length > 0;
+    public bool Walkable
+    {
+        get
+        {
+            // a hold alone (a boat trailer's cradle, #463) is nothing to walk about in
+            foreach (var deck in Decks)
+                if (!deck.CargoOnly) return true;
+            return false;
+        }
+    }
 
     /// <summary>
     /// A walkable vehicle is driven from its wheel inside (#384, E from outside only with the

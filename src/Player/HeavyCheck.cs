@@ -482,13 +482,36 @@ public static class HeavyCheck
         Check(TrailerCatalog.BoatAboard(TrailerCatalog.Code(speedboat, 0.3f)) == 0 && TrailerCatalog.BoatAboard(TrailerCatalog.Code(speedboat, 0.6f)) == RideKind.Speedboat,
             "a boat trailer's load is the boat or nothing");
 
-        // the server's count: launching parks one unit, winching claims one (Vehicles.VehicleState.Units)
+        // the boat is a boat of its own in the trailer's cradle: the train counts as a truck and a trailer
         var at = new GlobalPos();
         int Units(RideKind kind, int train) => new Vehicles.VehicleState(kind, at, 0f, Vector3.Zero, 100f, false, false, 0f, 0, Train: train).Units;
-        int full = TrailerCatalog.Code(speedboat, 1f), empty = TrailerCatalog.Code(speedboat, 0f);
-        Check(Units(raptor.Kind, full) == 3 && Units(raptor.Kind, empty) == 2 && Units(RideKind.Trailer, full) == 2
-            && Units(RideKind.Trailer, empty) == 1 && Units(RideKind.Speedboat, 0) == 1,
-            "units: pickup + trailer + boat 3, launched 2; a lone trailer with its boat 2, empty 1");
+        int full = TrailerCatalog.Code(speedboat, 1f);
+        Check(Units(raptor.Kind, full) == 2 && Units(RideKind.Trailer, full) == 1 && Units(RideKind.Speedboat, 0) == 1,
+            "units: pickup + trailer 2, a lone trailer 1, its boat 1 of its own");
+
+        // the cradle: a hold on the trailer for its own kind of boat, that boat's hull fits it, its spot on the bunks is in it
+        foreach (int i in new[] { jetski, speedboat })
+        {
+            var t = TrailerCatalog.All[i];
+            foreach (var host in new[] { raptor, rigid })
+            {
+                var train = new Truck(host, TrailerCatalog.Code(i, 1f), 0f);
+                var cradle = train.Decks.Where(d => d.CargoOnly).SelectMany(d => d.CargoBays.Select(b => (d.Section, b))).ToArray();
+                var hull = Rideable.Create(t.Boat)!.ParkedBox.Size;
+                var spot = Avatar.TrailerMeshBuilder.BoatSpot(t, 0, 1f);
+                Check(cradle.Length == 1 && cradle[0].Section == train.SectionCount - 1 && cradle[0].b.Takes(t.Boat) && !cradle[0].b.Takes(RideKind.Jetski + (t.Boat == RideKind.Jetski ? 1 : 0))
+                    && cradle[0].b.Fits(hull) && cradle[0].b.Contains(spot, 0f) && !train.Walkable,
+                    $"{host.Label} + {t.Label}: a cradle in section {(cradle.Length > 0 ? cradle[0].Section : -1)} for the {t.Boat} only, its {F(hull.Z)} m hull fits, the bunks in it, nothing to walk");
+            }
+        }
+
+        // the pickup's doors are a car's: four, the driver's (CarRig.DriverDoor) the front left one
+        var parts = Avatar.PickupMeshBuilder.Build(raptor, 0, 0.5f);
+        var rig = Avatar.HeavyRig.Create(raptor, 0, 0.5f);
+        var driver = parts.Doors.First(d => 1 << d.Door == Avatar.CarRig.DriverDoor).Centre;
+        Check(parts.CarDoors && rig.DoorCount == 4 && rig.DoorPivot(Avatar.CarRig.DriverDoor) != null && driver.X < -0.5f && driver.Z < 0f && new Truck(raptor).CarDoors,
+            $"the Raptor's doors: {rig.DoorCount}, the driver's at ({F(driver.X, "F2")}, {F(driver.Z, "F2")}): front left");
+        rig.Free();
     }
 
     private static void Roads()

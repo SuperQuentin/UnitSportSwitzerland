@@ -42,6 +42,9 @@ public sealed class ParkedTrailer : Rideable
     public override bool IsVehicle => true;
     public override float MaxHealth => 400f;
 
+    /// <summary>A boat trailer's cradle (#463): its boat, parked on it, rides it.</summary>
+    public override VehicleDeck[] Decks => Truck.TrailerDecks(Spec, Code);
+
     private float Load => TrailerCatalog.Load(Code);
 
     /// <summary>A semi's floor, m: the underside of its nose, over a fifth wheel.</summary>
@@ -61,9 +64,9 @@ public sealed class ParkedTrailer : Rideable
             }
             if (Spec.Boat != 0)
             {
-                // the frame and the boat on it, down to the tyres; not the A-frame ahead of the winch post
-                float top = TrailerCatalog.BoatAboard(Code) != 0 ? s.Height : Spec.BoatKeel + 0.15f;
-                return Box(cg, Spec.BowAt, s.Length, 0f, top, s.Width);
+                // the frame and its bunks, down to the tyres; not the A-frame ahead of the winch post. The
+                // boat on it is a boat of its own, with its own hull
+                return Box(cg, Spec.BowAt, s.Length, 0f, Spec.BoatKeel + 0.1f, s.Width);
             }
             return Box(cg, 0f, s.Length, Floor - 0.1f, s.Height, s.Width);
         }

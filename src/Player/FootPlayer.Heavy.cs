@@ -109,7 +109,22 @@ public partial class FootPlayer
         if (_trainRids != null) return _trainRids;
         var rids = new Godot.Collections.Array<Rid> { GetRid() };
         foreach (var s in _sections) rids.Add(s.GetRid());
+        foreach (var c in _cargo) if (IsInstanceValid(c)) rids.Add(c.GetRid());
         return _trainRids = rids;
+    }
+
+    /// <summary>
+    /// What this vehicle carries (a boat on its trailer, #463): its rays past them too. The trailer
+    /// read the boat's hull on its bunks as the ground under it and stood itself on top of it.
+    /// </summary>
+    private readonly List<PhysicsBody3D> _cargo = new();
+
+    /// <summary>A parked vehicle hooked to this carrier (<c>VehicleBody.Hold.cs</c>), or let go of it.</summary>
+    internal void Cargo(PhysicsBody3D body, bool on)
+    {
+        if (on == _cargo.Contains(body)) return;
+        if (on) _cargo.Add(body); else _cargo.Remove(body);
+        _trainRids = null;
     }
     private Godot.Collections.Array<Rid>? _trainRids;
     private readonly Core.RayQuery _groundRay = new();
@@ -406,6 +421,7 @@ public partial class FootPlayer
             truck.Couple(code);
             TrailerCode = truck.TrailerCode;
             RefreshVisual(force: true);
+            if (TrailerCatalog.BoatAboard(code) != 0) SpawnBoatOn(spec, KeyOf(this), truck.SectionCount - 1, TrailerFrame(truck));
             return true;
         }
         if (_ride != null || Vehicles == null) return false;
@@ -414,10 +430,17 @@ public partial class FootPlayer
         if (Terrain != null && Terrain.TryGetHeight(pos, out float g)) pos.Y = g;
         Vehicles.Park(new VehicleState(RideKind.Trailer, Origin!.ToGlobal(pos), Rotation.Y, Vector3.Zero, 400f, false, false, 0f,
             VehicleState.Now, Train: code));
+        // its boat on it: the trailer's name is the server's to give, so the boat finds it where it stands
+        if (TrailerCatalog.BoatAboard(code) != 0)
+            SpawnBoatOn(spec, "?", 0, new Transform3D(new Basis(Vector3.Up, Rotation.Y), pos + Vector3.Up * 0.15f));
         return true;
     }
 
     // ---- the boat trailer's boat (#463) ----------------------------------------------------------
+    // The boat on a boat trailer is a boat of its own: a parked VehicleBody in the trailer's cradle
+    // (a hold, VehicleBody.Hold.cs), drawn where the trailer is drawn on every peer. Launching takes
+    // it (claimed like getting in) and parks it in the water; winching takes a floating one and parks
+    // it on the bunks. The trailer's code says only how heavy it is: the boat aboard or not.
 
     /// <summary>
     /// Where the coupled boat trailer's boat goes when it is launched, in world space, and its yaw:
@@ -427,13 +450,20 @@ public partial class FootPlayer
     {
         if (truck.Trailer is not { Boat: not 0 } t || BoatCatalog.For((int)t.Boat) is not { } boat) return null;
         int k = truck.SectionCount - 1;
-        var section = _sections.Count >= k && k >= 1 ? _sections[k - 1].GlobalTransform : GlobalTransform * truck.NodeLocal(k);
+        var section = TrailerFrame(truck);
         var s = t.Sections[^1];
         float cg = truck.Train.Bodies[k].CgAt;
         // node space, −Z forward: the trailer's back, then the boat's length from its bow to its origin
         var at = section * new Vector3(0, 0, (s.Length - cg) + 0.5f + (boat.Length - boat.Shape.SternZ));
         var fwd = -section.Basis.Z;
         return (at, Mathf.Atan2(-fwd.X, -fwd.Z), boat);
+    }
+
+    /// <summary>The boat trailer's section frame now: its body where it has one, else laid out from the angles.</summary>
+    private Transform3D TrailerFrame(Truck truck)
+    {
+        int k = truck.SectionCount - 1;
+        return _sections.Count >= k && k >= 1 ? _sections[k - 1].GlobalTransform : GlobalTransform * truck.NodeLocal(k);
     }
 
     /// <summary>
@@ -448,45 +478,88 @@ public partial class FootPlayer
         return level - bed >= boat.Depth * 0.55f ? level : null;
     }
 
-    /// <summary>The coupled trailer's boat is aboard and its launch spot is deep enough to float it.</summary>
-    public bool CanLaunchBoat(Truck truck) =>
-        TrailerCatalog.BoatAboard(truck.TrailerCode) != 0 && BoatSpot(truck) is { } spot && LaunchWater(spot.At, spot.Boat) != null;
+    /// <summary>The boat strapped to the coupled trailer: a parked boat in its cradle, or null.</summary>
+    public VehicleBody? CarriedBoat(Truck truck)
+    {
+        if (truck.Trailer is not { Boat: not 0 } t || Vehicles == null) return null;
+        int k = truck.SectionCount - 1;
+        string key = KeyOf(this);
+        foreach (var node in Vehicles.GetChildren())
+            if (node is VehicleBody { Wrecked: false, InHold: true } v && v.Ride.Kind == t.Boat && v.Carrier == key && v.CarrierSection == k)
+                return v;
+        return null;
+    }
 
-    /// <summary>A parked boat of the trailer's kind near its launch spot, nobody aboard: what the winch can pull on.</summary>
+    /// <summary>A boat is on the coupled trailer and its launch spot is deep enough to float it.</summary>
+    public bool CanLaunchBoat(Truck truck) =>
+        CarriedBoat(truck) != null && BoatSpot(truck) is { } spot && LaunchWater(spot.At, spot.Boat) != null;
+
+    /// <summary>A parked boat of the trailer's kind near its launch spot, nobody aboard, the trailer empty: what the winch can pull on.</summary>
     public VehicleBody? BoatToWinch(Truck truck)
     {
-        if (BoatSpot(truck) is not { } spot || TrailerCatalog.BoatAboard(truck.TrailerCode) != 0 || Vehicles == null) return null;
+        if (BoatSpot(truck) is not { } spot || Vehicles == null || CarriedBoat(truck) != null) return null;
         return Vehicles.NearestOfKind(spot.At, BoatReach, truck.Trailer!.Boat);
     }
 
     /// <summary>How far from its launch spot a boat may float and still be winched aboard, m.</summary>
     private const float BoatReach = 6f;
 
+    /// <summary>The trailer's weight follows the boat on it: aboard or not (the code's load), the train rebuilt when that changes.</summary>
+    private void WeighBoat(Truck truck, bool aboard)
+    {
+        if ((TrailerCatalog.BoatAboard(truck.TrailerCode) != 0) == aboard || !truck.SetBoatAboard(aboard)) return;
+        TrailerCode = truck.TrailerCode;
+        RefreshVisual(force: true);
+    }
+
     /// <summary>
-    /// {car_door} with a boat trailer: launches its boat into the water behind it (a parked boat, the
-    /// trailer empty), or winches a boat of its kind floating there back aboard (claimed like getting
-    /// in, so two players cannot take one boat).
+    /// A boat parked on a boat trailer's bunks: in the cradle of section <paramref name="section"/> of
+    /// <paramref name="carrier"/> (<see cref="KeyOf"/>; "?" for one not in the world yet, found again
+    /// where it stands), at <paramref name="frame"/> (that section's frame now).
+    /// </summary>
+    private static VehicleState OnBunks(VehicleState boat, TrailerSpec trailer, string carrier, int section, Transform3D frame, WorldOrigin origin)
+    {
+        var local = Avatar.TrailerMeshBuilder.BoatSpot(trailer, trailer.Sections.Length - 1, 1f);
+        var fwd = -frame.Basis.Z;
+        return boat with
+        {
+            Position = origin.ToGlobal(frame * local), Yaw = Mathf.Atan2(-fwd.X, -fwd.Z), Velocity = Vector3.Zero, Angles = default,
+            Carrier = carrier, CarrierSection = section, CarrierPos = local, CarrierYaw = 0f,
+        };
+    }
+
+    /// <summary>
+    /// {car_door} with a boat trailer: launches its boat into the water behind it (claimed off the
+    /// bunks, parked afloat), or winches a boat of its kind floating there aboard (claimed, parked on
+    /// the bunks). Claimed like getting in, so two players cannot take one boat.
     /// </summary>
     public void ToggleBoat(Truck truck)
     {
         if (GroundSpeed > 1.5f) { Announced?.Invoke("Stop to launch or load the boat", false); return; }
-        if (BoatSpot(truck) is not { } spot || Vehicles == null) return;
-        if (TrailerCatalog.BoatAboard(truck.TrailerCode) != 0)
+        if (BoatSpot(truck) is not { } spot || Vehicles == null || Vehicles.Claiming) return;
+        int k = truck.SectionCount - 1;
+        var trailer = truck.Trailer!;
+        if (CarriedBoat(truck) is { } carried)
         {
+            WeighBoat(truck, true);
             if (LaunchWater(spot.At, spot.Boat) is not { } level)
             {
                 Announced?.Invoke("Back the trailer into the water to launch the boat", false);
                 return;
             }
-            var kind = truck.Trailer!.Boat;
-            if (!truck.SetBoatAboard(false)) return;
-            Vehicles.Park(new VehicleState(kind, Origin!.ToGlobal(spot.At with { Y = level }), spot.Yaw, Vector3.Zero,
-                Rideable.Create(kind)?.MaxHealth ?? 100f, false, false, 0f, VehicleState.Now));
-            TrailerCode = truck.TrailerCode;
-            RefreshVisual(force: true);
-            Announced?.Invoke("LAUNCHED", true);
+            Vehicles.Claim(carried, state =>
+            {
+                Vehicles?.Park(state with
+                {
+                    Position = Origin!.ToGlobal(spot.At with { Y = level }), Yaw = spot.Yaw, Velocity = Vector3.Zero, Angles = default,
+                    Carrier = "", CarrierSection = 0, CarrierPos = Vector3.Zero, CarrierYaw = 0f,
+                });
+                if (_ride is Truck t) WeighBoat(t, false);
+                Announced?.Invoke("LAUNCHED", true);
+            });
             return;
         }
+        WeighBoat(truck, false);
         if (BoatToWinch(truck) is not { } target)
         {
             Announced?.Invoke($"Float a {spot.Boat.Name.ToLowerInvariant()} up behind the trailer to winch it aboard", false);
@@ -494,11 +567,19 @@ public partial class FootPlayer
         }
         Vehicles.Claim(target, state =>
         {
-            if (_ride is not Truck t || !t.SetBoatAboard(true)) { Vehicles?.Park(state); return; }
-            TrailerCode = t.TrailerCode;
-            RefreshVisual(force: true);
+            if (_ride is not Truck t || t.Trailer != trailer) { Vehicles?.Park(state); return; }
+            Vehicles?.Park(OnBunks(state, trailer, KeyOf(this), k, TrailerFrame(t), Origin!));
+            WeighBoat(t, true);
             Announced?.Invoke("BOAT ABOARD", true);
         });
+    }
+
+    /// <summary>A boat trailer from the picker with its boat (load half or more): the boat parked on its bunks too.</summary>
+    private void SpawnBoatOn(TrailerSpec trailer, string carrier, int section, Transform3D frame)
+    {
+        if (Vehicles == null || Rideable.Create(trailer.Boat) is not { } boat) return;
+        var state = new VehicleState(trailer.Boat, default, 0f, Vector3.Zero, boat.MaxHealth, false, false, 0f, VehicleState.Now);
+        Vehicles.Park(OnBunks(state, trailer, carrier, section, frame, Origin!));
     }
 
     /// <summary>Contacts the sections behind the cab have made since this player was made (for the probes).</summary>

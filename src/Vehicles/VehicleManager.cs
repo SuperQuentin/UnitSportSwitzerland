@@ -142,9 +142,15 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     /// <summary>How far from a car's side a player may be to work its doors, m.</summary>
     public const float DoorReach = 3f;
 
-    /// <summary>A vehicle someone could get into now: not burnt out, not a lone trailer, not being claimed.</summary>
+    /// <summary>A vehicle someone could get into now: not burnt out, not a lone trailer, not a boat strapped to its trailer, not being claimed.</summary>
     public bool Enterable(VehicleBody v) =>
-        IsInstanceValid(v) && v.GetParent() == this && !v.Wrecked && v.Trailer == null && !_claimed.Contains(v.Name);
+        IsInstanceValid(v) && v.GetParent() == this && !v.Wrecked && v.Trailer == null && !OnTrailer(v) && !_claimed.Contains(v.Name);
+
+    /// <summary>
+    /// A boat strapped to its trailer (#463): carried, launched only from the towing vehicle (or
+    /// winched aboard), never got into on the bunks.
+    /// </summary>
+    public static bool OnTrailer(VehicleBody v) => v.InHold && v.Ride is Player.Boat;
 
     /// <summary>The nearest drivable vehicle within reach of a point, or null.</summary>
     public VehicleBody? Nearest(Vector3 point, float reach)
@@ -152,7 +158,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         VehicleBody? best = null;
         float bestDist = reach;
         foreach (var node in GetChildren())
-            if (node is VehicleBody { Wrecked: false, Trailer: null } v && !_claimed.Contains(v.Name))
+            if (node is VehicleBody { Wrecked: false, Trailer: null } v && !OnTrailer(v) && !_claimed.Contains(v.Name))
             {
                 // measured to the door where there is one (a truck's cab, a bus's front door, metres
                 // from the middle), else to the box, roughly: a plane's cockpit is metres from its origin
@@ -288,7 +294,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     {
         if (!Multiplayer.IsServer()) return;
         long sender = Multiplayer.GetRemoteSenderId();
-        if (GetNodeOrNull<VehicleBody>(name) is not { Wrecked: false, Ride: Player.Car or Player.Truck { IsBus: true } or Player.Steamer or Player.Airliner } vehicle) return;
+        if (GetNodeOrNull<VehicleBody>(name) is not { Wrecked: false, Ride: Player.Car or Player.Truck { IsBus: true } or Player.Truck { CarDoors: true } or Player.Steamer or Player.Airliner } vehicle) return;
         // the server's copy of the asker: only someone standing at the car works its doors
         var asker = GetTree().GetNodesInGroup(Player.FootPlayer.Group).OfType<Player.FootPlayer>()
             .FirstOrDefault(p => p.Name == sender.ToString());
