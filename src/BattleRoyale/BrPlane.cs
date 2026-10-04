@@ -6,7 +6,7 @@ namespace UnitSport.BattleRoyale;
 /// <summary>
 /// The cargo plane as every client sees it (#207): the military freighter's model (#420, the same
 /// aircraft players fly: <see cref="AirlinerRig.CreateFreighter"/>), gear up, propellers turning, the
-/// ramp and the para doors open only while <see cref="BrFlight.DoorsOpen"/> (over the zone, #447), and its engines' drone; placed each frame by <see cref="BrManager"/>
+/// ramp and the para doors swinging open just before the zone so they are fully open over it (#447), and its engines' drone; placed each frame by <see cref="BrManager"/>
 /// from <see cref="BrFlight"/>. Only the model: its flight is the server's scripted line, nothing
 /// about it is networked.
 /// </summary>
@@ -22,6 +22,9 @@ public partial class BrPlane : Node3D
     public static readonly Vector3 Ramp = AircraftMeshBuilder.Flip(new Vector3(0, 0, FreighterLayout.RampToeZ)) - Middle;
 
     private const byte JumpDoors = 1 << FreighterLayout.RampDoor | 1 << FreighterLayout.ParaDoorL | 1 << FreighterLayout.ParaDoorR;
+
+    /// <summary>Seconds before the doors open that they start to swing: the ramp's whole travel, so it is fully open at the zone.</summary>
+    public static readonly float OpenLead = 1f / FreighterMeshBuilder.DoorRate(FreighterLayout.RampDoor) + 0.25f;
 
     /// <summary>The pose; <see cref="Fly"/> sets the doors. The rig's first show snaps to it, later ones ease.</summary>
     private AirlinerLook _look = new()
@@ -50,7 +53,7 @@ public partial class BrPlane : Node3D
     public override void _Process(double delta) => _rig.Show(_look, (float)delta);
 
     /// <summary>
-    /// Where it is and where it is heading, and whether the jump doors are open; a slow wing rock so it
+    /// Where it is and where it is heading, and whether the jump doors are shown open; a slow wing rock so it
     /// does not look pinned to a rail.
     /// </summary>
     public void Fly(Vector3 at, float yaw, bool doorsOpen)
