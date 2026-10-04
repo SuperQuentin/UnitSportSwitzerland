@@ -31,8 +31,10 @@ public partial class Handshake : Node
     /// 8: shops and PAUSA vending machines: ShopService buy/sell/vend, card payment (#273).
     /// 9: structures sent by distance, PlacedObjects AskBurn/Burnt, hang and climb pose kinds (#359).
     /// 10: World/ChurchRadios (Ask*/Set), CdInfo's source, MusicStyle.RatDance (#370).
+    /// 11: ChatManager.WorldTime carries the world clock (hour0, epoch, day length); ClockSync.Pong
+    /// the server's Unix offset (#452).
     /// </summary>
-    public const int Protocol = 10;
+    public const int Protocol = 11;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
