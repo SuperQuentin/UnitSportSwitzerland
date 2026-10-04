@@ -15,7 +15,7 @@ grep -h "\[brcheck\]" "$OUT/br_selfcheck.log"
 # SITES=1: also the outdoor sites (crack a bunker, shoot a crate open, fire a flare); wants REAL=1 and BRPACE=0.2.
 WORLD=(--generated-world); [ -n "${REAL:-}" ] && WORLD=(${CH[@]+"${CH[@]}"})
 # SERVER_WAIT: the longest wait for the server to listen
-tc_server 400 "${SERVER_WAIT:-120}" "$OUT/br_server.log" --server ${WORLD[@]+"${WORLD[@]}"} --port $PORT --admin-password brcheck --brpace ${BRPACE:-0.08}
+tc_server 400 "${SERVER_WAIT:-120}" "$OUT/br_server.log" --server ${WORLD[@]+"${WORLD[@]}"} --port $PORT --admin-password brcheck --brpace ${BRPACE:-0.13}
 client() { tc_client 300 "$OUT/br_$1.log" --windowed ${CH[@]+"${CH[@]}"} --connect 127.0.0.1:$PORT --name "BR$1" --cache "$OUT/br_cache_$1" \
     --at "$2" --brprobe "$1" ${SITES:+--brsites} ${3:-}; }
 client A "$AT" & A=$!
