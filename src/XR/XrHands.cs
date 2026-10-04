@@ -22,6 +22,12 @@ namespace UnitSport.XR;
 /// through the same server-checked paths as G and E. A grip that holds the wheel or worked a door
 /// is not also a shoulder press (<see cref="XrPad.LeftGripBusy"/>) until it opens.
 /// </para>
+///
+/// <para>
+/// <b>Things on the ground (#437).</b> On foot, a grip closed with the hand at a dropped item takes
+/// it, at a radio opens its panel: the same paths as E on the thing pointed at. A grip squeezed on
+/// nothing and let go with a fling drops the item in hand (Q), so a hand that throws throws.
+/// </para>
 /// </summary>
 internal sealed class XrHands
 {
@@ -33,6 +39,10 @@ internal sealed class XrHands
     private const float SlipOff = 0.22f;
     /// <summary>A light tick in the hands every this much the wheel turns, radians.</summary>
     private const float TickEvery = 0.4f;
+    /// <summary>A hand this near a dropped item or a radio takes it, m.</summary>
+    private const float TakeReach = 0.3f;
+    /// <summary>An empty squeeze let go this fast (in the play space, so walking does not count) drops the held item, m/s.</summary>
+    private const float FlingSpeed = 2.5f;
 
     private sealed class Hand
     {
@@ -42,6 +52,11 @@ internal sealed class XrHands
         /// <summary>The grip is spent (holding, or it worked a door) until it opens.</summary>
         public bool Busy;
         public bool OnWheel;
+        /// <summary>Closed on nothing: let go with a fling, it drops the held item.</summary>
+        public bool EmptySqueeze;
+        /// <summary>Where the hand was last frame in the play space, for its speed.</summary>
+        public Vector3 PrevLocal;
+        public float Speed;
         /// <summary>The point held, in the wheel node's own frame: it turns with the wheel.</summary>
         public Vector3 HeldLocal;
         /// <summary>The hand's direction from the hub, in the column's (the wheel's parent's) frame.</summary>
@@ -61,11 +76,15 @@ internal sealed class XrHands
     public bool LeftBusy => _left.Busy;
     public bool RightBusy => _right.Busy;
 
-    public void Update(FootPlayer? player)
+    public void Update(FootPlayer? player, float dt)
     {
         var grip = WheelOf(player);
         foreach (var hand in new[] { _left, _right })
         {
+            var local = hand.Ctl.Position;
+            hand.Speed = (local - hand.PrevLocal).Length() / Mathf.Max(dt, 1e-3f);
+            hand.PrevLocal = local;
+
             float g = hand.Ctl.GetHasTrackingData() ? hand.Ctl.GetFloat("grip") : 0f;
             bool closing = !hand.Closed && g > GripClose;
             if (hand.Closed && g < GripOpen)
@@ -73,6 +92,10 @@ internal sealed class XrHands
                 hand.Closed = false;
                 hand.Busy = false;
                 if (hand.OnWheel) LetGo(hand, buzz: false);
+                if (hand.EmptySqueeze && hand.Speed > FlingSpeed && player is { Ride: RideKind.OnFoot, RidingWith: 0 }
+                    && Input.MouseMode == Input.MouseModeEnum.Captured)
+                    XrPad.Tap(Core.PlayerInput.DropItem);
+                hand.EmptySqueeze = false;
             }
             else if (closing) hand.Closed = true;
 
@@ -114,10 +137,38 @@ internal sealed class XrHands
             return;
         }
         if (player is not { Ride: RideKind.OnFoot, RidingWith: 0 }) return;
-        if (player.TryToggleCarDoor(at) || Interiors.InteriorManager.Instance?.TryDoorByHand(player, at) == true)
+        if (player.TryToggleCarDoor(at) || Interiors.InteriorManager.Instance?.TryDoorByHand(player, at) == true
+            || TakeAt(at))
         {
             hand.Busy = true;
             Buzz(hand, 0.5f, 0.06f);
+            return;
+        }
+        hand.EmptySqueeze = true;
+    }
+
+    /// <summary>A dropped item at the hand goes into the inventory; a radio there opens its panel.</summary>
+    private static bool TakeAt(Vector3 at)
+    {
+        if (Input.MouseMode != Input.MouseModeEnum.Captured) return false;   // a menu is open
+        Node3D? best = null;
+        float bestD = TakeReach;
+        if (Items.DroppedItems.Instance is { } dropped)
+            foreach (var item in dropped.Items)
+                if (!dropped.IsClaimed(item) && item.GlobalPosition.DistanceTo(at) is var d && d < bestD) { bestD = d; best = item; }
+        if (Items.RadioManager.Instance is { } radios)
+            foreach (var node in radios.GetChildren())
+                if (node is Items.RadioBody r && r.GlobalPosition.DistanceTo(at) is var d && d < bestD) { bestD = d; best = r; }
+        switch (best)
+        {
+            case Items.DroppedItem item when Items.ItemController.Instance is { } items:
+                items.PickUp(item);
+                return true;
+            case Items.RadioBody radio when Items.RadioUi.Instance is { } ui:
+                ui.Open(radio);
+                return true;
+            default:
+                return false;
         }
     }
 

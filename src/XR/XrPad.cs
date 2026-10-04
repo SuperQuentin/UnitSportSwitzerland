@@ -23,6 +23,8 @@ internal sealed class XrPad
     /// <summary>A device number no real pad gets; the bindings listen to every device.</summary>
     private const int Device = 7;
     private const float MenuHold = 0.5f;
+    /// <summary>The head this far below where it was calibrated, on foot, is a crouch: the slide / dive (#437), m.</summary>
+    private const float CrouchDrop = 0.35f;
 
     private readonly XRController3D _left, _right;
     private readonly Dictionary<JoyAxis, float> _axes = new();
@@ -84,8 +86,9 @@ internal sealed class XrPad
         {
             Axis(JoyAxis.TriggerLeft, 0f);
             Axis(JoyAxis.TriggerRight, 0f);
-            Button(JoyButton.LeftShoulder, lt > 0.6f || lg > 0.6f);
-            Button(JoyButton.RightShoulder, rt > 0.6f || rg > 0.6f);
+            // the grips grab on foot (XrHands, #437): use and aim are the triggers' alone
+            Button(JoyButton.LeftShoulder, lt > 0.6f);
+            Button(JoyButton.RightShoulder, rt > 0.6f);
         }
         else
         {
@@ -97,7 +100,11 @@ internal sealed class XrPad
 
         // --- face buttons ---
         Button(JoyButton.A, _right.IsButtonPressed("ax_button"));
-        Button(JoyButton.B, _right.IsButtonPressed("by_button"));
+        // crouching for real slides (running) or dives (swimming), like B (#437); not while a menu
+        // is open, where B is back
+        bool crouched = onFoot && player != null && calibrated.Origin.Y < -CrouchDrop
+                        && Input.MouseMode == Input.MouseModeEnum.Captured;
+        Button(JoyButton.B, _right.IsButtonPressed("by_button") || crouched);
         Button(JoyButton.X, _left.IsButtonPressed("ax_button"));
         Button(JoyButton.Y, _left.IsButtonPressed("by_button"));
         Button(JoyButton.LeftStick, _left.IsButtonPressed("primary_click"));
@@ -192,6 +199,16 @@ internal sealed class XrPad
         },
         _ => null,
     };
+
+    /// <summary>
+    /// Presses <paramref name="action"/> for one frame, as a key would: for the hands and the wrist
+    /// menu, whose gestures are actions with no pad button of their own.
+    /// </summary>
+    public static void Tap(string action)
+    {
+        Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = true });
+        Callable.From(() => Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = false })).CallDeferred();
+    }
 
     private static bool Hysteresis(float v, ref bool was) => was = was ? v > 0.4f : v > 0.75f;
 

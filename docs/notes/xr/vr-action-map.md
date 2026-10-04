@@ -27,12 +27,12 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | move_* / sprint | WASD, L stick / Shift, L3 | ok: L stick head-relative, L3 | + arc **teleport** and room-scale (comfort setting) |
 | look / turn | mouse, R stick | ok: head + snap 30° | snap angle 15/30/45 or smooth (setting) |
 | jump | Space / A | ok: A | keep |
-| crouch_slide | Ctrl, C / B | ok: B | **physical crouch** + B |
-| interact_mount | E / Y | ok: Y; doors by grip | **grip the thing** (seat, ladder, crate, loot, radio, item); Y ranged fallback |
-| ride_menu | R / Y with nothing near | ok: Y | + **wrist menu** |
+| crouch_slide | Ctrl, C / B | ok: B, or crouch for real (#437) | keep |
+| interact_mount | E / Y | ok: Y; doors, dropped items, radios by grip (#437) | grip seats, ladders, crates, loot too; Y ranged fallback |
+| ride_menu | R / Y with nothing near | ok: Y, wrist menu (#437) | keep |
 | car_door / gather | G / X (tap / hold) | ok: X; doors by grip | gather = **grip and pull** the resource |
 | emote_wheel | B / D-pad ↑ | gap: R stick ↑ (engine when mounted) | hold **L3** → radial aimed with the hand |
-| toggle_mode | T / D-pad ↓ | gap | wrist menu |
+| toggle_mode | T / D-pad ↓ | ok: wrist menu (#437) | keep |
 | climb ladder | W / S on a ladder | ok: stick | **hand over hand** grab; rocks too (stamina) |
 
 ## Items, building, inventory
@@ -40,12 +40,12 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | Action | Kb / Pad | VR now | VR target |
 |---|---|---|---|
 | use_item / aim_item | LMB, RMB / RB, LB | ok: R / L trigger | camera and binoculars **raised to the eye** = aim |
-| drop_item | Q / — | gap | **open the grip** holding it; throw by release velocity |
+| drop_item | Q / — | ok: fling an empty squeeze, or the wrist menu (#437) | a real throw by release velocity |
 | next / prev_item, slot_1-6 | wheel, 1-6 / D-pad → | partial: R stick ↓ | **hip hotbar** (grip a slot) + R stick ↓ |
 | inventory | I, Tab / Back | ok: Menu hold | keep |
 | quick_wheel | X / D-pad ← | gap | hold **R3** → radial |
 | build_turn, next piece | R, aim+wheel / D-pad ↑, LB+D-pad → | gap | **twist the hand** while aiming; R stick ←/→ steps the piece |
-| bird_journal | J / — | gap | wrist menu |
+| bird_journal | J / — | ok: wrist menu (#437) | keep |
 
 ## Mounted and driving
 
@@ -84,8 +84,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | Action | Kb / Pad | VR now | VR target |
 |---|---|---|---|
 | menu | Esc / Start | ok: Menu tap | keep |
-| teleport (place search, BR map) | M / — | gap | **hand-held 3D Swiss map**; wrist menu |
-| help / debug | F1 F9 / — | gap | wrist menu |
+| teleport (place search, BR map) | M / — | ok: wrist menu (#437) | + **hand-held 3D Swiss map** |
+| help / debug | F1 F9 / — | help: wrist menu (#437); debug: gap | debug in the wrist menu for admins |
 | fly camera up / down / boost | Space Ctrl… / A B L3 | ok: A B L3 | keep |
 | BR jump out / spectate | E, ←→ / Y, D-pad | ok | spectate on R stick ←/→ |
 | loot, shop, lock, Simon, vending | mouse + keys | ok: laser + trigger | lock dial by **wrist twist** |
