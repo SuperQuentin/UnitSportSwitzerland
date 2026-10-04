@@ -66,8 +66,9 @@ public static class An124MeshBuilder
         {
             ("Door2", Vector3.Right, RampTravel, -RampKneelBack),
             ("Door2/Toes", Vector3.Right, -Mathf.Pi, 0f),
-            ("Door2L", Vector3.Up, -1.9f, 0f),
-            ("Door2R", Vector3.Up, 1.9f, 0f),
+            // the petals fold up and in about their top edges, inside the tail's outline
+            ("Door2L", PetalAxis(1), 1.7f, 0f),
+            ("Door2R", PetalAxis(-1), -1.7f, 0f),
             ("Door2b", Vector3.Right, RearDoorOpen, 0f),
         },
         _ => System.Array.Empty<(string, Vector3, float, float)>(),
@@ -451,7 +452,7 @@ public static class An124MeshBuilder
     private static float FinThick(float y) => Mathf.Lerp(0.9f, 0.3f, Mathf.Clamp((y - FinRootY) / (FinTopY - FinRootY), 0f, 1f));
     private static Vector3 FinPt(float y, float f, int v) => new(v * FinThick(y) * 0.5f * Prof(f), y, FinFront(y) + f * (FinRear(y) - FinFront(y)));
 
-    private const float RudderFrom = 11.0f, RudderTo = 20.0f, RudderF = 0.68f;
+    private const float RudderFrom = 10.6f, RudderTo = 20.6f, RudderF = 0.6f;
     private const float ElevatorFrom = 1.2f, ElevatorTo = 11.6f, ElevatorF = 0.66f;
 
     private static float StabLe(float x) => Mathf.Lerp(StabRootFrontZ, StabTipFrontZ, (x - StabRootX) / (StabTipX - StabRootX));
@@ -651,10 +652,13 @@ public static class An124MeshBuilder
         return part.ToNode("Door2b", bm, gm);
     }
 
-    /// <summary>A side petal of the rear opening, hinged at its front edge, swinging out.</summary>
+    /// <summary>A side petal's hinge along its top edge, node space, from its front end aft (the tail rises).</summary>
+    private static Vector3 PetalAxis(int sg) => (Flip(Po(PetalRearZ, H[PetalTo + 1], sg)) - Flip(Po(RampHingeZ, H[PetalTo + 1], sg))).Normalized();
+
+    /// <summary>A side petal of the rear opening, hinged along its top edge, folding up and in.</summary>
     private static Node3D Petal(int sg, Material bm, Material gm)
     {
-        var part = new AircraftPart(new Vector3(sg * OuterX(RampHingeZ, 5f), 5f, RampHingeZ), Basis.Identity);
+        var part = new AircraftPart(Po(RampHingeZ, H[PetalTo + 1], sg), Basis.Identity);
         SkinPart(part, sg, PetalFrom, PetalTo, PetalRearZ, RampHingeZ);
         return part.ToNode(sg > 0 ? "Door2L" : "Door2R", bm, gm);
     }

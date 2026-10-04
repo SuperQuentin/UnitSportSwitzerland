@@ -205,11 +205,13 @@ public partial class An124Check : Node
         // the kneeling button by the crew door: it rises, then kneels again
         bool atButton = await Path(me, (1.5f, 10f), (HoldHalfWidth - 0.55f, CrewDoorZ + DoorWidth * 0.5f + An124Deck.KneelButtonAhead + 0.2f));
         var button = me.ButtonInReach();
-        Expect(atButton && button?.Door == KneelDoor && me.TryInteract() && await Until(() => jet.KneelShown <= 0f, 12),
-            $"the kneeling button raised it (button {button?.Door}, kneel {jet.KneelShown:F2})");
+        // stood up, the aircraft is parked: its own ride object now, not the one flown
+        float Kneel() => Jet(me)?.KneelShown ?? -1f;
+        Expect(atButton && button?.Door == KneelDoor && me.TryInteract() && await Until(() => Kneel() <= 0f, 12),
+            $"the kneeling button raised it (button {button?.Door}, kneel {Kneel():F2})");
         Expect(Mathf.Abs(Local(me).Y - FloorY) < 0.3f && Mathf.Abs(me.GlobalPosition.Y - Spot(0, 0, 0).Y - FloorY) < 0.3f,
             $"carried up on the floor as it rose {Where(me)}");
-        Expect(me.TryInteract() && await Until(() => jet.KneelShown >= 1f, 12), $"and knelt it again (kneel {jet.KneelShown:F2})");
+        Expect(me.TryInteract() && await Until(() => Kneel() >= 1f, 12), $"and knelt it again (kneel {Kneel():F2})");
 
         // up the ladder, the controls, G shuts everything and it stands up
         bool up = await Path(me, (LadderX, LadderFootZ - 1.0f), (LadderX, UpperRearZ + 1.0f), (0f, 16.4f), (0f, 22.4f), (0f, 23.6f), (PilotHip.X, PilotHip.Z - 0.85f));
@@ -220,6 +222,13 @@ public partial class An124Check : Node
         await Until(() => flying.DoorsOpen == 0 && flying.KneelShown <= 0f && (!Drawn || (Frame() as AirlinerRig)?.DoorOpen(RearDoor) <= 0f), 15);
         Expect(flying.DoorsOpen == 0 && flying.KneelShown <= 0f, $"G shut everything and it stood up (doors {flying.DoorsOpen}, kneel {flying.KneelShown:F2})");
         await Shot("ready_to_taxi", new Vector3(30f, 9f, 45f), new Vector3(0, 6f, 0f));
+        if (!Shots) return;
+        // a picture in flight: put up at 400 m, the gear up (G in the air)
+        me.DebugLaunch(me.GlobalPosition + Vector3.Up * 400f, -me.GlobalTransform.Basis.Z * 85f);
+        await Seconds(1);
+        Key(PlayerInput.CarDoor);
+        await Seconds(14);
+        await Shot("in_flight", new Vector3(45f, 14f, 40f), new Vector3(0, 6f, 0f));
     }
 
     /// <summary>A parked, knelt AN-124 with both ends open: a car or a bus drives in at the nose, through the hold, and out at the tail.</summary>
@@ -265,7 +274,8 @@ public partial class An124Check : Node
         me.RideControls = () => new RideInput(0f, 0f, 0f, false, true);
         await Seconds(2);
         var l = Local(me);
-        Expect(outside && Mathf.Abs(l.Y - GroundY(me)) < 0.35f, $"drove down the rear ramp onto the ground at {Where(me)}, not carried ('{me.DeckOn}')");
+        // off the ramp, on the ground (a real apron is not level with the aircraft's frame: below the floor is enough)
+        Expect(outside && l.Y < FloorY - 1.5f && me.IsOnFloor(), $"drove down the rear ramp onto the ground at {Where(me)}, not carried ('{me.DeckOn}')");
         await Shot("out_at_the_rear", new Vector3(-20f, 6f, RearToeZ(true) - 20f), new Vector3(0, 3f, -16f));
         me.RideControls = null;
     }

@@ -16,9 +16,9 @@ public static class An124Layout
     // ---- the fuselage: a rounded-square section (superellipse), constant along the barrel ----
     public const float NoseZ = 31.0f, TailZ = -38.1f;
     public const float BarrelFront = 21.5f, BarrelRear = RampHingeZ;
-    public const float BellyY = 2.4f, TopY = 10.2f, HalfWidth = 3.65f;
+    public const float BellyY = 2.4f, TopY = 10.2f, HalfWidth = 4.0f;
     public const float CentreY = (BellyY + TopY) * 0.5f, HalfHeight = (TopY - BellyY) * 0.5f;
-    public const float Squareness = 3.5f, Skin = 0.12f;
+    public const float Squareness = 2.8f, Skin = 0.12f;
 
     public static float Across(float a, float h) =>
         a * Mathf.Pow(Mathf.Max(0f, 1f - Mathf.Pow(Mathf.Min(1f, Mathf.Abs(h)), Squareness)), 1f / Squareness);
@@ -135,15 +135,15 @@ public static class An124Layout
     public static float EngineFrontZ(int i) => WingLeading(EngineX[i]) + 3.6f;
 
     // ---- the tail: conventional, the stabiliser low on the fuselage ----
-    public const float FinRootFrontZ = -24.5f, FinRootRearZ = -37.4f, FinRootY = 9.6f;
-    public const float FinTopFrontZ = -33.6f, FinTopRearZ = -38.6f, FinTopY = 20.8f;
+    public const float FinRootFrontZ = -28.0f, FinRootRearZ = -37.6f, FinRootY = 9.6f;
+    public const float FinTopFrontZ = -35.6f, FinTopRearZ = -39.6f, FinTopY = 21.3f;
     public const float StabY = 9.2f, StabRootX = 0.6f, StabTipX = 12.4f;
     public const float StabRootFrontZ = -28.5f, StabRootRearZ = -36.6f, StabTipFrontZ = -34.6f, StabTipRearZ = -37.8f;
 
     // ---- the gear: five twin-wheel legs a side in the fairings, rising straight up; two twin nose legs ----
     public const float MainGearX = 2.75f, MainWheelRadius = 0.62f, MainWheelWidth = 0.42f, MainGearLift = 1.45f;
     public static readonly float[] MainLegZ = { 4.8f, 2.4f, 0f, -2.4f, -4.8f };
-    public const float FairingFrontZ = 6.4f, FairingRearZ = -6.4f, FairingOutX = 4.4f, FairingBottomY = 1.35f, FairingTopY = 4.2f;
+    public const float FairingFrontZ = 6.4f, FairingRearZ = -6.4f, FairingOutX = 4.6f, FairingBottomY = 1.35f, FairingTopY = 4.2f;
     public const float NoseGearZ = 22.0f, NoseGearX = 0.75f, NoseWheelRadius = 0.6f, NoseStowAngle = 1.6f;
     public static readonly Vector3 NoseHinge = new(0f, 2.2f, NoseGearZ - 0.4f);
     /// <summary>The outside buttons stand on the fairings' ends at this height (standing).</summary>
