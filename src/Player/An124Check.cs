@@ -61,12 +61,17 @@ public partial class An124Check : Node
     /// <summary>A picture from a camera of its own, at an authored eye looking at an authored point of the aircraft.</summary>
     private async Task Shot(string name, Vector3 eye, Vector3 at)
     {
-        if (!Shots || !Drawn || Frame() is not { } frame) return;
+        if (Frame() is { } frame) await ShotWorld(name, frame.GlobalTransform * AircraftMeshBuilder.Flip(eye), frame.GlobalTransform * AircraftMeshBuilder.Flip(at));
+    }
+
+    private async Task ShotWorld(string name, Vector3 eye, Vector3 at)
+    {
+        if (!Shots || !Drawn) return;
         var was = GetViewport().GetCamera3D();
         var cam = new Camera3D { Fov = 60f, Far = 4000f };
         AddChild(cam);
-        cam.GlobalPosition = frame.GlobalTransform * AircraftMeshBuilder.Flip(eye);
-        cam.LookAt(frame.GlobalTransform * AircraftMeshBuilder.Flip(at), Vector3.Up);
+        cam.GlobalPosition = eye;
+        cam.LookAt(at, Vector3.Up);
         cam.MakeCurrent();
         for (int i = 0; i < 8; i++) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         string dir = ProjectSettings.GlobalizePath("res://test_output/an124");
@@ -222,14 +227,6 @@ public partial class An124Check : Node
         await Until(() => flying.DoorsOpen == 0 && flying.KneelShown <= 0f && (!Drawn || (Frame() as AirlinerRig)?.DoorOpen(RearDoor) <= 0f), 15);
         Expect(flying.DoorsOpen == 0 && flying.KneelShown <= 0f, $"G shut everything and it stood up (doors {flying.DoorsOpen}, kneel {flying.KneelShown:F2})");
         await Shot("ready_to_taxi", new Vector3(30f, 9f, 45f), new Vector3(0, 6f, 0f));
-        if (!Shots) return;
-        // a picture in flight: put up at 400 m, the gear up (G in the air)
-        me.DebugLaunch(me.GlobalPosition + Vector3.Up * 600f, -me.GlobalTransform.Basis.Z * 115f);
-        await Seconds(1);
-        Key(PlayerInput.CarDoor);
-        await Seconds(10);
-        GD.Print($"[an124check] in flight: {me.Ride}, {me.GroundSpeed:F0} m/s");
-        await Shot("in_flight", new Vector3(45f, 14f, 40f), new Vector3(0, 6f, 0f));
     }
 
     /// <summary>A parked, knelt AN-124 with both ends open: a car or a bus drives in at the nose, through the hold, and out at the tail.</summary>
@@ -252,14 +249,23 @@ public partial class An124Check : Node
         // facing aft, in front of the nose ramp
         me.PlaceAt(Spot(0f, KneelDrop + 0.3f, NoseToeZ(true) + 9f), carrier.Rotation.Y + Mathf.Pi);
         await Seconds(2);
-        await Shot("before_the_nose_ramp", new Vector3(22f, 6f, NoseToeZ(true) + 16f), new Vector3(0, 3f, NoseHingeZ));
+        await Shot("before_the_nose_ramp", new Vector3(16f, 15f, NoseToeZ(true) + 24f), new Vector3(0, 3f, NoseHingeZ));
         float throttle = 0.9f, brake = 0f;
         bool handbrake = false;
         me.RideControls = () => new RideInput(throttle, brake, 0f, false, handbrake);
         void Cruise() { if (me.GroundSpeed > 3f) throttle = 0f; else if (me.GroundSpeed < 1.5f) throttle = Load == "bus" ? 0.6f : 0.9f; }
+        // a chase picture beside it as it climbs the ramp
+        await Until(() => { Cruise(); return Local(me).Z < NoseHingeZ + 4f; }, 60);
+        if (Shots)
+        {
+            var paused = me.RideControls;
+            me.RideControls = () => new RideInput(0f, 1f, 0f, false, false);
+            var side = me.GlobalTransform.Basis;
+            await ShotWorld("driving_in", me.GlobalPosition + side.X * 9f + side.Z * 13f + Vector3.Up * 6f, me.GlobalPosition + Vector3.Up * 2f - side.Z * 4f);
+            me.RideControls = paused;
+        }
         bool inside = await Until(() => { Cruise(); return me.DeckOn == key && Local(me).Z < NoseHingeZ - 9f; }, 60);
         Expect(inside && Mathf.Abs(Local(me).Y - FloorY) < 0.35f, $"drove up the nose ramp into the hold: carried by '{me.DeckOn}' at {Where(me)}");
-        await Shot("driving_in", new Vector3(16f, 5f, NoseToeZ(true) + 6f), new Vector3(0, 4f, NoseHingeZ - 6f));
         bool mid = await Until(() => { Cruise(); return Local(me).Z < 2f; }, 40);
         throttle = 0f;
         brake = 1f;
