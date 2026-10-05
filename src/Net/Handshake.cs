@@ -38,8 +38,9 @@ public partial class Handshake : Node
     /// 14: item events Horn/Fondue/Smoke, items Alphorn/FonduePot/SmokeCanister (#478).
     /// 15: BattleRoyale RequestRecall/Recalled/RecallNews, BrState.RecallPoints, ItemId.Dogtag (#480).
     /// 16: FootPlayer.NetPose may carry a VR player's two hands after the pose (14 or 17 floats, #439).
+    /// 17: item events FishCast/FishEnd, items FishingRod..RoundGoby 194-222 (#493).
     /// </summary>
-    public const int Protocol = 16;
+    public const int Protocol = 17;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

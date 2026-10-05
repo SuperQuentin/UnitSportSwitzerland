@@ -39,6 +39,10 @@ public partial class ItemController : Node
 
     /// <summary>The throw in progress, for probes and the prompt bar.</summary>
     public ThrowAim Throw => _throw;
+
+    /// <summary>The fishing rod's cast, bite and fight (#493), for the hints and the probes.</summary>
+    public Fishing.FishingRod Rod => _fishing;
+    private Fishing.FishingRod _fishing = null!;
     private AudioStreamPlayer _sfx = null!;
     private bool _capturing;
     private bool _forceAim;
@@ -134,6 +138,8 @@ public partial class ItemController : Node
         AddChild(_flagGhost);
         _throw = new ThrowAim { Name = "ThrowAim" };
         AddChild(_throw);
+        _fishing = new Fishing.FishingRod(this, _inventory, _origin);
+        AddChild(_fishing);
         _build = new Build.BuildTool(this) { Name = "BuildTool" };
         AddChild(_build);
         _gadgets = new Build.GadgetTool(this) { Name = "GadgetTool" };
@@ -216,6 +222,7 @@ public partial class ItemController : Node
             Highlight.Point(null);
             Vehicles.VehicleReach.Point(null);
             _throw.Step(null, false, false, (float)delta);
+            _fishing.Step(null, false, false, (float)delta);
             return;
         }
 
@@ -297,6 +304,11 @@ public partial class ItemController : Node
         _ui.Scope = scoped ? (poseSettled ? ItemUse.Optic : null)
             : aiming && (def!.Use == ItemUse.Shoot || poseSettled) ? def!.Use : null;
         StepThrow(player, def, usable, aiming, (float)delta);
+        // the rod (#493): put away, in a menu or off foot, the line comes in
+        bool fishing = usable && _inventory.HeldId == ItemId.FishingRod && !_ui.IsOpen && !UiFocus.TextEntryActive;
+        _fishing.Step(fishing ? player : null, PlayerInput.Held(PlayerInput.UseItem) || ForceUse,
+            PlayerInput.Held(PlayerInput.AimItem) || _forceAim, (float)delta);
+        if (fishing && _fishing.State != UnitSport.Items.Fishing.FishingRod.Phase.Idle) player.ItemAction = 2;
 
         // the smart binoculars read out the building at hand while held (#165): no aiming
         _smart.Held = usable && _inventory.HeldId == ItemId.SmartBinoculars;
@@ -380,6 +392,9 @@ public partial class ItemController : Node
     }
 
     private void Click() => Play(SfxSynth.Tick, 1.4f);
+
+    /// <summary>A sound in the player's ears (the item channel): the rod's reel and its plop (#493).</summary>
+    internal void PlaySound(AudioStream stream, float pitch = 1f) => Play(stream, pitch);
 
     private void Play(AudioStream stream, float pitch = 1f)
     {
@@ -587,6 +602,12 @@ public partial class ItemController : Node
                 ItemEvents.Instance?.Send(ItemEventKind.Smoke, at, aim);
                 break;
             }
+
+            case ItemUse.Fish:
+                // only from the hand: the pack panel's Use has nothing to cast with (#493)
+                if (slot == _inventory.Selected) _fishing.Press(player);
+                else _ui.Toast("Put the rod in your hand to fish.");
+                break;
 
             case ItemUse.Recall:
             {
@@ -1027,7 +1048,7 @@ public partial class ItemController : Node
         if (weapon.Id == ItemId.Shotgun) Fire?.Invoke(player, eye, aim);
     }
 
-    private static void Kick(FootPlayer player)
+    internal static void Kick(FootPlayer player)
     {
         if (player.GetNodeOrNull<HeldItemVisual>("HeldItem") is { } v) v.Kick = 1f;
     }
