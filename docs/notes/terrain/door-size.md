@@ -41,8 +41,22 @@ width and reads as one hole: a cored plan's lobby (2.2 m) and a church's (2.5 m)
 ## Checking it
 
 `--doorcheck` (`src/Interiors/DoorCheck.cs`) asserts both halves per building: the main door is no
-taller than the wall it stands on, its head is under the eave wherever the wall can take a door at
-all, and the doorway inside is within `SameHole` (0.15 m) of the door outside. The *"a low works"*
+taller than the wall it stands on, and its head is under the eave wherever the wall can take a
+door at all.
+
+The size match is asserted in two directions, because they fail for different reasons:
+
+- **Never a taller hole behind a shorter door** (`inside <= d.Height + SameHole`, 0.15 m). This is
+  the half a player sees, and it is what caught #497's loading bay — a 3.2 m opening standing
+  behind a 2.8 m facade door, and 3.0 m behind the low works' 2.25 m.
+- **And not needlessly shorter**: the doorway is the door's own height unless the room it opens
+  into has a lower ceiling than the storey. The want is `min(d.Height, ClearOf(room) - 0.15)`, not
+  the storey's clear height — #498-with-#497 cut extra doors under `ClearOf(room)` precisely
+  because a works hall's 2.6 m service block stands inside a 9 m hall. `DoorCheck.RoomClearAt`
+  finds that room the same way `InteriorLayout.OpeningOf` finds the opening, so the two agree on
+  which room is meant.
+
+The *"a low works"*
 box (12x8x3.4 m) is the case where the clamp has to bite: a works wants 2.8 m and gets 2.25 m,
 inside and out. The *"a shed"* box has so little wall above the no-grid ground guess
 (`b.MinY + 0.8 m`, what `Compute` assumes when there is no `ChunkGrid` — in the real game there
