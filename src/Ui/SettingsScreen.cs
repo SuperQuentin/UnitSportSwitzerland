@@ -160,6 +160,9 @@ public partial class SettingsScreen : Screen
             UiKit.SliderRow(rows, "Day length", 0, 120, 1, s.DayLengthMinutes,
                 v => GameSettings.Current.DayLengthMinutes = (float)v,
                 v => v <= 0 ? "stopped" : $"{v:F0} min / day");
+            // online the server's world clock decides (#452); a server hosted from here starts from these
+            rows.AddChild(UiKit.Text("Solo, and a server you host. On someone else's server, its clock decides.",
+                UiTheme.FontTiny, UiTheme.TextDim, wrap: true));
             UiKit.SliderRow(rows, "Traffic", 0, 150, 5, s.TrafficCars,
                 v => GameSettings.Current.TrafficCars = (int)v, v => v <= 0 ? "off" : $"{v:F0} cars");
             UiKit.ToggleRow(rows, "Trains", s.Trains, on => GameSettings.Current.Trains = on);

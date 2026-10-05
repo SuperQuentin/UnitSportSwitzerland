@@ -69,7 +69,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Throttle / pedal", PlayerInput.Throttle),
             new("Brake / reverse", PlayerInput.Brake),
             new("Steer", Keys: "{move_left} {move_right}", Pad: "{move_forward}"),
-            new("Tuck / sprint effort", PlayerInput.TuckBoost),
+            new("Tuck / sprint effort; motorbike: pull a wheelie (tap on the gas: clutch pop)", PlayerInput.TuckBoost),
             new("Hop / handbrake", PlayerInput.Jump),
             new("Trick in the air (hold + stick)", PlayerInput.Trick),
             new("Boost", PlayerInput.Boost),
@@ -143,6 +143,7 @@ public partial class ControlsHelp : CanvasLayer
         ("Game", new Row[]
         {
             new("Map: search a place and go", PlayerInput.Teleport),
+            new("Battle Royale: ping for your team (also middle-click on the map)", PlayerInput.Ping),
             new("Menu", PlayerInput.Menu),
             new("Chat / command", Keys: "Enter or /", Pad: "—"),
             new("This screen", PlayerInput.Help),
