@@ -1175,6 +1175,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         race.LocalPlayer = () => LocalPlayer;
         AddChild(race);
 
+        // World/Fight on both sides (#495): the challenge, the match state, and its screen
+        AddChild(Combat.FightManager.CreateClient());
+        AddChild(new Combat.FightHud());
+
         // World/BattleRoyale (#177): the match HUD, the zone, the drop and the way back
         var br = BattleRoyale.BrManager.CreateClient(_worldOrigin!);
         br.LocalPlayer = () => _onFoot ? LocalPlayer : null;
@@ -1456,6 +1460,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 if (p.IsOnFloor()) yield return (PlayerInput.RideMenu, $"Take off the {gear.Label.ToLowerInvariant()}");
                 if (gear is not Flyer && gear.CanHop) yield return (PlayerInput.Trick, "Trick (in the air)");
             }
+            else if (p.Fighting)
+            {
+                // a fist fight (#495): the moves; the specials are on the fight HUD
+                yield return (PlayerInput.FightPunch, "Punch");
+                yield return (PlayerInput.FightKick, "Kick");
+                yield return (PlayerInput.FightBlock, "Block (hold)");
+            }
             else if (Items.ItemController.Instance?.Throw.Active == true)
             {
                 yield return (PlayerInput.UseItem, Items.ItemController.Instance.Throw.Charging ? "Let go to throw" : "Hold to wind up a throw");
@@ -1468,6 +1479,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 if (Items.ItemController.Instance?.Inventory.Held.IsEmpty == true) yield return (PlayerInput.UseItem, "Take the radio");
                 yield return (PlayerInput.InteractMount, "Radio");
             }
+            else if (Vehicles.VehicleReach.Current == null && Combat.FightManager.Client is { } fights
+                     && NetLink.Online(this) && p.PointedFighter() is { } rival && FootPlayer.NetId(rival.Name) is { } rivalId)
+                // another player looked at (#495): E challenges, or takes their challenge
+                yield return (PlayerInput.InteractMount, fights.Prompt(rivalId));
             else if (p.Indoors)
             {
                 // the chess type beat in a church (#370): dance to it, away from its radio and the door

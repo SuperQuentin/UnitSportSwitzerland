@@ -145,6 +145,11 @@ public partial class PlayerInput : Node
     public const string QuickWheel = "quick_wheel";
     /// <summary>Hold on foot for the emote wheel (<see cref="Player.EmoteWheel"/>, #404): dances and gestures, any time.</summary>
     public const string EmoteWheel = "emote_wheel";
+    /// <summary>In a fist fight only (#495): the fight is its own context, items and wheels are off, so these share their buttons.</summary>
+    public const string FightPunch = "fight_punch";
+    public const string FightKick = "fight_kick";
+    /// <summary>Held: the guard (high standing, low crouching).</summary>
+    public const string FightBlock = "fight_block";
     /// <summary>Drops one of the item in hand on the ground; with Ctrl, the whole stack (#206).</summary>
     public const string DropItem = "drop_item";
     public const string NextItem = "next_item";
@@ -547,6 +552,12 @@ public partial class PlayerInput : Node
         // B only looks behind when mounted; D-pad up is the engine in a vehicle and turns the
         // hammer's piece, so the emote wheel does not open with the hammer in hand
         Bind(EmoteWheel, Keys(Key.B), Button(JoyButton.DpadUp));
+        // a fist fight (#495): its own context, with items and wheels off, so the item buttons
+        // punch and kick (VR's triggers send RB / LB on foot) and B, the crouch, guards (the stick crouches);
+        // J K L for an arcade row under the right hand
+        Bind(FightPunch, Mouse(MouseButton.Left), Keys(Key.J), Button(JoyButton.X), Button(JoyButton.RightShoulder));
+        Bind(FightKick, Mouse(MouseButton.Right), Keys(Key.K), Button(JoyButton.Y), Button(JoyButton.LeftShoulder));
+        Bind(FightBlock, Keys(Key.Shift, Key.L), Button(JoyButton.B));
         // Minecraft's key: Q only means "down" in the fly camera and in the air, never on foot
         Bind(DropItem, Keys(Key.Q));
         // pad X is tuck/sprint only when mounted, so on foot it is free, as RB/LB are for items
