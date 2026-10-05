@@ -210,6 +210,10 @@ internal sealed class XrPad
     /// Presses <paramref name="action"/> for one frame, as a key would: for the hands and the wrist
     /// menu, whose gestures are actions with no pad button of their own.
     /// </summary>
+    /// <summary>Holds <paramref name="action"/> down, or lets it go: for a gesture that lasts (#489).</summary>
+    public static void Press(string action, bool on) =>
+        Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = on, Strength = on ? 1f : 0f });
+
     public static void Tap(string action)
     {
         Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = true });

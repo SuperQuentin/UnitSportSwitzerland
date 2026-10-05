@@ -46,8 +46,11 @@ The full per-action design and rules: `xr/vr-action-map`.
     front does what E does there (`FootPlayer.TryInteract(byHand: true)`): a seat, a ladder, a
     crate, a cupboard, a car's or a building's door. Never the dance, which is not a thing.
   - **Hip hotbar** (#437): a grip closing more than 0.75 m below the eyes and 0.12 m to a side
-    taps `next_item` (right hip) or `prev_item` (left hip).
-  - **Radial wheels aimed by hand** (#437): the emote wheel reads `XrSession.HandAim`, the right
+    taps `next_item` at the right hip at once. At the left hip a short squeeze taps `prev_item` when
+    it opens; held over 0.35 s it holds `quick_wheel` down (`XrPad.Press`, #489), so the quick wheel
+    opens, aimed by the right hand like the emote wheel, and letting go of the grip picks. Prompts
+    call it "Hold grip at left hip" (`XrHands.Gesture`).
+  - **Radial wheels aimed by hand** (#437): the emote and quick wheels read `XrSession.HandAim`, the right
     hand's move across the view since the wheel opened (0.15 m = full), when the stick is idle.
   - **Fling to drop** (#437): a grip squeezed on nothing and let go with the hand moving over
     2.5 m/s in the play space (walking does not count) taps `drop_item`.
