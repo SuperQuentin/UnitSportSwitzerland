@@ -62,6 +62,21 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
     /// <summary>Dormant cars are drawn to here, as <c>Traffic</c> draws its own to 600 m.</summary>
     private const float DrawnM = 400f;
 
+    /// <summary>
+    /// A tile holds its fleet while it is within this many tiles of an anchor's tile (#552): at
+    /// least 500 m round the anchor in every direction, past <see cref="DrawnM"/>. It used to be
+    /// every tile <c>ChunkManager.TileEntered</c> announced — the whole streamed square, 961 tiles
+    /// at render distance 15 — so every car park and yard in a 30 km square got its boxes and
+    /// lorries, Geneva's thousands of them, and none was ever freed.
+    /// </summary>
+    private const int NearRings = 1;
+
+    /// <summary>A fleet is dropped once its tile is further than this from every anchor's tile (hysteresis).</summary>
+    private const int KeepRings = 2;
+
+    /// <summary>How often the anchors' tiles are looked at, in seconds.</summary>
+    private const double CheckEvery = 0.5;
+
     private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
 
@@ -80,6 +95,11 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
     private readonly List<TileId> _pending = new();
     private bool _busy;
 
+    /// <summary>The anchors' tiles at the last look, and now: the fleets only change when these do.</summary>
+    private readonly List<TileId> _anchorTiles = new(), _anchorTilesNow = new();
+    private readonly List<TileId> _drop = new();
+    private double _sinceCheck = CheckEvery;
+
     public DormantVehicles(ChunkManager chunks, WorldOrigin origin)
     {
         Name = "DormantVehicles";
@@ -90,13 +110,11 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
     public override void _Ready()
     {
         Instance = this;
-        _chunks.TileEntered += OnTileEntered;
         Watch();
     }
 
     public override void _ExitTree()
     {
-        _chunks.TileEntered -= OnTileEntered;
         if (_watched is { } vm && IsInstanceValid(vm))
             vm.ChildEnteredTree -= OnVehicleAdded;
         if (Instance == this) Instance = null;
@@ -235,11 +253,74 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
 
     // ---- the fleet of a tile -----------------------------------------------------------------
 
-    private void OnTileEntered(TileId id)
+    /// <summary>
+    /// Twice a second: when an anchor has changed tile, the tiles near one are queued and the
+    /// fleets of those now out of reach are freed. Nothing else happens per frame.
+    /// </summary>
+    public override void _Process(double delta)
     {
-        if (_slots.ContainsKey(id) || _pending.Contains(id)) return;
-        _pending.Add(id);
-        _ = Fill();
+        _sinceCheck += delta;
+        if (_sinceCheck < CheckEvery) return;
+        _sinceCheck = 0;
+
+        _anchorTilesNow.Clear();
+        foreach (var anchor in _chunks.Anchors)
+            if (IsInstanceValid(anchor) && anchor.IsInsideTree()) _anchorTilesNow.Add(_origin.TileAt(anchor.GlobalPosition));
+        if (SameTiles(_anchorTilesNow, _anchorTiles))
+        {
+            if (_pending.Count > 0) _ = Fill();
+            return;
+        }
+        _anchorTiles.Clear();
+        _anchorTiles.AddRange(_anchorTilesNow);
+
+        _drop.Clear();
+        foreach (var id in _slots.Keys)
+            if (!Within(id, KeepRings)) _drop.Add(id);
+        foreach (var id in _drop) Drop(id);
+        _pending.RemoveAll(id => !Within(id, KeepRings));
+
+        foreach (var at in _anchorTiles)
+            for (int de = -NearRings; de <= NearRings; de++)
+                for (int dn = -NearRings; dn <= NearRings; dn++)
+                {
+                    var id = new TileId(at.E + de, at.N + dn);
+                    if (!_slots.ContainsKey(id) && !_pending.Contains(id)) _pending.Add(id);
+                }
+        if (_drop.Count > 0) Report();
+        if (_pending.Count > 0) _ = Fill();
+    }
+
+    private static bool SameTiles(List<TileId> a, List<TileId> b)
+    {
+        if (a.Count != b.Count) return false;
+        for (int i = 0; i < a.Count; i++)
+            if (a[i] != b[i]) return false;
+        return true;
+    }
+
+    /// <summary>True when the tile is within <paramref name="rings"/> tiles of some anchor's tile.</summary>
+    private bool Within(TileId id, int rings)
+    {
+        foreach (var at in _anchorTiles)
+            if (LodPolicy.Distance(id, at) <= rings) return true;
+        return false;
+    }
+
+    /// <summary>Frees a tile's fleet: drawn, solid and worked out. Its awake slots stay awake.</summary>
+    private void Drop(TileId id)
+    {
+        Clear(id);
+        _slots.Remove(id);
+    }
+
+    /// <summary>One line on what the layer holds, whenever that changes: what a perf log needs to see it.</summary>
+    private void Report()
+    {
+        int slots = 0, bodies = 0;
+        foreach (var (_, list) in _slots) slots += list.Count;
+        foreach (var (_, list) in _solid) bodies += list.Count;
+        GD.Print($"[dormant] {_slots.Count} tiles, {slots} slots, {bodies} bodies, {GetChildCount()} nodes");
     }
 
     /// <summary>
@@ -256,7 +337,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
             {
                 var id = _pending[0];
                 _pending.RemoveAt(0);
-                if (_slots.ContainsKey(id)) continue;
+                if (_slots.ContainsKey(id) || !Within(id, KeepRings)) continue;
                 if (_chunks.Source is not { } source) return;
 
                 // The provider seam. Nothing below this line knows what a bay is: a provider's only
@@ -274,10 +355,16 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
                     return list;
                 });
                 if (!IsInsideTree()) return;
+                // the anchors moved on while the worker read it
+                if (!Within(id, KeepRings)) continue;
 
                 Watch();
                 _slots[id] = slots;
-                if (slots.Count > 0) Draw(id);
+                if (slots.Count > 0)
+                {
+                    Draw(id);
+                    Report();
+                }
             }
         }
         catch (Exception ex)
