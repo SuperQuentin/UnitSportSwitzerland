@@ -8,6 +8,13 @@
   first nine) rides; hover only pops the card. The cards' `ButtonMask = 0` so a mouse never presses one
   (selection goes through `GuiInput`); Enter / pad A still do. R / E / Esc / B close. Opens on the tab of what
   you ride, with it selected. A mouse never auto-focuses a card; a pad does, and focus selects.
+- **Folders** (#410): `AddTab(..., path)` folds a tab's cards into folders; the Motorbikes tab uses brand,
+  then model when a model has several variants (`MotorbikeSpec.Brand` / `Family`: Honda › Africa Twin ›
+  28). Every card (rides, folder cards, a per-tab Back card) is built once and stays in the grid, depth
+  first; `ShowLevel` hides all but one folder's. A folder opens on one click (or A / Ride / 1-9 once
+  selected; it wears its first ride's thumbnail, badge `N ›`, "● Riding one" when it holds yours); Back,
+  Backspace and Esc / B go up a level, Esc at a tab's root closes. 1-9 index the level on show. Opening the
+  menu or `--ridemenu` reveals the folder of the selected ride. `tab.Cards` stays the flat list of rides.
 - **Thumbnails** (`Player/RideStage.cs`: `RideThumbs`): each card's model (`Rideable.Create(kind).BuildParkedVisual(0)`,
   `HeavyRig.Create`/`CreateTrailer`, a standing figure for On foot) rendered once on a transparent `RideStage`
   (own `World3D`, 288x176, MSAA), 3 frames each, the open tab first, the rest of the roster after.

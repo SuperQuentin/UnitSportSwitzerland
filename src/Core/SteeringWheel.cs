@@ -226,8 +226,8 @@ public partial class SteeringWheel : Node
         var ids = SDL_GetJoysticks(&count);
         if (ids == null) return;
         var names = new List<string>();
-        SDL_JoystickID pick = default;
-        bool found = false;
+        SDL_JoystickID pick = default, anyWheel = default;
+        bool found = false, sawWheel = false;
         var s = Settings;
         try
         {
@@ -237,16 +237,18 @@ public partial class SteeringWheel : Node
                 string name = SDL_GetJoystickNameForID(id) ?? $"Joystick {i}";
                 names.Add(name);
                 if (found || _claimed || !s.Enabled) continue;
-                bool wanted = s.Device.Length > 0
-                    ? name == s.Device
-                    : SDL_GetJoystickTypeForID(id) == SDL_JoystickType.SDL_JOYSTICK_TYPE_WHEEL || WheelPresets.For(name) != null;
-                if (wanted) { pick = id; found = true; }
+                bool isWheel = SDL_GetJoystickTypeForID(id) == SDL_JoystickType.SDL_JOYSTICK_TYPE_WHEEL || WheelPresets.For(name) != null;
+                if (isWheel && !sawWheel) (anyWheel, sawWheel) = (id, true);
+                if (s.Device.Length > 0 ? name == s.Device : isWheel) { pick = id; found = true; }
             }
         }
         finally
         {
             SDL_free(ids);
         }
+        // the saved device is not plugged in (another wheel was set up before): claim the wheel that is,
+        // or Godot reads it as a pad and its pedals turn the view
+        if (!found && sawWheel) (pick, found) = (anyWheel, true);
         _devices = names.ToArray();
         if (found) Claim(pick);
     }
@@ -379,16 +381,22 @@ public partial class SteeringWheel : Node
             bool byIds = vendor != 0
                 && info.TryGetValue("vendor_id", out var v) && info.TryGetValue("product_id", out var p)
                 && v.AsInt32() == vendor && p.AsInt32() == product;
+            // an SDL-style GUID holds both ids little-endian at hex 8 and 16, when the info has neither
+            string guid = Input.GetJoyGuid(pad);
+            bool byGuid = vendor != 0 && guid.Length >= 20
+                && guid.Substring(8, 4).Equals($"{vendor & 0xff:x2}{vendor >> 8:x2}", StringComparison.OrdinalIgnoreCase)
+                && guid.Substring(16, 4).Equals($"{product & 0xff:x2}{product >> 8:x2}", StringComparison.OrdinalIgnoreCase);
             string godotName = Input.GetJoyName(pad);
             bool byName = godotName.Length > 0
                 && (godotName.Contains(_name, StringComparison.OrdinalIgnoreCase) || _name.Contains(godotName, StringComparison.OrdinalIgnoreCase));
-            if (byIds || byName) ignored.Add(pad);
+            if (byIds || byGuid || byName) ignored.Add(pad);
         }
         if (!ignored.SequenceEqual(_ignoredLogged))
         {
             _ignoredLogged = ignored;
             GD.Print(ignored.Count == 0
-                ? $"[wheel] Godot has no joypad matching {_name} ({vendor:x4}:{product:x4})"
+                ? $"[wheel] Godot has no joypad matching {_name} ({vendor:x4}:{product:x4}); it sees "
+                  + string.Join(", ", Input.GetConnectedJoypads().Select(p => $"{p} '{Input.GetJoyName(p)}' {Input.GetJoyGuid(p)}"))
                 : $"[wheel] Godot joypad {string.Join(", ", ignored.Select(p => $"{p} '{Input.GetJoyName(p)}'"))} left to SDL");
         }
         PlayerInput.SetIgnoredJoypads(ignored);

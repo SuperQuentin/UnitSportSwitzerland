@@ -73,7 +73,9 @@ public static class FreighterDeck
         dk.Along(At(front), At(RampHingeZ), floor - 0.12f, floor, inner * 2f + Wall);
         dk.Along(At(FlightDeckFrontZ), At(rear), ceiling, ceiling + 0.1f, DeckWallX * 2f + Wall);
         // the ramp: open, a slope from the ground up to the hinge; shut, a slope up aft into the belly
-        dk.RampAlong(At(RampToeZ), 0f, At(RampHingeZ), floor, inner * 2f, 0f, DeckPart.DoorStep, RampDoor);
+        dk.RampAlong(At(RampToeZ), 0f, At(RampHingeZ), floor, inner * 2f, 0f, DeckPart.DoorStep, RampDownDeck);
+        // in the air it stops level with the floor (a drop, #420)
+        dk.Along(At(RampHingeZ), At(RampHingeZ - RampLength), floor - 0.12f, floor, inner * 2f, 0f, DeckPart.DoorStep, RampLevelDeck);
         dk.RampAlong(At(RampHingeZ), floor, At(RampClosedEndZ), RampTop(RampClosedEndZ), inner * 2f, 0f, DeckPart.DoorShut, RampDoor);
         // the rear wall over the ramp's end
         float wallBottom = RampTop(RampClosedEndZ) + 0.1f;
