@@ -61,4 +61,11 @@ public interface IChunkSource
     /// region has none or was built before them. Decorators forward it.
     /// </summary>
     Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => Task.FromResult<LandingIndex?>(null);
+
+    /// <summary>
+    /// The region's airports and their stands (#422, <c>airports.json</c>); null when the region has
+    /// none. Only the deciding peer reads it (the server, or a client offline): it is not streamed.
+    /// Decorators forward it.
+    /// </summary>
+    Task<AirportIndex?> LoadAirportsAsync(CancellationToken ct = default) => Task.FromResult<AirportIndex?>(null);
 }

@@ -325,6 +325,8 @@ public sealed class FallbackChunkSource : IChunkSource
     /// here, which only shows past the rings: a tile drawn by the loader discards the horizon.
     /// </summary>
     /// <summary>The real region's landings: the generated lakes have none.</summary>
+    public Task<AirportIndex?> LoadAirportsAsync(CancellationToken ct = default) => _inner.LoadAirportsAsync(ct);
+
     public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => _inner.LoadLandingsAsync(ct);
 
     public async Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default)
