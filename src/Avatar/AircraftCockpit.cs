@@ -130,7 +130,7 @@ public partial class AircraftCockpit : Node3D
 
     // ---- building ------------------------------------------------------------------------------------
 
-    private static readonly Color Dark = new(0.07f, 0.075f, 0.085f), Grip = new(0.13f, 0.13f, 0.14f), Metal = new(0.55f, 0.57f, 0.6f),
+    private static readonly Color Dark = new(0.07f, 0.075f, 0.085f), Grip = new(0.3f, 0.3f, 0.32f), Metal = new(0.55f, 0.57f, 0.6f),
         LeverKnob = new(0.85f, 0.85f, 0.82f), Plate = new(0.2f, 0.21f, 0.24f), PedalGrey = new(0.3f, 0.31f, 0.33f);
 
     /// <summary>Where the screens or gauges go on the panel: their atlas cell, centre (authored, on the panel's face) and size.</summary>
@@ -179,7 +179,7 @@ public partial class AircraftCockpit : Node3D
 
     private Vector3 StickPivot => new(_k.Hip.X + 0.4f, _k.ConsoleTop, _k.Hip.Z + 0.2f);
     private Vector3 ColumnPivot(float side) => new(side * _k.Hip.X, _k.Floor, _k.Hip.Z + 0.62f);
-    private Vector3 ColumnTop(float side) => new(side * _k.Hip.X, _k.Hip.Y + 0.36f, _k.Hip.Z + 0.25f);
+    private Vector3 ColumnTop(float side) => new(side * _k.Hip.X, _k.Hip.Y + 0.4f, _k.Hip.Z + 0.32f);
     /// <summary>The stem of a thrust lever, pivot to knob.</summary>
     private const float Stem = 0.24f;
     private Vector3 PedalAt(int i) => new((i < 2 ? 1f : -1f) * _k.Hip.X + (i % 2 == 0 ? 0.11f : -0.11f), _k.Floor + 0.12f, _k.Hip.Z + 0.86f);
@@ -238,9 +238,11 @@ public partial class AircraftCockpit : Node3D
                 col.Tube(piv, top, 0.035f, 0.03f, Dark, 6);
                 var column = Add(col, s > 0 ? "ColumnL" : "ColumnR");
                 var w = new AircraftPart(top, Basis.Identity);
-                w.Box(top + new Vector3(0, 0.02f, -0.02f), new Vector3(0.3f, 0.045f, 0.04f), Grip);
+                // a ram's-horn yoke: the hub on the column, a bar, two horns standing up at its ends
+                w.Box(top, new Vector3(0.06f, 0.06f, 0.07f), Dark);
+                w.Box(top + new Vector3(0, -0.01f, -0.03f), new Vector3(0.3f, 0.035f, 0.035f), Grip);
                 foreach (float e in new[] { -1f, 1f })
-                    w.Box(top + new Vector3(e * 0.15f, 0.05f, -0.02f), new Vector3(0.035f, 0.11f, 0.04f), Grip);
+                    w.Box(top + new Vector3(e * 0.15f, 0.035f, -0.03f), new Vector3(0.035f, 0.1f, 0.035f), Grip);
                 var wheel = w.ToNode(s > 0 ? "WheelL" : "WheelR", body, glass);
                 wheel.Position -= column.Position;
                 column.AddChild(wheel);
@@ -275,7 +277,7 @@ public partial class AircraftCockpit : Node3D
         {
             var piv = new Vector3(0f, _k.PedestalTop + 0.02f, _k.PedestalZ1 - 0.12f);
             var p = new AircraftPart(piv, Basis.Identity);
-            p.Box(piv + new Vector3(0, 0.02f, 0), new Vector3(0.07f, 0.03f, 0.025f), new Color(0.8f, 0.1f, 0.08f));
+            p.Box(piv + new Vector3(0, 0.015f, 0), new Vector3(0.05f, 0.02f, 0.02f), new Color(0.42f, 0.07f, 0.06f));
             _park = Add(p, "ParkBrake");
         }
         {
@@ -380,7 +382,7 @@ public partial class AircraftCockpit : Node3D
     {
         _clock += dt;
         // the stick or yokes: pulled back pitches the top aft, a right roll tilts it right / turns the wheel clockwise
-        float ax = -stick.Y * (_k.Sidestick ? 0.3f : 0.12f), az = stick.X * (_k.Sidestick ? 0.3f : 1.1f);
+        float ax = -stick.Y * (_k.Sidestick ? 0.3f : 0.07f), az = stick.X * (_k.Sidestick ? 0.3f : 0.8f);
         if (_stick != null) _stick.Basis = NodeTurn(ax, az);
         if (_columnL != null) _columnL.Basis = NodeTurn(ax, 0f);
         if (_columnR != null) _columnR.Basis = NodeTurn(ax, 0f);
@@ -455,17 +457,20 @@ public partial class AircraftCockpit : Node3D
     /// <summary>Where the pilot's hands and feet go for a stick, lever and rudder (authored): the outer hand on the stick or the yoke's horn, the inner on the levers.</summary>
     public (Vector3 Outer, Vector3 Inner, Vector3 FootOut, Vector3 FootIn) Holds(Vector2 stick, float lever, bool reverse)
     {
-        float ax = -stick.Y * (_k.Sidestick ? 0.3f : 0.12f), az = stick.X * (_k.Sidestick ? 0.3f : 1.1f);
+        float ax = -stick.Y * (_k.Sidestick ? 0.3f : 0.07f), az = stick.X * (_k.Sidestick ? 0.3f : 0.8f);
         Vector3 outer;
         if (_k.Sidestick) outer = StickPivot + AuthorTurn(ax, az) * new Vector3(0.0f, 0.12f, -0.015f);
         else
         {
             var piv = ColumnPivot(1f);
-            outer = piv + AuthorTurn(ax, 0f) * (ColumnTop(1f) - piv + AuthorTurn(0f, az) * new Vector3(0.15f, 0.06f, -0.02f));
+            outer = piv + AuthorTurn(ax, 0f) * (ColumnTop(1f) - piv + AuthorTurn(0f, az) * new Vector3(0.15f, 0.04f, -0.03f));
         }
         float la = CockpitInstruments.LeverAngle(lever, reverse);
         // the inner hand over the levers, on the pilot's side of them
         var inner = ThrustPivot(0) with { X = Mathf.Max(ThrustPivot(0).X, 0.05f) } + AuthorTurn(la, 0f) * new Vector3(0, Stem + 0.02f, -0.02f);
+        // the wrists short of the grips: the hands' own length closes round them
+        outer += new Vector3(0f, -0.01f, -0.07f);
+        inner += new Vector3(0f, 0f, -0.06f);
         float r = stick.X * 0.05f;
         // a foot's ball on its pad (the pad is pushed forward, +Z authored, by the turn on its side)
         var footOut = PedalAt(0) + new Vector3(0, 0.03f, -0.03f - r);

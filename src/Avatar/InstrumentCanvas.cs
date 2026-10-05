@@ -123,17 +123,24 @@ public partial class InstrumentCanvas : Control
         var origin = c - down * pitch * pxPerDeg;
         // the ground: the box's corners on the ground side, cut by the horizon (Sutherland-Hodgman, one plane)
         Span<Vector2> corners = stackalloc Vector2[4] { box.Position, new(box.End.X, box.Position.Y), box.End, new(box.Position.X, box.End.Y) };
-        int n = 0;
+        int n = 0, cuts = 0;
+        Span<Vector2> cut = stackalloc Vector2[2];
         for (int i = 0; i < 4; i++)
         {
             var p = corners[i];
             var q = corners[(i + 1) % 4];
             float dp = (p - origin).Dot(down), dq = (q - origin).Dot(down);
             if (dp >= 0) _poly[n++] = p;
-            if (dp >= 0 != dq >= 0) _poly[n++] = p + (q - p) * (dp / (dp - dq));
+            if (dp >= 0 != dq >= 0)
+            {
+                var x = p + (q - p) * (dp / (dp - dq));
+                _poly[n++] = x;
+                if (cuts < 2) cut[cuts++] = x;
+            }
         }
         Polygon(n, Ground);
-        DrawLine(origin - along * 200f, origin + along * 200f, White, 1f);
+        // the horizon where it crosses the box, never past its edges into the next screen
+        if (cuts == 2) DrawLine(cut[0], cut[1], White, 1f);
         // clipped to the box by hand: a line drawn only if both ends are inside
         for (int deg = -30; deg <= 30; deg += 5)
         {

@@ -4443,7 +4443,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             float back = MathX.Damp(5f, dt);
             _lookYaw = Mathf.Lerp(_lookYaw, 0f, back);
-            _pitch = Mathf.Lerp(_pitch, _ride is Truck ? HeavyCockpitPitch : _ride is Airliner ? AirlinerCockpitPitch : CockpitPitch, back);
+            _pitch = Mathf.Lerp(_pitch, _ride is Truck ? HeavyCockpitPitch : _ride is Airliner jet ? (jet.Spec.FlyByWire ? AirlinerCockpitPitch : YokeCockpitPitch) : CockpitPitch, back);
         }
 
         var sway = Vector3.Zero;
@@ -4476,6 +4476,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private const float CockpitPitch = -0.1f;
     /// <summary>An airliner (#421): out over the glareshield with the top of the screens in view.</summary>
     private const float AirlinerCockpitPitch = -0.14f;
+    /// <summary>A yoke aircraft (the freighter, the AN-124): lower, so the yoke and the hand on it are in the view.</summary>
+    private const float YokeCockpitPitch = -0.26f;
     /// <summary>A truck or bus: sat high over a flat wheel, the look rests lower, so the wheel and dials are in the view with the road.</summary>
     private const float HeavyCockpitPitch = -0.24f;
 

@@ -434,7 +434,8 @@ public static class A320MeshBuilder
         const float panelZ = 16.55f;
         // its top under the pilots' line of sight (the eye 4.51 m): the glareshield 4.41, the panel under it
         m.Box(new Vector3(0, 3.98f, panelZ), new Vector3(CockpitPanelHalf * 2, 0.7f, 0.12f), PanelGrey);
-        m.Box(new Vector3(0, 5.05f, 17.12f), new Vector3(0.07f, 0.9f, 0.07f), Frame);
+        // the windscreen's centre post, from the glareshield up into the roof (#421: it hung free over the lowered glareshield)
+        m.Box(new Vector3(0, 4.93f, 17.12f), new Vector3(0.07f, 1.1f, 0.07f), Frame);
         float gw = Mathf.Min(0.95f, InnerX(16.7f, 4.38f) - 0.04f);
         m.Box(new Vector3(0, 4.38f, 16.7f), new Vector3(gw * 2, 0.06f, 0.4f), Dark);
     }
