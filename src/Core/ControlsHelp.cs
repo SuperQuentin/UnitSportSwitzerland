@@ -56,6 +56,18 @@ public partial class ControlsHelp : CanvasLayer
             new("Gather stone, water, wood (hold)", PlayerInput.Gather),
             new("Bird journal", PlayerInput.BirdJournal),
         }),
+        ("Fist fight (#495)", new Row[]
+        {
+            new("Challenge a player you look at, or accept their challenge", PlayerInput.InteractMount),
+            new("Step towards / away", Keys: "{move_left} {move_right}", Pad: "{move_right}"),
+            new("Jump / crouch", Keys: "{move_forward} {jump} / {move_back} {crouch_slide}", Pad: "{move_forward} / {move_back}"),
+            new("Punch", PlayerInput.FightPunch),
+            new("Kick", PlayerInput.FightKick),
+            new("Block (hold; crouch to block low)", PlayerInput.FightBlock),
+            new("Uppercut: down, forward + punch", Keys: "{move_back} {move_right} + {fight_punch}", Pad: "{move_back} {move_right} + {fight_punch}"),
+            new("String: punch, punch, kick", Keys: "{fight_punch} {fight_punch} {fight_kick}", Pad: "{fight_punch} {fight_punch} {fight_kick}"),
+            new("Finish them: down, down + kick", Keys: "{move_back} {move_back} + {fight_kick}", Pad: "{move_back} {move_back} + {fight_kick}"),
+        }),
         ("Building (hammer in hand)", new Row[]
         {
             new("Build the piece shown", PlayerInput.UseItem),
