@@ -862,9 +862,21 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// as if it had taken off. A plane needs a runway and a paraglider a launch slope, and neither
     /// is what a test of the flight model is about.
     /// </summary>
+    /// <summary>
+    /// The body's floor contact is the old spot's until it moves: one still step where it is now clears it
+    /// (#456). For a body put somewhere by hand, before a flight step reads <c>IsOnFloor</c> as the ground under it.
+    /// </summary>
+    private void ClearFloorContact()
+    {
+        Velocity = Vector3.Zero;
+        MoveAndSlide();
+    }
+
     public void DebugLaunch(Vector3 position, Vector3 velocity)
     {
         GlobalPosition = position;
+        // or the first flight step at 600 m sees the runway under it, a touchdown with the gear up (#456)
+        ClearFloorContact();
         // placed by hand, so it need not wait for terrain under it (a probe over no terrain at all)
         _placed = true;
         _flight.Velocity = velocity;
@@ -1125,6 +1137,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     /// <summary>Turns the view (a probe's look around, e.g. aft down a hold), radians, + left.</summary>
     public void TurnView(float by) => _viewYaw += by;
+
+    /// <summary>A probe's free look around a craft (the chase camera orbits by it; it recentres when left alone).</summary>
+    public void OrbitView(float by) => _lookYaw += by;
 
     /// <summary>
     /// A teleport that also turns a mount: the body at <paramref name="at"/>, stopped, facing
@@ -2575,6 +2590,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is Airliner parked)
         {
             parked.UnpackFlags(state.Flags);
+            // taken over in the air (#456): its attitude, flying, not a fresh one level on the ground
+            if (state.Angles != default)
+            {
+                parked.Aloft(state.Angles, state.Velocity);
+                parked.Begin(ref _flight, state.Velocity, state.Yaw);
+                // nor the deck its pilot stood on as the ground under it: a belly scrape at once
+                ClearFloorContact();
+            }
             // the model was built before the flags: its doors, gear and flaps as left, not swinging there (#420)
             if (_visual is Avatar.AirlinerRig rig) rig.Snap(parked.Look(parked.State));
         }
@@ -2615,7 +2638,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : _ride is Steamer gangways ? gangways.DoorsOpen : DoorsOpen, Setup: CarSetupId,
             Train: _ride is Truck t ? t.TrailerCode : 0,
             // a truck's joints; a boat's attitude (Euler, #302), so it is parked as it floated
-            Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler() : default,
+            // an airliner left in the air (stood up from its seat): its attitude, or it is put down level (#456)
+            Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler()
+                : _ride is Airliner { State.OnGround: false } aloft ? aloft.State.Attitude.Orthonormalized().GetEuler() : default,
             Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
             Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd,
             Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw);
