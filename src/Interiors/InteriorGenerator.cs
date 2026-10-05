@@ -144,8 +144,7 @@ public static partial class InteriorGenerator
             var outward = new Godot.Vector2(d.Outward.X, d.Outward.Z);
             var faces = new Godot.Vector2(outward.Dot(fp.AxisU), outward.Dot(axisV));
             float width = Math.Min(d.Width, 1.8f);
-            float top = Math.Min(d.Height, clear - 0.15f);
-            if (width < 0.7f || top < 1.9f) continue;
+            if (width < 0.7f || Math.Min(d.Height, clear - 0.15f) < 1.9f) continue;
 
             // the wall that faces the same way first, then round the building
             foreach (var side in new[] { Side.Front, Side.Right, Side.Back, Side.Left }
@@ -154,6 +153,10 @@ public static partial class InteriorGenerator
             {
                 if (!FitEntry(l, ground, side, side is Side.Front or Side.Back ? at.X : at.Y, width, out var room, out float center))
                     continue;
+                // under the ceiling of the room it actually opens into, not of the storey: a works
+                // hall's service block is a 2.6 m room standing inside a 9 m hall (#497)
+                float top = Math.Min(d.Height, l.ClearOf(room) - 0.15f);
+                if (top < 1.9f) continue;
                 room.Openings.Add(new OpeningPlan
                 {
                     Side = side, Center = center, Width = width, Bottom = 0, Top = top, Kind = OpeningKind.Entry,
