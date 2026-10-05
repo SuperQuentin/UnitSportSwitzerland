@@ -241,7 +241,7 @@ public partial class GarageProbe : Node
     /// </summary>
     private Interiors.DoorIndex.Entry? StandAtGarage(FootPlayer me, float outward, float aside)
     {
-        if (Interiors.DoorIndex.Nearest(me.GlobalPosition, 1500f, TargetKind) is not { } door) return null;
+        if (Interiors.DoorIndex.Nearest(me.GlobalPosition, Interiors.DoorSearch.KindReach, TargetKind) is not { } door) return null;
         var o = door.Outward;
         var at = door.World + o * outward + new Vector3(-o.Z, 0, o.X) * aside;
         if (me.Terrain != null && me.Terrain.TryGetHeight(at, out float g)) at.Y = g + 0.3f;
@@ -278,14 +278,11 @@ public partial class GarageProbe : Node
                 _readyAt = _t;
             }
             else if ((_target = StandAtGarage(me, 12f, 0f)) != null) _readyAt = _t;
-            else if (_t > 25)
+            else if (_t > Interiors.DoorSearch.GiveUp)
             {
-                // somewhere to look instead: the nearest villages (generated ones have garages)
-                if (me.Terrain?.Origin is { } o)
-                    foreach (var town in Occasions.OccasionTowns.All
-                                 .OrderBy(t => Math.Pow(t.E - (o.E + me.GlobalPosition.X), 2) + Math.Pow(t.N - (o.N - me.GlobalPosition.Z), 2)).Take(3))
-                        Log($"  village {town.Name} at LV95 {town.E:F0},{town.N:F0}");
-                Log($"RESULT: FAILED (no {TargetKind} within 1.5 km)");
+                // what is drawn and why none of it served, and somewhere to look instead
+                Interiors.DoorSearch.Explain("garage", me.GlobalPosition, TargetKind, me.Terrain?.Origin);
+                Log($"RESULT: FAILED (no {TargetKind} within {Interiors.DoorSearch.KindReach:F0} m)");
                 GetTree().Quit();
                 return;
             }

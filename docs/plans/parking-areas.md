@@ -3,7 +3,9 @@
 
 # Parking areas as real lots
 
-Status: **planned, agreed** (#499). Today a car park is a shader pattern and nothing else. This
+Status: **built** (#499). The design below is as agreed; what actually landed, and the four places
+it differs, is in the notes: `docs/notes/tools/parking-lots.md`,
+`docs/notes/terrain/parking-runtime.md`, `docs/notes/vehicles/dormant-vehicles.md`. Today a car park is a shader pattern and nothing else. This
 document turns it into a laid-out place — rows of marked bays at the lot's own angle, aisles with
 arrows, one findable entrance, cars in the bays, and the kerbside detail that makes it read as
 designed rather than painted on.
@@ -207,7 +209,7 @@ not affordable, and scenery you cannot drive away is not what was asked for. So,
   than building it per tile.
 - **Waking**: anything that would move one — `VehicleReach` aiming at it, a collision, a shot —
   makes the client ask the server, which promotes the slot **exactly once** through
-  `VehicleManager.Place` under the deterministic node name `veh_bay_<E>_<N>_<slot>`; every peer
+  `VehicleManager.Place` under the deterministic node name `veh_slot_<owner>_<ordinal>`; every peer
   that sees that name stops drawing the dormant copy, the check `AfricaTwinEgg` already does. A
   server-initiated `Place` is not subject to `MayPark` (fact 11).
 - **Re-sleeping is deliberately out of scope** until it is measured, as the industrial plan says.
@@ -244,6 +246,23 @@ One issue, one PR (#499), in this order — each step is testable before the nex
   with the dormant copy gone on both. Required by the root `CLAUDE.md`.
 - Screenshots from above of a laid-out lot (fixture, and a real one when the drive is back), and
   `--perflog` on a tile with a big lot before merging.
+
+## Built differently from this plan
+
+Four things came out other than written, each for a reason found while building:
+
+1. **Bands anchor to the lot's lower `v` edge, not outward from the centroid.** The centroid-outward
+   version put a row's aisle outside a 9 m lot — a row of bays nothing could reach. The anchor is a
+   real boundary of the polygon, so the stated property (a far vertex moving shifts no bay) holds
+   on that side; it does not on the anchored side, which the plan claimed and could not have.
+2. **A planter replaces the end bay** rather than standing beside it. Hunting for 2.5 m of spare
+   ground past a row end only finds it when the bay grid happens to leave slack, so planters
+   appeared in some lots and not others for no reason a player could see.
+3. **A trolley shelter stands in a bay** (flagged `Blocked`), for the same reason — and it is what
+   real supermarket lots do anyway.
+4. **The bay pattern comes off through a new cover class**, `CoverClass.ParkingPaved` written by
+   `CoverStage`, rather than any runtime suppression. It is offline, diffable in the `.cover` bytes,
+   and costs nothing per tile build. A rejected lot keeps its class and its old grid, as planned.
 
 ## Risks
 

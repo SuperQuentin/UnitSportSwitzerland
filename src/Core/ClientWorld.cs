@@ -362,6 +362,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // the Africa Twin at Riddes: placed here offline, by the server online
         AddChild(new World.AfricaTwinEgg(_chunks));
+        // the cars already standing in the car parks (#499); the server promotes one when it is
+        // touched, every peer works the fleet out for itself from the tile and nothing is sent
+        if (Systems.On(Systems.Dormant) && _chunks.Origin is { } dormantOrigin)
+            AddChild(new Vehicles.DormantVehicles(_chunks, dormantOrigin));
         // the paddle steamer at the Nyon landing (#303): likewise
         AddChild(new World.SteamerBerth(_chunks));
         // jetskis and speedboats along the harbour jetties (#383): likewise
@@ -512,6 +516,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(() => World.TreeCheck.ParseArgs().Requested, ToolAnchor.AtTarget,
                 _ => new World.TreeCheck(chunks, origin, World.TreeCheck.ParseArgs().Shot)),
             new(() => TruckProbe.Requested, ToolAnchor.AtTarget, _ => new TruckProbe(chunks, origin)),
+            new(() => Terrain.ParkingProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new Terrain.ParkingProbe(chunks, origin, Terrain.ParkingProbe.ParseArgs().Shot)),
             // the anchor on the spawn, so the tile under the rider arrives with collision: without
             // it the probe drops through an empty world and measures gravity
             new(() => RideProbe.ParseArgs() != null, ToolAnchor.AtTarget, _ =>
@@ -639,7 +645,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
-            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null
+            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
@@ -679,6 +685,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Build.BuildNetProbe.Role != null) AddChild(new Build.BuildNetProbe(items));
         if (Build.GadgetProbe.Requested) { Build.GadgetProbe.Stock(items.Inventory); AddChild(new Build.GadgetProbe(items)); }
         if (Build.GadgetNetProbe.Role != null) AddChild(new Build.GadgetNetProbe(items));
+        // waking a dormant car over the network (#499), checked on the remote peer
+        if (Vehicles.ParkingNetProbe.Mode() is { } parkingNet && _chunks.Origin is { } parkingOrigin)
+            AddChild(new Vehicles.ParkingNetProbe(parkingNet, _chunks, parkingOrigin));
         if (BattleRoyale.PrefabProbe.Requested) AddChild(new BattleRoyale.PrefabProbe());
         if (BattleRoyale.BrProbe.Role != null) AddChild(new BattleRoyale.BrProbe(items));
         if (Crafting.CampfireProbe.Requested) AddChild(new Crafting.CampfireProbe(items));

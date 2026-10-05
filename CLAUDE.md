@@ -44,6 +44,9 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
      first commit is pushed: an open draft is how parallel workers see the feature exists in
      step 1. It stays a draft for the whole of the work; mark it ready (`gh pr ready <N>`) only
      once the feature is complete and the tier of step 4 has been run and recorded in it.
+     **Flipping it ready is the worker's own call, never the reviewer's**: the bar above is
+     objective, so whoever finishes the work runs `gh pr ready <N>` themselves rather than asking
+     anyone. Merging it is the reviewer's.
   4. **Test the cheapest tier that can catch the bug** (`docs/notes/general/testing.md`):
      `tools/test.sh quick` on every change; **tier 2 (`tools/test.sh net`) when the change touches
      network/authority/replicated state**, checking the feature on the **remote** peer (replication,

@@ -168,6 +168,99 @@ public static class CoverStage
         return roofed;
     }
 
+
+    /// <summary>
+    /// A laid-out car park (#499), after the network stage has written it. Two jobs, both of which
+    /// need the finished <c>.road</c> and so cannot happen in the stage itself:
+    ///
+    /// <para>
+    /// <b>The pattern comes off.</b> Cells under an <see cref="AreaPropType.ParkingPad"/> become
+    /// <see cref="CoverClass.ParkingPaved"/>, which carries no <see cref="SurfacePattern"/>. Without
+    /// this every laid-out lot shows its real bays <i>and</i> the old world-aligned grid bleeding a
+    /// cell past its edge. A lot the planner rejected keeps its class and its grid.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The planters get their trees.</b> One tree at the centre of each
+    /// <see cref="AreaPropType.ParkingIsland"/>, into the tile's <c>.trees</c> rather than as a
+    /// prop, so a car park's trees get the same LOD, per-ring thinning and pooled collision as
+    /// every other tree in the game (`perf-lod-trees`, `trees-solid`).
+    /// </para>
+    /// </summary>
+    private static (long Cells, int Trees) LaidOutLots(
+        TileId id, RoadTile tile, byte[] cells, CoverExtractor extractor)
+    {
+        int n = CoverFormat.Size;
+        double spacing = ChunkFormat.SpacingM;
+        long repainted = 0;
+        int planted = 0;
+
+        foreach (var area in tile.AreaProps)
+        {
+            if (area.Type == AreaPropType.ParkingIsland && area.Vertices.Length >= 9)
+            {
+                // the planter's centre, and the ground it stands on: its own kerbed top
+                double cx = 0, cy = 0, cz = 0;
+                int count = area.Vertices.Length / 3;
+                for (int v = 0; v < count; v++)
+                {
+                    cx += area.Vertices[v * 3];
+                    cy += area.Vertices[v * 3 + 1];
+                    cz += area.Vertices[v * 3 + 2];
+                }
+                cx /= count; cy /= count; cz /= count;
+
+                // a car park tree is a planted broadleaf, 4.5 to 7 m, hashed off its position so a
+                // rebuild grows the same one
+                ulong h = ParkingPlanner.Key((id.MinE + cx, id.MaxN - cz));
+                float height = 4.5f + (h & 0xFF) / 255f * 2.5f;
+                extractor.AddTree(id, new CoverExtractor.TreeInstance(
+                    (float)cx, (float)(cy + area.Height), (float)cz, height, 3));
+                planted++;
+                continue;
+            }
+            if (area.Type != AreaPropType.ParkingPad || area.Vertices.Length < 9) continue;
+
+            // every lattice cell whose centre falls in one of the pad's triangles
+            for (int t = 0; t + 2 < area.Indices.Length; t += 3)
+            {
+                var (ax, az) = (area.Vertices[area.Indices[t] * 3], area.Vertices[area.Indices[t] * 3 + 2]);
+                var (bx, bz) = (area.Vertices[area.Indices[t + 1] * 3], area.Vertices[area.Indices[t + 1] * 3 + 2]);
+                var (cx2, cz2) = (area.Vertices[area.Indices[t + 2] * 3], area.Vertices[area.Indices[t + 2] * 3 + 2]);
+
+                int c0 = Math.Max(0, (int)(Math.Min(ax, Math.Min(bx, cx2)) / spacing));
+                int c1 = Math.Min(n - 1, (int)(Math.Max(ax, Math.Max(bx, cx2)) / spacing) + 1);
+                int r0 = Math.Max(0, (int)(Math.Min(az, Math.Min(bz, cz2)) / spacing));
+                int r1 = Math.Min(n - 1, (int)(Math.Max(az, Math.Max(bz, cz2)) / spacing) + 1);
+
+                for (int r = r0; r <= r1; r++)
+                    for (int c = c0; c <= c1; c++)
+                    {
+                        double x = c * spacing, z = r * spacing;
+                        if (!InTriangle(x, z, ax, az, bx, bz, cx2, cz2)) continue;
+                        int k = r * n + c;
+                        // only a car park loses its pattern; paving, a square or open ground stay
+                        if ((CoverClass)cells[k] is not (CoverClass.ParkingPublic
+                            or CoverClass.ParkingPrivate or CoverClass.RestArea)) continue;
+                        cells[k] = (byte)CoverClass.ParkingPaved;
+                        repainted++;
+                    }
+            }
+        }
+        return (repainted, planted);
+    }
+
+    private static bool InTriangle(double px, double pz,
+        double ax, double az, double bx, double bz, double cx, double cz)
+    {
+        double d1 = (px - bx) * (az - bz) - (ax - bx) * (pz - bz);
+        double d2 = (px - cx) * (bz - cz) - (bx - cx) * (pz - cz);
+        double d3 = (px - ax) * (cz - az) - (cx - ax) * (pz - az);
+        bool neg = d1 < 0 || d2 < 0 || d3 < 0;
+        bool pos = d1 > 0 || d2 > 0 || d3 > 0;
+        return !(neg && pos);
+    }
+
     public static int Run(string tlmGpkg, string outDir, Dictionary<TileId, ChunkGrid> grids, string? overridesPath = null,
         string? rawDir = null)
     {
@@ -203,7 +296,8 @@ public static class CoverStage
 
         // in town, the ground along the streets is paved (#119)
         var field = new UrbanField(new Facades(outDir));
-        long paved = 0, roofs = 0;
+        long paved = 0, roofs = 0, lotCells = 0;
+        int lotTrees = 0;
         foreach (var (id, cells) in extractor.Cover)
         {
             string road = Path.Combine(outDir, RoadFormat.FileName(id));
@@ -212,6 +306,9 @@ public static class CoverStage
             using (var fs = File.OpenRead(road)) tile = RoadCodec.Decode(fs);
             paved += PaveStreets(id, tile, cells, field);
             if (grids.TryGetValue(id, out var grid)) roofs += RoofTunnels(tile, cells, grid);
+            var (lc, lt) = LaidOutLots(id, tile, cells, extractor);   // #499
+            lotCells += lc;
+            lotTrees += lt;
         }
 
         var histogram = new SortedDictionary<CoverClass, long>();
@@ -245,6 +342,7 @@ public static class CoverStage
         foreach (var (layer, rings) in extractor.LayerRings.OrderByDescending(kv => kv.Value))
             Console.WriteLine($"    {layer}: {rings} rings");
         Console.WriteLine($"  road corridors masked on {extractor.RoadMask.Count} tiles; {paved:N0} town vertices paved along the streets, {roofs:N0} over shallow tunnels concrete");
+        Console.WriteLine($"  car parks: {lotCells:N0} vertices under a laid-out pad lost the bay pattern, {lotTrees} planters planted");
         Console.WriteLine($"  classified {100.0 * coveredCells / totalCells:F1}% of vertices; " +
                           string.Join(", ", histogram.Select(kv => $"{kv.Key}={100.0 * kv.Value / totalCells:F1}%")));
         Console.WriteLine($"  trees: {treeTotal:N0} across {extractor.Trees.Count} tiles " +

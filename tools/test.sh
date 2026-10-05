@@ -97,7 +97,9 @@ while read -r prefix tier check; do
   [ -z "$prefix" ] || [[ $prefix == \#* ]] && continue
   [[ $WANT == *" $tier "* ]] || continue
   if [ -n "$AREA" ]; then
-    [[ ${prefix,,} == *"${AREA,,}"* ]] || continue
+    # tr, not ${x,,}: macOS ships bash 3.2, where that expansion is a syntax error and the
+    # whole area match silently fell through to "no Godot check matches <area>"
+    [[ $(printf %s "$prefix" | tr '[:upper:]' '[:lower:]') == *"$(printf %s "$AREA" | tr '[:upper:]' '[:lower:]')"* ]] || continue
   elif [ "$TIER" != full ]; then
     if [ "$prefix" = @rpc ]; then
       [ -z "$RPC" ] && { rpc_touched && RPC=yes || RPC=no; }

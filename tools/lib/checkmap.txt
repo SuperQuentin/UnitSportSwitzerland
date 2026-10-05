@@ -102,6 +102,11 @@ src/World/LaneGraph      quick  --drivecheck --chunks fixture:hairpin --traffic 
 src/World/Wa             quick  --watercheck --chunks fixture:lake
 src/World/SeaState       quick  --watercheck --chunks fixture:lake
 src/Terrain/Water        quick  --watercheck --chunks fixture:lake
+src/Terrain/ParkingBuilder quick --parkingcheck --chunks fixture:parking
+src/Terrain/ParkingProbe quick  --parkingcheck --chunks fixture:parking
+src/Vehicles/DormantVehicles quick --parkingcheck --chunks fixture:parking
+src/Vehicles/VehicleSlot quick  --parkingcheck --chunks fixture:parking
+tools/TerrainFormat/ParkingPlanner quick --parkingcheck --chunks fixture:parking
 src/Terrain/Fixture/     quick  --watercheck --chunks fixture:lake
 src/Terrain/ChunkManager quick  --watercheck --chunks fixture:lake
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
@@ -169,6 +174,8 @@ src/Core/ServerWorld     net    @netsmoke
 src/Core/ClientWorld     net    @netsmoke
 src/Core/Debug           net    tools/debugcheck.sh
 @rpc                     net    @netsmoke
+src/Vehicles/DormantVehicles net tools/parkingnetcheck.sh
+src/Vehicles/ParkingNetProbe net tools/parkingnetcheck.sh
 src/Items/ThrowHits      net    tools/bonkcheck.sh
 src/Items/ItemEvents     net    tools/bonkcheck.sh
 src/Items/DroppedItem    net    tools/bonkcheck.sh
