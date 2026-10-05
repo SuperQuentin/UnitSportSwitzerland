@@ -33,8 +33,9 @@ public partial class Handshake : Node
     /// 10: World/ChurchRadios (Ask*/Set), CdInfo's source, MusicStyle.RatDance (#370).
     /// 11: ChatManager.WorldTime carries the world clock (hour0, epoch, day length); ClockSync.Pong
     /// the server's Unix offset (#452).
+    /// 12: BattleRoyale RequestPing/Pinged, BrEntrant.Party (#469).
     /// </summary>
-    public const int Protocol = 11;
+    public const int Protocol = 12;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

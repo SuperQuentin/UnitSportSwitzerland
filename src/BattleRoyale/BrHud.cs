@@ -109,6 +109,20 @@ public partial class BrHud : CanvasLayer
             Banner(font, new Vector2(w * 0.5f, Y0 + 26), top, 20, Colors.White);
             if (sub.Length > 0) Text(font, new Vector2(w * 0.5f, Y0 + 52), sub, 14, new Color(1, 1, 1, 0.75f), HorizontalAlignment.Center);
 
+            // ---- the team's pings, where they stand on screen (#469) ---------------------------
+            if (s.Phase == BrPhase.Playing && GetViewport().GetCamera3D() is { } cam)
+                foreach (var ping in br.Pings)
+                {
+                    if (br.PingWorld(ping) is not { } at || cam.IsPositionBehind(at)) continue;
+                    var p = cam.UnprojectPosition(at);
+                    float bob = 3f * Mathf.Sin((float)Time.GetTicksMsec() / 160f);
+                    var tip = p + new Vector2(0, -6 + bob);
+                    DrawColoredPolygon(new[] { tip, tip + new Vector2(-8, -12), tip + new Vector2(0, -24), tip + new Vector2(8, -12) }, BrMapDraw.Ping);
+                    DrawPolyline(new[] { tip, tip + new Vector2(-8, -12), tip + new Vector2(0, -24), tip + new Vector2(8, -12), tip }, Colors.Black, 1.5f);
+                    float d = me != null ? me.GlobalPosition.DistanceTo(at) : 0f;
+                    Text(font, tip + new Vector2(0, -30), $"{ping.Name} · {d:F0} m", 13, BrMapDraw.Ping, HorizontalAlignment.Center);
+                }
+
             // ---- the zone, from where this player stands -----------------------------------
             if (s.Phase == BrPhase.Playing && br.ZoneNow is { } zn && me != null && br.InMatch && br.MeAlive)
             {

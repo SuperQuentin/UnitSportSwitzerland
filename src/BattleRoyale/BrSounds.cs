@@ -10,7 +10,7 @@ namespace UnitSport.BattleRoyale;
 /// </summary>
 public static class BrSounds
 {
-    private static AudioStreamWav? _doors, _closing, _final, _win, _out, _heart;
+    private static AudioStreamWav? _doors, _closing, _final, _win, _out, _heart, _ping;
 
     private static AudioStreamWav Tune(ChipTune.Note[] lead, ChipTune.Note[] bass, float bpm) =>
         Dsp.Encode(Dsp.Normalise(ChipTune.Render(lead, bass, bpm), 0.8f));
@@ -55,9 +55,22 @@ public static class BrSounds
         return s;
     });
 
+    /// <summary>A team-mate's ping (#469): two quick high blips, a fifth apart.</summary>
+    public static AudioStreamWav Ping => _ping ??= Dsp.OneShot(0.3f, 62, (_, n) =>
+    {
+        var s = new float[n];
+        foreach (var (start, hz) in new[] { (0f, 1318.5f), (0.11f, 1975.5f) })
+            for (int i = (int)(start * Dsp.Rate); i < n; i++)
+            {
+                float t = i / (float)Dsp.Rate - start;
+                s[i] += Mathf.Sin(Mathf.Tau * hz * t) * Mathf.Exp(-t * 30f) * 0.5f;
+            }
+        return s;
+    });
+
     /// <summary>All of them, for <c>--brcheck</c>: built, non-silent, short.</summary>
     public static IEnumerable<(string Name, AudioStreamWav Stream)> All() => new[]
     {
-        ("doors", Doors), ("closing", Closing), ("final", Final), ("win", Win), ("out", Out), ("heart", Heart),
+        ("doors", Doors), ("closing", Closing), ("final", Final), ("win", Win), ("out", Out), ("heart", Heart), ("ping", Ping),
     };
 }

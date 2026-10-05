@@ -17,6 +17,7 @@ public static class BrMapDraw
     public static readonly Color Drop = new(0.25f, 0.5f, 1f);
     public static readonly Color Rare = new(1f, 0.6f, 0.2f);
     public static readonly Color Mate = new(0.35f, 1f, 0.45f);
+    public static readonly Color Ping = new(1f, 0.45f, 0.85f);
     public static readonly Color Plane = new(0.95f, 0.95f, 0.85f);
 
     /// <summary>The supply drops of the match: zone position, and whether still falling.</summary>
@@ -77,6 +78,14 @@ public static class BrMapDraw
             var p = toScreen(mate.At);
             Arrow(c, p, mate.Heading, Mate);
             c.DrawString(ThemeDB.FallbackFont, p + new Vector2(9, -6), mate.Name, HorizontalAlignment.Left, -1, 11, Mate);
+        }
+
+        // the team's pings (#469): a pin in the pinger's name
+        foreach (var ping in br.Pings)
+        {
+            var p = toScreen(ping.At);
+            Pin(c, p, Ping);
+            c.DrawString(ThemeDB.FallbackFont, p + new Vector2(9, -12), ping.Name, HorizontalAlignment.Left, -1, 11, Ping);
         }
 
         if (br.Waypoint is { } wp) Pin(c, toScreen(wp), Waypoint);

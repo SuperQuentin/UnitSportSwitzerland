@@ -23,6 +23,15 @@ public sealed class BrEntrant
     public double Survived { get; set; }
     /// <summary>Out of the cargo plane (#207): jumped, or pushed out when the doors closed.</summary>
     public bool Jumped { get; set; }
+    /// <summary>
+    /// The group this player asked for in the lobby (<c>/br team &lt;name&gt;</c>, #469): entrants with the
+    /// same one share a team at GO (<see cref="BrState.AssignTeams"/>). Empty = anyone.
+    /// </summary>
+    public string Party { get; set; } = "";
+
+    /// <summary>A group name as typed, made comparable: trimmed, lower case, letters and digits, at most 16.</summary>
+    public static string PartyName(string typed) =>
+        new string(typed.Trim().ToLowerInvariant().Where(char.IsLetterOrDigit).Take(16).ToArray());
 }
 
 /// <summary>
@@ -71,8 +80,11 @@ public sealed class BrState
         Find(peer) is { Team: not 0 } me ? Entrants.Where(e => e.Team == me.Team && e.Peer != peer) : Enumerable.Empty<BrEntrant>();
 
     /// <summary>
-    /// Fills teams of <see cref="TeamSize"/> at GO, in a seeded shuffle (#231): team 1, 2, ... in order, the
-    /// last one short if the field does not divide. Solo leaves every team 0.
+    /// Fills teams of <see cref="TeamSize"/> at GO, in a seeded shuffle (#231). Entrants who asked for
+    /// the same <see cref="BrEntrant.Party"/> share a team (#469), split into several when the group
+    /// is bigger than a team; everyone else then fills the places left, short teams first, then new
+    /// ones. With no groups it is the plain shuffle: team 1, 2, ... in order, the last one short if
+    /// the field does not divide. Solo leaves every team 0.
     /// </summary>
     public void AssignTeams()
     {
@@ -88,7 +100,17 @@ public sealed class BrState
             int j = rng.Next(i + 1);
             (order[i], order[j]) = (order[j], order[i]);
         }
-        for (int i = 0; i < order.Count; i++) order[i].Team = i / TeamSize + 1;
+        var teams = new List<List<BrEntrant>>();
+        foreach (var group in order.Where(e => e.Party.Length > 0).GroupBy(e => e.Party))
+            foreach (var chunk in group.Chunk(TeamSize)) teams.Add(chunk.ToList());
+        foreach (var e in order.Where(e => e.Party.Length == 0))
+        {
+            var team = teams.FirstOrDefault(t => t.Count < TeamSize);
+            if (team == null) teams.Add(team = new List<BrEntrant>());
+            team.Add(e);
+        }
+        for (int i = 0; i < teams.Count; i++)
+            foreach (var e in teams[i]) e.Team = i + 1;
     }
     [JsonIgnore] public bool Running => Phase is BrPhase.Playing or BrPhase.Ended;
     [JsonIgnore] public BrArea Area => new(AreaE, AreaN, Side, AreaName);

@@ -86,6 +86,9 @@ public partial class BrManager : Node
             case "leave":
                 if (!player) return "'/br leave' needs a player.";
                 return Leave(sender);
+            case "team":
+                if (!player) return "'/br team' needs a player.";
+                return Party(sender, string.Join(' ', words[1..]));
         }
         if (!admin) return $"'/br {verb}' is an admin command.";
         switch (verb)
@@ -106,7 +109,7 @@ public partial class BrManager : Node
                 return "Cancelled.";
             case "zone": return ForceShrink();
             default:
-                return "Usage: /br open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] · join · leave · start · zone · cancel · status";
+                return "Usage: /br open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] · join · leave · team [name] · start · zone · cancel · status";
         }
     }
 
@@ -118,7 +121,8 @@ public partial class BrManager : Node
             BrPhase.Idle => "No Battle Royale. An admin opens one with /br open.",
             BrPhase.Lobby or BrPhase.Countdown =>
                 $"Lobby: {s.AreaName}, {s.Side / 1000:F0} × {s.Side / 1000:F0} km. {s.Entrants.Count} joined: "
-                + string.Join(", ", s.Entrants.Select(e => e.Name)) + ". /br join to play.",
+                + string.Join(", ", s.Entrants.Select(e => e.Party.Length > 0 ? $"{e.Name} [{e.Party}]" : e.Name)) + ". /br join to play"
+                + (s.TeamSize > 1 ? ", /br team <name> to play with friends." : "."),
             _ => $"Match in {s.AreaName}: {s.AliveCount} of {s.Entrants.Count} alive.",
         };
     }
@@ -222,6 +226,26 @@ public partial class BrManager : Node
         return $"You are in. {_state.AreaName}, {_state.Side / 1000:F0} km.";
     }
 
+    /// <summary>
+    /// <c>/br team &lt;name&gt;</c> (#469): play with whoever gives the same name, from the lobby on;
+    /// no name leaves the group. Teams are only made at GO, so it changes nothing in solo.
+    /// </summary>
+    private string Party(long peer, string typed)
+    {
+        if (_state.Phase is not (BrPhase.Lobby or BrPhase.Countdown)) return "Teams are picked in the lobby, before GO.";
+        if (_state.Find(peer) is not { } e) return "Join first: /br join";
+        string party = BrEntrant.PartyName(typed);
+        if (typed.Trim().Length > 0 && party.Length == 0) return "A team name is letters and digits.";
+        e.Party = party;
+        Push();
+        if (party.Length == 0) return "You will be put in any team.";
+        var with = _state.Entrants.Where(x => x.Party == party && x != e).Select(x => x.Name).ToList();
+        string mates = with.Count == 0 ? "nobody yet: tell your friends to type the same" : string.Join(", ", with);
+        return _state.TeamSize <= 1
+            ? $"Team '{party}' noted, but this match is solo."
+            : $"Team '{party}': with {mates}" + (with.Count + 1 > _state.TeamSize ? $" (more than {_state.TeamSize}: split at GO)" : "") + ".";
+    }
+
     private string Leave(long peer)
     {
         if (_state.Find(peer) is not { } e) return "You are not in the match.";
@@ -261,7 +285,7 @@ public partial class BrManager : Node
                 // the zone has closed and someone is still standing (a draw cannot linger)
                 var zone = _state.Zone();
                 Airdrops(zone);
-                if (_state.TeamsAlive <= 1 || Now - _state.Started > zone.Duration + 120) End();
+                if (_state.TeamsAlive <= LastSides || Now - _state.Started > zone.Duration + 120) End();
                 break;
             case BrPhase.Ended when Now - _endedAt >= ResultsSeconds:
                 Finish();
@@ -283,6 +307,7 @@ public partial class BrManager : Node
         // the first circle is sized for who actually boards (docs/notes/br/zone.md)
         _state.Field = _state.Entrants.Count;
         _state.AssignTeams();
+        _sidesAtGo = _state.TeamsAlive;
         // everyone boards the cargo plane (#207); the zone's clock starts when its doors close
         _state.FlightStart = Now;
         _state.FlightAlt = PlaneAltitude();
@@ -502,6 +527,41 @@ public partial class BrManager : Node
 
     private readonly Dictionary<long, double> _lastFlare = new();
 
+    /// <summary>Seconds between two pings of one player (#469).</summary>
+    private const double PingEvery = 1.5;
+
+    /// <summary>The farthest a ping may lie from its sender, m: the crosshair's reach plus slack.</summary>
+    private const double PingReach = 2500;
+
+    /// <summary>
+    /// Server: a living squad player marks a point (LV95; <paramref name="alt"/> NaN = on the map, height
+    /// unknown) for their team (#469). Sent to every team-mate, out or not (they may be watching), and back
+    /// to the sender; at most one every <see cref="PingEvery"/> s.
+    /// </summary>
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestPing(double e, double n, double alt)
+    {
+        if (!_server || _state.Phase != BrPhase.Playing || Origin == null || !double.IsFinite(e) || !double.IsFinite(n)) return;
+        long peer = Multiplayer.GetRemoteSenderId();
+        if (_state.Find(peer) is not { Alive: true, Team: not 0 } me || _players?.GetNodeOrNull<Node3D>(peer.ToString()) is not { } body) return;
+        if (_lastPing.TryGetValue(peer, out double last) && Now - last < PingEvery) return;
+        var (be, bn) = Origin.ToLv95(body.GlobalPosition);
+        if (Math.Sqrt((e - be) * (e - be) + (n - bn) * (n - bn)) > PingReach) return;
+        _lastPing[peer] = Now;
+        foreach (var x in _state.Entrants.Where(x => x.Team == me.Team))
+            if (Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, e, n, alt);
+    }
+
+    private readonly Dictionary<long, double> _lastPing = new();
+
+    private int _sidesAtGo;
+
+    /// <summary>
+    /// Sides left that end the match: the last one standing; or, when only one side boarded (friends
+    /// practising in one squad, #469), none, so it plays on until they are out or the zone has closed.
+    /// </summary>
+    private int LastSides => _sidesAtGo > 1 ? 1 : 0;
+
     /// <summary>The full map's grid square of a zone point ("C4").</summary>
     private string Cell(double x, double y)
     {
@@ -560,7 +620,7 @@ public partial class BrManager : Node
         GD.Print($"[br] out: {e.Name} ({cause}), place {e.Place}, killer {k?.Name ?? "-"}");
         Rpc(MethodName.Eliminated, e.Peer, k?.Peer ?? 0, (int)cause, e.Place);
         Push();
-        if (_state.TeamsAlive <= 1) End();
+        if (_state.TeamsAlive <= LastSides) End();
     }
 
     private void End()
