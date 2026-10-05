@@ -23,6 +23,12 @@
 - **No inventory as a pigeon** comes for free: `ItemController.UsablePlayer` is on foot only, so the hotbar,
   the inventory screen, the held item, pick-ups and item use are all off while mounted, and the pack is
   untouched. Do not add a pigeon special case there.
+- **Facing**: `BirdMesh`/`MeshScratch.Build` already turns the +Z-authored bird to face −Z, the way a body
+  faces, so `Pigeon.BuildVisual` adds **no** half turn of its own (`BirdLife`'s yaw + π is for its own
+  `Atan2(x, z)` yaw, not for the mesh). That half turn is now the **"Pigeon flies tail first"** setting
+  (`GameSettings.TailFirstPigeon`, Settings → Gameplay, `--tailfirstpigeon on`), off by default: drawing
+  only, client-only, never replicated, and it switches live on your bird and on every remote copy
+  (`AnimateFlight`, which `Flyer.AnimateRemote` also runs, re-aims the `Bird` node only when it differs).
 - **Camera**: third person is a 1.9 m chase cam; first person (V) and always in VR is the bird's eye
   (`FootPlayer.PigeonEye`): level, turned with the heading, no bob, roll or pitch on a headset.
 - **VR** (`XrPad`, `XrRig`): the triggers act as shoulders (right = drop), A flaps, B dives; snap turn

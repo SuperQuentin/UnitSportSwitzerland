@@ -188,6 +188,14 @@ public sealed class GameSettings
     /// <summary>The on-foot camera over the left shoulder instead of the right; <c>swap_shoulder</c> flips it in game (#460).</summary>
     public bool LeftShoulder { get; set; }
 
+    /// <summary>
+    /// Draw the pigeon tail first, the way it flew before the fix: the bird keeps the half turn
+    /// <see cref="Player.Pigeon.BuildVisual"/> used to give a mesh that already faced the right way.
+    /// Off by default. Client-only and never replicated, like <see cref="VisualStyle"/>: it decides
+    /// how the birds on this screen are drawn — your own and everyone else's — never how they fly.
+    /// </summary>
+    public bool TailFirstPigeon { get; set; }
+
     // --- network ---
     /// <summary>List the dedicated servers found on the LAN over mDNS in the main menu (<see cref="Net.LanDiscovery"/>).</summary>
     public bool LanDiscovery { get; set; } = true;
@@ -449,6 +457,7 @@ public sealed class GameSettings
                     break;
                 // left | right: the on-foot camera's shoulder (#460)
                 case "--shoulder": LeftShoulder = v is "left" or "l"; break;
+                case "--tailfirstpigeon": TailFirstPigeon = v is "on" or "1" or "true"; break;
                 case "--mirrors": CockpitMirrors = v is "on" or "1" or "true"; break;
                 // what the monitor shows in VR (#186): off | first | eyes | third
                 case "--vrmonitor":

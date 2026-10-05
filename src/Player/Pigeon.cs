@@ -16,8 +16,14 @@ public sealed class Pigeon : Flyer
     /// <summary>The town pigeon of the bird catalogue: its mesh, length and wing beat.</summary>
     public static BirdSpecies Species => _species ??= System.Array.Find(BirdCatalog.All, s => s.Name == "Rock Dove")!;
 
-    private static readonly NodePath WingP = "Bird/WingP", WingN = "Bird/WingN";
+    private static readonly NodePath BirdP = "Bird", WingP = "Bird/WingP", WingN = "Bird/WingN";
     private float _phase;
+
+    /// <summary>
+    /// The bird node's yaw: none, so the mesh faces the way it flies, or the half turn that flew it
+    /// tail first before the fix, kept as <see cref="Core.GameSettings.TailFirstPigeon"/>.
+    /// </summary>
+    private static float BirdYaw => Core.GameSettings.Current.TailFirstPigeon ? Mathf.Pi : 0f;
 
     public override RideKind Kind => RideKind.Pigeon;
     public override string Label => "Pigeon";
@@ -46,8 +52,9 @@ public sealed class Pigeon : Flyer
         var parts = BirdMesh.Get(Species);
         var root = new Node3D { Name = "Pigeon" };
         // MeshScratch.Build already turned the +Z-authored bird to face −Z, the way a body faces: no
-        // half turn here (BirdLife's yaw + π is for its own Atan2(x, z) yaw, not for the mesh)
-        var bird = new Node3D { Name = "Bird" };
+        // half turn here (BirdLife's yaw + π is for its own Atan2(x, z) yaw, not for the mesh) —
+        // unless the player asked for the tail-first bird back, which is all that half turn ever was
+        var bird = new Node3D { Name = "Bird", Rotation = new Vector3(0, BirdYaw, 0) };
         root.AddChild(bird);
         bird.AddChild(new MeshInstance3D { Mesh = parts.Body, MaterialOverride = BirdMesh.Material });
         foreach (var wing in new[] { parts.WingA, parts.WingB })
@@ -106,6 +113,10 @@ public sealed class Pigeon : Flyer
         float angle = Mathf.Lerp(0.25f, Mathf.Sin(_phase) * 0.9f, m.Spool);
         Wing(visual, WingP, air, angle);
         Wing(visual, WingN, air, -angle);
+        // the tail-first setting switches live, on this bird and on every remote copy (this runs for
+        // both, through AnimateRemote); written only when it differs, never every frame
+        if (visual.GetNodeOrNull<Node3D>(BirdP) is { } bird && !Mathf.IsEqualApprox(bird.Rotation.Y, BirdYaw))
+            bird.Rotation = new Vector3(0, BirdYaw, 0);
     }
 
     private static void Wing(Node3D visual, NodePath path, bool shown, float angle)
