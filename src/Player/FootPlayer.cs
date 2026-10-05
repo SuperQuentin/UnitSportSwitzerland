@@ -861,6 +861,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public static Func<FootPlayer, bool>? StayDown;
 
     /// <summary>
+    /// Asked every flight step with the craft's velocity: a corrected one keeps it inside the game mode's
+    /// bounds, null leaves it be. A Battle Royale sets it for gliders (#485): nobody glides out of the zone.
+    /// </summary>
+    public static Func<FootPlayer, Vector3, Vector3?>? FlightFence;
+
+    /// <summary>
     /// Asked before health regenerates: false stops it. A Battle Royale match sets it (#455), where
     /// health comes back only from bandages and kits, so a fight leaves its marks.
     /// </summary>
@@ -3686,6 +3692,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (flyer is Airliner trimmed)
             trimmed.TrimHeld = typing ? 0f : PlayerInput.Strength(PlayerInput.TrimNoseUp) - PlayerInput.Strength(PlayerInput.TrimNoseDown);
         var ev = flyer.Fly(input, new FlightEnv(onFloor, Clearance, altitude), dt, ref _flight);
+        // a game mode's fence (#485: a Battle Royale's zone, while gliding): no flying out of it
+        if (ev == FlightEvent.None && FlightFence?.Invoke(this, _flight.Velocity) is { } fenced) _flight.Velocity = fenced;
         // an airliner's hard landing or belly scrape: the airframe pays for it (#414)
         if (flyer is Airliner hurt && hurt.TakeDamage() is > 0f and var damage)
         {
@@ -3740,6 +3748,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             case FlightEvent.OpenCanopy:
                 ApplyRide(RideKind.Parachute, _flight.Velocity);
                 Announced?.Invoke("CANOPY", true);
+                return;
+            case FlightEvent.CutAway:
+                ApplyRide(RideKind.Wingsuit, _flight.Velocity);
+                Announced?.Invoke("WINGSUIT", true);
                 return;
             case FlightEvent.Landed:
                 ApplyRide(RideKind.OnFoot, _flight.Velocity with { Y = 0 } * 0.3f);

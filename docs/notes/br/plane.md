@@ -18,6 +18,14 @@
   - **E** (interact) jumps once the doors are open: `Leap` out of the ramp into the wingsuit, at the
     plane's speed capped to 55 m/s. Space is left alone: it opens the parachute a moment later
     (pressing it to jump would open the canopy the same frame).
+  - **Wingsuit ⇄ parachute** (#485): Jump under a parachute cuts it away (`FlightEvent.CutAway`, `Canopy.Fly`)
+    back into the wingsuit, Jump there opens it again, as often as you like, everywhere (free roam too;
+    the paraglider is not a parachute and keeps Jump for its ground launch).
+  - **No gliding out of the zone** (#485): `FootPlayer.FlightFence`, set by the match on its own player
+    (`BrManager.FenceGlide`, pure rule `BrManager.Fence`). In a wingsuit, parachute or paraglider, from
+    `FenceMargin` (15 m) inside the current circle's edge the outward part of the velocity is taken away:
+    the pilot slides along the edge. Outside (the plane's line starts beyond the square) only the way in is
+    left, plus a 3 m/s drift back in. On foot and in vehicles the zone is as before (walk out, take damage).
   - When the doors close, the client pushes itself out. There is no "ground too near" push: the
     ground a client holds under the plane right after the jump across the country is a placeholder
     until real tiles stream in (it fired over Bioggio at 1.3 km).

@@ -84,7 +84,7 @@ public partial class BrHud : CanvasLayer
                         ? $"IN THE PLANE · doors open over {s.AreaName} in {Clock(plane.OpensAt - now)}"
                         : $"DOORS OPEN · jump before they close in {Clock(plane.ClosesAt - now)}";
                     sub = Core.InputHints.Prompt(Core.PlayerInput.InteractMount, "jump (wingsuit)") + "   ·   in the air "
-                        + Core.InputHints.Prompt(Core.PlayerInput.Jump, "opens the parachute") + $"   ·   {s.Entrants.Count(e => !e.Jumped)} aboard";
+                        + Core.InputHints.Prompt(Core.PlayerInput.Jump, "opens or cuts away the parachute") + $"   ·   {s.Entrants.Count(e => !e.Jumped)} aboard";
                     break;
                 case BrPhase.Playing when br.ZoneNow is { } z:
                     string zone = z.Phase == 0 ? $"Zone appears in {Clock(z.Left)}"

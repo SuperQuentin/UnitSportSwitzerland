@@ -231,6 +231,17 @@ public partial class BrProbe : ChatProbe
             float turned = Mathf.AngleDifference(yaw0, me.GlobalRotation.Y);
             Expect(turned > 0.12f, Fmt($"looking left turns the wingsuit left ({Mathf.RadToDeg(turned):F0}°)"));
             Shot("a_wingsuit");
+            // wingsuit and parachute, both ways, as often as you like (#485)
+            await TapJump();
+            Expect(await Until(() => me.Ride == RideKind.Parachute, 2), $"Jump opens the parachute ({me.Ride})");
+            await Seconds(0.8);
+            await TapJump();
+            Expect(await Until(() => me.Ride == RideKind.Wingsuit, 2), $"Jump again cuts it away: back in the wingsuit ({me.Ride})");
+            await TapJump();
+            Expect(await Until(() => me.Ride == RideKind.Parachute, 2), $"and the parachute once more ({me.Ride})");
+            await Seconds(0.5);
+            await TapJump();
+            Expect(await Until(() => me.Ride == RideKind.Wingsuit, 2), $"and the wingsuit once more ({me.Ride})");
             Expect(await Until(() => br.State.Find(PeerOf("B"))?.Jumped == true && them is { Visible: true }, 90),
                 "B was pushed out when the doors closed, and shows again here");
         }
@@ -363,6 +374,15 @@ public partial class BrProbe : ChatProbe
         Loot.LootService.Instance?.TakeAll();
         Expect(await Until(() => CountOf(ItemId.Knife) == knives + 1, 10), $"B's knife is now A's ({knives} -> {CountOf(ItemId.Knife)})");
         Loot.LootService.Instance?.Close();
+    }
+
+    /// <summary>A press of Jump: held for a few frames, then let go (the flight reads its edge).</summary>
+    private async Task TapJump()
+    {
+        Input.ActionPress(PlayerInput.Jump);
+        await Seconds(0.12);
+        Input.ActionRelease(PlayerInput.Jump);
+        await Seconds(0.12);
     }
 
     /// <summary>"--brsites": the outdoor sites (#198) are checked too (a real-terrain run: tools/brcheck.sh with SITES=1).</summary>

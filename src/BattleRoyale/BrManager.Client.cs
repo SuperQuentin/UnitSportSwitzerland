@@ -84,6 +84,7 @@ public partial class BrManager
         if (Instance == this) Instance = null;
         if (_server) Combat.PvpRules.HitRelayed -= OnHit;
         FootPlayer.StayDown = null;
+        FootPlayer.FlightFence = null;
         FootPlayer.CanBeDowned = null;
         FootPlayer.Regenerates = null;
         Combat.PvpRules.Override = null;
@@ -187,6 +188,45 @@ public partial class BrManager
         _pings.Add(new BrPing(from, name, new Vector2((float)(e - _state.AreaE), (float)(n - _state.AreaN)), alt, LocalSeconds + PingSeconds));
         Effect(BrSounds.Ping, -6f);
         GD.Print(FormattableString.Invariant($"[br] ping from {name} at {e:F0}/{n:F0}"));
+    }
+
+    // ------------------------------------------------------------------------------------
+    // no gliding out of the zone (#485)
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>How far inside the edge the fence starts to hold a glider, m.</summary>
+    public const float FenceMargin = 15f;
+
+    /// <summary>How fast a glider outside the zone drifts back in, m/s.</summary>
+    private const float FenceDrift = 3f;
+
+    /// <summary>
+    /// The glide fence (<see cref="FootPlayer.FlightFence"/>): a wingsuit, parachute or paraglider in this
+    /// match never carries its pilot out of the current circle. Near the edge, the part of the speed
+    /// heading out is taken away, so the pilot slides along it; outside (the plane's line starts out of the
+    /// square), only the way in is left, with a gentle drift. Null where it does not apply.
+    /// </summary>
+    private Vector3? FenceGlide(FootPlayer p, Vector3 v)
+    {
+        if (!InMatch || _aboard || _state.Phase != BrPhase.Playing || p != LocalPlayer()
+            || p.Ride is not (RideKind.Wingsuit or RideKind.Parachute or RideKind.Paraglider) || ZoneNow is not { } z) return null;
+        return Fence(ZonePoint(p.GlobalPosition), v, z.Centre, z.Radius);
+    }
+
+    /// <summary>The fence's rule, pure: <paramref name="at"/> in zone metres (x east, y north), <paramref name="v"/> a world velocity (x east, z south).</summary>
+    public static Vector3? Fence(Vector2 at, Vector3 v, Vector2 centre, float radius)
+    {
+        var off = at - centre;
+        float d = off.Length();
+        if (d < 1f || d < radius - FenceMargin) return null;
+        var outward = off / d;
+        var flat = new Vector2(v.X, -v.Z);
+        float away = flat.Dot(outward);
+        bool outside = d > radius;
+        if (away <= 0f && !outside) return null;
+        if (away > 0f) flat -= outward * away;
+        if (outside) flat -= outward * FenceDrift;
+        return new Vector3(flat.X, v.Y, -flat.Y);
     }
 
     /// <summary>How far the minimap's radar picks up other entrants (#359).</summary>
@@ -308,6 +348,8 @@ public partial class BrManager
                 inv.Add(ItemId.WoodPlanks, 15);
             }
             FootPlayer.StayDown = _ => InMatch && _state.Phase == BrPhase.Playing;
+            // gliders stay inside the zone (#485)
+            FootPlayer.FlightFence = FenceGlide;
             // squads (#475): down, not out, while a team-mate stands to pick you up
             FootPlayer.CanBeDowned = _ => InMatch && _state.Phase == BrPhase.Playing && _state.MateStanding(Me);
             // no regeneration in a match (#455): bandages and kits are the only way back
@@ -436,6 +478,7 @@ public partial class BrManager
         LeaveHold(LocalPlayer());
         ShowHidden();
         FootPlayer.StayDown = null;
+        FootPlayer.FlightFence = null;
         FootPlayer.CanBeDowned = null;
         FootPlayer.Regenerates = null;
         Permissions.SetInMatch(false);

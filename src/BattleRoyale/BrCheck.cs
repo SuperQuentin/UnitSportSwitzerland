@@ -93,6 +93,18 @@ public static class BrCheck
         Expect(guidedBad * 4 < plainBad && roundTrip && sameWithout,
             $"centres on the ground: circles over a lake or a cliff {plainBad} -> {guidedBad} of 800, still nested, "
             + "the same on a client from the state, the seed's own zone without terrain");
+
+        // the glide fence (#485): zone (east, north), world velocity (east, -north)
+        var east = new Vector3(30, -5, 0);
+        bool middle = BrManager.Fence(new Vector2(0, 0), east, Vector2.Zero, 1000) == null;
+        bool inward = BrManager.Fence(new Vector2(995, 0), -east, Vector2.Zero, 1000) == null;
+        var edge = BrManager.Fence(new Vector2(995, 0), east, Vector2.Zero, 1000);
+        var slide = BrManager.Fence(new Vector2(995, 0), new Vector3(20, -5, -20), Vector2.Zero, 1000);
+        var outside = BrManager.Fence(new Vector2(1200, 0), new Vector3(0, -5, -20), Vector2.Zero, 1000);
+        Expect(middle && inward && edge is { } e1 && Mathf.Abs(e1.X) < 1e-3f && Mathf.IsEqualApprox(e1.Y, -5f)
+               && slide is { } s1 && Mathf.Abs(s1.X) < 1e-3f && Mathf.IsEqualApprox(s1.Z, -20f)
+               && outside is { } o1 && o1.X < -1f && Mathf.IsEqualApprox(o1.Z, -20f),
+            "glide fence: free inside and inward; at the edge the outward part goes (the rest slides on); outside it drifts back in");
         Expect(s.At(s.Duration + 1).Over, "the zone is over once the last shrink ends");
         // /br zone (#425): from the loot time or a wait, the next shrink; none while shrinking or over
         double first = s.NextShrinkAt(0) ?? -1, wait2 = first;
