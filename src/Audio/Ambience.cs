@@ -413,8 +413,8 @@ public partial class Ambience : Node, IOriginShiftAware
 
     private static float BirdActivity()
     {
-        var n = DateTime.Now;
-        float h = n.Hour + n.Minute / 60f;
+        // the game's hour, the one the sky shows (#452): a dawn chorus under a dawn sky
+        float h = (float)World.WorldClock.CurrentHour;
         // a dawn chorus, a quieter midday, a second wind toward dusk, and night silence
         if (h < 5.5f || h > 20.5f) return 0f;
         if (h < 9f) return 1f;
