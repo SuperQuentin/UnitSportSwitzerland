@@ -412,6 +412,55 @@ public class ParkingPlannerTests
         }
     }
 
+    /// <summary>
+    /// The planner works in LV95 bearings (east 0, north π/2); the tile records store a Godot
+    /// heading (about +Y, 0 = -Z = north) over axes X east and Z <b>south</b>. Getting the sense
+    /// wrong mirrors every parked car and every prop, by twice the lot's axis, and is invisible to
+    /// any check that only measures the angle off a world axis.
+    /// </summary>
+    [Theory]
+    [InlineData(90, 0)]      // north
+    [InlineData(0, -90)]     // east
+    [InlineData(180, 90)]    // west
+    [InlineData(104, 14)]    // across a lot whose rows run 14 deg north of east
+    public void A_bearing_becomes_the_godot_heading_that_faces_the_same_way(double bearingDeg, double wantDeg)
+    {
+        double h = ParkingPlanner.ToGodotHeading(bearingDeg * Math.PI / 180);
+
+        // the two have to agree as DIRECTIONS, which is the thing the sign error broke
+        double bx = Math.Cos(bearingDeg * Math.PI / 180), bz = -Math.Sin(bearingDeg * Math.PI / 180);
+        double hx = -Math.Sin(h), hz = -Math.Cos(h);
+        Assert.True(bx * hx + bz * hz > 0.9999,
+            $"bearing {bearingDeg} faces ({bx:F3},{bz:F3}), heading {h * 180 / Math.PI:F1} faces ({hx:F3},{hz:F3})");
+
+        double want = (wantDeg * Math.PI / 180 + Math.Tau) % Math.Tau;
+        Assert.Equal(want, h, 6);
+    }
+
+    [Fact]
+    public void A_bay_in_a_turned_lot_faces_across_that_lot_and_not_its_mirror()
+    {
+        // 30 deg: the mirror is 60 deg away, far outside any tolerance, and the sign is what matters
+        double turn = 30 * Math.PI / 180;
+        var lot = ParkingPlanner.Plan(Rect(60, 34, turn), [], new Flat());
+        Assert.Null(lot.Rejected);
+
+        foreach (var bay in lot.Bays)
+        {
+            // the planner's own LV95 bearing: across the lot, one way or the other
+            double across = turn + Math.PI / 2;
+            double delta = Math.Abs(bay.HeadingRad - across) % Math.PI;
+            Assert.True(Math.Min(delta, Math.PI - delta) < 0.02,
+                $"bay bearing {bay.HeadingRad * 180 / Math.PI:F1}, lot across {across * 180 / Math.PI:F1}");
+
+            // and as a stored heading it must still face that way, not its mirror
+            double h = ParkingPlanner.ToGodotHeading(bay.HeadingRad);
+            double hx = -Math.Sin(h), hz = -Math.Cos(h);
+            double bx = Math.Cos(bay.HeadingRad), bz = -Math.Sin(bay.HeadingRad);
+            Assert.True(bx * hx + bz * hz > 0.999, $"stored heading mirrors the bay at turn {turn}");
+        }
+    }
+
     [Fact]
     public void The_lot_key_is_stable_and_not_the_randomised_string_hash()
     {
@@ -518,4 +567,5 @@ public class ParkingFixtureTests
         }
     }
 }
+
 
