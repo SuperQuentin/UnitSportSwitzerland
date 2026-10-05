@@ -18,14 +18,21 @@
   `<last tag>..HEAD` is then empty, so it prints "Nothing releasable" and exits 0.
 - `concurrency: group: release` with **`cancel-in-progress: false`** on purpose: a cancellation could land between
   `gh release create` and the asset upload and leave a release with no downloads. Queue, never cancel.
-- **The runner's Godot:** 4.7.1 mono Linux from `godotengine/godot-builds` (editor 101 MB) plus the mono export
-  templates (**1.15 GB**), both in one `actions/cache` entry keyed on the version — well inside the 10 GB free cache,
-  but a cold run spends a few minutes downloading.
+- **The runner's Godot:** `tools/ci/install-godot.sh` fetches 4.7.1 mono Linux from `godotengine/godot-builds`
+  (editor 101 MB) plus the mono export templates (**1.15 GB**), both in one `actions/cache` entry keyed on the
+  version — well inside the 10 GB free cache. The templates must land in **`<version>.<status>.mono`**
+  (`4.7.1.stable.mono`); get that name wrong and the editor installs fine while every export silently produces
+  nothing, so the script checks for `version.txt` and fails there instead. A cold run (download included) measured
+  **4m49s** end to end on `ubuntu-latest`, with all three exports: windows.zip 170 MB, linux tar.gz 185 MB,
+  macos tar.gz 215 MB. A failed job saves no cache, so a broken install cannot poison the next run.
 - **`tools/ci/export_presets.cfg`** is committed, because the root `export_presets.cfg` is gitignored (per machine).
   It needs the `!tools/ci/export_presets.cfg` negation in `.gitignore` to be trackable at all. Same `exclude_filter`
   as the "Linux Server" preset in `tools/deploy-linux.sh`; `codesign/codesign=0` because a Linux runner cannot sign.
 - **`tools/release.sh --ci`** skips the "on main, in sync with origin/main" guards (CI is detached on the tip it
-  chose) and nothing else: same semver, same changelog, same three exports.
+  chose) and nothing else: same semver, same changelog, same three exports. `--no-upload` builds every export and
+  publishes nothing, which is how the CI build was first proven (a throwaway workflow on the branch, since
+  `release.yml` itself cannot run from one: `pull_request_target` and `workflow_dispatch` both resolve the workflow
+  file from `main`). Use it to check a release build without creating a release.
 - **A platform that will not export is skipped, not fatal:** `export_preset` returns 1, the release ships the assets
   that did build, and a line in the notes says which platform is missing. Only an all-empty run fails. This is what
   lets a host without the Windows templates still release, and the Linux runner's macOS `.app` is unsigned (players
