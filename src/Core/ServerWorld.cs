@@ -133,6 +133,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // the radio by the pastor rat in every church (#370)
         _churchRadios = Interiors.ChurchRadios.Create(this);
         Net.ClockSync.Create(this);
+        // the time of day, one for everyone (#452): sent to each joiner and on every /time
+        World.WorldClock.StartServer();
         // the traffic lights' group states on the server clock, for tools/signalnetcheck.sh (#353)
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: true));
         // live stations in cars: tuned here once each, relayed to whoever listens (#179)
@@ -345,8 +347,18 @@ public partial class ServerWorld : Node3D, IOriginContainer
     // one line per player every 5 s: ~6 ms per line on Windows, ~100 ms frames at 16 players (#221)
     private static readonly bool PlayerStatus = OS.GetCmdlineUserArgs().Contains("--player-status");
 
+    private double _sinceClockSave;
+
+    public override void _ExitTree() => World.WorldClock.Save();
+
     public override void _Process(double delta)
     {
+        // the hour, now and then, so a restart (or a crash) carries on near where the sky was
+        if ((_sinceClockSave += delta) >= 60)
+        {
+            _sinceClockSave = 0;
+            World.WorldClock.Save();
+        }
         if (_parentPid is { } parent && (_sinceParentCheck += delta) >= 1)
         {
             _sinceParentCheck = 0;
