@@ -11,7 +11,7 @@ using UnitSport.Vehicles;
 namespace UnitSport.Player;
 
 /// <summary>
-/// <c>--tractorcheck [shots] --chunks fixture:flat --traffic 0</c> (#494): the farm machines.
+/// <c>--tractorcheck [shots|slope] --chunks fixture:flat --traffic 0</c> (#494): the farm machines.
 /// First the numbers on flat ground with no world (as <see cref="HeavyCheck"/>): the tractor's 0-40
 /// and top speed, a lowered plough slowing it to a ploughing pace and a drill hardly, the weight of
 /// a raised implement on the rear axle, the combine's 25 km/h and its threshing speed, which
@@ -19,7 +19,9 @@ namespace UnitSport.Player;
 /// with a stand-in field (<see cref="MachineWork.FakeSweep"/>): the implement lowered and raised on
 /// the rig, the plough sweeping, the drill sowing only with seed in the pack and taking it, the
 /// mower's bales into the pack, the combine's tank filling, the auger unloading into a parked
-/// tipping trailer, a sack taken from it on foot, and the train parked with the implement down.
+/// tipping trailer, a sack taken from it on foot, the train parked with the implement down, and a
+/// lowered plough across a paved strip. <c>slope</c>: the numbers, then each implement raised and
+/// lowered up, down and across the flat fixture's 15 % ridge.
 /// Prints <c>[tractor] RESULT: ok</c> or <c>RESULT: FAILED (n)</c>; <c>shots</c> (windowed) writes
 /// pictures to <c>test_output/</c>.
 /// </summary>
@@ -38,6 +40,8 @@ public partial class TractorCheck : Node
     private const float Dt = 1f / 60f;
     private readonly System.Func<FootPlayer?> _local;
     private readonly bool _shots;
+    /// <summary><c>--tractorcheck slope</c>: the numbers, then only the ridge runs (a row of its own: together they outran the quick tier's timeout).</summary>
+    private readonly bool _slope;
     private int _failures;
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
@@ -45,6 +49,7 @@ public partial class TractorCheck : Node
     {
         _local = local;
         _shots = role.Contains("shots") && DisplayServer.GetName() != "headless";
+        _slope = role.Contains("slope");
         Name = "TractorCheck";
     }
 
@@ -139,6 +144,11 @@ public partial class TractorCheck : Node
         var mowing = new Truck(Tractor, TrailerCatalog.Code(mower, 0f)) { Lowered = true };
         var (_, mowTop) = Drive(mowing, 40f, 99f, Surface.Grass);
         Expect(mowTop > ploughTop, $"a mower down: {F(mowTop)} km/h");
+        // a rear disc mower cuts beside the tractor, out to the right (its rear wheel's outside at 1.3 m)
+        var mowBar = mowing.WorkBarNode;
+        float inner = mowBar.X - TrailerCatalog.All[mower].WorkWidth * 0.5f, outer = mowBar.X + TrailerCatalog.All[mower].WorkWidth * 0.5f;
+        Expect(inner > 0.2f && outer > Tractor.Sections[0].Width * 0.5f + 1.5f && Mathf.Abs(Truck.DraftOf(TrailerCatalog.All[mower], 8f)) > 0f,
+            $"the mower's bar is out to the right: {F(inner, "F2")} to {F(outer, "F2")} m from the tractor's centre");
 
         // a turn with the plough up: it stays square behind
         var turning = new Truck(Tractor, TrailerCatalog.Code(plough, 0f));
@@ -224,6 +234,17 @@ public partial class TractorCheck : Node
         // an empty pack lent for the check (as a match does): the saved one is neither read nor overwritten
         items.Inventory.BeginMatch();
         MachineWork.FakeSweep = Field;
+
+        if (_slope)
+        {
+            // ---- the ridge: each implement up and down, driven up, down and across a 15 % slope ----
+            MachineWork.FakeSweep = null;
+            foreach (var body in new[] { TrailerBody.Plough, TrailerBody.SeedDrill, TrailerBody.Mower })
+                foreach (bool lowered in new[] { false, true })
+                    await OnSlope(me, body, lowered);
+            Finish(null);
+            return;
+        }
 
         // ---- the tractor and the plough ----
         Expect(me.SetRide(Tractor.Kind), "in the tractor");
@@ -375,12 +396,6 @@ public partial class TractorCheck : Node
         // ---- a lowered plough across a paved strip: it rides on the tarmac, pulls and works nothing ----
         await OverTarmac(me);
 
-        // ---- the ridge: each implement up and down, driven up, down and across a 15 % slope ----
-        MachineWork.FakeSweep = null;
-        foreach (var body in new[] { TrailerBody.Plough, TrailerBody.SeedDrill, TrailerBody.Mower })
-            foreach (bool lowered in new[] { false, true })
-                await OnSlope(me, body, lowered);
-
         Finish(null);
     }
 
@@ -473,9 +488,9 @@ public partial class TractorCheck : Node
         // working pace, braking on the way down (Stop: a tractor's driver does not coast down a 15 % hill)
         var runs = new (string Name, double X, double Y, float Yaw, System.Func<Vector3, Vector3, bool> Done, double Seconds)[]
         {
-            ("up", a - 10, -40, East, (p, s) => p.X > a + 40, 90),
-            ("down", a + slope + plateau - 10, -40, East, (p, s) => p.X > a + 2 * slope + plateau + 10, 90),
-            ("across", a + slope / 2, -150, North, (p, s) => s.DistanceTo(p) > 50f, 60),
+            ("up", a - 10, -40, East, (p, s) => p.X > a + 35, 60),
+            ("down", a + slope + plateau - 10, -40, East, (p, s) => p.X > a + 2 * slope + plateau + 10, 60),
+            ("across", a + slope / 2, -150, North, (p, s) => s.DistanceTo(p) > 40f, 40),
         };
         foreach (var run in runs)
         {
@@ -489,7 +504,7 @@ public partial class TractorCheck : Node
             int hits = me.SectionHits;
             me.RideControls = () =>
             {
-                float err = 12f - me.GroundSpeed * 3.6f;
+                float err = 15f - me.GroundSpeed * 3.6f;
                 return new RideInput(Mathf.Clamp(err * 0.3f, 0f, 1f), Mathf.Clamp(-(err + 2f) * 0.2f, 0f, 1f), 0f, false);
             };
             for (double time = 0; time < run.Seconds && me.Vehicle is Truck; time += 0.05)

@@ -71,7 +71,7 @@ public sealed class FixtureCourse
             Terrain = (x, _) => FlatHeight + RidgeHeight(x),
             Cover = (x, _) => x >= PavedFrom && x < PavedFrom + PavedWidth ? CoverClass.PavedArea : CoverClass.Open,
             // the spawn's tiles plus the strip and the ridge, whatever the start
-            Extent = (-100, -160, RidgeFrom + 250, 160),
+            Extent = (-100, -160, RidgeFrom + 2 * RidgeSlope + RidgePlateau + 60, 160),
         };
         c.Fields.Add((0xF1E1D001, CropKind.Wheat, Box(24, -36, 96, 36)));
         c.Fields.Add((0xF1E1D002, CropKind.Potato, Box(24, 44, 72, 92)));
@@ -85,7 +85,7 @@ public sealed class FixtureCourse
     public const double PavedFrom = 130, PavedWidth = 12;
 
     /// <summary>The flat course's ridge: where it starts rising (x, m from the start), its grade, the lengths of its slopes and plateau.</summary>
-    public const double RidgeFrom = 170, RidgeGrade = 0.15, RidgeSlope = 90, RidgePlateau = 40;
+    public const double RidgeFrom = 170, RidgeGrade = 0.15, RidgeSlope = 50, RidgePlateau = 30;
 
     /// <summary>
     /// The ridge's height over the flat at <paramref name="x"/>: up <see cref="RidgeSlope"/> m at
