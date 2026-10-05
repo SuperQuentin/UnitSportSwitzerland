@@ -451,8 +451,11 @@ public static partial class Planner
         {
             Title = "Prepare processing tools",
             Detail = "dotnet build of TerrainPreprocessor and RoadGen (Release)",
-            Seconds = File.Exists(StepRun.ToolDll(p, "TerrainPreprocessor")) && File.Exists(StepRun.ToolDll(p, "RoadGen")) ? 8 : 45,
-            Skip = anyTool ? null : "nothing to process",
+            // No repository means the game, which has the processing tools compiled into it and no
+            // .NET SDK to build anything with: there is nothing for this step to do there.
+            Seconds = p.Root == null ? 0
+                : File.Exists(StepRun.ToolDll(p, "TerrainPreprocessor")) && File.Exists(StepRun.ToolDll(p, "RoadGen")) ? 8 : 45,
+            Skip = p.Root == null ? "built into the game" : anyTool ? null : "nothing to process",
             Run = r => r.BuildTools(),
         });
         return steps;
@@ -538,8 +541,21 @@ public sealed partial class StepRun
         _progress.Show(text);
     }
 
-    public static string ToolDll(Paths p, string name) =>
-        Path.Combine(p.Tools, name, "bin", "Release", name == "TerrainPreprocessor" ? "net9.0" : "net8.0", name + ".dll");
+    /// <summary>
+    /// The built tool, under whichever target framework folder it landed in — the preprocessor moved
+    /// from net9.0 to net8.0 when the game started hosting it (#515 phase 2), and a machine may
+    /// still have the old build lying beside the new one.
+    /// </summary>
+    public static string ToolDll(Paths p, string name)
+    {
+        string release = Path.Combine(p.Tools, name, "bin", "Release");
+        foreach (string framework in new[] { "net8.0", "net9.0" })
+        {
+            string dll = Path.Combine(release, framework, name + ".dll");
+            if (File.Exists(dll)) return dll;
+        }
+        return Path.Combine(release, "net8.0", name + ".dll");
+    }
 
     public async Task<bool> BuildTools()
     {

@@ -12,6 +12,7 @@ public static class TerrainPaths
     public const string ChunksEnvVar = "UNITSPORT_CHUNKS";
 
     private static string? _chunkDir;
+    private static string? _dataDir;
 
     /// <summary>
     /// Locates the terrain_chunks directory, first match wins:
@@ -55,7 +56,7 @@ public static class TerrainPaths
         foreach (string dir in new[] { exeDir, ProjectSettings.GlobalizePath("res://") })
         {
             string file = Path.Combine(dir, LocationFileName);
-            if (ReadLocationChunks(file) is not { } saved) continue;
+            if (ReadLocation(file, "chunks") is not { } saved) continue;
             if (Directory.Exists(saved)) return (saved, file);
             GD.PushWarning($"[paths] {file} points at {saved}, which does not exist; falling back");
         }
@@ -65,24 +66,59 @@ public static class TerrainPaths
         return (ProjectSettings.GlobalizePath("res://terrain_chunks"), "project folder");
     }
 
-    /// <summary>The "chunks" entry of a terrain_location.json, relative to the file; null if none or unreadable.</summary>
-    private static string? ReadLocationChunks(string file)
+    /// <summary>
+    /// One entry ("chunks" or "data") of a terrain_location.json, resolved relative to the file;
+    /// null if the file, the key or its value is missing or unreadable.
+    /// </summary>
+    private static string? ReadLocation(string file, string key)
     {
         if (!File.Exists(file)) return null;
         try
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(file));
             foreach (var prop in doc.RootElement.EnumerateObject())
-                if (prop.Name.Equals("chunks", StringComparison.OrdinalIgnoreCase)
+                if (prop.Name.Equals(key, StringComparison.OrdinalIgnoreCase)
                     && prop.Value.ValueKind == JsonValueKind.String
-                    && prop.Value.GetString() is { Length: > 0 } chunks)
-                    return Path.GetFullPath(chunks, Path.GetDirectoryName(Path.GetFullPath(file))!);
+                    && prop.Value.GetString() is { Length: > 0 } value)
+                    return Path.GetFullPath(value, Path.GetDirectoryName(Path.GetFullPath(file))!);
         }
         catch (Exception e)
         {
             GD.PushWarning($"[paths] cannot read {file}: {e.Message}");
         }
         return null;
+    }
+
+    /// <summary>
+    /// Where the downloaded source data (swissALTI3D zips, the TLM GeoPackage, GWR...) lives, for
+    /// the in-game downloader (#515): <c>--data &lt;dir&gt;</c>, then the "data" of the same
+    /// <c>terrain_location.json</c> <see cref="FindChunkDir"/> reads, then <c>data/</c> beside the
+    /// tiles. A release has no <c>ressources/data</c> to fall back on, which is why the last step is
+    /// relative to the tiles rather than to the repository.
+    /// </summary>
+    public static string FindDataDir()
+    {
+        if (_dataDir != null) return _dataDir;
+        var (dir, source) = ResolveDataDir();
+        GD.Print($"[paths] source data: {dir} ({source})");
+        return _dataDir = dir;
+    }
+
+    private static (string Dir, string Source) ResolveDataDir()
+    {
+        if (CmdArgs.Value("--data") is { Length: > 0 } explicitDir) return (explicitDir, "--data");
+
+        string exeDir = Path.GetDirectoryName(OS.GetExecutablePath()) ?? ".";
+        foreach (string dir in new[] { exeDir, ProjectSettings.GlobalizePath("res://") })
+        {
+            string file = Path.Combine(dir, LocationFileName);
+            if (ReadLocation(file, "data") is { } saved) return (saved, file);
+        }
+
+        // Beside the tiles, whichever directory those resolved to — including a drive the player
+        // picked, so the downloads and what is built from them stay together.
+        return (Path.Combine(Path.GetDirectoryName(FindChunkDir().TrimEnd('/', '\\')) ?? exeDir, "data"),
+                "beside the terrain chunks");
     }
 
     /// <summary>Reads an optional "--chunks &lt;dir&gt;" from the command line.</summary>

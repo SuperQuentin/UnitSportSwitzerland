@@ -4,7 +4,7 @@ using UnitSport.Core;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// The first screen: the name, the running occasion, and five ways in — Play solo, Multiplayer,
+/// The first screen: the name, the running occasion, and the ways in — Play solo, Multiplayer, Map,
 /// Settings, Controls, Quit. The 3D valley (<see cref="TitleDiorama"/>) turns behind it; a dark
 /// gradient on the left keeps the text readable over it. Esc does nothing here (there is nothing
 /// behind it), but it is still consumed.
@@ -45,6 +45,8 @@ public partial class TitleScreen : Screen
 
         _first = Entry(column, "Play solo", () => Shell.Push(SoloScreen.Create()));
         Entry(column, "Multiplayer", () => Shell.Push(MultiplayerScreen.Create()));
+        // The map of Switzerland: what terrain is downloaded, and how to get more (#515)
+        Entry(column, "Map", () => Shell.Push(MapScreen.Create()));
         Entry(column, "Settings", () => Shell.Push(SettingsScreen.Create()));
         // VR (#186): a restart either way, after a confirmation
         Entry(column, XR.XrSession.Active ? "Leave VR" : "Play in VR",
