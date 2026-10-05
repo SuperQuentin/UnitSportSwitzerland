@@ -299,7 +299,9 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
             {
                 var li = interiors.Current!;
                 var ni = interiors.CurrentNode!;
-                _lootIndex = li.Furniture.FindIndex(f => f.Floor == 0 && Loot.LootTables.IsLootable(f.Type) && !Loot.LootTables.IsLocked(f.Type));
+                // the ground floor is Below, not 0: in a house with a cellar, floor 0 is the cellar,
+                // and the player was put a storey above the piece it was told to face (#213)
+                _lootIndex = li.Furniture.FindIndex(f => f.Floor == li.Below && Loot.LootTables.IsLootable(f.Type) && !Loot.LootTables.IsLocked(f.Type));
                 if (Online)
                 {
                     GD.Print("[interior] (online: loot not tested here)");
@@ -314,7 +316,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 }
                 var f = li.Furniture[_lootIndex];
                 var front = new Basis(Vector3.Up, f.Turns * Mathf.Pi / 2) * new Vector3(0, 0, f.D / 2 + 0.55f);
-                var at = new Vector3(f.X, 0.1f, f.Z) + front;
+                var at = new Vector3(f.X, li.FloorY(f.Floor) + 0.1f, f.Z) + front;
                 var face = ni.GlobalTransform.Basis * -front;
                 _player.EnterInterior(li.Key, ni.GlobalTransform * at, Mathf.Atan2(-face.X, -face.Z));
                 _player.Velocity = Vector3.Zero;
@@ -708,7 +710,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
         var tb = b.Inside * new Vector3(0, 1.2f, -0.3f);
         Vector3? best = null;
         float bestScore = 0;
-        foreach (var r in l.Floors[0].Rooms)
+        foreach (var r in l.GroundFloor.Rooms)
             for (float x = r.X0 + 0.6f; x < r.X1 - 0.6f; x += 0.6f)
                 for (float z = r.Z0 + 0.6f; z < r.Z1 - 0.6f; z += 0.6f)
                 {
@@ -1052,22 +1054,27 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
     }
 
     /// <summary>Straight down onto the middle of a floor's flight: the ramp must be there.</summary>
-    private void StairRay(InteriorManager interiors, int floor = 0)
+    /// <param name="floor">Index into <see cref="InteriorLayout.Floors"/>; by default the floor the
+    /// entrances are on, which in a house with a cellar is <see cref="InteriorLayout.Below"/>, not 0.</param>
+    private void StairRay(InteriorManager interiors, int floor = -1)
     {
         var l = interiors.Current;
         var node = interiors.CurrentNode;
-        if (l == null || floor >= l.Floors.Count || l.Floors[floor].Flight is not { } f || node == null)
+        int at = floor < 0 ? l?.Below ?? 0 : floor;
+        if (l == null || at >= l.Floors.Count || l.Floors[at].Flight is not { } f || node == null)
         {
-            if (floor == 0) GD.Print("[interior] (single storey: no stairs to test)");
+            if (floor <= 0) GD.Print("[interior] (single storey: no stairs to test)");
             return;
         }
-        float y0 = floor * l.StoreyHeight;
+        // a floor's height is FloorY, never floor * StoreyHeight: floor 0 of a house with a
+        // cellar is a storey below the ground, and the ray missed the flight entirely (#213)
+        float y0 = l.FloorY(at);
         var local = new Vector3((f.X0 + f.X1) / 2, y0, (f.ZBottom + f.ZTop) / 2);
         var from = node.GlobalTransform * (local + Vector3.Up * (l.StoreyHeight - 0.5f));
         var to = node.GlobalTransform * (local + Vector3.Down * 0.5f);
         var hit = node.GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to));
         float y = hit.Count > 0 ? node.ToLocal(hit["position"].AsVector3()).Y - y0 : -1;
-        Check(y > l.StoreyHeight * 0.3f && y < l.StoreyHeight * 0.7f, $"floor {floor} stair ramp under mid-flight at {y:F2} m of {l.StoreyHeight:F2}");
+        Check(y > l.StoreyHeight * 0.3f && y < l.StoreyHeight * 0.7f, $"floor {at} stair ramp under mid-flight at {y:F2} m of {l.StoreyHeight:F2}");
     }
 
     private int _lootIndex = -1, _lootBefore, _lootPhase;
