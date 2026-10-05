@@ -24,9 +24,8 @@ These facts decide most of the trade-offs below.
    That is how a church's nave and tower work: `InteriorManager.PlanKey` maps any member's door to
    the primary's plan, and `InteriorLayout.Entrances` has an entry per door. A works hall plus its
    office annex plus its silos is the same shape of problem.
-3. **A single solid can carry only one door.** `DoorIndex.Entry` is keyed by `BuildingKey`, and
-   `Find(key)` returns the first match. `BuildingFootprint.ComputeDoors` returns one `DoorSpot` per
-   building, indexed by building. Loading bays on one warehouse wall need this widened (§4).
+3. **A single solid could carry only one door** — `DoorIndex.Entry` was keyed by `BuildingKey` and
+   `Find(key)` returned the first match. **Fixed in #498 (PR #500)**: see Phase 2.
 4. **The roll-up door exists and is gated on the kind.** `DoorLeaf.RollsUp(kind)` is
    `kind == Garage`; the shut slats are baked in `BuildingMeshBuilder.AppendDoor`, the live leaf is
    `DoorLeaf.CreateRollUp`, and `InteriorManager.OpenForVehicle` already opens a vehicle door for a
@@ -113,18 +112,39 @@ Nothing in phase 1 touches the network, so tier 0.5 is the right tier.
 
 Agreed: the bays are doors you can back a trailer through, not painted-on scenery.
 
-- **Door identity**: `BuildingKey` stays the building (and so the interior plan key and every
-  stored loot record, §7). A new `DoorId(BuildingKey Building, byte Ordinal)` carries the door.
-  Its text form is `"E_N_I"` for ordinal 0 — byte-identical to today, so nothing stored or sent
-  changes for the millions of one-door buildings — and `"E_N_I#k"` for the extras.
-- **Touched**: `DoorSpot` gains `Ordinal`; `BuildingFootprint.ComputeDoors` returns a flat array
-  with several entries per building; `DoorIndex` keys on `DoorId`; `DoorLink`, `DoorPortals`,
-  `DoorLeaf`, `DoorLights`, `DoorwayGhosts` take the door id; `InteriorManager.PlanKey` strips the
-  ordinal before looking up the plan; `EntrancePlan.Door` holds the door id text;
-  `ServerVehicleDoorReach` and `DoorIndex.VehicleDoorAhead` work per door.
-- **Bay placement**: on the longest wall facing the yard, N bays at 4.5 m centres, each a 4 m
-  roll-up door onto a raised 1.2 m dock inside, with rubber bumpers, a canopy and a dock leveller.
-  `DoorLeaf.RollsUp` becomes "a garage's, or an industrial bay's".
+**The door layer is built and pushed — #498, PR #500.** What landed, which supersedes this
+section's first sketch:
+
+- **Door identity**: `DoorKey(int TileE, int TileN, int Index, int Slot = 0)` in
+  `src/Interiors/DoorKey.cs`, with `.Building` giving the `BuildingKey`. Slot 0's text is
+  **byte-identical** to `BuildingKey.ToString()` and extras are `"E_N_I_<slot>"` — an underscore,
+  not the `#` this plan first proposed, so one `Split('_')` still parses it and it matches
+  `BuildingKey`'s own form. §7's guarantee holds either way: `BuildingKey` is still the building,
+  the plan key and the loot key, and `InteriorManager.PlanKey` strips the slot.
+- **The leaf is a property of the door, not of the kind**: `DoorHang { Inward, OutwardPair, RollUp }`
+  plus `bool Vehicle` on `DoorSpot`/`EntrancePlan`/`DoorLink`/`DoorIndex.Entry`, defaulted from the
+  kind by `DoorBudget.HangFor`/`VehicleFor`. A loading bay is simply `Hang = RollUp, Vehicle = true`
+  on an Industrial door — `DoorLeaf`, `OpenForVehicle`, `VehicleDoorAhead` and the server's reach
+  check all read the door, and driving out of an interior no longer gates on the kind at all. This
+  is better than this plan's "`DoorLeaf.RollsUp` becomes a garage's, or an industrial bay's", and
+  replaces it.
+- **Where doors come from**: `BuildingFootprint.ComputeDoors` returns a flat `DoorSpot[]` with
+  several per building; the rules are pure and unit-tested in `src/Interiors/DoorBudget.cs`.
+  `InteriorGenerator.FitEntry(l, ground, side, want, width, out room, out center)` picks the
+  ground-floor room an extra door's doorway is cut in, clear of other cuts, slab holes and the
+  stair flight.
+
+Still to do, in this epic:
+
+- **Bay placement**: `DoorBudget.AlongRun` spaces doors 22 m apart, which is not a loading bay.
+  Bays want a per-site-type run — on the longest wall facing the yard, N at 4.5 m centres, each a
+  4 m roll-up door (a depot's 4.5 m at 5.0 m centres, a body shop's 3.2 m at 4.0 m, a showroom
+  none) — as an override `DoorBudget` consults before its generic rule, keyed on
+  `BuildingTypes.SiteFor`. Shape: `readonly record struct DoorRun(int Count, float Spacing,
+  float Width, float Height, DoorHang Hang, bool Vehicle)`, returning null to fall through.
+- **The dock**: a raised 1.2 m platform inside the bay wall, with bumpers, a canopy and a leveller.
+  This is a change to the hall's floor, not just to the door, which is why no dock height was added
+  to `DoorSpot` in #498.
 - **Facade**: industrial walls get their own dressing — a painted base band, a ridge vent, a
   company sign over the main door (the `SignFlag` machinery the garage sign already uses),
   downpipes, and bay numbers.
@@ -132,7 +152,52 @@ Agreed: the bays are doors you can back a trailer through, not painted-on scener
   on the *remote* peer: a truck backed into bay 3 on one client is in bay 3 on the other, with the
   right leaf up.
 
+### Where the two branches meet
+
+`#498` sizes an extra door's opening as `top = min(door height, StoreyHeight − Slab)` — the
+*storey's* headroom. `#497` introduced rooms with a ceiling of their own inside a tall hall
+(`RoomPlan.Clear`), so a side door landing on a service-block room's outer wall could be cut
+taller than that room. Whichever branch rebases onto the other clamps `top` to `l.ClearOf(room)`.
+`InteriorValidator` now **rejects any opening taller than its room**, so this cannot land quietly:
+it fails `--sitecheck` the moment the two trees meet. 264 ordinary plans (houses, flats, barns,
+garages, shops, churches) pass the new rule unchanged.
+
 ## Phase 3 — dormant vehicles in the yards
+
+**The shared layer is #499's, not this epic's, and it is built.** Parking areas need parked cars for
+exactly the same reason yards need a fleet, so rather than invent the mechanism twice, #499
+("Parking areas as real lots") built `src/Vehicles/VehicleSlot.cs` and
+`src/Vehicles/DormantVehicles.cs` generalised over **slot providers**, with parking bays as the
+first. The design sketch below is what it was built from, and is kept because this plan is where it
+was worked out. **Phase 3 of this epic is then one thing: `DormantSlots.ForSite(...)` as a second
+provider** — the fleet mix per site type and the yard positions. No draw, no wake path, no RPC and
+no consistency test left to design.
+
+What phase 3 inherits, and the three things it still needs from #499:
+
+- `VehicleSlot(Owner, Ordinal, E, N, Height, Yaw, KindId, Paint, Van)` — pure data, no Godot, linked
+  into tier 0. `KindId` is a `RideKind` as an int so the file never reaches into `src/Player`.
+- **The node name is the wake-once key**, and `DormantVehicles.SlotOf()` is the single place that
+  parses it. As built it is `veh_bay_<E>_<N>_<ordinal>` and requires **exactly five**
+  underscore-separated parts. A yard's owner is a building, not a tile — `2593_1120_7` — so a yard
+  slot's name has six, `SlotOf` returns null, and the dormant copy is never dropped when the real
+  vehicle appears: exactly the double-draw #499's tier-2 check caught for late joiners. The parser
+  must take the **last** segment as the ordinal and the rest as the owner (the tile being the
+  owner's first two parts), or yards need a second parser and the fix stops being in one place.
+- **A trailer is not a `KindId`.** `RideKind.Trailer` (120) says only "a trailer"; *which* one, and
+  how loaded, is `TrailerCatalog` plus a code `(index + 1) | load% << 8` — what
+  `FootPlayer.TrailerCode` replicates, and what makes a timber trailer's logs and a tanker's slosh.
+  One `ushort TrailerCode` on the record (0 = none) covers the lot: with a trailer `KindId` it is a
+  trailer standing on its legs; with a tractor `KindId` it is a **coupled train**, woken as one
+  `VehicleState.Train` with straight articulation. A parked artic must never be two adjacent slots —
+  the pin angles are part of the parked state and would drift.
+- **Re-sleeping** stays off, as first planned, but the wake trigger is what decides whether it is
+  ever needed: wake on *intent* (a `VehicleReach` aim, a real impact, a shot), never on proximity,
+  or a player walking through a forty-car showroom leaves forty live `VehicleBody` nodes behind.
+  Measure the live count after a busy session first. If re-sleep does become necessary, the
+  condition has to be strict — still within ~0.3 m and ~5° of its slot pose, undamaged, unclaimed,
+  nobody within 200 m — because a vehicle that re-sleeps anywhere else teleports, and one that
+  re-sleeps damaged silently repairs itself.
 
 The yards need a *fleet*: a haulier with twelve tractors and twenty trailers, a dealership with
 forty cars. Spawning forty replicated `VehicleBody` nodes per site is not affordable, and making
@@ -157,6 +222,13 @@ to real ones only when someone actually touches them.
   dormant". Start with the first, measure, then decide.
 - **Cost to measure before merging**: dormant draw per tile, the wake round-trip, and the count of
   live vehicles after a busy session.
+- **A trailer is not a car slot.** `RideKind.Trailer` (120) is a lone trailer in the world, never
+  mounted, and what it *is* lives in a second index: `TrailerCatalog` plus a **code**
+  `(index + 1) | load% << 8`, which is what `FootPlayer.TrailerCode` replicates. A slot that can be
+  a trailer therefore needs that code, not just a catalogue index. A coupled train is worse: a
+  tractor and its trailer park as **one** `VehicleState.Train` with `Angles`, `Flags` and `Load`,
+  and the server counts it as two vehicles for `MayPark` — so a parked artic is one slot holding a
+  train, never two slots that happen to be adjacent. See `docs/notes/player/trucks-buses.md`.
 
 ## Phase 4 — the drivable forklift
 
