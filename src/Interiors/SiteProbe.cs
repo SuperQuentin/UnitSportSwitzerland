@@ -53,11 +53,18 @@ public partial class SiteProbe : Node3D
     /// One building to plan: the size and wall height that make <see cref="BuildingTypes.SiteFor"/>
     /// choose <see cref="Want"/>, and the kind it is in the cadastre.
     /// </summary>
-    private readonly record struct Spec(BuildingType Want, BuildingKind Kind, float Width, float Depth, float Wall);
+    /// <param name="Turn">
+    /// Degrees the solid is turned in plan. A box square to the world cannot catch a mirrored
+    /// direction convention — the mirror and the truth agree on it — and every real Swiss building
+    /// is at some angle, so one site is turned (#524's lesson, applied to the bays and the yard).
+    /// </param>
+    private readonly record struct Spec(BuildingType Want, BuildingKind Kind, float Width, float Depth,
+        float Wall, float Turn = 0f);
 
     private static readonly Spec[] Specs =
     {
-        new(BuildingType.Warehouse, BuildingKind.Industrial, 58f, 34f, 8f),
+        // turned to no axis: its bays, its doorways and its yard all have to survive a real angle
+        new(BuildingType.Warehouse, BuildingKind.Industrial, 58f, 34f, 8f, Turn: 31f),
         new(BuildingType.Factory, BuildingKind.Industrial, 46f, 28f, 12f),
         new(BuildingType.Depot, BuildingKind.Industrial, 26f, 18f, 7f),
         new(BuildingType.Mechanic, BuildingKind.Industrial, 16f, 12f, 6f),
@@ -273,7 +280,7 @@ public partial class SiteProbe : Node3D
             tile.Buildings.Add(new Building
             {
                 Kind = spec.Kind, Floors = 0, MinY = 0, MaxY = spec.Wall,
-                Triangles = Box(spec.Width, spec.Depth, spec.Wall),
+                Triangles = Box(spec.Width, spec.Depth, spec.Wall, 0f, spec.Turn),
             });
             return (tile, i, key);
         }
@@ -287,12 +294,22 @@ public partial class SiteProbe : Node3D
     };
 
     /// <summary>A flat-roofed box centred on (<paramref name="at"/>, 0), wound outward like a real solid.</summary>
-    private static float[] Box(float w, float d, float h, float at = 0f)
+    private static float[] Box(float w, float d, float h, float at = 0f, float turn = 0f)
     {
         float x0 = at - w / 2, x1 = at + w / 2, z0 = -d / 2, z1 = d / 2;
         var t = new List<float>();
-        void Tri(Vector3 a, Vector3 b, Vector3 c) =>
+        // turned about the box's own centre, so a turned solid keeps the place an upright one had
+        float cos = Mathf.Cos(Mathf.DegToRad(turn)), sin = Mathf.Sin(Mathf.DegToRad(turn));
+        Vector3 Turned(Vector3 v)
+        {
+            float dx = v.X - at, dz = v.Z;
+            return new Vector3(at + dx * cos - dz * sin, v.Y, dx * sin + dz * cos);
+        }
+        void Tri(Vector3 ra, Vector3 rb, Vector3 rc)
+        {
+            var (a, b, c) = (Turned(ra), Turned(rb), Turned(rc));
             t.AddRange(new[] { a.X, a.Y, a.Z, c.X, c.Y, c.Z, b.X, b.Y, b.Z });
+        }
         void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 e) { Tri(a, b, c); Tri(a, c, e); }
         Quad(new(x0, 0, z1), new(x1, 0, z1), new(x1, h, z1), new(x0, h, z1));  // south
         Quad(new(x1, 0, z0), new(x0, 0, z0), new(x0, h, z0), new(x1, h, z0));  // north

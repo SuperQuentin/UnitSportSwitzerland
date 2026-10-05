@@ -50,6 +50,23 @@ door **only on a building `BuildingTypes.SiteFor` calls a site**, and allows a p
 bays and `BayToDoorGap` between a bay and the main door, while every other pair still keeps
 `MinGap`. An ordinary building's rules are untouched.
 
+## A turned solid, and what it does and does not buy
+
+`--sitecheck`'s warehouse is turned **31°** (#524's lesson). Every real Swiss building is at some
+angle and every synthetic one here was square to the world, so the rotated path — bay placement on
+an angled wall, `DoorOnWall` against angled triangles, `FitEntry` and `Entrances` in a turned plan
+frame, and the validator's entrance-to-doorway match — was not exercised at all. It is now, and
+the turned warehouse keeps its 4 bays and a valid plan.
+
+It does **not** catch a mirrored wall tangent, and that was checked rather than assumed: inverting
+`t` in the bay loop leaves `--sitecheck` and `--doorcheck` both green. The reason is not a weak
+test — it is that **a bay row is symmetric about the wall's middle by construction**, so a mirror
+maps the set of positions onto itself. Where the row would be asymmetric (a wall with room on only
+one side), a mirror puts the bays where there is no wall and `DoorOnWall` drops them, which the
+count assertion does see. So the handedness of `t` is genuinely immaterial here — unlike
+`SiteYards`'s heading (#516), where it decides which way a vehicle faces and a physical
+nose-before-tail assertion was needed.
+
 ## Check
 
 `--doorcheck` (tier 1) covers it, and its 60 x 30 m works hall now goes through the industrial
