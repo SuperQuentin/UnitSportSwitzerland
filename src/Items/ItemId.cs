@@ -166,7 +166,8 @@ public enum ItemId
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
-public enum ItemCategory { Gear, Food, Water, Money, Medical, Scrap, Mineral, Part, Cosmetic, Clothing }
+/// <remarks>Append-only. <c>Produce</c> (#494): seeds and raw harvests, bought and sold at a farm co-op.</remarks>
+public enum ItemCategory { Gear, Food, Water, Money, Medical, Scrap, Mineral, Part, Cosmetic, Clothing, Produce }
 
 /// <summary>What pressing Use does with the item in hand.</summary>
 public enum ItemUse
@@ -211,4 +212,6 @@ public enum ItemUse
     Smoke,
     /// <summary>Use, at a Postauto stop, recalls a fallen team-mate (<see cref="ItemId.Dogtag"/>, #480).</summary>
     Recall,
+    /// <summary>Use works the field cell ahead (#494, <c>Farming.HandFarming</c>): a hoe tills, a seed sows, fertiliser feeds a sown crop.</summary>
+    Farm,
 }
