@@ -110,10 +110,12 @@ public static class DownloadManifest
 }
 
 /// <summary>
-/// Pure STAC/geometry helpers for the swissALTI3D tile-list path: turning a multihash into the
-/// checksum we verify against, an item id into the tile and flight year it names, a resolution
-/// into the asset-filename pattern for it, and a tile set into the WGS84 bbox the STAC query
-/// needs. None of these touch the network; <c>SwissDownload.AltiAsync</c> is built out of them.
+/// Pure STAC/geometry helpers the per-dataset resolvers are built out of: turning a multihash
+/// into the checksum we verify against, an item id into the tile and flight year it names, a
+/// resolution into the asset-filename pattern for it, a tile set into the WGS84 bbox the STAC
+/// query needs (swissALTI3D's <c>AltiAsync</c>), picking the one STAC item a release-only
+/// dataset wants (swissTLM3D's <c>TlmAsync</c>), and the fixed-URL case that is not STAC at all
+/// (GWR's <c>GwrAsync</c>). None of these touch the network.
 /// </summary>
 public static partial class SwissStacUtil
 {
@@ -183,4 +185,44 @@ public static partial class SwissStacUtil
         double maxN = (tiles.Max(t => t.N) + 1) * 1000.0;
         return BboxLv95ToWgs84(minE, minN, maxE, maxN);
     }
+
+    /// <summary>
+    /// Index of the item whose <c>datetime</c> sorts latest, by plain ordinal text comparison --
+    /// correct because STAC's are ISO-8601, which sorts the same as text or as a date. Ties keep
+    /// the first one seen, same as Python's <c>max()</c>. -1 for an empty list. This <i>is</i>
+    /// swissTLM3D's whole "latest release only" business logic: the collection keeps every past
+    /// release as its own STAC item, and a plain query would otherwise hand back several. Port of
+    /// the <c>max(features, key=lambda f: f.get("properties", {}).get("datetime", ""))</c> line in
+    /// <c>resolve_swisstlm3d</c>.
+    /// </summary>
+    public static int IndexOfLatestDatetime(IReadOnlyList<string> datetimes)
+    {
+        if (datetimes.Count == 0) return -1;
+        int best = 0;
+        for (int i = 1; i < datetimes.Count; i++)
+            if (string.CompareOrdinal(datetimes[i], datetimes[best]) > 0) best = i;
+        return best;
+    }
+
+    /// <summary>
+    /// Which of a swissTLM3D item's asset keys to fetch: every <c>.gpkg.zip</c> one, or -- on a
+    /// release that published only the legacy Esri format -- every <c>.gdb.zip</c> one instead.
+    /// Port of the pattern-then-fallback in <c>resolve_swisstlm3d</c> (<c>re.search</c> against
+    /// <c>\.gpkg\.zip$</c>, the <c>.gdb.zip</c> suffix check on empty <c>matches</c>).
+    /// </summary>
+    public static IReadOnlyList<string> TlmAssetKeys(IEnumerable<string> assetKeys)
+    {
+        var keys = assetKeys.ToList();
+        var gpkg = keys.Where(k => k.EndsWith(".gpkg.zip", StringComparison.Ordinal)).ToList();
+        return gpkg.Count > 0 ? gpkg : keys.Where(k => k.EndsWith(".gdb.zip", StringComparison.Ordinal)).ToList();
+    }
+
+    /// <summary>
+    /// GWR/RegBL is not a STAC collection at all: BFS publishes one zip per canton (or "ch" for
+    /// the whole country) at a fixed URL, so there is no item listing and -- unlike every other
+    /// dataset here -- no checksum to verify against; the skip decision falls back to size alone,
+    /// same as the Python tool's. Port of <c>resolve_gwr</c>.
+    /// </summary>
+    public static (string Url, string Filename) GwrAsset(string canton) =>
+        ($"https://public.madd.bfs.admin.ch/{canton}.zip", $"gwr_{canton}.zip");
 }

@@ -9,6 +9,16 @@
   `switzerland.bin` lives in `tools/MapCore/` and is an **embedded resource** of that assembly, so the
   game reads it with no data path or export filter involved; `CountryData.LoadPreferringFile` still
   prefers a loose copy, which is what `--bake` writes.
+- **Downloads are C#, not Python, since #515**: `MapCore/SwissDownload` talks to the swisstopo STAC
+  API itself for **swissALTI3D tiles, swissTLM3D and GWR** (`AltiAsync`, `TlmAsync`, `GwrAsync`),
+  with `swiss_data.py`'s own parallel jobs, byte-range fetches for big files, `.part` resume and
+  SHA-256 verification against `checksum:multihash`. It shares that tool's per-directory
+  `.swiss_data_manifest.json` byte for byte, so a machine that has used either one never
+  re-downloads the other's files. TLM picks the **latest release** by `datetime` and prefers
+  `.gpkg.zip`; GWR is not STAC at all but one zip per canton at
+  `public.madd.bfs.admin.ch/<canton>.zip`, with no published checksum, so its skip decision falls
+  back to size/ETag/Last-Modified. Still Python: buildings sheets, cycle routes, OSM and bathymetry,
+  whose per-dataset resolvers are not ported. `swiss_data.py` stays as the standalone tool.
 - **Region setup wizard**: `dotnet run --project tools/MapSetup` (`tools/MapSetup/`, Spectre.Console).
   Terminal map of CH (raw 24-bit ANSI, half-block pixels) to select tiles (rectangle, brush, town +
   radius, canton), an estimate table (download / disk / time per step), then it chains the whole

@@ -33,12 +33,14 @@ public sealed record DownloadResult(int Files, long Bytes, double Seconds, int S
 /// <para>
 /// Left out, deliberately, because the game does not need them: <c>--fill-disk</c> (and the disk
 /// budget it needs), <c>--dry-run</c>, <c>--list</c>, and every dataset resolver except
-/// swissALTI3D's (swissTLM3D, swissBUILDINGS3D, swissBATHY3D, GWR, Veloland/Mountainbikeland,
-/// OSM) -- <see cref="CollectionAsync"/> is the generic "every asset of every STAC item in this
-/// collection (bbox, and optionally a filename filter)" building block those would be written on
-/// top of, but the per-dataset business logic (latest flight only, nationwide vs. per-sheet,
-/// which zip extension) is not reproduced here. <see cref="AltiAsync"/> is the one resolver fully
-/// ported, because the game always knows exactly which 1 km tiles it wants.
+/// swissALTI3D's, swissTLM3D's and GWR's (swissBUILDINGS3D, swissBATHY3D,
+/// Veloland/Mountainbikeland, OSM) -- <see cref="CollectionAsync"/> is the generic "every asset
+/// of every STAC item in this collection (bbox, and optionally a filename filter)" building block
+/// those would be written on top of, but their per-dataset business logic (nationwide vs.
+/// per-sheet, which zip extension) is not reproduced here. <see cref="AltiAsync"/>,
+/// <see cref="TlmAsync"/> and <see cref="GwrAsync"/> are the three resolvers fully ported: the
+/// terrain, roads/place-name and building-register data the game needs with zero external
+/// dependencies.
 /// </para>
 /// </summary>
 public static class SwissDownload
@@ -111,6 +113,47 @@ public static class SwissDownload
                     candidates.Add((asset.Href, asset.Key, asset.Sha256));
 
         return await RunAsync(outDir, candidates, progress, ct, jobs);
+    }
+
+    /// <summary>
+    /// Downloads the swissTLM3D GeoPackage (<c>ch.swisstopo.swisstlm3d</c>): one nationwide file
+    /// the preprocessor reads for roads, railways, watercourses, land cover and trees, so no
+    /// bbox -- the business logic is entirely in <i>which</i> of several releases to take. The
+    /// collection keeps every past release as its own STAC item; this picks the one whose
+    /// <c>datetime</c> sorts latest (<see cref="SwissStacUtil.IndexOfLatestDatetime"/>) and takes
+    /// its <c>.gpkg.zip</c> asset(s), falling back to <c>.gdb.zip</c> if that release published
+    /// only the legacy format (<see cref="SwissStacUtil.TlmAssetKeys"/>). Port of
+    /// <c>resolve_swisstlm3d</c>.
+    /// </summary>
+    public static async Task<DownloadResult> TlmAsync(string outDir, IStepProgress progress,
+        CancellationToken ct, int jobs = 8)
+    {
+        progress.Show("resolving swisstlm3d assets...");
+        var items = await ListStacItemsAsync("ch.swisstopo.swisstlm3d", null, ct);
+        if (items.Count == 0) return new DownloadResult(0, 0, 0, 0, null);
+
+        var latest = items[SwissStacUtil.IndexOfLatestDatetime(items.Select(i => i.Datetime).ToList())];
+        var keys = new HashSet<string>(SwissStacUtil.TlmAssetKeys(latest.Assets.Select(a => a.Key)));
+        var candidates = latest.Assets.Where(a => keys.Contains(a.Key))
+            .Select(a => (a.Href, a.Key, a.Sha256)).ToList();
+
+        return await RunAsync(outDir, candidates, progress, ct, jobs);
+    }
+
+    /// <summary>
+    /// Downloads the GWR/RegBL building register for one canton (or "ch" for the whole country),
+    /// which the preprocessor reads for building use, year and storeys and the place index is
+    /// built from. Not a STAC collection at all -- BFS publishes one zip per canton at a fixed
+    /// URL (<see cref="SwissStacUtil.GwrAsset"/>), so there is no item listing and, unlike every
+    /// other dataset here, no checksum to verify against: the shared engine's HEAD-check skip
+    /// decision falls back to size alone, same as the Python tool's. Port of <c>resolve_gwr</c>.
+    /// </summary>
+    public static Task<DownloadResult> GwrAsync(string outDir, string canton, IStepProgress progress,
+        CancellationToken ct, int jobs = 8)
+    {
+        var (url, filename) = SwissStacUtil.GwrAsset(canton);
+        var candidates = new List<(string Url, string Filename, string? Sha256)> { (url, filename, null) };
+        return RunAsync(outDir, candidates, progress, ct, jobs);
     }
 
     /// <summary>

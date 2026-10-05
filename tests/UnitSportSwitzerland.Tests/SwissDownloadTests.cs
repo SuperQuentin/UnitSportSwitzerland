@@ -405,6 +405,67 @@ public class SwissDownloadTests
     }
 
     // ---------------------------------------------------------------------------
+    // swissTLM3D "latest release only" (IndexOfLatestDatetime, TlmAssetKeys).
+    // ---------------------------------------------------------------------------
+
+    [Fact]
+    public void IndexOfLatestDatetime_PicksLatestByOrdinalText()
+    {
+        var dts = new[] { "2021-03-01T00:00:00Z", "2024-09-12T00:00:00Z", "2019-01-01T00:00:00Z" };
+        Assert.Equal(1, SwissStacUtil.IndexOfLatestDatetime(dts));
+    }
+
+    [Fact]
+    public void IndexOfLatestDatetime_Tie_KeepsFirst()
+    {
+        var dts = new[] { "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z" };
+        Assert.Equal(0, SwissStacUtil.IndexOfLatestDatetime(dts));
+    }
+
+    [Fact]
+    public void IndexOfLatestDatetime_Empty_ReturnsNegativeOne()
+    {
+        Assert.Equal(-1, SwissStacUtil.IndexOfLatestDatetime(Array.Empty<string>()));
+    }
+
+    [Fact]
+    public void TlmAssetKeys_PrefersGpkgZip()
+    {
+        var keys = new[] { "swissTLM3D_2024.gpkg.zip", "swissTLM3D_2024.gdb.zip", "readme.txt" };
+        var result = SwissStacUtil.TlmAssetKeys(keys);
+        Assert.Equal(new[] { "swissTLM3D_2024.gpkg.zip" }, result);
+    }
+
+    [Fact]
+    public void TlmAssetKeys_FallsBackToGdbZip_WhenNoGpkgZip()
+    {
+        var keys = new[] { "swissTLM3D_2024.gdb.zip", "readme.txt" };
+        var result = SwissStacUtil.TlmAssetKeys(keys);
+        Assert.Equal(new[] { "swissTLM3D_2024.gdb.zip" }, result);
+    }
+
+    [Fact]
+    public void TlmAssetKeys_NeitherExtension_ReturnsEmpty()
+    {
+        var keys = new[] { "readme.txt", "metadata.xml" };
+        Assert.Empty(SwissStacUtil.TlmAssetKeys(keys));
+    }
+
+    // ---------------------------------------------------------------------------
+    // GWR fixed-URL resolution (not STAC at all).
+    // ---------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("vs", "https://public.madd.bfs.admin.ch/vs.zip", "gwr_vs.zip")]
+    [InlineData("ch", "https://public.madd.bfs.admin.ch/ch.zip", "gwr_ch.zip")]
+    public void GwrAsset_BuildsFixedBfsUrlAndFilename(string canton, string expectedUrl, string expectedFilename)
+    {
+        var (url, filename) = SwissStacUtil.GwrAsset(canton);
+        Assert.Equal(expectedUrl, url);
+        Assert.Equal(expectedFilename, filename);
+    }
+
+    // ---------------------------------------------------------------------------
 
     private static string MakeTempDir()
     {

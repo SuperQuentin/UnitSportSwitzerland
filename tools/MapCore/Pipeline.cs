@@ -116,7 +116,9 @@ public static partial class Planner
         var sel = c.Selection.Tiles.ToList();
         var stats = c.Stats;
         bool py = c.Python != null;
-        string noPython = "Python not found (needed for downloads)";
+        // Terrain, swissTLM3D and GWR are downloaded by SwissDownload now (#515 phase 1), so only the
+        // datasets whose resolvers are not ported yet still gate on Python.
+        string noPython = "Python not found (needed for this dataset)";
 
         // ---- which tiles need what -------------------------------------------------------
         var toDownload = sel.Where(t => !c.Local.Downloaded.Contains(t) && !c.Local.Built.Contains(t)).ToList();
@@ -159,8 +161,8 @@ public static partial class Planner
             DiskBytes = needTlm && !c.Local.TlmZip ? tlmZip : 0,
             DiskPath = p.TlmDir,
             Seconds = tlmZip / stats.EffectiveDownload + 5,
-            Skip = !wantRoads ? "roads layer off" : !needTlm || c.Local.TlmZip ? "already here" : !py ? noPython : null,
-            Run = r => r.SwissData(["--out", p.TlmDir, "swisstlm3d"]),
+            Skip = !wantRoads ? "roads layer off" : !needTlm || c.Local.TlmZip ? "already here" : null,
+            Run = r => r.Download(() => SwissDownload.TlmAsync(p.TlmDir, r.Progress, r.Cancellation)),
         });
 
         // ---- buildings sheets -----------------------------------------------------------------
@@ -205,8 +207,8 @@ public static partial class Planner
             DiskPath = p.GwrDir,
             Seconds = gwrZip / stats.EffectiveDownload + 3,
             Skip = !wantGwr ? "cadastre and places off" : gwrCovered ? "data.sqlite already covers the selection"
-                 : c.Local.GwrZips.Contains(gwrPick) ? "already here" : !py ? noPython : null,
-            Run = r => r.SwissData(["--out", p.GwrDir, "gwr", "--canton", gwrPick]),
+                 : c.Local.GwrZips.Contains(gwrPick) ? "already here" : null,
+            Run = r => r.Download(() => SwissDownload.GwrAsync(p.GwrDir, gwrPick, r.Progress, r.Cancellation)),
         });
 
         // ---- cycle routes -----------------------------------------------------------------------
