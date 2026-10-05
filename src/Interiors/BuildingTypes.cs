@@ -5,10 +5,23 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Interiors;
 
 /// <summary>What a group of buildings is, beyond the per-solid <see cref="BuildingKind"/>.</summary>
-public enum BuildingType : byte { None = 0, Church = 1, Bank = 2 }
+public enum BuildingType : byte
+{
+    None = 0, Church = 1, Bank = 2,
+    // stored plans hold these as numbers: new types go on the end, and a number is never reused.
+    // 3-7 are reserved for #497's industrial sites (Warehouse, Factory, Depot, Mechanic,
+    // Dealership), which lands first; #501 sits after them. Agreed on #497 before either merged.
+    /// <summary>One of the nine IKEA stores, recognised by position (#501, <see cref="Landmarks"/>).</summary>
+    Ikea = 8,
+}
 
 /// <summary>The role one solid plays in its group.</summary>
-public enum BuildingPart : byte { None = 0, Nave = 1, Tower = 2 }
+public enum BuildingPart : byte
+{
+    None = 0, Nave = 1, Tower = 2,
+    /// <summary>The main slab of a landmark store (#501).</summary>
+    Store = 3,
+}
 
 /// <summary>
 /// Solids that are one building to a visitor. <see cref="Members"/>[0] is the primary: the
@@ -142,6 +155,13 @@ public static class BuildingTypes
             }
             groups.Add(new BuildingGroup(BuildingType.Church, members, parts));
         }
+
+        // a landmark is recognised by where it stands, not by its shape (#501): the tile knows its
+        // own id, so this stays a pure function of the tile's bytes like everything above it. One
+        // member for now — grouping a store with its garden centre and its annexes is a follow-up.
+        if (Landmarks.Match(tile, boxes) is { } hit && groups.All(g => !g.Members.Contains(hit.Index)))
+            groups.Add(new BuildingGroup(hit.Store.Type, new[] { hit.Index }, new[] { BuildingPart.Store }));
+
         return new BuildingTypeMap(boxes, groups);
     }
 
