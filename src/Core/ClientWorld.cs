@@ -376,6 +376,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 vehicles.Visible = shown;
             };
         }
+        // a check's farm co-op on a fixture world (#494, --farmcoop E,N): the server is given the same
+        Farming.FarmMarket.StandInFromArgs(source, origin);
 
         var environment = StyleKit.NewEnvironment();
         _worldEnvironment = new WorldEnvironment { Environment = environment };

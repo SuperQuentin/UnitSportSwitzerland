@@ -2,6 +2,7 @@ using Godot;
 using UnitSport.Interiors;
 using UnitSport.Items;
 using UnitSport.Loot;
+using UnitSport.Terrain.Format;
 
 namespace UnitSport.Farming;
 
@@ -52,6 +53,35 @@ public static class FarmMarket
     public static DoorIndex.Entry? CoopDoor(Vector3 at, float reach) =>
         DoorIndex.Nearest(at, reach, ShopType.FarmCoop);
 
+    // ---- a stand-in co-op for the checks (a fixture world has no buildings) ----
+
+    /// <summary>The made-up tile the stand-in's door is filed under in <see cref="DoorIndex"/>: no real tile has it.</summary>
+    public static readonly TileId StandInTile = new(-1, -1);
+
+    /// <summary>
+    /// A farm co-op's door at <paramref name="door"/> (world, on the ground) facing
+    /// <paramref name="outward"/>, with no building behind it: what a check delivers to. Replaces
+    /// the previous stand-in. Main thread.
+    /// </summary>
+    public static void StandIn(Vector3 door, Vector3 outward)
+    {
+        var spot = new DoorSpot(0, door, outward.Normalized(), 6f, 4.5f) { Kind = BuildingKind.Commercial, Shop = ShopType.FarmCoop };
+        DoorIndex.SetTile(StandInTile, Vector3.Zero, [spot]);
+        _lastAt = new Vector3(float.NaN, 0, 0);
+    }
+
+    /// <summary>
+    /// <c>--farmcoop E,N</c> (LV95) on a fixture world: the stand-in's door there, facing south (its yard), on
+    /// the course's ground. The server and every client are given the same flag, so all agree
+    /// where it is (<c>tools/tractornetcheck.sh</c>). Ignored on a real map.
+    /// </summary>
+    public static void StandInFromArgs(Terrain.IChunkSource source, Core.WorldOrigin origin)
+    {
+        if (source is not Terrain.Fixture.FixtureChunkSource fixture || Core.SpawnPoint.ParseLv95("--farmcoop") is not var (e, n)) return;
+        StandIn(origin.ToWorld(e, n, fixture.GroundAt(e, n)), Vector3.Back);
+        GD.Print($"[farm] stand-in farm co-op at LV95 {e:F0}/{n:F0}");
+    }
+
     /// <summary>
     /// Sell <paramref name="count"/> of <paramref name="item"/> at the co-op by <paramref name="at"/>:
     /// asks the server (offline: this peer plays it), and calls <paramref name="done"/> on the main
@@ -66,6 +96,6 @@ public static class FarmMarket
             done(0);
             return;
         }
-        shops.Deliver(item, count, at, done);
+        shops.Deliver(item, count, at, CoopDoor(at, DeliverReach)?.Key.ToString() ?? "", done);
     }
 }

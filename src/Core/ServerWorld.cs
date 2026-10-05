@@ -153,6 +153,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // handed to everyone who walks in afterwards
         _interiors = Interiors.InteriorManager.Create(this, source, origin);
         _interiors.Players = _players;
+        // a check's farm co-op on a fixture world (#494, --farmcoop E,N): the clients are given the same
+        Farming.FarmMarket.StandInFromArgs(local, origin);
 
         // loot in those interiors: the server rolls it and remembers what was taken
         Loot.LootService.Create(this);
