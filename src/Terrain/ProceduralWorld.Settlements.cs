@@ -324,7 +324,7 @@ public sealed partial class ProceduralWorld
     /// through their points every <see cref="RoadStep"/>, and the village streets. A segment is
     /// cut into the same steps whichever tile asks, so pieces meet at a seam.
     /// </summary>
-    private IEnumerable<(List<(double E, double N)> Points, RoadClass Class)> LinesNear(
+    private IEnumerable<(List<(double E, double N)> Points, RoadClass Class, string Key, double FromM)> LinesNear(
         double minE, double minN, double maxE, double maxN)
     {
         var net = Network.Instance;
@@ -355,23 +355,33 @@ public sealed partial class ProceduralWorld
                 }
             }
             points.Add((line.E[last + 1], line.N[last + 1]));
-            yield return (points, line.Class);
+            yield return (points, line.Class, $"gen-line-{l}", DrawnStation(l, first));
         }
 
         foreach (var v in VillagesNear(minE, minN, maxE, maxN))
-            foreach (var s in v.Streets)
-                yield return (s.Points, s.Class);
+            for (int k = 0; k < v.Streets.Count; k++)
+                yield return (v.Streets[k].Points, v.Streets[k].Class, $"gen-village-{v.Slot.Id}-{k}", 0);
     }
 
-    public RoadTile? BuildRoads(TileId id, Blend? blend = null)
+    public RoadTile? BuildRoads(TileId id, Blend? blend = null) => BuildRoadsKeyed(id, blend).Tile;
+
+    /// <summary>
+    /// Which generated line a road segment is a piece of, and how far along it the piece starts:
+    /// the stand-in for the TLM uuid and along-line metre RoadGen keys its per-street choices on.
+    /// </summary>
+    public readonly record struct RoadKey(string Line, double FromM);
+
+    /// <summary><see cref="BuildRoads"/>, with a <see cref="RoadKey"/> per segment.</summary>
+    public (RoadTile? Tile, List<RoadKey> Keys) BuildRoadsKeyed(TileId id, Blend? blend = null)
     {
         CheckBlend(id, blend);
         blend?.PrepareLattice();
         var site = new Site(LatticeFor(id, fine: false), blend);
         double maxE = id.MinE + ChunkFormat.TileSizeM;
         var segments = new List<RoadSegment>();
-        foreach (var (points, cls) in LinesNear(id.MinE, id.MinN, maxE, id.MaxN))
-            foreach (var piece in Clip(points, id.MinE, id.MinN, maxE, id.MaxN))
+        var keys = new List<RoadKey>();
+        foreach (var (points, cls, key, fromM) in LinesNear(id.MinE, id.MinN, maxE, id.MaxN))
+            foreach (var (piece, at) in Clip(points, id.MinE, id.MinN, maxE, id.MaxN))
             {
                 var xyz = new float[piece.Count * 3];
                 for (int i = 0; i < piece.Count; i++)
@@ -388,24 +398,63 @@ public sealed partial class ProceduralWorld
                     Width = RoadFormat.DefaultWidth(cls),
                     Points = xyz,
                 });
+                keys.Add(new RoadKey(key, fromM + at));
             }
-        return segments.Count == 0 ? null : new RoadTile { Id = id, Segments = segments };
+        return (segments.Count == 0 ? null : new RoadTile { Id = id, Segments = segments }, keys);
+    }
+
+    private readonly Dictionary<int, double[]> _drawnStations = new();
+
+    /// <summary>
+    /// Metres along a valley line's drawn polyline (as <see cref="LinesNear"/> draws it) to its
+    /// node <paramref name="node"/>, the same whichever tile asks.
+    /// </summary>
+    private double DrawnStation(int l, int node)
+    {
+        double[]? at;
+        lock (_drawnStations) _drawnStations.TryGetValue(l, out at);
+        if (at is null)
+        {
+            var line = Network.Instance.Lines[l];
+            at = new double[line.Count];
+            for (int i = 0; i + 1 < line.Count; i++)
+            {
+                int i0 = Math.Max(0, i - 1), i3 = Math.Min(line.Count - 1, i + 2);
+                double len = Math.Sqrt(Sq(line.E[i + 1] - line.E[i]) + Sq(line.N[i + 1] - line.N[i]));
+                int steps = Math.Max(1, (int)Math.Ceiling(len / RoadStep));
+                double pe = line.E[i], pn = line.N[i], sum = 0;
+                for (int s = 1; s <= steps; s++)
+                {
+                    double t = s / (double)steps;
+                    double e = s == steps ? line.E[i + 1] : CatmullRom(line.E[i0], line.E[i], line.E[i + 1], line.E[i3], t);
+                    double n = s == steps ? line.N[i + 1] : CatmullRom(line.N[i0], line.N[i], line.N[i + 1], line.N[i3], t);
+                    sum += Math.Sqrt(Sq(e - pe) + Sq(n - pn));
+                    (pe, pn) = (e, n);
+                }
+                at[i + 1] = at[i] + sum;
+            }
+            lock (_drawnStations) _drawnStations[l] = at;
+        }
+        return at[node];
     }
 
     /// <summary>
     /// Cuts a polyline to a box, inserting the crossing points (Liang-Barsky per segment). Two
     /// tiles sharing an edge compute the same crossing from the same segment, so pieces meet.
     /// </summary>
-    private static List<List<(double E, double N)>> Clip(List<(double E, double N)> line,
+    private static List<(List<(double E, double N)> Points, double At)> Clip(List<(double E, double N)> line,
         double minE, double minN, double maxE, double maxN)
     {
-        var pieces = new List<List<(double E, double N)>>();
+        var pieces = new List<(List<(double E, double N)> Points, double At)>();
         List<(double E, double N)>? current = null;
+        double along = 0;
         for (int i = 0; i + 1 < line.Count; i++)
         {
             var a = line[i];
             var b = line[i + 1];
             double dx = b.E - a.E, dy = b.N - a.N;
+            double from = along;
+            along += Math.Sqrt(dx * dx + dy * dy);
             double t0 = 0, t1 = 1;
             if (!Edge(-dx, a.E - minE) || !Edge(dx, maxE - a.E)
                 || !Edge(-dy, a.N - minN) || !Edge(dy, maxN - a.N)
@@ -421,7 +470,7 @@ public sealed partial class ProceduralWorld
             if (current == null || t0 > 0)
             {
                 current = new List<(double E, double N)> { start };
-                pieces.Add(current);
+                pieces.Add((current, from + (along - from) * t0));
             }
             current.Add(end);
             if (t1 < 1) current = null;
@@ -435,7 +484,7 @@ public sealed partial class ProceduralWorld
                 return true;
             }
         }
-        pieces.RemoveAll(p => p.Count < 2);
+        pieces.RemoveAll(p => p.Points.Count < 2);
         return pieces;
     }
 
@@ -596,7 +645,7 @@ public sealed partial class ProceduralWorld
                 }
         }
 
-        foreach (var (points, cls) in LinesNear(id.MinE - margin, id.MinN - margin, maxE + margin, id.MaxN + margin))
+        foreach (var (points, cls, _, _) in LinesNear(id.MinE - margin, id.MinN - margin, maxE + margin, id.MaxN + margin))
         {
             double radius = RoadFormat.DefaultWidth(cls) / 2 + 3;
             for (int i = 0; i + 1 < points.Count; i++)

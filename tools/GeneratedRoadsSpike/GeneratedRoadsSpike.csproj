@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Spike for #559: runs RoadGen's network stage (TileRewriter) on generated tiles. Checks that a
+       tile rewritten alone with a one-tile halo equals the same tile from one big block (seams),
+       times it, and counts what it adds on the generated network. No Godot. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- the generator's doc comments cref game types this project does not compile -->
+    <NoWarn>CS1574;CS1584;CS1581;CS1580</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\Terrain\ProceduralWorld*.cs" Link="Generator\%(Filename)%(Extension)" />
+    <ProjectReference Include="..\TerrainFormat\TerrainFormat.csproj" />
+    <ProjectReference Include="..\RoadGen\RoadGen.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\src\Terrain\swiss_relief.gz" LogicalName="swiss_relief.gz" WithCulture="false" />
+  </ItemGroup>
+
+</Project>
