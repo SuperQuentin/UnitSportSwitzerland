@@ -271,6 +271,15 @@ src/Player/StairsNet     net    tools/stairsnetcheck.sh
 src/Player/Airstairs     net    tools/stairsnetcheck.sh
 src/Avatar/Airstairs     net    tools/stairsnetcheck.sh
 src/Player/FootPlayer.De net    tools/stairsnetcheck.sh
+# aircraft at the airport stands (#422): the fixture airport planned like the real ones, stairs docked, refills
+src/World/AirportStands  quick  --airportcheck --chunks fixture:airport --traffic 0
+src/World/AirportCheck   quick  --airportcheck --chunks fixture:airport --traffic 0
+src/Terrain/Fixture/FixtureAirport quick --airportcheck --chunks fixture:airport --traffic 0
+tools/TerrainFormat/Airport quick --airportcheck --chunks fixture:airport --traffic 0
+src/Vehicles/AirstairsDock quick --airportcheck --chunks fixture:airport --traffic 0
+src/World/AirportStands  net    tools/airportnetcheck.sh
+src/Vehicles/VehicleBody net    tools/airportnetcheck.sh
+tools/airportnetcheck    net    tools/airportnetcheck.sh
 src/Player/Airliner      net    tools/airlinernetcheck.sh
 src/Avatar/AirlinerRig   net    tools/airlinernetcheck.sh
 src/Avatar/A320Deck      net    tools/airlinernetcheck.sh
@@ -292,6 +301,7 @@ src/BattleRoyale/BrPlane quick  --flycheck freighter --world flat
 src/Player/Airliner      quick  --flycheck an124 --world flat
 src/Avatar/An124         quick  --flycheck an124 --world flat
 src/Player/AirlinerCirc  quick  --flycheck an124 --world flat
+src/Player/Airliner      quick  --flycheck an124 --world flat --airliner sim
 src/Avatar/An124         quick  --an124check --world fixture --traffic 0
 src/Player/An124Check    quick  --an124check --world fixture --traffic 0
 src/Player/Airliner      quick  --an124check --world fixture --traffic 0

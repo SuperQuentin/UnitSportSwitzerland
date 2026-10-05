@@ -43,3 +43,7 @@
   before the release and therefore before the deltas. If they ever fail the release still stands, as by hand.
 - Still open from #92: `release.sh` itself is GNU-only (`sed -i` with no argument, `tar --mode`, `tar --wildcards`),
   so a **macOS** host cannot run it even though CI can. See `local-release.md`.
+- **Android APK in CI (#544):** the runner image already has the Android SDK (`ANDROID_HOME`) and JDK 17, and a fresh
+  editor settings file picks both up. `setup-dotnet` installs 8.0.x and 9.0.x (the Android publish targets net9.0). The
+  keystore comes from the repo secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_USER` and `ANDROID_KEYSTORE_PASSWORD`,
+  decoded into `$RUNNER_TEMP`. Without them the release ships no APK and the notes say so. Details: `local-release`.

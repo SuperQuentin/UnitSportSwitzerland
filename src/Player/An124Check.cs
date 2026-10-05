@@ -58,6 +58,23 @@ public partial class An124Check : Node
 
     private static bool Drawn => DisplayServer.GetName() != "headless";
 
+    /// <summary>No face of the drawn body crosses the climb over the ladder's upper half, under the upper deck's floor up through it.</summary>
+    private static bool HatchClear()
+    {
+        var model = An124MeshBuilder.Build();
+        var faces = model.GetNode<MeshInstance3D>("Body").Mesh.GetFaces();
+        model.Free();
+        foreach (float z in new[] { 12.0f, 13.5f, UpperRearZ - 0.6f })
+            foreach (float dx in new[] { -0.25f, 0f, 0.25f })
+            {
+                var a = AircraftMeshBuilder.Flip(new Vector3(LadderX + dx, HoldCeilingY - 0.3f, z));
+                var b = AircraftMeshBuilder.Flip(new Vector3(LadderX + dx, UpperFloorY + 0.3f, z));
+                for (int i = 0; i + 2 < faces.Length; i += 3)
+                    if (Geometry3D.SegmentIntersectsTriangle(a, b, faces[i], faces[i + 1], faces[i + 2]).VariantType != Variant.Type.Nil) return false;
+            }
+        return true;
+    }
+
     /// <summary>A picture from a camera of its own, at an authored eye looking at an authored point of the aircraft.</summary>
     private async Task Shot(string name, Vector3 eye, Vector3 at)
     {
@@ -149,6 +166,7 @@ public partial class An124Check : Node
         Expect(jet.Seats.Length == 3 + CabinRows * CabinSeatX.Length && jet.Decks[0].CargoBays.Length == 1,
             $"{jet.Seats.Length} seats, {jet.Decks[0].CargoBays.Length} cargo bay");
         await Shot("parked", new Vector3(34f, 9f, 52f), new Vector3(0, 6f, 2f));
+        await Shot("parked_side", new Vector3(64f, 5f, -2f), new Vector3(0, 5.5f, -2f));
         var sill = AirstairsDock.LocalSill(jet.Decks[0], CrewDoor);
         float sillStand = sill is { } s0 ? (Frame()!.GlobalTransform * s0.Edge).Y - me.GlobalPosition.Y : -1f;
 
@@ -187,6 +205,7 @@ public partial class An124Check : Node
         Expect(await Path(me, (0f, 23.6f), (0f, 22.4f), (spot.X, spot.Z)) && me.TryInteract() && await Until(() => (me.SeatIndex - 3) / CabinSeatX.Length == (cabinSeat - 3) / CabinSeatX.Length, 5),
             $"E sat in a seat on the upper deck, row {(cabinSeat - 3) / CabinSeatX.Length} (seat {me.SeatIndex})");
         await Shot("upper_deck", new Vector3(-0.3f, UpperFloorY + 1.7f, 15.6f), new Vector3(0, UpperFloorY + 0.8f, 23f));
+        await Shot("upper_deck_windows", new Vector3(-0.9f, UpperFloorY + 1.45f, 13.4f), new Vector3(2.6f, UpperFloorY + 1.0f, 16.6f));
         Expect(me.TryInteract() && await Until(() => me.Aboard && me.SeatIndex == 0 && me.Ride == RideKind.OnFoot, 5), "E stood up into the aisle");
 
         // down the ladder into the hold
@@ -218,6 +237,11 @@ public partial class An124Check : Node
             $"carried up on the floor as it rose {Where(me)}");
         Expect(me.TryInteract() && await Until(() => Kneel() >= 1f, 12), $"and knelt it again (kneel {Kneel():F2})");
 
+        // the hatch at the ladder's top is open in the drawn model too, not only in the walk (#547)
+        Expect(HatchClear(), "nothing drawn caps the ladder: the hatch to the upper deck is open");
+        await Shot("up_the_ladder", new Vector3(LadderX + 0.4f, FloorY + 1.7f, LadderFootZ - 1.8f), new Vector3(LadderX, UpperFloorY + 0.8f, UpperRearZ));
+        await Shot("top_of_the_ladder", new Vector3(LadderX + 1.2f, UpperFloorY + 1.7f, UpperRearZ + 1.0f), new Vector3(LadderX, UpperFloorY - 1.2f, UpperRearZ - 1.6f));
+        await Shot("upper_deck_from_the_ladder", new Vector3(LadderX + 0.3f, UpperFloorY + 1.7f, UpperRearZ + 0.3f), new Vector3(0, UpperFloorY + 0.8f, 21f));
         // up the ladder, the controls, G shuts everything and it stands up
         bool up = await Path(me, (LadderX, LadderFootZ - 1.0f), (LadderX, UpperRearZ + 1.0f), (0f, 16.4f), (0f, 22.4f), (0f, 23.6f), (PilotHip.X, PilotHip.Z - 0.85f));
         Expect(up && Mathf.Abs(Local(me).Y - UpperFloorY) < 0.3f, $"up the ladder to the pilot's seat {Where(me)}");

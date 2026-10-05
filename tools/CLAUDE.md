@@ -27,6 +27,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `france` — France (cross-border): IGN BD TOPO® via the Géoplateforme WFS (`data.geopf.fr`, Licence Ouverte 2.0) ->...
 - `land-cover` — Land cover: six TLM area layers are rasterised onto the 501x501 vertex lattice -> `.cover` (deflate, ~2 KB/tile) ->...
 - `landings` (world) — `--landings [--landings-file F]`: boat landings and jetties into `landings.json` (`LandingPlanner`: a head at the steamer's plank height, a neck or a ramp from a TLM `Steg`, moved out for water; jetties over the water), after every water pass given `--tlm`
+- `airports` (world) — `--airports --tlm G --osm PBF [--airports-file F]`: airports, stands and runway profiles into `airports.json` (`AirportPlanner`: OSM lead-in lines, paved and free of buildings, a row of A320s, AN-124 and freighter), seconds
 - `bathymetry` — #298: lake and river beds in `.terr` (swissBATHY3D where surveyed, `WaterBed` shelf/drop-off/channel elsewhere, gap fill toward the survey), the still level in `.water` (USWL, u16 level + fetch), `--water`/`--bathy`, seams by 600 m windows, horizon.bin v2 water section (lakes drawn as water from afar), checks and Petit Lac numbers
 - `land-use-polygon-never-overwrite` — A land-use polygon must never overwrite Water in the cover raster
 - `vineyards-live-nutzungsareal-bodenbedeckung` — Vineyards live in `nutzungsareal`, not `bodenbedeckung`

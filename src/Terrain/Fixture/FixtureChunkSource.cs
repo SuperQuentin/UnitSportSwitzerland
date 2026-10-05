@@ -413,6 +413,10 @@ public sealed class FixtureChunkSource : IChunkSource
         }, ct);
     }
 
+    /// <summary>The course's airports (#422), planned as the preprocessor plans the real ones.</summary>
+    public Task<AirportIndex?> LoadAirportsAsync(CancellationToken ct = default) =>
+        Task.FromResult(_course.Airports?.Invoke(_startE, _startN));
+
     /// <summary>The course's ground and water for the pier planner, in LV95.</summary>
     private sealed class Shore(FixtureCourse course, double startE, double startN) : IShoreSampler
     {
