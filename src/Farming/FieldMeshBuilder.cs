@@ -253,7 +253,7 @@ public sealed class FieldMeshBuilder
     private static readonly Color Sprout = Lin(0.45f, 0.66f, 0.22f), Leaf = Lin(0.27f, 0.50f, 0.18f), LeafDark = Lin(0.17f, 0.34f, 0.12f);
     private static readonly Color Cut = Lin(0.55f, 0.66f, 0.30f), Hay = Lin(0.74f, 0.73f, 0.40f), Grass = Lin(0.36f, 0.58f, 0.22f);
     private static readonly Color Gold = Lin(0.88f, 0.71f, 0.32f), Pale = Lin(0.88f, 0.80f, 0.52f), StalkDry = Lin(0.58f, 0.47f, 0.26f);
-    private static readonly Color MaizeGreen = Lin(0.24f, 0.46f, 0.16f), MaizeTop = Lin(0.40f, 0.56f, 0.22f), MaizeDry = Lin(0.74f, 0.64f, 0.40f);
+    private static readonly Color MaizeGreen = Lin(0.24f, 0.46f, 0.16f), MaizeTop = Lin(0.30f, 0.50f, 0.19f), MaizeDry = Lin(0.74f, 0.64f, 0.40f), Tassel = Lin(0.66f, 0.62f, 0.34f);
     private static readonly Color RapeYellow = Lin(0.98f, 0.88f, 0.14f), RapeRipe = Lin(0.50f, 0.44f, 0.25f);
     private static readonly Color SunHead = Lin(0.98f, 0.76f, 0.08f), SunCentre = Lin(0.30f, 0.20f, 0.10f), SunRipe = Lin(0.38f, 0.28f, 0.15f);
     private static readonly Color Tan = Lin(0.72f, 0.64f, 0.40f), Yellowing = Lin(0.60f, 0.58f, 0.27f);
@@ -352,8 +352,10 @@ public sealed class FieldMeshBuilder
         float amp = l.Crop == CropKind.Maize ? 0.10f : 0.07f;
         var col = Tinted(f, CropColour(l.Crop, l.Stage, l.Growth));
         var stalk = Tinted(f, StalkColour(l.Crop, l.Stage, l.Growth));
+        _teeth = _lod == 0 ? (l.Crop switch { CropKind.Maize => 0.35f, CropKind.Sunflower => 0f, CropKind.Rapeseed => 0.10f, _ => 0.13f }) * top / SlabHeight(l.Crop) : 0f;
+        _tip = l.Crop == CropKind.Maize ? Tinted(f, l.Stage == FieldStage.Ripe ? MaizeDry : Tassel) : (col * 1.12f) with { A = 0f };
         float band = _lod == 0 ? MathF.Min(top * 0.4f, l.Crop == CropKind.Maize ? 0.7f : l.Crop == CropKind.Rapeseed ? 0.4f : 0.28f) : 0f;
-        var bandCol = (col * 0.82f) with { A = 0f };
+        var bandCol = (col * 0.72f) with { A = 0f };
         foreach (var p in _pieces)
         {
             Quad(Top(p.A, top, amp), Top(p.B, top, amp), Top(p.C, top, amp), Top(p.D, top, amp), Jit(col, p.A), Jit(col, p.B), Jit(col, p.C), Jit(col, p.D));
@@ -378,10 +380,10 @@ public sealed class FieldMeshBuilder
             switch (l.Crop)
             {
                 case CropKind.Maize: Rows(f, 1.5f, 0.35f, 0.6f, ridge, top, amp); break;
-                case CropKind.Rapeseed: Rows(f, 1.6f, 0.18f, 0.8f, ridge, top, amp); break;
+                case CropKind.Rapeseed: Rows(f, 1.6f, 0.18f, 0.8f, ridge, top, amp, saw: true); break;
                 case CropKind.Sunflower: break;
                 // drill rows, and the tramlines the sprayer drives in, every 18 m
-                default: Rows(f, 1.2f, 0.05f + 0.08f * g, 0.6f, ridge, top, amp, tram: 15); break;
+                default: Rows(f, 1.2f, 0.05f + 0.08f * g, 0.6f, ridge, top, amp, tram: 15, saw: true); break;
             }
         }
         if (_lod == 0 && l.Crop == CropKind.Sunflower && (l.Growth > 0.6f || l.Stage == FieldStage.Ripe))
@@ -410,14 +412,30 @@ public sealed class FieldMeshBuilder
             Quad(ta with { Y = ga }, tb with { Y = gb }, mb, ma, foot, foot, stalk, stalk);
         }
         else Quad(ta with { Y = ga }, tb with { Y = gb }, tb, ta, foot, foot, stalk, stalk);
+        if (_teeth <= 0) return;
+        // maize: tassels along the top edge, a ragged skyline instead of a ruler-straight one
+        int n = Math.Max(1, (int)MathF.Round((b - a).Length() / 0.5f));
+        var tip = _tip;
+        for (int i = 0; i < n; i++)
+        {
+            var p = ta.Lerp(tb, (float)i / n);
+            var q = ta.Lerp(tb, (float)(i + 1) / n);
+            var m = (p + q) * 0.5f;
+            float up = _teeth * (0.6f + 0.4f * MathF.Abs(Corner((int)(m.X * 3f), (int)(m.Z * 3f), 0x7a11u)));
+            Verts.Add(p); Verts.Add(q); Verts.Add(m with { Y = m.Y + up });
+            Colors.Add(bandCol); Colors.Add(bandCol); Colors.Add(tip);
+        }
     }
+
+    private float _teeth;
+    private Color _tip;
 
     /// <summary>
     /// Ridges along the field's rows, <paramref name="spacing"/> apart, cut to the footprint: a roof
     /// of two slopes <paramref name="height"/> high, <paramref name="half"/> either side of the row.
     /// On a slab when <paramref name="top"/> &gt; 0.
     /// </summary>
-    private void Rows(Field f, float spacing, float height, float half, Color col, float top, float amp = 0f, int tram = 0)
+    private void Rows(Field f, float spacing, float height, float half, Color col, float top, float amp = 0f, int tram = 0, bool saw = false)
     {
         col = Tinted(f, col);
         var dark = col.Darkened(0.25f) with { A = 0f };
@@ -440,9 +458,17 @@ public sealed class FieldMeshBuilder
                     Quad(P(a - w, 0.05f), P(b - w, 0.05f), P(b + w, 0.05f), P(a + w, 0.05f), track, track, track, track);
                     continue;
                 }
-                var a0 = P(a - side, 0); var b0 = P(b - side, 0);
+                var (fa0, fb0) = Foot(p, o - side, f.Along, t0, t1); var (fa1, fb1) = Foot(p, o + side, f.Along, t0, t1);
+                var a0 = P(fa0, 0); var b0 = P(fb0, 0);
                 var at = P(a, height); var bt = P(b, height);
-                var a1 = P(a + side, 0); var b1 = P(b + side, 0);
+                var a1 = P(fa1, 0); var b1 = P(fb1, 0);
+                if (saw)
+                {
+                    // one sloped face a row: a sawtooth, half the vertices of a roof
+                    var c1 = P(fa1, height); var d1 = P(fb1, height);
+                    Quad(a0, b0, d1, c1, dark, dark, col, col);
+                    continue;
+                }
                 Quad(a0, b0, bt, at, dark, dark, col, col);
                 Quad(at, bt, b1, a1, col, col, col.Darkened(0.1f) with { A = 0f }, col.Darkened(0.1f) with { A = 0f });
             }
@@ -467,10 +493,12 @@ public sealed class FieldMeshBuilder
                 var foot = f.Across * MathF.Min(spacing * 0.5f, half * 1.4f);
                 var crown = f.Across * half;
                 float sh = height * 0.45f;
-                var a0 = At(a - foot, Lift); var b0 = At(b - foot, Lift);
-                var a1 = At(a + foot, Lift); var b1 = At(b + foot, Lift);
-                var as0 = At(a - crown, Lift + sh); var bs0 = At(b - crown, Lift + sh);
-                var as1 = At(a + crown, Lift + sh); var bs1 = At(b + crown, Lift + sh);
+                var (pa0, pb0) = Foot(p, o - foot, f.Along, t0, t1); var (pa1, pb1) = Foot(p, o + foot, f.Along, t0, t1);
+                var (sa0, sb0) = Foot(p, o - crown, f.Along, t0, t1); var (sa1, sb1) = Foot(p, o + crown, f.Along, t0, t1);
+                var a0 = At(pa0, Lift); var b0 = At(pb0, Lift);
+                var a1 = At(pa1, Lift); var b1 = At(pb1, Lift);
+                var as0 = At(sa0, Lift + sh); var bs0 = At(sb0, Lift + sh);
+                var as1 = At(sa1, Lift + sh); var bs1 = At(sb1, Lift + sh);
                 var at = At(a, Lift + height); var bt = At(b, Lift + height);
                 // soil flank one side, the leaves over the ridge, flank the other side
                 Quad(a0, b0, bs0, as0, soil, soil, leafDark, leafDark);
@@ -506,6 +534,16 @@ public sealed class FieldMeshBuilder
                     Quad(V(-da - dx, -0.03f), V(da - dx, 0.08f), V(da + dx, 0.08f), V(-da + dx, -0.03f), heart, heart, heart, heart);
                 }
         }
+    }
+
+    /// <summary>
+    /// A ridge's foot line cut to the piece on its own, so the ridge ends on the piece's edge (no
+    /// spike over the outline, and the same cut the next cell makes); the ridge line's span if it misses.
+    /// </summary>
+    private static (Vector2, Vector2) Foot(in FieldPiece p, Vector2 o, Vector2 along, float t0, float t1)
+    {
+        if (FieldClip.LineInPiece(p, o, along, out float s0, out float s1)) { t0 = s0; t1 = s1; }
+        return (o + along * t0, o + along * t1);
     }
 
     private static bool RowRange(Field f, in FieldPiece p, float spacing, out int k0, out int k1)
