@@ -306,6 +306,7 @@ public partial class BrManager : Node
         _state.Phase = BrPhase.Playing;
         // the first circle is sized for who actually boards (docs/notes/br/zone.md)
         _state.Field = _state.Entrants.Count;
+        _state.ZoneCentres = GroundCentres();
         _state.AssignTeams();
         _sidesAtGo = _state.TeamsAlive;
         // everyone boards the cargo plane (#207); the zone's clock starts when its doors close
@@ -327,6 +328,23 @@ public partial class BrManager : Node
 
     private bool _pushedOut;
     private Task<HorizonIndex?>? _horizon;
+
+    /// <summary>
+    /// The zone's centres judged on the ground (#477): no circle mostly over a lake or a cliff, from the
+    /// terrain lattice. Null without the lattice (a generated or fixture world): the seed's zone, as before.
+    /// </summary>
+    private float[]? GroundCentres()
+    {
+        if (_horizon is not { IsCompletedSuccessfully: true, Result: { Count: > 0 } horizon }) return null;
+        double e0 = _state.AreaE, n0 = _state.AreaN;
+        var zone = new ZoneSchedule(_state.Seed, _state.Side, _state.Pace, _state.Field, badness: (c, r) => ZoneSchedule.Badness(c, r,
+            p => BrMapImage.Wet(horizon, e0 + p.X, n0 + p.Y),
+            p => (float)BrMapImage.Height(horizon, e0 + p.X, n0 + p.Y)));
+        var plain = new ZoneSchedule(_state.Seed, _state.Side, _state.Pace, _state.Field);
+        int moved = Enumerable.Range(0, ZoneSchedule.Phases + 1).Count(i => zone.CentreOf(i) != plain.CentreOf(i));
+        GD.Print($"[br] zone: {moved} of {ZoneSchedule.Phases + 1} centres moved off water or cliffs");
+        return zone.Centres;
+    }
 
     /// <summary>
     /// The plane's altitude over this match's line, from the terrain's 100 m lattice, asked for when the
