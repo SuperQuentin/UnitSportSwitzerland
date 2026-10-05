@@ -12,9 +12,9 @@ namespace UnitSport.Player;
 /// while it is down and moving, the local driver's peer sweeps the working bar over the ground
 /// once a physics tick (<see cref="FarmWork.Sweep"/>). A drill sows the seed in the pack, the
 /// mower puts hay in the pack, the combine fills its tank; the auger unloads the tank into a
-/// tipping trailer standing under it, and a loaded tank or trailer is sold at a farm co-op
-/// ({destination} / X). On foot, E at a loaded tank or trailer takes a sack (held, or with
-/// {sprint}: ten).
+/// tipping trailer standing under it or towed alongside by another player, and a loaded tank or
+/// trailer is sold at a farm co-op ({destination} / X: a tipping trailer tips its bin to deliver).
+/// On foot, E at a loaded tank or trailer takes a sack (held, or with {sprint}: ten).
 /// </summary>
 public partial class FootPlayer
 {
@@ -23,6 +23,16 @@ public partial class FootPlayer
     /// <summary>Seed a drill has used toward the next whole item, and hay the mower has cut toward the next bale.</summary>
     private float _seedOwed, _hayOwed;
     private float _farmToastCooldown, _augerTimer;
+    /// <summary>A delivery asked of the server and not answered yet (s left to wait): nothing is sold twice.</summary>
+    private float _deliverWait;
+    /// <summary>How long the tipping trailer's bin stays up, s (the rig takes 3 s to rise).</summary>
+    private float _tipTimer;
+    private const float TipHold = 7f;
+    /// <summary>Sacks offered to another player's driven tipping trailer, waiting for its answer (s left), and how many.</summary>
+    private float _augerWait;
+    private int _augerOffered;
+    /// <summary>Both machines must be this slow for the auger to unload into a driven trailer, m/s (~11 km/h).</summary>
+    public const float AugerDrivenSpeed = 3f;
 
     /// <summary>Sacks one swing of the auger moves into the trailer, and how often it swings, s.</summary>
     private const int AugerBatch = 8;
@@ -74,12 +84,20 @@ public partial class FootPlayer
     /// <summary>The load this machine can deliver: the combine's tank, else the coupled tipping trailer's.</summary>
     public Tank FarmLoad(Truck truck) => truck.Spec.TankItems > 0 ? truck.Tank : truck.TrailerTank;
 
-    /// <summary>Stopped by a farm co-op with something to sell.</summary>
-    public bool CanDeliver(Truck truck) => GroundSpeed < 1.5f && FarmLoad(truck).Items > 0 && FarmMarket.NearCoop(GlobalPosition);
+    /// <summary>Stopped by a farm co-op with something to sell, no delivery under way.</summary>
+    public bool CanDeliver(Truck truck) => _deliverWait <= 0f && !truck.Tipping && GroundSpeed < 1.5f && FarmLoad(truck).Items > 0 && FarmMarket.NearCoop(GlobalPosition);
 
-    /// <summary>{destination} / {car_door} in a farm machine: deliver at a co-op, else swing the combine's auger.</summary>
+    /// <summary>The francs the last delivery paid, and how many deliveries were paid (for the checks).</summary>
+    public int FarmFrancsPaid { get; private set; }
+    public int FarmDeliveries { get; private set; }
+
+    /// <summary>
+    /// {destination} / {car_door} in a farm machine: with a tipping trailer coupled, tip its bin
+    /// (at a co-op that delivers the load); in a combine, deliver at a co-op, else swing the auger.
+    /// </summary>
     public void FarmAction(Truck truck)
     {
+        if (truck.Spec.TankItems <= 0 && truck.TrailerCapacity > 0) { Tip(truck); return; }
         if (CanDeliver(truck)) { Deliver(truck); return; }
         if (truck.Spec.TankItems > 0)
         {
@@ -91,16 +109,39 @@ public partial class FootPlayer
         FarmToast(FarmLoad(truck).Items > 0 ? "Drive the load to a farm co-op to sell it" : "Nothing to deliver");
     }
 
+    /// <summary>
+    /// The tipping trailer's delivery gesture: stopped, its bin tips up for a few seconds (the
+    /// pose's tipping bit, <see cref="Truck.Tipping"/>). By a farm co-op the load pours out into it
+    /// and is sold; anywhere else nothing is poured (the harvest is not thrown on the ground).
+    /// </summary>
+    public void Tip(Truck truck)
+    {
+        if (truck.Tipping || _deliverWait > 0f) return;
+        if (GroundSpeed >= 1.5f) { FarmToast("Stop to tip the trailer"); return; }
+        var load = FarmLoad(truck);
+        bool coop = FarmMarket.NearCoop(GlobalPosition);
+        truck.Tipping = true;
+        _tipTimer = TipHold;
+        Announced?.Invoke("TIPPING", true);
+        if (load.Items <= 0) FarmToast("The trailer is empty: nothing to tip");
+        else if (!coop) FarmToast("Not at a farm co-op: the load stays in the trailer");
+        else Deliver(truck);
+    }
+
     /// <summary>Sells the whole load at the co-op (<see cref="FarmMarket.Deliver"/>): the tank is emptied once the francs are paid.</summary>
     private void Deliver(Truck truck)
     {
         var load = FarmLoad(truck);
         var item = FarmTables.YieldOf(load.Crop);
-        if (item == ItemId.None) return;
+        if (item == ItemId.None || _deliverWait > 0f) return;
         bool combine = truck.Spec.TankItems > 0;
+        _deliverWait = 10f;
         FarmMarket.Deliver(this, GlobalPosition, item, load.Items, francs =>
         {
+            _deliverWait = 0f;
             if (francs <= 0) { Announced?.Invoke("The co-op does not take it now", false); return; }
+            FarmFrancsPaid = francs;
+            FarmDeliveries++;
             if (_ride is not Truck t) return;
             if (combine) t.SetTank(MachineLoad.Take(t.Tank, load.Items, out _));
             else if (t.SetTrailerTank(MachineLoad.Take(t.TrailerTank, load.Items, out _)))
@@ -119,6 +160,8 @@ public partial class FootPlayer
     private void StepFarm(Truck truck, float dt)
     {
         if (Npc || SeatIndex != 0 || !IsMultiplayerAuthority()) return;
+        // the bin comes back down after a while, or as soon as the tractor drives off
+        if (truck.Tipping && ((_tipTimer -= dt) <= 0f || GroundSpeed > 2f)) truck.Tipping = false;
         if (truck.Spec.TankItems > 0) StepAuger(truck, dt);
         var tool = truck.WorkTool;
         if (tool == FarmTool.None) { _workLast = null; return; }
@@ -195,17 +238,41 @@ public partial class FootPlayer
         return (ItemId.None, CropKind.None);
     }
 
-    /// <summary>The auger out over a parked tipping trailer: a batch of sacks into it every couple of seconds.</summary>
+    /// <summary>
+    /// The auger out over a tipping trailer: a batch of sacks into it every couple of seconds. A
+    /// parked one is claimed and parked back; one another player is towing alongside is asked
+    /// through the server (<see cref="PassengerService.OfferAuger"/>): its driver's peer owns its
+    /// load, takes what fits and says how much, and only that leaves the tank.
+    /// </summary>
     private void StepAuger(Truck truck, float dt)
     {
+        if (_augerWait > 0f && (_augerWait -= dt) <= 0f) _augerOffered = 0;
         if (!truck.AugerOut || truck.Tank.Items <= 0 || Vehicles is not { } vehicles) { _augerTimer = 0f; return; }
         _augerTimer += dt;
-        if (_augerTimer < AugerEvery || vehicles.Claiming) return;
+        if (_augerTimer < AugerEvery || vehicles.Claiming || _augerOffered > 0) return;
         _augerTimer = 0f;
         var spout = ToGlobal(Avatar.FarmMeshBuilder.AugerSpout(truck.Train.Bodies[0].CgAt));
         if (TipperAt(spout, 0.3f) is not { } target)
         {
-            FarmToast("Park a tipping trailer under the auger to unload");
+            if (DrivenTipperAt(spout, 0.6f) is { } driver)
+            {
+                if (GroundSpeed > AugerDrivenSpeed || driver.WorldVelocity.Length() > AugerDrivenSpeed)
+                {
+                    FarmToast("Too fast: keep both machines slow to unload on the move");
+                    return;
+                }
+                if (driver.RideModel is Truck { TrailerTank: var held } && held.Items > 0 && held.Crop != truck.Tank.Crop)
+                {
+                    FarmToast($"That trailer holds {held.Crop}");
+                    return;
+                }
+                if (PassengerService.Instance is not { } passengers) return;
+                _augerOffered = Mathf.Min(AugerBatch, truck.Tank.Items);
+                _augerWait = 5f;
+                passengers.OfferAuger(driver.Name, (int)truck.Tank.Crop, _augerOffered);
+                return;
+            }
+            FarmToast("Bring a tipping trailer under the auger to unload");
             return;
         }
         var into = TrailerCatalog.TankOf(target.Trailer!.Code);
@@ -221,6 +288,76 @@ public partial class FootPlayer
             if (moved > 0) t.SetTank(MachineLoad.Take(t.Tank, moved, out _));
         });
     }
+
+    /// <summary>
+    /// Another player's driven train whose tipping trailer has <paramref name="point"/> over its bin
+    /// (its sections as drawn on this peer), or null.
+    /// </summary>
+    private FootPlayer? DrivenTipperAt(Vector3 point, float margin)
+    {
+        foreach (var node in GetTree().GetNodesInGroup(Group))
+            if (node is FootPlayer { Npc: false } p && p != this && p.SeatIndex == 0 && p.TipperBinHas(point, margin)) return p;
+        return null;
+    }
+
+    /// <summary>The tipping trailer's bin section as drawn on this peer (its node's frame: on the ground under its centre of mass, facing −Z), or null.</summary>
+    public Transform3D? TipperBinFrame()
+    {
+        if (RideModel is not Truck { Trailer.TankItems: > 0 } t) return null;
+        int k = t.SectionCount - 1;
+        return k >= 1 && _sections.Count >= k ? _sections[k - 1].GlobalTransform : null;
+    }
+
+    /// <summary>Whether <paramref name="point"/> is over the bin of the tipping trailer this player tows (within <paramref name="margin"/> m).</summary>
+    public bool TipperBinHas(Vector3 point, float margin)
+    {
+        if (RideModel is not Truck { Spec.TankItems: 0, Trailer.TankItems: > 0 } t) return false;
+        int k = t.SectionCount - 1;
+        if (k < 1 || _sections.Count < k) return false;
+        var body = t.Train.Bodies[k];
+        var local = _sections[k - 1].GlobalTransform.AffineInverse() * point;
+        float hw = body.Spec.Width * 0.5f + margin;
+        return Mathf.Abs(local.X) <= hw && local.Z >= -body.CgAt - margin && local.Z <= body.Spec.Length - body.CgAt + margin
+            && local.Y > -1f && local.Y < 5f;
+    }
+
+    /// <summary>
+    /// The driver of a tipping trailer, on its own peer: <paramref name="from"/>'s combine offers
+    /// <paramref name="count"/> sacks of <paramref name="crop"/>. Taken if its auger is out over
+    /// this bin (as this peer sees it), both are slow and it fits; returns how many were taken.
+    /// </summary>
+    public int AugerArrived(FootPlayer? from, CropKind crop, int count)
+    {
+        if (Npc || SeatIndex != 0 || !IsMultiplayerAuthority() || _ride is not Truck { Spec.TankItems: 0 } t || t.TrailerCapacity <= 0) return 0;
+        if (from?.RideModel is not Truck { Spec.TankItems: > 0, AugerOut: true } combine) return 0;
+        if (GroundSpeed > AugerDrivenSpeed + 0.5f || t.Tipping) return 0;
+        // the combine's copy lags its owner a little: a looser margin than the owner's own test
+        var spout = from.ToGlobal(Avatar.FarmMeshBuilder.AugerSpout(combine.Train.Bodies[0].CgAt));
+        if (!TipperBinHas(spout, 1.5f)) return 0;
+        var (_, to, moved) = MachineLoad.Transfer(new Tank(crop, Mathf.Clamp(count, 0, AugerBatch)), t.TrailerTank, t.TrailerCapacity);
+        if (moved <= 0) return 0;
+        if (t.SetTrailerTank(to))
+        {
+            TrailerCode = t.TrailerCode;
+            RefreshVisual(force: true);
+        }
+        FarmSacksAugered += moved;
+        return moved;
+    }
+
+    /// <summary>The combine's owner: the trailer's driver took <paramref name="moved"/> of the sacks offered; they leave the tank.</summary>
+    public void AugerTaken(int moved)
+    {
+        int offered = _augerOffered;
+        _augerOffered = 0;
+        _augerWait = 0f;
+        if (moved <= 0 || _ride is not Truck { Spec.TankItems: > 0 } t) return;
+        t.SetTank(MachineLoad.Take(t.Tank, Mathf.Min(moved, offered), out int taken));
+        FarmSacksAugered += taken;
+    }
+
+    /// <summary>Sacks moved by the auger into or out of a driven trailer on this peer (for the checks).</summary>
+    public int FarmSacksAugered { get; private set; }
 
     /// <summary>
     /// A parked tipping trailer whose body has <paramref name="point"/> over it (within
@@ -269,6 +406,7 @@ public partial class FootPlayer
     private void TickFarmFoot(float dt)
     {
         _farmToastCooldown = Mathf.Max(0f, _farmToastCooldown - dt);
+        if (_deliverWait > 0f) _deliverWait = Mathf.Max(0f, _deliverWait - dt);
         if (_ride != null || Npc) { _sackSource = null; _sackHeld = -1f; return; }
         if ((_sackScan -= dt) <= 0f)
         {

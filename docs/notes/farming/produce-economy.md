@@ -22,11 +22,22 @@
 - **Delivery** (`Farming/FarmMarket`): `NearCoop(at)` = a co-op door within `DeliverReach` (25 m) in `DoorIndex`
   (the door entry carries its `ShopType`), cached 0.5 s / 4 m. `Deliver` pays `ShopTables.DeliveryPrice` = the
   **full value per unit** (floored for the load) because it is a weighed delivery, not the counter's 35 %; only
-  harvests are taken (`FarmTables.IsHarvest`; seeds, fertiliser and flour are not, on the client and the server). `ShopService.Deliver` asks the server (`RequestDeliver`); the server ignores the claimed
+  harvests are taken (`FarmTables.IsHarvest`; seeds, fertiliser and flour are not, on the client and the server). `ShopService.Deliver` asks the server (`RequestDeliver`, with the co-op door key the client sees); the server ignores the claimed
   position online and uses the peer's replicated player node (reach + 12 m slack), then answers `Delivered`; the
   client adds `Francs` to its pocket on the answer and calls `done(total)`. Offline the same methods run locally.
   Not in the shop ledger (nothing is stocked).
+- **A dedicated server draws no buildings** (`ChunkManager.BuildMeshes` off), so its `DoorIndex` is empty: it
+  used to refuse every delivery online. Now a door in its own index (offline, a listen host, a check's stand-in)
+  serves, else the server plans the building the client named (`InteriorManager.GetOrCreate`) and pays only if its
+  layout is a `FarmCoop` and the peer is within reach of its outside door (`OutsideDoorAt`).
+- **Stand-in co-op for checks** (fixture worlds have no buildings): `FarmMarket.StandIn(door, outward)` files a
+  co-op door under the made-up tile `StandInTile` (-1, -1); `--farmcoop E,N` (LV95, fixture worlds only) puts one
+  there, facing south (its yard), on the server and every client (`StandInFromArgs`, from `ClientWorld`/`ServerWorld`).
+- **Delivering a tipping trailer** is tipping it (`FootPlayer.Tip`, `machines`): the bin goes up and the load is sold.
 - **Loot**: seeds, fertiliser and a rare hoe in barn crates/shelves and a little in garage shelves (`FarmKit`);
   potatoes, carrots, flour in cellar and pantry shelves (`Roots`). This shifts those containers' rolls.
 - **Checks**: `tools/test.sh unit` (`FarmEconomyTests`), `--invcheck` (items, icons, save by name, recipe values),
-  `--shopcheck` (barns become co-ops with counters, rural only, delivery beats the counter), `--iconsheet`.
+  `--shopcheck` (barns become co-ops with counters, rural only, delivery beats the counter), `--iconsheet`;
+  `--tractorcheck` (offline: refusals far away / seed / flour, the tipper and the combine paid units × value at a
+  stand-in) and `tools/tractornetcheck.sh` (online: the server pays a tipped trailer, refuses a claimed position
+  and seed). Not checked: the dedicated server's planned-co-op path on a real map.

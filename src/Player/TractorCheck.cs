@@ -5,6 +5,7 @@ using UnitSport.Audio;
 using UnitSport.Core;
 using UnitSport.Farming;
 using UnitSport.Items;
+using UnitSport.Loot;
 using UnitSport.Terrain.Format;
 using UnitSport.Vehicles;
 
@@ -20,6 +21,9 @@ namespace UnitSport.Player;
 /// the rig, the plough sweeping, the drill sowing only with seed in the pack and taking it, the
 /// mower's bales into the pack, the combine's tank filling, the auger unloading into a parked
 /// tipping trailer, a sack taken from it on foot, and the train parked with the implement down.
+/// Last, at a stand-in farm co-op (<see cref="FarmMarket.StandIn"/>): the server refusing a load
+/// from far away and a non-harvest, the tipper's bin tipped on a field (nothing poured), then
+/// driven to the co-op and tipped there (paid units × value, emptied), and the combine delivering.
 /// Prints <c>[tractor] RESULT: ok</c> or <c>RESULT: FAILED (n)</c>; <c>shots</c> (windowed) writes
 /// pictures to <c>test_output/</c>.
 /// </summary>
@@ -364,8 +368,109 @@ public partial class TractorCheck : Node
         else Expect(false, "the tipping trailer is gone");
         await Shot("6-on-foot");
 
+        await CoopDelivery(me, items);
+
         MachineWork.FakeSweep = null;
         Finish(null);
+    }
+
+    // ---- delivering at a farm co-op (#494) ---------------------------------------------------------
+
+    /// <summary>The server's answer to a delivery asked of it directly (<see cref="ShopService.Deliver"/>): the francs, 0 refused.</summary>
+    private async Task<int> AskDelivery(ItemId item, int count, Vector3 at, string door)
+    {
+        int answer = -1;
+        ShopService.Instance?.Deliver(item, count, at, door, francs => answer = francs);
+        await Until(() => answer >= 0, 5);
+        return answer;
+    }
+
+    /// <summary>
+    /// A stand-in co-op ahead in a clear spot; the server refuses far away and a non-harvest; the
+    /// tipping trailer tipped on the field pours nothing; driven to the co-op and tipped, it is
+    /// paid units × value and emptied (the bin drawn up); the combine delivers its tank the same way.
+    /// </summary>
+    private async Task CoopDelivery(FootPlayer me, ItemController items)
+    {
+        if (me.Vehicle != null) { me.ExitVehicle(); await Wait(1.0); }
+        if (ShopService.Instance == null) { Expect(false, "no shop service: nothing to deliver to"); return; }
+        // well clear of everything parked and dropped so far
+        var side = me.GlobalTransform.Basis.X with { Y = 0 };
+        me.PlaceAt(me.GlobalPosition + side.Normalized() * -45f + Vector3.Up * 0.5f, me.Rotation.Y);
+        await Until(() => me.IsOnFloor(), 5);
+        var fwd = (-me.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
+        var door = me.GlobalPosition + fwd * 70f;
+        FarmMarket.StandIn(door with { Y = me.GlobalPosition.Y - 0.3f }, -fwd);
+        float wheat = ItemDefs.Get(ItemId.Wheat)?.Value ?? 0f;
+
+        // the server's own checks, asked directly
+        Expect(await AskDelivery(ItemId.Wheat, 10, door + fwd * -200f, "") == 0, "the server refuses a load 200 m from the co-op");
+        Expect(await AskDelivery(ItemId.WheatSeed, 10, door - fwd * 5f, "") == 0, "and seed, which is no harvest, at its door");
+        Expect(await AskDelivery(ItemId.Flour, 10, door - fwd * 5f, "") == 0, "and flour");
+        int refusedClient = -1;
+        FarmMarket.Deliver(me, door - fwd * 5f, ItemId.WheatSeed, 10, f => refusedClient = f);
+        Expect(refusedClient == 0, "the client does not even ask for seed");
+
+        // the tipping trailer, 60 sacks of wheat
+        Expect(me.SetRide(Tractor.Kind) && me.Vehicle is Truck, "in a tractor again");
+        if (me.Vehicle is not Truck tractor) return;
+        await Wait(1.0);
+        Expect(me.SpawnTrailer(Index(TrailerBody.Tipper), 60f / 200f) && tractor.TrailerTank == new Tank(CropKind.Wheat, 60), $"a tipping trailer with {tractor.TrailerTank}");
+        await Wait(1.0);
+        var bin = me.GetNodeOrNull<Node3D>($"Section{tractor.SectionCount - 1}/Visual/Body/Tip");
+        int cash = items.Inventory.Cash;
+        Expect(!me.CanDeliver(tractor), "on the field: no co-op to deliver to");
+        me.FarmAction(tractor);
+        await Wait(3.5);
+        float fieldTilt = bin?.Rotation.X ?? 0f;
+        Expect(tractor.Tipping && (tractor.PackFlags() & (Truck.AugerBit << 4)) != 0 && fieldTilt > 0.6f,
+            $"{{destination}} tips the bin on the field: drawn up {F(Mathf.RadToDeg(fieldTilt), "F0")}°, the bit in the pose");
+        Expect(tractor.TrailerTank.Items == 60 && items.Inventory.Cash == cash, $"and pours nothing: {tractor.TrailerTank.Items} sacks still in it, {items.Inventory.Cash - cash} CHF");
+        await Shot("7-tipped-on-field");
+        await Until(() => !tractor.Tipping, 8);
+        await Wait(3.5);
+        Expect(!tractor.Tipping && (bin?.Rotation.X ?? 1f) < 0.05f, "the bin comes back down");
+
+        // to the co-op's yard
+        me.RideControls = () => new RideInput(0.5f, 0f, 0f, false);
+        await Until(() => me.GlobalPosition.DistanceTo(door) < 18f, 30);
+        await Stop(me);
+        me.RideControls = null;
+        Expect(me.CanDeliver(tractor), $"stopped {F(me.GlobalPosition.DistanceTo(door))} m from the co-op's door: it can deliver");
+        long due = ShopTables.DeliveryPrice(ItemCategory.Produce, wheat, 60);
+        me.FarmAction(tractor);
+        await Until(() => tractor.TrailerTank.Items == 0, 8);
+        await Wait(1.0);
+        Expect(tractor.TrailerTank.Items == 0 && me.FarmFrancsPaid == 60 * (int)wheat && due == 60 * (int)wheat && items.Inventory.Cash - cash == me.FarmFrancsPaid,
+            $"tipped at the co-op: paid {me.FarmFrancsPaid} CHF for 60 sacks × {F(wheat, "F0")} (pocket +{items.Inventory.Cash - cash}), the trailer {tractor.TrailerTank.Items}");
+        // the rig was rebuilt for the new load: look the bin up again
+        bin = me.GetNodeOrNull<Node3D>($"Section{tractor.SectionCount - 1}/Visual/Body/Tip");
+        var heap = bin?.GetNodeOrNull<Node3D>("Heap");
+        Expect(tractor.Tipping && bin != null && bin.Rotation.X > 0.6f && heap != null && !heap.Visible,
+            $"the bin still up ({F(Mathf.RadToDeg(bin?.Rotation.X ?? 0f), "F0")}°), the heap gone from it");
+        await Shot("8-tipped-at-coop");
+        me.FarmAction(tractor);
+        Expect(me.FarmDeliveries == 1, "a second press while it is up sells nothing more");
+
+        // the combine, its tank delivered by the auger
+        me.ExitVehicle();
+        await Wait(1.0);
+        me.PlaceAt(me.GlobalPosition + side.Normalized() * 14f + Vector3.Up * 0.5f, me.Rotation.Y);
+        await Until(() => me.IsOnFloor(), 5);
+        Expect(me.SetRide(Combine.Kind) && me.Vehicle is Truck, "in a combine by the co-op");
+        if (me.Vehicle is not Truck combine) return;
+        await Wait(1.0);
+        combine.SetTank(new Tank(CropKind.Wheat, 40));
+        cash = items.Inventory.Cash;
+        int paidBefore = me.FarmDeliveries;
+        Expect(me.CanDeliver(combine), $"{F(me.GlobalPosition.DistanceTo(door))} m from the door, 40 sacks: it can deliver");
+        me.FarmAction(combine);
+        await Until(() => combine.Tank.Items == 0, 8);
+        Expect(combine.Tank.Items == 0 && !combine.AugerOut && me.FarmDeliveries == paidBefore + 1 && me.FarmFrancsPaid == 40 * (int)wheat && items.Inventory.Cash - cash == 40 * (int)wheat,
+            $"the combine delivers: paid {me.FarmFrancsPaid} CHF for 40 sacks, the tank {combine.Tank.Items}");
+        me.ExitVehicle();
+        await Wait(1.0);
+        Interiors.DoorIndex.ClearTile(FarmMarket.StandInTile);
     }
 
     /// <summary>

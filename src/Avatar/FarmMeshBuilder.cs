@@ -343,6 +343,9 @@ public static class FarmMeshBuilder
 
     // ---- the implements and the tipping trailer -------------------------------------------------
 
+    /// <summary>How far a tipping trailer's bin tips up about its back edge, rad (~50°: grain slides out).</summary>
+    public const float TipAngle = 0.87f;
+
     public static HeavyParts Implement(TrailerSpec spec, int section, float load)
     {
         var s = spec.Sections[section];
@@ -420,20 +423,23 @@ public static class FarmMeshBuilder
             }
             case TrailerBody.Tipper:
             {
-                // the frame on its axle, the bin, the heap in it, the tipping ram at the front
+                // the frame on its axle; the bin, with the heap in it and the ladder at its front
+                // corner, on its own mesh: it tips up about its back edge (HeavyParts.Tip)
                 const float floor = 1.1f;
+                var bin = new MeshScratch();
                 foreach (float sx in new[] { -1f, 1f })
                     Along(m, cg, 0.0f, s.Length - 0.2f, floor - 0.25f, floor, 0.14f, spec.Frame, sx * 0.45f);
                 Along(m, cg, 0.5f, 1.1f, floor - 0.12f, floor, s.Width - 0.3f, spec.Frame);
-                Along(m, cg, 0f, s.Length, floor, floor + 0.08f, s.Width, spec.Paint);
+                Along(bin, cg, 0f, s.Length, floor, floor + 0.08f, s.Width, spec.Paint);
                 foreach (float sx in new[] { -1f, 1f })
-                    Along(m, cg, 0f, s.Length, floor + 0.08f, s.Height, 0.06f, spec.Paint, sx * (hw - 0.03f));
-                Along(m, cg, 0f, 0.06f, floor + 0.08f, s.Height + 0.25f, s.Width, spec.Paint);
-                Along(m, cg, s.Length - 0.06f, s.Length, floor + 0.08f, s.Height, s.Width, spec.Paint);
-                // the top rails and the steps of the ladder at the front corner
-                Sides(m, cg, 0f, s.Length, s.Height - 0.05f, s.Height, s.Width, spec.Accent);
-                for (float y = 0.5f; y < s.Height; y += 0.35f)
-                    Along(m, cg, -0.05f, 0.0f, y, y + 0.04f, 0.35f, Steel, hw - 0.3f);
+                    Along(bin, cg, 0f, s.Length, floor + 0.08f, s.Height, 0.06f, spec.Paint, sx * (hw - 0.03f));
+                Along(bin, cg, 0f, 0.06f, floor + 0.08f, s.Height + 0.25f, s.Width, spec.Paint);
+                Along(bin, cg, s.Length - 0.06f, s.Length, floor + 0.08f, s.Height, s.Width, spec.Paint);
+                Sides(bin, cg, 0f, s.Length, s.Height - 0.05f, s.Height, s.Width, spec.Accent);
+                for (float y = floor + 0.2f; y < s.Height; y += 0.35f)
+                    Along(bin, cg, -0.05f, 0.0f, y, y + 0.04f, 0.35f, Steel, hw - 0.3f);
+                // the tipping ram under the bin's front, folded
+                Along(m, cg, 0.6f, 1.0f, floor - 0.6f, floor - 0.12f, 0.22f, Steel);
                 var a = s.Axles[0];
                 float r = Tyre.Radius(a.Tyre);
                 Along(m, cg, a.At - r - 0.1f, a.At + r + 0.1f, 2f * r + 0.03f, 2f * r + 0.09f, s.Width, Trim);
@@ -449,6 +455,7 @@ public static class FarmMeshBuilder
                 {
                     Heap = (heap, new Vector3(0, floor + 0.08f, -Z(s.Length * 0.5f))),
                     Fill = load,
+                    Tip = (bin.Build(new Vector3(0, floor, Z(s.Length))), new Vector3(0, floor, -Z(s.Length)), TipAngle),
                 };
             }
         }

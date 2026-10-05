@@ -880,6 +880,7 @@ public partial class PlayerFeel : Node3D
         sb.Append("    ").Append(tank.Items).Append('/').Append(cap);
         if (tank.Items > 0) sb.Append(' ').Append(tank.Crop);
         if (t.AugerOut) sb.Append("    AUGER");
+        if (t.Tipping) sb.Append("    TIPPED");
     }
 
     private static void AppendRetarder(System.Text.StringBuilder sb, Truck t)
@@ -1084,7 +1085,10 @@ public partial class PlayerFeel : Node3D
                 break;
             case var _ when _player.Heavy is { Spec.Farm: true } farm && _player.CanDeliver(farm):
                 // a farm co-op's yard with a load aboard (#494)
-                text = InputHints.Format(InputHints.Pad ? "{car_door}  DELIVER the load to the co-op" : "{destination}  DELIVER the load to the co-op");
+                // a tipping trailer tips its bin to deliver; the combine's auger pours its tank
+                text = InputHints.Format(farm.Spec.TankItems > 0
+                    ? InputHints.Pad ? "{car_door}  DELIVER the load to the co-op" : "{destination}  DELIVER the load to the co-op"
+                    : InputHints.Pad ? "{car_door}  TIP the trailer: deliver the load to the co-op" : "{destination}  TIP the trailer: deliver the load to the co-op");
                 break;
             case var _ when _player.Heavy is { Trailer.Boat: not 0 } truck && _player.GroundSpeed < 1.5f
                 && (_player.CanLaunchBoat(truck) || _player.BoatToWinch(truck) != null):

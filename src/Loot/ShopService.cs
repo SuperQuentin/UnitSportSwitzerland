@@ -396,12 +396,15 @@ public partial class ShopService : Node
 
     private readonly Queue<Action<int>> _deliveries = new();
 
-    /// <summary>Asks the server to pay for a load by a farm co-op; <paramref name="done"/> gets the francs added to the pocket (0: refused).</summary>
-    public void Deliver(ItemId id, int count, Vector3 at, Action<int> done)
+    /// <summary>
+    /// Asks the server to pay for a load by a farm co-op (<paramref name="door"/>: the co-op door this
+    /// client sees, "" for none); <paramref name="done"/> gets the francs added to the pocket (0: refused).
+    /// </summary>
+    public void Deliver(ItemId id, int count, Vector3 at, string door, Action<int> done)
     {
         _deliveries.Enqueue(done);
-        if (Online) RpcId(1, MethodName.RequestDeliver, (int)id, count, at);
-        else ServeDeliver(1, (int)id, count, at);
+        if (Online) RpcId(1, MethodName.RequestDeliver, (int)id, count, at, door);
+        else ServeDeliver(1, (int)id, count, at, door);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -435,24 +438,45 @@ public partial class ShopService : Node
     private void RequestBump(string key, int furniture) => ServeBump(Multiplayer.GetRemoteSenderId(), key, furniture);
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void RequestDeliver(int id, int count, Vector3 at) => ServeDeliver(Multiplayer.GetRemoteSenderId(), id, count, at);
+    private void RequestDeliver(int id, int count, Vector3 at, string door) => ServeDeliver(Multiplayer.GetRemoteSenderId(), id, count, at, door);
 
     /// <summary>
     /// Server: pays for a load. Online the peer's own replicated position must be by a farm co-op's
     /// door (the claimed <paramref name="at"/> is not trusted); offline there is no one to lie, so it
-    /// is the vehicle's. The pack is the client's, as when selling at a counter.
+    /// is the vehicle's. The door is one this peer has in its <c>DoorIndex</c> (offline, a listen
+    /// host, a check's stand-in) or else the co-op the client named: a dedicated server draws no
+    /// buildings, so it plans that building (<see cref="InteriorManager.GetOrCreate"/>) and checks
+    /// it is a co-op and the peer stands by its door. The pack is the client's, as when selling at
+    /// a counter.
     /// </summary>
-    private void ServeDeliver(long peer, int id, int count, Vector3 at)
+    private async void ServeDeliver(long peer, int id, int count, Vector3 at, string door)
     {
         var def = ItemDefs.Get((ItemId)id);
         Vector3? where = at;
         if (Online) where = GetParent()?.GetNodeOrNull<Node3D>($"Players/{peer}")?.GlobalPosition;
         long total = def == null || !Farming.FarmTables.IsHarvest((ItemId)id) || count is <= 0 or > Farming.FarmMarket.MaxLoad ? 0 : ShopTables.DeliveryPrice(def.Category, def.Value, count);
         float reach = Farming.FarmMarket.DeliverReach + (Online ? Farming.FarmMarket.ServerSlack : 0f);
-        bool ok = total > 0 && where is { } w && Farming.FarmMarket.CoopDoor(w, reach) is { } door;
-        if (ok) GD.Print($"[shop] peer {peer} delivered {count} {(ItemId)id} to the farm co-op {Farming.FarmMarket.CoopDoor(where!.Value, reach)!.Value.Key} for {total} CHF");
+        string? coop = null;
+        try
+        {
+            if (total > 0 && where is { } w)
+                coop = Farming.FarmMarket.CoopDoor(w, reach)?.Key.ToString() ?? await CoopPlanNear(w, door, reach);
+        }
+        catch (Exception e) { GD.PushError($"[shop] delivery to {door}: {e.Message}"); }
+        if (!IsInsideTree()) return;
+        bool ok = coop != null;
+        if (ok) GD.Print($"[shop] peer {peer} delivered {count} {(ItemId)id} to the farm co-op {coop} for {total} CHF");
         else GD.Print($"[shop] peer {peer} delivery of {count} {(ItemId)id} refused");
         Reply(peer, MethodName.Delivered, id, ok ? count : 0, ok ? (int)total : 0);
+    }
+
+    /// <summary>The co-op <paramref name="door"/> names, if its building is a farm co-op and <paramref name="at"/> is by its door; else null.</summary>
+    private static async Task<string?> CoopPlanNear(Vector3 at, string door, float reach)
+    {
+        if (door.Length == 0 || !BuildingKey.TryParse(door, out _) || InteriorManager.Instance is not { } interiors) return null;
+        var layout = await interiors.GetOrCreate(door);
+        if (layout is not { Shop: ShopType.FarmCoop }) return null;
+        return at.DistanceTo(interiors.OutsideDoorAt(layout, layout.EntranceFor(door))) <= reach ? door : null;
     }
 
     /// <summary>Server: what a piece of furniture sells, if the peer stands in its building: a shop's counter or a machine.</summary>

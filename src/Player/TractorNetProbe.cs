@@ -21,6 +21,12 @@ namespace UnitSport.Player;
 /// sees them in the trailer's code and the heap on its rig; A gets out, B sees the parked train
 /// keep them;</item>
 /// <item>A takes the combine with 50 sacks of barley in its tank: B reads them from the flags.</item>
+/// <item>Logistics (<see cref="LogisticsA"/>, <see cref="LogisticsB"/>): B drives a tractor with an
+/// empty tipping trailer; A brings a combine with 30 sacks of wheat alongside, the auger over B's
+/// bin: the sacks go across through the server and both peers agree (A's tank empty, B's trailer
+/// 30). A, far from the co-op, is refused a delivery it claims to make at its door. B drives to the
+/// stand-in co-op (<c>--farmcoop</c>), is refused seed, tips the trailer: the server pays 30 × 25
+/// CHF, B's load is gone and A sees the bin up and the trailer empty.</item>
 /// </list>
 /// </summary>
 public partial class TractorNetProbe : ChatProbe
@@ -119,6 +125,7 @@ public partial class TractorNetProbe : ChatProbe
         await Seconds(2.5);
         Say("combine");
         if (!await Heard("B", "seen combine", 20)) Fail("B did not see the combine's tank");
+        await LogisticsA(me);
     }
 
     private async Task RunB(FootPlayer me)
@@ -145,7 +152,7 @@ public partial class TractorNetProbe : ChatProbe
         a = Other(me);
         bool load = a != null && await Until(() => a.RideModel is Truck { TrailerTank.Items: 77 } t && t.TrailerTank.Crop == CropKind.Wheat, 10);
         Expect(load, $"B sees 77 sacks of wheat in A's trailer ({(a?.RideModel as Truck)?.TrailerTank})");
-        var heap = a?.GetNodeOrNull<Node3D>("Section2/Visual/Body/Heap");
+        var heap = a?.GetNodeOrNull<Node3D>("Section2/Visual/Body/Tip/Heap");
         Expect(heap != null && heap.Visible && Mathf.Abs(heap.Scale.Y - 77f / 200f) < 0.02f, $"and the heap on its rig ({heap?.Scale.Y.ToString("F2", CultureInfo.InvariantCulture)})");
         Say("seen tipper");
 
@@ -159,5 +166,115 @@ public partial class TractorNetProbe : ChatProbe
         bool tank = a != null && await Until(() => a.RideModel is Truck { Spec.Class: HeavyClass.Combine } c && c.Tank == new Tank(CropKind.Barley, 50), 10);
         Expect(tank, $"B reads 50 sacks of barley in A's combine ({(a?.RideModel as Truck)?.Tank})");
         Say("seen combine");
+        await LogisticsB(me);
     }
+
+    // ---- logistics: the auger into a driven trailer, delivering at the co-op (#494) -------------
+
+    /// <summary>The stand-in co-op's door on this peer (<see cref="FarmMarket.StandIn"/> from <c>--farmcoop</c>), or null.</summary>
+    private static Interiors.DoorIndex.Entry? Coop() => Interiors.DoorIndex.Find(new Interiors.BuildingKey(FarmMarket.StandInTile.E, FarmMarket.StandInTile.N, 0));
+
+    private const int Augered = 30;
+
+    private async Task LogisticsA(FootPlayer me)
+    {
+        if (!await Heard("B", "trailer waiting", 60)) { Fail("B never brought the empty tipping trailer"); return; }
+        var b = Other(me);
+        // the combine alongside B's bin, heading the same way, its spout over the bin's middle
+        if (b?.TipperBinFrame() is not { } bin || b.RideModel is not Truck { } bt) { Fail("A does not see B's tipping trailer"); return; }
+        var binBody = bt.Train.Bodies[bt.SectionCount - 1];
+        var binMiddle = bin * new Vector3(0f, 0f, binBody.Spec.Length * 0.5f - binBody.CgAt);
+        me.ExitVehicle();
+        await Seconds(2);
+        float yaw = bin.Basis.GetEuler().Y;
+        var spoutLocal = Avatar.FarmMeshBuilder.AugerSpout(Combine.Sections[0] is { } s0 ? new HeavyTrain.Body(s0, 0f).CgAt : 0f);
+        var at = binMiddle - new Basis(Vector3.Up, yaw) * (spoutLocal with { Y = 0 });
+        me.PlaceAt(at with { Y = me.GlobalPosition.Y + 0.5f }, yaw);
+        await Until(() => me.IsOnFloor(), 5);
+        Expect(me.SetRide(Combine.Kind) && me.Vehicle is Truck, "A takes a combine alongside B's trailer");
+        if (me.Vehicle is not Truck combine) return;
+        await Seconds(2);
+        combine.SetTank(new Tank(CropKind.Wheat, Augered));
+        var spout = me.ToGlobal(Avatar.FarmMeshBuilder.AugerSpout(combine.Train.Bodies[0].CgAt));
+        Expect(b.TipperBinHas(spout, 0.6f), $"its spout over B's bin ({F(spout.DistanceTo(binMiddle))} m from its middle)");
+        me.FarmAction(combine);
+        Expect(combine.AugerOut, "A swings the auger out");
+        bool emptied = await Until(() => combine.Tank.Items == 0, 30);
+        Expect(emptied && me.FarmSacksAugered == Augered, $"A's tank empties into B's trailer ({combine.Tank.Items} left, {me.FarmSacksAugered} moved)");
+        bool seen = await Until(() => Other(me)?.RideModel is Truck { TrailerTank: var t } && t == new Tank(CropKind.Wheat, Augered), 10);
+        Expect(seen, $"A sees the {Augered} sacks in B's trailer ({(Other(me)?.RideModel as Truck)?.TrailerTank})");
+        me.FarmAction(combine);
+        Say("augered");
+        if (!await Heard("B", "seen augered", 30)) Fail("B did not agree on the sacks");
+
+        // a lie: A's claimed position is the co-op's door, its replicated one is far from it
+        if (Coop() is { } door)
+        {
+            int answer = -1;
+            Loot.ShopService.Instance?.Deliver(ItemId.Wheat, 10, door.World + door.Outward * 3f, "", f => answer = f);
+            await Until(() => answer >= 0, 10);
+            Expect(answer == 0, $"the server refuses A a delivery claimed at the co-op's door from {F(me.GlobalPosition.DistanceTo(door.World))} m away");
+        }
+        else Fail("A has no stand-in co-op (--farmcoop)");
+
+        if (!await Heard("B", "tipped", 90)) { Fail("B never tipped at the co-op"); return; }
+        b = Other(me);
+        bool tipped = b != null && await Until(() => b.RideModel is Truck { Tipping: true, TrailerTank.Items: 0 }, 10);
+        Expect(tipped, $"A sees B's trailer tipped and empty ({(b?.RideModel as Truck)?.TrailerTank})");
+        var tip = b?.GetNodeOrNull<Node3D>("Section2/Visual/Body/Tip");
+        Expect(tip != null && await Until(() => tip.Rotation.X > 0.6f, 6), $"and its bin drawn up on B's rig ({F(Mathf.RadToDeg(tip?.Rotation.X ?? 0f))}°)");
+        Say("seen tipped");
+    }
+
+    private async Task LogisticsB(FootPlayer me)
+    {
+        Chat?.Send("/login test");
+        await Seconds(1.5);
+        if (Coop() is not { } door) { Fail("B has no stand-in co-op (--farmcoop)"); return; }
+        // 75 m out in front of the co-op's door (it faces south), facing it
+        me.PlaceAt(door.World + new Vector3(0f, 0.5f, 75f), 0f);
+        await Until(() => me.IsOnFloor(), 5);
+        await Seconds(1);
+        Expect(me.SetRide(Tractor.Kind) && me.Vehicle is Truck, "B takes a tractor");
+        if (me.Vehicle is not Truck tractor) return;
+        await Seconds(1.5);
+        Expect(me.SpawnTrailer(Index(TrailerBody.Tipper), 0f) && tractor.TrailerCapacity > 0 && tractor.TrailerTank.Items == 0, "with an empty tipping trailer");
+        me.RideControls = () => new RideInput(0f, 1f, 0f, false, Handbrake: true);
+        await Seconds(2);
+        Say("trailer waiting");
+
+        if (!await Heard("A", "augered", 90)) { Fail("A never augered"); return; }
+        bool got = await Until(() => tractor.TrailerTank == new Tank(CropKind.Wheat, Augered), 10);
+        Expect(got && me.FarmSacksAugered == Augered, $"B's trailer took the {Augered} sacks ({tractor.TrailerTank}, {me.FarmSacksAugered} augered in)");
+        var a = Other(me);
+        bool empty = a != null && await Until(() => a.RideModel is Truck { Spec.Class: HeavyClass.Combine, Tank.Items: 0 }, 10);
+        Expect(empty, $"and B sees A's combine tank empty ({(a?.RideModel as Truck)?.Tank})");
+        var heap = me.GetNodeOrNull<Node3D>("Section2/Visual/Body/Tip/Heap");
+        Expect(heap != null && heap.Visible && Mathf.Abs(heap.Scale.Y - Augered / 200f) < 0.02f, $"the heap in B's own bin ({F(heap?.Scale.Y ?? 0f, "F2")})");
+        Say("seen augered");
+
+        // to the co-op, then tip
+        await Seconds(3);
+        me.RideControls = () => new RideInput(0.5f, 0f, 0f, false);
+        await Until(() => me.GlobalPosition.DistanceTo(door.World) < 18f, 40);
+        me.RideControls = () => new RideInput(0f, 1f, 0f, false, Handbrake: true);
+        await Until(() => me.GroundSpeed < 0.2f, 15);
+        await Seconds(1);
+        Expect(me.CanDeliver(tractor), $"B stopped {F(me.GlobalPosition.DistanceTo(door.World))} m from the co-op's door");
+        int seed = -1;
+        Loot.ShopService.Instance?.Deliver(ItemId.WheatSeed, 5, me.GlobalPosition, door.Key.ToString(), f => seed = f);
+        await Until(() => seed >= 0, 10);
+        Expect(seed == 0, "the server refuses seed at the co-op");
+        int cash = ItemController.Instance?.Inventory.Cash ?? 0;
+        me.FarmAction(tractor);
+        bool paid = await Until(() => tractor.TrailerTank.Items == 0, 15);
+        int gained = (ItemController.Instance?.Inventory.Cash ?? 0) - cash;
+        int due = Augered * (int)(ItemDefs.Get(ItemId.Wheat)?.Value ?? 0f);
+        Expect(paid && tractor.Tipping && me.FarmFrancsPaid == due && gained == due, $"B tips at the co-op: paid {me.FarmFrancsPaid} CHF (pocket +{gained}, due {due}), the trailer {tractor.TrailerTank.Items}");
+        Say("tipped");
+        if (!await Heard("A", "seen tipped", 30)) Fail("A did not see the tipped, empty trailer");
+        me.RideControls = null;
+    }
+
+    private static string F(float v, string f = "F1") => v.ToString(f, CultureInfo.InvariantCulture);
 }
