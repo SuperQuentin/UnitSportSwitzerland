@@ -203,7 +203,12 @@ public sealed record HeavySpec
     /// <summary>Seconds of an automated shift (clutch out, gear, clutch in): no drive for most of it.</summary>
     public float ShiftTime { get; init; } = 0.55f;
     /// <summary>The box is a range-splitter with six gates (twelve gears): the H-pattern takes it.</summary>
-    public bool SixGates => Gears.Length == 12;
+    public bool SixGates => Gears.Length == 12 && !Stepless;
+    /// <summary>
+    /// A stepless box (a tractor's CVT, #494), modelled as many close ratios the automatic walks
+    /// through without a pause: the player has only the automatic, no clutch, no gates.
+    /// </summary>
+    public bool Stepless { get; init; }
 
     // ---- chassis ----
     /// <summary>Road-wheel lock at full steer, rad.</summary>
@@ -305,6 +310,8 @@ public sealed record TrailerSpec
     public float LiftHeight { get; init; }
     /// <summary>A tipping trailer's body, in items (sacks): 0 for none.</summary>
     public int TankItems { get; init; }
+    /// <summary>A plough's working depth, cm (its draft grows with it).</summary>
+    public float DepthCm { get; init; } = 25f;
     /// <summary>A mounted implement: rigid on the three-point linkage, raised and lowered with {kneel}.</summary>
     public bool Mounted => Couples == Coupling.ThreePoint;
 }

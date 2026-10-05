@@ -103,6 +103,13 @@ public sealed class HeavyTrain
         public float Srt;
         /// <summary>Lateral acceleration as the body's roll has followed it, g.</summary>
         public float RollLat;
+        /// <summary>
+        /// A lowered implement's pull against the soil (#494), N: a force against its motion, never
+        /// more than it takes to stop it. Set by the vehicle each step; 0 raised.
+        /// </summary>
+        public float Draft;
+        /// <summary>A lowered implement stands on the soil: its weight is off the linkage (<see cref="ComputeLoads"/>).</summary>
+        public bool Grounded;
 
         public Body(SectionSpec spec, float payload)
         {
@@ -179,7 +186,7 @@ public sealed class HeavyTrain
     public float Mass { get { float m = 0; foreach (var b in Bodies) m += b.Mass; return m; } }
 
     /// <summary>Does the pivot of this section carry weight (a fifth wheel, a turntable, a bus joint, a tow ball) or only pull (a drawbar)?</summary>
-    public static bool Carries(Coupling c) => c is Coupling.FifthWheel or Coupling.Turntable or Coupling.BusJoint or Coupling.Ball;
+    public static bool Carries(Coupling c) => c is Coupling.FifthWheel or Coupling.Turntable or Coupling.BusJoint or Coupling.Ball or Coupling.ThreePoint;
 
     /// <summary>
     /// Static axle loads, from the last section forward: each section rests on its axle groups and,
@@ -196,6 +203,14 @@ public sealed class HeavyTrain
             float total = weight + passed;
             float moment = weight * b.CgAt + passed * (float.IsNaN(s.HitchAt) ? b.CgAt : s.HitchAt);   // about the front, N·m
             float at = moment / Mathf.Max(total, 1f);
+
+            // a mounted implement (#494) has no wheels: raised, all of it hangs on the linkage
+            // (it unloads the tractor's front axle); lowered, it stands on the soil
+            if (s.Axles.Length == 0)
+            {
+                passed = k > 0 && Carries(s.Pivot) && !b.Grounded ? total : 0f;
+                continue;
+            }
 
             // the supports: the pivot (if it carries) and the axle groups, by their mean position
             float g0 = 0, g1 = 0; int n0 = 0, n1 = 0;
@@ -351,6 +366,9 @@ public sealed class HeavyTrain
 
             float u = b.V.Dot(f);
             F -= f * (0.5f * AirDensity * b.Spec.DragArea * u * Mathf.Abs(u) * (1f - c.Draft));
+            // a lowered implement in the soil (#494): it holds the train back as a brake does, so
+            // standing still it pulls nothing (b.Draft is set by the vehicle, the soil's pull)
+            if (c.OnFloor && b.Draft > 0f) F -= f * Mathf.Clamp(u * b.Mass / h, -b.Draft, b.Draft);
 
             if (c.OnFloor)
                 for (int i = 0; i < b.AxleZ.Length; i++)
@@ -531,8 +549,17 @@ public sealed class HeavyTrain
                 p.V -= lambda * mp;
                 p.W -= Cross(rp, lambda) * ip;
 
-                // the stop: the trailer's front corner against the cab, the dolly against the frame
                 float gamma = MathX.WrapAngle(c.Psi - p.Psi);
+                // a mounted implement (#494) is held rigid by the linkage: no turn of its own
+                if (c.Spec.Pivot == Coupling.ThreePoint)
+                {
+                    float relW = c.W - p.W + gamma * (Baumgarte / h);
+                    float lw = relW / (ic + ip);
+                    c.W -= lw * ic;
+                    p.W += lw * ip;
+                    continue;
+                }
+                // the stop: the trailer's front corner against the cab, the dolly against the frame
                 float max = c.Spec.MaxArticulation;
                 if (Mathf.Abs(gamma) > max - 0.02f)
                 {
