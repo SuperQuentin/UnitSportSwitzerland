@@ -31,13 +31,13 @@ public partial class ControlsHelp : CanvasLayer
     {
         ("On foot", new Row[]
         {
-            new("Move", Keys: Wasd, Pad: "Left stick"),
-            new("Look", Keys: "Mouse", Pad: "Right stick"),
+            new("Move", Keys: Wasd, Pad: "{move_forward}"),
+            new("Look", Keys: "Mouse", Pad: "{look_right}"),
             new("Jump / wall jump / mantle", PlayerInput.Jump),
             new("Run", PlayerInput.Sprint),
             new("Slide (while running)", PlayerInput.CrouchSlide),
             new("Interact: get in or out, search, door", PlayerInput.InteractMount),
-            new("Travel menu: mounts and vehicles", PlayerInput.RideMenu, Pad: "Y (nothing near)"),
+            new("Travel menu: mounts and vehicles", PlayerInput.RideMenu, Pad: "{interact_mount} (nothing near)"),
             new("First / third person (driving: chase, cockpit, cockpit without your body)", PlayerInput.CameraToggle),
             new("Base jump: jump again while falling", PlayerInput.Jump),
         }),
@@ -45,11 +45,11 @@ public partial class ControlsHelp : CanvasLayer
         {
             new("Use the item in hand", PlayerInput.UseItem),
             new("Aim (binoculars, camera, shotgun); with anything else, a throw", PlayerInput.AimItem),
-            new("Throw: hold Aim, hold Use to wind up, let go", Keys: "{aim_item} + {use_item}", Pad: "LB + RB"),
+            new("Throw: hold Aim, hold Use to wind up, let go", Keys: "{aim_item} + {use_item}", Pad: "{aim_item} + {use_item}"),
             new("Drop the item in hand (Ctrl: the whole stack)", PlayerInput.DropItem),
             new("Pick up what you point at; a radio: open it", PlayerInput.InteractMount),
             new("Take the radio you point at into your hand", PlayerInput.UseItem),
-            new("Pick a hotbar slot", Keys: "1–6 / Wheel", Pad: "D-pad →"),
+            new("Pick a hotbar slot", Keys: "1–6 / Wheel", Pad: "{next_item}"),
             new("Quick wheel (hold)", PlayerInput.QuickWheel),
             new("Emote wheel: dances and gestures (hold; tap: stop / again)", PlayerInput.EmoteWheel),
             new("Inventory", PlayerInput.Inventory),
@@ -59,16 +59,16 @@ public partial class ControlsHelp : CanvasLayer
         ("Building (hammer in hand)", new Row[]
         {
             new("Build the piece shown", PlayerInput.UseItem),
-            new("Take back your own piece", Keys: "{aim_item} + {use_item}", Pad: "LB + RB"),
-            new("Next piece", Keys: "{aim_item} + {next_item}", Pad: "LB + D-pad →"),
+            new("Take back your own piece", Keys: "{aim_item} + {use_item}", Pad: "{aim_item} + {use_item}"),
+            new("Next piece", Keys: "{aim_item} + {next_item}", Pad: "{aim_item} + {next_item}"),
             new("Turn the piece", PlayerInput.BuildTurn),
-            new("Change the material", Keys: "{aim_item} + {build_turn}", Pad: "LB + D-pad ↑"),
+            new("Change the material", Keys: "{aim_item} + {build_turn}", Pad: "{aim_item} + {build_turn}"),
         }),
         ("Riding and driving", new Row[]
         {
             new("Throttle / pedal", PlayerInput.Throttle),
             new("Brake / reverse", PlayerInput.Brake),
-            new("Steer", Keys: "{move_left} {move_right}", Pad: "Left stick"),
+            new("Steer", Keys: "{move_left} {move_right}", Pad: "{move_forward}"),
             new("Tuck / sprint effort; motorbike: pull a wheelie (tap on the gas: clutch pop)", PlayerInput.TuckBoost),
             new("Hop / handbrake", PlayerInput.Jump),
             new("Trick in the air (hold + stick)", PlayerInput.Trick),
@@ -107,18 +107,18 @@ public partial class ControlsHelp : CanvasLayer
         }),
         ("Paddle steamer", new Row[]
         {
-            new("Telegraph: one step ahead / astern (FULL ASTERN .. STOP .. FULL AHEAD)", Keys: "{move_forward} / {move_back}", Pad: "Left stick up / down"),
-            new("Wheel (the rudder needs way on)", Keys: "{move_left} / {move_right}", Pad: "Left stick"),
+            new("Telegraph: one step ahead / astern (FULL ASTERN .. STOP .. FULL AHEAD)", Keys: "{move_forward} / {move_back}", Pad: "{move_forward} up / down"),
+            new("Wheel (the rudder needs way on)", Keys: "{move_left} / {move_right}", Pad: "{move_forward}"),
             new("Whistle (hold)", PlayerInput.Horn),
             new("Gangways, stopped", PlayerInput.CarDoor),
             new("Walk aboard by a gangway; E at the wheel in the wheelhouse drives, E at a seat sits", PlayerInput.InteractMount),
         }),
         ("Airliners", new Row[]
         {
-            new("Thrust levers forward / back (held back at idle on the ground: reverse)", Keys: "{sprint} / {crouch_slide}", Pad: "RT / LT"),
-            new("Pitch and roll; on the ground: steer the nose wheel", Keys: "{move_forward}{move_left}{move_back}{move_right}", Pad: "Left stick"),
+            new("Thrust levers forward / back (held back at idle on the ground: reverse)", Keys: "{sprint} / {crouch_slide}", Pad: "{throttle} / {brake}"),
+            new("Pitch and roll; on the ground: steer the nose wheel", Keys: "{move_forward}{move_left}{move_back}{move_right}", Pad: "{move_forward}"),
             new("Wheel brakes (hold)", PlayerInput.Jump),
-            new("Flaps a notch down / up", Keys: "{flaps_down} / {flaps_up}", Pad: "RB / LB"),
+            new("Flaps a notch down / up", Keys: "{flaps_down} / {flaps_up}", Pad: "{flaps_down} / {flaps_up}"),
             new("Gear up / down (in the air)", PlayerInput.CarDoor),
             new("Speedbrake: retracted, half, full", PlayerInput.Speedbrake),
             new("Parking brake", PlayerInput.ParkingBrake),
@@ -129,9 +129,9 @@ public partial class ControlsHelp : CanvasLayer
         }),
         ("Flying", new Row[]
         {
-            new("Pitch and roll", Keys: Wasd, Pad: "Left stick"),
-            new("Helicopter up / down", Keys: "{jump} / {crouch_slide}", Pad: "RT / LT"),
-            new("Plane throttle up / down", Keys: "{sprint} / {crouch_slide}", Pad: "RT / LT"),
+            new("Pitch and roll", Keys: Wasd, Pad: "{move_forward}"),
+            new("Helicopter up / down", Keys: "{jump} / {crouch_slide}", Pad: "{throttle} / {brake}"),
+            new("Plane throttle up / down", Keys: "{sprint} / {crouch_slide}", Pad: "{throttle} / {brake}"),
             new("Guns (armed aircraft)", PlayerInput.Fire),
         }),
         ("Fly camera", new Row[]
@@ -144,6 +144,7 @@ public partial class ControlsHelp : CanvasLayer
         ("Game", new Row[]
         {
             new("Map: search a place and go", PlayerInput.Teleport),
+            new("Battle Royale: ping for your team (also middle-click on the map)", PlayerInput.Ping),
             new("Menu", PlayerInput.Menu),
             new("Chat / command", Keys: "Enter or /", Pad: "—"),
             new("This screen", PlayerInput.Help),
@@ -154,6 +155,7 @@ public partial class ControlsHelp : CanvasLayer
 
     private ScrollContainer _scroll = null!;
     private Label _footer = null!;
+    private Control _padChip = null!;
 
     public override void _Ready()
     {
@@ -175,7 +177,8 @@ public partial class ControlsHelp : CanvasLayer
         head.AddChild(Ui.UiKit.Text("Controls", Ui.UiTheme.FontHeading, Ui.UiTheme.Text, bold: true));
         head.AddChild(Ui.UiKit.Spacer(expand: true));
         head.AddChild(Chip("Keyboard", KeyColor, true));
-        head.AddChild(Chip("Pad", PadColor, true));
+        _padChip = Chip("Pad", PadColor, true);
+        head.AddChild(_padChip);
         rows.AddChild(head);
 
         // the groups flow into as many columns as the window has room for, and scroll past its height
@@ -205,8 +208,15 @@ public partial class ControlsHelp : CanvasLayer
         GetViewport().SizeChanged -= Rebuild;
     }
 
+    /// <summary>The groups whose controls are used mounted: their VR names are the mounted ones.</summary>
+    private static readonly string[] Mounted = { "Riding and driving", "Trucks and buses", "Paddle steamer", "Airliners", "Flying" };
+
     private static readonly Color KeyColor = new(1f, 0.84f, 0.42f);
     private static readonly Color PadColor = new(0.6f, 0.8f, 1f);
+    private static readonly Color VrColor = new(0.55f, 0.9f, 0.62f);
+
+    /// <summary>The second column: the pad, or in VR the controllers (#435).</summary>
+    private static InputDevice PadDevice => PlayerInput.HintDevice == InputDevice.VR ? InputDevice.VR : InputDevice.Gamepad;
     private const float MinGroupWidth = 320;
 
     private void Rebuild()
@@ -216,6 +226,13 @@ public partial class ControlsHelp : CanvasLayer
         var size = new Vector2(Mathf.Min(view.X - 48, 1600), Mathf.Min(view.Y - 48, 900));
         _panel.CustomMinimumSize = size;
         _panel.Size = size;
+
+        bool vr = PadDevice == InputDevice.VR;
+        var legend = (Label)_padChip.GetChild(0);
+        legend.Text = vr ? "VR" : "Pad";
+        legend.AddThemeColorOverride("font_color", vr ? VrColor : PadColor);
+        _padChip.AddThemeStyleboxOverride("panel", Ui.UiTheme.Flat(new Color(vr ? VrColor : PadColor, 0.12f), 6, 7, 2,
+            new Color(vr ? VrColor : PadColor, 0.35f), 1));
 
         foreach (var child in _columns.GetChildren()) child.QueueFree();
         float inner = size.X - 40 - 10;   // panel margins, the scrollbar's gutter
@@ -235,7 +252,10 @@ public partial class ControlsHelp : CanvasLayer
         foreach (var (title, rows) in Groups)
         {
             int k = Array.IndexOf(heights, heights.Min());
+            // in VR the triggers are the triggers in a vehicle, the shoulders on foot (XrPad)
+            bool was = XR.XrPad.AssumeShoulders(!Mounted.Contains(title));
             stacks[k].AddChild(Group(title, rows));
+            XR.XrPad.AssumeShoulders(was);
             heights[k] += rows.Length + 3;
         }
         _footer.Text = $"{InputHints.Label(PlayerInput.Help, InputDevice.KeyboardMouse)} or Esc closes. "
@@ -250,13 +270,13 @@ public partial class ControlsHelp : CanvasLayer
         {
             string keys = row.Keys != null ? InputHints.Format(row.Keys, InputDevice.KeyboardMouse)
                 : row.Action != null ? InputHints.Label(row.Action, InputDevice.KeyboardMouse) : "—";
-            string pad = row.Pad ?? (row.Action != null ? PadOrDash(row.Action) : "—");
+            string pad = row.Pad != null ? InputHints.Format(row.Pad, PadDevice) : row.Action != null ? PadOrDash(row.Action) : "—";
             var line = Ui.UiKit.HBox(6);
             var what = Ui.UiKit.Text(row.What, Ui.UiTheme.FontSmall, Ui.UiTheme.Text, wrap: true);
             what.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
             line.AddChild(what);
             line.AddChild(Chip(keys, KeyColor));
-            line.AddChild(Chip(pad, PadColor));
+            line.AddChild(Chip(pad, PadDevice == InputDevice.VR ? VrColor : PadColor));
             box.AddChild(line);
         }
         return Ui.UiKit.Card(box, 0.5f, 12);
@@ -280,10 +300,10 @@ public partial class ControlsHelp : CanvasLayer
         return chip;
     }
 
-    /// <summary>The pad binding, or a dash where there is only a keyboard one (the label would repeat the key).</summary>
+    /// <summary>The pad (or VR) binding, or a dash where there is only a keyboard one (the label would repeat the key).</summary>
     private static string PadOrDash(string action)
     {
-        string pad = InputHints.Label(action, InputDevice.Gamepad);
+        string pad = InputHints.Label(action, PadDevice);
         return pad == InputHints.Label(action, InputDevice.KeyboardMouse) ? "—" : pad;
     }
 

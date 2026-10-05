@@ -27,7 +27,8 @@ namespace UnitSport.XR;
 public partial class XrRig : Node3D, Core.IOriginShiftAware
 {
     /// <summary>On foot, the right stick snaps the body round by this much.</summary>
-    private const float SnapTurn = Mathf.Pi / 6f;
+    /// <summary>A smooth turn at full right stick, radians per second (#439).</summary>
+    private const float SmoothTurnRate = 2.2f;
     /// <summary>Hold the right stick in this long to recentre on where the head is now.</summary>
     private const float RecentreHold = 0.8f;
 
@@ -46,6 +47,21 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     private XRCamera3D _camera = null!;
     private XRController3D _left = null!, _right = null!;
     private XrPad _pad = null!;
+    private XrWristMenu _wrist = null!;
+    private XrCabControls _cab = null!;
+    private XrTeleport _teleport = null!;
+    private XrWatch _watch = null!;
+    private XrMap _map = null!;
+    private XrClimb _climb = null!;
+
+    /// <summary>Opens or shuts the hand-held map (#439, the wrist menu's entry).</summary>
+    public void ToggleHandMap() => _map.Toggle(Anchor?.GetParent() as FootPlayer);
+    private bool _leftHanded;
+    private Vector3 _prevLeftLocal, _prevRightLocal;
+    private float _flapCooldown;
+
+    /// <summary>Following a camera in the world: not the title's backdrop, not before any camera.</summary>
+    public bool InWorld => Anchor != null && !_anchorIsBackdrop;
     private XrHands _hands = null!;
     private XrUi _ui = null!;
     private MeshInstance3D _vignette = null!;
@@ -148,9 +164,22 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _camera.AddChild(_vignette);
 
         _pad = new XrPad(_left, _right);
+        XrProfile.Watch();
         _hands = new XrHands(_left, _leftMarker, _right, _rightMarker);
         _ui = new XrUi(_camera, _right);
         AddChild(_ui);
+        _wrist = new XrWristMenu(this);
+        AddChild(_wrist);
+        _cab = new XrCabControls(_left, _right);
+        AddChild(_cab);
+        _teleport = new XrTeleport();
+        AddChild(_teleport);
+        _watch = new XrWatch();
+        _left.AddChild(_watch);
+        _map = new XrMap(_right);
+        _left.AddChild(_map);
+        _climb = new XrClimb(_left, _right);
+        ApplyHands();
         Notice = new XrNotice();
         AddChild(Notice);
         if (XrSession.Simulated) Notice.CallDeferred(XrNotice.MethodName.Show, "VR", "simulated");
@@ -179,12 +208,17 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         ApplyQuality();
     }
 
-    public override void _ExitTree() => Core.GameSettings.Changed -= OnSettings;
+    public override void _ExitTree()
+    {
+        Core.GameSettings.Changed -= OnSettings;
+        XrProfile.Unwatch();
+    }
 
     private void OnSettings()
     {
         _camera.Far = Core.GameSettings.Current.CameraFar;
         ApplyQuality();
+        ApplyHands();
     }
 
     /// <summary>
@@ -279,11 +313,22 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         var calibrated = _calib * head;
 
         HandleSticks(player, calibrated, dt);
-        // the hands first: a grip that holds the wheel or works a door is not a shoulder press
-        _hands.Update(player);
-        _pad.LeftGripBusy = _hands.LeftBusy;
-        _pad.RightGripBusy = _hands.RightBusy;
-        _pad.Update(player, calibrated, uiActive: _ui.Pointing, dt);
+        // the cab's levers, then the hands: a grip that holds a lever, the wheel or worked a door
+        // is not a shoulder press (#438)
+        _cab.Update(player, _lastAnchor);
+        // climbing (#439) before the hands: a grip on rock is a hold, not a grab
+        _climb.Update(player, dt);
+        bool leftClaimed = _cab.LeftHeld || _climb.LeftHeld, rightClaimed = _cab.RightHeld || _climb.RightHeld;
+        _hands.Update(player, _camera.GlobalTransform, dt, leftClaimed, rightClaimed);
+        _pad.LeftGripBusy = _hands.LeftBusy || leftClaimed;
+        _pad.RightGripBusy = _hands.RightBusy || rightClaimed;
+        _pad.BodyStick = BodyFlight(player, dt);
+        _map.Update(player);
+        _pad.Update(player, calibrated, uiActive: _ui.Pointing || _map.Pointing, dt);
+        _wrist.Watch(_camera.GlobalTransform, _left, player, InWorld, dt);
+        UpdateHandAim();
+        ShareHands(player);
+        _watch.Tick(player, _left.GetHasTrackingData(), dt);
         _ui.UpdatePanel(dt);
         UpdateSki(player, calibrated, dt);
         UpdateVignette(player, dt);
@@ -298,6 +343,94 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         // or the backdrop drifts away from the panel the headset would be looking at
         else if (XrSession.Simulated && _anchorIsBackdrop && Anchor != null)
             Anchor.GlobalTransform = _camera.GlobalTransform.Orthonormalized();
+    }
+
+    private Vector3 _aimZero;
+    private FootPlayer? _handsOn;
+
+    /// <summary>
+    /// The real hands for the avatar (#439): on foot, each hand from the eyes in the body's yaw
+    /// frame, written on the player and replicated in its pose so every peer's figure reaches
+    /// where they are. Cleared off foot and when a hand is not tracked.
+    /// </summary>
+    private void ShareHands(FootPlayer? player)
+    {
+        if (_handsOn != null && _handsOn != player && IsInstanceValid(_handsOn)) _handsOn.VrHands = null;
+        _handsOn = player;
+        if (player == null) return;
+        // --xrhands with --xrsim: a fixed pose (right hand raised ahead, left at the hip) to see the figure take it
+        if (XrSession.Simulated && Core.CmdArgs.Has("--xrhands") && player.Ride == RideKind.OnFoot)
+        {
+            player.VrHands = new Avatar.HumanMeshBuilder.VrArms(new Vector3(0.25f, 0.15f, -0.45f), new Vector3(-0.25f, -0.75f, 0f));
+            return;
+        }
+        if (player.Ride != RideKind.OnFoot || player.RidingWith != 0 || !_left.GetHasTrackingData() || !_right.GetHasTrackingData())
+        {
+            player.VrHands = null;
+            return;
+        }
+        var eye = _camera.GlobalPosition;
+        var body = new Basis(Vector3.Up, player.GlobalRotation.Y).Inverse();
+        // the logical right hand uses: left-handed, the nodes are already swapped (#439)
+        player.VrHands = new Avatar.HumanMeshBuilder.VrArms(body * (_right.GlobalPosition - eye), body * (_left.GlobalPosition - eye));
+    }
+
+    /// <summary>
+    /// Flying with the arms (#438), as a stick added to the left one (up +y, right +x): the pigeon
+    /// flaps when both hands beat down; the wingsuit, arms spread, rolls toward the lower hand; a
+    /// canopy's brakes are the hands pulled down, one to turn, both to slow and flare.
+    /// </summary>
+    private Vector2 BodyFlight(FootPlayer? player, float dt)
+    {
+        var head = _camera.Transform;
+        var l = _left.Position - head.Origin;
+        var r = _right.Position - head.Origin;
+        float vl = (_left.Position.Y - _prevLeftLocal.Y) / Mathf.Max(dt, 1e-3f);
+        float vr = (_right.Position.Y - _prevRightLocal.Y) / Mathf.Max(dt, 1e-3f);
+        _prevLeftLocal = _left.Position;
+        _prevRightLocal = _right.Position;
+        _flapCooldown -= dt;
+        if (player == null || player.RidingWith != 0 || !_left.GetHasTrackingData() || !_right.GetHasTrackingData())
+            return Vector2.Zero;
+
+        switch (player.Ride)
+        {
+            case RideKind.Pigeon:
+                // both wings beat down together, from about the shoulders
+                if (vl < -1.6f && vr < -1.6f && _flapCooldown <= 0f && Input.MouseMode == Input.MouseModeEnum.Captured)
+                {
+                    _flapCooldown = 0.3f;
+                    XrPad.Tap(Core.PlayerInput.Jump);
+                }
+                return Vector2.Zero;
+            case RideKind.Wingsuit:
+            {
+                // arms out: the lower hand is the wing that dips
+                if ((_left.Position - _right.Position).Length() < 1.0f) return Vector2.Zero;
+                return new Vector2(Mathf.Clamp((l.Y - r.Y) / 0.3f, -1f, 1f), 0f);
+            }
+            case RideKind.Parachute or RideKind.Paraglider:
+            {
+                // the toggles hang at the shoulders: pulled down, a brake
+                float bl = Mathf.Clamp((-l.Y - 0.3f) / 0.35f, 0f, 1f), br = Mathf.Clamp((-r.Y - 0.3f) / 0.35f, 0f, 1f);
+                return new Vector2(br - bl, -Mathf.Min(bl, br));
+            }
+            default:
+                return Vector2.Zero;
+        }
+    }
+
+    /// <summary>The right hand across the view since it was zeroed, as a stick (<see cref="XrSession.HandAim"/>).</summary>
+    private void UpdateHandAim()
+    {
+        var local = _camera.GlobalTransform.AffineInverse() * _right.GlobalPosition;
+        if (XrSession.HandAimZeroAsked)
+        {
+            XrSession.HandAimZeroAsked = false;
+            _aimZero = local;
+        }
+        var d = local - _aimZero;
+        XrSession.HandAim = new Vector2(d.X, -d.Y) / 0.15f;
     }
 
     /// <summary>Puts the tracking space so the calibrated head sits on the anchor.</summary>
@@ -343,16 +476,39 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         GD.Print($"[xr] recentred at head height {head.Origin.Y:F2} m");
     }
 
+    /// <summary>
+    /// Left-handed play (#439): the controller nodes swap trackers, so the hand that moves and the
+    /// hand that uses are swapped everywhere at once; the prompts name the real hand (<see cref="XrProfile.Name"/>).
+    /// </summary>
+    private void ApplyHands()
+    {
+        bool swap = Core.GameSettings.Current.VrLeftHanded;
+        if (_left == null || swap == _leftHanded && _left.Tracker != "") return;
+        _leftHanded = swap;
+        _left.Tracker = swap ? "right_hand" : "left_hand";
+        _right.Tracker = swap ? "left_hand" : "right_hand";
+        Core.PlayerInput.HintsChanged();
+    }
+
     private void HandleSticks(FootPlayer? player, Transform3D calibrated, float dt)
     {
         var stick = _right.GetVector2("primary");
 
-        // snap turn, on foot only: in a vehicle the head is the free look; a pigeon (#217) snaps
+        // the moving hand's stick pushed forward aims a teleport, when the setting asks (#439)
+        _pad.SuppressMove = _teleport.Update(player, _left, _left.GetVector2("primary").Y, Blink, dt);
+
+        // turning on foot only: in a vehicle the head is the free look; a pigeon (#217) snaps
         // while perched or walking (PigeonSnap says no in the air)
         bool onFoot = player != null && player.Ride == RideKind.OnFoot && player.RidingWith == 0;
-        if ((onFoot || player?.Ride == RideKind.Pigeon) && Mathf.Abs(stick.X) > 0.7f && _snapArmed && !_ui.Pointing)
+        int snapDegrees = Core.GameSettings.Current.VrSnapDegrees;
+        if (onFoot && snapDegrees == 0 && !_ui.Pointing)
         {
-            float turn = -Mathf.Sign(stick.X) * SnapTurn;
+            // smooth, past a small deadzone (#439)
+            if (Mathf.Abs(stick.X) > 0.2f) player!.LookYaw -= stick.X * SmoothTurnRate * dt;
+        }
+        else if ((onFoot || player?.Ride == RideKind.Pigeon) && Mathf.Abs(stick.X) > 0.7f && _snapArmed && !_ui.Pointing)
+        {
+            float turn = -Mathf.Sign(stick.X) * Mathf.DegToRad(snapDegrees == 0 ? 30 : snapDegrees);
             if (onFoot) player!.LookYaw += turn;
             else player!.PigeonSnap(turn);
             _snapArmed = false;
@@ -450,6 +606,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
                 target = (Mathf.Clamp((speed - 1.5f) / 14f, 0f, 0.55f) + Mathf.Clamp((turn - 0.4f) / 2.5f, 0f, 0.45f)) * frame;
             }
         }
+        target *= Core.GameSettings.Current.VrVignette;
         _vignetteLevel = Mathf.Lerp(_vignetteLevel, target, MathX.Damp(6f, dt));
         _blink = Mathf.Max(0f, _blink - dt / BlinkSeconds);
         _vignette.Visible = _vignetteLevel > 0.02f || _blink > 0f;

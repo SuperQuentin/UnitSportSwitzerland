@@ -18,7 +18,9 @@
 - **Client at Board** (`EnterMatch`):
   - Stores where it stood (LV95).
   - `Inventory.BeginMatch()`, then a knife + 3 bandages.
-  - Sets `FootPlayer.StayDown` (an eliminated player stays down).
+  - Sets `FootPlayer.StayDown` (an eliminated player stays down) and `FootPlayer.Regenerates` → false
+    (#455: no 12 HP/s regeneration after 6 s unhurt; bandages and kits are the only way back, so a
+    fight or the zone leaves its marks). Also sets `PvpRules.Override` on the client, for aerial rounds.
   - `Permissions.SetInMatch(true)`: no admin or free-roam advantage, admin or not (#425):
     - `RideUi.Open` refuses, so you ride only what you find (also no pigeon, paraglider, wingsuit from the menu).
     - The fly camera (T) is refused (walking back from it would drop the body where it flew); a player on it
@@ -52,4 +54,9 @@
   - results table.
 - **Server flags**: `--brpace f` scales every match's timing (the loopback check runs at 0.13, short: 0.104; its 2-player zone runs at half the timetable).
   `user://br/history.json` holds the last 5 region centres.
+- **Careers** (#479, `BrStats`, plain C#, unit-tested): at `End` the server folds every entrant into
+  `user://br/stats.json` (by display name, any case: matches, wins, top 5s, kills, damage, best place,
+  time survived; saved with `JsonStore.SaveAsync`) and tells each entrant their record in a private line.
+  `/br stats [name]`, `/br top` (10 by wins, then kills, then fewest matches). `BrState.Leaders` (top 3
+  when the lobby opens) shows on the lobby HUD. Names are not accounts: a renamed player starts afresh.
 - Not yet: teams, spectating for players who were never in the match, a warm-up in the hold during the lobby.

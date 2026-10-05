@@ -55,6 +55,11 @@
   enterable. A carrier's ground rays skip its cargo (`FootPlayer.Cargo`, `VehicleBody.Cargo`, and
   `GroundQuery` past anything `InHold`). A carrier key may be `"?"`: found where it stands (a trailer
   the server has not named yet).
+- **The AN-124** (#419) is drive-through: the bay runs hinge to hinge, vehicles drive up the nose ramp and
+  out down the rear one (`--an124check car|bus`: a Citaro fits). Its ramps reach the ground at 12° only
+  knelt; a ramp whose slope depends on a state is two `DoorStep`s on derived door bits
+  (`An124Deck.DeckDoors`). A carrier's driven hull must leave the bay's ends open (a belly slab, not the
+  fuselage), or a long vehicle's level hull box meets it on the ramp before it is excepted (1.5 m).
 - **Limits**: a vehicle driving out of a *moving* carrier keeps only its own speed (no carrier
   velocity added); trucks with trailers and articulated buses are carried by the cab's section only;
   carried rides are ground vehicles (no planes, boats in holds); the hold platform of the test carrier

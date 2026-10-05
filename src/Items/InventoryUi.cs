@@ -563,9 +563,8 @@ public partial class InventoryUi : CanvasLayer
 
     private void RefreshDropHint()
     {
-        bool pad = PlayerInput.LastDevice == InputDevice.Gamepad;
         _dropHint.Text = !IsOpen || Inv.Carried.IsEmpty ? ""
-            : pad ? "(B) put it back" : "Click outside the panel to drop it on the ground  ·  right click: drop one";
+            : InputHints.Pad ? InputHints.Format("{ui_cancel} put it back") : "Click outside the panel to drop it on the ground  ·  right click: drop one";
     }
 
     private static string Chf(long amount) =>
@@ -574,10 +573,12 @@ public partial class InventoryUi : CanvasLayer
     /// <summary>The key reference under the slots, for the device in hand.</summary>
     private void OnDeviceChanged()
     {
-        _controlsHint.Text = PlayerInput.LastDevice == InputDevice.Gamepad
-            ? "(A) pick up / put down   (X) take half / put one   (Y) send across   (B) put back, then close"
-            : "LMB pick up / put down   RMB half / one   Shift+LMB send across   Drag to spread   Double-click gather\n"
-              + $"1–6 over a slot: into hotbar   Q drop one, Ctrl+Q stack   MMB use   {InputHints.Label(PlayerInput.Inventory)} / Esc close";
+        _controlsHint.Text = InputHints.Pad
+            ? $"{InputHints.Button(JoyButton.A)} pick up / put down   {InputHints.Button(JoyButton.X)} take half / put one   "
+              + $"{InputHints.Button(JoyButton.Y)} send across   {InputHints.Button(JoyButton.B)} put back, then close"
+            : $"LMB pick up / put down   RMB half / one   {InputHints.Keyboard(Key.Shift)}+LMB send across   Drag to spread   Double-click gather\n"
+              + $"1–6 over a slot: into hotbar   {InputHints.Label(PlayerInput.DropItem)} drop one, {InputHints.Keyboard(Key.Ctrl)}+{InputHints.Label(PlayerInput.DropItem)} stack   MMB use   "
+              + InputHints.Format("{inventory} / {menu} close");
         RefreshMoney();
         RefreshDropHint();
     }
@@ -773,6 +774,8 @@ public partial class InventoryUi : CanvasLayer
     private void OpenWheel()
     {
         _wheelAim = Vector2.Zero;
+        // in VR the right hand aims, from where it is now (#489)
+        if (XR.XrSession.Active) XR.XrSession.ZeroHandAim();
         _wheel.Highlight = -1;
         _wheel.Visible = true;
         UiFocus.Set(_wheel, true);
@@ -1119,6 +1122,8 @@ public partial class InventoryUi : CanvasLayer
             var stick = Input.GetVector(PlayerInput.LookLeft, PlayerInput.LookRight,
                 PlayerInput.LookUp, PlayerInput.LookDown);
             if (stick.Length() > 0.5f) _wheelAim = stick;
+            // in VR the right hand points at a slot, as a stick would (#489)
+            else if (XR.XrSession.Active) _wheelAim = XR.XrSession.HandAim.LimitLength(1.2f);
             int before = _wheel.Highlight;
             _wheel.Highlight = _wheelAim.Length() < 0.35f
                 ? before

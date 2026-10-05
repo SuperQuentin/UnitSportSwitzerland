@@ -164,7 +164,7 @@ public partial class CatalogueUi : CanvasLayer
         scroll.AddChild(grid);
         left.AddChild(scroll);
 
-        left.AddChild(UiKit.Text("Click: one   ·   Right click: ten   ·   Shift-click: a full stack   ·   Enter in the search: the first match",
+        left.AddChild(UiKit.Text($"Click: one   ·   Right click: ten   ·   {InputHints.Keyboard(Key.Shift)}-click: a full stack   ·   Enter in the search: the first match",
             UiTheme.FontTiny, UiTheme.TextFaint));
         return left;
     }

@@ -35,6 +35,8 @@ public enum FlightEvent
     OpenCanopy,
     Landed,
     Crashed,
+    /// <summary>A parachute cut away (#485): back in the wingsuit, as often as the pilot likes.</summary>
+    CutAway,
 }
 
 /// <summary>
@@ -138,8 +140,11 @@ public abstract class Flyer : Rideable
     {
         var attitude = m.Attitude == default ? Basis.Identity : m.Attitude;
         var local = new Basis(Vector3.Up, -bodyYaw) * attitude * Fix;
-        visual.Transform = new Transform3D(local, Pivot - local * Pivot);
+        visual.Transform = new Transform3D(local, Pivot - local * Pivot + PoseShift);
     }
+
+    /// <summary>How far the drawn frame (and the deck in it) sits off the body: the AN-124 kneeling (#419).</summary>
+    public virtual Vector3 PoseShift => Vector3.Zero;
 
     /// <summary>Forward for the chase camera, before the player's free look is added.</summary>
     public virtual Vector3 CameraForward(in FlightMotion m) =>
@@ -307,7 +312,7 @@ public class Canopy : Flyer
     public override string Label => _paraglider ? "Paraglider" : "Parachute";
     public override string Blurb => _paraglider
         ? "{move_forward} run, {jump} to launch; steer with {move_left}/{move_right}, {move_back} brakes, {move_forward} speed bar"
-        : "{move_left}/{move_right} steer, {move_back} brakes and flares";
+        : "{move_left}/{move_right} steer, {move_back} brakes and flares, {jump} back to the wingsuit";
 
     private float TrimSpeed => _paraglider ? 10.5f : 9f;
     private float TrimSink => _paraglider ? 1.15f : 4.2f;
@@ -358,6 +363,9 @@ public class Canopy : Flyer
             m.Attitude = new Basis(Vector3.Up, m.Yaw);
             return FlightEvent.None;
         }
+
+        // a parachute in the air: Jump cuts it away, back to the wingsuit (#485); Jump there opens it again
+        if (!_paraglider && input.Action) return FlightEvent.CutAway;
 
         float brake = Mathf.Max(0f, input.Stick.Y);
         float bar = Mathf.Max(0f, -input.Stick.Y);

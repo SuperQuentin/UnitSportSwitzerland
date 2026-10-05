@@ -101,7 +101,7 @@ public partial class MarinaBoats : Node
     /// <summary>Puts a boat at every place that has none and may have one now. Returns how many were put.</summary>
     public int Review(VehicleManager vehicles, WorldOrigin origin)
     {
-        double now = Time.GetTicksMsec() / 1000.0;
+        double now = GameClock.Now;
         int placed = 0;
         var players = vehicles.PlayerPositions?.Invoke().ToList();
         foreach (var id in _berths.Keys.ToList())

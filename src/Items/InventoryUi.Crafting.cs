@@ -68,7 +68,7 @@ public partial class InventoryUi
             rows.AddChild(BuildRecipeRow(r));
         }
 
-        column.AddChild(UiKit.Text("Shift-click Make to craft as many as you can.",
+        column.AddChild(UiKit.Text($"{Core.InputHints.Keyboard(Key.Shift)}-click Make to craft as many as you can.",
             UiTheme.FontTiny, UiTheme.TextFaint, wrap: true));
     }
 
@@ -132,7 +132,7 @@ public partial class InventoryUi
             row.Make.Disabled = !here || max == 0 || _making != null;
             row.Make.TooltipText = !here ? CraftStations.WhereToFind(r.Station)
                 : max == 0 ? "Missing ingredients."
-                : $"Takes {r.Seconds:0.#} s. Shift-click: make all {max}.";
+                : $"Takes {r.Seconds:0.#} s. {Core.InputHints.Keyboard(Key.Shift)}-click: make all {max}.";
             row.Needs.Text = Describe(r, here);
         }
     }

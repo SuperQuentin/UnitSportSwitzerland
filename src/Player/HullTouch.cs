@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Threading.Tasks;
 using Godot;
 using UnitSport.Avatar;
+using UnitSport.Core;
 using UnitSport.Vehicles;
 
 namespace UnitSport.Player;
@@ -114,10 +115,10 @@ public static class HullTouch
             float s = Mathf.Sign((me.GlobalPosition - d.Origin).Dot(across));
             return (-across * (s == 0f ? 1f : s), false);
         };
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
+        double end = GameClock.Now + seconds;
         float dt = 1f / Engine.PhysicsTicksPerSecond;
         int climbs = 0;
-        while (Time.GetTicksMsec() / 1000.0 < end && GodotObject.IsInstanceValid(boat))
+        while (GameClock.Now < end && GodotObject.IsInstanceValid(boat))
         {
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.PhysicsFrame);
             // pushing at a low gunwale at the surface climbs out onto it (the mantle): back in beside it

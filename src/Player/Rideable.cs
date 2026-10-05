@@ -36,7 +36,9 @@ public enum RideKind
     Airstairs = 126,
     /// <summary>The military cargo plane (#420, the Battle Royale's model): an <see cref="Player.Airliner"/>, walkable, a ramp and a hold.</summary>
     Freighter = 127,
-    // 128 is the AN-124 (#419). 129..192 are motorbikes again (the second range, MotorbikeCatalog.First2).
+    /// <summary>The Antonov AN-124 Ruslan (#419): an <see cref="Player.Airliner"/>, walkable, a visor, two ramps, kneeling, a drive-through hold.</summary>
+    An124 = 128,
+    // 129..192 are motorbikes again (the second range, MotorbikeCatalog.First2).
     // The next other mount is 193.
 }
 

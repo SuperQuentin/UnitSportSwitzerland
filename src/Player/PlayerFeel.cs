@@ -1028,8 +1028,11 @@ public partial class PlayerFeel : Node3D
     /// </summary>
     private void UpdateHint(float dt, RideKind ride)
     {
-        bool pad = PlayerInput.LastDevice == InputDevice.Gamepad;
-        string jump = pad ? "(A)" : "SPACE";
+        bool pad = InputHints.Pad;
+        string jump = InputHints.Label(PlayerInput.Jump);
+        // the stick, the keys, and what leans: the right stick, the mouse, or the head in VR
+        string stick = InputHints.Label(PlayerInput.MoveForward);
+        string look = InputHints.Vr ? "head" : pad ? "look" : "mouse";
         string text = "";
         bool urgent = false;
 
@@ -1049,10 +1052,12 @@ public partial class PlayerFeel : Node3D
             case RideKind.Wingsuit:
                 urgent = _player.Clearance < 80f;
                 text = $"{jump}  open PARACHUTE" + (urgent ? "  — NOW!" : "")
-                    + $"\n{(pad ? "left stick" : "W / S")} dive · flare     {(pad ? "left stick" : "A / D")} turn · {(pad ? "look" : "mouse")} leans";
+                    + $"\n{(pad ? stick : InputHints.Format("{move_forward} / {move_back}"))} dive · flare     "
+                    + $"{(pad ? stick : InputHints.Format("{move_left} / {move_right}"))} turn · {look} leans";
                 break;
             case RideKind.Parachute:
-                text = $"{(pad ? "left stick" : "A / D")} steer · {(pad ? "look" : "mouse")} leans     {(pad ? "pull back" : "S")} brake — hold it to flare the landing";
+                text = $"{(pad ? stick : InputHints.Format("{move_left} / {move_right}"))} steer · {look} leans     "
+                    + $"{(pad ? "pull back" : InputHints.Label(PlayerInput.MoveBack))} brake — hold it to flare the landing";
                 break;
             case var _ when _player.Heavy is { } truck && truck.Trailer == null && _player.GroundSpeed < 1.5f
                 && _player.CoupleCandidate(truck) != null:

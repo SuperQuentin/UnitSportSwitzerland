@@ -1309,6 +1309,8 @@ public partial class InteriorNode : Node3D
             (pair ? node._shutters : node._leaves)[e.Door] = leaf;
         }
         AddLockDoors(node, material);
+        // a mirror over each washbasin (#439)
+        WallMirror.AddTo(node, layout);
         return node;
     }
 

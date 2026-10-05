@@ -587,9 +587,9 @@ public partial class SteamerCheck : Node
         await Ring(me, 8, ahead: false);
         Expect(steamer.Order == -Telegraph.Max, $"eight pulls ring {Telegraph.Name(steamer.Order)} (FULL ASTERN)");
         me.RideControls = Hold(me, East);
-        double start = Time.GetTicksMsec() / 1000.0;
+        double start = GameClock.Now;
         bool stopped = await Until(() => me.BoatMotion.WaterSpeed < 0.1f, 120);
-        float took = (float)(Time.GetTicksMsec() / 1000.0 - start);
+        float took = (float)(GameClock.Now - start);
         float run = MathX.FlatDistance(from, me.GlobalPosition);
         Log(F($"FULL ASTERN from {v0 * 3.6f:F0} km/h: stopped in {took:F0} s and {run:F0} m"));
         Expect(stopped && took > 15f && run > 60f, "a long stop");

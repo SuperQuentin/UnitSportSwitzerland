@@ -7,12 +7,16 @@
 #         full: the windowed / two-client / load scripts (tier 3), only under `test.sh full`.
 # check   "--flag [args]" runs `godot --headless --path . -- --flag [args]`; a tools/ path runs
 #         that script; "@netsmoke" is the runner's own headless server + client.
+#         quick-tier Godot checks run with --fixed-fps 60 (game time, docs/notes/general/fast-checks.md);
+#         "@realtime --flag ..." keeps one in real time.
 # Only list a check that ends by itself and prints a RESULT line or exits non-zero on failure.
 # Give each check the lightest world it works on (Core/Systems): `--world flat` (TestWorld, no
 # map), `--systems ui` (only what is named), `--world fixture` / `--chunks fixture:<course>`
 # (tiles built in code). Never the real map in quick/net.
 
 src/Net/                 quick  --interestcheck
+src/Player/FootPlayer.cs  quick  --vrposecheck
+src/XR/                  quick  --vrposecheck
 src/Audio/Cd/            quick  --beatcheck
 src/Audio/               quick  --earscheck --world fixture --view third
 src/Items/Radio          quick  --radiopanelcheck --world fixture
@@ -195,6 +199,13 @@ src/Vehicles/VehicleBody net    tools/boatnetcheck.sh
 src/World/SignalNetProbe net    tools/signalnetcheck.sh
 src/Terrain/SignalLamps  net    tools/signalnetcheck.sh
 src/Net/ClockSync        net    tools/signalnetcheck.sh
+# the time of day (#452): two clients, B joining later with its own clock, agree on the server's hour
+src/World/DayNight       net    tools/clocknetcheck.sh
+src/World/WorldClock     net    tools/clocknetcheck.sh
+src/World/TimeCommand    net    tools/clocknetcheck.sh
+src/World/ClockNetProbe  net    tools/clocknetcheck.sh
+src/Net/ClockSync        net    tools/clocknetcheck.sh
+src/Net/ChatManager      net    tools/clocknetcheck.sh
 tools/TerrainFormat/SignalPlan net tools/signalnetcheck.sh
 src/Player/Steamer       net    tools/steamernetcheck.sh
 src/Player/FootPlayer.St net    tools/steamernetcheck.sh
@@ -262,6 +273,23 @@ src/Player/Airliner      net    tools/freighternetcheck.sh
 src/Player/FreighterNet  net    tools/freighternetcheck.sh
 src/Avatar/Freighter     net    tools/freighternetcheck.sh
 src/BattleRoyale/BrPlane quick  --flycheck freighter --world flat
+src/Player/Airliner      quick  --flycheck an124 --world flat
+src/Avatar/An124         quick  --flycheck an124 --world flat
+src/Player/AirlinerCirc  quick  --flycheck an124 --world flat
+src/Avatar/An124         quick  --an124check --world fixture --traffic 0
+src/Player/An124Check    quick  --an124check --world fixture --traffic 0
+src/Player/Airliner      quick  --an124check --world fixture --traffic 0
+src/Avatar/AirlinerRig   quick  --an124check --world fixture --traffic 0
+src/Player/Flight.cs     quick  --an124check --world fixture --traffic 0
+src/Player/FootPlayer.De quick  --an124check --world fixture --traffic 0
+src/Avatar/An124         quick  --an124check bus --world fixture --traffic 0
+src/Player/An124Check    quick  --an124check bus --world fixture --traffic 0
+src/Player/FootPlayer.Hold quick --an124check bus --world fixture --traffic 0
+src/Player/An124Check    quick  --an124check car --world fixture --traffic 0
+src/Avatar/An124         net    tools/an124netcheck.sh
+src/Player/An124NetProbe net    tools/an124netcheck.sh
+src/Player/Airliner      net    tools/an124netcheck.sh
+src/Vehicles/VehicleManager net tools/an124netcheck.sh
 src/Player/FootPlayer.Hold quick --holdcheck --world fixture --traffic 0
 src/Player/HoldCheck     quick  --holdcheck --world fixture --traffic 0
 src/Player/FootPlayer.De quick  --holdcheck --world fixture --traffic 0
@@ -277,6 +305,9 @@ src/World/Wa             full   tools/waterparity.sh
 shaders/common/waves     full   tools/waterparity.sh
 shaders/body/water       full   tools/waterparity.sh
 src/Player/Emote         net    tools/emotenetcheck.sh
+# the Swiss match items (#478): fondue, smoke and alphorn between two clients
+src/Items/SwissItems     net    tools/swisscheck.sh
+src/Items/SwissNetProbe  net    tools/swisscheck.sh
 src/Avatar/HumanMeshBuilder.Emotes net tools/emotenetcheck.sh
 src/Player/FootPlayer.Hold net   tools/holdnetcheck.sh
 src/Player/HoldNetProbe  net    tools/holdnetcheck.sh
