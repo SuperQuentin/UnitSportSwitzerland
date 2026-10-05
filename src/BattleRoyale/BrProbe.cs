@@ -476,8 +476,15 @@ public partial class BrProbe : ChatProbe
         // to the nearest stop, and the tag used there
         var here = br.ZonePoint(me.GlobalPosition);
         var stop = br.NearestStop(here)!.Value;
-        br.Teleport(br.State.AreaE + stop.At.X + 2, br.State.AreaN + stop.At.Y, "a Postauto stop");
-        await Seconds(3.0);
+        // onto the stop itself, and again if the ground there slid A away (a road bank)
+        for (int tries = 0; tries < 4; tries++)
+        {
+            br.Teleport(br.State.AreaE + stop.At.X, br.State.AreaN + stop.At.Y, "a Postauto stop");
+            await Seconds(3.0);
+            if (br.ZonePoint(me.GlobalPosition).DistanceTo(stop.At) <= 4f) break;
+        }
+        Expect(br.ZonePoint(me.GlobalPosition).DistanceTo(stop.At) <= BrManager.RecallReach,
+            Fmt($"at the stop ({br.ZonePoint(me.GlobalPosition).DistanceTo(stop.At):F1} m)"));
         int signs = GetTree().GetNodesInGroup(BrManager.StopGroup).Count;
         Expect(signs == BrManager.RecallStops, $"the stops' signs stand in the world ({signs})");
         Expect(br.ZoneNow is { } zn && zn.Phase < BrManager.RecallBefore, $"still before zone {BrManager.RecallBefore} (zone {br.ZoneNow?.Phase})");
