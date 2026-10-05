@@ -76,6 +76,28 @@ public partial class Gathering : Node, Core.IOriginShiftAware
     /// <summary>What the player can collect right now, for probes.</summary>
     public Resource Target => _target.Kind;
 
+    /// <summary>The one in the client world, for the fishing rod's stream test (#493).</summary>
+    public static Gathering? Instance { get; private set; }
+
+    public override void _EnterTree() => Instance = this;
+
+    public override void _ExitTree()
+    {
+        if (Instance == this) Instance = null;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="ground"/> (a point on the ground) lies in a mapped stream: a watercourse line
+    /// with no water surface to it (#493: a float cast into a brook). Loads the tile's streams on first use,
+    /// so the first cast at a new tile may miss.
+    /// </summary>
+    public bool StreamAt(Vector3 ground)
+    {
+        var tile = _origin.TileAt(ground);
+        EnsureLoaded(tile);
+        return NearStream(tile, ground, ground);
+    }
+
     public override void _Ready()
     {
         Name = "Gathering";

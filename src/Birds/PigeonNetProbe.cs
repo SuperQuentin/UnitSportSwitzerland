@@ -14,6 +14,7 @@ namespace UnitSport.Birds;
 /// <item>B sees A as a bird (the remote copy draws the pigeon, at pigeon size);</item>
 /// <item>A flies over B and lets go: the server picks B as the victim, B gets the splat and A's name,
 /// A sees it land on B and scores a hit;</item>
+/// <item>A dives into the ground too fast (#519): a feather splat, on foot, unhurt; B sees the splat;</item>
 /// <item>A turns back into a person: items usable again, the same items.</item>
 /// </list>
 /// Roles talk through chat lines; scratch inventory.
@@ -82,6 +83,14 @@ public partial class PigeonNetProbe : ChatProbe
             $"A saw it fall on B and scored ({life.DropsOnOthers - drops} seen, {life.PigeonHits} hits, victim {life.LastVictim})");
         if (!await Heard("B", "splat", 20)) Fail("B was not hit");
 
+        // #519: into the ground beside B, too fast: a splat here and on B, A on foot and unhurt
+        int crashes = life.CrashSplats;
+        me.DebugLaunch(b.GlobalPosition + new Vector3(4f, 1.5f, 0f), new Vector3(0f, -30f, 0f));
+        Expect(await Until(() => me.Ride == RideKind.OnFoot, 5) && life.CrashSplats == crashes + 1 && me.Health >= FootPlayer.MaxHealth,
+            $"A crashed in a splat ({me.Ride}, {life.CrashSplats - crashes} splats, health {me.Health:F0})");
+        Say("crashed");
+        if (!await Heard("B", "sawsplat", 20)) Fail("B never saw A's splat");
+
         // landed and slowed to a walk: a person again
         Expect(await Until(() => me.SetRide(RideKind.OnFoot), 20), "back on foot");
         await Seconds(0.5);
@@ -104,6 +113,11 @@ public partial class PigeonNetProbe : ChatProbe
         bool hit = await Until(() => life.Splats > splats, 40);
         Expect(hit && life.LastDropper.Length > 0, $"A's dropping landed on B, by '{life.LastDropper}'");
         Say(hit ? "splat" : "nosplat");
+
+        int crashes = life.CrashSplats;
+        if (!await Heard("A", "crashed", 30)) Fail("A never crashed");
+        Expect(await Until(() => life.CrashSplats > crashes, 10), "B saw A's crash splat");
+        Say("sawsplat");
         await Heard("A", "done", 30);
         Expect(await Until(() => a.Ride == RideKind.OnFoot, 5), "B sees A on foot again");
     }

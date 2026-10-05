@@ -544,6 +544,19 @@ void fragment() {{
         if (_screenLabel != null && _screenLabel.Text != (ScreenText ?? "")) _screenLabel.Text = ScreenText ?? "";
     }
 
+    /// <summary>
+    /// Where a point of the held item's mesh (authored space, facing +Z, <c>MeshScratch</c>) is in the
+    /// world: on the viewmodel in first person, else in the figure's hand; null when neither is drawn.
+    /// The fishing line starts at the rod's tip (#493).
+    /// </summary>
+    public Vector3? ItemPoint(Vector3 authored)
+    {
+        var local = new Vector3(-authored.X, authored.Y, -authored.Z);
+        if (_viewmodel != null && IsInstanceValid(_viewmodel) && _viewmodel.Visible) return _viewmodel.GlobalTransform * local;
+        if (_inHand.Visible) return _inHand.GlobalTransform * local;
+        return null;
+    }
+
     private void EnsureViewmodel()
     {
         if (_viewmodel != null && IsInstanceValid(_viewmodel)) return;

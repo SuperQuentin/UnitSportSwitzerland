@@ -164,7 +164,28 @@ taller than that room. Whichever branch rebases onto the other clamps `top` to `
 it fails `--sitecheck` the moment the two trees meet. 264 ordinary plans (houses, flats, barns,
 garages, shops, churches) pass the new rule unchanged.
 
-## Phase 3 — dormant vehicles in the yards
+## Phase 3 — dormant vehicles in the yards (#516, **built**)
+
+Built as planned, in two halves: #499 made the shared layer and this epic added the one provider.
+What differs from the sketch below, and what it cost:
+
+- **The provider is `DormantSlots.ForSite`** beside `ForParking`, plus `SiteYards` as its Godot
+  half — the split the seam demanded, because the provider is tier 0 and finding a yard needs
+  `src/Interiors` and the plan box.
+- **The layer did not draw lorries.** `Draw` instanced every slot from `TrafficMeshBuilder.Car`
+  with a car-sized box, which is right for a car park and wrong for a haulier's yard: a 13.6 m
+  artic was a hatchback until you woke it. `DrawHeavies` now builds goods vehicles from the
+  `Rideable` the slot's own `VehicleState` makes — the state `Promote` wakes it with — so the
+  dormant artic and the real one cannot drift. This was not in the plan and is the bulk of the
+  work the phase actually took.
+- **Re-sleeping is still off**, and the trigger stayed the lever: #499 wakes on the aim ray only,
+  so crossing a forty-car forecourt promotes nothing. The strict conditions, if it is ever needed,
+  are in `docs/notes/vehicles/dormant-vehicles.md`.
+- Details: `docs/notes/vehicles/industrial-yards.md`.
+
+### The design as planned
+
+
 
 **The shared layer is #499's, not this epic's, and it is built.** Parking areas need parked cars for
 exactly the same reason yards need a fleet, so rather than invent the mechanism twice, #499

@@ -114,7 +114,7 @@ public partial class Modal : Control
 
     /// <summary>A yes/no question.</summary>
     public static Modal Confirm(Control host, string title, string message, string okText, Action ok,
-        Action? cancel = null, bool danger = false)
+        Action? cancel = null, bool danger = false, string cancelText = "Cancel")
     {
         var m = Build(host, title, message, out var body);
         m._cancel = cancel;
@@ -122,7 +122,7 @@ public partial class Modal : Control
         buttons.Alignment = BoxContainer.AlignmentMode.End;
         body.AddChild(UiKit.Spacer(4));
         body.AddChild(buttons);
-        var c = UiKit.Button("Cancel", minWidth: 96);
+        var c = UiKit.Button(cancelText, minWidth: 96);
         c.Pressed += m.Cancel;
         buttons.AddChild(c);
         var okButton = UiKit.Button(okText, primary: true, minWidth: 110);
@@ -186,6 +186,29 @@ public partial class Modal : Control
         okButton.Pressed += m.Cancel;
         buttons.AddChild(okButton);
         okButton.CallDeferred(Control.MethodName.GrabFocus);
+        return m;
+    }
+
+    /// <summary>
+    /// A progress bar, a status line under it and Cancel (also Esc / B). The caller fills both and
+    /// closes the modal with <see cref="CloseModal"/> when the work ends.
+    /// </summary>
+    public static Modal Progress(Control host, string title, string? message, Action cancel,
+        out ProgressBar bar, out Label status)
+    {
+        var m = Build(host, title, message, out var body);
+        m._cancel = cancel;
+        bar = new ProgressBar { MinValue = 0, MaxValue = 1, Step = 0, ShowPercentage = false, CustomMinimumSize = new Vector2(0, 12) };
+        body.AddChild(bar);
+        status = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
+        body.AddChild(status);
+        var buttons = UiKit.HBox(10);
+        buttons.Alignment = BoxContainer.AlignmentMode.End;
+        body.AddChild(buttons);
+        var c = UiKit.Button("Cancel", minWidth: 96);
+        c.Pressed += m.Cancel;
+        buttons.AddChild(c);
+        c.CallDeferred(Control.MethodName.GrabFocus);
         return m;
     }
 

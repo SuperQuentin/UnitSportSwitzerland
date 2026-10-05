@@ -163,6 +163,18 @@ public partial class PlayerInput : Node
     /// <summary>The hammer in hand (#359): turns the piece; with Aim, changes its material. R, or D-pad up on a pad.</summary>
     public const string BuildTurn = "build_turn";
 
+    // The map screen (#515). Menu actions, so they may share pad buttons with world ones: no world
+    // is listening while a page is up. VR is deferred — the map renders on the XrPad panel but is
+    // not pointable yet (docs/notes/xr/vr-action-map.md).
+    /// <summary>Map screen: zoom in a step.</summary>
+    public const string MapZoomIn = "map_zoom_in";
+    /// <summary>Map screen: zoom out a step.</summary>
+    public const string MapZoomOut = "map_zoom_out";
+    /// <summary>Map screen: cycle the drawing tool (rectangle, brush, erase).</summary>
+    public const string MapTool = "map_tool";
+    /// <summary>Map screen: jump to the place search box.</summary>
+    public const string MapSearch = "map_search";
+
     /// <summary>Which hotbar slot action <paramref name="e"/> presses (0-based), or -1.</summary>
     public static int SlotPressed(InputEvent e)
     {
@@ -573,6 +585,16 @@ public partial class PlayerInput : Node
         // R is the travel picker on foot, D-pad up the engine in a vehicle: with the hammer in hand
         // the item controller takes either first (Build.BuildTool)
         Bind(BuildTurn, Keys(Key.R), Button(JoyButton.DpadUp));
+
+        // The map screen. The shoulders zoom because they are the one pair of pad controls no menu
+        // uses, and the stick already pans through ui_left/right/up/down.
+        // Letters, not punctuation: these are physical keycodes, so the symbol keys are labelled
+        // differently on every layout ("/" is where "-" is on a Swiss keyboard) and the hint line
+        // ends up reading nonsense. Letters keep the same name everywhere.
+        Bind(MapZoomIn, Keys(Key.Equal), Button(JoyButton.RightShoulder));
+        Bind(MapZoomOut, Keys(Key.Minus), Button(JoyButton.LeftShoulder));
+        Bind(MapTool, Keys(Key.T), Button(JoyButton.Y));
+        Bind(MapSearch, Keys(Key.F), Button(JoyButton.X));
 
         // Godot's built-in UI actions map the D-pad but not the face buttons, so a pad could
         // walk a menu's focus and never press anything. A confirms and B backs out, as on

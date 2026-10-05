@@ -114,8 +114,34 @@ public static class BuildingFootprint
     /// <summary>However long the barn, its door stops here: a leaf is half of it, swinging out.</summary>
     public const float MaxBarnDoorWidth = 10f;
 
-    /// <summary>A barn's door stops this far under the eave, for the lintel.</summary>
-    public const float BarnDoorUnderEave = 0.35f;
+    /// <summary>
+    /// Any door stops this far under the eave, for the lintel: on the long side the eave is the
+    /// wall plate, on a gable end the level the slopes start from, so the door's top corners stay
+    /// on wall instead of poking through the roof. A barn's door was the first to obey it (#135).
+    /// </summary>
+    public const float DoorUnderEave = 0.35f;
+
+    /// <summary>
+    /// No door is planned shorter than this, even under a very low eave: below it a doorway is a
+    /// hatch, not a way in. A wall that cannot clear the kind's own door height is demoted
+    /// (<see cref="LowWallPenalty"/>) so a taller wall takes the door where the building has one.
+    /// </summary>
+    public const float MinDoorHeight = 2.0f;
+
+    /// <summary>A barn's pair is never planned shorter than this, low eave or not.</summary>
+    public const float MinBarnDoorHeight = 2.5f;
+
+    /// <summary>What a wall too low for its building's own door height loses in the ranking.</summary>
+    public const float LowWallPenalty = 1.5f;
+
+    /// <summary>
+    /// A door on a wall whose eave is <paramref name="eave"/> metres above the sill: the kind's
+    /// own <paramref name="want"/>, cut down to leave the lintel its wall, and never below the
+    /// floor for its kind. Every door goes through here, so the baked facade door
+    /// (<c>BuildingMeshBuilder.AppendDoor</c>) and the opening planned inside it are the same hole.
+    /// </summary>
+    public static float FitUnderEave(float want, float eave, bool barn) =>
+        Math.Min(want, Math.Max(barn ? MinBarnDoorHeight : MinDoorHeight, eave - DoorUnderEave));
 
     public static float DoorHeightFor(BuildingKind kind) => kind switch
     {
@@ -126,9 +152,10 @@ public static class BuildingFootprint
     /// <summary>
     /// The door's height in a building whose ground floor has <paramref name="clear"/> metres of
     /// headroom: a barn's as tall as its hall allows, a garage's too up to its usual height, others
-    /// as <see cref="DoorHeightFor(BuildingKind)"/>. A barn's facade door is also kept under the
-    /// eave, and the interior plan takes the height the footprint settled on
-    /// (<see cref="DoorSpot.Height"/>), so the two openings match.
+    /// as <see cref="DoorHeightFor(BuildingKind)"/>. What a door on a *wall* ends up as is this cut
+    /// down by <see cref="FitUnderEave"/> — every kind's, not just a barn's (#509) — and the
+    /// interior plan takes the height the footprint settled on (<see cref="DoorSpot.Height"/>), so
+    /// the two openings are the same hole.
     /// </summary>
     public static float DoorHeightFor(BuildingKind kind, float clear) => kind switch
     {
@@ -289,9 +316,10 @@ public static class BuildingFootprint
                 ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
                 : b.MinY + 0.8f;
             float baseY = Math.Max(ground, b.MinY);
-            // and rises to the eave: on the long side that is the wall plate, on a gable end the
-            // level the gable's slopes start from, so the door's top corners stay on the wall
-            float height = barn ? Math.Min(doorH, Math.Max(2.5f, box.Eave - baseY - BarnDoorUnderEave)) : doorH;
+            // every door stops under the eave, not just a barn's (#509): a 2.6 m shed used to take
+            // the 2.8 m door of a works and push it through its own roof
+            float headroom = box.Eave - baseY;
+            float height = FitUnderEave(doorH, headroom, barn);
 
             float score = Math.Min(length, 12f) * 0.08f;
             if (roadTarget is { } r)
@@ -305,6 +333,9 @@ public static class BuildingFootprint
             if (ground < b.MinY - 0.6f) score -= 2f;          // on stilts over a slope
             if (ground > b.MaxY - plainH - 0.3f) score -= 3f; // buried side of a hillside house
             if (width < doorW * 0.8f) score -= 1f;
+            // too little wall here for the door this building wants: it can still take a shorter
+            // one, but the uphill end of a hillside house loses to the end with wall to spare
+            if (headroom - DoorUnderEave < doorH - 0.01f) score -= LowWallPenalty;
 
             var pos = new Vector3(xz.X + f.Normal.X * 0.03f, baseY, xz.Y + f.Normal.Y * 0.03f);
             ranked.Add(new Cand(score, f.Normal, f.Offset, s0, s1,
@@ -329,7 +360,8 @@ public static class BuildingFootprint
             var open = cuts.Where(k => !Covered(k.Mid)).ToList();
             var cut = (open.Count > 0 ? open : cuts).MaxBy(k => k.Normal.Dot((aim - k.Mid).Normalized()) - k.Mid.DistanceTo(aim) * 0.01f);
             var pos = new Vector3(cut.Mid.X + cut.Normal.X * 0.03f, cut.Ground, cut.Mid.Y + cut.Normal.Y * 0.03f);
-            door = new DoorSpot(index, pos, new Vector3(cut.Normal.X, 0, cut.Normal.Y), Math.Min(doorW, 1.0f), plainH)
+            door = new DoorSpot(index, pos, new Vector3(cut.Normal.X, 0, cut.Normal.Y), Math.Min(doorW, 1.0f),
+                FitUnderEave(plainH, box.Eave - cut.Ground, barn: false))
             {
                 Hang = DoorBudget.HangFor(kind), Vehicle = DoorBudget.VehicleFor(kind),
             };
@@ -375,8 +407,11 @@ public static class BuildingFootprint
                         : b.MinY + 0.8f;
                     float baseY = Math.Max(ground, b.MinY);
                     // not on stilts over a slope, not on the buried side of a hillside house, and
-                    // not on a solid too low to take a door at all
+                    // not on a solid too low to take a door at all. An extra door is a fixed
+                    // pedestrian size, so a wall with no room for one simply does not get one
+                    // (#509) — unlike the main door, which is cut down to fit.
                     if (ground < b.MinY - 0.6f || ground > b.MaxY - serviceH - 0.3f) continue;
+                    if (box.Eave - baseY - DoorUnderEave < serviceH) continue;
                     var spot = new DoorSpot(index,
                         new Vector3(xz.X + c.Normal.X * 0.03f, baseY, xz.Y + c.Normal.Y * 0.03f),
                         new Vector3(c.Normal.X, 0, c.Normal.Y), serviceW, serviceH)

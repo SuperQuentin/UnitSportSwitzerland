@@ -59,7 +59,11 @@ public partial class OccasionHunt : Node, Core.IOriginShiftAware
     // ---- --huntcheck -----------------------------------------------------------------------------
 
     private bool _probe;
-    private double _probeTime;
+    /// <summary>Wall clock, not game time (#522): a spot is only drawn once the threaded tile build
+    /// has put ground under the spawn, and <c>--fixed-fps</c> does not speed threads up. Counted in
+    /// frames this budget burned in ~2 s of real time and the probe failed with the terrain still
+    /// streaming (<c>docs/notes/general/fast-checks.md</c>: wait for threaded work on the wall clock).</summary>
+    private ulong _probeStartMs;
 
     /// <summary>
     /// <c>--huntcheck</c> (with an occasion running): waits for a drawn hunt spot, claims it in
@@ -70,12 +74,13 @@ public partial class OccasionHunt : Node, Core.IOriginShiftAware
     public override void _Process(double delta)
     {
         if (!_probe) return;
-        _probeTime += delta;
+        if (_probeStartMs == 0) _probeStartMs = Time.GetTicksMsec();
         var decor = OccasionDecor.Instance;
         var first = decor?.AllSpots().FirstOrDefault();
         if (first is not { Spot.Key: not null } found)
         {
-            if (_probeTime > 90) Finish(false, "no hunt spot was drawn within 90 s");
+            if ((Time.GetTicksMsec() - _probeStartMs) / 1000.0 > 90)
+                Finish(false, "no hunt spot was drawn within 90 s of real time");
             return;
         }
 

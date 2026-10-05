@@ -148,6 +148,23 @@ public enum ItemId
 
     /// <summary>A fallen squad player's tag (#480): used at a Postauto stop, it brings them back (<c>BrManager.Recall</c>).</summary>
     Dogtag = 193,
+
+    // ---- fishing (#493, docs/notes/items/fishing.md, Items/Fishing) ----
+    /// <summary>Use (hold) casts, Use strikes a bite, hold Use reels in; Aim winds the line back in.</summary>
+    FishingRod = 194,
+    /// <summary>Bread dough on the hook: the peaceful fish take it; one goes with each fish that takes it.</summary>
+    DoughBait = 195,
+    /// <summary>A spinning lure: the hunters take it; lost only when the line snaps.</summary>
+    Spinner = 196,
+    /// <summary>Cooked at a fire from two perch (#493).</summary>
+    PerchFillets = 197,
+    GrilledFish = 198,
+    FishSoup = 199,
+    /// <summary>Caught (never crafted): one item per species that may be kept, <c>FishCatalog</c>.</summary>
+    BrownTrout = 200, LakeTrout = 201, RainbowTrout = 202, BrookTrout = 203, ArcticChar = 204, Namaycush = 205,
+    Grayling = 206, Whitefish = 207, Perch = 208, Pike = 209, Zander = 210, Wels = 211, Burbot = 212,
+    LargemouthBass = 213, Carp = 214, Tench = 215, Roach = 216, Rudd = 217, Bream = 218, Chub = 219,
+    Barbel = 220, Agone = 221, RoundGoby = 222,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -196,4 +213,6 @@ public enum ItemUse
     Smoke,
     /// <summary>Use, at a Postauto stop, recalls a fallen team-mate (<see cref="ItemId.Dogtag"/>, #480).</summary>
     Recall,
+    /// <summary>Hold Use to cast, Use on a bite strikes, hold Use reels in, Aim winds in (<see cref="ItemId.FishingRod"/>, #493).</summary>
+    Fish,
 }

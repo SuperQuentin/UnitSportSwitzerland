@@ -22,6 +22,9 @@
 
   <ItemGroup>
     <ProjectReference Include="tools\TerrainFormat\TerrainFormat.csproj" />
+    <!-- The map screen's country map, selection, plan and estimates, shared with the terminal
+         region wizard (tools/MapSetup). It embeds switzerland.bin, so no data folder is involved. -->
+    <ProjectReference Include="tools\MapCore\MapCore.csproj" />
   </ItemGroup>
 
   <ItemGroup>

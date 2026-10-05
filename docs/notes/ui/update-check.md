@@ -1,0 +1,9 @@
+# Update check (`Ui/UpdatePrompt`, `Core/UpdateInfo`, #532)
+
+- Once per session the title screen reads GitHub's release list (`releases?per_page=100`, public API, no token, 10 s timeout). If the newest stable tag is newer than `config/version` (stamped by `tools/release.sh`), a modal offers to update, or **Later** (nothing until the next launch).
+- **Update** (delta): when every release after this one carries a `.delta` for this platform (`UpdateInfo.DeltaChain`), they weigh under 60 % of the full archive, the build is exported (`OS.HasFeature("template")`: never the editor's folder) and the install folder is writable. The deltas download to `user://updates/`, are staged on a worker thread into `.update/` beside the install (every hash checked), then **Restart now** or **When I quit** starts the swap script, which waits for the game to exit. Format, script, tools: `tools/delta-updates`.
+- **Download** (full archive): otherwise, or when patching fails ("Update failed" offers it). This platform's asset into the OS Downloads folder as `<name>.part`, renamed when complete; "Show file" opens the file manager on it (macOS: the `xattr -cr` reminder). No asset for this OS: "Open release page".
+- Never asks: development builds (no version), headless runs, command-line runs that skip the title. A reply that lands while another page covers the title is kept and offered when the title is back.
+- Flags (whitelisted in `GameShell.UseTitle`): `--fakeversion 0.0.1` pretends to be an old build; `--updatefeed URL` reads another release list (a local `python -m http.server`); `--updateaccept` answers yes to every question. `--uishot test_output/update.png 8` captures the prompt.
+- Input: only `Modal` buttons, so keyboard, pad and VR pointer work like every menu; no new action.
+- Tier 0: `UpdateInfoTests`, `DeltaUpdateTests`.
