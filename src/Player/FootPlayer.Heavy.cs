@@ -132,7 +132,7 @@ public partial class FootPlayer
     /// <summary>The ground's height under a point: whatever is solid there (a road, a bridge deck), else the terrain.</summary>
 
     private float GroundUnder(Vector3 p, Godot.Collections.Array<Rid> exclude) =>
-        World.GroundQuery.Under(this, _groundRay, exclude, p, Terrain);
+        World.GroundQuery.Under(this, _groundRay, exclude, p, Terrain, pastVehicles: true);
 
     /// <summary>
     /// The cab's pitch on the ground under its axles: a 12 m bus on a 10% road leans with it, and its
@@ -328,6 +328,8 @@ public partial class FootPlayer
         }
         if (e.IsActionPressed(PlayerInput.LightsToggle)) { truck.Headlights = !truck.Headlights; return true; }
         if (e.IsActionPressed(PlayerInput.CarDoor) && truck.Trailer is { Boat: not 0 }) { ToggleBoat(truck); return true; }
+        // a tractor's implement, a combine's header and tank (#494, FootPlayer.Farm.cs)
+        if (truck.Spec.Farm) return HandleFarmInput(e, truck);
         if (!truck.IsBus) return false;
         bool stopped = GroundSpeed < 1f;
         if (e.IsActionPressed(PlayerInput.CarDoor) && truck.DoorCount > 0)
@@ -363,11 +365,12 @@ public partial class FootPlayer
         float tolerance = truck.Spec.Takes is Coupling.Drawbar or Coupling.Ball ? 1.2f : 0.9f;
         return Vehicles?.NearestTrailer(hitch, CoupleReach, v =>
             truck.Accepts(v.Trailer!.Spec)
-            && Mathf.Abs(MathX.WrapAngle(v.Rotation.Y - Rotation.Y)) < tolerance);
+            // a mounted implement is rigid on the linkage (#494): it must stand square behind
+            && Mathf.Abs(MathX.WrapAngle(v.Rotation.Y - Rotation.Y)) < (v.Trailer.Spec.Mounted ? 0.5f : tolerance));
     }
 
     /// <summary>{couple}: drops the trailer where it stands, or backs onto the one whose pivot is over the hitch.</summary>
-    private void ToggleCouple(Truck truck)
+    public void ToggleCouple(Truck truck)
     {
         if (GroundSpeed > 1.5f) { Announced?.Invoke("Stop to couple", false); return; }
         if (truck.Trailer != null) { DropTrailer(truck); return; }
@@ -378,6 +381,7 @@ public partial class FootPlayer
             {
                 Coupling.FifthWheel => "Back the fifth wheel under a trailer's kingpin",
                 Coupling.Ball => "Back the tow ball up to a boat trailer's coupler",
+                _ when truck.Spec.Mount == Coupling.ThreePoint => "Back the linkage up to an implement or the drawbar to a tipping trailer",
                 _ => "Back the hitch up to a drawbar or boat trailer's coupling",
             }, false);
             return;
@@ -415,6 +419,9 @@ public partial class FootPlayer
     {
         int code = TrailerCatalog.Code(index, load);
         if (TrailerCatalog.For(code) is not { } spec) return false;
+        // a tipping trailer (#494) comes with that share of its sacks, of wheat
+        if (spec.TankItems > 0)
+            code = TrailerCatalog.WithTank(code, new Farming.Tank(UnitSport.Terrain.Format.CropKind.Wheat, Mathf.RoundToInt(load * spec.TankItems)));
         if (_ride is Truck truck && truck.Trailer == null && truck.Accepts(spec))
         {
             if (GroundSpeed > 1.5f) return false;

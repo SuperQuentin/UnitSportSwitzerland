@@ -16,30 +16,35 @@ public static class GroundQuery
     /// on its trailer, #463) is always looked past: cargo is never the ground of what carries it. Its
     /// carrier excludes it once it is hooked; this is for the moments before (a trailer just dropped
     /// stood itself on its own boat's hull, and the boat, lifted out of the cradle, never hooked).
+    /// With <paramref name="pastVehicles"/> (a driven truck's own axles, #494) players and every other
+    /// vehicle are looked past too: what the train stands on is the road, never a dropped plough or a
+    /// parked car under an axle point — read as ground it pitched the cab 20° and the hull, dug into
+    /// the road, threw the tractor up off its wheels.
     /// </summary>
     public static float Under(CollisionObject3D self, RayQuery ray, Godot.Collections.Array<Rid> exclude, Vector3 p,
-        ChunkManager? terrain, bool pastPlayers = false)
+        ChunkManager? terrain, bool pastPlayers = false, bool pastVehicles = false)
     {
         var space = self.GetWorld3D().DirectSpaceState;
         var from = p + Vector3.Up * 3f;
         var to = p + Vector3.Down * 6f;
         uint mask = self.CollisionMask & ~TreeColliders.Layer;
         var hit = ray.Cast(space, from, to, mask, exclude);
-        if (hit.Count > 0 && Past(hit["collider"].AsGodotObject(), pastPlayers))
+        if (hit.Count > 0 && Past(hit["collider"].AsGodotObject(), pastPlayers, pastVehicles))
         {
             // rare: an array of its own, changed in place, so the query is told each time
             var past = exclude.Duplicate();
-            for (int tries = 0; tries < 4 && hit.Count > 0 && Past(hit["collider"].AsGodotObject(), pastPlayers); tries++)
+            for (int tries = 0; tries < 4 && hit.Count > 0 && Past(hit["collider"].AsGodotObject(), pastPlayers, pastVehicles); tries++)
             {
                 past.Add(hit["rid"].AsRid());
                 ray.Forget();
                 hit = ray.Cast(space, from, to, mask, past);
             }
-            if (hit.Count > 0 && Past(hit["collider"].AsGodotObject(), pastPlayers)) hit.Clear();
+            if (hit.Count > 0 && Past(hit["collider"].AsGodotObject(), pastPlayers, pastVehicles)) hit.Clear();
         }
         if (hit.Count > 0) return hit["position"].AsVector3().Y;
         return terrain != null && terrain.TryGetHeight(p, out float g) ? g : p.Y;
     }
 
-    private static bool Past(GodotObject? hit, bool players) => players && hit is FootPlayer || hit is Vehicles.VehicleBody { InHold: true };
+    private static bool Past(GodotObject? hit, bool players, bool vehicles) =>
+        (players || vehicles) && hit is FootPlayer || hit is Vehicles.VehicleBody { InHold: true } || vehicles && hit is Vehicles.VehicleBody;
 }

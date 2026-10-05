@@ -17,7 +17,7 @@ namespace UnitSport.Player;
 /// (<see cref="HeavyTrain.Contacts"/>).
 /// </para>
 /// </summary>
-public sealed class Truck : Rideable, IEngined
+public sealed partial class Truck : Rideable, IEngined
 {
     public HeavySpec Spec { get; }
     /// <summary>The coupled trailer, or null.</summary>
@@ -40,7 +40,10 @@ public sealed class Truck : Rideable, IEngined
     {
         Spec = spec;
         Load = Mathf.Clamp(load, 0f, 1f);
-        var driven = System.Array.Find(spec.Sections.SelectMany(s => s.Axles).ToArray(), a => a.Driven) ?? spec.Sections[0].Axles[^1];
+        // a combine's load is its grain tank (#494): empty until its flags say otherwise
+        if (spec.TankItems > 0) Load = 0f;
+        // the last driven axle: a tractor's big rear wheels set its gearing, not the smaller front ones (#494)
+        var driven = System.Array.FindLast(spec.Sections.SelectMany(s => s.Axles).ToArray(), a => a.Driven) ?? spec.Sections[0].Axles[^1];
         WheelRadius = Tyre.Radius(driven.Tyre) * 0.97f;   // loaded: ~3% squat
         Box = new HeavyDriveline(spec, WheelRadius);
         if (TrailerCatalog.For(trailerCode) is { } t && spec.Accepts(t))
@@ -205,6 +208,8 @@ public sealed class Truck : Rideable, IEngined
         get
         {
             var mode = ShiftOverride ?? Core.GameSettings.Current.HeavyGearbox;
+            // a tractor's CVT (#494) has no clutch and no gates: the automatic is all there is
+            if (Spec.Stepless) return HeavyShift.Automatic;
             if (Spec.Box == Transmission.TorqueConverter) return mode == HeavyShift.Automatic ? mode : HeavyShift.Sequential;
             if (!Spec.SixGates && mode is HeavyShift.HPattern or HeavyShift.HPatternSplitter) return HeavyShift.SequentialClutch;
             return mode;
@@ -221,7 +226,7 @@ public sealed class Truck : Rideable, IEngined
     {
         if (door < 0 || door >= DoorCount) return;
         DoorsOpen ^= (byte)(1 << door);
-        if (Spec.Class != HeavyClass.Coach && !_pulledAway) Kneeling = DoorsOpen != 0;
+        if (Spec.Class != HeavyClass.Coach && !Spec.Farm && !_pulledAway) Kneeling = DoorsOpen != 0;
     }
     public int DoorCount => Spec.Look.Doors.Length;
     /// <summary>Lowered on the door side for boarding (buses).</summary>
@@ -290,13 +295,23 @@ public sealed class Truck : Rideable, IEngined
                 HeavyClass.Rigid => (2.45f, 1.2f),
                 HeavyClass.Coach => (2.3f, 1.1f),
                 HeavyClass.Pickup => (1.68f, 2.9f),
+                HeavyClass.FarmTractor => (Avatar.FarmMeshBuilder.TractorEyeY, Avatar.FarmMeshBuilder.TractorEyeAt),
+                HeavyClass.Combine => (Avatar.FarmMeshBuilder.CombineEyeY, Avatar.FarmMeshBuilder.CombineEyeAt),
                 _ => (2.05f, 1.2f),
             };
+            // a tractor's and a combine's seat is in the middle of the cab (#494)
+            if (Spec.Farm) return new Vector3(0f, y, -(Train.Bodies[0].CgAt - at));
             // left-hand drive: the driver's left is −X
             return new Vector3(-(s.Width * 0.5f - 0.6f), y, -(Train.Bodies[0].CgAt - at));
         }
     }
-    public override float EyeHeight => Spec.Class == HeavyClass.Pickup ? 1.8f : 2.6f;
+    public override float EyeHeight => Spec.Class switch
+    {
+        HeavyClass.Pickup => 1.8f,
+        HeavyClass.FarmTractor => Avatar.FarmMeshBuilder.TractorEyeY,
+        HeavyClass.Combine => Avatar.FarmMeshBuilder.CombineEyeY,
+        _ => 2.6f,
+    };
     // behind the whole train and high enough to see over it: a semi's camera sits ~24 m back
     public override float ChaseDistance => 5f + TrainLength * 0.95f;
     public override float ChaseHeight => 3.5f + TrainLength * 0.28f;
@@ -331,6 +346,7 @@ public sealed class Truck : Rideable, IEngined
         get
         {
             if (Spec.Class == HeavyClass.Pickup) return PickupHull;
+            if (Spec.Farm) return FarmHull;
             if (Spec.Class != HeavyClass.Tractor) return null;
             var s = Spec.Sections[0];
             float cg = Train.Bodies[0].CgAt, cab = 2.35f;
@@ -365,7 +381,13 @@ public sealed class Truck : Rideable, IEngined
         get
         {
             var s = Spec.Sections[0];
-            float at = IsBus ? Spec.Look.Doors.FirstOrDefault().At : Spec.Class == HeavyClass.Pickup ? 2.6f : 1.4f;
+            float at = IsBus ? Spec.Look.Doors.FirstOrDefault().At : Spec.Class switch
+            {
+                HeavyClass.Pickup => 2.6f,
+                HeavyClass.FarmTractor => Avatar.FarmMeshBuilder.TractorDoorAt,
+                HeavyClass.Combine => Avatar.FarmMeshBuilder.CombineDoorAt,
+                _ => 1.4f,
+            };
             return new Vector3((IsBus ? 1f : -1f) * (s.Width * 0.5f + 0.4f), 0f, -(Train.Bodies[0].CgAt - at));
         }
     }
@@ -384,6 +406,7 @@ public sealed class Truck : Rideable, IEngined
     public override Aabb Solid(Aabb measured, int section)
     {
         if (section >= OwnSections) return measured;   // a trailer has no mirrors
+        if (Spec.Class == HeavyClass.Combine) return measured;   // its header is wider than its body (#494): the hull boxes are its own
         float half = Spec.Sections[section].Width * 0.5f + BodyFlare;
         float left = Mathf.Max(measured.Position.X, -half), right = Mathf.Min(measured.End.X, half);
         if (right <= left) return measured;
@@ -446,7 +469,7 @@ public sealed class Truck : Rideable, IEngined
     }
 
     /// <summary>The pickup's doors are a car's, worked one by one (#463); a bus's open together.</summary>
-    public bool CarDoors => Spec.Class == HeavyClass.Pickup;
+    public bool CarDoors => Spec.Class == HeavyClass.Pickup || Spec.Farm;
 
     private static readonly Dictionary<RideKind, (SeatAnchor[] Seats, VehicleDeck[] Decks)> _models = new();
 
@@ -478,11 +501,13 @@ public sealed class Truck : Rideable, IEngined
     public override Node3D BuildParkedVisual(int riderIndex)
     {
         var root = HeavyRig.Create(Spec, 0, Load);
+        DressFarm(root, 0);
         for (int k = 1; k < Train.Count; k++)
         {
             var rig = SectionRig(k);
             rig.Name = $"Section{k}";
             rig.Transform = NodeLocal(k);
+            DressFarm(rig, k);
             root.AddChild(rig);
         }
         return root;
@@ -552,6 +577,7 @@ public sealed class Truck : Rideable, IEngined
         }
         SteerAngle = delta;
 
+        PrepareFarm(dt, u);
         var (drive, retard) = Box.Step(new DriveDemand(pedal, brake, input.Handbrake, u, ground.Grade, Train.Mass, EngineRunning), dt);
 
         float grip = Spec.Grip * SurfaceFactor(ground.Surface) * (arcade ? 1.15f : 1f);
@@ -623,7 +649,8 @@ public sealed class Truck : Rideable, IEngined
         // a bus shuts its doors and comes up off its knees as it pulls away; a door opened after
         // that (a passenger's button, #162) stays open, at their own risk
         bool moving = motion.Speed > 1.5f;
-        if (moving && !_pulledAway) { DoorsOpen = 0; Kneeling = false; }
+        // a farm machine's kneel is its implement or header (#494): it works on the move
+        if (moving && !_pulledAway && !Spec.Farm) { DoorsOpen = 0; Kneeling = false; }
         _pulledAway = moving;
     }
 
@@ -654,7 +681,9 @@ public sealed class Truck : Rideable, IEngined
 
     public int PackFlags() => (Braking ? PoseBrake : 0) | (Headlights ? PoseLights : 0) | (Reversing ? PoseReverse : 0)
         | (Kneeling ? PoseKneel : 0) | ((DoorsOpen & 15) << PoseDoorShift) | ((Destination & 0xFF) << PoseDestShift)
-        | (Mathf.RoundToInt(Mathf.Clamp(ThrottlePedal, 0f, 1f) * PoseThrottleSteps) << PoseThrottleShift);
+        | (Mathf.RoundToInt(Mathf.Clamp(ThrottlePedal, 0f, 1f) * PoseThrottleSteps) << PoseThrottleShift)
+        // a combine's grain tank (#494), where a bus has its destination: sacks and crop
+        | (Spec.TankItems > 0 ? Farming.MachineLoad.TankFlags(Tank) : 0);
 
     public void UnpackFlags(int flags)
     {
@@ -663,7 +692,8 @@ public sealed class Truck : Rideable, IEngined
         _remoteReverse = (flags & PoseReverse) != 0;
         Kneeling = (flags & PoseKneel) != 0;
         DoorsOpen = (byte)((flags >> PoseDoorShift) & 15);
-        Destination = (flags >> PoseDestShift) & 0xFF;
+        Destination = Spec.TankItems > 0 ? 0 : (flags >> PoseDestShift) & 0xFF;
+        if (Spec.TankItems > 0) SetTank(Farming.MachineLoad.TankFromFlags(flags), keepPartial: true);
         ThrottlePedal = ((flags >> PoseThrottleShift) & PoseThrottleSteps) / (float)PoseThrottleSteps;
         BrakePedal = Braking ? 1f : 0f;
     }
@@ -723,5 +753,6 @@ public sealed class Truck : Rideable, IEngined
         rig.Kneeling = Kneeling;
         rig.Destination = DestinationText;
         rig.BodyRoll = k < Train.Count && k > 0 ? Mathf.Clamp(-Train.Bodies[k].Accel.Y * 0.02f * Train.Bodies[k].CgHeight, -0.08f, 0.08f) : 0f;
+        DressFarm(rig, k);
     }
 }

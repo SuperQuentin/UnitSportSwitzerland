@@ -9,3 +9,4 @@ farming; the machines call `FarmWork.Sweep`. Index only: one line per note in
 - `hand-farming` — hoe / seed / fertiliser through `ItemUse.Farm` and a short bar, seed remainder (50 cells an item), harvest with the gather hold, prompts, the "Wheat — ripe 100%" readout
 - `produce-economy` — farm items and values, recipes, the farm co-op shop (rural), `FarmMarket.Deliver` pays full value per unit; checks
 - `commands` — `--farmmonth`, `--farmdir`, `--farmfresh`, `--farmstats`, `--farmdraw`, `--farmcheck [shots]`, `--farmperf`, `tools/farmnetcheck.sh`, `FarmTests`
+- `machines` — the Fendt tractor (102), Claas combine (103), plough / drill / mower on a rigid `Coupling.ThreePoint` and the tipping trailer (`TrailerCatalog` 6-9): draft, lowered = kneel bit, tank in flags / trailer code, `StepFarm` sweeps, auger, sacks on foot, co-op delivery, `--tractorcheck`, `tools/tractornetcheck.sh`

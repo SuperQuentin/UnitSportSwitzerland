@@ -35,6 +35,19 @@ public sealed record HeavyParts(ArrayMesh Body, ArrayMesh Head, ArrayMesh Tail, 
     public bool CarDoors { get; init; }
     /// <summary>Meshes carried on the body, each at its place, node space: a boat on its trailer (#463).</summary>
     public (ArrayMesh Mesh, Vector3 At)[] Cargo { get; init; } = System.Array.Empty<(ArrayMesh, Vector3)>();
+
+    // ---- farm machines (#494) ----
+    /// <summary>What the linkage lifts (a mounted implement, a combine's header): drawn lowered, raised <see cref="LiftRaise"/> m.</summary>
+    public ArrayMesh? Lift { get; init; }
+    public float LiftRaise { get; init; }
+    /// <summary>A header's reel, on the lifted part: its axle's middle (node space, lowered), turning while it works.</summary>
+    public (ArrayMesh Mesh, Vector3 At)? Reel { get; init; }
+    /// <summary>A tank's heap of grain, its base on the tank's floor (node space): drawn grown to the fill.</summary>
+    public (ArrayMesh Mesh, Vector3 At)? Heap { get; init; }
+    /// <summary>The fill the heap is built at (the load the section was built with).</summary>
+    public float Fill { get; init; }
+    /// <summary>A combine's unloading auger, on its hinge (node space), swung out by <c>OpenYaw</c>.</summary>
+    public (ArrayMesh Mesh, Vector3 Hinge, float OpenYaw)? Auger { get; init; }
 }
 
 /// <summary>
@@ -61,6 +74,14 @@ public partial class HeavyRig : Node3D, IHingedDoors
     public string Destination { get; set; } = "";
     /// <summary>Body roll on the springs, rad (+ right side up): the wheels stay on the road.</summary>
     public float BodyRoll { get; set; }
+    /// <summary>The radius <see cref="WheelSpin"/> is reckoned on, m: smaller wheels turn faster (#494); 0 all as one.</summary>
+    public float SpinRadius { get; set; }
+    /// <summary>The implement or header down working (#494); raised it rises by <see cref="HeavyParts.LiftRaise"/>.</summary>
+    public bool Lowered { get; set; }
+    /// <summary>The tank's fill, 0..1: the heap grows with it (#494).</summary>
+    public float Fill { get; set; }
+    /// <summary>The combine's unloading auger out (#494).</summary>
+    public bool AugerOut { get; set; }
 
     // ---- the cockpit (first section of a truck or bus) ----
     /// <summary>The steering wheel's turn, rad (+ anticlockwise as the driver sees it).</summary>
@@ -93,6 +114,11 @@ public partial class HeavyRig : Node3D, IHingedDoors
     public HeavyCockpit? Cockpit => _cockpit;
 
     private const float DoorTime = 1.2f, KneelTime = 1.5f, KneelDrop = 0.08f;
+    /// <summary>Seconds a linkage takes to lower or raise, and an auger to swing (#494).</summary>
+    private const float LiftTime = 1.6f, AugerTime = 3f;
+    private Node3D? _lift, _reel, _heap, _auger;
+    private float _liftRaise, _lowered, _augerOpen, _augerYaw, _reelTurn;
+    private float[] _wheelRadius = System.Array.Empty<float>();
 
     private Node3D _body = null!;
     private readonly List<(Node3D Pivot, Node3D Spin, float Steer)> _wheels = new();
@@ -156,6 +182,8 @@ public partial class HeavyRig : Node3D, IHingedDoors
         {
             HeavyClass.Tractor or HeavyClass.Rigid => TruckMeshBuilder.Build(spec, section, load),
             HeavyClass.Pickup => PickupMeshBuilder.Build(spec, section, load),
+            HeavyClass.FarmTractor => FarmMeshBuilder.Tractor(spec, section, load),
+            HeavyClass.Combine => FarmMeshBuilder.Combine(spec, section, load),
             _ => BusMeshBuilder.Build(spec, section, load),
         }, driver);
 
@@ -163,7 +191,7 @@ public partial class HeavyRig : Node3D, IHingedDoors
     public static HeavyRig Create(HeavyParts parts, HumanPalette? driver) => Assemble(parts, driver);
 
     public static HeavyRig CreateTrailer(TrailerSpec spec, int section, float load, bool boatShown = false) =>
-        Assemble(TrailerMeshBuilder.Build(spec, section, load, boatShown), null);
+        Assemble(FarmMeshBuilder.Draws(spec) ? FarmMeshBuilder.Implement(spec, section, load) : TrailerMeshBuilder.Build(spec, section, load, boatShown), null);
 
     private static HeavyRig Assemble(HeavyParts p, HumanPalette? driver)
     {
@@ -215,6 +243,7 @@ public partial class HeavyRig : Node3D, IHingedDoors
             rig.AddChild(pivot);
             rig._wheels.Add((pivot, spin, w.Steer));
         }
+        rig._wheelRadius = p.Wheels.Select(w => w.Hub.Y).ToArray();
 
         if (p.Display is { } display && DisplayServer.GetName() != "headless")
         {
@@ -235,9 +264,73 @@ public partial class HeavyRig : Node3D, IHingedDoors
             };
             rig._body.AddChild(rig._display);
         }
+        rig.AssembleFarm(p, body, glass);
         if (p.Cockpit is { } cockpit) rig.AssembleCockpit(cockpit, body);
         rig.ApplyLamps();
         return rig;
+    }
+
+    /// <summary>The farm parts (#494): the lifted implement or header with its reel, the tank's heap, the auger.</summary>
+    private void AssembleFarm(HeavyParts p, Material body, Material glass)
+    {
+        Fill = p.Fill;
+        if (p.Lift is { } lift)
+        {
+            _liftRaise = p.LiftRaise;
+            _lift = new Node3D { Name = "Lift", Position = new Vector3(0, _liftRaise, 0) };
+            var mesh = new MeshInstance3D { Mesh = lift };
+            MeshScratch.Paint(mesh, body, glass);
+            _lift.AddChild(mesh);
+            _body.AddChild(_lift);
+            if (p.Reel is { } reel)
+            {
+                _reel = new Node3D { Name = "Reel", Position = reel.At };
+                _reel.AddChild(new MeshInstance3D { Mesh = reel.Mesh, MaterialOverride = body });
+                _lift.AddChild(_reel);
+            }
+        }
+        if (p.Heap is { } heap)
+        {
+            _heap = new Node3D { Name = "Heap", Position = heap.At };
+            _heap.AddChild(new MeshInstance3D { Mesh = heap.Mesh, MaterialOverride = body });
+            _body.AddChild(_heap);
+        }
+        if (p.Auger is { } auger)
+        {
+            _augerYaw = auger.OpenYaw;
+            _auger = new Node3D { Name = "Auger", Position = auger.Hinge };
+            _auger.AddChild(new MeshInstance3D { Mesh = auger.Mesh, MaterialOverride = body });
+            _body.AddChild(_auger);
+        }
+        ApplyFarm(0f, snap: true);
+    }
+
+    /// <summary>The lift up or down over its time, the reel turning while it works, the heap to the fill, the auger swinging.</summary>
+    private void ApplyFarm(float dt, bool snap = false)
+    {
+        if (_lift != null)
+        {
+            float target = Lowered ? 1f : 0f;
+            _lowered = snap ? target : Mathf.MoveToward(_lowered, target, dt / LiftTime);
+            _lift.Position = new Vector3(0, _liftRaise * (1f - Mathf.SmoothStep(0f, 1f, _lowered)), 0);
+            if (_reel != null && Lowered)
+            {
+                _reelTurn = Mathf.PosMod(_reelTurn + dt * 3f, Mathf.Tau);
+                _reel.Rotation = new Vector3(_reelTurn, 0, 0);
+            }
+        }
+        if (_heap != null)
+        {
+            float f = Mathf.Clamp(Fill, 0f, 1f);
+            _heap.Visible = f > 0.005f;
+            if (_heap.Visible) _heap.Scale = new Vector3(1f, f, 1f);
+        }
+        if (_auger != null)
+        {
+            float target = AugerOut ? 1f : 0f;
+            _augerOpen = snap ? target : Mathf.MoveToward(_augerOpen, target, dt / AugerTime);
+            _auger.Rotation = new Vector3(0, _augerYaw * Mathf.SmoothStep(0f, 1f, _augerOpen), 0);
+        }
     }
 
     /// <summary>The cockpit's moving parts and instruments, and the driver if there is one.</summary>
@@ -368,11 +461,15 @@ public partial class HeavyRig : Node3D, IHingedDoors
         _body.Position = new Vector3(0, -KneelDrop * 0.5f * k, 0);
         _body.Rotation = new Vector3(0, 0, BodyRoll - k * KneelDrop / 1.25f);
 
-        foreach (var (pivot, spin, steer) in _wheels)
+        for (int i = 0; i < _wheels.Count; i++)
         {
+            var (pivot, spin, steer) = _wheels[i];
             pivot.Rotation = new Vector3(0, SteerAngle * steer, 0);
-            spin.Rotation = new Vector3(-WheelSpin, 0, 0);
+            // a tractor's small front wheels turn faster than its big rear ones (#494)
+            float turn = SpinRadius > 0f && _wheelRadius[i] > 0.05f ? WheelSpin * SpinRadius / _wheelRadius[i] : WheelSpin;
+            spin.Rotation = new Vector3(-turn, 0, 0);
         }
+        ApplyFarm(dt);
 
         float step = dt / DoorTime;
         for (int i = 0; i < _doors.Count; i++)

@@ -62,6 +62,8 @@ public sealed class ParkedTrailer : Rideable
                 float axle = s.Axles[0].At;
                 return Box(cg, axle - 0.8f, axle + 0.8f, 0f, s.HitchHeight + 0.05f, s.Width);
             }
+            // a mounted implement (#494) on its stands, its headstock free for the linkage to reach
+            if (Spec.Mounted) return Box(cg, 0.35f, s.Length, 0.1f, s.Height, s.Width);
             if (Spec.Boat != 0)
             {
                 // the frame and its bunks, down to the tyres; not the A-frame ahead of the winch post. The
@@ -79,6 +81,8 @@ public sealed class ParkedTrailer : Rideable
     public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default)
     {
         var root = HeavyRig.CreateTrailer(Spec, 0, Load);
+        // a dropped implement stands on the ground (#494): its lift is the tractor's, and it has none
+        root.Lowered = Spec.Mounted;
         for (int k = 1; k < Spec.Sections.Length; k++)
         {
             var rig = HeavyRig.CreateTrailer(Spec, k, Load);
@@ -90,7 +94,7 @@ public sealed class ParkedTrailer : Rideable
     }
 
     /// <summary>A semi's running gear is its first extra box: a box apart from its body's (<see cref="ExtraBoxes"/>).</summary>
-    public bool HasGearBox => Spec.Sections[0].Pivot is not (Coupling.Drawbar or Coupling.Ball);
+    public bool HasGearBox => Spec.Sections[0].Pivot is not (Coupling.Drawbar or Coupling.Ball or Coupling.ThreePoint);
 
     public override IEnumerable<(Transform3D Pose, Vector3 Centre, Vector3 Size)> ExtraBoxes()
     {

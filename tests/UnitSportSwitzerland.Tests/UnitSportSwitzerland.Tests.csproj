@@ -61,6 +61,8 @@
     <Compile Include="..\..\src\Player\AirlinerFlight.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Build\BuildGrid.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrPrefabs.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the farm machines' tanks, codes and draft (#494) -->
+    <Compile Include="..\..\src\Farming\MachineLoad.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

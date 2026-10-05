@@ -2434,6 +2434,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // swimming beside a steamer's gangway: up its ladder onto the deck (#303)
         if (TryClimbAboard()) return true;
 
+        // a loaded tipping trailer or combine tank at hand: a sack of it (#494)
+        if (TryFarmTank()) return true;
         // the door (or the machine) you are at, worked precisely (#261): no more "whatever is in 3.5 m"
         if (TryVehicleAt()) return true;
 
@@ -3270,6 +3272,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var velocity = Velocity;
         bool onFloor = IsOnFloor();
         TickHealth(dt, onFloor);
+        TickFarmFoot(dt);
 
         // limp after a crash (#214): the body goes where its hips are, so the replicated position follows the ragdoll
         if (_ragdoll != null)
@@ -4101,6 +4104,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         interiors?.AfterMove(this, from);
         // the sections behind a truck's cab follow it, and report what they hit
         if (_ride is Truck train) StepSections(train, dt);
+        // a farm machine works the ground under its bar (#494, FootPlayer.Farm.cs)
+        if (_ride is Truck { Spec.Farm: true } farm) StepFarm(farm, dt);
 
         // Hitting something has to cost the speed, or the vehicle grinds along the wall at
         // 50 km/h and shoots off the moment the wall ends.

@@ -79,11 +79,20 @@ public static class HeavyCheck
         int trailer = spec.Takes switch
         {
             Coupling.FifthWheel => TrailerCatalog.Code(0, load),
+            // a farm tractor (#494) pulls the tipping trailer, its harvest the load
+            Coupling.Drawbar when spec.Farm => TrailerTipper(load),
             Coupling.Drawbar => TrailerCatalog.Code(3, load),
             Coupling.Ball => TrailerCatalog.Code(TrailerCatalog.TrailerFor(RideKind.Speedboat), load),
             _ => 0,
         };
         return new Truck(spec, trailer, load) { ShiftOverride = HeavyShift.Automatic };
+    }
+
+    /// <summary>The tipping trailer (#494) with <paramref name="load"/> of its sacks of wheat.</summary>
+    private static int TrailerTipper(float load)
+    {
+        int i = System.Array.FindIndex(TrailerCatalog.All.ToArray(), t => t.Body == TrailerBody.Tipper);
+        return TrailerCatalog.WithTank(TrailerCatalog.Code(i, 0f), new Farming.Tank(Terrain.Format.CropKind.Wheat, Mathf.RoundToInt(TrailerCatalog.All[i].TankItems * load)));
     }
 
     /// <summary>A train driven on flat ground by a function of time; the tractor's pose integrated alongside.</summary>
@@ -148,6 +157,14 @@ public static class HeavyCheck
             Check(t80 is > 30f and < 90f, $"0-80 km/h at {mass:F0} t in {F(t80)} s (a 450 hp 40 t truck: ~40-60 s)");
         else if (spec.Class == HeavyClass.Coach)
             Check(t50 is > 7f and < 20f, $"0-50 km/h in {F(t50)} s (a 430 hp coach ~9-12 s)");
+        else if (spec.Farm)
+        {
+            // a farm machine (#494) never sees 50: 0-25 km/h, a tractor with 10 t of grain behind ~10-25 s
+            float t25 = float.NaN;
+            var f = new Run2(Loaded(spec));
+            for (int i = 0; i < 90 * 60 && float.IsNaN(t25); i++) { f.Step(new RideInput(1f, 0f, 0f, false)); if (f.U >= 24f / 3.6f) t25 = f.Time; }
+            Check(t25 is > 3f and < 45f, $"0-24 km/h in {F(t25)} s at {mass:F0} t");
+        }
         else if (spec.Class == HeavyClass.Pickup)
             Check(t50 is > 2f and < 7f, $"0-50 km/h in {F(t50)} s with 2.6 t of boat behind (a Raptor alone ~2.5 s)");
         else

@@ -3,16 +3,21 @@
 - **Roster** (`Player/HeavyCatalog`, `RideKind` **96..119**, append-only; `RideKind.Trailer` = 120 is a
   lone trailer in the world, never mounted): Scania R 450 tractor (Swiss Post yellow), MAN TGS
   26.440 6x2 rigid with swap body (Migros), Mercedes Citaro 12 m (VBZ), Citaro G 18 m articulated
-  pusher (Bernmobil), Setra S 516 HD coach (PostAuto). Operators' colours only, no names or logos.
+  pusher (Bernmobil), Setra S 516 HD coach (PostAuto); the Raptor pickup (101, #463); the farm
+  machines (#494, `farming/machines`): Fendt 724 Vario tractor (102), Claas Lexion 6800 combine
+  (103). Operators' colours only, no names or logos.
   **Trailers** (`TrailerCatalog`, index append-only): curtainsider 13.6 m, fuel tanker (sloshes),
-  timber (the logs are the load), drawbar trailer (dolly + swap body, two pivots). A trailer's
+  timber (the logs are the load), drawbar trailer (dolly + swap body, two pivots); boat trailers
+  (4, 5, #463); the farm implements on `Coupling.ThreePoint` (rigid, no wheels: plough 6, drill 7,
+  mower 8) and the tipping trailer (9, drawbar, its sacks in the code's farm bits). A trailer's
   **code** = `(index+1) | load% << 8`, replicated as `FootPlayer.TrailerCode`. Figures are the
   published ones where they exist; every entry comments what is assumed (CG heights, mass splits,
   retarders, the Setra's box, the Citaro G's joint position).
 - **Physics** (`Player/HeavyTrain`): each section (tractor, trailer, dolly, bus half) is a planar
   rigid body with mass, yaw inertia and its own axles; every axle makes its own force from its
   own slip angle (`sin(C·atan(B·α))`, B 8, a truck tyre's shallow slope), friction circle, EBS
-  share of the brakes and ABS limit. Pins (fifth wheel, drawbar, turntable, bus joint) are
+  share of the brakes and ABS limit. Pins (fifth wheel, drawbar, turntable, bus joint, a
+  three-point linkage welded rigid, #494) are
   velocity constraints solved by sequential impulses (2x2 per pin, 12 iterations, Baumgarte 0.2)
   plus a one-sided articulation stop. Static axle loads from the tail forward (a fifth wheel or
   turntable carries the front of the section behind; a drawbar carries nothing); longitudinal
