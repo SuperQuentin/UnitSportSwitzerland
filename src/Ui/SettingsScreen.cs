@@ -115,10 +115,13 @@ public partial class SettingsScreen : Screen
             {
                 GameSettings.Current.TutorialDone = false;
                 GameSettings.SaveOnly(nameof(GameSettings.TutorialDone), false);
+                // and each ride's mini tutorial again
+                GameSettings.Current.VehicleIntrosSeen.Clear();
+                GameSettings.SaveOnly(nameof(GameSettings.VehicleIntrosSeen), new System.Text.Json.Nodes.JsonArray());
                 if (Shell.InWorld) Shell.World?.StartTutorial();
                 replay.Text = Shell.InWorld ? "Playing" : "In the next world";
                 replay.Disabled = true;
-            }, "Look, walk, travel, the map and the fly camera, step by step");
+            }, "Look, walk, travel, the map and the fly camera, then each ride's controls the first time");
             if (Tutorial.Current != null) { replay.Text = "Playing"; replay.Disabled = true; }
         });
 

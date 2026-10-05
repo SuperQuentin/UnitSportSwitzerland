@@ -205,6 +205,12 @@ public sealed class GameSettings
     public bool TutorialDone { get; set; }
 
     /// <summary>
+    /// The rides whose mini tutorial (#517, <see cref="VehicleIntroCard"/>) was done, by
+    /// <see cref="VehicleIntroKind"/> name. Cleared with <see cref="TutorialDone"/> by "Play again".
+    /// </summary>
+    public List<string> VehicleIntrosSeen { get; set; } = new();
+
+    /// <summary>
     /// The player's figure (#394): <see cref="Avatar.Appearance.Pack"/>ed, 0 until one is chosen in
     /// the inventory's Body row (till then the figure comes from the player's network id).
     /// </summary>
@@ -389,6 +395,7 @@ public sealed class GameSettings
         OccasionPreferences ??= new();
         RecentGpx ??= new();
         PlayerName ??= "";
+        VehicleIntrosSeen ??= new();
         Wheel ??= new();
         Wheel.Clamp();
     }

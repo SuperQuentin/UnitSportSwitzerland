@@ -32,5 +32,5 @@
   without being saved. The last ring is always **stride 50** (`LodPolicy.FarStride`, 21x21 verts,
   from the `.terrc`), which is what makes 40 rings (6,561 tiles) cost about what 9 used to.
   A server ignores all of it and keeps 2 rings of full grids around each player.
-- Also kept here: `TutorialDone` (the first-run tutorial, `ui/tutorial`), `PlayerName` (asked the first time the Multiplayer screen opens), `LastHost`,
+- Also kept here: `TutorialDone` and `VehicleIntrosSeen` (the first-run tutorial and the rides' mini tutorials, `ui/tutorial`), `PlayerName` (asked the first time the Multiplayer screen opens), `LastHost`,
   `RecentGpx` (the track picker's recents). Saved servers are `user://servers.json` (`Net/ServerBook`).

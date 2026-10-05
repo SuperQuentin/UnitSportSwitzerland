@@ -30,3 +30,26 @@
   `--tutorial` (whitelisted in `UseTitle`), which forces it: `--autostart --tutorial --uishot out.png 40`.
 - **Starts on foot** (same issue): Explore from the menus begins on foot on open ground, see
   `core/ground-start`.
+
+## A mini tutorial per kind of ride
+
+- **What**: the first time the player **drives** each kind (`VehicleIntroKind`: road bike, skis,
+  car, motorbike, truck or bus, boat, paddle steamer, helicopter, plane, paraglider or parachute,
+  wingsuit, pigeon, airliner), `Core/VehicleIntroCard` shows its 3-4 essential controls in the same
+  corner, "New ride". Each row ticks (○ → green ✓) once any of its actions is held
+  (`Input.IsActionPressed`; keys already held in the first 0.6 s do not count, so W from walking up
+  to a car does not tick "Accelerate"); all ticked, the title goes green, 1.2 s later it is gone and
+  the kind is saved in `GameSettings.VehicleIntrosSeen` (`SaveOnly`). Getting off first: shown again
+  next time. The footer names the rest (lights, doors, get out) and F1.
+- **Rows** are data in `Core/VehicleIntros` (plain C#, `VehicleIntrosTests`): `IntroRow(Keys,
+  Actions, Pad)`, keyboard and pad words like the tutorial's (`{action}` placeholders only, a test
+  checks), action names as strings (no Godot). `KindOf` maps the `Rideable` type (`Airliner` before
+  `Plane`, `Steamer` before `Boat`: subclasses first); airstairs and parked trailers get none.
+- **The driver only**: `SeatIndex == 0` and no `Host` (a passenger learns nothing here). The body is
+  `ClientWorld.Viewer` (the local player, or a probe's body that owns the camera, as the prompt bar).
+- While a card is up the first-run tutorial is covered (it waits under it): mounting ends its travel
+  step, the car's card comes, then the camera step.
+- Started by `GameShell.FinishLoading` in every session from the menus (`StartVehicleIntros`), and in
+  a command-line run with `--tutorial`: `--tutorial --ride car:0,8,out.png` screenshots the car's
+  card (`--ride` takes car:N, truck:N, moto:N, bike, skis). Settings › Gameplay › Tutorial "Play
+  again" clears the seen list too.

@@ -1450,9 +1450,28 @@ public partial class ClientWorld : Node3D, IOriginContainer
             walker: () => _onFoot ? LocalPlayer : null,
             flying: () => !_onFoot && _spectator is { Current: true },
             mapOpen: () => _places is { IsOpen: true },
-            covered: () => MenuOpen?.Invoke() == true || _rides is { IsOpen: true } || _places is { IsOpen: true }
-                || _gpx is { Active: true }));
+            covered: () => Covered || _vehicleIntros is { Showing: true }));
     }
+
+    private VehicleIntroCard? _vehicleIntros;
+
+    /// <summary>
+    /// The rides' mini tutorials (#517), each shown the first time the player drives that kind:
+    /// the shell starts them with the world, in every session from the menus.
+    /// </summary>
+    public void StartVehicleIntros()
+    {
+        if (_vehicleIntros != null || Launch.Mode == GameMode.GpxReplay) return;
+        AddChild(_vehicleIntros = new VehicleIntroCard(() => Viewer, () => Covered));
+    }
+
+    /// <summary>Whoever owns the camera on screen: the local player, or a body a probe made itself; null in the fly camera.</summary>
+    private FootPlayer? Viewer =>
+        (_onFoot ? LocalPlayer : null) ?? (XR.XrSession.Anchor ?? GetViewport().GetCamera3D())?.GetParent() as FootPlayer;
+
+    /// <summary>Something owns the screen: a menu, the travel menu, the map, a replay.</summary>
+    private bool Covered => MenuOpen?.Invoke() == true || _rides is { IsOpen: true } || _places is { IsOpen: true }
+        || _gpx is { Active: true };
 
     /// <summary>
     /// The hints for the prompt bar: what the buttons do in the situation the player is in now.
@@ -1463,9 +1482,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         if (MenuOpen?.Invoke() == true || _gpx is { Active: true } || _rides is { IsOpen: true }) yield break;
 
-        // whoever owns the camera on screen: the local player, or a body a probe made itself
         var shown = XR.XrSession.Anchor ?? GetViewport().GetCamera3D();
-        var viewer = (_onFoot ? LocalPlayer : null) ?? shown?.GetParent() as FootPlayer;
+        var viewer = Viewer;
         if (viewer == null && shown == _spectator)
         {
             yield return (PlayerInput.ToggleMode, "Walk");
