@@ -57,7 +57,11 @@ public sealed class DoorLink
     public float InsideHeight { get; init; }
     /// <summary>The building's kind as dressed: a garage's or a barn's door lets vehicles through.</summary>
     public BuildingKind Kind { get; init; }
-    public bool VehicleDoor => BuildingFootprint.VehicleDoor(Kind);
+    /// <summary>How this door's leaf moves (<see cref="DoorSpot.Hang"/>, #498).</summary>
+    public DoorHang Hang { get; init; }
+
+    /// <summary>Whether a ground vehicle is driven through it (<see cref="DoorSpot.Vehicle"/>).</summary>
+    public bool VehicleDoor { get; init; }
 
     public Transform3D ToInside => Inside * Outside.AffineInverse();
     public Transform3D ToOutside => Outside * Inside.AffineInverse();
@@ -91,7 +95,7 @@ public sealed class DoorLink
 
     public static DoorLink Create(InteriorLayout layout, EntrancePlan e, WorldOrigin origin, float? outsideWidth, float? outsideHeight = null)
     {
-        BuildingKey.TryParse(e.Door, out var door);
+        DoorKey.TryParse(e.Door, out var door);
         var tileOrigin = origin.ToWorld(door.Tile.MinE, door.Tile.MaxN, 0);
 
         // the door spot stands 3 cm proud of the facade; the plane is the facade itself
@@ -105,23 +109,24 @@ public sealed class DoorLink
 
         var kind = layout.DressedKind();
         var (width, top) = layout.OpeningOf(e);
-        float outsideW = outsideWidth ?? e.Width;
+        float outsideW = outsideWidth ?? (e.DoorWidth > 0 ? e.DoorWidth : e.Width);
         return new DoorLink
         {
             Door = e.Door,
             Plan = layout.Key,
             Tile = door.Tile,
+            Hang = e.Hang, VehicleDoor = e.Vehicle,
             Outside = outside,
             Inside = inside,
             OutsideWidth = outsideW,
-            OutsideHeight = outsideHeight ?? BuildingFootprint.DoorHeightFor(kind),
+            OutsideHeight = outsideHeight ?? (e.DoorHeight > 0 ? e.DoorHeight : BuildingFootprint.DoorHeightFor(kind)),
             InsideWidth = width,
             InsideHeight = top,
             Kind = kind,
             // a barn's pair: each leaf is half the opening; a roll-up door takes a second, as a
             // car driving up has to find it open
-            SwingSeconds = DoorLeaf.RollsUp(kind) ? DoorLeaf.RollSeconds
-                : SwingSecondsFor(DoorLeaf.SwingsOut(kind) ? outsideW / 2 : outsideW),
+            SwingSeconds = DoorLeaf.RollsUp(e.Hang) ? DoorLeaf.RollSeconds
+                : SwingSecondsFor(DoorLeaf.LeafWidth(e.Hang, outsideW)),
         };
     }
 

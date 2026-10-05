@@ -411,13 +411,15 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
 
         string? door = null;
         if (!p.Indoors) door = DoorIndex.VehicleDoorAhead(p.GlobalPosition, heading, VehicleOpenReach, VehicleOpenAngle)?.Key.ToString();
-        else if (_current != null && BuildingFootprint.VehicleDoor(_current.DressedKind()))
+        else if (_current != null)
         {
-            // inside, the room is the approach: any way out it is heading at
+            // inside, the room is the approach: any way out it is heading at. Which ways out take
+            // a vehicle is per door (#498), not per kind: a barn's pair does and its side door
+            // does not, and a warehouse's loading bay will.
             float cos = Mathf.Cos(VehicleOpenAngle);
             foreach (var link in _links.Values)
             {
-                if (link.Plan != _current.Key) continue;
+                if (link.Plan != _current.Key || !link.VehicleDoor) continue;
                 var local = link.Inside.AffineInverse() * p.GlobalPosition;
                 var towards = (link.Inside.Basis.Inverse() * heading).Normalized();
                 if (local.Z < -VehicleOpenReach || towards.Z < cos || Math.Abs(local.X) > link.InsideWidth / 2 + 1f) continue;
@@ -444,12 +446,14 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     {
         try
         {
-            var layout = BuildingKey.TryParse(door, out _) ? await GetOrCreate(door) : null;
-            if (layout == null || Origin == null) { Refuse(sender, "This door is locked."); return; }
+            var layout = DoorKey.TryParse(door, out _) ? await GetOrCreate(door) : null;
+            // a facade door the plan could fit no doorway for (#498) has no entrance: it is locked
+            var way = layout?.EntranceOf(door);
+            if (layout == null || way == null || Origin == null) { Refuse(sender, "This door is locked."); return; }
             // measured to the door's centre, so a wide door, and its open leaves, reach further; a
             // garage or a barn opens for a vehicle driving up to it (OpenForVehicle), further off still
-            float reach = ServerDoorReach + layout.EntranceFor(door).Width;
-            if (BuildingFootprint.VehicleDoor(layout.DressedKind())) reach = Math.Max(reach, ServerVehicleDoorReach);
+            float reach = ServerDoorReach + way.Width;
+            if (way.Vehicle) reach = Math.Max(reach, ServerVehicleDoorReach);
             if (!NearDoor(sender, layout, door, reach)) { Refuse(sender, "Too far from the door."); return; }
             // the plan first: the opener builds the interior while the door starts to swing
             if (open) SendPlan(sender, layout, door);
@@ -496,7 +500,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     /// <summary>The door on the facade, world space.</summary>
     public Vector3 OutsideDoorAt(InteriorLayout l, EntrancePlan e)
     {
-        BuildingKey.TryParse(e.Door, out var k);
+        DoorKey.TryParse(e.Door, out var k);
         return Origin!.ToWorld(k.Tile.MinE, k.Tile.MaxN, 0) + new Vector3(e.DoorX, e.DoorY, e.DoorZ);
     }
 
@@ -539,7 +543,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         long sender = Multiplayer.GetRemoteSenderId();
         try
         {
-            if (BuildingKey.TryParse(door, out _) && await GetOrCreate(door) is { } layout)
+            if (DoorKey.TryParse(door, out _) && await GetOrCreate(door) is { } layout)
                 SendPlan(sender, layout, door);
         }
         catch (Exception e) { GD.PushError($"[interior] plan for {door}, peer {sender}: {e}"); }
@@ -578,7 +582,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             _sounds?.Door(link.Outside.Origin + link.Outside.Basis.Z * 0.3f, open);
             if (_current?.Key == link.Plan) _sounds?.Door(link.Inside.Origin - link.Inside.Basis.Z * 0.3f, open);
         }
-        else if (listener is { } ear && BuildingKey.TryParse(door, out var k) && DoorIndex.Find(k) is { } d
+        else if (listener is { } ear && DoorKey.TryParse(door, out var k) && DoorIndex.Find(k) is { } d
                  && d.World.DistanceTo(ear) < 60f)
             _sounds?.Door(d.World, open);
         Maintain();
@@ -611,7 +615,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         bool Wanted(string door, string plan)
         {
             if (plan == inside) return true;
-            return BuildingKey.TryParse(door, out var k) && DoorIndex.Find(k) is { } d
+            return DoorKey.TryParse(door, out var k) && DoorIndex.Find(k) is { } d
                 && from.Any(at => d.World.DistanceTo(at) < BuildRange);
         }
 
@@ -659,17 +663,17 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             return;
         }
         var e = layout.EntranceFor(door);
-        var spot = BuildingKey.TryParse(door, out var k) ? DoorIndex.Find(k) : null;
+        var spot = DoorKey.TryParse(door, out var k) ? DoorIndex.Find(k) : null;
         var link = DoorLink.Create(layout, e, Origin!, spot?.Width, spot?.Height);
         link.Open = _doors.ContainsKey(door);
         link.Leaf = node.Leaf(door);
         link.Shutter = node.Shutter(door);
         link.Shutter?.SetSwing(link.Swing);
-        if (link.Leaf == null && DoorLeaf.OnFacade(layout.DressedKind()))
+        if (link.Leaf == null && DoorLeaf.OnFacade(link.Hang))
         {
             // a barn's pair or a garage's roll-up door hangs on the facade, and lives as long as the link
             link.Leaf = DoorLeaf.CreateOnFacade(door, link.Outside, link.OutsideWidth, link.OutsideHeight,
-                layout.DressedKind(), _material!);
+                link.Hang, layout.DressedKind(), _material!);
             AddChild(link.Leaf);
             link.Leaf.SetSwing(link.Swing);
         }
@@ -853,7 +857,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
 
     /// <summary>Extra reach in front of a door from outside: an open barn pair's leaves stand out there.</summary>
     private float OpenReachOutside(DoorIndex.Entry e) =>
-        DoorLeaf.SwingsOut(e.Kind) && _doors.ContainsKey(e.Key.ToString()) ? DoorLeaf.OpenReach(e.Kind, e.Width) : 0f;
+        DoorLeaf.SwingsOut(e.Hang) && _doors.ContainsKey(e.Key.ToString())
+            ? DoorLeaf.OpenReach(e.Hang, e.Width) : 0f;
 
     /// <summary>The entrance the player is standing at, on the ground floor, if any.</summary>
     private EntrancePlan? ExitAt(FootPlayer player)
@@ -871,7 +876,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             var rel = at - new Vector2(e.X, e.Z);
             float along = Math.Max(0, Math.Abs(rel.Dot(new Vector2(-inward.Y, inward.X))) - e.Width / 2);
             float into = rel.Dot(inward);
-            float deeper = !DoorLeaf.OnFacade(kind) && _doors.ContainsKey(e.Door) ? DoorLeaf.OpenReach(kind, e.Width) : 0f;
+            float deeper = !DoorLeaf.OnFacade(e.Hang) && _doors.ContainsKey(e.Door)
+                ? DoorLeaf.OpenReach(e.Hang, e.Width) : 0f;
             float depth = into < 0 ? -into : Math.Max(0, into - deeper);
             return Mathf.Sqrt(along * along + depth * depth);
         }
@@ -1095,10 +1101,13 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     /// <summary>The key a door's interior is stored under: the group's primary building, for a door of a group.</summary>
     public static async Task<string> PlanKey(IChunkSource source, string door)
     {
-        if (!BuildingKey.TryParse(door, out var k)) return door;
+        if (!DoorKey.TryParse(door, out var k)) return door;
         var tile = await source.LoadBuildingsAsync(k.Tile);
-        if (tile == null || k.Index < 0 || k.Index >= tile.Buildings.Count) return door;
-        return BuildingTypes.For(tile).GroupOf(k.Index) is { } g ? new BuildingKey(k.TileE, k.TileN, g.Primary).ToString() : door;
+        if (tile == null || k.Index < 0 || k.Index >= tile.Buildings.Count) return k.Building.ToString();
+        // a group is planned under its primary building; a building's extra doors (#498) all share
+        // its one plan, so the slot never reaches a plan key
+        return BuildingTypes.For(tile).GroupOf(k.Index) is { } g
+            ? new BuildingKey(k.TileE, k.TileN, g.Primary).ToString() : k.Building.ToString();
     }
 
     private async Task<InteriorLayout?> Finish(string key, Task<InteriorLayout?> task)
@@ -1301,7 +1310,7 @@ public partial class InteriorNode : Node3D
             var kind = layout.DressedKind();
             // a barn's pair or a garage's roll-up door moves on the facade, with its link; in here
             // only its shut face
-            bool pair = DoorLeaf.OnFacade(kind);
+            bool pair = DoorLeaf.OnFacade(e.Hang);
             var leaf = pair ? DoorLeaf.CreateShutter(e.Door, doorway, width, top, kind, material)
                 : DoorLeaf.Create(e.Door, doorway, width, top, kind, material);
             node.AddChild(leaf);

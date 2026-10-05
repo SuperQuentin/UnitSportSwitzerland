@@ -768,6 +768,47 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         else Dropping(from, vel, 0);
     }
 
+    /// <summary>Pigeon crashes this client has seen, its own and others' (probes read it).</summary>
+    public int CrashSplats { get; private set; }
+
+    /// <summary>
+    /// The playing pigeon crashed (#519): a feather splat here, and online every peer near it sees
+    /// one too (<see cref="BirdNet.SendSplat"/>). It hurts nobody.
+    /// </summary>
+    public void PlayerSplat(Vector3 at, Vector3 vel)
+    {
+        Splat(at, vel);
+        if (Net is { Online: true } net) net.SendSplat(at, vel);
+    }
+
+    /// <summary>A pigeon's crash, seen: feathers everywhere, a white splash thrown along the hit, a thud.</summary>
+    public void Splat(Vector3 at, Vector3 vel)
+    {
+        CrashSplats++;
+        GD.Print($"[birds] splat at {at.X:F0},{at.Y:F0},{at.Z:F0}");
+        if (Headless) return;
+        var pigeon = Pigeon.Species;
+        Feathers(at, pigeon.Back, pigeon.Belly, 90, 5f);
+        var splash = UnitSport.Vehicles.Explosion.Burst("Splash", 40, 0.8f, 0.12f, additive: false, explosiveness: 1f,
+            velocity: (2f, 7f), gravity: -9.8f, spread: 75f,
+            ramp: new[] { new Color(0.97f, 0.97f, 0.93f, 1f), new Color(0.85f, 0.85f, 0.8f, 0.9f), new Color(0.8f, 0.8f, 0.75f, 0f) });
+        ((ParticleProcessMaterial)splash.ProcessMaterial).EmissionSphereRadius = 0.15f;
+        // thrown back off whatever it hit, and up
+        var back = -vel.Normalized() + Vector3.Up;
+        ((ParticleProcessMaterial)splash.ProcessMaterial).Direction = back.Normalized();
+        AddChild(splash);
+        splash.GlobalPosition = at;
+        splash.Emitting = true;
+        var (stream, pitch, db) = SfxSynth.ImpactBank.Pick(_rng);
+        var thud = new AudioStreamPlayer3D
+        {
+            Stream = stream, PitchScale = pitch * 1.6f, VolumeDb = db, UnitSize = 6f, Autoplay = true, Bus = SfxBus.Name,
+        };
+        AddChild(thud);
+        thud.GlobalPosition = at;
+        GetTree().CreateTimer(3.0).Timeout += () => { splash.QueueFree(); thud.QueueFree(); };
+    }
+
     /// <summary>The nearest roof or ledge perch within <paramref name="radius"/> (#217: the playing pigeon lands there).</summary>
     public Perch? NearestPerch(Vector3 p, float radius)
     {
@@ -1223,14 +1264,14 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     private static AudioStreamWav CallFor(int pattern) => Calls.TryGetValue(pattern, out var c) ? c
         : Calls[pattern] = Dsp.Encode(Dsp.Normalise(AmbienceDsp.BirdCall(new Random(pattern * 977), AmbienceDsp.BirdPattern(pattern)), 0.8f));
 
-    private void Feathers(Vector3 at, Color a, Color b)
+    private void Feathers(Vector3 at, Color a, Color b, int amount = 28, float speed = 2.8f)
     {
         if (Headless) return;
         var puff = new CpuParticles3D
         {
-            OneShot = true, Amount = 28, Lifetime = 1.8, Explosiveness = 0.95f,
+            OneShot = true, Amount = amount, Lifetime = 1.8, Explosiveness = 0.95f,
             Mesh = new QuadMesh { Size = new Vector2(0.06f, 0.025f) },
-            Direction = Vector3.Up, Spread = 180f, InitialVelocityMin = 0.6f, InitialVelocityMax = 2.8f,
+            Direction = Vector3.Up, Spread = 180f, InitialVelocityMin = 0.6f, InitialVelocityMax = speed,
             Gravity = new Vector3(0, -0.7f, 0), DampingMin = 1.5f, DampingMax = 3f,
             AngularVelocityMin = -360f, AngularVelocityMax = 360f,
             ColorRamp = new Gradient { Colors = new[] { a, b } },

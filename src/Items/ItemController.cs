@@ -195,8 +195,8 @@ public partial class ItemController : Node
         get
         {
             var p = CurrentPlayer();
-            // downed (#475): no items until a team-mate picks you up
-            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false, Downed: false } && p.Ride == RideKind.OnFoot ? p : null;
+            // downed (#475): no items until a team-mate picks you up; in a fist fight (#495) the hands are fists
+            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false, Downed: false, Fighting: false } && p.Ride == RideKind.OnFoot ? p : null;
         }
     }
 
@@ -270,8 +270,11 @@ public partial class ItemController : Node
         var weapon = Weapons.Get(_inventory.HeldId);
         // a scoped gun is held to the eye like the binoculars, and drawn as their overlay
         bool scoped = aiming && weapon is { AimFov: < 20f };
+        // any other gun is shouldered over a close shoulder camera, zoomed to its aim FOV (#460); VR stays at the eye
+        bool shouldered = aiming && def!.Use == ItemUse.Shoot && !scoped && !XR.XrSession.Active;
+        player.GunAim = shouldered;
         player.FovOverride = aiming ? def!.Use switch { ItemUse.Optic => 9f * breathFov, ItemUse.Photo => FovFromFocal(_focalMm), _ => weapon?.AimFov ?? 50f } : null;
-        player.ScopeView = aiming;
+        player.ScopeView = aiming && !shouldered;
         player.ItemAction = _planting || _useBusy ? 2 : aiming ? 1 : 0;   // replicated: remote peers pose the arms from it
         player.LookScale = aiming ? def!.Use switch { ItemUse.Optic => 0.2f, ItemUse.Photo => Mathf.Clamp(FovFromFocal(_focalMm) / 76f, 0.04f, 1f), _ => scoped ? 0.15f : 0.6f } : 1f;
         // held items stay visible while aiming: they are raised to a pose. Binoculars and the
@@ -292,7 +295,7 @@ public partial class ItemController : Node
         {
             visual.SetPose(_raiseFlag ? ViewPose.Raise : !aiming ? ViewPose.Rest : def!.Use switch
             {
-                ItemUse.Shoot => ViewPose.Aim,
+                ItemUse.Shoot => shouldered ? ViewPose.Rest : ViewPose.Aim,
                 _ => ViewPose.Eye,
             });
             if (!aiming && def?.Use == ItemUse.Readout) visual.SetPose(ViewPose.Read);   // the GPS is held up to read

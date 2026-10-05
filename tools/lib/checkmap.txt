@@ -51,6 +51,9 @@ src/BattleRoyale/BrStruct quick  --prefabcheck --systems ui,physics,build
 src/Loot/                quick  --lootchancecheck
 src/Loot/                quick  --shopcheck
 src/Interiors/           quick  --shopcheck
+src/Interiors/           quick  --sitecheck --systems ui
+src/Loot/LootTables      quick  --sitecheck --systems ui
+src/Interiors/           quick  --doorcheck
 src/Interiors/Church     quick  --churchstagecheck
 src/Audio/Cd/CdLibrary   quick  --churchstagecheck
 src/Items/Item           quick  --shopcheck
@@ -97,6 +100,11 @@ src/World/LaneGraph      quick  --drivecheck --chunks fixture:hairpin --traffic 
 src/World/Wa             quick  --watercheck --chunks fixture:lake
 src/World/SeaState       quick  --watercheck --chunks fixture:lake
 src/Terrain/Water        quick  --watercheck --chunks fixture:lake
+src/Terrain/ParkingBuilder quick --parkingcheck --chunks fixture:parking
+src/Terrain/ParkingProbe quick  --parkingcheck --chunks fixture:parking
+src/Vehicles/DormantVehicles quick --parkingcheck --chunks fixture:parking
+src/Vehicles/VehicleSlot quick  --parkingcheck --chunks fixture:parking
+tools/TerrainFormat/ParkingPlanner quick --parkingcheck --chunks fixture:parking
 src/Terrain/Fixture/     quick  --watercheck --chunks fixture:lake
 src/Terrain/ChunkManager quick  --watercheck --chunks fixture:lake
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
@@ -167,6 +175,8 @@ src/Core/ServerWorld     net    @netsmoke
 src/Core/ClientWorld     net    @netsmoke
 src/Core/Debug           net    tools/debugcheck.sh
 @rpc                     net    @netsmoke
+src/Vehicles/DormantVehicles net tools/parkingnetcheck.sh
+src/Vehicles/ParkingNetProbe net tools/parkingnetcheck.sh
 src/Items/ThrowHits      net    tools/bonkcheck.sh
 src/Items/ItemEvents     net    tools/bonkcheck.sh
 src/Items/DroppedItem    net    tools/bonkcheck.sh
@@ -235,6 +245,8 @@ src/Net/                 full   tools/loadtest.sh 4 testsh 60
 tools/lib/               quick  tools/lib/guard_selftest.sh
 src/Player/Pigeon        quick  --flycheck pigeon --world flat
 src/Player/FlightCheck   quick  --flycheck pigeon --world flat
+src/Player/Pigeon        quick  --flycheck pigeoncrash --systems birds
+src/Birds/BirdLife       quick  --flycheck pigeoncrash --systems birds
 src/Player/FlightCheck   quick  --flycheck a320 --world flat
 src/Player/Airliner      quick  --flycheck a320 --world flat
 src/Player/Airliner      quick  --flycheck a320 --world flat --airliner sim
@@ -307,6 +319,9 @@ src/Player/Emote         net    tools/emotenetcheck.sh
 src/Items/SwissItems     net    tools/swisscheck.sh
 src/Items/SwissNetProbe  net    tools/swisscheck.sh
 src/Avatar/HumanMeshBuilder.Emotes net tools/emotenetcheck.sh
+src/Combat/Fight         net    tools/fightnetcheck.sh
+src/Player/FootPlayer.Fight net tools/fightnetcheck.sh
+src/Avatar/HumanMeshBuilder.Fight net tools/fightnetcheck.sh
 src/Player/FootPlayer.Hold net   tools/holdnetcheck.sh
 src/Player/HoldNetProbe  net    tools/holdnetcheck.sh
 src/Vehicles/VehicleBody.Hold net tools/holdnetcheck.sh
