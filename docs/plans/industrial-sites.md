@@ -136,9 +136,14 @@ section's first sketch:
   ground-floor room an extra door's doorway is cut in, clear of other cuts, slab holes and the
   stair flight.
 
+**The bays are built too — #528.** `DoorBudget.Bays` is the per-site-type run, placed in
+`BuildingFootprint.Compute` beside the main door and on both sides of it, on the wall the yard is
+in front of. `Hang = RollUp, Vehicle = true` was the whole of it, exactly as #498 promised.
+Details, and the three things the first cut got wrong, in `docs/notes/terrain/loading-bays.md`.
+
 Still to do, in this epic:
 
-- **Bay placement**: `DoorBudget.AlongRun` spaces doors 22 m apart, which is not a loading bay.
+- ~~**Bay placement**~~ (done, #528): `DoorBudget.AlongRun` spaces doors 22 m apart, which is not a loading bay.
   Bays want a per-site-type run — on the longest wall facing the yard, N at 4.5 m centres, each a
   4 m roll-up door (a depot's 4.5 m at 5.0 m centres, a body shop's 3.2 m at 4.0 m, a showroom
   none) — as an override `DoorBudget` consults before its generic rule, keyed on

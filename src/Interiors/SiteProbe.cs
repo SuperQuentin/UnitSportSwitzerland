@@ -28,6 +28,8 @@ public partial class SiteProbe : Node3D
     private int _step = -1;
     private double _t;
     private readonly List<(BuildingType Site, InteriorLayout Layout, InteriorNode Node)> _built = new();
+    /// <summary>How many facades the bay pass has stood in its row (#528).</summary>
+    private int _facades;
 
     public SiteProbe(string? shot) => _shot = shot;
 
@@ -127,6 +129,15 @@ public partial class SiteProbe : Node3D
             float wall = tile!.Buildings[index].MaxY - tile.Buildings[index].MinY;
             foreach (var d in bays)
                 Assert(d.Height <= wall, $"{spec.Want}: a {d.Height:F1} m bay in a {wall:F1} m wall");
+
+            // the facade with its doors on it, in a row for the picture: the baked roll-up slats
+            // are what a bay looks like from the yard, and nothing but a look can check them
+            if (fp != null && BuildingMeshBuilder.Build(tile, fp.Doors.Select(d => d with { Index = index }).ToArray()) is { } facade)
+                AddChild(new MeshInstance3D
+                {
+                    Name = $"Facade{_facades}", Position = new Vector3(_facades++ * 150f, 0, 900f),
+                    Mesh = Terrain.ChunkNode.ToArrayMesh(facade, Styles.StyleKit.Material(Styles.MaterialRole.Building)),
+                });
 
             var ground = layout.GroundFloor;
             var hall = ground.Rooms[0];
@@ -304,7 +315,24 @@ public partial class SiteProbe : Node3D
             image.SavePng(_shot.Replace(".png", $"_{_built[_step].Site}".ToLowerInvariant() + ".png"));
         }
         _step++;
-        if (_step >= _built.Count) { Finish(); return; }
+        // one last frame across a works' front wall: a row of roll-up bays beside its office door
+        if (_step == _built.Count)
+        {
+            var eye = GetNodeOrNull<Camera3D>("Eye");
+            if (eye == null) { Finish(); return; }
+            // the warehouse is the first facade in the row, and a synthetic tile with no roads
+            // puts its door on the south wall (+Z), so the yard side is beyond it
+            eye.GlobalPosition = new Vector3(-30f, 12f, 968f);
+            eye.LookAt(new Vector3(4f, 3.5f, 917f), Vector3.Up);
+            eye.MakeCurrent();
+            return;
+        }
+        if (_step > _built.Count)
+        {
+            GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_bays.png"));
+            Finish();
+            return;
+        }
 
         var (_, layout, node) = _built[_step];
         var hall = layout.GroundFloor.Rooms[0];
