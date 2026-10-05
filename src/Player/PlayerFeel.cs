@@ -1086,9 +1086,10 @@ public partial class PlayerFeel : Node3D
             case var _ when _player.Heavy is { Spec.Farm: true } farm && _player.CanDeliver(farm):
                 // a farm co-op's yard with a load aboard (#494)
                 // a tipping trailer tips its bin to deliver; the combine's auger pours its tank
-                text = InputHints.Format(farm.Spec.TankItems > 0
-                    ? InputHints.Pad ? "{car_door}  DELIVER the load to the co-op" : "{destination}  DELIVER the load to the co-op"
-                    : InputHints.Pad ? "{car_door}  TIP the trailer: deliver the load to the co-op" : "{destination}  TIP the trailer: deliver the load to the co-op");
+                // what it fetches there and whether the co-op wants it this week (Farming.FarmSales, built on change)
+                text = Farming.FarmSales.Instance is { } sales && _player.FarmLoad(farm) is { Items: > 0 } load
+                    ? sales.DeliveryHint(Farming.FarmTables.YieldOf(load.Crop), load.Items, _player.GlobalPosition, tip: farm.Spec.TankItems <= 0)
+                    : InputHints.Format(InputHints.Pad ? "{car_door}  DELIVER the load" : "{destination}  DELIVER the load");
                 break;
             case var _ when _player.Heavy is { Trailer.Boat: not 0 } truck && _player.GroundSpeed < 1.5f
                 && (_player.CanLaunchBoat(truck) || _player.BoatToWinch(truck) != null):

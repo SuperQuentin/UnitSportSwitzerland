@@ -2434,6 +2434,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // swimming beside a steamer's gangway: up its ladder onto the deck (#303)
         if (TryClimbAboard()) return true;
 
+        // a farm stand at hand, or a specialty buyer's weighbridge with its goods in the pack (#494)
+        if (Farming.FarmSales.TryInteract(this)) return true;
         // a loaded tipping trailer or combine tank at hand: a sack of it (#494)
         if (TryFarmTank()) return true;
         // the door (or the machine) you are at, worked precisely (#261): no more "whatever is in 3.5 m"

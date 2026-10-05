@@ -207,6 +207,8 @@ public static class ItemDefs
             ItemUse.Farm, 1, new Color("#8a6a40"), "HO", 0, ItemCategory.Gear, 25f),
         new(ItemId.Fertiliser, "Fertiliser", "{use_item} on a sown field cell: the crop there ripens sooner.",
             ItemUse.Farm, 20, new Color("#c8c8b0"), "FE", 0, ItemCategory.Produce, 12f),
+        new(ItemId.FarmStand, "Farm stand", "{use_item} sets it up where you look, by a road: a self-service stand with an honesty box. {interact_mount} at it stocks it with produce and takes the cash; passers-by and other players buy from it. Packed up empty with {use_item} and an empty hand.",
+            ItemUse.Place, 1, new Color("#8a5a30"), "FS", 0, ItemCategory.Gear, 30f),
     };
 
     private static ItemDef Seed(ItemId id, string name, string tint, string glyph, float value) =>

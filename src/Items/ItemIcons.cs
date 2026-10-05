@@ -1406,6 +1406,27 @@ public static class ItemIcons
             "..kkk...........",
         };
 
+        // a farm stand (#494): a red roof over a table of crates, the honesty box on its post
+        d[ItemId.FarmStand] = new[]
+        {
+            "................",
+            "..kkkkkkkkkkkk..",
+            ".kRrrrrrrrrrrRk.",
+            "kRrrrrrrrrrrrrRk",
+            "kkkkkkkkkkkkkkkk",
+            ".kN..........Nk.",
+            ".kN..........Nk.",
+            ".kN.kkk......Nk.",
+            ".kN.kok.kkk..Nk.",
+            ".kNkkkkkkekkkNk.",
+            ".kyyyooeeeyyykkk",
+            ".kttttttttttttkr",
+            ".kN.........NkkR",
+            ".kN.........Nk.k",
+            ".kN.........Nk.k",
+            ".kk.........kk.k",
+        };
+
         d[ItemId.FieldWorkbench] = new[]
         {
             "..........kkk...",

@@ -251,7 +251,7 @@ public partial class ShopService : Node
 
     /// <summary>What the open shop pays for one of these, 0 when it does not buy them.</summary>
     public int SellPriceOf(ItemId id) =>
-        Open is { } o && ItemDefs.Get(id) is { } def && ShopTables.Buys(o.Type, def.Category) ? ShopTables.SellPrice(def.Value) : 0;
+        Open is { } o && ItemDefs.Get(id) is { } def ? ShopTables.CounterPrice(o.Type, id, def.Category, def.Value, Farming.FarmSales.Month, o.Key, Farming.FarmSales.Week) : 0;
 
     /// <summary>Sells <paramref name="count"/> plain stacks of an item to the open shop: the cash comes when the server agrees.</summary>
     public bool Sell(ItemId id, int count)
@@ -464,8 +464,12 @@ public partial class ShopService : Node
         }
         catch (Exception e) { GD.PushError($"[shop] delivery to {door}: {e.Message}"); }
         if (!IsInsideTree()) return;
-        bool ok = coop != null;
-        if (ok) GD.Print($"[shop] peer {peer} delivered {count} {(ItemId)id} to the farm co-op {coop} for {total} CHF");
+        // the market's price (#494, Farming.FarmSales): the co-op's wishes and the season, or a specialty buyer's yard
+        string market = "the farm co-op";
+        if (total > 0 && Farming.FarmSales.Instance is { } sales)
+            (total, market) = sales.PriceLoad(peer, (ItemId)id, count, where, coop, Online ? Farming.FarmMarket.ServerSlack : 0f);
+        bool ok = total > 0 && (coop != null || market.Length > 0);
+        if (ok) GD.Print($"[shop] peer {peer} delivered {count} {(ItemId)id} to {market} {coop} for {total} CHF");
         else GD.Print($"[shop] peer {peer} delivery of {count} {(ItemId)id} refused");
         Reply(peer, MethodName.Delivered, id, ok ? count : 0, ok ? (int)total : 0);
     }
@@ -558,10 +562,13 @@ public partial class ShopService : Node
     {
         var shop = await ShopFor(peer, key, furniture);
         var def = ItemDefs.Get((ItemId)id);
-        int each = def == null ? 0 : ShopTables.SellPrice(def.Value);
+        // produce at a co-op follows the market (#494, Farming.FarmPrices): the season, its wishes of the week
+        int each = def == null || shop is not { } at ? 0 : ShopTables.CounterPrice(at.Type, (ItemId)id, def.Category, def.Value, Farming.FarmSales.Month, key, Farming.FarmSales.Week);
         // the pack is the client's, like the cash: what the server checks is where, what and how many at most
         bool ok = shop is { } s && def != null && ShopTables.Buys(s.Type, def.Category) && each > 0 && count is > 0 and <= 999;
         if (ok) GD.Print($"[shop] peer {peer} sold {count} {(ItemId)id} at {key} ({shop!.Value.Type}) for {count * each} CHF");
+        // sacks sold at a co-op's counter count toward the seller's delivery contracts there (#494)
+        if (ok && shop!.Value.Type == ShopType.FarmCoop) Farming.FarmSales.Instance?.Counted(peer, key, (ItemId)id, count);
         Reply(peer, MethodName.SoldBack, key, id, ok ? count : 0, ok ? each : 0);
     }
 

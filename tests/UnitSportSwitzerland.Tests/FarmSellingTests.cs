@@ -181,7 +181,7 @@ public class FarmSellingTests
     [Fact]
     public void A_stand_takes_produce_and_sells_it_over_time()
     {
-        var s = new StandState { Id = 1, Owner = "A", RoadM = 8, Doors = 0, LastTick = 0 };
+        var s = new StandState { Id = 1, Owner = "A", RoadM = 8, Houses = 0, LastTick = 0 };
         Assert.True(FarmStandRules.Stockable(ItemId.Potato) && FarmStandRules.Stockable(ItemId.Roesti) && FarmStandRules.Stockable(ItemId.Flour));
         Assert.False(FarmStandRules.Stockable(ItemId.WheatSeed) || FarmStandRules.Stockable(ItemId.Fertiliser) || FarmStandRules.Stockable(ItemId.HayBale)
                      || FarmStandRules.Stockable(ItemId.Shotgun));
@@ -206,7 +206,7 @@ public class FarmSellingTests
         Assert.Equal(28, s.Slots[0].Count);
 
         // a village round it sells faster, a stand far from the road slower
-        Assert.True(FarmStandRules.PerHour(new StandState { RoadM = 8, Doors = 40 }, ItemId.Potato) == 3 * FarmStandRules.PerHour(new StandState { RoadM = 8 }, ItemId.Potato));
+        Assert.True(FarmStandRules.PerHour(new StandState { RoadM = 8, Houses = 40 }, ItemId.Potato) == 3 * FarmStandRules.PerHour(new StandState { RoadM = 8 }, ItemId.Potato));
         Assert.True(FarmStandRules.RoadFactor(50) < FarmStandRules.RoadFactor(10));
         Assert.Equal(0, FarmStandRules.RoadFactor(FarmStandRules.RoadMax + 1));
 

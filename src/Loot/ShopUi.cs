@@ -19,7 +19,10 @@ public partial class ShopUi : CanvasLayer
     private readonly ShopService _shop;
     private PanelContainer _panel = null!;
     private Label _title = null!, _money = null!, _status = null!, _buys = null!;
-    private VBoxContainer _catalogue = null!, _pack = null!;
+    private VBoxContainer _catalogue = null!, _pack = null!, _orders = null!;
+    /// <summary>The open shop's type and building (a farm co-op shows its market and orders, #494).</summary>
+    private ShopType _type;
+    private string _key = "";
     private Inventory? _inventory;
 
     public ShopUi(ShopService shop) => _shop = shop;
@@ -75,6 +78,10 @@ public partial class ShopUi : CanvasLayer
         _pack.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         packScroll.AddChild(_pack);
 
+        // a farm co-op's orders and the player's contracts (#494, Farming.CoopPanel)
+        _orders = UiKit.VBox(4);
+        box.AddChild(_orders);
+
         _status = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim, align: HorizontalAlignment.Center, wrap: true);
         box.AddChild(_status);
     }
@@ -88,8 +95,15 @@ public partial class ShopUi : CanvasLayer
         _shop.Changed += Rebuild;
         if (_inventory != null) _inventory.Changed += Rebuild;
         if (Bank.Instance is { } bank) bank.BalanceChanged += OnBalance;
+        _type = type;
+        _key = _shop.Open?.Key ?? "";
+        if (Farming.FarmSales.Instance is { } sales && type == ShopType.FarmCoop)
+        {
+            sales.ContractsChanged += Rebuild;
+            sales.Refresh();
+        }
         _title.Text = ShopTables.Name(type);
-        _buys.Text = BuysText(type);
+        _buys.Text = type == ShopType.FarmCoop ? BuysText(type) + " " + Farming.CoopPanel.MarketLine(_key) : BuysText(type);
         _status.Text = "Cash under 20 CHF; from 20 CHF most shops take the card too (your bank account).";
         _panel.Visible = true;
         Input.MouseMode = Input.MouseModeEnum.Visible;
@@ -113,6 +127,7 @@ public partial class ShopUi : CanvasLayer
         _shop.Changed -= Rebuild;
         if (_inventory != null) _inventory.Changed -= Rebuild;
         if (Bank.Instance is { } bank) bank.BalanceChanged -= OnBalance;
+        if (Farming.FarmSales.Instance is { } sales) sales.ContractsChanged -= Rebuild;
     }
 
     private void OnBalance(long _) => Rebuild();
@@ -125,7 +140,8 @@ public partial class ShopUi : CanvasLayer
     private static string BuysText(ShopType type)
     {
         var cats = Enum.GetValues<ItemCategory>().Where(c => ShopTables.Buys(type, c)).Select(c => c.ToString().ToLowerInvariant()).ToList();
-        return cats.Count == 0 ? "This shop buys nothing." : $"Buys {string.Join(", ", cats)} for 35 % of its value: drag a line onto the catalogue, or Sell.";
+        return cats.Count == 0 ? "This shop buys nothing." : $"Buys {string.Join(", ", cats)} for 35 % of its value: drag a line onto the catalogue, or Sell."
+            + (type == ShopType.FarmCoop ? " Harvest prices follow the season and the week's wishes." : "");
     }
 
     private void Rebuild()
@@ -188,6 +204,9 @@ public partial class ShopUi : CanvasLayer
             var name = UiKit.Text($"{def.Name} ×{have}", UiTheme.FontSmall);
             name.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
             h.AddChild(name);
+            // the co-op wants it this week (#494): say so beside the price
+            if (_type == ShopType.FarmCoop && Farming.FarmSales.WantedTag(_key, def.Id) is { Length: > 0 } wanted)
+                h.AddChild(UiKit.Text(wanted, UiTheme.FontTiny, UiTheme.Amber));
             h.AddChild(UiKit.Text($"{each} CHF", UiTheme.FontTiny, UiTheme.Good));
             var id = def.Id;
             var sell = UiKit.Button("Sell", minWidth: 52);
@@ -198,6 +217,8 @@ public partial class ShopUi : CanvasLayer
             _pack.AddChild(row);
         }
         if (shown == 0) _pack.AddChild(UiKit.Text("Nothing this shop buys.", UiTheme.FontSmall, UiTheme.TextFaint));
+        if (_type == ShopType.FarmCoop) Farming.CoopPanel.Fill(_orders, _key);
+        else foreach (var c in _orders.GetChildren()) c.QueueFree();
     }
 
     private static TextureRect Icon(ItemId id) => new()

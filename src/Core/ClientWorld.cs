@@ -728,6 +728,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Systems.On(Systems.Loot)) Loot.LootService.Create(this).Items = items;
         // shops and PAUSA vending machines (#273): same node path as the server's, which keeps the sold counts
         if (Systems.On(Systems.Loot)) Loot.ShopService.Create(this).Items = items;
+        // selling farm produce (#494): World/FarmSales and World/FarmStands, same paths as the server's; offline this client plays it
+        if (Systems.On(Systems.Farming))
+        {
+            Farming.FarmSales.Create(this, origin, server: false, items);
+            var stands = Farming.FarmStands.Create(this, origin, server: false);
+            stands.Items = items;
+            stands.Source = () => _chunks?.Source;
+            if (Farming.SellCheck.Requested) AddChild(new Farming.SellCheck(items, origin));
+        }
         // the radio's panel: CDs to play, burn a new one, pick it up (opened from FootPlayer.TryInteract)
         _radioUi = Items.RadioUi.Create(() => LocalPlayer, items.Inventory);
         _radioUi.Give = items.Give;

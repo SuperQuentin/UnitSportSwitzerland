@@ -28,6 +28,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Interiors.InteriorManager? _interiors;
     private WorldOrigin? _origin;
     private Items.PlacedObjects? _placed;
+    private Farming.FarmStands? _farmStands;
     private Build.Structures? _structures;
     private Occasions.OccasionManager? _occasions;
     private World.RaceNpcs? _npcs;
@@ -226,6 +227,14 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
         _placed.NameOf = _chat.NameOfPeer;
         _chat.NameAssigned += bank.SendBalance;
+        // selling farm produce (#494): load prices, specialty buyers, contracts; farm stands' crates and cash
+        if (Systems.On(Systems.Farming))
+        {
+            Farming.FarmSales.Create(this, origin, server: true).NameOf = _chat.NameOfPeer;
+            _farmStands = Farming.FarmStands.Create(this, origin, server: true);
+            _farmStands.NameOf = _chat.NameOfPeer;
+            _farmStands.Source = () => source;
+        }
         // built structures (#274): checked, kept and saved here; match ones cleared after the match
         if (Systems.On(Systems.Build))
         {
@@ -410,6 +419,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
+        _farmStands?.SendTo(id);
         _structures?.SendTo(id);
         _br?.SendTo(id);
         _brCrates?.SendTo(id);

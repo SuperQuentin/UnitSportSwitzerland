@@ -46,7 +46,8 @@ public static class FarmMarket
         if (!float.IsNaN(_lastAt.X) && now - _lastMsec < 500 && _lastAt.DistanceSquaredTo(at) < 16f) return _lastNear;
         _lastAt = at;
         _lastMsec = now;
-        return _lastNear = CoopDoor(at, DeliverReach) != null;
+        // a specialty buyer's yard is a market too (#494, FarmSales / FarmBuyers)
+        return _lastNear = CoopDoor(at, DeliverReach) != null || FarmSales.Instance?.BuyerNear(at) != null;
     }
 
     /// <summary>The nearest farm co-op's door within <paramref name="reach"/> of a point, or null.</summary>

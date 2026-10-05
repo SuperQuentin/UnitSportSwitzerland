@@ -106,6 +106,8 @@ public static class Recipes
         Bench(ItemId.HayHideout, 1, 3f, I(ItemId.Firewood, 6), I(ItemId.Rope, 2), I(ItemId.Cloth, 2)),
 
         Bench(ItemId.FieldWorkbench, 1, 6f, I(ItemId.WoodPlanks, 6), I(ItemId.Screws, 10), I(ItemId.ScrapMetal, 2)),
+        // a farm stand (#494): a table under a roof and a cash box
+        Bench(ItemId.FarmStand, 1, 6f, I(ItemId.WoodPlanks, 8), I(ItemId.Screws, 10), I(ItemId.ScrapMetal, 1)),
 
         // milling (#494): a sack of grain makes more bags of flour than it was worth; nothing is lost
         Bench(ItemId.Flour, 4, 3f, I(ItemId.Wheat)),

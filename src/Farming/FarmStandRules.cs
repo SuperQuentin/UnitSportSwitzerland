@@ -26,8 +26,8 @@ public sealed class StandState
     public int Cash { get; set; }
     /// <summary>Metres to the nearest road (the server measures it when the stand is set up); NaN not known yet.</summary>
     public float RoadM { get; set; } = float.NaN;
-    /// <summary>Building doors within <see cref="FarmStandRules.TownRadius"/> m when set up: how many people live near.</summary>
-    public int Doors { get; set; }
+    /// <summary>Buildings within <see cref="FarmStandRules.TownRadius"/> m when set up: how many people live near.</summary>
+    public int Houses { get; set; }
     /// <summary>Server Unix time of the last sales tick.</summary>
     public double LastTick { get; set; }
     /// <summary>Francs taken in all (the stand's tally, for the panel).</summary>
@@ -54,7 +54,7 @@ public static class FarmStandRules
     public const float RoadNear = 15f;
     /// <summary>A second stand may not stand this close to another.</summary>
     public const float Spacing = 20f;
-    /// <summary>Doors counted round a stand for the town factor.</summary>
+    /// <summary>Houses counted round a stand for the town factor.</summary>
     public const float TownRadius = 300f;
     /// <summary>Sales an hour (server time) of one crate by a road in open country.</summary>
     public const double BasePerHour = 6;
@@ -77,12 +77,12 @@ public static class FarmStandRules
         return 1.0 - 0.6 * (roadM - RoadNear) / (RoadMax - RoadNear);
     }
 
-    /// <summary>The town's factor: 1 in open country, up to 3 with 40 doors or more round it.</summary>
-    public static double TownFactor(int doors) => 1.0 + Math.Min(Math.Max(doors, 0), 40) / 20.0;
+    /// <summary>The town's factor: 1 in open country, up to 3 with 40 houses or more round it.</summary>
+    public static double TownFactor(int houses) => 1.0 + Math.Min(Math.Max(houses, 0), 40) / 20.0;
 
     /// <summary>Expected sales an hour of one crate of <paramref name="item"/> at this stand.</summary>
     public static double PerHour(StandState s, ItemId item) =>
-        BasePerHour * RoadFactor(s.RoadM) * TownFactor(s.Doors) * (Cooked(item) ? 2.0 : 1.0);
+        BasePerHour * RoadFactor(s.RoadM) * TownFactor(s.Houses) * (Cooked(item) ? 2.0 : 1.0);
 
     /// <summary>
     /// Puts <paramref name="count"/> of an item on the stand: into its crate, else an empty one, at

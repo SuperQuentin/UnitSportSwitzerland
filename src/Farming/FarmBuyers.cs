@@ -52,12 +52,15 @@ public static class FarmBuyers
             new[] { ItemId.Rapeseed, ItemId.SunflowerSeeds }, 1.15, "OSM way 296573291, product=oil (centroid 6.449477 E, 46.568282 N)"),
     };
 
+    /// <summary>Checks: one more buyer (a real one moved next to a fixture world's spawn), or null.</summary>
+    public static FarmBuyer? StandIn { get; set; }
+
     /// <summary>The buyer whose yard holds an LV95 point (the nearest if two did), or null.</summary>
     public static FarmBuyer? At(double e, double n, float slack = 0f)
     {
         FarmBuyer? best = null;
         double bestD = double.MaxValue;
-        foreach (var b in All)
+        foreach (var b in StandIn is { } extra ? All.Append(extra) : All)
         {
             double d = Math.Sqrt((b.E - e) * (b.E - e) + (b.N - n) * (b.N - n));
             if (d <= b.Reach + slack && d < bestD) { best = b; bestD = d; }
