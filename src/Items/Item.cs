@@ -168,6 +168,11 @@ public static class ItemDefs
         Eat(ItemId.IsotonicDrink, "Isotonic drink", 6, "#3ab0e8", "ID", 20, ItemCategory.Water, 4),
         new(ItemId.SwissArmyKnife, "Swiss army knife", "A tool, not a weapon: kept anywhere in your pack, every tree you chop gives one more log.",
             ItemUse.Material, 1, new Color(0.80f, 0.10f, 0.12f), "SK", 0, ItemCategory.Gear, 45f),
+
+        // #501: the plush shark, out of a bin at any of the nine IKEA stores. Material, so
+        // {aim_item} + {use_item} throws it (ItemDefs.Throwable) — which is the whole point of one.
+        new(ItemId.Blahaj, "Blåhaj", "A plush shark, 100 cm. {aim_item} + {use_item} throws it. Stacks of three, because nobody buys one.",
+            ItemUse.Material, 3, new Color(0.49f, 0.78f, 0.94f), "BH", 0, ItemCategory.Cosmetic, 25f),
     };
 
     private static ItemDef Gadget(ItemId id, string name, string blurb, string tint, string glyph, float value) =>

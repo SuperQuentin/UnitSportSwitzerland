@@ -148,6 +148,10 @@ public enum ItemId
 
     /// <summary>A fallen squad player's tag (#480): used at a Postauto stop, it brings them back (<c>BrManager.Recall</c>).</summary>
     Dogtag = 193,
+
+    // ---- toys (#501) ----
+    /// <summary>The plush shark, out of a bin at any of the nine IKEA stores (<c>Interiors.Landmarks</c>).</summary>
+    Blahaj = 200,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>

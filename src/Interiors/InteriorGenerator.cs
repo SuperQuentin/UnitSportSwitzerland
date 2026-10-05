@@ -32,7 +32,13 @@ public static partial class InteriorGenerator
     private const int MaxFloors = 30;
 
     /// <param name="rural">The building's tile is countryside (<c>Loot.ShopTables.IsRural</c>): only there is a gun shop.</param>
-    public static InteriorLayout Generate(Footprint fp, Building b, bool rural = false)
+    /// <param name="type">
+    /// What <see cref="BuildingTypes"/> made of the building's group, for the types that cannot be
+    /// seen in the footprint alone: an IKEA is recognised from where the tile is (#501), so the
+    /// tile-aware <see cref="Generate(BuildingTile, int, RoadTile?, ChunkGrid?)"/> has to pass it in.
+    /// </param>
+    public static InteriorLayout Generate(Footprint fp, Building b, bool rural = false,
+        BuildingType type = BuildingType.None)
     {
         var rng = new Random(StableHash(fp.Key.ToString()));
         var (h, n) = Storeys(b);
@@ -65,6 +71,13 @@ public static partial class InteriorGenerator
         bool bank = BuildingFootprint.IsBank(fp);
         if (bank) layout.Type = BuildingType.Bank;
         layout.Shop = BuildingFootprint.ShopOf(fp, rural);
+
+        // an IKEA plans its own hall (#501), so none of the house rules below apply to it
+        if (type == BuildingType.Ikea && TryIkea(layout, fp.Door.Height))
+        {
+            Furnish(layout, rng);
+            return layout;
+        }
 
         bool single = b.Kind is BuildingKind.Industrial or BuildingKind.Agricultural or BuildingKind.Annex
             or BuildingKind.Garage
@@ -949,8 +962,10 @@ public static partial class InteriorGenerator
                 if (f == 0 && BuildingFootprint.VehicleDoor(l.Kind))
                     foreach (var o in r.Openings)
                         if (o.Kind == OpeningKind.Entry && o.Side == Side.Front) blocked.Add(Lane(l.Kind, r, o));
-                // the stairwell is not somewhere to put a sofa
-                bool isCore = ri == 0 && floor.Rooms.Count > 1;
+                // the stairwell is not somewhere to put a sofa. A hall that lays itself out is
+                // room 0 and holds no stair, so it is not one: the strip the core keeps clear just
+                // inside the door would have blocked its whole front row (#501).
+                bool isCore = ri == 0 && floor.Rooms.Count > 1 && !LaysItselfOut(r.Type);
                 if (isCore)
                 {
                     float zs = FirstStairZ(l);
@@ -959,6 +974,8 @@ public static partial class InteriorGenerator
                 }
                 foreach (var h in floor.Holes) blocked.Add(h);
 
+                // a shop floor is rows with aisles, not pieces scattered round the walls (#501)
+                if (LaysItselfOut(r.Type)) { HallLayout(l, f, r, placed, blocked, rng); continue; }
                 if (r.Type == RoomType.Nave) { Pews(l, f, r, placed, blocked); continue; }
                 if (r.Type == RoomType.Classroom) Desks(l, f, r, placed, blocked);
                 if (r.Type == RoomType.Vault) { Vault(l, f, r, placed, blocked, rng); continue; }

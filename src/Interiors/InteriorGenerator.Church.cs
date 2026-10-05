@@ -38,7 +38,8 @@ public static partial class InteriorGenerator
         {
             var fp = BuildingFootprint.Compute(tile, index, roads, grid);
             if (fp == null) return null;
-            layout = Generate(fp, tile.Buildings[index], Loot.ShopTables.IsRural(tile.Buildings.Count));
+            layout = Generate(fp, tile.Buildings[index], Loot.ShopTables.IsRural(tile.Buildings.Count),
+                group?.Type ?? BuildingType.None);
         }
         layout.Group = GroupPrint(tile, index);
         return layout;
@@ -46,7 +47,12 @@ public static partial class InteriorGenerator
 
     /// <summary>What a stored plan for this building must have been made from ("" for a lone solid).</summary>
     public static string GroupPrint(BuildingTile tile, int index) =>
-        BuildingTypes.For(tile).GroupOf(index) is { Type: BuildingType.Church } g ? g.Fingerprint(tile, ChurchRules) : "";
+        BuildingTypes.For(tile).GroupOf(index) switch
+        {
+            { Type: BuildingType.Church } g => g.Fingerprint(tile, ChurchRules),
+            { Type: BuildingType.Ikea } g => g.Fingerprint(tile, IkeaRules),
+            _ => "",
+        };
 
     private sealed class Part
     {

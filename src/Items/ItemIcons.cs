@@ -1603,6 +1603,27 @@ public static class ItemIcons
             "..kkkkkkkkkkk...",
         };
 
+        // #501: the Blåhaj, swimming right: forked tail, dorsal fin, pale belly, one small eye
+        d[ItemId.Blahaj] = new[]
+        {
+            "................",
+            "................",
+            "........kk......",
+            ".......kcck.....",
+            "kk.....kcck.....",
+            "kck....kcck.....",
+            "kcck..kccccck...",
+            "kcck.kcccccccck.",
+            "kcckkkcccccccck.",
+            "kccccccccccckck.",
+            "kcCCCCCCCCCCCCk.",
+            "kkCCCCCCCCCCCk..",
+            ".kkCCkkkCCCkk...",
+            "...kk..kCCk.....",
+            ".......kkk......",
+            "................",
+        };
+
         return d;
     }
 }

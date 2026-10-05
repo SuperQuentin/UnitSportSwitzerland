@@ -154,14 +154,19 @@ public static class BuildingFootprint
     public static DoorSpot[] ComputeDoors(BuildingTile tile, RoadTile? roads, ChunkGrid? grid)
     {
         var roadIndex = (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true));
+        var types = BuildingTypes.For(tile);
         var doors = new DoorSpot[tile.Buildings.Count];
         for (int i = 0; i < doors.Length; i++)
         {
             var fp = Compute(tile, i, roadIndex, grid);
+            // a landmark's shop is given by where it is, not by the key's hash (#501), and the door
+            // carries it so the sign over it reads IKEA rather than whatever the roll said
+            var shop = types.TypeOf(i) == BuildingType.Ikea ? Loot.ShopType.Ikea
+                : fp != null ? ShopOf(fp, Loot.ShopTables.IsRural(tile.Buildings.Count))
+                : Loot.ShopType.None;
             doors[i] = (fp?.Door ?? default) with
             {
-                Kind = tile.Buildings[i].Kind, Bank = fp != null && IsBank(fp),
-                Shop = fp != null ? ShopOf(fp, Loot.ShopTables.IsRural(tile.Buildings.Count)) : Loot.ShopType.None,
+                Kind = tile.Buildings[i].Kind, Bank = fp != null && IsBank(fp), Shop = shop,
             };
         }
         return doors;
