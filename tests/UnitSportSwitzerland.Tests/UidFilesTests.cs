@@ -56,7 +56,12 @@ public class UidFilesTests
 
         Assert.True(missing.Count == 0,
             $"{missing.Count} imported file(s) have no .uid beside them. Run the editor or "
-            + $"`<godot> --headless --import --path .` and commit the .uid files with the script:\n  "
+            + $"`<godot> --headless --import --path .` and commit the .uid files with the script.\n"
+            + "Two traps of that import run, neither visible in this failure "
+            + "(docs/notes/general/uid-files.md): it mints OTHER features' .uid files too, so stage "
+            + "only your own and never `git add -A`; and in a worktree whose Git LFS assets are still "
+            + "pointers it rewrites the texture .import files to valid=false — `git checkout --` "
+            + "those, do not commit them.\n  "
             + string.Join("\n  ", missing));
 
         Assert.True(orphans.Count == 0,
