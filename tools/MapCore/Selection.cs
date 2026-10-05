@@ -1,6 +1,6 @@
 using UnitSport.Terrain.Format;
 
-namespace UnitSport.Tools.MapSetup;
+namespace UnitSport.Map;
 
 /// <summary>
 /// The set of 1 km tiles the user picked. Only tiles that exist in swissALTI3D can be

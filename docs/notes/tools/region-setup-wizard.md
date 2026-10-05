@@ -1,11 +1,20 @@
 # Region setup wizard
 
+- **Two projects since #515**: `tools/MapCore/` (net8 library, `UnitSport.Map`) holds everything that
+  is not a user interface — `CountryData`, `Selection`, `LocalState`, `Paths`, `Stats`, `Planner`/`Step`,
+  `StepRun` — and is referenced by **both** the terminal tool and the game's own map screen.
+  `tools/MapSetup/` is only the terminal UI on top of it (`Program`, `MapView`, `Bake`, `Snapshot`).
+  A step reports through `IStepProgress` (`SpectreProgress` in the terminal tool) rather than a
+  Spectre `ProgressTask`, which is what lets the game drive the same steps.
+  `switzerland.bin` lives in `tools/MapCore/` and is an **embedded resource** of that assembly, so the
+  game reads it with no data path or export filter involved; `CountryData.LoadPreferringFile` still
+  prefers a loose copy, which is what `--bake` writes.
 - **Region setup wizard**: `dotnet run --project tools/MapSetup` (`tools/MapSetup/`, Spectre.Console).
   Terminal map of CH (raw 24-bit ANSI, half-block pixels) to select tiles (rectangle, brush, town +
   radius, canton), an estimate table (download / disk / time per step), then it chains the whole
   pipeline below as subprocesses. Every step skips when its output exists, and the state lives in
   `terrain_chunks_temp/mapsetup*.json`. The map comes from the committed
-  `tools/MapSetup/switzerland.bin` (per-km tile: zip size, survey year, canton, max elevation;
+  `tools/MapCore/switzerland.bin` (per-km tile: zip size, survey year, canton, max elevation;
   places; buildings sheets; nationwide file sizes). `--bake` rebuilds it from STAC +
   swissBOUNDARIES3D. Non-interactive: `--town X --radius km | --canton VS | --bbox E0,N0,E1,N1 |
   --tiles-file f | --resume`, `--layers`, `--plan-only`, `--yes`. The tile-list plumbing it relies

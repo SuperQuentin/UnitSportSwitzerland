@@ -2,10 +2,9 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Spectre.Console;
 using UnitSport.Terrain.Format;
 
-namespace UnitSport.Tools.MapSetup;
+namespace UnitSport.Map;
 
 [Flags]
 public enum Layers
@@ -477,23 +476,43 @@ public static partial class Planner
 public enum LineProgress { None, Counter, Batch, Source }
 
 /// <summary>
+/// Where a running step reports to. The terminal tool implements this over a Spectre progress
+/// bar; the game implements it over <c>DownloadJob</c>, which the map screen polls. Keeping it
+/// this small is the point: a step may only move a bar, say what it is doing, and write its log.
+/// </summary>
+public interface IStepProgress
+{
+    /// <summary>How far the step has got, 0-100.</summary>
+    double Value { set; }
+
+    /// <summary>
+    /// The step's latest line, shown beside the bar. Already trimmed and shortened by
+    /// <see cref="StepRun"/>; an implementation that renders markup must escape it itself.
+    /// </summary>
+    void Show(string text);
+
+    /// <summary>Every line the step produced, verbatim, for the step's log file.</summary>
+    void Log(string line);
+}
+
+/// <summary>
 /// Runs one step: starts the tool, logs every line to the step's log file, turns the tool's own
 /// progress output into the progress bar, and shows its latest line beside it.
 /// </summary>
 public sealed partial class StepRun
 {
     private readonly SetupContext _c;
-    private readonly ProgressTask _task;
+    private readonly IStepProgress _progress;
     private readonly string _title;
     private readonly StreamWriter _log;
     private readonly CancellationToken _ct;
 
     public string? Error { get; private set; }
 
-    public StepRun(SetupContext c, ProgressTask task, string title, StreamWriter log, CancellationToken ct)
+    public StepRun(SetupContext c, IStepProgress progress, string title, StreamWriter log, CancellationToken ct)
     {
         _c = c;
-        _task = task;
+        _progress = progress;
         _title = title;
         _log = log;
         _ct = ct;
@@ -508,13 +527,15 @@ public sealed partial class StepRun
     private void Log(string line)
     {
         lock (_log) _log.WriteLine(line);
+        _progress.Log(line);
     }
 
+    /// <summary>The step's latest line, shortened to fit beside a progress bar.</summary>
     private void Show(string line)
     {
         var text = line.Trim();
         if (text.Length > 60) text = text[..59] + "…";
-        _task.Description = $"{Markup.Escape(_title)} [grey]{Markup.Escape(text)}[/]";
+        _progress.Show(text);
     }
 
     public static string ToolDll(Paths p, string name) =>
@@ -532,7 +553,7 @@ public sealed partial class StepRun
                 return false;
             }
         }
-        _task.Value = 100;
+        _progress.Value = 100;
         return true;
     }
 
@@ -594,7 +615,7 @@ public sealed partial class StepRun
                         _ct.ThrowIfCancellationRequested();
                         dst.Write(buffer, 0, n);
                         done += n;
-                        _task.Value = 100.0 * done / Math.Max(1, total);
+                        _progress.Value = 100.0 * done / Math.Max(1, total);
                     }
                 }
                 File.Move(tmp, dest, overwrite: true);
@@ -640,7 +661,7 @@ public sealed partial class StepRun
                 _ => Match.Empty,
             };
             if (m.Success && double.TryParse(m.Groups[2].Value, out double total) && total > 0)
-                _task.Value = 100.0 * double.Parse(m.Groups[1].Value) / total;
+                _progress.Value = 100.0 * double.Parse(m.Groups[1].Value) / total;
         }
         proc.OutputDataReceived += (_, e) => OnLine(e.Data);
         proc.ErrorDataReceived += (_, e) => OnLine(e.Data);
@@ -674,7 +695,7 @@ public sealed partial class StepRun
                     break;
                 case "progress":
                     long bytes = e.GetProperty("bytes").GetInt64(), total = e.GetProperty("bytes_total").GetInt64();
-                    _task.Value = total > 0 ? 100.0 * bytes / total : 0;
+                    _progress.Value = total > 0 ? 100.0 * bytes / total : 0;
                     Show($"{e.GetProperty("done").GetInt32():N0}/{e.GetProperty("total").GetInt32():N0} files, "
                          + $"{bytes / 1e9:F2}/{total / 1e9:F2} GB, {e.GetProperty("rate").GetDouble() / 1e6:F0} MB/s");
                     break;

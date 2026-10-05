@@ -48,7 +48,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 ## Commands
 
 - `swiss-relief` — `tools/swiss_relief.py`: rebuilds the generated terrain's 500 m heightmap from one swissALTIRegio overview (GDAL, ~5 s)
-- `region-setup-wizard` — Region setup wizard: `dotnet run --project tools/MapSetup` (`tools/MapSetup/`, Spectre.Console). Terminal map of CH...
+- `region-setup-wizard` — Region setup wizard: `dotnet run --project tools/MapSetup`, a terminal front-end on `tools/MapCore` (the country map, selection, plan and estimates, shared with the game's map screen since #515)...
 - `gdal-setup` — GDAL setup: installing GDAL's Python bindings (macOS/Linux/Windows) for buildings, cycle routes and swiss_relief; how the wizard detects it
 - `signal-test-region` — #386 `RoadGen --test-region DIR`: synthetic flat region (E 2910-2915 N 1321-1323) with seven designed signalised junctions built by the real network stage; junction table, play/test commands, what it found
 - `commands` — Commands: --bbox, --buildings, --chunks, --coarse, --cover, --photos, --dry-run, --dump-png, --features-only, --force, --france, --fresh, --gwr
