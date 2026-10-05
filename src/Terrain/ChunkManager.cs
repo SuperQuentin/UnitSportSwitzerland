@@ -1140,6 +1140,18 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             && ((state.RoadCellsQueued & (1 << cell)) == 0 || (state.RoadCellsDone & (1 << cell)) != 0);
     }
 
+    /// <summary>
+    /// Whether the tile under a world position has every cell of its buildings' collision
+    /// committed: until then a spot can look free and be inside a house (#517, the on-foot start).
+    /// </summary>
+    public bool BuildingCollisionDoneAt(Vector3 worldPos)
+    {
+        if (_origin == null) return false;
+        var (e, n) = _origin.ToLv95(worldPos);
+        return _chunks.TryGetValue(TileId.FromLv95(e, n), out var state)
+            && state.HasBuildingCollision && state.BuildingCellsQueued == 0;
+    }
+
     private long _allocatedAtLastCollect;
     private const long CollectEveryBytes = 1L << 30;
 

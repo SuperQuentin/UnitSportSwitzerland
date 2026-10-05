@@ -10,7 +10,7 @@ namespace UnitSport.Tools.Preprocessor;
 /// </summary>
 public static class HorizonStage
 {
-    public static int Run(string outDir, int jobs)
+    public static int Run(string outDir, int jobs, CancellationToken ct = default)
     {
         var terrFiles = Directory.GetFiles(outDir, "chunk_*.terr");
         if (terrFiles.Length == 0)
@@ -25,7 +25,7 @@ public static class HorizonStage
         long readBytes = 0;
         int fromCoarse = 0;
 
-        Parallel.ForEach(terrFiles, new ParallelOptions { MaxDegreeOfParallelism = jobs }, path =>
+        Parallel.ForEach(terrFiles, new ParallelOptions { MaxDegreeOfParallelism = jobs, CancellationToken = ct }, path =>
         {
             string coarsePath = Path.ChangeExtension(path, ".terrc");
             string src = File.Exists(coarsePath) ? coarsePath : path;

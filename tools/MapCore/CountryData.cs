@@ -2,7 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using UnitSport.Terrain.Format;
 
-namespace UnitSport.Tools.MapSetup;
+namespace UnitSport.Map;
 
 /// <summary>A named place for the search box: a town (ranked by building count) or a summit/pass.</summary>
 public sealed record Town(string Name, string Canton, double E, double N, PlaceKind Kind, int Rank)
@@ -166,10 +166,34 @@ public sealed class CountryData
     public static CountryData Load(string path)
     {
         using var file = File.OpenRead(path);
-        using var z = new GZipStream(file, CompressionMode.Decompress);
+        return Load(file, path);
+    }
+
+    /// <summary>
+    /// The copy embedded in this assembly. That is how the game reads it: an embedded resource
+    /// cannot be lost to an export filter or a moved data folder, the same reason
+    /// <c>src/Terrain/swiss_relief.gz</c> is embedded. 425 KB, already gzipped.
+    /// </summary>
+    public static CountryData LoadEmbedded()
+    {
+        using var stream = typeof(CountryData).Assembly.GetManifestResourceStream(FileName)
+            ?? throw new InvalidDataException($"{FileName} is not embedded in MapCore (check its EmbeddedResource item)");
+        return Load(stream, "the embedded " + FileName);
+    }
+
+    /// <summary>
+    /// The embedded copy, unless <paramref name="path"/> names a loose file that exists — which is
+    /// what the terminal tool wants straight after <c>--bake</c>, before the rebuild is committed.
+    /// </summary>
+    public static CountryData LoadPreferringFile(string? path) =>
+        path != null && File.Exists(path) ? Load(path) : LoadEmbedded();
+
+    private static CountryData Load(Stream stream, string what)
+    {
+        using var z = new GZipStream(stream, CompressionMode.Decompress);
         using var r = new BinaryReader(z, Encoding.UTF8);
         if (r.ReadString() != Magic)
-            throw new InvalidDataException($"{path} is not a MapSetup country file (re-run --bake)");
+            throw new InvalidDataException($"{what} is not a MapSetup country file (re-run --bake)");
 
         var d = new CountryData { BakedAt = DateTime.FromBinary(r.ReadInt64()) };
         for (int i = 0; i < d._sizeKb.Length; i++) d._sizeKb[i] = r.ReadUInt32();

@@ -49,6 +49,8 @@ public static class LootTables
         // bags (#208): category Gear too, so only the pools that name them (Bags, Purses) give them
         [ItemId.BeltPouch] = Tier.Common, [ItemId.Handbag] = Tier.Uncommon,
         [ItemId.Backpack] = Tier.Rare, [ItemId.HikingPack] = Tier.VeryRare,
+        // fishing (#493): Gear, so only the barn crate's FishingGear pool gives them
+        [ItemId.FishingRod] = Tier.Rare, [ItemId.Spinner] = Tier.Uncommon,
     });
 
     /// <summary>
@@ -90,6 +92,8 @@ public static class LootTables
     private static readonly ItemId[] Tins = { ItemId.CannedFood };
     private static readonly ItemId[] BarnStuff = { ItemId.Rope, ItemId.Firewood, ItemId.Apple };
     private static readonly ItemId[] Fuel = { ItemId.Firewood, ItemId.Coal };
+    /// <summary>An old rod and a lure or two, put away in the barn (#493).</summary>
+    private static readonly ItemId[] FishingGear = { ItemId.FishingRod, ItemId.Spinner };
     private static readonly ItemId[] Guns = { ItemId.Shotgun };
     private static readonly ItemId[] Ammo = { ItemId.Shells };
     private static readonly ItemId[] Pantry = { ItemId.CannedFood, ItemId.WaterBottle, ItemId.MineralWater };
@@ -187,7 +191,7 @@ public static class LootTables
         [(FurnitureType.Desk, RoomType.Bedroom)] = new(0.45f, 1, 1, new[] { P(Sweets, 36), P(Gadgets, 36), P(Cloth, 18), P(Purses, 10) }, 0.30f, 2, 20),
         [(FurnitureType.Desk, RoomType.Classroom)] = new(0.55f, 0, 1, new[] { P(Sweets, 35), P(Gadgets, 25), P(Scrap, 40) }, 0.10f, 1, 5),
         [(FurnitureType.Crate, RoomType.Storage)] = new(0.25f, 1, 3, new[] { P(Pantry, 35), P(Scrap, 25), P(Minerals, 30), P(Parts, 10) }),
-        [(FurnitureType.Crate, RoomType.Barn)] = new(0.30f, 1, 3, new[] { P(BarnStuff, 55), P(Minerals, 30), P(Tins, 15) }),
+        [(FurnitureType.Crate, RoomType.Barn)] = new(0.30f, 1, 3, new[] { P(BarnStuff, 55), P(Minerals, 30), P(Tins, 15), P(FishingGear, 10) }),
         // #213: the shelter's shelf is the two weeks of supplies a household keeps; the cellar's
         // the overflow; the carnotzet's cheese for the raclette; the laundry's powder and pegs
         [(FurnitureType.Shelf, RoomType.Shelter)] = new(0.25f, 1, 3, new[] { P(Pantry, 55), P(Medical, 25), P(Fuel, 5), P(Hardware, 10), P(Optics, 1) }),

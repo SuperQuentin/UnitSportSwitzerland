@@ -283,6 +283,7 @@ public static partial class InteriorGenerator
         layout.DoorX = main.DoorX; layout.DoorY = main.DoorY; layout.DoorZ = main.DoorZ;
         layout.DoorOutX = main.DoorOutX; layout.DoorOutZ = main.DoorOutZ;
         layout.DoorWidth = main.DoorWidth > 0 ? main.DoorWidth : main.Width;
+        layout.DoorHeight = main.DoorHeight;
         layout.EntryX = main.X;
         layout.EntryWidth = main.Width;
 

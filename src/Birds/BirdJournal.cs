@@ -34,6 +34,11 @@ public partial class BirdJournal : CanvasLayer
     private PanelContainer _panel = null!;
     private RichTextLabel _text = null!;
     private Label _summary = null!;
+    private Label _title = null!;
+    private Label _hint = null!;
+    private Button _birdsTab = null!, _fishTab = null!;
+    /// <summary>The fish page (#493): the catch book and every species of Swiss waters.</summary>
+    private bool _fish;
 
     public int Score => _data.Score;
     public int SeenCount => _data.Species.Count(kv => kv.Value.Seen > 0);
@@ -62,8 +67,18 @@ public partial class BirdJournal : CanvasLayer
         rows.AddThemeConstantOverride("separation", 6);
         _panel.AddChild(rows);
 
-        var title = UiTheme.Title("Field journal — birds of Switzerland");
-        rows.AddChild(title);
+        _title = UiTheme.Title("Field journal — birds of Switzerland");
+        var top = new HBoxContainer();
+        top.AddThemeConstantOverride("separation", 12);
+        _title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        top.AddChild(_title);
+        _birdsTab = new Button { Text = "Birds", ToggleMode = true, ButtonPressed = true };
+        _fishTab = new Button { Text = "Fish", ToggleMode = true };
+        _birdsTab.Pressed += () => ShowPage(false);
+        _fishTab.Pressed += () => ShowPage(true);
+        top.AddChild(_birdsTab);
+        top.AddChild(_fishTab);
+        rows.AddChild(top);
 
         _summary = new Label();
         rows.AddChild(_summary);
@@ -77,10 +92,10 @@ public partial class BirdJournal : CanvasLayer
         _text.AddThemeFontSizeOverride("bold_font_size", 13);
         rows.AddChild(_text);
 
-        var hint = new Label { Text = Core.InputHints.Format("{bird_journal} / Esc closes. Green = game species (season in months), grey = protected.") };
-        hint.AddThemeFontSizeOverride("font_size", 12);
-        hint.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
-        rows.AddChild(hint);
+        _hint = new Label();
+        _hint.AddThemeFontSizeOverride("font_size", 12);
+        _hint.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
+        rows.AddChild(_hint);
 
         if (CmdArgs.Has("--journal"))
             GetTree().CreateTimer(1.5).Timeout += Open;
@@ -120,6 +135,8 @@ public partial class BirdJournal : CanvasLayer
 
     public void Open()
     {
+        // the rod in hand opens the fish page (#493)
+        _fish = Items.ItemController.Instance?.Inventory.HeldId == Items.ItemId.FishingRod;
         Refresh();
         _panel.Visible = true;
         UiFocus.Set(this, true);
@@ -145,8 +162,25 @@ public partial class BirdJournal : CanvasLayer
         GetViewport().SetInputAsHandled();
     }
 
+    private void ShowPage(bool fish)
+    {
+        _fish = fish;
+        Refresh();
+    }
+
     private void Refresh()
     {
+        _birdsTab.SetPressedNoSignal(!_fish);
+        _fishTab.SetPressedNoSignal(_fish);
+        _title.Text = _fish ? "Field journal — fish of Swiss waters" : "Field journal — birds of Switzerland";
+        _hint.Text = Core.InputHints.Format(_fish
+            ? "{bird_journal} / Esc closes. Green = may be kept (minimum length, closed months), grey = protected: always released."
+            : "{bird_journal} / Esc closes. Green = game species (season in months), grey = protected.");
+        if (_fish)
+        {
+            RefreshFish();
+            return;
+        }
         int bagged = _data.Species.Values.Sum(e => e.Bagged);
         _summary.Text = $"Seen {SeenCount} / {BirdCatalog.All.Length} species    Bagged {bagged}    Score {_data.Score}";
 
@@ -161,6 +195,31 @@ public partial class BirdJournal : CanvasLayer
             sb.Append($"[cell]{s.Length * 100:0} cm / {s.Wingspan * 100:0} cm, {s.MinAltitude}–{s.MaxAltitude} m, {s.Presence}  [/cell]");
             sb.Append($"[cell]{(s.IsGame ? $"season {s.SeasonFrom}–{s.SeasonTo}" : "protected")}  [/cell]");
             sb.Append($"[cell]{(e == null ? "" : $"seen {e.Seen}, bagged {e.Bagged}{(e.Illegal > 0 ? $", [color=#e05040]illegal {e.Illegal}[/color]" : "")}")}[/cell]");
+        }
+        sb.Append("[/table]");
+        _text.Text = sb.ToString();
+    }
+
+    private void RefreshFish()
+    {
+        var all = Items.Fishing.FishCatalog.All;
+        int landed = all.Sum(f => Items.Fishing.FishJournal.Of(f)?.Landed ?? 0);
+        _summary.Text = $"Landed {Items.Fishing.FishJournal.SpeciesLanded} / {all.Length} species    Fish on the bank {landed}";
+        var sb = new StringBuilder("[table=5]");
+        foreach (var f in all)
+        {
+            var e = Items.Fishing.FishJournal.Of(f);
+            string colour = f.Protected ? "#9098a0" : "#8ad07a";
+            string name = e is { Landed: > 0 } ? $"[b]{f.Name}[/b]" : f.Name;
+            string rules = f.Culled ? "invasive: killed"
+                : f.Protected ? $"protected ({f.RedList})"
+                : string.Join(", ", new[] { f.MinCm > 0 ? $"min {f.MinCm:0} cm" : "", f.ClosedText != "" ? $"closed {f.ClosedText}" : "" }.Where(x => x != ""));
+            sb.Append($"[cell][color={colour}]{name}[/color]  [/cell]");
+            sb.Append($"[cell][i]{f.Latin}[/i], {f.German}  [/cell]");
+            sb.Append($"[cell]{f.Waters}, {f.Basins}, {f.AltMin}–{f.AltMax} m  [/cell]");
+            sb.Append($"[cell]{(rules == "" ? "open all year" : rules)}{(f.Introduced ? ", introduced" : "")}  [/cell]");
+            sb.Append(e == null ? "[cell][/cell]" : System.FormattableString.Invariant(
+                $"[cell]landed {e.Landed}, kept {e.Kept}, best {e.BestCm:0} cm / {e.BestKg:0.00} kg ({e.BestWhere})[/cell]"));
         }
         sb.Append("[/table]");
         _text.Text = sb.ToString();

@@ -30,7 +30,7 @@ public static class PigeonFlight
         public Mode Mode;
     }
 
-    public const float CruiseFlap = 16f, FastFlap = 21f, Glide = 11f, GlideSink = 1.8f, ClimbRate = 3.5f;
+    public const float CruiseFlap = 16f, FastFlap = 21f, Glide = 11f, GlideSink = 1.8f, ClimbRate = 6f, FastClimb = 9f;
     public const float TurnRate = 2.4f, WalkSpeed = 1.1f, RunSpeed = 2.4f;
     /// <summary>A perch catches a bird gliding or braking within this distance, below this speed.</summary>
     public const float PerchReach = 1.3f, PerchSpeed = 9f;
@@ -71,7 +71,8 @@ public static class PigeonFlight
         h = Heading(s.Yaw);
         float speed = (c.Flap ? (c.Effort ? FastFlap : CruiseFlap) : Glide) + fwd * 8f - back * 5f;
         float vy = c.Dive ? -14f
-            : c.Flap ? ClimbRate - fwd * 4f + back * 1.5f
+            // forward trades a little climb for speed, never all of it: W + flap still gains height (#519)
+            : c.Flap ? (c.Effort ? FastClimb : ClimbRate) - fwd * 1.5f + back * 1.5f
             : -GlideSink - fwd * 6f + back * 0.8f;
         var target = h * Mathf.Max(speed, 5f) + Vector3.Up * vy;
         s.Velocity = s.Velocity.Lerp(target, MathX.Damp(c.Dive ? 1.2f : 1.8f, dt));

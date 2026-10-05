@@ -29,3 +29,5 @@
 - `<godot> --path . -- --ride foot,120 --view first --photocheck --photo-dir <abs dir>`: the Polaroid offline
   with screenshots (see `polaroid`).
 - `tools/bonkcheck.sh` (net tier, no terrain) and `--interactcheck` (offline, windowed, `--view third`, needs `--chunks`): thrown hits over loopback, and the #261 interactions photographed; see `throw-hits`.
+- `--fishcheck --chunks fixture:lake` (quick, #493): the rod on the lake course, offline; `tools/fishcheck.sh`
+  (net, two clients): B sees A's float and line come and go. Details: `fishing`.

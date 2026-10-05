@@ -34,8 +34,11 @@ public sealed class Pigeon : Flyer
     public override Vector3 FirstPersonEye => new(0, EyeHeight, -0.12f);
     public override float BodyRadius => 0.12f;
     public override float BodyHeight => 0.3f;
-    /// <summary>A pigeon bounces off a wall; nothing it flies into is a crash.</summary>
-    public override float CrashSpeed => 60f;
+    /// <summary>
+    /// Cruising (16 m/s) bounces off a wall; a boosted flap or a dive into a wall or the ground is a
+    /// crash, in a feather splat (#519, <c>BirdLife.PlayerSplat</c>).
+    /// </summary>
+    public override float CrashSpeed => 20f;
     public override float LookBank => 0.8f;
     public override float CameraDistance => 1.9f;
     public override float CameraHeight => 0.45f;
@@ -94,6 +97,8 @@ public sealed class Pigeon : Flyer
 
     public override FlightEvent Fly(in FlightInput input, in FlightEnv env, float dt, ref FlightMotion m)
     {
+        // into the ground too fast: the player's wall check only counts the flat part of a floor hit
+        if (env.OnFloor && ModeOf(m) == PigeonFlight.Mode.Air && m.Velocity.Length() > CrashSpeed) return FlightEvent.Crashed;
         var c = new PigeonFlight.Controls(input.Stick, input.Up > 0.5f, input.Down > 0.5f, input.Effort);
         var s = PigeonFlight.Step(ToState(m), c, env.OnFloor, dt);
         FromState(s, ref m);

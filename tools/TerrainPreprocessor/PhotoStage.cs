@@ -27,7 +27,8 @@ public static class PhotoStage
     /// <summary>A blank (out of coverage) 512x512 JPEG is a few KB; a real one is ~100 KB.</summary>
     private const int BlankBelowBytes = 12_000;
 
-    public static async Task<int> Run(string outDir, IEnumerable<TileId> tiles, int ioJobs, bool force)
+    public static async Task<int> Run(string outDir, IEnumerable<TileId> tiles, int ioJobs, bool force,
+        CancellationToken ct = default)
     {
         var todo = tiles.Where(id => force || !File.Exists(Path.Combine(outDir, FileName(id)))).ToList();
         Console.WriteLine($"[photos] {todo.Count} tile(s) to fetch into {outDir}");
@@ -39,8 +40,8 @@ public static class PhotoStage
         int written = 0, blank = 0, failed = 0;
         long bytes = 0;
 
-        await Parallel.ForEachAsync(todo, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, ioJobs) },
-            async (id, ct) =>
+        await Parallel.ForEachAsync(todo, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, ioJobs), CancellationToken = ct },
+            async (id, taskCt) =>
             {
                 string url = FormattableString.Invariant(
                     $"{Wms}&BBOX={id.MinE},{id.MinN},{id.MinE + 1000},{id.MaxN}&WIDTH={Size}&HEIGHT={Size}");
@@ -48,7 +49,7 @@ public static class PhotoStage
                 {
                     try
                     {
-                        var data = await http.GetByteArrayAsync(url, ct);
+                        var data = await http.GetByteArrayAsync(url, taskCt);
                         // a JPEG starts FF D8; an error comes back as XML
                         if (data.Length < 2 || data[0] != 0xFF || data[1] != 0xD8)
                             throw new InvalidDataException($"not a JPEG ({data.Length} bytes)");
@@ -58,7 +59,7 @@ public static class PhotoStage
                             return;
                         }
                         string path = Path.Combine(outDir, FileName(id));
-                        await File.WriteAllBytesAsync(path + ".tmp", data, ct);
+                        await File.WriteAllBytesAsync(path + ".tmp", data, taskCt);
                         File.Move(path + ".tmp", path, overwrite: true);
                         Interlocked.Increment(ref written);
                         Interlocked.Add(ref bytes, data.Length);
@@ -66,7 +67,7 @@ public static class PhotoStage
                     }
                     catch (Exception e) when (attempt < 3 && e is not OperationCanceledException)
                     {
-                        await Task.Delay(1000 * attempt, ct);
+                        await Task.Delay(1000 * attempt, taskCt);
                     }
                     catch (Exception e)
                     {

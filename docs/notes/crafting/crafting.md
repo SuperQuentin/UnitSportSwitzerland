@@ -28,3 +28,4 @@
   drops, salvage outputs), `--invcheck` (real values/categories, real `Inventory`, photo untouched).
   Screenshot: `--systems ui,physics --ride foot,2,test_output/craft_panel.png --inventory`
   (`--world flat` builds no UI).
+- **Hidden rows** (#493): `Recipe.OnlyWhenHeld` shows a row only while its first ingredient is in the pack: one cook row per fish species (the `items/fishing` note) without burying the Fire section; its `Key` adds that ingredient.
