@@ -419,6 +419,9 @@ public partial class FootPlayer
     {
         int code = TrailerCatalog.Code(index, load);
         if (TrailerCatalog.For(code) is not { } spec) return false;
+        // a tipping trailer (#494) comes with that share of its sacks, of wheat
+        if (spec.TankItems > 0)
+            code = TrailerCatalog.WithTank(code, new Farming.Tank(UnitSport.Terrain.Format.CropKind.Wheat, Mathf.RoundToInt(load * spec.TankItems)));
         if (_ride is Truck truck && truck.Trailer == null && truck.Accepts(spec))
         {
             if (GroundSpeed > 1.5f) return false;
