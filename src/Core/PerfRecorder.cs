@@ -131,7 +131,8 @@ public partial class PerfRecorder : Node, IOriginShiftAware
         _frames = Open("frames.csv",
             "frame,t_s,frame_ms,gpu_ms,render_cpu_ms,process_ms,physics_ms,fps,draws,prims,objects,mem_static_mb,vram_mb,"
             + "managed_mb,gc0,gc1,gc2,tiles_loaded,tiles_desired,in_flight,build_cap,pending,ready_queue,"
-            + "commits,commit_ms,worst_commit_ms,worst_commit_tile,cam_e,cam_n,cam_alt,speed_mps,mode");
+            + "commits,commit_ms,worst_commit_ms,worst_commit_tile,cam_e,cam_n,cam_alt,speed_mps,mode,"
+            + "nodes,objects,resources,orphan_nodes,vram_tex_mb,vram_buf_mb");
         _builds = Open("builds.csv",
             "t_s,tile,stride,ring,ground_ms,complete_ms,collision,roads,buildings,"
             + string.Join(",", ChunkManager.StageNames.Select(n => "w_" + n.Replace('+', '_').Replace('-', '_'))));
@@ -236,14 +237,18 @@ public partial class PerfRecorder : Node, IOriginShiftAware
         var ci = CultureInfo.InvariantCulture;
         _frames!.WriteLine(string.Format(ci,
             "{0},{1:F3},{2:F2},{30:F2},{31:F2},{3:F2},{4:F2},{5:F0},{6:F0},{7:F0},{8:F0},{9:F0},{10:F0},{11:F0},{12},{13},{14},"
-            + "{15},{16},{17},{18},{19},{20},{21},{22:F2},{23:F2},{24},{25:F0},{26:F0},{27:F0},{28:F1},{29}",
+            + "{15},{16},{17},{18},{19},{20},{21},{22:F2},{23:F2},{24},{25:F0},{26:F0},{27:F0},{28:F1},{29},"
+            + "{32:F0},{33:F0},{34:F0},{35:F0},{36:F0},{37:F0}",
             _frameIndex, _elapsed, ms, cpu, physics, Engine.GetFramesPerSecond(), draws, prims,
             Mon(Performance.Monitor.RenderTotalObjectsInFrame),
             Mon(Performance.Monitor.MemoryStatic) / 1048576, Mon(Performance.Monitor.RenderVideoMemUsed) / 1048576,
             GC.GetTotalMemory(false) / 1048576.0, gc[0], gc[1], gc[2],
             stats.Loaded, stats.Desired, stats.InFlight, _chunks.BuildCap, stats.Pending, stats.ReadyQueue,
             _prevCommits, _prevCommitMs, _prevWorstCommit, _prevWorstTile,
-            e, n, pos.Y, speed, mode, gpuMs, renderCpuMs));
+            e, n, pos.Y, speed, mode, gpuMs, renderCpuMs,
+            Mon(Performance.Monitor.ObjectNodeCount), Mon(Performance.Monitor.ObjectCount),
+            Mon(Performance.Monitor.ObjectResourceCount), Mon(Performance.Monitor.ObjectOrphanNodeCount),
+            Mon(Performance.Monitor.RenderTextureMemUsed) / 1048576, Mon(Performance.Monitor.RenderBufferMemUsed) / 1048576));
 
         _frameMs.Add((float)ms);
         _cpuSum += cpu;
