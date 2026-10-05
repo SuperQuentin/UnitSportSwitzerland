@@ -113,13 +113,14 @@ public static class An124Deck
         {
             dk.Button(NoseDoor, new Vector3(side * (inner - 0.05f), floor + 1.2f, front - 0.6f), new Vector3(-side, 0, 0));
             dk.Button(RearDoor, new Vector3(side * (inner - 0.05f), floor + 1.2f, RampHingeZ + 0.6f), new Vector3(-side, 0, 0));
-            // outside on the gear fairings' ends, reached from the ground: the front ones the visor, the
-            // kneeling (and the crew door on the left), the back ones the rear ramp
-            float fx = side * (FairingOutX - 0.3f);
-            dk.Button(NoseDoor, new Vector3(fx, OutsideButtonY, FairingFrontZ + 0.02f), Vector3.Back);
-            dk.Button(KneelDoor, new Vector3(fx - side * 0.4f, OutsideButtonY, FairingFrontZ + 0.02f), Vector3.Back);
-            if (side > 0) dk.Button(CrewDoor, new Vector3(fx - 0.8f, OutsideButtonY, FairingFrontZ + 0.02f), Vector3.Back);
-            dk.Button(RearDoor, new Vector3(fx, OutsideButtonY, FairingRearZ - 0.02f), Vector3.Forward);
+            // outside on the gear blisters' flanks, reached from the ground: near their front ends the
+            // visor, the kneeling (and the crew door on the left), near the back the rear ramp
+            float fx = side * OutsideButtonX;
+            var outward = new Vector3(side, 0, 0);
+            dk.Button(NoseDoor, new Vector3(fx, OutsideButtonY, FairingFrontZ - 0.4f), outward);
+            dk.Button(KneelDoor, new Vector3(fx, OutsideButtonY, FairingFrontZ - 0.9f), outward);
+            if (side > 0) dk.Button(CrewDoor, new Vector3(fx, OutsideButtonY, FairingFrontZ - 1.4f), outward);
+            dk.Button(RearDoor, new Vector3(fx, OutsideButtonY, FairingRearZ + 0.4f), outward);
         }
 
         // the ladder: a 45° slope from the hold's floor to the upper deck's rear edge, a rail on its open side
