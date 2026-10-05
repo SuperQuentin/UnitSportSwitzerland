@@ -568,6 +568,8 @@ public partial class VehicleBody : CharacterBody3D
         if (Ride is Airliner jetDoors) jetDoors.DoorsOpen = DoorsOpen;
         float spool = Wrecked ? 0f : Spool;
         if (Ride is Flyer f && !Wrecked) f.AnimateFlight(_visual, _flight with { Spool = spool }, dt);
+        // an AN-124 kneeling or rising while parked (#419): its frame comes down with it, asleep or not
+        if (Ride is Airliner { KneelMoved: true } kneeling && IsMultiplayerAuthority() && !Wrecked) ApplyPose(kneeling);
         if (_visual is Avatar.CarRig rig)
         {
             // a driverless car rolls to a stop on its own wheels; it never tips, so no roll here

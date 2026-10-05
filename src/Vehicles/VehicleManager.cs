@@ -276,9 +276,11 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         var asker = GetTree().GetNodesInGroup(Player.FootPlayer.Group).OfType<Player.FootPlayer>()
             .FirstOrDefault(p => p.Name == sender.ToString());
         if (asker == null) return;
-        var gap = (asker.GlobalPosition - vehicle.GlobalPosition) with { Y = 0 };
+        // measured from the middle of its parked box: an AN-124's is 5 m ahead of its origin, and its
+        // visor's buttons 23 m ahead were out of reach from the origin (#419)
+        var (centre, box) = vehicle.Ride.ParkedBox;
+        var gap = (asker.GlobalPosition - vehicle.GlobalTransform * centre) with { Y = 0 };
         // a car's doors from its side; a bus's buttons are along its whole length (#162)
-        var box = vehicle.Ride.ParkedBox.Size;
         // (and a ship's gangways, #384; an airliner's doors and a freighter's ramp, #416/#420)
         float half = vehicle.Ride is Player.Truck or Player.Steamer or Player.Airliner ? Mathf.Max(box.X, box.Z) * 0.5f : box.X * 0.5f;
         if (gap.Length() - half > DoorReach) return;

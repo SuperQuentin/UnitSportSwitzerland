@@ -151,10 +151,11 @@ public partial class FootPlayer
         // a freighter's open ramp: down on the ground, level in the air (#420)
         FootPlayer { Ride: RideKind.Freighter } f => Avatar.FreighterLayout.DeckDoors(f.BusDoors,
             f.Vehicle is Airliner own ? !own.State.OnGround : Airliner.LookOf(f.Anim).Airborne),
-        FootPlayer p => p.BusDoors,
+        // the AN-124's ramps have a slope for standing and one for kneeling (#419)
+        FootPlayer p => Airliner.DeckDoors(p.Ride, p.BusDoors),
         VehicleBody { Kind: RideKind.Freighter } parked => Avatar.FreighterLayout.DeckDoors(parked.BusDoors, parked.Ride is Airliner { State.OnGround: false }
             || parked.Velocity.LengthSquared() > Airliner.FlyingSpeed * Airliner.FlyingSpeed),
-        VehicleBody v => v.BusDoors,
+        VehicleBody v => Airliner.DeckDoors(v.Kind, v.BusDoors),
         _ => 0,
     };
 

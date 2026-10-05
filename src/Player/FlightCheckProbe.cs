@@ -117,8 +117,9 @@ public partial class FlightCheckProbe : Node
                 break;
             case "a320":
             case "freighter":
+            case "an124":
                 // a whole circuit on the real keys: take-off, climb, a 180° turn, approach, landing, stop (#414, #420)
-                p.SetRide(_kind == "freighter" ? RideKind.Freighter : RideKind.A320);
+                p.SetRide(_kind switch { "freighter" => RideKind.Freighter, "an124" => RideKind.An124, _ => RideKind.A320 });
                 // --heading deg (true, 0 north, 90 east): lined up on a real runway (GVA 05 is 46°)
                 if (CmdArgs.Value("--heading") is { } h && float.TryParse(h, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float deg)
                     && p.Vehicle is Airliner lined)
@@ -192,6 +193,7 @@ public partial class FlightCheckProbe : Node
                 break;
             case "a320":
             case "freighter":
+            case "an124":
                 if (_player!.Vehicle is not Airliner jet) { _crashed = true; End("not in an airliner"); break; }
                 if (_circuit!.Step(jet, _player, Agl(_player.GlobalPosition), (float)t, Hold) is { } how)
                 {
@@ -232,7 +234,7 @@ public partial class FlightCheckProbe : Node
     private AirlinerCircuit? _circuit;
 
     /// <summary>A heavy aircraft's whole circuit: a long sortie (#414, #420).</summary>
-    private bool Heavy => _kind is "a320" or "freighter";
+    private bool Heavy => _kind is "a320" or "freighter" or "an124";
 
     private void Finish(int code)
     {
