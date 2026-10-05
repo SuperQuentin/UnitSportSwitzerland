@@ -38,7 +38,7 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
   3. Branch from up-to-date `main` as `feat/<issue#>-name`, in a **worktree**
      (`../UnitSportSwitzerland-<issue#>`): the main checkout stays on `main`
      (`docs/notes/general/worktrees.md`). Never commit features on `main`; `Closes #N` in the PR.
-     **Push local commits on feature branches whenever possible**, so others can build on them
+     **Always push a commit as soon as you make it, on every branch**, so others can build on it
      and a local crash loses nothing.
      **Open the PR as a draft together with the branch** (`gh pr create --draft`), as soon as the
      first commit is pushed: an open draft is how parallel workers see the feature exists in
