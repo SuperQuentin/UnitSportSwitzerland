@@ -114,6 +114,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Has("--interestcheck"), () => Verdict("interestcheck", Interest.SelfCheck() & RemoteInterpolator.SelfCheck())),
         // the CD beat analyser's self-test: synthetic clicks at known tempos
         (() => Has("--beatcheck"), () => Verdict("beatcheck", Audio.Cd.BeatAnalyzer.SelfCheck())),
+        // a VR player's hands packed into the pose and back (#439)
+        (() => Has("--vrposecheck"), () => Verdict("vrposecheck", Player.FootPlayer.VrPoseSelfCheck())),
     };
 
     public override async void _Ready()
