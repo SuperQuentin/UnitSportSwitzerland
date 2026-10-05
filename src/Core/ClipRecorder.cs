@@ -28,10 +28,10 @@ public partial class ClipRecorder : Node
     public static readonly string[] Words = ["start", "stop"];
 
     /// <summary>Frames read back per second; the GIF keeps every other one.</summary>
-    private const int Fps = 30, GifFps = 15;
+    private const int Fps = 30, GifFps = 12;
 
     /// <summary>Width of the captured frames (the MP4); the GIF is scaled down to <see cref="GifWidth"/>.</summary>
-    private const int Width = 960, GifWidth = 640;
+    private const int Width = 960, GifWidth = 560;
 
     private const double DefaultSeconds = 10, MaxSeconds = 60, ChatDelay = 2;
 
@@ -175,7 +175,7 @@ public partial class ClipRecorder : Node
     private bool StartEncoder()
     {
         _hasX264 ??= Encoders().Contains("libx264");
-        string gifChain = $"fps={GifFps},scale={GifWidth}:-2:flags=lanczos,split[g1][g2];[g1]palettegen=stats_mode=diff[p];[g2][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle";
+        string gifChain = $"fps={GifFps},scale={GifWidth}:-2:flags=lanczos,split[g1][g2];[g1]palettegen=stats_mode=diff:max_colors=128[p];[g2][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle";
         var start = new ProcessStartInfo(BundledTools.Resolve("ffmpeg"))
         {
             RedirectStandardInput = true,

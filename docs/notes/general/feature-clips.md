@@ -8,10 +8,12 @@
   exits once the files are written (code 1 if not). Pair it with a probe that plays the feature
   (`--stairscheck`, `--freightercheck car`, `--trafficcheck`...) or a `--shot-queue` (its `/` lines drive the
   chat). One launch: `tools/record-clip.sh <name> <delay> <seconds> [game flags...]`; read the probe's own log
-  in `test_output/clips/<name>.log` to time `delay` to the moment worth showing. The probe may quit first: keep
-  `delay + seconds` inside its run.
-- **Output**: `test_output/clips/<name>.gif` from source (`user://clips` in an export): 640 px wide, 15 fps,
-  palette per clip (`palettegen stats_mode=diff`, bayer dither): about 1-3 MB for 10 s of the PS1 look. Plus
+  in `test_output/clips/<name>.log` to time `delay` to the moment worth showing. A probe that quits first still
+  leaves whole files (ffmpeg finishes them when the pipe closes), only shorter. Easiest: film the whole probe once
+  (`delay` 3, `seconds` 60), look at the MP4, then `tools/record-clip.sh trim <mp4> <start> <seconds> <name>`.
+- **Output**: `test_output/clips/<name>.gif` from source (`user://clips` in an export): 560 px wide, 12 fps,
+  128-colour palette per clip (`palettegen stats_mode=diff`, bayer dither 5): 0.2-0.6 MB/s of the PS1 look
+  (640 px at 15 fps was twice that, 1.1 MB/s inside the freighter's hold); keep release GIFs under ~10 s. Plus
   `<name>.mp4` (960 px, 30 fps, x264 crf 20) when the ffmpeg has libx264 (the chocolatey one does; the release's
   LGPL `bin/ffmpeg` does not, so an export writes the GIF only). Drag the MP4 or the GIF into a PR description.
 - **How**: `Core/ClipRecorder` reads the last drawn frame back every 1/30 s, scales it and pipes raw RGB to
