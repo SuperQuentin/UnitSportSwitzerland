@@ -188,7 +188,7 @@ public partial class An124Check : Node
         Expect(await Path(me, (0f, 23.6f), (0f, 22.4f), (spot.X, spot.Z)) && me.TryInteract() && await Until(() => (me.SeatIndex - 3) / CabinSeatX.Length == (cabinSeat - 3) / CabinSeatX.Length, 5),
             $"E sat in a seat on the upper deck, row {(cabinSeat - 3) / CabinSeatX.Length} (seat {me.SeatIndex})");
         await Shot("upper_deck", new Vector3(-0.3f, UpperFloorY + 1.7f, 15.6f), new Vector3(0, UpperFloorY + 0.8f, 23f));
-        await Shot("upper_deck_windows", new Vector3(-1.2f, UpperFloorY + 1.5f, 12.4f), new Vector3(2.6f, UpperFloorY + 1.0f, 18.5f));
+        await Shot("upper_deck_windows", new Vector3(-0.9f, UpperFloorY + 1.45f, 13.4f), new Vector3(2.6f, UpperFloorY + 1.0f, 16.6f));
         Expect(me.TryInteract() && await Until(() => me.Aboard && me.SeatIndex == 0 && me.Ride == RideKind.OnFoot, 5), "E stood up into the aisle");
 
         // down the ladder into the hold

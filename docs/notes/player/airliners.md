@@ -116,18 +116,23 @@
   slope is 11°: a car's hull box does not pitch on a deck (level from 0.45 m up), and at the leaf's own
   17° its nose met the hold's floor at the hinge and it stopped halfway.
 - **The AN-124 Ruslan** (#419, RideKind 128, `AirlinerCatalog.An124`, conventional): `Avatar/An124Layout.cs`
-  (69.1 m, 73.3 m span, a superellipse section 8 × 7.8 m, the hold 36 m × 5.9 m × 4.2 m at 3.3 m from
+  (69.1 m, 73.3 m span; the skin one wide oval 8 m wide, flatter under its widest line at 5.6 m (exponent 3)
+  than over it (2.3), crown 9.9 m, constant from behind the flight deck to the tail's upsweep, with a 0.8 m
+  hump over the upper deck and the cockpit, `An124Layout.Section`/`Crown` (#491: it was a boxy 8 × 7.8 m
+  superellipse that stepped down behind the cockpit); the hold 36 m × 5.9 m × 4.2 m at 3.3 m from
   the nose ramp's hinge to the rear ramp's, the upper deck at 7.7 m over its front third), `An124MeshBuilder`
   (skin rows with real holes like the freighter's; swept anhedral wing, four D-18T pods `Fan0..3`, five
-  twin-wheel legs a side rising into low blisters, two nose legs, conventional tail with a tall fin),
+  twin-wheel legs a side rising into long low blisters faired into the skin at both ends, two nose legs, conventional tail with a tall fin),
   `An124Deck` (the drive-through hold as a `CargoBay` beside the ladder, a 45° ship's ladder on the right
-  wall to the upper deck, 24 upper-deck seats 2+2, the cockpit with pilot, copilot and flight engineer
+  wall to the upper deck, 24 upper-deck seats 2+2 (cushion, back,
+  head rest, arm rests), its linings with the windows cut through and lined out to the skin's panes
+  (behind a plain lining they were hidden), the cockpit with pilot, copilot and flight engineer
   (seats 0, 1, 2), panel and pedestal blocks). Doors: 0 crew door (left, at the hold's floor: a sill
   airstairs dock to), 1 the visor (swings up 125° about its hinge over the windscreen) with the nose ramp
   (three plates folded behind it, unfolding to the ground), 2 the rear ramp (toes) with the rear door
   (`Door2b`, up into the tail) and two side petals folding up inside the tail, 3 **kneeling**. G at the
   controls on the ground works all four ("cargo doors"). Buttons inside on the hold's walls and outside on
-  the gear blisters' ends at 1.75 m (the crew door's also by the door for airstairs). Rates `DoorRate`
+  the gear blisters' flanks near their ends at 1.9 m (the crew door's also by the door for airstairs). Rates `DoorRate`
   (the visor, ramps and kneeling ~8 s).
   **Kneeling** lowers the whole drawn frame by `KneelDrop` 0.85 m (`Flyer.PoseShift`, so the deck, the
   sills and the airstairs' dock come down with it; a remote copy gets it in `BodyPose`, a parked one is
@@ -141,11 +146,17 @@
   both ends. Door buttons on a parked one are reached measured from the parked box's middle
   (`VehicleManager.RequestDoor`; from the origin the visor's were out of reach).
   Checks: `--flycheck an124 --world flat` (quick; the circuit flares a slow-pitching heavy at 24 m with
-  more stick and some thrust: touchdown 0.99 m/s, at 14 m it was 3.2; `--airliner sim`: the four-engine start takes 150 s, the circuit's start and roll timeouts scale with it; it flew the circuit once at touchdown 1.27 m/s, but **flaky**: in 3 of 4 runs the cold AN-124 settles 1-2 m at spawn, pitches and banks a few degrees and takes damage before the start, so that row is not in the checkmap yet); `--an124check [shots] --world
+  more stick and some thrust: touchdown 0.99 m/s, at 14 m it was 3.2; `--airliner sim`: the four-engine start takes 150 s, the circuit's start and roll timeouts scale with it; touchdown 1.29 m/s; in the checkmap since #491). **Spawn drop (#491)**: put down ~1 m up with no way
+  on, the cold aircraft fell with an "alpha" of 90°; a conventional type hand-flown in Sim has no path
+  law, so the static stability, the stalled-wing drop and the weathercocking pitched and banked it in the
+  air, the 24 m belly box's nose end met the ground before the wheels and the solver shoved it up again
+  every half second (8.5 damage a bump; the freighter's shorter box escaped, the A320 is fly-by-wire).
+  Those moments now fade in with the airflow, 6 to 16 m/s (`AirlinerFlight.AirflowFrom`; unit test
+  `A_cold_heavy_dropped_onto_its_wheels_stays_level`); `--an124check [shots] --world
   fixture` (quick: G opens and kneels, the levers do not move it knelt, the crew sill 3.30/2.45 m, the
   pilot stood up, the engineer's and a cabin seat, down the ladder, down and up both ramps, the kneeling
   button raises it with the walker on the floor and kneels it again, up the ladder, G shuts and it rises;
-  `shots` adds a picture in flight); `--an124check car|bus` (a car or a Citaro up the nose ramp, carried,
+  `shots` adds a side view, the upper deck's windows and a picture in flight); `--an124check car|bus` (a car or a Citaro up the nose ramp, carried,
   tied down mid-hold, out down the rear ramp); `tools/an124netcheck.sh` (net: G's doors and the knelt
   frame on B, parked open and knelt, B raises it from inside and shuts the visor, A sees both).
 - **HUD**: the configuration (flaps, gear, brakes, warnings) is on a second line: on one line it ran
