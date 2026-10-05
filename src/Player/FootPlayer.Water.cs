@@ -31,6 +31,8 @@ public partial class FootPlayer
     {
         // a Raptor fords 0.8 m (#463)
         Truck { Spec.Class: HeavyClass.Pickup } => 0.8f,
+        // a tractor or a combine to its axles' seals and the cab's step (#494)
+        Truck { Spec.Farm: true } => 0.8f,
         Truck => 1.0f,
         Motorbike => 0.45f,
         Car => 0.55f,

@@ -870,6 +870,18 @@ public partial class PlayerFeel : Node3D
         if (!a.Spec.FlyByWire) sb.Append($"    TRIM {Mathf.RadToDeg(s.TrimAlpha):0.0}");
     }
 
+    /// <summary>A farm machine's implement or header, up or down, and its tank or trailer's sacks (#494).</summary>
+    private static void AppendFarm(System.Text.StringBuilder sb, Truck t)
+    {
+        if (t.Spec.Farm && (t.Spec.Tool != Farming.FarmTool.None || t.Implement != null))
+            sb.Append(t.Implement != null ? "    IMPLEMENT " : "    HEADER ").Append(t.Lowered ? "DOWN" : "UP");
+        var (tank, cap) = t.Spec.TankItems > 0 ? (t.Tank, t.TankCapacity) : (t.TrailerTank, t.TrailerCapacity);
+        if (cap <= 0) return;
+        sb.Append("    TANK ").Append(tank.Items).Append('/').Append(cap);
+        if (tank.Items > 0) sb.Append(' ').Append(tank.Crop);
+        if (t.AugerOut) sb.Append("    AUGER OUT");
+    }
+
     private static void AppendRetarder(System.Text.StringBuilder sb, Truck t)
     {
         int level = t.Box.RetarderLevel;
@@ -899,6 +911,7 @@ public partial class PlayerFeel : Node3D
             if (!heavy.Box.SpringBrakes && heavy.HillHold) wear.Append("    HOLD");
             if (heavy.Box.ClutchPedal > 0.5f) wear.Append("    CLUTCH");
             wear.Append($"    {heavy.Train.Mass / 1000f:0.0} t");
+            AppendFarm(wear, heavy);
         }
         // a passenger (#158): the vehicle's speed, and the wheel when nobody holds it
         var carrier = _player.Host;
@@ -933,6 +946,7 @@ public partial class PlayerFeel : Node3D
                 sb.Append(t.Box.SpringBrakes ? "    PARK" : t.HillHold ? "    HOLD" : "");
                 if (t.Box.ClutchPedal > 0.5f) sb.Append("    CLUTCH");
                 sb.Append($"    {t.Train.Mass / 1000f:0.0} t");
+                AppendFarm(sb, t);
             }
             else if (_player.Vehicle is Car c)
             {
@@ -1042,6 +1056,10 @@ public partial class PlayerFeel : Node3D
                 // the first moments in the water (#301): how to go down and up
                 if (_player.SwimTime < 5f) text = InputHints.Format("{crouch_slide}  dive     {jump}  up · climb out");
                 break;
+            case RideKind.OnFoot when _player.SackSource != null:
+                // a loaded tipping trailer or combine tank at hand (#494)
+                text = InputHints.Format("{interact_mount}  take a sack (hold: 10)");
+                break;
             case RideKind.OnFoot:
                 // mirrors FootPlayer's deploy test: falling, and more than 12 m of air below
                 if (!_player.IsOnFloor() && _player.Velocity.Y < -3f && _player.Terrain != null
@@ -1063,6 +1081,10 @@ public partial class PlayerFeel : Node3D
                 && _player.CoupleCandidate(truck) != null:
                 // the hitch is under a trailer's pivot: say so, in the device's own key
                 text = InputHints.Format("{couple}  COUPLE the trailer");
+                break;
+            case var _ when _player.Heavy is { Spec.Farm: true } farm && _player.CanDeliver(farm):
+                // a farm co-op's yard with a load aboard (#494)
+                text = InputHints.Format(InputHints.Pad ? "{car_door}  DELIVER the load to the co-op" : "{destination}  DELIVER the load to the co-op");
                 break;
             case var _ when _player.Heavy is { Trailer.Boat: not 0 } truck && _player.GroundSpeed < 1.5f
                 && (_player.CanLaunchBoat(truck) || _player.BoatToWinch(truck) != null):

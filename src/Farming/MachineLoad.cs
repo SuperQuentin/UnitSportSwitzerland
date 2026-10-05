@@ -87,6 +87,8 @@ public static class MachineLoad
     // ---- the combine's tank in its pose flags (Truck.PackFlags): items in 8..15, crop in 19..23 ----
 
     public const int FlagItemsShift = 8, FlagCropShift = 19;
+    /// <summary>The flags' bits the tank takes.</summary>
+    public const int FlagMask = 0xFF << FlagItemsShift | 31 << FlagCropShift;
 
     public static int TankFlags(Tank t) => t.Items <= 0 ? 0
         : Math.Clamp(t.Items, 0, 255) << FlagItemsShift | ((int)t.Crop & 31) << FlagCropShift;

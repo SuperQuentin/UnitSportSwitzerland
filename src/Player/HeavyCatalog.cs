@@ -34,7 +34,7 @@ public static class HeavyCatalog
     private static readonly Color BernRed = new(0.80f, 0.07f, 0.12f);
     private static readonly Color RaptorOrange = new(1.0f, 0.42f, 0.08f);
     private static readonly Color FendtGreen = new(0.24f, 0.45f, 0.16f);
-    private static readonly Color ClaasGreen = new(0.55f, 0.72f, 0.12f);
+    private static readonly Color ClaasGreen = new(0.47f, 0.63f, 0.1f);
 
     public static readonly IReadOnlyList<HeavySpec> All = Number(new[]
     {

@@ -490,7 +490,8 @@ public partial class PlayerInput : Node
         Bind(Horn, Keys(Key.H), Button(JoyButton.DpadLeft));
         // a passenger never does tricks: the trick keys are free in a seat
         Bind(TakeWheel, Keys(Key.F), Button(JoyButton.RightShoulder));
-        Bind(Kneel, Keys(Key.K));
+        // L3 means nothing in a cab: a bus kneels and a farm machine lowers its implement or header (#494)
+        Bind(Kneel, Keys(Key.K), Button(JoyButton.LeftStick));
         Bind(Destination, Keys(Key.N));
         Bind(ShiftUp, Keys(Key.Shift), Button(JoyButton.RightShoulder));
         Bind(ShiftDown, Keys(Key.Ctrl), Button(JoyButton.LeftShoulder));
