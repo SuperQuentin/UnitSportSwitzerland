@@ -18,6 +18,16 @@ public struct AirlinerLook
     public byte Doors;
     /// <summary>Off the ground: a freighter's open ramp goes level with the hold floor (a drop), not down to the ground (#420).</summary>
     public bool Airborne;
+
+    // the cockpit (#421): the levers as the pilot set them, the switches, the warnings
+    /// <summary>Thrust levers 0..1; flap lever setting; speedbrake lever 0/1/2; engines running (whole).</summary>
+    public float Lever;
+    public int FlapLever, SpeedbrakeLever, Lit;
+    public bool Reverse, ParkingBrake, GearLever, GearBroken, Power, Autopilot;
+    /// <summary>The red warning on now: 0 none, 1 stall, 2 overspeed, 3 gear not down.</summary>
+    public int Warning;
+    /// <summary>Fuel aboard, share of the tanks.</summary>
+    public float Fuel;
 }
 
 [System.Flags]
@@ -65,6 +75,15 @@ public partial class AirlinerRig : Node3D
     /// <summary>The captain's eye, the rig's frame (−Z forward): where the cockpit camera sits (#421).</summary>
     public Transform3D EyeFrame { get; private set; }
 
+    /// <summary>The flight deck's live controls, pilot and instruments (#421).</summary>
+    public AircraftCockpit? Cockpit { get; private set; }
+
+    private void AddCockpit(Node3D model, CockpitLayout layout)
+    {
+        Cockpit = new AircraftCockpit(model, layout, _spec);
+        AddChild(Cockpit);
+    }
+
     /// <summary>The pilots' seats' recline (the decks' <c>SeatAnchor</c>s).</summary>
     public const float PilotRecline = 0.2f;
 
@@ -83,6 +102,7 @@ public partial class AirlinerRig : Node3D
         rig._stowR = A320MeshBuilder.GearStowAngle("GearMainR");
         rig._stowNose = A320MeshBuilder.GearStowAngle("GearNose");
         rig.SetEye(A320Layout.CaptainHip);
+        rig.AddCockpit(model, CockpitLayout.A320);
         for (int i = 0; i < A320Layout.DoorCount; i++)
             if (model.GetNodeOrNull<Node3D>($"Door{i}") is { } door) rig._doorParts.Add((i, door, Vector3.Up, A320MeshBuilder.DoorOpenAngle(i), A320MeshBuilder.DoorOpenAngle(i)));
         return rig;
@@ -102,6 +122,7 @@ public partial class AirlinerRig : Node3D
         rig._gearRDown = rig._gearR?.Position ?? Vector3.Zero;
         rig._stowNose = FreighterMeshBuilder.NoseStowAngle;
         rig.SetEye(FreighterLayout.CaptainHip);
+        rig.AddCockpit(model, CockpitLayout.Freighter);
         for (int i = 0; i < FreighterLayout.DoorCount; i++)
         {
             rig._doorRate[i] = FreighterMeshBuilder.DoorRate(i);
@@ -130,6 +151,7 @@ public partial class AirlinerRig : Node3D
         rig._noseDown = rig._gearNose?.Position ?? Vector3.Zero;
         rig._stowNose = An124MeshBuilder.NoseStow;
         rig.SetEye(An124Layout.PilotHip);
+        rig.AddCockpit(model, CockpitLayout.An124);
         rig._kneelDoor = An124Layout.KneelDoor;
         rig._kneelDrop = An124Layout.KneelDrop;
         for (int i = 0; i < An124Layout.DoorCount; i++)
@@ -230,6 +252,7 @@ public partial class AirlinerRig : Node3D
         Lit(_strobeL, strobe); Lit(_strobeR, strobe);
         bool landing = (look.Lights & AirlinerLights.Landing) != 0;
         Lit(_landingL, landing); Lit(_landingR, landing);
+        Cockpit?.Show(look, _flaps, _gear, _stick, dt);
     }
 
     /// <summary>Puts every part where <paramref name="look"/> has it at once, as the first <see cref="Show"/> does.</summary>

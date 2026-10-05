@@ -153,6 +153,12 @@ public static class CockpitCheck
                 _ => AirlinerRig.CreateA320(Colors.White),
             };
             var tris = OpaqueTriangles(rig);
+            // the pilot's hands on the stick or yoke and the levers, the feet on the pedals, over their travel (#421)
+            var (stick, levers, feet) = rig.Cockpit?.PilotReach() ?? (1f, 1f, 1f);
+            bool fits = Mathf.Max(stick, Mathf.Max(levers, feet)) < 0.01f;
+            if (!fits) failed++;
+            GD.Print($"[cockpitcheck] {kind,-10} pilot falls short by: stick/yoke {stick * 1000f:F0} mm, thrust levers {levers * 1000f:F0} mm, "
+                + $"pedals {feet * 1000f:F0} mm  {(fits ? "ok" : "FAIL the hands or feet do not reach the controls")}");
             rig.Free();
             var seats = Airliner.For(kind)!.Seats;
             int crew = kind == RideKind.An124 ? 3 : 2;

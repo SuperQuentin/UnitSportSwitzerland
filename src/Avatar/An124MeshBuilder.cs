@@ -250,6 +250,9 @@ public static class An124MeshBuilder
         }
     }
 
+    /// <summary>The instrument panel's half width (#421): as wide as the nose allows at its height.</summary>
+    public static float CockpitPanelHalf => Mathf.Max(0.8f, OuterX(PanelZ, UpperFloorY + 1.0f) - 0.35f);
+
     /// <summary>The windscreen's panes in the visor, ahead of the cockpit's own glass.</summary>
     private static readonly (float From, float To)[] VisorGlass = { (VisorCapZ, 28.9f), (29.0f, 29.6f), (29.7f, 30.3f) };
 
@@ -399,17 +402,11 @@ public static class An124MeshBuilder
             m.Box(new Vector3(hip.X, hip.Y - 0.1f, hip.Z), new Vector3(0.52f, 0.12f, 0.5f), Seat, turn);
             var back = eng ? new Vector3(0.25f, 0, 0) : new Vector3(0, 0, -0.25f);
             m.Box(new Vector3(hip.X, hip.Y + 0.35f, hip.Z) + back, eng ? new Vector3(0.12f, 0.85f, 0.52f) : new Vector3(0.52f, 0.85f, 0.12f), Seat);
-            if (eng) continue;
-            m.Tube(new Vector3(hip.X, UpperFloorY, hip.Z + 0.75f), new Vector3(hip.X, hip.Y + 0.35f, hip.Z + 0.55f), 0.035f, 0.03f, Dark, 5);
-            m.Box(new Vector3(hip.X, hip.Y + 0.38f, hip.Z + 0.53f), new Vector3(0.36f, 0.05f, 0.05f), Dark);
         }
+        // the yokes, levers, gauges and lamps are the cockpit's own (#421, AircraftCockpit)
         m.Box(new Vector3(0, UpperFloorY + 0.3f, PilotHip.Z + 0.5f), new Vector3(0.4f, 0.6f, 0.9f), Panel);
-        for (int i = 0; i < 4; i++)
-            m.Tube(new Vector3(-0.12f + i * 0.08f, UpperFloorY + 0.6f, PilotHip.Z + 0.35f), new Vector3(-0.12f + i * 0.08f, UpperFloorY + 0.8f, PilotHip.Z + 0.5f), 0.015f, 0.012f, Lamp, 4);
-        float hw = Mathf.Max(0.8f, OuterX(PanelZ, UpperFloorY + 1.0f) - 0.35f);
+        float hw = CockpitPanelHalf;
         m.Box(new Vector3(0, UpperFloorY + 0.65f, PanelZ + 0.3f), new Vector3(hw * 2f, 0.7f, 0.6f), Panel);
-        for (int i = 0; i < 10; i++)
-            m.Box(new Vector3((i % 5 - 2) * hw * 0.36f, UpperFloorY + (i < 5 ? 0.85f : 0.58f), PanelZ - 0.005f), new Vector3(0.22f, 0.2f, 0.02f), i % 3 == 0 ? Screen : Dark);
         m.Box(new Vector3(0, UpperFloorY + 1.03f, PanelZ + 0.1f), new Vector3(hw * 2f, 0.06f, 0.45f), Dark);
         m.Box(new Vector3(0, UpperCeilingY - 0.1f, PilotHip.Z + 0.3f), new Vector3(1.0f, 0.14f, 1.2f), Panel);
         m.Box(new Vector3(-2.15f, UpperFloorY + 0.7f, EngineerHip.Z), new Vector3(0.5f, 1.4f, 1.4f), Panel);

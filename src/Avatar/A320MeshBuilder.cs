@@ -402,6 +402,9 @@ public static class A320MeshBuilder
 
     // ---- the flight deck ---------------------------------------------------------------------
 
+    /// <summary>The instrument panel's half width (#421): as wide as the nose allows at its height.</summary>
+    public static float CockpitPanelHalf => Mathf.Min(0.95f, InnerX(16.55f, 4.3f) - 0.04f);
+
     private static void Cockpit(MeshScratch m)
     {
         // the wall behind it, with the door opening
@@ -421,27 +424,16 @@ public static class A320MeshBuilder
                 m.Box(new Vector3(x + s * 0.27f, hip.Y + 0.1f, hip.Z + 0.1f), new Vector3(0.05f, 0.05f, 0.4f), UpholsteryDark);
         }
 
-        // side consoles with the sidesticks
+        // side consoles (the sidesticks on them) and the centre pedestal: the moving controls, the
+        // screens and the lamps are the cockpit's own (#421, AircraftCockpit)
         foreach (int sg in new[] { 1, -1 })
-        {
             m.Box(new Vector3(sg * 1.0f, FloorY + 0.4f, 15.95f), new Vector3(0.2f, 0.4f, 0.7f), PanelGrey);
-            m.Tube(new Vector3(sg * 1.0f, FloorY + 0.62f, 15.85f), new Vector3(sg * 0.95f, FloorY + 0.9f, 15.95f), 0.025f, 0.02f, Dark, 5);
-        }
-        // centre pedestal, two thrust levers
         m.Box(new Vector3(0, FloorY + 0.22f, 15.95f), new Vector3(0.3f, 0.44f, 0.7f), PanelGrey);
-        foreach (float s in new[] { -1f, 1f })
-            m.Tube(new Vector3(s * 0.06f, FloorY + 0.44f, 15.75f), new Vector3(s * 0.06f, FloorY + 0.66f, 15.92f), 0.02f, 0.015f, Dark, 5);
 
         // instrument panel with dark screens, glareshield
         const float panelZ = 16.55f;
         // its top under the pilots' line of sight (the eye 4.51 m): the glareshield 4.41, the panel under it
-        float hw = Mathf.Min(0.95f, InnerX(panelZ, 4.3f) - 0.04f);
-        m.Box(new Vector3(0, 3.98f, panelZ), new Vector3(hw * 2, 0.7f, 0.12f), PanelGrey);
-        for (int i = 0; i < 6; i++)
-        {
-            float x = (i % 3 - 1) * hw * 0.62f;
-            m.Box(new Vector3(x, i < 3 ? 4.16f : 3.84f, panelZ - 0.065f), new Vector3(hw * 0.5f, 0.24f, 0.02f), Screen);
-        }
+        m.Box(new Vector3(0, 3.98f, panelZ), new Vector3(CockpitPanelHalf * 2, 0.7f, 0.12f), PanelGrey);
         m.Box(new Vector3(0, 5.05f, 17.12f), new Vector3(0.07f, 0.9f, 0.07f), Frame);
         float gw = Mathf.Min(0.95f, InnerX(16.7f, 4.38f) - 0.04f);
         m.Box(new Vector3(0, 4.38f, 16.7f), new Vector3(gw * 2, 0.06f, 0.4f), Dark);

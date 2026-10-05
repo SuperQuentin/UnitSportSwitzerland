@@ -1552,6 +1552,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (IsMultiplayerAuthority())
         {
             if (Origin is { } origin) NetGlobal = origin.ToGlobal(Position);
+            // the cockpits' altimeters (#421) read the height over the sea of this world's y = 0
+            if (!Npc) Avatar.AircraftCockpit.WorldAltitude = Origin is { } sea ? (float)sea.ToGlobal(Vector3.Zero).Alt : 0f;
             NetVel = Velocity;
             NetYaw = Rotation.Y;
             NetTime = Time.GetTicksUsec() / 1e6;
@@ -1713,6 +1715,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         else if (_visual is Avatar.HeavyRig heavyRig) heavyRig.DriverShown = SeatIndex == 0;
         else if (_visual is Avatar.BoatRig boatRig) boatRig.DriverShown = SeatIndex == 0;
         else if (_visual is Avatar.SteamerRig steamerRig) steamerRig.DriverShown = SeatIndex == 0;
+        else if (_visual is Avatar.AirlinerRig { Cockpit: { } deck })
+        {
+            deck.PilotShown = SeatIndex == 0;
+            if (deck.PaletteKey != (OutfitBits, RiderIndex())) { deck.PaletteKey = (OutfitBits, RiderIndex()); deck.Palette = FigurePalette(RiderIndex()); }
+        }
         SetRemoteEngine(_remoteRide);
     }
 
@@ -3908,6 +3915,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
 
         if (_visual != null) flyer.Pose(_visual, _flight.Yaw, _flight);
+        if (_visual is Avatar.AirlinerRig { Cockpit: { } deck })
+        {
+            // the pilot in the captain's seat (#421): no head of one's own in the lens, no body either if asked
+            deck.PilotShown = SeatIndex == 0;
+            deck.View = !InCockpit ? Avatar.CockpitView.Outside
+                : Core.GameSettings.Current.CockpitBody ? Avatar.CockpitView.Body : Avatar.CockpitView.Bare;
+            if (deck.PaletteKey != (OutfitBits, RiderIndex())) { deck.PaletteKey = (OutfitBits, RiderIndex()); deck.Palette = FigurePalette(RiderIndex()); }
+        }
         UpdateFlightCamera(dt, flyer);
     }
 

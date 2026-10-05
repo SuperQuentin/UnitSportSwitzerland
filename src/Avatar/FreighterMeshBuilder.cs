@@ -371,6 +371,9 @@ public static class FreighterMeshBuilder
 
     private static float InnerAt(float z, float y) => Mathf.Max(0.1f, OuterX(z, y) - FreighterLayout.Skin - 0.02f);
 
+    /// <summary>The instrument panel's half width (#421): as wide as the nose allows at its height.</summary>
+    public static float CockpitPanelHalf => Mathf.Min(1.3f, InnerAt(PanelZ, 2.7f));
+
     private static void FlightDeck(MeshScratch m)
     {
         // its floor, narrowing with the nose
@@ -404,21 +407,11 @@ public static class FreighterMeshBuilder
             m.Box(new Vector3(x, hip.Y + 0.84f, hip.Z - 0.25f), new Vector3(0.3f, 0.2f, 0.1f), Seat);
             foreach (float s in new[] { -1f, 1f })
                 m.Box(new Vector3(x + s * 0.28f, hip.Y + 0.12f, hip.Z + 0.06f), new Vector3(0.05f, 0.05f, 0.4f), Dark);
-            // the control column and its yoke
-            m.Tube(new Vector3(x, FlightDeckY, hip.Z + 0.75f), new Vector3(x, hip.Y + 0.35f, hip.Z + 0.55f), 0.035f, 0.03f, Dark, 5);
-            m.Box(new Vector3(x, hip.Y + 0.38f, hip.Z + 0.53f), new Vector3(0.34f, 0.05f, 0.05f), Dark);
         }
-        // the pedestal with four power levers, the panel with its gauges, the glareshield, the overhead
+        // the pedestal, the panel, the glareshield, the overhead: the yokes, levers, gauges and lamps are
+        // the cockpit's own (#421, AircraftCockpit)
         m.Box(new Vector3(0, FlightDeckY + 0.3f, 9.75f), new Vector3(0.38f, 0.6f, 0.9f), Panel);
-        for (int i = 0; i < 4; i++)
-            m.Tube(new Vector3(-0.12f + i * 0.08f, FlightDeckY + 0.6f, 9.6f), new Vector3(-0.12f + i * 0.08f, FlightDeckY + 0.8f, 9.75f), 0.015f, 0.012f, Lamp, 4);
-        float hw = Mathf.Min(1.3f, InnerAt(PanelZ, 2.7f));
-        m.Box(new Vector3(0, 2.52f, PanelZ), new Vector3(hw * 2f, 0.7f, 0.1f), Panel);
-        for (int i = 0; i < 10; i++)
-        {
-            float x = (i % 5 - 2) * hw * 0.38f;
-            m.Box(new Vector3(x, i < 5 ? 2.68f : 2.42f, PanelZ - 0.055f), new Vector3(0.2f, 0.18f, 0.02f), i % 3 == 0 ? Screen : Dark);
-        }
+        m.Box(new Vector3(0, 2.52f, PanelZ), new Vector3(CockpitPanelHalf * 2f, 0.7f, 0.1f), Panel);
         float gw = Mathf.Min(1.3f, InnerAt(PanelZ - 0.15f, 2.9f));
         m.Box(new Vector3(0, 2.9f, PanelZ - 0.12f), new Vector3(gw * 2f, 0.06f, 0.4f), Dark);
         m.Box(new Vector3(0, FlightDeckCeilingY - 0.08f, 9.3f), new Vector3(0.9f, 0.12f, 1.0f), Panel);
