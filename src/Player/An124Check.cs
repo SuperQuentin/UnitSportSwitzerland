@@ -240,7 +240,7 @@ public partial class An124Check : Node
         // the hatch at the ladder's top is open in the drawn model too, not only in the walk (#547)
         Expect(HatchClear(), "nothing drawn caps the ladder: the hatch to the upper deck is open");
         await Shot("up_the_ladder", new Vector3(LadderX + 0.4f, FloorY + 1.7f, LadderFootZ - 1.8f), new Vector3(LadderX, UpperFloorY + 0.8f, UpperRearZ));
-        await Shot("top_of_the_ladder", new Vector3(LadderX + 0.7f, UpperFloorY + 1.7f, UpperRearZ + 1.4f), new Vector3(LadderX, FloorY, LadderFootZ + 1.0f));
+        await Shot("top_of_the_ladder", new Vector3(LadderX + 1.2f, UpperFloorY + 1.7f, UpperRearZ + 1.0f), new Vector3(LadderX, UpperFloorY - 1.2f, UpperRearZ - 1.6f));
         await Shot("upper_deck_from_the_ladder", new Vector3(LadderX + 0.3f, UpperFloorY + 1.7f, UpperRearZ + 0.3f), new Vector3(0, UpperFloorY + 0.8f, 21f));
         // up the ladder, the controls, G shuts everything and it stands up
         bool up = await Path(me, (LadderX, LadderFootZ - 1.0f), (LadderX, UpperRearZ + 1.0f), (0f, 16.4f), (0f, 22.4f), (0f, 23.6f), (PilotHip.X, PilotHip.Z - 0.85f));
