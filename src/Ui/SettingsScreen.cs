@@ -109,6 +109,17 @@ public partial class SettingsScreen : Screen
                 v => GameSettings.Current.ScreenShake = (float)v, Percent);
             UiKit.ToggleRow(rows, "Find servers on your network", s.LanDiscovery, on => GameSettings.Current.LanDiscovery = on,
                 "Lists LAN servers on the Multiplayer screen");
+            // the first-run tutorial (#517): now if a world is up (it shows when the menus close), else in the next one
+            Button replay = null!;
+            replay = UiKit.ActionRow(rows, "Tutorial", "Play again", () =>
+            {
+                GameSettings.Current.TutorialDone = false;
+                GameSettings.SaveOnly(nameof(GameSettings.TutorialDone), false);
+                if (Shell.InWorld) Shell.World?.StartTutorial();
+                replay.Text = Shell.InWorld ? "Playing" : "In the next world";
+                replay.Disabled = true;
+            }, "Look, walk, travel, the map and the fly camera, step by step");
+            if (Tutorial.Current != null) { replay.Text = "Playing"; replay.Disabled = true; }
         });
 
         Tab("Vehicles", rows =>

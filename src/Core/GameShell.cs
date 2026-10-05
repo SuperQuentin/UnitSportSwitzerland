@@ -81,7 +81,7 @@ public partial class GameShell : Node
             "--generated", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--voice", "--time",
             "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--airliner", "--perflog",
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world",
-            "--menu", "--settings", "--licenses", "--controls", "--multiplayer", "--solo", "--uishot", "--menucheck", "--leavecheck",
+            "--menu", "--settings", "--licenses", "--controls", "--tutorial", "--multiplayer", "--solo", "--uishot", "--menucheck", "--leavecheck",
             "--leave-restart", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
         };
         foreach (string a in args)
@@ -425,6 +425,7 @@ public partial class GameShell : Node
         if (_launch is { Mode: GameMode.Multiplayer, Hosted: false } l)
             Book.NotePlayed(l.Endpoint, l.ServerName);
         if (CmdArgs.Has("--menu")) Callable.From(OpenPause).CallDeferred();
+        else if (Tutorial.Wanted(fromMenus: true)) _world?.StartTutorial();
         GD.Print($"[shell] in world: {_launch?.Mode}");
     }
 

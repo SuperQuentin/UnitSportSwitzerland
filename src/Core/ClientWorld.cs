@@ -1423,6 +1423,21 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private FootPlayer? LocalPlayer => _networked ? GetLocalNetPlayer() : _player;
 
     /// <summary>
+    /// The first-run tutorial (#517) over this world, once: the shell calls it when the loading
+    /// screen is gone, Settings when it is played again. Not in a replay.
+    /// </summary>
+    public void StartTutorial()
+    {
+        if (Tutorial.Current != null || Launch.Mode == GameMode.GpxReplay) return;
+        AddChild(new Tutorial(
+            walker: () => _onFoot ? LocalPlayer : null,
+            flying: () => !_onFoot && _spectator is { Current: true },
+            mapOpen: () => _places is { IsOpen: true },
+            covered: () => MenuOpen?.Invoke() == true || _rides is { IsOpen: true } || _places is { IsOpen: true }
+                || _gpx is { Active: true }));
+    }
+
+    /// <summary>
     /// The hints for the prompt bar: what the buttons do in the situation the player is in now.
     /// Short on purpose — the loot, door and gather prompts are already centred on screen, and
     /// the whole list is one F1 away.

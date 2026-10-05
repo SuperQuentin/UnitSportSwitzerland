@@ -199,6 +199,12 @@ public sealed class GameSettings
     public string PlayerName { get; set; } = "";
 
     /// <summary>
+    /// The first-run tutorial (#517, <see cref="Tutorial"/>) was finished or skipped. Off until
+    /// then; Settings › Gameplay turns it off again to replay it.
+    /// </summary>
+    public bool TutorialDone { get; set; }
+
+    /// <summary>
     /// The player's figure (#394): <see cref="Avatar.Appearance.Pack"/>ed, 0 until one is chosen in
     /// the inventory's Body row (till then the figure comes from the player's network id).
     /// </summary>
@@ -323,9 +329,9 @@ public sealed class GameSettings
     /// <summary>
     /// Writes one setting into the file without the rest of this run's values (a command-line
     /// <c>--view</c> or <c>--traffic</c> must not become the saved choice): the radio panel's
-    /// volume slider, saved as it is dragged.
+    /// volume slider, saved as it is dragged; the tutorial's done flag.
     /// </summary>
-    public static void SaveOnly(string key, float value)
+    public static void SaveOnly(string key, System.Text.Json.Nodes.JsonNode value)
     {
         try
         {
