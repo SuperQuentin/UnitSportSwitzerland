@@ -43,10 +43,10 @@ public partial class AirstairsCheck : Node
 
     private async Task<bool> Until(System.Func<bool> condition, double seconds)
     {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
+        double end = GameClock.Now + seconds;
         while (!condition())
         {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
+            if (GameClock.Now > end) return false;
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
         }
         return true;
@@ -96,7 +96,9 @@ public partial class AirstairsCheck : Node
     public override async void _Ready()
     {
         await Seconds(2);
-        for (int i = 0; i < 1800 && (_player() is not { } ready || !ready.IsOnFloor()); i++)
+        // the world loads on threads: a wall-clock bound, as the runner's --fixed-fps outruns them
+        ulong deadline = Time.GetTicksMsec() + 30_000;
+        for (int i = 0; Time.GetTicksMsec() < deadline && (_player() is not { } ready || !ready.IsOnFloor()); i++)
         {
             if (_player() == null && i % 50 == 25)
             {
@@ -202,9 +204,9 @@ public partial class AirstairsCheck : Node
         var near = new List<AirstairsDock.Sill>();
         bool lined = await Until(() =>
         {
-            if (Time.GetTicksMsec() / 1000.0 > nextLog)
+            if (GameClock.Now > nextLog)
             {
-                nextLog = Time.GetTicksMsec() / 1000.0 + 2;
+                nextLog = GameClock.Now + 2;
                 AirstairsDock.SillsNear(GetTree(), me.GlobalPosition, 15f, near);
                 var ap = AirstairsDock.Approach(me.GlobalTransform.Orthonormalized(), near);
                 GD.Print($"[stairs]   driving: at {me.GlobalPosition} yaw {me.Rotation.Y:F2} (dock {dockAt}, {dockYaw:F2}), speed {me.GroundSpeed:F2}, sills {near.Count}, approach {ap?.Door}, hits [{string.Join(" ", Enumerable.Range(0, me.GetSlideCollisionCount()).Select(k => $"{(me.GetSlideCollision(k).GetCollider() as Node)?.Name} n{me.GetSlideCollision(k).GetNormal()}"))}], lip off {(AirstairsDock.Lip(me.GlobalTransform) - AirstairsDock.Lip(new Transform3D(new Basis(Vector3.Up, dockYaw), dockAt))).Length():F2}, target {driving.TargetHeight:F2}");

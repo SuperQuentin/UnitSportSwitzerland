@@ -93,8 +93,8 @@ public partial class SteamerNetProbe : ChatProbe
     {
         var all = new List<Vector3>();
         int off = 0;
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
-        while (Time.GetTicksMsec() / 1000.0 < end)
+        double end = GameClock.Now + seconds;
+        while (GameClock.Now < end)
         {
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             if (where() is not { } w) { off++; continue; }

@@ -42,8 +42,8 @@ public partial class ClockSync : Node
     /// </summary>
     public static double ServerUnixNow => _synced ? ServerNow + _serverUnixOffset : Time.GetUnixTimeFromSystem();
 
-    /// <summary>This process's own monotonic clock, seconds.</summary>
-    public static double LocalNow => Time.GetTicksUsec() / 1_000_000.0;
+    /// <summary>This process's own monotonic clock, seconds; game time under <c>--fixed-fps</c> (<see cref="Core.GameClock"/>).</summary>
+    public static double LocalNow => Core.GameClock.Fixed ? Core.GameClock.Now : Time.GetTicksUsec() / 1_000_000.0;
 
     /// <summary>Round trip to the server of the sample in use, or NaN before the first pong.</summary>
     public static double Rtt => _rtt;

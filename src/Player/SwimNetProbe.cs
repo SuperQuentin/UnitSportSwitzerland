@@ -123,8 +123,8 @@ public partial class SwimNetProbe : ChatProbe
         Expect(me.Ragdolled, "A is thrown limp");
         Say("thrown 0");
         bool wet = false, up = false;
-        double start = Time.GetTicksMsec() / 1000.0;
-        while (me.Ragdolled && Time.GetTicksMsec() / 1000.0 - start < 14)
+        double start = GameClock.Now;
+        while (me.Ragdolled && GameClock.Now - start < 14)
         {
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             if (me.RagdollPelvis is not { } hip || !WaterField.TryLevelAt(hip, out level)) continue;

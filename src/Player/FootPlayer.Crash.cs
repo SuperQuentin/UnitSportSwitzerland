@@ -186,7 +186,7 @@ public partial class FootPlayer
             bool want = PoseKind == PoseRagdoll && RideKindId == (int)RideKind.OnFoot;
             if (want && _ragdoll == null && Anim.W > RagdollMark)
             {
-                bool car = _seenSeat != null && Time.GetTicksMsec() / 1000.0 - _seenSeatAt < 0.5;
+                bool car = _seenSeat != null && GameClock.Now - _seenSeatAt < 0.5;
                 var joints = car ? DriverWorldJoints(_seenSeat!, _seenSeatFrame) : PoseWorldJoints();
                 StartRagdoll(joints, new Vector3(Anim.X, Anim.Y, Anim.Z), Anim.W - RagdollMark, car);
             }

@@ -374,8 +374,8 @@ public partial class BoatCheck : Node
             }
         }
         me.RideControls = Helm(me, 1f, hold: West);
-        double until = Time.GetTicksMsec() / 1000.0 + 20.0;
-        while (!thrown && Time.GetTicksMsec() / 1000.0 < until)
+        double until = GameClock.Now + 20.0;
+        while (!thrown && GameClock.Now < until)
         {
             // watched every physics frame: a jump off a crest lasts a few tenths of a second
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
@@ -398,8 +398,8 @@ public partial class BoatCheck : Node
             WaterField.TryLevelAt(at, out level);
             me.PlaceBoat(at with { Y = level - 0.2f }, West);
             me.RideControls = Helm(me, 1f, hold: West);
-            double end = Time.GetTicksMsec() / 1000.0 + 18.0;
-            while (!airShot && me.Ride == _kind && Time.GetTicksMsec() / 1000.0 < end)
+            double end = GameClock.Now + 18.0;
+            while (!airShot && me.Ride == _kind && GameClock.Now < end)
             {
                 await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
                 airShot = await JumpShot(me);
