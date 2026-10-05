@@ -292,6 +292,9 @@ public sealed class Car : Rideable, IEngined
     public bool RoofOpen { get; set; }
     /// <summary>An open car: its top folds away.</summary>
     public bool HasSoftTop => Spec.Body.Shape == BodyShape.Roadster;
+    /// <summary>Hydraulics pumping, as the driver set them: O / D-pad left on a car that has them (#464).</summary>
+    public bool Bouncing { get; set; }
+    public bool HasHydraulics => Spec.Body.Hydraulics;
     /// <summary>Longitudinal and lateral acceleration, m/s² (+ forward, + left), for body pitch and roll.</summary>
     public float AccelX { get; private set; }
     public float AccelY { get; private set; }
@@ -606,11 +609,13 @@ public sealed class Car : Rideable, IEngined
     /// </summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
         new(SteerAngle, motion.Speed * Mathf.Cos(motion.Slip) / WheelRadius, Rpm01,
-            (Braking ? PoseBrake : 0) | (Headlights ? PoseHeadlights : 0) | (RoofOpen ? PoseRoof : 0)
+            (Braking ? PoseBrake : 0) | (Headlights ? PoseHeadlights : 0) | (RoofOpen ? PoseRoof : 0) | (Bouncing ? PoseBounce : 0)
             | Mathf.RoundToInt(Mathf.Clamp(Throttle, 0f, 1f) * PoseThrottleSteps) << PoseThrottleShift);
 
     private const int PoseBrake = 1, PoseHeadlights = 2, PoseRoof = 4;
     private const int PoseThrottleShift = 3, PoseThrottleSteps = 7;
+    /// <summary>Above the throttle's three bits.</summary>
+    private const int PoseBounce = 64;
 
     private float _remoteSpin;
 
@@ -624,6 +629,7 @@ public sealed class Car : Rideable, IEngined
         rig.BrakeLights = (flags & PoseBrake) != 0;
         rig.Headlights = (flags & PoseHeadlights) != 0;
         rig.RoofOpen = (flags & PoseRoof) != 0;
+        rig.Bouncing = (flags & PoseBounce) != 0;
         Rpm = Mathf.Lerp(Spec.IdleRpm, Spec.Redline, pose.Z);
         rig.WheelTurn = pose.X * Ratio;
         rig.Throttle = ((flags >> PoseThrottleShift) & PoseThrottleSteps) / (float)PoseThrottleSteps;
@@ -641,6 +647,7 @@ public sealed class Car : Rideable, IEngined
         rig.BrakeLights = Braking;
         rig.Headlights = Headlights;
         rig.RoofOpen = RoofOpen;
+        rig.Bouncing = Bouncing;
         rig.WheelTurn = SteerAngle * Ratio;
         rig.Throttle = Throttle;
         rig.Brake = BrakePedal;

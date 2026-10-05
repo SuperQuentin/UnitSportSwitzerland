@@ -33,12 +33,17 @@
     <Compile Include="..\..\src\Terrain\Fixture\*.cs" Link="Game\Fixture\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\Recipes.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Items\Fishing\FishCatalog.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Items\Fishing\FishWaters.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Items\Fishing\FishRules.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\CampfireClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\HitGuard.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\FightRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrStats.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Loot\ShopTables.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\DoorBudget.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\DoorKey.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Loot\ShopLedger.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SaveQueue.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\MathX.cs" Link="Game\%(Filename)%(Extension)" />
@@ -65,6 +70,8 @@
     <Compile Include="..\..\src\Terrain\BuildingTriangles.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\PlanBox.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\BuildingTypes.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- update check (#532): version compare, asset pick, GitHub's JSON, delta updates -->
+    <Compile Include="..\..\src\Core\UpdateInfo.cs;..\..\src\Core\BinaryDelta.cs;..\..\src\Core\UpdatePackage.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

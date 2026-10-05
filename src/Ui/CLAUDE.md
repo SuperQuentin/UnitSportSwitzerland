@@ -15,6 +15,7 @@ touches its topic; search with `grep -ril <word> docs/notes/ui`.
 - `ui-theme-panels` — HUD panels via `UiTheme.Flat`/`GlassPanel`, titles `UiTheme.Title`, "press E" lines `UiTheme.Prompt`, amber `UiTheme.Amber`: no hand-built `StyleBoxFlat`, no amber literal
 - `loading` — Loading screen: real stages from `ClientWorld.Stage`, `ChunkManager.ProgressNear`, joke lines, Cancel; failure goes back with the reason
 - `tutorial` — First-run tutorial (#517, `Core/Tutorial`, steps in `Core/TutorialSteps`): a corner card, each step ends when the player does it; skip in the pause menu, replay in Settings › Gameplay, `TutorialDone`, `--tutorial`; a mini tutorial per kind of ride the first time you drive it (`VehicleIntroCard`, `VehicleIntrosSeen`)
+- `update-check` — Title screen asks GitHub for the releases once per session; Update (delta chain, staged, swapped on quit/restart) or Download (full archive) or Later; `--fakeversion`, `--updatefeed`, `--updateaccept` (#532)
 - `travel-menu` — R travel menu (tabs, card grid, brand/model folders (#410), pre-rendered thumbnails cached in user://thumbs, live stage: doors open + lamps on while pointed) and the F1 controls screen, both sized to the window (#210)
 
 ## Gotchas

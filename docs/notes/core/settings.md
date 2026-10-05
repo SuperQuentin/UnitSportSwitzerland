@@ -21,7 +21,7 @@
   setting would snap a hand-resized window back. `DisplaySettings` belongs to the shell, so all of it
   holds on the title screen too.
 - **Tabs**: Video (window, size, 3D resolution, VSync, fog, speed lines), Audio (volumes, engine
-  voice), Gameplay (movement, third person, camera shake, LAN discovery), Vehicles (wear, gearbox,
+  voice), Gameplay (movement, third person, camera shake, tail-first pigeon, LAN discovery), Vehicles (wear, gearbox,
   cockpit), Controls (stick, invert, vibration, the F1 overlay), World (time, day length, traffic,
   trains, generated terrain, occasions), Performance (render distance, detail, horizon, builds,
   commit budget, overlay, logs). LB / RB or Q / E change tab. The same screen serves the title and
@@ -29,7 +29,9 @@
 - Every change applies live (`GameSettings.Changed` -> `ChunkManager.ApplySettings`, the materials, the
   cameras' `Far`) and saves; there is no Apply button. `--settings` opens it for a screenshot;
   `--rings N --horizon km --fog on|off --generated on|off --detail low|medium|high` override for one run
-  without being saved. The last ring is always **stride 50** (`LodPolicy.FarStride`, 21x21 verts,
+  without being saved. `--tailfirstpigeon on` does the same for the tail-first pigeon
+  (`TailFirstPigeon`, off by default: the pre-fix backwards bird kept as an option, drawing only — see
+  `player/pigeon`). The last ring is always **stride 50** (`LodPolicy.FarStride`, 21x21 verts,
   from the `.terrc`), which is what makes 40 rings (6,561 tiles) cost about what 9 used to.
   A server ignores all of it and keeps 2 rings of full grids around each player.
 - Also kept here: `TutorialDone` and `VehicleIntrosSeen` (the first-run tutorial and the rides' mini tutorials, `ui/tutorial`), `PlayerName` (asked the first time the Multiplayer screen opens), `LastHost`,

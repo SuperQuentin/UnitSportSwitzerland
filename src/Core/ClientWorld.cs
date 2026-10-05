@@ -104,6 +104,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Items.IconSheet.Requested, Items.IconSheet.Run),
         (() => Loot.LootChanceCheck.Requested, Loot.LootChanceCheck.Run),
         (() => Loot.ShopCheck.Requested, Loot.ShopCheck.Run),
+        (() => Interiors.DoorCheck.Requested, Interiors.DoorCheck.Run),
         (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
         (() => ChatCheck.Requested, () => ChatCheck.Run(this)),
         (() => StyleKit.ReportRequested, StyleKit.Report),
@@ -623,6 +624,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.BoatCheck.Role is { } boatRole) AddChild(new Player.BoatCheck(boatRole, () => LocalPlayer));
         if (Player.SteamerCheck.Role is { } steamerRole) AddChild(new Player.SteamerCheck(steamerRole, () => LocalPlayer));
         if (Player.SwimCheck.Requested) AddChild(new Player.SwimCheck(() => LocalPlayer));
+        if (Items.Fishing.FishProbe.Requested) AddChild(new Items.Fishing.FishProbe(() => LocalPlayer));
         if (Player.CabinCheck.Requested) AddChild(new Player.CabinCheck(() => LocalPlayer));
         if (Player.FreighterCheck.Requested) AddChild(new Player.FreighterCheck(() => LocalPlayer));
         if (Player.An124Check.Requested) AddChild(new Player.An124Check(() => LocalPlayer));
@@ -636,7 +638,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
-            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
+            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
@@ -687,6 +689,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.EmoteNetProbe.Role != null) AddChild(new Player.EmoteNetProbe(items));
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
+        if (Items.Fishing.FishNetProbe.Role != null) AddChild(new Items.Fishing.FishNetProbe(items));
         if (World.ClockNetProbe.Role != null) AddChild(new World.ClockNetProbe(items));
         if (Player.BoatNetProbe.Role != null) AddChild(new Player.BoatNetProbe(items));
         if (Player.SteamerNetProbe.Role != null) AddChild(new Player.SteamerNetProbe(items));
@@ -1533,6 +1536,28 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 yield return (PlayerInput.FightPunch, "Punch");
                 yield return (PlayerInput.FightKick, "Kick");
                 yield return (PlayerInput.FightBlock, "Block (hold)");
+            }
+            else if (Items.ItemController.Instance is { Inventory.HeldId: Items.ItemId.FishingRod } rodHand && rodHand.UsablePlayer != null)
+            {
+                // the rod (#493): every step names its own control on every device
+                switch (rodHand.Rod.State)
+                {
+                    case Items.Fishing.FishingRod.Phase.Idle:
+                        yield return (PlayerInput.UseItem, "Hold to wind up a cast");
+                        break;
+                    case Items.Fishing.FishingRod.Phase.Charging:
+                        yield return (PlayerInput.UseItem, "Let go to cast");
+                        yield return (PlayerInput.AimItem, "Cancel");
+                        break;
+                    case Items.Fishing.FishingRod.Phase.Waiting:
+                    case Items.Fishing.FishingRod.Phase.Bite:
+                        yield return (PlayerInput.UseItem, "Strike when the float dips");
+                        yield return (PlayerInput.AimItem, "Wind in");
+                        break;
+                    case Items.Fishing.FishingRod.Phase.Fighting:
+                        yield return (PlayerInput.UseItem, "Hold to reel; let go when it runs");
+                        break;
+                }
             }
             else if (Items.ItemController.Instance?.Throw.Active == true)
             {

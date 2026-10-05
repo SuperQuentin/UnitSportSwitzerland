@@ -397,6 +397,22 @@ public static class InventoryCheck
                 "the new items have drawn icons");
         });
 
+        // ---- fishing (#493) ----
+        Case("fishing: the rod, its bait, the fish and the dishes are real items with drawn icons", _ =>
+        {
+            foreach (var id in new[] { ItemId.FishingRod, ItemId.DoughBait, ItemId.Spinner, ItemId.PerchFillets, ItemId.GrilledFish, ItemId.FishSoup }
+                         .Concat(Fishing.FishCatalog.Items))
+                Expect(ItemDefs.Get(id) != null && ItemIcons.IsAuthored(id), $"{id}: an item with an icon");
+            Expect(ItemDefs.Get(ItemId.FishingRod)?.Use == ItemUse.Fish && !ItemDefs.Throwable(ItemDefs.Get(ItemId.FishingRod)), "the rod fishes and is not thrown");
+            foreach (var fish in Fishing.FishCatalog.Items)
+            {
+                var def = ItemDefs.Get(fish)!;
+                Expect(def.Category == ItemCategory.Food && def.Use == ItemUse.Consume && def.Value > 0, $"{fish}: food with a price, sold at a grocery");
+                var dish = ItemDefs.Get(Fishing.FishCatalog.ItemOf(Fishing.FishCatalog.DishOf(fish).Dish))!;
+                Expect(dish.Heal > def.Heal * 4, $"{fish}: cooked ({dish.Name}) it feeds far more than raw");
+            }
+        });
+
         GD.Print(_failures == 0 ? "[invcheck] RESULT: ok": $"[invcheck] RESULT: FAILED ({_failures})");
         return _failures == 0 ? 0 : 1;
     }

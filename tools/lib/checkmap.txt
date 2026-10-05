@@ -53,6 +53,7 @@ src/Loot/                quick  --shopcheck
 src/Interiors/           quick  --shopcheck
 src/Interiors/           quick  --sitecheck --systems ui
 src/Loot/LootTables      quick  --sitecheck --systems ui
+src/Interiors/           quick  --doorcheck
 src/Interiors/Church     quick  --churchstagecheck
 src/Audio/Cd/CdLibrary   quick  --churchstagecheck
 src/Items/Item           quick  --shopcheck
@@ -139,6 +140,9 @@ src/Player/FootPlayer.Cr quick  --swimcheck --chunks fixture:lake
 src/Player/Wading        quick  --swimcheck --chunks fixture:lake
 src/Items/HeldItemVisual quick  --swimcheck --chunks fixture:lake
 src/Loot/Gathering       quick  --swimcheck --chunks fixture:lake
+src/Items/Fishing        quick  --fishcheck --chunks fixture:lake
+src/Loot/Gathering       quick  --fishcheck --chunks fixture:lake
+src/Items/Fishing        quick  --invcheck
 src/Avatar/WakeFoam      quick  --boatcheck speedboat --chunks fixture:lake
 src/Avatar/HullSlap      quick  --boatcheck speedboat --chunks fixture:lake
 shaders/wake_foam        quick  --boatcheck speedboat --chunks fixture:lake
@@ -178,6 +182,8 @@ src/Items/ItemEvents     net    tools/bonkcheck.sh
 src/Items/DroppedItem    net    tools/bonkcheck.sh
 src/Player/FootPlayer.B  net    tools/bonkcheck.sh
 src/Crafting/            net    tools/campfirecheck.sh
+src/Items/Fishing        net    tools/fishcheck.sh
+src/Items/ItemEvents     net    tools/fishcheck.sh
 src/Items/PlacedObjects  net    tools/campfirecheck.sh
 src/Items/HeldItemVisual net    tools/campfirecheck.sh
 src/World/Wa             net    tools/watercheck.sh
@@ -239,6 +245,8 @@ src/Net/                 full   tools/loadtest.sh 4 testsh 60
 tools/lib/               quick  tools/lib/guard_selftest.sh
 src/Player/Pigeon        quick  --flycheck pigeon --world flat
 src/Player/FlightCheck   quick  --flycheck pigeon --world flat
+src/Player/Pigeon        quick  --flycheck pigeoncrash --systems birds
+src/Birds/BirdLife       quick  --flycheck pigeoncrash --systems birds
 src/Player/FlightCheck   quick  --flycheck a320 --world flat
 src/Player/Airliner      quick  --flycheck a320 --world flat
 src/Player/Airliner      quick  --flycheck a320 --world flat --airliner sim
