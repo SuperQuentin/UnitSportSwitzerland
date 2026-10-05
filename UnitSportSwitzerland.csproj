@@ -17,6 +17,11 @@
     <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
 
+  <!-- Android APK (tools/release.sh, #544): Godot's prebuilt Android template only runs net9.0 -->
+  <PropertyGroup Condition=" '$(GodotTargetPlatform)' == 'android' ">
+    <TargetFramework>net9.0</TargetFramework>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Tiles churn through the large-object heap (1-4 MB grids, covers, collision maps), which
          the GC never compacts by default: the heap grows with fragmentation, not live data.
