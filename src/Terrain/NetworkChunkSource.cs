@@ -166,6 +166,16 @@ public sealed class NetworkChunkSource : IChunkSource
             .ConfigureAwait(false);
     }
 
+    /// <summary>The farm fields (#494): shipped, cached, else streamed like the trees. An older server answers "missing".</summary>
+    public async Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default)
+    {
+        if (await _local.LoadFieldsAsync(id, ct).ConfigureAwait(false) is { } local) return local;
+
+        return await ObtainAsync(AssetKind.Fields, id, ct,
+            bytes => { using var ms = new MemoryStream(bytes); return FieldFormat.Decode(ms); })
+            .ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Shipped copy first, else the one <see cref="ClientTerrainSync"/> pulled into the cache
     /// during sync. Not fetched on demand here: it is a single region-wide file, and the sync

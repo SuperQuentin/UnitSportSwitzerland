@@ -224,6 +224,30 @@ public sealed class FixtureChunkSource : IChunkSource
     public Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default) =>
         Task.FromResult(_tiles.Contains(id) ? (_trees.TryGetValue(id, out var t) ? t : new()) : null);
 
+
+    /// <summary>
+    /// The course's farm fields (#494), each written whole into every tile its box touches, ring
+    /// points in metres from the tile's south-west corner (<see cref="FieldFormat"/>); empty, not null.
+    /// </summary>
+    public Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default)
+    {
+        if (!_tiles.Contains(id)) return Task.FromResult<List<FieldPolygon>?>(null);
+        var fields = new List<FieldPolygon>();
+        foreach (var (fid, crop, outline) in _course.Fields)
+        {
+            double minE = outline.Min(p => p.X) + _startE, maxE = outline.Max(p => p.X) + _startE;
+            double minN = outline.Min(p => p.Y) + _startN, maxN = outline.Max(p => p.Y) + _startN;
+            if (maxE < id.MinE || minE > id.MinE + ChunkFormat.TileSizeM || maxN < id.MinN || minN > id.MaxN) continue;
+            var ring = new float[outline.Length * 2];
+            for (int i = 0; i < outline.Length; i++)
+            {
+                ring[i * 2] = (float)(_startE + outline[i].X - id.MinE);
+                ring[i * 2 + 1] = (float)(_startN + outline[i].Y - id.MinN);
+            }
+            fields.Add(new FieldPolygon(fid, crop, FieldSource.Osm, 0, [ring]));
+        }
+        return Task.FromResult<List<FieldPolygon>?>(fields);
+    }
     public Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default) => Task.FromResult<HorizonIndex?>(null);
 
     /// <summary>The course's stops and jetties (#377), planned over its own ground and water as the preprocessor plans the real ones.</summary>
