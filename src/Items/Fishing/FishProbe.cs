@@ -25,6 +25,9 @@ public partial class FishProbe : Node
 {
     public static bool Requested => CmdArgs.Has("--fishcheck");
 
+    /// <summary><c>--fishcheck shots</c>: windowed, third person, pictures into <c>test_output/fish/</c>.</summary>
+    private static bool ShotsMode => CmdArgs.Value("--fishcheck") == "shots";
+
     private readonly Func<FootPlayer?> _local;
     private int _failures;
     private FootPlayer _me = null!;
@@ -105,6 +108,7 @@ public partial class FishProbe : Node
         _items = items;
         if (!await Until(() => WaterField.TryGetStill(At(Course.ShoreX + 400, 0), out _, out _), 90)) { Finish("the lake's water layer never loaded"); return; }
 
+        if (ShotsMode) _me.DebugThirdPerson(true);
         var inv = _items.Inventory;
         inv.Put(0, new ItemStack(ItemId.FishingRod, 1));
         inv.Put(1, new ItemStack(ItemId.DoughBait, 20));
@@ -128,6 +132,19 @@ public partial class FishProbe : Node
         if (fatal != null) { _failures++; GD.PrintErr($"[fishcheck] FAIL {fatal}"); }
         Log(_failures == 0 ? "RESULT: ok" : $"RESULT: FAILED ({_failures})");
         GetTree().Quit(_failures == 0 ? 0 : 1);
+    }
+
+    private async Task Shot(string name)
+    {
+        if (!ShotsMode) return;
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        var dir = ProjectSettings.GlobalizePath("res://test_output/fish");
+        System.IO.Directory.CreateDirectory(dir);
+        string path = System.IO.Path.Combine(dir, name + ".png");
+        Log($"shot {path}: {GetViewport().GetTexture().GetImage().SavePng(path)}");
+        var tip = _me.GetNodeOrNull<HeldItemVisual>("HeldItem")?.ItemPoint(FishingVisuals.RodTip);
+        var bob = ItemEvents.Instance is { } n ? n.GetNodeOrNull<Node3D>("FishingLines")?.GetChildren().OfType<MeshInstance3D>().Skip(1).FirstOrDefault()?.GlobalPosition : null;
+        Log(FormattableString.Invariant($"  player {_me.GlobalPosition}, tip {tip}, float {(ItemEvents.Instance is { } m ? FishingVisuals.Of(m).LocalFloat : null)}, bobber mesh {bob}"));
     }
 
     private async Task StandAt(double x, double y, Vector3 facing)
@@ -176,6 +193,7 @@ public partial class FishProbe : Node
         float out_ = fl is { } f ? MathX.FlatLength(f - _me.GlobalPosition) : -1;
         Expect(out_ is > 20 and < 29, $"the float lies {out_:F1} m out");
         Expect(fl is { } f2 && WaterField.TryGetStill(f2, out float still, out _) && Mathf.Abs(f2.Y - still) < 0.2f, "the float sits on the surface");
+        await Shot("1_waiting");
 
         int dough = _items.Inventory.CountPlain(ItemId.DoughBait);
         Catch? landed = null;
@@ -190,7 +208,11 @@ public partial class FishProbe : Node
             _items.UseSlot(_me, 0);
             Expect(Rod.State == FishingRod.Phase.Fighting, $"Use on a bite hooks it ({Rod.Hooked?.Species.Name}, {Rod.Hooked?.Kg:F2} kg)");
             _play = true;
+            await Wait(1.5);
+            await Shot("2_fight");
             await Until(() => Rod.State != FishingRod.Phase.Fighting, 400);
+            await Wait(0.3);
+            await Shot("3_landed");
             _play = false;
             _items.ForceUse = false;
         }

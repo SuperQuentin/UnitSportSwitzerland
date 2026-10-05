@@ -598,6 +598,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public float ThrowAim { get; set; }
 
+    /// <summary>
+    /// Third person: face where the view points, whatever the feet do, as a throw's wind-up does. Set
+    /// every frame by <c>ItemController</c> while a fishing line is in use (#493): the cast goes along the view.
+    /// </summary>
+    public bool SquareToView { get; set; }
+
     /// <summary>Camera tremble in radians, set every frame (a fully wound-up throw shakes).</summary>
     public float CameraShake { get; set; }
 
@@ -1769,6 +1775,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Items.ItemUse.Consume => use ? Avatar.ItemArmPose.Mouth : Avatar.ItemArmPose.Hold,
             Items.ItemUse.Wear => use ? Avatar.ItemArmPose.Mouth : Avatar.ItemArmPose.Hold,   // a hat goes up to the head
             Items.ItemUse.Place => use ? Avatar.ItemArmPose.Plant : Avatar.ItemArmPose.Hold,
+            // a rod is held out ahead, not across the body as Hold carries things (#493)
+            Items.ItemUse.Fish => Avatar.ItemArmPose.ShoulderAim,
             _ => Avatar.ItemArmPose.Hold,
         };
     }
@@ -3644,7 +3652,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private void FaceTravel(float dt, Vector3 moveDirection)
     {
         // winding up a throw: square up to where the view points, whatever the feet do
-        if (_throwBlend > 0.05f)
+        if (_throwBlend > 0.05f || SquareToView)
         {
             Rotation = new Vector3(0, Mathf.LerpAngle(Rotation.Y, _viewYaw, MathX.Damp(18f, dt)), 0);
             return;

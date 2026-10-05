@@ -308,7 +308,9 @@ public partial class ItemController : Node
         bool fishing = usable && _inventory.HeldId == ItemId.FishingRod && !_ui.IsOpen && !UiFocus.TextEntryActive;
         _fishing.Step(fishing ? player : null, PlayerInput.Held(PlayerInput.UseItem) || ForceUse,
             PlayerInput.Held(PlayerInput.AimItem) || _forceAim, (float)delta);
-        if (fishing && _fishing.State != UnitSport.Items.Fishing.FishingRod.Phase.Idle) player.ItemAction = 2;
+        bool lineInUse = fishing && _fishing.State != UnitSport.Items.Fishing.FishingRod.Phase.Idle;
+        if (lineInUse) player.ItemAction = 2;
+        player.SquareToView = lineInUse;
 
         // the smart binoculars read out the building at hand while held (#165): no aiming
         _smart.Held = usable && _inventory.HeldId == ItemId.SmartBinoculars;
