@@ -22,17 +22,20 @@ public sealed class FieldTile
     public ushort[] Owner { get; }
     public uint[] FieldIds { get; }
     public CropKind[] Crops { get; }
+    /// <summary>The outlines (tile-local metres), index = owner - 1: the drawing clips the edge cells to them.</summary>
+    public IReadOnlyList<FieldPolygon> Fields { get; }
     /// <summary>Field cells in all.</summary>
     public int CellCount { get; }
     /// <summary>Per drawing chunk: how many field cells it holds (0: nothing to draw).</summary>
     public int[] ChunkCellCounts { get; }
 
-    private FieldTile(TileId id, ushort[] owner, uint[] ids, CropKind[] crops)
+    private FieldTile(TileId id, ushort[] owner, uint[] ids, CropKind[] crops, IReadOnlyList<FieldPolygon> fields)
     {
         Id = id;
         Owner = owner;
         FieldIds = ids;
         Crops = crops;
+        Fields = fields;
         ChunkCellCounts = new int[ChunkCount];
         for (int c = 0; c < owner.Length; c++)
         {
@@ -50,7 +53,7 @@ public sealed class FieldTile
         var ids = new uint[n];
         var crops = new CropKind[n];
         for (int i = 0; i < n; i++) { ids[i] = fields[i].Id; crops[i] = fields[i].Crop; }
-        return new FieldTile(id, owner, ids, crops);
+        return new FieldTile(id, owner, ids, crops, fields);
     }
 
     /// <summary>The field's crop at a cell, <see cref="CropKind.None"/> off every field.</summary>

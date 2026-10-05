@@ -134,8 +134,8 @@ public partial class FarmField
         int c0 = k % FieldTile.ChunksPerSide * FieldTile.ChunkCells, r0 = k / FieldTile.ChunksPerSide * FieldTile.ChunkCells;
         var looks = new CellLook[FieldMeshBuilder.LookSide * FieldMeshBuilder.LookSide];
         uint next = uint.MaxValue;
-        for (int r = -1; r <= FieldTile.ChunkCells; r++)
-            for (int c = -1; c <= FieldTile.ChunkCells; c++)
+        for (int r = -FieldMeshBuilder.Ring; r < FieldTile.ChunkCells + FieldMeshBuilder.Ring; r++)
+            for (int c = -FieldMeshBuilder.Ring; c < FieldTile.ChunkCells + FieldMeshBuilder.Ring; c++)
             {
                 int col = c0 + c, row = r0 + r;
                 if (col < 0 || row < 0 || col >= FieldFormat.CellsPerSide || row >= FieldFormat.CellsPerSide) continue;
@@ -152,12 +152,7 @@ public partial class FarmField
                     uint at = (uint)Math.Ceiling(s.Since + total * (q + 0.1f) + 0.5);
                     if (at < next) next = at;
                 }
-                uint fid = data.FieldAt(cell);
-                looks[FieldMeshBuilder.LookIndex(c, r)] = new CellLook
-                {
-                    Stage = stage, Crop = crop, Growth = q, Field = true, RowsNorth = (fid & 1) == 0,
-                    Jitter = (byte)((uint)(cell * 2654435761u) >> 24),
-                };
+                looks[FieldMeshBuilder.LookIndex(c, r)] = new CellLook { Stage = stage, Crop = crop, Growth = q, Owner = data.Owner[cell] };
             }
         int version = t.Cells.ChunkVersions[k];
         int month = _month;
@@ -170,7 +165,7 @@ public partial class FarmField
             Color[] colors = Array.Empty<Color>();
             try
             {
-                var b = new FieldMeshBuilder(looks, grid.SampleMeshHeight, e0, n0, lod);
+                var b = new FieldMeshBuilder(looks, data, c0, r0, grid.SampleMeshHeight, e0, n0, lod);
                 b.Build();
                 verts = b.Verts.ToArray();
                 colors = b.Colors.ToArray();
