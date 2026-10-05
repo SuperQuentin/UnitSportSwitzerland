@@ -177,13 +177,16 @@ What phase 3 inherits, and the three things it still needs from #499:
 
 - `VehicleSlot(Owner, Ordinal, E, N, Height, Yaw, KindId, Paint, Van)` — pure data, no Godot, linked
   into tier 0. `KindId` is a `RideKind` as an int so the file never reaches into `src/Player`.
-- **The node name is the wake-once key**, and `DormantVehicles.SlotOf()` is the single place that
-  parses it. As built it is `veh_bay_<E>_<N>_<ordinal>` and requires **exactly five**
-  underscore-separated parts. A yard's owner is a building, not a tile — `2593_1120_7` — so a yard
-  slot's name has six, `SlotOf` returns null, and the dormant copy is never dropped when the real
-  vehicle appears: exactly the double-draw #499's tier-2 check caught for late joiners. The parser
-  must take the **last** segment as the ordinal and the rest as the owner (the tile being the
-  owner's first two parts), or yards need a second parser and the fix stops being in one place.
+- **The node name is the wake-once key**, `veh_slot_<owner>_<ordinal>`, and
+  `DormantVehicles.SlotOf()` is the single place that parses it. It first assumed a **tile** owner
+  (exactly five underscore parts), which a car park has and a yard does not: a yard's owner is a
+  building, `2593_1120_7`, so its name has six and the parse failed — the dormant copy was never
+  dropped when the real vehicle appeared, the same double-draw #499's tier-2 check caught for late
+  joiners but permanent and invisible to the parking check. Fixed in #499 by taking the **last**
+  segment as the ordinal and the rest as the owner, along with two more in the same blast radius:
+  `TileOf` made the same assumption and would have refused to wake a yard vehicle at all, and the
+  awake-key was built from the tile rather than the owner, so two yards in one tile would have
+  woken each other's cars. Pinned by a theory over both owner shapes.
 - **A trailer is not a `KindId`.** `RideKind.Trailer` (120) says only "a trailer"; *which* one, and
   how loaded, is `TrailerCatalog` plus a code `(index + 1) | load% << 8` — what
   `FootPlayer.TrailerCode` replicates, and what makes a timber trailer's logs and a tanker's slosh.
