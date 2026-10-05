@@ -73,7 +73,6 @@ public sealed class SetupContext
     public required Stats Stats { get; init; }
     public required SetupState State { get; init; }
     public required string? Python { get; init; }
-    public required bool Gdal { get; init; }
     public int Cores { get; init; } = Environment.ProcessorCount;
 }
 
@@ -124,7 +123,9 @@ public static partial class Planner
         var toDownload = sel.Where(t => !c.Local.Downloaded.Contains(t) && !c.Local.Built.Contains(t)).ToList();
         var toBuild = sel.Where(t => !c.Local.Built.Contains(t)).ToList();
         bool wantRoads = c.Layers.HasFlag(Layers.Roads);
-        bool wantBuildings = c.Layers.HasFlag(Layers.Buildings) && c.Gdal;
+        // No GDAL gate since #537: the preprocessor reads the FileGDB itself, so the buildings
+        // layer only needs its sheets downloaded.
+        bool wantBuildings = c.Layers.HasFlag(Layers.Buildings);
         bool haveNationwideGpkg = File.Exists(NationwideBuildingsGpkg(p));
         var featureTiles = sel.Where(t =>
             (wantRoads && !RoadsDone(c, t)) || (wantBuildings && !BuildingsDone(c, t))).ToList();
@@ -180,7 +181,6 @@ public static partial class Planner
             DiskPath = p.BuildingsDir,
             Seconds = sheetBytes / stats.EffectiveDownload + 5,
             Skip = !c.Layers.HasFlag(Layers.Buildings) ? "buildings layer off"
-                 : !c.Gdal ? "needs GDAL (python -c \"import osgeo\" fails; docs/notes/tools/gdal-setup.md)"
                  : haveNationwideGpkg || haveNationwideZip ? "nationwide buildings already here"
                  : !needSheets || sheetsToGet.Count == 0 ? "already here" : !py ? noPython : null,
             Run = r =>
@@ -294,39 +294,8 @@ public static partial class Planner
         });
 
         var bounds = c.Selection.Bounds();
-        long exportBytes = haveNationwideZip ? 400_000_000L * Math.Max(1, sheets.Count) / 50 : sheets.Sum(s => s.Size);
-        steps.Add(new Step
-        {
-            Title = "Export buildings (GDAL)",
-            Detail = haveNationwideGpkg ? "buildings_ch.gpkg is used as is" : "the selection's buildings into one GeoPackage",
-            DiskBytes = wantBuildings && featureTiles.Count > 0 && !haveNationwideGpkg ? exportBytes * 3 : 0,
-            DiskPath = p.BuildingsDir,
-            Seconds = exportBytes / stats.GdalBytesPerSec + 10,
-            Skip = !c.Layers.HasFlag(Layers.Buildings) ? "buildings layer off" : !c.Gdal ? "needs GDAL"
-                 : featureTiles.Count == 0 ? "buildings already extracted for every tile"
-                 : haveNationwideGpkg ? "nationwide export already here" : null,
-            Run = r =>
-            {
-                var args = new List<string> { Path.Combine(p.Tools, "export_buildings.py"), "--out", BuildingsOut(p) };
-                if (bounds is { } b)
-                {
-                    args.Add("--bbox");
-                    args.AddRange(new[] { b.MinE, b.MinN, b.MaxE, b.MaxN }.Select(v => v.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)));
-                }
-                // always explicit: the script's own default is the repo's ressources/data, not the data location
-                if (haveNationwideZip)
-                    args.AddRange(["--src", NationwideBuildingsZip(p)]);
-                else
-                    foreach (var s in sheets)
-                        if (Directory.EnumerateFiles(p.BuildingsDir, $"swissbuildings3d_3_0_*_{s.Key}_2056_5728.gdb.zip")
-                                .OrderByDescending(f => f, StringComparer.Ordinal).FirstOrDefault() is { } zip)
-                        {
-                            args.Add("--src");
-                            args.Add(zip);
-                        }
-                return r.Python("export buildings", args, LineProgress.Source);
-            },
-        });
+        // No "export buildings" step any more (#537): the preprocessor reads the swissBUILDINGS3D
+        // FileGDB zips itself, so there is no GeoPackage to convert to first and no GDAL to need.
 
         // ---- processing ------------------------------------------------------------------------------
         int builtTotal = c.Local.Built.Count + toBuild.Count;
@@ -393,8 +362,18 @@ public static partial class Planner
                 }
                 if (wantBuildings)
                 {
+                    // A GeoPackage left by an older run (or the nationwide one) is still read; a
+                    // fresh region goes straight from the published sheet zips (#537).
                     string gpkg = File.Exists(NationwideBuildingsGpkg(p)) ? NationwideBuildingsGpkg(p) : BuildingsOut(p);
                     if (File.Exists(gpkg)) args.AddRange(["--buildings", gpkg]);
+                    else
+                        foreach (var sheet in sheets)
+                        {
+                            string zip = Directory.Exists(p.BuildingsDir)
+                                ? Directory.EnumerateFiles(p.BuildingsDir, $"swissbuildings3d_3_0_*_{sheet.Key}_*.gdb.zip").FirstOrDefault() ?? ""
+                                : "";
+                            if (zip.Length > 0) args.AddRange(["--buildings-gdb", zip]);
+                        }
                     if (File.Exists(p.GwrSqlite)) args.AddRange(["--gwr", p.GwrSqlite]);
                 }
                 var clock = Stopwatch.StartNew();

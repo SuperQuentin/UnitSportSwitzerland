@@ -98,15 +98,13 @@ if (Flag("--resume") || (scripted == false && state.Tiles.Count > 0))
     }
 
 var python = FindPython();
-bool gdal = python != null && Run(python, "-c", "import osgeo") == 0;
 Layers layers = state.Layers;
 if (Arg("--layers") is { } layerText) layers = ParseLayers(layerText);
-if (!gdal) layers &= ~(Layers.Buildings | Layers.Routes);
 
 List<Step> Plan() => Planner.Build(new SetupContext
 {
     Paths = paths, Country = country, Local = local, Selection = selection, Layers = layers,
-    Stats = stats, State = state, Python = python, Gdal = gdal,
+    Stats = stats, State = state, Python = python,
 });
 
 if (Arg("--snapshot") is { } snapshotPath)
@@ -205,7 +203,7 @@ await AnsiConsole.Progress()
             var run = new StepRun(new SetupContext
             {
                 Paths = paths, Country = country, Local = local, Selection = selection, Layers = layers,
-                Stats = stats, State = state, Python = python, Gdal = gdal,
+                Stats = stats, State = state, Python = python,
             }, new SpectreProgress(task, step.Title), step.Title, log, cts.Token);
             var clock = Stopwatch.StartNew();
             bool ok;
@@ -312,8 +310,6 @@ void ShowPlan(List<Step> steps)
     string rate = stats.DownloadProbedAt != null ? $"measured {stats.DownloadBytesPerSec / 1e6:N0} MB/s" : "assumed 40 MB/s (not measured)";
     AnsiConsole.MarkupLine($"[grey]Download at {rate}; processing on {Environment.ProcessorCount} cores"
                            + (stats.TerrainCoreSecPerTile != new Stats().TerrainCoreSecPerTile ? ", rates calibrated by earlier runs" : "") + ".[/]");
-    if (!gdal)
-        AnsiConsole.MarkupLine("[yellow]GDAL is not available to Python (python -c \"import osgeo\" fails): buildings and cycle routes are off. To install it: docs/notes/tools/gdal-setup.md[/]");
 
     // not enough room is the one failure worth catching before anything starts
     foreach (var group in running.Where(s => s.DiskBytes > 0 && s.DiskPath != null).GroupBy(s => Path.GetPathRoot(Path.GetFullPath(s.DiskPath!))))
@@ -427,9 +423,9 @@ Layers AskLayers(Layers current)
     var choices = new List<(Layers Layer, string Label)>
     {
         (Layers.Roads, $"Roads, rail, rivers, land cover, trees  [grey](swissTLM3D, {Bytes(country.Extras.GetValueOrDefault("swisstlm3d", 4_800_000_000))} once)[/]"),
-        (Layers.Buildings, gdal ? "Buildings  [grey](swissBUILDINGS3D, the sheets you touch; GDAL)[/]" : "Buildings  [red](needs GDAL — unavailable, see docs/notes/tools/gdal-setup.md)[/]"),
+        (Layers.Buildings, "Buildings  [grey](swissBUILDINGS3D, the sheets you touch)[/]"),
         (Layers.Cadastre, "Building use, age and storeys  [grey](GWR register)[/]"),
-        (Layers.Routes, gdal ? "Cycle and MTB route flags  [grey](ASTRA, ~90 MB; GDAL)[/]" : "Cycle routes  [red](needs GDAL — unavailable, see docs/notes/tools/gdal-setup.md)[/]"),
+        (Layers.Routes, "Cycle and MTB route flags  [grey](ASTRA, ~90 MB)[/]"),
         (Layers.Places, "Place index for the in-game search  [grey](needs the GWR register)[/]"),
         (Layers.Osm, "OpenStreetMap road attributes: one-way, lanes, sidewalks  [grey](Geofabrik, ~550 MB once; ODbL, needs roads)[/]"),
     };
@@ -440,12 +436,12 @@ Layers AskLayers(Layers current)
     foreach (var (layer, label) in choices)
     {
         prompt.AddChoice(label);
-        if (current.HasFlag(layer) && (gdal || layer is not (Layers.Buildings or Layers.Routes))) prompt.Select(label);
+        if (current.HasFlag(layer)) prompt.Select(label);
     }
     var picked = AnsiConsole.Prompt(prompt);
     var result = Layers.Terrain;
     foreach (var (layer, label) in choices)
-        if (picked.Contains(label) && (gdal || layer is not (Layers.Buildings or Layers.Routes))) result |= layer;
+        if (picked.Contains(label)) result |= layer;
     if (result.HasFlag(Layers.Places)) result |= Layers.Cadastre;
     return result;
 }

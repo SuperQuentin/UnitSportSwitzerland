@@ -12,7 +12,7 @@ macOS and Linux.
 | **.NET SDK 8** | 8.0.x | the game assembly (`net8.0`) |
 | **.NET SDK 9** | 9.0.x | `tools/TerrainPreprocessor` (`net9.0`). The 9 SDK builds the net8 projects too, so strictly it is the only SDK you need |
 | Python | 3.10+ | *optional*: `tools/swiss_data.py`, the data downloader (standard library only) |
-| GDAL (Python bindings) | any recent | *optional*: `tools/export_buildings.py` only. Cycle routes no longer need it (#537) |
+| GDAL (Python bindings) | any recent | *optional*, and no longer part of building a region (#537): only `tools/swiss_relief.py` uses it, to rebuild the embedded coarse heightmap |
 
 A .NET **runtime** is not enough: `dotnet --list-sdks` must list both an 8.x and a 9.x SDK.
 
@@ -129,7 +129,7 @@ python tools/swiss_data.py gwr --canton vs
 #    step 4, plus:  --places --gwr ressources/data/gwr/data.sqlite
 ```
 
-`--places` refuses to run without `--gwr`. Buildings also need GDAL and one more export step;
+`--places` refuses to run without `--gwr`. Buildings are read from their FileGDB zips directly;
 see *Add roads, land cover and buildings* in the README.
 
 Then run the game again. You spawn over Riddes.
