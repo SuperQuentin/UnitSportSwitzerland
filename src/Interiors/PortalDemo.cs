@@ -406,7 +406,8 @@ public partial class PortalDemo : Node3D
         }
         var main = layout.Entrances[0];
         layout.DoorX = main.DoorX; layout.DoorY = main.DoorY; layout.DoorZ = main.DoorZ;
-        layout.DoorOutX = main.DoorOutX; layout.DoorOutZ = main.DoorOutZ; layout.DoorWidth = h.DoorWidth;
+        layout.DoorOutX = main.DoorOutX; layout.DoorOutZ = main.DoorOutZ;
+        layout.DoorWidth = h.DoorWidth; layout.DoorHeight = h.DoorHeight;
         layout.EntryX = main.X;
 
         foreach (var side in new[] { Side.Left, Side.Right })
