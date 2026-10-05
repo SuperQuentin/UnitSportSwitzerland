@@ -436,6 +436,7 @@ Layers AskLayers(Layers current)
         (Layers.Cadastre, "Building use, age and storeys  [grey](GWR register)[/]"),
         (Layers.Routes, gdal ? "Cycle and MTB route flags  [grey](ASTRA, ~90 MB; GDAL)[/]" : "Cycle routes  [red](needs GDAL — unavailable, see docs/notes/tools/gdal-setup.md)[/]"),
         (Layers.Places, "Place index for the in-game search  [grey](needs the GWR register)[/]"),
+        (Layers.Fields, "Real farm fields  [grey](LWB land use per canton, geodienste.ch, ~1.1 GB once; OSM fills the gated cantons if downloaded)[/]"),
         (Layers.Osm, "OpenStreetMap road attributes: one-way, lanes, sidewalks  [grey](Geofabrik, ~550 MB once; ODbL, needs roads)[/]"),
     };
     var prompt = new MultiSelectionPrompt<string>()
@@ -467,10 +468,11 @@ static Layers ParseLayers(string text)
             "cadastre" or "gwr" => Layers.Cadastre,
             "routes" => Layers.Routes,
             "places" => Layers.Places | Layers.Cadastre,
+            "fields" => Layers.Fields,
             // never part of "all": tiles built with it fall under the ODbL (docs/notes/tools/osm-odbl-licence.md)
             "osm" => Layers.Osm | Layers.Roads,
-            "all" => Layers.Roads | Layers.Buildings | Layers.Cadastre | Layers.Routes | Layers.Places,
-            _ => throw new ArgumentException($"unknown layer '{part}' (terrain, roads, buildings, cadastre, routes, places, osm, all)"),
+            "all" => Layers.Roads | Layers.Buildings | Layers.Cadastre | Layers.Routes | Layers.Places | Layers.Fields,
+            _ => throw new ArgumentException($"unknown layer '{part}' (terrain, roads, buildings, cadastre, routes, places, fields, osm, all)"),
         };
     return result;
 }
@@ -548,7 +550,7 @@ static void PrintHelp()
           --tiles-file FILE            one "E-N" per line
           --resume                     the last selection and layers
         Layers:
-          --layers terrain,roads,buildings,cadastre,routes,places,osm|all
+          --layers terrain,roads,buildings,cadastre,routes,places,fields,osm|all
                                        (osm is optional and never implied by all)
         Folders:
           --data DIR                   source data instead of ressources/data (dataset subfolders inside)

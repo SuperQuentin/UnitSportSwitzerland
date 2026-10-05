@@ -23,6 +23,7 @@ public sealed class Paths
     public string GwrDir => Path.Combine(Data, "gwr");
     public string RoutesDir => Path.Combine(Data, "routes");
     public string OsmDir => Path.Combine(Data, "osm");
+    public string LwbDir => Path.Combine(Data, "lwb");
     /// <summary>swissBATHY3D lake zips (#298, <c>swiss_data.py swissbathy3d</c>); without them every bed is synthetic.</summary>
     public string BathyDir => Path.Combine(Data, "bathy3d");
 
