@@ -68,7 +68,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | retarder | ' ; / — | ok: stalk by hand (#438) | keep |
 | bus kneel / destination | K N / L3 — | ok: dash pokes (#438) | keep |
 | farm: lower / raise the implement or header (#494) | K / L3 | ok: the kneel dash poke, or L3 | **grip the linkage lever** on the right console |
-| farm: combine auger out / in, deliver at a co-op (#494) | N / X | ok: the destination dash poke, or X | **grip the auger joystick** on the console |
+| farm: combine auger out / in (over a parked or a driven tipper), deliver at a co-op (#494) | N / X | ok: the destination dash poke, or X | **grip the auger joystick** on the console |
+| farm: tip the tipping trailer's bin, delivering at a co-op (#494) | N / X (the same action, coupled to a tipper) | ok: the destination dash poke, or X | **grip the tipping valve lever** on the right console |
 | farm: couple an implement or tipping trailer (#494) | H / D-pad ← | ok: R stick ← | **on foot, grip the lower link** to hitch it |
 | farm: take a sack from a tank or trailer, on foot (#494) | E (hold / with Shift: 10) / Y (hold: 10) | ok: Y, hold for ten | **grip a sack** off the heap |
 | steamer whistle | H / D-pad ← | ok: R stick ←, or pull the cord (#438) | keep |

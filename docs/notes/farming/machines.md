@@ -39,6 +39,10 @@ radius, `SpinRadius`). Preview: `--avatars 3 out.png --cockpit --heavy 6|7 --sid
 - **Tipper's harvest** in its trailer code (`MachineLoad.FarmBits`, `TrailerCatalog.WithTank/TankOf`;
   `Clean` keeps it), so the driven train, the parked train and a dropped trailer carry it.
 - **Auger out** = door bit 8 (`Truck.AugerBit`, no cab door uses it).
+- **Tipper's bin tipped** = the same door bit on the tractor (`Truck.Tipping`: a tractor has no auger),
+  so it rides in the pose and parks with the train; the rig turns the bin (`HeavyParts.Tip`, its own
+  mesh built about its back edge, the heap inside it) up to `FarmMeshBuilder.TipAngle` (50°) in 3 s.
+  A rig rebuilt for a new load shows the first value it is given at once (`HeavyRig.Tipped`).
 - Tanks hold one crop; the fraction toward the next sack is the owner's only (`Tank.Partial`).
 
 ## Working (local driver's peer only, `FootPlayer.Farm.cs`)
@@ -53,10 +57,25 @@ radius, `SpinRadius`). Preview: `--avatars 3 out.png --cockpit --heavy 6|7 --sid
   is left on the field with a toast.
 - **Combine**: `MachineLoad.Add` into the tank; a field of another crop is not cut (peeked with
   `FarmWork.CellAt`); full, not cut.
-- **Auger** ({destination} / X): out, every 2 s it moves 8 sacks into a **parked** tipping trailer
-  whose body is under the spout (`FarmMeshBuilder.AugerSpout`), by claim + park (count even).
+- **Auger** ({destination} / X): out, every 2 s it moves 8 sacks into a tipping trailer whose bin is
+  under the spout (`FarmMeshBuilder.AugerSpout`):
+  - **parked**: by claim + park (count even);
+  - **driven by another player** alongside (`DrivenTipperAt`, `TipperBinHas` on the sections as drawn
+    here), both under 3 m/s (`AugerDrivenSpeed`): the trailer's load is its driver's trailer code, so
+    the combine's owner offers the batch through the server (`PassengerService.OfferAuger`, in
+    `PassengerService.Auger.cs`, like a passenger's door button). The server checks both players'
+    copies (a combine, a tractor with a tipper, slow, within 25 m) and passes it to the driver; the
+    driver's peer checks the spout over its own bin as it sees the combine (1.5 m margin for the
+    lag), takes what fits (`MachineLoad.Transfer`, one crop) into its code and answers; the server
+    passes the answer back clamped to the offer, and only then do the sacks leave the tank
+    (`AugerTaken`). One offer at a time (5 s timeout); a lost answer leaves them in the tank.
 - **Co-op**: stopped by a co-op (`FarmMarket.NearCoop`) with a load, the same key delivers it
-  (`FarmMarket.Deliver`; the tank empties when francs come back). Stub: never near one yet.
+  (`FarmMarket.Deliver`; the tank empties when francs come back). One delivery at a time
+  (`_deliverWait`, 10 s): a second press never sells the load twice.
+- **Tipping** ({destination} / X with a tipping trailer coupled, so no new key): stopped, the bin tips
+  up for 7 s (down again early if the tractor drives off). By a co-op that is the delivery: the load is
+  sold and the heap empties as the francs come back. Anywhere else nothing is poured (a toast: the
+  load stays in the trailer); empty, a toast. The hint at a co-op reads "TIP the trailer"; HUD `TIPPED`.
 - **On foot**: E at a parked tipper's body or the combine's tank side takes a sack
   (`ItemController.Give`), Shift+E or E held 0.6 s ten (claim + park the vehicle back).
 - Picker (admin online, `admin-only-spawning`): the tipper comes with `load` × 200 sacks of wheat.
@@ -67,7 +86,7 @@ radius, `SpinRadius`). Preview: `--avatars 3 out.png --cockpit --heavy 6|7 --sid
 |---|---|---|---|
 | couple implement / tipper | H | D-pad ← | R stick ← |
 | lower / raise | K | L3 (new pad binding of `kneel`) | the kneel dash poke, L3 |
-| auger / deliver | N (or G) | X | the destination dash poke, X |
+| auger / deliver (combine), tip the bin / deliver (tractor with a tipper) | N (or G) | X | the destination dash poke, X |
 | take a sack (on foot) | E, Shift+E / hold: 10 | Y, hold: 10 | Y, hold |
 
 Hints: `PlayerFeel` (deliver, take a sack), HUD `DOWN/UP`, `n/cap crop`, `AUGER`. Rows in
@@ -88,16 +107,22 @@ until it is 22 m away (#70): it can be driven through until then.
   codes and flags), each implement up and down driven ahead, full lock and reversed with the
   tractor's height within 8 cm, backed into each dropped one (stops, no climb), sweeping, seed,
   hay, the tank from a fake field, the auger into a parked tipper, a sack on foot, the parked
-  train. Shots: `test_output/494-*.png`.
+  train. Then at a stand-in co-op (`FarmMarket.StandIn`): the server refuses a load 200 m away, seed
+  and flour; the tipper tipped on the field (bin drawn up 50°, the pose bit, nothing poured, back
+  down); driven to the co-op and tipped: 60 sacks × 25 = 1,500 CHF into the pocket, emptied, a second
+  press sells nothing; the combine's 40 sacks the same (1,000 CHF). Shots: `test_output/494-*.png`.
 - `--truckcheck` includes both machines (0-24 km/h, brakes, swept width).
 - `tools/tractornetcheck.sh` (tier 2): B sees A's plough down (flags and rig), the parked tractor
-  keep it, 77 sacks in A's tipper (code and heap), the parked train keep them, A's combine's 50 sacks.
+  keep it, 77 sacks in A's tipper (code and heap), the parked train keep them, A's combine's 50 sacks; then B tows an empty tipper, A's combine alongside augers
+  30 sacks of wheat into it (A's tank 0, B's trailer 30 and its heap, each seen by the other), A is
+  refused a delivery claimed at the co-op's door from afar, B is refused seed, B drives to the
+  stand-in co-op (`--farmcoop E,N` given to the server and both clients) and tips: the server logs
+  750 CHF paid, B's pocket +750, A sees B's bin up and the trailer empty.
 - Unit: `MachineLoadTests`.
 
 ## Not done
 
-- Unloading into a trailer **another player is driving** (only parked trailers); tipping the
-  trailer; a header trailer; the mower drawn offset; a real CVT or hydrostat model; PTO.
+- Unloading on the move is allowed (both under 3 m/s) but only checked standing; a header trailer; the mower drawn offset; a real CVT or hydrostat model; PTO.
 - Seed, hay and grain items have no `ItemDefs` yet (the farming core adds them): until then the pack
   stays empty and the check counts what the machines handed over.
 - A lowered implement drags on any ground, tarmac too; no slope check of the height regression.
