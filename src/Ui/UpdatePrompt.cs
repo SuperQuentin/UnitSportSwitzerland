@@ -47,7 +47,8 @@ public partial class UpdatePrompt : Node
     /// <summary>Starts the check from the title screen (once per session), or offers what it already found.</summary>
     public static UpdatePrompt? Attach(TitleScreen title)
     {
-        if (DisplayServer.GetName() == "headless" || CurrentVersion.Length == 0) return null;
+        // a phone cannot patch its own APK, and the releases page would offer it desktop builds (#63)
+        if (DisplayServer.GetName() == "headless" || CurrentVersion.Length == 0 || Platform.IsMobile) return null;
         var p = new UpdatePrompt { Name = "UpdatePrompt", _title = title };
         title.AddChild(p);
         if (!_checked)

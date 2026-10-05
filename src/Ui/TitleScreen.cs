@@ -50,8 +50,9 @@ public partial class TitleScreen : Screen
         Entry(column, "Map", () => Shell.Push(MapScreen.Create()));
         Entry(column, "Settings", () => Shell.Push(SettingsScreen.Create()));
         // VR (#186): a restart either way, after a confirmation
-        Entry(column, XR.XrSession.Active ? "Leave VR" : "Play in VR",
-            () => SettingsScreen.AskVr(this, Shell, !XR.XrSession.Active));
+        if (Platform.CanSpawnProcesses) // a restart with OpenXR (#63)
+            Entry(column, XR.XrSession.Active ? "Leave VR" : "Play in VR",
+                () => SettingsScreen.AskVr(this, Shell, !XR.XrSession.Active));
         Entry(column, "Controls", () => Shell.ShowControls());
         column.AddChild(UiKit.Spacer(8));
         Entry(column, "Quit", () => Shell.Quit(), dim: true);

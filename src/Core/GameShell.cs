@@ -118,7 +118,7 @@ public partial class GameShell : Node
         // "VR mode" saved on, launched from the desktop: start again with OpenXR (once: the
         // relaunch carries --vr, and a run with --vr never relaunches)
         if (!Direct && !vr && GameSettings.Current.VrMode && !CmdArgs.Has("--vr") && !CmdArgs.Has("--xrsim")
-            && DisplayServer.GetName() != "headless" && XR.XrSession.Relaunch(true))
+            && DisplayServer.GetName() != "headless" && Platform.CanSpawnProcesses && XR.XrSession.Relaunch(true))
         {
             Quit();
             return;

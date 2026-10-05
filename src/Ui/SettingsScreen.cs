@@ -63,7 +63,8 @@ public partial class SettingsScreen : Screen
             SizeRow(rows, "Window size", WindowSizes(), s.WindowWidth, s.WindowHeight, "Keep current",
                 (w, h) => (GameSettings.Current.WindowWidth, GameSettings.Current.WindowHeight) = (w, h));
             ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
-            var styles = Styles.StyleKit.MenuStyles;
+            // Realistic+ needs Forward+ through a relaunch, which a phone cannot do (#63)
+            var styles = Styles.StyleKit.MenuStyles.Where(v => Platform.CanSpawnProcesses || !Styles.StyleKit.NeedsForwardPlus(v)).ToArray();
             var styleOption = UiKit.OptionRow(rows, "Visual style", styles.Select(Styles.StyleKit.Label).ToArray(),
                 Math.Max(0, Array.IndexOf(styles, s.VisualStyle)),
                 i =>
@@ -80,9 +81,12 @@ public partial class SettingsScreen : Screen
             UiKit.ToggleRow(rows, "VSync", s.VSync, on => GameSettings.Current.VSync = on);
             UiKit.ToggleRow(rows, "Distance fog", s.Fog, on => GameSettings.Current.Fog = on, "Off by default: the far horizon is the point");
             UiKit.ToggleRow(rows, "Speed lines", s.SpeedLines, on => GameSettings.Current.SpeedLines = on, "Streaks at the screen edge at speed");
-            rows.AddChild(UiKit.Spacer(6));
-            rows.AddChild(UiKit.Section("Virtual reality"));
-            VrRow(rows);
+            if (Platform.CanSpawnProcesses) // VR is a relaunch with OpenXR (#63)
+            {
+                rows.AddChild(UiKit.Spacer(6));
+                rows.AddChild(UiKit.Section("Virtual reality"));
+                VrRow(rows);
+            }
         });
 
         Tab("Audio", rows =>
@@ -166,7 +170,8 @@ public partial class SettingsScreen : Screen
         });
 
         // a steering wheel and its pedals (#68): its own tab, it is a page of bindings
-        Tab("Wheel", rows => rows.AddChild(new WheelPanel { Name = "WheelPanel" }));
+        if (!Platform.IsMobile) // SDL, desktop only (#63)
+            Tab("Wheel", rows => rows.AddChild(new WheelPanel { Name = "WheelPanel" }));
 
         Tab("World", rows =>
         {

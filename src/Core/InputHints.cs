@@ -169,7 +169,8 @@ public static class InputHints
         }
         if (physical is >= Key.F1 and <= Key.F12) return OS.GetKeycodeString(physical);
 
-        var label = DisplayServer.GetName() == "headless" ? Key.None : DisplayServer.KeyboardGetLabelFromPhysical(physical);
+        // only desktop display servers know the layout; Android errors on every call (#63)
+        var label = DisplayServer.GetName() is "headless" or "Android" ? Key.None : DisplayServer.KeyboardGetLabelFromPhysical(physical);
         string name = OS.GetKeycodeString(label != Key.None ? label : physical);
         return name.Length == 1 ? name.ToUpperInvariant() : name;
     }

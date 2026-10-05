@@ -52,6 +52,10 @@ public static class TerrainPaths
             GD.PushWarning($"[paths] {ChunksEnvVar}={envDir} does not exist; falling back");
         }
 
+        // res:// is inside the APK there, where System.IO cannot read; user:// is a real folder. It
+        // stays empty (#63: no terrain ships in the APK) and the client streams from the server.
+        if (OS.GetName() == "Android") return (ProjectSettings.GlobalizePath("user://terrain_chunks"), "Android app storage");
+
         string exeDir = Path.GetDirectoryName(OS.GetExecutablePath()) ?? ".";
         foreach (string dir in new[] { exeDir, ProjectSettings.GlobalizePath("res://") })
         {

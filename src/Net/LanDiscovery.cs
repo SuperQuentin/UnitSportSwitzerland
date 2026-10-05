@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -53,6 +54,7 @@ public sealed class LanDiscovery : IDisposable
     {
         if (_cts != null) return;
         _cts = new CancellationTokenSource();
+        Core.AndroidBridge.AcquireMulticast(); // else Android drops the mDNS answers (#63)
         foreach (var address in LocalIPv4())
         {
             try
@@ -77,6 +79,7 @@ public sealed class LanDiscovery : IDisposable
     {
         _cts?.Cancel();
         _cts = null;
+        Core.AndroidBridge.ReleaseMulticast();
         foreach (var s in _sockets) s.Dispose();
         _sockets.Clear();
         _servers.Clear();
@@ -104,14 +107,27 @@ public sealed class LanDiscovery : IDisposable
         return changed;
     }
 
-    private static IEnumerable<IPAddress> LocalIPv4() =>
-        NetworkInterface.GetAllNetworkInterfaces()
-            .Where(n => n.OperationalStatus == OperationalStatus.Up && n.SupportsMulticast
-                        && n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-            .SelectMany(n => n.GetIPProperties().UnicastAddresses)
-            .Select(u => u.Address)
-            .Where(a => a.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(a))
-            .Distinct();
+    private static IEnumerable<IPAddress> LocalIPv4()
+    {
+        // Android can refuse interface enumeration (#63): no discovery then, never an exception
+        // out of the multiplayer screen
+        try
+        {
+            return NetworkInterface.GetAllNetworkInterfaces()
+                .Where(n => n.OperationalStatus == OperationalStatus.Up && n.SupportsMulticast
+                            && n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                .SelectMany(n => n.GetIPProperties().UnicastAddresses)
+                .Select(u => u.Address)
+                .Where(a => a.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(a))
+                .Distinct()
+                .ToList();
+        }
+        catch (Exception e) when (e is NetworkInformationException or PlatformNotSupportedException or System.UnauthorizedAccessException)
+        {
+            Godot.GD.PushWarning($"[discovery] cannot list network interfaces: {e.Message}");
+            return Array.Empty<IPAddress>();
+        }
+    }
 
     private async Task QueryLoop(CancellationToken token)
     {
