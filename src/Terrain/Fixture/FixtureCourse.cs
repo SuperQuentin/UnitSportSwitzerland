@@ -8,7 +8,8 @@ namespace UnitSport.Terrain.Fixture;
 /// run. Coordinates are metres from the start, X east, Y north; Z is the altitude.
 /// <see cref="FixtureChunkSource"/> turns one into tiles. Each course targets a known failure:
 /// <list type="bullet">
-/// <item><c>flat</c>: no road, flat ground (UI, physics, network tests);</item>
+/// <item><c>flat</c>: no road, flat ground (UI, physics, network tests), with three fields, a paved
+/// strip and a 15 % ridge east of the spawn (#494, the farm machines);</item>
 /// <item><c>straight</c>: 3 km of straight 6 m road, flat: top speed, overtaking;</item>
 /// <item><c>hairpin</c>: a fast downhill with six 15 m-radius hairpins, 7 % down;</item>
 /// <item><c>narrow</c>: a winding 4 m road with a trunk every 5 m on both edges: no verge to use;</item>
@@ -57,17 +58,49 @@ public sealed class FixtureCourse
 
     /// <summary>
     /// The flat course's three fields, clear of the spawn and inside its tiles: a wheat field east
-    /// (18 x 18 cells), a potato field north of it, a meadow west.
+    /// (18 x 18 cells), a potato field north of it, a meadow west. Further east, clear of all three
+    /// (#494, <c>--tractorcheck</c>): a 12 m strip of paving running north-south
+    /// (<see cref="PavedFrom"/>), then a ridge across the whole tile (<see cref="RidgeHeight"/>):
+    /// up at <see cref="RidgeGrade"/>, a plateau, down again.
     /// </summary>
     private static FixtureCourse Flat()
     {
-        var c = new FixtureCourse { Name = "flat" };
+        var c = new FixtureCourse
+        {
+            Name = "flat",
+            Terrain = (x, _) => FlatHeight + RidgeHeight(x),
+            Cover = (x, _) => x >= PavedFrom && x < PavedFrom + PavedWidth ? CoverClass.PavedArea : CoverClass.Open,
+            // the spawn's tiles plus the strip and the ridge, whatever the start
+            Extent = (-100, -160, RidgeFrom + 2 * RidgeSlope + RidgePlateau + 60, 160),
+        };
         c.Fields.Add((0xF1E1D001, CropKind.Wheat, Box(24, -36, 96, 36)));
         c.Fields.Add((0xF1E1D002, CropKind.Potato, Box(24, 44, 72, 92)));
         c.Fields.Add((0xF1E1D003, CropKind.Meadow, Box(-96, -36, -24, 36)));
         return c;
 
         static (double, double)[] Box(double x0, double y0, double x1, double y1) => [(x0, y0), (x1, y0), (x1, y1), (x0, y1)];
+    }
+
+    /// <summary>The flat course's paved strip: from this x east, metres from the start, and its width.</summary>
+    public const double PavedFrom = 130, PavedWidth = 12;
+
+    /// <summary>The flat course's ridge: where it starts rising (x, m from the start), its grade, the lengths of its slopes and plateau.</summary>
+    public const double RidgeFrom = 170, RidgeGrade = 0.15, RidgeSlope = 50, RidgePlateau = 30;
+
+    /// <summary>
+    /// The ridge's height over the flat at <paramref name="x"/>: up <see cref="RidgeSlope"/> m at
+    /// <see cref="RidgeGrade"/>, <see cref="RidgePlateau"/> m level, down as far; each change of
+    /// grade eased over 10 m (no kink to throw a vehicle).
+    /// </summary>
+    public static double RidgeHeight(double x)
+    {
+        const double ease = 10;
+        double a = RidgeFrom, b = a + RidgeSlope, c = b + RidgePlateau, d = c + RidgeSlope;
+        return RidgeGrade * (Eased(x, a - ease / 2) - Eased(x, b - ease / 2) - Eased(x, c - ease / 2) + Eased(x, d - ease / 2));
+
+        // the integral of a grade going 0 -> 1 linearly over [from, from + ease], then held
+        static double Eased(double x, double from) =>
+            x <= from ? 0 : x < from + ease ? (x - from) * (x - from) / (2 * ease) : ease / 2 + (x - from - ease);
     }
 
     public static FixtureCourse? Create(string name) => name switch

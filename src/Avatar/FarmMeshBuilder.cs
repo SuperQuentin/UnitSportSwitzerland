@@ -411,14 +411,16 @@ public static class FarmMeshBuilder
             }
             case TrailerBody.Mower:
             {
-                // the cutter bed across, its discs, the guard over them on its frame
-                lift.Box(new Vector3(0, 0.08f, Z(spec.WorkAt)), new Vector3(s.Width, 0.12f, 0.5f), Steel);
+                // the cutter bed across, its discs, the guard over them, out to the right on the arm
+                // from the headstock (spec.WorkOffset)
+                float ox = spec.WorkOffset;
+                lift.Box(new Vector3(ox, 0.08f, Z(spec.WorkAt)), new Vector3(s.Width, 0.12f, 0.5f), Steel);
                 for (int i = 0; i < 7; i++)
-                    lift.Tube(new Vector3(-hw + 0.25f + i * (s.Width - 0.5f) / 6f, 0.14f, Z(spec.WorkAt)),
-                        new Vector3(-hw + 0.25f + i * (s.Width - 0.5f) / 6f, 0.2f, Z(spec.WorkAt)), 0.18f, Trim, 8);
-                lift.Box(new Vector3(0, 0.45f, Z(spec.WorkAt)), new Vector3(s.Width - 0.05f, 0.5f, 0.75f), spec.Paint);
-                lift.Box(new Vector3(0, 0.72f, Z(spec.WorkAt)), new Vector3(s.Width - 0.2f, 0.05f, 0.6f), spec.Accent);
-                lift.Tube(new Vector3(0, 0.75f, Z(0.15f)), new Vector3(0, 0.7f, Z(spec.WorkAt - 0.3f)), 0.06f, spec.Frame, 5);
+                    lift.Tube(new Vector3(ox - hw + 0.25f + i * (s.Width - 0.5f) / 6f, 0.14f, Z(spec.WorkAt)),
+                        new Vector3(ox - hw + 0.25f + i * (s.Width - 0.5f) / 6f, 0.2f, Z(spec.WorkAt)), 0.18f, Trim, 8);
+                lift.Box(new Vector3(ox, 0.45f, Z(spec.WorkAt)), new Vector3(s.Width - 0.05f, 0.5f, 0.75f), spec.Paint);
+                lift.Box(new Vector3(ox, 0.72f, Z(spec.WorkAt)), new Vector3(s.Width - 0.2f, 0.05f, 0.6f), spec.Accent);
+                lift.Tube(new Vector3(0, 0.75f, Z(0.15f)), new Vector3(ox - hw + 0.4f, 0.7f, Z(spec.WorkAt - 0.3f)), 0.06f, spec.Frame, 5);
                 break;
             }
             case TrailerBody.Tipper:
