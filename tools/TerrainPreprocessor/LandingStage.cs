@@ -134,7 +134,7 @@ public static class LandingStage
     }
 
     /// <summary>The bed and the still water from the built tiles, nearest vertex (1 m), decoded on demand.</summary>
-    private sealed class TileSampler : IShoreSampler
+    internal sealed class TileSampler : IShoreSampler
     {
         private readonly string _dir;
         private readonly HashSet<TileId> _tiles;
