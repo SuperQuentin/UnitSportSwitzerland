@@ -12,6 +12,12 @@
   throttle/brake/`clutch` is the max of the bindings and the pedal; `WheelHandbrake` (lever or a
   button bound to `handbrake`) ORs into the car's handbrake. Wheel buttons are raised as
   `InputEventAction`s, so a bound button is that action everywhere a key is.
+- **On foot only** (`FootPlayer`, `_ride == null && RidingWith == 0`): `WheelLookRate` turns the view
+  (±90° = a full right stick, 5% centre deadzone) and `WheelWalk` (brake − throttle) walks back/forward.
+  Mounted or seated, the wheel and pedals never touch the view. **Pedals turning the view** means Godot
+  is reading the wheel as a pad: it was not claimed, or its Godot copy was not matched (the log prints
+  `[wheel] Godot has no joypad matching ...` with every Godot pad's name and GUID). A saved `Device`
+  that is not plugged in no longer blocks claiming the wheel that is.
 - **Direct steering** (`Car.Step`, `Truck.Step`): with a wheel angle the road wheels are
   `−angle / ratio` clamped to `MaxSteer`, and the keyboard helpers are skipped — rack easing,
   speed-scaled lock and the Game counter-steer assist. Game grip, power and the yaw catch past 35°

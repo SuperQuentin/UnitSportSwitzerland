@@ -28,6 +28,12 @@ namespace UnitSport.Player;
 /// </para>
 ///
 /// <para>
+/// <b>Folders</b> (#410): a tab can fold its cards into folders — the motorbikes by brand, then by
+/// model when a model comes in several variants (Honda › Africa Twin › 28 bikes). A folder card opens
+/// on a click (or A / Ride once selected); a Back card, Backspace or Esc / (B) go up a level.
+/// </para>
+///
+/// <para>
 /// It registers with <see cref="UiFocus"/> while open. That is not about text: <see cref="FootPlayer"/>
 /// reads physical keys every frame, so without it the 1–9 shortcuts would arrive at the same
 /// time as W and you would ride away while choosing.
@@ -50,12 +56,36 @@ public partial class RideUi : CanvasLayer
         public TextureRect Thumb = null!;
         public Label Badge = null!;
         public StyleBox Normal = null!, Hot = null!, Picked = null!;
+        public Label Name = null!;
+        /// <summary>A folder card: what it opens. Its <see cref="Kind"/> means nothing.</summary>
+        public Folder? Opens;
+        /// <summary>The tab's "up a level" card.</summary>
+        public bool IsBack;
+        /// <summary>The folder this card is shown in.</summary>
+        public Folder In = null!;
+    }
+
+    private sealed class Folder
+    {
+        public required string Name;
+        public Folder? Parent;
+        /// <summary>The cards shown inside, in order: rides and folder cards.</summary>
+        public readonly List<Card> Items = new();
+        /// <summary>Every ride under it, at any depth.</summary>
+        public readonly List<Card> Rides = new();
+        /// <summary>This folder's own card in its parent (null for a tab's root).</summary>
+        public Card? Card;
     }
 
     private sealed class Tab
     {
         public required string Name;
+        /// <summary>Every ride on the tab, whatever folder it is in.</summary>
         public required List<Card> Cards;
+        public Folder Root = null!, Level = null!;
+        /// <summary>The folder cards and the Back card.</summary>
+        public readonly List<Card> Extra = new();
+        public Card Back = null!;
         public Button Button = null!;
         public GridContainer Grid = null!;
         public ScrollContainer Scroll = null!;
@@ -190,8 +220,13 @@ public partial class RideUi : CanvasLayer
 
         AddTab(bar, pages, "Cars", CarCatalog.All.Select(c => NewCard(c.Kind, c.Label, c.Blurb, true,
             $"{c.Kind}|{c}", () => Rideable.Create(c.Kind)?.BuildParkedVisual(0))).ToList());
-        AddTab(bar, pages, "Motorbikes", MotorbikeCatalog.All.Select(b => NewCard(b.Kind, b.Label, b.Blurb, true,
-            $"{b.Kind}|{b}", () => Rideable.Create(b.Kind)?.BuildParkedVisual(0))).ToList());
+        // brand folders, then a model folder where a model comes in several variants (#410)
+        var family = MotorbikeCatalog.All.Where(b => b.Family != "").GroupBy(b => (b.Brand, b.Family)).ToDictionary(g => g.Key, g => g.Count());
+        AddTab(bar, pages, "Motorbikes", MotorbikeCatalog.All.Select(b => NewCard(b.Kind, b.Label, b.Blurb + Motorbike.WheelieHint, true,
+            $"{b.Kind}|{b}", () => Rideable.Create(b.Kind)?.BuildParkedVisual(0))).ToList(),
+            card => MotorbikeCatalog.For(card.Kind) is { } b && b.Brand != ""
+                ? family.GetValueOrDefault((b.Brand, b.Family)) > 1 ? new[] { b.Brand, b.Family } : new[] { b.Brand }
+                : Array.Empty<string>());
         AddTab(bar, pages, "Trucks and buses", HeavyCatalog.All.Select(h => NewCard(h.Kind, h.Label,
             h.Blurb + (h.Look.Operator.Length > 0 ? $" ({h.Look.Operator} colours)" : ""), true,
             $"{h.Kind}|{h}", () => HeavyRig.Create(h, 0, 0.5f))).ToList());
@@ -213,9 +248,11 @@ public partial class RideUi : CanvasLayer
             $"Trailer{i}|{t}", () => HeavyRig.CreateTrailer(t, 0, 0.5f))).ToList());
     }
 
-    private void AddTab(HBoxContainer bar, Control pages, string name, List<Card> cards)
+    /// <param name="path">The folders a card goes in, outermost first; null or empty for none.</param>
+    private void AddTab(HBoxContainer bar, Control pages, string name, List<Card> cards, Func<Card, string[]>? path = null)
     {
         var tab = new Tab { Name = name, Cards = cards };
+        tab.Root = tab.Level = new Folder { Name = name };
         int index = _tabs.Count;
         tab.Button = TabButton($"{name}  {cards.Count}");
         tab.Button.Pressed += () => SelectTab(index);
@@ -232,12 +269,100 @@ public partial class RideUi : CanvasLayer
         tab.Grid.AddThemeConstantOverride("h_separation", (int)Gap);
         tab.Grid.AddThemeConstantOverride("v_separation", (int)Gap);
         tab.Scroll.AddChild(UiKit.Margin(tab.Grid, 4, 4, 10, 4));   // room for the focus outline, the hover pop and the scrollbar
+        tab.Back = new Card { Kind = RideKind.OnFoot, Label = "‹ Back", Blurb = "", Vehicle = false, ThumbKey = "", Build = () => null, IsBack = true, In = tab.Root };
+        BuildCard(tab.Back);
+        tab.Grid.AddChild(tab.Back.Button);
+        tab.Extra.Add(tab.Back);
+        // depth first, so each level's cards keep their order among the grid's children; a level is
+        // shown by hiding everything else (ShowLevel)
         foreach (var card in cards)
         {
+            var folder = tab.Root;
+            folder.Rides.Add(card);
+            foreach (var step in path?.Invoke(card) ?? Array.Empty<string>())
+            {
+                var inner = folder.Items.FirstOrDefault(c => c.Opens?.Name == step)?.Opens;
+                if (inner == null)
+                {
+                    inner = new Folder { Name = step, Parent = folder };
+                    // the folder wears its first ride's thumbnail
+                    inner.Card = new Card { Kind = card.Kind, Label = step, Blurb = "", Vehicle = card.Vehicle, ThumbKey = card.ThumbKey, Build = card.Build, Opens = inner, In = folder };
+                    folder.Items.Add(inner.Card);
+                    BuildCard(inner.Card);
+                    tab.Grid.AddChild(inner.Card.Button);
+                    tab.Extra.Add(inner.Card);
+                }
+                folder = inner;
+                folder.Rides.Add(card);
+            }
+            card.In = folder;
+            folder.Items.Add(card);
             BuildCard(card);
             tab.Grid.AddChild(card.Button);
         }
+        foreach (var c in tab.Extra)
+            if (c.Opens is { } f)
+            {
+                int folders = f.Items.Count(i => i.Opens != null);
+                c.Blurb = folders > 0 && folders == f.Items.Count
+                    ? $"{f.Name}: {folders} models, {f.Rides.Count} in all. Open it to choose."
+                    : $"{f.Name}: {f.Rides.Count} to choose from. Open it to see them.";
+            }
         _tabs.Add(tab);
+        ShowLevel(tab, tab.Root);
+    }
+
+    /// <summary>Shows one folder's cards on the tab (and Back, below the root); hides the rest.</summary>
+    private static void ShowLevel(Tab tab, Folder folder)
+    {
+        tab.Level = folder;
+        foreach (var c in tab.Cards) c.Button.Visible = c.In == folder;
+        foreach (var c in tab.Extra) c.Button.Visible = c.IsBack ? folder.Parent != null : c.In == folder;
+        tab.Back.Name.Text = folder.Parent == null ? "‹ Back" : $"‹ Back to {folder.Parent.Name}";
+        tab.Back.Blurb = folder.Parent == null ? "" : $"Up to {folder.Parent.Name}.";
+    }
+
+    /// <summary>The cards on show, in order, without Back.</summary>
+    private static IEnumerable<Card> Shown(Tab tab) => tab.Level.Items;
+
+    /// <summary>A click on a folder or Back, A on a pad, Ride, a number key: open, go up, or ride.</summary>
+    private void Activate(Card card)
+    {
+        var tab = _tabs[_tab];
+        if (card.IsBack) { Up(); return; }
+        if (card.Opens is { } folder)
+        {
+            ShowLevel(tab, folder);
+            var first = folder.Items.FirstOrDefault(c => c.Opens == null) ?? folder.Items.FirstOrDefault();
+            if (first != null) Select(first);
+            if (PlayerInput.LastDevice == InputDevice.Gamepad) PlayerInput.FocusFirst(tab.Scroll);
+            tab.Scroll.ScrollVertical = 0;
+            return;
+        }
+        Select(card);
+        Choose(card.Kind);
+    }
+
+    /// <summary>Up a level; false at a tab's root.</summary>
+    private bool Up()
+    {
+        var tab = _tabs[_tab];
+        if (tab.Level.Parent is not { } parent) return false;
+        var from = tab.Level.Card;
+        ShowLevel(tab, parent);
+        if (from != null)
+        {
+            Select(from);
+            if (PlayerInput.LastDevice == InputDevice.Gamepad) from.Button.GrabFocus();
+        }
+        return true;
+    }
+
+    /// <summary>Opens the folder a ride is in and selects it.</summary>
+    private void Reveal(Tab tab, Card card)
+    {
+        ShowLevel(tab, card.In);
+        Select(card);
     }
 
     private static Button TabButton(string text)
@@ -298,17 +423,20 @@ public partial class RideUi : CanvasLayer
         name.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
         name.CustomMinimumSize = new Vector2(ThumbW, 0);
         inside.AddChild(name);
+        card.Name = name;
         card.Badge = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextFaint);
         inside.AddChild(card.Badge);
 
-        b.Pressed += () => { Select(card); Choose(card.Kind); };
+        b.Pressed += () => Activate(card);
         b.GuiInput += e =>
         {
             if (e is not InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } mb) return;
+            // a folder (or Back) opens on one click: there is nothing to set before going in
+            if (card.Opens != null || card.IsBack) { Activate(card); return; }
             Select(card);
             if (mb.DoubleClick) Choose(card.Kind);
         };
-        b.FocusEntered += () => Select(card);
+        b.FocusEntered += () => { if (!card.IsBack) Select(card); };
         // hover only pops the card; it never changes the selection or the stage
         b.MouseEntered += () => b.CreateTween().TweenProperty(b, "scale", Vector2.One * 1.04f, 0.12f)
             .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.Out);
@@ -381,7 +509,7 @@ public partial class RideUi : CanvasLayer
         _status = UiKit.Text("", UiTheme.FontSmall, UiTheme.Bad, wrap: true);
         side.AddChild(_status);
         _go = UiKit.Button("Ride", primary: true);
-        _go.Pressed += () => { if (_selected != null) Choose(_selected.Kind); };
+        _go.Pressed += () => { if (_selected != null) Activate(_selected); };
         side.AddChild(_go);
     }
 
@@ -417,11 +545,10 @@ public partial class RideUi : CanvasLayer
         var tab = _tabs[_tab];
         _setupBox.Visible = tab.Name == "Cars";
         _loadBox.Visible = tab.Name is "Trucks and buses" or "Trailers";
-        _go.Text = tab.Name == "Trailers" ? "Couple / leave ahead" : "Ride";
         _status.Text = "";
         if (!IsOpen) return;   // the stage and the thumbnails are drawn only while the menu is up
         RequestThumbs(tab);
-        if (tab.Cards.Count > 0) Select(tab.Cards[0]);
+        if (Shown(tab).FirstOrDefault() is { } first) Select(first);
         // a pad drives the cards by focus; a mouse by pointing, so focus would point at the first card unasked
         if (PlayerInput.LastDevice == InputDevice.Gamepad) PlayerInput.FocusFirst(tab.Scroll);
     }
@@ -429,10 +556,11 @@ public partial class RideUi : CanvasLayer
     /// <summary>This tab's thumbnails, ahead of every other tab's; then the rest of the roster, in the background.</summary>
     private void RequestThumbs(Tab first)
     {
-        foreach (var card in first.Cards.AsEnumerable().Reverse()) RequestThumb(card, first: true);
+        foreach (var card in Shown(first).Reverse()) RequestThumb(card, first: true);
+        foreach (var card in first.Cards) RequestThumb(card, first: false);
         foreach (var tab in _tabs)
             if (tab != first)
-                foreach (var card in tab.Cards) RequestThumb(card, first: false);
+                foreach (var card in tab.Cards.Concat(tab.Extra.Where(c => !c.IsBack))) RequestThumb(card, first: false);
     }
 
     private void RequestThumb(Card card, bool first)
@@ -454,8 +582,8 @@ public partial class RideUi : CanvasLayer
         bool pad = InputHints.Pad;
         _hint.Text = InputHints.Format(pad
             ? $"{InputHints.Button(JoyButton.LeftShoulder)} / {InputHints.Button(JoyButton.RightShoulder)} switch tabs · "
-              + "{ui_accept} ride · {ride_menu} / {ui_cancel} closes. Vehicles stay where you get off ({interact_mount}); {interact_mount} next to one gets back in."
-            : "Tab / Shift+Tab or click a tab · click a card to select it, then Ride (or double-click, or 1–9) · drag the preview to turn it · {ride_menu} / Esc closes. "
+              + "{ui_accept} ride or open a folder · {ui_cancel} up a folder, else closes · {ride_menu} closes. Vehicles stay where you get off ({interact_mount}); {interact_mount} next to one gets back in."
+            : "Tab / Shift+Tab or click a tab · click a card to select it, then Ride (or double-click, or 1–9); a folder opens on a click, Backspace goes back · drag the preview to turn it · {ride_menu} / Esc closes. "
               + "Vehicles stay where you get off ({interact_mount}); {interact_mount} next to one gets back in.");
 
         bool locked = !Permissions.CanSpawnVehicles;
@@ -475,6 +603,16 @@ public partial class RideUi : CanvasLayer
                 card.Badge.Text = here ? "● Riding now" : card.Vehicle && locked ? "Admin only" : "";
                 card.Badge.AddThemeColorOverride("font_color", here ? UiTheme.Amber : UiTheme.TextFaint);
             }
+        foreach (var tab in _tabs)
+            foreach (var card in tab.Extra)
+                if (card.Opens is { } folder)
+                {
+                    bool here = folder.Rides.Any(c => c.Kind == current);
+                    card.Button.Disabled = locked && folder.Rides.All(c => c.Vehicle);
+                    card.Button.Modulate = card.Button.Disabled ? new Color(1, 1, 1, 0.45f) : Colors.White;
+                    card.Badge.Text = here ? $"● Riding one · {folder.Rides.Count} ›" : $"{folder.Rides.Count} ›";
+                    card.Badge.AddThemeColorOverride("font_color", here ? UiTheme.Amber : UiTheme.TextFaint);
+                }
         _current.Text = $"Now: {currentName}";
         if (_shown != null) ShowText(_shown);
     }
@@ -524,6 +662,7 @@ public partial class RideUi : CanvasLayer
         _name.Text = card.Label;
         _blurb.Text = InputHints.Format(card.Blurb);
         _go.Disabled = card.Button.Disabled;
+        _go.Text = card.Opens != null ? "Open" : _tabs[_tab].Name == "Trailers" ? "Couple / leave ahead" : "Ride";
     }
 
     public override void _Process(double delta)
@@ -622,7 +761,7 @@ public partial class RideUi : CanvasLayer
         var current = ActivePlayer?.Invoke()?.Ride ?? RideKind.OnFoot;
         int tab = _tabs.FindIndex(t => t.Cards.Any(c => c.Kind == current));
         SelectTab(tab >= 0 ? tab : _tab);
-        if (tab >= 0) Select(_tabs[tab].Cards.First(c => c.Kind == current));
+        if (tab >= 0) Reveal(_tabs[tab], _tabs[tab].Cards.First(c => c.Kind == current));
         ApplyShotArgs();
     }
 
@@ -632,7 +771,7 @@ public partial class RideUi : CanvasLayer
         if (CmdArgs.Int("--ridemenu") is not int tab) return;
         SelectTab(tab);
         if (CmdArgs.Int("--ridemenu", 2) is int card && card < _tabs[_tab].Cards.Count)
-            Select(_tabs[_tab].Cards[card]);
+            Reveal(_tabs[_tab], _tabs[_tab].Cards[card]);
     }
 
     public void Close()
@@ -670,6 +809,13 @@ public partial class RideUi : CanvasLayer
         // Y / B / Start have to close this the way E and Esc do.
         if (!IsOpen || !@event.IsPressed() || @event.IsEcho()) return;
 
+        // Esc / (B) and Backspace go up a folder first; from a tab's root Esc closes
+        bool back = @event.IsActionPressed("ui_cancel") || @event is InputEventKey { PhysicalKeycode: Key.Backspace };
+        if (back && Up())
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         if (@event.IsActionPressed(PlayerInput.RideMenu) || @event.IsActionPressed(PlayerInput.InteractMount)
             || @event.IsActionPressed(PlayerInput.Menu) || @event.IsActionPressed("ui_cancel"))
         {
@@ -683,9 +829,9 @@ public partial class RideUi : CanvasLayer
         // Key.Key1 is the physical "1", so the shortcuts land in the same place on an AZERTY
         // keyboard as on a QWERTY one — the same reason the movement keys are read physically.
         int index = (int)key.PhysicalKeycode - (int)Key.Key1;
-        var cards = _tabs[_tab].Cards;
+        var cards = Shown(_tabs[_tab]).ToList();
         if (index < 0 || index >= Math.Min(9, cards.Count)) return;
-        Choose(cards[index].Kind);
+        Activate(cards[index]);
         GetViewport().SetInputAsHandled();
     }
 }

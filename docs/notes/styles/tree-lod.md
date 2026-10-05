@@ -34,6 +34,10 @@ Riddes viewpoints, M1 Pro: 33–36M primitives a frame on `main`, 25–30M with 
   near trees to billboards for one frame). The LOD distance uses it rather than
   `CAMERA_POSITION_WORLD`, so a cockpit mirror or the zoom bubble agrees on which trees are 3D;
   the billboard's orientation and rays use the rendering camera, which is what it is drawn for.
+  Inside a building the camera is 3 km down with the interiors, so it is first carried up
+  through the nearest interior doorway (`InteriorManager.ThroughNearestDoor`), to where the
+  portal camera stands: else every tree seen out a door portal was past the handover, a
+  billboard through the doorway and 3D seen directly.
 - `--tree-lod off` restores every tree as 3D (pixel-identical to before, the check for changes
   here); `--tree-near m` moves the handover.
 - **Heavier trees (Cartoon, `MeshDetail.High`) are culled per tree on the CPU: `NearTrees`.** A
