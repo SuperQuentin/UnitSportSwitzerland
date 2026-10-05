@@ -30,6 +30,10 @@ public enum ItemEventKind
     Fondue = 7,
     /// <summary>A smoke canister landed (#478). Position = where; a cloud on every peer (<see cref="SwissItems.OnSmoke"/>).</summary>
     Smoke = 8,
+    /// <summary>A fishing float landed (#493). Position = where; no direction (<see cref="Fishing.FishingVisuals.OnCast"/>).</summary>
+    FishCast = 9,
+    /// <summary>A fishing line came in (#493). Position = the float; extra = "", "snap" or the item id landed.</summary>
+    FishEnd = 10,
 }
 
 /// <summary>
@@ -82,6 +86,8 @@ public partial class ItemEvents : Node
         [ItemEventKind.Horn] = SwissItems.OnHorn,
         [ItemEventKind.Fondue] = SwissItems.OnFondue,
         [ItemEventKind.Smoke] = SwissItems.OnSmoke,
+        [ItemEventKind.FishCast] = Fishing.FishingVisuals.OnCast,
+        [ItemEventKind.FishEnd] = Fishing.FishingVisuals.OnEnd,
     };
 
     /// <summary>

@@ -60,3 +60,4 @@ to every peer, whatever their origin (#185); `o.WorldTransform(placed.Origin)` c
 photo + refused far flag, B joins after and must get the snapshot, hear 3 shots + a flash, be refused
 removing A's photo (screenshot `test_output/placedcheck_b.png`); server restarted, C finds the flag
 and pulls it up. Writes the real `user://placed/server.json` (it ends empty again).
+- Kinds 9-10 (#493): `FishCast` / `FishEnd`, sent with no direction so the remote keeps the position (the float), not the hand (`fishing`).
