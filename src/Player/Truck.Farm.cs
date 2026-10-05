@@ -50,7 +50,7 @@ public sealed partial class Truck
             if (Spec.Tool != FarmTool.None) return new Vector3(0f, 0f, -(Train.Bodies[0].CgAt - Spec.WorkAt));
             if (Implement is not { } imp) return Vector3.Zero;
             int k = SectionCount - 1;
-            return NodeLocal(k) * new Vector3(0f, 0f, -(Train.Bodies[k].CgAt - imp.WorkAt));
+            return NodeLocal(k) * new Vector3(imp.WorkOffset, 0f, -(Train.Bodies[k].CgAt - imp.WorkAt));
         }
     }
 

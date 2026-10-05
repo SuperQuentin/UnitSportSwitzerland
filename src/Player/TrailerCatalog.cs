@@ -246,9 +246,10 @@ public static class TrailerCatalog
             Blurb = "Rear-mounted 3 m disc mower: lowered ({kneel}) on grass it cuts hay, the bales straight into your pack",
             Body = TrailerBody.Mower, Couples = Coupling.ThreePoint,
             Paint = MowerRed, Accent = Galvanised, Frame = Graphite,
-            Tool = Farming.FarmTool.Mow, WorkWidth = 3.0f, WorkAt = 0.9f, LiftHeight = 0.4f,
-            // Assumed (a Pöttinger Novacat / Kuhn GMD class, drawn centred behind rather than
-            // offset): 1.3 m deep, 750 kg, PTO driven.
+            Tool = Farming.FarmTool.Mow, WorkWidth = 3.0f, WorkAt = 0.9f, WorkOffset = 1.9f, LiftHeight = 0.4f,
+            // Assumed (a Pöttinger Novacat / Kuhn GMD class): 1.3 m deep, 750 kg, PTO driven; the
+            // cutter bar out to the right on its arm, from 0.4 m right of the tractor's centre to
+            // 3.4 m (the rear wheel's outside is at 1.3 m): it cuts beside the tractor's track.
             Sections = new[]
             {
                 new SectionSpec
