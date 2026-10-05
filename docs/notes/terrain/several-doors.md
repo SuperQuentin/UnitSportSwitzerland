@@ -48,7 +48,9 @@ deserves, and each of them is a real door: it opens, it has a portal, you walk t
   ground-floor room nearest it, on the wall facing the same way, clamped into the plan box.
   `FitEntry` picks the room and the spot: a room whose wall is on that side of the box, with wall left
   over beside its other cuts, no stair shaft or flight to step into. It tries the facing wall
-  first, then round the building. **Inside and outside are not the same building** — the plan box is
+  first, then round the building. The opening is cut under the ceiling of the room it opens into
+  (`ClearOf`), not of the storey: a works hall's service block is a 2.6 m room standing inside a
+  9 m hall (#497). **Inside and outside are not the same building** — the plan box is
   a clamped rectangle over a TIN solid, and a 300 m warehouse is 120 m of plan — so the two line up
   plausibly, not exactly, which is all a player can tell through a doorway.
   Furniture needs nothing new: `Furnish` already blocks every non-window opening (`Clearance`).
@@ -62,14 +64,24 @@ deserves, and each of them is a real door: it opens, it has a portal, you walk t
   door keeps the identity it had and the Halloween lantern or Christmas gift at it stays put.
 - **Churches** already had one entrance per member solid; they now get one per door per member, and
   the main entrance is still one of the solids' own front doors, never a side door.
-- **Plan version 14**: stored plans regenerate (#497's industrial sites took 13).
+- **Plan version 14**: stored plans regenerate (#497's industrial sites took 13). One number for
+  both, so whichever rebases onto the other takes the next — never a lower one, which would
+  regenerate the plans saved under the higher and then collide when that number is reissued.
 - **Still gated on the kind, not the door**: the main entry's width and height
   (`InteriorGenerator` line ~62 and `SingleRoom`), and the clear lane a vehicle door keeps through
   the room. Per-door versions of those are what an industrial bay will want next.
+- **Picking a building of a kind to walk to** is `DoorIndex.NearestOfKind`, not `Nearest`: plain
+  distance, that building's main door for choice, and none of `Nearest`'s reach rules (outside
+  only, within 2.5 m of the player's own level), which for a target hundreds of metres off over
+  sloping ground made "the nearest barn" a matter of luck — and, once barns had two doors, handed
+  `--doorkind Agricultural` a side door, leaving the pair's own behaviour untested.
 - **Check**: `--doorcheck` (quick tier, no world): synthetic box solids — house, shed, barn, garage,
-  block of flats, 100 m shop front, works hall — through the real `ComputeDoors` and
-  `InteriorGenerator`. Every door named once, on a wall, `MinGap` from the others, no more than
+  block of flats, 100 m shop front, works hall (which goes through #497's industrial generator) —
+  through the real `ComputeDoors` and `InteriorGenerator`. Every door named once, on a wall, `MinGap` from the others, no more than
   `Spacing` of its own wall between two of them, a barn and a garage with a pedestrian door beside
   their vehicle one, every plan valid, and every facade door arriving at a doorway inside that
   agrees with it on how the door hangs. The spacing arithmetic itself is tier 0
-  (`DoorBudgetTests`, `DoorKeyTests`).
+  (`DoorBudgetTests`, `DoorKeyTests`). Live: `--interiorcheck` walks in and out of a house with a
+  cellar, and `--interiorcheck --doorkind Agricultural` into a barn by its pair, with its open
+  leaves' edges in reach. Measured on the generated world: 100 m shop front 6 doors, works hall 5,
+  block of flats 3, barn and garage 2, house and shed 1.
