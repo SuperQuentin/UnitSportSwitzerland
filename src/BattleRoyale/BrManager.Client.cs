@@ -85,6 +85,8 @@ public partial class BrManager
         if (_server) Combat.PvpRules.HitRelayed -= OnHit;
         FootPlayer.StayDown = null;
         FootPlayer.CanBeDowned = null;
+        FootPlayer.Regenerates = null;
+        Combat.PvpRules.Override = null;
     }
 
     public long Me => Multiplayer.GetUniqueId();
@@ -238,6 +240,9 @@ public partial class BrManager
             chat.Send("/br join");
         }
         SetMatchLoot(s);
+        // the server's rule for who may hurt whom, here too: aerial rounds are applied by their
+        // victim's own client (Combat/CombatManager), which must not take a team-mate's (#455)
+        Combat.PvpRules.Override = s.Phase == BrPhase.Playing ? Allowed : null;   // as the server sets it
         if (s.Phase != BrPhase.Idle && _mapFor != (s.AreaE, s.AreaN, s.Side)) BuildMap(s.Area);
         if (before != BrPhase.Ended && s.Phase == BrPhase.Ended && InMatch && (s.Winner == Me || s.WinnerTeam != 0 && s.Find(Me)?.Team == s.WinnerTeam))
         {
@@ -268,6 +273,8 @@ public partial class BrManager
             FootPlayer.StayDown = _ => InMatch && _state.Phase == BrPhase.Playing;
             // squads (#475): down, not out, while a team-mate stands to pick you up
             FootPlayer.CanBeDowned = _ => InMatch && _state.Phase == BrPhase.Playing && _state.MateStanding(Me);
+            // no regeneration in a match (#455): bandages and kits are the only way back
+            FootPlayer.Regenerates = _ => !(InMatch && _state.Phase == BrPhase.Playing);
             Permissions.SetInMatch(true);
         }
     }
@@ -393,6 +400,7 @@ public partial class BrManager
         ShowHidden();
         FootPlayer.StayDown = null;
         FootPlayer.CanBeDowned = null;
+        FootPlayer.Regenerates = null;
         Permissions.SetInMatch(false);
         StopSpectating();
         Inventory()?.EndMatch();

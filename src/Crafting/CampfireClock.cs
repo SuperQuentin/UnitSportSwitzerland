@@ -7,7 +7,8 @@ namespace UnitSport.Crafting;
 /// <summary>
 /// How long a placed campfire burns (#272). Its <c>PlacedObject.Payload</c> is the Unix time it was
 /// lit, written by the server (a client's own value is ignored), so a fire keeps burning across a
-/// server restart and every peer agrees on it to within its clock's drift.
+/// server restart. Peers read it against the server's wall clock (<c>Net.ClockSync.ServerUnixNow</c>,
+/// #452), not their own, so a PC clock minutes off does not put a fire out early.
 /// </summary>
 public static class CampfireClock
 {

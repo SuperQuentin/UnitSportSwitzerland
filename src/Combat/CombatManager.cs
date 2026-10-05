@@ -439,7 +439,10 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
         switch (collider)
         {
             case FootPlayer fp:
-                if (fp.IsMultiplayerAuthority()) fp.ShotHit(Damage);
+                // a game mode's say (a Battle Royale: no team-mates, nobody outside the match, #455);
+                // free roam keeps its dogfights
+                if (fp.IsMultiplayerAuthority() && (PvpRules.Override?.Invoke(shooter, LocalId) ?? true)) fp.ShotHit(Damage);
+                else target = false;
                 break;
             case VehicleBody vb when !vb.Wrecked:
                 if (vb.IsMultiplayerAuthority())
