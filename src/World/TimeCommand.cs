@@ -125,6 +125,17 @@ public static class TimeCommand
 
     public static double Wrap(double hour) => ((hour % 24.0) + 24.0) % 24.0;
 
+    /// <summary>
+    /// The world clock's hour (#452, <see cref="WorldClock"/>): <paramref name="hour0"/> at
+    /// <paramref name="epoch"/>, read at <paramref name="now"/>, both on the server's clock. Any two
+    /// peers that agree on the server's clock agree on the hour.
+    /// </summary>
+    public static double HourAt(double hour0, double epoch, double now, float minutesPerDay) =>
+        Advance(hour0, now - epoch, minutesPerDay);
+
+    /// <summary>Hours from <paramref name="to"/> to <paramref name="from"/> the short way round the dial, -12..12.</summary>
+    public static double ShortWay(double from, double to) => Wrap(from - to + 12.0) - 12.0;
+
     /// <summary>"14:05".</summary>
     public static string Format(double hour)
     {

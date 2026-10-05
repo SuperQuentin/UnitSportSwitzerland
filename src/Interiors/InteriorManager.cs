@@ -242,6 +242,24 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
         return at with { Y = floor + (at.Y - InteriorBaseY) };
     }
 
+    /// <summary>
+    /// A point in interior space carried up through the nearest interior doorway (that of the
+    /// building it is in: interiors lie under their own buildings), exactly where a portal camera
+    /// looking out would stand. Unchanged in the world, or with no doorway built. No allocation.
+    /// </summary>
+    public Vector3 ThroughNearestDoor(Vector3 at)
+    {
+        if (!InInteriorSpace(at)) return at;
+        DoorLink? best = null;
+        float bestD = float.MaxValue;
+        foreach (var link in _links.Values)
+        {
+            float d = link.Inside.Origin.DistanceSquaredTo(at);
+            if (d < bestD) { bestD = d; best = link; }
+        }
+        return best != null ? best.ToOutside * at : at;
+    }
+
     /// <summary>The same in LV95 (#185): an interior differs from its building only in altitude.</summary>
     public static GlobalPos SurfacePoint(GlobalPos at, Func<GlobalPos, float?>? ground = null)
     {

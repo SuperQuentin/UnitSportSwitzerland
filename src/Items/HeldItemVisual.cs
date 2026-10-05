@@ -119,7 +119,7 @@ void fragment() {{
     // one-shot animation (eat, plant...): pose weight 0..1 over in / hold / out
     private bool _shotActive;
     private ViewPose _shotPose;
-    private float _shotIn, _shotHold, _shotOut, _shotT;
+    private float _shotIn, _shotHold, _shotOut, _shotT, _shotPeakAt;
     private bool _shotPeaked;
     private System.Action? _shotPeak, _shotEnd;
     private float _shotW;
@@ -148,8 +148,12 @@ void fragment() {{
     /// eases in for <paramref name="inTime"/>, calls <paramref name="onPeak"/> once on arrival,
     /// holds, eases out for <paramref name="outTime"/>. A new call replaces one in progress.
     /// </summary>
-    public void PlayOneShot(ViewPose target, float inTime, float hold, float outTime, System.Action? onPeak = null, System.Action? onEnd = null)
+    /// <param name="peakAfterHold">The peak lands at the end of the hold instead of its start: a
+    /// bandage is wrapped for a while before it heals (#455).</param>
+    public void PlayOneShot(ViewPose target, float inTime, float hold, float outTime, System.Action? onPeak = null, System.Action? onEnd = null,
+        bool peakAfterHold = false)
     {
+        _shotPeakAt = Mathf.Max(0.01f, inTime) + (peakAfterHold ? Mathf.Max(0f, hold) : 0f);
         _shotActive = true;
         _shotPose = target;
         _shotIn = Mathf.Max(0.01f, inTime);
@@ -182,7 +186,7 @@ void fragment() {{
         if (_shotT < _shotIn) w = _shotT / _shotIn;
         else if (_shotT < _shotIn + _shotHold) w = 1f;
         else w = 1f - (_shotT - _shotIn - _shotHold) / _shotOut;
-        if (!_shotPeaked && _shotT >= _shotIn) { _shotPeaked = true; var peak = _shotPeak; _shotPeak = null; peak?.Invoke(); }
+        if (!_shotPeaked && _shotT >= _shotPeakAt) { _shotPeaked = true; var peak = _shotPeak; _shotPeak = null; peak?.Invoke(); }
         if (_shotT >= _shotIn + _shotHold + _shotOut)
         {
             _shotActive = false;

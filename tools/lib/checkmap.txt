@@ -190,6 +190,13 @@ src/Vehicles/VehicleBody net    tools/boatnetcheck.sh
 src/World/SignalNetProbe net    tools/signalnetcheck.sh
 src/Terrain/SignalLamps  net    tools/signalnetcheck.sh
 src/Net/ClockSync        net    tools/signalnetcheck.sh
+# the time of day (#452): two clients, B joining later with its own clock, agree on the server's hour
+src/World/DayNight       net    tools/clocknetcheck.sh
+src/World/WorldClock     net    tools/clocknetcheck.sh
+src/World/TimeCommand    net    tools/clocknetcheck.sh
+src/World/ClockNetProbe  net    tools/clocknetcheck.sh
+src/Net/ClockSync        net    tools/clocknetcheck.sh
+src/Net/ChatManager      net    tools/clocknetcheck.sh
 tools/TerrainFormat/SignalPlan net tools/signalnetcheck.sh
 src/Player/Steamer       net    tools/steamernetcheck.sh
 src/Player/FootPlayer.St net    tools/steamernetcheck.sh
@@ -235,6 +242,10 @@ src/Player/Airstairs     quick  --stairscheck --world fixture --traffic 0 --airl
 src/Player/FootPlayer.Ai quick  --stairscheck --world fixture --traffic 0 --airliner arcade
 src/Vehicles/Airstairs   quick  --stairscheck --world fixture --traffic 0 --airliner arcade
 src/Vehicles/VehicleBody.Ai quick  --stairscheck --world fixture --traffic 0 --airliner arcade
+src/Player/StairsNet     net    tools/stairsnetcheck.sh
+src/Player/Airstairs     net    tools/stairsnetcheck.sh
+src/Avatar/Airstairs     net    tools/stairsnetcheck.sh
+src/Player/FootPlayer.De net    tools/stairsnetcheck.sh
 src/Player/Airliner      net    tools/airlinernetcheck.sh
 src/Avatar/AirlinerRig   net    tools/airlinernetcheck.sh
 src/Avatar/A320Deck      net    tools/airlinernetcheck.sh
@@ -268,6 +279,9 @@ src/World/Wa             full   tools/waterparity.sh
 shaders/common/waves     full   tools/waterparity.sh
 shaders/body/water       full   tools/waterparity.sh
 src/Player/Emote         net    tools/emotenetcheck.sh
+# the Swiss match items (#478): fondue, smoke and alphorn between two clients
+src/Items/SwissItems     net    tools/swisscheck.sh
+src/Items/SwissNetProbe  net    tools/swisscheck.sh
 src/Avatar/HumanMeshBuilder.Emotes net tools/emotenetcheck.sh
 src/Player/FootPlayer.Hold net   tools/holdnetcheck.sh
 src/Player/HoldNetProbe  net    tools/holdnetcheck.sh

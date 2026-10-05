@@ -13,10 +13,21 @@
   the hour for one run. **`/time`** (#202, `World/TimeCommand` parses, `Net/ChatManager` applies):
   `set <hh:mm|sunrise|day|noon|sunset|night|midnight>`, `add <hours>`, `speed <min a day, 0 stops>`;
   bare `/time` answers from this screen's clock. Offline it moves this machine's clock
-  (`DayNight.DayLengthOverride` for speed). Online changing it is an admin's: the server then owns
-  the world's clock (hour + day length), sends the current hour to every client and to each joiner
-  (`SendWorldTimeTo`), and their clocks run on at that length. Before any `/time set` every client
-  keeps its own clock from its settings, as before.
+  (`DayNight.DayLengthOverride` for speed).
+- **Online, one clock for everyone** (#452, `World/WorldClock`): the server always owns it, from its
+  own settings at start (`StartHour`, `DayLengthMinutes`, `--time`), or, on a dedicated server, from `user://world_clock.cfg`
+  where it stopped last (saved every 60 s, on `/time` and on exit; not when hosted from the menu,
+  in test runs or with `--time`). It is three numbers, the hour `Hour0` at `Epoch` on `ClockSync.ServerNow` and the day
+  length, sent to each joiner (`SendWorldTimeTo`) and on every `/time` (an admin's: it re-bases
+  them). Every peer computes `Hour = HourAt(ServerNow)` each frame; **nothing is summed per frame**,
+  so no drift, and a late joiner or a reconnect sees the same sky. A joiner's sky eases from its own
+  hour to the world's in ~2 s (`DayNight._joinEase`) once `ClockSync.Synced`. Online the player's
+  start hour and day length do nothing. Before #452 each client ran its own clock until an admin's
+  `/time set`, and the sum drifted after it.
+- **Game logic reads `WorldClock.CurrentHour`**, never `DayNight.Instance?.Hour ?? 12`: the server
+  has no sky (the shared birds' night species, #143), and a `--systems` client neither. The bird
+  chorus follows it; church bells and occasion tolls stay on the real wall clock on purpose (a
+  24-min day would ring them every real minute).
 - **Indoors** (#134): interior glass (`ps1_interior`, vertex alpha 0) is `world_sky * 1.3` plus a
   dark moonlit blue at night, so a room's windows show noon, sunset, blue hour and night. Rooms
   are lit by the hour (#388, `terrain/interior-light`: daylight and sun patches through the

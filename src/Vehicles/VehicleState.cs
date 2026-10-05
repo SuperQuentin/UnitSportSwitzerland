@@ -152,5 +152,6 @@ public readonly record struct VehicleState(
     /// </summary>
     public const byte DriverDoorShuts = 16;
 
-    public static double Now => Time.GetUnixTimeFromSystem();
+    /// <summary>The server's wall clock, which <c>SpawnedAt</c> is stamped by and read against on every peer (#452).</summary>
+    public static double Now => Net.ClockSync.ServerUnixNow;
 }

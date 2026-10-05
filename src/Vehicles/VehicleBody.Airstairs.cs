@@ -34,13 +34,25 @@ public partial class VehicleBody
             if (StairsDockedAt is { } sill && !Wrecked)
                 stairs.TargetHeight = sill.Edge.Y - GlobalPosition.Y + AirstairsLayout.DockAbove;
         }
+        stairs.AtDoor = StairsDockedAt != null;
         if (!Mathf.IsEqualApprox(stairs.Height, AirstairsLayout.Clamp(stairs.TargetHeight))) stairs.Lift(dt);
-        if (_visual is AirstairsRig rig) rig.Height = stairs.Height;
+        if (AirstairsMeshBuilder.StairsOf(_visual) is { } drawn)
+        {
+            drawn.Height = stairs.Height;
+            drawn.AtDoor = stairs.AtDoor;
+        }
         // kept in its state, so whoever takes it gets it at this height
         if (float.IsNaN(_stairsFlagsHeight) || Mathf.Abs(_stairsFlagsHeight - stairs.Height) > 0.01f)
         {
             _stairsFlagsHeight = stairs.Height;
             _initial = _initial with { Flags = stairs.PackFlags() };
+            // the stairs' collision box as they stand now, not as they were spawned
+            foreach (var (pose, centre, size) in stairs.ExtraBoxes())
+                if (GetNodeOrNull<CollisionShape3D>("Section1") is { Shape: BoxShape3D box } shape)
+                {
+                    box.Size = size;
+                    shape.Transform = pose * new Transform3D(Basis.Identity, centre);
+                }
         }
     }
 

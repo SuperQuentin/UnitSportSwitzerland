@@ -54,9 +54,10 @@ public partial class FootPlayer
 
     /// <summary>
     /// The owner's vehicle stopped dead (<see cref="RidePhysics"/>): the machine stays where it
-    /// hit, the rider goes on. A car throws its driver through the windscreen.
+    /// hit, the rider goes on. A car throws its driver through the windscreen. A motorbike's
+    /// wheelie taken over the top (<paramref name="loopOut"/>, #410) drops its rider off the back.
     /// </summary>
-    private void ThrowFromVehicle(float hit)
+    private void ThrowFromVehicle(float hit, bool loopOut = false)
     {
         var fwd = (-GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
         bool car = _visual is CarRig;
@@ -75,13 +76,14 @@ public partial class FootPlayer
             return;
         }
 
-        Announced?.Invoke(car ? "THROUGH THE WINDSCREEN!" : "THROWN OFF!", false);
-        // on at most of the speed it hit at, and up: over a low wall, into a tree
-        var launch = fwd * hit * 0.75f + Vector3.Up * (3f + hit * 0.18f);
+        Announced?.Invoke(car ? "THROUGH THE WINDSCREEN!" : loopOut ? "LOOPED OUT!" : "THROWN OFF!", false);
+        // on at most of the speed it hit at, and up: over a low wall, into a tree; off the back of
+        // a looped wheelie, on with the bike's speed and only a little up
+        var launch = loopOut ? fwd * hit * 0.7f + Vector3.Up * 2f : fwd * hit * 0.75f + Vector3.Up * (3f + hit * 0.18f);
         ApplyRide(RideKind.OnFoot, launch);
         StartRagdoll(joints, launch, Mathf.Clamp(hit * 0.35f, 3f, 10f), car);
         BeginCrashCamera(fwd);
-        TakeDamage((hit - 8f) * 2f, 0, DamageCause.Crash);
+        TakeDamage(Mathf.Max(loopOut ? 10f : 0f, (hit - 8f) * 2f), 0, DamageCause.Crash);
     }
 
     /// <summary>

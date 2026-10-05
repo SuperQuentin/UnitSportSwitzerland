@@ -9,7 +9,7 @@
   **Engines are live** (`EngineSynth`, an `AudioStreamGenerator` filled from `_Process`): firing
   pulses at rpm·cyl/2 with uneven cylinders, a fixed exhaust comb resonance (it must NOT follow rpm —
   that is what a pitch-shifted loop got wrong), intake noise, prop beat, decel crackle; the
-  turboshaft does blade slap + whine. Its per-sample `EngineFrame` goes to an `IChipVoice` picked by
+  turboshaft does blade slap + whine; the turboprop (#420) a governed prop buzz, beating engines, tip rasp with load, core whine (`player/airliners`). Its per-sample `EngineFrame` goes to an `IChipVoice` picked by
   `GameSettings.EngineVoice` (Settings dropdown, `--voice realistic|ps1|nes|sid|genesis`): PS1 SPU
   (real 28-sample ADPCM codec + gaussian playback, default), NES 2A03 (period-register pitch steps,
   short-mode LFSR, nonlinear mixer), C64 SID 6581 (hard sync + resonant filter), YM2612 (4-op FM,
