@@ -25,5 +25,6 @@
   stay natural); an older client never subscribes, so it is never sent `Cells`.
 - **Check**: `tools/farmnetcheck.sh` (tier 2): A ploughs a strip (machine stroke) and tills a cell
   by hand, every cell answered; B joins after and gets the strip from the snapshot, sees A's second
-  strip live, is refused ploughing the potatoes from 200 m (back to growing); the server's farm file
+  strip live, sees the cell A then tills and sows with a hoe and a seed bag from its pack (hotbar
+  slot + `use_item`, on a lent empty pack) sown with wheat, is refused ploughing the potatoes from 200 m (back to growing); the server's farm file
   holds the cells.

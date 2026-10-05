@@ -18,6 +18,14 @@
 - **Readout**: on foot, the cell ahead shows "Wheat — ripe 100%", "Potatoes — stubble",
   "Meadow — mown 40%" (`HandFarming.Describe`) on a HUD line above the prompts; the text is set
   only when it changes.
-- **Not yet**: the item definitions, icons and shop rows of the farm items are another part of #494;
-  until they land `ItemDefs.Get(ItemId.Hoe)` is null, so the pack path (`UseSlot`) cannot start a
-  stroke, and `--farmcheck` drives `HandFarming.Use(player, -1, item)` (no pack) directly.
+- **The pack path** (items in `produce-economy`): hotbar slot (`slot_N`, wheel / D-pad, VR hip grip)
+  -> `use_item` (LMB / RB / VR R trigger) -> `ItemController.UseHeld` -> `UseSlot` -> `ItemUse.Farm`
+  -> `HandFarming.Use(player, slot, id)`; the pack panel's "Use" on any slot takes the same call. A
+  stroke stops (nothing done, nothing taken) when the player walks 0.9 m off, when its item leaves the
+  slot (emptied, or another stack dragged in), or, started from the hand, when the hand switches to
+  another slot. `slot` -1 (probes: `--farmcheck`, `--farmnet`'s first strokes) takes nothing.
+- **Prompt and readout strings** are built only when what they say changes (tool, crop, the key's
+  memoised name, the cell): no string per poll while standing still; Gathering's line likewise.
+- **Checks**: `--handfarmcheck` (the whole loop through the pack: Give, hotbar, Use, harvest, flour,
+  bread, eaten; `commands`), `--farmcheck` (the farm code directly), `tools/farmnetcheck.sh` (a client
+  tills and sows from its pack, the other sees it).
