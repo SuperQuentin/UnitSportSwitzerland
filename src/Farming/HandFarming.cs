@@ -31,6 +31,11 @@ public partial class HandFarming : Node
     private Label _prompt = null!, _readout = null!;
     private ProgressBar _bar = null!;
     private string _promptText = "", _readoutText = "";
+    // the last prompt and readout built, so the poll makes no new string while nothing changes
+    private (FarmTool Tool, CropKind Seed) _promptTool;
+    private string? _promptKey;
+    private string _promptLine = "", _describedText = "";
+    private FieldCellView? _describedView;
     private double _poll;
 
     // the stroke in progress: its tool, the cell, where it started, how far along
@@ -38,6 +43,7 @@ public partial class HandFarming : Node
     private CropKind _seed;
     private int _slot = -1;
     private ItemId _item;
+    private bool _fromHand;
     private double _e, _n, _progress, _duration;
     private Vector3 _startedAt;
 
@@ -50,6 +56,8 @@ public partial class HandFarming : Node
     public (ItemId Id, int Count) LastHarvest { get; private set; }
     /// <summary>The readout line shown now ("" when none).</summary>
     public string Readout => _readoutText;
+    /// <summary>The prompt line shown now, "[LMB] Till the soil" ("" when none).</summary>
+    public string Prompt => _promptText;
     /// <summary>A stroke is under way.</summary>
     public bool Busy => _tool != FarmTool.None;
 
@@ -145,6 +153,19 @@ public partial class HandFarming : Node
         _progress = 0;
         _duration = tool switch { FarmTool.Plough => 1.2, FarmTool.Sow => 0.6, _ => 0.9 };
         _startedAt = player.GlobalPosition;
+        _fromHand = slot >= 0 && _items != null && slot == _items.Inventory.Selected;
+    }
+
+    /// <summary>
+    /// The item the stroke started with is no longer there: its slot was emptied or another stack
+    /// moved in (the pack panel), or the hand switched to another hotbar slot. The stroke stops, so
+    /// nothing else is taken from the slot and a put-away hoe does not finish the job.
+    /// </summary>
+    private bool ItemGone()
+    {
+        if (_slot < 0 || _items == null) return false;
+        var inv = _items.Inventory;
+        return inv[_slot].IsEmpty || inv[_slot].Id != _item || (_fromHand && inv.Selected != _slot);
     }
 
     public override void _Process(double delta)
@@ -152,7 +173,7 @@ public partial class HandFarming : Node
         var p = _items?.UsablePlayer;
         if (Busy)
         {
-            if (p == null || p.GlobalPosition.DistanceTo(_startedAt) > CancelDistance) Cancel();
+            if (p == null || p.GlobalPosition.DistanceTo(_startedAt) > CancelDistance || ItemGone()) Cancel();
             else
             {
                 _progress += delta / _duration;
@@ -170,10 +191,17 @@ public partial class HandFarming : Node
             var (e, n) = Ahead(p);
             if (farm.CellAtLv95(e, n) is { } view)
             {
-                readout = Describe(view);
+                if (view != _describedView) (_describedView, _describedText) = (view, Describe(view));
+                readout = _describedText;
                 var held = _items.Inventory.Held;
                 if (!held.IsEmpty && !Busy && ToolOf(held.Id) is { Tool: not FarmTool.None } t && FarmTables.CanWork(t.Tool, view.Stage))
-                    prompt = $"{InputHints.Tag(PlayerInput.UseItem)} {Verb(t.Tool, t.Seed)}";
+                {
+                    // built only when the tool, the crop or the key's name changes
+                    string key = InputHints.Label(PlayerInput.UseItem);
+                    if (t != _promptTool || !ReferenceEquals(key, _promptKey))
+                        (_promptTool, _promptKey, _promptLine) = (t, key, $"[{key}] {Verb(t.Tool, t.Seed)}");
+                    prompt = _promptLine;
+                }
             }
         }
         if (prompt != _promptText) { _promptText = prompt; _prompt.Text = prompt; _prompt.Visible = prompt != ""; }
@@ -211,7 +239,7 @@ public partial class HandFarming : Node
         LastStroke = WorkAt(farm, tool, _e, _n, seed, tool == FarmTool.Fertilise ? 1 : 0);
         if (LastStroke.Cells <= 0) return;
         if (tool == FarmTool.Sow && useInventory) _seedCells[seed] = _seedCells.GetValueOrDefault(seed) - LastStroke.Cells;
-        if (tool == FarmTool.Fertilise && useInventory) _items!.Inventory.TakeOne(slot);
+        if (tool == FarmTool.Fertilise && useInventory && _items!.Inventory[slot].Id == item) _items.Inventory.TakeOne(slot);
     }
 
     /// <summary>Works the cell holding (e, n) and, with <paramref name="ring"/> 1, the eight round it.</summary>

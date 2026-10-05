@@ -46,6 +46,10 @@ src/Farming/             quick  --farmcheck --systems ui,physics,loot,farming --
 src/Loot/Gathering       quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
 src/Items/ItemController quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
 src/Terrain/Fixture/FixtureCourse quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Farming/             quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
+src/Loot/Gathering       quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
+src/Items/ItemController quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
+src/Crafting/Recipes     quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
 src/Build/               quick  --buildcheck --systems ui,physics,build
 src/Build/               net    tools/buildnetcheck.sh
 src/Build/Gadget         quick  --gadgetcheck --systems ui,physics,build

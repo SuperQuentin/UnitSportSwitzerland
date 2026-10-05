@@ -79,6 +79,8 @@ public partial class Gathering : Node, Core.IOriginShiftAware
 
     /// <summary>What the player can collect right now, for probes.</summary>
     public Resource Target => _target.Kind;
+    /// <summary>The prompt line as shown, "[G] Hold to harvest wheat", for probes.</summary>
+    public string Prompt => _prompt?.Text ?? "";
 
     public override void _Ready()
     {
@@ -108,6 +110,11 @@ public partial class Gathering : Node, Core.IOriginShiftAware
     // ------------------------------------------------------------------------------------
     // per frame
     // ------------------------------------------------------------------------------------
+
+    // what the prompt says now: rebuilt only when one of these changes
+    private Resource _shownKind;
+    private bool _shownDepleted;
+    private string? _shownWhat, _shownKey;
 
     public override void _Process(double delta)
     {
@@ -140,8 +147,13 @@ public partial class Gathering : Node, Core.IOriginShiftAware
             : Label(_target.Kind);
         bool depleted = Remaining(_target) <= 0;
         _prompt.Visible = _progress <= 0;
-        string key = InputHints.Tag(PlayerInput.Gather);
-        _prompt.Text = depleted ? $"Nothing left to {Verb(_target.Kind)} here" : $"{key} Hold to {Verb(_target.Kind)} {what}";
+        // the line is built only when what it says changes (no string a frame, #221)
+        string key = InputHints.Label(PlayerInput.Gather);
+        if (_target.Kind != _shownKind || depleted != _shownDepleted || what != _shownWhat || !ReferenceEquals(key, _shownKey))
+        {
+            (_shownKind, _shownDepleted, _shownWhat, _shownKey) = (_target.Kind, depleted, what, key);
+            _prompt.Text = depleted ? $"Nothing left to {Verb(_target.Kind)} here" : $"[{key}] Hold to {Verb(_target.Kind)} {what}";
+        }
 
         if (!holding || depleted)
         {
