@@ -8,6 +8,7 @@ using UnitSport.Tools.RoadGen.Rewrite;
 //   dotnet run --project tools/TerrainPreprocessor -c Release -- --in <dir> [--in <dir> ...] --out terrain_chunks
 //       [--temp <cache dir>] [--jobs N] [--io-jobs N] [--force] [--fresh] [--verify] [--dump-png <dir>]
 //   ... --out terrain_chunks --photos [--tiles-file f] [--io-jobs N] [--force]   (SWISSIMAGE, PhotoStage)
+//   ... --out terrain_chunks --fields ressources/data/lwb [--osm-pbf f] [--gwr data.sqlite] [--tiles-file f]   (farm fields, FieldStage)
 // --in is searched recursively and may be repeated (sources can live on any drive); the build is
 // incremental — see TerrainBuild.
 
@@ -39,6 +40,9 @@ string? franceBox = null;
 // optional OpenStreetMap overlay (#118): a region-wide intermediate for the road network stage
 string? osmPbf = null;
 bool osmCheck = false;
+// real farm fields (#494): federal LWB land use per canton from <dir>, OSM fallback for the gated cantons
+string? fieldsDir = null, osmFieldsPbf = null;
+bool fieldsCheck = false;
 int jobs = Environment.ProcessorCount;
 int ioJobs = 4;
 
@@ -82,6 +86,9 @@ for (int i = 0; i < args.Length; i++)
         case "--france": franceBox = args[++i]; break;
         case "--osm-overlay": osmPbf = args[++i]; break;
         case "--osm-check": osmCheck = true; break;
+        case "--fields": fieldsDir = args[++i]; break;
+        case "--osm-pbf": osmFieldsPbf = args[++i]; break;
+        case "--fields-check": fieldsCheck = true; break;
         case "--jobs": jobs = int.Parse(args[++i]); break;
         case "--io-jobs": ioJobs = int.Parse(args[++i]); break;
         case "--force": force = true; break;
@@ -93,6 +100,23 @@ for (int i = 0; i < args.Length; i++)
 }
 
 if (osmCheck) return OsmOverlay.SelfCheck();
+if (fieldsCheck) return FieldStage.SelfCheck();
+
+// ---- farm fields (#494): fields_E_N.fld per manifest tile, standalone -------------------------
+// --gwr (the GWR data.sqlite) tells which OSM fields lie in the cantons without freely published data
+if (fieldsDir != null)
+{
+    if (outDir == null)
+    {
+        Console.Error.WriteLine("--fields <lwb dir> requires --out <chunk dir> [--osm-pbf <file>] [--gwr <data.sqlite>] [--tiles-file f]");
+        return 2;
+    }
+    var manifestPath = Path.Combine(outDir, "manifest.json");
+    var region = tilesFile != null ? TileId.ReadList(tilesFile).ToHashSet()
+        : File.Exists(manifestPath) ? TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet()
+        : new HashSet<TileId>();
+    return FieldStage.Run(fieldsDir, osmFieldsPbf, gwrPath, outDir, region, jobs);
+}
 
 // ---- OSM overlay: OSM attributes conflated onto TLM road lines, for the built tiles ----------
 // Standalone and region-wide (not per batch), so it covers the whole region however the feature
