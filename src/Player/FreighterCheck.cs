@@ -31,7 +31,7 @@ public partial class FreighterCheck : Node
     private static bool CarMode => CmdArgs.Value("--freightercheck") is "car" or "carshots";
 
     private readonly System.Func<FootPlayer?> _player;
-    private int _failures, _shot;
+    private int _failures, _shot, _impacts;
 
     public FreighterCheck(System.Func<FootPlayer?> player) => _player = player;
 
@@ -128,7 +128,7 @@ public partial class FreighterCheck : Node
         if (_player() is not { } me || !me.IsOnFloor()) { Finish("no player"); return; }
         if (CarMode) { await CarStage(me); Finish(null); return; }
         me.Announced += (text, good) => GD.Print($"[freightercheck] announce: {text}");
-        me.Impacted += lost => GD.Print($"[freightercheck] impact: lost {lost:F1} m/s, ride {me.Ride}");
+        me.Impacted += lost => { _impacts++; GD.Print($"[freightercheck] impact: lost {lost:F1} m/s, ride {me.Ride}"); };
         Expect(me.SetRide(RideKind.Freighter), "at the controls of the military freighter");
         await Seconds(2);
         if (me.Vehicle is not Airliner jet) { Finish("not an airliner"); return; }
@@ -217,6 +217,7 @@ public partial class FreighterCheck : Node
         // headless the launch came inside it and never saw the stale floor contact that wrecked it (#456).
         await Until(() => flying.State.Settle <= 0f, 5);
         float y0Launch = me.GlobalPosition.Y, health0 = me.VehicleHealth;
+        int impacts0 = _impacts;
         me.DebugLaunch(me.GlobalPosition + Vector3.Up * 600f, -me.GlobalTransform.Basis.Z * 65f);
         await Seconds(3);
         GD.Print($"[freightercheck] launched: ride {me.Ride}, same aircraft {me.Vehicle == flying}, on the ground {flying.State.OnGround}, {flying.State.Ias / 0.5144f:0} kt, {me.GlobalPosition.Y - y0Launch:F0} m up");
@@ -254,6 +255,9 @@ public partial class FreighterCheck : Node
         me.TurnView(Mathf.Pi);
         await WalkTo(me, 0f, 0f, 20);
         Expect(await ToCockpit(me) && me.TryInteract() && await Until(() => me.Vehicle is Airliner && me.SeatIndex == 0, 6), $"back at the controls in flight ({me.Ride})");
+        await Seconds(1);
+        Expect(_impacts == impacts0 && me.VehicleHealth >= health0,
+            $"the controls taken back in flight without a knock ({_impacts - impacts0} impacts, health {me.VehicleHealth:F0}, pitch {Mathf.RadToDeg(AirlinerFlight.PitchOf((me.Vehicle as Airliner)?.State.Attitude ?? Basis.Identity)):F1}°)");
         await Shot("controls_in_flight");
         Finish(null);
     }

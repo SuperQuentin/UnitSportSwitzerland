@@ -862,13 +862,21 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// as if it had taken off. A plane needs a runway and a paraglider a launch slope, and neither
     /// is what a test of the flight model is about.
     /// </summary>
+    /// <summary>
+    /// The body's floor contact is the old spot's until it moves: one still step where it is now clears it
+    /// (#456). For a body put somewhere by hand, before a flight step reads <c>IsOnFloor</c> as the ground under it.
+    /// </summary>
+    private void ClearFloorContact()
+    {
+        Velocity = Vector3.Zero;
+        MoveAndSlide();
+    }
+
     public void DebugLaunch(Vector3 position, Vector3 velocity)
     {
         GlobalPosition = position;
-        // the body's floor contact is still the old spot's until it moves: one still step here clears it,
         // or the first flight step at 600 m sees the runway under it, a touchdown with the gear up (#456)
-        Velocity = Vector3.Zero;
-        MoveAndSlide();
+        ClearFloorContact();
         // placed by hand, so it need not wait for terrain under it (a probe over no terrain at all)
         _placed = true;
         _flight.Velocity = velocity;
@@ -2572,6 +2580,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is Airliner parked)
         {
             parked.UnpackFlags(state.Flags);
+            // taken over in the air (#456): its attitude, flying, not a fresh one level on the ground
+            if (state.Angles != default)
+            {
+                parked.Aloft(state.Angles, state.Velocity);
+                parked.Begin(ref _flight, state.Velocity, state.Yaw);
+                // nor the deck its pilot stood on as the ground under it: a belly scrape at once
+                ClearFloorContact();
+            }
             // the model was built before the flags: its doors, gear and flaps as left, not swinging there (#420)
             if (_visual is Avatar.AirlinerRig rig) rig.Snap(parked.Look(parked.State));
         }
