@@ -200,6 +200,24 @@ public partial class SiteProbe : Node3D
                 break;
             }
 
+            // A vehicle's NOSE must be further from the building than its tail. This is the one
+            // assertion that can see a mirrored heading, and the reason it is here: the yard frame
+            // and the test that walks it back both use the same formula, so a mirror is invisible
+            // to them — #499 shipped exactly that bug in `ToGodotHeading` (correct square to north,
+            // wrong by twice the axis otherwise) and both of its angle checks passed, because they
+            // measured |angle| off a world axis and +14 and -14 look alike. A physical fact does
+            // not care which convention is right.
+            foreach (var s in slots.Take(6))
+            {
+                var at = new Vector2((float)(s.E - tile.Id.MinE), (float)(tile.Id.MaxN - s.N));
+                var facing = new Vector2(-Mathf.Sin(s.Yaw), -Mathf.Cos(s.Yaw));   // RoadSignBuilder.Frame
+                float nose = box.DistanceTo(at + facing * 2.5f), tail = box.DistanceTo(at - facing * 2.5f);
+                // a working yard faces either way, so only the forecourt's tidy rows can be judged
+                if (site != BuildingType.Dealership || nose > tail) continue;
+                Check(false, $"{site}: a slot faces its own building (nose {nose:F1} m, tail {tail:F1} m)");
+                break;
+            }
+
             int heavy = slots.Count(s => s.Train != 0 || Player.HeavyCatalog.For((Player.RideKind)s.KindId) != null);
             bool wantsHeavy = site is BuildingType.Depot or BuildingType.Warehouse;
             Check(wantsHeavy == heavy > 0,

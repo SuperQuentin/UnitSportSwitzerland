@@ -32,9 +32,17 @@ sites their insides; this parks their fleets on the ground outside.
   `DormantVehicles.Yards` rather than in the provider, because deciding it needs the tile's
   geometry and tier 0 has none. Dropping keeps the ordinals, which name the vehicle: a gap in a
   yard is fine, a renumbered fleet is not, and a nudged car is a car in a hedge.
-- **The yard frame**: yaw 0 faces −Z, so out of the wall is `(−sin, −cos)` and along it is
-  `(cos, −sin)`; `+v` is further from the building. Getting that backwards puts the whole fleet
-  inside the hall, which is why `Every_slot_stands_inside_its_own_yard` checks all four quadrants.
+- **The yard frame**: yaw 0 faces −Z (`RoadSignBuilder.Frame`), so out of the wall is
+  `(−sin, −cos)` and along it is `(cos, −sin)`; `+v` is further from the building, and the heading
+  whose facing is the door's outward normal is `atan2(−x, −z)`.
+- **A mirrored heading is invisible to the obvious test.** `Every_slot_stands_inside_its_own_yard`
+  walks the frame back with the same formula that laid it out, so it passes either way; and an
+  assertion on |angle| off a world axis cannot tell +14° from −14°. #499 shipped exactly that bug
+  in `ParkingPlanner.ToGodotHeading` — right square to north, wrong by twice the axis otherwise —
+  with both of its angle checks green, and it was caught by eye in a screenshot. So `--sitecheck`
+  asserts a **physical** fact instead: a forecourt car's **nose is further from the building than
+  its tail**. That holds whichever convention is right, and it fails the moment the sign flips
+  (verified by injecting the mirror: "a slot faces its own building, nose 18.5 m, tail 23.5 m").
 
 ## A lorry is not a car with different paint
 
