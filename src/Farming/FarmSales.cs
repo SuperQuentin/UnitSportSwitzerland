@@ -439,6 +439,9 @@ public partial class FarmSales : Node
 
     private (ItemId Item, int Count, string? Coop, string? Buyer, long Week, int Month, InputDevice Device, bool Tip) _hintKey;
     private string? _hintText;
+    private Vector3 _hintAt = new(float.NaN, 0, 0);
+    private ulong _hintMsec;
+    private Market? _hintMarket;
 
     /// <summary>
     /// The delivery prompt in a farm machine stopped at a market (PlayerFeel): what the load fetches
@@ -446,7 +449,15 @@ public partial class FarmSales : Node
     /// </summary>
     public string DeliveryHint(ItemId item, int count, Vector3 at, bool tip = false)
     {
-        var m = MarketAt(at, FarmMarket.DeliverReach, 0f);
+        // the market is looked up again only after 2 m or half a second (the prompt asks every frame)
+        ulong msec = Time.GetTicksMsec();
+        if (float.IsNaN(_hintAt.X) || _hintAt.DistanceSquaredTo(at) > 4f || msec - _hintMsec > 500)
+        {
+            _hintAt = at;
+            _hintMsec = msec;
+            _hintMarket = MarketAt(at, FarmMarket.DeliverReach, 0f);
+        }
+        var m = _hintMarket;
         var key = (item, count, m?.Coop, m?.Buyer?.Key, Week, Month, PlayerInput.HintDevice, tip);
         if (_hintText != null && key == _hintKey) return _hintText;
         _hintKey = key;

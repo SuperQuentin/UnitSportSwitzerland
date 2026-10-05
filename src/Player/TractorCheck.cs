@@ -437,11 +437,14 @@ public partial class TractorCheck : Node
         await Stop(me);
         me.RideControls = null;
         Expect(me.CanDeliver(tractor), $"stopped {F(me.GlobalPosition.DistanceTo(door))} m from the co-op's door: it can deliver");
-        long due = ShopTables.DeliveryPrice(ItemCategory.Produce, wheat, 60);
+        // the market's price (#494, Farming.FarmPrices): the season and the stand-in co-op's wishes of the week
+        string coopKey = new Interiors.BuildingKey(Farming.FarmMarket.StandInTile.E, Farming.FarmMarket.StandInTile.N, 0).ToString();
+        int Market(int n) => (int)Farming.FarmPrices.Delivery(wheat, ItemId.Wheat, n, Farming.FarmSales.Month, coopKey, Farming.FarmSales.Week);
+        long due = ShopTables.DeliveryPrice(ItemCategory.Produce, ItemId.Wheat, wheat, 60, Farming.FarmSales.Month, coopKey, Farming.FarmSales.Week);
         me.FarmAction(tractor);
         await Until(() => tractor.TrailerTank.Items == 0, 8);
         await Wait(1.0);
-        Expect(tractor.TrailerTank.Items == 0 && me.FarmFrancsPaid == 60 * (int)wheat && due == 60 * (int)wheat && items.Inventory.Cash - cash == me.FarmFrancsPaid,
+        Expect(tractor.TrailerTank.Items == 0 && me.FarmFrancsPaid == Market(60) && due == Market(60) && items.Inventory.Cash - cash == me.FarmFrancsPaid,
             $"tipped at the co-op: paid {me.FarmFrancsPaid} CHF for 60 sacks × {F(wheat, "F0")} (pocket +{items.Inventory.Cash - cash}), the trailer {tractor.TrailerTank.Items}");
         // the rig was rebuilt for the new load: look the bin up again
         bin = me.GetNodeOrNull<Node3D>($"Section{tractor.SectionCount - 1}/Visual/Body/Tip");
@@ -466,7 +469,7 @@ public partial class TractorCheck : Node
         Expect(me.CanDeliver(combine), $"{F(me.GlobalPosition.DistanceTo(door))} m from the door, 40 sacks: it can deliver");
         me.FarmAction(combine);
         await Until(() => combine.Tank.Items == 0, 8);
-        Expect(combine.Tank.Items == 0 && !combine.AugerOut && me.FarmDeliveries == paidBefore + 1 && me.FarmFrancsPaid == 40 * (int)wheat && items.Inventory.Cash - cash == 40 * (int)wheat,
+        Expect(combine.Tank.Items == 0 && !combine.AugerOut && me.FarmDeliveries == paidBefore + 1 && me.FarmFrancsPaid == Market(40) && items.Inventory.Cash - cash == Market(40),
             $"the combine delivers: paid {me.FarmFrancsPaid} CHF for 40 sacks, the tank {combine.Tank.Items}");
         me.ExitVehicle();
         await Wait(1.0);
