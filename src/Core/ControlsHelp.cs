@@ -113,6 +113,13 @@ public partial class ControlsHelp : CanvasLayer
             new("Tipping trailer: tip the bin (at a farm co-op: deliver the load)", Keys: "{destination}", Pad: "{car_door}"),
             new("On foot at a loaded trailer or combine tank: take a sack (hold, or with run held: ten)", PlayerInput.InteractMount),
         }),
+        ("Selling farm produce", new Row[]
+        {
+            new("Farm stand: set it up by a road (stand in hand) / pack it up empty (empty hand)", PlayerInput.UseItem),
+            new("At a farm stand: open it (yours: stock, take back, collect the honesty box; another's: buy)", PlayerInput.InteractMount),
+            new("At a sugar factory or a mill on foot: sell the sacks it buys", PlayerInput.InteractMount),
+            new("Farm machine at a co-op or a specialty buyer: deliver the load (the prompt shows the price)", Keys: "{destination}", Pad: "{car_door}"),
+        }),
         ("Paddle steamer", new Row[]
         {
             new("Telegraph: one step ahead / astern (FULL ASTERN .. STOP .. FULL AHEAD)", Keys: "{move_forward} / {move_back}", Pad: "{move_forward} up / down"),

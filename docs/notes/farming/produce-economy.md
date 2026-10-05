@@ -34,6 +34,11 @@
   co-op door under the made-up tile `StandInTile` (-1, -1); `--farmcoop E,N` (LV95, fixture worlds only) puts one
   there, facing south (its yard), on the server and every client (`StandInFromArgs`, from `ClientWorld`/`ServerWorld`).
 - **Delivering a tipping trailer** is tipping it (`FootPlayer.Tip`, `machines`): the bin goes up and the load is sold.
+- **Market prices and more buyers** (`selling`): the co-op's counter and loads now follow `FarmPrices` (season:
+  harvest glut × 0.8, stored crops in spring × 1.2; the co-op's 1-2 wanted crops of the farm week +30..60 %);
+  `ShopTables.DeliveryPrice(category, value, count)` is the neutral full value, the market overload and
+  `ShopTables.CounterPrice` carry month, co-op and week. Specialty buyers (sugar factories, mills) take loads and
+  sacks for a premium; a farm stand (item 240) sells to passers-by; co-ops post delivery contracts.
 - **Loot**: seeds, fertiliser and a rare hoe in barn crates/shelves and a little in garage shelves (`FarmKit`);
   potatoes, carrots, flour in cellar and pantry shelves (`Roots`). This shifts those containers' rolls.
 - **Checks**: `tools/test.sh unit` (`FarmEconomyTests`), `--invcheck` (items, icons, save by name, recipe values),

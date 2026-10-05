@@ -335,3 +335,8 @@ src/Farming/MachineLoad  quick  --tractorcheck --chunks fixture:flat --traffic 0
 src/Player/TractorNetPro net    tools/tractornetcheck.sh
 src/Player/Truck.Farm    net    tools/tractornetcheck.sh
 src/Player/FootPlayer.Fa net    tools/tractornetcheck.sh
+src/Farming/             quick  --sellcheck --systems ui,physics,loot,farming --farmmonth 7 --selldir test_output/sellcheck_store
+src/Loot/Shop            quick  --sellcheck --systems ui,physics,loot,farming --farmmonth 7 --selldir test_output/sellcheck_store
+src/Items/Place          quick  --sellcheck --systems ui,physics,loot,farming --farmmonth 7 --selldir test_output/sellcheck_store
+src/Farming/             net    tools/sellnetcheck.sh
+src/Items/PlacedObjects  net    tools/sellnetcheck.sh
