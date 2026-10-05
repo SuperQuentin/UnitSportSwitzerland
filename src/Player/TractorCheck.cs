@@ -213,6 +213,8 @@ public partial class TractorCheck : Node
         if (me == null) { Finish("no local player"); return; }
         if (VehicleManager.Instance is not { } vehicles || ItemController.Instance is not { } items) { Finish("no vehicles or items here"); return; }
         me.Announced += (text, _) => Log($"  announced: {text}");
+        // an empty pack lent for the check (as a match does): the saved one is neither read nor overwritten
+        items.Inventory.BeginMatch();
         MachineWork.FakeSweep = Field;
 
         // ---- the tractor and the plough ----
@@ -464,6 +466,7 @@ public partial class TractorCheck : Node
     private void Finish(string? fatal)
     {
         MachineWork.FakeSweep = null;
+        ItemController.Instance?.Inventory.EndMatch();
         if (_local() is { } me) me.RideControls = null;
         if (fatal != null) { _failures++; Log($"FAIL {fatal}"); }
         Log(_failures == 0 ? "RESULT: ok" : $"RESULT: FAILED ({_failures})");
