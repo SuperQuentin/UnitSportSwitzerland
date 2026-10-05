@@ -36,6 +36,9 @@ internal sealed class XrPad
     private bool _r3Was;
     private bool _dpadUpWas, _dpadDownWas, _dpadLeftWas, _dpadRightWas;
 
+    /// <summary>The arms flying (#438, <see cref="XrRig"/>): added to the left stick, up +y.</summary>
+    public Vector2 BodyStick { get; set; }
+
     /// <summary>Set by the rig while the right stick is held for a recentre: R3 is not sent then.</summary>
     public bool RecentreHeld { get; set; }
 
@@ -69,7 +72,7 @@ internal sealed class XrPad
         }
 
         // --- left stick: on foot, forward is where the head looks, not where the body faces ---
-        var stick = _left.GetVector2("primary");
+        var stick = (_left.GetVector2("primary") + BodyStick).LimitLength(1f);
         if (onFoot && player != null)
         {
             float yaw = XrRig.YawOf(calibrated.Basis);
