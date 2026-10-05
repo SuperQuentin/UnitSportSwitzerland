@@ -1,0 +1,112 @@
+# A release per merged pull request, coalesced: a burst of merges yields one release covering all of them.
+# Free on this repo (public -> unlimited standard-runner minutes). Background: docs/notes/general/release-on-merge.md
+name: Release
+
+on:
+  # pull_request_target, not pull_request: the closed event then carries a write token even when the
+  # merged PR came from a fork, and nothing from the PR branch is ever checked out (we build main's tip).
+  pull_request_target:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print the next version and changelog without releasing
+        type: boolean
+        default: false
+      quiet_minutes:
+        description: Minutes main must sit still before the build starts
+        default: "3"
+
+# One release at a time. Queued, never cancelled: a cancel could land between "gh release create"
+# and the asset upload and leave a release with no downloads. Superseded runs exit early instead.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GODOT_VERSION: 4.7.1-stable
+      GODOT: ${{ github.workspace }}/.godot-ci/godot
+      QUIET_MINUTES: ${{ inputs.quiet_minutes || '3' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0      # release.sh needs the tags and the full log for the changelog
+          lfs: false          # assets/**/*.{png,glb,...} are docs material, excluded from the export;
+                              # keeping LFS out holds this to zero metered LFS bandwidth
+
+      # A burst of merges (six in half an hour is normal here) should produce one release, not six:
+      # settle-main.sh waits for main to sit still, and stops early if its tip is already released.
+      - name: Wait for main to settle
+        id: settle
+        run: tools/ci/settle-main.sh
+
+      - name: Set up .NET
+        if: steps.settle.outputs.skip != '1'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x   # UnitSportSwitzerland.csproj TargetFramework
+
+      # 1.15 GB of export templates: cached, or every release would re-download them.
+      - name: Cache Godot and its export templates
+        if: steps.settle.outputs.skip != '1'
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .godot-ci
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-mono-linux
+
+      - name: Install Godot ${{ env.GODOT_VERSION }} mono
+        if: steps.settle.outputs.skip != '1' && steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          base=https://github.com/godotengine/godot-builds/releases/download/$GODOT_VERSION
+          v=${GODOT_VERSION%-stable}
+          mkdir -p .godot-ci "$HOME/.local/share/godot/export_templates"
+          curl -fsSL -o /tmp/godot.zip "$base/Godot_v${GODOT_VERSION}_mono_linux_x86_64.zip"
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          d=$(find /tmp/godot -maxdepth 1 -mindepth 1 -type d | head -1)
+          cp -r "$d"/* .godot-ci/
+          mv .godot-ci/Godot_v${GODOT_VERSION}_mono_linux.x86_64 .godot-ci/godot
+          chmod +x .godot-ci/godot
+          curl -fsSL -o /tmp/templates.tpz "$base/Godot_v${GODOT_VERSION}_mono_export_templates.tpz"
+          unzip -q /tmp/templates.tpz -d /tmp/tpz
+          mv /tmp/tpz/templates "$HOME/.local/share/godot/export_templates/${v}.mono"
+
+      - name: Report the Godot build
+        if: steps.settle.outputs.skip != '1'
+        run: |
+          "$GODOT" --headless --version
+          ls "$HOME/.local/share/godot/export_templates/"*/ | head -20
+
+      # export_presets.cfg is gitignored (one per machine), so CI brings its own.
+      - name: Install the CI export presets
+        if: steps.settle.outputs.skip != '1'
+        run: cp tools/ci/export_presets.cfg export_presets.cfg
+
+      - name: Release
+        if: steps.settle.outputs.skip != '1'
+        # via bash: tools/release.sh is mode 644 in the index, like most of tools/
+        run: bash tools/release.sh --ci ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: Keep the logs and notes
+        if: always() && steps.settle.outputs.skip != '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-logs
+          path: |
+            test_output/release/notes.md
+            test_output/release/subjects.txt
+          if-no-files-found: ignore

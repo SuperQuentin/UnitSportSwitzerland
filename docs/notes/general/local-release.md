@@ -1,8 +1,10 @@
 # Local release: `tools/release.sh`
 
-- Manual only: there is no push hook, nothing releases on its own. Run `tools/release.sh` when you want a release. Docs/chore-only ranges release nothing.
+- A merged PR releases on its own, on GitHub Actions (`general/release-on-merge`). Running `tools/release.sh` by hand
+  still works and is how you release without waiting for a merge; there is no push hook either way.
+  Docs/chore-only ranges release nothing, by hand or in CI.
 - The build always runs in a temporary worktree of the released commit, so your working files are never touched.
-- Releases are built and uploaded from your own machine, no GitHub Actions. Run from Git Bash on a synced `main`.
+- A hand-run release is built and uploaded from your own machine. Run from Git Bash on a synced `main` (macOS still cannot: #92).
 - VS Code tasks `release: dry run` and `release: build and publish` run it (Git Bash by full path on Windows).
 - `tools/release.sh --dry-run` prints the next version and changelog; `tools/release.sh` exports "Windows Desktop" (`-windows.zip`), "Linux" x86_64 (`-linux-x86_64.tar.gz`) and "macOS" universal (`-macos.tar.gz`, the `.app`) in one run and uploads all three with `gh release create vX.Y.Z`. The tarballs set Unix modes explicitly (NTFS has none): game binary and `bin/*` 0755. Godot writes macOS only as a `.zip` off a Mac, so the script unpacks it and repacks.
 - Semver from gitmoji commits since the last `v*` tag: `BREAKING` anywhere = major; anything except fix/docs/chore/merge = minor; only `:bug:` `:ambulance:` `:recycle:` `:art:` `:white_check_mark:` = patch; only `:memo:` `:wrench:` merges = no release.
