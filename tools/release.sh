@@ -122,9 +122,15 @@ tarball() {
 SKIPPED=()
 export_preset() { # preset, output file: returns 1 (never exits) so the caller can skip that platform
   "$GODOT" --headless --path . --export-release "$1" "$2" || true
-  [ -e "$2" ] && return 0
-  echo "WARNING: export \"$1\" produced nothing (template missing on this host?), skipping that platform"
+  if [ ! -e "$2" ]; then echo "WARNING: export \"$1\" produced nothing (template missing on this host?), skipping that platform"
+  # a failed dotnet publish still writes the export, just without the game (#548): never ship that
+  elif ! has_game "$2"; then echo "WARNING: export \"$1\" has no UnitSportSwitzerland.dll (dotnet publish failed), skipping that platform"
+  else return 0; fi
   SKIPPED+=("$1"); return 1
+}
+has_game() { # export output: an archive (.zip/.apk) or the executable inside its build dir
+  case $1 in *.zip|*.apk) unzip -l "$1" | grep -q '/UnitSportSwitzerland\.dll$' ;;
+    *) find "$(dirname "$1")" -name UnitSportSwitzerland.dll | grep -q . ;; esac
 }
 
 dotnet build UnitSportSwitzerland.csproj -c Release
