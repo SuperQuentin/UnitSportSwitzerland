@@ -176,6 +176,26 @@ public class AirlinerSimTests
     }
 
     [Fact]
+    public void A_cold_heavy_dropped_onto_its_wheels_stays_level()
+    {
+        // #491: put down a metre up with no way on, the falling "alpha" (90°) pitched and banked it
+        var spec = AirlinerCatalog.An124;
+        var s = Parked(spec, 0f, enginesRunning: false);
+        s.Settle = 2f;
+        var pos = new Vector3(0, 1.2f, 0);
+        float worst = 0f;
+        Run(spec, ref s, ref pos, 3f, (st, _) =>
+        {
+            worst = Mathf.Max(worst, Mathf.Max(Mathf.Abs(PitchOf(st.Attitude)), Mathf.Abs(BankOf(st.Attitude))));
+            return new Controls(Brake: 1f);
+        });
+        _out.WriteLine($"worst attitude {Mathf.RadToDeg(worst):0.00}°");
+        Assert.True(s.OnGround);
+        Assert.True(worst < 0.005f, $"tipped {Mathf.RadToDeg(worst):0.00}°");
+        Assert.Equal(0f, s.Damage);
+    }
+
+    [Fact]
     public void A_conventional_type_stalls_in_sim()
     {
         var spec = AirlinerCatalog.An124;

@@ -286,6 +286,7 @@ src/BattleRoyale/BrPlane quick  --flycheck freighter --world flat
 src/Player/Airliner      quick  --flycheck an124 --world flat
 src/Avatar/An124         quick  --flycheck an124 --world flat
 src/Player/AirlinerCirc  quick  --flycheck an124 --world flat
+src/Player/Airliner      quick  --flycheck an124 --world flat --airliner sim
 src/Avatar/An124         quick  --an124check --world fixture --traffic 0
 src/Player/An124Check    quick  --an124check --world fixture --traffic 0
 src/Player/Airliner      quick  --an124check --world fixture --traffic 0
