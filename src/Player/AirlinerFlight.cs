@@ -295,6 +295,9 @@ public static class AirlinerFlight
         return ev;
     }
 
+    /// <summary>The airflow's moments fade in from this speed over the next <see cref="AirflowFull"/> m/s (#491).</summary>
+    private const float AirflowFrom = 6f, AirflowFull = 10f;
+
     /// <summary>Trim wheel's travel, rad of trimmed alpha a second; static stability, 1/s.</summary>
     private const float TrimRate = 0.02f, PitchStability = 0.7f;
 
@@ -501,6 +504,10 @@ public static class AirlinerFlight
         float pitch = PitchOf(att), bank = BankOf(att);
         float qRef = 0.5f * SeaLevelDensity * Mathf.Pow(spec.StallSpeed(s.Mass, 0), 2f) * 0.6f;
         float authority = Mathf.Clamp(q / qRef, 0.15f, 1f);
+        // the airflow's own moments (static stability, a stalled wing, the fin) need air over the
+        // surfaces: dropped onto its wheels with no way on, the "alpha" of falling is 90° and they
+        // pitched and banked a cold heavy in Sim until its 24 m nose box met the ground (#491)
+        float airflow = Mathf.Clamp((v.Length() - AirflowFrom) / AirflowFull, 0f, 1f);
 
         // pitch: the stick moves the flight path; let go, the path is held. Turning takes more lift,
         // which in a bank is pitching about the wings (the feed-forward: ω·sin φ, ω = g·tan φ / V).
@@ -511,7 +518,7 @@ public static class AirlinerFlight
         {
             // static stability: the nose seeks the trimmed angle of attack, so letting go returns to the
             // trimmed speed; a turn needs back pressure; the stick adds to it
-            qCmd = stick.Y * spec.MaxPitchRate * 2.5f + (s.TrimAlpha - alpha) * PitchStability - gammaRate * 0.3f;
+            qCmd = stick.Y * spec.MaxPitchRate * 2.5f + ((s.TrimAlpha - alpha) * PitchStability - gammaRate * 0.3f) * airflow;
             s.PathTarget = gamma;
         }
         else if (Mathf.Abs(stick.Y) > 0.05f)
@@ -552,7 +559,7 @@ public static class AirlinerFlight
         // without the protections a stalled wing drops the nose (and one wing)
         if (!protect && alpha > s.AlphaStall)
         {
-            float deep = Mathf.Clamp((alpha - s.AlphaStall) / 0.1f, 0f, 1f);
+            float deep = Mathf.Clamp((alpha - s.AlphaStall) / 0.1f, 0f, 1f) * airflow;
             s.PitchRate -= 0.25f * deep * dt * 10f;
             s.RollRate += 0.15f * deep * dt * 10f;
         }
@@ -560,7 +567,7 @@ public static class AirlinerFlight
         att = att * new Basis(Vector3.Right, s.PitchRate * dt);
         att = att * new Basis(Vector3.Back, -s.RollRate * dt);
         // the fin weathercocks the nose into the airflow: no sideslip, no rudder to work
-        att = att * new Basis(Vector3.Up, -beta * Mathf.Clamp(q / qRef, 0.3f, 2f) * 1.5f * dt);
+        att = att * new Basis(Vector3.Up, -beta * Mathf.Clamp(q / qRef, 0.3f, 2f) * 1.5f * airflow * dt);
         att = att.Orthonormalized();
         s.Attitude = att;
         var nose = -att.Z;
