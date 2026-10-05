@@ -24,6 +24,9 @@ public sealed class FixtureChunkSource : IChunkSource
 
     public FixtureCourse Course => _course;
 
+    /// <summary>The course's ground height at an LV95 point, m.</summary>
+    public double GroundAt(double e, double n) => _course.Ground(e - _startE, n - _startN);
+
     public FixtureChunkSource(FixtureCourse course, double startE, double startN)
     {
         _course = course;

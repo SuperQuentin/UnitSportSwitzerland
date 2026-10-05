@@ -109,7 +109,8 @@ public partial class ControlsHelp : CanvasLayer
         {
             new("Couple an implement (linkage) or the tipping trailer (drawbar)", PlayerInput.Couple),
             new("Lower / raise the implement or the combine's header", PlayerInput.Kneel),
-            new("Combine: swing the auger out / in; at a farm co-op: deliver the load", Keys: "{destination}", Pad: "{car_door}"),
+            new("Combine: swing the auger out / in (over a parked or a driven tipping trailer); at a farm co-op: deliver the load", Keys: "{destination}", Pad: "{car_door}"),
+            new("Tipping trailer: tip the bin (at a farm co-op: deliver the load)", Keys: "{destination}", Pad: "{car_door}"),
             new("On foot at a loaded trailer or combine tank: take a sack (hold, or with run held: ten)", PlayerInput.InteractMount),
         }),
         ("Paddle steamer", new Row[]

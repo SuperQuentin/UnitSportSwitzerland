@@ -48,6 +48,8 @@ public sealed record HeavyParts(ArrayMesh Body, ArrayMesh Head, ArrayMesh Tail, 
     public float Fill { get; init; }
     /// <summary>A combine's unloading auger, on its hinge (node space), swung out by <c>OpenYaw</c>.</summary>
     public (ArrayMesh Mesh, Vector3 Hinge, float OpenYaw)? Auger { get; init; }
+    /// <summary>A tipping trailer's bin (built about its hinge), the hinge at its back (node space), tipped up by <c>Angle</c> rad; the heap rides in it.</summary>
+    public (ArrayMesh Mesh, Vector3 Hinge, float Angle)? Tip { get; init; }
 }
 
 /// <summary>
@@ -82,6 +84,20 @@ public partial class HeavyRig : Node3D, IHingedDoors
     public float Fill { get; set; }
     /// <summary>The combine's unloading auger out (#494).</summary>
     public bool AugerOut { get; set; }
+    /// <summary>
+    /// A tipping trailer's bin tipped up (#494). The first value a new rig is given is shown at once:
+    /// a rig rebuilt for a new load (the heap) keeps the bin where it was.
+    /// </summary>
+    public bool Tipped
+    {
+        get => _tippedOn;
+        set
+        {
+            if (!_tipDressed) { _tipDressed = true; _tipped = value ? 1f : 0f; }
+            _tippedOn = value;
+        }
+    }
+    private bool _tippedOn, _tipDressed;
 
     // ---- the cockpit (first section of a truck or bus) ----
     /// <summary>The steering wheel's turn, rad (+ anticlockwise as the driver sees it).</summary>
@@ -115,9 +131,9 @@ public partial class HeavyRig : Node3D, IHingedDoors
 
     private const float DoorTime = 1.2f, KneelTime = 1.5f, KneelDrop = 0.08f;
     /// <summary>Seconds a linkage takes to lower or raise, and an auger to swing (#494).</summary>
-    private const float LiftTime = 1.6f, AugerTime = 3f;
-    private Node3D? _lift, _reel, _heap, _auger;
-    private float _liftRaise, _lowered, _augerOpen, _augerYaw, _reelTurn;
+    private const float LiftTime = 1.6f, AugerTime = 3f, TipTime = 3f;
+    private Node3D? _lift, _reel, _heap, _auger, _tip;
+    private float _liftRaise, _lowered, _augerOpen, _augerYaw, _reelTurn, _tipAngle, _tipped, _tipShown;
     private float[] _wheelRadius = System.Array.Empty<float>();
 
     private Node3D _body = null!;
@@ -289,11 +305,21 @@ public partial class HeavyRig : Node3D, IHingedDoors
                 _lift.AddChild(_reel);
             }
         }
+        if (p.Tip is { } tip)
+        {
+            // the bin's mesh has its origin on the hinge (MeshScratch.Build(pivot)): turned about it
+            _tipAngle = tip.Angle;
+            _tip = new Node3D { Name = "Tip", Position = tip.Hinge };
+            var bin = new MeshInstance3D { Name = "Bin", Mesh = tip.Mesh };
+            MeshScratch.Paint(bin, body, glass);
+            _tip.AddChild(bin);
+            _body.AddChild(_tip);
+        }
         if (p.Heap is { } heap)
         {
-            _heap = new Node3D { Name = "Heap", Position = heap.At };
+            _heap = new Node3D { Name = "Heap", Position = heap.At - (_tip?.Position ?? Vector3.Zero) };
             _heap.AddChild(new MeshInstance3D { Mesh = heap.Mesh, MaterialOverride = body });
-            _body.AddChild(_heap);
+            (_tip ?? _body).AddChild(_heap);
         }
         if (p.Auger is { } auger)
         {
@@ -324,6 +350,16 @@ public partial class HeavyRig : Node3D, IHingedDoors
             float f = Mathf.Clamp(Fill, 0f, 1f);
             _heap.Visible = f > 0.005f;
             if (_heap.Visible) _heap.Scale = new Vector3(1f, f, 1f);
+        }
+        if (_tip != null)
+        {
+            float target = Tipped ? 1f : 0f;
+            if (_tipped != target) _tipped = Mathf.MoveToward(_tipped, target, dt / TipTime);
+            if (_tipped != _tipShown)
+            {
+                _tipShown = _tipped;
+                _tip.Rotation = new Vector3(_tipAngle * Mathf.SmoothStep(0f, 1f, _tipped), 0, 0);
+            }
         }
         if (_auger != null)
         {

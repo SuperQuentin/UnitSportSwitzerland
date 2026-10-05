@@ -22,6 +22,20 @@ public sealed partial class Truck
         set => DoorsOpen = (byte)(value ? DoorsOpen | AugerBit : DoorsOpen & ~AugerBit);
     }
 
+    /// <summary>
+    /// The coupled tipping trailer's body tipped up (#494): the same door bit as the combine's auger
+    /// (a tractor has no auger and no fourth door), so it travels in the pose and parks with the train.
+    /// </summary>
+    public bool Tipping
+    {
+        get => Spec.TankItems <= 0 && TrailerCapacity > 0 && (DoorsOpen & AugerBit) != 0;
+        set
+        {
+            if (Spec.TankItems > 0) return;
+            DoorsOpen = (byte)(value && TrailerCapacity > 0 ? DoorsOpen | AugerBit : DoorsOpen & ~AugerBit);
+        }
+    }
+
     /// <summary>The mounted implement on the linkage (plough, drill, mower), or null.</summary>
     public TrailerSpec? Implement => Trailer is { Mounted: true } ? Trailer : null;
 
@@ -122,7 +136,11 @@ public sealed partial class Truck
             rig.Fill = Tank.Items / (float)Spec.TankItems;
             rig.AugerOut = AugerOut;
         }
-        else if (k >= OwnSections && Trailer is { TankItems: > 0 } t) rig.Fill = TrailerTank.Items / (float)t.TankItems;
+        else if (k >= OwnSections && Trailer is { TankItems: > 0 } t)
+        {
+            rig.Fill = TrailerTank.Items / (float)t.TankItems;
+            rig.Tipped = Tipping;
+        }
     }
 
     /// <summary>

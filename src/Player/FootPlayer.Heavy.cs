@@ -46,7 +46,11 @@ public partial class FootPlayer
     {
         foreach (var s in _sections)
         {
-            if (IsInstanceValid(s)) RemoveCollisionExceptionWith(s);
+            if (!IsInstanceValid(s)) continue;
+            RemoveCollisionExceptionWith(s);
+            // out of the way of its successor's name: freed only at the end of the frame, it would
+            // keep "Section{k}" and the new one would be renamed
+            s.Name = $"{s.Name}Old";
             s.QueueFree();
         }
         _sections.Clear();
