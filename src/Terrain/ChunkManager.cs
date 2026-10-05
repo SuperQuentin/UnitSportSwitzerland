@@ -882,6 +882,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
     public bool HasAnchor(Node3D anchor) => _anchors.Contains(anchor);
 
+    /// <summary>Every streaming anchor, with or without collision. Check each with <c>IsInstanceValid</c>.</summary>
+    public IReadOnlyList<Node3D> Anchors => _anchors;
+
     public int ActiveChunkCount => _chunks.Count;
 
     /// <summary>Bilinear terrain height at a world position, if that chunk's data is loaded.</summary>
