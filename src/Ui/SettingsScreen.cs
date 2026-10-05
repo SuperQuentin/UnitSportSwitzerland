@@ -111,6 +111,20 @@ public partial class SettingsScreen : Screen
                 "The backwards bird of old, kept as an option; drawing only, every pigeon on your screen");
             UiKit.ToggleRow(rows, "Find servers on your network", s.LanDiscovery, on => GameSettings.Current.LanDiscovery = on,
                 "Lists LAN servers on the Multiplayer screen");
+            // the first-run tutorial (#517): now if a world is up (it shows when the menus close), else in the next one
+            Button replay = null!;
+            replay = UiKit.ActionRow(rows, "Tutorial", "Play again", () =>
+            {
+                GameSettings.Current.TutorialDone = false;
+                GameSettings.SaveOnly(nameof(GameSettings.TutorialDone), false);
+                // and each ride's mini tutorial again
+                GameSettings.Current.VehicleIntrosSeen.Clear();
+                GameSettings.SaveOnly(nameof(GameSettings.VehicleIntrosSeen), new System.Text.Json.Nodes.JsonArray());
+                if (Shell.InWorld) Shell.World?.StartTutorial();
+                replay.Text = Shell.InWorld ? "Playing" : "In the next world";
+                replay.Disabled = true;
+            }, "Look, walk, travel, the map and the fly camera, then each ride's controls the first time");
+            if (Tutorial.Current != null) { replay.Text = "Playing"; replay.Disabled = true; }
         });
 
         Tab("Vehicles", rows =>

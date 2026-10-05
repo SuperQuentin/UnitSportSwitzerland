@@ -221,6 +221,9 @@ public static partial class TileRewriter
     public static Stats Run(string chunkDir, IReadOnlyList<TileId> tiles, Options options, Action<string> log)
     {
         string rawDir = options.RawDir ?? RawRoads.DirFor(RawRoads.DefaultTempDir(chunkDir));
+        // the car park rings are written to their own directory beside the raw roads, not into it
+        // (#499, ParkingAreaExtractor -> RawParking.DirFor), so they are found from the temp dir
+        string parkDir = RawParking.DirFor(Directory.GetParent(rawDir)?.FullName ?? RawRoads.DefaultTempDir(chunkDir));
 
         // Input per tile: the raw extractor output if kept, else a fresh (never rewritten) tile
         // in the chunk dir. A rewritten tile with no raw input would be trimmed a second time.
@@ -619,7 +622,7 @@ public static partial class TileRewriter
             var parkAreas = new Dictionary<TileId, List<RoadAreaProp>>();
             var parkPoints = new Dictionary<TileId, List<RoadPointProp>>();
             var parkBays = new Dictionary<TileId, List<ParkingBay>>();
-            PlanParking(options.RawDir, block, wanted, output, facades, grids,
+            PlanParking(parkDir, block, wanted, output, facades, grids,
                 parkAreas, paint, parkPoints, parkBays, parkingStats);
 
             foreach (var id in block)

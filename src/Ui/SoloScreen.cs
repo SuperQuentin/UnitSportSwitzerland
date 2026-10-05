@@ -32,7 +32,8 @@ public partial class SoloScreen : Screen
             + "{teleport} searches a town and takes you there."), UiTheme.FontSmall, UiTheme.TextDim, wrap: true));
         exploreBody.AddChild(UiKit.Spacer(expand: true));
         _explore = UiKit.Button("Start exploring", primary: true);
-        _explore.Pressed += () => Shell.Launch(new WorldLaunch { Mode = GameMode.Explore });
+        // the map first, to pick where to land (#515)
+        _explore.Pressed += () => Shell.LaunchVia(new WorldLaunch { Mode = GameMode.Explore });
         exploreBody.AddChild(_explore);
         var exploreCard = UiKit.Card(exploreBody);
         exploreCard.SizeFlagsHorizontal = SizeFlags.ExpandFill;

@@ -57,6 +57,13 @@ public partial class ControlsHelp : CanvasLayer
             new("Gather stone, water, wood (hold)", PlayerInput.Gather),
             new("Bird journal", PlayerInput.BirdJournal),
         }),
+        ("Fishing (rod in hand)", new Row[]
+        {
+            new("Wind up a cast (hold), cast (let go)", PlayerInput.UseItem),
+            new("Strike when the float dips", PlayerInput.UseItem),
+            new("Reel in (hold); let go when the line strains or the fish runs", PlayerInput.UseItem),
+            new("Wind the line in; cancel a cast", PlayerInput.AimItem),
+        }),
         ("Fist fight (#495)", new Row[]
         {
             new("Challenge a player you look at, or accept their challenge", PlayerInput.InteractMount),
@@ -152,6 +159,17 @@ public partial class ControlsHelp : CanvasLayer
             new("Up", PlayerInput.FlyUp),
             new("Down", PlayerInput.FlyDown),
             new("Fast", PlayerInput.FlyBoost),
+        }),
+        // The map screen on the title menu (#515). Its keys are deliberately the same ones the world
+        // uses for other things, as T and the rest already are: only the map screen reads them, and
+        // there is no free letter left on the keyboard.
+        ("Map screen (main menu)", new Row[]
+        {
+            new("Pan", Keys: "Arrows / WASD, or right-drag", Pad: "Left stick"),
+            new("Zoom", PlayerInput.MapZoomIn),
+            new("Draw / erase the selection", Keys: "Drag, or Enter on the centre tile", Pad: "A"),
+            new("Switch tool (rectangle, brush, erase)", PlayerInput.MapTool),
+            new("Find a place", PlayerInput.MapSearch),
         }),
         ("Game", new Row[]
         {

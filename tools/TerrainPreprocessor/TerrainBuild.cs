@@ -86,7 +86,8 @@ public static class TerrainBuild
     }
 
     /// <summary>Builds tiles; returns the manifest of every tile in the dataset, or null on failure.</summary>
-    public static TerrainManifest? Run(List<SourceTile> sources, string outDir, string cacheDir, Options o)
+    public static TerrainManifest? Run(List<SourceTile> sources, string outDir, string cacheDir, Options o,
+        CancellationToken ct = default)
     {
         Directory.CreateDirectory(outDir);
         Directory.CreateDirectory(cacheDir);
@@ -105,7 +106,7 @@ public static class TerrainBuild
                 if (TryParseEdgeName(path, out var id)) candidates.Add(id);
 
         var toParse = new ConcurrentBag<SourceTile>();
-        Parallel.ForEach(candidates, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs }, id =>
+        Parallel.ForEach(candidates, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct }, id =>
         {
             bySource.TryGetValue(id, out var src);
             bool built = IsValidTerr(Path.Combine(outDir, ChunkFormat.ChunkFileName(id)));
@@ -198,7 +199,7 @@ public static class TerrainBuild
         var partitioner = System.Collections.Concurrent.Partitioner.Create(parseList, EnumerablePartitionerOptions.NoBuffering);
         try
         {
-            Parallel.ForEach(partitioner, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs }, src =>
+            Parallel.ForEach(partitioner, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct }, src =>
             {
                 if (!scratchPool.TryTake(out var sc)) sc = new Scratch();
                 try
@@ -258,7 +259,7 @@ public static class TerrainBuild
 
             // seam-only tiles with no parsed neighbour to trigger them (possible after --force-less reruns)
             Parallel.ForEach(toWrite.Where(id => !claimed.ContainsKey(id)),
-                new ParallelOptions { MaxDegreeOfParallelism = o.Jobs }, TryFinish);
+                new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct }, TryFinish);
         }
         catch (AggregateException)
         {
@@ -312,12 +313,12 @@ public static class TerrainBuild
     /// Every shared edge of adjacent tiles must be bit-identical. Streams the tiles (keeping only
     /// their four borders), so it runs on a whole country in constant memory per worker.
     /// </summary>
-    public static int VerifySeams(string outDir, IEnumerable<TileId> tiles, int jobs)
+    public static int VerifySeams(string outDir, IEnumerable<TileId> tiles, int jobs, CancellationToken ct = default)
     {
         var clock = Stopwatch.StartNew();
         int n = ChunkFormat.GridSize;
         var borders = new ConcurrentDictionary<TileId, ushort[]>(); // N, S, W, E rows of n
-        Parallel.ForEach(tiles, new ParallelOptions { MaxDegreeOfParallelism = jobs }, id =>
+        Parallel.ForEach(tiles, new ParallelOptions { MaxDegreeOfParallelism = jobs, CancellationToken = ct }, id =>
         {
             ChunkGrid g;
             using (var fs = File.OpenRead(Path.Combine(outDir, ChunkFormat.ChunkFileName(id)))) g = ChunkCodec.Decode(fs);

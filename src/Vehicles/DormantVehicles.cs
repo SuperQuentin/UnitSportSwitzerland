@@ -2,6 +2,7 @@ using System.Threading.Tasks;
 using Godot;
 using UnitSport.Avatar;
 using UnitSport.Core;
+using UnitSport.Interiors;
 using UnitSport.Player;
 using UnitSport.Terrain;
 using UnitSport.Terrain.Format;
@@ -133,6 +134,57 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
     }
 
     /// <summary>
+    /// Whether a slot is a goods vehicle rather than a car (#516): a lone trailer, a tractor, a
+    /// rigid, or a whole coupled artic. They cannot go through the car instancer — a 13.6 m artic
+    /// drawn from <c>TrafficMeshBuilder.Car</c> would be a hatchback standing where a lorry is, and
+    /// would turn into one the moment somebody woke it, with a car's collision box until then.
+    /// </summary>
+    private static bool IsHeavy(VehicleSlot s) =>
+        s.Train != 0 || HeavyCatalog.For((RideKind)s.KindId) != null;
+
+    /// <summary>
+    /// Draws a yard's goods vehicles (#516): the real mesh each one wakes as, built through the
+    /// <see cref="Rideable"/> the slot's own <see cref="VehicleState"/> makes, so the dormant artic
+    /// and the artic you get when you touch it are the same object drawn twice. No
+    /// <see cref="MultiMesh"/>: a yard holds a dozen of these where a retail lot holds eighty cars,
+    /// and no two are the same length or load, so there is nothing to instance.
+    ///
+    /// <para>
+    /// Collision is the parked hull plus each section's own box, exactly as <see cref="VehicleBody"/>
+    /// builds them for a real parked train — a trailer you walk through would be worse than none.
+    /// </para>
+    /// </summary>
+    private void DrawHeavies(TileId id, List<VehicleSlot> slots)
+    {
+        var bodies = _solid.TryGetValue(id, out var existing) ? existing : new List<DormantBody>();
+        foreach (var s in slots)
+        {
+            // the very state Promote would wake it with, so the two cannot drift apart
+            var state = new VehicleState(KindFor(s), new GlobalPos(s.E, s.N, s.Height), s.Yaw,
+                Vector3.Zero, 0f, EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0,
+                Train: s.Train, Load: s.Load);
+            if (state.CreateRide() is not { } ride) continue;
+            var where = _origin.ToWorld(s.E, s.N, s.Height);
+
+            var body = new DormantBody { Slot = s, Position = where, Basis = new Basis(Vector3.Up, s.Yaw) };
+            var box = ride.ParkedBox;
+            body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = box.Size }, Position = box.Centre });
+            int extra = 0;
+            foreach (var (pose, centre, size) in ride.ExtraBoxes())
+                body.AddChild(new CollisionShape3D
+                {
+                    Name = $"Section{++extra}",
+                    Shape = new BoxShape3D { Size = size },
+                    Transform = pose * new Transform3D(Basis.Identity, centre),
+                });
+            body.AddChild(ride.BuildVisual(-1));
+            AddChild(body);
+            bodies.Add(body);
+        }
+        _solid[id] = bodies;
+    }
+
+    /// <summary>
     /// The slot a vehicle node name belongs to: <c>veh_slot_&lt;owner&gt;_&lt;ordinal&gt;</c>, where the
     /// owner is itself underscore-separated and its first two parts are always its tile.
     ///
@@ -163,6 +215,23 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
         .Where(c => c.Body.Shape is BodyShape.Hatchback or BodyShape.Sedan
             or BodyShape.Coupe or BodyShape.Fastback)
         .Select(c => (int)c.Kind).ToArray();
+
+    /// <summary>
+    /// What stands in an industrial yard beyond cars (#496 phase 3): the goods vehicles only —
+    /// the tractor and the rigid, never a bus or a coach, which belong to an operator's depot and
+    /// not to a haulier's. Buses would read as a mistake outside a warehouse.
+    /// </summary>
+    private static readonly int[] YardHeavies = HeavyCatalog.All
+        .Where(h => h.Takes != Coupling.None || h.Sections.Length == 1 && h.Label.Contains("rigid"))
+        .Select(h => (int)h.Kind).ToArray();
+
+    /// <summary>
+    /// The trailers a yard holds, as <c>TrailerCatalog</c> codes with a load already in them. Each
+    /// trailer appears empty, part and fully loaded, so a row of them is not all the same.
+    /// </summary>
+    private static readonly int[] YardTrailers = Enumerable.Range(0, TrailerCatalog.All.Count)
+        .SelectMany(i => new[] { TrailerCatalog.Code(i, 0f), TrailerCatalog.Code(i, 0.55f), TrailerCatalog.Code(i, 1f) })
+        .ToArray();
 
     // ---- the fleet of a tile -----------------------------------------------------------------
 
@@ -201,6 +270,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
                     var list = new List<VehicleSlot>();
                     if (roads is { Parking.Count: > 0 })
                         DormantSlots.ForParking(id, roads.Parking, ParkedKinds, list);
+                    Yards(source, id, roads, list);
                     return list;
                 });
                 if (!IsInsideTree()) return;
@@ -221,6 +291,39 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
     }
 
     /// <summary>
+    /// The second provider (#496 phase 3): an industrial site's yard. Costs a tile's <c>.bldg</c>
+    /// and its height grid, so it is skipped entirely on a tile with no industrial building —
+    /// which is nearly all of them. Worker thread, like the rest of <see cref="Fill"/>.
+    ///
+    /// <para>
+    /// A slot the grid put inside a building or on a road is dropped here rather than in the
+    /// provider, because deciding that needs the tile's geometry and the provider is tier-0 and has
+    /// none. Dropping keeps the ordinals, which name the vehicle: a gap in the yard is fine, a
+    /// renumbered fleet is not.
+    /// </para>
+    /// </summary>
+    private static void Yards(IChunkSource source, TileId id, RoadTile? roads, List<VehicleSlot> into)
+    {
+        var tile = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
+        if (tile is not { Buildings.Count: > 0 }) return;
+        var grid = source.LoadChunkAsync(id).GetAwaiter().GetResult();
+        var yards = SiteYards.For(tile, roads, grid);
+        if (yards.Count == 0) return;
+
+        var map = BuildingTypes.For(tile);
+        int before = into.Count;
+        DormantSlots.ForSite(id, yards, ParkedKinds, YardHeavies, YardTrailers, (int)RideKind.Trailer, into);
+        for (int i = into.Count - 1; i >= before; i--)
+        {
+            var s = into[i];
+            var at = new Vector2((float)(s.E - id.MinE), (float)(id.MaxN - s.N));
+            // a lorry needs more room round it than a hatchback before it reads as parked in a wall
+            float radius = s.Train != 0 || s.KindId != (int)RideKind.Trailer && s.KindId >= HeavyCatalog.First ? 3.2f : 1.6f;
+            if (SiteYards.Blocked(tile, roads, map, at, radius)) into.RemoveAt(i);
+        }
+    }
+
+    /// <summary>
     /// Draws a tile's dormant fleet: one <see cref="MultiMesh"/> per look and part, so a lot of 80
     /// cars is a handful of draw calls and no nodes per car. A slot already awake is skipped — its
     /// real vehicle stands there instead.
@@ -231,6 +334,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
         if (!_slots.TryGetValue(id, out var slots)) return;
 
         var byLook = new Dictionary<(byte Paint, bool Van), List<VehicleSlot>>();
+        var heavies = new List<VehicleSlot>();
         foreach (var s in slots)
         {
             if (_awake.Contains(KeyOf(s))) continue;
@@ -240,10 +344,13 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
                 _awake.Add(KeyOf(s));
                 continue;
             }
+            // a lorry is not a car with a different paint: it gets its own mesh, not the car instancer
+            if (IsHeavy(s)) { heavies.Add(s); continue; }
             var look = (s.Paint, s.Van);
             if (!byLook.TryGetValue(look, out var list)) byLook[look] = list = new List<VehicleSlot>();
             list.Add(s);
         }
+        if (heavies.Count > 0) DrawHeavies(id, heavies);
         if (byLook.Count == 0) return;
 
         var instances = new List<MultiMeshInstance3D>(byLook.Count * 2);

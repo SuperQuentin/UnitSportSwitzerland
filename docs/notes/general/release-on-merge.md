@@ -37,5 +37,9 @@
   that did build, and a line in the notes says which platform is missing. Only an all-empty run fails. This is what
   lets a host without the Windows templates still release, and the Linux runner's macOS `.app` is unsigned (players
   need `xattr -cr`, as with the hand-built one).
+- **Delta updates (#532) run in CI too**, since they are the last step of `release.sh`: `tools/deltas.sh` needs only
+  `gh`, `dotnet`, `unzip` and `tar`, all already on the runner, and builds `tools/DeltaGen` itself. It downloads the
+  previous release's published archives, so a CI release deltas cleanly from a hand-built one. `--no-upload` stops
+  before the release and therefore before the deltas. If they ever fail the release still stands, as by hand.
 - Still open from #92: `release.sh` itself is GNU-only (`sed -i` with no argument, `tar --mode`, `tar --wildcards`),
   so a **macOS** host cannot run it even though CI can. See `local-release.md`.

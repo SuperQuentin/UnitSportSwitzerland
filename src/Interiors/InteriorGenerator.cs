@@ -55,6 +55,7 @@ public static partial class InteriorGenerator
             DoorOutX = fp.Door.Outward.X,
             DoorOutZ = fp.Door.Outward.Z,
             DoorWidth = fp.Door.Width,
+            DoorHeight = fp.Door.Height,
             StoreyHeight = h,
             EntryX = fp.EntryX,
             // a barn's or a garage's hall opens as wide as its door (a vehicle drives through);
@@ -283,9 +284,11 @@ public static partial class InteriorGenerator
         room.Openings.Add(new OpeningPlan
         {
             Side = Side.Front, Center = l.EntryX, Width = l.EntryWidth, Bottom = 0,
-            // a barn's or a garage's as tall as its facade door, which the footprint kept under the eave
-            Top = BuildingFootprint.VehicleDoor(kind) ? Math.Min(doorHeight, BuildingFootprint.DoorHeightFor(kind, clear))
-                : Math.Min(kind == BuildingKind.Industrial ? 2.8f : 2.1f, clear - 0.15f),
+            // the facade door's own height, whatever the kind, which the footprint already kept
+            // under the eave: the hole a player sees from the street and the one they walk
+            // through is the same hole (#509). It was only the vehicle kinds that took it, so a
+            // shed wore a 2.8 m door outside and a 2.1 m one inside.
+            Top = Math.Min(doorHeight, clear - 0.15f),
             Kind = OpeningKind.Entry,
         });
         var floor = new FloorPlan();

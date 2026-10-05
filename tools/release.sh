@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Local release: next semver from commits since the last tag, Windows + Linux + macOS exports, GitHub release.
+# Local release: next semver from commits since the last tag, Windows + Linux + macOS exports, GitHub release,
+# then the delta files from the previous release (tools/deltas.sh).
 # Usage: tools/release.sh [--dry-run] [--no-upload] [--ci]   (Git Bash or WSL, on a main in sync with origin/main; GODOT=godot on WSL)
-# --dry-run: print the version and changelog only. --no-upload: build every export but publish nothing.
+# --dry-run: print the version and changelog only. --no-upload: build every export but publish nothing (no deltas either).
 # --ci: run from .github/workflows/release.yml, which already checked out the tip of main detached.
 # The build runs in a temporary worktree of the released commit, so your working files are never touched.
 # Needs: gh (logged in), dotnet, Godot mono + export templates (windows, linux, macos), export_presets.cfg in the repo root
@@ -172,3 +173,8 @@ fi
 
 gh release create "v$V" "${ASSETS[@]}" --target "$SHA" --title "v$V" --notes-file "$REPO/$OUT/notes.md"
 echo "Released v$V with ${#ASSETS[@]} asset(s)${SKIPPED[0]+, skipping ${SKIPPED[*]}}"
+
+# delta updates (#532): the game updates from $last with these instead of the full archive
+if [ -n "$last" ]; then
+  (cd "$REPO" && tools/deltas.sh "$last" "v$V" --upload) || echo "Deltas failed; the release stands. Retry with: tools/deltas.sh $last v$V --upload"
+fi
