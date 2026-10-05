@@ -852,9 +852,19 @@ public static class ParkingPlanner
 
     /// <summary>
     /// An LV95 bearing (east 0, north π/2) as the Godot heading the tile records store (about +Y,
-    /// 0 = -Z = north): a quarter turn, and the opposite sense.
+    /// 0 = -Z = north).
+    ///
+    /// <para>
+    /// Tile-local axes are X east and Z <b>south</b>, so a bearing θ points along
+    /// <c>(cos θ, -sin θ)</c>, while a Godot heading h faces <c>(-sin h, -cos h)</c>
+    /// (<c>RoadSignBuilder.Frame</c>). Solving those gives <c>h = θ - π/2</c>. It was written
+    /// <c>π/2 - θ</c>, which is the mirror of that: correct for a lot square to north and wrong by
+    /// <b>twice the lot's axis</b> for every other one — 28° in the 14° fixture course, where it
+    /// showed as cars parked askew in their bays. Two tests measured |angle| off a world axis and
+    /// so were blind to the sign; both now pin the heading itself.
+    /// </para>
     /// </summary>
-    public static double ToGodotHeading(double bearingRad) => Norm2(Math.PI / 2 - bearingRad);
+    public static double ToGodotHeading(double bearingRad) => Norm2(bearingRad - Math.PI / 2);
 
     /// <summary>
     /// The lot's key: its centroid to the decimetre, FNV-1a. Stable across rebuilds and independent

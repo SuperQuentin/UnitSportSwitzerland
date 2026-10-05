@@ -93,14 +93,16 @@ public partial class ParkingProbe : Node
         if (_planters == 0) Fail("no planter");
         if (_marks < _bays.Count) Fail($"only {_marks} markings for {_bays.Count} bays");
 
-        // the course turns its lot 14 degrees off east: no bay may be square to the world, which is
-        // exactly what the old shader grid got wrong
+        // The course turns its lot 14 deg off east, so a bay must face 14 or 194 deg as a Godot
+        // heading — ACROSS the rows. Measuring |angle| off a world axis instead was sign-blind and
+        // passed happily while every car sat 28 deg askew in its bay, which is how that shipped.
         foreach (var b in _bays)
         {
-            double off = Math.Abs(b.Heading % (Mathf.Pi / 2)) * 180 / Math.PI;
-            if (Math.Min(off, 90 - off) is < 13 or > 15)
+            double deg = b.Heading * 180 / Math.PI;
+            double off = Math.Min(Math.Abs(deg - 14), Math.Abs(deg - 194));
+            if (off > 1.5)
             {
-                Fail($"a bay is {Math.Min(off, 90 - off):F1} deg off a world axis, expected 14");
+                Fail($"a bay faces {deg:F1} deg, expected 14 or 194 (the lot is turned 14 deg)");
                 break;
             }
         }

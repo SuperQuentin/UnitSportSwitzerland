@@ -10,7 +10,17 @@ namespace UnitSport.Interiors;
 /// </summary>
 public static class DoorIndex
 {
-    public readonly record struct Entry(BuildingKey Key, Vector3 World, Vector3 Outward, float Width, float Height, BuildingKind Kind);
+    public readonly record struct Entry(DoorKey Key, Vector3 World, Vector3 Outward, float Width, float Height, BuildingKind Kind)
+    {
+        /// <summary>How this door's leaf moves (<see cref="DoorSpot.Hang"/>, #498).</summary>
+        public DoorHang Hang { get; init; }
+
+        /// <summary>Whether a ground vehicle is driven through it (<see cref="DoorSpot.Vehicle"/>).</summary>
+        public bool Vehicle { get; init; }
+
+        /// <summary>The building the door is on: the key of its plan and of the space behind it.</summary>
+        public BuildingKey Building => Key.Building;
+    }
 
     private static readonly Dictionary<TileId, Entry[]> Tiles = new();
 
@@ -19,7 +29,10 @@ public static class DoorIndex
         var list = new List<Entry>(doors.Length);
         foreach (var d in doors)
             if (d.Width > 0)
-                list.Add(new Entry(new BuildingKey(id.E, id.N, d.Index), tileOrigin + d.Position, d.Outward, d.Width, d.Height, d.Kind));
+                list.Add(new Entry(d.KeyIn(id), tileOrigin + d.Position, d.Outward, d.Width, d.Height, d.Kind)
+                {
+                    Hang = d.Hang, Vehicle = d.Vehicle,
+                });
         Tiles[id] = list.ToArray();
     }
 
@@ -33,8 +46,8 @@ public static class DoorIndex
                 doors[i] = doors[i] with { World = shift.Point(doors[i].World), Outward = shift.Direction(doors[i].Outward) };
     }
 
-    /// <summary>A given building's door, if its tile is drawn and it has one.</summary>
-    public static Entry? Find(BuildingKey key)
+    /// <summary>A given door, if its tile is drawn and the building has it.</summary>
+    public static Entry? Find(DoorKey key)
     {
         if (!Tiles.TryGetValue(key.Tile, out var doors)) return null;
         foreach (var e in doors)
@@ -54,8 +67,44 @@ public static class DoorIndex
     /// </summary>
     public static Entry? Nearest(Vector3 at, float reach) => Nearest(at, reach, _ => true);
 
-    /// <summary>As <see cref="Nearest(Vector3, float)"/>, only doors of buildings of one kind.</summary>
-    public static Entry? Nearest(Vector3 at, float reach, BuildingKind kind) => Nearest(at, reach, e => e.Kind == kind);
+    /// <summary>
+    /// As <see cref="Nearest(Vector3, float)"/>, among buildings of one kind, <b>its main door
+    /// for choice</b>. Asking for "a barn" or "a garage" means the door that makes it one — the
+    /// pair or the roll-up door a vehicle goes through — rather than the pedestrian side door it
+    /// also has since #498. Any door of the kind will do when no main one is in reach, so a
+    /// caller looking for a building of a kind still finds it.
+    /// </summary>
+    public static Entry? Nearest(Vector3 at, float reach, BuildingKind kind) =>
+        Nearest(at, reach, e => e.Kind == kind && e.Key.Slot == 0)
+        ?? Nearest(at, reach, e => e.Kind == kind);
+
+    /// <summary>
+    /// A door of one kind to walk or drive to, however far off: the nearest by plain distance,
+    /// that building's <b>main</b> door for choice (a barn's pair, a garage's roll-up door).
+    ///
+    /// <para>
+    /// This is target selection, not reach, so none of <see cref="Nearest(Vector3, float)"/>'s
+    /// rules apply — those only let a door be worked from outside and within 2.5 m of the
+    /// player's own level, which for a target hundreds of metres off over sloping ground makes
+    /// the answer a matter of luck. A probe asking for "the nearest barn" needs the barn.
+    /// </para>
+    /// </summary>
+    public static Entry? NearestOfKind(Vector3 at, float reach, BuildingKind kind)
+    {
+        Entry? best = null;
+        float bestScore = float.MaxValue;
+        foreach (var doors in Tiles.Values)
+            foreach (var e in doors)
+            {
+                if (e.Kind != kind) continue;
+                float d = e.World.DistanceTo(at);
+                if (d > reach) continue;
+                // a side door only when no main door of the kind is anywhere in reach
+                float score = d + (e.Key.Slot == 0 ? 0f : reach);
+                if (score < bestScore) { bestScore = score; best = e; }
+            }
+        return best;
+    }
 
     /// <summary>
     /// The doors of one kind that are drawn, nearest first, each with what rules it out from
@@ -79,7 +128,7 @@ public static class DoorIndex
         Nearest(at, reach, _ => true, deeper);
 
     /// <summary>
-    /// The nearest door a vehicle drives through (<see cref="BuildingFootprint.VehicleDoor"/>)
+    /// The nearest door a vehicle drives through (<see cref="DoorSpot.Vehicle"/>)
     /// within <paramref name="reach"/> in front of it, at most <paramref name="halfAngle"/>
     /// radians off square: a vehicle heading at a garage or a barn, not driving past one.
     /// </summary>
@@ -91,7 +140,7 @@ public static class DoorIndex
         float cos = Mathf.Cos(halfAngle);
         return Nearest(at, reach, e =>
         {
-            if (!BuildingFootprint.VehicleDoor(e.Kind)) return false;
+            if (!e.Vehicle) return false;
             var into = new Vector2(-e.Outward.X, -e.Outward.Z);
             if (h.Dot(into) < cos) return false;
             // and aimed at the opening, not at the wall beside it: where the heading meets the facade
