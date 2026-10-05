@@ -222,10 +222,18 @@ public static partial class Planner
             DiskBytes = wantRoutes && !c.Local.RouteKeys && !c.Local.RoutesZips ? routesZip : 0,
             DiskPath = p.RoutesDir,
             Seconds = routesZip / stats.EffectiveDownload + 4,
-            Skip = !wantRoutes ? "routes layer off" : !c.Gdal ? "needs GDAL"
-                 : c.Local.RouteKeys || c.Local.RoutesZips ? "already here" : !py ? noPython : null,
-            Run = async r => await r.SwissData(["--out", p.RoutesDir, "veloland"])
-                            && await r.SwissData(["--out", p.RoutesDir, "mountainbikeland"]),
+            // Neither Python nor GDAL since #537: the zips come down through SwissDownload and the
+            // FileGDB inside them is read in-process.
+            Skip = !wantRoutes ? "routes layer off"
+                 : c.Local.RouteKeys || c.Local.RoutesZips ? "already here" : null,
+            Run = async r =>
+            {
+                bool RoutesGdb(string key) => key.EndsWith("_2056.gdb.zip", StringComparison.OrdinalIgnoreCase);
+                return await r.Download(() => SwissDownload.CollectionAsync(p.RoutesDir, "ch.astra.veloland",
+                           null, r.Progress, r.Cancellation, assetFilter: RoutesGdb))
+                    && await r.Download(() => SwissDownload.CollectionAsync(p.RoutesDir, "ch.astra.mountainbikeland",
+                           null, r.Progress, r.Cancellation, assetFilter: RoutesGdb));
+            },
         });
 
         // ---- OpenStreetMap (optional) -----------------------------------------------------------
@@ -277,11 +285,12 @@ public static partial class Planner
         // ---- GDAL exports --------------------------------------------------------------------------
         steps.Add(new Step
         {
-            Title = "Export cycle routes (GDAL)",
+            Title = "Export cycle routes",
             Detail = "route_keys.sqlite: which roads are on a signed route",
             Seconds = 20,
-            Skip = !wantRoutes ? "routes layer off" : !c.Gdal ? "needs GDAL" : c.Local.RouteKeys ? "already exported" : null,
-            Run = r => r.Python("export route keys", [Path.Combine(p.Tools, "export_route_keys.py"), "--dir", p.RoutesDir], LineProgress.None),
+            Skip = !wantRoutes ? "routes layer off" : c.Local.RouteKeys ? "already exported" : null,
+            Run = r => r.Tool("TerrainPreprocessor",
+                ["--export-route-keys", p.RoutesDir, "--temp", p.Temp], LineProgress.None),
         });
 
         var bounds = c.Selection.Bounds();

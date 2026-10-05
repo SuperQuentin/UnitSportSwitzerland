@@ -320,10 +320,11 @@ dotnet run --project tools/TerrainPreprocessor -c Release -- \
   --gwr ressources/data/gwr/data.sqlite
 ```
 
-Cycling routes are a one-off export, only needed if you refresh the ASTRA data:
+Cycling routes are a one-off export, only needed if you refresh the ASTRA data. It reads the
+ASTRA FileGDBs directly, so it needs nothing installed (#537):
 
 ```bash
-python tools/export_route_keys.py
+dotnet run --project tools/TerrainPreprocessor -c Release -- --export-route-keys ressources/data/routes
 ```
 
 ### 5. Check it
@@ -536,7 +537,6 @@ tools/
   RoadGen/ BlendCheck/ road generation and terrain blend checks
   swiss_data.py, swiss_relief.py    data downloader, 500 m relief for generated terrain
   export_buildings.py  FileGDB -> GeoPackage (needs GDAL)
-  export_route_keys.py cycle route keys
   *check.sh            multiplayer feature checks (dedicated server + client)
 shaders/     ps1_* terrain, road, building, tree, water and other shaders
 docs/notes/  one topic per file, indexed by each directory's CLAUDE.md

@@ -75,6 +75,7 @@ public static partial class Preprocessor
         var inDirs = new List<string>();
         string? outDir = null, tempDir = null, pngDir = null;
         string? tlmGpkg = null, routeKeys = null, buildingsGpkg = null, gwrPath = null;
+        string? exportRouteKeysDir = null;
         bool verify = false;
         bool roadsOnly = false, featuresOnly = false, doCover = false, doPlaces = false, placesOnly = false;
         // --tiles-file: feature passes only touch these tiles ("E-N" in km per line), so adding one valley
@@ -113,6 +114,8 @@ public static partial class Preprocessor
                 case "--dump-png": pngDir = args[++i]; break;
                 case "--tlm": tlmGpkg = args[++i]; break;
                 case "--route-keys": routeKeys = args[++i]; break;
+                // #537: build route_keys.sqlite from the ASTRA FileGDBs, with no GDAL
+                case "--export-route-keys": exportRouteKeysDir = args[++i]; break;
                 case "--buildings": buildingsGpkg = args[++i]; break;
                 case "--gwr": gwrPath = args[++i]; break;
                 case "--cover": doCover = true; break;
@@ -224,6 +227,14 @@ public static partial class Preprocessor
                 return 2;
             }
             return LandingStage.Run(outDir, tlmGpkg, landingsFile);
+        }
+
+        // ---- route keys from the ASTRA FileGDBs (#537), standalone: nothing else is needed ------
+        if (exportRouteKeysDir != null)
+        {
+            SetStage("route keys");
+            return RouteKeyStage.Run(exportRouteKeysDir, tempDir ?? Path.Combine(exportRouteKeysDir, "_temp"),
+                Console.WriteLine);
         }
 
         WaterStage.Options WaterOptions() => new() { Jobs = jobs, BathyDir = bathyDir, PngDir = pngDir, Crops = pngCrops };

@@ -12,7 +12,7 @@ macOS and Linux.
 | **.NET SDK 8** | 8.0.x | the game assembly (`net8.0`) |
 | **.NET SDK 9** | 9.0.x | `tools/TerrainPreprocessor` (`net9.0`). The 9 SDK builds the net8 projects too, so strictly it is the only SDK you need |
 | Python | 3.10+ | *optional*: `tools/swiss_data.py`, the data downloader (standard library only) |
-| GDAL (Python bindings) | any recent | *optional*: `tools/export_buildings.py` and `tools/export_route_keys.py` only |
+| GDAL (Python bindings) | any recent | *optional*: `tools/export_buildings.py` only. Cycle routes no longer need it (#537) |
 
 A .NET **runtime** is not enough: `dotnet --list-sdks` must list both an 8.x and a 9.x SDK.
 
