@@ -65,7 +65,9 @@ maps the set of positions onto itself. Where the row would be asymmetric (a wall
 one side), a mirror puts the bays where there is no wall and `DoorOnWall` drops them, which the
 count assertion does see. So the handedness of `t` is genuinely immaterial here — unlike
 `SiteYards`'s heading (#516), where it decides which way a vehicle faces and a physical
-nose-before-tail assertion was needed.
+nose-before-tail assertion was needed. The general rule this is an instance of — *ask whether the
+thing under test is asymmetric before adding a turned case, and say so when it is not* — is in
+`several-doors` (#524).
 
 ## Check
 
