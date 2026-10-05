@@ -65,6 +65,8 @@
     <Compile Include="..\..\src\Terrain\BuildingTriangles.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\PlanBox.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\BuildingTypes.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- update check (#532): version compare, asset pick, GitHub's JSON -->
+    <Compile Include="..\..\src\Core\UpdateInfo.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>
