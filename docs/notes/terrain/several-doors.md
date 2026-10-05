@@ -86,7 +86,16 @@ deserves, and each of them is a real door: it opens, it has a portal, you walk t
   mirrored plan frame, a direction does not, and on a box square to the world a mirror and the
   truth agree — so without a turned solid the check could not see the class of bug #499 shipped.
   Demonstrated both ways: mirroring `Entrances`' `faces` fails 7 assertions, and giving the check
-  itself a wrong-handed frame fails **only** the turned block. Live: `--interiorcheck` walks in and out of a house with a
+  itself a wrong-handed frame fails **only** the turned block.
+- **A mirror is only visible where the construction is asymmetric**, and that is the condition for
+  the trick above being worth anything. A doorway is asymmetric — a door on the north facade must
+  arrive on the north wall, one wall out of four — so turning the solid exposes a flipped frame.
+  A row of loading bays spaced evenly about a wall's middle is **symmetric**, so a mirrored wall
+  tangent maps the row onto itself and no assertion, on a turned solid or not, can see it (#528
+  injected exactly that fault and left both `--sitecheck` and `--doorcheck` green). Where such a
+  row is asymmetric — a wall with room on one side only — the mirror puts doors off the wall and
+  `DoorOnWall` drops them, which the count does see. So: before adding a turned case, ask whether
+  the thing under test is asymmetric; if it is not, say so rather than implying it is covered. Live: `--interiorcheck` walks in and out of a house with a
   cellar, and `--interiorcheck --doorkind Agricultural` into a barn by its pair, with its open
   leaves' edges in reach. Measured on the generated world: 100 m shop front 6 doors, works hall 5,
   block of flats 3, barn and garage 2, house and shed 1.
