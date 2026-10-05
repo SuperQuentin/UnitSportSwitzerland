@@ -164,14 +164,40 @@ garages, shops, churches) pass the new rule unchanged.
 
 ## Phase 3 — dormant vehicles in the yards
 
-**The shared layer is #499's, not this epic's.** Parking areas need parked cars for exactly the
-same reason yards need a fleet, so rather than invent the mechanism twice, #499 ("Parking areas as
-real lots") builds `src/Vehicles/DormantVehicles.cs` generalised over **slot providers** — a
-provider being the pure placement function described below — and parking bays are its first
-provider. The design below is what #499 builds; it is kept here because this plan is where it was
-worked out. **Phase 3 of this epic is then one thing: `SiteVehicles.For(tile)` as a second
-provider** — the fleet mix per site type, the yard positions, and trailers and swap bodies as slot
-kinds. No draw, no wake path, no RPC, no consistency test left to design.
+**The shared layer is #499's, not this epic's, and it is built.** Parking areas need parked cars for
+exactly the same reason yards need a fleet, so rather than invent the mechanism twice, #499
+("Parking areas as real lots") built `src/Vehicles/VehicleSlot.cs` and
+`src/Vehicles/DormantVehicles.cs` generalised over **slot providers**, with parking bays as the
+first. The design sketch below is what it was built from, and is kept because this plan is where it
+was worked out. **Phase 3 of this epic is then one thing: `DormantSlots.ForSite(...)` as a second
+provider** — the fleet mix per site type and the yard positions. No draw, no wake path, no RPC and
+no consistency test left to design.
+
+What phase 3 inherits, and the three things it still needs from #499:
+
+- `VehicleSlot(Owner, Ordinal, E, N, Height, Yaw, KindId, Paint, Van)` — pure data, no Godot, linked
+  into tier 0. `KindId` is a `RideKind` as an int so the file never reaches into `src/Player`.
+- **The node name is the wake-once key**, and `DormantVehicles.SlotOf()` is the single place that
+  parses it. As built it is `veh_bay_<E>_<N>_<ordinal>` and requires **exactly five**
+  underscore-separated parts. A yard's owner is a building, not a tile — `2593_1120_7` — so a yard
+  slot's name has six, `SlotOf` returns null, and the dormant copy is never dropped when the real
+  vehicle appears: exactly the double-draw #499's tier-2 check caught for late joiners. The parser
+  must take the **last** segment as the ordinal and the rest as the owner (the tile being the
+  owner's first two parts), or yards need a second parser and the fix stops being in one place.
+- **A trailer is not a `KindId`.** `RideKind.Trailer` (120) says only "a trailer"; *which* one, and
+  how loaded, is `TrailerCatalog` plus a code `(index + 1) | load% << 8` — what
+  `FootPlayer.TrailerCode` replicates, and what makes a timber trailer's logs and a tanker's slosh.
+  One `ushort TrailerCode` on the record (0 = none) covers the lot: with a trailer `KindId` it is a
+  trailer standing on its legs; with a tractor `KindId` it is a **coupled train**, woken as one
+  `VehicleState.Train` with straight articulation. A parked artic must never be two adjacent slots —
+  the pin angles are part of the parked state and would drift.
+- **Re-sleeping** stays off, as first planned, but the wake trigger is what decides whether it is
+  ever needed: wake on *intent* (a `VehicleReach` aim, a real impact, a shot), never on proximity,
+  or a player walking through a forty-car showroom leaves forty live `VehicleBody` nodes behind.
+  Measure the live count after a busy session first. If re-sleep does become necessary, the
+  condition has to be strict — still within ~0.3 m and ~5° of its slot pose, undamaged, unclaimed,
+  nobody within 200 m — because a vehicle that re-sleeps anywhere else teleports, and one that
+  re-sleeps damaged silently repairs itself.
 
 The yards need a *fleet*: a haulier with twelve tractors and twenty trailers, a dealership with
 forty cars. Spawning forty replicated `VehicleBody` nodes per site is not affordable, and making
