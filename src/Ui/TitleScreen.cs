@@ -14,6 +14,7 @@ public partial class TitleScreen : Screen
     private AudioStreamPlayer _jingle = null!;
     private static readonly HashSet<string> Jingled = new();
     private Button _first = null!;
+    private UpdatePrompt? _update;
 
     public static TitleScreen Create() => new() { Name = "Title" };
 
@@ -65,6 +66,7 @@ public partial class TitleScreen : Screen
         _jingle = new AudioStreamPlayer { Bus = Audio.SfxBus.Name, VolumeDb = -6 };
         AddChild(_jingle);
         PlayJingle();
+        _update = UpdatePrompt.Attach(this);
     }
 
     private static Button Entry(Container into, string text, Action pressed, bool dim = false)
@@ -76,7 +78,11 @@ public partial class TitleScreen : Screen
         return b;
     }
 
-    public override void OnShown() => _first.CallDeferred(Control.MethodName.GrabFocus);
+    public override void OnShown()
+    {
+        _first.CallDeferred(Control.MethodName.GrabFocus);
+        _update?.OnTitleShown();
+    }
 
     /// <summary>Nothing behind the title: Esc stays here.</summary>
     public override bool OnBack() => false;

@@ -14,6 +14,7 @@ touches its topic; search with `grep -ril <word> docs/notes/ui`.
 - `style-guide` — How any HUD/panel adopts the menu look: theme the root Control, glass panel sizes, text colours/sizes, selection rows, outlined floating text, PR checklist (example: `Core/ChatUi`)
 - `ui-theme-panels` — HUD panels via `UiTheme.Flat`/`GlassPanel`, titles `UiTheme.Title`, "press E" lines `UiTheme.Prompt`, amber `UiTheme.Amber`: no hand-built `StyleBoxFlat`, no amber literal
 - `loading` — Loading screen: real stages from `ClientWorld.Stage`, `ChunkManager.ProgressNear`, joke lines, Cancel; failure goes back with the reason
+- `update-check` — Title screen asks GitHub for the releases once per session; Update (delta chain, staged, swapped on quit/restart) or Download (full archive) or Later; `--fakeversion`, `--updatefeed`, `--updateaccept` (#532)
 - `travel-menu` — R travel menu (tabs, card grid, brand/model folders (#410), pre-rendered thumbnails cached in user://thumbs, live stage: doors open + lamps on while pointed) and the F1 controls screen, both sized to the window (#210)
 
 ## Gotchas

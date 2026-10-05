@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Delta updates (#532): writes the per-release .delta files tools/release.sh uploads, and applies
+       them the way the game does (stage, then the swap script), to check a delta end to end. Plain
+       C#: the game's pure update files are linked in. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\Core\BinaryDelta.cs;..\..\src\Core\UpdatePackage.cs;..\..\src\Core\UpdateScript.cs" Link="Game\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>
