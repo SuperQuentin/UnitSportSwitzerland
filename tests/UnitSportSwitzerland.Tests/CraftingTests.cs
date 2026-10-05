@@ -155,8 +155,10 @@ public class CraftingTests
     public void Every_fire_recipe_cooks_one_thing()
     {
         var cooking = Recipes.All.Where(r => r.Station == Station.Fire).Select(r => r.Out).ToList();
-        Assert.Equal(new[] { ItemId.Fondue, ItemId.HotChocolate, ItemId.ToastedBread, ItemId.CaramelApple, ItemId.MineralWater }, cooking);
-        Assert.All(Recipes.All.Where(r => r.Station == Station.Fire), r => Assert.Equal(1, r.Count));
+        // #272's five, then the farm's (#494)
+        Assert.Equal(new[] { ItemId.Fondue, ItemId.HotChocolate, ItemId.ToastedBread, ItemId.CaramelApple, ItemId.MineralWater }, cooking.Take(5));
+        // one thing a time, but a bag of flour bakes three loaves and a sack of maize pops into four boxes
+        Assert.All(Recipes.All.Where(r => r.Station == Station.Fire && r.Out is not (ItemId.Bread or ItemId.Popcorn)), r => Assert.Equal(1, r.Count));
         Assert.DoesNotContain(ItemId.CaramelApple, Recipes.NeverCrafted);
     }
 

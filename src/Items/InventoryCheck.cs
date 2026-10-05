@@ -380,7 +380,7 @@ public static class InventoryCheck
                 var def = ItemDefs.Get(r.Out)!;
                 float cost = r.In.Sum(i => i.Count * ItemDefs.Get(i.Id)!.Value);
                 Expect(def.Use == ItemUse.Consume && def.Heal > 0, $"{r.Key}: something to eat or drink");
-                Expect(def.Value >= cost, $"{r.Key}: worth {def.Value:0.#} CHF, its ingredients {cost:0.#}");
+                Expect(r.Count * def.Value >= cost, $"{r.Key}: worth {r.Count * def.Value:0.#} CHF, its ingredients {cost:0.#}");
             }
             Expect(ItemDefs.Get(ItemId.Fondue)?.Heal == 90f, "the fondue heals 90");
         });
@@ -395,6 +395,42 @@ public static class InventoryCheck
             Expect(ItemDefs.Get(ItemId.Torch)?.Use == ItemUse.Readout, "the torch is held, Use does nothing");
             Expect(ItemIcons.IsAuthored(ItemId.Fondue) && ItemIcons.IsAuthored(ItemId.Torch) && ItemIcons.IsAuthored(ItemId.FieldWorkbench),
                 "the new items have drawn icons");
+        });
+
+        // ---- farming (#494) ----
+        Case("farm items: every id defined, drawn, sorted into the right category and use", inv =>
+        {
+            var seeds = new[] { ItemId.WheatSeed, ItemId.BarleySeed, ItemId.MaizeSeed, ItemId.SeedPotato, ItemId.RapeSeed,
+                                ItemId.SunflowerSeed, ItemId.SugarBeetSeed, ItemId.VegetableSeeds, ItemId.PeaSeed };
+            var harvests = new[] { ItemId.Wheat, ItemId.Barley, ItemId.Maize, ItemId.Potato, ItemId.Rapeseed, ItemId.SunflowerSeeds,
+                                   ItemId.SugarBeet, ItemId.Carrot, ItemId.HayBale, ItemId.Peas };
+            var milled = new[] { ItemId.Flour, ItemId.RapeseedOil, ItemId.Sugar, ItemId.MaizeMeal };
+            var dishes = new[] { ItemId.BakedPotato, ItemId.Roesti, ItemId.Polenta, ItemId.Popcorn, ItemId.VegetableSoup, ItemId.Raclette };
+            foreach (var id in seeds.Concat(harvests).Concat(milled).Concat(dishes).Append(ItemId.Hoe).Append(ItemId.Fertiliser))
+                Expect(ItemDefs.Get(id) is { Value: > 0 } && ItemIcons.IsAuthored(id), $"{id}: a priced item with a drawn icon");
+            Expect(seeds.All(s => ItemDefs.Get(s) is { Use: ItemUse.Farm, Category: ItemCategory.Produce }), "seeds are Produce, Use = Farm");
+            Expect(harvests.Concat(milled).All(h => ItemDefs.Get(h) is { Category: ItemCategory.Produce, Use: ItemUse.Material }), "harvests and milled goods are Produce");
+            Expect(dishes.All(h => ItemDefs.Get(h) is { Category: ItemCategory.Food, Use: ItemUse.Consume, Heal: > 0 }), "dishes are food that heals");
+            Expect(ItemDefs.Get(ItemId.Hoe) is { Use: ItemUse.Farm, Category: ItemCategory.Gear }, "the hoe is a Farm tool");
+            Expect(ItemDefs.Get(ItemId.Fertiliser) is { Use: ItemUse.Farm }, "fertiliser is used on a field");
+            Expect(ItemDefs.Get(ItemId.Wheat)!.Value == 25f && ItemDefs.Get(ItemId.Potato)!.Value == 5f && ItemDefs.Get(ItemId.HayBale)!.Value == 40f,
+                "a wheat sack 25 CHF, a potato sack 5, a hay bale 40");
+            // saved by name, loaded back
+            inv.Put(Inventory.HotbarSize, new(ItemId.WheatSeed, 7));
+            inv.Put(Inventory.HotbarSize + 1, new(ItemId.Roesti, 2));
+            var back = Inventory.FromJson(inv.ToJson(), persist: false);
+            Expect(back != null && Total(back, ItemId.WheatSeed) == 7 && Total(back, ItemId.Roesti) == 2, "farm items survive a save by name");
+        });
+
+        Case("farm recipes: every crafted farm thing is worth at least its ingredients; milling loses nothing", _ =>
+        {
+            foreach (var r in Crafting.Recipes.All.Where(r => !r.Salvage && Crafting.Recipes.Outputs(r).Any(o => (int)o.Id >= 200)))
+            {
+                float cost = r.In.Sum(i => i.Count * ItemDefs.Get(i.Id)!.Value);
+                float worth = Crafting.Recipes.Outputs(r).Sum(o => o.Count * ItemDefs.Get(o.Id)!.Value);
+                Expect(worth >= cost, $"{r.Key}: worth {worth:0.#} CHF, its ingredients {cost:0.#}");
+            }
+            Expect(Crafting.Recipes.NeverCrafted.Contains(ItemId.Fertiliser), "fertiliser is bought, never made");
         });
 
         GD.Print(_failures == 0 ? "[invcheck] RESULT: ok": $"[invcheck] RESULT: FAILED ({_failures})");

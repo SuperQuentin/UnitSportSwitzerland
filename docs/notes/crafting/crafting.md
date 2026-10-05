@@ -28,3 +28,4 @@
   drops, salvage outputs), `--invcheck` (real values/categories, real `Inventory`, photo untouched).
   Screenshot: `--systems ui,physics --ride foot,2,test_output/craft_panel.png --inventory`
   (`--world flat` builds no UI).
+- **Farm recipes** (#494): seeds from harvests by hand, milling at the workbench, farm dishes at a fire (bread and popcorn make several); fertiliser is never crafted. See `farming/produce-economy`.

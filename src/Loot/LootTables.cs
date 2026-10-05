@@ -49,6 +49,11 @@ public static class LootTables
         // bags (#208): category Gear too, so only the pools that name them (Bags, Purses) give them
         [ItemId.BeltPouch] = Tier.Common, [ItemId.Handbag] = Tier.Uncommon,
         [ItemId.Backpack] = Tier.Rare, [ItemId.HikingPack] = Tier.VeryRare,
+        // farming (#494): category Produce / Gear, so only the pools that name them (FarmKit, Roots) give them
+        [ItemId.WheatSeed] = Tier.Uncommon, [ItemId.BarleySeed] = Tier.Uncommon, [ItemId.MaizeSeed] = Tier.Uncommon,
+        [ItemId.SeedPotato] = Tier.Uncommon, [ItemId.VegetableSeeds] = Tier.Uncommon, [ItemId.Fertiliser] = Tier.Uncommon,
+        [ItemId.Hoe] = Tier.Rare,
+        [ItemId.Potato] = Tier.Common, [ItemId.Carrot] = Tier.Common, [ItemId.Flour] = Tier.Uncommon,
     });
 
     /// <summary>
@@ -99,6 +104,13 @@ public static class LootTables
     private static readonly ItemId[] Purses = { ItemId.BeltPouch, ItemId.Handbag };
     private static readonly ItemId[] Plastic = { ItemId.Plastic };
     private static readonly ItemId[] Larder = { ItemId.Cheese, ItemId.Bread, ItemId.Apple };
+    /// <summary>What a barn or a shed keeps for the next sowing (#494).</summary>
+    private static readonly ItemId[] FarmKit =
+    {
+        ItemId.WheatSeed, ItemId.BarleySeed, ItemId.MaizeSeed, ItemId.SeedPotato, ItemId.VegetableSeeds, ItemId.Fertiliser, ItemId.Hoe,
+    };
+    /// <summary>Potatoes and carrots in a cellar, flour in a pantry (#494).</summary>
+    private static readonly ItemId[] Roots = { ItemId.Potato, ItemId.Carrot, ItemId.Flour };
     /// <summary>Clothes to wear, plain, gothic and kawaii (#251): what a wardrobe mostly holds.</summary>
     private static readonly ItemId[] Clothes = Avatar.Garments.All.Where(g => !g.IsSpecial).Select(g => g.Item).ToArray();
     /// <summary>The rare ones with a finish that moves: rainbow, disco ball, galaxy…</summary>
@@ -159,7 +171,7 @@ public static class LootTables
     /// </summary>
     private static readonly Dictionary<(FurnitureType, RoomType), Container> RoomContainers = new()
     {
-        [(FurnitureType.Shelf, RoomType.Garage)] = new(0.25f, 1, 3, new[] { P(Hardware, 40), P(Parts, 25), P(Scrap, 30), P(Minerals, 5) }),
+        [(FurnitureType.Shelf, RoomType.Garage)] = new(0.25f, 1, 3, new[] { P(Hardware, 40), P(Parts, 25), P(Scrap, 30), P(Minerals, 5), P(FarmKit, 4) }),
         [(FurnitureType.Shelf, RoomType.Workshop)] = new(0.25f, 1, 3, new[] { P(Hardware, 40), P(Parts, 25), P(Scrap, 30), P(Minerals, 5) }),
         [(FurnitureType.Shelf, RoomType.Storage)] = new(0.30f, 1, 3, new[] { P(Pantry, 40), P(Scrap, 20), P(Hardware, 10), P(Medical, 10), P(Minerals, 15), P(Parts, 5), P(Optics, 1) }),
         [(FurnitureType.Shelf, RoomType.Living)] = new(0.40f, 1, 2, new[] { P(Sweets, 25), P(Gadgets, 30), P(Medical, 15), P(Cloth, 10), P(Food, 10), P(Fuel, 12), P(Parts, 4), P(Optics, 1) }, 0.15f, 1, 10),   // logs and coal for the stove
@@ -171,16 +183,17 @@ public static class LootTables
         [(FurnitureType.Desk, RoomType.Bedroom)] = new(0.45f, 1, 1, new[] { P(Sweets, 36), P(Gadgets, 36), P(Cloth, 18), P(Purses, 10) }, 0.30f, 2, 20),
         [(FurnitureType.Desk, RoomType.Classroom)] = new(0.55f, 0, 1, new[] { P(Sweets, 35), P(Gadgets, 25), P(Scrap, 40) }, 0.10f, 1, 5),
         [(FurnitureType.Crate, RoomType.Storage)] = new(0.25f, 1, 3, new[] { P(Pantry, 35), P(Scrap, 25), P(Minerals, 30), P(Parts, 10) }),
-        [(FurnitureType.Crate, RoomType.Barn)] = new(0.30f, 1, 3, new[] { P(BarnStuff, 55), P(Minerals, 30), P(Tins, 15) }),
+        [(FurnitureType.Crate, RoomType.Barn)] = new(0.30f, 1, 3, new[] { P(BarnStuff, 55), P(Minerals, 30), P(Tins, 15), P(FarmKit, 22) }),
+        [(FurnitureType.Shelf, RoomType.Barn)] = new(0.30f, 1, 2, new[] { P(FarmKit, 35), P(Hardware, 20), P(Fuel, 10), P(Minerals, 20), P(Scrap, 15) }),
         // #213: the shelter's shelf is the two weeks of supplies a household keeps; the cellar's
         // the overflow; the carnotzet's cheese for the raclette; the laundry's powder and pegs
         [(FurnitureType.Shelf, RoomType.Shelter)] = new(0.25f, 1, 3, new[] { P(Pantry, 55), P(Medical, 25), P(Fuel, 5), P(Hardware, 10), P(Optics, 1) }),
         [(FurnitureType.Crate, RoomType.Shelter)] = new(0.20f, 1, 3, new[] { P(Tins, 50), P(Medical, 25), P(Hardware, 25) }),
-        [(FurnitureType.Shelf, RoomType.Cellar)] = new(0.30f, 1, 3, new[] { P(Pantry, 45), P(Scrap, 20), P(Hardware, 10), P(Minerals, 20), P(Parts, 5) }),
+        [(FurnitureType.Shelf, RoomType.Cellar)] = new(0.30f, 1, 3, new[] { P(Pantry, 45), P(Scrap, 20), P(Hardware, 10), P(Minerals, 20), P(Parts, 5), P(Roots, 15) }),
         [(FurnitureType.Crate, RoomType.Cellar)] = new(0.25f, 1, 3, new[] { P(Pantry, 35), P(Scrap, 25), P(Minerals, 30), P(Parts, 10) }),
         [(FurnitureType.Shelf, RoomType.Carnotzet)] = new(0.35f, 1, 2, new[] { P(Larder, 55), P(Water, 35), P(Fuel, 10) }, 0.10f, 1, 10),
         [(FurnitureType.Shelf, RoomType.Laundry)] = new(0.40f, 1, 2, new[] { P(Cloth, 45), P(Hardware, 25), P(KitchenScrap, 30) }),
-        [(FurnitureType.Shelf, RoomType.Pantry)] = new(0.35f, 1, 2, new[] { P(Pantry, 50), P(Food, 40), P(Sweets, 10) }),
+        [(FurnitureType.Shelf, RoomType.Pantry)] = new(0.35f, 1, 2, new[] { P(Pantry, 50), P(Food, 40), P(Sweets, 10), P(Roots, 15) }),
         [(FurnitureType.Shelf, RoomType.HomeCinema)] = new(0.40f, 1, 2, new[] { P(Gadgets, 50), P(Sweets, 40), P(Wire, 10) }, 0.10f, 1, 10),
         [(FurnitureType.Shelf, RoomType.Playroom)] = new(0.40f, 1, 2, new[] { P(Sweets, 45), P(Gadgets, 30), P(Plastic, 25) }),
         [(FurnitureType.Desk, RoomType.Playroom)] = new(0.50f, 0, 1, new[] { P(Sweets, 60), P(Plastic, 40) }, 0.20f, 1, 10),

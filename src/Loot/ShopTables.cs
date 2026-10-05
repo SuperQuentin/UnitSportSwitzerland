@@ -142,6 +142,7 @@ public static class ShopTables
             L(ItemId.Cheese, 0.8f, 2, 8), L(ItemId.Chocolate, 0.9f, 4, 12), L(ItemId.MineralWater, 0.9f, 4, 12),
             L(ItemId.WaterBottle, 0.85f, 3, 10), L(ItemId.EnergyBar, 0.6f, 2, 8), L(ItemId.Bandage, 0.3f, 1, 4),
             L(ItemId.RockSalt, 0.35f, 1, 4), L(ItemId.Firewood, 0.3f, 5, 15),
+            L(ItemId.Potato, 0.6f, 4, 12), L(ItemId.Carrot, 0.5f, 4, 12), L(ItemId.Flour, 0.5f, 3, 10),
         },
         [ShopType.Kiosk] = new[]
         {

@@ -187,7 +187,7 @@ public static class ItemDefs
         Crop(ItemId.Potato, "Potatoes", "A 10 kg sack of potatoes.", 10, "#b08c58", "PO", 5),
         Crop(ItemId.Rapeseed, "Rapeseed", "A 50 kg sack of rapeseed.", 10, "#2a2a22", "RA", 42),
         Crop(ItemId.SunflowerSeeds, "Sunflower seeds", "A 50 kg sack of sunflower seeds.", 10, "#4a4034", "SU", 38),
-        Crop(ItemId.SugarBeet, "Sugar beet", "A 10 kg sack of sugar beet.", 10, "#d8cdb8", "SB", 2),
+        Crop(ItemId.SugarBeet, "Sugar beet", "A 10 kg sack of sugar beet.", 10, "#d8cdb8", "SB", 3),
         Crop(ItemId.Carrot, "Carrots", "A 10 kg sack of carrots.", 10, "#e87a1c", "CA", 6),
         Crop(ItemId.HayBale, "Hay bale", "A 250 kg round bale of hay.", 3, "#c8b448", "HB", 40),
         Crop(ItemId.Peas, "Peas", "A 50 kg sack of dried peas.", 10, "#88b848", "PE", 28),
