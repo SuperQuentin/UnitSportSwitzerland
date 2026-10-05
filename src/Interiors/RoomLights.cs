@@ -20,6 +20,11 @@ public static class RoomLights
 {
     public const int TexelsPerLight = 4;
 
+    /// <summary>Metres between high-bay lamps in a room big enough to need more than one (#497).</summary>
+    private const float HighBaySpacing = 11f;
+    /// <summary>At most this many lamps each way, so a 120 m shed is not 120 lights in the table.</summary>
+    private const int MaxHighBays = 6;
+
     public sealed record Table(ImageTexture Texture, float FloorBase, float StoreyHeight, int Floors);
 
     public static Table Build(InteriorLayout l)
@@ -43,10 +48,22 @@ public static class RoomLights
                     var (c, n) = WindowFrame(r, o, y0);
                     lights.Add(Light(c, 0, n.X, n.Z, o.Width / 2, (o.Top - o.Bottom) / 2, r, y0, top));
                 }
-                // the lamp hangs a little under the ceiling, in the middle of the room
-                var lamp = new Vector3((r.X0 + r.X1) / 2, top - 0.3f, (r.Z0 + r.Z1) / 2);
-                float reach = Mathf.Max(3.5f, 0.75f * Mathf.Max(r.Width, r.Depth));
-                lights.Add(Light(lamp, 1, reach, windows ? 0 : 1, 0, 0, r, y0, top));
+                // the lamps hang a little under the ceiling. One in the middle of an ordinary room;
+                // a works hall gets the grid of high bays it really has, because one lamp with a 30 m
+                // reach lights the middle of a shed and leaves its corners black (#497)
+                int cols = Math.Clamp((int)(r.Width / HighBaySpacing), 1, MaxHighBays);
+                int rows = Math.Clamp((int)(r.Depth / HighBaySpacing), 1, MaxHighBays);
+                float reach = cols * rows > 1
+                    ? HighBaySpacing * 0.85f
+                    : Mathf.Max(3.5f, 0.75f * Mathf.Max(r.Width, r.Depth));
+                for (int cx = 0; cx < cols; cx++)
+                    for (int cz = 0; cz < rows; cz++)
+                    {
+                        var lamp = new Vector3(
+                            r.X0 + r.Width * (cx + 0.5f) / cols, top - 0.3f,
+                            r.Z0 + r.Depth * (cz + 0.5f) / rows);
+                        lights.Add(Light(lamp, 1, reach, windows ? 0 : 1, 0, 0, r, y0, top));
+                    }
                 for (int s = 0; s < Math.Max(1, r.Span) && f + s < floors; s++)
                     byFloor[f + s].AddRange(lights);
             }

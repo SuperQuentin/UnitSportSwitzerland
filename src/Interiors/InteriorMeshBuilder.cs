@@ -106,6 +106,16 @@ public static partial class InteriorMeshBuilder
         RoomType.Study => (C(0.42f, 0.28f, 0.18f), C(0.70f, 0.78f, 0.70f), C(0.92f, 0.92f, 0.88f)),
         RoomType.BankHall => (C(0.82f, 0.80f, 0.76f), C(0.84f, 0.82f, 0.74f), C(0.94f, 0.94f, 0.92f)),
         RoomType.Vault => (C(0.40f, 0.41f, 0.43f), C(0.50f, 0.52f, 0.55f), C(0.44f, 0.45f, 0.47f)),
+        // #497 industrial sites: sealed concrete under a painted sheet-metal shell
+        RoomType.WarehouseHall or RoomType.ProductionHall => (C(0.58f, 0.58f, 0.57f), C(0.72f, 0.74f, 0.76f), C(0.52f, 0.53f, 0.55f)),
+        RoomType.TruckBay or RoomType.ServiceBay => (C(0.50f, 0.50f, 0.50f), C(0.78f, 0.79f, 0.80f), C(0.54f, 0.55f, 0.56f)),
+        // the one industrial room meant to look expensive
+        RoomType.Showroom => (C(0.86f, 0.86f, 0.87f), C(0.94f, 0.94f, 0.94f), C(0.96f, 0.96f, 0.96f)),
+        RoomType.ControlRoom or RoomType.Dispatch => (C(0.46f, 0.48f, 0.52f), C(0.86f, 0.87f, 0.84f), C(0.93f, 0.93f, 0.93f)),
+        RoomType.LockerRoom => (C(0.56f, 0.58f, 0.60f), C(0.74f, 0.80f, 0.82f), C(0.92f, 0.92f, 0.92f)),
+        RoomType.BreakRoom => (C(0.72f, 0.68f, 0.62f), C(0.90f, 0.88f, 0.80f), C(0.95f, 0.95f, 0.93f)),
+        RoomType.PartsStore => (Concrete, C(0.76f, 0.76f, 0.73f), C(0.66f, 0.66f, 0.64f)),
+        RoomType.PaintBooth => (C(0.62f, 0.64f, 0.66f), C(0.92f, 0.93f, 0.94f), C(0.90f, 0.91f, 0.92f)),
         // #501: sealed grey concrete, a pale shell and the lit ceiling of a big-box shop floor
         RoomType.IkeaMarket => (C(0.56f, 0.56f, 0.57f), C(0.93f, 0.93f, 0.92f), C(0.96f, 0.96f, 0.95f)),
         _ => (C(0.52f, 0.38f, 0.25f), C(0.88f, 0.84f, 0.76f), C(0.95f, 0.94f, 0.90f)), // hall, landing
@@ -527,11 +537,51 @@ public static partial class InteriorMeshBuilder
             var max = new Vector3(xb, yb, zb);
             s.Box(at + min, at + max, col, collide, basis, at);
         }
+        // what sits on a pallet or a rack beam: boxes, a drum, or sacks, by a roll of its own, so no
+        // two bays of a warehouse hold the same thing (#497)
+        void Goods(float cx, float y, float half, float h, float roll)
+        {
+            if (h < 0.12f) return;
+            if (roll < 0.45f)
+            {
+                // cartons, two or three of them, stacked a little untidily
+                int n = roll < 0.22f ? 2 : 3;
+                for (int i = 0; i < n; i++)
+                {
+                    float y0 = y + h * i / n, y1 = y + h * (i + 1) / n - 0.01f;
+                    float skew = (roll * 10f % 1f - 0.5f) * half * 0.3f * (i % 2 == 0 ? 1 : -1);
+                    var box = new Color(0.62f + 0.1f * roll, 0.50f, 0.32f).SrgbToLinear();
+                    B(cx - half * 0.92f + skew, y0, -half * 0.8f, cx + half * 0.92f + skew, y1, half * 0.8f, box);
+                }
+            }
+            else if (roll < 0.7f)
+            {
+                // a pair of drums
+                var col = roll < 0.58f ? C(0.20f, 0.36f, 0.58f) : C(0.62f, 0.44f, 0.14f);
+                foreach (float bx in new[] { cx - half * 0.45f, cx + half * 0.45f })
+                    B(bx - half * 0.4f, y, -half * 0.4f, bx + half * 0.4f, y + h, half * 0.4f, col);
+            }
+            else if (roll < 0.88f)
+            {
+                // sacks, in two crossed courses
+                var sack = C(0.78f, 0.74f, 0.62f);
+                B(cx - half * 0.95f, y, -half * 0.85f, cx + half * 0.95f, y + h * 0.5f, half * 0.85f, sack);
+                B(cx - half * 0.8f, y + h * 0.5f, -half * 0.95f, cx + half * 0.8f, y + h, half * 0.95f, sack * 0.94f);
+            }
+            else
+            {
+                // a shrink-wrapped block, the pale grey-blue of stretch film
+                B(cx - half * 0.95f, y, -half * 0.88f, cx + half * 0.95f, y + h, half * 0.88f, C(0.72f, 0.76f, 0.78f));
+            }
+        }
         // one collision box for the whole piece: cheaper than per-part, and what a player hits
         // anyway; hung and wall-mounted pieces are overhead, and the chancel step has its own
         bool solid = p.Type is not (FurnitureType.Rug or FurnitureType.Plant or FurnitureType.Bell
             or FurnitureType.Cross or FurnitureType.Dais or FurnitureType.AcousticFoam or FurnitureType.CinemaScreen
-            or FurnitureType.GuitarStand);
+            or FurnitureType.GuitarStand
+            // #497: paint on the floor, a beam overhead, and signs flat on the wall
+            or FurnitureType.FloorMarking or FurnitureType.Gantry or FurnitureType.SafetySign
+            or FurnitureType.Banner or FurnitureType.Whiteboard or FurnitureType.TimeClock);
         if (solid) CollisionBox(s, at, basis, new Vector3(-w, 0, -d), new Vector3(w, H, d));
 
         var wood = C(0.52f, 0.36f, 0.22f);
@@ -865,7 +915,8 @@ public static partial class InteriorMeshBuilder
                 if (p.Type == FurnitureType.FrontPew) Congregation(p, w, d, y0, figures);
                 break;
             case FurnitureType.Car:
-                var paint = C(0.62f, 0.14f, 0.12f);
+                // a showroom row of identical red cars reads as a bug, not a style (#497)
+                var paint = CarPaint(Hash(p, 11));
                 B(-w, 0.25f, -d, w, 0.85f, d, paint);
                 B(-w + 0.1f, 0.85f, -d + 1.0f, w - 0.1f, H, d - 1.4f, C(0.40f, 0.52f, 0.62f));
                 foreach (float wz in new[] { -d + 0.7f, d - 0.7f })
@@ -943,17 +994,372 @@ public static partial class InteriorMeshBuilder
                 B(-0.06f, 0, -0.06f, 0.06f, H * 0.12f, 0.06f, dark); // the clapper
                 break;
             }
+
+            // ---- industrial sites (#497) ------------------------------------------------------
+            case FurnitureType.PalletRack:
+            {
+                // uprights, beam levels, and a loaded pallet on each: the one piece a warehouse is
+                var upright = C(0.58f, 0.30f, 0.18f);   // the orange of a Swiss racking frame
+                var beam = C(0.26f, 0.42f, 0.72f);
+                int levels = Math.Max(2, (int)(H / 1.6f));
+                foreach (float ux in new[] { -w + 0.05f, w - 0.05f })
+                {
+                    B(ux - 0.05f, 0, -d, ux + 0.05f, H, -d + 0.1f, upright);
+                    B(ux - 0.05f, 0, d - 0.1f, ux + 0.05f, H, d, upright);
+                    // the bracing between the two legs, as a ladder of short rungs; one per level is
+                    // all that reads at PS1 distances, and a 50-bay hall is 50 of these
+                    for (int k = 0; k < levels; k++)
+                    {
+                        float y = H * (k + 0.5f) / levels;
+                        B(ux - 0.035f, y, -d + 0.08f, ux + 0.035f, y + 0.05f, d - 0.08f, upright * 0.85f);
+                    }
+                }
+                for (int i = 0; i < levels; i++)
+                {
+                    float y = H * (i + 1) / (levels + 0.4f);
+                    B(-w, y, -d, w, y + 0.09f, -d + 0.09f, beam);
+                    B(-w, y, d - 0.09f, w, y + 0.09f, d, beam);
+                    // one or two pallets on the level, loaded with what this site stores
+                    int slots = p.W > 2.2f ? 2 : 1;
+                    for (int k = 0; k < slots; k++)
+                    {
+                        float cx = -w + (2 * w) * (k + 0.5f) / slots;
+                        float pw = Math.Min(0.95f, (2 * w) / slots * 0.82f) / 2;
+                        if (Hash(p, i * 7 + k) < 0.3f) continue;  // a gap on the shelf
+                        B(cx - pw, y + 0.09f, -d + 0.08f, cx + pw, y + 0.21f, d - 0.08f, wood * 0.9f);
+                        float lh = Math.Min(H / (levels + 0.4f) - 0.4f, 0.75f);
+                        Goods(cx, y + 0.21f, pw, lh, Hash(p, i * 13 + k + 1));
+                    }
+                }
+                break;
+            }
+            case FurnitureType.Pallet:
+            {
+                // the pallet itself, then what is stacked on it
+                var pine = C(0.70f, 0.56f, 0.36f);
+                for (int k = 0; k < 3; k++)
+                {
+                    float z = -d + (2 * d - 0.14f) * k / 2f;
+                    B(-w, 0, z, w, 0.08f, z + 0.14f, pine * 0.85f);
+                }
+                B(-w, 0.08f, -d, w, 0.14f, d, pine);
+                Goods(0, 0.14f, w * 0.9f, Math.Max(0.2f, H - 0.14f), Hash(p, 3));
+                break;
+            }
+            case FurnitureType.BarrelStack:
+            {
+                // four drums on a pallet, banded
+                var blue = C(0.20f, 0.36f, 0.58f);
+                B(-w, 0, -d, w, 0.14f, d, wood * 0.85f);
+                foreach (float bx in new[] { -w * 0.5f, w * 0.5f })
+                    foreach (float bz in new[] { -d * 0.5f, d * 0.5f })
+                    {
+                        var col = Hash(p, (int)(bx * 10 + bz * 3)) < 0.5f ? blue : C(0.62f, 0.44f, 0.14f);
+                        B(bx - w * 0.42f, 0.14f, bz - d * 0.42f, bx + w * 0.42f, H, bz + d * 0.42f, col);
+                        B(bx - w * 0.45f, H * 0.4f, bz - d * 0.45f, bx + w * 0.45f, H * 0.48f, bz + d * 0.45f, col * 0.85f);
+                    }
+                break;
+            }
+            case FurnitureType.SackStack:
+            {
+                // cement or feed sacks, courses crossed as they are really stacked
+                var sack = C(0.78f, 0.74f, 0.62f);
+                int courses = Math.Max(2, (int)(H / 0.18f));
+                for (int i = 0; i < courses; i++)
+                {
+                    float y = H * i / courses, y1 = H * (i + 1) / courses - 0.015f;
+                    bool across = i % 2 == 0;
+                    int n = 2;
+                    for (int k = 0; k < n; k++)
+                    {
+                        float t0 = -1f + 2f * k / n, t1 = -1f + 2f * (k + 1) / n;
+                        var col = sack * (0.92f + 0.08f * Hash(p, i * 5 + k));
+                        col.A = 1;
+                        if (across) B(w * t0 + 0.02f, y, -d + 0.03f, w * t1 - 0.02f, y1, d - 0.03f, col);
+                        else B(-w + 0.03f, y, d * t0 + 0.02f, w - 0.03f, y1, d * t1 - 0.02f, col);
+                    }
+                }
+                break;
+            }
+            case FurnitureType.Conveyor:
+            {
+                // legs, side rails and a belt, with rollers showing at the ends
+                float belt = H - 0.1f;
+                foreach (float lx in new[] { -w + 0.12f, w - 0.12f })
+                {
+                    B(lx - 0.05f, 0, -d + 0.08f, lx + 0.05f, belt, -d + 0.18f, metal * 0.8f);
+                    B(lx - 0.05f, 0, d - 0.18f, lx + 0.05f, belt, d - 0.08f, metal * 0.8f);
+                }
+                B(-w, belt - 0.14f, -d, w, belt, -d + 0.07f, metal);
+                B(-w, belt - 0.14f, d - 0.07f, w, belt, d, metal);
+                B(-w, belt - 0.07f, -d + 0.07f, w, belt, d - 0.07f, C(0.18f, 0.18f, 0.20f));
+                // a box or two riding on it
+                for (int k = 0; k < 2; k++)
+                {
+                    float h = Hash(p, k);
+                    if (h < 0.35f) continue;
+                    float cx = -w * 0.5f + w * k;
+                    B(cx - 0.22f, belt, -0.22f, cx + 0.22f, belt + 0.3f, 0.22f, C(0.66f, 0.52f, 0.32f));
+                }
+                break;
+            }
+            case FurnitureType.Machine:
+            {
+                // a press or a lathe: a base, a body, a head over the work, and a control box
+                var body = C(0.26f, 0.44f, 0.40f);   // machine green
+                B(-w, 0, -d, w, 0.14f, d, dark);
+                B(-w * 0.9f, 0.14f, -d * 0.9f, w * 0.9f, H * 0.6f, d * 0.9f, body);
+                B(-w * 0.7f, H * 0.6f, -d * 0.5f, w * 0.7f, H, d * 0.5f, body * 0.9f);
+                B(-w * 0.45f, H * 0.6f, -d * 0.95f, w * 0.45f, H * 0.78f, -d * 0.5f, metal);  // the ram
+                B(w * 0.55f, H * 0.35f, -d - 0.08f, w * 0.95f, H * 0.6f, -d * 0.6f, C(0.80f, 0.70f, 0.20f)); // the panel
+                B(-w * 0.2f, H, -0.06f, w * 0.2f, H + 0.3f, 0.06f, metal * 0.8f);  // the extract duct
+                break;
+            }
+            case FurnitureType.Gantry:
+            {
+                // a crane beam under the roof, with a hoist block hanging off it
+                B(-w, H - 0.25f, -d, w, H, d, C(0.80f, 0.68f, 0.16f));
+                B(-w, H - 0.32f, -d * 0.55f, w, H - 0.25f, d * 0.55f, C(0.80f, 0.68f, 0.16f) * 0.9f);
+                float hx = -w + 2 * w * Hash(p, 1);
+                B(hx - 0.22f, H - 0.62f, -0.18f, hx + 0.22f, H - 0.32f, 0.18f, dark);
+                B(hx - 0.03f, H - 1.3f, -0.03f, hx + 0.03f, H - 0.62f, 0.03f, metal * 0.8f);
+                B(hx - 0.12f, H - 1.45f, -0.08f, hx + 0.12f, H - 1.3f, 0.08f, metal);
+                break;
+            }
+            case FurnitureType.ToolChest:
+            {
+                var red = C(0.62f, 0.16f, 0.14f);
+                B(-w, 0, -d, w, H, d, red);
+                int drawers = Math.Max(3, (int)(H / 0.2f));
+                for (int i = 0; i < drawers; i++)
+                {
+                    float y = H * (i + 0.15f) / drawers;
+                    B(-w + 0.04f, y, -d - 0.015f, w - 0.04f, y + H / drawers * 0.6f, -d, red * 0.82f);
+                    B(-w * 0.3f, y + H / drawers * 0.2f, -d - 0.03f, w * 0.3f, y + H / drawers * 0.35f, -d - 0.01f, metal);
+                }
+                B(-w, H, -d, w, H + 0.03f, d, metal);
+                break;
+            }
+            case FurnitureType.CarLift:
+            {
+                // a low drive-on ramp: two runways on a cross beam, with ramps at the near end
+                B(-w, 0, -d, w, 0.04f, d, C(0.80f, 0.70f, 0.18f) * 0.7f);   // the painted bay under it
+                foreach (float rx in new[] { -w * 0.55f, w * 0.55f })
+                {
+                    B(rx - w * 0.3f, 0.04f, -d + 0.4f, rx + w * 0.3f, H, d - 0.2f, metal * 0.85f);
+                    // the ramp up onto the runway
+                    B(rx - w * 0.3f, 0.04f, -d, rx + w * 0.3f, H * 0.55f, -d + 0.4f, metal * 0.7f);
+                }
+                B(-w, 0.04f, d - 0.25f, w, H * 0.8f, d - 0.05f, C(0.26f, 0.28f, 0.30f));  // the crossbeam
+                break;
+            }
+            case FurnitureType.TyreStack:
+            {
+                int tyres = Math.Max(3, (int)(H / 0.22f));
+                for (int i = 0; i < tyres; i++)
+                {
+                    float y = H * i / tyres;
+                    float r = w * (i % 2 == 0 ? 1f : 0.94f);
+                    B(-r, y, -d * (r / w), r, H * (i + 1) / tyres - 0.015f, d * (r / w),
+                        i % 2 == 0 ? dark : dark * 1.4f);
+                }
+                break;
+            }
+            case FurnitureType.OilDrum:
+            {
+                var col = Hash(p, 0) < 0.45f ? C(0.18f, 0.34f, 0.56f) : C(0.56f, 0.18f, 0.14f);
+                B(-w, 0, -d, w, H, d, col);
+                B(-w * 1.04f, H * 0.28f, -d * 1.04f, w * 1.04f, H * 0.36f, d * 1.04f, col * 0.82f);
+                B(-w * 1.04f, H * 0.64f, -d * 1.04f, w * 1.04f, H * 0.72f, d * 1.04f, col * 0.82f);
+                B(-w * 0.9f, H, -d * 0.9f, w * 0.9f, H + 0.02f, d * 0.9f, col * 1.1f);
+                break;
+            }
+            case FurnitureType.JerryCan:
+                B(-w, 0, -d, w, H, d, C(0.58f, 0.18f, 0.14f));
+                B(-w * 0.3f, H, -d * 0.5f, w * 0.3f, H + 0.05f, d * 0.5f, dark);   // the spout
+                B(-w * 0.8f, H * 0.78f, -d - 0.02f, w * 0.8f, H * 0.86f, -d, dark); // the handle bar
+                break;
+            case FurnitureType.Compressor:
+            {
+                // a horizontal receiver on feet with the pump and motor on top
+                B(-w, 0, -d, w, 0.1f, d, dark);
+                B(-w, 0.1f, -d * 0.75f, w, H * 0.6f, d * 0.75f, C(0.20f, 0.32f, 0.52f));
+                B(-w * 0.4f, H * 0.6f, -d * 0.6f, w * 0.1f, H, d * 0.6f, metal * 0.8f);
+                B(w * 0.15f, H * 0.6f, -d * 0.5f, w * 0.8f, H * 0.92f, d * 0.5f, dark);
+                break;
+            }
+            case FurnitureType.Locker:
+            {
+                // a bank of two or three doors, each with a vent and a handle
+                var steel = C(0.42f, 0.52f, 0.60f);
+                B(-w, 0, -d, w, H, d, steel);
+                int doors = Math.Max(2, (int)(p.W / 0.4f));
+                for (int i = 0; i < doors; i++)
+                {
+                    float x0 = -w + 2 * w * i / doors + 0.015f, x1 = -w + 2 * w * (i + 1) / doors - 0.015f;
+                    B(x0, 0.03f, -d - 0.012f, x1, H - 0.03f, -d, steel * 0.9f);
+                    for (int k = 0; k < 3; k++)
+                        B(x0 + 0.03f, H - 0.16f - k * 0.05f, -d - 0.02f, x1 - 0.03f, H - 0.13f - k * 0.05f, -d - 0.012f, dark);
+                    B(x1 - 0.07f, H * 0.5f, -d - 0.03f, x1 - 0.03f, H * 0.5f + 0.1f, -d - 0.012f, metal);
+                }
+                break;
+            }
+            case FurnitureType.Bench:
+                foreach (float lx in new[] { -w + 0.12f, w - 0.12f })
+                    B(lx - 0.04f, 0, -d + 0.04f, lx + 0.04f, H - 0.05f, d - 0.04f, metal * 0.8f);
+                B(-w, H - 0.05f, -d, w, H, d, wood);
+                break;
+            case FurnitureType.HardHatRack:
+            {
+                // pegs on a board, with hats and a high-vis on them
+                B(-w, H - 0.5f, -d, w, H - 0.42f, d, wood * 0.9f);
+                int pegs = Math.Max(2, (int)(p.W / 0.3f));
+                for (int i = 0; i < pegs; i++)
+                {
+                    float x = -w + 2 * w * (i + 0.5f) / pegs;
+                    B(x - 0.02f, H - 0.48f, -d - 0.08f, x + 0.02f, H - 0.44f, -d, metal);
+                    float h = Hash(p, i);
+                    if (h < 0.25f) continue;
+                    var hat = h < 0.6f ? C(0.90f, 0.72f, 0.10f) : C(0.92f, 0.94f, 0.96f);
+                    B(x - 0.11f, H - 0.62f, -d - 0.13f, x + 0.11f, H - 0.48f, -d - 0.01f, hat);
+                    if (h > 0.8f) // a vest on the peg below
+                        B(x - 0.13f, H - 1.1f, -d - 0.1f, x + 0.13f, H - 0.62f, -d - 0.02f, C(0.85f, 0.88f, 0.12f));
+                }
+                break;
+            }
+            case FurnitureType.FireExtinguisher:
+            {
+                // on its wall bracket, at the height the rules want it
+                float head = H + 0.6f;
+                B(-w * 0.1f, 0.55f, -d - 0.03f, w * 0.1f, head, -d, metal * 0.7f);
+                B(-w * 0.8f, 0.6f, -d - 0.02f, w * 0.8f, head - 0.08f, d * 0.8f, C(0.70f, 0.12f, 0.10f));
+                B(-w * 0.3f, head - 0.08f, -d * 0.2f, w * 0.3f, head, d * 0.2f, dark);
+                B(-w * 0.9f, head - 0.2f, -d - 0.04f, -w * 0.2f, head - 0.14f, -d * 0.2f, dark); // the hose
+                break;
+            }
+            case FurnitureType.SafetySign:
+            {
+                // a pictogram board: a bright field with a dark figure on it, flat to the wall
+                float h = Hash(p, 0);
+                var field = h < 0.45f ? C(0.14f, 0.34f, 0.66f)      // blue: what you must wear
+                    : h < 0.8f ? C(0.88f, 0.76f, 0.10f)             // yellow: what to watch for
+                    : C(0.72f, 0.14f, 0.12f);                       // red: what you must not do
+                B(-w, H * 0.2f, -d, w, H, d, white);
+                B(-w * 0.86f, H * 0.26f, -d - 0.012f, w * 0.86f, H * 0.94f, -d, field);
+                B(-w * 0.3f, H * 0.4f, -d - 0.02f, w * 0.3f, H * 0.82f, -d - 0.012f, dark);
+                break;
+            }
+            case FurnitureType.TimeClock:
+                B(-w, 0.9f, -d, w, 0.9f + H, d, C(0.80f, 0.80f, 0.78f));
+                B(-w * 0.7f, 0.95f, -d - 0.012f, w * 0.7f, 0.9f + H * 0.7f, -d, dark);
+                break;
+            case FurnitureType.Whiteboard:
+                B(-w, 1.0f, -d, w, 1.0f + H, d, C(0.30f, 0.32f, 0.34f));
+                B(-w + 0.05f, 1.05f, -d - 0.015f, w - 0.05f, 1.0f + H - 0.05f, -d, white);
+                B(-w * 0.6f, 1.0f + H * 0.6f, -d - 0.025f, w * 0.1f, 1.0f + H * 0.64f, -d - 0.016f, C(0.20f, 0.36f, 0.66f));
+                B(-w * 0.5f, 1.0f + H * 0.38f, -d - 0.025f, w * 0.4f, 1.0f + H * 0.42f, -d - 0.016f, C(0.66f, 0.22f, 0.20f));
+                break;
+            case FurnitureType.Banner:
+            {
+                // a hanging cloth banner: the dealership's colours, not the works'
+                var col = Hash(p, 0) < 0.5f ? C(0.14f, 0.30f, 0.60f) : C(0.68f, 0.14f, 0.16f);
+                B(-w, H - 2.2f, -d, w, H, d, col);
+                B(-w, H - 0.08f, -d - 0.02f, w, H, d, metal * 0.8f);
+                B(-w * 0.55f, H - 1.3f, -d - 0.012f, w * 0.55f, H - 0.5f, -d, white);
+                break;
+            }
+            case FurnitureType.DeskCounter:
+            {
+                // a service counter: a worktop on a plinth, with a raised ledge facing the customer
+                B(-w, 0, -d + 0.08f, w, H - 0.14f, d, C(0.80f, 0.78f, 0.74f));
+                B(-w, H - 0.14f, -d, w, H - 0.04f, d, wood);
+                B(-w, H - 0.04f, -d, w, H, -d + 0.1f, wood * 0.85f);
+                B(-w * 0.55f, H, -d + 0.2f, -w * 0.1f, H + 0.22f, d * 0.4f, dark);  // a till
+                break;
+            }
+            case FurnitureType.ShowroomPlinth:
+                // a low polished dais a car stands on, with a lit edge reveal
+                B(-w, 0, -d, w, H - 0.04f, d, C(0.22f, 0.23f, 0.26f));
+                B(-w + 0.06f, H - 0.04f, -d + 0.06f, w - 0.06f, H, d - 0.06f, C(0.88f, 0.88f, 0.90f));
+                break;
+            case FurnitureType.Forklift:
+            {
+                // counterbalance truck: body, cage, mast and forks
+                var orange = C(0.86f, 0.44f, 0.08f);
+                B(-w, 0.14f, -d + 0.2f, w, 0.7f, d, orange);
+                B(-w * 0.8f, 0.7f, d * 0.1f, w * 0.8f, 1.05f, d * 0.8f, dark);   // the seat
+                foreach (float cx in new[] { -w + 0.08f, w - 0.08f })
+                {
+                    B(cx - 0.05f, 1.05f, d * 0.05f, cx + 0.05f, H, d * 0.15f, metal * 0.8f);
+                    B(cx - 0.05f, 1.05f, d * 0.75f, cx + 0.05f, H, d * 0.85f, metal * 0.8f);
+                }
+                B(-w * 0.9f, H - 0.07f, d * 0.05f, w * 0.9f, H, d * 0.85f, metal * 0.7f);  // the cage roof
+                foreach (float mx in new[] { -w * 0.6f, w * 0.6f })
+                    B(mx - 0.05f, 0.14f, -d + 0.08f, mx + 0.05f, H - 0.25f, -d + 0.2f, metal * 0.85f);
+                foreach (float fx in new[] { -w * 0.45f, w * 0.45f })
+                    B(fx - 0.06f, 0.05f, -d - 0.5f, fx + 0.06f, 0.14f, -d + 0.08f, metal);
+                foreach (float wz in new[] { -d + 0.45f, d - 0.35f })
+                {
+                    B(-w - 0.02f, 0, wz - 0.18f, -w + 0.14f, 0.42f, wz + 0.18f, dark);
+                    B(w - 0.14f, 0, wz - 0.18f, w + 0.02f, 0.42f, wz + 0.18f, dark);
+                }
+                break;
+            }
+            case FurnitureType.TruckProp:
+            {
+                // a rigid lorry: cab over the front axle, box body behind it
+                var cab = CarPaint(Hash(p, 5));
+                B(-w, 0.45f, -d, w, H * 0.8f, -d + 2.0f, cab);
+                B(-w * 0.9f, H * 0.42f, -d + 0.1f, w * 0.9f, H * 0.72f, -d + 0.22f, C(0.40f, 0.52f, 0.62f)); // screen
+                B(-w, 0.75f, -d + 2.0f, w, H, d, C(0.88f, 0.88f, 0.86f));   // the box
+                B(-w, 0.55f, -d + 2.0f, w, 0.75f, d, dark);                 // the chassis under it
+                foreach (float wz in new[] { -d + 1.1f, d - 1.6f, d - 0.6f })
+                {
+                    B(-w - 0.03f, 0, wz - 0.45f, -w + 0.22f, 0.9f, wz + 0.45f, dark);
+                    B(w - 0.22f, 0, wz - 0.45f, w + 0.03f, 0.9f, wz + 0.45f, dark);
+                }
+                break;
+            }
+            case FurnitureType.FloorMarking:
+            {
+                // paint, not a thing: a hazard-yellow lane edge or bay outline
+                var hazard = C(0.86f, 0.74f, 0.12f);
+                float line = Math.Min(0.09f, Math.Min(w, d) * 0.5f);
+                if (p.D <= 0.2f)   // a single lane line
+                    B(-w, 0.001f, -d, w, 0.012f, d, hazard);
+                else
+                {
+                    B(-w, 0.001f, -d, w, 0.012f, -d + line, hazard);
+                    B(-w, 0.001f, d - line, w, 0.012f, d, hazard);
+                    B(-w, 0.001f, -d, -w + line, 0.012f, d, hazard);
+                    B(w - line, 0.001f, -d, w, 0.012f, d, hazard);
+                }
+                break;
+            }
         }
     }
 
     /// <summary>
-    /// A stable 0..1 roll for one detail of one piece: which way a shark in a bin lies. From the
-    /// piece's own place in the plan, so every peer builds the same bin and a rebuild does not
-    /// reshuffle it.
+    /// A stable 0..1 roll for one detail of one piece: which colour a drum is, whether a rack slot is
+    /// empty, which way a shark in a bin lies (#501). From the piece's own place in the plan, so every peer builds the same warehouse and a
+    /// rebuild does not reshuffle it.
     /// </summary>
-    /// <remarks>#497 adds the same helper; keep one when the branches meet.</remarks>
     private static float Hash(FurniturePlan p, int salt) =>
         Occasions.OccasionHash.Unit((int)(p.X * 100), (int)(p.Z * 100), salt, (uint)p.Type);
+
+    /// <summary>Body colour for a car or a lorry cab, from a roll: the Swiss car park, roughly.</summary>
+    private static Color CarPaint(float roll) => roll switch
+    {
+        < 0.20f => C(0.72f, 0.73f, 0.75f),   // silver, still the commonest
+        < 0.36f => C(0.16f, 0.17f, 0.19f),   // black
+        < 0.50f => C(0.90f, 0.90f, 0.89f),   // white
+        < 0.62f => C(0.34f, 0.36f, 0.40f),   // graphite
+        < 0.74f => C(0.58f, 0.14f, 0.12f),   // red
+        < 0.84f => C(0.16f, 0.30f, 0.54f),   // blue
+        < 0.91f => C(0.18f, 0.36f, 0.26f),   // racing green
+        < 0.96f => C(0.72f, 0.56f, 0.18f),   // sand
+        _ => C(0.78f, 0.52f, 0.10f),         // the one bright one on the forecourt
+    };
 
     private static void CollisionBox(Scratch s, Vector3 at, Basis basis, Vector3 min, Vector3 max)
     {

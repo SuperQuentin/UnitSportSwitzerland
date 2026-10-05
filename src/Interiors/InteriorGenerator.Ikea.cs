@@ -4,6 +4,9 @@ namespace UnitSport.Interiors;
 
 /// <summary>
 /// IKEA rules (#501): what is inside one of the nine stores <see cref="Landmarks"/> recognises.
+/// Reached through <see cref="LaysItselfOut"/> and <see cref="HallLayout"/>, which it shares with
+/// the industrial sites of #497, along with <c>Put</c>, <c>PieceBudget</c>, <c>EntryLane</c> and
+/// <c>Free</c> — a shop floor of bins and a warehouse of racking are the same problem.
 ///
 /// <para>
 /// Deliberately thin. The real showroom — the marked one-way route, the room sets, the Småland, the
@@ -77,25 +80,6 @@ public static partial class InteriorGenerator
     }
 
     /// <summary>
-    /// Whether a room lays its own furniture out in rows, instead of having pieces placed round its
-    /// walls by <see cref="Furnish"/>'s generic placer.
-    /// </summary>
-    /// <remarks>
-    /// #497 adds the industrial halls to this. Keep the two lists as one when the branches meet.
-    /// </remarks>
-    private static bool LaysItselfOut(RoomType t) => t is RoomType.IkeaMarket;
-
-    /// <summary>Lays a self-laying-out room's floor out.</summary>
-    private static void HallLayout(InteriorLayout l, int f, RoomPlan r,
-        List<RectPlan> placed, List<RectPlan> blocked, Random rng)
-    {
-        switch (r.Type)
-        {
-            case RoomType.IkeaMarket: BlahajBins(l, f, r, placed, blocked); break;
-        }
-    }
-
-    /// <summary>
     /// Rows of bins of Blåhajs across the shop floor, with aisles between them and the lane in
     /// from the door left clear.
     ///
@@ -113,33 +97,16 @@ public static partial class InteriorGenerator
         int rows = Math.Max(1, (int)((r.Depth - 1.6f) / pitch));
         float used = rows * pitch;
         float z = r.Z0 + (r.Depth - used) / 2 + BinAisle / 2;
-        int budget = Math.Clamp((int)(r.Area / 28f), 6, MaxBins);
+        int budget = Math.Min(PieceBudget(r), MaxBins);
         float step = BinSize + BinGap;
 
         for (int row = 0; row < rows && budget > 0; row++, z += pitch)
             for (float x = r.X0 + 0.6f; x + BinSize < r.X1 - 0.6f && budget > 0; x += step)
             {
-                var rect = new RectPlan(x, z, x + BinSize, z + BinSize);
-                if (!Free(r, rect, placed, blocked, 0f)) continue;
-                l.Furniture.Add(new FurniturePlan
-                {
-                    Type = FurnitureType.BlahajBin, Floor = f,
-                    X = x + BinSize / 2, Z = z + BinSize / 2, Turns = 0,
-                    W = BinSize, D = BinSize, H = BinHeight,
-                });
-                placed.Add(rect);
+                if (!Free(r, new RectPlan(x, z, x + BinSize, z + BinSize), placed, blocked, 0f)) continue;
+                Put(l, f, FurnitureType.BlahajBin, x + BinSize / 2, z + BinSize / 2, 0,
+                    BinSize, BinSize, BinHeight, placed);
                 budget--;
             }
-    }
-
-    /// <summary>
-    /// The lane straight in from the entrance, kept clear of furniture: its width plus a shoulder
-    /// each side, the whole depth of the room.
-    /// </summary>
-    /// <remarks>#497 adds the same helper for its site halls; keep one when the branches meet.</remarks>
-    private static RectPlan EntryLane(InteriorLayout l, RoomPlan r)
-    {
-        float half = l.EntryWidth / 2 + 0.6f;
-        return new RectPlan(l.EntryX - half, r.Z0, l.EntryX + half, r.Z1);
     }
 }

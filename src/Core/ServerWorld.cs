@@ -32,6 +32,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Occasions.OccasionManager? _occasions;
     private World.RaceNpcs? _npcs;
     private BattleRoyale.BrManager? _br;
+    private Combat.FightManager? _fight;
     private BattleRoyale.BrCrates? _brCrates;
     private Handshake? _handshake;
 
@@ -182,6 +183,11 @@ public partial class ServerWorld : Node3D, IOriginContainer
         var passengers = _passengers;
         AddChild(race);
         _chat.Race = race;
+
+        // fist fights between players (#495): World/Fight, the server owns every match
+        _fight = Combat.FightManager.CreateServer(_chat, _players);
+        AddChild(_fight);
+        _chat.Fight = _fight;
 
         // Battle Royale (#177): World/BattleRoyale; everyone in a running match sees everyone else in it
         _brCrates = BattleRoyale.BrCrates.Create(this, origin, server: true);
@@ -421,6 +427,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // before the vehicles: a host's passengers go on in its vehicle, which it no longer simulates
         _passengers?.PeerLeft(id);
         _br?.PeerLeft(id);
+        _fight?.PeerLeft(id);
         _vehicles?.ForgetOwner(id);
         _radios?.ForgetOwner(id);
         _dropped?.ForgetOwner(id);

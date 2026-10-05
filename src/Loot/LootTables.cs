@@ -154,6 +154,22 @@ public static class LootTables
         [FurnitureType.Bookcase] = new(0.50f, 0, 1, new[] { P(Medical, 20), P(Gadgets, 30), P(Optics, 3), P(Cloth, 20) }, 0.30f, 5, 60),   // notes slipped in a book
         [FurnitureType.Amplifier] = new(0.60f, 0, 1, new[] { P(Gadgets, 50), P(Wire, 50) }),
         [FurnitureType.Piano] = new(0.70f, 0, 1, new[] { P(Sweets, 50), P(Gadgets, 50) }, 0.25f, 5, 40),
+        // #497 industrial sites: what a works, a warehouse and a workshop actually hold
+        [FurnitureType.PalletRack] = new(0.15f, 2, 5, new[] { P(Scrap, 35), P(Minerals, 20), P(Parts, 20), P(Tins, 15), P(Hardware, 10) }),
+        [FurnitureType.Pallet] = new(0.25f, 1, 3, new[] { P(Scrap, 40), P(Minerals, 30), P(Tins, 20), P(Parts, 10) }),
+        [FurnitureType.BarrelStack] = new(0.35f, 1, 2, new[] { P(Water, 40), P(Fuel, 30), P(Scrap, 30) }),
+        [FurnitureType.SackStack] = new(0.40f, 1, 2, new[] { P(Minerals, 60), P(Pantry, 25), P(Scrap, 15) }),
+        [FurnitureType.OilDrum] = new(0.45f, 0, 2, new[] { P(Fuel, 45), P(Scrap, 35), P(VehicleParts, 20) }),
+        [FurnitureType.JerryCan] = new(0.30f, 1, 1, new[] { P(VehicleParts, 100) }),
+        [FurnitureType.TyreStack] = new(0.30f, 1, 2, new[] { P(VehicleParts, 100) }),
+        [FurnitureType.ToolChest] = new(0.15f, 2, 4, new[] { P(Hardware, 45), P(Parts, 25), P(VehicleParts, 20), P(Scrap, 10) }),
+        [FurnitureType.Machine] = new(0.45f, 1, 2, new[] { P(Scrap, 50), P(Parts, 35), P(Wire, 15) }),
+        [FurnitureType.Compressor] = new(0.50f, 0, 2, new[] { P(Hardware, 40), P(Parts, 35), P(Scrap, 25) }),
+        // somebody's locker: their spare clothes, their snack, the odd note
+        [FurnitureType.Locker] = new(0.35f, 1, 2, new[] { P(Cloth, 35), P(Sweets, 25), P(Gadgets, 20), P(Medical, 10), P(Purses, 10) }, 0.30f, 2, 25),
+        [FurnitureType.TruckProp] = new(0.30f, 1, 2, new[] { P(VehicleParts, 100) }, 0.15f, 1, 10),
+        // the till of a goods office or a sales desk
+        [FurnitureType.DeskCounter] = new(0.30f, 1, 2, new[] { P(Gadgets, 40), P(Wire, 25), P(Hardware, 25), P(Optics, 2) }, 0.60f, 10, 90),
     };
 
     /// <summary>
@@ -196,6 +212,24 @@ public static class LootTables
         [(FurnitureType.Fridge, RoomType.Pantry)] = new(0.20f, 1, 3, new[] { P(Food, 70), P(Water, 30) }),   // the freezer
         [(FurnitureType.Crate, RoomType.Vault)] = new(0.30f, 0, 0, Array.Empty<Pool>(), 1.0f, 20, 200),       // coin rolls
         [(FurnitureType.Workbench, RoomType.Garage)] = new(0.15f, 2, 4, new[] { P(Hardware, 40), P(Parts, 25), P(VehicleParts, 15), P(Scrap, 20) }),
+        // #497: the same piece holds different stock in different parts of a site
+        [(FurnitureType.PalletRack, RoomType.ProductionHall)] = new(0.15f, 2, 5, new[] { P(Parts, 40), P(Scrap, 30), P(Minerals, 15), P(Hardware, 15) }),
+        [(FurnitureType.Rack, RoomType.PartsStore)] = new(0.15f, 2, 4, new[] { P(Parts, 40), P(VehicleParts, 25), P(Hardware, 25), P(Scrap, 10) }),
+        [(FurnitureType.Shelf, RoomType.PartsStore)] = new(0.20f, 1, 3, new[] { P(Parts, 40), P(VehicleParts, 25), P(Hardware, 30), P(Optics, 1) }),
+        [(FurnitureType.Crate, RoomType.PartsStore)] = new(0.20f, 2, 4, new[] { P(Parts, 45), P(VehicleParts, 25), P(Scrap, 30) }),
+        [(FurnitureType.Workbench, RoomType.ServiceBay)] = new(0.15f, 2, 4, new[] { P(Hardware, 35), P(VehicleParts, 35), P(Parts, 20), P(Scrap, 10) }),
+        [(FurnitureType.Workbench, RoomType.TruckBay)] = new(0.15f, 2, 4, new[] { P(Hardware, 35), P(VehicleParts, 35), P(Parts, 20), P(Scrap, 10) }),
+        [(FurnitureType.Rack, RoomType.ServiceBay)] = new(0.20f, 2, 4, new[] { P(VehicleParts, 40), P(Hardware, 30), P(Parts, 30) }),
+        [(FurnitureType.Rack, RoomType.TruckBay)] = new(0.20f, 2, 4, new[] { P(VehicleParts, 40), P(Hardware, 30), P(Parts, 30) }),
+        // the mess room: the shift's food and drink, and the kettle
+        [(FurnitureType.Counter, RoomType.BreakRoom)] = new(0.35f, 0, 2, new[] { P(Food, 40), P(Water, 30), P(Sweets, 15), P(KitchenScrap, 15) }, 0.25f, 1, 10),
+        [(FurnitureType.Fridge, RoomType.BreakRoom)] = new(0.25f, 1, 3, new[] { P(Food, 55), P(Water, 35), P(Sweets, 10) }),
+        [(FurnitureType.Shelf, RoomType.BreakRoom)] = new(0.35f, 1, 2, new[] { P(Food, 35), P(Water, 25), P(Sweets, 25), P(KitchenScrap, 15) }),
+        // a car for sale is clean and empty; one in a bay is being worked on
+        [(FurnitureType.Car, RoomType.Showroom)] = new(0.75f, 0, 1, new[] { P(VehicleParts, 100) }, 0.05f, 1, 10),
+        [(FurnitureType.Car, RoomType.ServiceBay)] = new(0.20f, 1, 3, new[] { P(VehicleParts, 100) }, 0.20f, 1, 15),
+        [(FurnitureType.Desk, RoomType.Dispatch)] = new(0.35f, 1, 2, new[] { P(Gadgets, 40), P(Wire, 25), P(Scrap, 25), P(Optics, 2) }, 0.45f, 5, 60),
+        [(FurnitureType.Desk, RoomType.ControlRoom)] = new(0.35f, 1, 2, new[] { P(Gadgets, 45), P(Wire, 30), P(Scrap, 25), P(Optics, 3) }, 0.35f, 5, 50),
     };
 
     public static bool IsLootable(FurnitureType type) => Containers.ContainsKey(type);
@@ -458,9 +492,26 @@ public static class LootTables
         int lootable = layout.Furniture.Count(f => IsLootable(f.Type) && !IsLocked(f.Type));
         if (lootable == 0) return 1f;
         // storeys above ground: a cellar spreads the same household's things over more furniture (#213)
+        // an industrial site (#497) is not one household's things spread thin: a warehouse hall with
+        // 120 racking bays really does hold stock in most of them, so it gets a flat rate per
+        // container instead of a building's budget divided by however many bays its hall fits
+        if (BuildingTypes.IsSite(layout.Type)) return SiteAbundance(layout.Type);
         float budget = (6f + 3f * Math.Max(1, layout.Floors.Count - layout.Below)) * BudgetFactor(layout.Kind);
         return Math.Min(1f, budget / lootable);
     }
+
+    /// <summary>
+    /// The share of a site's containers that hold something. A warehouse is the fullest; a
+    /// dealership's showroom is for selling cars, not for keeping things in.
+    /// </summary>
+    private static float SiteAbundance(BuildingType site) => site switch
+    {
+        BuildingType.Warehouse => 0.22f,
+        BuildingType.Factory => 0.18f,
+        BuildingType.Depot => 0.20f,
+        BuildingType.Mechanic => 0.26f,
+        _ => 0.12f,   // dealership
+    };
 
     /// <summary>A shop or a works keeps more stock than a home; a shed or a garage less.</summary>
     private static float BudgetFactor(BuildingKind kind) => kind switch
