@@ -17,6 +17,14 @@
     <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
 
+  <!-- Android APK (tools/release.sh, #544): Godot's prebuilt Android template only runs net9.0, and the
+       MapCore -> TerrainPreprocessor -> RoadGen exe references each bring a deps.json/runtimeconfig.json
+       that collide once published for an Android RID (NETSDK1152); the game never reads them. -->
+  <PropertyGroup Condition=" '$(GodotTargetPlatform)' == 'android' ">
+    <TargetFramework>net9.0</TargetFramework>
+    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Tiles churn through the large-object heap (1-4 MB grids, covers, collision maps), which
          the GC never compacts by default: the heap grows with fragmentation, not live data.
