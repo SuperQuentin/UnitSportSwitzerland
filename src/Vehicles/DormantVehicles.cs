@@ -52,7 +52,7 @@ public partial class DormantBody : StaticBody3D
     public VehicleSlot Slot { get; init; }
 }
 
-public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAware
+public partial class DormantVehicles : Node3D, IOriginContainer
 {
     public static DormantVehicles? Instance { get; private set; }
 
@@ -148,7 +148,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
     {
         if (SlotOf(node.Name) is not { } key) return;
         if (!_awake.Add(key.Key)) return;
-        if (_drawn.ContainsKey(key.Tile)) Draw(key.Tile);
+        Forget(key.Tile, key.Key);
     }
 
     /// <summary>
@@ -172,9 +172,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
     /// builds them for a real parked train — a trailer you walk through would be worse than none.
     /// </para>
     /// </summary>
-    private void DrawHeavies(TileId id, List<VehicleSlot> slots)
+    private void DrawHeavies(List<VehicleSlot> slots, List<DormantBody> bodies)
     {
-        var bodies = _solid.TryGetValue(id, out var existing) ? existing : new List<DormantBody>();
         foreach (var s in slots)
         {
             // the very state Promote would wake it with, so the two cannot drift apart
@@ -199,7 +198,6 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
             AddChild(body);
             bodies.Add(body);
         }
-        _solid[id] = bodies;
     }
 
     /// <summary>
@@ -420,7 +418,10 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
         Clear(id);
         if (!_slots.TryGetValue(id, out var slots)) return;
 
-        var byLook = new Dictionary<(byte Paint, bool Van), List<VehicleSlot>>();
+        // Every body of the tile, cars and lorries, in ONE list: the lorries' used to be stored and
+        // then overwritten by the cars', so Clear never freed them and every redraw stacked another
+        // copy of every lorry in the yard on top of the last (#552).
+        var bodies = new List<DormantBody>();
         var heavies = new List<VehicleSlot>();
         foreach (var s in slots)
         {
@@ -433,13 +434,46 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
             }
             // a lorry is not a car with a different paint: it gets its own mesh, not the car instancer
             if (IsHeavy(s)) { heavies.Add(s); continue; }
+
+            // one static box per car. A lot is 80 of them and only the tiles round an anchor hold
+            // a fleet, so they are created with the tile rather than pooled by distance the way
+            // TreeColliders pools its trunks; if --perflog ever says otherwise, pooling is the next
+            // step and the slot list is already the right input for it.
+            var box = new BoxShape3D { Size = new Vector3(s.Van ? 1.9f : 1.75f, s.Van ? 2.0f : 1.45f, s.Van ? 5.0f : 4.2f) };
+            var body = new DormantBody
+            {
+                Slot = s,
+                Position = _origin.ToWorld(s.E, s.N, s.Height) + Vector3.Up * box.Size.Y * 0.5f,
+                Basis = new Basis(Vector3.Up, s.Yaw),
+            };
+            body.AddChild(new CollisionShape3D { Shape = box });
+            AddChild(body);
+            bodies.Add(body);
+        }
+        if (heavies.Count > 0) DrawHeavies(heavies, bodies);
+        _solid[id] = bodies;
+        DrawCars(id);
+    }
+
+    /// <summary>
+    /// (Re)draws a tile's cars: one <see cref="MultiMesh"/> per look and part, so a lot of 80 cars
+    /// is a handful of draw calls and no nodes per car. Only these are redone when a car wakes; the
+    /// bodies and the lorries are left alone. Every tile with a fleet has an entry, even an empty
+    /// one: a yard of lorries alone used to have none, so a lorry woken there was never undrawn.
+    /// </summary>
+    private void DrawCars(TileId id)
+    {
+        if (_drawn.Remove(id, out var old)) Free(old);
+        if (!_slots.TryGetValue(id, out var slots)) return;
+
+        var byLook = new Dictionary<(byte Paint, bool Van), List<VehicleSlot>>();
+        foreach (var s in slots)
+        {
+            if (IsHeavy(s) || _awake.Contains(KeyOf(s))) continue;
             var look = (s.Paint, s.Van);
             if (!byLook.TryGetValue(look, out var list)) byLook[look] = list = new List<VehicleSlot>();
             list.Add(s);
         }
-        if (heavies.Count > 0) DrawHeavies(id, heavies);
-        if (byLook.Count == 0) return;
-
         var instances = new List<MultiMeshInstance3D>(byLook.Count * 2);
         foreach (var ((paint, van), list) in byLook)
         {
@@ -449,27 +483,24 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
         }
         foreach (var mm in instances) AddChild(mm);
         _drawn[id] = instances;
+    }
 
-        // one static box per car. A lot is 80 of them and only a handful of tiles hold a lot, so
-        // they are created with the tile rather than pooled by distance the way TreeColliders pools
-        // its trunks; if --perflog ever says otherwise, pooling is the next step and the slot list
-        // is already the right input for it.
-        var bodies = new List<DormantBody>();
-        foreach (var (_, list) in byLook)
-            foreach (var s in list)
-            {
-                var box = new BoxShape3D { Size = new Vector3(s.Van ? 1.9f : 1.75f, s.Van ? 2.0f : 1.45f, s.Van ? 5.0f : 4.2f) };
-                var body = new DormantBody
-                {
-                    Slot = s,
-                    Position = _origin.ToWorld(s.E, s.N, s.Height) + Vector3.Up * box.Size.Y * 0.5f,
-                    Basis = new Basis(Vector3.Up, s.Yaw),
-                };
-                body.AddChild(new CollisionShape3D { Shape = box });
-                AddChild(body);
-                bodies.Add(body);
-            }
-        _solid[id] = bodies;
+    /// <summary>
+    /// The real vehicle stands in this slot now: its dormant copy goes, and nothing else is rebuilt.
+    /// A lorry leaves with its own body; a car's box goes and the tile's car instancer is redone.
+    /// </summary>
+    private void Forget(TileId id, string key)
+    {
+        if (!_solid.TryGetValue(id, out var bodies)) return;
+        for (int i = bodies.Count - 1; i >= 0; i--)
+        {
+            if (KeyOf(bodies[i].Slot) != key) continue;
+            bool car = !IsHeavy(bodies[i].Slot);
+            bodies[i].QueueFree();
+            bodies.RemoveAt(i);
+            if (car) DrawCars(id);
+            return;
+        }
     }
 
     private MultiMeshInstance3D Instanced(Mesh mesh, List<VehicleSlot> slots, Material material)
@@ -499,21 +530,23 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
 
     private void Clear(TileId id)
     {
-        if (_drawn.Remove(id, out var list))
-            foreach (var mm in list)
-            {
-                mm.Multimesh?.Dispose();
-                mm.QueueFree();
-            }
+        if (_drawn.Remove(id, out var list)) Free(list);
         if (_solid.Remove(id, out var bodies))
             foreach (var b in bodies) b.QueueFree();
     }
 
-    /// <summary>Every drawn instance moves with the origin: their transforms are world positions (#185).</summary>
-    public void OnOriginShifted(OriginShift shift)
+    private static void Free(List<MultiMeshInstance3D> list)
     {
-        foreach (var id in _drawn.Keys.ToList()) Draw(id);
+        foreach (var mm in list)
+        {
+            mm.Multimesh?.Dispose();
+            mm.QueueFree();
+        }
     }
+
+    // No IOriginShiftAware: this is an IOriginContainer, so the shifter has already moved every body
+    // and instancer by the time it would be told. Redrawing every fleet on top of that rebuilt each
+    // lorry's model at every shift: 98 s for one teleport into Geneva (#552).
 
     // ---- what is standing where --------------------------------------------------------------
 
@@ -584,7 +617,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
         if (Find(owner, ordinal) is not { } slot) return;
         if (!_awake.Add(KeyOf(slot))) return;
         // the real vehicle stands there now: stop drawing the dormant copy of this one
-        if (TileOf(owner) is { } id && _drawn.ContainsKey(id)) Draw(id);
+        if (TileOf(owner) is { } id) Forget(id, KeyOf(slot));
     }
 
     /// <summary>Puts the real vehicle in the slot. Returns false when nothing could be placed.</summary>
@@ -603,7 +636,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
         if (vehicles.Place(state, slot.NodeName) == null) return false;
 
         _awake.Add(KeyOf(slot));
-        if (TileOf(slot.Owner) is { } id && _drawn.ContainsKey(id)) Draw(id);
+        if (TileOf(slot.Owner) is { } id) Forget(id, KeyOf(slot));
         return true;
     }
 
