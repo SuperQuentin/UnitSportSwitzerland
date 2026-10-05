@@ -12,7 +12,7 @@ namespace UnitSport.Tools.Preprocessor;
 public static class RoadStage
 {
     public static int Run(string tlmGpkg, string? routeKeys, string outDir, string tempDir,
-        Dictionary<TileId, ChunkGrid> grids)
+        Dictionary<TileId, ChunkGrid> grids, string? coverOverrides = null)
     {
         if (!File.Exists(tlmGpkg))
         {
@@ -65,8 +65,16 @@ public static class RoadStage
         int holeTiles = extractor.Holes.Count(kv => kv.Value.Count > 0);
         int holeCells = extractor.Holes.Sum(kv => kv.Value.Count);
 
+        // car park polygons for the network stage to lay out (#499): rings, not a raster, and kept
+        // beside the raw roads so --rewrite alone still rebuilds a region byte-identically
+        var parking = new ParkingAreaExtractor(tlmGpkg);
+        parking.Extract(grids.Keys.ToList(), coverOverrides);
+        parking.WriteAll(RawParking.DirFor(tempDir), grids.Keys.ToList());
+
         Console.WriteLine($"Raw roads written for {tiles.Count} tiles: {totalSegments} segments in {sw.Elapsed.TotalSeconds:F1}s");
         Console.WriteLine($"  tunnel portals: {holeCells} carved quads across {holeTiles} tiles");
+        Console.WriteLine($"  car parks:      {parking.RingCount} rings over {parking.Lots.Count} tiles"
+            + (parking.Skipped > 0 ? $" ({parking.Skipped} too small or degenerate)" : ""));
         Console.WriteLine("  by class:   " + string.Join(", ", byClass.Select(kv => $"{kv.Key}={kv.Value}")));
         Console.WriteLine($"  by surface: Paved={paved}, Natural={natural}");
         Console.WriteLine("  flags:      " + string.Join(", ", flagCounts.Select(kv => $"{kv.Key}={kv.Value}")));

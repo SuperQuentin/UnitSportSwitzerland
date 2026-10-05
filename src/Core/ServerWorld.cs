@@ -141,6 +141,10 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Audio.Live.WebRadio.Create(this);
         // an Africa Twin in front of one building at Riddes, put back each time its tile loads
         AddChild(new World.AfricaTwinEgg(_chunks));
+        // the cars already standing in the car parks (#499); the server promotes one when it is
+        // touched, every peer works the fleet out for itself from the tile and nothing is sent
+        if (Systems.On(Systems.Dormant) && _chunks.Origin is { } dormantOrigin)
+            AddChild(new Vehicles.DormantVehicles(_chunks, dormantOrigin));
         // the paddle steamer at the Nyon landing (#303), put back each time its tile loads
         AddChild(new World.SteamerBerth(_chunks));
         // jetskis and speedboats along the harbour jetties (#383), put back a while after they are taken

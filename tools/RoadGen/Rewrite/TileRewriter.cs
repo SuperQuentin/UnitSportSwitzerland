@@ -266,6 +266,7 @@ public static partial class TileRewriter
         var cornerStats = new CornerPlanner.Stats();
         var heightStats = new RoadHeights.Stats();
         var railings = new RailingPlanner.Stats();
+        var parkingStats = new ParkingStats();
         var buildings = new Footprints(chunkDir);
 
         foreach (var block in blocks)
@@ -613,6 +614,14 @@ public static partial class TileRewriter
                     stopsAt, signalPlans);
             }
 
+            // car parks (#499): one layout per lot, from the whole polygon, before the tiles are
+            // assembled. Needs the final lines (the entrance sits on one) and the ground.
+            var parkAreas = new Dictionary<TileId, List<RoadAreaProp>>();
+            var parkPoints = new Dictionary<TileId, List<RoadPointProp>>();
+            var parkBays = new Dictionary<TileId, List<ParkingBay>>();
+            PlanParking(options.RawDir, block, wanted, output, facades, grids,
+                parkAreas, paint, parkPoints, parkBays, parkingStats);
+
             foreach (var id in block)
             {
                 if (!loaded.ContainsKey(id) || !wanted.Contains(id)) continue;
@@ -629,6 +638,7 @@ public static partial class TileRewriter
                 var pointProps = signs.TryGetValue(id, out var sp) ? sp : new List<RoadPointProp>();
                 var bridges = bikeBridges.TryGetValue(id, out var br) ? br : [];
                 MoveSignsOffPaths(segments, pointProps, netStats.Bikes);   // #120
+                if (parkPoints.TryGetValue(id, out var pp)) pointProps.AddRange(pp);   // boom, kiosk, shelter, P sign (#499)
                 var walls = new List<RoadLinearProp>();
                 if (grids is not null)
                 {
@@ -643,10 +653,12 @@ public static partial class TileRewriter
                     LinearProps = walls,
                     AreaProps = [.. islands.TryGetValue(id, out var isl) ? isl : [],
                         .. Unbridged(id, CornerPlanner.Plan(id, segments, junctions, facades, cornerStats, isl), bridges, netStats.Bikes),   // sidewalk corners (#119)
-                        .. bridges.Select(x => x.Band)],
+                        .. bridges.Select(x => x.Band),
+                        .. parkAreas.TryGetValue(id, out var pa) ? pa : []],   // car park pad, islands, walks (#499)
                     PointProps = pointProps,
                     Signals = signalRecords.TryGetValue(id, out var sg) ? sg : new List<RoadSignal>(),
                     Approaches = approachRecords.TryGetValue(id, out var ap) ? ap : new List<RoadApproach>(),
+                    Parking = parkBays.TryGetValue(id, out var pb) ? pb : new List<ParkingBay>(),   // #499
                 };
                 rails.ClearTrackZones(tile.Paint, id);
                 var bytes = Encode(tile);
@@ -674,6 +686,7 @@ public static partial class TileRewriter
         log(cornerStats.Format());
         log(embankments.Format());
         log(railings.Format());
+        log(parkingStats.Format());
         return new Stats(tilesRead, tilesWritten, junctionCount, written, dropped,
             overlapBefore, overlapAfter, carriageway, audit.Result(), guarded, netStats);
     }
