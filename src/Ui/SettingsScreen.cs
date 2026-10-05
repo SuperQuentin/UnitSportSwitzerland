@@ -202,6 +202,18 @@ public partial class SettingsScreen : Screen
 
         Tab("Performance", rows =>
         {
+            if (Platform.IsMobile)
+            {
+                var phone = UiKit.Button("Use phone defaults");
+                phone.Pressed += () =>
+                {
+                    GameSettings.Current.UsePhoneDefaults();
+                    GameSettings.Current.Commit();
+                    Shell.Back();               // reopened, so the rows show the new values
+                    Shell.Push(Create());
+                };
+                rows.AddChild(phone);
+            }
             UiKit.SliderRow(rows, "Render distance", GameSettings.MinRings, GameSettings.MaxRings, 1,
                 s.RenderDistanceRings, v => GameSettings.Current.RenderDistanceRings = (int)v, RingsText);
             UiKit.OptionRow(rows, "Detail", new[] { "Low", "Medium", "High" }, (int)s.Detail,

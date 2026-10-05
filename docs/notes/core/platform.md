@@ -29,3 +29,15 @@
   - Logs come from `adb logcat -s godot:*`.
   - It is useless for the picture. Vulkan present fails on both host and SwiftShader GPUs, and SwiftShader GLES cannot link Godot's canvas shaders (`GL_MAX_FRAGMENT_UNIFORM_VECTORS` 261), so the screen stays black.
   - It is also no guide to performance: one frame took 47 s under translation. Rendering and frame rate need a real phone.
+
+## Phone performance (phase 4)
+
+- **First launch on a phone** (no `settings.json` yet): `GameSettings.UsePhoneDefaults()`:
+  - 8 rings, 25 km horizon, Low detail;
+  - 0.6 render scale, 10 traffic cars, no cockpit mirrors;
+  - 3 ms commit budget.
+  Settings → Performance → "Use phone defaults" (mobile only) puts them back. A saved file keeps what it says.
+- **Builds:** `ChunkManager` caps concurrent tile builds at half the cores, 2 to 4, whether offline, local or streaming. On desktop it is up to 2× the cores. `HorizonLayer` builds 2 blocks at a time. A phone's cores are big.LITTLE, and every build holds megabytes of grids.
+- **RAM tile cache:** `CachingChunkSource` is 96 MB on a phone, 256 MB on desktop.
+- **Door portals** render at half size. `directional_shadow/size.mobile` is 2048, Godot's own mobile default (it had been raised to 4096). This is a `.mobile` feature override, so desktop is untouched.
+- **Measured on the emulator before these:** 1.4 GB PSS a minute after joining a generated-world server at the desktop defaults (15 rings, 60 km horizon). Not yet measured on a phone.

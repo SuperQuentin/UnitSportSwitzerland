@@ -305,7 +305,9 @@ public sealed class GameSettings
     /// <summary>Reads the file (if any), then the command line. Call once at boot.</summary>
     public static void Load()
     {
+        // a phone's first launch starts from its own defaults (#63); a saved file keeps what it says
         var loaded = new GameSettings();
+        if (Platform.IsMobile && !Godot.FileAccess.FileExists(File)) loaded.UsePhoneDefaults();
         try
         {
             if (Godot.FileAccess.FileExists(File))
@@ -331,6 +333,23 @@ public sealed class GameSettings
             + $"detail={loaded.Detail} fog={loaded.Fog} builds={loaded.MaxConcurrentBuilds} "
             + $"commit={loaded.CommitBudgetMs}ms scale={loaded.RenderScale} vsync={loaded.VSync} "
             + $"window={loaded.WindowMode} perf={loaded.PerfOverlay}");
+    }
+
+    /// <summary>
+    /// What a phone starts with (#63), and what Settings → Performance → "Use phone defaults" puts
+    /// back: about a third of the desktop's world in view, a low LOD table, a shorter horizon, a
+    /// lower 3D resolution, less traffic and no cockpit mirrors (each one another camera).
+    /// </summary>
+    public void UsePhoneDefaults()
+    {
+        RenderDistanceRings = 8;
+        HorizonKm = 25;
+        Detail = DetailPreset.Low;
+        RenderScale = 0.6f;
+        TrafficCars = 10;
+        CockpitMirrors = false;
+        CommitBudgetMs = 3;
+        MaxConcurrentBuilds = 0; // auto, which ChunkManager caps on a phone
     }
 
     public void Save()

@@ -128,17 +128,23 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// per-frame commit budget is the real limiter there, so a small number costs nothing
     /// locally and is what makes streaming usable.
     /// </summary>
-    private const int PlayMaxConcurrentBuilds = 6;
+    private static readonly int PlayMaxConcurrentBuilds = Platform.IsMobile ? MobileMaxConcurrentBuilds : 6;
+
+    /// <summary>
+    /// A phone (#63): half its cores, 2 to 4. They are big.LITTLE: more builds than big cores
+    /// only heat it and starve the main thread, and every build holds megabytes of grids.
+    /// </summary>
+    private static readonly int MobileMaxConcurrentBuilds = Math.Clamp(System.Environment.ProcessorCount / 2, 2, 4);
 
     /// <summary>
     /// Offline the disk and the CPU are the only limits, so use the cores that are there.
     /// Two per core because each build is IO then CPU, and the halves interleave.
     /// </summary>
-    private static readonly int OfflineMaxConcurrentBuilds =
-        Math.Max(PlayMaxConcurrentBuilds, System.Environment.ProcessorCount * 2);
+    private static readonly int OfflineMaxConcurrentBuilds = Platform.IsMobile ? MobileMaxConcurrentBuilds
+        : Math.Max(PlayMaxConcurrentBuilds, System.Environment.ProcessorCount * 2);
 
-    private static readonly int LocalMaxConcurrentBuilds =
-        Math.Max(PlayMaxConcurrentBuilds, System.Environment.ProcessorCount);
+    private static readonly int LocalMaxConcurrentBuilds = Platform.IsMobile ? MobileMaxConcurrentBuilds
+        : Math.Max(PlayMaxConcurrentBuilds, System.Environment.ProcessorCount);
 
     private int MaxConcurrentBuilds =>
         OfflineMode ? OfflineMaxConcurrentBuilds
