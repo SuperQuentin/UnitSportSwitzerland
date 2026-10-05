@@ -108,7 +108,7 @@ until it is 22 m away (#70): it can be driven through until then.
   eased foot), 2 cm down, 1 cm across, never off the floor, no section hits, not wrecked. Each run
   takes a fresh tractor (`SetRide` OnFoot, then the tractor: nothing left in the way).
   `--tractorcheck slope`: the numbers and the ridge only. In the quick tier (`--fixed-fps 60` as an
-  engine argument, before `--`) ~95 s in all; after the `--` it is not seen and runs in real time
+  engine argument, before `--`) ~2 min in all; after the `--` it is not seen and runs in real time
   (~13 min). Shots: `test_output/494-*.png`.
 - `--truckcheck` includes both machines (0-24 km/h loaded, alone to just under the top: tractor
   12-24 s, combine 18-40 s; brakes, swept width).
