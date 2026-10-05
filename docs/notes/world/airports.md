@@ -114,7 +114,7 @@ no AI traffic.
 - `tools/airportnetcheck.sh` (net): the same as a client of a dedicated server
   (`--standrespawn 4`). The client's copies dock their stairs to the server-placed A320s.
 - `shots` windowed (`--airportcheck shots --style cartoon --chunks <real tiles> --airports <file>
-  --at E,N`) writes `test_output/airports/apron|cargo|runway-<style>.png`.
+  --at E,N`) writes `test_output/airports/apron|an124|freighter|runway-<style>.png`.
 
 ## Not done
 

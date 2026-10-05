@@ -147,13 +147,15 @@ public partial class AirportCheck : Node
             // from ahead and to the left of the row, up a little: noses, L1 doors and stairs
             await Shot($"{dir}/apron-{style}.png", mid + nose.Normalized() * 70f - side * 90f + Vector3.Up * 22f, mid + Vector3.Up * 3f);
         }
-        var cargo = Planes(RideKind.An124).Concat(Planes(RideKind.Freighter)).ToList();
-        if (cargo.Count > 0)
-        {
-            var mid = cargo.Aggregate(Vector3.Zero, (s, p) => s + p.GlobalPosition) / cargo.Count;
-            var nose = -cargo[0].GlobalTransform.Basis.Z with { Y = 0 };
-            await Shot($"{dir}/cargo-{style}.png", mid + nose.Normalized() * 110f + nose.Cross(Vector3.Up).Normalized() * 60f + Vector3.Up * 30f, mid + Vector3.Up * 6f);
-        }
+        // the cargo pair, each from behind and to one side (the taxilane side: open), well up; they
+        // may stand a kilometre apart
+        foreach (var (kind, tag, off) in new[] { (RideKind.An124, "an124", -120f), (RideKind.Freighter, "freighter", -70f) })
+            if (Planes(kind).FirstOrDefault() is { } heavy)
+            {
+                var nose = (-heavy.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
+                var side = nose.Cross(Vector3.Up).Normalized();
+                await Shot($"{dir}/{tag}-{style}.png", heavy.GlobalPosition + nose * off + side * off * 0.6f + Vector3.Up * Mathf.Abs(off) * 0.35f, heavy.GlobalPosition + Vector3.Up * 4f);
+            }
         if (AirportStands.Instance?.Index is { } index && VehicleManager.Instance?.Origin is { } origin)
         {
             var at = me.GlobalPosition;
