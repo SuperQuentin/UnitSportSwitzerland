@@ -9,7 +9,8 @@ namespace UnitSport.Items;
 /// <c>--pvpcheck A|B</c> with <c>--connect</c> (driven by <c>tools/pvpcheck.sh</c>): foot weapons against a player over
 /// loopback (#178). A holds an assault rifle, a pistol and a knife and shoots B through the real item path; B stands
 /// 10 m in front of A and checks its own health. With <c>--pvpexpect off</c> (a server without <c>--pvp</c>) nothing
-/// may hurt B. With PvP on: two rifle rounds, a pistol round half soaked by B's vest, a
+/// may hurt B, and A's 30 forged hits in one frame never arrive. With PvP on: only a pistol's burst of those
+/// arrives (#468); then two rifle rounds, a pistol round half soaked by B's vest, a
 /// knife stab at arm's length, then rifle rounds until B goes down — B's Died event must name A as the killer,
 /// and A must see B's replicated Down flag. Scratch inventories; outputs in <c>test_output/</c>.
 /// </summary>
@@ -65,6 +66,15 @@ public partial class PvpProbe : ChatProbe
 
         // B moved itself 10 m out: wait until its body is there on this machine, not still at the spawn
         await Near(me, b, 10f);
+        // a forged burst (#468): 30 pistol hits in one frame, far more than a pistol fires; the
+        // server lets the burst budget through (Combat.HitGuard.Burst) and refuses the rest
+        var forged = new PlayerHits.Hit(b.GetMultiplayerAuthority(), 0.1f, ItemId.Pistol, false).Pack();
+        var aim = (b.GlobalPosition - me.EyePosition).Normalized();
+        for (int i = 0; i < 30; i++)
+            ItemEvents.Instance!.Send(ItemEventKind.Hit, b.GlobalPosition + Vector3.Up * 1.2f, aim, forged);
+        await Seconds(1.5);
+        Say("forged");
+        await Step("B", "counted");
         await Fire(me, b, ItemId.Rifle, 2, "rifle");
         await Step("B", "vest");
         await Fire(me, b, ItemId.Pistol, 1, "pistol");
@@ -146,6 +156,14 @@ public partial class PvpProbe : ChatProbe
         await StandAt(me, 10f);
         Say("ready");
 
+        if (!await Until(() => Said("A", "forged"), 60)) { Expect(false, "A forged its burst"); return; }
+        await Seconds(0.5);
+        int forged = _received;
+        // the burst of 3, plus what the budget refills while the 30 trickle in over the wire
+        Expect(ExpectOn ? forged is >= 1 and <= 6 : forged == 0,
+            $"30 forged hits in one frame: {forged} got through ({(ExpectOn ? "a pistol's burst, not 30" : "none, PvP off")})");
+        Say("counted");
+
         float on = ExpectOn ? 1f : 0f;
         // the damage from the weapon table (#455 retuned it); no regeneration while this runs
         FootPlayer.Regenerates = _ => false;
@@ -225,7 +243,15 @@ public partial class PvpProbe : ChatProbe
 
     public override void _EnterTree() => ItemEvents.Received += Count;
     public override void _ExitTree() => ItemEvents.Received -= Count;
-    private void Count(ItemEvent e) { if (e.Kind == ItemEventKind.Hit && e.Local) Hits++; }
+    private void Count(ItemEvent e)
+    {
+        if (e.Kind != ItemEventKind.Hit) return;
+        if (e.Local) Hits++;
+        else _received++;
+    }
+
+    /// <summary>B: hits the server passed on to this player.</summary>
+    private int _received;
 
     private bool Said(string role, string what) => _heard.Any(l => l.Contains($"PV {role} {what}"));
 
