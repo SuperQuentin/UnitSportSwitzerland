@@ -88,10 +88,14 @@ public partial class IkeaProbe : Node
                         var box = map.Boxes[i]!.Value;
                         var b = tile.Buildings[i];
                         // the entrance in LV95, so you can go and stand at it
+                        // #498 returns a flat list with a building's extra doors after its main
+                        // one, so the entry for building i is the one naming it, not doors[i]
                         doors ??= BuildingFootprint.ComputeDoors(tile, null, null);
-                        var d = doors[i];
+                        var mine = doors.Where(x => x.Index == i).ToList();
+                        var d = mine.FirstOrDefault(x => x.Slot == 0);
                         string door = d.Width > 0
                             ? $" door E {t.MinE + d.Position.X:F0} N {t.MaxN - d.Position.Z:F0} w{d.Width:F1}"
+                              + (mine.Count > 1 ? $" (+{mine.Count - 1} more)" : "")
                             : " NO DOOR";
                         hits.Add($"{t} #{i} {box.Area:F0} m2 {box.Width:F0}x{box.Depth:F0} h{b.MaxY - b.MinY:F0} {b.Kind}{door}");
                     }
@@ -139,8 +143,11 @@ public partial class IkeaProbe : Node
         Check(map.PartOf(0) == BuildingPart.Store, "and its part is Store");
 
         var doors = BuildingFootprint.ComputeDoors(tile, null, null);
-        Check(doors[0].Shop == Loot.ShopType.Ikea, "its door reports ShopType.Ikea, so the sign reads IKEA");
-        Check(doors[0].Width > 0, "it has a door at all");
+        var main = doors.FirstOrDefault(d => d.Index == 0 && d.Slot == 0);
+        Check(main.Shop == Loot.ShopType.Ikea, "its main door reports ShopType.Ikea, so the sign reads IKEA");
+        Check(main.Width >= 6f, $"and it is a store's glass front, not a house door ({main.Width:F1} m)");
+        // #498 gives a long facade more than one way in; a store is the longest facade there is
+        Check(doors.Count(d => d.Index == 0) >= 1, $"it has {doors.Count(d => d.Index == 0)} door(s)");
 
         var layout = InteriorGenerator.Generate(tile, 0, null, null);
         if (layout == null) { Check(false, "an interior was planned"); return; }
