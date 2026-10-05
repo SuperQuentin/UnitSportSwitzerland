@@ -140,6 +140,9 @@ public partial class RideProbe : Node
             var ahead = -_player.GlobalBasis.Z with { Y = 0 };
             _player.WalkControls = () => (_elapsed < stopAt ? ahead.Normalized() : Vector3.Zero, true);
             GD.Print("[ride] on foot");
+            // "--trailer M" on foot: that trailer parked 14 m ahead, to walk up to (the trailer's intro, #517)
+            if (CmdArgs.Int("--trailer") is int lone)
+                GD.Print(_player.SpawnTrailer(lone, 0.5f) ? $"[ride] parked {TrailerCatalog.All[lone].Label} ahead" : "[ride] TRAILER REFUSED");
             return;
         }
 

@@ -23,7 +23,7 @@ public class VehicleIntrosTests
     {
         foreach (var row in VehicleIntros.Every.SelectMany(i => i.Rows))
         {
-            Assert.NotEmpty(row.Actions);
+            Assert.True(row.Actions.Length > 0 || row.While != null, row.Keys);
             // never a key typed into the text: keys come from InputHints placeholders
             Assert.Contains("{", row.Keys);
             if (row.Pad != null) Assert.Contains("{", row.Pad);
@@ -38,6 +38,16 @@ public class VehicleIntrosTests
         Assert.Equal(steer.Pad, VehicleIntros.Text(steer, pad: true));
         var gas = VehicleIntros.For(VehicleIntroKind.Car).Rows[0];
         Assert.Equal(gas.Keys, VehicleIntros.Text(gas, pad: true));
+    }
+
+    [Fact]
+    public void The_trailer_is_met_on_foot_and_done_from_a_truck()
+    {
+        var trailer = VehicleIntros.For(VehicleIntroKind.Trailer);
+        Assert.True(trailer.Near);
+        Assert.All(trailer.Rows, r => Assert.Equal(VehicleIntroKind.Truck, r.While));
+        Assert.Contains(trailer.Rows, r => r.Actions.Contains("couple"));
+        Assert.All(VehicleIntros.Every.Where(i => i.Kind != VehicleIntroKind.Trailer), i => Assert.False(i.Near));
     }
 
     [Fact]

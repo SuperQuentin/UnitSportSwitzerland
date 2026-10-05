@@ -5,16 +5,23 @@ public enum VehicleIntroKind
 {
     RoadBike, Skis, Car, Motorbike, Truck, Boat, Steamer,
     Helicopter, Plane, Canopy, Wingsuit, Pigeon, Airliner,
+    /// <summary>Not driven: shown on walking up to a lone trailer, and done from a truck.</summary>
+    Trailer,
 }
 
 /// <summary>
 /// One control of an intro: what it says (keyboard words, and pad words where a trigger or a stick
 /// replaces a key, as in <see cref="TutorialStep"/>) and the actions any of which ticks it off.
+/// With <see cref="While"/>, it ticks only while driving that kind, and with no actions it ticks by
+/// being in it ("get into a truck").
 /// </summary>
-public sealed record IntroRow(string Keys, string[] Actions, string? Pad = null);
+public sealed record IntroRow(string Keys, string[] Actions, string? Pad = null, VehicleIntroKind? While = null);
 
-/// <summary>A ride's intro: its name, the 3-4 controls that make it go, and a last hint line.</summary>
-public sealed record VehicleIntro(VehicleIntroKind Kind, string Title, IntroRow[] Rows, string Footer);
+/// <summary>
+/// A ride's intro: its name, the 3-4 controls that make it go, and a last hint line. <see cref="Near"/>:
+/// shown on walking up to one (a trailer), not on driving it.
+/// </summary>
+public sealed record VehicleIntro(VehicleIntroKind Kind, string Title, IntroRow[] Rows, string Footer, bool Near = false);
 
 /// <summary>
 /// The mini tutorials shown the first time the player takes each kind of ride (#517): a card of
@@ -133,6 +140,15 @@ public static class VehicleIntros
             new("Flaps a notch down / up: {flaps_down} / {flaps_up}", new[] { "flaps_down", "flaps_up" }),
             new("Gear up once flying: {car_door}", new[] { "car_door" }),
         }, "Rotate at about 260 km/h · {help} lists every cockpit switch"),
+
+        new(VehicleIntroKind.Trailer, "Trailer", new IntroRow[]
+        {
+            // a pickup (the F-150's tow ball, #463) is a Truck too: same rows for a boat trailer
+            new("Get into a truck or a pickup: {ride_menu}, Trucks and buses", Array.Empty<string>(),
+                Pad: "Get into a truck or a pickup: {interact_mount} with nothing near, Trucks and buses", While: VehicleIntroKind.Truck),
+            new("Back up slowly towards it with {brake}", Brake, While: VehicleIntroKind.Truck),
+            new("Couple with {couple} once the hitch lines up", new[] { "couple" }, While: VehicleIntroKind.Truck),
+        }, "{couple} again uncouples it · a boat trailer: {car_door}, stopped, launches or winches the boat", Near: true),
     };
 
     public static IReadOnlyList<VehicleIntro> Every => All;

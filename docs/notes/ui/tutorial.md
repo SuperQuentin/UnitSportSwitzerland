@@ -53,3 +53,14 @@
   a command-line run with `--tutorial`: `--tutorial --ride car:0,8,out.png` screenshots the car's
   card (`--ride` takes car:N, truck:N, moto:N, bike, skis). Settings › Gameplay › Tutorial "Play
   again" clears the seen list too.
+- **The trailer's card** (`VehicleIntroKind.Trailer`, `VehicleIntro.Near`) is the one met on foot:
+  "Close by" once a lone trailer stands within 18 m (`VehicleManager.LoneTrailerNear`, flat to the
+  body: the kingpin is the far end walking up from behind; checked twice a second), with rows that
+  only tick in a truck (`IntroRow.While`; a row with no action ticks by being in one): get into a
+  truck or a pickup, back up with the brake, couple. A pickup (the F-150's tow ball, #463 / PR #470)
+  is a `Truck`, and a boat trailer a lone trailer, so both are covered; the footer names the boat
+  trailer's launch / winch (`{car_door}`, stopped). While it is up the truck's own card waits; it closes
+  unseen when no lone trailer is within 60 m and the player is not in a truck.
+- Screenshots: `--tutorial --flycheck heli|plane,out.png` (the sortie presses the real actions,
+  so the rows tick: climb and throttle do), `--tutorial --ride foot,10,out.png --trailer 0
+  --brake-at 0` (the trailer parked 14 m ahead).

@@ -9,7 +9,8 @@ namespace UnitSport.Core;
 /// (<see cref="VehicleIntroKind"/>), a card in the top-left corner lists its few essential controls,
 /// and ticks each off as it is used. All ticked, the kind is saved in
 /// <see cref="GameSettings.VehicleIntrosSeen"/> and never shown again; getting off before that
-/// shows it again next time. Only the driver sees it, never a passenger. The rows are
+/// shows it again next time. Only the driver sees it, never a passenger. The trailer's card is
+/// the one shown on foot: on walking up to a lone trailer, then done from a truck. The rows are
 /// <see cref="VehicleIntros"/>; like <see cref="Tutorial"/> it takes no input of its own.
 /// </summary>
 public partial class VehicleIntroCard : CanvasLayer
@@ -22,13 +23,12 @@ public partial class VehicleIntroCard : CanvasLayer
     private readonly Func<FootPlayer?> _walker;
     private readonly Func<bool> _covered;
 
-    private Rideable? _lastRide;
     private VehicleIntro? _intro;
     private bool[] _ticked = Array.Empty<bool>();
     private double _shownFor, _doneFor = -1;
 
     private PanelContainer _panel = null!;
-    private Label _title = null!, _footer = null!;
+    private Label _title = null!, _tag = null!, _footer = null!;
     private VBoxContainer _rows = null!;
     private readonly List<(Label Mark, Label Text)> _rowLabels = new();
 
@@ -64,7 +64,8 @@ public partial class VehicleIntroCard : CanvasLayer
         _title = UiKit.Text("", UiTheme.FontHeading, UiTheme.Text, bold: true);
         _title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         head.AddChild(_title);
-        head.AddChild(UiKit.Text("New ride", UiTheme.FontSmall, UiTheme.Amber));
+        _tag = UiKit.Text("", UiTheme.FontSmall, UiTheme.Amber);
+        head.AddChild(_tag);
         column.AddChild(head);
 
         _rows = UiKit.VBox(4);
@@ -102,24 +103,39 @@ public partial class VehicleIntroCard : CanvasLayer
     public override void _Process(double delta)
     {
         var walker = _walker();
+        if (walker != null && !IsInstanceValid(walker)) walker = null;
         // the driver only: a passenger's seat (SeatIndex > 0) or a ride somebody else hosts is not theirs to learn
-        var ride = walker != null && IsInstanceValid(walker) && walker.SeatIndex == 0 && walker.Host == null
-            ? walker.Vehicle : null;
+        var ride = walker is { SeatIndex: 0, Host: null } ? walker.Vehicle : null;
+        var driving = ride != null ? KindOf(ride) : null;
+        _nearTimer -= delta;
 
         if (_intro == null)
         {
-            if (ride != null && ride != _lastRide && KindOf(ride) is { } kind
-                && !VehicleIntros.Seen(GameSettings.Current.VehicleIntrosSeen, kind))
-                Show(VehicleIntros.For(kind));
-            _lastRide = ride;
+            if (driving is { } kind && !Seen(kind)) Show(VehicleIntros.For(kind));
+            // walking up to a lone trailer, a few times a second (a handful of vehicles to look through)
+            else if (walker != null && _nearTimer <= 0)
+            {
+                _nearTimer = 0.5;
+                if (!Seen(VehicleIntroKind.Trailer) && TrailerWithin(walker, NearReach))
+                    Show(VehicleIntros.For(VehicleIntroKind.Trailer));
+            }
             return;
         }
 
+        if (_intro.Near)
+        {
+            // walked off (no lone trailer left near, and not in a truck to come back with): next time again
+            if (walker == null) { Close(seen: false); return; }
+            if (driving != VehicleIntroKind.Truck && _nearTimer <= 0)
+            {
+                _nearTimer = 0.5;
+                if (!TrailerWithin(walker, LeaveReach)) { Close(seen: false); return; }
+            }
+        }
         // got off (or into something else) before trying it all: next time again
-        if (ride == null || KindOf(ride) != _intro.Kind)
+        else if (driving != _intro.Kind)
         {
             Close(seen: false);
-            _lastRide = ride;
             return;
         }
 
@@ -139,7 +155,10 @@ public partial class VehicleIntroCard : CanvasLayer
         bool all = true;
         for (int i = 0; i < _ticked.Length; i++)
         {
-            if (!_ticked[i] && Pressed(_intro.Rows[i].Actions))
+            var row = _intro.Rows[i];
+            // a row for a truck only counts in one; with no action, being in it is the step
+            bool can = row.While == null || row.While == driving;
+            if (!_ticked[i] && can && (row.Actions.Length == 0 || Pressed(row.Actions)))
             {
                 _ticked[i] = true;
                 Tick(i);
@@ -151,6 +170,16 @@ public partial class VehicleIntroCard : CanvasLayer
         _title.AddThemeColorOverride("font_color", UiTheme.Good);
         GD.Print($"[intro] {_intro.Kind} done");
     }
+
+    /// <summary>A trailer this close shows its card; once shown, it goes when none is within <see cref="LeaveReach"/>.</summary>
+    private const float NearReach = 18, LeaveReach = 60;
+    private double _nearTimer;
+
+    private static bool Seen(VehicleIntroKind kind) => VehicleIntros.Seen(GameSettings.Current.VehicleIntrosSeen, kind);
+
+    private static bool TrailerWithin(FootPlayer walker, float reach) =>
+        Vehicles.VehicleManager.Instance is { } vehicles && IsInstanceValid(vehicles)
+        && vehicles.LoneTrailerNear(walker.GlobalPosition, reach);
 
     private static bool Pressed(string[] actions)
     {
@@ -166,6 +195,7 @@ public partial class VehicleIntroCard : CanvasLayer
         _shownFor = 0;
         _doneFor = -1;
         _title.Text = intro.Title;
+        _tag.Text = intro.Near ? "Close by" : "New ride";
         _title.AddThemeColorOverride("font_color", UiTheme.Text);
 
         foreach (var child in _rows.GetChildren()) child.QueueFree();
