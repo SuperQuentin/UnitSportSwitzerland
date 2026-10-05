@@ -148,6 +148,21 @@ public enum ItemId
 
     /// <summary>A fallen squad player's tag (#480): used at a Postauto stop, it brings them back (<c>BrManager.Recall</c>).</summary>
     Dogtag = 193,
+
+    // ---- farming (#494, docs/notes/farming/): seeds, harvests, what is made of them ----
+    /// <summary>Seeds: sown by hand on a ploughed cell or by a seed drill (<c>Farming.FarmTables.SeedFor</c>).</summary>
+    WheatSeed = 200, BarleySeed = 201, MaizeSeed = 202, SeedPotato = 203, RapeSeed = 204,
+    SunflowerSeed = 205, SugarBeetSeed = 206, VegetableSeeds = 207, PeaSeed = 208,
+    /// <summary>Harvests: a ripe cell by hand, or a combine / tractor's tank unloaded (<c>Farming.FarmTables.YieldOf</c>).</summary>
+    Wheat = 210, Barley = 211, Maize = 212, Potato = 213, Rapeseed = 214,
+    SunflowerSeeds = 215, SugarBeet = 216, Carrot = 217, HayBale = 218, Peas = 219,
+    /// <summary>Made from the harvests (<c>Crafting.Recipes</c>).</summary>
+    Flour = 220, RapeseedOil = 221, Sugar = 222, MaizeMeal = 223,
+    BakedPotato = 224, Roesti = 225, Polenta = 226, Popcorn = 227, VegetableSoup = 228, Raclette = 229,
+    /// <summary>Held: Use tills the cell ahead (plough by hand).</summary>
+    Hoe = 235,
+    /// <summary>Used on a sown cell (and the cells round it): the crop ripens sooner.</summary>
+    Fertiliser = 236,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
