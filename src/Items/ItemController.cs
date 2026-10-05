@@ -545,7 +545,7 @@ public partial class ItemController : Node
             case ItemUse.Horn:
             {
                 if (_useBusy) break;
-                double now = Time.GetTicksMsec() / 1000.0;
+                double now = Core.GameClock.Now;
                 if (now < _hornReadyAt)
                 {
                     _ui.Toast($"Out of breath: blow again in {_hornReadyAt - now:F0} s.");
@@ -553,7 +553,7 @@ public partial class ItemController : Node
                 }
                 StartUse(player, slot, def, ViewPose.Mouth, 2.8f, 0.3f, 0.4f, () =>
                 {
-                    _hornReadyAt = Time.GetTicksMsec() / 1000.0 + SwissItems.HornCooldown;
+                    _hornReadyAt = Core.GameClock.Now + SwissItems.HornCooldown;
                     var bell = player.GlobalPosition + Vector3.Up * 1.2f - player.Camera.GlobalTransform.Basis.Z * 1.6f;
                     ItemEvents.Instance?.Send(ItemEventKind.Horn, bell, Vector3.Up);
                     _ui.Toast("The alphorn rings out: you see who is near, and they know where you are.");
@@ -731,7 +731,7 @@ public partial class ItemController : Node
     /// <summary>This shot's cone half-angle, degrees, and the bloom it leaves for the next one.</summary>
     private float Bloom(WeaponDef weapon)
     {
-        double now = Time.GetTicksMsec() / 1000.0;
+        double now = Core.GameClock.Now;   // game time: the gun cools with the simulation (fast-checks)
         float heat = weapon.Id == _heatGun ? WeaponDef.Cool(_heat, (float)(now - _heatAt)) : 0f;
         float spread = weapon.SpreadAt(heat);
         _heat = weapon.Heat(heat);
