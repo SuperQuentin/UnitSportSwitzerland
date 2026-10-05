@@ -72,7 +72,7 @@ public static class VehicleIntros
             new("Wheelie: hold {tuck_boost}", new[] { "tuck_boost" }),
         }, "{camera_toggle} camera · {interact_mount} gets off"),
 
-        new(VehicleIntroKind.Truck, "Truck or bus", new IntroRow[]
+        new(VehicleIntroKind.Truck, "Truck, bus or pickup", new IntroRow[]
         {
             new("Accelerate with {throttle}", Throttle),
             new("Brake with {brake}", Brake),
