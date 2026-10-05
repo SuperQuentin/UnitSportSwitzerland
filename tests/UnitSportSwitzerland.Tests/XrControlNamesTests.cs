@@ -71,4 +71,14 @@ public class XrControlNamesTests
     [InlineData(0.06f, 0.02f, 0)]    // across the middle
     public void Gear_knob_gates(float across, float ahead, int gate) =>
         Assert.Equal(gate, XrControlNames.GateOf(across, ahead, 0.06f, 0.05f));
+
+    [Fact]
+    public void Mirroring_twice_is_the_same_control_and_names_the_other_hand()
+    {
+        foreach (var control in Enum.GetValues<XrControl>())
+            Assert.Equal(control, XrControlNames.Mirror(XrControlNames.Mirror(control)));
+        Assert.Equal("L trigger", XrControlNames.Name(XrControlNames.Mirror(XrControl.RightTrigger), XrController.Quest));
+        Assert.Equal("X", XrControlNames.Name(XrControlNames.Mirror(XrControl.A), XrController.Quest));
+        Assert.Equal("L stick ↑", XrControlNames.Name(XrControlNames.Mirror(XrControl.RightStickUp), XrController.Quest));
+    }
 }

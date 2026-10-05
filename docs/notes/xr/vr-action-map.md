@@ -24,8 +24,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 
 | Action | Kb / Pad | VR now | VR target |
 |---|---|---|---|
-| move_* / sprint | WASD, L stick / Shift, L3 | ok: L stick head-relative, L3 | + arc **teleport** and room-scale (comfort setting) |
-| look / turn | mouse, R stick | ok: head + snap 30° | snap angle 15/30/45 or smooth (setting) |
+| move_* / sprint | WASD, L stick / Shift, L3 | ok: L stick head-relative, L3, or arc teleport (setting, #439) | room-scale walking |
+| look / turn | mouse, R stick | ok: head + snap 15/30/45° or smooth (setting, #439) | keep |
 | jump | Space / A | ok: A | keep |
 | crouch_slide | Ctrl, C / B | ok: B, or crouch for real (#437) | keep |
 | interact_mount | E / Y | ok: Y; grip a door, an item, a radio, or reach out and grip what E would act on (#437) | keep |

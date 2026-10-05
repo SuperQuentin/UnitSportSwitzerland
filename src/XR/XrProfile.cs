@@ -69,5 +69,7 @@ public static class XrProfile
     }
 
     /// <summary>What <paramref name="control"/> is called on the current controller; null when it has none.</summary>
-    public static string? Name(XrControl control) => XrControlNames.Name(control, Controller);
+    /// <remarks>Left-handed (#439), the controllers swap, so a control is named by the hand it is really on.</remarks>
+    public static string? Name(XrControl control) =>
+        XrControlNames.Name(GameSettings.Current.VrLeftHanded ? XrControlNames.Mirror(control) : control, Controller);
 }

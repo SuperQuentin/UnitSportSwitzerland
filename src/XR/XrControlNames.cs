@@ -6,6 +6,8 @@ namespace UnitSport.XR;
 public enum XrControl
 {
     LeftStick, RightStick, LeftStickClick, RightStickClick, RightStickUp, RightStickDown, RightStickLeft, RightStickRight,
+    /// <summary>The right stick's directions, on the left hand when the hands are swapped (#439).</summary>
+    LeftStickUp, LeftStickDown, LeftStickLeft, LeftStickRight,
     LeftTrigger, RightTrigger, LeftGrip, RightGrip,
     A, B, X, Y, Menu, MenuHold,
 }
@@ -53,6 +55,35 @@ public static class XrControlNames
         return column * 2 + row;
     }
 
+    /// <summary>
+    /// The same control on the other hand (#439, left-handed play swaps the controllers): left
+    /// trigger for right, X for A, Y for B, the right stick's directions for the left stick.
+    /// </summary>
+    public static XrControl Mirror(XrControl control) => control switch
+    {
+        XrControl.LeftStick => XrControl.RightStick,
+        XrControl.RightStick => XrControl.LeftStick,
+        XrControl.LeftStickClick => XrControl.RightStickClick,
+        XrControl.RightStickClick => XrControl.LeftStickClick,
+        XrControl.LeftTrigger => XrControl.RightTrigger,
+        XrControl.RightTrigger => XrControl.LeftTrigger,
+        XrControl.LeftGrip => XrControl.RightGrip,
+        XrControl.RightGrip => XrControl.LeftGrip,
+        XrControl.A => XrControl.X,
+        XrControl.X => XrControl.A,
+        XrControl.B => XrControl.Y,
+        XrControl.Y => XrControl.B,
+        XrControl.RightStickUp => XrControl.LeftStickUp,
+        XrControl.RightStickDown => XrControl.LeftStickDown,
+        XrControl.RightStickLeft => XrControl.LeftStickLeft,
+        XrControl.RightStickRight => XrControl.LeftStickRight,
+        XrControl.LeftStickUp => XrControl.RightStickUp,
+        XrControl.LeftStickDown => XrControl.RightStickDown,
+        XrControl.LeftStickLeft => XrControl.RightStickLeft,
+        XrControl.LeftStickRight => XrControl.RightStickRight,
+        _ => control,
+    };
+
     public static string? Name(XrControl control, XrController controller) => control switch
     {
         XrControl.LeftTrigger => "L trigger",
@@ -97,6 +128,10 @@ public static class XrControlNames
         XrControl.RightStickDown => $"R {stick} ↓",
         XrControl.RightStickLeft => $"R {stick} ←",
         XrControl.RightStickRight => $"R {stick} →",
+        XrControl.LeftStickUp => $"L {stick} ↑",
+        XrControl.LeftStickDown => $"L {stick} ↓",
+        XrControl.LeftStickLeft => $"L {stick} ←",
+        XrControl.LeftStickRight => $"L {stick} →",
         _ => null,
     };
 }
