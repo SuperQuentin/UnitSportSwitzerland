@@ -946,17 +946,6 @@ public partial class ChatManager : Node
     // ---- /time --------------------------------------------------------------------------
 
     /// <summary>
-    /// Server: the world's clock once an admin has set it — the hour at <c>At</c> (this process's
-    /// seconds) and how fast it runs. Null until then, and each client keeps its own clock.
-    /// </summary>
-    private (double Hour, double At, float MinutesPerDay)? _worldClock;
-
-    private static double Now => Time.GetTicksMsec() / 1000.0;
-
-    private static double WorldHour((double Hour, double At, float MinutesPerDay) c) =>
-        World.TimeCommand.Advance(c.Hour, Now - c.At, c.MinutesPerDay);
-
-    /// <summary>
     /// Client: <c>/time</c> or <c>/time query</c> is answered from the clock on this screen, which
     /// is the one the player is asking about. Null when it is another command, or there is no clock.
     /// </summary>
@@ -990,8 +979,8 @@ public partial class ChatManager : Node
 
     /// <summary>
     /// Server <c>/time</c>. Changing it is an admin's, and it changes it for everyone: the server
-    /// keeps the clock from then on and sends it to each client, and to whoever joins later
-    /// (<see cref="SendWorldTimeTo"/>). The first change starts from the server's own day length.
+    /// always keeps the world's clock (<see cref="World.WorldClock"/>, #452), re-bases it here and
+    /// sends it to each client, as it does to whoever joins (<see cref="SendWorldTimeTo"/>).
     /// </summary>
     private void CommandTime(long sender, string[] args)
     {
@@ -1004,9 +993,7 @@ public partial class ChatManager : Node
         if (op == World.TimeOp.Query)
         {
             // a player's own client answers this; this is the console's, or a client with no clock
-            ReplyTo(sender, _worldClock is { } c
-                ? $"It is {World.TimeCommand.Format(WorldHour(c))} ({World.TimeCommand.DescribeSpeed(c.MinutesPerDay)})."
-                : "Nobody has set the time on this server: each player keeps their own clock.",
+            ReplyTo(sender, $"It is {World.TimeCommand.Format(World.WorldClock.Hour)} ({World.TimeCommand.DescribeSpeed(World.WorldClock.MinutesPerDay)}).",
                 ChatKind.Private);
             return;
         }
@@ -1017,22 +1004,17 @@ public partial class ChatManager : Node
             return;
         }
 
-        if (_worldClock is null && op != World.TimeOp.Set)
-        {
-            ReplyTo(sender, "Nobody has set the time on this server yet: /time set <hour> first.", ChatKind.Error);
-            return;
-        }
-
-        double hour = _worldClock is { } now ? WorldHour(now) : 0;
-        float speed = _worldClock?.MinutesPerDay ?? GameSettings.Current.DayLengthMinutes;
+        double hour = World.WorldClock.Hour;
+        float speed = World.WorldClock.MinutesPerDay;
         switch (op)
         {
             case World.TimeOp.Set: hour = value; break;
             case World.TimeOp.Add: hour = World.TimeCommand.Wrap(hour + value); break;
             case World.TimeOp.Speed: speed = (float)value; break;
         }
-        _worldClock = (hour, Now, speed);
-        Rpc(MethodName.WorldTime, hour, speed);
+        World.WorldClock.Rebase(hour, speed);
+        World.WorldClock.Save();
+        Rpc(MethodName.WorldTime, World.WorldClock.Hour0, World.WorldClock.Epoch, World.WorldClock.MinutesPerDay);
         GD.Print($"[admin] {NameOf(sender)} set the clock to {World.TimeCommand.Format(hour)}, {World.TimeCommand.DescribeSpeed(speed)}");
 
         string who = NameOf(sender);
@@ -1082,24 +1064,25 @@ public partial class ChatManager : Node
         GD.Print($"[water] the server's sea state: {World.SeaStateCommand.Describe(World.WaterField.SeaState)}");
     }
 
-    /// <summary>Server: tells a newly connected peer the world's time, if an admin has set one.</summary>
+    /// <summary>Server: tells a newly connected peer the world's time.</summary>
     public void SendWorldTimeTo(long peerId)
     {
-        if (_worldClock is { } c) RpcId(peerId, MethodName.WorldTime, WorldHour(c), c.MinutesPerDay);
+        if (World.WorldClock.Active)
+            RpcId(peerId, MethodName.WorldTime, World.WorldClock.Hour0, World.WorldClock.Epoch, World.WorldClock.MinutesPerDay);
     }
 
     /// <summary>
-    /// Client: the world's time, now. Sent as the current hour rather than a timestamp: a day of
-    /// 24 minutes moves a game minute a second, so the trip over the wire does not show.
+    /// Client: the world's clock (#452): the hour at a moment of the server's clock, and its speed.
+    /// <see cref="World.DayNight"/> reads the hour from <see cref="ClockSync.ServerNow"/> from then on,
+    /// so every screen shows the same sky and nothing drifts. Kept even without a sky
+    /// (<c>--systems</c>): the birds and the dawn chorus read it too.
     /// </summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void WorldTime(double hour, float minutesPerDay)
+    private void WorldTime(double hour0, double epoch, float minutesPerDay)
     {
-        if (World.DayNight.Instance is not { } clock) return;
-        clock.Hour = World.TimeCommand.Wrap(hour);
-        clock.DayLengthOverride = Math.Clamp(minutesPerDay, 0f, World.TimeCommand.MaxMinutesPerDay);
-        GD.Print($"[time] the server's clock: {clock.Clock}, {World.TimeCommand.DescribeSpeed(clock.MinutesPerDay)}");
+        World.WorldClock.Set(hour0, epoch, minutesPerDay);
+        GD.Print($"[time] the server's clock: {World.TimeCommand.Format(hour0)} at {epoch.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)} s, {World.TimeCommand.DescribeSpeed(World.WorldClock.MinutesPerDay)}");
     }
 
     /// <summary>

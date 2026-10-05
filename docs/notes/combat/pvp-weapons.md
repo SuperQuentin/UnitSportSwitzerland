@@ -4,13 +4,26 @@
   spread, range, falloff (full damage up to `FalloffFrom`, down to `FarFactor` at `Range`), fire
   interval, aim FOV, sound pitch, head multiplier. `MaxHit` = every pellet in the head (the server cap).
 
-  | Item | Ammo | Damage | Notes |
-  |---|---|---|---|
-  | Shotgun | Shells | 9 × 9 pellets | pump cycle |
-  | Pistol | 9 mm | 20 | |
-  | Assault rifle | 7.5 mm | 26 | every 0.16 s |
-  | Hunting rifle | 7.5 mm | 70 | scope at 9° FOV, drawn with the binocular overlay |
-  | Knife | none | 34 | `ItemUse.Melee`, 2.2 m reach |
+  | Item | Ammo | Damage | Full to | Notes |
+  |---|---|---|---|---|
+  | Shotgun | Shells | 9 × 9 pellets | 14 m | pump cycle, far factor 0.3 |
+  | Pistol | 9 mm | 24 | 30 m | every 0.28 s, bloom 1.2° |
+  | Assault rifle | 7.5 mm | 22 | 80 m | every 0.16 s, bloom 2.5° |
+  | Hunting rifle | 7.5 mm | 70 | 400 m | head ×1.8, far factor 0.55; scope at 9° FOV, drawn with the binocular overlay |
+  | Knife | none | 34 | 2.2 m | `ItemUse.Melee` |
+
+- **Balance** (#455): each gun owns a distance band — shotgun inside ~12 m, rifle in bursts to
+  ~80 m, hunting rifle beyond, the pistol an honest all-rounder (~86 DPS). Before, the rifle (26
+  every 0.16 s, full damage to 120 m, ~162 DPS) beat everything past 10 m. A hunting-rifle head shot
+  (126) no longer kills a full-health player with a vest.
+- **Spread bloom** (`WeaponDef.BloomDeg`/`BloomShots`, `ItemController.Bloom`): each shot adds
+  `1/BloomShots` of heat, heat cools to 0 over `BloomRecover` (1 s) idle, the cone is `SpreadDeg +
+  heat × BloomDeg`. The rifle held down reaches full bloom in ~2 s (+0.25 a shot, −0.16 between);
+  taps every half second never bloom. Client-side only, like the spread itself; no crosshair shows it yet.
+- **Medical items take time** (#455, `ItemController.MedicalSeconds`): a bandage (25 HP) heals 2.2 s
+  into its use and a first-aid kit (75 HP, was 100) 5.6 s in; switching items first cancels it and
+  keeps the item (`HeldItemVisual.PlayOneShot(peakAfterHold)`). It must be on the hotbar (a pack slot
+  cannot be held, and used to heal at once).
 
 - **Items** (appended to `ItemId`): `Pistol` 53, `Rifle` 54, `HuntingRifle` 55, `Knife` 56,
   `Ammo9mm` 57, `Ammo75` 58, `ArmorVest` 59 (`ItemUse.Armor`). Bandage and first-aid kit already
@@ -30,12 +43,22 @@
   - Neither body is down.
   - The two bodies are within `Range + 8 m` of each other, and the victim is within 8 m of the hit point.
   - The victim is connected.
+  - (#468, `Combat/HitGuard`) **No hill in the way**: `TerrainClear` samples `InterestService.Ground`
+    (the 100 m horizon lattice) every 10 m from the shooter's eye to the hit; blocked only where the
+    ground is 15 m above the line plus each end's own depth under the lattice surface, blended along
+    the shot (the lattice rounds ridges off and fills valleys in; rooms and tunnels lie under it). Not
+    for the knife. Buildings are not on the server: shooting through a wall is still trusted.
+  - (#468) **A real rate of fire**: `TryShot`, a token bucket per shooter and weapon, 3 shots deep,
+    refilled at 1/(0.85 × `Interval`) a second. Hits within 50 ms of a shot's first are that shot's:
+    up to `Pellets` different victims for free; the same victim again is another shot. An honest
+    rifle never trips it, jitter bunching three shots passes, and a 100-shot/s cheat gets ~7/s.
+    `tools/pvpcheck.sh`: 30 forged pistol hits in one frame, 3-5 arrive, none with PvP off.
 
   When it passes, the hit goes to the **victim only**, and `PvpRules.HitRelayed` is raised (for match statistics).
 - **Victim** (`PlayerHits.OnHit`): `FootPlayer.ShotHit(damage, shooter)`. Inside a vehicle, the vehicle takes the hit.
 - **Shooter**: `HitMarker` draws a cross at the screen centre, red for a head shot, with a tick sound.
-- **No rate limit or line-of-sight check on the server yet.** The damage cap and the distance checks
-  are the only guards; the client is trusted, the same as `CombatManager`.
+- Refusals log `[pvp] refused peer A on peer B: …`. Still trusted: walls (no building colliders on the
+  server), the aim itself, and aerial rounds (`CombatManager`, applied by the victim's client).
 - **PvP switch**: `/pvp on|off` (admin; bare `/pvp` reports it) or `--pvp` on the server command
   line. Off by default, so free roam stays peaceful.
 - **Player** (`src/Player/FootPlayer.cs`):

@@ -86,7 +86,7 @@ public partial class RideProbe : Node
                 "r1" => (RideKind)MotorbikeCatalog.First,
                 "monster" => (RideKind)(MotorbikeCatalog.First + 1),
                 // moto:N = MotorbikeCatalog.All[N]
-                _ when name.StartsWith("moto:") && int.TryParse(name[5..], out int b) => (RideKind)(MotorbikeCatalog.First + b),
+                _ when name.StartsWith("moto:") && int.TryParse(name[5..], out int b) => MotorbikeCatalog.All[b].Kind,
                 // truck:N = HeavyCatalog.All[N]; --trailer M couples TrailerCatalog.All[M], full
                 _ when name.StartsWith("truck") => (RideKind)(HeavyCatalog.First
                     + (name.Length > 6 && int.TryParse(name[6..], out int h) ? h : 0)),

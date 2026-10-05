@@ -42,14 +42,14 @@ public static class PlayerHits
     /// every pellet finds the nearest player body it crosses that no wall hides, and each player hit
     /// gets one Hit event with the sum. Returns the number of players hit.
     /// </summary>
-    public static int Shoot(FootPlayer shooter, Vector3 eye, Vector3 aim, WeaponDef weapon)
+    public static int Shoot(FootPlayer shooter, Vector3 eye, Vector3 aim, WeaponDef weapon, float? spreadDeg = null)
     {
         var targets = Targets(shooter);
         if (targets.Count == 0) return 0;
         var space = shooter.GetWorld3D().DirectSpaceState;
         var sums = new Dictionary<FootPlayer, (float Damage, bool Head, Vector3 At)>();
         var basis = Basis.LookingAt(aim.Normalized(), Mathf.Abs(aim.Normalized().Y) > 0.99f ? Vector3.Forward : Vector3.Up);
-        float spread = Mathf.DegToRad(weapon.SpreadDeg);
+        float spread = Mathf.DegToRad(spreadDeg ?? weapon.SpreadDeg);
 
         for (int i = 0; i < weapon.Pellets; i++)
         {
@@ -107,7 +107,7 @@ public static class PlayerHits
     {
         var list = new List<FootPlayer>();
         foreach (var n in shooter.GetTree().GetNodesInGroup(FootPlayer.Group))
-            if (n is FootPlayer p && p != shooter && !p.Npc && p.Down == 0 && PeerOf(p) > 0 && p.IsInsideTree())
+            if (n is FootPlayer p && p != shooter && !p.Npc && p.Down != 1 && PeerOf(p) > 0 && p.IsInsideTree())   // downed (2) can be finished, #475
                 list.Add(p);
         return list;
     }
