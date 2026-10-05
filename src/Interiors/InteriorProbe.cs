@@ -71,13 +71,26 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
     }
 
     /// <summary>The door the check uses, and the door watch watches.</summary>
-    public static DoorIndex.Entry? ChooseDoor(Vector3 at) =>
-        DoorKindArg() is { } kind ? DoorIndex.Nearest(at, 400f, kind) : DoorIndex.Nearest(at, 400f);
+    public static DoorIndex.Entry? ChooseDoor(Vector3 at) => DoorSearch.Nearest(at, DoorKindArg());
 
     private void Check(bool condition, string what)
     {
         GD.Print($"[interior] {(condition ? "ok  " : "FAIL")} {what}");
         _ok &= condition;
+    }
+
+    /// <summary>
+    /// Step 0 waits for four things in turn — the ground under the spawn, the server's player, a
+    /// landing, a door of the kind asked for — and any of them can never come. Each waits on its
+    /// own budget and names itself here, so a probe that will never start says so in seconds
+    /// instead of falling into the 400 s guard with only a step number (#507). Call it and
+    /// return: it has ended the run when it reports.
+    /// </summary>
+    private void StopIfStuck(string waitingFor)
+    {
+        if (_t < DoorSearch.GiveUp) return;
+        Check(false, $"waited {_t:F0} s for {waitingFor}");
+        Finish();
     }
 
     public override async void _Ready()
@@ -197,13 +210,13 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 var at = _origin.ToWorld(e, n, 0);
                 if (_player == null)
                 {
-                    if (!_chunks.TryGetHeight(at, out float g)) return;
+                    if (!_chunks.TryGetHeight(at, out float g)) { StopIfStuck($"the ground under {e:F0}/{n:F0} to stream in"); return; }
                     if (Online)
                     {
                         // the player the server spawned for us: its position is what the server checks
                         _player = GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>()
                             .FirstOrDefault(p => p.IsMultiplayerAuthority());
-                        if (_player == null) return;
+                        if (_player == null) { StopIfStuck("the server to spawn a player we have authority over"); return; }
                         _player.Camera.Current = true;
                         _player.LeaveInterior(new Vector3(at.X, g + 1f, at.Z), 0);
                         GD.Print($"[interior] online as peer {Me}");
@@ -218,12 +231,23 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                     interiors.LocalPlayer = () => probePlayer;
                     return;
                 }
-                if (!_player.IsOnFloor()) return;
+                if (!_player.IsOnFloor()) { StopIfStuck("the player to land on the ground"); return; }
+                var kind = DoorKindArg();
                 var door = ChooseDoor(_player.GlobalPosition);
-                if (door == null) return;
+                if (door == null)
+                {
+                    // doors appear as their tile's buildings commit, so keep looking for a while;
+                    // then say what is drawn, which tells "no barn here" from "a barn below us"
+                    if (_t < DoorSearch.GiveUp) return;
+                    DoorSearch.Explain("interior", _player.GlobalPosition, kind, _origin);
+                    Check(false, $"the nearest {kind?.ToString() ?? "building"} door is within {DoorSearch.Reach(kind):F0} m");
+                    Finish();
+                    return;
+                }
                 _door = door.Value;
                 StandOutside(_door);
-                GD.Print($"[interior] door of {_door.Key} at {_door.World:F1}");
+                // with the LV95, so a failure further on can be walked back into with --at
+                GD.Print($"[interior] door of {_door.Key} at {_door.World:F1}{DoorSearch.Lv95(_origin, _door.World)}");
                 Next();
                 break;
             }
