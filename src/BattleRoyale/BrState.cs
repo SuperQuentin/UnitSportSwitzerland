@@ -32,6 +32,10 @@ public sealed class BrEntrant
     public bool Downed { get; set; }
     /// <summary>Who downed them: the kill if they do not get up.</summary>
     public long DownedBy { get; set; }
+    /// <summary>Brought back once already with a dogtag (#480): not again.</summary>
+    public bool Recalled { get; set; }
+    /// <summary>Server clock when they went out: a recall brings back the latest.</summary>
+    public double OutAt { get; set; }
 
     /// <summary>A group name as typed, made comparable: trimmed, lower case, letters and digits, at most 16.</summary>
     public static string PartyName(string typed) =>
@@ -65,6 +69,11 @@ public sealed class BrState
     public int TeamSize { get; set; } = 1;
     /// <summary>Players at GO: the first circle is sized for them (<see cref="ZoneSchedule.FirstRadius"/>); 0 before GO.</summary>
     public int Field { get; set; }
+    /// <summary>
+    /// The Postauto stops where a dogtag recalls a team-mate (#480): x, y (zone metres), altitude, per stop.
+    /// Null in solo, before the roads are in, or on a roadless region.
+    /// </summary>
+    public float[]? RecallPoints { get; set; }
     /// <summary>The winning team, 0 in solo or with no winner.</summary>
     public int WinnerTeam { get; set; }
     public List<BrEntrant> Entrants { get; set; } = new();

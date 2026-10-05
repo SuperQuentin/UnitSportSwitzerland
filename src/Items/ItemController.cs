@@ -541,6 +541,14 @@ public partial class ItemController : Node
                 break;
             }
 
+            case ItemUse.Recall:
+            {
+                // a fallen team-mate's tag (#480): at a Postauto stop, they come back
+                string? refused = BattleRoyale.BrManager.Instance is { } br ? br.TryRecall() : "A dogtag is for a Battle Royale team-mate.";
+                _ui.Toast(refused ?? "The tag is handed in: your team-mate is on the way back.");
+                break;
+            }
+
             case ItemUse.Signal:
             {
                 // a flare calls a supply drop (#198): only where there is a match to drop into

@@ -35,8 +35,9 @@ public partial class Handshake : Node
     /// the server's Unix offset (#452).
     /// 12: BattleRoyale RequestPing/Pinged, BrEntrant.Party (#469).
     /// 13: BattleRoyale ReportDowned/RequestRevive/Revived/OutNow/DownNews, BrEntrant.Downed (#475).
+    /// 15: BattleRoyale RequestRecall/Recalled/RecallNews, BrState.RecallPoints, ItemId.Dogtag (#480); 14 is #478's.
     /// </summary>
-    public const int Protocol = 13;
+    public const int Protocol = 15;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
