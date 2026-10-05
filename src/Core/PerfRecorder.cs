@@ -132,7 +132,7 @@ public partial class PerfRecorder : Node, IOriginShiftAware
             "frame,t_s,frame_ms,gpu_ms,render_cpu_ms,process_ms,physics_ms,fps,draws,prims,objects,mem_static_mb,vram_mb,"
             + "managed_mb,gc0,gc1,gc2,tiles_loaded,tiles_desired,in_flight,build_cap,pending,ready_queue,"
             + "commits,commit_ms,worst_commit_ms,worst_commit_tile,cam_e,cam_n,cam_alt,speed_mps,mode,"
-            + "nodes,objects,resources,orphan_nodes,vram_tex_mb,vram_buf_mb");
+            + "nodes,objects,cached_resources,orphan_nodes,vram_tex_mb,vram_buf_mb");
         _builds = Open("builds.csv",
             "t_s,tile,stride,ring,ground_ms,complete_ms,collision,roads,buildings,"
             + string.Join(",", ChunkManager.StageNames.Select(n => "w_" + n.Replace('+', '_').Replace('-', '_'))));
