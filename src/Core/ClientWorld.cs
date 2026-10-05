@@ -159,6 +159,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
             return;
         }
+        // the five industrial sites, hand-made (#497): no terrain, no server
+        if (Interiors.SiteProbe.ParseArgs() is { Requested: true } siteCheck)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.SiteProbe(siteCheck.Shot) { Name = "SiteProbe" });
+            return;
+        }
         // a hand-made church whose radio plays the chess type beat (#370): no terrain, no server
         if (Interiors.ChurchStageProbe.ParseArgs() is { Requested: true } churchStage)
         {
