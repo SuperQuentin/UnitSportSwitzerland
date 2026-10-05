@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.Globalization;
 using Spectre.Console;
 using UnitSport.Terrain.Format;
+using UnitSport.Map;
 using UnitSport.Tools.MapSetup;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
@@ -30,13 +31,6 @@ if (Flag("--help") || Flag("-h"))
 if (Flag("--bake"))
     return await Bake.RunAsync(paths);
 
-if (!File.Exists(paths.CountryFile))
-{
-    AnsiConsole.MarkupLine($"[red]No country map at {Markup.Escape(paths.CountryFile)}.[/] "
-                           + "It is committed to the repository; pull it, or rebuild it with [bold]--bake[/].");
-    return 1;
-}
-
 if (Flag("--save-location"))
 {
     paths.SaveLocation();
@@ -49,7 +43,8 @@ if (Flag("--pick-location") && PickLocation(paths) is { } picked)
     AnsiConsole.MarkupLine($"Saved the location: {Markup.Escape(Where(paths))}");
 }
 
-var country = CountryData.Load(paths.CountryFile);
+// the embedded country map, unless --bake has just written a fresh one beside the binary
+var country = CountryData.LoadPreferringFile(paths.CountryFile);
 var state = SetupState.Load(paths);
 var stats = Stats.Load(paths);
 // --fresh: behave as on a clone with no data yet (for previews and screenshots)
@@ -211,7 +206,7 @@ await AnsiConsole.Progress()
             {
                 Paths = paths, Country = country, Local = local, Selection = selection, Layers = layers,
                 Stats = stats, State = state, Python = python, Gdal = gdal,
-            }, task, step.Title, log, cts.Token);
+            }, new SpectreProgress(task, step.Title), step.Title, log, cts.Token);
             var clock = Stopwatch.StartNew();
             bool ok;
             try
@@ -337,9 +332,9 @@ Paths? PickLocation(Paths current)
     var options = new List<(string Label, string? Base)>
     {
         ($"Keep  [grey]{Markup.Escape(Where(current))}[/]", null),
-        ($"The repository's folders  [grey]{Markup.Escape(current.Root)} · {Bytes(FreeBytes(current.Root))} free[/]", ""),
+        ($"The repository's folders  [grey]{Markup.Escape(current.RepoRoot)} · {Bytes(FreeBytes(current.RepoRoot))} free[/]", ""),
     };
-    var repoDrive = Path.GetPathRoot(current.Root);
+    var repoDrive = Path.GetPathRoot(current.RepoRoot);
     foreach (var d in Drives())
     {
         string name = d.RootDirectory.FullName;
@@ -407,7 +402,7 @@ void SwitchTo(Paths next)
 }
 
 static string Where(Paths p) =>
-    p.DataOverride == null && p.ChunksOverride == null ? $"the repository's folders ({p.Root})"
+    p.DataOverride == null && p.ChunksOverride == null ? $"the repository's folders ({p.RepoRoot})"
     : $"source data {p.Data}, built tiles {p.Chunks}";
 
 // Ready drives with room on them; skips pseudo and read-only filesystems (Linux lists dozens).
