@@ -45,8 +45,9 @@ public sealed class Pigeon : Flyer
     {
         var parts = BirdMesh.Get(Species);
         var root = new Node3D { Name = "Pigeon" };
-        // bird meshes face +Z, a body faces −Z (BirdLife turns its birds by yaw + π the same way)
-        var bird = new Node3D { Name = "Bird", Rotation = new Vector3(0, Mathf.Pi, 0) };
+        // MeshScratch.Build already turned the +Z-authored bird to face −Z, the way a body faces: no
+        // half turn here (BirdLife's yaw + π is for its own Atan2(x, z) yaw, not for the mesh)
+        var bird = new Node3D { Name = "Bird" };
         root.AddChild(bird);
         bird.AddChild(new MeshInstance3D { Mesh = parts.Body, MaterialOverride = BirdMesh.Material });
         foreach (var wing in new[] { parts.WingA, parts.WingB })
