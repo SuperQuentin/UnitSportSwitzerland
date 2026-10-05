@@ -16,6 +16,8 @@ namespace UnitSport.Terrain.Fixture;
 /// <item><c>verge</c>: two bends with 6 m of grass verge then a tree line on each side.</item>
 /// <item><c>lake</c> (#299): a 2.6 x 2 km lake east of the start, with a beach, a 150 m shelf, a
 /// drop-off to 25 m and a river coming in from the west; a slipway road runs into it.</item>
+/// <item><c>airport</c> (#422): flat, a 2.7 km runway, a taxiway, a terminal apron with six stands and
+/// a cargo apron with two (<see cref="FixtureAirport"/>).</item>
 /// </list>
 /// </summary>
 public sealed class FixtureCourse
@@ -26,7 +28,7 @@ public sealed class FixtureCourse
     public List<(RoadClass Class, List<(double X, double Y, double Z)> Points)> Roads { get; } = new();
     public List<(double X, double Y, double Z, float Height)> Trees { get; } = new();
 
-    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake", "parking" };
+    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake", "parking", "airport" };
 
     /// <summary>The ground as a function, instead of following the roads; null: <see cref="Ground"/>'s roads.</summary>
     public Func<double, double, double>? Terrain { get; init; }
@@ -59,6 +61,8 @@ public sealed class FixtureCourse
     /// this is how the fixture reaches that half of the planner.
     /// </summary>
     public (double DoorX, double DoorY, double FloorAreaM2, bool Retail)? Store { get; init; }
+    /// <summary>The course's airports (#422) planned at a start in LV95; null: none.</summary>
+    public Func<double, double, AirportIndex>? Airports { get; init; }
 
     /// <summary>The box the course needs whatever its roads, metres from the start; null: the roads' box.</summary>
     public (double MinX, double MinY, double MaxX, double MaxY)? Extent { get; init; }
@@ -73,6 +77,7 @@ public sealed class FixtureCourse
         "verge" => Verge(),
         "lake" => Lake.Create(),
         "parking" => Parking(),
+        "airport" => FixtureAirport.Create(),
         _ => null,
     };
 

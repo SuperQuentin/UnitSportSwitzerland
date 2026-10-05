@@ -143,6 +143,9 @@ public partial class VehicleBody : CharacterBody3D
         Position = Origin.ToWorld(s.Position) + Vector3.Up * 0.15f;
         AddChild(_place = new Net.NetPlace(Origin, s.Position));
         Rotation = new Vector3(0, s.Yaw, 0);
+        // a flyer's drawn attitude (replicated): its heading until its own flight model poses it. A
+        // server-placed aircraft (#422) is never flown there, and its copies drew it facing north
+        if (Ride is Flyer) Tilt = new Quaternion(Vector3.Up, s.Yaw);
         Velocity = s.Velocity;
         // parked in a hold (#418, VehicleBody.Hold.cs): carried, no physics of its own
         BeginHold(s);

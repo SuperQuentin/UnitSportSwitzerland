@@ -106,6 +106,8 @@ public sealed class CachingChunkSource : IChunkSource
     private Task<HorizonIndex?>? _horizon;
 
     /// <summary>Not cached: read once at boot and when a server sends its own.</summary>
+    public Task<AirportIndex?> LoadAirportsAsync(CancellationToken ct = default) => _inner.LoadAirportsAsync(ct);
+
     public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => _inner.LoadLandingsAsync(ct);
 
     private static long Weigh(ChunkGrid g) => g.Heights.LongLength * 2 + 64;
