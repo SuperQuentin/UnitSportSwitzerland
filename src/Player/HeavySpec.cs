@@ -1,10 +1,18 @@
 using Godot;
 using UnitSport.Audio;
+using UnitSport.Farming;
 
 namespace UnitSport.Player;
 
 /// <summary>What a heavy vehicle is: which trailers it takes, how it is drawn, how its box shifts.</summary>
-public enum HeavyClass { Tractor, Rigid, CityBus, ArticulatedBus, Coach, Pickup }
+public enum HeavyClass
+{
+    Tractor, Rigid, CityBus, ArticulatedBus, Coach, Pickup,
+    /// <summary>A farm tractor (#494): a drawbar and a three-point linkage, big rear wheels, a cab with doors.</summary>
+    FarmTractor,
+    /// <summary>A combine harvester (#494): a header lowered to cut, a grain tank, steered at the rear.</summary>
+    Combine,
+}
 
 /// <summary>
 /// How the automatic changes gear: an automated manual (a dry clutch the computer works, drive cut
@@ -30,6 +38,11 @@ public enum Coupling
     /// A pickup's ball, or the ball of a rigid truck's combination coupling.
     /// </summary>
     Ball,
+    /// <summary>
+    /// A mounted implement on a tractor's three-point linkage (#494): rigid, no articulation, no
+    /// wheels of its own; raised, its whole weight on the tractor's rear axle.
+    /// </summary>
+    ThreePoint,
 }
 
 /// <summary>
@@ -204,6 +217,21 @@ public sealed record HeavySpec
     /// <summary>Seats and standing places (buses): a passenger with luggage is 75 kg.</summary>
     public int Passengers { get; init; }
 
+    // ---- farm machines (#494) ----
+    /// <summary>A three-point linkage beside the hitch (a farm tractor): takes a mounted implement.</summary>
+    public Coupling Mount { get; init; }
+    /// <summary>What the machine itself works the ground with (a combine's header: Harvest), None for none.</summary>
+    public FarmTool Tool { get; init; }
+    /// <summary>Its working width, m (a combine's cut), and the bar's place, metres behind the front.</summary>
+    public float WorkWidth { get; init; }
+    public float WorkAt { get; init; }
+    /// <summary>A grain tank's capacity in items (sacks), 0 for none.</summary>
+    public int TankItems { get; init; }
+    /// <summary>The top speed while working (a combine threshing), km/h.</summary>
+    public float WorkKmh { get; init; } = float.PositiveInfinity;
+    /// <summary>A tractor or a combine: its lowering, tank and work keys.</summary>
+    public bool Farm => Class is HeavyClass.FarmTractor or HeavyClass.Combine;
+
     /// <summary>What can hang on the back: the last section's hitch.</summary>
     public Coupling Takes => Sections[^1].Hitch;
 
@@ -213,7 +241,7 @@ public sealed record HeavySpec
     /// ball under the jaw (#463).
     /// </summary>
     public bool Accepts(TrailerSpec t) => Takes != Coupling.None
-        && (t.Couples == Takes || t.Couples == Coupling.Ball && Takes == Coupling.Drawbar);
+        && (t.Couples == Takes || t.Couples == Coupling.Ball && Takes == Coupling.Drawbar || Mount != Coupling.None && t.Couples == Mount);
 
     /// <summary>Crank torque at an rpm, N·m, from the published curve.</summary>
     public float TorqueAt(float rpm)
@@ -235,7 +263,12 @@ public sealed record HeavySpec
 }
 
 /// <summary>What a trailer's body is: sets the mesh and how the load sits.</summary>
-public enum TrailerBody { Curtainsider, Tanker, Timber, SwapBody, Boat }
+public enum TrailerBody
+{
+    Curtainsider, Tanker, Timber, SwapBody, Boat,
+    /// <summary>Farm implements (#494): a mounted reversible plough, seed drill and mower; a tipping trailer.</summary>
+    Plough, SeedDrill, Mower, Tipper,
+}
 
 /// <summary>A trailer as numbers: its sections (one for a semi, dolly and body for a drawbar trailer) and its look.</summary>
 public sealed record TrailerSpec
@@ -261,4 +294,17 @@ public sealed record TrailerSpec
     public float BoatKeel { get; init; }
     /// <summary>The boat's bow (the winch post), metres behind the trailer's front.</summary>
     public float BowAt => BoatCatalog.For((int)Boat) is { } b ? BoatAt - (b.Length - b.Shape.SternZ) : 0f;
+
+    // ---- farm implements (#494) ----
+    /// <summary>What it works the ground with when lowered (None: it never works it, a trailer).</summary>
+    public FarmTool Tool { get; init; }
+    /// <summary>Its working width, m, and the working bar's place, metres behind its front.</summary>
+    public float WorkWidth { get; init; }
+    public float WorkAt { get; init; }
+    /// <summary>How high the linkage lifts it off the ground for the road, m.</summary>
+    public float LiftHeight { get; init; }
+    /// <summary>A tipping trailer's body, in items (sacks): 0 for none.</summary>
+    public int TankItems { get; init; }
+    /// <summary>A mounted implement: rigid on the three-point linkage, raised and lowered with {kneel}.</summary>
+    public bool Mounted => Couples == Coupling.ThreePoint;
 }
