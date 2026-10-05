@@ -170,7 +170,8 @@ public partial class MapScreen : Screen
         var footer = UiKit.HBox(10);
         body.AddChild(footer);
         _hint = UiKit.Text(InputHints.Format(
-            "Drag to draw  ·  right-drag or {ui_left}{ui_right} to pan  ·  wheel or {map_zoom_in}{map_zoom_out} to zoom  ·  {map_tool} tool  ·  {map_search} search"),
+            "Drag to draw  ·  right-drag or {ui_left}/{ui_right} to pan  ·  wheel or {map_zoom_in}/{map_zoom_out} to zoom"
+            + "  ·  {map_tool} tool  ·  {map_search} search"),
             UiTheme.FontTiny, UiTheme.TextFaint);
         _hint.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         footer.AddChild(_hint);
@@ -480,6 +481,16 @@ public partial class MapScreen : Screen
         if (erase) _selection.Remove(t); else _selection.Add(t);
         RefreshSummary();
     }
+
+    /// <summary>Moves the landing marker, as shift-clicking the map does.</summary>
+    public void MoveLanding(double e, double n)
+    {
+        _map.SetLanding(e, n);
+        RefreshSummary();
+    }
+
+    /// <summary>Confirms the landing, as the "Land here" button does.</summary>
+    public void ConfirmLanding() => OnPrimary();
 
     public void ClearSelection()
     {

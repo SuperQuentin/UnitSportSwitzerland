@@ -204,6 +204,13 @@ public sealed class GameSettings
     /// </summary>
     public int AppearanceBits { get; set; }
 
+    /// <summary>
+    /// Where the player landed last (#515), LV95 metres, so the map screen opens on it instead of
+    /// sending everyone back to Riddes every session. Zero until a world has been entered.
+    /// </summary>
+    public double LastLandingE { get; set; }
+    public double LastLandingN { get; set; }
+
     /// <summary>GPX files replayed recently, newest first (the Play solo track picker lists them).</summary>
     public List<string> RecentGpx { get; set; } = new();
 

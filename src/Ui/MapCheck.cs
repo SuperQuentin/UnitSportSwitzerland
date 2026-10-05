@@ -64,7 +64,28 @@ public partial class MapCheck : Node
 
         (() => Map!.ClearSelection(), () => Picked!.Count == 0, 2, "clear empties the selection"),
         (Esc, () => _shell.Top is TitleScreen, 2, "Esc goes back to the title"),
+
+        // the landing role: the same screen, with a marker and a confirmation (#515 phase 5)
+        (() => _shell.Push(MapScreen.CreateLanding((SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N),
+                landing => _landed = landing)),
+            () => Map?.Canvas.Landing != null, 5, "the landing map opens with a marker on Riddes"),
+        (() => { }, () => Math.Abs(Map!.Canvas.Landing!.Value.E - SpawnPoint.DefaultLv95E) < 1, 1,
+            "the marker is where it was asked for"),
+        (() => Map!.MoveLanding(2_600_000, 1_200_000), () => Math.Abs(Map!.Canvas.Landing!.Value.E - 2_600_000) < 1, 2,
+            "the marker moves"),
+        (() => Map!.ConfirmLanding(), () => _landed is { } l && Math.Abs(l.E - 2_600_000) < 1, 2,
+            "confirming reports where to land"),
+
+        // the plumbing the chosen landing actually travels down, asserted rather than assumed
+        (() => { }, () => SpawnPoint.ParseTarget(new WorldLaunch { Landing = (2_600_000, 1_200_000) })
+                is var (e, n) && Math.Abs(e - 2_600_000) < 1 && Math.Abs(n - 1_200_000) < 1, 1,
+            "a launch carrying a landing spawns there"),
+        (() => { }, () => SpawnPoint.ParseTarget(new WorldLaunch()) is var (e, _)
+                && Math.Abs(e - SpawnPoint.DefaultLv95E) < 1, 1,
+            "a launch with no landing still spawns at Riddes"),
     };
+
+    private (double E, double N)? _landed;
 
     public override void _Process(double delta)
     {

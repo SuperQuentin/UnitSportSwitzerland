@@ -180,7 +180,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         bool fixture = Systems.FixtureCourse != null;
         if (fixture)
         {
-            var (fE, fN) = SpawnPoint.ParseTarget();
+            var (fE, fN) = SpawnPoint.ParseTarget(Launch);
             source = Terrain.Fixture.FixtureChunkSource.Create(Systems.FixtureCourse!, fE, fN)
                 ?? throw new ArgumentException($"no fixture course '{Systems.FixtureCourse}' (known: {string.Join(", ", Terrain.Fixture.FixtureCourse.Names)})");
             GD.Print($"[world] fixture course {Systems.FixtureCourse}");
@@ -198,7 +198,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // every client and the server generate the same world. With no local terrain the origin
         // goes on the spawn point, so the ground is not tens of kilometres out in float precision.
         bool hasLocalTerrain = manifest.Tiles.Count > 0;
-        var (startE, startN) = SpawnPoint.ParseTarget();
+        var (startE, startN) = SpawnPoint.ParseTarget(Launch);
         // the generator derives its rivers on a worker as soon as it exists: not made when it is off
         var generated = Systems.On(Systems.Generated) && !fixture
             ? new ProceduralWorld(SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N) : null;
@@ -449,7 +449,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(tcam);
             tcam.MakeCurrent();
             _chunks.AddAnchor(tcam);
-            var (tE, tN) = SpawnPoint.ParseTarget();
+            var (tE, tN) = SpawnPoint.ParseTarget(Launch);
             tcam.Position = origin.ToWorld(tE, tN, 600);
             AddChild(new World.TrafficProbe(_traffic, tcam, tcheck.Shot)
                 { Origin = origin });
@@ -577,7 +577,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         if (!placedByTool)
         {
-            var (spawnE, spawnN) = SpawnPoint.ParseTarget();
+            var (spawnE, spawnN) = SpawnPoint.ParseTarget(Launch);
             AddChild(_spawn = new SpawnPoint(_spectator, _chunks, origin, spawnE, spawnN));
         }
 
@@ -828,7 +828,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (tool.Start == null || !tool.Requested()) continue;
             if (tool.Anchor == ToolAnchor.AtTarget)
             {
-                var (e, n) = SpawnPoint.ParseTarget();
+                var (e, n) = SpawnPoint.ParseTarget(Launch);
                 _spectator.Position = origin.ToWorld(e, n, 1200);
             }
             else if (tool.Anchor == ToolAnchor.Dropped) _chunks.RemoveAnchor(_spectator);
