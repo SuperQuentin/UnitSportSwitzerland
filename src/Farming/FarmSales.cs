@@ -276,7 +276,7 @@ public partial class FarmSales : Node
             refused = FarmContracts.Accept(ListOf(PlayerOf(peer)), coop, week, order, ValueOf(order.Item), Now);
             if (refused == null)
             {
-                GD.Print($"[sell] {PlayerOf(peer)} took order {index} of {coop} (week {week}): {order.Count} {order.Item} x{order.Multiplier} in {order.Days} d");
+                GD.Print($"[sell] {PlayerOf(peer)} took order {index} of {coop} (week {week}): {order.Count} {order.Item} x{FormattableString.Invariant($"{order.Multiplier:0.0}")} in {order.Days} d");
                 SaveContracts();
             }
         }

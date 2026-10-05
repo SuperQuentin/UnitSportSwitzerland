@@ -142,7 +142,7 @@ public partial class FarmStandNode : StaticBody3D
                 heap.MaterialOverride = FarmStandVisual.HeapMaterial(ItemDefs.Get(slot.Item)?.Tint ?? Colors.Wheat);
             }
             float fill = Mathf.Clamp(slot.Count / (float)FarmStandRules.PerCrate, 0.1f, 1f);
-            heap.Scale = new Vector3(0.48f, 0.04f + 0.10f * fill, 0.26f);
+            heap.Scale = new Vector3(0.48f, 0.08f + 0.16f * fill, 0.26f);   // heaped over the rim when full
             heap.Position = FarmStandVisual.CrateCentre(i) + new Vector3(0, -0.06f, 0);
             heap.Visible = true;
         }

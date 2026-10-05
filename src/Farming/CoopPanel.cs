@@ -35,7 +35,7 @@ public static class CoopPanel
             float unit = ItemDefs.Get(o.Item)?.Value ?? 0;
             var row = UiKit.HBox(8);
             row.AddChild(Icon(o.Item));
-            var text = UiKit.Text($"{o.Count} × {FarmSales.NameOfItem(o.Item)} within {o.Days} days, {o.Multiplier:0.0}×  (bonus +{FarmContracts.Bonus(o, unit)} CHF)",
+            var text = UiKit.Text($"{o.Count} × {FarmSales.NameOfItem(o.Item)} within {o.Days} days, {Mult(o.Multiplier)}×  (bonus +{FarmContracts.Bonus(o, unit)} CHF)",
                 UiTheme.FontSmall, UiTheme.Text, wrap: true);
             text.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
             row.AddChild(text);
@@ -54,10 +54,13 @@ public static class CoopPanel
         foreach (var c in mine)
         {
             string where = c.Coop == coop ? "here" : "another co-op";
-            box.AddChild(UiKit.Text($"{c.Delivered}/{c.Count} {FarmSales.NameOfItem(c.Item)} for {where}, {c.Multiplier:0.0}× (+{FarmContracts.Bonus(c)} CHF), {FarmCalendar.Left(c.Deadline - now)} left",
+            box.AddChild(UiKit.Text($"{c.Delivered}/{c.Count} {FarmSales.NameOfItem(c.Item)} for {where}, {Mult(c.Multiplier)}× (+{FarmContracts.Bonus(c)} CHF), {FarmCalendar.Left(c.Deadline - now)} left",
                 UiTheme.FontTiny, c.Coop == coop ? UiTheme.Good : UiTheme.TextDim, wrap: true));
         }
     }
+
+    /// <summary>"1.5" whatever the locale (docs/notes/general/invariant-culture-floats.md).</summary>
+    private static string Mult(double m) => m.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
 
     private static TextureRect Icon(ItemId id) => new()
     {

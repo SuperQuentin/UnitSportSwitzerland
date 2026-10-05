@@ -191,10 +191,8 @@ public partial class SellCheck : Node
             await Seconds(0.5);
             GD.Print($"{Tag} shot {Shot("494-sell-stand-panel")}");
             await Press(PlayerInput.InteractMount);
-            me.LookYaw += Mathf.Pi;
-            await Seconds(0.2);
-            await Stand(me, se, sn - 23.5, Mathf.Pi);
-            me.LookPitch = -0.25f;
+            await Stand(me, se + 1.5, sn - 24.5, 0.25f);
+            me.LookPitch = -0.2f;
             await Seconds(0.6);
             GD.Print($"{Tag} shot {Shot("494-sell-stand")}");
             await StepUpTo(me, stand.WorldTransform(placed.Origin).Origin);
