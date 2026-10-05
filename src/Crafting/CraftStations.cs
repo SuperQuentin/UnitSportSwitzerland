@@ -43,7 +43,7 @@ public static class CraftStations
 
         if (PlacedObjects.Instance is { } placed)
         {
-            double now = Godot.Time.GetUnixTimeFromSystem();
+            double now = Net.ClockSync.ServerUnixNow;
             var at = p.GlobalPosition;
             foreach (var o in placed.All.Values)
             {

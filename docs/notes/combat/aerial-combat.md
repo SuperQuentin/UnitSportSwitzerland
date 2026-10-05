@@ -14,7 +14,8 @@
   to next position (so nothing tunnels), 2.5 s life, one `MultiMesh` of unshaded streaks. 14 rounds/s,
   7 damage, 500 rounds, rearmed on the ground. **Client-authoritative**: the shooter RPCs each
   round (unreliable, relayed by the server, which flies none) and every peer flies every round, but a
-  peer damages only what it has authority over — its own player (`FootPlayer.ShotHit`: the vehicle
+  peer damages only what it has authority over — its own player (`FootPlayer.ShotHit`, only if the game mode allows the pair:
+  `PvpRules.Override`, which a Battle Royale also sets on its clients, #455; the vehicle
   takes it for its occupant, 0 HP wrecks it via the existing path), vehicles it parked
   (`VehicleBody.Health`/`Explode`), its own drones. The shooter id is the RPC sender, not a
   parameter. **Target drones** (`TargetDrone`, `AnimatableBody3D` with `SyncToPhysics = false` —

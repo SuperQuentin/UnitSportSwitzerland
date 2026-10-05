@@ -303,7 +303,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     /// <summary>A species for this habitat, altitude, month and hour, weighted by abundance; null if none fits.</summary>
     public BirdSpecies? Pick(Habitat habitat, float altitude)
     {
-        double hour = World.DayNight.Instance?.Hour ?? 12.0;
+        double hour = World.WorldClock.CurrentHour;
         bool night = hour < 5.5 || hour > 21.5;
         double total = 0;
         Span<double> weights = stackalloc double[BirdCatalog.All.Length];
@@ -620,7 +620,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     /// <summary>One town flock around <paramref name="p"/>: a species from <see cref="TownBirds"/>, sat on the buildings.</summary>
     private int TownSpawn(Vector3 p, TownPerches town, int room)
     {
-        double hour = World.DayNight.Instance?.Hour ?? 12.0;
+        double hour = World.WorldClock.CurrentHour;
         bool night = hour < 5.5 || hour > 21.5;
         bool water = false;
         for (int k = 0; k < 6 && !water; k++)
