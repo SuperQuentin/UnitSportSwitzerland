@@ -233,16 +233,6 @@ public partial class FreighterCheck : Node
         if (me.Vehicle != flying) { Finish("the aircraft was lost at the launch"); return; }
         flying.ToggleDoor(RampDoor);
         Expect((flying.DoorsOpen & 1 << RampDoor) != 0, $"the ramp opens in flight at {flying.State.Ias / 0.5144f:0} kt (a drop)");
-        if (Shots)
-        {
-            // from outside, the chase camera: the ramp level with the hold's floor in the air (#456)
-            await Until(() => Rig()?.DoorOpen(RampDoor) >= 1f, 10);
-            await Shot("outside_in_flight_ramp_level");
-            me.OrbitView(2.4f);
-            await Seconds(0.8);
-            await Shot("outside_in_flight_ramp_level_quarter");
-            me.OrbitView(-2.4f);
-        }
         float y0 = me.GlobalPosition.Y;
         bool up = me.TryInteract();
         Expect(up && await Until(() => me.Aboard && me.Ride == RideKind.OnFoot, 5), $"E stood up in flight (aboard {me.Aboard}, ride {me.Ride})");
@@ -276,6 +266,18 @@ public partial class FreighterCheck : Node
         Expect(_impacts == impacts0 && me.VehicleHealth >= health0,
             $"the controls taken back in flight without a knock ({_impacts - impacts0} impacts, health {me.VehicleHealth:F0}, pitch {Mathf.RadToDeg(AirlinerFlight.PitchOf((me.Vehicle as Airliner)?.State.Attitude ?? Basis.Identity)):F1}°)");
         await Shot("controls_in_flight");
+        // at the end: a parked one stood up from flies on only over the fixture's ground (a frozen
+        // body past its edge), so the walk comes first
+        if (Shots)
+        {
+            // from outside, the chase camera: the ramp level with the hold's floor in the air (#456)
+            await Until(() => Rig()?.DoorOpen(RampDoor) >= 1f, 10);
+            await Shot("outside_in_flight_ramp_level");
+            me.OrbitView(2.4f);
+            await Seconds(0.8);
+            await Shot("outside_in_flight_ramp_level_quarter");
+            me.OrbitView(-2.4f);
+        }
         Finish(null);
     }
 
