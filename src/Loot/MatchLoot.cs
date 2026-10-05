@@ -23,7 +23,9 @@ public static class MatchLoot
         { (ItemId.Pistol, 38), (ItemId.Shotgun, 26), (ItemId.Rifle, 9), (ItemId.HuntingRifle, 3), (ItemId.Knife, 6) };   // #455
     private static readonly (ItemId Id, float W)[] Supplies =
         { (ItemId.Ammo9mm, 24), (ItemId.Shells, 20), (ItemId.Ammo75, 16), (ItemId.Bandage, 28), (ItemId.FirstAidKit, 7),
-          (ItemId.ArmorVest, 8), (ItemId.EnergyBar, 8), (ItemId.Chocolate, 5), (ItemId.WaterBottle, 4) };
+          (ItemId.ArmorVest, 8), (ItemId.EnergyBar, 8), (ItemId.Chocolate, 5), (ItemId.WaterBottle, 4),
+          // Swiss match items (#478)
+          (ItemId.Alphorn, 2), (ItemId.FonduePot, 3), (ItemId.SmokeCanister, 5) };
 
     /// <summary>The share of furniture that is not empty, and the weight of a weapon against supplies.</summary>
     private const float FurnitureFull = 0.5f, WeaponShare = 0.3f;
@@ -58,6 +60,7 @@ public static class MatchLoot
                 Supply(found, rng, ItemId.Ammo75);
                 if (rng.NextDouble() < 0.5) Supply(found, rng, ItemId.ArmorVest);
                 Supply(found, rng, ItemId.Bandage);
+                if (rng.NextDouble() < 0.5) Supply(found, rng, ItemId.SmokeCanister);   // #478
                 break;
             case MatchTable.GunLocker:
                 Weapon(found, rng, rng.NextDouble() < 0.65 ? ItemId.Rifle : ItemId.HuntingRifle);
@@ -152,7 +155,7 @@ public static class MatchLoot
             ItemId.Ammo75 => rng.Next(10, 21),
             ItemId.Shells => rng.Next(5, 11),
             ItemId.Bandage => rng.Next(1, 4),
-            ItemId.ArmorVest or ItemId.FirstAidKit => 1,
+            ItemId.ArmorVest or ItemId.FirstAidKit or ItemId.Alphorn or ItemId.FonduePot => 1,
             _ => rng.Next(1, 3),
         };
         found[id] = found.GetValueOrDefault(id) + n;

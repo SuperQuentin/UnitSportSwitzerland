@@ -24,6 +24,12 @@ public enum ItemEventKind
     /// <see cref="ThrowHits.Bonk"/>. Relayed to everyone near: all play the reaction, the victim takes it.
     /// </summary>
     Bonk = 5,
+    /// <summary>An alphorn blown (#478). Position = the bell; heard far (<see cref="SwissItems.OnHorn"/>).</summary>
+    Horn = 6,
+    /// <summary>A fondue set out (#478). Position = the pot; everyone near eats (<see cref="SwissItems.OnFondue"/>).</summary>
+    Fondue = 7,
+    /// <summary>A smoke canister landed (#478). Position = where; a cloud on every peer (<see cref="SwissItems.OnSmoke"/>).</summary>
+    Smoke = 8,
 }
 
 /// <summary>
@@ -73,6 +79,9 @@ public partial class ItemEvents : Node
         [ItemEventKind.Hit] = PlayerHits.OnHit,
         [ItemEventKind.Flare] = (n, e) => n.FlareEffect(e),
         [ItemEventKind.Bonk] = ThrowHits.OnBonk,
+        [ItemEventKind.Horn] = SwissItems.OnHorn,
+        [ItemEventKind.Fondue] = SwissItems.OnFondue,
+        [ItemEventKind.Smoke] = SwissItems.OnSmoke,
     };
 
     /// <summary>
@@ -86,6 +95,9 @@ public partial class ItemEvents : Node
 
     /// <summary>This peer's origin: events go to the server and back in LV95 (#185).</summary>
     private Core.WorldOrigin _origin = null!;
+
+    /// <summary>This peer's origin, for handlers that keep a place beyond the moment (a smoke cloud, a horn's marker).</summary>
+    public Core.WorldOrigin? Origin => _origin;
 
     public static ItemEvents Create(Node world, Core.WorldOrigin origin, bool server)
     {

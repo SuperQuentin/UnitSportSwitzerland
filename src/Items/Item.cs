@@ -123,6 +123,13 @@ public static class ItemDefs
             ItemUse.Armor, 1, new Color(0.30f, 0.34f, 0.24f), "AV", 0, ItemCategory.Gear, 200f),
         new(ItemId.FlareGun, "Flare gun", "{use_item} fires its one flare into the sky: in a Battle Royale, a supply drop comes down where you stand. Everyone sees the flare.",
             ItemUse.Signal, 1, new Color(0.95f, 0.45f, 0.10f), "FG", 0, ItemCategory.Gear, 60f),
+        // Swiss match items (#478, Items/SwissItems)
+        new(ItemId.Alphorn, "Alphorn", "{use_item} and hold: a long call heard far away. For a few seconds you see who is near you, hidden or not; everyone who hears it sees where you are.",
+            ItemUse.Horn, 1, new Color(0.55f, 0.36f, 0.18f), "AH", 0, ItemCategory.Gear, 120f),
+        new(ItemId.FonduePot, "Fondue pot", "{use_item} and hold: everyone standing round it, you included, gets 40 health. Whoever they are.",
+            ItemUse.Share, 2, new Color(0.80f, 0.15f, 0.12f), "FO", 0, ItemCategory.Food, 40f),
+        new(ItemId.SmokeCanister, "Smoke canister", "{use_item} throws it ahead: a cloud for 12 seconds that hides whoever is inside from the radar.",
+            ItemUse.Smoke, 3, new Color(0.62f, 0.64f, 0.62f), "SM", 0, ItemCategory.Gear, 25f),
         new(ItemId.Dogtag, "Dogtag", "A fallen team-mate's tag. {use_item} at a Postauto stop (yellow on the map) before zone 4: they are dropped back in.",
             ItemUse.Recall, 3, new Color(0.75f, 0.76f, 0.78f), "DT", 0, ItemCategory.Gear, 0f),
         // bags (#208): found in houses, worn in the bag slot, one row of the pack per 9 slots
@@ -371,6 +378,31 @@ public static class ItemDefs
             {
                 s.Box(new Vector3(0, 0.0f, 0.0f), new Vector3(0.022f, 0.028f, 0.10f), new Color(0.80f, 0.10f, 0.12f));   // the red handle
                 s.Box(new Vector3(0, 0.003f, 0.10f), new Vector3(0.006f, 0.022f, 0.10f), new Color(0.80f, 0.82f, 0.86f)); // blade
+                break;
+            }
+            case ItemId.Alphorn:
+            {
+                // carried on the shoulder: a long wooden tube, the bell low in front
+                var wood = new Color(0.55f, 0.36f, 0.18f);
+                s.Tube(new Vector3(0, 0.06f, -0.05f), new Vector3(0, -0.25f, 0.9f), 0.02f, 0.035f, wood, 8);
+                s.Tube(new Vector3(0, -0.25f, 0.9f), new Vector3(0, -0.36f, 1.12f), 0.035f, 0.11f, wood, 10);
+                s.Tube(new Vector3(0, -0.24f, 0.88f), new Vector3(0, -0.26f, 0.92f), 0.04f, new Color(0.25f, 0.15f, 0.08f), 8);   // a band
+                break;
+            }
+            case ItemId.FonduePot:
+            {
+                var red = new Color(0.80f, 0.15f, 0.12f);
+                s.Tube(new Vector3(0, -0.06f, 0.08f), new Vector3(0, 0.04f, 0.08f), 0.09f, 0.11f, red, 12);   // the caquelon
+                s.Tube(new Vector3(0, 0.035f, 0.08f), new Vector3(0, 0.045f, 0.08f), 0.10f, new Color(0.98f, 0.86f, 0.45f), 12);   // cheese
+                s.Box(new Vector3(0, 0.0f, -0.05f), new Vector3(0.025f, 0.02f, 0.14f), red);   // the handle
+                break;
+            }
+            case ItemId.SmokeCanister:
+            {
+                var grey = new Color(0.62f, 0.64f, 0.62f);
+                s.Tube(new Vector3(0, -0.06f, 0.02f), new Vector3(0, 0.08f, 0.02f), 0.035f, grey, 10);
+                s.Tube(new Vector3(0, 0.08f, 0.02f), new Vector3(0, 0.10f, 0.02f), 0.02f, new Color(0.2f, 0.2f, 0.2f), 8);   // the cap
+                s.Box(new Vector3(0.035f, 0.05f, 0.02f), new Vector3(0.008f, 0.06f, 0.015f), new Color(0.85f, 0.75f, 0.2f));   // the lever
                 break;
             }
             case ItemId.FlareGun:

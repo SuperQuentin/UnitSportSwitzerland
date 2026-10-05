@@ -17,6 +17,7 @@ public static class BrMapDraw
     public static readonly Color Drop = new(0.25f, 0.5f, 1f);
     public static readonly Color Rare = new(1f, 0.6f, 0.2f);
     public static readonly Color Mate = new(0.35f, 1f, 0.45f);
+    public static readonly Color Horn = new(1f, 0.62f, 0.2f);
     public static readonly Color Postauto = new(1f, 0.8f, 0f);
     public static readonly Color Ping = new(1f, 0.45f, 0.85f);
     public static readonly Color Plane = new(0.95f, 0.95f, 0.85f);
@@ -80,6 +81,15 @@ public static class BrMapDraw
             var p = toScreen(mate.At);
             Arrow(c, p, mate.Heading, Mate);
             c.DrawString(ThemeDB.FallbackFont, p + new Vector2(9, -6), mate.Name, HorizontalAlignment.Left, -1, 11, Mate);
+        }
+
+        // alphorns heard (#478): where they were blown
+        foreach (var horn in br.Horns)
+        {
+            var p = toScreen(horn.At);
+            c.DrawArc(p, 9f, 0, Mathf.Tau, 16, Horn, 2.5f);
+            c.DrawArc(p, 15f, 0, Mathf.Tau, 20, Horn with { A = 0.5f }, 1.5f);
+            c.DrawString(ThemeDB.FallbackFont, p + new Vector2(12, -10), horn.Name, HorizontalAlignment.Left, -1, 11, Horn);
         }
 
         // the team's pings (#469): a pin in the pinger's name

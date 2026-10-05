@@ -87,6 +87,8 @@ public partial class BrCompass : Control
             Marker(font, heading, drop - view.Position, BrMapDraw.Drop, $"drop {drop.DistanceTo(view.Position):F0} m", diamond: false, row: 2);
         foreach (var mate in _br.Watching == 0 ? _br.Mates() : Enumerable.Empty<(string Name, Vector2 At, Vector2 Heading)>())
             Marker(font, heading, mate.At - view.Position, BrMapDraw.Mate, $"{mate.Name} {view.Position.DistanceTo(mate.At):F0} m", diamond: false, row: 3);
+        foreach (var horn in _br.Horns)
+            Marker(font, heading, horn.At - view.Position, BrMapDraw.Horn, $"alphorn {view.Position.DistanceTo(horn.At):F0} m", diamond: false, row: 5);
         foreach (var ping in _br.Pings)
             Marker(font, heading, ping.At - view.Position, BrMapDraw.Ping, $"{ping.Name} {view.Position.DistanceTo(ping.At):F0} m", diamond: true, row: 4);
         // carrying a fallen team-mate's tag (#480): the nearest Postauto stop

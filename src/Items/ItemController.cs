@@ -541,6 +541,53 @@ public partial class ItemController : Node
                 break;
             }
 
+            // ---- Swiss match items (#478, SwissItems) ----
+            case ItemUse.Horn:
+            {
+                if (_useBusy) break;
+                double now = Time.GetTicksMsec() / 1000.0;
+                if (now < _hornReadyAt)
+                {
+                    _ui.Toast($"Out of breath: blow again in {_hornReadyAt - now:F0} s.");
+                    break;
+                }
+                StartUse(player, slot, def, ViewPose.Mouth, 2.8f, 0.3f, 0.4f, () =>
+                {
+                    _hornReadyAt = Time.GetTicksMsec() / 1000.0 + SwissItems.HornCooldown;
+                    var bell = player.GlobalPosition + Vector3.Up * 1.2f - player.Camera.GlobalTransform.Basis.Z * 1.6f;
+                    ItemEvents.Instance?.Send(ItemEventKind.Horn, bell, Vector3.Up);
+                    _ui.Toast("The alphorn rings out: you see who is near, and they know where you are.");
+                });
+                break;
+            }
+            case ItemUse.Share:
+            {
+                if (_useBusy) break;
+                StartUse(player, slot, def, ViewPose.Mouth, 5.5f, 0.3f, 0.4f, () =>
+                {
+                    _inventory.TakeOne(slot);
+                    // the event feeds everyone near, this player too (SwissItems.OnFondue)
+                    ItemEvents.Instance?.Send(ItemEventKind.Fondue, player.GlobalPosition + Vector3.Up * 0.3f, Vector3.Up);
+                });
+                break;
+            }
+            case ItemUse.Smoke:
+            {
+                if (Time.GetTicksMsec() < _nextShotMs) break;
+                _nextShotMs = Time.GetTicksMsec() + 800;
+                var (eye, aim) = AimFrom(player, SwissItems.SmokeThrow);
+                var space = player.GetWorld3D().DirectSpaceState;
+                var hit = AimRay.Cast(space, eye, eye + aim * SwissItems.SmokeThrow, uint.MaxValue, player.SelfExclude);
+                var at = hit.Count > 0 ? hit["position"].AsVector3() : eye + aim * SwissItems.SmokeThrow;
+                // in the air: down to the ground under it
+                if (hit.Count == 0 && AimRay.Cast(space, at, at + Vector3.Down * 40f, uint.MaxValue, player.SelfExclude) is { Count: > 0 } ground)
+                    at = ground["position"].AsVector3();
+                _inventory.TakeOne(slot);
+                Kick(player);
+                ItemEvents.Instance?.Send(ItemEventKind.Smoke, at, aim);
+                break;
+            }
+
             case ItemUse.Recall:
             {
                 // a fallen team-mate's tag (#480): at a Postauto stop, they come back
@@ -672,6 +719,9 @@ public partial class ItemController : Node
     };
 
     private ulong _nextShotMs;
+
+    /// <summary>When the alphorn may be blown again (#478), local seconds.</summary>
+    private double _hornReadyAt;
 
     /// <summary>Spread bloom (#455): how hot the gun in hand is, which gun, and when it last fired.</summary>
     private float _heat;

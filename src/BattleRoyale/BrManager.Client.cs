@@ -201,14 +201,51 @@ public partial class BrManager
     {
         if (Origin == null || !InMatch || GetNodeOrNull<FootPlayer>("../Players/" + Me) is not { } me) yield break;
         var mates = _state.MatesOf(Me).Select(m => m.Peer).ToHashSet();
+        // an alphorn blown (#478): further, and through camo and hay, for a few seconds
+        bool horn = LocalSeconds < _hornRadarUntil;
+        float range = horn ? Items.SwissItems.HornRadar : RadarRange;
         foreach (var e in _state.Entrants)
         {
             if (!e.Alive || e.Peer == Me || mates.Contains(e.Peer)) continue;
             if (GetNodeOrNull<FootPlayer>("../Players/" + e.Peer) is not { } body) continue;
             var d = body.GlobalPosition - me.GlobalPosition;
-            if (new Vector2(d.X, d.Z).Length() > RadarRange || Build.Gadgets.Hidden(body.GlobalPosition)) continue;
+            if (new Vector2(d.X, d.Z).Length() > range) continue;
+            if (!horn && (Build.Gadgets.Hidden(body.GlobalPosition) || Items.SwissItems.InSmoke(body.Global))) continue;
             yield return ZonePoint(body.GlobalPosition);
         }
+    }
+
+    // ------------------------------------------------------------------------------------
+    // the alphorn (#478, Items/SwissItems)
+    // ------------------------------------------------------------------------------------
+
+    private double _hornRadarUntil;
+    private readonly List<(Vector2 At, string Name, double Until)> _horns = new();
+
+    /// <summary>Alphorns heard lately (zone metres, who blew it), for the maps and the compass.</summary>
+    public IReadOnlyList<(Vector2 At, string Name, double Until)> Horns
+    {
+        get
+        {
+            _horns.RemoveAll(h => h.Until < LocalSeconds);
+            return _horns;
+        }
+    }
+
+    /// <summary>An alphorn sounded: the blower's radar opens up; anyone else marks where it came from.</summary>
+    public void HeardHorn(Core.GlobalPos at, long peer, bool mine)
+    {
+        if (!InMatch) return;
+        double until = LocalSeconds + Items.SwissItems.HornSeconds;
+        if (mine)
+        {
+            _hornRadarUntil = until;
+            return;
+        }
+        string name = _state.Find(peer)?.Name ?? "?";
+        _horns.RemoveAll(h => h.Name == name);
+        _horns.Add((new Vector2((float)(at.E - _state.AreaE), (float)(at.N - _state.AreaN)), name, until));
+        GD.Print($"[br] alphorn: {name}");
     }
 
     /// <summary>Spectating: the player watched, else 0.</summary>
