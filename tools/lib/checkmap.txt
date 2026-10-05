@@ -51,6 +51,8 @@ src/BattleRoyale/BrStruct quick  --prefabcheck --systems ui,physics,build
 src/Loot/                quick  --lootchancecheck
 src/Loot/                quick  --shopcheck
 src/Interiors/           quick  --shopcheck
+src/Interiors/           quick  --sitecheck --systems ui
+src/Loot/LootTables      quick  --sitecheck --systems ui
 src/Interiors/Church     quick  --churchstagecheck
 src/Audio/Cd/CdLibrary   quick  --churchstagecheck
 src/Items/Item           quick  --shopcheck
@@ -309,6 +311,9 @@ src/Player/Emote         net    tools/emotenetcheck.sh
 src/Items/SwissItems     net    tools/swisscheck.sh
 src/Items/SwissNetProbe  net    tools/swisscheck.sh
 src/Avatar/HumanMeshBuilder.Emotes net tools/emotenetcheck.sh
+src/Combat/Fight         net    tools/fightnetcheck.sh
+src/Player/FootPlayer.Fight net tools/fightnetcheck.sh
+src/Avatar/HumanMeshBuilder.Fight net tools/fightnetcheck.sh
 src/Player/FootPlayer.Hold net   tools/holdnetcheck.sh
 src/Player/HoldNetProbe  net    tools/holdnetcheck.sh
 src/Vehicles/VehicleBody.Hold net tools/holdnetcheck.sh

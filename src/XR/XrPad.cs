@@ -110,7 +110,9 @@ internal sealed class XrPad
         // is open, where B is back
         bool crouched = onFoot && player != null && calibrated.Origin.Y < -CrouchDrop
                         && Input.MouseMode == Input.MouseModeEnum.Captured;
-        Button(JoyButton.B, _right.IsButtonPressed("by_button") || crouched);
+        RealCrouch = crouched;
+        RightB = _right.IsButtonPressed("by_button");
+        Button(JoyButton.B, RightB || crouched);
         Button(JoyButton.X, _left.IsButtonPressed("ax_button"));
         Button(JoyButton.Y, _left.IsButtonPressed("by_button"));
         Button(JoyButton.LeftStick, _left.IsButtonPressed("primary_click"));
@@ -157,6 +159,15 @@ internal sealed class XrPad
     /// (mounted). Read by <see cref="Control"/>, which names what the prompts show.
     /// </summary>
     public static bool TriggersAsShoulders { get; private set; } = true;
+
+    /// <summary>
+    /// The head is down in a real crouch (it also sends B). A fist fight (#495) crouches on it and
+    /// guards on <see cref="RightB"/> alone, since there B is the guard and the crouch is the body's.
+    /// </summary>
+    public static bool RealCrouch { get; private set; }
+
+    /// <summary>The right controller's B button itself, without the real crouch folded in.</summary>
+    public static bool RightB { get; private set; }
 
     /// <summary>
     /// Names controls as in another context for a moment (the controls overlay lists the vehicle
