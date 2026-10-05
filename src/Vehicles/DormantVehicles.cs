@@ -134,6 +134,57 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
     }
 
     /// <summary>
+    /// Whether a slot is a goods vehicle rather than a car (#516): a lone trailer, a tractor, a
+    /// rigid, or a whole coupled artic. They cannot go through the car instancer — a 13.6 m artic
+    /// drawn from <c>TrafficMeshBuilder.Car</c> would be a hatchback standing where a lorry is, and
+    /// would turn into one the moment somebody woke it, with a car's collision box until then.
+    /// </summary>
+    private static bool IsHeavy(VehicleSlot s) =>
+        s.Train != 0 || HeavyCatalog.For((RideKind)s.KindId) != null;
+
+    /// <summary>
+    /// Draws a yard's goods vehicles (#516): the real mesh each one wakes as, built through the
+    /// <see cref="Rideable"/> the slot's own <see cref="VehicleState"/> makes, so the dormant artic
+    /// and the artic you get when you touch it are the same object drawn twice. No
+    /// <see cref="MultiMesh"/>: a yard holds a dozen of these where a retail lot holds eighty cars,
+    /// and no two are the same length or load, so there is nothing to instance.
+    ///
+    /// <para>
+    /// Collision is the parked hull plus each section's own box, exactly as <see cref="VehicleBody"/>
+    /// builds them for a real parked train — a trailer you walk through would be worse than none.
+    /// </para>
+    /// </summary>
+    private void DrawHeavies(TileId id, List<VehicleSlot> slots)
+    {
+        var bodies = _solid.TryGetValue(id, out var existing) ? existing : new List<DormantBody>();
+        foreach (var s in slots)
+        {
+            // the very state Promote would wake it with, so the two cannot drift apart
+            var state = new VehicleState(KindFor(s), new GlobalPos(s.E, s.N, s.Height), s.Yaw,
+                Vector3.Zero, 0f, EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0,
+                Train: s.Train, Load: s.Load);
+            if (state.CreateRide() is not { } ride) continue;
+            var where = _origin.ToWorld(s.E, s.N, s.Height);
+
+            var body = new DormantBody { Slot = s, Position = where, Basis = new Basis(Vector3.Up, s.Yaw) };
+            var box = ride.ParkedBox;
+            body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = box.Size }, Position = box.Centre });
+            int extra = 0;
+            foreach (var (pose, centre, size) in ride.ExtraBoxes())
+                body.AddChild(new CollisionShape3D
+                {
+                    Name = $"Section{++extra}",
+                    Shape = new BoxShape3D { Size = size },
+                    Transform = pose * new Transform3D(Basis.Identity, centre),
+                });
+            body.AddChild(ride.BuildVisual(-1));
+            AddChild(body);
+            bodies.Add(body);
+        }
+        _solid[id] = bodies;
+    }
+
+    /// <summary>
     /// The slot a vehicle node name belongs to: <c>veh_slot_&lt;owner&gt;_&lt;ordinal&gt;</c>, where the
     /// owner is itself underscore-separated and its first two parts are always its tile.
     ///
@@ -283,6 +334,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
         if (!_slots.TryGetValue(id, out var slots)) return;
 
         var byLook = new Dictionary<(byte Paint, bool Van), List<VehicleSlot>>();
+        var heavies = new List<VehicleSlot>();
         foreach (var s in slots)
         {
             if (_awake.Contains(KeyOf(s))) continue;
@@ -292,10 +344,13 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
                 _awake.Add(KeyOf(s));
                 continue;
             }
+            // a lorry is not a car with a different paint: it gets its own mesh, not the car instancer
+            if (IsHeavy(s)) { heavies.Add(s); continue; }
             var look = (s.Paint, s.Van);
             if (!byLook.TryGetValue(look, out var list)) byLook[look] = list = new List<VehicleSlot>();
             list.Add(s);
         }
+        if (heavies.Count > 0) DrawHeavies(id, heavies);
         if (byLook.Count == 0) return;
 
         var instances = new List<MultiMeshInstance3D>(byLook.Count * 2);

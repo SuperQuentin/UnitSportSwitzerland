@@ -28,6 +28,8 @@ public partial class SiteProbe : Node3D
     private int _step = -1;
     private double _t;
     private readonly List<(BuildingType Site, InteriorLayout Layout, InteriorNode Node)> _built = new();
+    /// <summary>Each site's tile and the building's index in it, for the yard pass (#516).</summary>
+    private readonly List<(BuildingType Site, BuildingTile Tile, int Index)> _sites = new();
 
     public SiteProbe(string? shot) => _shot = shot;
 
@@ -152,15 +154,100 @@ public partial class SiteProbe : Node3D
                 new Transform3D(Basis.Identity, new Vector3(_built.Count * 400f, 0, 0)));
             AddChild(node);
             _built.Add((spec.Want, layout, node));
+            _sites.Add((spec.Want, tile!, index));
         }
 
         Check(_built.Count == Specs.Length, $"all {Specs.Length} sites built ({_built.Count})");
         GD.Print($"[site] plans written to {svgDir}");
         Ordinary();
+        Yards();
 
         if (_shot == null || DisplayServer.GetName() == "headless") { Finish(); return; }
         AddChild(new Camera3D { Name = "Eye", Fov = 75f });
     }
+
+    /// <summary>
+    /// The yard outside each site (#516, #496 phase 3): the fleet `DormantSlots.ForSite` parks on
+    /// the open ground in front of the building. Asserts the trade's own mix, that nothing stands
+    /// inside the building it belongs to, and — the part no unit test can reach — that every goods
+    /// vehicle actually builds the <c>Rideable</c> and the mesh it will wake as. It then stands the
+    /// sites and their yards in a row for the picture, which is the only way to see that an artic
+    /// is an artic and not a hatchback with a lorry's name.
+    /// </summary>
+    private void Yards()
+    {
+        var material = Styles.StyleKit.Material(Styles.MaterialRole.Building);
+        int drawnHeavies = 0;
+        for (int i = 0; i < _sites.Count; i++)
+        {
+            var (site, tile, index) = _sites[i];
+            var yards = Vehicles.SiteYards.For(tile, null, null);
+            var mine = yards.Where(y => y.Owner == new BuildingKey(tile.Id.E, tile.Id.N, index).ToString()).ToList();
+            Check(mine.Count == 1, $"{site} has a yard ({mine.Count})");
+            if (mine.Count != 1) continue;
+
+            var slots = new List<Vehicles.VehicleSlot>();
+            Vehicles.DormantSlots.ForSite(tile.Id, mine, ProbeCars, ProbeHeavies, ProbeTrailers,
+                (int)Player.RideKind.Trailer, slots);
+            Check(slots.Count > 0, $"{site} yard has a fleet ({slots.Count})");
+
+            var box = BuildingTypes.For(tile).Boxes[index]!.Value;
+            foreach (var s in slots)
+            {
+                var at = new Vector2((float)(s.E - tile.Id.MinE), (float)(tile.Id.MaxN - s.N));
+                if (box.DistanceTo(at) >= 1f) continue;
+                Check(false, $"{site}: a {s.KindId} stands inside its own building");
+                break;
+            }
+
+            int heavy = slots.Count(s => s.Train != 0 || Player.HeavyCatalog.For((Player.RideKind)s.KindId) != null);
+            bool wantsHeavy = site is BuildingType.Depot or BuildingType.Warehouse;
+            Check(wantsHeavy == heavy > 0,
+                $"{site} yard {(wantsHeavy ? "has" : "has no")} goods vehicles ({heavy} of {slots.Count})");
+
+            // the exterior and its yard, in a row well away from the interiors
+            var origin = new Vector3(i * YardRowPitch, 0, 1200f);
+            if (BuildingMeshBuilder.Build(tile) is { } mesh)
+                AddChild(new MeshInstance3D
+                {
+                    Name = $"Hall{i}", Position = origin,
+                    Mesh = Terrain.ChunkNode.ToArrayMesh(mesh, material),
+                });
+            foreach (var s in slots)
+            {
+                var state = new Vehicles.VehicleState((Player.RideKind)s.KindId,
+                    new Core.GlobalPos(s.E, s.N, s.Height), s.Yaw, Vector3.Zero, 0f,
+                    EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0,
+                    Train: s.Train, Load: s.Load);
+                if (state.CreateRide() is not { } ride) { Check(false, $"{site}: slot {s.Ordinal} builds no ride"); continue; }
+                var node = new Node3D
+                {
+                    Position = origin + new Vector3((float)(s.E - tile.Id.MinE), 0, (float)(tile.Id.MaxN - s.N)),
+                    Basis = new Basis(Vector3.Up, s.Yaw),
+                };
+                node.AddChild(ride.BuildVisual(-1));
+                AddChild(node);
+                if (s.Train != 0 || Player.HeavyCatalog.For((Player.RideKind)s.KindId) != null) drawnHeavies++;
+            }
+        }
+        Check(drawnHeavies > 0, $"goods vehicles build their real mesh ({drawnHeavies})");
+    }
+
+    /// <summary>How far apart the five sites stand in the yard row, metres.</summary>
+    private const float YardRowPitch = 170f;
+
+    /// <summary>The catalogues the yard pass fills from, as <c>DormantVehicles</c> does.</summary>
+    private static readonly int[] ProbeCars = Player.CarCatalog.All
+        .Where(c => c.Body.Shape is Avatar.BodyShape.Hatchback or Avatar.BodyShape.Sedan)
+        .Select(c => (int)c.Kind).ToArray();
+
+    private static readonly int[] ProbeHeavies = Player.HeavyCatalog.All
+        .Where(h => h.Takes != Player.Coupling.None || h.Label.Contains("rigid"))
+        .Select(h => (int)h.Kind).ToArray();
+
+    private static readonly int[] ProbeTrailers = Enumerable.Range(0, Player.TrailerCatalog.All.Count)
+        .SelectMany(i => new[] { Player.TrailerCatalog.Code(i, 0f), Player.TrailerCatalog.Code(i, 1f) })
+        .ToArray();
 
     /// <summary>
     /// Ordinary buildings still plan and still validate. Sites are planned on a new branch of
@@ -267,7 +354,25 @@ public partial class SiteProbe : Node3D
             image.SavePng(_shot.Replace(".png", $"_{_built[_step].Site}".ToLowerInvariant() + ".png"));
         }
         _step++;
-        if (_step >= _built.Count) { Finish(); return; }
+        // one last frame from above the row of yards: an artic has to look like an artic
+        if (_step == _built.Count)
+        {
+            var eye = GetNodeOrNull<Camera3D>("Eye");
+            if (eye == null) { Finish(); return; }
+            // the haulier's depot: the one yard whose point is that an artic is an artic
+            int depot = Math.Max(0, _sites.FindIndex(x => x.Site == BuildingType.Depot));
+            float x = depot * YardRowPitch;
+            eye.GlobalPosition = new Vector3(x - 34f, 26f, 1252f);
+            eye.LookAt(new Vector3(x, 1.5f, 1196f), Vector3.Up);
+            eye.MakeCurrent();
+            return;
+        }
+        if (_step > _built.Count)
+        {
+            GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_yards.png"));
+            Finish();
+            return;
+        }
 
         var (_, layout, node) = _built[_step];
         var hall = layout.GroundFloor.Rooms[0];
