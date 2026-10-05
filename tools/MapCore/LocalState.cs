@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using UnitSport.Terrain.Format;
 
-namespace UnitSport.Tools.MapSetup;
+namespace UnitSport.Map;
 
 /// <summary>
 /// What is already on this machine: which terrain tiles are downloaded, which are built, and

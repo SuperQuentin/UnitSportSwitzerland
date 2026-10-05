@@ -204,7 +204,7 @@ dotnet run --project tools/MapSetup -- --bbox 2580,1110,2585,1115 --layers all
 ```
 
 The map, tile sizes, cantons and place names come from the committed
-`tools/MapSetup/switzerland.bin`, so nothing is downloaded before you confirm.
+`tools/MapCore/switzerland.bin`, so nothing is downloaded before you confirm.
 `--bake` rebuilds that file from swisstopo. It is slow (about 40k HEAD requests) and only
 needed when swisstopo publishes new surveys.
 
@@ -531,7 +531,8 @@ src/
 tools/
   TerrainFormat/       binary formats shared by preprocessor and game
   TerrainPreprocessor/ the offline pipeline
-  MapSetup/            region setup wizard
+  MapCore/             country map, selection, plan: shared by MapSetup and the game
+  MapSetup/            region setup wizard (the terminal front-end on MapCore)
   RoadGen/ BlendCheck/ road generation and terrain blend checks
   swiss_data.py, swiss_relief.py    data downloader, 500 m relief for generated terrain
   export_buildings.py  FileGDB -> GeoPackage (needs GDAL)

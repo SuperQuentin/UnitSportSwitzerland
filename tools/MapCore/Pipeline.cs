@@ -2,10 +2,9 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Spectre.Console;
 using UnitSport.Terrain.Format;
 
-namespace UnitSport.Tools.MapSetup;
+namespace UnitSport.Map;
 
 [Flags]
 public enum Layers
@@ -117,7 +116,9 @@ public static partial class Planner
         var sel = c.Selection.Tiles.ToList();
         var stats = c.Stats;
         bool py = c.Python != null;
-        string noPython = "Python not found (needed for downloads)";
+        // Terrain, swissTLM3D and GWR are downloaded by SwissDownload now (#515 phase 1), so only the
+        // datasets whose resolvers are not ported yet still gate on Python.
+        string noPython = "Python not found (needed for this dataset)";
 
         // ---- which tiles need what -------------------------------------------------------
         var toDownload = sel.Where(t => !c.Local.Downloaded.Contains(t) && !c.Local.Built.Contains(t)).ToList();
@@ -138,11 +139,14 @@ public static partial class Planner
             DiskBytes = downloadBytes,
             DiskPath = p.AltiDir,
             Seconds = downloadBytes / stats.EffectiveDownload + (toDownload.Count > 0 ? 5 : 0),
-            Skip = toDownload.Count == 0 ? "all tiles already downloaded or built" : !py ? noPython : null,
+            // No Python needed since #515 phase 1: SwissDownload talks to the STAC API itself, and
+            // shares swiss_data.py's manifest, so neither tool re-downloads what the other fetched.
+            Skip = toDownload.Count == 0 ? "all tiles already downloaded or built" : null,
             Run = r =>
             {
+                // still written: the terminal tool's --resume and swiss_data.py --tiles-file read it
                 WriteTiles(DownloadTilesFile(p), toDownload);
-                return r.SwissData(["--out", p.AltiDir, "swissalti3d", "--tiles-file", DownloadTilesFile(p)]);
+                return r.Download(() => SwissDownload.AltiAsync(p.AltiDir, toDownload, r.Progress, r.Cancellation));
             },
         });
 
@@ -157,8 +161,8 @@ public static partial class Planner
             DiskBytes = needTlm && !c.Local.TlmZip ? tlmZip : 0,
             DiskPath = p.TlmDir,
             Seconds = tlmZip / stats.EffectiveDownload + 5,
-            Skip = !wantRoads ? "roads layer off" : !needTlm || c.Local.TlmZip ? "already here" : !py ? noPython : null,
-            Run = r => r.SwissData(["--out", p.TlmDir, "swisstlm3d"]),
+            Skip = !wantRoads ? "roads layer off" : !needTlm || c.Local.TlmZip ? "already here" : null,
+            Run = r => r.Download(() => SwissDownload.TlmAsync(p.TlmDir, r.Progress, r.Cancellation)),
         });
 
         // ---- buildings sheets -----------------------------------------------------------------
@@ -203,8 +207,8 @@ public static partial class Planner
             DiskPath = p.GwrDir,
             Seconds = gwrZip / stats.EffectiveDownload + 3,
             Skip = !wantGwr ? "cadastre and places off" : gwrCovered ? "data.sqlite already covers the selection"
-                 : c.Local.GwrZips.Contains(gwrPick) ? "already here" : !py ? noPython : null,
-            Run = r => r.SwissData(["--out", p.GwrDir, "gwr", "--canton", gwrPick]),
+                 : c.Local.GwrZips.Contains(gwrPick) ? "already here" : null,
+            Run = r => r.Download(() => SwissDownload.GwrAsync(p.GwrDir, gwrPick, r.Progress, r.Cancellation)),
         });
 
         // ---- cycle routes -----------------------------------------------------------------------
@@ -451,9 +455,12 @@ public static partial class Planner
         steps.Insert(firstTool, new Step
         {
             Title = "Prepare processing tools",
-            Detail = "dotnet build of TerrainPreprocessor and RoadGen (Release)",
-            Seconds = File.Exists(StepRun.ToolDll(p, "TerrainPreprocessor")) && File.Exists(StepRun.ToolDll(p, "RoadGen")) ? 8 : 45,
-            Skip = anyTool ? null : "nothing to process",
+            Detail = "dotnet build of RoadGen (Release); the preprocessor runs in-process",
+            // No repository means the game, which has the processing tools compiled into it and no
+            // .NET SDK to build anything with: there is nothing for this step to do there.
+            Seconds = p.Root == null ? 0
+                : File.Exists(StepRun.ToolDll(p, "TerrainPreprocessor")) && File.Exists(StepRun.ToolDll(p, "RoadGen")) ? 8 : 45,
+            Skip = p.Root == null ? "built into the game" : anyTool ? null : "nothing to process",
             Run = r => r.BuildTools(),
         });
         return steps;
@@ -477,23 +484,43 @@ public static partial class Planner
 public enum LineProgress { None, Counter, Batch, Source }
 
 /// <summary>
+/// Where a running step reports to. The terminal tool implements this over a Spectre progress
+/// bar; the game implements it over <c>DownloadJob</c>, which the map screen polls. Keeping it
+/// this small is the point: a step may only move a bar, say what it is doing, and write its log.
+/// </summary>
+public interface IStepProgress
+{
+    /// <summary>How far the step has got, 0-100.</summary>
+    double Value { set; }
+
+    /// <summary>
+    /// The step's latest line, shown beside the bar. Already trimmed and shortened by
+    /// <see cref="StepRun"/>; an implementation that renders markup must escape it itself.
+    /// </summary>
+    void Show(string text);
+
+    /// <summary>Every line the step produced, verbatim, for the step's log file.</summary>
+    void Log(string line);
+}
+
+/// <summary>
 /// Runs one step: starts the tool, logs every line to the step's log file, turns the tool's own
 /// progress output into the progress bar, and shows its latest line beside it.
 /// </summary>
 public sealed partial class StepRun
 {
     private readonly SetupContext _c;
-    private readonly ProgressTask _task;
+    private readonly IStepProgress _progress;
     private readonly string _title;
     private readonly StreamWriter _log;
     private readonly CancellationToken _ct;
 
     public string? Error { get; private set; }
 
-    public StepRun(SetupContext c, ProgressTask task, string title, StreamWriter log, CancellationToken ct)
+    public StepRun(SetupContext c, IStepProgress progress, string title, StreamWriter log, CancellationToken ct)
     {
         _c = c;
-        _task = task;
+        _progress = progress;
         _title = title;
         _log = log;
         _ct = ct;
@@ -508,17 +535,32 @@ public sealed partial class StepRun
     private void Log(string line)
     {
         lock (_log) _log.WriteLine(line);
+        _progress.Log(line);
     }
 
+    /// <summary>The step's latest line, shortened to fit beside a progress bar.</summary>
     private void Show(string line)
     {
         var text = line.Trim();
         if (text.Length > 60) text = text[..59] + "…";
-        _task.Description = $"{Markup.Escape(_title)} [grey]{Markup.Escape(text)}[/]";
+        _progress.Show(text);
     }
 
-    public static string ToolDll(Paths p, string name) =>
-        Path.Combine(p.Tools, name, "bin", "Release", name == "TerrainPreprocessor" ? "net9.0" : "net8.0", name + ".dll");
+    /// <summary>
+    /// The built tool, under whichever target framework folder it landed in — the preprocessor moved
+    /// from net9.0 to net8.0 when the game started hosting it (#515 phase 2), and a machine may
+    /// still have the old build lying beside the new one.
+    /// </summary>
+    public static string ToolDll(Paths p, string name)
+    {
+        string release = Path.Combine(p.Tools, name, "bin", "Release");
+        foreach (string framework in new[] { "net8.0", "net9.0" })
+        {
+            string dll = Path.Combine(release, framework, name + ".dll");
+            if (File.Exists(dll)) return dll;
+        }
+        return Path.Combine(release, "net8.0", name + ".dll");
+    }
 
     public async Task<bool> BuildTools()
     {
@@ -532,17 +574,79 @@ public sealed partial class StepRun
                 return false;
             }
         }
-        _task.Value = 100;
+        _progress.Value = 100;
         return true;
     }
 
+    /// <summary>
+    /// Runs one of the C# tools. The preprocessor runs <b>in-process</b> since #515 phase 2 — no
+    /// .NET SDK, no subprocess, and cancellation reaches its stage loops directly — which is what
+    /// lets the game build tiles at all. RoadGen is still a subprocess: its entry point is
+    /// top-level statements with no library seam, and its one step is skipped in practice (the
+    /// extraction step does the network pass).
+    /// </summary>
     public async Task<bool> Tool(string name, IReadOnlyList<string> args, LineProgress parse)
     {
+        if (name == "TerrainPreprocessor")
+        {
+            Log($"$ {name} {string.Join(' ', args)}  (in-process)");
+            int inProcess = await UnitSport.Tools.Preprocessor.Preprocessor.RunAsync(
+                args, new ToolLog(this, parse), _ct);
+            if (inProcess != 0) Fail($"{name} returned {inProcess}");
+            return inProcess == 0;
+        }
+
+        if (_c.Paths.Root == null)
+        {
+            Fail($"{name} can only run from the repository, and this is not one");
+            return false;
+        }
         var dll = ToolDll(_c.Paths, name);
         if (!File.Exists(dll)) { Fail($"{dll} missing (the tools step did not run?)"); return false; }
         int code = await Exec("dotnet", [dll, .. args], parse);
         if (code != 0) Fail($"{name} exited with {code}");
         return code == 0;
+    }
+
+    /// <summary>
+    /// The in-process preprocessor's output, turned into exactly what the subprocess path makes of
+    /// the same lines — so a step's bar and its log read the same either way.
+    /// </summary>
+    private sealed class ToolLog : UnitSport.Tools.Preprocessor.IPreprocessorLog
+    {
+        private readonly StepRun _run;
+        private readonly LineProgress _parse;
+
+        public ToolLog(StepRun run, LineProgress parse)
+        {
+            _run = run;
+            _parse = parse;
+        }
+
+        public void Line(string text) => _run.OnToolLine(text, _parse);
+
+        public void Progress(string stage, double fraction)
+        {
+            if (stage.Length > 0) _run.Show(stage);
+            _run._progress.Value = Math.Clamp(fraction * 100.0, 0, 100);
+        }
+    }
+
+    /// <summary>One line of a tool's output: logged, shown, and scanned for its own counter.</summary>
+    private void OnToolLine(string line, LineProgress parse)
+    {
+        Log(line);
+        Show(line);
+        var m = parse switch
+        {
+            LineProgress.Counter => CounterLine().Match(line),
+            LineProgress.Batch or LineProgress.Source => BatchLine().Match(line),
+            _ => Match.Empty,
+        };
+        if (m.Success && double.TryParse(m.Groups[2].Value, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double total) && total > 0)
+            _progress.Value = 100.0 * double.Parse(m.Groups[1].Value,
+                System.Globalization.CultureInfo.InvariantCulture) / total;
     }
 
     public async Task<bool> Python(string what, IReadOnlyList<string> args, LineProgress parse)
@@ -551,6 +655,30 @@ public sealed partial class StepRun
         int code = await Exec(_c.Python, args, parse);
         if (code != 0) Fail($"{what} exited with {code}");
         return code == 0;
+    }
+
+    /// <summary>The step's progress sink, for a stage that reports its own progress.</summary>
+    public IStepProgress Progress => _progress;
+
+    /// <summary>Cancelled when the player stops the download.</summary>
+    public CancellationToken Cancellation => _ct;
+
+    /// <summary>
+    /// Runs one of the C# downloads (#515 phase 1) and folds what it measured back into this
+    /// machine's rate, the way <see cref="SwissData"/> does for the Python tool it replaced.
+    /// </summary>
+    public async Task<bool> Download(Func<Task<DownloadResult>> download)
+    {
+        var result = await download();
+        if (result.Error != null)
+        {
+            Fail(result.Error);
+            return false;
+        }
+        Log($"{result.Files} files, {result.Bytes:N0} bytes in {result.Seconds:F1} s ({result.Skipped} already current)");
+        if (result.Bytes > 50_000_000 && result.Seconds > 1)
+            _c.Stats.DownloadBytesPerSec = Stats.Blend(_c.Stats.DownloadBytesPerSec, result.Bytes / result.Seconds);
+        return true;
     }
 
     /// <summary>swiss_data.py with machine-readable progress; learns the download rate from it.</summary>
@@ -594,7 +722,7 @@ public sealed partial class StepRun
                         _ct.ThrowIfCancellationRequested();
                         dst.Write(buffer, 0, n);
                         done += n;
-                        _task.Value = 100.0 * done / Math.Max(1, total);
+                        _progress.Value = 100.0 * done / Math.Max(1, total);
                     }
                 }
                 File.Move(tmp, dest, overwrite: true);
@@ -640,7 +768,7 @@ public sealed partial class StepRun
                 _ => Match.Empty,
             };
             if (m.Success && double.TryParse(m.Groups[2].Value, out double total) && total > 0)
-                _task.Value = 100.0 * double.Parse(m.Groups[1].Value) / total;
+                _progress.Value = 100.0 * double.Parse(m.Groups[1].Value) / total;
         }
         proc.OutputDataReceived += (_, e) => OnLine(e.Data);
         proc.ErrorDataReceived += (_, e) => OnLine(e.Data);
@@ -674,7 +802,7 @@ public sealed partial class StepRun
                     break;
                 case "progress":
                     long bytes = e.GetProperty("bytes").GetInt64(), total = e.GetProperty("bytes_total").GetInt64();
-                    _task.Value = total > 0 ? 100.0 * bytes / total : 0;
+                    _progress.Value = total > 0 ? 100.0 * bytes / total : 0;
                     Show($"{e.GetProperty("done").GetInt32():N0}/{e.GetProperty("total").GetInt32():N0} files, "
                          + $"{bytes / 1e9:F2}/{total / 1e9:F2} GB, {e.GetProperty("rate").GetDouble() / 1e6:F0} MB/s");
                     break;

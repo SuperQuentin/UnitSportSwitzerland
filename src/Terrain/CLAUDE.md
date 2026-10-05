@@ -18,6 +18,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `building-types` — Building types: `BuildingTypes` groups a tile's solids (a church's nave + bell tower) at runtime; one church interior, every...
 - `building-triangles` — read building triangles with `b.Tri(t)`; wall/roof split is `BuildingTriangles.RoofNormalY`, never a local copy
 - `industrial-sites` — Industrial sites (#497, #496 phase 1): `BuildingTypes.SiteFor` invents warehouse/works/depot/body shop/dealership from the building alone; `InteriorGenerator.Industrial.cs` plans a full-height hall + a low service block (`RoomPlan.Clear`), aisles/lines/bays/plinths laid out by the hall itself, 25 new pieces, flat `SiteAbundance` loot, high-bay `RoomLights`, plan v13, `--sitecheck`
+- `loading-bays` — Loading bays (#528, #496 phase 2): `DoorBudget.Bays` per site type, placed beside the main door and on both sides of it, `Hang = RollUp, Vehicle = true` and nothing else needed; the pier between bays is not `MinGap`; a showroom's front door is no longer a shutter; `--doorcheck` had encoded "every extra door is a pedestrian door"
 - `cellars-and-room-variety` — Cellars (`Below`, `FloorY`), shelters with blast doors, basement program (laundry, guest room, cinema, carnotzet, music room), new room/furniture types, logical room order, plan v8 (#213)
 - `door-portals` — Doors open (shared, auto-close) and you walk (or drive, garages and barns) through them: `DoorLink` map, portal camera + clip plane, sill crossing, third-person arm through doors, near/far by a doorway, `--doorcam` check, vehicles, linked spaces, building sounds
 - `interior-light` — Rooms lit by the hour in every style (#388): one interior body + PS1/Cartoon/Realistic wrappers, `RoomLights` table (window daylight, sun patches, lamps), indoor ambient, portals tonemapped once
@@ -35,6 +36,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `generated-relief` — The generator: 500 m heightmap of CH embedded, lakes, drainage -> rivers/roads/rails/villages, 25 m + 5 m field lattices, gotchas (carve only down, wall span)
 - `cachingchunksource` — `CachingChunkSource`: decorates the source chain with a byte-budgeted LRU of decoded tiles, so ground that is left...
 - `road-markings` (tools note) — v3 road paint: `RoadPaintBuilder` draws the `.road` PANT layer as a second road surface (style 6, depth bias, dither fade)
+- `download-job` — Background region downloads (#515): `DownloadJob` runs MapCore's Planner steps on a worker, survives worlds deliberately, polled progress; new tiles arrive on the next world load
 - `data-location` — Data location: `--chunks` > `UNITSPORT_CHUNKS` > `terrain_location.json` (MapSetup's drive picker) > `terrain_chunks/`; game and server alike
 - `perf-lod-trees` — Ring strides by screen-space error, trees thinned by ring (`VisibleInstanceCount`), shared unit tree meshes, free every replaced mesh
 - `landings` (world) — `PierMeshBuilder`: a tile's piers and jetties as one more roads-mesh surface (Prop role) and road collision cells; `IChunkSource.LoadLandingsAsync`; `ChunkManager.RebuildPiers` when the landings change

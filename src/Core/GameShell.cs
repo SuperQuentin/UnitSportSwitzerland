@@ -81,7 +81,8 @@ public partial class GameShell : Node
             "--generated", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--shoulder", "--voice", "--time",
             "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--airliner", "--perflog",
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world",
-            "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial", "--multiplayer", "--solo", "--uishot", "--menucheck", "--leavecheck",
+            "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
+            "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
             "--leave-restart", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
         };
         foreach (string a in args)
@@ -153,6 +154,8 @@ public partial class GameShell : Node
             }
             else if (CmdArgs.Has("--multiplayer")) Push(MultiplayerScreen.Create());
             else if (CmdArgs.Has("--solo")) Push(SoloScreen.Create());
+            else if (CmdArgs.Has("--map")) Push(Ui.MapScreen.Create());
+            else if (CmdArgs.Has("--landing")) LaunchVia(new WorldLaunch { Mode = GameMode.Explore });
             // "--autostart": straight into Explore through the loading screen, for screenshotting
             // it (and, with --menu, the pause menu once in)
             if (CmdArgs.Has("--autostart")) Callable.From(() => Launch(new WorldLaunch { Mode = GameMode.Explore })).CallDeferred();
@@ -160,6 +163,7 @@ public partial class GameShell : Node
         if (CmdArgs.Has("--controls")) GetTree().CreateTimer(1.5).Timeout += () => _help.Open();
         if (UiShot() is { } shot) GetTree().CreateTimer(shot.Seconds).Timeout += () => SaveShot(shot.Path);
         if (MenuCheck.Requested()) AddChild(new MenuCheck(this));
+        if (Ui.MapCheck.Requested()) AddChild(new Ui.MapCheck(this));
         if (LeaveCheck.Requested()) AddChild(new LeaveCheck(this));
     }
 
@@ -307,6 +311,34 @@ public partial class GameShell : Node
 
     // ---- sessions -------------------------------------------------------------------------------
 
+    /// <summary>
+    /// Shows the map so the player picks where to land, then launches (#515). The marker starts
+    /// where they landed last, else Riddes. Skipped when the launch already names a landing (the
+    /// map has just been through), for a GPX replay (the track says where to be), and for any
+    /// command-line run, which must still boot straight into the world.
+    /// </summary>
+    public void LaunchVia(WorldLaunch launch)
+    {
+        if (launch.Landing != null || launch.FromCommandLine || Direct || launch.Mode == GameMode.GpxReplay)
+        {
+            Launch(launch);
+            return;
+        }
+
+        var settings = GameSettings.Current;
+        var start = settings.LastLandingE != 0 || settings.LastLandingN != 0
+            ? (settings.LastLandingE, settings.LastLandingN)
+            : (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
+
+        Push(Ui.MapScreen.CreateLanding(start, landing =>
+        {
+            GameSettings.Current.LastLandingE = landing.E;
+            GameSettings.Current.LastLandingN = landing.N;
+            GameSettings.Current.Save();
+            Launch(launch with { Landing = landing });
+        }));
+    }
+
     /// <summary>Builds a world for <paramref name="launch"/> behind the loading screen.</summary>
     public void Launch(WorldLaunch launch)
     {
@@ -331,7 +363,7 @@ public partial class GameShell : Node
     {
         GameSettings.Current.LastHost = endpoint;
         GameSettings.Current.Save();
-        Launch(new WorldLaunch
+        LaunchVia(new WorldLaunch
         {
             Mode = GameMode.Multiplayer,
             Endpoint = endpoint,
@@ -382,7 +414,10 @@ public partial class GameShell : Node
         {
             _hostProbe.Dispose();
             _hostProbe = null;
-            Launch(new WorldLaunch
+            // The server is up; the map now asks where to land, as it does for any other world.
+            // Safe to push a page from here: the probe is already disposed, so this branch cannot
+            // be re-entered while the player is choosing.
+            LaunchVia(new WorldLaunch
             {
                 Mode = GameMode.Multiplayer,
                 Endpoint = endpoint,

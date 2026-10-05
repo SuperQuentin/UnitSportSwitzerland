@@ -19,7 +19,12 @@ public sealed partial class ProceduralWorld
     /// order, so every peer derives the same network from the same file.
     /// </para>
     /// </summary>
-    private sealed class Relief
+    /// <remarks>
+    /// Internal rather than private since #515: the map screen draws its shaded relief straight from
+    /// this lattice (<c>Ui/MapRelief</c>), and copying 1101x861 heights and lake ids out to a public
+    /// shape would double the memory for no gain. Still out of the assembly's public surface.
+    /// </remarks>
+    internal sealed class Relief
     {
         private const string ResourceName = "swiss_relief.gz";
 

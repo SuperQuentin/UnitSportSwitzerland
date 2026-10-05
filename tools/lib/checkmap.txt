@@ -80,6 +80,9 @@ src/Core/TestWorld       quick  --hitboxcheck --world flat
 src/Core/Systems         quick  --hitboxcheck --world flat
 src/Ui/                  quick  --leavecheck --world fixture
 src/Ui/                  quick  --menucheck --systems ui
+src/Ui/Map               quick  --mapcheck --systems ui
+tools/MapCore/           quick  --mapcheck --systems ui
+src/Core/TerrainPaths    quick  --mapcheck --systems ui
 src/Core/GameShell       quick  --menucheck --systems ui
 src/Core/Systems         quick  --menucheck --systems ui
 src/Core/ClientWorld     quick  --leavecheck --world fixture
@@ -295,6 +298,7 @@ src/BattleRoyale/BrPlane quick  --flycheck freighter --world flat
 src/Player/Airliner      quick  --flycheck an124 --world flat
 src/Avatar/An124         quick  --flycheck an124 --world flat
 src/Player/AirlinerCirc  quick  --flycheck an124 --world flat
+src/Player/Airliner      quick  --flycheck an124 --world flat --airliner sim
 src/Avatar/An124         quick  --an124check --world fixture --traffic 0
 src/Player/An124Check    quick  --an124check --world fixture --traffic 0
 src/Player/Airliner      quick  --an124check --world fixture --traffic 0

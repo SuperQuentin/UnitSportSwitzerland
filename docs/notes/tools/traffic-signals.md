@@ -52,7 +52,7 @@
   source BASt V 149) / 1 s (bikes), all-red 2 s fixed (SN 640 838 computes it per conflict,
   paywalled), min green 4 s, pedestrian green >= 5 s, pedestrian clearance 2/3 of the crossing
   at 1.2 m/s (2-8 s) as yellow on 3-lens heads, red on 2-lens ones (Geneva, `PedestrianAmber`
-  by canton from `tools/MapSetup/switzerland.bin`, `Cantons`); bike lead green 3 s (the cars'
+  by canton from `tools/MapCore/switzerland.bin`, `Cantons`); bike lead green 3 s (the cars'
   intergreen grows by it); turn phases 8 s; cycle ~60 s (2 phases), 75 (3-4), 90 (5-6), max 120,
   greens split by rank. A group green in two phases in a row does not change. Offset: a hash of
   the junction's LV95 metres (junctions are not coordinated, #356). `State(group, t)` with the
