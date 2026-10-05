@@ -128,10 +128,10 @@ public partial class XrMonitor : CanvasLayer
         _announce = true;
     }
 
-    /// <summary>F7 steps through the monitor views (keyboard only: the hands are in the headset).</summary>
+    /// <summary>F8 steps through the monitor views (keyboard only: the hands are in the headset). Not F7, the airliner's flaps down (#436).</summary>
     public override void _Input(InputEvent e)
     {
-        if (e is not InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.F7 }) return;
+        if (e is not InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.F8 }) return;
         var s = Core.GameSettings.Current;
         s.VrMonitor = (MonitorView)(((int)s.VrMonitor + 1) % 4);
         s.Commit();

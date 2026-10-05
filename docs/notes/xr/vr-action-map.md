@@ -24,28 +24,28 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 
 | Action | Kb / Pad | VR now | VR target |
 |---|---|---|---|
-| move_* / sprint | WASD, L stick / Shift, L3 | ok: L stick head-relative, L3 | + arc **teleport** and room-scale (comfort setting) |
-| look / turn | mouse, R stick | ok: head + snap 30° | snap angle 15/30/45 or smooth (setting) |
+| move_* / sprint | WASD, L stick / Shift, L3 | ok: L stick head-relative, L3, or arc teleport (setting, #439) | room-scale walking |
+| look / turn | mouse, R stick | ok: head + snap 15/30/45° or smooth (setting, #439) | keep |
 | jump | Space / A | ok: A | keep |
-| crouch_slide | Ctrl, C / B | ok: B | **physical crouch** + B |
-| interact_mount | E / Y | ok: Y; doors by grip | **grip the thing** (seat, ladder, crate, loot, radio, item); Y ranged fallback |
-| ride_menu | R / Y with nothing near | ok: Y | + **wrist menu** |
+| crouch_slide | Ctrl, C / B | ok: B, or crouch for real (#437) | keep |
+| interact_mount | E / Y | ok: Y; grip a door, an item, a radio, or reach out and grip what E would act on (#437) | keep |
+| ride_menu | R / Y with nothing near | ok: Y, wrist menu (#437) | keep |
 | car_door / gather | G / X (tap / hold) | ok: X; doors by grip | gather = **grip and pull** the resource |
-| emote_wheel | B / D-pad ↑ | gap: R stick ↑ (engine when mounted) | hold **L3** → radial aimed with the hand |
-| toggle_mode | T / D-pad ↓ | gap | wrist menu |
-| climb ladder | W / S on a ladder | ok: stick | **hand over hand** grab; rocks too (stamina) |
+| emote_wheel | B / D-pad ↑ | ok: hold R stick ↑, aim with the right hand (#437) | keep |
+| toggle_mode | T / D-pad ↓ | ok: wrist menu (#437) | keep |
+| climb ladder | W / S on a ladder | ok: stick; rock faces and walls hand over hand (#439, stamina) | keep |
 
 ## Items, building, inventory
 
 | Action | Kb / Pad | VR now | VR target |
 |---|---|---|---|
 | use_item / aim_item | LMB, RMB / RB, LB | ok: R / L trigger | camera and binoculars **raised to the eye** = aim |
-| drop_item | Q / — | gap | **open the grip** holding it; throw by release velocity |
-| next / prev_item, slot_1-6 | wheel, 1-6 / D-pad → | partial: R stick ↓ | **hip hotbar** (grip a slot) + R stick ↓ |
+| drop_item | Q / — | ok: fling an empty squeeze, or the wrist menu (#437) | a real throw by release velocity |
+| next / prev_item, slot_1-6 | wheel, 1-6 / D-pad → | ok: R stick ↓, grip at the right / left hip (#437) | slots shown at the hip |
 | inventory | I, Tab / Back | ok: Menu hold | keep |
 | quick_wheel | X / D-pad ← | gap | hold **R3** → radial |
 | build_turn, next piece | R, aim+wheel / D-pad ↑, LB+D-pad → | gap | **twist the hand** while aiming; R stick ←/→ steps the piece |
-| bird_journal | J / — | gap | wrist menu |
+| bird_journal | J / — | ok: wrist menu (#437) | keep |
 
 ## Mounted and driving
 
@@ -54,51 +54,55 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | throttle / brake / steer | W S A D / RT LT stick | ok: triggers; **wheel by grip** | keep |
 | tuck_boost / trick / boost | Shift F Q / X RB LB | ok: X, grips | keep |
 | engine_toggle | Z / D-pad ↑ | ok: R stick ↑ | keep (R3) |
-| lights_toggle | L / D-pad → | gap (R stick ↓ gives D-pad →, labelled "next item") | R stick → |
-| roof / horn / couple | O H / D-pad ← | gap | R stick ← |
-| tune | T / D-pad ↓ | gap | R stick ↓ |
-| radio next / prev / panel | U P R / — | gap | **reach to the dash radio**: grip = panel, poke ← → |
+| lights_toggle | L / D-pad → | ok: R stick → (#436) | keep |
+| roof / horn / couple | O H / D-pad ← | ok: R stick ← (#436) | keep |
+| tune | T / D-pad ↓ | ok: R stick ↓ (#436) | keep |
+| radio next / prev / panel | U P R / — | ok: dash pokes (#438) | keep |
 | take_wheel (passenger) | F / RB | ambiguous (free grip) | **grip the wheel** from the passenger seat |
 | shift up / down, clutch | Shift Ctrl C / RB LB B | ok: grips, B | keep |
-| gear 1-6, R, N | 1-6 ` 0 / — | gap | **H-pattern lever by hand** (`XrLever`) |
-| retarder | ' ; / — | gap | **stalk by hand** |
-| bus kneel / destination | K N / — | gap | **dash buttons by poke** |
-| steamer whistle | H / D-pad ← | gap | **pull the cord** |
-| look_behind | B / — | dead binding (never read) | head turn; remove the action |
+| gear 1-6, R, N | 1-6 ` 0 / — | ok: H-pattern lever by hand (#438) | keep |
+| retarder | ' ; / — | ok: stalk by hand (#438) | keep |
+| bus kneel / destination | K N / — | ok: dash pokes (#438) | keep |
+| steamer whistle | H / D-pad ← | ok: R stick ←, or pull the cord (#438) | keep |
+| look_behind | B / wheel button | ok: turn your head; held on a keyboard or wheel the view turns round (#436) | keep |
 
 ## Flying
 
 | Action | Kb / Pad | VR now | VR target |
 |---|---|---|---|
 | pitch / roll | WASD / L stick | ok | + optional yoke / stick grab |
-| throttle / climb / descend | Shift Space Ctrl / RT LT A B | gap: triggers dead (raw device-0 read) | **R / L trigger, analog** |
+| throttle / climb / descend | Shift Space Ctrl / RT LT A B | ok: R / L trigger, analog (#436) | keep |
 | fire / pigeon drop | LMB / RB | ok: R trigger | keep |
-| airliner flaps | F6 F7 / LB RB | ok: grips | + **flap lever by hand** |
-| speedbrake / gear / park brake | / G . / D-pad ← X — | partial: X only | **cockpit levers by hand** |
-| autopilot / trim | Y Home End / — | gap | **poke** AP, trim wheel by hand |
-| wingsuit / canopy | stick, Space | ok: stick, A | **arms spread** glide, lean steer; **pull the brake toggles** |
-| pigeon flap / dive | Space Ctrl / A B | ok: A B | + **flap the arms** |
+| airliner flaps | F6 F7 / LB RB | ok: grips, or the flap lever by hand (#438) | keep |
+| speedbrake / gear / park brake | / G . / D-pad ← X — | ok: levers and poke by hand (#438) | keep |
+| autopilot / trim | Y Home End / — | ok: AP poke, trim wheel by hand (#438) | keep |
+| wingsuit / canopy | stick, Space | ok: stick, A; arms roll the suit, hands pull the brakes (#438) | keep |
+| pigeon flap / dive | Space Ctrl / A B | ok: A B, flap the arms (#438) | keep |
 
 ## World, UI, others
 
 | Action | Kb / Pad | VR now | VR target |
 |---|---|---|---|
 | menu | Esc / Start | ok: Menu tap | keep |
-| teleport (place search, BR map) | M / — | gap | **hand-held 3D Swiss map**; wrist menu |
-| help / debug | F1 F9 / — | gap | wrist menu |
+| teleport (place search, BR map) | M / — | ok: wrist menu (#437), hand-held map with point and pull (#439) | keep |
+| help / debug | F1 F9 / — | help: wrist menu (#437); debug: gap | debug in the wrist menu for admins |
 | fly camera up / down / boost | Space Ctrl… / A B L3 | ok: A B L3 | keep |
 | BR jump out / spectate | E, ←→ / Y, D-pad | ok | spectate on R stick ←/→ |
 | loot, shop, lock, Simon, vending | mouse + keys | ok: laser + trigger | lock dial by **wrist twist** |
 | chat | Enter, / | gap: no keyboard | laser key grid on the `XrUi` panel |
-| watch | — | — | **Swiss watch** on the left wrist (time, altitude, speed); a look opens the wrist menu |
+| watch | — | ok: Swiss watch on the left wrist (#439) | keep |
 
-## Coherence findings (what violates the rules today)
+## Coherence findings (what violated the rules)
+
+Status after #436: 1, 2, 5, 6 fixed; 3 and 9 kept on purpose (below); 4 and 7 go to the hands
+work (#437, #438); 8 fixed by #435.
 
 1. Flight, GPX replay and the garage read `Input.GetJoyAxis(0, Trigger*)` raw (`FootPlayer.FlyPhysics`,
    `Gpx/PlaybackCamera`, `Vehicles/GarageUi`): they skip the input map and VR's parsed pad (R2).
 2. D-pad ← and ↓ cannot be reached in VR, and R stick ↓ sends D-pad →, which is "next item" on foot
    but "lights" mounted (R3).
-3. R stick ↑ is the emote wheel on foot and the engine mounted (R2).
+3. R stick ↑ is the emote wheel on foot and the engine mounted. Kept: one meaning per context is
+   what R2 asks, and the two contexts never overlap.
 4. A free grip is take_wheel / trick / boost; a grip should mean "grab what is near" (R1).
 5. The VR monitor's F7 swallows the keyboard's flaps_down (`XrMonitor`).
 6. `look_behind` is bound, listed in F1 and in the wheel presets, but never read.
@@ -106,4 +110,6 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 8. In VR, prompts show Xbox names (`PlayerInput` pins `Gamepad`), and about 20 UI strings type keys
    by hand (R6).
 9. `VendingUi` and `RadioUi` read logical keycodes; `LockPickUi`, `ShopUi` and crafting read raw
-   Shift (physical-key rule, `core/key-hints`).
+   Shift (physical-key rule, `core/key-hints`). Kept: the vending code and the radio's `/` and
+   Ctrl+F are typed characters, so the printed letter is the right one; Shift sits in the same
+   place on every layout, and the pad paths (sprint, the catalogue's X / Y) already exist.

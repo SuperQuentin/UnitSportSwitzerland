@@ -138,6 +138,10 @@ public partial class BrMap : CanvasLayer
                 _br.Waypoint = _br.Waypoint is { } wp && ToScreen(wp).DistanceTo(right.Position) < 16f ? null : at;
                 break;
             }
+            case InputEventMouseButton { ButtonIndex: MouseButton.Middle, Pressed: true } middle:
+                // a ping for the team (#469), where the click is
+                _br.PingMap(ToZone(middle.Position));
+                break;
             case InputEventMouseMotion motion when _dragging:
                 _pan -= BrMapDraw.Screen(motion.Relative / Ppm);
                 Clamp();

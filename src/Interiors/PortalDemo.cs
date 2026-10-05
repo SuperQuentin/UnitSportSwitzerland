@@ -49,7 +49,7 @@ public partial class PortalDemo : Node3D
             new[] { FurnitureType.Sofa, FurnitureType.Shelf, FurnitureType.Plant, FurnitureType.Rug }),
         // B: across the street, facing A
         new("B", new Vector2(0, 12), 10, 8, BuildingKind.House, new[] { (0f, false) },
-            new[] { FurnitureType.Table, FurnitureType.Wardrobe, FurnitureType.Tv }),
+            new[] { FurnitureType.Table, FurnitureType.Wardrobe, FurnitureType.Tv, FurnitureType.Sink }),
         new("C", new Vector2(14, -12), 9, 8, BuildingKind.House, new[] { (0f, true) },
             new[] { FurnitureType.Sofa, FurnitureType.Tv, FurnitureType.Rug }),
         new("D", new Vector2(26, -12), 9, 8, BuildingKind.Apartment, new[] { (0f, true) },
@@ -195,6 +195,7 @@ public partial class PortalDemo : Node3D
         ("garage_shut", 2.0),    // and down: the leaf over the facade's baked door, no flicker
         ("garage_inside", 2.0),  // from inside F, out through its door
         ("garage_inside_shut", 2.0), // and shut: its slats from inside, not a hole
+        ("mirror", 2.0),         // in front of B's washbasin: its wall mirror (#439)
         ("crossing", 4.0),       // the figure walks in through A's front door
     };
 
@@ -275,6 +276,10 @@ public partial class PortalDemo : Node3D
             case "barn_inside":
             case "barn_inside_shut":
                 _camera.GlobalTransform = Look(barn.Inside * new Vector3(1.2f, 1.7f, -5f), barn.Inside * new Vector3(0, 2f, 2f));
+                break;
+            case "mirror":
+                if (GetTree().GetFirstNodeInGroup(WallMirror.Group) is WallMirror m)
+                    _camera.GlobalTransform = Look(m.GlobalTransform * new Vector3(0.35f, 0.05f, 1.3f), m.GlobalPosition);
                 break;
             case "two_houses":
                 _camera.GlobalTransform = Look(new Vector3(20.5f, 1.7f, 4.5f), new Vector3(20f, 1.3f, -8f));

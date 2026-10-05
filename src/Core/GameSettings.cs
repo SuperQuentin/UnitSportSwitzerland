@@ -214,7 +214,7 @@ public sealed class GameSettings
     /// </summary>
     public bool VrMode { get; set; }
 
-    /// <summary>What the monitor shows while in VR (<see cref="XR.XrMonitor"/>); F7 cycles it.</summary>
+    /// <summary>What the monitor shows while in VR (<see cref="XR.XrMonitor"/>); F8 cycles it.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public XR.MonitorView VrMonitor { get; set; } = XR.MonitorView.FirstPerson;
 
@@ -229,6 +229,16 @@ public sealed class GameSettings
     public const float MinVrRenderScale = 0.5f, MaxVrRenderScale = 1.5f;
     /// <summary>Foveated rendering: coarser shading towards the edge of each eye (variable rate shading).</summary>
     public bool VrFoveation { get; set; } = true;
+
+    // --- VR comfort (#439) ---
+    /// <summary>The right stick's turn on foot: a snap of 15, 30 or 45 degrees, or 0 for a smooth turn.</summary>
+    public int VrSnapDegrees { get; set; } = 30;
+    /// <summary>On foot the left stick aims a teleport arc instead of walking.</summary>
+    public bool VrTeleport { get; set; }
+    /// <summary>How much the view narrows while the world moves under you: 0 off, 1 full.</summary>
+    public float VrVignette { get; set; } = 1f;
+    /// <summary>The hands swapped: the right controller moves and the left one uses and turns.</summary>
+    public bool VrLeftHanded { get; set; }
 
     // --- cockpit: first person at the wheel of a car (#69) ---
     /// <summary>Your own arms and legs at the wheel. V cycles chase → cockpit with them → cockpit without.</summary>
@@ -363,6 +373,8 @@ public sealed class GameSettings
         TrafficCars = Math.Clamp(TrafficCars, 0, 150);
         ScreenShake = Math.Clamp(ScreenShake, 0f, 1f);
         StickDeadzone = Math.Clamp(StickDeadzone, 0.05f, 0.5f);
+        if (VrSnapDegrees is not (0 or 15 or 30 or 45)) VrSnapDegrees = 30;
+        VrVignette = Math.Clamp(VrVignette, 0f, 1f);
         CockpitFov = Math.Clamp(CockpitFov, 50f, 100f);
         SeatHeight = Math.Clamp(SeatHeight, -0.1f, 0.1f);
         SeatForward = Math.Clamp(SeatForward, -0.15f, 0.15f);

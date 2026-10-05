@@ -579,9 +579,10 @@ public partial class RideUi : CanvasLayer
     private void Relabel()
     {
         if (_hint == null) return;
-        bool pad = PlayerInput.LastDevice == InputDevice.Gamepad;
+        bool pad = InputHints.Pad;
         _hint.Text = InputHints.Format(pad
-            ? "LB / RB switch tabs · (A) ride or open a folder · (B) up a folder, else closes · {ride_menu} closes. Vehicles stay where you get off ({interact_mount}); {interact_mount} next to one gets back in."
+            ? $"{InputHints.Button(JoyButton.LeftShoulder)} / {InputHints.Button(JoyButton.RightShoulder)} switch tabs · "
+              + "{ui_accept} ride or open a folder · {ui_cancel} up a folder, else closes · {ride_menu} closes. Vehicles stay where you get off ({interact_mount}); {interact_mount} next to one gets back in."
             : "Tab / Shift+Tab or click a tab · click a card to select it, then Ride (or double-click, or 1–9); a folder opens on a click, Backspace goes back · drag the preview to turn it · {ride_menu} / Esc closes. "
               + "Vehicles stay where you get off ({interact_mount}); {interact_mount} next to one gets back in.");
 

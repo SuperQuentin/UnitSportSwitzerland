@@ -189,7 +189,8 @@ public partial class ItemController : Node
         get
         {
             var p = CurrentPlayer();
-            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false } && p.Ride == RideKind.OnFoot ? p : null;
+            // downed (#475): no items until a team-mate picks you up
+            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false, Downed: false } && p.Ride == RideKind.OnFoot ? p : null;
         }
     }
 
@@ -458,7 +459,18 @@ public partial class ItemController : Node
                     break;
                 }
                 bool drink = def.Category == ItemCategory.Water;
-                StartUse(player, slot, def, ViewPose.Mouth, 0.35f, 0.6f, 0.3f, () =>
+                // dressing a wound takes a while, in the hand (#455): a fight does not reset on a click
+                float apply = MedicalSeconds(def.Id);
+                if (apply > 0f)
+                {
+                    if (!Inventory.IsHotbar(slot))
+                    {
+                        _ui.Toast($"Put the {def.Name.ToLowerInvariant()} on your hotbar to apply it.");
+                        break;
+                    }
+                    _inventory.Select(slot);
+                }
+                StartUse(player, slot, def, ViewPose.Mouth, 0.35f, apply > 0f ? apply : 0.6f, 0.3f, () =>
                 {
                     if (!player.Heal(def.Heal)) return;
                     _inventory.TakeOne(slot);
@@ -526,6 +538,61 @@ public partial class ItemController : Node
                 if (!PlayerHits.Stab(player, eye, aim, blade)
                     && BattleRoyale.BrCrates.Instance?.TryBreak(eye, aim, blade.Range) != true)
                     Build.BuildTool.TryHit(player, eye, aim, blade);
+                break;
+            }
+
+            // ---- Swiss match items (#478, SwissItems) ----
+            case ItemUse.Horn:
+            {
+                if (_useBusy) break;
+                double now = Time.GetTicksMsec() / 1000.0;
+                if (now < _hornReadyAt)
+                {
+                    _ui.Toast($"Out of breath: blow again in {_hornReadyAt - now:F0} s.");
+                    break;
+                }
+                StartUse(player, slot, def, ViewPose.Mouth, 2.8f, 0.3f, 0.4f, () =>
+                {
+                    _hornReadyAt = Time.GetTicksMsec() / 1000.0 + SwissItems.HornCooldown;
+                    var bell = player.GlobalPosition + Vector3.Up * 1.2f - player.Camera.GlobalTransform.Basis.Z * 1.6f;
+                    ItemEvents.Instance?.Send(ItemEventKind.Horn, bell, Vector3.Up);
+                    _ui.Toast("The alphorn rings out: you see who is near, and they know where you are.");
+                });
+                break;
+            }
+            case ItemUse.Share:
+            {
+                if (_useBusy) break;
+                StartUse(player, slot, def, ViewPose.Mouth, 5.5f, 0.3f, 0.4f, () =>
+                {
+                    _inventory.TakeOne(slot);
+                    // the event feeds everyone near, this player too (SwissItems.OnFondue)
+                    ItemEvents.Instance?.Send(ItemEventKind.Fondue, player.GlobalPosition + Vector3.Up * 0.3f, Vector3.Up);
+                });
+                break;
+            }
+            case ItemUse.Smoke:
+            {
+                if (Time.GetTicksMsec() < _nextShotMs) break;
+                _nextShotMs = Time.GetTicksMsec() + 800;
+                var (eye, aim) = AimFrom(player, SwissItems.SmokeThrow);
+                var space = player.GetWorld3D().DirectSpaceState;
+                var hit = AimRay.Cast(space, eye, eye + aim * SwissItems.SmokeThrow, uint.MaxValue, player.SelfExclude);
+                var at = hit.Count > 0 ? hit["position"].AsVector3() : eye + aim * SwissItems.SmokeThrow;
+                // in the air: down to the ground under it
+                if (hit.Count == 0 && AimRay.Cast(space, at, at + Vector3.Down * 40f, uint.MaxValue, player.SelfExclude) is { Count: > 0 } ground)
+                    at = ground["position"].AsVector3();
+                _inventory.TakeOne(slot);
+                Kick(player);
+                ItemEvents.Instance?.Send(ItemEventKind.Smoke, at, aim);
+                break;
+            }
+
+            case ItemUse.Recall:
+            {
+                // a fallen team-mate's tag (#480): at a Postauto stop, they come back
+                string? refused = BattleRoyale.BrManager.Instance is { } br ? br.TryRecall() : "A dogtag is for a Battle Royale team-mate.";
+                _ui.Toast(refused ?? "The tag is handed in: your team-mate is on the way back.");
                 break;
             }
 
@@ -636,10 +703,42 @@ public partial class ItemController : Node
         _useBusy = true;
         _usePeaked = false;
         _useItem = def.Id;
-        visual.PlayOneShot(pose, inTime, hold, outTime, () => { _usePeaked = true; effect(); });
+        visual.PlayOneShot(pose, inTime, hold, outTime, () => { _usePeaked = true; effect(); },
+            peakAfterHold: MedicalSeconds(def.Id) > 0f);
     }
 
+    /// <summary>
+    /// Seconds of dressing before a medical item heals (#455), 0 for food: switching items before
+    /// then cancels it and keeps the item.
+    /// </summary>
+    public static float MedicalSeconds(ItemId id) => id switch
+    {
+        ItemId.Bandage => 2.2f,
+        ItemId.FirstAidKit => 5.6f,
+        _ => 0f,
+    };
+
     private ulong _nextShotMs;
+
+    /// <summary>When the alphorn may be blown again (#478), local seconds.</summary>
+    private double _hornReadyAt;
+
+    /// <summary>Spread bloom (#455): how hot the gun in hand is, which gun, and when it last fired.</summary>
+    private float _heat;
+    private ItemId _heatGun;
+    private double _heatAt;
+
+    /// <summary>This shot's cone half-angle, degrees, and the bloom it leaves for the next one.</summary>
+    private float Bloom(WeaponDef weapon)
+    {
+        double now = Time.GetTicksMsec() / 1000.0;
+        float heat = weapon.Id == _heatGun ? WeaponDef.Cool(_heat, (float)(now - _heatAt)) : 0f;
+        float spread = weapon.SpreadAt(heat);
+        _heat = weapon.Heat(heat);
+        _heatGun = weapon.Id;
+        _heatAt = now;
+        return spread;
+    }
 
     // ------------------------------------------------------------------------------------
     // throwing, dropping, picking up (#206)
@@ -920,7 +1019,7 @@ public partial class ItemController : Node
             var (stream, pitch, db) = SfxSynth.Shotgun.Pick(SfxRng);
             Play(stream, pitch * weapon.Pitch);
         }
-        PlayerHits.Shoot(player, eye, aim, weapon);
+        PlayerHits.Shoot(player, eye, aim, weapon, Bloom(weapon));
         // a shot that meets a built piece first chips it (#274)
         Build.BuildTool.TryHit(player, eye, aim, weapon);
         // a shot through a supply crate breaks it open (#198)

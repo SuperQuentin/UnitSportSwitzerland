@@ -27,11 +27,20 @@ public partial class ClockSync : Node
     private const double FastPeriod = 0.2, FastFor = 3.0, SlowPeriod = 2.0;
 
     private static double _offset;
+    private static double _serverUnixOffset;
     private static double _rtt = double.NaN;
     private static bool _synced;
 
     /// <summary>The server's clock, in seconds, as well as this peer can tell.</summary>
     public static double ServerNow => LocalNow + _offset;
+
+    /// <summary>
+    /// The server's wall clock (Unix seconds), as well as this peer can tell (#452): for stamps
+    /// the server writes in Unix time because they outlive it on disk (a campfire's lighting, a
+    /// vehicle's spawn), compared on a client whose own system clock may be minutes off. This
+    /// machine's own wall clock offline, on the server, and before the first pong.
+    /// </summary>
+    public static double ServerUnixNow => _synced ? ServerNow + _serverUnixOffset : Time.GetUnixTimeFromSystem();
 
     /// <summary>This process's own monotonic clock, seconds; game time under <c>--fixed-fps</c> (<see cref="Core.GameClock"/>).</summary>
     public static double LocalNow => Core.GameClock.Fixed ? Core.GameClock.Now : Time.GetTicksUsec() / 1_000_000.0;
@@ -81,12 +90,14 @@ public partial class ClockSync : Node
     private void Ping(int seq, double sentAt)
     {
         if (!Multiplayer.IsServer()) return;
-        RpcId(Multiplayer.GetRemoteSenderId(), MethodName.Pong, seq, sentAt, LocalNow);
+        double now = LocalNow;
+        RpcId(Multiplayer.GetRemoteSenderId(), MethodName.Pong, seq, sentAt, now, Time.GetUnixTimeFromSystem() - now);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
-    private void Pong(int seq, double sentAt, double serverNow)
+    private void Pong(int seq, double sentAt, double serverNow, double serverUnixOffset)
     {
+        _serverUnixOffset = serverUnixOffset;
         double now = LocalNow;
         double rtt = now - sentAt;
         if (rtt < 0 || rtt > 5) return;

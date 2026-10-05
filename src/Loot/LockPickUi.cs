@@ -271,7 +271,8 @@ public partial class LockPickUi : CanvasLayer
             : _stage < _combo.Length ? (Direction(_stage) > 0 ? "Turn right (clockwise) until it clicks, then stop" : "Turn left (anticlockwise) until it clicks, then stop")
             : "";
         v.DrawString(font, new Vector2(panel.Position.X, y + 34), status, HorizontalAlignment.Center, panel.Size.X, 14, new Color(0.85f, 0.87f, 0.9f));
-        v.DrawString(font, new Vector2(panel.Position.X, y + 54), InputHints.Format("A/D, arrows, stick or drag to turn · Shift slow · {interact_mount} / Esc leave"),
+        v.DrawString(font, new Vector2(panel.Position.X, y + 54), (InputHints.Pad ? InputHints.Format("{move_right} to turn · {sprint} slow · {interact_mount} / {ui_cancel} leave")
+            : InputHints.Format("{move_left}/{move_right}, arrows or drag to turn · Shift slow · {interact_mount} / {menu} leave")),
             HorizontalAlignment.Center, panel.Size.X, 12, new Color(0.6f, 0.62f, 0.66f));
     }
 }

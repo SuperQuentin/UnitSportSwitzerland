@@ -56,6 +56,8 @@ public partial class EmoteWheel : CanvasLayer
         _view.Visible = true;
         _view.QueueRedraw();
         _openedAt = GameClock.Now;
+        // in VR the right hand aims, from where it is now (#437)
+        if (XR.XrSession.Active) XR.XrSession.ZeroHandAim();
         UiFocus.Set(this, true);
         GetViewport().SetInputAsHandled();
     }
@@ -131,6 +133,8 @@ public partial class EmoteWheel : CanvasLayer
         // the right stick aims directly; it has no captured-pointer drift to accumulate
         var stick = Input.GetVector(NLookLeft, NLookRight, NLookUp, NLookDown);
         if (stick.Length() > 0.5f) _aim = stick;
+        // in VR the right hand points at a slot, as a stick would (#437)
+        else if (XR.XrSession.Active) _aim = XR.XrSession.HandAim.LimitLength(1.2f);
         int count = _view.SlotsOnPage;
         int before = _view.Highlight;
         _view.Highlight = _aim.Length() < 0.35f
@@ -191,7 +195,8 @@ public partial class EmoteWheel : CanvasLayer
             for (int p = 0; p < pages.Length; p++)
                 DrawCircle(centre + new Vector2((p - (pages.Length - 1) * 0.5f) * 16f, outer + 48f), 4f,
                     p == Page ? UiTheme.Amber : UiTheme.TextFaint);
-            string hint = PlayerInput.LastDevice == InputDevice.Gamepad ? "D-pad ← → : page" : "Wheel or Q / E : page";
+            string hint = InputHints.Pad ? InputHints.Format("{ui_left} {ui_right} : page")
+                : $"Wheel or {InputHints.Keyboard(Key.Q)} / {InputHints.Keyboard(Key.E)} : page";
             DrawString(font, centre + new Vector2(-150f, outer + 72f), hint, HorizontalAlignment.Center, 300,
                 UiTheme.FontTiny, UiTheme.TextFaint);
         }

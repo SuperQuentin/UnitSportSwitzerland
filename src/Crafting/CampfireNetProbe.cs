@@ -56,7 +56,7 @@ public partial class CampfireNetProbe : ChatProbe
         var fire = placed.All.Values.FirstOrDefault(o => o.Kind == PlacedKind.Campfire && !before.Contains(o.Id));
         if (fire == null) { Fail("no fire to go on with"); return; }
         Expect(fire.Owner == "FireA", $"it is mine ({fire.Owner})");
-        Expect(CampfireClock.Burning(fire.Payload, Time.GetUnixTimeFromSystem()), $"lit by the server's clock ({fire.Payload})");
+        Expect(CampfireClock.Burning(fire.Payload, Net.ClockSync.ServerUnixNow), $"lit by the server's clock ({fire.Payload})");
         Expect((CraftStations.At(me) & Station.Fire) != 0, "a fire station here");
 
         // the torch in the hand: B must see its light

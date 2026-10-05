@@ -23,25 +23,32 @@ namespace UnitSport.Core;
 /// </summary>
 public static class InputHints
 {
-    /// <summary>The binding's name for the current device, e.g. "E", "LMB", "Y", "D-pad ↑". "?" when unbound.</summary>
+    /// <summary>The binding's name for the current device, e.g. "E", "LMB", "Y", "D-pad ↑", "R trigger". "?" when unbound.</summary>
     public static string Label(string action) =>
-        Label(action, PlayerInput.LastDevice);
+        Label(action, PlayerInput.HintDevice);
 
     // Memoised (#221): HUD prompts ask every frame, and each lookup marshals the action's events
     // and builds a list. Bindings only change in PlayerInput.Bind, which calls Invalidate.
-    private static readonly Dictionary<(string, InputDevice), string> Labels = new(), Formatted = new();
+    // In VR a control's name also depends on whether the triggers are the shoulders (on foot) or
+    // the triggers (mounted), XR.XrPad.TriggersAsShoulders: part of the key, false elsewhere.
+    private static readonly Dictionary<(string, InputDevice, bool), string> Labels = new(), Formatted = new();
+
+    private static bool Context(InputDevice device) => device == InputDevice.VR && XR.XrPad.TriggersAsShoulders;
 
     /// <summary>Forget the memoised labels: call after any change to the input map.</summary>
     public static void Invalidate()
     {
         Labels.Clear();
         Formatted.Clear();
+        Buttons.Clear();
+        Keys.Clear();
     }
 
     public static string Label(string action, InputDevice device)
     {
-        if (Labels.TryGetValue((action, device), out var label)) return label;
-        return Labels[(action, device)] = Lookup(action, device);
+        var key = (action, device, Context(device));
+        if (Labels.TryGetValue(key, out var label)) return label;
+        return Labels[key] = Lookup(action, device);
     }
 
     private static string Lookup(string action, InputDevice device)
@@ -49,7 +56,15 @@ public static class InputHints
         if (!InputMap.HasAction(action)) return "?";
         var events = InputMap.ActionGetEvents(action);
 
-        if (device == InputDevice.Gamepad)
+        if (device == InputDevice.VR)
+        {
+            // the control XR.XrPad replays as this pad event, by the controller's own name (#435)
+            foreach (var e in events)
+                if (XR.XrPad.Control(e) is { } control && XR.XrProfile.Name(control) is { } name) return name;
+            // nothing on the controllers: the wrist menu, else a keyboard within reach (#437)
+            if (XR.XrWristMenu.Reaches(action)) return "Wrist";
+        }
+        else if (device == InputDevice.Gamepad)
         {
             foreach (var e in events)
                 if (PadName(e) is { } pad) return pad;
@@ -61,6 +76,38 @@ public static class InputHints
             if (KeyName(e) is { } key && !keys.Contains(key)) keys.Add(key);
         return keys.Count > 0 ? string.Join(" / ", keys.Take(2)) : "?";
     }
+
+    /// <summary>True when hints name buttons rather than keys: a pad, or the VR controllers.</summary>
+    public static bool Pad => PlayerInput.HintDevice != InputDevice.KeyboardMouse;
+
+    /// <summary>True when the VR controllers are what hints name.</summary>
+    public static bool Vr => PlayerInput.HintDevice == InputDevice.VR;
+
+    private static readonly Dictionary<(JoyButton, InputDevice, bool), string> Buttons = new();
+
+    /// <summary>
+    /// A pad button some screen reads directly instead of through an action (a menu's tab switch),
+    /// named for the device in hand: "RB" on a pad, "R grip" on VR controllers.
+    /// </summary>
+    public static string Button(JoyButton button)
+    {
+        var device = PlayerInput.HintDevice;
+        var key = (button, device, Context(device));
+        if (Buttons.TryGetValue(key, out var name)) return name;
+        var e = new InputEventJoypadButton { ButtonIndex = button };
+        name = device == InputDevice.VR && XR.XrPad.Control(e) is { } c && XR.XrProfile.Name(c) is { } vr ? vr
+            : PadName(e) ?? "?";
+        return Buttons[key] = name;
+    }
+
+    /// <summary>A physical key some screen reads directly, as printed on the player's keyboard.</summary>
+    public static string Keyboard(Key physical)
+    {
+        if (Keys.TryGetValue(physical, out var name)) return name;
+        return Keys[physical] = PhysicalLabel(physical);
+    }
+
+    private static readonly Dictionary<Key, string> Keys = new();
 
     /// <summary>The binding in brackets, "[E]", the form every prompt uses.</summary>
     public static string Tag(string action) => $"[{Label(action)}]";
@@ -74,14 +121,15 @@ public static class InputHints
     /// Replaces each <c>{action}</c> by that action's binding, bare ("Hold {aim_item} to look"
     /// becomes "Hold RMB to look"). Braces that name no action are left as they are.
     /// </summary>
-    public static string Format(string text) => Format(text, PlayerInput.LastDevice);
+    public static string Format(string text) => Format(text, PlayerInput.HintDevice);
 
     public static string Format(string text, InputDevice device)
     {
-        if (Formatted.TryGetValue((text, device), out var done)) return done;
+        var key = (text, device, Context(device));
+        if (Formatted.TryGetValue(key, out var done)) return done;
         // ponytail: some texts carry numbers (loot toasts), so the cache is simply dropped when it grows
         if (Formatted.Count > 256) Formatted.Clear();
-        return Formatted[(text, device)] =
+        return Formatted[key] =
             Placeholder.Replace(text, m => InputMap.HasAction(m.Groups[1].Value) ? Label(m.Groups[1].Value, device) : m.Value);
     }
 

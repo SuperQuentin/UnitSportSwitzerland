@@ -65,6 +65,46 @@ public static class BrCheck
         Expect(true, "zone: 300 seeds deterministic, nested, inside the square, never growing");
         var s = new ZoneSchedule(7, 6000, 1);
         Expect(s.At(0).Phase == 0 && s.At(0).Dps == 0, "no damage while looting");
+        Expect(s.At(0).NextCentre == s.CentreOf(1) && Mathf.IsEqualApprox(s.At(0).NextRadius, s.RadiusOf(1)),
+            "while looting, the next circle is already the first shrink's (#477)");
+
+        // on the ground (#477): the west half is a lake, a cliff band runs north-south at x = 600..800
+        static bool Lake(Vector2 p) => p.X < 0;
+        static float Cliff(Vector2 p) => p.X < 600 ? 0 : p.X > 800 ? 300 : (p.X - 600) * 1.5f;
+        float Bad(Vector2 c, float r) => ZoneSchedule.Badness(c, r, Lake, Cliff);
+        int plainBad = 0, guidedBad = 0;
+        bool sameWithout = true, roundTrip = true;
+        for (int seed = 1; seed <= 100; seed++)
+        {
+            var plain = new ZoneSchedule(seed, 6000, 1, 20);
+            var guided = new ZoneSchedule(seed, 6000, 1, 20, badness: Bad);
+            var sent = BrState.FromJson(new BrState { Seed = seed, Side = 6000, Pace = 1, Field = 20, ZoneCentres = guided.Centres }.ToJson())!;
+            var client = sent.Zone();
+            for (int i = 1; i <= ZoneSchedule.Phases; i++)
+            {
+                if (Bad(plain.CentreOf(i), plain.RadiusOf(i)) > ZoneSchedule.GoodEnough) plainBad++;
+                if (Bad(guided.CentreOf(i), guided.RadiusOf(i)) > ZoneSchedule.GoodEnough) guidedBad++;
+                if (i > 0 && guided.CentreOf(i).DistanceTo(guided.CentreOf(i - 1)) + guided.RadiusOf(i) > guided.RadiusOf(i - 1) + 0.01f) roundTrip = false;
+                if (client.CentreOf(i) != guided.CentreOf(i)) roundTrip = false;
+            }
+            var again = new ZoneSchedule(seed, 6000, 1, 20, badness: null);
+            for (int i = 0; i <= ZoneSchedule.Phases; i++) sameWithout &= again.CentreOf(i) == plain.CentreOf(i);
+        }
+        Expect(guidedBad * 4 < plainBad && roundTrip && sameWithout,
+            $"centres on the ground: circles over a lake or a cliff {plainBad} -> {guidedBad} of 800, still nested, "
+            + "the same on a client from the state, the seed's own zone without terrain");
+
+        // the glide fence (#485): zone (east, north), world velocity (east, -north)
+        var east = new Vector3(30, -5, 0);
+        bool middle = BrManager.Fence(new Vector2(0, 0), east, Vector2.Zero, 1000) == null;
+        bool inward = BrManager.Fence(new Vector2(995, 0), -east, Vector2.Zero, 1000) == null;
+        var edge = BrManager.Fence(new Vector2(995, 0), east, Vector2.Zero, 1000);
+        var slide = BrManager.Fence(new Vector2(995, 0), new Vector3(20, -5, -20), Vector2.Zero, 1000);
+        var outside = BrManager.Fence(new Vector2(1200, 0), new Vector3(0, -5, -20), Vector2.Zero, 1000);
+        Expect(middle && inward && edge is { } e1 && Mathf.Abs(e1.X) < 1e-3f && Mathf.IsEqualApprox(e1.Y, -5f)
+               && slide is { } s1 && Mathf.Abs(s1.X) < 1e-3f && Mathf.IsEqualApprox(s1.Z, -20f)
+               && outside is { } o1 && o1.X < -1f && Mathf.IsEqualApprox(o1.Z, -20f),
+            "glide fence: free inside and inward; at the edge the outward part goes (the rest slides on); outside it drifts back in");
         Expect(s.At(s.Duration + 1).Over, "the zone is over once the last shrink ends");
         // /br zone (#425): from the loot time or a wait, the next shrink; none while shrinking or over
         double first = s.NextShrinkAt(0) ?? -1, wait2 = first;
@@ -252,6 +292,32 @@ public static class BrCheck
         Expect(teams == 4 && duos.TeamsAlive == 1, $"teams alive count each side once ({teams} at the start, 1 when only team 1 has someone up)");
         var solo = Field(1, 3);
         Expect(solo.TeamsAlive == 3 && BrState.Hostile(solo.Entrants[0], solo.Entrants[1]), "solo: every player is a side of their own");
+
+        // picked teams (#469): a group shares a team, a big one is split, the rest fill in
+        var picked = new BrState { Seed = 99, TeamSize = 3 };
+        string[] parties = { "alp", "", "alp", "", "berg", "alp", "berg", "", "alp", "" };
+        for (int i = 0; i < parties.Length; i++)
+            picked.Entrants.Add(new BrEntrant { Peer = (i + 1) * 10, Name = $"P{i + 1}", Party = parties[i] });
+        picked.AssignTeams();
+        var alp = picked.Entrants.Where(e => e.Party == "alp").GroupBy(e => e.Team).Select(g => g.Count()).OrderDescending().ToList();
+        var berg = picked.Entrants.Where(e => e.Party == "berg").Select(e => e.Team).Distinct().ToList();
+        var teamSizes = picked.Entrants.GroupBy(e => e.Team).Select(g => g.Count()).ToList();
+        Expect(alp.SequenceEqual(new[] { 3, 1 }) && berg.Count == 1 && teamSizes.All(n => n <= 3) && teamSizes.Count == 4,
+            $"trios with groups: 'alp' (4) split 3+1, 'berg' together, nobody over 3 ({string.Join("/", teamSizes)})");
+        Expect(BrEntrant.PartyName("  Les Alpes!! ") == "lesalpes" && BrEntrant.PartyName("???") == "",
+            "team names: trimmed, lower case, letters and digits");
+
+        // down, not out (#475): a downed player is still alive, but a team with nobody standing is not a side
+        var squad = Field(2, 4);
+        var a1 = squad.Entrants.First(e => e.Team == 1);
+        var a2 = squad.Entrants.First(e => e.Team == 1 && e != a1);
+        bool canDown = squad.MateStanding(a1.Peer);
+        a1.Downed = true;
+        int withOneDown = squad.TeamsAlive;
+        bool lastCanDown = squad.MateStanding(a2.Peer);
+        a2.Downed = true;
+        Expect(canDown && withOneDown == 2 && !lastCanDown && squad.TeamsAlive == 1 && squad.AliveCount == 4,
+            $"downed: still alive; the team counts while one stands ({withOneDown}), not once all are down ({squad.TeamsAlive})");
 
         // the stings: built, heard, short
         var bad = BrSounds.All().Where(x => x.Stream.Data.Length < 2000 || x.Stream.GetLength() > 6.0).Select(x => x.Name).ToList();

@@ -23,7 +23,8 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
 `dead-code-and-shared-helpers` (use `Terrain.Format.SwissProjection`, `TileId.ReadList`; prove a member unused before deleting it),
 `test-systems-optin` (every probe declares `--world flat|fixture` / `--systems`, the lightest that works; driving checks run on fixture courses),
 `perf-no-per-frame-allocations` (static `StringName`, no LINQ/strings/lists per frame, UI text and shader params only on change),
-`perf-221-migration` (**read before merging main into a branch started before Oct 2026**: every #221 rule note and the rebase order).
+`perf-221-migration` (**read before merging main into a branch started before Oct 2026**: every #221 rule note and the rebase order),
+`new-action-three-devices` (every new key or interaction: keyboard, gamepad and VR decided together).
 
 ## Rules
 
@@ -37,6 +38,10 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
      (`docs/notes/general/worktrees.md`). Never commit features on `main`; `Closes #N` in the PR.
      **Push local commits on feature branches whenever possible**, so others can build on them
      and a local crash loses nothing.
+- **Every new action or interaction is designed for keyboard, gamepad and VR together**: before
+  coding a new key, decide its pad button and its VR way (grip the thing, or the pad through
+  `XrPad`), show it with `InputHints`, and add its row to `xr/vr-action-map`
+  (`docs/notes/general/new-action-three-devices.md`).
 - **Simple tasks** (docs/notes tweaks, one-line fixes) skip the workflow: commit straight on `main`
   in the main checkout and push. No issue, branch, worktree or PR.
   4. **Test the cheapest tier that can catch the bug** (`docs/notes/general/testing.md`):
