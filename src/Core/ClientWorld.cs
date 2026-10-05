@@ -944,6 +944,23 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return;
         }
 
+        // Explore from the menus starts on foot, on open ground (#517), behind this screen
+        if (Launch is { Mode: GameMode.Explore, FromCommandLine: false } && !_groundStarted)
+        {
+            _groundStarted = true;
+            if (!_onFoot && _player == null)
+            {
+                AddChild(_player = new FootPlayer { Name = "Player", Terrain = _chunks });
+                EnterFootMode(_player);
+                _groundStart = new GroundStart(_chunks, _player);
+            }
+        }
+        if (_groundStart is { Done: false } ground && !ground.Step(delta))
+        {
+            Report(LoadStage.PlacingYou, 0.34f);
+            return;
+        }
+
         var eye = GetViewport().GetCamera3D()?.GlobalPosition ?? Vector3.Zero;
         var (done, total) = _chunks.PlayableNear(eye, 0);
         _terrainClock += delta;
@@ -1625,6 +1642,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     }
 
     /// <summary>The spawn point has not found the ground under the spawn yet.</summary>
+    private bool _groundStarted;
+    private GroundStart? _groundStart;
+
     private bool SpawnPending => _spawn != null && IsInstanceValid(_spawn) && _spawn.IsInsideTree();
 
     private FootPlayer? _pendingFoot;
