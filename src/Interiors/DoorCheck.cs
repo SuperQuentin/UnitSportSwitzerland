@@ -27,7 +27,12 @@ public static class DoorCheck
     /// </summary>
     private const float SameHole = 0.15f;
 
-    private sealed record Box(string What, BuildingKind Kind, float Width, float Depth, float Height, int Least, int Most);
+    /// <param name="Turn">
+    /// Degrees the solid is turned in plan. A box square to the world cannot catch a mirrored
+    /// direction convention — a mirror and the truth agree on it — so one building is turned (#524).
+    /// </param>
+    private sealed record Box(string What, BuildingKind Kind, float Width, float Depth, float Height,
+        int Least, int Most, float Turn = 0f);
 
     private static readonly Box[] Boxes =
     [
@@ -43,6 +48,8 @@ public static class DoorCheck
         // doorway planned inside has to follow it down (the shed above has so little wall that
         // the MinDoorHeight floor wins instead)
         new("a low works", BuildingKind.Industrial, 12, 8, 3.4f, 1, 1),
+        // turned to no axis, so a mirrored plan frame puts its doorways on visibly wrong walls
+        new("a turned block", BuildingKind.Commercial, 48, 18, 12, 3, DoorBudget.MaxPerBuilding, Turn: 31f),
     ];
 
     public static int Run()
@@ -187,6 +194,17 @@ public static class DoorCheck
                     + $"({d.Height:F2} m door under a {roomClear:F2} m ceiling)");
                 Expect(Math.Abs(way.X) <= layout.Width / 2 + 0.01f && Math.Abs(way.Z) <= layout.Depth / 2 + 0.01f,
                     $"{box.What} slot {d.Slot}: its doorway is inside the plan box");
+                // ...and faces the way the real door does. Distance and containment survive a
+                // mirrored plan frame; a direction does not (#524). On a turned solid a mirror
+                // lands the doorway on a visibly different wall, so this is the assertion that
+                // can tell a correct convention from a flipped one.
+                var axisU = new Vector2(Mathf.Cos(layout.Yaw), -Mathf.Sin(layout.Yaw));
+                var axisV = new Vector2(-axisU.Y, axisU.X);
+                var inward = axisU * way.InX + axisV * way.InZ;
+                var into = new Vector2(-d.Outward.X, -d.Outward.Z);
+                Expect(inward.Normalized().Dot(into.Normalized()) > 0.3f,
+                    $"{box.What} slot {d.Slot}: the doorway inside faces the way the door does "
+                    + $"(in {inward.Normalized()} vs {into.Normalized()})");
             }
             GD.Print($"[doorcheck] {box.What}: {mine.Count} door(s), {layout.AllEntrances().Count} entrance(s), "
                 + $"{layout.Floors.Count} floor(s), {string.Join("/", mine.Select(d => $"{d.Width:F1}m {d.Hang}"))}");
@@ -237,10 +255,13 @@ public static class DoorCheck
             Tri(p0, p1, p1 + Vector3.Up * h);
             Tri(p0, p1 + Vector3.Up * h, p0 + Vector3.Up * h);
         }
-        var nw = new Vector3(500 - hw, 0, cz - hd);
-        var ne = new Vector3(500 + hw, 0, cz - hd);
-        var se = new Vector3(500 + hw, 0, cz + hd);
-        var sw = new Vector3(500 - hw, 0, cz + hd);
+        float turn = Mathf.DegToRad(box.Turn);
+        Vector3 Corner(float x, float z) =>
+            new(500 + x * Mathf.Cos(turn) - z * Mathf.Sin(turn), 0, cz + x * Mathf.Sin(turn) + z * Mathf.Cos(turn));
+        var nw = Corner(-hw, -hd);
+        var ne = Corner(hw, -hd);
+        var se = Corner(hw, hd);
+        var sw = Corner(-hw, hd);
         Wall(nw, ne); Wall(ne, se); Wall(se, sw); Wall(sw, nw);
         Tri(nw + Vector3.Up * h, ne + Vector3.Up * h, se + Vector3.Up * h);
         Tri(nw + Vector3.Up * h, se + Vector3.Up * h, sw + Vector3.Up * h);
