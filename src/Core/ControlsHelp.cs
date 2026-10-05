@@ -105,6 +105,13 @@ public partial class ControlsHelp : CanvasLayer
             new("Bus: kneel", PlayerInput.Kneel),
             new("Bus: destination display", PlayerInput.Destination),
         }),
+        ("Farm machines", new Row[]
+        {
+            new("Couple an implement (linkage) or the tipping trailer (drawbar)", PlayerInput.Couple),
+            new("Lower / raise the implement or the combine's header", PlayerInput.Kneel),
+            new("Combine: swing the auger out / in; at a farm co-op: deliver the load", Keys: "{destination}", Pad: "{car_door}"),
+            new("On foot at a loaded trailer or combine tank: take a sack (hold, or with run held: ten)", PlayerInput.InteractMount),
+        }),
         ("Paddle steamer", new Row[]
         {
             new("Telegraph: one step ahead / astern (FULL ASTERN .. STOP .. FULL AHEAD)", Keys: "{move_forward} / {move_back}", Pad: "{move_forward} up / down"),

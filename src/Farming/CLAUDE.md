@@ -1,0 +1,12 @@
+# Farming (`src/Farming/`)
+
+Farm fields from the federal land-use data (#494): 4 m cells, server-owned state, drawing, hand
+farming; the machines call `FarmWork.Sweep`. Index only: one line per note in
+`docs/notes/farming/<name>.md`. Read a note only when the task touches its topic.
+
+- `fields-runtime` — `fields_E_N.fld` through every chunk source, `FieldTile` owner maps near the camera, shown stage = stored else NaturalStage(month), `FarmWork.Sweep`, per-chunk worker-built meshes (lod, rebuild rules, grass not drawn), measured cost
+- `field-state-net` — server-owned sparse `FieldCells` in `user://farm/E_N.json`, Subscribe/Work/Cells RPCs, prediction with seq + pending, loose server checks (90 m), snapshots for late joiners, no protocol bump, `tools/farmnetcheck.sh`
+- `hand-farming` — hoe / seed / fertiliser through `ItemUse.Farm` and a short bar, seed remainder (50 cells an item), harvest with the gather hold, prompts, the "Wheat — ripe 100%" readout
+- `produce-economy` — farm items and values, recipes, the farm co-op shop (rural), `FarmMarket.Deliver` pays full value per unit; checks
+- `commands` — `--farmmonth`, `--farmdir`, `--farmfresh`, `--farmstats`, `--farmdraw`, `--farmcheck [shots]`, `--farmperf`, `tools/farmnetcheck.sh`, `FarmTests`
+- `machines` — the Fendt tractor (102), Claas combine (103), plough / drill / mower on a rigid `Coupling.ThreePoint` and the tipping trailer (`TrailerCatalog` 6-9): draft, lowered = kneel bit, tank in flags / trailer code, `StepFarm` sweeps, auger, sacks on foot, co-op delivery, `--tractorcheck`, `tools/tractornetcheck.sh`

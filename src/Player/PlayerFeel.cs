@@ -874,12 +874,12 @@ public partial class PlayerFeel : Node3D
     private static void AppendFarm(System.Text.StringBuilder sb, Truck t)
     {
         if (t.Spec.Farm && (t.Spec.Tool != Farming.FarmTool.None || t.Implement != null))
-            sb.Append(t.Implement != null ? "    IMPLEMENT " : "    HEADER ").Append(t.Lowered ? "DOWN" : "UP");
+            sb.Append(t.Lowered ? "    DOWN" : "    UP");
         var (tank, cap) = t.Spec.TankItems > 0 ? (t.Tank, t.TankCapacity) : (t.TrailerTank, t.TrailerCapacity);
         if (cap <= 0) return;
-        sb.Append("    TANK ").Append(tank.Items).Append('/').Append(cap);
+        sb.Append("    ").Append(tank.Items).Append('/').Append(cap);
         if (tank.Items > 0) sb.Append(' ').Append(tank.Crop);
-        if (t.AugerOut) sb.Append("    AUGER OUT");
+        if (t.AugerOut) sb.Append("    AUGER");
     }
 
     private static void AppendRetarder(System.Text.StringBuilder sb, Truck t)
