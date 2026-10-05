@@ -20,10 +20,10 @@ public class UpdateInfoTests
         Assert.Equal(expected, UpdateInfo.IsNewer(latest, current));
 
     private const string Json = """
-        {"tag_name":"v0.9.0","html_url":"https://github.com/x/y/releases/tag/v0.9.0","assets":[
+        [{"tag_name":"v0.9.0-draft","draft":true},{"tag_name":"v0.9.0","html_url":"https://github.com/x/y/releases/tag/v0.9.0","assets":[
           {"name":"UnitSportSwitzerland-v0.9.0-windows.zip","browser_download_url":"https://e/w.zip","size":123},
           {"name":"UnitSportSwitzerland-v0.9.0-linux-x86_64.tar.gz","browser_download_url":"https://e/l.tgz","size":456},
-          {"name":"UnitSportSwitzerland-v0.9.0-macos.tar.gz","browser_download_url":"https://e/m.tgz","size":789}]}
+          {"name":"UnitSportSwitzerland-v0.9.0-macos.tar.gz","browser_download_url":"https://e/m.tgz","size":789}]}]
         """;
 
     [Theory]
@@ -33,9 +33,8 @@ public class UpdateInfoTests
     [InlineData("Android", null)]
     public void Picks_the_platform_asset(string os, string? url)
     {
-        var r = UpdateInfo.Parse(Json);
-        Assert.NotNull(r);
-        Assert.Equal("v0.9.0", r!.Tag);
+        var r = Assert.Single(UpdateInfo.ParseList(Json));
+        Assert.Equal("v0.9.0", r.Tag);
         Assert.Equal(3, r.Assets.Count);
         Assert.Equal(url, UpdateInfo.AssetFor(r, os)?.Url);
     }
@@ -44,5 +43,5 @@ public class UpdateInfoTests
     [InlineData("""{"message":"Not Found"}""")]
     [InlineData("[]")]
     [InlineData("not json")]
-    public void Parse_rejects_error_bodies(string body) => Assert.Null(UpdateInfo.Parse(body));
+    public void Parse_rejects_error_bodies(string body) => Assert.Empty(UpdateInfo.ParseList(body));
 }
