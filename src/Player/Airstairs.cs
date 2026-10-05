@@ -27,6 +27,12 @@ public sealed class Airstairs : Rideable
     /// <summary>The door it is docked at (aircraft's node name and door index), or null.</summary>
     public (string Host, int Door)? Docked { get; set; }
 
+    /// <summary>
+    /// Standing at a door (docked; a copy's from the driver's pose, a parked one's from the sill it
+    /// is at): the platform's front gate is folded away and the deck is open onto the plate.
+    /// </summary>
+    public bool AtDoor { get; set; }
+
     /// <summary>How fast the platform rises and falls, m/s.</summary>
     public const float LiftRate = 0.45f;
     /// <summary>Top speed forward and in reverse, m/s (25 and 8 km/h).</summary>
@@ -49,8 +55,10 @@ public sealed class Airstairs : Rideable
     public override float BaseFov => 68f;
     public override float MaxFov => 76f;
     public override float FovSpeed => 8f;
-    public override Vector3 FirstPersonEye => Flip(AirstairsLayout.Eye);
-    public override float EyeHeight => AirstairsLayout.Eye.Y;
+    /// <summary>The driver's eye in the cab (the cockpit's, derived from its seat).</summary>
+    private static Vector3? _eye;
+    public override Vector3 FirstPersonEye => _eye ??= AirstairsMeshBuilder.Parts().Cockpit!.Eye;
+    public override float EyeHeight => FirstPersonEye.Y;
     public override Vector3 EntryPoint => Flip(AirstairsLayout.CabDoor);
     public override bool ExitLeft => true;
 
@@ -92,16 +100,28 @@ public sealed class Airstairs : Rideable
     // ---- the deck, rebuilt when the platform has moved 5 mm --------------------------------
     private VehicleDeck[]? _decks;
     private float _deckHeight = float.NaN;
+    private bool _deckAtDoor;
+
+    /// <summary>The height the current deck was built for (it lags <see cref="Height"/> by up to a centimetre while rising).</summary>
+    public float DeckHeight => _deckHeight;
+
+    /// <summary>The seats: the driver's, and one beside it in the cab.</summary>
+    private static SeatAnchor[]? _seats;
+    public override SeatAnchor[] Seats => _seats ??= AirstairsMeshBuilder.Parts().Seats;
 
     /// <summary>The flight, platform and plate at the current height (a new array only when it changes).</summary>
     public override VehicleDeck[] Decks
     {
         get
         {
-            if (_decks == null || Mathf.Abs(_deckHeight - Height) > 0.005f)
+            // a new deck every centimetre as it rises (built round a walker, its boxes are moved in
+            // place: FootPlayer.Deck), and once more when it stops, so a docked platform is exact
+            bool moved = Mathf.Abs(_deckHeight - Height) > 0.01f || _deckHeight != Height && Height == AirstairsLayout.Clamp(TargetHeight);
+            if (_decks == null || moved || _deckAtDoor != AtDoor)
             {
                 _deckHeight = Height;
-                _decks = new[] { AirstairsMeshBuilder.Deck(Height) };
+                _deckAtDoor = AtDoor;
+                _decks = new[] { AirstairsMeshBuilder.Deck(Height, AtDoor) };
             }
             return _decks;
         }
@@ -116,9 +136,10 @@ public sealed class Airstairs : Rideable
         Height = TargetHeight = AirstairsLayout.Clamp(flags / 100f);
     }
 
-    public override Node3D BuildVisual(int riderIndex, Outfit outfit = default) => AirstairsRig.Create(Height);
+    public override Node3D BuildVisual(int riderIndex, Outfit outfit = default) =>
+        AirstairsMeshBuilder.CreateRig(Height, HumanPalette.ForRider(riderIndex) with { Outfit = outfit });
 
-    public override Node3D BuildParkedVisual(int riderIndex) => AirstairsRig.Create(Height);
+    public override Node3D BuildParkedVisual(int riderIndex) => AirstairsMeshBuilder.CreateRig(Height, null);
 
     /// <summary>The platform toward its target, at the lift's rate.</summary>
     public void Lift(float dt) => Height = Mathf.MoveToward(Height, AirstairsLayout.Clamp(TargetHeight), LiftRate * dt);
@@ -149,6 +170,8 @@ public sealed class Airstairs : Rideable
         motion.Speed = Mathf.Abs(v);
         motion.Slip = v < 0f ? Mathf.Pi : 0f;
         motion.Lean = 0f;
+        _throttle = input.Throttle;
+        _brake = brake;
         Lift(dt);
     }
 
@@ -163,15 +186,50 @@ public sealed class Airstairs : Rideable
 
     public override void Animate(Node3D visual, in RideMotion motion, float dt)
     {
-        if (visual is AirstairsRig rig) rig.Height = Height;
+        AtDoor = Docked != null;
+        Dress(visual, _signed, _steer, _throttle, _brake, dt);
     }
 
-    /// <summary>Remote copies: the platform's height and the steer.</summary>
-    public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) => new(Height, _steer, 0f, 0f);
+    private float _spin, _throttle, _brake;
+
+    /// <summary>The drawn truck: wheels, the steering wheel in the driver's hands, dials, pedals, the stairs.</summary>
+    private void Dress(Node3D visual, float speed, float steer, float throttle, float brake, float dt)
+    {
+        if (visual is not HeavyRig rig) return;
+        float angle = -steer * MaxSteer;
+        rig.SteerAngle = angle;
+        rig.WheelTurn = angle * HeavyCockpit.SteerRatio;
+        _spin += speed / AirstairsLayout.WheelRadius * dt;
+        rig.WheelSpin = _spin;
+        rig.SpeedKmh = Mathf.Abs(speed) * 3.6f;
+        rig.Rpm = 750f + Mathf.Abs(speed) / TopSpeed * 1700f + throttle * 300f;
+        rig.Throttle = throttle;
+        rig.Brake = brake;
+        rig.BrakeLights = brake > 0.05f;
+        rig.ReverseLights = speed < -0.1f;
+        // the small dial reads the platform (0-6 m on its face, the needle's travel is the air gauge's)
+        rig.Air = Height / AirstairsMeshBuilder.PlatformDial * HeavyDriveline.AirMax;
+        // the display: the platform in decimetres; the door lamp: docked
+        rig.Gear = Mathf.RoundToInt(Height * 10f).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        rig.DoorsOpen = AtDoor ? (byte)1 : (byte)0;
+        if (AirstairsMeshBuilder.StairsOf(rig) is { } stairs)
+        {
+            stairs.Height = Height;
+            stairs.AtDoor = AtDoor;
+        }
+    }
+
+    /// <summary>
+    /// Remote copies: the platform's height (what their decks are built at, on every peer), the
+    /// steer, whether it stands at a door, and its signed speed with the pedals in the fraction.
+    /// </summary>
+    public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
+        new(Height, _steer, AtDoor ? 1f : 0f, _signed);
 
     public override void AnimateRemote(Node3D visual, Vector4 pose, float dt)
     {
-        if (pose.X > 0.5f) Height = pose.X;
-        if (visual is AirstairsRig rig) rig.Height = Height;
+        if (pose.X > 0.5f) Height = TargetHeight = pose.X;
+        AtDoor = pose.Z > 0.5f;
+        Dress(visual, pose.W, pose.Y, 0f, 0f, dt);
     }
 }

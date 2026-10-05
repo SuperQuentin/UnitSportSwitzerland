@@ -116,6 +116,8 @@ public partial class PlayerInput : Node
     public const string CameraToggle = "camera_toggle";
     public const string ToggleMode = "toggle_mode";
     public const string Teleport = "teleport";
+    /// <summary>Battle Royale squads (#469): mark the point under the crosshair for your team-mates.</summary>
+    public const string Ping = "ping";
     public const string Menu = "menu";
     /// <summary>In a stopped car at a garage: open the tuning menu (<see cref="Vehicles.GarageUi"/>).</summary>
     public const string Tune = "tune";
@@ -273,6 +275,28 @@ public partial class PlayerInput : Node
         Blocked || !SteeringWheel.Active || Input.GetAxis(NLeft, NRight) != 0f
             ? float.NaN
             : SteeringWheel.GameAngle(lockToLock);
+
+    /// <summary>
+    /// On foot only: the pedals walk, brake back minus throttle forward (y back, as <see cref="Move"/>);
+    /// 0 without a wheel. Never in a vehicle, where the pedals drive.
+    /// </summary>
+    public static float WheelWalk => Blocked || !SteeringWheel.Active ? 0f : SteeringWheel.Brake - SteeringWheel.Throttle;
+
+    /// <summary>
+    /// On foot only: the wheel turned ±<see cref="SteeringWheel.PlainSpanDeg"/> turns the view like a
+    /// fully pushed right stick, x right, rad/s; a few degrees around centre do nothing. 0 without a
+    /// wheel. Never in a vehicle, where the wheel steers.
+    /// </summary>
+    public static float WheelLookRate
+    {
+        get
+        {
+            if (Blocked || !SteeringWheel.Active) return 0f;
+            float a = Mathf.Clamp(SteeringWheel.Angle / Mathf.DegToRad(SteeringWheel.PlainSpanDeg), -1f, 1f);
+            float m = Mathf.Max(0f, (Mathf.Abs(a) - 0.05f) / 0.95f);
+            return Mathf.Sign(a) * m * m * StickTurnRate * GameSettings.Current.StickSensitivity;
+        }
+    }
 
     /// <summary>The wheel's handbrake lever (or the button bound to it), 0..1.</summary>
     public static float WheelHandbrake => Blocked || !SteeringWheel.Active ? 0f : SteeringWheel.Handbrake;
@@ -494,6 +518,8 @@ public partial class PlayerInput : Node
         // The place search is a map in all but drawing, so it sits on M. A pad can open it but
         // not type in it, so it stays keyboard-only rather than trapping a controller player.
         Bind(Teleport, Keys(Key.M));
+        // mouse only: a pad has no button left that is free in a match
+        Bind(Ping, Mouse(MouseButton.Middle));
         Bind(Menu, Keys(Key.Escape), Button(JoyButton.Start));
         // Both share a key with something that cannot happen at the same moment: T drops to the
         // fly camera except in a stopped car at a garage, and G / X gathers only as a HOLD, where

@@ -84,7 +84,7 @@ public partial class CampfireProbe : Node
         await Seconds(0.3);
         var node = fire == null ? null : placed.GetNodeOrNull<Node3D>($"P{fire.Id}");
         Expect(node?.FindChild(StationVisuals.LightName, true, false) is OmniLight3D, "it burns: its light is there");
-        Expect(fire != null && CampfireClock.SecondsLeft(fire.Payload, Time.GetUnixTimeFromSystem()) > CampfireClock.BurnSeconds - 30,
+        Expect(fire != null && CampfireClock.SecondsLeft(fire.Payload, Net.ClockSync.ServerUnixNow) > CampfireClock.BurnSeconds - 30,
             $"lit just now, by the server's clock ({fire?.Payload})");
 
         // 3. a fire station: cook
