@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- net8.0, not the terminal tool's net9.0: the game assembly references this, and that is net8 -->
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>UnitSport.Map</RootNamespace>
+    <AssemblyName>MapCore</AssemblyName>
+    <!-- French locale machine: never let the current culture near a float. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- GWR cadastre and the TLM GeoPackage are SQLite; the preprocessor reads them the same way -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <ProjectReference Include="..\TerrainFormat\TerrainFormat.csproj" />
+    <!-- The preprocessor is a library as well as a CLI since #515 phase 2: the build steps call
+         Preprocessor.RunAsync in-process, so neither the game nor this tool needs a .NET SDK or a
+         subprocess. It also brings the GDAL-free GeoPackageReader the canton polygons are read with. -->
+    <ProjectReference Include="..\TerrainPreprocessor\TerrainPreprocessor.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The baked country map, embedded rather than copied beside the binary: the game reads it
+         through the assembly, so no export filter or data path can lose it (the same reason
+         src/Terrain/swiss_relief.gz is embedded). WithCulture because MSBuild otherwise reads
+         ".bin"-like infixes as a culture. -->
+    <EmbeddedResource Include="switzerland.bin" LogicalName="switzerland.bin" WithCulture="false" />
+  </ItemGroup>
+
+</Project>

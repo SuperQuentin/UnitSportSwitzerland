@@ -30,6 +30,13 @@ public sealed record WorldLaunch
     /// <summary>Tracks to load for <see cref="GameMode.GpxReplay"/>; several make a race.</summary>
     public IReadOnlyList<string> GpxPaths { get; init; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Where the player chose to land on the map screen, in LV95 metres (#515). Null falls back to
+    /// <see cref="SpawnPoint.DefaultLv95E"/> (Riddes). <c>--at</c> still wins over both, so every
+    /// probe and screenshot run is unaffected.
+    /// </summary>
+    public (double E, double N)? Landing { get; init; }
+
     /// <summary>The server's display name, when it is known (LAN list, saved list, hosting).</summary>
     public string? ServerName { get; init; }
 

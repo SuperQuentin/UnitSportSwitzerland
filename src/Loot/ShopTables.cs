@@ -136,6 +136,8 @@ public static class ShopTables
             L(ItemId.Cheese, 0.8f, 2, 8), L(ItemId.Chocolate, 0.9f, 4, 12), L(ItemId.MineralWater, 0.9f, 4, 12),
             L(ItemId.WaterBottle, 0.85f, 3, 10), L(ItemId.EnergyBar, 0.6f, 2, 8), L(ItemId.Bandage, 0.3f, 1, 4),
             L(ItemId.RockSalt, 0.35f, 1, 4), L(ItemId.Firewood, 0.3f, 5, 15),
+            // the lake's catch at the fish counter (#493), appended like the sport shop's gear
+            L(ItemId.Perch, 0.3f, 2, 8), L(ItemId.Whitefish, 0.3f, 1, 5),
         },
         // #501: the blue box. A Blåhaj, and the flat-pack and bits anyone actually leaves with.
         [ShopType.Ikea] = new[]
@@ -170,6 +172,8 @@ public static class ShopTables
             L(ItemId.EnergyBar, 0.9f, 4, 12), L(ItemId.WaterBottle, 0.85f, 3, 8), L(ItemId.Binoculars, 0.4f, 1, 2),
             L(ItemId.SwissArmyKnife, 0.7f, 1, 3), L(ItemId.Rope, 0.5f, 1, 4),
             L(ItemId.JoggingShorts, 0.5f, 1, 3), L(ItemId.WhiteSneakers, 0.4f, 1, 2), L(ItemId.KneeSocks, 0.4f, 1, 3),
+            // fishing (#493), appended: a slot's index is its sold count's key (ShopLedger)
+            L(ItemId.FishingRod, 0.6f, 1, 3), L(ItemId.Spinner, 0.7f, 2, 6), L(ItemId.DoughBait, 0.6f, 10, 30),
         },
         [ShopType.Boutique] = PlainClothes.Select(id => L(id, 0.10f, 1, 2))
             .Concat(SpecialClothes.Select(id => L(id, 0.025f, 1, 1)))

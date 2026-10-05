@@ -253,8 +253,11 @@ public class LandmarkTests
         Assert.Equal(8, (int)BuildingType.Ikea);
         Assert.Equal(3, (int)BuildingPart.Store);
         Assert.Equal(11, (int)UnitSport.Loot.ShopType.Ikea);
-        Assert.Equal(200, (int)UnitSport.Items.ItemId.Blahaj);
+        Assert.Equal(223, (int)UnitSport.Items.ItemId.Blahaj);
         // and #497's industrial sites keep 3-7, whichever branch lands first
         Assert.Equal(2, (int)BuildingType.Bank);
+        // 194-222 went to #493's fishing while this branch was open, which is why Blahaj is 223
+        // and not 200: an id is never reused, so the one that was taken is simply skipped
+        Assert.Equal(222, (int)UnitSport.Items.ItemId.RoundGoby);
     }
 }

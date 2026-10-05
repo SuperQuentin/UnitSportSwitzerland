@@ -126,6 +126,9 @@ public partial class InventoryUi
         foreach (var row in _recipeRows)
         {
             var r = row.Recipe;
+            // a fish's cook row only while that fish is in the pack (#493): twenty-odd species would bury the fire
+            row.Root.Visible = !r.OnlyWhenHeld || Store.Count(r.In[0].Id) > 0;
+            if (!row.Root.Visible) continue;
             bool here = (r.Station & _station) != 0;
             int max = Recipes.MaxTimes(Store, r);
             row.Root.Modulate = here && max > 0 ? Colors.White : new Color(1, 1, 1, 0.55f);

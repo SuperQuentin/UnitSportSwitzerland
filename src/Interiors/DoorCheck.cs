@@ -27,7 +27,12 @@ public static class DoorCheck
     /// </summary>
     private const float SameHole = 0.15f;
 
-    private sealed record Box(string What, BuildingKind Kind, float Width, float Depth, float Height, int Least, int Most);
+    /// <param name="Turn">
+    /// Degrees the solid is turned in plan. A box square to the world cannot catch a mirrored
+    /// direction convention — a mirror and the truth agree on it — so one building is turned (#524).
+    /// </param>
+    private sealed record Box(string What, BuildingKind Kind, float Width, float Depth, float Height,
+        int Least, int Most, float Turn = 0f);
 
     private static readonly Box[] Boxes =
     [
@@ -43,6 +48,8 @@ public static class DoorCheck
         // doorway planned inside has to follow it down (the shed above has so little wall that
         // the MinDoorHeight floor wins instead)
         new("a low works", BuildingKind.Industrial, 12, 8, 3.4f, 1, 1),
+        // turned to no axis, so a mirrored plan frame puts its doorways on visibly wrong walls
+        new("a turned block", BuildingKind.Commercial, 48, 18, 12, 3, DoorBudget.MaxPerBuilding, Turn: 31f),
     ];
 
     public static int Run()
@@ -70,6 +77,11 @@ public static class DoorCheck
             var box = Boxes[i];
             var b = tile.Buildings[i];
             var mine = doors.Where(d => d.Index == i && d.Width > 0).OrderBy(d => d.Slot).ToList();
+            // which industrial site it is, if it is one: only those carry loading bays (#528)
+            var site = BuildingTypes.For(tile).Boxes[i] is { } plan
+                ? BuildingTypes.SiteFor(new BuildingKey(tile.Id.E, tile.Id.N, i).ToString(),
+                    b.Kind, plan.Width, plan.Depth, b.MaxY - b.MinY)
+                : BuildingType.None;
             Expect(mine.Count >= box.Least && mine.Count <= box.Most,
                 $"{box.What} ({box.Width:F0}x{box.Depth:F0} m) has {mine.Count} door(s), wanted {box.Least}..{box.Most}");
             Expect(mine.Select(d => d.Slot).SequenceEqual(Enumerable.Range(0, mine.Count)),
@@ -98,10 +110,16 @@ public static class DoorCheck
                         $"{box.What} slot 0: its main door is {d.Height:F2} m, still tall enough to walk through");
                     continue;
                 }
-                // an extra door is a plain pedestrian one, whatever the building is, and it fits
+                // an extra door is a plain pedestrian one, whatever the building is, and it fits —
+                // unless it is an industrial site's loading bay (#528), which is the one extra door
+                // that is wide, rolls up and is driven through
                 Expect(d.Position.Y + d.Height <= b.MaxY + 0.01f, $"{box.What} slot {d.Slot}: the door is under the eave");
-                Expect(d.Hang == DoorHang.Inward && !d.Vehicle && d.Width <= 1.8f,
-                    $"{box.What} slot {d.Slot}: a pedestrian door ({d.Width:F1} m, {d.Hang}), not driven through");
+                if (d.Hang == DoorHang.RollUp && d.Vehicle)
+                    Expect(site != BuildingType.None,
+                        $"{box.What} slot {d.Slot}: a loading bay, and its building is an industrial site");
+                else
+                    Expect(d.Hang == DoorHang.Inward && !d.Vehicle && d.Width <= 1.8f,
+                        $"{box.What} slot {d.Slot}: a pedestrian door ({d.Width:F1} m, {d.Hang}), not driven through");
                 // and the sign over the door, and the shop behind it, belong to the main door
                 Expect(!d.Bank && d.Shop == Loot.ShopType.None, $"{box.What} slot {d.Slot}: no second shop sign");
             }
@@ -112,8 +130,15 @@ public static class DoorCheck
                     if (a.Slot >= c.Slot) continue;
                     float gap = new Vector2(a.Position.X - c.Position.X, a.Position.Z - c.Position.Z).Length()
                         - a.Width / 2 - c.Width / 2;
-                    Expect(gap >= DoorBudget.MinGap - 0.01f,
-                        $"{box.What}: slots {a.Slot} and {c.Slot} are {gap:F1} m apart, wall to wall");
+                    // Two loading bays stand a pier apart on purpose (#528) — the strip of wall
+                    // that carries their lintels — and a bay sits closer to the main door than a
+                    // pedestrian door would, because a works' office door is beside its first bay.
+                    // Everything else keeps MinGap.
+                    bool bays = a.Hang == DoorHang.RollUp && a.Vehicle && c.Hang == DoorHang.RollUp && c.Vehicle;
+                    bool bayAndDoor = (a.Hang == DoorHang.RollUp && a.Vehicle) || (c.Hang == DoorHang.RollUp && c.Vehicle);
+                    float least = bays ? 0.25f : bayAndDoor ? DoorBudget.BayToDoorGap : DoorBudget.MinGap;
+                    Expect(gap >= least - 0.01f,
+                        $"{box.What}: slots {a.Slot} and {c.Slot} are {gap:F1} m apart, wall to wall (least {least:F2})");
                 }
 
             // a barn and a garage keep their vehicle door, and gain a door for a person
@@ -169,6 +194,17 @@ public static class DoorCheck
                     + $"({d.Height:F2} m door under a {roomClear:F2} m ceiling)");
                 Expect(Math.Abs(way.X) <= layout.Width / 2 + 0.01f && Math.Abs(way.Z) <= layout.Depth / 2 + 0.01f,
                     $"{box.What} slot {d.Slot}: its doorway is inside the plan box");
+                // ...and faces the way the real door does. Distance and containment survive a
+                // mirrored plan frame; a direction does not (#524). On a turned solid a mirror
+                // lands the doorway on a visibly different wall, so this is the assertion that
+                // can tell a correct convention from a flipped one.
+                var axisU = new Vector2(Mathf.Cos(layout.Yaw), -Mathf.Sin(layout.Yaw));
+                var axisV = new Vector2(-axisU.Y, axisU.X);
+                var inward = axisU * way.InX + axisV * way.InZ;
+                var into = new Vector2(-d.Outward.X, -d.Outward.Z);
+                Expect(inward.Normalized().Dot(into.Normalized()) > 0.3f,
+                    $"{box.What} slot {d.Slot}: the doorway inside faces the way the door does "
+                    + $"(in {inward.Normalized()} vs {into.Normalized()})");
             }
             GD.Print($"[doorcheck] {box.What}: {mine.Count} door(s), {layout.AllEntrances().Count} entrance(s), "
                 + $"{layout.Floors.Count} floor(s), {string.Join("/", mine.Select(d => $"{d.Width:F1}m {d.Hang}"))}");
@@ -219,10 +255,13 @@ public static class DoorCheck
             Tri(p0, p1, p1 + Vector3.Up * h);
             Tri(p0, p1 + Vector3.Up * h, p0 + Vector3.Up * h);
         }
-        var nw = new Vector3(500 - hw, 0, cz - hd);
-        var ne = new Vector3(500 + hw, 0, cz - hd);
-        var se = new Vector3(500 + hw, 0, cz + hd);
-        var sw = new Vector3(500 - hw, 0, cz + hd);
+        float turn = Mathf.DegToRad(box.Turn);
+        Vector3 Corner(float x, float z) =>
+            new(500 + x * Mathf.Cos(turn) - z * Mathf.Sin(turn), 0, cz + x * Mathf.Sin(turn) + z * Mathf.Cos(turn));
+        var nw = Corner(-hw, -hd);
+        var ne = Corner(hw, -hd);
+        var se = Corner(hw, hd);
+        var sw = Corner(-hw, hd);
         Wall(nw, ne); Wall(ne, se); Wall(se, sw); Wall(sw, nw);
         Tri(nw + Vector3.Up * h, ne + Vector3.Up * h, se + Vector3.Up * h);
         Tri(nw + Vector3.Up * h, se + Vector3.Up * h, sw + Vector3.Up * h);

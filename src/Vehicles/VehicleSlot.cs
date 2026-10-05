@@ -53,6 +53,28 @@ public readonly record struct VehicleSlot(
 }
 
 /// <summary>
+/// One industrial site's yard: the open ground its fleet stands on (#496 phase 3). The Godot side
+/// works it out from <c>BuildingTypes.SiteFor</c> and the building's plan box and hands it over,
+/// the same way <see cref="DormantSlots.ForParking"/> is handed a tile's <see cref="ParkingBay"/>s
+/// — so this file stays free of Godot and of <c>src/Interiors</c>, and stays in tier 0.
+/// </summary>
+public readonly record struct SiteYard(
+    // The building whose yard it is, as `BuildingKey` text, "E_N_Index". It becomes the slots'
+    // owner, so `DormantVehicles.SlotOf` sees a three-part owner here and a two-part one for a car
+    // park; its first two parts must be the tile.
+    string Owner,
+    // The `BuildingType` as an int, for the same reason `VehicleSlot.KindId` is one: that enum
+    // lives in src/Interiors, which pulls Godot in.
+    int SiteType,
+    // Tile-local centre of the strip, X east and Z south, Y the ground it stands on.
+    float X, float Y, float Z,
+    // Radians about +Y, 0 = -Z (north): the way a vehicle in the yard faces, nose first — square
+    // to the building's own wall, because that is how a yard is marked out.
+    float Heading,
+    // The strip, metres: across the building's wall, and out from it.
+    float Width, float Depth);
+
+/// <summary>
 /// Where dormant vehicles stand, as a <b>pure function of the tile's own bytes</b> — so the server
 /// and every client work out the same fleet from the same files and not one byte of it is ever sent.
 /// Car parks are the first provider (#499); an industrial site's yard is meant to be the second
@@ -100,6 +122,114 @@ public static class DormantSlots
                 (h >> 40 & 7) == 0 && bay.Kind != ParkingBayKind.Motorcycle));
         }
     }
+
+    /// <summary>
+    /// What stands in an industrial site's yard (#496 phase 3), as rows across the strip. The fleet
+    /// is the site's own: a haulier's tractors and artics and the trailers dropped beside them, a
+    /// dealership's stock rows, a works' staff cars.
+    ///
+    /// <para>
+    /// Rows run across the building's wall and march out from it, at the pitch the longest thing in
+    /// the fleet needs, so a 13.6 m artic and a 4 m hatchback are never laid out on the same grid.
+    /// A dealership's rows face one way and are packed tight, because a forecourt is arranged to be
+    /// looked at; everything else faces either way and leaves gaps, because a working yard is not.
+    /// </para>
+    ///
+    /// <para>
+    /// Every roll comes from the slot's own place in its own yard, never from a running counter, so
+    /// one site's fleet never shifts when a neighbour's changes — the same rule
+    /// <see cref="ForParking"/> follows, and the reason the ordinal can name the vehicle.
+    /// </para>
+    /// </summary>
+    /// <param name="cars">Ordinary car <c>RideKind</c>s. <paramref name="heavies"/>: tractors and
+    /// rigids. <paramref name="trailers"/>: <c>TrailerCatalog</c> codes, already loaded.</param>
+    public static void ForSite(TileId id, IReadOnlyList<SiteYard> yards,
+        IReadOnlyList<int> cars, IReadOnlyList<int> heavies, IReadOnlyList<int> trailers,
+        int trailerKind, List<VehicleSlot> into)
+    {
+        if (cars.Count == 0) return;
+        foreach (var yard in yards)
+        {
+            // how full, and of what: the site's own roll, so two depots on one tile differ
+            ulong yh = Hash(Key((long)(yard.X * 100), (long)(yard.Z * 100)), 0x5173);
+            var site = (SiteFleet)yard.SiteType;
+            bool heavy = site is SiteFleet.Depot or SiteFleet.Warehouse && heavies.Count > 0 && trailers.Count > 0;
+            // a forecourt is packed and tidy; a working yard is not
+            bool neat = site == SiteFleet.Dealership;
+            float fill = neat ? 0.92f : site switch
+            {
+                SiteFleet.Depot => 0.72f,
+                SiteFleet.Mechanic => 0.60f,
+                SiteFleet.Warehouse => 0.48f,
+                _ => 0.40f,
+            };
+
+            // the grid: a bay as wide and deep as the longest thing that parks in it
+            float cell = heavy ? 4.2f : 3.2f;
+            float row = heavy ? 16.5f : 6.0f;
+            int across = (int)(yard.Width / cell);
+            int deep = (int)(yard.Depth / row);
+            if (across < 1 || deep < 1) continue;
+
+            float cos = MathF.Cos(yard.Heading), sin = MathF.Sin(yard.Heading);
+            int ordinal = 0;
+            for (int d = 0; d < deep; d++)
+                for (int a = 0; a < across; a++, ordinal++)
+                {
+                    // along the wall, and out from it, in the yard's own frame
+                    float u = (a + 0.5f) * cell - yard.Width / 2;
+                    float v = (d + 0.5f) * row - yard.Depth / 2;
+                    // Yaw 0 faces -Z, so the way out of the wall is (-sin, -cos) and the way along
+                    // it is (cos, -sin). +v is further from the building, +u is along its face.
+                    float x = yard.X + u * cos - v * sin;
+                    float z = yard.Z - u * sin - v * cos;
+
+                    ulong h = Hash(Key((long)(x * 100), (long)(z * 100)), 0xFA17);
+                    if ((h & 0xFFFF) / 65535.0 > fill) continue;
+
+                    // a forecourt's stock all faces the way it is meant to be seen from
+                    float yaw = neat ? yard.Heading : yard.Heading + ((h >> 17 & 1) == 0 ? 0f : MathF.PI);
+                    var slot = new VehicleSlot(yard.Owner, ordinal,
+                        id.MinE + x, id.MaxN - z, yard.Y, Wrap(yaw),
+                        cars[(int)(h >> 20 & 0xFFFF) % cars.Count],
+                        (byte)(neat ? (h >> 36 & 7) : h >> 36 & 3),   // a forecourt is brighter
+                        !neat && (h >> 40 & 7) == 0);
+
+                    if (heavy) slot = Heavy(slot, site, h, heavies, trailers, trailerKind);
+                    into.Add(slot);
+                }
+        }
+    }
+
+    /// <summary>
+    /// Turns a yard slot into part of the fleet where the site has one: a coupled artic, a lone
+    /// trailer dropped on its legs, a bare tractor or a rigid. A warehouse is mostly trailers backed
+    /// at the dock with a van among them; a depot is the whole mix, because that is what a haulier's
+    /// yard holds between runs.
+    /// </summary>
+    private static VehicleSlot Heavy(VehicleSlot slot, SiteFleet site, ulong h,
+        IReadOnlyList<int> heavies, IReadOnlyList<int> trailers, int trailerKind)
+    {
+        int roll = (int)(h >> 44 & 0xFF);
+        // a trailer's own identity, and how loaded it is, in one code (TrailerCatalog)
+        int code = trailers[(int)(h >> 24 & 0xFFFF) % trailers.Count];
+        int tractor = heavies[(int)(h >> 28 & 0xFFFF) % heavies.Count];
+        float load = (h >> 52 & 0xFF) / 255f;
+
+        // a warehouse's yard is trailers at the dock; a depot's is tractors and whole trains too
+        int lone = site == SiteFleet.Warehouse ? 190 : 105;
+        if (roll < lone) return slot with { KindId = trailerKind, Train = code, Load = 0f };
+        if (roll < lone + 70) return slot with { KindId = tractor, Train = code, Load = load };
+        if (roll < lone + 115) return slot with { KindId = tractor, Train = 0, Load = load };
+        return slot;   // a car among them: somebody drove to work
+    }
+
+    /// <summary>
+    /// The site types this file needs to tell apart, as the ints <see cref="SiteYard.SiteType"/>
+    /// carries. The names and numbers are <c>Interiors.BuildingType</c>'s and must not drift from
+    /// it; the unit tests pin both sides.
+    /// </summary>
+    private enum SiteFleet { Warehouse = 3, Factory = 4, Depot = 5, Mechanic = 6, Dealership = 7 }
 
     private static float Wrap(float a)
     {

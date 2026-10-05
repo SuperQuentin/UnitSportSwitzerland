@@ -184,6 +184,19 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         return best;
     }
 
+    /// <summary>
+    /// Whether a lone trailer stands within <paramref name="reach"/> of a point, measured flat to
+    /// the body (not its kingpin, which is the far end walking up from behind): the trailer's
+    /// intro card (#517).
+    /// </summary>
+    public bool LoneTrailerNear(Vector3 point, float reach)
+    {
+        foreach (var node in GetChildren())
+            if (node is VehicleBody { Wrecked: false, Trailer: not null } v && Core.MathX.FlatDistance(v.GlobalPosition, point) < reach)
+                return true;
+        return false;
+    }
+
     // ---- server side --------------------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]

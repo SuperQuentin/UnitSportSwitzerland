@@ -1,18 +1,29 @@
 #!/usr/bin/env bash
-# Local release: next semver from commits since the last tag, Windows + Linux + macOS exports, GitHub release.
-# Usage: tools/release.sh [--dry-run]   (Git Bash or WSL, on a main in sync with origin/main; GODOT=godot on WSL)
+# Local release: next semver from commits since the last tag, Windows + Linux + macOS exports, GitHub release,
+# then the delta files from the previous release (tools/deltas.sh).
+# Usage: tools/release.sh [--dry-run] [--no-upload] [--ci]   (Git Bash or WSL, on a main in sync with origin/main; GODOT=godot on WSL)
+# --dry-run: print the version and changelog only. --no-upload: build every export but publish nothing (no deltas either).
+# --ci: run from .github/workflows/release.yml, which already checked out the tip of main detached.
 # The build runs in a temporary worktree of the released commit, so your working files are never touched.
 # Needs: gh (logged in), dotnet, Godot mono + export templates (windows, linux, macos), export_presets.cfg in the repo root
 # ("Linux" and "macOS" presets are added when missing), curl, unzip, tar, xz, zip or PowerShell.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
+DRY=0; CI=0; NOUP=0
+for a in "$@"; do case $a in
+  --dry-run) DRY=1 ;;
+  --no-upload) NOUP=1 ;;
+  --ci) CI=1 ;;
+  *) echo "Unknown option: $a"; exit 2 ;;
+esac; done
 GODOT=${GODOT:-'/c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.1-stable_mono_win64/godot_v4.7.1-stable_mono_win64_console.exe'}
 OUT=test_output/release; mkdir -p "$OUT"
 
-[ "$(git branch --show-current)" = main ] || { echo "Not on main"; exit 1; }
-git fetch -q origin --tags
-[ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || { echo "main is not in sync with origin/main (push or pull first)"; exit 1; }
+if [ $CI = 0 ]; then
+  [ "$(git branch --show-current)" = main ] || { echo "Not on main"; exit 1; }
+  git fetch -q origin --tags
+  [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || { echo "main is not in sync with origin/main (push or pull first)"; exit 1; }
+fi
 SHA=$(git rev-parse HEAD)
 
 last=$(git describe --tags --abbrev=0 "$SHA" --match 'v[0-9]*' 2>/dev/null || true)
@@ -108,9 +119,12 @@ tarball() {
   tar -rf "${out%.gz}" -C "$dir" --owner=0 --group=0 --mode=0755 "$@"
   gzip -f "${out%.gz}"
 }
-export_preset() { # preset, output file
-  "$GODOT" --headless --path . --export-release "$1" "$2"
-  [ -e "$2" ] || { echo "Export \"$1\" failed"; exit 1; }
+SKIPPED=()
+export_preset() { # preset, output file: returns 1 (never exits) so the caller can skip that platform
+  "$GODOT" --headless --path . --export-release "$1" "$2" || true
+  [ -e "$2" ] && return 0
+  echo "WARNING: export \"$1\" produced nothing (template missing on this host?), skipping that platform"
+  SKIPPED+=("$1"); return 1
 }
 
 dotnet build UnitSportSwitzerland.csproj -c Release
@@ -118,28 +132,49 @@ dotnet build UnitSportSwitzerland.csproj -c Release
 rm -rf build; mkdir -p build/windows build/linux build/macos
 ASSETS=()
 
-export_preset "Windows Desktop" build/windows/UnitSportSwitzerland.exe
-fetch_tools windows build/windows/bin
-ZIP="$REPO/$OUT/UnitSportSwitzerland-v$V-windows.zip"; rm -f "$ZIP"
-if command -v zip >/dev/null; then (cd build/windows && zip -qr "$ZIP" .)
-else powershell -NoProfile -Command "Compress-Archive -Path 'build/windows/*' -DestinationPath '$(cygpath -w "$ZIP" 2>/dev/null || echo "$ZIP")'"; fi
-ASSETS+=("$ZIP")
+if export_preset "Windows Desktop" build/windows/UnitSportSwitzerland.exe; then
+  fetch_tools windows build/windows/bin
+  ZIP="$REPO/$OUT/UnitSportSwitzerland-v$V-windows.zip"; rm -f "$ZIP"
+  if command -v zip >/dev/null; then (cd build/windows && zip -qr "$ZIP" .)
+  else powershell -NoProfile -Command "Compress-Archive -Path 'build/windows/*' -DestinationPath '$(cygpath -w "$ZIP" 2>/dev/null || echo "$ZIP")'"; fi
+  ASSETS+=("$ZIP")
+fi
 
-export_preset "Linux" build/linux/UnitSportSwitzerland.x86_64
-fetch_tools linux build/linux/bin
-TGZ="$REPO/$OUT/UnitSportSwitzerland-v$V-linux-x86_64.tar.gz"
-tarball "$TGZ" build/linux UnitSportSwitzerland.x86_64 bin/yt-dlp bin/qjs bin/ffmpeg
-ASSETS+=("$TGZ")
+if export_preset "Linux" build/linux/UnitSportSwitzerland.x86_64; then
+  fetch_tools linux build/linux/bin
+  TGZ="$REPO/$OUT/UnitSportSwitzerland-v$V-linux-x86_64.tar.gz"
+  tarball "$TGZ" build/linux UnitSportSwitzerland.x86_64 bin/yt-dlp bin/qjs bin/ffmpeg
+  ASSETS+=("$TGZ")
+fi
 
 # Godot can only write a macOS export as a .zip off a Mac; unpacked here so the tools go inside the bundle
 # (Contents/MacOS/bin, next to the executable) and the exec bits are set. Unsigned: first launch needs xattr -cr.
-export_preset "macOS" build/macos.zip
-unzip -qo build/macos.zip -d build/macos
-APP=$(cd build/macos && ls -d *.app | head -1)
-fetch_tools macos "build/macos/$APP/Contents/MacOS/bin"
-TGZ="$REPO/$OUT/UnitSportSwitzerland-v$V-macos.tar.gz"
-tarball "$TGZ" build/macos $(cd build/macos && find "$APP/Contents/MacOS" -type f)
-ASSETS+=("$TGZ")
+if export_preset "macOS" build/macos.zip; then
+  unzip -qo build/macos.zip -d build/macos
+  APP=$(cd build/macos && ls -d *.app | head -1)
+  fetch_tools macos "build/macos/$APP/Contents/MacOS/bin"
+  TGZ="$REPO/$OUT/UnitSportSwitzerland-v$V-macos.tar.gz"
+  tarball "$TGZ" build/macos $(cd build/macos && find "$APP/Contents/MacOS" -type f)
+  ASSETS+=("$TGZ")
+fi
+
+[ ${#ASSETS[@]} -gt 0 ] || { echo "Every export failed, nothing to release. Are the mono export templates installed?"; exit 1; }
+# Say so in the notes rather than silently shipping fewer downloads than usual.
+if [ ${#SKIPPED[@]} -gt 0 ]; then
+  printf '\n_Built on a host that could not export %s, so this release ships without it._\n' \
+    "$(IFS=,; echo "${SKIPPED[*]}")" >> "$REPO/$OUT/notes.md"
+fi
+
+if [ $NOUP = 1 ]; then
+  echo "Built v$V without releasing${SKIPPED[0]+, skipping ${SKIPPED[*]}}:"
+  for a in "${ASSETS[@]}"; do echo "  $(du -h "$a" | cut -f1)	${a#$REPO/}"; done
+  exit 0
+fi
 
 gh release create "v$V" "${ASSETS[@]}" --target "$SHA" --title "v$V" --notes-file "$REPO/$OUT/notes.md"
-echo "Released v$V"
+echo "Released v$V with ${#ASSETS[@]} asset(s)${SKIPPED[0]+, skipping ${SKIPPED[*]}}"
+
+# delta updates (#532): the game updates from $last with these instead of the full archive
+if [ -n "$last" ]; then
+  (cd "$REPO" && tools/deltas.sh "$last" "v$V" --upload) || echo "Deltas failed; the release stands. Retry with: tools/deltas.sh $last v$V --upload"
+fi

@@ -124,12 +124,24 @@ public static class BuildingMeshBuilder
                 Quad(P(-hw, mid, 0.03f), P(hw, mid, 0.03f), P(hw, y1, 0.03f), P(-hw, y1, 0.03f), metal);
                 Quad(P(-hw, y0, 0.03f), P(hw, y0, 0.03f), P(hw, mid, 0.03f), P(-hw, mid, 0.03f), metal * 0.8f);
             }
-            // the sign: a workshop-blue board, and on it a light face the shader lights at night
-            Box(-hw - 0.35f, hw + 0.35f, h + 0.2f, h + 0.85f, 0, 0.12f, new Color(0.16f, 0.30f, 0.58f).SrgbToLinear());
-            int start = f.Count;
-            Quad(P(-hw - 0.22f, h + 0.3f, 0.13f), P(hw + 0.22f, h + 0.3f, 0.13f),
-                P(hw + 0.22f, h + 0.75f, 0.13f), P(-hw - 0.22f, h + 0.75f, 0.13f), Colors.White);
-            for (int i = start; i < f.Count; i++) f[i] = SignFlag;
+            // The sign: a workshop-blue board with a light face the shader lights at night. Only
+            // over the MAIN door — a works has one name over its entrance, not one over every
+            // loading bay (#528). A row of four lit shop signs along a warehouse wall read as a
+            // parade of garages.
+            if (d.Slot == 0)
+            {
+                Box(-hw - 0.35f, hw + 0.35f, h + 0.2f, h + 0.85f, 0, 0.12f, new Color(0.16f, 0.30f, 0.58f).SrgbToLinear());
+                int start = f.Count;
+                Quad(P(-hw - 0.22f, h + 0.3f, 0.13f), P(hw + 0.22f, h + 0.3f, 0.13f),
+                    P(hw + 0.22f, h + 0.75f, 0.13f), P(-hw - 0.22f, h + 0.75f, 0.13f), Colors.White);
+                for (int i = start; i < f.Count; i++) f[i] = SignFlag;
+            }
+            else
+            {
+                // a bay gets a painted lintel band instead, which is what numbers them in a real yard
+                Box(-hw - 0.2f, hw + 0.2f, h + 0.12f, h + 0.42f, 0, 0.1f,
+                    new Color(0.80f, 0.68f, 0.16f).SrgbToLinear());
+            }
             // flush with the ground, or a car would hit a kerb
             Box(-hw - 0.2f, hw + 0.2f, -0.3f, 0.01f, 0, 0.45f, step);
             return;
