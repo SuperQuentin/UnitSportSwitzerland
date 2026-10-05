@@ -947,6 +947,23 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return;
         }
 
+        // Explore from the menus starts on foot, on open ground (#517), behind this screen
+        if (Launch is { Mode: GameMode.Explore, FromCommandLine: false } && !_groundStarted)
+        {
+            _groundStarted = true;
+            if (!_onFoot && _player == null)
+            {
+                AddChild(_player = new FootPlayer { Name = "Player", Terrain = _chunks });
+                EnterFootMode(_player);
+                _groundStart = new GroundStart(_chunks, _player);
+            }
+        }
+        if (_groundStart is { Done: false } ground && !ground.Step(delta))
+        {
+            Report(LoadStage.PlacingYou, 0.34f);
+            return;
+        }
+
         var eye = GetViewport().GetCamera3D()?.GlobalPosition ?? Vector3.Zero;
         var (done, total) = _chunks.PlayableNear(eye, 0);
         _terrainClock += delta;
@@ -1426,6 +1443,40 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private FootPlayer? LocalPlayer => _networked ? GetLocalNetPlayer() : _player;
 
     /// <summary>
+    /// The first-run tutorial (#517) over this world, once: the shell calls it when the loading
+    /// screen is gone, Settings when it is played again. Not in a replay.
+    /// </summary>
+    public void StartTutorial()
+    {
+        if (Tutorial.Current != null || Launch.Mode == GameMode.GpxReplay) return;
+        AddChild(new Tutorial(
+            walker: () => _onFoot ? LocalPlayer : null,
+            flying: () => !_onFoot && _spectator is { Current: true },
+            mapOpen: () => _places is { IsOpen: true },
+            covered: () => Covered || _vehicleIntros is { Showing: true }));
+    }
+
+    private VehicleIntroCard? _vehicleIntros;
+
+    /// <summary>
+    /// The rides' mini tutorials (#517), each shown the first time the player drives that kind:
+    /// the shell starts them with the world, in every session from the menus.
+    /// </summary>
+    public void StartVehicleIntros()
+    {
+        if (_vehicleIntros != null || Launch.Mode == GameMode.GpxReplay) return;
+        AddChild(_vehicleIntros = new VehicleIntroCard(() => Viewer, () => Covered));
+    }
+
+    /// <summary>Whoever owns the camera on screen: the local player, or a body a probe made itself; null in the fly camera.</summary>
+    private FootPlayer? Viewer =>
+        (_onFoot ? LocalPlayer : null) ?? (XR.XrSession.Anchor ?? GetViewport().GetCamera3D())?.GetParent() as FootPlayer;
+
+    /// <summary>Something owns the screen: a menu, the travel menu, the map, a replay.</summary>
+    private bool Covered => MenuOpen?.Invoke() == true || _rides is { IsOpen: true } || _places is { IsOpen: true }
+        || _gpx is { Active: true };
+
+    /// <summary>
     /// The hints for the prompt bar: what the buttons do in the situation the player is in now.
     /// Short on purpose — the loot, door and gather prompts are already centred on screen, and
     /// the whole list is one F1 away.
@@ -1434,9 +1485,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         if (MenuOpen?.Invoke() == true || _gpx is { Active: true } || _rides is { IsOpen: true }) yield break;
 
-        // whoever owns the camera on screen: the local player, or a body a probe made itself
         var shown = XR.XrSession.Anchor ?? GetViewport().GetCamera3D();
-        var viewer = (_onFoot ? LocalPlayer : null) ?? shown?.GetParent() as FootPlayer;
+        var viewer = Viewer;
         if (viewer == null && shown == _spectator)
         {
             yield return (PlayerInput.ToggleMode, "Walk");
@@ -1635,6 +1685,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     }
 
     /// <summary>The spawn point has not found the ground under the spawn yet.</summary>
+    private bool _groundStarted;
+    private GroundStart? _groundStart;
+
     private bool SpawnPending => _spawn != null && IsInstanceValid(_spawn) && _spawn.IsInsideTree();
 
     private FootPlayer? _pendingFoot;
