@@ -7,6 +7,11 @@ public enum InputDevice
 {
     KeyboardMouse,
     Gamepad,
+    /// <summary>
+    /// The VR controllers (#435). Never <see cref="PlayerInput.LastDevice"/> (they replay as a pad,
+    /// so pad-only behaviour holds); only <see cref="PlayerInput.HintDevice"/>, so prompts name them.
+    /// </summary>
+    VR,
 }
 
 /// <summary>
@@ -111,6 +116,8 @@ public partial class PlayerInput : Node
     public const string CameraToggle = "camera_toggle";
     public const string ToggleMode = "toggle_mode";
     public const string Teleport = "teleport";
+    /// <summary>Battle Royale squads (#469): mark the point under the crosshair for your team-mates.</summary>
+    public const string Ping = "ping";
     public const string Menu = "menu";
     /// <summary>In a stopped car at a garage: open the tuning menu (<see cref="Vehicles.GarageUi"/>).</summary>
     public const string Tune = "tune";
@@ -118,6 +125,12 @@ public partial class PlayerInput : Node
     public const string CarDoor = "car_door";
     /// <summary>The travel picker (<see cref="Player.RideUi"/>): mounts, equipment and, for an admin, vehicles.</summary>
     public const string RideMenu = "ride_menu";
+    /// <summary>
+    /// The pad's analog triggers alone, 0..1, for code that wants the pull itself (flight's lever,
+    /// the GPX camera). Through the input map rather than <c>Input.GetJoyAxis(0, …)</c>, so any
+    /// pad works, and so do the VR controllers, which replay as a pad (#436).
+    /// </summary>
+    public const string TriggerRight = "trigger_right", TriggerLeft = "trigger_left";
     /// <summary>The controls overlay (<see cref="ControlsHelp"/>), built from the live bindings.</summary>
     public const string Help = "help";
     /// <summary>The debug menu (<see cref="DebugMenu"/>): overlays, terrain layers, view modes. Offline or as an admin.</summary>
@@ -169,8 +182,27 @@ public partial class PlayerInput : Node
 
     private static InputDevice _lastDevice = InputDevice.KeyboardMouse;
 
-    /// <summary>Raised when the player switches between keyboard and pad, so on-screen key hints can follow.</summary>
+    /// <summary>
+    /// Raised when the player switches between keyboard and pad, or when what a VR control is
+    /// called changes (<see cref="HintsChanged"/>), so on-screen key hints can follow.
+    /// </summary>
     public static event Action? DeviceChanged;
+
+    /// <summary>
+    /// The device prompts name (#435): <see cref="InputDevice.VR"/> while the headset is on, where
+    /// <see cref="LastDevice"/> stays Gamepad because the controllers replay as a pad.
+    /// </summary>
+    public static InputDevice HintDevice => XR.XrSession.Active ? InputDevice.VR : _lastDevice;
+
+    /// <summary>
+    /// What a control is called changed without a device switch (the VR controller was recognised,
+    /// the VR triggers changed role on mounting): forget the hints and tell whoever shows them.
+    /// </summary>
+    public static void HintsChanged()
+    {
+        InputHints.Invalidate();
+        DeviceChanged?.Invoke();
+    }
 
     // Per-frame reads: a string action converts to a new StringName on every call (#221).
     private static readonly StringName NLeft = MoveLeft, NRight = MoveRight, NForward = MoveForward, NBack = MoveBack,
@@ -323,8 +355,8 @@ public partial class PlayerInput : Node
     {
         // the steering wheel is read through SDL; Godot's copy of it is not a pad
         if (e is InputEventJoypadButton or InputEventJoypadMotion && _ignoredPads.Contains(e.Device)) return;
-        // VR replays the controllers as a pad, and points at the UI panel with mouse events:
-        // the prompts stay on pad glyphs either way (#186)
+        // VR replays the controllers as a pad, and points at the UI panel with mouse events: it
+        // stays a pad for pad-only behaviour either way (#186); prompts ask HintDevice (#435)
         if (XR.XrSession.Active)
         {
             LastDevice = InputDevice.Gamepad;
@@ -479,6 +511,8 @@ public partial class PlayerInput : Node
         Bind(FlyUp, Keys(Key.Space, Key.E), Button(JoyButton.A), Axis(JoyAxis.TriggerRight, 1));
         Bind(FlyDown, Keys(Key.Shift, Key.Q), Button(JoyButton.B), Axis(JoyAxis.TriggerLeft, 1));
         Bind(FlyBoost, Keys(Key.Ctrl), Button(JoyButton.LeftStick));
+        Bind(TriggerRight, Axis(JoyAxis.TriggerRight, 1));
+        Bind(TriggerLeft, Axis(JoyAxis.TriggerLeft, 1));
 
         // E only ever acts on what is in front of you (get in or out, search, a door). The
         // travel picker has its own key: sharing E made the picker pop up whenever you pressed
@@ -492,6 +526,8 @@ public partial class PlayerInput : Node
         // The place search is a map in all but drawing, so it sits on M. A pad can open it but
         // not type in it, so it stays keyboard-only rather than trapping a controller player.
         Bind(Teleport, Keys(Key.M));
+        // mouse only: a pad has no button left that is free in a match
+        Bind(Ping, Mouse(MouseButton.Middle));
         Bind(Menu, Keys(Key.Escape), Button(JoyButton.Start));
         // Both share a key with something that cannot happen at the same moment: T drops to the
         // fly camera except in a stopped car at a garage, and G / X gathers only as a HOLD, where

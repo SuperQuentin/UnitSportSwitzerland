@@ -569,11 +569,11 @@ public partial class SwimCheck : Node
         float deepest = 0f, lo = float.MaxValue, hi = float.MinValue, travel = 0f;
         Vector3? settled = null;
         bool shot = false;
-        double start = Time.GetTicksMsec() / 1000.0;
+        double start = GameClock.Now;
         while (t < 14)
         {
             await Wait(0.05);
-            t = Time.GetTicksMsec() / 1000.0 - start;
+            t = GameClock.Now - start;
             if (!_me.Ragdolled) { swimAt = t; break; }
             if (_me.RagdollPelvis is not { } hip || !WaterField.TryLevelAt(hip, out float level)) continue;
             float sub = level - hip.Y;

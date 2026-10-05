@@ -3,19 +3,20 @@ using Godot;
 namespace UnitSport.BattleRoyale;
 
 /// <summary>
-/// The cargo plane's line over the region (#207), in zone metres (east, north of the centre).
+/// The cargo plane's line over the region and its first circle (#207), in zone metres (east, north of the centre).
 /// Rebuilt by every peer from the match state (<see cref="BrState.Seed"/>, <see cref="BrState.FlightStart"/>,
 /// <see cref="BrState.FlightAlt"/>) and the shared clock, like the zone: nothing is sent while it flies.
 /// <para>
-/// A straight line at a seeded angle, offset up to 30 % of the half side from the centre. The plane
-/// starts <see cref="Lead"/> metres before the region's edge, the doors open as it crosses into the
-/// square and close <see cref="DoorMargin"/> before it leaves; whoever is still aboard then is pushed out.
-/// The zone's clock (<see cref="BrState.Started"/>) starts when the doors close.
+/// A straight line at a seeded angle, offset up to 30 % of the first circle's radius from its centre
+/// (the circle is sized for the field, #447). The doors open where the plane is over both that circle
+/// and the square, so nobody jumps before the zone; the plane starts <see cref="Lead"/> metres before
+/// that point. They close <see cref="DoorMargin"/> before it leaves; whoever is still aboard then is
+/// pushed out. The zone's clock (<see cref="BrState.Started"/>) starts when the doors close.
 /// </para>
 /// </summary>
 public readonly struct BrFlight
 {
-    /// <summary>Metres flown before the region's edge: time to look around and to stream the ground in.</summary>
+    /// <summary>Metres flown before the doors open: time to look around and to stream the ground in.</summary>
     public const float Lead = 1500f;
     /// <summary>Metres before the far edge at which the doors close, so the last ones out still land inside.</summary>
     public const float DoorMargin = 300f;
@@ -36,29 +37,36 @@ public readonly struct BrFlight
     public readonly float Speed, Altitude;
     public readonly double Start;
 
-    public BrFlight(int seed, float side, float pace, double start, float altitude)
+    /// <param name="centre">The first circle's centre, zone metres (<see cref="ZoneSchedule.CentreOf"/> 0).</param>
+    /// <param name="radius">The first circle's radius; 0 for the full circle of an unknown field.</param>
+    public BrFlight(int seed, float side, float pace, double start, float altitude, Vector2 centre = default, float radius = 0f)
     {
-        var (angle, offset) = Line(seed, side);
+        if (radius <= 0f) (centre, radius) = (Vector2.Zero, ZoneSchedule.FirstRadius(side, 0));
+        var (angle, offset) = Line(seed, radius);
         Dir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
-        var through = new Vector2(-Dir.Y, Dir.X) * offset;
-        var (tIn, tOut) = Chord(through, Dir, side * 0.5f);
+        var through = centre + new Vector2(-Dir.Y, Dir.X) * offset;
+        // over the square and over the circle (the offset is across the line, so the circle is ±half its chord)
+        var (sIn, sOut) = Chord(through, Dir, side * 0.5f);
+        float halfChord = Mathf.Sqrt(Math.Max(0f, radius * radius - offset * offset));
+        float tIn = Math.Max(sIn, -halfChord), tOut = Math.Min(sOut, halfChord);
         From = through + Dir * (tIn - Lead);
         Opens = Lead;
-        Closes = Lead + Math.Max(0f, tOut - tIn - DoorMargin);
+        // a short chord over a small circle keeps most of itself open
+        Closes = Lead + Math.Max(0f, tOut - tIn - Math.Min(DoorMargin, (tOut - tIn) * 0.2f));
         Gone = Closes + DoorMargin + Trail;
         Speed = Cruise * Math.Clamp(1f / Math.Max(pace, 0.01f), 1f, 2f);
         Altitude = altitude;
         Start = start;
     }
 
-    public BrFlight(BrState s) : this(s.Seed, s.Side, s.Pace, s.FlightStart, s.FlightAlt) { }
+    public BrFlight(BrState s) : this(s.Seed, s.Side, s.Pace, s.FlightStart, s.FlightAlt, s.Zone().CentreOf(0), s.Zone().RadiusOf(0)) { }
 
-    /// <summary>The seeded angle (radians, from east towards north) and offset from the centre (m).</summary>
-    public static (float Angle, float Offset) Line(int seed, float side)
+    /// <summary>The seeded angle (radians, from east towards north) and offset from the circle's centre (m).</summary>
+    public static (float Angle, float Offset) Line(int seed, float radius)
     {
         var rng = new Random(seed ^ 0x2c1b3c6d);
         float angle = (float)(rng.NextDouble() * Math.Tau);
-        float offset = (float)(rng.NextDouble() * 2 - 1) * side * 0.5f * 0.3f;
+        float offset = (float)(rng.NextDouble() * 2 - 1) * radius * 0.3f;
         return (angle, offset);
     }
 
@@ -88,16 +96,15 @@ public readonly struct BrFlight
     /// <summary>The plane's zone position at a server time.</summary>
     public Vector2 At(double now) => From + Dir * Flown(now);
 
-    /// <summary>The doors are open: over the region.</summary>
+    /// <summary>The doors are open: over the first circle.</summary>
     public bool DoorsOpen(double now) => now >= OpensAt && now < ClosesAt;
 
-    /// <summary>Where the line crosses the region: door-open point to door-close point.</summary>
+    /// <summary>Where the line crosses the first circle: door-open point to door-close point.</summary>
     public (Vector2 A, Vector2 B) JumpStretch => (From + Dir * Opens, From + Dir * Closes);
 
     /// <summary>The plane's altitude: the highest ground under its line plus <see cref="Clearance"/>.</summary>
-    public static float AltitudeOver(int seed, float side, Func<Vector2, double> ground)
+    public static float AltitudeOver(BrFlight line, Func<Vector2, double> ground)
     {
-        var line = new BrFlight(seed, side, 1f, 0, 0);
         double top = 0;
         for (float t = 0; t <= line.Gone; t += 100f) top = Math.Max(top, ground(line.From + line.Dir * t));
         return Math.Max(MinAltitude, (float)top + Clearance);

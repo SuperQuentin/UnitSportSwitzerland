@@ -45,10 +45,18 @@
     back. The rig detects this and reuses the previous anchor; otherwise the origin would drift by
     the head offset every frame.
 - **Comfort.**
-  - Snap turn of 30° on foot (right stick X). In vehicles the head is the free look.
+  - Turning on foot (right stick X): a snap of 15, 30 (default) or 45°, or a smooth turn at
+    2.2 rad/s (Settings → Video, `VrSnapDegrees`, #439). In vehicles the head is the free look.
+  - **Teleport** (#439, `XR/XrTeleport`, setting `VrTeleport`): on foot the moving hand's stick no
+    longer walks; pushed forward it shows an arc from that hand (7.5 m/s, lands on ground flatter
+    than 45°, within 12 m), and let go it blinks you there (`FootPlayer.PlaceAt`). The next jump
+    waits as long as walking the last one would take (5 m/s), so it is never faster than walking.
+  - **Left-handed** (`VrLeftHanded`): the controller nodes swap trackers, so moving and using swap
+    hands everywhere at once; prompts mirror the names (`XrControlNames.Mirror`).
+  - Seated play needs no setting: a recentre takes the head where it is as the eye.
   - A vignette (`shaders/xr_vignette.gdshader`, a clip-space quad per eye) driven by the anchor's
-    speed and yaw rate. It is halved in a first-person mount or cockpit.
+    speed and yaw rate. It is halved in a first-person mount or cockpit, and scaled by the
+    `VrVignette` setting (off, light, full; #439).
   - `XrRig.Blink()`: black at once, clear again in 0.4 s (the vignette's `blackout`), to hide a cut. Used by the
     crash view (`player/crash-ragdoll`).
-  - Teleport is not done yet.
 - Hands are small boxes until the avatar's arms are driven (phase 2, see `roadmap`).

@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Items;
 using UnitSport.Player;
 
@@ -84,7 +85,7 @@ public partial class CampfireProbe : Node
         await Seconds(0.3);
         var node = fire == null ? null : placed.GetNodeOrNull<Node3D>($"P{fire.Id}");
         Expect(node?.FindChild(StationVisuals.LightName, true, false) is OmniLight3D, "it burns: its light is there");
-        Expect(fire != null && CampfireClock.SecondsLeft(fire.Payload, Time.GetUnixTimeFromSystem()) > CampfireClock.BurnSeconds - 30,
+        Expect(fire != null && CampfireClock.SecondsLeft(fire.Payload, Net.ClockSync.ServerUnixNow) > CampfireClock.BurnSeconds - 30,
             $"lit just now, by the server's clock ({fire?.Payload})");
 
         // 3. a fire station: cook
@@ -205,10 +206,10 @@ public partial class CampfireProbe : Node
 
     private async Task<bool> Until(Func<bool> condition, double seconds)
     {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
+        double end = GameClock.Now + seconds;
         while (!condition())
         {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
+            if (GameClock.Now > end) return false;
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }
         return true;

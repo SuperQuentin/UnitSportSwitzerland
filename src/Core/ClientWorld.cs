@@ -114,6 +114,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Has("--interestcheck"), () => Verdict("interestcheck", Interest.SelfCheck() & RemoteInterpolator.SelfCheck())),
         // the CD beat analyser's self-test: synthetic clicks at known tempos
         (() => Has("--beatcheck"), () => Verdict("beatcheck", Audio.Cd.BeatAnalyzer.SelfCheck())),
+        // a VR player's hands packed into the pose and back (#439)
+        (() => Has("--vrposecheck"), () => Verdict("vrposecheck", Player.FootPlayer.VrPoseSelfCheck())),
     };
 
     public override async void _Ready()
@@ -618,7 +620,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Loot.BankProbe.Role != null
-            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
+            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null
@@ -648,6 +650,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Birds.BirdNetProbe.Role != null) AddChild(new Birds.BirdNetProbe(items));
         if (Birds.PigeonNetProbe.Role != null) AddChild(new Birds.PigeonNetProbe(items));
         if (Player.AirlinerNetProbe.Role != null) AddChild(new Player.AirlinerNetProbe(items));
+        if (Player.StairsNetProbe.Role != null) AddChild(new Player.StairsNetProbe(items));
         if (Player.FreighterNetProbe.Role != null) AddChild(new Player.FreighterNetProbe(items));
         if (Player.An124NetProbe.Role != null) AddChild(new Player.An124NetProbe(items));
         if (Player.HoldNetProbe.Role != null) AddChild(new Player.HoldNetProbe(items));
@@ -666,6 +669,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Crafting.CampfireNetProbe.Role != null) AddChild(new Crafting.CampfireNetProbe(items));
         if (Player.SwimNetProbe.Role != null) AddChild(new Player.SwimNetProbe(items));
         if (Player.EmoteNetProbe.Role != null) AddChild(new Player.EmoteNetProbe(items));
+        if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
+        if (World.ClockNetProbe.Role != null) AddChild(new World.ClockNetProbe(items));
         if (Player.BoatNetProbe.Role != null) AddChild(new Player.BoatNetProbe(items));
         if (Player.SteamerNetProbe.Role != null) AddChild(new Player.SteamerNetProbe(items));
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "solo") > Array.IndexOf(OS.GetCmdlineUserArgs(), "--dropcheck")
@@ -1499,6 +1504,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (_chunks != null && GetViewport().GetCamera3D() is { } cam)
             _chunks.SetView(cam);
         TrackLoading(delta);
+        if (GameClock.Fixed) GameClock.Pace(Stage != LoadStage.Ready || _chunks is { Settled: false });
         if (_pendingFoot != null && !SpawnPending)
         {
             var player = _pendingFoot;

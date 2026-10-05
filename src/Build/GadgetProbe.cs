@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Items;
 using UnitSport.Player;
 
@@ -107,8 +108,8 @@ public partial class GadgetProbe : Node
         me.Velocity = Vector3.Zero;
         if (Shots) { me.LookPitch = -0.5f; await Seconds(0.3); Shot("on_trampoline"); }
         float top = 0, vmax = 0;
-        double end = Time.GetTicksMsec() / 1000.0 + 3;
-        while (Time.GetTicksMsec() / 1000.0 < end)
+        double end = GameClock.Now + 3;
+        while (GameClock.Now < end)
         {
             top = Mathf.Max(top, me.GlobalPosition.Y - tramp.Y);
             vmax = Mathf.Max(vmax, me.Velocity.Y);
@@ -150,8 +151,8 @@ public partial class GadgetProbe : Node
         Expect(tool.Riding, "on the zipline");
         if (Shots) { await Seconds(0.8); Shot("zipline"); }
         float fastest = 0;
-        end = Time.GetTicksMsec() / 1000.0 + 15;
-        while (tool.Riding && Time.GetTicksMsec() / 1000.0 < end)
+        end = GameClock.Now + 15;
+        while (tool.Riding && GameClock.Now < end)
         {
             fastest = Mathf.Max(fastest, me.Velocity.Length());
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
@@ -168,8 +169,8 @@ public partial class GadgetProbe : Node
         Expect(tool.Riding, "on the ladder");
         tool.ForceClimb = 1;
         float reached = 0;
-        end = Time.GetTicksMsec() / 1000.0 + 6;
-        while (tool.Riding && Time.GetTicksMsec() / 1000.0 < end)
+        end = GameClock.Now + 6;
+        while (tool.Riding && GameClock.Now < end)
         {
             reached = me.GlobalPosition.Y;
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
@@ -186,8 +187,8 @@ public partial class GadgetProbe : Node
         tool.Board(me, PlacedKind.LaunchPad);
         Expect(tool.Riding, "launching");
         float peak = 0;
-        end = Time.GetTicksMsec() / 1000.0 + 5;
-        while (tool.Riding && Time.GetTicksMsec() / 1000.0 < end)
+        end = GameClock.Now + 5;
+        while (tool.Riding && GameClock.Now < end)
         {
             peak = Mathf.Max(peak, me.GlobalPosition.Y - pad.Y);
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
@@ -218,10 +219,10 @@ public partial class GadgetProbe : Node
 
     private async Task<bool> Until(Func<bool> condition, double seconds)
     {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
+        double end = GameClock.Now + seconds;
         while (!condition())
         {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
+            if (GameClock.Now > end) return false;
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }
         return true;

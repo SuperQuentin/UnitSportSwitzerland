@@ -196,15 +196,52 @@ public static partial class HumanMeshBuilder
     /// <param name="into">A mesh to rebuild in place (an animated figure keeps one), or null for a new one.</param>
     public static ArrayMesh BuildStride(HumanPalette palette, float speed, float phase,
         bool helmet = false, Headwear hat = Headwear.None,
-        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null, ArrayMesh? into = null)
+        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null, ArrayMesh? into = null,
+        VrArms? vr = null)
     {
         var scratch = ScratchFor(into);
         // a skirt with no measured wind still feels the stride's own (#251)
         if (palette.Wind == Vector3.Zero && speed > 0.05f && Flutters(palette.Outfit))
             palette = palette with { Wind = new Vector3(0, 0, -speed) };
-        AppendRig(scratch, palette, ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), includeLegs: true, helmet, hat);
+        AppendRig(scratch, palette, ApplyVr(ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), vr), includeLegs: true, helmet, hat);
         return into == null ? scratch.Build() : scratch.BuildInto(into);
     }
+
+    /// <summary>
+    /// A VR player's real hands (#439), each relative to the eyes in the body's frame (x right, y up,
+    /// -z ahead, metres): what <see cref="Player.FootPlayer.VrHands"/> carries to every peer.
+    /// </summary>
+    public readonly record struct VrArms(Vector3 Right, Vector3 Left);
+
+    /// <summary>The eyes in author space, from the head's base: where the real head's hands are measured from.</summary>
+    private static readonly Vector3 EyeFromHeadBase = new(0f, 0.1f, 0.08f);
+
+    /// <summary>
+    /// Puts the wrists where a VR player's hands really are (#439) and re-solves the elbows; the
+    /// item hand (author -X, the figure's right) is the right hand. A hand out of reach is pulled
+    /// back along its line to the shoulder.
+    /// </summary>
+    private static Rig ApplyVr(Rig rig, VrArms? vr)
+    {
+        if (vr is not { } hands) return rig;
+        var eye = rig.HeadBase + EyeFromHeadBase;
+        float reach = (UpperArmLength + ForearmLength) * 0.98f;
+        var wristL = Reach(rig.ShoulderL, eye + Author(hands.Right), reach);
+        var wristR = Reach(rig.ShoulderR, eye + Author(hands.Left), reach);
+        var elbowL = Limb.Solve(rig.ShoulderL, wristL, UpperArmLength, ForearmLength, new Vector3(-0.6f, -0.6f, -0.2f));
+        var elbowR = Limb.Solve(rig.ShoulderR, wristR, UpperArmLength, ForearmLength, new Vector3(0.6f, -0.6f, -0.2f));
+        return rig with
+        {
+            ElbowL = elbowL, WristL = wristL, ElbowR = elbowR, WristR = wristR,
+            HandDir = (wristL - elbowL).Normalized(),
+        };
+    }
+
+    /// <summary>The body faces -Z, the author space +Z: a half turn about Y.</summary>
+    private static Vector3 Author(Vector3 v) => new(-v.X, v.Y, -v.Z);
+
+    private static Vector3 Reach(Vector3 shoulder, Vector3 wrist, float reach) =>
+        wrist.DistanceTo(shoulder) > reach ? shoulder + (wrist - shoulder).Normalized() * reach : wrist;
 
     /// <summary>A fixed pose with the item arm override on top (uncached: the blend changes every frame).</summary>
     public static ArrayMesh BuildPosed(HumanPalette palette, HumanPose pose, ItemArmPose arm, float armBlend,
@@ -316,8 +353,8 @@ public static partial class HumanMeshBuilder
     /// </para>
     /// </summary>
     public static GaitMounts MountsFor(float speed, float phase,
-        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null) =>
-        MountsForRig(ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend));
+        ItemArmPose arm = ItemArmPose.None, float armBlend = 0f, DanceParams? dance = null, VrArms? vr = null) =>
+        MountsForRig(ApplyVr(ApplyArms(GaitWithDance(speed, phase, dance), arm, armBlend), vr));
 
     /// <summary>
     /// Mounts for a fixed (non-gait) pose — a cyclist, who does not run, still needs a head to

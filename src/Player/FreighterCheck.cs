@@ -45,10 +45,10 @@ public partial class FreighterCheck : Node
 
     private async Task<bool> Until(System.Func<bool> condition, double seconds)
     {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
+        double end = GameClock.Now + seconds;
         while (!condition())
         {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
+            if (GameClock.Now > end) return false;
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
         }
         return true;
@@ -118,13 +118,17 @@ public partial class FreighterCheck : Node
     {
         await Seconds(2);
         // offline the world starts on the free camera: the player comes with the mode key
-        for (int i = 0; i < 1800 && (_player() is null || !_player()!.IsOnFloor()); i++)
+        // the world loads on threads: a wall-clock bound, as the runner's --fixed-fps outruns them
+        ulong deadline = Time.GetTicksMsec() + 30_000;
+        for (int i = 0; Time.GetTicksMsec() < deadline && (_player() is null || !_player()!.IsOnFloor()); i++)
         {
             if (_player() == null && i % 50 == 25) Key(PlayerInput.ToggleMode);
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
         }
         if (_player() is not { } me || !me.IsOnFloor()) { Finish("no player"); return; }
         if (CarMode) { await CarStage(me); Finish(null); return; }
+        me.Announced += (text, good) => GD.Print($"[freightercheck] announce: {text}");
+        me.Impacted += lost => GD.Print($"[freightercheck] impact: lost {lost:F1} m/s, ride {me.Ride}");
         Expect(me.SetRide(RideKind.Freighter), "at the controls of the military freighter");
         await Seconds(2);
         if (me.Vehicle is not Airliner jet) { Finish("not an airliner"); return; }
@@ -198,10 +202,21 @@ public partial class FreighterCheck : Node
         Key(PlayerInput.CarDoor);
         await Until(() => flying.DoorsOpen == 0 && (!Drawn || Rig()?.DoorOpen(RampDoor) <= 0f), 12);
         Expect(flying.DoorsOpen == 0, $"G and the para door's toggle shut everything (doors {flying.DoorsOpen})");
+        Expect(me.Vehicle == flying, $"still at the controls once the ramp is shut (ride {me.Ride}, aboard {me.Aboard})");
+        if (me.Vehicle != flying)
+        {
+            // windowed it was seen standing up meanwhile: back at the controls for the flight stage
+            me.SetRide(RideKind.Freighter);
+            await Seconds(1);
+            if (me.Vehicle is not Airliner again) { Finish("no aircraft for the flight stage"); return; }
+            flying = again;
+        }
 
         // in flight below the drop speed: the ramp opens, stand up, walk aft into the hold, carried along
+        float y0Launch = me.GlobalPosition.Y;
         me.DebugLaunch(me.GlobalPosition + Vector3.Up * 600f, -me.GlobalTransform.Basis.Z * 65f);
         await Seconds(3);
+        GD.Print($"[freightercheck] launched: ride {me.Ride}, same aircraft {me.Vehicle == flying}, on the ground {flying.State.OnGround}, {flying.State.Ias / 0.5144f:0} kt, {me.GlobalPosition.Y - y0Launch:F0} m up");
         flying.ToggleDoor(RampDoor);
         Expect((flying.DoorsOpen & 1 << RampDoor) != 0, $"the ramp opens in flight at {flying.State.Ias / 0.5144f:0} kt (a drop)");
         float y0 = me.GlobalPosition.Y;
@@ -219,6 +234,15 @@ public partial class FreighterCheck : Node
         await Seconds(0.5);
         await Shot("hold_in_flight_ramp_open_looking_aft");
         me.TurnView(Mathf.Pi);
+        // out onto the open ramp: level with the floor in the air (#420), walked on, not a slope down
+        bool onRamp = await WalkTo(me, 0f, RampHingeZ - 1.4f, 20);
+        l = Local(me);
+        Expect(onRamp && me.Aboard && Mathf.Abs(l.Y - FloorY) < 0.15f, $"on the ramp in flight, level with the floor {Where(me)}");
+        me.TurnView(Mathf.Pi);
+        await Seconds(0.5);
+        await Shot("on_the_level_ramp_in_flight");
+        me.TurnView(Mathf.Pi);
+        await WalkTo(me, 0f, 0f, 20);
         Expect(await ToCockpit(me) && me.TryInteract() && await Until(() => me.Vehicle is Airliner && me.SeatIndex == 0, 6), $"back at the controls in flight ({me.Ride})");
         await Shot("controls_in_flight");
         Finish(null);

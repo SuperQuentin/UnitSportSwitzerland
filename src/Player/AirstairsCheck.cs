@@ -43,10 +43,10 @@ public partial class AirstairsCheck : Node
 
     private async Task<bool> Until(System.Func<bool> condition, double seconds)
     {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
+        double end = GameClock.Now + seconds;
         while (!condition())
         {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
+            if (GameClock.Now > end) return false;
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
         }
         return true;
@@ -57,7 +57,7 @@ public partial class AirstairsCheck : Node
     {
         if (!Shots || DisplayServer.GetName() == "headless") return;
         var was = GetViewport().GetCamera3D();
-        var cam = new Camera3D { Fov = 55f };
+        var cam = new Camera3D { Fov = 70f, Near = 0.05f };
         AddChild(cam);
         cam.GlobalPosition = eye;
         cam.LookAt(at, Vector3.Up);
@@ -96,7 +96,9 @@ public partial class AirstairsCheck : Node
     public override async void _Ready()
     {
         await Seconds(2);
-        for (int i = 0; i < 1800 && (_player() is not { } ready || !ready.IsOnFloor()); i++)
+        // the world loads on threads: a wall-clock bound, as the runner's --fixed-fps outruns them
+        ulong deadline = Time.GetTicksMsec() + 30_000;
+        for (int i = 0; Time.GetTicksMsec() < deadline && (_player() is not { } ready || !ready.IsOnFloor()); i++)
         {
             if (_player() == null && i % 50 == 25)
             {
@@ -202,9 +204,9 @@ public partial class AirstairsCheck : Node
         var near = new List<AirstairsDock.Sill>();
         bool lined = await Until(() =>
         {
-            if (Time.GetTicksMsec() / 1000.0 > nextLog)
+            if (GameClock.Now > nextLog)
             {
-                nextLog = Time.GetTicksMsec() / 1000.0 + 2;
+                nextLog = GameClock.Now + 2;
                 AirstairsDock.SillsNear(GetTree(), me.GlobalPosition, 15f, near);
                 var ap = AirstairsDock.Approach(me.GlobalTransform.Orthonormalized(), near);
                 GD.Print($"[stairs]   driving: at {me.GlobalPosition} yaw {me.Rotation.Y:F2} (dock {dockAt}, {dockYaw:F2}), speed {me.GroundSpeed:F2}, sills {near.Count}, approach {ap?.Door}, hits [{string.Join(" ", Enumerable.Range(0, me.GetSlideCollisionCount()).Select(k => $"{(me.GetSlideCollision(k).GetCollider() as Node)?.Name} n{me.GetSlideCollision(k).GetNormal()}"))}], lip off {(AirstairsDock.Lip(me.GlobalTransform) - AirstairsDock.Lip(new Transform3D(new Basis(Vector3.Up, dockYaw), dockAt))).Length():F2}, target {driving.TargetHeight:F2}");
@@ -214,6 +216,15 @@ public partial class AirstairsCheck : Node
         var err = (me.GlobalPosition - dockAt) with { Y = 0 };
         Expect(lined && err.Length() < 0.05f && Mathf.Abs(MathX.WrapAngle(me.Rotation.Y - dockYaw)) < 0.02f,
             $"driven to L2 and let go: docked (door {driving.Docked?.Door}, off by {err.Length():F3} m, {Mathf.RadToDeg(MathX.WrapAngle(me.Rotation.Y - dockYaw)):F1}°, platform {driving.Height:F3} for {DockH():F3})");
+        if (me.Visual is HeavyRig cab)
+        {
+            // the cab from the driver's seat: the wheel in the hands, the dials, the aircraft through the glass
+            cab.View = CockpitView.Body;
+            var eye = me.Visual.GlobalTransform * cab.EyeFrame;
+            await Shot("cab-driver-seat", eye.Origin, eye.Origin + eye.Basis * new Vector3(0.15f, -0.35f, -1f));
+            await Shot("cab-looking-up", eye.Origin, eye.Origin + eye.Basis * new Vector3(0.1f, 0.55f, -1f));
+            cab.View = CockpitView.Outside;
+        }
         await Shot("driven-docked-l2", me.GlobalPosition + outward * 10f + side * 8f + Vector3.Up * 6f, me.GlobalPosition + Vector3.Up * 2.5f);
         me.RideControls = null;
         Expect(me.TryInteract() && await Until(() => me.Ride == RideKind.OnFoot, 5), "got out: parked");
@@ -266,7 +277,34 @@ public partial class AirstairsCheck : Node
         Expect(rolled && shoved.All(s => s.Pushed > 2f && s.Clear),
             $"taxied {moved:F0} m away, the stairs shoved clear ({string.Join(", ", shoved.Select(s => $"{s.Name} pushed {s.Pushed:F1} m, now {s.Side:F1} m off the centreline, {s.Aft:F1} m aft"))})");
         await Shot("taxied-away", from + turn * new Vector3(-35f, 14f, 10f), from + turn * new Vector3(0, 2f, -20f));
+        await Until(() => me.GroundSpeed < 0.5f, 30);
         Input.ActionRelease(PlayerInput.Jump);
+
+        // ---- parked stairs being raised with a player on the platform, then walked down -------
+        me.ExitVehicle();
+        await Until(() => me.Ride == RideKind.OnFoot, 5);
+        await Seconds(1);
+        var lift = Body("stairs_0");
+        if (lift?.Ride is not Airstairs raised) { Finish("no stairs to raise"); return; }
+        var lx = lift.GlobalTransform.Orthonormalized();
+        me.DebugLaunch(lx * new Vector3(0, raised.Height + 0.1f, -3f), Vector3.Zero);
+        bool onIt = await Until(() => me.IsOnFloor() && me.Aboard, 5);
+        float wasH = raised.Height;
+        raised.TargetHeight = 4.6f;
+        float worst = 0f;
+        bool risen = await Until(() =>
+        {
+            worst = Mathf.Max(worst, Mathf.Abs(me.GlobalPosition.Y - lift.GlobalPosition.Y - raised.Height));
+            return Mathf.Abs(raised.Height - 4.6f) < 0.001f;
+        }, 15);
+        await Seconds(1);
+        float stood = me.GlobalPosition.Y - lift.GlobalPosition.Y;
+        Expect(onIt && risen && me.Aboard && Mathf.Abs(stood - raised.Height) < 0.06f && worst < 0.12f,
+            $"parked stairs raised {wasH:F2} -> {raised.Height:F2} m with a player on the platform: carried up (stands {stood:F2} m, worst {worst * 100:F0} cm off)");
+        await Shot("raised-with-player", lx * new Vector3(-7f, 5.5f, 2f), me.GlobalPosition + Vector3.Up);
+        bool walkedDown = await WalkTo(me, () => lx * new Vector3(0, 0, 6.5f), 30);
+        Expect(walkedDown && !me.Aboard && me.GlobalPosition.Y - lift.GlobalPosition.Y < 0.3f,
+            $"walked down the raised flight to the ground ({me.GlobalPosition.Y - lift.GlobalPosition.Y:F2} m up)");
         Finish(null);
     }
 

@@ -35,6 +35,8 @@ public enum FlightEvent
     OpenCanopy,
     Landed,
     Crashed,
+    /// <summary>A parachute cut away (#485): back in the wingsuit, as often as the pilot likes.</summary>
+    CutAway,
 }
 
 /// <summary>
@@ -310,7 +312,7 @@ public class Canopy : Flyer
     public override string Label => _paraglider ? "Paraglider" : "Parachute";
     public override string Blurb => _paraglider
         ? "{move_forward} run, {jump} to launch; steer with {move_left}/{move_right}, {move_back} brakes, {move_forward} speed bar"
-        : "{move_left}/{move_right} steer, {move_back} brakes and flares";
+        : "{move_left}/{move_right} steer, {move_back} brakes and flares, {jump} back to the wingsuit";
 
     private float TrimSpeed => _paraglider ? 10.5f : 9f;
     private float TrimSink => _paraglider ? 1.15f : 4.2f;
@@ -361,6 +363,9 @@ public class Canopy : Flyer
             m.Attitude = new Basis(Vector3.Up, m.Yaw);
             return FlightEvent.None;
         }
+
+        // a parachute in the air: Jump cuts it away, back to the wingsuit (#485); Jump there opens it again
+        if (!_paraglider && input.Action) return FlightEvent.CutAway;
 
         float brake = Mathf.Max(0f, input.Stick.Y);
         float bar = Mathf.Max(0f, -input.Stick.Y);

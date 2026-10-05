@@ -28,7 +28,7 @@ public partial class PlayerFeel : Node3D
 
     // --- audio ---
     private AudioStreamPlayer _hiss = null!, _tyre = null!, _scrape = null!;
-    private EngineSynth _rotor = null!, _engine = null!, _jet = null!;
+    private EngineSynth _rotor = null!, _engine = null!, _jet = null!, _turboprop = null!;
     private AudioStreamPlayer _squeal = null!;
     private double _beep;
     private int _puffs;
@@ -95,6 +95,8 @@ public partial class PlayerFeel : Node3D
         _engine = new EngineSynth(EngineProfile.PistonAero, spatial: false, seed: 2);
         _jet = new EngineSynth(EngineProfile.Turbofan, spatial: false, seed: 4);
         AddChild(_jet);
+        _turboprop = new EngineSynth(EngineProfile.Turboprop, spatial: false, seed: 5);
+        AddChild(_turboprop);
         AddChild(_rotor);
         AddChild(_engine);
         for (int i = 0; i < _voices.Length; i++)
@@ -197,7 +199,7 @@ public partial class PlayerFeel : Node3D
         {
             // someone else's camera is on screen (the fly camera): nothing of this belongs there
             SetLoop(_hiss, 0, 1); SetLoop(_tyre, 0, 1); SetLoop(_scrape, 0, 1); SetLoop(_squeal, 0, 1);
-            _rotor.Set(0, 0, 0, 0); _engine.Set(0, 0, 0, 0); _jet.Set(0, 0, 0, 0); _carEngine?.Set(0, 0, 0, 0);
+            _rotor.Set(0, 0, 0, 0); _engine.Set(0, 0, 0, 0); _jet.Set(0, 0, 0, 0); _turboprop.Set(0, 0, 0, 0); _carEngine?.Set(0, 0, 0, 0);
             _spray.Emitting = _dust.Emitting = _smoke.Emitting = false;
             return;
         }
@@ -264,9 +266,13 @@ public partial class PlayerFeel : Node3D
         _engine.Set(Mathf.Clamp((flight.Spool - 0.15f) / 0.85f, 0f, 1f), flight.Control, flight.Control,
             plane && flight.Spool > 0.02f ? 0.35f + 0.45f * flight.Spool : 0f);
         // an airliner's fans (#414): heard from the cockpit, far quieter than from outside
-        bool jet = _player.Vehicle is Airliner;
-        _jet.Set(flight.Spool, flight.Control, Mathf.Clamp((flight.Spool - 0.3f) / 0.7f, 0f, 1f),
-            jet && flight.Spool > 0.02f ? 0.18f + 0.32f * flight.Spool : 0f);
+        // the freighter's turboprops (#420) the same way, from their own voice
+        var airliner = _player.Vehicle as Airliner;
+        bool props = airliner?.Sound.IsTurboprop == true;
+        float cabin = airliner != null && flight.Spool > 0.02f ? 0.18f + 0.32f * flight.Spool : 0f;
+        float thrust = Mathf.Clamp((flight.Spool - 0.3f) / 0.7f, 0f, 1f);
+        _jet.Set(flight.Spool, flight.Control, thrust, props ? 0f : cabin);
+        _turboprop.Set(flight.Spool, flight.Control, thrust, props ? cabin : 0f);
 
         // Proximity: a wingsuit fast and low is the whole point of one. Time spent under 20 m at
         // speed pays out as a named popup once the pilot climbs out of it (or lands).
@@ -1021,8 +1027,11 @@ public partial class PlayerFeel : Node3D
     /// </summary>
     private void UpdateHint(float dt, RideKind ride)
     {
-        bool pad = PlayerInput.LastDevice == InputDevice.Gamepad;
-        string jump = pad ? "(A)" : "SPACE";
+        bool pad = InputHints.Pad;
+        string jump = InputHints.Label(PlayerInput.Jump);
+        // the stick, the keys, and what leans: the right stick, the mouse, or the head in VR
+        string stick = InputHints.Label(PlayerInput.MoveForward);
+        string look = InputHints.Vr ? "head" : pad ? "look" : "mouse";
         string text = "";
         bool urgent = false;
 
@@ -1042,10 +1051,12 @@ public partial class PlayerFeel : Node3D
             case RideKind.Wingsuit:
                 urgent = _player.Clearance < 80f;
                 text = $"{jump}  open PARACHUTE" + (urgent ? "  — NOW!" : "")
-                    + $"\n{(pad ? "left stick" : "W / S")} dive · flare     {(pad ? "left stick" : "A / D")} turn · {(pad ? "look" : "mouse")} leans";
+                    + $"\n{(pad ? stick : InputHints.Format("{move_forward} / {move_back}"))} dive · flare     "
+                    + $"{(pad ? stick : InputHints.Format("{move_left} / {move_right}"))} turn · {look} leans";
                 break;
             case RideKind.Parachute:
-                text = $"{(pad ? "left stick" : "A / D")} steer · {(pad ? "look" : "mouse")} leans     {(pad ? "pull back" : "S")} brake — hold it to flare the landing";
+                text = $"{(pad ? stick : InputHints.Format("{move_left} / {move_right}"))} steer · {look} leans     "
+                    + $"{(pad ? "pull back" : InputHints.Label(PlayerInput.MoveBack))} brake — hold it to flare the landing";
                 break;
             case var _ when _player.Heavy is { } truck && truck.Trailer == null && _player.GroundSpeed < 1.5f
                 && _player.CoupleCandidate(truck) != null:

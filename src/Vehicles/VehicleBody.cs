@@ -212,7 +212,7 @@ public partial class VehicleBody : CharacterBody3D
             if (Ride is Helicopter or Plane or Airliner or IEngined)
             {
                 var profile = Ride is IEngined parked ? parked.Sound
-                    : Ride is Helicopter ? EngineProfile.Turboshaft : Ride is Airliner ? EngineProfile.Turbofan : EngineProfile.PistonAero;
+                    : Ride is Helicopter ? EngineProfile.Turboshaft : Ride is Airliner parkedJet ? parkedJet.Sound : EngineProfile.PistonAero;
                 _engineSound = new EngineSynth(profile, spatial: true, seed: (int)Math.Max(1, Owner));
                 AddChild(_engineSound);
             }

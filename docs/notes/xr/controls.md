@@ -4,21 +4,28 @@ The full per-action design and rules: `xr/vr-action-map`.
 
 - **How it works.** `XR/XrPad` replays the controllers as joypad events (`Input.ParseInputEvent`,
   device 7). Every `PlayerInput` action is bound to "any device", so all of them work unchanged.
-  - `PlayerInput._Input` pins `LastDevice` to Gamepad in VR, so prompts show pad glyphs.
+  - `PlayerInput._Input` pins `LastDevice` to Gamepad in VR (pad-only behaviour); prompts ask
+    `PlayerInput.HintDevice`, which is VR, and name the real controller (#435, `core/key-hints`).
+    `XrPad.Control` is the reverse of the layout below: change the two together.
   - `PlayerInput.Rumble` routes to `XrSession.Rumble`, which pulses both hands.
 - **Layout.**
   - Left stick: move. On foot it is rotated to the **head's** yaw, so forward is where you look.
   - A, B, X, Y: the pad's A, B, X, Y.
   - L3: sprint.
-  - Right stick X: snap turn. Right stick up: D-pad up (engine). Right stick down: D-pad right
-    (next item).
+  - Right stick on foot: X snap turn, up D-pad up (emote wheel, the hammer's turn), down D-pad
+    right (next item). Mounted, where the head is the look, it is the whole D-pad (#436): up
+    engine, right lights, left roof / horn / couple / speedbrake, down tune. Only the stronger
+    axis counts, so a diagonal presses one direction.
   - R3 tap: view (cockpit body). R3 hold: recentre.
   - Left menu tap: Start. Left menu hold: Back (inventory).
 - **Triggers and grips.**
   - On foot, the triggers act as **shoulders**: right = use item / fire, left = aim.
   - Mounted, they act as **triggers**: throttle, and brake / plough.
-  - The grips are the shoulders (trick, boost, items), except while a grip holds something
-    (below): `XrPad.LeftGripBusy` / `RightGripBusy` mute it until it opens.
+  - Mounted, the grips are the shoulders (trick, boost, shift paddles, flaps), except while a grip
+    holds something (below): `XrPad.LeftGripBusy` / `RightGripBusy` mute it until it opens.
+  - On foot the grips only grab (#437): use and aim are the triggers' alone.
+- **Crouch (#437).** On foot, the head more than 0.35 m below where it was calibrated presses B
+  (slide while running, dive while swimming), never while a menu is open (B is back there).
 - **Hands (#243, `XR/XrHands`).** A grip closing (> 0.7, opens < 0.35) is the hand closing.
   - **Steering wheel**, first person in the driver's seat (car, truck, bus): a hand within 0.14 m of
     the rim catches it; its marker snaps onto the rim and rides round with it. The hands' turn about
@@ -33,11 +40,67 @@ The full per-action design and rules: `xr/vr-action-map`.
     (`FootPlayer.TryToggleCarDoor(hand)`) or 0.7 m of a building doorway, between sill and lintel
     (`InteriorManager.TryDoorByHand`), toggles it through the usual server-checked paths. A toggle,
     not a hand-driven swing: door state is binary on the network.
+  - **Things on the ground** (#437), on foot: a grip closing within 0.3 m of a dropped item picks it
+    up (`ItemController.PickUp`), of a radio opens its panel, as E on the thing pointed at does.
+  - **Reaching out** (#437), on foot: a grip closing with the hand over 0.45 m from the eyes and in
+    front does what E does there (`FootPlayer.TryInteract(byHand: true)`): a seat, a ladder, a
+    crate, a cupboard, a car's or a building's door. Never the dance, which is not a thing.
+  - **Hip hotbar** (#437): a grip closing more than 0.75 m below the eyes and 0.12 m to a side
+    taps `next_item` at the right hip at once. At the left hip a short squeeze taps `prev_item` when
+    it opens; held over 0.35 s it holds `quick_wheel` down (`XrPad.Press`, #489), so the quick wheel
+    opens, aimed by the right hand like the emote wheel, and letting go of the grip picks. Prompts
+    call it "Hold grip at left hip" (`XrHands.Gesture`).
+  - **Radial wheels aimed by hand** (#437): the emote and quick wheels read `XrSession.HandAim`, the right
+    hand's move across the view since the wheel opened (0.15 m = full), when the stick is idle.
+  - **Fling to drop** (#437): a grip squeezed on nothing and let go with the hand moving over
+    2.5 m/s in the play space (walking does not count) taps `drop_item`.
+- **Cab and cockpit controls (#438, `XR/XrCabControls`).** Knobs in the driver's eye frame (the
+  rig's anchor before the head is written back), drawn in the headset only (amber: grip, blue:
+  poke). A grip closing within 0.09 m holds one; it takes that grip from the hands and the pad.
+  - Spring levers tap an action a notch at a time along their axis and spring back: truck
+    sequential lever (back up, forward down), retarder stalk (down more, up less), airliner flaps
+    (back more, forward less), speedbrake (each pull back a step), landing gear (either way).
+  - Hold levers hold an action while pushed: airliner trim wheel, steamer whistle cord.
+  - The H-pattern lever (trucks set to H-pattern) taps the gear of the gate it sits in
+    (`XrControlNames.GateOf`, unit tested): 1 3 5 ahead, 2 4 6 back, reverse left of 1.
+  - Pokes, the tip within 3.5 cm: bus kneel and destination, airliner parking brake and
+    autopilot, car radio previous / next / panel.
+  - Places are guesses at each dash, not its drawn switches. `--xrcab truck-h-bus|truck-seq|car|airliner|steamer`
+    builds a set round any view, for checks with `--xrsim`.
+- **Flying with the arms (#438, `XrRig.BodyFlight`)**, added to the left stick: the pigeon flaps
+  when both hands beat down faster than 1.6 m/s; the wingsuit, hands over 1 m apart, rolls toward
+  the lower hand; under a canopy each hand pulled down past the shoulder is a brake (one turns,
+  both slow and flare).
+- **Watch (#439, `XR/XrWatch`).** On the back of the left wrist (the controller's +X, where the
+  wrist-menu look aims): the world's time (`DayNight.Hour`), the altitude above the sea
+  (`FootPlayer.Global.Alt`) and the speed, a `Label3D` set twice a second and only on change. Hidden
+  while the controller is untracked; headset only.
+- **Hand-held map (#439, `XR/XrMap`).** The wrist menu's *Map in your hand* (on foot) builds a relief of
+  3 km round the player in the left hand (32 × 32 heights from `ChunkManager.TryGetHeight`, twice
+  exaggerated, snow above 2600 m, grey where no tile is loaded) with a red marker for you. The right
+  hand's ray on it shows a dot; the trigger travels there through `Core.Teleporter` (the place
+  search's teleport) and shuts the map. In a Battle Royale match it only shows, as M does there.
+  While the ray is on the map the right trigger is muted as a use.
+- **Climbing (#439, `XR/XrClimb`).** On foot, a grip closed with the hand touching a face steeper than
+  about 53° (a 12 cm ray along the hand) holds that point: the body hangs from it through
+  `FootPlayer.Carrier` (the climbing pose everyone sees, #359), moving the other way as the hand
+  moves. The newest hand carries; letting go with the last one releases with the push given (at
+  most 6 m/s). 15 s of holding and the hands slip; standing rests them. A grip on rock is not
+  also a grab or a shoulder.
+- **Wrist menu (#437, `XR/XrWristMenu`).** The back of the left wrist (the controller's +X) turned
+  toward the eyes, in view within 24° and 0.7 m, for 0.6 s opens a menu on the UI panel: travel,
+  inventory, map, bird journal, drop the held item (on foot), fly camera / walk, controls,
+  recentre. A pick taps the action (`XrPad.Tap`) after the menu has let the pointer go, so the
+  screen it opens is the one the key opens. In the world only (`XrRig.InWorld`), never on the
+  title. Prompts for an action with no controller input but a wrist entry say **Wrist**
+  (`XrWristMenu.Reaches`). `--xrwrist [Entry,Entry…]` opens it (and picks those, 2 s apart) for
+  checks with `--xrsim`.
 - **Pigeon (#217).** As a pigeon the triggers stay shoulders (right = drop), A flaps, B dives, the eye is
   the bird's (level), snap turn works perched or walking (`player/pigeon`).
-- **Flight gap.** In `FootPlayer`, flight reads `Input.GetJoyAxis(0, Trigger*)` directly, and
-  parsed events do not set that. In an aircraft, climb and descend come from A and B
-  (Jump / Crouch) only.
+- **Analog triggers (#436).** Parsed events do not set `Input.GetJoyAxis`, so code that wants a
+  trigger's pull reads the pad-only actions `PlayerInput.TriggerRight` / `TriggerLeft` (flight's
+  lever and climb, the GPX camera) and the garage reads `look_left` / `look_right`. In an aircraft
+  the VR triggers climb and descend, analog, as a pad's do.
 - **UI.** `XR/XrUi` draws the game's UI on a 1.5 m panel 1.7 m ahead. The panel follows the head's
   yaw lazily and has no depth test.
   - It draws every `CanvasLayer` by attaching the layer's canvas to a SubViewport in the

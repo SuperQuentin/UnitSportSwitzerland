@@ -45,7 +45,7 @@ public abstract partial class Screen : Control
         panel.AddChild(column);
 
         var header = UiKit.HBox(12);
-        var back = UiKit.IconButton(Icons.Back, "Back (Esc)", 38);
+        var back = UiKit.IconButton(Icons.Back, InputHints.Format("Back ({menu})", InputDevice.KeyboardMouse), 38);
         back.Pressed += () => Shell.Back();
         header.AddChild(back);
         var titles = UiKit.VBox(0);
