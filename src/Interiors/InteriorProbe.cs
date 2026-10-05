@@ -425,7 +425,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
             {
                 // the tower's door if it has one, so the way in and the way out differ
                 var doors = _church!.Members
-                    .Select(m => DoorIndex.Find(new BuildingKey(_churchTile.E, _churchTile.N, m)))
+                    .Select(m => DoorIndex.Find(new DoorKey(_churchTile.E, _churchTile.N, m)))
                     .Where(d => d != null).Select(d => d!.Value).ToList();
                 if (doors.Count == 0)
                 {
@@ -865,9 +865,9 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 _shutT += GetPhysicsProcessDeltaTime();
                 bool shut = interiors.Links.TryGetValue(door, out var link) ? link.Swing <= 0f : !interiors.IsOpen(door);
                 if (!shut && _shutT < 8) return null;
-                if (DoorLeaf.SwingsOut(_door.Kind) && DoorLeaf.LeafWidth(_door.Kind, _door.Width) > 2f)
+                if (DoorLeaf.SwingsOut(_door.Hang) && DoorLeaf.LeafWidth(_door.Hang, _door.Width) > 2f)
                 {
-                    var edge = _door.World + _door.Outward * DoorLeaf.LeafWidth(_door.Kind, _door.Width) + Vector3.Up;
+                    var edge = _door.World + _door.Outward * DoorLeaf.LeafWidth(_door.Hang, _door.Width) + Vector3.Up;
                     Check(interiors.OutsideDoorInReach(edge) == null, $"shut, {door} is not in reach from where its leaves stood");
                 }
                 Input.ActionPress(PlayerInput.MoveForward);
@@ -994,10 +994,11 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 }
                 if (link.Swing < 1f || _walkT < 1.2) return null; // the portal picture settles
                 Check(true, $"the door {door} swung open ({_walkT:F1} s)");
-                if (inward && BuildingKey.TryParse(door, out var key) && DoorIndex.Find(key) is { } spot && DoorLeaf.SwingsOut(spot.Kind))
+                if (inward && DoorKey.TryParse(door, out var key) && DoorIndex.Find(key) is { } spot
+                    && DoorLeaf.SwingsOut(spot.Hang))
                 {
                     // open, a barn door is worked from out by its leaves' free edges, not only at the sill
-                    float leaf = DoorLeaf.LeafWidth(spot.Kind, spot.Width);
+                    float leaf = DoorLeaf.LeafWidth(spot.Hang, spot.Width);
                     var edge = spot.World + spot.Outward * leaf + Vector3.Up;
                     Check(interiors.OutsideDoorInReach(edge) == door, $"open, {door} is in reach {leaf:F1} m out, by its leaves");
                 }

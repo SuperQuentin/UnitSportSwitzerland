@@ -128,10 +128,10 @@ public partial class PortalDemo : Node3D
                 link.Swing = 1f;
                 link.Leaf = node.Leaf(e.Door);
                 link.Shutter = node.Shutter(e.Door);
-                if (link.Leaf == null && DoorLeaf.OnFacade(layout.DressedKind()))
+                if (link.Leaf == null && DoorLeaf.OnFacade(link.Hang))
                 {
                     link.Leaf = DoorLeaf.CreateOnFacade(e.Door, link.Outside, link.OutsideWidth, link.OutsideHeight,
-                        layout.DressedKind(), interiorMaterial);
+                        link.Hang, layout.DressedKind(), interiorMaterial);
                     AddChild(link.Leaf);
                 }
                 link.SetLeaves(1f);
@@ -397,10 +397,11 @@ public partial class PortalDemo : Node3D
             var outward = new Vector3(0, 0, doorSouth ? 1 : -1);
             layout.Entrances.Add(new EntrancePlan
             {
-                Door = n++ == 0 ? layout.Key : $"0_0_{index + 10}", X = local.X, Z = front ? -hd : hd,
+                // the back door is slot 1 of the same building, as a real second door is (#498)
+                Door = new DoorKey(0, 0, index, n++).ToString(), X = local.X, Z = front ? -hd : hd,
                 InX = 0, InZ = front ? 1 : -1, Width = h.DoorWidth,
                 DoorX = world.X, DoorY = 0, DoorZ = world.Z + outward.Z * 0.03f,
-                DoorOutX = 0, DoorOutZ = outward.Z,
+                DoorOutX = 0, DoorOutZ = outward.Z, DoorWidth = h.DoorWidth, DoorHeight = h.DoorHeight,
             });
         }
         var main = layout.Entrances[0];

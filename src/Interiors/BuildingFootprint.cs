@@ -3,35 +3,35 @@ using UnitSport.Terrain.Format;
 
 namespace UnitSport.Interiors;
 
-/// <summary>A building, named the way every peer can agree on: its tile and its index in that tile's <c>.bldg</c>.</summary>
-public readonly record struct BuildingKey(int TileE, int TileN, int Index)
-{
-    public TileId Tile => new(TileE, TileN);
-    public override string ToString() => $"{TileE}_{TileN}_{Index}";
-
-    public static bool TryParse(string s, out BuildingKey key)
-    {
-        key = default;
-        var p = s.Split('_');
-        if (p.Length != 3 || !int.TryParse(p[0], out int e) || !int.TryParse(p[1], out int n)
-            || !int.TryParse(p[2], out int i)) return false;
-        key = new BuildingKey(e, n, i);
-        return true;
-    }
-}
-
 /// <summary>
-/// Where a building's front door is, in tile-local metres (X east, Y altitude, Z south — the
-/// frame the building triangles and the chunk node share). <see cref="Outward"/> is horizontal.
+/// Where one of a building's front doors is, in tile-local metres (X east, Y altitude, Z south —
+/// the frame the building triangles and the chunk node share). <see cref="Outward"/> is horizontal.
 /// </summary>
 public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outward, float Width, float Height)
 {
+    /// <summary>Which of its building's doors this is: 0 the main one, 1 and up the extra ones (#498).</summary>
+    public int Slot { get; init; }
+
+    /// <summary>
+    /// How this door's leaf moves, which is a fact about the door and not about its building
+    /// (#498): a barn's side door is <see cref="DoorHang.Inward"/> on an Agricultural building.
+    /// </summary>
+    public DoorHang Hang { get; init; }
+
+    /// <summary>
+    /// Whether a ground vehicle is driven through this door: a barn's or a garage's main door, or
+    /// a loading bay. Never a pedestrian side door, however big the barn it is on.
+    /// </summary>
+    public bool Vehicle { get; init; }
+
     /// <summary>The building's kind, so door consumers need not keep the tile.</summary>
     public BuildingKind Kind { get; init; }
     /// <summary>A bank (<see cref="BuildingFootprint.IsBank"/>): a sign over the door, a teller desk inside.</summary>
     public bool Bank { get; init; }
     /// <summary>What it sells, if it is a shop (#273, <see cref="BuildingFootprint.ShopOf"/>): a sign over the door, a counter inside.</summary>
     public Loot.ShopType Shop { get; init; }
+
+    public DoorKey KeyIn(TileId tile) => new(tile.E, tile.N, Index, Slot);
 }
 
 /// <summary>
@@ -45,6 +45,15 @@ public sealed record Footprint(
     Vector2 Center, Vector2 AxisU, float Width, float Depth,
     DoorSpot Door)
 {
+    /// <summary>
+    /// The building's other doors (#498), slot 1 and up: more entrances along a long facade and a
+    /// side or back door, all of them plain pedestrian doors. Empty on a house or a shed.
+    /// </summary>
+    public IReadOnlyList<DoorSpot> Extra { get; init; } = Array.Empty<DoorSpot>();
+
+    /// <summary>Every door of the building, the main one first.</summary>
+    public IEnumerable<DoorSpot> Doors => Extra.Count == 0 ? [Door] : Extra.Prepend(Door);
+
     /// <summary>Back of the building, i.e. away from the door, horizontal unit (x, z).</summary>
     public Vector2 AxisV => new(-AxisU.Y, AxisU.X);
 
@@ -129,10 +138,23 @@ public static class BuildingFootprint
     };
 
     /// <summary>
-    /// Whether a building's front door is driven through: a garage's or a barn's. It opens for a
-    /// vehicle driving up to it, a vehicle crosses its portal, and the room behind keeps a lane clear.
+    /// Whether a kind of building's *main* door is driven through: a garage's or a barn's. It opens
+    /// for a vehicle driving up to it, a vehicle crosses its portal, and the room behind keeps a
+    /// lane clear. Per door this is <see cref="DoorSpot.Vehicle"/> (#498): a barn's pedestrian side
+    /// door is not one, however big the barn, and a loading bay is one on an Industrial building.
     /// </summary>
-    public static bool VehicleDoor(BuildingKind kind) => kind is BuildingKind.Garage or BuildingKind.Agricultural;
+    public static bool VehicleDoor(BuildingKind kind) => DoorBudget.VehicleFor(kind);
+
+    /// <summary>
+    /// How wide and tall a building's secondary pedestrian doors are (#498): the same as its main door where
+    /// that is already a pedestrian one (a long shop front gets more shop doors), and a plain
+    /// <see cref="DoorBudget.ServiceWidth"/> x <see cref="DoorBudget.ServiceHeight"/> door where the
+    /// main one is wagon- or car-sized.
+    /// </summary>
+    public static (float Width, float Height) ServiceDoorFor(BuildingKind kind) =>
+        DoorWidthFor(kind) <= 1.8f
+            ? (DoorWidthFor(kind), DoorHeightFor(kind))
+            : (DoorBudget.ServiceWidth, DoorBudget.ServiceHeight);
 
     /// <summary>The front door's leaf, linear: the facade's baked leaf and the interior's swinging one.</summary>
     public static Color DoorLeafColorFor(BuildingKind kind) => (kind switch
@@ -150,21 +172,32 @@ public static class BuildingFootprint
     /// <summary>The front door's street-side handle, linear: on the facade and on the swinging leaf.</summary>
     public static readonly Color DoorHandleColor = DoorFrameColor * 0.7f;
 
-    /// <summary>Doors for every building of a tile, in building order.</summary>
+    /// <summary>
+    /// Every door of every building of a tile, in building order and, within a building, main door
+    /// first (#498). A building with no wall to hang one on still contributes its empty door spot,
+    /// so nothing downstream has to tell "no doors" from "not computed".
+    /// </summary>
     public static DoorSpot[] ComputeDoors(BuildingTile tile, RoadTile? roads, ChunkGrid? grid)
     {
         var roadIndex = (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true));
-        var doors = new DoorSpot[tile.Buildings.Count];
-        for (int i = 0; i < doors.Length; i++)
+        bool rural = Loot.ShopTables.IsRural(tile.Buildings.Count);
+        var doors = new List<DoorSpot>(tile.Buildings.Count);
+        for (int i = 0; i < tile.Buildings.Count; i++)
         {
             var fp = Compute(tile, i, roadIndex, grid);
-            doors[i] = (fp?.Door ?? default) with
+            var kind = tile.Buildings[i].Kind;
+            // an empty spot still names its own building, so the array can be read by Index
+            // the sign over the door, and the shop behind it, belong to the building: they go on
+            // its main door only, or a long shop front would grow a sign per entrance
+            doors.Add((fp?.Door ?? new DoorSpot(i, Vector3.Zero, Vector3.Forward, 0f, 0f)) with
             {
-                Kind = tile.Buildings[i].Kind, Bank = fp != null && IsBank(fp),
-                Shop = fp != null ? ShopOf(fp, Loot.ShopTables.IsRural(tile.Buildings.Count)) : Loot.ShopType.None,
-            };
+                Kind = kind, Bank = fp != null && IsBank(fp),
+                Shop = fp != null ? ShopOf(fp, rural) : Loot.ShopType.None,
+            });
+            if (fp == null) continue;
+            foreach (var extra in fp.Extra) doors.Add(extra with { Kind = kind });
         }
-        return doors;
+        return doors.ToArray();
     }
 
     public static Footprint? Compute(BuildingTile tile, int index, RoadTile? roads, ChunkGrid? grid) =>
@@ -240,7 +273,7 @@ public static class BuildingFootprint
         bool barn = DoorLeaf.SwingsOut(kind);
         var roadTarget = roads.Streets.Nearest(center, 60f) ?? roads.Paths.Nearest(center, 40f);
 
-        var ranked = new List<(float Score, DoorSpot Door)>();
+        var ranked = new List<Cand>();
         foreach (var f in facets.Values)
         {
             var (s0, s1) = f.LongestRun();
@@ -274,15 +307,20 @@ public static class BuildingFootprint
             if (width < doorW * 0.8f) score -= 1f;
 
             var pos = new Vector3(xz.X + f.Normal.X * 0.03f, baseY, xz.Y + f.Normal.Y * 0.03f);
-            ranked.Add((score, new DoorSpot(index, pos, new Vector3(f.Normal.X, 0, f.Normal.Y), Math.Max(0.7f, width), height)));
+            ranked.Add(new Cand(score, f.Normal, f.Offset, s0, s1,
+                new DoorSpot(index, pos, new Vector3(f.Normal.X, 0, f.Normal.Y), Math.Max(0.7f, width), height)
+                {
+                    Hang = DoorBudget.HangFor(kind), Vehicle = DoorBudget.VehicleFor(kind),
+                }));
         }
 
         // best-scoring door that is actually on a wall; the score alone can pick a run whose
         // middle falls in a gap the cross-section never saw (a pillar between two bays)
         DoorSpot door = default;
+        Cand? main = null;
         bool found = false;
-        foreach (var (_, candidate) in ranked.OrderByDescending(r => r.Score))
-            if (DoorOnWall(b, candidate)) { door = candidate; found = true; break; }
+        foreach (var candidate in ranked.OrderByDescending(r => r.Score))
+            if (DoorOnWall(b, candidate.Door)) { door = candidate.Door; main = candidate; found = true; break; }
         if (!found && cuts.Count > 0)
         {
             // a round tank or a many-sided silo: no flat run is door-wide, so stand the door on
@@ -291,10 +329,13 @@ public static class BuildingFootprint
             var open = cuts.Where(k => !Covered(k.Mid)).ToList();
             var cut = (open.Count > 0 ? open : cuts).MaxBy(k => k.Normal.Dot((aim - k.Mid).Normalized()) - k.Mid.DistanceTo(aim) * 0.01f);
             var pos = new Vector3(cut.Mid.X + cut.Normal.X * 0.03f, cut.Ground, cut.Mid.Y + cut.Normal.Y * 0.03f);
-            door = new DoorSpot(index, pos, new Vector3(cut.Normal.X, 0, cut.Normal.Y), Math.Min(doorW, 1.0f), plainH);
+            door = new DoorSpot(index, pos, new Vector3(cut.Normal.X, 0, cut.Normal.Y), Math.Min(doorW, 1.0f), plainH)
+            {
+                Hang = DoorBudget.HangFor(kind), Vehicle = DoorBudget.VehicleFor(kind),
+            };
             found = true;
         }
-        if (!found && ranked.Count > 0) { door = ranked.MaxBy(r => r.Score).Door; found = true; }
+        if (!found && ranked.Count > 0) { main = ranked.MaxBy(r => r.Score); door = main!.Door; found = true; }
         // No wall anywhere a metre above the ground: a roof on posts, a canopy, a reservoir sunk
         // into the slope. Nothing to walk into, so no door (Width 0) rather than one in mid-air.
         if (!found)
@@ -302,6 +343,54 @@ public static class BuildingFootprint
             var v = new Vector2(-u.Y, u.X);
             var xz = center - v * (dpt * 0.5f);
             door = new DoorSpot(index, new Vector3(xz.X, b.MinY, xz.Y), new Vector3(-v.X, 0, -v.Y), 0f, plainH);
+        }
+
+        // ---- the building's other doors (#498) -------------------------------------------
+        // A 100 m block with one front door reads as a prop. Doors go first along the wall the
+        // main door stands on, DoorBudget.Spacing apart, then on the next-best walls (a back or
+        // side door), until the building's budget is spent. All of them are service doors: plain
+        // pedestrian doors, so a barn's pair and a garage's roll-up door gain a man-sized one.
+        var extras = new List<DoorSpot>();
+        int budget = DoorBudget.Total(kind, w, dpt);
+        if (found && door.Width > 0 && budget > 1)
+        {
+            var (serviceW, serviceH) = ServiceDoorFor(kind);
+            var placed = new List<DoorSpot> { door };
+            var order = new List<Cand>();
+            if (main != null) order.Add(main);
+            order.AddRange(ranked.OrderByDescending(r => r.Score).Where(c => c != main));
+            foreach (var c in order)
+            {
+                if (placed.Count >= budget) break;
+                float mid = (c.S0 + c.S1) * 0.5f;
+                var t = new Vector2(-c.Normal.Y, c.Normal.X);
+                foreach (float off in DoorBudget.AlongRun(c.S1 - c.S0, serviceW, DoorBudget.MaxPerWall))
+                {
+                    if (placed.Count >= budget) break;
+                    if (off == 0 && c == main) continue; // the main door already stands there
+                    var xz = c.Normal * c.Offset + t * (mid + off);
+                    if (Covered(xz)) continue;
+                    float ground = grid != null
+                        ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
+                        : b.MinY + 0.8f;
+                    float baseY = Math.Max(ground, b.MinY);
+                    // not on stilts over a slope, not on the buried side of a hillside house, and
+                    // not on a solid too low to take a door at all
+                    if (ground < b.MinY - 0.6f || ground > b.MaxY - serviceH - 0.3f) continue;
+                    var spot = new DoorSpot(index,
+                        new Vector3(xz.X + c.Normal.X * 0.03f, baseY, xz.Y + c.Normal.Y * 0.03f),
+                        new Vector3(c.Normal.X, 0, c.Normal.Y), serviceW, serviceH)
+                    {
+                        // a plain pedestrian door, whatever the building is: a barn's side door
+                        // swings into the hall and no tractor comes through it
+                        Slot = placed.Count, Hang = DoorHang.Inward, Vehicle = false,
+                    };
+                    if (!DoorOnWall(b, spot)) continue;
+                    if (placed.Any(q => TooClose(q, spot))) continue;
+                    placed.Add(spot);
+                    extras.Add(spot);
+                }
+            }
         }
 
         // ---- interior frame: the box edge the door is on becomes local -Z ----------------
@@ -314,7 +403,23 @@ public static class BuildingFootprint
         float width2 = alongU ? w : dpt, depth2 = alongU ? dpt : w;
 
         return new Footprint(key, kind, center, axisU,
-            Mathf.Clamp(width2, MinSide, MaxSide), Mathf.Clamp(depth2, MinSide, MaxSide), door);
+            Mathf.Clamp(width2, MinSide, MaxSide), Mathf.Clamp(depth2, MinSide, MaxSide), door)
+        {
+            Extra = extras,
+        };
+    }
+
+    /// <summary>One wall run a door could stand on: its plane, the run along it, and the door it would be.</summary>
+    private sealed record Cand(float Score, Vector2 Normal, float Offset, float S0, float S1, DoorSpot Door);
+
+    /// <summary>
+    /// Whether two doors of one building are too near each other to both be real, edge to edge:
+    /// on the same wall, or round a corner, where two walls' runs both reach the same corner.
+    /// </summary>
+    private static bool TooClose(DoorSpot a, DoorSpot b)
+    {
+        var d = new Vector2(a.Position.X - b.Position.X, a.Position.Z - b.Position.Z);
+        return d.Length() < a.Width / 2 + b.Width / 2 + DoorBudget.MinGap;
     }
 
     /// <summary>Where a triangle crosses the horizontal plane at <paramref name="y"/>, in plan (x, z).</summary>

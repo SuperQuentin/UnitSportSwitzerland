@@ -53,6 +53,7 @@ src/Loot/                quick  --shopcheck
 src/Interiors/           quick  --shopcheck
 src/Interiors/           quick  --sitecheck --systems ui
 src/Loot/LootTables      quick  --sitecheck --systems ui
+src/Interiors/           quick  --doorcheck
 src/Interiors/Church     quick  --churchstagecheck
 src/Audio/Cd/CdLibrary   quick  --churchstagecheck
 src/Items/Item           quick  --shopcheck

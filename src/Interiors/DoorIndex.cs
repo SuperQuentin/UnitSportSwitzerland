@@ -10,7 +10,17 @@ namespace UnitSport.Interiors;
 /// </summary>
 public static class DoorIndex
 {
-    public readonly record struct Entry(BuildingKey Key, Vector3 World, Vector3 Outward, float Width, float Height, BuildingKind Kind);
+    public readonly record struct Entry(DoorKey Key, Vector3 World, Vector3 Outward, float Width, float Height, BuildingKind Kind)
+    {
+        /// <summary>How this door's leaf moves (<see cref="DoorSpot.Hang"/>, #498).</summary>
+        public DoorHang Hang { get; init; }
+
+        /// <summary>Whether a ground vehicle is driven through it (<see cref="DoorSpot.Vehicle"/>).</summary>
+        public bool Vehicle { get; init; }
+
+        /// <summary>The building the door is on: the key of its plan and of the space behind it.</summary>
+        public BuildingKey Building => Key.Building;
+    }
 
     private static readonly Dictionary<TileId, Entry[]> Tiles = new();
 
@@ -19,7 +29,10 @@ public static class DoorIndex
         var list = new List<Entry>(doors.Length);
         foreach (var d in doors)
             if (d.Width > 0)
-                list.Add(new Entry(new BuildingKey(id.E, id.N, d.Index), tileOrigin + d.Position, d.Outward, d.Width, d.Height, d.Kind));
+                list.Add(new Entry(d.KeyIn(id), tileOrigin + d.Position, d.Outward, d.Width, d.Height, d.Kind)
+                {
+                    Hang = d.Hang, Vehicle = d.Vehicle,
+                });
         Tiles[id] = list.ToArray();
     }
 
@@ -33,8 +46,8 @@ public static class DoorIndex
                 doors[i] = doors[i] with { World = shift.Point(doors[i].World), Outward = shift.Direction(doors[i].Outward) };
     }
 
-    /// <summary>A given building's door, if its tile is drawn and it has one.</summary>
-    public static Entry? Find(BuildingKey key)
+    /// <summary>A given door, if its tile is drawn and the building has it.</summary>
+    public static Entry? Find(DoorKey key)
     {
         if (!Tiles.TryGetValue(key.Tile, out var doors)) return null;
         foreach (var e in doors)
@@ -79,7 +92,7 @@ public static class DoorIndex
         Nearest(at, reach, _ => true, deeper);
 
     /// <summary>
-    /// The nearest door a vehicle drives through (<see cref="BuildingFootprint.VehicleDoor"/>)
+    /// The nearest door a vehicle drives through (<see cref="DoorSpot.Vehicle"/>)
     /// within <paramref name="reach"/> in front of it, at most <paramref name="halfAngle"/>
     /// radians off square: a vehicle heading at a garage or a barn, not driving past one.
     /// </summary>
@@ -91,7 +104,7 @@ public static class DoorIndex
         float cos = Mathf.Cos(halfAngle);
         return Nearest(at, reach, e =>
         {
-            if (!BuildingFootprint.VehicleDoor(e.Kind)) return false;
+            if (!e.Vehicle) return false;
             var into = new Vector2(-e.Outward.X, -e.Outward.Z);
             if (h.Dot(into) < cos) return false;
             // and aimed at the opening, not at the wall beside it: where the heading meets the facade

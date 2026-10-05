@@ -55,6 +55,8 @@ public static partial class InteriorGenerator
         public PlanBox Box;
         public RectPlan Rect = null!;
         public DoorSpot Door;
+        /// <summary>This solid's other facade doors (#498): a side door on the nave, slot 1 and up.</summary>
+        public IReadOnlyList<DoorSpot> Extra = Array.Empty<DoorSpot>();
         /// <summary>For a tower: which side of the nave it stands on.</summary>
         public Side Toward;
         public int Room = -1;
@@ -83,7 +85,11 @@ public static partial class InteriorGenerator
             int i = group.Members[m];
             if (map.Boxes[i] is not { } box) continue;
             var fp = BuildingFootprint.Compute(tile, i, roads, grid);
-            parts.Add(new Part { Index = i, Role = group.Parts[m], Box = box, Door = fp?.Door ?? default });
+            parts.Add(new Part
+            {
+                Index = i, Role = group.Parts[m], Box = box,
+                Door = fp?.Door ?? default, Extra = fp?.Extra ?? Array.Empty<DoorSpot>(),
+            });
         }
         if (parts.Count == 0 || parts[0].Role != BuildingPart.Nave) return null;
 
@@ -219,16 +225,21 @@ public static partial class InteriorGenerator
             spans.Cut(0, t.Toward, acrossX ? porch.X0 - 0.25f : porch.Z0 - 0.25f, acrossX ? porch.X1 + 0.25f : porch.Z1 + 0.25f);
         }
 
-        // ---- entrances: every member's door opens into its own room -----------------------------
-        foreach (var p in parts)
+        // ---- entrances: every door of every member opens into its own room ----------------------
+        // the main door of each solid first (a church of one gets its west door before its side
+        // door, so the one nearest the street below still wins the main entrance), then the extras
+        var mainDoors = new HashSet<string>();
+        foreach (var p in parts.SelectMany(p => p.Extra.Prepend(p.Door).Select(d => (Part: p, Door: d)))
+                     .OrderBy(x => x.Door.Slot))
         {
-            if (p.Door.Width <= 0) continue;
-            int room = p.Role == BuildingPart.Nave || p.Room < 0 ? 0 : p.Room;
+            var spot = p.Door;
+            if (spot.Width <= 0) continue;
+            int room = p.Part.Role == BuildingPart.Nave || p.Part.Room < 0 ? 0 : p.Part.Room;
             var r = ground.Rooms[room];
-            var at = ToLocal(p.Door.Position);
-            var d = new Vector2(p.Door.Outward.X, p.Door.Outward.Z);
+            var at = ToLocal(spot.Position);
+            var d = new Vector2(spot.Outward.X, spot.Outward.Z);
             var outward = new Vector2(d.Dot(U), d.Dot(V));
-            float width = Math.Clamp(p.Door.Width, 0.9f, 1.8f);
+            float width = Math.Clamp(spot.Width, 0.9f, 1.8f);
             foreach (var side in new[] { Side.Front, Side.Right, Side.Back, Side.Left }
                          .OrderByDescending(s => Outward(s).Dot(outward)).ThenBy(s => (int)s))
             {
@@ -248,12 +259,15 @@ public static partial class InteriorGenerator
                     Side.Left => new Vector2(r.X0, c),
                     _ => new Vector2(r.X1, c),
                 };
+                string name = new DoorKey(tile.Id.E, tile.Id.N, p.Part.Index, spot.Slot).ToString();
+                if (spot.Slot == 0) mainDoors.Add(name);
                 layout.Entrances.Add(new EntrancePlan
                 {
-                    Door = new BuildingKey(tile.Id.E, tile.Id.N, p.Index).ToString(),
+                    Door = name,
                     X = line.X, Z = line.Y, InX = inward.X, InZ = inward.Y, Width = width,
-                    DoorX = p.Door.Position.X, DoorY = p.Door.Position.Y, DoorZ = p.Door.Position.Z,
-                    DoorOutX = p.Door.Outward.X, DoorOutZ = p.Door.Outward.Z,
+                    DoorX = spot.Position.X, DoorY = spot.Position.Y, DoorZ = spot.Position.Z,
+                    DoorOutX = spot.Outward.X, DoorOutZ = spot.Outward.Z,
+                    DoorWidth = spot.Width, DoorHeight = spot.Height, Hang = spot.Hang, Vehicle = spot.Vehicle,
                 });
                 break;
             }
@@ -261,12 +275,14 @@ public static partial class InteriorGenerator
         if (layout.Entrances.Count == 0) return null;
 
         // the main entrance, first in the list: the one whose door is nearest the street
-        var main = layout.Entrances.MinBy(e => new Vector2(e.DoorX, e.DoorZ).DistanceTo(toward))!;
+        // the main entrance is one of the solids' own front doors, never a side door
+        var main = layout.Entrances.Where(e => mainDoors.Contains(e.Door)).DefaultIfEmpty(layout.Entrances[0])
+            .MinBy(e => new Vector2(e.DoorX, e.DoorZ).DistanceTo(toward))!;
         layout.Entrances.Remove(main);
         layout.Entrances.Insert(0, main);
         layout.DoorX = main.DoorX; layout.DoorY = main.DoorY; layout.DoorZ = main.DoorZ;
         layout.DoorOutX = main.DoorOutX; layout.DoorOutZ = main.DoorOutZ;
-        layout.DoorWidth = main.Width;
+        layout.DoorWidth = main.DoorWidth > 0 ? main.DoorWidth : main.Width;
         layout.EntryX = main.X;
         layout.EntryWidth = main.Width;
 
