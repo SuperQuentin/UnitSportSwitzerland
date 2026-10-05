@@ -184,7 +184,7 @@ public sealed class InteriorLayout
     // one number, so whichever of #497/#498 rebases onto the other takes the NEXT one, never a
     // lower one: a version going backwards regenerates the plans saved under the higher one and
     // then collides when it is reissued.
-    public const int CurrentVersion = 14; // 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
+    public const int CurrentVersion = 15; // 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";
@@ -214,6 +214,12 @@ public sealed class InteriorLayout
     public float DoorOutX { get; set; }
     public float DoorOutZ { get; set; }
     public float DoorWidth { get; set; }
+    /// <summary>
+    /// The facade door's height as the footprint settled it, under the eave
+    /// (<see cref="BuildingFootprint.FitUnderEave"/>). Carried so a single-door plan's entrance
+    /// knows it too and the opening outside matches the one inside (#509).
+    /// </summary>
+    public float DoorHeight { get; set; }
 
     public float StoreyHeight { get; set; }
     /// <summary>Interior X of the entry door on the front wall.</summary>
@@ -252,7 +258,8 @@ public sealed class InteriorLayout
         {
             Door = Key, X = EntryX, Z = -Depth / 2, InX = 0, InZ = 1, Width = EntryWidth,
             DoorX = DoorX, DoorY = DoorY, DoorZ = DoorZ, DoorOutX = DoorOutX, DoorOutZ = DoorOutZ,
-            DoorWidth = DoorWidth, Hang = DoorBudget.HangFor(DressedKind()),
+            DoorWidth = DoorWidth, DoorHeight = DoorHeight,
+            Hang = DoorBudget.HangFor(DressedKind()),
             Vehicle = DoorBudget.VehicleFor(DressedKind()),
         },
     };

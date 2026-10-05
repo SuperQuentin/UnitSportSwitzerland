@@ -20,6 +20,13 @@ public static class DoorCheck
 {
     public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--doorcheck") >= 0;
 
+    /// <summary>
+    /// How far the opening inside a door may differ from the door on the facade (#509). Not zero:
+    /// a cored plan's lobby keeps its own 2.2 m lintel, which is a hand's width over the 2.1 m
+    /// door in front of it and reads as one hole. A shed's old 2.8 m outside / 2.1 m inside did not.
+    /// </summary>
+    private const float SameHole = 0.15f;
+
     private sealed record Box(string What, BuildingKind Kind, float Width, float Depth, float Height, int Least, int Most);
 
     private static readonly Box[] Boxes =
@@ -31,6 +38,11 @@ public static class DoorCheck
         new("a block of flats", BuildingKind.Apartment, 30, 15, 15, 3, 3),
         new("a 100 m shop front", BuildingKind.Commercial, 100, 20, 12, 5, DoorBudget.MaxPerBuilding),
         new("a works hall", BuildingKind.Industrial, 60, 30, 9, 3, DoorBudget.MaxPerBuilding),
+        // low enough that the 2.8 m door of a works does not fit under its eave, tall enough that
+        // a cut-down one does: the case #509 is about, where the clamp has to bite and the
+        // doorway planned inside has to follow it down (the shed above has so little wall that
+        // the MinDoorHeight floor wins instead)
+        new("a low works", BuildingKind.Industrial, 12, 8, 3.4f, 1, 1),
     ];
 
     public static int Run()
@@ -68,11 +80,22 @@ public static class DoorCheck
                 Expect(BuildingFootprint.DoorOnWall(b, d), $"{box.What} slot {d.Slot}: the door is on a wall, not in the air");
                 if (d.Slot == 0)
                 {
-                    // A main door is sized by its kind alone, and on a low solid it can reach over
-                    // the eave: a 2.6 m shed takes the 2.8 m door of a works. Older than this
-                    // check and left alone by #498, which only adds doors; noted, not asserted.
-                    if (d.Position.Y + d.Height > b.MaxY + 0.01f)
-                        GD.Print($"[doorcheck] note {box.What}: its main door is {d.Height:F1} m on a {b.MaxY:F1} m wall (pre-existing)");
+                    // A main door used to be sized by its kind alone, so on a low solid it reached
+                    // over the eave: a 2.6 m shed took the 2.8 m door of a works and pushed it
+                    // through its own roof. #509 cuts every kind's door down to the wall it stands
+                    // on. These solids are flat-roofed, so their eave is their MaxY, and the wall
+                    // runs from the sill the footprint settled on (this check builds no world, so
+                    // that is BuildingFootprint.Compute's no-grid guess, 0.8 m up the solid).
+                    float wall = b.MaxY - d.Position.Y;
+                    float room = wall - BuildingFootprint.DoorUnderEave;
+                    Expect(d.Height <= Math.Max(BuildingFootprint.MinDoorHeight, room) + 0.01f,
+                        $"{box.What} slot 0: its main door is {d.Height:F2} m on {wall:F2} m of wall");
+                    // and where the wall can take a door at all, its head really is under the eave
+                    Expect(room < BuildingFootprint.MinDoorHeight
+                           || d.Position.Y + d.Height <= b.MaxY - BuildingFootprint.DoorUnderEave + 0.01f,
+                        $"{box.What} slot 0: its main door's head is under the {b.MaxY:F1} m eave, lintel and all");
+                    Expect(d.Height >= BuildingFootprint.MinDoorHeight - 0.01f,
+                        $"{box.What} slot 0: its main door is {d.Height:F2} m, still tall enough to walk through");
                     continue;
                 }
                 // an extra door is a plain pedestrian one, whatever the building is, and it fits
@@ -128,6 +151,14 @@ public static class DoorCheck
                 if (way == null) continue;
                 Expect(way.Hang == d.Hang && way.Vehicle == d.Vehicle,
                     $"{box.What} slot {d.Slot}: inside and outside agree on how it hangs");
+                // ... and on how big it is (#509). The facade door is the hole; the plan takes it
+                // unless its own storey is too low, and a cored lobby keeps its own lintel, which
+                // is why this is a tolerance and not an equality.
+                var (_, inside) = layout.OpeningOf(way);
+                float want = Math.Min(d.Height, layout.StoreyHeight - InteriorGenerator.Slab - 0.15f);
+                Expect(Math.Abs(inside - want) <= SameHole,
+                    $"{box.What} slot {d.Slot}: the doorway inside is {inside:F2} m and the door outside {d.Height:F2} m "
+                    + $"(wanted {want:F2} m within {SameHole:F2} m)");
                 Expect(Math.Abs(way.X) <= layout.Width / 2 + 0.01f && Math.Abs(way.Z) <= layout.Depth / 2 + 0.01f,
                     $"{box.What} slot {d.Slot}: its doorway is inside the plan box");
             }
