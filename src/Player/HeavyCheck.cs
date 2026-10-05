@@ -164,6 +164,12 @@ public static class HeavyCheck
             var f = new Run2(Loaded(spec));
             for (int i = 0; i < 90 * 60 && float.IsNaN(t25); i++) { f.Step(new RideInput(1f, 0f, 0f, false)); if (f.U >= 24f / 3.6f) t25 = f.Time; }
             Check(t25 is > 3f and < 45f, $"0-24 km/h in {F(t25)} s at {mass:F0} t");
+            // and alone, to just under its top: a Fendt 724 takes some 15-20 s to 40, a combine longer to its 25
+            float solo = float.NaN, to = spec.LimiterKmh - 1f;
+            var alone = new Run2(new Truck(spec) { ShiftOverride = HeavyShift.Automatic });
+            for (int i = 0; i < 90 * 60 && float.IsNaN(solo); i++) { alone.Step(new RideInput(1f, 0f, 0f, false)); if (alone.U >= to / 3.6f) solo = alone.Time; }
+            Check(spec.Class == HeavyClass.Combine ? solo is > 18f and < 40f : solo is > 12f and < 24f,
+                $"alone 0-{F(to, "F0")} km/h in {F(solo)} s at {alone.T.Train.Mass / 1000f:F1} t");
         }
         else if (spec.Class == HeavyClass.Pickup)
             Check(t50 is > 2f and < 7f, $"0-50 km/h in {F(t50)} s with 2.6 t of boat behind (a Raptor alone ~2.5 s)");

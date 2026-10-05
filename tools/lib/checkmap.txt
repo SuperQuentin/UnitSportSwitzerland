@@ -332,6 +332,7 @@ src/Player/TrailerCatal  quick  --tractorcheck --chunks fixture:flat --traffic 0
 src/Avatar/FarmMesh      quick  --tractorcheck --chunks fixture:flat --traffic 0
 src/Avatar/FarmMesh      quick  --cockpitcheck
 src/Farming/MachineLoad  quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Terrain/Fixture/FixtureCourse quick  --tractorcheck --chunks fixture:flat --traffic 0
 src/Player/TractorNetPro net    tools/tractornetcheck.sh
 src/Player/Truck.Farm    net    tools/tractornetcheck.sh
 src/Player/FootPlayer.Fa net    tools/tractornetcheck.sh

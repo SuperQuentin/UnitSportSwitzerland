@@ -306,6 +306,8 @@ public sealed record TrailerSpec
     /// <summary>Its working width, m, and the working bar's place, metres behind its front.</summary>
     public float WorkWidth { get; init; }
     public float WorkAt { get; init; }
+    /// <summary>The working bar's middle to the right of the linkage's centre, m: a disc mower works beside the tractor's track.</summary>
+    public float WorkOffset { get; init; }
     /// <summary>How high the linkage lifts it off the ground for the road, m.</summary>
     public float LiftHeight { get; init; }
     /// <summary>A tipping trailer's body, in items (sacks): 0 for none.</summary>

@@ -277,6 +277,7 @@ public partial class FootPlayer
         // nobody at the wheel (#158): the engine only drags; idling in drive it would creep on for ever
         truck.EngineRunning = EngineOn && SeatIndex == 0;
         truck.Box.ClutchHeld = !Npc && RideControls == null && PlayerInput.Held(PlayerInput.Clutch);
+        SenseSoil(truck);
     }
 
     /// <summary>What the step decided that the player hears about: a stall, a grind, the air, a rollover.</summary>
