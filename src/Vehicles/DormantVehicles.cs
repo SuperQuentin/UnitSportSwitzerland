@@ -2,6 +2,7 @@ using System.Threading.Tasks;
 using Godot;
 using UnitSport.Avatar;
 using UnitSport.Core;
+using UnitSport.Interiors;
 using UnitSport.Player;
 using UnitSport.Terrain;
 using UnitSport.Terrain.Format;
@@ -164,6 +165,23 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
             or BodyShape.Coupe or BodyShape.Fastback)
         .Select(c => (int)c.Kind).ToArray();
 
+    /// <summary>
+    /// What stands in an industrial yard beyond cars (#496 phase 3): the goods vehicles only —
+    /// the tractor and the rigid, never a bus or a coach, which belong to an operator's depot and
+    /// not to a haulier's. Buses would read as a mistake outside a warehouse.
+    /// </summary>
+    private static readonly int[] YardHeavies = HeavyCatalog.All
+        .Where(h => h.Takes != Coupling.None || h.Sections.Length == 1 && h.Label.Contains("rigid"))
+        .Select(h => (int)h.Kind).ToArray();
+
+    /// <summary>
+    /// The trailers a yard holds, as <c>TrailerCatalog</c> codes with a load already in them. Each
+    /// trailer appears empty, part and fully loaded, so a row of them is not all the same.
+    /// </summary>
+    private static readonly int[] YardTrailers = Enumerable.Range(0, TrailerCatalog.All.Count)
+        .SelectMany(i => new[] { TrailerCatalog.Code(i, 0f), TrailerCatalog.Code(i, 0.55f), TrailerCatalog.Code(i, 1f) })
+        .ToArray();
+
     // ---- the fleet of a tile -----------------------------------------------------------------
 
     private void OnTileEntered(TileId id)
@@ -201,6 +219,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
                     var list = new List<VehicleSlot>();
                     if (roads is { Parking.Count: > 0 })
                         DormantSlots.ForParking(id, roads.Parking, ParkedKinds, list);
+                    Yards(source, id, roads, list);
                     return list;
                 });
                 if (!IsInsideTree()) return;
@@ -217,6 +236,39 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
         finally
         {
             _busy = false;
+        }
+    }
+
+    /// <summary>
+    /// The second provider (#496 phase 3): an industrial site's yard. Costs a tile's <c>.bldg</c>
+    /// and its height grid, so it is skipped entirely on a tile with no industrial building —
+    /// which is nearly all of them. Worker thread, like the rest of <see cref="Fill"/>.
+    ///
+    /// <para>
+    /// A slot the grid put inside a building or on a road is dropped here rather than in the
+    /// provider, because deciding that needs the tile's geometry and the provider is tier-0 and has
+    /// none. Dropping keeps the ordinals, which name the vehicle: a gap in the yard is fine, a
+    /// renumbered fleet is not.
+    /// </para>
+    /// </summary>
+    private static void Yards(IChunkSource source, TileId id, RoadTile? roads, List<VehicleSlot> into)
+    {
+        var tile = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
+        if (tile is not { Buildings.Count: > 0 }) return;
+        var grid = source.LoadChunkAsync(id).GetAwaiter().GetResult();
+        var yards = SiteYards.For(tile, roads, grid);
+        if (yards.Count == 0) return;
+
+        var map = BuildingTypes.For(tile);
+        int before = into.Count;
+        DormantSlots.ForSite(id, yards, ParkedKinds, YardHeavies, YardTrailers, (int)RideKind.Trailer, into);
+        for (int i = into.Count - 1; i >= before; i--)
+        {
+            var s = into[i];
+            var at = new Vector2((float)(s.E - id.MinE), (float)(id.MaxN - s.N));
+            // a lorry needs more room round it than a hatchback before it reads as parked in a wall
+            float radius = s.Train != 0 || s.KindId != (int)RideKind.Trailer && s.KindId >= HeavyCatalog.First ? 3.2f : 1.6f;
+            if (SiteYards.Blocked(tile, roads, map, at, radius)) into.RemoveAt(i);
         }
     }
 
