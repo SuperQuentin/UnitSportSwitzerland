@@ -73,6 +73,8 @@ public partial class GameShell : Node
     /// probe or a tool. The list is of the harmless ones, so a new probe flag never lands on the
     /// title by accident — anything unknown boots straight into the world, as before.
     /// </summary>
+    private bool _meteredAsked;
+
     /// <summary>The menus' size on a phone, over the desktop's (#63): 38 px buttons become about 7 mm on a 6" screen.</summary>
     public const float MobileUiScale = 1.15f;
 
@@ -80,7 +82,7 @@ public partial class GameShell : Node
     {
         string[] harmless =
         {
-            "--name", "--chunks", "--landings", "--cache", "--title", "--nocapture", "--rings", "--horizon", "--fog", "--detail",
+            "--name", "--chunks", "--landings", "--cache", "--title", "--nocapture", "--rings", "--horizon", "--fog", "--detail", "--data",
             "--generated", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--shoulder", "--voice", "--time",
             "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--airliner", "--perflog",
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world",
@@ -104,6 +106,7 @@ public partial class GameShell : Node
         // VR (#186) before any menu or camera exists, so the title is in the headset too
         bool vr = XR.XrSession.TryStart(GetParent());
         AddChild(new DisplaySettings { Name = "Display" });
+        AddChild(new DataWatch { Name = "DataWatch" });
 
         // F1 over everything, menus included (layer 42)
         _help = ControlsHelp.Create();
@@ -367,6 +370,19 @@ public partial class GameShell : Node
 
     public void Join(string endpoint, string? serverName = null)
     {
+        // a metered connection (#63): say what streaming costs before it starts, once per session
+        if (GameSettings.Current.WarnMetered && DataWatch.Metered && !GameSettings.Current.LowDataActive && !_meteredAsked)
+        {
+            _meteredAsked = true;
+            Modal.Choose(_menuRoot, "Metered connection",
+                "You are on mobile data or a hotspot. The world streams from the server: about "
+                + $"{StreamEstimate.ArrivalMb} MB on arrival, and more as you travel. Low data streams "
+                + $"only the nearest tiles (about {StreamEstimate.ArrivalLowMb} MB on arrival).",
+                ("Use Low data", () => { GameSettings.Current.Data = DataPreset.Low; GameSettings.Current.Commit(); Join(endpoint, serverName); }),
+                ("Join anyway", () => Join(endpoint, serverName)),
+                ("Never ask", () => { GameSettings.Current.WarnMetered = false; GameSettings.Current.Commit(); Join(endpoint, serverName); }));
+            return;
+        }
         GameSettings.Current.LastHost = endpoint;
         GameSettings.Current.Save();
         LaunchVia(new WorldLaunch

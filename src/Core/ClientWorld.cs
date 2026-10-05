@@ -257,6 +257,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // (not under a fixture course: the cache would fill its gaps, and its horizon, with real data)
         IChunkSource streamedSource = fixture ? source : _chunkSource = new NetworkChunkSource(
             source, TerrainPaths.FindChunkDir(), _streamer, TerrainPaths.FindCacheDir());
+        if (_chunkSource != null)
+        {
+            // Settings → Data (#63): the cap is the player's, and Clear reaches the live cache
+            _chunkSource.MaxCacheBytes = CacheCapBytes;
+            NetworkChunkSource.Active = _chunkSource;
+        }
 
         // The generated fill answers for the tiles no real data exists for, above the network
         // source so a client never asks a server for one, and under the cache so a generated tile
@@ -1015,8 +1021,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (_mode is GameMode.Explore or GameMode.Multiplayer) MouseCapture.Capture();
     }
 
+    private static long CacheCapBytes => (long)(GameSettings.Current.CacheGb * 1024 * 1024 * 1024);
+
     private void OnSettingsChanged()
     {
+        if (_chunkSource != null) _chunkSource.MaxCacheBytes = CacheCapBytes;
         foreach (var m in _worldMaterials) FogUniforms.Apply(m);
         // before the terrain takes the settings: its rings and mesh detail are the style's
         if (StyleKit.Restyle()) ApplyStyle();
@@ -1133,6 +1142,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         World.WaterField.Bind(null);
         World.WaterField.SetSeaState(0f);
         GameSettings.Changed -= OnSettingsChanged;
+        if (NetworkChunkSource.Active == _chunkSource) NetworkChunkSource.Active = null;
         Permissions.Changed -= OnPermissionsChanged;
         StyleCommand.RebuildRequested -= OnRebuildRequested;
         StyleKit.Chosen -= OnStyleChosen;

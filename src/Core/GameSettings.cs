@@ -6,6 +6,13 @@ using Godot;
 namespace UnitSport.Core;
 
 /// <summary>How finely the inner LOD rings and their roads/buildings are drawn.</summary>
+/// <summary>How much the client streams (#63): Low data keeps fine tiles to the nearest rings.</summary>
+public enum DataPreset
+{
+    Standard = 0,
+    Low = 1,
+}
+
 public enum DetailPreset
 {
     Low = 0,
@@ -110,6 +117,26 @@ public sealed class GameSettings
     // --- controls ---
     /// <summary>Right-stick look speed multiplier; 1 turns at <see cref="PlayerInput.StickTurnRate"/>.</summary>
     public float StickSensitivity { get; set; } = 1f;
+    /// <summary>Data (#63, every platform): Standard, or Low data (fewer full tiles fetched).</summary>
+    public DataPreset Data { get; set; } = DataPreset.Standard;
+    /// <summary>Low data whenever the phone's data saver is on (Android; ignored elsewhere).</summary>
+    public bool AutoLowData { get; set; } = true;
+    /// <summary>Ask before joining a server over a metered connection (cellular, a hotspot).</summary>
+    public bool WarnMetered { get; set; } = true;
+    /// <summary>Cap on the downloaded-tile cache on disk, GB (oldest evicted first).</summary>
+    public float CacheGb { get; set; } = 2f;
+
+    /// <summary>Android's data saver, as last read (<see cref="DataWatch"/>); never saved.</summary>
+    [JsonIgnore]
+    public static bool DataSaverOn { get; set; }
+
+    /// <summary>Whether the client streams as Low data now: chosen, or the data saver with auto on.</summary>
+    [JsonIgnore]
+    public bool LowDataActive => Data == DataPreset.Low || AutoLowData && DataSaverOn;
+
+    /// <summary>Low data's render distance cap, in rings: past it the horizon draws the land.</summary>
+    public const int LowDataRings = 5;
+
     /// <summary>Touch look (#63): camera turn per pixel of drag, as a multiple of the mouse's.</summary>
     public float TouchLookSpeed { get; set; } = 1.5f;
     public bool InvertY { get; set; }
@@ -350,6 +377,7 @@ public sealed class GameSettings
         CockpitMirrors = false;
         CommitBudgetMs = 3;
         MaxConcurrentBuilds = 0; // auto, which ChunkManager caps on a phone
+        CacheGb = 0.5f;
     }
 
     public void Save()
@@ -397,6 +425,9 @@ public sealed class GameSettings
         }
     }
 
+    /// <summary>Something not saved changed what the settings mean (the data saver): tell the world.</summary>
+    public static void NotifyChanged() => Changed?.Invoke();
+
     /// <summary>Applies a change made in the UI: clamps, notifies the world, persists.</summary>
     public void Commit()
     {
@@ -411,6 +442,7 @@ public sealed class GameSettings
         HorizonKm = Math.Clamp(HorizonKm, 0, MaxHorizonKm);
         MaxConcurrentBuilds = Math.Clamp(MaxConcurrentBuilds, 0, MaxBuildsCap);
         CommitBudgetMs = Math.Clamp(CommitBudgetMs, 1, 16);
+        CacheGb = Math.Clamp(CacheGb, 0.1f, 20f);
         RenderScale = Math.Clamp(RenderScale, MinRenderScale, MaxRenderScale);
         VrMsaa = VrMsaa switch { <= 0 => 0, <= 2 => 2, <= 4 => 4, _ => 8 };
         VrRenderScale = Math.Clamp(VrRenderScale, MinVrRenderScale, MaxVrRenderScale);
@@ -457,6 +489,7 @@ public sealed class GameSettings
                 case "--fog": Fog = v != "off" && v != "0" && v != "false"; break;
                 case "--generated": GeneratedFill = v != "off" && v != "0" && v != "false"; break;
                 case "--detail" when Enum.TryParse<DetailPreset>(v, true, out var d): Detail = d; break;
+                case "--data" when Enum.TryParse<DataPreset>(v, true, out var dp): Data = dp; break;
                 case "--builds" when int.TryParse(v, out int b): MaxConcurrentBuilds = b; break;
                 case "--commit" when double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double c):
                     CommitBudgetMs = c; break;
