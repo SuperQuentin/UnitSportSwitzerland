@@ -70,6 +70,11 @@ public static class DoorCheck
             var box = Boxes[i];
             var b = tile.Buildings[i];
             var mine = doors.Where(d => d.Index == i && d.Width > 0).OrderBy(d => d.Slot).ToList();
+            // which industrial site it is, if it is one: only those carry loading bays (#528)
+            var site = BuildingTypes.For(tile).Boxes[i] is { } plan
+                ? BuildingTypes.SiteFor(new BuildingKey(tile.Id.E, tile.Id.N, i).ToString(),
+                    b.Kind, plan.Width, plan.Depth, b.MaxY - b.MinY)
+                : BuildingType.None;
             Expect(mine.Count >= box.Least && mine.Count <= box.Most,
                 $"{box.What} ({box.Width:F0}x{box.Depth:F0} m) has {mine.Count} door(s), wanted {box.Least}..{box.Most}");
             Expect(mine.Select(d => d.Slot).SequenceEqual(Enumerable.Range(0, mine.Count)),
@@ -98,10 +103,16 @@ public static class DoorCheck
                         $"{box.What} slot 0: its main door is {d.Height:F2} m, still tall enough to walk through");
                     continue;
                 }
-                // an extra door is a plain pedestrian one, whatever the building is, and it fits
+                // an extra door is a plain pedestrian one, whatever the building is, and it fits —
+                // unless it is an industrial site's loading bay (#528), which is the one extra door
+                // that is wide, rolls up and is driven through
                 Expect(d.Position.Y + d.Height <= b.MaxY + 0.01f, $"{box.What} slot {d.Slot}: the door is under the eave");
-                Expect(d.Hang == DoorHang.Inward && !d.Vehicle && d.Width <= 1.8f,
-                    $"{box.What} slot {d.Slot}: a pedestrian door ({d.Width:F1} m, {d.Hang}), not driven through");
+                if (d.Hang == DoorHang.RollUp && d.Vehicle)
+                    Expect(site != BuildingType.None,
+                        $"{box.What} slot {d.Slot}: a loading bay, and its building is an industrial site");
+                else
+                    Expect(d.Hang == DoorHang.Inward && !d.Vehicle && d.Width <= 1.8f,
+                        $"{box.What} slot {d.Slot}: a pedestrian door ({d.Width:F1} m, {d.Hang}), not driven through");
                 // and the sign over the door, and the shop behind it, belong to the main door
                 Expect(!d.Bank && d.Shop == Loot.ShopType.None, $"{box.What} slot {d.Slot}: no second shop sign");
             }
@@ -112,8 +123,15 @@ public static class DoorCheck
                     if (a.Slot >= c.Slot) continue;
                     float gap = new Vector2(a.Position.X - c.Position.X, a.Position.Z - c.Position.Z).Length()
                         - a.Width / 2 - c.Width / 2;
-                    Expect(gap >= DoorBudget.MinGap - 0.01f,
-                        $"{box.What}: slots {a.Slot} and {c.Slot} are {gap:F1} m apart, wall to wall");
+                    // Two loading bays stand a pier apart on purpose (#528) — the strip of wall
+                    // that carries their lintels — and a bay sits closer to the main door than a
+                    // pedestrian door would, because a works' office door is beside its first bay.
+                    // Everything else keeps MinGap.
+                    bool bays = a.Hang == DoorHang.RollUp && a.Vehicle && c.Hang == DoorHang.RollUp && c.Vehicle;
+                    bool bayAndDoor = (a.Hang == DoorHang.RollUp && a.Vehicle) || (c.Hang == DoorHang.RollUp && c.Vehicle);
+                    float least = bays ? 0.25f : bayAndDoor ? DoorBudget.BayToDoorGap : DoorBudget.MinGap;
+                    Expect(gap >= least - 0.01f,
+                        $"{box.What}: slots {a.Slot} and {c.Slot} are {gap:F1} m apart, wall to wall (least {least:F2})");
                 }
 
             // a barn and a garage keep their vehicle door, and gain a door for a person

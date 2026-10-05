@@ -384,10 +384,58 @@ public static class BuildingFootprint
         // pedestrian doors, so a barn's pair and a garage's roll-up door gain a man-sized one.
         var extras = new List<DoorSpot>();
         int budget = DoorBudget.Total(kind, w, dpt);
-        if (found && door.Width > 0 && budget > 1)
+
+        // ---- loading bays (#528) ----------------------------------------------------------
+        // An industrial site's front wall is mostly bays, so they are placed before the generic
+        // street-front rule and claim the budget first: a works with one pedestrian door and no way
+        // to get a trailer inside is the thing this fixes. They go on the wall the MAIN door is on,
+        // which is the wall `SiteYards` lays the yard in front of (#516) — so the bays face their
+        // own fleet rather than the back hedge.
+        var site = BuildingTypes.SiteFor(key.ToString(), b.Kind, box.Width, box.Depth, b.MaxY - b.MinY);
+        // A showroom's front is glass, not a shutter. The building is GKLAS 1242 and so
+        // `BuildingKind.Garage`, whose main door defaults to a roll-up one — right for a workshop,
+        // wrong for the one site type whose front wall is meant to be looked through. Per door, as
+        // #498 made possible.
+        if (site == BuildingType.Dealership)
+            door = door with { Hang = DoorHang.Inward, Vehicle = false };
+
+        // the wall itself, base to eave: a bay cannot be taller than the wall it is cut in
+        float wallHeight = Math.Max(0f, box.Eave - b.MinY);
+        if (found && door.Width > 0 && main != null && site != BuildingType.None
+            && DoorBudget.Bays(site, main.S1 - main.S0, wallHeight) is { } bays)
+        {
+            float mid = (main.S0 + main.S1) * 0.5f;
+            var t = new Vector2(-main.Normal.Y, main.Normal.X);
+            foreach (float off in DoorBudget.BayOffsets(main.S1 - main.S0, door.Width / 2, bays))
+            {
+                if (extras.Count + 1 >= budget) break;
+                var xz = main.Normal * main.Offset + t * (mid + off);
+                if (Covered(xz)) continue;
+                float ground = grid != null
+                    ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
+                    : b.MinY + 0.8f;
+                float baseY = Math.Max(ground, b.MinY);
+                if (ground < b.MinY - 0.6f || ground > b.MaxY - bays.Height - 0.3f) continue;
+                var bay = new DoorSpot(index,
+                    new Vector3(xz.X + main.Normal.X * 0.03f, baseY, xz.Y + main.Normal.Y * 0.03f),
+                    new Vector3(main.Normal.X, 0, main.Normal.Y), bays.Width, bays.Height)
+                {
+                    Slot = extras.Count + 1, Hang = DoorHang.RollUp, Vehicle = true,
+                };
+                if (!DoorOnWall(b, bay)) continue;
+                // the pier between two bays, not a pedestrian door's 3 m, or every bay after the
+                // first is rejected; the main door still keeps its own elbow room
+                if (extras.Any(q => TooClose(q, bay, bays.Pier))) continue;
+                if (TooClose(door, bay, DoorBudget.BayToDoorGap)) continue;
+                extras.Add(bay);
+            }
+        }
+
+        if (found && door.Width > 0 && budget > 1 + extras.Count)
         {
             var (serviceW, serviceH) = ServiceDoorFor(kind);
             var placed = new List<DoorSpot> { door };
+            placed.AddRange(extras);   // the bays are already on the wall and keep their room
             var order = new List<Cand>();
             if (main != null) order.Add(main);
             order.AddRange(ranked.OrderByDescending(r => r.Score).Where(c => c != main));
@@ -451,10 +499,10 @@ public static class BuildingFootprint
     /// Whether two doors of one building are too near each other to both be real, edge to edge:
     /// on the same wall, or round a corner, where two walls' runs both reach the same corner.
     /// </summary>
-    private static bool TooClose(DoorSpot a, DoorSpot b)
+    private static bool TooClose(DoorSpot a, DoorSpot b, float gap = DoorBudget.MinGap)
     {
         var d = new Vector2(a.Position.X - b.Position.X, a.Position.Z - b.Position.Z);
-        return d.Length() < a.Width / 2 + b.Width / 2 + DoorBudget.MinGap;
+        return d.Length() < a.Width / 2 + b.Width / 2 + gap;
     }
 
     /// <summary>Where a triangle crosses the horizontal plane at <paramref name="y"/>, in plan (x, z).</summary>
