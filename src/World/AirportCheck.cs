@@ -101,6 +101,13 @@ public partial class AirportCheck : Node
             if (Body(p.Name + "_0") is { Ride: Airstairs s0 } st)
                 GD.Print($"[airportcheck] {p.Name}_0 platform {s0.Height:F2} m, docked at door {st.StairsDockedAt?.Door}");
 
+        if (!filled)
+            foreach (var v in Vehicles().Where(v => v.Name.ToString().StartsWith(AirportStands.Prefix, System.StringComparison.Ordinal)).Take(4))
+            {
+                var sills = new List<AirstairsDock.Sill>();
+                AirstairsDock.SillsNear(GetTree(), v.GlobalPosition, 12f, sills);
+                GD.Print($"[airportcheck] {v.Name} at {v.GlobalPosition} yaw {Mathf.RadToDeg(v.GlobalRotation.Y):F1} posed {v.Posed} lip {AirstairsDock.Lip(v.GlobalTransform)} sills {string.Join(" ", sills.Select(x => $"{x.Door}:{x.Edge}"))}");
+            }
         if (Shots) await TakeShots(me);
 
         if (Fixture && a320s.Count > 0)

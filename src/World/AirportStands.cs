@@ -145,8 +145,9 @@ public partial class AirportStands : Node
             if (there is VehicleBody { Wrecked: false } plane)
             {
                 if (!double.IsNaN(empty)) _stands[id] = (stand, double.NaN);
-                // an A320's stairs once it has settled on its gear, docked where it stands
-                if (_stairsDue.Contains(id) && plane.Posed && plane.Velocity.LengthSquared() < 0.01f)
+                // an A320's stairs once it has settled on its gear (offline its body settles a few
+                // degrees round), docked where it stands; the dedicated server moves nothing at rest
+                if (_stairsDue.Contains(id) && (Net.NetworkManager.DedicatedServer || plane.Posed && plane.Velocity.LengthSquared() < 0.01f))
                 {
                     _stairsDue.Remove(id);
                     AirstairsDock.PlaceAt(vehicles, plane.Capture() with { Name = name }, name);
