@@ -155,10 +155,18 @@ public static class DoorCheck
                 // unless its own storey is too low, and a cored lobby keeps its own lintel, which
                 // is why this is a tolerance and not an equality.
                 var (_, inside) = layout.OpeningOf(way);
-                float want = Math.Min(d.Height, layout.StoreyHeight - InteriorGenerator.Slab - 0.15f);
-                Expect(Math.Abs(inside - want) <= SameHole,
-                    $"{box.What} slot {d.Slot}: the doorway inside is {inside:F2} m and the door outside {d.Height:F2} m "
-                    + $"(wanted {want:F2} m within {SameHole:F2} m)");
+                // never a taller hole behind a shorter door — the half a player actually sees, and
+                // what caught #497's 3.2 m loading bay standing behind a 2.8 m facade door
+                Expect(inside <= d.Height + SameHole,
+                    $"{box.What} slot {d.Slot}: the doorway inside is {inside:F2} m behind a {d.Height:F2} m door outside");
+                // ... and not needlessly shorter either: it is the door's own height unless the
+                // room it opens into has a lower ceiling than the storey (#498 with #497: a works
+                // hall's 2.6 m service block stands inside a 9 m hall)
+                float roomClear = RoomClearAt(layout, way);
+                float want = Math.Min(d.Height, roomClear - 0.15f);
+                Expect(inside >= want - SameHole,
+                    $"{box.What} slot {d.Slot}: the doorway inside is {inside:F2} m, wanted {want:F2} m "
+                    + $"({d.Height:F2} m door under a {roomClear:F2} m ceiling)");
                 Expect(Math.Abs(way.X) <= layout.Width / 2 + 0.01f && Math.Abs(way.Z) <= layout.Depth / 2 + 0.01f,
                     $"{box.What} slot {d.Slot}: its doorway is inside the plan box");
             }
@@ -168,6 +176,33 @@ public static class DoorCheck
 
         GD.Print($"[doorcheck] RESULT: {(failures == 0 ? "ok" : $"FAILED ({failures})")}");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Headroom in the room an entrance arrives at: the ceiling the plan cut its doorway under,
+    /// which is the room's own and not the storey's. Mirrors how <see cref="InteriorLayout.OpeningOf"/>
+    /// picks the opening — nearest ground-floor entry — so the two agree on which room is meant.
+    /// </summary>
+    private static float RoomClearAt(InteriorLayout l, EntrancePlan e)
+    {
+        var at = new Vector2(e.X, e.Z);
+        float clear = l.StoreyHeight - InteriorGenerator.Slab;
+        float best = float.MaxValue;
+        foreach (var r in l.GroundFloor.Rooms)
+            foreach (var o in r.Openings)
+            {
+                if (o.Kind != OpeningKind.Entry) continue;
+                var p = o.Side switch
+                {
+                    Side.Front => new Vector2(o.Center, r.Z0),
+                    Side.Back => new Vector2(o.Center, r.Z1),
+                    Side.Left => new Vector2(r.X0, o.Center),
+                    _ => new Vector2(r.X1, o.Center),
+                };
+                float d = p.DistanceTo(at);
+                if (d < best) { best = d; clear = l.ClearOf(r); }
+            }
+        return clear;
     }
 
     /// <summary>A plain box solid: four walls of two triangles each and a flat roof, at <paramref name="cz"/> south.</summary>
