@@ -152,9 +152,10 @@ public static class BuildingFootprint
     /// <summary>
     /// The door's height in a building whose ground floor has <paramref name="clear"/> metres of
     /// headroom: a barn's as tall as its hall allows, a garage's too up to its usual height, others
-    /// as <see cref="DoorHeightFor(BuildingKind)"/>. A barn's facade door is also kept under the
-    /// eave, and the interior plan takes the height the footprint settled on
-    /// (<see cref="DoorSpot.Height"/>), so the two openings match.
+    /// as <see cref="DoorHeightFor(BuildingKind)"/>. What a door on a *wall* ends up as is this cut
+    /// down by <see cref="FitUnderEave"/> — every kind's, not just a barn's (#509) — and the
+    /// interior plan takes the height the footprint settled on (<see cref="DoorSpot.Height"/>), so
+    /// the two openings are the same hole.
     /// </summary>
     public static float DoorHeightFor(BuildingKind kind, float clear) => kind switch
     {
