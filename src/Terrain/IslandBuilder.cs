@@ -4,7 +4,8 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Terrain;
 
 /// <summary>
-/// Roundabout central islands (#122): the <see cref="AreaPropType.Island"/> props the network
+/// Roundabout central islands (#122) and a car park's kerbed planters (#499): the
+/// <see cref="AreaPropType.Island"/> and <see cref="AreaPropType.ParkingIsland"/> props the network
 /// stage wrote, a fan whose rim vertices sit at the ring road's height. Variant 0 is raised by its
 /// <c>Height</c> behind a kerb, grassed, and solid; variant 1 (a mini-roundabout) is a flush white
 /// disc a lorry drives over. The ground under a raised island is held below its top by the road
@@ -20,7 +21,8 @@ public static class IslandBuilder
     /// <summary>A mini-roundabout's paint stands this far over the road, against z-fighting.</summary>
     private const float PaintLift = 0.02f;
 
-    public static bool IsIsland(RoadAreaProp p) => p.Type == AreaPropType.Island && p.Vertices.Length >= 9;
+    public static bool IsIsland(RoadAreaProp p) =>
+        p.Type is AreaPropType.Island or AreaPropType.ParkingIsland && p.Vertices.Length >= 9;
 
     public static void Append(RoadTile tile, List<Vector3> vertices, List<Color> colors, List<Vector2> uvs,
         List<Vector2> uv2s, List<int> indices)
@@ -31,7 +33,8 @@ public static class IslandBuilder
         foreach (var p in tile.AreaProps)
         {
             if (!IsIsland(p)) continue;
-            bool mini = p.Variant == 1;
+            // only a roundabout has the flush mini variant; a planter is always a raised kerbed bed
+            bool mini = p.Type == AreaPropType.Island && p.Variant == 1;
             float lift = mini ? PaintLift : p.Height;
             var top = mini ? paint : grass;
             for (int t = 0; t + 2 < p.Indices.Length; t += 3)

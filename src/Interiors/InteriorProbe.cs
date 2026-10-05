@@ -71,13 +71,26 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
     }
 
     /// <summary>The door the check uses, and the door watch watches.</summary>
-    public static DoorIndex.Entry? ChooseDoor(Vector3 at) =>
-        DoorKindArg() is { } kind ? DoorIndex.Nearest(at, 400f, kind) : DoorIndex.Nearest(at, 400f);
+    public static DoorIndex.Entry? ChooseDoor(Vector3 at) => DoorSearch.Nearest(at, DoorKindArg());
 
     private void Check(bool condition, string what)
     {
         GD.Print($"[interior] {(condition ? "ok  " : "FAIL")} {what}");
         _ok &= condition;
+    }
+
+    /// <summary>
+    /// Step 0 waits for four things in turn — the ground under the spawn, the server's player, a
+    /// landing, a door of the kind asked for — and any of them can never come. Each waits on its
+    /// own budget and names itself here, so a probe that will never start says so in seconds
+    /// instead of falling into the 400 s guard with only a step number (#507). Call it and
+    /// return: it has ended the run when it reports.
+    /// </summary>
+    private void StopIfStuck(string waitingFor)
+    {
+        if (_t < DoorSearch.GiveUp) return;
+        Check(false, $"waited {_t:F0} s for {waitingFor}");
+        Finish();
     }
 
     public override async void _Ready()
@@ -197,13 +210,13 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 var at = _origin.ToWorld(e, n, 0);
                 if (_player == null)
                 {
-                    if (!_chunks.TryGetHeight(at, out float g)) return;
+                    if (!_chunks.TryGetHeight(at, out float g)) { StopIfStuck($"the ground under {e:F0}/{n:F0} to stream in"); return; }
                     if (Online)
                     {
                         // the player the server spawned for us: its position is what the server checks
                         _player = GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>()
                             .FirstOrDefault(p => p.IsMultiplayerAuthority());
-                        if (_player == null) return;
+                        if (_player == null) { StopIfStuck("the server to spawn a player we have authority over"); return; }
                         _player.Camera.Current = true;
                         _player.LeaveInterior(new Vector3(at.X, g + 1f, at.Z), 0);
                         GD.Print($"[interior] online as peer {Me}");
@@ -218,12 +231,23 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                     interiors.LocalPlayer = () => probePlayer;
                     return;
                 }
-                if (!_player.IsOnFloor()) return;
+                if (!_player.IsOnFloor()) { StopIfStuck("the player to land on the ground"); return; }
+                var kind = DoorKindArg();
                 var door = ChooseDoor(_player.GlobalPosition);
-                if (door == null) return;
+                if (door == null)
+                {
+                    // doors appear as their tile's buildings commit, so keep looking for a while;
+                    // then say what is drawn, which tells "no barn here" from "a barn below us"
+                    if (_t < DoorSearch.GiveUp) return;
+                    DoorSearch.Explain("interior", _player.GlobalPosition, kind, _origin);
+                    Check(false, $"the nearest {kind?.ToString() ?? "building"} door is within {DoorSearch.Reach(kind):F0} m");
+                    Finish();
+                    return;
+                }
                 _door = door.Value;
                 StandOutside(_door);
-                GD.Print($"[interior] door of {_door.Key} at {_door.World:F1}");
+                // with the LV95, so a failure further on can be walked back into with --at
+                GD.Print($"[interior] door of {_door.Key} at {_door.World:F1}{DoorSearch.Lv95(_origin, _door.World)}");
                 Next();
                 break;
             }
@@ -275,7 +299,9 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
             {
                 var li = interiors.Current!;
                 var ni = interiors.CurrentNode!;
-                _lootIndex = li.Furniture.FindIndex(f => f.Floor == 0 && Loot.LootTables.IsLootable(f.Type) && !Loot.LootTables.IsLocked(f.Type));
+                // the ground floor is Below, not 0: in a house with a cellar, floor 0 is the cellar,
+                // and the player was put a storey above the piece it was told to face (#213)
+                _lootIndex = li.Furniture.FindIndex(f => f.Floor == li.Below && Loot.LootTables.IsLootable(f.Type) && !Loot.LootTables.IsLocked(f.Type));
                 if (Online)
                 {
                     GD.Print("[interior] (online: loot not tested here)");
@@ -290,7 +316,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 }
                 var f = li.Furniture[_lootIndex];
                 var front = new Basis(Vector3.Up, f.Turns * Mathf.Pi / 2) * new Vector3(0, 0, f.D / 2 + 0.55f);
-                var at = new Vector3(f.X, 0.1f, f.Z) + front;
+                var at = new Vector3(f.X, li.FloorY(f.Floor) + 0.1f, f.Z) + front;
                 var face = ni.GlobalTransform.Basis * -front;
                 _player.EnterInterior(li.Key, ni.GlobalTransform * at, Mathf.Atan2(-face.X, -face.Z));
                 _player.Velocity = Vector3.Zero;
@@ -401,7 +427,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
             {
                 // the tower's door if it has one, so the way in and the way out differ
                 var doors = _church!.Members
-                    .Select(m => DoorIndex.Find(new BuildingKey(_churchTile.E, _churchTile.N, m)))
+                    .Select(m => DoorIndex.Find(new DoorKey(_churchTile.E, _churchTile.N, m)))
                     .Where(d => d != null).Select(d => d!.Value).ToList();
                 if (doors.Count == 0)
                 {
@@ -684,7 +710,7 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
         var tb = b.Inside * new Vector3(0, 1.2f, -0.3f);
         Vector3? best = null;
         float bestScore = 0;
-        foreach (var r in l.Floors[0].Rooms)
+        foreach (var r in l.GroundFloor.Rooms)
             for (float x = r.X0 + 0.6f; x < r.X1 - 0.6f; x += 0.6f)
                 for (float z = r.Z0 + 0.6f; z < r.Z1 - 0.6f; z += 0.6f)
                 {
@@ -841,9 +867,9 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 _shutT += GetPhysicsProcessDeltaTime();
                 bool shut = interiors.Links.TryGetValue(door, out var link) ? link.Swing <= 0f : !interiors.IsOpen(door);
                 if (!shut && _shutT < 8) return null;
-                if (DoorLeaf.SwingsOut(_door.Kind) && DoorLeaf.LeafWidth(_door.Kind, _door.Width) > 2f)
+                if (DoorLeaf.SwingsOut(_door.Hang) && DoorLeaf.LeafWidth(_door.Hang, _door.Width) > 2f)
                 {
-                    var edge = _door.World + _door.Outward * DoorLeaf.LeafWidth(_door.Kind, _door.Width) + Vector3.Up;
+                    var edge = _door.World + _door.Outward * DoorLeaf.LeafWidth(_door.Hang, _door.Width) + Vector3.Up;
                     Check(interiors.OutsideDoorInReach(edge) == null, $"shut, {door} is not in reach from where its leaves stood");
                 }
                 Input.ActionPress(PlayerInput.MoveForward);
@@ -970,10 +996,11 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
                 }
                 if (link.Swing < 1f || _walkT < 1.2) return null; // the portal picture settles
                 Check(true, $"the door {door} swung open ({_walkT:F1} s)");
-                if (inward && BuildingKey.TryParse(door, out var key) && DoorIndex.Find(key) is { } spot && DoorLeaf.SwingsOut(spot.Kind))
+                if (inward && DoorKey.TryParse(door, out var key) && DoorIndex.Find(key) is { } spot
+                    && DoorLeaf.SwingsOut(spot.Hang))
                 {
                     // open, a barn door is worked from out by its leaves' free edges, not only at the sill
-                    float leaf = DoorLeaf.LeafWidth(spot.Kind, spot.Width);
+                    float leaf = DoorLeaf.LeafWidth(spot.Hang, spot.Width);
                     var edge = spot.World + spot.Outward * leaf + Vector3.Up;
                     Check(interiors.OutsideDoorInReach(edge) == door, $"open, {door} is in reach {leaf:F1} m out, by its leaves");
                 }
@@ -1027,22 +1054,27 @@ public partial class InteriorProbe : Node, Core.IOriginShiftAware
     }
 
     /// <summary>Straight down onto the middle of a floor's flight: the ramp must be there.</summary>
-    private void StairRay(InteriorManager interiors, int floor = 0)
+    /// <param name="floor">Index into <see cref="InteriorLayout.Floors"/>; by default the floor the
+    /// entrances are on, which in a house with a cellar is <see cref="InteriorLayout.Below"/>, not 0.</param>
+    private void StairRay(InteriorManager interiors, int floor = -1)
     {
         var l = interiors.Current;
         var node = interiors.CurrentNode;
-        if (l == null || floor >= l.Floors.Count || l.Floors[floor].Flight is not { } f || node == null)
+        int at = floor < 0 ? l?.Below ?? 0 : floor;
+        if (l == null || at >= l.Floors.Count || l.Floors[at].Flight is not { } f || node == null)
         {
-            if (floor == 0) GD.Print("[interior] (single storey: no stairs to test)");
+            if (floor <= 0) GD.Print("[interior] (single storey: no stairs to test)");
             return;
         }
-        float y0 = floor * l.StoreyHeight;
+        // a floor's height is FloorY, never floor * StoreyHeight: floor 0 of a house with a
+        // cellar is a storey below the ground, and the ray missed the flight entirely (#213)
+        float y0 = l.FloorY(at);
         var local = new Vector3((f.X0 + f.X1) / 2, y0, (f.ZBottom + f.ZTop) / 2);
         var from = node.GlobalTransform * (local + Vector3.Up * (l.StoreyHeight - 0.5f));
         var to = node.GlobalTransform * (local + Vector3.Down * 0.5f);
         var hit = node.GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to));
         float y = hit.Count > 0 ? node.ToLocal(hit["position"].AsVector3()).Y - y0 : -1;
-        Check(y > l.StoreyHeight * 0.3f && y < l.StoreyHeight * 0.7f, $"floor {floor} stair ramp under mid-flight at {y:F2} m of {l.StoreyHeight:F2}");
+        Check(y > l.StoreyHeight * 0.3f && y < l.StoreyHeight * 0.7f, $"floor {at} stair ramp under mid-flight at {y:F2} m of {l.StoreyHeight:F2}");
     }
 
     private int _lootIndex = -1, _lootBefore, _lootPhase;

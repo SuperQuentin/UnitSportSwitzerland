@@ -32,6 +32,10 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | ride_menu | R / Y with nothing near | ok: Y, wrist menu (#437) | keep |
 | car_door / gather | G / X (tap / hold) | ok: X; doors by grip | gather = **grip and pull** the resource |
 | emote_wheel | B / D-pad ↑ | ok: hold R stick ↑, aim with the right hand (#437) | keep |
+| challenge / accept a fist fight (#495) | E / Y, looking at the player | ok: Y, or reach out and grip | keep |
+| fight step / jump / crouch (#495) | A D, W Space, S Ctrl / L stick, A | ok: L stick towards / away, A, crouch for real (`XrPad.RealCrouch`) | room-scale stepping |
+| fight_punch / fight_kick (#495) | LMB J, RMB K / X RB, Y LB | ok: R / L trigger | **punch and kick for real** (hand speed, R4) |
+| fight_block (#495, hold) | Shift L / B | ok: B (`XrPad.RightB`, not the crouch's B) | forearms raised in front of the face |
 | toggle_mode | T / D-pad ↓ | ok: wrist menu (#437) | keep |
 | climb ladder | W / S on a ladder | ok: stick; rock faces and walls hand over hand (#439, stamina) | keep |
 
@@ -45,7 +49,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | inventory | I, Tab / Back | ok: Menu hold | keep |
 | quick_wheel | X / D-pad ← | ok: hold a grip at the left hip, aim with the right hand, let go to pick (#489) | keep |
 | build_turn, next piece | R, aim+wheel / D-pad ↑, LB+D-pad → | gap | **twist the hand** while aiming; R stick ←/→ steps the piece |
-| bird_journal | J / — | ok: wrist menu (#437) | keep |
+| fishing rod: cast, strike, reel, wind in (#493) | hold LMB + let go, LMB, hold LMB, RMB / the same on RB, LB | ok: R trigger (hold, let go: cast; press: strike; hold: reel), L trigger winds in | gap: **flick the rod hand** to cast (release speed = distance), **crank the reel** with the left hand (R1, R4) |
+| bird_journal (birds and fish pages, #493) | J / — | ok: wrist menu (#437); the page buttons by pointer | keep |
 
 ## Mounted and driving
 

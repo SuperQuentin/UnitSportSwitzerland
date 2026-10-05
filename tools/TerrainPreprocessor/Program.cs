@@ -424,7 +424,7 @@ int RunFeatures(TerrainManifest existing)
         {
             var batch = LoadBatch(b, out var slice);
             Console.WriteLine($"=== roads, batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
-            int rc = RoadStage.Run(tlmGpkg!, routeKeys, outDir!, tempDir!, batch);
+            int rc = RoadStage.Run(tlmGpkg!, routeKeys, outDir!, tempDir!, batch, coverOverrides);
             if (rc != 0) return rc;
             if (buildingsGpkg != null)
             {

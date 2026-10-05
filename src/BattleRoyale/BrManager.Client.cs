@@ -131,7 +131,8 @@ public partial class BrManager
     private readonly List<BrPing> _pings = new();
     private static readonly Core.RayQuery PingRay = new();
 
-    private static double LocalSeconds => Time.GetTicksMsec() / 1000.0;
+    /// <summary>Game time for this client's own timers (pings, horn markers): docs/notes/general/fast-checks.md.</summary>
+    private static double LocalSeconds => Core.GameClock.Now;
 
     /// <summary>The team's pings still showing, one per player at most.</summary>
     public IReadOnlyList<BrPing> Pings

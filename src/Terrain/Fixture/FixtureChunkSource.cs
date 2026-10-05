@@ -20,6 +20,11 @@ public sealed class FixtureChunkSource : IChunkSource
     private readonly HashSet<TileId> _tiles = new();
     private readonly Dictionary<TileId, List<RoadSegment>> _roads = new();
     private readonly Dictionary<TileId, List<TreeInstance>> _trees = new();
+    // a laid-out car park (#499), by the tile each piece falls in
+    private readonly Dictionary<TileId, List<RoadAreaProp>> _parkAreas = new();
+    private readonly Dictionary<TileId, List<RoadPaint>> _parkPaint = new();
+    private readonly Dictionary<TileId, List<RoadPointProp>> _parkProps = new();
+    private readonly Dictionary<TileId, List<ParkingBay>> _parkBays = new();
     private readonly ConcurrentDictionary<TileId, Lazy<double[]>> _lattices = new();
 
     public FixtureCourse Course => _course;
@@ -50,6 +55,8 @@ public sealed class FixtureChunkSource : IChunkSource
                     Class = cls, Surface = RoadSurface.Paved, Width = RoadFormat.DefaultWidth(cls), Points = xyz,
                 });
             }
+        PlanCarParks();
+
         foreach (var (x, y, _, height) in course.Trees)
         {
             double e = startE + x, n = startN + y;
@@ -179,9 +186,171 @@ public sealed class FixtureChunkSource : IChunkSource
         return Task.FromResult<ChunkGrid?>(Grid(id, Lattice(id).Select(ChunkFormat.Quantize).ToArray(), LatticeStride));
     }
 
+
+    /// <summary>Flat ground over the course, and nothing standing on it but its own roads.</summary>
+    private sealed class CourseGround(FixtureCourse course, double startE, double startN) : IParkingGround
+    {
+        public double Ground(double e, double n) => course.Ground(e - startE, n - startN);
+
+        public bool Occupied(double e, double n)
+        {
+            double x = e - startE, y = n - startN;
+            foreach (var (cls, pts) in course.Roads)
+            {
+                double half = RoadFormat.DefaultWidth(cls) * 0.5 + 2.0;
+                for (int i = 0; i < pts.Count - 1; i++)
+                {
+                    double ax = pts[i].X, ay = pts[i].Y, bx = pts[i + 1].X, by = pts[i + 1].Y;
+                    double dx = bx - ax, dy = by - ay;
+                    double len2 = dx * dx + dy * dy;
+                    double t = len2 < 1e-9 ? 0 : Math.Clamp(((x - ax) * dx + (y - ay) * dy) / len2, 0, 1);
+                    double px = ax + dx * t - x, py = ay + dy * t - y;
+                    if (px * px + py * py <= half * half) return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Runs the real <c>ParkingPlanner</c> over the course's rings and files the pieces by tile,
+    /// exactly as <c>TileRewriter.PlanParking</c> does for the map (#499). The course exists so the
+    /// layout can be walked, driven and screenshotted with no terrain data at all.
+    /// </summary>
+    private void PlanCarParks()
+    {
+        if (_course.CarParks.Count == 0) return;
+        var ground = new CourseGround(_course, _startE, _startN);
+
+        foreach (var ring in _course.CarParks)
+        {
+            var lv95 = ring.Select(p => (E: _startE + p.X, N: _startN + p.Y)).ToList();
+            var borders = new List<ParkingPlanner.Border>();
+            foreach (var (cls, pts) in _course.Roads)
+            {
+                if (pts.Count < 2) continue;
+                // the course's roads are straight runs: the nearest point of each to the lot
+                var (cE, cN) = (lv95.Average(p => p.E), lv95.Average(p => p.N));
+                double best = double.MaxValue, bE = 0, bN = 0, heading = 0;
+                for (int i = 0; i < pts.Count - 1; i++)
+                {
+                    double ax = _startE + pts[i].X, ay = _startN + pts[i].Y;
+                    double bx = _startE + pts[i + 1].X, by = _startN + pts[i + 1].Y;
+                    double dx = bx - ax, dy = by - ay;
+                    double len2 = dx * dx + dy * dy;
+                    double t = len2 < 1e-9 ? 0 : Math.Clamp(((cE - ax) * dx + (cN - ay) * dy) / len2, 0, 1);
+                    double pe = ax + dx * t, pn = ay + dy * t;
+                    double d = (pe - cE) * (pe - cE) + (pn - cN) * (pn - cN);
+                    if (d < best) { best = d; bE = pe; bN = pn; heading = Math.Atan2(dy, dx); }
+                }
+                if (best > 40 * 40) continue;
+                borders.Add(new ParkingPlanner.Border(bE, bN, heading,
+                    cls <= RoadClass.Major ? 3 : 1, RoadFormat.DefaultWidth(cls) * 0.5, false));
+            }
+
+            ParkingPlanner.Frontage? frontage = _course.Store is { } st
+                ? new ParkingPlanner.Frontage(_startE + st.DoorX, _startN + st.DoorY, st.FloorAreaM2, st.Retail)
+                : null;
+
+            var lot = ParkingPlanner.Plan(lv95, borders, ground, frontage);
+            if (lot.Rejected != null) continue;
+            FileLot(lot);
+        }
+    }
+
+    /// <summary>One planned lot into the tile records, by the tile each piece falls in.</summary>
+    private void FileLot(ParkingPlanner.Lot lot)
+    {
+        foreach (var area in lot.Areas)
+        {
+            var at = TileId.FromLv95(
+                (area.Ring[0] + area.Ring[4]) * 0.5, (area.Ring[1] + area.Ring[5]) * 0.5);
+            if (!_tiles.Contains(at)) continue;
+            var v = new float[12];
+            for (int i = 0; i < 4; i++)
+            {
+                v[i * 3] = (float)(area.Ring[i * 2] - at.MinE);
+                v[i * 3 + 1] = (float)area.Y;
+                v[i * 3 + 2] = (float)(at.MaxN - area.Ring[i * 2 + 1]);
+            }
+            Add(_parkAreas, at, new RoadAreaProp
+            {
+                Type = area.Kind switch
+                {
+                    ParkingPlanner.AreaKind.Island => AreaPropType.ParkingIsland,
+                    ParkingPlanner.AreaKind.Walk => AreaPropType.Sidewalk,
+                    _ => AreaPropType.ParkingPad,
+                },
+                Flags = area.Height > 0 ? PropFlags.Solid : PropFlags.None,
+                Height = (float)area.Height, Vertices = v, Indices = [0, 1, 2, 0, 2, 3],
+            });
+        }
+
+        foreach (var mark in lot.Marks)
+        {
+            double mE = (mark.Line[0] + mark.Line[^2]) * 0.5, mN = (mark.Line[1] + mark.Line[^1]) * 0.5;
+            var at = TileId.FromLv95(mE, mN);
+            if (!_tiles.Contains(at)) continue;
+            var v = new float[mark.Line.Length / 2 * 3];
+            for (int i = 0; i < mark.Line.Length / 2; i++)
+            {
+                v[i * 3] = (float)(mark.Line[i * 2] - at.MinE);
+                v[i * 3 + 1] = (float)mark.Y;
+                v[i * 3 + 2] = (float)(at.MaxN - mark.Line[i * 2 + 1]);
+            }
+            // the glyphs are built by the paint layer in the tools; the fixture only needs the
+            // lines, so a glyph becomes a short line across its bay rather than nothing at all
+            Add(_parkPaint, at, new RoadPaint
+            {
+                Shape = PaintShape.Polyline,
+                Type = mark.Type == PaintType.Arrow ? PaintType.WhiteSolid : mark.Type,
+                Rgba = 0xE0DED1FF, Width = (float)Math.Max(mark.Width, 0.12), Vertices = v, Indices = [],
+            });
+        }
+
+        foreach (var f in lot.Fixtures)
+        {
+            var at = TileId.FromLv95(f.E, f.N);
+            if (!_tiles.Contains(at)) continue;
+            if (f.Kind == ParkingPlanner.FixtureKind.Tree)
+            {
+                Add(_trees, at, new TreeInstance(
+                    (float)(f.E - at.MinE), (float)f.Y, (float)(at.MaxN - f.N), 5.5f, 3));
+                continue;
+            }
+            var (type, height) = f.Kind switch
+            {
+                ParkingPlanner.FixtureKind.Barrier => (PointPropType.TicketBarrier, 1.1f),
+                ParkingPlanner.FixtureKind.Kiosk => (PointPropType.TicketKiosk, 1.5f),
+                ParkingPlanner.FixtureKind.Shelter => (PointPropType.CartShelter, 2.4f),
+                _ => (PointPropType.ParkingSign, 2.1f),
+            };
+            Add(_parkProps, at, new RoadPointProp(type, f.Variant, PropFlags.Solid,
+                (float)(f.E - at.MinE), (float)f.Y, (float)(at.MaxN - f.N),
+                (float)ParkingPlanner.ToGodotHeading(f.HeadingRad), height));
+        }
+
+        foreach (var b in lot.Bays)
+        {
+            var at = TileId.FromLv95(b.E, b.N);
+            if (!_tiles.Contains(at)) continue;
+            Add(_parkBays, at, new ParkingBay(
+                (float)(b.E - at.MinE), (float)b.Y, (float)(at.MaxN - b.N),
+                (float)ParkingPlanner.ToGodotHeading(b.HeadingRad), b.Kind, b.Flags));
+        }
+    }
+
     public Task<RoadTile?> LoadRoadsAsync(TileId id, CancellationToken ct = default) =>
         Task.FromResult(_tiles.Contains(id)
-            ? new RoadTile { Id = id, Segments = _roads.TryGetValue(id, out var s) ? s : new() }
+            ? new RoadTile
+            {
+                Id = id,
+                Segments = _roads.TryGetValue(id, out var s) ? s : new(),
+                AreaProps = _parkAreas.TryGetValue(id, out var pa) ? pa : new(),
+                Paint = _parkPaint.TryGetValue(id, out var pp) ? pp : new(),
+                PointProps = _parkProps.TryGetValue(id, out var px) ? px : new(),
+                Parking = _parkBays.TryGetValue(id, out var pb) ? pb : new(),
+            }
             : null);
 
     public Task<HashSet<int>?> LoadHolesAsync(TileId id, CancellationToken ct = default) =>

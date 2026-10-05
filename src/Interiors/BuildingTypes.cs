@@ -5,7 +5,13 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Interiors;
 
 /// <summary>What a group of buildings is, beyond the per-solid <see cref="BuildingKind"/>.</summary>
-public enum BuildingType : byte { None = 0, Church = 1, Bank = 2 }
+public enum BuildingType : byte
+{
+    None = 0, Church = 1, Bank = 2,
+    // stored plans hold these as numbers: new types go on the end
+    // #497: industrial sites, a pure function of the building (BuildingTypes.SiteFor)
+    Warehouse = 3, Factory = 4, Depot = 5, Mechanic = 6, Dealership = 7,
+}
 
 /// <summary>The role one solid plays in its group.</summary>
 public enum BuildingPart : byte { None = 0, Nave = 1, Tower = 2 }
@@ -75,6 +81,78 @@ public sealed class BuildingTypeMap
 /// </summary>
 public static class BuildingTypes
 {
+    // ---- industrial sites (#497) ---------------------------------------------------------------
+
+    /// <summary>A hall below this is a shed or a single-car box, not a site.</summary>
+    public const float SiteMinArea = 60f;
+    /// <summary>A hall this big is a distribution shed or a works, never a one-man workshop.</summary>
+    public const float SiteBigArea = 600f;
+    /// <summary>Above this, a hall of any size is a works: the height is machinery, not storage.</summary>
+    public const float SiteTallWall = 9f;
+    /// <summary>A <see cref="BuildingKind.Garage"/> this big is a trade workshop, not somebody's garage.</summary>
+    public const float TradeGarageArea = 120f;
+    /// <summary>And this big, often a dealership: a showroom needs frontage.</summary>
+    public const float DealerArea = 200f;
+
+    /// <summary>
+    /// Which kind of industrial site a building is (#497), or <see cref="BuildingType.None"/> for
+    /// anything that is not one. A pure function of the building — footprint box, wall height, kind
+    /// and a stable hash of its key — in the same spirit as <see cref="BuildingFootprint.IsBank"/>
+    /// and <c>ShopTables.TypeFor</c>: the data says "industrial building" and nothing more, so which
+    /// industry it is has to be invented, and invented identically on the server and on every
+    /// client without a byte being sent.
+    ///
+    /// <para>
+    /// Geometry decides what it can be, the hash decides between what is left. A big low hall is a
+    /// warehouse or a works; a big tall one is always a works (that height is a crane, a silo run or
+    /// a press, not pallet racking); a medium hall is a works, a haulier's depot or a body shop; a
+    /// trade-sized garage is a body shop, a depot or — with the frontage for a showroom — a
+    /// dealership.
+    /// </para>
+    /// </summary>
+    public static BuildingType SiteFor(string key, BuildingKind kind, float width, float depth, float wallHeight)
+    {
+        float area = width * depth, longSide = Math.Max(width, depth);
+        // a tall slender solid is a silo or a tank: it has no floors to walk, so it is no site
+        if (longSide <= 14f && wallHeight >= Math.Max(10f, 1.6f * longSide)) return BuildingType.None;
+
+        if (kind == BuildingKind.Industrial)
+        {
+            if (area < SiteMinArea) return BuildingType.None;
+            double roll = Core.Fnv.Unit(key + "|site");
+            if (area >= SiteBigArea)
+                return wallHeight >= SiteTallWall ? BuildingType.Factory
+                    : roll < 0.55 ? BuildingType.Warehouse : BuildingType.Factory;
+            if (wallHeight >= SiteTallWall) return BuildingType.Factory;
+            if (area >= DealerArea)
+                return roll < 0.40 ? BuildingType.Warehouse
+                    : roll < 0.75 ? BuildingType.Factory : BuildingType.Depot;
+            return roll < 0.5 ? BuildingType.Depot : BuildingType.Mechanic;
+        }
+
+        if (kind == BuildingKind.Garage && area >= TradeGarageArea)
+        {
+            double roll = Core.Fnv.Unit(key + "|trade");
+            if (area >= DealerArea)
+                return roll < 0.35 ? BuildingType.Dealership
+                    : roll < 0.65 ? BuildingType.Depot : BuildingType.Mechanic;
+            return roll < 0.75 ? BuildingType.Mechanic : BuildingType.Depot;
+        }
+
+        return BuildingType.None;
+    }
+
+    /// <summary>Whether a type is one of the industrial sites, rather than a church or a bank.</summary>
+    public static bool IsSite(BuildingType type) =>
+        type is BuildingType.Warehouse or BuildingType.Factory or BuildingType.Depot
+            or BuildingType.Mechanic or BuildingType.Dealership;
+
+    /// <summary>Whether a site's main hall is driven into — every one of them but a dealership's showroom.</summary>
+    public static bool DrivenInto(BuildingType type) =>
+        type is BuildingType.Warehouse or BuildingType.Factory or BuildingType.Depot or BuildingType.Mechanic;
+
+    // ---- churches ------------------------------------------------------------------------------
+
     public const float HallMinArea = 40f;
     private const float HallMinLong = 8f;
     private const float TowerMinSide = 2.5f, TowerMaxSide = 12f, TowerMaxAspect = 1.6f;

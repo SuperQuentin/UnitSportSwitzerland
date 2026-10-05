@@ -83,6 +83,18 @@ public sealed class CoverExtractor
     public string? OverridesPath { get; init; }
 
     /// <summary>
+    /// Adds one tree to a tile after <see cref="Extract"/> has run: the car park planters (#499) are
+    /// only known once the network stage has written its islands, which happens after this stage's
+    /// own passes. The tile may have had no trees at all, so the list is created on demand.
+    /// </summary>
+    public void AddTree(TileId id, TreeInstance tree)
+    {
+        if (!Trees.TryGetValue(id, out var list)) Trees[id] = list = new List<TreeInstance>();
+        list.Add(tree);
+        PlantedTrees++;
+    }
+
+    /// <summary>
     /// Stamps the override polygons: <c>{"polygons":[{"cover":"ParkingPrivate","ring":[[E,N],...]}]}</c>
     /// in LV95. Rings off the batch's tiles fall away in <see cref="MarkIn"/>, which also keeps Water.
     /// </summary>

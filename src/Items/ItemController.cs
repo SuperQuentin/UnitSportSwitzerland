@@ -39,6 +39,10 @@ public partial class ItemController : Node
 
     /// <summary>The throw in progress, for probes and the prompt bar.</summary>
     public ThrowAim Throw => _throw;
+
+    /// <summary>The fishing rod's cast, bite and fight (#493), for the hints and the probes.</summary>
+    public Fishing.FishingRod Rod => _fishing;
+    private Fishing.FishingRod _fishing = null!;
     private AudioStreamPlayer _sfx = null!;
     private bool _capturing;
     private bool _forceAim;
@@ -134,6 +138,8 @@ public partial class ItemController : Node
         AddChild(_flagGhost);
         _throw = new ThrowAim { Name = "ThrowAim" };
         AddChild(_throw);
+        _fishing = new Fishing.FishingRod(this, _inventory, _origin);
+        AddChild(_fishing);
         _build = new Build.BuildTool(this) { Name = "BuildTool" };
         AddChild(_build);
         _gadgets = new Build.GadgetTool(this) { Name = "GadgetTool" };
@@ -189,8 +195,8 @@ public partial class ItemController : Node
         get
         {
             var p = CurrentPlayer();
-            // downed (#475): no items until a team-mate picks you up
-            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false, Downed: false } && p.Ride == RideKind.OnFoot ? p : null;
+            // downed (#475): no items until a team-mate picks you up; in a fist fight (#495) the hands are fists
+            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false, Downed: false, Fighting: false } && p.Ride == RideKind.OnFoot ? p : null;
         }
     }
 
@@ -216,6 +222,7 @@ public partial class ItemController : Node
             Highlight.Point(null);
             Vehicles.VehicleReach.Point(null);
             _throw.Step(null, false, false, (float)delta);
+            _fishing.Step(null, false, false, (float)delta);
             return;
         }
 
@@ -263,8 +270,11 @@ public partial class ItemController : Node
         var weapon = Weapons.Get(_inventory.HeldId);
         // a scoped gun is held to the eye like the binoculars, and drawn as their overlay
         bool scoped = aiming && weapon is { AimFov: < 20f };
+        // any other gun is shouldered over a close shoulder camera, zoomed to its aim FOV (#460); VR stays at the eye
+        bool shouldered = aiming && def!.Use == ItemUse.Shoot && !scoped && !XR.XrSession.Active;
+        player.GunAim = shouldered;
         player.FovOverride = aiming ? def!.Use switch { ItemUse.Optic => 9f * breathFov, ItemUse.Photo => FovFromFocal(_focalMm), _ => weapon?.AimFov ?? 50f } : null;
-        player.ScopeView = aiming;
+        player.ScopeView = aiming && !shouldered;
         player.ItemAction = _planting || _useBusy ? 2 : aiming ? 1 : 0;   // replicated: remote peers pose the arms from it
         player.LookScale = aiming ? def!.Use switch { ItemUse.Optic => 0.2f, ItemUse.Photo => Mathf.Clamp(FovFromFocal(_focalMm) / 76f, 0.04f, 1f), _ => scoped ? 0.15f : 0.6f } : 1f;
         // held items stay visible while aiming: they are raised to a pose. Binoculars and the
@@ -285,7 +295,7 @@ public partial class ItemController : Node
         {
             visual.SetPose(_raiseFlag ? ViewPose.Raise : !aiming ? ViewPose.Rest : def!.Use switch
             {
-                ItemUse.Shoot => ViewPose.Aim,
+                ItemUse.Shoot => shouldered ? ViewPose.Rest : ViewPose.Aim,
                 _ => ViewPose.Eye,
             });
             if (!aiming && def?.Use == ItemUse.Readout) visual.SetPose(ViewPose.Read);   // the GPS is held up to read
@@ -297,6 +307,13 @@ public partial class ItemController : Node
         _ui.Scope = scoped ? (poseSettled ? ItemUse.Optic : null)
             : aiming && (def!.Use == ItemUse.Shoot || poseSettled) ? def!.Use : null;
         StepThrow(player, def, usable, aiming, (float)delta);
+        // the rod (#493): put away, in a menu or off foot, the line comes in
+        bool fishing = usable && _inventory.HeldId == ItemId.FishingRod && !_ui.IsOpen && !UiFocus.TextEntryActive;
+        _fishing.Step(fishing ? player : null, PlayerInput.Held(PlayerInput.UseItem) || ForceUse,
+            PlayerInput.Held(PlayerInput.AimItem) || _forceAim, (float)delta);
+        bool lineInUse = fishing && _fishing.State != UnitSport.Items.Fishing.FishingRod.Phase.Idle;
+        if (lineInUse) player.ItemAction = 2;
+        player.SquareToView = lineInUse;
 
         // the smart binoculars read out the building at hand while held (#165): no aiming
         _smart.Held = usable && _inventory.HeldId == ItemId.SmartBinoculars;
@@ -380,6 +397,9 @@ public partial class ItemController : Node
     }
 
     private void Click() => Play(SfxSynth.Tick, 1.4f);
+
+    /// <summary>A sound in the player's ears (the item channel): the rod's reel and its plop (#493).</summary>
+    internal void PlaySound(AudioStream stream, float pitch = 1f) => Play(stream, pitch);
 
     private void Play(AudioStream stream, float pitch = 1f)
     {
@@ -545,7 +565,7 @@ public partial class ItemController : Node
             case ItemUse.Horn:
             {
                 if (_useBusy) break;
-                double now = Time.GetTicksMsec() / 1000.0;
+                double now = Core.GameClock.Now;
                 if (now < _hornReadyAt)
                 {
                     _ui.Toast($"Out of breath: blow again in {_hornReadyAt - now:F0} s.");
@@ -553,7 +573,7 @@ public partial class ItemController : Node
                 }
                 StartUse(player, slot, def, ViewPose.Mouth, 2.8f, 0.3f, 0.4f, () =>
                 {
-                    _hornReadyAt = Time.GetTicksMsec() / 1000.0 + SwissItems.HornCooldown;
+                    _hornReadyAt = Core.GameClock.Now + SwissItems.HornCooldown;
                     var bell = player.GlobalPosition + Vector3.Up * 1.2f - player.Camera.GlobalTransform.Basis.Z * 1.6f;
                     ItemEvents.Instance?.Send(ItemEventKind.Horn, bell, Vector3.Up);
                     _ui.Toast("The alphorn rings out: you see who is near, and they know where you are.");
@@ -587,6 +607,12 @@ public partial class ItemController : Node
                 ItemEvents.Instance?.Send(ItemEventKind.Smoke, at, aim);
                 break;
             }
+
+            case ItemUse.Fish:
+                // only from the hand: the pack panel's Use has nothing to cast with (#493)
+                if (slot == _inventory.Selected) _fishing.Press(player);
+                else _ui.Toast("Put the rod in your hand to fish.");
+                break;
 
             case ItemUse.Recall:
             {
@@ -731,7 +757,7 @@ public partial class ItemController : Node
     /// <summary>This shot's cone half-angle, degrees, and the bloom it leaves for the next one.</summary>
     private float Bloom(WeaponDef weapon)
     {
-        double now = Time.GetTicksMsec() / 1000.0;
+        double now = Core.GameClock.Now;   // game time: the gun cools with the simulation (fast-checks)
         float heat = weapon.Id == _heatGun ? WeaponDef.Cool(_heat, (float)(now - _heatAt)) : 0f;
         float spread = weapon.SpreadAt(heat);
         _heat = weapon.Heat(heat);
@@ -1027,7 +1053,7 @@ public partial class ItemController : Node
         if (weapon.Id == ItemId.Shotgun) Fire?.Invoke(player, eye, aim);
     }
 
-    private static void Kick(FootPlayer player)
+    internal static void Kick(FootPlayer player)
     {
         if (player.GetNodeOrNull<HeldItemVisual>("HeldItem") is { } v) v.Kick = 1f;
     }

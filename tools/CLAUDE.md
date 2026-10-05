@@ -7,6 +7,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 
 ## Architecture
 
+- `delta-updates` — per-release `.delta` files (rsync-style binary patches, SHA-256 checked, Brotli) made by `tools/deltas.sh` from the published archives and uploaded by `release.sh`; staging + swap script; measured 8 KB vs 176 MB (#532)
 - `data-pipeline` — Data pipeline: swissALTI3D XYZ zips (`ressources/data/swiss_chunks/`, LV95/EPSG:2056, 0.5 m grid, 1 km tiles) →...
 - `shared-format-code` — Shared format code: `tools/TerrainFormat` classlib (TileId, ChunkFormat, ChunkGrid, ChunkCodec, TerrainManifest) —...
 - `perf-tile-header` — tile file headers only via `TileHeader.Write/Read` and `ChunkCodec.ReadHeader`; goldens keep the bytes identical
@@ -43,6 +44,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `traffic-signals` — #346/#348/#349: inferred signalised junctions (dense core, two priority roads), left + right pockets on every approach, 0.50 m stop line 3 m back, SGNL record, SignalPlan (groups, chord conflicts, lead/both/lag, T, split; Swiss timing; canton pedestrian heads), --signal-check, Geneva numbers
 - `urban-streets` — #119 build side: UrbanField (walls, local + city scale), RoadHeights (rural +8 cm, town ground − kerb), StreetPlanner sidewalks (facade rays, medians, splits), CornerPlanner, ramp shoulders, TownPaving/TunnelRoof cover, tram PavedBed, cost, --street-svg
 - `bike-infrastructure` — #120: candidates (Major/Road, Minor on Veloland; rural parallel-alternative rule), Radstreifen widths, looser Kernfahrbahn, five path layouts per street (strokes), sloped kerbs, symbols, red crossings at main-road junctions (#406 at lights: straight, red only on a same-phase conflict), Wartelinie/sign moves, format (BufferDm, TrackMid, OuterDm), cost, Nyon test region
+- `parking-lots` — Car parks laid out, not painted (#499): pure `ParkingPlanner` (axis from the lot or its street, modules by depth, planters replacing end bays, entrance + barrier), `RawParking` rings from the road stage, `TileRewriter.Parking`, shared SSV arrows, the bay pattern taken off in CoverStage
 - `tlm-road-attribute-domains` — swissTLM3D `kreisel`, `verkehrsbedeutung`, `eigentuemer`, `stufe` value domains (SELECT DISTINCT counts) and where each goes in v3
 
 ## Commands

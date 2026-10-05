@@ -198,7 +198,10 @@ public class BoatTests
         _out.WriteLine($"{name}, gamey: longest airborne {air:F2} s, pitch {pitchMin:F0}..{pitchMax:F0}°, worst roll {worstRoll:F0}°, lowest {lowest:F2} m, " +
             $"speed {b.WaterSpeed * 3.6f:F0} km/h, thrown {thrown}");
         Assert.True(lowest > -2f, "never goes under");
-        Assert.True(worstRoll < 80f, $"never rolls over ({worstRoll:F0}°)");
+        // Rolling over is the spec's own FlipAngle, the angle BoatModel counts as capsized, not a
+        // literal: the jetski's is 1.6 rad = 92°, and its harsh gamey ride is deliberate (#376,
+        // docs/notes/player/boats.md). The rider is still thrown by the landing rule well before.
+        Assert.True(worstRoll < Deg(s.FlipAngle), $"never rolls over ({worstRoll:F0}° of {Deg(s.FlipAngle):F0}°)");
         Assert.True(pitchMax - pitchMin > 2f, "the waves pitch it");
     }
 

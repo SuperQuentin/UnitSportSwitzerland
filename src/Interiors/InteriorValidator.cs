@@ -22,9 +22,16 @@ public static class InteriorValidator
                 errors.Add("no entry door on the front wall");
         }
         else
+        {
+            var named = new HashSet<string>();
             foreach (var e in l.Entrances)
+            {
                 if (!l.GroundFloor.Rooms.Any(r => r.Openings.Any(o => o.Kind == OpeningKind.Entry && OnWall(r, o, e.X, e.Z))))
                     errors.Add($"entrance for {e.Door} has no doorway at {e.X:F1},{e.Z:F1}");
+                // two entrances for one door would give it two portals and two leaves (#498)
+                if (!named.Add(e.Door)) errors.Add($"two entrances for door {e.Door}");
+            }
+        }
 
         for (int f = 0; f < l.Floors.Count; f++)
         {
@@ -36,6 +43,14 @@ public static class InteriorValidator
                     errors.Add($"floor {f} room {i} {r.Type} outside the footprint");
                 if (Math.Min(r.Width, r.Depth) < 1.0f)
                     errors.Add($"floor {f} room {i} {r.Type} is {r.Width:F1}x{r.Depth:F1} m");
+                // An opening cannot be taller than the room it is cut in. Worth stating because a
+                // room's headroom is no longer always the storey's: a site's service block is a
+                // 2.6 m room inside a 9 m hall (RoomPlan.Clear, #497), so anything that sizes a
+                // doorway from StoreyHeight rather than from the room would cut through its ceiling.
+                float roomClear = l.ClearOf(r);
+                foreach (var o in r.Openings)
+                    if (o.Top > roomClear + 0.01f)
+                        errors.Add($"floor {f} room {i} {r.Type}: a {o.Kind} {o.Top:F2} m tall in a {roomClear:F2} m room");
                 for (int j = i + 1; j < rooms.Count; j++)
                     if (new RectPlan(r.X0, r.Z0, r.X1, r.Z1).Overlaps(new RectPlan(rooms[j].X0, rooms[j].Z0, rooms[j].X1, rooms[j].Z1), 0.02f))
                         errors.Add($"floor {f} rooms {i} and {j} overlap");
@@ -101,8 +116,12 @@ public static class InteriorValidator
                 if (room == null) { errors.Add($"{p.Type} on floor {p.Floor} is in no room"); continue; }
                 if (rect.X0 < room.X0 || rect.X1 > room.X1 || rect.Z0 < room.Z0 || rect.Z1 > room.Z1)
                     errors.Add($"{p.Type} on floor {p.Floor} pokes through a wall");
-                // stood on (a rug, the chancel step) or overhead (a bell, a cross on the wall)
-                if (p.Type is not (FurnitureType.Rug or FurnitureType.Dais) && p.Lift < 1.5f)
+                // stood on (a rug, the chancel step, a showroom plinth, paint on the floor) or
+                // overhead (a bell, a cross on the wall, a crane beam)
+                if (p.Type is not (FurnitureType.Rug or FurnitureType.Dais
+                        or FurnitureType.ShowroomPlinth or FurnitureType.FloorMarking
+                        or FurnitureType.CarLift)
+                    && p.Lift < 1.5f)
                 {
                     foreach (var o in room.Openings.Where(o => o.Kind is OpeningKind.Door or OpeningKind.Entry or OpeningKind.Arch))
                         if (Doorway(room, o).Overlaps(rect)) errors.Add($"{p.Type} on floor {p.Floor} blocks a doorway");

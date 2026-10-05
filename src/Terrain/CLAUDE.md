@@ -17,10 +17,13 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `windows` — Windows: `BuildingMeshBuilder` bakes facade UVs (metres along the wall, storey index) from the *triangle* normal;... fake rooms behind the glass, occupancy cues
 - `building-types` — Building types: `BuildingTypes` groups a tile's solids (a church's nave + bell tower) at runtime; one church interior, every...
 - `building-triangles` — read building triangles with `b.Tri(t)`; wall/roof split is `BuildingTriangles.RoofNormalY`, never a local copy
+- `industrial-sites` — Industrial sites (#497, #496 phase 1): `BuildingTypes.SiteFor` invents warehouse/works/depot/body shop/dealership from the building alone; `InteriorGenerator.Industrial.cs` plans a full-height hall + a low service block (`RoomPlan.Clear`), aisles/lines/bays/plinths laid out by the hall itself, 25 new pieces, flat `SiteAbundance` loot, high-bay `RoomLights`, plan v13, `--sitecheck`
 - `cellars-and-room-variety` — Cellars (`Below`, `FloorY`), shelters with blast doors, basement program (laundry, guest room, cinema, carnotzet, music room), new room/furniture types, logical room order, plan v8 (#213)
 - `door-portals` — Doors open (shared, auto-close) and you walk (or drive, garages and barns) through them: `DoorLink` map, portal camera + clip plane, sill crossing, third-person arm through doors, near/far by a doorway, `--doorcam` check, vehicles, linked spaces, building sounds
 - `interior-light` — Rooms lit by the hour in every style (#388): one interior body + PS1/Cartoon/Realistic wrappers, `RoomLights` table (window daylight, sun patches, lamps), indoor ambient, portals tonemapped once
 - `wall-mirrors` — A mirror over every washbasin (`Interiors/WallMirror`, #439): reflected-eye viewport like the cab mirrors, only the nearest in front renders, every other frame; shows the VR player's own body and hands; `--portaldemo` shot `pd_mirror.png`
+- `several-doors` — Several doors on one building (#498): `DoorKey` = building + slot (slot 0's text unchanged), `DoorBudget` spacing rules, extra doors along a long facade and round the back, a barn's pedestrian side door, `DoorHang`/`Vehicle` per door (a loading bay is one line), a doorway each inside, `--doorcheck`
+- `door-size` — How big a door is, outside and inside (#509): `BuildingFootprint.FitUnderEave` is the one place a main door's height is settled (kind's own, capped under `box.Eave` by `DoorUnderEave`, floored at `MinDoorHeight`), a wall too low is demoted not squashed, `InteriorLayout.DoorHeight`/`EntrancePlan.DoorHeight` carry it inside so the opening matches, plan v15
 - `perf-door-portals` — `DoorPortals`/`DoorwayGhosts`/`DoorLights` allocate nothing per frame (reused lists, static `StringName`s, `live` written on change, ghosts scanned at 10 Hz); interior `ArrayMesh` built on the worker, collision a frame later
 - `runtime` — Runtime: (`src/`): `Terrain/ChunkManager` streams LOD rings around anchors (workers build arrays, main thread...
 - `coarse-tiles` — Coarse tiles: every `.terr` has a `.terrc` companion — the same grid point-decimated at stride 10 (51x51, 5.2 KB...
@@ -35,6 +38,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `data-location` — Data location: `--chunks` > `UNITSPORT_CHUNKS` > `terrain_location.json` (MapSetup's drive picker) > `terrain_chunks/`; game and server alike
 - `perf-lod-trees` — Ring strides by screen-space error, trees thinned by ring (`VisibleInstanceCount`), shared unit tree meshes, free every replaced mesh
 - `landings` (world) — `PierMeshBuilder`: a tile's piers and jetties as one more roads-mesh surface (Prop role) and road collision cells; `IChunkSource.LoadLandingsAsync`; `ChunkManager.RebuildPiers` when the landings change
+- `parking-runtime` — Car parks at runtime (#499): the pad through `PavementBuilder`, planters through `IslandBuilder`, walks as #119 sidewalks, bay lines and the disabled roundel as `PNT2`, `ParkingBuilder` for the boom/kiosk/shelter/P sign, the `PARK` bay list as a wire contract
 - `perf-collision-commits` — Collision is queued and committed one 4x4 cell piece a frame, nearest a body first; a new collision layer must go through that queue
 - `perf-ring-key` — `EvaluateRings` compares its inputs in `RingKeyChanged()` (no string key); a new desired-set input goes there
 

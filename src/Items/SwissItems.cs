@@ -37,7 +37,8 @@ public static class SwissItems
 
     private static readonly List<(GlobalPos At, double Until)> Clouds = new();
 
-    private static double Now => Time.GetTicksMsec() / 1000.0;
+    /// <summary>Game time (docs/notes/general/fast-checks.md): a cloud lasts its seconds of simulation.</summary>
+    private static double Now => GameClock.Now;
 
     /// <summary>Whether a point stands in a live smoke cloud (the radar does not see in).</summary>
     public static bool InSmoke(GlobalPos at)

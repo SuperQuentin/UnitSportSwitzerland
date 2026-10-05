@@ -28,7 +28,8 @@ public sealed record ItemDef(
 public static class ItemDefs
 {
     /// <summary>Every item: the authored rows, then one per look in the wardrobe (<see cref="Garments.All"/>).</summary>
-    public static readonly ItemDef[] All = Authored().Concat(Garments.All.Select(Cloth)).ToArray();
+    public static readonly ItemDef[] All = Authored().Concat(Fishing.FishCatalog.All.Where(f => f.Item != ItemId.None).Select(Fish))
+        .Concat(Garments.All.Select(Cloth)).ToArray();
 
     private static ItemDef[] Authored() => new[]
     {
@@ -168,7 +169,63 @@ public static class ItemDefs
         Eat(ItemId.IsotonicDrink, "Isotonic drink", 6, "#3ab0e8", "ID", 20, ItemCategory.Water, 4),
         new(ItemId.SwissArmyKnife, "Swiss army knife", "A tool, not a weapon: kept anywhere in your pack, every tree you chop gives one more log.",
             ItemUse.Material, 1, new Color(0.80f, 0.10f, 0.12f), "SK", 0, ItemCategory.Gear, 45f),
+
+        // fishing (#493, Items/Fishing): the rod and its bait; the fish themselves are the Fish rows
+        new(ItemId.FishingRod, "Fishing rod", "Hold {use_item} to swing back, let go to cast at water. When the float dips, {use_item} strikes. Then hold {use_item} to reel, and let go when the line strains. {aim_item} winds the line in. It takes the bait in your pack: a spinner first, else dough.",
+            ItemUse.Fish, 1, new Color(0.36f, 0.25f, 0.14f), "RD", 0, ItemCategory.Gear, 35f),
+        new(ItemId.DoughBait, "Dough bait", "Bread kneaded into bait. In your pack, the rod uses it: carp, roach, whitefish and trout take it, and eat it.",
+            ItemUse.Material, 20, new Color(0.93f, 0.85f, 0.62f), "DB", 0, ItemCategory.Gear, 1f),
+        new(ItemId.Spinner, "Spinner", "A spinning lure. In your pack, the rod uses it before dough: pike, perch, trout and zander chase it. Lost only when the line snaps.",
+            ItemUse.Material, 5, new Color(0.85f, 0.80f, 0.30f), "SP", 0, ItemCategory.Gear, 6f),
+        Eat(ItemId.PerchFillets, "Filets de perche", 5, "#e8c070", "PF", 60, ItemCategory.Food, 12),
+        Eat(ItemId.GrilledFish, "Grilled fish", 5, "#b87838", "GF", 50, ItemCategory.Food, 22),
+        Eat(ItemId.FishSoup, "Fish soup", 3, "#d8a050", "FS", 45, ItemCategory.Food, 16),
     };
+
+    /// <summary>A fish's worth in CHF, roughly the Léman fishers' prices per kg times a typical catch (docs/notes/items/fishing.md).</summary>
+    // a method, not a table: All (above) is built before any later static field is set
+    private static (float Value, string Tint, int Stack) FishLook(ItemId id) => id switch
+    {
+        ItemId.BrownTrout => (8, "#8a7a4a", 5),
+        ItemId.LakeTrout => (16, "#9aa0a0", 2),
+        ItemId.RainbowTrout => (5, "#b0a0c0", 5),
+        ItemId.BrookTrout => (5, "#6a6a4a", 5),
+        ItemId.ArcticChar => (12, "#c86a4a", 5),
+        ItemId.Namaycush => (14, "#707a68", 2),
+        ItemId.Grayling => (9, "#8a90a0", 5),
+        ItemId.Whitefish => (7, "#c8d0d8", 5),
+        ItemId.Perch => (4, "#8aa040", 10),
+        ItemId.Pike => (14, "#6a8a40", 2),
+        ItemId.Zander => (15, "#a0a088", 2),
+        ItemId.Wels => (20, "#4a4a48", 1),
+        ItemId.Burbot => (7, "#7a6a40", 5),
+        ItemId.LargemouthBass => (6, "#6a8a50", 5),
+        ItemId.Carp => (6, "#b89a40", 2),
+        ItemId.Tench => (4, "#6a7a30", 5),
+        ItemId.Roach => (1, "#c0c8d0", 10),
+        ItemId.Rudd => (1, "#c8b070", 10),
+        ItemId.Bream => (3, "#a8a890", 5),
+        ItemId.Chub => (2, "#9aa0a8", 5),
+        ItemId.Barbel => (4, "#a08a60", 5),
+        ItemId.Agone => (3, "#d0d8e0", 10),
+        ItemId.RoundGoby => (1, "#6a6050", 10),
+        _ => throw new ArgumentException($"no look for fish {id}"),
+    };
+
+    /// <summary>Raw fish: eaten raw it barely feeds; cooked at a fire it is a meal (Crafting.Recipes).</summary>
+    private static ItemDef Fish(Fishing.FishSpecies f)
+    {
+        var (value, tint, stack) = FishLook(f.Item);
+        string dish = Fishing.FishCatalog.DishOf(f.Item) switch
+        {
+            (Fishing.Dish.PerchFillets, var n) => $"{n} make filets de perche",
+            (Fishing.Dish.FishSoup, var n) => $"{n} make a fish soup",
+            _ => "grill it",
+        };
+        string glyph = string.Concat(f.Name.Split(' ').Take(2).Select(w => char.ToUpperInvariant(w[0])));
+        return new(f.Item, f.Name, $"{f.German} / {f.French}, {f.Latin}. {f.Fact} At a fire, {dish}; groceries buy it. {{use_item}} eats it raw (+8).",
+            ItemUse.Consume, stack, new Color(tint), glyph, 8, ItemCategory.Food, value);
+    }
 
     private static ItemDef Gadget(ItemId id, string name, string blurb, string tint, string glyph, float value) =>
         new(id, name, blurb + " {aim_item} + {use_item} on your own takes it back.", ItemUse.Gadget, 1, new Color(tint), glyph, 0, ItemCategory.Gear, value);
@@ -387,6 +444,18 @@ public static class ItemDefs
                 s.Tube(new Vector3(0, 0.06f, -0.05f), new Vector3(0, -0.25f, 0.9f), 0.02f, 0.035f, wood, 8);
                 s.Tube(new Vector3(0, -0.25f, 0.9f), new Vector3(0, -0.36f, 1.12f), 0.035f, 0.11f, wood, 10);
                 s.Tube(new Vector3(0, -0.24f, 0.88f), new Vector3(0, -0.26f, 0.92f), 0.04f, new Color(0.25f, 0.15f, 0.08f), 8);   // a band
+                break;
+            }
+            case ItemId.FishingRod:
+            {
+                // a 2.3 m rod held up ahead: cork grip, a reel under it, the blank tapering to a light tip
+                var cork = new Color(0.72f, 0.56f, 0.36f);
+                var blank = new Color(0.20f, 0.24f, 0.20f);
+                s.Tube(new Vector3(0, -0.05f, -0.28f), new Vector3(0, 0.02f, 0.12f), 0.016f, 0.014f, cork, 8);
+                s.Tube(new Vector3(0, 0.02f, 0.12f), Fishing.FishingVisuals.RodTip, 0.010f, 0.003f, blank, 6);
+                s.Tube(new Vector3(0, -0.06f, -0.02f), new Vector3(0, -0.06f, 0.05f), 0.035f, new Color(0.70f, 0.70f, 0.72f), 10);   // the reel
+                s.Box(new Vector3(0, -0.035f, 0.015f), new Vector3(0.01f, 0.03f, 0.012f), new Color(0.55f, 0.55f, 0.58f));
+                s.Box(new Vector3(0.045f, -0.06f, 0.015f), new Vector3(0.012f, 0.05f, 0.008f), new Color(0.15f, 0.15f, 0.15f));   // the crank
                 break;
             }
             case ItemId.FonduePot:

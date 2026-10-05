@@ -160,8 +160,9 @@ public partial class ShopProbe : ChatProbe
         me.GlobalPosition = new Vector3(spot.X, me.GlobalPosition.Y + 2, spot.Z);
         me.Velocity = Vector3.Zero;
         me.RequestReplacement();
-        if (!await Until(() => me.IsOnFloor() && DoorIndex.Find(bk) != null, 90)) { Fail("the shop's door never loaded"); return; }
-        var door = DoorIndex.Find(bk)!.Value;
+        var dk = new DoorKey(bk);
+        if (!await Until(() => me.IsOnFloor() && DoorIndex.Find(dk) != null, 90)) { Fail("the shop's door never loaded"); return; }
+        var door = DoorIndex.Find(dk)!.Value;
         var interiors = InteriorManager.Instance!;
         InteriorLayout? layout = null;
         try { layout = await interiors.GetOrCreate(key); } catch { }

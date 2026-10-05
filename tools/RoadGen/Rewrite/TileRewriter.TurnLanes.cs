@@ -1256,8 +1256,8 @@ public static partial class TileRewriter
             // two per lane in the storage length, tips 5 m from the stop bar and 15 m apart (Bern
             // Normalien C 2.10.17), closer in a short pocket: left in the pocket, straight (and
             // right) in the through lane
-            double second = storage >= 20 + ArrowLength ? 20 : 13;
-            foreach (double tip in (ReadOnlySpan<double>)[5 + ArrowLength, second + ArrowLength])
+            double second = storage >= 20 + PaintEmitter.ArrowLength ? 20 : 13;
+            foreach (double tip in (ReadOnlySpan<double>)[5 + PaintEmitter.ArrowLength, second + PaintEmitter.ArrowLength])
             {
                 double back = tip + setback - 0.1;   // from the stop line, wherever it stands
                 var (x, y, z, sx, sz) = At(back);
@@ -1265,8 +1265,8 @@ public static partial class TileRewriter
                 double fx = sz, fz = -sx;
                 var (px, py, pz, _, _) = At(tip + pocketBack - 0.1);
                 double left = lanes.LeftPocketLane!.Value.Mid, ahead = lanes.Through().Mid;
-                paint.Add(Arrow(px + sx * left, py, pz + sz * left, fx, fz, PaintArrow.Left));
-                paint.Add(Arrow(x + sx * ahead, y, z + sz * ahead, fx, fz,
+                paint.Add(PaintEmitter.Arrow(px + sx * left, py, pz + sz * left, fx, fz, PaintArrow.Left));
+                paint.Add(PaintEmitter.Arrow(x + sx * ahead, y, z + sz * ahead, fx, fz,
                     rightTurn ? PaintArrow.Straight | PaintArrow.Right : PaintArrow.Straight));
                 stats.Arrows += 2;
             }
@@ -1335,22 +1335,22 @@ public static partial class TileRewriter
                 Vertices = [.. Point(bar, (lanes.BikeBetween ? inner : pocket.From) + 0.1), .. Point(bar, pocket.To - 0.1)],
             });
             stats.StopBars++;
-            double second = storage >= 20 + ArrowLength ? 20 : 13;
+            double second = storage >= 20 + PaintEmitter.ArrowLength ? 20 : 13;
             // the first arrow always: where a short storage behind a skewed line has no room for it 5 m
             // back, it moves up to 1 m from the line; the second only where the storage holds it
-            double first = Math.Clamp(storage + 1 - setback, 1 + ArrowLength, 5 + ArrowLength);
-            foreach (double tip in (ReadOnlySpan<double>)[first, second + ArrowLength])
+            double first = Math.Clamp(storage + 1 - setback, 1 + PaintEmitter.ArrowLength, 5 + PaintEmitter.ArrowLength);
+            foreach (double tip in (ReadOnlySpan<double>)[first, second + PaintEmitter.ArrowLength])
             {
                 double back = tip + setback;
                 if (tip > first && back > storage + 1) continue;
                 var (x, y, z, sx, sz) = At(back);
                 double fx = sz, fz = -sx;
-                paint.Add(Arrow(x + sx * pocket.Mid, y, z + sz * pocket.Mid, fx, fz, PaintArrow.Right));
+                paint.Add(PaintEmitter.Arrow(x + sx * pocket.Mid, y, z + sz * pocket.Mid, fx, fz, PaintArrow.Right));
                 stats.Arrows++;
                 if (through is { } kind)
                 {
                     double own = lanes.Through().Mid;
-                    paint.Add(Arrow(x + sx * own, y, z + sz * own, fx, fz, kind));
+                    paint.Add(PaintEmitter.Arrow(x + sx * own, y, z + sz * own, fx, fz, kind));
                     stats.Arrows++;
                 }
             }
@@ -1450,81 +1450,5 @@ public static partial class TileRewriter
                     Vertices = v.ToArray(), Indices = idx.ToArray(),
                 });
         }
-    }
-
-    /// <summary>Length of a straight lane arrow, tail to tip.</summary>
-    private const double ArrowLength = 6.5;
-
-    /// <summary>
-    /// Lane arrows (Einspurpfeile, SSV 6.06), outlines traced from the Wikimedia Commons diagram
-    /// <c>CH-Markierung-606-Einspurpfeile.svg</c> (path data in its units, y up = the driver's left;
-    /// tail x, shaft centre y): straight, a dart head with notches where the barbs meet the shaft;
-    /// left, the shaft jogging left near its end into an open corner head pointing 45 degrees
-    /// forward-left; straight + right, the straight arrow with a short barb leaving its shaft to the
-    /// right. Right and straight + left are their mirrors. Scaled so the straight one is
-    /// <see cref="ArrowLength"/> long (the Stadt Bern Normalien's 6.50 m); the shaft comes out
-    /// 0.175 m.
-    /// </summary>
-    private static readonly (double Tail, double Centre, double[] Xy) StraightOutline = (449.281, 390.959,
-    [
-        912.961, 362.883, 1026, 380.879, 449.281, 380.879, 449.281, 401.039, 1027.44, 401.039, 912.961, 420.48,
-        912.961, 438.48, 1198.08, 391.68, 912.961, 344.16,
-    ]);
-
-    private static readonly (double Tail, double Centre, double[] Xy) LeftOutline = (449.281, 671.039,
-    [
-        1057.68, 654.48, 1110.24, 701.277, 939.602, 660.961, 449.281, 660.961, 449.281, 681.117, 927.359, 681.117,
-        1066.32, 712.078, 912.961, 712.078, 913.684, 733.684, 1210.32, 733.684, 1091.52, 619.199,
-    ]);
-
-    private static readonly (double Tail, double Centre, double[] Xy) StraightRightOutline = (443.52, 141.838,
-    [
-        907.203, 113.762, 1020.24, 131.758, 616.316, 131.758, 699.121, 65.5195, 704.879, 113.762, 740.879, 110.16,
-        731.52, 29.5195, 585.359, 47.5195, 586.801, 66.957, 668.16, 56.879, 570.961, 131.758, 443.52, 131.758,
-        443.52, 151.918, 1021.68, 151.918, 907.203, 170.641, 907.203, 189.359, 1192.32, 141.84, 907.203, 95.0391,
-    ]);
-
-    private static readonly Dictionary<PaintArrow, (Vec2[] Points, int[] Triangles)> ArrowShapes = new()
-    {
-        [PaintArrow.Straight] = Shape(StraightOutline, mirror: false),
-        [PaintArrow.Left] = Shape(LeftOutline, mirror: false),
-        [PaintArrow.Right] = Shape(LeftOutline, mirror: true),
-        [PaintArrow.Straight | PaintArrow.Right] = Shape(StraightRightOutline, mirror: false),
-        [PaintArrow.Straight | PaintArrow.Left] = Shape(StraightRightOutline, mirror: true),
-    };
-
-    /// <summary>An outline in metres, (forward, left) from the tail, and its triangles.</summary>
-    private static (Vec2[] Points, int[] Triangles) Shape((double Tail, double Centre, double[] Xy) o, bool mirror)
-    {
-        double scale = ArrowLength / (1198.08 - 449.281);
-        var pts = new Vec2[o.Xy.Length / 2];
-        for (int i = 0; i < pts.Length; i++)
-            pts[i] = new Vec2((o.Xy[i * 2] - o.Tail) * scale, (o.Xy[i * 2 + 1] - o.Centre) * scale * (mirror ? -1 : 1));
-        return (pts, Junctions.EarClip.Triangulate(pts).ToArray());
-    }
-
-    /// <summary>
-    /// A lane arrow (#123) as paint triangles, its tail at (x, z) and pointing along (fx, fz)
-    /// (tile-local, X east and Z south); shapes in <see cref="ArrowShapes"/>.
-    /// </summary>
-    private static RoadPaint Arrow(double x, double y, double z, double fx, double fz, PaintArrow kind)
-    {
-        double len = Math.Sqrt(fx * fx + fz * fz);
-        fx /= len; fz /= len;
-        // the driver's left, X east and Z south: forward (fx, fz) turned a quarter to the left
-        double lx = fz, lz = -fx;
-        var (pts, tris) = ArrowShapes[kind];
-        var v = new float[pts.Length * 3];
-        for (int i = 0; i < pts.Length; i++)
-        {
-            v[i * 3] = (float)(x + fx * pts[i].X + lx * pts[i].Y);
-            v[i * 3 + 1] = (float)y;
-            v[i * 3 + 2] = (float)(z + fz * pts[i].X + lz * pts[i].Y);
-        }
-        return new RoadPaint
-        {
-            Shape = PaintShape.Triangles, Type = PaintType.Arrow, Variant = (byte)kind, Rgba = PaintEmitter.White,
-            Vertices = v, Indices = tris.Select(i => (ushort)i).ToArray(),
-        };
     }
 }
