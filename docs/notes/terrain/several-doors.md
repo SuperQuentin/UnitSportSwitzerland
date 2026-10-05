@@ -62,7 +62,7 @@ deserves, and each of them is a real door: it opens, it has a portal, you walk t
   door keeps the identity it had and the Halloween lantern or Christmas gift at it stays put.
 - **Churches** already had one entrance per member solid; they now get one per door per member, and
   the main entrance is still one of the solids' own front doors, never a side door.
-- **Plan version 13**: stored plans regenerate.
+- **Plan version 14**: stored plans regenerate (#497's industrial sites took 13).
 - **Still gated on the kind, not the door**: the main entry's width and height
   (`InteriorGenerator` line ~62 and `SingleRoom`), and the clear lane a vehicle door keeps through
   the room. Per-door versions of those are what an industrial bay will want next.
