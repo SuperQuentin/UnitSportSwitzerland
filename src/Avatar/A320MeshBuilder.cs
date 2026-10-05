@@ -252,11 +252,22 @@ public static class A320MeshBuilder
         }
         // the flight deck: side windows, and the windscreen over the nose
         // (separated by dark frames: the windscreen pillars)
-        if (k == 7) { holes.Add(new Hole(15.2f, 16.05f, true)); holes.Add(new Hole(16.17f, 16.7f, true)); holes.Add(new Hole(16.82f, 17.3f, true)); }
-        if (k == 8) { holes.Add(new Hole(16.0f, 16.7f, true)); holes.Add(new Hole(16.82f, 17.3f, true)); }
+        // (separated by dark frames: the windscreen pillars). Cut in every row the pilots look through at
+        // that station: the nose's rows close in and come down, so which rows those are depends on where (#421)
+        foreach (var (f, t) in FlightDeckGlass)
+            if (InSight(k, (f + t) * 0.5f)) holes.Add(new Hole(f, t, true));
         holes.Sort((x, y) => x.From.CompareTo(y.From));
         return holes;
     }
+
+    /// <summary>The flight deck's glass along each side: two side windows and the windscreen to the nose, between pillars.</summary>
+    private static readonly (float From, float To)[] FlightDeckGlass = { (15.2f, 16.05f), (16.17f, 16.7f), (16.82f, 17.5f) };
+
+    /// <summary>The pilots' sight: from under the glareshield's line to over their heads, around the eye (4.51 m).</summary>
+    private const float SightLow = 4.0f, SightHigh = 5.0f;
+
+    /// <summary>Row <paramref name="k"/> is in the pilots' sight at station <paramref name="z"/>: part of its height is between <see cref="SightLow"/> and <see cref="SightHigh"/>.</summary>
+    private static bool InSight(int k, float z) => Po(z, H[k + 1], 1).Y > SightLow + 0.35f && Po(z, H[k], 1).Y < SightHigh;
 
     private static void SkinRow(MeshScratch m, int sg, int k, Color tail)
     {
@@ -423,16 +434,17 @@ public static class A320MeshBuilder
 
         // instrument panel with dark screens, glareshield
         const float panelZ = 16.55f;
-        float hw = Mathf.Min(0.95f, InnerX(panelZ, 4.55f) - 0.04f);
-        m.Box(new Vector3(0, 4.2f, panelZ), new Vector3(hw * 2, 0.75f, 0.12f), PanelGrey);
+        // its top under the pilots' line of sight (the eye 4.51 m): the glareshield 4.41, the panel under it
+        float hw = Mathf.Min(0.95f, InnerX(panelZ, 4.3f) - 0.04f);
+        m.Box(new Vector3(0, 3.98f, panelZ), new Vector3(hw * 2, 0.7f, 0.12f), PanelGrey);
         for (int i = 0; i < 6; i++)
         {
             float x = (i % 3 - 1) * hw * 0.62f;
-            m.Box(new Vector3(x, i < 3 ? 4.38f : 4.06f, panelZ - 0.065f), new Vector3(hw * 0.5f, 0.24f, 0.02f), Screen);
+            m.Box(new Vector3(x, i < 3 ? 4.16f : 3.84f, panelZ - 0.065f), new Vector3(hw * 0.5f, 0.24f, 0.02f), Screen);
         }
         m.Box(new Vector3(0, 5.05f, 17.12f), new Vector3(0.07f, 0.9f, 0.07f), Frame);
-        float gw = Mathf.Min(0.95f, InnerX(16.7f, 4.68f) - 0.04f);
-        m.Box(new Vector3(0, 4.64f, 16.7f), new Vector3(gw * 2, 0.06f, 0.4f), Dark);
+        float gw = Mathf.Min(0.95f, InnerX(16.7f, 4.38f) - 0.04f);
+        m.Box(new Vector3(0, 4.38f, 16.7f), new Vector3(gw * 2, 0.06f, 0.4f), Dark);
     }
 
     // ---- wings -------------------------------------------------------------------------------

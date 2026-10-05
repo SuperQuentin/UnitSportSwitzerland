@@ -182,11 +182,22 @@ public static class An124MeshBuilder
         if (k >= FloorRow && k < CeilingRow) holes.Add(new Hole(PetalRearZ, RampHingeZ, false));
         // the upper deck's windows; the cockpit's side windows and windscreen
         if (k == WindowRow) for (int i = 0; i < UpperWindows; i++) { float z = UpperWindowZ(i); holes.Add(new Hole(z - UpperWindowHalf, z + UpperWindowHalf, true)); }
-        if (k >= WindowRow && k <= CockpitTopRow)
-            foreach (var (f, t) in new[] { (24.3f, 25.2f), (25.4f, 26.3f), (26.5f, 27.4f), (27.5f, 28.25f) }) holes.Add(new Hole(f, t, true));
+        // cut in every row the crew look through at that station: over the cockpit the nose's crown comes
+        // down to the eye (the hump's rows stretch and fall), so which rows those are depends on where (#421)
+        foreach (var (f, t) in FlightDeckGlass)
+            if (InSight(k, (f + t) * 0.5f)) holes.Add(new Hole(f, t, true));
         holes.Sort((x, y) => x.From.CompareTo(y.From));
         return holes;
     }
+
+    /// <summary>The flight deck's glass along each side: side windows and the windscreen up to the visor, between pillars.</summary>
+    private static readonly (float From, float To)[] FlightDeckGlass = { (24.3f, 25.2f), (25.4f, 26.3f), (26.5f, 27.4f), (27.5f, VisorCapZ) };
+
+    /// <summary>The crew's sight around the eye (8.93 m): from under the glareshield's line to over their heads.</summary>
+    private const float SightLow = UpperFloorY + 0.6f, SightHigh = UpperFloorY + 1.9f;
+
+    /// <summary>Row <paramref name="k"/> is in the crew's sight at station <paramref name="z"/>.</summary>
+    private static bool InSight(int k, float z) => k >= StripeRow && Po(z, H[k + 1], 1).Y > SightLow + 0.35f && Po(z, H[k], 1).Y < SightHigh;
 
     private static Color RowColour(int k) => k < FloorRow ? Belly : k == StripeRow ? Stripe : Hull;
 
@@ -236,6 +247,20 @@ public static class An124MeshBuilder
         {
             Vector3 Mid(float z, float h) => (Po(z, h, sg) + Pi(z, h, sg)) * 0.5f;
             m.Pane(new[] { Mid(zs[i], H[k]), Mid(zs[i], H[k + 1]), Mid(zs[i + 1], H[k + 1]), Mid(zs[i + 1], H[k]) }, Pane);
+        }
+    }
+
+    /// <summary>The windscreen's panes in the visor, ahead of the cockpit's own glass.</summary>
+    private static readonly (float From, float To)[] VisorGlass = { (VisorCapZ, 28.9f), (29.0f, 29.6f), (29.7f, 30.3f) };
+
+    /// <summary>A glass pane in row <paramref name="k"/> of a moving part between two stations.</summary>
+    private static void PanePart(AircraftPart part, int sg, int k, float z0, float z1)
+    {
+        var zs = Zs(z0, z1);
+        for (int i = 0; i + 1 < zs.Count; i++)
+        {
+            Vector3 Mid(float z, float h) => part.P((Po(z, h, sg) + Pi(z, h, sg)) * 0.5f);
+            part.S.Pane(new[] { Mid(zs[i], H[k]), Mid(zs[i], H[k + 1]), Mid(zs[i + 1], H[k + 1]), Mid(zs[i + 1], H[k]) }, Pane);
         }
     }
 
@@ -382,10 +407,10 @@ public static class An124MeshBuilder
         for (int i = 0; i < 4; i++)
             m.Tube(new Vector3(-0.12f + i * 0.08f, UpperFloorY + 0.6f, PilotHip.Z + 0.35f), new Vector3(-0.12f + i * 0.08f, UpperFloorY + 0.8f, PilotHip.Z + 0.5f), 0.015f, 0.012f, Lamp, 4);
         float hw = Mathf.Max(0.8f, OuterX(PanelZ, UpperFloorY + 1.0f) - 0.35f);
-        m.Box(new Vector3(0, UpperFloorY + 0.75f, PanelZ + 0.3f), new Vector3(hw * 2f, 0.7f, 0.6f), Panel);
+        m.Box(new Vector3(0, UpperFloorY + 0.65f, PanelZ + 0.3f), new Vector3(hw * 2f, 0.7f, 0.6f), Panel);
         for (int i = 0; i < 10; i++)
-            m.Box(new Vector3((i % 5 - 2) * hw * 0.36f, UpperFloorY + (i < 5 ? 0.95f : 0.68f), PanelZ - 0.005f), new Vector3(0.22f, 0.2f, 0.02f), i % 3 == 0 ? Screen : Dark);
-        m.Box(new Vector3(0, UpperFloorY + 1.15f, PanelZ + 0.1f), new Vector3(hw * 2f, 0.06f, 0.45f), Dark);
+            m.Box(new Vector3((i % 5 - 2) * hw * 0.36f, UpperFloorY + (i < 5 ? 0.85f : 0.58f), PanelZ - 0.005f), new Vector3(0.22f, 0.2f, 0.02f), i % 3 == 0 ? Screen : Dark);
+        m.Box(new Vector3(0, UpperFloorY + 1.03f, PanelZ + 0.1f), new Vector3(hw * 2f, 0.06f, 0.45f), Dark);
         m.Box(new Vector3(0, UpperCeilingY - 0.1f, PilotHip.Z + 0.3f), new Vector3(1.0f, 0.14f, 1.2f), Panel);
         m.Box(new Vector3(-2.15f, UpperFloorY + 0.7f, EngineerHip.Z), new Vector3(0.5f, 1.4f, 1.4f), Panel);
         for (int i = 0; i < 6; i++)
@@ -640,7 +665,20 @@ public static class An124MeshBuilder
     {
         var part = new AircraftPart(new Vector3(0, VisorHingeY, VisorCapZ), Basis.Identity);
         SkinPart(part, 0, 0, CeilingRow - 1, NoseHingeZ, VisorCapZ);
-        SkinPart(part, 0, 0, Levels.Length - 2, VisorCapZ, NoseZ);
+        // its rows over the cockpit carry the windscreen's front panes, between pillars, where the crew look
+        // out over the glareshield (#421): the visor's crown comes down in front of their eyes
+        for (int k = 0; k <= Levels.Length - 2; k++)
+        {
+            float z = VisorCapZ;
+            foreach (var (f, t) in VisorGlass)
+            {
+                if (!InSight(k, (f + t) * 0.5f)) continue;
+                SkinPart(part, 0, k, k, z, f);
+                foreach (int sg in new[] { 1, -1 }) PanePart(part, sg, k, f, t);
+                z = t;
+            }
+            SkinPart(part, 0, k, k, z, NoseZ);
+        }
         // its inside face across the hold's front: the bulkhead the ramp folds against
         part.Box(new Vector3(0, BellyY + 0.2f, NoseZ - 0.3f), new Vector3(0.3f, 0.3f, 0.5f), Radome);
         return part.ToNode("Door1", bm, gm);
