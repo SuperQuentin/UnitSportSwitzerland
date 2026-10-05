@@ -80,6 +80,17 @@ public partial class BrManager : Node
         switch (verb)
         {
             case "status": return Status();
+            // careers (#479): your record or another's, and the leaderboard
+            case "stats":
+            {
+                string who = words.Length > 1 ? string.Join(' ', words[1..]) : player ? _chat?.NameOfPeer(sender) ?? "" : "";
+                return Stats.Find(who) is { } r ? $"{r.Name}: {r.Line()}" : $"No Battle Royale played by '{who}' yet.";
+            }
+            case "top":
+            {
+                var board = Stats.Board(10).ToList();
+                return board.Count == 0 ? "Nobody has finished a Battle Royale yet." : "Battle Royale leaderboard:\n" + string.Join("\n", board);
+            }
             case "join":
                 if (!player) return "'/br join' needs a player.";
                 return Join(sender);
@@ -109,7 +120,7 @@ public partial class BrManager : Node
                 return "Cancelled.";
             case "zone": return ForceShrink();
             default:
-                return "Usage: /br open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] · join · leave · team [name] · start · zone · cancel · status";
+                return "Usage: /br open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] · join · leave · team [name] · start · zone · cancel · status · stats [name] · top";
         }
     }
 
@@ -194,6 +205,7 @@ public partial class BrManager : Node
         {
             Phase = BrPhase.Lobby, AreaE = area.E, AreaN = area.N, Side = area.Side, AreaName = area.Name, Seed = seed, Pace = pace,
             TeamSize = team,
+            Leaders = Stats.Board(3).ToList(),   // shown in the lobby (#479)
         };
         double minutes = new ZoneSchedule(seed, area.Side, pace).Duration / 60.0;
         _horizon ??= _source?.LoadHorizonAsync();   // for the plane's altitude at GO
@@ -742,7 +754,43 @@ public partial class BrManager : Node
                 : $"{winner.Name} WINS the Battle Royale in {_state.AreaName}! ({BrHud.Kills(winner.Kills)})");
         GD.Print($"[br] ended, winner {winner?.Name ?? "-"}");
         SaveHistory();
+        RecordStats();
         Push();
+    }
+
+    // ------------------------------------------------------------------------------------
+    // server: careers (#479)
+    // ------------------------------------------------------------------------------------
+
+    private const string StatsFile = "user://br/stats.json";
+    private BrStats? _stats;
+
+    private BrStats Stats => _stats ??= LoadStats();
+
+    private static BrStats LoadStats()
+    {
+        try
+        {
+            if (!Godot.FileAccess.FileExists(StatsFile)) return new BrStats();
+            using var f = Godot.FileAccess.Open(StatsFile, Godot.FileAccess.ModeFlags.Read);
+            return JsonSerializer.Deserialize<BrStats>(f.GetAsText()) ?? new BrStats();
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"[br] {StatsFile}: {ex.Message}");
+            return new BrStats();
+        }
+    }
+
+    /// <summary>The match just ended goes into everyone's record, saved off the main thread; each entrant hears theirs.</summary>
+    private void RecordStats()
+    {
+        Stats.Add(_state.Entrants.Select(e => (e.Name, e.Place, e.Kills, e.Damage, e.Survived)));
+        Core.JsonStore.SaveAsync(StatsFile, Stats, Core.JsonStore.Indented, ex => GD.PushWarning($"[br] stats: {ex.Message}"));
+        foreach (var e in _state.Entrants)
+            if (Stats.Find(e.Name) is { } r && Multiplayer.GetPeers().Contains((int)e.Peer))
+                _chat?.Tell(e.Peer, $"Your Battle Royale record: {r.Line()}.", ChatKind.Private);
+        GD.Print($"[br] stats: {Stats.Players.Count} players on record");
     }
 
     /// <summary>Everyone back where they were, with their own things; the server back to idle.</summary>

@@ -3,7 +3,7 @@
 Index only: one line per note in `docs/notes/br/<name>.md`. Read a note only when the task touches
 its topic; search with `grep -ril <word> docs/notes/br`. Weapons and PvP: `docs/notes/combat/pvp-weapons.md`.
 
-- `match` — BrManager at World/BattleRoyale: BrState JSON, phases, drop, lent inventory, StayDown, death report, PvpRules.Override, spectating, BrHud, --brpace
+- `match` — BrManager at World/BattleRoyale: BrState JSON, phases, drop, lent inventory, StayDown, death report, PvpRules.Override, spectating, BrHud, --brpace, careers and leaderboard (BrStats, /br stats|top, #479)
 - `zone` — ZoneSchedule (seeded, ServerNow-driven, first circle sized for the field at GO, nested circles, 8-phase timetable, damage on the owner), ZoneWall shader
 - `region` — BrRegion.Pick: random square from places.json towns + manifest tiles, hard rules, scoring, 8 km anti-repeat
 - `map` — BrMapImage (hillshade + cover + roads + buildings from the chunk source), Minimap, BrCompass strip, BrMap on M (grid, towns, zoom/pan, waypoint), no /city in a match

@@ -108,6 +108,10 @@ public partial class BrHud : CanvasLayer
             }
             Banner(font, new Vector2(w * 0.5f, Y0 + 26), top, 20, Colors.White);
             if (sub.Length > 0) Text(font, new Vector2(w * 0.5f, Y0 + 52), sub, 14, new Color(1, 1, 1, 0.75f), HorizontalAlignment.Center);
+            // the lobby: who leads the board (#479)
+            if (s.Phase is BrPhase.Lobby or BrPhase.Countdown && s.Leaders.Count > 0)
+                for (int i = 0; i < s.Leaders.Count; i++)
+                    Text(font, new Vector2(w * 0.5f, Y0 + 78 + i * 18), s.Leaders[i], 14, i == 0 ? Gold : new Color(1, 1, 1, 0.7f), HorizontalAlignment.Center, shadow: true);
 
             // ---- the team's pings, where they stand on screen (#469) ---------------------------
             if (s.Phase == BrPhase.Playing && GetViewport().GetCamera3D() is { } cam)

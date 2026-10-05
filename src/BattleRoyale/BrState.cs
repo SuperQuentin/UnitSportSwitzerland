@@ -79,6 +79,8 @@ public sealed class BrState
     /// Null in solo, before the roads are in, or on a roadless region.
     /// </summary>
     public float[]? RecallPoints { get; set; }
+    /// <summary>The leaderboard's top lines when the lobby opened (#479), for the lobby HUD.</summary>
+    public List<string> Leaders { get; set; } = new();
     /// <summary>The winning team, 0 in solo or with no winner.</summary>
     public int WinnerTeam { get; set; }
     public List<BrEntrant> Entrants { get; set; } = new();
