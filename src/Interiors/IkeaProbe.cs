@@ -81,12 +81,19 @@ public partial class IkeaProbe : Node
                     var tile = Read(path);
                     if (tile == null) continue;
                     var map = BuildingTypes.For(tile);
+                    DoorSpot[]? doors = null;
                     for (int i = 0; i < tile.Buildings.Count; i++)
                     {
                         if (map.TypeOf(i) != BuildingType.Ikea) continue;
                         var box = map.Boxes[i]!.Value;
                         var b = tile.Buildings[i];
-                        hits.Add($"{t} #{i} {box.Area:F0} m2 {box.Width:F0}x{box.Depth:F0} h{b.MaxY - b.MinY:F0} {b.Kind}");
+                        // the entrance in LV95, so you can go and stand at it
+                        doors ??= BuildingFootprint.ComputeDoors(tile, null, null);
+                        var d = doors[i];
+                        string door = d.Width > 0
+                            ? $" door E {t.MinE + d.Position.X:F0} N {t.MaxN - d.Position.Z:F0} w{d.Width:F1}"
+                            : " NO DOOR";
+                        hits.Add($"{t} #{i} {box.Area:F0} m2 {box.Width:F0}x{box.Depth:F0} h{b.MaxY - b.MinY:F0} {b.Kind}{door}");
                     }
                 }
 
@@ -168,6 +175,18 @@ public partial class IkeaProbe : Node
 
         var problems = InteriorValidator.Validate(layout);
         Check(problems.Count == 0, $"the plan validates{(problems.Count == 0 ? "" : ": " + string.Join("; ", problems.Take(4)))}");
+
+        // the plan as a picture, the way SiteProbe writes its sites: the one artefact that shows
+        // the rows of bins and the lane in from the door at a glance
+        try
+        {
+            string dir = ProjectSettings.GlobalizePath("res://test_output/ikea");
+            Directory.CreateDirectory(dir);
+            string svg = Path.Combine(dir, $"{store.Name.Replace(". ", "").Replace(" ", "_")}.svg");
+            File.WriteAllText(svg, InteriorValidator.ToSvg(layout));
+            GD.Print($"[ikea] plan: {svg}");
+        }
+        catch (Exception e) { GD.Print($"[ikea] could not write the plan: {e.Message}"); }
 
         var mesh = InteriorMeshBuilder.Build(layout);
         Check(mesh.Vertices.Length > 0, $"the interior meshes ({mesh.Vertices.Length} vertices)");

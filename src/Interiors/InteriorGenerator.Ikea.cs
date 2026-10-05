@@ -75,7 +75,10 @@ public static partial class InteriorGenerator
             Kind = OpeningKind.Entry,
         });
 
-        AddWindows(l, floor, 0);
+        // No windows, deliberately: the facade has none (BuildingMeshBuilder forces the grid off
+        // for a store), so a cut here would be daylight through a blank wall. It is also what a
+        // big-box store is — the hall is lit by its own high bays, which RoomLights gives any room
+        // with no window.
         return true;
     }
 
@@ -93,16 +96,34 @@ public static partial class InteriorGenerator
     {
         blocked.Add(EntryLane(l, r));
 
-        float pitch = BinSize + BinAisle;
-        int rows = Math.Max(1, (int)((r.Depth - 1.6f) / pitch));
-        float used = rows * pitch;
-        float z = r.Z0 + (r.Depth - used) / 2 + BinAisle / 2;
         int budget = Math.Min(PieceBudget(r), MaxBins);
-        float step = BinSize + BinGap;
+        float step = BinSize + BinGap, pitch = BinSize + BinAisle;
 
-        for (int row = 0; row < rows && budget > 0; row++, z += pitch)
-            for (float x = r.X0 + 0.6f; x + BinSize < r.X1 - 0.6f && budget > 0; x += step)
+        // Spread the budget over the whole floor rather than filling rows until it runs out. At
+        // the natural pitch a 120 x 110 m hall holds about 2 000 bins and the cap is 110, so
+        // marching row by row laid two dense rows across the front wall and left the other
+        // hundred metres bare. Widening both spacings by the square root of the overshoot keeps
+        // the grid square and covers the hall, which is what the floor of one really looks like:
+        // islands of stock with room to walk and push a trolley between them.
+        int Cols(float by) => Math.Max(1, (int)((r.Width - 1.2f) / by));
+        int Rows(float by) => Math.Max(1, (int)((r.Depth - 1.6f) / by));
+        int fits = Cols(step) * Rows(pitch);
+        if (fits > budget)
+        {
+            float spread = MathF.Sqrt((float)fits / budget);
+            step *= spread;
+            pitch *= spread;
+        }
+        int cols = Cols(step), rows = Rows(pitch);
+
+        // centre the grid in the hall, so the gap at the walls is even
+        float x0 = r.X0 + (r.Width - (cols - 1) * step - BinSize) / 2;
+        float z0 = r.Z0 + (r.Depth - (rows - 1) * pitch - BinSize) / 2;
+
+        for (int row = 0; row < rows && budget > 0; row++)
+            for (int col = 0; col < cols && budget > 0; col++)
             {
+                float x = x0 + col * step, z = z0 + row * pitch;
                 if (!Free(r, new RectPlan(x, z, x + BinSize, z + BinSize), placed, blocked, 0f)) continue;
                 Put(l, f, FurnitureType.BlahajBin, x + BinSize / 2, z + BinSize / 2, 0,
                     BinSize, BinSize, BinHeight, placed);

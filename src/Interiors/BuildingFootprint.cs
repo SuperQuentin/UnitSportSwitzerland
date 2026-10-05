@@ -91,6 +91,9 @@ public static class BuildingFootprint
     /// <summary>Beyond this the interior is clamped — a 300 m warehouse is one hall either way.</summary>
     public const float MaxSide = 120f;
 
+    /// <summary>A landmark store's entrance (#501): the glass front, as wide as a trolley crowd.</summary>
+    public const float StoreDoorWidth = 7.0f, StoreDoorHeight = 3.4f;
+
     public static float DoorWidthFor(BuildingKind kind) => kind switch
     {
         BuildingKind.House or BuildingKind.Other => 1.0f,
@@ -240,6 +243,13 @@ public static class BuildingFootprint
 
         float doorW = DoorWidthFor(kind);
         float doorH = DoorHeightFor(kind, InteriorGenerator.Storeys(b).Height - InteriorGenerator.Slab);
+        // a landmark store's entrance is a wall of glass, not a front door: a 1.8 m Commercial door
+        // on 190 m of blue sheet is the detail that makes it read as a warehouse again (#501)
+        if (group?.Type == BuildingType.Ikea)
+        {
+            doorW = Math.Min(StoreDoorWidth, w * 0.25f);
+            doorH = Math.Min(StoreDoorHeight, InteriorGenerator.Storeys(b).Height - InteriorGenerator.Slab - 0.15f);
+        }
         // a door's worth of height, for judging a wall and for the odd doors that are no barn gate
         float plainH = Math.Min(doorH, DoorHeightFor(kind));
         bool barn = DoorLeaf.SwingsOut(kind);
