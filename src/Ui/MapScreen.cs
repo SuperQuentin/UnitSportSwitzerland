@@ -493,7 +493,7 @@ public partial class MapScreen : Screen
     {
         into.AddChild(UiKit.Section("Requirements"));
         Requirement(into, true, "Downloading", "Built in — nothing to install.");
-        Requirement(into, true, "Building tiles", "Built in — nothing to install.");
+        Requirement(into, true, "Building tiles", "Built in — the preprocessor runs inside the game.");
         Requirement(into, false, "Buildings and cycle routes",
             "These two come as Esri FileGDB, which needs GDAL's Python bindings. Install Python 3.10+ "
             + "and GDAL, then run the terminal wizard once for those layers: "

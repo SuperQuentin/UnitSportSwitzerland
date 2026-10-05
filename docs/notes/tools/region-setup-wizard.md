@@ -19,6 +19,13 @@
   `public.madd.bfs.admin.ch/<canton>.zip`, with no published checksum, so its skip decision falls
   back to size/ETag/Last-Modified. Still Python: buildings sheets, cycle routes, OSM and bathymetry,
   whose per-dataset resolvers are not ported. `swiss_data.py` stays as the standalone tool.
+- **The preprocessor runs in-process since #515**: it targets net8 (like the game) and
+  `Preprocessor.RunAsync` runs the same argument-driven pipeline as its CLI, so neither the game nor
+  this tool needs a .NET SDK or a subprocess to build a tile; `StepRun.Tool` calls it directly and
+  `IPreprocessorLog` replaces scraping stdout. Verified by output identity: the same four tiles
+  built in-process and by the old net9 CLI are byte for byte identical. RoadGen is still a
+  subprocess (top-level statements, no library seam) and its step is skipped in practice, so a
+  rootless `Paths` fails it with a clear reason rather than inventing a path.
 - **Region setup wizard**: `dotnet run --project tools/MapSetup` (`tools/MapSetup/`, Spectre.Console).
   Terminal map of CH (raw 24-bit ANSI, half-block pixels) to select tiles (rectangle, brush, town +
   radius, canton), an estimate table (download / disk / time per step), then it chains the whole

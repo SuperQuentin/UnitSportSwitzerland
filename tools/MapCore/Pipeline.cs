@@ -455,7 +455,7 @@ public static partial class Planner
         steps.Insert(firstTool, new Step
         {
             Title = "Prepare processing tools",
-            Detail = "dotnet build of TerrainPreprocessor and RoadGen (Release)",
+            Detail = "dotnet build of RoadGen (Release); the preprocessor runs in-process",
             // No repository means the game, which has the processing tools compiled into it and no
             // .NET SDK to build anything with: there is nothing for this step to do there.
             Seconds = p.Root == null ? 0
@@ -578,13 +578,75 @@ public sealed partial class StepRun
         return true;
     }
 
+    /// <summary>
+    /// Runs one of the C# tools. The preprocessor runs <b>in-process</b> since #515 phase 2 — no
+    /// .NET SDK, no subprocess, and cancellation reaches its stage loops directly — which is what
+    /// lets the game build tiles at all. RoadGen is still a subprocess: its entry point is
+    /// top-level statements with no library seam, and its one step is skipped in practice (the
+    /// extraction step does the network pass).
+    /// </summary>
     public async Task<bool> Tool(string name, IReadOnlyList<string> args, LineProgress parse)
     {
+        if (name == "TerrainPreprocessor")
+        {
+            Log($"$ {name} {string.Join(' ', args)}  (in-process)");
+            int inProcess = await UnitSport.Tools.Preprocessor.Preprocessor.RunAsync(
+                args, new ToolLog(this, parse), _ct);
+            if (inProcess != 0) Fail($"{name} returned {inProcess}");
+            return inProcess == 0;
+        }
+
+        if (_c.Paths.Root == null)
+        {
+            Fail($"{name} can only run from the repository, and this is not one");
+            return false;
+        }
         var dll = ToolDll(_c.Paths, name);
         if (!File.Exists(dll)) { Fail($"{dll} missing (the tools step did not run?)"); return false; }
         int code = await Exec("dotnet", [dll, .. args], parse);
         if (code != 0) Fail($"{name} exited with {code}");
         return code == 0;
+    }
+
+    /// <summary>
+    /// The in-process preprocessor's output, turned into exactly what the subprocess path makes of
+    /// the same lines — so a step's bar and its log read the same either way.
+    /// </summary>
+    private sealed class ToolLog : UnitSport.Tools.Preprocessor.IPreprocessorLog
+    {
+        private readonly StepRun _run;
+        private readonly LineProgress _parse;
+
+        public ToolLog(StepRun run, LineProgress parse)
+        {
+            _run = run;
+            _parse = parse;
+        }
+
+        public void Line(string text) => _run.OnToolLine(text, _parse);
+
+        public void Progress(string stage, double fraction)
+        {
+            if (stage.Length > 0) _run.Show(stage);
+            _run._progress.Value = Math.Clamp(fraction * 100.0, 0, 100);
+        }
+    }
+
+    /// <summary>One line of a tool's output: logged, shown, and scanned for its own counter.</summary>
+    private void OnToolLine(string line, LineProgress parse)
+    {
+        Log(line);
+        Show(line);
+        var m = parse switch
+        {
+            LineProgress.Counter => CounterLine().Match(line),
+            LineProgress.Batch or LineProgress.Source => BatchLine().Match(line),
+            _ => Match.Empty,
+        };
+        if (m.Success && double.TryParse(m.Groups[2].Value, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double total) && total > 0)
+            _progress.Value = 100.0 * double.Parse(m.Groups[1].Value,
+                System.Globalization.CultureInfo.InvariantCulture) / total;
     }
 
     public async Task<bool> Python(string what, IReadOnlyList<string> args, LineProgress parse)

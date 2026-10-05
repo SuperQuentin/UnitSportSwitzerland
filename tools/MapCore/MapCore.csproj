@@ -16,8 +16,10 @@
     <!-- GWR cadastre and the TLM GeoPackage are SQLite; the preprocessor reads them the same way -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
     <ProjectReference Include="..\TerrainFormat\TerrainFormat.csproj" />
-    <!-- canton polygons and the TLM GeoPackage are read with the preprocessor's GDAL-free reader -->
-    <Compile Include="..\TerrainPreprocessor\GeoPackageReader.cs" Link="GeoPackageReader.cs" />
+    <!-- The preprocessor is a library as well as a CLI since #515 phase 2: the build steps call
+         Preprocessor.RunAsync in-process, so neither the game nor this tool needs a .NET SDK or a
+         subprocess. It also brings the GDAL-free GeoPackageReader the canton polygons are read with. -->
+    <ProjectReference Include="..\TerrainPreprocessor\TerrainPreprocessor.csproj" />
   </ItemGroup>
 
   <ItemGroup>
