@@ -14,6 +14,7 @@ cockpit VR, first-person mounts, body skiing, haptics, `--xrsim`.
 4. **Room-scale walking** that moves the body. Today the body does not follow the head if you
    step away.
 5. Flight triggers (see `controls`), slalom gates via `RaceManager`, ski touring.
+5b. Done in #439: teleport and comfort, hands on the avatar, wall mirrors, hand-held map, climbing, watch.
 6. The asymmetric VR roles: rescue winch, summit spotter, tabletop "Alp spirit".
 
 **Stereo risks to check on a headset:**

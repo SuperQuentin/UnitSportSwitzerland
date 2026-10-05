@@ -50,6 +50,12 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     private XrWristMenu _wrist = null!;
     private XrCabControls _cab = null!;
     private XrTeleport _teleport = null!;
+    private XrWatch _watch = null!;
+    private XrMap _map = null!;
+    private XrClimb _climb = null!;
+
+    /// <summary>Opens or shuts the hand-held map (#439, the wrist menu's entry).</summary>
+    public void ToggleHandMap() => _map.Toggle(Anchor?.GetParent() as FootPlayer);
     private bool _leftHanded;
     private Vector3 _prevLeftLocal, _prevRightLocal;
     private float _flapCooldown;
@@ -168,6 +174,11 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         AddChild(_cab);
         _teleport = new XrTeleport();
         AddChild(_teleport);
+        _watch = new XrWatch();
+        _left.AddChild(_watch);
+        _map = new XrMap(_right);
+        _left.AddChild(_map);
+        _climb = new XrClimb(_left, _right);
         ApplyHands();
         Notice = new XrNotice();
         AddChild(Notice);
@@ -305,14 +316,19 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         // the cab's levers, then the hands: a grip that holds a lever, the wheel or worked a door
         // is not a shoulder press (#438)
         _cab.Update(player, _lastAnchor);
-        _hands.Update(player, _camera.GlobalTransform, dt, _cab.LeftHeld, _cab.RightHeld);
-        _pad.LeftGripBusy = _hands.LeftBusy || _cab.LeftHeld;
-        _pad.RightGripBusy = _hands.RightBusy || _cab.RightHeld;
+        // climbing (#439) before the hands: a grip on rock is a hold, not a grab
+        _climb.Update(player, dt);
+        bool leftClaimed = _cab.LeftHeld || _climb.LeftHeld, rightClaimed = _cab.RightHeld || _climb.RightHeld;
+        _hands.Update(player, _camera.GlobalTransform, dt, leftClaimed, rightClaimed);
+        _pad.LeftGripBusy = _hands.LeftBusy || leftClaimed;
+        _pad.RightGripBusy = _hands.RightBusy || rightClaimed;
         _pad.BodyStick = BodyFlight(player, dt);
-        _pad.Update(player, calibrated, uiActive: _ui.Pointing, dt);
+        _map.Update(player);
+        _pad.Update(player, calibrated, uiActive: _ui.Pointing || _map.Pointing, dt);
         _wrist.Watch(_camera.GlobalTransform, _left, player, InWorld, dt);
         UpdateHandAim();
         ShareHands(player);
+        _watch.Tick(player, _left.GetHasTrackingData(), dt);
         _ui.UpdatePanel(dt);
         UpdateSki(player, calibrated, dt);
         UpdateVignette(player, dt);
