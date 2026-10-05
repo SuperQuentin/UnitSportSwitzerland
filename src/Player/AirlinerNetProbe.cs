@@ -31,6 +31,8 @@ public partial class AirlinerNetProbe : ChatProbe
     public override async void _Ready()
     {
         _role = Role ?? "A";
+        // the cockpits' instruments are compared between the peers, not only shown near a camera (#421)
+        AircraftCockpit.ReadAlways = true;
         if (!await Joined(150))
         {
             await Finish(0);
@@ -39,6 +41,12 @@ public partial class AirlinerNetProbe : ChatProbe
         if (_role == "A") await RunA(Me!); else await RunB(Me!);
         await Finish(2.0);
     }
+
+    private static AircraftCockpit? Cockpit(FootPlayer p) => p.GetChildren().OfType<AirlinerRig>().FirstOrDefault()?.Cockpit;
+
+    /// <summary>The words of the last line <paramref name="who"/> said starting with <paramref name="word"/>, after it.</summary>
+    private string[]? Words(string who, string word) =>
+        _heard.LastOrDefault(l => l.Contains($"AN {who} {word} ")) is { } line ? line[(line.IndexOf($"AN {who} {word} ") + $"AN {who} {word} ".Length)..].Split(' ') : null;
 
     private FootPlayer? Other(FootPlayer me)
     {
@@ -71,6 +79,12 @@ public partial class AirlinerNetProbe : ChatProbe
         Input.ActionRelease(PlayerInput.Sprint);
         Expect(jet.State.FlapLever == 3 && jet.State.SpeedBrake == 1 && jet.State.ParkingBrake, "levers set");
         Say($"levers {jet.State.Spool:F2}");
+        // #421: what A's own cockpit shows, for B's copy to show the same
+        if (Cockpit(me) is { } deck)
+        {
+            var r = deck.Shown;
+            Say($"deck {r.FlapLever} {r.Speedbrake} {(r.Park ? 1 : 0)} {r.N1a} {jet.State.Lever.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}");
+        }
         await Heard("B", "seen levers", 20);
         Input.ActionRelease(PlayerInput.MoveRight);
 
@@ -101,6 +115,12 @@ public partial class AirlinerNetProbe : ChatProbe
         await Seconds(1);
         Expect(!air.State.GearDown && !air.State.OnGround, "gear lever up in the air");
         Say("gear up");
+        await Seconds(2);
+        if (Cockpit(me) is { } flying)
+        {
+            var r = flying.Shown;
+            Say($"deckair {r.Ias} {r.Alt} {r.Hdg} {r.Gear} {(air.State.GearDown ? 1 : 0)}");
+        }
         await Heard("B", "seen gear", 30);
 
         // #416: B walks in A's cabin while A flies; both peers must put B at the same spot in it
@@ -134,6 +154,18 @@ public partial class AirlinerNetProbe : ChatProbe
             && l.Flaps == 3 && l.Spoilers > 0.4f && l.Stick.X > 0.3f && l.Spool > 0.5f, 15);
         var look = a != null ? Airliner.LookOf(a.Anim) : default;
         Expect(seen, $"B sees A's flaps 3, speedbrake, stick right, spool up ({look.Flaps}, {look.Spoilers:F2}, {look.Stick.X:F2}, {look.Spool:F2})");
+        // #421: B's copy of A's cockpit shows what A's own does: the levers drawn, the screens' readout
+        if (await Heard("A", "deck", 10) && Words("A", "deck") is { Length: >= 5 } d && Rig()?.Cockpit is { } deck)
+        {
+            int flap = int.Parse(d[0]), sb = int.Parse(d[1]), park = int.Parse(d[2]), n1 = int.Parse(d[3]);
+            float lever = Float(d[4]);
+            bool same = await Until(() => deck.Shown is var r && r.FlapLever == flap && r.Speedbrake == sb && (r.Park ? 1 : 0) == park
+                && Mathf.Abs(r.N1a - n1) <= 3 && Mathf.Abs(deck.ThrustDrawn - CockpitInstruments.LeverAngle(lever, false)) < 0.03f, 10);
+            var r = deck.Shown;
+            Expect(same, $"B's copy of A's cockpit shows A's: flap lever {r.FlapLever}/{flap}, speedbrake {r.Speedbrake}/{sb}, park {r.Park}/{park}, "
+                + $"N1 {r.N1a}/{n1}, thrust levers {Mathf.RadToDeg(deck.ThrustDrawn):F1}°/{Mathf.RadToDeg(CockpitInstruments.LeverAngle(lever, false)):F1}°");
+        }
+        else Fail("no cockpit readout from A, or no cockpit here");
         Say("seen levers");
 
         if (!await Heard("A", "parked", 60)) { Fail("A never parked"); return; }
@@ -173,6 +205,17 @@ public partial class AirlinerNetProbe : ChatProbe
         float down = Gear()?.Rotation.X ?? 0f;
         bool travelled = await Until(() => Airliner.LookOf(a!.Anim).Gear == 0f && Mathf.Abs((Gear()?.Rotation.X ?? 0f) - down) > 1.5f, 20);
         Expect(travelled, $"B's copy folds the nose gear up ({down:F2} -> {Gear()?.Rotation.X ?? 0f:F2} rad)");
+        // #421: in flight, B's copy of the screens reads A's speed, height, heading, the gear up and its lever
+        if (await Heard("A", "deckair", 10) && Words("A", "deckair") is { Length: >= 5 } f && Rig()?.Cockpit is { } panel)
+        {
+            int ias = int.Parse(f[0]), alt = int.Parse(f[1]), hdg = int.Parse(f[2]), gear = int.Parse(f[3]);
+            bool same = await Until(() => panel.Shown is var r && Mathf.Abs(r.Ias - ias) <= 6 && Mathf.Abs(r.Alt - alt) <= 60
+                && Mathf.Abs(Mathf.Wrap(r.Hdg - hdg, -180, 180)) <= 2 && r.Gear == gear && panel.GearLeverDrawn > 0f, 6);
+            var r = panel.Shown;
+            Expect(same, $"B's copy of A's screens in flight: {r.Ias}/{ias} kt, {r.Alt}/{alt} ft, heading {r.Hdg}/{hdg}, gear {r.Gear}/{gear}, "
+                + $"gear lever {Mathf.RadToDeg(panel.GearLeverDrawn):F0}° (up +)");
+        }
+        else Fail("no cockpit readout in flight from A, or no cockpit here");
         Say("seen gear");
 
         // #416: aboard A's flying A320 (put on its cabin floor: no airstairs in the sky), walk aft, report the spot

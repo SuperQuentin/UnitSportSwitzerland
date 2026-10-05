@@ -99,6 +99,19 @@ public partial class AircraftCockpit : Node3D
     private bool _hasLast;
     private float _vs;
 
+    /// <summary>The checks (#421): read the instruments even with no camera near, to compare peers.</summary>
+    public static bool ReadAlways;
+
+    /// <summary>What the screens show now (or would, with no camera near and <see cref="ReadAlways"/>).</summary>
+    public Readout Shown => _shown;
+
+    /// <summary>The thrust levers' and the gear lever's travel as drawn, radians authored (forward, up +): for the checks.</summary>
+    public float ThrustDrawn => _thrust[0] is { } t ? -t.Basis.GetEuler().X : float.NaN;
+    public float GearLeverDrawn => _gearLever is { } g ? -g.Basis.GetEuler().X : float.NaN;
+
+    /// <summary>Screen <paramref name="i"/>'s frame in the world (the captain's PFD first, then the ND; it faces +Z): for close-up pictures.</summary>
+    public Transform3D? ScreenFrame(int i) => i >= 0 && i < _screens.Length && _screens[i].IsInsideTree() ? _screens[i].GlobalTransform : null;
+
     /// <summary>The world's height over the sea at y = 0 (the floating origin's), set by the local player: altitudes read in feet AMSL.</summary>
     public static float WorldAltitude;
 
@@ -544,7 +557,7 @@ public partial class AircraftCockpit : Node3D
             bool near = cam != null && cam.GlobalPosition.DistanceSquaredTo(GlobalTransform * AircraftMeshBuilder.Flip(_k.Eye)) < 30f * 30f;
             if (near != _active) Activate(near);
         }
-        if (!_active || _canvas == null || _viewport == null) return;
+        if (!_active && !ReadAlways) return;
 
         var g = GlobalTransform.Basis.Orthonormalized();
         var fwd = -g.Z;
@@ -578,6 +591,11 @@ public partial class AircraftCockpit : Node3D
             Autopilot: look.Autopilot,
             Warn: warn,
             Flash: flash && CockpitInstruments.MasterWarning(warn));
+        if (!_active || _canvas == null || _viewport == null)
+        {
+            _shown = r;
+            return;
+        }
         string mode = !look.Power ? "" : look.Autopilot ? "SPEED  HDG  ALT" : CockpitInstruments.LeverDetent(look.Lever, look.Reverse);
         int posE = Mathf.RoundToInt(pos.X / 100f), posN = Mathf.RoundToInt(-pos.Z / 100f);
         if (!r.Equals(_shown) || !ReferenceEquals(mode, _canvas.Mode) || posE != _canvas.PosE || posN != _canvas.PosN)

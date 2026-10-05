@@ -41,13 +41,14 @@
   clip like the light plane's when flown; parked they are a box at the root's height (`ExtraBoxes`)
   and the fuselage box reaches the ground (`ParkedBox`).
 - **Network**: `Anim` = (spool, lever, the stick quantised into one float, bits: flap lever, gear
-  lever, gear broken, speedbrake, ground spoilers, reverse, lights, doors, parking brake). Remote
+  lever, gear broken, speedbrake, ground spoilers, reverse, lights, doors, parking brake; #421: power, autopilot,
+  the red warning, and the fuel and engines running over the stick: `aircraft-cockpit`). Remote
   copies travel the parts at the aircraft's own rates from the levers (`AirlinerRig.Show`). Parked:
   the same bits in `VehicleState.Flags` (`PackFlags`/`UnpackFlags`).
 - **Sound**: `EngineProfile.Turbofan` (`EngineSynth.Jet`: fan tone 700 Hz–2.4 kHz with its second
   harmonic, a low rumble, broadband roar growing with the thrust), quieter from the cockpit.
-- **HUD** (until the cockpit's screens, #421): kt, ft, fpm, N1, flaps, gear, speedbrake, brakes, STALL,
-  OVERSPEED, TOO LOW GEAR.
+- **HUD**: kt, ft, fpm, N1, flaps, gear, speedbrake, brakes, STALL, OVERSPEED, TOO LOW GEAR; hidden in
+  the cockpit view, whose screens show it (`aircraft-cockpit`, #421), unless `CockpitHud`.
 - **Check**: `--flycheck a320 --world flat` (quick): a scripted pilot (`AirlinerCircuit`) on the real
   actions with analog strengths: take-off, gear up, climb to 600 m, a 180° turn, approach with the
   flaps and gear as the speed allows, flare, brakes and reversers to a stop; fails on a hard landing,
@@ -167,5 +168,5 @@
   about once a second, a 10-harmonic sawtooth buzz and tip rasp louder with the blade load (thrust),
   the core's whine 1.1-1.65 kHz; `Airliner.Sound` picks it (cockpit `PlayerFeel._turboprop`, remote,
   parked). `--soundcheck` renders `engine_turboprop_*.wav`.
-- **Not done**: no AI; the AN-124's instruments (#421), its seats are blocks, its upper-deck windows are behind the lining; the BR plane keeps its old drone sample (`SfxSynth.Engine`), not the turboprop voice; wings and tail do not collide in flight; the visual does not pitch with a
+- **Not done**: no AI; the AN-124's seats are blocks, its upper-deck windows are behind the lining; the BR plane keeps its old drone sample (`SfxSynth.Engine`), not the turboprop voice; wings and tail do not collide in flight; the visual does not pitch with a
   sloping taxiway; no wind; no fuel burn or engine start in Arcade (only in Light sim).

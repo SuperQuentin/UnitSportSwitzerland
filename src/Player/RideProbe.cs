@@ -32,6 +32,7 @@ public partial class RideProbe : Node
     private readonly RideKind _kind;
     private readonly double _seconds;
     private readonly string? _shot;
+    private Camera3D? _closeCam;
 
     private FootPlayer? _player;
     private double _elapsed;
@@ -201,6 +202,19 @@ public partial class RideProbe : Node
         }
 
         WatchCrash(delta);
+
+        // --closeup (#421): the last second from a camera in front of the captain's screens or gauges
+        if (_shot != null && CmdArgs.Has("--closeup") && _closeCam == null && _elapsed >= _seconds - 1.0
+            && _player.GetChildren().OfType<Avatar.AirlinerRig>().FirstOrDefault()?.Cockpit is { } deck
+            && deck.ScreenFrame(0) is { } a && deck.ScreenFrame(1) is { } b)
+        {
+            var at = (a.Origin + b.Origin) * 0.5f;
+            _closeCam = new Camera3D { Fov = 40f, Near = 0.02f };
+            AddChild(_closeCam);
+            _closeCam.GlobalPosition = at + a.Basis.Z.Normalized() * 0.5f;
+            _closeCam.LookAt(at, a.Basis.Y.Normalized());
+            _closeCam.MakeCurrent();
+        }
 
         _sinceReport += delta;
         if (_sinceReport >= 1.0)
