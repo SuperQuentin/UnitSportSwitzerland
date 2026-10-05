@@ -123,6 +123,10 @@ public partial class FishingVisuals : Node3D
         if (_lines.TryGetValue(_localPeer, out var line) && _events.Origin is { } origin) line.Float = origin.ToGlobal(world);
     }
 
+    /// <summary>Where a peer's float is drawn here, if it has one out (the net check).</summary>
+    public Vector3? FloatOf(long peer) =>
+        _lines.TryGetValue(peer, out var line) && _events.Origin is { } origin ? origin.ToWorld(line.Float) : null;
+
     /// <summary>Where this machine's float is now, if it has one out.</summary>
     public Vector3? LocalFloat =>
         _lines.TryGetValue(_localPeer, out var line) && _events.Origin is { } origin ? origin.ToWorld(line.Float) : null;

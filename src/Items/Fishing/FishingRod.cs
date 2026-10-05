@@ -181,20 +181,26 @@ public partial class FishingRod : Node
         ItemController.Kick(player);
         _items.PlaySound(SfxSynth.WhooshBank.Variants[0], Mathf.Lerp(0.8f, 1.3f, power));
 
-        // water first: a surface, below the eye and not far down a cliff
+        // the ground under the float: a lake's bed, a river's, or dry land
+        var space = player.GetWorld3D().DirectSpaceState;
+        var hit = Ray.Cast(space, target + Vector3.Up * 20f, target + Vector3.Down * 60f, uint.MaxValue, player.SelfExclude);
+        float ground = hit.Count > 0 ? hit["position"].AsVector3().Y : float.NegativeInfinity;
+        // water: a surface over that ground (the layer runs on a little under a beach, to hide its edge),
+        // below the eye and not far down a cliff
         bool onLayer = World.WaterField.TryGetStill(target, out float still, out _)
+                       && still > ground + MinDepth
                        && still < player.Camera.GlobalPosition.Y + 0.5f && still > feet.Y - 30f;
         bool stream = false;
         if (onLayer) target.Y = still;
         else
         {
-            var space = player.GetWorld3D().DirectSpaceState;
-            var hit = Ray.Cast(space, target + Vector3.Up * 20f, target + Vector3.Down * 60f, uint.MaxValue, player.SelfExclude);
-            if (hit.Count > 0) target = hit["position"].AsVector3();
+            if (hit.Count > 0) target.Y = ground;
             stream = Loot.Gathering.Instance?.StreamAt(target) == true;
             if (stream) target.Y += 0.05f;
         }
         _float = target;
+        GD.Print(FormattableString.Invariant(
+            $"[fishing] cast power {power:F2}, {MathX.FlatLength(target - feet):F1} m: {(onLayer ? $"water {still - ground:F1} m deep" : stream ? "a stream" : "dry")}"));
         Events?.Send(ItemEventKind.FishCast, target, Vector3.Zero);
         if (!onLayer && !stream)
         {
@@ -204,17 +210,8 @@ public partial class FishingRod : Node
         }
 
         var at = _origin.ToGlobal(target);
-        double slope = 0;
-        if (onLayer)
-        {
-            // a lake lies flat; a river's surface falls downstream
-            float a0 = still, a1 = still, b0 = still, b1 = still;
-            World.WaterField.TryGetStill(target + new Vector3(-6, 0, 0), out a0, out _);
-            World.WaterField.TryGetStill(target + new Vector3(6, 0, 0), out a1, out _);
-            World.WaterField.TryGetStill(target + new Vector3(0, 0, -6), out b0, out _);
-            World.WaterField.TryGetStill(target + new Vector3(0, 0, 6), out b1, out _);
-            slope = Math.Max(Math.Abs(a1 - a0), Math.Abs(b1 - b0)) / 12.0;
-        }
+        // a lake lies flat, a river's surface falls downstream: compare the wet samples across the float
+        double slope = onLayer ? Math.Max(Fall(target, new Vector3(6, 0, 0)), Fall(target, new Vector3(0, 0, 6))) : 0;
         Spot = FishWaters.Spot(onLayer, at.E, at.N, at.Alt, slope);
         State = Phase.Waiting;
         _waited = 0;
@@ -223,6 +220,14 @@ public partial class FishingRod : Node
         string bait = Bait switch { Bait.Spinner => "a spinner", Bait.Dough => "dough", _ => "a bare hook" };
         _items.Toast($"Cast into {Spot.Describe()}, with {bait}.");
     }
+
+    /// <summary>Water shallower than this is a wet beach, not somewhere a float lies.</summary>
+    public const float MinDepth = 0.15f;
+
+    /// <summary>The still surface's fall per metre across <paramref name="at"/> along <paramref name="half"/>; 0 unless both ends are wet.</summary>
+    private static double Fall(Vector3 at, Vector3 half) =>
+        World.WaterField.TryGetStill(at - half, out float a, out _) && World.WaterField.TryGetStill(at + half, out float b, out _)
+            ? Math.Abs(b - a) / (2 * half.Length()) : 0;
 
     // ---- the bite ----------------------------------------------------------------------------------
 

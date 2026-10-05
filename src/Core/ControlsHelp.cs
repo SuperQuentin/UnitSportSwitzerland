@@ -56,6 +56,13 @@ public partial class ControlsHelp : CanvasLayer
             new("Gather stone, water, wood (hold)", PlayerInput.Gather),
             new("Bird journal", PlayerInput.BirdJournal),
         }),
+        ("Fishing (rod in hand)", new Row[]
+        {
+            new("Wind up a cast (hold), cast (let go)", PlayerInput.UseItem),
+            new("Strike when the float dips", PlayerInput.UseItem),
+            new("Reel in (hold); let go when the line strains or the fish runs", PlayerInput.UseItem),
+            new("Wind the line in; cancel a cast", PlayerInput.AimItem),
+        }),
         ("Building (hammer in hand)", new Row[]
         {
             new("Build the piece shown", PlayerInput.UseItem),
