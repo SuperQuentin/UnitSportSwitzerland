@@ -159,6 +159,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
             return;
         }
+        // the nine IKEA stores and one store built in code (#501): no terrain, no server
+        if (Interiors.IkeaProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.IkeaProbe { Name = "IkeaProbe" });
+            return;
+        }
         // a hand-made church whose radio plays the chess type beat (#370): no terrain, no server
         if (Interiors.ChurchStageProbe.ParseArgs() is { Requested: true } churchStage)
         {

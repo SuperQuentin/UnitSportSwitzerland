@@ -32,27 +32,37 @@ public readonly record struct Landmark(string Name, BuildingType Type, double La
 /// <b>Why the point must land inside the footprint.</b> The first cut of this took "the largest big
 /// solid within 400 m", and checked against real tiles it was wrong almost everywhere: at
 /// Spreitenbach it took the 73 m Tivoli tower, at Vernier a 249 000 m² complex, at Aubonne a block
-/// of flats. Worse, a radius that reaches into neighbouring tiles lets up to four tiles each claim
-/// the same store, and <see cref="BuildingTypes.Detect"/> sees one tile at a time so it cannot
-/// compare across them. Containment fixes both: exactly one building in exactly one tile can hold a
-/// point, so the answer is unique however the tiles are cut, and no mall or tower can be picked up
-/// by being merely nearby. <see cref="Tolerance"/> only forgives a point that fell just off a wall.
+/// of flats. Worse, any radius at all destroys agreement between peers: a point near a tile edge is
+/// offered to two tiles, <see cref="BuildingTypes.Detect"/> sees one tile at a time and cannot
+/// compare across them, so two tiles could each claim a store and the two halves of the region
+/// would disagree about where the IKEA is. That is not hypothetical — St. Gallen's point is 0.4 m
+/// from a tile edge, and its store is in the tile next door.
 /// </para>
 ///
 /// <para>
-/// Each row's coordinate was checked against the real solid it has to find, and the shape band
-/// below was measured from those nine buildings. <c>--ikeacheck</c> prints every row and what it
-/// matched, so a row the data disagrees with is one line to correct.
-/// Rules and how to re-check them: <c>docs/notes/terrain/ikea.md</c>.
+/// <b>Strict containment is what makes the answer unique.</b> Two buildings are disjoint solids, so
+/// exactly one footprint in exactly one tile can hold a given point: the match cannot depend on how
+/// the tiles are cut, in what order anything is read, or which tiles happen to be loaded. All nine
+/// points were checked to fall inside their store's footprint, which is the standard each row has
+/// to meet. The price is that a row drifting a few metres off a wall stops matching — reported at
+/// once by <c>--ikeacheck</c>, and one line to correct, which is much the better failure.
+/// </para>
+///
+/// <para>
+/// The shape band below was measured off those same nine solids. Rules, the sources behind each
+/// coordinate, and how to re-check them: <c>docs/notes/terrain/ikea.md</c>.
 /// </para>
 /// </summary>
 public static class Landmarks
 {
     /// <summary>
-    /// How far outside a footprint the noted point may still fall. Small on purpose: this forgives
-    /// a point taken from the car park edge or a door, not a point in the wrong retail park.
+    /// How far outside a tile a point may lie for that tile to bother looking at it. Only a
+    /// pre-filter, and generous: a store is up to 300 m across, its record belongs to the tile
+    /// holding its centre, and its footprint can therefore cover a point well inside a neighbour.
+    /// Being generous here costs one box test per tile and changes no answer — strict containment
+    /// in <see cref="Match"/> is what decides.
     /// </summary>
-    public const float Tolerance = 45f;
+    public const float Reach = 400f;
 
     // The store signature, measured off the nine real solids: a big LOW box. The height band is
     // what keeps a shopping centre's tower or an 8-storey block from ever being a store, and the
@@ -89,14 +99,14 @@ public static class Landmarks
 
     /// <summary>
     /// The landmarks whose point could fall on a building of this tile: inside it, or within
-    /// <see cref="Tolerance"/> of its edge, since a building belongs to the tile holding its centre
-    /// and a 200 m store beside a tile edge reaches well over it.
+    /// <see cref="Reach"/> of its edge. More than one tile may be offered the same landmark — that
+    /// is the point of it — and at most one of them can then hold the building that contains it.
     /// </summary>
     public static IEnumerable<Landmark> Near(TileId id)
     {
         foreach (var l in All)
-            if (l.E >= id.MinE - Tolerance && l.E <= id.MinE + ChunkFormat.TileSizeM + Tolerance
-                && l.N >= id.MinN - Tolerance && l.N <= id.MaxN + Tolerance)
+            if (l.E >= id.MinE - Reach && l.E <= id.MinE + ChunkFormat.TileSizeM + Reach
+                && l.N >= id.MinN - Reach && l.N <= id.MaxN + Reach)
                 yield return l;
     }
 
@@ -116,9 +126,10 @@ public static class Landmarks
 
     /// <summary>
     /// Which of a tile's buildings is a landmark, if any: the store-shaped solid whose footprint
-    /// holds the noted point (within <see cref="Tolerance"/>). Ties — a point in the gap between two
-    /// qualifying solids — go to the nearer, then the larger, then the lower index, so the answer
-    /// never depends on anything but the bytes.
+    /// <b>contains</b> the noted point. Since buildings are disjoint solids, at most one can, so
+    /// there is nothing to arbitrate and no way for two tiles to disagree; the larger-then-lower
+    /// index tiebreak only exists so that a pathological tile (overlapping solids in the source
+    /// data) still gives one fixed answer rather than depending on anything.
     ///
     /// <para>
     /// <paramref name="boxes"/> comes in rather than being recomputed, so this can run inside
@@ -129,7 +140,7 @@ public static class Landmarks
     public static (int Index, Landmark Store)? Match(BuildingTile tile, PlanBox?[] boxes)
     {
         (int Index, Landmark Store)? best = null;
-        float bestDist = float.MaxValue, bestArea = 0;
+        float bestArea = 0;
         foreach (var l in Near(tile.Id))
         {
             var at = LocalPoint(tile.Id, l);
@@ -138,11 +149,9 @@ public static class Landmarks
             {
                 if (boxes[i] is not { } box) continue;
                 if (!IsStoreShaped(box, tile.Buildings[i])) continue;
-                float dist = box.DistanceTo(at);
-                if (dist > Tolerance) continue;
-                if (dist > bestDist - 0.01f && (dist > bestDist + 0.01f || box.Area <= bestArea)) continue;
+                if (box.DistanceTo(at) > 0f) continue;      // the point must be on the building
+                if (box.Area <= bestArea) continue;
                 best = (i, l);
-                bestDist = dist;
                 bestArea = box.Area;
             }
         }

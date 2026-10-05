@@ -16,6 +16,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `water-level-layer` — In-memory still water per tile (#299): `WaterTile` (501² levels, NaN dry, optional fetch) from `IChunkSource.LoadWaterAsync`, `WaterLayer` (+ wave scale), legacy from cover, `ChunkManager.TryGetWaterLevel`; the shape #298 fills
 - `windows` — Windows: `BuildingMeshBuilder` bakes facade UVs (metres along the wall, storey index) from the *triangle* normal;... fake rooms behind the glass, occupancy cues
 - `building-types` — Building types: `BuildingTypes` groups a tile's solids (a church's nave + bell tower) at runtime; one church interior, every...
+- `ikea` — the nine IKEA stores named by position (#501): strict containment, not proximity (St. Gallen's point is 0.4 m from a tile edge); the blue box, the pylon, bins of Blåhajs; `--ikeacheck`
 - `building-triangles` — read building triangles with `b.Tri(t)`; wall/roof split is `BuildingTriangles.RoofNormalY`, never a local copy
 - `cellars-and-room-variety` — Cellars (`Below`, `FloorY`), shelters with blast doors, basement program (laundry, guest room, cinema, carnotzet, music room), new room/furniture types, logical room order, plan v8 (#213)
 - `door-portals` — Doors open (shared, auto-close) and you walk (or drive, garages and barns) through them: `DoorLink` map, portal camera + clip plane, sill crossing, third-person arm through doors, near/far by a doorway, `--doorcam` check, vehicles, linked spaces, building sounds

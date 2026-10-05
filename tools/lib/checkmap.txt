@@ -52,6 +52,9 @@ src/Loot/                quick  --lootchancecheck
 src/Loot/                quick  --shopcheck
 src/Interiors/           quick  --shopcheck
 src/Interiors/Church     quick  --churchstagecheck
+src/Interiors/Landmarks  quick  --ikeacheck --systems ui
+src/Interiors/Ikea       quick  --ikeacheck --systems ui
+src/Interiors/BuildingTypes quick  --ikeacheck --systems ui
 src/Audio/Cd/CdLibrary   quick  --churchstagecheck
 src/Items/Item           quick  --shopcheck
 src/Occasions/           quick  --occasioncheck
