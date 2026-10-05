@@ -41,6 +41,10 @@ internal sealed class XrHands
     private const float TickEvery = 0.4f;
     /// <summary>A hand this near a dropped item or a radio takes it, m.</summary>
     private const float TakeReach = 0.3f;
+    /// <summary>A hand this far from the eyes, in front, is reaching out: its grip does what E does there (#437), m.</summary>
+    private const float ReachOut = 0.45f;
+    /// <summary>A hand this far below the eyes, and to a side, is at the hip: its grip steps the hotbar, m.</summary>
+    private const float HipDrop = 0.75f, HipSide = 0.12f;
     /// <summary>An empty squeeze let go this fast (in the play space, so walking does not count) drops the held item, m/s.</summary>
     private const float FlingSpeed = 2.5f;
 
@@ -64,6 +68,7 @@ internal sealed class XrHands
     }
 
     private readonly Hand _left, _right;
+    private Transform3D _head;
     /// <summary>The wheel's turn while held, radians, + anticlockwise from the seat (<see cref="Avatar.CarRig.WheelTurn"/>).</summary>
     private float _turn, _lastTick;
 
@@ -76,8 +81,9 @@ internal sealed class XrHands
     public bool LeftBusy => _left.Busy;
     public bool RightBusy => _right.Busy;
 
-    public void Update(FootPlayer? player, float dt)
+    public void Update(FootPlayer? player, Transform3D head, float dt)
     {
+        _head = head;
         var grip = WheelOf(player);
         foreach (var hand in new[] { _left, _right })
         {
@@ -138,13 +144,38 @@ internal sealed class XrHands
         }
         if (player is not { Ride: RideKind.OnFoot, RidingWith: 0 }) return;
         if (player.TryToggleCarDoor(at) || Interiors.InteriorManager.Instance?.TryDoorByHand(player, at) == true
-            || TakeAt(at))
+            || TakeAt(at) || AtHip(at) || ReachingOut(player, at))
         {
             hand.Busy = true;
             Buzz(hand, 0.5f, 0.06f);
             return;
         }
         hand.EmptySqueeze = true;
+    }
+
+    /// <summary>
+    /// A hand at the hip steps the hotbar (#437): the right hip to the next item, the left to the
+    /// previous, as a holster would hand them over.
+    /// </summary>
+    private bool AtHip(Vector3 at)
+    {
+        if (Input.MouseMode != Input.MouseModeEnum.Captured) return false;
+        var local = _head.AffineInverse() * at;
+        if (local.Y > -HipDrop || Mathf.Abs(local.X) < HipSide) return false;
+        XrPad.Tap(local.X > 0f ? Core.PlayerInput.NextItem : Core.PlayerInput.PrevItem);
+        return true;
+    }
+
+    /// <summary>
+    /// A hand reaching out in front closes on what E would act on there (#437): a seat, a ladder, a
+    /// crate, a cupboard, a car's door, a building's. Never the dance, which is not a thing.
+    /// </summary>
+    private bool ReachingOut(FootPlayer player, Vector3 at)
+    {
+        if (Input.MouseMode != Input.MouseModeEnum.Captured) return false;
+        var to = at - _head.Origin;
+        if (to.Length() < ReachOut || (-_head.Basis.Z).Dot(to.Normalized()) < 0.5f) return false;
+        return player.TryInteract(byHand: true);
     }
 
     /// <summary>A dropped item at the hand goes into the inventory; a radio there opens its panel.</summary>

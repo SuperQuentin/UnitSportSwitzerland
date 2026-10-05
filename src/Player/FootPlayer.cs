@@ -2317,7 +2317,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// E / Y. In a vehicle: get out. On foot next to one: get in. Otherwise false, and the caller
     /// opens the picker. Equipment (skis, canopies) is not a vehicle and is not left behind.
     /// </summary>
-    public bool TryInteract()
+    /// <param name="byHand">A VR hand reaching out and closing (#437): only a thing, never the dance.</param>
+    public bool TryInteract(bool byHand = false)
     {
         // limp after a crash, or downed (#475): nothing to do, and no picker either
         if (Ragdolled || Downed) return true;
@@ -2350,7 +2351,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (Interiors.ChurchRadios.TryOpen(this)) return true;
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             // the chess type beat in here: E dances to it, as outdoors (#370)
-            if (interiors?.AtExit(this) != true && (DanceId != 0 || RatBeatHere(heard: true)))
+            if (!byHand && interiors?.AtExit(this) != true && (DanceId != 0 || RatBeatHere(heard: true)))
             {
                 DanceId = DanceId == 0 ? 1 : 0;
                 return true;
@@ -2384,6 +2385,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         // a building's door in reach beats the dance: music next door must not lock you out
         if (IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true) return true;
+        if (byHand) return false;
         // music heard here: E starts the dance; stopping works for as long as it lasts
         if (Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius, heard: DanceId == 0) != null)
         {
