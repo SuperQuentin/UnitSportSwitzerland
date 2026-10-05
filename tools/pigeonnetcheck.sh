@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Playing the pigeon over loopback (src/Birds/PigeonNetProbe, #217): a dedicated server (--generated-world)
 # and two headless clients. A turns into a pigeon (no items, items kept), B sees a bird, A flies over B and
-# lets go (B splatted and told by whom, A scores), A turns back (items back). Output in test_output/pigeonnet_*.log.
+# lets go (B splatted and told by whom, A scores), A crashes in a splat B sees (#519), A turns back (items back). Output in test_output/pigeonnet_*.log.
 #   GODOT=<exe> [PORT=] [SERVER_ARGS=] tools/pigeonnetcheck.sh [E,N]
 . "$(dirname "$0")/lib/twoclient.sh" pigeonnet
 AT=${1:-2583250,1113250}

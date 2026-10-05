@@ -61,6 +61,7 @@ public static partial class InteriorGenerator
             DoorOutX = fp.Door.Outward.X,
             DoorOutZ = fp.Door.Outward.Z,
             DoorWidth = fp.Door.Width,
+            DoorHeight = fp.Door.Height,
             StoreyHeight = h,
             EntryX = fp.EntryX,
             // a barn's or a garage's hall opens as wide as its door (a vehicle drives through);
@@ -97,8 +98,139 @@ public static partial class InteriorGenerator
             }
         }
 
+        // a doorway for every other facade door (#498), before the furniture, which keeps clear
+        // of every opening by itself (Clearance)
+        if (fp.Extra.Count > 0) Entrances(layout, fp);
+
         Furnish(layout, rng);
         return layout;
+    }
+
+    // ---- several ways in (#498) -------------------------------------------------------------
+
+    /// <summary>Which way a room's wall faces, interior-local.</summary>
+    private static (float X, float Z) Facing(Side s) => s switch
+    {
+        Side.Front => (0, -1),
+        Side.Back => (0, 1),
+        Side.Left => (-1, 0),
+        _ => (1, 0),
+    };
+
+    /// <summary>
+    /// One <see cref="EntrancePlan"/> per facade door, the main one first. A building's extra
+    /// doors stand where the facade had room for them; the doorway inside is cut in the
+    /// ground-floor room nearest each of them, on the wall facing the same way, clamped into the
+    /// plan box. Inside and outside are not the same building — the plan box is a clamped
+    /// rectangle over a TIN solid — so the two line up plausibly, not exactly.
+    ///
+    /// <para>
+    /// A door the plan can fit no doorway for gets no entrance and reads as locked
+    /// (<see cref="InteriorLayout.EntranceOf"/>): a facade door is worth more than a portal onto
+    /// somebody else's doorway.
+    /// </para>
+    /// </summary>
+    private static void Entrances(InteriorLayout l, Footprint fp)
+    {
+        var ground = l.GroundFloor;
+        float clear = l.StoreyHeight - Slab;
+        l.Entrances.Clear();
+        // the main door, exactly as InteriorLayout.AllEntrances would have synthesised it
+        l.Entrances.Add(new EntrancePlan
+        {
+            Door = new DoorKey(fp.Key).ToString(),
+            X = l.EntryX, Z = -l.Depth / 2, InX = 0, InZ = 1, Width = l.EntryWidth,
+            DoorX = l.DoorX, DoorY = l.DoorY, DoorZ = l.DoorZ,
+            DoorOutX = l.DoorOutX, DoorOutZ = l.DoorOutZ,
+            DoorWidth = l.DoorWidth, DoorHeight = fp.Door.Height,
+            Hang = fp.Door.Hang, Vehicle = fp.Door.Vehicle,
+        });
+
+        var axisV = fp.AxisV;
+        foreach (var d in fp.Extra)
+        {
+            var rel = new Godot.Vector2(d.Position.X - fp.Center.X, d.Position.Z - fp.Center.Y);
+            var at = new Godot.Vector2(rel.Dot(fp.AxisU), rel.Dot(axisV));
+            var outward = new Godot.Vector2(d.Outward.X, d.Outward.Z);
+            var faces = new Godot.Vector2(outward.Dot(fp.AxisU), outward.Dot(axisV));
+            float width = Math.Min(d.Width, 1.8f);
+            if (width < 0.7f || Math.Min(d.Height, clear - 0.15f) < 1.9f) continue;
+
+            // the wall that faces the same way first, then round the building
+            foreach (var side in new[] { Side.Front, Side.Right, Side.Back, Side.Left }
+                         .OrderByDescending(x => Facing(x).X * faces.X + Facing(x).Z * faces.Y)
+                         .ThenBy(x => (int)x))
+            {
+                if (!FitEntry(l, ground, side, side is Side.Front or Side.Back ? at.X : at.Y, width, out var room, out float center))
+                    continue;
+                // under the ceiling of the room it actually opens into, not of the storey: a works
+                // hall's service block is a 2.6 m room standing inside a 9 m hall (#497)
+                float top = Math.Min(d.Height, l.ClearOf(room) - 0.15f);
+                if (top < 1.9f) continue;
+                room.Openings.Add(new OpeningPlan
+                {
+                    Side = side, Center = center, Width = width, Bottom = 0, Top = top, Kind = OpeningKind.Entry,
+                });
+                var (fx, fz) = Facing(side);
+                var line = side switch
+                {
+                    Side.Front => new Godot.Vector2(center, room.Z0),
+                    Side.Back => new Godot.Vector2(center, room.Z1),
+                    Side.Left => new Godot.Vector2(room.X0, center),
+                    _ => new Godot.Vector2(room.X1, center),
+                };
+                l.Entrances.Add(new EntrancePlan
+                {
+                    Door = new DoorKey(fp.Key, d.Slot).ToString(),
+                    X = line.X, Z = line.Y, InX = -fx, InZ = -fz, Width = width,
+                    DoorX = d.Position.X, DoorY = d.Position.Y, DoorZ = d.Position.Z,
+                    DoorOutX = d.Outward.X, DoorOutZ = d.Outward.Z,
+                    DoorWidth = d.Width, DoorHeight = d.Height, Hang = d.Hang, Vehicle = d.Vehicle,
+                });
+                break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Where a doorway <paramref name="width"/> wide fits on one side of the plan box, as near
+    /// <paramref name="want"/> along it as the rooms there allow: a ground-floor room whose wall
+    /// is on that side of the box, with wall left over beside its other openings and no stair
+    /// shaft to step into.
+    /// </summary>
+    private static bool FitEntry(InteriorLayout l, FloorPlan ground, Side side, float want, float width,
+        out RoomPlan room, out float center)
+    {
+        room = null!;
+        center = 0;
+        float hw = l.Width / 2, hd = l.Depth / 2;
+        bool along = side is Side.Front or Side.Back;
+        var onSide = ground.Rooms.Where(r => side switch
+        {
+            Side.Front => r.Z0 <= -hd + 0.05f,
+            Side.Back => r.Z1 >= hd - 0.05f,
+            Side.Left => r.X0 <= -hw + 0.05f,
+            _ => r.X1 >= hw - 0.05f,
+        });
+        foreach (var r in onSide.OrderBy(r => Math.Abs(Fit(want, along ? r.X0 : r.Z0, along ? r.X1 : r.Z1) - want)))
+        {
+            float s0 = along ? r.X0 : r.Z0, s1 = along ? r.X1 : r.Z1;
+            if (s1 - s0 < width + 0.4f) continue;
+            float c = Fit(want, s0 + width / 2 + 0.2f, s1 - width / 2 - 0.2f);
+            // not over another cut in the same wall, nor over the shaft of a stair from below
+            if (r.Openings.Any(o => o.Kind != OpeningKind.Window && o.Side == side
+                                    && Math.Abs(o.Center - c) < (o.Width + width) / 2 + 0.3f)) continue;
+            var reach = along
+                ? new RectPlan(c - width / 2, side == Side.Front ? r.Z0 : r.Z1 - 1.2f, c + width / 2, side == Side.Front ? r.Z0 + 1.2f : r.Z1)
+                : new RectPlan(side == Side.Left ? r.X0 : r.X1 - 1.2f, c - width / 2, side == Side.Left ? r.X0 + 1.2f : r.X1, c + width / 2);
+            if (ground.Holes.Any(h => h.Overlaps(reach))) continue;
+            if (ground.Flight is { } fl && new RectPlan(fl.X0, Math.Min(fl.ZBottom, fl.ZTop), fl.X1, Math.Max(fl.ZBottom, fl.ZTop)).Overlaps(reach))
+                continue;
+            room = r;
+            center = c;
+            return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -161,9 +293,11 @@ public static partial class InteriorGenerator
         room.Openings.Add(new OpeningPlan
         {
             Side = Side.Front, Center = l.EntryX, Width = l.EntryWidth, Bottom = 0,
-            // a barn's or a garage's as tall as its facade door, which the footprint kept under the eave
-            Top = BuildingFootprint.VehicleDoor(kind) ? Math.Min(doorHeight, BuildingFootprint.DoorHeightFor(kind, clear))
-                : Math.Min(kind == BuildingKind.Industrial ? 2.8f : 2.1f, clear - 0.15f),
+            // the facade door's own height, whatever the kind, which the footprint already kept
+            // under the eave: the hole a player sees from the street and the one they walk
+            // through is the same hole (#509). It was only the vehicle kinds that took it, so a
+            // shed wore a 2.8 m door outside and a 2.1 m one inside.
+            Top = Math.Min(doorHeight, clear - 0.15f),
             Kind = OpeningKind.Entry,
         });
         var floor = new FloorPlan();

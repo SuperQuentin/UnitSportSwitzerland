@@ -38,3 +38,4 @@ pictures. Only CC0, MIT-style and Swiss open government data so far; nothing AI-
 | File | Source | Licence |
 |---|---|---|
 | `chess_type_beat.ogg` | "Chess Type Beat" by The Vibe Guide ([YouTube](https://www.youtube.com/watch?v=EK2w6qA5zz8)), audio only, Vorbis q4; the church radio's track and the rat dance (#370) | **not an open licence**: all rights with the artist; added by the project owner, replace before any public release |
+| `yaris_bounce.ogg` (optional, not yet added) | the clip the Yaris loops while its hydraulics bounce (#464); played only if the file is there, else just the synthesized thuds | record its source and licence here when it is added |

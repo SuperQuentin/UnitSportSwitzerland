@@ -19,3 +19,15 @@
   (the four states side by side), `--synccheck` (car stage presses L and O on the NA6CE; fails if the
   mirror's switches ever differ on a fresh frame), `tools/switchcheck.sh` (server + two clients:
   driven and parked; needs terrain chunks, not yet run).
+
+## Hydraulics bounce (#464)
+
+`CarBody.Hydraulics` (only the XP90 Yaris so far): **O / D-pad ←** (the soft-top key, which does
+nothing on a hard top) toggles `Car.Bouncing`. **Visual only**: `CarRig.ApplyHydraulics` hops the
+body (`HopPeriod` 0.62 s, 0.32 m, nose and tail leading in turn, easing in and out over a hop);
+the wheels and the physics never move. Each landing thuds (`SfxSynth.LandingBank`, pitched down),
+and while it bounces the rig loops the clip at `CarRig.BounceClipRes`
+(`res://assets/audio/yaris_bounce.ogg`) **if that file exists**: drop any clip there, no code change.
+**Sync**: pose `W` bit 64 (`PoseBounce`, above the throttle's three bits), so every peer runs the
+same hops and sound from its own copy. Not carried by `VehicleState`: a parked car stops bouncing.
+Kept across a preset change (`SetCarSetup`).

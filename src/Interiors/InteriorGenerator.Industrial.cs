@@ -75,7 +75,11 @@ public static partial class InteriorGenerator
         bool driven = BuildingTypes.DrivenInto(site);
         l.EntryWidth = Math.Min(driven ? Math.Max(l.DoorWidth, 2.8f) : l.DoorWidth, W - 1.2f);
         l.EntryX = Fit(l.EntryX, -hw + l.EntryWidth / 2 + 0.3f, hw - l.EntryWidth / 2 - 0.3f);
-        float entryTop = Math.Min(driven ? Math.Max(doorHeight, 3.2f) : 2.4f, clear - 0.3f);
+        // the facade door's own height, which the footprint kept under the eave (#509): a bay
+        // seen as 2.25 m from the yard must not be a 3.2 m hole once you are through it. A
+        // truck bay that wants 3.2 m needs its *facade* door built that big (#496), not a
+        // taller opening behind a short one.
+        float entryTop = Math.Min(doorHeight, clear - 0.3f);
         hall.Openings.Add(new OpeningPlan
         {
             Side = Side.Front, Center = l.EntryX, Width = l.EntryWidth, Bottom = 0,

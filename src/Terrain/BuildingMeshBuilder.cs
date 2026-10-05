@@ -79,6 +79,8 @@ public static class BuildingMeshBuilder
     /// </summary>
     private static void AppendDoor(List<Vector3> v, List<Color> c, List<float> f, Interiors.DoorSpot d, BuildingKind kind)
     {
+        // the leaf follows the door's own hang (#498): a plain leaf even on a barn or a garage
+        var hang = d.Hang;
         var o = d.Outward;
         var t = new Vector3(-o.Z, 0, o.X);
         var at = d.Position;
@@ -110,7 +112,7 @@ public static class BuildingMeshBuilder
         Box(-hw - 0.12f, -hw, 0, h + 0.12f, 0, 0.08f, frame);
         Box(hw, hw + 0.12f, 0, h + 0.12f, 0, 0.08f, frame);
         Box(-hw - 0.12f, hw + 0.12f, h, h + 0.12f, 0, 0.08f, frame);
-        if (kind == BuildingKind.Garage)
+        if (Interiors.DoorLeaf.RollsUp(hang))
         {
             // The shut roll-up door: slats in the leaf's own plane (6 cm out of the facade), the
             // one the building shader drops at every height while the door's portal shows.
@@ -133,7 +135,7 @@ public static class BuildingMeshBuilder
             return;
         }
         Quad(P(-hw, 0, 0.03f), P(hw, 0, 0.03f), P(hw, h, 0.03f), P(-hw, h, 0.03f), leaf);
-        if (Interiors.DoorLeaf.SwingsOut(kind))
+        if (Interiors.DoorLeaf.SwingsOut(hang))
         {
             // a pair (DoorLeaf.CreateOutward): the seam where they meet, a handle each beside it
             Quad(P(-0.015f, 0, 0.035f), P(0.015f, 0, 0.035f), P(0.015f, h, 0.035f), P(-0.015f, h, 0.035f), leaf * 0.6f);

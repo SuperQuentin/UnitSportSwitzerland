@@ -53,6 +53,7 @@ src/Loot/                quick  --shopcheck
 src/Interiors/           quick  --shopcheck
 src/Interiors/           quick  --sitecheck --systems ui
 src/Loot/LootTables      quick  --sitecheck --systems ui
+src/Interiors/           quick  --doorcheck
 src/Interiors/Church     quick  --churchstagecheck
 src/Interiors/Landmarks  quick  --ikeacheck --systems ui
 src/Interiors/Ikea       quick  --ikeacheck --systems ui
@@ -242,6 +243,8 @@ src/Net/                 full   tools/loadtest.sh 4 testsh 60
 tools/lib/               quick  tools/lib/guard_selftest.sh
 src/Player/Pigeon        quick  --flycheck pigeon --world flat
 src/Player/FlightCheck   quick  --flycheck pigeon --world flat
+src/Player/Pigeon        quick  --flycheck pigeoncrash --systems birds
+src/Birds/BirdLife       quick  --flycheck pigeoncrash --systems birds
 src/Player/FlightCheck   quick  --flycheck a320 --world flat
 src/Player/Airliner      quick  --flycheck a320 --world flat
 src/Player/Airliner      quick  --flycheck a320 --world flat --airliner sim

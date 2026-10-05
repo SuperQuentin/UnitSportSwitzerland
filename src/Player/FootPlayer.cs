@@ -598,6 +598,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public float ThrowAim { get; set; }
 
+    /// <summary>
+    /// A gun shouldered with Aim (set every frame by <see cref="Items.ItemController"/>, #460): the
+    /// close shoulder camera of a throw, a little tighter, the body squared up to the view with the
+    /// gun in its arms. From first person it is lent third person the same way.
+    /// </summary>
+    public bool GunAim { get; set; }
+
+    /// <summary>The on-foot camera's side: 1 over the right shoulder, -1 the left, eased between on a swap (#460).</summary>
+    private float _shoulderSide = Core.GameSettings.Current.LeftShoulder ? -1f : 1f;
+
     /// <summary>Camera tremble in radians, set every frame (a fully wound-up throw shakes).</summary>
     public float CameraShake { get; set; }
 
@@ -2129,6 +2139,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </para>
     /// </summary>
     private const float ThrowCamHeight = 1.62f, ThrowCamOffset = 0.62f, ThrowCamDistance = 1.7f;
+    /// <summary>A shouldered gun's camera (#460): closer than a throw's, the zoom is the weapon's aim FOV.</summary>
+    private const float GunCamOffset = 0.62f, GunCamDistance = 1.5f;
 
     /// <summary>
     /// Eases the throw camera toward <see cref="ThrowAim"/>, lending third person to a first-person
@@ -2137,7 +2149,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     private void StepThrowView(float dt)
     {
-        float want = ScopeView ? 0f : Mathf.Clamp(ThrowAim, 0f, 1f);
+        float want = ScopeView ? 0f : GunAim ? 1f : Mathf.Clamp(ThrowAim, 0f, 1f);
+        float side = Core.GameSettings.Current.LeftShoulder ? -1f : 1f;
+        _shoulderSide = Mathf.MoveToward(_shoulderSide, side, dt * 8f);
         _throwBlend = Mathf.Lerp(_throwBlend, want, MathX.Damp(want > _throwBlend ? 9f : 7f, dt));
         if (want == 0f && _throwBlend < 0.01f) _throwBlend = 0f;
         if (!_thirdPerson && want > 0f)
@@ -2275,9 +2289,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // pulled back a little with speed, so a sprint and a slide feel like they cover ground
         float speed = MathX.FlatLength(Velocity);
-        float distance = Mathf.Lerp(_borrowedThird ? 0f : ArmLength + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f, ThrowCamDistance, tb);
+        float distance = Mathf.Lerp(_borrowedThird ? 0f : ArmLength + Mathf.Clamp(speed / RunSpeed, 0f, 1.6f) * 0.6f,
+            GunAim ? GunCamDistance : ThrowCamDistance, tb);
 
-        var shoulder = pivot + view.X * Mathf.Lerp(_borrowedThird ? 0f : ShoulderOffset, ThrowCamOffset, tb);
+        // over the right shoulder, or the left once swapped (#460): the swap slides across in an eighth of a second
+        float offset = Mathf.Lerp(_borrowedThird ? 0f : ShoulderOffset, GunAim ? GunCamOffset : ThrowCamOffset, tb);
+        var shoulder = pivot + view.X * (offset * _shoulderSide);
         var wanted = shoulder + view.Z * distance;
 
         // cast from the body's centre, not the shoulder, so a wall at the player's right does not
@@ -2294,6 +2311,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var position = pivot.Lerp(wanted, _armBlend) + Vector3.Up * _landingDip * 0.5f;
         var lens = new Transform3D(view, position);
         _camera.GlobalTransform = _armBlend > through ? across * lens : lens;
+    }
+
+    /// <summary>Puts the on-foot camera over the other shoulder and saves the side (#460).</summary>
+    public void SwapShoulder()
+    {
+        var settings = Core.GameSettings.Current;
+        settings.LeftShoulder = !settings.LeftShoulder;
+        settings.Save();
     }
 
     /// <summary>
@@ -2594,6 +2619,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var car = (Car)CarSetups.Ride(old.Kind, id, TuningBits)!;   // the garage parts stay on
         car.Headlights = old.Headlights;
         car.RoofOpen = old.RoofOpen;
+        car.Bouncing = old.Bouncing;
         _ride = car;
         CarSetupId = id;
         RefreshVisual();
@@ -3100,6 +3126,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (UnitSport.Core.UiFocus.TextEntryActive) return;
 
+        // the other shoulder (#460): its own key, or R3 on a pad while a gun is shouldered
+        if (_ride == null && !@event.IsEcho() && (@event.IsActionPressed(PlayerInput.SwapShoulder)
+            || (GunAim && @event is InputEventJoypadButton && @event.IsActionPressed(PlayerInput.CameraToggle))))
+        {
+            SwapShoulder();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         if (@event.IsActionPressed(PlayerInput.CameraToggle) && !@event.IsEcho())
         {
             ToggleView();
@@ -3173,6 +3208,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (@event.IsActionPressed(PlayerInput.RoofToggle) && !@event.IsEcho() && _ride is Car { HasSoftTop: true } open)
         {
             open.RoofOpen = !open.RoofOpen;
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        // the same key pumps the hydraulics on a car that has them (#464)
+        if (@event.IsActionPressed(PlayerInput.RoofToggle) && !@event.IsEcho() && _ride is Car { HasHydraulics: true } hopper)
+        {
+            hopper.Bouncing = !hopper.Bouncing;
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -3874,10 +3917,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             WreckVehicle();
             return;
         }
+        // a pigeon goes up in feathers and the player walks out of them unhurt, dazed (#519)
+        if (flyer is Pigeon) Birds.BirdLife.Instance?.PlayerSplat(GlobalPosition, _flight.Velocity);
         // a wingsuit into the ground is the pilot hitting it, not a machine
-        TakeDamage((speed - 8f) * 3.5f, 0, DamageCause.Crash);
+        else TakeDamage((speed - 8f) * 3.5f, 0, DamageCause.Crash);
         Impacted?.Invoke(Mathf.Max(speed, 8f));
-        Announced?.Invoke(flyer is Wingsuit ? "SPLAT!" : "CRASH!", false);
+        Announced?.Invoke(flyer is Wingsuit or Pigeon ? "SPLAT!" : "CRASH!", false);
         PlayerInput.Rumble(1f, 1f, 0.5f);
         ApplyRide(RideKind.OnFoot, Vector3.Zero);
         _stunTimer = 1.5f;

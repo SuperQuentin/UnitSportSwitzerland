@@ -107,6 +107,8 @@ public partial class SettingsScreen : Screen
                 "Over the shoulder on foot, chase view mounted (V in game)");
             UiKit.SliderRow(rows, "Camera shake", 0, 1, 0.05, s.ScreenShake,
                 v => GameSettings.Current.ScreenShake = (float)v, Percent);
+            UiKit.ToggleRow(rows, "Pigeon flies tail first", s.TailFirstPigeon, on => GameSettings.Current.TailFirstPigeon = on,
+                "The backwards bird of old, kept as an option; drawing only, every pigeon on your screen");
             UiKit.ToggleRow(rows, "Find servers on your network", s.LanDiscovery, on => GameSettings.Current.LanDiscovery = on,
                 "Lists LAN servers on the Multiplayer screen");
         });

@@ -22,9 +22,16 @@ public static class InteriorValidator
                 errors.Add("no entry door on the front wall");
         }
         else
+        {
+            var named = new HashSet<string>();
             foreach (var e in l.Entrances)
+            {
                 if (!l.GroundFloor.Rooms.Any(r => r.Openings.Any(o => o.Kind == OpeningKind.Entry && OnWall(r, o, e.X, e.Z))))
                     errors.Add($"entrance for {e.Door} has no doorway at {e.X:F1},{e.Z:F1}");
+                // two entrances for one door would give it two portals and two leaves (#498)
+                if (!named.Add(e.Door)) errors.Add($"two entrances for door {e.Door}");
+            }
+        }
 
         for (int f = 0; f < l.Floors.Count; f++)
         {

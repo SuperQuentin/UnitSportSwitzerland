@@ -39,6 +39,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Interact: get in or out, search, door", PlayerInput.InteractMount),
             new("Travel menu: mounts and vehicles", PlayerInput.RideMenu, Pad: "{interact_mount} (nothing near)"),
             new("First / third person (driving: chase, cockpit, cockpit without your body)", PlayerInput.CameraToggle),
+            new("Camera over the other shoulder", PlayerInput.SwapShoulder, Pad: "R3 (aiming a gun)"),
             new("Base jump: jump again while falling", PlayerInput.Jump),
         }),
         ("Items", new Row[]
@@ -91,7 +92,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Car radio: next station", PlayerInput.RadioNext),
             new("Car radio: previous station", PlayerInput.RadioPrev),
             new("Car radio: stations and CDs (passengers too)", PlayerInput.RadioPanel),
-            new("Car: fold the soft top", PlayerInput.RoofToggle),
+            new("Car: fold the soft top / pump the hydraulics (Yaris)", PlayerInput.RoofToggle),
             new("At a car door: open it, then get in", PlayerInput.InteractMount),
             new("Open / shut the car door you are at", PlayerInput.CarDoor),
             new("Get out", PlayerInput.InteractMount),
