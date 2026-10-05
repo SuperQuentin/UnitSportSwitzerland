@@ -128,6 +128,7 @@ public static class Recipes
         ItemId.SwissArmyKnife, ItemId.IceTea, ItemId.Crisps, ItemId.GummyBears, ItemId.IsotonicDrink,
         // Battle Royale finds (#478)
         ItemId.Alphorn, ItemId.FonduePot, ItemId.SmokeCanister,
+        ItemId.Dogtag,   // a match's own (#480)
     };
 
     /// <summary>Everything a recipe gives, the main output first.</summary>

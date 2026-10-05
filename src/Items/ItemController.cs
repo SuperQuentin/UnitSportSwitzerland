@@ -189,7 +189,8 @@ public partial class ItemController : Node
         get
         {
             var p = CurrentPlayer();
-            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false } && p.Ride == RideKind.OnFoot ? p : null;
+            // downed (#475): no items until a team-mate picks you up
+            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false, Downed: false } && p.Ride == RideKind.OnFoot ? p : null;
         }
     }
 
@@ -458,7 +459,18 @@ public partial class ItemController : Node
                     break;
                 }
                 bool drink = def.Category == ItemCategory.Water;
-                StartUse(player, slot, def, ViewPose.Mouth, 0.35f, 0.6f, 0.3f, () =>
+                // dressing a wound takes a while, in the hand (#455): a fight does not reset on a click
+                float apply = MedicalSeconds(def.Id);
+                if (apply > 0f)
+                {
+                    if (!Inventory.IsHotbar(slot))
+                    {
+                        _ui.Toast($"Put the {def.Name.ToLowerInvariant()} on your hotbar to apply it.");
+                        break;
+                    }
+                    _inventory.Select(slot);
+                }
+                StartUse(player, slot, def, ViewPose.Mouth, 0.35f, apply > 0f ? apply : 0.6f, 0.3f, () =>
                 {
                     if (!player.Heal(def.Heal)) return;
                     _inventory.TakeOne(slot);
@@ -576,6 +588,14 @@ public partial class ItemController : Node
                 break;
             }
 
+            case ItemUse.Recall:
+            {
+                // a fallen team-mate's tag (#480): at a Postauto stop, they come back
+                string? refused = BattleRoyale.BrManager.Instance is { } br ? br.TryRecall() : "A dogtag is for a Battle Royale team-mate.";
+                _ui.Toast(refused ?? "The tag is handed in: your team-mate is on the way back.");
+                break;
+            }
+
             case ItemUse.Signal:
             {
                 // a flare calls a supply drop (#198): only where there is a match to drop into
@@ -683,13 +703,42 @@ public partial class ItemController : Node
         _useBusy = true;
         _usePeaked = false;
         _useItem = def.Id;
-        visual.PlayOneShot(pose, inTime, hold, outTime, () => { _usePeaked = true; effect(); });
+        visual.PlayOneShot(pose, inTime, hold, outTime, () => { _usePeaked = true; effect(); },
+            peakAfterHold: MedicalSeconds(def.Id) > 0f);
     }
+
+    /// <summary>
+    /// Seconds of dressing before a medical item heals (#455), 0 for food: switching items before
+    /// then cancels it and keeps the item.
+    /// </summary>
+    public static float MedicalSeconds(ItemId id) => id switch
+    {
+        ItemId.Bandage => 2.2f,
+        ItemId.FirstAidKit => 5.6f,
+        _ => 0f,
+    };
 
     private ulong _nextShotMs;
 
     /// <summary>When the alphorn may be blown again (#478), local seconds.</summary>
     private double _hornReadyAt;
+
+    /// <summary>Spread bloom (#455): how hot the gun in hand is, which gun, and when it last fired.</summary>
+    private float _heat;
+    private ItemId _heatGun;
+    private double _heatAt;
+
+    /// <summary>This shot's cone half-angle, degrees, and the bloom it leaves for the next one.</summary>
+    private float Bloom(WeaponDef weapon)
+    {
+        double now = Time.GetTicksMsec() / 1000.0;
+        float heat = weapon.Id == _heatGun ? WeaponDef.Cool(_heat, (float)(now - _heatAt)) : 0f;
+        float spread = weapon.SpreadAt(heat);
+        _heat = weapon.Heat(heat);
+        _heatGun = weapon.Id;
+        _heatAt = now;
+        return spread;
+    }
 
     // ------------------------------------------------------------------------------------
     // throwing, dropping, picking up (#206)
@@ -970,7 +1019,7 @@ public partial class ItemController : Node
             var (stream, pitch, db) = SfxSynth.Shotgun.Pick(SfxRng);
             Play(stream, pitch * weapon.Pitch);
         }
-        PlayerHits.Shoot(player, eye, aim, weapon);
+        PlayerHits.Shoot(player, eye, aim, weapon, Bloom(weapon));
         // a shot that meets a built piece first chips it (#274)
         Build.BuildTool.TryHit(player, eye, aim, weapon);
         // a shot through a supply crate breaks it open (#198)

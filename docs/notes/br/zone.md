@@ -13,28 +13,39 @@
 - **Next centres**: circle i's centre is uniform in the disc of radius `r(i-1) - r(i)` around the
   previous centre, clamped into the square and pulled back inside the previous circle. So every
   circle lies inside the one before.
+- **On the ground** (#477): at GO the server (`BrManager.GroundCentres`) draws each centre as above but
+  tries up to `ZoneSchedule.Tries` (12) seeded candidates, keeping the first whose disc has at most
+  `GoodEnough` (30 %) of bad ground, else the least bad. `ZoneSchedule.Badness`: 41 sunflower samples
+  over the disc, each on water (`BrMapImage.Wet`, the horizon lattice's water level) or on a slope over
+  35° (heights ±50 m) counts. The centres go out in `BrState.ZoneCentres` and every client builds its
+  zone from them (`ZoneSchedule(..., centres)`), so nobody needs the lattice and nobody disagrees.
+  Without the lattice (generated, fixture worlds) `ZoneCentres` is null: the seed's own zone.
+  `--brcheck`: a synthetic lake + cliff, circles on bad ground 533 → 35 of 800.
+- **The next circle while looting** (#477): `At` in phase 0 already gives the first shrink's circle as
+  `NextCentre`/`NextRadius`; the maps draw it dashed from the start, so a rotation can be planned
+  before the zone bites.
 - **Timetable**: the 6 km normal baseline below; times scale by `r0 / 3,420 m x pace` (short 0.8 / normal 1 / long 1.3),
   the same as `side / 6 km` for a full circle; a small field never under half (5 players on 5 km: about 20 min a round).
 
   | Phase | Wait | Shrink | End radius | Damage |
   |---|---|---|---|---|
   | Loot | 4:00 | - | 3,420 m | 0 |
-  | 1 | 2:00 | 3:00 | 0.618 r0 | 1 HP/s |
-  | 2 | 3:00 | 2:30 | 0.397 r0 | 2 HP/s |
-  | 3 | 2:30 | 2:00 | 0.25 r0 | 3 HP/s |
-  | 4 | 2:00 | 1:45 | 0.147 r0 | 5 HP/s |
-  | 5 | 1:45 | 1:30 | 0.082 r0 | 7 HP/s |
-  | 6 | 1:30 | 1:15 | 0.041 r0 | 10 HP/s |
-  | 7 | 1:15 | 1:00 | 0.0176 r0 | 15 HP/s |
-  | 8 | 1:00 | 1:00 | 0 | 25 HP/s |
+  | 1 | 2:00 | 3:00 | 0.618 r0 | 2 HP/s |
+  | 2 | 3:00 | 2:30 | 0.397 r0 | 3 HP/s |
+  | 3 | 2:30 | 2:00 | 0.25 r0 | 5 HP/s |
+  | 4 | 2:00 | 1:45 | 0.147 r0 | 7 HP/s |
+  | 5 | 1:45 | 1:30 | 0.082 r0 | 10 HP/s |
+  | 6 | 1:30 | 1:15 | 0.041 r0 | 14 HP/s |
+  | 7 | 1:15 | 1:00 | 0.0176 r0 | 20 HP/s |
+  | 8 | 1:00 | 1:00 | 0 | 30 HP/s |
 
   That makes 33 min at 6 km normal, plus about 2 min of countdown and landing. Damage is per second
-  outside the *current* circle, from the start of each phase's wait.
+  outside the *current* circle, from the start of each phase's wait. Raised in #455 (was 1, 2, 3, 5,
+  7, 10, 15, 25): 50 s outside the first circle now kills, where 100 s of phase 1 used to be shrugged off.
 - **Damage**: on the owner's machine (health is the owner's). Every 0.5 s,
   `TakeDamage(dps x dt, 0, DamageCause.Zone)`. The check is horizontal only: an interior lies straight
   under its building, so indoors needs no special case.
 - **Wall** (`ZoneWall`): an open `CylinderMesh` scaled to the radius, 3 km tall around the camera's
   height. Drawn by `shaders/br_zone_wall.gdshader`: unshaded, cull off, stripes about every 12 m,
   rising bands, stronger up close, Bayer-dithered. Hidden at radius 0.
-- Not yet: rejecting centres over lakes or steep slopes (the server and clients would need the same
-  height data); a terrain tint outside the circle (shader globals).
+- Not yet: glaciers (the lattice has no cover classes); a terrain tint outside the circle (shader globals).

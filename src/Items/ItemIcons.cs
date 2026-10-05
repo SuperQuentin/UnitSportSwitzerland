@@ -1156,6 +1156,23 @@ public static class ItemIcons
             ".....kkkkkkk....",
         };
 
+        d[ItemId.Dogtag] = new[]
+        {
+            "......kk........",
+            ".....k..k.......",
+            "....k....k......",
+            "...kkkkkkkkkk...",
+            "..kwaaaaaaaagk..",
+            "..kaGaGaGaaagk..",
+            "..kaaaaaaaaagk..",
+            "..kaGGGaGGaagk..",
+            "..kaaaaaaaaagk..",
+            "..kaGaGGaGaagk..",
+            "..kaaaaaaaaagk..",
+            "..kgggggggggGk..",
+            "...kkkkkkkkkk...",
+        };
+
         d[ItemId.FlareGun] = new[]
         {
             "................",

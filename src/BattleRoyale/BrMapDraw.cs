@@ -18,6 +18,8 @@ public static class BrMapDraw
     public static readonly Color Rare = new(1f, 0.6f, 0.2f);
     public static readonly Color Mate = new(0.35f, 1f, 0.45f);
     public static readonly Color Horn = new(1f, 0.62f, 0.2f);
+    public static readonly Color Postauto = new(1f, 0.8f, 0f);
+    public static readonly Color Ping = new(1f, 0.45f, 0.85f);
     public static readonly Color Plane = new(0.95f, 0.95f, 0.85f);
 
     /// <summary>The supply drops of the match: zone position, and whether still falling.</summary>
@@ -39,7 +41,8 @@ public static class BrMapDraw
             float r = z.Radius * ppm;
             c.DrawArc(centre, r + reach * 0.5f, 0, Mathf.Tau, 128, Storm, reach);
             c.DrawArc(centre, r, 0, Mathf.Tau, 128, Edge, 2f);
-            if (z.Phase > 0 && !z.Over) Dashed(c, toScreen(z.NextCentre), z.NextRadius * ppm, Next);
+            // the next circle, from the loot time on (#477)
+            if (!z.Over) Dashed(c, toScreen(z.NextCentre), z.NextRadius * ppm, Next);
         }
 
         // the cargo plane (#207) until its doors close: its line, the stretch the doors are open, the plane
@@ -87,6 +90,23 @@ public static class BrMapDraw
             c.DrawArc(p, 9f, 0, Mathf.Tau, 16, Horn, 2.5f);
             c.DrawArc(p, 15f, 0, Mathf.Tau, 20, Horn with { A = 0.5f }, 1.5f);
             c.DrawString(ThemeDB.FallbackFont, p + new Vector2(12, -10), horn.Name, HorizontalAlignment.Left, -1, 11, Horn);
+        }
+
+        // the team's pings (#469): a pin in the pinger's name
+        foreach (var ping in br.Pings)
+        {
+            var p = toScreen(ping.At);
+            Pin(c, p, Ping);
+            c.DrawString(ThemeDB.FallbackFont, p + new Vector2(9, -12), ping.Name, HorizontalAlignment.Left, -1, 11, Ping);
+        }
+
+        // the Postauto stops (#480): yellow squares, where a dogtag recalls a team-mate
+        foreach (var (stop, _) in br.Stops())
+        {
+            var p = toScreen(stop);
+            c.DrawRect(new Rect2(p - new Vector2(6, 6), new Vector2(12, 12)), Postauto);
+            c.DrawRect(new Rect2(p - new Vector2(6, 6), new Vector2(12, 12)), Colors.Black, false, 1.2f);
+            c.DrawString(ThemeDB.FallbackFont, p + new Vector2(-3.5f, 4.5f), "P", HorizontalAlignment.Left, -1, 11, Colors.Black);
         }
 
         if (br.Waypoint is { } wp) Pin(c, toScreen(wp), Waypoint);

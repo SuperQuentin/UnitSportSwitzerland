@@ -56,7 +56,7 @@ public static class ItemDefs
         new(ItemId.Francs, "Swiss francs", "Money. Never takes a slot: it is counted as cash, and deposited to your account at a bank counter.",
             ItemUse.Material, 9999, new Color(0.80f, 0.70f, 0.35f), "CHF", 0, ItemCategory.Money, 1f),
         Eat(ItemId.Bandage, "Bandage", 10, "#f2eee6", "BD", 25, ItemCategory.Medical, 5),
-        Eat(ItemId.FirstAidKit, "First-aid kit", 3, "#d02828", "+", 100, ItemCategory.Medical, 30),
+        Eat(ItemId.FirstAidKit, "First-aid kit", 3, "#d02828", "+", 75, ItemCategory.Medical, 30),
 
         Mat(ItemId.ScrapMetal, "Scrap metal", 50, "#7c8088", "SM", ItemCategory.Scrap, 1),
         Mat(ItemId.Plastic, "Plastic", 50, "#e0e4e8", "PL", ItemCategory.Scrap, 0.5f),
@@ -130,6 +130,8 @@ public static class ItemDefs
             ItemUse.Share, 2, new Color(0.80f, 0.15f, 0.12f), "FO", 0, ItemCategory.Food, 40f),
         new(ItemId.SmokeCanister, "Smoke canister", "{use_item} throws it ahead: a cloud for 12 seconds that hides whoever is inside from the radar.",
             ItemUse.Smoke, 3, new Color(0.62f, 0.64f, 0.62f), "SM", 0, ItemCategory.Gear, 25f),
+        new(ItemId.Dogtag, "Dogtag", "A fallen team-mate's tag. {use_item} at a Postauto stop (yellow on the map) before zone 4: they are dropped back in.",
+            ItemUse.Recall, 3, new Color(0.75f, 0.76f, 0.78f), "DT", 0, ItemCategory.Gear, 0f),
         // bags (#208): found in houses, worn in the bag slot, one row of the pack per 9 slots
         Bag(ItemId.BeltPouch, "Belt pouch", "#6a5a3a", "BP", 9, 15),
         Bag(ItemId.Handbag, "Handbag", "#8a2a3a", "HB", 18, 40),

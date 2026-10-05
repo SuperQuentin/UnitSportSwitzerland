@@ -145,6 +145,9 @@ public enum ItemId
     FonduePot = 191,
     /// <summary>Thrown: a cloud that hides who is inside from the radar.</summary>
     SmokeCanister = 192,
+
+    /// <summary>A fallen squad player's tag (#480): used at a Postauto stop, it brings them back (<c>BrManager.Recall</c>).</summary>
+    Dogtag = 193,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -191,4 +194,6 @@ public enum ItemUse
     Share,
     /// <summary>Use throws it ahead, where it smokes (<see cref="ItemId.SmokeCanister"/>, #478).</summary>
     Smoke,
+    /// <summary>Use, at a Postauto stop, recalls a fallen team-mate (<see cref="ItemId.Dogtag"/>, #480).</summary>
+    Recall,
 }
