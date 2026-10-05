@@ -311,13 +311,15 @@ public static class An124MeshBuilder
                 if (sg > 0 && rz > d0 - 0.1f && rz < d1 + 0.1f) continue;
                 m.Box(new Vector3(sg * (LiningX - 0.03f), yc, rz), new Vector3(0.05f, h, 0.1f), Rib);
             }
-        m.Box(new Vector3(0, HoldCeilingY + 0.02f, (rear + front) * 0.5f), new Vector3(LiningX * 2f, 0.04f, front - rear), Lining);
+        HatchedSlab(m, HoldCeilingY, HoldCeilingY + 0.04f, rear, front, LiningX, Lining);
         for (float z = rear + 1.5f; z < front - 0.5f; z += 3.0f)
             foreach (float x in new[] { -1.4f, 1.4f })
-                m.Box(new Vector3(x, HoldCeilingY - 0.01f, z), new Vector3(0.5f, 0.03f, 0.2f), Lamp);
-        // the gantry crane rails along the ceiling
-        foreach (float x in new[] { -2.4f, 2.4f })
-            m.Box(new Vector3(x, HoldCeilingY - 0.12f, (rear + front) * 0.5f), new Vector3(0.18f, 0.22f, front - rear), Metal);
+                if (x > 0f || z < LadderFootZ - 0.1f || z > UpperRearZ + 0.1f)
+                    m.Box(new Vector3(x, HoldCeilingY - 0.01f, z), new Vector3(0.5f, 0.03f, 0.2f), Lamp);
+        // the gantry crane rails along the ceiling, the right one stopping either side of the hatch
+        m.Box(new Vector3(2.4f, HoldCeilingY - 0.12f, (rear + front) * 0.5f), new Vector3(0.18f, 0.22f, front - rear), Metal);
+        foreach (var (z0, z1) in new[] { (rear, LadderFootZ), (UpperRearZ, front) })
+            m.Box(new Vector3(-2.4f, HoldCeilingY - 0.12f, (z0 + z1) * 0.5f), new Vector3(0.18f, 0.22f, z1 - z0), Metal);
 
         // the ladder: two stringers and the treads, a hand rail on its open side
         float run = UpperRearZ - LadderFootZ, rise = UpperFloorY - FloorY;
@@ -334,6 +336,25 @@ public static class An124MeshBuilder
         m.Box(new Vector3(railX, UpperFloorY + 1.0f, (LadderFootZ + UpperRearZ) * 0.5f), new Vector3(0.05f, 0.05f, run), Yellow);
     }
 
+    /// <summary>
+    /// A slab across the hold between two heights and stations, with the hatch the ladder climbs through
+    /// cut out (the walk's hole, <see cref="An124Deck"/>): whole, it capped the ladder (#547).
+    /// </summary>
+    private static void HatchedSlab(MeshScratch m, float y0, float y1, float z0, float z1, float halfX, Color c)
+    {
+        float h0 = Mathf.Max(z0, LadderFootZ), h1 = Mathf.Min(z1, UpperRearZ);
+        float xIn = LadderX + LadderWidth * 0.5f, xOut = LadderX - LadderWidth * 0.5f, yc = (y0 + y1) * 0.5f, t = y1 - y0;
+        void Piece(float xa, float xb, float za, float zb)
+        {
+            if (xb - xa > 0.01f && zb - za > 0.01f) m.Box(new Vector3((xa + xb) * 0.5f, yc, (za + zb) * 0.5f), new Vector3(xb - xa, t, zb - za), c);
+        }
+        if (h1 <= h0) { Piece(-halfX, halfX, z0, z1); return; }
+        Piece(-halfX, halfX, z0, h0);
+        Piece(-halfX, halfX, h1, z1);
+        Piece(xIn, halfX, h0, h1);
+        Piece(-halfX, xOut, h0, h1);
+    }
+
     // ---- the upper deck and the cockpit ------------------------------------------------------
 
     private static void Upper(MeshScratch m)
@@ -341,7 +362,7 @@ public static class An124MeshBuilder
         float rear = LadderFootZ - 0.1f, front = CabinFrontZ;
         // its floor is the hold's ceiling (drawn there); on it a carpet, round the ladder's hole
         m.Box(new Vector3(0, UpperFloorY - 0.01f, (UpperRearZ + CockpitFloorFrontZ) * 0.5f), new Vector3(UpperWallX * 2f, 0.04f, CockpitFloorFrontZ - UpperRearZ), Seat.Darkened(0.4f));
-        m.Box(new Vector3(0, (HoldCeilingY + UpperFloorY) * 0.5f, (rear + CockpitFloorFrontZ) * 0.5f), new Vector3(UpperWallX * 2f, UpperFloorY - HoldCeilingY - 0.04f, CockpitFloorFrontZ - rear), Lining);
+        HatchedSlab(m, HoldCeilingY + 0.02f, UpperFloorY - 0.02f, rear, CockpitFloorFrontZ, UpperWallX, Lining);
         float wy = (UpperFloorY + UpperCeilingY) * 0.5f, wh = UpperCeilingY - UpperFloorY;
         // the side linings, up to where the ceiling's coves lean in, with the windows cut through and lined
         // out to the skin's panes (behind a plain lining they were hidden, #491)

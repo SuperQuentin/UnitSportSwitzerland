@@ -65,6 +65,21 @@ public partial class FreighterCheck : Node
         GD.Print($"[freightercheck] wrote {path}");
     }
 
+    /// <summary>A picture from a camera of its own, at an authored eye looking at an authored point of the aircraft.</summary>
+    private async Task ShotAt(string name, Vector3 eye, Vector3 at)
+    {
+        if (!Shots || !Drawn || Frame() is not { } frame) return;
+        var was = GetViewport().GetCamera3D();
+        var cam = new Camera3D { Fov = 60f, Far = 4000f };
+        AddChild(cam);
+        cam.GlobalPosition = frame.GlobalTransform * AircraftMeshBuilder.Flip(eye);
+        cam.LookAt(frame.GlobalTransform * AircraftMeshBuilder.Flip(at), Vector3.Up);
+        cam.MakeCurrent();
+        await Shot(name);
+        cam.QueueFree();
+        was?.MakeCurrent();
+    }
+
     private static bool Drawn => DisplayServer.GetName() != "headless";
 
     /// <summary>The drawn freighter, wherever it is (driven: the player's visual; parked: a vehicle's).</summary>
@@ -153,6 +168,9 @@ public partial class FreighterCheck : Node
         Expect(jet.DoorsOpen == (1 << RampDoor | 1 << CrewDoor) && (!Drawn || Rig()?.DoorOpen(RampDoor) >= 1f && Rig()?.DoorOpen(CrewDoor) >= 1f),
             $"G lowered the ramp and opened the crew door (doors {jet.DoorsOpen})");
         await Shot("ramp_open");
+        // from low behind and beside: the sides stop at the skin, only the ramp reaches the ground (#545)
+        await ShotAt("ramp_open_rear_quarter", new Vector3(-9f, 2f, -21f), new Vector3(0, 1.6f, -8f));
+        await ShotAt("ramp_open_side", new Vector3(-13f, 1.4f, -8.5f), new Vector3(0, 1.6f, -8.5f));
 
         // up from the captain's seat onto the flight deck, then down the stairs into the hold
         Expect(me.TryInteract() && await Until(() => me.Aboard && me.Ride == RideKind.OnFoot, 5),

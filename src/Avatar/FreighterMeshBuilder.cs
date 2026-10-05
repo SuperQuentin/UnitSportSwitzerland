@@ -257,6 +257,9 @@ public static class FreighterMeshBuilder
 
     private const float LiningX = HoldHalfWidth + 0.03f, LiningT = 0.06f;
 
+    /// <summary>The side linings' foot at station z: the floor, aft of the ramp's hinge the skin's lower edge over the ramp (its rows' top).</summary>
+    private static float LiningBottom(float z) => z >= RampHingeZ ? FloorY : Mathf.Max(FloorY, RampTop(z));
+
     private static void Hold(MeshScratch m)
     {
         float front = HoldFrontZ, rear = RearWallZ;
@@ -284,7 +287,20 @@ public static class FreighterMeshBuilder
             var cuts = new List<(float From, float To)> { (ParaDoorZ - DoorWidth * 0.5f, ParaDoorZ + DoorWidth * 0.5f) };
             if (sg > 0) cuts.Add((CrewDoorZ - DoorWidth * 0.5f, CrewDoorZ + DoorWidth * 0.5f));
             cuts.Sort((p, q) => p.From.CompareTo(q.From));
-            float z = rear;
+            // aft of the ramp's hinge the lining stands on the skin's lower edge, which sweeps up over the
+            // ramp: down to the floor it hung below the fuselage as a flat wall once the ramp opened (#545)
+            {
+                var zs = Zs(rear, RampHingeZ);
+                var rings = new Vector3[zs.Count][];
+                float xi = sg * LiningX, xo = sg * (LiningX + LiningT);
+                for (int i = 0; i < zs.Count; i++)
+                {
+                    float y0 = LiningBottom(zs[i]);
+                    rings[i] = new[] { new Vector3(xo, y0, zs[i]), new Vector3(xo, HoldCeilingY, zs[i]), new Vector3(xi, HoldCeilingY, zs[i]), new Vector3(xi, y0, zs[i]) };
+                }
+                m.Loft(rings, new[] { Lining, Lining, Lining, Lining }, Lining);
+            }
+            float z = RampHingeZ;
             foreach (var (f, t) in cuts)
             {
                 m.Box(new Vector3(x, (FloorY + HoldCeilingY) * 0.5f, (z + f) * 0.5f), new Vector3(LiningT, HoldCeilingY - FloorY, f - z), Lining);
@@ -297,7 +313,7 @@ public static class FreighterMeshBuilder
             {
                 bool door = false;
                 foreach (var (f, t) in cuts) if (rz > f - 0.05f && rz < t + 0.05f) door = true;
-                float y0 = door ? FloorY + DoorHeight : FloorY;
+                float y0 = door ? FloorY + DoorHeight : LiningBottom(rz);
                 m.Box(new Vector3(sg * (LiningX - 0.02f), (y0 + HoldCeilingY) * 0.5f, rz), new Vector3(0.04f, HoldCeilingY - y0, 0.07f), Rib);
             }
             // the troop benches: red webbing seat and back, a tube frame, legs every other seat
