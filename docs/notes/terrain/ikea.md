@@ -61,9 +61,10 @@ godot --headless --path . -- --ikeacheck --systems ui                 # the rule
 CHUNKS=<real chunk dir> godot --headless --path . -- --ikeacheck --systems ui
 ```
 
-`IkeaProbe` prints a row per store and what the data has there: `OK` with the solid it matched,
-`MISS` when nothing store-shaped covers the point, `AMBG` if two tiles ever claimed one. A `MISS` is
-one line in `Landmarks.Ikea` to correct. It then builds a store in code — a `BuildingTile` carrying
+`IkeaProbe` prints a row per store and what the data has there: `OK` with the solid it matched and
+its entrance in LV95 (go and stand at it), `MISS` when nothing store-shaped covers the point, `AMBG`
+if two tiles ever claimed one. A `MISS` is one line in `Landmarks.Ikea` to correct. It also writes
+the plan to `test_output/ikea/<store>.svg`. It then builds a store in code — a `BuildingTile` carrying
 the real Dietlikon tile id with one store-sized box on the point — and takes it all the way to its
 mesh, which is **necessary** rather than convenient: the fixture world has no buildings at all
 (`FixtureChunkSource` returns an empty list for every tile) and the generated world puts none at
@@ -84,6 +85,10 @@ Verified 9/9 matching exactly one solid: 9 201–31 717 m², 17–25 m tall.
   — the stores are all the same blue whatever year they were built. The **window grid is forced
   off**, which matters more than the colour: a grid of flats across 200 m of blue sheet is the one
   thing that would stop it reading as an IKEA.
+- **Entrance**: `BuildingFootprint.Compute` gives a store a 7.0 x 3.4 m glass front
+  (`StoreDoorWidth`/`StoreDoorHeight`, capped at a quarter of the facade) instead of the 1.8 m front
+  door `DoorWidthFor` gives a `Commercial` building. On 190 m of blue sheet that one detail is what
+  made it read as a warehouse again.
 - **Door sign**: free from the #273 shop machinery once the door reports `ShopType.Ikea`, which
   `BuildingFootprint.ComputeDoors` does by asking the type map before falling back to the key's hash.
 - **Pylon** (`Interiors/IkeaPylon`): the totem by the road, on the same `ChunkManager.TileFurnished`
@@ -91,9 +96,16 @@ Verified 9/9 matching exactly one solid: 9 201–31 717 m², 17–25 m tall.
   Deliberately **not** a road prop: #499 owns the car park's bays, signs, trolley shelters and
   barriers in the `.road` format, and a brand totem at nine known places does not belong there.
 - **Interior** (`InteriorGenerator.Ikea`): one `RoomType.IkeaMarket` hall through the building's full
-  height, rows of `FurnitureType.BlahajBin` with aisles between them, the lane in from the door kept
-  clear, and the till `Furnish` already guarantees for any `layout.Shop`. Capped at **120 bins** a
-  hall — a 28 000 m² slab would otherwise take about 3 000, more geometry than the rest of the tile.
+  height, a grid of `FurnitureType.BlahajBin` with aisles between them, the lane in from the door
+  kept clear, and the till `Furnish` already guarantees for any `layout.Shop`. **No windows**: the
+  facade has none, so a cut would be daylight through a blank wall, and `RoomLights` gives a
+  windowless room its own high bays.
+  Capped at **120 bins** a hall (`PieceBudget` caps it lower again) — a 28 000 m² slab would
+  otherwise take about 3 000, more geometry than the rest of the tile put together. **The budget is
+  spread, not spent front to back**: marching row by row laid two dense rows against the entrance
+  wall and left the other hundred metres bare, so both spacings widen by the square root of the
+  overshoot, which keeps the grid square and covers the floor. The SVG plan `--ikeacheck` writes is
+  what showed that; no assertion would have.
 - **`ShopType.Ikea`** is given by position, never by `ShopTables.TypeFor`'s hash, so it stays out of
   `ShopTables.Weights` the way `Garage` does, and out of the weights test's sampling.
 - **`ItemId.Blahaj`** is `Material`, which makes it throwable through `ItemDefs.Throwable`, and
