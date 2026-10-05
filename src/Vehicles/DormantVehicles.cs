@@ -517,16 +517,17 @@ public partial class DormantVehicles : Node3D, IOriginContainer
 
     /// <summary>
     /// The dormant slot nearest <paramref name="world"/> within <see cref="ReachM"/>, or null. What
-    /// <c>VehicleReach</c> asks before it decides there is nothing to get into.
+    /// <c>VehicleReach</c> asks before it decides there is nothing to get into. With
+    /// <paramref name="awakeToo"/>, a slot already woken counts as well: the bay is taken either way.
     /// </summary>
-    public VehicleSlot? Nearest(Vector3 world)
+    public VehicleSlot? Nearest(Vector3 world, bool awakeToo = false)
     {
         VehicleSlot? best = null;
         float bestD = ReachM * ReachM;
         foreach (var (_, slots) in _slots)
             foreach (var s in slots)
             {
-                if (_awake.Contains(KeyOf(s))) continue;
+                if (!awakeToo && _awake.Contains(KeyOf(s))) continue;
                 float d = _origin.ToWorld(s.E, s.N, s.Height).DistanceSquaredTo(world);
                 if (d >= bestD) continue;
                 bestD = d;
