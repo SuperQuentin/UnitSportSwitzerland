@@ -137,11 +137,14 @@ public static partial class Planner
             DiskBytes = downloadBytes,
             DiskPath = p.AltiDir,
             Seconds = downloadBytes / stats.EffectiveDownload + (toDownload.Count > 0 ? 5 : 0),
-            Skip = toDownload.Count == 0 ? "all tiles already downloaded or built" : !py ? noPython : null,
+            // No Python needed since #515 phase 1: SwissDownload talks to the STAC API itself, and
+            // shares swiss_data.py's manifest, so neither tool re-downloads what the other fetched.
+            Skip = toDownload.Count == 0 ? "all tiles already downloaded or built" : null,
             Run = r =>
             {
+                // still written: the terminal tool's --resume and swiss_data.py --tiles-file read it
                 WriteTiles(DownloadTilesFile(p), toDownload);
-                return r.SwissData(["--out", p.AltiDir, "swissalti3d", "--tiles-file", DownloadTilesFile(p)]);
+                return r.Download(() => SwissDownload.AltiAsync(p.AltiDir, toDownload, r.Progress, r.Cancellation));
             },
         });
 
@@ -588,6 +591,30 @@ public sealed partial class StepRun
         int code = await Exec(_c.Python, args, parse);
         if (code != 0) Fail($"{what} exited with {code}");
         return code == 0;
+    }
+
+    /// <summary>The step's progress sink, for a stage that reports its own progress.</summary>
+    public IStepProgress Progress => _progress;
+
+    /// <summary>Cancelled when the player stops the download.</summary>
+    public CancellationToken Cancellation => _ct;
+
+    /// <summary>
+    /// Runs one of the C# downloads (#515 phase 1) and folds what it measured back into this
+    /// machine's rate, the way <see cref="SwissData"/> does for the Python tool it replaced.
+    /// </summary>
+    public async Task<bool> Download(Func<Task<DownloadResult>> download)
+    {
+        var result = await download();
+        if (result.Error != null)
+        {
+            Fail(result.Error);
+            return false;
+        }
+        Log($"{result.Files} files, {result.Bytes:N0} bytes in {result.Seconds:F1} s ({result.Skipped} already current)");
+        if (result.Bytes > 50_000_000 && result.Seconds > 1)
+            _c.Stats.DownloadBytesPerSec = Stats.Blend(_c.Stats.DownloadBytesPerSec, result.Bytes / result.Seconds);
+        return true;
     }
 
     /// <summary>swiss_data.py with machine-readable progress; learns the download rate from it.</summary>

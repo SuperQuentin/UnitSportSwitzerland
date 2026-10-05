@@ -152,6 +152,17 @@ public partial class ControlsHelp : CanvasLayer
             new("Down", PlayerInput.FlyDown),
             new("Fast", PlayerInput.FlyBoost),
         }),
+        // The map screen on the title menu (#515). Its keys are deliberately the same ones the world
+        // uses for other things, as T and the rest already are: only the map screen reads them, and
+        // there is no free letter left on the keyboard.
+        ("Map screen (main menu)", new Row[]
+        {
+            new("Pan", Keys: "Arrows / WASD, or right-drag", Pad: "Left stick"),
+            new("Zoom", PlayerInput.MapZoomIn),
+            new("Draw / erase the selection", Keys: "Drag, or Enter on the centre tile", Pad: "A"),
+            new("Switch tool (rectangle, brush, erase)", PlayerInput.MapTool),
+            new("Find a place", PlayerInput.MapSearch),
+        }),
         ("Game", new Row[]
         {
             new("Map: search a place and go", PlayerInput.Teleport),

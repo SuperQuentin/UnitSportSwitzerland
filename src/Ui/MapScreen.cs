@@ -56,6 +56,12 @@ public partial class MapScreen : Screen
 
     private Layers _layers = Layers.Terrain | Layers.Roads | Layers.Places;
     private PanelContainer? _panel;
+    private VBoxContainer? _jobRow;
+    private Label _jobLine = null!;
+    private Label _jobDetail = null!;
+    private ProgressBar _jobBar = null!;
+    private Button _jobStop = null!;
+    private double _sinceJobPoll;
 
     public static MapScreen Create() => new(Role.Library, null) { Name = "Map" };
 
@@ -309,6 +315,63 @@ public partial class MapScreen : Screen
         into.AddChild(UiKit.Section("This selection"));
         _summary = UiKit.VBox(3);
         into.AddChild(_summary);
+
+        _jobRow = UiKit.VBox(4);
+        into.AddChild(_jobRow);
+        _jobLine = UiKit.Text("", UiTheme.FontSmall, UiTheme.Amber, wrap: true);
+        _jobRow.AddChild(_jobLine);
+        _jobBar = new ProgressBar { MaxValue = 1, ShowPercentage = false, CustomMinimumSize = new Vector2(0, 6) };
+        _jobRow.AddChild(_jobBar);
+        _jobDetail = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextFaint, wrap: true);
+        _jobRow.AddChild(_jobDetail);
+        _jobStop = UiKit.Button("Stop the download");
+        _jobStop.Pressed += () =>
+        {
+            Terrain.DownloadJob.CancelCurrent();
+            _map.Working.Clear();
+        };
+        _jobRow.AddChild(_jobStop);
+        _jobRow.Visible = false;
+    }
+
+    /// <summary>
+    /// Follows the background job. Polled rather than signalled: the job runs on a worker and
+    /// publishes an immutable snapshot, so this reads one value a few times a second and touches
+    /// no lock the worker is holding.
+    /// </summary>
+    public override void _Process(double delta)
+    {
+        if (_jobRow == null) return;
+        _sinceJobPoll += delta;
+        if (_sinceJobPoll < 0.2) return;
+        _sinceJobPoll = 0;
+
+        if (Terrain.DownloadJob.CurrentProgress is not { } progress)
+        {
+            _jobRow.Visible = false;
+            return;
+        }
+
+        _jobRow.Visible = true;
+        _jobLine.Text = progress.Error != null ? $"Download stopped: {progress.Error}"
+            : progress.Finished ? $"Downloaded {progress.Tiles:N0} km². It is on the map next time a world loads."
+            : progress.Running ? $"{progress.StepTitle}  ({progress.StepIndex + 1}/{progress.StepCount})"
+            : "Download stopped.";
+        _jobLine.AddThemeColorOverride("font_color",
+            progress.Error != null ? UiTheme.Bad : progress.Finished ? UiTheme.Good : UiTheme.Amber);
+        _jobBar.Visible = progress.Running;
+        _jobBar.Value = progress.Overall;
+        _jobDetail.Text = progress.Running ? progress.Latest : "";
+        _jobStop.Visible = progress.Running;
+
+        if (!progress.Running && _map.Working.Count > 0)
+        {
+            // the job is over: stop tinting its tiles and pick up whatever it actually wrote
+            _map.Working.Clear();
+            _local = LocalState.Scan(_paths);
+            _map.Rescan(_local);
+            RefreshSummary();
+        }
     }
 
     /// <summary>
@@ -510,15 +573,22 @@ public partial class MapScreen : Screen
             return;
         }
 
-        // Phase 4 hands the plan to the background DownloadJob. Saving the selection is already
-        // useful on its own: the terminal wizard's --resume picks up exactly this.
+        if (Terrain.DownloadJob.Current is { Now.Running: true })
+        {
+            Modal.Inform(this, "Already downloading",
+                "One download is running. Two writing the same folders would fight over the shared "
+                + "record of what has been fetched. Stop it first, or wait for it to finish.");
+            return;
+        }
+
+        // Saved as well as started: the terminal wizard's --resume picks up exactly this selection.
         _state.Tiles = _selection.Tiles.OrderBy(t => t.E).ThenBy(t => t.N).Select(SetupState.Key).ToList();
         _state.Layers = _layers;
         _state.Save(_paths);
-        Modal.Inform(this, "Not downloading yet",
-            $"{_selection.Count:N0} tiles and the layers you chose are saved. Running the download from "
-            + "here arrives with the next phase of #515; until then the terminal wizard picks this "
-            + "selection up with --resume.");
+
+        Terrain.DownloadJob.Start(_paths, _country, _local, _selection, _layers, _stats, _state);
+        foreach (var t in _selection.Tiles) _map.Working.Add(t);
+        RefreshSummary();
     }
 
     public override void OnShown()
