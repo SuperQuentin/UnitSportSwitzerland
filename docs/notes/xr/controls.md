@@ -21,8 +21,11 @@ The full per-action design and rules: `xr/vr-action-map`.
 - **Triggers and grips.**
   - On foot, the triggers act as **shoulders**: right = use item / fire, left = aim.
   - Mounted, they act as **triggers**: throttle, and brake / plough.
-  - The grips are the shoulders (trick, boost, items), except while a grip holds something
-    (below): `XrPad.LeftGripBusy` / `RightGripBusy` mute it until it opens.
+  - Mounted, the grips are the shoulders (trick, boost, shift paddles, flaps), except while a grip
+    holds something (below): `XrPad.LeftGripBusy` / `RightGripBusy` mute it until it opens.
+  - On foot the grips only grab (#437): use and aim are the triggers' alone.
+- **Crouch (#437).** On foot, the head more than 0.35 m below where it was calibrated presses B
+  (slide while running, dive while swimming), never while a menu is open (B is back there).
 - **Hands (#243, `XR/XrHands`).** A grip closing (> 0.7, opens < 0.35) is the hand closing.
   - **Steering wheel**, first person in the driver's seat (car, truck, bus): a hand within 0.14 m of
     the rim catches it; its marker snaps onto the rim and rides round with it. The hands' turn about
@@ -37,6 +40,18 @@ The full per-action design and rules: `xr/vr-action-map`.
     (`FootPlayer.TryToggleCarDoor(hand)`) or 0.7 m of a building doorway, between sill and lintel
     (`InteriorManager.TryDoorByHand`), toggles it through the usual server-checked paths. A toggle,
     not a hand-driven swing: door state is binary on the network.
+  - **Things on the ground** (#437), on foot: a grip closing within 0.3 m of a dropped item picks it
+    up (`ItemController.PickUp`), of a radio opens its panel, as E on the thing pointed at does.
+  - **Fling to drop** (#437): a grip squeezed on nothing and let go with the hand moving over
+    2.5 m/s in the play space (walking does not count) taps `drop_item`.
+- **Wrist menu (#437, `XR/XrWristMenu`).** The back of the left wrist (the controller's +X) turned
+  toward the eyes, in view within 24° and 0.7 m, for 0.6 s opens a menu on the UI panel: travel,
+  inventory, map, bird journal, drop the held item (on foot), fly camera / walk, controls,
+  recentre. A pick taps the action (`XrPad.Tap`) after the menu has let the pointer go, so the
+  screen it opens is the one the key opens. In the world only (`XrRig.InWorld`), never on the
+  title. Prompts for an action with no controller input but a wrist entry say **Wrist**
+  (`XrWristMenu.Reaches`). `--xrwrist [Entry,Entry…]` opens it (and picks those, 2 s apart) for
+  checks with `--xrsim`.
 - **Pigeon (#217).** As a pigeon the triggers stay shoulders (right = drop), A flaps, B dives, the eye is
   the bird's (level), snap turn works perched or walking (`player/pigeon`).
 - **Analog triggers (#436).** Parsed events do not set `Input.GetJoyAxis`, so code that wants a

@@ -46,6 +46,10 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     private XRCamera3D _camera = null!;
     private XRController3D _left = null!, _right = null!;
     private XrPad _pad = null!;
+    private XrWristMenu _wrist = null!;
+
+    /// <summary>Following a camera in the world: not the title's backdrop, not before any camera.</summary>
+    public bool InWorld => Anchor != null && !_anchorIsBackdrop;
     private XrHands _hands = null!;
     private XrUi _ui = null!;
     private MeshInstance3D _vignette = null!;
@@ -152,6 +156,8 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _hands = new XrHands(_left, _leftMarker, _right, _rightMarker);
         _ui = new XrUi(_camera, _right);
         AddChild(_ui);
+        _wrist = new XrWristMenu(this);
+        AddChild(_wrist);
         Notice = new XrNotice();
         AddChild(Notice);
         if (XrSession.Simulated) Notice.CallDeferred(XrNotice.MethodName.Show, "VR", "simulated");
@@ -285,10 +291,11 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
 
         HandleSticks(player, calibrated, dt);
         // the hands first: a grip that holds the wheel or works a door is not a shoulder press
-        _hands.Update(player);
+        _hands.Update(player, dt);
         _pad.LeftGripBusy = _hands.LeftBusy;
         _pad.RightGripBusy = _hands.RightBusy;
         _pad.Update(player, calibrated, uiActive: _ui.Pointing, dt);
+        _wrist.Watch(_camera.GlobalTransform, _left, player, InWorld, dt);
         _ui.UpdatePanel(dt);
         UpdateSki(player, calibrated, dt);
         UpdateVignette(player, dt);

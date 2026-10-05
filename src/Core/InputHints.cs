@@ -61,7 +61,8 @@ public static class InputHints
             // the control XR.XrPad replays as this pad event, by the controller's own name (#435)
             foreach (var e in events)
                 if (XR.XrPad.Control(e) is { } control && XR.XrProfile.Name(control) is { } name) return name;
-            // nothing on the controllers: a keyboard within reach is better than nothing
+            // nothing on the controllers: the wrist menu, else a keyboard within reach (#437)
+            if (XR.XrWristMenu.Reaches(action)) return "Wrist";
         }
         else if (device == InputDevice.Gamepad)
         {
