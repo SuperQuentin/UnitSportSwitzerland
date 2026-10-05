@@ -115,13 +115,16 @@ public partial class AirlinerNetProbe : ChatProbe
         await Seconds(1);
         Expect(!air.State.GearDown && !air.State.OnGround, "gear lever up in the air");
         Say("gear up");
-        await Seconds(2);
-        if (Cockpit(me) is { } flying)
+        // #421: what A's own screens show, said every second (it accelerates) until B has compared its copy's
+        for (int i = 0; i < 40 && !_heard.Any(l => l.Contains("AN B seen gear")); i++)
         {
-            var r = flying.Shown;
-            Say($"deckair {r.Ias} {r.Alt} {r.Hdg} {r.Gear} {(air.State.GearDown ? 1 : 0)}");
+            if (Cockpit(me) is { } flying)
+            {
+                var r = flying.Shown;
+                Say($"deckair {r.Ias} {r.Alt} {r.Hdg} {r.Gear} {(air.State.GearDown ? 1 : 0)}");
+            }
+            await Seconds(1);
         }
-        await Heard("B", "seen gear", 30);
 
         // #416: B walks in A's cabin while A flies; both peers must put B at the same spot in it
         if (!await Heard("B", "walked", 60)) { Fail("B never walked aboard"); return; }
@@ -206,11 +209,17 @@ public partial class AirlinerNetProbe : ChatProbe
         bool travelled = await Until(() => Airliner.LookOf(a!.Anim).Gear == 0f && Mathf.Abs((Gear()?.Rotation.X ?? 0f) - down) > 1.5f, 20);
         Expect(travelled, $"B's copy folds the nose gear up ({down:F2} -> {Gear()?.Rotation.X ?? 0f:F2} rad)");
         // #421: in flight, B's copy of the screens reads A's speed, height, heading, the gear up and its lever
-        if (await Heard("A", "deckair", 10) && Words("A", "deckair") is { Length: >= 5 } f && Rig()?.Cockpit is { } panel)
+        if (await Heard("A", "deckair", 10) && Rig()?.Cockpit is { } panel)
         {
-            int ias = int.Parse(f[0]), alt = int.Parse(f[1]), hdg = int.Parse(f[2]), gear = int.Parse(f[3]);
-            bool same = await Until(() => panel.Shown is var r && Mathf.Abs(r.Ias - ias) <= 6 && Mathf.Abs(r.Alt - alt) <= 60
-                && Mathf.Abs(Mathf.Wrap(r.Hdg - hdg, -180, 180)) <= 2 && r.Gear == gear && panel.GearLeverDrawn > 0f, 6);
+            // against A's latest word: A says it every second
+            int ias = 0, alt = 0, hdg = 0, gear = 0;
+            bool same = await Until(() =>
+            {
+                if (Words("A", "deckair") is not { Length: >= 5 } f) return false;
+                ias = int.Parse(f[0]); alt = int.Parse(f[1]); hdg = int.Parse(f[2]); gear = int.Parse(f[3]);
+                return panel.Shown is var r && Mathf.Abs(r.Ias - ias) <= 6 && Mathf.Abs(r.Alt - alt) <= 60
+                    && Mathf.Abs(Mathf.Wrap(r.Hdg - hdg, -180, 180)) <= 2 && r.Gear == gear && panel.GearLeverDrawn > 0f;
+            }, 10);
             var r = panel.Shown;
             Expect(same, $"B's copy of A's screens in flight: {r.Ias}/{ias} kt, {r.Alt}/{alt} ft, heading {r.Hdg}/{hdg}, gear {r.Gear}/{gear}, "
                 + $"gear lever {Mathf.RadToDeg(panel.GearLeverDrawn):F0}° (up +)");

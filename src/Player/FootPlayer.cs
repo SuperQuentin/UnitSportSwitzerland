@@ -1733,6 +1733,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         else if (_visual is Avatar.AirlinerRig { Cockpit: { } deck })
         {
             deck.PilotShown = SeatIndex == 0;
+            deck.Velocity = WorldVelocity;
             if (deck.PaletteKey != (OutfitBits, RiderIndex())) { deck.PaletteKey = (OutfitBits, RiderIndex()); deck.Palette = FigurePalette(RiderIndex()); }
         }
         SetRemoteEngine(_remoteRide);
@@ -3945,6 +3946,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             // the pilot in the captain's seat (#421): no head of one's own in the lens, no body either if asked
             deck.PilotShown = SeatIndex == 0;
+            deck.Velocity = _flight.Velocity;
             deck.View = !InCockpit ? Avatar.CockpitView.Outside
                 : Core.GameSettings.Current.CockpitBody ? Avatar.CockpitView.Body : Avatar.CockpitView.Bare;
             if (deck.PaletteKey != (OutfitBits, RiderIndex())) { deck.PaletteKey = (OutfitBits, RiderIndex()); deck.Palette = FigurePalette(RiderIndex()); }

@@ -76,6 +76,13 @@ public partial class AircraftCockpit : Node3D
     private const int MasterWarnL = 0, MasterWarnR = 1, MasterCautL = 2, MasterCautR = 3, GearLamp = 4, ApLamp = 7, LampCount = 8;
 
     // ---- the pilot ---------------------------------------------------------------------------------
+    /// <summary>
+    /// The aircraft's velocity as its player knows it (the owner's, a remote copy's replicated one), set each
+    /// frame; without it (parked) the drawn frame's own motion is used. Position deltas of a remote copy
+    /// read its interpolation, not its speed.
+    /// </summary>
+    public Vector3? Velocity;
+
     /// <summary>Someone is at the controls: their figure is drawn in the captain's seat.</summary>
     public bool PilotShown;
     public CockpitView View = CockpitView.Outside;
@@ -540,7 +547,12 @@ public partial class AircraftCockpit : Node3D
     {
         if (!IsInsideTree()) return;
         var pos = GlobalPosition;
-        if (_hasLast && dt > 0f)
+        if (Velocity is { } known && dt > 0f)
+        {
+            _vel = _vel.Lerp(known, MathX.Damp(8f, dt));
+            _vs = Mathf.Lerp(_vs, known.Y, MathX.Damp(2f, dt));
+        }
+        else if (_hasLast && dt > 0f)
         {
             var v = (pos - _lastPos) / dt;
             // a jump (the floating origin moving, a teleport) is not a speed
