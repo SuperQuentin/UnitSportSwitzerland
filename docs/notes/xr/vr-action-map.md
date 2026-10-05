@@ -43,7 +43,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | drop_item | Q / — | ok: fling an empty squeeze, or the wrist menu (#437) | a real throw by release velocity |
 | next / prev_item, slot_1-6 | wheel, 1-6 / D-pad → | ok: R stick ↓, grip at the right / left hip (#437) | slots shown at the hip |
 | inventory | I, Tab / Back | ok: Menu hold | keep |
-| quick_wheel | X / D-pad ← | gap | hold **R3** → radial |
+| quick_wheel | X / D-pad ← | ok: hold a grip at the left hip, aim with the right hand, let go to pick (#489) | keep |
 | build_turn, next piece | R, aim+wheel / D-pad ↑, LB+D-pad → | gap | **twist the hand** while aiming; R stick ←/→ steps the piece |
 | bird_journal | J / — | ok: wrist menu (#437) | keep |
 

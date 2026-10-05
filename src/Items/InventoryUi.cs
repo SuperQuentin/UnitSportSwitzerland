@@ -774,6 +774,8 @@ public partial class InventoryUi : CanvasLayer
     private void OpenWheel()
     {
         _wheelAim = Vector2.Zero;
+        // in VR the right hand aims, from where it is now (#489)
+        if (XR.XrSession.Active) XR.XrSession.ZeroHandAim();
         _wheel.Highlight = -1;
         _wheel.Visible = true;
         UiFocus.Set(_wheel, true);
@@ -1120,6 +1122,8 @@ public partial class InventoryUi : CanvasLayer
             var stick = Input.GetVector(PlayerInput.LookLeft, PlayerInput.LookRight,
                 PlayerInput.LookUp, PlayerInput.LookDown);
             if (stick.Length() > 0.5f) _wheelAim = stick;
+            // in VR the right hand points at a slot, as a stick would (#489)
+            else if (XR.XrSession.Active) _wheelAim = XR.XrSession.HandAim.LimitLength(1.2f);
             int before = _wheel.Highlight;
             _wheel.Highlight = _wheelAim.Length() < 0.35f
                 ? before

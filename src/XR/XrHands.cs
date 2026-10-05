@@ -45,6 +45,8 @@ internal sealed class XrHands
     private const float ReachOut = 0.45f;
     /// <summary>A hand this far below the eyes, and to a side, is at the hip: its grip steps the hotbar, m.</summary>
     private const float HipDrop = 0.75f, HipSide = 0.12f;
+    /// <summary>A grip held this long at the left hip opens the quick wheel instead of stepping back (#489), s.</summary>
+    private const float HipHold = 0.35f;
     /// <summary>An empty squeeze let go this fast (in the play space, so walking does not count) drops the held item, m/s.</summary>
     private const float FlingSpeed = 2.5f;
 
@@ -58,6 +60,10 @@ internal sealed class XrHands
         public bool OnWheel;
         /// <summary>Closed on nothing: let go with a fling, it drops the held item.</summary>
         public bool EmptySqueeze;
+        /// <summary>Closed at the left hip: how long, s; −1 when not (#489).</summary>
+        public float AtLeftHip = -1f;
+        /// <summary>Held there long enough: the quick wheel is open until the grip opens.</summary>
+        public bool QuickWheel;
         /// <summary>Where the hand was last frame in the play space, for its speed.</summary>
         public Vector3 PrevLocal;
         public float Speed;
@@ -98,6 +104,11 @@ internal sealed class XrHands
             {
                 hand.Closed = false;
                 hand.Busy = false;
+                // the left hip (#489): let go of a held wheel to pick, or a short squeeze steps back
+                if (hand.QuickWheel) XrPad.Press(Core.PlayerInput.QuickWheel, false);
+                else if (hand.AtLeftHip >= 0f) XrPad.Tap(Core.PlayerInput.PrevItem);
+                hand.QuickWheel = false;
+                hand.AtLeftHip = -1f;
                 if (hand.OnWheel) LetGo(hand, buzz: false);
                 if (hand.EmptySqueeze && hand.Speed > FlingSpeed && player is { Ride: RideKind.OnFoot, RidingWith: 0 }
                     && Input.MouseMode == Input.MouseModeEnum.Captured)
@@ -105,6 +116,16 @@ internal sealed class XrHands
                 hand.EmptySqueeze = false;
             }
             else if (closing) hand.Closed = true;
+            else if (hand.Closed && hand.AtLeftHip >= 0f && !hand.QuickWheel)
+            {
+                hand.AtLeftHip += dt;
+                if (hand.AtLeftHip > HipHold)
+                {
+                    hand.QuickWheel = true;
+                    XrPad.Press(Core.PlayerInput.QuickWheel, true);
+                    Buzz(hand, 0.3f, 0.04f);
+                }
+            }
 
             if (hand.OnWheel && grip == null) LetGo(hand, buzz: false);
             if (closing && !hand.Busy && !(hand == _left ? leftClaimed : rightClaimed)) TryTake(hand, player, grip);
@@ -145,7 +166,7 @@ internal sealed class XrHands
         }
         if (player is not { Ride: RideKind.OnFoot, RidingWith: 0 }) return;
         if (player.TryToggleCarDoor(at) || Interiors.InteriorManager.Instance?.TryDoorByHand(player, at) == true
-            || TakeAt(at) || AtHip(at) || ReachingOut(player, at))
+            || TakeAt(at) || AtHip(hand, at) || ReachingOut(player, at))
         {
             hand.Busy = true;
             Buzz(hand, 0.5f, 0.06f);
@@ -155,17 +176,23 @@ internal sealed class XrHands
     }
 
     /// <summary>
-    /// A hand at the hip steps the hotbar (#437): the right hip to the next item, the left to the
-    /// previous, as a holster would hand them over.
+    /// A hand at the hip steps the hotbar (#437), as a holster would hand them over: the right hip to
+    /// the next item at once; the left hip to the previous one when the grip opens soon, or, held,
+    /// opens the quick wheel, aimed by the right hand and picked by letting go (#489).
     /// </summary>
-    private bool AtHip(Vector3 at)
+    private bool AtHip(Hand hand, Vector3 at)
     {
         if (Input.MouseMode != Input.MouseModeEnum.Captured) return false;
         var local = _head.AffineInverse() * at;
         if (local.Y > -HipDrop || Mathf.Abs(local.X) < HipSide) return false;
-        XrPad.Tap(local.X > 0f ? Core.PlayerInput.NextItem : Core.PlayerInput.PrevItem);
+        if (local.X > 0f) XrPad.Tap(Core.PlayerInput.NextItem);
+        else hand.AtLeftHip = 0f;
         return true;
     }
+
+    /// <summary>What a prompt calls a gesture that stands for an action with no controller input (#489).</summary>
+    public static string? Gesture(string action) =>
+        action == Core.PlayerInput.QuickWheel ? "Hold grip at left hip" : null;
 
     /// <summary>
     /// A hand reaching out in front closes on what E would act on there (#437): a seat, a ladder, a

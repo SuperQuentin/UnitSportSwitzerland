@@ -62,6 +62,7 @@ public static class InputHints
             foreach (var e in events)
                 if (XR.XrPad.Control(e) is { } control && XR.XrProfile.Name(control) is { } name) return name;
             // nothing on the controllers: the wrist menu, else a keyboard within reach (#437)
+            if (XR.XrHands.Gesture(action) is { } gesture) return gesture;
             if (XR.XrWristMenu.Reaches(action)) return "Wrist";
         }
         else if (device == InputDevice.Gamepad)
