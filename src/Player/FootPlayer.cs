@@ -3874,10 +3874,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             WreckVehicle();
             return;
         }
+        // a pigeon goes up in feathers and the player walks out of them unhurt, dazed (#519)
+        if (flyer is Pigeon) Birds.BirdLife.Instance?.PlayerSplat(GlobalPosition, _flight.Velocity);
         // a wingsuit into the ground is the pilot hitting it, not a machine
-        TakeDamage((speed - 8f) * 3.5f, 0, DamageCause.Crash);
+        else TakeDamage((speed - 8f) * 3.5f, 0, DamageCause.Crash);
         Impacted?.Invoke(Mathf.Max(speed, 8f));
-        Announced?.Invoke(flyer is Wingsuit ? "SPLAT!" : "CRASH!", false);
+        Announced?.Invoke(flyer is Wingsuit or Pigeon ? "SPLAT!" : "CRASH!", false);
         PlayerInput.Rumble(1f, 1f, 0.5f);
         ApplyRide(RideKind.OnFoot, Vector3.Zero);
         _stunTimer = 1.5f;
