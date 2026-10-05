@@ -81,7 +81,12 @@ deserves, and each of them is a real door: it opens, it has a portal, you walk t
   `Spacing` of its own wall between two of them, a barn and a garage with a pedestrian door beside
   their vehicle one, every plan valid, and every facade door arriving at a doorway inside that
   agrees with it on how the door hangs. The spacing arithmetic itself is tier 0
-  (`DoorBudgetTests`, `DoorKeyTests`). Live: `--interiorcheck` walks in and out of a house with a
+  (`DoorBudgetTests`, `DoorKeyTests`). One solid is **turned 31 deg** and the check asserts each
+  doorway's inward direction against its door's outward (#524): distance and containment survive a
+  mirrored plan frame, a direction does not, and on a box square to the world a mirror and the
+  truth agree — so without a turned solid the check could not see the class of bug #499 shipped.
+  Demonstrated both ways: mirroring `Entrances`' `faces` fails 7 assertions, and giving the check
+  itself a wrong-handed frame fails **only** the turned block. Live: `--interiorcheck` walks in and out of a house with a
   cellar, and `--interiorcheck --doorkind Agricultural` into a barn by its pair, with its open
   leaves' edges in reach. Measured on the generated world: 100 m shop front 6 doors, works hall 5,
   block of flats 3, barn and garage 2, house and shed 1.
