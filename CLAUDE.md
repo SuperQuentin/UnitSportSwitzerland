@@ -44,17 +44,17 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
      first commit is pushed: an open draft is how parallel workers see the feature exists in
      step 1. It stays a draft for the whole of the work; mark it ready (`gh pr ready <N>`) only
      once the feature is complete and the tier of step 4 has been run and recorded in it.
+  4. **Test the cheapest tier that can catch the bug** (`docs/notes/general/testing.md`):
+     `tools/test.sh quick` on every change; **tier 2 (`tools/test.sh net`) when the change touches
+     network/authority/replicated state**, checking the feature on the **remote** peer (replication,
+     authority, animation, damage). The PR says what was and was not verified. Network model:
+     `src/Net/CLAUDE.md`.
 - **Every new action or interaction is designed for keyboard, gamepad and VR together**: before
   coding a new key, decide its pad button and its VR way (grip the thing, or the pad through
   `XrPad`), show it with `InputHints`, and add its row to `xr/vr-action-map`
   (`docs/notes/general/new-action-three-devices.md`).
 - **Simple tasks** (docs/notes tweaks, one-line fixes) skip the workflow: commit straight on `main`
   in the main checkout and push. No issue, branch, worktree or PR.
-  4. **Test the cheapest tier that can catch the bug** (`docs/notes/general/testing.md`):
-     `tools/test.sh quick` on every change; **tier 2 (`tools/test.sh net`) when the change touches
-     network/authority/replicated state**, checking the feature on the **remote** peer (replication,
-     authority, animation, damage). The PR says what was and was not verified. Network model:
-     `src/Net/CLAUDE.md`.
 - Check and probe output goes in `test_output/` (gitignored), never the repo root.
 - **In conversation, issues and PRs are always links**, e.g.
   [#346](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/346), never a bare `#346`
