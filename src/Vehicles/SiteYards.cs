@@ -1,0 +1,108 @@
+using Godot;
+using UnitSport.Interiors;
+using UnitSport.Terrain;
+using UnitSport.Terrain.Format;
+
+namespace UnitSport.Vehicles;
+
+/// <summary>
+/// The open ground an industrial site parks its fleet on (#496 phase 3), worked out from the tile's
+/// own files and handed to <see cref="DormantSlots.ForSite"/>. This is the Godot half of that
+/// provider: it may use <c>src/Interiors</c> and the plan box, which
+/// <see cref="VehicleSlot"/>'s file may not if it is to stay in tier 0.
+///
+/// <para>
+/// A yard is the strip in front of the building's own front — the wall its door is on, which
+/// <see cref="BuildingFootprint"/> has already pointed at the street. That is where the apron,
+/// the forecourt and the lorry park actually are. It is kept clear of the doorway itself, and any
+/// vehicle that would end up inside another building or on a road is dropped rather than nudged:
+/// a dropped slot leaves a gap, a nudged one would be a car in a hedge.
+/// </para>
+///
+/// <para>
+/// Everything here is a pure function of the tile's bytes, like the provider it feeds, so the
+/// server and every client work out the same yards and nothing about them is ever sent.
+/// </para>
+/// </summary>
+public static class SiteYards
+{
+    /// <summary>The apron: no vehicle stands within this of the facade, so the doors stay usable.</summary>
+    private const float Apron = 7f;
+
+    /// <summary>Beyond this from the building there is no yard, whatever the site.</summary>
+    private static float DepthFor(BuildingType site) => site switch
+    {
+        BuildingType.Depot => 34f,       // artics need to swing and to stand nose to tail
+        BuildingType.Warehouse => 26f,   // trailers backed at the dock, and room to pull off it
+        BuildingType.Factory => 20f,
+        BuildingType.Dealership => 17f,  // a forecourt is shallow and faces the road
+        _ => 13f,                        // a body shop: a handful of customers' cars
+    };
+
+    /// <summary>
+    /// The yards of one tile's industrial sites, in building order. <paramref name="grid"/> gives
+    /// the ground each stands on; without it the building's own base is used, which is close enough
+    /// for flat ground and is what <see cref="BuildingFootprint"/> falls back to as well.
+    /// </summary>
+    public static List<SiteYard> For(BuildingTile tile, RoadTile? roads, ChunkGrid? grid)
+    {
+        var yards = new List<SiteYard>();
+        var map = BuildingTypes.For(tile);
+        for (int i = 0; i < tile.Buildings.Count; i++)
+        {
+            if (map.Boxes[i] is not { } box) continue;
+            var b = tile.Buildings[i];
+            var key = new BuildingKey(tile.Id.E, tile.Id.N, i);
+            var site = BuildingTypes.SiteFor(key.ToString(), b.Kind, box.Width, box.Depth, b.MaxY - b.MinY);
+            if (site == BuildingType.None) continue;
+
+            // the front: the wall the door is on, already aimed at the street by the footprint
+            var fp = BuildingFootprint.Compute(tile, i, roads, grid);
+            if (fp == null || fp.Door.Width <= 0) continue;
+            var outward = new Vector2(fp.Door.Outward.X, fp.Door.Outward.Z);
+            if (outward.LengthSquared() < 1e-6f) continue;
+            outward = outward.Normalized();
+
+            // a vehicle in the yard stands nose out, away from the building: yaw 0 faces -Z, so the
+            // heading whose facing is `outward` is atan2(-x, -z)
+            float heading = Mathf.Atan2(-outward.X, -outward.Y);
+            float depth = DepthFor(site);
+            var door = new Vector2(fp.Door.Position.X, fp.Door.Position.Z);
+            var centre = door + outward * (Apron + depth / 2);
+
+            float ground = grid != null
+                ? (float)grid.SampleMeshHeight(tile.Id.MinE + centre.X, tile.Id.MaxN - centre.Y)
+                : b.MinY;
+            // a little wider than the facade, because a yard is not walled to the building's line
+            yards.Add(new SiteYard(key.ToString(), (int)site,
+                centre.X, ground, centre.Y, heading, fp.Width + 6f, depth));
+        }
+        return yards;
+    }
+
+    /// <summary>
+    /// Whether a slot cannot stand where the grid put it: inside a building (its own included —
+    /// an L-shaped works wraps round its own yard), or on a road. Measured in tile-local metres,
+    /// from the same bytes on every peer.
+    /// </summary>
+    public static bool Blocked(BuildingTile tile, RoadTile? roads, BuildingTypeMap map, Vector2 at, float radius)
+    {
+        for (int i = 0; i < tile.Buildings.Count; i++)
+            if (map.Boxes[i] is { } box && box.DistanceTo(at) < radius) return true;
+        if (roads == null) return false;
+        foreach (var s in roads.Segments)
+        {
+            if (RoadFormat.IsAerial(s.Class)) continue;
+            float half = s.Width * 0.5f + radius;
+            for (int k = 0; k + 1 < s.PointCount; k++)
+            {
+                var a = new Vector2(s.Points[k * 3], s.Points[k * 3 + 2]);
+                var c = new Vector2(s.Points[k * 3 + 3], s.Points[k * 3 + 5]);
+                var ac = c - a;
+                float t = ac.LengthSquared() < 1e-6f ? 0 : Mathf.Clamp((at - a).Dot(ac) / ac.LengthSquared(), 0, 1);
+                if ((a + ac * t).DistanceTo(at) < half) return true;
+            }
+        }
+        return false;
+    }
+}
