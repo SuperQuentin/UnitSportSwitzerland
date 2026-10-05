@@ -131,6 +131,19 @@ public static class BrMapImage
         return (h00 * (1 - fu) + h10 * fu) * (1 - fv) + (h01 * (1 - fu) + h11 * fu) * fv;
     }
 
+    /// <summary>Whether the lattice sample nearest (<paramref name="e"/>, <paramref name="n"/>) is under water (#477).</summary>
+    internal static bool Wet(HorizonIndex? horizon, double e, double n)
+    {
+        var id = TileId.FromLv95(e, n);
+        if (horizon == null || !horizon.TryGet(id, out var heights) || !horizon.TryGetWater(id, out var levels)) return false;
+        int last = HorizonFormat.SamplesPerSide - 1;
+        int c = Math.Clamp((int)Math.Round((e - id.MinE) / HorizonFormat.SpacingM), 0, last);
+        int r = Math.Clamp((int)Math.Round((id.MaxN - n) / HorizonFormat.SpacingM), 0, last);
+        int i = r * HorizonFormat.SamplesPerSide + c;
+        HorizonIndex.Surface(heights[i], levels, i, out bool wet);
+        return wet;
+    }
+
     private static Color Ground(CoverClass cover, float h) => cover switch
     {
         CoverClass.Forest or CoverClass.OpenForest or CoverClass.Shrub => new Color(0.30f, 0.46f, 0.24f),

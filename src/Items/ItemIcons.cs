@@ -1100,6 +1100,79 @@ public static class ItemIcons
             ".kkkkkkkkkkkkkk.",
         };
 
+        // Swiss match items (#478): a long wooden horn, a red caquelon of cheese, a grey canister
+        d[ItemId.Alphorn] = new[]
+        {
+            "kk..............",
+            "kTk.............",
+            ".ktk............",
+            "..ktk...........",
+            "...ktk..........",
+            "....ktk.........",
+            ".....ktk........",
+            "......ktk.......",
+            ".......kNtk.....",
+            "........kNtk....",
+            ".........kNnkkk.",
+            "..........kNnnTk",
+            "..........kNNnnk",
+            "...........kNNNk",
+            "............kkk.",
+        };
+
+        d[ItemId.FonduePot] = new[]
+        {
+            "................",
+            "........kk......",
+            ".......kwk......",
+            "......kwk.......",
+            "..kkkkkkkkkkk...",
+            ".kylyyyyyyyyYk..",
+            ".kkkkkkkkkkkkk..",
+            ".kqrrrrrrrrrRk..",
+            "kqrrrrrrrrrrrRk.",
+            "kqrrrrrrrrrrrRkk",
+            "krrrrrrrrrrrrRRk",
+            ".kRrrrrrrrrrRkk.",
+            "..kRRRRRRRRRk...",
+            "...kkkkkkkkk....",
+        };
+
+        d[ItemId.SmokeCanister] = new[]
+        {
+            "......kkkk......",
+            ".....kddddk.kk..",
+            "......kkkk.kyk..",
+            ".....kaaggkkyk..",
+            "....kaaggggkYk..",
+            "....kagggggGk...",
+            "....kagggggGk...",
+            "....kaddddddk...",
+            "....kagggggGk...",
+            "....kagggggGk...",
+            "....kagggggGk...",
+            "....kagggggGk...",
+            "....kGGGGGGGk...",
+            ".....kkkkkkk....",
+        };
+
+        d[ItemId.Dogtag] = new[]
+        {
+            "......kk........",
+            ".....k..k.......",
+            "....k....k......",
+            "...kkkkkkkkkk...",
+            "..kwaaaaaaaagk..",
+            "..kaGaGaGaaagk..",
+            "..kaaaaaaaaagk..",
+            "..kaGGGaGGaagk..",
+            "..kaaaaaaaaagk..",
+            "..kaGaGGaGaagk..",
+            "..kaaaaaaaaagk..",
+            "..kgggggggggGk..",
+            "...kkkkkkkkkk...",
+        };
+
         d[ItemId.FlareGun] = new[]
         {
             "................",
