@@ -25,9 +25,16 @@ public sealed partial class Truck
     /// <summary>The mounted implement on the linkage (plough, drill, mower), or null.</summary>
     public TrailerSpec? Implement => Trailer is { Mounted: true } ? Trailer : null;
 
-    /// <summary>What works the ground now: the combine's header or the implement, lowered; None raised.</summary>
+    /// <summary>
+    /// The lowered implement's bar is over soil (a field, open ground), not over a road or paving:
+    /// set by the driver's peer before each step (<c>FootPlayer.SenseSoil</c>). Off the soil it
+    /// neither pulls nor works.
+    /// </summary>
+    public bool OnSoil { get; set; } = true;
+
+    /// <summary>What works the ground now: the combine's header or the implement, lowered (and over soil); None raised.</summary>
     public FarmTool WorkTool => !Spec.Farm || !Lowered ? FarmTool.None
-        : Spec.Tool != FarmTool.None ? Spec.Tool : Implement?.Tool ?? FarmTool.None;
+        : Spec.Tool != FarmTool.None ? Spec.Tool : OnSoil ? Implement?.Tool ?? FarmTool.None : FarmTool.None;
 
     /// <summary>The working width of the header or the implement, m.</summary>
     public float WorkWidth => Spec.Tool != FarmTool.None ? Spec.WorkWidth : Implement?.WorkWidth ?? 0f;
@@ -98,7 +105,8 @@ public sealed partial class Truck
             b.Grounded = Lowered;
             Train.ComputeLoads();
         }
-        b.Draft = Lowered ? DraftOf(imp, Mathf.Abs(u) * 3.6f) : 0f;
+        // on tarmac the bodies or coulters ride on the surface: no soil to pull through
+        b.Draft = Lowered && OnSoil ? DraftOf(imp, Mathf.Abs(u) * 3.6f) : 0f;
     }
 
     /// <summary>The soil's pull on a lowered implement at a speed, N (<see cref="MachineLoad"/>, ASABE D497).</summary>

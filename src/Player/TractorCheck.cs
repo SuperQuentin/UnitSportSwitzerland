@@ -114,7 +114,7 @@ public partial class TractorCheck : Node
 
         var alone = new Truck(Tractor);
         var (t40, top) = Drive(alone, 60f, 39f);
-        Expect(t40 is > 5f and < 40f && top is > 37f and < 41.5f, $"{Tractor.Label}: 0-39 km/h in {F(t40)} s, top {F(top)} km/h (40 km/h tractor), {alone.GearLabel}");
+        Expect(t40 is > 12f and < 24f && top is > 37f and < 41.5f, $"{Tractor.Label}: 0-39 km/h in {F(t40)} s (a Vario ~15-20 s to 40), top {F(top)} km/h (40 km/h tractor), {alone.GearLabel}");
 
         int plough = Index(TrailerBody.Plough), drill = Index(TrailerBody.SeedDrill), mower = Index(TrailerBody.Mower), tipper = Index(TrailerBody.Tipper);
         var up = new Truck(Tractor, TrailerCatalog.Code(plough, 0f));
@@ -128,6 +128,10 @@ public partial class TractorCheck : Node
         var (_, ploughTop) = Drive(down, 40f, 99f, Surface.Grass);
         Expect(ploughTop > 3f && ploughTop < 0.5f * raisedTop, $"the plough down slows it to a ploughing pace: {F(ploughTop)} km/h against {F(raisedTop)} raised (draft {F(Truck.DraftOf(TrailerCatalog.All[plough], ploughTop) / 1000f)} kN)");
         Expect(down.Train.Bodies[0].StaticLoad[1] < rear - 1000f * 9.81f, "lowered, its weight is on the soil, not the linkage");
+        var onRoad = new Truck(Tractor, TrailerCatalog.Code(plough, 0f)) { Lowered = true, OnSoil = false };
+        var (_, roadTop) = Drive(onRoad, 40f, 99f);
+        Expect(roadTop > 0.95f * raisedTop && onRoad.WorkTool == FarmTool.None,
+            $"lowered on tarmac it pulls and works nothing: {F(roadTop)} km/h");
         Expect(Mathf.Abs(down.Articulation[0]) < 0.01f, $"rigid on the linkage: {F(Mathf.RadToDeg(down.Articulation[0]), "F2")}°");
         var drilling = new Truck(Tractor, TrailerCatalog.Code(drill, 0f)) { Lowered = true };
         var (_, drillTop) = Drive(drilling, 40f, 99f, Surface.Grass);
@@ -212,7 +216,11 @@ public partial class TractorCheck : Node
         }
         if (me == null) { Finish("no local player"); return; }
         if (VehicleManager.Instance is not { } vehicles || ItemController.Instance is not { } items) { Finish("no vehicles or items here"); return; }
-        me.Announced += (text, _) => Log($"  announced: {text}");
+        me.Announced += (text, _) =>
+        {
+            Log($"  announced: {text}");
+            if (text.Contains("on the road")) _roadToasts++;
+        };
         // an empty pack lent for the check (as a match does): the saved one is neither read nor overwritten
         items.Inventory.BeginMatch();
         MachineWork.FakeSweep = Field;
@@ -364,8 +372,145 @@ public partial class TractorCheck : Node
         else Expect(false, "the tipping trailer is gone");
         await Shot("6-on-foot");
 
+        // ---- a lowered plough across a paved strip: it rides on the tarmac, pulls and works nothing ----
+        await OverTarmac(me);
+
+        // ---- the ridge: each implement up and down, driven up, down and across a 15 % slope ----
         MachineWork.FakeSweep = null;
+        foreach (var body in new[] { TrailerBody.Plough, TrailerBody.SeedDrill, TrailerBody.Mower })
+            foreach (bool lowered in new[] { false, true })
+                await OnSlope(me, body, lowered);
+
         Finish(null);
+    }
+
+    private int _roadToasts;
+
+    private static float GroundAt(FootPlayer me, Vector3 p) => me.Terrain != null && me.Terrain.TryGetHeight(p, out float g) ? g : 0f;
+
+    /// <summary>Heading east (+X) and north (-Z) as a yaw.</summary>
+    private const float East = -Mathf.Pi / 2f, North = 0f;
+
+    /// <summary>
+    /// A fresh tractor at a point of the course (metres from the start, x east, y north), facing
+    /// <paramref name="yaw"/>, with <paramref name="body"/> on its linkage, lowered or not. The one
+    /// driven before goes (a picker's swap): nothing is left in the way.
+    /// </summary>
+    private async Task<Truck?> FreshTractor(FootPlayer me, double x, double y, float yaw, TrailerBody body, bool lowered)
+    {
+        if (me.Vehicle != null)
+        {
+            await Stop(me);
+            me.RideControls = null;
+            me.SetRide(RideKind.OnFoot);
+            await Wait(0.5);
+        }
+        var at = new Vector3((float)x, 0f, (float)-y);
+        at.Y = GroundAt(me, at) + 0.5f;
+        me.PlaceAt(at, yaw);
+        await Until(() => me.IsOnFloor(), 10);
+        if (!me.SetRide(Tractor.Kind) || me.Vehicle is not Truck t) { Expect(false, $"a tractor at {F((float)x, "F0")},{F((float)y, "F0")}"); return null; }
+        await Wait(1.0);
+        if (!me.SpawnTrailer(Index(body), 0f)) { Expect(false, $"{body} coupled at {F((float)x, "F0")},{F((float)y, "F0")}"); return null; }
+        await Wait(0.5);
+        t.Lowered = lowered;
+        await Wait(1.0);
+        return t;
+    }
+
+    /// <summary>
+    /// The plough lowered, driven east across the course's paved strip: over the paving its bodies
+    /// pull nothing and work nothing, a toast says once to raise it; past it, it works again.
+    /// </summary>
+    private async Task OverTarmac(FootPlayer me)
+    {
+        MachineWork.FakeSweep = Field;
+        const double from = Terrain.Fixture.FixtureCourse.PavedFrom, to = from + Terrain.Fixture.FixtureCourse.PavedWidth;
+        if (await FreshTractor(me, from - 25, 0, East, TrailerBody.Plough, true) is not { } t) return;
+        int toasts = _roadToasts, before = me.FarmStrokes, onStrip = -1, after = -1;
+        float worstDraft = 0f, stripKmh = 0f, fieldKmh = 0f;
+        bool sawRoad = false, workedOnStrip = false;
+        me.RideControls = () => new RideInput(0.6f, 0f, 0f, false);
+        for (double time = 0; time < 60; time += 0.05)
+        {
+            await Wait(0.05);
+            float bx = me.ToGlobal(t.WorkBarNode).X;
+            int strokes = me.FarmStrokes;
+            // a metre inside the strip: last tick's bar may still have been on the grass
+            if (bx > from + 1 && bx < to - 1)
+            {
+                if (onStrip < 0) onStrip = strokes;
+                sawRoad |= !t.OnSoil;
+                workedOnStrip |= strokes > onStrip;
+                worstDraft = Mathf.Max(worstDraft, t.Train.Bodies[^1].Draft);
+                stripKmh = Mathf.Max(stripKmh, me.GroundSpeed * 3.6f);
+            }
+            else if (bx < from - 1) fieldKmh = me.GroundSpeed * 3.6f;
+            if (bx > to + 4) { after = strokes; break; }
+        }
+        int afterStrip = me.FarmStrokes;
+        await Wait(1.5);
+        Expect(onStrip > before && sawRoad && !workedOnStrip && worstDraft == 0f,
+            $"the plough lowered over paving: off the soil {sawRoad}, worked there {workedOnStrip} ({onStrip - before} strokes on the grass before), draft {F(worstDraft / 1000f)} kN, {F(stripKmh)} km/h against {F(fieldKmh)} on the grass");
+        Expect(_roadToasts - toasts == 1, $"one toast to raise it on the road ({_roadToasts - toasts})");
+        Expect(after >= 0 && t.OnSoil && me.FarmStrokes > afterStrip, $"past the paving it works again ({me.FarmStrokes - afterStrip} strokes)");
+        await Stop(me);
+        me.RideControls = null;
+    }
+
+    /// <summary>
+    /// The tractor with <paramref name="body"/> raised or lowered on the course's ridge: driven up
+    /// it, down the far side and across its slope. It stays on its wheels: its height over the
+    /// ground within 8 cm of the flat's, hardly a tick off the floor, not rolled over.
+    /// </summary>
+    private async Task OnSlope(FootPlayer me, TrailerBody body, bool lowered)
+    {
+        const double a = Terrain.Fixture.FixtureCourse.RidgeFrom, slope = Terrain.Fixture.FixtureCourse.RidgeSlope,
+            plateau = Terrain.Fixture.FixtureCourse.RidgePlateau;
+        string what = $"{TrailerCatalog.All[Index(body)].Label} {(lowered ? "down" : "up")}";
+        float rest = float.NaN;
+        // up from the flat onto the slope, down from the plateau onto the flat, across mid-slope; at a
+        // working pace, braking on the way down (Stop: a tractor's driver does not coast down a 15 % hill)
+        var runs = new (string Name, double X, double Y, float Yaw, System.Func<Vector3, Vector3, bool> Done, double Seconds)[]
+        {
+            ("up", a - 10, -40, East, (p, s) => p.X > a + 40, 90),
+            ("down", a + slope + plateau - 10, -40, East, (p, s) => p.X > a + 2 * slope + plateau + 10, 90),
+            ("across", a + slope / 2, -150, North, (p, s) => s.DistanceTo(p) > 50f, 60),
+        };
+        foreach (var run in runs)
+        {
+            if (await FreshTractor(me, run.X, run.Y, run.Yaw, body, lowered) is null) return;
+            float off0 = me.GlobalPosition.Y - GroundAt(me, me.GlobalPosition);
+            if (float.IsNaN(rest)) rest = off0;   // the first run starts on the flat
+            var start = me.GlobalPosition;
+            float worst = 0f, worstKmh = 0f, top = 0f, tilt = 0f;
+            int air = 0;
+            bool done = false;
+            int hits = me.SectionHits;
+            me.RideControls = () =>
+            {
+                float err = 12f - me.GroundSpeed * 3.6f;
+                return new RideInput(Mathf.Clamp(err * 0.3f, 0f, 1f), Mathf.Clamp(-(err + 2f) * 0.2f, 0f, 1f), 0f, false);
+            };
+            for (double time = 0; time < run.Seconds && me.Vehicle is Truck; time += 0.05)
+            {
+                await Wait(0.05);
+                var p = me.GlobalPosition;
+                float off = p.Y - GroundAt(me, p) - rest;
+                if (Mathf.Abs(off) > Mathf.Abs(worst)) { worst = off; worstKmh = me.GroundSpeed * 3.6f; }
+                if (!me.IsOnFloor()) air++;
+                top = Mathf.Max(top, me.GroundSpeed * 3.6f);
+                tilt = Mathf.Max(tilt, Mathf.RadToDeg(me.GlobalTransform.Basis.Y.AngleTo(Vector3.Up)));
+                if (CmdArgs.Has("trace") && Mathf.PosMod((float)time, 1f) < 0.05f)
+                    Log($"    {run.Name} t {F((float)time)} x {F(p.X)} y {F(p.Y, "F2")} ground {F(GroundAt(me, p), "F2")} off {F(off * 100f, "F0")} cm floor {me.IsOnFloor()} {F(me.GroundSpeed * 3.6f)} km/h {me.Heavy?.GearLabel}");
+                if (run.Done(p, start)) { done = true; break; }
+            }
+            bool truck = me.Vehicle is Truck;
+            Expect(done && truck && Mathf.Abs(worst) < 0.08f && air < 6 && tilt < 5f && me.SectionHits == hits,
+                $"{what}, {run.Name} the 15 % slope: on its wheels (worst {F(worst * 100f, "F0")} cm at {F(worstKmh)} km/h, start {F((off0 - rest) * 100f, "F0")} cm, {air} ticks off the floor, body tilt {F(tilt)}°, top {F(top)} km/h, {me.SectionHits - hits} section hits{(done ? "" : ", did not get there")}{(truck ? "" : ", WRECKED")})");
+        }
+        await Stop(me);
+        me.RideControls = null;
     }
 
     /// <summary>
