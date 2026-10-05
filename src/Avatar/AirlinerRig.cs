@@ -62,6 +62,15 @@ public partial class AirlinerRig : Node3D
 
     private const float Deg = Mathf.Pi / 180f;
 
+    /// <summary>The captain's eye, the rig's frame (−Z forward): where the cockpit camera sits (#421).</summary>
+    public Transform3D EyeFrame { get; private set; }
+
+    /// <summary>The pilots' seats' recline (the decks' <c>SeatAnchor</c>s).</summary>
+    public const float PilotRecline = 0.2f;
+
+    private void SetEye(Vector3 hipAuthored) =>
+        EyeFrame = new Transform3D(Basis.Identity, AircraftMeshBuilder.Flip(HumanMeshBuilder.DriverEye(hipAuthored, PilotRecline)));
+
     public static AirlinerRig CreateA320(Color tail)
     {
         var rig = new AirlinerRig { Name = "A320", _spec = AirlinerCatalog.A320 };
@@ -73,6 +82,7 @@ public partial class AirlinerRig : Node3D
         rig._stowL = A320MeshBuilder.GearStowAngle("GearMainL");
         rig._stowR = A320MeshBuilder.GearStowAngle("GearMainR");
         rig._stowNose = A320MeshBuilder.GearStowAngle("GearNose");
+        rig.SetEye(A320Layout.CaptainHip);
         for (int i = 0; i < A320Layout.DoorCount; i++)
             if (model.GetNodeOrNull<Node3D>($"Door{i}") is { } door) rig._doorParts.Add((i, door, Vector3.Up, A320MeshBuilder.DoorOpenAngle(i), A320MeshBuilder.DoorOpenAngle(i)));
         return rig;
@@ -91,6 +101,7 @@ public partial class AirlinerRig : Node3D
         rig._gearLDown = rig._gearL?.Position ?? Vector3.Zero;
         rig._gearRDown = rig._gearR?.Position ?? Vector3.Zero;
         rig._stowNose = FreighterMeshBuilder.NoseStowAngle;
+        rig.SetEye(FreighterLayout.CaptainHip);
         for (int i = 0; i < FreighterLayout.DoorCount; i++)
         {
             rig._doorRate[i] = FreighterMeshBuilder.DoorRate(i);
@@ -118,6 +129,7 @@ public partial class AirlinerRig : Node3D
         rig._gearRDown = rig._gearR?.Position ?? Vector3.Zero;
         rig._noseDown = rig._gearNose?.Position ?? Vector3.Zero;
         rig._stowNose = An124MeshBuilder.NoseStow;
+        rig.SetEye(An124Layout.PilotHip);
         rig._kneelDoor = An124Layout.KneelDoor;
         rig._kneelDrop = An124Layout.KneelDrop;
         for (int i = 0; i < An124Layout.DoorCount; i++)

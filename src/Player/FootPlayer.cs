@@ -626,8 +626,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>In a car's, a truck's or a bus's driver's seat, looking out through the windscreen (not the chase camera, not the garage's orbit).</summary>
     public bool InCockpit => !_thirdPerson && HasCockpit && ShowroomYaw == null && SeatIndex == 0;
 
-    /// <summary>What is ridden has a driver's seat with a cockpit (#69 cars, #157 trucks and buses).</summary>
-    private bool HasCockpit => _ride is Car or Truck or Airstairs;
+    /// <summary>What is ridden has a driver's seat with a cockpit (#69 cars, #157 trucks and buses, #421 aircraft).</summary>
+    private bool HasCockpit => _ride is Car or Truck or Airstairs or Airliner;
 
     private Rideable? _ride;
     private RideMotion _motion;
@@ -3944,6 +3944,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (_camera == null) return;
         if (flyer is Pigeon pigeon && PigeonEye(dt, pigeon)) return;
+        // an airliner's flight deck (#421): the captain's eye, as a car's cockpit
+        if (InCockpit && _visual is Avatar.AirlinerRig jet)
+        {
+            _lookIdle += dt;
+            UpdateCockpitCamera(jet.EyeFrame, dt);
+            return;
+        }
 
         Vector3 fwd;
         if (flyer.LookSteers)
@@ -4420,7 +4427,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             float back = MathX.Damp(5f, dt);
             _lookYaw = Mathf.Lerp(_lookYaw, 0f, back);
-            _pitch = Mathf.Lerp(_pitch, _ride is Truck ? HeavyCockpitPitch : CockpitPitch, back);
+            _pitch = Mathf.Lerp(_pitch, _ride is Truck ? HeavyCockpitPitch : _ride is Airliner ? AirlinerCockpitPitch : CockpitPitch, back);
         }
 
         var sway = Vector3.Zero;
@@ -4451,6 +4458,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     /// <summary>Resting look from the seat: a touch down, so the bonnet and the dials share the view with the road.</summary>
     private const float CockpitPitch = -0.1f;
+    /// <summary>An airliner (#421): out over the glareshield with the top of the screens in view.</summary>
+    private const float AirlinerCockpitPitch = -0.14f;
     /// <summary>A truck or bus: sat high over a flat wheel, the look rests lower, so the wheel and dials are in the view with the road.</summary>
     private const float HeavyCockpitPitch = -0.24f;
 

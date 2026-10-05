@@ -84,6 +84,10 @@ public partial class RideProbe : Node
                 "bike" or "roadbike" => RideKind.RoadBike,
                 "skis" or "ski" => RideKind.Skis,
                 "r1" => (RideKind)MotorbikeCatalog.First,
+                // the aircraft (#421): parked, on their brakes
+                "a320" => RideKind.A320,
+                "freighter" => RideKind.Freighter,
+                "an124" => RideKind.An124,
                 "monster" => (RideKind)(MotorbikeCatalog.First + 1),
                 // moto:N = MotorbikeCatalog.All[N]
                 _ when name.StartsWith("moto:") && int.TryParse(name[5..], out int b) => MotorbikeCatalog.All[b].Kind,
