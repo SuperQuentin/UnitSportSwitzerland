@@ -2,7 +2,8 @@
 # Farm fields over loopback (#494, src/Farming/FarmNetProbe): a dedicated server on the flat fixture in
 # July (--farmmonth 7: the wheat is ripe); client A ploughs a strip with a machine stroke and tills a
 # cell by hand; client B joins after and must get the strip from the subscribe snapshot, then sees
-# A's second strip live, and is refused ploughing the potatoes from 200 m away. The server's
+# A's second strip live, then a cell A tills and sows by hand with a hoe and a seed bag from its
+# pack (hotbar slot + use_item), and is refused ploughing the potatoes from 200 m away. The server's
 # user://farm file must hold the cells. No terrain data needed.
 #   GODOT=<exe> [PORT=] tools/farmnetcheck.sh
 . "$(dirname "$0")/lib/twoclient.sh" farmnet

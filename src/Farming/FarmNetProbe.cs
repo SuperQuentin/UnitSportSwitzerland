@@ -14,6 +14,8 @@ namespace UnitSport.Farming;
 /// its predictions are answered (nothing left pending) and say "worked".</item>
 /// <item>B joins after: the strip comes in the subscribe snapshot (late joiner).</item>
 /// <item>A ploughs a second strip while B is there: B sees it live.</item>
+/// <item>A tills and sows a cell by hand with a hoe and a seed bag from its pack (hotbar slot,
+/// <c>use_item</c>): B sees the cell sown with wheat.</item>
 /// <item>B, 200 m from the potato field, tries to plough it: the server refuses (too far) and B's
 /// prediction goes back to the growing crop.</item>
 /// </list>
@@ -70,7 +72,46 @@ public partial class FarmNetProbe : ChatProbe
         Expect(s2.Cells > 10, $"A ploughs a second strip: {s2.Cells} cells");
         Expect(await Until(() => farm.PendingCount == 0, 10), "answered");
         Say($"more {Count(farm, se + 60, sn, FieldStage.Ploughed)}");
+
+        // by hand from the pack, the player's way (hotbar slot, use_item): till and sow one cell
+        if (hand != null)
+        {
+            var inv = _items.Inventory;
+            inv.BeginMatch();   // an empty pack lent for this, the saved one untouched
+            try
+            {
+                _items.Give(new ItemStack(ItemId.Hoe, 1));
+                _items.Give(new ItemStack(ItemId.WheatSeed, 1));
+                const float cs = FieldFormat.CellSize;
+                double ce = (Math.Floor((se + 80) / cs) + 0.5) * cs, cn = (Math.Floor((sn + 10) / cs) + 0.5) * cs;
+                await Stand(ce - HandFarming.Reach, cn);
+                Me!.LookYaw = -Mathf.Pi * 0.5f;
+                await Seconds(0.3);
+                await Press(PlayerInput.Slots[SlotOf(ItemId.Hoe)]);
+                await Press(PlayerInput.UseItem);
+                Expect(hand.Busy && await Until(() => !hand.Busy, 5) && farm.CellAtLv95(ce, cn)?.Stage == FieldStage.Ploughed,
+                    $"A tills a cell with the hoe from its pack ({farm.CellAtLv95(ce, cn)?.Stage})");
+                await Press(PlayerInput.Slots[SlotOf(ItemId.WheatSeed)]);
+                await Press(PlayerInput.UseItem);
+                Expect(hand.Busy && await Until(() => !hand.Busy, 5) && farm.CellAtLv95(ce, cn) is { Stage: FieldStage.Sown, Crop: CropKind.Wheat },
+                    $"and sows it with a seed bag from its pack ({farm.CellAtLv95(ce, cn)?.Stage} {farm.CellAtLv95(ce, cn)?.Crop})");
+                Expect(CountOf(ItemId.WheatSeed) == 0, "the bag was opened");
+                Expect(await Until(() => farm.PendingCount == 0, 10) && farm.CellAtLv95(ce, cn)?.Stage == FieldStage.Sown, "the server kept it");
+                Say(FormattableString.Invariant($"sown {ce:F1} {cn:F1}"));
+            }
+            finally { inv.EndMatch(); }
+        }
         Expect(await Heard("B", "done", 60), "B is done");
+    }
+
+    /// <summary>Presses and lets go of an action, as a key, a pad button or a VR control would.</summary>
+    private async Task Press(StringName action)
+    {
+        Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = true, Strength = 1f });
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = false });
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
     }
 
     private async Task RunB(FarmField farm, double se, double sn)
@@ -81,6 +122,17 @@ public partial class FarmNetProbe : ChatProbe
         Expect(await Heard("A", "more", 60), "A ploughed more");
         Expect(await Until(() => Count(farm, se + 60, sn, FieldStage.Ploughed) >= 10, 10),
             $"B sees the second strip live ({Count(farm, se + 60, sn, FieldStage.Ploughed)} ploughed)");
+
+        // A tills and sows a cell by hand from its pack: B sees it sown with wheat
+        if (await Heard("A", "sown", 60) && _heard.LastOrDefault(l => l.Contains("FM A sown ")) is { } line)
+        {
+            var w = line[(line.IndexOf("FM A sown ", StringComparison.Ordinal) + 10)..].Split(' ');
+            double ce = double.Parse(w[0], System.Globalization.CultureInfo.InvariantCulture);
+            double cn = double.Parse(w[1], System.Globalization.CultureInfo.InvariantCulture);
+            Expect(await Until(() => farm.CellAtLv95(ce, cn) is { Stage: FieldStage.Sown, Crop: CropKind.Wheat }, 10),
+                $"B sees A's hand-sown cell: {farm.CellAtLv95(ce, cn)?.Stage} {farm.CellAtLv95(ce, cn)?.Crop}");
+        }
+        else Expect(false, "A never sowed by hand");
 
         // too far from the potato field: the server refuses, the prediction goes back
         await Stand(se - 150, sn);
