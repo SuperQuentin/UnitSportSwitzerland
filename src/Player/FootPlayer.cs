@@ -1138,6 +1138,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>Turns the view (a probe's look around, e.g. aft down a hold), radians, + left.</summary>
     public void TurnView(float by) => _viewYaw += by;
 
+    /// <summary>A probe's free look around a craft (the chase camera orbits by it; it recentres when left alone).</summary>
+    public void OrbitView(float by) => _lookYaw += by;
+
     /// <summary>
     /// A teleport that also turns a mount: the body at <paramref name="at"/>, stopped, facing
     /// <paramref name="yaw"/>, put down on the ground once it is there. Setting <c>Rotation</c> alone

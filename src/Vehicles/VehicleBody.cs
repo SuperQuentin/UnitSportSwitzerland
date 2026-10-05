@@ -304,7 +304,7 @@ public partial class VehicleBody : CharacterBody3D
         // a boat's attitude as it floats now (#302; the replicated one, which the server has too)
         // an airliner's in the air (#456), none on the ground (the server never flew it: its speed says)
         _initial.Train, Ride is Boat ? new Basis(Tilt).GetEuler()
-            : Ride is Airliner jet ? (jet.State.OnGround || Velocity.LengthSquared() < 225f ? default : new Basis(Tilt).GetEuler()) : _initial.Angles,
+            : Ride is Airliner jet ? (jet.State.OnGround || Velocity.LengthSquared() < Airliner.FlyingSpeed * Airliner.FlyingSpeed ? default : new Basis(Tilt).GetEuler()) : _initial.Angles,
         // a bus's doors as they are now, where a truck keeps them
         Ride is Truck { IsBus: true } ? (_initial.Flags & ~(15 << 4)) | ((DoorsOpen & 15) << 4)
             : Ride is Airliner ? (_initial.Flags & ~(15 << 13)) | ((DoorsOpen & 15) << 13) : _initial.Flags, _initial.Load,

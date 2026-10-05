@@ -77,6 +77,16 @@
   L2; replicated in the pose bits (driven) and `VehicleBody.DoorsOpen` (parked, flags bits 13-16).
   `Driverless`: stood up from its seat it stays the player's aircraft and flies on hands off (the law
   holds its path), carrying its walkers at 120 m/s. A parked one's frame is `Posed` by `ApplyPose`.
+  **Left in the air it keeps its attitude** (#456): `VehicleState.Angles` carries it (captured when
+  not `OnGround`; a server that never flew it: above `FlyingSpeed`), `Airliner.Aloft` restores it
+  (not on the ground, path held) in `CreateRide` and when its pilot takes the controls back
+  (`EnterVehicle`, then `ClearFloorContact`). Before, a fresh one came level and "on the ground": a
+  10° climb dropped the nose, the pilot stood up 1+ m above the floor (on the roof at ~15°), and
+  walking back to the seat the deck under the walker was read as a belly scrape (a 4.1 m/s knock).
+  **A body put somewhere by hand keeps its old floor contact until it moves**: `DebugLaunch` takes
+  one still `MoveAndSlide` there (`ClearFloorContact`), or the first flight step at 600 m reads the
+  runway left behind: `Touchdown` with the gear up and a stale `LastSink`, wrecked (#456; headless it
+  hid inside the 2 s settle after taking the controls, windowed the ramp animation used that up).
   Airstairs dock to its doors (#417, vehicles note `airstairs`); E from outside still takes the controls (`BoardWalkableFromOutside`).
   Checks: `--cabincheck [shots] --world fixture` (quick: doors, stand up, aisle, sit, the controls,
   then the same walked in flight; `shots` windowed: `test_output/cabin/`); `tools/airlinernetcheck.sh`
@@ -107,8 +117,10 @@
   re-extended on approach; the circuit now fails a flaps overspeed held 3 s, measured touchdown
   2.35 m/s); `--freightercheck [shots] --world fixture` (quick: G lowers the ramp, the flight deck, the
   stairs, a troop seat, down the ramp onto the ground and back up, the para and crew door buttons,
-  the controls, the ramp opened in flight, walked into the hold at 73 m/s, the controls again;
-  `shots` windowed: `test_output/freighter/`); `tools/freighternetcheck.sh` (net: B sees A's ramp go down,
+  the controls, launched past the settle (#456: flying on unhurt), the ramp opened in flight, stood up
+  onto the flight deck, walked into the hold at 73 m/s, the controls again without a knock;
+  `shots` windowed: `test_output/freighter/`, outside views of the level ramp in flight too; on real
+  terrain windowed the in-flight walk is still flaky, #542); `tools/freighternetcheck.sh` (net: B sees A's ramp go down,
   walks up the parked one's ramp, shuts it by its button, A sees it shut).
   **Vehicles in the hold** (#418's carrying, merged): the hold is a `CargoBay` between the benches; a
   car drives up the open ramp, is carried, ties down with the handbrake and reverses out

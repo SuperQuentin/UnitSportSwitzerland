@@ -90,6 +90,13 @@ public partial class FreighterCheck : Node
 
     private string Where(FootPlayer me) { var l = Local(me); return $"({l.X:F2}, {l.Y:F2}, {l.Z:F2})"; }
 
+    /// <summary>Turns the view to an authored spot of the aircraft (the shots: forward, aft at the ramp).</summary>
+    private void Face(FootPlayer me, float x, float z)
+    {
+        var d = Spot(x, FloorY, z) - me.GlobalPosition;
+        me.LookYaw = Mathf.Atan2(-d.X, -d.Z);
+    }
+
     private async Task<bool> WalkTo(FootPlayer me, float x, float z, double seconds)
     {
         me.WalkControls = () =>
@@ -226,6 +233,16 @@ public partial class FreighterCheck : Node
         if (me.Vehicle != flying) { Finish("the aircraft was lost at the launch"); return; }
         flying.ToggleDoor(RampDoor);
         Expect((flying.DoorsOpen & 1 << RampDoor) != 0, $"the ramp opens in flight at {flying.State.Ias / 0.5144f:0} kt (a drop)");
+        if (Shots)
+        {
+            // from outside, the chase camera: the ramp level with the hold's floor in the air (#456)
+            await Until(() => Rig()?.DoorOpen(RampDoor) >= 1f, 10);
+            await Shot("outside_in_flight_ramp_level");
+            me.OrbitView(2.4f);
+            await Seconds(0.8);
+            await Shot("outside_in_flight_ramp_level_quarter");
+            me.OrbitView(-2.4f);
+        }
         float y0 = me.GlobalPosition.Y;
         bool up = me.TryInteract();
         Expect(up && await Until(() => me.Aboard && me.Ride == RideKind.OnFoot, 5), $"E stood up in flight (aboard {me.Aboard}, ride {me.Ride})");
@@ -239,20 +256,20 @@ public partial class FreighterCheck : Node
         Expect(walked && me.Aboard && Mathf.Abs(l.Y - FloorY) < 0.35f, $"walked into the hold in flight, on the floor {Where(me)}");
         Expect(me.GlobalPosition.Y > y0 - 200f, $"it flew on by itself ({me.GlobalPosition.Y - y0:+0;-0} m, {speed:F0} m/s)");
         await Until(() => !Drawn || Rig()?.DoorOpen(RampDoor) >= 1f, 10);
+        Face(me, 0f, HoldFrontZ);
+        await Seconds(0.5);
         await Shot("hold_in_flight_looking_forward");
         // aft, down the hold to the open ramp and the sky behind
-        me.TurnView(Mathf.Pi);
+        Face(me, 0f, RampToeZ);
         await Seconds(0.5);
         await Shot("hold_in_flight_ramp_open_looking_aft");
-        me.TurnView(Mathf.Pi);
         // out onto the open ramp: level with the floor in the air (#420), walked on, not a slope down
         bool onRamp = await WalkTo(me, 0f, RampHingeZ - 1.4f, 20);
         l = Local(me);
         Expect(onRamp && me.Aboard && Mathf.Abs(l.Y - FloorY) < 0.15f, $"on the ramp in flight, level with the floor {Where(me)}");
-        me.TurnView(Mathf.Pi);
+        Face(me, 0f, RampToeZ - 20f);
         await Seconds(0.5);
         await Shot("on_the_level_ramp_in_flight");
-        me.TurnView(Mathf.Pi);
         await WalkTo(me, 0f, 0f, 20);
         Expect(await ToCockpit(me) && me.TryInteract() && await Until(() => me.Vehicle is Airliner && me.SeatIndex == 0, 6), $"back at the controls in flight ({me.Ride})");
         await Seconds(1);
