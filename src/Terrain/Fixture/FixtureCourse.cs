@@ -49,9 +49,30 @@ public sealed class FixtureCourse
     /// <summary>The box the course needs whatever its roads, metres from the start; null: the roads' box.</summary>
     public (double MinX, double MinY, double MaxX, double MaxY)? Extent { get; init; }
 
+    /// <summary>
+    /// Farm fields (#494): an id, the crop and an outline, metres from the start; the source writes
+    /// them into every tile their box touches, as the preprocessor does.
+    /// </summary>
+    public List<(uint Id, CropKind Crop, (double X, double Y)[] Outline)> Fields { get; } = new();
+
+    /// <summary>
+    /// The flat course's three fields, clear of the spawn and inside its tiles: a wheat field east
+    /// (18 x 18 cells), a potato field north of it, a meadow west.
+    /// </summary>
+    private static FixtureCourse Flat()
+    {
+        var c = new FixtureCourse { Name = "flat" };
+        c.Fields.Add((0xF1E1D001, CropKind.Wheat, Box(24, -36, 96, 36)));
+        c.Fields.Add((0xF1E1D002, CropKind.Potato, Box(24, 44, 72, 92)));
+        c.Fields.Add((0xF1E1D003, CropKind.Meadow, Box(-96, -36, -24, 36)));
+        return c;
+
+        static (double, double)[] Box(double x0, double y0, double x1, double y1) => [(x0, y0), (x1, y0), (x1, y1), (x0, y1)];
+    }
+
     public static FixtureCourse? Create(string name) => name switch
     {
-        "flat" => new FixtureCourse { Name = name },
+        "flat" => Flat(),
         "straight" => new FixtureCourse { Name = name }.Road(RoadClass.Road, new Pen(0, 0, FlatHeight, 0, 0).Straight(3000)),
         "hairpin" => Hairpin(),
         "narrow" => Narrow(),

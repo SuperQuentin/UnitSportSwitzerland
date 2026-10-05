@@ -42,6 +42,10 @@ src/Crafting/            quick  --campfirecheck --systems ui,physics
 src/Items/PlacedObjects  quick  --campfirecheck --systems ui,physics
 src/Items/FlagGhost      quick  --campfirecheck --systems ui,physics
 src/Items/Placeables     quick  --campfirecheck --systems ui,physics
+src/Farming/             quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Loot/Gathering       quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Items/ItemController quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Terrain/Fixture/FixtureCourse quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
 src/Build/               quick  --buildcheck --systems ui,physics,build
 src/Build/               net    tools/buildnetcheck.sh
 src/Build/Gadget         quick  --gadgetcheck --systems ui,physics,build
@@ -178,6 +182,8 @@ src/Player/FootPlayer.B  net    tools/bonkcheck.sh
 src/Crafting/            net    tools/campfirecheck.sh
 src/Items/PlacedObjects  net    tools/campfirecheck.sh
 src/Items/HeldItemVisual net    tools/campfirecheck.sh
+src/Farming/             net    tools/farmnetcheck.sh
+src/Terrain/NetworkChunkSource net tools/farmnetcheck.sh
 src/World/Wa             net    tools/watercheck.sh
 src/World/SeaState       net    tools/watercheck.sh
 src/Net/ChatManager      net    tools/watercheck.sh

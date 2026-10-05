@@ -72,6 +72,12 @@ public enum AssetKind
     /// <see cref="Places"/>: fetched once during sync; an older server answers "missing".
     /// </summary>
     Landings = 12,
+
+    /// <summary>
+    /// <c>fields_E_N.fld</c>, a tile's farm fields (#494). Only tiles with fields have one; an older
+    /// server answers "missing" (unknown kinds are refused as missing), so no protocol bump.
+    /// </summary>
+    Fields = 13,
 }
 
 /// <summary>
@@ -120,6 +126,7 @@ public static class AssetStream
         AssetKind.Cd => $"{id.E}.ogg",
         AssetKind.Water => WaterFormat.FileName(id),
         AssetKind.Landings => LandingIndex.FileName,
+        AssetKind.Fields => FieldFormat.FileName(id),
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 

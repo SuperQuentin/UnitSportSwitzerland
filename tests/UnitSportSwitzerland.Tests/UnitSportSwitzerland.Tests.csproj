@@ -31,6 +31,10 @@
     <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\Recipes.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\CampfireClock.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmTables.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FieldCells.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FieldTile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\HitGuard.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrStats.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />

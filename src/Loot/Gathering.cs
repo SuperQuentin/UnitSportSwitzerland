@@ -28,7 +28,7 @@ namespace UnitSport.Loot;
 /// </summary>
 public partial class Gathering : Node, Core.IOriginShiftAware
 {
-    public enum Resource { None, Stone, Water, TreeWood, Deadwood, Pumpkin, Treat }
+    public enum Resource { None, Stone, Water, TreeWood, Deadwood, Pumpkin, Treat, Crop }
 
     private const double RegrowSeconds = 20 * 60;
     private const float TreeReach = 2.3f;
@@ -60,6 +60,10 @@ public partial class Gathering : Node, Core.IOriginShiftAware
     private ProgressBar _bar = null!;
     private AudioStreamPlayer _sfx = null!;
     private readonly Random _rng = new();
+
+    // a ripe field cell ahead (#494): where it is and what grows there
+    private string _cropLabel = "";
+    private double _cropE, _cropN;
 
     public Gathering(ChunkManager chunks, WorldOrigin origin, ItemController items)
     {
@@ -131,7 +135,7 @@ public partial class Gathering : Node, Core.IOriginShiftAware
             return;
         }
 
-        string what = _target.Kind == Resource.Treat
+        string what = _target.Kind == Resource.Crop ? _cropLabel : _target.Kind == Resource.Treat
             ? Occasions.OccasionHunt.Instance?.LabelFor(_target.Spot) ?? "it"
             : Label(_target.Kind);
         bool depleted = Remaining(_target) <= 0;
@@ -182,6 +186,12 @@ public partial class Gathering : Node, Core.IOriginShiftAware
     {
         var target = _target;
         Cancel();
+        if (target.Kind == Resource.Crop)
+        {
+            // a ripe field cell (#494): the farm decides what it gives and turns it to stubble
+            if (Farming.HandFarming.Instance?.HarvestAt(_cropE, _cropN) is { Count: > 0 }) Play(SfxSynth.Chime, 1.3f);
+            return;
+        }
         if (target.Kind == Resource.Treat)
         {
             // an occasion hunt spot: claimed once per player per occasion, and the reward is its own
@@ -222,6 +232,7 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         Resource.Water => "water",
         Resource.TreeWood => "firewood",
         Resource.Pumpkin => "a pumpkin",
+        Resource.Crop => "the crop",
         _ => "dead wood",
     };
 
@@ -230,6 +241,7 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         Resource.Water => "fill up with",
         Resource.TreeWood => "chop",
         Resource.Pumpkin => "pick",
+        Resource.Crop => "harvest",
         Resource.Treat => "take",
         _ => "gather",
     };
@@ -240,6 +252,7 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         Resource.Stone => 1.6,
         Resource.TreeWood => 2.2,
         Resource.Pumpkin => 1.0,
+        Resource.Crop => 1.4,
         Resource.Treat => 0.6,
         _ => 1.4,
     };
@@ -251,6 +264,7 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         Resource.Stone => 4,
         Resource.TreeWood => 2,
         Resource.Pumpkin => 3,
+        Resource.Crop => int.MaxValue,   // the cell itself turns to stubble
         Resource.Treat => 1,
         _ => 2,
     };
@@ -320,6 +334,13 @@ public partial class Gathering : Node, Core.IOriginShiftAware
             return (Resource.Treat, hunt, CoverClass.Open);
         if (Occasions.OccasionDecor.Instance is { } decor && (decor.InPatch(ahead) || decor.InPatch(feet)))
             return (Resource.Pumpkin, Spot("pumpkin", ahead), CoverClass.Open);
+
+        // a ripe field cell ahead (#494): harvested by hand
+        if (Farming.HandFarming.Instance?.RipeAhead(p, out _cropE, out _cropN) is { } ripe)
+        {
+            _cropLabel = Farming.FarmRules.CropName(ripe.Crop).ToLowerInvariant();
+            return (Resource.Crop, Spot("crop", ahead), CoverClass.Open);
+        }
 
         // a tree in reach, the nearest one
         if (NearestTree(tile, feet, ahead) is { } tree)
