@@ -24,6 +24,6 @@ tc_stop
 grep -h "\[tractornet" "$OUT/tractornet_A.log" "$OUT/tractornet_B.log"
 # the server's own word: the sacks the auger moved, and what it paid for the tipped load
 grep -h "\[passengers\] auger\|\[shop\] peer" "$OUT/tractornet_server.log"
-PAID=$(grep -c "delivered 30 Wheat to the farm co-op .* for 750 CHF" "$OUT/tractornet_server.log")
+PAID=$(grep -c "delivered 30 Wheat to the farm co-op .* for [0-9]* CHF" "$OUT/tractornet_server.log")
 if [ "$PAID" = 1 ] && tc_ok 2 "$OUT/tractornet_A.log" "$OUT/tractornet_B.log"; then echo "[tractornetcheck] RESULT: ok"; exit 0; fi
 echo "[tractornetcheck] RESULT: FAILED (see $OUT/tractornet_*.log; server paid $PAID times)"; exit 1

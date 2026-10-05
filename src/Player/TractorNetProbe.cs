@@ -269,7 +269,8 @@ public partial class TractorNetProbe : ChatProbe
         me.FarmAction(tractor);
         bool paid = await Until(() => tractor.TrailerTank.Items == 0, 15);
         int gained = (ItemController.Instance?.Inventory.Cash ?? 0) - cash;
-        int due = Augered * (int)(ItemDefs.Get(ItemId.Wheat)?.Value ?? 0f);
+        // the market's price at this co-op this week (#494, Farming.FarmPrices: season and wishes)
+        int due = (int)Farming.FarmPrices.Delivery(ItemDefs.Get(ItemId.Wheat)?.Value ?? 0f, ItemId.Wheat, Augered, Farming.FarmSales.Month, door.Key.ToString(), Farming.FarmSales.Week);
         Expect(paid && tractor.Tipping && me.FarmFrancsPaid == due && gained == due, $"B tips at the co-op: paid {me.FarmFrancsPaid} CHF (pocket +{gained}, due {due}), the trailer {tractor.TrailerTank.Items}");
         Say("tipped");
         if (!await Heard("A", "seen tipped", 30)) Fail("A did not see the tipped, empty trailer");

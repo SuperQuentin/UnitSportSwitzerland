@@ -13,8 +13,13 @@ tc_server 300 120 "$OUT/sellnet_server.log" --server --port $PORT $WORLD --farmm
 tc_client 260 "$OUT/sellnet_A.log" --connect 127.0.0.1:$PORT --name SellA $WORLD --traffic 0 --farmmonth 7 --sellnet A & A=$!
 # B joins only once A's stand is stocked: what it sees first comes from the snapshot
 for _ in $(seq 1 200); do grep -q "say stand" "$OUT/sellnet_A.log" 2>/dev/null && break; kill -0 $A 2>/dev/null || break; sleep 1; done
-file=$(find "$OUT/userdata_sellnet" -path "*farm/stands.json" 2>/dev/null | head -1)
-saved=0; [ -n "$file" ] && grep -q '"Count":30' "$file" && saved=1
+# the server saves on a worker: give it a moment
+saved=0
+for _ in $(seq 1 15); do
+  file=$(find "$OUT/userdata_sellnet" -path "*farm/stands.json" 2>/dev/null | head -1)
+  [ -n "$file" ] && grep -q '"Count":30' "$file" && { saved=1; break; }
+  sleep 1
+done
 tc_client 220 "$OUT/sellnet_B.log" --connect 127.0.0.1:$PORT --name SellB $WORLD --traffic 0 --farmmonth 7 --sellnet B & B=$!
 wait $A $B
 tc_stop
