@@ -22,6 +22,9 @@ public partial class ExitProbe : Node, Core.IOriginShiftAware
 {
     public static bool Requested => CmdArgs.Has("--exitcheck");
 
+    /// <summary>What a heavy vehicle may be as wide as: its body, or a combine's header (#494, really wider than its body).</summary>
+    private static float BodyWidth(HeavySpec spec) => spec.Class == HeavyClass.Combine ? Avatar.FarmMeshBuilder.HeaderWidth : spec.Sections[0].Width;
+
     private static string? Password => CmdArgs.Value("--exitcheck", notFlag: true);
 
     private readonly System.Func<FootPlayer?> _local;
@@ -226,10 +229,10 @@ public partial class ExitProbe : Node, Core.IOriginShiftAware
             onTop = over && !aisle && local.Y >= roof - 1.5f;
             what = (aisle ? "in the aisle: " : byDoor ? "the deck never came, out by the door: " : "") + what;
         }
-        if (ride is Truck heavy && size.X > heavy.Spec.Sections[0].Width + 0.11f)
+        if (ride is Truck heavy && size.X > BodyWidth(heavy.Spec) + 0.11f)
         {
             ok = false;
-            what += $" WIDER than its {heavy.Spec.Sections[0].Width:F2} m body";
+            what += $" WIDER than its {BodyWidth(heavy.Spec):F2} m body";
         }
         if (ok) Log($"ok   {name}: {what}");
         else Fail(name, (onTop ? "ON TOP: " : ride.Walkable ? "NOT IN THE AISLE: " : over ? "INSIDE: " : agl >= 0.8f ? "OFF THE GROUND: " : "") + what);
@@ -250,7 +253,7 @@ public partial class ExitProbe : Node, Core.IOriginShiftAware
         {
             if (HeavyCatalog.For(kind) is not { } spec || !seen.Add(key)) return;
             heavy++;
-            float body = spec.Sections[0].Width;
+            float body = BodyWidth(spec);
             if (size.X > body + 0.11f) Fail(spec.Label, $"{what} box {size.X:F2} m wide, WIDER than its {body:F2} m body");
             else Log($"ok   {spec.Label}: {what} box {size.X:F2} x {size.Y:F2} x {size.Z:F2}");
         }
