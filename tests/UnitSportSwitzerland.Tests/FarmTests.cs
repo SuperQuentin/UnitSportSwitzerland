@@ -11,6 +11,17 @@ public class FarmTests
     private static readonly CropKind[] Crops = Enum.GetValues<CropKind>();
 
     [Fact]
+    public void OnlyHarvestsAreDeliveredByTheLoad()
+    {
+        Assert.True(FarmTables.IsHarvest(ItemId.Wheat));
+        Assert.True(FarmTables.IsHarvest(ItemId.HayBale));
+        Assert.False(FarmTables.IsHarvest(ItemId.WheatSeed));
+        Assert.False(FarmTables.IsHarvest(ItemId.Fertiliser));
+        Assert.False(FarmTables.IsHarvest(ItemId.Flour));
+        Assert.False(FarmTables.IsHarvest(ItemId.None));
+    }
+
+    [Fact]
     public void EverySownCropHasASeedAndAHarvest()
     {
         foreach (var crop in Crops)

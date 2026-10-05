@@ -14,7 +14,7 @@ namespace UnitSport.Farming;
 /// <see cref="ShopTables.TypeFor"/>: a big agricultural building or a village shop on a rural tile),
 /// found through <see cref="DoorIndex"/>. <see cref="Deliver"/> pays the **full producer price**
 /// (<see cref="ItemDef.Value"/>) of every unit (<see cref="ShopTables.DeliveryPrice"/>); the same
-/// co-op's counter pays only 35 % for a pack item. Only what the co-op buys (Produce) is taken. The
+/// co-op's counter pays only 35 % for a pack item. Only harvests are taken (`FarmTables.IsHarvest`: not seeds or fertiliser). The
 /// server checks the peer's own replicated position against the co-op's door (outdoors, no counter
 /// to stand at); the pocket is the client's, so the client adds the cash on the server's answer
 /// (<see cref="ShopService"/>), and offline this peer plays the server.
@@ -59,7 +59,7 @@ public static class FarmMarket
     /// </summary>
     public static void Deliver(Node from, Vector3 at, ItemId item, int count, System.Action<int> done)
     {
-        if (count <= 0 || count > MaxLoad || ItemDefs.Get(item) is not { } def
+        if (count <= 0 || count > MaxLoad || !FarmTables.IsHarvest(item) || ItemDefs.Get(item) is not { } def
             || !ShopTables.Buys(ShopType.FarmCoop, def.Category) || !NearCoop(at)
             || ShopService.Instance is not { } shops)
         {

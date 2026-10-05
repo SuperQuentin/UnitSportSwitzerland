@@ -22,7 +22,7 @@
 - **Delivery** (`Farming/FarmMarket`): `NearCoop(at)` = a co-op door within `DeliverReach` (25 m) in `DoorIndex`
   (the door entry carries its `ShopType`), cached 0.5 s / 4 m. `Deliver` pays `ShopTables.DeliveryPrice` = the
   **full value per unit** (floored for the load) because it is a weighed delivery, not the counter's 35 %; only
-  Produce is taken. `ShopService.Deliver` asks the server (`RequestDeliver`); the server ignores the claimed
+  harvests are taken (`FarmTables.IsHarvest`; seeds, fertiliser and flour are not, on the client and the server). `ShopService.Deliver` asks the server (`RequestDeliver`); the server ignores the claimed
   position online and uses the peer's replicated player node (reach + 12 m slack), then answers `Delivered`; the
   client adds `Francs` to its pocket on the answer and calls `done(total)`. Offline the same methods run locally.
   Not in the shop ledger (nothing is stocked).

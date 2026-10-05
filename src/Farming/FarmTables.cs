@@ -122,6 +122,14 @@ public static class FarmTables
         _ => ItemId.None,
     };
 
+    /// <summary>Whether an item is a crop's harvest (what a co-op takes by the load); seeds and fertiliser are not.</summary>
+    public static bool IsHarvest(ItemId item)
+    {
+        if (item == ItemId.None) return false;
+        foreach (var c in Enum.GetValues<CropKind>()) if (YieldOf(c) == item) return true;
+        return false;
+    }
+
     /// <summary>
     /// Items one 4 m cell gives (fractions add up along a machine's pass). Scaled to the real
     /// yields (wheat 6.5 t/ha, potatoes 40 t/ha, hay 8 t DM/ha) with one item a 50 kg sack of

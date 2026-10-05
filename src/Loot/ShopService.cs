@@ -447,7 +447,7 @@ public partial class ShopService : Node
         var def = ItemDefs.Get((ItemId)id);
         Vector3? where = at;
         if (Online) where = GetParent()?.GetNodeOrNull<Node3D>($"Players/{peer}")?.GlobalPosition;
-        long total = def == null || count is <= 0 or > Farming.FarmMarket.MaxLoad ? 0 : ShopTables.DeliveryPrice(def.Category, def.Value, count);
+        long total = def == null || !Farming.FarmTables.IsHarvest((ItemId)id) || count is <= 0 or > Farming.FarmMarket.MaxLoad ? 0 : ShopTables.DeliveryPrice(def.Category, def.Value, count);
         float reach = Farming.FarmMarket.DeliverReach + (Online ? Farming.FarmMarket.ServerSlack : 0f);
         bool ok = total > 0 && where is { } w && Farming.FarmMarket.CoopDoor(w, reach) is { } door;
         if (ok) GD.Print($"[shop] peer {peer} delivered {count} {(ItemId)id} to the farm co-op {Farming.FarmMarket.CoopDoor(where!.Value, reach)!.Value.Key} for {total} CHF");
