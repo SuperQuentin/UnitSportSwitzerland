@@ -30,17 +30,18 @@
   | Phase | Wait | Shrink | End radius | Damage |
   |---|---|---|---|---|
   | Loot | 4:00 | - | 3,420 m | 0 |
-  | 1 | 2:00 | 3:00 | 0.618 r0 | 1 HP/s |
-  | 2 | 3:00 | 2:30 | 0.397 r0 | 2 HP/s |
-  | 3 | 2:30 | 2:00 | 0.25 r0 | 3 HP/s |
-  | 4 | 2:00 | 1:45 | 0.147 r0 | 5 HP/s |
-  | 5 | 1:45 | 1:30 | 0.082 r0 | 7 HP/s |
-  | 6 | 1:30 | 1:15 | 0.041 r0 | 10 HP/s |
-  | 7 | 1:15 | 1:00 | 0.0176 r0 | 15 HP/s |
-  | 8 | 1:00 | 1:00 | 0 | 25 HP/s |
+  | 1 | 2:00 | 3:00 | 0.618 r0 | 2 HP/s |
+  | 2 | 3:00 | 2:30 | 0.397 r0 | 3 HP/s |
+  | 3 | 2:30 | 2:00 | 0.25 r0 | 5 HP/s |
+  | 4 | 2:00 | 1:45 | 0.147 r0 | 7 HP/s |
+  | 5 | 1:45 | 1:30 | 0.082 r0 | 10 HP/s |
+  | 6 | 1:30 | 1:15 | 0.041 r0 | 14 HP/s |
+  | 7 | 1:15 | 1:00 | 0.0176 r0 | 20 HP/s |
+  | 8 | 1:00 | 1:00 | 0 | 30 HP/s |
 
   That makes 33 min at 6 km normal, plus about 2 min of countdown and landing. Damage is per second
-  outside the *current* circle, from the start of each phase's wait.
+  outside the *current* circle, from the start of each phase's wait. Raised in #455 (was 1, 2, 3, 5,
+  7, 10, 15, 25): 50 s outside the first circle now kills, where 100 s of phase 1 used to be shrugged off.
 - **Damage**: on the owner's machine (health is the owner's). Every 0.5 s,
   `TakeDamage(dps x dt, 0, DamageCause.Zone)`. The check is horizontal only: an interior lies straight
   under its building, so indoors needs no special case.

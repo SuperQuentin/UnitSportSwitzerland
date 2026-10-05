@@ -27,7 +27,10 @@ public partial class DayNight : Node
 {
     public static DayNight? Instance { get; private set; }
 
-    /// <summary>Hours, 0..24.</summary>
+    /// <summary>
+    /// Hours, 0..24. Online it follows the server's <see cref="WorldClock"/> (#452), so setting it
+    /// only holds offline.
+    /// </summary>
     public double Hour { get; set; } = 10.0;
 
     public float SunElevationDeg { get; private set; }
@@ -127,6 +130,8 @@ public partial class DayNight : Node
     public override void _ExitTree()
     {
         if (Instance == this) Instance = null;
+        // this screen's world is going: whatever comes next starts offline until a server says
+        WorldClock.Reset();
     }
 
     public override void _Ready()
@@ -136,16 +141,51 @@ public partial class DayNight : Node
     }
 
     /// <summary>
-    /// Real minutes per day when <c>/time speed</c> or the server's world clock has decided it;
-    /// null = this player's setting (<see cref="GameSettings.DayLengthMinutes"/>).
+    /// Real minutes per day offline when <c>/time speed</c> has decided it; null = this player's
+    /// setting (<see cref="GameSettings.DayLengthMinutes"/>).
     /// </summary>
     public float? DayLengthOverride { get; set; }
 
-    public float MinutesPerDay => DayLengthOverride ?? GameSettings.Current.DayLengthMinutes;
+    public float MinutesPerDay => OnWorldClock ? WorldClock.MinutesPerDay
+        : DayLengthOverride ?? GameSettings.Current.DayLengthMinutes;
+
+    /// <summary>Online, with the server's clock in hand and this peer's estimate of it.</summary>
+    private static bool OnWorldClock => WorldClock.Active && Net.ClockSync.Synced;
+
+    /// <summary>
+    /// Hours still between this screen's own clock and the world's when it first took the world's:
+    /// eased away over a second or two, so a joiner's sky turns to the server's instead of jumping.
+    /// </summary>
+    private double _joinEase;
+
+    private bool _onWorld;
+
+    private const double JoinEaseSeconds = 0.6;
+
+    private double Step(double delta)
+    {
+        if (!OnWorldClock)
+        {
+            _onWorld = false;
+            return TimeCommand.Advance(Hour, delta, MinutesPerDay);
+        }
+        double world = WorldClock.Hour;
+        if (!_onWorld)
+        {
+            _onWorld = true;
+            _joinEase = TimeCommand.ShortWay(Hour, world);
+        }
+        if (_joinEase != 0)
+        {
+            _joinEase *= Math.Exp(-delta / JoinEaseSeconds);
+            if (Math.Abs(_joinEase) < 1e-4) _joinEase = 0;
+        }
+        return TimeCommand.Wrap(world + _joinEase);
+    }
 
     public override void _Process(double delta)
     {
-        Hour = TimeCommand.Advance(Hour, delta, MinutesPerDay);
+        Hour = Step(delta);
         Apply((float)delta);
         // The sun stays up while the camera is indoors (#388): a door portal's camera looking out
         // shares it, and the street it saw from a room was sunless, a night at noon. The rooms

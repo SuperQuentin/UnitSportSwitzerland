@@ -56,7 +56,7 @@ public static class ItemDefs
         new(ItemId.Francs, "Swiss francs", "Money. Never takes a slot: it is counted as cash, and deposited to your account at a bank counter.",
             ItemUse.Material, 9999, new Color(0.80f, 0.70f, 0.35f), "CHF", 0, ItemCategory.Money, 1f),
         Eat(ItemId.Bandage, "Bandage", 10, "#f2eee6", "BD", 25, ItemCategory.Medical, 5),
-        Eat(ItemId.FirstAidKit, "First-aid kit", 3, "#d02828", "+", 100, ItemCategory.Medical, 30),
+        Eat(ItemId.FirstAidKit, "First-aid kit", 3, "#d02828", "+", 75, ItemCategory.Medical, 30),
 
         Mat(ItemId.ScrapMetal, "Scrap metal", 50, "#7c8088", "SM", ItemCategory.Scrap, 1),
         Mat(ItemId.Plastic, "Plastic", 50, "#e0e4e8", "PL", ItemCategory.Scrap, 0.5f),
@@ -123,6 +123,8 @@ public static class ItemDefs
             ItemUse.Armor, 1, new Color(0.30f, 0.34f, 0.24f), "AV", 0, ItemCategory.Gear, 200f),
         new(ItemId.FlareGun, "Flare gun", "{use_item} fires its one flare into the sky: in a Battle Royale, a supply drop comes down where you stand. Everyone sees the flare.",
             ItemUse.Signal, 1, new Color(0.95f, 0.45f, 0.10f), "FG", 0, ItemCategory.Gear, 60f),
+        new(ItemId.Dogtag, "Dogtag", "A fallen team-mate's tag. {use_item} at a Postauto stop (yellow on the map) before zone 4: they are dropped back in.",
+            ItemUse.Recall, 3, new Color(0.75f, 0.76f, 0.78f), "DT", 0, ItemCategory.Gear, 0f),
         // bags (#208): found in houses, worn in the bag slot, one row of the pack per 9 slots
         Bag(ItemId.BeltPouch, "Belt pouch", "#6a5a3a", "BP", 9, 15),
         Bag(ItemId.Handbag, "Handbag", "#8a2a3a", "HB", 18, 40),

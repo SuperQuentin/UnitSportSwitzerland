@@ -20,10 +20,10 @@ public enum MatchTable
 public static class MatchLoot
 {
     private static readonly (ItemId Id, float W)[] Weapons =
-        { (ItemId.Pistol, 34), (ItemId.Shotgun, 26), (ItemId.Rifle, 12), (ItemId.HuntingRifle, 3), (ItemId.Knife, 6) };
+        { (ItemId.Pistol, 38), (ItemId.Shotgun, 26), (ItemId.Rifle, 9), (ItemId.HuntingRifle, 3), (ItemId.Knife, 6) };   // #455
     private static readonly (ItemId Id, float W)[] Supplies =
         { (ItemId.Ammo9mm, 24), (ItemId.Shells, 20), (ItemId.Ammo75, 16), (ItemId.Bandage, 28), (ItemId.FirstAidKit, 7),
-          (ItemId.ArmorVest, 6), (ItemId.EnergyBar, 8), (ItemId.Chocolate, 5), (ItemId.WaterBottle, 4) };
+          (ItemId.ArmorVest, 8), (ItemId.EnergyBar, 8), (ItemId.Chocolate, 5), (ItemId.WaterBottle, 4) };
 
     /// <summary>The share of furniture that is not empty, and the weight of a weapon against supplies.</summary>
     private const float FurnitureFull = 0.5f, WeaponShare = 0.3f;
