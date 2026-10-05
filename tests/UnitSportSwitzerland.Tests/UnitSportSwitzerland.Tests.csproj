@@ -63,6 +63,11 @@
     <Compile Include="..\..\src\Terrain\BuildingTriangles.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\PlanBox.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\BuildingTypes.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- swiss_data.py port (#515): only the pure half (manifest format, skip decisions, STAC
+         id/bbox arithmetic) is linked. SwissDownload.cs itself needs IStepProgress from
+         Pipeline.cs, which would drag in CountryData/LocalState/Selection/Stats and
+         TerrainPreprocessor-only types this project has no ProjectReference for. -->
+    <Compile Include="..\..\tools\MapCore\DownloadManifest.cs" Link="Map\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>
