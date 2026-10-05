@@ -23,13 +23,13 @@ public partial class FarmField
     private sealed class DrawChunk
     {
         public MeshInstance3D? Node;
-        public int Version = -1, Lod = -1, Month = -1, Verts;
+        public int Version = -1, Lod = -1, Month = -1, Verts, Tris;
         public uint NextChange = uint.MaxValue;
         public ChunkGrid? Grid;
         public bool Building;
     }
 
-    private readonly record struct Built(Tile Tile, int Chunk, Vector3[] Verts, Color[] Colors, int Version, int Lod, int Month,
+    private readonly record struct Built(Tile Tile, int Chunk, Vector3[] Verts, Color[] Colors, int[] Indices, int Version, int Lod, int Month,
         uint NextChange, ChunkGrid? Grid, int Generation, double WorkerMs);
 
     private readonly ConcurrentQueue<Built> _built = new();
@@ -41,6 +41,7 @@ public partial class FarmField
     /// <summary>Drawing numbers, for the probes and <c>--farmstats</c>: chunks drawn, vertices, main-thread ms.</summary>
     public int DrawnChunks { get; private set; }
     public long DrawnVertices { get; private set; }
+    public long DrawnTriangles { get; private set; }
     public int Rebuilds { get; private set; }
     public double MainMsTotal { get; private set; }
     public double WorkerMsTotal { get; private set; }
@@ -73,7 +74,7 @@ public partial class FarmField
         if (_stats && (_statsTimer -= delta) <= 0)
         {
             _statsTimer = 10;
-            GD.Print($"[farm] draw: {DrawnChunks} chunks, {DrawnVertices} vertices, {Rebuilds} builds, main {MainMsTotal:F1} ms in all (max frame {MainMsMax:F2} ms), worker {WorkerMsTotal:F0} ms");
+            GD.Print($"[farm] draw: {DrawnChunks} chunks, {DrawnVertices} vertices ({DrawnTriangles} triangles), {Rebuilds} builds, main {MainMsTotal:F1} ms in all (max frame {MainMsMax:F2} ms), worker {WorkerMsTotal:F0} ms");
         }
     }
 
@@ -163,15 +164,17 @@ public partial class FarmField
             var watch = Stopwatch.StartNew();
             Vector3[] verts = Array.Empty<Vector3>();
             Color[] colors = Array.Empty<Color>();
+            int[] indices = Array.Empty<int>();
             try
             {
                 var b = new FieldMeshBuilder(looks, data, c0, r0, grid.SampleMeshHeight, e0, n0, lod);
                 b.Build();
                 verts = b.Verts.ToArray();
                 colors = b.Colors.ToArray();
+                indices = b.Indices.ToArray();
             }
             catch (Exception e) { GD.PushWarning($"[farm] building {t.Id} #{k}: {e.Message}"); }
-            _built.Enqueue(new Built(t, k, verts, colors, version, lod, month, next, grid, generation, watch.Elapsed.TotalMilliseconds));
+            _built.Enqueue(new Built(t, k, verts, colors, indices, version, lod, month, next, grid, generation, watch.Elapsed.TotalMilliseconds));
         });
     }
 
@@ -199,6 +202,7 @@ public partial class FarmField
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = b.Verts;
         arrays[(int)Mesh.ArrayType.Color] = b.Colors;
+        arrays[(int)Mesh.ArrayType.Index] = b.Indices;
         var mesh = new ArrayMesh();
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         mesh.SurfaceSetMaterial(0, _material);
@@ -208,11 +212,13 @@ public partial class FarmField
             AddChild(dc.Node);
             DrawnChunks++;
         }
-        else DrawnVertices -= dc.Verts;
+        else { DrawnVertices -= dc.Verts; DrawnTriangles -= dc.Tris; }
         int c0 = b.Chunk % FieldTile.ChunksPerSide * FieldTile.ChunkCells, r0 = b.Chunk / FieldTile.ChunksPerSide * FieldTile.ChunkCells;
         dc.Node.Position = _origin.ToWorld(t.Id.MinE + c0 * FieldFormat.CellSize, t.Id.MinN + r0 * FieldFormat.CellSize, 0);
         dc.Node.Mesh = mesh;
         dc.Verts = b.Verts.Length;
+        dc.Tris = b.Indices.Length / 3;
+        DrawnTriangles += dc.Tris;
         DrawnVertices += dc.Verts;
     }
 
@@ -221,6 +227,8 @@ public partial class FarmField
         if (dc.Node == null) return;
         DrawnVertices -= dc.Verts;
         dc.Verts = 0;
+        DrawnTriangles -= dc.Tris;
+        dc.Tris = 0;
         DrawnChunks--;
         dc.Node.QueueFree();
         dc.Node = null;

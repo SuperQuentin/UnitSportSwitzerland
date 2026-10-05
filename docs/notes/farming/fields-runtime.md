@@ -24,19 +24,34 @@
 - **`FarmWork.Sweep`** (pinned): the strip's cells (`FarmRules.CellsInStrip`, a reused list, no
   allocation per call), each worked by `FarmRules.Work`, applied at once on this peer; units = items
   gained (harvest/mow, `YieldPerCell` of the crop that was there) or seed items used (sow, cells / 50).
-- **Drawing** (`FarmField.Draw.cs`, `FieldMeshBuilder`): one `MeshInstance3D` per 100 m chunk
-  (25² cells) within 360 m of the camera, built on a worker, committed one a frame, with the prop
-  material (`StyleKit.Material(Prop)`: PS1, Cartoon, Realistic through the style chain), vertex
-  colours raw linear with **alpha 0** (the prop shader reads alpha as a lamp mask). Draped on
+- **Drawing** (`FarmField.Draw.cs`, `FieldMeshBuilder`, `FieldClip`): one `MeshInstance3D` per 100 m
+  chunk (25² cells) within 360 m of the camera, built on a worker, committed one a frame, with the
+  prop material (`StyleKit.Material(Prop)`: PS1, Cartoon, Realistic through the style chain), an
+  **indexed** mesh (a corner shared by neighbouring quads with the same colour is one vertex),
+  vertex colours raw linear with **alpha 0** (the prop shader reads alpha as a lamp mask). Draped on
   `ChunkManager.GridAt(tile).SampleMeshHeight`. Rebuilt only when a cell of the chunk changed
-  (`FieldCells.ChunkVersions`), its detail ring changed (lod 0 under 160 m: furrows, sprout rows,
-  stubble, swaths, potato/beet/vegetable ridges, sunflower heads; lod 1: flat cover and crop blocks),
-  the ground grid was replaced, the month changed, or a growing cell passed its next tenth
-  (`NextChange`). Standing crops are blocks (wheat 0.95 m golden, barley paler, maize 2.6 m,
-  rapeseed yellow then brown, sunflower 1.9 m with heads) with walls only towards lower neighbours.
+  (`FieldCells.ChunkVersions`), its detail ring changed (lod 0 under 160 m, lod 1 beyond: cover and
+  plain slabs), the ground grid was replaced, the month changed, or a growing cell passed its next
+  tenth (`NextChange`). The worker gets the cells' looks plus a 2-cell ring (`FieldMeshBuilder.Ring`)
+  and the tile's outlines (`FieldTile.Fields`).
+- **Edges follow the parcel**: a cell an outline crosses (found by walking the field's segments) is
+  cut to the outline (`FieldClip.Cut`: trapezoids between the segments' x breakpoints, even-odd
+  counted from below, so holes and concave outlines work); a cell inside stays one square. A cell
+  outside every field but crossed by a neighbour's outline gets that field's sliver with the
+  neighbour cell's look. Slabs get walls along the outline segments and towards lower neighbours.
+- **Looks**: rows run along the field's long axis (second moment of its outer ring), laid out in
+  tile metres so they carry on across cells and chunks; ridge feet are cut to the piece on their own
+  (no spikes over the outline). Heights and colour jitter come from hashed world cell corners
+  (bilinear), so tops have no cell seams; each field gets a tint from its id. Ploughed: furrow
+  ridges; sown: soil ridges, then thin sprout rows; stubble: pale stripes over brown ground; mown:
+  windrows; potato/beet/vegetables: soil ridges with a leafy crown; standing crops are slabs (wheat
+  0.95 m gold, barley paler, maize 2.4 m, rapeseed yellow in flower, sunflower 1.6 m) with a darker
+  ear band and a ragged top edge (maize: tall tassels), and on top (lod 0) sawtooth drill rows with
+  tramlines every 18 m (grain), rapeseed bumps, maize row roofs, sunflower heads.
   **Untouched grass is not drawn**: the terrain already is grass; only mown cells are.
-- **Cost** (`--farmperf`, windowed, real map at 2592500,1182500, Windows): 15 chunks, 25-29 k
-  vertices drawn; standing still 0.001 ms a frame on the main thread; moving 20 m/s, 46 builds in
-  20 s at 0.002 ms a frame on average, 0.1-0.3 ms a chunk on the worker; worst farm frame ~2.3 ms
-  (one chunk's commit; the first pays the material). In a town at 2580500,1200500: 26 chunks, 50 k
-  vertices, same per-frame cost.
+- **Cost** (`--farmperf`, windowed, Windows, PS1, July; before -> after the outline cut, #494 look
+  pass): at 2592500,1182500, 15 chunks, 24.7 k -> 7.3 k vertices; with the camera at a field edge
+  (lod 0 near) 33 k vertices / 11 k triangles -> 15.5 k vertices / 18.5 k triangles. Town spot
+  2580500,1200500 (August): 47 k -> 15 k vertices, near 68.5 k vertices / 22.8 k triangles -> 25.6 k /
+  34.7 k. Main thread unchanged: 0.001-0.003 ms a frame, worst farm frame ~2 ms (the first commit
+  pays the material); worker 0.1 -> 0.5-0.7 ms a chunk.

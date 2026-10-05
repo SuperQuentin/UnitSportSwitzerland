@@ -51,6 +51,9 @@ public sealed class FieldMeshBuilder
 
     public readonly List<Vector3> Verts = new();
     public readonly List<Color> Colors = new();
+    /// <summary>Triangles into <see cref="Verts"/>: corners shared by neighbouring quads (same place, same colour) are one vertex.</summary>
+    public readonly List<int> Indices = new();
+    private readonly Dictionary<(Vector3, Color), int> _shared = new();
 
     /// <summary>A field seen by this chunk: its outline near the chunk, its rows, its tint.</summary>
     private sealed class Field
@@ -252,7 +255,7 @@ public sealed class FieldMeshBuilder
     private static readonly Color Straw = Lin(0.80f, 0.71f, 0.45f), StubbleGround = Lin(0.55f, 0.46f, 0.30f);
     private static readonly Color Sprout = Lin(0.45f, 0.66f, 0.22f), Leaf = Lin(0.27f, 0.50f, 0.18f), LeafDark = Lin(0.17f, 0.34f, 0.12f);
     private static readonly Color Cut = Lin(0.55f, 0.66f, 0.30f), Hay = Lin(0.74f, 0.73f, 0.40f), Grass = Lin(0.36f, 0.58f, 0.22f);
-    private static readonly Color Gold = Lin(0.88f, 0.71f, 0.32f), Pale = Lin(0.88f, 0.80f, 0.52f), StalkDry = Lin(0.58f, 0.47f, 0.26f);
+    private static readonly Color Gold = Lin(0.88f, 0.71f, 0.32f), Pale = Lin(0.80f, 0.70f, 0.42f), StalkDry = Lin(0.58f, 0.47f, 0.26f);
     private static readonly Color MaizeGreen = Lin(0.24f, 0.46f, 0.16f), MaizeTop = Lin(0.30f, 0.50f, 0.19f), MaizeDry = Lin(0.74f, 0.64f, 0.40f), Tassel = Lin(0.66f, 0.62f, 0.34f);
     private static readonly Color RapeYellow = Lin(0.98f, 0.88f, 0.14f), RapeRipe = Lin(0.50f, 0.44f, 0.25f);
     private static readonly Color SunHead = Lin(0.98f, 0.76f, 0.08f), SunCentre = Lin(0.30f, 0.20f, 0.10f), SunRipe = Lin(0.38f, 0.28f, 0.15f);
@@ -383,7 +386,7 @@ public sealed class FieldMeshBuilder
                 case CropKind.Rapeseed: Rows(f, 1.6f, 0.18f, 0.8f, ridge, top, amp, saw: true); break;
                 case CropKind.Sunflower: break;
                 // drill rows, and the tramlines the sprayer drives in, every 18 m
-                default: Rows(f, 1.2f, 0.05f + 0.08f * g, 0.6f, ridge, top, amp, tram: 15, saw: true); break;
+                default: Rows(f, 1.5f, 0.06f + 0.09f * g, 0.75f, ridge, top, amp, tram: 12, saw: true); break;
             }
         }
         if (_lod == 0 && l.Crop == CropKind.Sunflower && (l.Growth > 0.6f || l.Stage == FieldStage.Ripe))
@@ -422,8 +425,7 @@ public sealed class FieldMeshBuilder
             var q = ta.Lerp(tb, (float)(i + 1) / n);
             var m = (p + q) * 0.5f;
             float up = _teeth * (0.6f + 0.4f * MathF.Abs(Corner((int)(m.X * 3f), (int)(m.Z * 3f), 0x7a11u)));
-            Verts.Add(p); Verts.Add(q); Verts.Add(m with { Y = m.Y + up });
-            Colors.Add(bandCol); Colors.Add(bandCol); Colors.Add(tip);
+            Tri(p, q, m with { Y = m.Y + up }, bandCol, bandCol, tip);
         }
     }
 
@@ -606,9 +608,23 @@ public sealed class FieldMeshBuilder
 
     private void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color ca, Color cb, Color cc, Color cd)
     {
-        Verts.Add(a); Verts.Add(c); Verts.Add(b);
-        Verts.Add(a); Verts.Add(d); Verts.Add(c);
-        Colors.Add(ca); Colors.Add(cc); Colors.Add(cb);
-        Colors.Add(ca); Colors.Add(cd); Colors.Add(cc);
+        int ia = V(a, ca), ib = V(b, cb), ic = V(c, cc), id = V(d, cd);
+        Indices.Add(ia); Indices.Add(ic); Indices.Add(ib);
+        Indices.Add(ia); Indices.Add(id); Indices.Add(ic);
+    }
+
+    private void Tri(Vector3 a, Vector3 b, Vector3 c, Color ca, Color cb, Color cc)
+    {
+        Indices.Add(V(a, ca)); Indices.Add(V(c, cc)); Indices.Add(V(b, cb));
+    }
+
+    private int V(Vector3 p, Color c)
+    {
+        if (_shared.TryGetValue((p, c), out int i)) return i;
+        i = Verts.Count;
+        Verts.Add(p);
+        Colors.Add(c);
+        _shared.Add((p, c), i);
+        return i;
     }
 }
