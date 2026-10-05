@@ -860,6 +860,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public static Func<FootPlayer, bool>? StayDown;
 
+    /// <summary>
+    /// Asked before health regenerates: false stops it. A Battle Royale match sets it (#455), where
+    /// health comes back only from bandages and kits, so a fight leaves its marks.
+    /// </summary>
+    public static Func<FootPlayer, bool>? Regenerates;
+
     /// <summary>Down for good, until <see cref="Respawn"/>: out of the match.</summary>
     public bool Eliminated { get; private set; }
 
@@ -2870,7 +2876,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (_ejected > 0) _ejected -= dt;
         _sinceHurt += dt;
-        if (_sinceHurt > 6 && Health < MaxHealth && _deadTimer <= 0)
+        if (_sinceHurt > 6 && Health < MaxHealth && _deadTimer <= 0 && Regenerates?.Invoke(this) != false)
             Health = Mathf.Min(MaxHealth, Health + 12f * dt);
 
         _safeTimer += dt;
