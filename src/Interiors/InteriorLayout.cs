@@ -14,6 +14,9 @@ public enum RoomType
     // #213: more variety, basements, banks
     Laundry, GuestRoom, HomeCinema, Carnotzet, MusicRoom, Shelter, Cellar, Playroom, Study, Pantry,
     BankHall, Vault,
+    // #497: industrial sites
+    WarehouseHall, ProductionHall, TruckBay, ServiceBay, Showroom,
+    ControlRoom, LockerRoom, BreakRoom, PartsStore, Dispatch, PaintBooth,
 }
 
 public enum OpeningKind { Door, Window, Entry, Arch }
@@ -52,6 +55,12 @@ public sealed class RoomPlan
     /// floor per storey. The floors it reaches into must leave its rectangle empty.
     /// </summary>
     public int Span { get; set; } = 1;
+    /// <summary>
+    /// Headroom in metres, when it is not <see cref="Span"/> whole storeys: the goods office and the
+    /// mess room built as a low block inside a 9 m works hall (#497). 0 = derived from
+    /// <see cref="Span"/> (<see cref="InteriorLayout.ClearOf"/>).
+    /// </summary>
+    public float Clear { get; set; }
     public List<OpeningPlan> Openings { get; set; } = new();
 
     public float Width => X1 - X0;
@@ -110,6 +119,11 @@ public enum FurnitureType
     VendingMachine,
     // #370: the church radio by the pastor rat
     ChurchRadio,
+    // #497: industrial sites
+    PalletRack, Pallet, BarrelStack, SackStack, Conveyor, Machine, Gantry, ToolChest, CarLift,
+    TyreStack, OilDrum, Compressor, JerryCan, SafetySign, HardHatRack, FireExtinguisher, Locker,
+    Forklift, ShowroomPlinth, TruckProp, DeskCounter, Whiteboard, TimeClock, Banner, FloorMarking,
+    Bench,
 }
 
 public sealed class FurniturePlan
@@ -159,7 +173,7 @@ public sealed class EntrancePlan
 public sealed class InteriorLayout
 {
     /// <summary>Bumped whenever the generator changes enough that old plans should be regenerated.</summary>
-    public const int CurrentVersion = 12; // 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
+    public const int CurrentVersion = 13; // one number, so whichever of #497/#498 rebases onto the other takes the NEXT one, never a lower one: a version going backwards regenerates the plans saved under the higher one and then collides when it is reissued. 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";
@@ -278,7 +292,8 @@ public sealed class InteriorLayout
     }
 
     /// <summary>Clear height of a room: its storeys less the slab under the floor above.</summary>
-    public float ClearOf(RoomPlan r) => r.Span * StoreyHeight - InteriorGenerator.Slab;
+    public float ClearOf(RoomPlan r) =>
+        r.Clear > 0 ? r.Clear : r.Span * StoreyHeight - InteriorGenerator.Slab;
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = false };
 

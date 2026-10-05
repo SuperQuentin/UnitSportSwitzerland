@@ -32,6 +32,7 @@
     <Compile Include="..\..\src\Crafting\Recipes.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\CampfireClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\HitGuard.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Combat\FightRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrStats.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Loot\ShopTables.cs" Link="Game\%(Filename)%(Extension)" />
@@ -57,6 +58,10 @@
     <Compile Include="..\..\src\Player\AirlinerFlight.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Build\BuildGrid.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrPrefabs.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- industrial site detection (#497): a pure function of a building, Godot maths only -->
+    <Compile Include="..\..\src\Terrain\BuildingTriangles.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\PlanBox.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\BuildingTypes.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

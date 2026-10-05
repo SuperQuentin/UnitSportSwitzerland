@@ -66,18 +66,26 @@ public static partial class InteriorGenerator
         if (bank) layout.Type = BuildingType.Bank;
         layout.Shop = BuildingFootprint.ShopOf(fp, rural);
 
-        bool single = b.Kind is BuildingKind.Industrial or BuildingKind.Agricultural or BuildingKind.Annex
-            or BuildingKind.Garage
-            or BuildingKind.UnderConstruction or BuildingKind.Sacral
-            || fp.Width < 4.5f || fp.Depth < 4.5f || fp.Width * fp.Depth < 25f;
-
-        int below = single ? 0 : Cellars(layout.Key, b.Kind, n);
-        if (single || !TryCored(layout, fp, b.Kind, n, below, bank, rng)
-            && (below == 0 || !TryCored(layout, fp, b.Kind, n, 0, bank, rng)))
+        // An industrial site (#497) plans its own hall, so none of the house rules below apply.
+        // Deliberately not an early return: Generate has one exit and one Furnish, so anything
+        // that has to run over every finished plan (#498 cuts the facade doors' doorways here)
+        // is written once and cannot miss this path.
+        var site = BuildingTypes.SiteFor(fp.Key.ToString(), b.Kind, fp.Width, fp.Depth, b.MaxY - b.MinY);
+        if (site == BuildingType.None || !TryIndustrial(layout, site, fp.Door.Height, rng))
         {
-            layout.Below = 0;
-            SingleRoom(layout, b.Kind, fp.Door.Height, rng);
-            if (bank) layout.Floors[0].Rooms[0].Type = RoomType.BankHall;
+            bool single = b.Kind is BuildingKind.Industrial or BuildingKind.Agricultural or BuildingKind.Annex
+                or BuildingKind.Garage
+                or BuildingKind.UnderConstruction or BuildingKind.Sacral
+                || fp.Width < 4.5f || fp.Depth < 4.5f || fp.Width * fp.Depth < 25f;
+
+            int below = single ? 0 : Cellars(layout.Key, b.Kind, n);
+            if (single || !TryCored(layout, fp, b.Kind, n, below, bank, rng)
+                && (below == 0 || !TryCored(layout, fp, b.Kind, n, 0, bank, rng)))
+            {
+                layout.Below = 0;
+                SingleRoom(layout, b.Kind, fp.Door.Height, rng);
+                if (bank) layout.Floors[0].Rooms[0].Type = RoomType.BankHall;
+            }
         }
 
         Furnish(layout, rng);
@@ -678,19 +686,24 @@ public static partial class InteriorGenerator
     /// <summary>
     /// How many buildings of a kind have a PAUSA vending machine (#273): a school's or a hospital's
     /// hall about one in three, an office block's lobby one in five, a works' floor one in seven.
+    /// A trade garage only ever has the room for one once it is a site with a mess room (#497).
     /// </summary>
     private static double VendingChance(BuildingKind kind) => kind switch
     {
         BuildingKind.Civic => 0.35,
         BuildingKind.Commercial => 0.20,
         BuildingKind.Industrial => 0.15,
+        BuildingKind.Garage => 0.15,
         _ => 0,
     };
 
     /// <summary>Where it stands: the ground floor's lobby or hall, a works' hall or store.</summary>
-    private static bool VendingRoom(RoomType t, BuildingKind kind) => kind == BuildingKind.Industrial
-        ? t is RoomType.Workshop or RoomType.Storage
-        : t is RoomType.Lobby or RoomType.Hall;
+    private static bool VendingRoom(RoomType t, BuildingKind kind) =>
+        // a site's mess room is where one really stands (#497), whatever the building's cadastre kind
+        t == RoomType.BreakRoom
+        || (kind == BuildingKind.Industrial
+            ? t is RoomType.Workshop or RoomType.Storage
+            : t is RoomType.Lobby or RoomType.Hall);
 
     /// <summary>
     /// Stock that depends on what the building is for: a shop's back room is racks of goods, a
@@ -914,6 +927,58 @@ public static partial class InteriorGenerator
             new Piece(FurnitureType.Fridge, 0.6f, 0.65f, 1.8f, true),
             new Piece(FurnitureType.Shelf, 0.9f, 0.4f, 1.9f, true),
         },
+        // ---- industrial sites (#497): the small rooms of a site's service block ----------------
+        RoomType.Dispatch => new[]
+        {
+            new Piece(FurnitureType.Desk, 1.4f, 0.7f, 0.75f, true),
+            new Piece(FurnitureType.DeskCounter, 1.8f, 0.7f, 1.1f, true),
+            new Piece(FurnitureType.Shelf, 1.0f, 0.4f, 1.9f, true),
+            new Piece(FurnitureType.Whiteboard, 1.6f, 0.08f, 1.1f, true),
+            new Piece(FurnitureType.Chair, 0.5f, 0.5f, 0.9f, false),
+        },
+        RoomType.ControlRoom => new[]
+        {
+            new Piece(FurnitureType.Desk, 1.8f, 0.8f, 0.75f, true),
+            new Piece(FurnitureType.Tv, 1.0f, 0.4f, 0.9f, true),
+            new Piece(FurnitureType.Whiteboard, 1.6f, 0.08f, 1.1f, true),
+            new Piece(FurnitureType.Chair, 0.5f, 0.5f, 0.9f, false),
+            new Piece(FurnitureType.Shelf, 1.0f, 0.4f, 1.9f, true),
+        },
+        RoomType.LockerRoom => new[]
+        {
+            new Piece(FurnitureType.Locker, 1.2f, 0.45f, 1.9f, true),
+            new Piece(FurnitureType.Locker, 1.2f, 0.45f, 1.9f, true),
+            new Piece(FurnitureType.Locker, 1.2f, 0.45f, 1.9f, true),
+            new Piece(FurnitureType.Bench, 1.6f, 0.4f, 0.45f, true),
+            new Piece(FurnitureType.HardHatRack, 1.0f, 0.3f, 1.8f, true),
+            new Piece(FurnitureType.Sink, 0.6f, 0.45f, 0.85f, true),
+            new Piece(FurnitureType.TimeClock, 0.25f, 0.12f, 0.3f, true),
+        },
+        RoomType.BreakRoom => new[]
+        {
+            new Piece(FurnitureType.Table, 1.6f, 0.85f, 0.75f, false),
+            new Piece(FurnitureType.Chair, 0.5f, 0.5f, 0.9f, false),
+            new Piece(FurnitureType.Chair, 0.5f, 0.5f, 0.9f, false),
+            new Piece(FurnitureType.Counter, Math.Clamp(Math.Max(r.Width, r.Depth) - 1.6f, 1.0f, 2.4f), 0.6f, 0.9f, true),
+            new Piece(FurnitureType.Fridge, 0.6f, 0.65f, 1.8f, true),
+            new Piece(FurnitureType.Sink, 0.6f, 0.45f, 0.85f, true),
+        },
+        RoomType.PartsStore => new[]
+        {
+            new Piece(FurnitureType.Rack, 2.0f, 0.6f, 2.2f, true),
+            new Piece(FurnitureType.Rack, 2.0f, 0.6f, 2.2f, true),
+            new Piece(FurnitureType.Shelf, 1.2f, 0.45f, 1.9f, true),
+            new Piece(FurnitureType.TyreStack, 0.8f, 0.8f, 1.2f, true),
+            new Piece(FurnitureType.Crate, 0.8f, 0.8f, 0.7f, false),
+        },
+        RoomType.PaintBooth => new[]
+        {
+            new Piece(FurnitureType.Compressor, 0.9f, 0.6f, 1.1f, true),
+            new Piece(FurnitureType.OilDrum, 0.6f, 0.6f, 0.9f, true),
+            new Piece(FurnitureType.OilDrum, 0.6f, 0.6f, 0.9f, true),
+            new Piece(FurnitureType.Shelf, 1.0f, 0.4f, 1.9f, true),
+            new Piece(FurnitureType.SafetySign, 0.5f, 0.06f, 0.7f, true),
+        },
         RoomType.BankHall => new[]
         {
             new Piece(FurnitureType.TellerDesk, Math.Clamp(Math.Max(r.Width, r.Depth) * 0.45f, 2.0f, 3.6f), 0.8f, 1.15f, true),
@@ -949,8 +1014,10 @@ public static partial class InteriorGenerator
                 if (f == 0 && BuildingFootprint.VehicleDoor(l.Kind))
                     foreach (var o in r.Openings)
                         if (o.Kind == OpeningKind.Entry && o.Side == Side.Front) blocked.Add(Lane(l.Kind, r, o));
-                // the stairwell is not somewhere to put a sofa
-                bool isCore = ri == 0 && floor.Rooms.Count > 1;
+                // the stairwell is not somewhere to put a sofa. A site hall (#497) is room 0 with
+                // the service block beside it and holds no stair, so it is not one: the strip the
+                // core keeps clear just inside the door would have blocked its whole front bay.
+                bool isCore = ri == 0 && floor.Rooms.Count > 1 && !LaysItselfOut(r.Type);
                 if (isCore)
                 {
                     float zs = FirstStairZ(l);
@@ -959,6 +1026,14 @@ public static partial class InteriorGenerator
                 }
                 foreach (var h in floor.Holes) blocked.Add(h);
 
+                // a site hall is aisles or lines, not pieces scattered round its walls (#497)
+                if (LaysItselfOut(r.Type))
+                {
+                    HallLayout(l, f, r, placed, blocked, rng);
+                    foreach (var p in HallDressing(r.Type))
+                        TryPlace(l, f, r, p, placed, blocked, rng);
+                    continue;
+                }
                 if (r.Type == RoomType.Nave) { Pews(l, f, r, placed, blocked); continue; }
                 if (r.Type == RoomType.Classroom) Desks(l, f, r, placed, blocked);
                 if (r.Type == RoomType.Vault) { Vault(l, f, r, placed, blocked, rng); continue; }

@@ -1150,6 +1150,10 @@ public static partial class HumanMeshBuilder
         RatSwing, RatArmPump, RatHeadBob, RatHop,
         // #404: new dances (also in the style tables) and gestures (emote wheel only)
         Ymca, ChickenDance, CabbagePatch, SwimDance, Wave, Cheer, Salute, Shrug,
+        // #495: fist fights (HumanMeshBuilder.Fight.cs); keep them last, Channels skips the groove from FightStand on
+        FightStand, FightGuardHigh, FightCrouch, FightGuardLow, FightAir, FightHit, FightDazed, FightVictory,
+        FightBlockStun, FightJab, FightKick, FightLowJab, FightSweep, FightJumpKick, FightUppercut,
+        FightStringKick, FightFinisher,
     }
 
     /// <summary>
@@ -1237,6 +1241,7 @@ public static partial class HumanMeshBuilder
     {
         if (index == GroupPogo) return DanceMove.Pogo;
         if (index == GroupJump) return DanceMove.JumpTogether;
+        if (index >= FightMoves) return FightResolve(index - FightMoves);
         if (index >= EmoteMoves) return EmoteMove(index - EmoteMoves);
         var table = DanceTable[DanceStyleIndex(style)];
         return table[((index % table.Length) + table.Length) % table.Length];
@@ -1255,7 +1260,7 @@ public static partial class HumanMeshBuilder
         ch.ArmBlend = 1f;
         Planted(ref ch, 0.098f, 0f);
         EvalMove(move, t, mv, ref ch);
-        if (move is not (DanceMove.Pogo or DanceMove.JumpTogether or DanceMove.Salute)) Groove(ref ch, t, mv);
+        if (move is not (DanceMove.Pogo or DanceMove.JumpTogether or DanceMove.Salute) && move < DanceMove.FightStand) Groove(ref ch, t, mv);
         return ch;
     }
 
@@ -1649,6 +1654,7 @@ public static partial class HumanMeshBuilder
             case DanceMove.Cheer: Cheer(ref ch, t, mv); break;
             case DanceMove.Salute: Salute(ref ch, t, mv); break;
             case DanceMove.Shrug: Shrug(ref ch, t, mv); break;
+            case >= DanceMove.FightStand: EvalFight(move, t, mv, ref ch); break;
         }
     }
 

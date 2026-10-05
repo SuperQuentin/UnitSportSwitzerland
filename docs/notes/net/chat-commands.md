@@ -34,6 +34,9 @@
   **`/time`** (Minecraft style; `world/day-night`): the query is answered client-side from the
   clock on screen, set/add/speed go to the server, admin only, and change it for everyone.
 - **Look** (`Core/ChatUi`): floating lines sit exactly where the same lines sit in the open panel's scrollback (`AlignFeed`: inside the panel margin, just above the input; same font size and line gap in both lists, a short scrollback bottom-aligned), so opening the chat only adds the glass behind them. The open panel is see-through (`GlassPanel(0.55)`). `--chatopen [s]` opens the input after s seconds, for screenshots.
+- **`/fight <player> | accept [player] | decline | leave`** (#495, `combat/fist-fight`): anyone online;
+  challenges a player within 12 m to a fist fight, takes or turns down a challenge, forfeits. Offline it says
+  it needs a multiplayer game.
 - **`/seastate [0..1|calm|chop|storm|gamey]`** (#299, `world/water-field`): anyone asks, an admin sets it for
   everyone (sent on join and on change); offline anyone. **`/water [E N]`**: the water at an LV95 point (or
   where you are) as this side computes it, to the 0.1 mm; the server's answer and a client's own compare
