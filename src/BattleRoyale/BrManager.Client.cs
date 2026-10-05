@@ -84,6 +84,7 @@ public partial class BrManager
         if (Instance == this) Instance = null;
         if (_server) Combat.PvpRules.HitRelayed -= OnHit;
         FootPlayer.StayDown = null;
+        FootPlayer.CanBeDowned = null;
         FootPlayer.Regenerates = null;
         Combat.PvpRules.Override = null;
     }
@@ -113,7 +114,7 @@ public partial class BrManager
         if (Origin == null) yield break;
         foreach (var m in _state.MatesOf(Me))
             if (m.Alive && GetNodeOrNull<FootPlayer>("../Players/" + m.Peer) is { } body)
-                yield return (m.Name, ZonePoint(body.GlobalPosition), new Vector2(-Mathf.Sin(body.NetYaw), Mathf.Cos(body.NetYaw)));
+                yield return (m.Downed ? $"{m.Name} (down)" : m.Name, ZonePoint(body.GlobalPosition), new Vector2(-Mathf.Sin(body.NetYaw), Mathf.Cos(body.NetYaw)));
     }
 
     // ------------------------------------------------------------------------------------
@@ -270,10 +271,100 @@ public partial class BrManager
                 inv.Add(ItemId.WoodPlanks, 15);
             }
             FootPlayer.StayDown = _ => InMatch && _state.Phase == BrPhase.Playing;
+            // squads (#475): down, not out, while a team-mate stands to pick you up
+            FootPlayer.CanBeDowned = _ => InMatch && _state.Phase == BrPhase.Playing && _state.MateStanding(Me);
             // no regeneration in a match (#455): bandages and kits are the only way back
             FootPlayer.Regenerates = _ => !(InMatch && _state.Phase == BrPhase.Playing);
             Permissions.SetInMatch(true);
         }
+    }
+
+    // ------------------------------------------------------------------------------------
+    // down, not out (#475)
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>Seconds a team-mate holds Interact over a downed one to stand them up.</summary>
+    public const float ReviveSeconds = 5f;
+
+    /// <summary>How close to a downed team-mate to revive them, m.</summary>
+    public const float ReviveReach = 2.2f;
+
+    /// <summary>The downed team-mate being revived now and how far along, 0..1; null when nobody is.</summary>
+    public (string Name, float Progress)? Reviving { get; private set; }
+
+    /// <summary>For probes: hold Interact without a key (<c>BrProbe</c>).</summary>
+    public bool ForceInteract { get; set; }
+
+    private long _reviveTarget;
+    private float _reviveHeld;
+    private bool _reviveSent;
+
+    private void OnLocalDowned(long attacker) => RpcId(1, MethodName.ReportDowned, attacker);
+
+    /// <summary>Holding Interact over a downed team-mate: after <see cref="ReviveSeconds"/>, ask the server.</summary>
+    private void ReviveTick(FootPlayer? me, double delta)
+    {
+        long target = 0;
+        string name = "";
+        if (InMatch && MeAlive && me is { Downed: false } && _state.Phase == BrPhase.Playing
+            && (ForceInteract || PlayerInput.Held(PlayerInput.InteractMount)))
+            foreach (var m in _state.MatesOf(Me))
+                if (m is { Alive: true, Downed: true } && GetNodeOrNull<FootPlayer>("../Players/" + m.Peer) is { } body
+                    && body.GlobalPosition.DistanceTo(me.GlobalPosition) <= ReviveReach)
+                {
+                    target = m.Peer;
+                    name = m.Name;
+                    break;
+                }
+        if (target == 0 || target != _reviveTarget)
+        {
+            _reviveTarget = target;
+            _reviveHeld = 0f;
+            _reviveSent = false;
+        }
+        if (target == 0)
+        {
+            Reviving = null;
+            return;
+        }
+        _reviveHeld += (float)delta;
+        Reviving = (name, Mathf.Clamp(_reviveHeld / ReviveSeconds, 0f, 1f));
+        if (_reviveHeld >= ReviveSeconds && !_reviveSent)
+        {
+            _reviveSent = true;
+            RpcId(1, MethodName.RequestRevive, target);
+        }
+    }
+
+    /// <summary>A team-mate stood this player up (the server checked it).</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Revived()
+    {
+        if (_server) return;
+        LocalPlayer()?.ReviveInPlace();
+        GD.Print("[br] revived");
+    }
+
+    /// <summary>The whole team is down: out now, as if bled out.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void OutNow()
+    {
+        if (_server) return;
+        if (LocalPlayer() is { Downed: true } me) me.FinishDowned();
+        GD.Print("[br] out: the whole team is down");
+    }
+
+    /// <summary>The feed: someone went down, or was picked up.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void DownNews(long victim, long other, bool revived)
+    {
+        if (_server) return;
+        string v = _state.Find(victim)?.Name ?? "?", o = _state.Find(other)?.Name ?? "";
+        string text = revived ? $"{o} revived {v}" : o.Length > 0 ? $"{o} downed {v}" : $"{v} is down";
+        _feed.Add(new FeedLine(text, victim == Me || other == Me, Time.GetTicksMsec() / 1000.0));
+        if (_feed.Count > 8) _feed.RemoveAt(0);
+        if (!revived && other == Me && victim != Me) LocalPlayer()?.Announce($"KNOCKED {v.ToUpperInvariant()} DOWN", true);
+        GD.Print($"[br] {(revived ? "revive" : "down")}: {text}");
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -308,6 +399,7 @@ public partial class BrManager
         LeaveHold(LocalPlayer());
         ShowHidden();
         FootPlayer.StayDown = null;
+        FootPlayer.CanBeDowned = null;
         FootPlayer.Regenerates = null;
         Permissions.SetInMatch(false);
         StopSpectating();
@@ -392,10 +484,19 @@ public partial class BrManager
         var me = LocalPlayer();
         if (me != _hooked)
         {
-            if (_hooked != null && IsInstanceValid(_hooked)) _hooked.Died -= OnLocalDied;
+            if (_hooked != null && IsInstanceValid(_hooked))
+            {
+                _hooked.Died -= OnLocalDied;
+                _hooked.WentDown -= OnLocalDowned;
+            }
             _hooked = me;
-            if (me != null) me.Died += OnLocalDied;
+            if (me != null)
+            {
+                me.Died += OnLocalDied;
+                me.WentDown += OnLocalDowned;
+            }
         }
+        ReviveTick(me, delta);
 
         FlightTick(me);
 

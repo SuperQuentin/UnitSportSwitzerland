@@ -34,8 +34,9 @@ public partial class Handshake : Node
     /// 11: ChatManager.WorldTime carries the world clock (hour0, epoch, day length); ClockSync.Pong
     /// the server's Unix offset (#452).
     /// 12: BattleRoyale RequestPing/Pinged, BrEntrant.Party (#469).
+    /// 13: BattleRoyale ReportDowned/RequestRevive/Revived/OutNow/DownNews, BrEntrant.Downed (#475).
     /// </summary>
-    public const int Protocol = 12;
+    public const int Protocol = 13;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

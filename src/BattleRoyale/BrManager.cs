@@ -383,6 +383,63 @@ public partial class BrManager : Node
     }
 
     // ------------------------------------------------------------------------------------
+    // server: down, not out (#475)
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>How close a reviver must be to the downed team-mate, m (the server's view of both bodies).</summary>
+    private const float ServerReviveReach = 3.5f;
+
+    /// <summary>
+    /// Server: a squad player's health ran out with a team-mate standing, so their client put them
+    /// down instead of out. If that was the last of their team standing, the whole team goes out.
+    /// </summary>
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReportDowned(long attacker)
+    {
+        if (!_server || _state.Phase != BrPhase.Playing) return;
+        long peer = Multiplayer.GetRemoteSenderId();
+        if (_state.Find(peer) is not { Alive: true, Downed: false } e) return;
+        e.Downed = true;
+        e.DownedBy = attacker;
+        var k = _state.Find(attacker);
+        GD.Print($"[br] down: {e.Name}, by {k?.Name ?? "-"}");
+        Rpc(MethodName.DownNews, peer, attacker, false);
+        Push();
+        OutIfAllDown(e);
+    }
+
+    /// <summary>
+    /// A team whose living are all down has nobody to pick them up: each is told to go out (their
+    /// client reports the death, with its pack for the death box, as any other).
+    /// </summary>
+    private void OutIfAllDown(BrEntrant who)
+    {
+        if (who.Team == 0) return;
+        var living = _state.Entrants.Where(m => m.Team == who.Team && m.Alive).ToList();
+        if (living.Count == 0 || living.Any(m => !m.Downed)) return;
+        GD.Print($"[br] team {who.Team} is all down: out");
+        foreach (var m in living) RpcId(m.Peer, MethodName.OutNow);
+    }
+
+    /// <summary>Server: a standing team-mate held Interact over a downed one for long enough.</summary>
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestRevive(long target)
+    {
+        if (!_server || _state.Phase != BrPhase.Playing) return;
+        long peer = Multiplayer.GetRemoteSenderId();
+        if (_state.Find(peer) is not { Alive: true, Downed: false, Team: not 0 } r
+            || _state.Find(target) is not { Alive: true, Downed: true } t || t.Team != r.Team) return;
+        if (_players?.GetNodeOrNull<Node3D>(peer.ToString()) is not { } a || _players.GetNodeOrNull<Node3D>(target.ToString()) is not { } b
+            || a.GlobalPosition.DistanceTo(b.GlobalPosition) > ServerReviveReach) return;
+        t.Downed = false;
+        t.DownedBy = 0;
+        GD.Print($"[br] revived: {t.Name}, by {r.Name}");
+        RpcId(target, MethodName.Revived);
+        Rpc(MethodName.DownNews, target, peer, true);
+        Push();
+    }
+
+    // ------------------------------------------------------------------------------------
     // server: loot (#194)
     // ------------------------------------------------------------------------------------
 
@@ -600,6 +657,7 @@ public partial class BrManager : Node
     private void Eliminate(BrEntrant e, long killer, BrOut cause)
     {
         e.Alive = false;
+        e.Downed = false;
         e.Survived = Now - _state.FlightStart;
         // a team places when its last member is out, all of them together (solo: at once)
         if (!_state.Entrants.Any(m => m.Alive && BrState.SideOf(m) == BrState.SideOf(e)))
@@ -620,23 +678,30 @@ public partial class BrManager : Node
         GD.Print($"[br] out: {e.Name} ({cause}), place {e.Place}, killer {k?.Name ?? "-"}");
         Rpc(MethodName.Eliminated, e.Peer, k?.Peer ?? 0, (int)cause, e.Place);
         Push();
+        // the last one standing of a team is out: the downed ones go with them (#475)
+        OutIfAllDown(e);
         if (_state.TeamsAlive <= LastSides) End();
     }
 
     private void End()
     {
         if (_state.Phase != BrPhase.Playing) return;
-        var winner = _state.Entrants.FirstOrDefault(e => e.Alive)
-                     ?? _state.Entrants.OrderBy(e => e.Place).FirstOrDefault();
+        // someone standing wins; a team that is all down (#475) is on its way out, and when only
+        // the downed are left there is no winner
+        var winner = _state.Entrants.FirstOrDefault(e => e.Alive && !e.Downed)
+                     ?? (_state.Entrants.Any(e => e.Alive) ? null : _state.Entrants.OrderBy(e => e.Place).FirstOrDefault());
         // the winner's whole side wins (#231): its living keep standing, its fallen place first too
         long side = winner != null ? BrState.SideOf(winner) : 0;
         foreach (var e in _state.Entrants.Where(e => e.Alive))
         {
             e.Survived = Now - _state.FlightStart;
-            e.Place = 1;
             e.Alive = winner != null && BrState.SideOf(e) == side;
+            e.Place = e.Alive ? 1 : 2;
+            e.Downed = false;
         }
         foreach (var e in _state.Entrants.Where(e => winner != null && BrState.SideOf(e) == side)) e.Place = 1;
+        // the rest of a side that was still waiting on its downed (#475) places together
+        foreach (var e in _state.Entrants.Where(e => e.Place == 0)) e.Place = 2;
         _state.Winner = winner?.Peer ?? 0;
         _state.WinnerTeam = winner?.Team ?? 0;
         _state.Phase = BrPhase.Ended;

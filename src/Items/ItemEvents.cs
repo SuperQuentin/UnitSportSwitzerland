@@ -168,7 +168,7 @@ public partial class ItemEvents : Node
         if (Weapons.Get(hit.Weapon) is not { } weapon || hit.Damage > weapon.MaxHit + 0.5f) return;
         var shooter = GetNodeOrNull<FootPlayer>("../Players/" + sender);
         var victim = GetNodeOrNull<FootPlayer>("../Players/" + hit.Victim);
-        if (shooter == null || victim == null || victim.Down != 0 || shooter.Down != 0) return;
+        if (shooter == null || victim == null || victim.Down == 1 || shooter.Down != 0) return;   // a downed victim (2) can be finished, #475
         // the bodies are where their owners last said (in LV95, #185): allow for a quarter second of
         // running at both ends
         const float Slack = 8f;

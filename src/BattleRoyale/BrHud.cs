@@ -123,6 +123,19 @@ public partial class BrHud : CanvasLayer
                     Text(font, tip + new Vector2(0, -30), $"{ping.Name} · {d:F0} m", 13, BrMapDraw.Ping, HorizontalAlignment.Center);
                 }
 
+            // ---- down, not out (#475): the bleeding, or a team-mate being picked up -----------
+            if (s.Phase == BrPhase.Playing && me is { Downed: true })
+            {
+                float left = me.BleedLeft / Player.FootPlayer.MaxHealth;
+                Banner(font, new Vector2(w * 0.5f, Size.Y * 0.62f), $"DOWN  ·  out in {left * Player.FootPlayer.BleedSeconds:F0} s  ·  a team-mate can revive you", 18, Danger);
+                Bar(new Vector2(w * 0.5f, Size.Y * 0.62f + 16), left, Danger);
+            }
+            else if (br.Reviving is { } rv)
+            {
+                Banner(font, new Vector2(w * 0.5f, Size.Y * 0.62f), $"Reviving {rv.Name}…", 18, BrMapDraw.Mate);
+                Bar(new Vector2(w * 0.5f, Size.Y * 0.62f + 16), rv.Progress, BrMapDraw.Mate);
+            }
+
             // ---- the zone, from where this player stands -----------------------------------
             if (s.Phase == BrPhase.Playing && br.ZoneNow is { } zn && me != null && br.InMatch && br.MeAlive)
             {
@@ -202,6 +215,14 @@ public partial class BrHud : CanvasLayer
             var sz = font.GetStringSize(text, HorizontalAlignment.Left, -1, size);
             DrawRect(new Rect2(centre.X - sz.X * 0.5f - 12, centre.Y - size - 2, sz.X + 24, size + 12), Panel);
             DrawString(font, new Vector2(centre.X - sz.X * 0.5f, centre.Y), text, HorizontalAlignment.Left, -1, size, color);
+        }
+
+        /// <summary>A 240 px bar centred under <paramref name="top"/>, <paramref name="fill"/> 0..1 of it in <paramref name="color"/>.</summary>
+        private void Bar(Vector2 top, float fill, Color color)
+        {
+            var r = new Rect2(top.X - 120, top.Y, 240, 8);
+            DrawRect(r, Panel);
+            DrawRect(new Rect2(r.Position, new Vector2(r.Size.X * Mathf.Clamp(fill, 0f, 1f), r.Size.Y)), color);
         }
 
         private void Text(Font font, Vector2 at, string text, int size, Color color, HorizontalAlignment align, bool shadow = false)
