@@ -56,7 +56,7 @@ public static class ItemDefs
         new(ItemId.Francs, "Swiss francs", "Money. Never takes a slot: it is counted as cash, and deposited to your account at a bank counter.",
             ItemUse.Material, 9999, new Color(0.80f, 0.70f, 0.35f), "CHF", 0, ItemCategory.Money, 1f),
         Eat(ItemId.Bandage, "Bandage", 10, "#f2eee6", "BD", 25, ItemCategory.Medical, 5),
-        Eat(ItemId.FirstAidKit, "First-aid kit", 3, "#d02828", "+", 100, ItemCategory.Medical, 30),
+        Eat(ItemId.FirstAidKit, "First-aid kit", 3, "#d02828", "+", 75, ItemCategory.Medical, 30),
 
         Mat(ItemId.ScrapMetal, "Scrap metal", 50, "#7c8088", "SM", ItemCategory.Scrap, 1),
         Mat(ItemId.Plastic, "Plastic", 50, "#e0e4e8", "PL", ItemCategory.Scrap, 0.5f),

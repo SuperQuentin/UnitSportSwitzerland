@@ -160,8 +160,20 @@ public partial class BrProbe : ChatProbe
         var last = Br.Zone!.CentreOf(ZoneSchedule.Phases);
         Br.Teleport(s.AreaE + last.X + 5, s.AreaN + last.Y, "back in the zone");   // never on top of A
 
-        // next to A
-        if (!await Until(() => _heard.Any(l => l.Contains("BR A posA")), 160)) { Expect(false, "A reported"); return; }
+        // next to A; until A reports, keep up with the zone: it bites harder and nobody regenerates
+        // in a match (#455), so a wait at one centre while the circles close is a death
+        var at = Br.ZoneNow?.NextCentre;
+        double give = Time.GetTicksMsec() / 1000.0 + 160;
+        while (!_heard.Any(l => l.Contains("BR A posA")))
+        {
+            if (Time.GetTicksMsec() / 1000.0 > give) { Expect(false, "A reported"); return; }
+            if (Br.ZoneNow is { } z && z.NextCentre != at)
+            {
+                at = z.NextCentre;
+                Br.Teleport(s.AreaE + z.NextCentre.X, s.AreaN + z.NextCentre.Y, "keeping in the zone");
+            }
+            await Seconds(1.0);
+        }
         var p = _heard.Last(l => l.Contains("BR A posA")).Split("posA ")[1].Split(' ');
         double e = double.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture);
         double n = double.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture);

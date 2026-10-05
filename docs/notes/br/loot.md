@@ -14,7 +14,7 @@
 
   | Table | Contents |
   |---|---|
-  | Furniture | 50 % hold something: 1-2 rolls, 30 % weapon (pistol > shotgun > rifle > hunting rifle, knife), else supplies (9 mm, shells, 7.5 mm, bandages, first-aid kit, vest, food) |
+  | Furniture | 50 % hold something: 1-2 rolls, 30 % weapon (pistol 38 > shotgun 26 > rifle 9 > knife 6 > hunting rifle 3; #455 made the rifle rarer), else supplies (9 mm, shells, 7.5 mm, bandages, first-aid kit, vest 8, food) |
   | GunLocker | a rifle or a hunting rifle + 7.5 mm, sometimes a vest |
   | Safe | a vest + a first-aid kit, sometimes a pistol |
   | Supply | 1-2 commons |

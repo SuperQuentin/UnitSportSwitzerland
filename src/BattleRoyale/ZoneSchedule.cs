@@ -39,7 +39,7 @@ public sealed class ZoneSchedule
     private static readonly float[] RadiusFraction = { 1f, 0.618f, 0.397f, 0.25f, 0.147f, 0.082f, 0.041f, 0.0176f, 0f };
     private static readonly double[] Wait = { 0, 120, 180, 150, 120, 105, 90, 75, 60 };
     private static readonly double[] Shrink = { 0, 180, 150, 120, 105, 90, 75, 60, 60 };
-    private static readonly float[] Damage = { 0f, 1f, 2f, 3f, 5f, 7f, 10f, 15f, 25f };
+    private static readonly float[] Damage = { 0f, 2f, 3f, 5f, 7f, 10f, 14f, 20f, 30f };   // #455: the first circle bites
 
     private readonly Vector2[] _centre = new Vector2[Phases + 1];
     private readonly float[] _radius = new float[Phases + 1];

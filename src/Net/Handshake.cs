@@ -31,7 +31,9 @@ public partial class Handshake : Node
     /// 8: shops and PAUSA vending machines: ShopService buy/sell/vend, card payment (#273).
     /// 9: structures sent by distance, PlacedObjects AskBurn/Burnt, hang and climb pose kinds (#359).
     /// 10: World/ChurchRadios (Ask*/Set), CdInfo's source, MusicStyle.RatDance (#370).
-    /// 12: BattleRoyale RequestPing/Pinged, BrEntrant.Party (#469); 11 is the world clock's (#452).
+    /// 11: ChatManager.WorldTime carries the world clock (hour0, epoch, day length); ClockSync.Pong
+    /// the server's Unix offset (#452).
+    /// 12: BattleRoyale RequestPing/Pinged, BrEntrant.Party (#469).
     /// </summary>
     public const int Protocol = 12;
 
