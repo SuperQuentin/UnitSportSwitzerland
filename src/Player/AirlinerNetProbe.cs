@@ -42,6 +42,19 @@ public partial class AirlinerNetProbe : ChatProbe
         await Finish(2.0);
     }
 
+    private async Task SayScreens(FootPlayer me, Airliner air)
+    {
+        for (int i = 0; i < 40 && !_heard.Any(l => l.Contains("AN B seen gear")); i++)
+        {
+            if (Cockpit(me) is { } flying)
+            {
+                var r = flying.Shown;
+                Say($"deckair {r.Ias} {r.Alt} {r.Hdg} {r.Gear} {(air.State.GearDown ? 1 : 0)}");
+            }
+            await Seconds(1);
+        }
+    }
+
     private static AircraftCockpit? Cockpit(FootPlayer p) => p.GetChildren().OfType<AirlinerRig>().FirstOrDefault()?.Cockpit;
 
     /// <summary>The words of the last line <paramref name="who"/> said starting with <paramref name="word"/>, after it.</summary>
@@ -115,16 +128,10 @@ public partial class AirlinerNetProbe : ChatProbe
         await Seconds(1);
         Expect(!air.State.GearDown && !air.State.OnGround, "gear lever up in the air");
         Say("gear up");
-        // #421: what A's own screens show, said every second (it accelerates) until B has compared its copy's
-        for (int i = 0; i < 40 && !_heard.Any(l => l.Contains("AN B seen gear")); i++)
-        {
-            if (Cockpit(me) is { } flying)
-            {
-                var r = flying.Shown;
-                Say($"deckair {r.Ias} {r.Alt} {r.Hdg} {r.Gear} {(air.State.GearDown ? 1 : 0)}");
-            }
-            await Seconds(1);
-        }
+        // #421: what A's own screens show, said every second (it accelerates) until B has compared its copy's;
+        // alongside, so the rest of A's steps keep their timing
+        _ = SayScreens(me, air);
+        await Heard("B", "seen gear", 30);
 
         // #416: B walks in A's cabin while A flies; both peers must put B at the same spot in it
         if (!await Heard("B", "walked", 60)) { Fail("B never walked aboard"); return; }
