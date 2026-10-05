@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # Local release: next semver from commits since the last tag, Windows + Linux + macOS exports, GitHub release.
-# Usage: tools/release.sh [--dry-run] [--ci]   (Git Bash or WSL, on a main in sync with origin/main; GODOT=godot on WSL)
+# Usage: tools/release.sh [--dry-run] [--no-upload] [--ci]   (Git Bash or WSL, on a main in sync with origin/main; GODOT=godot on WSL)
+# --dry-run: print the version and changelog only. --no-upload: build every export but publish nothing.
 # --ci: run from .github/workflows/release.yml, which already checked out the tip of main detached.
 # The build runs in a temporary worktree of the released commit, so your working files are never touched.
 # Needs: gh (logged in), dotnet, Godot mono + export templates (windows, linux, macos), export_presets.cfg in the repo root
 # ("Linux" and "macOS" presets are added when missing), curl, unzip, tar, xz, zip or PowerShell.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-DRY=0; CI=0
+DRY=0; CI=0; NOUP=0
 for a in "$@"; do case $a in
   --dry-run) DRY=1 ;;
+  --no-upload) NOUP=1 ;;
   --ci) CI=1 ;;
   *) echo "Unknown option: $a"; exit 2 ;;
 esac; done
@@ -160,6 +162,12 @@ fi
 if [ ${#SKIPPED[@]} -gt 0 ]; then
   printf '\n_Built on a host that could not export %s, so this release ships without it._\n' \
     "$(IFS=,; echo "${SKIPPED[*]}")" >> "$REPO/$OUT/notes.md"
+fi
+
+if [ $NOUP = 1 ]; then
+  echo "Built v$V without releasing${SKIPPED[0]+, skipping ${SKIPPED[*]}}:"
+  for a in "${ASSETS[@]}"; do echo "  $(du -h "$a" | cut -f1)	${a#$REPO/}"; done
+  exit 0
 fi
 
 gh release create "v$V" "${ASSETS[@]}" --target "$SHA" --title "v$V" --notes-file "$REPO/$OUT/notes.md"

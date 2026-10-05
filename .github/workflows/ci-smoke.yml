@@ -1,0 +1,80 @@
+# TEMPORARY, deleted before #529 leaves draft: release.yml cannot run from a branch
+# (pull_request_target and workflow_dispatch both resolve the workflow from main), so this
+# runs the same install + build + export steps on this branch and publishes nothing.
+name: Release build smoke test
+
+on:
+  push:
+    branches: [feat/92-release-on-merge]
+  workflow_dispatch:
+
+concurrency:
+  group: release-smoke
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GODOT_VERSION: 4.7.1-stable
+      GODOT: ${{ github.workspace }}/.godot-ci/godot
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Cache Godot and its export templates
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .godot-ci
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-mono-linux
+
+      - name: Install Godot ${{ env.GODOT_VERSION }} mono
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          base=https://github.com/godotengine/godot-builds/releases/download/$GODOT_VERSION
+          v=${GODOT_VERSION%-stable}
+          mkdir -p .godot-ci "$HOME/.local/share/godot/export_templates"
+          curl -fsSL -o /tmp/godot.zip "$base/Godot_v${GODOT_VERSION}_mono_linux_x86_64.zip"
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          d=$(find /tmp/godot -maxdepth 1 -mindepth 1 -type d | head -1)
+          cp -r "$d"/* .godot-ci/
+          mv .godot-ci/Godot_v${GODOT_VERSION}_mono_linux.x86_64 .godot-ci/godot
+          chmod +x .godot-ci/godot
+          curl -fsSL -o /tmp/templates.tpz "$base/Godot_v${GODOT_VERSION}_mono_export_templates.tpz"
+          unzip -q /tmp/templates.tpz -d /tmp/tpz
+          mv /tmp/tpz/templates "$HOME/.local/share/godot/export_templates/${v}.mono"
+
+      - name: What did we install
+        run: |
+          "$GODOT" --headless --version
+          ls "$HOME/.local/share/godot/export_templates/"
+          ls "$HOME/.local/share/godot/export_templates/"*/ | head -40
+
+      - name: Install the CI export presets
+        run: cp tools/ci/export_presets.cfg export_presets.cfg
+
+      - name: Build every export, publish nothing
+        run: bash tools/release.sh --ci --no-upload
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-notes
+          path: |
+            test_output/release/notes.md
+            test_output/release/subjects.txt
+          if-no-files-found: ignore
