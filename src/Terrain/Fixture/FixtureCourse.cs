@@ -26,7 +26,7 @@ public sealed class FixtureCourse
     public List<(RoadClass Class, List<(double X, double Y, double Z)> Points)> Roads { get; } = new();
     public List<(double X, double Y, double Z, float Height)> Trees { get; } = new();
 
-    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake" };
+    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake", "parking" };
 
     /// <summary>The ground as a function, instead of following the roads; null: <see cref="Ground"/>'s roads.</summary>
     public Func<double, double, double>? Terrain { get; init; }
@@ -46,6 +46,20 @@ public sealed class FixtureCourse
     /// <summary>Harbour jetties (#377): a centreline, metres from the start, with the deck's height.</summary>
     public List<List<(double X, double Y, double Z)>> Jetties { get; } = new();
 
+    /// <summary>
+    /// Car parks (#499): a ring in metres from the start, which the source hands to
+    /// <c>ParkingPlanner</c> — the same planner the network stage runs over swissTLM3D's rings, so
+    /// the course exercises the real layout code rather than a stand-in.
+    /// </summary>
+    public List<List<(double X, double Y)>> CarParks { get; } = new();
+
+    /// <summary>
+    /// The shop a car park serves, metres from the start: its door and its floor area. A big enough
+    /// retail one earns trolley shelters and a walk to the door. The course has no buildings, so
+    /// this is how the fixture reaches that half of the planner.
+    /// </summary>
+    public (double DoorX, double DoorY, double FloorAreaM2, bool Retail)? Store { get; init; }
+
     /// <summary>The box the course needs whatever its roads, metres from the start; null: the roads' box.</summary>
     public (double MinX, double MinY, double MaxX, double MaxY)? Extent { get; init; }
 
@@ -58,8 +72,39 @@ public sealed class FixtureCourse
         "junction" => Junction(),
         "verge" => Verge(),
         "lake" => Lake.Create(),
+        "parking" => Parking(),
         _ => null,
     };
+
+    /// <summary>
+    /// A big-box store's car park off a main road (#499): 34 m deep, so it takes two-sided bands,
+    /// and 72 m of frontage, so its rows are long enough for end planters. The road runs 14° off
+    /// east so the lot is NOT square to the world — which is the whole point: the old shader grid
+    /// cut across rows like these, and the planner's rows have to follow the lot instead.
+    /// </summary>
+    private static FixtureCourse Parking()
+    {
+        const double turn = 14 * Math.PI / 180;
+        var road = new Pen(0, 0, FlatHeight, 14, 0).Straight(600);
+
+        // the lot sits 10 m north of the road, turned with it
+        var ring = new List<(double X, double Y)>();
+        foreach (var (u, v) in (( double, double)[])[(60, 10), (132, 10), (132, 44), (60, 44)])
+            ring.Add((u * Math.Cos(turn) - v * Math.Sin(turn), u * Math.Sin(turn) + v * Math.Cos(turn)));
+
+        // the store's door on the far side of the lot, facing it
+        double doorU = 96, doorV = 48;
+        var course = new FixtureCourse
+        {
+            Name = "parking",
+            Terrain = (_, _) => FlatHeight,
+            Store = (doorU * Math.Cos(turn) - doorV * Math.Sin(turn),
+                     doorU * Math.Sin(turn) + doorV * Math.Cos(turn), 2400, true),
+            Extent = (-20, -60, 320, 160),
+        }.Road(RoadClass.Major, road);
+        course.CarParks.Add(ring);
+        return course;
+    }
 
     private static FixtureCourse Hairpin()
     {

@@ -41,7 +41,14 @@ public static class FormatCheck
         Check(back.PointProps.SequenceEqual(tile.PointProps), "point props");
         Check(back.LinearProps.Count == 1 && back.LinearProps[0].Points.SequenceEqual(tile.LinearProps[0].Points),
             "linear props");
-        Check(back.AreaProps.Count == 1 && back.AreaProps[0].Height == 0.12f, "area props");
+        Check(back.AreaProps.Count == 2 && back.AreaProps[0].Height == 0.12f
+              && back.AreaProps[1].Type == AreaPropType.ParkingPad && back.AreaProps[1].Height == 0,
+            "area props, a car park pad among them");
+        // the PARK order is a wire contract: a dormant vehicle's slot is an index into it (#499)
+        Check(back.Parking.SequenceEqual(tile.Parking)
+              && back.Parking[1].Flags.HasFlag(ParkingBayFlags.Disabled)
+              && back.Parking[1].Width == ParkingBay.DisabledWidth,
+            "parking bays (PARK), in order, flags and widths kept");
 
         // v2: the same bytes up to the end of the junctions, version 2, header flags zero
         int v2Length = RoadFormat.HeaderSize
@@ -265,6 +272,15 @@ public static class FormatCheck
         {
             new RoadAreaProp { Type = AreaPropType.Island, Flags = PropFlags.Solid, Height = 0.12f,
                 Vertices = [0, 1, 0, 1, 1, 0, 0, 1, 1], Indices = [0, 1, 2] },
+            new RoadAreaProp { Type = AreaPropType.ParkingPad, Height = 0,
+                Vertices = [20, 479, 20, 25, 479, 20, 25, 479, 25, 20, 479, 25], Indices = [0, 1, 2, 0, 2, 3] },
+        },
+        // marked bays of a car park (#499, PARK), in the planner's stable order
+        Parking =
+        {
+            new ParkingBay(21.25f, 479f, 22.5f, 1.5708f, ParkingBayKind.Car, ParkingBayFlags.None),
+            new ParkingBay(23.75f, 479f, 22.5f, 1.5708f, ParkingBayKind.Car,
+                ParkingBayFlags.Disabled | ParkingBayFlags.Shaded),
         },
     };
 }

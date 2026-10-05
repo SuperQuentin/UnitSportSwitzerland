@@ -143,9 +143,13 @@ public static partial class TerrainMeshBuilder
                     FreeBehindWall(scratch, wall);
 
             foreach (var island in roadTile.AreaProps)
-                if (island.Type == AreaPropType.Island && island.Height > 0 && island.Vertices.Length >= 9)
+                // a car park's planter is a kerbed bed like a roundabout's island, and its pad is
+                // flush like a turn lane's widening (#499)
+                if (island.Type is AreaPropType.Island or AreaPropType.ParkingIsland
+                    && island.Height > 0 && island.Vertices.Length >= 9)
                     HoldUnderIsland(scratch, island);
-                else if (island.Type == AreaPropType.Pavement && island.Vertices.Length >= 9)
+                else if (island.Type is AreaPropType.Pavement or AreaPropType.ParkingPad
+                    && island.Vertices.Length >= 9)
                     HoldUnderPavement(scratch, island);
 
             // tunnels (#119): the ground over a bore never lies under its crown, so a mouth always has
