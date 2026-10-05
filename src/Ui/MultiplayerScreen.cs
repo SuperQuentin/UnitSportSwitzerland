@@ -33,7 +33,7 @@ public partial class MultiplayerScreen : Screen
 
     public override void _Ready()
     {
-        var (body, header) = Framed("Multiplayer", "Join a server, or host one from this machine", new Vector2(1000, 590));
+        var (body, header) = Framed("Multiplayer", Platform.CanSpawnProcesses ? "Join a server, or host one from this machine" : "Join a server", new Vector2(1000, 590));
 
         // --- the name chip, top right
         var chip = UiKit.HBox(6);

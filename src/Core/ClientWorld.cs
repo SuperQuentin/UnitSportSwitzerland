@@ -727,6 +727,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var prompts = PromptBar.Create();
         prompts.Source = Prompts;
         AddChild(prompts);
+        // a phone's controls (#63): an on-screen pad labelled from the same prompts
+        if (TouchControls.Wanted)
+        {
+            var touch = TouchControls.Create();
+            touch.Source = Prompts;
+            AddChild(touch);
+            if (TouchCheck.Requested) AddChild(new TouchCheck(() => LocalPlayer, touch));
+        }
 
         // Scavenging: what the furniture in those interiors holds. Same node path as the server's,
         // which decides who gets what; offline this client does both.

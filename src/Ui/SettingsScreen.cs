@@ -58,10 +58,13 @@ public partial class SettingsScreen : Screen
 
         Tab("Video", rows =>
         {
-            UiKit.OptionRow(rows, "Window", new[] { "Windowed", "Borderless fullscreen", "Fullscreen" }, (int)s.WindowMode,
-                i => GameSettings.Current.WindowMode = (WindowMode)i, "F11 or Alt+Enter toggles it anywhere");
-            SizeRow(rows, "Window size", WindowSizes(), s.WindowWidth, s.WindowHeight, "Keep current",
-                (w, h) => (GameSettings.Current.WindowWidth, GameSettings.Current.WindowHeight) = (w, h));
+            if (!Platform.IsMobile) // a phone's window is the screen (#63)
+            {
+                UiKit.OptionRow(rows, "Window", new[] { "Windowed", "Borderless fullscreen", "Fullscreen" }, (int)s.WindowMode,
+                    i => GameSettings.Current.WindowMode = (WindowMode)i, "F11 or Alt+Enter toggles it anywhere");
+                SizeRow(rows, "Window size", WindowSizes(), s.WindowWidth, s.WindowHeight, "Keep current",
+                    (w, h) => (GameSettings.Current.WindowWidth, GameSettings.Current.WindowHeight) = (w, h));
+            }
             ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
             // Realistic+ needs Forward+ through a relaunch, which a phone cannot do (#63)
             var styles = Styles.StyleKit.MenuStyles.Where(v => Platform.CanSpawnProcesses || !Styles.StyleKit.NeedsForwardPlus(v)).ToArray();
@@ -161,6 +164,9 @@ public partial class SettingsScreen : Screen
         {
             UiKit.SliderRow(rows, "Stick look speed", 0.2, 3, 0.1, s.StickSensitivity,
                 v => GameSettings.Current.StickSensitivity = (float)v, v => $"{v:F1}x");
+            if (Platform.IsMobile)
+                UiKit.SliderRow(rows, "Touch look speed", 0.3, 4, 0.1, s.TouchLookSpeed,
+                    v => GameSettings.Current.TouchLookSpeed = (float)v, v => $"{v:F1}x");
             UiKit.SliderRow(rows, "Stick deadzone", 0.05, 0.5, 0.01, s.StickDeadzone,
                 v => GameSettings.Current.StickDeadzone = (float)v, v => $"{v * 100:F0} %");
             UiKit.ToggleRow(rows, "Invert look Y", s.InvertY, on => GameSettings.Current.InvertY = on);

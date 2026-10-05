@@ -3253,7 +3253,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
-        if (@event is InputEventMouseMotion motion && Input.MouseMode == Input.MouseModeEnum.Captured)
+        if (@event is InputEventMouseMotion motion && PlayerInput.IsLookMotion(motion))
         {
             // Mounted, the body's yaw belongs to the steering — a bicycle goes where it points,
             // and letting the mouse turn it would mean looking over your shoulder steered you

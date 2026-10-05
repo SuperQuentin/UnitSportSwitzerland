@@ -110,6 +110,8 @@ public sealed class GameSettings
     // --- controls ---
     /// <summary>Right-stick look speed multiplier; 1 turns at <see cref="PlayerInput.StickTurnRate"/>.</summary>
     public float StickSensitivity { get; set; } = 1f;
+    /// <summary>Touch look (#63): camera turn per pixel of drag, as a multiple of the mouse's.</summary>
+    public float TouchLookSpeed { get; set; } = 1.5f;
     public bool InvertY { get; set; }
 
     /// <summary>Stick travel ignored around centre. Worn pads drift, so it is a setting.</summary>
@@ -394,6 +396,7 @@ public sealed class GameSettings
         VrMsaa = VrMsaa switch { <= 0 => 0, <= 2 => 2, <= 4 => 4, _ => 8 };
         VrRenderScale = Math.Clamp(VrRenderScale, MinVrRenderScale, MaxVrRenderScale);
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
+        TouchLookSpeed = Math.Clamp(TouchLookSpeed, 0.3f, 4f);
         MasterVolume = Math.Clamp(MasterVolume, 0f, 1f);
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
         AmbienceVolume = Math.Clamp(AmbienceVolume, 0f, 1f);

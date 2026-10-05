@@ -73,6 +73,9 @@ public partial class GameShell : Node
     /// probe or a tool. The list is of the harmless ones, so a new probe flag never lands on the
     /// title by accident — anything unknown boots straight into the world, as before.
     /// </summary>
+    /// <summary>The menus' size on a phone, over the desktop's (#63): 38 px buttons become about 7 mm on a 6" screen.</summary>
+    public const float MobileUiScale = 1.15f;
+
     public static bool UseTitle(string[] args)
     {
         string[] harmless =
@@ -83,7 +86,7 @@ public partial class GameShell : Node
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world",
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
             "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
-            "--leave-restart", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
+            "--leave-restart", "--mobile", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
         };
         foreach (string a in args)
             if (a.StartsWith("--") && Array.IndexOf(harmless, a) < 0) return false;
@@ -93,6 +96,9 @@ public partial class GameShell : Node
     public override void _Ready()
     {
         Instance = this;
+        // a phone: fingers, not a pointer, so every menu a size up (#63; the canvas shrinks to match,
+        // and the touch overlay lays out on what is left)
+        if (Platform.IsMobile) GetTree().Root.ContentScaleFactor = MobileUiScale;
         Audio.SfxBus.Ensure();
         PlayerInput.Install(GetParent());
         // VR (#186) before any menu or camera exists, so the title is in the headset too
