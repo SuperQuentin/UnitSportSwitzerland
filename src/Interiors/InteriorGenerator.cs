@@ -31,6 +31,9 @@ public static partial class InteriorGenerator
     private const float Landing = 1.0f;
     private const int MaxFloors = 30;
 
+    /// <summary>An entry at least this wide is driven through, and keeps a lane clear behind it.</summary>
+    private const float VehicleEntryWidth = 2.5f;
+
     /// <param name="rural">The building's tile is countryside (<c>Loot.ShopTables.IsRural</c>): only there is a gun shop.</param>
     public static InteriorLayout Generate(Footprint fp, Building b, bool rural = false)
     {
@@ -144,7 +147,11 @@ public static partial class InteriorGenerator
             var at = new Godot.Vector2(rel.Dot(fp.AxisU), rel.Dot(axisV));
             var outward = new Godot.Vector2(d.Outward.X, d.Outward.Z);
             var faces = new Godot.Vector2(outward.Dot(fp.AxisU), outward.Dot(axisV));
-            float width = Math.Min(d.Width, 1.8f);
+            // A pedestrian door's doorway is a doorway, whatever the door. A door DRIVEN through
+            // keeps its full width, or a 4.5 m loading bay arrives at a 1.8 m hole on the inside
+            // and a 1.8 m car wedges in it at the sill — which is exactly what the drive-through
+            // found (#531): the bay opened, the portal was crossed, and the car stopped 3 cm in.
+            float width = d.Vehicle ? d.Width : Math.Min(d.Width, 1.8f);
             if (width < 0.7f || Math.Min(d.Height, clear - 0.15f) < 1.9f) continue;
 
             // the wall that faces the same way first, then round the building
@@ -1144,10 +1151,20 @@ public static partial class InteriorGenerator
                 if (r.Type == RoomType.Shelter)
                     foreach (var o in r.Openings)
                         if (o.Kind == OpeningKind.Door) blocked.Add(BlastLeaf(r, o));
-                // a garage or a barn is driven into: a lane from its door, as wide, kept clear
-                if (f == 0 && BuildingFootprint.VehicleDoor(l.Kind))
+                // A door driven through needs a lane behind it, kept clear of furniture. Judged by
+                // the OPENING, not by the building's kind: a works is not a `VehicleDoor` kind, yet
+                // every one of its loading bays is driven through (#528), and furniture stood in
+                // all of them — a car through a bay hit a lift and was shoved back into the yard,
+                // which is what the drive-through found (#531). A pedestrian entrance is 1.0-1.8 m
+                // and a vehicle one 2.8 m and up, so the width tells them apart with room to spare.
+                var lanes = new List<RectPlan>();
+                if (f == l.Below)
                     foreach (var o in r.Openings)
-                        if (o.Kind == OpeningKind.Entry && o.Side == Side.Front) blocked.Add(Lane(l.Kind, r, o));
+                        if (o.Kind == OpeningKind.Entry && o.Side == Side.Front && o.Width >= VehicleEntryWidth)
+                            lanes.Add(Lane(l.Kind, r, o));
+                // a hall that lays itself out takes its lanes in hand: a workshop's drive-on ramp
+                // belongs IN the lane, everything else out of it (HallLayout)
+                if (!LaysItselfOut(r.Type)) blocked.AddRange(lanes);
                 // the stairwell is not somewhere to put a sofa. A site hall (#497) is room 0 with
                 // the service block beside it and holds no stair, so it is not one: the strip the
                 // core keeps clear just inside the door would have blocked its whole front bay.
@@ -1163,7 +1180,7 @@ public static partial class InteriorGenerator
                 // a site hall is aisles or lines, not pieces scattered round its walls (#497)
                 if (LaysItselfOut(r.Type))
                 {
-                    HallLayout(l, f, r, placed, blocked, rng);
+                    HallLayout(l, f, r, placed, blocked, lanes, rng);
                     foreach (var p in HallDressing(r.Type))
                         TryPlace(l, f, r, p, placed, blocked, rng);
                     continue;

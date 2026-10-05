@@ -175,8 +175,42 @@ public sealed partial class ProceduralWorld
                 24, 0, 0, 1650, Tower: true));
         }
 
+        // The works, beyond one end of the village (#531). A village is houses, a church and a few
+        // barns, and nothing in the generated world was ever `BuildingKind.Industrial` — so the
+        // warehouses, yards and loading bays of #496 could be built but never driven to. It stands
+        // off the valley road past the last house, on the side away from the river, with its long
+        // wall to the road: that is the wall `BuildingFootprint` puts the door on, and so the wall
+        // the loading bays and the yard go on (#528, #516).
+        if (halfLength > WorksMinVillage)
+        {
+            double at = x + (rng.NextDouble() < 0.5 ? -1 : 1) * (halfLength + WorksBeyondEnd);
+            var (p, t, nrm) = RoadFrame(line, at);
+            var c = (E: p.E + nrm.E * WorksSetback, N: p.N + nrm.N * WorksSetback);
+            // two sizes, by where it stands rather than by the village's own rng, so the works
+            // never moves a house: a big shed is a warehouse or a works, a medium one can also be
+            // a haulier's depot (BuildingTypes.SiteFor decides from the footprint)
+            bool big = Noise.Hash01((int)Math.Floor(c.E), (int)Math.Floor(c.N), 229) < 0.55;
+            double halfLong = big ? 17 : 11, halfShort = big ? 11 : 8;
+            var year = (ushort)(1968 + (int)(Noise.Hash01((int)Math.Floor(c.E), (int)Math.Floor(c.N), 233) * 50));
+            plans.Add(new Plan(new Footprint(c.E, c.N, t.E, t.N, halfLong, halfShort),
+                BuildingKind.Industrial, big ? 8.5 : 6.5, 0, 0, year));
+        }
+
         return new Village(slot, streets, plans);
     }
+
+    /// <summary>A village shorter than this is a hamlet, and a hamlet has no works.</summary>
+    private const double WorksMinVillage = 200;
+
+    /// <summary>How far past the last house the works stands, metres along the valley road.</summary>
+    private const double WorksBeyondEnd = 70;
+
+    /// <summary>
+    /// Its middle, off the valley road's centre line. Far enough that the yard in front of it
+    /// (<c>SiteYards</c>, 7 m apron plus up to 34 m of standing room) does not reach the road —
+    /// a dormant lorry on the carriageway would be dropped, and the yard would look half-used.
+    /// </summary>
+    private const double WorksSetback = 52;
 
     private const double GarageHalfWidth = 1.7, GarageHalfDepth = 3.1;
 
@@ -285,13 +319,19 @@ public sealed partial class ProceduralWorld
         var villages = VillagesNear(minE, minN, maxE, maxN).ToList();
         foreach (var v in villages)
             foreach (var p in v.Buildings)
-                if (In(p) && p.Kind != BuildingKind.Garage) yield return p;
+                if (In(p) && p.Kind is not (BuildingKind.Garage or BuildingKind.Industrial)) yield return p;
         foreach (var p in FarmsNear(site, minE, minN, maxE, maxN))
             if (In(p)) yield return p;
-        // garages last: they came later, and must not move any other building's index in its tile
+        // Garages, then the works, each after everything that came before it. A building's index in
+        // its tile is its name — the interior's plan key, its loot records, a check's hard-coded
+        // `2585_1114_52` — so a kind added later has to be yielded last or it renames everything
+        // after it. Garages learnt this in #139; the works keeps the rule in #531.
         foreach (var v in villages)
             foreach (var p in v.Buildings)
                 if (In(p) && p.Kind == BuildingKind.Garage) yield return p;
+        foreach (var v in villages)
+            foreach (var p in v.Buildings)
+                if (In(p) && p.Kind == BuildingKind.Industrial) yield return p;
     }
 
     // ---- roads -------------------------------------------------------------------------------

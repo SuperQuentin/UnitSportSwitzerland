@@ -196,6 +196,10 @@ src/Terrain/Water        net    tools/watercheck.sh
 src/Loot/Shop            net    tools/shopcheck.sh
 src/Items/Bank           net    tools/shopcheck.sh
 src/Interiors/BankSigns  net    tools/shopcheck.sh
+src/Interiors/BuildingFootprint net tools/baycheck.sh
+src/Interiors/DoorBudget net    tools/baycheck.sh
+src/Interiors/InteriorGenerator net tools/baycheck.sh
+src/Terrain/ProceduralWorld.Settlements net tools/baycheck.sh
 src/Terrain/ProceduralWorld.Settlements  net  tools/shopcheck.sh
 src/Player/FootPlayer.Sw net    tools/swimnetcheck.sh
 src/Player/SwimNet       net    tools/swimnetcheck.sh
