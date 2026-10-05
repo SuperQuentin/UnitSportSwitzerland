@@ -865,6 +865,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public void DebugLaunch(Vector3 position, Vector3 velocity)
     {
         GlobalPosition = position;
+        // the body's floor contact is still the old spot's until it moves: one still step here clears it,
+        // or the first flight step at 600 m sees the runway under it, a touchdown with the gear up (#456)
+        Velocity = Vector3.Zero;
+        MoveAndSlide();
         // placed by hand, so it need not wait for terrain under it (a probe over no terrain at all)
         _placed = true;
         _flight.Velocity = velocity;
@@ -2608,7 +2612,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : _ride is Steamer gangways ? gangways.DoorsOpen : DoorsOpen, Setup: CarSetupId,
             Train: _ride is Truck t ? t.TrailerCode : 0,
             // a truck's joints; a boat's attitude (Euler, #302), so it is parked as it floated
-            Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler() : default,
+            // an airliner left in the air (stood up from its seat): its attitude, or it is put down level (#456)
+            Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler()
+                : _ride is Airliner { State.OnGround: false } aloft ? aloft.State.Attitude.Orthonormalized().GetEuler() : default,
             Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
             Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd,
             Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw);

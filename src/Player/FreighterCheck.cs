@@ -212,16 +212,26 @@ public partial class FreighterCheck : Node
             flying = again;
         }
 
-        // in flight below the drop speed: the ramp opens, stand up, walk aft into the hold, carried along
-        float y0Launch = me.GlobalPosition.Y;
+        // in flight below the drop speed: the ramp opens, stand up, walk aft into the hold, carried along.
+        // Past the settling after taking the controls, as windowed (the ramp's animation takes that long):
+        // headless the launch came inside it and never saw the stale floor contact that wrecked it (#456).
+        await Until(() => flying.State.Settle <= 0f, 5);
+        float y0Launch = me.GlobalPosition.Y, health0 = me.VehicleHealth;
         me.DebugLaunch(me.GlobalPosition + Vector3.Up * 600f, -me.GlobalTransform.Basis.Z * 65f);
         await Seconds(3);
         GD.Print($"[freightercheck] launched: ride {me.Ride}, same aircraft {me.Vehicle == flying}, on the ground {flying.State.OnGround}, {flying.State.Ias / 0.5144f:0} kt, {me.GlobalPosition.Y - y0Launch:F0} m up");
+        Expect(me.Vehicle == flying && !flying.State.OnGround && me.VehicleHealth >= health0,
+            $"launched at 600 m: flying on, unhurt (ride {me.Ride}, health {me.VehicleHealth:F0} of {health0:F0})");
+        if (me.Vehicle != flying) { Finish("the aircraft was lost at the launch"); return; }
         flying.ToggleDoor(RampDoor);
         Expect((flying.DoorsOpen & 1 << RampDoor) != 0, $"the ramp opens in flight at {flying.State.Ias / 0.5144f:0} kt (a drop)");
         float y0 = me.GlobalPosition.Y;
         bool up = me.TryInteract();
         Expect(up && await Until(() => me.Aboard && me.Ride == RideKind.OnFoot, 5), $"E stood up in flight (aboard {me.Aboard}, ride {me.Ride})");
+        // on the flight deck of the aircraft as it flies on, pitched as it was: not left level, the pilot on its roof (#456)
+        await Seconds(1);
+        l = Local(me);
+        Expect(me.Aboard && Mathf.Abs(l.Y - FlightDeckY) < 0.3f, $"stood up in flight onto the flight deck {Where(me)}, pitch {Mathf.RadToDeg(Frame()!.GlobalRotation.X):F1}°");
         bool walked = await WalkTo(me, 0f, HoldFrontZ + 0.6f, 15) && await WalkTo(me, 0f, 0f, 25);
         l = Local(me);
         float speed = me.Vehicle?.Kind == RideKind.Freighter ? 0f : (Parked()?.Velocity.Length() ?? 0f);

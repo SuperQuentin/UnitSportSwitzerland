@@ -97,9 +97,7 @@ public partial class FootPlayer
         if (_carried) Uncarry();
         GlobalPosition = at;
         // no physics ran while carried, so the body still believes it stands where it boarded:
-        // one still step in the air clears that, or the wingsuit would "land" at once (SPLAT at 3 km)
-        Velocity = Vector3.Zero;
-        MoveAndSlide();
+        // DebugLaunch's still step in the air clears that, or the wingsuit would "land" at once (SPLAT at 3 km)
         _fallSpeed = 0f;
         if (velocity.LengthSquared() > 1f) Rotation = new Vector3(0, Mathf.Atan2(-velocity.X, -velocity.Z), 0);
         ApplyRide(ride, velocity);

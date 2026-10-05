@@ -302,7 +302,8 @@ public partial class VehicleBody : CharacterBody3D
         _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning,
         Ride is Truck { IsBus: true } ? (byte)0 : DoorsOpen, _initial.Setup,
         // a boat's attitude as it floats now (#302; the replicated one, which the server has too)
-        _initial.Train, Ride is Boat ? new Basis(Tilt).GetEuler() : _initial.Angles,
+        // an airliner's in the air (#456), none on the ground
+        _initial.Train, Ride is Boat ? new Basis(Tilt).GetEuler() : Ride is Airliner jet ? (jet.State.OnGround ? default : new Basis(Tilt).GetEuler()) : _initial.Angles,
         // a bus's doors as they are now, where a truck keeps them
         Ride is Truck { IsBus: true } ? (_initial.Flags & ~(15 << 4)) | ((DoorsOpen & 15) << 4)
             : Ride is Airliner ? (_initial.Flags & ~(15 << 13)) | ((DoorsOpen & 15) << 13) : _initial.Flags, _initial.Load,

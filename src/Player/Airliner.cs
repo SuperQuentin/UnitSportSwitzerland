@@ -292,6 +292,18 @@ public sealed class Airliner : Flyer
         }
     }
 
+    /// <summary>
+    /// Left in the air (its pilot stood up in flight, #456): it flies on at the attitude it had. Put down
+    /// level and "on the ground" instead, a 10° climb dropped the nose at once and the pilot, stood up in the
+    /// pitched cockpit, landed a metre and more above its floor, on the roof at 15°.
+    /// </summary>
+    public void Aloft(Vector3 angles, Vector3 velocity)
+    {
+        State.OnGround = false;
+        State.Attitude = Basis.FromEuler(angles);
+        State.PathTarget = velocity.LengthSquared() > 1f ? Mathf.Asin(Mathf.Clamp(velocity.Normalized().Y, -1f, 1f)) : 0f;
+    }
+
     public override void Begin(ref FlightMotion m, Vector3 velocity, float yaw)
     {
         State.Velocity = velocity;
