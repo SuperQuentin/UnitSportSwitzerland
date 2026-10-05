@@ -92,7 +92,8 @@ public sealed class FieldMeshBuilder
         float h = BlockHeight(l.Crop);
         if (h <= 0) return 0f;
         float g = l.Stage == FieldStage.Ripe ? 1f : l.Growth;
-        return h * (0.25f + 0.75f * g) * (0.94f + l.Jitter / 255f * 0.12f);
+        // a little height jitter, under the wall threshold: one even top, not tiles
+        return h * (0.25f + 0.75f * g) * (0.98f + l.Jitter / 255f * 0.04f);
     }
 
     private static Color Lin(float r, float g, float b) => new Color(r, g, b).SrgbToLinear() with { A = 0f };

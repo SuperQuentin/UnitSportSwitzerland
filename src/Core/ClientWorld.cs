@@ -624,7 +624,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
-            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null
+            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.FarmNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
@@ -734,6 +734,15 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // (null only with loot or birds off, when no probe that needs them runs)
         Loot.Gathering gathering = null!;
         if (Systems.On(Systems.Loot)) AddChild(gathering = new Loot.Gathering(_chunks, origin, items));
+        // farm fields (#494): the worked cells near the camera, drawn, and the hoe / seeds / harvest by hand.
+        // World/Farm, same path as the server's, which owns the cells; offline this client does
+        if (Systems.On(Systems.Farming))
+        {
+            Farming.FarmField.Create(this, _chunks?.Source, origin, _chunks, dedicated: false);
+            AddChild(new Farming.HandFarming(items, origin));
+            if (Farming.FarmProbe.Requested) AddChild(new Farming.FarmProbe(items, origin));
+            if (Farming.FarmNetProbe.Role != null) AddChild(new Farming.FarmNetProbe(items, origin));
+        }
         // birds around the player, from the real land cover; the shotgun hunts them (J: journal)
         Birds.BirdLife birds = null!;
         if (Systems.On(Systems.Birds))

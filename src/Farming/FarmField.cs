@@ -108,7 +108,10 @@ public partial class FarmField : Node
 
     public override void _Ready()
     {
-        _storeDir = ProjectSettings.GlobalizePath("user://farm");
+        // --farmdir: the checks keep their cells out of the real user://farm
+        var args = OS.GetCmdlineUserArgs();
+        int dirAt = Array.IndexOf(args, "--farmdir");
+        _storeDir = dirAt >= 0 && dirAt + 1 < args.Length ? Path.GetFullPath(args[dirAt + 1]) : ProjectSettings.GlobalizePath("user://farm");
         _month = FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), DateTime.Now);
         Multiplayer.PeerDisconnected += OnPeerGone;
         if (!_dedicated) ReadyDraw();

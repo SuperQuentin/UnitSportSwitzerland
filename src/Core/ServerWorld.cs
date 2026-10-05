@@ -158,6 +158,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Loot.LootService.Create(this);
         // shops and vending machines (#273): the server keeps what was sold and charges the card
         Loot.ShopService.Create(this);
+        // farm fields (#494): the server keeps the worked cells (user://farm) and checks the work
+        if (Systems.On(Systems.Farming)) Farming.FarmField.Create(this, source, origin, _chunks, dedicated: true);
 
         // occasions run on the server's calendar and are replicated, so every player shares one
         _occasions = Occasions.OccasionManager.Create(this);

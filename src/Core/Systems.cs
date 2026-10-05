@@ -19,10 +19,10 @@ public static class Systems
 {
     public const string Terrain = "terrain", Generated = "generated", Traffic = "traffic", Trains = "trains",
         Npcs = "npcs", Birds = "birds", Physics = "physics", Audio = "audio", Network = "network", Sky = "sky",
-        Interiors = "interiors", Loot = "loot", Occasions = "occasions", Ui = "ui", Build = "build";
+        Interiors = "interiors", Loot = "loot", Occasions = "occasions", Ui = "ui", Build = "build", Farming = "farming";
 
     public static readonly string[] All =
-        { Terrain, Generated, Traffic, Trains, Npcs, Birds, Physics, Audio, Network, Sky, Interiors, Loot, Occasions, Ui, Build };
+        { Terrain, Generated, Traffic, Trains, Npcs, Birds, Physics, Audio, Network, Sky, Interiors, Loot, Occasions, Ui, Build, Farming };
 
     public enum WorldKind { Real, Fixture, Flat }
 

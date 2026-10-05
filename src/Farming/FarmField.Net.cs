@@ -186,3 +186,17 @@ public partial class FarmField
         }
     }
 }
+
+public partial class FarmField
+{
+    /// <summary>Client: predicted cells the server has not answered yet (probes).</summary>
+    public int PendingCount
+    {
+        get
+        {
+            int n = 0;
+            foreach (var t in _tiles.Values) n += t.Pending.Count;
+            return n;
+        }
+    }
+}
