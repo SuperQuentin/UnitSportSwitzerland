@@ -36,6 +36,8 @@ public partial class FootPlayer
     /// <summary>Seed bags a drill has taken, bales the mower has given and sacks taken on foot (for the checks).</summary>
     public int FarmSeedUsed { get; private set; }
     public int FarmHayCut { get; private set; }
+    /// <summary>Bales the mower cut with no room for them in the pack: left on the field.</summary>
+    public int FarmHayLeft { get; private set; }
     public int FarmSacksTaken { get; private set; }
 
     private void FarmToast(string text)
@@ -160,8 +162,14 @@ public partial class FootPlayer
                 if (bales > 0)
                 {
                     _hayOwed -= bales;
-                    FarmHayCut += bales;
-                    ItemController.Instance?.Give(new ItemStack(ItemId.HayBale, bales));
+                    // only what fits: Give drops the rest at the player's feet, and a driver's feet are
+                    // inside the tractor — dropped bales lifted it off the ground and threw it about
+                    int room = ItemController.Instance?.Inventory.Room(ItemId.HayBale) ?? 0;
+                    int given = Mathf.Min(room, bales);
+                    if (given > 0) ItemController.Instance!.Give(new ItemStack(ItemId.HayBale, given));
+                    FarmHayCut += given;
+                    FarmHayLeft += bales - given;
+                    if (given < bales) FarmToast("Your pack is full: the hay is left on the field");
                 }
                 break;
             case FarmTool.Harvest:

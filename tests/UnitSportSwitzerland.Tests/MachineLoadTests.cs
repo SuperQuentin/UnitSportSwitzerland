@@ -84,4 +84,18 @@ public class MachineLoadTests
         Assert.True(plough > 2.5f * drill);
         Assert.InRange(MachineLoad.MowerDraft(12f, 3f), 3000f, 6000f);
     }
+
+    [Fact]
+    public void The_combine_tank_keeps_to_its_flag_bits()
+    {
+        var t = new Tank(CropKind.Barley, 140);
+        int flags = MachineLoad.TankFlags(t);
+        Assert.Equal(flags, flags & MachineLoad.FlagMask);
+        // the bus bits under it (brake, lamps, reverse, kneel, doors) and the throttle eighths are not touched
+        int other = 1 | 2 | 4 | 8 | 15 << 4 | 7 << 16;
+        Assert.Equal(0, other & MachineLoad.FlagMask);
+        Assert.Equal(t, MachineLoad.TankFromFlags(flags | other));
+        // a float carries the whole pose word exactly (Truck.WritePose)
+        Assert.Equal(flags | other, (int)(float)(flags | other));
+    }
 }

@@ -219,6 +219,10 @@ public partial class TractorCheck : Node
         Expect(me.SetRide(Tractor.Kind), "in the tractor");
         if (me.Vehicle is not Truck tractor) { Finish("not in the tractor"); return; }
         await Wait(1.0);
+        // the user's report: the implement lifted the tractor off the ground. Each one, raised and
+        // lowered, driven, turned tight and reversed: the tractor stays on its wheels
+        foreach (var body in new[] { TrailerBody.Plough, TrailerBody.SeedDrill, TrailerBody.Mower, TrailerBody.Tipper })
+            await StaysDown(me, tractor, body);
         Expect(me.SpawnTrailer(Index(TrailerBody.Plough), 0f) && tractor.Implement?.Body == TrailerBody.Plough, "the plough on its linkage");
         await Wait(0.5);
         var lift = me.GetNodeOrNull<Node3D>("Section1/Visual/Body/Lift");
@@ -234,15 +238,13 @@ public partial class TractorCheck : Node
         await Wait(6.0);
         Expect(me.FarmStrokes - strokes > 30 && me.FarmCells > 0, $"ploughing: {me.FarmStrokes - strokes} strokes, {me.FarmCells} cells, at {F(me.GroundSpeed * 3.6f)} km/h");
         await Shot("2-ploughing");
-        me.RideControls = () => new RideInput(0f, 1f, 0f, false, Handbrake: true);
-        await Until(() => me.GroundSpeed < 0.2f, 8);
+        await Stop(me);
         me.ToggleLowered(tractor);
         strokes = me.FarmStrokes;
         me.RideControls = () => new RideInput(0.5f, 0f, 0f, false);
         await Wait(2.0);
         Expect(me.FarmStrokes == strokes, "raised, it works nothing");
-        me.RideControls = () => new RideInput(0f, 1f, 0f, false, Handbrake: true);
-        await Until(() => me.GroundSpeed < 0.2f, 8);
+        await Stop(me);
 
         // ---- the drill: seed from the pack ----
         tractor.Couple(0);   // no-op: one at a time
@@ -263,8 +265,7 @@ public partial class TractorCheck : Node
         await Wait(6.0);
         int seedLeft = Count(ItemId.WheatSeed);
         if (defs) Expect(me.FarmStrokes > strokes && seedLeft < 20 && me.FarmSeedUsed == 20 - seedLeft, $"with seed: sowing, {20 - seedLeft} of 20 bags used");
-        me.RideControls = () => new RideInput(0f, 1f, 0f, false, Handbrake: true);
-        await Until(() => me.GroundSpeed < 0.2f, 8);
+        await Stop(me);
         me.ToggleLowered(tractor);
         DropTrailer(me);
         await Wait(1.0);
@@ -275,9 +276,9 @@ public partial class TractorCheck : Node
         me.ToggleLowered(tractor);
         me.RideControls = () => new RideInput(0.5f, 0f, 0f, false);
         await Wait(6.0);
-        Expect(me.FarmHayCut > 0 && (!defs || Count(ItemId.HayBale) > hay), $"mowing: {me.FarmHayCut} bales handed to the pack ({Count(ItemId.HayBale) - hay} in it)");
-        me.RideControls = () => new RideInput(0f, 1f, 0f, false, Handbrake: true);
-        await Until(() => me.GroundSpeed < 0.2f, 8);
+        Expect(defs ? me.FarmHayCut > 0 && Count(ItemId.HayBale) > hay : me.FarmHayLeft > 0 && me.FarmHayCut == 0, $"mowing: {me.FarmHayCut} bales into the pack ({Count(ItemId.HayBale) - hay} in it), {me.FarmHayLeft} left on the field for want of room");
+        Expect(!GetTree().Root.FindChildren("*", nameof(DroppedItem), true, false).Any(), "and none dropped at the driver's feet, inside the tractor");
+        await Stop(me);
         await Shot("3-mowing");
 
         // ---- parked with the mower down: the whole train, as it was ----
@@ -312,8 +313,7 @@ public partial class TractorCheck : Node
         me.RideControls = () => new RideInput(0.6f, 0f, 0f, false);
         await Until(() => combine.Tank.Items >= 40, 30);
         Expect(combine.Tank.Items >= 40 && combine.Tank.Crop == CropKind.Wheat, $"harvesting: {combine.Tank.Items} sacks of {combine.Tank.Crop} in the tank at {F(me.GroundSpeed * 3.6f)} km/h");
-        me.RideControls = () => new RideInput(0f, 1f, 0f, false, Handbrake: true);
-        await Until(() => me.GroundSpeed < 0.2f, 10);
+        await Stop(me);
         await Shot("4-combine-full");
         me.ToggleLowered(combine);
         int inTank = combine.Tank.Items;
@@ -329,7 +329,9 @@ public partial class TractorCheck : Node
         await Wait(1.0);
         me.FarmAction(combine);
         Expect(combine.AugerOut, "{destination} swings the auger out");
-        VehicleBody? Tipper() => vehicles.GetChildren().OfType<VehicleBody>().FirstOrDefault(v => v.Trailer is { Spec.TankItems: > 0 } && !v.IsQueuedForDeletion());
+        // the one parked under the spout (the tipping trailer dropped earlier stands elsewhere)
+        VehicleBody? Tipper() => vehicles.GetChildren().OfType<VehicleBody>().Where(v => v.Trailer is { Spec.TankItems: > 0 } && !v.IsQueuedForDeletion())
+            .OrderBy(v => v.GlobalPosition.DistanceTo(dollyAt)).FirstOrDefault();
         await Until(() => Tipper() is { } t && TrailerCatalog.TankOf(t.Trailer!.Code).Items >= 16, 12);
         var tipped = Tipper();
         int inTrailer = tipped != null ? TrailerCatalog.TankOf(tipped.Trailer!.Code).Items : 0;
@@ -362,6 +364,96 @@ public partial class TractorCheck : Node
 
         MachineWork.FakeSweep = null;
         Finish(null);
+    }
+
+    /// <summary>
+    /// The tractor with <paramref name="body"/> coupled: standing, forward, full lock both ways and in
+    /// reverse, raised then lowered; its height over the ground must stay within a few cm.
+    /// </summary>
+    private async Task StaysDown(FootPlayer me, Truck tractor, TrailerBody body)
+    {
+        if (!me.SpawnTrailer(Index(body), 0f)) { Expect(false, $"{body}: not coupled"); return; }
+        await Wait(1.0);
+        float Ground() => me.Terrain != null && me.Terrain.TryGetHeight(me.GlobalPosition, out float g) ? g : 0f;
+        foreach (bool lowered in new[] { false, true })
+        {
+            if (tractor.Implement != null) tractor.Lowered = lowered;
+            else if (lowered) continue;
+            await Wait(1.0);
+            float rest = me.GlobalPosition.Y - Ground(), worst = 0f, worstAt = 0f;
+            int air = 0;
+            var phases = new (string, RideInput, double)[]
+            {
+                ("ahead", new RideInput(0.5f, 0f, 0f, false), 3),
+                ("left lock", new RideInput(0.4f, 0f, 1f, false), 4),
+                ("right lock", new RideInput(0.4f, 0f, -1f, false), 4),
+                ("stop", new RideInput(0f, 1f, 0f, false), 3),
+                ("let go", new RideInput(0f, 0f, 0f, false), 1),
+                ("reverse", new RideInput(0f, 0.5f, 0.6f, false), 4),
+            };
+            foreach (var (name, input, seconds) in phases)
+            {
+                var held = input;
+                me.RideControls = () => held;
+                for (double t = 0; t < seconds; t += 0.05)
+                {
+                    await Wait(0.05);
+                    float off = me.GlobalPosition.Y - Ground() - rest;
+                    if (Mathf.Abs(off) > Mathf.Abs(worst)) { worst = off; worstAt = me.GroundSpeed * 3.6f; }
+                    if (!me.IsOnFloor()) air++;
+                    if (CmdArgs.Has("trace") && Mathf.PosMod((float)t, 0.5f) < 0.05f)
+                        Log($"    {name} t {F((float)t)} y {F(me.GlobalPosition.Y, "F2")} ground {F(Ground(), "F2")} floor {me.IsOnFloor()} {F(me.GroundSpeed * 3.6f)} km/h vy {F(me.Velocity.Y, "F2")} pos {me.GlobalPosition}");
+                }
+            }
+            await Stop(me);
+            me.RideControls = null;
+            Expect(Mathf.Abs(worst) < 0.08f && air < 6 && me.Vehicle is Truck,
+                $"{TrailerCatalog.All[Index(body)].Label} {(lowered ? "down" : "up")}: the tractor stays on its wheels (worst {F(worst * 100f, "F0")} cm at {F(worstAt)} km/h, {air} ticks off the floor, {me.SectionHits} section hits)");
+        }
+        if (tractor.Implement != null) tractor.Lowered = false;
+        DropTrailer(me);
+        await Wait(0.5);
+        // pull clear of what was just dropped, then back straight into it: it stops the tractor, it
+        // is no ramp (a dropped implement's box low down was a step the tractor rode up and flew off)
+        // (past 22 m: a dropped trailer ignores the truck that left it until it has driven clear)
+        var dropped = me.GlobalPosition;
+        me.RideControls = () => new RideInput(0.5f, 0f, 0f, false);
+        await Until(() => me.GlobalPosition.DistanceTo(dropped) > 26f, 20);
+        await Stop(me);
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false);
+        await Wait(1.0);
+        float rest0 = me.GlobalPosition.Y - Ground(), worstBack = 0f, slowest = 99f;
+        me.RideControls = () => new RideInput(0f, 0.4f, 0f, false);
+        for (int i = 0; i < 400; i++)
+        {
+            await Wait(0.05);
+            worstBack = Mathf.Max(worstBack, Mathf.Abs(me.GlobalPosition.Y - Ground() - rest0));
+            if (i > 100) slowest = Mathf.Min(slowest, me.GroundSpeed);
+            if (CmdArgs.Has("trace") && (i % 8 == 0 || Mathf.Abs(me.GlobalPosition.Y - Ground() - rest0) > 0.03f)) Log($"    back {i} y {F(me.GlobalPosition.Y, "F3")} ground {F(Ground(), "F3")} floor {me.IsOnFloor()} {F(me.GroundSpeed * 3.6f)} km/h {me.Heavy?.GearLabel} pos {me.GlobalPosition} slides {me.GetSlideCollisionCount()} {(me.GetSlideCollisionCount() > 0 ? (me.GetSlideCollision(0).GetCollider() as Node)?.Name + " " + me.GetSlideCollision(0).GetNormal() : "")} floorN {me.GetFloorNormal()}");
+            if (CmdArgs.Has("trace"))
+                for (int c = 0; c < me.GetSlideCollisionCount(); c++)
+                {
+                    var hit = me.GetSlideCollision(c);
+                    if (hit.GetCollider() is Node n && n is not StaticBody3D)
+                        Log($"    back y {F(me.GlobalPosition.Y - Ground(), "F2")} hit {n.Name} shape {(hit.GetColliderShape() as Node)?.Name} by {(hit.GetLocalShape() as Node)?.Name} n {hit.GetNormal()} at {hit.GetPosition() - me.GlobalPosition}");
+                }
+        }
+        await Stop(me);
+        Expect(worstBack < 0.08f, $"backed 20 s into the dropped {TrailerCatalog.All[Index(body)].Label.ToLowerInvariant()}: no climb ({F(worstBack * 100f, "F0")} cm; slowest {F(slowest * 3.6f)} km/h, {F(me.GlobalPosition.DistanceTo(dropped))} m from where it was dropped)");
+        // and clear of it for the next one
+        me.RideControls = () => new RideInput(0.5f, 0f, 0.3f, false);
+        await Wait(3.0);
+        await Stop(me);
+        me.RideControls = null;
+    }
+
+    /// <summary>Brakes to a standstill (in game time or real time alike), then lets the pedals go.</summary>
+    private async Task Stop(FootPlayer me)
+    {
+        me.RideControls = () => new RideInput(0f, 1f, 0f, false, Handbrake: true);
+        bool still = await Until(() => me.GroundSpeed < 0.2f, 20);
+        if (!still) Log($"  still at {F(me.GroundSpeed * 3.6f)} km/h after braking");
+        await Wait(0.3);
     }
 
     private static void DropTrailer(FootPlayer me)

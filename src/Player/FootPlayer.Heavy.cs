@@ -132,7 +132,7 @@ public partial class FootPlayer
     /// <summary>The ground's height under a point: whatever is solid there (a road, a bridge deck), else the terrain.</summary>
 
     private float GroundUnder(Vector3 p, Godot.Collections.Array<Rid> exclude) =>
-        World.GroundQuery.Under(this, _groundRay, exclude, p, Terrain);
+        World.GroundQuery.Under(this, _groundRay, exclude, p, Terrain, pastVehicles: true);
 
     /// <summary>
     /// The cab's pitch on the ground under its axles: a 12 m bus on a 10% road leans with it, and its
