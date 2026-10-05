@@ -1183,6 +1183,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:OutfitBits");
         replication.AddProperty(".:AppearanceBits");
         replication.AddProperty(".:DanceId");
+        replication.AddProperty(".:FightPose");
         replication.AddProperty(".:HeldRadio");
         replication.AddProperty(".:BackItemId");
         replication.AddProperty(".:Down");
@@ -1201,7 +1202,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:DeckYaw");
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         Terrain ??= GetNodeOrNull<ChunkManager>("/root/Main/World/Terrain");
         if (Origin is { } start) NetGlobal = start.ToGlobal(Position);
@@ -1574,6 +1575,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // published whatever the view: first person draws no body, but everyone else does
             PublishFootPose(dt);
             StepThrowView(dt);
+            // a fist fight (#495): its own side-on view
+            if (FightView(dt)) return;
 
             // Render rate, not physics rate: the look has to answer the mouse the frame it
             // moves, the way rotating the body directly always did.
@@ -1819,7 +1822,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
-        PoseKind = _sliding ? PoseTucked : _airTime > 0.12f ? PoseAir : PoseStride;
+        // a fighter (#495) is drawn by the dance layer, which lays over the stride only, in the air too
+        PoseKind = Fighting ? PoseStride : _sliding ? PoseTucked : _airTime > 0.12f ? PoseAir : PoseStride;
         if (PoseKind == PoseStride) _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, speed, dt);
         Anim = new Vector4(speed, _stridePhase, 0f, 0f);
 
@@ -1828,7 +1832,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // rather than the figure shrinking.
         float squash = Mathf.Clamp(-_landingDip * 1.2f, 0f, 0.22f);
         // thrown, stunned or knocked out: flat on the ground
-        float down = (_stunTimer > 0 || Downed) && IsOnFloor() ? -1.45f : 0f;   // downed (#475): crawling, flat
+        float down = (_stunTimer > 0 || Downed || FightPose == (int)Combat.FightStance.Down) && IsOnFloor() ? -1.45f : 0f;   // downed (#475): crawling, flat; floored in a fight (#495)
         _downRot = Mathf.Lerp(_downRot, down, MathX.Damp(10f, dt));
         BodyPose = new Transform3D(
             new Basis(Vector3.Right, _downRot) * Basis.FromScale(new Vector3(1f + squash * 0.5f, 1f - squash, 1f + squash * 0.5f)),
@@ -1848,7 +1852,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             && (!Indoors || Audio.Cd.CdLibrary.IsRatBeat(music.CdId)));
 
     /// <summary>On foot and free to move the body: what an emote (#404), or any dance, needs.</summary>
-    public bool CanEmote => Ride == RideKind.OnFoot && !KnockedOut && !Downed && !_sliding && !_swimming && !_carried && _deadTimer <= 0;
+    public bool CanEmote => Ride == RideKind.OnFoot && !KnockedOut && !Downed && !_sliding && !_swimming && !_carried && _deadTimer <= 0 && !Fighting;
 
     /// <summary>Indoors, the chess type beat heard here (#370): E dances, as outdoors to any music.</summary>
     public bool RatBeatHere(bool heard) =>
@@ -2005,7 +2009,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (PoseKind == PoseSwim) { ApplySwimFigure(); return; }
         float dt = (float)GetProcessDeltaTime();
         StepArmPose(dt);
-        var dance = DrawnDance = StepDance(dt);
+        var danced = StepDance(dt);
+        // a fighter's pose (#495) over any dance, which eases out underneath
+        var dance = DrawnDance = StepFightPose(dt) ?? danced;
         var arm = _itemArmCur;
         float blend = _itemArmBlend;
         // dancing, the hands are the dance's, unless the item is actually being aimed or used
@@ -2382,6 +2388,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         // limp after a crash, or downed (#475): nothing to do, and no picker either
         if (Ragdolled || Downed) return true;
+        // in a fist fight (#495) the hands are busy
+        if (Fighting) return true;
         // a walkable vehicle's passenger stands up into the aisle; any other gets out
         if (RidingWith != 0) return StandUp() || TryLeaveSeat();
         if (_ride is { IsVehicle: true })
@@ -2445,6 +2453,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         // a building's door in reach beats the dance: music next door must not lock you out
         if (IsOnFloor() && Interiors.InteriorManager.Instance?.TryDoor(this) == true) return true;
+        // another player looked at, on foot: challenge them to a fist fight, or take their challenge (#495)
+        if (TryEngageFighter()) return true;
         if (byHand) return false;
         // music heard here: E starts the dance; stopping works for as long as it lasts
         if (Items.RadioManager.Instance?.NearestMusic(GlobalPosition, Items.RadioManager.DanceRadius, heard: DanceId == 0) != null)
@@ -3292,6 +3302,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
         // in the water (#301, FootPlayer.Swim.cs)
         if (SwimPhysics(dt, onFloor)) return;
+        // in a fist fight (#495, FootPlayer.Fight.cs)
+        if (FightPhysics(dt, onFloor)) return;
 
         if (Npc)
         {
