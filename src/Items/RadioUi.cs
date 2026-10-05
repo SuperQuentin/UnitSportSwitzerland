@@ -133,7 +133,7 @@ public partial class RadioUi : CanvasLayer
         _pick.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
         _pick.Pressed += PickUp;
         header.AddChild(_pick);
-        var close = UiKit.IconButton(Icons.Close, "Close (Esc)");
+        var close = UiKit.IconButton(Icons.Close, InputHints.Format("Close ({menu})", InputDevice.KeyboardMouse));
         close.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
         close.Pressed += Close;
         header.AddChild(close);
@@ -896,9 +896,16 @@ public partial class RadioUi : CanvasLayer
             Target.Held => "",   // its Use is a click: the click outside
             _ => ", " + KeyName(PlayerInput.InteractMount),
         };
-        _footer.Text = PlayerInput.LastDevice == InputDevice.Gamepad
-            ? (_libraryShown ? "D-pad choose · A play · Y player · B close" : "D-pad choose · A press · Y library · B close")
-            : (_libraryShown ? "Up / Down choose · Enter play · / search · Esc close" : $"/ library · Esc{closeKey} or a click outside close");
+        // pad Y switches the view (_UnhandledInput reads the button itself)
+        string y = InputHints.Button(JoyButton.Y);
+        _footer.Text = InputHints.Vr
+            ? (_libraryShown ? $"Point and pull to play · {y} player · " : $"Point and pull to press · {y} library · ")
+              + InputHints.Format("{ui_cancel} close")
+            : InputHints.Pad
+            ? InputHints.Format(_libraryShown ? "{ui_up} {ui_down} choose · {ui_accept} play · " : "{ui_up} {ui_down} choose · {ui_accept} press · ")
+              + (_libraryShown ? $"{y} player · " : $"{y} library · ") + InputHints.Format("{ui_cancel} close")
+            : (_libraryShown ? InputHints.Format("Up / Down choose · Enter play · / search · {menu} close")
+                : InputHints.Format("/ library · {menu}") + $"{closeKey} or a click outside close");
         Highlight();
     }
 

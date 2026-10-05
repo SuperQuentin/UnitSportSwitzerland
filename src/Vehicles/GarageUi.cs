@@ -35,7 +35,7 @@ public partial class GarageUi : CanvasLayer
 
     private PanelContainer _panel = null!;
     private VBoxContainer _slots = null!, _options = null!;
-    private Label _prompt = null!, _optionsTitle = null!;
+    private Label _prompt = null!, _optionsTitle = null!, _hint = null!;
     private FootPlayer? _player;
     private CarTuning _atOpen;
     private TuneSlot _slot;
@@ -110,7 +110,7 @@ public partial class GarageUi : CanvasLayer
         }
         rows.AddChild(actions);
 
-        var hint = new Label { Text = "Free. Right-drag / right stick: walk round the car. Esc / (B) / T: done. The parts stay on this car; a new car comes stock." };
+        var hint = _hint = new Label();
         hint.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         hint.AddThemeFontSizeOverride("font_size", 12);
         hint.AddThemeColorOverride("font_color", new Color(0.5f, 0.54f, 0.6f));
@@ -143,6 +143,10 @@ public partial class GarageUi : CanvasLayer
         player.ShowroomYaw = _yaw;
         _panel.Visible = true;
         _prompt.Visible = false;
+        // named for the device in hand as the panel opens (#435)
+        _hint.Text = (InputHints.Pad ? InputHints.Format("Free. {look_right}: walk round the car. {ui_cancel} / {tune}: done.")
+                : InputHints.Format("Free. Right-drag: walk round the car. {menu} / {tune}: done."))
+            + " The parts stay on this car; a new car comes stock.";
         Input.MouseMode = Input.MouseModeEnum.Visible;
         UiFocus.Set(this, true);
         Refresh();
@@ -216,7 +220,7 @@ public partial class GarageUi : CanvasLayer
             var p = ActivePlayer?.Invoke();
             bool can = p != null && CanTune(p);
             _prompt.Visible = can;
-            if (can) _prompt.Text = PlayerInput.LastDevice == InputDevice.Gamepad ? "[D-pad ↓] Tuning" : "[T] Tuning";
+            if (can) _prompt.Text = InputHints.Prompt(PlayerInput.Tune, "Tuning");
             return;
         }
         // the car went (a respawn, a wreck, a reconnect): nothing left to tune

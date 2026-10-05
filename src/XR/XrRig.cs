@@ -148,6 +148,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _camera.AddChild(_vignette);
 
         _pad = new XrPad(_left, _right);
+        XrProfile.Watch();
         _hands = new XrHands(_left, _leftMarker, _right, _rightMarker);
         _ui = new XrUi(_camera, _right);
         AddChild(_ui);
@@ -179,7 +180,11 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         ApplyQuality();
     }
 
-    public override void _ExitTree() => Core.GameSettings.Changed -= OnSettings;
+    public override void _ExitTree()
+    {
+        Core.GameSettings.Changed -= OnSettings;
+        XrProfile.Unwatch();
+    }
 
     private void OnSettings()
     {

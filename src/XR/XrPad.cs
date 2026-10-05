@@ -56,6 +56,14 @@ internal sealed class XrPad
         _pulses.Clear();
 
         bool onFoot = player == null || player.Ride == RideKind.OnFoot && player.RidingWith == 0;
+        // the pigeon (#217) drops on the right trigger, like using an item on foot; it flaps on A
+        bool shoulders = onFoot || player?.Ride == RideKind.Pigeon;
+        // the triggers change role on mounting: the prompts name them again (#435)
+        if (shoulders != TriggersAsShoulders)
+        {
+            TriggersAsShoulders = shoulders;
+            Core.PlayerInput.HintsChanged();
+        }
 
         // --- left stick: on foot, forward is where the head looks, not where the body faces ---
         var stick = _left.GetVector2("primary");
@@ -71,8 +79,7 @@ internal sealed class XrPad
         // --- triggers and grips ---
         float lt = _left.GetFloat("trigger"), rt = uiActive ? 0f : _right.GetFloat("trigger");
         float lg = LeftGripBusy ? 0f : _left.GetFloat("grip"), rg = RightGripBusy ? 0f : _right.GetFloat("grip");
-        // the pigeon (#217) drops on the right trigger, like using an item on foot; it flaps on A
-        if (onFoot || player?.Ride == RideKind.Pigeon)
+        if (shoulders)
         {
             Axis(JoyAxis.TriggerLeft, 0f);
             Axis(JoyAxis.TriggerRight, 0f);
@@ -122,6 +129,58 @@ internal sealed class XrPad
             _menuLong = false;
         }
     }
+
+    /// <summary>
+    /// The triggers act as the shoulders (on foot, the pigeon) rather than as the triggers
+    /// (mounted). Read by <see cref="Control"/>, which names what the prompts show.
+    /// </summary>
+    public static bool TriggersAsShoulders { get; private set; } = true;
+
+    /// <summary>
+    /// Names controls as in another context for a moment (the controls overlay lists the vehicle
+    /// groups as mounted while you stand): sets <see cref="TriggersAsShoulders"/>, returns what it was.
+    /// </summary>
+    public static bool AssumeShoulders(bool shoulders)
+    {
+        bool was = TriggersAsShoulders;
+        TriggersAsShoulders = shoulders;
+        return was;
+    }
+
+    /// <summary>
+    /// The controller input that <see cref="Update"/> replays as this pad event, right now; null
+    /// when none does (D-pad ← / ↓, Guide, the triggers' axes on foot). The reverse of the layout
+    /// above (#435): change the two together.
+    /// </summary>
+    public static XrControl? Control(InputEvent e) => e switch
+    {
+        InputEventJoypadButton b => b.ButtonIndex switch
+        {
+            JoyButton.A => XrControl.A,
+            JoyButton.B => XrControl.B,
+            JoyButton.X => XrControl.X,
+            JoyButton.Y => XrControl.Y,
+            // on foot the trigger and the grip both press the shoulder; the trigger is the one to name
+            JoyButton.LeftShoulder => TriggersAsShoulders ? XrControl.LeftTrigger : XrControl.LeftGrip,
+            JoyButton.RightShoulder => TriggersAsShoulders ? XrControl.RightTrigger : XrControl.RightGrip,
+            JoyButton.LeftStick => XrControl.LeftStickClick,
+            JoyButton.RightStick => XrControl.RightStickClick,
+            JoyButton.DpadUp => XrControl.RightStickUp,
+            JoyButton.DpadRight => XrControl.RightStickDown,
+            JoyButton.Start => XrControl.Menu,
+            JoyButton.Back => XrControl.MenuHold,
+            _ => null,
+        },
+        InputEventJoypadMotion m => m.Axis switch
+        {
+            JoyAxis.LeftX or JoyAxis.LeftY => XrControl.LeftStick,
+            JoyAxis.RightX or JoyAxis.RightY => XrControl.RightStick,
+            JoyAxis.TriggerLeft when !TriggersAsShoulders => XrControl.LeftTrigger,
+            JoyAxis.TriggerRight when !TriggersAsShoulders => XrControl.RightTrigger,
+            _ => null,
+        },
+        _ => null,
+    };
 
     private static bool Hysteresis(float v, ref bool was) => was = was ? v > 0.4f : v > 0.75f;
 
