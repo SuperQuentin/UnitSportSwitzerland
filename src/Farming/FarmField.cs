@@ -112,6 +112,8 @@ public partial class FarmField : Node
         var args = OS.GetCmdlineUserArgs();
         int dirAt = Array.IndexOf(args, "--farmdir");
         _storeDir = dirAt >= 0 && dirAt + 1 < args.Length ? Path.GetFullPath(args[dirAt + 1]) : ProjectSettings.GlobalizePath("user://farm");
+        // --farmfresh (checks, with --farmdir): start from untouched fields
+        if (dirAt >= 0 && Array.IndexOf(args, "--farmfresh") >= 0 && Directory.Exists(_storeDir)) Directory.Delete(_storeDir, true);
         _month = FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), DateTime.Now);
         Multiplayer.PeerDisconnected += OnPeerGone;
         if (!_dedicated) ReadyDraw();

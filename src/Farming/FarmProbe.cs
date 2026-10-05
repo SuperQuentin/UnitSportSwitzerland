@@ -17,7 +17,7 @@ namespace UnitSport.Farming;
 /// </summary>
 public partial class FarmProbe : Node
 {
-    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--farmcheck") >= 0;
+    public static bool Requested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--farmcheck") >= 0 || PerfRequested;
     private static bool Shots => Array.IndexOf(OS.GetCmdlineUserArgs(), "shots") > Array.IndexOf(OS.GetCmdlineUserArgs(), "--farmcheck");
 
     private readonly ItemController _items;
@@ -29,12 +29,86 @@ public partial class FarmProbe : Node
 
     private FootPlayer? Me => GetViewport().GetCamera3D()?.GetParent() as FootPlayer;
 
+    /// <summary>
+    /// <c>--farmperf</c> (real map, windowed, <c>--at E,N</c> in farmland): walks in, waits for the
+    /// tiles, turns round once to draw every side, then reports the farm's main-thread cost per frame,
+    /// its worst frame, chunks, vertices and builds, and the frame time.
+    /// </summary>
+    public static bool PerfRequested => Array.IndexOf(OS.GetCmdlineUserArgs(), "--farmperf") >= 0;
+
+    private async Task Perf()
+    {
+        var farm = FarmField.Instance!;
+        var me = Me!;
+        double wait = Time.GetTicksMsec() / 1000.0 + 90;
+        while (farm.DrawnChunks < 4 && Time.GetTicksMsec() / 1000.0 < wait) await Seconds(0.5);
+        await Seconds(10);
+        double main0 = farm.MainMsTotal, worker0 = farm.WorkerMsTotal;
+        int builds0 = farm.Rebuilds;
+        ulong f0 = Engine.GetProcessFrames(), t0 = Time.GetTicksUsec();
+        for (int i = 0; i < 80; i++) { me.LookYaw += Mathf.Tau / 80; await Seconds(0.25); }
+        ulong frames = Engine.GetProcessFrames() - f0;
+        double seconds = (Time.GetTicksUsec() - t0) / 1e6;
+        GD.Print($"[farmperf] month {farm.Month}: {farm.DrawnChunks} chunks, {farm.DrawnVertices} vertices drawn; over {seconds:F1} s / {frames} frames turning round: "
+            + $"{farm.Rebuilds - builds0} builds, farm main {(farm.MainMsTotal - main0) / Math.Max(1, frames):F3} ms/frame avg, worst frame {farm.MainMsMax:F2} ms (whole run), "
+            + $"worker {(farm.WorkerMsTotal - worker0):F0} ms; frame {seconds * 1000 / Math.Max(1, frames):F2} ms avg ({Engine.GetFramesPerSecond()} fps)");
+        if (DisplayServer.GetName() != "headless")
+        {
+            // from 25 m up, looking over the fields round the spot
+            var cam = new Camera3D { Fov = 65, Far = 6000 };
+            GetParent().AddChild(cam);
+            // aim at the nearest arable cell (grass is the terrain's own), from 30 m up, 70 m south-west of it
+            var (pe, pn) = _origin.ToLv95(me.GlobalPosition);
+            double be = pe, bn = pn, bd = double.MaxValue;
+            for (double de = -240; de <= 240; de += 8)
+                for (double dn = -240; dn <= 240; dn += 8)
+                    if (farm.CellAtLv95(pe + de, pn + dn) is { } v && !FarmTables.IsGrass(v.FieldCrop) && de * de + dn * dn < bd)
+                        (be, bn, bd) = (pe + de, pn + dn, de * de + dn * dn);
+            float gy = me.GlobalPosition.Y;
+            var target = _origin.ToWorld(be + 20, bn + 20, gy);
+            cam.GlobalPosition = _origin.ToWorld(be - 50, bn - 50, gy + 30);
+            cam.LookAt(target, Vector3.Up);
+            await Seconds(3.0);   // the chunks round the target are drawn from the player's camera already
+            cam.MakeCurrent();
+            await Seconds(2.0);
+            string file = ProjectSettings.GlobalizePath($"res://test_output/farmperf_{Styles.StyleKit.Applied.ToString().ToLowerInvariant()}_m{farm.Month}.png");
+            GD.Print($"[farmperf] shot {file}: {GetViewport().GetTexture().GetImage().SavePng(file)}");
+            cam.QueueFree();
+            me.Camera.MakeCurrent();
+        }
+        // then on the move, 20 m/s east for 20 s (a car on a farm road): chunks enter and leave
+        main0 = farm.MainMsTotal; worker0 = farm.WorkerMsTotal; builds0 = farm.Rebuilds;
+        f0 = Engine.GetProcessFrames(); t0 = Time.GetTicksUsec();
+        double maxFrame = 0;
+        var start = me.GlobalPosition;
+        me.LookYaw = -Mathf.Pi * 0.5f;
+        for (int i = 0; i < 80; i++)
+        {
+            me.DebugLaunch(start + new Vector3(5f * (i + 1), 2f, 0), Vector3.Zero);
+            await Seconds(0.25);
+            maxFrame = Math.Max(maxFrame, Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000);
+        }
+        frames = Engine.GetProcessFrames() - f0;
+        seconds = (Time.GetTicksUsec() - t0) / 1e6;
+        GD.Print($"[farmperf] moving 400 m: {farm.DrawnChunks} chunks, {farm.DrawnVertices} vertices; {farm.Rebuilds - builds0} builds, "
+            + $"farm main {(farm.MainMsTotal - main0) / Math.Max(1, frames):F3} ms/frame avg, worst farm frame {farm.MainMsMax:F2} ms, worker {(farm.WorkerMsTotal - worker0):F0} ms "
+            + $"({(farm.WorkerMsTotal - worker0) / Math.Max(1, farm.Rebuilds - builds0):F1} ms a chunk); frame {seconds * 1000 / Math.Max(1, frames):F2} ms avg");
+        GD.Print("[farmperf] RESULT: ok");
+        GetTree().Quit(0);
+    }
+
     public override async void _Ready()
     {
         await Until(() => GetViewport().GetCamera3D() != null, 60);
         await Seconds(2.0);
         if (Me == null) GetParent<ClientWorld>().ToggleMode();
         var (se, sn) = SpawnPoint.ParseTarget();
+        if (PerfRequested)
+        {
+            if (await Until(() => Me is { } m && m.IsOnFloor() && FarmField.Instance != null, 300)) await Perf();
+            else Fail("no player on the ground");
+            return;
+        }
         var wheatTile = TileId.FromLv95(se + 60, sn);
         if (!await Until(() => Me is { } m && m.IsOnFloor() && FarmField.Instance?.HasFields(wheatTile) == true && HandFarming.Instance != null, 120))
         {

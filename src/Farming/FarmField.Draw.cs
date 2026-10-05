@@ -18,7 +18,7 @@ public partial class FarmField
     /// <summary>...with full detail (furrows, rows, heads) within this.</summary>
     public const double DetailRadius = 160;
     private const int MaxInflight = 2;
-    private const int MaxCommitsPerFrame = 2;
+    private const int MaxCommitsPerFrame = 1;
 
     private sealed class DrawChunk
     {
