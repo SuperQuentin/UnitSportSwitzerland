@@ -20,8 +20,8 @@ namespace UnitSport.Player;
 /// the rig, the plough sweeping, the drill sowing only with seed in the pack and taking it, the
 /// mower's bales into the pack, the combine's tank filling, the auger unloading into a parked
 /// tipping trailer, a sack taken from it on foot, the train parked with the implement down, and a
-/// lowered plough across a paved strip. <c>slope</c>: the numbers, then each implement raised and
-/// lowered up, down and across the flat fixture's 15 % ridge.
+/// lowered plough across a paved strip, then each implement raised and lowered driven up, down and
+/// across the flat fixture's 15 % ridge. <c>slope</c>: the numbers and the ridge only.
 /// Prints <c>[tractor] RESULT: ok</c> or <c>RESULT: FAILED (n)</c>; <c>shots</c> (windowed) writes
 /// pictures to <c>test_output/</c>.
 /// </summary>
@@ -40,7 +40,7 @@ public partial class TractorCheck : Node
     private const float Dt = 1f / 60f;
     private readonly System.Func<FootPlayer?> _local;
     private readonly bool _shots;
-    /// <summary><c>--tractorcheck slope</c>: the numbers, then only the ridge runs (a row of its own: together they outran the quick tier's timeout).</summary>
+    /// <summary><c>--tractorcheck slope</c>: the numbers, then only the ridge runs.</summary>
     private readonly bool _slope;
     private int _failures;
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
@@ -237,23 +237,21 @@ public partial class TractorCheck : Node
 
         if (_slope)
         {
-            // ---- the ridge: each implement up and down, driven up, down and across a 15 % slope ----
-            MachineWork.FakeSweep = null;
-            foreach (var body in new[] { TrailerBody.Plough, TrailerBody.SeedDrill, TrailerBody.Mower })
-                foreach (bool lowered in new[] { false, true })
-                    await OnSlope(me, body, lowered);
+            await Ridge(me);
             Finish(null);
             return;
         }
 
-        // ---- the tractor and the plough ----
-        Expect(me.SetRide(Tractor.Kind), "in the tractor");
-        if (me.Vehicle is not Truck tractor) { Finish("not in the tractor"); return; }
-        await Wait(1.0);
         // the user's report: the implement lifted the tractor off the ground. Each one, raised and
-        // lowered, driven, turned tight and reversed: the tractor stays on its wheels
-        foreach (var body in new[] { TrailerBody.Plough, TrailerBody.SeedDrill, TrailerBody.Mower, TrailerBody.Tipper })
-            await StaysDown(me, tractor, body);
+        // lowered, driven, turned tight and reversed: the tractor stays on its wheels. Each on a lane
+        // of its own south of the spawn, so what was dropped before is never in the way
+        var bodies = new[] { TrailerBody.Plough, TrailerBody.SeedDrill, TrailerBody.Mower, TrailerBody.Tipper };
+        for (int i = 0; i < bodies.Length; i++)
+            await StaysDown(me, bodies[i], -80 + 55 * i, -120);
+
+        // ---- the tractor and the plough, from the spawn ----
+        if (await FreshTractor(me, 0, 0, North, null, false) is not { } tractor) { Finish("not in the tractor"); return; }
+        Expect(me.Vehicle == tractor, "in the tractor");
         Expect(me.SpawnTrailer(Index(TrailerBody.Plough), 0f) && tractor.Implement?.Body == TrailerBody.Plough, "the plough on its linkage");
         await Wait(0.5);
         var lift = me.GetNodeOrNull<Node3D>("Section1/Visual/Body/Lift");
@@ -395,8 +393,18 @@ public partial class TractorCheck : Node
 
         // ---- a lowered plough across a paved strip: it rides on the tarmac, pulls and works nothing ----
         await OverTarmac(me);
+        await Ridge(me);
 
         Finish(null);
+    }
+
+    /// <summary>The ridge: each implement raised and lowered, driven up, down and across the 15 % slope.</summary>
+    private async Task Ridge(FootPlayer me)
+    {
+        MachineWork.FakeSweep = null;
+        foreach (var body in new[] { TrailerBody.Plough, TrailerBody.SeedDrill, TrailerBody.Mower })
+            foreach (bool lowered in new[] { false, true })
+                await OnSlope(me, body, lowered);
     }
 
     private int _roadToasts;
@@ -411,7 +419,7 @@ public partial class TractorCheck : Node
     /// <paramref name="yaw"/>, with <paramref name="body"/> on its linkage, lowered or not. The one
     /// driven before goes (a picker's swap): nothing is left in the way.
     /// </summary>
-    private async Task<Truck?> FreshTractor(FootPlayer me, double x, double y, float yaw, TrailerBody body, bool lowered)
+    private async Task<Truck?> FreshTractor(FootPlayer me, double x, double y, float yaw, TrailerBody? body, bool lowered)
     {
         if (me.Vehicle != null)
         {
@@ -426,7 +434,8 @@ public partial class TractorCheck : Node
         await Until(() => me.IsOnFloor(), 10);
         if (!me.SetRide(Tractor.Kind) || me.Vehicle is not Truck t) { Expect(false, $"a tractor at {F((float)x, "F0")},{F((float)y, "F0")}"); return null; }
         await Wait(1.0);
-        if (!me.SpawnTrailer(Index(body), 0f)) { Expect(false, $"{body} coupled at {F((float)x, "F0")},{F((float)y, "F0")}"); return null; }
+        if (body is not { } b) return t;
+        if (!me.SpawnTrailer(Index(b), 0f)) { Expect(false, $"{b} coupled at {F((float)x, "F0")},{F((float)y, "F0")}"); return null; }
         await Wait(0.5);
         t.Lowered = lowered;
         await Wait(1.0);
@@ -529,13 +538,13 @@ public partial class TractorCheck : Node
     }
 
     /// <summary>
-    /// The tractor with <paramref name="body"/> coupled: standing, forward, full lock both ways and in
-    /// reverse, raised then lowered; its height over the ground must stay within a few cm.
+    /// A fresh tractor at (<paramref name="x"/>, <paramref name="y"/>) facing north with <paramref name="body"/>
+    /// coupled: standing, forward, full lock both ways and in reverse, raised then lowered; its height
+    /// over the ground must stay within a few cm, its sections hit nothing.
     /// </summary>
-    private async Task StaysDown(FootPlayer me, Truck tractor, TrailerBody body)
+    private async Task StaysDown(FootPlayer me, TrailerBody body, double x, double y)
     {
-        if (!me.SpawnTrailer(Index(body), 0f)) { Expect(false, $"{body}: not coupled"); return; }
-        await Wait(1.0);
+        if (await FreshTractor(me, x, y, North, body, false) is not { } tractor) return;
         float Ground() => me.Terrain != null && me.Terrain.TryGetHeight(me.GlobalPosition, out float g) ? g : 0f;
         foreach (bool lowered in new[] { false, true })
         {
@@ -543,7 +552,7 @@ public partial class TractorCheck : Node
             else if (lowered) continue;
             await Wait(1.0);
             float rest = me.GlobalPosition.Y - Ground(), worst = 0f, worstAt = 0f;
-            int air = 0;
+            int air = 0, tracedHits = me.SectionHits, hitsBefore = me.SectionHits;
             var phases = new (string, RideInput, double)[]
             {
                 ("ahead", new RideInput(0.5f, 0f, 0f, false), 3),
@@ -563,16 +572,30 @@ public partial class TractorCheck : Node
                     float off = me.GlobalPosition.Y - Ground() - rest;
                     if (Mathf.Abs(off) > Mathf.Abs(worst)) { worst = off; worstAt = me.GroundSpeed * 3.6f; }
                     if (!me.IsOnFloor()) air++;
+                    if (CmdArgs.Has("trace") && me.SectionHits != tracedHits && me.GetNodeOrNull<CharacterBody3D>("Section1") is { } sec)
+                    {
+                        tracedHits = me.SectionHits;
+                        for (int c = 0; c < sec.GetSlideCollisionCount(); c++)
+                            Log($"    {name} section hit {(sec.GetSlideCollision(c).GetCollider() as Node)?.Name} n {sec.GetSlideCollision(c).GetNormal()} at {sec.GetSlideCollision(c).GetPosition() - sec.GlobalPosition} {F(me.GroundSpeed * 3.6f)} km/h");
+                    }
                     if (CmdArgs.Has("trace") && Mathf.PosMod((float)t, 0.5f) < 0.05f)
                         Log($"    {name} t {F((float)t)} y {F(me.GlobalPosition.Y, "F2")} ground {F(Ground(), "F2")} floor {me.IsOnFloor()} {F(me.GroundSpeed * 3.6f)} km/h vy {F(me.Velocity.Y, "F2")} pos {me.GlobalPosition}");
                 }
             }
             await Stop(me);
             me.RideControls = null;
-            Expect(Mathf.Abs(worst) < 0.08f && air < 6 && me.Vehicle is Truck,
-                $"{TrailerCatalog.All[Index(body)].Label} {(lowered ? "down" : "up")}: the tractor stays on its wheels (worst {F(worst * 100f, "F0")} cm at {F(worstAt)} km/h, {air} ticks off the floor, {me.SectionHits} section hits)");
+            Expect(Mathf.Abs(worst) < 0.08f && air < 6 && me.Vehicle is Truck && me.SectionHits == hitsBefore,
+                $"{TrailerCatalog.All[Index(body)].Label} {(lowered ? "down" : "up")}: the tractor stays on its wheels (worst {F(worst * 100f, "F0")} cm at {F(worstAt)} km/h, {air} ticks off the floor, {me.SectionHits - hitsBefore} section hits)");
         }
         if (tractor.Implement != null) tractor.Lowered = false;
+        else
+        {
+            // a drawbar trailer folded by the reverse on lock: pulled straight behind before it is
+            // dropped, so the tractor backing up meets it rather than passing beside it
+            me.RideControls = () => new RideInput(0.5f, 0f, 0f, false);
+            await Wait(6.0);
+            await Stop(me);
+        }
         DropTrailer(me);
         await Wait(0.5);
         // pull clear of what was just dropped, then back straight into it: it stops the tractor, it
@@ -602,7 +625,7 @@ public partial class TractorCheck : Node
         }
         await Stop(me);
         Expect(worstBack < 0.08f, $"backed 20 s into the dropped {TrailerCatalog.All[Index(body)].Label.ToLowerInvariant()}: no climb ({F(worstBack * 100f, "F0")} cm; slowest {F(slowest * 3.6f)} km/h, {F(me.GlobalPosition.DistanceTo(dropped))} m from where it was dropped)");
-        // and clear of it for the next one
+        // and clear of it
         me.RideControls = () => new RideInput(0.5f, 0f, 0.3f, false);
         await Wait(3.0);
         await Stop(me);

@@ -328,13 +328,6 @@ src/Player/TrailerCatal  quick  --tractorcheck --chunks fixture:flat --traffic 0
 src/Avatar/FarmMesh      quick  --tractorcheck --chunks fixture:flat --traffic 0
 src/Avatar/FarmMesh      quick  --cockpitcheck
 src/Farming/MachineLoad  quick  --tractorcheck --chunks fixture:flat --traffic 0
-src/Player/TractorCheck  quick  --tractorcheck slope --chunks fixture:flat --traffic 0
-src/Player/Truck.Farm    quick  --tractorcheck slope --chunks fixture:flat --traffic 0
-src/Player/FootPlayer.He quick  --tractorcheck slope --chunks fixture:flat --traffic 0
-src/Player/HeavyTrain    quick  --tractorcheck slope --chunks fixture:flat --traffic 0
-src/Player/TrailerCatal  quick  --tractorcheck slope --chunks fixture:flat --traffic 0
-src/Avatar/FarmMesh      quick  --tractorcheck slope --chunks fixture:flat --traffic 0
-src/Terrain/Fixture/FixtureCourse quick  --tractorcheck slope --chunks fixture:flat --traffic 0
 src/Terrain/Fixture/FixtureCourse quick  --tractorcheck --chunks fixture:flat --traffic 0
 src/Player/TractorNetPro net    tools/tractornetcheck.sh
 src/Player/Truck.Farm    net    tools/tractornetcheck.sh

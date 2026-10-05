@@ -94,18 +94,22 @@ until it is 22 m away (#70): it can be driven through until then.
 - `--tractorcheck [shots] [trace] --chunks fixture:flat --traffic 0`: numbers (0-39 km/h 17.2 s, top
   39.2 km/h; plough down 12.0 km/h vs 39.2 raised; lowered on tarmac 39.2; drill 36; mower 38, its
   bar 0.4-3.4 m right; combine 24 / 9.5 threshing; who takes what; codes and flags), each implement
-  up and down driven ahead, full lock and reversed with the tractor's height within 8 cm, backed
-  into each dropped one (stops, no climb), sweeping, seed, hay, the tank from a fake field, the
+  on a lane of its own south of the spawn (a fresh tractor each: with the slower Vario the old
+  shared path put the offset mower into the drill dropped before), up and down driven ahead, full
+  lock and reversed with the tractor's height within 8 cm and **no section hits**, backed into
+  each dropped one (stops, no climb; the tipper is pulled straight before it is dropped, else the
+  lock-reverse leaves it folded beside the tractor's line), sweeping, seed, hay, the tank from a fake field, the
   auger into a parked tipper, a sack on foot, the parked train; then the lowered plough across the
   flat fixture's **paved strip** (x 130-142 m: no draft, no strokes on it, 17.6 km/h there against
-  8.6 ploughing, one toast, works again past it). ~7 min. Shots: `test_output/494-*.png`.
-- `--tractorcheck slope --chunks fixture:flat --traffic 0` (its own checkmap row: together they
-  outran the quick tier's 600 s): the numbers, then the flat fixture's **ridge**
+  8.6 ploughing, one toast, works again past it), and last the flat fixture's **ridge**
   (`FixtureCourse.RidgeHeight`: from x 170 m, 50 m up at 15 %, 30 m level, 50 m down, each change of
   grade eased over 10 m): plough, drill and mower, raised and lowered, driven up from the flat, down
   onto it and 40 m across mid-slope at ~15 km/h (braking downhill). Measured: worst 3 cm up (the
   eased foot), 2 cm down, 1 cm across, never off the floor, no section hits, not wrecked. Each run
-  takes a fresh tractor (`SetRide` OnFoot, then the tractor: nothing left in the way). ~6 min.
+  takes a fresh tractor (`SetRide` OnFoot, then the tractor: nothing left in the way).
+  `--tractorcheck slope`: the numbers and the ridge only. In the quick tier (`--fixed-fps 60` as an
+  engine argument, before `--`) ~95 s in all; after the `--` it is not seen and runs in real time
+  (~13 min). Shots: `test_output/494-*.png`.
 - `--truckcheck` includes both machines (0-24 km/h loaded, alone to just under the top: tractor
   12-24 s, combine 18-40 s; brakes, swept width).
 - `tools/tractornetcheck.sh` (tier 2): B sees A's plough down (flags and rig), the parked tractor
