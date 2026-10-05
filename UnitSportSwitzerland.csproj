@@ -17,12 +17,9 @@
     <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
 
-  <!-- Android APK (tools/release.sh, #544): Godot's prebuilt Android template only runs net9.0, and the
-       MapCore -> TerrainPreprocessor -> RoadGen exe references each bring a deps.json/runtimeconfig.json
-       that collide once published for an Android RID (NETSDK1152); the game never reads them. -->
+  <!-- Android APK (tools/release.sh, #544): Godot's prebuilt Android template only runs net9.0 -->
   <PropertyGroup Condition=" '$(GodotTargetPlatform)' == 'android' ">
     <TargetFramework>net9.0</TargetFramework>
-    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
 
   <ItemGroup>

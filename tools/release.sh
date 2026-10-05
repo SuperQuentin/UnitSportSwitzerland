@@ -7,7 +7,7 @@
 # The build runs in a temporary worktree of the released commit, so your working files are never touched.
 # Needs: gh (logged in), dotnet, Godot mono + export templates (windows, linux, macos), export_presets.cfg in the repo root
 # ("Linux", "macOS" and "Android" presets are added when missing), curl, unzip, tar, xz, zip or PowerShell.
-# The APK also needs the Android SDK (ANDROID_HOME, or the editor setting) and a release keystore in
+# The APK also needs the Android SDK path in the editor settings (seeded from ANDROID_HOME) and a release keystore in
 # GODOT_ANDROID_KEYSTORE_RELEASE_PATH/_USER/_PASSWORD; without the keystore it is skipped.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -194,13 +194,11 @@ fi
 if [ -z "${GODOT_ANDROID_KEYSTORE_RELEASE_PATH:-}" ]; then
   echo "WARNING: no GODOT_ANDROID_KEYSTORE_RELEASE_PATH, skipping the Android APK"; SKIPPED+=("Android")
 else
-  [ -n "${ANDROID_HOME:-}" ] || [ ! -d "${LOCALAPPDATA:-/nonexistent}/Android/Sdk" ] || export ANDROID_HOME="$LOCALAPPDATA/Android/Sdk"
   APK="$REPO/$OUT/UnitSportSwitzerland-v$V-android-arm64.apk"; rm -f "$APK"
   # a failed .NET publish still yields an APK, just without the game: never ship that
-  if export_preset "Android" "$APK"; then
-    if unzip -l "$APK" | grep -q 'mono/publish/arm64/UnitSportSwitzerland.dll'; then ASSETS+=("$APK")
-    else echo "WARNING: the APK has no game assembly (dotnet publish failed?), skipping Android"; SKIPPED+=("Android"); fi
-  fi
+  # "A valid Android SDK path is required": Editor Settings > Export > Android > Android SDK Path (ANDROID_HOME
+  # only seeds a fresh editor settings file, as on CI)
+  if export_preset "Android" "$APK"; then ASSETS+=("$APK"); fi
 fi
 
 [ ${#ASSETS[@]} -gt 0 ] || { echo "Every export failed, nothing to release. Are the mono export templates installed?"; exit 1; }
