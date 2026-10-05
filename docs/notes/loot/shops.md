@@ -54,3 +54,4 @@
   `--generated-world --admin-password shopcheck --shopstuck`, `--shopnet A|B`: A buys a slot empty
   for cash, one line on the card, the server's balance drops, sells back; B walks in after and sees
   the slot sold out; saves in `test_output/shopcheck_appdata`, never the real ones).
+- **Farm co-op** (#494): `ShopType.FarmCoop`, rural tiles only (`ShopTables.RuralOnly`), a barn of 120 m2 or more 12 % of the time; seeds, hoe, fertiliser; buys Produce; `Farming.FarmMarket.Deliver` pays loads at full value. See `farming/produce-economy`.

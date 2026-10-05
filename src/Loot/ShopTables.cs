@@ -14,6 +14,8 @@ public enum ShopType : byte
     Electronics = 7, GunShop = 8, Garage = 9,
     /// <summary>A PAUSA vending machine: a piece of furniture, never a building's type.</summary>
     Vending = 10,
+    /// <summary>The farm co-op (#494): seeds, the hoe and fertiliser; buys produce; only on a rural tile.</summary>
+    FarmCoop = 11,
 }
 
 /// <summary>How a line may be paid.</summary>
@@ -58,10 +60,18 @@ public static class ShopTables
     private static readonly (ShopType Type, int Weight)[] Weights =
     {
         (ShopType.Grocery, 35), (ShopType.Hardware, 15), (ShopType.Kiosk, 15), (ShopType.Pharmacy, 10),
-        (ShopType.Sport, 8), (ShopType.Boutique, 8), (ShopType.Electronics, 6), (ShopType.GunShop, 3),
+        (ShopType.Sport, 8), (ShopType.Boutique, 8), (ShopType.Electronics, 6), (ShopType.GunShop, 3), (ShopType.FarmCoop, 8),
     };
 
     public static bool IsRural(int tileBuildings) => tileBuildings < RuralBuildings;
+
+    /// <summary>Shops that only the countryside has: the gun shop and the farm co-op (#494).</summary>
+    public static bool RuralOnly(ShopType type) => type is ShopType.GunShop or ShopType.FarmCoop;
+
+    /// <summary>A big agricultural building is a farm co-op this often (rural tiles only, #494).</summary>
+    public const double CoopShare = 0.12;
+    /// <summary>The smallest agricultural building (plan area, m²) that can be a farm co-op.</summary>
+    public const float CoopMinArea = 120f;
 
     /// <summary>
     /// A building's shop, from nothing but what every peer knows about it: every shop or office
@@ -73,16 +83,18 @@ public static class ShopTables
     {
         if (kind == BuildingKind.Commercial && !bank)
         {
-            int total = Weights.Where(w => rural || w.Type != ShopType.GunShop).Sum(w => w.Weight);
+            int total = Weights.Where(w => rural || !RuralOnly(w.Type)).Sum(w => w.Weight);
             double pick = Fnv.Unit(key + "|shop") * total;
             foreach (var (type, weight) in Weights)
             {
-                if (!rural && type == ShopType.GunShop) continue;
+                if (!rural && RuralOnly(type)) continue;
                 pick -= weight;
                 if (pick < 0) return type;
             }
             return ShopType.Grocery;
         }
+        if (rural && kind == BuildingKind.Agricultural && area >= CoopMinArea && Fnv.Unit(key + "|coop") < CoopShare)
+            return ShopType.FarmCoop;
         if (kind is BuildingKind.Garage or BuildingKind.Annex && area >= 30f && Fnv.Unit(key + "|garage") < 0.25)
             return ShopType.Garage;
         return ShopType.None;
@@ -91,9 +103,9 @@ public static class ShopTables
     /// <summary>The chance <see cref="TypeFor"/> gives a shop or office building this type.</summary>
     public static double TypeShare(ShopType type, bool rural)
     {
-        int total = Weights.Where(w => rural || w.Type != ShopType.GunShop).Sum(w => w.Weight);
+        int total = Weights.Where(w => rural || !RuralOnly(w.Type)).Sum(w => w.Weight);
         var row = Weights.FirstOrDefault(w => w.Type == type);
-        return row.Type != type || (!rural && type == ShopType.GunShop) ? 0 : row.Weight / (double)total;
+        return row.Type != type || (!rural && RuralOnly(type)) ? 0 : row.Weight / (double)total;
     }
 
     // ---- what each sells ------------------------------------------------------------------------
@@ -117,7 +129,7 @@ public static class ShopTables
     public static readonly ItemId[] ShopOnly =
     {
         ItemId.Camera, ItemId.Shotgun, ItemId.Shells, ItemId.HikingPack, ItemId.SwissArmyKnife,
-        ItemId.IceTea, ItemId.Crisps, ItemId.GummyBears, ItemId.IsotonicDrink,
+        ItemId.IceTea, ItemId.Crisps, ItemId.GummyBears, ItemId.IsotonicDrink, ItemId.Fertiliser,
     };
 
     private static ShopLine L(ItemId id, float chance, int min, int max) => new(id, chance, min, max);
@@ -130,6 +142,7 @@ public static class ShopTables
             L(ItemId.Cheese, 0.8f, 2, 8), L(ItemId.Chocolate, 0.9f, 4, 12), L(ItemId.MineralWater, 0.9f, 4, 12),
             L(ItemId.WaterBottle, 0.85f, 3, 10), L(ItemId.EnergyBar, 0.6f, 2, 8), L(ItemId.Bandage, 0.3f, 1, 4),
             L(ItemId.RockSalt, 0.35f, 1, 4), L(ItemId.Firewood, 0.3f, 5, 15),
+            L(ItemId.Potato, 0.6f, 4, 12), L(ItemId.Carrot, 0.5f, 4, 12), L(ItemId.Flour, 0.5f, 3, 10),
         },
         [ShopType.Kiosk] = new[]
         {
@@ -169,6 +182,14 @@ public static class ShopTables
         {
             L(ItemId.Shotgun, 0.9f, 1, 3), L(ItemId.Shells, 1.0f, 50, 150), L(ItemId.Binoculars, 0.6f, 1, 2),
             L(ItemId.SwissArmyKnife, 0.6f, 1, 3), L(ItemId.Backpack, 0.3f, 1, 2),
+        },
+        [ShopType.FarmCoop] = new[]
+        {
+            L(ItemId.WheatSeed, 0.9f, 3, 12), L(ItemId.BarleySeed, 0.8f, 3, 10), L(ItemId.MaizeSeed, 0.8f, 3, 10),
+            L(ItemId.SeedPotato, 0.85f, 3, 12), L(ItemId.RapeSeed, 0.6f, 2, 8), L(ItemId.SunflowerSeed, 0.6f, 2, 8),
+            L(ItemId.SugarBeetSeed, 0.6f, 3, 10), L(ItemId.VegetableSeeds, 0.85f, 3, 12), L(ItemId.PeaSeed, 0.6f, 2, 8),
+            L(ItemId.Hoe, 0.85f, 1, 3), L(ItemId.Fertiliser, 0.9f, 5, 20),
+            L(ItemId.Rope, 0.4f, 1, 4), L(ItemId.FuelCan, 0.35f, 1, 3),
         },
         [ShopType.Garage] = new[]
         {
@@ -211,11 +232,21 @@ public static class ShopTables
         ShopType.Sport or ShopType.GunShop or ShopType.Electronics => category == ItemCategory.Gear,
         ShopType.Boutique => category is ItemCategory.Clothing or ItemCategory.Cosmetic,
         ShopType.Garage => category == ItemCategory.Part,
+        ShopType.FarmCoop => category == ItemCategory.Produce,
         _ => false,
     };
 
     /// <summary>What a shop pays for one: 35 % of the value, rounded down; 0 means it is not worth buying.</summary>
     public static int SellPrice(float value) => value <= 0 ? 0 : (int)Math.Floor(value * SellShare);
+
+    /// <summary>
+    /// What a farm co-op pays for a delivered load (#494, <c>Farming.FarmMarket.Deliver</c>): the full
+    /// producer price (<see cref="ItemDef.Value"/>) of every unit, rounded down for the load. A load is a
+    /// weighed delivery to a buyer, not a shop-counter sale at <see cref="SellShare"/>; only what the
+    /// co-op buys (<see cref="Buys"/>) is taken, 0 otherwise.
+    /// </summary>
+    public static long DeliveryPrice(ItemCategory category, float value, int count) =>
+        count <= 0 || value <= 0 || !Buys(ShopType.FarmCoop, category) ? 0 : (long)Math.Floor(value * (double)count);
 
     // ---- prices and payment ---------------------------------------------------------------------
 
@@ -344,6 +375,7 @@ public static class ShopTables
         ShopType.Electronics => "Electronics",
         ShopType.GunShop => "Gun shop",
         ShopType.Garage => "Garage",
+        ShopType.FarmCoop => "Farm co-op",
         ShopType.Vending => "PAUSA",
         _ => "",
     };

@@ -73,6 +73,16 @@ public static class Recipes
         Hands(ItemId.SandBag, 1, I(ItemId.Cloth), I(ItemId.Stone, 3)),
         Hands(ItemId.Campfire, 1, I(ItemId.Firewood, 5), I(ItemId.Stone, 4)),
         Hands(ItemId.Torch, 1, I(ItemId.Firewood), I(ItemId.Cloth), I(ItemId.Coal)),
+        // farming (#494): seed kept from a harvest (worth at least what went in)
+        Hands(ItemId.WheatSeed, 2, I(ItemId.Wheat)),
+        Hands(ItemId.BarleySeed, 2, I(ItemId.Barley)),
+        Hands(ItemId.MaizeSeed, 2, I(ItemId.Maize)),
+        Hands(ItemId.SeedPotato, 1, I(ItemId.Potato, 2)),
+        Hands(ItemId.RapeSeed, 3, I(ItemId.Rapeseed)),
+        Hands(ItemId.SunflowerSeed, 3, I(ItemId.SunflowerSeeds)),
+        Hands(ItemId.SugarBeetSeed, 1, I(ItemId.SugarBeet, 2)),
+        Hands(ItemId.VegetableSeeds, 1, I(ItemId.Carrot)),
+        Hands(ItemId.PeaSeed, 2, I(ItemId.Peas)),
 
         // ---- at a workbench ----
         Bench(ItemId.WoodPlanks, 1, 2f, I(ItemId.Firewood, 3)),
@@ -97,12 +107,28 @@ public static class Recipes
 
         Bench(ItemId.FieldWorkbench, 1, 6f, I(ItemId.WoodPlanks, 6), I(ItemId.Screws, 10), I(ItemId.ScrapMetal, 2)),
 
+        // milling (#494): a sack of grain makes more bags of flour than it was worth; nothing is lost
+        Bench(ItemId.Flour, 4, 3f, I(ItemId.Wheat)),
+        Bench(ItemId.MaizeMeal, 3, 3f, I(ItemId.Maize)),
+        Bench(ItemId.RapeseedOil, 6, 3f, I(ItemId.Rapeseed)),
+        Bench(ItemId.Sugar, 1, 3f, I(ItemId.SugarBeet)),
+        Bench(ItemId.Hoe, 1, 3f, I(ItemId.ScrapMetal, 2), I(ItemId.WoodPlanks)),
+
         // ---- at a fire: a campfire or a stove (#272) ----
         Cook(ItemId.Fondue, 8f, I(ItemId.Cheese, 2), I(ItemId.Bread), I(ItemId.MineralWater)),
         Cook(ItemId.HotChocolate, 4f, I(ItemId.Chocolate), I(ItemId.MineralWater)),
         Cook(ItemId.ToastedBread, 3f, I(ItemId.Bread)),
         Cook(ItemId.CaramelApple, 4f, I(ItemId.Apple), I(ItemId.Candy, 2)),
         Cook(ItemId.MineralWater, 5f, I(ItemId.WaterBottle)),   // boiled
+
+        // farm cooking (#494)
+        new(ItemId.Bread, 3, Station.Fire, new[] { I(ItemId.Flour), I(ItemId.WaterBottle) }, 6f),   // a bag of flour bakes three loaves
+        Cook(ItemId.BakedPotato, 5f, I(ItemId.Potato)),
+        new(ItemId.Popcorn, 4, Station.Fire, new[] { I(ItemId.Maize), I(ItemId.RapeseedOil) }, 5f),   // a sack of maize pops into four boxes
+        Cook(ItemId.Roesti, 6f, I(ItemId.Potato, 2), I(ItemId.RapeseedOil)),
+        Cook(ItemId.Polenta, 6f, I(ItemId.MaizeMeal), I(ItemId.WaterBottle)),
+        Cook(ItemId.VegetableSoup, 7f, I(ItemId.Carrot), I(ItemId.Potato), I(ItemId.WaterBottle)),
+        Cook(ItemId.Raclette, 7f, I(ItemId.Cheese), I(ItemId.Potato, 2)),
 
         // ---- salvage: parts back into materials (always worth less than the part) ----
         Strip(ItemId.Tyre, I(ItemId.Rubber, 3)),
@@ -129,6 +155,8 @@ public static class Recipes
         // Battle Royale finds (#478)
         ItemId.Alphorn, ItemId.FonduePot, ItemId.SmokeCanister,
         ItemId.Dogtag,   // a match's own (#480)
+        // sold only (#494): the farm co-op's fertiliser
+        ItemId.Fertiliser,
     };
 
     /// <summary>Everything a recipe gives, the main output first.</summary>
