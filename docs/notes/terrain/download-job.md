@@ -14,4 +14,4 @@
   queued — two writing the same folders would fight over the shared `.swiss_data_manifest.json`.
 - **Tiles do not appear under a player already flying.** The download continues while you play, but
   the result is picked up the next time a world loads, and the screen says so. Re-blending the
-  generated fill (`terrain/generated-fill`) at a boundary moving under the camera is its own job.
+  generated fill (`terrain/generated-fill`) at a boundary moving under the camera is its own job: #536.
