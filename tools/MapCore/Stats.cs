@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using UnitSport.Terrain.Format;
 
-namespace UnitSport.Tools.MapSetup;
+namespace UnitSport.Map;
 
 /// <summary>
 /// The rates every time estimate is built from. The defaults are the figures measured on the

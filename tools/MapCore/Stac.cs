@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Net;
 using System.Text.Json;
 
-namespace UnitSport.Tools.MapSetup;
+namespace UnitSport.Map;
 
 /// <summary>
 /// Just enough of swisstopo's STAC API (v0.9, the one tools/swiss_data.py talks to) for the

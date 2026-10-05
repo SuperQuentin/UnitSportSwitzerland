@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace UnitSport.Tools.MapSetup;
+namespace UnitSport.Map;
 
 /// <summary>
 /// Where everything lives, resolved from the repository root so the tool works whatever
@@ -8,13 +8,30 @@ namespace UnitSport.Tools.MapSetup;
 /// </summary>
 public sealed class Paths
 {
-    public required string Root { get; init; }
+    /// <summary>
+    /// The repository root, when there is one. The terminal tool is always run from inside the
+    /// repo and needs it (it is where <c>tools/</c>, the Python helpers and
+    /// <c>terrain_location.json</c> live). The game has no repository: it is built from
+    /// <see cref="ForGame"/> with the two data folders given outright, and anything that needs
+    /// <see cref="Root"/> is a step the game cannot run anyway.
+    /// </summary>
+    public string? Root { get; init; }
     /// <summary>
     /// Somewhere else than the repo's own folders (another drive, a test sandbox): --data / --chunks
     /// for one run, otherwise the location saved in <see cref="LocationFile"/>.
     /// </summary>
     public string? DataOverride { get; init; }
     public string? ChunksOverride { get; init; }
+
+    /// <summary>
+    /// The repository root, for the terminal tool, which is always run from inside the repo.
+    /// Throws when there is none, which is a programming error rather than a user's.
+    /// </summary>
+    public string RepoRoot => RequireRoot();
+
+    private string RequireRoot() => Root
+        ?? throw new InvalidOperationException("this Paths has no repository root (built by ForGame): "
+                                               + "the step asking for it is one only the terminal tool can run");
 
     public string Data => DataOverride ?? DefaultData;
     public string AltiDir => Path.Combine(Data, "swiss_chunks");
@@ -36,20 +53,26 @@ public sealed class Paths
     public string StatsFile => Path.Combine(Temp, "mapsetup_stats.json");
     public string LogsDir => Path.Combine(Temp, "mapsetup_logs");
 
-    public string Tools => Path.Combine(Root, "tools");
+    public string Tools => Path.Combine(RequireRoot(), "tools");
     public string SwissData => Path.Combine(Tools, "swiss_data.py");
 
-    /// <summary>The committed country map; next to the binary when built, in the source folder otherwise.</summary>
-    public string CountryFile
+    /// <summary>
+    /// A loose copy of the country map to prefer over the one embedded in MapCore: beside the
+    /// binary, else the committed source file. Null in the game, which has no repository and
+    /// always reads the embedded copy (<see cref="CountryData.LoadEmbedded"/>).
+    /// </summary>
+    public string? CountryFile
     {
         get
         {
+            if (Root == null) return null;
             var beside = Path.Combine(AppContext.BaseDirectory, CountryData.FileName);
             return File.Exists(beside) ? beside : CountrySourceFile;
         }
     }
 
-    public string CountrySourceFile => Path.Combine(Tools, "MapSetup", CountryData.FileName);
+    /// <summary>Where <c>--bake</c> writes the country map, for committing.</summary>
+    public string CountrySourceFile => Path.Combine(Tools, "MapCore", CountryData.FileName);
 
     public string GwrSqlite => Path.Combine(GwrDir, "data.sqlite");
     public string RouteKeys => Path.Combine(RoutesDir, "route_keys.sqlite");
@@ -64,14 +87,14 @@ public sealed class Paths
         ? Directory.EnumerateFiles(OsmDir, "switzerland-*.osm.pbf").OrderByDescending(f => f, StringComparer.Ordinal).FirstOrDefault()
         : null;
 
-    public string DefaultData => Path.Combine(Root, "ressources", "data");
-    public string DefaultChunks => Path.Combine(Root, "terrain_chunks");
+    public string DefaultData => Path.Combine(RequireRoot(), "ressources", "data");
+    public string DefaultChunks => Path.Combine(RequireRoot(), "terrain_chunks");
 
     /// <summary>
     /// The saved storage location (gitignored, repo root). The game and the dedicated server read
     /// its "chunks" too (src/Core/TerrainPaths.cs), so tiles built on another drive load with no flag.
     /// </summary>
-    public string LocationFile => Path.Combine(Root, DataLocation.FileName);
+    public string LocationFile => Path.Combine(RequireRoot(), DataLocation.FileName);
 
     /// <summary>The same repo with other folders; null means the repo's own.</summary>
     public Paths With(string? data, string? chunks) => new()
@@ -93,6 +116,18 @@ public sealed class Paths
     public static bool SamePath(string a, string b) =>
         string.Equals(Path.GetFullPath(a).TrimEnd('/', '\\'), Path.GetFullPath(b).TrimEnd('/', '\\'),
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    /// <summary>
+    /// The game's locations: both folders outright, with no repository to look for. The data folder
+    /// is <c>terrain_location.json</c>'s "data" when it has one, else <c>data/</c> beside the tiles
+    /// — a release has no <c>ressources/data</c> to fall back on.
+    /// </summary>
+    public static Paths ForGame(string data, string chunks) => new()
+    {
+        Root = null,
+        DataOverride = Path.GetFullPath(data),
+        ChunksOverride = Path.GetFullPath(chunks),
+    };
 
     /// <summary>Flags win over the saved location, which wins over the repo's own folders.</summary>
     public static Paths Find(string? data = null, string? chunks = null)
