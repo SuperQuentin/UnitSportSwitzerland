@@ -79,8 +79,13 @@ public sealed class TileContext
     /// <summary>Tile-local position of an LV95 point (altitude 0).</summary>
     public Vector3 Local(double e, double n) => World.ToWorld(e, n, 0) - Origin;
 
-    /// <summary>A stable identity for a door, for hashing and hunt keys.</summary>
-    public (int A, int B, int C) DoorKey(DoorSpot d) => (Id.E, Id.N, d.Index);
+    /// <summary>
+    /// A stable identity for a door, for hashing and hunt keys. A building's extra doors (#498)
+    /// are a million apart in the third number, well past any tile's building count, so a main
+    /// door keeps exactly the identity it had when buildings had one door each — and the gift or
+    /// the lantern at it stays where it was.
+    /// </summary>
+    public (int A, int B, int C) DoorKey(DoorSpot d) => (Id.E, Id.N, d.Index + d.Slot * 1_000_000);
 
     /// <summary>Distance in the ground plane from a tile-local point to the nearest drivable or walkable line.</summary>
     public float DistanceToRoad(Vector3 local, float giveUpBeyond = 50f)

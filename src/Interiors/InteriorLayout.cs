@@ -143,11 +143,11 @@ public sealed class FurniturePlan
 
 /// <summary>
 /// One way in: a real door outside and the doorway it arrives at inside. A church has one per
-/// solid (nave, tower), all opening into the same interior; a house has one.
+/// solid (nave, tower), a long block or a warehouse one per facade door (#498), a house one.
 /// </summary>
 public sealed class EntrancePlan
 {
-    /// <summary>Key of the building whose door this is (what <see cref="DoorIndex"/> hands out).</summary>
+    /// <summary>Key of the door this is (<see cref="DoorKey"/> text, what <see cref="DoorIndex"/> hands out).</summary>
     public string Door { get; set; } = "";
     /// <summary>Middle of the doorway on the inside wall line, interior-local, ground floor.</summary>
     public float X { get; set; }
@@ -163,6 +163,14 @@ public sealed class EntrancePlan
     public float DoorZ { get; set; }
     public float DoorOutX { get; set; }
     public float DoorOutZ { get; set; }
+    public float DoorWidth { get; set; }
+    public float DoorHeight { get; set; }
+
+    /// <summary>How this door's leaf moves (<see cref="DoorSpot.Hang"/>, #498).</summary>
+    public DoorHang Hang { get; set; }
+
+    /// <summary>Whether a ground vehicle is driven through it (<see cref="DoorSpot.Vehicle"/>).</summary>
+    public bool Vehicle { get; set; }
 }
 
 /// <summary>
@@ -173,7 +181,10 @@ public sealed class EntrancePlan
 public sealed class InteriorLayout
 {
     /// <summary>Bumped whenever the generator changes enough that old plans should be regenerated.</summary>
-    public const int CurrentVersion = 13; // one number, so whichever of #497/#498 rebases onto the other takes the NEXT one, never a lower one: a version going backwards regenerates the plans saved under the higher one and then collides when it is reissued. 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
+    // one number, so whichever of #497/#498 rebases onto the other takes the NEXT one, never a
+    // lower one: a version going backwards regenerates the plans saved under the higher one and
+    // then collides when it is reissued.
+    public const int CurrentVersion = 14; // 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";
@@ -241,15 +252,20 @@ public sealed class InteriorLayout
         {
             Door = Key, X = EntryX, Z = -Depth / 2, InX = 0, InZ = 1, Width = EntryWidth,
             DoorX = DoorX, DoorY = DoorY, DoorZ = DoorZ, DoorOutX = DoorOutX, DoorOutZ = DoorOutZ,
+            DoorWidth = DoorWidth, Hang = DoorBudget.HangFor(DressedKind()),
+            Vehicle = DoorBudget.VehicleFor(DressedKind()),
         },
     };
 
-    /// <summary>The entrance behind a given building's door, or the main one.</summary>
-    public EntrancePlan EntranceFor(string door)
-    {
-        var all = AllEntrances();
-        return all.FirstOrDefault(e => e.Door == door) ?? all[0];
-    }
+    /// <summary>
+    /// The entrance behind exactly this door, or null. A facade door whose doorway the plan could
+    /// not fit (#498) has none, and reads as locked: better than opening a portal onto another
+    /// door's doorway.
+    /// </summary>
+    public EntrancePlan? EntranceOf(string door) => AllEntrances().FirstOrDefault(e => e.Door == door);
+
+    /// <summary>The entrance behind a given door, or the main one.</summary>
+    public EntrancePlan EntranceFor(string door) => EntranceOf(door) ?? AllEntrances()[0];
 
     /// <summary>
     /// Width and head height of the doorway an entrance arrives at: the ground-floor entry cut
