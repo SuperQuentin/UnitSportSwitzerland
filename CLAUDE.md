@@ -40,6 +40,10 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
      (`docs/notes/general/worktrees.md`). Never commit features on `main`; `Closes #N` in the PR.
      **Push local commits on feature branches whenever possible**, so others can build on them
      and a local crash loses nothing.
+     **Open the PR as a draft together with the branch** (`gh pr create --draft`), as soon as the
+     first commit is pushed: an open draft is how parallel workers see the feature exists in
+     step 1. It stays a draft for the whole of the work; mark it ready (`gh pr ready <N>`) only
+     once the feature is complete and the tier of step 4 has been run and recorded in it.
 - **Every new action or interaction is designed for keyboard, gamepad and VR together**: before
   coding a new key, decide its pad button and its VR way (grip the thing, or the pad through
   `XrPad`), show it with `InputHints`, and add its row to `xr/vr-action-map`
