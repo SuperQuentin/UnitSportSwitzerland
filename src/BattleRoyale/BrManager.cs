@@ -97,6 +97,9 @@ public partial class BrManager : Node
             case "leave":
                 if (!player) return "'/br leave' needs a player.";
                 return Leave(sender);
+            case "team":
+                if (!player) return "'/br team' needs a player.";
+                return Party(sender, string.Join(' ', words[1..]));
         }
         if (!admin) return $"'/br {verb}' is an admin command.";
         switch (verb)
@@ -117,7 +120,7 @@ public partial class BrManager : Node
                 return "Cancelled.";
             case "zone": return ForceShrink();
             default:
-                return "Usage: /br open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] · join · leave · start · zone · cancel · status · stats [name] · top";
+                return "Usage: /br open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] · join · leave · team [name] · start · zone · cancel · status · stats [name] · top";
         }
     }
 
@@ -129,7 +132,8 @@ public partial class BrManager : Node
             BrPhase.Idle => "No Battle Royale. An admin opens one with /br open.",
             BrPhase.Lobby or BrPhase.Countdown =>
                 $"Lobby: {s.AreaName}, {s.Side / 1000:F0} × {s.Side / 1000:F0} km. {s.Entrants.Count} joined: "
-                + string.Join(", ", s.Entrants.Select(e => e.Name)) + ". /br join to play.",
+                + string.Join(", ", s.Entrants.Select(e => e.Party.Length > 0 ? $"{e.Name} [{e.Party}]" : e.Name)) + ". /br join to play"
+                + (s.TeamSize > 1 ? ", /br team <name> to play with friends." : "."),
             _ => $"Match in {s.AreaName}: {s.AliveCount} of {s.Entrants.Count} alive.",
         };
     }
@@ -234,6 +238,26 @@ public partial class BrManager : Node
         return $"You are in. {_state.AreaName}, {_state.Side / 1000:F0} km.";
     }
 
+    /// <summary>
+    /// <c>/br team &lt;name&gt;</c> (#469): play with whoever gives the same name, from the lobby on;
+    /// no name leaves the group. Teams are only made at GO, so it changes nothing in solo.
+    /// </summary>
+    private string Party(long peer, string typed)
+    {
+        if (_state.Phase is not (BrPhase.Lobby or BrPhase.Countdown)) return "Teams are picked in the lobby, before GO.";
+        if (_state.Find(peer) is not { } e) return "Join first: /br join";
+        string party = BrEntrant.PartyName(typed);
+        if (typed.Trim().Length > 0 && party.Length == 0) return "A team name is letters and digits.";
+        e.Party = party;
+        Push();
+        if (party.Length == 0) return "You will be put in any team.";
+        var with = _state.Entrants.Where(x => x.Party == party && x != e).Select(x => x.Name).ToList();
+        string mates = with.Count == 0 ? "nobody yet: tell your friends to type the same" : string.Join(", ", with);
+        return _state.TeamSize <= 1
+            ? $"Team '{party}' noted, but this match is solo."
+            : $"Team '{party}': with {mates}" + (with.Count + 1 > _state.TeamSize ? $" (more than {_state.TeamSize}: split at GO)" : "") + ".";
+    }
+
     private string Leave(long peer)
     {
         if (_state.Find(peer) is not { } e) return "You are not in the match.";
@@ -273,7 +297,7 @@ public partial class BrManager : Node
                 // the zone has closed and someone is still standing (a draw cannot linger)
                 var zone = _state.Zone();
                 Airdrops(zone);
-                if (_state.TeamsAlive <= 1 || Now - _state.Started > zone.Duration + 120) End();
+                if (_state.TeamsAlive <= LastSides || Now - _state.Started > zone.Duration + 120) End();
                 break;
             case BrPhase.Ended when Now - _endedAt >= ResultsSeconds:
                 Finish();
@@ -294,7 +318,9 @@ public partial class BrManager : Node
         _state.Phase = BrPhase.Playing;
         // the first circle is sized for who actually boards (docs/notes/br/zone.md)
         _state.Field = _state.Entrants.Count;
+        _state.ZoneCentres = GroundCentres();
         _state.AssignTeams();
+        _sidesAtGo = _state.TeamsAlive;
         // everyone boards the cargo plane (#207); the zone's clock starts when its doors close
         _state.FlightStart = Now;
         _state.FlightAlt = PlaneAltitude();
@@ -314,6 +340,23 @@ public partial class BrManager : Node
 
     private bool _pushedOut;
     private Task<HorizonIndex?>? _horizon;
+
+    /// <summary>
+    /// The zone's centres judged on the ground (#477): no circle mostly over a lake or a cliff, from the
+    /// terrain lattice. Null without the lattice (a generated or fixture world): the seed's zone, as before.
+    /// </summary>
+    private float[]? GroundCentres()
+    {
+        if (_horizon is not { IsCompletedSuccessfully: true, Result: { Count: > 0 } horizon }) return null;
+        double e0 = _state.AreaE, n0 = _state.AreaN;
+        var zone = new ZoneSchedule(_state.Seed, _state.Side, _state.Pace, _state.Field, badness: (c, r) => ZoneSchedule.Badness(c, r,
+            p => BrMapImage.Wet(horizon, e0 + p.X, n0 + p.Y),
+            p => (float)BrMapImage.Height(horizon, e0 + p.X, n0 + p.Y)));
+        var plain = new ZoneSchedule(_state.Seed, _state.Side, _state.Pace, _state.Field);
+        int moved = Enumerable.Range(0, ZoneSchedule.Phases + 1).Count(i => zone.CentreOf(i) != plain.CentreOf(i));
+        GD.Print($"[br] zone: {moved} of {ZoneSchedule.Phases + 1} centres moved off water or cliffs");
+        return zone.Centres;
+    }
 
     /// <summary>
     /// The plane's altitude over this match's line, from the terrain's 100 m lattice, asked for when the
@@ -370,6 +413,63 @@ public partial class BrManager : Node
     }
 
     // ------------------------------------------------------------------------------------
+    // server: down, not out (#475)
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>How close a reviver must be to the downed team-mate, m (the server's view of both bodies).</summary>
+    private const float ServerReviveReach = 3.5f;
+
+    /// <summary>
+    /// Server: a squad player's health ran out with a team-mate standing, so their client put them
+    /// down instead of out. If that was the last of their team standing, the whole team goes out.
+    /// </summary>
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReportDowned(long attacker)
+    {
+        if (!_server || _state.Phase != BrPhase.Playing) return;
+        long peer = Multiplayer.GetRemoteSenderId();
+        if (_state.Find(peer) is not { Alive: true, Downed: false } e) return;
+        e.Downed = true;
+        e.DownedBy = attacker;
+        var k = _state.Find(attacker);
+        GD.Print($"[br] down: {e.Name}, by {k?.Name ?? "-"}");
+        Rpc(MethodName.DownNews, peer, attacker, false);
+        Push();
+        OutIfAllDown(e);
+    }
+
+    /// <summary>
+    /// A team whose living are all down has nobody to pick them up: each is told to go out (their
+    /// client reports the death, with its pack for the death box, as any other).
+    /// </summary>
+    private void OutIfAllDown(BrEntrant who)
+    {
+        if (who.Team == 0) return;
+        var living = _state.Entrants.Where(m => m.Team == who.Team && m.Alive).ToList();
+        if (living.Count == 0 || living.Any(m => !m.Downed)) return;
+        GD.Print($"[br] team {who.Team} is all down: out");
+        foreach (var m in living) RpcId(m.Peer, MethodName.OutNow);
+    }
+
+    /// <summary>Server: a standing team-mate held Interact over a downed one for long enough.</summary>
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestRevive(long target)
+    {
+        if (!_server || _state.Phase != BrPhase.Playing) return;
+        long peer = Multiplayer.GetRemoteSenderId();
+        if (_state.Find(peer) is not { Alive: true, Downed: false, Team: not 0 } r
+            || _state.Find(target) is not { Alive: true, Downed: true } t || t.Team != r.Team) return;
+        if (_players?.GetNodeOrNull<Node3D>(peer.ToString()) is not { } a || _players.GetNodeOrNull<Node3D>(target.ToString()) is not { } b
+            || a.GlobalPosition.DistanceTo(b.GlobalPosition) > ServerReviveReach) return;
+        t.Downed = false;
+        t.DownedBy = 0;
+        GD.Print($"[br] revived: {t.Name}, by {r.Name}");
+        RpcId(target, MethodName.Revived);
+        Rpc(MethodName.DownNews, target, peer, true);
+        Push();
+    }
+
+    // ------------------------------------------------------------------------------------
     // server: loot (#194)
     // ------------------------------------------------------------------------------------
 
@@ -401,6 +501,14 @@ public partial class BrManager : Node
         {
             var roads = await BrLoot.RoadPoints(_source, area);
             if (match != _match || _state.Phase != BrPhase.Playing) return;
+            // the Postauto stops for recalls (#480), squads only
+            if (_state.TeamSize > 1)
+            {
+                var zone = _state.Zone();
+                _state.RecallPoints = PickStops(roads, area, zone.CentreOf(0), zone.RadiusOf(0), seed);
+                GD.Print($"[br] recall stops: {(_state.RecallPoints?.Length ?? 0) / 3}");
+                Push();
+            }
             var crates = BrLoot.RoadsideCrates(roads, area, seed);
             if (_crates != null) _crates.Seed = seed;
             _crates?.Spawn(crates);
@@ -514,6 +622,41 @@ public partial class BrManager : Node
 
     private readonly Dictionary<long, double> _lastFlare = new();
 
+    /// <summary>Seconds between two pings of one player (#469).</summary>
+    private const double PingEvery = 1.5;
+
+    /// <summary>The farthest a ping may lie from its sender, m: the crosshair's reach plus slack.</summary>
+    private const double PingReach = 2500;
+
+    /// <summary>
+    /// Server: a living squad player marks a point (LV95; <paramref name="alt"/> NaN = on the map, height
+    /// unknown) for their team (#469). Sent to every team-mate, out or not (they may be watching), and back
+    /// to the sender; at most one every <see cref="PingEvery"/> s.
+    /// </summary>
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestPing(double e, double n, double alt)
+    {
+        if (!_server || _state.Phase != BrPhase.Playing || Origin == null || !double.IsFinite(e) || !double.IsFinite(n)) return;
+        long peer = Multiplayer.GetRemoteSenderId();
+        if (_state.Find(peer) is not { Alive: true, Team: not 0 } me || _players?.GetNodeOrNull<Node3D>(peer.ToString()) is not { } body) return;
+        if (_lastPing.TryGetValue(peer, out double last) && Now - last < PingEvery) return;
+        var (be, bn) = Origin.ToLv95(body.GlobalPosition);
+        if (Math.Sqrt((e - be) * (e - be) + (n - bn) * (n - bn)) > PingReach) return;
+        _lastPing[peer] = Now;
+        foreach (var x in _state.Entrants.Where(x => x.Team == me.Team))
+            if (Multiplayer.GetPeers().Contains((int)x.Peer)) RpcId(x.Peer, MethodName.Pinged, peer, e, n, alt);
+    }
+
+    private readonly Dictionary<long, double> _lastPing = new();
+
+    private int _sidesAtGo;
+
+    /// <summary>
+    /// Sides left that end the match: the last one standing; or, when only one side boarded (friends
+    /// practising in one squad, #469), none, so it plays on until they are out or the zone has closed.
+    /// </summary>
+    private int LastSides => _sidesAtGo > 1 ? 1 : 0;
+
     /// <summary>The full map's grid square of a zone point ("C4").</summary>
     private string Cell(double x, double y)
     {
@@ -530,6 +673,8 @@ public partial class BrManager : Node
         for (int i = 0; i < Math.Min(Math.Min(ids.Length, counts.Length), Items.Inventory.Size); i++)
             if (Items.ItemDefs.Get((Items.ItemId)ids[i]) is { } def && def.Id != Items.ItemId.Francs && counts[i] > 0)
                 stacks.Add(new Items.ItemStack(def.Id, Math.Min(counts[i], def.MaxStack)));
+        // a squad player's dogtag (#480): a team-mate can bring them back with it
+        if (LeavesTag(e)) stacks.Add(new Items.ItemStack(Items.ItemId.Dogtag, 1));
         if (stacks.Count == 0) return;
         var (pe, pn) = Origin.ToLv95(body.GlobalPosition);
         var box = new Crate { Style = CrateStyle.DeathBox, E = pe, N = pn, Alt = body.GlobalPosition.Y, Label = $"{e.Name}'s things" };
@@ -552,6 +697,8 @@ public partial class BrManager : Node
     private void Eliminate(BrEntrant e, long killer, BrOut cause)
     {
         e.Alive = false;
+        e.OutAt = Now;
+        e.Downed = false;
         e.Survived = Now - _state.FlightStart;
         // a team places when its last member is out, all of them together (solo: at once)
         if (!_state.Entrants.Any(m => m.Alive && BrState.SideOf(m) == BrState.SideOf(e)))
@@ -572,23 +719,30 @@ public partial class BrManager : Node
         GD.Print($"[br] out: {e.Name} ({cause}), place {e.Place}, killer {k?.Name ?? "-"}");
         Rpc(MethodName.Eliminated, e.Peer, k?.Peer ?? 0, (int)cause, e.Place);
         Push();
-        if (_state.TeamsAlive <= 1) End();
+        // the last one standing of a team is out: the downed ones go with them (#475)
+        OutIfAllDown(e);
+        if (_state.TeamsAlive <= LastSides) End();
     }
 
     private void End()
     {
         if (_state.Phase != BrPhase.Playing) return;
-        var winner = _state.Entrants.FirstOrDefault(e => e.Alive)
-                     ?? _state.Entrants.OrderBy(e => e.Place).FirstOrDefault();
+        // someone standing wins; a team that is all down (#475) is on its way out, and when only
+        // the downed are left there is no winner
+        var winner = _state.Entrants.FirstOrDefault(e => e.Alive && !e.Downed)
+                     ?? (_state.Entrants.Any(e => e.Alive) ? null : _state.Entrants.OrderBy(e => e.Place).FirstOrDefault());
         // the winner's whole side wins (#231): its living keep standing, its fallen place first too
         long side = winner != null ? BrState.SideOf(winner) : 0;
         foreach (var e in _state.Entrants.Where(e => e.Alive))
         {
             e.Survived = Now - _state.FlightStart;
-            e.Place = 1;
             e.Alive = winner != null && BrState.SideOf(e) == side;
+            e.Place = e.Alive ? 1 : 2;
+            e.Downed = false;
         }
         foreach (var e in _state.Entrants.Where(e => winner != null && BrState.SideOf(e) == side)) e.Place = 1;
+        // the rest of a side that was still waiting on its downed (#475) places together
+        foreach (var e in _state.Entrants.Where(e => e.Place == 0)) e.Place = 2;
         _state.Winner = winner?.Peer ?? 0;
         _state.WinnerTeam = winner?.Team ?? 0;
         _state.Phase = BrPhase.Ended;

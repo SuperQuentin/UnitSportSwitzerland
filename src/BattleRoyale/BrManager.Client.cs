@@ -41,7 +41,7 @@ public partial class BrManager
     private BrMap? _map;
 
     private ZoneSchedule? _zone;
-    private (int Seed, float Side, float Pace, int Field) _zoneKey;
+    private (int Seed, float Side, float Pace, int Field, float Centres) _zoneKey;
     private BrHud? _hud;
     private ZoneWall? _wall;
     private Camera3D? _spectator;
@@ -84,6 +84,9 @@ public partial class BrManager
         if (Instance == this) Instance = null;
         if (_server) Combat.PvpRules.HitRelayed -= OnHit;
         FootPlayer.StayDown = null;
+        FootPlayer.CanBeDowned = null;
+        FootPlayer.Regenerates = null;
+        Combat.PvpRules.Override = null;
     }
 
     public long Me => Multiplayer.GetUniqueId();
@@ -111,7 +114,79 @@ public partial class BrManager
         if (Origin == null) yield break;
         foreach (var m in _state.MatesOf(Me))
             if (m.Alive && GetNodeOrNull<FootPlayer>("../Players/" + m.Peer) is { } body)
-                yield return (m.Name, ZonePoint(body.GlobalPosition), new Vector2(-Mathf.Sin(body.NetYaw), Mathf.Cos(body.NetYaw)));
+                yield return (m.Downed ? $"{m.Name} (down)" : m.Name, ZonePoint(body.GlobalPosition), new Vector2(-Mathf.Sin(body.NetYaw), Mathf.Cos(body.NetYaw)));
+    }
+
+    // ------------------------------------------------------------------------------------
+    // pings (#469): a point marked for the team, for a few seconds
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>A ping as this client keeps it: who, where (zone metres; altitude, NaN when marked on the map), until when (local seconds).</summary>
+    public readonly record struct BrPing(long Peer, string Name, Vector2 At, double Alt, double Until);
+
+    /// <summary>How long a ping shows.</summary>
+    public const double PingSeconds = 8;
+
+    private readonly List<BrPing> _pings = new();
+    private static readonly Core.RayQuery PingRay = new();
+
+    private static double LocalSeconds => Time.GetTicksMsec() / 1000.0;
+
+    /// <summary>The team's pings still showing, one per player at most.</summary>
+    public IReadOnlyList<BrPing> Pings
+    {
+        get
+        {
+            _pings.RemoveAll(p => p.Until < LocalSeconds);
+            return _pings;
+        }
+    }
+
+    /// <summary>Whether this player may ping now: alive in a running squad match, out of the plane.</summary>
+    public bool CanPing => InMatch && MeAlive && !_aboard && _state.Phase == BrPhase.Playing && MyEntry is { Team: not 0 };
+
+    /// <summary>Marks what the crosshair is on, up to 2 km out (the <c>ping</c> action). False when there is nothing to mark.</summary>
+    public bool PingCrosshair()
+    {
+        if (!CanPing || LocalPlayer() is not { } me || Origin == null) return false;
+        // the guns' aim: from the eye at what the crosshair is on, in either view
+        var (from, aim) = Items.ItemController.AimFrom(me, 2000f);
+        var hit = PingRay.Cast(me.GetWorld3D().DirectSpaceState, from, from + aim * 2000f, uint.MaxValue, me.SelfExclude);
+        if (hit.Count == 0) return false;
+        var at = Origin.ToGlobal(hit["position"].AsVector3());
+        RpcId(1, MethodName.RequestPing, at.E, at.N, at.Alt);
+        return true;
+    }
+
+    /// <summary>Marks a point of the full map (zone metres): on the ground when its tile is loaded here.</summary>
+    public bool PingMap(Vector2 zone)
+    {
+        if (!CanPing || Origin == null) return false;
+        var world = WorldPoint(zone, 0f);
+        double alt = LocalPlayer()?.Terrain is { } t && t.TryGetHeight(world, out float h) ? Origin.ToGlobal(world with { Y = h }).Alt : double.NaN;
+        RpcId(1, MethodName.RequestPing, _state.AreaE + zone.X, _state.AreaN + zone.Y, alt);
+        return true;
+    }
+
+    /// <summary>Where a ping stands in this world: its altitude, else the ground here; null when neither is known.</summary>
+    public Vector3? PingWorld(BrPing p)
+    {
+        if (Origin == null) return null;
+        if (double.IsFinite(p.Alt)) return Origin.ToWorld(_state.AreaE + p.At.X, _state.AreaN + p.At.Y, p.Alt);
+        var world = WorldPoint(p.At, 0f);
+        return LocalPlayer()?.Terrain is { } t && t.TryGetHeight(world, out float h) ? world with { Y = h } : null;
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Pinged(long from, double e, double n, double alt)
+    {
+        if (_server) return;
+        string name = _state.Find(from)?.Name ?? "?";
+        // one ping a player: a new one replaces the last
+        _pings.RemoveAll(p => p.Peer == from);
+        _pings.Add(new BrPing(from, name, new Vector2((float)(e - _state.AreaE), (float)(n - _state.AreaN)), alt, LocalSeconds + PingSeconds));
+        Effect(BrSounds.Ping, -6f);
+        GD.Print(FormattableString.Invariant($"[br] ping from {name} at {e:F0}/{n:F0}"));
     }
 
     /// <summary>How far the minimap's radar picks up other entrants (#359).</summary>
@@ -126,14 +201,51 @@ public partial class BrManager
     {
         if (Origin == null || !InMatch || GetNodeOrNull<FootPlayer>("../Players/" + Me) is not { } me) yield break;
         var mates = _state.MatesOf(Me).Select(m => m.Peer).ToHashSet();
+        // an alphorn blown (#478): further, and through camo and hay, for a few seconds
+        bool horn = LocalSeconds < _hornRadarUntil;
+        float range = horn ? Items.SwissItems.HornRadar : RadarRange;
         foreach (var e in _state.Entrants)
         {
             if (!e.Alive || e.Peer == Me || mates.Contains(e.Peer)) continue;
             if (GetNodeOrNull<FootPlayer>("../Players/" + e.Peer) is not { } body) continue;
             var d = body.GlobalPosition - me.GlobalPosition;
-            if (new Vector2(d.X, d.Z).Length() > RadarRange || Build.Gadgets.Hidden(body.GlobalPosition)) continue;
+            if (new Vector2(d.X, d.Z).Length() > range) continue;
+            if (!horn && (Build.Gadgets.Hidden(body.GlobalPosition) || Items.SwissItems.InSmoke(body.Global))) continue;
             yield return ZonePoint(body.GlobalPosition);
         }
+    }
+
+    // ------------------------------------------------------------------------------------
+    // the alphorn (#478, Items/SwissItems)
+    // ------------------------------------------------------------------------------------
+
+    private double _hornRadarUntil;
+    private readonly List<(Vector2 At, string Name, double Until)> _horns = new();
+
+    /// <summary>Alphorns heard lately (zone metres, who blew it), for the maps and the compass.</summary>
+    public IReadOnlyList<(Vector2 At, string Name, double Until)> Horns
+    {
+        get
+        {
+            _horns.RemoveAll(h => h.Until < LocalSeconds);
+            return _horns;
+        }
+    }
+
+    /// <summary>An alphorn sounded: the blower's radar opens up; anyone else marks where it came from.</summary>
+    public void HeardHorn(Core.GlobalPos at, long peer, bool mine)
+    {
+        if (!InMatch) return;
+        double until = LocalSeconds + Items.SwissItems.HornSeconds;
+        if (mine)
+        {
+            _hornRadarUntil = until;
+            return;
+        }
+        string name = _state.Find(peer)?.Name ?? "?";
+        _horns.RemoveAll(h => h.Name == name);
+        _horns.Add((new Vector2((float)(at.E - _state.AreaE), (float)(at.N - _state.AreaN)), name, until));
+        GD.Print($"[br] alphorn: {name}");
     }
 
     /// <summary>Spectating: the player watched, else 0.</summary>
@@ -149,13 +261,13 @@ public partial class BrManager
         if (_server || BrState.FromJson(json) is not { } s) return;
         var before = _state.Phase;
         _state = s;
-        var key = (s.Seed, s.Side, s.Pace, s.Field);
+        var key = (s.Seed, s.Side, s.Pace, s.Field, s.ZoneCentres?.Sum() ?? 0f);   // the centres the server chose, #477
         if (s.Phase != BrPhase.Idle && (_zone == null || key != _zoneKey))
         {
             _zone = s.Zone();
             _zoneKey = key;
         }
-        if (s.Phase == BrPhase.Idle) _feed.Clear();
+        if (s.Phase == BrPhase.Idle) { _feed.Clear(); _pings.Clear(); }
         // "--br" (#231): join every lobby as it opens, and the one already open on arrival
         if (AutoJoin && s.Phase is BrPhase.Lobby or BrPhase.Countdown && s.Find(Me) == null && _autoJoined != s.Seed
             && GetNodeOrNull<ChatManager>("../" + ChatManager.NodeName) is { } chat)
@@ -165,6 +277,9 @@ public partial class BrManager
             chat.Send("/br join");
         }
         SetMatchLoot(s);
+        // the server's rule for who may hurt whom, here too: aerial rounds are applied by their
+        // victim's own client (Combat/CombatManager), which must not take a team-mate's (#455)
+        Combat.PvpRules.Override = s.Phase == BrPhase.Playing ? Allowed : null;   // as the server sets it
         if (s.Phase != BrPhase.Idle && _mapFor != (s.AreaE, s.AreaN, s.Side)) BuildMap(s.Area);
         if (before != BrPhase.Ended && s.Phase == BrPhase.Ended && InMatch && (s.Winner == Me || s.WinnerTeam != 0 && s.Find(Me)?.Team == s.WinnerTeam))
         {
@@ -193,8 +308,100 @@ public partial class BrManager
                 inv.Add(ItemId.WoodPlanks, 15);
             }
             FootPlayer.StayDown = _ => InMatch && _state.Phase == BrPhase.Playing;
+            // squads (#475): down, not out, while a team-mate stands to pick you up
+            FootPlayer.CanBeDowned = _ => InMatch && _state.Phase == BrPhase.Playing && _state.MateStanding(Me);
+            // no regeneration in a match (#455): bandages and kits are the only way back
+            FootPlayer.Regenerates = _ => !(InMatch && _state.Phase == BrPhase.Playing);
             Permissions.SetInMatch(true);
         }
+    }
+
+    // ------------------------------------------------------------------------------------
+    // down, not out (#475)
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>Seconds a team-mate holds Interact over a downed one to stand them up.</summary>
+    public const float ReviveSeconds = 5f;
+
+    /// <summary>How close to a downed team-mate to revive them, m.</summary>
+    public const float ReviveReach = 2.2f;
+
+    /// <summary>The downed team-mate being revived now and how far along, 0..1; null when nobody is.</summary>
+    public (string Name, float Progress)? Reviving { get; private set; }
+
+    /// <summary>For probes: hold Interact without a key (<c>BrProbe</c>).</summary>
+    public bool ForceInteract { get; set; }
+
+    private long _reviveTarget;
+    private float _reviveHeld;
+    private bool _reviveSent;
+
+    private void OnLocalDowned(long attacker) => RpcId(1, MethodName.ReportDowned, attacker);
+
+    /// <summary>Holding Interact over a downed team-mate: after <see cref="ReviveSeconds"/>, ask the server.</summary>
+    private void ReviveTick(FootPlayer? me, double delta)
+    {
+        long target = 0;
+        string name = "";
+        if (InMatch && MeAlive && me is { Downed: false } && _state.Phase == BrPhase.Playing
+            && (ForceInteract || PlayerInput.Held(PlayerInput.InteractMount)))
+            foreach (var m in _state.MatesOf(Me))
+                if (m is { Alive: true, Downed: true } && GetNodeOrNull<FootPlayer>("../Players/" + m.Peer) is { } body
+                    && body.GlobalPosition.DistanceTo(me.GlobalPosition) <= ReviveReach)
+                {
+                    target = m.Peer;
+                    name = m.Name;
+                    break;
+                }
+        if (target == 0 || target != _reviveTarget)
+        {
+            _reviveTarget = target;
+            _reviveHeld = 0f;
+            _reviveSent = false;
+        }
+        if (target == 0)
+        {
+            Reviving = null;
+            return;
+        }
+        _reviveHeld += (float)delta;
+        Reviving = (name, Mathf.Clamp(_reviveHeld / ReviveSeconds, 0f, 1f));
+        if (_reviveHeld >= ReviveSeconds && !_reviveSent)
+        {
+            _reviveSent = true;
+            RpcId(1, MethodName.RequestRevive, target);
+        }
+    }
+
+    /// <summary>A team-mate stood this player up (the server checked it).</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Revived()
+    {
+        if (_server) return;
+        LocalPlayer()?.ReviveInPlace();
+        GD.Print("[br] revived");
+    }
+
+    /// <summary>The whole team is down: out now, as if bled out.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void OutNow()
+    {
+        if (_server) return;
+        if (LocalPlayer() is { Downed: true } me) me.FinishDowned();
+        GD.Print("[br] out: the whole team is down");
+    }
+
+    /// <summary>The feed: someone went down, or was picked up.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void DownNews(long victim, long other, bool revived)
+    {
+        if (_server) return;
+        string v = _state.Find(victim)?.Name ?? "?", o = _state.Find(other)?.Name ?? "";
+        string text = revived ? $"{o} revived {v}" : o.Length > 0 ? $"{o} downed {v}" : $"{v} is down";
+        _feed.Add(new FeedLine(text, victim == Me || other == Me, Time.GetTicksMsec() / 1000.0));
+        if (_feed.Count > 8) _feed.RemoveAt(0);
+        if (!revived && other == Me && victim != Me) LocalPlayer()?.Announce($"KNOCKED {v.ToUpperInvariant()} DOWN", true);
+        GD.Print($"[br] {(revived ? "revive" : "down")}: {text}");
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -229,6 +436,8 @@ public partial class BrManager
         LeaveHold(LocalPlayer());
         ShowHidden();
         FootPlayer.StayDown = null;
+        FootPlayer.CanBeDowned = null;
+        FootPlayer.Regenerates = null;
         Permissions.SetInMatch(false);
         StopSpectating();
         Inventory()?.EndMatch();
@@ -312,10 +521,20 @@ public partial class BrManager
         var me = LocalPlayer();
         if (me != _hooked)
         {
-            if (_hooked != null && IsInstanceValid(_hooked)) _hooked.Died -= OnLocalDied;
+            if (_hooked != null && IsInstanceValid(_hooked))
+            {
+                _hooked.Died -= OnLocalDied;
+                _hooked.WentDown -= OnLocalDowned;
+            }
             _hooked = me;
-            if (me != null) me.Died += OnLocalDied;
+            if (me != null)
+            {
+                me.Died += OnLocalDied;
+                me.WentDown += OnLocalDowned;
+            }
         }
+        ReviveTick(me, delta);
+        StopSigns();
 
         FlightTick(me);
 
@@ -375,6 +594,11 @@ public partial class BrManager
         if (_aboard && e.IsActionPressed(PlayerInput.InteractMount))
         {
             JumpOut();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        if (e.IsActionPressed(PlayerInput.Ping) && PingCrosshair())
+        {
             GetViewport().SetInputAsHandled();
             return;
         }

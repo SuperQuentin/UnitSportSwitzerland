@@ -45,7 +45,8 @@ public partial class BrProbe : ChatProbe
         if (!await Joined(150, () => Br != null)) return;
         await Seconds(2.0);
         var start = Me!.Global;   // LV95: the match's flight moves the origin (#185)
-        if (_role == "A") await RunA(); else await RunB();
+        if (Squad) await (_role == "A" ? SquadA() : SquadB());
+        else if (_role == "A") await RunA(); else await RunB();
         if (_failures == 0) await Released(start);
         await Finish(1.0);
     }
@@ -159,8 +160,20 @@ public partial class BrProbe : ChatProbe
         var last = Br.Zone!.CentreOf(ZoneSchedule.Phases);
         Br.Teleport(s.AreaE + last.X + 5, s.AreaN + last.Y, "back in the zone");   // never on top of A
 
-        // next to A
-        if (!await Until(() => _heard.Any(l => l.Contains("BR A posA")), 160)) { Expect(false, "A reported"); return; }
+        // next to A; until A reports, keep up with the zone: it bites harder and nobody regenerates
+        // in a match (#455), so a wait at one centre while the circles close is a death
+        var at = Br.ZoneNow?.NextCentre;
+        double give = Time.GetTicksMsec() / 1000.0 + 160;
+        while (!_heard.Any(l => l.Contains("BR A posA")))
+        {
+            if (Time.GetTicksMsec() / 1000.0 > give) { Expect(false, "A reported"); return; }
+            if (Br.ZoneNow is { } z && z.NextCentre != at)
+            {
+                at = z.NextCentre;
+                Br.Teleport(s.AreaE + z.NextCentre.X, s.AreaN + z.NextCentre.Y, "keeping in the zone");
+            }
+            await Seconds(1.0);
+        }
         var p = _heard.Last(l => l.Contains("BR A posA")).Split("posA ")[1].Split(' ');
         double e = double.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture);
         double n = double.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture);
@@ -354,6 +367,197 @@ public partial class BrProbe : ChatProbe
 
     /// <summary>"--brsites": the outdoor sites (#198) are checked too (a real-terrain run: tools/brcheck.sh with SITES=1).</summary>
     private static bool Sites => CmdArgs.Has("--brsites");
+
+    // ------------------------------------------------------------------------------------
+    // --brsquad (SQUAD=1 tools/brcheck.sh, #469): a duo picked in the lobby, pings
+    // ------------------------------------------------------------------------------------
+
+    private static bool Squad => CmdArgs.Has("--brsquad");
+
+    /// <summary>A: opens a duos lobby, picks team "alp", starts, then pings the ground ahead and a map point.</summary>
+    private async Task SquadA()
+    {
+        Chat!.Send("/login brcheck");
+        await Until(() => Permissions.IsAdmin, 10);
+        Chat.Send("/br open 5 short duos");
+        if (!await Until(() => Br!.State.Phase == BrPhase.Lobby, 20)) { Fail("no lobby"); return; }
+        Chat.Send("/br join");
+        Chat.Send("/br team alp");
+        for (int i = 0; i < 60 && Br!.State.Entrants.Count(e => e.Party == "alp") < 2; i++)
+        {
+            Say("lobby");
+            await Seconds(2.0);
+        }
+        if (Br!.State.Entrants.Count(e => e.Party == "alp") < 2) { Fail("B never joined team alp"); return; }
+        Chat.Send("/br start");
+        if (!await Dropped()) return;
+        var me = Me!;
+        Expect(Br.MyEntry is { Team: not 0 } mine && Br.State.Find(PeerOf("B"))?.Team == mine.Team,
+            "the team picked in the lobby: A and B together");
+        await Seconds(4.0);
+        Expect(Br.State.Phase == BrPhase.Playing, "one squad alone plays on (it used to end at GO)");
+        Say("landed");
+        if (!await Until(() => Said("B", "landed"), 60)) { Fail("B never landed"); return; }
+
+        // the ground a few metres ahead
+        me.LookPitch = -0.5f;
+        await Seconds(0.5);
+        Expect(Br.PingCrosshair(), "middle mouse pings what the crosshair is on");
+        Expect(await Until(() => Br.Pings.Any(p => p.Peer == Br.Me), 5), "the ping comes back to its sender");
+        if (Br.Pings.FirstOrDefault(p => p.Peer == Br.Me) is { Peer: not 0 } mine0 && Br.PingWorld(mine0) is { } spot)
+        {
+            var look = -me.Camera.GlobalTransform.Basis.Z with { Y = 0 };
+            var to = (spot - me.Camera.GlobalPosition) with { Y = 0 };
+            float off = Mathf.RadToDeg(look.AngleTo(to));
+            Expect(off < 20f, $"the ping is where the crosshair is ({off:F0}° off, {to.Length():F0} m)");
+            var cam = GetViewport().GetCamera3D();
+            var px = cam?.UnprojectPosition(spot) ?? Vector2.Zero;
+            var size = GetViewport().GetVisibleRect().Size;
+            Expect(cam != null && !cam.IsPositionBehind(spot) && new Rect2(Vector2.Zero, size).HasPoint(px),
+                $"and on screen (at {px.X:F0},{px.Y:F0} of {size.X:F0}×{size.Y:F0})");
+        }
+        await Seconds(0.5);   // a frame or two drawn with it
+        Shot("a_ping");
+        Say("pinged");
+        if (!await Until(() => Said("B", "got ping"), 20)) Expect(false, "B got the ping");
+
+        // a map ping replaces it; a second one at once is refused (1.5 s apart)
+        await Seconds(2.0);
+        Expect(Br.PingMap(Vector2.Zero), "a middle-click on the map pings");
+        Expect(await Until(() => Br.Pings.Any(p => p.Peer == Br.Me && p.At.Length() < 2f), 5), "the map ping replaces the first");
+        Br.PingMap(new Vector2(500, 500));
+        await Seconds(2.0);
+        Expect(Br.Pings.Single(p => p.Peer == Br.Me).At.Length() < 2f, "a second ping within 1.5 s is refused");
+        Say("map pinged");
+        await Until(() => Said("B", "got map ping"), 20);
+        await Revive(me);
+    }
+
+    /// <summary>
+    /// A (#480): B goes out for good; A takes the dogtag from B's box to a Postauto stop and uses it: B is back.
+    /// </summary>
+    private async Task Recall(FootPlayer me)
+    {
+        var br = Br!;
+        if (!await Until(() => Said("B", "out"), 30)) { Fail("B never went out"); return; }
+        Expect(await Until(() => br.State.Find(PeerOf("B"))?.Alive == false, 10), "B is out");
+        Expect(br.Stops().Count() == BrManager.RecallStops, $"{br.Stops().Count()} Postauto stops in this squad match");
+        var crates = BrCrates.Instance!;
+        if (!await Until(() => crates.All.Any(c => c.Style == CrateStyle.DeathBox), 10)) { Expect(false, "B's death box appeared"); return; }
+        var box = crates.All.First(c => c.Style == CrateStyle.DeathBox);
+        Expect(box.Stacks().Any(st => st.Id == ItemId.Dogtag), $"the box holds B's dogtag ({string.Join(", ", box.Stacks().Select(st => st.Id))})");
+        await Until(() => crates.NearestTo(me)?.Id == box.Id, 10);
+        Expect(crates.TryOpen(me), "E opens B's box");
+        Loot.LootService.Instance?.TakeAll();
+        Expect(await Until(() => CountOf(ItemId.Dogtag) == 1, 10), "A carries the tag");
+        Loot.LootService.Instance?.Close();
+        Expect(br.CarryingTag, "the HUD knows a tag is carried");
+
+        // to the nearest stop, and the tag used there
+        var here = br.ZonePoint(me.GlobalPosition);
+        var stop = br.NearestStop(here)!.Value;
+        br.Teleport(br.State.AreaE + stop.At.X + 2, br.State.AreaN + stop.At.Y, "a Postauto stop");
+        await Seconds(3.0);
+        int signs = GetTree().GetNodesInGroup(BrManager.StopGroup).Count;
+        Expect(signs == BrManager.RecallStops, $"the stops' signs stand in the world ({signs})");
+        Expect(br.ZoneNow is { } zn && zn.Phase < BrManager.RecallBefore, $"still before zone {BrManager.RecallBefore} (zone {br.ZoneNow?.Phase})");
+        _items.UseSlot(me, SlotOf(ItemId.Dogtag));
+        Expect(await Until(() => br.State.Find(PeerOf("B"))?.Alive == true, 8), "the tag used at the stop: B is back in");
+        Expect(await Until(() => CountOf(ItemId.Dogtag) == 0, 5), "the tag is spent");
+        Shot("a_stop");
+        Say("recalled");
+        if (!await Until(() => Said("B", "back"), 60)) Fail("B never landed back");
+    }
+
+    /// <summary>
+    /// A (#475): B goes down; A walks over and holds Interact until B is up. Then B goes down again
+    /// and A falls too: a team all down is out, and the match ends with nobody standing.
+    /// </summary>
+    private async Task Revive(FootPlayer me)
+    {
+        if (!await Until(() => Said("B", "down"), 30)) { Fail("B never went down"); return; }
+        var b = GetParent().GetNodeOrNull<FootPlayer>("Players/" + PeerOf("B"));
+        Expect(await Until(() => b?.Down == 2, 5), $"B's body is downed here (Down {b?.Down})");
+        Expect(Br!.State.Find(PeerOf("B"))?.Downed == true && Br.State.TeamsAlive == 1, "the server has B down; the team still counts");
+        var p = _heard.Last(l => l.Contains("BR B posB")).Split("posB ")[1].Split(' ');
+        Br.Teleport(double.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture) + 1.2,
+            double.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture), "next to B");
+        await Seconds(3.0);
+        Br.ForceInteract = true;
+        Expect(await Until(() => Br.Reviving != null, 4), $"holding Interact over B revives it ({Br.Reviving?.Name})");
+        await Seconds(1.0);
+        Shot("a_reviving");
+        bool up = await Until(() => Br.State.Find(PeerOf("B"))?.Downed == false, BrManager.ReviveSeconds + 5);
+        Br.ForceInteract = false;
+        Expect(up, "after the hold, the server stands B up");
+        await Recall(me);
+        if (!await Until(() => Said("B", "down again"), 60)) { Fail("B never went down again"); return; }
+        await Until(() => Br.State.Find(PeerOf("B"))?.Downed == true, 5);   // the state, not just the chat
+        me.TakeDamage(1000f, 0, DamageCause.Other);
+        Expect(me.Eliminated && !me.Downed, "with B down, A falling is out at once: nobody to pick A up");
+        Expect(await Until(() => Br.State.Phase == BrPhase.Ended, 15) && Br.State.Entrants.All(e => !e.Alive),
+            "a team all down is out: the match ends with nobody standing");
+    }
+
+    /// <summary>B: joins by itself, picks team "ALP" (any case), and must see A's pings.</summary>
+    private async Task SquadB()
+    {
+        if (!await Until(() => Br!.MyEntry != null, 90)) { Fail("never joined"); return; }
+        Chat!.Send("/br team ALP");
+        Expect(await Until(() => Br!.MyEntry?.Party == "alp", 10), "/br team: the name, made comparable");
+        if (!await Dropped()) return;
+        Say("landed");
+        if (!await Until(() => Said("A", "pinged"), 60)) { Fail("A never pinged"); return; }
+        bool got = await Until(() => Br!.Pings.Any(p => p.Peer == PeerOf("A")), 5);
+        Expect(got, $"A's ping is here ({string.Join(", ", Br!.Pings.Select(p => $"{p.Name} {p.At}"))})");
+        await Seconds(0.5);
+        Shot("b_ping");
+        Say("got ping");
+        if (!await Until(() => Said("A", "map pinged"), 30)) { Fail("A never pinged the map"); return; }
+        Expect(Br.Pings.Any(p => p.Peer == PeerOf("A") && p.At.Length() < 2f), "A's map ping replaced its first");
+        Say("got map ping");
+
+        // down, not out (#475): a team-mate stands, so 0 HP puts B down
+        var me = Me!;
+        await Seconds(1.0);
+        Say(Fmt($"posB {me.Global.E:F2} {me.Global.N:F2}"));
+        me.TakeDamage(1000f, 0, DamageCause.Other);
+        Expect(me.Downed && !me.Eliminated, "0 HP with a team-mate standing: down, not out");
+        Expect(await Until(() => Br.State.Find(Br.Me)?.Downed == true, 5), "the server has B down");
+        float bleed = me.BleedLeft;
+        await Seconds(2.0);
+        Expect(me.BleedLeft < bleed - 5f && me.Downed, $"bleeding out ({bleed:F0} -> {me.BleedLeft:F0})");
+        Expect(_items.UsablePlayer == null, "no items while down");
+        Shot("b_down");
+        Say("down");
+        Expect(await Until(() => !me.Downed, 20), "A revived B");
+        Expect(Mathf.IsEqualApprox(me.Health, FootPlayer.RevivedHealth) && !me.Eliminated, $"up with {me.Health:F0} HP");
+
+        // respawn tickets (#480): out for good this time, A brings B back with the tag
+        await Seconds(1.0);
+        me.TakeDamage(1000f, 0, DamageCause.Other);
+        me.FinishDowned();
+        Expect(me.Eliminated, "out: B leaves a dogtag");
+        Say("out");
+        Expect(await Until(() => !me.Eliminated && Br.MeAlive, 40), "A recalled B: back in the match");
+        Expect(me.Ride == RideKind.Wingsuit && !me.IsOnFloor(), $"dropped by wingsuit over the stop ({me.Ride})");
+        Expect(CountOf(ItemId.Knife) == 1 && CountOf(ItemId.Bandage) == 2, "with a knife and two bandages");
+        Shot("b_recalled");
+        // the probe does not fly the suit down: out of it, and set on the ground by the stop
+        me.Leap(me.GlobalPosition, Vector3.Zero, RideKind.OnFoot);
+        var landed = Br.ZonePoint(me.GlobalPosition);
+        Br.Teleport(Br.State.AreaE + landed.X, Br.State.AreaN + landed.Y, "down from the suit");
+        Expect(await Until(() => me.IsOnFloor() && Mathf.Abs(me.Velocity.Y) < 1f, 40), "on the ground again");
+        await Seconds(1.5);
+        Say("back");
+        if (!await Until(() => Said("A", "recalled"), 30)) { Fail("A never said recalled"); return; }
+        await Seconds(1.0);
+        me.TakeDamage(1000f, 0, DamageCause.Other);
+        Expect(me.Downed, "down again");
+        Say("down again");
+        Expect(await Until(() => me.Eliminated, 15), "A fell too: the whole team down, B is out");
+        Expect(await Until(() => Br.State.Phase == BrPhase.Ended, 15), "the match ended");
+    }
 
     /// <summary>A: the sites exist; crack a bunker; shoot a supply crate open and loot the pile; fire a flare.</summary>
     private async Task TrySites(FootPlayer me)

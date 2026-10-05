@@ -860,6 +860,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public static Func<FootPlayer, bool>? StayDown;
 
+    /// <summary>
+    /// Asked before health regenerates: false stops it. A Battle Royale match sets it (#455), where
+    /// health comes back only from bandages and kits, so a fight leaves its marks.
+    /// </summary>
+    public static Func<FootPlayer, bool>? Regenerates;
+
     /// <summary>Down for good, until <see cref="Respawn"/>: out of the match.</summary>
     public bool Eliminated { get; private set; }
 
@@ -1761,7 +1767,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // rather than the figure shrinking.
         float squash = Mathf.Clamp(-_landingDip * 1.2f, 0f, 0.22f);
         // thrown, stunned or knocked out: flat on the ground
-        float down = _stunTimer > 0 && IsOnFloor() ? -1.45f : 0f;
+        float down = (_stunTimer > 0 || Downed) && IsOnFloor() ? -1.45f : 0f;   // downed (#475): crawling, flat
         _downRot = Mathf.Lerp(_downRot, down, MathX.Damp(10f, dt));
         BodyPose = new Transform3D(
             new Basis(Vector3.Right, _downRot) * Basis.FromScale(new Vector3(1f + squash * 0.5f, 1f - squash, 1f + squash * 0.5f)),
@@ -1781,7 +1787,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             && (!Indoors || Audio.Cd.CdLibrary.IsRatBeat(music.CdId)));
 
     /// <summary>On foot and free to move the body: what an emote (#404), or any dance, needs.</summary>
-    public bool CanEmote => Ride == RideKind.OnFoot && !KnockedOut && !_sliding && !_swimming && !_carried && _deadTimer <= 0;
+    public bool CanEmote => Ride == RideKind.OnFoot && !KnockedOut && !Downed && !_sliding && !_swimming && !_carried && _deadTimer <= 0;
 
     /// <summary>Indoors, the chess type beat heard here (#370): E dances, as outdoors to any music.</summary>
     public bool RatBeatHere(bool heard) =>
@@ -2306,8 +2312,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public bool TryInteract()
     {
-        // limp after a crash: nothing to do, and no picker either
-        if (Ragdolled) return true;
+        // limp after a crash, or downed (#475): nothing to do, and no picker either
+        if (Ragdolled || Downed) return true;
         // a walkable vehicle's passenger stands up into the aisle; any other gets out
         if (RidingWith != 0) return StandUp() || TryLeaveSeat();
         if (_ride is { IsVehicle: true })
@@ -2702,6 +2708,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public void TakeDamage(float amount, long attacker, DamageCause cause)
     {
         if (amount <= 0 || _deadTimer > 0) return;
+        if (Downed)
+        {
+            HurtDowned(amount, attacker, cause);
+            return;
+        }
         if (cause == DamageCause.Weapon && Armor > 0)
         {
             float soaked = Mathf.Min(Armor, amount * 0.5f);
@@ -2721,6 +2732,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (Health <= 0f)
         {
             long killer = now - _lastAttackedAt <= CreditSeconds ? _lastAttacker : 0;
+            // a squad match: down, not out, while a team-mate stands (#475)
+            if (TryGoDown(killer, cause)) return;
             Die();
             Died?.Invoke(killer, cause);
         }
@@ -2729,7 +2742,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>Puts on a vest: armour back to full. False when it already is.</summary>
     public bool AddArmor(float amount)
     {
-        if (amount <= 0 || _deadTimer > 0 || Armor >= MaxArmor - 0.01f) return false;
+        if (amount <= 0 || _deadTimer > 0 || Downed || Armor >= MaxArmor - 0.01f) return false;
         Armor = Mathf.Min(MaxArmor, Armor + amount);
         return true;
     }
@@ -2744,6 +2757,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _deadTimer = 0;
         _stunTimer = 0;
         Down = 0;
+        BleedLeft = 0;
         Health = MaxHealth;
         Armor = 0;
         _lastAttacker = 0;
@@ -2794,7 +2808,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>Restores health (food, water). Returns false when there was nothing to restore.</summary>
     public bool Heal(float amount)
     {
-        if (amount <= 0 || _deadTimer > 0 || Health >= MaxHealth - 0.01f) return false;
+        if (amount <= 0 || _deadTimer > 0 || Downed || Health >= MaxHealth - 0.01f) return false;
         Health = Mathf.Min(MaxHealth, Health + amount);
         return true;
     }
@@ -2869,8 +2883,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     private void TickHealth(float dt, bool onFloor)
     {
         if (_ejected > 0) _ejected -= dt;
+        TickDowned(dt);
         _sinceHurt += dt;
-        if (_sinceHurt > 6 && Health < MaxHealth && _deadTimer <= 0)
+        if (_sinceHurt > 6 && Health < MaxHealth && _deadTimer <= 0 && !Downed && Regenerates?.Invoke(this) != false)
             Health = Mathf.Min(MaxHealth, Health + 12f * dt);
 
         _safeTimer += dt;
@@ -3227,6 +3242,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         bool spaceDown = PlayerInput.Held(PlayerInput.Jump);
         bool jumpPressed = spaceDown && !_jumpHeld;
         _jumpHeld = spaceDown;
+        // downed (#475): a crawl, nothing more
+        if (Downed) running = crouchHeld = spaceDown = jumpPressed = _sprintLatch = false;
 
         bool crouchPressed = crouchHeld && !_crouchHeld;
         _crouchHeld = crouchHeld;
@@ -3370,7 +3387,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // --- ordinary walking / running ----------------------------------------------
         if (!_sliding)
         {
-            float speed = (running ? RunSpeed : WalkSpeed) * moveAmount * WadePace(running);   // wading (#380)
+            float speed = Downed ? CrawlSpeed * moveAmount
+                : (running ? RunSpeed : WalkSpeed) * moveAmount * WadePace(running);   // wading (#380)
 
             // climbing costs speed: scale by how much of the move is uphill
             if (onFloor && direction != Vector3.Zero)
