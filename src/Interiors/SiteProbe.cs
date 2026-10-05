@@ -39,6 +39,14 @@ public partial class SiteProbe : Node3D
         _ok &= condition;
     }
 
+    /// <summary>Like <see cref="Check"/>, but silent when it holds: for a per-bay or per-slot rule.</summary>
+    private void Assert(bool condition, string what)
+    {
+        if (condition) return;
+        GD.Print($"[site] FAIL {what}");
+        _ok = false;
+    }
+
     /// <summary>
     /// One building to plan: the size and wall height that make <see cref="BuildingTypes.SiteFor"/>
     /// choose <see cref="Want"/>, and the kind it is in the cadastre.
@@ -90,6 +98,35 @@ public partial class SiteProbe : Node3D
             var problems = InteriorValidator.Validate(layout);
             Check(problems.Count == 0, $"{spec.Want} plan is valid" +
                 (problems.Count > 0 ? ": " + string.Join("; ", problems.Take(3)) : ""));
+
+            // the loading bays (#528): a works' front wall is mostly doors a trailer goes through
+            var fp = BuildingFootprint.Compute(tile!, index, null, null);
+            var bays = fp?.Doors.Where(d => d.Vehicle && d.Hang == DoorHang.RollUp).ToList() ?? new();
+            bool wantsBays = spec.Want != BuildingType.Dealership;
+            Check(wantsBays == bays.Count > 0, $"{spec.Want} {(wantsBays ? "has" : "has no")} loading bays ({bays.Count})");
+            if (bays.Count > 1)
+            {
+                var along = new Vector2(-bays[0].Outward.Z, bays[0].Outward.X);
+                Assert(bays.All(d => d.Outward.IsEqualApprox(bays[0].Outward)), $"{spec.Want}: bays share a wall");
+                Assert(bays.All(d => Mathf.IsEqualApprox(d.Width, bays[0].Width)), $"{spec.Want}: bays are the same width");
+                // Along the wall, each neighbouring pair is either a pier apart — the strip of
+                // wall that carries the two lintels — or has the main door standing between them,
+                // because the bays fill both sides of it.
+                float Along(Vector3 at) => along.Dot(new Vector2(at.X, at.Z));
+                var sorted = bays.OrderBy(d => Along(d.Position)).ToList();
+                float mainAt = Along(fp!.Door.Position);
+                for (int k = 1; k < sorted.Count; k++)
+                {
+                    float a = Along(sorted[k - 1].Position), c = Along(sorted[k].Position);
+                    float gap = c - a - sorted[k].Width;
+                    bool acrossTheDoor = mainAt > a && mainAt < c;
+                    Assert(gap > 0.2f && (gap < 2.5f || acrossTheDoor),
+                        $"{spec.Want}: a {gap:F2} m gap between two bays with no door in it");
+                }
+            }
+            float wall = tile!.Buildings[index].MaxY - tile.Buildings[index].MinY;
+            foreach (var d in bays)
+                Assert(d.Height <= wall, $"{spec.Want}: a {d.Height:F1} m bay in a {wall:F1} m wall");
 
             var ground = layout.GroundFloor;
             var hall = ground.Rooms[0];
