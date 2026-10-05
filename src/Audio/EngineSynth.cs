@@ -4,7 +4,9 @@ using UnitSport.Core;
 namespace UnitSport.Audio;
 
 /// <summary>A car engine's layout, which is most of what it sounds like.</summary>
-public enum EngineLayout { Inline4, Inline4Turbo, Rotary, RotaryTurbo, Boxer4Turbo, Inline6Turbo, V6, V6Turbo, V8, Crossplane4, VTwin90, ParallelTwin270, VTwin52, Diesel6 }
+public enum EngineLayout { Inline4, Inline4Turbo, Rotary, RotaryTurbo, Boxer4Turbo, Inline6Turbo, V6, V6Turbo, V8, Crossplane4, VTwin90, ParallelTwin270, VTwin52, Diesel6,
+    // the motorbikes of #410
+    Single, ParallelTwin180, ParallelTwin360, Triple, VTwin75, Inline4Bike }
 
 /// <summary>How an engine is built, as far as its sound is concerned.</summary>
 public sealed record EngineProfile
@@ -18,6 +20,14 @@ public sealed record EngineProfile
     /// double-acting cylinders), so the beat is rpm / 60 Hz.
     /// </summary>
     public bool Steam { get; init; }
+    /// <summary>
+    /// Turboprops (#420): <see cref="Engines"/> constant-speed propellers at <see cref="IdleRpm"/>..
+    /// <see cref="MaxRpm"/> with <see cref="PropBlades"/> blades (<see cref="TurbopropTone"/>), their
+    /// buzz loudening with the blades' load, beating against each other, over a gas turbine's whine.
+    /// </summary>
+    public bool IsTurboprop { get; init; }
+    /// <summary>A turboprop's engine count: the props that beat against each other.</summary>
+    public int Engines { get; init; } = 1;
     public int Cylinders { get; init; } = 4;
     public float IdleRpm { get; init; } = 800f;
     public float MaxRpm { get; init; } = 2700f;
@@ -45,6 +55,14 @@ public sealed record EngineProfile
     public static readonly EngineProfile Turboshaft = new() { Turbine = true };
     /// <summary>An airliner's high-bypass turbofans (#414): fan tone 700 Hz at idle to 2.4 kHz at take-off.</summary>
     public static readonly EngineProfile Turbofan = new() { Jet = true, WhineIdleHz = 700f, WhineMaxHz = 2400f };
+    /// <summary>
+    /// A military freighter's four turboprops (#420), C-130-like: four-blade props governed at
+    /// 1,020 rpm (68 Hz blade pass), 740 at ground idle; the core's whine 1.1-1.65 kHz.
+    /// </summary>
+    public static readonly EngineProfile Turboprop = new()
+    {
+        IsTurboprop = true, Engines = 4, PropBlades = 4, IdleRpm = 740f, MaxRpm = 1020f, WhineIdleHz = 1100f, WhineMaxHz = 1650f,
+    };
 
     /// <summary>A high-revving naturally aspirated four with a short pipe: 900 to 7,800 rpm.</summary>
     public static readonly EngineProfile Inline4Na = new() { Cylinders = 4, IdleRpm = 900, MaxRpm = 7800, PipeM = 0.7f };
@@ -85,6 +103,24 @@ public sealed record EngineProfile
     /// </summary>
     public static readonly EngineProfile VTwin52 = VTwin90 with { PipeM = 1.0f, Unevenness = 1.3f, Firing = new[] { 232f, 488f } };
 
+    /// <summary>A big single (KTM LC4 690): one bang every two turns, the thump of a supermoto. Short pipe.</summary>
+    public static readonly EngineProfile Single = new() { Cylinders = 1, IdleRpm = 1500, MaxRpm = 9000, PipeM = 0.85f, Unevenness = 0.4f };
+
+    /// <summary>A 180° parallel twin (CB500, R3, Versys 650): fires 180-540, a busier, flatter beat than a V.</summary>
+    public static readonly EngineProfile ParallelTwin180 = VTwin90 with { PipeM = 0.8f, Unevenness = 0.9f, Firing = new[] { 180f, 540f } };
+
+    /// <summary>A 360° parallel twin (TMAX): both pistons together, fired evenly 360-360, a smooth drone.</summary>
+    public static readonly EngineProfile ParallelTwin360 = VTwin90 with { PipeM = 1.0f, Unevenness = 0.3f, Firing = null };
+
+    /// <summary>Yamaha's CP3 crossplane triple (MT-09 / Tracer 9): three cylinders fired every 240°, the triple's howl.</summary>
+    public static readonly EngineProfile Triple = Inline4Na with { Cylinders = 3, PipeM = 0.75f, Unevenness = 0.7f };
+
+    /// <summary>KTM's 75° V-twin (LC8, 1290) and the 75°-offset parallel twin (LC8c, 790/890): fires 285-435.</summary>
+    public static readonly EngineProfile VTwin75 = VTwin90 with { PipeM = 0.85f, Unevenness = 1.1f, Firing = new[] { 285f, 435f } };
+
+    /// <summary>A flat-plane inline four from a bike (Fazer): even firing, high revs, a short 4-into-1 shriek.</summary>
+    public static readonly EngineProfile Inline4Bike = Inline4Na with { PipeM = 0.65f, Unevenness = 0.4f };
+
     /// <summary>A car's engine: the layout's voice, at that car's own idle and redline.</summary>
     public static EngineProfile For(EngineLayout layout, float idleRpm, float redline) => (layout switch
     {
@@ -98,6 +134,12 @@ public sealed record EngineProfile
         EngineLayout.VTwin90 => VTwin90,
         EngineLayout.ParallelTwin270 => ParallelTwin270,
         EngineLayout.VTwin52 => VTwin52,
+        EngineLayout.Single => Single,
+        EngineLayout.ParallelTwin180 => ParallelTwin180,
+        EngineLayout.ParallelTwin360 => ParallelTwin360,
+        EngineLayout.Triple => Triple,
+        EngineLayout.VTwin75 => VTwin75,
+        EngineLayout.Inline4Bike => Inline4Bike,
         // a truck or bus diesel: a big inline six at 550-2,200 rpm, fired evenly, through a long
         // pipe — the low, smooth drone of a Scania or an OM 470, not a car's rasp
         EngineLayout.Diesel6 => Inline4Na with { Cylinders = 6, PipeM = 2.4f, Unevenness = 0.3f },
@@ -156,6 +198,7 @@ public partial class EngineSynth : Node3D
     private readonly float[] _comb;
     private int _combPos;
     private float _intakeLp, _intakeHp, _bodyLp, _dc;
+    private float _prop2Phase;
     private float _propPhase, _whinePhase, _whine2Phase, _subPhase, _tipLp, _tipHp;
     private float _crackleEnv, _crackleRate;
 
@@ -285,7 +328,8 @@ public partial class EngineSynth : Node3D
         };
         if (f.Level < 1e-4f && _tLevel < 1e-4f) return 0f;   // silent: skip the model
 
-        if (Profile.Jet) Jet(ref f);
+        if (Profile.IsTurboprop) TurbopropVoice(ref f);
+        else if (Profile.Jet) Jet(ref f);
         else if (Profile.Turbine) Turbine(ref f);
         else if (Profile.Steam) SteamBeat(ref f);
         else Piston(ref f, prevThrottle);
@@ -461,6 +505,47 @@ public partial class EngineSynth : Node3D
                + Mathf.Sin(Mathf.Tau * _subPhase) * 0.12f * spool
                + whine * 0.09f * (0.25f + 0.75f * spool);
         f.Core = Mathf.Tanh(f.Core * 1.2f) * 0.8f;
+    }
+
+    /// <summary>
+    /// Turboprops (#420): two props a hair apart in rpm (the fleet's beating, <see cref="TurbopropTone.Detune"/>),
+    /// each a band-limited sawtooth at blade pass with the tips' rasp pulsing on it, both louder and
+    /// brighter as the blades take load (<c>_load</c>, the thrust); the governor holds the rpm, so the
+    /// note barely moves with the levers, only its weight does. Under it the core's whine and a
+    /// little exhaust roar.
+    /// </summary>
+    private void TurbopropVoice(ref EngineFrame f)
+    {
+        var p = Profile;
+        float spool = _rpm;
+        float rpm = TurbopropTone.PropRpm(spool, p.IdleRpm, p.MaxRpm);
+        float bpf = TurbopropTone.BladePassHz(rpm, p.PropBlades);
+        float whineHz = Mathf.Lerp(p.WhineIdleHz, p.WhineMaxHz, spool);
+        f.ToneHz = bpf * 2f;
+        f.SubHz = bpf;
+        int engines = Mathf.Max(1, p.Engines);
+        _propPhase = (_propPhase + bpf * TurbopropTone.Detune(0, engines) / Dsp.Rate) % 1f;
+        _prop2Phase = (_prop2Phase + bpf * TurbopropTone.Detune(engines - 1, engines) / Dsp.Rate) % 1f;
+        float buzz = 0f;
+        for (int k = 1; k <= 10; k++)
+            buzz += (Mathf.Sin(Mathf.Tau * _propPhase * k) + Mathf.Sin(Mathf.Tau * _prop2Phase * k)) / k;
+        float loud = TurbopropTone.BladeLoudness(_load);
+        float n = WhiteNoise();
+        _tipLp += Dsp.Coef(2800f) * (n - _tipLp);
+        _tipHp += Dsp.Coef(500f) * (_tipLp - _tipHp);
+        float tip = (_tipLp - _tipHp) * (0.5f + 0.5f * Mathf.Cos(Mathf.Tau * _propPhase)) * loud * loud;
+        _bodyLp += Dsp.Coef(180f + 400f * _load) * (n - _bodyLp);
+        _whinePhase = (_whinePhase + whineHz / Dsp.Rate) % 1f;
+        _whine2Phase = (_whine2Phase + whineHz * 2.02f / Dsp.Rate) % 1f;
+        float whine = Mathf.Sin(Mathf.Tau * _whinePhase) + 0.3f * Mathf.Sin(Mathf.Tau * _whine2Phase);
+        float running = Mathf.Clamp(spool * 3f, 0f, 1f);
+        f.Noise = 0.35f + 0.45f * _load;
+        f.Pulse = 0.5f + 0.5f * Mathf.Sin(Mathf.Tau * _propPhase);
+        f.Core = buzz * 0.11f * loud * running
+               + tip * 2.4f * running
+               + _bodyLp * 2.2f * (0.15f + 0.5f * _load * _load)
+               + whine * 0.06f * (0.3f + 0.7f * spool);
+        f.Core = Mathf.Tanh(f.Core * 1.3f) * 0.8f;
     }
 
     private void Turbine(ref EngineFrame f)

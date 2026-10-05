@@ -72,9 +72,25 @@ public static class CockpitCheck
         int failed = 0;
         GD.Print("[cockpitcheck] heavy                    eye (x, y, z)         head  ahead  over dash  reach  pedals  wall  seats  width");
         foreach (var spec in HeavyCatalog.All)
+            failed += CheckCab(spec.Label, Enumerable.Range(0, spec.Sections.Length)
+                .Select(k => HeavyRig.Create(spec, k, 0.5f, k == 0 ? HumanPalette.Default : null)).ToList(),
+                spec.Class is HeavyClass.Tractor or HeavyClass.Rigid ? 1 : 20);
+        // the airstairs' cab (#417): a heavy cockpit in a low cab, its seat in front of the back wall
+        var stairs = Avatar.AirstairsMeshBuilder.CreateRig(2.5f, HumanPalette.Default);
+        float back = stairs.Cockpit!.Seat.Hip.Z - 0.3f - (Avatar.AirstairsLayout.CabRear + Avatar.AirstairsLayout.CabWall);
+        failed += CheckCab("Airstairs", new List<HeavyRig> { stairs }, 1);
+        if (back < 0f) failed++;
+        GD.Print($"[cockpitcheck] Airstairs seat back {back * 100:F0} cm in front of the cab's back wall {(back >= 0f ? "ok" : "FAIL")}");
+        GD.Print("[cockpitcheck] heavy: over dash = cm the eye has above the dash and under the top of the windscreen; "
+            + "wall = cm between the seat's side and the cab wall; seats = passenger seats; width = the first section's mesh, mirrors and all, m");
+        return failed;
+    }
+
+    /// <summary>One heavy cab's fit (its rigs, freed here), and the passenger seats it must have; 1 when it fails.</summary>
+    private static int CheckCab(string label, List<HeavyRig> rigs, int wanted)
+    {
+        int failed = 0;
         {
-            var rigs = Enumerable.Range(0, spec.Sections.Length)
-                .Select(k => HeavyRig.Create(spec, k, 0.5f, k == 0 ? HumanPalette.Default : null)).ToList();
             var c = rigs[0].Cockpit;
             var shell = rigs[0].GetNode<Node3D>("Body").GetNode<MeshInstance3D>("Shell");
             bool glass = shell.Mesh is ArrayMesh m && Enumerable.Range(0, m.GetSurfaceCount())
@@ -87,8 +103,8 @@ public static class CockpitCheck
             if (c == null)
             {
                 failed++;
-                GD.Print($"[cockpitcheck] {spec.Label,-24} FAIL no cockpit");
-                continue;
+                GD.Print($"[cockpitcheck] {label,-24} FAIL no cockpit");
+                return 1;
             }
 
             var f = c.Frame;
@@ -106,17 +122,14 @@ public static class CockpitCheck
             }
             float pedals = f.Front - f.Nose - (seat.Throttle + DriverSeat.PedalHinge).Z;
             float wall = f.InnerHalf - (Mathf.Abs(seat.Hip.X) + 0.25f);
-            int wanted = spec.Class is HeavyClass.Tractor or HeavyClass.Rigid ? 1 : 20;
 
             bool ok = head >= 0.05f && ahead >= 0.5f && overDash >= 0.1f && reach < 0.01f && pedals >= 0f && wall >= 0f
                 && glass && driver && seats >= wanted;
             if (!ok) failed++;
-            GD.Print($"[cockpitcheck] {spec.Label,-24} ({eye.X,5:F2}, {eye.Y,4:F2}, {eye.Z,5:F2})  {head * 100,4:F0}  {ahead * 100,5:F0}  "
+            GD.Print($"[cockpitcheck] {label,-24} ({eye.X,5:F2}, {eye.Y,4:F2}, {eye.Z,5:F2})  {head * 100,4:F0}  {ahead * 100,5:F0}  "
                 + $"{overDash * 100,9:F0}  {reach * 1000,4:F0}mm {pedals * 100,6:F0}  {wall * 100,4:F0}  {seats,5}  {span,5:F2}  "
                 + $"{(ok ? "ok" : "FAIL" + (glass ? "" : " no glass surface") + (driver ? "" : " no driver") + (seats >= wanted ? "" : " too few seats"))}");
         }
-        GD.Print("[cockpitcheck] heavy: over dash = cm the eye has above the dash and under the top of the windscreen; "
-            + "wall = cm between the seat's side and the cab wall; seats = passenger seats; width = the first section's mesh, mirrors and all, m");
         return failed;
     }
 }

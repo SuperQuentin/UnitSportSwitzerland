@@ -24,6 +24,12 @@ public enum ItemEventKind
     /// <see cref="ThrowHits.Bonk"/>. Relayed to everyone near: all play the reaction, the victim takes it.
     /// </summary>
     Bonk = 5,
+    /// <summary>An alphorn blown (#478). Position = the bell; heard far (<see cref="SwissItems.OnHorn"/>).</summary>
+    Horn = 6,
+    /// <summary>A fondue set out (#478). Position = the pot; everyone near eats (<see cref="SwissItems.OnFondue"/>).</summary>
+    Fondue = 7,
+    /// <summary>A smoke canister landed (#478). Position = where; a cloud on every peer (<see cref="SwissItems.OnSmoke"/>).</summary>
+    Smoke = 8,
 }
 
 /// <summary>
@@ -73,6 +79,9 @@ public partial class ItemEvents : Node
         [ItemEventKind.Hit] = PlayerHits.OnHit,
         [ItemEventKind.Flare] = (n, e) => n.FlareEffect(e),
         [ItemEventKind.Bonk] = ThrowHits.OnBonk,
+        [ItemEventKind.Horn] = SwissItems.OnHorn,
+        [ItemEventKind.Fondue] = SwissItems.OnFondue,
+        [ItemEventKind.Smoke] = SwissItems.OnSmoke,
     };
 
     /// <summary>
@@ -86,6 +95,9 @@ public partial class ItemEvents : Node
 
     /// <summary>This peer's origin: events go to the server and back in LV95 (#185).</summary>
     private Core.WorldOrigin _origin = null!;
+
+    /// <summary>This peer's origin, for handlers that keep a place beyond the moment (a smoke cloud, a horn's marker).</summary>
+    public Core.WorldOrigin? Origin => _origin;
 
     public static ItemEvents Create(Node world, Core.WorldOrigin origin, bool server)
     {
@@ -152,10 +164,14 @@ public partial class ItemEvents : Node
                 RpcId(peer, MethodName.Deliver, sender, kind, e, n, alt, direction, extra);
     }
 
+    /// <summary>Server: the fire-rate budgets of every shooter (#468).</summary>
+    private readonly Combat.HitGuard _guard = new();
+
     /// <summary>
     /// Server: a player says it hit another. Passed on to the victim alone when PvP is on, the
     /// weapon exists and could do that much, the shooter stands by its body and the victim is
-    /// within the weapon's reach of it, where the shot says.
+    /// within the weapon's reach of it, where the shot says; and (#468) the shot fits the weapon's
+    /// rate of fire and no hill stands between the shooter's eye and the hit.
     /// </summary>
     private void RelayHit(long sender, Core.GlobalPos position, Vector3 direction, string extra)
     {
@@ -164,13 +180,26 @@ public partial class ItemEvents : Node
         if (Weapons.Get(hit.Weapon) is not { } weapon || hit.Damage > weapon.MaxHit + 0.5f) return;
         var shooter = GetNodeOrNull<FootPlayer>("../Players/" + sender);
         var victim = GetNodeOrNull<FootPlayer>("../Players/" + hit.Victim);
-        if (shooter == null || victim == null || victim.Down != 0 || shooter.Down != 0) return;
+        if (shooter == null || victim == null || victim.Down == 1 || shooter.Down != 0) return;   // a downed victim (2) can be finished, #475
         // the bodies are where their owners last said (in LV95, #185): allow for a quarter second of
         // running at both ends
         const float Slack = 8f;
         if (!(shooter.Global.DistanceTo(victim.Global) <= weapon.Range + Slack)) return;
         if (!(victim.Global.DistanceTo(position) <= Slack)) return;
         if (!Multiplayer.GetPeers().Contains((int)hit.Victim)) return;
+        var eye = shooter.Global;
+        if (!weapon.Melee && GetNodeOrNull<Net.InterestService>("../" + Net.InterestService.NodeName)?.Ground is { } ground
+            && !Combat.HitGuard.TerrainClear((eye.E, eye.N, eye.Alt + 1.6), (position.E, position.N, position.Alt),
+                (e, n) => ground(new Core.GlobalPos(e, n, 0))))
+        {
+            GD.Print(FormattableString.Invariant($"[pvp] refused peer {sender} on peer {hit.Victim}: through the ground ({hit.Weapon})"));
+            return;
+        }
+        if (!_guard.TryShot(sender, (int)hit.Weapon, weapon.Interval, weapon.Pellets, hit.Victim, Time.GetTicksMsec() / 1000.0))
+        {
+            GD.Print(FormattableString.Invariant($"[pvp] refused peer {sender} on peer {hit.Victim}: faster than a {hit.Weapon} fires"));
+            return;
+        }
         GD.Print(FormattableString.Invariant($"[pvp] peer {sender} hit peer {hit.Victim} for {hit.Damage:F1} ({hit.Weapon})"));
         RpcId(hit.Victim, MethodName.Deliver, sender, (int)ItemEventKind.Hit, position.E, position.N, position.Alt, direction, extra);
         Combat.PvpRules.RaiseHit(sender, hit.Victim, hit.Damage);

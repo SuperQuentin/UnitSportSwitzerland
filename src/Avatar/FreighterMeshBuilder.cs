@@ -59,13 +59,19 @@ public static class FreighterMeshBuilder
     /// swing out and forward along the skin; the ramp's lip goes down to the ground about its hinge and
     /// the upper door swings up into the tail.
     /// </summary>
-    public static (string Node, Vector3 Axis, float Angle)[] DoorMotions(int i) => i switch
+    /// <para>Each part has a second angle for the air (<c>AirAngle</c>): the ramp opened in flight
+    /// stops level with the hold floor, its toes stay folded (#420).</para>
+    public static (string Node, Vector3 Axis, float Angle, float AirAngle)[] DoorMotions(int i) => i switch
     {
-        CrewDoor => new[] { ("Door0", Vector3.Back, 2.19f) },
-        ParaDoorL => new[] { ("Door1", Vector3.Up, -2.6f) },
-        ParaDoorR => new[] { ("Door2", Vector3.Up, 2.6f) },
-        RampDoor => new[] { ("Door3", Vector3.Right, RampTravel), ("Door3/Toes", Vector3.Right, -Mathf.Pi), ("Door3b", Vector3.Right, UpperDoorOpen) },
-        _ => System.Array.Empty<(string, Vector3, float)>(),
+        CrewDoor => new[] { ("Door0", Vector3.Back, 2.19f, 2.19f) },
+        ParaDoorL => new[] { ("Door1", Vector3.Up, -2.6f, -2.6f) },
+        ParaDoorR => new[] { ("Door2", Vector3.Up, 2.6f, 2.6f) },
+        RampDoor => new[]
+        {
+            ("Door3", Vector3.Right, RampTravel, RampClosedAngle), ("Door3/Toes", Vector3.Right, -Mathf.Pi, 0f),
+            ("Door3b", Vector3.Right, UpperDoorOpen, UpperDoorOpen),
+        },
+        _ => System.Array.Empty<(string, Vector3, float, float)>(),
     };
 
     /// <summary>How fast door <paramref name="i"/> travels, fraction of its stroke per second (the ramp is slow).</summary>
