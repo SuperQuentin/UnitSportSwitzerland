@@ -10,7 +10,7 @@ namespace UnitSport.Items;
 /// loopback (#178). A holds an assault rifle, a pistol and a knife and shoots B through the real item path; B stands
 /// 10 m in front of A and checks its own health. With <c>--pvpexpect off</c> (a server without <c>--pvp</c>) nothing
 /// may hurt B, and A's 30 forged hits in one frame never arrive. With PvP on: only a pistol's burst of those
-/// arrives (#468); then two rifle rounds (2 × 26), a pistol round half soaked by B's vest (10 off, armour 40), a
+/// arrives (#468); then two rifle rounds, a pistol round half soaked by B's vest, a
 /// knife stab at arm's length, then rifle rounds until B goes down — B's Died event must name A as the killer,
 /// and A must see B's replicated Down flag. Scratch inventories; outputs in <c>test_output/</c>.
 /// </summary>
@@ -165,14 +165,17 @@ public partial class PvpProbe : ChatProbe
         Say("counted");
 
         float on = ExpectOn ? 1f : 0f;
-        Expect(await HealthAfter(me, "rifle", 100f - 52f * on), $"two rifle rounds: health {me.Health:F1}");
+        // the damage from the weapon table (#455 retuned it); no regeneration while this runs
+        FootPlayer.Regenerates = _ => false;
+        float rifle = Weapons.Get(ItemId.Rifle)!.Damage, pistol = Weapons.Get(ItemId.Pistol)!.Damage;
+        Expect(await HealthAfter(me, "rifle", 100f - 2f * rifle * on), $"two rifle rounds: health {me.Health:F1}");
         _items.UseSlot(me, SlotOf(ItemId.ArmorVest));
         await Until(() => me.Armor > 0, 4);
         Expect(Mathf.IsEqualApprox(me.Armor, FootPlayer.MaxArmor), $"vest on: armour {me.Armor:F1}");
         float h = me.Health;
         Say("vest");
-        Expect(await HealthAfter(me, "pistol", h - 10f * on), $"pistol round through the vest: health {me.Health:F1}");
-        Expect(Mathf.IsEqualApprox(me.Armor, FootPlayer.MaxArmor - 10f * on), $"the vest soaked half: armour {me.Armor:F1}");
+        Expect(await HealthAfter(me, "pistol", h - pistol / 2f * on), $"pistol round through the vest: health {me.Health:F1}");
+        Expect(Mathf.IsEqualApprox(me.Armor, FootPlayer.MaxArmor - pistol / 2f * on), $"the vest soaked half: armour {me.Armor:F1}");
         if (!ExpectOn)
         {
             await Until(() => Said("A", "finished"), 30);
@@ -183,7 +186,8 @@ public partial class PvpProbe : ChatProbe
         await StandAt(me, 1.5f);
         h = me.Health;
         Say("close");
-        Expect(await HealthAfter(me, "knife", h - (34f - Mathf.Min(me.Armor, 17f))), $"knife stab: health {me.Health:F1}");
+        float knife = Weapons.Get(ItemId.Knife)!.Damage;
+        Expect(await HealthAfter(me, "knife", h - (knife - Mathf.Min(me.Armor, knife / 2f))), $"knife stab: health {me.Health:F1}");
         await StandAt(me, 10f);
         Say("far");
 
