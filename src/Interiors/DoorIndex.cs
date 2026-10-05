@@ -10,7 +10,7 @@ namespace UnitSport.Interiors;
 /// </summary>
 public static class DoorIndex
 {
-    public readonly record struct Entry(BuildingKey Key, Vector3 World, Vector3 Outward, float Width, float Height, BuildingKind Kind);
+    public readonly record struct Entry(BuildingKey Key, Vector3 World, Vector3 Outward, float Width, float Height, BuildingKind Kind, Loot.ShopType Shop = Loot.ShopType.None);
 
     private static readonly Dictionary<TileId, Entry[]> Tiles = new();
 
@@ -19,7 +19,7 @@ public static class DoorIndex
         var list = new List<Entry>(doors.Length);
         foreach (var d in doors)
             if (d.Width > 0)
-                list.Add(new Entry(new BuildingKey(id.E, id.N, d.Index), tileOrigin + d.Position, d.Outward, d.Width, d.Height, d.Kind));
+                list.Add(new Entry(new BuildingKey(id.E, id.N, d.Index), tileOrigin + d.Position, d.Outward, d.Width, d.Height, d.Kind, d.Shop));
         Tiles[id] = list.ToArray();
     }
 
@@ -56,6 +56,9 @@ public static class DoorIndex
 
     /// <summary>As <see cref="Nearest(Vector3, float)"/>, only doors of buildings of one kind.</summary>
     public static Entry? Nearest(Vector3 at, float reach, BuildingKind kind) => Nearest(at, reach, e => e.Kind == kind);
+
+    /// <summary>As <see cref="Nearest(Vector3, float)"/>, only the doors of one type of shop (a farm co-op, #494).</summary>
+    public static Entry? Nearest(Vector3 at, float reach, Loot.ShopType shop) => Nearest(at, reach, e => e.Shop == shop);
 
     /// <summary>
     /// The nearest door a player on foot enters an interior by. <paramref name="deeper"/> gives a

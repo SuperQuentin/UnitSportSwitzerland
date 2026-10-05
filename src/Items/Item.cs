@@ -168,7 +168,54 @@ public static class ItemDefs
         Eat(ItemId.IsotonicDrink, "Isotonic drink", 6, "#3ab0e8", "ID", 20, ItemCategory.Water, 4),
         new(ItemId.SwissArmyKnife, "Swiss army knife", "A tool, not a weapon: kept anywhere in your pack, every tree you chop gives one more log.",
             ItemUse.Material, 1, new Color(0.80f, 0.10f, 0.12f), "SK", 0, ItemCategory.Gear, 45f),
+
+        // farming (#494, docs/notes/farming/produce-economy.md): seeds are sown by hand, harvests are
+        // sacks (grain 50 kg, potatoes / beet / carrots 10 kg, peas 50 kg) and a 250 kg round bale of hay;
+        // Value is the producer price of one, which the farm co-op pays for a load
+        Seed(ItemId.WheatSeed, "Wheat seed", "#d8c070", "WS", 14),
+        Seed(ItemId.BarleySeed, "Barley seed", "#c8b060", "BS", 12),
+        Seed(ItemId.MaizeSeed, "Maize seed", "#e8c830", "MS", 12),
+        Seed(ItemId.SeedPotato, "Seed potatoes", "#b89868", "SP", 12),
+        Seed(ItemId.RapeSeed, "Rapeseed seed", "#b8c030", "RS", 14),
+        Seed(ItemId.SunflowerSeed, "Sunflower seed", "#e8a818", "SS", 13),
+        Seed(ItemId.SugarBeetSeed, "Sugar beet seed", "#d8d0c0", "BT", 6),
+        Seed(ItemId.VegetableSeeds, "Vegetable seeds", "#e07830", "VS", 10),
+        Seed(ItemId.PeaSeed, "Pea seed", "#70b040", "PS", 14),
+        Crop(ItemId.Wheat, "Wheat", "A 50 kg sack of wheat.", 10, "#d8b858", "WH", 25),
+        Crop(ItemId.Barley, "Barley", "A 50 kg sack of barley.", 10, "#c8aa50", "BA", 22),
+        Crop(ItemId.Maize, "Maize", "A 50 kg sack of maize.", 10, "#e8c020", "MZ", 22),
+        Crop(ItemId.Potato, "Potatoes", "A 10 kg sack of potatoes.", 10, "#b08c58", "PO", 5),
+        Crop(ItemId.Rapeseed, "Rapeseed", "A 50 kg sack of rapeseed.", 10, "#2a2a22", "RA", 42),
+        Crop(ItemId.SunflowerSeeds, "Sunflower seeds", "A 50 kg sack of sunflower seeds.", 10, "#4a4034", "SU", 38),
+        Crop(ItemId.SugarBeet, "Sugar beet", "A 10 kg sack of sugar beet.", 10, "#d8cdb8", "SB", 2),
+        Crop(ItemId.Carrot, "Carrots", "A 10 kg sack of carrots.", 10, "#e87a1c", "CA", 6),
+        Crop(ItemId.HayBale, "Hay bale", "A 250 kg round bale of hay.", 3, "#c8b448", "HB", 40),
+        Crop(ItemId.Peas, "Peas", "A 50 kg sack of dried peas.", 10, "#88b848", "PE", 28),
+        // milled at a workbench (a wheat sack = 4 flour): still produce, so the co-op buys them
+        Crop(ItemId.Flour, "Flour", "A bag of flour. Bread at a fire, with water.", 20, "#f0ead8", "FL", 7),
+        Crop(ItemId.RapeseedOil, "Rapeseed oil", "A bottle of rapeseed oil, for frying.", 10, "#e0c838", "OI", 7),
+        Crop(ItemId.Sugar, "Sugar", "A bag of sugar.", 20, "#f4f4f0", "SG", 3),
+        Crop(ItemId.MaizeMeal, "Maize meal", "Coarse maize meal, for polenta.", 20, "#e8c850", "MM", 8),
+        // cooked at a fire (Recipes): worth more than what went in
+        Eat(ItemId.BakedPotato, "Baked potato", 5, "#c89858", "BP", 25, ItemCategory.Food, 6),
+        Eat(ItemId.Roesti, "Rösti", 5, "#d8a838", "RO", 60, ItemCategory.Food, 20),
+        Eat(ItemId.Polenta, "Polenta", 5, "#e8c030", "PL", 45, ItemCategory.Food, 11),
+        Eat(ItemId.Popcorn, "Popcorn", 10, "#f4ecc8", "PC", 15, ItemCategory.Food, 8),
+        Eat(ItemId.VegetableSoup, "Vegetable soup", 5, "#c87838", "VS", 55, ItemCategory.Food, 14),
+        Eat(ItemId.Raclette, "Raclette", 3, "#f0d070", "RC", 75, ItemCategory.Food, 22),
+        new(ItemId.Hoe, "Hoe", "{use_item} tills the ground ahead: stubble or grass turns to ploughed soil, ready to sow by hand.",
+            ItemUse.Farm, 1, new Color("#8a6a40"), "HO", 0, ItemCategory.Gear, 25f),
+        new(ItemId.Fertiliser, "Fertiliser", "{use_item} on a sown field cell: the crop there ripens sooner.",
+            ItemUse.Farm, 20, new Color("#c8c8b0"), "FE", 0, ItemCategory.Produce, 12f),
     };
+
+    private static ItemDef Seed(ItemId id, string name, string tint, string glyph, float value) =>
+        new(id, name, "{use_item} sows the ploughed field cell ahead: one bag covers about 800 m².",
+            ItemUse.Farm, 20, new Color(tint), glyph, 0, ItemCategory.Produce, value);
+
+    private static ItemDef Crop(ItemId id, string name, string blurb, int stack, string tint, string glyph, float value) =>
+        new(id, name, blurb + " Sell it at a farm co-op, or make something of it.",
+            ItemUse.Material, stack, new Color(tint), glyph, 0, ItemCategory.Produce, value);
 
     private static ItemDef Gadget(ItemId id, string name, string blurb, string tint, string glyph, float value) =>
         new(id, name, blurb + " {aim_item} + {use_item} on your own takes it back.", ItemUse.Gadget, 1, new Color(tint), glyph, 0, ItemCategory.Gear, value);

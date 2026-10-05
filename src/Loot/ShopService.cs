@@ -392,6 +392,32 @@ public partial class ShopService : Node
         Changed?.Invoke();
     }
 
+    // ---- client: delivering a load (#494, Farming.FarmMarket) ---------------------------------------
+
+    private readonly Queue<Action<int>> _deliveries = new();
+
+    /// <summary>Asks the server to pay for a load by a farm co-op; <paramref name="done"/> gets the francs added to the pocket (0: refused).</summary>
+    public void Deliver(ItemId id, int count, Vector3 at, Action<int> done)
+    {
+        _deliveries.Enqueue(done);
+        if (Online) RpcId(1, MethodName.RequestDeliver, (int)id, count, at);
+        else ServeDeliver(1, (int)id, count, at);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Delivered(int id, int count, int total)
+    {
+        if (_deliveries.Count == 0) return;
+        var done = _deliveries.Dequeue();
+        if (total > 0 && count > 0)
+        {
+            Items?.Inventory.Add(ItemId.Francs, total);
+            Items?.Ui.Toast($"Delivered {count} {ItemDefs.Get((ItemId)id)?.Name}: +{total} CHF cash");
+            Play(SfxSynth.Chime, 1.1f);
+        }
+        done(count > 0 ? total : 0);
+    }
+
     // ---- server ---------------------------------------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -407,6 +433,27 @@ public partial class ShopService : Node
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void RequestBump(string key, int furniture) => ServeBump(Multiplayer.GetRemoteSenderId(), key, furniture);
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestDeliver(int id, int count, Vector3 at) => ServeDeliver(Multiplayer.GetRemoteSenderId(), id, count, at);
+
+    /// <summary>
+    /// Server: pays for a load. Online the peer's own replicated position must be by a farm co-op's
+    /// door (the claimed <paramref name="at"/> is not trusted); offline there is no one to lie, so it
+    /// is the vehicle's. The pack is the client's, as when selling at a counter.
+    /// </summary>
+    private void ServeDeliver(long peer, int id, int count, Vector3 at)
+    {
+        var def = ItemDefs.Get((ItemId)id);
+        Vector3? where = at;
+        if (Online) where = GetParent()?.GetNodeOrNull<Node3D>($"Players/{peer}")?.GlobalPosition;
+        long total = def == null || count is <= 0 or > Farming.FarmMarket.MaxLoad ? 0 : ShopTables.DeliveryPrice(def.Category, def.Value, count);
+        float reach = Farming.FarmMarket.DeliverReach + (Online ? Farming.FarmMarket.ServerSlack : 0f);
+        bool ok = total > 0 && where is { } w && Farming.FarmMarket.CoopDoor(w, reach) is { } door;
+        if (ok) GD.Print($"[shop] peer {peer} delivered {count} {(ItemId)id} to the farm co-op {Farming.FarmMarket.CoopDoor(where!.Value, reach)!.Value.Key} for {total} CHF");
+        else GD.Print($"[shop] peer {peer} delivery of {count} {(ItemId)id} refused");
+        Reply(peer, MethodName.Delivered, id, ok ? count : 0, ok ? (int)total : 0);
+    }
 
     /// <summary>Server: what a piece of furniture sells, if the peer stands in its building: a shop's counter or a machine.</summary>
     private async Task<(InteriorLayout Layout, ShopType Type)?> ShopFor(long peer, string key, int furniture)
