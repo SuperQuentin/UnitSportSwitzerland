@@ -24,6 +24,8 @@
     <ProjectReference Include="..\..\tools\TerrainFormat\TerrainFormat.csproj" />
     <ProjectReference Include="..\..\tools\RoadGen\RoadGen.csproj" />
     <Compile Include="..\..\src\World\TimeCommand.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\TutorialSteps.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\VehicleIntros.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\AdminArgs.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\XR\XrControlNames.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\IChunkSource.cs" Link="Game\%(Filename)%(Extension)" />
@@ -31,12 +33,17 @@
     <Compile Include="..\..\src\Terrain\Fixture\*.cs" Link="Game\Fixture\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\Recipes.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Items\Fishing\FishCatalog.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Items\Fishing\FishWaters.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Items\Fishing\FishRules.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\CampfireClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\HitGuard.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\FightRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrStats.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Loot\ShopTables.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\DoorBudget.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\DoorKey.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Loot\ShopLedger.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SaveQueue.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\MathX.cs" Link="Game\%(Filename)%(Extension)" />
@@ -68,6 +75,8 @@
          Pipeline.cs, which would drag in CountryData/LocalState/Selection/Stats and
          TerrainPreprocessor-only types this project has no ProjectReference for. -->
     <Compile Include="..\..\tools\MapCore\DownloadManifest.cs" Link="Map\%(Filename)%(Extension)" />
+    <!-- update check (#532): version compare, asset pick, GitHub's JSON, delta updates -->
+    <Compile Include="..\..\src\Core\UpdateInfo.cs;..\..\src\Core\BinaryDelta.cs;..\..\src\Core\UpdatePackage.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

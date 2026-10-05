@@ -37,7 +37,7 @@ public static class DoorSearch
 
     /// <summary>The nearest door a probe asked for, or null while none is drawn in reach.</summary>
     public static DoorIndex.Entry? Nearest(Vector3 at, BuildingKind? kind) =>
-        kind is { } k ? DoorIndex.Nearest(at, KindReach, k) : DoorIndex.Nearest(at, NearReach);
+        kind is { } k ? DoorIndex.NearestOfKind(at, KindReach, k) : DoorIndex.Nearest(at, NearReach);
 
     /// <summary>
     /// Why the search came up empty, in the log: the doors of that kind that <i>are</i> drawn,

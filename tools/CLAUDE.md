@@ -7,6 +7,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 
 ## Architecture
 
+- `delta-updates` — per-release `.delta` files (rsync-style binary patches, SHA-256 checked, Brotli) made by `tools/deltas.sh` from the published archives and uploaded by `release.sh`; staging + swap script; measured 8 KB vs 176 MB (#532)
 - `data-pipeline` — Data pipeline: swissALTI3D XYZ zips (`ressources/data/swiss_chunks/`, LV95/EPSG:2056, 0.5 m grid, 1 km tiles) →...
 - `shared-format-code` — Shared format code: `tools/TerrainFormat` classlib (TileId, ChunkFormat, ChunkGrid, ChunkCodec, TerrainManifest) —...
 - `perf-tile-header` — tile file headers only via `TileHeader.Write/Read` and `ChunkCodec.ReadHeader`; goldens keep the bytes identical

@@ -185,6 +185,17 @@ public sealed class GameSettings
     /// <summary>Over-the-shoulder view on foot and a chase view mounted; V / R3 toggles it in game.</summary>
     public bool ThirdPerson { get; set; } = true;
 
+    /// <summary>The on-foot camera over the left shoulder instead of the right; <c>swap_shoulder</c> flips it in game (#460).</summary>
+    public bool LeftShoulder { get; set; }
+
+    /// <summary>
+    /// Draw the pigeon tail first, the way it flew before the fix: the bird keeps the half turn
+    /// <see cref="Player.Pigeon.BuildVisual"/> used to give a mesh that already faced the right way.
+    /// Off by default. Client-only and never replicated, like <see cref="VisualStyle"/>: it decides
+    /// how the birds on this screen are drawn — your own and everyone else's — never how they fly.
+    /// </summary>
+    public bool TailFirstPigeon { get; set; }
+
     // --- network ---
     /// <summary>List the dedicated servers found on the LAN over mDNS in the main menu (<see cref="Net.LanDiscovery"/>).</summary>
     public bool LanDiscovery { get; set; } = true;
@@ -197,6 +208,18 @@ public sealed class GameSettings
     /// Empty until then; <c>--name</c> overrides it for one run without saving.
     /// </summary>
     public string PlayerName { get; set; } = "";
+
+    /// <summary>
+    /// The first-run tutorial (#517, <see cref="Tutorial"/>) was finished or skipped. Off until
+    /// then; Settings › Gameplay turns it off again to replay it.
+    /// </summary>
+    public bool TutorialDone { get; set; }
+
+    /// <summary>
+    /// The rides whose mini tutorial (#517, <see cref="VehicleIntroCard"/>) was done, by
+    /// <see cref="VehicleIntroKind"/> name. Cleared with <see cref="TutorialDone"/> by "Play again".
+    /// </summary>
+    public List<string> VehicleIntrosSeen { get; set; } = new();
 
     /// <summary>
     /// The player's figure (#394): <see cref="Avatar.Appearance.Pack"/>ed, 0 until one is chosen in
@@ -330,9 +353,9 @@ public sealed class GameSettings
     /// <summary>
     /// Writes one setting into the file without the rest of this run's values (a command-line
     /// <c>--view</c> or <c>--traffic</c> must not become the saved choice): the radio panel's
-    /// volume slider, saved as it is dragged.
+    /// volume slider, saved as it is dragged; the tutorial's done flag.
     /// </summary>
-    public static void SaveOnly(string key, float value)
+    public static void SaveOnly(string key, System.Text.Json.Nodes.JsonNode value)
     {
         try
         {
@@ -390,6 +413,7 @@ public sealed class GameSettings
         OccasionPreferences ??= new();
         RecentGpx ??= new();
         PlayerName ??= "";
+        VehicleIntrosSeen ??= new();
         Wheel ??= new();
         Wheel.Clamp();
     }
@@ -451,6 +475,9 @@ public sealed class GameSettings
                     ThirdPerson = v is not ("first" or "1st" or "body" or "bare");
                     if (v is "body" or "bare") CockpitBody = v == "body";
                     break;
+                // left | right: the on-foot camera's shoulder (#460)
+                case "--shoulder": LeftShoulder = v is "left" or "l"; break;
+                case "--tailfirstpigeon": TailFirstPigeon = v is "on" or "1" or "true"; break;
                 case "--mirrors": CockpitMirrors = v is "on" or "1" or "true"; break;
                 // what the monitor shows in VR (#186): off | first | eyes | third
                 case "--vrmonitor":

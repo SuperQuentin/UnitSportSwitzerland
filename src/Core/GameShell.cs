@@ -78,10 +78,11 @@ public partial class GameShell : Node
         string[] harmless =
         {
             "--name", "--chunks", "--landings", "--cache", "--title", "--nocapture", "--rings", "--horizon", "--fog", "--detail",
-            "--generated", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--voice", "--time",
+            "--generated", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--shoulder", "--voice", "--time",
             "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--airliner", "--perflog",
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world",
-            "--menu", "--settings", "--licenses", "--controls", "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
+            "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
+            "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
             "--leave-restart", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
         };
         foreach (string a in args)
@@ -193,6 +194,8 @@ public partial class GameShell : Node
         if (Direct)
         {
             _state = State.InWorld;
+            // "--tutorial" with a probe that rides something (--ride car:0,8,out.png): the ride's intro card
+            if (CmdArgs.Has("--tutorial")) Callable.From(world.StartVehicleIntros).CallDeferred();
             // "--menu" / "--settings" open the pause menu over the world, for screenshotting it
             if (CmdArgs.Has("--menu") || CmdArgs.Has("--settings"))
                 Callable.From(() =>
@@ -459,6 +462,8 @@ public partial class GameShell : Node
         if (_launch is { Mode: GameMode.Multiplayer, Hosted: false } l)
             Book.NotePlayed(l.Endpoint, l.ServerName);
         if (CmdArgs.Has("--menu")) Callable.From(OpenPause).CallDeferred();
+        else if (Tutorial.Wanted(fromMenus: true)) _world?.StartTutorial();
+        _world?.StartVehicleIntros();
         GD.Print($"[shell] in world: {_launch?.Mode}");
     }
 

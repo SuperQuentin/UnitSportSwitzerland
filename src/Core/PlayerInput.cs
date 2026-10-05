@@ -65,7 +65,7 @@ public partial class PlayerInput : Node
     public const string Fire = "fire";
     /// <summary>In a car: headlights on/off, raising or folding pop-ups (<see cref="Player.Car.Headlights"/>).</summary>
     public const string LightsToggle = "lights_toggle";
-    /// <summary>In an open car: soft top down/up (<see cref="Player.Car.RoofOpen"/>).</summary>
+    /// <summary>In an open car: soft top down/up (<see cref="Player.Car.RoofOpen"/>); in one with hydraulics, bounce on/off (<see cref="Player.Car.Bouncing"/>).</summary>
     public const string RoofToggle = "roof_toggle";
     /// <summary>In a car, truck or bus: the next / previous live radio station, through off (#179).</summary>
     public const string RadioNext = "radio_next";
@@ -114,6 +114,8 @@ public partial class PlayerInput : Node
     public const string InteractMount = "interact_mount";
     public const string EngineToggle = "engine_toggle";
     public const string CameraToggle = "camera_toggle";
+    /// <summary>On foot: the camera over the other shoulder (#460). A pad swaps with R3 while aiming a gun.</summary>
+    public const string SwapShoulder = "swap_shoulder";
     public const string ToggleMode = "toggle_mode";
     public const string Teleport = "teleport";
     /// <summary>Battle Royale squads (#469): mark the point under the crosshair for your team-mates.</summary>
@@ -539,6 +541,8 @@ public partial class PlayerInput : Node
         Bind(RideMenu, Keys(Key.R));
         Bind(EngineToggle, Keys(Key.Z), Button(JoyButton.DpadUp));
         Bind(CameraToggle, Keys(Key.V), Button(JoyButton.RightStick));
+        // H only couples or sounds a horn in a vehicle; on foot it is the other shoulder (#460)
+        Bind(SwapShoulder, Keys(Key.H), Mouse(MouseButton.Middle));
         Bind(ToggleMode, Keys(Key.T), Button(JoyButton.DpadDown));
         // The place search is a map in all but drawing, so it sits on M. A pad can open it but
         // not type in it, so it stays keyboard-only rather than trapping a controller player.

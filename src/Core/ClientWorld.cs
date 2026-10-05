@@ -104,6 +104,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Items.IconSheet.Requested, Items.IconSheet.Run),
         (() => Loot.LootChanceCheck.Requested, Loot.LootChanceCheck.Run),
         (() => Loot.ShopCheck.Requested, Loot.ShopCheck.Run),
+        (() => Interiors.DoorCheck.Requested, Interiors.DoorCheck.Run),
         (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
         (() => ChatCheck.Requested, () => ChatCheck.Run(this)),
         (() => StyleKit.ReportRequested, StyleKit.Report),
@@ -623,6 +624,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.BoatCheck.Role is { } boatRole) AddChild(new Player.BoatCheck(boatRole, () => LocalPlayer));
         if (Player.SteamerCheck.Role is { } steamerRole) AddChild(new Player.SteamerCheck(steamerRole, () => LocalPlayer));
         if (Player.SwimCheck.Requested) AddChild(new Player.SwimCheck(() => LocalPlayer));
+        if (Items.Fishing.FishProbe.Requested) AddChild(new Items.Fishing.FishProbe(() => LocalPlayer));
         if (Player.CabinCheck.Requested) AddChild(new Player.CabinCheck(() => LocalPlayer));
         if (Player.FreighterCheck.Requested) AddChild(new Player.FreighterCheck(() => LocalPlayer));
         if (Player.An124Check.Requested) AddChild(new Player.An124Check(() => LocalPlayer));
@@ -636,7 +638,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
-            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
+            || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
@@ -687,6 +689,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.EmoteNetProbe.Role != null) AddChild(new Player.EmoteNetProbe(items));
         if (Player.FightNetProbe.Role != null) AddChild(new Player.FightNetProbe(items));
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
+        if (Items.Fishing.FishNetProbe.Role != null) AddChild(new Items.Fishing.FishNetProbe(items));
         if (World.ClockNetProbe.Role != null) AddChild(new World.ClockNetProbe(items));
         if (Player.BoatNetProbe.Role != null) AddChild(new Player.BoatNetProbe(items));
         if (Player.SteamerNetProbe.Role != null) AddChild(new Player.SteamerNetProbe(items));
@@ -941,6 +944,23 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (SpawnPending)
         {
             Report(LoadStage.PlacingYou, 0.32f);
+            return;
+        }
+
+        // Explore from the menus starts on foot, on open ground (#517), behind this screen
+        if (Launch is { Mode: GameMode.Explore, FromCommandLine: false } && !_groundStarted)
+        {
+            _groundStarted = true;
+            if (!_onFoot && _player == null)
+            {
+                AddChild(_player = new FootPlayer { Name = "Player", Terrain = _chunks });
+                EnterFootMode(_player);
+                _groundStart = new GroundStart(_chunks, _player);
+            }
+        }
+        if (_groundStart is { Done: false } ground && !ground.Step(delta))
+        {
+            Report(LoadStage.PlacingYou, 0.34f);
             return;
         }
 
@@ -1423,6 +1443,40 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private FootPlayer? LocalPlayer => _networked ? GetLocalNetPlayer() : _player;
 
     /// <summary>
+    /// The first-run tutorial (#517) over this world, once: the shell calls it when the loading
+    /// screen is gone, Settings when it is played again. Not in a replay.
+    /// </summary>
+    public void StartTutorial()
+    {
+        if (Tutorial.Current != null || Launch.Mode == GameMode.GpxReplay) return;
+        AddChild(new Tutorial(
+            walker: () => _onFoot ? LocalPlayer : null,
+            flying: () => !_onFoot && _spectator is { Current: true },
+            mapOpen: () => _places is { IsOpen: true },
+            covered: () => Covered || _vehicleIntros is { Showing: true }));
+    }
+
+    private VehicleIntroCard? _vehicleIntros;
+
+    /// <summary>
+    /// The rides' mini tutorials (#517), each shown the first time the player drives that kind:
+    /// the shell starts them with the world, in every session from the menus.
+    /// </summary>
+    public void StartVehicleIntros()
+    {
+        if (_vehicleIntros != null || Launch.Mode == GameMode.GpxReplay) return;
+        AddChild(_vehicleIntros = new VehicleIntroCard(() => Viewer, () => Covered));
+    }
+
+    /// <summary>Whoever owns the camera on screen: the local player, or a body a probe made itself; null in the fly camera.</summary>
+    private FootPlayer? Viewer =>
+        (_onFoot ? LocalPlayer : null) ?? (XR.XrSession.Anchor ?? GetViewport().GetCamera3D())?.GetParent() as FootPlayer;
+
+    /// <summary>Something owns the screen: a menu, the travel menu, the map, a replay.</summary>
+    private bool Covered => MenuOpen?.Invoke() == true || _rides is { IsOpen: true } || _places is { IsOpen: true }
+        || _gpx is { Active: true };
+
+    /// <summary>
     /// The hints for the prompt bar: what the buttons do in the situation the player is in now.
     /// Short on purpose — the loot, door and gather prompts are already centred on screen, and
     /// the whole list is one F1 away.
@@ -1431,9 +1485,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     {
         if (MenuOpen?.Invoke() == true || _gpx is { Active: true } || _rides is { IsOpen: true }) yield break;
 
-        // whoever owns the camera on screen: the local player, or a body a probe made itself
         var shown = XR.XrSession.Anchor ?? GetViewport().GetCamera3D();
-        var viewer = (_onFoot ? LocalPlayer : null) ?? shown?.GetParent() as FootPlayer;
+        var viewer = Viewer;
         if (viewer == null && shown == _spectator)
         {
             yield return (PlayerInput.ToggleMode, "Walk");
@@ -1483,6 +1536,28 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 yield return (PlayerInput.FightPunch, "Punch");
                 yield return (PlayerInput.FightKick, "Kick");
                 yield return (PlayerInput.FightBlock, "Block (hold)");
+            }
+            else if (Items.ItemController.Instance is { Inventory.HeldId: Items.ItemId.FishingRod } rodHand && rodHand.UsablePlayer != null)
+            {
+                // the rod (#493): every step names its own control on every device
+                switch (rodHand.Rod.State)
+                {
+                    case Items.Fishing.FishingRod.Phase.Idle:
+                        yield return (PlayerInput.UseItem, "Hold to wind up a cast");
+                        break;
+                    case Items.Fishing.FishingRod.Phase.Charging:
+                        yield return (PlayerInput.UseItem, "Let go to cast");
+                        yield return (PlayerInput.AimItem, "Cancel");
+                        break;
+                    case Items.Fishing.FishingRod.Phase.Waiting:
+                    case Items.Fishing.FishingRod.Phase.Bite:
+                        yield return (PlayerInput.UseItem, "Strike when the float dips");
+                        yield return (PlayerInput.AimItem, "Wind in");
+                        break;
+                    case Items.Fishing.FishingRod.Phase.Fighting:
+                        yield return (PlayerInput.UseItem, "Hold to reel; let go when it runs");
+                        break;
+                }
             }
             else if (Items.ItemController.Instance?.Throw.Active == true)
             {
@@ -1610,6 +1685,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     }
 
     /// <summary>The spawn point has not found the ground under the spawn yet.</summary>
+    private bool _groundStarted;
+    private GroundStart? _groundStart;
+
     private bool SpawnPending => _spawn != null && IsInstanceValid(_spawn) && _spawn.IsInsideTree();
 
     private FootPlayer? _pendingFoot;

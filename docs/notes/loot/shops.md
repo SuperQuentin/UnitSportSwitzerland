@@ -54,3 +54,4 @@
   `--generated-world --admin-password shopcheck --shopstuck`, `--shopnet A|B`: A buys a slot empty
   for cash, one line on the card, the server's balance drops, sells back; B walks in after and sees
   the slot sold out; saves in `test_output/shopcheck_appdata`, never the real ones).
+- **Fishing** (#493): sport shops sell the rod, spinners and dough bait, groceries perch and whitefish; both lines appended at the end of their catalogues (slot indices are the ledger's keys). Fish sell back as Food (the `items/fishing` note).
