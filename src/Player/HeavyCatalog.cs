@@ -284,8 +284,9 @@ public static class HeavyCatalog
             // 181 kW (246 hp) max, 1,072 N·m at 1,500 rpm; ML 220 Vario CVT, 40 km/h; wheelbase
             // 2,900 mm; 9,250 kg operating weight; 540/65R30 front, 650/65R42 rear.
             // Assumed: 5.05 m long and 3.1 m to the cab roof, the 45/55 split, CG height, the
-            // torque curve between the published points, the Vario as sixteen close ratios walked
-            // through without a pause (HeavySpec.Stepless; no CVT model), the hitch 0.85 m behind
+            // torque curve between the published points, the Vario as 84 close ratios walked
+            // through without a pause (HeavySpec.Stepless; no CVT model) at its default
+            // acceleration stage's pace (TractorRatios: 0-40 km/h ~17 s), the hitch 0.85 m behind
             // the rear axle and 0.55 m up (drawbar and lower links at one point), hydraulic brakes
             // to 4.5 m/s², a 55° lock, the engine brake.
             Sections = new[]
@@ -324,8 +325,8 @@ public static class HeavyCatalog
             // 800/65R32 drive wheels, 600/70R28 steered rear; hydrostatic drive with a range box,
             // 25 km/h on the road. Assumed: 10.4 m with the header on (the section's front is the
             // cutter bar), 3.3 m body width, 3.95 m tall, a 3.95 m wheelbase, 18 t with the header
-            // split 65/35, CG height, the torque curve, the hydrostat as a converter with three
-            // ranges, hydraulic brakes, a 140-sack (7 t) tank where the brochure gives ~11,000 l.
+            // split 65/35, CG height, the torque curve, the hydrostat as a stepless box of 64
+            // close ratios (CombineRatios: 0-24 km/h ~22 s), hydraulic brakes, a 140-sack (7 t) tank where the brochure gives ~11,000 l.
             Sections = new[]
             {
                 new SectionSpec
