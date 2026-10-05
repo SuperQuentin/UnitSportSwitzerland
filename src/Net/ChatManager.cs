@@ -153,6 +153,12 @@ public partial class ChatManager : Node
             LineReceived?.Invoke(style, ChatKind.Private);
             return;
         }
+        // a feature clip films this screen (#487)
+        if (Core.ClipRecorder.Run(text.Trim(), line => LineReceived?.Invoke(line, ChatKind.Private)) is { } clip)
+        {
+            LineReceived?.Invoke(clip, ChatKind.Private);
+            return;
+        }
         // the catalogue is a panel on this screen; what it gives still goes through /spawn
         if (text.Trim().ToLowerInvariant() is "/catalogue" or "/catalog" or "/items")
         {
