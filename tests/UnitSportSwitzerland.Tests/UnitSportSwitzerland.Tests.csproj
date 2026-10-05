@@ -63,6 +63,11 @@
     <Compile Include="..\..\src\BattleRoyale\BrPrefabs.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the farm machines' tanks, codes and draft (#494) -->
     <Compile Include="..\..\src\Farming\MachineLoad.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- selling (#494): prices, specialty buyers, contracts, the farm stand -->
+    <Compile Include="..\..\src\Farming\FarmPrices.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmBuyers.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmContracts.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmStandRules.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

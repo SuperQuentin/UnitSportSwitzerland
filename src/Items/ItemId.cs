@@ -163,6 +163,8 @@ public enum ItemId
     Hoe = 235,
     /// <summary>Used on a sown cell (and the cells round it): the crop ripens sooner.</summary>
     Fertiliser = 236,
+    /// <summary>Placed: a self-service farm stand with an honesty box (<c>PlacedKind.FarmStand</c>, <c>Farming.FarmStands</c>).</summary>
+    FarmStand = 240,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>

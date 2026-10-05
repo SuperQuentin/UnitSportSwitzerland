@@ -246,7 +246,25 @@ public static class ShopTables
     /// co-op buys (<see cref="Buys"/>) is taken, 0 otherwise.
     /// </summary>
     public static long DeliveryPrice(ItemCategory category, float value, int count) =>
-        count <= 0 || value <= 0 || !Buys(ShopType.FarmCoop, category) ? 0 : (long)Math.Floor(value * (double)count);
+        !Buys(ShopType.FarmCoop, category) ? 0 : Farming.FarmPrices.Delivery(value, ItemId.None, count, 0, null, 0);
+
+    /// <summary>
+    /// The same with the market (#494, <see cref="Farming.FarmPrices"/>): the season of
+    /// <paramref name="month"/>, the co-op <paramref name="coop"/>'s wish list of farm week
+    /// <paramref name="week"/>, a specialty buyer's <paramref name="premium"/>.
+    /// </summary>
+    public static long DeliveryPrice(ItemCategory category, ItemId item, float value, int count, int month, string? coop, long week, double premium = 1.0) =>
+        !Buys(ShopType.FarmCoop, category) ? 0 : Farming.FarmPrices.Delivery(value, item, count, month, coop, week, premium);
+
+    /// <summary>
+    /// What a shop's counter pays for one: <see cref="SellPrice"/> (35 %), except produce at a farm
+    /// co-op (#494), which follows the market (<see cref="Farming.FarmPrices.Counter"/>: the season and
+    /// that co-op's wishes of the week). 0 when the shop does not buy it.
+    /// </summary>
+    public static int CounterPrice(ShopType type, ItemId item, ItemCategory category, float value, int month, string key, long week) =>
+        !Buys(type, category) ? 0
+        : type == ShopType.FarmCoop ? Farming.FarmPrices.Counter(value, item, month, key, week)
+        : SellPrice(value);
 
     // ---- prices and payment ---------------------------------------------------------------------
 
