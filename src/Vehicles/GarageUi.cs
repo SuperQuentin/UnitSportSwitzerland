@@ -225,7 +225,7 @@ public partial class GarageUi : CanvasLayer
         }
         // the car went (a respawn, a wreck, a reconnect): nothing left to tune
         if (_player == null || !IsInstanceValid(_player) || CarCatalog.For(_player.Ride) == null) { Close(); return; }
-        float stick = Input.GetJoyAxis(0, JoyAxis.RightX);
+        float stick = PlayerInput.Strength(PlayerInput.LookRight) - PlayerInput.Strength(PlayerInput.LookLeft);
         if (Mathf.Abs(stick) > 0.2f) _yaw -= stick * 2f * (float)delta;
         _player.ShowroomYaw = _yaw;
     }
