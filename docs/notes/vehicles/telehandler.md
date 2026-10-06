@@ -71,5 +71,7 @@ through the rig (`HeavyWheel.Steer` 1); the rear ones are `TelehandlerBoom`'s, p
 
 ## Not done
 
-- No load on the forks (#615), no stability limit (a real one's load chart and outriggers).
+- Its forks lift pallets since #615 (`vehicles/pallets`, "Any machine with tines"); a pallet can
+  only be set down at the height the machine stands at, not on a slab or a scaffold up on the boom.
+- No stability limit (a real one's load chart and outriggers).
 - No boom-up speed limit: it drives as fast with the boom at 9.8 m as stowed.

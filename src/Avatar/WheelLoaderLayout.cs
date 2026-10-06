@@ -56,6 +56,56 @@ public static class WheelLoaderLayout
     /// <summary>The bucket pin's height over the ground at a lift.</summary>
     public static float PinHeight(float lift) => ArmPivot.Y + Mathf.Sin(lift) * ArmLength;
 
+    // ---- the fork carriage (#615): the loader with forks instead of a bucket ---------------------
+
+    /// <summary>
+    /// The forks' pitch from level (+ back): the carriage levels itself, as a loader's parallel
+    /// linkage keeps a fork frame level, so it is not the bucket's tilt against the arm.
+    /// </summary>
+    public const float ForkTiltMin = -0.5f, ForkTiltMax = 0.3f, ForkRestTilt = 0.05f;
+    /// <summary>
+    /// The tines: their top face this far under the arm's pin (on the ground with the arm down),
+    /// their heel this far ahead of it, their length and half their span outside edge to outside edge.
+    /// </summary>
+    public const float ForkTop = 0.31f, ForkFace = 0.25f, ForkLength = 1.2f, TineHalfSpan = 0.45f;
+
+    public static float ClampForkTilt(float a) => Mathf.Clamp(a, ForkTiltMin, ForkTiltMax);
+
+    /// <summary>The arm's pin, forward of the hinge (in the front frame) and up from the ground, at a lift.</summary>
+    public static Vector2 Pin(float lift) => new(ArmPivot.Z + Mathf.Cos(lift) * ArmLength, PinHeight(lift));
+
+    /// <summary>The tines' top face over the ground at a lift, m.</summary>
+    public static float ForkHeight(float lift) => PinHeight(lift) - ForkTop;
+
+    /// <summary>
+    /// What a parked fork loader keeps: lift eight bits, the forks' pitch and the articulation seven
+    /// each, and what is on the forks ten (<c>Pallets.Carried</c>). Zero: the rest pose, empty forks.
+    /// </summary>
+    public static int PackForks(float lift, float tilt, float articulation, int carrying)
+    {
+        static uint Q(float v, float lo, float hi, int top) => (uint)(Mathf.Clamp(Mathf.RoundToInt((v - lo) / (hi - lo) * top), 0, top) + 1);
+        return unchecked((int)(Q(lift, LiftMin, LiftMax, 254) | Q(tilt, ForkTiltMin, ForkTiltMax, 126) << 8
+            | Q(articulation, -MaxArticulation, MaxArticulation, 126) << 15 | (uint)Mathf.Clamp(carrying, 0, 0x3FF) << 22));
+    }
+
+    public static (float Lift, float Tilt, float Articulation, int Carrying) UnpackForks(int flags)
+    {
+        if (flags == 0) return (LiftMin, ForkRestTilt, 0f, 0);
+        uint f = unchecked((uint)flags);
+        static float U(uint q, float lo, float hi, int top) => lo + (Mathf.Clamp((int)q, 1, top + 1) - 1) / (float)top * (hi - lo);
+        return (U(f & 0xFF, LiftMin, LiftMax, 254), U(f >> 8 & 0x7F, ForkTiltMin, ForkTiltMax, 126),
+            U(f >> 15 & 0x7F, -MaxArticulation, MaxArticulation, 126), (int)(f >> 22 & 0x3FF));
+    }
+
+    /// <summary>The lift and what is on the forks in one float of the pose: the lift (never past ±2) plus 4 a step of carrying.</summary>
+    public static float PoseLift(float lift, int carrying) => lift + 4f * Mathf.Clamp(carrying, 0, 0x3FF);
+
+    public static (float Lift, int Carrying) FromPoseLift(float y)
+    {
+        int carrying = Mathf.Clamp(Mathf.FloorToInt((y + 2f) / 4f), 0, 0x3FF);
+        return (ClampLift(y - 4f * carrying), carrying);
+    }
+
     /// <summary>
     /// What a parked one keeps, in the 32 bits of <c>VehicleState.Flags</c>: lift, tilt and the
     /// articulation, eight bits each over their travel. Zero is "never set": the rest pose, straight.

@@ -305,6 +305,19 @@ src/Vehicles/VehicleBody.Ai quick  --stairscheck --world fixture --traffic 0 --a
 src/Avatar/Forklift      quick  --forkliftcheck --world flat --systems physics,ui
 src/Player/Forklift      quick  --forkliftcheck --world flat --systems physics,ui
 src/Player/FootPlayer.Fo quick  --forkliftcheck --world flat --systems physics,ui
+# #615: any machine with tines lifts pallets (the telehandler, the fork loader), on the flat; the forklift's own check guards the shared rule
+src/Player/IForks         quick  --forkcheck telehandler --world flat --systems physics,ui
+src/Player/IForks         quick  --forkcheck loaderforks --world flat --systems physics,ui
+src/Player/IForks         quick  --palletcheck --world flat --systems physics,ui
+src/Items/ForkCheck       quick  --forkcheck telehandler --world flat --systems physics,ui
+src/Items/ForkCheck       quick  --forkcheck loaderforks --world flat --systems physics,ui
+src/Items/PalletService   quick  --forkcheck telehandler --world flat --systems physics,ui
+src/Items/Pallets         quick  --forkcheck loaderforks --world flat --systems physics,ui
+src/Player/Telehandler    quick  --forkcheck telehandler --world flat --systems physics,ui
+src/Player/WheelLoader    quick  --forkcheck loaderforks --world flat --systems physics,ui
+src/Avatar/WheelLoader    quick  --forkcheck loaderforks --world flat --systems physics,ui
+src/Avatar/Telehandler    quick  --forkcheck telehandler --world flat --systems physics,ui
+src/Player/Telehandler    net    tools/palletnetcheck.sh
 # pallets a forklift lifts (#583 phase 2): forked, carried and set down in the hand-made warehouse; and over the wire
 src/Items/Pallet         quick  --palletcheck --world flat --systems physics,ui
 src/Avatar/Forklift      quick  --palletcheck --world flat --systems physics,ui

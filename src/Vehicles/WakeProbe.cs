@@ -48,7 +48,7 @@ public partial class WakeProbe : Node
     private static bool IsHeavy(VehicleSlot s) =>
         s.Train != 0 || s.KindId == (int)RideKind.Trailer || HeavyCatalog.For((RideKind)s.KindId) != null;
 
-    private static bool IsMachine(VehicleSlot s) => s.KindId is (int)RideKind.Excavator or (int)RideKind.WheelLoader or (int)RideKind.MiniExcavator or (int)RideKind.CompactRoller or (int)RideKind.Telehandler;
+    private static bool IsMachine(VehicleSlot s) => s.KindId is (int)RideKind.Excavator or (int)RideKind.WheelLoader or (int)RideKind.MiniExcavator or (int)RideKind.CompactRoller or (int)RideKind.Telehandler or (int)RideKind.WheelLoaderForks;
 
     private static bool Wanted(VehicleSlot s) => Kind switch
     {
