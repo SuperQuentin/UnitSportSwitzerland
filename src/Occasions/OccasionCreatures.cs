@@ -106,6 +106,17 @@ public partial class OccasionCreatures : Node3D, Core.IOriginContainer, Core.IOr
     private static readonly Color Leather = PropColors.Matte(0.30f, 0.24f, 0.32f);
     private static readonly Color Feather = PropColors.Matte(0.06f, 0.06f, 0.07f);
 
+    /// <summary>Every critter, under the material they fly with, in the model viewer (--models).</summary>
+    [Showcase("Occasions", "Critter")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseCritters() =>
+        Enum.GetValues<CritterKind>().Select(kind => (kind.ToString(), (Func<Node3D>)(() =>
+        {
+            var material = Styles.StyleKit.Material(Styles.MaterialRole.Prop);
+            material.SetShaderParameter("flicker", 0.6f);
+            FogUniforms.Apply(material);
+            return new MeshInstance3D { Mesh = Mesh(kind), MaterialOverride = material };
+        })));
+
     private static ArrayMesh Mesh(CritterKind kind)
     {
         var s = new MeshScratch();

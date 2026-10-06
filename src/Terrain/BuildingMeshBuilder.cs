@@ -40,6 +40,7 @@ public static class BuildingMeshBuilder
     public static MeshData? Build(BuildingTile tile, Interiors.DoorSpot[]? doors,
         Styles.MeshDetail detail = Styles.MeshDetail.Low)
     {
+        Core.ShowcaseTrace.Mark();
         var data = Build(tile);
         if (data == null || doors == null || doors.Length == 0) return data;
 

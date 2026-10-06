@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Avatar;
+using UnitSport.Core;
 
 namespace UnitSport.Birds;
 
@@ -44,6 +45,23 @@ public static class BirdMesh
 
     /// <summary>The same shaded vertex-colour material every figure uses.</summary>
     public static StandardMaterial3D Material => _material ??= HumanMeshBuilder.Material();
+
+    /// <summary>Every species in <see cref="BirdCatalog"/>, wings spread, in the model viewer (--models).</summary>
+    [Showcase("Birds")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseBirds() =>
+        BirdCatalog.All.Select(species => (species.Name, (Func<Node3D>)(() =>
+        {
+            var parts = Get(species);
+            var root = new MeshInstance3D { Mesh = parts.Body, MaterialOverride = Material };
+            // the wings as Pigeon hangs them, left visible and raised a little
+            foreach (var wing in new[] { parts.WingA, parts.WingB })
+                root.AddChild(new MeshInstance3D
+                {
+                    Mesh = wing, MaterialOverride = Material, Position = parts.Shoulder,
+                    Rotation = new Vector3(0, 0, wing.GetAabb().GetCenter().X >= 0 ? 0.25f : -0.25f),
+                });
+            return root;
+        })));
 
     public static Parts Get(BirdSpecies s)
     {
