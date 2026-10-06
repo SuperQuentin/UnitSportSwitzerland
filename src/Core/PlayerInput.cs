@@ -163,6 +163,12 @@ public partial class PlayerInput : Node
     public const string QuickWheel = "quick_wheel";
     /// <summary>Hold on foot for the emote wheel (<see cref="Player.EmoteWheel"/>, #404): dances and gestures, any time.</summary>
     public const string EmoteWheel = "emote_wheel";
+    /// <summary>
+    /// Tap Alt: the mouse is let go in game, MMO style (#654, <see cref="CursorToggle"/>, which reads the key
+    /// itself to tell a tap from Alt+Enter). Bound for the hints and the help only. No pad or VR way: a pad
+    /// has no cursor, VR points with the laser.
+    /// </summary>
+    public const string FreeCursor = "free_cursor";
     /// <summary>In a fist fight only (#495): the fight is its own context, items and wheels are off, so these share their buttons.</summary>
     public const string FightPunch = "fight_punch";
     public const string FightKick = "fight_kick";
@@ -607,6 +613,7 @@ public partial class PlayerInput : Node
         Bind(CarDoor, Keys(Key.G), Button(JoyButton.X));
         Bind(Help, Keys(Key.F1));
         Bind(DebugMenu, Keys(Key.F9));
+        Bind(FreeCursor, Keys(Key.Alt));
 
         // Items are an on-foot thing, so they reuse the shoulders that only mean something
         // mounted (RB trick, LB boost). The inventory is on the two keys players try first, I

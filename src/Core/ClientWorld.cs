@@ -332,6 +332,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new World.WaterSurface { Name = "WaterSurface" });
         ApplyNearTrees();
         ApplyPhotos();
+        // tap Alt: the mouse is free to click what is on screen, the game going on (#654)
+        AddChild(new CursorToggle(() => MenuOpen?.Invoke() == true));
         Audio.Surfaces.Origin = origin;
         var chunksForAudio = _chunks;
         if (Systems.On(Systems.Audio))
