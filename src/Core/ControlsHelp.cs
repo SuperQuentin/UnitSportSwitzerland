@@ -142,6 +142,13 @@ public partial class ControlsHelp : CanvasLayer
             new("Dig: boom up / down (hold)", Keys: "{arm_boom_up} / {arm_boom_down}", Pad: "right stick ↓ ↑"),
             new("Dig: bucket curl / dump (hold)", Keys: "{arm_bucket_curl} / {arm_bucket_dump}", Pad: "right stick ← →"),
         }),
+        ("Wheel loader (#612)", new Row[]
+        {
+            // it bends in the middle to steer, and keeps driving in work mode: only the right stick changes
+            new("Work mode on / off (it still drives)", PlayerInput.DigMode),
+            new("Work: lift the arm / lower it (hold)", Keys: "{arm_boom_up} / {arm_boom_down}", Pad: "right stick ↓ ↑"),
+            new("Work: roll the bucket back / dump it (hold)", Keys: "{arm_bucket_curl} / {arm_bucket_dump}", Pad: "right stick ← →"),
+        }),
         ("Paddle steamer", new Row[]
         {
             new("Telegraph: one step ahead / astern (FULL ASTERN .. STOP .. FULL AHEAD)", Keys: "{move_forward} / {move_back}", Pad: "{move_forward} up / down"),
