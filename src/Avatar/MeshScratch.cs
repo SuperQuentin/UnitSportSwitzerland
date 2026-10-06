@@ -195,6 +195,81 @@ public sealed class MeshScratch
         }
     }
 
+    /// <summary>
+    /// An open sheet through closed rings <paramref name="rings"/>[<paramref name="from"/>] to
+    /// [<paramref name="from"/> + <paramref name="count"/> − 1], seen from inside and out: a draped
+    /// skirt (#671). Band <c>i</c> (between ring <c>from + i</c> and the next) is
+    /// <paramref name="bands"/>[i]. Faces round the rings within <paramref name="gapAngle"/> radians
+    /// of <paramref name="slit"/> are left out. Under <see cref="Smooth"/> each point gets a normal
+    /// from its neighbours, so the light rolls over the folds.
+    /// </summary>
+    public void Drape(Vector3[][] rings, int from, int count, ReadOnlySpan<Color> bands, Vector3 slit = default, float gapAngle = 0f)
+    {
+        if (count < 2) return;
+        int m = rings[from].Length;
+        int last = from + count - 1;
+        Span<Vector3> centres = stackalloc Vector3[count];
+        for (int i = 0; i < count; i++)
+        {
+            var c = Vector3.Zero;
+            foreach (var p in rings[from + i]) c += p;
+            centres[i] = c / m;
+        }
+        var axis = (centres[^1] - centres[0]).Normalized();
+        var cut = slit - axis * slit.Dot(axis);
+        bool open = gapAngle > 0f && cut.LengthSquared() > 1e-8f;
+        if (open) cut = cut.Normalized();
+
+        for (int i = 0; i + 1 < count; i++)
+        {
+            var linear = bands[Math.Min(i, bands.Length - 1)].SrgbToLinear();
+            var (r0, r1) = (rings[from + i], rings[from + i + 1]);
+            var middle = (centres[i] + centres[i + 1]) * 0.5f;
+            for (int k = 0; k < m; k++)
+            {
+                int k1 = (k + 1) % m;
+                Vector3 a = r0[k], b = r1[k], c = r1[k1], d = r0[k1];
+                var outward = (a + b + c + d) * 0.25f - middle;
+                if (open && (outward - axis * outward.Dot(axis)).AngleTo(cut) < gapAngle) continue;
+                // the outside clockwise seen from outside, as everywhere in the scratch
+                bool flip = (c - a).Cross(b - a).Dot(outward) < 0f;
+                if (flip) (b, d) = (d, b);
+                int s = _vertices.Count;
+                if (Smooth)
+                {
+                    int ib = flip ? k1 : k, id = flip ? k : k1;
+                    int jb = flip ? i : i + 1, jd = flip ? i + 1 : i;
+                    var na = DrapeNormal(rings, from, last, from + i, k, centres[i]);
+                    var nb = DrapeNormal(rings, from, last, from + jb, ib, centres[jb]);
+                    var nc = DrapeNormal(rings, from, last, from + i + 1, k1, centres[i + 1]);
+                    var nd = DrapeNormal(rings, from, last, from + jd, id, centres[jd]);
+                    Add(a, linear, na); Add(b, linear, nb); Add(c, linear, nc); Add(d, linear, nd);
+                    Add(a, linear, -na); Add(b, linear, -nb); Add(c, linear, -nc); Add(d, linear, -nd);
+                }
+                else
+                {
+                    Add(a, linear); Add(b, linear); Add(c, linear); Add(d, linear);
+                    Add(a, linear); Add(b, linear); Add(c, linear); Add(d, linear);
+                }
+                Quad(s, s + 1, s + 2, s + 3);           // outside
+                Quad(s + 4, s + 7, s + 6, s + 5);       // inside
+            }
+        }
+    }
+
+    // a drape point's outward normal: across its ring and along the drape, away from the ring's middle
+    private static Vector3 DrapeNormal(Vector3[][] rings, int first, int last, int i, int k, Vector3 centre)
+    {
+        var ring = rings[i];
+        int m = ring.Length;
+        var around = ring[(k + 1) % m] - ring[(k + m - 1) % m];
+        var along = rings[Math.Min(i + 1, last)][k] - rings[Math.Max(i - 1, first)][k];
+        var n = around.Cross(along);
+        if (n.LengthSquared() < 1e-12f) n = ring[k] - centre;
+        n = n.Normalized();
+        return n.Dot(ring[k] - centre) < 0f ? -n : n;
+    }
+
     /// <summary>An axis-aligned box, optionally rotated about its own centre.</summary>
     public void Box(Vector3 centre, Vector3 size, Color colour, Basis? orientation = null)
     {
