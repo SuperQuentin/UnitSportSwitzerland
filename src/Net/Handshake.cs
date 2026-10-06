@@ -43,8 +43,9 @@ public partial class Handshake : Node
     /// 19: World/Pallets (AskTake/AskDrop/Took/Dropped/Snapshot), RideKind.Forklift and the load in its pose (#583).
     /// 20: RideKind.Excavator and its arm in the pose (#611).
     /// 21: RideKind.WheelLoader, its frame, arm and bucket in the pose (#612).
+    /// 22: RideKind.MiniExcavator, its blade in the pose's bucket float (#614).
     /// </summary>
-    public const int Protocol = 21;
+    public const int Protocol = 22;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

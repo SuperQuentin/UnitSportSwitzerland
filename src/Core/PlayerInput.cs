@@ -108,6 +108,9 @@ public partial class PlayerInput : Node
     public const string ArmBoomDown = "arm_boom_down";
     public const string ArmBucketCurl = "arm_bucket_curl";
     public const string ArmBucketDump = "arm_bucket_dump";
+    /// <summary>A mini excavator's dozer blade up / down (#614), held, driving or digging: the gear paddles, which a crawler has no use for.</summary>
+    public const string BladeRaise = "blade_raise";
+    public const string BladeLower = "blade_lower";
     /// <summary>An airliner's flap lever a notch down / up, its speedbrake, its parking brake (#414). The gear is <see cref="CarDoor"/> in the air.</summary>
     public const string FlapsDown = "flaps_down";
     public const string FlapsUp = "flaps_up";
@@ -564,6 +567,8 @@ public partial class PlayerInput : Node
         Bind(ArmBoomDown, Keys(Key.Down), Axis(JoyAxis.RightY, -1));
         Bind(ArmBucketCurl, Keys(Key.Left), Axis(JoyAxis.RightX, -1));
         Bind(ArmBucketDump, Keys(Key.Right), Axis(JoyAxis.RightX, 1));
+        Bind(BladeRaise, Keys(Key.Shift), Button(JoyButton.RightShoulder));
+        Bind(BladeLower, Keys(Key.Ctrl), Button(JoyButton.LeftShoulder));
         Bind(FlapsDown, Keys(Key.F7), Button(JoyButton.RightShoulder));
         Bind(FlapsUp, Keys(Key.F6), Button(JoyButton.LeftShoulder));
         Bind(Speedbrake, Keys(Key.Slash), Button(JoyButton.DpadLeft));

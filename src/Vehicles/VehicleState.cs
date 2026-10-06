@@ -70,7 +70,7 @@ public readonly record struct VehicleState(
         if (Kind == RideKind.Airstairs) { var stairs = new Airstairs(); stairs.UnpackFlags(Flags); return stairs; }
         // a forklift with its forks where they were left, and whatever is on them (#583)
         if (Kind == RideKind.Forklift) { var lift = new Forklift(); lift.UnpackFlags(Flags); return lift; }
-        if (Kind == RideKind.Excavator) { var arm = new Excavator(); arm.UnpackFlags(Flags); return arm; }
+        if (Kind is RideKind.Excavator or RideKind.MiniExcavator) { var arm = new Excavator(Kind == RideKind.MiniExcavator); arm.UnpackFlags(Flags); return arm; }
         if (Kind == RideKind.WheelLoader) { var loader = new WheelLoader(); loader.UnpackFlags(Flags); return loader; }
         return CarSetups.Ride(Kind, Setup, Tuning);
     }

@@ -541,6 +541,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     private static int? SiteKind(MachineRole role) => role switch
     {
         MachineRole.Excavator => (int)RideKind.Excavator,
+        MachineRole.MiniExcavator => (int)RideKind.MiniExcavator,
         MachineRole.WheelLoader => (int)RideKind.WheelLoader,
         _ => null,
     };
