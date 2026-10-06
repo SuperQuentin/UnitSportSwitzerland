@@ -192,3 +192,35 @@ skip it. In its place:
   site office.
 - `BrStructures` still stands a BR scaffolding prefab beside every site, which #609's hoarding and
   yard will meet.
+
+## The yard (#609)
+
+`SiteDressings.Plan` (pure, `SiteDressing.cs`, tier 0) dresses what the planner laid out, every piece
+an axis-aligned box in the site frame like the shell's (the planner's zones, runs and slots are all
+square to the plan box), standing on the drawn ground under it (a callback, the tile's
+`SampleMeshHeight`; constant in the tests). `SiteShellBuilder` draws it in the same prop mesh and
+adds its solid pieces to the same collision.
+
+- **Hoarding**: a mesh panel per 3.5 m of every run, solid 2 m high, on concrete feet, a post at
+  each joint, a green banner on 30 % of the panels, a warning lamp at each run's ends.
+- **Site office**: containers 6.06 x 2.44 x 2.6 m, two high, side by side across the zone, blue
+  frames, windows, a door on the ground floor. **Toilets**: a blue and a green cabin. **Skips**:
+  orange, with rubble in them. **Materials**: a rebar bundle the length of the zone, then a row of
+  brick pallets, cement-bag pallets, formwork stacks and concrete rings, by roll.
+- **Soil heap** (`ShellMound`): an eight-sided low-poly mound, half as high as it is wide, its
+  sides well under 52° so a body walks up it, collided like the rest.
+- **The builder's board** by the gate, facing the street.
+
+### Checks
+
+`SiteDressingTests` (tier 0, 15): nothing solid in the building or its scaffolding, everything
+inside the hoarding, the hoarding solid along every run at its full height, a walkable heap at the
+foundations, the office two high, determinism. Pictures: `--shot-queue` on the generated sites
+(the street view, a foundations yard, a shell from above).
+
+### Not done
+
+- **Loot.** A site's loot was in its `Storage` interior; with no interior there is no container
+  left. A container outside an interior needs its own identity (#627; loot is keyed by an interior plan's
+  furniture index) and server ownership: its own issue.
+- The office has no stair to its upper containers; the lamps do not blink at night.

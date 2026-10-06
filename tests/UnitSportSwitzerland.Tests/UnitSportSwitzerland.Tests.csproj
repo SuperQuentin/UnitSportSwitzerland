@@ -79,6 +79,7 @@
     <!-- building sites (#606): the planner, Godot maths only -->
     <Compile Include="..\..\src\Terrain\Construction\ConstructionSite.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Construction\ShellPlan.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Construction\SiteDressing.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- swiss_data.py port (#515): only the pure half (manifest format, skip decisions, STAC
          id/bbox arithmetic) is linked. SwissDownload.cs itself needs IStepProgress from
          Pipeline.cs, which would drag in CountryData/LocalState/Selection/Stats and

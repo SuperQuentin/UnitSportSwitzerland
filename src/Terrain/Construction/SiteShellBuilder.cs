@@ -32,6 +32,20 @@ public static class SiteShellBuilder
         C(0.24f, 0.25f, 0.27f),   // Frame
         C(0.86f, 0.30f, 0.16f),   // Board: the toe boards
         default,                  // Invisible: never drawn
+        C(0.88f, 0.89f, 0.87f),   // Container, a site office's white
+        C(0.16f, 0.30f, 0.52f),   // ContainerTrim, its blue frame and door
+        C(0.15f, 0.42f, 0.75f),   // Toilet, the blue cabin
+        C(0.22f, 0.58f, 0.30f),   // ToiletAlt, the green one
+        C(0.86f, 0.50f, 0.10f),   // Skip
+        C(0.36f, 0.33f, 0.30f),   // Debris
+        C(0.45f, 0.34f, 0.23f),   // Soil
+        C(0.66f, 0.30f, 0.20f),   // Brick
+        C(0.84f, 0.83f, 0.78f),   // Cement, the bags
+        C(0.70f, 0.72f, 0.73f),   // Fence, the mesh panels
+        C(0.12f, 0.45f, 0.32f),   // Banner, a builder's green
+        C(0.98f, 0.78f, 0.10f),   // Lamp, the warning lamps
+        C(0.18f, 0.22f, 0.27f),   // Window
+        C(0.95f, 0.95f, 0.93f),   // SignBoard, the builder's board
     };
 
     /// <summary>Faces lit by the sun in a flat-shaded world: the top full, the sides darker, the bottom darkest.</summary>
@@ -69,6 +83,24 @@ public static class SiteShellBuilder
         new(site.Box.Center.X + site.Box.AxisU.X * p.X + site.Box.AxisV.X * p.Z, p.Y,
             site.Box.Center.Y + site.Box.AxisU.Y * p.X + site.Box.AxisV.Y * p.Z);
 
+    /// <summary>
+    /// The yard of one site (#609): the ground under any point of its frame read from the drawn
+    /// terrain, or the building's base with no grid.
+    /// </summary>
+    public static SiteDressingPlan Dressing(BuildingTile tile, ConstructionSite site, ChunkGrid? grid)
+    {
+        int index = int.Parse(site.Key.Split('_')[2]);
+        float baseY = tile.Buildings[index].MinY;
+        var id = tile.Id;
+        return SiteDressings.Plan(site, (x, z) =>
+        {
+            if (grid == null) return baseY;
+            var p = ToTile(site, new Vector3(x, 0, z));
+            return (float)grid.SampleMeshHeight(id.MinE + Mathf.Clamp(p.X, 0, ChunkFormat.TileSizeM),
+                id.MaxN - Mathf.Clamp(p.Z, 0, ChunkFormat.TileSizeM));
+        });
+    }
+
     /// <summary>The shell of one site, its wings read off its own roof (<see cref="PlanOutline.Wings"/>, #577).</summary>
     public static ShellPlan Shell(BuildingTile tile, ConstructionSite site, ChunkGrid? grid)
     {
@@ -95,9 +127,10 @@ public static class SiteShellBuilder
         foreach (var site in sites)
         {
             var shell = Shell(tile, site, grid);
+            var yard = Dressing(tile, site, grid);
             Vector3 T(float x, float y, float z) => ToTile(site, new Vector3(x, y, z));
 
-            foreach (var box in shell.Boxes)
+            foreach (var box in shell.Boxes.Concat(yard.Boxes))
             {
                 var (n, m) = (box.Min, box.Max);
                 // the eight corners: bottom ring, then top ring
@@ -132,6 +165,7 @@ public static class SiteShellBuilder
                 Quad(1, 2, 6, 5, SideX);
                 Quad(3, 0, 4, 7, SideX);
             }
+            foreach (var m in yard.Mounds) Mound(m, site);
             if (collision)
                 foreach (var r in shell.Ramps)
                 {
@@ -142,5 +176,52 @@ public static class SiteShellBuilder
         }
         return (mesh && vertices.Count > 0 ? new PierMeshBuilder.MeshData(vertices.ToArray(), colors.ToArray(), indices.ToArray()) : null,
             faces.ToArray());
+
+        // a heap: an eight-sided foot, a shoulder, a crown and a point, its sides lit by the way they face
+        void Mound(ShellMound m, ConstructionSite site)
+        {
+            Vector3 T(float x, float y, float z) => ToTile(site, new Vector3(x, y, z));
+            const int sides = 8;
+            float[] ring = { 1f, 0.62f, 0.25f };
+            float[] lift = { -0.15f, 0.58f, 0.92f };
+            var rings = new Vector3[ring.Length][];
+            for (int r = 0; r < ring.Length; r++)
+            {
+                rings[r] = new Vector3[sides];
+                for (int s = 0; s < sides; s++)
+                {
+                    float a = s * Mathf.Tau / sides + 0.3f;
+                    // a little lumpy, the same on every peer: by side and ring, not by chance
+                    float lump = 1f + 0.08f * MathF.Sin(s * 2.3f + r * 1.7f);
+                    rings[r][s] = T(m.Center.X + MathF.Cos(a) * m.RadiusX * ring[r] * lump, m.Ground + m.Height * lift[r],
+                        m.Center.Y + MathF.Sin(a) * m.RadiusZ * ring[r] * lump);
+                }
+            }
+            var top = T(m.Center.X, m.Ground + m.Height, m.Center.Y);
+            var col = Colors[(int)m.Part];
+            void Tri(Vector3 a, Vector3 b, Vector3 c)
+            {
+                if (mesh)
+                {
+                    var n = (b - a).Cross(c - a).Normalized();
+                    float shade = 0.7f + 0.3f * Math.Abs(n.Y) + 0.08f * n.X;
+                    int i = vertices.Count;
+                    vertices.Add(a); vertices.Add(b); vertices.Add(c);
+                    var shaded = new Color(col.R * shade, col.G * shade, col.B * shade, col.A);
+                    colors.Add(shaded); colors.Add(shaded); colors.Add(shaded);
+                    indices.Add(i); indices.Add(i + 1); indices.Add(i + 2);
+                }
+                if (collision) { faces.Add(a); faces.Add(b); faces.Add(c); }
+            }
+            for (int r = 0; r + 1 < ring.Length; r++)
+                for (int s = 0; s < sides; s++)
+                {
+                    int t = (s + 1) % sides;
+                    Tri(rings[r][s], rings[r][t], rings[r + 1][t]);
+                    Tri(rings[r][s], rings[r + 1][t], rings[r + 1][s]);
+                }
+            for (int s = 0; s < sides; s++)
+                Tri(rings[^1][s], rings[^1][(s + 1) % sides], top);
+        }
     }
 }
