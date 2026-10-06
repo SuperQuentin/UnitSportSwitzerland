@@ -93,6 +93,7 @@ public partial class RideProbe : Node
                 // works machinery (#583): the mast is worked with the shift paddles while driving
                 "forklift" => RideKind.Forklift,
                 "excavator" => RideKind.Excavator,
+                "loader" => RideKind.WheelLoader,
                 // moto:N = MotorbikeCatalog.All[N]
                 _ when name.StartsWith("moto:") && int.TryParse(name[5..], out int b) => MotorbikeCatalog.All[b].Kind,
                 // truck:N = HeavyCatalog.All[N]; --trailer M couples TrailerCatalog.All[M], full

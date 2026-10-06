@@ -73,6 +73,8 @@ public partial class FootPlayer
         if (who._remoteRide is Forklift lifting && who.Ride == RideKind.Forklift) return lifting;
         // and a copy's own excavator: its arm is the driver's (Anim) (#611)
         if (who._remoteRide is Excavator digging && who.Ride == RideKind.Excavator) return digging;
+        // and a copy's own wheel loader: its frame, arm and bucket are the driver's (#612)
+        if (who._remoteRide is WheelLoader loading && who.Ride == RideKind.WheelLoader) return loading;
         var key = (who.Ride, who.CarSetupId, who.TuningBits);
         if (_seatRides.TryGetValue(key, out var known)) return known;
         var made = CarSetups.Ride(who.Ride, who.CarSetupId, who.TuningBits);

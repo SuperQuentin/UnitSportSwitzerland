@@ -397,3 +397,9 @@ src/Player/FootPlayer.Exc quick  --excavatorcheck --world flat --systems physics
 src/Player/Excavator      net    tools/excavatornetcheck.sh
 src/Avatar/Excavator      net    tools/excavatornetcheck.sh
 src/Player/FootPlayer.Exc net    tools/excavatornetcheck.sh
+# #612: the wheel loader: frame steering, work mode, the arm and the bucket (flat), and from a second peer (the excavator's script)
+src/Player/WheelLoader    quick  --loadercheck --world flat --systems physics,ui
+src/Avatar/WheelLoader    quick  --loadercheck --world flat --systems physics,ui
+src/Player/FootPlayer.Whe quick  --loadercheck --world flat --systems physics,ui
+src/Player/WheelLoader    net    tools/excavatornetcheck.sh
+src/Avatar/WheelLoader    net    tools/excavatornetcheck.sh

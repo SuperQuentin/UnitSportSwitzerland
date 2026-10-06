@@ -71,6 +71,7 @@ public readonly record struct VehicleState(
         // a forklift with its forks where they were left, and whatever is on them (#583)
         if (Kind == RideKind.Forklift) { var lift = new Forklift(); lift.UnpackFlags(Flags); return lift; }
         if (Kind == RideKind.Excavator) { var arm = new Excavator(); arm.UnpackFlags(Flags); return arm; }
+        if (Kind == RideKind.WheelLoader) { var loader = new WheelLoader(); loader.UnpackFlags(Flags); return loader; }
         return CarSetups.Ride(Kind, Setup, Tuning);
     }
 

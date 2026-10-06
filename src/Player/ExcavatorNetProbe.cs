@@ -103,7 +103,32 @@ public partial class ExcavatorNetProbe : ChatProbe
         me.ExitVehicle();
         if (!await Until(() => me.Ride == RideKind.OnFoot && Parked() != null, 10)) { Fail("the excavator is not parked"); return; }
         Say($"parked {F(ex.Slew)} {F(ex.Boom)} {F(ex.Stick)} {F(ex.Bucket)}");
-        if (!await Heard("B", "compared", 30)) Fail("B never compared the parked one");
+        if (!await Heard("B", "compared", 30)) { Fail("B never compared the parked one"); return; }
+
+        // the wheel loader (#612): bent, its arm up and its bucket tipped, seen from B
+        me.PlaceAt(me.GlobalPosition + new Vector3(12f, 0.5f, 0f), me.Rotation.Y);
+        await Seconds(1);
+        Expect(me.SetRide(RideKind.WheelLoader) && me.Vehicle is WheelLoader, "A takes a wheel loader");
+        if (me.Vehicle is not WheelLoader loader) { Fail("not a wheel loader"); return; }
+        await Seconds(1);
+        me.RideControls = () => new RideInput(0.5f, 0f, -0.6f, false);
+        await Seconds(2);
+        // braked to a stop, then let go: held on, a loader's brake would back it away
+        me.RideControls = () => new RideInput(0f, 1f, -0.6f, false);
+        await Until(() => me.GroundSpeed < 0.1f, 5);
+        me.RideControls = () => new RideInput(0f, 0f, -0.6f, false);
+        await Seconds(1);
+        XrPad.Press(PlayerInput.DigMode, true);
+        await Seconds(0.1);
+        XrPad.Press(PlayerInput.DigMode, false);
+        await Seconds(0.2);
+        await Hold(PlayerInput.ArmBoomUp, 2.0);
+        await Hold(PlayerInput.ArmBucketDump, 0.6);
+        await Seconds(1.5);
+        at = me.GlobalPosition;
+        Say($"loader {F(loader.Articulation)} {F(loader.Lift)} {F(loader.Tilt)} {F(at.X)} {F(at.Z)}");
+        if (!await Heard("B", "loader seen", 30)) Fail("B never compared the loader");
+        me.RideControls = null;
     }
 
     private async Task RunB(FootPlayer me)
@@ -139,5 +164,17 @@ public partial class ExcavatorNetProbe : ChatProbe
         var shown = ExcavatorMeshBuilder.ArmOf(body?.Visual)?.Drawn ?? new Vector4(float.NaN, 0, 0, 0);
         Expect(parked, $"B's parked excavator keeps the arm A left (A {left}, kept {kept}, drawn {shown})");
         Say("compared");
+
+        if (!await Heard("A", "loader", 60)) { Fail("A never worked the loader"); return; }
+        w = _heard.Last(l => l.Contains("EX A loader")).Split(' ');
+        var bent = new Vector3(Float(w[^5]), Float(w[^4]), Float(w[^3]));
+        var lAt = new Vector2(Float(w[^2]), Float(w[^1]));
+        bool loaderDrawn = await Until(() => a.RideModel is WheelLoader && WheelLoaderMeshBuilder.FrontOf(a.Visual) is { } f
+            && (f.Drawn - bent).Length() < 0.03f, 10);
+        var seenFront = WheelLoaderMeshBuilder.FrontOf(a.Visual)?.Drawn ?? new Vector3(float.NaN, 0, 0);
+        Expect(loaderDrawn, $"B draws A's loader bent, lifted and tipped as A has it (A {bent}, B {seenFront})");
+        float lOff = new Vector2(a.GlobalPosition.X - lAt.X, a.GlobalPosition.Z - lAt.Y).Length();
+        Expect(lOff < 0.2f, $"B has A's loader where A has it ({lOff:F2} m)");
+        Say("loader seen");
     }
 }

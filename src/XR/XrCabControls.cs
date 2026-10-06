@@ -108,6 +108,7 @@ internal sealed partial class XrCabControls : Node3D
             _ when p.Ride == RideKind.Steamer => "steamer",
             _ when p.Ride == RideKind.Forklift => "forklift",
             _ when p.Ride == RideKind.Excavator => "excavator",
+            _ when p.Ride == RideKind.WheelLoader => "loader",
             _ => "",
         };
     }
@@ -164,6 +165,14 @@ internal sealed partial class XrCabControls : Node3D
             Add(Kind.Hold, new(-0.32f, -0.42f, -0.18f), Vector3.Back, PlayerInput.ArmBoomUp, PlayerInput.ArmBoomDown);
             Add(Kind.Hold, new(-0.32f, -0.42f, -0.32f), Vector3.Left, PlayerInput.ArmBucketCurl, PlayerInput.ArmBucketDump);
             Add(Kind.Poke, new(0.26f, -0.34f, -0.45f), plus: PlayerInput.DigMode);
+        }
+        else if (context == "loader")
+        {
+            // the arm's two levers right of the seat (#612): the inner one lifts (aft is up), the
+            // outer one tilts the bucket (aft rolls it back); work mode on the console
+            Add(Kind.Hold, new(-0.34f, -0.36f, -0.28f), Vector3.Back, PlayerInput.ArmBoomUp, PlayerInput.ArmBoomDown);
+            Add(Kind.Hold, new(-0.34f, -0.36f, -0.4f), Vector3.Back, PlayerInput.ArmBucketCurl, PlayerInput.ArmBucketDump);
+            Add(Kind.Poke, new(-0.24f, -0.32f, -0.46f), plus: PlayerInput.DigMode);
         }
         else if (context == "steamer")
             // the whistle cord overhead: pulled down, it blows
