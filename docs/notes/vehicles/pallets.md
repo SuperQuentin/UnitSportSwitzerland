@@ -57,7 +57,7 @@ Plan: `docs/plans/forklift-and-pallets.md`. The machine is `forklift`; this is w
   (`Anim.Z` = `Carrying`) are empty to take, holding that load to drop, and within 4 m (LV95).
   Offline the client serves itself through the same methods, with no checks.
 - `Took` / `Dropped` to everyone, `TakeRefused` / `DropRefused` to the asker, `Snapshot` on join
-  (`ServerWorld.OnPeerAccepted`). Protocol 18.
+  (`ServerWorld.OnPeerAccepted`). Protocol 19.
 - `Layouts`: where a plan comes from, `InteriorManager` unless set (the flat-world check sets it).
 
 ## Phase 3: the yard — apron stacks and a forklift beside them
