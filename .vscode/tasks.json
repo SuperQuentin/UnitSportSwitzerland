@@ -235,6 +235,46 @@
             "problemMatcher": []
         },
         {
+            "label": "run: model viewer",
+            "detail": "Procedural models one at a time: Left/Right switch, drag orbits, wheel zooms",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "osx": {
+                "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot"
+            },
+            "linux": {
+                "command": "godot"
+            },
+            "args": [
+                "--path",
+                ".",
+                "--",
+                "--models"
+            ],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "run: sound player",
+            "detail": "Every game sound: Left/Right switch (plays), Up/Down category, Enter replays",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "osx": {
+                "command": "/Applications/Godot_mono.app/Contents/MacOS/Godot"
+            },
+            "linux": {
+                "command": "godot"
+            },
+            "args": [
+                "--path",
+                ".",
+                "--",
+                "--sounds"
+            ],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
             "label": "run: editor",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",

@@ -163,6 +163,9 @@ public partial class BrManager
         }
     }
 
+    [Showcase("Battle royale", "Postauto stop")]
+    private static Node3D ShowcaseSign() => BuildSign();
+
     private static Node3D BuildSign()
     {
         var root = new Node3D { Name = "PostautoStop" };

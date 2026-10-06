@@ -39,7 +39,9 @@ public enum RideKind
     /// <summary>The Antonov AN-124 Ruslan (#419): an <see cref="Player.Airliner"/>, walkable, a visor, two ramps, kneeling, a drive-through hold.</summary>
     An124 = 128,
     // 129..192 are motorbikes again (the second range, MotorbikeCatalog.First2).
-    // The next other mount is 193.
+    /// <summary>A counterbalance forklift (#583): a <see cref="Player.Forklift"/>, a mast that lifts pallets.</summary>
+    Forklift = 193,
+    // The next other mount is 194.
 }
 
 /// <summary>
@@ -477,6 +479,7 @@ public abstract class Rideable
         RideKind.Plane => new Plane(),
         RideKind.Pigeon => new Pigeon(),
         RideKind.Airstairs => new Airstairs(),
+        RideKind.Forklift => new Forklift(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),
         _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),
         _ when HeavyCatalog.For(kind) is { } heavy => new Truck(heavy),
@@ -484,4 +487,31 @@ public abstract class Rideable
         _ when Airliner.For(kind) is { } airliner => airliner,
         _ => null,
     };
+
+    /// <summary>
+    /// Every ride <see cref="Create"/> knows, ridden and (when it differs) parked, in the model
+    /// viewer (--models): a new car, bike, truck, boat or aircraft shows by itself.
+    /// </summary>
+    [Core.Showcase("Rides")]
+    private static IEnumerable<(string, string, Func<Node3D>)> ShowcaseRides()
+    {
+        for (int k = 0; k <= byte.MaxValue; k++)
+        {
+            if (Create((RideKind)k) is not { } ride) continue;
+            string category = ride switch
+            {
+                Car => "Cars",
+                Motorbike => "Motorbikes",
+                Truck => "Trucks and buses",
+                Boat => "Boats",
+                Airliner or Helicopter or Plane => "Aircraft",
+                _ => "Rides",
+            };
+            int rider = k;
+            yield return (category, ride.Label, () => ride.BuildVisual(rider));
+            var parked = ride.GetType().GetMethod(nameof(BuildParkedVisual))!;
+            if (parked.DeclaringType != typeof(Rideable))
+                yield return (category, $"{ride.Label} (parked)", () => ride.BuildParkedVisual(rider));
+        }
+    }
 }

@@ -39,8 +39,10 @@ public partial class Handshake : Node
     /// 15: BattleRoyale RequestRecall/Recalled/RecallNews, BrState.RecallPoints, ItemId.Dogtag (#480).
     /// 16: FootPlayer.NetPose may carry a VR player's two hands after the pose (14 or 17 floats, #439).
     /// 17: item events FishCast/FishEnd, items FishingRod..RoundGoby 194-222 (#493).
+    /// 18: the world clock on the wire is (Env0, EnvEpoch, HourShift, MinutesPerDay), EnvEpoch in simulated seconds (#579).
+    /// 19: World/Pallets (AskTake/AskDrop/Took/Dropped/Snapshot), RideKind.Forklift and the load in its pose (#583).
     /// </summary>
-    public const int Protocol = 18;
+    public const int Protocol = 19;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
