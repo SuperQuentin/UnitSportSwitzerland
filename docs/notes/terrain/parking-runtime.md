@@ -11,6 +11,11 @@
   so a lot reads from the air as a lot and not as a very wide road. Flush, `Height` 0: its collision
   is the heightfield's, because the road blend holds the ground under it (`HoldUnderPavement`,
   extended to `ParkingPad`) exactly as under a ribbon.
+- **The ground round the pad (#603)**: the hold pins only the lattice points *inside* the pad, so
+  the terrain triangles across its edge rose to the raw ground one cell out and, in a lot dug into
+  a slope, cut through the first row of bays as green wedges. `RimAroundPavement` gives every pad
+  (and turn-lane `Pavement`) a road-like embankment from its outline: at most the pad's height out
+  to one lattice diagonal, then the cut slope; the fill slope below; 3 m reach. `PadBlendTests`.
 - **Planters** are `AreaPropType.ParkingIsland`, drawn and collided by `IslandBuilder` — the
   roundabout-island code, which already does a grassed kerbed bed with a rim face. Only a roundabout
   has the flush `Variant 1` mini form, so `mini` now tests the type as well. The blend holds the
