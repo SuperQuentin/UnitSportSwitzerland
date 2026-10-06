@@ -230,6 +230,35 @@ public partial class LootService : Node
     /// <summary>The locked crate whose dial is being worked (a bunker door), if any.</summary>
     private long? _pickingCrate;
 
+    /// <summary>Where the numbers of a dial on something else go: a flat's locked front door (#557).</summary>
+    private Action<int[]>? _pickingOther;
+
+    /// <summary>
+    /// Opens the dial on a lock that is not a container (a flat's front door, #557): its numbers go
+    /// to <paramref name="submit"/>, which asks its own server; <see cref="OtherPicked"/> or
+    /// <see cref="OtherRefused"/> is the answer.
+    /// </summary>
+    public void PickOther(FootPlayer p, string title, int[] combo, float tolerance, Action<int[]> submit)
+    {
+        Close();
+        StopPicking();
+        _pickingOther = submit;
+        _searcher = p;
+        _lockUi?.Open(title, combo, tolerance);
+    }
+
+    /// <summary>The lock <see cref="PickOther"/> opened the dial on was cracked: the dial goes.</summary>
+    public void OtherPicked()
+    {
+        if (_pickingOther != null) StopPicking();
+    }
+
+    /// <summary>The server said no to the numbers: the dial shakes and starts again.</summary>
+    public void OtherRefused()
+    {
+        if (_pickingOther != null) _lockUi?.Refused();
+    }
+
     /// <summary>Opens the dial on a locked crate; the numbers it settles on go to the crate's server.</summary>
     public void PickCrate(FootPlayer p, long id, string title, int[] combo)
     {
@@ -507,7 +536,7 @@ public partial class LootService : Node
     /// <summary>Client: whether this client knows the locked container to be cracked this period.</summary>
     public bool IsUnlocked(string key, int furniture) => key == _lockKey && _unlocked.Contains(furniture);
 
-    public bool Picking => _picking != null;
+    public bool Picking => _picking != null || _pickingOther != null;
     public LockPickUi? LockUi => _lockUi;
 
     private void StartPicking(FootPlayer p, InteriorLayout layout, int furniture)
@@ -525,6 +554,7 @@ public partial class LootService : Node
     {
         _picking = null;
         _pickingCrate = null;
+        _pickingOther = null;
         _dialDone = null;
         _lockUi?.Close();
         _simonUi?.Close();
@@ -551,6 +581,11 @@ public partial class LootService : Node
     /// </summary>
     public void SubmitCombination(int[] combo)
     {
+        if (_pickingOther is { } submit)
+        {
+            submit(combo);
+            return;
+        }
         if (_pickingCrate is long crate)
         {
             BattleRoyale.BrCrates.Instance?.Unlock(crate, combo);

@@ -413,6 +413,19 @@ public static partial class InteriorMeshBuilder
 
     // ---- elevators (#557) ----------------------------------------------------------------------
 
+    /// <summary>
+    /// One leaf of an elevator's sliding pair, <paramref name="w"/> wide, centred on its origin in x,
+    /// standing on y = 0, thin in z: brushed steel with a darker edge where the two meet.
+    /// </summary>
+    public static MeshData LiftDoorPanel(float w, float h)
+    {
+        var s = new Scratch();
+        s.Box(new Vector3(-w / 2, 0.005f, -0.02f), new Vector3(w / 2, h, 0.02f), LiftSteel * 0.95f, false);
+        s.Box(new Vector3(w / 2 - 0.015f, 0.005f, -0.022f), new Vector3(w / 2, h, 0.022f), LiftSteel * 0.6f, false);
+        s.Box(new Vector3(-w / 2, 0.005f, -0.022f), new Vector3(-w / 2 + 0.015f, h, 0.022f), LiftSteel * 0.6f, false);
+        return new MeshData(s.V.ToArray(), s.C.ToArray(), Array.Empty<Vector3>());
+    }
+
     private static readonly Color LiftSteel = C(0.66f, 0.68f, 0.70f);
     private static readonly Color LiftButton = C(0.95f, 0.78f, 0.30f);
 

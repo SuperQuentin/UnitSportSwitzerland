@@ -376,6 +376,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     public bool TryDoorByHand(FootPlayer player, Vector3 hand)
     {
         string? door;
+        // an elevator's button or a flat's door in the hand comes first (#557)
+        if (player.Indoors && TryInsideByHand(player, hand)) return true;
         if (player.Indoors) door = _current == null ? null : ExitAt(player)?.Door;
         else
         {
@@ -995,8 +997,14 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
 
     public override void _Process(double delta)
     {
-        if (Authoritative) TickDoors(delta);
+        if (Authoritative)
+        {
+            TickDoors(delta);
+            TickLifts();
+        }
         if (!_presenting) return;
+        PresentLifts();
+        PresentInnerDoors(delta);
 
         if (_requestingDoor != null && (_requestTimer -= delta) <= 0) _requestingDoor = null;
         OpenForVehicle(delta);
@@ -1057,7 +1065,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
             if (p.Indoors && _current != null)
             {
                 door = ExitAt(p)?.Door;
-                if (door == null) text = ChurchRadios.PromptFor(p) ?? Loot.LootService.Instance?.PromptFor(p);
+                if (door == null) text = InsidePrompt(p) ?? ChurchRadios.PromptFor(p) ?? Loot.LootService.Instance?.PromptFor(p);
             }
             else if (!p.Indoors) door = OutsideDoorInReach(p.GlobalPosition);
             if (door != null)
@@ -1318,6 +1326,9 @@ public partial class InteriorNode : Node3D
             (pair ? node._shutters : node._leaves)[e.Door] = leaf;
         }
         AddLockDoors(node, material);
+        // an apartment block's elevator doors and flats' front doors (#557)
+        AddLiftDoors(node, material);
+        AddInnerDoors(node, material);
         // a mirror over each washbasin (#439)
         WallMirror.AddTo(node, layout);
         return node;

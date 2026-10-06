@@ -37,6 +37,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Run", PlayerInput.Sprint),
             new("Slide (while running)", PlayerInput.CrouchSlide),
             new("Interact: get in or out, search, door", PlayerInput.InteractMount),
+            new("Elevator: call it at its button, choose a floor inside", PlayerInput.InteractMount),
             new("Travel menu: mounts and vehicles", PlayerInput.RideMenu, Pad: "{interact_mount} (nothing near)"),
             new("First / third person (driving: chase, cockpit, cockpit without your body)", PlayerInput.CameraToggle),
             new("Camera over the other shoulder", PlayerInput.SwapShoulder, Pad: "R3 (aiming a gun)"),
