@@ -345,6 +345,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         public bool PendingRoads;
         public bool HasBuildings;
         public bool PendingBuildings;
+        /// <summary>Its buildings were built as cells with occluders (#553), not as one mesh; and what the build in flight asked for.</summary>
+        public bool BuildingCells, PendingCells;
         public bool HasBuildingCollision;
 
         // Collision waiting for its frame, one piece at a time (see CommitCollisionPieces).
@@ -405,7 +407,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         Vector3[][]? RoadCollisionFaces = null, long[]? StageMs = null,
         Interiors.DoorSpot[]? Doors = null,
         List<(float[] Points, int Count, float Half, float Height)>? Bores = null,
-        WaterLayer? WaterLayer = null, SignalBuilder.Lamps? Lamps = null);
+        WaterLayer? WaterLayer = null, SignalBuilder.Lamps? Lamps = null,
+        ArrayMesh?[]? BuildingCells = null, Vector3[]? OccluderVertices = null, int[]? OccluderIndices = null);
 
     private Material? _roadMaterial;
     private Material? _buildingMaterial;
@@ -469,6 +472,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             Horizon.DistanceM = s.HorizonKm * 1000.0;
             FogUniforms.Apply(Horizon.Material);
         }
+        ApplyOcclusion();
         _sinceEval = double.MaxValue;
     }
 
@@ -557,6 +561,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// </summary>
     public void SetSightlineCut(Vector3 from, Vector3 to, float radius)
     {
+        // the cut dissolves the buildings between the camera and its subject; their occluders
+        // would still hide it (#553)
+        bool cut = radius > 0f;
+        if (cut != _cutting) { _cutting = cut; ApplyOcclusion(); }
         foreach (var m in new[] { _buildingMaterial, _treeMaterial })
         {
             if (m is not ShaderMaterial shader) continue;
@@ -720,6 +728,51 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// the next <see cref="TileFurnished"/> if the tile comes near again.
     /// </summary>
     public event Action<TileId, ChunkNode>? TileUnfurnished;
+
+    /// <summary>
+    /// Buildings round the camera drawn in cells with occluders, for occlusion culling (#553):
+    /// <c>--occlusion</c>, an experiment until it is measured to pay.
+    /// </summary>
+    public static bool OcclusionCells { get; set; } = Core.CmdArgs.Has("--occlusion");
+
+    /// <summary>Tiles within this many of an anchor's draw their buildings in cells.</summary>
+    public const int CellRings = 1;
+
+    private bool _cutting;
+
+    /// <summary>An anchor this close above the ground is at street level: building cells round it (#553).</summary>
+    public const float StreetEnterM = 40f;
+
+    /// <summary>...and back to one mesh a tile once every anchor is this high (slack, so a hop does not rebuild).</summary>
+    public const float StreetLeaveM = 120f;
+
+    private bool _street;
+
+    /// <summary>True while some anchor is near the ground, with hysteresis: where buildings hide things.</summary>
+    private bool StreetLevel()
+    {
+        float lowest = float.MaxValue;
+        foreach (var anchor in _anchors)
+            if (IsInstanceValid(anchor) && TryGetHeight(anchor.GlobalPosition, out float ground))
+                lowest = Math.Min(lowest, anchor.GlobalPosition.Y - ground);
+        if (lowest == float.MaxValue) return _street;
+        if (_street && lowest > StreetLeaveM) _street = false;
+        else if (!_street && lowest < StreetEnterM) _street = true;
+        return _street;
+    }
+
+    /// <summary>
+    /// Occlusion culling on the main view (#553) while the buildings are occluders: off in VR (two
+    /// eyes, one occlusion buffer) and while a sightline cut dissolves the buildings in the way.
+    /// The portal cameras' viewports never cull: they stand inside the walls.
+    /// </summary>
+    public void ApplyOcclusion()
+    {
+        if (!IsInsideTree()) return;
+        bool on = OcclusionCells && !_cutting && !XR.XrSession.Active;
+        if (on) ProjectSettings.SetSetting("rendering/occlusion_culling/use_occlusion_culling", true);
+        GetViewport().UseOcclusionCulling = on;
+    }
 
     /// <summary>Main thread: a tile has just come into the streamed rings (nothing is built yet).</summary>
     public event Action<TileId>? TileEntered;
@@ -1330,8 +1383,13 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             }
             if (result.BuildingsRequested)
             {
-                if (result.Buildings != null)
+                if (result.BuildingCells != null)
+                    EnsureNode(result.Id, state).SetBuildingCells(result.BuildingCells, result.OccluderVertices, result.OccluderIndices);
+                else if (result.Buildings != null)
                     EnsureNode(result.Id, state).SetBuildings(result.Buildings);
+                // what was asked for, not what came back: a tile with no buildings at all (the lake)
+                // has no cells to show, and recording that as "not cells" rebuilt it forever
+                state.BuildingCells = state.PendingCells;
                 if (result.Doors != null)
                     Interiors.DoorIndex.SetTile(result.Id, _origin!.ToWorld(result.Id.MinE, result.Id.MaxN, 0), result.Doors);
                 TileFurnished?.Invoke(result.Id, EnsureNode(result.Id, state), result.Doors ?? []);
@@ -1574,6 +1632,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             SortByView(view);
         }
 
+        bool street = OcclusionCells && StreetLevel();
         foreach (var (id, want) in _ordered)
         {
             if (!_chunks.TryGetValue(id, out var state))
@@ -1586,7 +1645,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             bool needCollision = want.Collision && !state.PendingCollision && !state.CollisionQueued
                 && (!state.HasCollision || !state.HasBuildingCollision);
             bool needRoads = want.Roads && !state.HasRoads && !state.PendingRoads;
-            bool needBuildings = want.Buildings && !state.HasBuildings && !state.PendingBuildings;
+            // A tile round the camera draws its buildings in cells with occluders, one farther out
+            // as one mesh (#553), and only near the ground: from the air a building hides next to
+            // nothing, and flying across a city rebuilt three tiles a crossing for no gain. Rebuilt
+            // (buildings only) when it crosses, with a ring of slack so it does not flap.
+            bool wantCells = OcclusionCells && street && want.Buildings && want.Dist <= CellRings;
+            bool cellSwitch = state.HasBuildings && state.BuildingCells != wantCells
+                && (wantCells || want.Dist > CellRings + 1 || !street);
+            bool needBuildings = want.Buildings && !state.PendingBuildings && (!state.HasBuildings || cellSwitch);
             bool needGrid = state.Grid == null;
 
             // A fine build for a tile that is now far away is work the player has left behind:
@@ -1624,7 +1690,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // ground came back unblended, burying the roads it had been lowered under.
                 bool nearMesh = needMesh && want.Stride <= TerrainMeshBuilder.MaxHoleStride;
                 StartBuild(id, state, want.Stride, needCollision, needRoads, needBuildings,
-                    roadsForBlend: (needCollision || nearMesh) && want.Roads, fine: fine);
+                    roadsForBlend: (needCollision || nearMesh) && want.Roads, fine: fine, cells: wantCells,
+                    buildingsOnly: needBuildings && cellSwitch);
             }
         }
     }
@@ -1795,12 +1862,15 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         r.Mesh?.Dispose();
         r.Roads?.Dispose();
         r.Buildings?.Dispose();
+        if (r.BuildingCells != null)
+            foreach (var cell in r.BuildingCells) cell?.Dispose();
         r.Water?.Dispose();
         r.Trees?.Dispose();
     }
 
     private void StartBuild(TileId id, ChunkState state, int stride, bool wantCollision,
-        bool wantRoads, bool wantBuildings, bool roadsForBlend = false, bool fine = false)
+        bool wantRoads, bool wantBuildings, bool roadsForBlend = false, bool fine = false, bool cells = false,
+        bool buildingsOnly = false)
     {
         if (fine) Interlocked.Increment(ref _fineBuildsInFlight);
         state.PendingStride = stride;
@@ -1809,6 +1879,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         state.PendingCollision = wantCollision;
         state.PendingRoads = wantRoads;
         state.PendingBuildings = wantBuildings;
+        if (wantBuildings) state.PendingCells = cells;
         var cts = state.Cts = new CancellationTokenSource();
         var ct = cts.Token;
         int generation = state.Generation;
@@ -1972,7 +2043,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
                 ChunkNode.TreeMeshes? trees = null;
                 ArrayMesh? water = null;
-                if (wantBuildings)
+                // a switch to or from building cells (#553) redoes the buildings, not the trees and
+                // the water committed with them, which stay where they are
+                if (wantBuildings && !buildingsOnly)
                 {
                     var treeList = await source.LoadTreesAsync(id, ct);
                     ct.ThrowIfCancellationRequested();
@@ -2013,6 +2086,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // town tile), and only the tile a body stands on needs one. Empty faces still
                 // mark the tile done, so it is not asked again.
                 ArrayMesh? buildings = null;
+                ArrayMesh?[]? buildingCells = null;
+                (Vector3[] Vertices, int[] Indices)? occluders = null;
                 Vector3[][]? buildingFaces = null;
                 Interiors.DoorSpot[]? doors = null;
                 if (wantBuildings || wantCollision)
@@ -2032,7 +2107,15 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         if (BuildingMeshBuilder.Build(bTile, doors, detail) is { } buildingData)
                         {
                             ct.ThrowIfCancellationRequested();
-                            buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial);
+                            if (cells)
+                            {
+                                var parts = BuildingOcclusion.SplitByCell(buildingData);
+                                buildingCells = new ArrayMesh?[parts.Length];
+                                for (int c = 0; c < parts.Length; c++)
+                                    if (parts[c] is { } part) buildingCells[c] = ChunkNode.ToArrayMesh(part, buildingMaterial);
+                                occluders = BuildingOcclusion.Occluders(bTile);
+                            }
+                            else buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial);
                         }
                     }
                     if (wantCollision)
@@ -2125,7 +2208,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 _ready.Enqueue(new BuildResult(id, stride, generation, grid, Interim: false,
                     tailMesh, blendedCollision, roads, wantRoads,
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
-                    bridgeCollision, stageMs, doors, bores, waterLayer, lamps));
+                    bridgeCollision, stageMs, doors, bores, waterLayer, lamps,
+                    buildingCells, occluders?.Vertices, occluders?.Indices));
             }
             catch (OperationCanceledException)
             {

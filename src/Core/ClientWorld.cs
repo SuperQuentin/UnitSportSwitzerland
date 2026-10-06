@@ -281,6 +281,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the auto build cap depends on whether tiles are coming over the wire
         _chunks.Streaming = () => _streamer?.ServerReachable == true;
         _chunks.Initialize(_cache, origin, manifest, material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial);
+        // occlusion culling with the buildings round the camera as occluders (#553)
+        _chunks.ApplyOcclusion();
         _chunks.PierMaterial = pierMaterial;
         // the landings and jetties (#377) before the first tile builds: their piers ride in its build
         World.Landings.Use(await World.Landings.LoadAsync(_cache));
