@@ -6,41 +6,40 @@ using UnitSport.Interiors;
 using UnitSport.Player;
 using UnitSport.Terrain;
 using UnitSport.Terrain.Format;
+using UnitSport.World;
 
 namespace UnitSport.Vehicles;
 
 /// <summary>
-/// The cars already standing in the car parks (#499) — and, when #496 phase 3 lands, the fleets in
-/// the industrial yards, through the same layer.
+/// The vehicles already standing in the world until somebody touches one: the cars in the car parks
+/// (#499), an industrial yard's fleet (#516) and a harbour's moored boats (#554).
 ///
 /// <para>
-/// <b>Why they are dormant.</b> A big retail lot is 80 bays. Spawning 80 replicated
-/// <see cref="VehicleBody"/> nodes per lot is not affordable, and scenery you cannot drive away is
-/// not what a car park full of cars should be. So a slot is drawn as instanced geometry and nothing
-/// else until someone actually touches it, and only then is it <b>promoted</b> to a real vehicle.
+/// <b>Why they are dormant.</b> A big retail lot is 80 bays and a city harbour a hundred boats.
+/// Spawning a replicated <see cref="VehicleBody"/> for each is not affordable, and scenery you
+/// cannot take away is not what a full car park should be. So a slot is drawn as instanced geometry
+/// with a static box, and is <b>promoted</b> to a real vehicle only when someone touches it.
 /// </para>
 ///
 /// <para>
-/// <b>Nothing is replicated.</b> <see cref="DormantSlots"/> is a pure function of the tile's bytes,
-/// so the server and every client work out the same fleet independently — the
-/// <see cref="BuildingTypes"/> trick. The only thing that ever goes on the wire is "slot N of owner
-/// X is awake", once, when it wakes.
+/// <b>Nothing is replicated.</b> <see cref="DormantSlots"/> is a pure function of the tile's bytes
+/// (and of the landings, for a harbour), so the server and every client work out the same fleet
+/// independently, the <see cref="BuildingTypes"/> trick. What goes on the wire is "slot N of owner
+/// X is awake", once, when it wakes, and for a slot that respawns, "asleep again".
 /// </para>
 ///
 /// <para>
-/// <b>Waking.</b> Anything that would move one asks <see cref="RequestWake"/>. The server promotes
-/// the slot exactly once through <see cref="VehicleManager.Place"/> under
-/// <see cref="VehicleSlot.NodeName"/> (a server-initiated <c>Place</c> is not subject to
-/// <c>MayPark</c>, which is what <c>AfricaTwinEgg</c> relies on) and tells every peer to stop
-/// drawing the dormant copy. Once woken a slot stays a vehicle for the session: re-sleeping is
-/// deliberately left out until it is measured, as <c>docs/plans/industrial-sites.md</c> says.
+/// <b>Waking.</b> Anything that would move one asks <see cref="Wake"/>. The server promotes the slot
+/// exactly once through <see cref="VehicleManager.Place"/> under <see cref="VehicleSlot.NodeName"/>
+/// (a server-initiated <c>Place</c> is not subject to <c>MayPark</c>, which is what
+/// <c>AfricaTwinEgg</c> relies on) and tells every peer to stop drawing the dormant copy. A woken
+/// slot stays a vehicle while that vehicle exists; a slot that respawns sleeps again a while after
+/// its vehicle is gone (<see cref="Restock"/>).
 /// </para>
 ///
 /// <para>
-/// <b>The look changes on waking</b>, and that is a known wart: a dormant car is drawn from the
-/// shared low-poly meshes <see cref="Traffic"/> already uses for its traffic, and a woken one is a
-/// real catalogue car. <see cref="KindFor"/> keeps the body shape and the paint as close as it can,
-/// so what pops is the detail, not the car.
+/// <b>The look is the woken vehicle's own model</b> (<see cref="DormantLooks"/>), so waking changes
+/// what is alive about it, not what it is (#552).
 /// </para>
 /// </summary>
 /// <summary>
@@ -110,14 +109,34 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     public override void _Ready()
     {
         Instance = this;
+        Landings.Changed += OnLandingsChanged;
         Watch();
     }
 
     public override void _ExitTree()
     {
+        Landings.Changed -= OnLandingsChanged;
         if (_watched is { } vm && IsInstanceValid(vm))
+        {
             vm.ChildEnteredTree -= OnVehicleAdded;
+            vm.ChildExitingTree -= OnVehicleRemoved;
+        }
         if (Instance == this) Instance = null;
+    }
+
+    /// <summary>
+    /// The harbour jetties changed (#554): a streaming client gets the server's landings after its
+    /// first tiles, and a marina's slots come from them. Every fleet is worked out again on the next
+    /// look; the awake slots stay awake.
+    /// </summary>
+    private void OnLandingsChanged()
+    {
+        _drop.Clear();
+        _drop.AddRange(_slots.Keys);
+        foreach (var id in _drop) Drop(id);
+        _pending.Clear();
+        _anchorTiles.Clear();
+        _sinceCheck = CheckEvery;
     }
 
     private VehicleManager? _watched;
@@ -140,6 +159,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         if (_watched != null || VehicleManager.Instance is not { } vehicles) return;
         _watched = vehicles;
         vehicles.ChildEnteredTree += OnVehicleAdded;
+        vehicles.ChildExitingTree += OnVehicleRemoved;
         // anything already standing there when this system started (a join snapshot that arrived first)
         foreach (var child in vehicles.GetChildren()) OnVehicleAdded(child);
     }
@@ -147,8 +167,83 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     private void OnVehicleAdded(Node node)
     {
         if (SlotOf(node.Name) is not { } key) return;
+        _gone.Remove(key.Key);
         if (!_awake.Add(key.Key)) return;
         Forget(key.Tile, key.Key);
+    }
+
+    /// <summary>
+    /// A woken slot's vehicle left the world (taken by a player, wrecked and cleared): where the slot
+    /// respawns, the clock starts. Only the peer that decides acts on it (<see cref="Restock"/>).
+    /// </summary>
+    private void OnVehicleRemoved(Node node)
+    {
+        if (SlotOf(node.Name) is not { } key || !_awake.Contains(key.Key)) return;
+        _gone[key.Key] = GameClock.Now;
+    }
+
+    // ---- respawning (#554) ---------------------------------------------------------------------
+
+    /// <summary>Seconds a respawning slot stays empty after its vehicle is gone (#383's marina boats).</summary>
+    public static double RespawnSeconds { get; set; } = 180;
+
+    /// <summary>Nobody within this of a slot when it is restocked: it must not appear in front of someone.</summary>
+    public const float ClearOfPlayers = 40f;
+
+    /// <summary>No vehicle within this of a slot when it is restocked, flat metres.</summary>
+    public const float ClearOfVehicles = 4f;
+
+    /// <summary>Awake slots whose vehicle is gone, and since when (<see cref="GameClock.Now"/>).</summary>
+    private readonly Dictionary<string, double> _gone = new();
+    private readonly List<string> _restocked = new();
+
+    /// <summary>True on the peer that decides what stands where: the server, or a game played offline.</summary>
+    private bool Decides => !Online || Multiplayer.IsServer();
+
+    /// <summary>
+    /// Puts a respawning slot back to sleep once its vehicle has been gone <see cref="RespawnSeconds"/>,
+    /// its place is clear and nobody is near: the dormant copy is drawn again on every peer
+    /// (<see cref="Slept"/>), so a harbour is restocked as #383's boats were. A slot whose vehicle
+    /// still exists, however far it went, stays awake: that vehicle is the slot's.
+    /// </summary>
+    private void Restock()
+    {
+        if (_gone.Count == 0 || !Decides || VehicleManager.Instance is not { } vehicles) return;
+        double now = GameClock.Now;
+        _restocked.Clear();
+        foreach (var (key, since) in _gone)
+        {
+            if (now - since < RespawnSeconds) continue;
+            int bar = key.LastIndexOf('|');
+            if (Find(key[..bar], int.Parse(key[(bar + 1)..])) is not { } slot) continue;   // its tile is not here
+            if (!slot.Respawns) { _restocked.Add(key); continue; }
+            if (!Clear(vehicles, _origin.ToWorld(slot.E, slot.N, slot.Height))) continue;
+            _restocked.Add(key);
+            if (Online) Rpc(MethodName.Slept, slot.Owner, slot.Ordinal);
+            else Slept(slot.Owner, slot.Ordinal);
+        }
+        foreach (var key in _restocked) _gone.Remove(key);
+    }
+
+    /// <summary>No vehicle within <see cref="ClearOfVehicles"/> of the place and nobody within <see cref="ClearOfPlayers"/>.</summary>
+    private static bool Clear(VehicleManager vehicles, Vector3 at)
+    {
+        foreach (var node in vehicles.GetChildren())
+            if (node is VehicleBody v && MathX.FlatDistance(v.GlobalPosition, at) < ClearOfVehicles) return false;
+        if (vehicles.PlayerPositions?.Invoke() is { } players)
+            foreach (var p in players)
+                if (MathX.FlatDistance(p, at) < ClearOfPlayers) return false;
+        return true;
+    }
+
+    /// <summary>A slot sleeps again: dormant on every peer, drawn where its tile is.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = true, TransferMode = MultiplayerPeerExtension.TransferModeEnum.Reliable)]
+    private void Slept(string owner, int ordinal)
+    {
+        string key = $"{owner}|{ordinal}";
+        _gone.Remove(key);
+        if (!_awake.Remove(key)) return;
+        if (TileOf(owner) is { } id && _slots.ContainsKey(id)) Draw(id);
     }
 
     /// <summary>
@@ -232,6 +327,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         _sinceCheck += delta;
         if (_sinceCheck < CheckEvery) return;
         _sinceCheck = 0;
+        Restock();
 
         _anchorTilesNow.Clear();
         foreach (var anchor in _chunks.Anchors)
@@ -322,6 +418,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                     if (roads is { Parking.Count: > 0 })
                         DormantSlots.ForParking(id, roads.Parking, ParkedKinds, list);
                     Yards(source, id, roads, list);
+                    Marina(source, id, list);
                     return list;
                 });
                 if (!IsInsideTree()) return;
@@ -378,6 +475,35 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             float radius = s.Train != 0 || s.KindId != (int)RideKind.Trailer && s.KindId >= HeavyCatalog.First ? 3.2f : 1.6f;
             if (SiteYards.Blocked(tile, roads, map, at, radius)) into.RemoveAt(i);
         }
+    }
+
+    /// <summary>
+    /// The third provider (#554): a harbour's moored boats. Costs the tile's full grid, cover and
+    /// water, so it is skipped on a tile whose jetties are elsewhere, which is nearly all of them. The
+    /// water comes from the source, as the tile's own build reads it, not from the loaded chunk: the
+    /// tile may not be built yet, and the server and every client must agree on which berths float.
+    /// Worker thread, like the rest of <see cref="Fill"/>.
+    /// </summary>
+    private static void Marina(IChunkSource source, TileId id, List<VehicleSlot> into)
+    {
+        var jetties = Landings.Current.Jetties;
+        bool here = false;
+        foreach (var j in jetties)
+        {
+            var (e, n) = j.Ribbon.Middle;
+            if (TileId.FromLv95(e, n) == id) { here = true; break; }
+        }
+        if (!here) return;
+        if (source.LoadChunkAsync(id).GetAwaiter().GetResult() is not { } grid) return;
+        var cover = source.LoadCoverAsync(id).GetAwaiter().GetResult();
+        if (ChunkManager.LoadWaterLayerAsync(source, id, grid, cover, default).GetAwaiter().GetResult() is not { } water) return;
+        DormantSlots.ForMarina(id, jetties, (e, n) =>
+        {
+            // a berth a few metres across the tile's edge reads the edge's water
+            double x = Math.Clamp(e - id.MinE, 0, ChunkFormat.TileSizeM), z = Math.Clamp(id.MaxN - n, 0, ChunkFormat.TileSizeM);
+            if (!water.TrySample(x, z, out float level, out _)) return null;
+            return (level, (float)grid.SampleHeight(id.MinE + x, id.MaxN - z));
+        }, (int)RideKind.Speedboat, (int)RideKind.Jetski, into);
     }
 
     /// <summary>
@@ -534,6 +660,18 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                 best = s;
             }
         return best;
+    }
+
+    /// <summary>
+    /// The slot standing at a place, woken or not, within <paramref name="within"/> flat metres:
+    /// what a check asks to find a berth's or a bay's slot by where it is (LV95).
+    /// </summary>
+    public VehicleSlot? SlotAt(double e, double n, double within = 1.5)
+    {
+        foreach (var (_, slots) in _slots)
+            foreach (var s in slots)
+                if ((s.E - e) * (s.E - e) + (s.N - n) * (s.N - n) < within * within) return s;
+        return null;
     }
 
     /// <summary>True where this slot has already become a real vehicle.</summary>
