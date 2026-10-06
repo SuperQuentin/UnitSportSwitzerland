@@ -324,7 +324,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         get => _netTime;
         // a new state, not the server relaying the last one again (it does, at 30 Hz, whether or not
         // the owner still sends): only that tells a live sender from a crashed one
-        set { if (value != _netTime) LastNetState = Time.GetTicksMsec() / 1000.0; _netTime = value; OnNetState(); }
+        set { if (value != _netTime) LastNetState = Core.RealClock.Now; _netTime = value; OnNetState(); }
     }
     private double _netTime;
 
@@ -413,7 +413,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     }
 
     /// <summary>Server: when the proxy last received a state from its simulator (seconds, engine clock).</summary>
-    public double LastNetState { get; private set; } = Time.GetTicksMsec() / 1000.0;
+    /// <summary>When a net state last arrived, on the wall clock (<c>Core.RealClock</c>): a peer
+    /// that has crashed stops sending in real time, whatever the simulation is doing (#579).</summary>
+    public double LastNetState { get; private set; } = Core.RealClock.Now;
 
     private bool _netUp;
 
@@ -435,7 +437,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         bool was = IsMultiplayerAuthority();
         SetMultiplayerAuthority(peer, false);
         _sync?.SetMultiplayerAuthority(peer);
-        LastNetState = Time.GetTicksMsec() / 1000.0;   // the new simulator gets a fresh grace period
+        LastNetState = Core.RealClock.Now;   // the new simulator gets a fresh grace period
         if (!_netUp || NetProxy) return;   // spawn state inside _Ready, or the server's data proxy
         bool now = IsMultiplayerAuthority();
         if (now == was) { _interp.NewSender(); return; }   // another remote sender: another clock
@@ -1665,7 +1667,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // A sender publishes 30 times a second, standing still or not: silent this long, it has
         // crashed or frozen, and ENet takes up to 30 s to say so. Its body, frozen mid-road, must
         // not be a wall the whole field piles into (#50: every car stopped on a crashed leader).
-        bool silent = Time.GetTicksMsec() / 1000.0 - LastNetState > SilentSeconds;
+        bool silent = Core.RealClock.Now - LastNetState > SilentSeconds;
         // a passenger has no body of its own: it is in the vehicle; one walking about in it must not
         // be a wall the vehicle runs into on its driver's peer
         bool off = silent || RidingWith != 0 || DeckOn != "";
@@ -2882,7 +2884,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             Armor -= soaked;
             amount -= soaked;
         }
-        double now = Time.GetTicksMsec() / 1000.0;
+        // simulation time (#579): a hit and the kill it is credited for are both part of the
+        // world, so the CreditSeconds window has to stretch with it
+        double now = Core.GameClock.Now;
         if (attacker != 0)
         {
             _lastAttacker = attacker;

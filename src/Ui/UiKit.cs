@@ -314,7 +314,7 @@ public static class HoverSlide
         {
             bool on = (hovered || focused) && !b.Disabled;
             tween?.Kill();
-            tween = b.CreateTween().SetParallel().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+            tween = b.CreateTween().SetIgnoreTimeScale(true).SetParallel().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
             float from = boxes[0].ContentMarginLeft;
             tween.TweenMethod(Callable.From<float>(v =>
             {

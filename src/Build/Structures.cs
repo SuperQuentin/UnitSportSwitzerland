@@ -121,7 +121,14 @@ public partial class Structures : Node
     private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
         && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
 
-    private static double Now => ClockSync.ServerNow;
+    /// <summary>
+    /// Simulation time (#579): a piece gains its strength over <c>BuildGrid.Spec(m).Seconds</c>,
+    /// which is 2 s for wood — a gameplay beat, not a world duration, so it belongs to the
+    /// simulation and not to environment time, where 2 s would be 0.03 real seconds at the default
+    /// day length. <c>SimClock.SimAt</c> rather than <c>GameClock.Now</c> because <c>BuiltAt</c>
+    /// crosses the wire and every peer has to agree about a piece's age.
+    /// </summary>
+    private static double Now => Core.SimClock.SimAt(ClockSync.ServerNow);
 
     // ---- geometry -------------------------------------------------------------------------------
 

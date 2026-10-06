@@ -64,6 +64,7 @@ public partial class StairWalkCheck : Node3D
             foreach (var fl in l.Floors[f].AllFlights().Where(x => x.Half))
             {
                 float xm = (fl.X0 + fl.X1) / 2, ya = y0 + h * fl.From, yb = y0 + h * fl.To;
+                Vector3 Foot(float along, float y) { var (px, pz) = fl.Point(xm, along); return new Vector3(px, y, pz); }
                 int steps = (int)MathF.Ceiling((yb - ya) / 0.18f);
                 float dir = Math.Sign(fl.ZTop - fl.ZBottom), tread = Math.Abs(fl.ZTop - fl.ZBottom) / steps;
                 float zs = fl.ZBottom - dir * tread;
@@ -72,7 +73,7 @@ public partial class StairWalkCheck : Node3D
                 {
                     float z = zs + (fl.ZTop - zs) * Math.Min(t, 1f) + (t > 1 ? dir * 0.3f : 0);
                     float want = ya + (yb - ya) * Math.Clamp(t, 0f, 1f);
-                    if (!Probe(space, at + new Vector3(xm, want, z), out string why))
+                    if (!Probe(space, at + Foot(z, want), out string why))
                     {
                         if (bad++ < 4) Fail($"{l.Key} floor {f} flight {fl.From:F1}-{fl.To:F1} at z {z:F2}: {why}");
                     }

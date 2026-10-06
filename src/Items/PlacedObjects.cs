@@ -108,7 +108,7 @@ public partial class PlacedObjects : Node
     /// </summary>
     public static bool AnyoneMayRemove(PlacedObject o) =>
         RemovableByAnyone.Contains(o.Kind)
-        || o.Kind == PlacedKind.Campfire && !Crafting.CampfireClock.Burning(o.Payload, Net.ClockSync.ServerUnixNow);
+        || o.Kind == PlacedKind.Campfire && !Crafting.CampfireClock.Burning(o.Payload, World.WorldClock.EnvNow);
 
     /// <summary>
     /// Sets (or replaces) how a kind is drawn: the factory returns a node whose origin is the
@@ -339,7 +339,7 @@ public partial class PlacedObjects : Node
         }
 
         // a campfire is lit now, by the server's clock: what the client sent does not count
-        if ((PlacedKind)kind == PlacedKind.Campfire) payload = Crafting.CampfireClock.Lit(Net.ClockSync.ServerUnixNow);
+        if ((PlacedKind)kind == PlacedKind.Campfire) payload = Crafting.CampfireClock.Lit(World.WorldClock.EnvNow);
         var o = new PlacedObject(_nextId++, (PlacedKind)kind, owner, e, n, alt, rot.Normalized(), payload);
         Spawned(Put(o));   // offline the client plays the server's part; a dedicated server has no visual, so it is a no-op there
         Save();

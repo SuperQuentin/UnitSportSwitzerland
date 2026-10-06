@@ -57,7 +57,13 @@ public static class WaterField
     public static void Bind(ChunkManager? chunks) => _chunks = chunks;
 
     /// <summary>The wave clock now: the synchronized server time modulo <see cref="WaveSpectrum.LoopS"/>.</summary>
-    public static double Now => WaveSpectrum.WaveTime(Net.ClockSync.ServerNow);
+    /// <summary>
+    /// Wave phase, on the simulation clock (#579): the swell is a physical process and the boats
+    /// and swimmers riding it are simulated, so at a quarter speed the waves have to crawl with
+    /// them — a boat bobbing at full rate while it crawls forward is the inconsistency the three
+    /// clocks exist to remove. Identical to the server clock at 1x speed.
+    /// </summary>
+    public static double Now => WaveSpectrum.WaveTime(Core.SimClock.SimAt(Net.ClockSync.ServerNow));
 
     /// <summary>The current amplitudes of the waves (read-only view, for probes).</summary>
     public static ReadOnlySpan<float> Amplitudes => Amp;

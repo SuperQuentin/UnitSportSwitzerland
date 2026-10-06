@@ -52,7 +52,7 @@ public partial class Modal : Control
         // fade and lift in
         m.Modulate = new Color(1, 1, 1, 0);
         panel.Position += new Vector2(0, 10);
-        var tw = m.CreateTween().SetParallel().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+        var tw = m.CreateTween().SetIgnoreTimeScale(true).SetParallel().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
         tw.TweenProperty(m, "modulate:a", 1f, 0.16f);
         UiFocus.Set(m, true);
         return m;

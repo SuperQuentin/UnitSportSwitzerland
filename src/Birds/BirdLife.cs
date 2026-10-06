@@ -1318,11 +1318,15 @@ public sealed class Bird
     /// <summary>Measured velocity (what the server sends so a puppet can carry on between snapshots).</summary>
     public Vector3 Vel { get; private set; }
 
-    private ulong _reportedUntil;
+    private double _reportedUntil;
 
-    /// <summary>This client already told the server about this bird; wait for its answer before acting on it again.</summary>
-    public bool Reported => Time.GetTicksMsec() < _reportedUntil;
-    public void MarkReported() => _reportedUntil = Time.GetTicksMsec() + 800;
+    /// <summary>
+    /// This client already told the server about this bird; wait for its answer before acting on it
+    /// again. Wall clock (<c>Core.RealClock</c>, #579): the wait is for a round trip, which takes
+    /// as long as it takes whatever the simulation is doing.
+    /// </summary>
+    public bool Reported => Core.RealClock.Now < _reportedUntil;
+    public void MarkReported() => _reportedUntil = Core.RealClock.Now + 0.8;
 
     private Vector3 _netPos, _netVel;
     private float _netYaw, _netAge;

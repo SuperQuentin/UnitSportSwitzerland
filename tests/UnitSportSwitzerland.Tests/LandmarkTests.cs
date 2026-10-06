@@ -56,9 +56,9 @@ public class LandmarkTests
     }
 
     [Fact]
-    public void There_are_nine_stores_and_they_are_all_in_Switzerland()
+    public void There_are_ten_stores_and_they_are_all_in_Switzerland()
     {
-        Assert.Equal(9, Landmarks.Ikea.Length);
+        Assert.Equal(10, Landmarks.Ikea.Length);
         Assert.Equal(Landmarks.Ikea.Length, Landmarks.Ikea.Select(l => l.Name).Distinct().Count());
         foreach (var l in Landmarks.Ikea)
         {
