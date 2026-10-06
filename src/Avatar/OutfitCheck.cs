@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Items;
+using FaceGenome = UnitSport.Avatar.Face.FaceGenome;
 
 namespace UnitSport.Avatar;
 
@@ -73,7 +74,7 @@ public static class OutfitCheck
         for (int b = 0; b < Appearance.Builds; b++)
             for (int h = 0; h < Appearance.HairStyles; h++)
             {
-                var a = new Appearance((BodyBuild)b, h % FaceAtlas.Count, h % 8, (b + h) % 8, (HairStyle)h, h % 12);
+                var a = new Appearance((BodyBuild)b, h % FaceGenome.PresetCount, h % 8, (b + h) % 8, (HairStyle)h, h % 12);
                 if (Appearance.Unpack(a.Pack()) != a) Fail($"{a} did not survive packing");
                 var who = palette.With(a);
                 foreach (var (name, mesh) in new[]

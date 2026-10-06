@@ -79,7 +79,14 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
     private float _vignetteLevel;
     /// <summary>All black, fading back to clear: the cover for a cut (<see cref="Blink"/>).</summary>
     private float _blink;
-    private MeshInstance3D _leftMarker = null!, _rightMarker = null!;
+    /// <summary>Where each controller node's hand is held: the wheel rim moves it off the controller (<see cref="XrHands"/>).</summary>
+    private Node3D _leftMarker = null!, _rightMarker = null!;
+    /// <summary>The real hands (#648), on each physical hand's grip pose: a left-handed swap moves the nodes, not these.</summary>
+    private XRController3D _leftGrip = null!, _rightGrip = null!;
+    private XrHand _leftHand = null!, _rightHand = null!;
+    /// <summary>The player whose skin and gloves the hands wear: the last one the rig followed.</summary>
+    private FootPlayer? _handsLook;
+    private Avatar.HumanPalette? _handsPalette;
     /// <summary>The heading kept for an anchor that is not a player's, taken when it was adopted.</summary>
     private float _heldYaw;
     private bool _anchorIsBackdrop, _holdPending;
@@ -140,10 +147,18 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _right = new XRController3D { Name = "Right", Tracker = "right_hand", Pose = "aim" };
         _origin.AddChild(_left);
         _origin.AddChild(_right);
-        _leftMarker = HandMarker();
-        _rightMarker = HandMarker();
+        _leftMarker = new Node3D { Name = "LeftMarker" };
+        _rightMarker = new Node3D { Name = "RightMarker" };
         _left.AddChild(_leftMarker);
         _right.AddChild(_rightMarker);
+        _leftGrip = new XRController3D { Name = "LeftGrip", Tracker = "left_hand", Pose = "grip" };
+        _rightGrip = new XRController3D { Name = "RightGrip", Tracker = "right_hand", Pose = "grip" };
+        _origin.AddChild(_leftGrip);
+        _origin.AddChild(_rightGrip);
+        _leftHand = new XrHand(right: false);
+        _rightHand = new XrHand(right: true);
+        _leftGrip.AddChild(_leftHand);
+        _rightGrip.AddChild(_rightHand);
 
         _vignetteMat = new ShaderMaterial
         {
@@ -246,32 +261,6 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _view.VrsMode = s.VrFoveation ? Viewport.VrsModeEnum.XR : Viewport.VrsModeEnum.Disabled;
     }
 
-    /// <summary>
-    /// A small controller in each hand, until the avatar's own hands are driven (#186 phase 2): the
-    /// menus' dark glass, with an amber tip where the pointer leaves it.
-    /// </summary>
-    private static MeshInstance3D HandMarker()
-    {
-        var body = new MeshInstance3D
-        {
-            Mesh = new BoxMesh { Size = new Vector3(0.045f, 0.035f, 0.11f) },
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = Ui.UiTheme.Glass with { A = 1f }, Roughness = 0.35f },
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-        };
-        body.AddChild(new MeshInstance3D
-        {
-            Mesh = new BoxMesh { Size = new Vector3(0.047f, 0.037f, 0.008f) },
-            Position = new Vector3(0, 0, -0.055f),
-            MaterialOverride = new StandardMaterial3D
-            {
-                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                AlbedoColor = Ui.UiTheme.Amber,
-            },
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-        });
-        return body;
-    }
-
     /// <summary>The one-line notices (recentred, monitor view), on the monitor and the panel.</summary>
     internal XrNotice Notice { get; private set; } = null!;
 
@@ -298,9 +287,6 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
 
         UpdateTonemap();
 
-        // a controller that is not tracked sits at the origin, inside the head: not drawn then
-        _leftMarker.Visible = _left.GetHasTrackingData();
-        _rightMarker.Visible = _right.GetHasTrackingData();
 
         var head = _camera.Transform;
         bool tracking = head.Origin != Vector3.Zero;
@@ -320,6 +306,7 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         _climb.Update(player, dt);
         bool leftClaimed = _cab.LeftHeld || _climb.LeftHeld, rightClaimed = _cab.RightHeld || _climb.RightHeld;
         _hands.Update(player, _camera.GlobalTransform, dt, leftClaimed, rightClaimed);
+        UpdateRealHands(player, dt);
         _pad.LeftGripBusy = _hands.LeftBusy || leftClaimed;
         _pad.RightGripBusy = _hands.RightBusy || rightClaimed;
         _pad.BodyStick = BodyFlight(player, dt);
@@ -343,6 +330,50 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         // or the backdrop drifts away from the panel the headset would be looking at
         else if (XrSession.Simulated && _anchorIsBackdrop && Anchor != null)
             Anchor.GlobalTransform = _camera.GlobalTransform.Orthonormalized();
+    }
+
+    /// <summary>
+    /// The real hands (#648): each on its own side's grip pose, or on the rim where <see cref="XrHands"/>
+    /// holds the wheel, wearing the player's skin and gloves, its fingers from the tracker or the controller.
+    /// </summary>
+    private void UpdateRealHands(FootPlayer? player, float dt)
+    {
+        if (player != null) _handsLook = player;
+        // a palette compares by value: only a new skin or new clothes rebuild the hands
+        if (_handsLook != null && IsInstanceValid(_handsLook) && _handsLook.WalkPalette != _handsPalette)
+        {
+            _handsPalette = _handsLook.WalkPalette;
+            var look = Avatar.HumanMeshBuilder.HandsOf(_handsPalette);
+            _leftHand.SetLook(look);
+            _rightHand.SetLook(look);
+        }
+        // the physical left hand is the left node unless play is left-handed (#439)
+        PlaceHand(_leftHand, _leftGrip, _leftHanded ? _right : _left, _leftHanded ? _rightMarker : _leftMarker, dt);
+        PlaceHand(_rightHand, _rightGrip, _leftHanded ? _left : _right, _leftHanded ? _leftMarker : _rightMarker, dt);
+
+        // --xrhands with --xrsim: held up before the eyes for a headset shot, the left a thumbs-up, the right pointing
+        if (XrSession.Simulated && Core.CmdArgs.Has("--xrhands"))
+        {
+            var eye = _camera.GlobalTransform;
+            // held as a Touch controller is: the handle (−Z) leaning 40° forward from upright
+            var hold = new Basis(Vector3.Right, 0.69f);
+            _leftHand.Visible = _rightHand.Visible = true;
+            _leftHand.GlobalTransform = eye * new Transform3D(new Basis(Vector3.Up, -0.35f) * hold, new Vector3(-0.13f, -0.12f, -0.34f));
+            _rightHand.GlobalTransform = eye * new Transform3D(new Basis(Vector3.Up, 0.35f) * hold, new Vector3(0.13f, -0.12f, -0.34f));
+            _leftHand.Hold(1f, 1f, 0f);
+            _rightHand.Hold(1f, 0f, 1f);
+        }
+    }
+
+    private static void PlaceHand(XrHand hand, XRController3D grip, XRController3D ctl, Node3D marker, float dt)
+    {
+        // a controller that is not tracked sits at the origin, inside the head: not drawn then
+        hand.Visible = grip.GetHasTrackingData();
+        if (!hand.Visible) return;
+        hand.Drive(ctl, dt);
+        // on the wheel the closed hand's middle is the point held on the rim
+        if (marker.Position != Vector3.Zero) hand.GlobalPosition = marker.GlobalPosition;
+        else hand.Position = Vector3.Zero;
     }
 
     private Vector3 _aimZero;

@@ -203,6 +203,10 @@ src/Core/SimClock        net    tools/speednetcheck.sh
 src/Core/SpeedNetProbe   net    tools/speednetcheck.sh
 src/Net/ClockSync        net    tools/speednetcheck.sh
 src/Net/                 net    @netsmoke
+src/Net/Sleeper          net    tools/sleepercheck.sh
+src/Net/PlayerKey        net    tools/sleepercheck.sh
+src/Net/ChatManager      net    tools/transfercheck.sh
+src/Net/TransferProbe    net    tools/transfercheck.sh
 src/Core/ServerWorld     net    @netsmoke
 src/Core/ClientWorld     net    @netsmoke
 src/Core/Debug           net    tools/debugcheck.sh
@@ -422,6 +426,9 @@ src/Player/Emote         net    tools/emotenetcheck.sh
 src/Items/SwissItems     net    tools/swisscheck.sh
 src/Items/SwissNetProbe  net    tools/swisscheck.sh
 src/Avatar/HumanMeshBuilder.Emotes net tools/emotenetcheck.sh
+src/Avatar/Face           net    tools/emotenetcheck.sh
+src/Player/FootPlayer.Face net   tools/emotenetcheck.sh
+shaders/body/face        quick  --outfitcheck
 src/Combat/Fight         net    tools/fightnetcheck.sh
 src/Player/FootPlayer.Fight net tools/fightnetcheck.sh
 src/Avatar/HumanMeshBuilder.Fight net tools/fightnetcheck.sh
