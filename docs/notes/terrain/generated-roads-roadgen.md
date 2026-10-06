@@ -27,13 +27,31 @@
   `UrbanField` and the grids shared across calls (a measuring hack, not committed): **~46 ms a
   tile** (39-69 per village), results unchanged. The field depends on position and walls only,
   so one cache per world is safe.
-- **What it adds on today's network** (3 villages, 35 tiles): 17 junction polygons, 16 yield
-  signs + Wartelinie, 28 main-road signs, bike paths and symbols, 14 turn-lane approaches,
-  centre and edge lines; **0 lights**: every generated junction is a T (village side streets,
-  tributary links) and `PriorityPlanner.InferSignal` wants 4+ arms of two priority roads in a
-  dense core. Lights need the generator to grow towns with crossroads.
-- **Open for the real change**: split `Run` into a loader and an in-memory core (tiles, grids,
-  buildings in); where neighbour grids come from at runtime (full grids cost ~19 ms each to
-  generate: cache, or let the stage read `ProceduralWorld.Height`); generated roads meeting a real
-  tile's already rewritten roads at a blend seam; whether the server needs the same output for
-  traffic priority.
+- **Runtime** (`FallbackChunkSource.Roads.cs`): `LoadRoadsAsync` of a generated tile runs
+  `TileRewriter.Rewrite` (the in-memory core of `Run`: `TileRewriter.Inputs` = raw roads + keys,
+  grids, buildings, car parks, optionally a shared `Facades`/`UrbanField`) on the tile with a halo
+  of 1. Inputs: generated neighbours give raw keyed roads (keys to the centimetre, as `.keys`
+  files hold them) and a **stride-5 grid** (the generated surface is bilinear between 5 m points,
+  so it is exact, 80 KB, ~2 ms; RoadGen only ever calls `SampleHeight`); real neighbours give
+  their ground and buildings, **never roads** (theirs are already rewritten), so a generated road
+  ends at a real tile's edge as before. Buildings come through `Neighbours` (the tile cache), the
+  ones drawn. One `Facades`/`UrbanField` pair per source behind an async `SemaphoreSlim` (waiters
+  hold no thread), restarted past 64 tiles; walls the field reaches for past the fetched 5x5 are
+  loaded synchronously on the stage's worker. The result goes through `RoadCodec` (the game reads
+  what a file would give it); a throw logs `[fallback] road stage failed` and serves raw roads.
+  `--generated-roads raw` (one run, not saved) or `FallbackChunkSource.RewriteRoads` skips it.
+- **Gotcha: the stage writes into its input.** `RoadHeights.Apply` adds the town kerb offset into
+  the raw segments' points in place. A file run decodes fresh copies; a runtime cache handing the
+  same objects to the nine rewrites that read a tile lowered them again each time (31/35 tiles
+  differed). Raw roads are cached **encoded** and decoded per use; `Inputs.Roads` says so.
+- **Checks**: `dotnet run --project tools/BlendCheck -c Release -- --generated-roads [--villages N
+  --size N --list]`: tiles served through `FallbackChunkSource` under `CachingChunkSource`, all
+  loaded at once, against the whole block rewritten in one go with nothing shared: 126/126
+  identical (8 villages incl. towns), ~57-66 ms a road tile from cold caches; `--list` prints yield
+  signs and lights in LV95. The offline split was checked byte-identical on the Valais (49) and
+  Geneva (28, OSM overlay + signals) test regions. In game, `--fly` through the towns at 50 m/s:
+  road reads ~8 s of 90 s worker time, no hitch in flight (`--perflog`: the one >33 ms frame is
+  the start tile's mesh commit).
+- **Lights** need crossroads, which villages lack (every junction a T): the generator's **towns**
+  (`generated-relief`, `ProceduralWorld.Towns.cs`) give each a 4-arm crossing of two 6 m roads in
+  a dense core, so `PriorityPlanner.InferSignal` fires there (5 lights over 8 settlements).
