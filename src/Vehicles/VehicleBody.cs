@@ -106,8 +106,13 @@ public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
     public GlobalPos InterestAt => Global;
     /// <summary>The size it presents, m: the largest side of its parked box.</summary>
     public float InterestSize => Ride.ParkedBox.Size is var s ? Mathf.Max(s.X, Mathf.Max(s.Y, s.Z)) : 4f;
-    public float InterestRange(Net.Interest.View view) => Net.EntityInterestRules.VehicleRange(InterestSize, view.Far, view.FovDeg);
-    public bool InterestBig => InterestSize > Net.EntityInterest.CellSize;
+    /// <remarks>
+    /// One parked in a hold (#418) goes where its carrier goes, which its own published position
+    /// need not follow: it is sent to every peer, as before entity interest.
+    /// </remarks>
+    public float InterestRange(Net.Interest.View view) =>
+        InHold ? float.MaxValue : Net.EntityInterestRules.VehicleRange(InterestSize, view.Far, view.FovDeg);
+    public bool InterestBig => InHold || InterestSize > Net.EntityInterest.CellSize;
     public void RefreshInterest(long peer) => Net.EntityNet.Refresh(this, peer);
     public void RelayRate(bool moving) { if (_relay != null) _relay.ReplicationInterval = moving ? 0.05f : 2f; }
 

@@ -176,7 +176,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         MarkAwake(key.Key);
         if (fresh && Decides && World.ObjectContainers.Instance is { } containers)
         {
-            _awakeSince[key.Key] = Time.GetUnixTimeFromSystem();
+            _awakeSince[key.Key] = VehicleState.Now;
             containers.SaveAwake(_awakeSince);
         }
         // every peer is told, near or not (#689): with entity interest a peer far away never gets
@@ -223,8 +223,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         var filedSlots = new HashSet<string>();
         foreach (var name in filedNames)
             if (SlotOf(name) is { } key) filedSlots.Add(key.Key);
-        var keep = World.ContainerRules.KeepAwake(saved, Time.GetUnixTimeFromSystem(), filedSlots.Contains);
-        foreach (var key in filedSlots) keep.TryAdd(key, Time.GetUnixTimeFromSystem());
+        var keep = World.ContainerRules.KeepAwake(saved, VehicleState.Now, filedSlots.Contains);
+        foreach (var key in filedSlots) keep.TryAdd(key, VehicleState.Now);
         foreach (var (key, since) in keep)
         {
             _awakeSince[key] = since;

@@ -167,7 +167,8 @@ public partial class ObjectContainers : Node
         if (Instance == this) Instance = null;
     }
 
-    private static double Now => Time.GetUnixTimeFromSystem();
+    /// <summary>The server's wall clock, Unix seconds (<see cref="VehicleState.Now"/>): container stamps outlive the process.</summary>
+    private static double Now => VehicleState.Now;
 
     // ---- the book follows the world ----------------------------------------------------------
 
