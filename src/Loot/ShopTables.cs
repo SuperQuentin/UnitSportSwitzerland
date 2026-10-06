@@ -14,6 +14,12 @@ public enum ShopType : byte
     Electronics = 7, GunShop = 8, Garage = 9,
     /// <summary>A PAUSA vending machine: a piece of furniture, never a building's type.</summary>
     Vending = 10,
+    /// <summary>
+    /// One of the nine IKEA stores (#501). Given by <c>Interiors.Landmarks</c>, never by
+    /// <see cref="ShopTables.TypeFor"/>'s hash, so it is deliberately absent from
+    /// <see cref="ShopTables.Weights"/> — the same as <see cref="Garage"/>.
+    /// </summary>
+    Ikea = 11,
 }
 
 /// <summary>How a line may be paid.</summary>
@@ -133,6 +139,14 @@ public static class ShopTables
             // the lake's catch at the fish counter (#493), appended like the sport shop's gear
             L(ItemId.Perch, 0.3f, 2, 8), L(ItemId.Whitefish, 0.3f, 1, 5),
         },
+        // #501: the blue box. A Blåhaj, and the flat-pack and bits anyone actually leaves with.
+        [ShopType.Ikea] = new[]
+        {
+            L(ItemId.Blahaj, 0.95f, 6, 20), L(ItemId.Chocolate, 0.6f, 4, 12),
+            L(ItemId.Cloth, 0.8f, 5, 15), L(ItemId.WoodPlanks, 0.85f, 6, 20),
+            L(ItemId.Screws, 0.8f, 4, 12), L(ItemId.Hammer, 0.4f, 1, 3), L(ItemId.DuctTape, 0.4f, 2, 6),
+            L(ItemId.EnergyBar, 0.5f, 3, 10), L(ItemId.MineralWater, 0.6f, 4, 12),
+        },
         [ShopType.Kiosk] = new[]
         {
             L(ItemId.Chocolate, 0.95f, 3, 10), L(ItemId.EnergyBar, 0.8f, 2, 8), L(ItemId.MineralWater, 0.85f, 3, 8),
@@ -214,6 +228,8 @@ public static class ShopTables
         ShopType.Hardware => category is ItemCategory.Scrap or ItemCategory.Mineral,
         ShopType.Sport or ShopType.GunShop or ShopType.Electronics => category == ItemCategory.Gear,
         ShopType.Boutique => category is ItemCategory.Clothing or ItemCategory.Cosmetic,
+        // it sells flat-pack and soft toys, so it takes back timber, cloth and a Blåhaj
+        ShopType.Ikea => category is ItemCategory.Scrap or ItemCategory.Cosmetic,
         ShopType.Garage => category == ItemCategory.Part,
         _ => false,
     };
@@ -349,6 +365,7 @@ public static class ShopTables
         ShopType.GunShop => "Gun shop",
         ShopType.Garage => "Garage",
         ShopType.Vending => "PAUSA",
+        ShopType.Ikea => "IKEA",
         _ => "",
     };
 }

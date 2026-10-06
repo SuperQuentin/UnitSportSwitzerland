@@ -185,7 +185,7 @@ Then it runs every step below in order:
 
 1. download (via `tools/swiss_data.py`)
 2. unpack TLM and GWR
-3. GDAL exports
+3. route keys from the ASTRA FileGDBs
 4. terrain build
 5. feature extraction for the selected tiles only
 6. RoadGen junctions
@@ -308,22 +308,21 @@ dotnet run --project tools/TerrainPreprocessor -c Release -- \
   --cover
 ```
 
-Buildings need one extra step, because swissBUILDINGS3D ships as FileGDB which needs GDAL
-(Python only). Export the region to a GeoPackage first, then run the C# stage:
+Buildings are read straight out of the swissBUILDINGS3D FileGDB zips — no GDAL, and no export
+step first (#537):
 
 ```bash
-python tools/export_buildings.py --bbox 2577000 1110000 2586000 1115000
-
 dotnet run --project tools/TerrainPreprocessor -c Release -- \
   --out terrain_chunks --features-only \
-  --buildings ressources/data/buildings3d/buildings.gpkg \
+  --buildings-gdb ressources/data/buildings3d/swissbuildings3d_3_0_2026_1267-14_2056_5728.gdb.zip \
   --gwr ressources/data/gwr/data.sqlite
 ```
 
-Cycling routes are a one-off export, only needed if you refresh the ASTRA data:
+Cycling routes are a one-off export, only needed if you refresh the ASTRA data. It reads the
+ASTRA FileGDBs directly, so it needs nothing installed (#537):
 
 ```bash
-python tools/export_route_keys.py
+dotnet run --project tools/TerrainPreprocessor -c Release -- --export-route-keys ressources/data/routes
 ```
 
 ### 5. Check it
@@ -535,8 +534,6 @@ tools/
   MapSetup/            region setup wizard (the terminal front-end on MapCore)
   RoadGen/ BlendCheck/ road generation and terrain blend checks
   swiss_data.py, swiss_relief.py    data downloader, 500 m relief for generated terrain
-  export_buildings.py  FileGDB -> GeoPackage (needs GDAL)
-  export_route_keys.py cycle route keys
   *check.sh            multiplayer feature checks (dedicated server + client)
 shaders/     ps1_* terrain, road, building, tree, water and other shaders
 docs/notes/  one topic per file, indexed by each directory's CLAUDE.md

@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Local release: next semver from commits since the last tag, Windows + Linux + macOS exports, GitHub release,
-# then the delta files from the previous release (tools/deltas.sh).
+# Local release: next semver from commits since the last tag, Windows + Linux + macOS exports + an Android APK,
+# GitHub release, then the delta files from the previous release (tools/deltas.sh).
 # Usage: tools/release.sh [--dry-run] [--no-upload] [--ci]   (Git Bash or WSL, on a main in sync with origin/main; GODOT=godot on WSL)
 # --dry-run: print the version and changelog only. --no-upload: build every export but publish nothing (no deltas either).
 # --ci: run from .github/workflows/release.yml, which already checked out the tip of main detached.
 # The build runs in a temporary worktree of the released commit, so your working files are never touched.
 # Needs: gh (logged in), dotnet, Godot mono + export templates (windows, linux, macos), export_presets.cfg in the repo root
-# ("Linux" and "macOS" presets are added when missing), curl, unzip, tar, xz, zip or PowerShell.
+# ("Linux", "macOS" and "Android" presets are added when missing), curl, unzip, tar, xz, zip or PowerShell.
+# The APK also needs the Android SDK path in the editor settings (seeded from ANDROID_HOME) and a release keystore in
+# GODOT_ANDROID_KEYSTORE_RELEASE_PATH/_USER/_PASSWORD; without the keystore it is skipped.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DRY=0; CI=0; NOUP=0
@@ -18,6 +20,8 @@ for a in "$@"; do case $a in
 esac; done
 GODOT=${GODOT:-'/c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.1-stable_mono_win64/godot_v4.7.1-stable_mono_win64_console.exe'}
 OUT=test_output/release; mkdir -p "$OUT"
+# The exports run dotnet publish; reused MSBuild nodes outlive it holding Godot's console pipe, so the export never returns
+export MSBUILDDISABLENODEREUSE=1
 
 if [ $CI = 0 ]; then
   [ "$(git branch --show-current)" = main ] || { echo "Not on main"; exit 1; }
@@ -86,7 +90,28 @@ texture_format/etc2_astc=true
 application/bundle_identifier="ch.unitsport.switzerland"
 codesign/codesign=1
 notarization/notarization=0'
+ensure_preset "Android" "Android" 'gradle_build/use_gradle_build=false
+gradle_build/export_format=0
+architectures/armeabi-v7a=false
+architectures/arm64-v8a=true
+architectures/x86=false
+architectures/x86_64=false
+keystore/release=""
+keystore/release_user=""
+keystore/release_password=""
+version/code=1
+version/name=""
+package/unique_name="ch.unitsport.switzerland"
+package/name="UnitSport Switzerland"
+package/signed=true
+screen/immersive_mode=true
+permissions/access_network_state=true
+permissions/access_wifi_state=true
+permissions/change_wifi_multicast_state=true
+permissions/internet=true'
 cp "$REPO/export_presets.cfg" .
+# Android installs an update only over a lower version code, so it follows the semver
+sed -i -E "s|^version/code=.*|version/code=$((MA*10000+MI*100+PA))|; s|^version/name=.*|version/name=\"$V\"|" export_presets.cfg
 
 # yt-dlp + its QuickJS runtime (else 403s) + ffmpeg (CD burning, GPX video export) ship in bin/ beside the
 # executable (BundledTools), one set per platform, cached in $OUT/tools/<platform>/ between releases; delete it to refresh
@@ -122,9 +147,15 @@ tarball() {
 SKIPPED=()
 export_preset() { # preset, output file: returns 1 (never exits) so the caller can skip that platform
   "$GODOT" --headless --path . --export-release "$1" "$2" || true
-  [ -e "$2" ] && return 0
-  echo "WARNING: export \"$1\" produced nothing (template missing on this host?), skipping that platform"
+  if [ ! -e "$2" ]; then echo "WARNING: export \"$1\" produced nothing (template missing on this host?), skipping that platform"
+  # a failed dotnet publish still writes the export, just without the game (#548): never ship that
+  elif ! has_game "$2"; then echo "WARNING: export \"$1\" has no UnitSportSwitzerland.dll (dotnet publish failed), skipping that platform"
+  else return 0; fi
   SKIPPED+=("$1"); return 1
+}
+has_game() { # export output: an archive (.zip/.apk) or the executable inside its build dir
+  case $1 in *.zip|*.apk) unzip -l "$1" | grep -q '/UnitSportSwitzerland\.dll$' ;;
+    *) find "$(dirname "$1")" -name UnitSportSwitzerland.dll | grep -q . ;; esac
 }
 
 dotnet build UnitSportSwitzerland.csproj -c Release
@@ -156,6 +187,18 @@ if export_preset "macOS" build/macos.zip; then
   TGZ="$REPO/$OUT/UnitSportSwitzerland-v$V-macos.tar.gz"
   tarball "$TGZ" build/macos $(cd build/macos && find "$APP/Contents/MacOS" -type f)
   ASSETS+=("$TGZ")
+fi
+
+# Sideloaded APK (#544): no bin/ tools and no deltas. Signed with the release keystore Godot reads from
+# GODOT_ANDROID_KEYSTORE_RELEASE_*; every release must use the same one, or phones refuse the update.
+if [ -z "${GODOT_ANDROID_KEYSTORE_RELEASE_PATH:-}" ]; then
+  echo "WARNING: no GODOT_ANDROID_KEYSTORE_RELEASE_PATH, skipping the Android APK"; SKIPPED+=("Android")
+else
+  APK="$REPO/$OUT/UnitSportSwitzerland-v$V-android-arm64.apk"; rm -f "$APK"
+  # a failed .NET publish still yields an APK, just without the game: never ship that
+  # "A valid Android SDK path is required": Editor Settings > Export > Android > Android SDK Path (ANDROID_HOME
+  # only seeds a fresh editor settings file, as on CI)
+  if export_preset "Android" "$APK"; then ASSETS+=("$APK"); fi
 fi
 
 [ ${#ASSETS[@]} -gt 0 ] || { echo "Every export failed, nothing to release. Are the mono export templates installed?"; exit 1; }

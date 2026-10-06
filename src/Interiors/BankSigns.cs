@@ -30,6 +30,8 @@ public partial class BankSigns : Node
         Loot.ShopType.Boutique => (new Color(0.30f, 0.12f, 0.34f), new Color(0.98f, 0.80f, 0.90f)),
         Loot.ShopType.Electronics => (new Color(0.08f, 0.36f, 0.42f), new Color(0.70f, 0.98f, 1.00f)),
         Loot.ShopType.GunShop => (new Color(0.24f, 0.16f, 0.10f), new Color(0.92f, 0.82f, 0.62f)),
+        // #501: the yellow-on-blue the store is known by
+        Loot.ShopType.Ikea => (Terrain.BuildingMeshBuilder.IkeaBlue, new Color(0.98f, 0.80f, 0.08f)),
         _ => (new Color(0.28f, 0.30f, 0.32f), new Color(0.98f, 0.84f, 0.20f)),   // a garage
     };
 
