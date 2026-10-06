@@ -48,12 +48,10 @@ public static class WheelLoaderLayout
     /// axle runs along the rear frame, so that is the vehicle's heading.
     /// </summary>
     public static float YawRate(float speed, float articulation) =>
-        speed * Mathf.Sin(articulation) / (FrontAxle + -RearAxle * Mathf.Cos(articulation));
+        FrameSteering.YawRate(speed, articulation, FrontAxle, -RearAxle);
 
     /// <summary>The rear axle's turning circle at an articulation, m (infinite going straight).</summary>
-    public static float TurnRadius(float articulation) =>
-        Mathf.Abs(articulation) < 1e-4f ? float.PositiveInfinity
-            : (FrontAxle + -RearAxle * Mathf.Cos(articulation)) / Mathf.Abs(Mathf.Sin(articulation));
+    public static float TurnRadius(float articulation) => FrameSteering.TurnRadius(articulation, FrontAxle, -RearAxle);
 
     /// <summary>The bucket pin's height over the ground at a lift.</summary>
     public static float PinHeight(float lift) => ArmPivot.Y + Mathf.Sin(lift) * ArmLength;

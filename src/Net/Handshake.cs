@@ -44,8 +44,9 @@ public partial class Handshake : Node
     /// 20: RideKind.Excavator and its arm in the pose (#611).
     /// 21: RideKind.WheelLoader, its frame, arm and bucket in the pose (#612).
     /// 22: RideKind.MiniExcavator, its blade in the pose's bucket float (#614).
+    /// 23: RideKind.CompactRoller, its bend and its vibration in the pose (#614).
     /// </summary>
-    public const int Protocol = 22;
+    public const int Protocol = 23;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

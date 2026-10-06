@@ -83,6 +83,11 @@ stand either side of the seat, where the VR levers are.
   parked machine keeps the arm A left. A headless client draws no parked vehicle, so there it is the
   parked state that is compared.
 
+**VR knobs mirrored until #614.** `XrCabControls`' eye frame has +x on the driver's right (the
+truck's gear lever is at +0.32), but the excavator's slew and stick knobs were at +0.32 and its
+boom and bucket at -0.32, the reverse of the ISO pattern on the keyboard and pad. The loader's
+"right of the seat" levers were at -0.34. Both were mirrored in #614. Neither was tried in a headset.
+
 ## The mini excavator (#614)
 
 `RideKind.MiniExcavator = 196`. It is the same `Excavator` class built with `mini: true`.

@@ -47,7 +47,9 @@ public enum RideKind
     WheelLoader = 195,
     /// <summary>A 2.7 t mini excavator (#614): an <see cref="Player.Excavator"/> at the mini's size, with a dozer blade.</summary>
     MiniExcavator = 196,
-    // The next other mount is 194.
+    /// <summary>A compact tandem roller (#614): a <see cref="Player.CompactRoller"/>, frame steering and vibrating drums.</summary>
+    CompactRoller = 197,
+    // The next other mount is 198.
 }
 
 /// <summary>
@@ -212,6 +214,8 @@ public abstract class Rideable
     public virtual float ChasePitch => 0f;
     /// <summary>How far the chase camera swings toward the direction of travel in a slide, 0..1.</summary>
     public virtual float ChaseFollowsTravel => 0f;
+    /// <summary>How hard the machine shakes its driver's view, rad either way (a vibrating roller, #614); 0 for nearly everything.</summary>
+    public virtual float CameraShake => 0f;
 
     /// <summary>FOV at rest, and the speed at which it has widened to <see cref="MaxFov"/>.</summary>
     public virtual float BaseFov => 70f;
@@ -489,6 +493,7 @@ public abstract class Rideable
         RideKind.Excavator => new Excavator(),
         RideKind.MiniExcavator => new Excavator(mini: true),
         RideKind.WheelLoader => new WheelLoader(),
+        RideKind.CompactRoller => new CompactRoller(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),
         _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),
         _ when HeavyCatalog.For(kind) is { } heavy => new Truck(heavy),

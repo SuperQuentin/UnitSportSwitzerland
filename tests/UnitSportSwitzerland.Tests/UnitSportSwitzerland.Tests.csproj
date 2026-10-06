@@ -91,6 +91,9 @@
     <Compile Include="..\..\src\Avatar\ExcavatorSpec.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\MiniExcavatorLayout.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\WheelLoaderLayout.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- frame steering, shared with the compact roller (#614), and the roller's numbers -->
+    <Compile Include="..\..\src\Avatar\FrameSteering.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\CompactRollerLayout.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- swiss_data.py port (#515): only the pure half (manifest format, skip decisions, STAC
          id/bbox arithmetic) is linked. SwissDownload.cs itself needs IStepProgress from
          Pipeline.cs, which would drag in CountryData/LocalState/Selection/Stats and
