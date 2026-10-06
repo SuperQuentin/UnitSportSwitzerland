@@ -112,6 +112,9 @@ rows in `Core/ControlsHelp` ("Selling farm produce") and `xr/vr-action-map`.
   `test_output/494-sell-coop-panel.png`, `494-sell-stand-panel.png`, `494-sell-stand.png`.
 - `tools/sellnetcheck.sh` (net, fixture `straight`, the server measures the real road): B buys from
   A's stand, A collects, both see the same 27 left; the server's `stands.json` held the stand.
+  Its server runs with `--standsquiet` (no passers-by): one comes due within minutes, and a slow
+  run under the load of the net tier saw a sale mid-check and the counts drift. The probe waits for
+  the stock answer (crate and pack both) and for the prompt instead of fixed times.
 
 ## Not done
 

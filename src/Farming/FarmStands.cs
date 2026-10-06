@@ -76,8 +76,12 @@ public partial class FarmStands : Node
     private bool Online => NetLink.Online(this);
     private bool Serving => _server || !Online;
 
+    /// <summary>--standsquiet (net checks): no passers-by, so the stock and the box move only by what the players do.</summary>
+    private bool _quiet;
+
     public override void _Ready()
     {
+        _quiet = Array.IndexOf(OS.GetCmdlineUserArgs(), "--standsquiet") >= 0;
         _placed = GetParent().GetNodeOrNull<PlacedObjects>(PlacedObjects.NodeName);
         if (_placed != null)
         {
@@ -270,7 +274,7 @@ public partial class FarmStands : Node
         bool any = false;
         foreach (var s in _stands.Values)
         {
-            if (s.Stocked == 0) { s.LastTick = now; continue; }
+            if (s.Stocked == 0 || _quiet) { s.LastTick = now; continue; }
             var sales = FarmStandRules.Advance(s, now, PriceOf);
             if (sales.Count == 0) continue;
             any = true;
