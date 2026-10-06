@@ -261,6 +261,7 @@ public partial class PlaybackHud : CanvasLayer
 
         _exportButton = Button("Export video", () => ExportRequested?.Invoke(FpsSteps[_fpsIndex]));
         _exportButton.CustomMinimumSize = new Vector2(108, 26);
+        _exportButton.Visible = Core.Platform.CanSpawnProcesses; // ffmpeg (#63)
         _exportButton.TooltipText =
             "Render the whole run to a video with the current camera and speed. "
             + "Slower than real time — it waits for terrain to load on every frame.";

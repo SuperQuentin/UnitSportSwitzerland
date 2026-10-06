@@ -22,7 +22,7 @@ public static class RendererRelaunch
     /// <summary>Whether a saved style wants Forward+ and this run is not on it.</summary>
     public static bool Wanted =>
         StyleKit.NeedsForwardPlus(StyleKit.Style) && !StyleKit.OnForwardPlus && !IsRelaunch
-        && DisplayServer.GetName() != "headless";
+        && DisplayServer.GetName() != "headless" && Platform.CanSpawnProcesses;
 
     /// <summary>Starts the game again on Forward+, with this run's own arguments. True if it started.</summary>
     public static bool Relaunch()

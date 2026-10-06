@@ -279,6 +279,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // (not under a fixture course: the cache would fill its gaps, and its horizon, with real data)
         IChunkSource streamedSource = fixture ? source : _chunkSource = new NetworkChunkSource(
             source, TerrainPaths.FindChunkDir(), _streamer, TerrainPaths.FindCacheDir());
+        if (_chunkSource != null)
+        {
+            // Settings → Data (#63): the cap is the player's, and Clear reaches the live cache
+            _chunkSource.MaxCacheBytes = CacheCapBytes;
+            NetworkChunkSource.Active = _chunkSource;
+        }
 
         // The generated fill answers for the tiles no real data exists for, above the network
         // source so a client never asks a server for one, and under the cache so a generated tile
@@ -288,7 +294,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // Outermost, so a tile decoded once is not decoded again when the rings drop it and pick
         // it back up — which a route that doubles back does constantly.
-        _cache = new CachingChunkSource(fallback ?? (IChunkSource)streamedSource);
+        // decoded tiles in RAM: a phone has a fraction of a desktop's to spare (#63)
+        _cache = Platform.IsMobile
+            ? new CachingChunkSource(fallback ?? (IChunkSource)streamedSource, 96L * 1024 * 1024)
+            : new CachingChunkSource(fallback ?? (IChunkSource)streamedSource);
         // the blend reads real neighbours through the cache, sharing what the loader decodes
         if (fallback != null) fallback.Neighbours = _cache;
 
@@ -761,6 +770,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var prompts = PromptBar.Create();
         prompts.Source = Prompts;
         AddChild(prompts);
+        // a phone's controls (#63): an on-screen pad labelled from the same prompts
+        if (TouchControls.Wanted)
+        {
+            var touch = TouchControls.Create();
+            touch.Source = Prompts;
+            AddChild(touch);
+            if (TouchCheck.Requested) AddChild(new TouchCheck(() => LocalPlayer, touch));
+        }
 
         // Scavenging: what the furniture in those interiors holds. Same node path as the server's,
         // which decides who gets what; offline this client does both.
@@ -1038,8 +1055,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (_mode is GameMode.Explore or GameMode.Multiplayer) MouseCapture.Capture();
     }
 
+    private static long CacheCapBytes => (long)(GameSettings.Current.CacheGb * 1024 * 1024 * 1024);
+
     private void OnSettingsChanged()
     {
+        if (_chunkSource != null) _chunkSource.MaxCacheBytes = CacheCapBytes;
         foreach (var m in _worldMaterials) FogUniforms.Apply(m);
         // before the terrain takes the settings: its rings and mesh detail are the style's
         if (StyleKit.Restyle()) ApplyStyle();
@@ -1156,6 +1176,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         World.WaterField.Bind(null);
         World.WaterField.SetSeaState(0f);
         GameSettings.Changed -= OnSettingsChanged;
+        if (NetworkChunkSource.Active == _chunkSource) NetworkChunkSource.Active = null;
         Permissions.Changed -= OnPermissionsChanged;
         StyleCommand.RebuildRequested -= OnRebuildRequested;
         StyleKit.Chosen -= OnStyleChosen;

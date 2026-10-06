@@ -475,7 +475,9 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     private static void Yards(IChunkSource source, TileId id, RoadTile? roads, List<VehicleSlot> into)
     {
         var tile = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
-        if (tile is not { Buildings.Count: > 0 }) return;
+        // most tiles have buildings and no site: their height grid is 2 MB a streaming client
+        // would download for nothing (#63)
+        if (tile is not { Buildings.Count: > 0 } || !SiteYards.HasSite(tile)) return;
         var grid = source.LoadChunkAsync(id).GetAwaiter().GetResult();
         var yards = SiteYards.For(tile, roads, grid);
         if (yards.Count == 0) return;

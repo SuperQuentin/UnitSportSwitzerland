@@ -112,6 +112,27 @@ public partial class Modal : Control
         return m;
     }
 
+    /// <summary>
+    /// A question with several answers, the first one primary (#63: the metered-connection
+    /// warning). Escape or a click outside picks none.
+    /// </summary>
+    public static Modal Choose(Control host, string title, string message, params (string Text, Action Act)[] answers)
+    {
+        var m = Build(host, title, message, out var body);
+        var buttons = UiKit.HBox(10);
+        buttons.Alignment = BoxContainer.AlignmentMode.End;
+        body.AddChild(UiKit.Spacer(4));
+        body.AddChild(buttons);
+        for (int i = answers.Length - 1; i >= 0; i--)
+        {
+            var (text, act) = answers[i];
+            var b = UiKit.Button(text, primary: i == 0, minWidth: 96);
+            b.Pressed += () => { m.CloseModal(); act(); };
+            buttons.AddChild(b);
+        }
+        return m;
+    }
+
     /// <summary>A yes/no question.</summary>
     public static Modal Confirm(Control host, string title, string message, string okText, Action ok,
         Action? cancel = null, bool danger = false, string cancelText = "Cancel")

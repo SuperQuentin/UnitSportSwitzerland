@@ -25,6 +25,9 @@ src/Avatar/              quick  --meshcheck
 src/Avatar/              quick  --outfitcheck
 src/Avatar/              quick  --emotecheck
 src/Player/EmoteWheel    quick  --emotewheelcheck --world fixture
+src/Core/TouchControls   quick  --touchcheck --mobile --world fixture
+src/Core/PlayerInput.cs  quick  --touchcheck --mobile --world fixture
+src/Core/Platform.cs     quick  --touchcheck --mobile --world fixture
 src/Player/FootPlayer.cs quick  --emotewheelcheck --world fixture
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck

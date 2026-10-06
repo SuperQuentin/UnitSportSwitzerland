@@ -149,7 +149,7 @@ public partial class PlaybackCamera : Camera3D, Core.IOriginShiftAware
     public override void _UnhandledInput(InputEvent @event)
     {
         if (Mode != CameraMode.Free) return;
-        if (@event is InputEventMouseMotion m && Input.MouseMode == Input.MouseModeEnum.Captured)
+        if (@event is InputEventMouseMotion m && Core.PlayerInput.IsLookMotion(m))
         {
             _yaw -= m.Relative.X * 0.0022f;
             _pitch = Mathf.Clamp(_pitch - m.Relative.Y * 0.0022f, -1.55f, 1.55f);

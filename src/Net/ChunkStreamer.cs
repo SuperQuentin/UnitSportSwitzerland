@@ -67,6 +67,10 @@ public partial class ChunkStreamer : Node
     /// <summary>Bytes this client has received since it connected.</summary>
     public long BytesReceived { get; private set; }
 
+    /// <summary>Terrain bytes received since the game started, across every server joined (#63: Settings → Data, the perf overlay).</summary>
+    public static long SessionBytes { get; private set; }
+    private const long TenMb = 10L * 1024 * 1024;
+
     /// <summary>Files this client has received since it connected.</summary>
     public int FilesReceived { get; private set; }
 
@@ -338,6 +342,9 @@ public partial class ChunkStreamer : Node
 
         BytesReceived += result.Length;
         FilesReceived++;
+        long before = SessionBytes;
+        SessionBytes += result.Length;
+        if (SessionBytes / TenMb != before / TenMb) GD.Print($"[stream] {SessionBytes / (1024.0 * 1024):F0} MB received this session");
         AssetReceived?.Invoke(pending.Kind, pending.Tile, result.Length);
         pending.Completion.TrySetResult(new AssetResult(result, false));
     }
