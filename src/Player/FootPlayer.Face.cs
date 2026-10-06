@@ -14,7 +14,7 @@ public partial class FootPlayer
     private readonly FaceAnimator _face = new();
 
     /// <summary>Past this from the camera a face stops moving, m: a few pixels nobody reads.</summary>
-    private const float FaceDrawDistance = 30f;
+    public const float FaceDrawDistance = 30f;
     /// <summary>Within this a face looks at the camera, m.</summary>
     private const float FaceLookDistance = 8f;
 
