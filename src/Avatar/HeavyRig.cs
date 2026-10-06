@@ -26,6 +26,18 @@ public sealed record HeavyParts(ArrayMesh Body, ArrayMesh Head, ArrayMesh Tail, 
     public VehicleDeck? Deck { get; init; }
     /// <summary>A tipping body (built about its hinge), the hinge at its back (node space), tipped up by <c>Angle</c> rad (#494, #613).</summary>
     public (ArrayMesh Mesh, Vector3 Hinge, float Angle)? Tip { get; init; }
+    /// <summary>
+    /// The tipping body's tailgate (#613), built about its top hinge, which is at <c>Pivot</c> in the
+    /// body's own frame: it hangs plumb as the body rises, so it swings open and lets the load out.
+    /// </summary>
+    public (ArrayMesh Mesh, Vector3 Pivot)? Tailgate { get; init; }
+    /// <summary>
+    /// A mixer's drum (#613), built along its own −Z about its axis: at <c>Pivot</c> (node space),
+    /// its axis pitched up toward the back by <c>Tilt</c> rad, turned at <see cref="HeavyRig.DrumSpeed"/>.
+    /// </summary>
+    public (ArrayMesh Mesh, Vector3 Pivot, float Tilt)? Drum { get; init; }
+    /// <summary>A mixer's discharge chute (#613), built about its top pivot (node space): swung out to the side while it discharges.</summary>
+    public (ArrayMesh Mesh, Vector3 Pivot)? Chute { get; init; }
 }
 
 /// <summary>
@@ -66,6 +78,21 @@ public partial class HeavyRig : Node3D
         }
     }
     private bool _tippedOn, _tipDressed;
+
+    /// <summary>A mixer's drum speed, rad/s: + charging (the load mixed in), − discharging (#613).</summary>
+    public float DrumSpeed { get; set; }
+    /// <summary>A mixer discharging: its chute swung out (#613).</summary>
+    public bool Discharging { get; set; }
+    /// <summary>How far round the drum has turned, rad: what a check reads.</summary>
+    public float DrumTurned { get; private set; }
+    /// <summary>How far out the chute is, 0..1: what a check reads.</summary>
+    public float ChuteOut => _chute;
+    /// <summary>How far up the tipping body is, 0..1: what a check reads.</summary>
+    public float TippedShown => _tipped;
+    private Node3D? _tailgate, _drum, _chuteNode;
+    private float _chute;
+    /// <summary>Seconds the chute takes to swing out or back, and how far it swings, rad.</summary>
+    private const float ChuteTime = 2f, ChuteSwing = 1.3f;
 
     // ---- the cockpit (first section of a truck or bus) ----
     /// <summary>The steering wheel's turn, rad (+ anticlockwise as the driver sees it).</summary>
@@ -213,7 +240,34 @@ public partial class HeavyRig : Node3D
             var bin = new MeshInstance3D { Name = "Bin", Mesh = tip.Mesh };
             MeshScratch.Paint(bin, body, glass);
             rig._tip.AddChild(bin);
+            if (p.Tailgate is { } gate)
+            {
+                rig._tailgate = new Node3D { Name = "Tailgate", Position = gate.Pivot };
+                var leaf = new MeshInstance3D { Name = "Leaf", Mesh = gate.Mesh };
+                MeshScratch.Paint(leaf, body, glass);
+                rig._tailgate.AddChild(leaf);
+                rig._tip.AddChild(rig._tailgate);
+            }
             rig._body.AddChild(rig._tip);
+        }
+        if (p.Drum is { } drum)
+        {
+            // the axis pitched up toward the back; the drum turns about it
+            var axis = new Node3D { Name = "DrumAxis", Position = drum.Pivot, Rotation = new Vector3(-drum.Tilt, 0, 0) };
+            rig._drum = new Node3D { Name = "Drum" };
+            var drumShell = new MeshInstance3D { Name = "Shell", Mesh = drum.Mesh };
+            MeshScratch.Paint(drumShell, body, glass);
+            rig._drum.AddChild(drumShell);
+            axis.AddChild(rig._drum);
+            rig._body.AddChild(axis);
+        }
+        if (p.Chute is { } chute)
+        {
+            rig._chuteNode = new Node3D { Name = "Chute", Position = chute.Pivot };
+            var trough = new MeshInstance3D { Name = "Trough", Mesh = chute.Mesh };
+            MeshScratch.Paint(trough, body, glass);
+            rig._chuteNode.AddChild(trough);
+            rig._body.AddChild(rig._chuteNode);
         }
         if (p.Cockpit is { } cockpit) rig.AssembleCockpit(cockpit, body);
         rig.ApplyLamps();
@@ -361,7 +415,26 @@ public partial class HeavyRig : Node3D
             if (_tipped != _tipShown)
             {
                 _tipShown = _tipped;
-                _tip.Rotation = new Vector3(_tipAngle * Mathf.SmoothStep(0f, 1f, _tipped), 0, 0);
+                float angle = _tipAngle * Mathf.SmoothStep(0f, 1f, _tipped);
+                _tip.Rotation = new Vector3(angle, 0, 0);
+                // the tailgate hangs plumb from its top hinge: open by as much as the body is up
+                if (_tailgate != null) _tailgate.Rotation = new Vector3(-angle, 0, 0);
+            }
+        }
+        if (_drum != null && DrumSpeed != 0f)
+        {
+            DrumTurned = Mathf.PosMod(DrumTurned + DrumSpeed * dt, Mathf.Tau);
+            _drum.Rotation = new Vector3(0, 0, DrumTurned);
+        }
+        if (_chuteNode != null)
+        {
+            float target = Discharging ? 1f : 0f;
+            if (_chute != target)
+            {
+                _chute = Mathf.MoveToward(_chute, target, dt / ChuteTime);
+                float c = Mathf.SmoothStep(0f, 1f, _chute);
+                // swung out to the right and down a little, toward where the concrete goes
+                _chuteNode.Rotation = new Vector3(0.25f * c, -ChuteSwing * c, 0);
             }
         }
 
