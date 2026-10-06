@@ -55,6 +55,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `region-setup-wizard` — Region setup wizard: `dotnet run --project tools/MapSetup`, a terminal front-end on `tools/MapCore` (the country map, selection, plan and estimates, shared with the game's map screen since #515)...
 - `gdal-setup` — GDAL setup: installing GDAL's Python bindings (macOS/Linux/Windows) for buildings, cycle routes and swiss_relief; how the wizard detects it
 - `signal-test-region` — #386 `RoadGen --test-region DIR`: synthetic flat region (E 2910-2915 N 1321-1323) with seven designed signalised junctions built by the real network stage; junction table, play/test commands, what it found
+- `junction-corner-arcs` — #682 circular kerb arcs sized by room, bands round them, straight half-red bike crossings, yellow zebra and path stop lines, signal timing
 - `commands` — Commands: --bbox, --buildings, --chunks, --coarse, --cover, --photos, --dry-run, --dump-png, --features-only, --force, --france, --fresh, --gwr
 
 ## Gotchas

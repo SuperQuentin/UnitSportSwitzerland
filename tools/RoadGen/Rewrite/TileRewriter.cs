@@ -641,7 +641,7 @@ public static partial class TileRewriter
                 var stopsAt = new Dictionary<(int Link, LinkEnd End), double>();
                 var signalPlans = new Dictionary<int, (SignalPlan Plan, int[] PlanArm)>();
                 EmitSignals(priority, result, pockets, BikeSideAt, block, wanted, paint, signalRecords, cantons, field, buildings, islands, signs, netStats.Signals,
-                    approachRecords, restrictions, netStats.Lanes, stopsAt, signalPlans);
+                    approachRecords, restrictions, netStats.Lanes, stopsAt, signalPlans, StreetSideAt);
                 EmitRightLanes(pockets, paint, bikeBetween, netStats.TurnLanes);
                 EmitPocketApproaches(priority, result, pockets, approachRecords, restrictions, netStats.Lanes);
 

@@ -37,7 +37,7 @@ public static partial class TileRewriter
     /// <see cref="SignalStopSetback"/> back that leaves the 4 m a driver needs to see a roadside
     /// head (Kanton Bern Handbuch Markierung).
     /// </summary>
-    private const double PoleAlong = 0.6, PoleClear = 0.5, PoleStep = 0.4;
+    private const double PoleAlong = 0.4, PoleClear = 0.5, PoleStep = 0.4;
     private const int PoleTries = 6;
 
     /// <summary>A priority sign on a signal pole (#350) has its plate's top this high: below the heads' 2.35 m (SSV Art. 71).</summary>
@@ -75,7 +75,7 @@ public static partial class TileRewriter
         public int Junctions, Inferred, FromData, Arms, Approaches, LeftPockets, RightPockets, StopLines, Groups, TwoLensPedestrian, Invalid;
         /// <summary>Where OSM decides, what the inference rule would have said: both, rule only, OSM only (#348 tuning).</summary>
         public int RuleAndOsm, RuleOnly, OsmOnly, InternalArms;
-        public int Poles, PolesRejected, SignsOnPoles, BikeSignals;
+        public int Poles, PolesRejected, SignsOnPoles, BikeSignals, Crossings, PathStopLines;
         public readonly List<string> InvalidExamples = new();
         /// <summary>Where the first inferred junctions are (LV95), to look at them (#353).</summary>
         public readonly List<string> InferredAt = new();
@@ -190,7 +190,8 @@ public static partial class TileRewriter
         Dictionary<TileId, List<RoadSignal>> signals, Cantons? cantons, UrbanField field, Footprints buildings,
         Dictionary<TileId, List<RoadAreaProp>> areas, Dictionary<TileId, List<RoadPointProp>> signs, SignalStats stats,
         Dictionary<TileId, List<RoadApproach>> approaches, Restrictions? restrictions, LaneStats laneStats,
-        Dictionary<(int Link, LinkEnd End), double> stopsAt, Dictionary<int, (SignalPlan Plan, int[] PlanArm)> plans)
+        Dictionary<(int Link, LinkEnd End), double> stopsAt, Dictionary<int, (SignalPlan Plan, int[] PlanArm)> plans,
+        Func<int, LinkEnd, bool, RoadSide> streetSideAt)
     {
         var net = result.Network;
         PriorityPlanner.Clearance? clearance = null;
@@ -256,6 +257,14 @@ public static partial class TileRewriter
                 var sides = CrossSectionPlanner.Attributes(source.Line);
                 var rightSide = drawnRight ? sides.Right : sides.Left;
                 var leftSide = drawnRight ? sides.Left : sides.Right;
+                // the yellow crossing behind the stop line (#682), over the paths beside the carriageway too
+                if (!inside && block.Contains(source.Tile))
+                {
+                    var streetRight = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, drawnRight);
+                    var streetLeft = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
+                    if (streetRight.OuterDm > 0 || streetLeft.OuterDm > 0)
+                        EmitCrossing(paint, source, mid, u, right, MouthSkew(junction, arm) + SignalStopSetback, -(half + (pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0)), to, streetRight, streetLeft, stats);
+                }
                 // none on a link inside a junction of several nodes: its ends are the junction's own
                 var mainFlags = inside ? 0 : (approach ? SignalPoleFlags.Main : 0) | SignalPoleFlags.Pedestrian;
                 var secondFlags = inside ? 0 : (approach && (pocket || rightPocket) ? SignalPoleFlags.Second : 0) | SignalPoleFlags.Pedestrian;
