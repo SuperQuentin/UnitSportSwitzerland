@@ -311,10 +311,10 @@ public partial class FreighterCheck : Node
     /// Standing at the aft end of the level ramp in flight through long frames (a tile's build, an
     /// origin shift): several physics steps each, in which the aircraft moves on while its deck is put
     /// where it is drawn only once a frame. Read from where the aircraft was drawn, the walker stood
-    /// past the deck's end, stepped off it and fell out (#542). Eight physics steps a frame (the physics
-    /// at 8 times its rate, even under the quick tier's <c>--fixed-fps</c>), the aircraft pushed 1.1 m
-    /// a step, 68 m/s in real steps: a 130 ms frame each, flown whether or not the fixture's ground
-    /// still lies under it (past it a parked aircraft holds still).
+    /// past the deck's end, stepped off it and fell out (#542). The physics at 16 times its rate (16
+    /// steps a frame under the quick tier's <c>--fixed-fps</c>, fewer at a window's frame rate), the
+    /// aircraft pushed 1.1 m a step, 68 m/s in real steps: a frame of 70 ms or more each, flown whether
+    /// or not the fixture's ground still lies under it (past it a parked aircraft holds still).
     /// </summary>
     private async Task LongFrames(FootPlayer me)
     {
@@ -322,18 +322,23 @@ public partial class FreighterCheck : Node
         if (Parked() is not { } jet) { Expect(false, "no parked aircraft to stand in"); return; }
         var forward = (Spot(0f, 0f, 1f) - Spot(0f, 0f, 0f)).Normalized();
         var from = jet.GlobalPosition;
-        void Push() => jet.GlobalPosition += forward * (68f / 60f);
-        int ticks = Engine.PhysicsTicksPerSecond;
-        Engine.PhysicsTicksPerSecond = ticks * 8;
+        int steps = 0;
+        void Push() { jet.GlobalPosition += forward * (68f / 60f); steps++; }
+        int ticks = Engine.PhysicsTicksPerSecond, most = Engine.MaxPhysicsStepsPerFrame;
+        Engine.MaxPhysicsStepsPerFrame = 16;
+        Engine.PhysicsTicksPerSecond = ticks * 16;
+        ulong frame0 = Engine.GetProcessFrames();
         GetTree().PhysicsFrame += Push;
-        for (int i = 0; i < 20; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        while (steps < 160) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         GetTree().PhysicsFrame -= Push;
+        float perFrame = steps / (float)System.Math.Max(1UL, Engine.GetProcessFrames() - frame0);
         Engine.PhysicsTicksPerSecond = ticks;
+        Engine.MaxPhysicsStepsPerFrame = most;
         await Seconds(0.3);
         float moved = jet.GlobalPosition.DistanceTo(from);
         var l = Local(me);
-        Expect(atEnd && moved > 100f && me.Aboard && Mathf.Abs(l.Y - FloorY) < 0.15f,
-            $"stood at the ramp's aft end through long frames, still aboard {Where(me)}, the aircraft {moved:F0} m on");
+        Expect(atEnd && perFrame >= 4f && me.Aboard && Mathf.Abs(l.Y - FloorY) < 0.15f,
+            $"stood at the ramp's aft end through long frames, still aboard {Where(me)}, {perFrame:F1} steps a frame, the aircraft {moved:F0} m on");
     }
 
     /// <summary>
