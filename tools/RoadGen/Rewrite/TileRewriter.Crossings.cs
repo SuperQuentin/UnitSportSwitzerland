@@ -26,7 +26,7 @@ public static partial class TileRewriter
     /// from the mouth; the carriageway runs from <paramref name="lo"/> to <paramref name="hi"/> across it (negative to the left).
     /// </summary>
     private static void EmitCrossing(Dictionary<TileId, List<RoadPaint>> paint, Source source, Vec2 mid, Vec2 u, Vec2 right,
-        double stopAt, double lo, double hi, RoadSide rightSide, RoadSide leftSide, Dictionary<TileId, List<RoadAreaProp>> areas, SignalStats stats)
+        double stopAt, double lo, double hi, RoadSide rightSide, RoadSide leftSide, Dictionary<TileId, List<RoadAreaProp>> areas, SignalStats stats, Func<double, double>? leftEdgeAt = null)
     {
         static double Strip(RoadSide s) => s.HasTrack ? (s.VergeDm + s.BikeDm + s.BufferDm) / 10.0 : 0;
         double pathR = Strip(rightSide), pathL = Strip(leftSide);
@@ -42,6 +42,9 @@ public static partial class TileRewriter
             verts.AddRange(corners);
             foreach (int k in (ReadOnlySpan<int>)[0, 1, 2, 0, 2, 3]) index.Add((ushort)(first + k));
         }
+        // the exit strip's edge leans in along the arm: the left end of the bars and the cut follow it (#682)
+        double LeftAt(double s) => leftEdgeAt?.Invoke(s) ?? lo;
+        lo = LeftAt((s0 + s1) * 0.5);
         // bars from the left end to the right end; one on a path or verge stands at its height
         double start = lo - pathL, end = hi + pathR;
         for (double l = start; l + ZebraBar <= end + 1e-6; l += ZebraBar + ZebraGap)
@@ -58,7 +61,7 @@ public static partial class TileRewriter
         });
         stats.Crossings++;
         // the crosswalk cuts through the green strips: path surface over the verge and the buffer from the mouth to past the bars (the pole stands on it)
-        void Cut(RoadSide side, double edge, double sign)
+        void Cut(RoadSide side, Func<double, double> edge, double sign)
         {
             if (!side.HasTrack) return;
             float h = RoadStreetSection.TrackHeight(side);
@@ -66,7 +69,7 @@ public static partial class TileRewriter
             foreach (var (d0, d1) in new[] { (0.0, verge), (verge + path, verge + path + buffer) })
             {
                 if (d1 - d0 < 0.05) continue;
-                Vec2 P(double along, double d) => mid + u * along + right * (edge + sign * d);
+                Vec2 P(double along, double d) => mid + u * along + right * (edge(along) + sign * d);
                 Get(areas, source.Tile).Add(new RoadAreaProp
                 {
                     Type = AreaPropType.BikePath, Flags = h > 0 ? PropFlags.Solid : PropFlags.None, Height = h,
@@ -75,8 +78,8 @@ public static partial class TileRewriter
                 });
             }
         }
-        Cut(rightSide, hi, 1);
-        Cut(leftSide, lo, -1);
+        Cut(rightSide, _ => hi, 1);
+        Cut(leftSide, LeftAt, -1);
         // the approach's path stops before the bars: a yellow line across it, the cars' line's distance out
         if (rightSide.HasTrack && pathR > 0)
         {
