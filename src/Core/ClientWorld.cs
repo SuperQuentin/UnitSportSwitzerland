@@ -168,6 +168,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.IkeaProbe { Name = "IkeaProbe" });
             return;
         }
+        // whether a block of flats' stairwells can be climbed, from their collision (#571)
+        if (Interiors.StairWalkCheck.Requested)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.StairWalkCheck { Name = "StairWalkCheck" });
+            return;
+        }
         // an apartment block's inside, hand-made (#557): no terrain, no server
         if (Interiors.FlatTour.ParseArgs() is { Requested: true } flatTour)
         {

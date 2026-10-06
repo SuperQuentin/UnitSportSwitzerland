@@ -35,6 +35,13 @@ public static partial class InteriorGenerator
     private const float FrontLanding = 2.0f;
     /// <summary>Back landing, behind the last step: also the width of a corridor running off it.</summary>
     private const float BackLanding = 1.6f;
+    /// <summary>A stairwell's flight (#571): one lane each way, and the open well between them.</summary>
+    internal const float StairLane = 1.15f, StairEye = 0.15f;
+    private const float StairWidth = 2 * StairLane + StairEye;
+    /// <summary>The half landing the two flights of a storey turn on, front to back.</summary>
+    private const float MidLanding = 1.3f;
+    /// <summary>Riser of a stairwell's steps, m: a public stair is gentler than a house's.</summary>
+    private const float StairRiser = 0.175f;
     /// <summary>Width of the elevator column beside the stair.</summary>
     private const float LiftColumn = 2.0f;
     private const float CabinDepth = 1.8f;
@@ -86,7 +93,9 @@ public static partial class InteriorGenerator
     {
         public float X0, X1, DoorX;
         /// <summary>Room indices, the same on every floor: wells are laid first, in order.</summary>
-        public int Core = -1, Front = -1, Cabin = -1, Back = -1;
+        public int Core = -1, Front = -1, Cabin = -1, Back = -1, Stair = -1, Passage = -1;
+        /// <summary>The landing at the back, or the core where there is no stair and so no back landing.</summary>
+        public int BackOrCore => Back >= 0 ? Back : Core;
         /// <summary>The facade door it was built for: slot 0 is the main door.</summary>
         public int Slot;
     }
@@ -94,8 +103,17 @@ public static partial class InteriorGenerator
     private sealed class Apt
     {
         public InteriorLayout L = null!;
-        public float Hw, Hd, RunZ0, RunZ1, ZB1, CoreW, Clear, Tread;
+        /// <summary>
+        /// Front to back: the front landing to <see cref="RunZ0"/>, the flights to <see cref="RunZ1"/>,
+        /// the half landing to <see cref="ZM"/>, the back landing to <see cref="ZB1"/>.
+        /// </summary>
+        public float Hw, Hd, RunZ0, RunZ1, ZM, ZB1, CoreW, Clear, Tread;
         public bool Lift, Stairs;
+        /// <summary>
+        /// Whether the stairwell has its passage beside the stair and a back landing behind it
+        /// (#571). A block too narrow for both has neither: its flats open off the front landing.
+        /// </summary>
+        public bool Passage;
         public int Floors, Below;
         public List<Well> Wells = new();
         public bool Mixed;
@@ -113,12 +131,14 @@ public static partial class InteriorGenerator
         int below = AptBasement(l.Key, mixed, above, W * D);
         int floors = above + below;
         bool stairs = floors > 1;
-        int steps = (int)MathF.Ceiling(h / 0.18f);
-        float tread = 0.27f;
-        if (stairs && FrontLanding + tread * steps + BackLanding > D)
+        // a stairwell climbs a storey in two flights round a half landing (#571): each flight is
+        // half a storey's steps, and the stair is that, the half landing and the two floor landings deep
+        int steps = (int)MathF.Ceiling(h / 2 / StairRiser);
+        float tread = 0.28f;
+        if (stairs && FrontLanding + tread * steps + MidLanding + BackLanding > D)
         {
-            tread = (D - FrontLanding - BackLanding) / steps;
-            if (tread < 0.21f)
+            tread = (D - FrontLanding - MidLanding - BackLanding) / steps;
+            if (tread < 0.22f)
             {
                 if (below == 0) return false;
                 // a basement is what made it a stair: try again without one
@@ -130,20 +150,29 @@ public static partial class InteriorGenerator
         }
         float run = stairs ? tread * steps : 0;
         bool lift = floors >= 3;
-        float coreW = stairs ? 2 * LaneWidth + WalkWidth : 2.4f;
+        // the stair and, beside it, the passage from the front landing to the back one
+        float coreW = stairs ? StairWidth + WalkWidth : 2.4f;
+        bool passage = stairs;
+        if (stairs && W < coreW + (lift ? LiftColumn : 0) + MinFlatSide)
+        {
+            passage = false;
+            coreW = StairWidth;
+        }
         float wellW = coreW + (lift ? LiftColumn : 0);
         if (W < wellW + MinFlatSide || D < 5f) return false;
 
-        float sd = FrontLanding + run + BackLanding;
+        float mid = stairs ? MidLanding : 0;
+        float back = passage || !stairs ? BackLanding : 0;
+        float sd = FrontLanding + run + mid + back;
         // a strip behind the stairwell too thin to be a flat goes to the stairwell instead: the
         // lobby gets deeper
         if (D - sd < 5.0f) sd = D;
-        float zB1 = -hd + sd, runZ1 = zB1 - BackLanding, runZ0 = runZ1 - run;
+        float zB1 = -hd + sd, zM = zB1 - back, runZ1 = zM - mid, runZ0 = runZ1 - run;
 
         var a = new Apt
         {
-            L = l, Hw = hw, Hd = hd, RunZ0 = runZ0, RunZ1 = runZ1, ZB1 = zB1, CoreW = coreW, Clear = clear,
-            Tread = tread, Lift = lift, Stairs = stairs, Floors = floors, Below = below, Mixed = mixed,
+            L = l, Hw = hw, Hd = hd, RunZ0 = runZ0, RunZ1 = runZ1, ZM = zM, ZB1 = zB1, CoreW = coreW, Clear = clear,
+            Tread = tread, Lift = lift, Stairs = stairs, Passage = passage, Floors = floors, Below = below, Mixed = mixed,
             Target = 55f + 60f * (float)new Random(StableHash(l.Key + "|flatsize")).NextDouble(),
         };
 
@@ -240,15 +269,33 @@ public static partial class InteriorGenerator
         {
             float c0 = w.X0, c1 = w.X0 + a.CoreW;
             var lobby = level == 0 ? RoomType.Lobby : RoomType.Landing;
-            w.Core = Add(rooms, new RoomPlan { X0 = c0, Z0 = -hd, X1 = c1, Z1 = a.ZB1, Type = lobby });
+            float arch = Math.Min(2.3f, a.Clear - 0.2f);
+            if (!a.Stairs)
+                w.Core = Add(rooms, new RoomPlan { X0 = c0, Z0 = -hd, X1 = c1, Z1 = a.ZB1, Type = lobby });
+            else
+            {
+                // the front landing (the lobby on the ground floor), the enclosed stair open onto it,
+                // the passage beside the stair, and the back landing across the whole stairwell (#571)
+                float s1 = c0 + StairWidth;
+                w.Core = Add(rooms, new RoomPlan { X0 = c0, Z0 = -hd, X1 = c1, Z1 = a.RunZ0, Type = lobby });
+                w.Stair = Add(rooms, new RoomPlan { X0 = c0, Z0 = a.RunZ0, X1 = s1, Z1 = a.ZM, Type = RoomType.Stairwell });
+                Opening(rooms, w.Stair, Side.Front, w.Core, (c0 + s1) / 2, StairWidth - 0.2f, arch, OpeningKind.Arch);
+                if (a.Passage)
+                {
+                    w.Passage = Add(rooms, new RoomPlan { X0 = s1, Z0 = a.RunZ0, X1 = c1, Z1 = a.ZM, Type = RoomType.Landing });
+                    w.Back = Add(rooms, new RoomPlan { X0 = c0, Z0 = a.ZM, X1 = w.X1, Z1 = a.ZB1, Type = RoomType.Landing });
+                    Opening(rooms, w.Passage, Side.Front, w.Core, (s1 + c1) / 2, WalkWidth - 0.2f, arch, OpeningKind.Arch);
+                    Opening(rooms, w.Passage, Side.Back, w.Back, (s1 + c1) / 2, WalkWidth - 0.2f, arch, OpeningKind.Arch);
+                }
+            }
             if (a.Lift)
             {
-                float cab0 = a.RunZ1 - CabinDepth;
+                float cab0 = a.ZM - CabinDepth;
                 w.Front = Add(rooms, new RoomPlan { X0 = c1, Z0 = -hd, X1 = w.X1, Z1 = cab0, Type = lobby });
-                w.Cabin = Add(rooms, new RoomPlan { X0 = c1, Z0 = cab0, X1 = w.X1, Z1 = a.RunZ1, Type = RoomType.Elevator });
-                w.Back = Add(rooms, new RoomPlan { X0 = c1, Z0 = a.RunZ1, X1 = w.X1, Z1 = a.ZB1, Type = RoomType.Landing });
-                Opening(rooms, w.Core, Side.Right, w.Front, (-hd + cab0) / 2, cab0 + hd - 0.4f, Math.Min(2.3f, a.Clear - 0.2f), OpeningKind.Arch);
-                Opening(rooms, w.Core, Side.Right, w.Back, (a.RunZ1 + a.ZB1) / 2, BackLanding - 0.3f, Math.Min(2.3f, a.Clear - 0.2f), OpeningKind.Arch);
+                w.Cabin = Add(rooms, new RoomPlan { X0 = c1, Z0 = cab0, X1 = w.X1, Z1 = a.ZM, Type = RoomType.Elevator });
+                Opening(rooms, w.Core, Side.Right, w.Front, (-hd + a.RunZ0) / 2, a.RunZ0 + hd - 0.4f, arch, OpeningKind.Arch);
+                if (a.Passage && cab0 - a.RunZ0 >= 1.2f)
+                    Opening(rooms, w.Passage, Side.Right, w.Front, (a.RunZ0 + cab0) / 2, cab0 - a.RunZ0 - 0.3f, arch, OpeningKind.Arch);
                 Opening(rooms, w.Cabin, Side.Front, w.Front, (c1 + w.X1) / 2, LiftDoor, Math.Min(2.1f, a.Clear - 0.15f), OpeningKind.Door);
             }
             if (a.Stairs) Stair(floor, a, f, c0);
@@ -257,17 +304,19 @@ public static partial class InteriorGenerator
         // ---- the regions round them ----------------------------------------------------------
         var regions = new List<Region>();
         var wells = a.Wells;
-        bool carStrip = what == AptFloor.Basement && a.Hd - a.ZB1 >= 9.5f && a.L.Width >= 12f;
+        // what hangs off the back landing needs one: a block too narrow for the passage has none
+        bool backed = a.Passage || !a.Stairs;
+        bool carStrip = backed && what == AptFloor.Basement && a.Hd - a.ZB1 >= 9.5f && a.L.Width >= 12f;
         // A block much deeper than its stairwell: a corridor runs on from each back landing to the
         // back facade, and the flats behind the stairwells' depth open off it, both sides
-        bool deep = what != AptFloor.Basement && a.Hd - a.ZB1 > DeepBack;
+        bool deep = backed && what != AptFloor.Basement && a.Hd - a.ZB1 > DeepBack;
         var spines = new Dictionary<Well, (int Room, float X0, float X1)>();
         if (deep)
             foreach (var w in wells)
             {
                 float m = w.X0 + a.CoreW - 0.9f;
                 int sp = Add(rooms, new RoomPlan { X0 = m - 0.8f, Z0 = a.ZB1, X1 = m + 0.8f, Z1 = a.Hd, Type = RoomType.Corridor });
-                Opening(rooms, sp, Side.Front, w.Core, m, 1.3f, Math.Min(2.3f, a.Clear - 0.2f), OpeningKind.Arch);
+                Opening(rooms, sp, Side.Front, w.BackOrCore, m, 1.3f, Math.Min(2.3f, a.Clear - 0.2f), OpeningKind.Arch);
                 spines[w] = (sp, m - 0.8f, m + 0.8f);
             }
         float back = deep ? a.ZB1 : a.Hd;
@@ -295,17 +344,17 @@ public static partial class InteriorGenerator
             if (width < 1.2f) continue;
             bool corridor = what switch
             {
-                AptFloor.Basement => true,
+                AptFloor.Basement => backed,
                 AptFloor.Shops => false,
-                _ => !deep && width > (left != null && right != null ? 2 : 1) * CorridorSide,
+                _ => backed && !deep && width > (left != null && right != null ? 2 : 1) * CorridorSide,
             };
             if (corridor)
             {
-                int cor = Add(rooms, new RoomPlan { X0 = g0, Z0 = a.RunZ1, X1 = g1, Z1 = a.ZB1, Type = RoomType.Corridor });
-                float mid = (a.RunZ1 + a.ZB1) / 2, archTop = Math.Min(2.3f, a.Clear - 0.2f);
-                if (left != null) Opening(rooms, cor, Side.Left, a.Lift ? left.Back : left.Core, mid, BackLanding - 0.3f, archTop, OpeningKind.Arch);
-                if (right != null) Opening(rooms, cor, Side.Right, right.Core, mid, BackLanding - 0.3f, archTop, OpeningKind.Arch);
-                regions.Add(new Region(new RectPlan(g0, -hd, g1, a.RunZ1), Side.Back, new List<Way> { new(cor, g0, g1) }));
+                int cor = Add(rooms, new RoomPlan { X0 = g0, Z0 = a.ZM, X1 = g1, Z1 = a.ZB1, Type = RoomType.Corridor });
+                float mid = (a.ZM + a.ZB1) / 2, archTop = Math.Min(2.3f, a.Clear - 0.2f);
+                if (left != null) Opening(rooms, cor, Side.Left, left.BackOrCore, mid, BackLanding - 0.3f, archTop, OpeningKind.Arch);
+                if (right != null) Opening(rooms, cor, Side.Right, right.BackOrCore, mid, BackLanding - 0.3f, archTop, OpeningKind.Arch);
+                regions.Add(new Region(new RectPlan(g0, -hd, g1, a.ZM), Side.Back, new List<Way> { new(cor, g0, g1) }));
                 if (!carStrip && a.Hd - a.ZB1 >= 2.5f)
                     regions.Add(new Region(new RectPlan(g0, a.ZB1, g1, a.Hd), Side.Front, new List<Way> { new(cor, g0, g1) }));
                 continue;
@@ -321,10 +370,10 @@ public static partial class InteriorGenerator
             else
                 regions.Add(new Region(new RectPlan(g0, -hd, g1, back), Side.Right, LeftWays(a, right!)));
         }
-        if (!deep && !carStrip && a.Hd - a.ZB1 >= 2.5f)
+        if (backed && !deep && !carStrip && a.Hd - a.ZB1 >= 2.5f)
             foreach (var w in wells)
             {
-                var ways = new List<Way> { new(w.Core, w.X0, w.X0 + a.CoreW) };
+                var ways = new List<Way> { new(w.BackOrCore, w.X0, w.X0 + a.CoreW) };
                 if (a.Lift) ways.Add(new Way(w.Back, w.X0 + a.CoreW, w.X1));
                 regions.Add(new Region(new RectPlan(w.X0, a.ZB1, w.X1, a.Hd), Side.Front, ways));
             }
@@ -363,40 +412,47 @@ public static partial class InteriorGenerator
         rooms[b].Openings.Add(new OpeningPlan { Side = Opposite(side), Center = center, Width = width, Top = top, Kind = kind, Other = a });
     }
 
-    /// <summary>Where a region left of a stairwell may open a door: the front and the back landing, not the stair's side.</summary>
-    private static List<Way> LeftWays(Apt a, Well w) => a.Stairs
-        ? new List<Way> { new(w.Core, -a.Hd, a.RunZ0), new(w.Core, a.RunZ1, a.ZB1) }
-        : new List<Way> { new(w.Core, -a.Hd, a.ZB1) };
+    /// <summary>Where a region left of a stairwell may open a door: the front and the back landing, not the stair's wall.</summary>
+    private static List<Way> LeftWays(Apt a, Well w) => !a.Stairs
+        ? new List<Way> { new(w.Core, -a.Hd, a.ZB1) }
+        : a.Passage
+            ? new List<Way> { new(w.Core, -a.Hd, a.RunZ0), new(w.Back, a.ZM, a.ZB1) }
+            : new List<Way> { new(w.Core, -a.Hd, a.RunZ0) };
 
-    /// <summary>Right of a stairwell: the lobby in front of the elevator and the back landing, or the walkway beside the stair.</summary>
+    /// <summary>Right of a stairwell: the lobby in front of the elevator, or the passage beside the stair, and the back landing.</summary>
     private static List<Way> RightWays(Apt a, Well w) => a.Lift
-        ? new List<Way> { new(w.Front, -a.Hd, a.RunZ1 - CabinDepth), new(w.Back, a.RunZ1, a.ZB1) }
-        : new List<Way> { new(w.Core, -a.Hd, a.ZB1) };
+        ? a.Passage
+            ? new List<Way> { new(w.Front, -a.Hd, a.ZM - CabinDepth), new(w.Back, a.ZM, a.ZB1) }
+            : new List<Way> { new(w.Front, -a.Hd, a.ZM - CabinDepth) }
+        : !a.Stairs
+            ? new List<Way> { new(w.Core, -a.Hd, a.ZB1) }
+            : a.Passage
+                ? new List<Way> { new(w.Core, -a.Hd, a.RunZ0), new(w.Passage, a.RunZ0, a.ZM), new(w.Back, a.ZM, a.ZB1) }
+                : new List<Way> { new(w.Core, -a.Hd, a.RunZ0) };
 
     /// <summary>
-    /// The stairwell's switchback, exactly as the cored plan builds its own (<see cref="TryCored"/>):
-    /// floor <paramref name="f"/>'s flight in lane A or B, the hole of the one from below, and rails.
-    /// The first stairwell's flight is the floor's <see cref="FloorPlan.Flight"/>, the others go
-    /// in <see cref="FloorPlan.Flights"/>.
+    /// A block of flats' stair (#571): a storey in two flights round a half landing. Up from the
+    /// front landing in lane A, half a storey, onto the half landing at the back; turn; up lane B
+    /// to the next floor's front landing. A parapet with a handrail along the open well between
+    /// the lanes; on the floors above the bottom the shaft is open (no slab), and on the top floor,
+    /// where nothing climbs on, a rail across lane A's mouth. The first stairwell's first flight is
+    /// the floor's <see cref="FloorPlan.Flight"/>, everything else is in <see cref="FloorPlan.Flights"/>.
     /// </summary>
     private static void Stair(FloorPlan floor, Apt a, int f, float c0)
     {
-        float laneA0 = c0, laneA1 = c0 + LaneWidth, laneB1 = c0 + 2 * LaneWidth;
-        float runZ0 = a.RunZ0, runZ1 = a.RunZ1;
+        float laneA0 = c0, laneA1 = c0 + StairLane, laneB0 = laneA1 + StairEye, laneB1 = c0 + StairWidth;
         if (f < a.Floors - 1)
         {
-            var flight = f % 2 == 0
-                ? new FlightPlan { X0 = laneA0, X1 = laneA1, ZBottom = runZ0, ZTop = runZ1 }
-                : new FlightPlan { X0 = laneA1, X1 = laneB1, ZBottom = runZ1, ZTop = runZ0 };
-            if (floor.Flight == null) floor.Flight = flight;
-            else floor.Flights.Add(flight);
+            var up = new FlightPlan { X0 = laneA0, X1 = laneA1, ZBottom = a.RunZ0, ZTop = a.RunZ1, From = 0, To = 0.5f, Parapet = +1 };
+            var on = new FlightPlan { X0 = laneB0, X1 = laneB1, ZBottom = a.RunZ1, ZTop = a.RunZ0, From = 0.5f, To = 1, Parapet = -1 };
+            if (floor.Flight == null) floor.Flight = up; else floor.Flights.Add(up);
+            floor.Flights.Add(on);
+            floor.Landings.Add(new LandingPlan { X0 = laneA0, Z0 = a.RunZ1, X1 = laneB1, Z1 = a.ZM, Level = 0.5f });
         }
         if (f > 0)
         {
-            bool holeA = (f - 1) % 2 == 0;
-            floor.Holes.Add(holeA ? new RectPlan(laneA0, runZ0, laneA1, runZ1) : new RectPlan(laneA1, runZ0, laneB1, runZ1));
-            floor.Rails.Add(new RectPlan(laneA1, runZ0, laneA1, runZ1));
-            if (!holeA) floor.Rails.Add(new RectPlan(laneB1, runZ0, laneB1, runZ1));
+            floor.Holes.Add(new RectPlan(laneA0, a.RunZ0, laneB1, a.ZM));
+            if (f == a.Floors - 1) floor.Rails.Add(new RectPlan(laneA0, a.RunZ0, laneB0, a.RunZ0));
         }
     }
 
@@ -1329,7 +1385,7 @@ public static partial class InteriorGenerator
             new Piece(FurnitureType.Mailboxes, 1.4f, 0.32f, 1.3f, true),
             new Piece(FurnitureType.Plant, 0.45f, 0.45f, 1.2f, true),
         },
-        RoomType.Landing or RoomType.Corridor or RoomType.Elevator => Array.Empty<Piece>(),
+        RoomType.Landing or RoomType.Corridor or RoomType.Elevator or RoomType.Stairwell => Array.Empty<Piece>(),
         RoomType.Laundry => new[]
         {
             new Piece(FurnitureType.WashingMachine, 0.6f, 0.6f, 0.85f, true),

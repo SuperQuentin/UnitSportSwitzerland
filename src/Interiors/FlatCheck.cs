@@ -74,7 +74,8 @@ public static class FlatCheck
             var ground = l.GroundFloor;
             int above = l.Floors.Count - l.Below;
             // a stairwell is a flight stack: count the flights up from the bottom floor
-            int wells = l.Floors.Count > 1 ? l.Floors[0].AllFlights().Count() : 1;
+            // a stairwell is a flight stack: count the flights up from the bottom floor's own level
+            int wells = l.Floors.Count > 1 ? l.Floors[0].AllFlights().Count(x => x.From <= 0.001f) : 1;
             Expect(wells == box.Wells, $"{box.What}: {wells} stairwell(s), wanted {box.Wells}");
             Expect(ground.Rooms.Count(r => r.Type == RoomType.Lobby && r.Openings.Any(o => o.Kind == OpeningKind.Entry)) >= wells,
                 $"{box.What}: a street door into every stairwell's lobby");
@@ -85,8 +86,9 @@ public static class FlatCheck
                     Expect(lift.Bottom == 0 && lift.Top == l.Floors.Count - 1, $"{box.What}: an elevator from the bottom floor to the top");
             }
             if (l.Floors.Count > 1)
-                Expect(l.Floors.Take(l.Floors.Count - 1).All(f => f.AllFlights().Count() == wells),
-                    $"{box.What}: a flight up from every floor in every stairwell");
+                Expect(l.Floors.Take(l.Floors.Count - 1).All(f => f.AllFlights().Count(x => x.From <= 0.001f) == wells
+                        && f.AllFlights().Count(x => x.Half) == 2 * wells && f.Landings.Count == wells),
+                    $"{box.What}: two flights round a half landing up from every floor in every stairwell");
 
             // every flat: a bed, a kitchen, a bathroom, a hall at its front door
             for (int f = l.Below; f < l.Floors.Count; f++)
