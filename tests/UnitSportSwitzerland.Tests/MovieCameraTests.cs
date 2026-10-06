@@ -100,6 +100,69 @@ public class MovieCameraTests
     }
 
     [Fact]
+    public void TheProgramShowsTheLastCutsCamera()
+    {
+        var p = new MovieProject(new[] { "RideKindId" });
+        var two = p.AddCamera();
+        var three = p.AddCamera();
+        Assert.Equal(new[] { "Cam 1", "Cam 2", "Cam 3" }, p.Cameras.Select(c => c.Name));
+        Assert.Equal(0, p.ProgramCamera(5));   // no cut: the first camera
+        p.CutTo(4, 2, 1 / 30.0);
+        p.CutTo(2, 1, 1 / 30.0);
+        Assert.Equal(new[] { 2.0, 4.0 }, p.Cuts.Select(c => c.T));
+        Assert.Equal(0, p.ProgramCamera(1.9));
+        Assert.Equal(1, p.ProgramCamera(2));
+        Assert.Equal(2, p.ProgramCamera(9));
+        // a cut where one already is changes it
+        p.CutTo(4.01, 0, 1 / 30.0);
+        Assert.Equal(2, p.Cuts.Count);
+        Assert.Equal(0, p.ProgramCamera(5));
+        p.RetimeCut(p.Cuts[1], 1);
+        Assert.Equal(new[] { 1.0, 2.0 }, p.Cuts.Select(c => c.T));
+        Assert.Same(p.Cuts[0], p.CutNear(1.05, 0.1));
+        Assert.Equal(2, p.Duration, 9);   // cuts count in the length
+        Assert.True(p.RemoveCut(p.Cuts[0]));
+
+        // a camera removed: its cuts go, the later cameras' cuts follow their new place
+        p.CutTo(3, 2, 0);
+        Assert.True(p.RemoveCamera(1));
+        Assert.Equal(new[] { 3.0 }, p.Cuts.Select(c => c.T));
+        Assert.Equal(1, p.Cuts[0].Camera);
+        Assert.Same(three, p.Cameras[1]);
+        Assert.True(p.RemoveCamera(0));
+        Assert.False(p.RemoveCamera(0));   // the last camera stays
+        Assert.Equal("Cam 1", p.AddCamera().Name);   // the first free name
+        Assert.DoesNotContain(two, p.Cameras);
+    }
+
+    [Fact]
+    public void CamerasAndTheProgramSurviveTheFileAndVersion3StillLoads()
+    {
+        var p = new MovieProject(new[] { "RideKindId" });
+        p.Camera.Set(Key(1, 10, lens: 50), 0);
+        var wide = p.AddCamera();
+        wide.Name = "Wide";
+        wide.Set(Key(2, 20, lens: 14, ease: KeyEase.Linear), 0);
+        p.CutTo(0, 1, 0);
+        p.CutTo(3, 0, 0);
+        var bytes = new MemoryStream();
+        MovieFile.Write(p, bytes);
+        bytes.Position = 0;
+        var q = MovieFile.Read(bytes, p.Discrete);
+        Assert.Equal(new[] { "Cam 1", "Wide" }, q.Cameras.Select(c => c.Name));
+        Assert.Equal(14f, q.Cameras[1].Keys[0].Lens);
+        Assert.Equal(new[] { (0.0, 1), (3.0, 0) }, q.Cuts.Select(c => (c.T, c.Camera)));
+
+        var old = new MemoryStream();
+        MovieFile.Write(p, old, 3);
+        old.Position = 0;
+        var o = MovieFile.Read(old, p.Discrete);
+        Assert.Single(o.Cameras);
+        Assert.Equal(50f, o.Camera.Keys[0].Lens);
+        Assert.Empty(o.Cuts);
+    }
+
+    [Fact]
     public void CutAllCutsEveryLaneAtOnce()
     {
         var p = new MovieProject(new[] { "RideKindId" });
