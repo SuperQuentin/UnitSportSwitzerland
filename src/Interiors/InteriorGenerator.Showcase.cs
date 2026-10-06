@@ -33,7 +33,8 @@ public static partial class InteriorGenerator
         {
             var piece = sizes.GetValueOrDefault(type) ?? new Piece(type, 1f, 1f, 1f, false);
             var (layout, data) = Layout(type, piece);
-            if (data.Vertices.Length == 0) continue;
+            // (a loose floor pallet is its own node now: InteriorNode.Create draws it, so it stays)
+            if (data.Vertices.Length == 0 && !layout.Furniture.Any(InteriorMeshBuilder.IsLoosePallet)) continue;
             yield return (type.ToString(), () =>
             {
                 var node = InteriorNode.Create(layout, data, Styles.StyleKit.Material(Styles.MaterialRole.Interior), Transform3D.Identity);

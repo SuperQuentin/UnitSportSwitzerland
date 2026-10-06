@@ -39,7 +39,9 @@ public enum RideKind
     /// <summary>The Antonov AN-124 Ruslan (#419): an <see cref="Player.Airliner"/>, walkable, a visor, two ramps, kneeling, a drive-through hold.</summary>
     An124 = 128,
     // 129..192 are motorbikes again (the second range, MotorbikeCatalog.First2).
-    // The next other mount is 193.
+    /// <summary>A counterbalance forklift (#583): a <see cref="Player.Forklift"/>, a mast that lifts pallets.</summary>
+    Forklift = 193,
+    // The next other mount is 194.
 }
 
 /// <summary>
@@ -477,6 +479,7 @@ public abstract class Rideable
         RideKind.Plane => new Plane(),
         RideKind.Pigeon => new Pigeon(),
         RideKind.Airstairs => new Airstairs(),
+        RideKind.Forklift => new Forklift(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),
         _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),
         _ when HeavyCatalog.For(kind) is { } heavy => new Truck(heavy),
