@@ -11,7 +11,7 @@ namespace UnitSport.Terrain;
 /// <list type="number">
 /// <item><b>shipped</b> — the local <c>terrain_chunks/</c> directory, unchanged;</item>
 /// <item><b>cache</b> — <c>user://chunk_cache/</c>, everything fetched in earlier sessions;</item>
-/// <item><b>server</b> — streamed over ENet, then written into the cache.</item>
+/// <item><b>server</b> — the server's HTTP mirror when it names one (#651), else ENet; then written into the cache.</item>
 /// </list>
 ///
 /// <para>
@@ -74,7 +74,7 @@ public sealed class NetworkChunkSource : IChunkSource
     }
 
     /// <summary>
-    /// Cap on the on-disk cache. The full region is 5.3 GB, so an unbounded cache would
+    /// Cap on the on-disk cache. The full region is ~112 GB, so an unbounded cache would
     /// quietly fill a disk over a few sessions.
     /// </summary>
     public long MaxCacheBytes { get; set; } = 2L * 1024 * 1024 * 1024;
@@ -386,7 +386,16 @@ public sealed class NetworkChunkSource : IChunkSource
             try
             {
                 File.WriteAllBytes(temp, bytes);
-                File.Move(temp, path, overwrite: true);
+                try
+                {
+                    File.Move(temp, path, overwrite: true);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException && File.Exists(path))
+                {
+                    // Windows refuses to replace a file another thread is reading: the twin fetch
+                    // already put the same bytes there (HTTP delivers fast enough to hit this often).
+                    return;
+                }
             }
             finally
             {

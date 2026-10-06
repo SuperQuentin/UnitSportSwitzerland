@@ -109,8 +109,9 @@ internal sealed partial class XrCabControls : Node3D
             _ when p.Ride == RideKind.Forklift => "forklift",
             _ when p.Ride == RideKind.Excavator => "excavator",
             _ when p.Ride == RideKind.MiniExcavator => "miniexcavator",
-            _ when p.Ride == RideKind.WheelLoader => "loader",
+            _ when p.Ride is RideKind.WheelLoader or RideKind.WheelLoaderForks => "loader",
             _ when p.Ride == RideKind.CompactRoller => "roller",
+            _ when p.Ride == RideKind.Telehandler => "telehandler",
             _ => "",
         };
     }
@@ -183,6 +184,17 @@ internal sealed partial class XrCabControls : Node3D
         else if (context == "roller")
             // the vibration's red button on the console right of the wheel (#614)
             Add(Kind.Poke, new(0.3f, -0.5f, -0.36f), plus: PlayerInput.DigMode);
+        else if (context == "telehandler")
+        {
+            // the boom's joystick right of the seat (#614), as the loader's levers: aft lifts, aft
+            // tilts the forks back; the extend rocker beside it, pushed forward to run the boom out;
+            // work mode and the steering mode as two buttons on the dash
+            Add(Kind.Hold, new(0.32f, -0.4f, -0.22f), Vector3.Back, PlayerInput.ArmBoomUp, PlayerInput.ArmBoomDown);
+            Add(Kind.Hold, new(0.32f, -0.4f, -0.36f), Vector3.Back, PlayerInput.ArmBucketCurl, PlayerInput.ArmBucketDump);
+            Add(Kind.Hold, new(0.44f, -0.42f, -0.28f), Vector3.Forward, PlayerInput.ShiftUp, PlayerInput.ShiftDown);
+            Add(Kind.Poke, new(0.22f, -0.3f, -0.48f), plus: PlayerInput.DigMode);
+            Add(Kind.Poke, new(-0.16f, -0.26f, -0.5f), plus: PlayerInput.RoofToggle);
+        }
         else if (context == "steamer")
             // the whistle cord overhead: pulled down, it blows
             Add(Kind.Hold, new(0.15f, 0.3f, -0.25f), Vector3.Down, PlayerInput.Horn, null);

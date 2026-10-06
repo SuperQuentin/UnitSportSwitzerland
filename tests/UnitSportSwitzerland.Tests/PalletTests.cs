@@ -71,6 +71,8 @@ public class PalletTests
         Assert.Equal(new PalletRef(PalletSource.Hall, "2585_1114_52", 37, 0), hall);
         Assert.True(Pallets.TryParse(Pallets.YardId("2585_1114_52", 3), out var yard));
         Assert.Equal(new PalletRef(PalletSource.Yard, "2585_1114_52", 3, 0), yard);
+        Assert.True(Pallets.TryParse(Pallets.SiteId("2585_1114_68", 4), out var site));
+        Assert.Equal(new PalletRef(PalletSource.Site, "2585_1114_68", 4, 0), site);
         Assert.True(Pallets.TryParse(Pallets.LooseId(12), out var loose));
         Assert.Equal(new PalletRef(PalletSource.Loose, "", -1, 12), loose);
 

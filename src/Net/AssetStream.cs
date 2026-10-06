@@ -9,7 +9,7 @@ public enum AssetKind
     /// <summary>The whole terrain manifest, sent once on join.</summary>
     Manifest = 0,
 
-    /// <summary>.terr height grid, ~490 KB — by far the largest per-tile payload.</summary>
+    /// <summary>.terr height grid, 2 MB (1001² uint16, stored raw) — by far the largest per-tile payload.</summary>
     Chunk = 1,
 
     /// <summary>.road polylines.</summary>
@@ -38,7 +38,7 @@ public enum AssetKind
     Places = 7,
 
     /// <summary>
-    /// .terrc, the decimated companion tile — 5 KB against the full tile's 490 KB.
+    /// .terrc, the decimated companion tile — 20 KB against the full tile's 2 MB.
     /// <para>
     /// Worth more over the wire than on disk: the outer LOD rings are 280 of a client's 361
     /// tiles and render one vertex in ten or twenty, so serving them the full grid was 137 MB
@@ -72,6 +72,13 @@ public enum AssetKind
     /// <see cref="Places"/>: fetched once during sync; an older server answers "missing".
     /// </summary>
     Landings = 12,
+
+    /// <summary>
+    /// The base URL this server's tiles are also served from over HTTP (#651), as UTF-8 text.
+    /// Asked once during sync; a server without one, or an older one (which does not know the
+    /// kind), answers "missing" and every file streams over ENet as before.
+    /// </summary>
+    HttpBase = 13,
 }
 
 /// <summary>
@@ -120,8 +127,17 @@ public static class AssetStream
         AssetKind.Cd => $"{id.E}.ogg",
         AssetKind.Water => WaterFormat.FileName(id),
         AssetKind.Landings => LandingIndex.FileName,
+        AssetKind.HttpBase => "",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
+
+    /// <summary>
+    /// Kinds a client may fetch from the HTTP mirror (#651): files that sit in the chunk directory as
+    /// they are. Not the manifest or the landings (a server may serve an override in their place),
+    /// nor CDs (another directory).
+    /// </summary>
+    public static bool ServedOverHttp(AssetKind kind) =>
+        kind is not (AssetKind.Manifest or AssetKind.Landings or AssetKind.Cd or AssetKind.HttpBase);
 
     /// <summary>
     /// True for kinds whose format already compresses its own payload, so deflating again

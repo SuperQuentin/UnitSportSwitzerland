@@ -8,9 +8,11 @@ namespace UnitSport.Items;
 /// (which name it, <see cref="Pallets.YardId"/>), LV95 and the ground it stands on, its yaw (its
 /// runners' heading: along the facade) and its load byte.
 /// </summary>
-public readonly record struct YardPallet(string Building, int Slot, double E, double N, double Height, float Yaw, byte Load)
+public readonly record struct YardPallet(string Building, int Slot, double E, double N, double Height, float Yaw, byte Load,
+    bool Site = false)
 {
-    public string Id => Pallets.YardId(Building, Slot);
+    /// <summary>A yard stack's id, or with <see cref="Site"/> a building site's materials pallet's (#615).</summary>
+    public string Id => Site ? Pallets.SiteId(Building, Slot) : Pallets.YardId(Building, Slot);
 }
 
 /// <summary>

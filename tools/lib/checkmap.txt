@@ -305,6 +305,26 @@ src/Vehicles/VehicleBody.Ai quick  --stairscheck --world fixture --traffic 0 --a
 src/Avatar/Forklift      quick  --forkliftcheck --world flat --systems physics,ui
 src/Player/Forklift      quick  --forkliftcheck --world flat --systems physics,ui
 src/Player/FootPlayer.Fo quick  --forkliftcheck --world flat --systems physics,ui
+# #615: a building site's pallets of materials, lifted by a telehandler from a second peer (generated world)
+src/Terrain/Construction/SiteDressing net tools/sitepalletnetcheck.sh
+src/Terrain/Construction/SitePlans net tools/sitepalletnetcheck.sh
+src/Items/SitePalletNetProbe net tools/sitepalletnetcheck.sh
+src/Items/SitePallets     net    tools/sitepalletnetcheck.sh
+src/Items/PalletService   net    tools/sitepalletnetcheck.sh
+src/Terrain/Construction/SiteDressing quick --constructioncheck --systems ui
+# #615: any machine with tines lifts pallets (the telehandler, the fork loader), on the flat; the forklift's own check guards the shared rule
+src/Player/IForks         quick  --forkcheck telehandler --world flat --systems physics,ui
+src/Player/IForks         quick  --forkcheck loaderforks --world flat --systems physics,ui
+src/Player/IForks         quick  --palletcheck --world flat --systems physics,ui
+src/Items/ForkCheck       quick  --forkcheck telehandler --world flat --systems physics,ui
+src/Items/ForkCheck       quick  --forkcheck loaderforks --world flat --systems physics,ui
+src/Items/PalletService   quick  --forkcheck telehandler --world flat --systems physics,ui
+src/Items/Pallets         quick  --forkcheck loaderforks --world flat --systems physics,ui
+src/Player/Telehandler    quick  --forkcheck telehandler --world flat --systems physics,ui
+src/Player/WheelLoader    quick  --forkcheck loaderforks --world flat --systems physics,ui
+src/Avatar/WheelLoader    quick  --forkcheck loaderforks --world flat --systems physics,ui
+src/Avatar/Telehandler    quick  --forkcheck telehandler --world flat --systems physics,ui
+src/Player/Telehandler    net    tools/palletnetcheck.sh
 # pallets a forklift lifts (#583 phase 2): forked, carried and set down in the hand-made warehouse; and over the wire
 src/Items/Pallet         quick  --palletcheck --world flat --systems physics,ui
 src/Avatar/Forklift      quick  --palletcheck --world flat --systems physics,ui
@@ -395,6 +415,9 @@ src/Player/Emote         net    tools/emotenetcheck.sh
 src/Items/SwissItems     net    tools/swisscheck.sh
 src/Items/SwissNetProbe  net    tools/swisscheck.sh
 src/Avatar/HumanMeshBuilder.Emotes net tools/emotenetcheck.sh
+src/Avatar/Face           net    tools/emotenetcheck.sh
+src/Player/FootPlayer.Face net   tools/emotenetcheck.sh
+shaders/body/face        quick  --outfitcheck
 src/Combat/Fight         net    tools/fightnetcheck.sh
 src/Player/FootPlayer.Fight net tools/fightnetcheck.sh
 src/Avatar/HumanMeshBuilder.Fight net tools/fightnetcheck.sh
@@ -409,6 +432,12 @@ src/Player/FootPlayer.Exc quick  --excavatorcheck --world flat --systems physics
 src/Player/Excavator      net    tools/excavatornetcheck.sh
 src/Avatar/Excavator      net    tools/excavatornetcheck.sh
 src/Player/FootPlayer.Exc net    tools/excavatornetcheck.sh
+# #614: the telehandler: three steering modes and the boom (flat), and from a second peer (the excavator's script)
+src/Player/Telehandler    quick  --telehandlercheck --world flat --systems physics,ui
+src/Avatar/Telehandler    quick  --telehandlercheck --world flat --systems physics,ui
+src/Player/FootPlayer.Tel quick  --telehandlercheck --world flat --systems physics,ui
+src/Player/Telehandler    net    tools/excavatornetcheck.sh
+src/Avatar/Telehandler    net    tools/excavatornetcheck.sh
 # #614: the compact roller: drives, steers on its hinge, vibrates (flat), and from a second peer (the excavator's script)
 src/Player/CompactRoller  quick  --rollercheck --world flat --systems physics,ui
 src/Avatar/CompactRoller  quick  --rollercheck --world flat --systems physics,ui
