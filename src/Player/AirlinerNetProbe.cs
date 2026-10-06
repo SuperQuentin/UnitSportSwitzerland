@@ -46,7 +46,8 @@ public partial class AirlinerNetProbe : ChatProbe
     {
         for (int i = 0; i < 40 && !_heard.Any(l => l.Contains("AN B seen gear")); i++)
         {
-            if (Cockpit(me) is { } flying)
+            // once the gear is up and locked: in transit the two copies read it a latency apart
+            if (Cockpit(me) is { Shown.Gear: 0 } flying)
             {
                 var r = flying.Shown;
                 Say($"deckair {r.Ias} {r.Alt} {r.Hdg} {r.Gear} {(air.State.GearDown ? 1 : 0)}");
@@ -228,7 +229,7 @@ public partial class AirlinerNetProbe : ChatProbe
         bool travelled = await Until(() => Airliner.LookOf(a!.Anim).Gear == 0f && Mathf.Abs((Gear()?.Rotation.X ?? 0f) - down) > 1.5f, 20);
         Expect(travelled, $"B's copy folds the nose gear up ({down:F2} -> {Gear()?.Rotation.X ?? 0f:F2} rad)");
         // #421: in flight, B's copy of the screens reads A's speed, height, heading, the gear up and its lever
-        if (await Heard("A", "deckair", 10) && Rig()?.Cockpit is { } panel)
+        if (await Heard("A", "deckair", 25) && Rig()?.Cockpit is { } panel)
         {
             // against A's latest word: A says it every second
             int ias = 0, alt = 0, hdg = 0, gear = 0;
@@ -237,8 +238,8 @@ public partial class AirlinerNetProbe : ChatProbe
                 if (Words("A", "deckair") is not { Length: >= 5 } f) return false;
                 ias = int.Parse(f[0]); alt = int.Parse(f[1]); hdg = int.Parse(f[2]); gear = int.Parse(f[3]);
                 return panel.Shown is var r && Mathf.Abs(r.Ias - ias) <= 6 && Mathf.Abs(r.Alt - alt) <= 60
-                    && Mathf.Abs(Mathf.Wrap(r.Hdg - hdg, -180, 180)) <= 2 && (r.Gear == gear || r.Gear == 1 || gear == 1) && panel.GearLeverDrawn > 0f;
-            }, 3);
+                    && Mathf.Abs(Mathf.Wrap(r.Hdg - hdg, -180, 180)) <= 2 && r.Gear == gear && panel.GearLeverDrawn > 0f;
+            }, 10);
             var r = panel.Shown;
             Expect(same, $"B's copy of A's screens in flight: {r.Ias}/{ias} kt, {r.Alt}/{alt} ft, heading {r.Hdg}/{hdg}, gear {r.Gear}/{gear}, "
                 + $"gear lever {Mathf.RadToDeg(panel.GearLeverDrawn):F0}° (up +)");
