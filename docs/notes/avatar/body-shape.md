@@ -31,7 +31,14 @@
   struct, `Torso`/`Head`/`Fit` structs, loft rings come from a per-thread `RingPool` (a loft
   reads its rings only while drawn). About 1.7-2.8 k triangles in the lit styles.
 - **Lit styles**: lofted bands get round normals (out of each ring's middle) so the cel light
-  rolls round the trunk and the Cartoon ink outline closes over the edges (`cartoon-outline`).
+  rolls round the trunk. No ink outline round figures in Cartoon (dropped in #671).
+- **Limbs are one skin each** (#671): `LimbLoft` lofts an arm from the deltoid's dome to the wrist,
+  a leg from inside the pelvis to the ankle, through `(t, radius)` stations plus a cut at each
+  colour change; the elbow's or knee's ring sits on the bisector, stretched across the bend like
+  a mitre, and the rings are carried along without twist. One loft per run of one colour,
+  neighbours sharing their ring, so no seam opens at a joint.
+- **Head** (#671): round, not an egg: full jaw, short blunt chin, a domed crown (ring at 0.238);
+  the hair cap has a ring there too, or the scalp shows through.
 - Preview: `<godot> --path . -- --avatars <s> <png> --bodies builds|crowd|looks|guys|faces|eyes|hair|hair2|heads|walk [--style ps1|cartoon|real-] [--view deg]`.
   Check: `--outfitcheck` builds every build × hair plain, dressed, under a hat and a helmet.
 - Hats sit on `Head.Seat(hair)`, just above the brow (0.184, 0.192 over hair), not on the crown:

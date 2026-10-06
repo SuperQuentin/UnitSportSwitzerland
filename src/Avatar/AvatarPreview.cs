@@ -852,7 +852,7 @@ public partial class AvatarPreview : Node3D
         if (_outfitWalk)
         {
             // in the convoy the walker runs at its speed (capped to a sprint) in the wind it measures
-            float speed = _convoy != null ? Mathf.Min(_convoySpeed, 7f) : 1.4f;
+            float speed = _convoy != null ? Mathf.Min(_convoySpeed, 7f) : CmdArgs.Float("--speed") ?? 1.4f;
             _walkPhase = HumanMeshBuilder.AdvancePhase(_walkPhase, speed, (float)delta);
             foreach (var (mesh, palette, hat) in _walkers)
             {

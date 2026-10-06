@@ -47,8 +47,11 @@ public partial class Handshake : Node
     /// 23: RideKind.CompactRoller, its bend and its vibration in the pose (#614).
     /// 24: RideKind.Telehandler, its wheels, steering mode and boom in the pose (#614).
     /// 25: RideKind.WheelLoaderForks; the telehandler's and the fork loader's pallet in their pose's lift float (#615).
+    /// 26: World/Sleepers (Challenge/Prove, Snapshot/Add/Remove, WakeAt) (#644).
+    /// 27: ChatManager HandOver/HandedOver/ReceiveInventory, /transfer (#649).
+    /// 28: the wheel loader's bucket carries a pallet, in its pose's lift float as the fork loader's (#615).
     /// </summary>
-    public const int Protocol = 25;
+    public const int Protocol = 28;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

@@ -86,4 +86,44 @@ public class MachineForksTests
         Assert.Equal(TelehandlerLayout.ClampLift(lift), tl, 3);
         Assert.Equal(carrying, tc);
     }
+
+    [Fact]
+    public void A_bucket_holds_rolled_back_and_tips_out_dumped_far_apart()
+    {
+        // between the two, a pallet just scooped is not dropped, nor one just dropped scooped again
+        Assert.True(Pallets.Curled(Pallets.CurlCarry) && !Pallets.Dumped(Pallets.CurlCarry));
+        Assert.True(Pallets.Dumped(Pallets.DumpDrop) && !Pallets.Curled(Pallets.DumpDrop));
+        Assert.True(Pallets.CurlCarry - Pallets.DumpDrop > 0.5f);
+        // the loader's carry pose holds nothing back from a dump, and its fully curled bucket on the
+        // ground is short of holding: the arm has to lift as it curls, as a real loader's does
+        Assert.False(Pallets.Dumped(WheelLoaderLayout.RestLift + WheelLoaderLayout.RestTilt));
+        Assert.False(Pallets.Curled(WheelLoaderLayout.LiftMin + WheelLoaderLayout.TiltMax));
+        Assert.True(Pallets.Curled(0f + WheelLoaderLayout.TiltMax));
+        Assert.True(Pallets.Dumped(0f + WheelLoaderLayout.TiltMin));
+    }
+
+    [Theory]
+    [InlineData(0f, 0.6f, 0f, true)]
+    [InlineData(0.9f, 0.6f, 0f, true)]
+    [InlineData(1.0f, 0.6f, 0f, false)]
+    [InlineData(0f, 0.05f, 0f, false)]
+    [InlineData(0f, 1.8f, 0f, true)]
+    [InlineData(0f, 1.9f, 0f, false)]
+    [InlineData(0f, 0.6f, 0.7f, false)]
+    [InlineData(0f, 0.6f, -0.5f, true)]
+    public void A_pallet_is_in_the_loaders_bucket_within_its_width_out_to_its_lip_on_its_floor(float x, float ahead, float up, bool inIt) =>
+        Assert.Equal(inIt, Pallets.InBucket(x, ahead, up, WheelLoaderLayout.BucketHalf, WheelLoaderLayout.BucketReach));
+
+    [Theory]
+    [InlineData(-0.45f, 0.55f, 0f, 0)]
+    [InlineData(0.95f, -0.95f, 0.7f, 512)]
+    [InlineData(0.2f, 0.75f, -0.31f, 129)]
+    public void A_parked_bucket_loader_keeps_its_arm_and_its_pallet(float lift, float tilt, float articulation, int carrying)
+    {
+        var (l, t, a, c) = WheelLoaderLayout.Unpack(WheelLoaderLayout.Pack(lift, tilt, articulation, carrying));
+        Assert.True(MathF.Abs(l - lift) < 0.004f, $"lift {lift} came back {l}");
+        Assert.True(MathF.Abs(t - tilt) < 0.008f, $"tilt {tilt} came back {t}");
+        Assert.True(MathF.Abs(a - articulation) < 0.006f, $"articulation {articulation} came back {a}");
+        Assert.Equal(carrying, c);
+    }
 }
