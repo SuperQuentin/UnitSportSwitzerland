@@ -16,7 +16,7 @@ namespace UnitSportSwitzerland.Tests;
 public class ConstructionSiteTests
 {
     /// <summary>A flat-topped prism, as swissBUILDINGS3D draws an <c>Im Bau</c> volume, turned by <paramref name="turn"/> radians.</summary>
-    private static Building Box(float cx, float cz, float w, float d, float h, byte floors, float turn = 0f,
+    internal static Building Box(float cx, float cz, float w, float d, float h, byte floors, float turn = 0f,
         BuildingKind kind = BuildingKind.UnderConstruction)
     {
         var u = Vector2.FromAngle(turn);
@@ -38,7 +38,7 @@ public class ConstructionSiteTests
         return new Building { Kind = kind, Floors = floors, MinY = 0, MaxY = h, Triangles = tris.ToArray() };
     }
 
-    private static ConstructionSite Plan(string key, Building b, Vector2? street, Func<Vector2, bool>? blocked = null) =>
+    internal static ConstructionSite Plan(string key, Building b, Vector2? street, Func<Vector2, bool>? blocked = null) =>
         ConstructionSites.Plan(key, b, PlanBox.Of(b)!.Value, street, blocked ?? (_ => false))!;
 
     /// <summary>Every point the site puts something on: hoarding ends and middles, zone and machine corners, crane bases.</summary>

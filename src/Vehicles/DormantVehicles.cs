@@ -6,6 +6,7 @@ using UnitSport.Interiors;
 using UnitSport.Items;
 using UnitSport.Player;
 using UnitSport.Terrain;
+using UnitSport.Terrain.Construction;
 using UnitSport.Terrain.Format;
 using UnitSport.World;
 
@@ -438,7 +439,9 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                     var stacks = new List<YardPallet>();
                     if (roads is { Parking.Count: > 0 })
                         DormantSlots.ForParking(id, roads.Parking, ParkedKinds, list);
-                    Yards(source, id, roads, list, stacks);
+                    var buildings = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
+                    Yards(source, id, buildings, roads, list, stacks);
+                    Sites(source, id, buildings, roads, list);
                     Marina(source, id, list);
                     return (list, stacks);
                 });
@@ -481,9 +484,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// </summary>
     /// <param name="pallets">The pallets out on the sites' aprons (#583 phase 3), filled from the same
     /// fronts: drawn by <c>PalletService</c>, not by this layer.</param>
-    private static void Yards(IChunkSource source, TileId id, RoadTile? roads, List<VehicleSlot> into, List<YardPallet> pallets)
+    private static void Yards(IChunkSource source, TileId id, BuildingTile? tile, RoadTile? roads, List<VehicleSlot> into, List<YardPallet> pallets)
     {
-        var tile = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
         // most tiles have buildings and no site: their height grid is 2 MB a streaming client
         // would download for nothing (#63)
         if (tile is not { Buildings.Count: > 0 } || !SiteYards.HasSite(tile)) return;
@@ -514,6 +516,34 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         }
         pallets.AddRange(SiteYards.Pallets(tile, roads, grid, fronts));
     }
+
+    /// <summary>
+    /// The fourth provider (#616): the machines parked on a building site, where its plan
+    /// (<see cref="SitePlans"/>, the very plan the tile's site is built from) put them. Skipped on a
+    /// tile with no site, which is nearly all of them. Each stands on its own ground; the planner
+    /// already kept the yard's places off the building, the roads and the neighbours.
+    /// </summary>
+    private static void Sites(IChunkSource source, TileId id, BuildingTile? tile, RoadTile? roads, List<VehicleSlot> into)
+    {
+        if (tile is not { Buildings.Count: > 0 } || !SitePlans.HasSite(tile)) return;
+        var sites = SitePlans.For(tile, roads);
+        if (sites.Count == 0) return;
+        int before = into.Count;
+        DormantSlots.ForConstruction(id, sites, SiteKind, ParkedKinds, into);
+        if (into.Count == before || source.LoadChunkAsync(id).GetAwaiter().GetResult() is not { } grid) return;
+        for (int i = before; i < into.Count; i++) into[i] = into[i] with { Height = GroundUnder(grid, into[i], false) };
+    }
+
+    /// <summary>
+    /// What a site's machine parks as: the excavator (#611) and the wheel loader (#612). The small
+    /// kit (#614), the tipper and the mixer (#613) join here once they can be driven.
+    /// </summary>
+    private static int? SiteKind(MachineRole role) => role switch
+    {
+        MachineRole.Excavator => (int)RideKind.Excavator,
+        MachineRole.WheelLoader => (int)RideKind.WheelLoader,
+        _ => null,
+    };
 
     /// <summary>
     /// The ground a slot stands at: for a car, the highest point under its box's corners and middle,
