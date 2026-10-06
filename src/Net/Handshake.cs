@@ -50,8 +50,9 @@ public partial class Handshake : Node
     /// 26: World/Sleepers (Challenge/Prove, Snapshot/Add/Remove, WakeAt) (#644).
     /// 27: ChatManager HandOver/HandedOver/ReceiveInventory, /transfer (#649).
     /// 28: the wheel loader's bucket carries a pallet, in its pose's lift float as the fork loader's (#615).
+    /// 29: the site tipper (104) and mixer (105); a mixer's pose has -1 for its rpm with the engine off (#613).
     /// </summary>
-    public const int Protocol = 28;
+    public const int Protocol = 29;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
