@@ -150,7 +150,8 @@ A Swiss *Treppenhaus*, not the house stair the first version reused.
 | Open / shut a flat's door | E | Y | Y, or grip the door |
 | Pick a flat door's lock | E, then the dial (A/D, mouse) | Y, then the stick | Y or grip, then the stick |
 
-Esc / B / E again closes the floor list. Prompts through `InputHints`.
+Esc / B / E again closes the floor list. On a landing where a flat's door stands beside the call
+button, E works whichever is nearer (`DoorNearer`, #576). Prompts through `InputHints`.
 
 ## Checks
 
