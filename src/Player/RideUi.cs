@@ -241,6 +241,9 @@ public partial class RideUi : CanvasLayer
         // ground equipment at an airport (#417): the airstairs that dock to an airliner's doors
         AddTab(bar, pages, "Airport", new List<Card> { NewCard(RideKind.Airstairs, "Airstairs", new Airstairs().Blurb, true,
             $"{RideKind.Airstairs}|Airstairs", () => new Airstairs().BuildParkedVisual(0)) });
+        // works machinery (#583): the forklift, which is driven rather than dispatched
+        AddTab(bar, pages, "Works", new List<Card> { NewCard(RideKind.Forklift, "Forklift", new Forklift().Blurb, true,
+            $"{RideKind.Forklift}|Forklift", () => new Forklift().BuildParkedVisual(0)) });
         // trailers are not mounts: each card couples one behind the truck being driven, or leaves it
         // in the world ahead to back onto (RideKind.Trailer + its index, decoded in Choose)
         AddTab(bar, pages, "Trailers", TrailerCatalog.All.Select((t, i) => NewCard((RideKind)(TrailerRow + i), t.Label,

@@ -28,6 +28,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Interiors.InteriorManager? _interiors;
     private WorldOrigin? _origin;
     private Items.PlacedObjects? _placed;
+    private Items.PalletService? _pallets;
     private Build.Structures? _structures;
     private Occasions.OccasionManager? _occasions;
     private World.RaceNpcs? _npcs;
@@ -232,6 +233,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
         _placed.NameOf = _chat.NameOfPeer;
+        // pallets a forklift has moved (#583): which of the plan's have gone, and where they were put
+        _pallets = Items.PalletService.Create(this, origin, server: true);
+        _pallets.Source = () => source;
         _chat.NameAssigned += bank.SendBalance;
         // built structures (#274): checked, kept and saved here; match ones cleared after the match
         if (Systems.On(Systems.Build))
@@ -417,6 +421,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
+        _pallets?.SendTo(id);
         _structures?.SendTo(id);
         _br?.SendTo(id);
         _brCrates?.SendTo(id);

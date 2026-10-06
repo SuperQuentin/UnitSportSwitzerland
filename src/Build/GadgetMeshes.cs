@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Avatar;
 using UnitSport.Items;
+using UnitSport.Core;
 
 namespace UnitSport.Build;
 
@@ -85,6 +86,20 @@ public static class GadgetMeshes
         }
         if (o.Kind == PlacedKind.RopeLadder) return Ladder(Gadgets.LadderLength(o.Payload) ?? Gadgets.LadderMax);
         return Mesh(o.Kind);
+    }
+
+    /// <summary>
+    /// The gadgets in the model viewer (--models): every kind with colliders here, a full rope
+    /// ladder, and a zipline with both posts and its cable.
+    /// </summary>
+    [Showcase("Build")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseGadgets()
+    {
+        foreach (var kind in Enum.GetValues<PlacedKind>())
+            if (Colliders(kind).Any())
+                yield return (kind.ToString(), () => ModelViewer.Shaded(Mesh(kind)));
+        yield return ("Rope ladder", () => ModelViewer.Shaded(Ladder(Gadgets.LadderMax)));
+        yield return ("Zipline, both posts", () => ModelViewer.Shaded(Zipline(new Vector3(0, 4f, 25f))));
     }
 
     /// <summary>A gadget that looks the same wherever it is: cached per kind.</summary>
