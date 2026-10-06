@@ -69,7 +69,7 @@ public static class InteriorValidator
 
             if (f < l.Floors.Count - 1)
             {
-                if (!l.Floors[f].AllFlights().Any()) errors.Add($"no stairs from floor {f}");
+                if (!Stairs(l.Floors[f]).Any()) errors.Add($"no stairs from floor {f}");
                 foreach (var fl in l.Floors[f].AllFlights())
                 {
                     if (!rooms.Any(core => fl.X0 >= core.X0 - 0.01f && fl.X1 <= core.X1 + 0.01f
@@ -101,14 +101,15 @@ public static class InteriorValidator
             var room = floor.Rooms[a];
             foreach (var o in room.Openings)
                 if (o.Kind is OpeningKind.Door or OpeningKind.Arch && o.Other >= 0) Reach(f, o.Other);
-            // a flight from this room's floor, starting in it, lands in the room over its top
-            foreach (var fl in floor.AllFlights())
-                if (Inside(room, (fl.X0 + fl.X1) / 2, fl.ZBottom) && f + 1 < l.Floors.Count)
-                    Reach(f + 1, RoomAt(l.Floors[f + 1], (fl.X0 + fl.X1) / 2, fl.ZTop));
+            // a stair from this room's floor, starting in it, lands in the room over its top: one
+            // flight, or two round a half landing (#571)
+            foreach (var (first, last) in Stairs(floor))
+                if (Inside(room, (first.X0 + first.X1) / 2, first.ZBottom) && f + 1 < l.Floors.Count)
+                    Reach(f + 1, RoomAt(l.Floors[f + 1], (last.X0 + last.X1) / 2, last.ZTop));
             // and back down one arriving here
             if (f > 0)
-                foreach (var fl in l.Floors[f - 1].AllFlights())
-                    if (Inside(room, (fl.X0 + fl.X1) / 2, fl.ZTop)) Reach(f - 1, RoomAt(l.Floors[f - 1], (fl.X0 + fl.X1) / 2, fl.ZBottom));
+                foreach (var (first, last) in Stairs(l.Floors[f - 1]))
+                    if (Inside(room, (last.X0 + last.X1) / 2, last.ZTop)) Reach(f - 1, RoomAt(l.Floors[f - 1], (first.X0 + first.X1) / 2, first.ZBottom));
             if (room.Type == RoomType.Elevator)
                 foreach (var lift in l.Lifts)
                     if (lift.Contains((room.X0 + room.X1) / 2, (room.Z0 + room.Z1) / 2))
@@ -172,6 +173,32 @@ public static class InteriorValidator
             }
         }
         return errors;
+    }
+
+    /// <summary>
+    /// The stairs up from a floor, each as its first and last flight: a whole-storey flight on its
+    /// own, or a flight to a half landing and the one on from it (#571) — the one starting at the
+    /// height the other ends, on a landing both reach.
+    /// </summary>
+    private static IEnumerable<(FlightPlan First, FlightPlan Last)> Stairs(FloorPlan floor)
+    {
+        var flights = floor.AllFlights().ToList();
+        foreach (var first in flights.Where(x => x.From <= 0.001f))
+        {
+            var at = first;
+            for (int guard = 0; at.To < 0.999f && guard < 8; guard++)
+            {
+                var landing = floor.Landings.FirstOrDefault(g => Math.Abs(g.Level - at.To) < 0.01f
+                    && (at.X0 + at.X1) / 2 >= g.X0 - 0.01f && (at.X0 + at.X1) / 2 <= g.X1 + 0.01f
+                    && Math.Abs(Math.Clamp(at.ZTop, g.Z0, g.Z1) - at.ZTop) < 0.05f);
+                var next = landing == null ? null : flights.FirstOrDefault(x => Math.Abs(x.From - at.To) < 0.01f
+                    && (x.X0 + x.X1) / 2 >= landing.X0 - 0.01f && (x.X0 + x.X1) / 2 <= landing.X1 + 0.01f
+                    && Math.Abs(Math.Clamp(x.ZBottom, landing.Z0, landing.Z1) - x.ZBottom) < 0.05f);
+                if (next == null) break;
+                at = next;
+            }
+            if (at.To >= 0.999f) yield return (first, at);
+        }
     }
 
     private static bool Inside(RoomPlan r, float x, float z) =>
@@ -267,6 +294,8 @@ public static class InteriorValidator
             }
             foreach (var h in floor.Holes)
                 sb.Append($"<rect x=\"{N(X(h.X0))}\" y=\"{N(Y(h.Z1))}\" width=\"{N((h.X1 - h.X0) * S)}\" height=\"{N((h.Z1 - h.Z0) * S)}\" fill=\"#333\" fill-opacity=\"0.5\"/>");
+            foreach (var g in floor.Landings)
+                sb.Append($"<rect x=\"{N(X(g.X0))}\" y=\"{N(Y(g.Z1))}\" width=\"{N((g.X1 - g.X0) * S)}\" height=\"{N((g.Z1 - g.Z0) * S)}\" fill=\"#b8b2a6\"/>");
             foreach (var fl in floor.AllFlights())
             {
                 float z0 = Math.Min(fl.ZBottom, fl.ZTop), z1 = Math.Max(fl.ZBottom, fl.ZTop);

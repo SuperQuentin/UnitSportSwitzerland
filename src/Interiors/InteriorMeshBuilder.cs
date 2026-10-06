@@ -123,6 +123,8 @@ public static partial class InteriorMeshBuilder
         RoomType.CarPark => (C(0.50f, 0.50f, 0.49f), C(0.74f, 0.74f, 0.72f), C(0.62f, 0.62f, 0.61f)),
         RoomType.TechRoom => (Concrete, C(0.78f, 0.78f, 0.75f), C(0.68f, 0.68f, 0.66f)),
         RoomType.Corridor => (C(0.62f, 0.58f, 0.52f), C(0.88f, 0.86f, 0.80f), C(0.94f, 0.94f, 0.92f)),
+        // #571: a terrazzo floor and pale painted walls, as every Swiss Treppenhaus
+        RoomType.Stairwell => (C(0.70f, 0.68f, 0.64f), C(0.92f, 0.90f, 0.84f), C(0.95f, 0.95f, 0.93f)),
         _ => (C(0.52f, 0.38f, 0.25f), C(0.88f, 0.84f, 0.76f), C(0.95f, 0.94f, 0.90f)), // hall, landing
     };
 
@@ -141,9 +143,20 @@ public static partial class InteriorMeshBuilder
             foreach (var room in floor.Rooms)
                 Room(s, room, y0, l.ClearOf(room), floor.Holes, HolesOf(f + room.Span));
             foreach (var flight in floor.AllFlights()) Flight(s, flight, y0, h);
+            // a stairwell's half landings (#571): a stone slab, stood on, its underside seen from below
+            foreach (var g in floor.Landings)
+                s.Box(new Vector3(g.X0 + 0.02f, y0 + h * g.Level - 0.22f, g.Z0), new Vector3(g.X1 - 0.02f, y0 + h * g.Level, g.Z1 - 0.02f), StairStone);
             foreach (var r in floor.Rails)
-                s.Box(new Vector3(Math.Min(r.X0, r.X1) - 0.03f, y0, Math.Min(r.Z0, r.Z1)),
-                    new Vector3(Math.Max(r.X0, r.X1) + 0.03f, y0 + 1.0f, Math.Max(r.Z0, r.Z1)), Rail);
+            {
+                var lo = new Vector3(Math.Min(r.X0, r.X1) - 0.03f, y0, Math.Min(r.Z0, r.Z1));
+                var hi = new Vector3(Math.Max(r.X0, r.X1) + 0.03f, y0 + 1.0f, Math.Max(r.Z0, r.Z1));
+                // in a stairwell (#571) the guard is the parapet's own: plaster with a handrail on it
+                bool well = floor.Rooms.Any(q => q.Type == RoomType.Stairwell
+                    && (lo.X + hi.X) / 2 > q.X0 && (lo.X + hi.X) / 2 < q.X1 && lo.Z >= q.Z0 - 0.01f && hi.Z <= q.Z1 + 0.01f);
+                if (!well) { s.Box(lo, hi, Rail); continue; }
+                s.Box(lo with { Z = lo.Z - 0.04f }, hi with { Y = y0 + 0.9f, Z = hi.Z + 0.04f }, Parapet);
+                s.Box(new Vector3(lo.X - 0.02f, y0 + 0.9f, lo.Z - 0.06f), new Vector3(hi.X + 0.02f, y0 + 0.96f, hi.Z + 0.06f), Handrail, false);
+            }
             // the shaft between this ceiling and the next floor
             foreach (var hole in above)
             {
@@ -385,14 +398,24 @@ public static partial class InteriorMeshBuilder
 
     // ---- stairs ------------------------------------------------------------------------------
 
+    private static readonly Color StairStone = C(0.72f, 0.70f, 0.66f);
+    private static readonly Color StairNosing = C(0.50f, 0.48f, 0.45f);
+    private static readonly Color Parapet = C(0.90f, 0.88f, 0.82f);
+    private static readonly Color Handrail = C(0.40f, 0.27f, 0.17f);
+
     /// <summary>
-    /// Solid steps to look at, a ramp to stand on. A CharacterBody climbing real risers catches on
-    /// every nosing; the ramp runs from one tread before the first step to the top landing, which
-    /// keeps it at or just under the nosings the whole way up.
+    /// Steps to look at, a ramp to stand on. A CharacterBody climbing real risers catches on every
+    /// nosing; the ramp runs from one tread before the first step to the top, which keeps it at or
+    /// just under the nosings the whole way up. A house's flight is wooden steps on a solid
+    /// block down to its floor. A stairwell's half flight (#571) is stone treads with a dark
+    /// nosing on a slab whose underside follows the steps, since the flight below passes under it,
+    /// and carries a parapet with a handrail along the open well when <see cref="FlightPlan.Parapet"/> says.
     /// </summary>
     private static void Flight(Scratch s, FlightPlan f, float y0, float h)
     {
-        int steps = Math.Max(1, (int)MathF.Ceiling(h / 0.19f));
+        float ya = y0 + h * f.From, yb = y0 + h * f.To, rise = yb - ya;
+        bool stone = f.Half;
+        int steps = Math.Max(1, (int)MathF.Ceiling(rise / (stone ? 0.18f : 0.19f)));
         float dir = Math.Sign(f.ZTop - f.ZBottom);
         float run = Math.Abs(f.ZTop - f.ZBottom);
         float tread = run / steps;
@@ -400,17 +423,59 @@ public static partial class InteriorMeshBuilder
         for (int i = 0; i < steps; i++)
         {
             float za = f.ZBottom + dir * tread * i, zb = f.ZBottom + dir * tread * (i + 1);
-            var shade = i % 2 == 0 ? StairWood : StairWood * 0.93f;
-            shade.A = 1;
-            s.Box(new Vector3(x0, y0, Math.Min(za, zb)), new Vector3(x1, y0 + h * (i + 1) / steps, Math.Max(za, zb)), shade, false);
+            float top = ya + rise * (i + 1) / steps;
+            float z0 = Math.Min(za, zb), z1 = Math.Max(za, zb);
+            if (!stone)
+            {
+                var shade = i % 2 == 0 ? StairWood : StairWood * 0.93f;
+                shade.A = 1;
+                s.Box(new Vector3(x0, y0, z0), new Vector3(x1, top, z1), shade, false);
+                continue;
+            }
+            // the tread and its riser on a slab 0.35 m thick under the step line
+            s.Box(new Vector3(x0, Math.Max(ya - 0.2f, top - 0.38f), z0), new Vector3(x1, top, z1), StairStone, false);
+            float nose = dir > 0 ? z0 : z1;
+            s.Box(new Vector3(x0, top - 0.03f, nose - 0.02f), new Vector3(x1, top + 0.005f, nose + 0.02f), StairNosing, false);
+        }
+        if (stone && f.Parapet != 0)
+        {
+            // a solid parapet in the well, following the flight, and a handrail along its top: each
+            // flight's half of the well, so the two of a turn stand side by side; solid, so nobody
+            // steps off one flight onto the other
+            float p0 = f.Parapet > 0 ? f.X1 : f.X0 - InteriorGenerator.StairEye / 2;
+            float p1 = f.Parapet > 0 ? f.X1 + InteriorGenerator.StairEye / 2 : f.X0;
+            float ra = ya + rise / steps, rb = yb;
+            Prism(s, p0, p1, f.ZBottom, f.ZTop, ra - 0.4f, ra + 0.9f, rb - 0.4f, rb + 0.9f, Parapet, true);
+            Prism(s, p0 - 0.03f, p1 + 0.03f, f.ZBottom, f.ZTop, ra + 0.9f, ra + 0.96f, rb + 0.9f, rb + 0.96f, Handrail, false);
         }
         float zs = f.ZBottom - dir * tread;
-        var a = new Vector3(f.X0, y0, zs);
-        var b = new Vector3(f.X1, y0, zs);
-        var c = new Vector3(f.X1, y0 + h, f.ZTop);
-        var d = new Vector3(f.X0, y0 + h, f.ZTop);
+        var a = new Vector3(f.X0, ya, zs);
+        var b = new Vector3(f.X1, ya, zs);
+        var c = new Vector3(f.X1, yb, f.ZTop);
+        var d = new Vector3(f.X0, yb, f.ZTop);
         s.Col.Add(a); s.Col.Add(b); s.Col.Add(c);
         s.Col.Add(a); s.Col.Add(c); s.Col.Add(d);
+    }
+
+    /// <summary>
+    /// A box sloped along z: x from <paramref name="x0"/> to <paramref name="x1"/>, at
+    /// z = <paramref name="za"/> from <paramref name="lowA"/> to <paramref name="highA"/>, at
+    /// z = <paramref name="zb"/> from <paramref name="lowB"/> to <paramref name="highB"/>.
+    /// </summary>
+    private static void Prism(Scratch s, float x0, float x1, float za, float zb,
+        float lowA, float highA, float lowB, float highB, Color col, bool collide)
+    {
+        var a0 = new Vector3(x0, lowA, za); var a1 = new Vector3(x1, lowA, za);
+        var a2 = new Vector3(x1, highA, za); var a3 = new Vector3(x0, highA, za);
+        var b0 = new Vector3(x0, lowB, zb); var b1 = new Vector3(x1, lowB, zb);
+        var b2 = new Vector3(x1, highB, zb); var b3 = new Vector3(x0, highB, zb);
+        var side = col * 0.9f; side.A = col.A;
+        s.Quad(a0, b0, b3, a3, side, collide);       // -x face
+        s.Quad(a1, a2, b2, b1, side, collide);       // +x face
+        s.Quad(a3, b3, b2, a2, col, collide);        // top
+        s.Quad(a0, a1, b1, b0, side * 0.8f, false);  // underside
+        s.Quad(a0, a3, a2, a1, side, false);         // ends
+        s.Quad(b0, b1, b2, b3, side, false);
     }
 
     // ---- elevators (#557) ----------------------------------------------------------------------
