@@ -52,6 +52,7 @@ public partial class MovieStudio : Screen
     private bool _xFired;
     private const double HoldToCut = 0.4;
     private PopupMenu? _keyMenu;
+    private ScrollContainer _timelineBox = null!;
     private Button _fly = null!;
 
     private static readonly StringName Forward = PlayerInput.TriggerRight, Backward = PlayerInput.TriggerLeft;
@@ -211,6 +212,7 @@ public partial class MovieStudio : Screen
         var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(0, 170), HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
         scroll.AddChild(_timeline);
         column.AddChild(scroll);
+        _timelineBox = scroll;
         _scroll = new HScrollBar { Step = 0, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _scroll.ValueChanged += v => { if (!_syncingScroll) _timeline.Left = v; };
         column.AddChild(_scroll);
@@ -293,6 +295,10 @@ public partial class MovieStudio : Screen
         float shuttle = Input.GetActionStrength(Forward) - Input.GetActionStrength(Backward);
         if (_lookThrough.ButtonPressed) ShowThroughCamera();
         _gizmos.Hidden = _lookThrough.ButtonPressed;
+        // the timeline as tall as its rows, up to a third of the screen; past that it scrolls
+        float rows = Math.Min(_timeline.CustomMinimumSize.Y, GetViewportRect().Size.Y / 3f);
+        if (!Mathf.IsEqualApprox(_timelineBox.CustomMinimumSize.Y, Math.Max(170, rows)))
+            _timelineBox.CustomMinimumSize = new Vector2(0, Math.Max(170, rows));
         if (_camPicker.ItemCount != MovieSession.Project.Cameras.Count) RefreshCameras();
         // a pad's X held: cut to the picked camera (a tap splits, on release)
         if (_xHeldSince >= 0 && !_xFired && Time.GetTicksMsec() / 1000.0 - _xHeldSince >= HoldToCut)

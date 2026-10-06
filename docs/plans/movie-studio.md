@@ -11,6 +11,7 @@ Tracking: #637. Status: **milestone 1 built** (PR #642).
 | 1b Acted takes (layering) | planned | — |
 | 1c Sound: songs, game sound, beat markers, snapping | done: `movie/movie-sound` | #656 |
 | 1d Timeline zoom, cut tools, one camera track with keyframes, game sound beats | done: `movie/movie-camera` | #669 |
+| 2a Several cameras, the Program cut list, camera gizmos | done: `movie/movie-cameras` | #675 |
 | 2 Virtual cameras, lenses, lock, cuts, export | planned | — |
 | 3 VR performance + VR handheld camera | planned | — |
 | 4 Webcam/phone body tracking (VMC) | planned | — |
