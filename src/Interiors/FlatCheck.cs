@@ -47,11 +47,7 @@ public static class FlatCheck
 
         string dir = ProjectSettings.GlobalizePath("res://test_output/flats");
         System.IO.Directory.CreateDirectory(dir);
-        var tile = new BuildingTile
-        {
-            Id = new TileId(2583, 1113),
-            Buildings = Boxes.Select((b, i) => Solid(b, 150f * i + 60f)).ToList(),
-        };
+        var tile = Tile();
         var doors = BuildingFootprint.ComputeDoors(tile, null, null);
         int flats = 0, locked = 0, lit = 0, livings = 0;
 
@@ -149,6 +145,16 @@ public static class FlatCheck
         GD.Print($"[flatcheck] RESULT: {(failures == 0 ? "ok" : $"FAILED ({failures})")}");
         return failures == 0 ? 0 : 1;
     }
+
+    /// <summary>The synthetic tile every box stands on, 150 m apart (also what <c>--flattour</c> walks).</summary>
+    internal static BuildingTile Tile() => new()
+    {
+        Id = new TileId(2583, 1113),
+        Buildings = Boxes.Select((b, i) => Solid(b, 150f * i + 60f)).ToList(),
+    };
+
+    /// <summary>Index of the box called <paramref name="what"/>.</summary>
+    internal static int IndexOf(string what) => Array.FindIndex(Boxes, b => b.What == what);
 
     /// <summary>Same rooms in the same places, units and all.</summary>
     private static bool SamePlan(FloorPlan a, FloorPlan b)

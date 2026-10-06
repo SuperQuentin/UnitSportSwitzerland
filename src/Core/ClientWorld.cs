@@ -161,6 +161,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
             return;
         }
+        // an apartment block's inside, hand-made (#557): no terrain, no server
+        if (Interiors.FlatTour.ParseArgs() is { Requested: true } flatTour)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.FlatTour(flatTour.Shot, Interiors.FlatTour.BlockArg()) { Name = "FlatTour" });
+            return;
+        }
         // the five industrial sites, hand-made (#497): no terrain, no server
         if (Interiors.SiteProbe.ParseArgs() is { Requested: true } siteCheck)
         {

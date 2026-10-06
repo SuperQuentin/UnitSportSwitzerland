@@ -559,6 +559,9 @@ public static partial class InteriorGenerator
         // it, the living room and a bedroom at the two facades.
         if (u * v < 38f) return StudioFlat(u, v, door);
         if (u < 4.4f) return LinearFlat(u, v, program);
+        // as wide as it is deep: a hall across the middle, wet rooms between it and the landing,
+        // the rooms people live in on the facade side
+        if (v >= 6.4f && u >= 6.0f && u >= 0.7f * v && TFlat(u, v, door, ext, program) is { } t) return t;
         if (v >= 3.6f && (v < 6.5f || !ext.Far && (ext.U0 || ext.U1) && v <= 9.5f))
             return GalleryFlat(u, v, door, ext, program) ?? StudioFlat(u, v, door);
 
@@ -752,6 +755,69 @@ public static partial class InteriorGenerator
         return rooms;
     }
 
+    /// <summary>
+    /// A hall across the flat, a short way in from its front door: between the hall and the
+    /// landing wall a band of the rooms that need no window (bathroom, WC, box room) either side
+    /// of the entrance; beyond the hall, along the facades, the living room with the kitchen
+    /// beside it and the bedrooms. Every room opens off the hall. Null if it does not fit.
+    /// </summary>
+    private static List<Local>? TFlat(float u, float v, float door, (bool U0, bool U1, bool Far) ext, List<FlatItem> program)
+    {
+        const float hall = 1.2f;
+        float band = v >= 8f ? 2.6f : 2.3f;
+        float h0 = Fit(door - HallWidth / 2, 0, u - HallWidth), h1 = h0 + HallWidth;
+        // a sliver beside the entrance is the entrance's own
+        if (h0 < 1.1f) h0 = 0;
+        if (u - h1 < 1.1f) h1 = u;
+        var rooms = new List<Local> { new(RoomType.Hall, h0, 0, h1, band), new(RoomType.Hall, 0, band, u, band + hall) };
+
+        var wet = program.Where(p => p.Type is RoomType.Bathroom or RoomType.WC or RoomType.Storage).ToList();
+        var dry = program.Where(p => p.Type is not (RoomType.Bathroom or RoomType.WC or RoomType.Storage)).ToList();
+        // the band either side of the entrance, the bathroom on the wider side
+        var zones = new List<(float A, float B)>();
+        if (h0 > 0) zones.Add((0, h0));
+        if (h1 < u) zones.Add((h1, u));
+        zones = zones.OrderByDescending(z => z.B - z.A).ToList();
+        var lost = new List<FlatItem>();
+        var shares = zones.Select(_ => new List<FlatItem>()).ToList();
+        foreach (var it in wet.OrderByDescending(i => i.Keep))
+        {
+            int best = -1;
+            float fill = float.MaxValue;
+            for (int z = 0; z < zones.Count; z++)
+            {
+                float need = shares[z].Sum(i => StripMin(i.Type)) + StripMin(it.Type);
+                float len = zones[z].B - zones[z].A;
+                if (need > len || need / len >= fill) continue;
+                fill = need / len;
+                best = z;
+            }
+            if (best < 0) lost.Add(it);
+            else shares[best].Add(it);
+        }
+        if (lost.Any(i => i.Type == RoomType.Bathroom)) return null;
+        for (int z = 0; z < zones.Count; z++)
+        {
+            // a stretch with nothing for it is a cupboard
+            if (shares[z].Count == 0) shares[z].Add(new FlatItem(RoomType.Storage, 1f, 0));
+            foreach (var (it, a0, a1) in Strip(zones[z].A, zones[z].B, shares[z], lost))
+                rooms.Add(new Local(it.Type, a0, 0, a1, band));
+        }
+
+        // the facade side: the living room at a facade end (away from the door if both are), the
+        // kitchen beside it, the bedrooms on from there
+        var kitchenLiving = dry.Where(p => p.Type is RoomType.Kitchen or RoomType.Living).OrderBy(p => p.Type == RoomType.Living);
+        var ordered = dry.Where(p => p.Type is not (RoomType.Kitchen or RoomType.Living)).Concat(kitchenLiving).ToList();
+        bool livingAtU = ext.U0 && ext.U1 ? door < u / 2 : ext.U1 || !ext.U0 && door < u / 2;
+        foreach (var (it, a0, a1) in Strip(0, u, ordered, lost))
+            rooms.Add(livingAtU
+                ? new Local(it.Type, a0, band + hall, a1, v)
+                : new Local(it.Type, u - a1, band + hall, u - a0, v));
+        bool complete = rooms.Any(r => r.Type == RoomType.Bedroom) && rooms.Any(r => r.Type == RoomType.Kitchen)
+            && rooms.Any(r => r.Type == RoomType.Bathroom);
+        return complete ? rooms : null;
+    }
+
     /// <summary>Every order of up to three items.</summary>
     private static IEnumerable<List<FlatItem>> Orders(List<FlatItem> items)
     {
@@ -867,7 +933,8 @@ public static partial class InteriorGenerator
                     if (inTree.Contains(j) || Touching(rooms[i], rooms[j]) is not { } t) continue;
                     var rf = rooms[i].Type;
                     var rt = rooms[j].Type;
-                    int score = i == root ? 40 + (rt == RoomType.Living ? 5 : 0)
+                    // a flat's hall, the entrance and any hall off it, is where rooms open from
+                    int score = i == root || rf == RoomType.Hall ? 40 + (rt is RoomType.Living or RoomType.Hall ? 5 : 0)
                         : rf == RoomType.Living && rt == RoomType.Kitchen || rf == RoomType.Kitchen && rt == RoomType.Living ? 35
                         : rf == RoomType.Living ? rt is RoomType.Study ? 10 : rt is RoomType.Bedroom ? 6 : 2
                         : rf == RoomType.Bedroom && rt == RoomType.Bathroom ? 12
@@ -880,7 +947,9 @@ public static partial class InteriorGenerator
             inTree.Add(e.B);
             var ta = rooms[e.A].Type;
             var tb = rooms[e.B].Type;
-            bool open = (ta, tb) is (RoomType.Living, RoomType.Kitchen) or (RoomType.Kitchen, RoomType.Living)
+            // the entrance runs into the hall across the flat with no door between them
+            bool open = (ta, tb) is (RoomType.Hall, RoomType.Hall) && e.S1 - e.S0 >= 1.2f
+                || (ta, tb) is (RoomType.Living, RoomType.Kitchen) or (RoomType.Kitchen, RoomType.Living)
                 && e.S1 - e.S0 >= 2.0f && rng.NextDouble() < 0.5;
             if (open)
             {
