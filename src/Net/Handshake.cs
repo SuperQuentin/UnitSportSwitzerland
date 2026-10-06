@@ -51,8 +51,9 @@ public partial class Handshake : Node
     /// 27: ChatManager HandOver/HandedOver/ReceiveInventory, /transfer (#649).
     /// 28: the wheel loader's bucket carries a pallet, in its pose's lift float as the fork loader's (#615).
     /// 29: the site tipper (104) and mixer (105); a mixer's pose has -1 for its rpm with the engine off (#613).
+    /// 30: RideKind.MiniDumper, its skip in the pose and the parked flags (#614).
     /// </summary>
-    public const int Protocol = 29;
+    public const int Protocol = 30;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

@@ -104,6 +104,7 @@
     <Compile Include="..\..\src\Avatar\CompactRollerLayout.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the telehandler (#614): its steering modes, boom and packing -->
     <Compile Include="..\..\src\Avatar\TelehandlerLayout.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\MiniDumperLayout.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- swiss_data.py port (#515): only the pure half (manifest format, skip decisions, STAC
          id/bbox arithmetic) is linked. SwissDownload.cs itself needs IStepProgress from
          Pipeline.cs, which would drag in CountryData/LocalState/Selection/Stats and

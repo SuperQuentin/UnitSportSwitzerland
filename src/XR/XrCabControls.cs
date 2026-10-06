@@ -111,6 +111,7 @@ internal sealed partial class XrCabControls : Node3D
             _ when p.Ride == RideKind.MiniExcavator => "miniexcavator",
             _ when p.Ride is RideKind.WheelLoader or RideKind.WheelLoaderForks => "loader",
             _ when p.Ride == RideKind.CompactRoller => "roller",
+            _ when p.Ride == RideKind.MiniDumper => "minidumper",
             _ when p.Ride == RideKind.Telehandler => "telehandler",
             _ => "",
         };
@@ -184,6 +185,9 @@ internal sealed partial class XrCabControls : Node3D
             Add(Kind.Hold, new(0.34f, -0.36f, -0.4f), Vector3.Back, PlayerInput.ArmBucketCurl, PlayerInput.ArmBucketDump);
             Add(Kind.Poke, new(0.24f, -0.32f, -0.46f), plus: PlayerInput.DigMode);
         }
+        else if (context == "minidumper")
+            // the skip's button on the console right of the wheel (#614), the tipper's action
+            Add(Kind.Poke, new(0.28f, -0.48f, -0.34f), plus: PlayerInput.Destination);
         else if (context == "roller")
             // the vibration's red button on the console right of the wheel (#614)
             Add(Kind.Poke, new(0.3f, -0.5f, -0.36f), plus: PlayerInput.DigMode);

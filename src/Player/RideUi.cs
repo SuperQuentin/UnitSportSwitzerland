@@ -254,6 +254,8 @@ public partial class RideUi : CanvasLayer
                 $"{RideKind.WheelLoader}|WheelLoader", () => new WheelLoader().BuildParkedVisual(0)),
             NewCard(RideKind.WheelLoaderForks, "Wheel loader (forks)", new WheelLoader(forks: true).Blurb, true,
                 $"{RideKind.WheelLoaderForks}|WheelLoaderForks", () => new WheelLoader(forks: true).BuildParkedVisual(0)),
+            NewCard(RideKind.MiniDumper, "Mini dumper", new MiniDumper().Blurb, true,
+                $"{RideKind.MiniDumper}|MiniDumper", () => new MiniDumper().BuildParkedVisual(0)),
             NewCard(RideKind.CompactRoller, "Compact roller", new CompactRoller().Blurb, true,
                 $"{RideKind.CompactRoller}|CompactRoller", () => new CompactRoller().BuildParkedVisual(0)),
             NewCard(RideKind.Telehandler, "Telehandler", new Telehandler().Blurb, true,

@@ -471,6 +471,12 @@ src/Avatar/Telehandler    quick  --telehandlercheck --world flat --systems physi
 src/Player/FootPlayer.Tel quick  --telehandlercheck --world flat --systems physics,ui
 src/Player/Telehandler    net    tools/excavatornetcheck.sh
 src/Avatar/Telehandler    net    tools/excavatornetcheck.sh
+# #614: the mini dumper: crawls, turns on the spot, tips its skip (flat), and from a second peer (the excavator's script)
+src/Player/MiniDumper     quick  --dumpercheck --world flat --systems physics,ui
+src/Avatar/MiniDumper     quick  --dumpercheck --world flat --systems physics,ui
+src/Player/DumperCheck    quick  --dumpercheck --world flat --systems physics,ui
+src/Player/MiniDumper     net    tools/excavatornetcheck.sh
+src/Avatar/MiniDumper     net    tools/excavatornetcheck.sh
 # #614: the compact roller: drives, steers on its hinge, vibrates (flat), and from a second peer (the excavator's script)
 src/Player/CompactRoller  quick  --rollercheck --world flat --systems physics,ui
 src/Avatar/CompactRoller  quick  --rollercheck --world flat --systems physics,ui
