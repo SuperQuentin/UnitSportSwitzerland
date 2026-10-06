@@ -50,8 +50,9 @@ numbers: nothing is sent, the server derives the slot from its own plan.
   who gets in takes it over (`EnterVehicle`), and from then on it is the player's body crossing the
   garage door's `DoorLink` exactly as the ramp check's car does. `tools/hallcarnetcheck.sh` drives the
   woken car from the ramp's foot up the ramp and out of the door.
-- **Loot** is unchanged: a bay car is still a `FurnitureType.Car` container by position, so a woken or
-  gone car leaves a searchable spot. Cars of a car park are 30 % of the loot's car rolls; not touched.
+- **Loot**: a bay car is no container any more (`LootService.NearestContainer` skips it): it is a
+  vehicle asleep or gone, and "Search the car" over an empty bay or a woken car read as a bug (the first
+  windowed run showed it). Cars of a showroom or a service bay are still searchable props.
 - **Checks.** Tier 0: `HallCarTests` (naming, the hash, the yaw). Quick: `--flatcheck` (`BayCars`: every
   bay car has a slot named for its building, the same every time, the nose through LV95 and back, the
   whole hull of the car it wakes as inside the room and its 2.5 x 5 m bay). Net:
