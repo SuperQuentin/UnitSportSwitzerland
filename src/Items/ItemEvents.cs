@@ -201,7 +201,8 @@ public partial class ItemEvents : Node
             GD.Print(FormattableString.Invariant($"[pvp] refused peer {sender} on peer {hit.Victim}: through the ground ({hit.Weapon})"));
             return;
         }
-        if (!_guard.TryShot(sender, (int)hit.Weapon, weapon.Interval, weapon.Pellets, hit.Victim, Time.GetTicksMsec() / 1000.0))
+        // wall clock (#579): a client that slowed its own simulation must not get to fire faster
+        if (!_guard.TryShot(sender, (int)hit.Weapon, weapon.Interval, weapon.Pellets, hit.Victim, Core.RealClock.Now))
         {
             GD.Print(FormattableString.Invariant($"[pvp] refused peer {sender} on peer {hit.Victim}: faster than a {hit.Weapon} fires"));
             return;

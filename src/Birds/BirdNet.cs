@@ -149,7 +149,9 @@ public partial class BirdNet : Node
         if (!_server) return;
         long sender = Multiplayer.GetRemoteSenderId();
         var from = new GlobalPos(e, n, alt);
-        double now = Time.GetTicksMsec() / 1000.0;
+        // wall clock (#579): a rate limit on what a client may send must not loosen when that
+        // client slows its own simulation
+        double now = Core.RealClock.Now;
         if (GetNodeOrNull<FootPlayer>("../Players/" + sender) is not { } body || body.RideKindId != (int)RideKind.Pigeon
             || !from.IsFinite || body.Global.DistanceTo(from) > 4f || !vel.IsFinite() || vel.Length() > 60f
             || _lastDrop.TryGetValue(sender, out double last) && now - last < DropInterval) return;
@@ -178,7 +180,7 @@ public partial class BirdNet : Node
         if (!_server) return;
         long sender = Multiplayer.GetRemoteSenderId();
         var from = new GlobalPos(e, n, alt);
-        double now = Time.GetTicksMsec() / 1000.0;
+        double now = Core.RealClock.Now;   // wall clock, as in DropRpc
         if (GetNodeOrNull<FootPlayer>("../Players/" + sender) is not { } body || !from.IsFinite || body.Global.DistanceTo(from) > 8f
             || !vel.IsFinite() || vel.Length() > 80f || _lastSplat.TryGetValue(sender, out double last) && now - last < 1.0) return;
         _lastSplat[sender] = now;
