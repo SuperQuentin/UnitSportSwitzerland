@@ -45,6 +45,7 @@ public partial class MovieStudio : Screen
     private bool _syncingScroll;
     private int _aimLanes = -1;
     private PopupMenu? _keyMenu;
+    private Button _fly = null!;
 
     private static readonly StringName Forward = PlayerInput.TriggerRight, Backward = PlayerInput.TriggerLeft;
     private static readonly double[] Speeds = { 0.1, 0.25, 0.5, 1, 2, 4 };
@@ -63,8 +64,8 @@ public partial class MovieStudio : Screen
     private static string Hints(InputDevice device) => device == InputDevice.KeyboardMouse
         ? "Space play  ·  J / L back / forward  ·  ← → frame (Shift 1 s)  ·  S split, Shift+S cut all, Ctrl+click a clip: blade  ·  Del delete  ·  Ctrl+D duplicate  ·  "
           + "M marker, Ctrl+← → between markers, double-click a beat  ·  wheel on the timeline zooms (Shift scrolls), = / − too  ·  "
-          + "right mouse + WASD QE fly, Tab orbit an actor  ·  I camera key, V look through, right-click a key: options  ·  drop a song on the window"
-        : "Y play  ·  LT / RT shuttle  ·  X split / cut all  ·  R3 marker on the beat  ·  View: camera key  ·  right stick turn, LB / RB zoom or dolly (on the timeline: zoom it)  ·  D-pad on the timeline: frame  ·  B back";
+          + "F fly the camera (or right mouse + WASD), Tab follow an actor  ·  I camera key, V look through, right-click a key: options  ·  drop a song on the window"
+        : "Y play  ·  LT / RT shuttle  ·  X split / cut all  ·  R3 marker on the beat  ·  L3 fly the camera  ·  View: camera key  ·  right stick turn, LB / RB zoom (on the timeline: zoom it)  ·  D-pad on the timeline: frame  ·  B back";
 
     public override void _Ready()
     {
@@ -75,6 +76,13 @@ public partial class MovieStudio : Screen
         _origin = origin;
         _camera = new StudioCamera(origin) { Target = FocusPoint, PadBusy = () => _timeline?.HasFocus() == true };
         _camera.TookOver += () => _lookThrough.SetPressedNoSignal(false);
+        _camera.FlyingChanged += () =>
+        {
+            _fly.Text = _camera.Flying ? "✈ Flying (F)" : "✈ Fly";
+            _hint.Text = _camera.Flying
+                ? "Flying: mouse to look  ·  W A S D move, Space / E up, Shift / Q down, Ctrl faster, wheel speed  ·  I camera key  ·  F or Esc: the cursor back"
+                : Hints(PlayerInput.HintDevice);
+        };
         _world.AddChild(_camera);
         _chunks?.AddAnchor(_camera);
         Freeze();
@@ -154,7 +162,8 @@ public partial class MovieStudio : Screen
         edits.AddChild(_worldSound);
         edits.AddChild(UiKit.Spacer(w: 10));
         // the camera track: a key from the view, the view through the track, and the key's options
-        Tool(edits, "◆ Key", "A camera key from this view at the playhead (I; pad View)", SetKey);
+        _fly = Tool(edits, "✈ Fly", "Fly the camera freely: mouse to look, WASD, Space / Shift up and down, Ctrl faster, wheel speed; F or Esc for the cursor (pad: L3)", () => _camera.SetFlying(!_camera.Flying));
+        Tool(edits, "◆ Key", "A camera key from this view at the playhead (I, also while flying; pad View)", SetKey);
         _lookThrough = new CheckButton { Text = "Look through camera", TooltipText = "Play the movie through the camera track (V); moving the view takes it over" };
         edits.AddChild(_lookThrough);
         _ease = new OptionButton { TooltipText = "How the camera goes on to the next key" };
@@ -173,7 +182,8 @@ public partial class MovieStudio : Screen
         _deleteKey = Tool(edits, "✕", "Delete this camera key", () => { if (_timeline.SelectedKey is { } k) DeleteKey(k); });
 
         _timeline = new TimelineView(_stage);
-        _timeline.SelectionChanged += () => { FocusSelected(); Frame(); };
+        // picking a clip only picks it: the camera is the studio's own, it does not jump to the actor
+        _timeline.SelectionChanged += FocusSelected;
         _timeline.KeySelectionChanged += ShowKeyOptions;
         _timeline.KeyMenuRequested += OpenKeyMenu;
         _timeline.ViewChanged += SyncScroll;
@@ -201,7 +211,8 @@ public partial class MovieStudio : Screen
                 Seek(_startAt ?? last.Start);
             }
             else Seek(0);
-            Frame();
+            // a free camera of its own, placed once looking at the action
+            Callable.From(PlaceCamera).CallDeferred();
         }).CallDeferred();
     }
 
@@ -211,6 +222,7 @@ public partial class MovieStudio : Screen
     {
         PlayerInput.DeviceChanged -= ShowHints;
         GetWindow().FilesDropped -= OnFilesDropped;
+        if (IsInstanceValid(_camera) && _camera.Flying) _camera.SetFlying(false);
         Audio.SfxBus.ApplyVolumes();   // the world's buses as the settings have them again
         if (IsInstanceValid(_camera))
         {
@@ -291,7 +303,16 @@ public partial class MovieStudio : Screen
         return null;
     }
 
-    /// <summary>The view jumps to the focused actor, close for a figure, further back for whatever it rides.</summary>
+    /// <summary>The free camera behind whoever is on screen, close for a figure, further back for a ride.</summary>
+    private void PlaceCamera()
+    {
+        var puppet = _stage.Puppet(_focusLane);
+        for (int lane = 0; lane < MovieSession.Project.Lanes.Count && puppet == null; lane++) puppet = _stage.Puppet(lane);
+        if (puppet != null) _camera.PlaceNear(puppet.GlobalPosition, puppet.Ride == RideKind.OnFoot ? 7f : 24f);
+        else _camera.PlaceNear(_camera.GlobalPosition, 7f);
+    }
+
+    /// <summary>Follow the focused actor (Tab): the view orbits them, close for a figure, further back for a ride.</summary>
     private void Frame()
     {
         var puppet = _stage.Puppet(_focusLane);
@@ -329,6 +350,7 @@ public partial class MovieStudio : Screen
     public override void _Input(InputEvent e)
     {
         if (Modal.Current != null || UiFocus.TextEntryActive || !Visible) return;
+        if (_camera.Flying) { FlyingInput(e); return; }
         if (e is InputEventKey { Pressed: true } k)
         {
             bool handled = true;
@@ -354,6 +376,7 @@ public partial class MovieStudio : Screen
                 case Key.Delete: Delete(); break;
                 case Key.D when k.CtrlPressed: Duplicate(); break;
                 case Key.Tab: NextActor(); break;
+                case Key.F: _camera.SetFlying(true); break;
                 // flying: W A S D Q E belong to the view, not to the shortcuts above (S, D)
                 case Key.W or Key.A or Key.D or Key.Q or Key.E when _camera.Steering: break;
                 default: handled = false; break;
@@ -367,7 +390,28 @@ public partial class MovieStudio : Screen
             else if (b.ButtonIndex == JoyButton.X) { Split(); GetViewport().SetInputAsHandled(); }
             else if (b.ButtonIndex == JoyButton.RightStick) { Mark(); GetViewport().SetInputAsHandled(); }
             else if (b.ButtonIndex == JoyButton.Back) { SetKey(); GetViewport().SetInputAsHandled(); }
+            else if (b.ButtonIndex == JoyButton.LeftStick) { _camera.SetFlying(true); GetViewport().SetInputAsHandled(); }
         }
+    }
+
+    /// <summary>
+    /// While flying, every key and button belongs to the camera (it polls them): none reaches a button
+    /// with focus or closes the studio. Only I (a key), F, Esc / L3 / Start (stop flying) and the pad's
+    /// View (a key) do something here.
+    /// </summary>
+    private void FlyingInput(InputEvent e)
+    {
+        if (e is InputEventKey { Pressed: true, Echo: false } k)
+        {
+            if (k.PhysicalKeycode == Key.I) SetKey();
+            else if (k.PhysicalKeycode is Key.F or Key.Escape) _camera.SetFlying(false);
+        }
+        else if (e is InputEventJoypadButton { Pressed: true } b)
+        {
+            if (b.ButtonIndex == JoyButton.Back) SetKey();
+            else if (b.ButtonIndex is JoyButton.LeftStick or JoyButton.Start) _camera.SetFlying(false);
+        }
+        if (e is InputEventKey or InputEventJoypadButton or InputEventJoypadMotion) GetViewport().SetInputAsHandled();
     }
 
     // ---- actions ---------------------------------------------------------------------------------

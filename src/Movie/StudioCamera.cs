@@ -8,9 +8,11 @@ namespace UnitSport.Movie;
 /// <list type="bullet">
 /// <item><b>Orbit</b>: circles the selected actor, so scrubbing never loses them. Right-drag (or
 /// the right stick) orbits, the wheel (or LB / RB) zooms. Tab or picking an actor comes back here.</item>
-/// <item><b>Free</b>: flies. Hold the right mouse button with W A S D, Q E (Shift for speed), the
-/// mouse looking; on a pad the right stick looks and LB / RB dolly. Its place is kept in LV95, so
-/// an origin shift never moves it.</item>
+/// <item><b>Free</b>: a camera of its own, tied to nobody, where the studio opens. <see cref="Flying"/>
+/// (F, L3) captures the mouse and flies it as the game's fly camera does: W A S D / left stick,
+/// Space E / A up, Shift Q / B down, Ctrl boost, the wheel or LB / RB its speed. Without flying,
+/// hold the right mouse button on the view with W A S D, Q E. Its place is kept in LV95, so an
+/// origin shift never moves it.</item>
 /// <item><b>Track</b>: shows the camera track's pose (<see cref="Show"/>); any move takes the view
 /// over in Free mode from there, to set a key where it ends up.</item>
 /// </list>
@@ -21,7 +23,14 @@ public partial class StudioCamera : Camera3D
     public enum ViewMode { Orbit, Free, Track }
 
     private static readonly StringName Left = PlayerInput.LookLeft, Right = PlayerInput.LookRight,
-        Up = PlayerInput.LookUp, Down = PlayerInput.LookDown, Closer = PlayerInput.MapZoomIn, Further = PlayerInput.MapZoomOut;
+        Up = PlayerInput.LookUp, Down = PlayerInput.LookDown, Closer = PlayerInput.MapZoomIn, Further = PlayerInput.MapZoomOut,
+        MoveL = PlayerInput.MoveLeft, MoveR = PlayerInput.MoveRight, MoveF = PlayerInput.MoveForward, MoveB = PlayerInput.MoveBack,
+        Rise = PlayerInput.FlyUp, Sink = PlayerInput.FlyDown, Boost = PlayerInput.FlyBoost;
+
+    /// <summary>Flying with the mouse captured (#669): the studio hands it every key and button but its own few.</summary>
+    public bool Flying { get; private set; }
+    public event Action? FlyingChanged;
+    private float _flySpeed = 15f;
 
     private readonly WorldOrigin _origin;
     private float _yaw = 0.6f, _pitch = -0.3f, _distance = 9f;
@@ -70,6 +79,55 @@ public partial class StudioCamera : Camera3D
         if (Mode == ViewMode.Orbit) { _distance = Mathf.Clamp(_distance * factor, 1.5f, 3000f); return; }
         if (Mode == ViewMode.Track) TakeOver();
         Fly(-GlobalTransform.Basis.Z * (1 - factor) * 40f);
+    }
+
+    /// <summary>Starts or stops flying: the mouse captured to look, or the cursor back for the timeline.</summary>
+    public void SetFlying(bool on)
+    {
+        if (on == Flying) return;
+        Flying = on;
+        if (on)
+        {
+            if (Mode != ViewMode.Free) TakeOver();
+            MouseCapture.Capture();   // never in a probe run (--nocapture): it flies with the cursor showing
+        }
+        else Input.MouseMode = Input.MouseModeEnum.Visible;
+        FlyingChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// A free camera placed <paramref name="distance"/> metres behind and above <paramref name="target"/>,
+    /// looking at it: where the studio opens, tied to nothing afterwards.
+    /// </summary>
+    public void PlaceNear(Vector3 target, float distance)
+    {
+        var eye = target + new Vector3(0, 1.2f, 0);
+        var offset = new Basis(Vector3.Up, _yaw) * new Basis(Vector3.Right, -0.3f) * new Vector3(0, 0, distance);
+        var look = Basis.LookingAt(-offset, Vector3.Up).GetEuler();
+        _pitch = look.X;
+        _yaw = look.Y;
+        _freeAt = _origin.ToGlobal(eye + offset);
+        Mode = ViewMode.Free;
+    }
+
+    public override void _Input(InputEvent e)
+    {
+        if (!Flying) return;
+        switch (e)
+        {
+            case InputEventMouseMotion m:
+                Turn(m.Relative * 0.0025f);
+                GetViewport().SetInputAsHandled();
+                break;
+            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp }:
+                _flySpeed = Mathf.Min(_flySpeed * 1.25f, 600f);
+                GetViewport().SetInputAsHandled();
+                break;
+            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelDown }:
+                _flySpeed = Mathf.Max(_flySpeed / 1.25f, 1f);
+                GetViewport().SetInputAsHandled();
+                break;
+        }
     }
 
     /// <summary>Back to orbiting the target, <paramref name="distance"/> metres off: a new selection.</summary>
@@ -127,7 +185,22 @@ public partial class StudioCamera : Camera3D
     public override void _Process(double delta)
     {
         float dt = (float)delta;
-        bool padFree = PadBusy?.Invoke() != true;
+        bool padFree = PadBusy?.Invoke() != true && !Flying;
+        if (Flying)
+        {
+            // the game's fly camera's controls, keyboard and pad alike, through the input map
+            var stickMove = Input.GetVector(MoveL, MoveR, MoveF, MoveB);
+            float vertical = Input.GetActionStrength(Rise) - Input.GetActionStrength(Sink);
+            if (Input.IsActionPressed(Closer)) _flySpeed = Mathf.Min(_flySpeed * Mathf.Exp(1.2f * dt), 600f);
+            if (Input.IsActionPressed(Further)) _flySpeed = Mathf.Max(_flySpeed * Mathf.Exp(-1.2f * dt), 1f);
+            var dir = GlobalTransform.Basis * new Vector3(stickMove.X, 0, stickMove.Y) + Vector3.Up * vertical;
+            if (dir.LengthSquared() > 1e-4f)
+            {
+                float amount = Mathf.Min(dir.Length(), 1f);
+                float speed = _flySpeed * amount * (Input.IsActionPressed(Boost) ? 5f : 1f);
+                Fly(dir.Normalized() * speed * dt);
+            }
+        }
         // a pad (and VR, whose controllers play a pad on another device): the right stick turns, the
         // shoulders zoom or dolly. Through the input map, never a device's raw axes (vr-action-map, finding 1).
         var stick = Input.GetVector(Left, Right, Up, Down);

@@ -15,9 +15,18 @@
   - `Compact` remaps or clears `LookAt` when actor lanes are dropped.
   - `Duration` includes the last key.
 - **Studio view** (`StudioCamera`):
-  - **Orbit**: the selected actor. Tab, or picking a clip, comes back to it.
-  - **Free**: hold the right mouse button on the view with W A S D, Q E (Shift ×6). The keys are read raw,
-    because the studio's `UiFocus` holds the movement actions. The position is kept as a `GlobalPos`.
+  - **Free**, the default: a camera of its own, tied to no player. The studio places it once behind the action
+    (`PlaceNear`). Picking a clip never moves it.
+  - **Flying** (F, ✈ Fly, pad L3) captures the mouse and uses the game's fly camera controls, read through the
+    input map so the pad and VR work too: Move* / left stick, FlyUp (Space E / A, RT), FlyDown (Shift Q / B, LT),
+    FlyBoost (Ctrl) ×5, the wheel or LB / RB for the speed. I (pad View) sets a key mid-flight. F / Esc / L3 /
+    Start give the cursor back.
+  - While flying, the studio's `FlyingInput` swallows every key and button, so Space never presses the focused
+    button and B / Esc never close the studio. The camera polls the actions, which `SetInputAsHandled` leaves
+    alone.
+  - Without flying, hold the right mouse button on the view with W A S D, Q E (Shift ×6). These keys are read
+    raw, because the studio's `UiFocus` holds the movement actions. The position is kept as a `GlobalPos`.
+  - **Orbit** follows an actor only when asked, with Tab.
   - **Track**: `ShowPose` draws the camera track's pose, aiming at the head (+1.2 m) of a `LookAt` actor's
     puppet. Any turn, fly or zoom takes it over in Free mode, and `TookOver` switches "Look through camera"
     off, so the user can frame a better view and press I.
