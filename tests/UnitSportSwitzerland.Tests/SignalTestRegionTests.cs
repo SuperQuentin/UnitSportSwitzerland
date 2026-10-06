@@ -122,7 +122,7 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
                     $"{path}: a hatch {length:F1} m long, {width:F1} m wide at its wide end (stripes over {reach:F1} m)");
             }
         }
-        Assert.True(hatches >= 36, $"{hatches} hatches");   // 40 before #682: its larger kerb radius leaves the close pair J5 two pockets fewer
+        Assert.True(hatches >= 40, $"{hatches} hatches");
     }
 
     [Fact]

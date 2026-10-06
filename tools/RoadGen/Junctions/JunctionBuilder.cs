@@ -7,7 +7,18 @@ public sealed record JunctionOptions(
     /// <summary>Extra trim past the geometric corner, so there is room for a kerb curve.</summary>
     double KerbFactor = 2.2,
     double MinKerb = 0.5,
-    double MaxKerb = 12.0,
+    double MaxKerb = 20.0,
+    /// <summary>
+    /// Roads at least <see cref="SlipMinHalf"/> wide (half width) get this much more room before their mouth, the width of a right-turn pocket
+    /// and its bike lane (#682): beside one the corner's kerb arc keeps its radius.
+    /// </summary>
+    double SlipExtra = 4.5,
+    double SlipMinHalf = 3.5,
+    /// <summary>The share of a link its kerb allowance may take at most, so the road keeps room for pockets and the next junction.</summary>
+    double LinkShare = 0.3,
+    /// <summary>Where the link has room the kerb allowance (and so the turn radius) grows to this many times the nominal one.</summary>
+    double Grow = 1.4,
+    double GrowFromLength = 150.0,
     /// <summary>Points used to draw each rounded inner corner.</summary>
     int FilletSamples = 6,
     /// <summary>
@@ -19,6 +30,13 @@ public sealed record JunctionOptions(
     /// </summary>
     double MaxTrimWidths = 5.0,
     double MaxTrimAbsolute = 30.0);
+
+public static class JunctionOptionsExtensions
+{
+    /// <summary>The kerb allowance of an arm of this half width: the room its corners' kerb arcs get past the geometric corner.</summary>
+    public static double Kerb(this JunctionOptions o, double half) =>
+        Math.Clamp(o.KerbFactor * half + (half >= o.SlipMinHalf ? o.SlipExtra : 0), o.MinKerb, o.MaxKerb);
+}
 
 /// <summary>
 /// Builds junction polygons and decides how far each road is cut back.
@@ -112,7 +130,14 @@ public sealed class JunctionBuilder
         var arms = new List<PendingArm>(n);
         for (int i = 0; i < n; i++)
         {
-            double kerb = Math.Clamp(_options.KerbFactor * ordered[i].Half, _options.MinKerb, _options.MaxKerb);
+            double kerb = _options.Kerb(ordered[i].Half);
+            if (net.Links[ordered[i].Approach.LinkId].Alignment is { IsEmpty: false } alignment)
+            {
+                // never more than its share of the link; on a long one up to `Grow` times the nominal allowance
+                double room = Math.Max(_options.MinKerb, alignment.Length * _options.LinkShare);
+                kerb = Math.Min(kerb, room);
+                if (alignment.Length >= _options.GrowFromLength) kerb = Math.Min(kerb * _options.Grow, _options.MaxKerb);
+            }
             double limit = Math.Min(_options.MaxTrimWidths * ordered[i].Half * 2, _options.MaxTrimAbsolute);
 
             double wanted = Math.Max(trims[i], 0) + kerb;

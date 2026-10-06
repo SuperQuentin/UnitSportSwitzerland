@@ -206,9 +206,11 @@ public static partial class TileRewriter
                         return simplify ? Polyline.Simplify(line, 0.02) : line;
                     }
                     // at traffic lights, across a widened arm or from one: square across the arm it crosses (#351)
+                    bool round = townArcs.Keys.Any(k => k.Node == junction.NodeId);   // kerb arcs with paths round them (#682)
                     SquareCrossing? square = plan.Kind == PriorityPlanner.Kind.Signal && joined.Count == 1
-                        ? SquareCrossing.For(junction, joined[0], lanes.GetValueOrDefault((junction.NodeId, joined[0])), from, xa, xb)
+                        ? SquareCrossing.For(junction, joined[0], lanes.GetValueOrDefault((junction.NodeId, joined[0])), from, xa, xb, force: round)
                         : null;
+                    if (square is not null && round) square.Straight = true;
                     List<Vec2> Curve(double oa, double ob, bool simplify = true) =>
                         square is null ? Bezier(oa, ob, simplify)
                             : square.Line(ca + da * oa, ua, cb + db * ob, Vec2.FromHeading(b.OutwardHeading), oa - xa, ob - xb);
@@ -423,11 +425,13 @@ public static partial class TileRewriter
         private bool _aOnApproach;
         /// <summary>The band's centre: its distance along the arm, and the offsets it was placed for.</summary>
         private double _at, _centre;
+        /// <summary>The paths run round kerb arcs to the crossing (#682): only the crossing itself is drawn, not the jogs to the arms' path ends.</summary>
+        public bool Straight;
 
-        public static SquareCrossing? For(Junction junction, int armIndex, ArmLanes? lanes, Vec2 fromA, double xa, double xb)
+        public static SquareCrossing? For(Junction junction, int armIndex, ArmLanes? lanes, Vec2 fromA, double xa, double xb, bool force = false)
         {
             double widenIn = lanes?.Approach is { } l ? l.Edge() - l.Half : 0, widenOut = lanes?.ExitWidening ?? 0;
-            if (widenIn < 0.05 && widenOut < 0.05 && xa < 0.05 && xb < 0.05) return null;
+            if (!force && widenIn < 0.05 && widenOut < 0.05 && xa < 0.05 && xb < 0.05) return null;
             var arm = junction.Arms[armIndex];
             var u = Vec2.FromHeading(arm.OutwardHeading);
             var mid = (arm.Left + arm.Right) * 0.5;
@@ -477,6 +481,7 @@ public static partial class TileRewriter
             double at = _at + (oa + ob) * 0.5 - _centre;
             var onApproach = _mid + _u * at + _n * _in;
             var onExit = _mid + _u * at - _n * _out;
+            if (Straight) return _aOnApproach ? [onApproach, onExit] : [onExit, onApproach];
             pa = Clear(pa, ua, _aOnApproach ? 1 : -1, at);
             pb = Clear(pb, ub, _aOnApproach ? -1 : 1, at);
             return _aOnApproach ? [pa, onApproach, onExit, pb] : [pa, onExit, onApproach, pb];
