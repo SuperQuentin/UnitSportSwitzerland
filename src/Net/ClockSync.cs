@@ -65,6 +65,8 @@ public partial class ClockSync : Node
 
     public override void _ExitTree()
     {
+        Core.SimClock.Reset();
+        Engine.TimeScale = 1;
         _startedAt = 0;
         _nextPingAt = 0;
         _offset = 0;
@@ -79,6 +81,11 @@ public partial class ClockSync : Node
     // env clocks are both derived from, so it has to hold its pace whatever the world is doing.
     public override void _Process(double delta)
     {
+        // Every peer, the server included: a scheduled simulation-speed change is promoted here,
+        // and SimClock.Tick rebases at the instant it was scheduled for rather than at this frame,
+        // so a peer that notices late still agrees about simulated time (#579).
+        if (Core.SimClock.Tick(ServerNow)) Engine.TimeScale = Core.SimClock.Scale;
+
         if (!Online || Multiplayer.IsServer()) return;
         double real = Core.RealClock.Now;
         if (_startedAt == 0) _startedAt = real;

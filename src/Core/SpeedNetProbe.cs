@@ -1,0 +1,135 @@
+using System.Globalization;
+using System.Threading.Tasks;
+using Godot;
+using UnitSport.Items;
+
+namespace UnitSport.Core;
+
+/// <summary>
+/// <c>--speednet A|B</c> with <c>--connect</c> (driven by <c>tools/speednetcheck.sh</c>, #579): the
+/// server owns the simulation's pace and every peer runs at it.
+/// <list type="bullet">
+/// <item>Both sides wait for the clock sync and the server's speed to arrive.</item>
+/// <item>A logs in as admin and sends <c>/speed 0.25</c>: both peers must reach
+/// <see cref="Engine.TimeScale"/> 0.25 and <see cref="SimClock.Scale"/> 0.25.</item>
+/// <item>Each sends the simulated time its own clock gives for an instant of the server clock; the
+/// other computes its own for that same instant. They must agree — that is the whole point of
+/// scheduling the change at a server instant instead of applying it on receipt.</item>
+/// <item>A sends <c>/speed normal</c> and both must come back to 1x.</item>
+/// </list>
+/// </summary>
+public partial class SpeedNetProbe : ChatProbe
+{
+    public static string? Role => RoleArg("--speednet");
+
+    public SpeedNetProbe(ItemController items) : base(items, "speednet", "SP") { }
+    public SpeedNetProbe() : this(null!) { }
+
+    protected override void Fail(string why) => Expect(false, why);
+
+    /// <summary>Agreement between two peers, in simulated seconds. A frame at 60 Hz is 0.017 s.</summary>
+    private const double Tolerance = 0.05;
+
+    public override async void _Ready()
+    {
+        _role = Role ?? "A";
+        if (!await Joined(150)) { await Finish(0); return; }
+        if (!await Synced(20)) { await Finish(1); return; }
+        if (_role == "A") await RunA(); else await RunB();
+        await Finish(2.0);
+    }
+
+    /// <summary>The server's clock is in hand, so <see cref="SimClock.SimAt"/> means something here.</summary>
+    private async Task<bool> Synced(double seconds)
+    {
+        bool ok = await Until(() => Net.ClockSync.Synced, seconds);
+        Expect(ok, $"the server's clock is in hand (rtt {Net.ClockSync.Rtt * 1000:F0} ms)");
+        return ok;
+    }
+
+    private async Task RunA()
+    {
+        if (!await Handshake("hello", "ready")) return;
+        await Compare("1");
+
+        Chat?.Send("/login test");
+        if (!await Until(() => Permissions.IsAdmin, 10)) { Fail("no admin rights"); return; }
+
+        Chat?.Send("/speed 0.25");
+        Expect(await Until(() => AtScale(0.25), 10), $"A runs at x0.25 ({Describe()})");
+        Say("slow");
+        Expect(await Heard("B", "saw slow", 15), "B runs at x0.25");
+        await Seconds(3);
+        await Compare("2");
+
+        Chat?.Send("/speed normal");
+        Expect(await Until(() => AtScale(1.0), 10), $"A is back to normal speed ({Describe()})");
+        Say("normal");
+        Expect(await Heard("B", "saw normal", 15), "B is back to normal speed");
+    }
+
+    private async Task RunB()
+    {
+        if (!await Handshake("ready", "hello")) return;
+        await Compare("1");
+
+        if (!await Heard("A", "slow", 30)) { Fail("A never slowed the simulation"); return; }
+        if (await Until(() => AtScale(0.25), 10)) Say("saw slow");
+        else Fail($"B is at {Describe()}, not x0.25");
+        await Compare("2");
+
+        if (!await Heard("A", "normal", 30)) { Fail("A never restored the speed"); return; }
+        if (await Until(() => AtScale(1.0), 10)) Say("saw normal");
+        else Fail($"B is at {Describe()}, not normal speed");
+    }
+
+    /// <summary>The clock and the engine both have to be there: one without the other is the bug.</summary>
+    private static bool AtScale(double scale) =>
+        System.Math.Abs(SimClock.Scale - scale) < 1e-6 && System.Math.Abs(Engine.TimeScale - scale) < 1e-6;
+
+    private static string Describe() => string.Format(CultureInfo.InvariantCulture,
+        "clock {0:F4}, engine {1:F4}", SimClock.Scale, Engine.TimeScale);
+
+    /// <summary>A says <paramref name="mine"/> until it hears <paramref name="theirs"/>; B answers once.</summary>
+    private async Task<bool> Handshake(string mine, string theirs)
+    {
+        string other = _role == "A" ? "B" : "A";
+        if (_role == "B")
+        {
+            if (!await Heard(other, theirs, 90)) { Fail($"{other} never said {theirs}"); return false; }
+            Say(mine);
+            return true;
+        }
+        for (int i = 0; i < 40; i++)
+        {
+            Say(mine);
+            if (await Heard(other, theirs, 3)) return true;
+        }
+        Fail($"{other} never said {theirs}");
+        return false;
+    }
+
+    /// <summary>
+    /// Sends the simulated time this peer's clock gives for an instant of the server clock, and
+    /// checks the other side's against what this peer's clock gives for *their* instant. Two peers
+    /// that agree on the server's clock must agree on simulated time, before and after a change.
+    /// </summary>
+    private async Task Compare(string round)
+    {
+        string other = _role == "A" ? "B" : "A";
+        double at = Net.ClockSync.ServerNow;
+        Say(string.Format(CultureInfo.InvariantCulture, "at{0} {1:F4} {2:F5}", round, at, SimClock.SimAt(at)));
+
+        string key = $"SP {other} at{round} ";
+        if (!await Until(() => _heard.Exists(l => l.Contains(key)), 30)) { Fail($"{other} never sent round {round}"); return; }
+        string line = _heard.Find(l => l.Contains(key))!;
+        string[] parts = line[(line.IndexOf(key) + key.Length)..].Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
+        double theirAt = double.Parse(parts[0], CultureInfo.InvariantCulture);
+        double theirSim = double.Parse(parts[1], CultureInfo.InvariantCulture);
+        double mineThen = SimClock.SimAt(theirAt);
+        double gap = System.Math.Abs(theirSim - mineThen);
+        Expect(gap < Tolerance, string.Format(CultureInfo.InvariantCulture,
+            "round {0}: {1} was at sim {2:F4} s at server {3:F2} s, here the clock gives {4:F4} (gap {5:F4} s)",
+            round, other, theirSim, theirAt, mineThen, gap));
+    }
+}

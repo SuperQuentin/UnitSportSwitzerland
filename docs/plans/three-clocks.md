@@ -3,12 +3,12 @@
 
 # Three clocks: environment time, simulation speed, real time
 
-Status: **planned**, nothing built. Tracking issue: #579.
+Status: **phases 1-2 built** (PR #594). Tracking issue: #579.
 
 | Phase | State | What it does |
 |---|---|---|
-| 1 `RealClock` | not done | An unscaled wall clock and frame delta, so the real-time bucket survives a time scale |
-| 2 Server-owned sim clock | not done | `SimClock`: the server owns `(sim0, epoch, scale)`; every peer flips `Engine.TimeScale` at the same server instant |
+| 1 `RealClock` | done | An unscaled wall clock and frame delta, so the real-time bucket survives a time scale |
+| 2 Server-owned sim clock | done | `SimClock`: the server owns `(sim0, epoch, scale)`; every peer flips `Engine.TimeScale` at the same server instant |
 | 3 Env time onto sim time | not done | `WorldClock` re-keyed from `ServerNow` to `SimNow`, with a monotonic persisted `EnvNow` |
 | 4 Move the misplaced timers | not done | The ~10 simulation timers currently on the wall clock move to sim or env time |
 | 5 Guards | not done | A lint check for wall-clock use in gameplay, and two-peer probes for sim speed and env scaling |
@@ -111,8 +111,12 @@ that must stay real needs a source a scale cannot touch.
 - Audit the other `delta`-driven network and UI cadences for the same bug. The ones that already
   read `Time.GetTicksMsec` directly (`Handshake`, `InterestService`, `ServerStats`, `Swarm`, the
   chat rate limit) are safe and stay as they are.
-- Decide per case whether HUD and menu animation should slow with the world. World-space HUD
-  probably should; menus should not.
+- Decided while building: **UI chrome ignores the scale** (`SetIgnoreTimeScale(true)` on the menu
+  and HUD tweens). Most HUD animation here is absolute wall-clock phase
+  (`Mathf.Sin(Time.GetTicksMsec() / 160f)` for the BR ping bob, the zone pulse, camera shake, cloth
+  sway), which a scale never touched and which needed no change at all; the only real exposure was
+  Godot `Tween`s, which `Engine.TimeScale` does scale. A sluggish menu is not a useful signal that
+  slow motion is on. That is also why phase 1's `RealClock` needs no `Delta`.
 
 No behaviour change at scale 1. Quick tier.
 

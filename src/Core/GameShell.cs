@@ -265,7 +265,7 @@ public partial class GameShell : Node
     {
         c.Modulate = new Color(1, 1, 1, 0);
         c.Position = new Vector2(0, 12);
-        var tw = c.CreateTween().SetParallel().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+        var tw = c.CreateTween().SetIgnoreTimeScale(true).SetParallel().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
         tw.TweenProperty(c, "modulate:a", 1f, 0.18f);
         tw.TweenProperty(c, "position:y", 0f, 0.22f);
     }

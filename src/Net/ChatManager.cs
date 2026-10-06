@@ -301,7 +301,7 @@ public partial class ChatManager : Node
         {
             case "help":
                 Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /catalogue  /clear  /money <amount>  "
-                    + "/bank [set|add|take <amount>]  /occasion  /time  /seastate  /style  /debug  — Tab completes.", ChatKind.Private);
+                    + "/bank [set|add|take <amount>]  /occasion  /time  /speed  /seastate  /style  /debug  — Tab completes.", ChatKind.Private);
                 Show("Offline: the server commands (/race, /tp, /kick ...) need a multiplayer game.", ChatKind.Private);
                 return;
 
@@ -331,6 +331,18 @@ public partial class ChatManager : Node
 
             case "time":
                 Show(LocalTime(parts[1..], out bool failed), failed ? ChatKind.Error : ChatKind.Admin);
+                return;
+
+            case "speed":
+                if (parts.Length == 1) Show($"The simulation runs at {Core.SimClock.Describe(Core.SimClock.Scale)}.", ChatKind.Private);
+                else if (Core.SimClock.TryParse(rest, out double simScale, out string speedError))
+                {
+                    // offline there is no RPC to wait for, but it goes through the same scheduled
+                    // path so there is one way a speed change ever takes effect (ClockSync.Tick)
+                    Core.SimClock.Schedule(simScale, ClockSync.ServerNow);
+                    Show($"The simulation runs at {Core.SimClock.Describe(simScale)}.", ChatKind.Admin);
+                }
+                else Show(speedError, ChatKind.Error);
                 return;
 
             case "water":
@@ -594,6 +606,7 @@ public partial class ChatManager : Node
                 return;
             // anyone may ask; set/add/speed are checked inside, against the same IsAdmin
             case "time": CommandTime(sender, parts[1..]); return;
+            case "speed": CommandSpeed(sender, rest); return;
             // anyone may ask; setting it is an admin's (checked inside)
             case "seastate": CommandSeaState(sender, rest); return;
             // the water at a point as the server sees it (#299): a debug line, two peers compare it
@@ -693,7 +706,7 @@ public partial class ChatManager : Node
 
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /fight <player>|accept|decline|leave  /br join|leave|status  /occasion  /time  /seastate  /clear", ChatKind.Private);
+        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /fight <player>|accept|decline|leave  /br join|leave|status  /occasion  /time  /speed  /seastate  /clear", ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);
@@ -705,7 +718,8 @@ public partial class ChatManager : Node
                 + "/occasion start|stop <id>|auto  /spawn <item> [count]  /catalogue  /debug  "
                 + "/give <player> <item> [count]  /clear [player]  /money <amount> [player]  "
                 + "/bank <player> [set|add|take <amount>]  "
-                + "/time set <hh:mm|noon|night...>|add <h>|speed <min>  /seastate <0..1|calm|chop|storm|gamey>  — Tab completes",
+                + "/time set <hh:mm|noon|night...>|add <h>|speed <min>  /speed <0.05..8|normal>  "
+                + "/seastate <0..1|calm|chop|storm|gamey>  — Tab completes",
                 ChatKind.Private);
     }
 
@@ -1070,6 +1084,65 @@ public partial class ChatManager : Node
     {
         World.WaterField.SetSeaState(seaState);
         GD.Print($"[water] the server's sea state: {World.SeaStateCommand.Describe(World.WaterField.SeaState)}");
+    }
+
+    /// <summary>
+    /// Server <c>/speed</c>: the simulation's pace, which carries environment time with it (#579).
+    /// Scheduled a moment ahead so every peer flips at the same instant on the server's clock
+    /// rather than whenever its RPC happened to land.
+    /// </summary>
+    private void CommandSpeed(long sender, string arg)
+    {
+        if (arg.Length == 0)
+        {
+            ReplyTo(sender, $"The simulation runs at {Core.SimClock.Describe(Core.SimClock.Scale)}.", ChatKind.Private);
+            return;
+        }
+        if (!Core.SimClock.TryParse(arg, out double scale, out string error))
+        {
+            ReplyTo(sender, error, ChatKind.Error);
+            return;
+        }
+        if (!IsAdmin(sender))
+        {
+            ReplyTo(sender, "Changing the simulation speed is an admin command.", ChatKind.Error);
+            return;
+        }
+
+        double applyAt = ClockSync.ServerNow + SpeedApplyDelay;
+        Core.SimClock.Schedule(scale, applyAt);
+        Rpc(MethodName.WorldSpeed, Core.SimClock.Sim0, Core.SimClock.Epoch, Core.SimClock.Scale, scale, applyAt);
+        GD.Print($"[admin] {NameOf(sender)} set the simulation to {Core.SimClock.Describe(scale)}");
+        Broadcast($"{NameOf(sender)} set the simulation to {Core.SimClock.Describe(scale)}", ChatKind.Admin);
+    }
+
+    /// <summary>
+    /// Long enough for the change to reach every peer before it takes effect, short enough that an
+    /// admin does not notice the wait. A peer whose RPC arrives after the instant still lands on the
+    /// same numbers; it just applies them a frame late (<c>Core.SimClock.Tick</c>).
+    /// </summary>
+    private const double SpeedApplyDelay = 0.3;
+
+    /// <summary>Server: tells a newly connected peer the simulation's pace, and any change already scheduled.</summary>
+    public void SendWorldSpeedTo(long peerId) =>
+        RpcId(peerId, MethodName.WorldSpeed, Core.SimClock.Sim0, Core.SimClock.Epoch, Core.SimClock.Scale,
+            Core.SimClock.HasPending ? Core.SimClock.PendingScale : Core.SimClock.Scale,
+            Core.SimClock.HasPending ? Core.SimClock.PendingAt : 0.0);
+
+    /// <summary>
+    /// Client: the simulation's pace (#579). The three numbers in force now, plus a change waiting
+    /// for the server's clock to reach <paramref name="pendingAt"/> (0 = none). Environment time is
+    /// derived from this, so this one message also moves the sun and the traffic lights.
+    /// </summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void WorldSpeed(double sim0, double epoch, double scale, double pendingScale, double pendingAt)
+    {
+        Core.SimClock.Set(sim0, epoch, scale);
+        Engine.TimeScale = Core.SimClock.Scale;
+        if (pendingAt > 0) Core.SimClock.Schedule(pendingScale, pendingAt);
+        GD.Print($"[speed] the server's simulation: {Core.SimClock.Describe(Core.SimClock.Scale)}"
+            + (pendingAt > 0 ? $", going to {Core.SimClock.Describe(pendingScale)}" : ""));
     }
 
     /// <summary>Server: tells a newly connected peer the world's time.</summary>

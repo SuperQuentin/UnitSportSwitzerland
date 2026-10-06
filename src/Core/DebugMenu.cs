@@ -34,6 +34,7 @@ public partial class DebugMenu : CanvasLayer
     private readonly WorldOrigin _origin;
     private readonly Func<Node3D?> _nearTrees;
     private readonly Action<string> _say;
+    private readonly Action<double> _askSpeed;
     private DebugOverlay _overlay = null!;
 
     private Control _panel = null!;
@@ -58,12 +59,14 @@ public partial class DebugMenu : CanvasLayer
     internal DebugViewMode View => _view;
     internal DebugOverlay Overlay => _overlay;
 
-    public DebugMenu(ChunkManager chunks, WorldOrigin origin, Func<Node3D?> nearTrees, Action<string> say)
+    public DebugMenu(ChunkManager chunks, WorldOrigin origin, Func<Node3D?> nearTrees, Action<string> say,
+        Action<double>? askSpeed = null)
     {
         _chunks = chunks;
         _origin = origin;
         _nearTrees = nearTrees;
         _say = say;
+        _askSpeed = askSpeed ?? (scale => SimClock.Schedule(scale, Net.ClockSync.ServerNow));
         Name = "DebugMenu";
     }
 
@@ -184,7 +187,7 @@ public partial class DebugMenu : CanvasLayer
         if (IsOpen) Close();
         // what outlives this world: the root viewport, the kit's materials, the clock
         if (_view != DebugViewMode.Normal) DebugView.Apply(GetViewport(), null, DebugViewMode.Normal, _view);
-        if (_timeScaled) Engine.TimeScale = 1;
+        if (_timeScaled) _askSpeed(SimClock.Normal);
     }
 
     private void OnPermissionsChanged()
@@ -284,16 +287,15 @@ public partial class DebugMenu : CanvasLayer
         _view = mode;
     }
 
+    /// <summary>
+    /// The picker asks for a simulation speed; it never sets <see cref="Engine.TimeScale"/> itself
+    /// (#579). The server owns the pace and hands it to every peer at one instant, so online an
+    /// admin's pick goes out as <c>/speed</c> and comes back through <c>Net.ClockSync</c> like
+    /// everyone else's. Offline that path is this process anyway.
+    /// </summary>
     private void SetTimeScale(double scale)
     {
-        // online the server keeps the clock: a client running slow would only fall out of step
-        if (Permissions.Online && scale != 1)
-        {
-            _say("Time scale is offline only.");
-            _timePicker.Selected = Array.IndexOf(TimeScales, 1.0);
-            return;
-        }
-        Engine.TimeScale = scale;
+        _askSpeed(scale);
         _timeScaled = scale != 1;
     }
 
@@ -318,7 +320,7 @@ public partial class DebugMenu : CanvasLayer
         _chunks.FreezeRings = false;
         SetView(DebugViewMode.Normal);
         _viewPicker.Selected = 0;
-        if (_timeScaled) Engine.TimeScale = 1;
+        if (_timeScaled) _askSpeed(SimClock.Normal);
         _timeScaled = false;
         _timePicker.Selected = Array.IndexOf(TimeScales, 1.0);
     }

@@ -119,7 +119,7 @@ public partial class LoadingScreen : CanvasLayer
     {
         _target = 1;
         _cancel.Disabled = true;
-        var tw = CreateTween();
+        var tw = CreateTween().SetIgnoreTimeScale(true);
         tw.TweenInterval(0.25f);
         tw.TweenProperty(_root, "modulate:a", 0f, 0.45f);
         tw.TweenCallback(Callable.From(() => _root.Visible = false));
@@ -142,7 +142,7 @@ public partial class LoadingScreen : CanvasLayer
         string text = LoadingPhrases.All[_order[_jokeIndex++ % _order.Length]] + "…";
         _jokeFade?.Kill();
         if (instant) { _joke.Text = text; _joke.Modulate = Colors.White; return; }
-        _jokeFade = CreateTween();
+        _jokeFade = CreateTween().SetIgnoreTimeScale(true);
         _jokeFade.TweenProperty(_joke, "modulate:a", 0f, 0.25f);
         _jokeFade.TweenCallback(Callable.From(() => _joke.Text = text));
         _jokeFade.TweenProperty(_joke, "modulate:a", 1f, 0.35f);

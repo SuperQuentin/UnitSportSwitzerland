@@ -16,6 +16,43 @@ Environment time rides simulation speed, so at 0.25x the sun and the traffic lig
 with the cars and the world stays internally consistent. Both world clocks are owned by the
 server; real time is per-process and never synced.
 
+## `SimClock` (built, phase 2)
+
+The server owns three numbers — `Sim0` at `Epoch` on its own clock (`Net.ClockSync.ServerNow`),
+running at `Scale` — and every peer turns them into "the simulated time now". The same epoch shape
+as `World.WorldClock` (#452): nothing summed frame by frame, so nothing drifts, a late joiner lands
+on the same value, and the wire trip does not move it.
+
+```
+SimAt(serverNow) = Sim0 + (serverNow - Epoch) * Scale
+```
+
+- **A change is scheduled at a server instant, never applied on receipt.** `/speed` schedules it
+  0.3 s ahead and broadcasts it; `SimClock.Tick` (driven from `ClockSync._Process` on *every* peer,
+  the server included) promotes it and rebases **at `PendingAt`, not at the frame that noticed**. A
+  peer three frames late therefore lands on the same `Sim0`/`Epoch` as one that noticed on time,
+  instead of disagreeing about simulated time from then on. Applying on receipt instead would
+  rubber-band the replicated bodies for the width of the RPC spread.
+- **`SimAt` versus `GameClock.Now`.** `SimAt` is authoritative-by-formula and comparable between
+  peers — use it for anything whose timing crosses the wire. `GameClock.Now` is this peer's *actual*
+  physics progress and falls behind on a machine dropping frames — use it for purely local timers,
+  because it matches what the physics really did.
+- **Scale 0 is deliberately out of range** (`MinScale` 0.05, `MaxScale` 8). Freezing the simulation
+  would freeze environment time, growth and the day with it, and a real pause needs its own answers
+  for input, UI and network keepalive. Stopping the day is `/time speed 0`, which leaves the
+  simulation running.
+- `/speed [<0.05..8> | normal]`, admin-gated online like `/time`; anyone may ask. The debug menu's
+  Time x0.1-x4 picker now routes through it (`_askSpeed` -> `/speed`) instead of setting
+  `Engine.TimeScale` itself, and is no longer offline-only.
+- **UI chrome ignores the scale**: `SetIgnoreTimeScale(true)` on the menu and HUD tweens
+  (`UiKit`, `Modal`, `GameShell`, `LoadingScreen`, `Tutorial`, `VehicleIntroCard`). A sluggish menu
+  is not a useful signal that slow motion is on, and these fades are feedback for the player, who is
+  not slowed. World-space effect tweens stay scaled. Note that the `Mathf.Sin(Time.GetTicksMsec())`
+  style of animation all over the HUD was never affected by a scale and needed no change.
+- Checked by `tools/speednetcheck.sh` (tier 2, `src/Core/SpeedNetProbe`): both peers reach the scale
+  on clock *and* engine, and still agree about simulated time at the same server instant afterwards.
+  Unit-tested in `SimClockTests` (20 tests), including that a late peer agrees with a prompt one.
+
 ## `RealClock` (built, phase 1)
 
 `Core.RealClock.Now` is this process's monotonic wall clock in seconds.
