@@ -47,9 +47,19 @@ public partial class FlatTour : Node3D
                 AmbientLightColor = new Color(0.85f, 0.85f, 0.85f),
             },
         });
-        var tile = FlatCheck.Tile();
-        int index = Math.Max(0, FlatCheck.IndexOf(_block));
-        _l = InteriorGenerator.Generate(tile, index, null, null)!;
+        if (_block == "a garage block")
+        {
+            // an 80 x 18 m block whose key rolled an underground garage (#558): its ramp is the tour
+            var (garageTile, roads) = FlatCheck.RampTile();
+            int garage = BuildingFootprint.ComputeDoors(garageTile, roads, null).First(d => d.Link.Any).Index;
+            _l = InteriorGenerator.Generate(garageTile, garage, roads, null)!;
+        }
+        else
+        {
+            var tile = FlatCheck.Tile();
+            int index = Math.Max(0, FlatCheck.IndexOf(_block));
+            _l = InteriorGenerator.Generate(tile, index, null, null)!;
+        }
         var material = Styles.StyleKit.Material(Styles.MaterialRole.Interior);
         AddChild(InteriorNode.Create(_l, InteriorMeshBuilder.Build(_l), material, Transform3D.Identity));
         _eye = new Camera3D { Name = "Eye", Fov = 75f, Near = 0.05f, Far = 400f };
@@ -67,6 +77,19 @@ public partial class FlatTour : Node3D
         Vector3 At(int floor, float x, float z, float up = eyeH) => new(x, _l.FloorY(floor) + up, z);
 
         var main = _l.AllEntrances()[0];
+        // the garage ramp (#558): from the doorway, from the top of the descent, half way down, from the
+        // car park looking back up, and the aisle at its foot
+        if (_l.Floors[Math.Max(0, ground - 1)].AllFlights().FirstOrDefault(f => f.Ramp) is { } ramp)
+        {
+            float cx = (ramp.X0 + ramp.X1) / 2, h = _l.StoreyHeight, len = RampProfile.Length(h);
+            Vector3 OnRamp(float t, float up) => new(cx, _l.FloorY(ground) - RampProfile.Drop(t, h) + up, ramp.ZTop + t);
+            var way = _l.AllEntrances().First(e => e.Vehicle);
+            _views.Add(("ramp_door", At(ground, way.X, way.Z + 0.4f, 1.4f), OnRamp(9f, 0.2f)));
+            _views.Add(("ramp_top", OnRamp(0.5f, 1.6f), OnRamp(8f, 0.2f)));
+            _views.Add(("ramp_mid", OnRamp(5f, 1.5f), OnRamp(len, 0.5f)));
+            _views.Add(("ramp_foot", OnRamp(len - 0.5f, 1.5f) with { Z = ramp.ZBottom + 3.5f }, OnRamp(3f, 0.3f)));
+            _views.Add(("ramp_aisle", OnRamp(len, 1.6f) with { Z = ramp.ZBottom + 0.5f, X = ramp.X0 - 2f }, new Vector3(cx + 8f, _l.FloorY(ground - 1) + 0.6f, ramp.ZBottom + 2.5f)));
+        }
         _views.Add(("lobby", At(ground, main.X + 0.3f, main.Z + 0.5f), At(ground, main.X + 1.2f, main.Z + 5f, 1.2f)));
         // the stairwell (#571): up the stair from the front landing, from the half landing, and
         // down the well from the top floor
