@@ -10,6 +10,9 @@ namespace UnitSport.Movie;
 /// </summary>
 public partial class StudioCamera : Camera3D
 {
+    private static readonly StringName Left = PlayerInput.LookLeft, Right = PlayerInput.LookRight,
+        Up = PlayerInput.LookUp, Down = PlayerInput.LookDown, Closer = PlayerInput.MapZoomIn, Further = PlayerInput.MapZoomOut;
+
     private float _yaw = 0.6f, _pitch = -0.3f, _distance = 9f;
     private Vector3 _focus;
     private bool _hasFocus;
@@ -43,11 +46,12 @@ public partial class StudioCamera : Camera3D
     public override void _Process(double delta)
     {
         float dt = (float)delta;
-        // a pad (and VR, whose controllers play a pad): the right stick orbits, the shoulders zoom
-        var stick = new Vector2(Input.GetJoyAxis(0, JoyAxis.RightX), Input.GetJoyAxis(0, JoyAxis.RightY));
+        // a pad (and VR, whose controllers play a pad on another device): the right stick orbits, the
+        // shoulders zoom. Through the input map, never a device's raw axes (vr-action-map, finding 1).
+        var stick = Input.GetVector(Left, Right, Up, Down);
         if (stick.Length() > 0.2f) Orbit(stick * 2.2f * dt);
-        if (Input.IsJoyButtonPressed(0, JoyButton.RightShoulder)) Zoom(Mathf.Exp(-1.5f * dt));
-        if (Input.IsJoyButtonPressed(0, JoyButton.LeftShoulder)) Zoom(Mathf.Exp(1.5f * dt));
+        if (Input.IsActionPressed(Closer)) Zoom(Mathf.Exp(-1.5f * dt));
+        if (Input.IsActionPressed(Further)) Zoom(Mathf.Exp(1.5f * dt));
 
         if (Target?.Invoke() is { } target)
         {

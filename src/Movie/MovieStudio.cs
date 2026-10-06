@@ -29,6 +29,7 @@ public partial class MovieStudio : Screen
     private double _shownTime = -1;
     private bool _shownPlaying;
 
+    private static readonly StringName Forward = PlayerInput.TriggerRight, Backward = PlayerInput.TriggerLeft;
     private static readonly double[] Speeds = { 0.1, 0.25, 0.5, 1, 2, 4 };
 
     private readonly double? _startAt;
@@ -177,12 +178,14 @@ public partial class MovieStudio : Screen
     public override void _Process(double delta)
     {
         // a pad's triggers shuttle: the harder, the faster
-        float shuttle = Input.GetJoyAxis(0, JoyAxis.TriggerRight) - Input.GetJoyAxis(0, JoyAxis.TriggerLeft);
+        float shuttle = Input.GetActionStrength(Forward) - Input.GetActionStrength(Backward);
         if (Math.Abs(shuttle) > 0.15f) { _stage.Playing = false; _stage.Seek(_stage.Time + shuttle * 2 * delta); }
 
-        if (_stage.Time != _shownTime || _stage.Playing != _shownPlaying)
+        // text only when the second shown changes, not every frame of playback
+        double shown = Math.Round(_stage.Time) * 10000 + Math.Round(_stage.Duration);
+        if (shown != _shownTime || _stage.Playing != _shownPlaying)
         {
-            _shownTime = _stage.Time;
+            _shownTime = shown;
             _shownPlaying = _stage.Playing;
             _time.Text = $"{MovieSession.Clock(_stage.Time)} / {MovieSession.Clock(_stage.Duration)}";
             _play.Text = _stage.Playing && _stage.Speed > 0 ? "❚❚" : "▶";
