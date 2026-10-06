@@ -68,6 +68,13 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
     /// <summary>Slots by tile, in <c>PARK</c> order; a tile with no car park has no entry.</summary>
     private readonly Dictionary<TileId, List<VehicleSlot>> _slots = new();
 
+    // A client works out a tile's yards only once its buildings are built near the player (#63):
+    // the yard needs the .bldg and the 2 MB height grid, which a client without local terrain
+    // streams, and a yard is never seen from further out. Both are in the RAM cache by then.
+    // The server (no meshes, local data) still does every tile at once: it wakes the slots.
+    private bool LazyYards => _chunks.BuildMeshes;
+    private readonly HashSet<TileId> _furnished = new(), _yardsDone = new();
+
     /// <summary>The drawn instances of each tile, so a tile's fleet can be rebuilt or dropped whole.</summary>
     private readonly Dictionary<TileId, List<MultiMeshInstance3D>> _drawn = new();
 
@@ -91,12 +98,14 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
     {
         Instance = this;
         _chunks.TileEntered += OnTileEntered;
+        _chunks.TileFurnished += OnTileFurnished;
         Watch();
     }
 
     public override void _ExitTree()
     {
         _chunks.TileEntered -= OnTileEntered;
+        _chunks.TileFurnished -= OnTileFurnished;
         if (_watched is { } vm && IsInstanceValid(vm))
             vm.ChildEnteredTree -= OnVehicleAdded;
         if (Instance == this) Instance = null;
@@ -270,7 +279,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
                     var list = new List<VehicleSlot>();
                     if (roads is { Parking.Count: > 0 })
                         DormantSlots.ForParking(id, roads.Parking, ParkedKinds, list);
-                    Yards(source, id, roads, list);
+                    if (!LazyYards) Yards(source, id, roads, list);
                     return list;
                 });
                 if (!IsInsideTree()) return;
@@ -278,6 +287,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
                 Watch();
                 _slots[id] = slots;
                 if (slots.Count > 0) Draw(id);
+                if (LazyYards && _furnished.Contains(id)) _ = AddYards(id);
             }
         }
         catch (Exception ex)
@@ -287,6 +297,36 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
         finally
         {
             _busy = false;
+        }
+    }
+
+    private void OnTileFurnished(TileId id, ChunkNode node, Interiors.DoorSpot[] doors)
+    {
+        if (!LazyYards || !_furnished.Add(id)) return;
+        // the parking pass has not reached it yet: it adds the yards when it does
+        if (_slots.ContainsKey(id)) _ = AddYards(id);
+    }
+
+    /// <summary>A client's yards for one tile, once (see <see cref="LazyYards"/>), drawn with its car parks.</summary>
+    private async Task AddYards(TileId id)
+    {
+        if (!_yardsDone.Add(id) || _chunks.Source is not { } source) return;
+        try
+        {
+            var yards = await Task.Run(() =>
+            {
+                var list = new List<VehicleSlot>();
+                Yards(source, id, source.LoadRoadsAsync(id).GetAwaiter().GetResult(), list);
+                return list;
+            });
+            if (!IsInsideTree() || yards.Count == 0 || !_slots.TryGetValue(id, out var slots)) return;
+            slots.AddRange(yards);
+            Clear(id);
+            Draw(id);
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"[dormant] yards of {id}: {ex.Message}");
         }
     }
 
@@ -305,7 +345,9 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
     private static void Yards(IChunkSource source, TileId id, RoadTile? roads, List<VehicleSlot> into)
     {
         var tile = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
-        if (tile is not { Buildings.Count: > 0 }) return;
+        // most tiles have buildings and no site: their height grid is 2 MB a streaming client
+        // would download for nothing (#63)
+        if (tile is not { Buildings.Count: > 0 } || !SiteYards.HasSite(tile)) return;
         var grid = source.LoadChunkAsync(id).GetAwaiter().GetResult();
         var yards = SiteYards.For(tile, roads, grid);
         if (yards.Count == 0) return;

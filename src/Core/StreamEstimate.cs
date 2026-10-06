@@ -8,8 +8,8 @@ namespace UnitSport.Core;
 public static class StreamEstimate
 {
     /// <summary>MB received on arrival at the default (Standard) settings.</summary>
-    public const int ArrivalMb = 480;
+    public const int ArrivalMb = 300;
 
     /// <summary>MB received on arrival with Low data.</summary>
-    public const int ArrivalLowMb = 290;
+    public const int ArrivalLowMb = 80;
 }
