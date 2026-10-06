@@ -473,8 +473,7 @@ public static class BuildingFootprint
         // Only a block of flats with three front doors, a basement car park (GarageRule, the same
         // predicate the generator's basement answers to) and a good roll, and only where a road
         // can be reached from it: no road in front, no door. It claims its slot in the budget
-        // before the pedestrian doors, on a wall facing the road that is not the front wall if
-        // there is one, else on the front wall between two of its entrances.
+        // before the pedestrian doors, on the front wall between two of its entrances.
         if (found && door.Width > 0 && main != null && extras.Count + 1 < budget && roads.Streets.Roads.Count > 0
             && roof.Count > 0 && roof.Sum(r => Math.Abs(Cross2(r.A, r.B, r.C)) * 0.5f) >= 0.9f * w * dpt)
         {
@@ -528,12 +527,17 @@ public static class BuildingFootprint
                     return DoorOnWall(b, spot) && !TooClose(door, spot) && !extras.Any(q => TooClose(q, spot)) ? spot : null;
                 }
                 DoorSpot? garage = null;
-                foreach (var c in ranked.OrderByDescending(r => r.Score).Where(c => c != main))
-                    if ((garage = Garage(c, 0f)) != null) break;
-                // on the front wall, halfway between two entrances (which stand Spacing apart)
+                // On the front wall, halfway between two entrances (which stand Spacing apart): the ramp
+                // behind it runs straight in from the door between two stairwells (PR 2). A door on any
+                // other wall had no ramp to lead to.
+                var entrances = DoorBudget.AlongRun(main.S1 - main.S0, DoorBudget.ServiceWidth, budget - 1);
+                bool Entrance(float at) => entrances.Any(e => Math.Abs(e - at) < 0.5f);
                 for (int k = 1; garage == null && k <= DoorBudget.MaxPerWall; k++)
                     foreach (float off in new[] { DoorBudget.Spacing * (k - 0.5f), -DoorBudget.Spacing * (k - 0.5f) })
-                        if ((garage = Garage(main, off)) != null) break;
+                        // with an entrance, and so a stairwell, on both sides of it: the lane then
+                        // stands in the gap between two of them
+                        if (Entrance(off - DoorBudget.Spacing / 2) && Entrance(off + DoorBudget.Spacing / 2)
+                            && (garage = Garage(main, off)) != null) break;
                 if (garage is { } g) extras.Add(g);
             }
         }

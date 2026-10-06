@@ -109,6 +109,18 @@ public static partial class InteriorGenerator
         public bool Pinned;
     }
 
+    /// <summary>
+    /// The garage ramp's column (#558), in the plan's frame: wall to wall <c>X0..X1</c>; the run along Z
+    /// from <c>Top</c> (the flat apron behind the door ends there, floor level of the ground floor) to
+    /// <c>Foot</c> (basement floor); the slab over it stops at <c>HoleEnd</c>; <c>Slot</c> is the door.
+    /// </summary>
+    private sealed record RampColumn(float X0, float X1, float Top, float Foot, float HoleEnd, int Slot)
+    {
+        public float Center => (X0 + X1) / 2;
+        /// <summary>The ground floor's ramp room and the basement's, set as they are laid out.</summary>
+        public int GroundRoom = -1, BasementRoom = -1;
+    }
+
     private sealed class Apt
     {
         public InteriorLayout L = null!;
@@ -124,6 +136,13 @@ public static partial class InteriorGenerator
         /// </summary>
         public bool Passage;
         public int Floors, Below;
+        /// <summary>
+        /// The garage ramp (#558) when the block has a vehicle door it can serve: its column of the plan
+        /// (X0..X1 wall to wall), the Z where the flat apron ends and the descent starts (<c>Top</c>), its foot,
+        /// and where the floor slab over it stops (<c>HoleEnd</c>); <c>Slot</c> is the garage door it serves.
+        /// The column is kept out of every floor's flats; only the ground floor and the basement have rooms in it.
+        /// </summary>
+        public RampColumn? Ramp;
         public List<Well> Wells = new();
         public bool Mixed;
         /// <summary>The flat size this building runs to, m²: one block is studios, the next family flats.</summary>
@@ -202,7 +221,7 @@ public static partial class InteriorGenerator
             var rel = new Godot.Vector2(d.Position.X - fp.Center.X, d.Position.Z - fp.Center.Y);
             var outward = new Godot.Vector2(d.Outward.X, d.Outward.Z);
             // only a door on the front wall leads straight into a stairwell
-            if (outward.Dot(axisV) > -0.8f) continue;
+            if (outward.Dot(axisV) > -0.8f || d.Vehicle) continue;   // the garage door has a ramp, not a stairwell (#558)
             cands.Add((rel.Dot(fp.AxisU), d.Slot));
         }
         float spacing = wellW + (mixed ? 12f : 2 * MinFlatSide + 0.6f);
@@ -237,6 +256,9 @@ public static partial class InteriorGenerator
             if (a.Wells.Count > 1 && gr > 0.01f && gr < MinFlatSide) { wn.X0 += gr; wn.X1 += gr; }
         }
 
+        // the garage ramp's column (#558): kept out of every floor's flats
+        if (o.Free == null && o.Below == null && !o.Pinned && o.Links.Count == 0) a.Ramp = PlanRamp(a, fp);
+
         l.Type = type;
         l.Below = below;
         l.Floors.Clear();
@@ -266,6 +288,37 @@ public static partial class InteriorGenerator
         AptEntrances(a, fp);
         for (int f = below; f < floors; f++) AddWindows(l, l.Floors[f], f - below);
         return true;
+    }
+
+    /// <summary>
+    /// The column for the ramp behind the block's garage door (#558), or null when there is no such
+    /// door or the plan has no room for it: the door is on the front wall (a ramp runs straight in
+    /// from it), a basement car park strip runs across the back, the block is deep enough
+    /// (<see cref="GarageRule.HasRamp"/>), and the lane stands clear of every stairwell. A door with no
+    /// ramp reads as locked, as it did before the ramp existed.
+    /// </summary>
+    private static RampColumn? PlanRamp(Apt a, Footprint fp)
+    {
+        var l = a.L;
+        if (a.Below < 1 || !a.Stairs || !a.Passage) return null;
+        bool strip = a.Hd - a.ZB1 >= GarageRule.StripDepth && l.Width >= GarageRule.StripWidth;
+        if (!strip || !GarageRule.HasRamp(l.Depth, l.StoreyHeight)) return null;
+        var axisV = fp.AxisV;
+        foreach (var d in fp.Doors)
+        {
+            if (!d.Vehicle || d.Width <= 0) continue;
+            var outward = new Godot.Vector2(d.Outward.X, d.Outward.Z);
+            if (outward.Dot(axisV) > -0.8f) continue;
+            var rel = new Godot.Vector2(d.Position.X - fp.Center.X, d.Position.Z - fp.Center.Y);
+            float x = rel.Dot(fp.AxisU);
+            float x0 = x - GarageRule.RampWidth / 2, x1 = x + GarageRule.RampWidth / 2;
+            if (x0 < -a.Hw + 0.3f || x1 > a.Hw - 0.3f) return null;
+            if (a.Wells.Any(w => x1 + 0.4f > w.X0 && x0 - 0.4f < w.X1)) return null;
+            float top = -a.Hd + GarageRule.RampApron;
+            float foot = -a.Hd + GarageRule.RampFoot(l.StoreyHeight);
+            return new RampColumn(x0, x1, top, foot, top + RampProfile.HoleLength(l.StoreyHeight, a.Clear), d.Slot);
+        }
+        return null;
     }
 
     /// <summary>
@@ -346,6 +399,28 @@ public static partial class InteriorGenerator
             if (a.Stairs) Stair(floor, a, f, c0);
         }
 
+        // ---- the garage ramp (#558) ---------------------------------------------------------
+        // Its column holds no flats on any floor. The ground floor has a room under the garage door:
+        // the flat apron, then the floor slab opens over the descent (the hole), which is the ramp's
+        // flight, standing on the basement floor. The basement has its own room as far as the car
+        // park, which the ramp runs on into.
+        if (a.Ramp is { } ramp)
+        {
+            if (level == 0)
+            {
+                ramp.GroundRoom = Add(rooms, new RoomPlan { X0 = ramp.X0, Z0 = -hd, X1 = ramp.X1, Z1 = ramp.HoleEnd, Type = RoomType.Ramp });
+                floor.Holes.Add(new RectPlan(ramp.X0, ramp.Top, ramp.X1, ramp.HoleEnd));
+            }
+            else if (level == -1)
+            {
+                ramp.BasementRoom = Add(rooms, new RoomPlan { X0 = ramp.X0, Z0 = -hd, X1 = ramp.X1, Z1 = a.ZB1, Type = RoomType.Ramp });
+                floor.Flights.Add(new FlightPlan
+                {
+                    Ramp = true, X0 = ramp.X0, X1 = ramp.X1, ZBottom = ramp.Foot, ZTop = ramp.Top, From = 0, To = 1,
+                });
+            }
+        }
+
         // ---- the regions round them ----------------------------------------------------------
         var regions = new List<Region>();
         var wells = a.Wells;
@@ -366,16 +441,30 @@ public static partial class InteriorGenerator
                 spines[w] = (sp, m - half, m + half);
             }
         float back = deep ? a.ZB1 : a.Hd;
+        // the gaps between the stairwells; the garage ramp's column (#558) splits the gap it stands in
+        // in two, each part reached from its own stairwell only
+        var gaps = new List<(float G0, float G1, Well? Left, Well? Right)>();
         for (int i = 0; i <= wells.Count; i++)
         {
-            float g0 = i == 0 ? -a.Hw : wells[i - 1].X1, g1 = i == wells.Count ? a.Hw : wells[i].X0;
-            var left = i > 0 ? wells[i - 1] : null;
-            var right = i < wells.Count ? wells[i] : null;
+            float gg0 = i == 0 ? -a.Hw : wells[i - 1].X1, gg1 = i == wells.Count ? a.Hw : wells[i].X0;
+            var gl = i > 0 ? wells[i - 1] : null;
+            var gr = i < wells.Count ? wells[i] : null;
+            if (a.Ramp is { } rp && rp.X0 >= gg0 - 0.01f && rp.X1 <= gg1 + 0.01f)
+            {
+                gaps.Add((gg0, rp.X0, gl, null));
+                gaps.Add((rp.X1, gg1, null, gr));
+            }
+            else gaps.Add((gg0, gg1, gl, gr));
+        }
+        foreach (var (g0, g1, left, right) in gaps)
+        {
             float width = g1 - g0;
+            // beside the ramp and at no stairwell: nothing to open off
+            if (left == null && right == null) continue;
             if (deep)
             {
                 // behind the stairwells' depth: from one spine to the next
-                float b0 = left != null ? spines[left].X1 : -a.Hw, b1 = right != null ? spines[right].X0 : a.Hw;
+                float b0 = left != null ? spines[left].X1 : g0, b1 = right != null ? spines[right].X0 : g1;
                 if (left != null && right != null && b1 - b0 >= 2 * MinFlatSide)
                 {
                     float mid = (b0 + b1) / 2;
@@ -1438,6 +1527,9 @@ public static partial class InteriorGenerator
         if (carStrip)
         {
             int park = Add(rooms, new RoomPlan { X0 = -a.Hw, Z0 = a.ZB1, X1 = a.Hw, Z1 = a.Hd, Type = RoomType.CarPark });
+            // the garage ramp (#558) runs on into the car park: a lane-wide arch from its basement room
+            if (a.Ramp is { BasementRoom: >= 0 } ramp)
+                Opening(rooms, park, Side.Front, ramp.BasementRoom, ramp.Center, GarageRule.RampWidth - 0.3f, a.Clear, OpeningKind.Arch);
             // a door from every circulation room along its front: the stairwells meet in it too
             for (int i = 0; i < park; i++)
             {
@@ -1534,17 +1626,27 @@ public static partial class InteriorGenerator
         var axisV = fp.AxisV;
         foreach (var d in fp.Doors)
         {
-            // the underground garage's door (#558): its ramp is not planned yet, so it gets no
-            // doorway and reads as locked (EntranceOf is null), never a portal onto a stairwell
-            if (d.Vehicle) continue;
-            float width = Math.Min(d.Width, 1.8f);
+            // the underground garage's door (#558) opens into the ground floor room over its ramp. A
+            // block with no ramp for it (the lane would not clear a stairwell, a wing, a short block)
+            // gives it no doorway: EntranceOf is null and it reads as locked, never a portal onto a stairwell
+            RampColumn? serve = d.Vehicle && a.Ramp is { GroundRoom: >= 0 } rc && rc.Slot == d.Slot ? rc : null;
+            if (d.Vehicle && serve == null) continue;
+            float width = serve != null ? d.Width : Math.Min(d.Width, 1.8f);
             float height = Math.Min(d.Height, clear - 0.15f);
             var well = a.Wells.FirstOrDefault(w => w.Slot == d.Slot);
             bool main = d.Slot == fp.Door.Slot;
             RoomPlan? room = null;
             Side side = Side.Front;
             float center = 0;
-            if (well != null)
+            if (serve != null)
+            {
+                room = ground.Rooms[serve.GroundRoom];
+                var gx = new Godot.Vector2(d.Position.X - fp.Center.X, d.Position.Z - fp.Center.Y).Dot(fp.AxisU);
+                width = Math.Min(width, room.X1 - room.X0 - 0.5f);
+                center = Fit(gx, room.X0 + width / 2 + 0.2f, room.X1 - width / 2 - 0.2f);
+                room.Openings.Add(new OpeningPlan { Side = Side.Front, Center = center, Width = width, Top = height, Kind = OpeningKind.Entry });
+            }
+            else if (well != null)
             {
                 // the lobby's front wall: the core's, or the bit before the elevator
                 var core = ground.Rooms[well.Core];
@@ -1627,7 +1729,7 @@ public static partial class InteriorGenerator
             new Piece(FurnitureType.Mailboxes, 1.4f, 0.32f, 1.3f, true),
             new Piece(FurnitureType.Plant, 0.45f, 0.45f, 1.2f, true),
         },
-        RoomType.Landing or RoomType.Corridor or RoomType.Elevator or RoomType.Stairwell => Array.Empty<Piece>(),
+        RoomType.Landing or RoomType.Corridor or RoomType.Elevator or RoomType.Stairwell or RoomType.Ramp => Array.Empty<Piece>(),
         RoomType.Laundry => new[]
         {
             new Piece(FurnitureType.WashingMachine, 0.6f, 0.6f, 0.85f, true),

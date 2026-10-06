@@ -235,8 +235,9 @@ public static class DoorCheck
             GD.Print($"[doorcheck] {(ok ? "ok  " : "FAIL")} {what}");
         }
 
-        // a block 80 x 20 m, 15 m tall: three front doors and a deep enough basement for a car park
-        var block = new Box("a long block", BuildingKind.Apartment, 80, 20, 15, 3, DoorBudget.MaxPerBuilding);
+        // a block 80 x 26 m, 15 m tall: three front doors, a car park strip behind the stairwells and
+        // the 24 m a ramp down to it takes (GarageRule.RampDepth)
+        var block = new Box("a long block", BuildingKind.Apartment, 80, 26, 15, 3, DoorBudget.MaxPerBuilding);
         const int copies = 8;
         // street centreline, metres in front of the block's south wall, its class, and what comes of it
         (string What, RoadClass Class, float Gap, LinkKind Want)[] cases =
@@ -260,7 +261,7 @@ public static class DoorCheck
                 Segments = Enumerable.Range(0, copies).Select(i => new RoadSegment
                 {
                     Class = cls, Surface = RoadSurface.Paved, Width = RoadFormat.DefaultWidth(cls),
-                    Points = [380f, 0f, 110f * i + 60f + 10f + gap, 620f, 0f, 110f * i + 60f + 10f + gap],
+                    Points = [380f, 0f, 110f * i + 60f + 13f + gap, 620f, 0f, 110f * i + 60f + 13f + gap],
                 }).ToList(),
             };
             var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
@@ -286,10 +287,26 @@ public static class DoorCheck
                 var layout = InteriorGenerator.Generate(tile, g.Index, roads, null);
                 if (layout == null) { Expect(false, $"{what}: no plan"); continue; }
                 var problems = InteriorValidator.Validate(layout);
-                Expect(problems.Count == 0, $"{what}: the plan validates{(problems.Count > 0 ? " — " + string.Join("; ", problems.Take(3)) : "")}");
+                Expect(problems.Count == 0, $"{what}: the plan validates{(problems.Count > 0 ? " ï¿½ " + string.Join("; ", problems.Take(3)) : "")}");
                 Expect(layout.Floors.Any(f => f.Rooms.Any(r => r.Type == RoomType.CarPark)),
                     $"{what}: the basement behind it has a car park (the rule and the generator agree)");
-                Expect(layout.EntranceOf(g.KeyIn(tile.Id).ToString()) == null, $"{what}: the garage door reads as locked until its ramp exists");
+                // PR 2 (#558): the door leads in, to the ramp room under it, and the ramp goes down to the car park
+                var way = layout.EntranceOf(g.KeyIn(tile.Id).ToString());
+                Expect(way is { Vehicle: true, Hang: DoorHang.RollUp } && way.Width >= 3f - 0.01f, $"{what}: the garage door arrives at a doorway 3 m wide inside ({way?.Width:F1})");
+                var ramp = layout.Floors[layout.Below - 1].AllFlights().FirstOrDefault(x => x.Ramp);
+                Expect(ramp != null && layout.Version == InteriorLayout.CurrentVersion, $"{what}: a ramp runs down from the ground floor (plan version {layout.Version})");
+                if (ramp != null && way != null)
+                {
+                    var room = layout.GroundFloor.Rooms.FirstOrDefault(r => r.Type == RoomType.Ramp && r.Openings.Any(o => o.Kind == OpeningKind.Entry));
+                    Expect(room != null && ramp.TopEnd.X > room.X0 && ramp.TopEnd.X < room.X1 && Math.Abs(room.X0 + (room.X1 - room.X0) / 2 - way.X) < 0.5f,
+                        $"{what}: the doorway opens into the ground floor ramp room, in line with the ramp");
+                    Expect(layout.Floors[layout.Below - 1].Rooms.Any(r => r.Type == RoomType.CarPark && ramp.Bottom.Z > r.Z0 && ramp.Bottom.Z < r.Z1),
+                        $"{what}: the ramp's foot is in the car park");
+                    // the plan frame is the building's: the lane stands where the door does along the wall
+                    var axisU = new Vector2(Mathf.Cos(layout.Yaw), -Mathf.Sin(layout.Yaw));
+                    float along = (new Vector2(g.Position.X, g.Position.Z) - new Vector2(layout.CenterX, layout.CenterZ)).Dot(axisU);
+                    Expect(Math.Abs(along - way.X) < 0.5f && along > ramp.X0 && along < ramp.X1, $"{what}: the door is {along:F1} m along the wall, the doorway and the ramp at {way.X:F1}");
+                }
             }
         }
         // shops under flats (#558): the rarer 20 % roll and 4 front doors, on 100 x 20 m commercial blocks
@@ -299,7 +316,7 @@ public static class DoorCheck
             {
                 Id = new TileId(2583, 1113),
                 Buildings = Enumerable.Range(0, mixedCopies)
-                    .Select(i => Solid(new Box("a mixed block", BuildingKind.Commercial, 100, 20, 15, 1, DoorBudget.MaxPerBuilding), 110f * i + 60f)).ToList(),
+                    .Select(i => Solid(new Box("a mixed block", BuildingKind.Commercial, 100, 26, 15, 1, DoorBudget.MaxPerBuilding), 110f * i + 60f)).ToList(),
             };
             var roads = new RoadTile
             {
@@ -307,7 +324,7 @@ public static class DoorCheck
                 Segments = Enumerable.Range(0, mixedCopies).Select(i => new RoadSegment
                 {
                     Class = RoadClass.Minor, Surface = RoadSurface.Paved, Width = RoadFormat.DefaultWidth(RoadClass.Minor),
-                    Points = [360f, 0f, 110f * i + 60f + 10f + 6f, 640f, 0f, 110f * i + 60f + 10f + 6f],
+                    Points = [360f, 0f, 110f * i + 60f + 13f + 6f, 640f, 0f, 110f * i + 60f + 13f + 6f],
                 }).ToList(),
             };
             var doors = BuildingFootprint.ComputeDoors(tile, roads, null);

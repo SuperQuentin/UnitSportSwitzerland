@@ -116,6 +116,27 @@ public static class GarageRule
         return BehindStairwell(width, depth, above + below, storeyHeight) >= StripDepth;
     }
 
+    // ---- the ramp (#558, PR 2) -----------------------------------------------------------------
+
+    /// <summary>The ramp's lane, wall to wall: a car 1.9 m wide, mirrors out, with a hand each side.</summary>
+    public const float RampWidth = 3.6f;
+
+    /// <summary>The flat floor behind the door before the ramp tips down, m.</summary>
+    public const float RampApron = 2.0f;
+
+    /// <summary>Clear run past the ramp's foot to turn into the aisle, m, and the depth of a row of bays beyond it.</summary>
+    public const float RampTurn = 3.5f, BayRow = 5.1f;
+
+    /// <summary>How far from the front wall the ramp reaches its foot, m, in a block whose storeys are <paramref name="storeyHeight"/>.</summary>
+    public static float RampFoot(float storeyHeight) => RampApron + RampProfile.Length(storeyHeight);
+
+    /// <summary>The shallowest block a ramp fits: its foot, the room to turn there, and a row of bays behind.</summary>
+    public static float RampDepth(float storeyHeight) => RampFoot(storeyHeight) + RampTurn + BayRow;
+
+    /// <summary>Whether a block is deep enough for the ramp down to its car park.</summary>
+    public static bool HasRamp(float depth, float storeyHeight) => depth >= RampDepth(storeyHeight);
+
+
     /// <summary>Whether the key rolls a garage, the same on every peer.</summary>
     public static bool Rolls(string key, bool mixed = false) =>
         Fnv.Unit(key + "|garage") < (mixed ? MixedRollShare : Share);
@@ -132,9 +153,9 @@ public static class GarageRule
         type switch
         {
             BuildingType.Apartments => frontDoors >= MinFrontDoors
-                && HasCarPark(key, false, above, width, depth, storeyHeight) && Rolls(key),
+                && HasCarPark(key, false, above, width, depth, storeyHeight) && HasRamp(depth, storeyHeight) && Rolls(key),
             BuildingType.MixedUse => frontDoors >= MixedMinFrontDoors
-                && HasCarPark(key, true, above, width, depth, storeyHeight) && Rolls(key, mixed: true),
+                && HasCarPark(key, true, above, width, depth, storeyHeight) && HasRamp(depth, storeyHeight) && Rolls(key, mixed: true),
             _ => false,
         };
 }
