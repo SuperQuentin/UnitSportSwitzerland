@@ -3,7 +3,7 @@
 
 # Android client: play on a phone against a PC server
 
-Status: **proposed** (issue #63), nothing built yet.
+Status: **proposed** (issue #63). Only the APK build exists so far (#544).
 
 ## Goal
 
@@ -43,9 +43,11 @@ Out of scope: iOS, a phone-hosted server, the Play Store, and shipping real terr
 
 ### 0. Spike: does it run at all? (go / no-go)
 
-1. Install the Android SDK, JDK 17 and the Godot 4.7 .NET export templates. Add an Android preset
-   (arm64-v8a only) to `export_presets.cfg`.
-2. Export a debug APK with **no** `terrain_chunks/`, then install it with `adb install`.
+1. ~~Install the Android SDK, JDK 17 and the Godot 4.7 .NET export templates. Add an Android preset
+   (arm64-v8a only) to `export_presets.cfg`.~~ **Done (#544):** every release ships
+   `-android-arm64.apk`, built by `tools/release.sh` (locally or in CI) with no `terrain_chunks/`.
+   The csproj targets net9.0 for Android, which Godot's APK template needs (`general/local-release`).
+2. Install the release APK with `adb install -r`.
 3. On the PC: `<godot> --headless --path . -- --server --generated-world`. On the phone: "Join a
    server" at the PC's LAN IP.
 4. Measure frame rate, memory (`adb shell dumpsys meminfo`) and heat over about 10 minutes on

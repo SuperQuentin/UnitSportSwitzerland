@@ -116,6 +116,8 @@ public static partial class InteriorMeshBuilder
         RoomType.BreakRoom => (C(0.72f, 0.68f, 0.62f), C(0.90f, 0.88f, 0.80f), C(0.95f, 0.95f, 0.93f)),
         RoomType.PartsStore => (Concrete, C(0.76f, 0.76f, 0.73f), C(0.66f, 0.66f, 0.64f)),
         RoomType.PaintBooth => (C(0.62f, 0.64f, 0.66f), C(0.92f, 0.93f, 0.94f), C(0.90f, 0.91f, 0.92f)),
+        // #501: sealed grey concrete, a pale shell and the lit ceiling of a big-box shop floor
+        RoomType.IkeaMarket => (C(0.56f, 0.56f, 0.57f), C(0.93f, 0.93f, 0.92f), C(0.96f, 0.96f, 0.95f)),
         _ => (C(0.52f, 0.38f, 0.25f), C(0.88f, 0.84f, 0.76f), C(0.95f, 0.94f, 0.90f)), // hall, landing
     };
 
@@ -602,6 +604,42 @@ public static partial class InteriorMeshBuilder
                 B(-0.1f, 1.0f, d, -0.05f, 1.15f, d + 0.03f, metal);
                 B(0.05f, 1.0f, d, 0.1f, 1.15f, d + 0.03f, metal);
                 break;
+            case FurnitureType.BlahajBin:
+            {
+                // a wire bin, heaped over the rim with plush sharks (#501). The heap is what sells
+                // it, so the sharks are built individually rather than as one mound: six or seven
+                // of them, each turned its own way, laid out from the bin's own place in the plan
+                // so every peer builds the same bin and a rebuild does not reshuffle it.
+                var wire = C(0.34f, 0.36f, 0.40f);
+                var shark = C(0.49f, 0.78f, 0.94f);
+                var belly = C(0.90f, 0.95f, 0.98f);
+                // the basket: a rim, four corner posts and a slatted floor
+                B(-w, H - 0.06f, -d, w, H, -d + 0.05f, wire);
+                B(-w, H - 0.06f, d - 0.05f, w, H, d, wire);
+                B(-w, H - 0.06f, -d, -w + 0.05f, H, d, wire);
+                B(w - 0.05f, H - 0.06f, -d, w, H, d, wire);
+                B(-w + 0.04f, 0.08f, -d + 0.04f, w - 0.04f, 0.13f, d - 0.04f, wire * 0.8f);
+                foreach (var (px, pz) in new[] { (-w, -d), (w - 0.05f, -d), (-w, d - 0.05f), (w - 0.05f, d - 0.05f) })
+                    B(px, 0, pz, px + 0.05f, H, pz + 0.05f, wire);
+
+                int sharks = 5 + (int)(Hash(p, 1) * 3);      // 5..7
+                for (int i = 0; i < sharks; i++)
+                {
+                    // stacked in two layers, the upper one proud of the rim: a full bin
+                    float sx = (Hash(p, i * 4 + 2) - 0.5f) * (p.W - 0.46f);
+                    float sz = (Hash(p, i * 4 + 3) - 0.5f) * (p.D - 0.46f);
+                    float sy = 0.13f + (i % 2) * 0.17f + Hash(p, i * 4 + 4) * 0.05f;
+                    bool lengthwise = Hash(p, i * 4 + 5) < 0.5f;
+                    const float bl = 0.19f, bw = 0.075f, bh = 0.085f;   // half-extents of one shark
+                    float ax = lengthwise ? bl : bw, az = lengthwise ? bw : bl;
+                    // body, pale belly under it, and the tail standing up at one end
+                    B(sx - ax, sy, sz - az, sx + ax, sy + bh * 2, sz + az, shark);
+                    B(sx - ax * 0.86f, sy, sz - az * 0.86f, sx + ax * 0.86f, sy + bh * 0.6f, sz + az * 0.86f, belly);
+                    float tx = lengthwise ? sx - ax : sx, tz = lengthwise ? sz : sz - az;
+                    B(tx - 0.035f, sy + bh * 0.5f, tz - 0.035f, tx + 0.035f, sy + bh * 2.3f, tz + 0.035f, shark * 0.9f);
+                }
+                break;
+            }
             case FurnitureType.Nightstand:
             case FurnitureType.Crate:
                 B(-w, 0, -d, w, H, d, p.Type == FurnitureType.Crate ? C(0.62f, 0.48f, 0.30f) : wood);
@@ -1303,7 +1341,7 @@ public static partial class InteriorMeshBuilder
 
     /// <summary>
     /// A stable 0..1 roll for one detail of one piece: which colour a drum is, whether a rack slot is
-    /// empty. From the piece's own place in the plan, so every peer builds the same warehouse and a
+    /// empty, which way a shark in a bin lies (#501). From the piece's own place in the plan, so every peer builds the same warehouse and a
     /// rebuild does not reshuffle it.
     /// </summary>
     private static float Hash(FurniturePlan p, int salt) =>

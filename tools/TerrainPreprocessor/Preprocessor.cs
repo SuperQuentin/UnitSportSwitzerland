@@ -96,6 +96,9 @@ public static partial class Preprocessor
         bool landingsOnly = false;
         // --landings-file: write landings.json elsewhere (reading a live region without touching it)
         string? landingsFile = null;
+        // airports (#422): stands and runways from swissTLM3D and OpenStreetMap (--osm <pbf>) over the built tiles
+        bool airportsOnly = false;
+        string? airportsFile = null, airportsOsm = null;
         var pngCrops = new List<(double E, double N, int Size)>();
         bool force = false, fresh = false;
         string? franceBox = null;
@@ -136,6 +139,9 @@ public static partial class Preprocessor
                 case "--water": waterOnly = true; break;
                 case "--landings": landingsOnly = true; break;
                 case "--landings-file": landingsFile = args[++i]; break;
+                case "--airports": airportsOnly = true; break;
+                case "--airports-file": airportsFile = args[++i]; break;
+                case "--osm": airportsOsm = args[++i]; break;
                 case "--bathy": bathyDir = args[++i]; break;
                 case "--png-crop":
                 {
@@ -161,6 +167,17 @@ public static partial class Preprocessor
         }
 
         if (osmCheck) return OsmOverlay.SelfCheck();
+
+        // ---- airports: stands and runways (#422) ---------------------------------------------------
+        if (airportsOnly)
+        {
+            if (outDir == null || tlmGpkg == null || airportsOsm == null)
+            {
+                Console.Error.WriteLine("--airports requires --out <chunk dir>, --tlm <swisstlm3d .gpkg> and --osm <switzerland .osm.pbf>");
+                return 2;
+            }
+            return AirportStage.Run(outDir, tlmGpkg, airportsOsm, airportsFile, jobs);
+        }
 
         // ---- OSM overlay: OSM attributes conflated onto TLM road lines, for the built tiles ----------
         // Standalone and region-wide (not per batch), so it covers the whole region however the feature
