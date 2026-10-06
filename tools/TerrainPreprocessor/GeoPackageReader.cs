@@ -68,6 +68,108 @@ public static class GeoPackageReader
         return cmd;
     }
 
+    /// <summary>
+    /// One row of <see cref="TileRows"/>: the requested columns, then the geometry blob, read by
+    /// index the way a <see cref="SqliteDataReader"/> row is.
+    /// </summary>
+    public readonly struct Row
+    {
+        private readonly object?[] _values;
+
+        public Row(object?[] values) => _values = values;
+
+        public int FieldCount => _values.Length;
+        public bool IsDBNull(int i) => _values[i] is null;
+        public object GetValue(int i) => _values[i]!;
+
+        public string GetString(int i) => _values[i] as string
+            ?? Convert.ToString(_values[i], System.Globalization.CultureInfo.InvariantCulture)!;
+
+        public int GetInt32(int i) => _values[i] switch
+        {
+            long l => (int)l,
+            double d => (int)d,
+            var v => int.Parse(Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture)!,
+                System.Globalization.CultureInfo.InvariantCulture),
+        };
+    }
+
+    // Rows fetched per sweep of the file. Bounds what is held at once: road lines are a few hundred
+    // bytes each, land cover polygons about 2 KB.
+    private const int SweepRows = 50_000;
+
+    /// <summary>
+    /// The rows of a layer that a tile region needs: the same rows, in the same order, as
+    /// <see cref="BboxQuery(SqliteConnection, string, string, IReadOnlyList{string}, double, double, double, double)"/>
+    /// over the region's box, minus those whose box does not come within the region's margin of
+    /// a wanted tile (#678).
+    ///
+    /// <para>
+    /// It also reads them faster. The R-tree hands rows back in its own order, which is random
+    /// access into a 4.8 GB file: 0.81 ms a row cold on a hard disk, against 0.15 ms in rowid
+    /// order. So the ids come from the index alone, are fetched in rowid order one sweep at a time,
+    /// and are handed back in the order the index gave them, which is the order every extractor's
+    /// output was built in.
+    /// </para>
+    /// </summary>
+    public static IEnumerable<Row> TileRows(SqliteConnection conn, string table, string geomColumn,
+        IReadOnlyList<string> columns, TileRegion region)
+    {
+        var ids = new List<long>();
+        using (var index = conn.CreateCommand())
+        {
+            index.CommandText = $"""
+                select r.id, r.minx, r.maxx, r.miny, r.maxy
+                from "rtree_{table}_{geomColumn}" r
+                where r.maxx >= $minE and r.minx <= $maxE
+                  and r.maxy >= $minN and r.miny <= $maxN
+                """;
+            index.Parameters.AddWithValue("$minE", region.MinE);
+            index.Parameters.AddWithValue("$maxE", region.MaxE);
+            index.Parameters.AddWithValue("$minN", region.MinN);
+            index.Parameters.AddWithValue("$maxN", region.MaxN);
+            using var r = index.ExecuteReader();
+            while (r.Read())
+                if (region.Touches(r.GetDouble(1), r.GetDouble(2), r.GetDouble(3), r.GetDouble(4)))
+                    ids.Add(r.GetInt64(0));
+        }
+
+        string cols = string.Join(", ", columns.Select(c => $"t.\"{c}\""));
+        int width = columns.Count + 1;
+        var sweep = new Dictionary<long, object?[]>();
+        for (int start = 0; start < ids.Count; start += SweepRows)
+        {
+            int count = Math.Min(SweepRows, ids.Count - start);
+            var sorted = ids.GetRange(start, count);
+            sorted.Sort();
+
+            sweep.Clear();
+            using (var fetch = conn.CreateCommand())
+            {
+                // an id list in the statement: SQLite walks it in ascending rowid order
+                fetch.CommandText = $"select t.rowid, {cols}, t.\"{geomColumn}\" from \"{table}\" t where t.rowid in ("
+                    + string.Join(",", sorted) + ")";
+                using var r = fetch.ExecuteReader();
+                while (r.Read())
+                {
+                    var values = new object?[width];
+                    for (int i = 0; i < width; i++)
+                        values[i] = r.IsDBNull(i + 1) ? null : r.GetValue(i + 1);
+                    sweep[r.GetInt64(0)] = values;
+                }
+            }
+            // an index entry with no row is skipped, as the join skipped it
+            for (int i = start; i < start + count; i++)
+                if (sweep.TryGetValue(ids[i], out var values))
+                    yield return new Row(values);
+        }
+    }
+
+    /// <summary><see cref="TileRows(SqliteConnection, string, string, IReadOnlyList{string}, TileRegion)"/> that resolves the geometry column itself.</summary>
+    public static IEnumerable<Row> TileRows(SqliteConnection conn, string table,
+        IReadOnlyList<string> columns, TileRegion region)
+        => TileRows(conn, table, GeometryColumn(conn, table), columns, region);
+
     /// <summary>A closed ring as flat x,y,z triples in map coordinates.</summary>
     public sealed record Ring(double[] Xyz)
     {

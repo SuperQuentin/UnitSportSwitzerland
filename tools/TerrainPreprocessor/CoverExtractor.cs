@@ -46,33 +46,27 @@ public sealed class CoverExtractor
         foreach (var t in tiles)
             Cover[t] = new byte[CoverFormat.Size * CoverFormat.Size];
 
-        double minE = tiles.Min(t => t.MinE), maxE = tiles.Max(t => t.MinE) + ChunkFormat.TileSizeM;
-        double minN = tiles.Min(t => t.MinN), maxN = tiles.Max(t => t.MinN) + ChunkFormat.TileSizeM;
+        // no margin: an area or a tree that touches no wanted tile draws on none
+        var region = new TileRegion(tiles);
 
         using var conn = GeoPackageReader.Open(_gpkgPath);
 
         // Layers are rasterised in order of increasing specificity: what a human would
         // name the ground wins over what grows on it. A car park stays last so it beats
         // everything, and the pitch polygon beats the sports ground that contains it.
-        PolygonCount = Rasterise(conn, "tlm_bb_bodenbedeckung", CoverFormat.Parse,
-            minE, minN, maxE, maxN);
-        Rasterise(conn, "tlm_areale_nutzungsareal", CoverFormat.ParseLandUse,
-            minE, minN, maxE, maxN);
-        Rasterise(conn, "tlm_areale_freizeitareal", CoverFormat.ParseLeisure,
-            minE, minN, maxE, maxN);
-        Rasterise(conn, "tlm_bauten_sportbaute_ply", CoverFormat.ParseStructureArea,
-            minE, minN, maxE, maxN);
-        Rasterise(conn, "tlm_bauten_verkehrsbaute_ply", CoverFormat.ParseStructureArea,
-            minE, minN, maxE, maxN);
-        TrafficAreaCount = Rasterise(conn, "tlm_areale_verkehrsareal", CoverFormat.ParseTrafficArea,
-            minE, minN, maxE, maxN);
+        PolygonCount = Rasterise(conn, "tlm_bb_bodenbedeckung", CoverFormat.Parse, region);
+        Rasterise(conn, "tlm_areale_nutzungsareal", CoverFormat.ParseLandUse, region);
+        Rasterise(conn, "tlm_areale_freizeitareal", CoverFormat.ParseLeisure, region);
+        Rasterise(conn, "tlm_bauten_sportbaute_ply", CoverFormat.ParseStructureArea, region);
+        Rasterise(conn, "tlm_bauten_verkehrsbaute_ply", CoverFormat.ParseStructureArea, region);
+        TrafficAreaCount = Rasterise(conn, "tlm_areale_verkehrsareal", CoverFormat.ParseTrafficArea, region);
         // hand-traced ground TLM does not map (docs/data/cover_overrides.json), last so it beats
         // every TLM layer; before the trees so an orchard it paves over is not planted
         if (OverridesPath != null) StampOverrides(OverridesPath);
 
         ScatterTrees(tiles, heightOf);
         PlantRows(tiles, heightOf);
-        AddSurveyedTrees(conn, tiles, heightOf, minE, minN, maxE, maxN);
+        AddSurveyedTrees(conn, heightOf, region);
 
         // the three passes each ask for a list up front; drop the tiles that stayed bare
         foreach (var id in Trees.Where(kv => kv.Value.Count == 0).Select(kv => kv.Key).ToList())
@@ -121,14 +115,10 @@ public sealed class CoverExtractor
     /// classifier. Returns the number of rings drawn.
     /// </summary>
     private int Rasterise(Microsoft.Data.Sqlite.SqliteConnection conn, string layer,
-        Func<string?, CoverClass> classify, double minE, double minN, double maxE, double maxN)
+        Func<string?, CoverClass> classify, TileRegion region)
     {
         int rings = 0;
-        using var cmd = GeoPackageReader.BboxQuery(conn, layer,
-            new[] { "objektart" }, minE, minN, maxE, maxN);
-        using var reader = cmd.ExecuteReader();
-
-        while (reader.Read())
+        foreach (var reader in GeoPackageReader.TileRows(conn, layer, new[] { "objektart" }, region))
         {
             var cls = classify(reader.IsDBNull(0) ? null : reader.GetString(0));
             if (cls == CoverClass.Open || reader.IsDBNull(1)) continue;
@@ -348,14 +338,9 @@ public sealed class CoverExtractor
     /// a scatter, and they are what makes open farmland stop looking like a bare heightmap.
     /// </summary>
     private void AddSurveyedTrees(Microsoft.Data.Sqlite.SqliteConnection conn,
-        IReadOnlyCollection<TileId> tiles, Func<double, double, double?> heightOf,
-        double minE, double minN, double maxE, double maxN)
+        Func<double, double, double?> heightOf, TileRegion region)
     {
-        using var cmd = GeoPackageReader.BboxQuery(conn, "tlm_bb_einzelbaum",
-            new[] { "objektart" }, minE, minN, maxE, maxN);
-        using var reader = cmd.ExecuteReader();
-
-        while (reader.Read())
+        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_bb_einzelbaum", new[] { "objektart" }, region))
         {
             if (reader.IsDBNull(1)) continue;
             foreach (var (e, n, _) in GeoPackageReader.ParsePoints((byte[])reader.GetValue(1)))
