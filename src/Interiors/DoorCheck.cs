@@ -223,8 +223,9 @@ public static class DoorCheck
     /// above, as a loading bay is, and every property that exemption lets go is asserted here: it
     /// is a roll-up vehicle door of its own size on a wall, its link is the one the road's distance
     /// and class call for, there is no door at all with no street in reach or a motorway as near,
-    /// and the plan behind it still validates, with a car park for the garage to belong to and no
-    /// doorway yet (PR 2 plans the ramp), so the door reads as locked.
+    /// and the plan behind it validates, with a car park for the garage to belong to and (PR 2) a
+    /// doorway 3 m wide into the ground floor ramp room, in line with the door along its wall, and a
+    /// ramp from it down into the car park.
     /// </summary>
     private static int Garages()
     {

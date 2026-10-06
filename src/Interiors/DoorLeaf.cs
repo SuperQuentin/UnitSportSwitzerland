@@ -166,11 +166,11 @@ public partial class DoorLeaf : Node3D
     /// anyone walk (or drive) out through it. Shown and solid only
     /// while the door is shut; open, or swinging, the portal shows the real leaves.
     /// </summary>
-    public static DoorLeaf CreateShutter(string door, Transform3D doorway, float width, float height, BuildingKind kind, Material material)
+    public static DoorLeaf CreateShutter(string door, Transform3D doorway, float width, float height, DoorHang hang, BuildingKind kind, Material material)
     {
         var leaf = new DoorLeaf { Name = "Shutter_" + door, Transform = doorway, Shutter = true };
         float half = width / 2, z = -InteriorGenerator.WallInset;
-        if (RollsUp(kind))
+        if (RollsUp(hang))
             // a garage's roll-up door: its slats, the same as outside
             leaf.AddHinge(new Vector3(0, height, 0), 0, InteriorMeshBuilder.RollUpLeaf(width, height, z - Thickness, z), 0, material);
         else
