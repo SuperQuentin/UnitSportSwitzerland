@@ -137,10 +137,11 @@ public sealed class MeshScratch
     /// <paramref name="gapAngle"/> radians of <paramref name="gap"/> are left out, which makes a
     /// slit. Not closed, so like <see cref="Pane"/> it has no volume for <c>--meshcheck</c>.
     /// <paramref name="ripple"/> (a fraction of the hem radius) waves the hem in and out and up and
-    /// down round its edge, at <paramref name="phase"/>: a skirt fluttering in the wind.
+    /// down round its edge, at <paramref name="phase"/>: a skirt fluttering in the wind. No hem point
+    /// goes below height <paramref name="floor"/> (the ground under a figure, #671).
     /// </summary>
     public void Skirt(Vector3 a, Vector3 b, float radiusA, float radiusB, Color colour, int sides = 10,
-        Vector3 gap = default, float gapAngle = 0f, float ripple = 0f, float phase = 0f)
+        Vector3 gap = default, float gapAngle = 0f, float ripple = 0f, float phase = 0f, float floor = float.NegativeInfinity)
     {
         var axis = b - a;
         float length = axis.Length();
@@ -166,6 +167,7 @@ public sealed class MeshScratch
             float lift = Mathf.Cos(phase * 1.3f + i * 1.9f);
             var top = a + offset * radiusA;
             var hem = b + offset * radiusB * (1f + ripple * wave) + axis * (radiusB * ripple * 0.6f * lift);
+            hem.Y = Mathf.Max(hem.Y, floor);
             if (Smooth)
             {
                 // the outside and the inside each their own vertices: shared, their normals cancel

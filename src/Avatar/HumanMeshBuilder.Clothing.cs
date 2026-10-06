@@ -605,8 +605,16 @@ public static partial class HumanMeshBuilder
             return from + (shifted - from).Normalized() * length;
         }
         var waist = r.Waist;
-        void Cone(Vector3 from, Vector3 hem, float ra, float rb, Color colour, int sides, Vector3 gap = default, float gapAngle = 0f) =>
-            s.Skirt(from, Blown(waist, hem) + (from - waist), ra, rb, colour, sides, gap, gapAngle, ripple, phase);
+        // no hem point below the lower ankle's sole line, however the wind tilts the cone or the
+        // ripple drops it (#671: a running dress dragged through the ground)
+        float floor = Mathf.Min(r.AnkleL.Y, r.AnkleR.Y) - 0.06f;
+        // a cone from fraction `from` of the way down the blown skirt, so a tier
+        // under it tilts with it rather than starting on the still line (#671)
+        void Cone(float from, Vector3 hem, float ra, float rb, Color colour, int sides, Vector3 gap = default, float gapAngle = 0f)
+        {
+            var blown = Blown(waist, hem);
+            s.Skirt(waist.Lerp(blown, from), blown, ra, rb, colour, sides, gap, gapAngle, ripple, phase, floor);
+        }
 
         if (top is { CoversBottom: true })
         {
@@ -615,16 +623,16 @@ public static partial class HumanMeshBuilder
             {
                 var hem = ankles + Vector3.Up * 0.035f;
                 float rh = Mathf.Max(0.30f, spreadA + 0.07f) + extra;
-                Cone(waist, hem, ConeStart(fit, hem, rh), rh, c.A, 12);
-                Cone(waist.Lerp(hem, 0.95f), hem, rh * 0.97f + 0.004f, rh + 0.004f, c.B, 12);
+                Cone(0f, hem, ConeStart(fit, hem, rh), rh, c.A, 12);
+                Cone(0.95f, hem, rh * 0.97f + 0.004f, rh + 0.004f, c.B, 12);
             }
             else
             {
                 var hem = r.Hip.Lerp(knees, 0.85f);
                 float rh = Mathf.Max(0.29f, spreadK + 0.12f) + extra;
-                Cone(waist, hem, ConeStart(fit, hem, rh), rh, c.A, 12);
+                Cone(0f, hem, ConeStart(fit, hem, rh), rh, c.A, 12);
                 // the petticoat frothing out under it
-                Cone(waist.Lerp(hem, 0.78f), hem - Vector3.Up * 0.035f, rh * 0.9f, rh + 0.03f, c.B, 12);
+                Cone(0.78f, hem - Vector3.Up * 0.035f, rh * 0.9f, rh + 0.03f, c.B, 12);
             }
             return;
         }
@@ -637,16 +645,16 @@ public static partial class HumanMeshBuilder
             {
                 var hem = r.Hip.Lerp(knees, 0.55f);
                 float rh = Mathf.Max(0.25f, spreadK + 0.09f) + extra;
-                Cone(waist, hem, ConeStart(fit, hem, rh), rh, b.A, 14);
+                Cone(0f, hem, ConeStart(fit, hem, rh), rh, b.A, 14);
                 break;
             }
             case GarmentShape.RuffleMini:
             {
                 var hem = r.Hip.Lerp(knees, 0.40f);
                 float rh = Mathf.Max(0.22f, spreadK + 0.08f) + extra;
-                Cone(waist, hem, ConeStart(fit, hem, rh), rh, b.A, 12);
+                Cone(0f, hem, ConeStart(fit, hem, rh), rh, b.A, 12);
                 // a second tier of ruffle under the first
-                Cone(waist.Lerp(hem, 0.55f), hem - Vector3.Up * 0.045f, rh * 0.95f, rh + 0.035f, b.B, 12);
+                Cone(0.55f, hem - Vector3.Up * 0.045f, rh * 0.95f, rh + 0.035f, b.B, 12);
                 break;
             }
             case GarmentShape.HighLowSkirt:
@@ -654,7 +662,7 @@ public static partial class HumanMeshBuilder
                 // the axis leans back, so the hem rides high in front and trails low behind
                 var hem = r.Hip.Lerp(knees, 0.85f) + new Vector3(0, -0.04f, -0.14f);
                 float rh = Mathf.Max(0.27f, spreadK + 0.11f) + extra;
-                Cone(waist, hem, ConeStart(fit, hem, rh), rh, b.A, 14);
+                Cone(0f, hem, ConeStart(fit, hem, rh), rh, b.A, 14);
                 break;
             }
             case GarmentShape.SlitMaxi:
@@ -662,7 +670,7 @@ public static partial class HumanMeshBuilder
                 // to the ankles, with a slit up the front of the right leg (−X)
                 var hem = ankles + Vector3.Up * 0.05f;
                 float rh = Mathf.Max(0.29f, spreadA + 0.08f) + extra;
-                Cone(waist, hem, ConeStart(fit, hem, rh), rh, b.A, 14, gap: new Vector3(-0.55f, 0, 1f), gapAngle: 0.42f);
+                Cone(0f, hem, ConeStart(fit, hem, rh), rh, b.A, 14, gap: new Vector3(-0.55f, 0, 1f), gapAngle: 0.42f);
                 break;
             }
             case GarmentShape.LongPleated:
@@ -671,7 +679,7 @@ public static partial class HumanMeshBuilder
                 var hem = Blown(waist, r.Hip.Lerp(ankles, 0.80f));
                 float rh = Mathf.Max(0.29f, spreadK + 0.12f) + extra;
                 float ra = ConeStart(fit, hem, rh);
-                s.Skirt(waist, hem, ra, rh, b.A, 16, ripple: ripple, phase: phase);
+                s.Skirt(waist, hem, ra, rh, b.A, 16, ripple: ripple, phase: phase, floor: floor);
                 var axis = Frame.Along(waist - hem);
                 foreach (float a in stackalloc[] { -0.45f, 0.45f, Mathf.Pi - 0.45f, Mathf.Pi + 0.45f })
                 {
