@@ -298,12 +298,16 @@ public partial class SiteProbe : Node3D
                     Position = origin + new Vector3((float)(s.E - tile.Id.MinE), 0, (float)(tile.Id.MaxN - s.N)),
                     Basis = new Basis(Vector3.Up, s.Yaw),
                 };
-                node.AddChild(ride.BuildVisual(-1));
+                // drawn through the dormant layer's own look (#552): the merged parked model, every
+                // section posed, exactly what a yard shows until somebody touches the lorry
+                var look = Vehicles.DormantLooks.For(Vehicles.DormantLooks.KeyOf(s), () => ride, drawn: true);
+                if (look?.Mesh is not { } merged || look.Triangles == 0) { Check(false, $"{site}: slot {s.Ordinal} has no dormant look"); continue; }
+                node.AddChild(new MeshInstance3D { Mesh = merged });
                 AddChild(node);
                 if (s.Train != 0 || Player.HeavyCatalog.For((Player.RideKind)s.KindId) != null) drawnHeavies++;
             }
         }
-        Check(drawnHeavies > 0, $"goods vehicles build their real mesh ({drawnHeavies})");
+        Check(drawnHeavies > 0, $"goods vehicles build their dormant look from their real parked model ({drawnHeavies})");
     }
 
     /// <summary>How far apart the five sites stand in the yard row, metres.</summary>

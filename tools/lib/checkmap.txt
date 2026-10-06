@@ -25,6 +25,9 @@ src/Avatar/              quick  --meshcheck
 src/Avatar/              quick  --outfitcheck
 src/Avatar/              quick  --emotecheck
 src/Player/EmoteWheel    quick  --emotewheelcheck --world fixture
+src/Core/TouchControls   quick  --touchcheck --mobile --world fixture
+src/Core/PlayerInput.cs  quick  --touchcheck --mobile --world fixture
+src/Core/Platform.cs     quick  --touchcheck --mobile --world fixture
 src/Player/FootPlayer.cs quick  --emotewheelcheck --world fixture
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
@@ -54,7 +57,12 @@ src/Interiors/           quick  --shopcheck
 src/Interiors/           quick  --sitecheck --systems ui
 src/Loot/LootTables      quick  --sitecheck --systems ui
 src/Interiors/           quick  --doorcheck
+src/Interiors/           quick  --flatcheck
+src/Interiors/           quick  --stairwalkcheck
 src/Interiors/Church     quick  --churchstagecheck
+src/Interiors/Landmarks  quick  --ikeacheck --systems ui
+src/Interiors/Ikea       quick  --ikeacheck --systems ui
+src/Interiors/BuildingTypes quick  --ikeacheck --systems ui
 src/Audio/Cd/CdLibrary   quick  --churchstagecheck
 src/Items/Item           quick  --shopcheck
 src/Occasions/           quick  --occasioncheck
@@ -108,6 +116,14 @@ src/Terrain/ParkingProbe quick  --parkingcheck --chunks fixture:parking
 src/Vehicles/DormantVehicles quick --parkingcheck --chunks fixture:parking
 src/Vehicles/VehicleSlot quick  --parkingcheck --chunks fixture:parking
 tools/TerrainFormat/ParkingPlanner quick --parkingcheck --chunks fixture:parking
+# waking a dormant vehicle is seamless (#560): the live one where its copy stood, first frame and settled
+src/Vehicles/WakeProbe   quick  --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/Vehicles/WakeProbe   quick  --wakecheck --wakekind boat --chunks fixture:lake --traffic 0
+src/Vehicles/DormantVehicles quick --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/Vehicles/DormantVehicles quick --wakecheck --wakekind boat --chunks fixture:lake --traffic 0
+src/Vehicles/DormantLooks quick --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/Vehicles/VehicleBody quick  --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/World/GroundQuery    quick  --wakecheck --wakekind boat --chunks fixture:lake --traffic 0
 src/Terrain/Fixture/     quick  --watercheck --chunks fixture:lake
 src/Terrain/ChunkManager quick  --watercheck --chunks fixture:lake
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
@@ -165,9 +181,10 @@ src/Terrain/Fixture/     quick  --steamercheck pier --chunks fixture:lake
 src/Player/FootPlayer.Pi quick  --steamercheck pier --chunks fixture:lake
 src/Player/SteamerCheck  quick  --steamercheck pier --chunks fixture:lake
 tools/TerrainFormat/Land quick  --steamercheck pier --chunks fixture:lake
-# the tilting gangway plank and the marina boats (#383)
+# the tilting gangway plank and the marina boats (#383, dormant slots since #554)
 src/World/GangwayFit     quick  --steamercheck pier --chunks fixture:lake
-src/World/MarinaBoats    quick  --steamercheck pier --chunks fixture:lake
+src/Vehicles/DormantVehicles quick --steamercheck pier --chunks fixture:lake
+src/Vehicles/VehicleSlot quick  --steamercheck pier --chunks fixture:lake
 src/Avatar/SteamerMesh   quick  --steamercheck pier --chunks fixture:lake
 # the hull's boarding ladder and the walkable E setting (#384)
 src/Vehicles/VehicleReac quick  --steamercheck walk --chunks fixture:lake
@@ -196,6 +213,11 @@ src/Terrain/Water        net    tools/watercheck.sh
 src/Loot/Shop            net    tools/shopcheck.sh
 src/Items/Bank           net    tools/shopcheck.sh
 src/Interiors/BankSigns  net    tools/shopcheck.sh
+src/Interiors/InteriorManager.Lifts net tools/liftsynccheck.sh
+src/Interiors/InteriorManager.InnerDoors net tools/liftsynccheck.sh
+src/Interiors/InteriorNode.Inside net tools/liftsynccheck.sh
+src/Interiors/LiftSyncProbe net tools/liftsynccheck.sh
+src/Interiors/FloorPicker net tools/liftsynccheck.sh
 src/Interiors/BuildingFootprint net tools/baycheck.sh
 src/Interiors/DoorBudget net    tools/baycheck.sh
 src/Interiors/InteriorGenerator net tools/baycheck.sh

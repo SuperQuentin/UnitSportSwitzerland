@@ -364,7 +364,8 @@ public partial class SteamerCheck : Node
     /// <summary>
     /// The harbour by the landing (#383): its jetty's marina boats moored at their places, a speedboat
     /// brought alongside a free place whose driver steps out onto the jetty (#377), one marina boat
-    /// taken and put back, and the boats counted per harbour.
+    /// woken, taken and put back, and the boats counted per harbour. Since #554 the boats are dormant
+    /// slots (<see cref="DormantVehicles"/>): drawn instanced until somebody touches one.
     /// </summary>
     private async Task JettyBoat(FootPlayer me, Landing landing, Vector3 away)
     {
@@ -372,16 +373,22 @@ public partial class SteamerCheck : Node
         var origin = chunks.Origin!;
         var vehicles = VehicleManager.Instance!;
         var jetty = Landings.Current.Jetties.MinBy(j => Math.Abs(j.Ribbon.Points[0][0] - landing.E) + Math.Abs(j.Ribbon.Points[0][1] - landing.N));
-        if (jetty == null || MarinaBoats.Instance == null) { Expect(false, "a jetty near the landing, and the marina boats"); return; }
+        if (jetty == null || DormantVehicles.Instance is not { } dormant) { Expect(false, "a jetty near the landing, and the dormant layer"); return; }
         bool Wet(BoatBerth b) => chunks.TryGetWater(origin.ToWorld(b.E, b.N, 0), out float l, out _)
-            && chunks.TryGetHeight(origin.ToWorld(b.E, b.N, 0), out float bed) && l - bed >= MarinaBoats.MinDepth;
+            && chunks.TryGetHeight(origin.ToWorld(b.E, b.N, 0), out float bed) && l - bed >= DormantSlots.MarinaMinDepth;
         var berths = jetty.BoatBerths();
-        VehicleBody? At(BoatBerth b) => vehicles.GetNodeOrNull<VehicleBody>(MarinaBoats.Prefix + b.Id);
+        VehicleSlot? At(BoatBerth b) => dormant.SlotAt(b.E, b.N);
         await Until(() => berths.All(b => !Wet(b) || At(b) != null), 30);
         int wet = berths.Count(Wet), moored = berths.Count(b => At(b) != null);
-        float worst = berths.Where(b => At(b) != null).Select(b => MathX.FlatDistance(At(b)!.GlobalPosition, origin.ToWorld(b.E, b.N, 0))).DefaultIfEmpty(0f).Max();
-        Log(F($"jetty {jetty.Id}: {jetty.BoatSlots().Count} places, {berths.Count} chosen, {wet} with water enough: {moored} boats moored ({berths.Count(b => b.Speedboat && At(b) != null)} speedboats), {worst:F2} m off their places at most"));
-        Expect(moored == wet && moored > 0 && worst < 1.5f, "the jetty's marina boats lie at their places");
+        // a moored boat floats: its keel under the still water, by its own draught
+        float worst = berths.Where(b => At(b) != null).Select(b =>
+        {
+            var s = At(b)!.Value;
+            var keel = origin.ToWorld(s.E, s.N, s.Height);
+            return chunks.TryGetWater(keel, out float still, out _) ? Mathf.Abs(still - keel.Y - (b.Speedboat ? DormantSlots.SpeedboatDraught : DormantSlots.JetskiDraught)) : 99f;
+        }).DefaultIfEmpty(0f).Max();
+        Log(F($"jetty {jetty.Id}: {jetty.BoatSlots().Count} places, {berths.Count} chosen, {wet} with water enough: {moored} boats moored ({berths.Count(b => b.Speedboat && At(b) != null)} speedboats), keels {worst:F2} m off their draught at most"));
+        Expect(moored == wet && moored > 0 && worst < 0.15f, "the jetty's marina boats lie at their places, afloat");
 
         // a free place with water, as far from the moored boats as there is
         var free = jetty.BoatSlots().Where(s => !berths.Any(b => b.Id == s.Id) && Wet(s))
@@ -431,19 +438,28 @@ public partial class SteamerCheck : Node
             return new Transform3D(Basis.LookingAt(centre - eye, Vector3.Up), eye);
         });
 
-        // one taken away comes back once its place is clear and nobody is near
-        if (berths.FirstOrDefault(b => At(b) != null) is { Id: not null } taken)
+        // one woken, then taken away, comes back dormant once its place is clear and nobody is near
+        if (berths.Select(At).FirstOrDefault(s => s is { } d && !dormant.IsAwake(d)) is { } taken)
         {
-            double was = MarinaBoats.RespawnSeconds;
-            MarinaBoats.RespawnSeconds = 2;
-            vehicles.Claim(At(taken)!, _ => { });
-            await Wait(0.5);
-            Expect(At(taken) == null, $"a marina boat taken away ({taken.Id})");
-            me.Velocity = Vector3.Zero;
-            me.GlobalPosition = away;
-            bool back = await Until(() => At(taken) != null, 20);
-            MarinaBoats.RespawnSeconds = was;
-            Expect(back, "and put back at its place a while later, nobody near");
+            dormant.Wake(taken);
+            bool live = await Until(() => vehicles.GetNodeOrNull<VehicleBody>(taken.NodeName) != null, 5);
+            var woken = vehicles.GetNodeOrNull<VehicleBody>(taken.NodeName);
+            Expect(live && dormant.IsAwake(taken) && woken != null
+                && MathX.FlatDistance(woken.GlobalPosition, origin.ToWorld(taken.E, taken.N, taken.Height)) < 1.5f,
+                $"a marina boat woken where it lay ({taken.NodeName})");
+            if (woken != null)
+            {
+                double was = DormantVehicles.RespawnSeconds;
+                DormantVehicles.RespawnSeconds = 2;
+                vehicles.Claim(woken, _ => { });
+                await Wait(0.5);
+                Expect(vehicles.GetNodeOrNull(taken.NodeName) == null, "and taken away");
+                me.Velocity = Vector3.Zero;
+                me.GlobalPosition = away;
+                bool back = await Until(() => !dormant.IsAwake(taken), 20);
+                DormantVehicles.RespawnSeconds = was;
+                Expect(back, "and put back at its place a while later, nobody near");
+            }
         }
 
         // a count per harbour, of the jetties seen

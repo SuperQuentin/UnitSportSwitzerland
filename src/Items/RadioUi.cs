@@ -211,6 +211,7 @@ public partial class RadioUi : CanvasLayer
         _link.TextSubmitted += _ => Burn();
         burn.AddChild(_link);
         _mine = new CheckBox { Text = "Just for me", FocusMode = Control.FocusModeEnum.All, TooltipText = "Burn it on this computer, into your own list: nobody else hears it" };
+        _mine.Visible = Platform.CanSpawnProcesses; // a personal burn runs yt-dlp + ffmpeg here (#63)
         burn.AddChild(_mine);
         var burnButton = UiKit.Button("Burn");
         burnButton.Pressed += Burn;

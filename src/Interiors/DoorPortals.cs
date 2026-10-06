@@ -66,7 +66,8 @@ public partial class DoorPortals : Node3D, Core.IOriginContainer
     /// <summary>A doorway further than this from the camera looking at it gets no portal.</summary>
     private const float Range = 45f;
     /// <summary>Resolution of a portal picture relative to the screen, per depth.</summary>
-    private static readonly float[] Scale = { 1f, 1f };
+    // a phone renders the room behind a door at half size: two more cameras at full size are too much (#63)
+    private static readonly float[] Scale = Core.Platform.IsMobile ? new[] { 0.5f, 0.5f } : new[] { 1f, 1f };
 
     private readonly Func<IEnumerable<DoorLink>> _links;
     private readonly Func<Vector3, string?> _planAt;

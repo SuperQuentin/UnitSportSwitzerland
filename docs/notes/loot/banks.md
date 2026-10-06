@@ -4,7 +4,7 @@
   60 m² and 6 m a side, and `StableHash(key|bank) % 5 == 0` (about 4 banks around Riddes). Pure
   function of the tile: the server's plan (`InteriorLayout.Type = BuildingType.Bank`, `IsBank`) and
   every client's `DoorSpot.Bank` agree without sending anything.
-- **Sign**: `Interiors/BankSigns` (client) puts a blue plate with a gold "BANK" `Label3D` over each
+- **Sign**: `Interiors/BankSigns` (client, drawn to 200 m, #553) puts a blue plate with a gold "BANK" `Label3D` over each
   bank door, from `ChunkManager.TileFurnished`, parented to the tile node.
 - **Plan**: ground floor `BankProgram`: banking hall at the street end, vault behind it on the
   same side (so it opens off the hall), office and WC on the other side (or in front of the hall when

@@ -184,6 +184,15 @@ public partial class PlayerInput : Node
         return -1;
     }
 
+    /// <summary>
+    /// Whether a mouse motion turns the camera: the captured mouse, or a touch-look drag
+    /// (<see cref="TouchControls"/>, #63). Never the mouse Godot makes up from a touch, which would
+    /// turn it a second time.
+    /// </summary>
+    public static bool IsLookMotion(InputEventMouseMotion m) =>
+        m.Device == TouchControls.Device
+        || Input.MouseMode == Input.MouseModeEnum.Captured && m.Device != InputEvent.DeviceIdEmulation;
+
     /// <summary>Right-stick turn rate at full deflection and sensitivity 1, radians per second.</summary>
     public const float StickTurnRate = 3.0f;
 
@@ -340,6 +349,8 @@ public partial class PlayerInput : Node
             return;
         }
         if (!GameSettings.Current.Vibration || LastDevice != InputDevice.Gamepad) return;
+        // the phone itself (#63): one motor, so the stronger of the two
+        if (TouchControls.Shown) Input.VibrateHandheld((int)(seconds * 1000), Mathf.Clamp(Math.Max(weak, strong), 0, 1));
         foreach (int pad in Input.GetConnectedJoypads())
             // never the steering wheel: Godot rumbles a force-feedback wheel through its own SDL,
             // which takes the wheel's forces away from SteeringWheel (#68); its knocks are its own
@@ -379,6 +390,13 @@ public partial class PlayerInput : Node
         if (XR.XrSession.Active)
         {
             LastDevice = InputDevice.Gamepad;
+            return;
+        }
+        // the touch overlay plays a pad (#63): its buttons and the touches behind it are the pad,
+        // and the mouse Godot makes up from a finger is not a mouse
+        if (e.Device == TouchControls.Device || e.Device == InputEvent.DeviceIdEmulation || e is InputEventScreenTouch or InputEventScreenDrag)
+        {
+            if (TouchControls.Shown) LastDevice = InputDevice.Gamepad;
             return;
         }
         switch (e)

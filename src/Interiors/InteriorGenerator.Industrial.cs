@@ -192,7 +192,8 @@ public static partial class InteriorGenerator
     /// </summary>
     private static bool LaysItselfOut(RoomType t) =>
         t is RoomType.WarehouseHall or RoomType.ProductionHall or RoomType.TruckBay
-            or RoomType.ServiceBay or RoomType.Showroom;
+            or RoomType.ServiceBay or RoomType.Showroom
+            or RoomType.IkeaMarket;        // #501, laid out in InteriorGenerator.Ikea
 
     /// <summary>Lays out one site hall; the wall dressing is added afterwards by the generic placer.</summary>
     /// <param name="lanes">
@@ -210,6 +211,7 @@ public static partial class InteriorGenerator
             case RoomType.ProductionHall: blocked.AddRange(lanes); Line(l, f, r, placed, blocked, rng); break;
             case RoomType.TruckBay: Bays(l, f, r, placed, blocked, lanes, rng, truck: true); break;
             case RoomType.ServiceBay: Bays(l, f, r, placed, blocked, lanes, rng, truck: false); break;
+            case RoomType.IkeaMarket: blocked.AddRange(lanes); BlahajBins(l, f, r, placed, blocked); break;   // #501
             default: blocked.AddRange(lanes); ShowroomFloor(l, f, r, placed, blocked, rng); break;
         }
     }

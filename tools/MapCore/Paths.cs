@@ -54,7 +54,6 @@ public sealed class Paths
     public string LogsDir => Path.Combine(Temp, "mapsetup_logs");
 
     public string Tools => Path.Combine(RequireRoot(), "tools");
-    public string SwissData => Path.Combine(Tools, "swiss_data.py");
 
     /// <summary>
     /// A loose copy of the country map to prefer over the one embedded in MapCore: beside the

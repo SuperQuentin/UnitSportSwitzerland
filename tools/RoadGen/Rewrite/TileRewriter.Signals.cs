@@ -129,7 +129,7 @@ public static partial class TileRewriter
     /// approach at its TLM line's end (the junction it stands before), one on a junction node at
     /// itself. Pedestrian-only signals (<c>crossing=traffic_signals</c>) do not make a junction.
     /// </summary>
-    private sealed class SignalSites
+    internal sealed class SignalSites
     {
         /// <summary>A line end or node this close to a junction's centre is that junction's.</summary>
         private const double Reach = 12.0, Cell = 50.0;

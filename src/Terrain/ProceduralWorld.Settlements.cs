@@ -14,7 +14,13 @@ public sealed partial class ProceduralWorld
 
     private const double RoadStep = 3;   // drawn polyline spacing; under the 4 m the drape expects
 
-    private sealed record Street(List<(double E, double N)> Points, RoadClass Class);
+    /// <summary>
+    /// A village or town street. A bridge has <see cref="RoadFlags.Bridge"/>; the streets running up
+    /// to either end of one name it in <paramref name="Bridge"/> (and which of their ends it meets),
+    /// so their heights can ramp up to its deck instead of the deck sinking to them (#559).
+    /// </summary>
+    private sealed record Street(List<(double E, double N)> Points, RoadClass Class,
+        RoadFlags Flags = 0, Street? Bridge = null, bool BridgeAtEnd = false);
 
     private readonly record struct Footprint(double E, double N, double UE, double UN,
         double HalfLength, double HalfWidth);
@@ -22,7 +28,7 @@ public sealed partial class ProceduralWorld
     private sealed record Plan(Footprint Rect, BuildingKind Kind, double WallHeight, double Pitch,
         byte Floors, ushort Year, bool Tower = false);
 
-    private sealed record Village(VillageSlot Slot, List<Street> Streets, List<Plan> Buildings);
+    private sealed record Village(VillageSlot Slot, List<Street> Streets, List<Plan> Buildings, bool IsTown = false);
 
     private readonly Dictionary<int, Village> _villages = new();
 
@@ -80,12 +86,15 @@ public sealed partial class ProceduralWorld
         double halfLength = slot.HalfLength;
         var streets = new List<Street>();
         var plans = new List<Plan>();
+        // the biggest slots, if they can host it, are towns: their cross road takes the first side street's place
+        var town = slot.IsTown ? PlanTown(slot, line) : null;
 
         // side streets, away from the river
-        var streetXs = new List<double> { x + 25 };
+        var streetXs = new List<double> { town is null ? x + 25 : x };
         if (halfLength > 260) streetXs.Add(x + (rng.NextDouble() < 0.5 ? -1 : 1) * halfLength * 0.6);
         foreach (double sx in streetXs)
         {
+            if (town is not null && sx == x) continue;
             var (p, t, nrm) = RoadFrame(line, sx);
             double length = 170 + rng.NextDouble() * 150;
             double bend = (rng.NextDouble() - 0.5) * 0.5;   // radians over the street's length
@@ -136,16 +145,18 @@ public sealed partial class ProceduralWorld
             {
                 double width = 9 + rng.NextDouble() * 5, depth = 10 + rng.NextDouble() * 4;
                 double cx = x + along + width / 2;
-                along += width + 5 + rng.NextDouble() * 12;
+                // a town's core, round the crossroads, is built tight
+                bool core = town is not null && Math.Abs(cx - x) < TownCoreM;
+                along += width + (core ? 2 + rng.NextDouble() * 5 : 5 + rng.NextDouble() * 12);
 
                 // leave the mouths of the side streets and the church plot clear
                 if (streetXs.Any(sx => Math.Abs(cx - sx) < width / 2 + 9)) continue;
                 if (side > 0 && Math.Abs(cx - (mainStreet + 32)) < 22) continue;
                 double edge = Math.Abs(cx - x) / halfLength;
-                if (rng.NextDouble() > 0.92 - 0.5 * edge * edge) continue;
+                if (!core && rng.NextDouble() > 0.92 - 0.5 * edge * edge) continue;
 
                 var (p, t, nrm) = RoadFrame(line, cx);
-                double setback = 9 + rng.NextDouble() * 5 + depth / 2;
+                double setback = core ? 11 + rng.NextDouble() * 2 + depth / 2 : 9 + rng.NextDouble() * 5 + depth / 2;
                 var c = (E: p.E + nrm.E * side * setback, N: p.N + nrm.N * side * setback);
                 // barns at the ends of the village, a few apartment blocks in the middle
                 if (edge > 0.75 && rng.NextDouble() < 0.4)
@@ -153,12 +164,18 @@ public sealed partial class ProceduralWorld
                         BuildingKind.Agricultural, 5, 24, 0, (ushort)(1880 + rng.Next(80))));
                 else
                 {
-                    var plan = House(rng, c, t, width, depth, edge < 0.3 ? 0.3 : 0.0);
+                    var plan = House(rng, c, t, width, depth, core ? 0.5 : edge < 0.3 ? 0.3 : 0.0);
                     // the village shops (#273): a third of the houses in its middle keep a shop on
                     // the ground floor, by a hash of where they stand, so no other building moves
                     if (plan.Kind == BuildingKind.House && edge < 0.35
-                        && Noise.Hash01((int)Math.Floor(c.E), (int)Math.Floor(c.N), 227) < 0.35)
+                        && Noise.Hash01((int)Math.Floor(c.E), (int)Math.Floor(c.N), 227) < (core ? 0.5 : 0.35))
                         plan = plan with { Kind = BuildingKind.Commercial };
+                    // a block is wider than the slot its neighbours leave it: push it on
+                    if (core && plan.Kind == BuildingKind.Apartment)
+                    {
+                        plan = plan with { Rect = plan.Rect with { E = plan.Rect.E + t.E * 3, N = plan.Rect.N + t.N * 3 } };
+                        along += 6;
+                    }
                     plans.Add(plan);
                 }
             }
@@ -196,7 +213,8 @@ public sealed partial class ProceduralWorld
                 BuildingKind.Industrial, big ? 8.5 : 6.5, 0, 0, year));
         }
 
-        return new Village(slot, streets, plans);
+        if (town is not null) AddTown(slot, town, streets, plans);
+        return new Village(slot, streets, plans, town is not null);
     }
 
     /// <summary>A village shorter than this is a hamlet, and a hamlet has no works.</summary>
@@ -364,7 +382,10 @@ public sealed partial class ProceduralWorld
     /// through their points every <see cref="RoadStep"/>, and the village streets. A segment is
     /// cut into the same steps whichever tile asks, so pieces meet at a seam.
     /// </summary>
-    private IEnumerable<(List<(double E, double N)> Points, RoadClass Class)> LinesNear(
+    private readonly record struct Drawn(List<(double E, double N)> Points, RoadClass Class, string Key, double FromM,
+        Street? Street = null, bool Town = false);
+
+    private IEnumerable<Drawn> LinesNear(
         double minE, double minN, double maxE, double maxN)
     {
         var net = Network.Instance;
@@ -395,57 +416,130 @@ public sealed partial class ProceduralWorld
                 }
             }
             points.Add((line.E[last + 1], line.N[last + 1]));
-            yield return (points, line.Class);
+            yield return new Drawn(points, line.Class, $"gen-line-{l}", DrawnStation(l, first));
         }
 
         foreach (var v in VillagesNear(minE, minN, maxE, maxN))
-            foreach (var s in v.Streets)
-                yield return (s.Points, s.Class);
+            for (int k = 0; k < v.Streets.Count; k++)
+                yield return new Drawn(v.Streets[k].Points, v.Streets[k].Class, $"gen-village-{v.Slot.Id}-{k}", 0,
+                    v.Streets[k], v.IsTown);
     }
 
-    public RoadTile? BuildRoads(TileId id, Blend? blend = null)
+    public RoadTile? BuildRoads(TileId id, Blend? blend = null) => BuildRoadsKeyed(id, blend).Tile;
+
+    /// <summary>
+    /// Which generated line a road segment is a piece of, and how far along it the piece starts:
+    /// the stand-in for the TLM uuid and along-line metre RoadGen keys its per-street choices on.
+    /// </summary>
+    public readonly record struct RoadKey(string Line, double FromM);
+
+    /// <summary><see cref="BuildRoads"/>, with a <see cref="RoadKey"/> per segment.</summary>
+    public (RoadTile? Tile, List<RoadKey> Keys) BuildRoadsKeyed(TileId id, Blend? blend = null)
     {
         CheckBlend(id, blend);
         blend?.PrepareLattice();
         var site = new Site(LatticeFor(id, fine: false), blend);
         double maxE = id.MinE + ChunkFormat.TileSizeM;
         var segments = new List<RoadSegment>();
-        foreach (var (points, cls) in LinesNear(id.MinE, id.MinN, maxE, id.MaxN))
-            foreach (var piece in Clip(points, id.MinE, id.MinN, maxE, id.MaxN))
+        var keys = new List<RoadKey>();
+        foreach (var drawn in LinesNear(id.MinE, id.MinN, maxE, id.MaxN))
+        {
+            var (points, cls, key, fromM) = (drawn.Points, drawn.Class, drawn.Key, drawn.FromM);
+            var bridge = drawn.Street is { } st ? (st.Flags & RoadFlags.Bridge) != 0 ? st : st.Bridge : null;
+            // a bridge's deck is level, over the higher of its two banks; the street running up to
+            // it ramps from the ground to the deck over ApproachM, never the deck down to the ground
+            double deck = 0, delta = 0;
+            (double E, double N) meet = default;
+            if (bridge is not null)
+            {
+                deck = Math.Max(Ground(site, bridge.Points[0].E, bridge.Points[0].N),
+                    Ground(site, bridge.Points[^1].E, bridge.Points[^1].N)) + DeckClearance;
+                if (bridge != drawn.Street)
+                {
+                    meet = drawn.Street!.BridgeAtEnd ? drawn.Street.Points[^1] : drawn.Street.Points[0];
+                    delta = deck - Ground(site, meet.E, meet.N);
+                }
+            }
+            foreach (var (piece, at) in Clip(points, id.MinE, id.MinN, maxE, id.MaxN))
             {
                 var xyz = new float[piece.Count * 3];
                 for (int i = 0; i < piece.Count; i++)
                 {
                     var (e, n) = piece[i];
+                    double y = Ground(site, e, n);
+                    if (bridge is not null)
+                        y = bridge == drawn.Street ? deck
+                            : y + delta * (1 - SmoothStep(0, ApproachM, Math.Sqrt(Sq(e - meet.E) + Sq(n - meet.N))));
                     xyz[i * 3] = (float)(e - id.MinE);
-                    xyz[i * 3 + 1] = (float)Ground(site, e, n);
+                    xyz[i * 3 + 1] = (float)y;
                     xyz[i * 3 + 2] = (float)(id.MaxN - n);
                 }
                 segments.Add(new RoadSegment
                 {
                     Class = cls,
                     Surface = cls == RoadClass.Railway ? RoadSurface.Unknown : RoadSurface.Paved,
+                    Flags = drawn.Street?.Flags ?? 0,
                     Width = RoadFormat.DefaultWidth(cls),
                     Points = xyz,
                 });
+                keys.Add(new RoadKey(key, fromM + at));
             }
-        return segments.Count == 0 ? null : new RoadTile { Id = id, Segments = segments };
+        }
+        return (segments.Count == 0 ? null : new RoadTile { Id = id, Segments = segments }, keys);
+    }
+
+    private readonly Dictionary<int, double[]> _drawnStations = new();
+
+    /// <summary>
+    /// Metres along a valley line's drawn polyline (as <see cref="LinesNear"/> draws it) to its
+    /// node <paramref name="node"/>, the same whichever tile asks.
+    /// </summary>
+    private double DrawnStation(int l, int node)
+    {
+        double[]? at;
+        lock (_drawnStations) _drawnStations.TryGetValue(l, out at);
+        if (at is null)
+        {
+            var line = Network.Instance.Lines[l];
+            at = new double[line.Count];
+            for (int i = 0; i + 1 < line.Count; i++)
+            {
+                int i0 = Math.Max(0, i - 1), i3 = Math.Min(line.Count - 1, i + 2);
+                double len = Math.Sqrt(Sq(line.E[i + 1] - line.E[i]) + Sq(line.N[i + 1] - line.N[i]));
+                int steps = Math.Max(1, (int)Math.Ceiling(len / RoadStep));
+                double pe = line.E[i], pn = line.N[i], sum = 0;
+                for (int s = 1; s <= steps; s++)
+                {
+                    double t = s / (double)steps;
+                    double e = s == steps ? line.E[i + 1] : CatmullRom(line.E[i0], line.E[i], line.E[i + 1], line.E[i3], t);
+                    double n = s == steps ? line.N[i + 1] : CatmullRom(line.N[i0], line.N[i], line.N[i + 1], line.N[i3], t);
+                    sum += Math.Sqrt(Sq(e - pe) + Sq(n - pn));
+                    (pe, pn) = (e, n);
+                }
+                at[i + 1] = at[i] + sum;
+            }
+            lock (_drawnStations) _drawnStations[l] = at;
+        }
+        return at[node];
     }
 
     /// <summary>
     /// Cuts a polyline to a box, inserting the crossing points (Liang-Barsky per segment). Two
     /// tiles sharing an edge compute the same crossing from the same segment, so pieces meet.
     /// </summary>
-    private static List<List<(double E, double N)>> Clip(List<(double E, double N)> line,
+    private static List<(List<(double E, double N)> Points, double At)> Clip(List<(double E, double N)> line,
         double minE, double minN, double maxE, double maxN)
     {
-        var pieces = new List<List<(double E, double N)>>();
+        var pieces = new List<(List<(double E, double N)> Points, double At)>();
         List<(double E, double N)>? current = null;
+        double along = 0;
         for (int i = 0; i + 1 < line.Count; i++)
         {
             var a = line[i];
             var b = line[i + 1];
             double dx = b.E - a.E, dy = b.N - a.N;
+            double from = along;
+            along += Math.Sqrt(dx * dx + dy * dy);
             double t0 = 0, t1 = 1;
             if (!Edge(-dx, a.E - minE) || !Edge(dx, maxE - a.E)
                 || !Edge(-dy, a.N - minN) || !Edge(dy, maxN - a.N)
@@ -461,7 +555,7 @@ public sealed partial class ProceduralWorld
             if (current == null || t0 > 0)
             {
                 current = new List<(double E, double N)> { start };
-                pieces.Add(current);
+                pieces.Add((current, from + (along - from) * t0));
             }
             current.Add(end);
             if (t1 < 1) current = null;
@@ -475,7 +569,7 @@ public sealed partial class ProceduralWorld
                 return true;
             }
         }
-        pieces.RemoveAll(p => p.Count < 2);
+        pieces.RemoveAll(p => p.Points.Count < 2);
         return pieces;
     }
 
@@ -636,9 +730,11 @@ public sealed partial class ProceduralWorld
                 }
         }
 
-        foreach (var (points, cls) in LinesNear(id.MinE - margin, id.MinN - margin, maxE + margin, id.MaxN + margin))
+        foreach (var drawn in LinesNear(id.MinE - margin, id.MinN - margin, maxE + margin, id.MaxN + margin))
         {
-            double radius = RoadFormat.DefaultWidth(cls) / 2 + 3;
+            var (points, cls) = (drawn.Points, drawn.Class);
+            // a town's streets have sidewalks and bike paths, reaching ~6 m past the carriageway edge
+            double radius = RoadFormat.DefaultWidth(cls) / 2 + (drawn.Town ? 7 : 3);
             for (int i = 0; i + 1 < points.Count; i++)
             {
                 var a = points[i];

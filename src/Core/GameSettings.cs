@@ -6,6 +6,13 @@ using Godot;
 namespace UnitSport.Core;
 
 /// <summary>How finely the inner LOD rings and their roads/buildings are drawn.</summary>
+/// <summary>How much the client streams (#63): Low data keeps fine tiles to the nearest rings.</summary>
+public enum DataPreset
+{
+    Standard = 0,
+    Low = 1,
+}
+
 public enum DetailPreset
 {
     Low = 0,
@@ -110,6 +117,28 @@ public sealed class GameSettings
     // --- controls ---
     /// <summary>Right-stick look speed multiplier; 1 turns at <see cref="PlayerInput.StickTurnRate"/>.</summary>
     public float StickSensitivity { get; set; } = 1f;
+    /// <summary>Data (#63, every platform): Standard, or Low data (fewer full tiles fetched).</summary>
+    public DataPreset Data { get; set; } = DataPreset.Standard;
+    /// <summary>Low data whenever the phone's data saver is on (Android; ignored elsewhere).</summary>
+    public bool AutoLowData { get; set; } = true;
+    /// <summary>Ask before joining a server over a metered connection (cellular, a hotspot).</summary>
+    public bool WarnMetered { get; set; } = true;
+    /// <summary>Cap on the downloaded-tile cache on disk, GB (oldest evicted first).</summary>
+    public float CacheGb { get; set; } = 2f;
+
+    /// <summary>Android's data saver, as last read (<see cref="DataWatch"/>); never saved.</summary>
+    [JsonIgnore]
+    public static bool DataSaverOn { get; set; }
+
+    /// <summary>Whether the client streams as Low data now: chosen, or the data saver with auto on.</summary>
+    [JsonIgnore]
+    public bool LowDataActive => Data == DataPreset.Low || AutoLowData && DataSaverOn;
+
+    /// <summary>Low data's render distance cap, in rings: past it the horizon draws the land.</summary>
+    public const int LowDataRings = 5;
+
+    /// <summary>Touch look (#63): camera turn per pixel of drag, as a multiple of the mouse's.</summary>
+    public float TouchLookSpeed { get; set; } = 1.5f;
     public bool InvertY { get; set; }
 
     /// <summary>Stick travel ignored around centre. Worn pads drift, so it is a setting.</summary>
@@ -303,7 +332,9 @@ public sealed class GameSettings
     /// <summary>Reads the file (if any), then the command line. Call once at boot.</summary>
     public static void Load()
     {
+        // a phone's first launch starts from its own defaults (#63); a saved file keeps what it says
         var loaded = new GameSettings();
+        if (Platform.IsMobile && !Godot.FileAccess.FileExists(File)) loaded.UsePhoneDefaults();
         try
         {
             if (Godot.FileAccess.FileExists(File))
@@ -329,6 +360,24 @@ public sealed class GameSettings
             + $"detail={loaded.Detail} fog={loaded.Fog} builds={loaded.MaxConcurrentBuilds} "
             + $"commit={loaded.CommitBudgetMs}ms scale={loaded.RenderScale} vsync={loaded.VSync} "
             + $"window={loaded.WindowMode} perf={loaded.PerfOverlay}");
+    }
+
+    /// <summary>
+    /// What a phone starts with (#63), and what Settings → Performance → "Use phone defaults" puts
+    /// back: about a third of the desktop's world in view, a low LOD table, a shorter horizon, a
+    /// lower 3D resolution, less traffic and no cockpit mirrors (each one another camera).
+    /// </summary>
+    public void UsePhoneDefaults()
+    {
+        RenderDistanceRings = 8;
+        HorizonKm = 25;
+        Detail = DetailPreset.Low;
+        RenderScale = 0.6f;
+        TrafficCars = 10;
+        CockpitMirrors = false;
+        CommitBudgetMs = 3;
+        MaxConcurrentBuilds = 0; // auto, which ChunkManager caps on a phone
+        CacheGb = 0.5f;
     }
 
     public void Save()
@@ -376,6 +425,9 @@ public sealed class GameSettings
         }
     }
 
+    /// <summary>Something not saved changed what the settings mean (the data saver): tell the world.</summary>
+    public static void NotifyChanged() => Changed?.Invoke();
+
     /// <summary>Applies a change made in the UI: clamps, notifies the world, persists.</summary>
     public void Commit()
     {
@@ -390,10 +442,12 @@ public sealed class GameSettings
         HorizonKm = Math.Clamp(HorizonKm, 0, MaxHorizonKm);
         MaxConcurrentBuilds = Math.Clamp(MaxConcurrentBuilds, 0, MaxBuildsCap);
         CommitBudgetMs = Math.Clamp(CommitBudgetMs, 1, 16);
+        CacheGb = Math.Clamp(CacheGb, 0.1f, 20f);
         RenderScale = Math.Clamp(RenderScale, MinRenderScale, MaxRenderScale);
         VrMsaa = VrMsaa switch { <= 0 => 0, <= 2 => 2, <= 4 => 4, _ => 8 };
         VrRenderScale = Math.Clamp(VrRenderScale, MinVrRenderScale, MaxVrRenderScale);
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
+        TouchLookSpeed = Math.Clamp(TouchLookSpeed, 0.3f, 4f);
         MasterVolume = Math.Clamp(MasterVolume, 0f, 1f);
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
         AmbienceVolume = Math.Clamp(AmbienceVolume, 0f, 1f);
@@ -420,7 +474,7 @@ public sealed class GameSettings
 
     /// <summary>
     /// "--rings N", "--horizon km", "--fog on|off", "--detail low|medium|high",
-    /// "--generated on|off", "--style ps1|cartoon|real-|real+" — for
+    /// "--generated on|off", "--generated-roads raw|on", "--style ps1|cartoon|real-|real+" — for
     /// screenshotting one configuration against another without touching the saved file.
     /// </summary>
     private void ApplyCommandLine(string[] args)
@@ -434,7 +488,10 @@ public sealed class GameSettings
                 case "--horizon" when int.TryParse(v, out int h): HorizonKm = h; break;
                 case "--fog": Fog = v != "off" && v != "0" && v != "false"; break;
                 case "--generated": GeneratedFill = v != "off" && v != "0" && v != "false"; break;
+                // raw: generated roads without the road network stage (#559), to compare; not saved
+                case "--generated-roads": Terrain.FallbackChunkSource.RewriteRoads = v != "raw" && v != "off"; break;
                 case "--detail" when Enum.TryParse<DetailPreset>(v, true, out var d): Detail = d; break;
+                case "--data" when Enum.TryParse<DataPreset>(v, true, out var dp): Data = dp; break;
                 case "--builds" when int.TryParse(v, out int b): MaxConcurrentBuilds = b; break;
                 case "--commit" when double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double c):
                     CommitBudgetMs = c; break;

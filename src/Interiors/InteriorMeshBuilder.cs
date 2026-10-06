@@ -116,6 +116,15 @@ public static partial class InteriorMeshBuilder
         RoomType.BreakRoom => (C(0.72f, 0.68f, 0.62f), C(0.90f, 0.88f, 0.80f), C(0.95f, 0.95f, 0.93f)),
         RoomType.PartsStore => (Concrete, C(0.76f, 0.76f, 0.73f), C(0.66f, 0.66f, 0.64f)),
         RoomType.PaintBooth => (C(0.62f, 0.64f, 0.66f), C(0.92f, 0.93f, 0.94f), C(0.90f, 0.91f, 0.92f)),
+        // #501: sealed grey concrete, a pale shell and the lit ceiling of a big-box shop floor
+        RoomType.IkeaMarket => (C(0.56f, 0.56f, 0.57f), C(0.93f, 0.93f, 0.92f), C(0.96f, 0.96f, 0.95f)),
+        // #557 apartment blocks: a brushed-steel cabin, a bare concrete car park and boiler room
+        RoomType.Elevator => (C(0.36f, 0.36f, 0.38f), C(0.70f, 0.72f, 0.74f), C(0.86f, 0.86f, 0.84f)),
+        RoomType.CarPark => (C(0.50f, 0.50f, 0.49f), C(0.74f, 0.74f, 0.72f), C(0.62f, 0.62f, 0.61f)),
+        RoomType.TechRoom => (Concrete, C(0.78f, 0.78f, 0.75f), C(0.68f, 0.68f, 0.66f)),
+        RoomType.Corridor => (C(0.62f, 0.58f, 0.52f), C(0.88f, 0.86f, 0.80f), C(0.94f, 0.94f, 0.92f)),
+        // #571: a terrazzo floor and pale painted walls, as every Swiss Treppenhaus
+        RoomType.Stairwell => (C(0.70f, 0.68f, 0.64f), C(0.92f, 0.90f, 0.84f), C(0.95f, 0.95f, 0.93f)),
         _ => (C(0.52f, 0.38f, 0.25f), C(0.88f, 0.84f, 0.76f), C(0.95f, 0.94f, 0.90f)), // hall, landing
     };
 
@@ -133,10 +142,21 @@ public static partial class InteriorMeshBuilder
             var above = HolesOf(f + 1);
             foreach (var room in floor.Rooms)
                 Room(s, room, y0, l.ClearOf(room), floor.Holes, HolesOf(f + room.Span));
-            if (floor.Flight is { } flight) Flight(s, flight, y0, h);
+            foreach (var flight in floor.AllFlights()) Flight(s, flight, y0, h);
+            // a stairwell's half landings (#571): a stone slab, stood on, its underside seen from below
+            foreach (var g in floor.Landings)
+                s.Box(new Vector3(g.X0 + 0.02f, y0 + h * g.Level - 0.22f, g.Z0), new Vector3(g.X1 - 0.02f, y0 + h * g.Level, g.Z1 - 0.02f), StairStone);
             foreach (var r in floor.Rails)
-                s.Box(new Vector3(Math.Min(r.X0, r.X1) - 0.03f, y0, Math.Min(r.Z0, r.Z1)),
-                    new Vector3(Math.Max(r.X0, r.X1) + 0.03f, y0 + 1.0f, Math.Max(r.Z0, r.Z1)), Rail);
+            {
+                var lo = new Vector3(Math.Min(r.X0, r.X1) - 0.03f, y0, Math.Min(r.Z0, r.Z1));
+                var hi = new Vector3(Math.Max(r.X0, r.X1) + 0.03f, y0 + 1.0f, Math.Max(r.Z0, r.Z1));
+                // in a stairwell (#571) the guard is the parapet's own: plaster with a handrail on it
+                bool well = floor.Rooms.Any(q => q.Type == RoomType.Stairwell
+                    && (lo.X + hi.X) / 2 > q.X0 && (lo.X + hi.X) / 2 < q.X1 && lo.Z >= q.Z0 - 0.01f && hi.Z <= q.Z1 + 0.01f);
+                if (!well) { s.Box(lo, hi, Rail); continue; }
+                s.Box(lo with { Z = lo.Z - 0.04f }, hi with { Y = y0 + 0.9f, Z = hi.Z + 0.04f }, Parapet);
+                s.Box(new Vector3(lo.X - 0.02f, y0 + 0.9f, lo.Z - 0.06f), new Vector3(hi.X + 0.02f, y0 + 0.96f, hi.Z + 0.06f), Handrail, false);
+            }
             // the shaft between this ceiling and the next floor
             foreach (var hole in above)
             {
@@ -148,6 +168,10 @@ public static partial class InteriorMeshBuilder
                 s.Quad(new(hole.X1, a, hole.Z0), new(hole.X1, a, hole.Z1), new(hole.X1, b, hole.Z1), new(hole.X1, b, hole.Z0), wall);
             }
         }
+
+        foreach (var lift in l.Lifts)
+            for (int f = lift.Bottom; f <= lift.Top && f < l.Floors.Count; f++)
+                LiftDressing(s, lift, l.FloorY(f));
 
         var figures = new List<Figure>();
         foreach (var p in l.Furniture)
@@ -374,14 +398,24 @@ public static partial class InteriorMeshBuilder
 
     // ---- stairs ------------------------------------------------------------------------------
 
+    private static readonly Color StairStone = C(0.72f, 0.70f, 0.66f);
+    private static readonly Color StairNosing = C(0.50f, 0.48f, 0.45f);
+    private static readonly Color Parapet = C(0.90f, 0.88f, 0.82f);
+    private static readonly Color Handrail = C(0.40f, 0.27f, 0.17f);
+
     /// <summary>
-    /// Solid steps to look at, a ramp to stand on. A CharacterBody climbing real risers catches on
-    /// every nosing; the ramp runs from one tread before the first step to the top landing, which
-    /// keeps it at or just under the nosings the whole way up.
+    /// Steps to look at, a ramp to stand on. A CharacterBody climbing real risers catches on every
+    /// nosing; the ramp runs from one tread before the first step to the top, which keeps it at or
+    /// just under the nosings the whole way up. A house's flight is wooden steps on a solid
+    /// block down to its floor. A stairwell's half flight (#571) is stone treads with a dark
+    /// nosing on a slab whose underside follows the steps, since the flight below passes under it,
+    /// and carries a parapet with a handrail along the open well when <see cref="FlightPlan.Parapet"/> says.
     /// </summary>
     private static void Flight(Scratch s, FlightPlan f, float y0, float h)
     {
-        int steps = Math.Max(1, (int)MathF.Ceiling(h / 0.19f));
+        float ya = y0 + h * f.From, yb = y0 + h * f.To, rise = yb - ya;
+        bool stone = f.Half;
+        int steps = Math.Max(1, (int)MathF.Ceiling(rise / (stone ? 0.18f : 0.19f)));
         float dir = Math.Sign(f.ZTop - f.ZBottom);
         float run = Math.Abs(f.ZTop - f.ZBottom);
         float tread = run / steps;
@@ -389,17 +423,131 @@ public static partial class InteriorMeshBuilder
         for (int i = 0; i < steps; i++)
         {
             float za = f.ZBottom + dir * tread * i, zb = f.ZBottom + dir * tread * (i + 1);
-            var shade = i % 2 == 0 ? StairWood : StairWood * 0.93f;
-            shade.A = 1;
-            s.Box(new Vector3(x0, y0, Math.Min(za, zb)), new Vector3(x1, y0 + h * (i + 1) / steps, Math.Max(za, zb)), shade, false);
+            float top = ya + rise * (i + 1) / steps;
+            float z0 = Math.Min(za, zb), z1 = Math.Max(za, zb);
+            if (!stone)
+            {
+                var shade = i % 2 == 0 ? StairWood : StairWood * 0.93f;
+                shade.A = 1;
+                s.Box(new Vector3(x0, y0, z0), new Vector3(x1, top, z1), shade, false);
+                continue;
+            }
+            // the tread and its riser on a slab 0.35 m thick under the step line
+            s.Box(new Vector3(x0, Math.Max(ya - 0.2f, top - 0.38f), z0), new Vector3(x1, top, z1), StairStone, false);
+            float nose = dir > 0 ? z0 : z1;
+            s.Box(new Vector3(x0, top - 0.03f, nose - 0.02f), new Vector3(x1, top + 0.005f, nose + 0.02f), StairNosing, false);
+        }
+        if (stone && f.Parapet != 0)
+        {
+            // a solid parapet in the well, following the flight, and a handrail along its top: each
+            // flight's half of the well, so the two of a turn stand side by side; solid, so nobody
+            // steps off one flight onto the other
+            float p0 = f.Parapet > 0 ? f.X1 : f.X0 - InteriorGenerator.StairEye / 2;
+            float p1 = f.Parapet > 0 ? f.X1 + InteriorGenerator.StairEye / 2 : f.X0;
+            float ra = ya + rise / steps, rb = yb;
+            Prism(s, p0, p1, f.ZBottom, f.ZTop, ra - 0.4f, ra + 0.9f, rb - 0.4f, rb + 0.9f, Parapet, true);
+            Prism(s, p0 - 0.03f, p1 + 0.03f, f.ZBottom, f.ZTop, ra + 0.9f, ra + 0.96f, rb + 0.9f, rb + 0.96f, Handrail, false);
         }
         float zs = f.ZBottom - dir * tread;
-        var a = new Vector3(f.X0, y0, zs);
-        var b = new Vector3(f.X1, y0, zs);
-        var c = new Vector3(f.X1, y0 + h, f.ZTop);
-        var d = new Vector3(f.X0, y0 + h, f.ZTop);
+        var a = new Vector3(f.X0, ya, zs);
+        var b = new Vector3(f.X1, ya, zs);
+        var c = new Vector3(f.X1, yb, f.ZTop);
+        var d = new Vector3(f.X0, yb, f.ZTop);
         s.Col.Add(a); s.Col.Add(b); s.Col.Add(c);
         s.Col.Add(a); s.Col.Add(c); s.Col.Add(d);
+    }
+
+    /// <summary>
+    /// A box sloped along z: x from <paramref name="x0"/> to <paramref name="x1"/>, at
+    /// z = <paramref name="za"/> from <paramref name="lowA"/> to <paramref name="highA"/>, at
+    /// z = <paramref name="zb"/> from <paramref name="lowB"/> to <paramref name="highB"/>.
+    /// </summary>
+    private static void Prism(Scratch s, float x0, float x1, float za, float zb,
+        float lowA, float highA, float lowB, float highB, Color col, bool collide)
+    {
+        var a0 = new Vector3(x0, lowA, za); var a1 = new Vector3(x1, lowA, za);
+        var a2 = new Vector3(x1, highA, za); var a3 = new Vector3(x0, highA, za);
+        var b0 = new Vector3(x0, lowB, zb); var b1 = new Vector3(x1, lowB, zb);
+        var b2 = new Vector3(x1, highB, zb); var b3 = new Vector3(x0, highB, zb);
+        var side = col * 0.9f; side.A = col.A;
+        s.Quad(a0, b0, b3, a3, side, collide);       // -x face
+        s.Quad(a1, a2, b2, b1, side, collide);       // +x face
+        s.Quad(a3, b3, b2, a2, col, collide);        // top
+        s.Quad(a0, a1, b1, b0, side * 0.8f, false);  // underside
+        s.Quad(a0, a3, a2, a1, side, false);         // ends
+        s.Quad(b0, b1, b2, b3, side, false);
+    }
+
+    // ---- elevators (#557) ----------------------------------------------------------------------
+
+    /// <summary>
+    /// One leaf of an elevator's sliding pair, <paramref name="w"/> wide, centred on its origin in x,
+    /// standing on y = 0, thin in z: brushed steel with a darker edge where the two meet.
+    /// </summary>
+    public static MeshData LiftDoorPanel(float w, float h)
+    {
+        var s = new Scratch();
+        s.Box(new Vector3(-w / 2, 0.005f, -0.02f), new Vector3(w / 2, h, 0.02f), LiftSteel * 0.95f, false);
+        s.Box(new Vector3(w / 2 - 0.015f, 0.005f, -0.022f), new Vector3(w / 2, h, 0.022f), LiftSteel * 0.6f, false);
+        s.Box(new Vector3(-w / 2, 0.005f, -0.022f), new Vector3(-w / 2 + 0.015f, h, 0.022f), LiftSteel * 0.6f, false);
+        return new MeshData(s.V.ToArray(), s.C.ToArray(), Array.Empty<Vector3>());
+    }
+
+    private static readonly Color LiftSteel = C(0.66f, 0.68f, 0.70f);
+    private static readonly Color LiftButton = C(0.95f, 0.78f, 0.30f);
+
+    /// <summary>
+    /// What an elevator has on one floor besides its cabin room: the steel frame round the doors
+    /// and the call button on the landing, and in the cabin the button panel and a handrail. The
+    /// sliding doors themselves move, so they are nodes (<c>InteriorNode</c>), not baked.
+    /// </summary>
+    private static void LiftDressing(Scratch s, LiftPlan lift, float y0)
+    {
+        float half = lift.DoorWidth / 2, top = y0 + lift.DoorTop;
+        void Slab(float a0, float a1, float ya, float yb, float off0, float off1, Color col)
+        {
+            var p = lift.WallPoint(a0, ya, off0);
+            var q = lift.WallPoint(a1, yb, off1);
+            s.Box(new Vector3(Math.Min(p.X, q.X), ya, Math.Min(p.Z, q.Z)), new Vector3(Math.Max(p.X, q.X), yb, Math.Max(p.Z, q.Z)), col);
+        }
+        const float wall = InteriorGenerator.WallInset;
+        Slab(-half - 0.10f, -half, y0, top + 0.10f, wall, wall + 0.04f, LiftSteel);
+        Slab(half, half + 0.10f, y0, top + 0.10f, wall, wall + 0.04f, LiftSteel);
+        Slab(-half - 0.10f, half + 0.10f, top, top + 0.10f, wall, wall + 0.04f, LiftSteel);
+        // the floor indicator over the doors, and the call button beside them
+        Slab(-0.15f, 0.15f, top + 0.16f, top + 0.28f, wall, wall + 0.03f, C(0.08f, 0.08f, 0.09f));
+        Slab(-0.05f, 0.05f, top + 0.19f, top + 0.25f, wall + 0.03f, wall + 0.035f, C(0.95f, 0.30f, 0.12f));
+        float ca = lift.CallAlong, cy = y0 + LiftPlan.ButtonHeight;
+        Slab(ca - 0.06f, ca + 0.06f, cy - 0.11f, cy + 0.11f, wall, wall + 0.02f, LiftSteel * 0.9f);
+        Slab(ca - 0.025f, ca + 0.025f, cy - 0.025f, cy + 0.025f, wall + 0.02f, wall + 0.035f, LiftButton);
+
+        // inside: the panel on the wall beside the doors, a button a floor, the bottom one lowest
+        var pc = lift.PanelPoint(y0 + LiftPlan.ButtonHeight);
+        var (nx, nz) = lift.PanelNormal;
+        var normal = new Vector3(nx, 0, nz);
+        var across = new Vector3(-nz, 0, nx);
+        int buttons = lift.Top - lift.Bottom + 1;
+        float panelH = LiftPlan.PanelHeight(buttons);
+        var pmin = pc - across * 0.13f - new Vector3(0, panelH / 2, 0);
+        var pmax = pc + across * 0.13f + new Vector3(0, panelH / 2, 0) + normal * 0.02f;
+        s.Box(pmin.Min(pmax), pmin.Max(pmax), LiftSteel * 0.85f, false);
+        for (int b = 0; b < buttons; b++)
+        {
+            var at = lift.ButtonPoint(y0, b);
+            var bmin = at - across * 0.025f - new Vector3(0, 0.025f, 0);
+            var bmax = at + across * 0.025f + new Vector3(0, 0.025f, 0) + normal * 0.015f;
+            s.Box(bmin.Min(bmax), bmin.Max(bmax), b == 0 ? C(0.30f, 0.80f, 0.40f) : LiftButton, false);
+        }
+        // a handrail on the back wall
+        float hx0 = lift.X0 + 0.25f, hx1 = lift.X1 - 0.25f, hz0 = lift.Z0 + 0.25f, hz1 = lift.Z1 - 0.25f;
+        var (a, b2) = lift.DoorSide switch
+        {
+            Side.Front => (new Vector3(hx0, y0 + 0.88f, lift.Z1 - wall - 0.08f), new Vector3(hx1, y0 + 0.93f, lift.Z1 - wall - 0.04f)),
+            Side.Back => (new Vector3(hx0, y0 + 0.88f, lift.Z0 + wall + 0.04f), new Vector3(hx1, y0 + 0.93f, lift.Z0 + wall + 0.08f)),
+            Side.Left => (new Vector3(lift.X1 - wall - 0.08f, y0 + 0.88f, hz0), new Vector3(lift.X1 - wall - 0.04f, y0 + 0.93f, hz1)),
+            _ => (new Vector3(lift.X0 + wall + 0.04f, y0 + 0.88f, hz0), new Vector3(lift.X0 + wall + 0.08f, y0 + 0.93f, hz1)),
+        };
+        s.Box(a, b2, LiftSteel, false);
     }
 
     // ---- furniture ---------------------------------------------------------------------------
@@ -602,6 +750,42 @@ public static partial class InteriorMeshBuilder
                 B(-0.1f, 1.0f, d, -0.05f, 1.15f, d + 0.03f, metal);
                 B(0.05f, 1.0f, d, 0.1f, 1.15f, d + 0.03f, metal);
                 break;
+            case FurnitureType.BlahajBin:
+            {
+                // a wire bin, heaped over the rim with plush sharks (#501). The heap is what sells
+                // it, so the sharks are built individually rather than as one mound: six or seven
+                // of them, each turned its own way, laid out from the bin's own place in the plan
+                // so every peer builds the same bin and a rebuild does not reshuffle it.
+                var wire = C(0.34f, 0.36f, 0.40f);
+                var shark = C(0.49f, 0.78f, 0.94f);
+                var belly = C(0.90f, 0.95f, 0.98f);
+                // the basket: a rim, four corner posts and a slatted floor
+                B(-w, H - 0.06f, -d, w, H, -d + 0.05f, wire);
+                B(-w, H - 0.06f, d - 0.05f, w, H, d, wire);
+                B(-w, H - 0.06f, -d, -w + 0.05f, H, d, wire);
+                B(w - 0.05f, H - 0.06f, -d, w, H, d, wire);
+                B(-w + 0.04f, 0.08f, -d + 0.04f, w - 0.04f, 0.13f, d - 0.04f, wire * 0.8f);
+                foreach (var (px, pz) in new[] { (-w, -d), (w - 0.05f, -d), (-w, d - 0.05f), (w - 0.05f, d - 0.05f) })
+                    B(px, 0, pz, px + 0.05f, H, pz + 0.05f, wire);
+
+                int sharks = 5 + (int)(Hash(p, 1) * 3);      // 5..7
+                for (int i = 0; i < sharks; i++)
+                {
+                    // stacked in two layers, the upper one proud of the rim: a full bin
+                    float sx = (Hash(p, i * 4 + 2) - 0.5f) * (p.W - 0.46f);
+                    float sz = (Hash(p, i * 4 + 3) - 0.5f) * (p.D - 0.46f);
+                    float sy = 0.13f + (i % 2) * 0.17f + Hash(p, i * 4 + 4) * 0.05f;
+                    bool lengthwise = Hash(p, i * 4 + 5) < 0.5f;
+                    const float bl = 0.19f, bw = 0.075f, bh = 0.085f;   // half-extents of one shark
+                    float ax = lengthwise ? bl : bw, az = lengthwise ? bw : bl;
+                    // body, pale belly under it, and the tail standing up at one end
+                    B(sx - ax, sy, sz - az, sx + ax, sy + bh * 2, sz + az, shark);
+                    B(sx - ax * 0.86f, sy, sz - az * 0.86f, sx + ax * 0.86f, sy + bh * 0.6f, sz + az * 0.86f, belly);
+                    float tx = lengthwise ? sx - ax : sx, tz = lengthwise ? sz : sz - az;
+                    B(tx - 0.035f, sy + bh * 0.5f, tz - 0.035f, tx + 0.035f, sy + bh * 2.3f, tz + 0.035f, shark * 0.9f);
+                }
+                break;
+            }
             case FurnitureType.Nightstand:
             case FurnitureType.Crate:
                 B(-w, 0, -d, w, H, d, p.Type == FurnitureType.Crate ? C(0.62f, 0.48f, 0.30f) : wood);
@@ -1166,6 +1350,70 @@ public static partial class InteriorMeshBuilder
                 }
                 break;
             }
+            // ---- #557: apartment blocks ------------------------------------------------------
+            case FurnitureType.Pillar:
+                // bare concrete, a darker band at its foot where the bumpers rub
+                B(-w, 0, -d, w, H, d, C(0.66f, 0.66f, 0.64f));
+                B(-w - 0.01f, 0, -d - 0.01f, w + 0.01f, 0.5f, d + 0.01f, C(0.86f, 0.70f, 0.14f));
+                for (int i = 0; i < 3; i++)
+                    B(-w - 0.012f, 0.08f + i * 0.16f, -d - 0.012f, w + 0.012f, 0.16f + i * 0.16f, d + 0.012f, dark);
+                break;
+            case FurnitureType.StorageCage:
+            {
+                // a tenant's compartment: slatted wooden walls with gaps, a door in front, boxes
+                // and a pair of skis inside
+                var lath = C(0.70f, 0.56f, 0.38f);
+                foreach (float cx in new[] { -w, w - 0.05f })
+                    for (float z = -d; z < d - 0.02f; z += 0.14f)
+                        B(cx, 0, z, cx + 0.05f, H, Math.Min(z + 0.09f, d), lath);
+                for (float x = -w; x < w - 0.02f; x += 0.14f)
+                    B(x, 0, -d, Math.Min(x + 0.09f, w), H, -d + 0.04f, lath * 0.9f);
+                for (float x = -w; x < w - 0.02f; x += 0.14f)
+                    B(x, 0.05f, d - 0.04f, Math.Min(x + 0.09f, w), H - 0.05f, d, lath);
+                B(-w, 0.05f, d - 0.05f, w, 0.12f, d, lath * 0.75f);
+                B(-w, H - 0.12f, d - 0.05f, w, H - 0.05f, d, lath * 0.75f);
+                B(w - 0.25f, H * 0.5f, d, w - 0.18f, H * 0.5f + 0.12f, d + 0.04f, dark);
+                B(-w + 0.15f, 0, -d + 0.15f, -w + 0.7f, 0.5f, -d + 0.6f, C(0.62f, 0.50f, 0.32f));
+                B(-w + 0.2f, 0.5f, -d + 0.2f, -w + 0.6f, 0.8f, -d + 0.55f, C(0.66f, 0.54f, 0.36f));
+                if (Hash(p, 3) > 0.5f)
+                    B(w - 0.45f, 0, -d + 0.1f, w - 0.35f, 1.7f, -d + 0.2f, C(0.80f, 0.16f, 0.14f));
+                break;
+            }
+            case FurnitureType.Mailboxes:
+            {
+                // a bank of letterboxes, a slot and a name tag each
+                var steel = C(0.58f, 0.62f, 0.64f);
+                B(-w, H - 0.75f, -d, w, H, d, steel);
+                int cols = Math.Max(2, (int)(p.W / 0.32f));
+                for (int c = 0; c < cols; c++)
+                    for (int r = 0; r < 3; r++)
+                    {
+                        float x0 = -w + 2 * w * c / cols + 0.02f, x1 = -w + 2 * w * (c + 1) / cols - 0.02f;
+                        float ya = H - 0.75f + 0.25f * r + 0.02f, yb = ya + 0.21f;
+                        B(x0, ya, d, x1, yb, d + 0.01f, steel * 0.86f);
+                        B(x0 + 0.03f, yb - 0.05f, d + 0.01f, x1 - 0.03f, yb - 0.035f, d + 0.02f, dark);
+                        B(x0 + 0.04f, ya + 0.03f, d + 0.01f, x0 + 0.12f, ya + 0.06f, d + 0.02f, white);
+                    }
+                break;
+            }
+            case FurnitureType.BikeRack:
+            {
+                // a floor rail and two or three bikes in it, each a frame on two thin wheels
+                B(-w, 0, -d, w, 0.06f, -d + 0.08f, metal);
+                int bikes = Hash(p, 5) < 0.5f ? 2 : 3;
+                for (int i = 0; i < bikes; i++)
+                {
+                    float x = -w + 2 * w * (i + 0.5f) / bikes;
+                    var bikeCol = (Hash(p, i) * 3) switch { < 1 => C(0.16f, 0.30f, 0.62f), < 2 => C(0.70f, 0.12f, 0.12f), _ => C(0.18f, 0.18f, 0.18f) };
+                    foreach (float wz in new[] { -d + 0.05f, d - 0.3f })
+                        B(x - 0.02f, 0, wz, x + 0.02f, 0.62f, wz + 0.26f, dark);
+                    B(x - 0.025f, 0.35f, -d + 0.2f, x + 0.025f, 0.42f, d - 0.15f, bikeCol);
+                    B(x - 0.025f, 0.42f, d - 0.3f, x + 0.025f, 0.85f, d - 0.25f, bikeCol);
+                    B(x - 0.22f, 0.85f, d - 0.3f, x + 0.22f, 0.88f, d - 0.25f, dark);
+                    B(x - 0.06f, 0.8f, -d + 0.25f, x + 0.06f, 0.84f, -d + 0.45f, dark);
+                }
+                break;
+            }
             case FurnitureType.Bench:
                 foreach (float lx in new[] { -w + 0.12f, w - 0.12f })
                     B(lx - 0.04f, 0, -d + 0.04f, lx + 0.04f, H - 0.05f, d - 0.04f, metal * 0.8f);
@@ -1303,7 +1551,7 @@ public static partial class InteriorMeshBuilder
 
     /// <summary>
     /// A stable 0..1 roll for one detail of one piece: which colour a drum is, whether a rack slot is
-    /// empty. From the piece's own place in the plan, so every peer builds the same warehouse and a
+    /// empty, which way a shark in a bin lies (#501). From the piece's own place in the plan, so every peer builds the same warehouse and a
     /// rebuild does not reshuffle it.
     /// </summary>
     private static float Hash(FurniturePlan p, int salt) =>

@@ -27,6 +27,12 @@
   (`_deckWait`), or within a metre of it, the vehicle's own rule for its guests (`WatchGuests`).
   Excepted for as long as the deck was built (30 m and more), a swimmer swam through a parked
   steamer's hull under its deck. Built excepted, so a deck arriving round a player still lets them be.
+- **Aboard is read in the deck body's frame** (#542), where the last `_Process` put it, not where
+  the vehicle is drawn now: a vehicle moving in its own physics steps leads its deck by its motion
+  since that frame (1.1 m a step at 68 m/s, several steps in a long frame: a tile build, an origin
+  shift). Read from the live frame, a walker on the last metres of a flying freighter's level ramp
+  stood "past" the deck's end, stepped off and fell out. A check aiming a walk aims in
+  `FootPlayer.DeckFrame` for the same reason.
 - **Aboard** (`DeckPhysics`, each physics step): standing in a deck's aboard box. The player is then
   **carried** in `_Process` by the section's motion since the last frame (position, heading, view
   and velocity turned with it), its velocity is the vehicle frame's, its mask is `DeckLayer` only,

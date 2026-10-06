@@ -33,7 +33,7 @@ public partial class MultiplayerScreen : Screen
 
     public override void _Ready()
     {
-        var (body, header) = Framed("Multiplayer", "Join a server, or host one from this machine", new Vector2(1000, 590));
+        var (body, header) = Framed("Multiplayer", Platform.CanSpawnProcesses ? "Join a server, or host one from this machine" : "Join a server", new Vector2(1000, 590));
 
         // --- the name chip, top right
         var chip = UiKit.HBox(6);
@@ -98,6 +98,15 @@ public partial class MultiplayerScreen : Screen
         direct.AddChild(join);
         side.AddChild(UiKit.Card(direct, margin: 16));
 
+        // hosting starts a server process, which a phone cannot do (#63)
+        if (Platform.CanSpawnProcesses) side.AddChild(UiKit.Card(HostCard(), margin: 16));
+
+        RebuildSaved();
+        ShowName();
+    }
+
+    private Control HostCard()
+    {
         var host = UiKit.VBox(8);
         var hostTitle = UiKit.HBox(8);
         hostTitle.AddChild(new TextureRect { Texture = Icons.Host, StretchMode = TextureRect.StretchModeEnum.KeepCentered, Modulate = UiTheme.Amber, CustomMinimumSize = new Vector2(20, 20) });
@@ -108,10 +117,7 @@ public partial class MultiplayerScreen : Screen
         var hostButton = UiKit.Button("Host…");
         hostButton.Pressed += HostDialog;
         host.AddChild(hostButton);
-        side.AddChild(UiKit.Card(host, margin: 16));
-
-        RebuildSaved();
-        ShowName();
+        return host;
     }
 
     public override void OnShown()

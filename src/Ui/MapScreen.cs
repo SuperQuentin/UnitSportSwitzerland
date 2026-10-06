@@ -402,9 +402,6 @@ public partial class MapScreen : Screen
         {
             Paths = _paths, Country = _country, Local = _local, Selection = _selection, Layers = _layers,
             Stats = _stats, State = _state,
-            // In the game there is no Python and no GDAL: the C# downloader and the in-process
-            // preprocessor replace them (#515 phases 1 and 2). The two GDAL layers say so instead.
-            Python = null, Gdal = false,
         });
 
         long download = steps.Where(s => s.Skip == null).Sum(s => s.DownloadBytes);
@@ -466,11 +463,11 @@ public partial class MapScreen : Screen
         AddLayer(into, Layers.Roads, "Roads, rail, water, trees", "swissTLM3D: one nationwide file, fetched once.");
         AddLayer(into, Layers.Places, "Place names", "The in-game place search.");
         AddLayer(into, Layers.Cadastre, "Building use and storeys", "The GWR register.");
-        AddLayer(into, Layers.Buildings, "Buildings", "Needs GDAL — see below.", needsGdal: true);
-        AddLayer(into, Layers.Routes, "Cycle routes", "Needs GDAL — see below.", needsGdal: true);
+        AddLayer(into, Layers.Buildings, "Buildings", "swissBUILDINGS3D, the map sheets your selection touches.");
+        AddLayer(into, Layers.Routes, "Cycle routes", "Signed Veloland and Mountainbikeland routes.");
     }
 
-    private void AddLayer(Container into, Layers layer, string name, string hint, bool locked = false, bool needsGdal = false)
+    private void AddLayer(Container into, Layers layer, string name, string hint, bool locked = false)
     {
         var toggle = UiKit.ToggleRow(into, name, _layers.HasFlag(layer), on =>
         {
@@ -478,26 +475,22 @@ public partial class MapScreen : Screen
             _state.Layers = _layers;
             RefreshSummary();
         }, hint);
-        // Terrain is what every other layer is draped on, and GDAL is not in a release build:
-        // disable rather than hide, so the reason is visible instead of mysterious.
-        if (locked || needsGdal) toggle.Disabled = true;
-        if (needsGdal) _layers &= ~layer;
+        // Terrain is what every other layer is draped on: shown, and not switchable off.
+        if (locked) toggle.Disabled = true;
     }
 
     /// <summary>
     /// What the machine can and cannot do, named plainly. Downloading and building need nothing
-    /// installed (#515 phases 1 and 2 removed Python and the .NET SDK); buildings and cycle routes
+    /// installed: #515 removed Python and the .NET SDK, #537 removed GDAL, and #564 the last
     /// are read from Esri FileGDB, which still needs GDAL until that reader is ported to C#.
     /// </summary>
     private void BuildRequirements(Container into)
     {
         into.AddChild(UiKit.Section("Requirements"));
-        Requirement(into, true, "Downloading", "Built in — nothing to install.");
+        Requirement(into, true, "Downloading", "Built in — every dataset, straight from swisstopo.");
         Requirement(into, true, "Building tiles", "Built in — the preprocessor runs inside the game.");
-        Requirement(into, false, "Buildings and cycle routes",
-            "These two come as Esri FileGDB, which needs GDAL's Python bindings. Install Python 3.10+ "
-            + "and GDAL, then run the terminal wizard once for those layers: "
-            + "dotnet run --project tools/MapSetup. Everything else works without it.");
+        Requirement(into, true, "Buildings and cycle routes",
+            "Built in — the Esri FileGDB these come as is read directly, with no GDAL.");
     }
 
     private static void Requirement(Container into, bool ok, string name, string detail)

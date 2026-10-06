@@ -75,15 +75,22 @@ the steamer AI (#379) reads.
 - **Boats at jetties** (`FootPlayer.Pier.cs`): getting out of a boat looks for a deck or dry ground
   beside it (rays either side, up to 2.6 m past its side, a static body standing out of the water,
   room to stand): the driver steps onto the jetty instead of swimming.
-- **Marina boats** (#383, `World/MarinaBoats`, server, or the client offline): `Jetty.BoatSlots` are
-  places every 9 m from 4 m in, both sides, the boat's side 0.4 m off the deck's edge, lying along it;
-  `BoatBerths` keeps one in three by an FNV hash of its name (`m<jetty hash>_<k><l|r>`), at most 4 a
-  jetty, 2 in 5 speedboats, the rest jetskis, bow either way: the same on every peer and every restart.
-  When a jetty's tile enters the rings, each place with 0.7 m of water gets an ordinary parked boat
-  (`veh_marina_<id>`, keel at its draught under the still level); one taken is put back
-  `RespawnSeconds` (180) later, once nothing lies within 4 m of its place and nobody within 40 m. They
-  get #378's mooring spring with every parked boat. Region: 89 jetties (`LandingIndex.Harbours`: the
-  jetties within 120 m of one another are a harbour).
+- **Marina boats** (#383; dormant slots since #554, `vehicles/dormant-vehicles`): `Jetty.BoatSlots`
+  are places every 9 m from 4 m in, both sides, the boat's side 0.4 m off the deck's edge, lying along
+  it; `BoatBerths` keeps one in three by an FNV hash of its name (`m<jetty hash>_<k><l|r>`), at most 4
+  a jetty, 2 in 5 speedboats, the rest jetskis, bow either way: the same on every peer and every
+  restart. `DormantSlots.ForMarina` (tier 0, `MarinaSlotTests`) makes each berth with
+  `MarinaMinDepth` (0.7 m) of water a dormant slot, keel at its draught under the still level, owner
+  `<E>_<N>_m<jetty hash>` (the jetty's tile, by its ribbon's middle), ordinal = the berth's index on
+  the jetty, so the vehicle is `veh_slot_<E>_<N>_m<hash>_<k>`. The water is read on the fill worker
+  from the source (`ChunkManager.LoadWaterLayerAsync`, the full grid's bed), not from the loaded
+  chunk, so every peer agrees on which berths float before the tile is even built. A boat is drawn
+  instanced until somebody touches it; taken away, its slot sleeps again `DormantVehicles.RespawnSeconds`
+  (180) later, once nothing lies within 4 m of its place and nobody within 40 m (`Restock`, the
+  server or an offline game decides, `Slept` tells every peer). Before #554 every berth within 1.5 km
+  of a player was a live, simulated `VehicleBody` (`MarinaBoats`), never removed: 160 of them along
+  Geneva's quays. Region: 89 jetties (`LandingIndex.Harbours`: the jetties within 120 m of one another
+  are a harbour). **A dormant boat does not bob**: it lies level at the still surface until woken.
 
 ## API for #379 (the steamer AI)
 

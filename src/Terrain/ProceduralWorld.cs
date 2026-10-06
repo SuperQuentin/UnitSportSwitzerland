@@ -370,26 +370,53 @@ public sealed partial class ProceduralWorld
     private static Fine FineNear(double e, double n) =>
         FineAt((long)Math.Round(e / FineM), (long)Math.Round(n / FineM));
 
-    /// <summary>The height from the two fields: the valleys' ground, the lake shore, the channel.</summary>
-    private static double Combine(in Coarse c, in Fine f)
+    /// <summary>
+    /// The ground before any channel is dug into it: the valleys' floor and the lake shore, or
+    /// (<paramref name="lakeBed"/>) the bed of the lake it lies in.
+    /// </summary>
+    private static double Natural(in Coarse c, in Fine f, out bool lakeBed)
     {
         double h = c.P + c.Q * f.F;
-
+        lakeBed = false;
         if (c.Lake > 0)
         {
             // low ground near a lake is lifted clear of it, then the shore comes down to the level
             h += Math.Max(0, c.Level + 0.5 - h) * SmoothStep(0.05, 0.3, c.Lake);
-            if (c.Lake >= 0.5) return c.Level - LakeDepth(c);
+            if (c.Lake >= 0.5)
+            {
+                lakeBed = true;
+                return c.Level - LakeDepth(c);
+            }
             h = c.Level + (h - c.Level) * SmoothStep(0.5, 0.3, c.Lake);
         }
+        return h;
+    }
+
+    /// <summary>
+    /// A channel's flat bottom, which is its water's level, over ground that was
+    /// <paramref name="natural"/> before the channel was dug: its bed, but never above that ground
+    /// (#572). The floor follows each valley's axis while the channel meanders, so along a bend
+    /// the channel's bed is read further upstream than the floor beside it and could stand metres
+    /// above it; that bed was never dug, and its water hung over the floor. There the river runs
+    /// on the floor, its own channel dug into it. Where a lake reaches (its shore lowers the
+    /// ground to its level) the bed is left as it was, so a river's mouth meets the shelf as before.
+    /// </summary>
+    private static double ChannelBed(in Coarse c, in Fine f, double natural) =>
+        c.Lake > 0 ? f.Level - f.Depth : Math.Min(f.Level - f.Depth, natural);
+
+    /// <summary>The height from the two fields: the valleys' ground, the lake shore, the channel.</summary>
+    private static double Combine(in Coarse c, in Fine f)
+    {
+        double h = Natural(c, f, out bool lakeBed);
+        if (lakeBed) return h;
 
         if (f.Dr < f.Bank)
         {
             // a flat bottom below the floor, so the water drawn on it is level from bank to bank
-            // (only ever down: a channel whose bed is above the ground here is not dug at all)
             double carve = (1 - SmoothStep(f.Half, f.Bank, f.Dr)) * f.Keep * (1 - SmoothStep(0.3, 0.5, c.Lake));
-            double bed = f.Level - f.Depth;
-            if (h > bed)
+            // only ever down: by a lake a bed above the ground is not dug at all
+            double bed = ChannelBed(c, f, h);
+            if (h >= bed)
             {
                 h -= (h - bed) * carve;
                 // #298: the flat bottom is the water's level; the river's own channel lies below it
@@ -664,11 +691,20 @@ public sealed partial class ProceduralWorld
                 var fine = FineNear(e, nn);
                 double l, f;
                 if (coarse.Lake > 0.3) (l, f) = (coarse.Level, coarse.Fetch);
-                else if (fine.Dr < fine.Bank) (l, f) = (fine.Level - fine.Depth, 2 * fine.Half);
+                // the bed exactly here as well as at the nearest 5 m point, whichever is lower (#572):
+                // on a steep stream the 5 m point sits up or down the slope, and at a confluence the
+                // two can be different channels, the carve having dug for the 5 m point's
+                else if (fine.Dr < fine.Bank)
+                    (l, f) = (Math.Min(ChannelAt(e, nn).Bed, ChannelBed(coarse, fine, Natural(coarse, fine, out _))), 2 * fine.Half);
                 else (l, f) = (Height(lattice, e, nn), 10);
                 double ground = Height(lattice, e, nn);
                 if (blend != null) ground += blend.Correction(e, nn, ground);
-                if (ground > l) continue;
+                // a river's flat bottom is its level itself, and between 5 m points the ground is
+                // mixed from points up and down a steep stream's bed (5 m of a 5% grade): ground up
+                // to 25 cm over the level still counts, the water lifted to it, so the squares round
+                // it close into one surface. A lake keeps its one level.
+                if (ground > l + (coarse.Lake > 0.3 ? 0 : 0.25)) continue;
+                l = Math.Max(l, ground);
                 wet++;
                 level[r * n + c] = (float)l;
                 fetch![r * n + c] = (float)f;
@@ -676,10 +712,52 @@ public sealed partial class ProceduralWorld
         return wet == 0 ? null : new WaterTile { Level = level!, FetchM = fetch };
     }
 
+    /// <summary>
+    /// How a tile's generated river water holds up (#572), for <c>BlendCheck --generated-water</c>,
+    /// over the 2 m samples well inside a wet channel (1 m in from its flat bottom's edge, clear
+    /// of roads): <c>Dug</c> of them have the ground at the water level or in the river's own
+    /// channel below it, <c>Drawn</c> of those are wet in <see cref="BuildWater"/>; <c>Undug</c> have
+    /// the ground more than a metre below the channel's profile (its bed ran above the floor, so
+    /// nothing was dug), <c>Floating</c> of those are wet anyway: water standing over the ground,
+    /// the worst at <c>Worst</c> (LV95, metres above the ground).
+    /// </summary>
+    public (int Dug, int Drawn, int Undug, int Floating, (double E, double N, double Above) Worst) WaterAudit(TileId id)
+    {
+        var water = BuildWater(id);
+        var lattice = LatticeFor(id, fine: true);
+        int n = WaterTile.Size, dug = 0, drawn = 0, undug = 0, floating = 0;
+        (double E, double N, double Above) worst = (0, 0, 0);
+        for (int r = 0; r < n; r++)
+            for (int c = 0; c < n; c++)
+            {
+                double e = id.MinE + c * WaterTile.Stride, nn = id.MaxN - r * WaterTile.Stride;
+                var near = FineNear(e, nn);
+                if (near.Dr > near.Bank + 10 || near.Keep < 1) continue;
+                var ch = ChannelAt(e, nn);
+                if (!ch.Wet || ch.Dr > ch.Half - 1) continue;
+                if (SampleCoarse(lattice, e, nn).Lake > 0.3) continue;
+                float level = water?.Level[r * n + c] ?? float.NaN;
+                double ground = Height(lattice, e, nn), bed = ChannelBed(SampleCoarse(lattice, e, nn), near, Natural(SampleCoarse(lattice, e, nn), near, out _));
+                if (ground > bed + 0.25) continue;   // not reached by the carve: the bank
+                // a metre deeper than the channel's profile is a pool; past that, the water stands over the ground
+                if (ground >= bed - WaterBed.ChannelDepth(2 * ch.Half) - 1)
+                {
+                    dug++;
+                    if (!float.IsNaN(level)) drawn++;
+                    continue;
+                }
+                undug++;
+                if (float.IsNaN(level)) continue;
+                floating++;
+                if (level - ground > worst.Above) worst = (e, nn, level - ground);
+            }
+        return (dug, drawn, undug, floating, worst);
+    }
+
     /// <summary>Everything a cover class is decided from, at one point.</summary>
     private struct CoverInputs
     {
-        public float Alt, Slope, Forest, Crop, Above, South, Vines, Road, River, Half, Wet, Lake, Bed;
+        public float Alt, Slope, Forest, Crop, Above, South, Vines, Road, River, Half, Wet, Lake, Bed, Keep;
         public bool WaterOk;
     }
 
@@ -774,12 +852,49 @@ public sealed partial class ProceduralWorld
 
                         float u = dc / (float)CoverStep;
                         var at = Mix(inputs[k00], inputs[k10], inputs[k01], inputs[k11], u, v);
+                        // A distance to a line is V-shaped across it, and bilinear from the corners
+                        // it reads up to half a square's diagonal too far: a channel narrower than
+                        // a square came out as blobs round whichever corners sat near it, with
+                        // grass between (#572). Where the channel could be, its distance is exact;
+                        // the carve has dug the ground there to the flat bottom (ChannelBed), so the
+                        // ground mixed from the banks' corners is not asked.
+                        if (nearWater && at.River - CornerOverreach < at.Half)
+                        {
+                            bool inside = InWetChannel(id.MinE + col, id.MaxN - row, 0.5);
+                            at.River = inside ? 0 : float.MaxValue;
+                            at.Half = 1;
+                            at.Wet = inside ? at.Keep : 0;
+                            at.Alt = Math.Min(at.Alt, at.Bed);
+                        }
                         cells[row * size + col] = (byte)Classify(at);
                     }
                 }
             }
         return cells;
     }
+
+    /// <summary>
+    /// Whether a point lies inside a wet channel's flat bottom, <paramref name="margin"/> in from its
+    /// edge: any channel's, not only the nearest centre line's, since where a stream joins a wide
+    /// river the stream's line runs inside the river and is the nearer one there.
+    /// </summary>
+    private static bool InWetChannel(double e, double n, double margin)
+    {
+        var net = Network.Instance;
+        foreach (int s in net.Channels.At(e, n))
+        {
+            if (!net.Water[s] || !net.Water[s + 1]) continue;
+            var (d, u) = SegmentDistance(e, n, net.PE[s], net.PN[s], net.PE[s + 1], net.PN[s + 1]);
+            if (d < net.Half[s] + (net.Half[s + 1] - net.Half[s]) * u - margin) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// The most a distance read bilinear from a cover square's corners overstates the true one: at
+    /// the square's middle, half its diagonal.
+    /// </summary>
+    private static readonly float CornerOverreach = (float)(CoverStep * Math.Sqrt(0.5)) + 0.1f;
 
     /// <summary>Cover inputs inside a 10 m square, bilinear from its corners.</summary>
     private static CoverInputs Mix(in CoverInputs a, in CoverInputs b, in CoverInputs c, in CoverInputs d,
@@ -801,6 +916,7 @@ public sealed partial class ProceduralWorld
             Wet = a.Wet * wa + b.Wet * wb + c.Wet * wc + d.Wet * wd,
             Lake = a.Lake * wa + b.Lake * wb + c.Lake * wc + d.Lake * wd,
             Bed = a.Bed * wa + b.Bed * wb + c.Bed * wc + d.Bed * wd,
+            Keep = a.Keep * wa + b.Keep * wb + c.Keep * wc + d.Keep * wd,
             WaterOk = (a.WaterOk ? wa : 0) + (b.WaterOk ? wb : 0) + (c.WaterOk ? wc : 0) + (d.WaterOk ? wd : 0) > 0.5f,
         };
     }
@@ -826,7 +942,8 @@ public sealed partial class ProceduralWorld
             Half = (float)f.Half,
             Wet = (float)(f.Wet * f.Keep),
             Lake = (float)c.Lake,
-            Bed = (float)(f.Level - f.Depth),
+            Bed = (float)ChannelBed(c, f, Natural(c, f, out _)),
+            Keep = (float)f.Keep,
             WaterOk = waterOk,
         };
         // orchards want to know how far the road is; only worth asking on a candidate

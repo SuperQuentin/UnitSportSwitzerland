@@ -1,6 +1,7 @@
 # Buildings
 
-- **Buildings**: swissBUILDINGS3D 3.0 LoD2 TINs -> `tools/export_buildings.py` (GDAL, the
+- **Buildings**: swissBUILDINGS3D 3.0 LoD2 TINs, read straight from the published FileGDB zips by
+  `FileGdb`/`FileGdbGeometry` (#537, `--buildings-gdb`; no GDAL and no GeoPackage step). Formerly `tools/export_buildings.py` (GDAL, the
   only step needing it) -> `buildings.gpkg` -> `.bldg` per tile. GWR cadastre is joined
   **spatially** (EGID is null in the 3.0 Beta); classification uses GKLAS, not GKAT.
   Roof vs wall is decided per triangle by normal; year built tints tone.

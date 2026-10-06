@@ -258,23 +258,111 @@ public static partial class TileRewriter
         var wanted = new HashSet<TileId>(targets);
         var blocks = GroupIntoBlocks(targets, options.BlockSize);
 
-        int tilesRead = 0, tilesWritten = 0, junctionCount = 0, written = 0, dropped = 0;
-        double overlapBefore = 0, overlapAfter = 0, carriageway = 0;
-        int blockIndex = 0, guarded = 0;
-        var audit = new HeightAuditor();
-        var shiftAudit = new HeightAuditor();
-        var netStats = new NetworkStats();
-        var embankments = new EmbankmentPlanner.Stats();
-        var streetStats = new StreetPlanner.Stats();
-        var cornerStats = new CornerPlanner.Stats();
-        var heightStats = new RoadHeights.Stats();
-        var railings = new RailingPlanner.Stats();
-        var parkingStats = new ParkingStats();
-        var buildings = new Footprints(chunkDir);
+        var session = new Session(options, new Inputs
+        {
+            Roads = id => LoadInput(chunkDir, rawDir, id, stash: wanted.Contains(id) && !options.DryRun),
+            Grid = id => LoadGrid(chunkDir, id),
+            Buildings = id => Facades.Read(chunkDir, id),
+            Parking = id => RawParking.Read(parkDir, id),
+            Overlay = overlay, Cantons = cantons, SignalSites = signalSites, Restrictions = restrictions,
+        });
 
+        int blockIndex = 0;
         foreach (var block in blocks)
         {
             blockIndex++;
+            foreach (var tile in session.Block(block, wanted))
+            {
+                var bytes = Encode(tile);
+                Count(session.Net, tile, bytes);
+
+                if (options.DryRun) { session.TilesWritten++; continue; }
+
+                string path = Path.Combine(chunkDir, RoadFormat.FileName(tile.Id));
+                string temp = path + ".part";
+
+                // write via a temp file: a half-written .road looks exactly like a valid short
+                // one, and the region being rewritten is the region being played
+                File.WriteAllBytes(temp, bytes);
+                File.Move(temp, path, overwrite: true);
+                session.TilesWritten++;
+            }
+
+            if (blockIndex % 10 == 0 || blockIndex == blocks.Count)
+                log($"  block {blockIndex}/{blocks.Count}  {session.TilesWritten} tiles, {session.JunctionCount} junctions");
+        }
+
+        return session.Finish(log);
+    }
+
+    /// <summary>
+    /// Where the stage reads its input. The preprocessor reads files (<see cref="Run"/>); a
+    /// generated world hands in what its generator built (#559), with one <see cref="Facades"/> and
+    /// <see cref="UrbanField"/> shared across calls: both depend on position and walls only, so a
+    /// shared pair gives the same bytes and is not rebuilt for every tile of every halo.
+    /// </summary>
+    public sealed class Inputs
+    {
+        /// <summary>
+        /// A tile's raw (never rewritten) roads and their keys; (null, null) for none. A fresh copy
+        /// on every call: the stage writes into the segments (road heights in town, #119).
+        /// </summary>
+        public required Func<TileId, (RoadTile? Tile, RawRoads.Key?[]? Keys)> Roads { get; init; }
+        /// <summary>A tile's full-resolution ground, or null.</summary>
+        public required Func<TileId, ChunkGrid?> Grid { get; init; }
+        /// <summary>A tile's buildings, or null: the walls streets stop at, the footprints poles keep off.</summary>
+        public required Func<TileId, BuildingTile?> Buildings { get; init; }
+        /// <summary>A tile's car parks (#499); null = none anywhere.</summary>
+        public Func<TileId, List<RawParking.Lot>>? Parking { get; init; }
+        /// <summary>Shared walls and density, both or neither; null = a new pair per block (the preprocessor's memory bound).</summary>
+        public Facades? Facades { get; init; }
+        public UrbanField? Field { get; init; }
+        internal OsmOverlayReader? Overlay { get; init; }
+        internal Cantons? Cantons { get; init; }
+        internal SignalSites? SignalSites { get; init; }
+        internal Restrictions? Restrictions { get; init; }
+    }
+
+    /// <summary>
+    /// The stage on one block in memory, no files (#559): the block's tiles that have roads,
+    /// finished. Not thread-safe while it shares <see cref="Inputs.Facades"/> (their tile caches):
+    /// one call at a time per shared pair.
+    /// </summary>
+    public static List<RoadTile> Rewrite(HashSet<TileId> block, Options options, Inputs inputs) =>
+        new Session(options, inputs).Block(block, block);
+
+    /// <summary>One run of the stage: its inputs and the region's numbers, block after block.</summary>
+    public sealed class Session(Options options, Inputs inputs)
+    {
+        public readonly NetworkStats Net = new();
+        public int TilesWritten { get; set; }
+        public int JunctionCount => junctionCount;
+
+        private int tilesRead, junctionCount, written, dropped, guarded;
+        private double overlapBefore, overlapAfter, carriageway;
+        private readonly HeightAuditor audit = new();
+        private readonly HeightAuditor shiftAudit = new();
+        private readonly EmbankmentPlanner.Stats embankments = new();
+        private readonly StreetPlanner.Stats streetStats = new();
+        private readonly CornerPlanner.Stats cornerStats = new();
+        private readonly RoadHeights.Stats heightStats = new();
+        private readonly RailingPlanner.Stats railings = new();
+        private readonly ParkingStats parkingStats = new();
+        private readonly Footprints buildings = new(inputs.Buildings);
+
+        /// <summary>
+        /// Rewrites one block: its tiles and a halo of <see cref="Options.Halo"/> read for context;
+        /// returns the block's tiles in <paramref name="wanted"/> that have roads, finished.
+        /// </summary>
+        public List<RoadTile> Block(HashSet<TileId> block, HashSet<TileId> wanted)
+        {
+            var netStats = Net;
+            var overlay = inputs.Overlay;
+            var cantons = inputs.Cantons;
+            var signalSites = inputs.SignalSites;
+            var restrictions = inputs.Restrictions;
+            var built = new List<RoadTile>();
+
             var context = WithHalo(block, options.Halo);
 
             var net = new RoadNetwork();
@@ -284,7 +372,7 @@ public static partial class TileRewriter
 
             foreach (var id in context)
             {
-                var (tile, keys) = LoadInput(chunkDir, rawDir, id, stash: wanted.Contains(id) && !options.DryRun);
+                var (tile, keys) = inputs.Roads(id);
                 if (tile is null) continue;
                 loaded[id] = tile;
                 if (block.Contains(id)) tilesRead++;
@@ -312,8 +400,8 @@ public static partial class TileRewriter
 
             CrossSectionPlanner.Plan(lines, overlay, netStats.Carriageways);
             // road heights against the ground (#119), before anything reads them
-            var facades = new Facades(chunkDir);   // building walls, for the streets
-            var field = new UrbanField(facades);
+            var facades = inputs.Facades ?? new Facades(inputs.Buildings);   // building walls, for the streets
+            var field = inputs.Field ?? new UrbanField(facades);
             RoadHeights.Apply(lines, field, heightStats, count: true);
             BikePlanner.PlanLines(lines, field, netStats.Bikes);   // bike lanes (#120), before the junctions read the lines
             // roundabout rings rebuilt as arcs before anything is built from them (#122)
@@ -338,7 +426,7 @@ public static partial class TileRewriter
             var bikeBridges = new Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>>();   // paths through junctions (#120)
 
             // the full-res terrain of the block and its halo: the height audit and the walls (#125)
-            var grids = LoadGrids(chunkDir, context);
+            var grids = LoadGrids(inputs.Grid, context);
 
             if (net.Links.Count > 0)
             {
@@ -622,7 +710,7 @@ public static partial class TileRewriter
             var parkAreas = new Dictionary<TileId, List<RoadAreaProp>>();
             var parkPoints = new Dictionary<TileId, List<RoadPointProp>>();
             var parkBays = new Dictionary<TileId, List<ParkingBay>>();
-            PlanParking(parkDir, block, wanted, output, facades, grids,
+            PlanParking(inputs.Parking, block, wanted, output, facades, grids,
                 parkAreas, paint, parkPoints, parkBays, parkingStats);
 
             foreach (var id in block)
@@ -664,34 +752,23 @@ public static partial class TileRewriter
                     Parking = parkBays.TryGetValue(id, out var pb) ? pb : new List<ParkingBay>(),   // #499
                 };
                 rails.ClearTrackZones(tile.Paint, id);
-                var bytes = Encode(tile);
-                Count(netStats, tile, bytes);
-
-                if (options.DryRun) { tilesWritten++; continue; }
-
-                string path = Path.Combine(chunkDir, RoadFormat.FileName(id));
-                string temp = path + ".part";
-
-                // write via a temp file: a half-written .road looks exactly like a valid short
-                // one, and the region being rewritten is the region being played
-                File.WriteAllBytes(temp, bytes);
-                File.Move(temp, path, overwrite: true);
-                tilesWritten++;
+                built.Add(tile);
             }
-
-            if (blockIndex % 10 == 0 || blockIndex == blocks.Count)
-                log($"  block {blockIndex}/{blocks.Count}  {tilesWritten} tiles, {junctionCount} junctions");
+            return built;
         }
 
-        netStats.Shifted = shiftAudit.Result();
-        log(heightStats.Format());
-        log(streetStats.Format());
-        log(cornerStats.Format());
-        log(embankments.Format());
-        log(railings.Format());
-        log(parkingStats.Format());
-        return new Stats(tilesRead, tilesWritten, junctionCount, written, dropped,
-            overlapBefore, overlapAfter, carriageway, audit.Result(), guarded, netStats);
+        public Stats Finish(Action<string> log)
+        {
+            Net.Shifted = shiftAudit.Result();
+            log(heightStats.Format());
+            log(streetStats.Format());
+            log(cornerStats.Format());
+            log(embankments.Format());
+            log(railings.Format());
+            log(parkingStats.Format());
+            return new Stats(tilesRead, TilesWritten, junctionCount, written, dropped,
+                overlapBefore, overlapAfter, carriageway, audit.Result(), guarded, Net);
+        }
     }
 
     /// <summary>
@@ -1139,24 +1216,27 @@ public static partial class TileRewriter
     private static double SampleGround(Dictionary<TileId, ChunkGrid> grids, double e, double n) =>
         grids.TryGetValue(TileId.FromLv95(e, n), out var grid) ? grid.SampleHeight(e, n) : double.NaN;
 
-    private static Dictionary<TileId, ChunkGrid>? LoadGrids(string chunkDir, IEnumerable<TileId> tiles)
+    private static Dictionary<TileId, ChunkGrid>? LoadGrids(Func<TileId, ChunkGrid?> grid, IEnumerable<TileId> tiles)
     {
         var grids = new Dictionary<TileId, ChunkGrid>();
         foreach (var id in tiles)
-        {
-            string path = Path.Combine(chunkDir, ChunkFormat.ChunkFileName(id));
-            if (!File.Exists(path)) continue;
-            try
-            {
-                using var stream = File.OpenRead(path);
-                grids[id] = ChunkCodec.Decode(stream);
-            }
-            catch (Exception)
-            {
-                // a tile that will not decode is the terrain pipeline's problem, not this pass's
-            }
-        }
+            if (grid(id) is { } g) grids[id] = g;
         return grids.Count == 0 ? null : grids;
+    }
+
+    private static ChunkGrid? LoadGrid(string chunkDir, TileId id)
+    {
+        string path = Path.Combine(chunkDir, ChunkFormat.ChunkFileName(id));
+        if (!File.Exists(path)) return null;
+        try
+        {
+            using var stream = File.OpenRead(path);
+            return ChunkCodec.Decode(stream);
+        }
+        catch (Exception)
+        {
+            return null;   // a tile that will not decode is the terrain pipeline's problem, not this pass's
+        }
     }
 
     /// <summary>

@@ -105,6 +105,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Loot.LootChanceCheck.Requested, Loot.LootChanceCheck.Run),
         (() => Loot.ShopCheck.Requested, Loot.ShopCheck.Run),
         (() => Interiors.DoorCheck.Requested, Interiors.DoorCheck.Run),
+        (() => Interiors.FlatCheck.Requested, Interiors.FlatCheck.Run),
         (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
         (() => ChatCheck.Requested, () => ChatCheck.Run(this)),
         (() => StyleKit.ReportRequested, StyleKit.Report),
@@ -158,6 +159,27 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             MouseCapture.Disabled = true;
             AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
+            return;
+        }
+        // the nine IKEA stores and one store built in code (#501): no terrain, no server
+        if (Interiors.IkeaProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.IkeaProbe { Name = "IkeaProbe" });
+            return;
+        }
+        // whether a block of flats' stairwells can be climbed, from their collision (#571)
+        if (Interiors.StairWalkCheck.Requested)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.StairWalkCheck { Name = "StairWalkCheck" });
+            return;
+        }
+        // an apartment block's inside, hand-made (#557): no terrain, no server
+        if (Interiors.FlatTour.ParseArgs() is { Requested: true } flatTour)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.FlatTour(flatTour.Shot, Interiors.FlatTour.BlockArg()) { Name = "FlatTour" });
             return;
         }
         // the five industrial sites, hand-made (#497): no terrain, no server
@@ -257,6 +279,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // (not under a fixture course: the cache would fill its gaps, and its horizon, with real data)
         IChunkSource streamedSource = fixture ? source : _chunkSource = new NetworkChunkSource(
             source, TerrainPaths.FindChunkDir(), _streamer, TerrainPaths.FindCacheDir());
+        if (_chunkSource != null)
+        {
+            // Settings → Data (#63): the cap is the player's, and Clear reaches the live cache
+            _chunkSource.MaxCacheBytes = CacheCapBytes;
+            NetworkChunkSource.Active = _chunkSource;
+        }
 
         // The generated fill answers for the tiles no real data exists for, above the network
         // source so a client never asks a server for one, and under the cache so a generated tile
@@ -266,7 +294,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // Outermost, so a tile decoded once is not decoded again when the rings drop it and pick
         // it back up — which a route that doubles back does constantly.
-        _cache = new CachingChunkSource(fallback ?? (IChunkSource)streamedSource);
+        // decoded tiles in RAM: a phone has a fraction of a desktop's to spare (#63)
+        _cache = Platform.IsMobile
+            ? new CachingChunkSource(fallback ?? (IChunkSource)streamedSource, 96L * 1024 * 1024)
+            : new CachingChunkSource(fallback ?? (IChunkSource)streamedSource);
         // the blend reads real neighbours through the cache, sharing what the loader decodes
         if (fallback != null) fallback.Neighbours = _cache;
 
@@ -274,6 +305,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the auto build cap depends on whether tiles are coming over the wire
         _chunks.Streaming = () => _streamer?.ServerReachable == true;
         _chunks.Initialize(_cache, origin, manifest, material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial);
+        // occlusion culling with the buildings round the camera as occluders (#553)
+        _chunks.ApplyOcclusion();
         _chunks.PierMaterial = pierMaterial;
         // the landings and jetties (#377) before the first tile builds: their piers ride in its build
         World.Landings.Use(await World.Landings.LoadAsync(_cache));
@@ -363,7 +396,6 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the paddle steamer at the Nyon landing (#303): likewise
         AddChild(new World.SteamerBerth(_chunks));
         // jetskis and speedboats along the harbour jetties (#383): likewise
-        AddChild(new World.MarinaBoats(_chunks));
         // A320s with airstairs, the AN-124 and the freighter at the airports' stands (#422), put back a while after they are taken
         if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(_chunks));
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
@@ -410,6 +442,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
+        // the IKEA totem out by the road (#501), the same tile hook as the door signs
+        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.IkeaPylon(_chunks));
 
         // the clock: sun, light colour, sky and night for every shader and the environment.
         // Off (--systems without sky): no clock, the style's fixed sun and the background colour.
@@ -512,6 +546,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(() => TruckProbe.Requested, ToolAnchor.AtTarget, _ => new TruckProbe(chunks, origin)),
             new(() => Terrain.ParkingProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
                 _ => new Terrain.ParkingProbe(chunks, origin, Terrain.ParkingProbe.ParseArgs().Shot)),
+            new(() => Vehicles.WakeProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new Vehicles.WakeProbe(chunks, origin, Vehicles.WakeProbe.ParseArgs().Shot)),
             // the anchor on the spawn, so the tile under the rider arrives with collision: without
             // it the probe drops through an empty world and measures gravity
             new(() => RideProbe.ParseArgs() != null, ToolAnchor.AtTarget, _ =>
@@ -543,6 +579,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 return new FlightProbe(_spectator!, chunks,
                     new Vector3(float.Parse(fly[0], inv), float.Parse(fly[1], inv), float.Parse(fly[2], inv)),
                     float.Parse(fly[3], inv), float.Parse(fly[4], inv), double.Parse(fly[5], inv));
+            }),
+            new(() => StreetFlight.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                var (speed, seconds) = StreetFlight.ParseArgs()!.Value;
+                FreeSpectator();
+                return new StreetFlight(_spectator!, chunks, origin, speed, seconds);
             }),
             new(() => ShotRunner.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
@@ -637,7 +679,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
-            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Loot.BankProbe.Role != null
+            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Loot.BankProbe.Role != null
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
@@ -661,6 +703,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
+        if (Interiors.LiftSyncProbe.Role != null) AddChild(new Interiors.LiftSyncProbe(items, origin));
         if (Loot.BankProbe.Role != null) AddChild(new Loot.BankProbe(items, origin));
         if (Loot.ShopProbe.Role != null) AddChild(new Loot.ShopProbe(items, origin));
         if (Player.WheelProbe.WatchRole != null) AddChild(new Player.WheelProbe { Name = "WheelProbe" });
@@ -727,6 +770,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var prompts = PromptBar.Create();
         prompts.Source = Prompts;
         AddChild(prompts);
+        // a phone's controls (#63): an on-screen pad labelled from the same prompts
+        if (TouchControls.Wanted)
+        {
+            var touch = TouchControls.Create();
+            touch.Source = Prompts;
+            AddChild(touch);
+            if (TouchCheck.Requested) AddChild(new TouchCheck(() => LocalPlayer, touch));
+        }
 
         // Scavenging: what the furniture in those interiors holds. Same node path as the server's,
         // which decides who gets what; offline this client does both.
@@ -1004,8 +1055,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (_mode is GameMode.Explore or GameMode.Multiplayer) MouseCapture.Capture();
     }
 
+    private static long CacheCapBytes => (long)(GameSettings.Current.CacheGb * 1024 * 1024 * 1024);
+
     private void OnSettingsChanged()
     {
+        if (_chunkSource != null) _chunkSource.MaxCacheBytes = CacheCapBytes;
         foreach (var m in _worldMaterials) FogUniforms.Apply(m);
         // before the terrain takes the settings: its rings and mesh detail are the style's
         if (StyleKit.Restyle()) ApplyStyle();
@@ -1122,6 +1176,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         World.WaterField.Bind(null);
         World.WaterField.SetSeaState(0f);
         GameSettings.Changed -= OnSettingsChanged;
+        if (NetworkChunkSource.Active == _chunkSource) NetworkChunkSource.Active = null;
         Permissions.Changed -= OnPermissionsChanged;
         StyleCommand.RebuildRequested -= OnRebuildRequested;
         StyleKit.Chosen -= OnStyleChosen;

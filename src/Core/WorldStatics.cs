@@ -35,5 +35,6 @@ public static class WorldStatics
         Vehicles.Explosion.ResetEvents();
         Vehicles.PassengerService.ResetEvents();
         Vehicles.VehicleManager.ResetEvents();
+        Vehicles.DormantLooks.Reset();
     }
 }

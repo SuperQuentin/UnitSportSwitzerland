@@ -40,7 +40,7 @@ public static partial class TileRewriter
     /// a seam — which is the reason the layout is baked here rather than built per tile at runtime.
     /// </summary>
     internal static void PlanParking(
-        string rawDir,
+        Func<TileId, List<RawParking.Lot>>? lotsOf,
         IReadOnlyCollection<TileId> block,
         HashSet<TileId> wanted,
         Dictionary<TileId, List<RoadSegment>> roads,
@@ -52,14 +52,14 @@ public static partial class TileRewriter
         Dictionary<TileId, List<ParkingBay>> bays,
         ParkingStats stats)
     {
-        if (grids is null) return;   // no .terr: nothing to stand a lot on
+        if (grids is null || lotsOf is null) return;   // no .terr: nothing to stand a lot on; no lots
 
         // every segment of the block and its halo once, for the borders and the corridor test
         var allRoads = roads.SelectMany(kv => kv.Value.Select(s => (Tile: kv.Key, Segment: s))).ToList();
 
         foreach (var home in block)
         {
-            foreach (var lot in RawParking.Read(rawDir, home))
+            foreach (var lot in lotsOf(home))
             {
                 stats.Lots++;
                 var ring = lot.Points();

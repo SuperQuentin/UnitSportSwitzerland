@@ -73,17 +73,22 @@ public partial class GameShell : Node
     /// probe or a tool. The list is of the harmless ones, so a new probe flag never lands on the
     /// title by accident — anything unknown boots straight into the world, as before.
     /// </summary>
+    private bool _meteredAsked;
+
+    /// <summary>The menus' size on a phone, over the desktop's (#63): 38 px buttons become about 7 mm on a 6" screen.</summary>
+    public const float MobileUiScale = 1.15f;
+
     public static bool UseTitle(string[] args)
     {
         string[] harmless =
         {
-            "--name", "--chunks", "--landings", "--cache", "--title", "--nocapture", "--rings", "--horizon", "--fog", "--detail",
-            "--generated", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--shoulder", "--voice", "--time",
+            "--name", "--chunks", "--landings", "--cache", "--title", "--nocapture", "--rings", "--horizon", "--fog", "--detail", "--data",
+            "--generated", "--generated-roads", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--shoulder", "--voice", "--time",
             "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--airliner", "--perflog",
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world",
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
             "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
-            "--leave-restart", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
+            "--leave-restart", "--mobile", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
         };
         foreach (string a in args)
             if (a.StartsWith("--") && Array.IndexOf(harmless, a) < 0) return false;
@@ -93,11 +98,15 @@ public partial class GameShell : Node
     public override void _Ready()
     {
         Instance = this;
+        // a phone: fingers, not a pointer, so every menu a size up (#63; the canvas shrinks to match,
+        // and the touch overlay lays out on what is left)
+        if (Platform.IsMobile) GetTree().Root.ContentScaleFactor = MobileUiScale;
         Audio.SfxBus.Ensure();
         PlayerInput.Install(GetParent());
         // VR (#186) before any menu or camera exists, so the title is in the headset too
         bool vr = XR.XrSession.TryStart(GetParent());
         AddChild(new DisplaySettings { Name = "Display" });
+        AddChild(new DataWatch { Name = "DataWatch" });
 
         // F1 over everything, menus included (layer 42)
         _help = ControlsHelp.Create();
@@ -118,7 +127,7 @@ public partial class GameShell : Node
         // "VR mode" saved on, launched from the desktop: start again with OpenXR (once: the
         // relaunch carries --vr, and a run with --vr never relaunches)
         if (!Direct && !vr && GameSettings.Current.VrMode && !CmdArgs.Has("--vr") && !CmdArgs.Has("--xrsim")
-            && DisplayServer.GetName() != "headless" && XR.XrSession.Relaunch(true))
+            && DisplayServer.GetName() != "headless" && Platform.CanSpawnProcesses && XR.XrSession.Relaunch(true))
         {
             Quit();
             return;
@@ -361,6 +370,19 @@ public partial class GameShell : Node
 
     public void Join(string endpoint, string? serverName = null)
     {
+        // a metered connection (#63): say what streaming costs before it starts, once per session
+        if (GameSettings.Current.WarnMetered && DataWatch.Metered && !GameSettings.Current.LowDataActive && !_meteredAsked)
+        {
+            _meteredAsked = true;
+            Modal.Choose(_menuRoot, "Metered connection",
+                "You are on mobile data or a hotspot. The world streams from the server: about "
+                + $"{StreamEstimate.ArrivalMb} MB on arrival, and more as you travel. Low data streams "
+                + $"only the nearest tiles (about {StreamEstimate.ArrivalLowMb} MB on arrival).",
+                ("Use Low data", () => { GameSettings.Current.Data = DataPreset.Low; GameSettings.Current.Commit(); Join(endpoint, serverName); }),
+                ("Join anyway", () => Join(endpoint, serverName)),
+                ("Never ask", () => { GameSettings.Current.WarnMetered = false; GameSettings.Current.Commit(); Join(endpoint, serverName); }));
+            return;
+        }
         GameSettings.Current.LastHost = endpoint;
         GameSettings.Current.Save();
         LaunchVia(new WorldLaunch

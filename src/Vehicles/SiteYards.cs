@@ -44,6 +44,24 @@ public static class SiteYards
     /// the ground each stands on; without it the building's own base is used, which is close enough
     /// for flat ground and is what <see cref="BuildingFootprint"/> falls back to as well.
     /// </summary>
+    /// <summary>
+    /// Whether any building of <paramref name="tile"/> is an industrial site, the check
+    /// <see cref="For"/> starts with, without the footprints. Lets a caller skip the tile's height
+    /// grid (2 MB, streamed to a client without local terrain, #63) on the tiles with none.
+    /// </summary>
+    public static bool HasSite(BuildingTile tile)
+    {
+        var map = BuildingTypes.For(tile);
+        for (int i = 0; i < tile.Buildings.Count; i++)
+        {
+            if (map.Boxes[i] is not { } box) continue;
+            var b = tile.Buildings[i];
+            if (BuildingTypes.SiteFor(new BuildingKey(tile.Id.E, tile.Id.N, i).ToString(), b.Kind, box.Width, box.Depth, b.MaxY - b.MinY) != BuildingType.None)
+                return true;
+        }
+        return false;
+    }
+
     public static List<SiteYard> For(BuildingTile tile, RoadTile? roads, ChunkGrid? grid)
     {
         var yards = new List<SiteYard>();

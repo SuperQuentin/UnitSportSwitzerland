@@ -626,8 +626,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>In a car's, a truck's or a bus's driver's seat, looking out through the windscreen (not the chase camera, not the garage's orbit).</summary>
     public bool InCockpit => !_thirdPerson && HasCockpit && ShowroomYaw == null && SeatIndex == 0;
 
-    /// <summary>What is ridden has a driver's seat with a cockpit (#69 cars, #157 trucks and buses).</summary>
-    private bool HasCockpit => _ride is Car or Truck or Airstairs;
+    /// <summary>What is ridden has a driver's seat with a cockpit (#69 cars, #157 trucks and buses, #421 aircraft).</summary>
+    private bool HasCockpit => _ride is Car or Truck or Airstairs or Airliner;
 
     private Rideable? _ride;
     private RideMotion _motion;
@@ -800,6 +800,19 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _motion.Yaw += turn;
         Rotation = new Vector3(Rotation.X, Rotation.Y + turn, Rotation.Z);
         RememberSafe(at);
+        _pivotY = float.NaN;
+    }
+
+    /// <summary>
+    /// An elevator ride (#557): the same spot in the cabin, <paramref name="rise"/> metres up or down,
+    /// at rest. Not a teleport to new ground: the cabin's floor is right there.
+    /// </summary>
+    public void RideLift(float rise)
+    {
+        GlobalPosition += Vector3.Up * rise;
+        Velocity = Vector3.Zero;
+        _fallSpeed = 0f;
+        RememberSafe(GlobalPosition);
         _pivotY = float.NaN;
     }
 
@@ -1567,6 +1580,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (IsMultiplayerAuthority())
         {
             if (Origin is { } origin) NetGlobal = origin.ToGlobal(Position);
+            // the cockpits' altimeters (#421) read the height over the sea of this world's y = 0
+            if (!Npc) Avatar.AircraftCockpit.WorldAltitude = Origin is { } sea ? (float)sea.ToGlobal(Vector3.Zero).Alt : 0f;
             NetVel = Velocity;
             NetYaw = Rotation.Y;
             NetTime = Time.GetTicksUsec() / 1e6;
@@ -1728,6 +1743,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         else if (_visual is Avatar.HeavyRig heavyRig) heavyRig.DriverShown = SeatIndex == 0;
         else if (_visual is Avatar.BoatRig boatRig) boatRig.DriverShown = SeatIndex == 0;
         else if (_visual is Avatar.SteamerRig steamerRig) steamerRig.DriverShown = SeatIndex == 0;
+        else if (_visual is Avatar.AirlinerRig { Cockpit: { } deck })
+        {
+            deck.PilotShown = SeatIndex == 0;
+            deck.Velocity = WorldVelocity;
+            if (deck.PaletteKey != (OutfitBits, RiderIndex())) { deck.PaletteKey = (OutfitBits, RiderIndex()); deck.Palette = FigurePalette(RiderIndex()); }
+        }
         SetRemoteEngine(_remoteRide);
     }
 
@@ -2464,6 +2485,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             if (_ride == null && !_mantling && _deadTimer <= 0 && TryVehicleAt()) return true;
             var interiors = Interiors.InteriorManager.Instance;
+            // an elevator's call button or cabin, a flat's front door (#557)
+            if (_ride == null && interiors?.TryInside(this) == true) return true;
             if (Interiors.ChurchRadios.TryOpen(this)) return true;
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             // the chess type beat in here: E dances to it, as outdoors (#370)
@@ -3253,7 +3276,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
-        if (@event is InputEventMouseMotion motion && Input.MouseMode == Input.MouseModeEnum.Captured)
+        if (@event is InputEventMouseMotion motion && PlayerInput.IsLookMotion(motion))
         {
             // Mounted, the body's yaw belongs to the steering — a bicycle goes where it points,
             // and letting the mouse turn it would mean looking over your shoulder steered you
@@ -3861,6 +3884,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (flyer is Pigeon) PigeonStep(input, dt);
         if (flyer is Airliner trimmed)
             trimmed.TrimHeld = typing ? 0f : PlayerInput.Strength(PlayerInput.TrimNoseUp) - PlayerInput.Strength(PlayerInput.TrimNoseDown);
+        if (flyer is Airliner padded) AirlinerPadHold(dt, padded);
         var ev = flyer.Fly(input, new FlightEnv(onFloor, Clearance, altitude), dt, ref _flight);
         // a game mode's fence (#485: a Battle Royale's zone, while gliding): no flying out of it
         if (ev == FlightEvent.None && FlightFence?.Invoke(this, _flight.Velocity) is { } fenced) _flight.Velocity = fenced;
@@ -3933,6 +3957,15 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
 
         if (_visual != null) flyer.Pose(_visual, _flight.Yaw, _flight);
+        if (_visual is Avatar.AirlinerRig { Cockpit: { } deck })
+        {
+            // the pilot in the captain's seat (#421): no head of one's own in the lens, no body either if asked
+            deck.PilotShown = SeatIndex == 0;
+            deck.Velocity = _flight.Velocity;
+            deck.View = !InCockpit ? Avatar.CockpitView.Outside
+                : Core.GameSettings.Current.CockpitBody ? Avatar.CockpitView.Body : Avatar.CockpitView.Bare;
+            if (deck.PaletteKey != (OutfitBits, RiderIndex())) { deck.PaletteKey = (OutfitBits, RiderIndex()); deck.Palette = FigurePalette(RiderIndex()); }
+        }
         UpdateFlightCamera(dt, flyer);
     }
 
@@ -3969,6 +4002,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         if (_camera == null) return;
         if (flyer is Pigeon pigeon && PigeonEye(dt, pigeon)) return;
+        // an airliner's flight deck (#421): the captain's eye, as a car's cockpit
+        if (InCockpit && _visual is Avatar.AirlinerRig jet)
+        {
+            _lookIdle += dt;
+            UpdateCockpitCamera(jet.EyeFrame, dt);
+            return;
+        }
 
         Vector3 fwd;
         if (flyer.LookSteers)
@@ -4445,7 +4485,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             float back = MathX.Damp(5f, dt);
             _lookYaw = Mathf.Lerp(_lookYaw, 0f, back);
-            _pitch = Mathf.Lerp(_pitch, _ride is Truck ? HeavyCockpitPitch : CockpitPitch, back);
+            _pitch = Mathf.Lerp(_pitch, _ride is Truck ? HeavyCockpitPitch : _ride is Airliner jet ? (jet.Spec.FlyByWire ? AirlinerCockpitPitch : YokeCockpitPitch) : CockpitPitch, back);
         }
 
         var sway = Vector3.Zero;
@@ -4476,6 +4516,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     /// <summary>Resting look from the seat: a touch down, so the bonnet and the dials share the view with the road.</summary>
     private const float CockpitPitch = -0.1f;
+    /// <summary>An airliner (#421): out over the glareshield with the top of the screens in view.</summary>
+    private const float AirlinerCockpitPitch = -0.14f;
+    /// <summary>A yoke aircraft (the freighter, the AN-124): lower, so the yoke and the hand on it are in the view.</summary>
+    private const float YokeCockpitPitch = -0.26f;
     /// <summary>A truck or bus: sat high over a flat wheel, the look rests lower, so the wheel and dials are in the view with the road.</summary>
     private const float HeavyCockpitPitch = -0.24f;
 

@@ -39,6 +39,24 @@
     flank beside its parent's floor; its bed was 150 m above the flattened floor and "carving"
     raised a 150 m wall (a 48 m-per-metre step). Water is drawn only where the ground is the
     channel's bottom (`Alt < Bed + 0.5`).
+  - **A bed above the floor floated its water** (#572). The floor follows each valley's axis,
+    the channel meanders, so along a bend the bed is read further upstream than the floor beside
+    it: up to 10 m above it, never dug, and `Alt < Bed + 0.5` (one-sided) drew the water there,
+    hanging over the ground (8,644 such 2 m samples in 25x25 tiles; a camera at ground + 2.5 m
+    in such a stretch was *under* it and saw "water in the sky"). The flat bottom is now
+    `ChannelBed` = min(bed, the ground before the channel), so the river runs on the floor with
+    its channel dug into it (left as it was where a lake reaches, so mouths meet the shelf).
+  - **Narrow rivers came out as dotted patches** (#572): the cover classifies cells near a channel
+    from 10 m fields mixed bilinearly, and a distance to a line is V-shaped: mixed from the corners
+    it reads up to 7.1 m (half the square's diagonal) too far, so a channel narrower than a square
+    was water only round the corners that sat near its line (40% of a 8 m stream drawn). In the
+    band where that error could matter the cover asks `InWetChannel` exactly (any wet channel,
+    since at a confluence a stream's line runs inside the wide river and is the nearer one).
+    `BuildWater` takes the lower of the exact bed and the nearest 5 m point's, and lets ground up
+    to 25 cm over a river's level count (lifted to it): between 5 m points a steep stream's ground
+    is mixed from up and down its bed. Cover +2.4 ms on a river tile (13.6 ms median).
+    Check: `BlendCheck --generated-water [--radius N]`: 100.0% of the samples well inside a dug,
+    wet channel drawn, none standing a metre deeper than the channel's profile.
   - The channel bucket must reach **two lattice cells past the bank**: a corner just outside it
     saw no channel, and the carve stopped dead inside the cell.
   - A fixed wall span squeezed a kilometre of rise into a kilometre of smoothstep (63° walls);
@@ -49,5 +67,18 @@
   "largest step per metre" line — generated 1.43, the old one's was below that only because it
   had no rivers crossing floors. Map renders of the network are easiest from a scratch console
   project compiling `src/Terrain/ProceduralWorld*.cs` with the resource embedded.
+- **Towns** (#559, `ProceduralWorld.Towns.cs`): village slots with `HalfLength > 381` (top 15%) are
+  towns when the ground allows it (9 slots in the anchor's world, 6 host the layout). The valley
+  road is a main street built tight +-150 m round the centre (gaps 2-7 m, half apartments, half
+  shops), and a **cross road** (`Road`, 6 m, a priority road) runs straight through it: uphill 110-360
+  m with houses both sides (it replaces the first side street), downhill to the first channel, over
+  it on a **`RoadFlags.Bridge` segment** (bank + 6 m each side, level deck 0.5 m over the higher bank;
+  the street running up to either end ramps to the deck over 30 m, never the deck down to the
+  ground), then 45 m to a `Minor` street along the other bank with houses. The channel is carved
+  under it because `Keep` only reacts to the valley lines, not village streets. No river within
+  300 m, a dry channel, a span over 90 m, a lake or steep ground: stays a village. Every street keeps
+  its `gen-village-<id>-<k>` key. Houses keep 10 m (8 m) off a street's axis and off each other, trees
+  stay 7 m off a town's streets' edge. Harness: `GeneratedRoadsSpike --towns` (+ `--reach`) writes a
+  plan-view SVG per town; 90 of 90 tiles byte-identical, 1-3 lights a town.
 - **Open**: lakes cut the road network (no shore roads; the Rhône road ends at Lake Geneva), roads
   never cross watersheds (no passes), and villages are named "Village <id>".
