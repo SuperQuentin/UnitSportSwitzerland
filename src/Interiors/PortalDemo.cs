@@ -172,7 +172,8 @@ public partial class PortalDemo : Node3D
     /// </summary>
     [Showcase("Terrain", "Building")]
     private static IEnumerable<(string, Func<Node3D>)> ShowcaseBuildings() =>
-        Enum.GetValues<BuildingKind>().Select(kind => (kind.ToString(), (Func<Node3D>)(() =>
+        // a building under construction has no facade: it is drawn as its site (#608)
+        Enum.GetValues<BuildingKind>().Where(kind => kind != BuildingKind.UnderConstruction).Select(kind => (kind.ToString(), (Func<Node3D>)(() =>
         {
             var tile = new BuildingTile
             {

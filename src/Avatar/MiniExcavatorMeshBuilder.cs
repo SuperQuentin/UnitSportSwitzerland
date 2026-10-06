@@ -99,7 +99,7 @@ public static class MiniExcavatorMeshBuilder
     }
 
     /// <summary>The meshes <see cref="ExcavatorArm"/> poses for a mini.</summary>
-    public static ExcavatorArm.Meshes ArmMeshes() => new(UndercarriageMesh(), ShoeRowMesh(), ShoePitch,
+    public static ExcavatorArm.ArmParts ArmMeshes() => new(UndercarriageMesh(), ShoeRowMesh(), ShoePitch,
         BoomMesh(), StickMesh(), BucketMesh(), BladeArmsMesh(), BladeMesh());
 
     /// <summary>The rubber tracks' lug spacing, m.</summary>

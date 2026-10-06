@@ -207,7 +207,7 @@ public static class ExcavatorMeshBuilder
     }
 
     /// <summary>The meshes <see cref="ExcavatorArm"/> poses for the 20 t machine: no blade.</summary>
-    public static ExcavatorArm.Meshes ArmMeshes() => new(UndercarriageMesh(), ShoeRowMesh(), ShoePitch,
+    public static ExcavatorArm.ArmParts ArmMeshes() => new(UndercarriageMesh(), ShoeRowMesh(), ShoePitch,
         BoomMesh(), StickMesh(), BucketMesh(), null, null);
 
     /// <summary>The arm node of a drawn excavator, or null (headless: nothing drawn).</summary>
@@ -224,7 +224,7 @@ public static class ExcavatorMeshBuilder
 public partial class ExcavatorArm : Node3D
 {
     /// <summary>What an arm is drawn with: one size's parts, the lug spacing its tracks run by, its blade or none.</summary>
-    public sealed record Meshes(ArrayMesh Undercarriage, ArrayMesh ShoeRow, float ShoePitch,
+    public sealed record ArmParts(ArrayMesh Undercarriage, ArrayMesh ShoeRow, float ShoePitch,
         ArrayMesh Boom, ArrayMesh Stick, ArrayMesh Bucket, ArrayMesh? BladeArms, ArrayMesh? Blade);
 
     private Node3D _under = null!, _boom = null!, _stick = null!, _bucket = null!;
@@ -282,7 +282,7 @@ public partial class ExcavatorArm : Node3D
     /// <summary>The 20 t machine's arm.</summary>
     public static ExcavatorArm Create() => Create(ExcavatorLayout.Spec, ExcavatorMeshBuilder.ArmMeshes());
 
-    public static ExcavatorArm Create(ExcavatorSpec spec, Meshes meshes)
+    public static ExcavatorArm Create(ExcavatorSpec spec, ArmParts meshes)
     {
         var material = HumanMeshBuilder.FigureMaterial();
         MeshInstance3D Mesh(string name, ArrayMesh mesh) => new() { Name = name, Mesh = mesh, MaterialOverride = material };
