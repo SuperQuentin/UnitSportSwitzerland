@@ -40,6 +40,8 @@ public partial class ModelViewer : Node3D
     public override void _Ready()
     {
         _shots = CmdArgs.FlagWithShot("--models").Shot;
+        // screenshots are stills: no face caught mid-blink (#657)
+        if (_shots != null) HumanMeshBuilder.FigureMaterial().SetShaderParameter(Face.FaceAnimator.IdleParam, 0f);
         AddChild(new DirectionalLight3D
         {
             Rotation = new Vector3(Mathf.DegToRad(-42), Mathf.DegToRad(-35), 0),

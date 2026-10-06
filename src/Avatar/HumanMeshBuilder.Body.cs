@@ -96,7 +96,8 @@ public readonly record struct Appearance(BodyBuild Build, int Face, int Eyes, in
         int Next(int n) { h = h * 1103515245u + 12345u; return (int)(h >> 16) % n; }
         var build = (BodyBuild)Next(Builds);
         bool masc = build >= BodyBuild.Broad;
-        ReadOnlySpan<int> faces = masc ? [5, 6, 7, 1, 2] : [0, 1, 2, 3, 4];
+        // the preset faces (FaceGenome), the #657 ones too; the draw advances the same whatever the count
+        ReadOnlySpan<int> faces = masc ? [5, 6, 7, 1, 2, 9, 11, 15] : [0, 1, 2, 3, 4, 8, 9, 10, 12, 13, 14];
         ReadOnlySpan<HairStyle> hairs = masc
             ? [HairStyle.Short, HairStyle.Quiff, HairStyle.Shaggy, HairStyle.Spiky, HairStyle.Mohawk, HairStyle.Long, HairStyle.Bun]
             : [HairStyle.Bob, HairStyle.Ponytail, HairStyle.Long, HairStyle.BluntBangs, HairStyle.SideSwept, HairStyle.Twintails, HairStyle.Bun, HairStyle.Spiky];
