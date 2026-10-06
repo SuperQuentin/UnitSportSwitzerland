@@ -111,6 +111,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     public override void _Ready()
     {
         Instance = this;
+        // a check that cannot wait three minutes for a slot to sleep again (tools/hallcarnetcheck.sh)
+        if (CmdArgs.Float("--dormant-respawn") is { } respawn) RespawnSeconds = respawn;
         Landings.Changed += OnLandingsChanged;
         Watch();
     }
@@ -172,6 +174,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         _asked.Remove(key.Key);
         // a forklift asleep in a hall (#630) is no tile's slot: its own node undraws itself
         ParkedForklift.Woke(key.Key);
+        // and so is a car in an underground car park's bay (#558): its own node undraws itself
+        ParkedCars.Woke(key.Key);
         if (!_awake.Add(key.Key)) return;
         Forget(key.Tile, key.Key);
     }
@@ -197,6 +201,12 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// <summary>No vehicle within this of a slot when it is restocked, flat metres.</summary>
     public const float ClearOfVehicles = 4f;
 
+    /// <summary>
+    /// The slots of woken bay cars (#558), by key, on the peer that decides: where one is put back to
+    /// sleep (<see cref="Restock"/>) needs its place, and a bay car is no tile's slot to look it up in.
+    /// </summary>
+    private readonly Dictionary<string, VehicleSlot> _hallCars = new();
+
     /// <summary>Awake slots whose vehicle is gone, and since when (<see cref="GameClock.Now"/>).</summary>
     private readonly Dictionary<string, double> _gone = new();
     private readonly List<string> _restocked = new();
@@ -219,6 +229,16 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         {
             if (now - since < RespawnSeconds) continue;
             int bar = key.LastIndexOf('|');
+            // a car of an underground car park's bay (#558) is no tile's slot: it always goes back to
+            // its bay after RespawnSeconds, once the bay is clear and nobody is near
+            if (_hallCars.TryGetValue(key, out var bay))
+            {
+                if (!Clear(vehicles, _origin.ToWorld(bay.E, bay.N, bay.Height))) continue;
+                _restocked.Add(key);
+                if (Online) Rpc(MethodName.Slept, bay.Owner, bay.Ordinal);
+                else Slept(bay.Owner, bay.Ordinal);
+                continue;
+            }
             if (Find(key[..bar], int.Parse(key[(bar + 1)..])) is not { } slot) continue;   // its tile is not here
             if (!slot.Respawns) { _restocked.Add(key); continue; }
             if (!Clear(vehicles, _origin.ToWorld(slot.E, slot.N, slot.Height))) continue;
@@ -246,6 +266,14 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     {
         string key = $"{owner}|{ordinal}";
         _gone.Remove(key);
+        // a bay car (#558): drawn again where its interior is built, on every peer
+        if (HallCarRule.BuildingOf(owner) != null)
+        {
+            _awake.Remove(key);
+            _hallCars.Remove(key);
+            ParkedCars.Slept(key);
+            return;
+        }
         if (!_awake.Remove(key)) return;
         if (TileOf(owner) is { } id && _slots.ContainsKey(id)) Draw(id);
     }
@@ -268,7 +296,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// load and shared by every slot that has it, and its boxes — the parked hull plus each further
     /// section's, as <see cref="VehicleBody"/> takes them for a real parked train.
     /// </summary>
-    private static DormantLook? LookOf(VehicleSlot s) =>
+    internal static DormantLook? LookOf(VehicleSlot s) =>
         DormantLooks.For(DormantLooks.KeyOf(s), () => StateOf(s).CreateRide(), Drawn);
 
     /// <summary>
@@ -298,7 +326,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// The cars a lot is filled with: ordinary road shapes only. A car park of MR2s and Roadsters
     /// would be a car show, so the mid-engined and open ones are left out.
     /// </summary>
-    private static readonly int[] ParkedKinds = CarCatalog.All
+    internal static readonly int[] ParkedKinds = CarCatalog.All
         .Where(c => c.Body.Shape is BodyShape.Hatchback or BodyShape.Sedan
             or BodyShape.Coupe or BodyShape.Fastback)
         .Select(c => (int)c.Kind).ToArray();
@@ -896,7 +924,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// </summary>
     private void ServerWake(string owner, int ordinal, long peer = 0)
     {
-        if (HallForklifts.BuildingOf(owner) is { } hall) { ServerWakeHall(hall, ordinal, peer); return; }
+        if (HallForklifts.BuildingOf(owner) is { } hall) { ServerWakeHall(hall, ordinal, peer, car: false); return; }
+        if (HallCarRule.BuildingOf(owner) is { } garage) { ServerWakeHall(garage, ordinal, peer, car: true); return; }
         if (Find(owner, ordinal) is not { } slot) return;
         if (_awake.Contains(KeyOf(slot))) return;
         // No "woken" broadcast (#560). Every peer drops its dormant copy when the vehicle node enters
@@ -912,15 +941,18 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// more. The asker has to be in that very building, as for a container (<c>LootService</c>);
     /// <paramref name="peer"/> 0 is the server's own, which has nobody to doubt.
     /// </summary>
-    private async void ServerWakeHall(string building, int furniture, long peer)
+    private async void ServerWakeHall(string building, int furniture, long peer, bool car)
     {
         if (InteriorManager.Instance is not { } interiors) return;
         if (peer != 0 && interiors.SpaceOf(peer) != building) return;
         InteriorLayout? layout;
         try { layout = await interiors.GetOrCreate(building); }
         catch (Exception e) { GD.PushError($"[dormant] hall {building}: {e.Message}"); return; }
-        if (layout == null || HallForklifts.SlotOf(layout, furniture, _origin) is not { } slot) return;
-        if (_awake.Contains(KeyOf(slot))) return;
+        if (layout == null || (car ? HallCars.SlotOf(layout, furniture, _origin) : HallForklifts.SlotOf(layout, furniture, _origin)) is not { } slot) return;
+        // a bay car whose vehicle is gone (driven off, awaiting its respawn) is asleep as far as an
+        // asker can tell: it is drawn on any peer that built the interior since (a late joiner
+        // cannot know), so it wakes again rather than leave a car in the bay that does nothing
+        if (_awake.Contains(KeyOf(slot)) && (!car || VehicleManager.Instance?.GetNodeOrNull(slot.NodeName) != null)) return;
         Promote(slot);
     }
 
@@ -939,6 +971,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         if (vehicles.Place(state, slot.NodeName, settled: true) == null) return false;
 
         _awake.Add(KeyOf(slot));
+        if (HallCarRule.BuildingOf(slot.Owner) != null) _hallCars[KeyOf(slot)] = slot;
         if (TileOf(slot.Owner) is { } id) Forget(id, KeyOf(slot));
         return true;
     }

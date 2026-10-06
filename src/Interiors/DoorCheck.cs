@@ -310,7 +310,7 @@ public static class DoorCheck
                 }
             }
         }
-        // shops under flats (#558): the rarer 20 % roll and 4 front doors, on 100 x 20 m commercial blocks
+        // shops under flats (#558): the rarer 50 % roll and 3 front doors, on 100 x 20 m commercial blocks
         {
             const int mixedCopies = 40;
             var tile = new BuildingTile
@@ -331,7 +331,7 @@ public static class DoorCheck
             var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
             var types = BuildingTypes.For(tile);
             var garages = doors.Where(d => d.Link.Any).ToList();
-            Expect(garages.Count > 0 && garages.Count < mixedCopies / 2, $"mixed blocks: {garages.Count} of {mixedCopies} roll a garage door (a fifth, and shops under flats only)");
+            Expect(garages.Count > 0 && garages.Count < mixedCopies / 2, $"mixed blocks: {garages.Count} of {mixedCopies} roll a garage door (about half, and shops under flats only)");
             foreach (var g in garages)
             {
                 Expect(InteriorGenerator.ApartmentTypeFor(BuildingFootprint.Compute(tile, g.Index, roads, null)!, BuildingKind.Commercial, 5, false) == BuildingType.MixedUse,

@@ -48,21 +48,22 @@ public class GarageTests
     }
 
     [Fact]
-    public void A_garage_is_wanted_only_with_flats_three_front_doors_a_car_park_and_the_roll()
+    public void A_garage_is_wanted_only_with_flats_two_front_doors_a_car_park_and_the_roll()
     {
         string rolled = Enumerable.Range(0, 400).Select(i => $"2583_1113_{i}").First(k => GarageRule.Rolls(k));
         string unlucky = Enumerable.Range(0, 400).Select(i => $"2583_1113_{i}").First(k => !GarageRule.Rolls(k));
         Assert.True(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 80, 26, H, 3));
         Assert.False(GarageRule.Wanted(unlucky, BuildingType.Apartments, 5, 80, 26, H, 3));
-        // two front doors is a small block, not a development with an underground garage
-        Assert.False(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 80, 26, H, 2));
+        // two front doors is still a block (the garage door goes between them); one is a house
+        Assert.True(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 80, 26, H, 2));
+        Assert.False(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 80, 26, H, 1));
         // shops under flats and any other kind of building are not blocks of flats
-        // shops under flats qualify too, rarer: 4 front doors and a 20 % roll
+        // shops under flats qualify too, rarer: 3 front doors and a 50 % roll
         string mixedRolled = Enumerable.Range(0, 400).Select(i => $"2583_1113_{i}").First(k => GarageRule.Rolls(k, mixed: true));
         string mixedUnlucky = Enumerable.Range(0, 400).Select(i => $"2583_1113_{i}").First(k => GarageRule.Rolls(k) && !GarageRule.Rolls(k, mixed: true));
-        Assert.True(GarageRule.Wanted(mixedRolled, BuildingType.MixedUse, 5, 80, 26, H, 4));
-        Assert.False(GarageRule.Wanted(mixedRolled, BuildingType.MixedUse, 5, 80, 26, H, 3));
-        Assert.False(GarageRule.Wanted(mixedUnlucky, BuildingType.MixedUse, 5, 80, 26, H, 4));
+        Assert.True(GarageRule.Wanted(mixedRolled, BuildingType.MixedUse, 5, 80, 26, H, 3));
+        Assert.False(GarageRule.Wanted(mixedRolled, BuildingType.MixedUse, 5, 80, 26, H, 2));
+        Assert.False(GarageRule.Wanted(mixedUnlucky, BuildingType.MixedUse, 5, 80, 26, H, 3));
         Assert.False(GarageRule.Wanted(rolled, BuildingType.None, 5, 80, 26, H, 3));
         // too shallow for a car park
         Assert.False(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 80, 14, H, 3));
@@ -77,14 +78,14 @@ public class GarageTests
     public void The_roll_keeps_garages_rare()
     {
         int rolled = Enumerable.Range(0, 2000).Count(i => GarageRule.Rolls($"2583_1113_{i}"));
-        Assert.InRange(rolled / 2000.0, 0.34, 0.46);
+        Assert.InRange(rolled / 2000.0, 0.74, 0.86);
     }
 
     [Fact]
-    public void The_mixed_roll_is_a_fifth_and_inside_the_flats_roll()
+    public void The_mixed_roll_is_half_and_inside_the_flats_roll()
     {
         int n = Enumerable.Range(0, 2000).Count(i => GarageRule.Rolls($"2583_1113_{i}", mixed: true));
-        Assert.InRange(n / 2000.0, 0.15, 0.25);
+        Assert.InRange(n / 2000.0, 0.44, 0.56);
         for (int i = 0; i < 500; i++)
             if (GarageRule.Rolls($"2583_1113_{i}", mixed: true)) Assert.True(GarageRule.Rolls($"2583_1113_{i}"));
     }
@@ -201,6 +202,9 @@ public class GarageTests
         Assert.Equal(0.19f, GarageLink.HumpFor([(0.5f, 0.19f), (0.25f, 0.05f)]), 3);
         // flat or sunken ground needs none; a spike is capped
         Assert.Equal(0f, GarageLink.HumpFor([(0.5f, -0.2f), (0.3f, 0f)]));
+        // a bank higher than the hump can lift the road over is not built on
+        Assert.True(GarageLink.Humpable([(0.5f, 0.4f)]));
+        Assert.False(GarageLink.Humpable([(0.5f, 0.8f)]));
         Assert.Equal(0.5f, GarageLink.HumpFor([(0.5f, 2f)]));
     }
 

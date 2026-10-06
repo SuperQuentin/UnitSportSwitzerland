@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.Interiors;
@@ -306,11 +307,67 @@ public static class FlatCheck
             var park = below.Rooms.FirstOrDefault(r => r.Type == RoomType.CarPark && ramp.Bottom.Z > r.Z0 && ramp.Bottom.Z < r.Z1);
             Expect(park != null && park.Z1 - ramp.ZBottom >= GarageRule.RampTurn - 0.3f,
                 $"{what}: {(park == null ? 0 : park.Z1 - ramp.ZBottom):F1} m of car park beyond the foot, to turn in");
-            Expect(l.Furniture.Count(p => p.Floor == l.Below - 1 && p.Type == FurnitureType.Car) > 0, $"{what}: cars still stand in its bays (props)");
+            Expect(l.Furniture.Count(p => p.Floor == l.Below - 1 && p.Type == FurnitureType.Car) > 0, $"{what}: cars stand in its bays");
+            BayCars(l, what, Expect);
             // the stairwells either side still have their flats
             Expect(l.Floors[l.Below].Rooms.Count(r => r.Type == RoomType.Lobby) >= 2, $"{what}: stairwells either side of the ramp");
         }
         return failures;
+    }
+
+    /// <summary>
+    /// The cars in a car park's bays are vehicles asleep (#558, PR 3): each has a slot named for its
+    /// building, the same one every time, standing in its bay with the whole hull of the car it wakes
+    /// as inside the car park room and inside its own 2.5 m bay, nose where the plan's piece faces.
+    /// The nose is checked the long way round, to LV95 and back through a vehicle's own yaw convention,
+    /// because a slot's yaw and a rig's node frame are two mirrors that can each be wrong and agree.
+    /// </summary>
+    private static void BayCars(InteriorLayout l, string what, Action<bool, string> expect)
+    {
+        var origin = WorldOrigin.SwissDefault();
+        var bay = Enumerable.Range(0, l.Furniture.Count).Where(i => HallCars.IsBayCar(l, l.Furniture[i])).ToList();
+        expect(bay.Count > 0 && bay.All(i => l.Furniture[i].Floor == l.Below - 1), $"{what}: {bay.Count} bay cars, all in the basement car park");
+        expect(l.Furniture.All(p => p.Type != FurnitureType.Car || p.Floor != l.Below - 1 || HallCars.IsBayCar(l, p)), $"{what}: every car of the car park is a bay car");
+        bool named = true, same = true, nose = true, inRoom = true, inBay = true;
+        var kinds = new HashSet<int>();
+        var place = InteriorManager.PlacementFor(l, origin);
+        foreach (int i in bay)
+        {
+            if (HallCars.SlotOf(l, i, origin) is not { } slot) { named = false; continue; }
+            named &= slot.Owner == HallCars.OwnerOf(l.Key) && HallCars.BuildingOf(slot.Owner) == l.Key && slot.Ordinal == i
+                && slot.NodeName == $"veh_slot_{l.Key}_c_{i}";
+            same &= HallCars.SlotOf(l, i, origin) == slot;
+            kinds.Add(slot.KindId);
+            var f = l.Furniture[i];
+            var frame = HallCars.LocalFrame(l, f);
+            // the nose 2 m ahead of the origin by the slot's own yaw (-Z turned: (-sin, -cos)), back into the interior's frame
+            var at = origin.ToWorld(slot.E, slot.N, slot.Height);
+            var ahead = at + new Vector3(-Mathf.Sin(slot.Yaw), 0, -Mathf.Cos(slot.Yaw)) * 2f;
+            var got = place.AffineInverse() * ahead;
+            var want = frame * new Vector3(0, 0, -2f);
+            nose &= new Vector2(got.X - want.X, got.Z - want.Z).Length() < 0.02f && Mathf.Abs(got.Y - want.Y) < 0.02f;
+            // and the piece's own front (+Z at turn 0) is the same way: its origin to its nose is the piece's half length
+            var front = frame * new Vector3(0, 0, -1f) - frame.Origin;
+            var turned = new Basis(Vector3.Up, f.Turns * Mathf.Pi / 2) * new Vector3(0, 0, 1);
+            nose &= front.DistanceTo(turned) < 0.001f;
+            // the hull of the car it wakes as, in the room and in its bay
+            var (centre, size) = Player.Rideable.Create((Player.RideKind)slot.KindId) is { } ride ? ride.ParkedBox : (Vector3.Zero, new Vector3(1.8f, 1.4f, 4.2f));
+            var room = l.RoomOf(f)!;
+            foreach (var (sx, sz) in new[] { (-1f, -1f), (1f, -1f), (-1f, 1f), (1f, 1f) })
+            {
+                var corner = frame * (centre + new Vector3(sx * size.X / 2, 0, sz * size.Z / 2));
+                inRoom &= corner.X > room.X0 && corner.X < room.X1 && corner.Z > room.Z0 && corner.Z < room.Z1;
+                // a bay is 2.5 m wide and 5 m deep around the piece's centre, turned with it
+                var rel = new Basis(Vector3.Up, -f.Turns * Mathf.Pi / 2) * (corner - new Vector3(f.X, corner.Y, f.Z));
+                inBay &= Mathf.Abs(rel.X) <= 1.25f && Mathf.Abs(rel.Z) <= 2.5f;
+            }
+        }
+        expect(named, $"{what}: every bay car's slot is named for its building (veh_slot_<building>_c_<piece>)");
+        expect(same, $"{what}: a bay car's slot is the same every time it is worked out");
+        expect(nose, $"{what}: every slot faces the way its piece does (nose through LV95 and the vehicle's own yaw)");
+        expect(inRoom, $"{what}: every woken car's whole hull lies inside the car park");
+        expect(inBay, $"{what}: every woken car's whole hull lies inside its own bay");
+        expect(kinds.Count > 1 || bay.Count < 4, $"{what}: the bay cars are of {kinds.Count} different kinds");
     }
 
     /// <summary>The synthetic tile every box stands on, 150 m apart (also what <c>--flattour</c> walks).</summary>

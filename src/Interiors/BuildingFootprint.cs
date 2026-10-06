@@ -88,9 +88,16 @@ public static class BuildingFootprint
     /// building in five of some size is one, by a stable hash of its key: a pure function of the tile,
     /// so the server's plan and every client's door sign agree without sending anything.
     /// </summary>
-    public static bool IsBank(Footprint fp) =>
-        fp.Kind == BuildingKind.Commercial && fp.Width * fp.Depth >= 60f && Math.Min(fp.Width, fp.Depth) >= 6f
-        && (uint)InteriorGenerator.StableHash(fp.Key + "|bank") % 5 == 0;
+    public static bool IsBank(Footprint fp) => IsBank(fp.Key.ToString(), fp.Kind, fp.Width, fp.Depth);
+
+    /// <summary>
+    /// <see cref="IsBank(Footprint)"/> before the footprint exists: the garage door is placed in
+    /// <see cref="Compute"/>, which has to know the generator will not plan the block as a bank
+    /// (a bank has no ramp, and its garage door would read as locked, #558).
+    /// </summary>
+    public static bool IsBank(string key, BuildingKind kind, float width, float depth) =>
+        kind == BuildingKind.Commercial && width * depth >= 60f && Math.Min(width, depth) >= 6f
+        && (uint)InteriorGenerator.StableHash(key + "|bank") % 5 == 0;
 
     /// <summary>
     /// A building's shop (#273), the same pure function of the tile as <see cref="IsBank"/>, so the
@@ -470,7 +477,7 @@ public static class BuildingFootprint
         }
 
         // ---- an underground garage door (#558) -------------------------------------------
-        // Only a block of flats with three front doors, a basement car park (GarageRule, the same
+        // Only a block of flats with two front doors, a basement car park (GarageRule, the same
         // predicate the generator's basement answers to) and a good roll, and only where a road
         // can be reached from it: no road in front, no door. It claims its slot in the budget
         // before the pedestrian doors, on the front wall between two of its entrances.
@@ -479,6 +486,8 @@ public static class BuildingFootprint
         {
             var (storeyH, above) = InteriorGenerator.Storeys(b);
             var type = GarageRule.BlockType(key.ToString(), w * dpt, kind, above, false);
+            // the generator plans a bank as a bank, never as a block with a car park behind a ramp
+            if (IsBank(key.ToString(), kind, Mathf.Clamp(w, MinSide, MaxSide), Mathf.Clamp(dpt, MinSide, MaxSide))) type = BuildingType.None;
             var frontOut = new Vector2(door.Outward.X, door.Outward.Z);
             // the plan's own frame: the box edge the main door is on is its front wall
             bool frontAlongV = Math.Abs(frontOut.Dot(u)) < 0.5f;
@@ -518,6 +527,7 @@ public static class BuildingFootprint
                                 float gy = (float)grid.SampleMeshHeight(tile.Id.MinE + p.X, tile.Id.MaxN - p.Y);
                                 samples.Add((at, gy - (baseY + (link.RoadY - baseY) * at) - 0.03f));
                             }
+                        if (!GarageLink.Humpable(samples)) return null;
                         link = link with { Hump = GarageLink.HumpFor(samples) };
                     }
                     var spot = new DoorSpot(index,
