@@ -23,13 +23,19 @@ public static class ForkliftMeshBuilder
     /// the binnacle on purpose: <see cref="HeavyCabin.Build"/> only draws its full-width dash when
     /// the face is ahead of the dials, and a forklift's driver looks out <b>through the mast</b> —
     /// a dash across that is the one thing that would make it unusable. The cowl is drawn here.
+    /// <para>
+    /// The seat is a chair, not a truck's: <see cref="CabFrame.HipRise"/> high and the back nearly
+    /// upright. <see cref="HeavyCabin.SeatFor"/> keeps hip to pedal at one leg's length, so with the
+    /// pedals this close under the cowl a truck's low hip put the legs out flat and the driver
+    /// lounging (phase 1's shot); a high one drops the shins under the knees.
+    /// </para>
     /// </summary>
     public static readonly CabFrame Frame = new()
     {
         Front = 0.62f, Floor = ForkliftLayout.Floor, Ceiling = ForkliftLayout.GuardTop - 0.06f,
         WsBase = 1.0f, WsTop = 1.9f, DashTop = 1.02f,
-        InnerHalf = ForkliftLayout.HalfWidth - 0.04f, Nose = 0.26f, DriverX = 0f, HipRise = 0.4f,
-        Recline = 0.18f, ColumnTilt = 0.72f, WheelRadius = 0.16f, DashToX = -(ForkliftLayout.HalfWidth - 0.04f),
+        InnerHalf = ForkliftLayout.HalfWidth - 0.04f, Nose = 0.26f, DriverX = 0f, HipRise = 0.56f,
+        Recline = 0.08f, ColumnTilt = 0.72f, WheelRadius = 0.16f, DashToX = -(ForkliftLayout.HalfWidth - 0.04f),
         Clutch = false, PassengerSeat = false,
     };
 
