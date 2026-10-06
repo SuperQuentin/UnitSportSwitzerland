@@ -66,7 +66,7 @@ through the rig (`HeavyWheel.Steer` 1); the rear ones are `TelehandlerBoom`'s, p
   - Shots go in `test_output/telehandler/`.
 - A telehandler round in `tools/excavatornetcheck.sh`: B has A's machine in crab at A's wheel
   angle, its boom at A's lift, extension and tilt (0.260 for 0.258), drawn so, where A has it.
-- `TelehandlerLayoutTests` (tier 0, 17) cover the circles, each mode's travel, the boom's
+- `TelehandlerLayoutTests` (tier 0, 16) cover the circles, each mode's travel, the boom's
   heights, the forks on the ground at rest, and the flags and pose round trips.
 
 ## Not done
