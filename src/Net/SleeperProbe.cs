@@ -12,13 +12,14 @@ namespace UnitSport.Net;
 /// <item><c>watch</c> (another identity): must see one sleeper, then see it go when its owner returns.</item>
 /// <item><c>wake</c> (the same <c>user://</c>, so the same key as <c>leave</c>): the server must wake it
 /// where it fell asleep, and the body must end up there, not at the spawn.</item>
+/// <item><c>look</c> (windowed, by hand): stands by the sleeper and saves <c>test_output/sleepers_*.png</c>.</item>
 /// </list>
 /// </summary>
 public partial class SleeperProbe : ChatProbe
 {
     public static string? Role => RoleArg("--sleepers");
 
-    public SleeperProbe(ItemController items) : base(items, "sleepers", "SL") { }
+    public SleeperProbe(ItemController items) : base(items, "sleepers", "SL", "sleepers_") { }
     public SleeperProbe() : this(null!) { }
 
     private static Sleepers? Book => Sleepers.Instance;
@@ -31,6 +32,7 @@ public partial class SleeperProbe : ChatProbe
         {
             case "LEAVE": await Leave(); return;
             case "WATCH": await Watch(); break;
+            case "LOOK": await Look(); break;
             default: await Wake(); break;
         }
         await Finish(1.0);
@@ -52,6 +54,26 @@ public partial class SleeperProbe : ChatProbe
     {
         Expect(await Until(() => Book is { Count: 1 }, 90), $"one sleeper shown ({Book?.Count})");
         Expect(await Until(() => Book is { Count: 0 }, 120), $"the sleeper woke and went ({Book?.Count})");
+    }
+
+    private async Task Look()
+    {
+        Expect(await Until(() => Book?.AnyShown != null, 90), "a sleeper to look at");
+        if (Book?.AnyShown is not { } at) return;
+        // three views: close from its side, its head end, and from further off with the tag
+        (Vector3 off, float pitch, string name)[] views =
+            { (new(2.2f, 0, 1.2f), -0.55f, "side"), (new(0, 0, -2.6f), -0.45f, "head"), (new(6f, 0, 5f), -0.2f, "far") };
+        foreach (var (off, pitch, name) in views)
+        {
+            Me!.GlobalPosition = at + off + Vector3.Up * 0.2f;
+            var dir = at - Me.GlobalPosition;
+            float yaw = Mathf.Atan2(-dir.X, -dir.Z);
+            Me.Rotation = new Vector3(0, yaw, 0);
+            Me.LookYaw = yaw;
+            Me.LookPitch = pitch;
+            await Seconds(2.5);
+            GD.Print($"{Log} shot {Shot(name)}");
+        }
     }
 
     private async Task Wake()

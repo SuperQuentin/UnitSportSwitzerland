@@ -221,6 +221,9 @@ public partial class Sleepers : Node
     /// <summary>Client: how many sleepers this client shows (checks).</summary>
     public int Count => _shown.Count;
 
+    /// <summary>Client: where a shown sleeper lies, in world space (checks).</summary>
+    public Vector3? AnyShown => _visuals.Values.FirstOrDefault(IsInstanceValid)?.GlobalPosition;
+
     /// <summary>Client: where the server last woke this player, LV95 E/N (checks).</summary>
     public (double E, double N)? LastWake { get; private set; }
 
@@ -267,7 +270,8 @@ public partial class Sleepers : Node
             Shaded = false,
             VisibilityRangeEnd = 60f,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            Position = new Vector3(0, 0.9f, 0),
+            // over the middle of the body: lying, the head points forward (-Z) from the feet
+            Position = new Vector3(0, 0.8f, -0.85f),
         });
         return root;
     }
