@@ -9,7 +9,7 @@ using UnitSport.XR;
 namespace UnitSport.Items;
 
 /// <summary>
-/// <c>--forkcheck telehandler|loaderforks[,shots] --world flat --systems physics,ui</c> (#615, tier
+/// <c>--forkcheck telehandler|loaderforks|loaderbucket[,shots] --world flat --systems physics,ui</c> (#615, tier
 /// 1): a pallet lifted, carried and set down by a machine whose forks are on an arm, not a mast —
 /// the telehandler and the wheel loader with forks — through the same rule and the same service as
 /// the forklift's (<see cref="IForks"/>, <see cref="PalletService.Tend"/>), offline, on the real
@@ -23,6 +23,9 @@ namespace UnitSport.Items;
 /// <item>lowered, it is set down where it rode, with its load, and the forks are empty;</item>
 /// <item>the parked flags keep what is on the forks.</item>
 /// </list>
+/// <c>loaderbucket</c>: the wheel loader's bucket instead (<see cref="IBucket"/>): down and level,
+/// driven in until the pallet is in it, curled back and the arm lifted (it is scooped up), carried
+/// off, dumped (it is tipped out under the lip), and the parked flags keep what is in the bucket.
 /// Windowed with <c>shots</c>: <c>test_output/forks/*.png</c>.
 /// </summary>
 public partial class ForkCheck : Node
@@ -30,7 +33,8 @@ public partial class ForkCheck : Node
     public static bool Requested => CmdArgs.Has("--forkcheck");
     private static string[] Args => (CmdArgs.Value("--forkcheck") ?? "").Split(',');
     private static bool Shots => Args.Contains("shots");
-    private static RideKind Machine => Args.Contains("loaderforks") ? RideKind.WheelLoaderForks : RideKind.Telehandler;
+    private static RideKind Machine => Args.Contains("loaderforks") ? RideKind.WheelLoaderForks
+        : Args.Contains("loaderbucket") ? RideKind.WheelLoader : RideKind.Telehandler;
 
     /// <summary>The pallet's load: a square deck of drums, so a wrong deck or goods shows.</summary>
     private const byte Load = 0x80 | 70;
@@ -121,6 +125,7 @@ public partial class ForkCheck : Node
     {
         var me = _player!;
         for (int i = 0; i < 300 && !me.IsOnFloor(); i++) await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        if (Machine == RideKind.WheelLoader) { await RunBucket(me); Finish(); return; }
         Expect(me.SetRide(Machine) && me.Vehicle is IForks { HasTines: true }, $"mounted a {Machine}");
         if (me.Vehicle is not IForks forks) { Finish(); return; }
         me.RideControls = () => new RideInput(0f, 0f, 0f, false);
@@ -215,10 +220,93 @@ public partial class ForkCheck : Node
         Finish();
     }
 
+    /// <summary>The wheel loader's bucket: scooped up by curling it back and lifting, tipped out by dumping it.</summary>
+    private async Task RunBucket(FootPlayer me)
+    {
+        Expect(me.SetRide(RideKind.WheelLoader) && me.Vehicle is WheelLoader { HasBucket: true }, "mounted a wheel loader with its bucket");
+        if (me.Vehicle is not WheelLoader loader) return;
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false);
+        await Frames(20);
+
+        // work mode, the arm down and the bucket level on the ground, as one drives into a load
+        await Tap(PlayerInput.DigMode);
+        await Hold(PlayerInput.ArmBoomDown, (loader.Lift - WheelLoaderLayout.LiftMin) / WheelLoaderLayout.LiftRate + 0.3);
+        float level = -loader.Lift - loader.Tilt;
+        await Hold(level > 0 ? PlayerInput.ArmBucketCurl : PlayerInput.ArmBucketDump, Mathf.Abs(level) / WheelLoaderLayout.TiltRate);
+        var floor = me.GlobalTransform * loader.BucketFrame * loader.BucketFloor;
+        Expect(Mathf.Abs(loader.BucketPitch) < 0.05f && floor.Y - me.GlobalPosition.Y < Pallets.ScoopHeight,
+            $"the bucket is down and level ({loader.BucketPitch:F2} rad, its floor {floor.Y - me.GlobalPosition.Y:F2} m up)");
+
+        // a loose pallet three metres past the bucket's floor, runners along the way in
+        var ahead = (-me.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
+        var spot = floor + ahead * 3f;
+        spot.Y = me.GlobalPosition.Y;
+        bool put = false;
+        _pallets.RequestDrop(Load, _origin.ToGlobal(spot), me.GlobalRotation.Y + Mathf.Pi * 0.5f, ok => put = ok);
+        await Frames(5);
+        var pallet = PalletNode.All.Values.FirstOrDefault(p => !p.Taken && p.Load == Load);
+        Expect(put && pallet != null, $"a pallet of {Pallets.Goods(Load)} stands ahead");
+        if (pallet == null) return;
+
+        // in at a crawl until the pallet's middle is over the bucket's floor
+        float InIt() => -((me.GlobalTransform * loader.BucketFrame).AffineInverse() * pallet.GlobalPosition).Z;
+        me.RideControls = () => new RideInput(0.25f, 0f, 0f, false);
+        double t0 = GameClock.Now;
+        while (InIt() > WheelLoaderLayout.BucketFloorZ + 0.1f && GameClock.Now - t0 < 15) await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false);
+        for (int i = 0; i < 240 && me.GroundSpeed > 0.05f; i++) await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        Expect(InIt() < WheelLoaderLayout.BucketReach + 0.5f, $"driven in, the pallet is in the bucket ({InIt():F2} m ahead of the pin)");
+        await Shot("in-the-bucket", me.GlobalPosition + new Vector3(5f, 2.5f, 2f), spot + Vector3.Up * 0.5f);
+
+        // curled back: still on the ground, not yet held; then lifting rolls it back past CurlCarry
+        await Hold(PlayerInput.ArmBucketCurl, (WheelLoaderLayout.TiltMax - loader.Tilt) / WheelLoaderLayout.TiltRate + 0.2);
+        Expect(loader.Carrying == 0, $"curled back on the ground ({loader.BucketPitch:F2} rad), not yet carried");
+        await Hold(PlayerInput.ArmBoomUp, 3.0, () => loader.Carrying != 0);
+        await Frames(10);
+        Expect(Pallets.LoadCarried(loader.Carrying) == Load && _pallets.Loose.Count == 0,
+            $"curled and lifted ({loader.BucketPitch:F2} rad), it is scooped up: its load in the bucket, gone from the ground");
+        Expect(WheelLoaderMeshBuilder.FrontOf(me.Visual)?.Load != null || me.Visual == null, "it is drawn in the bucket");
+
+        // carried off: up and back
+        await Hold(PlayerInput.ArmBoomUp, 1.5);
+        await Shot("carried", me.GlobalPosition + new Vector3(8f, 3.5f, 5f), me.GlobalPosition + Vector3.Up * 2f);
+        var before = me.GlobalPosition;
+        me.RideControls = () => new RideInput(0f, 0.5f, 0f, false);
+        t0 = GameClock.Now;
+        while ((me.GlobalPosition - before).Length() < 3f && GameClock.Now - t0 < 10) await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false);
+        for (int i = 0; i < 240 && me.GroundSpeed > 0.05f; i++) await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        Expect(Pallets.LoadCarried(loader.Carrying) == Load, $"backed away {(me.GlobalPosition - before).Length():F1} m with it in the bucket");
+
+        // dumped: tipped out under the lip
+        await Hold(PlayerInput.ArmBucketDump, 4.0, () => loader.Carrying == 0);
+        await Frames(10);
+        var set = _pallets.Loose.Values.FirstOrDefault();
+        var expected = me.GlobalTransform * loader.BucketFrame
+            * new Vector3(0f, loader.BucketFloor.Y, -(WheelLoaderLayout.BucketReach + Pallets.Length * 0.5f));
+        var down = set == null ? null : PalletNode.All.GetValueOrDefault(Pallets.LooseId(set.Id));
+        float off = down == null ? float.NaN : new Vector2(down.GlobalPosition.X - expected.X, down.GlobalPosition.Z - expected.Z).Length();
+        Expect(loader.Carrying == 0 && set?.Load == Load && down != null && off < 0.4f && Mathf.Abs(down.GlobalPosition.Y - me.GlobalPosition.Y) < 0.05f,
+            $"dumped ({loader.BucketPitch:F2} rad), it is tipped out under the lip with its load, on the ground ({off:F2} m off)");
+        await Shot("dumped", me.GlobalPosition + new Vector3(5f, 2.5f, -4f), expected);
+
+        // a parked one keeps what is in the bucket
+        bool all = true;
+        foreach (int l in new[] { 0, 1, 127, 128, 255 })
+            foreach (bool across in new[] { false, true })
+            {
+                int carrying = Pallets.Carried((byte)l, across);
+                var parked = new WheelLoader();
+                parked.UnpackFlags(new WheelLoader { Carrying = carrying }.PackFlags());
+                all &= parked.Carrying == carrying;
+            }
+        Expect(all, "the parked flags keep every load byte in the bucket and which way it sits");
+    }
+
     private void Finish()
     {
         GD.Print(_failures == 0
-            ? $"[forks] RESULT: ok — the {Machine} forks, carries and sets down a pallet on the real bindings"
+            ? $"[forks] RESULT: ok — the {Machine} takes, carries and sets down a pallet on the real bindings"
             : $"[forks] RESULT: FAILED {_failures} check(s)");
         GetTree().Quit(_failures == 0 ? 0 : 1);
     }

@@ -189,6 +189,30 @@ public static class Pallets
         && Mathf.Abs(x) <= halfSpan
         && ahead >= 0f && ahead <= length;
 
+    // ---- the bucket rule (#615): a loader scoops a pallet up, and dumps it ---------------------
+
+    /// <summary>Under this over the ground, the bucket's floor is down to scoop, m (a bucket on the ground digs in a little).</summary>
+    public const float ScoopHeight = 0.4f;
+
+    /// <summary>
+    /// The bucket's pitch from level (+ rolled back), rad: past <see cref="CurlCarry"/> with a pallet
+    /// in it, it holds it; past <see cref="DumpDrop"/> the other way, it tips it out. Far apart, so a
+    /// pallet just scooped is not dropped by the bucket settling, nor one just dropped scooped again.
+    /// </summary>
+    public const float CurlCarry = 0.35f, DumpDrop = -0.4f;
+
+    public static bool Curled(float pitch) => pitch >= CurlCarry;
+    public static bool Dumped(float pitch) => pitch <= DumpDrop;
+
+    /// <summary>
+    /// Whether a pallet is in a bucket: its centre <paramref name="x"/> across the bucket's middle,
+    /// <paramref name="ahead"/> of the pin it hangs from, <paramref name="up"/> over its floor, in
+    /// the bucket's frame; within the bucket's width less half a deck, out to its lip and a little
+    /// past (a pallet's 1.2 m is near a bucket's depth), and down on its floor.
+    /// </summary>
+    public static bool InBucket(float x, float ahead, float up, float halfWidth, float reach) =>
+        Mathf.Abs(x) <= halfWidth - 0.45f && ahead >= 0.1f && ahead <= reach + 0.5f && Mathf.Abs(up) <= 0.6f;
+
     /// <summary>
     /// How far ahead of the tines' heel a carried pallet's centre rides, m: a pallet's length out from
     /// the face and 0.12 m clear of it, as <see cref="ForkliftLayout.LoadCentre"/> puts the forklift's.

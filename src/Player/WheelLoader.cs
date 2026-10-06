@@ -19,7 +19,7 @@ namespace UnitSport.Player;
 /// attachment swapped in play.
 /// </para>
 /// </summary>
-public sealed class WheelLoader : Rideable, IEngined, IForks
+public sealed class WheelLoader : Rideable, IEngined, IForks, IBucket
 {
     /// <summary>A loader with its bucket, or with <paramref name="forks"/> a fork carriage.</summary>
     public WheelLoader(bool forks = false)
@@ -63,6 +63,32 @@ public sealed class WheelLoader : Rideable, IEngined, IForks
     }
     public float TineLength => WheelLoaderLayout.ForkLength;
     public float TineHalfSpan => WheelLoaderLayout.TineHalfSpan;
+
+    // ---- the bucket, as the pallets ask (IBucket, #615) -----------------------------------------
+    public bool HasBucket => !Forks;
+    /// <summary>The bucket's pin on the front frame, swung with it about the hinge, the arm lifted and the bucket tilted against it.</summary>
+    public Transform3D BucketFrame
+    {
+        get
+        {
+            var swing = new Transform3D(new Basis(Vector3.Up, Articulation), Vector3.Zero);
+            var arm = new Transform3D(new Basis(Vector3.Right, Lift), CarMeshBuilder.Turned(WheelLoaderLayout.ArmPivot));
+            var bucket = new Transform3D(new Basis(Vector3.Right, Tilt), new Vector3(0f, 0f, -WheelLoaderLayout.ArmLength));
+            return swing * arm * bucket;
+        }
+    }
+    public Transform3D BucketPinLevel
+    {
+        get
+        {
+            var swing = new Basis(Vector3.Up, Articulation);
+            return new Transform3D(swing, BucketFrame.Origin);
+        }
+    }
+    public float BucketPitch => Lift + Tilt;
+    public Vector3 BucketFloor => CarMeshBuilder.Turned(new Vector3(0f, WheelLoaderLayout.BucketFloorY, WheelLoaderLayout.BucketFloorZ));
+    public float BucketHalfWidth => WheelLoaderLayout.BucketHalf;
+    public float BucketReach => WheelLoaderLayout.BucketReach;
 
     private float ClampTilt(float a) => Forks ? WheelLoaderLayout.ClampForkTilt(a) : WheelLoaderLayout.ClampTilt(a);
 
@@ -118,12 +144,12 @@ public sealed class WheelLoader : Rideable, IEngined, IForks
         }
     }
 
-    public int PackFlags() => Forks ? WheelLoaderLayout.PackForks(Lift, Tilt, Articulation, Carrying) : WheelLoaderLayout.Pack(Lift, Tilt, Articulation);
+    public int PackFlags() => Forks ? WheelLoaderLayout.PackForks(Lift, Tilt, Articulation, Carrying) : WheelLoaderLayout.Pack(Lift, Tilt, Articulation, Carrying);
 
     public void UnpackFlags(int flags)
     {
         if (Forks) (Lift, Tilt, Articulation, Carrying) = WheelLoaderLayout.UnpackForks(flags);
-        else (Lift, Tilt, Articulation) = WheelLoaderLayout.Unpack(flags);
+        else (Lift, Tilt, Articulation, Carrying) = WheelLoaderLayout.Unpack(flags);
         Working = false;
     }
 
@@ -203,20 +229,19 @@ public sealed class WheelLoader : Rideable, IEngined, IForks
     }
 
     /// <summary>
-    /// Remote copies: the frame's bend, the arm (with forks, and what is on them:
-    /// <see cref="WheelLoaderLayout.PoseLift"/>, which the server reads too), the bucket or the forks'
-    /// pitch, and the signed speed (the wheels turn by it).
+    /// Remote copies: the frame's bend, the arm with what is on the forks or in the bucket
+    /// (<see cref="WheelLoaderLayout.PoseLift"/>, which the server reads too), the bucket's tilt or the
+    /// forks' pitch, and the signed speed (the wheels turn by it).
     /// </summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
-        new(Articulation, Forks ? WheelLoaderLayout.PoseLift(Lift, Carrying) : Lift, Tilt, _signed);
+        new(Articulation, WheelLoaderLayout.PoseLift(Lift, Carrying), Tilt, _signed);
 
     public override void AnimateRemote(Node3D visual, Vector4 pose, float dt)
     {
         if (pose != Vector4.Zero)
         {
             Articulation = Mathf.Clamp(pose.X, -WheelLoaderLayout.MaxArticulation, WheelLoaderLayout.MaxArticulation);
-            if (Forks) (Lift, Carrying) = WheelLoaderLayout.FromPoseLift(pose.Y);
-            else Lift = WheelLoaderLayout.ClampLift(pose.Y);
+            (Lift, Carrying) = WheelLoaderLayout.FromPoseLift(pose.Y);
             Tilt = ClampTilt(pose.Z);
         }
         Dress(visual, pose.W, dt);

@@ -313,6 +313,13 @@ src/Items/SitePallets     net    tools/sitepalletnetcheck.sh
 src/Items/PalletService   net    tools/sitepalletnetcheck.sh
 src/Terrain/Construction/SiteDressing quick --constructioncheck --systems ui
 # #615: any machine with tines lifts pallets (the telehandler, the fork loader), on the flat; the forklift's own check guards the shared rule
+src/Player/IBucket        quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Player/WheelLoader    quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Avatar/WheelLoader    quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Items/PalletService   quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Items/ForkCheck       quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Player/FootPlayer.Whe quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Player/WheelLoader    net    tools/sitepalletnetcheck.sh
 src/Player/IForks         quick  --forkcheck telehandler --world flat --systems physics,ui
 src/Player/IForks         quick  --forkcheck loaderforks --world flat --systems physics,ui
 src/Player/IForks         quick  --palletcheck --world flat --systems physics,ui

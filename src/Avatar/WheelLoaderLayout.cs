@@ -81,21 +81,31 @@ public static class WheelLoaderLayout
     /// What a parked fork loader keeps: lift eight bits, the forks' pitch and the articulation seven
     /// each, and what is on the forks ten (<c>Pallets.Carried</c>). Zero: the rest pose, empty forks.
     /// </summary>
-    public static int PackForks(float lift, float tilt, float articulation, int carrying)
+    public static int PackForks(float lift, float tilt, float articulation, int carrying) =>
+        PackArm(lift, tilt, ForkTiltMin, ForkTiltMax, articulation, carrying);
+
+    public static (float Lift, float Tilt, float Articulation, int Carrying) UnpackForks(int flags) =>
+        flags == 0 ? (LiftMin, ForkRestTilt, 0f, 0) : UnpackArm(flags, ForkTiltMin, ForkTiltMax);
+
+    private static int PackArm(float lift, float tilt, float tiltMin, float tiltMax, float articulation, int carrying)
     {
         static uint Q(float v, float lo, float hi, int top) => (uint)(Mathf.Clamp(Mathf.RoundToInt((v - lo) / (hi - lo) * top), 0, top) + 1);
-        return unchecked((int)(Q(lift, LiftMin, LiftMax, 254) | Q(tilt, ForkTiltMin, ForkTiltMax, 126) << 8
+        return unchecked((int)(Q(lift, LiftMin, LiftMax, 254) | Q(tilt, tiltMin, tiltMax, 126) << 8
             | Q(articulation, -MaxArticulation, MaxArticulation, 126) << 15 | (uint)Mathf.Clamp(carrying, 0, 0x3FF) << 22));
     }
 
-    public static (float Lift, float Tilt, float Articulation, int Carrying) UnpackForks(int flags)
+    private static (float Lift, float Tilt, float Articulation, int Carrying) UnpackArm(int flags, float tiltMin, float tiltMax)
     {
-        if (flags == 0) return (LiftMin, ForkRestTilt, 0f, 0);
         uint f = unchecked((uint)flags);
         static float U(uint q, float lo, float hi, int top) => lo + (Mathf.Clamp((int)q, 1, top + 1) - 1) / (float)top * (hi - lo);
-        return (U(f & 0xFF, LiftMin, LiftMax, 254), U(f >> 8 & 0x7F, ForkTiltMin, ForkTiltMax, 126),
+        return (U(f & 0xFF, LiftMin, LiftMax, 254), U(f >> 8 & 0x7F, tiltMin, tiltMax, 126),
             U(f >> 15 & 0x7F, -MaxArticulation, MaxArticulation, 126), (int)(f >> 22 & 0x3FF));
     }
+
+    // ---- the bucket as the pallets see it (#615) -------------------------------------------------
+
+    /// <summary>The bucket's floor, in its own frame (authored, from the arm's pin): its middle's height, and how far ahead of the pin it is.</summary>
+    public const float BucketFloorY = -BucketHeight * 0.9f + 0.05f, BucketFloorZ = BucketReach * 0.5f;
 
     /// <summary>The lift and what is on the forks in one float of the pose: the lift (never past ±2) plus 4 a step of carrying.</summary>
     public static float PoseLift(float lift, int carrying) => lift + 4f * Mathf.Clamp(carrying, 0, 0x3FF);
@@ -107,20 +117,13 @@ public static class WheelLoaderLayout
     }
 
     /// <summary>
-    /// What a parked one keeps, in the 32 bits of <c>VehicleState.Flags</c>: lift, tilt and the
-    /// articulation, eight bits each over their travel. Zero is "never set": the rest pose, straight.
+    /// What a parked one keeps, in the 32 bits of <c>VehicleState.Flags</c>: lift eight bits, tilt and
+    /// the articulation seven each, and what is in the bucket ten (<c>Pallets.Carried</c>, #615: before
+    /// it the three were eight bits each). Zero is "never set": the rest pose, straight, empty.
     /// </summary>
-    public static int Pack(float lift, float tilt, float articulation)
-    {
-        static int Q(float v, float lo, float hi) => Mathf.Clamp(Mathf.RoundToInt((v - lo) / (hi - lo) * 254f), 0, 254) + 1;
-        return Q(lift, LiftMin, LiftMax) | Q(tilt, TiltMin, TiltMax) << 8 | Q(articulation, -MaxArticulation, MaxArticulation) << 16;
-    }
+    public static int Pack(float lift, float tilt, float articulation, int carrying = 0) =>
+        PackArm(lift, tilt, TiltMin, TiltMax, articulation, carrying);
 
-    public static (float Lift, float Tilt, float Articulation) Unpack(int flags)
-    {
-        if (flags == 0) return (RestLift, RestTilt, 0f);
-        static float U(int q, float lo, float hi) => lo + (Mathf.Clamp(q, 1, 255) - 1) / 254f * (hi - lo);
-        return (U(flags & 0xFF, LiftMin, LiftMax), U(flags >> 8 & 0xFF, TiltMin, TiltMax),
-            U(flags >> 16 & 0xFF, -MaxArticulation, MaxArticulation));
-    }
+    public static (float Lift, float Tilt, float Articulation, int Carrying) Unpack(int flags) =>
+        flags == 0 ? (RestLift, RestTilt, 0f, 0) : UnpackArm(flags, TiltMin, TiltMax);
 }
