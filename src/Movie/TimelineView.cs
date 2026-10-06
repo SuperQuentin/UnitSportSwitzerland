@@ -182,15 +182,16 @@ public partial class TimelineView : Control
     /// <summary>The sound's waveform inside its clip's box, one line every two pixels.</summary>
     private void DrawWave(Clip c, Rect2 r)
     {
-        var peaks = Project.Audio[c.Track].Peaks;
+        var asset = Project.Audio[c.Track];
+        var peaks = asset.Peaks;
         if (peaks.Length == 0) return;
-        float mid = r.Position.Y + r.Size.Y * 0.5f, half = r.Size.Y * 0.45f;
+        float mid = r.Position.Y + r.Size.Y * 0.5f, half = r.Size.Y * 0.45f / asset.PeakMax;
         for (float x = r.Position.X; x < r.End.X; x += 2)
         {
             double source = c.In + (T(x) - c.Start);
             int i = (int)(source * AudioAsset.PeaksPerSecond);
             if (i < 0 || i >= peaks.Length) continue;
-            float a = peaks[i] / 255f * half;
+            float a = peaks[i] * half;
             DrawLine(new Vector2(x, mid - a), new Vector2(x, mid + a), Wave);
         }
     }

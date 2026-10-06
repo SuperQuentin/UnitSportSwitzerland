@@ -42,8 +42,12 @@ public sealed class AudioAsset
     public double Duration { get; init; }
     public BeatGrid Beat { get; set; } = BeatGrid.None;
     /// <summary>The waveform: the loudest sample every 1/<see cref="PeaksPerSecond"/> s, 0..255.</summary>
-    public byte[] Peaks { get; set; } = Array.Empty<byte>();
+    public byte[] Peaks { get => _peaks; set { _peaks = value; _peakMax = null; } }
+    private byte[] _peaks = Array.Empty<byte>();
     public const int PeaksPerSecond = 50;
+    /// <summary>The loudest peak (at least 1): a waveform is drawn against it, so a quiet recording still shows its shape.</summary>
+    public int PeakMax => _peakMax ??= Peaks.Length == 0 ? 1 : Math.Max(1, (int)Peaks.Max());
+    private int? _peakMax;
     /// <summary>Recorded from the game, not music: no beat is looked for in it.</summary>
     public bool Game { get; init; }
 }

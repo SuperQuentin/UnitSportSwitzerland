@@ -205,13 +205,16 @@ public partial class GameShell : Node
             _state = State.InWorld;
             // "--tutorial" with a probe that rides something (--ride car:0,8,out.png): the ride's intro card
             if (CmdArgs.Has("--tutorial")) Callable.From(world.StartVehicleIntros).CallDeferred();
-            // "--moviestudio <s> [t]": after s seconds of play, the movie studio over it (#638), at movie time t, for screenshotting it
+            // "--moviestudio <s> [t] [--moviesong <file>]": after s seconds of play, the movie studio over it
+            // (#638), at movie time t, a song added (#656), for screenshotting it
             if (CmdArgs.Double("--moviestudio", 1) is { } studioAt)
                 GetTree().CreateTimer(studioAt).Timeout += () =>
                 {
                     Movie.MovieSession.SaveClip(quiet: true);
                     OpenPause();
-                    Push(Movie.MovieStudio.Create(world, CmdArgs.Double("--moviestudio", 2)));
+                    var studio = Movie.MovieStudio.Create(world, CmdArgs.Double("--moviestudio", 2));
+                    Push(studio);
+                    if (CmdArgs.Value("--moviesong") is { } song) studio.Import(song);
                 };
             // "--menu" / "--settings" open the pause menu over the world, for screenshotting it
             if (CmdArgs.Has("--menu") || CmdArgs.Has("--settings"))

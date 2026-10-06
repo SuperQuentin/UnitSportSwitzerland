@@ -70,14 +70,29 @@ public partial class MovieStudio : Screen
         AddChild(view);
 
         var top = UiKit.VBox(2);
-        top.SetAnchorsPreset(LayoutPreset.TopLeft);
-        top.Position = new Vector2(28, 22);
+        top.SetAnchorsPreset(LayoutPreset.TopWide);
+        top.OffsetLeft = 28; top.OffsetTop = 22; top.OffsetRight = -380;
         top.MouseFilter = MouseFilterEnum.Ignore;
         _title = UiKit.Text("", 24, Colors.White, bold: true);
         top.AddChild(_title);
         _hint = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextDim);
+        _hint.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         top.AddChild(_hint);
         AddChild(top);
+
+        // the movie as a whole, top right: out of the way of the transport and the edits below
+        var filePanel = new PanelContainer();
+        filePanel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.86f, 12, 8));
+        filePanel.SetAnchorsPreset(LayoutPreset.TopRight);
+        filePanel.GrowHorizontal = GrowDirection.Begin;
+        filePanel.OffsetRight = -16; filePanel.OffsetTop = 16;
+        var file = UiKit.HBox(6);
+        filePanel.AddChild(file);
+        Tool(file, "New", "Start an empty movie", NewMovie);
+        Tool(file, "Open", "Open a saved movie", OpenMovie);
+        Tool(file, "Save", "Save this movie", SaveMovie);
+        Tool(file, "Close", "Back to the game (Esc)", () => Shell.Back());
+        AddChild(filePanel);
 
         var panel = new PanelContainer();
         panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.86f, 14, 14));
@@ -112,11 +127,6 @@ public partial class MovieStudio : Screen
         _worldSound = new CheckButton { Text = "World sound", ButtonPressed = true, TooltipText = "The puppets' live engines and steps; off when the recorded game sound plays instead" };
         _worldSound.Toggled += WorldSound;
         transport.AddChild(_worldSound);
-        transport.AddChild(UiKit.Spacer(w: 12));
-        Tool(transport, "New", "Start an empty movie", NewMovie);
-        Tool(transport, "Open", "Open a saved movie", OpenMovie);
-        Tool(transport, "Save", "Save this movie", SaveMovie);
-        Tool(transport, "Close", "Back to the game (Esc)", () => Shell.Back());
 
         _timeline = new TimelineView(_stage);
         _timeline.SelectionChanged += () => { FocusSelected(); Frame(); };
@@ -427,6 +437,7 @@ public partial class MovieStudio : Screen
         var asset = job.Result();
         var clip = MovieSession.Project.AddAudio(MovieSession.Project.AudioLaneFor("Music"), asset, _stage.Time);
         _timeline.Resync();
+        _timeline.Fit();
         _timeline.Select(clip.Id);
         ShowHints();
     }
