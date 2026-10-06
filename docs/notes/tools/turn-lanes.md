@@ -54,7 +54,12 @@
   arrow is 6.50 m, ear-clipped once; right and straight + left are mirrors. Straight: a slender
   notched dart head; left: the shaft jogs left near its end into an open corner head at 45 deg,
   within 0.55 m of the lane's middle. Two attempts from memory were wrong (the old Swiss
-  branch arrow, then a guessed jog). The stop bar is a `StopLine` polyline.
+  branch arrow, then a guessed jog). **An arrow climbs with the road** (#639): `PaintEmitter.Arrow`
+  takes the tail's and the tip's centreline heights and interpolates along it. One height for the
+  whole arrow left the head of one on a 3 % approach 20 cm under the road; the 2 cm paint lift
+  and the 0.2 %-of-distance paint depth bias hid that from afar, but up close the head vanished
+  (a Left arrow lost its wedge, a straight one its dart). Old tiles need `--rewrite`. The stop bar
+  is a `StopLine` polyline.
 - **Beside a painted bike lane** (#120; as painted, #351: a street that got paths has none): along the solid centre line a car must pass a cyclist
   without crossing it, so every car lane beside the bike lane is 3.0 m (ZH Standards
   Veloverkehr): the pocket is the approach lane widened to 3.0 m (`_pocket`), the through lane
