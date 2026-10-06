@@ -1,4 +1,5 @@
 using Godot;
+using FaceGenome = UnitSport.Avatar.Face.FaceGenome;
 
 namespace UnitSport.Avatar;
 
@@ -259,7 +260,13 @@ public static partial class HumanMeshBuilder
     }
 
     // a colour carrying the pixel face's finish id in its alpha (the clothes' Garments.Fx convention)
-    private static Color FaceMark(Color eyes) => new(eyes.R, eyes.G, eyes.B, 1f - FaceAtlas.FinishId / 255f);
+    private static Color FaceMark(Color eyes) => new(eyes.R, eyes.G, eyes.B, 1f - (int)Finish.Face / 255f);
+
+    // where a face's blink and glances start (#657): from the look, so two figures side by side in
+    // one mesh (a bus's passengers) blink apart, and a figure rebuilt every frame keeps its rhythm
+    private static int FaceSeed(BodyLook look) =>
+        (int)((uint)look.Eyes.ToRgba32() * 2654435761u >> 24 ^ (uint)look.Skin.ToRgba32() * 40503u >> 24
+            ^ (uint)look.Hair.ToRgba32() * 2246822519u >> 24 ^ (uint)look.Top.ToRgba32() * 3266489917u >> 24) & 0xFF;
 
     /// <summary>
     /// Everything a dressed figure's clothes need to know about the body under them: the trunk's
@@ -345,7 +352,7 @@ public static partial class HumanMeshBuilder
         fit.Head.Draw(s, look.Skin);
         if (cover != HairCover.Head)
         {
-            fit.Head.Face(s, look.Face, look.Eyes);
+            fit.Head.Face(s, FaceGenome.Preset(look.Face).WithSeed(FaceSeed(look)), look.Eyes);
             fit.Head.Ears(s, look.Skin);
             fit.Head.Hair(s, look.HairStyle, look.Hair, look.Skin, cover);
         }
@@ -841,8 +848,8 @@ public static partial class HumanMeshBuilder
             s.Loft(pool.Sections, pool.Fill(skin), skin);
         }
 
-        /// <summary>The pixel face: a band over the front of the head, from brow to chin, sampling <see cref="FaceAtlas"/>; its vertex colour is the eye colour.</summary>
-        public void Face(MeshScratch s, int face, Color eyes)
+        /// <summary>The pixel face: a band over the front of the head, from brow to chin, drawn from <paramref name="face"/> by the shader (#657); its vertex colour is the eye colour.</summary>
+        public void Face(MeshScratch s, FaceGenome face, Color eyes)
         {
             ReadOnlySpan<float> rows = [0.178f, 0.135f, 0.090f, 0.045f, 0.010f];
             const int columns = 9;
@@ -855,7 +862,8 @@ public static partial class HumanMeshBuilder
                     row[i] = Point(rows[r], Mathf.DegToRad(Mathf.Lerp(145f, 35f, i / (columns - 1f))), 0.004f);
                 pool.Sections.Add(row);
             }
-            s.FaceBand(pool.Sections, FaceAtlas.Uv(face), FaceMark(eyes), Centre(0.10f));
+            var (low, high) = face.Code;
+            s.FaceBand(pool.Sections, new Rect2(0f, 0f, 1f, 1f), FaceMark(eyes), Centre(0.10f), new Vector2(low, high));
         }
 
         /// <summary>Where an ear is (<paramref name="side"/> −1 the figure's right, +1 its left).</summary>

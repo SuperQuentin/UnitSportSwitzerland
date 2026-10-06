@@ -28,7 +28,7 @@ public enum Finish : byte
     Tartan = 8,
     Fishnet = 9,
     Lace = 10,
-    /// <summary>Not a cloth: the pixel face's band (#394, <see cref="FaceAtlas"/>); listed so no pattern takes its id.</summary>
+    /// <summary>Not a cloth: the pixel face's band (#394; procedural since #657, <c>shaders/body/face.gdshaderinc</c>); listed so no pattern takes its id.</summary>
     Face = 11,
     // #394: the references' cloth patterns
     Checker = 12,

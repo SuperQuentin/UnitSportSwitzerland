@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Core;
+using FaceGenome = UnitSport.Avatar.Face.FaceGenome;
 
 namespace UnitSport.Avatar;
 
@@ -646,8 +647,8 @@ public partial class AvatarPreview : Node3D
                 break;
             case "faces":
                 // every face, bald so nothing hides it, heads only in frame
-                for (int f = 0; f < FaceAtlas.Count; f++)
-                    Add(FaceAtlas.Name(f), (f < 5 ? looks[f] : guys[f - 5]).Look with { Face = f, HairStyle = HairStyle.None });
+                for (int f = 0; f < FaceGenome.PresetCount; f++)
+                    Add(FaceGenome.PresetName(f), (f % 2 == 0 ? looks[f / 2 % looks.Length] : guys[f / 2 % guys.Length]).Look with { Face = f, HairStyle = HairStyle.None });
                 Heads();
                 break;
             case "eyes":
