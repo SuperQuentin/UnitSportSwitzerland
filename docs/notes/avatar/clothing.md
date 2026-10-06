@@ -30,7 +30,7 @@
   GGX) reproduces
   `Material()` for alpha 1 and decodes rainbow, disco, galaxy, holo, glitch, lava, neon, and the
   patterns tartan, fishnet (discard over skin), lace, checker, stripes, studs (12-14, #394); 11 is
-  the pixel face (`face-atlas`). Every mesh that carries a figure must use it (#394: the face only draws there); the shared
+  the pixel face (`procedural-faces`). Every mesh that carries a figure must use it (#394: the face only draws there); the shared
   `Material()` is untouched. Specials put the finish on all three
   colours, patterns only on A. Effects that need an angle compute a facet normal from derivatives:
   `MeshScratch` writes no normals.

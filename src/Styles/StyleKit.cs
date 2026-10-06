@@ -339,7 +339,6 @@ public static class StyleKit
             // the figures' pixel faces (#394), in every style's avatar shader, and Cartoon's ink
             // outline round them (a next pass: shaders/figure_outline.gdshader)
             case MaterialRole.Figure:
-                if (HasUniform(shader, "face_atlas")) m.SetShaderParameter("face_atlas", Avatar.FaceAtlas.Texture);
                 m.NextPass = style == VisualStyle.Cartoon
                     ? _figureOutline ??= new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/figure_outline.gdshader") }
                     : null;

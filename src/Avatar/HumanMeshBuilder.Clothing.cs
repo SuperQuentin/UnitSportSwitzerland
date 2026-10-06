@@ -234,6 +234,22 @@ public static partial class HumanMeshBuilder
         return look;
     }
 
+    /// <summary>A hand drawn apart from its figure (the VR hands, #648): its colours and its build's size.</summary>
+    public readonly record struct HandLook(Color Palm, Color Fingers, Color Cuff, float Scale);
+
+    /// <summary>The figure's hands in its clothes: skin or gloves, and the glove or sleeve just above the wrist.</summary>
+    public static HandLook HandsOf(HumanPalette p)
+    {
+        var o = p.Outfit;
+        var top = o[WearSlot.Top];
+        var look = Dress(p, o, top, top is { CoversBottom: true } ? null : o[WearSlot.Bottom]);
+        var palm = look.Gloves ?? look.Skin;
+        var fingers = look.Gloves is { } gloves && !look.Fingerless ? gloves : look.Skin;
+        // the forearm by the wrist (limb parameter ~1.85: elbow 1, wrist 2)
+        var cuff = look.Gloves is { } g && look.GloveFrom < 1.85f ? g : look.SleeveTo > 1.85f ? look.Top : look.Skin;
+        return new HandLook(palm, fingers, cuff, Physique.Of(look.Build).Hand);
+    }
+
     // ------------------------------------------------------------------------------------
     // trunk
     // ------------------------------------------------------------------------------------

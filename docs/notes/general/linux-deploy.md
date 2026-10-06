@@ -24,6 +24,14 @@
   `cron.log`; tiles in `DEPLOY_CHUNKS_DIR` (default `$DEPLOY_DIR/terrain_chunks`, point it at a data volume), passed as
   `UNITSPORT_CHUNKS`. Server state (`admins.json`, bank, placed items, CDs...) lives in `~/.local/share/godot/app_userdata/`
   and is never touched by a deploy.
+- **Tiles over HTTP** (#651, `TILES=1` by default, `net/http-tiles`): setup installs `caddy` and `acl`. It writes
+  `/etc/caddy/Caddyfile` from `tools/deploy/Caddyfile`, serving `/tiles/` = `DEPLOY_CHUNKS_DIR` with tile files only. The site is
+  `TILES_DOMAIN` (HTTPS via Let's Encrypt, HTTP/2; DNS must point at the host and 80/443 must be open) or `:80`. An ACL lets
+  the `caddy` user reach a chunk dir under a 0700 home. The chunk step then runs `tools/deploy/gzip-tiles.sh` on the host:
+  a `.gz` beside each changed tile file, about +25% disk, so leave room. `TILES_PRECOMPRESS=0` gzips on the fly instead.
+  The `.gz` files are left out of the compare and of `--prune`. The server starts with `--tiles-url`: `https://TILES_DOMAIN/tiles/`,
+  else `http://<DEPLOY_HOST without user@>/tiles/`. Set `TILES_URL` when `DEPLOY_HOST` is an ssh alias, or for a CDN.
+  Check: `curl -sI -H 'Accept-Encoding: gzip' <url>chunk_2593_1119.terr` shows `Content-Encoding: gzip`.
 - **Server process:** a detached tmux session `unitsport`, so its stdin console still works:
   `ssh -t user@host tmux attach -t unitsport` (detach Ctrl-b d). A deploy kills the session (no graceful save exists) and
   restarts it, then waits for the UDP port (about 30 s) and prints the log tail.

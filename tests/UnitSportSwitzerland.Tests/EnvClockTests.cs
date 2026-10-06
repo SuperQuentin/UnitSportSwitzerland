@@ -7,8 +7,10 @@ namespace UnitSportSwitzerland.Tests;
 /// <summary>
 /// Environment time layered on the simulation clock (#579): the two pure halves composed the way
 /// <c>World.WorldClock</c> composes them, so the claim "env time rides sim speed" is pinned at
-/// tier 0 rather than only in the two-peer check.
+/// tier 0 rather than only in the two-peer check. It sets the static <see cref="SimClock"/>, so it
+/// shares <see cref="SimClockTests"/>' collection: run in parallel, one set it under the other.
 /// </summary>
+[Collection(SimClockTests.Collection)]
 public class EnvClockTests
 {
     public EnvClockTests() => SimClock.Reset();

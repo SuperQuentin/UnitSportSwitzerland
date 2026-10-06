@@ -391,7 +391,8 @@ public partial class GarageProbe : Node
         var other = GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>().FirstOrDefault(p => p != me);
         if (other == null) return;
         // with no --at, stand beside the garage the driver will pick (the nearest to the same spawn)
-        if (AutoGarage && !_standing && _clock > 3) { _standing = true; _watchedDoor = StandAtGarage(me, 9f, 3.5f); }
+        // (until it is found: the works can be tiles away, and not yet built at the first look, #666)
+        if (AutoGarage && !_standing && _clock > 3) { _watchedDoor = StandAtGarage(me, 9f, 3.5f); _standing = _watchedDoor != null; }
         // the garage it drives at; once inside, it is 3 km under that door
         if (!AutoGarage && !Interiors.InteriorManager.InInteriorSpace(other.GlobalPosition)
             && Interiors.DoorIndex.Nearest(other.GlobalPosition, 15f, TargetKind) is { } near)

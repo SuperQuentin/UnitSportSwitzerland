@@ -1,0 +1,14 @@
+# Installed as /etc/caddy/Caddyfile by tools/deploy/remote-setup.sh (#651); values baked in there.
+# Serves the chunk directory read-only under /tiles/, the HTTP mirror the game server names to its
+# clients (--tiles-url). The site is TILES_DOMAIN: a domain gets HTTPS (Let's Encrypt) and HTTP/2, or ":80" for plain HTTP.
+@TILES_SITE@ {
+	handle_path /tiles/* {
+		root * @CHUNKS_DIR@
+		# only the files a client may ask for: no listing, no .part leftovers
+		@hidden not path_regexp \.(terr|terrc|road|cover|trees|bldg|holes|water|json|bin)$
+		respond @hidden 404
+		header Cache-Control "public, max-age=300"
+		@COMPRESS@
+	}
+	respond 404
+}

@@ -25,6 +25,8 @@ public enum PalletSource : byte
     Yard,
     /// <summary>One somebody set down: <c>"#&lt;id&gt;"</c>, numbered by the server for the session.</summary>
     Loose,
+    /// <summary>A building site's pallet of bricks or cement (#615): <c>"&lt;building&gt;:c&lt;slot&gt;"</c>.</summary>
+    Site,
 }
 
 /// <summary>A pallet id taken apart.</summary>
@@ -132,6 +134,9 @@ public static class Pallets
     /// <summary>A yard pallet: its site's building key and its slot in the yard (phase 3).</summary>
     public static string YardId(string building, int slot) => $"{building}:y{slot}";
 
+    /// <summary>A building site's pallet of materials (#615): its building key and its slot in the materials' row.</summary>
+    public static string SiteId(string building, int slot) => $"{building}:c{slot}";
+
     /// <summary>A pallet somebody set down, by the server's number for it.</summary>
     public static string LooseId(long id) => "#" + id.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -151,9 +156,9 @@ public static class Pallets
         // a building key, a kind letter and at least one digit
         if (colon <= 0 || colon + 2 >= id.Length) return false;
         char kind = id[colon + 1];
-        if (kind is not ('f' or 'y')) return false;
+        if (kind is not ('f' or 'y' or 'c')) return false;
         if (!int.TryParse(id.AsSpan(colon + 2), System.Globalization.NumberStyles.None, inv, out int index)) return false;
-        parsed = new PalletRef(kind == 'f' ? PalletSource.Hall : PalletSource.Yard, id[..colon], index, 0);
+        parsed = new PalletRef(kind switch { 'f' => PalletSource.Hall, 'y' => PalletSource.Yard, _ => PalletSource.Site }, id[..colon], index, 0);
         return true;
     }
 
@@ -167,11 +172,28 @@ public static class Pallets
     /// square to one of its sides (<see cref="Across"/>), and the machine under <see cref="MaxForkSpeed"/>.
     /// </summary>
     public static bool Forked(float x, float z, float along, float lift, float speed) =>
-        lift < ForkliftLayout.ForkEntry
+        OnTines(x, z - ForkliftLayout.MastZ, along, lift, speed, ForkliftLayout.TineLength, ForkliftLayout.ForkHalfSpan);
+
+    /// <summary>
+    /// The fork rule for any machine with tines (#615: the telehandler, the loader's forks, the
+    /// forklift): a pallet's centre <paramref name="x"/> across the tines' middle and
+    /// <paramref name="ahead"/> of their heel (the carriage's face), in the tines' own frame, inside
+    /// the <paramref name="length"/> by twice <paramref name="halfSpan"/> they sweep; the tines'
+    /// top face <paramref name="height"/> over the ground under <see cref="ForkliftLayout.ForkEntry"/>,
+    /// so they went in under the deck; square to one of its sides; the machine under <see cref="MaxForkSpeed"/>.
+    /// </summary>
+    public static bool OnTines(float x, float ahead, float along, float height, float speed, float length, float halfSpan) =>
+        height < ForkliftLayout.ForkEntry
         && speed < MaxForkSpeed
         && Across(along) != null
-        && Mathf.Abs(x) <= ForkliftLayout.ForkHalfSpan
-        && z >= ForkliftLayout.MastZ && z <= ForkliftLayout.MastZ + ForkliftLayout.TineLength;
+        && Mathf.Abs(x) <= halfSpan
+        && ahead >= 0f && ahead <= length;
+
+    /// <summary>
+    /// How far ahead of the tines' heel a carried pallet's centre rides, m: a pallet's length out from
+    /// the face and 0.12 m clear of it, as <see cref="ForkliftLayout.LoadCentre"/> puts the forklift's.
+    /// </summary>
+    public const float LoadAhead = 0.12f + Length * 0.5f;
 
     /// <summary>Raised this far, the forks under a pallet have lifted it off the floor.</summary>
     public static bool Lifts(float lift) => lift >= Seat;
