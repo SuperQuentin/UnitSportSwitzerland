@@ -211,6 +211,26 @@ public partial class ChunkNode : Node3D
         Swap(_buildingInstance, mesh);
     }
 
+    /// <summary>
+    /// The tile has left the building ring (#553): its building mesh goes. The trees and the water,
+    /// committed with the buildings, stay: they are drawn far past it.
+    /// </summary>
+    public void ClearBuildings()
+    {
+        if (_buildingInstance?.Mesh is not { } mesh) return;
+        _buildingInstance.Mesh = null;
+        mesh.Dispose();
+    }
+
+    /// <summary>The tile has left the road ring (#553): its road mesh (piers, signs and paint with it) and its signal lenses go.</summary>
+    public void ClearRoads()
+    {
+        SetSignalLamps(null);
+        if (_roadInstance?.Mesh is not { } mesh) return;
+        _roadInstance.Mesh = null;
+        mesh.Dispose();
+    }
+
     /// <summary>The tile's building collision, once built: a player in an open doorway is let through it.</summary>
     public StaticBody3D? BuildingBody => _buildingBody;
 
