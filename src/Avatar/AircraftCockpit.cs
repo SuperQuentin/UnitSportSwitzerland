@@ -106,6 +106,9 @@ public partial class AircraftCockpit : Node3D
     private bool _hasLast;
     private float _vs;
 
+    /// <summary><c>--instruments off</c>: the screens never render (to measure what they cost).</summary>
+    public static readonly bool InstrumentsOff = CmdArgs.Value("--instruments") == "off";
+
     /// <summary>The checks (#421): read the instruments even with no camera near, to compare peers.</summary>
     public static bool ReadAlways;
 
@@ -571,7 +574,7 @@ public partial class AircraftCockpit : Node3D
         {
             _scan = 0.25f;
             var cam = GetViewport()?.GetCamera3D();
-            bool near = cam != null && cam.GlobalPosition.DistanceSquaredTo(GlobalTransform * AircraftMeshBuilder.Flip(_k.Eye)) < 30f * 30f;
+            bool near = !InstrumentsOff && cam != null && cam.GlobalPosition.DistanceSquaredTo(GlobalTransform * AircraftMeshBuilder.Flip(_k.Eye)) < 30f * 30f;
             if (near != _active) Activate(near);
         }
         if (!_active && !ReadAlways) return;
