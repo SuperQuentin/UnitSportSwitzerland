@@ -135,6 +135,36 @@ public partial class DroppedItems : Node3D, Core.IOriginContainer
 
     public IEnumerable<DroppedItem> Items => GetChildren().OfType<DroppedItem>();
 
+    // ---- object containers (#689) --------------------------------------------------------------
+
+    /// <summary>Server: true for an item the object containers keep (asleep far from everyone, never cleared as lonely).</summary>
+    public Func<DroppedItem, bool>? Keeps { get; set; }
+
+    /// <summary>Server: an item is about to leave the world for good (picked up): the containers write that down first.</summary>
+    public Action<DroppedItem>? Removing { get; set; }
+
+    /// <summary>A pick-up is in flight for this item: it must not be put to sleep under the picker.</summary>
+    public bool IsClaimedOnServer(string name) => _claimed.Contains(name);
+
+    private void Spawn(DropState state, bool keepOid = false)
+    {
+        if (!keepOid || state.Oid == 0) state = state with { Oid = Vehicles.VehicleState.NewOid() };
+        _spawner!.Spawn(state.ToDict());
+    }
+
+    /// <summary>
+    /// Server: brings an item back from a container (#689): where it lay, at rest, the server its
+    /// authority, its oid kept; under its own name unless something holds it now.
+    /// </summary>
+    public string? Restore(DropState state)
+    {
+        if (!Multiplayer.IsServer() || _spawner == null) return null;
+        string name = state.Name;
+        if (string.IsNullOrEmpty(name) || HasNode(name)) name = $"drop_r_{++_counter}";
+        Spawn(state with { Owner = 0, Name = name, Settled = true, Token = 0, Velocity = Vector3.Zero, Spin = Vector3.Zero }, keepOid: true);
+        return name;
+    }
+
     // ---- server side ---------------------------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -158,7 +188,7 @@ public partial class DroppedItems : Node3D, Core.IOriginContainer
         var all = Items.Where(i => !i.Proxy).ToList();
         for (int i = 0; i <= all.Count - MaxItems; i++) all[i].QueueFree();
         var state = dropped with { Owner = sender, Name = $"drop_{sender}_{++_counter}", Settled = false };
-        _spawner.Spawn(state.ToDict());
+        Spawn(state);
         GD.Print($"[drop] {state.Name}: {dropped.Stack.Id} x{dropped.Stack.Count}");
     }
 
@@ -172,6 +202,8 @@ public partial class DroppedItems : Node3D, Core.IOriginContainer
             RpcId(sender, MethodName.PickUpRefused, name);
             return;
         }
+        // off the containers' book before anyone has it (#689): a crash now must not bring it back
+        Removing?.Invoke(item);
         item.QueueFree();   // the spawner removes it on every client
         _claimed.Remove(name);
         RpcId(sender, MethodName.PickUpGranted, name, (int)item.Stack.Id, item.Stack.Count, item.Stack.Data ?? "");
@@ -221,7 +253,8 @@ public partial class DroppedItems : Node3D, Core.IOriginContainer
                 respawn.Add(item.Capture() with { Owner = 0, Name = $"drop_srv_{++_counter}", Settled = true });
                 item.QueueFree();
             }
-        foreach (var state in respawn) _spawner.Spawn(state.ToDict());
+        // the same item (its oid kept): the containers follow it to its new name
+        foreach (var state in respawn) Spawn(state, keepOid: true);
     }
 
     private void TrimOffline()
@@ -242,6 +275,8 @@ public partial class DroppedItems : Node3D, Core.IOriginContainer
         var players = PlayerPositions?.Invoke().ToList() ?? new List<Vector3>();
         foreach (var item in Items)
         {
+            // the object containers put it to sleep instead (#689)
+            if (Keeps?.Invoke(item) == true) { item.LonelyFor = 0; continue; }
             bool near = players.Count == 0 || players.Any(p => p.DistanceTo(item.GlobalPosition) < LonelyDistance);
             item.LonelyFor = near ? 0 : item.LonelyFor + step;
             if (item.LonelyFor > LonelyTime) item.QueueFree();

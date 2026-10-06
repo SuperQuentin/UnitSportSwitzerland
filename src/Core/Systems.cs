@@ -22,10 +22,12 @@ public static class Systems
         Interiors = "interiors", Loot = "loot", Occasions = "occasions", Ui = "ui", Build = "build",
         // the cars already parked in the car parks, and later the industrial yards' fleets (#499)
         Dormant = "dormant",
-        Airports = "airports";
+        Airports = "airports",
+        // vehicles and dropped items far from everyone saved per tile and brought back (#689)
+        Containers = "containers";
 
     public static readonly string[] All =
-        { Terrain, Generated, Traffic, Trains, Npcs, Birds, Physics, Audio, Network, Sky, Interiors, Loot, Occasions, Ui, Build, Dormant, Airports };
+        { Terrain, Generated, Traffic, Trains, Npcs, Birds, Physics, Audio, Network, Sky, Interiors, Loot, Occasions, Ui, Build, Dormant, Airports, Containers };
 
     public enum WorldKind { Real, Fixture, Flat }
 

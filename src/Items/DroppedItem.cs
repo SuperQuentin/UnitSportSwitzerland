@@ -19,7 +19,9 @@ public readonly record struct DropState(
     Vector3 Velocity,
     Vector3 Spin,
     bool Settled = false,
-    int Token = 0)
+    int Token = 0,
+    // which item this is to the object containers (#689): given by the server; 0 = not persisted
+    long Oid = 0)
 {
     public Godot.Collections.Dictionary ToDict()
     {
@@ -36,6 +38,7 @@ public readonly record struct DropState(
         ["settled"] = Settled,
         ["token"] = Token,
         };
+        if (Oid != 0) d["oid"] = Oid;
         Position.Write(d);
         return d;
     }
@@ -52,7 +55,8 @@ public readonly record struct DropState(
             d["vel"].AsVector3(),
             d["spin"].AsVector3(),
             d["settled"].AsBool(),
-            d.TryGetValue("token", out var token) ? token.AsInt32() : 0);
+            d.TryGetValue("token", out var token) ? token.AsInt32() : 0,
+            d.TryGetValue("oid", out var oid) ? oid.AsInt64() : 0);
     }
 }
 
@@ -325,5 +329,8 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware
     }
 
     /// <summary>The state to respawn it from: where it lies now, what it is.</summary>
-    public DropState Capture() => new(Name, Owner, Stack, _place.Global, Rotation, Vector3.Zero, Vector3.Zero, Settled);
+    public DropState Capture() => new(Name, Owner, Stack, _place.Global, Rotation, Vector3.Zero, Vector3.Zero, Settled, Oid: _initial.Oid);
+
+    /// <summary>Which item this is to the object containers (#689); 0 = not persisted.</summary>
+    public long Oid => _initial.Oid;
 }

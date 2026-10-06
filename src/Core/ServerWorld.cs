@@ -148,6 +148,10 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // touched, every peer works the fleet out for itself from the tile and nothing is sent
         if (Systems.On(Systems.Dormant) && _chunks.Origin is { } dormantOrigin)
             AddChild(new Vehicles.DormantVehicles(_chunks, dormantOrigin));
+        // vehicles and items far from everyone go to sleep in their tile's container and come back
+        // when someone does, and after a restart (#689); after the dormant fleets, whose woken
+        // slots it keeps awake
+        World.ObjectContainers.CreateServer(this, _vehicles, _dropped, _players);
         // the paddle steamer at the Nyon landing (#303), put back each time its tile loads
         AddChild(new World.SteamerBerth(_chunks));
         // jetskis and speedboats along the harbour jetties (#383), put back a while after they are taken
@@ -431,6 +435,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _placed?.SendTo(id);
         _sleepers?.SendTo(id);
         _pallets?.SendTo(id);
+        // the dormant slots woken anywhere (#689): a far one's car is not sent, its bay must be empty
+        Vehicles.DormantVehicles.Instance?.SendTo(id);
         _structures?.SendTo(id);
         _br?.SendTo(id);
         _brCrates?.SendTo(id);

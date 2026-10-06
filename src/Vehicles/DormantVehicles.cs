@@ -113,6 +113,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         Instance = this;
         Landings.Changed += OnLandingsChanged;
         Watch();
+        // woken slots whose vehicle sleeps in a container stay awake (#689)
+        if (World.ObjectContainers.Instance is { } containers) KeepAwake(containers.FiledNames);
     }
 
     public override void _ExitTree()
@@ -170,11 +172,78 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         if (SlotOf(node.Name) is not { } key) return;
         _gone.Remove(key.Key);
         _asked.Remove(key.Key);
-        // a forklift asleep in a hall (#630) is no tile's slot: its own node undraws itself
-        ParkedForklift.Woke(key.Key);
-        if (!_awake.Add(key.Key)) return;
-        Forget(key.Tile, key.Key);
+        bool fresh = !_awake.Contains(key.Key);
+        MarkAwake(key.Key);
+        // every peer is told, near or not (#689): with entity interest a peer far away never gets
+        // the node, and its bay must still be empty when it comes; the fact is global, the car local
+        if (fresh && Online && Multiplayer.IsServer()) Rpc(MethodName.Woke, key.Key);
     }
+
+    /// <summary>A slot is awake here: its dormant copy goes, in a car park or a hall (#630).</summary>
+    private void MarkAwake(string key)
+    {
+        _awaiting.Remove(key);
+        // a forklift asleep in a hall (#630) is no tile's slot: its own node undraws itself
+        ParkedForklift.Woke(key);
+        if (!_awake.Add(key)) return;
+        int bar = key.LastIndexOf('|');
+        if (bar > 0 && TileOf(key[..bar]) is { } tile) Forget(tile, key);
+    }
+
+    // ---- the awake set on every peer (#689) ----------------------------------------------------
+
+    /// <summary>
+    /// Awake slots the server told of whose vehicle has not arrived here yet, and until when the
+    /// dormant copy waits for it. Within a client's interest the node is on its way, and the copy
+    /// stays until it lands rather than leave the bay empty for a frame (the spawn and the message
+    /// travel apart, #560); past the wait the vehicle is elsewhere and the bay is empty.
+    /// </summary>
+    private readonly Dictionary<string, double> _awaiting = new();
+
+    /// <summary>Seconds a copy waits for its woken vehicle; longer on joining, when the spawns come in budgets.</summary>
+    private const double AwaitNode = 1.0, AwaitNodeOnJoin = 3.0;
+
+    /// <summary>Whether a slot (<c>owner|ordinal</c>) is awake: its vehicle is somewhere in the world, or asleep in a container.</summary>
+    public bool IsAwake(string key) => _awake.Contains(key);
+
+    /// <summary>Server: vehicles asleep in containers (#689), by node name; the woken slots among them stay awake.</summary>
+    public void KeepAwake(IEnumerable<string> names)
+    {
+        foreach (var name in names)
+            if (SlotOf(name) is { } key) MarkAwake(key.Key);
+    }
+
+    /// <summary>Server: a joining peer gets every awake slot, wherever its vehicle is.</summary>
+    public void SendTo(long peer)
+    {
+        if (_awake.Count > 0) RpcId(peer, MethodName.AwakeSet, _awake.ToArray());
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeerExtension.TransferModeEnum.Reliable)]
+    private void Woke(string key)
+    {
+        if (!_awake.Contains(key)) _awaiting.TryAdd(key, GameClock.Now + AwaitNode);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeerExtension.TransferModeEnum.Reliable)]
+    private void AwakeSet(string[] keys)
+    {
+        foreach (var key in keys)
+            if (!_awake.Contains(key)) _awaiting.TryAdd(key, GameClock.Now + AwaitNodeOnJoin);
+    }
+
+    /// <summary>The waits that ran out: those slots' vehicles are elsewhere, their bays empty.</summary>
+    private void AwaitedLong()
+    {
+        if (_awaiting.Count == 0) return;
+        double now = GameClock.Now;
+        _expiredWaits.Clear();
+        foreach (var (key, until) in _awaiting)
+            if (now >= until) _expiredWaits.Add(key);
+        foreach (var key in _expiredWaits) MarkAwake(key);
+    }
+
+    private readonly List<string> _expiredWaits = new();
 
     /// <summary>
     /// A woken slot's vehicle left the world (taken by a player, wrecked and cleared): where the slot
@@ -182,6 +251,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// </summary>
     private void OnVehicleRemoved(Node node)
     {
+        // gone to sleep in a container (#689), not gone: the slot is still that vehicle's
+        if (World.ObjectContainers.IsFiling(node)) return;
         if (SlotOf(node.Name) is not { } key || !_awake.Contains(key.Key)) return;
         _gone[key.Key] = GameClock.Now;
     }
@@ -246,6 +317,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     {
         string key = $"{owner}|{ordinal}";
         _gone.Remove(key);
+        _awaiting.Remove(key);
         if (!_awake.Remove(key)) return;
         if (TileOf(owner) is { } id && _slots.ContainsKey(id)) Draw(id);
     }
@@ -332,6 +404,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         if (_sinceCheck < CheckEvery) return;
         _sinceCheck = 0;
         Restock();
+        AwaitedLong();
         if (_unposed.Count > 0)
         {
             _repose.Clear();

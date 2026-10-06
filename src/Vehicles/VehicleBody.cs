@@ -330,7 +330,10 @@ public partial class VehicleBody : CharacterBody3D
             : Ride is Airliner ? (_initial.Flags & ~(15 << 13)) | ((DoorsOpen & 15) << 13) : _initial.Flags, _initial.Load,
         _initial.Radio, _initial.Cd,
         // in a hold (#418): its carrier now (it may have changed hands since it was parked) and its spot
-        HoldPlace.Key, HoldPlace.Section, HoldPlace.Pos, HoldPlace.Yaw);
+        HoldPlace.Key, HoldPlace.Section, HoldPlace.Pos, HoldPlace.Yaw, _initial.Oid);
+
+    /// <summary>Which vehicle this is to the object containers (#689); 0 = not persisted.</summary>
+    public long Oid => _initial.Oid;
 
     /// <summary>The live station its radio plays, as the driver left it (spawn data only: nobody tunes a parked car).</summary>
     public int Radio => _initial.Radio;
