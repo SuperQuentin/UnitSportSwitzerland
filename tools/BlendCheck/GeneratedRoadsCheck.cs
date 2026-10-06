@@ -72,6 +72,12 @@ static class GeneratedRoadsCheck
                     continue;
                 }
                 Tally(counts, want);
+                if (args.Contains("--list"))
+                    foreach (var pp in want.PointProps.Where(pp => pp.Type == PointPropType.YieldSign))
+                        WriteLine($"  yield sign at {id.MinE + pp.X:F1},{id.MaxN - pp.Z:F1} y {pp.Y:F1}");
+                if (args.Contains("--list"))
+                    foreach (var sg in want.Signals)
+                        WriteLine($"  traffic lights at {id.MinE + sg.X:F1},{id.MaxN - sg.Z:F1} y {sg.Y:F1}");
                 if (Encode(tile).AsSpan().SequenceEqual(Encode(want))) same++;
                 else
                 {
