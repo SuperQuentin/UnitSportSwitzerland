@@ -35,7 +35,13 @@ public static partial class InteriorGenerator
             var (layout, data) = Layout(type, piece);
             if (data.Vertices.Length == 0) continue;
             yield return (type.ToString(), () =>
-                InteriorNode.Create(layout, data, Styles.StyleKit.Material(Styles.MaterialRole.Interior), Transform3D.Identity));
+            {
+                var node = InteriorNode.Create(layout, data, Styles.StyleKit.Material(Styles.MaterialRole.Interior), Transform3D.Identity);
+                // a layout with no entrance still gets the fallback front door (AllEntrances), at
+                // the origin, right through the piece: hidden, not freed (the node keeps its leaves)
+                foreach (var leaf in node.GetChildren().OfType<DoorLeaf>()) leaf.Visible = false;
+                return node;
+            });
         }
     }
 

@@ -221,7 +221,8 @@ public partial class ModelViewer : Node3D
         Aabb? box = null;
         var inverse = root.GlobalTransform.AffineInverse();
         foreach (var node in root.FindChildren("*", nameof(VisualInstance3D), true, false).Prepend(root))
-            if (node is VisualInstance3D vi and not Light3D)
+            // hidden parts (a pigeon's folded wings, a door left out) do not count
+            if (node is VisualInstance3D vi and not Light3D && vi.IsVisibleInTree())
             {
                 var b = inverse * vi.GlobalTransform * vi.GetAabb();
                 box = box is { } a ? a.Merge(b) : b;
