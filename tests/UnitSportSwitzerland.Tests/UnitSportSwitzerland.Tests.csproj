@@ -64,6 +64,7 @@
     <Compile Include="..\..\src\Player\AirlinerCatalog.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\TurbopropTone.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\AirlinerFlight.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\CockpitInstruments.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Build\BuildGrid.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrPrefabs.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- site detection (#497) and landmark detection (#501): pure functions of a tile's

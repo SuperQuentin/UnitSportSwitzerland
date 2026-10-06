@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 using UnitSport.Core;
 using UnitSport.Terrain;
@@ -231,10 +232,29 @@ public partial class FlightCheckProbe : Node
         }
     }
 
+    /// <summary>Wall-clock frame times, ms, while flying: what a windowed run costs (#421, the cockpit's screens with <c>--instruments off</c> to compare).</summary>
+    private readonly List<float> _frameMs = new();
+    private ulong _lastFrameUs;
+
+    public override void _Process(double delta)
+    {
+        ulong now = Time.GetTicksUsec();
+        if (_lastFrameUs != 0 && _player != null && !_done) _frameMs.Add((now - _lastFrameUs) / 1000f);
+        _lastFrameUs = now;
+    }
+
     private void End(string how)
     {
         if (_done) return;
         _done = true;
+        if (_frameMs.Count > 10)
+        {
+            _frameMs.Sort();
+            float sum = 0f;
+            foreach (float f in _frameMs) sum += f;
+            GD.Print($"[flycheck] frames {_frameMs.Count}: avg {sum / _frameMs.Count:F2} ms, p50 {_frameMs[_frameMs.Count / 2]:F2}, "
+                + $"p95 {_frameMs[_frameMs.Count * 95 / 100]:F2}, max {_frameMs[^1]:F2} (time scale {Engine.TimeScale:F0})");
+        }
         var p = _player!.GlobalPosition;
         float dist = (float)_origin.ToGlobal(p).HorizontalDistanceTo(_from);
         float drop = (float)_from.Alt - p.Y;
