@@ -115,8 +115,8 @@ public static class DoorCheck
                 // that is wide, rolls up and is driven through
                 Expect(d.Position.Y + d.Height <= b.MaxY + 0.01f, $"{box.What} slot {d.Slot}: the door is under the eave");
                 if (d.Hang == DoorHang.RollUp && d.Vehicle)
-                    Expect(site != BuildingType.None,
-                        $"{box.What} slot {d.Slot}: a loading bay, and its building is an industrial site");
+                    Expect(site != BuildingType.None || d.Link.Any,
+                        $"{box.What} slot {d.Slot}: a loading bay, and its building is an industrial site (or a block's garage door, #558)");
                 else
                     Expect(d.Hang == DoorHang.Inward && !d.Vehicle && d.Width <= 1.8f,
                         $"{box.What} slot {d.Slot}: a pedestrian door ({d.Width:F1} m, {d.Hang}), not driven through");
@@ -210,8 +210,89 @@ public static class DoorCheck
                 + $"{layout.Floors.Count} floor(s), {string.Join("/", mine.Select(d => $"{d.Width:F1}m {d.Hang}"))}");
         }
 
+        failures += Garages();
+
         GD.Print($"[doorcheck] RESULT: {(failures == 0 ? "ok" : $"FAILED ({failures})")}");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// The underground garage door of a block of flats (#558): eight long blocks beside a street at
+    /// a distance each, through the real <see cref="BuildingFootprint.ComputeDoors"/> (which needs a
+    /// road tile) and the real generator. A garage door is exempt from the pedestrian-door rules
+    /// above, as a loading bay is, and every property that exemption lets go is asserted here: it
+    /// is a roll-up vehicle door of its own size on a wall, its link is the one the road's distance
+    /// and class call for, there is no door at all with no street in reach or a motorway as near,
+    /// and the plan behind it still validates, with a car park for the garage to belong to and no
+    /// doorway yet (PR 2 plans the ramp), so the door reads as locked.
+    /// </summary>
+    private static int Garages()
+    {
+        int failures = 0;
+        void Expect(bool ok, string what)
+        {
+            if (!ok) failures++;
+            GD.Print($"[doorcheck] {(ok ? "ok  " : "FAIL")} {what}");
+        }
+
+        // a block 80 x 20 m, 15 m tall: three front doors and a deep enough basement for a car park
+        var block = new Box("a long block", BuildingKind.Apartment, 80, 20, 15, 3, DoorBudget.MaxPerBuilding);
+        const int copies = 8;
+        // street centreline, metres in front of the block's south wall, its class, and what comes of it
+        (string What, RoadClass Class, float Gap, LinkKind Want)[] cases =
+        [
+            ("a minor street 6 m off", RoadClass.Minor, 6f, LinkKind.Sidewalk),
+            ("a street 16 m off", RoadClass.Road, 16f, LinkKind.Stub),
+            ("a main road 8 m off", RoadClass.Major, 8f, LinkKind.Stub),
+            ("a street 40 m off", RoadClass.Road, 40f, LinkKind.None),
+            ("a motorway 12 m off", RoadClass.Motorway, 12f, LinkKind.None),
+        ];
+        foreach (var (what, cls, gap, want) in cases)
+        {
+            var tile = new BuildingTile
+            {
+                Id = new TileId(2583, 1113),
+                Buildings = Enumerable.Range(0, copies).Select(i => Solid(block, 110f * i + 60f)).ToList(),
+            };
+            var roads = new RoadTile
+            {
+                Id = tile.Id,
+                Segments = Enumerable.Range(0, copies).Select(i => new RoadSegment
+                {
+                    Class = cls, Surface = RoadSurface.Paved, Width = RoadFormat.DefaultWidth(cls),
+                    Points = [380f, 0f, 110f * i + 60f + 10f + gap, 620f, 0f, 110f * i + 60f + 10f + gap],
+                }).ToList(),
+            };
+            var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
+            var garages = doors.Where(d => d.Link.Any).ToList();
+            if (want == LinkKind.None)
+            {
+                Expect(garages.Count == 0, $"{what}: no garage door ({garages.Count} found)");
+                continue;
+            }
+            Expect(garages.Count >= 1 && garages.Count <= copies, $"{what}: {garages.Count} of {copies} blocks roll a garage door");
+            // 40 % by key hash: not none, not all
+            Expect(garages.Count < copies, $"{what}: not every block has one");
+            foreach (var g in garages)
+            {
+                var b = tile.Buildings[g.Index];
+                Expect(g.Link.Kind == want, $"{what}: slot {g.Slot} links with {g.Link.Kind}, wanted {want}");
+                Expect(g.Vehicle && g.Hang == DoorHang.RollUp && Math.Abs(g.Width - GarageRule.Width) < 0.01f && g.Height >= 2.2f,
+                    $"{what}: slot {g.Slot} is a {g.Width:F1} x {g.Height:F1} m roll-up vehicle door");
+                Expect(BuildingFootprint.DoorOnWall(b, g), $"{what}: slot {g.Slot} is on a wall");
+                Expect(g.Link.Length is > 0.3f and < 25f, $"{what}: its link is {g.Link.Length:F1} m long");
+                int total = doors.Count(d => d.Index == g.Index && d.Width > 0);
+                Expect(total >= 1 + GarageRule.MinFrontDoors, $"{what}: the block has {total} doors, garage included");
+                var layout = InteriorGenerator.Generate(tile, g.Index, roads, null);
+                if (layout == null) { Expect(false, $"{what}: no plan"); continue; }
+                var problems = InteriorValidator.Validate(layout);
+                Expect(problems.Count == 0, $"{what}: the plan validates{(problems.Count > 0 ? " — " + string.Join("; ", problems.Take(3)) : "")}");
+                Expect(layout.Floors.Any(f => f.Rooms.Any(r => r.Type == RoomType.CarPark)),
+                    $"{what}: the basement behind it has a car park (the rule and the generator agree)");
+                Expect(layout.EntranceOf(g.KeyIn(tile.Id).ToString()) == null, $"{what}: the garage door reads as locked until its ramp exists");
+            }
+        }
+        return failures;
     }
 
     /// <summary>
