@@ -554,6 +554,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
                     new Vector3(float.Parse(fly[0], inv), float.Parse(fly[1], inv), float.Parse(fly[2], inv)),
                     float.Parse(fly[3], inv), float.Parse(fly[4], inv), double.Parse(fly[5], inv));
             }),
+            new(() => StreetFlight.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                var (speed, seconds) = StreetFlight.ParseArgs()!.Value;
+                FreeSpectator();
+                return new StreetFlight(_spectator!, chunks, origin, speed, seconds);
+            }),
             new(() => ShotRunner.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
                 var shot = ShotRunner.ParseArgs()!;
