@@ -41,6 +41,7 @@ public partial class HallCarProbe : ChatProbe
     {
         _role = Role ?? "A";
         string other = _role == "A" ? "B" : "A";
+        bool late = _role == "C";
         if (!await Joined(120)) return;
         var me = Me!;
         var interiors = InteriorManager.Instance!;
@@ -94,6 +95,11 @@ public partial class HallCarProbe : ChatProbe
             for (int tries = 0; tries < 60 && !got; tries++) { Say("in"); got = await Heard("B", "spot", 3); }
             if (!got) { Fail("B never got to its end of the car park"); return; }
         }
+        else if (late)
+        {
+            // joined after A woke its car: nothing was said to this client, and the door may have shut again
+            if (!await WalkIn(me, interiors, door)) return;
+        }
         else
         {
             if (!await Heard("A", "in", 120)) { Fail("A never walked in"); return; }
@@ -111,6 +117,23 @@ public partial class HallCarProbe : ChatProbe
         Vector3 Local(float x, float z) => node.GlobalTransform * new Vector3(x, floorY + 0.1f, z);
         float YawToward(Vector3 from, Vector3 to) { var d = to - from; return Mathf.Atan2(-d.X, -d.Z); }
 
+        if (late)
+        {
+            // the late joiner: the car A woke is a vehicle in this client's join snapshot, and its sleeper must
+            // never be drawn (not for a frame: the interior was built after the vehicle existed)
+            float zl = far.Z < roomMidZ ? far.Z + 3.4f : far.Z - 3.4f;
+            var atl = Local(far.X, zl);
+            me.EnterInterior(plan.Key, atl, YawToward(atl, Local(car.X, car.Z)));
+            await Seconds(1.0);
+            Expect(await Until(() => Vehicle(slot.NodeName) != null, 10), $"C: the woken car {slot.NodeName} is in the vehicles it joined to");
+            Expect(!cp.IsDrawn(mine), "C: its sleeper is not drawn (never both)");
+            var others2 = cp.Slots.Where(s2 => s2.Ordinal != mine).ToList();
+            Expect(others2.Count > 0 && others2.All(s2 => cp.IsDrawn(s2.Ordinal)), $"C: the other {others2.Count} cars are drawn");
+            if (windowed) Shot("late_joiner");
+            Say("checked");
+            await Finish(1.0);
+            return;
+        }
         if (_role == "B")
         {
             float zin = far.Z < roomMidZ ? far.Z + 3.4f : far.Z - 3.4f;
@@ -152,6 +175,13 @@ public partial class HallCarProbe : ChatProbe
         if (windowed) Shot("woken");
         Say("woke");
         await Seconds(4.0);   // B looks at it
+        // a third client joins now (--late-joiner) and must find the car a vehicle and its sleeper gone
+        if (CmdArgs.Has("--late-joiner"))
+        {
+            bool checkedLate = false;
+            for (int tries = 0; tries < 80 && !checkedLate; tries++) { Say("woke"); checkedLate = await Heard("C", "checked", 3); }
+            Expect(checkedLate, "A: the late joiner C found the car a vehicle and its sleeper gone");
+        }
 
         // ---- get in ----------------------------------------------------------------------------------
         bool inCar = false;
@@ -166,7 +196,7 @@ public partial class HallCarProbe : ChatProbe
         }
         Expect(inCar && CarCatalog.IsCar(me.Ride), $"A: got into the bay car (ride {me.Ride})");
         if (!inCar) { Fail("could not get into the woken car"); return; }
-        Expect(Vehicle(slot.NodeName) == null, "A: the vehicle is the player's now");
+        Expect(await Until(() => Vehicle(slot.NodeName) == null, 5), "A: the vehicle is the player's now");
         Say("in car");
         await Seconds(1.0);
 
@@ -184,7 +214,7 @@ public partial class HallCarProbe : ChatProbe
         float startY = me.GlobalPosition.Y;
         Input.ActionPress(PlayerInput.Throttle);
         float peak = 0;
-        bool outside = await Until(() => { peak = Math.Max(peak, me.GlobalPosition.Y - startY); return !InteriorManager.InInteriorSpace(me.GlobalPosition); }, 40);
+        bool outside = await Until(() => { if (InteriorManager.InInteriorSpace(me.GlobalPosition)) peak = Math.Max(peak, me.GlobalPosition.Y - startY); return !InteriorManager.InInteriorSpace(me.GlobalPosition); }, 40);
         Input.ActionRelease(PlayerInput.Throttle);
         Input.ActionPress(PlayerInput.Brake);
         await Until(() => me.GroundSpeed < 0.3f, 8);
@@ -232,7 +262,7 @@ public partial class HallCarProbe : ChatProbe
 
         // A gets in and drives it: the vehicle becomes A's body, seen climbing and leaving
         Say("saw woke");
-        if (!await Heard("A", "in car", 60)) { Fail("A never got in"); return; }
+        if (!await Heard("A", "in car", 180)) { Fail("A never got in"); return; }
         float lowest = float.MaxValue, highest = float.MinValue;
         bool sawCar = false, sawOutside = false, sawClimb = false;
         double end = GameClock.Now + 60;
