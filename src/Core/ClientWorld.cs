@@ -370,7 +370,6 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the paddle steamer at the Nyon landing (#303): likewise
         AddChild(new World.SteamerBerth(_chunks));
         // jetskis and speedboats along the harbour jetties (#383): likewise
-        AddChild(new World.MarinaBoats(_chunks));
         // A320s with airstairs, the AN-124 and the freighter at the airports' stands (#422), put back a while after they are taken
         if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(_chunks));
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));

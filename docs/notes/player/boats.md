@@ -126,6 +126,6 @@
   The jetski has no wheel (bars on the rider's mesh, not turned).
 - **At a jetty** (#377, `world/landings`): harbour jetties are solid decks; getting out beside one steps
   onto it instead of into the water (`FootPlayer.Pier.cs`, `--steamercheck pier|nyon`).
-- **At the harbours** (#383, `world/landings`): jetskis and speedboats moored along the jetties (`World.MarinaBoats`), server-placed, put back a while after being taken.
+- **At the harbours** (#383, `world/landings`): jetskis and speedboats moored along the jetties, dormant slots since #554 (`DormantSlots.ForMarina`, drawn instanced until touched), put back a while after being taken.
 - **Not done**: boats placed at the real harbours (the jetties are there, nothing parks at them); no hiss of a hull running through the water; boats in races have no water courses (the mount words
   `jetski`/`boat` parse); the jetski's rider is the motorbike rider (helmet).

@@ -101,6 +101,17 @@
   What still differs is everything a live `VehicleBody` adds — its settling onto the ground, a
   heavy's sections posed axle by axle, lights, hurtbox outline — which is the follow-up for a
   seamless switch.
+- **Harbours are the third provider** (#554): `DormantSlots.ForMarina` turns each jetty's
+  `BoatBerths` into boats at their keel (`world/landings`). Its Godot half, `DormantVehicles.Marina`,
+  reads the tile's full grid, cover and water on the fill worker, only on a tile a jetty's middle is in.
+  A streaming client gets the server's landings after its first tiles: `Landings.Changed` drops every
+  fleet and fills them again on the next look.
+- **A slot can respawn** (`VehicleSlot.Respawns`, boats only): when a woken slot's vehicle leaves the
+  world (`VehicleManager.ChildExitingTree`: taken by a player, wrecked and cleared), the deciding peer
+  (server, or offline) starts a clock; `RespawnSeconds` (180) later, with nothing within 4 m and
+  nobody within 40 m, `Slept` puts it back to sleep on every peer and it is drawn again. A vehicle
+  that still exists keeps its slot awake however far it went. Cars and yards do not respawn: whoever
+  drove one off has it.
 - **Switchable**: `Systems.Dormant` (`--systems ... ,dormant`), created in `ClientWorld` and
   `ServerWorld`. Absent `--systems`, players get it.
 - **Checks**: `tools/parkingnetcheck.sh` (tier 2, `src/Vehicles/ParkingNetProbe`): a server and two
