@@ -138,6 +138,15 @@ public static class FreighterMeshBuilder
         return h;
     }
 
+    /// <summary>The flight deck's glass along each side: side windows and the windscreen to the nose, between pillars.</summary>
+    private static readonly (float From, float To)[] FlightDeckGlass = { (8.75f, 9.2f), (9.3f, 9.75f), (9.85f, 10.4f), (10.5f, 11.05f), (11.15f, 11.9f) };
+
+    /// <summary>The pilots' sight around the eye (3.08 m): from under the glareshield's line to over their heads.</summary>
+    private const float SightLow = 2.55f, SightHigh = 3.6f;
+
+    /// <summary>Row <paramref name="k"/> is in the pilots' sight at station <paramref name="z"/>.</summary>
+    private static bool InSight(int k, float z) => Po(z, H[k + 1], 1).Y > SightLow + 0.35f && Po(z, H[k], 1).Y < SightHigh;
+
     /// <summary>A point of the skin's outer face at station z, fraction h (−1 belly .. 1 crown), side sg.</summary>
     private static Vector3 Po(float z, float h, int sg)
     {
@@ -190,9 +199,10 @@ public static class FreighterMeshBuilder
         if (k <= 1) holes.Add(new Hole(UpperDoorHingeZ, RampHingeZ, false));
         if (k == 5) foreach (float z in HoldWindowZ) holes.Add(new Hole(z - 0.18f, z + 0.18f, true));
         // the flight deck: side windows, the windscreen, the eyebrows and the chin
-        if (k is 6 or 7)
-            foreach (var (f, t) in new[] { (8.75f, 9.2f), (9.3f, 9.75f), (9.85f, 10.4f), (10.5f, 10.95f) }) holes.Add(new Hole(f, t, true));
-        if (k == 8) { holes.Add(new Hole(9.3f, 9.75f, true)); holes.Add(new Hole(9.85f, 10.4f, true)); }
+        // cut in every row the pilots look through at that station: the nose's rows close in and come
+        // down, so which rows those are depends on where (#421)
+        foreach (var (f, t) in FlightDeckGlass)
+            if (InSight(k, (f + t) * 0.5f)) holes.Add(new Hole(f, t, true));
         if (k == 3) holes.Add(new Hole(10.45f, 11.0f, true));
         holes.Sort((x, y) => x.From.CompareTo(y.From));
         return holes;
@@ -377,6 +387,9 @@ public static class FreighterMeshBuilder
 
     private static float InnerAt(float z, float y) => Mathf.Max(0.1f, OuterX(z, y) - FreighterLayout.Skin - 0.02f);
 
+    /// <summary>The instrument panel's half width (#421): as wide as the nose allows at its height.</summary>
+    public static float CockpitPanelHalf => Mathf.Min(1.3f, InnerAt(PanelZ, 2.7f));
+
     private static void FlightDeck(MeshScratch m)
     {
         // its floor, narrowing with the nose
@@ -410,23 +423,13 @@ public static class FreighterMeshBuilder
             m.Box(new Vector3(x, hip.Y + 0.84f, hip.Z - 0.25f), new Vector3(0.3f, 0.2f, 0.1f), Seat);
             foreach (float s in new[] { -1f, 1f })
                 m.Box(new Vector3(x + s * 0.28f, hip.Y + 0.12f, hip.Z + 0.06f), new Vector3(0.05f, 0.05f, 0.4f), Dark);
-            // the control column and its yoke
-            m.Tube(new Vector3(x, FlightDeckY, hip.Z + 0.75f), new Vector3(x, hip.Y + 0.35f, hip.Z + 0.55f), 0.035f, 0.03f, Dark, 5);
-            m.Box(new Vector3(x, hip.Y + 0.38f, hip.Z + 0.53f), new Vector3(0.34f, 0.05f, 0.05f), Dark);
         }
-        // the pedestal with four power levers, the panel with its gauges, the glareshield, the overhead
+        // the pedestal, the panel, the glareshield, the overhead: the yokes, levers, gauges and lamps are
+        // the cockpit's own (#421, AircraftCockpit)
         m.Box(new Vector3(0, FlightDeckY + 0.3f, 9.75f), new Vector3(0.38f, 0.6f, 0.9f), Panel);
-        for (int i = 0; i < 4; i++)
-            m.Tube(new Vector3(-0.12f + i * 0.08f, FlightDeckY + 0.6f, 9.6f), new Vector3(-0.12f + i * 0.08f, FlightDeckY + 0.8f, 9.75f), 0.015f, 0.012f, Lamp, 4);
-        float hw = Mathf.Min(1.3f, InnerAt(PanelZ, 2.7f));
-        m.Box(new Vector3(0, 2.62f, PanelZ), new Vector3(hw * 2f, 0.7f, 0.1f), Panel);
-        for (int i = 0; i < 10; i++)
-        {
-            float x = (i % 5 - 2) * hw * 0.38f;
-            m.Box(new Vector3(x, i < 5 ? 2.78f : 2.52f, PanelZ - 0.055f), new Vector3(0.2f, 0.18f, 0.02f), i % 3 == 0 ? Screen : Dark);
-        }
-        float gw = Mathf.Min(1.3f, InnerAt(PanelZ - 0.15f, 3.0f));
-        m.Box(new Vector3(0, 3.0f, PanelZ - 0.12f), new Vector3(gw * 2f, 0.06f, 0.4f), Dark);
+        m.Box(new Vector3(0, 2.52f, PanelZ), new Vector3(CockpitPanelHalf * 2f, 0.7f, 0.1f), Panel);
+        float gw = Mathf.Min(1.3f, InnerAt(PanelZ - 0.15f, 2.9f));
+        m.Box(new Vector3(0, 2.9f, PanelZ - 0.12f), new Vector3(gw * 2f, 0.06f, 0.4f), Dark);
         m.Box(new Vector3(0, FlightDeckCeilingY - 0.08f, 9.3f), new Vector3(0.9f, 0.12f, 1.0f), Panel);
         // behind the pilots: the engineer's station (right), a crew bunk (left)
         m.Box(new Vector3(-1.45f, FlightDeckY + 0.5f, 7.6f), new Vector3(0.6f, 1.0f, 1.6f), Panel);

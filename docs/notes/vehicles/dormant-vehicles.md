@@ -37,14 +37,35 @@
   is: the draw, the collision, the wake path and the awake bookkeeping work off `VehicleSlot` alone.
   An industrial yard derives its standing positions from the building's plan box and the cover
   around it and joins by adding one call at that seam.
-- **The draw** (`src/Vehicles/DormantVehicles.cs`) is one `MultiMesh` per look and part from
-  `TrafficMeshBuilder.Car` — the same cached meshes the traffic uses, so a lot of 80 cars is a
-  handful of draw calls and no node per car. Slots are worked out on a worker (a `.road` is tens of
-  ms to decode), one tile at a time, on `ChunkManager.TileEntered`. Drawn to 400 m.
-- **Collision** is one `DormantBody` (a `StaticBody3D` with a box) per car, created with the tile
-  rather than pooled by distance the way `TreeColliders` pools its trunks: only a handful of tiles
-  hold a lot. If `--perflog` ever says otherwise, pooling is the next step and the slot list is
-  already the right input. A ghost car you walk through would be worse than no car.
+- **Only near an anchor** (#552). A tile holds its fleet while it is within `NearRings` (1) tile of
+  an anchor's tile, and drops it, bodies and instancers, past `KeepRings` (2); checked twice a second
+  in `_Process`, only when an anchor changes tile. It used to fill every tile
+  `ChunkManager.TileEntered` announced — the whole streamed square, 961 tiles at render distance 15 —
+  and never let one go, which is what sank Geneva (Jolt's 10 240 bodies gone, renderer out of RIDs,
+  tens of GB). **Never hang per-tile content on `TileEntered` alone**: it fires for every streamed
+  tile, and a system that takes it must also take `TileUnloaded` or keep its own radius.
+- **No origin shift handler.** `DormantVehicles` is an `IOriginContainer`: the shifter moves its
+  bodies and instancers. Redrawing every fleet on a shift as well rebuilt every lorry's cab per shift
+  (98 s for one teleport into Geneva). A redraw places instances with `_origin.ToWorld` under the
+  container at the identity, which agrees with the shifted ones.
+- **The draw is the woken vehicle's own model** (`DormantLooks`): `StateOf(slot).CreateRide()`, the
+  very state `Promote` places, then `BuildParkedVisual(1)` as `VehicleBody` calls it, merged once per
+  look — kind, train, load to a twentieth — into one `ArrayMesh`, a surface per (material,
+  primitive, vertex format), and kept for the session (`WorldStatics.Reset` clears it). A tile is one
+  `MultiMesh` per look, drawn to 400 m, so a lot of 80 cars of a dozen kinds is a dozen instancers
+  and no node per car, and a lorry is the artic it wakes as, trailer included. Headless (a server, a
+  check) builds the boxes only. Slots are worked out on a worker (a `.road` is tens of ms to
+  decode), one tile at a time.
+- **Collision** is one `DormantBody` (a `StaticBody3D`) per slot with the look's boxes — the parked
+  hull plus each further section's, as `VehicleBody` takes them — whose shapes are shared by every
+  slot of that look. Created with the tile rather than pooled by distance the way `TreeColliders`
+  pools its trunks; if `--perflog` ever says otherwise, pooling is the next step. A ghost car you
+  walk through would be worse than no car.
+- **All of a tile's bodies are in one list** (`_solid[id]`), lorries included. The lorries' were once
+  stored and then overwritten by the cars', so `Clear` never freed them and every redraw stacked
+  another copy. A wake (`Forget`) frees that one slot's body and redoes the tile's instancers from
+  the shared looks; nothing else is rebuilt. Every tile with a fleet has a `_drawn` entry, even an
+  empty one.
 - **Waking.** `VehicleReach.Find` wakes the slot whose `DormantBody` the **aim ray** hit — never on
   mere proximity, or walking past a full lot would promote eighty cars. The client asks the server,
   which checks the slot is one it worked out for itself (so a client cannot conjure a vehicle at a
@@ -76,9 +97,10 @@
   pose, undamaged, unclaimed, nobody within 200 m — because one that re-sleeps anywhere else
   teleports in front of whoever is watching, and one that re-sleeps damaged silently repairs itself
   (#497's analysis).
-- **The look changes on waking**, and it is a known wart: dormant is a generic low-poly hatch or van
-  from the traffic meshes, woken is the real catalogue car the slot was hashed to. What pops is the
-  detail, not the car. Drawing the catalogue mesh dormant is the fix if it grates.
+- **The model does not change on waking** (#552): dormant and woken are both `BuildParkedVisual`.
+  What still differs is everything a live `VehicleBody` adds — its settling onto the ground, a
+  heavy's sections posed axle by axle, lights, hurtbox outline — which is the follow-up for a
+  seamless switch.
 - **Switchable**: `Systems.Dormant` (`--systems ... ,dormant`), created in `ClientWorld` and
   `ServerWorld`. Absent `--systems`, players get it.
 - **Checks**: `tools/parkingnetcheck.sh` (tier 2, `src/Vehicles/ParkingNetProbe`): a server and two

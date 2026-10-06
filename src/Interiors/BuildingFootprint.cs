@@ -100,6 +100,9 @@ public static class BuildingFootprint
     /// <summary>Beyond this the interior is clamped — a 300 m warehouse is one hall either way.</summary>
     public const float MaxSide = 120f;
 
+    /// <summary>A landmark store's entrance (#501): the glass front, as wide as a trolley crowd.</summary>
+    public const float StoreDoorWidth = 7.0f, StoreDoorHeight = 3.4f;
+
     public static float DoorWidthFor(BuildingKind kind) => kind switch
     {
         BuildingKind.House or BuildingKind.Other => 1.0f,
@@ -208,18 +211,23 @@ public static class BuildingFootprint
     {
         var roadIndex = (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true));
         bool rural = Loot.ShopTables.IsRural(tile.Buildings.Count);
+        var types = BuildingTypes.For(tile);
         var doors = new List<DoorSpot>(tile.Buildings.Count);
         for (int i = 0; i < tile.Buildings.Count; i++)
         {
             var fp = Compute(tile, i, roadIndex, grid);
             var kind = tile.Buildings[i].Kind;
+            // a landmark's shop is given by where it is, not by the key's hash (#501), and the main
+            // door carries it so the sign over it reads IKEA rather than whatever the roll said
+            var shop = types.TypeOf(i) == BuildingType.Ikea ? Loot.ShopType.Ikea
+                : fp != null ? ShopOf(fp, rural)
+                : Loot.ShopType.None;
             // an empty spot still names its own building, so the array can be read by Index
             // the sign over the door, and the shop behind it, belong to the building: they go on
             // its main door only, or a long shop front would grow a sign per entrance
             doors.Add((fp?.Door ?? new DoorSpot(i, Vector3.Zero, Vector3.Forward, 0f, 0f)) with
             {
-                Kind = kind, Bank = fp != null && IsBank(fp),
-                Shop = fp != null ? ShopOf(fp, rural) : Loot.ShopType.None,
+                Kind = kind, Bank = fp != null && IsBank(fp), Shop = shop,
             });
             if (fp == null) continue;
             foreach (var extra in fp.Extra) doors.Add(extra with { Kind = kind });
@@ -295,6 +303,13 @@ public static class BuildingFootprint
 
         float doorW = DoorWidthFor(kind);
         float doorH = DoorHeightFor(kind, InteriorGenerator.Storeys(b).Height - InteriorGenerator.Slab);
+        // a landmark store's entrance is a wall of glass, not a front door: a 1.8 m Commercial door
+        // on 190 m of blue sheet is the detail that makes it read as a warehouse again (#501)
+        if (group?.Type == BuildingType.Ikea)
+        {
+            doorW = Math.Min(StoreDoorWidth, w * 0.25f);
+            doorH = Math.Min(StoreDoorHeight, InteriorGenerator.Storeys(b).Height - InteriorGenerator.Slab - 0.15f);
+        }
         // a door's worth of height, for judging a wall and for the odd doors that are no barn gate
         float plainH = Math.Min(doorH, DoorHeightFor(kind));
         bool barn = DoorLeaf.SwingsOut(kind);

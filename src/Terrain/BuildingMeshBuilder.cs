@@ -185,15 +185,20 @@ public static class BuildingMeshBuilder
         {
             var b = tile.Buildings[bi];
             var part = types.PartOf(bi);
-            var kind = KindOf(b, types.TypeOf(bi));
-            var wall = WallColor(kind, b.YearBuilt).SrgbToLinear();
-            var roof = RoofColor(kind).SrgbToLinear();
+            var type = types.TypeOf(bi);
+            var kind = KindOf(b, type);
+            var wall = WallColor(kind, b.YearBuilt, type).SrgbToLinear();
+            var roof = RoofColor(kind, type).SrgbToLinear();
             var (storey, storeyCount) = part switch
             {
                 // one tall storey: the shader's window row becomes a church window
                 BuildingPart.Nave => (Math.Max(3f, (types.Boxes[bi]?.Eave ?? b.MaxY) - b.MinY), 1),
                 // a tower's few openings are not a grid of flats
                 BuildingPart.Tower => (0f, 0),
+                // a big-box store has no windows at all, whatever kind the cadastre calls it: a
+                // grid of flats painted across 200 m of blue sheet is the one thing that would
+                // stop it reading as an IKEA (#501)
+                _ when type == BuildingType.Ikea => (0f, 0),
                 _ => Storeys(b),
             };
             // a spire's faces are steep enough to count as wall; above the eave they are roof
@@ -314,8 +319,12 @@ public static class BuildingMeshBuilder
     private static BuildingKind KindOf(Building b, BuildingType type) =>
         type == BuildingType.Church ? BuildingKind.Sacral : b.Kind;
 
-    private static Color WallColor(BuildingKind kind, ushort year)
+    private static Color WallColor(BuildingKind kind, ushort year, BuildingType type = BuildingType.None)
     {
+        // a brand paints its own box, and does not weather: ApplyAge on IKEA blue would make a
+        // 1973 store a different colour from a 2006 one, and they are the same blue (#501)
+        if (type == BuildingType.Ikea) return IkeaBlue;
+
         var baseColor = kind switch
         {
             BuildingKind.House => new Color(0.82f, 0.76f, 0.65f),        // rendered cream
@@ -333,7 +342,13 @@ public static class BuildingMeshBuilder
         return ApplyAge(baseColor, year);
     }
 
-    private static Color RoofColor(BuildingKind kind) => kind switch
+    /// <summary>IKEA blue, Pantone 294 C (#0051BA): what makes the box recognisable (#501).</summary>
+    public static readonly Color IkeaBlue = new(0.00f, 0.32f, 0.73f);
+
+    private static Color RoofColor(BuildingKind kind, BuildingType type = BuildingType.None) => type == BuildingType.Ikea
+        // plant and ducts on a grey membrane, the way it looks from the motorway bridge
+        ? new Color(0.44f, 0.45f, 0.46f)
+        : kind switch
     {
         BuildingKind.Agricultural => new Color(0.42f, 0.36f, 0.30f),
         BuildingKind.Industrial => new Color(0.46f, 0.48f, 0.49f),
