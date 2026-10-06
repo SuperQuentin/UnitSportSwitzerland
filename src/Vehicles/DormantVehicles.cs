@@ -563,13 +563,15 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         // the materials' pallets stand on the ground the dressing is drawn on, as the server works them out
         foreach (var site in sites) pallets.AddRange(SitePlans.PalletsOf(tile, site, grid));
         if (grid == null) return;
-        for (int i = before; i < into.Count; i++) into[i] = into[i] with { Height = GroundUnder(grid, into[i], false) };
+        // a lorry stands axle by axle as a yard's does (#613): its origin on the ground
+        for (int i = before; i < into.Count; i++)
+            into[i] = into[i] with { Height = GroundUnder(grid, into[i], HeavyCatalog.For((RideKind)into[i].KindId) != null) };
     }
 
     /// <summary>
     /// What a site's machine parks as: the excavator (#611), the wheel loader (#612), a quarter of
-    /// them with forks (#615, from the slot's own roll), and the small kit (#614). The tipper, the
-    /// mixer and the mini dumper (#613) join here once they can be driven.
+    /// them with forks (#615, from the slot's own roll), the small kit (#614), and the tipper and the
+    /// mixer (#613). The mini dumper joins here once it can be driven.
     /// </summary>
     private static int? SiteKind(MachineRole role, ulong roll) => role switch
     {
@@ -577,6 +579,9 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         MachineRole.MiniExcavator => (int)RideKind.MiniExcavator,
         MachineRole.Roller => (int)RideKind.CompactRoller,
         MachineRole.Telehandler => (int)RideKind.Telehandler,
+        // the site's lorries (#613): HeavyCatalog's tipper and mixer
+        MachineRole.Tipper => 104,
+        MachineRole.Mixer => 105,
         MachineRole.WheelLoader => (roll >> 52 & 3) == 0 ? (int)RideKind.WheelLoaderForks : (int)RideKind.WheelLoader,
         _ => null,
     };

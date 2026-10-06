@@ -453,6 +453,18 @@ src/Player/FootPlayer.Exc quick  --excavatorcheck --world flat --systems physics
 src/Player/Excavator      net    tools/excavatornetcheck.sh
 src/Avatar/Excavator      net    tools/excavatornetcheck.sh
 src/Player/FootPlayer.Exc net    tools/excavatornetcheck.sh
+# #613: the site's tipper and mixer on the destination action (flat), and from a second peer (the excavator's script)
+src/Player/TipperCheck    quick  --tippercheck tipper --world flat --systems physics,ui
+src/Player/TipperCheck    quick  --tippercheck mixer --world flat --systems physics,ui
+src/Player/Truck.cs       quick  --tippercheck tipper --world flat --systems physics,ui
+src/Player/Truck.cs       quick  --tippercheck mixer --world flat --systems physics,ui
+src/Player/HeavyCatalog   quick  --tippercheck mixer --world flat --systems physics,ui
+src/Avatar/TruckMeshBuilder quick --tippercheck tipper --world flat --systems physics,ui
+src/Avatar/TruckMeshBuilder quick --tippercheck mixer --world flat --systems physics,ui
+src/Avatar/HeavyRig       quick  --tippercheck mixer --world flat --systems physics,ui
+src/Player/FootPlayer.Hea quick  --tippercheck tipper --world flat --systems physics,ui
+src/Player/Truck.cs       net    tools/excavatornetcheck.sh
+src/Avatar/HeavyRig       net    tools/excavatornetcheck.sh
 # #614: the telehandler: three steering modes and the boom (flat), and from a second peer (the excavator's script)
 src/Player/Telehandler    quick  --telehandlercheck --world flat --systems physics,ui
 src/Avatar/Telehandler    quick  --telehandlercheck --world flat --systems physics,ui

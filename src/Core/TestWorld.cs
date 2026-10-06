@@ -56,6 +56,7 @@ public partial class TestWorld : Node3D
             : LoaderCheck.Requested ? new LoaderCheck(origin)
             : RollerCheck.Requested ? new RollerCheck(origin)
             : TelehandlerCheck.Requested ? new TelehandlerCheck(origin)
+            : TipperCheck.Requested ? new TipperCheck(origin)
             : Items.PalletCheck.Requested ? new Items.PalletCheck()
             : Items.ForkCheck.Requested ? new Items.ForkCheck(origin)
             : RideProbe.ParseArgs() is { } ride ? new RideProbe(null, origin, ride.Kind, ride.Seconds, ride.Shot)

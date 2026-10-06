@@ -124,6 +124,8 @@ public partial class ControlsHelp : CanvasLayer
             new("Bus: doors", PlayerInput.CarDoor),
             new("Bus: kneel", PlayerInput.Kneel),
             new("Bus: destination display", PlayerInput.Destination),
+            new("Tipper: tip the body up / down (stopped)", PlayerInput.Destination),
+            new("Mixer: discharge / stop (stopped; the drum turns while the engine runs)", PlayerInput.Destination),
         }),
         ("Forklift (#583)", new Row[]
         {
