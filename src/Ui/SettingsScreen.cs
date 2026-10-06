@@ -230,6 +230,7 @@ public partial class SettingsScreen : Screen
             UiKit.ActionRow(rows, "Performance logs", "Open folder", PerfRecorder.OpenLogsFolder, "F4 records a session");
         });
 
+        Tab("Data", DataRows);
         Tab("About", LicenseRows);
         _about = _tabs.Count - 1;
 
@@ -372,6 +373,37 @@ public partial class SettingsScreen : Screen
     /// Asks before restarting into VR or out of it, then saves the choice and relaunches. Shared
     /// by the Settings toggle and the title screen's entry.
     /// </summary>
+    /// <summary>
+    /// What streaming costs and keeps (#63), on every platform. Low data, the cache cap and its
+    /// Clear work everywhere; the data saver and the metered warning need Android to tell.
+    /// </summary>
+    private void DataRows(VBoxContainer rows)
+    {
+        var s = GameSettings.Current;
+        UiKit.OptionRow(rows, "Data use", new[] { "Standard", "Low data" }, (int)s.Data,
+            i => GameSettings.Current.Data = (DataPreset)i,
+            $"Low data streams full detail only round you: about {Core.StreamEstimate.ArrivalLowMb} MB on arrival instead of {Core.StreamEstimate.ArrivalMb}");
+        if (Platform.IsMobile)
+        {
+            UiKit.ToggleRow(rows, "Low data with data saver", s.AutoLowData, on => GameSettings.Current.AutoLowData = on,
+                "Follows the phone's data saver" + (GameSettings.DataSaverOn ? " (on now)" : ""));
+            UiKit.ToggleRow(rows, "Ask on mobile data", s.WarnMetered, on => GameSettings.Current.WarnMetered = on,
+                "Before joining over cellular or a hotspot");
+        }
+        UiKit.SliderRow(rows, "Tile cache size", 0.25, 8, 0.25, s.CacheGb,
+            v => GameSettings.Current.CacheGb = (float)v, v => $"{v:0.##} GB");
+        string dir = TerrainPaths.FindCacheDir();
+        long cached = Terrain.NetworkChunkSource.MeasureCache(dir);
+        UiKit.ActionRow(rows, "Downloaded tiles", "Clear", () =>
+        {
+            Terrain.NetworkChunkSource.ClearCache(dir);
+            Shell.Back();               // reopened, so the sizes are the new ones
+            Shell.Push(Create());
+        }, $"{Mb(cached)} on this device · {Mb(Net.ChunkStreamer.SessionBytes)} streamed this session");
+    }
+
+    private static string Mb(long bytes) => $"{bytes / (1024.0 * 1024):0} MB";
+
     internal static void AskVr(Control host, GameShell shell, bool on, Action? cancel = null)
     {
         string message = on
