@@ -294,7 +294,7 @@ public static partial class TileRewriter
             var armLanes = Arm(pocket.Node, pocket.Arm, pocket.Home);
             approach.Layout = armLanes.Approach = LanesOf(approach, right, pocket.Signal);
             if (pocket.Signal && approach.Layout is { Equal: true, LeftPocketLane: { } facing })
-                departure.SetExit(facing.To + approach.Layout.LeftBike, approach.Layout.LaneWidth);
+                departure.SetExit(facing.To + approach.Layout.LeftBike);
             armLanes.AdvancedBikeLine = approach.HasLeftBikeLane && !pocket.BikeBox;
             armLanes.PlacedLeft(approach, inSlot.Storage, inSlot.Merged, pocket.RightTurn && right is null, pocket.Signal);
             if (pocket.ExitArm >= 0)
@@ -968,8 +968,8 @@ public static partial class TileRewriter
         /// At traffic lights (#682) the exit's through lane continues the facing approach's through lane: the hatch is as wide as its pocket
         /// and bike lane at the mouth and the lane after it as wide as an approach lane (<see cref="ApproachLayout.LaneWidth"/>), so it never starts narrow.
         /// </summary>
-        public void SetExit(double hatch, double lane) => (_exitHatch, _exitLane) = (hatch, lane);
-        private double? _exitHatch, _exitLane;
+        public void SetExit(double hatch) => _exitHatch = hatch;
+        private double? _exitHatch;
         public double HatchAtMouth => _exitHatch ?? _pocket;
         public bool HasLeftBikeLane => _bikeLeft > 0;
 
@@ -1078,7 +1078,8 @@ public static partial class TileRewriter
         /// </summary>
         private double Widen(double dist)
         {
-            if (_exit && _exitHatch is { } hatch && _exitLane is { } lane) return Math.Max(0, hatch * (1 - dist / _length) + lane + _bike - _half);   // #682
+            // #682: the exit lane keeps its width (the carriageway's lane) from the mouth to where the hatch has closed: the edge moves in as fast as the hatch
+            if (_exit && _exitHatch is { } hatch) return Math.Max(0, hatch * (1 - dist / _length));
             if (_taper <= 0) return Lane + _extra;
             double main = Math.Clamp((_length - dist) / _taper, 0, 1);
             if (_lead <= 0 || (_exit && _bike <= 0)) return (Lane + _extra) * main;
