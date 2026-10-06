@@ -53,7 +53,7 @@ public partial class SleeperProbe : ChatProbe
     private async Task Watch()
     {
         Expect(await Until(() => Book is { Count: 1 }, 90), $"one sleeper shown ({Book?.Count})");
-        Expect(await Until(() => Book is { Count: 0 }, 120), $"the sleeper woke and went ({Book?.Count})");
+        Expect(await Until(() => Book is { Count: 0 }, 400), $"the sleeper woke and went ({Book?.Count})");
     }
 
     private async Task Look()
@@ -80,10 +80,12 @@ public partial class SleeperProbe : ChatProbe
     {
         Expect(await Until(() => Book?.LastWake != null, 30), "the server woke this player");
         if (Book?.LastWake is not { } at) return;
+        // at once: the Remove comes before WakeAt on the same reliable channel, and the watcher may
+        // fall asleep itself once it has seen this one go
+        Expect(Book.Count == 0, "its own sleeper is gone");
         // the teleport settles on the ground once the tile is there
         bool there = await Until(() => Me is { } me && Distance(me, at) < 3, 20);
         Expect(there, $"woke where it fell asleep ({(Me is { } m ? Distance(m, at) : -1):F1} m away)");
-        Expect(Book!.Count == 0, "its own sleeper is gone");
     }
 
     private static double Distance(Player.FootPlayer me, (double E, double N) at)

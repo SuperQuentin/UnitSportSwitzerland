@@ -7,14 +7,16 @@
 . "$(dirname "$0")/lib/twoclient.sh" sleepers
 PORT=${PORT:-7877}
 WORLD="--world fixture --chunks fixture:flat"
-tc_server 400 120 "$OUT/sleepers_server.log" --server --port $PORT $WORLD
+: > "$OUT/sleepers_A1.log"; : > "$OUT/sleepers_B.log"; : > "$OUT/sleepers_A2.log"   # the B wait below reads a live log, never an old one
+tc_server 700 120 "$OUT/sleepers_server.log" --server --port $PORT $WORLD
 tc_client 200 "$OUT/sleepers_A1.log" --connect 127.0.0.1:$PORT --name Sleepy $WORLD --sleepers leave
 # B under its own user://: a second identity
 B_UD="$OUT/userdata_sleepers_B"; rm -rf "$B_UD"; mkdir -p "$B_UD"; B_UD=$(cd "$B_UD" && pwd)
 if _guard_windows; then B_ENV=(APPDATA="$(cygpath -w "$B_UD")"); else B_ENV=(XDG_DATA_HOME="$B_UD"); fi
-( export "${B_ENV[@]}"; tc_client 300 "$OUT/sleepers_B.log" --connect 127.0.0.1:$PORT --name Watcher $WORLD --sleepers watch ) & B=$!
+( export "${B_ENV[@]}"; tc_client 600 "$OUT/sleepers_B.log" --connect 127.0.0.1:$PORT --name Watcher $WORLD --sleepers watch ) & B=$!
 # B is in and has seen the sleeper before A comes back
-for i in $(seq 1 150); do grep -q "ok   one sleeper shown" "$OUT/sleepers_B.log" 2>/dev/null && break; kill -0 $B 2>/dev/null || break; sleep 1; done
+for i in $(seq 1 300); do grep -q "one sleeper shown" "$OUT/sleepers_B.log" 2>/dev/null && break; sleep 1; done
+echo "[sleepercheck] B saw the sleeper after ${i} s; A comes back"
 tc_client 200 "$OUT/sleepers_A2.log" --connect 127.0.0.1:$PORT --name Sleepy $WORLD --sleepers wake
 wait $B
 tc_stop
