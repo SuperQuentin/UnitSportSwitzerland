@@ -343,6 +343,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _ambience = new Audio.Ambience(chunksForAudio, EarNode)
                 { Name = "Ambience", Origin = origin, Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume) };
             AddChild(_ambience);
+            // the hammering, vibrator, grinder, beeper, radio and crane motor of a working building site (#617)
+            AddChild(new Terrain.Construction.SiteSounds(chunksForAudio, EarNode));
         }
         await Breathe();
         if (!IsInsideTree()) return;

@@ -269,3 +269,5 @@ same view 25 s apart (the hook down on the bricks), and at 22:30 (the lamps lit)
 
 - The hook's load is drawn whenever the pose says loaded: nothing is taken from the materials.
 - Operating a crane is #618.
+
+The sound of a site (#617): hammering, a vibrator, a grinder, a beeper, a radio and a crane motor, in the crane's working hours: `audio/site-sounds`.
