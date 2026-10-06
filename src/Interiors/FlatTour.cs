@@ -99,6 +99,11 @@ public partial class FlatTour : Node3D
             _views.Add(("hall", At(upper, dx + fx * 0.4f, dz + fz * 0.4f), At(upper, dx + fx * 5f, dz + fz * 5f, 1.3f)));
             var living = _l.Floors[upper].Rooms.FirstOrDefault(r => r.Unit == flat.Unit && r.Type == RoomType.Living);
             if (living != null) _views.Add(FromDoor("living", upper, living));
+            // from the sofa, to its TV (#680)
+            if (living != null
+                && _l.Furniture.FirstOrDefault(p => p.Floor == upper && p.Type == FurnitureType.Sofa && p.X > living.X0 && p.X < living.X1 && p.Z > living.Z0 && p.Z < living.Z1) is { } sofa
+                && _l.Furniture.FirstOrDefault(p => p.Floor == upper && p.Type == FurnitureType.Tv && p.X > living.X0 && p.X < living.X1 && p.Z > living.Z0 && p.Z < living.Z1) is { } tv)
+                _views.Add(("sofa_tv", At(upper, sofa.X, sofa.Z, 1.1f), At(upper, tv.X, tv.Z, 0.9f)));
             var bed = _l.Floors[upper].Rooms.FirstOrDefault(r => r.Unit == flat.Unit && r.Type == RoomType.Bedroom);
             if (bed != null) _views.Add(FromDoor("bedroom", upper, bed));
             var bath = _l.Floors[upper].Rooms.FirstOrDefault(r => r.Unit == flat.Unit && r.Type == RoomType.Bathroom);
