@@ -49,7 +49,8 @@ public static class FlatCheck
         System.IO.Directory.CreateDirectory(dir);
         var tile = Tile();
         var doors = BuildingFootprint.ComputeDoors(tile, null, null);
-        int flats = 0, locked = 0, lit = 0, livings = 0;
+        int flats = 0, locked = 0, lit = 0, livings = 0, wetLit = 0, wet = 0;
+        var dark = new List<string>();
 
         for (int i = 0; i < Boxes.Length; i++)
         {
@@ -103,10 +104,21 @@ public static class FlatCheck
                     Expect(door != null && floor.Rooms[door.Room].Type == RoomType.Hall,
                         $"{box.What} floor {f} flat {unit.Key}: its front door opens into its hall");
                     if (door?.Locked == true) locked++;
-                    foreach (var r in unit.Where(r => r.Type == RoomType.Living))
+                    // daylight (#571): every room people live in has a window, a wet room only if it is on a facade
+                    foreach (var r in unit)
                     {
-                        livings++;
-                        if (r.Openings.Any(o => o.Kind == OpeningKind.Window)) lit++;
+                        bool window = r.Openings.Any(o => o.Kind == OpeningKind.Window);
+                        if (r.Type is RoomType.Living or RoomType.Bedroom)
+                        {
+                            livings++;
+                            if (window) lit++;
+                            else dark.Add($"{box.What} floor {f} flat {unit.Key} {r.Type}");
+                        }
+                        else if (r.Type is RoomType.Kitchen or RoomType.Bathroom or RoomType.WC)
+                        {
+                            wet++;
+                            if (window) wetLit++;
+                        }
                     }
                     Expect(l.Furniture.Any(p => p.Floor == f && (p.Type is FurnitureType.Bed or FurnitureType.SingleBed)
                             && unit.Any(r => p.X > r.X0 && p.X < r.X1 && p.Z > r.Z0 && p.Z < r.Z1)),
@@ -140,7 +152,9 @@ public static class FlatCheck
                 + $"{mine.Count} door(s), {l.Furniture.Count} pieces");
         }
         Expect(flats > 0 && locked > 0 && locked < flats, $"{locked} of {flats} flats' front doors locked");
-        Expect(livings > 0 && lit >= 0.85f * livings, $"{lit} of {livings} living rooms have a window");
+        Expect(livings > 0 && lit == livings, $"{lit} of {livings} living rooms and bedrooms have a window"
+            + (dark.Count > 0 ? ": dark " + string.Join("; ", dark.Distinct().Take(6)) : ""));
+        GD.Print($"[flatcheck] {wetLit} of {wet} kitchens, bathrooms and WCs have one (those on a facade)");
         GD.Print($"[flatcheck] plans in {dir}");
         GD.Print($"[flatcheck] RESULT: {(failures == 0 ? "ok" : $"FAILED ({failures})")}");
         return failures == 0 ? 0 : 1;
