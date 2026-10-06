@@ -155,11 +155,20 @@ Still to do, in this epic:
 - **Facade**: industrial walls get their own dressing — a painted base band, a ridge vent, a
   company sign over the main door (the `SignFlag` machinery the garage sign already uses),
   downpipes, and bay numbers.
-- **Testing**: this is authority and replicated state, so **tier 2 (`tools/test.sh net`)**, checked
-  on the *remote* peer: a truck backed into bay 3 on one client is in bay 3 on the other, with the
-  right leaf up.
+- ~~**Testing**~~ (done, #531): `tools/baycheck.sh` is the tier-2 check — a lorry driven into a bay
+  on the generated world, with a second peer watching the leaf and the driver from the street.
+  Driving into one is also what found the three bugs no plan-inspecting check could see: furniture
+  in every bay's lane, a 4.5 m bay arriving at a 1.8 m doorway inside, and the drive aiming at the
+  office door. `docs/notes/terrain/generated-works.md`.
 
-### Where the two branches meet
+### What is left in this epic
+
+Everything agreed is built and merged: phase 1 (#497), phase 2's bays (#528), phase 3's yards
+(#516), and a works in the generated villages with a drive-through check (#531). What remains is
+the **dock** and the **facade dressing** above, plus phase 4's forklift and the ideas below —
+none of them filed as issues yet, because none has been agreed.
+
+### Where the two branches met (history)
 
 `#498` sizes an extra door's opening as `top = min(door height, StoreyHeight − Slab)` — the
 *storey's* headroom. `#497` introduced rooms with a ceiling of their own inside a tall hall

@@ -58,7 +58,7 @@ Before, a block of flats was planned as one big house round a single stair core.
   read), `LiftPlan` (cabin rectangle, door side, floors served, the call button and panel
   positions), `InnerDoorPlan` (a flat's front door: floor, hall room, side, centre, `Locked`).
   New rooms `Elevator CarPark TechRoom Corridor`, pieces `Pillar StorageCage Mailboxes BikeRack`.
-  Plan version 17 (#501 took 16); 18 with #571 (half flights, landings, daylight); 19 with #576 (one door, wider corridors); 20 with #577 (wings).
+  Plan version 17 (#501 took 16); 18 with #571 (half flights, landings, daylight); 19 went to #531 (loading bays); 20 with #576 (one door, wider corridors); 21 with #577 (wings).
 - **Validator**: reachability now runs from every street doorway through doorways, up and down
   every flight and along every elevator, over the whole building (a block's upper floors are
   stairwells that never meet); a hole must cover its flight; each elevator has a cabin with a

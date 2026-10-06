@@ -218,6 +218,10 @@ src/Interiors/InteriorManager.InnerDoors net tools/liftsynccheck.sh
 src/Interiors/InteriorNode.Inside net tools/liftsynccheck.sh
 src/Interiors/LiftSyncProbe net tools/liftsynccheck.sh
 src/Interiors/FloorPicker net tools/liftsynccheck.sh
+src/Interiors/BuildingFootprint net tools/baycheck.sh
+src/Interiors/DoorBudget net    tools/baycheck.sh
+src/Interiors/InteriorGenerator net tools/baycheck.sh
+src/Terrain/ProceduralWorld.Settlements net tools/baycheck.sh
 src/Terrain/ProceduralWorld.Settlements  net  tools/shopcheck.sh
 src/Player/FootPlayer.Sw net    tools/swimnetcheck.sh
 src/Player/SwimNet       net    tools/swimnetcheck.sh
