@@ -177,9 +177,10 @@ public static partial class InteriorMeshBuilder
         var figures = new List<Figure>();
         foreach (var p in l.Furniture)
         {
-            // a loose floor pallet is its own node, to be forked up and carried off (#583):
-            // InteriorManager.AddPallets draws it from PalletPiece
-            if (IsLoosePallet(p)) continue;
+            // a loose floor pallet is its own node, to be forked up and carried off (#583), and a
+            // parked forklift one to be woken and driven (#630): InteriorManager.AddPallets and
+            // AddForklifts draw them
+            if (IsCarvedOut(p)) continue;
             Furniture(s, p, l.FloorY(p.Floor) + p.Lift, figures);
         }
 
@@ -613,6 +614,12 @@ public static partial class InteriorMeshBuilder
     /// merged mesh; it is its own node (<c>InteriorManager.AddPallets</c>).
     /// </summary>
     public static bool IsLoosePallet(FurniturePlan p) => p.Type == FurnitureType.Pallet && p.Lift == 0f;
+
+    /// <summary>A hall's forklift parked on the floor: a vehicle asleep (<see cref="HallForklifts"/>), not furniture (#630).</summary>
+    public static bool IsParkedForklift(FurniturePlan p) => HallForklifts.IsParked(p);
+
+    /// <summary>A piece <see cref="Build"/> leaves out of the merged mesh because it is a node of its own.</summary>
+    public static bool IsCarvedOut(FurniturePlan p) => IsLoosePallet(p) || IsParkedForklift(p);
 
     /// <summary>The load byte a plan's pallet carries off with it: its goods roll and its deck.</summary>
     public static byte PalletLoad(FurniturePlan p) => Items.Pallets.LoadOf(Hash(p, 3), p.D);

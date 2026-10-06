@@ -212,6 +212,7 @@ public partial class SiteProbe : Node3D
             AddChild(node);
             _built.Add((spec.Want, layout, node));
             _sites.Add((spec.Want, tile!, index));
+            HallForklift(spec.Want, layout, node, new WorldOrigin(tile!.Id.MinE, tile.Id.MaxN));
         }
 
         Check(_built.Count == Specs.Length, $"all {Specs.Length} sites built ({_built.Count})");
@@ -221,6 +222,52 @@ public partial class SiteProbe : Node3D
 
         if (_shot == null || DisplayServer.GetName() == "headless") { Finish(); return; }
         AddChild(new Camera3D { Name = "Eye", Fov = 75f });
+    }
+
+    /// <summary>
+    /// A hall's forklift is a vehicle asleep (#630): in a warehouse and a works there is one; it is
+    /// out of the merged mesh and a <see cref="ParkedForklift"/> node stands in its place; the
+    /// whole machine — tail to tines' tips, hull wide — lies inside its hall, which a 2.1 m box
+    /// would not have; and its <see cref="Vehicles.VehicleSlot"/> puts the nose where the plan's
+    /// piece faces. The last is checked the long way round, nose to LV95 and back through the
+    /// vehicle's own yaw convention, because a slot's yaw and a rig's node frame are two mirrors
+    /// that can each be wrong and agree.
+    /// </summary>
+    private void HallForklift(BuildingType site, InteriorLayout layout, InteriorNode node, WorldOrigin origin)
+    {
+        var lifts = layout.Furniture.Select((f, i) => (f, i)).Where(t => HallForklifts.IsParked(t.f)).ToList();
+        bool wants = site is BuildingType.Warehouse or BuildingType.Factory;
+        Check(wants == lifts.Count > 0, $"{site} hall {(wants ? "has a" : "has no")} forklift ({lifts.Count})");
+        foreach (var (f, i) in lifts)
+        {
+            Check(node.GetNodeOrNull<ParkedForklift>($"HallForklift{i}") != null, $"{site}'s forklift #{i} is a node of its own");
+            var room = layout.RoomOf(f)!;
+            var frame = HallForklifts.LocalFrame(layout, f);
+            // the machine's extremes in the hall's plan: tail corners and the tines' tips (a rig's nose is -Z)
+            bool inside = true;
+            foreach (var (x, z) in new[] { (-0.575f, 1.5f), (0.575f, 1.5f), (-0.38f, -2.25f), (0.38f, -2.25f) })
+            {
+                var p = frame * new Vector3(x, 0, z);
+                inside &= p.X > room.X0 && p.X < room.X1 && p.Z > room.Z0 && p.Z < room.Z1;
+            }
+            Check(inside, $"{site}'s whole forklift #{i} lies inside its hall");
+
+            if (HallForklifts.SlotOf(layout, i, origin) is not { } slot) { Check(false, $"{site}'s forklift #{i} has a slot"); continue; }
+            Check(slot.Owner == HallForklifts.OwnerOf(layout.Key) && slot.KindId == (int)Player.RideKind.Forklift
+                  && HallForklifts.BuildingOf(slot.Owner) == layout.Key, $"{site}'s forklift slot is named for its building ({slot.NodeName})");
+            // the nose, 2.25 m ahead of the origin by the slot's own yaw (-Z turned: (-sin, -cos)), back into the hall's frame
+            var place = InteriorManager.PlacementFor(layout, origin);
+            var at = origin.ToWorld(slot.E, slot.N, slot.Height);
+            var nose = at + new Vector3(-Mathf.Sin(slot.Yaw), 0, -Mathf.Cos(slot.Yaw)) * 2.25f;
+            var want = frame * new Vector3(0, 0, -2.25f);
+            var got = place.AffineInverse() * nose;
+            Check(new Vector2(got.X - want.X, got.Z - want.Z).Length() < 0.02f && Mathf.Abs(got.Y - want.Y) < 0.02f,
+                $"{site}'s forklift slot faces the way its piece does (nose off by {new Vector2(got.X - want.X, got.Z - want.Z).Length():F3} m)");
+            // and that is toward the end wall it stands against: nose in, tail to the room
+            var tail = frame * new Vector3(0, 0, 1.5f);
+            float Gap(float z) => Mathf.Min(z - room.Z0, room.Z1 - z);
+            Check(Gap(want.Z) < Gap(tail.Z), $"{site}'s forklift #{i} stands nose in ({Gap(want.Z):F2} m from the wall at the tines, {Gap(tail.Z):F2} m at the tail)");
+        }
     }
 
     /// <summary>
@@ -539,9 +586,28 @@ public partial class SiteProbe : Node3D
             eye.MakeCurrent();
             return;
         }
-        if (_step > _built.Count + 2)
+        if (_step == _built.Count + 3)
         {
             GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_apron.png"));
+            var eye = GetNodeOrNull<Camera3D>("Eye");
+            var lift = _built.OrderBy(b => b.Site == BuildingType.Factory ? 0 : 1).Select(b => b.Node.GetNodeOrNull<ParkedForklift>($"HallForklift{b.Layout.Furniture.FindIndex(HallForklifts.IsParked)}")).FirstOrDefault(n => n != null);
+            if (eye == null || lift == null) { Finish(); return; }
+            // the forklift standing in the works' hall (#630), the open one, three-quarter on
+            var at = lift.GlobalPosition;
+            // from the hall's open middle, so no rack stands in the way: its own end wall is behind it
+            var owner = _built.First(b => b.Node.IsAncestorOf(lift));
+            var room = owner.Layout.GroundFloor.Rooms[0];
+            var middle = owner.Node.GlobalTransform * new Vector3((room.X0 + room.X1) / 2, owner.Layout.FloorY(0), (room.Z0 + room.Z1) / 2);
+            var toward = (middle - at) with { Y = 0 };
+            var side = toward.Cross(Vector3.Up).Normalized();
+            eye.GlobalPosition = at + toward.Normalized() * 6f + side * 2f + Vector3.Up * 2.4f;
+            eye.LookAt(at + Vector3.Up * 0.9f, Vector3.Up);
+            eye.MakeCurrent();
+            return;
+        }
+        if (_step > _built.Count + 3)
+        {
+            GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_hallforklift.png"));
             Finish();
             return;
         }
