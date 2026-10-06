@@ -81,7 +81,7 @@ public sealed class SignalPlan
     /// <summary>A pedestrian clears 2/3 of the crossing at this pace in the clearance time (2-8 s).</summary>
     public const float WalkSpeed = 1.2f;
     /// <summary>The green of a leading or lagging left-turn phase.</summary>
-    public const float TurnPhaseGreen = 8f;
+    public const float TurnPhaseGreen = 5f;
     public const float MaxCycle = 120f;
 
     // ---- the plan ----------------------------------------------------------------------------
