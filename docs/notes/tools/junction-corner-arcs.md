@@ -27,5 +27,5 @@
 - **Signal timing** (`SignalPlan`): left-turn phases 5 s, all-red 1 s after a turn arrow or a pedestrian group (the
   next group's red-yellow overlaps the last second of yellow: the entry time), cycle targets 60/60/70 s. J2 106 -> 88 s.
 - **Test region**: J5 pair 100 m apart (was 60), J3's east houses from 68 m out: a corner radius takes ~16 m of an arm.
-- Open: lines at the lights slant where only one arm is widened; centre islands with the left repeater signal in place of
-  the hatched lead-out; check on real tiles (Geneva) and the cramped-arm setup choice.
+- **Islands** (`Widening.Island`): a small paved kerbed island (`AreaPropType.Island` variant 2, `IslandBuilder`) in the exit's hatched median, from the mouth to just behind the stop line, the zebra running over it; the arm's left repeater signal (the `Second` pole) stands on it past the crosswalk, not on the far kerb. The remaining hatch starts after it (often under 20 m: none).
+- Open: lines at the lights slant where only one arm is widened; check on real tiles (Geneva) and the cramped-arm setup choice.

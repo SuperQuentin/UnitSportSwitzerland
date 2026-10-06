@@ -315,7 +315,17 @@ public static partial class TileRewriter
             if (!departure.Emitted) departure.Emit(Get(paint, outSlot.Tile), Get(areas, outSlot.Tile), stripOwners);
             // a merged strip is painted by the pocket at its other end, as its approach (#406: it was
             // painted here when this pocket came first, without the lights' stop line)
-            if (!outSlot.Merged && !departure.Painted) departure.Median(Get(paint, outSlot.Tile), stats, StopBefore(pocket));
+            if (!outSlot.Merged && !departure.Painted)
+            {
+                double hatchFrom = StopBefore(pocket);
+                // at traffic lights a small island with the left repeater signal takes the hatch's wide end (#682)
+                if (pocket.Signal && pocket.ExitArm >= 0 && departure.Island(Get(areas, outSlot.Tile), hatchFrom) is { } island)
+                {
+                    Arm(pocket.Node, pocket.ExitArm, pocket.Home).Island = (island.Pole, island.Y, island.LateralFrom, island.LateralTo);
+                    hatchFrom = island.End + 0.5;
+                }
+                departure.Median(Get(paint, outSlot.Tile), stats, hatchFrom);
+            }
             Across(approach, departure, exitFar: outSlot.Merged, inSlot.Tile, Get(areas, inSlot.Tile), Get(paint, pocket.Home),
                 pocket.Home, priority.Guides, joined: pocket.RightTurn, guide: !pocket.Signal);
             // a sign beside the old edge (#121's 3.03) would now stand on the widening
@@ -647,6 +657,8 @@ public static partial class TileRewriter
         /// <summary>That widening (#406: the corner beside it), seen from its far end when it is a strip merged with the next pocket (#325).</summary>
         public Widening? ExitWay;
         public bool ExitFar;
+        /// <summary>The island with the left repeater signal in the hatched median behind this arm's stop line (#682): where its pole stands (LV95), and its top height.</summary>
+        public (Vec2 Pole, float Y, double LateralFrom, double LateralTo)? Island;
         /// <summary>A yellow advanced bike stop line <see cref="AdvancedBikeLine"/> ahead of the cars' (#351).</summary>
         public bool AdvancedBikeLine;
         /// <summary>The right-turn pocket, its lanes painted after the signal plan (#351).</summary>
@@ -1432,6 +1444,42 @@ public static partial class TileRewriter
             Painted = true;
             SolidCentre(paint);
             Hatch(paint, stats, near, _length, d => _pocket * Math.Clamp(1 - d / _length, 0, 1));
+        }
+
+        /// <summary>
+        /// A small kerbed island (#682) where the exit's hatched median is widest, from the mouth to just behind the stop line of the
+        /// arm's own approach (<paramref name="near"/> from the mouth): between the centre line and the through lane's
+        /// edge, a quarter metre clear of both. The crosswalk runs over it. It carries the approach's left repeater signal, facing the drivers who wait at its
+        /// pocket. Returns where its pole stands (LV95 and the island's top height) and how far out it reaches, null when
+        /// there is no room.
+        /// </summary>
+        public (Vec2 Pole, float Y, double End, double LateralFrom, double LateralTo)? Island(List<RoadAreaProp> areas, double near)
+        {
+            const double Margin = 0.25, IslandMinWidth = 1.2, Top = 0.12;
+            double Width(double d) => _pocket * Math.Clamp(1 - d / _length, 0, 1) - 2 * Margin;
+            // from just past the mouth to just behind the stop line: the pedestrian crossing runs over it (a refuge) and its signal stands past the bars, on the junction side
+            double a = 0.4, b = near + 2.0;
+            if (Width(b) < IslandMinWidth) return null;
+            var v = new List<float>();
+            var idx = new List<ushort>();
+            int steps = (int)Math.Round(b - a);
+            for (int k = 0; k <= steps; k++)
+            {
+                double d = a + (b - a) * k / steps, w = Width(d);
+                v.AddRange(Point(d, Margin));
+                v.AddRange(Point(d, Margin + w));
+                if (k == 0) continue;
+                ushort p = (ushort)(2 * k - 2);
+                idx.AddRange([p, (ushort)(p + 1), (ushort)(p + 3), p, (ushort)(p + 3), (ushort)(p + 2)]);
+            }
+            areas.Add(new RoadAreaProp
+            {
+                Type = AreaPropType.Island, Variant = 2, Flags = PropFlags.Solid, Height = (float)Top,
+                Vertices = v.ToArray(), Indices = idx.ToArray(),
+            });
+            double at = a + 0.3, across = near - 1.7;   // the bars' middle
+            var spot = Point(at, Margin + Width(at) * 0.5);
+            return (new Vec2(_tile.MinE + spot[0], _tile.MaxN - spot[2]), spot[1] + (float)Top, b, -(Margin + Width(across)), -Margin);
         }
 
         /// <summary>Set once its lane markings are painted (a merged strip is painted once, by the pocket it leads to).</summary>

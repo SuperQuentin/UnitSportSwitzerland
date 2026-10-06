@@ -206,6 +206,7 @@ public static partial class TileRewriter
             var kerbside = new List<(int Index, ApproachLayout Lanes)>();   // layout (a) bike lanes (#351)
             var stops = new List<float>();
             var wantPoles = new List<PoleWish>();
+            var islandPoles = new List<(byte Arm, Vec2 At, float Y, Vec2 Facing, Vec2 Across)>();   // #682
             var approachArms = new List<(int Arm, int PlanArm, float[] Stop)>();   // their lane records (#353)
             var armInPlan = new int[junction.Arms.Count];   // each junction arm's index in the plan, -1 none (#406)
             Array.Fill(armInPlan, -1);
@@ -263,11 +264,17 @@ public static partial class TileRewriter
                     var streetRight = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, drawnRight);
                     var streetLeft = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
                     if (streetRight.OuterDm > 0 || streetLeft.OuterDm > 0)
-                        EmitCrossing(paint, source, mid, u, right, MouthSkew(junction, arm) + SignalStopSetback, -(half + (pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0)), to, streetRight, streetLeft, areas, stats);
+                        EmitCrossing(paint, source, mid, u, right, MouthSkew(junction, arm) + SignalStopSetback, -(half + (pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0)), to, streetRight, streetLeft, areas, pockets.GetValueOrDefault((junction.NodeId, i))?.Island is { } isl ? (isl.LateralFrom, isl.LateralTo) : null, stats);
                 }
                 // none on a link inside a junction of several nodes: its ends are the junction's own
                 var mainFlags = inside ? 0 : (approach ? SignalPoleFlags.Main : 0) | SignalPoleFlags.Pedestrian;
                 var secondFlags = inside ? 0 : (approach && (pocket || rightPocket) ? SignalPoleFlags.Second : 0) | SignalPoleFlags.Pedestrian;
+                // the left repeater signal stands on a small island in the hatched median behind the stop line, not on the far kerb (#682)
+                if (!inside && approach && pocket && pockets.GetValueOrDefault((junction.NodeId, i))?.Island is { } island)
+                {
+                    secondFlags &= ~SignalPoleFlags.Second;
+                    islandPoles.Add(((byte)arms.Count, island.Pole, island.Y, u, right));
+                }
                 wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, right, to, u, -right,
                     rightSide.OuterDm > 0 ? rightSide.KerbCm / 100f : 0f, mainFlags, plan.Arms[i].LinkId));
                 // the left kerb stands out by the exit widening of the opposite approach's pocket (#123):
@@ -346,6 +353,12 @@ public static partial class TileRewriter
                         };
                         stats.SignsOnPoles++;
                     }
+            }
+            foreach (var ip in islandPoles)
+            {
+                var local = Local(home, [ip.At], _ => ip.Y, 0f);
+                poles.Add(new SignalPole(local[0], local[1], local[2], Heading(ip.Facing), Heading(ip.Across), ip.Arm, SignalPoleFlags.Second));
+                stats.Poles++;
             }
             plans[junction.NodeId] = (signalPlan, armInPlan);   // the bike crossings' conflicts (#406)
             Get(signals, home).Add(new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops.ToArray(), Plan = signalPlan, Poles = poles });
