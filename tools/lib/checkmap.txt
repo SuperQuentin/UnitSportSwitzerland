@@ -396,3 +396,10 @@ src/Player/FootPlayer.Hold net   tools/holdnetcheck.sh
 src/Player/HoldNetProbe  net    tools/holdnetcheck.sh
 src/Vehicles/VehicleBody.Hold net tools/holdnetcheck.sh
 src/Player/FootPlayer.Overlap net tools/holdnetcheck.sh
+# #611: the excavator: tracks, dig mode and the arm on the real bindings (flat), and seen from a second peer
+src/Player/Excavator      quick  --excavatorcheck --world flat --systems physics,ui
+src/Avatar/Excavator      quick  --excavatorcheck --world flat --systems physics,ui
+src/Player/FootPlayer.Exc quick  --excavatorcheck --world flat --systems physics,ui
+src/Player/Excavator      net    tools/excavatornetcheck.sh
+src/Avatar/Excavator      net    tools/excavatornetcheck.sh
+src/Player/FootPlayer.Exc net    tools/excavatornetcheck.sh
