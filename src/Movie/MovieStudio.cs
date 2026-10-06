@@ -138,7 +138,8 @@ public partial class MovieStudio : Screen
         PlayerInput.DeviceChanged -= ShowHints;
         if (IsInstanceValid(_camera))
         {
-            _chunks?.RemoveAnchor(_camera);
+            // the world may be on its way out with the studio still open (leaving to the menu)
+            if (_chunks != null && IsInstanceValid(_chunks)) _chunks.RemoveAnchor(_camera);
             _camera.QueueFree();
         }
         if (IsInstanceValid(_stage)) _stage.QueueFree();

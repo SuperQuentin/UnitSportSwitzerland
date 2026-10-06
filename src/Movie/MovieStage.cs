@@ -41,7 +41,12 @@ public partial class MovieStage : Node3D
     public void Use(MovieProject project)
     {
         Project = project;
-        foreach (var p in _puppets) p.QueueFree();
+        foreach (var p in _puppets)
+        {
+            // out of the tree now: the new puppets take the same names, which a passenger finds its host by
+            RemoveChild(p);
+            p.QueueFree();
+        }
         _puppets.Clear();
         Seek(0);
     }

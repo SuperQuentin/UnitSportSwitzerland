@@ -23,7 +23,7 @@ public partial class MovieProbe : Node
     private MovieProject? _project;
     private MovieStage? _stage;
     private double _t, _next, _wait;
-    private bool _mounted, _done;
+    private bool _mounted, _done, _reloaded;
     private int _seek = -1, _settle, _failures;
     private readonly List<(double T, string Why)> _seeks = new();
 
@@ -128,10 +128,22 @@ public partial class MovieProbe : Node
             return;
         }
 
-        var puppet = _stage.Puppet(0);
-        bool hidden = puppet == null && GetNodeOrNull<FootPlayer>($"MovieStage/{MovieStage.PuppetBase}") is { Visible: false };
-        GD.Print($"[moviecheck] in the hole a cut left: puppet {(hidden ? "hidden" : "STILL DRAWN")}");
-        if (!hidden) Fail("a lane with no clip still draws its puppet");
+        if (!_reloaded)
+        {
+            var puppet = _stage.Puppet(0);
+            bool hidden = puppet == null && GetNodeOrNull<FootPlayer>($"MovieStage/{MovieStage.PuppetBase}") is { Visible: false };
+            GD.Print($"[moviecheck] in the hole a cut left: puppet {(hidden ? "hidden" : "STILL DRAWN")}");
+            if (!hidden) Fail("a lane with no clip still draws its puppet");
+            // the project again (Open, New, Save do this): the new puppet must get the old one's name,
+            // which a passenger finds its host by
+            _reloaded = true;
+            _stage.Use(_project);
+            _stage.Seek(5);
+            return;
+        }
+        bool named = GetNodeOrNull<FootPlayer>($"MovieStage/{MovieStage.PuppetBase}") is { Visible: true } p && p == _stage.Puppet(0);
+        GD.Print($"[moviecheck] after reloading the project: puppet {(named ? $"back as {MovieStage.PuppetBase}" : "MISSING or renamed")}");
+        if (!named) Fail("a reloaded project's puppet lost its name");
         Finish();
     }
 
