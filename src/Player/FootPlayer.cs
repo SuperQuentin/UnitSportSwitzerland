@@ -67,7 +67,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     private const float Gravity = 9.81f;
     private const float EyeHeight = 1.68f;   // average adult eye level
-    private const float BaseFov = 68f;
+    public const float BaseFov = 68f;
     private const float RunFov = 76f;
     private const float SlideFov = 86f;
 

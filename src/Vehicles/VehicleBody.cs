@@ -27,7 +27,7 @@ namespace UnitSport.Vehicles;
 /// nothing. Every peer watches <see cref="Wrecked"/>: the frame it flips, it explodes there too.
 /// </para>
 /// </summary>
-public partial class VehicleBody : CharacterBody3D
+public partial class VehicleBody : CharacterBody3D, Net.IInterestEntity
 {
     public const string Group = "vehicles";
 
@@ -100,7 +100,33 @@ public partial class VehicleBody : CharacterBody3D
     private float _heavySpin;
     private float _restTime;
     private bool _asleep;
-    private MultiplayerSynchronizer? _sync;
+    private MultiplayerSynchronizer? _sync, _relay;
+
+    // ---- entity interest (#689) ----
+    public GlobalPos InterestAt => Global;
+    /// <summary>The size it presents, m: the largest side of its parked box.</summary>
+    public float InterestSize => Ride.ParkedBox.Size is var s ? Mathf.Max(s.X, Mathf.Max(s.Y, s.Z)) : 4f;
+    public float InterestRange(Net.Interest.View view) => Net.EntityInterestRules.VehicleRange(InterestSize, view.Far, view.FovDeg);
+    public bool InterestBig => InterestSize > Net.EntityInterest.CellSize;
+    public void RefreshInterest(long peer) => Net.EntityNet.Refresh(this, peer);
+    public void RelayRate(bool moving) { if (_relay != null) _relay.ReplicationInterval = moving ? 0.05f : 2f; }
+
+    /// <summary>
+    /// Online, this peer only has the vehicle within its interest range (#689): its model fades out
+    /// before that range and in after it, so it arrives invisible and leaves already gone, never popping.
+    /// The range is the server's rule for this peer's own lens.
+    /// </summary>
+    private void FadeAtRange(Node visual)
+    {
+        float range = Net.EntityInterestRules.VehicleRange(InterestSize, GameSettings.Current.CameraFar, FootPlayer.BaseFov);
+        foreach (var node in visual.FindChildren("*", nameof(GeometryInstance3D), recursive: true, owned: false))
+            if (node is GeometryInstance3D g && g.VisibilityRangeEnd == 0f)
+            {
+                g.VisibilityRangeEnd = range * Net.EntityInterestRules.FadeEnd;
+                g.VisibilityRangeEndMargin = range * Net.EntityInterestRules.FadeMargin;
+                g.VisibilityRangeFadeMode = GeometryInstance3D.VisibilityRangeFadeModeEnum.Self;
+            }
+    }
     private bool _anchored;
     private bool _charred;
     private bool _wasWrecked;
@@ -199,7 +225,8 @@ public partial class VehicleBody : CharacterBody3D
             ReplicationInterval = 0.05f,
         };
         sync.SetMultiplayerAuthority(GetMultiplayerAuthority());
-        AddChild(sync);
+        // only to the peers near enough to have it (#689), a client's vehicle relayed by the server
+        _relay = Net.EntityNet.Add(this, sync, 0.05f);
 
         // Placed by the dedicated server itself (VehicleManager.Place): the server has no ground
         // collision to simulate it on, so it stands exactly where it was put, asleep, until a
@@ -224,6 +251,7 @@ public partial class VehicleBody : CharacterBody3D
             _visual = Ride.BuildParkedVisual((int)Math.Max(1, Owner));
             _visual.Name = "Visual";
             AddChild(_visual);
+            if (Multiplayer.MultiplayerPeer is not (null or OfflineMultiplayerPeer) && !Multiplayer.IsServer()) FadeAtRange(_visual);
             Hurtbox.Fit(_visual);
             if (Ride is Helicopter or Plane or Airliner or IEngined)
             {

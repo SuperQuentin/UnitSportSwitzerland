@@ -22,6 +22,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Items.RadioManager? _radios;
     private Interiors.ChurchRadios? _churchRadios;
     private Items.DroppedItems? _dropped;
+    private EntityInterest? _entityInterest;
     private PlayerRegistry? _registry;
     private ChatManager? _chat;
     private ChunkStreamer? _streamer;
@@ -132,6 +133,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // items dropped and thrown on the ground (#206), the same spawn-and-claim pattern
         _dropped = Items.DroppedItems.Create(this, origin);
         _dropped.PlayerPositions = _vehicles.PlayerPositions;
+        // which peer has which of those (#689): only what it could see from where it stands; before
+        // anything is spawned, every entity's synchronizers ask it
+        _entityInterest = EntityInterest.CreateServer(this, _players, _interest, _vehicles, _dropped, _radios);
         Audio.Cd.CdLibrary.Create(this, server: true);
         // the radio by the pastor rat in every church (#370)
         _churchRadios = Interiors.ChurchRadios.Create(this);
@@ -462,6 +466,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _interiors?.ForgetPeer(id);
         _streamer?.ForgetPeer(id);
         _interest?.ForgetPeer(id);
+        _entityInterest?.ForgetPeer(id);
         _npcs?.PeerLeft(id);   // its race NPCs go to someone near them, or retire
 
         if (_players!.GetNodeOrNull<Node3D>(id.ToString()) is { } player)
