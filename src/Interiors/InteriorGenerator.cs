@@ -796,7 +796,7 @@ public static partial class InteriorGenerator
                     _ => Math.Abs(r.X1 - hw) < 0.02f,
                 };
                 // a vault and a shelter are blind on purpose
-                if (!exterior || r.Type is RoomType.Vault or RoomType.Shelter or RoomType.Elevator) continue;
+                if (!exterior || r.Type is RoomType.Vault or RoomType.Shelter or RoomType.Elevator or RoomType.Ramp) continue;
                 // the core's front wall is the entrance; its sides are rooms
                 if (core && side == Side.Front) continue;
                 float a = side is Side.Front or Side.Back ? r.X0 : r.Z0;
@@ -1201,6 +1201,13 @@ public static partial class InteriorGenerator
                     {
                         var run = fl.Area(1.2f, 1.2f);
                         if (run.Overlaps(new RectPlan(r.X0, r.Z0, r.X1, r.Z1))) blocked.Add(run);
+                        // a garage's ramp (#558): the wedge's parapets stand outside its lane, and a car
+                        // coming off its foot needs room to turn into the aisle
+                        if (!fl.Ramp) continue;
+                        var wedge = fl.Area().Grow(0.3f);
+                        if (wedge.Overlaps(new RectPlan(r.X0, r.Z0, r.X1, r.Z1))) blocked.Add(wedge);
+                        var mouth = new RectPlan(fl.X0 - 2.2f, fl.ZBottom - 1f, fl.X1 + 2.2f, fl.ZBottom + GarageRule.RampTurn);
+                        if (mouth.Overlaps(new RectPlan(r.X0, r.Z0, r.X1, r.Z1))) blocked.Add(mouth);
                     }
                 if (isCore)
                 {

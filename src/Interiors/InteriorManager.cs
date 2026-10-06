@@ -1358,7 +1358,7 @@ public partial class InteriorNode : Node3D
             // a barn's pair or a garage's roll-up door moves on the facade, with its link; in here
             // only its shut face
             bool pair = DoorLeaf.OnFacade(e.Hang);
-            var leaf = pair ? DoorLeaf.CreateShutter(e.Door, doorway, width, top, kind, material)
+            var leaf = pair ? DoorLeaf.CreateShutter(e.Door, doorway, width, top, e.Hang, kind, material)
                 : DoorLeaf.Create(e.Door, doorway, width, top, kind, material);
             node.AddChild(leaf);
             leaf.SetSwing(0);

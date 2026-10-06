@@ -28,7 +28,7 @@ public sealed class FixtureCourse
     public List<(RoadClass Class, List<(double X, double Y, double Z)> Points)> Roads { get; } = new();
     public List<(double X, double Y, double Z, float Height)> Trees { get; } = new();
 
-    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake", "parking", "airport" };
+    public static readonly string[] Names = { "flat", "straight", "hairpin", "narrow", "junction", "verge", "lake", "parking", "airport", "garage" };
 
     /// <summary>The ground as a function, instead of following the roads; null: <see cref="Ground"/>'s roads.</summary>
     public Func<double, double, double>? Terrain { get; init; }
@@ -41,6 +41,23 @@ public sealed class FixtureCourse
 
     /// <summary>Ground cover per point; null: open grass everywhere.</summary>
     public Func<double, double, CoverClass>? Cover { get; init; }
+
+    /// <summary>
+    /// A plain box building standing on the course (#558): metres from the start, its front (the
+    /// wall the main door goes on) facing south, turned <see cref="Turn"/> degrees. Walls and a flat
+    /// roof, nothing else, as a synthetic solid in the door checks.
+    /// </summary>
+    public sealed record Block(double X, double Y, float Width, float Depth, float Height, float Turn = 0f,
+        BuildingKind Kind = BuildingKind.Apartment);
+
+    /// <summary>Buildings standing on the course; none by default.</summary>
+    public List<Block> Blocks { get; } = new();
+
+    /// <summary>
+    /// Every block of flats rolls an underground garage door (<see cref="Interiors.GarageRule.AlwaysRolls"/>):
+    /// a live check cannot depend on a hash of the building's key.
+    /// </summary>
+    public bool AlwaysGarage { get; init; }
 
     /// <summary>Boat stops (#377): a name and where it lies, metres from the start; the source plans their piers.</summary>
     public List<(string Name, double X, double Y)> Stops { get; } = new();
@@ -78,6 +95,7 @@ public sealed class FixtureCourse
         "lake" => Lake.Create(),
         "parking" => Parking(),
         "airport" => FixtureAirport.Create(),
+        "garage" => Garage(),
         _ => null,
     };
 
@@ -108,6 +126,26 @@ public sealed class FixtureCourse
             Extent = (-20, -60, 320, 160),
         }.Road(RoadClass.Major, road);
         course.CarParks.Add(ring);
+        return course;
+    }
+
+    /// <summary>
+    /// Three blocks of flats 80 x 18 m (three entrances, a car park, just the depth a ramp takes) along a
+    /// minor street, their fronts 6 m from its kerb, on flat ground: each rolls an underground garage
+    /// door, between two of its entrances, with a pavement to the street (#558). The street and the
+    /// blocks stand within one tile of the default spawn.
+    /// </summary>
+    private static FixtureCourse Garage()
+    {
+        var course = new FixtureCourse
+        {
+            Name = "garage",
+            Terrain = (_, _) => FlatHeight,
+            AlwaysGarage = true,
+            Extent = (-150, -150, 700, 200),
+        }.Road(RoadClass.Minor, new Pen(-120, 0, FlatHeight, 0, 0).Straight(780));
+        foreach (double x in new[] { 100.0, 220, 340 })
+            course.Blocks.Add(new Block(x, 17, 80, 18, 15));
         return course;
     }
 

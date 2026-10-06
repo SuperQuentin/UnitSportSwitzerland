@@ -20,6 +20,7 @@ public sealed class FixtureChunkSource : IChunkSource
     private readonly HashSet<TileId> _tiles = new();
     private readonly Dictionary<TileId, List<RoadSegment>> _roads = new();
     private readonly Dictionary<TileId, List<TreeInstance>> _trees = new();
+    private readonly Dictionary<TileId, List<Building>> _buildings = new();
     // a laid-out car park (#499), by the tile each piece falls in
     private readonly Dictionary<TileId, List<RoadAreaProp>> _parkAreas = new();
     private readonly Dictionary<TileId, List<RoadPaint>> _parkPaint = new();
@@ -56,7 +57,14 @@ public sealed class FixtureChunkSource : IChunkSource
                 });
             }
         PlanCarParks();
-
+        // buildings (#558), filed by the tile their middle is in
+        Interiors.GarageRule.AlwaysRolls = course.AlwaysGarage;
+        foreach (var block in course.Blocks)
+        {
+            double e = startE + block.X, n = startN + block.Y;
+            var tile = TileId.FromLv95(e, n);
+            Add(_buildings, tile, FixtureBlocks.Solid(block, (float)(e - tile.MinE), (float)(tile.MaxN - n)));
+        }
         foreach (var (x, y, _, height) in course.Trees)
         {
             double e = startE + x, n = startN + y;
@@ -357,7 +365,7 @@ public sealed class FixtureChunkSource : IChunkSource
         Task.FromResult(_tiles.Contains(id) ? new HashSet<int>() : null);
 
     public Task<BuildingTile?> LoadBuildingsAsync(TileId id, CancellationToken ct = default) =>
-        Task.FromResult(_tiles.Contains(id) ? new BuildingTile { Id = id, Buildings = new() } : null);
+        Task.FromResult(_tiles.Contains(id) ? new BuildingTile { Id = id, Buildings = _buildings.TryGetValue(id, out var b) ? b : new() } : null);
 
     /// <summary>The course's cover; all open ground (grass, the cover's zero class) by default.</summary>
     public Task<byte[]?> LoadCoverAsync(TileId id, CancellationToken ct = default)

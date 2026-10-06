@@ -46,6 +46,19 @@ public static partial class InteriorGenerator
         }
     }
 
+    /// <summary>
+    /// A block of flats' underground garage (#558): the plan of an 80 x 18 m block that rolled a garage
+    /// door (<c>FlatCheck.RampTile</c>), its ground floor and basement with the ramp between them.
+    /// </summary>
+    [Showcase("Terrain", "Garage ramp")]
+    private static Node3D ShowcaseGarageRamp()
+    {
+        var (tile, roads) = FlatCheck.RampTile();
+        int index = BuildingFootprint.ComputeDoors(tile, roads, null).First(d => d.Link.Any).Index;
+        var layout = Generate(tile, index, roads, null)!;
+        return InteriorNode.Create(layout, InteriorMeshBuilder.Build(layout), Styles.StyleKit.Material(Styles.MaterialRole.Interior), Transform3D.Identity);
+    }
+
     private static (InteriorLayout, InteriorMeshBuilder.MeshData) Layout(FurnitureType type, Piece piece)
     {
         var layout = new InteriorLayout { StoreyHeight = 3f };

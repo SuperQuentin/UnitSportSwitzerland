@@ -52,6 +52,7 @@
     <Compile Include="..\..\src\Loot\ShopTables.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\DoorBudget.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\GarageRule.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\RampProfile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\GarageLink.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\DoorKey.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\LiftRide.cs" Link="Game\%(Filename)%(Extension)" />

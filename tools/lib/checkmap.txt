@@ -237,6 +237,16 @@ src/Interiors/FloorPicker net tools/liftsynccheck.sh
 src/Interiors/BuildingFootprint net tools/baycheck.sh
 src/Interiors/DoorBudget net    tools/baycheck.sh
 src/Interiors/InteriorGenerator net tools/baycheck.sh
+src/Interiors/BuildingFootprint net tools/rampnetcheck.sh
+src/Interiors/GarageRule net    tools/rampnetcheck.sh
+src/Interiors/RampProfile net   tools/rampnetcheck.sh
+src/Interiors/InteriorGenerator net tools/rampnetcheck.sh
+src/Interiors/InteriorMeshBuilder net tools/rampnetcheck.sh
+src/Interiors/InteriorValidator net tools/rampnetcheck.sh
+src/Interiors/DoorLink   net    tools/rampnetcheck.sh
+src/Interiors/DoorIndex  net    tools/rampnetcheck.sh
+src/Terrain/Fixture/     net    tools/rampnetcheck.sh
+src/Player/GarageProbe   net    tools/rampnetcheck.sh
 src/Terrain/ProceduralWorld.Settlements net tools/baycheck.sh
 src/Terrain/ProceduralWorld.Settlements  net  tools/shopcheck.sh
 src/Player/FootPlayer.Sw net    tools/swimnetcheck.sh

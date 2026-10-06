@@ -125,6 +125,8 @@ public static partial class InteriorMeshBuilder
         RoomType.Corridor => (C(0.62f, 0.58f, 0.52f), C(0.88f, 0.86f, 0.80f), C(0.94f, 0.94f, 0.92f)),
         // #571: a terrazzo floor and pale painted walls, as every Swiss Treppenhaus
         RoomType.Stairwell => (C(0.70f, 0.68f, 0.64f), C(0.92f, 0.90f, 0.84f), C(0.95f, 0.95f, 0.93f)),
+        // #558: a garage ramp: raw concrete under a pale ceiling, like the car park it runs into
+        RoomType.Ramp => (C(0.46f, 0.46f, 0.45f), C(0.72f, 0.72f, 0.70f), C(0.60f, 0.60f, 0.59f)),
         _ => (C(0.52f, 0.38f, 0.25f), C(0.88f, 0.84f, 0.76f), C(0.95f, 0.94f, 0.90f)), // hall, landing
     };
 
@@ -143,7 +145,11 @@ public static partial class InteriorMeshBuilder
             var above = HolesOf(f + 1);
             foreach (var room in floor.Rooms)
                 Room(s, room, y0, l.ClearOf(room), floor.Holes, HolesOf(f + room.Span));
-            foreach (var flight in floor.AllFlights()) Flight(s, flight, y0, h);
+            foreach (var flight in floor.AllFlights())
+            {
+                if (flight.Ramp) Ramp(s, flight, floor, y0, h);
+                else Flight(s, flight, y0, h);
+            }
             // a stairwell's half landings (#571): a stone slab, stood on, its underside seen from below
             foreach (var g in floor.Landings)
                 s.Box(new Vector3(g.X0 + 0.02f, y0 + h * g.Level - 0.22f, g.Z0), new Vector3(g.X1 - 0.02f, y0 + h * g.Level, g.Z1 - 0.02f), StairStone);
@@ -162,7 +168,8 @@ public static partial class InteriorMeshBuilder
             foreach (var hole in above)
             {
                 float a = y0 + clear, b = y0 + h;
-                var wall = StairWood * 0.8f;
+                // a stair's shaft is lined with wood, a garage ramp's (#558) is bare concrete
+                var wall = floor.AllFlights().Any(fl => fl.Ramp && fl.Area().Overlaps(hole)) ? RampWall : StairWood * 0.8f;
                 s.Quad(new(hole.X0, a, hole.Z0), new(hole.X1, a, hole.Z0), new(hole.X1, b, hole.Z0), new(hole.X0, b, hole.Z0), wall);
                 s.Quad(new(hole.X0, a, hole.Z1), new(hole.X1, a, hole.Z1), new(hole.X1, b, hole.Z1), new(hole.X0, b, hole.Z1), wall);
                 s.Quad(new(hole.X0, a, hole.Z0), new(hole.X0, a, hole.Z1), new(hole.X0, b, hole.Z1), new(hole.X0, b, hole.Z0), wall);
@@ -324,7 +331,9 @@ public static partial class InteriorMeshBuilder
             Vector3 R(float u, float y, float d) => OnWall(side, inner, u, y, d);
             s.Quad(R(s0, ob, 0), R(s0, ot, 0), R(s0, ot, depth), R(s0, ob, depth), reveal);
             s.Quad(R(s1, ob, 0), R(s1, ob, depth), R(s1, ot, depth), R(s1, ot, 0), reveal);
-            s.Quad(R(s0, ot, 0), R(s1, ot, 0), R(s1, ot, depth), R(s0, ot, depth), reveal);
+            // (no soffit where the opening runs up to the ceiling, as a garage ramp's does, #558: a
+            // car's roof would hit that sliver across the lane)
+            if (ot < top - 0.01f) s.Quad(R(s0, ot, 0), R(s1, ot, 0), R(s1, ot, depth), R(s0, ot, depth), reveal);
             if (o.Bottom > 0.01f)
                 s.Quad(R(s0, ob, 0), R(s0, ob, depth), R(s1, ob, depth), R(s1, ob, 0), reveal);
             else
@@ -472,6 +481,41 @@ public static partial class InteriorMeshBuilder
         var d = V(f.X0, yb, f.ZTop);
         s.Col.Add(a); s.Col.Add(b); s.Col.Add(c);
         s.Col.Add(a); s.Col.Add(c); s.Col.Add(d);
+    }
+
+    private static readonly Color RampSurface = C(0.36f, 0.36f, 0.37f);
+    private static readonly Color RampWall = C(0.62f, 0.62f, 0.60f);
+
+    /// <summary>
+    /// A garage's ramp (#558): a solid wedge of concrete following <see cref="RampProfile"/> from the
+    /// flat apron's end down to the basement floor, a car's way (the whole of it collides, unlike a
+    /// stair's drawn steps over one collision ramp). Where it runs on into the car park, which has
+    /// no wall of its own along the lane, a parapet each side from the floor to a metre above the
+    /// surface keeps a car from driving off its edge; in its own room the room's walls do that.
+    /// The ramp runs along +Z from <see cref="FlightPlan.ZTop"/>.
+    /// </summary>
+    private static void Ramp(Scratch s, FlightPlan f, FloorPlan floor, float y0, float h)
+    {
+        float inset = InteriorGenerator.WallInset;
+        float x0 = f.X0 + inset, x1 = f.X1 - inset;
+        float rise = h * (f.To - f.From);
+        // where the car park begins along the lane
+        float zPark = float.MaxValue;
+        foreach (var q in floor.Rooms)
+            if (q.Type == RoomType.CarPark && q.X0 <= x0 + 0.01f && q.X1 >= x1 - 0.01f) zPark = Math.Min(zPark, q.Z0);
+        var pts = RampProfile.Polyline(rise);
+        for (int i = 1; i < pts.Count; i++)
+        {
+            float za = f.ZTop + pts[i - 1].T, zb = f.ZTop + pts[i].T;
+            float ya = y0 + pts[i - 1].Y, yb = y0 + pts[i].Y;
+            var col = i % 2 == 0 ? RampSurface : RampSurface * 0.93f;
+            col.A = 1;
+            s.Quad(new(x0, ya, za), new(x1, ya, za), new(x1, yb, zb), new(x0, yb, zb), col);
+            if ((za + zb) / 2 < zPark) continue;
+            // the part in the car park: the wedge's own sides, and a parapet over each
+            Prism(s, false, x0 - 0.15f, x0, za, zb, y0, ya + 0.9f, y0, yb + 0.9f, RampWall, true);
+            Prism(s, false, x1, x1 + 0.15f, za, zb, y0, ya + 0.9f, y0, yb + 0.9f, RampWall, true);
+        }
     }
 
     /// <summary>
