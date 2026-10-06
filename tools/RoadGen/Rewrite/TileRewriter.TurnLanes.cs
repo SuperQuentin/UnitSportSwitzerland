@@ -297,7 +297,7 @@ public static partial class TileRewriter
             var armLanes = Arm(pocket.Node, pocket.Arm, pocket.Home);
             approach.Layout = armLanes.Approach = LanesOf(approach, right, pocket.Signal);
             if (pocket.Signal && approach.Layout is { Equal: true, LeftPocketLane: { } facing })
-                departure.SetExit(facing.To + approach.Layout.LeftBike);
+                departure.SetExit(facing.To + approach.Layout.LeftBike, approach.Layout.LaneWidth);
             armLanes.AdvancedBikeLine = approach.HasLeftBikeLane && !pocket.BikeBox;
             armLanes.PlacedLeft(approach, inSlot.Storage, inSlot.Merged, pocket.RightTurn && right is null, pocket.Signal);
             if (pocket.ExitArm >= 0)
@@ -972,11 +972,11 @@ public static partial class TileRewriter
         /// At traffic lights (#682) the exit's through lane continues the facing approach's through lane: the hatch is as wide as its pocket
         /// and bike lane at the mouth and the lane after it as wide as an approach lane (<see cref="ApproachLayout.LaneWidth"/>), so it never starts narrow.
         /// </summary>
-        public void SetExit(double hatch) => _exitHatch = hatch;
-        private double? _exitHatch;
+        public void SetExit(double hatch, double lane) => (_exitHatch, _exitLane) = (hatch, lane);
+        private double? _exitHatch, _exitLane;
         public double HatchAtMouth => _exitHatch ?? _pocket;
         /// <summary>The width of the exit's car lane (the carriageway's half less a painted bike lane).</summary>
-        public double ExitCar => _car;
+        public double ExitCar => _bike > 0 ? Math.Max(_car, _exitLane ?? 0) : _car;   // beside an on-street bike lane a full lane (#682)
         public bool HasLeftBikeLane => _bikeLeft > 0;
 
         /// <summary>What the widening adds at full width: the through lane, and on an approach the left-turn bike lane (#351).</summary>
@@ -1085,7 +1085,7 @@ public static partial class TileRewriter
         private double Widen(double dist)
         {
             // #682: the exit lane keeps its width (the carriageway's lane) from the mouth to where the hatch has closed: the edge moves in as fast as the hatch
-            if (_exit && _exitHatch is { } hatch) return Math.Max(0, hatch * (1 - dist / _length));
+            if (_exit && _exitHatch is { } hatch) return Math.Max(0, (hatch + (ExitCar - _car)) * (1 - dist / _length));   // an on-street bike lane keeps its width beside a full car lane until the widening ends
             if (_taper <= 0) return Lane + _extra;
             double main = Math.Clamp((_length - dist) / _taper, 0, 1);
             if (_lead <= 0 || (_exit && _bike <= 0)) return (Lane + _extra) * main;
