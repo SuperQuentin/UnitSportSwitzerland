@@ -46,7 +46,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `data-location` — Data location: `--chunks` > `UNITSPORT_CHUNKS` > `terrain_location.json` (MapSetup's drive picker) > `terrain_chunks/`; game and server alike
 - `perf-lod-trees` — Ring strides by screen-space error, trees thinned by ring (`VisibleInstanceCount`), shared unit tree meshes, free every replaced mesh
 - `landings` (world) — `PierMeshBuilder`: a tile's piers and jetties as one more roads-mesh surface (Prop role) and road collision cells; `IChunkSource.LoadLandingsAsync`; `ChunkManager.RebuildPiers` when the landings change
-- `parking-runtime` — Car parks at runtime (#499): the pad through `PavementBuilder`, planters through `IslandBuilder`, walks as #119 sidewalks, bay lines and the disabled roundel as `PNT2`, `ParkingBuilder` for the boom/kiosk/shelter/P sign, the `PARK` bay list as a wire contract
+- `parking-runtime` — Car parks at runtime (#499): the pad through `PavementBuilder` with an embankment round its edge (#603), planters through `IslandBuilder`, walks as #119 sidewalks, bay lines and the disabled roundel as `PNT2`, `ParkingBuilder` for the boom/kiosk/shelter/P sign, the `PARK` bay list as a wire contract
 - `perf-collision-commits` — Collision is queued and committed one 4x4 cell piece a frame, nearest a body first; a new collision layer must go through that queue
 - `perf-static-city` — what a city's static things cost (#553): CPU-bound frames, buildings 1.1–1.6 ms of GPU, the dormant layer ~0.3 ms, shop signs 1 300 draws → drawn to 200 m; tiles past the building/road ring shed them (`TileUnfurnished`)
 - `occlusion-culling` — buildings as occluders near the ground (#553): 125 m building cells round the camera, box occluders inset 0.5 m for buildings that fill their plan box, cells only under 40 m above ground, off in VR and during a sightline cut
@@ -58,7 +58,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 
 ## Gotchas
 
-- `collision-build-load-road-tile` — A collision or near-field mesh rebuild must load the road tile even when the roads are already drawn (or the ground swallows them after flying away and back)
+- `collision-build-load-road-tile` — Any collision or near-field build must load the road tile even when the roads are already drawn (or the ground swallows them after flying away and back, or on the #553 street-level cell switch, #603)
 - `road-s-collision-core-takes` — A road's collision core takes the height at the cell's perpendicular foot on the centreline, nearest segment wins
 - `concavepolygonshape3d-one-sided-collision-unless` — `ConcavePolygonShape3D` is one-sided for collision unless told otherwise, and geometry that "looks right" can still...
 - `flat-shaded-quad-mesh-bilinear` — A flat-shaded quad mesh is NOT a bilinear surface, and a height query must match whichever one is actually on screen

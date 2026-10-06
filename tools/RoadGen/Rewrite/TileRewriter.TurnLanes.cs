@@ -1264,10 +1264,12 @@ public static partial class TileRewriter
                 // the through lane lies on the driver's right (sx, sz): their forward is that turned a quarter left
                 double fx = sz, fz = -sx;
                 var (px, py, pz, _, _) = At(tip + pocketBack - 0.1);
+                // each arrow climbs with the road to its tip, ArrowLength nearer the mouth (#639)
+                double tipY = At(back - PaintEmitter.ArrowLength).Y, pocketTipY = At(tip + pocketBack - 0.1 - PaintEmitter.ArrowLength).Y;
                 double left = lanes.LeftPocketLane!.Value.Mid, ahead = lanes.Through().Mid;
-                paint.Add(PaintEmitter.Arrow(px + sx * left, py, pz + sz * left, fx, fz, PaintArrow.Left));
+                paint.Add(PaintEmitter.Arrow(px + sx * left, py, pz + sz * left, fx, fz, PaintArrow.Left, pocketTipY));
                 paint.Add(PaintEmitter.Arrow(x + sx * ahead, y, z + sz * ahead, fx, fz,
-                    rightTurn ? PaintArrow.Straight | PaintArrow.Right : PaintArrow.Straight));
+                    rightTurn ? PaintArrow.Straight | PaintArrow.Right : PaintArrow.Straight, tipY));
                 stats.Arrows += 2;
             }
         }
@@ -1345,12 +1347,13 @@ public static partial class TileRewriter
                 if (tip > first && back > storage + 1) continue;
                 var (x, y, z, sx, sz) = At(back);
                 double fx = sz, fz = -sx;
-                paint.Add(PaintEmitter.Arrow(x + sx * pocket.Mid, y, z + sz * pocket.Mid, fx, fz, PaintArrow.Right));
+                double tipY = At(back - PaintEmitter.ArrowLength).Y;   // climbing with the road (#639)
+                paint.Add(PaintEmitter.Arrow(x + sx * pocket.Mid, y, z + sz * pocket.Mid, fx, fz, PaintArrow.Right, tipY));
                 stats.Arrows++;
                 if (through is { } kind)
                 {
                     double own = lanes.Through().Mid;
-                    paint.Add(PaintEmitter.Arrow(x + sx * own, y, z + sz * own, fx, fz, kind));
+                    paint.Add(PaintEmitter.Arrow(x + sx * own, y, z + sz * own, fx, fz, kind, tipY));
                     stats.Arrows++;
                 }
             }

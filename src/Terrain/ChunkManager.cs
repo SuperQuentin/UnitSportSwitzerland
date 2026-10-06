@@ -1700,7 +1700,11 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // and then dropping on foot, and flying away and back: the tile coarsens with its
                 // roads kept (out to RoadMaxDist), and refined without the road tile its stride-1
                 // ground came back unblended, burying the roads it had been lowered under.
-                bool nearMesh = needMesh && want.Stride <= TerrainMeshBuilder.MaxHoleStride;
+                // Not only when the stride changes: every build redraws the surface, and the
+                // switch to building cells when the camera comes down to the street (#553, a
+                // buildings-only build) drew the bare ground over every road and car park round
+                // it (#603).
+                bool nearMesh = BuildMeshes && want.Stride > 0 && want.Stride <= TerrainMeshBuilder.MaxHoleStride;
                 StartBuild(id, state, want.Stride, needCollision, needRoads, needBuildings,
                     roadsForBlend: (needCollision || nearMesh) && want.Roads, fine: fine, cells: wantCells,
                     buildingsOnly: needBuildings && cellSwitch);
