@@ -80,7 +80,7 @@ public partial class InterestService : Node
     private double _frameE, _frameN;
     private Func<Vector3, Vector3, bool>? _sight;
     private Vector3 Local(GlobalPos g) => new((float)(g.E - _frameE), (float)g.Alt, (float)-(g.N - _frameN));
-    private double _timer;
+    private double _nextEvalAt;
 
     public static InterestService CreateServer(Node parent, Node players, Func<GlobalPos, float?>? ground)
     {
@@ -132,10 +132,12 @@ public partial class InterestService : Node
     public override void _Process(double delta)
     {
         if (Players == null || !Multiplayer.IsServer()) return;
-        _timer += delta;
-        if (_timer < Period) return;
-        _timer = 0;
-        Evaluate(Time.GetTicksMsec() / 1000.0);
+        // wall clock both for the period and for the stamps it compares (Core.RealClock): keeping
+        // peers' interest sets fresh is bandwidth housekeeping, not part of the simulation
+        double now = Core.RealClock.Now;
+        if (now < _nextEvalAt) return;
+        _nextEvalAt = now + Period;
+        Evaluate(now);
     }
 
     private void Evaluate(double now)

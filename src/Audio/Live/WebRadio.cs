@@ -64,7 +64,7 @@ public partial class WebRadio : Node
     private readonly Dictionary<int, StationBuffer> _buffers = new();
     private int[] _wanted = Array.Empty<int>();
     private readonly Dictionary<int, double> _lastNear = new();
-    private double _sinceScan;
+    private double _nextScanAt;
 
     /// <summary>On every peer; whichever is the server (the offline game too) tunes the stations.</summary>
     public static WebRadio Create(Node world)
@@ -94,10 +94,10 @@ public partial class WebRadio : Node
     {
         if (!NetworkManager.DedicatedServer)
         {
-            _sinceScan += delta;
-            if (_sinceScan >= 0.25)
+            // wall clock: a network stream arrives in real time whatever the world is doing
+            if (Core.RealClock.Now >= _nextScanAt)
             {
-                _sinceScan = 0;
+                _nextScanAt = Core.RealClock.Now + 0.25;
                 Scan();
             }
         }

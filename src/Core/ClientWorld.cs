@@ -738,6 +738,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
         if (Items.Fishing.FishNetProbe.Role != null) AddChild(new Items.Fishing.FishNetProbe(items));
         if (World.ClockNetProbe.Role != null) AddChild(new World.ClockNetProbe(items));
+        if (SpeedNetProbe.Role != null) AddChild(new SpeedNetProbe(items));
         if (Player.BoatNetProbe.Role != null) AddChild(new Player.BoatNetProbe(items));
         if (Player.SteamerNetProbe.Role != null) AddChild(new Player.SteamerNetProbe(items));
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "solo") > Array.IndexOf(OS.GetCmdlineUserArgs(), "--dropcheck")
@@ -858,7 +859,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new PerfOverlay(_chunks, _cache, recorder));
 
         // F9 or /debug: overlays, terrain layers and view modes, alone or as an admin (#339)
-        var debug = new DebugMenu(_chunks, origin, () => _nearTrees, Toast);
+        var debug = new DebugMenu(_chunks, origin, () => _nearTrees, Toast,
+            scale => _chat?.Send($"/speed {scale.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}"));
         AddChild(debug);
         _chat.DebugRequested += debug.Open;
         if (DebugMenuCheck.Requested) AddChild(new DebugMenuCheck(items, debug, _chunks));

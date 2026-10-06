@@ -218,7 +218,7 @@ public partial class VehicleIntroCard : CanvasLayer
 
         _panel.Visible = !_covered();
         _panel.Modulate = new Color(1, 1, 1, 0);
-        _panel.CreateTween().TweenProperty(_panel, "modulate:a", 1f, 0.25f);
+        _panel.CreateTween().SetIgnoreTimeScale(true).TweenProperty(_panel, "modulate:a", 1f, 0.25f);
         GD.Print($"[intro] {intro.Kind}");
     }
 

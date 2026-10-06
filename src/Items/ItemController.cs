@@ -531,7 +531,7 @@ public partial class ItemController : Node
             {
                 if (Weapons.Get(stack.Id) is not { } weapon) break;
                 // the action has to cycle before the next round (the shotgun's pump, a rifle's bolt)
-                if (Time.GetTicksMsec() < _nextShotMs) break;
+                if (Core.GameClock.Now < _nextShotAt) break;
                 int ammo = -1;
                 for (int i = 0; i < Inventory.Size && ammo < 0; i++)
                     if (_inventory[i].Id == weapon.Ammo && !_inventory[i].IsEmpty) ammo = i;
@@ -542,7 +542,7 @@ public partial class ItemController : Node
                     break;
                 }
                 _inventory.TakeOne(ammo);
-                _nextShotMs = Time.GetTicksMsec() + (ulong)(weapon.Interval * 1000f);
+                _nextShotAt = Core.GameClock.Now + weapon.Interval;
                 Recoil(player, weapon);
                 Shoot(player, weapon);
                 break;
@@ -550,8 +550,8 @@ public partial class ItemController : Node
 
             case ItemUse.Melee:
             {
-                if (Weapons.Get(stack.Id) is not { } blade || Time.GetTicksMsec() < _nextShotMs) break;
-                _nextShotMs = Time.GetTicksMsec() + (ulong)(blade.Interval * 1000f);
+                if (Weapons.Get(stack.Id) is not { } blade || Core.GameClock.Now < _nextShotAt) break;
+                _nextShotAt = Core.GameClock.Now + blade.Interval;
                 Kick(player);
                 Play(SfxSynth.WhooshBank.Variants[SfxRng.Next(SfxSynth.WhooshBank.Variants.Length)], 1.3f);
                 var (eye, aim) = AimFrom(player, blade.Range);
@@ -593,8 +593,8 @@ public partial class ItemController : Node
             }
             case ItemUse.Smoke:
             {
-                if (Time.GetTicksMsec() < _nextShotMs) break;
-                _nextShotMs = Time.GetTicksMsec() + 800;
+                if (Core.GameClock.Now < _nextShotAt) break;
+                _nextShotAt = Core.GameClock.Now + 0.8;
                 var (eye, aim) = AimFrom(player, SwissItems.SmokeThrow);
                 var space = player.GetWorld3D().DirectSpaceState;
                 var hit = AimRay.Cast(space, eye, eye + aim * SwissItems.SmokeThrow, uint.MaxValue, player.SelfExclude);
@@ -744,7 +744,9 @@ public partial class ItemController : Node
         _ => 0f,
     };
 
-    private ulong _nextShotMs;
+    // simulation time (#579), like _hornReadyAt above: a weapon's action cycling is part of the
+    // world, so the rate of fire slows when the world does
+    private double _nextShotAt;
 
     /// <summary>When the alphorn may be blown again (#478), local seconds.</summary>
     private double _hornReadyAt;

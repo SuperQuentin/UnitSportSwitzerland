@@ -421,6 +421,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _br?.SendTo(id);
         _brCrates?.SendTo(id);
         _chat?.SendWorldTimeTo(id);
+        _chat?.SendWorldSpeedTo(id);
         _chat?.SendSeaStateTo(id);
     }
 

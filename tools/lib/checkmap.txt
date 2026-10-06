@@ -193,6 +193,9 @@ src/Avatar/SteamerMesh   quick  --steamercheck pier --chunks fixture:lake
 src/Vehicles/VehicleReac quick  --steamercheck walk --chunks fixture:lake
 src/Core/GameSettings    quick  --exitcheck --world fixture
 
+src/Core/SimClock        net    tools/speednetcheck.sh
+src/Core/SpeedNetProbe   net    tools/speednetcheck.sh
+src/Net/ClockSync        net    tools/speednetcheck.sh
 src/Net/                 net    @netsmoke
 src/Core/ServerWorld     net    @netsmoke
 src/Core/ClientWorld     net    @netsmoke

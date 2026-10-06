@@ -3,15 +3,15 @@
 
 # Three clocks: environment time, simulation speed, real time
 
-Status: **planned**, nothing built. Tracking issue: #579.
+Status: **all five phases built** (PR #594). Tracking issue: #579.
 
 | Phase | State | What it does |
 |---|---|---|
-| 1 `RealClock` | not done | An unscaled wall clock and frame delta, so the real-time bucket survives a time scale |
-| 2 Server-owned sim clock | not done | `SimClock`: the server owns `(sim0, epoch, scale)`; every peer flips `Engine.TimeScale` at the same server instant |
-| 3 Env time onto sim time | not done | `WorldClock` re-keyed from `ServerNow` to `SimNow`, with a monotonic persisted `EnvNow` |
-| 4 Move the misplaced timers | not done | The ~10 simulation timers currently on the wall clock move to sim or env time |
-| 5 Guards | not done | A lint check for wall-clock use in gameplay, and two-peer probes for sim speed and env scaling |
+| 1 `RealClock` | done | An unscaled wall clock and frame delta, so the real-time bucket survives a time scale |
+| 2 Server-owned sim clock | done | `SimClock`: the server owns `(sim0, epoch, scale)`; every peer flips `Engine.TimeScale` at the same server instant |
+| 3 Env time onto sim time | done | `WorldClock` re-keyed from `ServerNow` to `SimNow`, with a monotonic persisted `EnvNow` |
+| 4 Move the misplaced timers | done | The ~10 simulation timers currently on the wall clock move to sim or env time |
+| 5 Guards | done | A lint check for wall-clock use in gameplay, and two-peer probes for sim speed and env scaling |
 
 ## Goal
 
@@ -111,8 +111,12 @@ that must stay real needs a source a scale cannot touch.
 - Audit the other `delta`-driven network and UI cadences for the same bug. The ones that already
   read `Time.GetTicksMsec` directly (`Handshake`, `InterestService`, `ServerStats`, `Swarm`, the
   chat rate limit) are safe and stay as they are.
-- Decide per case whether HUD and menu animation should slow with the world. World-space HUD
-  probably should; menus should not.
+- Decided while building: **UI chrome ignores the scale** (`SetIgnoreTimeScale(true)` on the menu
+  and HUD tweens). Most HUD animation here is absolute wall-clock phase
+  (`Mathf.Sin(Time.GetTicksMsec() / 160f)` for the BR ping bob, the zone pulse, camera shake, cloth
+  sway), which a scale never touched and which needed no change at all; the only real exposure was
+  Godot `Tween`s, which `Engine.TimeScale` does scale. A sluggish menu is not a useful signal that
+  slow motion is on. That is also why phase 1's `RealClock` needs no `Delta`.
 
 No behaviour change at scale 1. Quick tier.
 
@@ -147,8 +151,14 @@ Replicated state, so **tier 2** (`tools/test.sh net`), checking the scale on the
   24 h. `Hour` stays for the sky.
 - Persist `EnvNow` in `user://world_clock.cfg` next to `minutes_per_day`, replacing the saved
   wrapped `hour`, which loses the day count. On load, `env0 = saved` and `envEpoch = SimNow(now)`.
-- `/time set` and `/time add` rebase the env layer at the current `SimNow`; `/time speed` rebases it
-  and changes `dayFactor`. `/speed` rebases only the sim layer.
+- Built differently from the plan: `/time set` and `/time add` move a **`HourShift`**, they do not
+  rebase the counter. The plan would have let `/time set 3` at 22:00 wind `EnvNow` back nineteen
+  hours, which is fine for a sky and wrong for everything phase 4 is about to hang off it — a
+  campfire lit ten env-minutes ago would have become one lit in the future. Splitting the monotonic
+  counter from the admin-movable hour was cheap to do now, with no consumers to break, and the trap
+  would have been expensive to find in phase 4. `/time speed` still rebases the env layer; `/speed`
+  rebases only the sim layer.
+- The wire semantics changed, so `Handshake.Protocol` goes 17 -> 18.
 - A `docs/notes/core/three-clocks.md` note with the bucket rule, the layering, and the table of
   which system is in which — replacing the looser wording in `docs/notes/general/fast-checks.md`.
 
@@ -167,10 +177,10 @@ From the audit of `main`. To **simulation** time:
 | System | Where | Why |
 |---|---|---|
 | Weapon rate of fire | `Items/ItemController.cs:534-597` `_nextShotMs` | the most visible one: firing does not slow in slow motion |
-| NPC racer handoff | `World/RaceNpc.cs:293` | stale, min-hold and handoff grace |
+| ~~NPC racer handoff~~ | `World/RaceNpc.cs:293` | **wrong in this plan: it stays real.** Every window there is compared against `FootPlayer.LastNetState`, a packet arrival time, so it is housekeeping about which peer is alive |
 | Damage attribution window | `Player/FootPlayer.cs:2883`, `:1668` | who gets the kill credit |
 | Gadget bounce cooldown | `Build/GadgetTool.cs:415` | trampoline re-trigger |
-| Bird replication cadence | `Birds/BirdNet.cs:152,181`, `Birds/BirdLife.cs:1324` | send rate and the 800 ms re-report guard |
+| ~~Bird replication cadence~~ | `Birds/BirdNet.cs:152,181`, `Birds/BirdLife.cs:1324` | **wrong in this plan: it stays real.** These are rate limits on what a client may send and a wait for a round trip; a client that slowed its own simulation must not get more through |
 
 To **environment** time, each with its constant re-expressed in env units:
 
@@ -179,8 +189,8 @@ To **environment** time, each with its constant re-expressed in env units:
 | Resource regrowth | `Loot/Gathering.cs:235` `RegrowSeconds` | berries and firewood are a world process |
 | Campfire burn | `Crafting/CampfireClock.cs` | currently a Unix stamp purely to survive restart; `EnvNow` persisting in phase 3 covers that |
 | Craft station progress | `Crafting/CraftStations.cs:46` | same |
-| Build growth | `Build/Structures.cs:124` | already on `ServerNow`, which is real time; growth belongs to the world's pace |
-| Water waves, sea state | `World/WaterField.cs:60` | **open question**: waves are physics-driven but read as visual. Sim is the likely answer now that env rides sim, since the two differ only by `dayFactor` |
+| Build growth | `Build/Structures.cs:124` | **moved to simulation, not environment.** `BuildGrid.Spec(Wood).Seconds` is 2 s — a gameplay beat, not a world duration; in env units that is 0.03 real seconds at the default day length |
+| Water waves, sea state | `World/WaterField.cs:60` | **decided: simulation.** The swell is physics and the boats riding it are simulated, so a boat bobbing at full rate while it crawls forward is exactly the inconsistency the three clocks exist to remove |
 
 Deliberately **left on the wall clock**: the server-side shot guard at `Items/ItemEvents.cs:204` is
 anti-cheat rate limiting, so real time is correct — a client that slowed its own simulation must not
@@ -198,11 +208,21 @@ simulation), `Interiors/InteriorManager.cs:433` (4 s door re-ask), `Interiors/Fl
 - A lint-style unit check: no file under the gameplay directories reads `Time.GetTicksMsec`,
   `Time.GetTicksUsec` or `Time.GetUnixTimeFromSystem` unless it is on an explicit allow-list with a
   reason. This is the only thing that stops the three buckets rotting back into one.
-- A two-peer probe that the simulation scale matches on both peers after a `/speed`, and that a
-  replicated body's position does not jump across the flip.
+- A two-peer probe that the simulation scale matches on both peers after a `/speed`: done in
+  phase 2's `speednetcheck`, asserting the scale on **clock and engine** (one without the other is
+  the bug) and that both peers still agree about simulated time afterwards. Phase 5 added that
+  replication keeps flowing across the flip.
+- **Not done, filed as #604:** that a *moving* body does not jump across the flip. The probe's
+  players stand still, so the assertion would have passed whatever happened, and a vacuous assert is
+  worse than none. `Net/NetSmoothProbe` / `--synccheck` already measures a driven body's smoothness
+  and is where it belongs.
 - A two-peer probe that the **hour advances at `scale * dayFactor`**: the whole point of the flipped
   decision, and the thing a future refactor is most likely to break silently.
-- A probe that `EnvNow` survives a server restart and that nothing mid-growth resets.
+- `EnvNow` surviving a restart is covered at tier 0 by `ClockSaveTests`, including that a campfire
+  lit before a restart is still burning after it. Built differently from the plan: an end-to-end
+  restart probe is impossible, because `WorldClock.Persists` is deliberately false under `--world` /
+  `--systems`, so a test server never writes the file. The parsing was extracted into the pure
+  `World/ClockSave` so the part that actually goes wrong — the pre-#579 fallback — is testable.
 
 ## Risks
 

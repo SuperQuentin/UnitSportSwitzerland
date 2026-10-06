@@ -48,6 +48,7 @@ public sealed class ChatCompleter
         ("city", false, true, "<town>"),
         ("occasion", false, true, "[list | start | stop | auto] [id]"),
         ("time", false, true, "[query] | set <hh:mm | noon | night ...> | add <hours> | speed <minutes>"),
+        ("speed", false, true, "[<0.05 .. 8> | normal]"),
         ("seastate", false, true, "[0..1 | calm | chop | storm | gamey]"),
         ("water", false, true, "[E N]"),
         ("style", false, true, "[ps1 | cartoon | real- | real+ | rebuild]"),
