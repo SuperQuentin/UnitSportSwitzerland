@@ -8,6 +8,10 @@
   `[models] no viewer entry: <Class>` for builder classes that built nothing during the run, and a
   `[models] RESULT: ok` line (FAILED when a model throws). Run it windowed: headless renders nothing.
   About 1000 models, a few minutes.
+- **Rule: every new procedural model is in the viewer** (CLAUDE.md). A model added through an
+  existing registry (a car spec, an item, a bird, an enum value) shows by itself; a new builder, or
+  a new kind of thing, gets a `[Showcase]` tag or a set in the same change. The screenshot run's
+  `no viewer entry` lines are where a missed one shows: a new class there is a missing tag.
 - **No list to keep.** The viewer finds `[Showcase("Category", "Name")]` (`src/Core/ShowcaseAttribute.cs`)
   methods by reflection, in any class, private ones too. A tagged method takes no parameters and returns:
   - an `ArrayMesh` / `Mesh`: shown under `HumanMeshBuilder.Material()` (or `FigureMaterial()` with
