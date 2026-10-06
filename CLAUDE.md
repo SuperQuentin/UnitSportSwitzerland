@@ -60,6 +60,9 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
 - **Every new procedural model is in the model viewer**: tag its builder `[Showcase("Category")]`,
   or extend the set that already covers it (a new enum value or catalog row usually shows by
   itself), and check it with `--models,test_output/models` (`docs/notes/avatar/model-viewer.md`).
+- **Every new synthesised sound is in the sound player**: a static `SfxBank`/`AudioStreamWav` shows by itself;
+  a sound built per call (surface, species, voice) gets a `[SoundShowcase]` set; check with
+  `--sounds,check` (`docs/notes/audio/sound-player.md`).
 - **Simple tasks** (docs/notes tweaks, one-line fixes) skip the workflow: commit straight on `main`
   in the main checkout and push. No issue, branch, worktree or PR.
 - Check and probe output goes in `test_output/` (gitignored), never the repo root.

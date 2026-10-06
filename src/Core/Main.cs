@@ -126,6 +126,12 @@ public partial class Main : Node
 			return;
 		}
 
+		if (UnitSport.Audio.SoundPlayer.Requested())
+		{
+			AddChild(new UnitSport.Audio.SoundPlayer { Name = "SoundPlayer" });
+			return;
+		}
+
 		if (UnitSport.Avatar.ModelViewer.Requested())
 		{
 			AddChild(new UnitSport.Avatar.ModelViewer { Name = "ModelViewer" });
