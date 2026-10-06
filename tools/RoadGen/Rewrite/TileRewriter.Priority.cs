@@ -199,7 +199,7 @@ public static partial class TileRewriter
     /// stands inside a building. A point is inside when a triangle of the building covers it in
     /// plan (the roof always does). Loaded lazily per tile.
     /// </summary>
-    private sealed class Footprints(string chunkDir)
+    private sealed class Footprints(Func<TileId, BuildingTile?> source)
     {
         private readonly Dictionary<TileId, List<(double MinX, double MinY, double MaxX, double MaxY, float[] Tris)>> _tiles = new();
 
@@ -226,25 +226,17 @@ public static partial class TileRewriter
         {
             if (_tiles.TryGetValue(id, out var list)) return list;
             _tiles[id] = list = new();
-            string path = Path.Combine(chunkDir, BuildingFormat.FileName(id));
-            if (!File.Exists(path)) return list;
-            try
+            // a building tile that is missing or will not decode only loses this check
+            if (source(id) is not { } tile) return list;
+            foreach (var b in tile.Buildings)
             {
-                using var stream = File.OpenRead(path);
-                foreach (var b in BuildingCodec.Decode(stream).Buildings)
+                double minX = double.MaxValue, minZ = double.MaxValue, maxX = double.MinValue, maxZ = double.MinValue;
+                for (int i = 0; i + 2 < b.Triangles.Length; i += 3)
                 {
-                    double minX = double.MaxValue, minZ = double.MaxValue, maxX = double.MinValue, maxZ = double.MinValue;
-                    for (int i = 0; i + 2 < b.Triangles.Length; i += 3)
-                    {
-                        minX = Math.Min(minX, b.Triangles[i]); maxX = Math.Max(maxX, b.Triangles[i]);
-                        minZ = Math.Min(minZ, b.Triangles[i + 2]); maxZ = Math.Max(maxZ, b.Triangles[i + 2]);
-                    }
-                    list.Add((minX, minZ, maxX, maxZ, b.Triangles));
+                    minX = Math.Min(minX, b.Triangles[i]); maxX = Math.Max(maxX, b.Triangles[i]);
+                    minZ = Math.Min(minZ, b.Triangles[i + 2]); maxZ = Math.Max(maxZ, b.Triangles[i + 2]);
                 }
-            }
-            catch (Exception)
-            {
-                // a building tile that will not decode only loses this check
+                list.Add((minX, minZ, maxX, maxZ, b.Triangles));
             }
             return list;
         }
