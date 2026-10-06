@@ -1,4 +1,5 @@
 using UnitSport.Farming;
+using UnitSport.Terrain.Format;
 using UnitSport.Items;
 using UnitSport.Loot;
 using Xunit;
@@ -122,6 +123,36 @@ public class FarmSellingTests
         Assert.True(aarberg.Buys(ItemId.SugarBeet) && !aarberg.Buys(ItemId.Wheat));
         Assert.Equal((long)Math.Floor(3 * 1.3 * 100), FarmPrices.Delivery(3, ItemId.SugarBeet, 100, 12, null, 0, aarberg.Premium));
         Assert.Equal("wheat, barley or maize", FarmBuyers.ByKey("swissmill-zuerich")!.GoodsText(i => i.ToString()));
+    }
+
+    [Fact]
+    public void A_buyers_office_stands_by_its_road_clear_of_the_factory()
+    {
+        // a buyer at the middle of a tile, inside a 60 m square factory; a road runs east-west 70 m south of the point
+        var tile = new TileId(2600, 1200);
+        var b = new FarmBuyer("t", "Test Mill", "Here", 2600500, 1200500, 90f, new[] { ItemId.Wheat }, 1.1, "test");
+        static float[] Square(double x0, double z0, double x1, double z1) => new[]
+        {
+            (float)x0, 0f, (float)z0, (float)x1, 0f, (float)z0, (float)x1, 0f, (float)z1,
+            (float)x0, 0f, (float)z0, (float)x1, 0f, (float)z1, (float)x0, 0f, (float)z1,
+        };
+        var factory = new Building { Triangles = Square(470, 470, 530, 530) };   // tile-local: x east, z south
+        var road = new RoadSegment { Class = RoadClass.Road, Width = 6f, Points = new[] { 300f, 432f, 570f, 700f, 432f, 570f } };
+        var site = FarmBuyerSite.Pick(b, new[] { (tile, road) }, new[] { (tile, factory) })!.Value;
+        Assert.Equal(432f, site.Altitude);
+        Assert.InRange(site.E, 2600495, 2600505);                 // straight south of the point
+        Assert.InRange(site.N, 1200500 - 70 + 3 + 5 - 0.1, 1200500 - 70 + 3 + 5 + 0.1);   // the road's north side, 5 m from its edge
+        Assert.True(Math.Abs(Math.Abs(site.Yaw) - 0) < 0.01, $"faces south, to the road: yaw {site.Yaw}");
+        // the factory reaching to the road leaves only the far side, which is out of the yard
+        var big = new Building { Triangles = Square(380, 380, 620, 566) };
+        Assert.Null(FarmBuyerSite.Pick(b, new[] { (tile, road) }, new[] { (tile, big) }));
+        // a railway or a footpath is no access road
+        var rail = new RoadSegment { Class = RoadClass.Railway, Width = 3f, Points = road.Points };
+        Assert.Null(FarmBuyerSite.Pick(b, new[] { (tile, rail) }, new[] { (tile, factory) }));
+        Assert.Equal("NE", FarmBuyers.Toward(100, 100));
+        Assert.Equal("W", FarmBuyers.Toward(-100, 3));
+        var near = FarmBuyers.FromHere(2587000, 1209000).First();
+        Assert.Equal("zucker-aarberg", near.Buyer.Key);
     }
 
     [Fact]

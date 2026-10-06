@@ -115,6 +115,7 @@
     <!-- selling (#494): prices, specialty buyers, contracts, the farm stand -->
     <Compile Include="..\..\src\Farming\FarmPrices.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FarmBuyers.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmBuyerSite.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FarmContracts.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FarmStandRules.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the road blend (#603): plain C# over TerrainFormat, as tools/BlendCheck links it -->

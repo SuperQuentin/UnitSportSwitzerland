@@ -44,6 +44,24 @@ peer's own body position, not the claim). Only goods they buy; others: "takes on
 - Found with GDAL (`ogr2ogr` from QGIS, `GDAL_DATA=<qgis>/apps/gdal/share/gdal`) on the PBF: names
   like `%Zucker%`, `%Mühle%`, `%Moulin%`, tags `industrial=grinding_mill`, `sugar`, `product=oil`.
   WGS84 → LV95 with swisstopo's approximate formulas (~1 m). TLM3D has no factory names, GWR none.
+- **In the world** (`FarmBuyerYards`, client only, a plain `Node` under the world so its children
+  follow origin shifts): within 2.5 km of the camera (freed past 3.5 km) each buyer gets a
+  weighbridge office and a tall sign on two posts (`FarmBuyerYard`: name, place, "Buys sugar beet ·
+  +30 %", one board colour per trade: sugar blue, grain red, oil yellow). The buyer's point is the
+  factory's OSM centroid, usually *inside* the factory, so the office goes beside an **access road**
+  instead (`FarmBuyerSite.Candidates`, plain C#, unit-tested): road classes Major..Lane and squares
+  (no motorway, track, path or rail), 5 m off the road's edge both sides, every 4 m, within 85 % of
+  the yard's reach, a 6.5 m square clear of every building triangle of the map's `.bldg` tiles, front
+  to the road; nearest the point first. The client then takes the first whose ground falls at most
+  1.2 m under the office's corners (its plinth reaches 1.5 m down), and re-seats it on the terrain
+  every second (`Settle`: finer tiles change the height after it is built). No road in the data (a
+  fixture, the stand-in): on the point. Selling still goes by the yard's circle, not the office.
+  Placed on the real map (`--buyercheck`): 20-39 m from each point, ground falling 0-0.3 m.
+- **Map marker**: the game has no in-world map (the title screen's is for terrain, the XR hand map
+  shows relief only), so the co-op panel lists the **three nearest buyers** with distance and compass
+  point (`FarmBuyers.FromHere` from the camera, `FarmSales.HereLv95`): "Swissmill, Zürich: wheat,
+  barley or maize +15 %, 23 km NE". Three, because the panel's orders box does not scroll. They are
+  not in the teleport search, which lists only places with terrain.
 - **Left out** (could not be placed reliably from the data): Groupe Minoteries (no OSM feature),
   Meyerhans Mühlen (an untagged area east of the town it is known for), the many small and
   historic mills, Zuckermühle Rupperswil (a sugar *refinery*, not a beet buyer).
@@ -110,6 +128,13 @@ rows in `Core/ControlsHelp` ("Selling farm produce") and `xr/vr-action-map`.
   the stand placed with Use (refused at 500 m from a road via `FarmStands.RoadDistanceOverride`),
   stocked, two days of sales, the box collected, packed up. `shots` (windowed) writes
   `test_output/494-sell-coop-panel.png`, `494-sell-stand-panel.png`, `494-sell-stand.png`.
+- `--buyercheck [shots] --systems terrain,ui,physics,farming,sky --at <a buyer's E,N> --chunks <the
+  main checkout's terrain_chunks>` (real map, by hand, ~1 min, not in `checkmap.txt`): the nearest
+  buyer's office is built, in its yard, by an access road, on the ground at its four corners; `shots`
+  (windowed) writes `test_output/494-buyer-<key>.png` from across the road (it can land inside a
+  building there, as at Sévery) and `-high.png` from above. All six passed (Oct 2026).
+- `--sellcheck` also waits for the stand-in buyer's office (on its point: the flat fixture has no
+  road near it) and its `shots` add `494-sell-buyer-yard.png`.
 - `tools/sellnetcheck.sh` (net, fixture `straight`, the server measures the real road): B buys from
   A's stand, A collects, both see the same 27 left; the server's `stands.json` held the stand.
   Its server runs with `--standsquiet` (no passers-by): one comes due within a few real minutes, and a slow
@@ -120,5 +145,6 @@ rows in `Core/ControlsHelp` ("Selling farm produce") and `xr/vr-action-map`.
 
 - No land ownership: stands go anywhere outdoors by a road. The wire changes (new nodes and RPCs,
   `PlacedKind` 11) are in `Handshake.Protocol` 24 with the rest of #494.
-- Specialty buyers have no building, sign or map marker; their yards are invisible circles.
+- Specialty buyers have an office and a sign but no marker on a map (there is none in the world);
+  the co-op panel gives the direction.
 - A stand's passers-by are simulated only while the server runs (10 days caught up after a restart).

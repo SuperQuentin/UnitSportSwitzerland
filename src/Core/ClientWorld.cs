@@ -820,7 +820,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             var stands = Farming.FarmStands.Create(this, origin, server: false);
             stands.Items = items;
             stands.Source = () => _chunks?.Source;
+            // the specialty buyers' offices and signs, beside their access roads
+            Farming.FarmBuyerYards.Create(this, origin, () => _chunks?.Source, p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null);
             if (Farming.SellCheck.Requested) AddChild(new Farming.SellCheck(items, origin));
+            if (Farming.BuyerCheck.Requested) AddChild(new Farming.BuyerCheck(origin));
             if (Farming.SellNetProbe.Role != null) AddChild(new Farming.SellNetProbe(items));
         }
         // the radio's panel: CDs to play, burn a new one, pick it up (opened from FootPlayer.TryInteract)

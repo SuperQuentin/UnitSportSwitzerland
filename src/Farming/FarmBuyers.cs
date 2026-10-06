@@ -55,17 +55,32 @@ public static class FarmBuyers
     /// <summary>Checks: one more buyer (a real one moved next to a fixture world's spawn), or null.</summary>
     public static FarmBuyer? StandIn { get; set; }
 
+    /// <summary>Every buyer, the stand-in too.</summary>
+    public static IEnumerable<FarmBuyer> Everyone => StandIn is { } extra ? All.Append(extra) : All;
+
     /// <summary>The buyer whose yard holds an LV95 point (the nearest if two did), or null.</summary>
     public static FarmBuyer? At(double e, double n, float slack = 0f)
     {
         FarmBuyer? best = null;
         double bestD = double.MaxValue;
-        foreach (var b in StandIn is { } extra ? All.Append(extra) : All)
+        foreach (var b in Everyone)
         {
             double d = Math.Sqrt((b.E - e) * (b.E - e) + (b.N - n) * (b.N - n));
             if (d <= b.Reach + slack && d < bestD) { best = b; bestD = d; }
         }
         return best;
+    }
+
+    /// <summary>The buyers nearest first from an LV95 point, with the distance in km and the compass point toward each.</summary>
+    public static IEnumerable<(FarmBuyer Buyer, double Km, string Toward)> FromHere(double e, double n) =>
+        All.Select(b => (b, Math.Sqrt((b.E - e) * (b.E - e) + (b.N - n) * (b.N - n)) / 1000.0, Toward(b.E - e, b.N - n)))
+            .OrderBy(x => x.Item2);
+
+    /// <summary>"N", "NE" ... "NW": the compass point of an LV95 offset (east, north).</summary>
+    public static string Toward(double de, double dn)
+    {
+        double deg = (Math.Atan2(de, dn) * 180 / Math.PI + 360) % 360;
+        return new[] { "N", "NE", "E", "SE", "S", "SW", "W", "NW" }[(int)Math.Round(deg / 45) % 8];
     }
 
     public static FarmBuyer? ByKey(string key) => All.FirstOrDefault(b => b.Key == key);

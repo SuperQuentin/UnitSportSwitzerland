@@ -48,6 +48,14 @@ public static class CoopPanel
             row.AddChild(accept);
             box.AddChild(row);
         }
+        if (sales.HereLv95 is { } here)
+        {
+            // the nearest three: the panel has no room to scroll here
+            box.AddChild(UiKit.Section("Nearest specialty buyers: more than the co-op, by the load or the sack"));
+            foreach (var (b, km, toward) in FarmBuyers.FromHere(here.E, here.N).Take(3))
+                box.AddChild(UiKit.Text(FormattableString.Invariant($"{b.Name}, {b.Place}: {b.GoodsText(FarmSales.NameOfItem)} +{Math.Round((b.Premium - 1) * 100):0} %, {km:0} km {toward}"),
+                    UiTheme.FontTiny, UiTheme.TextDim, wrap: true));
+        }
         if (mine.Count == 0) return;
         box.AddChild(UiKit.Section($"Your contracts ({mine.Count}/{FarmContracts.MaxActive})"));
         double now = FarmSales.Now;

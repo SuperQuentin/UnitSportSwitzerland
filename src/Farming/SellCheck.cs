@@ -138,6 +138,24 @@ public partial class SellCheck : Node
         FarmBuyers.StandIn = aarberg with { Key = "standin", E = se - 60, N = sn, Reach = 25f };
         var yard = _origin.ToWorld(se - 60, sn, 0);
         yard.Y = me.GlobalPosition.Y;
+        // its office and sign go up in the yard, by a road of the fixture or on its point
+        var yards = GetParent().GetNodeOrNull<FarmBuyerYards>("FarmBuyerYards");
+        Expect(await Until(() => yards?.YardOf("standin") != null, 15), "the buyer's office and sign are built near the camera");
+        if (yards?.YardOf("standin") is { } office)
+        {
+            var (oe, on) = _origin.ToLv95(office.GlobalPosition);
+            double off = Math.Sqrt((oe - (se - 60)) * (oe - (se - 60)) + (on - sn) * (on - sn));
+            Expect(off <= 25 && Math.Abs(office.GlobalPosition.Y - me.GlobalPosition.Y) < 3, $"the office stands in the yard, on the ground: {off:F1} m from the point, y {office.GlobalPosition.Y:F1}");
+            Expect(sales.HereLv95 is { } here && FarmBuyers.FromHere(here.E, here.N).Count() == FarmBuyers.All.Length, "the co-op panel can list every buyer with its distance");
+            if (Shots)
+            {
+                var (ve, vn) = _origin.ToLv95(office.GlobalTransform * new Vector3(4f, 0, 17f));
+                await Stand(me, ve, vn, office.GlobalRotation.Y);
+                me.LookPitch = 0.05f;
+                await Seconds(0.8);
+                GD.Print($"{Tag} shot {Shot("494-sell-buyer-yard")}");
+            }
+        }
         long beet = FarmPrices.Delivery(V(ItemId.SugarBeet), ItemId.SugarBeet, 200, 7, null, week, aarberg.Premium);
         got = await Deliver(yard, ItemId.SugarBeet, 200);
         Expect(got == beet && beet > ShopTables.DeliveryPrice(ItemCategory.Produce, ItemId.SugarBeet, V(ItemId.SugarBeet), 200, 7, coop, week)

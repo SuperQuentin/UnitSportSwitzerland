@@ -104,6 +104,9 @@ public partial class FarmSales : Node
     public static double UnitPrice(Market m, ItemId item) =>
         ItemDefs.Get(item) is { } def ? def.Value * FarmPrices.Factor(item, Month, m.Coop, Week) * m.Premium : 0;
 
+    /// <summary>Client: where the camera is, in LV95 (the co-op panel's distances to the buyers), or null without one.</summary>
+    public (double E, double N)? HereLv95 => GetViewport()?.GetCamera3D() is { } cam ? _origin.ToLv95(cam.GlobalPosition) : null;
+
     /// <summary>The specialty buyer whose yard holds a world point (with <paramref name="slack"/>), or null.</summary>
     public FarmBuyer? BuyerNear(Vector3 at, float slack = 0f)
     {
