@@ -48,7 +48,7 @@ public sealed class AudioAsset
     /// <summary>The loudest peak (at least 1): a waveform is drawn against it, so a quiet recording still shows its shape.</summary>
     public int PeakMax => _peakMax ??= Peaks.Length == 0 ? 1 : Math.Max(1, (int)Peaks.Max());
     private int? _peakMax;
-    /// <summary>Recorded from the game, not music: no beat is looked for in it.</summary>
+    /// <summary>Recorded from the game, not imported: drawn in its own colour, its beat found after the grab (#669).</summary>
     public bool Game { get; init; }
 }
 
