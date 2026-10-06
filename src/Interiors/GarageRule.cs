@@ -20,14 +20,14 @@ public static class GarageRule
     public const float Width = 3.0f, Height = 2.4f;
 
     /// <summary>Share of blocks that qualify by size and basement and still get one, so garages stay rare.</summary>
-    public const double Share = 0.4;
+    public const double Share = 0.8;
 
     /// <summary>A city block with shops under its flats qualifies too, but rarer and only with a bigger frontage.</summary>
-    public const double MixedRollShare = 0.2;
-    public const int MixedMinFrontDoors = 4;
+    public const double MixedRollShare = 0.5;
+    public const int MixedMinFrontDoors = 3;
 
-    /// <summary>A block with fewer front doors is too small a development for an underground garage.</summary>
-    public const int MinFrontDoors = 3;
+    /// <summary>A block with a single front door is too small a development for an underground garage (two or more is a block).</summary>
+    public const int MinFrontDoors = 2;
 
     /// <summary>A car park strip behind the stairwells is this deep (two rows and an aisle) in a block at least this wide.</summary>
     public const float StripDepth = 9.5f, StripWidth = 12f;
@@ -44,7 +44,7 @@ public static class GarageRule
     public const float MinFlatSide = 3.4f;
     public const float WalkWidth = 1.2f;
     /// <summary>Share of tall commercial blocks that are shops under flats.</summary>
-    public const double MixedShare = 0.6;
+    public const double MixedShare = 0.8;
 
     /// <summary>
     /// Whether a building is planned as a block of flats or a city block with shops under flats
