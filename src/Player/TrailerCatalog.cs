@@ -292,6 +292,23 @@ public static class TrailerCatalog
         },
     };
 
+    /// <summary>
+    /// Every trailer parked on its own, and coupled behind the first truck in
+    /// <see cref="HeavyCatalog"/> that takes it, in the model viewer (--models).
+    /// </summary>
+    [Core.Showcase("Trucks and buses")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseTrailers()
+    {
+        for (int i = 0; i < All.Count; i++)
+        {
+            int code = Code(i, 0.6f);
+            var trailer = All[i];
+            yield return (trailer.Label, () => new ParkedTrailer(code, Vector3.Zero).BuildVisual(0));
+            if (HeavyCatalog.All.FirstOrDefault(h => new Truck(h).Accepts(trailer)) is { } truck)
+                yield return ($"{truck.Label} + {trailer.Label}", () => new Truck(truck, code).BuildParkedVisual(0));
+        }
+    }
+
     // ---- trailer codes: which trailer and how full, in one replicated int ----
     // 0 = none; otherwise (index + 1) | (load percent << 8).
 

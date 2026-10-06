@@ -485,6 +485,7 @@ public sealed class MeshScratch
     /// </summary>
     public ArrayMesh Build() => Build(Vector3.Zero);
 
+
     /// <summary>
     /// As <see cref="Build()"/>, with <paramref name="pivot"/> (authored space, facing +Z) as the
     /// mesh's origin: for a part that swings on a hinge, authored in place with the rest of the
@@ -492,6 +493,7 @@ public sealed class MeshScratch
     /// </summary>
     public ArrayMesh Build(Vector3 pivot)
     {
+        Core.ShowcaseTrace.Mark();
         var mesh = new ArrayMesh();
         AddSurface(mesh, _vertices, _colors, _normals, _uvs, _indices, pivot, "body");
         AddSurface(mesh, _glassVertices, _glassColors, null, null, _glassIndices, pivot, GlassSurface);
@@ -515,6 +517,7 @@ public sealed class MeshScratch
     /// </summary>
     public ArrayMesh BuildInto(ArrayMesh mesh)
     {
+        Core.ShowcaseTrace.Mark();
         mesh.ClearSurfaces();
         AddSurface(mesh, _vertices, _colors, _normals, _uvs, _indices, Vector3.Zero, "body");
         AddSurface(mesh, _glassVertices, _glassColors, null, null, _glassIndices, Vector3.Zero, GlassSurface);

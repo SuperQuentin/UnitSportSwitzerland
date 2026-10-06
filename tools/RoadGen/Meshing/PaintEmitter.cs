@@ -404,9 +404,12 @@ public static class PaintEmitter
 
     /// <summary>
     /// A lane arrow (#123) as paint triangles, its tail at (x, z) and pointing along (fx, fz)
-    /// (tile-local, X east and Z south); shapes in <see cref="ArrowShapes"/>.
+    /// (tile-local, X east and Z south); shapes in <see cref="ArrowShapes"/>. Its height runs from
+    /// <paramref name="y"/> at the tail to <paramref name="tipY"/> <see cref="ArrowLength"/> ahead
+    /// (#639): one height for the whole arrow put the head of one on a climbing approach under the
+    /// road, where it vanished up close. Across the arrow the road is level.
     /// </summary>
-    public static RoadPaint Arrow(double x, double y, double z, double fx, double fz, PaintArrow kind)
+    public static RoadPaint Arrow(double x, double y, double z, double fx, double fz, PaintArrow kind, double tipY)
     {
         double len = Math.Sqrt(fx * fx + fz * fz);
         fx /= len; fz /= len;
@@ -417,7 +420,7 @@ public static class PaintEmitter
         for (int i = 0; i < pts.Length; i++)
         {
             v[i * 3] = (float)(x + fx * pts[i].X + lx * pts[i].Y);
-            v[i * 3 + 1] = (float)y;
+            v[i * 3 + 1] = (float)(y + (tipY - y) * pts[i].X / ArrowLength);
             v[i * 3 + 2] = (float)(z + fz * pts[i].X + lz * pts[i].Y);
         }
         return new RoadPaint

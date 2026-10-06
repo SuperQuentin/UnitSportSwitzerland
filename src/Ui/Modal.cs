@@ -52,7 +52,7 @@ public partial class Modal : Control
         // fade and lift in
         m.Modulate = new Color(1, 1, 1, 0);
         panel.Position += new Vector2(0, 10);
-        var tw = m.CreateTween().SetParallel().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+        var tw = m.CreateTween().SetIgnoreTimeScale(true).SetParallel().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
         tw.TweenProperty(m, "modulate:a", 1f, 0.16f);
         UiFocus.Set(m, true);
         return m;
@@ -109,6 +109,27 @@ public partial class Modal : Control
         if (initial.Length == 0) error.Text = "";
         m._field = field;
         field.CallDeferred(Control.MethodName.GrabFocus);
+        return m;
+    }
+
+    /// <summary>
+    /// A question with several answers, the first one primary (#63: the metered-connection
+    /// warning). Escape or a click outside picks none.
+    /// </summary>
+    public static Modal Choose(Control host, string title, string message, params (string Text, Action Act)[] answers)
+    {
+        var m = Build(host, title, message, out var body);
+        var buttons = UiKit.HBox(10);
+        buttons.Alignment = BoxContainer.AlignmentMode.End;
+        body.AddChild(UiKit.Spacer(4));
+        body.AddChild(buttons);
+        for (int i = answers.Length - 1; i >= 0; i--)
+        {
+            var (text, act) = answers[i];
+            var b = UiKit.Button(text, primary: i == 0, minWidth: 96);
+            b.Pressed += () => { m.CloseModal(); act(); };
+            buttons.AddChild(b);
+        }
         return m;
     }
 

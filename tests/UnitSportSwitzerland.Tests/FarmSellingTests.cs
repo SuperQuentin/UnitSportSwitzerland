@@ -191,30 +191,31 @@ public class FarmSellingTests
         Assert.Equal(0, FarmStandRules.Stock(s, ItemId.WheatSeed, 5));
         Assert.Equal(2, s.Slots.Count);
 
-        // one hour by a road in open country: 6 potatoes (12 rösti: cooked sells twice as fast, only 5 there)
+        // two days by a road in open country: 6 potatoes (12 rösti: cooked sells twice as fast, only 5 there)
         int Price(ItemId id) => FarmPrices.Stand(Value(id), id, 12);
-        var sales = FarmStandRules.Advance(s, 3600, Price);
+        const double Day = FarmCalendar.DaySeconds;
+        var sales = FarmStandRules.Advance(s, 2 * Day, Price);
         Assert.Equal(6, sales.Single(x => x.Item == ItemId.Potato).Count);
         Assert.Equal(5, sales.Single(x => x.Item == ItemId.Roesti).Count);
         Assert.Equal(34, s.Slots[0].Count);
         Assert.Equal(0, s.Slots[1].Count);
         Assert.Equal(6 * Price(ItemId.Potato) + 5 * Price(ItemId.Roesti), s.Cash);
 
-        // half an hour: fractions carry over, nothing lost
-        FarmStandRules.Advance(s, 3600 + 1800, Price);
-        FarmStandRules.Advance(s, 3600 + 3600, Price);
+        // a day, half at a time: fractions carry over, nothing lost
+        FarmStandRules.Advance(s, 2.5 * Day, Price);
+        FarmStandRules.Advance(s, 4 * Day, Price);
         Assert.Equal(28, s.Slots[0].Count);
 
         // a village round it sells faster, a stand far from the road slower
-        Assert.True(FarmStandRules.PerHour(new StandState { RoadM = 8, Houses = 40 }, ItemId.Potato) == 3 * FarmStandRules.PerHour(new StandState { RoadM = 8 }, ItemId.Potato));
+        Assert.True(FarmStandRules.PerDay(new StandState { RoadM = 8, Houses = 40 }, ItemId.Potato) == 3 * FarmStandRules.PerDay(new StandState { RoadM = 8 }, ItemId.Potato));
         Assert.True(FarmStandRules.RoadFactor(50) < FarmStandRules.RoadFactor(10));
         Assert.Equal(0, FarmStandRules.RoadFactor(FarmStandRules.RoadMax + 1));
 
-        // a long outage catches up at most 12 h
+        // a stand left two months catches up at most 10 days
         var t = new StandState { RoadM = 55, LastTick = 0 };
         FarmStandRules.Stock(t, ItemId.Potato, 40);
-        FarmStandRules.Advance(t, 7 * 24 * 3600, Price);
-        int capped = (int)Math.Floor(FarmStandRules.PerHour(t, ItemId.Potato) * 12);
+        FarmStandRules.Advance(t, 60 * Day, Price);
+        int capped = (int)Math.Floor(FarmStandRules.PerDay(t, ItemId.Potato) * 10);
         Assert.True(capped < 40);
         Assert.Equal(40 - capped, t.Slots[0].Count);
         Assert.Equal(4, FarmStandRules.Take(t, 0, 4) + FarmStandRules.Take(t, 9, 4));

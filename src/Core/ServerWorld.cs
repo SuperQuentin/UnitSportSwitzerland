@@ -29,6 +29,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private WorldOrigin? _origin;
     private Items.PlacedObjects? _placed;
     private Farming.FarmStands? _farmStands;
+    private Items.PalletService? _pallets;
     private Build.Structures? _structures;
     private Occasions.OccasionManager? _occasions;
     private World.RaceNpcs? _npcs;
@@ -237,6 +238,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
         _placed.NameOf = _chat.NameOfPeer;
+        // pallets a forklift has moved (#583): which of the plan's have gone, and where they were put
+        _pallets = Items.PalletService.Create(this, origin, server: true);
+        _pallets.Source = () => source;
         _chat.NameAssigned += bank.SendBalance;
         // selling farm produce (#494): load prices, specialty buyers, contracts; farm stands' crates and cash
         if (Systems.On(Systems.Farming))
@@ -431,10 +435,12 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
         _farmStands?.SendTo(id);
+        _pallets?.SendTo(id);
         _structures?.SendTo(id);
         _br?.SendTo(id);
         _brCrates?.SendTo(id);
         _chat?.SendWorldTimeTo(id);
+        _chat?.SendWorldSpeedTo(id);
         _chat?.SendSeaStateTo(id);
     }
 

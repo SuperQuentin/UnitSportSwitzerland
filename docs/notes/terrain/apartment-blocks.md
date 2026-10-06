@@ -12,28 +12,34 @@ Before, a block of flats was planned as one big house round a single stair core.
   bank. `BuildingType.Apartments` / `MixedUse` (9, 10) mark the plan; a footprint the planner cannot
   fit (too narrow, too shallow for a stair) falls back to the old cored plan.
 - **A stairwell per front door.** Every door on the front wall (slot 0 always, extras if far enough
-  apart: the stairwell width plus two thin flats, more for mixed blocks) gets one: a core room
-  (lobby on the ground floor, landing above, the cored plan's own switchback stair and walkway,
-  `Stair`), and from three levels up (basement counted) an elevator column beside it: lobby
-  in front, cabin (`RoomType.Elevator`) facing the lobby, back landing. Room indices of a
+  apart: the stairwell width plus two thin flats, more for mixed blocks) gets one (see *The
+  stairwell* below), and from three levels up (basement counted) an elevator column beside it:
+  lobby in front, cabin (`RoomType.Elevator`) facing the lobby. Room indices of a
   stairwell are the same on every floor. Wells slide flush to an end when the sliver beside them
   is too thin for a flat; a one-stairwell block that would get two slivers puts the stair at one
   end, one flat a floor (a three-family house). Doors on other walls open into whatever room
   takes them, circulation first, never a bathroom or a bedroom (`AptEntrances`, `StreetRank`).
 - **Regions and flats.** Round each stairwell, regions touching circulation along one wall (`Way`s:
-  the landing's stretch of wall away from the stair runs). A side wider than 13.5 m gets a corridor
+  the landing's stretch of wall away from the stair runs). The building's corridors (and the back
+  landing they run off) are `CorridorWidth` 2.0 m, wider than a flat's 1.2–1.3 m hall (#576).
+  A side wider than 13.5 m gets a corridor
   off the back landing (`CorridorSide`), flats front and back of it; a block more than 12 m deeper
   than its stairwell gets a corridor from the back landing to the back facade (`DeepBack`), flats
   both sides. Each region is cut along its way into flats of the block's own size
   (55–115 m², `|flatsize` roll); a piece under 22 m² is a box room off the landing.
-- **A flat from its front door** (`FlatRooms`, by shape and by which walls are facades):
+- **A flat from its front door** (`FlatRooms`): every layout the shape allows is drawn up and
+  scored (`Score`), and the best kept (see *Daylight* below):
   *T* (as wide as deep: entrance, then bathroom/WC/box room against the landing wall, a hall across,
   living room + kitchen at a facade end, bedrooms), *spine* (deep: a hall straight in, rooms either
   side, living room and kitchen across the far facade), *gallery* (shallow, or facades only at the
   two ends: a hall along the door wall, living room at one facade, a bedroom at the other, wet rooms
   in the dark middle), *studio* (under 38 m²), *linear* (under 4.4 m wide). Every flat has a bed, a
   kitchen and a bathroom. `ConnectFlat` grows the doorways from the hall; a hall opens into the
-  next with no door, the kitchen half the time into the living room (open kitchen). `Strip` gives
+  next with no door, the kitchen half the time into the living room (open kitchen). Rooms open
+  only off a **connector** (`Connector`: a hall, the living room, the kitchen, a dining room, a
+  shop's floor): a bedroom, a bathroom, a WC, a box room or a study is a dead end with one door,
+  never walked through and no en-suite (#576). `Reachable` checks a layout for it before it is
+  chosen (`Score` +500), and the daylight swap keeps to it. `Strip` gives
   every room its minimum first and shares what is left by weight; when even the minimums do not
   fit, the item easiest to lose goes (`FlatItem.Keep`).
 - **Every floor of flats is the same plan**: one seed (`|flats`) for all of them, as the plumbing
@@ -52,11 +58,96 @@ Before, a block of flats was planned as one big house round a single stair core.
   read), `LiftPlan` (cabin rectangle, door side, floors served, the call button and panel
   positions), `InnerDoorPlan` (a flat's front door: floor, hall room, side, centre, `Locked`).
   New rooms `Elevator CarPark TechRoom Corridor`, pieces `Pillar StorageCage Mailboxes BikeRack`.
-  Plan version 17 (#501 took 16).
+  Plan version 17 (#501 took 16); 18 with #571 (half flights, landings, daylight); 19 went to #531 (loading bays); 20 with #576 (one door, wider corridors); 21 with #577 (wings).
 - **Validator**: reachability now runs from every street doorway through doorways, up and down
   every flight and along every elevator, over the whole building (a block's upper floors are
   stairwells that never meet); a hole must cover its flight; each elevator has a cabin with a
   doorway on every floor it serves; each inner door hangs in a doorway.
+
+## The stairwell (#571)
+
+A Swiss *Treppenhaus*, not the house stair the first version reused.
+
+- **Rooms**, front to back (`AptFloorPlan`): the **front landing** (`Core`, the lobby on the ground
+  floor) across the stair and the passage; the **stair** (`RoomType.Stairwell`, terrazzo and pale
+  walls), open onto the front landing, walled from everything else; beside it the **passage**
+  (1.2 m) to the **back landing** (`Back`), which runs across the whole stairwell, lift column
+  included. The flats behind, the corridors off the back landing and the deep blocks' spine all
+  hang off the back landing; `Way`s on a stairwell's side are the front landing, the passage (no
+  elevator) or the lift lobby, and the back landing, never the stair's wall.
+- **The stair** (`Stair`): two lanes of 1.15 m and a 0.15 m well. Each storey is a flight up lane A
+  from the front landing to half a storey (`FlightPlan.From`/`To` = 0..0.5), a **half landing**
+  across both lanes at the back (`FloorPlan.Landings`, `LandingPlan.Level` 0.5), and a flight up
+  lane B from it to the next floor's front landing (0.5..1). Risers 0.175 m, treads 0.28 m (down to
+  0.22 m in a shallow block). Above the bottom floor the whole shaft is open (one `Hole`); on the
+  top floor, where no flight climbs on, a parapet across lane A's mouth (`Rails`).
+- **Drawn** (`InteriorMeshBuilder.Flight`, `Prism`): stone treads with a dark nosing on a slab whose
+  underside follows the steps (the flight below passes under it; a house's flight is still a
+  solid wooden block), a solid plaster parapet with a wooden handrail along each flight's half of
+  the well (`FlightPlan.Parapet`), sloped, solid; the half landing a stone slab.
+- **A block too narrow for the passage** (the stair, the passage, the lift and a 3.4 m flight
+  of flats do not fit) gets the stair without passage or back landing (`Apt.Passage` false): its
+  flats open off the front landing only, and it has no back flats, corridors or car-park strip.
+- **Walking** is the ramp collision of each flight (one tread before its first step to its top),
+  the half landing slab and the open shaft. `--stairwalkcheck` proves it on every block.
+
+## Daylight (#571)
+
+- Every living room and bedroom touches a facade with at least `WindowWall` (1.9 m) of it, so
+  `AddWindows` gives it a window. A kitchen, bathroom or WC has one only when it happens to be on
+  a facade (in the checks, about a third).
+- `FlatRooms` draws up every layout that fits (T, spine, gallery, linear, studio) and scores each
+  (`Score`): 1000 with no bed, kitchen or bathroom, 30 a dark living room, 12 a dark bedroom, 3 a room
+  of the program left out, and for rooms shaped like corridors (aspect over 2.6, or over 8 m long).
+  The lowest wins; a linear or a studio layout is a last resort for a flat big enough for better.
+- Then `Daylight` swaps a dark living room or bedroom with a lit bathroom, WC, box room, kitchen or
+  study where each fits the other's place (`StripMin`); a dark spare bedroom with nothing to swap
+  becomes a box room.
+- The program is cut to what the facades can light: one bedroom per 2.8 m of facade beside the
+  living room's 3.5 m (`facade`). A deep region lit only across from its way is cut into flats at
+  least a living room and a bedroom wide; in the spine layout, a flat lit only at its far end puts
+  its bedrooms beside the living room there and keeps the kitchen inside.
+- `AddWindows` (every plan) slides a window aside within its stretch of wall when a doorway (a
+  ground-floor flat's garden door) stands where it would go, instead of dropping it.
+
+## Shaped blocks: wings (#577)
+
+An L, a U or a ring round a courtyard used to be filled as its whole bounding box. Now the inside
+follows the outline; it may differ a little from it (a corner that fits no wing is left out),
+never from its shape.
+
+- **The outline** (`PlanOutline.Wings`): every roof face (not a wall: `BuildingTriangles.RoofNormalY`)
+  laid flat on a 0.5 m grid in the plan frame; a courtyard has no roof, so it stays empty. `Peel`
+  takes the biggest fully covered rectangle, then the next, each at least 6 m both ways, at most
+  four, until under 10 % is left. A wing within 1.5 cells of the box's edge is snapped onto it.
+  A box covered over 92 %, or one wing nearly the box, is planned as the box (`null`).
+- **Planning** (`InteriorGenerator.Wings.cs`, `TryApartments` → `TryWings`, else `TryBlock`, the
+  old one-box planner): each street door goes to the wing whose wall it is on. Each wing is turned
+  so its front faces its door and planned by `TryBlock` with `AptOptions`: the building's
+  basement count (every wing the same floors), its links, and `Free` (how much of a stretch of
+  its wall faces out, not onto the next wing).
+- **A wing with no street door** is reached through a neighbour (BFS over wings sharing at least
+  3.5 m of wall): it faces the wing it joins, which runs a corridor to that point (off its back
+  landing to its end wall, or a spine, `LinkSpines`, to its back wall). The link borrows a door
+  slot (`LinkSlot` 60+) while planned; the two doorways become one arch (`Join`).
+- **Merged** (`Merge`): rooms, openings, holes, landings, rails, flights (`TurnFlight`: a flight
+  turned a quarter runs along x, `FlightPlan.AlongX`, and the validator, mesh builder and stair
+  walk check read it through `Point`/`Area`), lifts, inner doors; unit ids offset 1000 a wing.
+  A window on a wall another wing stands against slides along it or is dropped; a courtyard wall
+  is a facade. Anything that does not validate falls back to the box, the layout restored.
+- **Flats on part of a facade**: daylight reads `Free` per room (`Ext.Free`, `Lit`), the bedroom cap
+  counts only free wall, each layout is also tried mirrored end to end, and a region is cut into
+  fewer, wider flats until each has `TwoRooms` (5.4 m) of free wall for a lit living room and
+  bedroom; a flat still short of it is a studio.
+- **Fixes found by the generated world's shapes** (#598, `generated-shaped-buildings`): a wing
+  entered from the next one keeps its stairwell where that one's corridor meets it
+  (`AptOptions.Pinned`: no slide to an end, the sliver is a box room); a link on a wing's front
+  gets a stairwell of its own if one flat fits between it and the next (a U opening onto the
+  street, its bar entered from the courtyard, joins its far arm there); and a lone wing (an
+  outline at other angles) is planned alone, taking every door. `InteriorGenerator.WingFailure`
+  says why a wing plan fell back to the box.
+- **Street doors face out** (`BuildingFootprint`): a wall's outward side is the one without roof
+  over it, not the one away from the box's centre (a courtyard wall faces the courtyard).
 
 ## The elevator (`InteriorManager.Lifts.cs`, `LiftRide`)
 
@@ -98,19 +189,28 @@ Before, a block of flats was planned as one big house round a single stair core.
 | Open / shut a flat's door | E | Y | Y, or grip the door |
 | Pick a flat door's lock | E, then the dial (A/D, mouse) | Y, then the stick | Y or grip, then the stick |
 
-Esc / B / E again closes the floor list. Prompts through `InputHints`.
+Esc / B / E again closes the floor list. On a landing where a flat's door stands beside the call
+button, E works whichever is nearer (`DoorNearer`, #576). Prompts through `InputHints`.
 
 ## Checks
 
+- `--stairwalkcheck` (quick, headless, no world): every `--flatcheck` block built with its real
+  collision; rays walk each flight from a tread before it to just past its top, and each half
+  landing: ground within 0.22 m of the flight's line, and 1.9 m of head room over it. Shown to fail
+  with the half landing drawn 0.6 m high.
 - `--flatcheck` (quick, no world): eight synthetic blocks (three-family house, one-entrance block,
   66 m block with three entrances, a 14-floor tower, a deep block over a car park, a 9 m narrow
   block, a big `Other`, city blocks) through the real `ComputeDoors` and generator: the plan
   validates, a stairwell per front door, an elevator per stairwell from three levels, a flight up
   from every floor in every stairwell, a bed/kitchen/bathroom and a hall at the door of every
   flat, the floors the same plan, the basement's rooms, the car park and its cars, shops in a
-  mixed block, every facade door arriving somewhere, some flat doors locked, living rooms with a
-  window. SVG plans in `test_output/flats/` (render with Edge headless, see
+  mixed block, every facade door arriving somewhere, some flat doors locked, every living room
+  and bedroom with a window (#571), every bedroom, bathroom and WC with one door (#576; fails with
+  every room a connector), and two flights round a half landing up from every floor of every
+  stairwell. SVG plans in `test_output/flats/` (render with Edge headless, see
   `cellars-and-room-variety`).
+- `--flatcheck` also builds an L, a U and a courtyard block (`Box.Parts`, walls and roofs by
+  `Shaped`): every room inside the outline, the ground floor's area within 60–102 % of it.
 - `--flattour[,shot.png] [--block NAME]` (windowed, no world): one of those blocks built with the
   real mesh builder, photographed at the lobby, a landing, the cabin, the flat's rooms, the car
   park, the storage cellar, the laundry, the shelter and the boiler room.

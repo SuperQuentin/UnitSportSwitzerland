@@ -196,17 +196,23 @@ public static partial class InteriorGenerator
             or RoomType.IkeaMarket;        // #501, laid out in InteriorGenerator.Ikea
 
     /// <summary>Lays out one site hall; the wall dressing is added afterwards by the generic placer.</summary>
+    /// <param name="lanes">
+    /// The strips behind the hall's vehicle doors. Racking, machinery and plinths keep out of them
+    /// — a trailer has to get in. A workshop's bays are the exception: its drive-on ramps stand in
+    /// the lane on purpose, because driving onto one is the point, so <see cref="Bays"/> lays them
+    /// before it takes the lanes in.
+    /// </param>
     private static void HallLayout(InteriorLayout l, int f, RoomPlan r,
-        List<RectPlan> placed, List<RectPlan> blocked, Random rng)
+        List<RectPlan> placed, List<RectPlan> blocked, List<RectPlan> lanes, Random rng)
     {
         switch (r.Type)
         {
-            case RoomType.WarehouseHall: Aisles(l, f, r, placed, blocked, rng); break;
-            case RoomType.ProductionHall: Line(l, f, r, placed, blocked, rng); break;
-            case RoomType.TruckBay: Bays(l, f, r, placed, blocked, rng, truck: true); break;
-            case RoomType.ServiceBay: Bays(l, f, r, placed, blocked, rng, truck: false); break;
-            case RoomType.IkeaMarket: BlahajBins(l, f, r, placed, blocked); break;   // #501
-            default: ShowroomFloor(l, f, r, placed, blocked, rng); break;
+            case RoomType.WarehouseHall: blocked.AddRange(lanes); Aisles(l, f, r, placed, blocked, rng); break;
+            case RoomType.ProductionHall: blocked.AddRange(lanes); Line(l, f, r, placed, blocked, rng); break;
+            case RoomType.TruckBay: Bays(l, f, r, placed, blocked, lanes, rng, truck: true); break;
+            case RoomType.ServiceBay: Bays(l, f, r, placed, blocked, lanes, rng, truck: false); break;
+            case RoomType.IkeaMarket: blocked.AddRange(lanes); BlahajBins(l, f, r, placed, blocked); break;   // #501
+            default: blocked.AddRange(lanes); ShowroomFloor(l, f, r, placed, blocked, rng); break;
         }
     }
 
@@ -377,7 +383,7 @@ public static partial class InteriorGenerator
     /// vehicle standing in one of them.
     /// </summary>
     private static void Bays(InteriorLayout l, int f, RoomPlan r,
-        List<RectPlan> placed, List<RectPlan> blocked, Random rng, bool truck)
+        List<RectPlan> placed, List<RectPlan> blocked, List<RectPlan> lanes, Random rng, bool truck)
     {
         float bayW = truck ? 4.2f : 3.4f;
         float bayD = Math.Min(r.Depth - 1.2f, truck ? 14f : 7.5f);
@@ -427,6 +433,8 @@ public static partial class InteriorGenerator
                 budget--;
             }
         }
+        // the ramps and the vehicle on one are down; now nothing ELSE may stand in a doorway's lane
+        blocked.AddRange(lanes);
     }
 
     /// <summary>
@@ -459,17 +467,22 @@ public static partial class InteriorGenerator
             }
     }
 
-    /// <summary>A forklift parked out of the way: against a wall, nose in, where one still fits.</summary>
+    /// <summary>
+    /// A forklift parked out of the way: against a wall, nose in, where one still fits. The size of
+    /// the real machine (<see cref="HallForklifts"/>, #630): it is driven, and a 2.1 m box would
+    /// have been stuck out of at both ends.
+    /// </summary>
     private static void Forklift(InteriorLayout l, int f, RoomPlan r,
         List<RectPlan> placed, List<RectPlan> blocked, Random rng)
     {
         for (int k = 0; k < 6; k++)
         {
             float x = r.X0 + r.Width * (0.1f + 0.8f * (float)rng.NextDouble());
-            float z = r.Z0 + r.Depth * (k < 3 ? 0.08f : 0.92f);
-            var rect = new RectPlan(x - 0.7f, z - 1.1f, x + 0.7f, z + 1.1f);
+            // nose in: its forks a hand's breadth off the wall at one end of the hall or the other
+            float z = k < 3 ? r.Z0 + 0.35f + HallForklifts.Length / 2 : r.Z1 - 0.35f - HallForklifts.Length / 2;
+            var rect = new RectPlan(x - HallForklifts.Width / 2, z - HallForklifts.Length / 2, x + HallForklifts.Width / 2, z + HallForklifts.Length / 2);
             if (!Free(r, rect, placed, blocked, 0.2f)) continue;
-            Put(l, f, FurnitureType.Forklift, x, z, k < 3 ? 2 : 0, 1.3f, 2.1f, 2.0f, placed);
+            Put(l, f, FurnitureType.Forklift, x, z, k < 3 ? 2 : 0, HallForklifts.Width, HallForklifts.Length, HallForklifts.Height, placed);
             return;
         }
     }

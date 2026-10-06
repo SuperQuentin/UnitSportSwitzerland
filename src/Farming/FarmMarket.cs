@@ -33,7 +33,7 @@ public static class FarmMarket
     public const int MaxLoad = 999;
 
     private static Vector3 _lastAt = new(float.NaN, 0, 0);
-    private static ulong _lastMsec;
+    private static double _lastAsked;
     private static bool _lastNear;
 
     /// <summary>
@@ -42,10 +42,10 @@ public static class FarmMarket
     /// </summary>
     public static bool NearCoop(Vector3 at)
     {
-        ulong now = Time.GetTicksMsec();
-        if (!float.IsNaN(_lastAt.X) && now - _lastMsec < 500 && _lastAt.DistanceSquaredTo(at) < 16f) return _lastNear;
+        double now = Core.RealClock.Now;   // a lookup cache, real time
+        if (!float.IsNaN(_lastAt.X) && now - _lastAsked < 0.5 && _lastAt.DistanceSquaredTo(at) < 16f) return _lastNear;
         _lastAt = at;
-        _lastMsec = now;
+        _lastAsked = now;
         // a specialty buyer's yard is a market too (#494, FarmSales / FarmBuyers)
         return _lastNear = CoopDoor(at, DeliverReach) != null || FarmSales.Instance?.BuyerNear(at) != null;
     }

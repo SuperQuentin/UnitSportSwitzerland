@@ -71,6 +71,13 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | shift up / down, clutch | Shift Ctrl C / RB LB B | ok: grips, B | keep |
 | couple a trailer (fifth wheel, drawbar, tow ball #463) | H / D-pad ← | ok: R stick ← (#436) | keep from the seat; **on foot, grip the coupler's latch** to couple / drop a trailer standing on the hitch |
 | boat trailer: launch / winch the boat (#463) | G / X | ok: X (left controller) | + **grip and crank the winch handle** on the post |
+| forklift mast up / down (#583, hold) | Shift Ctrl / RB LB | ok: grips, or the **mast lever** by hand (`XrCabControls` "forklift", `Kind.Hold`: pulled back the forks rise) | keep |
+| dig_mode as the roller's vibration (#614) | C / B | ok: the **red button on the console right of the wheel** (`XrCabControls` "roller", `Kind.Poke`) | keep |
+| dig_mode (#611, excavator) | C / B | ok: B, or the **button on the left console** (`XrCabControls` "excavator", `Kind.Poke`) | keep |
+| arm_slew_left/right, arm_stick_out/in (#611, hold) | A D, W S / L stick X, Y in dig mode | ok: the **left joystick** by hand, as two levers (`Kind.Hold`: side to side slews, fore and aft runs the stick) | one two-axis grip per joystick |
+| wheel loader lift / tilt (#612, hold; the excavator's arm_boom and arm_bucket actions in work mode) | ↑ ↓ ← → / R stick in work mode | ok: the **two levers right of the seat** (`XrCabControls` "loader", `Kind.Hold`: aft lifts, aft rolls back), work mode on the console | keep |
+| blade_raise / blade_lower (#614, mini excavator, hold, driving or digging) | Shift / Ctrl, RB / LB (the gear paddles, which a crawler has no use for) | ok: the **blade lever** low and outboard of the left joystick (`XrCabControls` "miniexcavator", `Kind.Hold`: aft raises) | keep |
+| arm_boom_up/down, arm_bucket_curl/dump (#611, hold) | ↑ ↓, ← → / R stick Y, X in dig mode | ok: the **right joystick** by hand, as two levers (aft raises the boom, side to side the bucket); the right stick itself stays R3's action pad | one two-axis grip per joystick |
 | gear 1-6, R, N | 1-6 ` 0 / — | ok: H-pattern lever by hand (#438) | keep |
 | retarder | ' ; / — | ok: stalk by hand (#438) | keep |
 | bus kneel / destination | K N / L3 — | ok: dash pokes (#438) | keep |

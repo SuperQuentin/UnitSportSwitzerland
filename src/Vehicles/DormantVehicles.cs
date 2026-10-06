@@ -3,8 +3,10 @@ using Godot;
 using UnitSport.Avatar;
 using UnitSport.Core;
 using UnitSport.Interiors;
+using UnitSport.Items;
 using UnitSport.Player;
 using UnitSport.Terrain;
+using UnitSport.Terrain.Construction;
 using UnitSport.Terrain.Format;
 using UnitSport.World;
 
@@ -168,6 +170,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         if (SlotOf(node.Name) is not { } key) return;
         _gone.Remove(key.Key);
         _asked.Remove(key.Key);
+        // a forklift asleep in a hall (#630) is no tile's slot: its own node undraws itself
+        ParkedForklift.Woke(key.Key);
         if (!_awake.Add(key.Key)) return;
         Forget(key.Tile, key.Key);
     }
@@ -394,6 +398,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     {
         Clear(id);
         _slots.Remove(id);
+        PalletService.Instance?.HideYard(id);
     }
 
     /// <summary>One line on what the layer holds, whenever that changes: what a perf log needs to see it.</summary>
@@ -427,15 +432,18 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                 // the awake bookkeeping work off the record alone. An industrial yard (#496 phase 3)
                 // has no bay list at all — it derives its standing positions from the building's
                 // plan box and the cover around it — and joins by adding one call here.
-                var slots = await Task.Run(() =>
+                var (slots, pallets) = await Task.Run(() =>
                 {
                     var roads = source.LoadRoadsAsync(id).GetAwaiter().GetResult();
                     var list = new List<VehicleSlot>();
+                    var stacks = new List<YardPallet>();
                     if (roads is { Parking.Count: > 0 })
                         DormantSlots.ForParking(id, roads.Parking, ParkedKinds, list);
-                    Yards(source, id, roads, list);
+                    var buildings = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
+                    Yards(source, id, buildings, roads, list, stacks);
+                    Sites(source, id, buildings, roads, list);
                     Marina(source, id, list);
-                    return list;
+                    return (list, stacks);
                 });
                 if (!IsInsideTree()) return;
                 // the anchors moved on while the worker read it
@@ -443,6 +451,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
 
                 Watch();
                 _slots[id] = slots;
+                // the yards' pallets live and die with the tile's fleet, but are the pallets' to draw
+                if (pallets.Count > 0) PalletService.Instance?.ShowYard(id, pallets);
                 if (slots.Count > 0)
                 {
                     Draw(id);
@@ -472,30 +482,70 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// renumbered fleet is not.
     /// </para>
     /// </summary>
-    private static void Yards(IChunkSource source, TileId id, RoadTile? roads, List<VehicleSlot> into)
+    /// <param name="pallets">The pallets out on the sites' aprons (#583 phase 3), filled from the same
+    /// fronts: drawn by <c>PalletService</c>, not by this layer.</param>
+    private static void Yards(IChunkSource source, TileId id, BuildingTile? tile, RoadTile? roads, List<VehicleSlot> into, List<YardPallet> pallets)
     {
-        var tile = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
-        if (tile is not { Buildings.Count: > 0 }) return;
+        // most tiles have buildings and no site: their height grid is 2 MB a streaming client
+        // would download for nothing (#63)
+        if (tile is not { Buildings.Count: > 0 } || !SiteYards.HasSite(tile)) return;
         var grid = source.LoadChunkAsync(id).GetAwaiter().GetResult();
-        var yards = SiteYards.For(tile, roads, grid);
-        if (yards.Count == 0) return;
+        var fronts = SiteYards.Fronts(tile, roads, grid);
+        if (fronts.Count == 0) return;
+        var yards = fronts.Select(f => f.Yard).ToList();
 
         var map = BuildingTypes.For(tile);
         int before = into.Count;
         DormantSlots.ForSite(id, yards, ParkedKinds, YardHeavies, YardTrailers, (int)RideKind.Trailer, into);
+        // a warehouse's and a works' forklift, on the apron beside the facade (#583 phase 3)
+        foreach (var front in fronts)
+            if (DormantSlots.ForkliftOf(id, front, (int)RideKind.Forklift) is { } lift) into.Add(lift);
         for (int i = into.Count - 1; i >= before; i--)
         {
             var s = into[i];
             var at = new Vector2((float)(s.E - id.MinE), (float)(id.MaxN - s.N));
             // a lorry needs more room round it than a hatchback before it reads as parked in a wall
-            float radius = s.Train != 0 || s.KindId != (int)RideKind.Trailer && s.KindId >= HeavyCatalog.First ? 3.2f : 1.6f;
+            bool goods = s.Train != 0 || s.KindId == (int)RideKind.Trailer || s.KindId is >= HeavyCatalog.First and <= HeavyCatalog.Last;
+            // (a forklift, RideKind 193, is past HeavyCatalog's range and parks as a car does)
+            float radius = goods ? 3.2f : 1.6f;
             if (SiteYards.Blocked(tile, roads, map, at, radius)) { into.RemoveAt(i); continue; }
             // On its own ground, not the yard's (#560): a yard is one height, the ground at its
             // middle, and on a slope its far rows floated or sank by metres. Online, the server
             // keeps a woken vehicle exactly at its slot, so the slot's height is where it stands.
-            if (grid != null) into[i] = s with { Height = GroundUnder(grid, s, s.KindId == (int)RideKind.Trailer || s.Train != 0 || s.KindId >= HeavyCatalog.First) };
+            if (grid != null) into[i] = s with { Height = GroundUnder(grid, s, goods) };
         }
+        pallets.AddRange(SiteYards.Pallets(tile, roads, grid, fronts));
     }
+
+    /// <summary>
+    /// The fourth provider (#616): the machines parked on a building site, where its plan
+    /// (<see cref="SitePlans"/>, the very plan the tile's site is built from) put them. Skipped on a
+    /// tile with no site, which is nearly all of them. Each stands on its own ground; the planner
+    /// already kept the yard's places off the building, the roads and the neighbours.
+    /// </summary>
+    private static void Sites(IChunkSource source, TileId id, BuildingTile? tile, RoadTile? roads, List<VehicleSlot> into)
+    {
+        if (tile is not { Buildings.Count: > 0 } || !SitePlans.HasSite(tile)) return;
+        var sites = SitePlans.For(tile, roads);
+        if (sites.Count == 0) return;
+        int before = into.Count;
+        DormantSlots.ForConstruction(id, sites, SiteKind, ParkedKinds, into);
+        if (into.Count == before || source.LoadChunkAsync(id).GetAwaiter().GetResult() is not { } grid) return;
+        for (int i = before; i < into.Count; i++) into[i] = into[i] with { Height = GroundUnder(grid, into[i], false) };
+    }
+
+    /// <summary>
+    /// What a site's machine parks as: the excavator (#611) and the wheel loader (#612). The small
+    /// kit (#614), the tipper and the mixer (#613) join here once they can be driven.
+    /// </summary>
+    private static int? SiteKind(MachineRole role) => role switch
+    {
+        MachineRole.Excavator => (int)RideKind.Excavator,
+        MachineRole.MiniExcavator => (int)RideKind.MiniExcavator,
+        MachineRole.Roller => (int)RideKind.CompactRoller,
+        MachineRole.WheelLoader => (int)RideKind.WheelLoader,
+        _ => null,
+    };
 
     /// <summary>
     /// The ground a slot stands at: for a car, the highest point under its box's corners and middle,
@@ -825,7 +875,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     private void RequestWake(string owner, int ordinal)
     {
         if (!Multiplayer.IsServer()) return;
-        ServerWake(owner, ordinal);
+        ServerWake(owner, ordinal, Multiplayer.GetRemoteSenderId());
     }
 
     /// <summary>
@@ -833,14 +883,33 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// client cannot conjure a vehicle at a position of its choosing by asking for a slot that is
     /// not there.
     /// </summary>
-    private void ServerWake(string owner, int ordinal)
+    private void ServerWake(string owner, int ordinal, long peer = 0)
     {
+        if (HallForklifts.BuildingOf(owner) is { } hall) { ServerWakeHall(hall, ordinal, peer); return; }
         if (Find(owner, ordinal) is not { } slot) return;
         if (_awake.Contains(KeyOf(slot))) return;
         // No "woken" broadcast (#560). Every peer drops its dormant copy when the vehicle node enters
         // its tree (OnVehicleAdded): the very frame the live one is drawn. A broadcast sent at once
         // could arrive before the spawn, which the server sends at its next poll, and leave the bay
         // empty in between.
+        Promote(slot);
+    }
+
+    /// <summary>
+    /// A hall's forklift (#630): the slot is the plan's, worked out here from the layout the server
+    /// keeps (<see cref="HallForklifts.SlotOf"/>), so a client names a furniture index and nothing
+    /// more. The asker has to be in that very building, as for a container (<c>LootService</c>);
+    /// <paramref name="peer"/> 0 is the server's own, which has nobody to doubt.
+    /// </summary>
+    private async void ServerWakeHall(string building, int furniture, long peer)
+    {
+        if (InteriorManager.Instance is not { } interiors) return;
+        if (peer != 0 && interiors.SpaceOf(peer) != building) return;
+        InteriorLayout? layout;
+        try { layout = await interiors.GetOrCreate(building); }
+        catch (Exception e) { GD.PushError($"[dormant] hall {building}: {e.Message}"); return; }
+        if (layout == null || HallForklifts.SlotOf(layout, furniture, _origin) is not { } slot) return;
+        if (_awake.Contains(KeyOf(slot))) return;
         Promote(slot);
     }
 

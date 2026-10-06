@@ -249,7 +249,7 @@ public static partial class TileRewriter
                 if (!wanted.Contains(at)) continue;
                 Get(paint, at).Add(PaintEmitter.Arrow(
                     mark.Line[0] - at.MinE, mark.Y, at.MaxN - mark.Line[1],
-                    Math.Cos(mark.HeadingRad), -Math.Sin(mark.HeadingRad), PaintArrow.Straight));
+                    Math.Cos(mark.HeadingRad), -Math.Sin(mark.HeadingRad), PaintArrow.Straight, tipY: mark.Y));   // an aisle is level
                 stats.Marks++;
                 continue;
             }

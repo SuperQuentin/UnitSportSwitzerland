@@ -106,6 +106,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Loot.ShopCheck.Requested, Loot.ShopCheck.Run),
         (() => Interiors.DoorCheck.Requested, Interiors.DoorCheck.Run),
         (() => Interiors.FlatCheck.Requested, Interiors.FlatCheck.Run),
+        (() => Interiors.ShapedCheck.Requested, Interiors.ShapedCheck.Run),
+        (() => Terrain.Construction.ConstructionCheck.Requested, Terrain.Construction.ConstructionCheck.Run),
         (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
         (() => ChatCheck.Requested, () => ChatCheck.Run(this)),
         (() => StyleKit.ReportRequested, StyleKit.Report),
@@ -166,6 +168,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             MouseCapture.Disabled = true;
             AddChild(new Interiors.IkeaProbe { Name = "IkeaProbe" });
+            return;
+        }
+        // whether a block of flats' stairwells can be climbed, from their collision (#571)
+        if (Interiors.StairWalkCheck.Requested)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.StairWalkCheck { Name = "StairWalkCheck" });
             return;
         }
         // an apartment block's inside, hand-made (#557): no terrain, no server
@@ -272,6 +281,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // (not under a fixture course: the cache would fill its gaps, and its horizon, with real data)
         IChunkSource streamedSource = fixture ? source : _chunkSource = new NetworkChunkSource(
             source, TerrainPaths.FindChunkDir(), _streamer, TerrainPaths.FindCacheDir());
+        if (_chunkSource != null)
+        {
+            // Settings → Data (#63): the cap is the player's, and Clear reaches the live cache
+            _chunkSource.MaxCacheBytes = CacheCapBytes;
+            NetworkChunkSource.Active = _chunkSource;
+        }
 
         // The generated fill answers for the tiles no real data exists for, above the network
         // source so a client never asks a server for one, and under the cache so a generated tile
@@ -281,7 +296,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
         // Outermost, so a tile decoded once is not decoded again when the rings drop it and pick
         // it back up — which a route that doubles back does constantly.
-        _cache = new CachingChunkSource(fallback ?? (IChunkSource)streamedSource);
+        // decoded tiles in RAM: a phone has a fraction of a desktop's to spare (#63)
+        _cache = Platform.IsMobile
+            ? new CachingChunkSource(fallback ?? (IChunkSource)streamedSource, 96L * 1024 * 1024)
+            : new CachingChunkSource(fallback ?? (IChunkSource)streamedSource);
         // the blend reads real neighbours through the cache, sharing what the loader decodes
         if (fallback != null) fallback.Neighbours = _cache;
 
@@ -325,6 +343,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _ambience = new Audio.Ambience(chunksForAudio, EarNode)
                 { Name = "Ambience", Origin = origin, Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume) };
             AddChild(_ambience);
+            // the hammering, vibrator, grinder, beeper, radio and crane motor of a working building site (#617)
+            AddChild(new Terrain.Construction.SiteSounds(chunksForAudio, EarNode));
         }
         await Breathe();
         if (!IsInsideTree()) return;
@@ -640,6 +660,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _garage.ActivePlayer = () => _onFoot ? LocalPlayer : null;
         AddChild(_garage);
         if (Player.GarageProbe.ParseArgs() is { } garageRole) AddChild(new Player.GarageProbe(garageRole, () => LocalPlayer));
+        // a forklift forks a hall pallet and sets it down in the yard; the other client watches (#583)
+        if (Items.PalletNetProbe.ParseArgs() is { } palletRole) AddChild(new Items.PalletNetProbe(palletRole, () => LocalPlayer));
         if (Player.HeavyNetProbe.ParseArgs() is { } heavyRole) AddChild(new Player.HeavyNetProbe(heavyRole, () => LocalPlayer));
         if (Player.CrashNetProbe.ParseArgs() is { } crashRole) AddChild(new Player.CrashNetProbe(crashRole, () => LocalPlayer));
         if (Player.PassengerProbe.ParseArgs() is { } passengerRole) AddChild(new Player.PassengerProbe(passengerRole, () => LocalPlayer));
@@ -668,7 +690,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Loot.BankProbe.Role != null
-            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
+            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
@@ -702,6 +724,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.AirlinerNetProbe.Role != null) AddChild(new Player.AirlinerNetProbe(items));
         if (Player.StairsNetProbe.Role != null) AddChild(new Player.StairsNetProbe(items));
         if (Player.TractorNetProbe.Role != null) AddChild(new Player.TractorNetProbe(items));
+        if (Player.ExcavatorNetProbe.Role != null) AddChild(new Player.ExcavatorNetProbe(items));
         if (Player.FreighterNetProbe.Role != null) AddChild(new Player.FreighterNetProbe(items));
         if (Player.An124NetProbe.Role != null) AddChild(new Player.An124NetProbe(items));
         if (Player.HoldNetProbe.Role != null) AddChild(new Player.HoldNetProbe(items));
@@ -727,6 +750,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.SwissNetProbe.Role != null) AddChild(new Items.SwissNetProbe(items));
         if (Items.Fishing.FishNetProbe.Role != null) AddChild(new Items.Fishing.FishNetProbe(items));
         if (World.ClockNetProbe.Role != null) AddChild(new World.ClockNetProbe(items));
+        if (SpeedNetProbe.Role != null) AddChild(new SpeedNetProbe(items));
         if (Player.BoatNetProbe.Role != null) AddChild(new Player.BoatNetProbe(items));
         if (Player.SteamerNetProbe.Role != null) AddChild(new Player.SteamerNetProbe(items));
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "solo") > Array.IndexOf(OS.GetCmdlineUserArgs(), "--dropcheck")
@@ -760,6 +784,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
         var prompts = PromptBar.Create();
         prompts.Source = Prompts;
         AddChild(prompts);
+        // a phone's controls (#63): an on-screen pad labelled from the same prompts
+        if (TouchControls.Wanted)
+        {
+            var touch = TouchControls.Create();
+            touch.Source = Prompts;
+            AddChild(touch);
+            if (TouchCheck.Requested) AddChild(new TouchCheck(() => LocalPlayer, touch));
+        }
 
         // Scavenging: what the furniture in those interiors holds. Same node path as the server's,
         // which decides who gets what; offline this client does both.
@@ -769,6 +801,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the images of stuck Polaroids, fetched from the server by hash (before the list draws them)
         Items.PhotoTransfer.Create(this, server: false);
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
+        // pallets a forklift has moved (#583): the server keeps them for the session, offline this client does
+        Items.PalletService.Create(this, origin, server: false).Source = () => _chunks?.Source;
         // built structures (#274): the server owns them, offline this client does
         if (Systems.On(Systems.Build))
         {
@@ -859,7 +893,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new PerfOverlay(_chunks, _cache, recorder));
 
         // F9 or /debug: overlays, terrain layers and view modes, alone or as an admin (#339)
-        var debug = new DebugMenu(_chunks, origin, () => _nearTrees, Toast);
+        var debug = new DebugMenu(_chunks, origin, () => _nearTrees, Toast,
+            scale => _chat?.Send($"/speed {scale.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}"));
         AddChild(debug);
         _chat.DebugRequested += debug.Open;
         if (DebugMenuCheck.Requested) AddChild(new DebugMenuCheck(items, debug, _chunks));
@@ -1057,8 +1092,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (_mode is GameMode.Explore or GameMode.Multiplayer) MouseCapture.Capture();
     }
 
+    private static long CacheCapBytes => (long)(GameSettings.Current.CacheGb * 1024 * 1024 * 1024);
+
     private void OnSettingsChanged()
     {
+        if (_chunkSource != null) _chunkSource.MaxCacheBytes = CacheCapBytes;
         foreach (var m in _worldMaterials) FogUniforms.Apply(m);
         // before the terrain takes the settings: its rings and mesh detail are the style's
         if (StyleKit.Restyle()) ApplyStyle();
@@ -1175,6 +1213,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         World.WaterField.Bind(null);
         World.WaterField.SetSeaState(0f);
         GameSettings.Changed -= OnSettingsChanged;
+        if (NetworkChunkSource.Active == _chunkSource) NetworkChunkSource.Active = null;
         Permissions.Changed -= OnPermissionsChanged;
         StyleCommand.RebuildRequested -= OnRebuildRequested;
         StyleKit.Chosen -= OnStyleChosen;

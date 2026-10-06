@@ -55,7 +55,8 @@ public sealed partial class ProceduralWorld
 
     private sealed record Town(Street Up, Street Down, Street Bridge, Street Far, Street Bank, double BankMouth);
 
-    private readonly record struct Channel(double Dr, double Bank, double Half, bool Wet);
+    /// <summary>The nearest channel exactly: distance, bank, half-width, wet, and its bed (level less depth) there.</summary>
+    private readonly record struct Channel(double Dr, double Bank, double Half, bool Wet, double Bed = 0);
 
     /// <summary>The nearest river channel to a point (an exact distance, not the 5 m lattice's), or none.</summary>
     private static Channel ChannelAt(double e, double n)
@@ -69,7 +70,8 @@ public sealed partial class ProceduralWorld
             if (d >= best) continue;
             best = d;
             c = new Channel(d, net.Bank[s] + (net.Bank[s + 1] - net.Bank[s]) * u,
-                net.Half[s] + (net.Half[s + 1] - net.Half[s]) * u, net.Water[s] && net.Water[s + 1]);
+                net.Half[s] + (net.Half[s + 1] - net.Half[s]) * u, net.Water[s] && net.Water[s + 1],
+                net.Bed[s] + (net.Bed[s + 1] - net.Bed[s]) * u - (net.Depth[s] + (net.Depth[s + 1] - net.Depth[s]) * u));
         }
         return c;
     }

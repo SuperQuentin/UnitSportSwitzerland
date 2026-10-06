@@ -102,10 +102,13 @@ public sealed class FieldCells
         return changed;
     }
 
-    /// <summary>The save file's shape: <c>{"Version":1,"Cells":[packed...]}</c>.</summary>
+    /// <summary>
+    /// The save file's shape: <c>{"Version":2,"Cells":[packed...]}</c>. 2: <see cref="CellState.Since"/>
+    /// in environment seconds (#579); a version-1 file held Unix stamps and is not read (the fields go back to natural).
+    /// </summary>
     public sealed class File
     {
-        public const int CurrentVersion = 1;
+        public const int CurrentVersion = 2;
         public int Version { get; set; } = CurrentVersion;
         public long[] Cells { get; set; } = Array.Empty<long>();
     }

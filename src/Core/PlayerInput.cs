@@ -95,6 +95,22 @@ public partial class PlayerInput : Node
     /// <summary>The retarder stalk: 0 off, 1 exhaust brake, 2-4 the retarder.</summary>
     public const string RetarderUp = "retarder_up";
     public const string RetarderDown = "retarder_down";
+    // --- the excavator (#611): a drive / dig toggle, then the arm on the two sticks, ISO pattern ---
+    /// <summary>The excavator: dig mode on / off. In it the tracks hold and the sticks work the arm.</summary>
+    public const string DigMode = "dig_mode";
+    /// <summary>Dig mode, the left stick: slew the house (X), run the stick out and in (Y).</summary>
+    public const string ArmSlewLeft = "arm_slew_left";
+    public const string ArmSlewRight = "arm_slew_right";
+    public const string ArmStickOut = "arm_stick_out";
+    public const string ArmStickIn = "arm_stick_in";
+    /// <summary>Dig mode, the right stick: raise and lower the boom (Y, back is up), curl and dump the bucket (X, left curls).</summary>
+    public const string ArmBoomUp = "arm_boom_up";
+    public const string ArmBoomDown = "arm_boom_down";
+    public const string ArmBucketCurl = "arm_bucket_curl";
+    public const string ArmBucketDump = "arm_bucket_dump";
+    /// <summary>A mini excavator's dozer blade up / down (#614), held, driving or digging: the gear paddles, which a crawler has no use for.</summary>
+    public const string BladeRaise = "blade_raise";
+    public const string BladeLower = "blade_lower";
     /// <summary>An airliner's flap lever a notch down / up, its speedbrake, its parking brake (#414). The gear is <see cref="CarDoor"/> in the air.</summary>
     public const string FlapsDown = "flaps_down";
     public const string FlapsUp = "flaps_up";
@@ -183,6 +199,15 @@ public partial class PlayerInput : Node
             if (e.IsActionPressed(Slots[s])) return s;
         return -1;
     }
+
+    /// <summary>
+    /// Whether a mouse motion turns the camera: the captured mouse, or a touch-look drag
+    /// (<see cref="TouchControls"/>, #63). Never the mouse Godot makes up from a touch, which would
+    /// turn it a second time.
+    /// </summary>
+    public static bool IsLookMotion(InputEventMouseMotion m) =>
+        m.Device == TouchControls.Device
+        || Input.MouseMode == Input.MouseModeEnum.Captured && m.Device != InputEvent.DeviceIdEmulation;
 
     /// <summary>Right-stick turn rate at full deflection and sensitivity 1, radians per second.</summary>
     public const float StickTurnRate = 3.0f;
@@ -340,6 +365,8 @@ public partial class PlayerInput : Node
             return;
         }
         if (!GameSettings.Current.Vibration || LastDevice != InputDevice.Gamepad) return;
+        // the phone itself (#63): one motor, so the stronger of the two
+        if (TouchControls.Shown) Input.VibrateHandheld((int)(seconds * 1000), Mathf.Clamp(Math.Max(weak, strong), 0, 1));
         foreach (int pad in Input.GetConnectedJoypads())
             // never the steering wheel: Godot rumbles a force-feedback wheel through its own SDL,
             // which takes the wheel's forces away from SteeringWheel (#68); its knocks are its own
@@ -379,6 +406,13 @@ public partial class PlayerInput : Node
         if (XR.XrSession.Active)
         {
             LastDevice = InputDevice.Gamepad;
+            return;
+        }
+        // the touch overlay plays a pad (#63): its buttons and the touches behind it are the pad,
+        // and the mouse Godot makes up from a finger is not a mouse
+        if (e.Device == TouchControls.Device || e.Device == InputEvent.DeviceIdEmulation || e is InputEventScreenTouch or InputEventScreenDrag)
+        {
+            if (TouchControls.Shown) LastDevice = InputDevice.Gamepad;
             return;
         }
         switch (e)
@@ -520,6 +554,22 @@ public partial class PlayerInput : Node
         Bind(GearNeutral, Keys(Key.Key0));
         Bind(RetarderUp, Keys(Key.Apostrophe));
         Bind(RetarderDown, Keys(Key.Semicolon));
+        // The excavator (#611): C / pad B toggles dig mode (the clutch's and the crouch's, which mean
+        // nothing in a crawler). In dig mode the sticks are the arm's, ISO pattern, as on a real
+        // one: the left slews (X) and runs the stick out and in (Y), the right raises the boom (Y,
+        // back is up) and curls the bucket (X, left curls). On the keyboard WASD are the left
+        // stick and the arrows the right; the tracks ignore WASD while it digs.
+        Bind(DigMode, Keys(Key.C), Button(JoyButton.B));
+        Bind(ArmSlewLeft, Keys(Key.A), Axis(JoyAxis.LeftX, -1));
+        Bind(ArmSlewRight, Keys(Key.D), Axis(JoyAxis.LeftX, 1));
+        Bind(ArmStickOut, Keys(Key.W), Axis(JoyAxis.LeftY, -1));
+        Bind(ArmStickIn, Keys(Key.S), Axis(JoyAxis.LeftY, 1));
+        Bind(ArmBoomUp, Keys(Key.Up), Axis(JoyAxis.RightY, 1));
+        Bind(ArmBoomDown, Keys(Key.Down), Axis(JoyAxis.RightY, -1));
+        Bind(ArmBucketCurl, Keys(Key.Left), Axis(JoyAxis.RightX, -1));
+        Bind(ArmBucketDump, Keys(Key.Right), Axis(JoyAxis.RightX, 1));
+        Bind(BladeRaise, Keys(Key.Shift), Button(JoyButton.RightShoulder));
+        Bind(BladeLower, Keys(Key.Ctrl), Button(JoyButton.LeftShoulder));
         Bind(FlapsDown, Keys(Key.F7), Button(JoyButton.RightShoulder));
         Bind(FlapsUp, Keys(Key.F6), Button(JoyButton.LeftShoulder));
         Bind(Speedbrake, Keys(Key.Slash), Button(JoyButton.DpadLeft));

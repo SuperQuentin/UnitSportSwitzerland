@@ -92,7 +92,8 @@ public partial class SteeringWheel : Node
     /// <summary>Adds the reader under <paramref name="root"/>; nothing on a headless run. Idempotent.</summary>
     public static void Install(Node root)
     {
-        if (DisplayServer.GetName() == "headless" || root.GetNodeOrNull("SteeringWheel") != null) return;
+        // SDL on Android wants its own Java activity: never init it there (#63)
+        if (DisplayServer.GetName() == "headless" || Platform.IsMobile || root.GetNodeOrNull("SteeringWheel") != null) return;
         root.AddChild(new SteeringWheel { Name = "SteeringWheel" });
     }
 

@@ -8,10 +8,10 @@ buyers on foot, contracts) and `World/FarmStands` (stands), created under `Syste
 
 ## Prices: one function (`Farming/FarmPrices`)
 
-- **Farm calendar** (`FarmCalendar`): a farm day = 24 min of server time (the default day length,
-  whatever the sky clock does), a farm week = 7 of them. Season = the month the fields show
+- **Farm calendar** (`FarmCalendar`): a farm day = a day of the world (86400 environment seconds,
+  24 real minutes at the default pace; it slows with `/speed` and stops with the day), a farm week = 7 of them. Season = the month the fields show
   (`FarmSales.Month`: `FarmField.Month`, else `--farmmonth` / today). Clock: `FarmSales.Now`
-  (`ClockSync.ServerUnixNow`; `ClockOverride` for checks).
+  (`World.WorldClock.EnvNow`; `ClockOverride` for checks).
 - **Season**: a harvest in its harvest months (where `FarmTables.NaturalStage` is Ripe; hay June to
   August) × 0.8 (glut); a crop that keeps (all but carrots) in March-May × 1.2; products 1.
 - **Wish list**: each co-op (keyed by its building key and the week, like `ShopTables.Markup`) wants
@@ -62,8 +62,8 @@ peer's own body position, not the claim). Only goods they buy; others: "takes on
   `--selldir` for checks): 6 crates × 40, cash box, road metres and buildings within 300 m (from the
   map's building tiles, never `DoorIndex`: a dedicated server draws no doors), last tick, takings.
 - **Passers-by** (server tick 5 s, `FarmStandRules.Advance`, deterministic: expected sales add up per
-  crate, every whole one sold): 6 an hour a crate × road factor (1 within 15 m, 0.4 at 60 m) × town
-  factor (1 + buildings/20, max 3) × 2 for cooked dishes; at most 12 h caught up. Price `FarmPrices.Stand`.
+  crate, every whole one sold): 3 a day of the world a crate × road factor (1 within 15 m, 0.4 at 60 m) × town
+  factor (1 + buildings/20, max 3) × 2 for cooked dishes; at most 10 days caught up (a contract or stand time beyond any order is a save from before the world clock and is dropped or reset). Price `FarmPrices.Stand`.
   Stockable: harvests but hay, and flour .. raclette.
 - **Requests** (`AskOp`: stock, take back, buy, collect → `Answer`): server checks the peer's body is
   within 6.5 m (LV95), the owner (by display name, like placed objects) for stock / take / collect;
@@ -108,17 +108,17 @@ rows in `Core/ControlsHelp` ("Selling farm produce") and `xr/vr-action-map`.
   (quick, offline, ~40 s): a stand-in co-op (`FarmMarket.StandIn`) and a stand-in buyer
   (`FarmBuyers.StandIn`: Aarberg moved by the spawn), loads, the prompt, contracts, sacks sold with E,
   the stand placed with Use (refused at 500 m from a road via `FarmStands.RoadDistanceOverride`),
-  stocked, an hour of sales, the box collected, packed up. `shots` (windowed) writes
+  stocked, two days of sales, the box collected, packed up. `shots` (windowed) writes
   `test_output/494-sell-coop-panel.png`, `494-sell-stand-panel.png`, `494-sell-stand.png`.
 - `tools/sellnetcheck.sh` (net, fixture `straight`, the server measures the real road): B buys from
   A's stand, A collects, both see the same 27 left; the server's `stands.json` held the stand.
-  Its server runs with `--standsquiet` (no passers-by): one comes due within minutes, and a slow
+  Its server runs with `--standsquiet` (no passers-by): one comes due within a few real minutes, and a slow
   run under the load of the net tier saw a sale mid-check and the counts drift. The probe waits for
   the stock answer (crate and pack both) and for the prompt instead of fixed times.
 
 ## Not done
 
 - No land ownership: stands go anywhere outdoors by a road. The wire changes (new nodes and RPCs,
-  `PlacedKind` 11) are in `Handshake.Protocol` 18 with the rest of #494.
+  `PlacedKind` 11) are in `Handshake.Protocol` 24 with the rest of #494.
 - Specialty buyers have no building, sign or map marker; their yards are invisible circles.
-- A stand's passers-by are simulated only while the server runs (12 h catch-up after a restart).
+- A stand's passers-by are simulated only while the server runs (10 days caught up after a restart).

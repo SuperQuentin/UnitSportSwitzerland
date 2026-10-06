@@ -141,6 +141,40 @@ public partial class ControlsHelp : CanvasLayer
             new("At a sugar factory or a mill on foot: sell the sacks it buys", PlayerInput.InteractMount),
             new("Farm machine at a co-op or a specialty buyer: deliver the load (the prompt shows the price)", Keys: "{destination}", Pad: "{car_door}"),
         }),
+        ("Forklift (#583)", new Row[]
+        {
+            // the paddles, free on a machine with no gearbox: held, the mast runs; let go, it stops
+            // pallets need nothing more: forks run in under one and raised lift it, lowered set it down
+            new("Raise the forks (hold); under a pallet, lifts it", PlayerInput.ShiftUp),
+            new("Lower the forks (hold); with a pallet on, sets it down", PlayerInput.ShiftDown),
+        }),
+        ("Excavator (#611)", new Row[]
+        {
+            // drive mode: the tracks; dig mode: the arm on both sticks, ISO pattern, tracks held
+            new("Tracks: forward / back, turn on the spot", Keys: "{move_forward} {move_back} / {move_left} {move_right}", Pad: "{throttle} {brake} / {move_left}"),
+            new("Dig mode on / off", PlayerInput.DigMode),
+            new("Dig: slew the house (hold)", Keys: "{arm_slew_left} / {arm_slew_right}", Pad: "left stick ← →"),
+            new("Dig: stick out / in (hold)", Keys: "{arm_stick_out} / {arm_stick_in}", Pad: "left stick ↑ ↓"),
+            new("Dig: boom up / down (hold)", Keys: "{arm_boom_up} / {arm_boom_down}", Pad: "right stick ↓ ↑"),
+            new("Dig: bucket curl / dump (hold)", Keys: "{arm_bucket_curl} / {arm_bucket_dump}", Pad: "right stick ← →"),
+        }),
+        ("Mini excavator (#614): the excavator's controls, and", new Row[]
+        {
+            // the excavator's controls, and a dozer blade on the gear paddles, driving or digging
+            new("Blade up / down (hold, driving or digging)", Keys: "{blade_raise} / {blade_lower}", Pad: "RB / LB"),
+        }),
+        ("Wheel loader (#612)", new Row[]
+        {
+            // it bends in the middle to steer, and keeps driving in work mode: only the right stick changes
+            new("Work mode on / off (it still drives)", PlayerInput.DigMode),
+            new("Work: lift the arm / lower it (hold)", Keys: "{arm_boom_up} / {arm_boom_down}", Pad: "right stick ↓ ↑"),
+            new("Work: roll the bucket back / dump it (hold)", Keys: "{arm_bucket_curl} / {arm_bucket_dump}", Pad: "right stick ← →"),
+        }),
+        ("Compact roller (#614)", new Row[]
+        {
+            // it bends in the middle like the loader; the work-mode toggle sets the drums vibrating
+            new("Drums vibrating on / off", PlayerInput.DigMode),
+        }),
         ("Paddle steamer", new Row[]
         {
             new("Telegraph: one step ahead / astern (FULL ASTERN .. STOP .. FULL AHEAD)", Keys: "{move_forward} / {move_back}", Pad: "{move_forward} up / down"),

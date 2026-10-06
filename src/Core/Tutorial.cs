@@ -204,7 +204,7 @@ public partial class Tutorial : CanvasLayer
         ShowStep();
         // the new card slides in a little, so the change is seen out of the corner of an eye
         _panel.Modulate = new Color(1, 1, 1, 0);
-        var tw = _panel.CreateTween();
+        var tw = _panel.CreateTween().SetIgnoreTimeScale(true);
         tw.TweenProperty(_panel, "modulate:a", 1f, 0.25f);
     }
 
@@ -227,7 +227,7 @@ public partial class Tutorial : CanvasLayer
         // only this one value: a command-line --rings must not become the saved choice
         GameSettings.SaveOnly(nameof(GameSettings.TutorialDone), true);
         SetProcess(false);
-        var tw = _panel.CreateTween();
+        var tw = _panel.CreateTween().SetIgnoreTimeScale(true);
         tw.TweenProperty(_panel, "modulate:a", 0f, 0.4f);
         tw.TweenCallback(Callable.From(QueueFree));
         GD.Print("[tutorial] finished");

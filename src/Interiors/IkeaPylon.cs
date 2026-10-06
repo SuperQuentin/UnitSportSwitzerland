@@ -29,8 +29,20 @@ public partial class IkeaPylon : Node
 {
     private const string NodeName = "IkeaPylon";
 
-    /// <summary>How far out from the entrance the totem stands, in metres.</summary>
-    private const float StandOff = 30f;
+    /// <summary>
+    /// How far out from the entrance wall the totem stands, and how far along the facade from the
+    /// door. It sits on the store's own forecourt, beside the entrance.
+    ///
+    /// <para>
+    /// It used to stand 30 m straight out from the door, which put it <b>in the middle of the
+    /// road</b>: a door is placed facing the nearest street (<c>BuildingFootprint.Compute</c>), so
+    /// following its outward far enough always arrives at one. The right place is the lot entrance
+    /// by the road, but the road tile is not available at <see cref="ChunkManager.TileFurnished"/>,
+    /// and widening that for a cosmetic prop is not worth it — the forecourt is the store's own
+    /// ground, so it is always clear of the carriageway.
+    /// </para>
+    /// </summary>
+    private const float StandOff = 9f, AlongFacade = 15f;
     /// <summary>Height of the mast, and the slab's size: it has to read from the motorway.</summary>
     private const float MastHeight = 14f, SlabWidth = 4.4f, SlabHeight = 3.0f;
 
@@ -80,9 +92,16 @@ public partial class IkeaPylon : Node
             if (outward.LengthSquared() < 1e-4f) continue;
             outward = outward.Normalized();
 
-            var at = d.Position + outward * StandOff;
-            if (!_chunks.TryGetHeight(at, out float ground)) continue;
-            at.Y = ground;
+            // DoorSpot.Position is in the tile node's frame (BankSigns parents its plates straight
+            // onto it), but TryGetHeight takes a world point: the two differ by the node's offset
+            // from the floating origin, so querying with the local one sampled the ground hundreds
+            // of metres away and the miss silently dropped the pylon.
+            // beside the entrance, not in front of it: straight out is the way in
+            var along = new Vector3(outward.Z, 0, -outward.X);
+            var at = d.Position + outward * StandOff + along * AlongFacade;
+            var world = node.ToGlobal(at);
+            if (!_chunks.TryGetHeight(world, out float ground)) continue;
+            at = node.ToLocal(world with { Y = ground });
 
             // the slab's faces look back along the door's outward, so it is readable from the road
             var basis = new Basis(Vector3.Up, Mathf.Atan2(outward.X, outward.Z));

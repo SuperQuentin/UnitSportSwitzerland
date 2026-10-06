@@ -31,6 +31,9 @@ public static partial class InteriorGenerator
     private const float Landing = 1.0f;
     private const int MaxFloors = 30;
 
+    /// <summary>An entry at least this wide is driven through, and keeps a lane clear behind it.</summary>
+    private const float VehicleEntryWidth = 2.5f;
+
     /// <param name="rural">The building's tile is countryside (<c>Loot.ShopTables.IsRural</c>): only there is a gun shop.</param>
     /// <param name="type">
     /// What <see cref="BuildingTypes"/> made of the building's group, for the types that cannot be
@@ -84,7 +87,7 @@ public static partial class InteriorGenerator
         // a block of flats (#557) plans its stairwells and flats itself, and its street doors with them
         var flats = !planned && site == BuildingType.None && type == BuildingType.None
             ? ApartmentTypeFor(fp, b.Kind, n, bank) : BuildingType.None;
-        bool flatsPlanned = flats != BuildingType.None && TryApartments(layout, fp, b.Kind, n, flats, rng);
+        bool flatsPlanned = flats != BuildingType.None && TryApartments(layout, fp, b, b.Kind, n, flats, rng);
         planned |= flatsPlanned;
         if (!planned)
         {
@@ -158,7 +161,11 @@ public static partial class InteriorGenerator
             var at = new Godot.Vector2(rel.Dot(fp.AxisU), rel.Dot(axisV));
             var outward = new Godot.Vector2(d.Outward.X, d.Outward.Z);
             var faces = new Godot.Vector2(outward.Dot(fp.AxisU), outward.Dot(axisV));
-            float width = Math.Min(d.Width, 1.8f);
+            // A pedestrian door's doorway is a doorway, whatever the door. A door DRIVEN through
+            // keeps its full width, or a 4.5 m loading bay arrives at a 1.8 m hole on the inside
+            // and a 1.8 m car wedges in it at the sill — which is exactly what the drive-through
+            // found (#531): the bay opened, the portal was crossed, and the car stopped 3 cm in.
+            float width = d.Vehicle ? d.Width : Math.Min(d.Width, 1.8f);
             if (width < 0.7f || Math.Min(d.Height, clear - 0.15f) < 1.9f) continue;
 
             // the wall that faces the same way first, then round the building
@@ -232,7 +239,7 @@ public static partial class InteriorGenerator
                 ? new RectPlan(c - width / 2, side == Side.Front ? r.Z0 : r.Z1 - 1.2f, c + width / 2, side == Side.Front ? r.Z0 + 1.2f : r.Z1)
                 : new RectPlan(side == Side.Left ? r.X0 : r.X1 - 1.2f, c - width / 2, side == Side.Left ? r.X0 + 1.2f : r.X1, c + width / 2);
             if (ground.Holes.Any(h => h.Overlaps(reach))) continue;
-            if (ground.AllFlights().Any(fl => new RectPlan(fl.X0, Math.Min(fl.ZBottom, fl.ZTop), fl.X1, Math.Max(fl.ZBottom, fl.ZTop)).Overlaps(reach)))
+            if (ground.AllFlights().Any(fl => fl.Area().Overlaps(reach)))
                 continue;
             room = r;
             center = c;
@@ -811,6 +818,13 @@ public static partial class InteriorGenerator
                 for (int k = 0; k < count; k++)
                 {
                     float c = a + len * (k + 0.5f) / count;
+                    // a doorway where the window would go (a ground-floor flat's garden door) moves
+                    // the window aside within its own stretch of wall, rather than losing it (#571)
+                    float lo = a + len * k / count + width / 2 + 0.2f;
+                    float hi = a + len * (k + 1) / count - width / 2 - 0.2f;
+                    for (float step = 0.3f; Blocked(r, side, c, width) && step < len; step += 0.3f)
+                        foreach (float at in new[] { c - step, c + step })
+                            if (at >= lo && at <= hi && !Blocked(r, side, at, width)) { c = at; break; }
                     if (Blocked(r, side, c, width)) continue;
                     r.Openings.Add(new OpeningPlan
                     {
@@ -1162,10 +1176,20 @@ public static partial class InteriorGenerator
                 if (r.Type == RoomType.Shelter)
                     foreach (var o in r.Openings)
                         if (o.Kind == OpeningKind.Door) blocked.Add(BlastLeaf(r, o));
-                // a garage or a barn is driven into: a lane from its door, as wide, kept clear
-                if (f == 0 && BuildingFootprint.VehicleDoor(l.Kind))
+                // A door driven through needs a lane behind it, kept clear of furniture. Judged by
+                // the OPENING, not by the building's kind: a works is not a `VehicleDoor` kind, yet
+                // every one of its loading bays is driven through (#528), and furniture stood in
+                // all of them — a car through a bay hit a lift and was shoved back into the yard,
+                // which is what the drive-through found (#531). A pedestrian entrance is 1.0-1.8 m
+                // and a vehicle one 2.8 m and up, so the width tells them apart with room to spare.
+                var lanes = new List<RectPlan>();
+                if (f == l.Below)
                     foreach (var o in r.Openings)
-                        if (o.Kind == OpeningKind.Entry && o.Side == Side.Front) blocked.Add(Lane(l.Kind, r, o));
+                        if (o.Kind == OpeningKind.Entry && o.Side == Side.Front && o.Width >= VehicleEntryWidth)
+                            lanes.Add(Lane(l.Kind, r, o));
+                // a hall that lays itself out takes its lanes in hand: a workshop's drive-on ramp
+                // belongs IN the lane, everything else out of it (HallLayout)
+                if (!LaysItselfOut(r.Type)) blocked.AddRange(lanes);
                 // the stairwell is not somewhere to put a sofa. A site hall (#497) or a shop
                 // floor (#501) is room 0 and holds no stair, so it is not one: the strip the core
                 // keeps clear just inside the door would have blocked its whole front bay.
@@ -1175,7 +1199,7 @@ public static partial class InteriorGenerator
                 if (apt)
                     foreach (var fl in floor.AllFlights())
                     {
-                        var run = new RectPlan(fl.X0, Math.Min(fl.ZBottom, fl.ZTop) - 1.2f, fl.X1, Math.Max(fl.ZBottom, fl.ZTop) + 1.2f);
+                        var run = fl.Area(1.2f, 1.2f);
                         if (run.Overlaps(new RectPlan(r.X0, r.Z0, r.X1, r.Z1))) blocked.Add(run);
                     }
                 if (isCore)
@@ -1190,7 +1214,7 @@ public static partial class InteriorGenerator
                 // walls (#497, #501)
                 if (LaysItselfOut(r.Type))
                 {
-                    HallLayout(l, f, r, placed, blocked, rng);
+                    HallLayout(l, f, r, placed, blocked, lanes, rng);
                     foreach (var p in HallDressing(r.Type))
                         TryPlace(l, f, r, p, placed, blocked, rng);
                     continue;

@@ -68,6 +68,18 @@ public partial class FlatTour : Node3D
 
         var main = _l.AllEntrances()[0];
         _views.Add(("lobby", At(ground, main.X + 0.3f, main.Z + 0.5f), At(ground, main.X + 1.2f, main.Z + 5f, 1.2f)));
+        // the stairwell (#571): up the stair from the front landing, from the half landing, and
+        // down the well from the top floor
+        if (_l.Floors[upper].Rooms.FirstOrDefault(r => r.Type == RoomType.Stairwell) is { } stair
+            && _l.Floors[upper].Landings.FirstOrDefault() is { } half)
+        {
+            float laneA = stair.X0 + 0.55f, laneB = stair.X1 - 0.55f, h = _l.StoreyHeight;
+            _views.Add(("stair_up", At(upper, laneB - 0.2f, stair.Z0 - 1.6f, 1.6f), At(upper, laneA, stair.Z1, 1.9f)));
+            _views.Add(("stair_halflanding", At(upper, (half.X0 + half.X1) / 2, (half.Z0 + half.Z1) / 2, h / 2 + 1.6f),
+                At(upper, laneA, stair.Z0, 0.2f)));
+            int topFloor = _l.Floors.Count - 1;
+            _views.Add(("stair_well", At(topFloor, laneA + 0.2f, stair.Z0 - 0.5f, 1.7f), At(topFloor, laneA + 0.6f, stair.Z1 - 1.5f, -2.5f * h)));
+        }
         if (_l.Lifts.FirstOrDefault() is { } lift)
         {
             var (ox, oz) = lift.Outward;

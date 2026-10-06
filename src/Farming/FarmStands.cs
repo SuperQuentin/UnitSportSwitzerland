@@ -235,7 +235,7 @@ public partial class FarmStands : Node
             }
         if (!IsInsideTree()) return;
         s.Houses = houses;
-        GD.Print(FormattableString.Invariant($"[stand] #{o.Id} by {o.Owner}: road {s.RoadM:F0} m, {houses} houses near, {FarmStandRules.PerHour(s, ItemId.Potato):F1} sales/h a crate"));
+        GD.Print(FormattableString.Invariant($"[stand] #{o.Id} by {o.Owner}: road {s.RoadM:F0} m, {houses} houses near, {FarmStandRules.PerDay(s, ItemId.Potato):F1} sales a day a crate"));
         Save();
         Broadcast(o.Id);
     }

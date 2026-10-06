@@ -25,8 +25,10 @@ public sealed partial class ProceduralWorld
     private readonly record struct Footprint(double E, double N, double UE, double UN,
         double HalfLength, double HalfWidth);
 
+    /// <param name="Outline">A shaped building's outline (#598, <see cref="Shape"/>): its walls and flat roof
+    /// follow it, and <paramref name="Rect"/> is only its bounding box. Null for a plain rectangle.</param>
     private sealed record Plan(Footprint Rect, BuildingKind Kind, double WallHeight, double Pitch,
-        byte Floors, ushort Year, bool Tower = false);
+        byte Floors, ushort Year, bool Tower = false, Shape? Outline = null);
 
     private sealed record Village(VillageSlot Slot, List<Street> Streets, List<Plan> Buildings, bool IsTown = false);
 
@@ -192,9 +194,79 @@ public sealed partial class ProceduralWorld
                 24, 0, 0, 1650, Tower: true));
         }
 
+        // The works, beyond one end of the village (#531). A village is houses, a church and a few
+        // barns, and nothing in the generated world was ever `BuildingKind.Industrial` — so the
+        // warehouses, yards and loading bays of #496 could be built but never driven to. It stands
+        // off the valley road past the last house, on the side away from the river, with its long
+        // wall to the road: that is the wall `BuildingFootprint` puts the door on, and so the wall
+        // the loading bays and the yard go on (#528, #516).
+        double worksEnd = 0;
+        if (halfLength > WorksMinVillage)
+        {
+            worksEnd = rng.NextDouble() < 0.5 ? -1 : 1;
+            double at = x + worksEnd * (halfLength + WorksBeyondEnd);
+            var (p, t, nrm) = RoadFrame(line, at);
+            var c = (E: p.E + nrm.E * WorksSetback, N: p.N + nrm.N * WorksSetback);
+            // two sizes, by where it stands rather than by the village's own rng, so the works
+            // never moves a house: a big shed is a warehouse or a works, a medium one can also be
+            // a haulier's depot (BuildingTypes.SiteFor decides from the footprint)
+            bool big = Noise.Hash01((int)Math.Floor(c.E), (int)Math.Floor(c.N), 229) < 0.55;
+            double halfLong = big ? 17 : 11, halfShort = big ? 11 : 8;
+            var year = (ushort)(1968 + (int)(Noise.Hash01((int)Math.Floor(c.E), (int)Math.Floor(c.N), 233) * 50));
+            plans.Add(new Plan(new Footprint(c.E, c.N, t.E, t.N, halfLong, halfShort),
+                BuildingKind.Industrial, big ? 8.5 : 6.5, 0, 0, year));
+        }
+
+        // The building site (#607), past the village's other end. Nothing in the generated world was
+        // `BuildingKind.UnderConstruction`, so the sites of #605 could only be reached with the real
+        // tiles. Every roll is a hash of the village, never its rng, so no house moves; it is the
+        // last kind a tile yields (`PlansNear`), so no building's index moves either.
+        {
+            uint id = (uint)slot.Id;
+            double end = worksEnd != 0 ? -worksEnd : Noise.Hash01((int)id, 0, 239) < 0.5 ? -1 : 1;
+            var (p, t, nrm) = RoadFrame(line, x + end * (halfLength + SiteBeyondEnd));
+            // a house plot, a block of flats, or a big block; and how far it has got, by the village,
+            // so the villages round the spawn show all three phases
+            double size = Noise.Hash01((int)id, 1, 241);
+            double halfLong = size < 0.35 ? 7 : size < 0.8 ? 12 : 20, halfShort = size < 0.35 ? 5.5 : size < 0.8 ? 7.5 : 9;
+            byte floors = (byte)(size < 0.35 ? 2 : size < 0.8 ? 4 : 6);
+            int phase = (int)(id % 3);
+            // the solid stands 0.8 m below its lowest corner (Solid), so its surveyed height is the
+            // wall plus that: a slab, some whole storeys, or the full height
+            // a shell stops at least two storeys short, so it cannot read as topped out on a slope
+            int storeys = phase == 0 ? 0 : phase == 1 ? 1 + (int)(Noise.Hash01((int)id, 2, 251) * Math.Max(1, floors - 2)) : floors;
+            double wall = phase == 0 ? 0.5 : storeys * 3.0 - 0.6;
+            var c = (E: p.E + nrm.E * (SiteSetback + halfShort), N: p.N + nrm.N * (SiteSetback + halfShort));
+            plans.Add(new Plan(new Footprint(c.E, c.N, t.E, t.N, halfLong, halfShort),
+                BuildingKind.UnderConstruction, wall, 0, floors, 2026));
+        }
+
         if (town is not null) AddTown(slot, town, streets, plans);
+        AddShaped(slot, line, streets, plans);
         return new Village(slot, streets, plans, town is not null);
     }
+
+    /// <summary>A village shorter than this is a hamlet, and a hamlet has no works.</summary>
+    private const double WorksMinVillage = 200;
+
+    /// <summary>How far past the last house the works stands, metres along the valley road.</summary>
+    private const double WorksBeyondEnd = 70;
+
+    /// <summary>
+    /// Its middle, off the valley road's centre line. Far enough that the yard in front of it
+    /// (<c>SiteYards</c>, 7 m apron plus up to 34 m of standing room) does not reach the road —
+    /// a dormant lorry on the carriageway would be dropped, and the yard would look half-used.
+    /// </summary>
+    private const double WorksSetback = 52;
+
+    /// <summary>How far past the last house the building site stands (#607), metres along the valley road.</summary>
+    private const double SiteBeyondEnd = 45;
+
+    /// <summary>
+    /// Its front wall, off the valley road's centre line: room for the yard a site lays out on its
+    /// street side (11-20 m, <c>ConstructionSites.Plan</c>) before its hoarding reaches the road.
+    /// </summary>
+    private const double SiteSetback = 22;
 
     private const double GarageHalfWidth = 1.7, GarageHalfDepth = 3.1;
 
@@ -303,13 +375,42 @@ public sealed partial class ProceduralWorld
         var villages = VillagesNear(minE, minN, maxE, maxN).ToList();
         foreach (var v in villages)
             foreach (var p in v.Buildings)
-                if (In(p) && p.Kind != BuildingKind.Garage) yield return p;
+                if (In(p) && p.Kind is not (BuildingKind.Garage or BuildingKind.Industrial or BuildingKind.UnderConstruction)
+                    && p.Outline == null) yield return p;
         foreach (var p in FarmsNear(site, minE, minN, maxE, maxN))
             if (In(p)) yield return p;
-        // garages last: they came later, and must not move any other building's index in its tile
+        // Garages, then the works, each after everything that came before it. A building's index in
+        // its tile is its name — the interior's plan key, its loot records, a check's hard-coded
+        // `2585_1114_52` — so a kind added later has to be yielded last or it renames everything
+        // after it. Garages learnt this in #139; the works keeps the rule in #531.
         foreach (var v in villages)
             foreach (var p in v.Buildings)
                 if (In(p) && p.Kind == BuildingKind.Garage) yield return p;
+        foreach (var v in villages)
+            foreach (var p in v.Buildings)
+                if (In(p) && p.Kind == BuildingKind.Industrial) yield return p;
+        // shaped buildings (#598) after the works, for the same reason
+        foreach (var v in villages)
+            foreach (var p in v.Buildings)
+                if (In(p) && p.Outline != null) yield return p;
+        // and the building sites (#607) after them
+        foreach (var v in villages)
+            foreach (var p in v.Buildings)
+                if (In(p) && p.Kind == BuildingKind.UnderConstruction) yield return p;
+    }
+
+    /// <summary>
+    /// The building sites planned round a point (#607, for checks and probes): their centre in LV95,
+    /// the GWR floors they will have, and the phase they were planned at, as the number
+    /// <c>Construction.SitePhase</c> gives it (0 foundations, 1 shell, 2 topped out). Planned, not
+    /// built: one whose solid the ground turns down has no building.
+    /// </summary>
+    public IEnumerable<(double E, double N, byte Floors, int Phase)> SitesNear(double e, double n, double radius)
+    {
+        foreach (var v in VillagesNear(e - radius, n - radius, e + radius, n + radius))
+            foreach (var p in v.Buildings)
+                if (p.Kind == BuildingKind.UnderConstruction && Math.Abs(p.Rect.E - e) <= radius && Math.Abs(p.Rect.N - n) <= radius)
+                    yield return (p.Rect.E, p.Rect.N, p.Floors, p.WallHeight < 1 ? 0 : p.WallHeight >= p.Floors * 3.0 - 1 ? 2 : 1);
     }
 
     // ---- roads -------------------------------------------------------------------------------
@@ -560,12 +661,9 @@ public sealed partial class ProceduralWorld
         (double E, double N) At(double a, double b) =>
             (f.E + u.E * a + v.E * b, f.N + u.N * a + v.N * b);
 
-        // counter-clockwise in LV95
-        var ring = new[]
-        {
-            At(-f.HalfLength, -f.HalfWidth), At(f.HalfLength, -f.HalfWidth),
-            At(f.HalfLength, f.HalfWidth), At(-f.HalfLength, f.HalfWidth),
-        };
+        // counter-clockwise in LV95; a shaped building's outline, courtyard clockwise (#598)
+        var rings = Rings(plan);
+        var ring = rings[0];
         double low = double.MaxValue, high = double.MinValue;
         foreach (var p in ring.Append((f.E, f.N)))
         {
@@ -612,17 +710,26 @@ public sealed partial class ProceduralWorld
         }
 
         // walls
-        for (int i = 0; i < 4; i++)
-        {
-            var a = ring[i];
-            var b = ring[(i + 1) % 4];
-            // outward: the ring is counter-clockwise, so the outside is to the right of each edge
-            double oe = b.N - a.N, on = -(b.E - a.E);
-            Quad(a, baseY, a, eave, b, eave, b, baseY, oe, 0, on);
-        }
+        foreach (var r in rings)
+            for (int i = 0; i < r.Length; i++)
+            {
+                var a = r[i];
+                var b = r[(i + 1) % r.Length];
+                // outward: the outer ring is counter-clockwise and a courtyard's clockwise, so the
+                // outside is to the right of each edge
+                double oe = b.N - a.N, on = -(b.E - a.E);
+                Quad(a, baseY, a, eave, b, eave, b, baseY, oe, 0, on);
+            }
 
         double top = eave;
-        if (plan.Tower)
+        if (RoofParts(plan) is { } parts)
+        {
+            // a shaped building's flat roof, part by part (each convex: a fan)
+            foreach (var q in parts)
+                for (int i = 1; i + 1 < q.Length; i++)
+                    Tri(q[0], eave, q[i], eave, q[i + 1], eave, 0, 1, 0);
+        }
+        else if (plan.Tower)
         {
             // a pyramid spire, four times the tower's width
             var apex = (f.E, f.N);

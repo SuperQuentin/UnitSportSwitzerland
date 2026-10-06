@@ -53,7 +53,7 @@ public partial class SellCheck : Node
         await Seconds(0.5);
         var placed = PlacedObjects.Instance!;
         var before = placed.All.Keys.ToHashSet();
-        _clock = Math.Floor(Time.GetUnixTimeFromSystem() / FarmCalendar.WeekSeconds) * FarmCalendar.WeekSeconds + 3600;   // early in a farm week
+        _clock = (Math.Floor(World.WorldClock.EnvNow / FarmCalendar.WeekSeconds) + 1) * FarmCalendar.WeekSeconds + 3600;   // early in a farm week
         FarmSales.ClockOverride = () => _clock;
         FarmSales.Instance!.ClearContracts();
         Inv.BeginMatch();
@@ -200,13 +200,13 @@ public partial class SellCheck : Node
         else await Press(PlayerInput.InteractMount);
         Expect(!stands.IsOpen, "E closes it");
 
-        // an hour of passers-by: 6 potatoes, 5 rösti (cooked: twice as fast, only 5 there)
+        // two days of passers-by: 6 potatoes, 5 rösti (cooked: twice as fast, only 5 there)
         int potato = FarmStands.PriceOf(ItemId.Potato), roesti = FarmStands.PriceOf(ItemId.Roesti);
-        _clock += 3600;
+        _clock += 2 * FarmCalendar.DaySeconds;
         stands.Tick();
         var st = stands.All[stand.Id];
         Expect(st.Slots.Sum(x => x.Item == ItemId.Potato ? x.Count : 0) == 19 && st.Slots.Sum(x => x.Item == ItemId.Roesti ? x.Count : 0) == 0
-               && st.Cash == 6 * potato + 5 * roesti, $"an hour later: {st.Stocked} left, {st.Cash} CHF in the box (expected {6 * potato + 5 * roesti})");
+               && st.Cash == 6 * potato + 5 * roesti, $"two days later: {st.Stocked} left, {st.Cash} CHF in the box (expected {6 * potato + 5 * roesti})");
         Expect(placed.GetNodeOrNull<FarmStandNode>($"P{stand.Id}")?.HeapsShown == 1, "the empty crate shows no heap");
         PlacedResult? packed = null;
         placed.RequestRemove(stand.Id, r => packed = r);

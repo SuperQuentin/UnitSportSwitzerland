@@ -8,24 +8,25 @@ using UnitSport.Terrain.Format;
 namespace UnitSport.Farming;
 
 /// <summary>
-/// The farm economy's clock (#494, docs/notes/farming/selling.md): a <b>farm day</b> is the default
-/// day length (24 min of server time, <c>GameSettings.DayLengthMinutes</c>) whatever the sky clock
-/// does (it may be stopped), and a <b>farm week</b> is seven of them. Co-op wish lists and orders
+/// The farm economy's clock (#494, docs/notes/farming/selling.md): a <b>farm day</b> is a day of the
+/// world (<c>World.WorldClock.EnvNow</c>, #579: it slows with <c>/speed</c> and stops with the day),
+/// and a <b>farm week</b> is seven of them. Co-op wish lists and orders
 /// change with the week; contract deadlines count farm days. The season is the calendar month the
 /// fields show (<see cref="FarmRules.MonthFromArgs"/>).
 /// </summary>
 public static class FarmCalendar
 {
-    public const int DaySeconds = 24 * 60;
+    /// <summary>A farm day is a day of the world: 86400 environment seconds (24 real minutes at the default pace).</summary>
+    public const int DaySeconds = 24 * 3600;
     public const int WeekSeconds = 7 * DaySeconds;
 
-    /// <summary>The farm week a server Unix time falls in.</summary>
-    public static long Week(double unix) => (long)Math.Floor(unix / WeekSeconds);
+    /// <summary>The farm week an environment time falls in.</summary>
+    public static long Week(double env) => (long)Math.Floor(env / WeekSeconds);
 
-    /// <summary>When a farm week ends (server Unix seconds).</summary>
+    /// <summary>When a farm week ends (environment seconds).</summary>
     public static double WeekEnds(long week) => (week + 1) * (double)WeekSeconds;
 
-    /// <summary>"2 d 5 h" in farm days and farm hours (a farm hour is a minute of server time).</summary>
+    /// <summary>"2 d 5 h" in days and hours of the world.</summary>
     public static string Left(double seconds)
     {
         if (seconds <= 0) return "due";

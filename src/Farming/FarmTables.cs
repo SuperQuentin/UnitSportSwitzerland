@@ -57,17 +57,20 @@ public readonly record struct CellState(FieldStage Stage, CropKind Crop, uint Si
 /// <summary>The farming numbers: which seed and harvest each crop has, how long it grows, how much a cell gives.</summary>
 public static class FarmTables
 {
-    /// <summary>Seconds a sown crop takes to ripen (compressed: a field grows within a session).</summary>
+    /// <summary>
+    /// Environment seconds a sown crop takes to ripen (compressed: a day or two of the world, so a
+    /// field grows within a session: 25-55 real minutes at the default 24-minute day).
+    /// </summary>
     public static int GrowSeconds(CropKind crop) => crop switch
     {
-        CropKind.Vegetables => 25 * 60,
-        CropKind.Legumes => 30 * 60,
-        CropKind.Barley => 35 * 60,
-        CropKind.Wheat or CropKind.Sunflower or CropKind.OtherArable => 40 * 60,
-        CropKind.Potato or CropKind.Rapeseed => 45 * 60,
-        CropKind.Maize => 50 * 60,
-        CropKind.SugarBeet => 55 * 60,
-        _ => 20 * 60, // grass regrowing after the mower
+        CropKind.Vegetables => 25 * 3600,
+        CropKind.Legumes => 30 * 3600,
+        CropKind.Barley => 35 * 3600,
+        CropKind.Wheat or CropKind.Sunflower or CropKind.OtherArable => 40 * 3600,
+        CropKind.Potato or CropKind.Rapeseed => 45 * 3600,
+        CropKind.Maize => 50 * 3600,
+        CropKind.SugarBeet => 55 * 3600,
+        _ => 20 * 3600, // grass regrowing after the mower
     };
 
     /// <summary>Fertilised, a crop grows in this share of its time.</summary>

@@ -50,8 +50,9 @@ public partial class TitleScreen : Screen
         Entry(column, "Map", () => Shell.Push(MapScreen.Create()));
         Entry(column, "Settings", () => Shell.Push(SettingsScreen.Create()));
         // VR (#186): a restart either way, after a confirmation
-        Entry(column, XR.XrSession.Active ? "Leave VR" : "Play in VR",
-            () => SettingsScreen.AskVr(this, Shell, !XR.XrSession.Active));
+        if (Platform.CanSpawnProcesses) // a restart with OpenXR (#63)
+            Entry(column, XR.XrSession.Active ? "Leave VR" : "Play in VR",
+                () => SettingsScreen.AskVr(this, Shell, !XR.XrSession.Active));
         Entry(column, "Controls", () => Shell.ShowControls());
         column.AddChild(UiKit.Spacer(8));
         Entry(column, "Quit", () => Shell.Quit(), dim: true);
@@ -62,7 +63,8 @@ public partial class TitleScreen : Screen
         foot.OffsetLeft = 72; foot.OffsetBottom = -26; foot.OffsetTop = -50;
         string version = (string)ProjectSettings.GetSetting("application/config/version", "");
         foot.AddChild(UiKit.Text(version.Length > 0 ? $"v{version}" : "development build", UiTheme.FontTiny, UiTheme.TextFaint));
-        foot.AddChild(UiKit.Text(InputHints.Format("{help} all controls  ·  F11 fullscreen"), UiTheme.FontTiny, UiTheme.TextFaint));
+        if (!Platform.IsMobile) // keyboard hints, and the room Quit needs on a phone's shorter canvas (#63)
+            foot.AddChild(UiKit.Text(InputHints.Format("{help} all controls  ·  F11 fullscreen"), UiTheme.FontTiny, UiTheme.TextFaint));
         AddChild(foot);
 
         _jingle = new AudioStreamPlayer { Bus = Audio.SfxBus.Name, VolumeDb = -6 };

@@ -76,7 +76,8 @@ public class FileGdbTests
     public void A_shape_that_is_not_a_multipatch_is_refused()
     {
         // shape type 1 (point), no flags
-        var grid = new FileGdb.GeometryGrid(0, 0, 10000, 0, 10000, 0, 10000, HasZ: true, HasM: false);
+        var grid = new FileGdb.GeometryGrid(0, 0, 10000, 0, 10000, 0, 10000, HasZ: true, HasM: false,
+            Bounds: (0, 0, 0, 0));
         Assert.Throws<InvalidDataException>(() => FileGdbGeometry.DecodeMultiPatch(new byte[] { 0x01 }, grid));
     }
 

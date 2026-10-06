@@ -128,6 +128,15 @@
   reads the tile's full grid, cover and water on the fill worker, only on a tile a jetty's middle is in.
   A streaming client gets the server's landings after its first tiles: `Landings.Changed` drops every
   fleet and fills them again on the next look.
+- **Building sites are the fourth provider** (#616): `DormantSlots.ForConstruction` turns a site
+  plan's `MachineSlot`s (`terrain/construction-sites`) into slots. The owner is the site's
+  building key and the ordinal is the plan's, so a machine that found no room leaves a gap. Today
+  that means the excavator (#611), the wheel loader (#612) and the mini excavator (#614), plus the crew's van as one of the
+  lot's cars. A role nothing can drive yet (tipper, mixer, the small kit) is left out, and its place
+  stays empty until #613 and #614 map it in `DormantVehicles.SiteKind`.
+  `DormantVehicles.Sites` plans the tile's sites with `SitePlans.For`, the plan the shell is built
+  from, only on a tile that has one. It stands each machine on its own ground. Fill loads the `.bldg`
+  once for the yards and the sites. Not respawning.
 - **A slot can respawn** (`VehicleSlot.Respawns`, boats only): when a woken slot's vehicle leaves the
   world (`VehicleManager.ChildExitingTree`: taken by a player, wrecked and cleared), the deciding peer
   (server, or offline) starts a clock; `RespawnSeconds` (180) later, with nothing within 4 m and
@@ -136,17 +145,23 @@
   drove one off has it.
 - **Switchable**: `Systems.Dormant` (`--systems ... ,dormant`), created in `ClientWorld` and
   `ServerWorld`. Absent `--systems`, players get it.
-- **`--wakecheck[,SHOT.png] --wakekind car|boat|heavy|artic`** (`src/Vehicles/WakeProbe`): wakes the
+- **`--wakecheck[,SHOT.png] --wakekind car|boat|heavy|artic|site`** (`src/Vehicles/WakeProbe`): wakes the
   slot of that kind nearest the spawn and compares the live vehicle's sections with
   `DormantVehicles.DrawnPoses`, headless, on the first frame and two seconds later; with a shot, the
   pictures before and after and their mean pixel difference. Quick tier for a car
   (`fixture:parking`) and a boat (`fixture:lake`); the fixtures have no industrial yard, so `heavy`
   and `artic` run on real terrain: `--chunks <real> --at 2498800,1115800 --origin 2498800,1115800`
-  (La Praille: a lone trailer on a slope, and a coupled artic).
+  (La Praille: a lone trailer on a slope, and a coupled artic). `site` (an excavator or a wheel
+  loader) runs on the generated world at a site: `--generated on --at 2585292,1114432 --traffic 0`
+  wakes that site's excavator 0.000 m and 0.00° off its copy.
 - **Checks**: `tools/parkingnetcheck.sh` (tier 2, `src/Vehicles/ParkingNetProbe`): a server and two
   headless clients on the `parking` fixture course — A wakes a car, B joins afterwards and must see
   the same vehicle under the same name in the same bay with its own dormant copy gone. Needs no
-  terrain data. `DormantSlotTests` (7 cases: the same tile gives the same fleet, a **pinned** slot, an
+  terrain data. `tools/sitemachinenetcheck.sh` (tier 2, the same probe with `--parkingkind site`):
+  the same on the generated world at a site, with the first machine by name. `DormantConstructionTests`
+  (5 cases) cover the same plan giving the same machines, a foundations site parking an excavator and
+  a loader, a pinned slot with a gap and the van, two sites naming theirs apart, and no cars meaning
+  no van. `DormantSlotTests` (7 cases: the same tile gives the same fleet, a **pinned** slot, an
   ordinal that survives a neighbouring bay changing, non-occupiable bays staying empty, the fill
   band, ordinary road cars facing either way out of the bay, and the empty cases).
 - **Not done**: waking on a collision or a shot (only the aim ray wakes one today); the fleets in

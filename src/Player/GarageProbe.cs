@@ -241,7 +241,9 @@ public partial class GarageProbe : Node
     /// </summary>
     private Interiors.DoorIndex.Entry? StandAtGarage(FootPlayer me, float outward, float aside)
     {
-        if (Interiors.DoorIndex.Nearest(me.GlobalPosition, Interiors.DoorSearch.KindReach, TargetKind) is not { } door) return null;
+        // a door to DRIVE through: on a works that is a loading bay and never the office door (#531)
+        if (Interiors.DoorIndex.NearestOfKind(me.GlobalPosition, Interiors.DoorSearch.KindReach, TargetKind,
+                vehicleOnly: true) is not { } door) return null;
         var o = door.Outward;
         var at = door.World + o * outward + new Vector3(-o.Z, 0, o.X) * aside;
         if (me.Terrain != null && me.Terrain.TryGetHeight(at, out float g)) at.Y = g + 0.3f;

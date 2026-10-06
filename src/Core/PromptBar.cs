@@ -59,7 +59,8 @@ public partial class PromptBar : CanvasLayer
 
     private void Rebuild()
     {
-        var rows = UiFocus.TextEntryActive || Source == null
+        // on a phone the touch buttons carry these labels themselves (#63)
+        var rows = UiFocus.TextEntryActive || Source == null || TouchControls.Shown
             ? new List<(string, string)>()
             : Source().ToList();
 

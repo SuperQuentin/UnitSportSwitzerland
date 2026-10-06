@@ -22,6 +22,8 @@ internal sealed class XrPad
 {
     /// <summary>A device number no real pad gets; the bindings listen to every device.</summary>
     private const int Device = 7;
+    /// <summary>The virtual pad's device id, so other readers can tell it from a real pad.</summary>
+    public const int DeviceId = Device;
     private const float MenuHold = 0.5f;
     /// <summary>The head this far below where it was calibrated, on foot, is a crouch: the slide / dive (#437), m.</summary>
     private const float CrouchDrop = 0.35f;

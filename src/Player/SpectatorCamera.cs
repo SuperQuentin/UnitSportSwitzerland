@@ -29,7 +29,7 @@ public partial class SpectatorCamera : Camera3D
 
         switch (@event)
         {
-            case InputEventMouseMotion motion when Input.MouseMode == Input.MouseModeEnum.Captured:
+            case InputEventMouseMotion motion when Core.PlayerInput.IsLookMotion(motion):
                 _yaw -= motion.Relative.X * MouseSensitivity;
                 _pitch = Mathf.Clamp(_pitch - motion.Relative.Y * MouseSensitivity,
                     -Mathf.Pi / 2 + 0.01f, Mathf.Pi / 2 - 0.01f);

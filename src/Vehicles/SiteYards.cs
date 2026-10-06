@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Interiors;
+using UnitSport.Items;
 using UnitSport.Terrain;
 using UnitSport.Terrain.Format;
 
@@ -27,7 +28,7 @@ namespace UnitSport.Vehicles;
 public static class SiteYards
 {
     /// <summary>The apron: no vehicle stands within this of the facade, so the doors stay usable.</summary>
-    private const float Apron = 7f;
+    public const float Apron = 7f;
 
     /// <summary>Beyond this from the building there is no yard, whatever the site.</summary>
     private static float DepthFor(BuildingType site) => site switch
@@ -44,9 +45,34 @@ public static class SiteYards
     /// the ground each stands on; without it the building's own base is used, which is close enough
     /// for flat ground and is what <see cref="BuildingFootprint"/> falls back to as well.
     /// </summary>
-    public static List<SiteYard> For(BuildingTile tile, RoadTile? roads, ChunkGrid? grid)
+    /// <summary>
+    /// Whether any building of <paramref name="tile"/> is an industrial site, the check
+    /// <see cref="For"/> starts with, without the footprints. Lets a caller skip the tile's height
+    /// grid (2 MB, streamed to a client without local terrain, #63) on the tiles with none.
+    /// </summary>
+    public static bool HasSite(BuildingTile tile)
     {
-        var yards = new List<SiteYard>();
+        var map = BuildingTypes.For(tile);
+        for (int i = 0; i < tile.Buildings.Count; i++)
+        {
+            if (map.Boxes[i] is not { } box) continue;
+            var b = tile.Buildings[i];
+            if (BuildingTypes.SiteFor(new BuildingKey(tile.Id.E, tile.Id.N, i).ToString(), b.Kind, box.Width, box.Depth, b.MaxY - b.MinY) != BuildingType.None)
+                return true;
+        }
+        return false;
+    }
+
+    public static List<SiteYard> For(BuildingTile tile, RoadTile? roads, ChunkGrid? grid) =>
+        Fronts(tile, roads, grid).Select(f => f.Yard).ToList();
+
+    /// <summary>
+    /// Each site's yard with the front wall it lies against (<see cref="SiteFront"/>): the facade's
+    /// span and the doors on it, in the yard's u. What the apron's pallets and forklift keep clear of.
+    /// </summary>
+    public static List<SiteFront> Fronts(BuildingTile tile, RoadTile? roads, ChunkGrid? grid)
+    {
+        var yards = new List<SiteFront>();
         var map = BuildingTypes.For(tile);
         for (int i = 0; i < tile.Buildings.Count; i++)
         {
@@ -74,10 +100,57 @@ public static class SiteYards
                 ? (float)grid.SampleMeshHeight(tile.Id.MinE + centre.X, tile.Id.MaxN - centre.Y)
                 : b.MinY;
             // a little wider than the facade, because a yard is not walled to the building's line
-            yards.Add(new SiteYard(key.ToString(), (int)site,
-                centre.X, ground, centre.Y, heading, fp.Width + 6f, depth));
+            var yard = new SiteYard(key.ToString(), (int)site, centre.X, ground, centre.Y, heading, fp.Width + 6f, depth);
+            // the doors on that wall, along it: u is (cos, -sin) in (x, z), as DormantSlots lays it
+            var along = new Vector2(Mathf.Cos(heading), -Mathf.Sin(heading));
+            var doors = fp.Doors
+                .Where(d => new Vector2(d.Outward.X, d.Outward.Z).Normalized().Dot(outward) > 0.9f)
+                .Select(d => new DoorSpan(along.Dot(new Vector2(d.Position.X, d.Position.Z) - centre), d.Width / 2))
+                .ToArray();
+            // the facade itself along the yard: the yard is centred on the main door, not on it
+            var (from, to) = box.Along(along, centre);
+            yards.Add(new SiteFront(yard, from, to, doors));
         }
         return yards;
+    }
+
+    /// <summary>
+    /// The pallets out on the aprons of one tile's sites (#583 phase 3, <see cref="SitePallets"/>),
+    /// each on its own ground: dropped, not nudged, where one would stand in a building or on a
+    /// road, which keeps the slots that name the rest. Worker-thread safe, like <see cref="For"/>.
+    /// </summary>
+    /// <param name="fronts">The tile's fronts if already worked out (<see cref="Fronts"/>), else null.</param>
+    public static List<YardPallet> Pallets(BuildingTile tile, RoadTile? roads, ChunkGrid? grid, List<SiteFront>? fronts = null)
+    {
+        var list = new List<YardPallet>();
+        var map = BuildingTypes.For(tile);
+        foreach (var front in fronts ?? Fronts(tile, roads, grid))
+            SitePallets.ForSite(tile.Id, front, Apron, list);
+        for (int i = list.Count - 1; i >= 0; i--)
+        {
+            var p = list[i];
+            var at = new Vector2((float)(p.E - tile.Id.MinE), (float)(tile.Id.MaxN - p.N));
+            if (Blocked(tile, roads, map, at, 0.9f)) { list.RemoveAt(i); continue; }
+            if (grid != null) list[i] = p with { Height = grid.SampleMeshHeight(p.E, p.N) };
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// One yard pallet by its building and slot, worked out from the tile's own files as every peer
+    /// draws it: what the server checks a forklift's request against. Null if there is none.
+    /// Blocks on the source: call it off the main thread.
+    /// </summary>
+    public static YardPallet? PalletAt(IChunkSource source, string building, int slot)
+    {
+        if (!BuildingKey.TryParse(building, out var key)) return null;
+        var tile = source.LoadBuildingsAsync(key.Tile).GetAwaiter().GetResult();
+        if (tile is not { Buildings.Count: > 0 } || !HasSite(tile)) return null;
+        var roads = source.LoadRoadsAsync(key.Tile).GetAwaiter().GetResult();
+        var grid = source.LoadChunkAsync(key.Tile).GetAwaiter().GetResult();
+        foreach (var p in Pallets(tile, roads, grid))
+            if (p.Slot == slot && p.Building == building) return p;
+        return null;
     }
 
     /// <summary>

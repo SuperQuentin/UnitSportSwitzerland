@@ -98,6 +98,25 @@ public static class TrafficMeshBuilder
         return (s.Build(), l.Build());
     }
 
+    /// <summary>The AI traffic's car, van and train carriages, as World/Traffic builds them, in the model viewer (--models).</summary>
+    [Core.Showcase("Traffic")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseTraffic()
+    {
+        static Node3D WithLamps((ArrayMesh Body, ArrayMesh Lamps) m)
+        {
+            var node = ModelViewer.Shaded(m.Body);
+            node.AddChild(new MeshInstance3D { Mesh = m.Lamps, MaterialOverride = LampMaterial() });
+            return node;
+        }
+        var white = new Color(0.9f, 0.9f, 0.9f);
+        var red = new Color(0.78f, 0.1f, 0.1f);
+        yield return ("Car", () => WithLamps(Car(Paints[0], van: false)));
+        yield return ("Van", () => WithLamps(Car(Paints[1], van: true)));
+        yield return ("SBB carriage", () => WithLamps(Carriage(white, red, 24f, false, false, false)));
+        yield return ("SBB end car, rear cab", () => WithLamps(Carriage(white, red, 24f, false, false, true)));
+        yield return ("Narrow-gauge carriage", () => WithLamps(Carriage(new Color(0.72f, 0.12f, 0.12f), new Color(0.95f, 0.95f, 0.95f), 17f, true, false, false)));
+    }
+
     /// <summary>Unshaded, vertex-coloured: lamps stay bright whatever the light.</summary>
     public static StandardMaterial3D LampMaterial() => new()
     {

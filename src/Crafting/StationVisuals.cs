@@ -1,6 +1,7 @@
 using Godot;
 using UnitSport.Avatar;
 using UnitSport.Items;
+using UnitSport.Core;
 
 namespace UnitSport.Crafting;
 
@@ -17,6 +18,7 @@ public static class StationVisuals
     private static ArrayMesh? _fire, _ashes, _bench;
 
     /// <summary>A ring of stones around a teepee of logs.</summary>
+    [Showcase("Crafting", "Campfire, unlit")]
     public static ArrayMesh CampfireMesh()
     {
         if (_fire != null) return _fire;
@@ -33,6 +35,7 @@ public static class StationVisuals
     }
 
     /// <summary>What is left: the stones, a grey bed and two charred logs lying down.</summary>
+    [Showcase("Crafting", "Ashes")]
     public static ArrayMesh AshesMesh()
     {
         if (_ashes != null) return _ashes;
@@ -57,6 +60,7 @@ public static class StationVisuals
     }
 
     /// <summary>A small wooden bench: a thick top with a vice, four legs, a shelf under it.</summary>
+    [Showcase("Crafting", "Workbench")]
     public static ArrayMesh WorkbenchMesh()
     {
         if (_bench != null) return _bench;
@@ -76,6 +80,10 @@ public static class StationVisuals
     }
 
     /// <summary>The factory of <see cref="PlacedKind.Campfire"/>: burning or ashes, by the clock in its payload.</summary>
+    /// <summary>A campfire lit now, flames, smoke and light, in the model viewer (--models).</summary>
+    [Showcase("Crafting", "Campfire, burning")]
+    private static Node3D ShowcaseBurning() => new CampfireNode(CampfireClock.Lit(World.WorldClock.EnvNow));
+
     public static Node3D Campfire(PlacedObject o) => new CampfireNode(o.Payload);
 
     /// <summary>The factory of <see cref="PlacedKind.FieldWorkbench"/>.</summary>
@@ -140,7 +148,7 @@ public partial class CampfireNode : StaticBody3D
 
     private void Refresh()
     {
-        bool burning = CampfireClock.Burning(_payload, Net.ClockSync.ServerUnixNow);
+        bool burning = CampfireClock.Burning(_payload, World.WorldClock.EnvNow);
         if (burning == (_burning != null) && _mesh.Mesh != null) return;
         _mesh.Mesh = burning ? StationVisuals.CampfireMesh() : StationVisuals.AshesMesh();
         if (!burning)

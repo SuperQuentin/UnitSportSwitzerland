@@ -16,7 +16,7 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 `invariant-culture-floats` (French locale), `gdignore-data-dirs`, `godot-ai-mcp-tips`,
 `headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
 `worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand),
-`release-on-merge` (a merged PR releases on GitHub Actions; bursts coalesce into one release),
+`release-on-merge` (a merged PR releases on GitHub Actions; bursts coalesce into one release, at most one an hour),
 `linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
 `twoclient-checks` (server + two-client `tools/*check.sh` go through `tools/lib/twoclient.sh`),
 `testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard),
@@ -57,6 +57,12 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
   coding a new key, decide its pad button and its VR way (grip the thing, or the pad through
   `XrPad`), show it with `InputHints`, and add its row to `xr/vr-action-map`
   (`docs/notes/general/new-action-three-devices.md`).
+- **Every new procedural model is in the model viewer**: tag its builder `[Showcase("Category")]`,
+  or extend the set that already covers it (a new enum value or catalog row usually shows by
+  itself), and check it with `--models,test_output/models` (`docs/notes/avatar/model-viewer.md`).
+- **Every new synthesised sound is in the sound player**: a static `SfxBank`/`AudioStreamWav` shows by itself;
+  a sound built per call (surface, species, voice) gets a `[SoundShowcase]` set; check with
+  `--sounds,check` (`docs/notes/audio/sound-player.md`).
 - **Simple tasks** (docs/notes tweaks, one-line fixes) skip the workflow: commit straight on `main`
   in the main checkout and push. No issue, branch, worktree or PR.
 - Check and probe output goes in `test_output/` (gitignored), never the repo root.

@@ -24,7 +24,7 @@ public sealed class FarmContract
     public double Multiplier { get; set; }
     /// <summary>The full value of one when accepted (the base of the bonus).</summary>
     public float Unit { get; set; }
-    /// <summary>Server Unix seconds.</summary>
+    /// <summary>Environment seconds (<c>World.WorldClock.EnvNow</c>).</summary>
     public double Deadline { get; set; }
 
     public int Missing => Math.Max(0, Count - Delivered);

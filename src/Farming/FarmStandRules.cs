@@ -28,7 +28,7 @@ public sealed class StandState
     public float RoadM { get; set; } = float.NaN;
     /// <summary>Buildings within <see cref="FarmStandRules.TownRadius"/> m when set up: how many people live near.</summary>
     public int Houses { get; set; }
-    /// <summary>Server Unix time of the last sales tick.</summary>
+    /// <summary>Environment time of the last sales tick.</summary>
     public double LastTick { get; set; }
     /// <summary>Francs taken in all (the stand's tally, for the panel).</summary>
     public int Takings { get; set; }
@@ -56,10 +56,10 @@ public static class FarmStandRules
     public const float Spacing = 20f;
     /// <summary>Houses counted round a stand for the town factor.</summary>
     public const float TownRadius = 300f;
-    /// <summary>Sales an hour (server time) of one crate by a road in open country.</summary>
-    public const double BasePerHour = 6;
-    /// <summary>At most this much time is caught up at once (a server that was down a week sells no more than this).</summary>
-    public const double CatchUpMax = 12 * 3600;
+    /// <summary>Sales a day of the world (environment time) of one crate by a road in open country.</summary>
+    public const double BasePerDay = 3;
+    /// <summary>At most this much environment time is caught up at once (a stand left a month sells no more than this).</summary>
+    public const double CatchUpMax = 10 * 24 * 3600;
 
     /// <summary>What a stand sells: the harvests and what is made of them (flour .. raclette), not seeds, fertiliser or hay.</summary>
     public static bool Stockable(ItemId item) =>
@@ -81,8 +81,8 @@ public static class FarmStandRules
     public static double TownFactor(int houses) => 1.0 + Math.Min(Math.Max(houses, 0), 40) / 20.0;
 
     /// <summary>Expected sales an hour of one crate of <paramref name="item"/> at this stand.</summary>
-    public static double PerHour(StandState s, ItemId item) =>
-        BasePerHour * RoadFactor(s.RoadM) * TownFactor(s.Houses) * (Cooked(item) ? 2.0 : 1.0);
+    public static double PerDay(StandState s, ItemId item) =>
+        BasePerDay * RoadFactor(s.RoadM) * TownFactor(s.Houses) * (Cooked(item) ? 2.0 : 1.0);
 
     /// <summary>
     /// Puts <paramref name="count"/> of an item on the stand: into its crate, else an empty one, at
@@ -117,7 +117,7 @@ public static class FarmStandRules
 
     /// <summary>
     /// The passers-by from <see cref="StandState.LastTick"/> to <paramref name="now"/>: each crate's
-    /// expected sales (<see cref="PerHour"/>) add up and every whole one is sold, paid into the box
+    /// expected sales (<see cref="PerDay"/>) add up and every whole one is sold, paid into the box
     /// at <paramref name="price"/>. Deterministic (no dice), so a check can count on it.
     /// </summary>
     public static List<StandSale> Advance(StandState s, double now, Func<ItemId, int> price)
@@ -130,7 +130,7 @@ public static class FarmStandRules
         {
             var c = s.Slots[i];
             if (c.Count <= 0) continue;
-            c.Due += PerHour(s, c.Item) * dt / 3600.0;
+            c.Due += PerDay(s, c.Item) * dt / (24 * 3600.0);
             int n = Math.Min(c.Count, (int)Math.Floor(c.Due));
             if (n <= 0) continue;
             c.Due -= n;

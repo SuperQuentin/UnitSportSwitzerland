@@ -21,7 +21,11 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `permissions` — Permissions: (`Core/Permissions`): what the menus may offer; online, spawning a vehicle is an admin's...
 - `licenses` — Licenses page: (`Core/Licenses`, Settings > About tab, `--licenses`): every data source and bundled component with its attribution and link, plus Godot's notices...
 - `chat-probe` — MP probes derive from `Core/ChatProbe`; quick self-checks go in `ClientWorld.QuickChecks`, camera-placing tools in the `tools` table (`placedByTool` derived), never a hand-kept list
+- `three-clocks` — Three clocks (#579): env time (`WorldClock`) rides sim speed (`GameClock`/`SimNow`), real time (`Core.RealClock`) bends to neither; read `RealClock.Now` as a deadline, never a delta (there is no `RealClock.Delta` on purpose)
 - `cmd-args` — Read the command line only via `CmdArgs.Has/Value/Float/Double/Int/FlagWithShot` (cached, InvariantCulture); never `OS.GetCmdlineUserArgs()` + `IndexOf` again (#221)
+- `platform` — `Platform.IsMobile` (Android/iOS or `--mobile`) and `CanSpawnProcesses` gate the phone client (#63): app-storage terrain, no updater/SDL/host/VR/Realistic+/ffmpeg, multicast lock via `AndroidBridge`; emulator joins but cannot render
+- `touch-controls` — `TouchControls`: the phone's on-screen virtual pad (device 8) labelled from the prompts, 1:1 look drag via `PlayerInput.IsLookMotion`, `--touchcheck`, `--mobile` desktop preview, menus at 1.15x (#63)
+- `data-usage` — Settings → Data (Low data, cache cap + Clear, Android data saver/metered via `DataWatch`), metered warning on join, `ChunkStreamer.SessionBytes`; measured 260 / 70 MB on arrival after the DormantVehicles yard fixes (#63)
 - `is-online` — "online?" is `NetLink.Online(this)`; never copy the `not OfflineMultiplayerPeer && Connected` check again
 - `floating-origin` — Floating origin (#185): world space follows the camera, online too (each peer its own origin, LV95 on the wire); keep `GlobalPos` or handle `IOriginShiftAware`; containers; `Follow` for shared point lists; Jolt kinematic teleport; the renderer across a shift (SDFGI, shadows, particles, snow); `--origincheck`, `--originstress`
 - `json-store` — Persist JSON only via `JsonStore.Save` (atomic, `user://` ok, static options); never `FileAccess` Write / `File.WriteAllText`; InteriorManager still to migrate

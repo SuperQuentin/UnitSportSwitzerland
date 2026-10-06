@@ -13,6 +13,17 @@
   until `origin/main` has sat still for `quiet_minutes` (3 by default), restarting that clock on every new merge, and
   then releases whatever the tip is by then — so the release covers every PR in the burst. A 50-minute cap releases
   anyway if merges never stop.
+- **At most one release per hour.** Before the quiet wait counts, `settle-main.sh` holds until `min_gap_minutes`
+  (60 by default) have passed since the latest published release (`gh release view --json publishedAt`), polling
+  main meanwhile, so every merge of that hour ships in the one release at its end. The 50-minute cap counts from
+  the end of the gap; `timeout-minutes: 150` covers gap + cap + build. If `gh` cannot read the latest release the
+  gap is skipped rather than blocking. Waiting is free (public repo), and the merges behind it add at most one
+  queued run, which exits early on the already-released tip.
+- **Forcing a release now:** a run already holding in the gap is still in its "Wait for main to settle" step,
+  before anything is built or published, so cancelling it is safe; then dispatch one with no gap and no quiet wait:
+  `gh run list -w release.yml -s in_progress` -> `gh run cancel <id>` ->
+  `gh workflow run release.yml -f min_gap_minutes=0 -f quiet_minutes=0`. Without the cancel the dispatched run
+  queues behind the holding one (`cancel-in-progress: false`) and waits out its hour.
 - **Superseded runs stop early**, which is what keeps the queue cheap: the runs behind the first one find a `v*` tag
   already pointing at the tip and exit in seconds. `release.sh` is idempotent the same way — the range
   `<last tag>..HEAD` is then empty, so it prints "Nothing releasable" and exits 0.

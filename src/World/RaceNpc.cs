@@ -290,7 +290,12 @@ public partial class RaceNpcs : Node
 
     private RaceManager? Race => GetParent()?.GetNodeOrNull<RaceManager>(RaceManager.NodeName);
     private InterestService? Interest => GetParent()?.GetNodeOrNull<InterestService>(InterestService.NodeName);
-    private static double Now => Time.GetTicksMsec() / 1000.0;
+    /// <summary>
+    /// Wall clock (<c>Core.RealClock</c>), not simulation time (#579): every window here is
+    /// compared against <see cref="FootPlayer.LastNetState"/>, a packet arrival time. Handing an
+    /// NPC over is housekeeping about which peer is alive, not part of the world.
+    /// </summary>
+    private static double Now => Core.RealClock.Now;
 
     private FootPlayer? Npc(long id) => GetParent()?.GetNodeOrNull<FootPlayer>("Players/" + PlayerReplication.NodeName(id));
 

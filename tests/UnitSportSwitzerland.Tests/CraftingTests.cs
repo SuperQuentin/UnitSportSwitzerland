@@ -175,19 +175,49 @@ public class CraftingTests
     }
 
     [Fact]
-    public void A_campfire_burns_twenty_minutes()
+    public void A_campfire_burns_half_a_day_of_environment_time()
     {
-        const double lit = 1_790_000_000;
+        const double lit = 123_456.5;   // environment seconds, not Unix (#579)
         string payload = CampfireClock.Lit(lit);
-        Assert.Equal("1790000000", payload);
+        Assert.Equal("e123456.5", payload);
         Assert.True(CampfireClock.Burning(payload, lit));
-        Assert.True(CampfireClock.Burning(payload, lit + 19 * 60));
-        Assert.False(CampfireClock.Burning(payload, lit + 20 * 60));
-        Assert.Equal(60, CampfireClock.SecondsLeft(payload, lit + 19 * 60), 3);
+        Assert.True(CampfireClock.Burning(payload, lit + 11 * 3600));
+        Assert.False(CampfireClock.Burning(payload, lit + 12 * 3600));
+        Assert.Equal(3600, CampfireClock.SecondsLeft(payload, lit + 11 * 3600), 3);
         // a clock behind the server's never shows more than a whole fire
-        Assert.Equal(CampfireClock.BurnSeconds, CampfireClock.SecondsLeft(payload, lit - 500));
+        Assert.Equal(CampfireClock.BurnEnvSeconds, CampfireClock.SecondsLeft(payload, lit - 500));
         // not a time: out, so anyone may clear it
         Assert.False(CampfireClock.Burning("", lit));
         Assert.False(CampfireClock.Burning("soon", lit));
+        Assert.False(CampfireClock.Burning("e", lit));
+    }
+
+    /// <summary>
+    /// A payload written before #579 is a Unix stamp, and the two counters share no origin. Read as
+    /// environment seconds it would be a fire lit ~1.8 billion seconds in the future, which would
+    /// burn for ever; it must read as ashes instead.
+    /// </summary>
+    [Fact]
+    public void A_campfire_saved_before_the_env_clock_reads_as_ashes()
+    {
+        Assert.False(CampfireClock.Burning("1790000000", 0));
+        Assert.False(CampfireClock.Burning("1790000000", 123_456));
+        Assert.Equal(0, CampfireClock.SecondsLeft("1790000000", 123_456));
+        Assert.True(double.IsNaN(CampfireClock.LitAt("1790000000")));
+    }
+
+    /// <summary>The French locale would write "123456,5" and read "e123456.5" back as 1234565.</summary>
+    [Fact]
+    public void A_campfire_payload_is_invariant_culture()
+    {
+        var before = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("fr-FR");
+            string payload = CampfireClock.Lit(123_456.5);
+            Assert.Equal("e123456.5", payload);
+            Assert.Equal(123_456.5, CampfireClock.LitAt(payload), 3);
+        }
+        finally { System.Globalization.CultureInfo.CurrentCulture = before; }
     }
 }

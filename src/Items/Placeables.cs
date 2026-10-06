@@ -38,7 +38,7 @@ public static class Placeables
     /// <summary>The hint over something that can be taken back.</summary>
     public static string TakeVerb(PlacedObject o) => o.Kind switch
     {
-        PlacedKind.Campfire => Crafting.CampfireClock.Burning(o.Payload, Net.ClockSync.ServerUnixNow) ? "put it out" : "clear the ashes",
+        PlacedKind.Campfire => Crafting.CampfireClock.Burning(o.Payload, World.WorldClock.EnvNow) ? "put it out" : "clear the ashes",
         PlacedKind.FieldWorkbench or PlacedKind.FarmStand => "pack it up",
         _ => "pick up",
     };

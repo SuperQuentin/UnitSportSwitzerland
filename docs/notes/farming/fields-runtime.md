@@ -19,8 +19,10 @@
   (the hunting season's flag), else today's (`FarmRules.MonthFromArgs`); a client takes the server's.
   Working a natural cell first turns it into the state it stands for (`FarmRules.NaturalState`:
   growing = sown half a growing time ago, ripe = sown a whole one ago).
-- **Clock**: server Unix seconds (`ClockSync.ServerUnixNow`) + `FarmField.ClockSkew` (the checks'
-  fast-forward). Crops grow in compressed time (`FarmTables.GrowSeconds`, 25-55 min).
+- **Clock**: environment seconds (`World.WorldClock.EnvNow`, `core/three-clocks`) + `FarmField.ClockSkew`
+  (the checks' fast-forward): crops ripen with the sun, slow with `/speed` and stop with the day.
+  They grow in compressed time (`FarmTables.GrowSeconds`, 25-55 world hours: 25-55 real minutes at
+  the default 24-minute day).
 - **`FarmWork.Sweep`** (pinned): the strip's cells (`FarmRules.CellsInStrip`, a reused list, no
   allocation per call), each worked by `FarmRules.Work`, applied at once on this peer; units = items
   gained (harvest/mow, `YieldPerCell` of the crop that was there) or seed items used (sow, cells / 50).

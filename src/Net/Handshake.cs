@@ -39,12 +39,18 @@ public partial class Handshake : Node
     /// 15: BattleRoyale RequestRecall/Recalled/RecallNews, BrState.RecallPoints, ItemId.Dogtag (#480).
     /// 16: FootPlayer.NetPose may carry a VR player's two hands after the pose (14 or 17 floats, #439).
     /// 17: item events FishCast/FishEnd, items FishingRod..RoundGoby 194-222 (#493).
-    /// 18: farming (#494): FarmField Subscribe/Work/Cells, AssetKind.Fields, FarmStands and FarmSales
+    /// 18: the world clock on the wire is (Env0, EnvEpoch, HourShift, MinutesPerDay), EnvEpoch in simulated seconds (#579).
+    /// 19: World/Pallets (AskTake/AskDrop/Took/Dropped/Snapshot), RideKind.Forklift and the load in its pose (#583).
+    /// 20: RideKind.Excavator and its arm in the pose (#611).
+    /// 21: RideKind.WheelLoader, its frame, arm and bucket in the pose (#612).
+    /// 22: RideKind.MiniExcavator, its blade in the pose's bucket float (#614).
+    /// 23: RideKind.CompactRoller, its bend and its vibration in the pose (#614).
+    /// 24: farming (#494): FarmField Subscribe/Work/Cells, AssetKind.Fields, FarmStands and FarmSales
     /// nodes and RPCs, PassengerService auger offers, ShopService.RequestDeliver's door, PlacedKind.FarmStand
     /// 11, ShopType.FarmCoop 12, items 300-340, HeavyCatalog 102-103, TrailerCatalog 6-9 and the boat
     /// trailers it builds on (#463).
     /// </summary>
-    public const int Protocol = 18;
+    public const int Protocol = 24;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;
@@ -95,7 +101,9 @@ public partial class Handshake : Node
                 }
             return;
         }
-        if (_clientWaited < 0 || (_clientWaited += delta) < WaitSeconds) return;
+        if (_clientWaited < 0) return;
+        if (_clientWaited == 0) _clientWaited = Now;   // first frame as a client: start the clock
+        if (Now - _clientWaited < WaitSeconds) return;
         _clientWaited = -1;
         Refused?.Invoke("The server did not answer the version check: it runs an older version of the game.");
     }

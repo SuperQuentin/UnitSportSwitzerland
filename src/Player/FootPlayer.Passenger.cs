@@ -72,6 +72,14 @@ public partial class FootPlayer
         // a copy's truck with its trailer as the owner coupled it (FitSections): a boat trailer's cradle
         // is in it, which the boat on it follows (#463)
         if (who._remoteRide is Truck train && train.Kind == who.Ride) return train;
+        // and a copy's own forklift: its mast is the driver's (Anim), not a shared one's (#583)
+        if (who._remoteRide is Forklift lifting && who.Ride == RideKind.Forklift) return lifting;
+        // and a copy's own excavator: its arm is the driver's (Anim) (#611)
+        if (who._remoteRide is Excavator digging && who.Ride == digging.Kind) return digging;
+        // and a copy's own wheel loader: its frame, arm and bucket are the driver's (#612)
+        if (who._remoteRide is WheelLoader loading && who.Ride == RideKind.WheelLoader) return loading;
+        // and a copy's own roller: its bend and its vibration are the driver's (#614)
+        if (who._remoteRide is CompactRoller rolling && who.Ride == RideKind.CompactRoller) return rolling;
         var key = (who.Ride, who.CarSetupId, who.TuningBits);
         if (_seatRides.TryGetValue(key, out var known)) return known;
         var made = CarSetups.Ride(who.Ride, who.CarSetupId, who.TuningBits);

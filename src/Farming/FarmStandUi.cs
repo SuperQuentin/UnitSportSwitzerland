@@ -152,7 +152,7 @@ public partial class FarmStandUi : CanvasLayer
         foreach (var c in _crates.GetChildren()) c.QueueFree();
         foreach (var c in _pack.GetChildren()) c.QueueFree();
         _rate.Text = s == null ? "" : $"By a road {(float.IsNaN(s.RoadM) || s.RoadM < 0 ? "?" : $"{s.RoadM:F0} m")} away, {s.Houses} buildings round it: "
-            + $"about {FarmStandRules.PerHour(s, ItemId.Potato):F0} sales an hour a crate (cooked dishes twice that).";
+            + $"about {FarmStandRules.PerDay(s, ItemId.Potato):F0} sales a day a crate (cooked dishes twice that).";
 
         int shown = 0;
         if (s != null)

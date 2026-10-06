@@ -166,6 +166,27 @@ public partial class PortalDemo : Node3D
         _walker.Visible = false;
     }
 
+    /// <summary>
+    /// One gabled house per <see cref="BuildingKind"/>, 10 x 8 m with a door, as a tile brings it,
+    /// for the model viewer (--models): the facade each kind gets.
+    /// </summary>
+    [Showcase("Terrain", "Building")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseBuildings() =>
+        // a building under construction has no facade: it is drawn as its site (#608)
+        Enum.GetValues<BuildingKind>().Where(kind => kind != BuildingKind.UnderConstruction).Select(kind => (kind.ToString(), (Func<Node3D>)(() =>
+        {
+            var tile = new BuildingTile
+            {
+                Id = new TileId(0, 0),
+                Buildings = new List<Building>
+                {
+                    new() { Kind = kind, Floors = 2, MinY = 0, MaxY = 8.5f, Triangles = Solid(Vector2.Zero, 10f, 8f, 6.2f, 8.5f) },
+                },
+            };
+            var door = new DoorSpot(0, new Vector3(0, 0, 4.03f), new Vector3(0, 0, 1), 1.1f, 2.2f);
+            return new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, new[] { door })!, World(Styles.MaterialRole.Building)) };
+        })));
+
     private static ShaderMaterial World(Styles.MaterialRole role)
     {
         var m = Styles.StyleKit.Material(role);

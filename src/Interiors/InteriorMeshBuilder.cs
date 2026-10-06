@@ -123,11 +123,14 @@ public static partial class InteriorMeshBuilder
         RoomType.CarPark => (C(0.50f, 0.50f, 0.49f), C(0.74f, 0.74f, 0.72f), C(0.62f, 0.62f, 0.61f)),
         RoomType.TechRoom => (Concrete, C(0.78f, 0.78f, 0.75f), C(0.68f, 0.68f, 0.66f)),
         RoomType.Corridor => (C(0.62f, 0.58f, 0.52f), C(0.88f, 0.86f, 0.80f), C(0.94f, 0.94f, 0.92f)),
+        // #571: a terrazzo floor and pale painted walls, as every Swiss Treppenhaus
+        RoomType.Stairwell => (C(0.70f, 0.68f, 0.64f), C(0.92f, 0.90f, 0.84f), C(0.95f, 0.95f, 0.93f)),
         _ => (C(0.52f, 0.38f, 0.25f), C(0.88f, 0.84f, 0.76f), C(0.95f, 0.94f, 0.90f)), // hall, landing
     };
 
     public static MeshData Build(InteriorLayout l)
     {
+        Core.ShowcaseTrace.Mark();
         var s = new Scratch();
         float h = l.StoreyHeight;
         float clear = h - InteriorGenerator.Slab;
@@ -141,9 +144,20 @@ public static partial class InteriorMeshBuilder
             foreach (var room in floor.Rooms)
                 Room(s, room, y0, l.ClearOf(room), floor.Holes, HolesOf(f + room.Span));
             foreach (var flight in floor.AllFlights()) Flight(s, flight, y0, h);
+            // a stairwell's half landings (#571): a stone slab, stood on, its underside seen from below
+            foreach (var g in floor.Landings)
+                s.Box(new Vector3(g.X0 + 0.02f, y0 + h * g.Level - 0.22f, g.Z0), new Vector3(g.X1 - 0.02f, y0 + h * g.Level, g.Z1 - 0.02f), StairStone);
             foreach (var r in floor.Rails)
-                s.Box(new Vector3(Math.Min(r.X0, r.X1) - 0.03f, y0, Math.Min(r.Z0, r.Z1)),
-                    new Vector3(Math.Max(r.X0, r.X1) + 0.03f, y0 + 1.0f, Math.Max(r.Z0, r.Z1)), Rail);
+            {
+                var lo = new Vector3(Math.Min(r.X0, r.X1) - 0.03f, y0, Math.Min(r.Z0, r.Z1));
+                var hi = new Vector3(Math.Max(r.X0, r.X1) + 0.03f, y0 + 1.0f, Math.Max(r.Z0, r.Z1));
+                // in a stairwell (#571) the guard is the parapet's own: plaster with a handrail on it
+                bool well = floor.Rooms.Any(q => q.Type == RoomType.Stairwell
+                    && (lo.X + hi.X) / 2 > q.X0 && (lo.X + hi.X) / 2 < q.X1 && lo.Z >= q.Z0 - 0.01f && hi.Z <= q.Z1 + 0.01f);
+                if (!well) { s.Box(lo, hi, Rail); continue; }
+                s.Box(lo with { Z = lo.Z - 0.04f }, hi with { Y = y0 + 0.9f, Z = hi.Z + 0.04f }, Parapet);
+                s.Box(new Vector3(lo.X - 0.02f, y0 + 0.9f, lo.Z - 0.06f), new Vector3(hi.X + 0.02f, y0 + 0.96f, hi.Z + 0.06f), Handrail, false);
+            }
             // the shaft between this ceiling and the next floor
             foreach (var hole in above)
             {
@@ -162,7 +176,13 @@ public static partial class InteriorMeshBuilder
 
         var figures = new List<Figure>();
         foreach (var p in l.Furniture)
+        {
+            // a loose floor pallet is its own node, to be forked up and carried off (#583), and a
+            // parked forklift one to be woken and driven (#630): InteriorManager.AddPallets and
+            // AddForklifts draw them
+            if (IsCarvedOut(p)) continue;
             Furniture(s, p, l.FloorY(p.Floor) + p.Lift, figures);
+        }
 
         return new MeshData(s.V.ToArray(), s.C.ToArray(), s.Col.ToArray(), figures.ToArray());
     }
@@ -385,14 +405,34 @@ public static partial class InteriorMeshBuilder
 
     // ---- stairs ------------------------------------------------------------------------------
 
+    private static readonly Color StairStone = C(0.72f, 0.70f, 0.66f);
+    private static readonly Color StairNosing = C(0.50f, 0.48f, 0.45f);
+    private static readonly Color Parapet = C(0.90f, 0.88f, 0.82f);
+    private static readonly Color Handrail = C(0.40f, 0.27f, 0.17f);
+
     /// <summary>
-    /// Solid steps to look at, a ramp to stand on. A CharacterBody climbing real risers catches on
-    /// every nosing; the ramp runs from one tread before the first step to the top landing, which
-    /// keeps it at or just under the nosings the whole way up.
+    /// Steps to look at, a ramp to stand on. A CharacterBody climbing real risers catches on every
+    /// nosing; the ramp runs from one tread before the first step to the top, which keeps it at or
+    /// just under the nosings the whole way up. A house's flight is wooden steps on a solid
+    /// block down to its floor. A stairwell's half flight (#571) is stone treads with a dark
+    /// nosing on a slab whose underside follows the steps, since the flight below passes under it,
+    /// and carries a parapet with a handrail along the open well when <see cref="FlightPlan.Parapet"/> says.
     /// </summary>
     private static void Flight(Scratch s, FlightPlan f, float y0, float h)
     {
-        int steps = Math.Max(1, (int)MathF.Ceiling(h / 0.19f));
+        // built in the flight's own frame, across its lane and along its run; a flight along X
+        // (#577) is the same with the two swapped, which the two-sided interior shaders and
+        // collision do not mind
+        Vector3 V(float across, float y, float along) => f.AlongX ? new Vector3(along, y, across) : new Vector3(across, y, along);
+        void B(float a0, float ya, float l0, float a1, float yb, float l1, Color col, bool collide)
+        {
+            var p = V(a0, ya, l0);
+            var q = V(a1, yb, l1);
+            s.Box(p.Min(q), p.Max(q), col, collide);
+        }
+        float ya = y0 + h * f.From, yb = y0 + h * f.To, rise = yb - ya;
+        bool stone = f.Half;
+        int steps = Math.Max(1, (int)MathF.Ceiling(rise / (stone ? 0.18f : 0.19f)));
         float dir = Math.Sign(f.ZTop - f.ZBottom);
         float run = Math.Abs(f.ZTop - f.ZBottom);
         float tread = run / steps;
@@ -400,17 +440,60 @@ public static partial class InteriorMeshBuilder
         for (int i = 0; i < steps; i++)
         {
             float za = f.ZBottom + dir * tread * i, zb = f.ZBottom + dir * tread * (i + 1);
-            var shade = i % 2 == 0 ? StairWood : StairWood * 0.93f;
-            shade.A = 1;
-            s.Box(new Vector3(x0, y0, Math.Min(za, zb)), new Vector3(x1, y0 + h * (i + 1) / steps, Math.Max(za, zb)), shade, false);
+            float top = ya + rise * (i + 1) / steps;
+            float z0 = Math.Min(za, zb), z1 = Math.Max(za, zb);
+            if (!stone)
+            {
+                var shade = i % 2 == 0 ? StairWood : StairWood * 0.93f;
+                shade.A = 1;
+                B(x0, y0, z0, x1, top, z1, shade, false);
+                continue;
+            }
+            // the tread and its riser on a slab 0.35 m thick under the step line
+            B(x0, Math.Max(ya - 0.2f, top - 0.38f), z0, x1, top, z1, StairStone, false);
+            float nose = dir > 0 ? z0 : z1;
+            B(x0, top - 0.03f, nose - 0.02f, x1, top + 0.005f, nose + 0.02f, StairNosing, false);
+        }
+        if (stone && f.Parapet != 0)
+        {
+            // a solid parapet in the well, following the flight, and a handrail along its top: each
+            // flight's half of the well, so the two of a turn stand side by side; solid, so nobody
+            // steps off one flight onto the other
+            float p0 = f.Parapet > 0 ? f.X1 : f.X0 - InteriorGenerator.StairEye / 2;
+            float p1 = f.Parapet > 0 ? f.X1 + InteriorGenerator.StairEye / 2 : f.X0;
+            float ra = ya + rise / steps, rb = yb;
+            Prism(s, f.AlongX, p0, p1, f.ZBottom, f.ZTop, ra - 0.4f, ra + 0.9f, rb - 0.4f, rb + 0.9f, Parapet, true);
+            Prism(s, f.AlongX, p0 - 0.03f, p1 + 0.03f, f.ZBottom, f.ZTop, ra + 0.9f, ra + 0.96f, rb + 0.9f, rb + 0.96f, Handrail, false);
         }
         float zs = f.ZBottom - dir * tread;
-        var a = new Vector3(f.X0, y0, zs);
-        var b = new Vector3(f.X1, y0, zs);
-        var c = new Vector3(f.X1, y0 + h, f.ZTop);
-        var d = new Vector3(f.X0, y0 + h, f.ZTop);
+        var a = V(f.X0, ya, zs);
+        var b = V(f.X1, ya, zs);
+        var c = V(f.X1, yb, f.ZTop);
+        var d = V(f.X0, yb, f.ZTop);
         s.Col.Add(a); s.Col.Add(b); s.Col.Add(c);
         s.Col.Add(a); s.Col.Add(c); s.Col.Add(d);
+    }
+
+    /// <summary>
+    /// A box sloped along z (or along x, <paramref name="alongX"/>, the two swapped): x from <paramref name="x0"/> to <paramref name="x1"/>, at
+    /// z = <paramref name="za"/> from <paramref name="lowA"/> to <paramref name="highA"/>, at
+    /// z = <paramref name="zb"/> from <paramref name="lowB"/> to <paramref name="highB"/>.
+    /// </summary>
+    private static void Prism(Scratch s, bool alongX, float x0, float x1, float za, float zb,
+        float lowA, float highA, float lowB, float highB, Color col, bool collide)
+    {
+        Vector3 V(float x, float y, float z) => alongX ? new Vector3(z, y, x) : new Vector3(x, y, z);
+        var a0 = V(x0, lowA, za); var a1 = V(x1, lowA, za);
+        var a2 = V(x1, highA, za); var a3 = V(x0, highA, za);
+        var b0 = V(x0, lowB, zb); var b1 = V(x1, lowB, zb);
+        var b2 = V(x1, highB, zb); var b3 = V(x0, highB, zb);
+        var side = col * 0.9f; side.A = col.A;
+        s.Quad(a0, b0, b3, a3, side, collide);       // -x face
+        s.Quad(a1, a2, b2, b1, side, collide);       // +x face
+        s.Quad(a3, b3, b2, a2, col, collide);        // top
+        s.Quad(a0, a1, b1, b0, side * 0.8f, false);  // underside
+        s.Quad(a0, a3, a2, a1, side, false);         // ends
+        s.Quad(b0, b1, b2, b3, side, false);
     }
 
     // ---- elevators (#557) ----------------------------------------------------------------------
@@ -523,6 +606,43 @@ public static partial class InteriorMeshBuilder
         return new MeshData(s.V.ToArray(), s.C.ToArray(), Array.Empty<Vector3>());
     }
 
+    // ---- pallets a forklift can lift (#583) ------------------------------------------------------
+
+    /// <summary>
+    /// A pallet standing loose on the floor — not one on a rack beam, which <see cref="FurnitureType.PalletRack"/>
+    /// draws itself — and so one a forklift can lift. <see cref="Build"/> leaves it out of the
+    /// merged mesh; it is its own node (<c>InteriorManager.AddPallets</c>).
+    /// </summary>
+    public static bool IsLoosePallet(FurniturePlan p) => p.Type == FurnitureType.Pallet && p.Lift == 0f;
+
+    /// <summary>A hall's forklift parked on the floor: a vehicle asleep (<see cref="HallForklifts"/>), not furniture (#630).</summary>
+    public static bool IsParkedForklift(FurniturePlan p) => HallForklifts.IsParked(p);
+
+    /// <summary>A piece <see cref="Build"/> leaves out of the merged mesh because it is a node of its own.</summary>
+    public static bool IsCarvedOut(FurniturePlan p) => IsLoosePallet(p) || IsParkedForklift(p);
+
+    /// <summary>The load byte a plan's pallet carries off with it: its goods roll and its deck.</summary>
+    public static byte PalletLoad(FurniturePlan p) => Items.Pallets.LoadOf(Hash(p, 3), p.D);
+
+    /// <summary>
+    /// A pallet on its own, from its load byte: centred on the origin on its underside, its runners
+    /// along X (the way the tines go in). The same mesh in the hall, on the forks and set down
+    /// anywhere, so a pallet looks the same wherever it is. No collision soup: its node has a box.
+    /// </summary>
+    public static MeshData PalletPiece(byte load)
+    {
+        var s = new Scratch();
+        var plan = new FurniturePlan
+        {
+            Type = FurnitureType.Pallet, W = Items.Pallets.Length, D = Items.Pallets.Depth(load), H = Items.Pallets.Height,
+        };
+        Furniture(s, plan, 0f, new List<Figure>(), load);
+        // whole alpha: a goods shade (sacks' 0.94) is a figure shader's effect code where it is drawn outside
+        var colors = s.C.ToArray();
+        for (int i = 0; i < colors.Length; i++) colors[i].A = 1f;
+        return new MeshData(s.V.ToArray(), colors, Array.Empty<Vector3>());
+    }
+
     /// <summary>PAUSA's block letters, 3x5, top row first.</summary>
     private static readonly string[] PausaFont =
     {
@@ -606,7 +726,8 @@ public static partial class InteriorMeshBuilder
         B(-w + 0.1f, 0.3f, f + 0.012f, w * 0.36f, 0.36f, f + 0.02f, C(0.30f, 0.30f, 0.32f));
     }
 
-    private static void Furniture(Scratch s, FurniturePlan p, float y0, List<Figure> figures)
+    /// <param name="load">A pallet's load byte (<see cref="Items.Pallets"/>), drawn instead of its plan's own roll; -1 for none.</param>
+    private static void Furniture(Scratch s, FurniturePlan p, float y0, List<Figure> figures, int load = -1)
     {
         // authored with its back to -Z, centred on the origin, then turned and moved
         var basis = new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2);
@@ -623,7 +744,8 @@ public static partial class InteriorMeshBuilder
         void Goods(float cx, float y, float half, float h, float roll)
         {
             if (h < 0.12f) return;
-            if (roll < 0.45f)
+            var goods = Items.Pallets.GoodsOf(roll);
+            if (goods == Items.PalletGoods.Cartons)
             {
                 // cartons, two or three of them, stacked a little untidily
                 int n = roll < 0.22f ? 2 : 3;
@@ -635,14 +757,14 @@ public static partial class InteriorMeshBuilder
                     B(cx - half * 0.92f + skew, y0, -half * 0.8f, cx + half * 0.92f + skew, y1, half * 0.8f, box);
                 }
             }
-            else if (roll < 0.7f)
+            else if (goods == Items.PalletGoods.Drums)
             {
                 // a pair of drums
                 var col = roll < 0.58f ? C(0.20f, 0.36f, 0.58f) : C(0.62f, 0.44f, 0.14f);
                 foreach (float bx in new[] { cx - half * 0.45f, cx + half * 0.45f })
                     B(bx - half * 0.4f, y, -half * 0.4f, bx + half * 0.4f, y + h, half * 0.4f, col);
             }
-            else if (roll < 0.88f)
+            else if (goods == Items.PalletGoods.Sacks)
             {
                 // sacks, in two crossed courses
                 var sack = C(0.78f, 0.74f, 0.62f);
@@ -1124,7 +1246,7 @@ public static partial class InteriorMeshBuilder
                     B(-w, 0, z, w, 0.08f, z + 0.14f, pine * 0.85f);
                 }
                 B(-w, 0.08f, -d, w, 0.14f, d, pine);
-                Goods(0, 0.14f, w * 0.9f, Math.Max(0.2f, H - 0.14f), Hash(p, 3));
+                Goods(0, 0.14f, w * 0.9f, Math.Max(0.2f, H - 0.14f), load >= 0 ? Items.Pallets.Roll((byte)load) : Hash(p, 3));
                 break;
             }
             case FurnitureType.BarrelStack:

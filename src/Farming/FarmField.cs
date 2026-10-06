@@ -123,8 +123,11 @@ public partial class FarmField : Node
     /// <summary>This peer owns the cells: the server, or the game offline.</summary>
     private bool Authority => _dedicated || !NetLink.Online(this);
 
-    /// <summary>The farm clock: server Unix seconds (<see cref="ClockSync.ServerUnixNow"/>) plus the debug skew.</summary>
-    public static uint Now => (uint)Math.Max(0, ClockSync.ServerUnixNow + ClockSkew);
+    /// <summary>
+    /// The farm clock: environment seconds (<see cref="World.WorldClock.EnvNow"/>, #579: crops ripen
+    /// with the sun, slow with <c>/speed</c> and stop with the day) plus the debug skew.
+    /// </summary>
+    public static uint Now => (uint)Math.Max(0, World.WorldClock.EnvNow + ClockSkew);
 
     /// <summary>The calendar month the fields show (the server's, once it said).</summary>
     public int Month => _month;
@@ -185,7 +188,7 @@ public partial class FarmField : Node
     {
         if (_source == null) return;
         var (e, n) = Focus();
-        double now = Time.GetTicksMsec() / 1000.0;
+        double now = Core.RealClock.Now;   // how long a tile went unwanted: housekeeping, real time
         var centre = TileId.FromLv95(e, n);
         for (int dn = -1; dn <= 1; dn++)
             for (int de = -1; de <= 1; de++)
@@ -213,7 +216,7 @@ public partial class FarmField : Node
     private Tile Ensure(TileId id)
     {
         if (_tiles.TryGetValue(id, out var t)) return t;
-        t = new Tile { Id = id, LastWanted = Time.GetTicksMsec() / 1000.0 };
+        t = new Tile { Id = id, LastWanted = Core.RealClock.Now };
         if (Authority) t.Cells = Store(id);
         _tiles[id] = t;
         StartLoad(t);

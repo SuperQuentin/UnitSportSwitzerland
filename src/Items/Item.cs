@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Avatar;
+using UnitSport.Core;
 
 namespace UnitSport.Items;
 
@@ -346,6 +347,7 @@ public static class ItemDefs
     private static ArrayMesh? _foreEnd;
 
     /// <summary>The shotgun's slide handle, origin where it sits at rest (the viewmodel and the hand slide it along Z to pump).</summary>
+    [Showcase("Parts", "Shotgun fore-end")]
     public static ArrayMesh ShotgunForeEnd()
     {
         if (_foreEnd != null) return _foreEnd;
@@ -631,6 +633,7 @@ public static class ItemDefs
     }
 
     /// <summary>A flag planted in the ground: origin at the foot of the pole.</summary>
+    [Showcase("Items", "Planted flag")]
     public static ArrayMesh PlantedFlagMesh()
     {
         if (_plantedFlag != null) return _plantedFlag;
@@ -662,4 +665,15 @@ public static class ItemDefs
         s.Box(centre, new Vector3(span, arm, CrossDepth), white);
         s.Box(centre, new Vector3(arm, span, CrossDepth), white);
     }
+
+    /// <summary>Every item with a held mesh, as held, in the model viewer (--models): new items show by themselves.</summary>
+    [Showcase("Items")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseHeld() =>
+        Enum.GetValues<ItemId>().Where(id => id != ItemId.None).Select(id => (id.ToString(), (Func<Node3D>)(() =>
+        {
+            var node = ModelViewer.Shaded(HandMesh(id)!);
+            if (HandMaterial(id, null) is { } material) node.MaterialOverride = material;
+            if (id == ItemId.Shotgun) node.AddChild(ModelViewer.Shaded(ShotgunForeEnd()));
+            return node;
+        })));
 }

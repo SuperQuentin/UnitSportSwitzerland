@@ -21,6 +21,8 @@ public enum RoomType
     IkeaMarket = 42,
     // #557: apartment blocks
     Elevator, CarPark, TechRoom, Corridor,
+    // #571: a block of flats' own stair, round a half landing
+    Stairwell,
 }
 
 public enum OpeningKind { Door, Window, Entry, Arch }
@@ -94,6 +96,51 @@ public sealed class FlightPlan
     public float X1 { get; set; }
     public float ZBottom { get; set; }
     public float ZTop { get; set; }
+    /// <summary>
+    /// Where it starts and ends, as a fraction of the storey above its floor: a house's flight
+    /// climbs a whole storey (0 to 1); a block of flats' stairwell (#571) climbs it in two
+    /// flights, 0 to 0.5 to a half landing and 0.5 to 1 from it.
+    /// </summary>
+    public float From { get; set; }
+    public float To { get; set; } = 1f;
+    /// <summary>The side a solid parapet with a handrail runs along: -1 its X0 edge, +1 its X1, 0 none.</summary>
+    public int Parapet { get; set; }
+
+    /// <summary>Whether this flight is half of a stairwell's turn rather than a whole storey's stair.</summary>
+    public bool Half => From > 0 || To < 1;
+
+    /// <summary>
+    /// A flight running along X rather than Z (#577: a wing of a building turned a quarter from
+    /// the plan's frame). Then <see cref="X0"/>/<see cref="X1"/> are its lane's extent in Z and
+    /// <see cref="ZBottom"/>/<see cref="ZTop"/> are X positions; read it through
+    /// <see cref="Point"/> and <see cref="Area"/>.
+    /// </summary>
+    public bool AlongX { get; set; }
+
+    /// <summary>A point of the flight's own frame (across its lane, along its run) in the plan's (X, Z).</summary>
+    public (float X, float Z) Point(float across, float along) => AlongX ? (along, across) : (across, along);
+
+    /// <summary>The middle of its bottom and top ends, plan (X, Z).</summary>
+    public (float X, float Z) Bottom => Point((X0 + X1) / 2, ZBottom);
+    public (float X, float Z) TopEnd => Point((X0 + X1) / 2, ZTop);
+
+    /// <summary>The rectangle it stands on, plan frame.</summary>
+    public RectPlan Area(float before = 0, float after = 0)
+    {
+        float r0 = Math.Min(ZBottom, ZTop) - before, r1 = Math.Max(ZBottom, ZTop) + after;
+        return AlongX ? new RectPlan(r0, X0, r1, X1) : new RectPlan(X0, r0, X1, r1);
+    }
+}
+
+/// <summary>A landing partway up a storey (#571): the half landing a stairwell's flights turn on.</summary>
+public sealed class LandingPlan
+{
+    public float X0 { get; set; }
+    public float Z0 { get; set; }
+    public float X1 { get; set; }
+    public float Z1 { get; set; }
+    /// <summary>Its height above its floor, as a fraction of the storey.</summary>
+    public float Level { get; set; }
 }
 
 public sealed class FloorPlan
@@ -112,6 +159,8 @@ public sealed class FloorPlan
     public IEnumerable<FlightPlan> AllFlights() => Flight == null ? Flights : Flights.Prepend(Flight);
     /// <summary>Guard rails along hole edges, as (x0,z0)-(x1,z1) segments stored in a rect.</summary>
     public List<RectPlan> Rails { get; set; } = new();
+    /// <summary>Half landings between this floor and the next (#571).</summary>
+    public List<LandingPlan> Landings { get; set; } = new();
 }
 
 public enum FurnitureType
@@ -311,7 +360,7 @@ public sealed class InteriorLayout
     // one number, so whichever of #497/#498 rebases onto the other takes the NEXT one, never a
     // lower one: a version going backwards regenerates the plans saved under the higher one and
     // then collides when it is reissued.
-    public const int CurrentVersion = 17; // 17: apartment blocks, a stairwell and elevator per entrance, flats, a shared basement (#557); 16: IKEA stores at their nine real locations, with bins of Blåhajs (#501); 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
+    public const int CurrentVersion = 22; // 22: a hall's forklift is the size of the real, drivable machine (#630); 21: apartment blocks follow the building's outline, wing by wing (#577); 20: a bedroom, bathroom or WC has one door, wider corridors (#576); 19: a door driven through keeps its full width inside, so a loading bay is not a 1.8 m hole (#531); 18: flats' living rooms and bedrooms on a facade, stairwells with half landings (#571); 17: apartment blocks, a stairwell and elevator per entrance, flats, a shared basement (#557); 16: IKEA stores at their nine real locations, with bins of Blåhajs (#501); 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";

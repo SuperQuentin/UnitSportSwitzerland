@@ -19,7 +19,7 @@ public partial class LoadingScreen : CanvasLayer
     private Button _cancel = null!;
     private float _shown;            // what the bar shows, eased toward the target
     private float _target;
-    private double _sinceJoke;
+    private double _nextJokeAt;
     private int _jokeIndex;
     private readonly int[] _order;
     private Tween? _jokeFade;
@@ -119,7 +119,7 @@ public partial class LoadingScreen : CanvasLayer
     {
         _target = 1;
         _cancel.Disabled = true;
-        var tw = CreateTween();
+        var tw = CreateTween().SetIgnoreTimeScale(true);
         tw.TweenInterval(0.25f);
         tw.TweenProperty(_root, "modulate:a", 0f, 0.45f);
         tw.TweenCallback(Callable.From(() => _root.Visible = false));
@@ -132,17 +132,17 @@ public partial class LoadingScreen : CanvasLayer
         if (!_root.Visible) return;
         _shown = Mathf.Lerp(_shown, _target, MathX.Damp(6f, (float)delta));
         _bar.Value = _shown;
-        _sinceJoke += delta;
-        if (_sinceJoke > 2.6) NextJoke(instant: false);
+        // wall clock: the loading threads set the pace, and GameClock.Pace is holding the frames
+        if (Core.RealClock.Now >= _nextJokeAt) NextJoke(instant: false);
     }
 
     private void NextJoke(bool instant)
     {
-        _sinceJoke = 0;
+        _nextJokeAt = Core.RealClock.Now + 2.6;
         string text = LoadingPhrases.All[_order[_jokeIndex++ % _order.Length]] + "…";
         _jokeFade?.Kill();
         if (instant) { _joke.Text = text; _joke.Modulate = Colors.White; return; }
-        _jokeFade = CreateTween();
+        _jokeFade = CreateTween().SetIgnoreTimeScale(true);
         _jokeFade.TweenProperty(_joke, "modulate:a", 0f, 0.25f);
         _jokeFade.TweenCallback(Callable.From(() => _joke.Text = text));
         _jokeFade.TweenProperty(_joke, "modulate:a", 1f, 0.35f);

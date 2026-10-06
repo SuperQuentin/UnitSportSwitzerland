@@ -108,7 +108,8 @@ screen/immersive_mode=true
 permissions/access_network_state=true
 permissions/access_wifi_state=true
 permissions/change_wifi_multicast_state=true
-permissions/internet=true'
+permissions/internet=true
+permissions/vibrate=true'
 cp "$REPO/export_presets.cfg" .
 # Android installs an update only over a lower version code, so it follows the semver
 sed -i -E "s|^version/code=.*|version/code=$((MA*10000+MI*100+PA))|; s|^version/name=.*|version/name=\"$V\"|" export_presets.cfg

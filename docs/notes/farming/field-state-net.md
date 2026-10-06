@@ -1,8 +1,8 @@
 # Field state: authority, wire, persistence (#494)
 
 - **The server owns the cells**: `FieldCells` per tile (sparse: only worked cells), saved to
-  `user://farm/E_N.json` as `{"Version":1,"Cells":[packed...]}` (`FieldCells.Pack`: cell 16 bits,
-  stage 4, crop 8, fertilised 1, Since 32 = server Unix seconds) through `JsonStore.SaveAsync`
+  `user://farm/E_N.json` as `{"Version":2,"Cells":[packed...]}` (`FieldCells.Pack`: cell 16 bits,
+  stage 4, crop 8, fertilised 1, Since 32 = environment seconds; a version-1 file held Unix stamps and is not read) through `JsonStore.SaveAsync`
   every 2 s for the tiles that changed (`core/perf-saves-background`). Offline the game is the
   server: the same store, the same file, the same `FarmRules`.
 - **RPCs on `World/Farm`** (`FarmField.Net.cs`): `Subscribe(e, n)` / `Unsubscribe(e, n)` (client:
@@ -20,7 +20,7 @@
   like the pack everywhere else.
 - **Late joiners and newly streamed tiles** get the stored cells in the subscribe snapshot; the
   server forgets who held what on disconnect.
-- **Versions**: all of #494 is `Handshake.Protocol` 18 (fields, farm state, machines, selling), so
+- **Versions**: all of #494 is `Handshake.Protocol` 24 (fields, farm state, machines, selling), so
   two versions never meet. Within it the fields degrade on their own anyway: a source without the
   layer answers `AssetKind.Fields` as missing and the fields stay natural.
 - **Check**: `tools/farmnetcheck.sh` (tier 2): A ploughs a strip (machine stroke) and tills a cell

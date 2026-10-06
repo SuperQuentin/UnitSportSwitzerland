@@ -68,7 +68,7 @@ public sealed class NetworkChunkSource : IChunkSource
         _cacheDirectory = cacheDirectory ?? ProjectSettings.GlobalizePath("user://chunk_cache");
 
         Directory.CreateDirectory(_cacheDirectory);
-        _cacheBytes = MeasureCache();
+        _cacheBytes = MeasureCache(_cacheDirectory);
 
         GD.Print($"[stream] cache at {_cacheDirectory} holding {_cacheBytes / (1024.0 * 1024):F0} MB");
     }
@@ -412,11 +412,12 @@ public sealed class NetworkChunkSource : IChunkSource
         }
     }
 
-    private long MeasureCache()
+    /// <summary>Bytes the tile cache in <paramref name="directory"/> holds (Settings → Data shows it).</summary>
+    public static long MeasureCache(string directory)
     {
         try
         {
-            return new DirectoryInfo(_cacheDirectory)
+            return new DirectoryInfo(directory)
                 .EnumerateFiles()
                 .Sum(f => f.Length);
         }
@@ -424,6 +425,38 @@ public sealed class NetworkChunkSource : IChunkSource
         {
             return 0;
         }
+    }
+
+    /// <summary>The source of the world being played, if any: Settings → Data clears through it.</summary>
+    public static NetworkChunkSource? Active { get; set; }
+
+    /// <summary>
+    /// Settings → Data → Clear (#63): deletes the cached tiles in <paramref name="directory"/>
+    /// (never a download in progress, a <c>.part</c>). Tiles already loaded stay; they come back
+    /// from the server when next needed. Returns the bytes freed.
+    /// </summary>
+    public static long ClearCache(string directory)
+    {
+        long freed = 0;
+        try
+        {
+            foreach (var file in new DirectoryInfo(directory).EnumerateFiles())
+            {
+                if (file.Extension == ".part") continue;
+                try
+                {
+                    long size = file.Length;
+                    file.Delete();
+                    freed += size;
+                }
+                catch (IOException) { }
+            }
+        }
+        catch (DirectoryNotFoundException) { }
+        if (Active is { } live && Path.GetFullPath(live._cacheDirectory) == Path.GetFullPath(directory))
+            lock (live._gate) live._cacheBytes = MeasureCache(directory);
+        GD.Print($"[stream] cache cleared: {freed / (1024.0 * 1024):F0} MB");
+        return freed;
     }
 
     /// <summary>

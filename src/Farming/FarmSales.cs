@@ -26,11 +26,11 @@ public partial class FarmSales : Node
 
     public static FarmSales? Instance { get; private set; }
 
-    /// <summary>Probes: the economy's clock (server Unix seconds), to run contracts and stands fast.</summary>
+    /// <summary>Probes: the economy's clock (environment seconds), to run contracts and stands fast.</summary>
     public static Func<double>? ClockOverride { get; set; }
 
-    /// <summary>The farm economy's time: the server's Unix clock (<see cref="ClockSync.ServerUnixNow"/>).</summary>
-    public static double Now => ClockOverride?.Invoke() ?? ClockSync.ServerUnixNow;
+    /// <summary>The farm economy's time: environment seconds (<see cref="World.WorldClock.EnvNow"/>, #579), like the fields.</summary>
+    public static double Now => ClockOverride?.Invoke() ?? World.WorldClock.EnvNow;
 
     /// <summary>The month prices follow: the one the fields show (the server's, once it said), else <c>--farmmonth</c> / today.</summary>
     public static int Month => FarmField.Instance?.Month ?? FarmRules.MonthFromArgs(OS.GetCmdlineUserArgs(), DateTime.Now);
@@ -389,7 +389,9 @@ public partial class FarmSales : Node
         {
             if (!File.Exists(ContractsPath)) return;
             var data = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, List<FarmContract>>>(File.ReadAllText(ContractsPath));
-            if (data != null) foreach (var (k, v) in data) _contracts[k] = v;
+            // a contract no order could set (4 days at most) is from a save before the world clock (#579): Unix deadlines
+            double latest = Now + 7 * FarmCalendar.DaySeconds;
+            if (data != null) foreach (var (k, v) in data) _contracts[k] = v.Where(c => c.Deadline <= latest).ToList();
             GD.Print($"[sell] {_contracts.Values.Sum(l => l.Count)} contract(s) from {ContractsPath}");
         }
         catch (Exception e) { GD.PushWarning($"[sell] {ContractsPath}: {e.Message}"); }
@@ -440,7 +442,7 @@ public partial class FarmSales : Node
     private (ItemId Item, int Count, string? Coop, string? Buyer, long Week, int Month, InputDevice Device, bool Tip) _hintKey;
     private string? _hintText;
     private Vector3 _hintAt = new(float.NaN, 0, 0);
-    private ulong _hintMsec;
+    private double _hintAsked;
     private Market? _hintMarket;
 
     /// <summary>
@@ -450,11 +452,11 @@ public partial class FarmSales : Node
     public string DeliveryHint(ItemId item, int count, Vector3 at, bool tip = false)
     {
         // the market is looked up again only after 2 m or half a second (the prompt asks every frame)
-        ulong msec = Time.GetTicksMsec();
-        if (float.IsNaN(_hintAt.X) || _hintAt.DistanceSquaredTo(at) > 4f || msec - _hintMsec > 500)
+        double now = Core.RealClock.Now;   // a prompt cache, real time
+        if (float.IsNaN(_hintAt.X) || _hintAt.DistanceSquaredTo(at) > 4f || now - _hintAsked > 0.5)
         {
             _hintAt = at;
-            _hintMsec = msec;
+            _hintAsked = now;
             _hintMarket = MarketAt(at, FarmMarket.DeliverReach, 0f);
         }
         var m = _hintMarket;
