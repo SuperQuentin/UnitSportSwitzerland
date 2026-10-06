@@ -98,8 +98,8 @@ public static class SignalTestRegion
             Arms("L|T|R", "L|T|R", "L|T|R", "L|T|R")));
 
         // 3. mismatched room. W: a long arm, L|T|R. E: houses 1.5 m from the kerb from 68 m out (the corner radius of #682 takes ~16 m of the arm): only the
-        // shortest left pocket (20 + 20 m) fits, and a right pocket never reaches past the left's storage:
-        // L|TR. N: houses 1 m from the kerb from the corner on: no room for a widening, one lane. S: a 6 m
+        // shortest left pocket (20 + 20 m) fits, and a right pocket reaches at most 8 m past the left's storage (#682):
+        // L|T|R. N: houses 1 m from the kerb from the corner on: no room for a widening, one lane. S: a 6 m
         // road 52 m long to a T where it gives way: too short for a left pocket, long enough for a right.
         Cross("J3N", j3, n, n + 400, "8m Strasse", "Verbindungsstrasse", "tertiary");
         Cross("J3S", j3, n - 52, n, "6m Strasse", "k_W", "tertiary");
@@ -113,7 +113,7 @@ public static class SignalTestRegion
         boxes.Add(new Box(j3 - 17, n + 55, j3 - 5, n + 75, 12));
         boxes.Add(new Box(j3 - 17, n + 78, j3 - 5, n + 100, 9));
         junctions.Add(new Junction("J3-mismatch", j3, n, "mismatched room: long arm, houses at the kerb, a short arm",
-            Arms("L|T|R", "L|TR", "LT|R", "LTR")));
+            Arms("L|T|R", "L|T|R", "LT|R", "LTR")));
 
         // 3b. a narrower road class: a 4 m road (no pockets on that class) meets an 8 m and a 6 m road. The 6 m
         // road's left pocket has no through lane to carry on into the 4 m road (#123: no main road out), so
@@ -469,7 +469,7 @@ public static class SignalTestRegion
                 seen.Add(dir);
                 string car = string.Join("|", a.Lanes.Where(l => l.Kind == ApproachLaneKind.Car).Select(l => Moves(l.Moves)));
                 string all = string.Join(" | ", a.Lanes.Select(l => (l.Kind == ApproachLaneKind.Bike ? "b" : "") + Moves(l.Moves)
-                    + (l.StopBehind > 0.01f ? "[box]" : l.StopBehind < -0.01f ? "[adv]" : "")));
+                    + (l.StopBehind > 3.5f ? "[box]" : l.StopBehind > 0.01f ? "[adv]" : "")));
                 var arm = plan.Arms[a.SignalArm];
                 string designed = j.Design.GetValueOrDefault(dir) ?? "-";
                 bool ok = designed == "-" || designed == car;

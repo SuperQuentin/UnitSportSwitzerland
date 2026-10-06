@@ -259,9 +259,12 @@ public static partial class TileRewriter
             int side = r.InAtEnd ? 1 : -1;
             bool exitHere = slots.TryGetValue((seg, side), out var slot) && slot.ExitWay is not null && slot.Exit is { Dropped: false };
             double baseOffset = lp?.In.ApproachWay!.FullWidth ?? 0;
-            double reach = lp?.In.Storage ?? double.MaxValue;
+            // a little earlier than the left pocket is full (#682): the two widenings run into each other, no straight edge between
+            double reach = lp is null ? double.MaxValue : lp.In.Storage + RightEarlier;
             int self = output[tile].IndexOf(seg);
-            foreach (var (taper, storage) in RightPocketSizes)
+            // beside a left pocket the right one starts to widen where the left one has finished (#682): no stretch of straight edge between them
+            var sizes = lp is not null && reach >= 25 ? [(Math.Min(15.0, Math.Round(reach * 0.35)), reach - Math.Min(15.0, Math.Round(reach * 0.35))), .. RightPocketSizes] : RightPocketSizes;
+            foreach (var (taper, storage) in sizes)
             {
                 if (taper + storage > reach) continue;
                 var way = new Widening(seg, painted, tile, self, junctionAtEnd: r.InAtEnd, side, taper + storage, taper,
@@ -769,6 +772,7 @@ public static partial class TileRewriter
     }
 
     /// <summary>Right-turn pockets, (taper, storage) in metres, longest first: shorter than a left pocket, beside its full width.</summary>
+    private const double RightEarlier = 8;
     private static readonly (double Taper, double Storage)[] RightPocketSizes = [(15, 30), (10, 25), (10, 15)];
 
     /// <summary>
@@ -1292,7 +1296,7 @@ public static partial class TileRewriter
             double setback = signal ? SignalStopSetback + StopShift : 0.1;
             // the lanes across the approach (#351): pocket, left-turn bike lane, through lane
             var lanes = Layout ?? new ApproachLayout(_half, _bike, _pocket, _bikeLeft, FullWidth, false, 0);
-            double pocket = lanes.LeftPocket, through = lanes.Through().From;
+            double pocket = lanes.LeftPocketLane?.To ?? lanes.LeftPocket, through = lanes.Through().From;   // #682: the equal lane widths, not the carriageway lane it was cut from
             bool box = _bikeLeft > 0 && BikeBox;
             // the pocket's arrows and its stop line stand behind a bike box (#351)
             bool advanced = _bikeLeft > 0 && !BikeBox;
