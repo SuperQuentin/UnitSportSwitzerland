@@ -38,6 +38,9 @@ src/Terrain/             quick  --origincheck
 # the level the runtime reads, and collision is the bed
 src/Terrain/ProceduralWorld quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 src/Terrain/ProceduralWorld quick --shapedcheck --systems ui
+# #607: the generated world's building sites (#605) through the site planner, plan views in test_output/construction/
+src/Terrain/ProceduralWorld quick --constructioncheck --systems ui
+src/Terrain/Construction/ quick --constructioncheck --systems ui
 src/Terrain/WaterProbe   quick  --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 tools/TerrainFormat/Water quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 src/Items/               quick  --invcheck
