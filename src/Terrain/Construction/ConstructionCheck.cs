@@ -83,7 +83,7 @@ public static class ConstructionCheck
             }
             double fall = high - low;
             Expect(site.Phase == want || site.Phase == want + 1 && fall > 1.0,
-                $"{what}: planned as {site.Phase}, {site.BuiltStoreys}/{site.TargetStoreys} storeys, measured {site.Measured:F1} m on ground falling {fall:F1} m");
+                $"{what}: planned as {site.Phase}, {site.BuiltStoreys}/{site.TargetStoreys} storeys, measured {site.Measured:F1} m on ground at {low:F1}-{high:F1} m");
             Expect(site.TargetStoreys == p.Floors || site.Phase == SitePhase.ToppedOut && site.TargetStoreys >= p.Floors,
                 $"{what}: {site.TargetStoreys} storeys to come, GWR-style floors {p.Floors}");
 

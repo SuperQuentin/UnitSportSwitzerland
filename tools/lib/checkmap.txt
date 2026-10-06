@@ -41,6 +41,9 @@ src/Terrain/ProceduralWorld quick --shapedcheck --systems ui
 # #607: the generated world's building sites (#605) through the site planner, plan views in test_output/construction/
 src/Terrain/ProceduralWorld quick --constructioncheck --systems ui
 src/Terrain/Construction/ quick --constructioncheck --systems ui
+# #608: a body walks every storey of hand-made sites' shells, on their real collision
+src/Terrain/Construction/ quick --shellwalkcheck --world flat
+src/Terrain/BuildingMeshBuilder quick --shellwalkcheck --world flat
 src/Terrain/WaterProbe   quick  --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 tools/TerrainFormat/Water quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 src/Items/               quick  --invcheck
@@ -299,6 +302,25 @@ src/Player/Airstairs     quick  --stairscheck --world fixture --traffic 0 --airl
 src/Player/FootPlayer.Ai quick  --stairscheck --world fixture --traffic 0 --airliner arcade
 src/Vehicles/Airstairs   quick  --stairscheck --world fixture --traffic 0 --airliner arcade
 src/Vehicles/VehicleBody.Ai quick  --stairscheck --world fixture --traffic 0 --airliner arcade
+src/Avatar/Forklift      quick  --forkliftcheck --world flat --systems physics,ui
+src/Player/Forklift      quick  --forkliftcheck --world flat --systems physics,ui
+src/Player/FootPlayer.Fo quick  --forkliftcheck --world flat --systems physics,ui
+# pallets a forklift lifts (#583 phase 2): forked, carried and set down in the hand-made warehouse; and over the wire
+src/Items/Pallet         quick  --palletcheck --world flat --systems physics,ui
+src/Avatar/Forklift      quick  --palletcheck --world flat --systems physics,ui
+src/Player/Forklift      quick  --palletcheck --world flat --systems physics,ui
+src/Player/FootPlayer.Fo quick  --palletcheck --world flat --systems physics,ui
+src/Interiors/InteriorMeshBuilder quick --palletcheck --world flat --systems physics,ui
+src/Loot/LootService     quick  --palletcheck --world flat --systems physics,ui
+src/Items/Pallet         net    tools/palletnetcheck.sh
+src/Player/Forklift      net    tools/palletnetcheck.sh
+# phase 3: the stacks on a site's apron and the forklift beside it, drawn with the dormant fleet
+src/Items/SitePallets    quick  --sitecheck --systems ui
+src/Vehicles/SiteYards   quick  --sitecheck --systems ui
+src/Vehicles/VehicleSlot quick  --sitecheck --systems ui
+src/Items/SitePallets    net    tools/palletnetcheck.sh
+src/Vehicles/SiteYards   net    tools/palletnetcheck.sh
+src/Vehicles/DormantVehicles net tools/palletnetcheck.sh
 src/Player/StairsNet     net    tools/stairsnetcheck.sh
 src/Player/Airstairs     net    tools/stairsnetcheck.sh
 src/Avatar/Airstairs     net    tools/stairsnetcheck.sh

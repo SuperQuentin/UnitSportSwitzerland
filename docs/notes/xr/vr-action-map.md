@@ -67,6 +67,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | radio next / prev / panel | U P R / — | ok: dash pokes (#438) | keep |
 | take_wheel (passenger) | F / RB | ambiguous (free grip) | **grip the wheel** from the passenger seat |
 | shift up / down, clutch | Shift Ctrl C / RB LB B | ok: grips, B | keep |
+| forklift mast up / down (#583, hold) | Shift Ctrl / RB LB | ok: grips, or the **mast lever** by hand (`XrCabControls` "forklift", `Kind.Hold`: pulled back the forks rise) | keep |
 | gear 1-6, R, N | 1-6 ` 0 / — | ok: H-pattern lever by hand (#438) | keep |
 | retarder | ' ; / — | ok: stalk by hand (#438) | keep |
 | bus kneel / destination | K N / — | ok: dash pokes (#438) | keep |

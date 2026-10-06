@@ -29,6 +29,8 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 - `catalogue` — Item catalogue (#262): every item as tiles, tabs + search, click 1 / right 10 / shift stack, money + clear buttons; only sends chat commands, so the server checks admin
 - `smart-binoculars` — Held at a building's door (or inside): reads out its loot table (LootTables.BuildingTable); no aim, no zoom (#165)
 
+- `vehicles/pallets` (in docs/notes/vehicles/) — `Pallets` (load byte, ids, fork rule), `PalletNode`, `PalletService` at World/Pallets (server-owned, session-only), `PalletCheck`, `PalletNetProbe` (#583)
+
 ## Commands
 
 - `commands` — Commands: --invcheck, --invuicheck, --econcheck, --iconsheet, tools/placedcheck.sh, --photocheck, tools/gunshotcheck.sh, tools/useanimcheck.sh, tools/radiocheck.sh, tools/carcdcheck.sh, --carcdcheck shots, --cdfixture, tools/dropcheck.sh, tools/bonkcheck.sh, --interactcheck, --churchstagecheck, --fishcheck, tools/fishcheck.sh

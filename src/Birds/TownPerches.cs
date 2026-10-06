@@ -73,6 +73,8 @@ public sealed class TownPerches
         {
             var b = tile.Buildings[bi];
             if (b.MaxY - b.MinY < 2.5f) continue;
+            // a building site's solid is not drawn (#608): no bird perches on a roof that is not there
+            if (b.Kind == BuildingKind.UnderConstruction) continue;
             if (b.Kind is not (BuildingKind.Agricultural or BuildingKind.Annex or BuildingKind.Garage or BuildingKind.UnderConstruction))
             {
                 var middle = boxes[bi].GetCenter();

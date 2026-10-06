@@ -78,6 +78,7 @@
     <Compile Include="..\..\src\Interiors\BuildingTypes.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- building sites (#606): the planner, Godot maths only -->
     <Compile Include="..\..\src\Terrain\Construction\ConstructionSite.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Construction\ShellPlan.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- swiss_data.py port (#515): only the pure half (manifest format, skip decisions, STAC
          id/bbox arithmetic) is linked. SwissDownload.cs itself needs IStepProgress from
          Pipeline.cs, which would drag in CountryData/LocalState/Selection/Stats and
@@ -90,6 +91,9 @@
     <!-- update check (#532): version compare, asset pick, GitHub's JSON, delta updates -->
     <Compile Include="..\..\src\Core\UpdateInfo.cs;..\..\src\Core\BinaryDelta.cs;..\..\src\Core\UpdatePackage.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Landmarks.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- forklift pallets (#583): the load byte, the ids and the fork rule, against the forks' numbers;
+         and the stacks on a site's apron (phase 3) -->
+    <Compile Include="..\..\src\Avatar\ForkliftLayout.cs;..\..\src\Items\Pallets.cs;..\..\src\Items\SitePallets.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>
