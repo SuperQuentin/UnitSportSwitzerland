@@ -80,7 +80,10 @@ public partial class ModelViewer : Node3D
                         _covered.Add(Outermost(type));
             };
 
+        // --modelsonly <text>: just the models whose category or name holds it, for a quick look
+        string? only = CmdArgs.Value("--modelsonly");
         _categories = Discover()
+            .Where(e => only == null || $"{e.Category} {e.Name}".Contains(only, StringComparison.OrdinalIgnoreCase))
             .GroupBy(e => e.Category)
             .OrderBy(g => g.Key == Unlisted ? 1 : 0).ThenBy(g => g.Key, StringComparer.Ordinal)
             .Select(g => (g.Key, g.ToList()))

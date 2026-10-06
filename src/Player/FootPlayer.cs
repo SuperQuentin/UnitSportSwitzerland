@@ -658,6 +658,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     // --- figure animation ---
     private MeshInstance3D? _walker;
     private Avatar.HumanPalette _walkPalette = Avatar.HumanPalette.Default;
+    /// <summary>The figure's colours and clothes as drawn now: the VR hands wear its skin and gloves (#648).</summary>
+    public Avatar.HumanPalette WalkPalette => _walkPalette;
     private float _stridePhase;
     /// <summary>Remote: the last replicated gait phase, so a fresh one is taken and a repeat integrated.</summary>
     private float _seenPhase = float.NaN;
