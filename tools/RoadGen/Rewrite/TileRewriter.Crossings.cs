@@ -133,6 +133,9 @@ public static partial class TileRewriter
             double den = (-u).Cross(ut);
             Vec2 control = Math.Abs(den) < 1e-6 ? junction.Centre : start + (-u) * ((end - start).Cross(ut) / den);
             var line = new List<Vec2>();
+            // straight from the crosswalk's junction edge to where the curve starts
+            double crosswalkEdge = MouthSkew(junction, from) + SignalStopSetback - ZebraClear - ZebraDepth;
+            line.Add((from.Left + from.Right) * 0.5 + u.Perp * entryAt + u * crosswalkEdge);
             for (int k = 0; k <= 16; k++)
             {
                 double t = k / 16.0, mt = 1 - t;
