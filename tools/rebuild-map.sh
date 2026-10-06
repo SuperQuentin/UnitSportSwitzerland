@@ -164,7 +164,7 @@ if [ $what = osm ] && [ -z "$pbf" ]; then
   echo "No switzerland-*.osm.pbf in $data/osm (MapSetup --layers roads,osm downloads it)" >&2; exit 1
 fi
 if [ $what = osm ] || { [ $what = all ] && [ -n "$pbf" ]; }; then
-  step "OSM overlay, whole map: every TLM road line of the map's bounding box, then the OSM extract (minutes on a wide map)"
+  step "OSM overlay, whole map: the TLM road lines of the built tiles, then the whole OSM extract"
   run "${pre[@]}" --out "$chunks" --tlm "$tlm" --osm-overlay "$pbf"
 elif [ ! -f "$temp/osm_nodes.tsv" ]; then
   echo "Note: no $temp/osm_nodes.tsv, so traffic lights come from the inference rule alone (osm builds it)"

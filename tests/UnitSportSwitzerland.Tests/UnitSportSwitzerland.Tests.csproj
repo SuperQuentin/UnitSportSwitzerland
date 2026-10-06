@@ -109,6 +109,8 @@
          itself is linked only for the GeometryGrid the decoder takes. -->
     <Compile Include="..\..\tools\TerrainPreprocessor\FileGdbGeometry.cs" Link="Gdb\%(Filename)%(Extension)" />
     <Compile Include="..\..\tools\TerrainPreprocessor\FileGdb.cs" Link="Gdb\%(Filename)%(Extension)" />
+    <!-- which source features a set of tiles needs (#678): pure, over TerrainFormat -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\TileRegion.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- update check (#532): version compare, asset pick, GitHub's JSON, delta updates -->
     <Compile Include="..\..\src\Core\UpdateInfo.cs;..\..\src\Core\BinaryDelta.cs;..\..\src\Core\UpdatePackage.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Landmarks.cs" Link="Game\%(Filename)%(Extension)" />
