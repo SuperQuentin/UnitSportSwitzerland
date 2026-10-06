@@ -188,4 +188,14 @@ public class GarageTests
         // the centreline crosses x = 0 at z = 20; its edge, 3 m across the road, is 3 / cos(45) short of it
         Assert.Equal(20f - 3f / MathF.Cos(MathF.PI / 4), link.Length, 1);
     }
+
+    [Fact]
+    public void A_stub_over_a_rise_in_the_ground_is_humped_to_clear_it()
+    {
+        // 0.19 m of ground over the line at the middle: the sine hump is exactly that high there
+        Assert.Equal(0.19f, GarageLink.HumpFor([(0.5f, 0.19f), (0.25f, 0.05f)]), 3);
+        // flat or sunken ground needs none; a spike is capped
+        Assert.Equal(0f, GarageLink.HumpFor([(0.5f, -0.2f), (0.3f, 0f)]));
+        Assert.Equal(0.5f, GarageLink.HumpFor([(0.5f, 2f)]));
+    }
 }

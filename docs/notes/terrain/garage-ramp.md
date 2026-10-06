@@ -56,3 +56,12 @@ in is PR 2, the parked cars PR 3. Until PR 2 the door is a shut roll-up door tha
   street 6 m, 16 m, a main road 8 m, a street 40 m and a motorway 12 m off: the first three roll
   garage doors with the link the rule calls for, the last two none, and each garage block plans
   with a car park and a valid plan.
+
+- **Real-data check** (`--garagelinks,<outdir>`, `GarageLinkProbe`, windowed, by hand: needs real tiles, so it is in no tier;
+  `--garagevillages N`): hops to each village, counts the blocks that rolled a garage door, measures every access road against the
+  terrain and a physics ray, and takes street-level shots of the first pavement and the first access road. Run on the Geneva
+  and Lausanne tiles (`--chunks <terrain_chunks> --at 2500300,1118450 --traffic 0`). Findings (#558): a stub on bumpy ground
+  was buried up to 24 cm, so `GarageLink.Hump` (a sine over the run, set from the ground by `BuildingFootprint`, `StubDeck` in
+  six-odd quarter pieces) now raises it over the rise: 0.00 to 0.03 m off the deck afterwards. The last 0.8 m meets the road's
+  own kerb, up to 20 cm proud of the road's height: a kerb to drive up, not fixed. The generated world (`--generated-world`)
+  has no flats that roll one in the villages sampled.

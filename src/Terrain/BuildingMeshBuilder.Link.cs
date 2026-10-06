@@ -22,17 +22,37 @@ public static partial class BuildingMeshBuilder
     /// corners, near end first, left to right; drawn raised <see cref="LinkLift"/> over a straight
     /// line between the ground at the door and the road's height, and collided as the same quads.
     /// </summary>
-    public static (Vector3[] Strip, Vector3[] Flare) StubDeck(DoorSpot d)
+    public static Vector3[][] StubDeck(DoorSpot d)
     {
         var o = d.Outward;
         var t = new Vector3(-o.Z, 0, o.X);
         float len = d.Link.Length, dy = d.Link.RoadY - d.Position.Y;
         float half = GarageLink.StubWidth / 2;
         Vector3 P(float along, float out_) =>
-            d.Position + t * along + o * out_ + Vector3.Up * (dy * Mathf.Clamp(out_ / len, 0f, 1f) + LinkLift);
+            d.Position + t * along + o * out_ + Vector3.Up * (LinkHeight(d.Link, dy, out_) + LinkLift);
         float round = Mathf.Min(StubRound, Mathf.Max(0.3f, len - LinkStart - 0.1f));
-        return ([P(-half, LinkStart), P(half, LinkStart), P(half, len - round), P(-half, len - round)],
-            [P(-half, len - round), P(half, len - round), P(half + StubFlare, len), P(-half - StubFlare, len)]);
+        // the strip in pieces about a metre and a half long, so the hump over a rise in the ground can bend
+        float end = len - round;
+        int n = Math.Max(1, (int)Mathf.Ceil((end - LinkStart) / 1.5f));
+        var quads = new List<Vector3[]>();
+        for (int i = 0; i < n; i++)
+        {
+            float o0 = Mathf.Lerp(LinkStart, end, i / (float)n), o1 = Mathf.Lerp(LinkStart, end, (i + 1) / (float)n);
+            quads.Add([P(-half, o0), P(half, o0), P(half, o1), P(-half, o1)]);
+        }
+        quads.Add([P(-half, end), P(half, end), P(half + StubFlare, len), P(-half - StubFlare, len)]);
+        return quads.ToArray();
+    }
+
+    /// <summary>
+    /// How high above the door's ground a link is at <paramref name="out_"/> metres out: the straight
+    /// line to the road's height, plus <see cref="GarageLink.Hump"/> raised over the middle where the
+    /// ground between them rises above that line.
+    /// </summary>
+    private static float LinkHeight(GarageLink link, float dy, float out_)
+    {
+        float u = Mathf.Clamp(out_ / link.Length, 0f, 1f);
+        return dy * u + link.Hump * Mathf.Sin(Mathf.Pi * u);
     }
 
     /// <summary>
@@ -45,7 +65,7 @@ public static partial class BuildingMeshBuilder
         var o = d.Outward;
         var t = new Vector3(-o.Z, 0, o.X);
         float len = d.Link.Length, dy = d.Link.RoadY - d.Position.Y, hw = d.Width / 2;
-        float Y(float out_) => dy * Mathf.Clamp(out_ / len, 0f, 1f);
+        float Y(float out_) => LinkHeight(d.Link, dy, out_);
         Vector3 P(float along, float out_, float up) => d.Position + t * along + o * out_ + Vector3.Up * (Y(out_) + up);
         void Quad(Vector3 a, Vector3 b, Vector3 cc, Vector3 dd, Color col)
         {
@@ -83,9 +103,7 @@ public static partial class BuildingMeshBuilder
         }
         else
         {
-            var (strip, flare) = StubDeck(d);
-            Quad(strip[0], strip[1], strip[2], strip[3], asphalt);
-            Quad(flare[0], flare[1], flare[2], flare[3], asphalt);
+            foreach (var q in StubDeck(d)) Quad(q[0], q[1], q[2], q[3], asphalt);
             // a kerb stone line either side, so the stub reads as a made road and not a stain
             float half = GarageLink.StubWidth / 2;
             float round = Mathf.Min(StubRound, Mathf.Max(0.3f, len - LinkStart - 0.1f));
@@ -134,8 +152,7 @@ public static partial class BuildingMeshBuilder
         foreach (var d in doors)
         {
             if (d.Link.Kind != LinkKind.Stub) continue;
-            var (strip, flare) = StubDeck(d);
-            foreach (var q in new[] { strip, flare })
+            foreach (var q in StubDeck(d))
             {
                 faces.AddRange([q[0], q[1], q[2], q[0], q[2], q[3]]);
                 faces.AddRange([q[0], q[2], q[1], q[0], q[3], q[2]]);

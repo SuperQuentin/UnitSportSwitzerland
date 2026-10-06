@@ -40,6 +40,25 @@ public readonly record struct GarageLink(LinkKind Kind, float Length, float Road
 
     private static bool Motorway(RoadClass c) => c is RoadClass.Motorway or RoadClass.Expressway or RoadClass.Ramp;
 
+    /// <summary>
+    /// How much an access road is raised over the middle of its straight line from door to road,
+    /// metres, where the ground between them rises above that line (set by the footprint, which has
+    /// the ground; 0 otherwise). A sine over the run, so it meets the door and the road level.
+    /// </summary>
+    public float Hump { get; init; }
+
+    /// <summary>The hump needed for a link of <paramref name="length"/> over ground heights <paramref name="above"/> the line, sampled at <paramref name="at"/> (0..1 along it).</summary>
+    public static float HumpFor(IEnumerable<(float At, float Above)> samples, float max = 0.5f)
+    {
+        float hump = 0;
+        foreach (var (at, above) in samples)
+        {
+            float w = MathF.Sin(MathF.PI * Math.Clamp(at, 0f, 1f));
+            if (w > 0.2f && above > 0) hump = Math.Max(hump, above / w);
+        }
+        return Math.Min(hump, max);
+    }
+
     public bool Any => Kind != LinkKind.None;
 
     /// <summary>

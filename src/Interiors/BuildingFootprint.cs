@@ -503,6 +503,22 @@ public static class BuildingFootprint
                     if (gh < 2.2f || ground < b.MinY - 0.6f || ground > b.MaxY - gh - 0.3f) return null;
                     var link = GarageLink.Choose(xz + c.Normal * 0.03f, c.Normal, roads.Streets.Roads);
                     if (!link.Any) return null;
+                    if (link.Kind == LinkKind.Stub && grid != null)
+                    {
+                        // the stub is a straight line between two heights: where the ground between them
+                        // stands higher it would lie buried, so the stub is humped over it
+                        var outV = c.Normal;
+                        var samples = new List<(float, float)>();
+                        for (int i = 1; i < 16; i++)
+                            foreach (float side in new[] { -2.2f, -1f, 0f, 1f, 2.2f })
+                            {
+                                float at = i / 16f, o = link.Length * at;
+                                var p = xz + outV * o + t * side;
+                                float gy = (float)grid.SampleMeshHeight(tile.Id.MinE + p.X, tile.Id.MaxN - p.Y);
+                                samples.Add((at, gy - (baseY + (link.RoadY - baseY) * at) - 0.03f));
+                            }
+                        link = link with { Hump = GarageLink.HumpFor(samples) };
+                    }
                     var spot = new DoorSpot(index,
                         new Vector3(xz.X + c.Normal.X * 0.03f, baseY, xz.Y + c.Normal.Y * 0.03f),
                         new Vector3(c.Normal.X, 0, c.Normal.Y), gw, gh)
