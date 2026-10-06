@@ -8,12 +8,12 @@ namespace UnitSport.Movie;
 /// change-only properties are stored by name: a file from a build with more or fewer of them
 /// loads, the unknown ones dropped and the new ones at their default. Version 2 (#656) adds the
 /// sound: audio lanes, the sounds (file name, beats, waveform), a flag per clip and the markers.
-/// Version 1 files still load, silent.
+/// Version 1 files still load, silent. Version 3 (#669) adds the camera's keyframes.
 /// </summary>
 public static class MovieFile
 {
     private const uint Magic = 0x564D5355;   // "USMV"
-    private const int Version = 2;
+    private const int Version = 3;
 
     public static void Write(MovieProject p, Stream to) => Write(p, to, Version);
 
@@ -72,6 +72,17 @@ public static class MovieFile
         {
             w.Write(p.Markers.Count);
             foreach (double m in p.Markers) w.Write(m);
+        }
+
+        if (version >= 3)
+        {
+            w.Write(p.Camera.Keys.Count);
+            foreach (var k in p.Camera.Keys)
+            {
+                w.Write(k.T); w.Write(k.E); w.Write(k.N); w.Write(k.Alt);
+                w.Write(k.Qx); w.Write(k.Qy); w.Write(k.Qz); w.Write(k.Qw);
+                w.Write(k.Lens); w.Write((byte)k.Ease); w.Write(k.LookAt);
+            }
         }
     }
 
@@ -165,6 +176,22 @@ public static class MovieFile
         {
             int markers = r.ReadInt32();
             for (int i = 0; i < markers; i++) p.AddMarker(r.ReadDouble());
+        }
+
+        if (version >= 3)
+        {
+            int keys = r.ReadInt32();
+            for (int i = 0; i < keys; i++)
+            {
+                var k = new CameraKey
+                {
+                    T = r.ReadDouble(), E = r.ReadDouble(), N = r.ReadDouble(), Alt = r.ReadDouble(),
+                    Qx = r.ReadSingle(), Qy = r.ReadSingle(), Qz = r.ReadSingle(), Qw = r.ReadSingle(),
+                    Lens = r.ReadSingle(), Ease = (KeyEase)Math.Min(r.ReadByte(), (byte)KeyEase.Cut), LookAt = r.ReadInt32(),
+                };
+                if (k.LookAt >= p.Lanes.Count) k.LookAt = -1;
+                p.Camera.Set(k, -1, replaceOptions: true);
+            }
         }
         return p;
     }
