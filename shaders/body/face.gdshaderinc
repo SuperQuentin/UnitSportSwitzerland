@@ -95,13 +95,14 @@ bool face_heart(vec2 p) {
 
 // rgb, and alpha 0 where the face leaves the skin showing
 vec4 face_px(vec2 uv, vec2 code, vec3 iris_col, float t) {
-    int lo = int(code.x + 0.5);
-    int hi = int(code.y + 0.5);
+    // whole numbers up to 2^24: round, never + 0.5 (at 8 million a float steps by 1, so x + 0.5 rounds up a whole one)
+    int lo = int(round(code.x));
+    int hi = int(round(code.y));
     int shape = lo & 7;
     float size = 0.85 + 0.12 * float((lo >> 3) & 3);
     float spacing = 3.3 + 0.35 * float((lo >> 5) & 3);
     float eye_y = 6.9 + 0.45 * float((lo >> 7) & 3);
-    float iris_k = 0.48 + 0.12 * float((lo >> 9) & 3);
+    float iris_k = 0.5 + 0.1 * float((lo >> 9) & 3);
     bool lashes = ((lo >> 11) & 1) == 1;
     bool shine = ((lo >> 12) & 1) == 1;
     int brow = (lo >> 13) & 3;
@@ -185,7 +186,7 @@ vec4 face_px(vec2 uv, vec2 code, vec3 iris_col, float t) {
                 }
                 return vec4(FACE_LINE, 1.0);
             } else {
-                float ir = ry * iris_k;
+                float ir = min(rx, ry * 0.8) * iris_k;
                 float side = right ? -1.0 : 1.0;   // +gaze.x is +lx for the left eye, -lx for the right
                 vec2 ic = vec2(side * gaze.x * max(rx - ir * 0.8, 0.0), gaze.y * max(ry - ir, 0.0) * 0.6 + ry * 0.12);
                 float dl = length(e - ic);
@@ -194,11 +195,11 @@ vec4 face_px(vec2 uv, vec2 code, vec3 iris_col, float t) {
                     if (shine && length(e - hl) <= max(px * 0.75, ir * 0.22)) {
                         return vec4(1.0);
                     }
-                    if (res >= 24.0 && dl <= ir * 0.42) {
-                        return vec4(iris_col * 0.22, 1.0);   // the pupil
+                    if (ir > px * 2.2 && dl <= ir * 0.4) {
+                        return vec4(iris_col * 0.3, 1.0);   // the pupil, once the iris is big enough to hold one
                     }
-                    // the iris in the figure's eye colour, darker under the lid
-                    return vec4(iris_col * (e.y < ic.y - ir * 0.25 ? 0.6 : 1.0), 1.0);
+                    // the iris in the figure's eye colour, a shade darker round its rim
+                    return vec4(iris_col * (dl > ir - px ? 0.7 : 1.0), 1.0);
                 }
                 return vec4(FACE_WHITE, 1.0);
             }
@@ -296,7 +297,7 @@ vec4 face_px(vec2 uv, vec2 code, vec3 iris_col, float t) {
             && face_hash2(cell) < 0.16) {
         return vec4(FACE_FRECKLE, 1.0);
     }
-    if (stubble && p.y > mouth_y - 1.3 && lx > 2.2 && mod(cell.x + cell.y, 2.0) < 0.5 && face_hash2(cell) > 0.3) {
+    if (stubble && p.y > mouth_y - 1.1 && lx > 2.6 && mod(cell.x + cell.y, 2.0) < 0.5 && face_hash2(cell) > 0.55) {
         return vec4(FACE_STUBBLE, 1.0);
     }
     return vec4(0.0);

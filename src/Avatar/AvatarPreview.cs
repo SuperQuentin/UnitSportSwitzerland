@@ -540,7 +540,8 @@ public partial class AvatarPreview : Node3D
     /// <summary>
     /// "--bodies [page]" (#394): the figures. <c>builds</c> (default): every build in the same
     /// jersey; <c>crowd</c>: ten seeded figures, as NPCs and players who never chose get them; <c>looks</c>: six styled looks; <c>faces</c>: every
-    /// face close up; <c>heads</c>: the looks' heads and hair; <c>walk</c>: the builds mid-stride. Long lens, turned
+    /// face close up, four to a row; <c>expressions</c> / <c>expressions2</c>: every <see cref="Face.FaceExpression"/> (#657), on a big-eyed and a small-eyed face;
+    /// <c>seeded</c>: sixteen faces made up from seeds (<see cref="FaceGenome.ForSeed"/>); <c>heads</c>: the looks' heads and hair; <c>walk</c>: the builds mid-stride. Long lens, turned
     /// three-quarters (or by --view degrees).
     /// </summary>
     private void BuildBodies()
@@ -548,8 +549,8 @@ public partial class AvatarPreview : Node3D
         string page = CmdArgs.Value("--bodies", notFlag: true) ?? "builds";
         var skin = new Color(0.90f, 0.74f, 0.62f);
         var jersey = new BodyLook(BodyBuild.Slim, skin) { Top = new Color(0.85f, 0.24f, 0.20f), Bottom = new Color(0.16f, 0.17f, 0.20f) };
-        var figures = new List<(string Name, Func<ArrayMesh> Mesh)>();
-        void Add(string name, BodyLook look) => figures.Add((name, () => HumanMeshBuilder.BuildBody(look)));
+        var figures = new List<(string Name, Func<ArrayMesh> Mesh, Face.FaceState? State)>();
+        void Add(string name, BodyLook look, Face.FaceState? state = null) => figures.Add((name, () => HumanMeshBuilder.BuildBody(look), state));
 
         var black = new Color(0.08f, 0.08f, 0.10f);
         var looks = new (string Name, BodyLook Look)[]
@@ -636,7 +637,10 @@ public partial class AvatarPreview : Node3D
         };
 
         float spacing = 0.95f, lookAtY = 0.92f, height = 2.1f;
+        int columns = 0;   // >0: heads in a grid, this many to a row, each row lower and nearer
+        const float rowDrop = 0.36f, rowNear = 0.3f;
         void Heads() { spacing = 0.42f; lookAtY = 1.68f; height = 0.55f; }
+        void Grid(int across) { Heads(); columns = across; spacing = 0.34f; }
         switch (page)
         {
             case "looks":
@@ -649,7 +653,27 @@ public partial class AvatarPreview : Node3D
                 // every face, bald so nothing hides it, heads only in frame
                 for (int f = 0; f < FaceGenome.PresetCount; f++)
                     Add(FaceGenome.PresetName(f), (f % 2 == 0 ? looks[f / 2 % looks.Length] : guys[f / 2 % guys.Length]).Look with { Face = f, HairStyle = HairStyle.None });
-                Heads();
+                Grid(4);
+                break;
+            case "expressions":
+            case "expressions2":
+            {
+                // every expression (#657), on a big-eyed face, or (2) a small-eyed one
+                bool big = page == "expressions";
+                var look = (big ? looks[3] : guys[1]).Look with { Face = big ? 0 : 6, HairStyle = HairStyle.None };
+                foreach (var e in Enum.GetValues<Face.FaceExpression>())
+                    Add(e.ToString(), look, Face.FaceExpressions.Of(e));
+                Grid(5);
+                break;
+            }
+            case "seeded":
+                for (int f = 0; f < 16; f++)
+                {
+                    int f2 = f;
+                    var look = (f % 2 == 0 ? looks[f / 2 % looks.Length] : guys[f / 2 % guys.Length]).Look with { HairStyle = HairStyle.None };
+                    Add($"seed {f}", look with { Genome = FaceGenome.ForSeed((uint)f2 * 7919u + 13u) });
+                }
+                Grid(4);
                 break;
             case "eyes":
                 // one face, the eye colour its own choice
@@ -676,7 +700,7 @@ public partial class AvatarPreview : Node3D
                 foreach (var b in Enum.GetValues<BodyBuild>())
                 {
                     var look = (b < BodyBuild.Broad ? looks[(int)b * 2] : guys[(int)b - 2]).Look;
-                    figures.Add(($"{b}", () => HumanMeshBuilder.BuildBodyStride(look, 1.6f, 0.15f)));
+                    figures.Add(($"{b}", () => HumanMeshBuilder.BuildBodyStride(look, 1.6f, 0.15f), null));
                 }
                 break;
             case "crowd":
@@ -684,7 +708,7 @@ public partial class AvatarPreview : Node3D
                 for (int i = 0; i < 10; i++)
                 {
                     int seed = i;
-                    figures.Add(($"seed {seed}", () => HumanMeshBuilder.Build(HumanPalette.ForRider(seed))));
+                    figures.Add(($"seed {seed}", () => HumanMeshBuilder.Build(HumanPalette.ForRider(seed)), null));
                 }
                 break;
             default:
@@ -706,18 +730,31 @@ public partial class AvatarPreview : Node3D
         AddChild(new DirectionalLight3D { Rotation = new Vector3(Mathf.DegToRad(-15), Mathf.DegToRad(20), 0), LightEnergy = 0.7f });
 
         var material = HumanMeshBuilder.FigureMaterial();
+        // stills: the faces neither blink nor glance (#657)
+        material.SetShaderParameter(Face.FaceAnimator.IdleParam, 0f);
         float yaw = _viewDegrees == 90 ? Mathf.Pi - 0.45f : Mathf.DegToRad(_viewDegrees);
+        int across = columns > 0 ? columns : figures.Count;
+        int rows = (figures.Count + across - 1) / across;
         for (int i = 0; i < figures.Count; i++)
         {
             var mesh = figures[i].Mesh();
-            AddChild(new MeshInstance3D
+            int col = i % across, row = i / across;
+            var node = new MeshInstance3D
             {
                 Mesh = mesh,
                 MaterialOverride = material,
-                Position = new Vector3((i - (figures.Count - 1) * 0.5f) * spacing, 0, 0),
+                Position = new Vector3((col - (across - 1) * 0.5f) * spacing, -row * rowDrop, row * rowNear),
                 Rotation = new Vector3(0, yaw, 0),
-            });
+            };
+            if (figures[i].State is { } state) Face.FaceAnimator.Apply(node, state);
+            AddChild(node);
             GD.Print($"[bodies] {figures[i].Name}: {mesh.SurfaceGetArrayIndexLen(0) / 3} triangles");
+        }
+        if (rows > 1)
+        {
+            // the grid's middle row in the middle of the frame
+            lookAtY -= (rows - 1) * rowDrop * 0.5f + 0.05f;
+            height += (rows - 1) * rowDrop + 0.25f;
         }
         // a long lens (docs/notes/avatar/judge-model-proportions-long-lens.md): framed to the row, or
         // to the figures' height, whichever needs more distance
@@ -725,7 +762,7 @@ public partial class AvatarPreview : Node3D
         float half = Mathf.Tan(Mathf.DegToRad(fov * 0.5f));
         var size = GetViewport().GetVisibleRect().Size;
         float aspect = size.X / Mathf.Max(1f, size.Y);
-        float distance = Mathf.Max(figures.Count * spacing * 0.55f / (half * aspect), height * 0.55f / half);
+        float distance = Mathf.Max(across * spacing * 0.55f / (half * aspect), height * 0.55f / half);
         var cam = new Camera3D { Fov = fov, Position = new Vector3(0, lookAtY + distance * 0.06f, distance), Far = distance * 3f };
         AddChild(cam);
         cam.LookAt(new Vector3(0, lookAtY, 0), Vector3.Up);

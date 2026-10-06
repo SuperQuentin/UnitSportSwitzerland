@@ -200,6 +200,8 @@ public readonly record struct BodyLook(BodyBuild Build, Color Skin)
     public Color Hair { get; init; } = new(0.20f, 0.13f, 0.08f);
     public HairStyle HairStyle { get; init; }
     public int Face { get; init; }
+    /// <summary>A face of its own instead of preset <see cref="Face"/> (#657): a seeded one (<see cref="FaceGenome.ForSeed"/>).</summary>
+    public FaceGenome? Genome { get; init; }
     /// <summary>The iris, whatever the face (the atlas keys it, the shader paints it).</summary>
     public Color Eyes { get; init; } = new(0.35f, 0.22f, 0.12f);
     /// <summary>Cloth patterns (<see cref="Finish"/>: Checker, Stripes, Studs, Tartan, Fishnet…) on the top, the bottom and the legwear.</summary>
@@ -352,7 +354,7 @@ public static partial class HumanMeshBuilder
         fit.Head.Draw(s, look.Skin);
         if (cover != HairCover.Head)
         {
-            fit.Head.Face(s, FaceGenome.Preset(look.Face).WithSeed(FaceSeed(look)), look.Eyes);
+            fit.Head.Face(s, look.Genome ?? FaceGenome.Preset(look.Face).WithSeed(FaceSeed(look)), look.Eyes);
             fit.Head.Ears(s, look.Skin);
             fit.Head.Hair(s, look.HairStyle, look.Hair, look.Skin, cover);
         }
