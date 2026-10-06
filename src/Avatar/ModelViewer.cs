@@ -120,6 +120,13 @@ public partial class ModelViewer : Node3D
             foreach (var (variant, make) in set)
                 yield return new Entry(tag.Category, tag.Name == null ? variant : $"{tag.Name} - {variant}", make);
         }
+        else if (typeof(IEnumerable<(string, string, Func<Node3D>)>).IsAssignableFrom(type))
+        {
+            // a set spanning categories: the tuple's own category, the tag's only as a fallback
+            var set = (IEnumerable<(string Category, string Name, Func<Node3D> Make)>)method.Invoke(null, null)!;
+            foreach (var (category, variant, make) in set)
+                yield return new Entry(category.Length > 0 ? category : tag.Category, variant, make);
+        }
         else
             GD.PushError($"[models] [Showcase] on {Where(method)}: returns {type.Name}, not a Mesh, Node3D or variant set");
     }
@@ -142,14 +149,12 @@ public partial class ModelViewer : Node3D
 
     /// <summary>
     /// Builder classes (a public static method returning a mesh, or named *MeshBuilder / *Meshes)
-    /// with no entry in the viewer at all: where the next model to tag probably is.
+    /// that built nothing during the screenshot run, whose stacks <see cref="MeshScratch.Built"/>
+    /// recorded in <paramref name="covered"/>: where the next model to tag probably is.
     /// </summary>
-    private static List<string> Uncovered()
+    private static List<string> Uncovered(HashSet<Type> covered)
     {
         var methods = StaticMethods().ToList();
-        var covered = methods
-            .Where(m => m.GetCustomAttributes<ShowcaseAttribute>().Any() || IsBareMeshBuilder(m))
-            .Select(m => Outermost(m.DeclaringType!)).ToHashSet();
         return methods
             .Where(m => m.IsPublic && (typeof(Mesh).IsAssignableFrom(m.ReturnType)
                 || m.DeclaringType!.Name.EndsWith("MeshBuilder", StringComparison.Ordinal)
@@ -194,7 +199,7 @@ public partial class ModelViewer : Node3D
             box = Bounds(_model) ?? box;
         }
         _target = box.GetCenter();
-        _distance = Mathf.Max(box.Size.Length() * 1.4f, 0.3f);
+        _distance = Fit(box);
 
         _label.Text = $"{_categories[_category].Name}  ({_category + 1}/{_categories.Count})   ›   " +
                       $"{entry.Name}  ({_index + 1}/{entries.Count})   " +
@@ -215,12 +220,42 @@ public partial class ModelViewer : Node3D
         return box;
     }
 
+    /// <summary>
+    /// The camera distance at which the box's eight corners just fit the view from the current
+    /// yaw and pitch, with a margin: a tall figure and a flat airliner both fill the frame.
+    /// </summary>
+    private float Fit(Aabb box)
+    {
+        var back = new Vector3(0, 0, 1).Rotated(Vector3.Right, _pitch).Rotated(Vector3.Up, _yaw);
+        var right = (-back).Cross(Vector3.Up).Normalized();
+        var up = right.Cross(-back);
+        var size = GetViewport().GetVisibleRect().Size;
+        float tanV = Mathf.Tan(Mathf.DegToRad(_camera.Fov * 0.5f)), tanH = tanV * size.X / Mathf.Max(size.Y, 1f);
+        var centre = box.GetCenter();
+        float distance = 0.3f;
+        for (int i = 0; i < 8; i++)
+        {
+            var c = box.GetEndpoint(i) - centre;
+            float z = c.Dot(back);
+            distance = Mathf.Max(distance, z + Mathf.Abs(c.Dot(up)) / tanV);
+            distance = Mathf.Max(distance, z + Mathf.Abs(c.Dot(right)) / tanH);
+        }
+        return distance * 1.12f;
+    }
+
     private static int Wrap(int i, int n) => (i % n + n) % n;
 
     private async Task ShootAll()
     {
         DirAccess.MakeDirRecursiveAbsolute(_shots!);
         int count = 0, failed = 0;
+        var covered = new HashSet<Type>();
+        MeshScratch.Built = () =>
+        {
+            foreach (var frame in new System.Diagnostics.StackTrace().GetFrames())
+                if (frame.GetMethod()?.DeclaringType is { } type)
+                    covered.Add(Outermost(type));
+        };
         for (int c = 0; c < _categories.Count; c++)
             for (int i = 0; i < _categories[c].Entries.Count; i++)
             {
@@ -235,7 +270,8 @@ public partial class ModelViewer : Node3D
                 GetViewport().GetTexture().GetImage().SavePng(file);
                 count++;
             }
-        foreach (var name in Uncovered())
+        MeshScratch.Built = null;
+        foreach (var name in Uncovered(covered))
             GD.Print($"[models] no viewer entry: {name}");
         GD.Print($"[models] wrote {count} models in {_categories.Count} categories to {_shots}");
         GD.Print(failed == 0 ? "[models] RESULT: ok" : $"[models] RESULT: FAILED ({failed} models threw)");

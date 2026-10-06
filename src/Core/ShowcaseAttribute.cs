@@ -10,7 +10,9 @@ namespace UnitSport.Core;
 /// On a static method with no parameters returning an <c>ArrayMesh</c> / <c>Mesh</c> (shown with the
 /// shared vertex-colour material), a <c>Node3D</c> (shown as is: its own materials, parts, script),
 /// or an <c>IEnumerable&lt;(string Name, Func&lt;Node3D&gt; Make)&gt;</c> for a set of variants
-/// (each tuple named on its own, <see cref="Name"/> is then a prefix or null).
+/// (each tuple named on its own, <see cref="Name"/> is then a prefix or null), or an
+/// <c>IEnumerable&lt;(string Category, string Name, Func&lt;Node3D&gt; Make)&gt;</c> for a set that
+/// spans categories (an empty category falls back to <see cref="Category"/>).
 /// A builder that needs arguments gets a small parameterless factory next to it.
 /// </para>
 /// <para>

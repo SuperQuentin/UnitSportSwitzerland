@@ -486,12 +486,19 @@ public sealed class MeshScratch
     public ArrayMesh Build() => Build(Vector3.Zero);
 
     /// <summary>
+    /// Called on every build, null in the game: the model viewer's screenshot run (--models,dir)
+    /// reads the stack to learn which builder classes it has shown.
+    /// </summary>
+    internal static Action? Built;
+
+    /// <summary>
     /// As <see cref="Build()"/>, with <paramref name="pivot"/> (authored space, facing +Z) as the
     /// mesh's origin: for a part that swings on a hinge, authored in place with the rest of the
     /// machine. Its node goes at the pivot turned the same way, <c>(−x, y, −z)</c>.
     /// </summary>
     public ArrayMesh Build(Vector3 pivot)
     {
+        Built?.Invoke();
         var mesh = new ArrayMesh();
         AddSurface(mesh, _vertices, _colors, _normals, _uvs, _indices, pivot, "body");
         AddSurface(mesh, _glassVertices, _glassColors, null, null, _glassIndices, pivot, GlassSurface);
@@ -515,6 +522,7 @@ public sealed class MeshScratch
     /// </summary>
     public ArrayMesh BuildInto(ArrayMesh mesh)
     {
+        Built?.Invoke();
         mesh.ClearSurfaces();
         AddSurface(mesh, _vertices, _colors, _normals, _uvs, _indices, Vector3.Zero, "body");
         AddSurface(mesh, _glassVertices, _glassColors, null, null, _glassIndices, Vector3.Zero, GlassSurface);
