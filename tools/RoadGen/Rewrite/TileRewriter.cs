@@ -303,7 +303,10 @@ public static partial class TileRewriter
     /// </summary>
     public sealed class Inputs
     {
-        /// <summary>A tile's raw (never rewritten) roads and their keys; (null, null) for none.</summary>
+        /// <summary>
+        /// A tile's raw (never rewritten) roads and their keys; (null, null) for none. A fresh copy
+        /// on every call: the stage writes into the segments (road heights in town, #119).
+        /// </summary>
         public required Func<TileId, (RoadTile? Tile, RawRoads.Key?[]? Keys)> Roads { get; init; }
         /// <summary>A tile's full-resolution ground, or null.</summary>
         public required Func<TileId, ChunkGrid?> Grid { get; init; }

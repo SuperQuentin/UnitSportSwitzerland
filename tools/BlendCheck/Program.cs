@@ -13,6 +13,7 @@ using static System.Console;
 //   dotnet run --project tools/BlendCheck -c Release
 
 if (args.Contains("--roads")) return RoadBlendCheck.Run(args);
+if (args.Contains("--generated-roads")) return await GeneratedRoadsCheck.Run(args);
 
 const double AnchorE = 2583250, AnchorN = 1113250;   // SpawnPoint.DefaultLv95E/N
 var world = new ProceduralWorld(AnchorE, AnchorN);
