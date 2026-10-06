@@ -53,7 +53,9 @@ public enum RideKind
     Telehandler = 198,
     /// <summary>A wheel loader with a fork carriage instead of its bucket (#615): a <see cref="Player.WheelLoader"/> that lifts pallets.</summary>
     WheelLoaderForks = 199,
-    // The next other mount is 200.
+    /// <summary>A tracked mini dumper (#614): a <see cref="Player.MiniDumper"/>, a skip that tips forward.</summary>
+    MiniDumper = 200,
+    // The next other mount is 201.
 }
 
 /// <summary>
@@ -498,6 +500,7 @@ public abstract class Rideable
         RideKind.MiniExcavator => new Excavator(mini: true),
         RideKind.WheelLoader => new WheelLoader(),
         RideKind.WheelLoaderForks => new WheelLoader(forks: true),
+        RideKind.MiniDumper => new MiniDumper(),
         RideKind.CompactRoller => new CompactRoller(),
         RideKind.Telehandler => new Telehandler(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),

@@ -245,8 +245,30 @@ public partial class ExcavatorNetProbe : ChatProbe
         await Seconds(1.0);
         Expect(!me.EngineOn, "A's engine is off");
         Say("mixer off");
-        if (!await Heard("B", "mixer off seen", 30)) Fail("B never saw the drum stop");
+        if (!await Heard("B", "mixer off seen", 30)) { Fail("B never saw the drum stop"); return; }
+
+        // the mini dumper (#614): its skip tipped on the same binding, then parked up
         me.RideControls = null;
+        me.ExitVehicle();
+        if (!await Until(() => me.Ride == RideKind.OnFoot, 10)) { Fail("A never got off the mixer"); return; }
+        me.PlaceAt(me.GlobalPosition + new Vector3(-12f, 0.5f, 0f), me.Rotation.Y);
+        await Seconds(1);
+        Expect(me.SetRide(RideKind.MiniDumper) && me.Vehicle is MiniDumper, "A takes a mini dumper");
+        if (me.Vehicle is not MiniDumper dumper) { Fail("not a mini dumper"); return; }
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false);
+        await Seconds(1);
+        XrPad.Press(PlayerInput.Destination, true);
+        await Seconds(0.1);
+        XrPad.Press(PlayerInput.Destination, false);
+        await Seconds(3.5);
+        Expect(dumper.Tipped, "A's mini dumper has its skip up");
+        Say("dumper tipped");
+        if (!await Heard("B", "dumper seen", 30)) { Fail("B never saw the skip"); return; }
+        me.RideControls = null;
+        me.ExitVehicle();
+        if (!await Until(() => me.Ride == RideKind.OnFoot && Parked(RideKind.MiniDumper) != null, 10)) { Fail("the mini dumper is not parked"); return; }
+        Say("dumper parked");
+        if (!await Heard("B", "dumper kept", 30)) Fail("B never compared the parked mini dumper");
     }
 
     private async Task RunB(FootPlayer me)
@@ -369,5 +391,16 @@ public partial class ExcavatorNetProbe : ChatProbe
         bool stopped = await Until(() => a.Visual == null || a.Visual is HeavyRig { DrumSpeed: 0f }, 10);
         Expect(stopped, $"B has A's drum stopped with its engine ({(a.Visual as HeavyRig)?.DrumSpeed:F2} rad/s)");
         Say("mixer off seen");
+
+        if (!await Heard("A", "dumper tipped", 60)) { Fail("A never tipped a mini dumper"); return; }
+        bool skipUp = await Until(() => a.RideModel is MiniDumper { Tipped: true }
+            && (a.Visual == null || a.Visual is HeavyRig { TippedShown: > 0.95f }), 10);
+        Expect(skipUp, $"B has A's mini dumper with its skip up (copy {(a.RideModel as MiniDumper)?.Tipped}, drawn {(a.Visual as HeavyRig)?.TippedShown:F2})");
+        Say("dumper seen");
+
+        if (!await Heard("A", "dumper parked", 60)) { Fail("A never parked the mini dumper"); return; }
+        bool skipKept = await Until(() => Parked(RideKind.MiniDumper) is { Ride: MiniDumper { Tipped: true } }, 15);
+        Expect(skipKept, "B's parked mini dumper keeps its skip up");
+        Say("dumper kept");
     }
 }

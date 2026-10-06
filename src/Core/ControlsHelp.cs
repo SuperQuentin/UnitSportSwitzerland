@@ -158,6 +158,12 @@ public partial class ControlsHelp : CanvasLayer
             // the variant with a fork carriage (#615): the same controls, the forks lift pallets
             new("With forks: run them in under a pallet and lift the arm to take it, lower it to set it down", PlayerInput.ArmBoomUp),
         }),
+        ("Mini dumper (#614)", new Row[]
+        {
+            // tracks like the excavator's; the skip on the tipper's action
+            new("Tracks: forward / back, turn on the spot", Keys: "{move_forward} {move_back} / {move_left} {move_right}", Pad: "{throttle} {brake} / {move_left}"),
+            new("Tip the skip / bring it down (stopped)", PlayerInput.Destination),
+        }),
         ("Compact roller (#614)", new Row[]
         {
             // it bends in the middle like the loader; the work-mode toggle sets the drums vibrating

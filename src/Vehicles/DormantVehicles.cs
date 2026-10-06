@@ -542,8 +542,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
 
     /// <summary>
     /// What a site's machine parks as: the excavator (#611), the wheel loader (#612), a quarter of
-    /// them with forks (#615, from the slot's own roll), the small kit (#614), and the tipper and the
-    /// mixer (#613). The mini dumper joins here once it can be driven.
+    /// them with forks (#615, from the slot's own roll), the small kit with the mini dumper (#614),
+    /// and the tipper and the mixer (#613).
     /// </summary>
     private static int? SiteKind(MachineRole role, ulong roll) => role switch
     {
@@ -554,6 +554,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         // the site's lorries (#613): HeavyCatalog's tipper and mixer
         MachineRole.Tipper => 104,
         MachineRole.Mixer => 105,
+        MachineRole.MiniDumper => (int)RideKind.MiniDumper,
         MachineRole.WheelLoader => (roll >> 52 & 3) == 0 ? (int)RideKind.WheelLoaderForks : (int)RideKind.WheelLoader,
         _ => null,
     };

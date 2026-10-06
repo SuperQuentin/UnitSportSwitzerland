@@ -79,6 +79,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | gear 1-6, R, N | 1-6 ` 0 / — | ok: H-pattern lever by hand (#438) | keep |
 | retarder | ' ; / — | ok: stalk by hand (#438) | keep |
 | bus kneel / destination | K N / — | ok: dash pokes (#438) | keep |
+| mini dumper: tip the skip (#614; the destination action, stopped) | N / — | ok: the **skip's button** on the console right of the wheel (`XrCabControls` "minidumper", `Kind.Poke`) | keep |
 | tipper: tip the body / mixer: discharge (#613; the destination action, stopped) | N / — | ok: the destination dash poke (`XrCabControls` "-work") | grip a tipping valve lever |
 | steamer whistle | H / D-pad ← | ok: R stick ←, or pull the cord (#438) | keep |
 | look_behind | B / wheel button | ok: turn your head; held on a keyboard or wheel the view turns round (#436) | keep |
