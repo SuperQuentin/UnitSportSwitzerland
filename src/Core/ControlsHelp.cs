@@ -200,6 +200,7 @@ public partial class ControlsHelp : CanvasLayer
         ("Game", new Row[]
         {
             new("Map: search a place and go", PlayerInput.Teleport),
+            new("Keep the last minutes for the movie studio (also Pause > Save clip)", PlayerInput.SaveClip, Pad: "{menu}, then Save clip"),
             new("Battle Royale: ping for your team (also middle-click on the map)", PlayerInput.Ping),
             new("Menu", PlayerInput.Menu),
             new("Chat / command", Keys: "Enter or /", Pad: "—"),

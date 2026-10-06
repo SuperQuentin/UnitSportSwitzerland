@@ -28,9 +28,9 @@ public static class MovieSession
 
     /// <summary>
     /// The replay buffer's last minutes into the movie, one clip per player: F5 in game, or the pause
-    /// menu. Says how much went in.
+    /// menu. Says how much went in, unless <paramref name="quiet"/> (opening the studio does it too).
     /// </summary>
-    public static int SaveClip()
+    public static int SaveClip(bool quiet = false)
     {
         if (ReplayRecorder.Instance is not { } recorder)
         {
@@ -44,7 +44,7 @@ public static class MovieSession
         }
         double held = recorder.Held;
         int clips = recorder.Grab(Project);
-        Said?.Invoke(clips == 0 ? "Nothing new to save since the last clip"
+        if (!quiet) Said?.Invoke(clips == 0 ? "Nothing new to save since the last clip"
             : $"Saved the last {Clock(held)} to the movie studio ({clips} {(clips == 1 ? "player" : "players")})");
         return clips;
     }
