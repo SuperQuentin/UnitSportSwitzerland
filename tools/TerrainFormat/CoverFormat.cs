@@ -217,10 +217,11 @@ public static class CoverFormat
     /// <summary>Which pattern, if any, the terrain shader draws over this class.</summary>
     public static SurfacePattern PatternFor(CoverClass c) => c switch
     {
-        // ParkingPaved is deliberately absent: its bays are geometry, so a painted grid on top
-        // of them would be a second, world-aligned set of bays (#499)
-        CoverClass.ParkingPublic or CoverClass.ParkingPrivate or CoverClass.RestArea
-            => SurfacePattern.ParkingBays,
+        // No car park draws a painted grid any more. #499 lays real bays out as geometry, and the
+        // old shader pattern is world-aligned, so wherever a lot has both you see two sets of bays
+        // at different angles; and a lot the planner rejected sat beside one that has proper bays,
+        // which looked worse than plain tarmac. ParkingPaved never had it for the same reason.
+        // SurfacePattern.ParkingBays is kept in the enum because the value is on the wire.
         CoverClass.Vineyard => SurfacePattern.VineRows,
         CoverClass.SportsField or CoverClass.Golf => SurfacePattern.PitchStripes,
         _ => SurfacePattern.None,

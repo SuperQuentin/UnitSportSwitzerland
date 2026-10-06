@@ -54,11 +54,11 @@ public static class CoverPalette
             CoverClass.Military => new Color(0.42f, 0.43f, 0.33f),
             CoverClass.Runway or CoverClass.Platform => new Color(0.33f, 0.33f, 0.33f),
 
-            CoverClass.ParkingPublic or CoverClass.RestArea => new Color(0.34f, 0.34f, 0.33f),
-            // a laid-out lot (#499): the pad geometry covers most of it, so this is the fringe
-            // between the outermost bay and the lot edge — the lot's own tarmac, no bay pattern
-            CoverClass.ParkingPaved => new Color(0.355f, 0.350f, 0.340f),
-            CoverClass.ParkingPrivate => new Color(0.37f, 0.36f, 0.34f),
+            // Every car park is plain concrete now: #499 lays the bays out as geometry, and the
+            // painted grid that used to stand in for them is gone (CoverFormat.PatternFor), so a
+            // lot with real bays and one without read as the same surface instead of clashing.
+            CoverClass.ParkingPublic or CoverClass.ParkingPrivate
+                or CoverClass.ParkingPaved or CoverClass.RestArea => new Color(0.355f, 0.350f, 0.340f),
             CoverClass.PavedArea => new Color(0.36f, 0.36f, 0.35f),
             CoverClass.TownPaving => new Color(0.50f, 0.50f, 0.48f),   // stone and concrete slabs
             CoverClass.TunnelRoof => new Color(0.60f, 0.60f, 0.57f),   // poured concrete
