@@ -446,8 +446,7 @@ public sealed class MeshScratch
                 (_indices[i + 1], _indices[i + 2]) = (_indices[i + 2], _indices[i + 1]);
         // a lit style's figure (#394: the lofted torso, head and boots): the caps flat, each face out of
         // itself; the bands round, every ring point's normal straight out from its ring's middle, so
-        // the cel light rolls round the trunk and the Cartoon ink outline (which pushes along the
-        // normals) closes over the edges instead of cracking open at each facet
+        // the cel light rolls round the trunk instead of breaking at each facet
         if (Smooth)
         {
             while (_normals.Count < _vertices.Count) _normals.Add(NoNormal);
