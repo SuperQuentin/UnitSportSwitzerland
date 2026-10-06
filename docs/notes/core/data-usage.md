@@ -17,13 +17,13 @@
 
 - **Setup:** a fresh desktop client (empty `--chunks` and `--cache`) joins a server with the real terrain, at 15 rings, 60 km horizon, Medium detail, standing at the spawn, for 150 s.
 
-  | | Before #63's yard fix | After |
+  | | Before | After the yard fixes |
   |---|---|---|
-  | Standard | 480+ MB (capped by the server's 3 MB/s) | 300 MB |
-  | Low data | 291 MB | 80 MB |
+  | Standard | 480+ MB (capped by the server's 3 MB/s) | 260 MB |
+  | Low data | 291 MB | 70 MB |
 
 - **What the bytes were:**
-  - Most were `DormantVehicles`' yard pass. It loaded every entering tile's `.bldg`, plus its 2 MB full grid whenever the tile had any building at all.
-  - On a client the yards now come from `TileFurnished` (buildings built near the player, both files already in the RAM cache), and only for tiles where `SiteYards.HasSite` finds a site.
-  - The server keeps the eager pass, because it has local data and must know every slot to wake it.
+  - Most were `DormantVehicles`' yard pass. It ran on every tile `TileEntered` announced (the whole streamed square), loading each one's `.bldg`, plus its 2 MB full grid whenever the tile had any building at all.
+  - #552 now limits fleets to the 3×3 tiles round each anchor (`NearRings`).
+  - #63 adds `SiteYards.HasSite`: the grid is fetched only when a building of the tile is a site.
 - **How to find who fetches a tile:** a stack trace at the top of `CachingChunkSource.Load*Async` (the synchronous part still has the caller). One in `NetworkChunkSource` only shows `MoveNext`, because the caller is gone after the first await.

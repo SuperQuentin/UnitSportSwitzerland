@@ -13,7 +13,7 @@ phone. The APK is built by every release (#544).
 | 2 No command line | already true: "Join a server" prefills `LastHost`, `ServerBook` keeps servers | — |
 | 3 Touch | done, `--touchcheck` in the quick tier | `core/touch-controls` |
 | 4 Mobile perf | done: phone defaults, build caps, 96 MB RAM cache, half-size portals, 2048 shadows | `core/platform` |
-| 5 Data | done: Settings → Data, Low data, metered warning, data saver; 300 / 80 MB on arrival | `core/data-usage` |
+| 5 Data | done: Settings → Data, Low data, metered warning, data saver; 260 / 70 MB on arrival | `core/data-usage` |
 | 6 Gating | done: no updater, SDL, hosting, Realistic+/VR relaunch, ffmpeg; multicast lock | `core/platform` |
 | 7 Multiplayer on a phone | not done: needs a phone | — |
 
