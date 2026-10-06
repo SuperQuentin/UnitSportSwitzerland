@@ -300,8 +300,8 @@ public partial class MovieStudio : Screen
         if (!Mathf.IsEqualApprox(_timelineBox.CustomMinimumSize.Y, Math.Max(170, rows)))
             _timelineBox.CustomMinimumSize = new Vector2(0, Math.Max(170, rows));
         if (_camPicker.ItemCount != MovieSession.Project.Cameras.Count) RefreshCameras();
-        // a pad's X held: cut to the picked camera (a tap splits, on release)
-        if (_xHeldSince >= 0 && !_xFired && Time.GetTicksMsec() / 1000.0 - _xHeldSince >= HoldToCut)
+        // a pad's X held: cut to the picked camera (a tap splits, on release); a hold is real time, whatever the game does
+        if (_xHeldSince >= 0 && !_xFired && RealClock.Now - _xHeldSince >= HoldToCut)
         {
             _xFired = true;
             CutToPicked();
@@ -425,7 +425,7 @@ public partial class MovieStudio : Screen
         if (e is InputEventJoypadButton { ButtonIndex: JoyButton.X } x)
         {
             // X: a tap splits, held it cuts to the picked camera (#675)
-            if (x.Pressed) { _xHeldSince = Time.GetTicksMsec() / 1000.0; _xFired = false; }
+            if (x.Pressed) { _xHeldSince = RealClock.Now; _xFired = false; }
             else if (_xHeldSince >= 0)
             {
                 if (!_xFired) Split();
