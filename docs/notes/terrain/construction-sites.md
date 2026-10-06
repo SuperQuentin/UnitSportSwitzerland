@@ -271,3 +271,5 @@ same view 25 s apart (the hook down on the bricks), and at 22:30 (the lamps lit)
 - Operating a crane is #618.
 
 The sound of a site (#617): hammering, a vibrator, a grinder, a beeper, a radio and a crane motor, in the crane's working hours: `audio/site-sounds`.
+
+The machines on a site (#616): its excavator and wheel loader stand as dormant vehicles and wake when aimed at. The crew's van stands as a car. The rest wait for #613 and #614: `vehicles/dormant-vehicles` (the fourth provider), `tools/sitemachinenetcheck.sh`.
