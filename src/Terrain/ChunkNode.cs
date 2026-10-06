@@ -156,6 +156,7 @@ public partial class ChunkNode : Node3D
 
     private static ArrayMesh Finish(Godot.Collections.Array arrays, Material material, Mesh.ArrayFormat flags = 0)
     {
+        Core.ShowcaseTrace.Mark();
         var mesh = new ArrayMesh();
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, flags: flags);
         mesh.SurfaceSetMaterial(0, material);

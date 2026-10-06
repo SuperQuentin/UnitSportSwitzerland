@@ -39,6 +39,7 @@ public static class PierMeshBuilder
     /// <param name="grid">The tile's heights, for the piles' feet on the bed (any stride); null: piles 4 m long.</param>
     public static (MeshData? Mesh, Vector3[] Faces)? Build(LandingIndex index, TileId id, ChunkGrid? grid, bool mesh, bool collision)
     {
+        Core.ShowcaseTrace.Mark();
         if (!mesh && !collision) return null;
         var g = new Geo(id, grid, mesh, collision);
         foreach (var r in index.RibbonsOf(id)) g.Ribbon(r);

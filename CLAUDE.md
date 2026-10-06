@@ -57,6 +57,9 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
   coding a new key, decide its pad button and its VR way (grip the thing, or the pad through
   `XrPad`), show it with `InputHints`, and add its row to `xr/vr-action-map`
   (`docs/notes/general/new-action-three-devices.md`).
+- **Every new procedural model is in the model viewer**: tag its builder `[Showcase("Category")]`,
+  or extend the set that already covers it (a new enum value or catalog row usually shows by
+  itself), and check it with `--models,test_output/models` (`docs/notes/avatar/model-viewer.md`).
 - **Simple tasks** (docs/notes tweaks, one-line fixes) skip the workflow: commit straight on `main`
   in the main checkout and push. No issue, branch, worktree or PR.
 - Check and probe output goes in `test_output/` (gitignored), never the repo root.

@@ -235,6 +235,15 @@
             "problemMatcher": []
         },
         {
+            "label": "run: model viewer",
+            "detail": "Procedural models one at a time: Left/Right switch, drag orbits, wheel zooms",
+            "type": "process",
+            "command": "${config:godotTools.editorPath.godot4}",
+            "args": ["--path", ".", "--", "--models"],
+            "dependsOn": "build",
+            "problemMatcher": []
+        },
+        {
             "label": "run: editor",
             "type": "process",
             "command": "${config:godotTools.editorPath.godot4}",
