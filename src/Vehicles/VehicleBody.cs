@@ -143,6 +143,9 @@ public partial class VehicleBody : CharacterBody3D
         Position = Origin.ToWorld(s.Position) + Vector3.Up * 0.15f;
         AddChild(_place = new Net.NetPlace(Origin, s.Position));
         Rotation = new Vector3(0, s.Yaw, 0);
+        // a flyer's drawn attitude (replicated): its heading until its own flight model poses it. A
+        // server-placed aircraft (#422) is never flown there, and its copies drew it facing north
+        if (Ride is Flyer) Tilt = new Quaternion(Vector3.Up, s.Yaw);
         Velocity = s.Velocity;
         // parked in a hold (#418, VehicleBody.Hold.cs): carried, no physics of its own
         BeginHold(s);
@@ -302,7 +305,9 @@ public partial class VehicleBody : CharacterBody3D
         _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning,
         Ride is Truck { IsBus: true } ? (byte)0 : DoorsOpen, _initial.Setup,
         // a boat's attitude as it floats now (#302; the replicated one, which the server has too)
-        _initial.Train, Ride is Boat ? new Basis(Tilt).GetEuler() : _initial.Angles,
+        // an airliner's in the air (#456), none on the ground (the server never flew it: its speed says)
+        _initial.Train, Ride is Boat ? new Basis(Tilt).GetEuler()
+            : Ride is Airliner jet ? (jet.State.OnGround || Velocity.LengthSquared() < Airliner.FlyingSpeed * Airliner.FlyingSpeed ? default : new Basis(Tilt).GetEuler()) : _initial.Angles,
         // a bus's doors as they are now, where a truck keeps them
         Ride is Truck { IsBus: true } ? (_initial.Flags & ~(15 << 4)) | ((DoorsOpen & 15) << 4)
             : Ride is Airliner ? (_initial.Flags & ~(15 << 13)) | ((DoorsOpen & 15) << 13) : _initial.Flags, _initial.Load,

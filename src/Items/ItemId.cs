@@ -165,6 +165,10 @@ public enum ItemId
     Grayling = 206, Whitefish = 207, Perch = 208, Pike = 209, Zander = 210, Wels = 211, Burbot = 212,
     LargemouthBass = 213, Carp = 214, Tench = 215, Roach = 216, Rudd = 217, Bream = 218, Chub = 219,
     Barbel = 220, Agone = 221, RoundGoby = 222,
+
+    // ---- toys (#501) ----
+    /// <summary>The plush shark, out of a bin at any of the nine IKEA stores (<c>Interiors.Landmarks</c>).</summary>
+    Blahaj = 223,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>

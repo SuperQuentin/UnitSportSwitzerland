@@ -49,6 +49,8 @@
 # Export output. export_presets.cfg holds local paths and can hold signing
 # credentials, so it stays out too.
 export_presets.cfg
+# except the committed CI presets, which hold no local path (.github/workflows/release.yml)
+!tools/ci/export_presets.cfg
 /build/
 /export/
 *.pck

@@ -21,10 +21,11 @@ public static class Systems
         Npcs = "npcs", Birds = "birds", Physics = "physics", Audio = "audio", Network = "network", Sky = "sky",
         Interiors = "interiors", Loot = "loot", Occasions = "occasions", Ui = "ui", Build = "build",
         // the cars already parked in the car parks, and later the industrial yards' fleets (#499)
-        Dormant = "dormant";
+        Dormant = "dormant",
+        Airports = "airports";
 
     public static readonly string[] All =
-        { Terrain, Generated, Traffic, Trains, Npcs, Birds, Physics, Audio, Network, Sky, Interiors, Loot, Occasions, Ui, Build, Dormant };
+        { Terrain, Generated, Traffic, Trains, Npcs, Birds, Physics, Audio, Network, Sky, Interiors, Loot, Occasions, Ui, Build, Dormant, Airports };
 
     public enum WorldKind { Real, Fixture, Flat }
 

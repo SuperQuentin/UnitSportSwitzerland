@@ -100,6 +100,9 @@ public static class BuildingFootprint
     /// <summary>Beyond this the interior is clamped — a 300 m warehouse is one hall either way.</summary>
     public const float MaxSide = 120f;
 
+    /// <summary>A landmark store's entrance (#501): the glass front, as wide as a trolley crowd.</summary>
+    public const float StoreDoorWidth = 7.0f, StoreDoorHeight = 3.4f;
+
     public static float DoorWidthFor(BuildingKind kind) => kind switch
     {
         BuildingKind.House or BuildingKind.Other => 1.0f,
@@ -208,18 +211,23 @@ public static class BuildingFootprint
     {
         var roadIndex = (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true));
         bool rural = Loot.ShopTables.IsRural(tile.Buildings.Count);
+        var types = BuildingTypes.For(tile);
         var doors = new List<DoorSpot>(tile.Buildings.Count);
         for (int i = 0; i < tile.Buildings.Count; i++)
         {
             var fp = Compute(tile, i, roadIndex, grid);
             var kind = tile.Buildings[i].Kind;
+            // a landmark's shop is given by where it is, not by the key's hash (#501), and the main
+            // door carries it so the sign over it reads IKEA rather than whatever the roll said
+            var shop = types.TypeOf(i) == BuildingType.Ikea ? Loot.ShopType.Ikea
+                : fp != null ? ShopOf(fp, rural)
+                : Loot.ShopType.None;
             // an empty spot still names its own building, so the array can be read by Index
             // the sign over the door, and the shop behind it, belong to the building: they go on
             // its main door only, or a long shop front would grow a sign per entrance
             doors.Add((fp?.Door ?? new DoorSpot(i, Vector3.Zero, Vector3.Forward, 0f, 0f)) with
             {
-                Kind = kind, Bank = fp != null && IsBank(fp),
-                Shop = fp != null ? ShopOf(fp, rural) : Loot.ShopType.None,
+                Kind = kind, Bank = fp != null && IsBank(fp), Shop = shop,
             });
             if (fp == null) continue;
             foreach (var extra in fp.Extra) doors.Add(extra with { Kind = kind });
@@ -295,6 +303,13 @@ public static class BuildingFootprint
 
         float doorW = DoorWidthFor(kind);
         float doorH = DoorHeightFor(kind, InteriorGenerator.Storeys(b).Height - InteriorGenerator.Slab);
+        // a landmark store's entrance is a wall of glass, not a front door: a 1.8 m Commercial door
+        // on 190 m of blue sheet is the detail that makes it read as a warehouse again (#501)
+        if (group?.Type == BuildingType.Ikea)
+        {
+            doorW = Math.Min(StoreDoorWidth, w * 0.25f);
+            doorH = Math.Min(StoreDoorHeight, InteriorGenerator.Storeys(b).Height - InteriorGenerator.Slab - 0.15f);
+        }
         // a door's worth of height, for judging a wall and for the odd doors that are no barn gate
         float plainH = Math.Min(doorH, DoorHeightFor(kind));
         bool barn = DoorLeaf.SwingsOut(kind);
@@ -384,10 +399,58 @@ public static class BuildingFootprint
         // pedestrian doors, so a barn's pair and a garage's roll-up door gain a man-sized one.
         var extras = new List<DoorSpot>();
         int budget = DoorBudget.Total(kind, w, dpt);
-        if (found && door.Width > 0 && budget > 1)
+
+        // ---- loading bays (#528) ----------------------------------------------------------
+        // An industrial site's front wall is mostly bays, so they are placed before the generic
+        // street-front rule and claim the budget first: a works with one pedestrian door and no way
+        // to get a trailer inside is the thing this fixes. They go on the wall the MAIN door is on,
+        // which is the wall `SiteYards` lays the yard in front of (#516) — so the bays face their
+        // own fleet rather than the back hedge.
+        var site = BuildingTypes.SiteFor(key.ToString(), b.Kind, box.Width, box.Depth, b.MaxY - b.MinY);
+        // A showroom's front is glass, not a shutter. The building is GKLAS 1242 and so
+        // `BuildingKind.Garage`, whose main door defaults to a roll-up one — right for a workshop,
+        // wrong for the one site type whose front wall is meant to be looked through. Per door, as
+        // #498 made possible.
+        if (site == BuildingType.Dealership)
+            door = door with { Hang = DoorHang.Inward, Vehicle = false };
+
+        // the wall itself, base to eave: a bay cannot be taller than the wall it is cut in
+        float wallHeight = Math.Max(0f, box.Eave - b.MinY);
+        if (found && door.Width > 0 && main != null && site != BuildingType.None
+            && DoorBudget.Bays(site, main.S1 - main.S0, wallHeight) is { } bays)
+        {
+            float mid = (main.S0 + main.S1) * 0.5f;
+            var t = new Vector2(-main.Normal.Y, main.Normal.X);
+            foreach (float off in DoorBudget.BayOffsets(main.S1 - main.S0, door.Width / 2, bays))
+            {
+                if (extras.Count + 1 >= budget) break;
+                var xz = main.Normal * main.Offset + t * (mid + off);
+                if (Covered(xz)) continue;
+                float ground = grid != null
+                    ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
+                    : b.MinY + 0.8f;
+                float baseY = Math.Max(ground, b.MinY);
+                if (ground < b.MinY - 0.6f || ground > b.MaxY - bays.Height - 0.3f) continue;
+                var bay = new DoorSpot(index,
+                    new Vector3(xz.X + main.Normal.X * 0.03f, baseY, xz.Y + main.Normal.Y * 0.03f),
+                    new Vector3(main.Normal.X, 0, main.Normal.Y), bays.Width, bays.Height)
+                {
+                    Slot = extras.Count + 1, Hang = DoorHang.RollUp, Vehicle = true,
+                };
+                if (!DoorOnWall(b, bay)) continue;
+                // the pier between two bays, not a pedestrian door's 3 m, or every bay after the
+                // first is rejected; the main door still keeps its own elbow room
+                if (extras.Any(q => TooClose(q, bay, bays.Pier))) continue;
+                if (TooClose(door, bay, DoorBudget.BayToDoorGap)) continue;
+                extras.Add(bay);
+            }
+        }
+
+        if (found && door.Width > 0 && budget > 1 + extras.Count)
         {
             var (serviceW, serviceH) = ServiceDoorFor(kind);
             var placed = new List<DoorSpot> { door };
+            placed.AddRange(extras);   // the bays are already on the wall and keep their room
             var order = new List<Cand>();
             if (main != null) order.Add(main);
             order.AddRange(ranked.OrderByDescending(r => r.Score).Where(c => c != main));
@@ -451,10 +514,10 @@ public static class BuildingFootprint
     /// Whether two doors of one building are too near each other to both be real, edge to edge:
     /// on the same wall, or round a corner, where two walls' runs both reach the same corner.
     /// </summary>
-    private static bool TooClose(DoorSpot a, DoorSpot b)
+    private static bool TooClose(DoorSpot a, DoorSpot b, float gap = DoorBudget.MinGap)
     {
         var d = new Vector2(a.Position.X - b.Position.X, a.Position.Z - b.Position.Z);
-        return d.Length() < a.Width / 2 + b.Width / 2 + DoorBudget.MinGap;
+        return d.Length() < a.Width / 2 + b.Width / 2 + gap;
     }
 
     /// <summary>Where a triangle crosses the horizontal plane at <paramref name="y"/>, in plan (x, z).</summary>

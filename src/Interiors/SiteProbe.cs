@@ -28,6 +28,10 @@ public partial class SiteProbe : Node3D
     private int _step = -1;
     private double _t;
     private readonly List<(BuildingType Site, InteriorLayout Layout, InteriorNode Node)> _built = new();
+    /// <summary>How many facades the bay pass has stood in its row (#528).</summary>
+    private int _facades;
+    /// <summary>Each site's tile and the building's index in it, for the yard pass (#516).</summary>
+    private readonly List<(BuildingType Site, BuildingTile Tile, int Index)> _sites = new();
 
     public SiteProbe(string? shot) => _shot = shot;
 
@@ -39,15 +43,30 @@ public partial class SiteProbe : Node3D
         _ok &= condition;
     }
 
+    /// <summary>Like <see cref="Check"/>, but silent when it holds: for a per-bay or per-slot rule.</summary>
+    private void Assert(bool condition, string what)
+    {
+        if (condition) return;
+        GD.Print($"[site] FAIL {what}");
+        _ok = false;
+    }
+
     /// <summary>
     /// One building to plan: the size and wall height that make <see cref="BuildingTypes.SiteFor"/>
     /// choose <see cref="Want"/>, and the kind it is in the cadastre.
     /// </summary>
-    private readonly record struct Spec(BuildingType Want, BuildingKind Kind, float Width, float Depth, float Wall);
+    /// <param name="Turn">
+    /// Degrees the solid is turned in plan. A box square to the world cannot catch a mirrored
+    /// direction convention — the mirror and the truth agree on it — and every real Swiss building
+    /// is at some angle, so one site is turned (#524's lesson, applied to the bays and the yard).
+    /// </param>
+    private readonly record struct Spec(BuildingType Want, BuildingKind Kind, float Width, float Depth,
+        float Wall, float Turn = 0f);
 
     private static readonly Spec[] Specs =
     {
-        new(BuildingType.Warehouse, BuildingKind.Industrial, 58f, 34f, 8f),
+        // turned to no axis: its bays, its doorways and its yard all have to survive a real angle
+        new(BuildingType.Warehouse, BuildingKind.Industrial, 58f, 34f, 8f, Turn: 31f),
         new(BuildingType.Factory, BuildingKind.Industrial, 46f, 28f, 12f),
         new(BuildingType.Depot, BuildingKind.Industrial, 26f, 18f, 7f),
         new(BuildingType.Mechanic, BuildingKind.Industrial, 16f, 12f, 6f),
@@ -90,6 +109,44 @@ public partial class SiteProbe : Node3D
             var problems = InteriorValidator.Validate(layout);
             Check(problems.Count == 0, $"{spec.Want} plan is valid" +
                 (problems.Count > 0 ? ": " + string.Join("; ", problems.Take(3)) : ""));
+
+            // the loading bays (#528): a works' front wall is mostly doors a trailer goes through
+            var fp = BuildingFootprint.Compute(tile!, index, null, null);
+            var bays = fp?.Doors.Where(d => d.Vehicle && d.Hang == DoorHang.RollUp).ToList() ?? new();
+            bool wantsBays = spec.Want != BuildingType.Dealership;
+            Check(wantsBays == bays.Count > 0, $"{spec.Want} {(wantsBays ? "has" : "has no")} loading bays ({bays.Count})");
+            if (bays.Count > 1)
+            {
+                var along = new Vector2(-bays[0].Outward.Z, bays[0].Outward.X);
+                Assert(bays.All(d => d.Outward.IsEqualApprox(bays[0].Outward)), $"{spec.Want}: bays share a wall");
+                Assert(bays.All(d => Mathf.IsEqualApprox(d.Width, bays[0].Width)), $"{spec.Want}: bays are the same width");
+                // Along the wall, each neighbouring pair is either a pier apart — the strip of
+                // wall that carries the two lintels — or has the main door standing between them,
+                // because the bays fill both sides of it.
+                float Along(Vector3 at) => along.Dot(new Vector2(at.X, at.Z));
+                var sorted = bays.OrderBy(d => Along(d.Position)).ToList();
+                float mainAt = Along(fp!.Door.Position);
+                for (int k = 1; k < sorted.Count; k++)
+                {
+                    float a = Along(sorted[k - 1].Position), c = Along(sorted[k].Position);
+                    float gap = c - a - sorted[k].Width;
+                    bool acrossTheDoor = mainAt > a && mainAt < c;
+                    Assert(gap > 0.2f && (gap < 2.5f || acrossTheDoor),
+                        $"{spec.Want}: a {gap:F2} m gap between two bays with no door in it");
+                }
+            }
+            float wall = tile!.Buildings[index].MaxY - tile.Buildings[index].MinY;
+            foreach (var d in bays)
+                Assert(d.Height <= wall, $"{spec.Want}: a {d.Height:F1} m bay in a {wall:F1} m wall");
+
+            // the facade with its doors on it, in a row for the picture: the baked roll-up slats
+            // are what a bay looks like from the yard, and nothing but a look can check them
+            if (fp != null && BuildingMeshBuilder.Build(tile, fp.Doors.Select(d => d with { Index = index }).ToArray()) is { } facade)
+                AddChild(new MeshInstance3D
+                {
+                    Name = $"Facade{_facades}", Position = new Vector3(_facades++ * 150f, 0, 900f),
+                    Mesh = Terrain.ChunkNode.ToArrayMesh(facade, Styles.StyleKit.Material(Styles.MaterialRole.Building)),
+                });
 
             var ground = layout.GroundFloor;
             var hall = ground.Rooms[0];
@@ -152,15 +209,122 @@ public partial class SiteProbe : Node3D
                 new Transform3D(Basis.Identity, new Vector3(_built.Count * 400f, 0, 0)));
             AddChild(node);
             _built.Add((spec.Want, layout, node));
+            _sites.Add((spec.Want, tile!, index));
         }
 
         Check(_built.Count == Specs.Length, $"all {Specs.Length} sites built ({_built.Count})");
         GD.Print($"[site] plans written to {svgDir}");
         Ordinary();
+        Yards();
 
         if (_shot == null || DisplayServer.GetName() == "headless") { Finish(); return; }
         AddChild(new Camera3D { Name = "Eye", Fov = 75f });
     }
+
+    /// <summary>
+    /// The yard outside each site (#516, #496 phase 3): the fleet `DormantSlots.ForSite` parks on
+    /// the open ground in front of the building. Asserts the trade's own mix, that nothing stands
+    /// inside the building it belongs to, and — the part no unit test can reach — that every goods
+    /// vehicle actually builds the <c>Rideable</c> and the mesh it will wake as. It then stands the
+    /// sites and their yards in a row for the picture, which is the only way to see that an artic
+    /// is an artic and not a hatchback with a lorry's name.
+    /// </summary>
+    private void Yards()
+    {
+        var material = Styles.StyleKit.Material(Styles.MaterialRole.Building);
+        int drawnHeavies = 0;
+        for (int i = 0; i < _sites.Count; i++)
+        {
+            var (site, tile, index) = _sites[i];
+            var yards = Vehicles.SiteYards.For(tile, null, null);
+            var mine = yards.Where(y => y.Owner == new BuildingKey(tile.Id.E, tile.Id.N, index).ToString()).ToList();
+            Check(mine.Count == 1, $"{site} has a yard ({mine.Count})");
+            if (mine.Count != 1) continue;
+
+            var slots = new List<Vehicles.VehicleSlot>();
+            Vehicles.DormantSlots.ForSite(tile.Id, mine, ProbeCars, ProbeHeavies, ProbeTrailers,
+                (int)Player.RideKind.Trailer, slots);
+            Check(slots.Count > 0, $"{site} yard has a fleet ({slots.Count})");
+
+            var box = BuildingTypes.For(tile).Boxes[index]!.Value;
+            foreach (var s in slots)
+            {
+                var at = new Vector2((float)(s.E - tile.Id.MinE), (float)(tile.Id.MaxN - s.N));
+                if (box.DistanceTo(at) >= 1f) continue;
+                Check(false, $"{site}: a {s.KindId} stands inside its own building");
+                break;
+            }
+
+            // A vehicle's NOSE must be further from the building than its tail. This is the one
+            // assertion that can see a mirrored heading, and the reason it is here: the yard frame
+            // and the test that walks it back both use the same formula, so a mirror is invisible
+            // to them — #499 shipped exactly that bug in `ToGodotHeading` (correct square to north,
+            // wrong by twice the axis otherwise) and both of its angle checks passed, because they
+            // measured |angle| off a world axis and +14 and -14 look alike. A physical fact does
+            // not care which convention is right.
+            foreach (var s in slots.Take(6))
+            {
+                var at = new Vector2((float)(s.E - tile.Id.MinE), (float)(tile.Id.MaxN - s.N));
+                var facing = new Vector2(-Mathf.Sin(s.Yaw), -Mathf.Cos(s.Yaw));   // RoadSignBuilder.Frame
+                float nose = box.DistanceTo(at + facing * 2.5f), tail = box.DistanceTo(at - facing * 2.5f);
+                // a working yard faces either way, so only the forecourt's tidy rows can be judged
+                if (site != BuildingType.Dealership || nose > tail) continue;
+                Check(false, $"{site}: a slot faces its own building (nose {nose:F1} m, tail {tail:F1} m)");
+                break;
+            }
+
+            int heavy = slots.Count(s => s.Train != 0 || Player.HeavyCatalog.For((Player.RideKind)s.KindId) != null);
+            bool wantsHeavy = site is BuildingType.Depot or BuildingType.Warehouse;
+            Check(wantsHeavy == heavy > 0,
+                $"{site} yard {(wantsHeavy ? "has" : "has no")} goods vehicles ({heavy} of {slots.Count})");
+
+            // the exterior and its yard, in a row well away from the interiors
+            var origin = new Vector3(i * YardRowPitch, 0, 1200f);
+            if (BuildingMeshBuilder.Build(tile) is { } mesh)
+                AddChild(new MeshInstance3D
+                {
+                    Name = $"Hall{i}", Position = origin,
+                    Mesh = Terrain.ChunkNode.ToArrayMesh(mesh, material),
+                });
+            foreach (var s in slots)
+            {
+                var state = new Vehicles.VehicleState((Player.RideKind)s.KindId,
+                    new Core.GlobalPos(s.E, s.N, s.Height), s.Yaw, Vector3.Zero, 0f,
+                    EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0,
+                    Train: s.Train, Load: s.Load);
+                if (state.CreateRide() is not { } ride) { Check(false, $"{site}: slot {s.Ordinal} builds no ride"); continue; }
+                var node = new Node3D
+                {
+                    Position = origin + new Vector3((float)(s.E - tile.Id.MinE), 0, (float)(tile.Id.MaxN - s.N)),
+                    Basis = new Basis(Vector3.Up, s.Yaw),
+                };
+                // drawn through the dormant layer's own look (#552): the merged parked model, every
+                // section posed, exactly what a yard shows until somebody touches the lorry
+                var look = Vehicles.DormantLooks.For(Vehicles.DormantLooks.KeyOf(s), () => ride, drawn: true);
+                if (look?.Mesh is not { } merged || look.Triangles == 0) { Check(false, $"{site}: slot {s.Ordinal} has no dormant look"); continue; }
+                node.AddChild(new MeshInstance3D { Mesh = merged });
+                AddChild(node);
+                if (s.Train != 0 || Player.HeavyCatalog.For((Player.RideKind)s.KindId) != null) drawnHeavies++;
+            }
+        }
+        Check(drawnHeavies > 0, $"goods vehicles build their dormant look from their real parked model ({drawnHeavies})");
+    }
+
+    /// <summary>How far apart the five sites stand in the yard row, metres.</summary>
+    private const float YardRowPitch = 170f;
+
+    /// <summary>The catalogues the yard pass fills from, as <c>DormantVehicles</c> does.</summary>
+    private static readonly int[] ProbeCars = Player.CarCatalog.All
+        .Where(c => c.Body.Shape is Avatar.BodyShape.Hatchback or Avatar.BodyShape.Sedan)
+        .Select(c => (int)c.Kind).ToArray();
+
+    private static readonly int[] ProbeHeavies = Player.HeavyCatalog.All
+        .Where(h => h.Takes != Player.Coupling.None || h.Label.Contains("rigid"))
+        .Select(h => (int)h.Kind).ToArray();
+
+    private static readonly int[] ProbeTrailers = Enumerable.Range(0, Player.TrailerCatalog.All.Count)
+        .SelectMany(i => new[] { Player.TrailerCatalog.Code(i, 0f), Player.TrailerCatalog.Code(i, 1f) })
+        .ToArray();
 
     /// <summary>
     /// Ordinary buildings still plan and still validate. Sites are planned on a new branch of
@@ -225,7 +389,7 @@ public partial class SiteProbe : Node3D
             tile.Buildings.Add(new Building
             {
                 Kind = spec.Kind, Floors = 0, MinY = 0, MaxY = spec.Wall,
-                Triangles = Box(spec.Width, spec.Depth, spec.Wall),
+                Triangles = Box(spec.Width, spec.Depth, spec.Wall, 0f, spec.Turn),
             });
             return (tile, i, key);
         }
@@ -239,12 +403,22 @@ public partial class SiteProbe : Node3D
     };
 
     /// <summary>A flat-roofed box centred on (<paramref name="at"/>, 0), wound outward like a real solid.</summary>
-    private static float[] Box(float w, float d, float h, float at = 0f)
+    private static float[] Box(float w, float d, float h, float at = 0f, float turn = 0f)
     {
         float x0 = at - w / 2, x1 = at + w / 2, z0 = -d / 2, z1 = d / 2;
         var t = new List<float>();
-        void Tri(Vector3 a, Vector3 b, Vector3 c) =>
+        // turned about the box's own centre, so a turned solid keeps the place an upright one had
+        float cos = Mathf.Cos(Mathf.DegToRad(turn)), sin = Mathf.Sin(Mathf.DegToRad(turn));
+        Vector3 Turned(Vector3 v)
+        {
+            float dx = v.X - at, dz = v.Z;
+            return new Vector3(at + dx * cos - dz * sin, v.Y, dx * sin + dz * cos);
+        }
+        void Tri(Vector3 ra, Vector3 rb, Vector3 rc)
+        {
+            var (a, b, c) = (Turned(ra), Turned(rb), Turned(rc));
             t.AddRange(new[] { a.X, a.Y, a.Z, c.X, c.Y, c.Z, b.X, b.Y, b.Z });
+        }
         void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 e) { Tri(a, b, c); Tri(a, c, e); }
         Quad(new(x0, 0, z1), new(x1, 0, z1), new(x1, h, z1), new(x0, h, z1));  // south
         Quad(new(x1, 0, z0), new(x0, 0, z0), new(x0, h, z0), new(x1, h, z0));  // north
@@ -267,7 +441,38 @@ public partial class SiteProbe : Node3D
             image.SavePng(_shot.Replace(".png", $"_{_built[_step].Site}".ToLowerInvariant() + ".png"));
         }
         _step++;
-        if (_step >= _built.Count) { Finish(); return; }
+        // Two more frames after the walk through the interiors, because neither is a room: the
+        // yard full of lorries (#516) and a works' front wall of bays (#528).
+        if (_step == _built.Count)
+        {
+            var eye = GetNodeOrNull<Camera3D>("Eye");
+            if (eye == null) { Finish(); return; }
+            // the haulier's depot: the one yard whose point is that an artic is an artic
+            int depot = Math.Max(0, _sites.FindIndex(x => x.Site == BuildingType.Depot));
+            float x = depot * YardRowPitch;
+            eye.GlobalPosition = new Vector3(x - 34f, 26f, 1252f);
+            eye.LookAt(new Vector3(x, 1.5f, 1196f), Vector3.Up);
+            eye.MakeCurrent();
+            return;
+        }
+        if (_step == _built.Count + 1)
+        {
+            GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_yards.png"));
+            var eye = GetNodeOrNull<Camera3D>("Eye");
+            if (eye == null) { Finish(); return; }
+            // the warehouse is the first facade in the row, and a synthetic tile with no roads
+            // puts its door on the south wall (+Z), so the yard side is beyond it
+            eye.GlobalPosition = new Vector3(-30f, 12f, 968f);
+            eye.LookAt(new Vector3(4f, 3.5f, 917f), Vector3.Up);
+            eye.MakeCurrent();
+            return;
+        }
+        if (_step > _built.Count + 1)
+        {
+            GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_bays.png"));
+            Finish();
+            return;
+        }
 
         var (_, layout, node) = _built[_step];
         var hall = layout.GroundFloor.Rooms[0];

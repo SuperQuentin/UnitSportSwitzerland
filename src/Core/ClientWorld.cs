@@ -160,6 +160,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
             return;
         }
+        // the nine IKEA stores and one store built in code (#501): no terrain, no server
+        if (Interiors.IkeaProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.IkeaProbe { Name = "IkeaProbe" });
+            return;
+        }
         // the five industrial sites, hand-made (#497): no terrain, no server
         if (Interiors.SiteProbe.ParseArgs() is { Requested: true } siteCheck)
         {
@@ -364,6 +371,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new World.SteamerBerth(_chunks));
         // jetskis and speedboats along the harbour jetties (#383): likewise
         AddChild(new World.MarinaBoats(_chunks));
+        // A320s with airstairs, the AN-124 and the freighter at the airports' stands (#422), put back a while after they are taken
+        if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(_chunks));
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
 
         // Guns on the plane and helicopter. World/Combat on both sides, like World/Vehicles.
@@ -408,6 +417,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
+        // the IKEA totem out by the road (#501), the same tile hook as the door signs
+        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.IkeaPylon(_chunks));
 
         // the clock: sun, light colour, sky and night for every shader and the environment.
         // Off (--systems without sky): no clock, the style's fixed sun and the background colour.
@@ -630,6 +641,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Player.An124Check.Requested) AddChild(new Player.An124Check(() => LocalPlayer));
         if (Player.HoldCheck.Requested) AddChild(new Player.HoldCheck(() => LocalPlayer));
         if (Player.AirstairsCheck.Requested) AddChild(new Player.AirstairsCheck(() => LocalPlayer));
+        if (World.AirportCheck.Requested) AddChild(new World.AirportCheck(() => LocalPlayer));
 
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
