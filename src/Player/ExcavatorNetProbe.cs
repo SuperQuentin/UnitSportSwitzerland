@@ -23,7 +23,8 @@ namespace UnitSport.Player;
 /// in its drawing (the flags are all a parked one is drawn from).</item>
 /// <item>the wheel loader (#612) bent, lifted and tipped, as B sees it;</item>
 /// <item>the mini excavator (#614): its arm and its raised blade, which travels in the pose's bucket
-/// float, drawn by B at A's angles, and kept by B's parked one.</item>
+/// float, drawn by B at A's angles, and kept by B's parked one;</item>
+/// <item>the compact roller (#614): bent and vibrating, as B sees it (and hears it, where drawn).</item>
 /// </list>
 /// </summary>
 public partial class ExcavatorNetProbe : ChatProbe
@@ -156,7 +157,24 @@ public partial class ExcavatorNetProbe : ChatProbe
         me.ExitVehicle();
         if (!await Until(() => me.Ride == RideKind.OnFoot && Parked(RideKind.MiniExcavator) != null, 10)) { Fail("the mini is not parked"); return; }
         Say($"miniparked {F(mini.Blade)}");
-        if (!await Heard("B", "mini kept", 30)) Fail("B never compared the parked mini");
+        if (!await Heard("B", "mini kept", 30)) { Fail("B never compared the parked mini"); return; }
+
+        // the compact roller (#614): bent on its hinge, its drums set vibrating on the real binding
+        me.PlaceAt(me.GlobalPosition + new Vector3(-10f, 0.5f, 0f), me.Rotation.Y);
+        await Seconds(1);
+        Expect(me.SetRide(RideKind.CompactRoller) && me.Vehicle is CompactRoller, "A takes a compact roller");
+        if (me.Vehicle is not CompactRoller roller) { Fail("not a compact roller"); return; }
+        await Seconds(1);
+        me.RideControls = () => new RideInput(0f, 0f, -0.6f, false);
+        await Seconds(1);
+        XrPad.Press(PlayerInput.DigMode, true);
+        await Seconds(0.1);
+        XrPad.Press(PlayerInput.DigMode, false);
+        await Seconds(1.5);
+        at = me.GlobalPosition;
+        Say($"roller {F(roller.Articulation)} {F(roller.Vibration)} {F(at.X)} {F(at.Z)}");
+        if (!await Heard("B", "roller seen", 30)) Fail("B never compared the roller");
+        me.RideControls = null;
     }
 
     private async Task RunB(FootPlayer me)
@@ -226,5 +244,20 @@ public partial class ExcavatorNetProbe : ChatProbe
         var keptBlade = Parked(RideKind.MiniExcavator)?.Ride is Excavator kb2 ? kb2.Blade : float.NaN;
         Expect(bladeKept, $"B's parked mini keeps the blade A left (A {leftBlade:F3}, kept {keptBlade:F3})");
         Say("mini kept");
+
+        if (!await Heard("A", "roller", 60)) { Fail("A never drove the roller"); return; }
+        w = _heard.Last(l => l.Contains("EX A roller ")).Split(' ');
+        float bend = Float(w[^4]), vib = Float(w[^3]);
+        var rAt = new Vector2(Float(w[^2]), Float(w[^1]));
+        // the copy's own roller: its bend drawn where anything is drawn, its vibration in its state
+        bool rollerSeen = await Until(() => a.RideModel is CompactRoller c && Mathf.Abs(c.Articulation - bend) < 0.01f && c.Vibration > 0.9f
+            && (a.Visual == null || CompactRollerMeshBuilder.FrontOf(a.Visual) is { } f && Mathf.Abs(f.Drawn - bend) < 0.01f
+                && CompactRollerMeshBuilder.DrumsOf(a.Visual) is { Playing: true }), 10);
+        var copy = a.RideModel as CompactRoller;
+        Expect(rollerSeen, $"B has A's roller bent and vibrating (A {bend:F3} at {vib:F2}, B {copy?.Articulation:F3} at {copy?.Vibration:F2}, "
+            + $"humming {CompactRollerMeshBuilder.DrumsOf(a.Visual)?.Playing.ToString() ?? "(nothing drawn)"})");
+        float rOff = new Vector2(a.GlobalPosition.X - rAt.X, a.GlobalPosition.Z - rAt.Y).Length();
+        Expect(rOff < 0.5f, $"B has A's roller where A has it ({rOff:F2} m)");
+        Say("roller seen");
     }
 }

@@ -95,6 +95,7 @@ public partial class RideProbe : Node
                 "excavator" => RideKind.Excavator,
                 "miniexcavator" => RideKind.MiniExcavator,
                 "loader" => RideKind.WheelLoader,
+                "roller" => RideKind.CompactRoller,
                 // moto:N = MotorbikeCatalog.All[N]
                 _ when name.StartsWith("moto:") && int.TryParse(name[5..], out int b) => MotorbikeCatalog.All[b].Kind,
                 // truck:N = HeavyCatalog.All[N]; --trailer M couples TrailerCatalog.All[M], full

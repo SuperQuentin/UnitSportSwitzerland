@@ -154,6 +154,11 @@ public partial class ControlsHelp : CanvasLayer
             new("Work: lift the arm / lower it (hold)", Keys: "{arm_boom_up} / {arm_boom_down}", Pad: "right stick ↓ ↑"),
             new("Work: roll the bucket back / dump it (hold)", Keys: "{arm_bucket_curl} / {arm_bucket_dump}", Pad: "right stick ← →"),
         }),
+        ("Compact roller (#614)", new Row[]
+        {
+            // it bends in the middle like the loader; the work-mode toggle sets the drums vibrating
+            new("Drums vibrating on / off", PlayerInput.DigMode),
+        }),
         ("Paddle steamer", new Row[]
         {
             new("Telegraph: one step ahead / astern (FULL ASTERN .. STOP .. FULL AHEAD)", Keys: "{move_forward} / {move_back}", Pad: "{move_forward} up / down"),
