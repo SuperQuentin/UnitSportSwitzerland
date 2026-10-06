@@ -285,7 +285,7 @@ Parallel.ForEach(gen.Where(t => MakeBlend(t, 1) != null), new ParallelOptions { 
     double te = 0, re = 0;
     foreach (var x in tr) te = Math.Max(te, Math.Abs(x.Y - full[t].SampleMeshHeight(t.MinE + x.X, t.MaxN - x.Z)));
     if (world.BuildRoads(t, fb) is { } roads)
-        foreach (var s in roads.Segments)
+        foreach (var s in roads.Segments.Where(s => (s.Flags & RoadFlags.Bridge) == 0))   // a deck stands over the ground by design (#559)
             for (int i = 0; i < s.Points.Length; i += 3)
                 re = Math.Max(re, Math.Abs(s.Points[i + 1] - full[t].SampleMeshHeight(t.MinE + s.Points[i], t.MaxN - s.Points[i + 2])));
     int b = world.BuildBuildings(t, fb)?.Buildings.Count ?? 0;
