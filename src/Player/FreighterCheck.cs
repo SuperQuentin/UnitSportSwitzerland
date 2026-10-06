@@ -97,11 +97,18 @@ public partial class FreighterCheck : Node
     /// <summary>The doors as the walk sees them: the player's own aircraft, or the parked one.</summary>
     private byte Doors(FootPlayer me) => me.Vehicle is Airliner own ? own.DoorsOpen : Parked()?.BusDoors ?? 0;
 
-    /// <summary>An authored point at height <paramref name="y"/> (+Z forward, +X left) in the world, as the aircraft is drawn now.</summary>
-    private Vector3 Spot(float x, float y, float z) => Frame()!.GlobalTransform * AircraftMeshBuilder.Flip(new Vector3(x, y, z));
+    /// <summary>
+    /// The aircraft's frame as the walker knows it: aboard, the deck's frame it is carried in (#542);
+    /// the aircraft as drawn now leads it by its motion since the last frame, 1.1 m a physics step
+    /// at 68 m/s and several in a long frame, and the walk aimed that far ahead of the spot.
+    /// </summary>
+    private Transform3D Pose() => _player()?.DeckFrame ?? Frame()!.GlobalTransform;
+
+    /// <summary>An authored point at height <paramref name="y"/> (+Z forward, +X left) in the world, as the walker's deck stands now.</summary>
+    private Vector3 Spot(float x, float y, float z) => Pose() * AircraftMeshBuilder.Flip(new Vector3(x, y, z));
 
     /// <summary>The player's spot, authored (x, height, z).</summary>
-    private Vector3 Local(FootPlayer me) => AircraftMeshBuilder.Flip(Frame()!.GlobalTransform.AffineInverse() * me.GlobalPosition);
+    private Vector3 Local(FootPlayer me) => AircraftMeshBuilder.Flip(Pose().AffineInverse() * me.GlobalPosition);
 
     private string Where(FootPlayer me) { var l = Local(me); return $"({l.X:F2}, {l.Y:F2}, {l.Z:F2})"; }
 
@@ -263,6 +270,7 @@ public partial class FreighterCheck : Node
         float speed = me.Vehicle?.Kind == RideKind.Freighter ? 0f : (Parked()?.Velocity.Length() ?? 0f);
         Expect(walked && me.Aboard && Mathf.Abs(l.Y - FloorY) < 0.35f, $"walked into the hold in flight, on the floor {Where(me)}");
         Expect(me.GlobalPosition.Y > y0 - 200f, $"it flew on by itself ({me.GlobalPosition.Y - y0:+0;-0} m, {speed:F0} m/s)");
+        await LongFrames(me);
         await Until(() => !Drawn || Rig()?.DoorOpen(RampDoor) >= 1f, 10);
         Face(me, 0f, HoldFrontZ);
         await Seconds(0.5);
@@ -297,6 +305,35 @@ public partial class FreighterCheck : Node
             me.OrbitView(-2.4f);
         }
         Finish(null);
+    }
+
+    /// <summary>
+    /// Standing at the aft end of the level ramp in flight through long frames (a tile's build, an
+    /// origin shift): several physics steps each, in which the aircraft moves on while its deck is put
+    /// where it is drawn only once a frame. Read from where the aircraft was drawn, the walker stood
+    /// past the deck's end, stepped off it and fell out (#542). Eight physics steps a frame (the physics
+    /// at 8 times its rate, even under the quick tier's <c>--fixed-fps</c>), the aircraft pushed 1.1 m
+    /// a step, 68 m/s in real steps: a 130 ms frame each, flown whether or not the fixture's ground
+    /// still lies under it (past it a parked aircraft holds still).
+    /// </summary>
+    private async Task LongFrames(FootPlayer me)
+    {
+        bool atEnd = await WalkTo(me, 0f, RampHingeZ - RampLength + 0.15f, 15);
+        if (Parked() is not { } jet) { Expect(false, "no parked aircraft to stand in"); return; }
+        var forward = (Spot(0f, 0f, 1f) - Spot(0f, 0f, 0f)).Normalized();
+        var from = jet.GlobalPosition;
+        void Push() => jet.GlobalPosition += forward * (68f / 60f);
+        int ticks = Engine.PhysicsTicksPerSecond;
+        Engine.PhysicsTicksPerSecond = ticks * 8;
+        GetTree().PhysicsFrame += Push;
+        for (int i = 0; i < 20; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GetTree().PhysicsFrame -= Push;
+        Engine.PhysicsTicksPerSecond = ticks;
+        await Seconds(0.3);
+        float moved = jet.GlobalPosition.DistanceTo(from);
+        var l = Local(me);
+        Expect(atEnd && moved > 100f && me.Aboard && Mathf.Abs(l.Y - FloorY) < 0.15f,
+            $"stood at the ramp's aft end through long frames, still aboard {Where(me)}, the aircraft {moved:F0} m on");
     }
 
     /// <summary>
