@@ -16,6 +16,18 @@ public sealed class DormantLook
     public required (Transform3D Pose, Shape3D Shape)[] Boxes { get; init; }
 
     public int Triangles { get; init; }
+
+    /// <summary>
+    /// A goods vehicle's sections, each merged in its own frame (0 the first rig without the sections
+    /// behind it), posed one by one on the ground the way a parked train stands (#560). Null for a
+    /// vehicle in one piece, which is drawn from <see cref="Mesh"/>.
+    /// </summary>
+    public ArrayMesh[]? Sections { get; init; }
+
+    /// <summary>The train's bodies and articulation, what <see cref="HeavyGround.Stand"/> poses <see cref="Sections"/> from.</summary>
+    public IReadOnlyList<HeavyTrain.Body>? Bodies { get; init; }
+
+    public Func<int, Transform3D>? NodeLocal { get; init; }
 }
 
 /// <summary>
@@ -55,16 +67,34 @@ public static class DormantLooks
         foreach (var (pose, centre, size) in ride.ExtraBoxes())
             boxes.Add((pose * new Transform3D(Basis.Identity, centre), new BoxShape3D { Size = size }));
 
+        // a truck, a bus or a lone trailer stands section by section, as VehicleBody stands it
+        IReadOnlyList<HeavyTrain.Body>? bodies = null;
+        Func<int, Transform3D>? local = null;
+        if (ride is Truck truck) { bodies = truck.Train.Bodies; local = truck.NodeLocal; }
+        else if (ride is ParkedTrailer lone) { bodies = lone.Bodies; local = lone.NodeLocal; }
+
         ArrayMesh? mesh = null;
+        ArrayMesh[]? sections = null;
         int triangles = 0;
         if (drawn)
         {
             var visual = ride.BuildParkedVisual(1);   // VehicleBody: Math.Max(1, Owner), and a slot is the server's
             (mesh, triangles) = Merge(visual);
+            if (bodies != null)
+            {
+                sections = new ArrayMesh[bodies.Count];
+                sections[0] = Merge(visual, skip: n => n.Name.ToString().StartsWith("Section")).Mesh;
+                for (int k = 1; k < bodies.Count; k++)
+                    sections[k] = visual.GetNodeOrNull<Node3D>($"Section{k}") is { } rig ? Merge(rig).Mesh : new ArrayMesh();
+            }
             visual.Free();
-            GD.Print($"[dormant] look {(RideKind)key.Kind} train {key.Train}: {triangles} triangles, {mesh.GetSurfaceCount()} surfaces");
+            GD.Print($"[dormant] look {(RideKind)key.Kind} train {key.Train}: {triangles} triangles, {mesh.GetSurfaceCount()} surfaces{(sections != null ? $", {sections.Length} sections" : "")}");
         }
-        return _looks[key] = new DormantLook { Mesh = mesh, Boxes = boxes.ToArray(), Triangles = triangles };
+        return _looks[key] = new DormantLook
+        {
+            Mesh = mesh, Boxes = boxes.ToArray(), Triangles = triangles,
+            Sections = sections, Bodies = bodies, NodeLocal = local,
+        };
     }
 
     /// <summary>Forgets every look (a world torn down): the meshes go with the last instance using them.</summary>
@@ -75,11 +105,11 @@ public static class DormantLooks
     /// by material, primitive and vertex format: merging a surface without colours into one with them
     /// would paint it black.
     /// </summary>
-    public static (ArrayMesh Mesh, int Triangles) Merge(Node3D root)
+    public static (ArrayMesh Mesh, int Triangles) Merge(Node3D root, Func<Node, bool>? skip = null)
     {
         var tools = new Dictionary<(Material?, Mesh.PrimitiveType, ulong), SurfaceTool>();
         var order = new List<(Material?, Mesh.PrimitiveType, ulong)>();
-        Walk(root, Transform3D.Identity, true, tools, order);
+        Walk(root, Transform3D.Identity, true, skip, tools, order);
 
         var merged = new ArrayMesh();
         int triangles = 0;
@@ -96,7 +126,7 @@ public static class DormantLooks
         return (merged, triangles);
     }
 
-    private static void Walk(Node node, Transform3D parent, bool isRoot,
+    private static void Walk(Node node, Transform3D parent, bool isRoot, Func<Node, bool>? skip,
         Dictionary<(Material?, Mesh.PrimitiveType, ulong), SurfaceTool> tools, List<(Material?, Mesh.PrimitiveType, ulong)> order)
     {
         var pose = parent;
@@ -124,7 +154,9 @@ public static class DormantLooks
                 st.AppendFrom(mesh, i, pose);
             }
         foreach (var child in node.GetChildren())
-            Walk(child, pose, false, tools, order);
+            // the skip rule picks the root's own children (a train's sections behind the first)
+            if (!isRoot || skip == null || !skip(child))
+                Walk(child, pose, false, null, tools, order);
     }
 
     /// <summary>The vertex attributes of a surface format, without the compression and stride flags.</summary>

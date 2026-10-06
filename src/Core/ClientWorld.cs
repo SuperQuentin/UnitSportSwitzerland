@@ -289,6 +289,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the auto build cap depends on whether tiles are coming over the wire
         _chunks.Streaming = () => _streamer?.ServerReachable == true;
         _chunks.Initialize(_cache, origin, manifest, material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial);
+        // occlusion culling with the buildings round the camera as occluders (#553)
+        _chunks.ApplyOcclusion();
         _chunks.PierMaterial = pierMaterial;
         // the landings and jetties (#377) before the first tile builds: their piers ride in its build
         World.Landings.Use(await World.Landings.LoadAsync(_cache));
@@ -528,6 +530,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(() => TruckProbe.Requested, ToolAnchor.AtTarget, _ => new TruckProbe(chunks, origin)),
             new(() => Terrain.ParkingProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
                 _ => new Terrain.ParkingProbe(chunks, origin, Terrain.ParkingProbe.ParseArgs().Shot)),
+            new(() => Vehicles.WakeProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new Vehicles.WakeProbe(chunks, origin, Vehicles.WakeProbe.ParseArgs().Shot)),
             // the anchor on the spawn, so the tile under the rider arrives with collision: without
             // it the probe drops through an empty world and measures gravity
             new(() => RideProbe.ParseArgs() != null, ToolAnchor.AtTarget, _ =>
@@ -559,6 +563,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 return new FlightProbe(_spectator!, chunks,
                     new Vector3(float.Parse(fly[0], inv), float.Parse(fly[1], inv), float.Parse(fly[2], inv)),
                     float.Parse(fly[3], inv), float.Parse(fly[4], inv), double.Parse(fly[5], inv));
+            }),
+            new(() => StreetFlight.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                var (speed, seconds) = StreetFlight.ParseArgs()!.Value;
+                FreeSpectator();
+                return new StreetFlight(_spectator!, chunks, origin, speed, seconds);
             }),
             new(() => ShotRunner.ParseArgs() != null, ToolAnchor.Own, _ =>
             {

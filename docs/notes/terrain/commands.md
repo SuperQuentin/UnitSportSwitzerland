@@ -4,6 +4,10 @@
 - Streaming smoothness: `<godot> --path . -- --fly x,y,z,yawDeg,speedMps,seconds [--rings N --horizon km --builds N]`
   — flies straight at that speed and prints the frame-time distribution; exits non-zero on any
   frame over 33 ms. The way to check a loader change, since a hitch never shows in a `--shot`.
+- Street level (#553): `<godot> --path . -- --flystreet speed,seconds --at E,N --to E,N` — the
+  camera at eye height along the road `--drivecheck --to` would race (`Core/StreetFlight`), looking
+  down the street; the same report as `--fly`. Geneva: `--at 2500300,1118450 --to 2499600,1117100`
+  (2.4 km). The way to measure occlusion culling and anything a flight at altitude never shows.
 - Generated fill check (no Godot): `dotnet run --project tools/BlendCheck -c Release [-- --render]` —
   synthetic real blocks beside the generator, then the real `FallbackChunkSource` +
   `CachingChunkSource` chain: seams generated|real and generated|generated at both resolutions,
