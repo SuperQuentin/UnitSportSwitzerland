@@ -95,6 +95,7 @@ public partial class RideProbe : Node
                 "excavator" => RideKind.Excavator,
                 "miniexcavator" => RideKind.MiniExcavator,
                 "loader" => RideKind.WheelLoader,
+                "loaderforks" => RideKind.WheelLoaderForks,
                 "roller" => RideKind.CompactRoller,
                 "telehandler" => RideKind.Telehandler,
                 // moto:N = MotorbikeCatalog.All[N]

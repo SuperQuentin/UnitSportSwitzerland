@@ -52,23 +52,25 @@ public class TelehandlerLayoutTests
     }
 
     [Theory]
-    [InlineData(-0.22f, 0f, 0.05f, SteerMode.Front)]
-    [InlineData(1.15f, 4.3f, 0.35f, SteerMode.Crab)]
-    [InlineData(0.4f, 2.17f, -0.6f, SteerMode.FourWheel)]
-    [InlineData(0.9f, 0.5f, -0.1f, SteerMode.Crab)]
-    public void Parked_flags_keep_the_boom_and_the_mode(float lift, float extend, float tilt, SteerMode mode)
+    [InlineData(-0.22f, 0f, 0.05f, SteerMode.Front, 0)]
+    [InlineData(1.15f, 4.3f, 0.35f, SteerMode.Crab, 512)]
+    [InlineData(0.4f, 2.17f, -0.6f, SteerMode.FourWheel, 1)]
+    [InlineData(0.9f, 0.5f, -0.1f, SteerMode.Crab, 300)]
+    public void Parked_flags_keep_the_boom_the_mode_and_the_pallet(float lift, float extend, float tilt, SteerMode mode, int carrying)
     {
-        var (l, e, t, m) = TelehandlerLayout.Unpack(TelehandlerLayout.Pack(lift, extend, tilt, mode));
-        Assert.True(MathF.Abs(l - lift) < 0.004f, $"lift {lift} came back {l}");
-        Assert.True(MathF.Abs(e - extend) < 0.01f, $"extend {extend} came back {e}");
+        var (l, e, t, m, c) = TelehandlerLayout.Unpack(TelehandlerLayout.Pack(lift, extend, tilt, mode, carrying));
+        // seven bits of lift and extension since the pallet took ten (#615), six of tilt
+        Assert.True(MathF.Abs(l - lift) < 0.006f, $"lift {lift} came back {l}");
+        Assert.True(MathF.Abs(e - extend) < 0.018f, $"extend {extend} came back {e}");
         Assert.True(MathF.Abs(t - tilt) < 0.01f, $"tilt {tilt} came back {t}");
         Assert.Equal(mode, m);
+        Assert.Equal(carrying, c);
     }
 
     [Fact]
     public void A_fresh_one_parks_boom_down_in_front_steering()
     {
-        Assert.Equal((TelehandlerLayout.RestLift, TelehandlerLayout.RestExtend, TelehandlerLayout.RestTilt, SteerMode.Front),
+        Assert.Equal((TelehandlerLayout.RestLift, TelehandlerLayout.RestExtend, TelehandlerLayout.RestTilt, SteerMode.Front, 0),
             TelehandlerLayout.Unpack(0));
         Assert.NotEqual(0, TelehandlerLayout.Pack(TelehandlerLayout.LiftMin, 0f, TelehandlerLayout.TiltMin, SteerMode.Front));
     }

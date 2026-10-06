@@ -183,6 +183,32 @@ public partial class TelehandlerBoom : Node3D
     /// <summary>The lift, extension, tilt and rear wheel angle it is drawn at.</summary>
     public Vector4 Drawn => _drawn;
 
+    /// <summary>What rides on the forks, drawn on the carriage; null when they are empty.</summary>
+    public Node3D? Load { get; private set; }
+
+    private int _carrying;
+
+    /// <summary>
+    /// What is on the forks, as <c>Telehandler.Carrying</c> holds it (#615): 0 nothing, else 1 + a
+    /// pallet's load byte, drawn by <see cref="Items.PalletNode.Carried"/> on the carriage, where the
+    /// pallets' rule says it rides. Rebuilt only when it changes.
+    /// </summary>
+    public int Carrying
+    {
+        get => _carrying;
+        set
+        {
+            if (value == _carrying) return;
+            _carrying = value;
+            if (Load != null) { Load.QueueFree(); Load = null; }
+            if (Items.Pallets.LoadCarried(value) is not { } load) return;
+            Load = Items.PalletNode.Carried(load, Items.Pallets.CarriedAcross(value));
+            Load.Name = "Load";
+            Load.Position = CarMeshBuilder.Turned(new Vector3(0f, -TelehandlerLayout.ForkTop, TelehandlerLayout.ForkFace + Items.Pallets.LoadAhead));
+            _carriage.AddChild(Load);
+        }
+    }
+
     public void Pose(float lift, float extend, float tilt, float rearSteer, float wheelSpin)
     {
         foreach (var s in _rearSpin) s.Rotation = new Vector3(-wheelSpin, 0, 0);

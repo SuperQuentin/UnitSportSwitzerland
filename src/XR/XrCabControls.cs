@@ -109,7 +109,7 @@ internal sealed partial class XrCabControls : Node3D
             _ when p.Ride == RideKind.Forklift => "forklift",
             _ when p.Ride == RideKind.Excavator => "excavator",
             _ when p.Ride == RideKind.MiniExcavator => "miniexcavator",
-            _ when p.Ride == RideKind.WheelLoader => "loader",
+            _ when p.Ride is RideKind.WheelLoader or RideKind.WheelLoaderForks => "loader",
             _ when p.Ride == RideKind.CompactRoller => "roller",
             _ when p.Ride == RideKind.Telehandler => "telehandler",
             _ => "",

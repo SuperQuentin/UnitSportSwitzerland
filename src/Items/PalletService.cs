@@ -136,11 +136,12 @@ public partial class PalletService : Node
     // ---- client: the forks ----------------------------------------------------------------------
 
     /// <summary>
-    /// The local driver's forklift, once per physics frame: with empty forks raised through
-    /// <see cref="Pallets.Seat"/> under a pallet, asks to take it; with a pallet lowered under the
-    /// set-down height, asks to put it down where it is. Allocates only when it asks.
+    /// The local driver's machine with tines (a forklift, a telehandler, a loader's forks: #615),
+    /// once per physics frame: with empty tines raised through <see cref="Pallets.Seat"/> under a
+    /// pallet, asks to take it; with a pallet lowered under the set-down height, asks to put it down
+    /// where it is. Allocates only when it asks.
     /// </summary>
-    public void Tend(FootPlayer p, Forklift fork)
+    public void Tend(FootPlayer p, IForks fork)
     {
         double now = GameClock.Now;
         if (_askedAt >= 0)
@@ -153,40 +154,43 @@ public partial class PalletService : Node
         }
         if (now < _quietUntil) return;
 
+        if (!fork.HasTines) return;
         var frame = p.GlobalTransform;
+        var tines = frame * fork.TinesFrame;
         if (Pallets.LoadCarried(fork.Carrying) is { } load)
         {
-            if (!Pallets.SetsDown(fork.Lift)) return;
+            if (!Pallets.SetsDown(fork.ForkHeight)) return;
             // where it rode, on the ground the machine stands on, turned as it rode
-            var at = frame * CarMeshBuilder.Turned(ForkliftLayout.LoadCentre);
+            var at = tines * new Vector3(0f, 0f, -Pallets.LoadAhead);
             at.Y = p.GlobalPosition.Y;
             int carrying = fork.Carrying;
-            float yaw = p.GlobalRotation.Y + PalletNode.CarriedYaw(Pallets.CarriedAcross(carrying));
+            float yaw = tines.Basis.GetEuler().Y + PalletNode.CarriedYaw(Pallets.CarriedAcross(carrying));
             RequestDrop(load, _origin.ToGlobal(at), yaw, ok =>
             {
                 if (ok && fork.Carrying == carrying) fork.Carrying = 0;
             });
             return;
         }
-        if (fork.Carrying != 0 || !Pallets.Lifts(fork.Lift) || fork.Lift >= ForkliftLayout.ForkEntry) return;
+        if (fork.Carrying != 0 || !Pallets.Lifts(fork.ForkHeight) || fork.ForkHeight >= ForkliftLayout.ForkEntry) return;
 
         var inverse = frame.AffineInverse();
-        var ahead = new Vector2(-frame.Basis.Z.X, -frame.Basis.Z.Z).Normalized();
+        var onTines = tines.AffineInverse();
+        var ahead = new Vector2(-tines.Basis.Z.X, -tines.Basis.Z.Z).Normalized();
         float speed = p.GroundSpeed;
         foreach (var node in PalletNode.All.Values)
         {
             if (node.Taken || !node.IsInsideTree()) continue;
-            var local = inverse * node.GlobalPosition;
             // another floor of the hall, or a pallet up on something
-            if (Mathf.Abs(local.Y) > 0.5f) continue;
+            if (Mathf.Abs((inverse * node.GlobalPosition).Y) > 0.5f) continue;
+            var local = onTines * node.GlobalPosition;
             var runners = node.GlobalTransform.Basis.X;
             float along = Mathf.Abs(ahead.Dot(new Vector2(runners.X, runners.Z).Normalized()));
-            // the authored frame is the node's turned: +Z ahead, +X the left side
-            if (!Pallets.Forked(-local.X, -local.Z, along, fork.Lift, speed)) continue;
+            // the tines' frame: −Z ahead of their heel, X across them
+            if (!Pallets.OnTines(local.X, -local.Z, along, fork.ForkHeight, speed, fork.TineLength, fork.TineHalfSpan)) continue;
             bool across = Pallets.Across(along) == true;
             RequestTake(node.Id, taken =>
             {
-                if (taken is { } l && p.Vehicle == fork && fork.Carrying == 0) fork.Carrying = Pallets.Carried(l, across);
+                if (taken is { } l && ReferenceEquals(p.Vehicle, fork) && fork.Carrying == 0) fork.Carrying = Pallets.Carried(l, across);
             });
             return;
         }
@@ -422,18 +426,31 @@ public partial class PalletService : Node
     }
 
     /// <summary>
-    /// Server: why the asker may not do it — not driving a forklift, or its forks not holding
-    /// <paramref name="load"/> (null: empty forks) — or null. From the pose the driver publishes
-    /// (<c>Anim.Z</c> is <c>Forklift.Carrying</c>); offline there is nobody to doubt.
+    /// Server: why the asker may not do it — not driving a machine with tines, or its tines not
+    /// holding <paramref name="load"/> (null: empty forks) — or null. From the pose the driver
+    /// publishes (<see cref="CarryingOf"/>); offline there is nobody to doubt.
     /// </summary>
     private string? Forks(long peer, byte? load)
     {
         if (!Online) return null;
         if (GetNodeOrNull<FootPlayer>("../Players/" + peer) is not { } body) return "Nobody there.";
-        if (body.Ride != RideKind.Forklift) return "Not on a forklift.";
-        var on = Pallets.LoadCarried(Mathf.RoundToInt(body.Anim.Z));
+        if (CarryingOf(body.Ride, body.Anim) is not { } carrying) return "Not on a machine with forks.";
+        var on = Pallets.LoadCarried(carrying);
         return on == load ? null : load == null ? "The forks are full." : "That is not on the forks.";
     }
+
+    /// <summary>
+    /// What a machine's published pose says is on its tines, or null for a machine with none: the
+    /// forklift's <c>Anim.Z</c>, the telehandler's and the fork loader's packed with their lift in
+    /// <c>Anim.Y</c> (#615).
+    /// </summary>
+    public static int? CarryingOf(RideKind kind, Vector4 anim) => kind switch
+    {
+        RideKind.Forklift => Mathf.RoundToInt(anim.Z),
+        RideKind.Telehandler => TelehandlerLayout.FromPoseLift(anim.Y).Carrying,
+        RideKind.WheelLoaderForks => WheelLoaderLayout.FromPoseLift(anim.Y).Carrying,
+        _ => null,
+    };
 
     /// <summary>Server: the asker's body within <see cref="Reach"/>, in LV95 (the server's origin may be far away, #185).</summary>
     private bool InReach(long peer, GlobalPos at)

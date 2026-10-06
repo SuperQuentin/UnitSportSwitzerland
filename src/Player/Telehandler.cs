@@ -13,7 +13,7 @@ namespace UnitSport.Player;
 /// arrows lift the boom and tilt the forks, the gear paddles (Shift / Ctrl, RB / LB, the forklift
 /// mast's) run it out and in, and it still drives. See <c>docs/notes/vehicles/telehandler.md</c>.
 /// </summary>
-public sealed class Telehandler : Rideable, IEngined
+public sealed class Telehandler : Rideable, IEngined, IForks
 {
     public override RideKind Kind => RideKind.Telehandler;
     public override string Label => "Telehandler";
@@ -30,6 +30,24 @@ public sealed class Telehandler : Rideable, IEngined
 
     /// <summary>Work mode: the right stick, the arrows and the paddles are the boom's.</summary>
     public bool Working { get; set; }
+
+    // ---- the forks, as the pallets ask (IForks, #615) ------------------------------------------
+    /// <summary>What is on the forks: 0 nothing, else <c>Pallets.Carried</c>. In the pose and the parked flags.</summary>
+    public int Carrying { get; set; }
+    public bool HasTines => true;
+    public float ForkHeight => TelehandlerLayout.ForkHeight(Lift, Extend);
+    /// <summary>The tines' heel on their top face, between them, where the boom has the carriage: square ahead (the carriage levels itself).</summary>
+    public Transform3D TinesFrame
+    {
+        get
+        {
+            var pin = TelehandlerLayout.Carriage(Lift, Extend);
+            return new Transform3D(Basis.Identity, CarMeshBuilder.Turned(new Vector3(TelehandlerLayout.BoomPivot.X,
+                pin.Y - TelehandlerLayout.ForkTop, pin.X + TelehandlerLayout.ForkFace)));
+        }
+    }
+    public float TineLength => TelehandlerLayout.ForkLength;
+    public float TineHalfSpan => TelehandlerLayout.TineHalfSpan;
 
     /// <summary>The boom's levers this frame, -1..1 (set by the driver's input, or a check).</summary>
     public (float Lift, float Extend, float Tilt) Levers { get; set; }
@@ -77,11 +95,11 @@ public sealed class Telehandler : Rideable, IEngined
         }
     }
 
-    public int PackFlags() => TelehandlerLayout.Pack(Lift, Extend, Tilt, Mode);
+    public int PackFlags() => TelehandlerLayout.Pack(Lift, Extend, Tilt, Mode, Carrying);
 
     public void UnpackFlags(int flags)
     {
-        (Lift, Extend, Tilt, Mode) = TelehandlerLayout.Unpack(flags);
+        (Lift, Extend, Tilt, Mode, Carrying) = TelehandlerLayout.Unpack(flags);
         Working = false;
     }
 
@@ -147,7 +165,11 @@ public sealed class Telehandler : Rideable, IEngined
     private void Dress(Node3D visual, float speed, float dt)
     {
         _spin += speed / TelehandlerLayout.WheelRadius * dt;
-        TelehandlerMeshBuilder.BoomOf(visual)?.Pose(Lift, Extend, Tilt, TelehandlerLayout.RearSteer(Steer, Mode), _spin);
+        if (TelehandlerMeshBuilder.BoomOf(visual) is { } boom)
+        {
+            boom.Pose(Lift, Extend, Tilt, TelehandlerLayout.RearSteer(Steer, Mode), _spin);
+            boom.Carrying = Carrying;
+        }
         if (visual is not HeavyRig rig) return;
         rig.SteerAngle = Steer;
         rig.WheelSpin = _spin;
@@ -163,18 +185,19 @@ public sealed class Telehandler : Rideable, IEngined
 
     /// <summary>
     /// Remote copies: the front wheels with the mode (<see cref="TelehandlerLayout.PoseSteer"/>), the
-    /// lift, the extension with the tilt (<see cref="TelehandlerLayout.PoseExtend"/>), and the signed
-    /// speed the wheels turn by.
+    /// lift with what is on the forks (<see cref="TelehandlerLayout.PoseLift"/>), the extension with
+    /// the tilt (<see cref="TelehandlerLayout.PoseExtend"/>), and the signed speed the wheels turn by.
+    /// The server reads the forks' load out of it too (<c>PalletService.CarryingOf</c>).
     /// </summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
-        new(TelehandlerLayout.PoseSteer(Steer, Mode), Lift, TelehandlerLayout.PoseExtend(Extend, Tilt), _signed);
+        new(TelehandlerLayout.PoseSteer(Steer, Mode), TelehandlerLayout.PoseLift(Lift, Carrying), TelehandlerLayout.PoseExtend(Extend, Tilt), _signed);
 
     public override void AnimateRemote(Node3D visual, Vector4 pose, float dt)
     {
         if (pose != Vector4.Zero)
         {
             (Steer, Mode) = TelehandlerLayout.FromPoseSteer(pose.X);
-            Lift = TelehandlerLayout.ClampLift(pose.Y);
+            (Lift, Carrying) = TelehandlerLayout.FromPoseLift(pose.Y);
             (Extend, Tilt) = TelehandlerLayout.FromPoseExtend(pose.Z);
         }
         Dress(visual, pose.W, dt);

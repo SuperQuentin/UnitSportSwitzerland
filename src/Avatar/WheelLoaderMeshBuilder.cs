@@ -170,13 +170,31 @@ public static class WheelLoaderMeshBuilder
         var rig = HeavyRig.Create(Parts(), driver);
         rig.Name = "WheelLoader";
         rig.AirLowAt = -1f;
-        var front = WheelLoaderFront.Create();
+        var front = WheelLoaderFront.Create(machine.Forks);
         rig.AddChild(front);
+        front.Carrying = machine.Carrying;
         front.Pose(machine.Articulation, machine.Lift, machine.Tilt, 0f);
         return rig;
     }
 
     public static WheelLoaderFront? FrontOf(Node3D? visual) => visual?.GetNodeOrNull<WheelLoaderFront>("Front");
+
+    /// <summary>The fork carriage about the arm's pin, level (#615): the frame across the arm's two booms, the backrest, and two tines.</summary>
+    [Core.Showcase("Parts", "Wheel loader forks")]
+    internal static ArrayMesh ForksMesh()
+    {
+        var s = new MeshScratch();
+        s.Box(new Vector3(0, 0f, 0.2f), new Vector3(1.6f, 0.62f, 0.1f), Dark);
+        s.Box(new Vector3(0, 0.6f, 0.2f), new Vector3(1.4f, 0.6f, 0.05f), Dark.Lightened(0.1f));
+        s.Tube(new Vector3(-0.6f, 0, 0), new Vector3(0.6f, 0, 0), 0.1f, Dark, 8);
+        foreach (int side in new[] { 1, -1 })
+        {
+            float x = side * (L.TineHalfSpan - 0.07f);
+            s.Box(new Vector3(x, -(L.ForkTop - 0.05f) * 0.5f, L.ForkFace - 0.03f), new Vector3(0.14f, L.ForkTop - 0.05f + 0.3f, 0.06f), Steel.Darkened(0.2f));
+            s.Box(new Vector3(x, -L.ForkTop - 0.03f, L.ForkFace + L.ForkLength * 0.5f), new Vector3(0.14f, 0.06f, L.ForkLength), Steel.Darkened(0.2f));
+        }
+        return s.Build();
+    }
 }
 
 /// <summary>
@@ -193,6 +211,30 @@ public partial class WheelLoaderFront : Node3D
     /// <summary>The articulation, lift and tilt it is drawn at.</summary>
     public Vector3 Drawn => _drawn;
 
+    private bool _forks;
+
+    /// <summary>What rides on the forks (#615), drawn on the carriage; null when they are empty or it has a bucket.</summary>
+    public Node3D? Load { get; private set; }
+
+    private int _carrying;
+
+    /// <summary>What is on the forks, as <c>WheelLoader.Carrying</c> holds it: drawn by <see cref="Items.PalletNode.Carried"/>, rebuilt only when it changes.</summary>
+    public int Carrying
+    {
+        get => _carrying;
+        set
+        {
+            if (value == _carrying || !_forks) return;
+            _carrying = value;
+            if (Load != null) { Load.QueueFree(); Load = null; }
+            if (Items.Pallets.LoadCarried(value) is not { } load) return;
+            Load = Items.PalletNode.Carried(load, Items.Pallets.CarriedAcross(value));
+            Load.Name = "Load";
+            Load.Position = CarMeshBuilder.Turned(new Vector3(0f, -WheelLoaderLayout.ForkTop, WheelLoaderLayout.ForkFace + Items.Pallets.LoadAhead));
+            _bucket.AddChild(Load);
+        }
+    }
+
     public void Pose(float articulation, float lift, float tilt, float wheelSpin)
     {
         foreach (var w in _spin) w.Rotation = new Vector3(-wheelSpin, 0, 0);
@@ -203,14 +245,15 @@ public partial class WheelLoaderFront : Node3D
         // left, + about X raises a part that points along −Z
         Rotation = new Vector3(0, articulation, 0);
         _arm.Rotation = new Vector3(lift, 0, 0);
-        _bucket.Rotation = new Vector3(tilt, 0, 0);
+        // a bucket tilts against the arm; a fork carriage is levelled by the linkage, then pitched
+        _bucket.Rotation = new Vector3(_forks ? tilt - lift : tilt, 0, 0);
     }
 
-    public static WheelLoaderFront Create()
+    public static WheelLoaderFront Create(bool forks = false)
     {
         var material = HumanMeshBuilder.FigureMaterial();
         MeshInstance3D Mesh(string name, ArrayMesh mesh) => new() { Name = name, Mesh = mesh, MaterialOverride = material };
-        var node = new WheelLoaderFront { Name = "Front" };
+        var node = new WheelLoaderFront { Name = "Front", _forks = forks };
         node.AddChild(Mesh("Frame", WheelLoaderMeshBuilder.FrontFrameMesh()));
         int k = 0;
         foreach (int side in new[] { 1, -1 })
@@ -226,7 +269,7 @@ public partial class WheelLoaderFront : Node3D
         node._arm.AddChild(Mesh("Booms", WheelLoaderMeshBuilder.ArmMesh()));
         node.AddChild(node._arm);
         node._bucket = new Node3D { Name = "Bucket", Position = new Vector3(0, 0, -WheelLoaderLayout.ArmLength) };
-        node._bucket.AddChild(Mesh("Bucket", WheelLoaderMeshBuilder.BucketMesh()));
+        node._bucket.AddChild(forks ? Mesh("Forks", WheelLoaderMeshBuilder.ForksMesh()) : Mesh("Bucket", WheelLoaderMeshBuilder.BucketMesh()));
         node._arm.AddChild(node._bucket);
         return node;
     }

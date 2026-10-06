@@ -26,5 +26,7 @@ public partial class FootPlayer
             // the bucket's angle grows as it rolls back: curling it in is the positive way here
             PlayerInput.Strength(PlayerInput.ArmBucketCurl) - PlayerInput.Strength(PlayerInput.ArmBucketDump));
         loader.Work(dt);
+        // with forks (#615): under a pallet and lifted, it is taken; lowered with one on them, set down
+        if (loader.Forks) Items.PalletService.Instance?.Tend(this, loader);
     }
 }

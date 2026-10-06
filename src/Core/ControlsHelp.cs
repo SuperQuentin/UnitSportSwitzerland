@@ -153,6 +153,8 @@ public partial class ControlsHelp : CanvasLayer
             new("Work mode on / off (it still drives)", PlayerInput.DigMode),
             new("Work: lift the arm / lower it (hold)", Keys: "{arm_boom_up} / {arm_boom_down}", Pad: "right stick ↓ ↑"),
             new("Work: roll the bucket back / dump it (hold)", Keys: "{arm_bucket_curl} / {arm_bucket_dump}", Pad: "right stick ← →"),
+            // the variant with a fork carriage (#615): the same controls, the forks lift pallets
+            new("With forks: run them in under a pallet and lift the arm to take it, lower it to set it down", PlayerInput.ArmBoomUp),
         }),
         ("Compact roller (#614)", new Row[]
         {

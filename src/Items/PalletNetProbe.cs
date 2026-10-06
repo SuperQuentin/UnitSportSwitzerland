@@ -24,6 +24,12 @@ namespace UnitSport.Items;
 /// the hall and then out in the yard (A's pose), the hall's pallet taken and a loose one set down
 /// outside (the server's <see cref="PalletService"/>), and A's forks empty again.
 /// </para>
+///
+/// <para>
+/// Then (#615) A takes a <b>telehandler</b> and forks the pallet the forklift left on the apron:
+/// the server lets a machine with tines take it by its kind (<c>PalletService.CarryingOf</c>), and B
+/// sees the pallet in the telehandler's own pose, drawn on its boom, and its forks empty again.
+/// </para>
 /// </summary>
 public partial class PalletNetProbe : Node
 {
@@ -252,9 +258,61 @@ public partial class PalletNetProbe : Node
         // the watcher needs a moment to see the empty forks
         await Seconds(3);
         bool apron = await ForkApronPallet(me, fork);
+        await Seconds(3);
+        bool tele = apron && await ForkWithTelehandler(me);
         await Seconds(6);
-        return outside && carriedOut != 0 && down && set is { Altitude: > InteriorManager.InteriorBaseY + 1000f } && apron
+        return outside && carriedOut != 0 && down && set is { Altitude: > InteriorManager.InteriorBaseY + 1000f } && apron && tele
             && (_woke || !_liftSeen);
+    }
+
+    /// <summary>
+    /// #615: off the forklift and onto a telehandler (an admin's), and the nearest pallet on the
+    /// ground forked with its boom: lined up so its tines (right of the machine's middle, under the
+    /// boom) run in square, driven in, the boom lifted on the real binding, then lowered again.
+    /// </summary>
+    private async Task<bool> ForkWithTelehandler(FootPlayer me)
+    {
+        me.RideControls = null;
+        me.ExitVehicle();
+        if (!await Until(() => me.Ride == RideKind.OnFoot, 8)) { Log("could not get off the forklift"); return false; }
+        var pallet = PalletNode.All.Values.Where(n => !n.Taken && n.IsInsideTree() && !InteriorManager.InInteriorSpace(n.GlobalPosition))
+            .OrderBy(n => n.GlobalPosition.DistanceTo(me.GlobalPosition)).FirstOrDefault();
+        if (pallet == null) { Log("no pallet on the ground near for the telehandler"); return false; }
+        if (!me.SetRide(RideKind.Telehandler) || me.Vehicle is not Telehandler th) { Log("could not get on a telehandler"); return false; }
+        // in from the side its runners face, along or across them as the forklift did
+        var runners = pallet.GlobalTransform.Basis.X with { Y = 0 };
+        var outward = -(pallet.GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
+        var tines = th.TinesFrame.Origin;
+        float back = -tines.Z + Pallets.LoadAhead + 3f;
+        // the tines are right of the middle: the machine stands that much to their left
+        var right = new Vector3(-outward.Z, 0, outward.X) * -1f;
+        var at = pallet.GlobalPosition + outward * back - right * tines.X;
+        if (me.Terrain != null && me.Terrain.TryGetHeight(at, out float g)) at.Y = g + 0.3f;
+        me.PlaceAt(at, Yaw(-outward));
+        await Seconds(1.5);
+        Log(FormattableString.Invariant($"telehandler before {pallet.Id}, {Where(me)}, runners {runners.Normalized()}"));
+        XrPad.Press(PlayerInput.DigMode, true);
+        await Seconds(0.1);
+        XrPad.Press(PlayerInput.DigMode, false);
+        await Seconds(0.2);
+        float Ahead() => -((me.GlobalTransform * th.TinesFrame).AffineInverse() * pallet.GlobalPosition).Z;
+        me.RideControls = () => new RideInput(0.25f, 0f, 0f, false);
+        await Until(() => Ahead() < Pallets.LoadAhead + 0.05f || me.Velocity.Length() < 0.01f && me.GroundSpeed > 0.3f, 15);
+        // no handbrake: on a telehandler the brake reverses from a standstill
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false);
+        await Until(() => me.GroundSpeed < 0.05f, 5);
+        XrPad.Press(PlayerInput.ArmBoomUp, true);
+        bool lifted = await Until(() => th.Carrying != 0, 6);
+        await Seconds(1.0);
+        XrPad.Press(PlayerInput.ArmBoomUp, false);
+        Log($"telehandler lifted {pallet.Id}: {lifted}, carrying {th.Carrying}, forks {th.ForkHeight:F2} m up");
+        if (!lifted) return false;
+        await Seconds(3);
+        XrPad.Press(PlayerInput.ArmBoomDown, true);
+        bool down = await Until(() => th.Carrying == 0, 10);
+        XrPad.Press(PlayerInput.ArmBoomDown, false);
+        Log($"telehandler set it down: {down}");
+        return down;
     }
 
     /// <summary>The hall forklift's vehicle node: what B looks for, and A's slot is named for.</summary>
@@ -439,6 +497,8 @@ public partial class PalletNetProbe : Node
         // #630: the forklift standing in the hall, woken by A inside: its vehicle arrives on B too
         string? hallNode = me.Terrain?.Origin is { } o ? HallForkliftNode(bay.Layout, o) : null;
         bool hallLiftSeen = false;
+        // #615: a pallet on A's telehandler, from its own pose, drawn on its boom; then its forks empty
+        bool teleCarried = false, teleDrawn = false, teleEmptied = false;
         string last = "";
         double end = _clock + 200;
         while (_clock < end)
@@ -469,17 +529,29 @@ public partial class PalletNetProbe : Node
             if (yardLift is { } ys && DormantVehicles.Instance?.IsAwake(ys) == true) liftWoken = true;
             hallLiftSeen |= hallNode != null && VehicleManager.Instance?.GetNodeOrNull(hallNode) != null;
             bool liftOk = yardLift == null || liftWoken;
+            if (other.Ride == RideKind.Telehandler && PalletService.CarryingOf(other.Ride, other.Anim) is { } teleCarry)
+            {
+                if (teleCarry != 0)
+                {
+                    teleCarried = true;
+                    // a headless client draws a remote rider's machine too: the boom's load is there or not
+                    teleDrawn |= other.Visual == null || TelehandlerMeshBuilder.BoomOf(other.Visual)?.Load != null;
+                }
+                else if (teleCarried) teleEmptied = true;
+            }
 
             string now = $"A: {other.Ride} {(inside ? "inside" : "outside")}, forks carrying {carry} (drawn: {drawn}); "
                 + $"taken {hall ?? "-"} {apron ?? "-"}, loose {(loose == null ? "-" : FormattableString.Invariant($"{Pallets.LooseId(loose.Id)} load {loose.Load} at LV95 {loose.E:F1}/{loose.N:F1} alt {loose.Altitude:F1}"))}";
             if (now != last) { Log(now); last = now; }
-            if (carriedInside && carriedOutside && taken && setDown && drawnDown && emptied && apronTaken && apronCarried && liftOk && hallLiftSeen) break;
+            if (carriedInside && carriedOutside && taken && setDown && drawnDown && emptied && apronTaken && apronCarried && liftOk && hallLiftSeen
+                && teleCarried && teleDrawn && teleEmptied) break;
         }
         Log($"saw: carried inside {carriedInside}, carried out in the yard {carriedOutside}, the hall's pallet taken {taken}, "
             + $"set down outside {setDown} (drawn here {drawnDown}), forks empty after {emptied}, an apron stack taken {apronTaken} and carried {apronCarried}, "
             + $"the hall's own forklift {hallNode ?? "-"} arrived here {hallLiftSeen}, "
-            + $"the site's forklift {(yardLift == null ? "not on its apron here" : $"{yardLift.Value.NodeName} woken {liftWoken}")}");
+            + $"the site's forklift {(yardLift == null ? "not on its apron here" : $"{yardLift.Value.NodeName} woken {liftWoken}")}, "
+            + $"a pallet on A's telehandler {teleCarried} (drawn on its boom {teleDrawn}), its forks empty after {teleEmptied}");
         return carriedInside && carriedOutside && taken && setDown && drawnDown && emptied && apronTaken && apronCarried
-            && (yardLift == null || liftWoken) && hallLiftSeen;
+            && (yardLift == null || liftWoken) && hallLiftSeen && teleCarried && teleDrawn && teleEmptied;
     }
 }
