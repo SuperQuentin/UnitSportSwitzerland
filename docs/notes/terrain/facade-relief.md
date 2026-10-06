@@ -20,3 +20,24 @@
   `fine_detail(size, px)` (gone under ~1 px), `px` = metres a pixel spans on the wall.
 - **Not yet:** depth on roofs (tiles), quoins at corners, the sill's top face from above, doors.
 - **Check:** `tools/style-shots.sh` views `house` and `chase` (`--style ps1|cartoon|real-`).
+
+## Roofs
+
+- **Roof frame in CUSTOM0.w** (`BuildingMeshBuilder`, 0 = none, doors and walls stay 0). A
+  roof's UV2 is its own frame, so the shader zeroes `storey_count` and `garage_flag` on roofs.
+- **1, pitched** (unit |normal.y| at most 0.97): CUSTOM0.xyz the unit up-slope vector, UV.x metres
+  along the eave, UV2 = (metres up from the eave, eave-to-ridge length). A first pass per building
+  groups roof triangles by plane (`PitchedRoof`: rounded upward normal + offset) so every triangle
+  of a face measures from the same eave. `roof_tiles`: beaver tails or pantiles (hash of the
+  ridge length, so both faces of a gable agree), butt edges with their own normal, the course
+  shadow, a gutter, ridge caps, moss toward the eave. Realistic samples `tex_roof` in this frame.
+- **2, solar** (a building with at least `SolarRoofArea`, 250 m², of flat roof above its base +
+  2 m, not a church part, 7 in 10 by index): CUSTOM0 = (extent along the building's long axis,
+  across it, atan2 of the across direction), UV.x / UV2.x metres from the flat roof's bounding
+  edge. `solar_field`: 1 x 1.7 m modules tilted 20° south (normal tilted, glossy), rows 2.7 m
+  apart with a sun-dependent shadow, a 1.2 m margin. Per roof: mono or poly cells and an age;
+  the older, the more yellowing, low-edge dust, droppings, cracked and missing (rails) modules.
+- **Known limits:** the field fills the flat roof's bounding box, so an L-shaped roof's panels are
+  cut at the inner corner; a roof's soffit (wound either way) can get tiles; hips get no cap.
+- **Check:** shots low over Riddes; the solar roofs by the railway, `--at`-free:
+  `2583010 1113450 g35` pitch -50 yaw 0 in a `--shot-queue`.

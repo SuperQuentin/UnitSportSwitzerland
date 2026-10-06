@@ -15,7 +15,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `water` — Water: its own mesh on the tile's still water layer (2 m near, 4 m far, wave scale in UV.x, no collision); legacy tiles from the cover; PS1 translucent, wave-displaced (#299)
 - `water-level-layer` — In-memory still water per tile (#299): `WaterTile` (501² levels, NaN dry, optional fetch) from `IChunkSource.LoadWaterAsync`, `WaterLayer` (+ wave scale), legacy from cover, `ChunkManager.TryGetWaterLevel`; the shape #298 fills
 - `windows` — Windows: `BuildingMeshBuilder` bakes facade UVs (metres along the wall, storey index) from the *triangle* normal;... fake rooms behind the glass, occupancy cues
-- `facade-relief` — Recessed windows (parallax into the opening, reveals lit by the sun), sills, shutters, string courses and plinth, all in the building shader from the facade UVs
+- `facade-relief` — Recessed windows, sills, shutters, string courses, plinth; roof tile courses (roof frame in CUSTOM0.w) and solar panels with wear on large flat roofs, all shader-drawn
 - `building-types` — Building types: `BuildingTypes` groups a tile's solids (a church's nave + bell tower) at runtime; one church interior, every...
 - `ikea` — the nine IKEA stores named by position (#501): strict containment, not proximity (St. Gallen's point is 0.4 m from a tile edge); the blue box, the pylon, bins of Blåhajs; `--ikeacheck`
 - `building-triangles` — read building triangles with `b.Tri(t)`; wall/roof split is `BuildingTriangles.RoofNormalY`, never a local copy
