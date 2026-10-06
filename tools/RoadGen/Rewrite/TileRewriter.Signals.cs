@@ -266,7 +266,7 @@ public static partial class TileRewriter
                 {
                     var streetRight = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, drawnRight);
                     var streetLeft = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
-                    if (crosswalk = streetRight.OuterDm > 0 || streetLeft.OuterDm > 0)
+                    if (crosswalk = streetRight.SidewalkDm > 0 || streetLeft.SidewalkDm > 0)   // a crosswalk only where there is a sidewalk (#682)
                         EmitCrossing(paint, source, mid, u, right, MouthSkew(junction, arm) + SignalStopSetback, -(half + (pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0)), to, streetRight, streetLeft, areas, stats,
                             pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } edgeWay, ExitFar: false } ? s => (edgeWay.OuterEdge(Math.Max(s, 0)).P - (mid + u * s)).Dot(right) : null);
                 }
