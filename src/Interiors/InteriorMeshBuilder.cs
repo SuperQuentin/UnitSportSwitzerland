@@ -130,6 +130,7 @@ public static partial class InteriorMeshBuilder
 
     public static MeshData Build(InteriorLayout l)
     {
+        Core.ShowcaseTrace.Mark();
         var s = new Scratch();
         float h = l.StoreyHeight;
         float clear = h - InteriorGenerator.Slab;

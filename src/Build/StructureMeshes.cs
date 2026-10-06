@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Avatar;
+using UnitSport.Core;
 
 namespace UnitSport.Build;
 
@@ -185,6 +186,13 @@ public static class StructureMeshes
             }
         }
     }
+
+    /// <summary>Every piece in every material the grid allows, in the model viewer (--models).</summary>
+    [Showcase("Build")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcasePieces() =>
+        Enum.GetValues<BuildMaterial>().SelectMany(m => Enum.GetValues<PieceKind>()
+            .Where(k => BuildGrid.Allowed(k, m))
+            .Select(k => ($"{k} - {m}", (Func<Node3D>)(() => ModelViewer.Shaded(Mesh(k, m))))));
 
     /// <summary>A post under a grounded piece's foot, down to the terrain: a unit-tall column scaled to the gap.</summary>
     public static ArrayMesh Stilt(BuildMaterial m)
