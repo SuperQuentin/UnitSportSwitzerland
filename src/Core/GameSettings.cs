@@ -420,7 +420,7 @@ public sealed class GameSettings
 
     /// <summary>
     /// "--rings N", "--horizon km", "--fog on|off", "--detail low|medium|high",
-    /// "--generated on|off", "--style ps1|cartoon|real-|real+" — for
+    /// "--generated on|off", "--generated-roads raw|on", "--style ps1|cartoon|real-|real+" — for
     /// screenshotting one configuration against another without touching the saved file.
     /// </summary>
     private void ApplyCommandLine(string[] args)
@@ -434,6 +434,8 @@ public sealed class GameSettings
                 case "--horizon" when int.TryParse(v, out int h): HorizonKm = h; break;
                 case "--fog": Fog = v != "off" && v != "0" && v != "false"; break;
                 case "--generated": GeneratedFill = v != "off" && v != "0" && v != "false"; break;
+                // raw: generated roads without the road network stage (#559), to compare; not saved
+                case "--generated-roads": Terrain.FallbackChunkSource.RewriteRoads = v != "raw" && v != "off"; break;
                 case "--detail" when Enum.TryParse<DetailPreset>(v, true, out var d): Detail = d; break;
                 case "--builds" when int.TryParse(v, out int b): MaxConcurrentBuilds = b; break;
                 case "--commit" when double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double c):

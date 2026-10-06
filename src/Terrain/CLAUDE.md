@@ -36,6 +36,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `view-cone-priority` — The load queue is `ring × view weight`: on-screen tiles first, from the live camera's cone (FOV, 16 sectors, cheap re-sort)
 - `generated-fill` — Generated fill: every tile with no real data is generated and blended into the real tiles beside it (ownership, anchor, blend, merge, horizon, server, off switch)
 - `generated-relief` — The generator: 500 m heightmap of CH embedded, lakes, drainage -> rivers/roads/rails/villages, 25 m + 5 m field lattices, gotchas (carve only down, wall span)
+- `generated-roads-roadgen` — #559: generated road tiles go through RoadGen's network stage at runtime (halo 1, line keys, stride-5 ground, shared UrbanField, the stage writes into its input), BlendCheck --generated-roads, --generated-roads raw
 - `cachingchunksource` — `CachingChunkSource`: decorates the source chain with a byte-budgeted LRU of decoded tiles, so ground that is left...
 - `road-markings` (tools note) — v3 road paint: `RoadPaintBuilder` draws the `.road` PANT layer as a second road surface (style 6, depth bias, dither fade)
 - `download-job` — Background region downloads (#515): `DownloadJob` runs MapCore's Planner steps on a worker, survives worlds deliberately, polled progress; new tiles arrive on the next world load
