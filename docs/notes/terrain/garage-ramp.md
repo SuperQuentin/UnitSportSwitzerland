@@ -7,8 +7,9 @@ PR 1 of the stack: the door is cut in the facade and joined to the road. The ram
 in is PR 2, the parked cars PR 3. Until PR 2 the door is a shut roll-up door that reads as locked.
 
 - **Which blocks: `GarageRule`** (`src/Interiors/GarageRule.cs`, pure, tier 0: `GarageTests`).
-  `Wanted` = flats (`BuildingType.Apartments`, not shops under flats), at least 3 front doors, a
-  basement car park, and `StableHash(key + "|garage")` under 40 %. The car park half is the
+  `Wanted` = flats (`BuildingType.Apartments`) with at least 3 front doors, a basement car park and
+  `Fnv.Unit(key + "|garage")` under 40 %; or **shops under flats** (`MixedUse`) with at least 4 front doors and
+  the same hash under 20 % (a subset of the flats' rolls). The car park half is the
   generator's own rule: `GarageRule.Basement` is what `AptBasement` calls, `BehindStairwell` is
   the stairwell's depth from the constants the generator now aliases (`FrontLanding`,
   `MidLanding`, `StairRiser`...), and `StripDepth`/`StripWidth` are what `carStrip` compares against.

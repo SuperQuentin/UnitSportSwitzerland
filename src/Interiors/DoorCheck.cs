@@ -292,6 +292,37 @@ public static class DoorCheck
                 Expect(layout.EntranceOf(g.KeyIn(tile.Id).ToString()) == null, $"{what}: the garage door reads as locked until its ramp exists");
             }
         }
+        // shops under flats (#558): the rarer 20 % roll and 4 front doors, on 100 x 20 m commercial blocks
+        {
+            const int mixedCopies = 40;
+            var tile = new BuildingTile
+            {
+                Id = new TileId(2583, 1113),
+                Buildings = Enumerable.Range(0, mixedCopies)
+                    .Select(i => Solid(new Box("a mixed block", BuildingKind.Commercial, 100, 20, 15, 1, DoorBudget.MaxPerBuilding), 110f * i + 60f)).ToList(),
+            };
+            var roads = new RoadTile
+            {
+                Id = tile.Id,
+                Segments = Enumerable.Range(0, mixedCopies).Select(i => new RoadSegment
+                {
+                    Class = RoadClass.Minor, Surface = RoadSurface.Paved, Width = RoadFormat.DefaultWidth(RoadClass.Minor),
+                    Points = [360f, 0f, 110f * i + 60f + 10f + 6f, 640f, 0f, 110f * i + 60f + 10f + 6f],
+                }).ToList(),
+            };
+            var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
+            var types = BuildingTypes.For(tile);
+            var garages = doors.Where(d => d.Link.Any).ToList();
+            Expect(garages.Count > 0 && garages.Count < mixedCopies / 2, $"mixed blocks: {garages.Count} of {mixedCopies} roll a garage door (a fifth, and shops under flats only)");
+            foreach (var g in garages)
+            {
+                Expect(InteriorGenerator.ApartmentTypeFor(BuildingFootprint.Compute(tile, g.Index, roads, null)!, BuildingKind.Commercial, 5, false) == BuildingType.MixedUse,
+                    $"mixed blocks: slot {g.Slot} of building {g.Index} is a block with shops under its flats");
+                Expect(doors.Count(x => x.Index == g.Index && x.Width > 0) >= 1 + GarageRule.MixedMinFrontDoors, $"mixed blocks: building {g.Index} has the {GarageRule.MixedMinFrontDoors} front doors it takes");
+                var problems = InteriorValidator.Validate(InteriorGenerator.Generate(tile, g.Index, roads, null)!);
+                Expect(problems.Count == 0, $"mixed blocks: building {g.Index} plans and validates");
+            }
+        }
         return failures;
     }
 

@@ -50,14 +50,19 @@ public class GarageTests
     [Fact]
     public void A_garage_is_wanted_only_with_flats_three_front_doors_a_car_park_and_the_roll()
     {
-        string rolled = Enumerable.Range(0, 400).Select(i => $"2583_1113_{i}").First(GarageRule.Rolls);
+        string rolled = Enumerable.Range(0, 400).Select(i => $"2583_1113_{i}").First(k => GarageRule.Rolls(k));
         string unlucky = Enumerable.Range(0, 400).Select(i => $"2583_1113_{i}").First(k => !GarageRule.Rolls(k));
         Assert.True(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 80, 20, H, 3));
         Assert.False(GarageRule.Wanted(unlucky, BuildingType.Apartments, 5, 80, 20, H, 3));
         // two front doors is a small block, not a development with an underground garage
         Assert.False(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 80, 20, H, 2));
         // shops under flats and any other kind of building are not blocks of flats
-        Assert.False(GarageRule.Wanted(rolled, BuildingType.MixedUse, 5, 80, 20, H, 3));
+        // shops under flats qualify too, rarer: 4 front doors and a 20 % roll
+        string mixedRolled = Enumerable.Range(0, 400).Select(i => $"2583_1113_{i}").First(k => GarageRule.Rolls(k, mixed: true));
+        string mixedUnlucky = Enumerable.Range(0, 400).Select(i => $"2583_1113_{i}").First(k => GarageRule.Rolls(k) && !GarageRule.Rolls(k, mixed: true));
+        Assert.True(GarageRule.Wanted(mixedRolled, BuildingType.MixedUse, 5, 80, 20, H, 4));
+        Assert.False(GarageRule.Wanted(mixedRolled, BuildingType.MixedUse, 5, 80, 20, H, 3));
+        Assert.False(GarageRule.Wanted(mixedUnlucky, BuildingType.MixedUse, 5, 80, 20, H, 4));
         Assert.False(GarageRule.Wanted(rolled, BuildingType.None, 5, 80, 20, H, 3));
         // too shallow for a car park
         Assert.False(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 80, 14, H, 3));
@@ -68,6 +73,15 @@ public class GarageTests
     {
         int rolled = Enumerable.Range(0, 2000).Count(i => GarageRule.Rolls($"2583_1113_{i}"));
         Assert.InRange(rolled / 2000.0, 0.34, 0.46);
+    }
+
+    [Fact]
+    public void The_mixed_roll_is_a_fifth_and_inside_the_flats_roll()
+    {
+        int n = Enumerable.Range(0, 2000).Count(i => GarageRule.Rolls($"2583_1113_{i}", mixed: true));
+        Assert.InRange(n / 2000.0, 0.15, 0.25);
+        for (int i = 0; i < 500; i++)
+            if (GarageRule.Rolls($"2583_1113_{i}", mixed: true)) Assert.True(GarageRule.Rolls($"2583_1113_{i}"));
     }
 
     [Fact]

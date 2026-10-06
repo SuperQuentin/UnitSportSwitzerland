@@ -22,6 +22,10 @@ public static class GarageRule
     /// <summary>Share of blocks that qualify by size and basement and still get one, so garages stay rare.</summary>
     public const double Share = 0.4;
 
+    /// <summary>A city block with shops under its flats qualifies too, but rarer and only with a bigger frontage.</summary>
+    public const double MixedRollShare = 0.2;
+    public const int MixedMinFrontDoors = 4;
+
     /// <summary>A block with fewer front doors is too small a development for an underground garage.</summary>
     public const int MinFrontDoors = 3;
 
@@ -113,15 +117,24 @@ public static class GarageRule
     }
 
     /// <summary>Whether the key rolls a garage, the same on every peer.</summary>
-    public static bool Rolls(string key) => Fnv.Unit(key + "|garage") < Share;
+    public static bool Rolls(string key, bool mixed = false) =>
+        Fnv.Unit(key + "|garage") < (mixed ? MixedRollShare : Share);
 
     /// <summary>
     /// Whether a block of flats gets an underground garage door: flats (not shops under them), at
-    /// least <see cref="MinFrontDoors"/> front doors, a basement car park and the roll.
+    /// least <see cref="MinFrontDoors"/> front doors, a basement car park and the roll. Flats with
+    /// shops under them (<see cref="BuildingType.MixedUse"/>) qualify too: at least
+    /// <see cref="MixedMinFrontDoors"/> front doors and a <see cref="MixedRollShare"/> roll.
     /// <paramref name="width"/> is the plan box's length along the front wall.
     /// </summary>
     public static bool Wanted(string key, BuildingType type, int above, float width, float depth,
         float storeyHeight, int frontDoors) =>
-        type == BuildingType.Apartments && frontDoors >= MinFrontDoors
-        && HasCarPark(key, false, above, width, depth, storeyHeight) && Rolls(key);
+        type switch
+        {
+            BuildingType.Apartments => frontDoors >= MinFrontDoors
+                && HasCarPark(key, false, above, width, depth, storeyHeight) && Rolls(key),
+            BuildingType.MixedUse => frontDoors >= MixedMinFrontDoors
+                && HasCarPark(key, true, above, width, depth, storeyHeight) && Rolls(key, mixed: true),
+            _ => false,
+        };
 }
