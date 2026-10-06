@@ -22,7 +22,7 @@ public static partial class TileRewriter
     /// from the mouth; the carriageway runs from <paramref name="lo"/> to <paramref name="hi"/> across it (negative to the left).
     /// </summary>
     private static void EmitCrossing(Dictionary<TileId, List<RoadPaint>> paint, Source source, Vec2 mid, Vec2 u, Vec2 right,
-        double stopAt, double lo, double hi, RoadSide rightSide, RoadSide leftSide, SignalStats stats)
+        double stopAt, double lo, double hi, RoadSide rightSide, RoadSide leftSide, Dictionary<TileId, List<RoadAreaProp>> areas, SignalStats stats)
     {
         static double Strip(RoadSide s) => s.HasTrack ? (s.VergeDm + s.BikeDm + s.BufferDm) / 10.0 : 0;
         double pathR = Strip(rightSide), pathL = Strip(leftSide);
@@ -53,6 +53,26 @@ public static partial class TileRewriter
             Shape = PaintShape.Triangles, Type = PaintType.YellowSolid, Rgba = PaintEmitter.Yellow, Vertices = verts.ToArray(), Indices = index.ToArray(),
         });
         stats.Crossings++;
+        // the crosswalk cuts through the green strips: path surface over the verge and the buffer where the bars run
+        void Cut(RoadSide side, double edge, double sign)
+        {
+            if (!side.HasTrack) return;
+            float h = RoadStreetSection.TrackHeight(side);
+            double verge = side.VergeDm / 10.0, path = side.BikeDm / 10.0, buffer = side.BufferDm / 10.0;
+            foreach (var (d0, d1) in new[] { (0.0, verge), (verge + path, verge + path + buffer) })
+            {
+                if (d1 - d0 < 0.05) continue;
+                Vec2 P(double along, double d) => mid + u * along + right * (edge + sign * d);
+                Get(areas, source.Tile).Add(new RoadAreaProp
+                {
+                    Type = AreaPropType.BikePath, Flags = h > 0 ? PropFlags.Solid : PropFlags.None, Height = h,
+                    Vertices = Local(source.Tile, [P(s0 - 0.25, d0), P(s1 + 0.25, d0), P(s1 + 0.25, d1), P(s0 - 0.25, d1)], source.SampleHeight, 0f),
+                    Indices = [0, 1, 2, 0, 2, 3],
+                });
+            }
+        }
+        Cut(rightSide, hi, 1);
+        Cut(leftSide, lo, -1);
         // the approach's path stops before the bars: a yellow line across it, the cars' line's distance out
         if (rightSide.HasTrack && pathR > 0)
         {
