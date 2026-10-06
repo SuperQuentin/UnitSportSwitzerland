@@ -64,6 +64,7 @@
     <Compile Include="..\..\src\Player\AirlinerCatalog.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\TurbopropTone.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\AirlinerFlight.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\CockpitInstruments.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Build\BuildGrid.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrPrefabs.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- site detection (#497) and landmark detection (#501): pure functions of a tile's
@@ -76,6 +77,10 @@
          Pipeline.cs, which would drag in CountryData/LocalState/Selection/Stats and
          TerrainPreprocessor-only types this project has no ProjectReference for. -->
     <Compile Include="..\..\tools\MapCore\DownloadManifest.cs" Link="Map\%(Filename)%(Extension)" />
+    <!-- FileGDB reader (#537): the geometry decoding is pure arithmetic and tested here; FileGdb.cs
+         itself is linked only for the GeometryGrid the decoder takes. -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\FileGdbGeometry.cs" Link="Gdb\%(Filename)%(Extension)" />
+    <Compile Include="..\..\tools\TerrainPreprocessor\FileGdb.cs" Link="Gdb\%(Filename)%(Extension)" />
     <!-- update check (#532): version compare, asset pick, GitHub's JSON, delta updates -->
     <Compile Include="..\..\src\Core\UpdateInfo.cs;..\..\src\Core\BinaryDelta.cs;..\..\src\Core\UpdatePackage.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Landmarks.cs" Link="Game\%(Filename)%(Extension)" />

@@ -9,6 +9,7 @@ public partial class FootPlayer
     /// <summary>Keys that mean something only at an airliner's controls. True when this event was one of them.</summary>
     private bool HandleAirlinerInput(InputEvent e, Airliner airliner)
     {
+        if (AirlinerPadSwitch(e, airliner)) return true;
         if (!e.IsPressed() || e.IsEcho() || SeatIndex != 0) return false;
         if (e.IsActionPressed(PlayerInput.FlapsDown)) { airliner.Command(AirlinerCommand.FlapsDown); return true; }
         if (e.IsActionPressed(PlayerInput.FlapsUp)) { airliner.Command(AirlinerCommand.FlapsUp); return true; }

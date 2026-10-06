@@ -72,8 +72,6 @@ public sealed class SetupContext
     public required Layers Layers { get; init; }
     public required Stats Stats { get; init; }
     public required SetupState State { get; init; }
-    public required string? Python { get; init; }
-    public required bool Gdal { get; init; }
     public int Cores { get; init; } = Environment.ProcessorCount;
 }
 
@@ -115,16 +113,14 @@ public static partial class Planner
         var steps = new List<Step>();
         var sel = c.Selection.Tiles.ToList();
         var stats = c.Stats;
-        bool py = c.Python != null;
-        // Terrain, swissTLM3D and GWR are downloaded by SwissDownload now (#515 phase 1), so only the
-        // datasets whose resolvers are not ported yet still gate on Python.
-        string noPython = "Python not found (needed for this dataset)";
 
         // ---- which tiles need what -------------------------------------------------------
         var toDownload = sel.Where(t => !c.Local.Downloaded.Contains(t) && !c.Local.Built.Contains(t)).ToList();
         var toBuild = sel.Where(t => !c.Local.Built.Contains(t)).ToList();
         bool wantRoads = c.Layers.HasFlag(Layers.Roads);
-        bool wantBuildings = c.Layers.HasFlag(Layers.Buildings) && c.Gdal;
+        // No GDAL gate since #537: the preprocessor reads the FileGDB itself, so the buildings
+        // layer only needs its sheets downloaded.
+        bool wantBuildings = c.Layers.HasFlag(Layers.Buildings);
         bool haveNationwideGpkg = File.Exists(NationwideBuildingsGpkg(p));
         var featureTiles = sel.Where(t =>
             (wantRoads && !RoadsDone(c, t)) || (wantBuildings && !BuildingsDone(c, t))).ToList();
@@ -180,13 +176,13 @@ public static partial class Planner
             DiskPath = p.BuildingsDir,
             Seconds = sheetBytes / stats.EffectiveDownload + 5,
             Skip = !c.Layers.HasFlag(Layers.Buildings) ? "buildings layer off"
-                 : !c.Gdal ? "needs GDAL (python -c \"import osgeo\" fails; docs/notes/tools/gdal-setup.md)"
                  : haveNationwideGpkg || haveNationwideZip ? "nationwide buildings already here"
-                 : !needSheets || sheetsToGet.Count == 0 ? "already here" : !py ? noPython : null,
+                 : !needSheets || sheetsToGet.Count == 0 ? "already here" : null,
             Run = r =>
             {
+                // still written: the terminal tool's --resume and swiss_data.py --tiles-file read it
                 WriteTiles(SelectionTilesFile(p), sel);
-                return r.SwissData(["--out", p.BuildingsDir, "swissbuildings3d", "--tiles-file", SelectionTilesFile(p)]);
+                return r.Download(() => SwissDownload.BuildingsAsync(p.BuildingsDir, sel, r.Progress, r.Cancellation));
             },
         });
 
@@ -222,10 +218,18 @@ public static partial class Planner
             DiskBytes = wantRoutes && !c.Local.RouteKeys && !c.Local.RoutesZips ? routesZip : 0,
             DiskPath = p.RoutesDir,
             Seconds = routesZip / stats.EffectiveDownload + 4,
-            Skip = !wantRoutes ? "routes layer off" : !c.Gdal ? "needs GDAL"
-                 : c.Local.RouteKeys || c.Local.RoutesZips ? "already here" : !py ? noPython : null,
-            Run = async r => await r.SwissData(["--out", p.RoutesDir, "veloland"])
-                            && await r.SwissData(["--out", p.RoutesDir, "mountainbikeland"]),
+            // Neither Python nor GDAL since #537: the zips come down through SwissDownload and the
+            // FileGDB inside them is read in-process.
+            Skip = !wantRoutes ? "routes layer off"
+                 : c.Local.RouteKeys || c.Local.RoutesZips ? "already here" : null,
+            Run = async r =>
+            {
+                bool RoutesGdb(string key) => key.EndsWith("_2056.gdb.zip", StringComparison.OrdinalIgnoreCase);
+                return await r.Download(() => SwissDownload.CollectionAsync(p.RoutesDir, "ch.astra.veloland",
+                           null, r.Progress, r.Cancellation, assetFilter: RoutesGdb))
+                    && await r.Download(() => SwissDownload.CollectionAsync(p.RoutesDir, "ch.astra.mountainbikeland",
+                           null, r.Progress, r.Cancellation, assetFilter: RoutesGdb));
+            },
         });
 
         // ---- OpenStreetMap (optional) -----------------------------------------------------------
@@ -239,8 +243,8 @@ public static partial class Planner
             DiskBytes = wantOsm && p.OsmPbf == null ? osmPbf : 0,
             DiskPath = p.OsmDir,
             Seconds = osmPbf / stats.EffectiveDownload + 3,
-            Skip = !wantOsm ? "OSM layer off" : p.OsmPbf != null ? "already here" : !py ? noPython : null,
-            Run = r => r.SwissData(["--out", p.OsmDir, "osm"]),
+            Skip = !wantOsm ? "OSM layer off" : p.OsmPbf != null ? "already here" : null,
+            Run = r => r.Download(() => SwissDownload.OsmAsync(p.OsmDir, r.Progress, r.Cancellation)),
         });
 
         // ---- unpack ------------------------------------------------------------------------------
@@ -277,47 +281,17 @@ public static partial class Planner
         // ---- GDAL exports --------------------------------------------------------------------------
         steps.Add(new Step
         {
-            Title = "Export cycle routes (GDAL)",
+            Title = "Export cycle routes",
             Detail = "route_keys.sqlite: which roads are on a signed route",
             Seconds = 20,
-            Skip = !wantRoutes ? "routes layer off" : !c.Gdal ? "needs GDAL" : c.Local.RouteKeys ? "already exported" : null,
-            Run = r => r.Python("export route keys", [Path.Combine(p.Tools, "export_route_keys.py"), "--dir", p.RoutesDir], LineProgress.None),
+            Skip = !wantRoutes ? "routes layer off" : c.Local.RouteKeys ? "already exported" : null,
+            Run = r => r.Tool("TerrainPreprocessor",
+                ["--export-route-keys", p.RoutesDir, "--temp", p.Temp], LineProgress.None),
         });
 
         var bounds = c.Selection.Bounds();
-        long exportBytes = haveNationwideZip ? 400_000_000L * Math.Max(1, sheets.Count) / 50 : sheets.Sum(s => s.Size);
-        steps.Add(new Step
-        {
-            Title = "Export buildings (GDAL)",
-            Detail = haveNationwideGpkg ? "buildings_ch.gpkg is used as is" : "the selection's buildings into one GeoPackage",
-            DiskBytes = wantBuildings && featureTiles.Count > 0 && !haveNationwideGpkg ? exportBytes * 3 : 0,
-            DiskPath = p.BuildingsDir,
-            Seconds = exportBytes / stats.GdalBytesPerSec + 10,
-            Skip = !c.Layers.HasFlag(Layers.Buildings) ? "buildings layer off" : !c.Gdal ? "needs GDAL"
-                 : featureTiles.Count == 0 ? "buildings already extracted for every tile"
-                 : haveNationwideGpkg ? "nationwide export already here" : null,
-            Run = r =>
-            {
-                var args = new List<string> { Path.Combine(p.Tools, "export_buildings.py"), "--out", BuildingsOut(p) };
-                if (bounds is { } b)
-                {
-                    args.Add("--bbox");
-                    args.AddRange(new[] { b.MinE, b.MinN, b.MaxE, b.MaxN }.Select(v => v.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)));
-                }
-                // always explicit: the script's own default is the repo's ressources/data, not the data location
-                if (haveNationwideZip)
-                    args.AddRange(["--src", NationwideBuildingsZip(p)]);
-                else
-                    foreach (var s in sheets)
-                        if (Directory.EnumerateFiles(p.BuildingsDir, $"swissbuildings3d_3_0_*_{s.Key}_2056_5728.gdb.zip")
-                                .OrderByDescending(f => f, StringComparer.Ordinal).FirstOrDefault() is { } zip)
-                        {
-                            args.Add("--src");
-                            args.Add(zip);
-                        }
-                return r.Python("export buildings", args, LineProgress.Source);
-            },
-        });
+        // No "export buildings" step any more (#537): the preprocessor reads the swissBUILDINGS3D
+        // FileGDB zips itself, so there is no GeoPackage to convert to first and no GDAL to need.
 
         // ---- processing ------------------------------------------------------------------------------
         int builtTotal = c.Local.Built.Count + toBuild.Count;
@@ -384,8 +358,18 @@ public static partial class Planner
                 }
                 if (wantBuildings)
                 {
+                    // A GeoPackage left by an older run (or the nationwide one) is still read; a
+                    // fresh region goes straight from the published sheet zips (#537).
                     string gpkg = File.Exists(NationwideBuildingsGpkg(p)) ? NationwideBuildingsGpkg(p) : BuildingsOut(p);
                     if (File.Exists(gpkg)) args.AddRange(["--buildings", gpkg]);
+                    else
+                        foreach (var sheet in sheets)
+                        {
+                            string zip = Directory.Exists(p.BuildingsDir)
+                                ? Directory.EnumerateFiles(p.BuildingsDir, $"swissbuildings3d_3_0_*_{sheet.Key}_*.gdb.zip").FirstOrDefault() ?? ""
+                                : "";
+                            if (zip.Length > 0) args.AddRange(["--buildings-gdb", zip]);
+                        }
                     if (File.Exists(p.GwrSqlite)) args.AddRange(["--gwr", p.GwrSqlite]);
                 }
                 var clock = Stopwatch.StartNew();
@@ -649,14 +633,6 @@ public sealed partial class StepRun
                 System.Globalization.CultureInfo.InvariantCulture) / total;
     }
 
-    public async Task<bool> Python(string what, IReadOnlyList<string> args, LineProgress parse)
-    {
-        if (_c.Python == null) { Fail("Python not found"); return false; }
-        int code = await Exec(_c.Python, args, parse);
-        if (code != 0) Fail($"{what} exited with {code}");
-        return code == 0;
-    }
-
     /// <summary>The step's progress sink, for a stage that reports its own progress.</summary>
     public IStepProgress Progress => _progress;
 
@@ -664,8 +640,8 @@ public sealed partial class StepRun
     public CancellationToken Cancellation => _ct;
 
     /// <summary>
-    /// Runs one of the C# downloads (#515 phase 1) and folds what it measured back into this
-    /// machine's rate, the way <see cref="SwissData"/> does for the Python tool it replaced.
+    /// Runs one of the C# downloads and folds what it measured back into this machine's rate, so
+    /// the estimates keep converging on the real connection rather than the author's.
     /// </summary>
     public async Task<bool> Download(Func<Task<DownloadResult>> download)
     {
@@ -680,18 +656,6 @@ public sealed partial class StepRun
             _c.Stats.DownloadBytesPerSec = Stats.Blend(_c.Stats.DownloadBytesPerSec, result.Bytes / result.Seconds);
         return true;
     }
-
-    /// <summary>swiss_data.py with machine-readable progress; learns the download rate from it.</summary>
-    public async Task<bool> SwissData(IReadOnlyList<string> args)
-    {
-        _download = (0, 0);
-        bool ok = await Python("swiss_data.py", [_c.Paths.SwissData, "--progress-json", .. args], LineProgress.None);
-        if (ok && _download.Bytes > 50_000_000 && _download.Seconds > 1)
-            _c.Stats.DownloadBytesPerSec = Stats.Blend(_c.Stats.DownloadBytesPerSec, _download.Bytes / _download.Seconds);
-        return ok;
-    }
-
-    private (long Bytes, double Seconds) _download;
 
     public Task<bool> Extract(string dir, string zipPattern, Func<ZipArchiveEntry, bool> pick, string outDir, bool overwrite = false)
     {
@@ -759,7 +723,6 @@ public sealed partial class StepRun
         {
             if (line == null) return;
             Log(line);
-            if (line.StartsWith("@progress ", StringComparison.Ordinal)) { OnJson(line[10..]); return; }
             Show(line);
             var m = parse switch
             {
@@ -786,31 +749,4 @@ public sealed partial class StepRun
         return proc.ExitCode;
     }
 
-    private void OnJson(string json)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            var e = doc.RootElement;
-            switch (e.GetProperty("event").GetString())
-            {
-                case "check":
-                    Show($"checking {e.GetProperty("done").GetInt32():N0}/{e.GetProperty("total").GetInt32():N0} against the server");
-                    break;
-                case "plan":
-                    Show($"{e.GetProperty("files").GetInt32():N0} files, {e.GetProperty("bytes").GetInt64() / 1e9:F2} GB to fetch");
-                    break;
-                case "progress":
-                    long bytes = e.GetProperty("bytes").GetInt64(), total = e.GetProperty("bytes_total").GetInt64();
-                    _progress.Value = total > 0 ? 100.0 * bytes / total : 0;
-                    Show($"{e.GetProperty("done").GetInt32():N0}/{e.GetProperty("total").GetInt32():N0} files, "
-                         + $"{bytes / 1e9:F2}/{total / 1e9:F2} GB, {e.GetProperty("rate").GetDouble() / 1e6:F0} MB/s");
-                    break;
-                case "done":
-                    _download = (_download.Bytes + e.GetProperty("bytes").GetInt64(), _download.Seconds + e.GetProperty("seconds").GetDouble());
-                    break;
-            }
-        }
-        catch (JsonException) { }
-    }
 }
