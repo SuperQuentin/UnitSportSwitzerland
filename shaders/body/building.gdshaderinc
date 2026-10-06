@@ -210,6 +210,54 @@ vec3 stained_glass(vec2 q, vec2 cell, bool lit) {
     return c * (lit ? 1.4 : mix(0.7, 0.25, world_night));
 }
 
+// --- facade relief ---------------------------------------------------------------------
+// Depth without geometry, in the facade frame the windows use (u along, v up the storey, d into
+// the wall): the glass sits `window_recess` behind the facade and the view ray is traced into
+// the opening, so the jambs, the head and the sill show and shift with the camera; a stone sill
+// stands under each window, a string course at each floor slab, a plinth at the foot, and part
+// of the houses have louvred shutters. All of it fades with the window grid at a distance.
+uniform float window_recess = 0.22;
+uniform float plinth_height = 0.45;
+
+// Follows the view ray d (along, up, into) from q on the facade into an opening [lo, hi] set
+// `depth` into the wall. Returns the distance travelled; side 0 = the glass, 1 = a jamb,
+// 2 = the head, 3 = the sill.
+float recess_trace(vec2 q, vec3 d, vec2 lo, vec2 hi, float depth, out int side) {
+    float tg = depth / max(d.z, 1e-4);
+    float tu = d.x > 1e-4 ? (hi.x - q.x) / d.x : (d.x < -1e-4 ? (lo.x - q.x) / d.x : 1e6);
+    float tv = d.y > 1e-4 ? (hi.y - q.y) / d.y : (d.y < -1e-4 ? (lo.y - q.y) / d.y : 1e6);
+    float t = min(tg, min(tu, tv));
+    side = t == tg ? 0 : (t == tu ? 1 : (d.y > 0.0 ? 2 : 3));
+    return t;
+}
+
+// 0 where a point z deep in the recess is in the reveals' shadow, else 1. s = the sun in the
+// facade frame (along, up, out of the wall); a sun behind the wall or below the horizon leaves
+// the whole wall in shade already, so nothing more is taken off.
+float recess_sun(vec2 q, float z, vec3 s, vec2 lo, vec2 hi) {
+    if (s.z <= 0.02 || s.y <= 0.0) {
+        return 1.0;
+    }
+    vec2 e = q + s.xy * (z / s.z);
+    return (e.x > lo.x && e.x < hi.x && e.y > lo.y && e.y < hi.y) ? 1.0 : 0.0;
+}
+
+// Louvred shutter at q (metres inside the leaf of width w, height h): a frame and slats whose
+// tops catch the sky and whose undersides fall into shade. `fine` fades the slats into the
+// leaf's average shade as they near a pixel.
+vec3 shutter(vec2 q, float w, float h, vec3 paint, float fine) {
+    if (q.x < 0.05 || q.x > w - 0.05 || q.y < 0.05 || q.y > h - 0.05) {
+        return paint;
+    }
+    float f = fract(q.y / 0.075);
+    return paint * mix(0.93, mix(0.68, 1.18, f), fine);
+}
+
+// How fully a feature of `size` metres shows when a pixel spans px metres: gone under ~1 px.
+float fine_detail(float size, float px) {
+    return clamp(size / max(px, 1e-4) - 1.0, 0.0, 1.0);
+}
+
 varying float garage_flag;  // UV2.y: 0 plain, 1 neon sign, 2 garage wall (storey_count = eave m)
 
 void vertex() {
@@ -257,37 +305,113 @@ void fragment() {
     float top = storey_count - 0.22;
     vec3 glow = vec3(0.0);
     bool garage_wall = garage_flag > 1.5;
-    if (!garage_wall && facade.y > 0.0 && facade.y < top && detail < 0.6) {
+    if (!garage_wall && facade.y >= 0.0 && facade.y < top && detail < 0.6) {
         float u = facade.x;
         float wall_v = fract(facade.y);
         float col_u = fract(u / window_spacing);
         bool in_row = wall_v > 0.32 && wall_v < 0.76;
         bool in_col = col_u > 0.30 && col_u < 0.70;
+        vec2 cell = vec2(floor(u / window_spacing), floor(facade.y));
+        // fade the pattern out as it approaches the resolution limit
+        float legible = clamp(1.0 - detail / 0.6, 0.0, 1.0);
+        float storey_h = max(wall_frame.z, 0.5);
+        float px = detail * storey_h; // metres a pixel spans on this wall
 
-        if (facade.y > 0.35 && in_row && in_col) {
+        // the wall's frame: along (u grows that way), out toward the viewer, and the sun in it
+        vec3 along = normalize(vec3(wall_frame.x, 0.0, wall_frame.y));
+        vec3 out_n = vec3(-along.z, 0.0, along.x);
+        if (dot(out_n, n) < 0.0) {
+            out_n = -out_n;
+        }
+        vec3 sun = normalize(world_sun_dir);
+        vec3 sun_f = vec3(dot(sun, along), sun.y, dot(sun, out_n));
+        // the opening in this window cell, metres (along, up the storey)
+        vec2 lo = vec2(0.30 * window_spacing, 0.32 * storey_h);
+        vec2 hi = vec2(0.70 * window_spacing, 0.76 * storey_h);
+        vec2 q = vec2(col_u * window_spacing, wall_v * storey_h);
+        bool windowed = facade.y > 0.35;
+
+        // shutters on some houses, not on blocks of flats or a church: one paint a house
+        float house = hash(floor(pattern_xz(world_pos) / 24.0) + 0.37);
+        bool shuttered = house < 0.55 && storey_h < 3.6 && storey_count < 5.5;
+        vec3 paint = house < 0.2 ? vec3(0.17, 0.34, 0.21) : house < 0.32 ? vec3(0.46, 0.12, 0.10)
+                   : house < 0.44 ? vec3(0.36, 0.24, 0.14) : vec3(0.36, 0.43, 0.47);
+        float leaf_w = (hi.x - lo.x) * 0.5;
+        float slats = fine_detail(0.075, px);
+
+        if (windowed && in_row && in_col) {
             // stable per-window hash decides which ones are lit
-            vec2 cell = vec2(floor(u / window_spacing), floor(facade.y));
             float r = hash(cell);
             // someone inside lights more of them
             float busy = occupancy(world_pos);
             // a few lit windows by day, most of a village at night
             bool lit = r > mix(0.86, 0.35 - 0.2 * world_lights, world_night) - busy * 0.45;
+            // a shuttered house keeps a few of its dark windows shut
+            bool closed = shuttered && !lit && busy == 0.0 && hash(cell + 6.6) < 0.15;
             vec3 win = lit ? window_lit : window_color;
-            // fade the pattern out as it approaches the resolution limit
-            float legible = clamp(1.0 - detail / 0.6, 0.0, 1.0);
-            // close enough to see into: a room behind it (a church's tall storey gets coloured glass)
-            float storey_h = wall_frame.z;
-            if (legible > 0.05 && storey_h > 0.0) {
-                if (storey_h > 5.5) {
-                    win = stained_glass(vec2(col_u * window_spacing, wall_v * storey_h), cell, lit);
-                } else {
-                    win = room_behind(world_pos, CAMERA_POSITION_WORLD, wall_frame.xy, storey_h,
-                        col_u, wall_v, cell, lit, busy, TIME);
+
+            // into the recess: the glass, or a reveal in front of it
+            vec3 ray = normalize(world_pos - CAMERA_POSITION_WORLD);
+            vec3 d = vec3(dot(ray, along), ray.y, -dot(ray, out_n));
+            int side;
+            float th = recess_trace(q, d, lo, hi, window_recess * legible, side);
+            vec2 gq = q + d.xy * th;
+            float shade = mix(0.55, 1.0, recess_sun(gq, d.z * th, sun_f, lo, hi));
+
+            if (side == 0) {
+                // close enough to see into: a room behind it (a church's tall storey gets coloured glass)
+                if (closed) {
+                    float lx = gq.x - lo.x;
+                    win = shutter(vec2(mod(lx, leaf_w), gq.y - lo.y), leaf_w, hi.y - lo.y, paint, slats);
+                } else if (legible > 0.05 && wall_frame.z > 0.0) {
+                    if (storey_h > 5.5) {
+                        win = stained_glass(gq, cell, lit);
+                    } else {
+                        win = room_behind(world_pos + ray * th, CAMERA_POSITION_WORLD, wall_frame.xy, storey_h,
+                            gq.x / window_spacing, gq.y / storey_h, cell, lit, busy, TIME);
+                    }
                 }
+                col = mix(col, win * (lit ? 1.0 : shade), legible);
+                glass = closed ? 0.0 : legible;
+                if (lit) glow = win * legible;
+            } else {
+                // a reveal: the wall turned into the opening, its own facing for the sun, darker
+                // toward the glass; a lit room spills onto it at night
+                vec3 rn = side == 1 ? -along * sign(d.x) : vec3(0.0, side == 2 ? -1.0 : 1.0, 0.0);
+                n = normalize(mix(n, rn, legible));
+                float ao = mix(1.0, 0.62, clamp(d.z * th / window_recess, 0.0, 1.0));
+                col *= mix(1.0, ao * shade, legible);
+                if (lit) glow = window_lit * 0.3 * legible;
             }
-            col = mix(col, win, legible);
-            glass = legible;
-            if (lit) glow = win * legible;
+        } else if (windowed) {
+            // --- around the opening: shutters folded back, the sill and its shadow ---------
+            float sill_lo = lo.y - 0.07;
+            bool beside = in_row && col_u > 0.30 - leaf_w / window_spacing && col_u < 0.70 + leaf_w / window_spacing;
+            if (shuttered && beside) {
+                float lx = q.x < lo.x ? q.x - (lo.x - leaf_w) : q.x - hi.x;
+                col = mix(col, shutter(vec2(lx, q.y - lo.y), leaf_w, hi.y - lo.y, paint, slats), legible);
+            } else if (q.x > lo.x - 0.06 && q.x < hi.x + 0.06 && q.y < lo.y && q.y > sill_lo) {
+                // the stone sill's front, standing out of the wall
+                col = mix(col, mix(col, vec3(0.80, 0.78, 0.74), 0.55) * 1.08, fine_detail(0.07, px) * legible);
+            } else if (q.x > lo.x - 0.06 && q.x < hi.x + 0.06 && q.y < sill_lo && q.y > sill_lo - 0.08) {
+                // the sill's shadow on the wall below, deepest right under it
+                float under = (sill_lo - q.y) / 0.08;
+                col *= mix(1.0, mix(0.68, 1.0, under), fine_detail(0.05, px) * legible);
+            }
+        }
+
+        // --- string courses and the plinth --------------------------------------------------
+        float bands = legible * fine_detail(0.06, px);
+        if (storey_count > 1.5 && cell.y >= 1.0 && q.y < 0.14) {
+            col *= mix(1.0, 1.08, bands); // the slab's edge, a band proud of the wall
+        } else if (storey_count > 1.5 && cell.y + 1.0 < storey_count - 0.5 && q.y > storey_h - 0.05) {
+            col *= mix(1.0, 0.8, bands); // the shadow line under it
+        }
+        float base_m = facade.y * storey_h;
+        if (base_m < plinth_height) {
+            col *= mix(1.0, 0.82, bands); // a plinth of rougher, darker render
+        } else if (base_m < plinth_height + 0.04) {
+            col *= mix(1.0, 1.1, bands); // its chamfered top catches the light
         }
     }
 
