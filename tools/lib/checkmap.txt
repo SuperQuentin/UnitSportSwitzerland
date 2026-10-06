@@ -409,6 +409,12 @@ src/Player/FootPlayer.Exc quick  --excavatorcheck --world flat --systems physics
 src/Player/Excavator      net    tools/excavatornetcheck.sh
 src/Avatar/Excavator      net    tools/excavatornetcheck.sh
 src/Player/FootPlayer.Exc net    tools/excavatornetcheck.sh
+# #614: the telehandler: three steering modes and the boom (flat), and from a second peer (the excavator's script)
+src/Player/Telehandler    quick  --telehandlercheck --world flat --systems physics,ui
+src/Avatar/Telehandler    quick  --telehandlercheck --world flat --systems physics,ui
+src/Player/FootPlayer.Tel quick  --telehandlercheck --world flat --systems physics,ui
+src/Player/Telehandler    net    tools/excavatornetcheck.sh
+src/Avatar/Telehandler    net    tools/excavatornetcheck.sh
 # #614: the compact roller: drives, steers on its hinge, vibrates (flat), and from a second peer (the excavator's script)
 src/Player/CompactRoller  quick  --rollercheck --world flat --systems physics,ui
 src/Avatar/CompactRoller  quick  --rollercheck --world flat --systems physics,ui
