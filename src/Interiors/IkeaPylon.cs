@@ -80,9 +80,14 @@ public partial class IkeaPylon : Node
             if (outward.LengthSquared() < 1e-4f) continue;
             outward = outward.Normalized();
 
+            // DoorSpot.Position is in the tile node's frame (BankSigns parents its plates straight
+            // onto it), but TryGetHeight takes a world point: the two differ by the node's offset
+            // from the floating origin, so querying with the local one sampled the ground hundreds
+            // of metres away and the miss silently dropped the pylon.
             var at = d.Position + outward * StandOff;
-            if (!_chunks.TryGetHeight(at, out float ground)) continue;
-            at.Y = ground;
+            var world = node.ToGlobal(at);
+            if (!_chunks.TryGetHeight(world, out float ground)) continue;
+            at = node.ToLocal(world with { Y = ground });
 
             // the slab's faces look back along the door's outward, so it is readable from the road
             var basis = new Basis(Vector3.Up, Mathf.Atan2(outward.X, outward.Z));
