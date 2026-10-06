@@ -101,9 +101,9 @@ public sealed class DownloadJob
             {
                 Paths = paths, Country = country, Local = local, Selection = selection, Layers = layers,
                 Stats = stats, State = state,
-                // The game has neither, and no longer needs either for terrain: the download is C#
-                // and the build is in-process. The two GDAL layers are off in the screen that got here.
-                Python = null, Gdal = false,
+                // The game has no Python: the downloads are C# and the build is in-process. Only
+                // the swissBUILDINGS3D sheets still need it, and that step says so when it skips.
+                Python = null,
             };
 
             var steps = Planner.Build(context).Where(s => s.Skip == null && s.Run != null).ToList();
