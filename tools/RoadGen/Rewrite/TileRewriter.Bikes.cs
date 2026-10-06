@@ -79,9 +79,10 @@ public static partial class TileRewriter
                 if (!side.HasTrack) continue;
                 // beside a turn lane's widening the side is shifted out (#123): along a steady shift the
                 // paint moves with it, along a taper (a varying shift) there is none
-                if (side.ShiftStartCm != side.ShiftEndCm) continue;
+                bool dashed = side.Bike == BikeKind.Track && side.BufferDm == 0 && side.SidewalkDm > 0;
+                if (side.ShiftStartCm != side.ShiftEndCm) { if (dashed) PaintEmitter.TaperTrackLine(p, right, into); continue; }
                 float sign = right ? 1f : -1f, half = p.Width * 0.5f + side.ShiftStartCm / 100f;
-                if (side.Bike == BikeKind.Track && side.BufferDm == 0 && side.SidewalkDm > 0)
+                if (dashed)
                     PaintEmitter.AddDashed(p, sign * (half + (side.VergeDm + side.BikeDm) / 10f), 0, into,
                         PaintType.YellowDashed, PaintEmitter.Yellow, BikePlanner.LineWidth, BikePlanner.Dash, BikePlanner.Gap);
                 bool atStart = i == 0 ? startsAtJunction : !Track(pieces[i - 1], right);
@@ -111,7 +112,8 @@ public static partial class TileRewriter
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<RoadSegment, List<RoadSegment>> finalPieces,
         Dictionary<(int Node, int Arm), ArmLanes> lanes, HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadPaint>> paint,
         Dictionary<TileId, List<RoadPointProp>> signs, Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges,
-        BikePlanner.Stats stats, Dictionary<(int Link, LinkEnd End), double> stopsAt, Dictionary<int, (SignalPlan Plan, int[] PlanArm)> signalPlans)
+        BikePlanner.Stats stats, Dictionary<(int Link, LinkEnd End), double> stopsAt, Dictionary<int, (SignalPlan Plan, int[] PlanArm)> signalPlans,
+        Dictionary<(int Node, int Arm), CornerArc> townArcs)
     {
         var net = result.Network;
         bool IsCar(int linkId) => net.Links[linkId].Tag is Source s && PriorityPlanner.IsCarRoad(s.Segment.Class)
@@ -283,6 +285,61 @@ public static partial class TileRewriter
                             Get(bridges, home).AddRange(bands);
                             stats.PathsThrough++;
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sidewalk, verge and path bands round the kerb arcs of a signalised junction in town (#682):
+    /// from the end of arm i's left side, along the arc offset by each band, to the end of arm j's
+    /// right side. Where the two sides' profiles differ the sidewalk corner stays.
+    /// </summary>
+    private static void EmitTownCorners(PriorityResult priority, RoadNetwork net, Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf,
+        Dictionary<RoadSegment, List<RoadSegment>> finalPieces, Dictionary<(int Node, int Arm), CornerArc> arcs, HashSet<TileId> block, HashSet<TileId> wanted,
+        Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges, Dictionary<TileId, List<RoadPaint>> paint, BikePlanner.Stats stats)
+    {
+        RoadSide EndSide(Junction junction, PriorityPlanner.Plan plan, int armIndex, bool armLeft)
+        {
+            var arm = junction.Arms[armIndex];
+            var end = plan.Arms[armIndex].End;
+            bool segRight = (end == LinkEnd.End) == armLeft;
+            if (!segmentOf.TryGetValue(arm.LinkId, out var so)) return default;
+            var pieces = finalPieces.TryGetValue(so.Segment, out var list) && list.Count > 0 ? list : [so.Segment];
+            var seg = end == LinkEnd.Start ? pieces[0] : pieces[^1];
+            return segRight ? seg.Attributes.Right : seg.Attributes.Left;
+        }
+        foreach (var (junction, plan) in priority.Plans)
+        {
+            if (plan.Kind != PriorityPlanner.Kind.Signal || plan.Arms.Count != junction.Arms.Count) continue;
+            var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
+            if (!block.Contains(home) || !wanted.Contains(home)) continue;
+            var anchors = Anchors(junction, net);
+            if (anchors.Count == 0) continue;
+            int n = junction.Arms.Count;
+            for (int i = 0; i < n; i++)
+            {
+                if (!arcs.TryGetValue((junction.NodeId, i), out var arc)) continue;
+                int j = (i + 1) % n;
+                var sa = EndSide(junction, plan, i, armLeft: true);
+                var sb = EndSide(junction, plan, j, armLeft: false);
+                var ua = Vec2.FromHeading(junction.Arms[i].OutwardHeading);
+                var ub = Vec2.FromHeading(junction.Arms[j].OutwardHeading);
+                if (BridgePath(home, sa, sb, arc.Ei, arc.Ej, arc.Offset, p => HeightAt(anchors, p)) is { } bands)
+                {
+                    Get(bridges, home).AddRange(bands);
+                    stats.PathsThrough++;
+                    // the yellow dashes between path and sidewalk go round the corner too (#682)
+                    if (sa.Bike == BikeKind.Track && sa.BufferDm == 0 && sa.SidewalkDm > 0)
+                    {
+                        double d = (sa.VergeDm + sa.BikeDm) / 10.0;
+                        float lift = RoadStreetSection.HeightAt(sa, (float)d);
+                        Get(paint, home).Add(new RoadPaint
+                        {
+                            Shape = PaintShape.Polyline, Type = PaintType.YellowDashed, Rgba = PaintEmitter.Yellow, Width = BikePlanner.LineWidth,
+                            Dash = BikePlanner.Dash, Gap = BikePlanner.Gap, Vertices = Local(home, arc.Offset(d, d), p => HeightAt(anchors, p), lift),
+                        });
                     }
                 }
             }

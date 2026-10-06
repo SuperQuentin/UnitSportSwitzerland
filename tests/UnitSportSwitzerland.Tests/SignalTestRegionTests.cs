@@ -122,7 +122,7 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
                     $"{path}: a hatch {length:F1} m long, {width:F1} m wide at its wide end (stripes over {reach:F1} m)");
             }
         }
-        Assert.True(hatches >= 40, $"{hatches} hatches");
+        Assert.True(hatches >= 36, $"{hatches} hatches");   // 40 before #682: its larger kerb radius leaves the close pair J5 two pockets fewer
     }
 
     [Fact]
@@ -159,6 +159,9 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         Assert.True(advanced >= 10, $"{advanced} advanced bike lines");
     }
 
+    private static double Extent(IReadOnlyList<(double X, double Z)> p) =>
+        Math.Max(p.Max(q => q.X) - p.Min(q => q.X), p.Max(q => q.Z) - p.Min(q => q.Z));
+
     [Fact]
     public void Widened_arms_get_rounded_corners()
     {
@@ -167,8 +170,8 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
             var j = region.Junction(name);
             var id = TileId.FromLv95(j.E, j.N);
             double cx = j.E - id.MinE, cz = id.MaxN - j.N;
-            // a corner's kerb patch: its corner point and the curve (9 points), off every arm's axis
-            var corners = region.Tile(j.E, j.N).AreaProps.Where(a => a.Type == AreaPropType.Pavement && a.Vertices.Length / 3 == 10)
+            // a corner's kerb patch (#682: the pavement between the junction's own corner and the kerb arc, 9 points on it): a small polygon off every arm's axis
+            var corners = region.Tile(j.E, j.N).AreaProps.Where(a => a.Type == AreaPropType.Pavement && a.Vertices.Length / 3 >= 13 && Extent(Points(a.Vertices)) < 25)
                 .Select(a => Points(a.Vertices)).Select(p => (X: p.Average(q => q.X) - cx, Z: p.Average(q => q.Z) - cz))
                 .Where(c => Math.Abs(c.X) > 1.5 && Math.Abs(c.Z) > 1.5 && Math.Abs(c.X) < 30 && Math.Abs(c.Z) < 30).ToList();
             foreach (var (sx, sz) in (ReadOnlySpan<(int, int)>)[(1, 1), (1, -1), (-1, 1), (-1, -1)])

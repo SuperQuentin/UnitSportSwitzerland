@@ -5,9 +5,9 @@ using UnitSport.Tools.RoadGen.Network;
 
 public sealed record JunctionOptions(
     /// <summary>Extra trim past the geometric corner, so there is room for a kerb curve.</summary>
-    double KerbFactor = 0.6,
+    double KerbFactor = 2.2,
     double MinKerb = 0.5,
-    double MaxKerb = 5.0,
+    double MaxKerb = 12.0,
     /// <summary>Points used to draw each rounded inner corner.</summary>
     int FilletSamples = 6,
     /// <summary>

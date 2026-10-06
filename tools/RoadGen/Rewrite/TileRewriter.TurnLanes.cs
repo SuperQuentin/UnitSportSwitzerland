@@ -131,7 +131,7 @@ public static partial class TileRewriter
         Dictionary<TileId, List<RoadPaint>> paint, Dictionary<TileId, List<RoadAreaProp>> areas,
         Dictionary<TileId, List<RoadPointProp>> signs, List<(RoadSegment Segment, bool Right, (double From, double To) Along)> bikeBetween,
         Dictionary<RoadAreaProp, RoadSegment> stripOwners, TurnLaneStats stats, Func<int, LinkEnd, bool, RoadSide> streetSide,
-        List<PocketOpening>? openings = null)
+        List<PocketOpening>? openings = null, Dictionary<(int Node, int Arm), CornerArc>? arcs = null)
     {
         var net = result.Network;
         var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
@@ -340,7 +340,7 @@ public static partial class TileRewriter
             stats.SignsMoved += r.Way.PushOut(Get(signs, tile));
             stats.RightPockets++;
         }
-        Corners(priority, net, placed, block, wanted, areas, stats, streetSide);
+        Corners(priority, net, placed, block, wanted, areas, stats, streetSide, arcs);
         return placed;
     }
 
@@ -355,7 +355,7 @@ public static partial class TileRewriter
     /// </summary>
     private static void Corners(PriorityResult priority, RoadNetwork net, Dictionary<(int Node, int Arm), ArmLanes> placed,
         HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadAreaProp>> areas, TurnLaneStats stats,
-        Func<int, LinkEnd, bool, RoadSide> streetSide)
+        Func<int, LinkEnd, bool, RoadSide> streetSide, Dictionary<(int Node, int Arm), CornerArc>? arcs)
     {
         var kerb = new JunctionOptions();
         double Kerb(double half) => Math.Clamp(kerb.KerbFactor * half, kerb.MinKerb, kerb.MaxKerb);
@@ -381,17 +381,15 @@ public static partial class TileRewriter
                 // follow the new kerb too, not done (#406): the corner stays square there
                 var ei = plan.Arms[i].End;
                 var ej = plan.Arms[j].End;
-                if (streetSide(ai.LinkId, ei, ei == LinkEnd.End).OuterDm > 0 || streetSide(aj.LinkId, ej, ej != LinkEnd.End).OuterDm > 0)
-                {
-                    stats.CornersInTown++;
-                    continue;
-                }
+                bool town = streetSide(ai.LinkId, ei, ei == LinkEnd.End).OuterDm > 0 || streetSide(aj.LinkId, ej, ej != LinkEnd.End).OuterDm > 0;
+                if (town) stats.CornersInTown++;
                 Vec2 ui = Vec2.FromHeading(ai.OutwardHeading), uj = Vec2.FromHeading(aj.OutwardHeading);
                 (Vec2 P, float Y) EdgeI(double d) => inWay?.OuterEdge(d) ?? (ai.Left + ui * d, si.SampleHeight(ai.Left + ui * d));
                 (Vec2 P, float Y) EdgeJ(double d) => outWay?.OuterEdge(d, outLanes!.ExitFar) ?? (aj.Right + uj * d, sj.SampleHeight(aj.Right + uj * d));
-                if (CornerPatch(junction, i, EdgeI, EdgeJ, Kerb(ai.HalfWidth), Kerb(aj.HalfWidth), anchors) is not { } patches)
+                if (town && arcs is not null && ArcOf(junction, i, EdgeI, EdgeJ, Kerb(ai.HalfWidth), Kerb(aj.HalfWidth), true) is { } arc) arcs[(junction.NodeId, i)] = arc;
+                if (CornerPatch(junction, i, EdgeI, EdgeJ, Kerb(ai.HalfWidth), Kerb(aj.HalfWidth), anchors, town) is not { } patches)
                 {
-                    stats.CornersRejected++;
+                    stats.CornersRejected++; if (Environment.GetEnvironmentVariable("CORNERDBG") == "1") Console.WriteLine($"[corner] rejected (simple) at {junction.Centre.X:F0},{junction.Centre.Y:F0} corner {i}");
                     continue;
                 }
                 if (patches.Count == 0) continue;
@@ -399,7 +397,7 @@ public static partial class TileRewriter
                 {
                     var outline = patch.Select(p => p.P).ToList();
                     var tris = Junctions.EarClip.Triangulate(outline);
-                    if (tris.Count != 3 * (outline.Count - 2)) { stats.CornersRejected++; continue; }
+                    if (tris.Count != 3 * (outline.Count - 2)) { stats.CornersRejected++; if (Environment.GetEnvironmentVariable("CORNERDBG") == "1") Console.WriteLine($"[corner] rejected (tris) at {junction.Centre.X:F0},{junction.Centre.Y:F0} corner {i}"); continue; }
                     var v = new float[patch.Count * 3];
                     for (int k = 0; k < patch.Count; k++)
                         (v[k * 3], v[k * 3 + 1], v[k * 3 + 2]) = ((float)(patch[k].P.X - home.MinE), patch[k].Y, (float)(home.MaxN - patch[k].P.Y));
@@ -427,53 +425,33 @@ public static partial class TileRewriter
     /// (a straight road's two sides carried on); null when an outline is not simple.
     /// </summary>
     private static List<List<(Vec2 P, float Y)>>? CornerPatch(Junction junction, int i, Func<double, (Vec2 P, float Y)> edgeI,
-        Func<double, (Vec2 P, float Y)> edgeJ, double kerbI, double kerbJ, List<(Vec2 At, float Height)> anchors)
+        Func<double, (Vec2 P, float Y)> edgeJ, double kerbI, double kerbJ, List<(Vec2 At, float Height)> anchors, bool clamp)
     {
         int n = junction.Arms.Count, j = (i + 1) % n;
         Vec2 ai = junction.Arms[i].Left, aj = junction.Arms[j].Right;
-        var mi = edgeI(0).P;
-        var mj = edgeJ(0).P;
-        // the widened edges as lines near the mouths (a taper leans in a little)
-        var ei = (edgeI(5).P - mi).Normalized();
-        var ej = (edgeJ(5).P - mj).Normalized();
-        double den = ei.Cross(ej);
-        if (Math.Abs(den) < 0.2) return [];   // within ~12 degrees of parallel: the two sides of a road carried on
-        double ci = (mj - mi).Cross(ej) / den, cj = (mj - mi).Cross(ei) / den;
-        var c = mi + ei * ci;
-        double reach = Math.Max(junction.Arms[i].Trim, junction.Arms[j].Trim) * 1.5 + 10;
-        if (c.DistanceTo(junction.Centre) > reach || ci < -reach || cj < -reach) return [];
-        float yc = (edgeI(Math.Max(ci, 0)).Y + edgeJ(Math.Max(cj, 0)).Y) * 0.5f;
-        // the kerb's ends: an allowance past the corner point along each widened edge, never inside the mouth
-        var (fi, fyi) = edgeI(Math.Max(ci + kerbI, 0));
-        var (fj, fyj) = edgeJ(Math.Max(cj + kerbJ, 0));
-        var round = new List<(Vec2 P, float Y)> { (c, yc) };
+        if (ArcOf(junction, i, edgeI, edgeJ, kerbI, kerbJ, clamp) is not { } arc) return [];
+        var (c, fi, fyi, fj, fyj) = (arc.C, arc.Fi, arc.Yi, arc.Fj, arc.Yj);
+        // the pavement the corner adds: between the junction polygon's own corner (from arm j's right
+        // end back to arm i's left end) and the kerb arc, out along each mouth and widened edge
+        var ring = junction.Boundary;
+        int ri = Nearest(ring, ai), rj = Nearest(ring, aj);
+        var fill = new List<(Vec2 P, float Y)> { (ai, HeightAt(anchors, ai)), edgeI(0), (fi, fyi) };
         for (int k = 0; k <= 8; k++)
         {
             double t = k / 8.0, mt = 1 - t;
-            round.Add((fi * (mt * mt) + c * (2 * mt * t) + fj * (t * t), (float)(fyi + (fyj - fyi) * t)));
+            fill.Add((fi * (mt * mt) + c * (2 * mt * t) + fj * (t * t), (float)(fyi + (fyj - fyi) * t)));
         }
-        // the junction polygon's own corner, from arm j's right end back to arm i's left end
-        var ring = junction.Boundary;
-        int ri = Nearest(ring, ai), rj = Nearest(ring, aj);
-        var back = new List<(Vec2 P, float Y)>();
-        for (int k = rj; k != ri; k = (k - 1 + ring.Count) % ring.Count) back.Add((ring[k], HeightAt(anchors, ring[k])));
-        back.Add((ai, HeightAt(anchors, ai)));
-        // between the junction, the mouths and the corner point; where the mouths' edges cross
-        // (both widened edges meet past both mouths) only the part inside them
-        var inner = new List<(Vec2 P, float Y)>();
-        if (SegmentsCross(ai, mi, mj, aj) is { } x) inner.Add((x, HeightAt(anchors, x)));
-        else inner.AddRange([edgeI(0), (c, yc), edgeJ(0)]);
-        inner.AddRange(back);
-        var patches = new List<List<(Vec2 P, float Y)>>();
-        foreach (var patch in (ReadOnlySpan<List<(Vec2 P, float Y)>>)[round, inner])
+        fill.Add(edgeJ(0));
+        for (int k = rj; k != ri; k = (k - 1 + ring.Count) % ring.Count) fill.Add((ring[k], HeightAt(anchors, ring[k])));
+        var clean = Clean(fill);
+        if (clean.Count < 3 || Area(clean) < 0.05) return [];   // nothing there
+        if (!Simple(clean))
         {
-            var clean = Clean(patch);
-            if (clean.Count < 3 || Area(clean) < 0.05) continue;   // nothing there (a widening ending right at the corner point)
-            if (!Simple(clean)) return null;
-            patches.Add(clean);
+            if (Environment.GetEnvironmentVariable("CORNERDBG") == "1")
+                Console.WriteLine($"[corner]   not simple c={c - junction.Centre} fi={fi - junction.Centre} fj={fj - junction.Centre} :: " + string.Join(" ", clean.Select(q => $"({q.P.X - junction.Centre.X:F1},{q.P.Y - junction.Centre.Y:F1})")));
+            return null;
         }
-        return patches;
-
+        return [clean];
         static int Nearest(List<Vec2> ring, Vec2 p)
         {
             int best = 0;
@@ -482,6 +460,71 @@ public static partial class TileRewriter
         }
     }
 
+    /// <summary>
+    /// The kerb arc of one corner (#682): the widened edges' meeting point <c>C</c> (the quadratic
+    /// curve's control), the curve's ends <c>Fi</c>, <c>Fj</c> (along each edge from C), the mouths
+    /// <c>Mi</c>, <c>Mj</c>, each edge's direction out from its mouth (<c>Ei</c>, <c>Ej</c>) and
+    /// heights. A sidewalk or path round the corner follows it, offset outward.
+    /// </summary>
+    private sealed record CornerArc(Vec2 C, Vec2 Fi, float Yi, Vec2 Fj, float Yj, Vec2 Mi, Vec2 Mj, Vec2 Ei, Vec2 Ej)
+    {
+        /// <summary>
+        /// The arc offset <paramref name="di"/> / <paramref name="dj"/> outward from the kerb (9 samples,
+        /// the control mitred), led in and out along the edges from the mouths when the arc ends short of them.
+        /// </summary>
+        public List<Vec2> Offset(double di, double dj)
+        {
+            Vec2 ni = Ei.Perp, nj = -Ej.Perp;   // away from the road: arm i's left, arm j's right
+            var pi = Fi + ni * di;
+            var pj = Fj + nj * dj;
+            var control = C + ni * di + nj * dj;
+            var line = new List<Vec2>(11);
+            if (Fi.DistanceTo(Mi) > 0.05) line.Add(Mi + ni * di);
+            for (int k = 0; k <= 8; k++)
+            {
+                double t = k / 8.0, mt = 1 - t;
+                line.Add(pi * (mt * mt) + control * (2 * mt * t) + pj * (t * t));
+            }
+            if (Fj.DistanceTo(Mj) > 0.05) line.Add(Mj + nj * dj);
+            return line;
+        }
+    }
+
+    /// <summary>
+    /// The kerb arc between arm i's widened approach edge and arm j's widened departing edge, null where
+    /// they do not meet near the junction. Its legs are a kerb allowance long, past the corner point
+    /// along each edge; in town (<paramref name="clamp"/>) never past a mouth, where the arm's own
+    /// sidewalk or path begins: a leg is the corner point's distance back to its mouth when that is
+    /// shorter, and none shorter than 1 m (a widening that leaves no room: the corner stays square).
+    /// </summary>
+    private static CornerArc? ArcOf(Junction junction, int i, Func<double, (Vec2 P, float Y)> edgeI, Func<double, (Vec2 P, float Y)> edgeJ,
+        double kerbI, double kerbJ, bool clamp)
+    {
+        int j = (i + 1) % junction.Arms.Count;
+        var (mi, myi) = edgeI(0);
+        var (mj, myj) = edgeJ(0);
+        // the widened edges as lines near the mouths (a taper leans in a little)
+        var ei = (edgeI(5).P - mi).Normalized();
+        var ej = (edgeJ(5).P - mj).Normalized();
+        double den = ei.Cross(ej);
+        if (Math.Abs(den) < 0.2) return null;   // within ~12 degrees of parallel: the two sides of a road carried on
+        double ci = (mj - mi).Cross(ej) / den, cj = (mj - mi).Cross(ei) / den;
+        var c = mi + ei * ci;
+        double reach = Math.Max(junction.Arms[i].Trim, junction.Arms[j].Trim) * 1.5 + 10;
+        if (c.DistanceTo(junction.Centre) > reach || ci < -reach || cj < -reach) return null;
+        if (clamp)
+        {
+            kerbI = Math.Min(kerbI, -ci);
+            kerbJ = Math.Min(kerbJ, -cj);
+            if (kerbI < 1 || kerbJ < 1) return null;
+        }
+        // the kerb's ends: a leg past the corner point along each widened edge, never inside the mouth unless clamped
+        (Vec2 P, float Y) At(Func<double, (Vec2 P, float Y)> edge, Vec2 m, float my, Vec2 e, double d) =>
+            d >= 0 ? edge(d) : (m + e * d, my);
+        var (fi, fyi) = At(edgeI, mi, myi, ei, clamp ? ci + kerbI : Math.Max(ci + kerbI, 0));
+        var (fj, fyj) = At(edgeJ, mj, myj, ej, clamp ? cj + kerbJ : Math.Max(cj + kerbJ, 0));
+        return new CornerArc(c, fi, fyi, fj, fyj, mi, mj, ei, ej);
+    }
     private static double Area(List<(Vec2 P, float Y)> poly)
     {
         double area = 0;
