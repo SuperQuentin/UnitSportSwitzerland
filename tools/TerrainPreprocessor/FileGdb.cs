@@ -68,7 +68,8 @@ public sealed class FileGdb : IDisposable
         double XOrigin, double YOrigin, double XyScale,
         double ZOrigin, double ZScale,
         double MOrigin, double MScale,
-        bool HasZ, bool HasM);
+        bool HasZ, bool HasM,
+        (double MinE, double MinN, double MaxE, double MaxN) Bounds);
 
     private readonly string _dir;
     private readonly Dictionary<string, string> _tables = new(StringComparer.OrdinalIgnoreCase);
@@ -270,7 +271,13 @@ public sealed class FileGdb : IDisposable
             off += 8;                                   // xy tolerance
             if (hasM) off += 8;                         // m tolerance
             if (hasZ) off += 8;                         // z tolerance
-            off += 32;                                  // xmin, ymin, xmax, ymax
+            // The layer's own extent. Worth keeping rather than skipping: it says where a whole
+            // sheet is without reading a single row, which is what lets a caller skip the sheets a
+            // batch of tiles cannot possibly contain (#570).
+            double minE = BitConverter.ToDouble(block, off); off += 8;
+            double minN = BitConverter.ToDouble(block, off); off += 8;
+            double maxE = BitConverter.ToDouble(block, off); off += 8;
+            double maxN = BitConverter.ToDouble(block, off); off += 8;
 
             // The tail is a run of optional bounds pairs (z, m) and then the spatial index: a byte,
             // a grid count, and that many grid sizes. Which bounds pairs are actually written does
@@ -295,7 +302,8 @@ public sealed class FileGdb : IDisposable
                     "geometry field: no credible spatial index follows its bounds; the descriptor is not understood");
             off = afterBounds + 5 + 8 * grids;
 
-            return new GeometryGrid(xOrigin, yOrigin, xyScale, zOrigin, zScale, mOrigin, mScale, hasZ, hasM);
+            return new GeometryGrid(xOrigin, yOrigin, xyScale, zOrigin, zScale, mOrigin, mScale, hasZ, hasM,
+                (minE, minN, maxE, maxN));
         }
 
         /// <summary>A length-prefixed UTF-16 string, as every name in the field block is stored.</summary>
