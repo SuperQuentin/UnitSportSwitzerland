@@ -71,10 +71,17 @@ public static class OsmOverlay
         double minE = tiles.Min(t => t.MinE), maxE = tiles.Max(t => t.MinE) + ChunkFormat.TileSizeM;
         double minN = tiles.Min(t => t.MinN), maxN = tiles.Max(t => t.MinN) + ChunkFormat.TileSizeM;
 
+        // Said as it goes: the TLM read is most of the run (103 of 114 s on a 94 x 55 km box), and
+        // minutes of silence look like a hang.
+        Console.WriteLine($"OSM overlay: {tiles.Count:N0} tiles, E {minE / 1000:F0}..{maxE / 1000:F0}, N {minN / 1000:F0}..{maxN / 1000:F0} km; "
+            + "reading the swissTLM3D road lines of that box...");
         var tlm = LoadTlm(tlmGpkg, minE, minN, maxE, maxN);
         double tlmSec = clock.Elapsed.TotalSeconds;
+        Console.WriteLine($"  {tlm.Count:N0} TLM line parts in {tlmSec:F0} s; reading {Path.GetFileName(pbfPath)} "
+            + $"({new FileInfo(pbfPath).Length / 1e6:N0} MB)...");
         var (osm, points, relations, position) = LoadOsm(pbfPath, minE - 200, minN - 200, maxE + 200, maxN + 200, jobs);
         double osmSec = clock.Elapsed.TotalSeconds - tlmSec;
+        Console.WriteLine($"  {osm.Count:N0} OSM way pieces in {osmSec:F0} s; matching them to the TLM lines, then signals and turn restrictions...");
         var result = Conflate(tlm, osm);
         // signals, bike boxes and via nodes inside the region box only (the 200 m margin is for the ways)
         bool Inside(double e, double n) => e >= minE && e <= maxE && n >= minN && n <= maxN;
@@ -105,8 +112,15 @@ public static class OsmOverlay
         using var cmd = GeoPackageReader.BboxQuery(conn, "tlm_strassen_strasse", "geom",
             ["uuid", "objektart", "richtungsgetrennt"], minE, minN, maxE, maxN);
         using var r = cmd.ExecuteReader();
+        var clock = Stopwatch.StartNew();
+        double nextSay = 10;
         while (r.Read())
         {
+            if (clock.Elapsed.TotalSeconds >= nextSay)
+            {
+                Console.WriteLine($"  {lines.Count:N0} TLM line parts so far ({clock.Elapsed.TotalSeconds:F0} s)");
+                nextSay += 10;
+            }
             if (r.IsDBNull(0) || r.IsDBNull(3)) continue;
             string uuid = r.GetString(0);
             string objektart = r.IsDBNull(1) ? "" : r.GetString(1);
