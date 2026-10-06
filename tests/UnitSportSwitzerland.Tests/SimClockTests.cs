@@ -6,10 +6,15 @@ namespace UnitSportSwitzerland.Tests;
 /// <summary>
 /// The server-owned simulation clock (#579). Static state, so every test calls
 /// <see cref="SimClock.Reset"/> first: xUnit runs a class's tests one at a time, and these do not
-/// run in parallel with each other.
+/// run in parallel with each other. Every class that sets the clock joins <see cref="Collection"/>,
+/// which runs its classes one after another: <c>EnvClockTests</c> once failed in parallel with this one.
 /// </summary>
+[Collection(Collection)]
 public class SimClockTests
 {
+    /// <summary>The xUnit collection every test class that sets the static clock is in.</summary>
+    public const string Collection = "SimClock";
+
     public SimClockTests() => SimClock.Reset();
 
     [Fact]

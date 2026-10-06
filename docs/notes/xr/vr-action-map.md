@@ -72,6 +72,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | couple a trailer (fifth wheel, drawbar, tow ball #463) | H / D-pad ← | ok: R stick ← (#436) | keep from the seat; **on foot, grip the coupler's latch** to couple / drop a trailer standing on the hitch |
 | boat trailer: launch / winch the boat (#463) | G / X | ok: X (left controller) | + **grip and crank the winch handle** on the post |
 | forklift mast up / down (#583, hold) | Shift Ctrl / RB LB | ok: grips, or the **mast lever** by hand (`XrCabControls` "forklift", `Kind.Hold`: pulled back the forks rise) | keep |
+| roof_toggle as the telehandler's steering mode (#614: front, four-wheel, crab) | O / D-pad left | ok: a **dash button** (`XrCabControls` "telehandler", `Kind.Poke`) | keep |
+| telehandler lift / extend / tilt (#614, hold, in work mode; arm_boom, shift_up/down and arm_bucket actions) | ↑ ↓, Shift Ctrl, ← → / R stick, RB LB | ok: the **boom's joystick** right of the seat as two levers (aft lifts, aft tilts back) and the **extend rocker** beside it (forward runs it out); work mode on the dash | keep |
 | dig_mode as the roller's vibration (#614) | C / B | ok: the **red button on the console right of the wheel** (`XrCabControls` "roller", `Kind.Poke`) | keep |
 | dig_mode (#611, excavator) | C / B | ok: B, or the **button on the left console** (`XrCabControls` "excavator", `Kind.Poke`) | keep |
 | arm_slew_left/right, arm_stick_out/in (#611, hold) | A D, W S / L stick X, Y in dig mode | ok: the **left joystick** by hand, as two levers (`Kind.Hold`: side to side slews, fore and aft runs the stick) | one two-axis grip per joystick |

@@ -16,7 +16,7 @@ namespace UnitSport.Player;
 /// <c>VehicleState.Flags</c> for a parked one. See <c>docs/notes/vehicles/forklift.md</c>.
 /// </para>
 /// </summary>
-public sealed class Forklift : Rideable
+public sealed class Forklift : Rideable, IForks
 {
     public override RideKind Kind => RideKind.Forklift;
     public override string Label => "Forklift";
@@ -34,6 +34,14 @@ public sealed class Forklift : Rideable
     /// the replicated pose and in the parked flags, so a copy and a parked machine both keep it.
     /// </summary>
     public int Carrying { get; set; }
+
+    // ---- the tines, as the pallets ask (IForks, #615) ------------------------------------------
+    public bool HasTines => true;
+    public float ForkHeight => Lift;
+    /// <summary>The carriage's face at the mast's plane, up at the fork height: square ahead, between the two tines.</summary>
+    public Transform3D TinesFrame => new(Basis.Identity, CarMeshBuilder.Turned(new Vector3(0f, Lift, ForkliftLayout.MastZ)));
+    public float TineLength => ForkliftLayout.TineLength;
+    public float TineHalfSpan => ForkliftLayout.ForkHalfSpan;
 
     /// <summary>Top speed forward and in reverse, m/s (18 km/h both ways: it is driven backwards half the time).</summary>
     public const float TopSpeed = 5.0f, TopReverse = 5.0f;

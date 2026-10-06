@@ -45,12 +45,14 @@ public partial class Handshake : Node
     /// 21: RideKind.WheelLoader, its frame, arm and bucket in the pose (#612).
     /// 22: RideKind.MiniExcavator, its blade in the pose's bucket float (#614).
     /// 23: RideKind.CompactRoller, its bend and its vibration in the pose (#614).
-    /// 24: farming (#494): FarmField Subscribe/Work/Cells, AssetKind.Fields, FarmStands and FarmSales
+    /// 24: RideKind.Telehandler, its wheels, steering mode and boom in the pose (#614).
+    /// 25: RideKind.WheelLoaderForks; the telehandler's and the fork loader's pallet in their pose's lift float (#615).
+    /// 26: farming (#494): FarmField Subscribe/Work/Cells, AssetKind.Fields, FarmStands and FarmSales
     /// nodes and RPCs, PassengerService auger offers, ShopService.RequestDeliver's door, PlacedKind.FarmStand
     /// 11, ShopType.FarmCoop 12, items 300-340, HeavyCatalog 102-103, TrailerCatalog 6-9 and the boat
     /// trailers it builds on (#463).
     /// </summary>
-    public const int Protocol = 24;
+    public const int Protocol = 26;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

@@ -535,15 +535,17 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     }
 
     /// <summary>
-    /// What a site's machine parks as: the excavator (#611) and the wheel loader (#612). The small
-    /// kit (#614), the tipper and the mixer (#613) join here once they can be driven.
+    /// What a site's machine parks as: the excavator (#611), the wheel loader (#612), a quarter of
+    /// them with forks (#615, from the slot's own roll), and the small kit (#614). The tipper, the
+    /// mixer and the mini dumper (#613) join here once they can be driven.
     /// </summary>
-    private static int? SiteKind(MachineRole role) => role switch
+    private static int? SiteKind(MachineRole role, ulong roll) => role switch
     {
         MachineRole.Excavator => (int)RideKind.Excavator,
         MachineRole.MiniExcavator => (int)RideKind.MiniExcavator,
         MachineRole.Roller => (int)RideKind.CompactRoller,
-        MachineRole.WheelLoader => (int)RideKind.WheelLoader,
+        MachineRole.Telehandler => (int)RideKind.Telehandler,
+        MachineRole.WheelLoader => (roll >> 52 & 3) == 0 ? (int)RideKind.WheelLoaderForks : (int)RideKind.WheelLoader,
         _ => null,
     };
 

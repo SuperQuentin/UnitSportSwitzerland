@@ -18,7 +18,7 @@ public class DormantConstructionTests
     private static readonly int[] Cars = { 8, 9, 10, 11 };
     private const int Excavator = 194, Loader = 195;
 
-    private static int? KindOf(MachineRole role) => role switch
+    private static int? KindOf(MachineRole role, ulong roll) => role switch
     {
         MachineRole.Excavator => Excavator,
         MachineRole.WheelLoader => Loader,

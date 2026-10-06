@@ -169,11 +169,22 @@ public partial class ControlsHelp : CanvasLayer
             new("Work mode on / off (it still drives)", PlayerInput.DigMode),
             new("Work: lift the arm / lower it (hold)", Keys: "{arm_boom_up} / {arm_boom_down}", Pad: "right stick ↓ ↑"),
             new("Work: roll the bucket back / dump it (hold)", Keys: "{arm_bucket_curl} / {arm_bucket_dump}", Pad: "right stick ← →"),
+            // the variant with a fork carriage (#615): the same controls, the forks lift pallets
+            new("With forks: run them in under a pallet and lift the arm to take it, lower it to set it down", PlayerInput.ArmBoomUp),
         }),
         ("Compact roller (#614)", new Row[]
         {
             // it bends in the middle like the loader; the work-mode toggle sets the drums vibrating
             new("Drums vibrating on / off", PlayerInput.DigMode),
+        }),
+        ("Telehandler (#614)", new Row[]
+        {
+            // it drives in work mode, as the loader does; the paddles are the forklift mast's
+            new("Steering: front / four-wheel / crab", PlayerInput.RoofToggle),
+            new("Work mode on / off (it still drives)", PlayerInput.DigMode),
+            new("Work: lift the boom / lower it (hold)", Keys: "{arm_boom_up} / {arm_boom_down}", Pad: "right stick ↓ ↑"),
+            new("Work: run the boom out / in (hold)", Keys: "{shift_up} / {shift_down}", Pad: "RB / LB"),
+            new("Work: tilt the forks back / down (hold)", Keys: "{arm_bucket_curl} / {arm_bucket_dump}", Pad: "right stick ← →"),
         }),
         ("Paddle steamer", new Row[]
         {
