@@ -1161,8 +1161,10 @@ public static partial class HumanMeshBuilder
 
     /// <summary>
     /// <see cref="Material"/> as a shader that also draws the clothes' finishes (rainbow, disco
-    /// ball, galaxy…, <c>shaders/body/avatar.gdshaderinc</c>), read from the vertex alpha. One
-    /// shared instance: it has no per-figure parameters. The visual style swaps its shader
+    /// ball, galaxy…, <c>shaders/body/avatar.gdshaderinc</c>), read from the vertex alpha, and the
+    /// procedural faces (#657). One shared instance: what is per figure is in the mesh (the face's
+    /// genome) or in instance uniforms on its node (the face's state,
+    /// <see cref="Face.FaceAnimator"/>). The visual style swaps its shader
     /// (<see cref="Styles.MaterialRole.Figure"/>).
     /// </summary>
     public static ShaderMaterial FigureMaterial() =>

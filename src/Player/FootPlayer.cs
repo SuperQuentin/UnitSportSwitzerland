@@ -1455,6 +1455,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (IsMultiplayerAuthority() && !Npc && !_thirdPerson && !XR.XrSession.Active) return;
             _walkPalette = FigurePalette(rider);
             _poseOutfit = OutfitBits;
+            _face.Reset();   // a new node: its face uniforms start over
             _walker = new MeshInstance3D
             {
                 Name = "Body",
@@ -2138,6 +2139,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _walker.Transform *= FlinchPose(dt);
         PlaceHand(mounts);
         PlaceBack(mounts);
+        StepFace(dt);
     }
 
     /// <summary>What the figure was last built from: the same key, the same mesh (#221).</summary>

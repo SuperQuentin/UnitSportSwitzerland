@@ -38,6 +38,27 @@ public static partial class HumanMeshBuilder
         Each(Enum.GetValues<Headwear>().Where(hat => hat != Headwear.None),
             (hat, i) => Build(HumanPalette.ForRider(i + 1), hat: hat));
 
+    // the procedural faces (#657): bald, so nothing hides them
+    [Showcase("Faces", "Preset")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseFaces() =>
+        Enumerable.Range(0, Face.FaceGenome.PresetCount).Select(f => (Face.FaceGenome.PresetName(f), (Func<Node3D>)(() =>
+            Figure(Build(HumanPalette.ForRider(f).With(Appearance.Default with { Face = f, Hair = HairStyle.None }))))));
+
+    [Showcase("Faces", "Expression")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseExpressions() =>
+        Enum.GetValues<Face.FaceExpression>().Select(e => (e.ToString(), (Func<Node3D>)(() =>
+        {
+            var node = Figure(Build(HumanPalette.ForRider(3).With(Appearance.Default with { Hair = HairStyle.None })));
+            Face.FaceAnimator.Apply(node, Face.FaceExpressions.Of(e));
+            return node;
+        })));
+
+    [Showcase("Faces", "Seeded")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseSeededFaces() =>
+        Enumerable.Range(0, 8).Select(i => ($"seed {i}", (Func<Node3D>)(() =>
+            Figure(BuildBody(BodyLook.Of(Appearance.ForSeed(i) with { Hair = HairStyle.None })
+                with { Genome = Face.FaceGenome.ForSeed((uint)i * 7919u + 13u) })))));
+
     [Showcase("Figures")]
     private static IEnumerable<(string, Func<Node3D>)> ShowcaseMisc()
     {

@@ -41,6 +41,8 @@ public sealed class MeshScratch
     private readonly List<Vector3> _normals = new();
     // filled only once a textured primitive is drawn (FaceBand, #394); otherwise no UVs at all
     private readonly List<Vector2> _uvs = new();
+    // and its second UV: the face's genome (Face.FaceGenome.Code, #657), filled alongside
+    private readonly List<Vector2> _uv2s = new();
     // panes go in a second surface, so they can take a translucent material of their own
     private readonly List<Vector3> _glassVertices = new();
     private readonly List<Color> _glassColors = new();
@@ -415,15 +417,18 @@ public sealed class MeshScratch
     /// are polylines of the same length, top to bottom, joined quad by quad. Texture coordinates run
     /// across <paramref name="uv"/>, u along a row and v down the rows; every other primitive has
     /// UV (0, 0). Each face is wound clockwise as seen from away from <paramref name="centre"/>.
-    /// Not closed (like <see cref="Pane"/>), so <c>--meshcheck</c> leaves it out.
+    /// Not closed (like <see cref="Pane"/>), so <c>--meshcheck</c> leaves it out. Every vertex of
+    /// it carries <paramref name="code"/> as its second UV: the procedural face's genome (#657,
+    /// <c>Face.FaceGenome.Code</c>), whole numbers below 2^24 so a float holds them exactly.
     /// </summary>
-    public void FaceBand(IReadOnlyList<Vector3[]> rows, Rect2 uv, Color colour, Vector3 centre)
+    public void FaceBand(IReadOnlyList<Vector3[]> rows, Rect2 uv, Color colour, Vector3 centre, Vector2 code = default)
     {
         if (rows.Count < 2) return;
         int n = rows[0].Length;
         if (n < 2) return;
         var linear = colour.SrgbToLinear();
         while (_uvs.Count < _vertices.Count) _uvs.Add(Vector2.Zero);
+        while (_uv2s.Count < _vertices.Count) _uv2s.Add(Vector2.Zero);
         int start = _vertices.Count;
         for (int r = 0; r < rows.Count; r++)
             for (int i = 0; i < n; i++)
@@ -432,6 +437,7 @@ public sealed class MeshScratch
                 if (Smooth) Add(p, linear, (p - centre).Normalized());
                 else Add(p, linear);
                 _uvs[^1] = uv.Position + uv.Size * new Vector2(i / (n - 1f), r / (rows.Count - 1f));
+                _uv2s[^1] = code;
             }
         for (int r = 0; r + 1 < rows.Count; r++)
             for (int i = 0; i + 1 < n; i++)
@@ -495,8 +501,8 @@ public sealed class MeshScratch
     {
         Core.ShowcaseTrace.Mark();
         var mesh = new ArrayMesh();
-        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _indices, pivot, "body");
-        AddSurface(mesh, _glassVertices, _glassColors, null, null, _glassIndices, pivot, GlassSurface);
+        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _uv2s, _indices, pivot, "body");
+        AddSurface(mesh, _glassVertices, _glassColors, null, null, null, _glassIndices, pivot, GlassSurface);
         return mesh;
     }
 
@@ -506,7 +512,7 @@ public sealed class MeshScratch
     /// </summary>
     public void Clear()
     {
-        _vertices.Clear(); _colors.Clear(); _indices.Clear(); _normals.Clear(); _uvs.Clear();
+        _vertices.Clear(); _colors.Clear(); _indices.Clear(); _normals.Clear(); _uvs.Clear(); _uv2s.Clear();
         _glassVertices.Clear(); _glassColors.Clear(); _glassIndices.Clear();
     }
 
@@ -519,13 +525,13 @@ public sealed class MeshScratch
     {
         Core.ShowcaseTrace.Mark();
         mesh.ClearSurfaces();
-        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _indices, Vector3.Zero, "body");
-        AddSurface(mesh, _glassVertices, _glassColors, null, null, _glassIndices, Vector3.Zero, GlassSurface);
+        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _uv2s, _indices, Vector3.Zero, "body");
+        AddSurface(mesh, _glassVertices, _glassColors, null, null, null, _glassIndices, Vector3.Zero, GlassSurface);
         return mesh;
     }
 
     private static void AddSurface(ArrayMesh mesh, List<Vector3> vertices, List<Color> colors, List<Vector3>? normals,
-        List<Vector2>? uvs, List<int> indices, Vector3 pivot, string name)
+        List<Vector2>? uvs, List<Vector2>? uv2s, List<int> indices, Vector3 pivot, string name)
     {
         if (indices.Count == 0) return;
         var facing = new Vector3[vertices.Count];
@@ -552,6 +558,11 @@ public sealed class MeshScratch
             // a textured primitive drawn last leaves the vertices after it without a UV of their own
             while (uvs.Count < vertices.Count) uvs.Add(Vector2.Zero);
             arrays[(int)Mesh.ArrayType.TexUV] = uvs.ToArray();
+        }
+        if (uv2s is { Count: > 0 })
+        {
+            while (uv2s.Count < vertices.Count) uv2s.Add(Vector2.Zero);
+            arrays[(int)Mesh.ArrayType.TexUV2] = uv2s.ToArray();
         }
 
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
@@ -679,6 +690,7 @@ public sealed class MeshScratch
         _colors.Add(linear);
         if (_normals.Count > 0) _normals.Add(NoNormal);
         if (_uvs.Count > 0) _uvs.Add(Vector2.Zero);
+        if (_uv2s.Count > 0) _uv2s.Add(Vector2.Zero);
     }
 
     private void Add(Vector3 position, Color linear, Vector3 normal)
@@ -689,6 +701,7 @@ public sealed class MeshScratch
         _colors.Add(linear);
         _normals.Add(normal);
         if (_uvs.Count > 0) _uvs.Add(Vector2.Zero);
+        if (_uv2s.Count > 0) _uv2s.Add(Vector2.Zero);
     }
 
     /// <summary>
