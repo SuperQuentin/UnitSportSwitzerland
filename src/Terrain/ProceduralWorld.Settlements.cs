@@ -25,8 +25,10 @@ public sealed partial class ProceduralWorld
     private readonly record struct Footprint(double E, double N, double UE, double UN,
         double HalfLength, double HalfWidth);
 
+    /// <param name="Outline">A shaped building's outline (#598, <see cref="Shape"/>): its walls and flat roof
+    /// follow it, and <paramref name="Rect"/> is only its bounding box. Null for a plain rectangle.</param>
     private sealed record Plan(Footprint Rect, BuildingKind Kind, double WallHeight, double Pitch,
-        byte Floors, ushort Year, bool Tower = false);
+        byte Floors, ushort Year, bool Tower = false, Shape? Outline = null);
 
     private sealed record Village(VillageSlot Slot, List<Street> Streets, List<Plan> Buildings, bool IsTown = false);
 
@@ -214,6 +216,7 @@ public sealed partial class ProceduralWorld
         }
 
         if (town is not null) AddTown(slot, town, streets, plans);
+        AddShaped(slot, line, streets, plans);
         return new Village(slot, streets, plans, town is not null);
     }
 
@@ -337,7 +340,7 @@ public sealed partial class ProceduralWorld
         var villages = VillagesNear(minE, minN, maxE, maxN).ToList();
         foreach (var v in villages)
             foreach (var p in v.Buildings)
-                if (In(p) && p.Kind is not (BuildingKind.Garage or BuildingKind.Industrial)) yield return p;
+                if (In(p) && p.Kind is not (BuildingKind.Garage or BuildingKind.Industrial) && p.Outline == null) yield return p;
         foreach (var p in FarmsNear(site, minE, minN, maxE, maxN))
             if (In(p)) yield return p;
         // Garages, then the works, each after everything that came before it. A building's index in
@@ -350,6 +353,10 @@ public sealed partial class ProceduralWorld
         foreach (var v in villages)
             foreach (var p in v.Buildings)
                 if (In(p) && p.Kind == BuildingKind.Industrial) yield return p;
+        // shaped buildings (#598) after the works, for the same reason
+        foreach (var v in villages)
+            foreach (var p in v.Buildings)
+                if (In(p) && p.Outline != null) yield return p;
     }
 
     // ---- roads -------------------------------------------------------------------------------
@@ -600,12 +607,9 @@ public sealed partial class ProceduralWorld
         (double E, double N) At(double a, double b) =>
             (f.E + u.E * a + v.E * b, f.N + u.N * a + v.N * b);
 
-        // counter-clockwise in LV95
-        var ring = new[]
-        {
-            At(-f.HalfLength, -f.HalfWidth), At(f.HalfLength, -f.HalfWidth),
-            At(f.HalfLength, f.HalfWidth), At(-f.HalfLength, f.HalfWidth),
-        };
+        // counter-clockwise in LV95; a shaped building's outline, courtyard clockwise (#598)
+        var rings = Rings(plan);
+        var ring = rings[0];
         double low = double.MaxValue, high = double.MinValue;
         foreach (var p in ring.Append((f.E, f.N)))
         {
@@ -652,17 +656,26 @@ public sealed partial class ProceduralWorld
         }
 
         // walls
-        for (int i = 0; i < 4; i++)
-        {
-            var a = ring[i];
-            var b = ring[(i + 1) % 4];
-            // outward: the ring is counter-clockwise, so the outside is to the right of each edge
-            double oe = b.N - a.N, on = -(b.E - a.E);
-            Quad(a, baseY, a, eave, b, eave, b, baseY, oe, 0, on);
-        }
+        foreach (var r in rings)
+            for (int i = 0; i < r.Length; i++)
+            {
+                var a = r[i];
+                var b = r[(i + 1) % r.Length];
+                // outward: the outer ring is counter-clockwise and a courtyard's clockwise, so the
+                // outside is to the right of each edge
+                double oe = b.N - a.N, on = -(b.E - a.E);
+                Quad(a, baseY, a, eave, b, eave, b, baseY, oe, 0, on);
+            }
 
         double top = eave;
-        if (plan.Tower)
+        if (RoofParts(plan) is { } parts)
+        {
+            // a shaped building's flat roof, part by part (each convex: a fan)
+            foreach (var q in parts)
+                for (int i = 1; i + 1 < q.Length; i++)
+                    Tri(q[0], eave, q[i], eave, q[i + 1], eave, 0, 1, 0);
+        }
+        else if (plan.Tower)
         {
             // a pyramid spire, four times the tower's width
             var apex = (f.E, f.N);

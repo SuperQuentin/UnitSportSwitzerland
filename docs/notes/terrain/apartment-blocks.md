@@ -139,6 +139,13 @@ never from its shape.
   counts only free wall, each layout is also tried mirrored end to end, and a region is cut into
   fewer, wider flats until each has `TwoRooms` (5.4 m) of free wall for a lit living room and
   bedroom; a flat still short of it is a studio.
+- **Fixes found by the generated world's shapes** (#598, `generated-shaped-buildings`): a wing
+  entered from the next one keeps its stairwell where that one's corridor meets it
+  (`AptOptions.Pinned`: no slide to an end, the sliver is a box room); a link on a wing's front
+  gets a stairwell of its own if one flat fits between it and the next (a U opening onto the
+  street, its bar entered from the courtyard, joins its far arm there); and a lone wing (an
+  outline at other angles) is planned alone, taking every door. `InteriorGenerator.WingFailure`
+  says why a wing plan fell back to the box.
 - **Street doors face out** (`BuildingFootprint`): a wall's outward side is the one without roof
   over it, not the one away from the box's centre (a courtyard wall faces the courtyard).
 
