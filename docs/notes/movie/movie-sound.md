@@ -46,7 +46,12 @@
   clip's edge within 8 px (`MovieProject.Snap`). Hold Shift to move freely.
 - **File:** `.usmovie` v2 adds the audio lanes, the assets (file name, BPM, beats, peaks), a flag per clip and the
   markers. v1 files load silent (`MovieFile.Write(p, s, 1)` is kept for that test).
-- **Not yet:**
-  - The beat of the game sound is not looked for.
-  - A song cannot be re-analysed or have its tempo typed in.
+- **Game sound beats** (#669): `SoundImport.FromGame` runs `BeatDetector` on a worker thread after the grab.
+  - It keeps the grid only when `Confidence` (the autocorrelation peak over the mean of all the tempi tried)
+    reaches `BeatDetector.Rhythmic` (2.0).
+  - Measured confidence: click tracks 12–20, a 124 BPM loop 5.1, game sound with something rhythmic 2.7–3.1.
+    White noise, a drone and engine-only flights scored 1.1–1.4, and got a bogus 157 BPM before the gate.
+  - Imported songs keep their beat whatever the confidence.
+  - `TimelineView.SoundKey` includes the beat count, so the ghosts appear when the worker is done.
+- **Not yet:** a song cannot be re-analysed or have its tempo typed in.
   - Sound in an exported video waits for the export milestone (#637).

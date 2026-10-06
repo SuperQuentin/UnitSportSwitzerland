@@ -97,8 +97,11 @@ public sealed class SoundImport
         {
             var low = Pcm.Decimate(mono, rate, 11025, out int lowRate);
             var beat = BeatDetector.Detect(low, lowRate);
-            asset.Beat = beat;   // one reference written: the timeline sees it on its next frame
-            GD.Print($"[movie] game sound {file}: {beat.Bpm:F1} BPM, {beat.Beats.Length} beats");
+            // an engine's drone or wind has a "tempo" too: only something rhythmic gets ghost markers
+            bool rhythmic = beat.Confidence >= BeatDetector.Rhythmic;
+            if (rhythmic) asset.Beat = beat;   // one reference written: the timeline sees it on its next frame
+            GD.Print($"[movie] game sound {file}: {beat.Bpm:F1} BPM, confidence {beat.Confidence:F2}, "
+                + (rhythmic ? $"{beat.Beats.Length} beats" : "not rhythmic: no beats"));
         });
         return asset;
     }

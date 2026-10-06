@@ -1,7 +1,9 @@
 namespace UnitSport.Movie;
 
 /// <summary>A piece of music's beat (#656): its tempo and every beat's time from the start, in seconds.</summary>
-public sealed record BeatGrid(double Bpm, double[] Beats)
+/// <param name="Confidence">How much the strongest tempo stands out of the rest (its autocorrelation over
+/// the mean of all the tempi tried): music well above 2, noise and an engine's drone near 1 (#669).</param>
+public sealed record BeatGrid(double Bpm, double[] Beats, double Confidence = 0)
 {
     public static readonly BeatGrid None = new(0, Array.Empty<double>());
 }
@@ -16,6 +18,13 @@ public sealed record BeatGrid(double Bpm, double[] Beats)
 public static class BeatDetector
 {
     private const int N = 1024, Hop = 128;
+
+    /// <summary>
+    /// The <see cref="BeatGrid.Confidence"/> a sound needs before its beat is believed when nobody chose it
+    /// as music (the recorded game sound, #669). Measured: click tracks 12-20, a 124 BPM loop 5.1, game
+    /// sound with something rhythmic 2.7-3.1; white noise, a drone and engine-only flights 1.1-1.4.
+    /// </summary>
+    public const double Rhythmic = 2.0;
     private const double MinBpm = 60, MaxBpm = 200;
 
     /// <param name="mono">Samples in -1..1.</param>
@@ -47,6 +56,10 @@ public static class BeatDetector
             if (score > bestScore) { bestScore = score; best = lag; }
         }
         if (bestScore <= 0) return BeatGrid.None;
+        double mean = 0;
+        for (int lag = minLag; lag <= maxLag; lag++) mean += ac[lag];
+        mean /= maxLag - minLag + 1;
+        double confidence = mean > 0 ? ac[best] / mean : 0;
         // parabolic interpolation between the neighbours: a period finer than one envelope frame
         double l = best;
         if (best > minLag && best < maxLag)
@@ -84,7 +97,7 @@ public static class BeatDetector
             if (beat >= 0 && (beats.Count == 0 || beat - beats[^1] > period * 0.5)) beats.Add(beat);
             t = beat + period;
         }
-        return new BeatGrid(60 / period, beats.ToArray());
+        return new BeatGrid(60 / period, beats.ToArray(), confidence);
     }
 
     // A frame's flux peaks when the onset sits where its Hann window falls fastest, three quarters of

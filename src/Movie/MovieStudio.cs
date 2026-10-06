@@ -119,7 +119,8 @@ public partial class MovieStudio : Screen
         var column = UiKit.VBox(8);
         panel.AddChild(column);
 
-        var transport = UiKit.HBox(6);
+        // rows that wrap rather than run off a narrow (or big-UI) screen
+        var transport = Row();
         column.AddChild(transport);
         Tool(transport, "|◀", "To the start (Home)", () => Seek(0));
         _reverse = Tool(transport, "◀", "Play backwards (J)", () => Play(-1));
@@ -134,13 +135,13 @@ public partial class MovieStudio : Screen
         _time = UiKit.Text("", UiTheme.FontBody, UiTheme.Amber, bold: true);
         _time.CustomMinimumSize = new Vector2(150, 0);
         transport.AddChild(_time);
-        transport.AddChild(UiKit.Spacer(expand: true));
+        transport.AddChild(UiKit.Spacer(w: 10));
         transport.AddChild(UiKit.Text("Zoom", UiTheme.FontSmall, UiTheme.TextDim));
         Tool(transport, "−", "Zoom out (− , the wheel on the timeline)", () => _timeline.ZoomBy(0.66f));
         Tool(transport, "Fit", "The whole movie in view", () => _timeline.Fit());
         Tool(transport, "+", "Zoom in (= , the wheel on the timeline)", () => _timeline.ZoomBy(1.5f));
 
-        var edits = UiKit.HBox(6);
+        var edits = Row();
         column.AddChild(edits);
         Tool(edits, "Split", "Cut the selected clip at the playhead, or every lane if it is not under it (S)", Split);
         Tool(edits, "Cut all", "Cut every clip under the playhead (Shift+S); Ctrl+click a clip cuts it there", CutAll);
@@ -151,7 +152,7 @@ public partial class MovieStudio : Screen
         _worldSound = new CheckButton { Text = "World sound", ButtonPressed = true, TooltipText = "The puppets' live engines and steps; off when the recorded game sound plays instead" };
         _worldSound.Toggled += WorldSound;
         edits.AddChild(_worldSound);
-        edits.AddChild(UiKit.Spacer(expand: true));
+        edits.AddChild(UiKit.Spacer(w: 10));
         // the camera track: a key from the view, the view through the track, and the key's options
         Tool(edits, "◆ Key", "A camera key from this view at the playhead (I; pad View)", SetKey);
         _lookThrough = new CheckButton { Text = "Look through camera", TooltipText = "Play the movie through the camera track (V); moving the view takes it over" };
@@ -371,6 +372,14 @@ public partial class MovieStudio : Screen
 
     // ---- actions ---------------------------------------------------------------------------------
 
+    private static HFlowContainer Row()
+    {
+        var row = new HFlowContainer();
+        row.AddThemeConstantOverride("h_separation", 6);
+        row.AddThemeConstantOverride("v_separation", 6);
+        return row;
+    }
+
     private static Button Tool(Container into, string text, string tip, Action pressed)
     {
         var b = UiKit.Button(text);
@@ -554,6 +563,29 @@ public partial class MovieStudio : Screen
     }
 
     private Vector3? ActorAt(int lane) => _stage.Puppet(lane)?.GlobalPosition;
+
+    /// <summary>
+    /// <c>--moviekeys</c>, for screenshots: three camera keys a few seconds apart from views round the
+    /// actor (a smooth one aimed at it, a linear one, a cut), the first picked, the timeline zoomed in.
+    /// </summary>
+    public void ScreenshotKeys()
+    {
+        double t0 = _stage.Time;
+        for (int i = 0; i < 3; i++)
+        {
+            _stage.Seek(Math.Max(0, t0 - 4 + i * 3));
+            _camera.Turn(new Vector2(0.9f, 0));
+            SetKey();
+            var key = _timeline.SelectedKey!;
+            key.Ease = (KeyEase)i;
+            key.Lens = new[] { 24f, 50f, 85f }[i];
+            if (i == 0) key.LookAt = 0;
+        }
+        _timeline.SelectKey(MovieSession.Project.Camera.Keys[0]);
+        _stage.Seek(t0);
+        _timeline.ZoomBy(3f);
+        ShowKeyOptions();
+    }
 
     private void DeleteKey(CameraKey key)
     {
