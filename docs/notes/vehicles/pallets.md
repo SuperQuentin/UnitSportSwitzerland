@@ -7,8 +7,8 @@ Plan: `docs/plans/forklift-and-pallets.md`. The machine is `forklift`; this is w
 
 - **Which pallets**: a hall's **loose floor pallets** (`FurnitureType.Pallet`, `Lift == 0`:
   `InteriorMeshBuilder.IsLoosePallet`), 5-20 per warehouse or works. Pallets on racking stay drawn
-  inside the `PalletRack` piece and are not liftable. Yard stacks are phase 3 (their id is
-  reserved, the server refuses them for now).
+  inside the `PalletRack` piece and are not liftable. And a site's **apron stacks** (phase 3,
+  below).
 - **Carved out of the merged mesh**, as a gun locker's door is (`AddLockDoors`):
   `InteriorMeshBuilder.Build` skips them and `InteriorManager.AddPallets` gives each a node of its
   own, `Items/PalletNode` (mesh from `PalletPiece(load)`, one box body). **No plan change, no
@@ -60,6 +60,36 @@ Plan: `docs/plans/forklift-and-pallets.md`. The machine is `forklift`; this is w
   (`ServerWorld.OnPeerAccepted`). Protocol 18.
 - `Layouts`: where a plan comes from, `InteriorManager` unless set (the flat-world check sets it).
 
+## Phase 3: the yard — apron stacks and a forklift beside them
+
+- **`Items/SitePallets.ForSite`** (tier 0, `SitePalletTests`), the third pure provider beside
+  `DormantSlots.ForSite`: one row along the facade, `Out` (2.2 m) from it, at a 1.7 m pitch,
+  runners along the facade (so they are forked from the yard side, across). Inside the 7 m apron
+  the fleet keeps clear of, so a pallet never stands in a lorry's place, and never within
+  `DoorClear` (1.5 m) of a door's edge, so a bay stays a bay. By trade (`FillFor`): a warehouse
+  0.75 along its dock, a works 0.9 but only along the end third of its front (its raw stock), a
+  depot 0.3, a body shop and a dealership none. Ids `"<building>:y<slot>"`, the slot a place
+  along the row counted before anything is skipped, so a door or a dropped one leaves a gap and
+  never renumbers the rest (pinned).
+- **`SiteFront`** (`Vehicles/VehicleSlot.cs`): the yard plus the facade's real span and the doors on
+  it, in the yard's u, from `SiteYards.Fronts`. **The yard is centred on the main door, not on the
+  facade**: deriving the facade from the yard's width put pallets past one corner and short of the
+  other wherever the door is off-centre; the span comes from the plan box (`PlanBox.Along`).
+- **A forklift in the fleet** (`DormantSlots.ForkliftOf`): a warehouse's and a works' yard keep one,
+  1.5 m past one end of the facade on the apron, forks to the building, ordinal
+  `ForkliftOrdinal` (1000) so no existing vehicle was renamed. It is a slot like any other — woken by
+  getting in, drawn from its parked look, solid — which `--sitecheck` and the net check both prove.
+  RideKind 193 is past `HeavyCatalog`'s range, so it parks with a car's 1.6 m clearance.
+- **Drawn with the fleet**: `DormantVehicles.Yards` already reads a tile's buildings, roads and grid
+  on its worker for the yards; it fills the apron pallets from the same fronts
+  (`SiteYards.Pallets`: dropped in a building or on a road, set on their own ground) and hands them
+  to `PalletService.ShowYard` on the main thread; `Drop` frees them (`HideYard`). So they live on
+  exactly the tiles round a player that the fleet does (#552), and a taken one hides itself as it
+  enters the tree.
+- **The server** checks a yard take against `SiteYards.PalletAt` — the same function on the tile's
+  own files (`PalletService.Source`, the world's chunk source), off the main thread. Nothing about
+  the stacks is ever sent but which have been taken.
+
 ## Loot
 
 `FurnitureType.Pallet` is a loot container (0.25). **A pallet still where the plan put it keeps
@@ -85,8 +115,19 @@ a container. A small, real loss, stated so it is not found later.
   writes `test_output/palletnet_<key>.svg`); A drives in through it, forks the pallet, drives out
   and sets it down in the yard; **B passes only on what reached it**: A's published forks loaded
   inside and outside (and drawn on B's copy of A), the hall pallet in `Taken`, a loose one outside
-  drawn on B, A's forks empty after. ~45 s. Near the default spawn the only candidate is a small
+  drawn on B, A's forks empty after. Near the default spawn the only candidate is a small
   warehouse's one wall pallet, so this run forks **across** (`Carrying` 304 = 1 + 47 + 256).
+  **Phase 3 in the same run**: A does not conjure its forklift — it walks to the warehouse's own
+  dormant one on the apron, wakes it and gets in (B must see that slot awake, which only the
+  server's spawn makes it); after the hall pallet it forks an apron stack (`:y8`) from the yard
+  side and sets it down, and B must see the yard id taken and A's forks loaded. ~60 s.
+  The probe re-reads its door from `DoorIndex` at every use: the teleport to the bay rebases the
+  origin, and a copy of the entry kept from before was 3.6 km off.
+- `--sitecheck --systems ui` (phase 3): per trade, apron pallets or none, none inside the building
+  and none in front of any of the footprint's doors (measured against the doors themselves, not the
+  spans the row was laid out from), a forklift at the warehouse and the works only, clear of the
+  building, the pallets and every door, and both build their dormant look. Windowed,
+  `<shot>_apron.png` looks across the warehouse's apron.
 
 ## Not done
 
@@ -94,5 +135,9 @@ a container. A small, real loss, stated so it is not found later.
   carrying) is lost for the session: it is in nobody's records but the forklift's.
 - Set down at the height the machine stands at, not the ground under the pallet: on a slope it
   floats or sinks by the slope over 1.8 m. Posed, not simulated.
-- No stacking a pallet on a pallet, no racking slots, no yard stacks yet (phase 3), nothing
-  survives a restart (the plan's decisions).
+- No stacking a pallet on a pallet, no racking slots, nothing survives a restart (the plan's
+  decisions).
+- Apron stacks are one row and one pallet high; a busy warehouse front is mostly bays, so it
+  keeps only a few (the hand-made one keeps 3 along 58 m).
+- A woken yard forklift, like any woken yard vehicle, does not go back to its place: whoever drove
+  it off has it (#499).

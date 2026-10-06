@@ -5,6 +5,7 @@ using UnitSport.Core;
 using UnitSport.Interiors;
 using UnitSport.Player;
 using UnitSport.Terrain.Format;
+using UnitSport.Vehicles;
 using UnitSport.XR;
 
 namespace UnitSport.Items;
@@ -30,6 +31,9 @@ public partial class PalletNetProbe : Node
     private static string? Password => CmdArgs.Value("--palletnetcheck", 2, notFlag: true);
 
     private readonly string _role;
+    /// <summary>The site's dormant forklift was there to be woken: then waking it is part of the verdict.</summary>
+    private bool _liftSeen;
+    private bool _woke;
     private readonly Func<FootPlayer?> _local;
     private double _clock;
 
@@ -142,18 +146,46 @@ public partial class PalletNetProbe : Node
         Log($"admin: {Permissions.IsAdmin}");
 
         if (await FindBay(me) is not { } bay) { Log("no industrial bay with a pallet near the spawn"); return false; }
-        var door = bay.Door;
-        StandAt(me, door, 12f, 0f);
+        // the door as the index holds it now: a teleport across the map rebases the origin, and a
+        // copy kept from before the move is kilometres off (DoorIndex.Shift moves only its own)
+        DoorIndex.Entry Door() => DoorIndex.Find(bay.Door.Key) ?? bay.Door;
+        // to the bay on foot first: the dormant layer works out the tiles round a player, and a
+        // mount teleported hundreds of metres lands on ground whose collision is not there yet
+        StandAt(me, Door(), 12f, 0f);
         await Seconds(1.5);
-        if (!me.SetRide(RideKind.Forklift) || me.Vehicle is not Forklift fork) { Log("could not get on a forklift"); return false; }
+        // the works' own forklift, standing dormant on its apron (phase 3): woken by getting in, as
+        // a player does; conjured (the admin's SetRide) only where the slot was dropped
+        bool woke = _woke = await GetInYardForklift(me, bay);
+        if (!woke)
+        {
+            StandAt(me, Door(), 12f, 0f);
+            await Seconds(1.5);
+            if (!me.SetRide(RideKind.Forklift)) { Log("could not get on a forklift"); return false; }
+        }
+        if (me.Vehicle is not Forklift fork) { Log("not on a forklift"); return false; }
         me.RideControls = () => new RideInput(0f, 0f, 0f, false, Handbrake: true);
+        await Seconds(1);
+        // lined up 12 m out from the bay, on it (a short way from the apron: the ground is loaded)
+        var o = Door().Outward;
+        var lineUp = Door().World + o * 12f;
+        if (me.Terrain != null && me.Terrain.TryGetHeight(lineUp, out float lineGround)) lineUp.Y = lineGround + 0.3f;
+        me.PlaceAt(lineUp, Yaw(-o));
         // the watcher takes its place beside the bay meanwhile
         await Seconds(6);
 
         // ---- in through the bay -------------------------------------------------------------
         Log($"driving in, {Where(me)}");
         me.RideControls = () => new RideInput(0.6f, 0f, 0f, false);
-        bool inside = await Until(() => InteriorManager.InInteriorSpace(me.GlobalPosition), 25);
+        double traceAt = 0;
+        bool inside = await Until(() =>
+        {
+            if (_clock >= traceAt)
+            {
+                traceAt = _clock + 1;
+                Log(FormattableString.Invariant($"  at {me.GlobalPosition}, {me.GroundSpeed:F1} m/s, {(me.GlobalPosition - Door().World).Length():F1} m from the door, ride {me.Ride}, vel {me.Velocity}"));
+            }
+            return InteriorManager.InInteriorSpace(me.GlobalPosition);
+        }, 25);
         await Seconds(0.6);
         me.RideControls = () => new RideInput(0f, 0f, 0f, false, Handbrake: true);
         await Until(() => me.GroundSpeed < 0.1f, 5);
@@ -186,15 +218,15 @@ public partial class PalletNetProbe : Node
         await Seconds(2);
 
         // ---- out through the bay with it ------------------------------------------------------
-        if (InteriorManager.Instance?.Links.GetValueOrDefault(door.Key.ToString()) is not { } link)
+        if (InteriorManager.Instance?.Links.GetValueOrDefault(Door().Key.ToString()) is not { } link)
         {
             Log("no link for the bay");
             return false;
         }
         var map = link.ToInside;
-        var outward = map.Basis * door.Outward;
+        var outward = map.Basis * Door().Outward;
         outward = new Vector3(outward.X, 0, outward.Z).Normalized();
-        me.PlaceAt(map * (door.World - door.Outward * 7f) + Vector3.Up * 0.1f, Yaw(outward));
+        me.PlaceAt(map * (Door().World - Door().Outward * 7f) + Vector3.Up * 0.1f, Yaw(outward));
         await Seconds(1);
         Log($"lined up inside the bay, {Where(me)}, carrying {fork.Carrying}");
         me.RideControls = () => new RideInput(0.6f, 0f, 0f, false);
@@ -213,8 +245,94 @@ public partial class PalletNetProbe : Node
         var set = PalletService.Instance?.Loose.Values.OrderBy(p => p.Id).LastOrDefault();
         Log($"set down: {down}" + (set == null ? "" : FormattableString.Invariant($", {Pallets.LooseId(set.Id)} at LV95 {set.E:F1}/{set.N:F1} alt {set.Altitude:F1}")));
         // the watcher needs a moment to see the empty forks
+        await Seconds(3);
+        bool apron = await ForkApronPallet(me, fork);
         await Seconds(6);
-        return outside && carriedOut != 0 && down && set is { Altitude: > InteriorManager.InteriorBaseY + 1000f };
+        return outside && carriedOut != 0 && down && set is { Altitude: > InteriorManager.InteriorBaseY + 1000f } && apron
+            && (_woke || !_liftSeen);
+    }
+
+    /// <summary>The bay's site's dormant forklift (phase 3), if the dormant layer has it: its yard is the building's.</summary>
+    private static VehicleSlot? YardForklift(Bay bay) =>
+        DormantVehicles.Instance?.Slots().Where(s => s.Ordinal == DormantSlots.ForkliftOrdinal
+            && s.KindId == (int)RideKind.Forklift && s.Owner == bay.Door.Key.Building.ToString()).Cast<VehicleSlot?>().FirstOrDefault();
+
+    /// <summary>
+    /// Walks up to the site's own forklift where it stands dormant on the apron, wakes it and gets
+    /// in: the path a player takes, through the server. False where there is no such slot (it was
+    /// dropped, standing on a road or in a neighbour) or it would not wake.
+    /// </summary>
+    private async Task<bool> GetInYardForklift(FootPlayer me, Bay bay)
+    {
+        // the dormant layer works the tiles round the player out a moment after they arrive
+        await Until(() => YardForklift(bay) != null, 15);
+        if (YardForklift(bay) is not { } slot || me.Terrain?.Origin is not { } origin)
+        {
+            Log("no dormant forklift on the site's apron (its slot was dropped)");
+            return false;
+        }
+        _liftSeen = true;
+        var at = origin.ToWorld(slot.E, slot.N, slot.Height);
+        // beside it, on the side its step is (Forklift.EntryPoint, node frame), facing it
+        var step = new Basis(Vector3.Up, slot.Yaw) * new Forklift().EntryPoint;
+        var stand = at + step + step.Normalized() * 0.6f + Vector3.Up * 0.3f;
+        var look = at - stand;
+        me.PlaceAt(stand, Mathf.Atan2(-look.X, -look.Z));
+        await Seconds(1.5);
+        DormantVehicles.Instance!.Wake(slot);
+        string name = slot.NodeName;
+        bool woken = await Until(() => VehicleManager.Instance?.GetNodeOrNull(name) != null, 10);
+        Log(FormattableString.Invariant($"the site's forklift {name}: woken {woken}"));
+        if (!woken) return false;
+        await Seconds(0.5);
+        bool asked = me.TryGetIn();
+        bool inside = await Until(() => me.Vehicle is Forklift, 5);
+        Log($"got into it: {inside} (asked {asked})");
+        return inside;
+    }
+
+    /// <summary>
+    /// Phase 3: one of the stacks out on a site's apron, the nearest the dormant layer has drawn,
+    /// forked from the yard side (across its runners, which run along the facade), lifted and set
+    /// down again. Its id is a yard one, which the server works out from the tile's own files.
+    /// </summary>
+    private async Task<bool> ForkApronPallet(FootPlayer me, Forklift fork)
+    {
+        // back off the pallet just set down
+        var from = me.GlobalPosition;
+        me.RideControls = () => new RideInput(0f, 0.4f, 0f, false);
+        await Until(() => (me.GlobalPosition - from).Length() > 2.5f, 6);
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false, Handbrake: true);
+        await Until(() => me.GroundSpeed < 0.05f, 4);
+
+        var stack = PalletNode.All.Values
+            .Where(n => !n.Taken && n.IsInsideTree() && Pallets.TryParse(n.Id, out var r) && r.Source == PalletSource.Yard)
+            .OrderBy(n => n.GlobalPosition.DistanceTo(me.GlobalPosition)).FirstOrDefault();
+        if (stack == null) { Log("no apron pallet drawn near"); return false; }
+        // out of the facade is the stack's -Z: its runners (+X) run along the facade
+        var outward = -stack.GlobalTransform.Basis.Z;
+        outward = new Vector3(outward.X, 0, outward.Z).Normalized();
+        Log(FormattableString.Invariant($"apron pallet {stack.Id}, {stack.GlobalPosition.DistanceTo(me.GlobalPosition):F0} m off"));
+        me.PlaceAt(stack.GlobalPosition + outward * PalletCheck.RunIn + Vector3.Up * 0.1f, Yaw(-outward));
+        await Seconds(1);
+        me.RideControls = () => new RideInput(0.3f, 0f, 0f, false);
+        await Until(() => -(me.GlobalTransform.AffineInverse() * stack.GlobalPosition).Z
+            < ForkliftLayout.MastZ + 0.1f + Pallets.Length * 0.5f + 0.1f || me.Velocity.Length() < 0.01f && me.GroundSpeed > 0.3f, 10);
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false, Handbrake: true);
+        await Until(() => me.GroundSpeed < 0.05f, 4);
+
+        XrPad.Press(PlayerInput.ShiftUp, true);
+        bool lifted = await Until(() => fork.Carrying != 0, 6);
+        await Until(() => fork.Lift >= 0.3f, 3);
+        XrPad.Press(PlayerInput.ShiftUp, false);
+        Log($"lifted {stack.Id}: {lifted}, carrying {fork.Carrying}");
+        if (!lifted) return false;
+        await Seconds(2);
+        XrPad.Press(PlayerInput.ShiftDown, true);
+        bool down = await Until(() => fork.Carrying == 0, 8);
+        XrPad.Press(PlayerInput.ShiftDown, false);
+        Log($"set it down again: {down}");
+        return down;
     }
 
     // ---- watch: B ---------------------------------------------------------------------------------
@@ -228,6 +346,11 @@ public partial class PalletNetProbe : Node
         StandAt(me, bay.Door, 4.5f, 3f);
 
         bool carriedInside = false, carriedOutside = false, taken = false, setDown = false, drawnDown = false, emptied = false;
+        // phase 3: an apron stack taken (a yard id, from the server) and then on A's forks
+        bool apronTaken = false, apronCarried = false;
+        // phase 3: the site's own forklift, dormant on its apron, woken by A (the server spawned it)
+        VehicleSlot? yardLift = null;
+        bool liftWoken = false;
         string last = "";
         double end = _clock + 200;
         while (_clock < end)
@@ -251,14 +374,22 @@ public partial class PalletNetProbe : Node
                 drawnDown |= PalletNode.All.ContainsKey(Pallets.LooseId(loose.Id));
             }
             if (setDown && carriedOutside && carry == 0 && other.Ride == RideKind.Forklift) emptied = true;
+            var apron = service.Taken.FirstOrDefault(t => Pallets.TryParse(t, out var r) && r.Source == PalletSource.Yard);
+            if (apron != null) apronTaken = true;
+            if (apronTaken && carry != 0) apronCarried = true;
+            yardLift ??= YardForklift(bay);
+            if (yardLift is { } ys && DormantVehicles.Instance?.IsAwake(ys) == true) liftWoken = true;
+            bool liftOk = yardLift == null || liftWoken;
 
             string now = $"A: {other.Ride} {(inside ? "inside" : "outside")}, forks carrying {carry} (drawn: {drawn}); "
-                + $"taken {hall ?? "-"}, loose {(loose == null ? "-" : FormattableString.Invariant($"{Pallets.LooseId(loose.Id)} load {loose.Load} at LV95 {loose.E:F1}/{loose.N:F1} alt {loose.Altitude:F1}"))}";
+                + $"taken {hall ?? "-"} {apron ?? "-"}, loose {(loose == null ? "-" : FormattableString.Invariant($"{Pallets.LooseId(loose.Id)} load {loose.Load} at LV95 {loose.E:F1}/{loose.N:F1} alt {loose.Altitude:F1}"))}";
             if (now != last) { Log(now); last = now; }
-            if (carriedInside && carriedOutside && taken && setDown && drawnDown && emptied) break;
+            if (carriedInside && carriedOutside && taken && setDown && drawnDown && emptied && apronTaken && apronCarried && liftOk) break;
         }
         Log($"saw: carried inside {carriedInside}, carried out in the yard {carriedOutside}, the hall's pallet taken {taken}, "
-            + $"set down outside {setDown} (drawn here {drawnDown}), forks empty after {emptied}");
-        return carriedInside && carriedOutside && taken && setDown && drawnDown && emptied;
+            + $"set down outside {setDown} (drawn here {drawnDown}), forks empty after {emptied}, an apron stack taken {apronTaken} and carried {apronCarried}, "
+            + $"the site's forklift {(yardLift == null ? "not on its apron here" : $"{yardLift.Value.NodeName} woken {liftWoken}")}");
+        return carriedInside && carriedOutside && taken && setDown && drawnDown && emptied && apronTaken && apronCarried
+            && (yardLift == null || liftWoken);
     }
 }

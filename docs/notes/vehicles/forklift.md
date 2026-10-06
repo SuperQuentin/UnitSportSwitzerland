@@ -72,4 +72,9 @@ against its numbers.
   and reverse the way a real rear-steer one does. A slip angle would give both; it was left out
   because a 30° crab on a bicycle model reads as a bug, not as a forklift.
 - No fork tilt, no side shift, no load weight affecting the drive, no tipping over the forks.
-- Not a dormant yard slot yet (#499 / `DormantSlots.ForSite`): phase 3.
+
+## In the world
+
+A warehouse and a works keep one standing dormant on their apron (#583 phase 3,
+`DormantSlots.ForkliftOf`, see `pallets` and `industrial-yards`): getting in wakes it, as any
+parked yard vehicle. Elsewhere, an admin conjures one (Works tab).

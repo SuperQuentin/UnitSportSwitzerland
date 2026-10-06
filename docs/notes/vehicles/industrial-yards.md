@@ -44,6 +44,16 @@ sites their insides; this parks their fleets on the ground outside.
   its tail**. That holds whichever convention is right, and it fails the moment the sign flips
   (verified by injecting the mirror: "a slot faces its own building, nose 18.5 m, tail 23.5 m").
 
+## The apron (#583 phase 3)
+
+The 7 m `Apron` between the facade and the fleet is no longer empty: a warehouse and a works keep a
+**forklift** there (`DormantSlots.ForkliftOf`, 1.5 m past one end of the facade, ordinal 1000 so
+the grid's names did not move), and the stacks of pallets a forklift lifts stand in a row along the
+facade (`Items/SitePallets`). Both read `SiteYards.Fronts`, the yard with its facade's real span:
+**the yard is centred on the main door, not on the facade**, so anything laid out along the facade
+from the yard's own width lands past one corner wherever the door is off-centre. Details:
+`pallets`.
+
 ## A lorry is not a car with different paint
 
 `DormantVehicles.Draw` once instanced **every** slot from `TrafficMeshBuilder.Car` with a car-sized

@@ -235,6 +235,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _placed.NameOf = _chat.NameOfPeer;
         // pallets a forklift has moved (#583): which of the plan's have gone, and where they were put
         _pallets = Items.PalletService.Create(this, origin, server: true);
+        _pallets.Source = () => source;
         _chat.NameAssigned += bank.SendBalance;
         // built structures (#274): checked, kept and saved here; match ones cleared after the match
         if (Systems.On(Systems.Build))

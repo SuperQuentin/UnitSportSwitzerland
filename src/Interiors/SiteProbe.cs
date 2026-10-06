@@ -30,6 +30,8 @@ public partial class SiteProbe : Node3D
     private readonly List<(BuildingType Site, InteriorLayout Layout, InteriorNode Node)> _built = new();
     /// <summary>How many facades the bay pass has stood in its row (#528).</summary>
     private int _facades;
+    /// <summary>Where the apron shot looks (#583 phase 3), and the way out of the warehouse's front.</summary>
+    private (Vector3 At, Vector3 Out)? _apron;
     /// <summary>Each site's tile and the building's index in it, for the yard pass (#516).</summary>
     private readonly List<(BuildingType Site, BuildingTile Tile, int Index)> _sites = new();
 
@@ -232,7 +234,7 @@ public partial class SiteProbe : Node3D
     private void Yards()
     {
         var material = Styles.StyleKit.Material(Styles.MaterialRole.Building);
-        int drawnHeavies = 0;
+        int drawnHeavies = 0, drawnForklifts = 0;
         for (int i = 0; i < _sites.Count; i++)
         {
             var (site, tile, index) = _sites[i];
@@ -278,8 +280,51 @@ public partial class SiteProbe : Node3D
             Check(wantsHeavy == heavy > 0,
                 $"{site} yard {(wantsHeavy ? "has" : "has no")} goods vehicles ({heavy} of {slots.Count})");
 
+            // The apron (#583 phase 3): pallets by trade along the facade and clear of every door,
+            // measured against the footprint's doors themselves rather than the spans the row was
+            // laid out from; and beside a warehouse's or a works' front a forklift, drawn below
+            // through the dormant layer's look like the rest of the fleet.
+            var front = Vehicles.SiteYards.Fronts(tile, null, null).First(f => f.Yard.Owner == mine[0].Owner);
+            var pallets = Vehicles.SiteYards.Pallets(tile, null, null, new() { front });
+            bool wantsPallets = Items.SitePallets.FillFor((int)site) > 0f;
+            Check(wantsPallets == pallets.Count > 0, $"{site} apron {(wantsPallets ? "has" : "has no")} pallets ({pallets.Count})");
+            var fp = BuildingFootprint.Compute(tile, index, null, null)!;
+            foreach (var p in pallets)
+            {
+                var at = new Vector2((float)(p.E - tile.Id.MinE), (float)(tile.Id.MaxN - p.N));
+                if (box.DistanceTo(at) < Items.SitePallets.Out - 0.7f) { Check(false, $"{site}: pallet {p.Id} stands in its building"); break; }
+                if (fp.Doors.FirstOrDefault(d => new Vector2(d.Position.X, d.Position.Z).DistanceTo(at) < d.Width / 2 + 0.9f) is { Width: > 0 } door)
+                {
+                    Check(false, $"{site}: pallet {p.Id} stands in front of a {door.Width:F1} m door");
+                    break;
+                }
+            }
+            var lift = Vehicles.DormantSlots.ForkliftOf(tile.Id, front, (int)Player.RideKind.Forklift);
+            bool wantsLift = site is BuildingType.Warehouse or BuildingType.Factory;
+            Check(wantsLift == (lift != null), $"{site} {(wantsLift ? "keeps a" : "keeps no")} forklift on its apron");
+            if (lift is { } forklift)
+            {
+                var at = new Vector2((float)(forklift.E - tile.Id.MinE), (float)(tile.Id.MaxN - forklift.N));
+                float clear = pallets.Count == 0 ? float.MaxValue
+                    : pallets.Min(p => at.DistanceTo(new Vector2((float)(p.E - tile.Id.MinE), (float)(tile.Id.MaxN - p.N))));
+                Check(box.DistanceTo(at) >= 1.5f && clear >= 2f,
+                    $"{site}'s forklift stands clear of the building ({box.DistanceTo(at):F1} m) and of its pallets ({clear:F1} m)");
+                Check(fp.Doors.All(d => new Vector2(d.Position.X, d.Position.Z).DistanceTo(at) >= d.Width / 2 + 1.5f),
+                    $"{site}'s forklift is in front of no door");
+                slots.Add(forklift);
+            }
+
             // the exterior and its yard, in a row well away from the interiors
             var origin = new Vector3(i * YardRowPitch, 0, 1200f);
+            if (site == BuildingType.Warehouse && lift is { } shown)
+            {
+                // for the apron shot: between the forklift and its nearest pallet, seen from the yard
+                Vector3 Local(double e, double n) => origin + new Vector3((float)(e - tile.Id.MinE), 0, (float)(tile.Id.MaxN - n));
+                var at = Local(shown.E, shown.N);
+                var near = pallets.Count == 0 ? at : pallets.Select(p => Local(p.E, p.N)).MinBy(p => p.DistanceTo(at));
+                float h = front.Yard.Heading;
+                _apron = ((at + near) / 2, new Vector3(-Mathf.Sin(h), 0, -Mathf.Cos(h)));
+            }
             if (BuildingMeshBuilder.Build(tile) is { } mesh)
                 AddChild(new MeshInstance3D
                 {
@@ -305,8 +350,17 @@ public partial class SiteProbe : Node3D
                 node.AddChild(new MeshInstance3D { Mesh = merged });
                 AddChild(node);
                 if (s.Train != 0 || Player.HeavyCatalog.For((Player.RideKind)s.KindId) != null) drawnHeavies++;
+                if (s.KindId == (int)Player.RideKind.Forklift) drawnForklifts++;
+            }
+            foreach (var p in pallets)
+            {
+                var node = Items.PalletNode.Create(p.Id, p.Load, Avatar.HumanMeshBuilder.FigureMaterial());
+                node.Transform = new Transform3D(new Basis(Vector3.Up, p.Yaw),
+                    origin + new Vector3((float)(p.E - tile.Id.MinE), 0, (float)(tile.Id.MaxN - p.N)));
+                AddChild(node);
             }
         }
+        Check(drawnForklifts == 2, $"the warehouse's and the works' forklifts build their dormant look ({drawnForklifts})");
         Check(drawnHeavies > 0, $"goods vehicles build their dormant look from their real parked model ({drawnHeavies})");
     }
 
@@ -473,9 +527,21 @@ public partial class SiteProbe : Node3D
             eye.MakeCurrent();
             return;
         }
-        if (_step > _built.Count + 1)
+        if (_step == _built.Count + 2)
         {
             GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_bays.png"));
+            var eye = GetNodeOrNull<Camera3D>("Eye");
+            if (eye == null || _apron is not { } apron) { Finish(); return; }
+            // the warehouse's apron (#583 phase 3): its pallets along the dock and its forklift,
+            // from out in the yard
+            eye.GlobalPosition = apron.At + apron.Out * 14f + Vector3.Up * 6f;
+            eye.LookAt(apron.At + Vector3.Up * 0.8f, Vector3.Up);
+            eye.MakeCurrent();
+            return;
+        }
+        if (_step > _built.Count + 2)
+        {
+            GetViewport().GetTexture().GetImage().SavePng(_shot.Replace(".png", "_apron.png"));
             Finish();
             return;
         }

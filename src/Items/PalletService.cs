@@ -4,6 +4,9 @@ using UnitSport.Core;
 using UnitSport.Interiors;
 using UnitSport.Net;
 using UnitSport.Player;
+using UnitSport.Terrain;
+using UnitSport.Terrain.Format;
+using UnitSport.Vehicles;
 
 namespace UnitSport.Items;
 
@@ -72,6 +75,43 @@ public partial class PalletService : Node
     /// set — a check with a hand-made hall and no interior manager sets it.
     /// </summary>
     public Func<string, Task<InteriorLayout?>>? Layouts { get; set; }
+
+    /// <summary>The tiles' files, for a yard pallet's place (<c>SiteYards.PalletAt</c>): the world's chunk source.</summary>
+    public Func<IChunkSource?>? Source { get; set; }
+
+    // ---- the yards' stacks (#583 phase 3) ---------------------------------------------------------
+
+    /// <summary>The drawn apron pallets of each tile, as <c>DormantVehicles</c> works its yards out and drops them.</summary>
+    private readonly Dictionary<TileId, List<PalletNode>> _yards = new();
+
+    /// <summary>
+    /// Client: draws a tile's apron pallets (<see cref="SitePallets"/>), handed over by the dormant
+    /// layer, which already reads the tile's yards on its worker and frees them with its fleet. A
+    /// pallet taken this session hides itself as it enters the tree, as a hall's does.
+    /// </summary>
+    public void ShowYard(TileId id, IReadOnlyList<YardPallet> pallets)
+    {
+        if (_server) return;
+        HideYard(id);
+        var nodes = new List<PalletNode>(pallets.Count);
+        var material = HumanMeshBuilder.FigureMaterial();
+        foreach (var p in pallets)
+        {
+            var node = PalletNode.Create(p.Id, p.Load, material);
+            node.Transform = new Transform3D(new Basis(Vector3.Up, p.Yaw), _origin.ToWorld(p.E, p.N, p.Height));
+            AddChild(node);
+            nodes.Add(node);
+        }
+        _yards[id] = nodes;
+    }
+
+    /// <summary>Client: frees a tile's apron pallets, its fleet being dropped.</summary>
+    public void HideYard(TileId id)
+    {
+        if (!_yards.Remove(id, out var nodes)) return;
+        foreach (var node in nodes)
+            if (IsInstanceValid(node)) node.QueueFree();
+    }
 
     public static PalletService Create(Node world, WorldOrigin origin, bool server)
     {
@@ -332,9 +372,17 @@ public partial class PalletService : Node
         }
         else
         {
-            // a site's yard stacks are phase 3
-            Refuse(peer, id, "No such pallet.");
-            return;
+            // a site's apron stack (#583 phase 3): worked out from the tile's own files, as every
+            // peer draws it, so nothing the asker sends decides where it is or what is on it
+            if (_taken.Contains(id)) { Refuse(peer, id, "It is not there any more."); return; }
+            YardPallet? stack = null;
+            if (Source?.Invoke() is { } source)
+                try { stack = await Task.Run(() => SiteYards.PalletAt(source, r.Building, r.Index)); }
+                catch (Exception e) { GD.PushError($"[pallets] yard {r.Building}: {e.Message}"); }
+            if (stack is not { } yard) { Refuse(peer, id, "No such pallet."); return; }
+            if (_taken.Contains(id)) { Refuse(peer, id, "It is not there any more."); return; }
+            load = yard.Load;
+            at = new GlobalPos(yard.E, yard.N, yard.Height);
         }
 
         if (Forks(peer, null) is { } why) { Refuse(peer, id, why); return; }

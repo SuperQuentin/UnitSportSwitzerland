@@ -3,12 +3,15 @@
 
 # A drivable forklift, and pallets you can pick up
 
-Status: **phases 1 and 2 done** on `feat/583-forklift` (PR #600): the forklift and its mast
-(`docs/notes/vehicles/forklift.md`), hall pallets forked, carried and set down over the network
-(`docs/notes/vehicles/pallets.md`). Phase 3 (yard stacks, a forklift in the dormant fleet) is open.
-One change to the decisions below, found building phase 2: pallets are forked **four-way**, along
-their runners or across them, not along only — the wall placer stands a pallet with its runners
-along the wall, which along-only left unliftable. Issue #583, the last bullet of #496's original
+Status: **done**, all three phases, on `feat/583-forklift` (PR #600): the forklift and its mast
+(`docs/notes/vehicles/forklift.md`); hall pallets forked, carried and set down over the network,
+apron stacks by trade and a forklift in a warehouse's and a works' dormant fleet
+(`docs/notes/vehicles/pallets.md`). Two refinements to what follows, found building it: pallets
+are forked **four-way**, along their runners or across them, not along only — the wall placer
+stands a pallet with its runners along the wall, which along-only left unliftable; and phase 3's
+stacks stand in **one row on the apron**, drawn by `PalletService` from what the dormant layer
+already works out per tile, rather than a drawer of their own on `TileEntered` (the fleet's
+anchor rings, #552, replaced that hook). Issue #583, the last bullet of #496's original
 request and part of the #580 tracking issue. Deferred out of #496 on purpose, because the forklift is the easy half: *making
 pallets stop being furniture* is the feature.
 

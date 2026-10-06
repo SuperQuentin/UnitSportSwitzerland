@@ -302,6 +302,13 @@ src/Interiors/InteriorMeshBuilder quick --palletcheck --world flat --systems phy
 src/Loot/LootService     quick  --palletcheck --world flat --systems physics,ui
 src/Items/Pallet         net    tools/palletnetcheck.sh
 src/Player/Forklift      net    tools/palletnetcheck.sh
+# phase 3: the stacks on a site's apron and the forklift beside it, drawn with the dormant fleet
+src/Items/SitePallets    quick  --sitecheck --systems ui
+src/Vehicles/SiteYards   quick  --sitecheck --systems ui
+src/Vehicles/VehicleSlot quick  --sitecheck --systems ui
+src/Items/SitePallets    net    tools/palletnetcheck.sh
+src/Vehicles/SiteYards   net    tools/palletnetcheck.sh
+src/Vehicles/DormantVehicles net tools/palletnetcheck.sh
 src/Player/StairsNet     net    tools/stairsnetcheck.sh
 src/Player/Airstairs     net    tools/stairsnetcheck.sh
 src/Avatar/Airstairs     net    tools/stairsnetcheck.sh
