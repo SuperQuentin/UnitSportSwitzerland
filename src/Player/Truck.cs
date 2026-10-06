@@ -406,8 +406,11 @@ public sealed partial class Truck : Rideable, IEngined
     public override Aabb Solid(Aabb measured, int section)
     {
         if (section >= OwnSections) return measured;   // a trailer has no mirrors
-        if (Spec.Class == HeavyClass.Combine) return measured;   // its header is wider than its body (#494): the hull boxes are its own
-        float half = Spec.Sections[section].Width * 0.5f + BodyFlare;
+        // a combine's header is wider than its body (#494): the body and its wheels here, the header
+        // a box of its own (ExtraBoxes), or getting out puts the driver 3.9 m out, past the cab door's reach
+        float half = Spec.Class == HeavyClass.Combine && section == 0
+            ? Mathf.Max(Spec.Sections[0].Width * 0.5f, Spec.Sections[0].Track * 0.5f + 0.45f)
+            : Spec.Sections[section].Width * 0.5f + BodyFlare;
         float left = Mathf.Max(measured.Position.X, -half), right = Mathf.Min(measured.End.X, half);
         if (right <= left) return measured;
         return new Aabb(measured.Position with { X = left }, measured.Size with { X = right - left });
@@ -515,6 +518,13 @@ public sealed partial class Truck : Rideable, IEngined
 
     public override IEnumerable<(Transform3D Pose, Vector3 Centre, Vector3 Size)> ExtraBoxes()
     {
+        // the combine's header, across the front, wider than its body (raised or lowered: to 2 m up)
+        if (Spec.Class == HeavyClass.Combine)
+        {
+            float cg = Train.Bodies[0].CgAt, from = Avatar.FarmMeshBuilder.HeaderFrom, to = Avatar.FarmMeshBuilder.HeaderTo;
+            yield return (Transform3D.Identity, new Vector3(0f, 1f, -cg + (from + to) * 0.5f),
+                new Vector3(Avatar.FarmMeshBuilder.HeaderWidth, 2f, to - from));
+        }
         for (int k = 1; k < Train.Count; k++)
         {
             var (centre, size) = SectionBox(k);

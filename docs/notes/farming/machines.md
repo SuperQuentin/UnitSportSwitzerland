@@ -53,6 +53,12 @@ radius, `SpinRadius`). Preview: `--avatars 3 out.png --cockpit --heavy 6|7 --sid
   A rig rebuilt for a new load shows the first value it is given at once (`HeavyRig.Tipped`).
 - Tanks hold one crop; the fraction toward the next sack is the owner's only (`Tank.Partial`).
 
+- **The combine's boxes**: its parked box is the body and wheels only (`Truck.Solid`: 3.3 m body,
+  the 2.6 m track + tyres), the 6 m header an extra box across the front (`Truck.ExtraBoxes`). With
+  the header in the parked box, getting out put the driver 3.9 m from the centreline, 1.8 m from
+  the cab door (`EntryPoint`, reach 1.6 m): E could not get back in. `--tractorcheck` now gets out
+  and expects the combine in reach.
+
 ## Working (local driver's peer only, `FootPlayer.Farm.cs`)
 
 - Lowered and moving: `StepFarm` once per physics tick calls `MachineWork.Sweep` (=

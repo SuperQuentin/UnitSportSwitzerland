@@ -376,6 +376,10 @@ public partial class TractorCheck : Node
         // ---- on foot: a sack from the trailer ----
         me.ExitVehicle();
         await Wait(1.0);
+        // out beside the cab, not past the header's width: E gets back in from where the driver lands
+        var back = Vehicles.VehicleReach.Find(me);
+        Expect(back is { Vehicle.Ride: Truck { Spec.Class: HeavyClass.Combine } } && back.Value.Action.StartsWith("Get in"),
+            $"out of the combine, it is in reach to get back in ({back?.Action ?? "nothing in reach"})");
         if (Tipper() is { } tp && tp.Trailer is { } pt)
         {
             int k = pt.Spec.Sections.Length - 1;
