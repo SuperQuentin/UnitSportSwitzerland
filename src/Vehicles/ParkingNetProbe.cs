@@ -115,7 +115,7 @@ public partial class ParkingNetProbe : Node
     {
         if (Site)
             return dormant.Slots()
-                .Where(s => s.KindId is (int)RideKind.Excavator or (int)RideKind.WheelLoader or (int)RideKind.MiniExcavator or (int)RideKind.CompactRoller && (!_wakes || !dormant.IsAwake(s)))
+                .Where(s => s.KindId is (int)RideKind.Excavator or (int)RideKind.WheelLoader or (int)RideKind.MiniExcavator or (int)RideKind.CompactRoller or (int)RideKind.Telehandler && (!_wakes || !dormant.IsAwake(s)))
                 .OrderBy(s => s.NodeName, StringComparer.Ordinal)
                 .Cast<VehicleSlot?>().FirstOrDefault();
         if (_chunks.Source is not { } source) return null;

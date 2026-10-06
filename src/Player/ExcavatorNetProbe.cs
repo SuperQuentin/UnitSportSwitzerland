@@ -24,7 +24,8 @@ namespace UnitSport.Player;
 /// <item>the wheel loader (#612) bent, lifted and tipped, as B sees it;</item>
 /// <item>the mini excavator (#614): its arm and its raised blade, which travels in the pose's bucket
 /// float, drawn by B at A's angles, and kept by B's parked one;</item>
-/// <item>the compact roller (#614): bent and vibrating, as B sees it (and hears it, where drawn).</item>
+/// <item>the compact roller (#614): bent and vibrating, as B sees it (and hears it, where drawn);</item>
+/// <item>the telehandler (#614): in crab steering, its boom lifted, run out and its forks tilted, drawn by B as A has it.</item>
 /// </list>
 /// </summary>
 public partial class ExcavatorNetProbe : ChatProbe
@@ -173,7 +174,37 @@ public partial class ExcavatorNetProbe : ChatProbe
         await Seconds(1.5);
         at = me.GlobalPosition;
         Say($"roller {F(roller.Articulation)} {F(roller.Vibration)} {F(at.X)} {F(at.Z)}");
-        if (!await Heard("B", "roller seen", 30)) Fail("B never compared the roller");
+        if (!await Heard("B", "roller seen", 30)) { Fail("B never compared the roller"); return; }
+
+        // the telehandler (#614): crab steering on the roof switch, its boom on the real bindings
+        me.RideControls = null;
+        me.ExitVehicle();
+        if (!await Until(() => me.Ride == RideKind.OnFoot, 10)) { Fail("A never got off the roller"); return; }
+        me.PlaceAt(me.GlobalPosition + new Vector3(-10f, 0.5f, 0f), me.Rotation.Y);
+        await Seconds(1);
+        Expect(me.SetRide(RideKind.Telehandler) && me.Vehicle is Telehandler, "A takes a telehandler");
+        if (me.Vehicle is not Telehandler th) { Fail("not a telehandler"); return; }
+        await Seconds(1);
+        foreach (var _ in new[] { 0, 1 })
+        {
+            XrPad.Press(PlayerInput.RoofToggle, true);
+            await Seconds(0.1);
+            XrPad.Press(PlayerInput.RoofToggle, false);
+            await Seconds(0.2);
+        }
+        me.RideControls = () => new RideInput(0f, 0f, -0.7f, false);
+        await Seconds(1);
+        XrPad.Press(PlayerInput.DigMode, true);
+        await Seconds(0.1);
+        XrPad.Press(PlayerInput.DigMode, false);
+        await Seconds(0.2);
+        await Hold(PlayerInput.ArmBoomUp, 2.0);
+        await Hold(PlayerInput.ShiftUp, 1.5);
+        await Hold(PlayerInput.ArmBucketCurl, 0.4);
+        await Seconds(1.5);
+        at = me.GlobalPosition;
+        Say($"tele {(int)th.Mode} {F(th.Steer)} {F(th.Lift)} {F(th.Extend)} {F(th.Tilt)} {F(at.X)} {F(at.Z)}");
+        if (!await Heard("B", "tele seen", 30)) Fail("B never compared the telehandler");
         me.RideControls = null;
     }
 
@@ -259,5 +290,24 @@ public partial class ExcavatorNetProbe : ChatProbe
         float rOff = new Vector2(a.GlobalPosition.X - rAt.X, a.GlobalPosition.Z - rAt.Y).Length();
         Expect(rOff < 0.5f, $"B has A's roller where A has it ({rOff:F2} m)");
         Say("roller seen");
+
+        if (!await Heard("A", "tele", 60)) { Fail("A never worked the telehandler"); return; }
+        w = _heard.Last(l => l.Contains("EX A tele ")).Split(' ');
+        var mode = (SteerMode)int.Parse(w[^7], CultureInfo.InvariantCulture);
+        float steer = Float(w[^6]);
+        var boomSaid = new Vector3(Float(w[^5]), Float(w[^4]), Float(w[^3]));
+        var tAt = new Vector2(Float(w[^2]), Float(w[^1]));
+        // the tilt on the wire is one of 64 steps: 0.008 rad at worst
+        bool teleSeen = await Until(() => a.RideModel is Telehandler t && t.Mode == mode && Mathf.Abs(t.Steer - steer) < 0.01f
+            && Mathf.Abs(t.Lift - boomSaid.X) < 0.01f && Mathf.Abs(t.Extend - boomSaid.Y) < 0.01f && Mathf.Abs(t.Tilt - boomSaid.Z) < 0.02f
+            && (a.Visual == null || TelehandlerMeshBuilder.BoomOf(a.Visual) is { } b
+                && (new Vector3(b.Drawn.X, b.Drawn.Y, b.Drawn.Z) - boomSaid).Length() < 0.025f
+                && Mathf.Abs(b.Drawn.W - TelehandlerLayout.RearSteer(steer, mode)) < 0.01f), 10);
+        var tCopy = a.RideModel as Telehandler;
+        Expect(teleSeen, $"B has A's telehandler in {mode} at {steer:F2} with its boom (A {boomSaid}, B {tCopy?.Mode} {tCopy?.Steer:F2} "
+            + $"({tCopy?.Lift:F3}, {tCopy?.Extend:F3}, {tCopy?.Tilt:F3}), drawn {TelehandlerMeshBuilder.BoomOf(a.Visual)?.Drawn})");
+        float tOff = new Vector2(a.GlobalPosition.X - tAt.X, a.GlobalPosition.Z - tAt.Y).Length();
+        Expect(tOff < 0.5f, $"B has A's telehandler where A has it ({tOff:F2} m)");
+        Say("tele seen");
     }
 }
