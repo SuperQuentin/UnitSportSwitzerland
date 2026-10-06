@@ -12,6 +12,9 @@ public enum ShellPart : byte
     Net = 7, Insulation = 8, Frame = 9, Board = 10,
     /// <summary>Collision only, never drawn: a scaffold lift's guard where it has no netting.</summary>
     Invisible = 11,
+    // the yard (#609)
+    Container = 12, ContainerTrim = 13, Toilet = 14, ToiletAlt = 15, Skip = 16, Debris = 17, Soil = 18,
+    Brick = 19, Cement = 20, Fence = 21, Banner = 22, Lamp = 23, Window = 24, SignBoard = 25,
 }
 
 /// <summary>
