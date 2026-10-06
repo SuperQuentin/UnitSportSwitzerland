@@ -441,7 +441,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                         DormantSlots.ForParking(id, roads.Parking, ParkedKinds, list);
                     var buildings = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
                     Yards(source, id, buildings, roads, list, stacks);
-                    Sites(source, id, buildings, roads, list);
+                    Sites(source, id, buildings, roads, list, stacks);
                     Marina(source, id, list);
                     return (list, stacks);
                 });
@@ -523,14 +523,18 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// tile with no site, which is nearly all of them. Each stands on its own ground; the planner
     /// already kept the yard's places off the building, the roads and the neighbours.
     /// </summary>
-    private static void Sites(IChunkSource source, TileId id, BuildingTile? tile, RoadTile? roads, List<VehicleSlot> into)
+    /// <param name="pallets">The sites' pallets of bricks and cement (#615), handed to <c>PalletService</c> with the yards' stacks.</param>
+    private static void Sites(IChunkSource source, TileId id, BuildingTile? tile, RoadTile? roads, List<VehicleSlot> into, List<YardPallet> pallets)
     {
         if (tile is not { Buildings.Count: > 0 } || !SitePlans.HasSite(tile)) return;
         var sites = SitePlans.For(tile, roads);
         if (sites.Count == 0) return;
         int before = into.Count;
         DormantSlots.ForConstruction(id, sites, SiteKind, ParkedKinds, into);
-        if (into.Count == before || source.LoadChunkAsync(id).GetAwaiter().GetResult() is not { } grid) return;
+        var grid = source.LoadChunkAsync(id).GetAwaiter().GetResult();
+        // the materials' pallets stand on the ground the dressing is drawn on, as the server works them out
+        foreach (var site in sites) pallets.AddRange(SitePlans.PalletsOf(tile, site, grid));
+        if (grid == null) return;
         for (int i = before; i < into.Count; i++) into[i] = into[i] with { Height = GroundUnder(grid, into[i], false) };
     }
 
