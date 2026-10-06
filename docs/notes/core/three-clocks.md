@@ -16,6 +16,59 @@ Environment time rides simulation speed, so at 0.25x the sun and the traffic lig
 with the cars and the world stays internally consistent. Both world clocks are owned by the
 server; real time is per-process and never synced.
 
+## Which system reads which (phase 4)
+
+Moved to **simulation** time, because they are part of the world and must slow with it:
+
+| System | Where | Note |
+|---|---|---|
+| Weapon rate of fire | `Items/ItemController._nextShotAt` | the most visible one; the alphorn cooldown in the same file was already on `GameClock` |
+| Trampoline re-arm | `Build/GadgetTool._nextBounceAt` | |
+| Kill-credit window | `Player/FootPlayer._lastAttackedAt` | a hit and the kill it is credited for are both in the world |
+| Build growth | `Build/Structures.Now` | `SimClock.SimAt`, not `GameClock.Now`: `BuiltAt` crosses the wire |
+| Wave phase | `World/WaterField.Now` | the swell is physics, and the boats riding it are simulated |
+
+Moved to **environment** time, with every constant re-expressed in env units:
+
+| System | Where | Old | New |
+|---|---|---|---|
+| Campfire burn | `Crafting/CampfireClock.BurnEnvSeconds` | 20 real min | 12 env h (~12 real min at the default day) |
+| Resource regrowth | `Loot/Gathering.RegrowSeconds` | 20 real min | 12 env h (~12 real min) |
+| Craft stations | `Crafting/CraftStations` | — | only passes the campfire its clock |
+
+Deliberately **left real**, and now saying so by name rather than on a bare `Time.GetTicksMsec`:
+`FootPlayer.LastNetState` and `SilentSeconds` (a packet arrival time — a crashed peer stops sending
+in real time whatever the simulation does), every window in `World/RaceNpc` (all compared against
+`LastNetState`, so handing an NPC over is housekeeping about which peer is alive), `Birds/BirdNet`'s
+drop and splat limits and `BirdLife`'s report guard (rate limits on what a client may send, and
+waits for a round trip), and `Items/ItemEvents`' shot guard. A client that slowed its own simulation
+must not get more through — which is why the shot guard was always deliberately real.
+
+Also left alone: the emote blend, the dance crowd poll, camera shake and the idle sway, all
+presentation.
+
+### Two the audit got wrong, and why
+
+- **Build growth is not environment time.** `BuildGrid.Spec(Wood).Seconds` is **2 s** — a gameplay
+  beat, not a world duration. In env units at the default day length that is 0.03 real seconds, so
+  a piece would be fully cured before you let go of the mouse. Short timescales belong to the
+  simulation even when the thing they describe sounds like a world process.
+- **`RaceNpc` and the bird guards were already right.** They read the wall clock because they are
+  network liveness and anti-spam, not because anyone forgot. The fix was to name the clock, not to
+  change it.
+
+### The campfire payload
+
+`PlacedObject.Payload` is now `"e<environment seconds>"`. It used to be a bare Unix stamp purely so
+a fire could outlive the server, and `WorldClock.EnvNow` persisting does that itself now. A bare
+number is therefore a pre-#579 save: the two counters share no origin, so an old fire reads as ashes
+anyone may clear rather than as one lit 1.8 billion seconds in the future that would burn for ever.
+
+### Stopping the day stops growth
+
+`/time speed 0` zeroes `DayFactor`, so environment time stops and nothing burns down or regrows
+while it is stopped. That is consistent rather than surprising: it is the world's clock that stopped.
+
 ## Environment time on the simulation clock (built, phase 3)
 
 `World.WorldClock` is keyed to `Core.SimClock`, not to `Net.ClockSync.ServerNow`:

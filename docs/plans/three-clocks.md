@@ -3,14 +3,14 @@
 
 # Three clocks: environment time, simulation speed, real time
 
-Status: **phases 1-3 built** (PR #594). Tracking issue: #579.
+Status: **phases 1-4 built** (PR #594). Tracking issue: #579.
 
 | Phase | State | What it does |
 |---|---|---|
 | 1 `RealClock` | done | An unscaled wall clock and frame delta, so the real-time bucket survives a time scale |
 | 2 Server-owned sim clock | done | `SimClock`: the server owns `(sim0, epoch, scale)`; every peer flips `Engine.TimeScale` at the same server instant |
 | 3 Env time onto sim time | done | `WorldClock` re-keyed from `ServerNow` to `SimNow`, with a monotonic persisted `EnvNow` |
-| 4 Move the misplaced timers | not done | The ~10 simulation timers currently on the wall clock move to sim or env time |
+| 4 Move the misplaced timers | done | The ~10 simulation timers currently on the wall clock move to sim or env time |
 | 5 Guards | not done | A lint check for wall-clock use in gameplay, and two-peer probes for sim speed and env scaling |
 
 ## Goal
@@ -177,10 +177,10 @@ From the audit of `main`. To **simulation** time:
 | System | Where | Why |
 |---|---|---|
 | Weapon rate of fire | `Items/ItemController.cs:534-597` `_nextShotMs` | the most visible one: firing does not slow in slow motion |
-| NPC racer handoff | `World/RaceNpc.cs:293` | stale, min-hold and handoff grace |
+| ~~NPC racer handoff~~ | `World/RaceNpc.cs:293` | **wrong in this plan: it stays real.** Every window there is compared against `FootPlayer.LastNetState`, a packet arrival time, so it is housekeeping about which peer is alive |
 | Damage attribution window | `Player/FootPlayer.cs:2883`, `:1668` | who gets the kill credit |
 | Gadget bounce cooldown | `Build/GadgetTool.cs:415` | trampoline re-trigger |
-| Bird replication cadence | `Birds/BirdNet.cs:152,181`, `Birds/BirdLife.cs:1324` | send rate and the 800 ms re-report guard |
+| ~~Bird replication cadence~~ | `Birds/BirdNet.cs:152,181`, `Birds/BirdLife.cs:1324` | **wrong in this plan: it stays real.** These are rate limits on what a client may send and a wait for a round trip; a client that slowed its own simulation must not get more through |
 
 To **environment** time, each with its constant re-expressed in env units:
 
@@ -189,8 +189,8 @@ To **environment** time, each with its constant re-expressed in env units:
 | Resource regrowth | `Loot/Gathering.cs:235` `RegrowSeconds` | berries and firewood are a world process |
 | Campfire burn | `Crafting/CampfireClock.cs` | currently a Unix stamp purely to survive restart; `EnvNow` persisting in phase 3 covers that |
 | Craft station progress | `Crafting/CraftStations.cs:46` | same |
-| Build growth | `Build/Structures.cs:124` | already on `ServerNow`, which is real time; growth belongs to the world's pace |
-| Water waves, sea state | `World/WaterField.cs:60` | **open question**: waves are physics-driven but read as visual. Sim is the likely answer now that env rides sim, since the two differ only by `dayFactor` |
+| Build growth | `Build/Structures.cs:124` | **moved to simulation, not environment.** `BuildGrid.Spec(Wood).Seconds` is 2 s — a gameplay beat, not a world duration; in env units that is 0.03 real seconds at the default day length |
+| Water waves, sea state | `World/WaterField.cs:60` | **decided: simulation.** The swell is physics and the boats riding it are simulated, so a boat bobbing at full rate while it crawls forward is exactly the inconsistency the three clocks exist to remove |
 
 Deliberately **left on the wall clock**: the server-side shot guard at `Items/ItemEvents.cs:204` is
 anti-cheat rate limiting, so real time is correct — a client that slowed its own simulation must not

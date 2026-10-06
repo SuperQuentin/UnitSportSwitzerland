@@ -140,7 +140,7 @@ public partial class CampfireNode : StaticBody3D
 
     private void Refresh()
     {
-        bool burning = CampfireClock.Burning(_payload, Net.ClockSync.ServerUnixNow);
+        bool burning = CampfireClock.Burning(_payload, World.WorldClock.EnvNow);
         if (burning == (_burning != null) && _mesh.Mesh != null) return;
         _mesh.Mesh = burning ? StationVisuals.CampfireMesh() : StationVisuals.AshesMesh();
         if (!burning)

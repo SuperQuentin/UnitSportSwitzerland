@@ -30,7 +30,13 @@ public partial class Gathering : Node, Core.IOriginShiftAware
 {
     public enum Resource { None, Stone, Water, TreeWood, Deadwood, Pumpkin, Treat }
 
-    private const double RegrowSeconds = 20 * 60;
+    /// <summary>
+    /// A picked spot comes back half a day of environment time later (#579): berries and firewood
+    /// are a world process, so they regrow with the world rather than on the wall clock. At the
+    /// default 24 min a day that is about 12 real minutes at 1x, where the old value was 20 real
+    /// minutes flat.
+    /// </summary>
+    private const double RegrowSeconds = 12 * 3600;
     private const float TreeReach = 2.3f;
     private const float StreamReach = 1.6f;
     private const float CancelDistance = 0.9f;
@@ -232,7 +238,8 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         _sfx.Play();
     }
 
-    private static double Now => Time.GetTicksMsec() / 1000.0;
+    /// <summary>Environment seconds (#579): regrowth keeps the world's pace.</summary>
+    private static double Now => World.WorldClock.EnvNow;
 
     // ------------------------------------------------------------------------------------
     // rules

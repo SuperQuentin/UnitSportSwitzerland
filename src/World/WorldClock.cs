@@ -59,11 +59,20 @@ public static class WorldClock
     /// <summary>The server runs it, or this client has been handed it.</summary>
     public static bool Active { get; private set; }
 
+    /// <summary>
+    /// The day length in force on this screen: the server's when it owns the clock, this machine's
+    /// own otherwise. Offline <see cref="MinutesPerDay"/> is 0 because no server ever set it, and
+    /// reading that as "stopped" would freeze <see cref="EnvNow"/> at zero — nothing would ever
+    /// regrow or burn down in a single-player game.
+    /// </summary>
+    private static float Pace => Active ? MinutesPerDay
+        : DayNight.Instance?.MinutesPerDay ?? Core.GameSettings.Current.DayLengthMinutes;
+
     /// <summary>Environment seconds per simulated second, 0 when the clock is stopped.</summary>
-    public static double DayFactor => TimeCommand.DayFactor(MinutesPerDay);
+    public static double DayFactor => TimeCommand.DayFactor(Pace);
 
     /// <summary>Environment seconds at a moment of the simulation clock. Pure.</summary>
-    public static double EnvAt(double simNow) => TimeCommand.EnvAt(Env0, EnvEpoch, simNow, MinutesPerDay);
+    public static double EnvAt(double simNow) => TimeCommand.EnvAt(Env0, EnvEpoch, simNow, Pace);
 
     /// <summary>
     /// Environment seconds now, by the server's clock as this peer knows it. Monotonic: what
