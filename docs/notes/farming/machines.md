@@ -137,15 +137,18 @@ until it is 22 m away (#70): it can be driven through until then.
   12-24 s, combine 18-40 s; brakes, swept width).
 - `tools/tractornetcheck.sh` (tier 2): B sees A's plough down (flags and rig), the parked tractor
   keep it, 77 sacks in A's tipper (code and heap), the parked train keep them, A's combine's 50 sacks; then B tows an empty tipper, A's combine alongside augers
-  30 sacks of wheat into it (A's tank 0, B's trailer 30 and its heap, each seen by the other), A is
+  30 sacks of wheat into it (A's tank 0, B's trailer 30 and its heap, each seen by the other); then
+  **on the move**: A refills with 24, B rolls toward the co-op at ~1.5 m/s and A's throttle keeps the
+  spout over the moving bin (`FollowBin`: B's speed plus the gap along the heading), every batch
+  counted at the slower machine's speed (measured: 1.3 m/s or more, 24 moved, B's trailer 54). A is
   refused a delivery claimed at the co-op's door from afar, B is refused seed, B drives to the
   stand-in co-op (`--farmcoop E,N` given to the server and both clients) and tips: the server logs
-  750 CHF paid, B's pocket +750, A sees B's bin up and the trailer empty.
+  54 sacks paid at the market's price, B's pocket the same, A sees B's bin up and the trailer empty.
 - Unit: `MachineLoadTests`.
 
 ## Not done
 
-- Unloading on the move is allowed (both under 3 m/s) but only checked standing; a header trailer;
+- Unloading on the move is checked only on a straight line (no steering to follow a turn); a header trailer;
   a real CVT or hydrostat model (no acceleration-stage setting); PTO; the mower's offset weight (its
   CG is still on the centreline for the physics).
 - Seed, hay and grain items have no `ItemDefs` yet (the farming core adds them): until then the pack

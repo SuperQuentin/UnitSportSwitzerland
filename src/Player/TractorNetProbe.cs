@@ -175,6 +175,28 @@ public partial class TractorNetProbe : ChatProbe
     private static Interiors.DoorIndex.Entry? Coop() => Interiors.DoorIndex.Find(new Interiors.DoorKey(new Interiors.BuildingKey(FarmMarket.StandInTile.E, FarmMarket.StandInTile.N, 0)));
 
     private const int Augered = 30;
+    /// <summary>The second load, unloaded with both machines rolling (three batches).</summary>
+    private const int AugeredMoving = 24;
+    /// <summary>B's pace while A unloads on the move, m/s (the limit is <see cref="FootPlayer.AugerDrivenSpeed"/>).</summary>
+    private const float RollSpeed = 1.5f;
+
+    /// <summary>
+    /// A's combine keeps its spout over B's moving bin as a driver does: B's speed, plus the gap
+    /// along the heading between the spout and the bin's middle, as throttle or brake.
+    /// </summary>
+    private RideInput FollowBin(FootPlayer me, FootPlayer b)
+    {
+        if (b.TipperBinFrame() is not { } bin || b.RideModel is not Truck bt || me.Vehicle is not Truck combine) return new RideInput(0f, 1f, 0f, false);
+        var binBody = bt.Train.Bodies[bt.SectionCount - 1];
+        var middle = bin * new Vector3(0f, 0f, binBody.Spec.Length * 0.5f - binBody.CgAt);
+        var spout = me.ToGlobal(Avatar.FarmMeshBuilder.AugerSpout(combine.Train.Bodies[0].CgAt));
+        var forward = (-bin.Basis.Z with { Y = 0 }).Normalized();
+        float gap = (middle - spout).Dot(forward);
+        float want = Mathf.Clamp(b.WorldVelocity.Length() + 0.8f * gap, 0f, FootPlayer.AugerDrivenSpeed - 0.5f);
+        float off = want - me.GroundSpeed;
+        return off >= 0f ? new RideInput(Mathf.Clamp(off * 0.6f, 0f, 0.6f), 0f, 0f, false)
+            : new RideInput(0f, Mathf.Clamp(-off * 0.5f, 0f, 0.5f), 0f, false);
+    }
 
     private async Task LogisticsA(FootPlayer me)
     {
@@ -206,6 +228,32 @@ public partial class TractorNetProbe : ChatProbe
         me.FarmAction(combine);
         Say("augered");
         if (!await Heard("B", "seen augered", 30)) Fail("B did not agree on the sacks");
+
+        // on the move: a second load while B rolls toward the co-op and A keeps alongside
+        combine.SetTank(new Tank(CropKind.Wheat, AugeredMoving));
+        int before = me.FarmSacksAugered;
+        Say("refilled");
+        if (!await Heard("B", "rolling", 30)) { Fail("B never rolled off"); return; }
+        me.RideControls = () => FollowBin(me, b);
+        me.FarmAction(combine);
+        Expect(combine.AugerOut, "A swings the auger out again, rolling");
+        // each batch counted at the slower machine's speed when it went in
+        float slowest = float.MaxValue;
+        int counted = before;
+        bool rolled = await Until(() =>
+        {
+            if (me.FarmSacksAugered > counted)
+            {
+                counted = me.FarmSacksAugered;
+                slowest = Mathf.Min(slowest, Mathf.Min(me.GroundSpeed, b.WorldVelocity.Length()));
+            }
+            return combine.Tank.Items == 0;
+        }, 45);
+        Expect(rolled && me.FarmSacksAugered - before == AugeredMoving && slowest > 0.5f,
+            $"A's tank empties into B's trailer on the move ({combine.Tank.Items} left, {me.FarmSacksAugered - before} moved, both at {F(slowest)} m/s or more at every batch)");
+        me.FarmAction(combine);
+        me.RideControls = () => new RideInput(0f, 1f, 0f, false, Handbrake: true);
+        Say("rolled");
 
         // a lie: A's claimed position is the co-op's door, its replicated one is far from it
         if (Coop() is { } door)
@@ -253,8 +301,24 @@ public partial class TractorNetProbe : ChatProbe
         Expect(heap != null && heap.Visible && Mathf.Abs(heap.Scale.Y - Augered / 200f) < 0.02f, $"the heap in B's own bin ({F(heap?.Scale.Y ?? 0f, "F2")})");
         Say("seen augered");
 
+        // on the move: B rolls slowly toward the co-op while A's combine unloads alongside
+        if (!await Heard("A", "refilled", 30)) { Fail("A never refilled"); return; }
+        me.RideControls = () => me.GroundSpeed < RollSpeed
+            ? new RideInput(Mathf.Clamp((RollSpeed - me.GroundSpeed) * 0.5f, 0.05f, 0.4f), 0f, 0f, false)
+            : new RideInput(0f, me.GroundSpeed > RollSpeed + 0.5f ? 0.3f : 0f, 0f, false);
+        await Until(() => me.GroundSpeed > 1f, 10);
+        int before = me.FarmSacksAugered;
+        float slowest = float.MaxValue;
+        Say("rolling");
+        await Until(() =>
+        {
+            if (me.FarmSacksAugered > before) slowest = Mathf.Min(slowest, me.GroundSpeed);
+            return _heard.Any(l => l.Contains("TN A rolled")) || me.GlobalPosition.DistanceTo(door.World) < 30f;
+        }, 50);
+        Expect(tractor.TrailerTank == new Tank(CropKind.Wheat, Augered + AugeredMoving) && me.FarmSacksAugered - before == AugeredMoving && slowest > 0.5f,
+            $"B's trailer took {me.FarmSacksAugered - before} more on the move, at {F(slowest)} m/s or more ({tractor.TrailerTank})");
+
         // to the co-op, then tip
-        await Seconds(3);
         me.RideControls = () => new RideInput(0.5f, 0f, 0f, false);
         await Until(() => me.GlobalPosition.DistanceTo(door.World) < 18f, 40);
         me.RideControls = () => new RideInput(0f, 1f, 0f, false, Handbrake: true);
@@ -270,7 +334,7 @@ public partial class TractorNetProbe : ChatProbe
         bool paid = await Until(() => tractor.TrailerTank.Items == 0, 15);
         int gained = (ItemController.Instance?.Inventory.Cash ?? 0) - cash;
         // the market's price at this co-op this week (#494, Farming.FarmPrices: season and wishes)
-        int due = (int)Farming.FarmPrices.Delivery(ItemDefs.Get(ItemId.Wheat)?.Value ?? 0f, ItemId.Wheat, Augered, Farming.FarmSales.Month, door.Building.ToString(), Farming.FarmSales.Week);
+        int due = (int)Farming.FarmPrices.Delivery(ItemDefs.Get(ItemId.Wheat)?.Value ?? 0f, ItemId.Wheat, Augered + AugeredMoving, Farming.FarmSales.Month, door.Building.ToString(), Farming.FarmSales.Week);
         Expect(paid && tractor.Tipping && me.FarmFrancsPaid == due && gained == due, $"B tips at the co-op: paid {me.FarmFrancsPaid} CHF (pocket +{gained}, due {due}), the trailer {tractor.TrailerTank.Items}");
         Say("tipped");
         if (!await Heard("A", "seen tipped", 30)) Fail("A did not see the tipped, empty trailer");
