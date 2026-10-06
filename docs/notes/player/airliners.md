@@ -119,9 +119,15 @@
   2.35 m/s); `--freightercheck [shots] --world fixture` (quick: G lowers the ramp, the flight deck, the
   stairs, a troop seat, down the ramp onto the ground and back up, the para and crew door buttons,
   the controls, launched past the settle (#456: flying on unhurt), the ramp opened in flight, stood up
-  onto the flight deck, walked into the hold at 73 m/s, the controls again without a knock;
-  `shots` windowed: `test_output/freighter/`, outside views of the level ramp in flight too; on real
-  terrain windowed the in-flight walk is still flaky, #542); `tools/freighternetcheck.sh` (net: B sees A's ramp go down,
+  onto the flight deck, walked into the hold at 73 m/s, stood at the ramp's aft end through long
+  frames (#542: 16 physics steps a frame, the aircraft pushed 1.1 m a step), the controls again without
+  a knock; `shots` windowed: `test_output/freighter/`, outside views of the level ramp in flight too).
+  **On the fixture the flight walk is on a frozen aircraft**: past the fixture's ground a parked one
+  holds still (`VehicleBody` waits for collision under it), so only the real map
+  (`--chunks <real> --at 2560070,1188200`, Payerne, windowed) walks a moving one; the long-frames stage
+  pushes the aircraft itself so it moves on the fixture too. The walk aims in the frame the walker is
+  carried in (`FootPlayer.DeckFrame`), not the aircraft as drawn now, which leads it by a step or more
+  (#542); `tools/freighternetcheck.sh` (net: B sees A's ramp go down,
   walks up the parked one's ramp, shuts it by its button, A sees it shut).
   **Vehicles in the hold** (#418's carrying, merged): the hold is a `CargoBay` between the benches; a
   car drives up the open ramp, is carried, ties down with the handbrake and reverses out

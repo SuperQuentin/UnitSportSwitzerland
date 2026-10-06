@@ -29,6 +29,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | jump | Space / A | ok: A | keep |
 | crouch_slide | Ctrl, C / B | ok: B, or crouch for real (#437) | keep |
 | interact_mount | E / Y | ok: Y; grip a door, an item, a radio, or reach out and grip what E would act on (#437) | keep |
+| elevator call / floor list (#557) | E / Y at the call button or in the cabin | ok: Y, or grip the call button or the cabin's panel; the list is a pointable panel (`XrUi`) | keep |
+| flat door, its lock (#557) | E / Y at the door | ok: Y, or grip the door; the dial on the stick | keep |
 | ride_menu | R / Y with nothing near | ok: Y, wrist menu (#437) | keep |
 | car_door / gather | G / X (tap / hold) | ok: X; doors by grip | gather = **grip and pull** the resource |
 | emote_wheel | B / D-pad ↑ | ok: hold R stick ↑, aim with the right hand (#437) | keep |

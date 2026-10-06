@@ -36,7 +36,10 @@ public readonly record struct VehicleSlot(
     //   body — and is not in the code.
     // Setting this and expecting the trailer to look loaded fails silently and reads as a physics
     // bug, which is why it is spelled out here.
-    float Load = 0.5f)
+    float Load = 0.5f,
+    // Taken away, it comes back (#554): a marina's boats are put back at their places a while after
+    // one is taken, once nobody is near. A parked car does not: whoever drove it off has it.
+    bool Respawns = false)
 {
     /// <summary>
     /// The node name the server promotes this slot under. Deterministic, so a second wake of the
@@ -120,6 +123,49 @@ public static class DormantSlots
                 (byte)(h >> 36 & 7),
                 // a van or estate in roughly one bay in eight, and never in a motorcycle bay
                 (h >> 40 & 7) == 0 && bay.Kind != ParkingBayKind.Motorcycle));
+        }
+    }
+
+    /// <summary>Water under a marina boat's keel enough to float it, m (#383).</summary>
+    public const float MarinaMinDepth = 0.7f;
+
+    /// <summary>How far under the still surface a moored boat's keel sits (its origin), m: speedboat, jetski.</summary>
+    public const float SpeedboatDraught = 0.28f, JetskiDraught = 0.23f;
+
+    /// <summary>
+    /// The boats moored along a tile's harbour jetties (#554, before it #383's <c>MarinaBoats</c>).
+    /// A jetty belongs to the tile its ribbon's middle is in, as its deck does; its boats are
+    /// <see cref="Jetty.BoatBerths"/> — already a pure, named choice of one place in three, at most
+    /// four — wherever there is <see cref="MarinaMinDepth"/> of water. Each slot stands at its keel:
+    /// the still level less the boat's draught, which is exactly the state the boats used to be
+    /// placed with.
+    ///
+    /// <para>
+    /// The owner is the tile plus the jetty's own name (<c>E_N_m1a2b3c4d</c>, the berths' id prefix)
+    /// and the ordinal is the berth's index along it, so a dry berth dropped here keeps the others'
+    /// names. A boat respawns (<see cref="VehicleSlot.Respawns"/>): a harbour is restocked.
+    /// </para>
+    /// </summary>
+    /// <param name="water">The still water level and the bed at a point (LV95), or null where dry or unknown.</param>
+    public static void ForMarina(TileId id, IReadOnlyList<Jetty> jetties,
+        Func<double, double, (float Level, float Bed)?> water, int speedboatKind, int jetskiKind, List<VehicleSlot> into)
+    {
+        foreach (var jetty in jetties)
+        {
+            var (me, mn) = jetty.Ribbon.Middle;
+            if (TileId.FromLv95(me, mn) != id) continue;
+            var berths = jetty.BoatBerths();
+            for (int k = 0; k < berths.Count; k++)
+            {
+                var b = berths[k];
+                if (water(b.E, b.N) is not { } w || w.Level - w.Bed < MarinaMinDepth) continue;
+                string owner = $"{id.E}_{id.N}_{b.Id[..b.Id.IndexOf('_')]}";
+                float draught = b.Speedboat ? SpeedboatDraught : JetskiDraught;
+                // the berth's heading is degrees clockwise from grid north; a yaw turns the other way
+                float yaw = -(float)(b.Heading * Math.PI / 180);
+                into.Add(new VehicleSlot(owner, k, b.E, b.N, w.Level - draught, Wrap(yaw),
+                    b.Speedboat ? speedboatKind : jetskiKind, 0, false, Respawns: true));
+            }
         }
     }
 

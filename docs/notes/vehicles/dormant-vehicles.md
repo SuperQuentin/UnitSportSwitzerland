@@ -97,12 +97,52 @@
   pose, undamaged, unclaimed, nobody within 200 m — because one that re-sleeps anywhere else
   teleports in front of whoever is watching, and one that re-sleeps damaged silently repairs itself
   (#497's analysis).
-- **The model does not change on waking** (#552): dormant and woken are both `BuildParkedVisual`.
-  What still differs is everything a live `VehicleBody` adds — its settling onto the ground, a
-  heavy's sections posed axle by axle, lights, hurtbox outline — which is the follow-up for a
-  seamless switch.
+- **Waking is seamless** (#560): the live vehicle appears exactly where its dormant copy stood, on
+  the very frame the copy goes (`--wakecheck`: 0.000 m and 0.00 deg on the first frame and two
+  seconds later, for a car, a lone trailer and a coupled artic; a boat matches on its first frame and
+  then rides the waves, which is the point of it being live). What made it pop, and the fix:
+  - **A yard was one height**, the raw ground at its middle: on a slope its far rows floated or sank
+    by metres (a lone trailer 2.1 m in the air at La Praille). `Yards` now gives each slot its own
+    ground (`GroundUnder`): a car the highest point under its box's corners, where a box set down on
+    a slope comes to rest; a goods vehicle the ground at its origin. Online the server keeps a woken
+    vehicle exactly at its slot, so the slot's height is where it stands, for good.
+  - **A goods vehicle is drawn section by section** (`DormantLook.Sections`, each section merged in
+    its own frame) and posed by `HeavyGround.Stand` on `GroundQuery.Under` — the very function and
+    query a parked train stands on in `VehicleBody` — not level and straight. Where collision has
+    not been built yet the terrain's height stands in, and the tile is posed again once it has.
+  - **A dormant box is never ground** (`GroundQuery` looks past `DormantBody`, as past players): a
+    woken train posed in its `_Ready` stood its axles on its own dormant box, still in the physics
+    space that frame, a metre up; a parked one could stand on a neighbour's.
+  - **A woken vehicle is placed settled** (`VehicleManager.Place(.., settled: true)`,
+    `VehicleBody.PlacedSettled`): offline it was put a hand's breadth up and fell 0.15 m; now it is
+    put exactly there and asleep, as a dedicated server places everything. A boat still floats.
+  - **A train is posed in `_Ready`**, not one `_Process` later, when its first frame showed it level.
+  - **No "woken" broadcast**: the copy goes when the vehicle node enters the tree, on every peer
+    (`OnVehicleAdded`). The broadcast went at once and the spawn at the server's next poll, so it
+    could empty the bay for a frame. A client asks for a wake once per `AskAgainSeconds` (2 s), not
+    every frame the aim ray hits the box.
+  - Still different on purpose: a live vehicle can be outlined when aimed at (a dormant one wakes the
+    moment it is aimed at), and a woken boat bobs.
+- **Harbours are the third provider** (#554): `DormantSlots.ForMarina` turns each jetty's
+  `BoatBerths` into boats at their keel (`world/landings`). Its Godot half, `DormantVehicles.Marina`,
+  reads the tile's full grid, cover and water on the fill worker, only on a tile a jetty's middle is in.
+  A streaming client gets the server's landings after its first tiles: `Landings.Changed` drops every
+  fleet and fills them again on the next look.
+- **A slot can respawn** (`VehicleSlot.Respawns`, boats only): when a woken slot's vehicle leaves the
+  world (`VehicleManager.ChildExitingTree`: taken by a player, wrecked and cleared), the deciding peer
+  (server, or offline) starts a clock; `RespawnSeconds` (180) later, with nothing within 4 m and
+  nobody within 40 m, `Slept` puts it back to sleep on every peer and it is drawn again. A vehicle
+  that still exists keeps its slot awake however far it went. Cars and yards do not respawn: whoever
+  drove one off has it.
 - **Switchable**: `Systems.Dormant` (`--systems ... ,dormant`), created in `ClientWorld` and
   `ServerWorld`. Absent `--systems`, players get it.
+- **`--wakecheck[,SHOT.png] --wakekind car|boat|heavy|artic`** (`src/Vehicles/WakeProbe`): wakes the
+  slot of that kind nearest the spawn and compares the live vehicle's sections with
+  `DormantVehicles.DrawnPoses`, headless, on the first frame and two seconds later; with a shot, the
+  pictures before and after and their mean pixel difference. Quick tier for a car
+  (`fixture:parking`) and a boat (`fixture:lake`); the fixtures have no industrial yard, so `heavy`
+  and `artic` run on real terrain: `--chunks <real> --at 2498800,1115800 --origin 2498800,1115800`
+  (La Praille: a lone trailer on a slope, and a coupled artic).
 - **Checks**: `tools/parkingnetcheck.sh` (tier 2, `src/Vehicles/ParkingNetProbe`): a server and two
   headless clients on the `parking` fixture course — A wakes a car, B joins afterwards and must see
   the same vehicle under the same name in the same bay with its own dormant copy gone. Needs no

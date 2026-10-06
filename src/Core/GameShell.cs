@@ -83,7 +83,7 @@ public partial class GameShell : Node
         string[] harmless =
         {
             "--name", "--chunks", "--landings", "--cache", "--title", "--nocapture", "--rings", "--horizon", "--fog", "--detail", "--data",
-            "--generated", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--shoulder", "--voice", "--time",
+            "--generated", "--generated-roads", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--shoulder", "--voice", "--time",
             "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--airliner", "--perflog",
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world",
             "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",

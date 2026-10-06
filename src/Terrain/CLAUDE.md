@@ -25,6 +25,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `interior-light` — Rooms lit by the hour in every style (#388): one interior body + PS1/Cartoon/Realistic wrappers, `RoomLights` table (window daylight, sun patches, lamps), indoor ambient, portals tonemapped once
 - `wall-mirrors` — A mirror over every washbasin (`Interiors/WallMirror`, #439): reflected-eye viewport like the cab mirrors, only the nearest in front renders, every other frame; shows the VR player's own body and hands; `--portaldemo` shot `pd_mirror.png`
 - `several-doors` — Several doors on one building (#498): `DoorKey` = building + slot (slot 0's text unchanged), `DoorBudget` spacing rules, extra doors along a long facade and round the back, a barn's pedestrian side door, `DoorHang`/`Vehicle` per door (a loading bay is one line), a doorway each inside, `--doorcheck`
+- `apartment-blocks` — Apartment blocks (#557): a stairwell (lobby, switchback, elevator from 3 levels) per front door, flats laid out from their front door (T, spine, gallery, studio), corridors for wide and deep blocks, shops under flats, a shared basement with car park, laundries, compartments, shelter; working elevator (server `LiftRide`, group teleport), flats' front doors (leaf, synced, 40% locked, the dial); `--flatcheck`, `--flattour`, `tools/liftsynccheck.sh`, plan v17
 - `door-size` — How big a door is, outside and inside (#509): `BuildingFootprint.FitUnderEave` is the one place a main door's height is settled (kind's own, capped under `box.Eave` by `DoorUnderEave`, floored at `MinDoorHeight`), a wall too low is demoted not squashed, `InteriorLayout.DoorHeight`/`EntrancePlan.DoorHeight` carry it inside so the opening matches, plan v15
 - `perf-door-portals` — `DoorPortals`/`DoorwayGhosts`/`DoorLights` allocate nothing per frame (reused lists, static `StringName`s, `live` written on change, ghosts scanned at 10 Hz); interior `ArrayMesh` built on the worker, collision a frame later
 - `runtime` — Runtime: (`src/`): `Terrain/ChunkManager` streams LOD rings around anchors (workers build arrays, main thread...
@@ -35,6 +36,7 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `view-cone-priority` — The load queue is `ring × view weight`: on-screen tiles first, from the live camera's cone (FOV, 16 sectors, cheap re-sort)
 - `generated-fill` — Generated fill: every tile with no real data is generated and blended into the real tiles beside it (ownership, anchor, blend, merge, horizon, server, off switch)
 - `generated-relief` — The generator: 500 m heightmap of CH embedded, lakes, drainage -> rivers/roads/rails/villages, 25 m + 5 m field lattices, gotchas (carve only down, wall span)
+- `generated-roads-roadgen` — #559: generated road tiles go through RoadGen's network stage at runtime (halo 1, line keys, stride-5 ground, shared UrbanField, the stage writes into its input), BlendCheck --generated-roads, --generated-roads raw
 - `cachingchunksource` — `CachingChunkSource`: decorates the source chain with a byte-budgeted LRU of decoded tiles, so ground that is left...
 - `road-markings` (tools note) — v3 road paint: `RoadPaintBuilder` draws the `.road` PANT layer as a second road surface (style 6, depth bias, dither fade)
 - `download-job` — Background region downloads (#515): `DownloadJob` runs MapCore's Planner steps on a worker, survives worlds deliberately, polled progress; new tiles arrive on the next world load
@@ -43,6 +45,8 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `landings` (world) — `PierMeshBuilder`: a tile's piers and jetties as one more roads-mesh surface (Prop role) and road collision cells; `IChunkSource.LoadLandingsAsync`; `ChunkManager.RebuildPiers` when the landings change
 - `parking-runtime` — Car parks at runtime (#499): the pad through `PavementBuilder`, planters through `IslandBuilder`, walks as #119 sidewalks, bay lines and the disabled roundel as `PNT2`, `ParkingBuilder` for the boom/kiosk/shelter/P sign, the `PARK` bay list as a wire contract
 - `perf-collision-commits` — Collision is queued and committed one 4x4 cell piece a frame, nearest a body first; a new collision layer must go through that queue
+- `perf-static-city` — what a city's static things cost (#553): CPU-bound frames, buildings 1.1–1.6 ms of GPU, the dormant layer ~0.3 ms, shop signs 1 300 draws → drawn to 200 m; tiles past the building/road ring shed them (`TileUnfurnished`)
+- `occlusion-culling` — buildings as occluders near the ground (#553): 125 m building cells round the camera, box occluders inset 0.5 m for buildings that fill their plan box, cells only under 40 m above ground, off in VR and during a sightline cut
 - `perf-ring-key` — `EvaluateRings` compares its inputs in `RingKeyChanged()` (no string key); a new desired-set input goes there
 
 ## Commands

@@ -53,6 +53,13 @@ public partial class BankSigns : Node
 
     public BankSigns() : this(null!) { }
 
+    /// <summary>
+    /// A sign is drawn to here (#553): a 0.55 m plate is a few pixels at this distance and its
+    /// lettering long unreadable. Every commercial building out to the building ring had one, three
+    /// draws each (the plate and two transparent labels), with no range: thousands over a city.
+    /// </summary>
+    private const float DrawnM = 200f;
+
     public override void _Ready()
     {
         _plate = new StandardMaterial3D
@@ -61,12 +68,18 @@ public partial class BankSigns : Node
             AlbedoColor = new Color(0.10f, 0.20f, 0.36f),
         };
         _chunks.TileFurnished += OnFurnished;
+        _chunks.TileUnfurnished += OnUnfurnished;
     }
 
     public override void _ExitTree()
     {
-        if (_chunks != null) _chunks.TileFurnished -= OnFurnished;
+        if (_chunks == null) return;
+        _chunks.TileFurnished -= OnFurnished;
+        _chunks.TileUnfurnished -= OnUnfurnished;
     }
+
+    /// <summary>The tile shed its buildings (#553): their signs go with them.</summary>
+    private static void OnUnfurnished(TileId id, ChunkNode node) => node.GetNodeOrNull(NodeName)?.QueueFree();
 
     private void OnFurnished(TileId id, ChunkNode node, DoorSpot[] doors)
     {
@@ -90,6 +103,7 @@ public partial class BankSigns : Node
             {
                 Mesh = new BoxMesh { Size = new Vector3(w, 0.55f, 0.08f) },
                 MaterialOverride = d.Bank ? _plate : Plate(d.Shop),
+                VisibilityRangeEnd = DrawnM,
             });
             // lettering on both faces: whichever way the facade's outward runs, one reads from the street
             foreach (float side in new[] { 1f, -1f })
@@ -103,6 +117,8 @@ public partial class BankSigns : Node
                     Shaded = false,
                     DoubleSided = false,
                     RenderPriority = 1,
+                    VisibilityRangeEnd = DrawnM,
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
                     Transform = new Transform3D(new Basis(Vector3.Up, side > 0 ? 0 : Mathf.Pi), new Vector3(0, 0, 0.06f * side)),
                 });
             root.AddChild(sign);

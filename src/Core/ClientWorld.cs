@@ -105,6 +105,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Loot.LootChanceCheck.Requested, Loot.LootChanceCheck.Run),
         (() => Loot.ShopCheck.Requested, Loot.ShopCheck.Run),
         (() => Interiors.DoorCheck.Requested, Interiors.DoorCheck.Run),
+        (() => Interiors.FlatCheck.Requested, Interiors.FlatCheck.Run),
         (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
         (() => ChatCheck.Requested, () => ChatCheck.Run(this)),
         (() => StyleKit.ReportRequested, StyleKit.Report),
@@ -165,6 +166,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             MouseCapture.Disabled = true;
             AddChild(new Interiors.IkeaProbe { Name = "IkeaProbe" });
+            return;
+        }
+        // an apartment block's inside, hand-made (#557): no terrain, no server
+        if (Interiors.FlatTour.ParseArgs() is { Requested: true } flatTour)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.FlatTour(flatTour.Shot, Interiors.FlatTour.BlockArg()) { Name = "FlatTour" });
             return;
         }
         // the five industrial sites, hand-made (#497): no terrain, no server
@@ -290,6 +298,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the auto build cap depends on whether tiles are coming over the wire
         _chunks.Streaming = () => _streamer?.ServerReachable == true;
         _chunks.Initialize(_cache, origin, manifest, material, roadMaterial, buildingMaterial, treeMaterial, waterMaterial);
+        // occlusion culling with the buildings round the camera as occluders (#553)
+        _chunks.ApplyOcclusion();
         _chunks.PierMaterial = pierMaterial;
         // the landings and jetties (#377) before the first tile builds: their piers ride in its build
         World.Landings.Use(await World.Landings.LoadAsync(_cache));
@@ -379,7 +389,6 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the paddle steamer at the Nyon landing (#303): likewise
         AddChild(new World.SteamerBerth(_chunks));
         // jetskis and speedboats along the harbour jetties (#383): likewise
-        AddChild(new World.MarinaBoats(_chunks));
         // A320s with airstairs, the AN-124 and the freighter at the airports' stands (#422), put back a while after they are taken
         if (Systems.On(Systems.Airports)) AddChild(new World.AirportStands(_chunks));
         if (World.EggProbe.Mode() is { } eggMode) AddChild(new World.EggProbe(eggMode, () => LocalPlayer, _chunks, origin));
@@ -530,6 +539,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             new(() => TruckProbe.Requested, ToolAnchor.AtTarget, _ => new TruckProbe(chunks, origin)),
             new(() => Terrain.ParkingProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
                 _ => new Terrain.ParkingProbe(chunks, origin, Terrain.ParkingProbe.ParseArgs().Shot)),
+            new(() => Vehicles.WakeProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new Vehicles.WakeProbe(chunks, origin, Vehicles.WakeProbe.ParseArgs().Shot)),
             // the anchor on the spawn, so the tile under the rider arrives with collision: without
             // it the probe drops through an empty world and measures gravity
             new(() => RideProbe.ParseArgs() != null, ToolAnchor.AtTarget, _ =>
@@ -561,6 +572,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 return new FlightProbe(_spectator!, chunks,
                     new Vector3(float.Parse(fly[0], inv), float.Parse(fly[1], inv), float.Parse(fly[2], inv)),
                     float.Parse(fly[3], inv), float.Parse(fly[4], inv), double.Parse(fly[5], inv));
+            }),
+            new(() => StreetFlight.ParseArgs() != null, ToolAnchor.Own, _ =>
+            {
+                var (speed, seconds) = StreetFlight.ParseArgs()!.Value;
+                FreeSpectator();
+                return new StreetFlight(_spectator!, chunks, origin, speed, seconds);
             }),
             new(() => ShotRunner.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
@@ -655,7 +672,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
-            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Loot.BankProbe.Role != null
+            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Loot.BankProbe.Role != null
             || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
@@ -679,6 +696,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.InventoryUiProbe.Requested) AddChild(new Items.InventoryUiProbe(items));
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
+        if (Interiors.LiftSyncProbe.Role != null) AddChild(new Interiors.LiftSyncProbe(items, origin));
         if (Loot.BankProbe.Role != null) AddChild(new Loot.BankProbe(items, origin));
         if (Loot.ShopProbe.Role != null) AddChild(new Loot.ShopProbe(items, origin));
         if (Player.WheelProbe.WatchRole != null) AddChild(new Player.WheelProbe { Name = "WheelProbe" });

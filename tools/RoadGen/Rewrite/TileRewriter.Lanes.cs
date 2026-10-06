@@ -42,7 +42,7 @@ public static partial class TileRewriter
     }
 
     /// <summary>OSM turn restrictions (#347, <c>osm_nodes.tsv</c>) by their from-line.</summary>
-    private sealed class Restrictions
+    internal sealed class Restrictions
     {
         /// <summary>The via node lies this close to the junction's centre (the reader snapped the ways within 30 m).</summary>
         private const double Reach = 30.0;
