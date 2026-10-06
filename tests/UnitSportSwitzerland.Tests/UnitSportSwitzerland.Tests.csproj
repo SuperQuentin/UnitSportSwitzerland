@@ -53,6 +53,7 @@
     <Compile Include="..\..\src\Movie\MovieFile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Movie\BeatDetector.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Movie\Pcm.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\SoundRing.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\InnerDoorLock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Loot\ShopLedger.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SaveQueue.cs" Link="Game\%(Filename)%(Extension)" />

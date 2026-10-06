@@ -20,7 +20,11 @@ public partial class MovieStage : Node3D
     /// <summary>Seconds of movie per second; negative plays backwards.</summary>
     public double Speed { get; set; } = 1;
     public bool Playing { get; set; }
+    /// <summary>The playhead is being dragged: the sound holds its breath (#656).</summary>
+    public bool Scrubbing { get; set; }
     public double Duration => Project.Duration;
+    /// <summary>The movie's sound clips (#656).</summary>
+    public AudioDeck Deck { get; } = new();
 
     private readonly WorldOrigin _origin;
     private readonly List<FootPlayer> _puppets = new();
@@ -35,6 +39,7 @@ public partial class MovieStage : Node3D
         _origin = origin;
         // before the puppets (children, priority 0): they draw this frame what was written this frame
         ProcessPriority = -1;
+        AddChild(Deck);
     }
 
     /// <summary>Another project (loaded, or a new one): every puppet goes, the next frame makes the new ones.</summary>
@@ -48,6 +53,7 @@ public partial class MovieStage : Node3D
             p.QueueFree();
         }
         _puppets.Clear();
+        Deck.Reset();
         Seek(0);
     }
 
@@ -80,6 +86,7 @@ public partial class MovieStage : Node3D
             else if (Time <= 0) { Time = 0; Playing = false; }
         }
         Apply();
+        Deck.Follow(Project, Time, Speed, Playing && !Scrubbing);
     }
 
     /// <summary>Every lane's puppet as it was at <see cref="Time"/>.</summary>

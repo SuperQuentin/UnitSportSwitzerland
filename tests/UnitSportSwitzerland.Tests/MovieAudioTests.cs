@@ -68,6 +68,30 @@ public class MovieAudioTests
         Assert.Equal(44 + 6, wav.Length);
     }
 
+    [Fact]
+    public void TheGameSoundRingKeepsTheLastSecondsInTime()
+    {
+        var ring = new SoundRing(2, 100);   // 2 s at 100 Hz
+        var block = new float[50];
+        for (int k = 0; k < 6; k++)
+        {
+            Array.Fill(block, k / 10f);
+            ring.Append(block, 0.5 * (k + 1));   // half a second each, the last at 3 s
+        }
+        Assert.Equal(200, ring.Count);
+        Assert.Equal(1.0, ring.Oldest, 9);
+        var all = ring.Slice(double.NegativeInfinity, out double start);
+        Assert.Equal(1.0, start, 9);
+        Assert.Equal(200, all.Length);
+        Assert.Equal((short)(0.2f * 32767f), all[0]);
+        var late = ring.Slice(2.5, out start);
+        Assert.Equal(2.5, start, 9);
+        Assert.Equal(50, late.Length);
+        Assert.Equal((short)(0.5f * 32767f), late[0]);
+        ring.Clear();
+        Assert.Empty(ring.Slice(0, out _));
+    }
+
     private static MovieProject WithSong(out Clip song)
     {
         var p = new MovieProject(new[] { "RideKindId" });

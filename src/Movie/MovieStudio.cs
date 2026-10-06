@@ -27,6 +27,11 @@ public partial class MovieStudio : Screen
     private OptionButton _speed = null!;
     private int _focusLane = -1;
     private double _shownTime = -1;
+    private SoundImport? _import;
+    private Modal? _importModal;
+    private ProgressBar? _importBar;
+    private Label? _importStatus;
+    private CheckButton _worldSound = null!;
     private bool _shownPlaying;
 
     private static readonly StringName Forward = PlayerInput.TriggerRight, Backward = PlayerInput.TriggerLeft;
@@ -44,8 +49,8 @@ public partial class MovieStudio : Screen
     public static MovieStudio Create(ClientWorld world, double? startAt = null) => new(world, startAt) { Name = "MovieStudio" };
 
     private static string Hints(InputDevice device) => device == InputDevice.KeyboardMouse
-        ? "Space play  ·  J / L play back / forward  ·  ← → frame (Shift 1 s)  ·  S split  ·  Del delete  ·  Ctrl+D duplicate  ·  Tab next actor  ·  right-drag orbit, wheel zoom"
-        : "Y play  ·  LT / RT shuttle  ·  X split  ·  D-pad on the timeline: frame  ·  right stick orbit, LB / RB zoom  ·  B back";
+        ? "Space play  ·  J / L play back / forward  ·  ← → frame (Shift 1 s)  ·  S split  ·  Del delete  ·  Ctrl+D duplicate  ·  Tab next actor  ·  M marker, Ctrl+← → between markers, double-click a beat  ·  drop a song on the window  ·  right-drag orbit, wheel zoom"
+        : "Y play  ·  LT / RT shuttle  ·  X split  ·  R3 marker on the beat  ·  D-pad on the timeline: frame  ·  right stick orbit, LB / RB zoom  ·  B back";
 
     public override void _Ready()
     {
@@ -103,6 +108,11 @@ public partial class MovieStudio : Screen
         Tool(transport, "Duplicate", "A copy after it (Ctrl+D)", Duplicate);
         Tool(transport, "Delete", "Remove the selected clip (Del)", Delete);
         transport.AddChild(UiKit.Spacer(w: 12));
+        Tool(transport, "Music…", "Add a song (.wav, .ogg, .mp3) at the playhead; or drop it on the window", PickMusic);
+        _worldSound = new CheckButton { Text = "World sound", ButtonPressed = true, TooltipText = "The puppets' live engines and steps; off when the recorded game sound plays instead" };
+        _worldSound.Toggled += WorldSound;
+        transport.AddChild(_worldSound);
+        transport.AddChild(UiKit.Spacer(w: 12));
         Tool(transport, "New", "Start an empty movie", NewMovie);
         Tool(transport, "Open", "Open a saved movie", OpenMovie);
         Tool(transport, "Save", "Save this movie", SaveMovie);
@@ -116,6 +126,9 @@ public partial class MovieStudio : Screen
 
         PlayerInput.DeviceChanged += ShowHints;
         ShowHints();
+        GetWindow().FilesDropped += OnFilesDropped;
+        // the recorded game sound and the puppets' live sound would play twice
+        if (MovieSession.Project.Audio.Any(a => a.Game)) _worldSound.ButtonPressed = false;
         Callable.From(() =>
         {
             _timeline.Fit();
@@ -136,6 +149,8 @@ public partial class MovieStudio : Screen
     public override void _ExitTree()
     {
         PlayerInput.DeviceChanged -= ShowHints;
+        GetWindow().FilesDropped -= OnFilesDropped;
+        Audio.SfxBus.ApplyVolumes();   // the world's buses as the settings have them again
         if (IsInstanceValid(_camera))
         {
             // the world may be on its way out with the studio still open (leaving to the menu)
@@ -179,6 +194,7 @@ public partial class MovieStudio : Screen
     public override void _Process(double delta)
     {
         // a pad's triggers shuttle: the harder, the faster
+        if (_import != null) StepImport();
         float shuttle = Input.GetActionStrength(Forward) - Input.GetActionStrength(Backward);
         if (Math.Abs(shuttle) > 0.15f) { _stage.Playing = false; _stage.Seek(_stage.Time + shuttle * 2 * delta); }
 
@@ -256,8 +272,11 @@ public partial class MovieStudio : Screen
                 case Key.L: Play(1); break;
                 case Key.K: _stage.Playing = false; break;
                 case Key.J: Play(-1); break;
+                case Key.Left when k.CtrlPressed: ToMarker(-1); break;
+                case Key.Right when k.CtrlPressed: ToMarker(1); break;
                 case Key.Left: Step(k.ShiftPressed ? -1 : -1 / Channels.Rate); break;
                 case Key.Right: Step(k.ShiftPressed ? 1 : 1 / Channels.Rate); break;
+                case Key.M: Mark(); break;
                 case Key.Home: Seek(0); break;
                 case Key.End: Seek(_stage.Duration); break;
                 case Key.S when !k.CtrlPressed: Split(); break;
@@ -273,6 +292,7 @@ public partial class MovieStudio : Screen
         {
             if (b.ButtonIndex == JoyButton.Y) { Play(1); GetViewport().SetInputAsHandled(); }
             else if (b.ButtonIndex == JoyButton.X) { Split(); GetViewport().SetInputAsHandled(); }
+            else if (b.ButtonIndex == JoyButton.RightStick) { Mark(); GetViewport().SetInputAsHandled(); }
         }
     }
 
@@ -360,6 +380,77 @@ public partial class MovieStudio : Screen
         });
     }
 
+    // ---- sound (#656) ----------------------------------------------------------------------------
+
+    private void PickMusic()
+    {
+        var dialog = new FileDialog
+        {
+            FileMode = FileDialog.FileModeEnum.OpenFile,
+            Access = FileDialog.AccessEnum.Filesystem,
+            Filters = new[] { "*.wav, *.ogg, *.mp3 ; Sound" },
+            UseNativeDialog = true,
+            Title = "Add a song to the movie",
+        };
+        dialog.FileSelected += path => { Import(path); dialog.QueueFree(); };
+        dialog.Canceled += dialog.QueueFree;
+        AddChild(dialog);
+        dialog.PopupCentered(new Vector2I(900, 600));
+    }
+
+    private void OnFilesDropped(string[] files)
+    {
+        if (files.FirstOrDefault(AudioDecode.Supported) is { } song) Import(song);
+    }
+
+    /// <summary>Copies, decodes and analyses <paramref name="path"/> behind a progress bar; it lands at the playhead.</summary>
+    public void Import(string path)
+    {
+        if (_import != null) return;
+        _import = SoundImport.Start(path, out var error);
+        if (_import == null) { Modal.Inform(this, "Could not add the song", error ?? "Unknown error"); return; }
+        _importModal = Modal.Progress(this, "Adding a song", System.IO.Path.GetFileName(path), () => _import = null,
+            out var bar, out var status);
+        _importBar = bar;
+        _importStatus = status;
+    }
+
+    private void StepImport()
+    {
+        var job = _import!;
+        bool done = job.Step();
+        if (_importBar != null) _importBar.Value = job.Progress;
+        if (_importStatus != null && _importStatus.Text != job.Stage) _importStatus.Text = job.Stage;
+        if (!done) return;
+        _import = null;
+        _importModal?.CloseModal();
+        var asset = job.Result();
+        var clip = MovieSession.Project.AddAudio(MovieSession.Project.AudioLaneFor("Music"), asset, _stage.Time);
+        _timeline.Resync();
+        _timeline.Select(clip.Id);
+        ShowHints();
+    }
+
+    /// <summary>The world's own sound buses (engines, steps, radios) on or off: the movie's sound is on Master.</summary>
+    private static void WorldSound(bool on)
+    {
+        foreach (var bus in new[] { Audio.SfxBus.Name, Audio.SfxBus.Player, Audio.SfxBus.Music })
+            if (AudioServer.GetBusIndex(bus) is var i and >= 0) AudioServer.SetBusMute(i, !on);
+        if (on) Audio.SfxBus.ApplyVolumes();
+    }
+
+    /// <summary>A marker at the playhead, on the nearest beat within a quarter second; or the one there goes.</summary>
+    private void Mark() => _timeline.ToggleMarkerAt(_stage.Time, 0.25, ghostsOnly: false);
+
+    private void ToMarker(int direction)
+    {
+        var markers = MovieSession.Project.Markers;
+        double now = _stage.Time;
+        double? to = direction > 0 ? markers.Where(m => m > now + 1e-3).Cast<double?>().FirstOrDefault()
+            : markers.Where(m => m < now - 1e-3).Cast<double?>().LastOrDefault();
+        if (to is { } t) Seek(t);
+    }
+
     /// <summary>The stage and timeline on the session's project again: after New, Open or Save.</summary>
     private void Reload()
     {
@@ -367,6 +458,7 @@ public partial class MovieStudio : Screen
         _focusLane = -1;
         _timeline.Select(0);
         _timeline.Fit();
+        _timeline.Resync();
         _shownTime = -1;
         ShowHints();
     }
