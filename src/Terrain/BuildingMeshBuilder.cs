@@ -165,10 +165,16 @@ public static class BuildingMeshBuilder
         Box(-hw - 0.2f, hw + 0.2f, -0.3f, 0.12f, 0, 0.45f, step);
     }
 
+    /// <summary>
+    /// Whether a solid is drawn and collided as itself. A building site's (#608) is not: its
+    /// surveyed volume is replaced by the half-built shell <c>Construction.SiteShellBuilder</c> draws.
+    /// </summary>
+    public static bool Drawn(Building b) => b.Kind != BuildingKind.UnderConstruction;
+
     public static MeshData? Build(BuildingTile tile)
     {
         int triangles = 0;
-        foreach (var b in tile.Buildings) triangles += b.TriangleCount;
+        foreach (var b in tile.Buildings) if (Drawn(b)) triangles += b.TriangleCount;
         if (triangles == 0) return null;
 
         var types = BuildingTypes.For(tile);
@@ -185,6 +191,7 @@ public static class BuildingMeshBuilder
         for (int bi = 0; bi < tile.Buildings.Count; bi++)
         {
             var b = tile.Buildings[bi];
+            if (!Drawn(b)) continue;
             var part = types.PartOf(bi);
             var type = types.TypeOf(bi);
             var kind = KindOf(b, type);
@@ -268,11 +275,11 @@ public static class BuildingMeshBuilder
     public static Vector3[] BuildCollisionFaces(BuildingTile tile)
     {
         int triangles = 0;
-        foreach (var b in tile.Buildings) triangles += b.TriangleCount;
+        foreach (var b in tile.Buildings) if (Drawn(b)) triangles += b.TriangleCount;
         var faces = new Vector3[triangles * 3];
         int v = 0;
         foreach (var b in tile.Buildings)
-            for (int t = 0; t < b.TriangleCount; t++)
+            for (int t = 0; Drawn(b) && t < b.TriangleCount; t++)
             {
                 var (a, c, d) = b.Tri(t);
                 faces[v++] = a; faces[v++] = c; faces[v++] = d;

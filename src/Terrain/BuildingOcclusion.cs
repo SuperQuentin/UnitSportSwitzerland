@@ -85,6 +85,8 @@ public static class BuildingOcclusion
         {
             if (boxes[i] is not { } box) continue;
             var b = tile.Buildings[i];
+            // a building site is an open shell (#608): it hides nothing behind it
+            if (!BuildingMeshBuilder.Drawn(b)) continue;
             float w = box.Width - 2 * Inset, d = box.Depth - 2 * Inset;
             float bottom = b.MinY + Inset, top = box.Eave - Inset;
             if (w < 3f || d < 3f || top - bottom < 2.5f) continue;

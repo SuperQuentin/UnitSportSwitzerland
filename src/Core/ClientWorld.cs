@@ -107,6 +107,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Interiors.DoorCheck.Requested, Interiors.DoorCheck.Run),
         (() => Interiors.FlatCheck.Requested, Interiors.FlatCheck.Run),
         (() => Interiors.ShapedCheck.Requested, Interiors.ShapedCheck.Run),
+        (() => Terrain.Construction.ConstructionCheck.Requested, Terrain.Construction.ConstructionCheck.Run),
         (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
         (() => ChatCheck.Requested, () => ChatCheck.Run(this)),
         (() => StyleKit.ReportRequested, StyleKit.Report),
@@ -342,6 +343,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _ambience = new Audio.Ambience(chunksForAudio, EarNode)
                 { Name = "Ambience", Origin = origin, Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume) };
             AddChild(_ambience);
+            // the hammering, vibrator, grinder, beeper, radio and crane motor of a working building site (#617)
+            AddChild(new Terrain.Construction.SiteSounds(chunksForAudio, EarNode));
         }
         await Breathe();
         if (!IsInsideTree()) return;

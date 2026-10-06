@@ -76,6 +76,15 @@
     <Compile Include="..\..\src\Terrain\BuildingTriangles.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\PlanBox.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\BuildingTypes.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- building sites (#606): the planner, Godot maths only -->
+    <Compile Include="..\..\src\Terrain\Construction\ConstructionSite.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Construction\ShellPlan.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Construction\SiteDressing.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Construction\CraneMotion.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Terrain\Construction\CranePlan.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the sound of a site (#617): the scheduler and the synthesis, Godot maths only -->
+    <Compile Include="..\..\src\Terrain\Construction\SiteSoundPlan.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Audio\SiteSfx.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the excavator (#611): its layout and arm, Godot maths only -->
     <Compile Include="..\..\src\Avatar\ExcavatorLayout.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\WheelLoaderLayout.cs" Link="Game\%(Filename)%(Extension)" />
