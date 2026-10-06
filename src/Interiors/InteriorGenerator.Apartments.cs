@@ -113,6 +113,11 @@ public static partial class InteriorGenerator
         public int? Below;
         public List<(Side Side, float At)> Links = new();
         public Func<Side, float, float, float>? Free;
+        /// <summary>
+        /// Its main door is where the next wing's corridor meets it (#598): the stairwell stays
+        /// there and never slides to an end, or the two doorways would not meet.
+        /// </summary>
+        public bool Pinned;
     }
 
     private sealed class Apt
@@ -213,8 +218,10 @@ public static partial class InteriorGenerator
         }
         float spacing = wellW + (mixed ? 12f : 2 * MinFlatSide + 0.6f);
         var kept = new List<(float X, int Slot)> { cands[0] };
+        // where the next wing joins this one's front (#598) a stairwell is a must, not a nicety:
+        // one flat between it and the next is enough
         foreach (var c in cands.Skip(1).OrderBy(c => Math.Abs(c.X - cands[0].X)))
-            if (kept.All(k => Math.Abs(k.X - c.X) >= spacing)) kept.Add(c);
+            if (kept.All(k => Math.Abs(k.X - c.X) >= (c.Slot >= LinkSlot ? wellW + MinFlatSide + 0.3f : spacing))) kept.Add(c);
         foreach (var (x, slot) in kept.OrderBy(k => k.X))
         {
             float cx = Fit(x, -hw + wellW / 2, hw - wellW / 2);
@@ -227,7 +234,9 @@ public static partial class InteriorGenerator
         // does with its core. Its lobby's doorway then stands a little off the facade door, which
         // the plan box already allows (inside and outside line up plausibly, not exactly). A small
         // block with one stairwell goes to the nearer end outright: one flat a floor, as a Swiss
-        // three-family house is, beats two slivers either side of the stair.
+        // three-family house is, beats two slivers either side of the stair. Not in a wing
+        // entered from the next one: its sliver is a box room instead.
+        if (!o.Pinned)
         {
             var w0 = a.Wells[0];
             var wn = a.Wells[^1];

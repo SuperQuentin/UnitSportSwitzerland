@@ -18,8 +18,10 @@ namespace UnitSport.Interiors;
 /// </para>
 ///
 /// <para>
+/// An outline at other angles (a trapezoid, a bent or skewed block, #598) peels into one wing, its
+/// largest rectangle, planned alone: every street door goes to the wing wall facing its way.
 /// Anything that does not come out right (a wing too small for a stairwell, a link that cannot
-/// meet) falls back to the whole box, as before #577.
+/// meet) falls back to the whole box, as before #577; <see cref="WingFailure"/> says why.
 /// </para>
 /// </summary>
 public static partial class InteriorGenerator
@@ -51,7 +53,7 @@ public static partial class InteriorGenerator
     internal static bool TryApartments(InteriorLayout l, Footprint fp, Building b, BuildingKind kind, int above, BuildingType type, Random rng)
     {
         var wings = PlanOutline.Wings(b, fp.Center, fp.AxisU, fp.Width, fp.Depth);
-        if (wings is { Count: >= 2 })
+        if (wings is { Count: >= 1 })
         {
             var (t, below, x, width) = (l.Type, l.Below, l.EntryX, l.EntryWidth);
             if (TryWings(l, fp, kind, above, type, wings)) return true;
@@ -134,8 +136,21 @@ public static partial class InteriorGenerator
 
     // ---- planning --------------------------------------------------------------------------------
 
+    /// <summary>
+    /// Why the last wing plan on this thread fell back to the box, or null if it did not (for
+    /// checks: <c>--shapedcheck</c> prints it).
+    /// </summary>
+    [ThreadStatic] internal static string? WingFailure;
+
+    private static bool Fail(string why)
+    {
+        WingFailure = why;
+        return false;
+    }
+
     private static bool TryWings(InteriorLayout l, Footprint fp, BuildingKind kind, int above, BuildingType type, List<RectPlan> rects)
     {
+        WingFailure = null;
         var axisU = fp.AxisU;
         var axisV = fp.AxisV;
         (float X, float Z) Local(Vector3 p)
@@ -169,14 +184,17 @@ public static partial class InteriorGenerator
             var (x, z) = Local(d.Position);
             var side = Facing(d.Outward);
             WingPlan? best = null;
-            float bestD = 2.0f;
+            // a lone wing (an outline at other angles, #598) takes every door, wherever on its
+            // slanted walls it stands: the wing's own wall facing the same way is its doorway
+            bool lone = wings.Count == 1;
+            float bestD = lone ? float.MaxValue : 2.0f;
             foreach (var w in wings)
             {
                 var R = w.R;
                 float edge = side switch { Side.Front => R.Z0, Side.Back => R.Z1, Side.Left => R.X0, _ => R.X1 };
                 float across = AlongX(side) ? z : x, along = AlongX(side) ? x : z;
                 float lo = AlongX(side) ? R.X0 : R.Z0, hi = AlongX(side) ? R.X1 : R.Z1;
-                if (along < lo - 0.5f || along > hi + 0.5f) continue;
+                if (!lone && (along < lo - 0.5f || along > hi + 0.5f)) continue;
                 float dist = Math.Abs(edge - across);
                 if (dist < bestD) { bestD = dist; best = w; }
             }
@@ -184,7 +202,7 @@ public static partial class InteriorGenerator
             best.Doors.Add(d);
             if (best.Main == null || d.Slot < best.Main.Value.Slot) { best.Main = d; best.Front = side; }
         }
-        if (!wings.Any(w => w.Main is { Slot: 0 })) return false;
+        if (!wings.Any(w => w.Main is { Slot: 0 })) return Fail("no street door on a wing");
 
         // ---- a wing with no door of its own is reached through the next one ------------------------
         var reached = wings.Where(w => w.Main != null).ToHashSet();
@@ -207,7 +225,7 @@ public static partial class InteriorGenerator
         }
         // a wing nothing reaches is left out: the inside is a little smaller than the outline
         wings.RemoveAll(w => !reached.Contains(w));
-        if (wings.Count < 2) return false;
+        if (wings.Count == 0) return Fail("no wing reached");
         foreach (var w in wings) w.Turns = (int)w.Front;
 
         // where each link meets: a door of the wing it joins if that is its front, the corridor off
@@ -260,7 +278,7 @@ public static partial class InteriorGenerator
                 int li = links.FindIndex(k => k.B == w.Index);
                 var aw = wings.First(x => x.Index == links[li].A);
                 string key = new DoorKey(fp.Key, LinkSlot + li).ToString();
-                if (aw.Sub.AllEntrances().FirstOrDefault(e => e.Door == key) is not { } e) return false;
+                if (aw.Sub.AllEntrances().FirstOrDefault(e => e.Door == key) is not { } e) return Fail($"link {li}: no doorway in wing {aw.Index}");
                 var (lx, lz) = ToBox(aw, e.X, e.Z);
                 w.Main = new DoorSpot(fp.Door.Index, World(lx, lz, fp.Door.Position.Y), WorldDir(w.Front), 1.2f, 2.1f)
                 {
@@ -296,7 +314,8 @@ public static partial class InteriorGenerator
             };
 
             // what the wing is told: the basement, where corridors must run, what is no facade
-            var opts = new AptOptions { Below = below };
+            // a wing entered from the next one keeps its stairwell where that one's corridor meets it
+            var opts = new AptOptions { Below = below, Pinned = main.Slot >= LinkSlot };
             foreach (var (side, at, _) in w.Links)
             {
                 var s = TurnSide(side, -w.Turns);
@@ -334,10 +353,10 @@ public static partial class InteriorGenerator
             // the wall that faces out is what the next wing does not stand against
             opts.Free = (s, lo, hi) =>
                 hi - lo - blocked.Where(x => x.Side == s).Sum(x => Math.Max(0, Math.Min(hi, x.Hi) - Math.Max(lo, x.Lo)));
-            if (!TryBlock(sl, sub, kind, above, type, new Random(StableHash(l.Key + "|wing" + w.Index)), opts)) return false;
+            if (!TryBlock(sl, sub, kind, above, type, new Random(StableHash(l.Key + "|wing" + w.Index)), opts)) return Fail($"wing {w.Index} ({w.W:F1} x {w.D:F1}, front {w.Front}) does not plan");
             w.Sub = sl;
         }
-        if (wings.Select(w => w.Sub.Floors.Count).Distinct().Count() != 1) return false;
+        if (wings.Select(w => w.Sub.Floors.Count).Distinct().Count() != 1) return Fail("wings of different floor counts");
 
         // ---- merged into the building's frame ----------------------------------------------------
         l.Type = type;
@@ -356,10 +375,11 @@ public static partial class InteriorGenerator
         {
             string key = new DoorKey(fp.Key, LinkSlot + i).ToString();
             var ends = l.Entrances.Where(e => e.Door == key).ToList();
-            if (ends.Count != 2 || !Join(ground, ends[0], ends[1], Math.Min(2.2f, l.StoreyHeight - Slab - 0.2f))) return false;
+            if (ends.Count != 2) return Fail($"link {i}: {ends.Count} doorways found");
+            if (!Join(ground, ends[0], ends[1], Math.Min(2.2f, l.StoreyHeight - Slab - 0.2f))) return false;
         }
         l.Entrances.RemoveAll(e => DoorKey.TryParse(e.Door, out var dk) && dk.Slot >= LinkSlot);
-        if (l.Entrances.Count == 0) return false;
+        if (l.Entrances.Count == 0) return Fail("no street doorway left");
         var front = l.Entrances[0];
         l.EntryX = front.X;
         l.EntryWidth = front.Width;
@@ -395,7 +415,8 @@ public static partial class InteriorGenerator
                 }
 
         // a plan that does not hold together is dropped: the caller plans the box instead
-        return InteriorValidator.Validate(l).Count == 0;
+        var errs = InteriorValidator.Validate(l);
+        return errs.Count == 0 || Fail("invalid: " + string.Join("; ", errs.Take(3)));
     }
 
     /// <summary>One wing's plan, turned and moved into the building's frame, its rooms after those already there.</summary>
@@ -522,17 +543,17 @@ public static partial class InteriorGenerator
             return -1;
         }
         int ra = Find(e1, -1, out int oa), rb = Find(e2, ra, out int ob);
-        if (ra < 0 || rb < 0) return false;
+        if (ra < 0 || rb < 0) return Fail($"join: no room at a doorway ({ra}, {rb}) at {e1.X:F1},{e1.Z:F1} / {e2.X:F1},{e2.Z:F1}");
         var A = ground.Rooms[ra];
         var B = ground.Rooms[rb];
         var sa = A.Openings[oa];
         var sb = B.Openings[ob];
-        if (TurnSide(sa.Side, 2) != sb.Side) return false;
+        if (TurnSide(sa.Side, 2) != sb.Side) return Fail($"join: doorways on sides {sa.Side} / {sb.Side} of {A.Type} [{A.X0:F1},{A.Z0:F1}..{A.X1:F1},{A.Z1:F1}] / {B.Type} [{B.X0:F1},{B.Z0:F1}..{B.X1:F1},{B.Z1:F1}]");
         // the stretch both walls share, and the doorway on it
         bool along = AlongX(sa.Side);
         float lo = Math.Max(along ? A.X0 : A.Z0, along ? B.X0 : B.Z0), hi = Math.Min(along ? A.X1 : A.Z1, along ? B.X1 : B.Z1);
         float width = Math.Min(sa.Width, sb.Width);
-        if (hi - lo < width + 0.3f) return false;
+        if (hi - lo < width + 0.3f) return Fail($"join: {hi - lo:F2} m shared for a {width:F2} m arch between {A.Type} [{A.X0:F1},{A.Z0:F1}..{A.X1:F1},{A.Z1:F1}] and {B.Type} [{B.X0:F1},{B.Z0:F1}..{B.X1:F1},{B.Z1:F1}], doorways at {e1.X:F1},{e1.Z:F1} / {e2.X:F1},{e2.Z:F1}");
         float c = Fit((sa.Center + sb.Center) / 2, lo + width / 2 + 0.15f, hi - width / 2 - 0.15f);
         A.Openings[oa] = new OpeningPlan { Side = sa.Side, Center = c, Width = width, Top = Math.Min(top, Math.Min(sa.Top, sb.Top)), Kind = OpeningKind.Arch, Other = rb };
         B.Openings[ob] = new OpeningPlan { Side = sb.Side, Center = c, Width = width, Top = Math.Min(top, Math.Min(sa.Top, sb.Top)), Kind = OpeningKind.Arch, Other = ra };
