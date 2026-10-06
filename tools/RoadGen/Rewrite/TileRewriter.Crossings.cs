@@ -22,7 +22,7 @@ public static partial class TileRewriter
     /// from the mouth; the carriageway runs from <paramref name="lo"/> to <paramref name="hi"/> across it (negative to the left).
     /// </summary>
     private static void EmitCrossing(Dictionary<TileId, List<RoadPaint>> paint, Source source, Vec2 mid, Vec2 u, Vec2 right,
-        double stopAt, double lo, double hi, RoadSide rightSide, RoadSide leftSide, Dictionary<TileId, List<RoadAreaProp>> areas, (double From, double To)? island, SignalStats stats)
+        double stopAt, double lo, double hi, RoadSide rightSide, RoadSide leftSide, Dictionary<TileId, List<RoadAreaProp>> areas, SignalStats stats)
     {
         static double Strip(RoadSide s) => s.HasTrack ? (s.VergeDm + s.BikeDm + s.BufferDm) / 10.0 : 0;
         double pathR = Strip(rightSide), pathL = Strip(leftSide);
@@ -45,7 +45,6 @@ public static partial class TileRewriter
             double centre = l + ZebraBar * 0.5;
             float lift = centre > hi ? RoadStreetSection.HeightAt(rightSide, (float)(centre - hi))
                 : centre < lo ? RoadStreetSection.HeightAt(leftSide, (float)(lo - centre)) : 0f;
-            if (island is { } isl && centre > isl.From && centre < isl.To) lift = 0.12f;   // over the refuge island
             Quad(s0, s1, l, l + ZebraBar, lift);
         }
         if (verts.Count == 0) return;

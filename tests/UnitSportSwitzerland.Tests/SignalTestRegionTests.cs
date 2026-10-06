@@ -125,7 +125,8 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         Assert.True(hatches >= 30, $"{hatches} hatches");   // islands (#682) take the wide end of an exit hatch and its stripes with it
     }
 
-[Fact]    public void Left_repeater_signals_stand_on_islands_behind_the_crosswalk()    {        int islands = 0, poles = 0;        foreach (var (_, tile) in region.Tiles())        {            islands += tile.AreaProps.Count(a => a.Type == AreaPropType.Island && a.Variant == 2 && (a.Flags & PropFlags.Solid) != 0 && a.Height > 0);            poles += tile.Signals.Sum(s => s.Poles.Count(p => (p.Flags & SignalPoleFlags.Second) != 0));        }        Assert.True(islands >= 10, $"{islands} islands");        Assert.True(poles >= islands, $"{poles} second poles for {islands} islands");    }
+[Fact]    public void Left_repeater_signals_stand_on_islands_past_the_crosswalk()    {        int islands = 0, poles = 0;        foreach (var (_, tile) in region.Tiles())        {            islands += tile.AreaProps.Count(a => a.Type == AreaPropType.Island && a.Variant == 2 && (a.Flags & PropFlags.Solid) != 0 && a.Height > 0);            poles += tile.Signals.Sum(s => s.Poles.Count(p => (p.Flags & SignalPoleFlags.Second) != 0));        }        Assert.True(islands >= 10, $"{islands} islands");        // two islands an arm (past the crosswalk, with the pole, and behind it), cut by the crosswalk
+        Assert.True(poles >= islands / 2, $"{poles} second poles for {islands} islands");    }
     [Fact]
     public void No_car_stop_line_crosses_a_bike_lane_with_an_advanced_line()
     {

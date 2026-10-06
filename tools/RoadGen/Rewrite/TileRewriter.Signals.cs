@@ -28,7 +28,7 @@ public static partial class TileRewriter
     /// bike crossing there (#120, about 2 m) with a metre to spare. #292 moves it back behind a
     /// pedestrian crossing.
     /// </summary>
-    private const double SignalStopSetback = 4.5;
+    private const double SignalStopSetback = 3.6;
 
     /// <summary>
     /// Signal poles (#350) stand this far past the mouth along their arm, at the kerb plus
@@ -264,16 +264,20 @@ public static partial class TileRewriter
                     var streetRight = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, drawnRight);
                     var streetLeft = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
                     if (streetRight.OuterDm > 0 || streetLeft.OuterDm > 0)
-                        EmitCrossing(paint, source, mid, u, right, MouthSkew(junction, arm) + SignalStopSetback, -(half + (pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0)), to, streetRight, streetLeft, areas, pockets.GetValueOrDefault((junction.NodeId, i))?.Island is { } isl ? (isl.LateralFrom, isl.LateralTo) : null, stats);
+                        EmitCrossing(paint, source, mid, u, right, MouthSkew(junction, arm) + SignalStopSetback, -(half + (pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0)), to, streetRight, streetLeft, areas, stats);
                 }
                 // none on a link inside a junction of several nodes: its ends are the junction's own
                 var mainFlags = inside ? 0 : (approach ? SignalPoleFlags.Main : 0) | SignalPoleFlags.Pedestrian;
                 var secondFlags = inside ? 0 : (approach && (pocket || rightPocket) ? SignalPoleFlags.Second : 0) | SignalPoleFlags.Pedestrian;
                 // the left repeater signal stands on a small island in the hatched median behind the stop line, not on the far kerb (#682)
-                if (!inside && approach && pocket && pockets.GetValueOrDefault((junction.NodeId, i))?.Island is { } island)
+                if (!inside && approach && pocket && pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } exitWay, ExitFar: false })
                 {
-                    secondFlags &= ~SignalPoleFlags.Second;
-                    islandPoles.Add(((byte)arms.Count, island.Pole, island.Y, u, right));
+                    double stopAtArm = MouthSkew(junction, arm) + SignalStopSetback, zebraTo = stopAtArm - ZebraClear;
+                    if (exitWay.Islands(Get(areas, exitWay.Tile), stopAtArm, zebraTo - ZebraDepth, zebraTo) is { } island)
+                    {
+                        secondFlags &= ~SignalPoleFlags.Second;
+                        islandPoles.Add(((byte)arms.Count, island.Pole, island.Y, u, right));
+                    }
                 }
                 wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, right, to, u, -right,
                     rightSide.OuterDm > 0 ? rightSide.KerbCm / 100f : 0f, mainFlags, plan.Arms[i].LinkId));

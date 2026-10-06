@@ -27,5 +27,7 @@
 - **Signal timing** (`SignalPlan`): left-turn phases 5 s, all-red 1 s after a turn arrow or a pedestrian group (the
   next group's red-yellow overlaps the last second of yellow: the entry time), cycle targets 60/60/70 s. J2 106 -> 88 s.
 - **Test region**: J5 pair 100 m apart (was 60), J3's east houses from 68 m out: a corner radius takes ~16 m of an arm.
-- **Islands** (`Widening.Island`): a small paved kerbed island (`AreaPropType.Island` variant 2, `IslandBuilder`) in the exit's hatched median, from the mouth to just behind the stop line, the zebra running over it; the arm's left repeater signal (the `Second` pole) stands on it past the crosswalk, not on the far kerb. The remaining hatch starts after it (often under 20 m: none).
+- **Islands** (`Widening.Islands`): paved kerbed islands (`AreaPropType.Island` variant 2, `IslandBuilder`) in the exit's hatched median, cut through by the zebra (which stays level): one in the junction past the crosswalk (3 m) carrying the arm's left repeater signal (the `Second` pole, not the far kerb), one behind the bars up to the stop line. The hatch starts after the stop line as before.
+- **Stop lines**: `SignalStopSetback` 3.6 m: the zebra right behind the through lane's line, the curve right behind the zebra. A left pocket with an advanced bike line (`AdvancedBikeLine` 3 m) stops its cars 3 m further back (like a bike box): the bike line stands level with the through line, behind the crosswalk.
+- **Asphalt**: flush pavement (widenings, corner fill) takes the tint of the junction cap nearest to it (`PavementBuilder.CapColour`), so the box reads as one surface.
 - Open: lines at the lights slant where only one arm is widened; check on real tiles (Geneva) and the cramped-arm setup choice.
