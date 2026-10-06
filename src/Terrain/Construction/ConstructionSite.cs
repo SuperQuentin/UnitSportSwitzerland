@@ -211,8 +211,8 @@ public static class ConstructionSites
 
         // ---- the site: deep at the front for the yard, narrow round the rest -------------------
         float size = Math.Clamp((box.Area - 150f) / 1500f, 0f, 1f);
-        float frontM = (small ? 8f : 11f + 7f * size) + 2f * (float)R("front-margin");
-        float sideM = 3.5f + 2f * (float)R("side-margin") + 3f * size;
+        float frontM = (small ? 8f : 14f + 8f * size) + 2f * (float)R("front-margin");
+        float sideM = 4.5f + 2f * (float)R("side-margin") + 3f * size;
         float backM = 3f + (float)R("back-margin");
         var area = new SiteRect(box.Center + front * ((frontM - backM) / 2), along,
             2 * hs + 2 * sideM, 2 * hf + frontM + backM);
@@ -262,11 +262,8 @@ public static class ConstructionSites
             float hw = dug ? (small ? 7f : 9f + 5f * size) : 5f, hd = dug ? (small ? 5f : 7f + 3f * size) : 4f;
             Zone(SiteZoneKind.SoilHeap, hw, hd, p => -p.DistanceTo(gate));
         }
-        // materials go where the crane's hook reaches them, or failing a crane by the building
-        var hook = cranes.Count > 0 ? cranes[0].Base : box.Center;
-        Zone(SiteZoneKind.Materials, small ? 6f : 8f + 4f * size, small ? 4f : 6f, p => p.DistanceTo(hook));
-        Zone(SiteZoneKind.Skips, small ? 4.4f : 9f, 2.6f, p => p.DistanceTo(gate) + 4f);
-        // the machines last but for nothing: one that finds no room leaves a gap in the ordinals
+        // the machines before the materials and the skips: they are what a player comes for, and
+        // one that finds no room leaves a gap in the ordinals
         var machines = new List<MachineSlot>();
         var roles = Roles(phase, small);
         for (int k = 0; k < roles.Count; k++)
@@ -294,6 +291,11 @@ public static class ConstructionSites
             machines.Add(new MachineSlot(role.Role, k, at.Center, Mathf.Atan2(-facing.X, -facing.Y)));
         }
 
+
+        // materials go where the crane's hook reaches them, or failing a crane by the building
+        var hook = cranes.Count > 0 ? cranes[0].Base : box.Center;
+        Zone(SiteZoneKind.Materials, small ? 6f : 8f + 4f * size, small ? 4f : 6f, p => p.DistanceTo(hook));
+        Zone(SiteZoneKind.Skips, small ? 4.4f : 9f, 2.6f, p => p.DistanceTo(gate) + 4f);
 
         return new ConstructionSite(key, phase, box, b.MinY, measured, storey, built, target,
             area, front, gate, gateWidth, hoarding, zones, cranes, machines);

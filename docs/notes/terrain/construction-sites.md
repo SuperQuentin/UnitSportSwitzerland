@@ -36,15 +36,17 @@ Real mix: **74 foundations, 262 shells, 233 topped out.**
 
 - **The front** is the plan box side facing `BuildingFootprint.StreetNear` (the street a front door
   would face), so the gate and the yard are on the street.
-- **The site is a rectangle round the plan box**, aligned with it: 11-20 m deep at the front for the
-  yard (8-10 m on a house plot), 3.5-8.5 m at the sides, 3-4 m behind. The cadastre's plots are not
+- **The site is a rectangle round the plan box**, aligned with it: 14-24 m deep at the front for the
+  yard (8-10 m on a house plot), 4.5-9.5 m at the sides, 3-4 m behind (widened by #607: at 11 m a
+  generated 24 x 15 m block had no room left for a single machine). The cadastre's plots are not
   loaded, so every hoarding panel (3.5 m, a Bauzaun panel) on a road, a footpath or in another
   building is **dropped, never nudged**, as `SiteYards` drops yard slots. The notch of an L-shaped
   building is inside the rectangle, so it is yard. The shell should follow the real shape through
   `PlanOutline.Wings` (#577); the planner does not derive a second outline.
 - **Kept clear**: the plan box plus `Scaffold` (1.5 m), and the lane from the gate to the building.
 - **Order**: cranes, office containers (by the gate), toilets, soil heap (foundations: big; shell:
-  small; topped out: none), materials (by the first crane's base), skips, then the machines. A
+  small; topped out: none), the machines, materials (by the first crane's base), skips. The
+  machines come before the materials because they are what a player comes for. A
   zone that does not fit turns 90°, then shrinks to 70 %; a machine that does not fit turns 90°,
   then is **dropped, keeping its ordinal** (`MachineSlot.Ordinal` is its place in `Roles`), because
   the dormant provider names the vehicle by it.
@@ -78,16 +80,48 @@ circles, machines). Each of these passed every unit test:
 `Placer` lays a grid over the site (0.5 m on a house plot, 1 m, 1.5 m past 6,000 m²), sorts it by
 score once per item and takes the first point that fits, so a site costs a few obstacle tests per
 item. `SiteObstacles` gathers the other buildings and road segments within the site's reach once
-per site. Measured: all 569 real sites in 27.7 s, **49 ms a site on average, 470 ms worst** (a
+per site. Measured: all 569 real sites in 21.8 s, **38 ms a site on average, 320 ms worst** (a
 145 x 29 m block). A first version that tested every grid point against every road of the tile did
 not finish in 10 minutes. It runs off the main thread with the tile; if a busy tile ever shows,
 the grid sort is the lever.
 
 ## Checks
 
-`ConstructionSiteTests` (tier 0, 21 tests): determinism, the phase on the measured cases, the site
+`ConstructionSiteTests` (tier 0, 20 tests): determinism, the phase on the measured cases, the site
 facing its street, the hoarding closed but for the gate, nothing on a road, in a neighbour, the
 scaffolding or the way in, cranes reaching every corner and clearing the finished building, the
 inside fallback, house plots, machines by phase and their headings, ordinals, and the role numbers.
-The Godot half (`SitePlans.For`) only adds `StreetNear` and the tile's boxes; #607 adds
-`--constructioncheck` on hand-made solids.
+The Godot half (`SitePlans.For`) only adds `StreetNear` and the tile's boxes.
+
+Real tiles after #607's wider yards: 74 foundations, 262 shells, 233 topped out; 442 cranes (312
+tower, 130 self-erecting); 1,680 machines (66 excavators, 150 mixers, 321 telehandlers); an office
+on 567 sites, materials on 370, a soil heap on 289.
+
+## A site in every generated village (#607)
+
+Neither the generated world nor any fixture had an `UnderConstruction` building, so nothing of
+#605 could be reached without the real tiles. `ProceduralWorld.Settlements` now plans one site per
+village, `SiteBeyondEnd` (45 m) past the end the works is not at, its front wall `SiteSetback`
+(22 m) off the valley road's centre line, long wall to the road.
+
+- **Every roll is a hash of the village**, never its rng: a house plot (35 %, 14 x 11 m, 2 floors),
+  a block (45 %, 24 x 15 m, 4) or a big block (20 %, 40 x 18 m, 6); the phase is `slot.Id % 3`, so
+  neighbouring villages show different phases. The works' end was the one `rng` draw taken there,
+  and it still is.
+- **Yielded last** in `PlansNear`, after the shaped buildings: a building's index is its name.
+- **A shell stops at least two storeys short.** One storey short read as topped out on a 1.7 m
+  slope: the solid starts 0.8 m under its lowest corner, so the slope counts as height.
+- `ProceduralWorld.SitesNear(e, n, radius)` lists them with the phase they were planned at.
+
+## `--constructioncheck`
+
+`--constructioncheck --systems ui` (`ConstructionCheck`, a quick check like `--shapedcheck`, no
+world): plans the villages round the default spawn (13 sites within 12 km: 5 foundations, 3
+shells, 5 topped out), builds the tiles of up to three per phase and runs each through
+`SitePlans.For` with the tile's own roads. It asserts the phase (one further on is allowed where the
+ground falls over 1 m), the storeys to come, the front facing `StreetNear`, nothing on a road or in
+a building (`SiteObstacles`), the hoarding, the office, at least one machine and crane reach, and
+that all three phases are built. It writes the plan views (`SitePlanSvg`) to
+`test_output/construction/generated.svg`. The issues after it extend it with what they draw.
+`SitePlanSvg` turns into a PNG with headless Edge:
+`msedge --headless=new --screenshot=out.png --window-size=1560,1560 file:///.../generated.svg`.
