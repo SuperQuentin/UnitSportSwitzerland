@@ -747,6 +747,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (World.ClockNetProbe.Role != null) AddChild(new World.ClockNetProbe(items));
         if (SpeedNetProbe.Role != null) AddChild(new SpeedNetProbe(items));
         if (Net.SleeperProbe.Role != null) AddChild(new Net.SleeperProbe(items));
+        if (Net.TransferProbe.Role != null) AddChild(new Net.TransferProbe(items));
         if (Player.BoatNetProbe.Role != null) AddChild(new Player.BoatNetProbe(items));
         if (Player.SteamerNetProbe.Role != null) AddChild(new Player.SteamerNetProbe(items));
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "solo") > Array.IndexOf(OS.GetCmdlineUserArgs(), "--dropcheck")
