@@ -138,6 +138,12 @@ public static partial class TerrainMeshBuilder
                 if (StreetAreas.Is(area.Type) && area.Type != AreaPropType.Kerb)
                     UnderSurface(scratch, area.Vertices, area.Indices, core: false);
 
+            // the ground round a flush pad's edge (#603): a slope like a road's, so a wall releases
+            // it, and a neighbouring pad held below takes its own cells back
+            foreach (var pad in roadTile.AreaProps)
+                if (pad.Type is AreaPropType.Pavement or AreaPropType.ParkingPad && pad.Vertices.Length >= 9)
+                    RimAroundPavement(scratch, pad);
+
             foreach (var wall in roadTile.LinearProps)
                 if (wall.Type is LinearPropType.RetainingWallFill or LinearPropType.RetainingWallCut)
                     FreeBehindWall(scratch, wall);
@@ -593,6 +599,76 @@ public static partial class TerrainMeshBuilder
             s.CoreDist[idx] = 0.5f;
             s.Lo[idx] = s.Hi[idx] = y;
         });
+
+    /// <summary>
+    /// The ground stays at a flush pad's height this far out from its edge, then climbs at the cut
+    /// slope: one lattice diagonal, so every vertex of a terrain quad that overlaps the pad is held
+    /// at or under it.
+    /// </summary>
+    private static readonly double PadRimM = ChunkFormat.SpacingM * Math.Sqrt(2);
+
+    /// <summary>
+    /// The embankment round a flush pad (#603): <see cref="HoldUnderPavement"/> pins only the lattice
+    /// points inside it, so the terrain triangles across its edge rose from the pad to the raw ground
+    /// one cell out and, wherever that stood higher, surfaced through the pad as straight-edged
+    /// wedges on the lattice diagonals. Every cell within <see cref="RoadEmbankment.MinorReachM"/>
+    /// of an outline edge (an edge only one of the prop's triangles uses) is clamped like a road's
+    /// slope from the edge's height there: no lower than the fill slope, and no higher than the pad
+    /// out to <see cref="PadRimM"/>, the cut slope past it. A road's own cell keeps its height, and
+    /// a pad held afterwards takes its cells back.
+    /// </summary>
+    private static void RimAroundPavement(Scratch s, RoadAreaProp pad)
+    {
+        var v = pad.Vertices;
+        var ix = pad.Indices;
+        var edges = new Dictionary<(int, int), int>();
+        for (int t = 0; t + 2 < ix.Length; t += 3)
+            for (int k = 0; k < 3; k++)
+            {
+                int a = ix[t + k], b = ix[t + (k + 1) % 3];
+                var key = a < b ? (a, b) : (b, a);
+                edges[key] = edges.GetValueOrDefault(key) + 1;
+            }
+
+        int n = s.N;
+        double sp = ChunkFormat.SpacingM, reach = RoadEmbankment.MinorReachM;
+        double fill = RoadEmbankment.FillSlope, cut = RoadEmbankment.CutSlope;
+        foreach (var ((ia, ib), uses) in edges)
+        {
+            if (uses != 1) continue;   // shared by two triangles: inside the pad
+            double ax = v[ia * 3], ay = v[ia * 3 + 1], az = v[ia * 3 + 2];
+            double bx = v[ib * 3], by = v[ib * 3 + 1], bz = v[ib * 3 + 2];
+            double dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+            int c0 = Math.Max(0, (int)Math.Ceiling((Math.Min(ax, bx) - reach) / sp)), c1 = Math.Min(n - 1, (int)Math.Floor((Math.Max(ax, bx) + reach) / sp));
+            int r0 = Math.Max(0, (int)Math.Ceiling((Math.Min(az, bz) - reach) / sp)), r1 = Math.Min(n - 1, (int)Math.Floor((Math.Max(az, bz) + reach) / sp));
+            for (int r = r0; r <= r1; r++)
+                for (int c = c0; c <= c1; c++)
+                {
+                    int idx = r * n + c;
+                    if (s.Seen[idx] != 0 && s.CoreDist[idx] < float.PositiveInfinity) continue;   // a road's own cell
+                    double x = c * sp, z = r * sp;
+                    double t = l2 < 1e-12 ? 0 : Math.Clamp(((x - ax) * dx + (z - az) * dz) / l2, 0, 1);
+                    double ex = ax + dx * t - x, ez = az + dz * t - z;
+                    double d = Math.Sqrt(ex * ex + ez * ez);
+                    if (d > reach) continue;
+                    double y = ay + (by - ay) * t;
+                    float lo = (float)(y - fill * d), hi = (float)(y + cut * Math.Max(0, d - PadRimM));
+                    if (s.Seen[idx] == 0)
+                    {
+                        s.Seen[idx] = 1;
+                        s.Touched.Add(idx);
+                        s.CoreDist[idx] = float.PositiveInfinity;
+                        s.EdgeDist[idx] = (float)d;
+                        s.Lo[idx] = lo;
+                        s.Hi[idx] = hi;
+                        continue;
+                    }
+                    if (lo > s.Lo[idx]) s.Lo[idx] = lo;
+                    if (hi < s.Hi[idx]) s.Hi[idx] = hi;
+                    if (d < s.EdgeDist[idx]) s.EdgeDist[idx] = (float)d;
+                }
+        }
+    }
 
     /// <summary>Calls <paramref name="cell"/> for every lattice cell inside one of the prop's triangles, with the surface height there.</summary>
     private static void Rasterise(Scratch s, RoadAreaProp prop, Action<int, float> cell)

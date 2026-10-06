@@ -88,6 +88,8 @@
     <!-- update check (#532): version compare, asset pick, GitHub's JSON, delta updates -->
     <Compile Include="..\..\src\Core\UpdateInfo.cs;..\..\src\Core\BinaryDelta.cs;..\..\src\Core\UpdatePackage.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Landmarks.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the road blend (#603): plain C# over TerrainFormat, as tools/BlendCheck links it -->
+    <Compile Include="..\..\src\Terrain\TerrainMeshBuilder.RoadBlend.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>
