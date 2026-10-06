@@ -7,6 +7,13 @@ namespace UnitSport.Player;
 public enum HeavyClass { Tractor, Rigid, CityBus, ArticulatedBus, Coach }
 
 /// <summary>
+/// What a rigid carries behind its cab (#613): a swap body, a rear-tipping body with a tailgate, or a
+/// concrete mixer's drum. The tipper's body and the mixer's discharge both work on the truck's work
+/// bit (<c>Truck.Tipped</c>) and the destination action.
+/// </summary>
+public enum TruckBody { Box, Tipper, Mixer }
+
+/// <summary>
 /// How the automatic changes gear: an automated manual (a dry clutch the computer works, drive cut
 /// for half a second each shift: every truck and the coach) or a torque converter that powershifts
 /// under load (the city buses).
@@ -139,12 +146,17 @@ public sealed record HeavyLook
 /// </summary>
 public sealed record HeavySpec
 {
-    /// <summary>Assigned by <see cref="HeavyCatalog"/> from the entry's position; never set by hand.</summary>
+    /// <summary>
+    /// Assigned by <see cref="HeavyCatalog"/> from the entry's position for the first five; from 101 on
+    /// every entry names its own (#613), so two branches appending at once do not renumber each other.
+    /// </summary>
     public RideKind Kind { get; init; }
     public required string Label { get; init; }
     public required string Blurb { get; init; }
     public HeavyClass Class { get; init; }
     public HeavyLook Look { get; init; } = new();
+    /// <summary>A rigid's load body (#613): a swap body, a tipping body or a mixer drum.</summary>
+    public TruckBody Body { get; init; }
     public EngineLayout Engine { get; init; } = EngineLayout.Diesel6;
 
     /// <summary>The sections it is built of: one, or two for an articulated bus. A trailer is not in here.</summary>

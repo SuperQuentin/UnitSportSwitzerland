@@ -222,6 +222,22 @@ public sealed class Truck : Rideable, IEngined
         get => (DoorsOpen & TipBit) != 0;
         set => DoorsOpen = (byte)(value ? DoorsOpen | TipBit : DoorsOpen & ~TipBit);
     }
+    /// <summary>A mixer discharging (#613): its drum turned backwards, its chute out. The tipper's work bit.</summary>
+    public bool Discharging => Spec.Body == TruckBody.Mixer && Tipped;
+
+    /// <summary>
+    /// A mixer's drum speed, rad/s (#613): turning while the engine runs, 2 to 12 rpm with the engine's
+    /// speed as the hydraulic pump it drives does; backwards and faster while it discharges. 0 for any
+    /// other body, or with the engine off.
+    /// </summary>
+    public float DrumRate(bool engineOn, float rpm01)
+    {
+        if (Spec.Body != TruckBody.Mixer || !engineOn) return 0f;
+        float r = Mathf.Clamp(rpm01, 0f, 1f);
+        float rpm = Discharging ? -(4f + 10f * r) : 2f + 10f * r;
+        return rpm * Mathf.Tau / 60f;
+    }
+
     /// <summary>Lowered on the door side for boarding (buses).</summary>
     public bool Kneeling { get; set; }
     /// <summary>Index into <see cref="HeavyLook.Destinations"/>.</summary>
@@ -593,11 +609,16 @@ public sealed class Truck : Rideable, IEngined
 
     /// <summary>Front-wheel angle, wheel spin rate, rpm, and in W the lamps, doors, kneel, destination and throttle as bits.</summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
-        new(SteerAngle, motion.Speed * Mathf.Cos(motion.Slip) / WheelRadius, Rpm01, PackFlags());
+        // a mixer's copy turns its drum only with the engine on (#613): an engine off reads as −1
+        new(SteerAngle, motion.Speed * Mathf.Cos(motion.Slip) / WheelRadius,
+            Spec.Body == TruckBody.Mixer && !EngineRunning ? -1f : Rpm01, PackFlags());
 
     public int PackFlags() => (Braking ? PoseBrake : 0) | (Headlights ? PoseLights : 0) | (Reversing ? PoseReverse : 0)
         | (Kneeling ? PoseKneel : 0) | ((DoorsOpen & 15) << PoseDoorShift) | ((Destination & 0xFF) << PoseDestShift)
         | (Mathf.RoundToInt(Mathf.Clamp(ThrottlePedal, 0f, 1f) * PoseThrottleSteps) << PoseThrottleShift);
+
+    /// <summary>Whether a truck's published pose has its work bit up: the tipper's body, the mixer's discharge (#613).</summary>
+    public static bool TippedInPose(Vector4 pose) => ((Mathf.RoundToInt(pose.W) >> PoseDoorShift) & TipBit) != 0;
 
     public void UnpackFlags(int flags)
     {
@@ -620,9 +641,10 @@ public sealed class Truck : Rideable, IEngined
         UnpackFlags(Mathf.RoundToInt(pose.W));
         SteerAngle = pose.X;
         for (int k = 0; k < WheelSpin.Length; k++) WheelSpin[k] = _remoteSpin;
-        _remoteRpm = Mathf.Lerp(Spec.IdleRpm, Spec.Redline, pose.Z);
+        _remoteRpm = Mathf.Lerp(Spec.IdleRpm, Spec.Redline, Mathf.Max(pose.Z, 0f));
         if (visual is not HeavyRig rig) return;
         Dress(rig, 0, _remoteReverse);
+        rig.DrumSpeed = DrumRate(pose.Z >= 0f, pose.Z);
         // the cockpit seen through the glass: the wheel and feet, the dials from the rpm and wheel
         // speed; the gear display, the air and the lamps that are not replicated stay as they are
         DressCockpit(rig, Mathf.Abs(pose.Y) * WheelRadius * 3.6f, _remoteRpm);
@@ -636,6 +658,7 @@ public sealed class Truck : Rideable, IEngined
     {
         if (visual is not HeavyRig rig) return;
         Dress(rig, 0, Reversing);
+        rig.DrumSpeed = DrumRate(EngineRunning, Rpm01);
         DressCockpit(rig, motion.Speed * Mathf.Cos(motion.Slip) * 3.6f, Rpm);
         rig.Clutch = Box.ClutchPedal;
         rig.Gear = GearLabel;
@@ -665,6 +688,7 @@ public sealed class Truck : Rideable, IEngined
         rig.DoorsOpen = DoorsOpen;
         rig.Kneeling = Kneeling;
         rig.Tipped = Tipped;
+        rig.Discharging = Discharging;
         rig.Destination = DestinationText;
         rig.BodyRoll = k < Train.Count && k > 0 ? Mathf.Clamp(-Train.Bodies[k].Accel.Y * 0.02f * Train.Bodies[k].CgHeight, -0.08f, 0.08f) : 0f;
     }
