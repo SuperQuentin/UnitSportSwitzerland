@@ -61,7 +61,7 @@ public partial class MapScreen : Screen
     private Label _jobDetail = null!;
     private ProgressBar _jobBar = null!;
     private Button _jobStop = null!;
-    private double _sinceJobPoll;
+    private double _nextJobPollAt;
 
     public static MapScreen Create() => new(Role.Library, null) { Name = "Map" };
 
@@ -342,9 +342,9 @@ public partial class MapScreen : Screen
     public override void _Process(double delta)
     {
         if (_jobRow == null) return;
-        _sinceJobPoll += delta;
-        if (_sinceJobPoll < 0.2) return;
-        _sinceJobPoll = 0;
+        // wall clock: the download threads do not speed up or slow down with the world
+        if (Core.RealClock.Now < _nextJobPollAt) return;
+        _nextJobPollAt = Core.RealClock.Now + 0.2;
 
         if (Terrain.DownloadJob.CurrentProgress is not { } progress)
         {

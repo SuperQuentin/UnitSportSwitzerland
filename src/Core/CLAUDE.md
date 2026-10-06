@@ -21,6 +21,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `permissions` — Permissions: (`Core/Permissions`): what the menus may offer; online, spawning a vehicle is an admin's...
 - `licenses` — Licenses page: (`Core/Licenses`, Settings > About tab, `--licenses`): every data source and bundled component with its attribution and link, plus Godot's notices...
 - `chat-probe` — MP probes derive from `Core/ChatProbe`; quick self-checks go in `ClientWorld.QuickChecks`, camera-placing tools in the `tools` table (`placedByTool` derived), never a hand-kept list
+- `three-clocks` — Three clocks (#579): env time (`WorldClock`) rides sim speed (`GameClock`/`SimNow`), real time (`Core.RealClock`) bends to neither; read `RealClock.Now` as a deadline, never a delta (there is no `RealClock.Delta` on purpose)
 - `cmd-args` — Read the command line only via `CmdArgs.Has/Value/Float/Double/Int/FlagWithShot` (cached, InvariantCulture); never `OS.GetCmdlineUserArgs()` + `IndexOf` again (#221)
 - `platform` — `Platform.IsMobile` (Android/iOS or `--mobile`) and `CanSpawnProcesses` gate the phone client (#63): app-storage terrain, no updater/SDL/host/VR/Realistic+/ffmpeg, multicast lock via `AndroidBridge`; emulator joins but cannot render
 - `touch-controls` — `TouchControls`: the phone's on-screen virtual pad (device 8) labelled from the prompts, 1:1 look drag via `PlayerInput.IsLookMotion`, `--touchcheck`, `--mobile` desktop preview, menus at 1.15x (#63)

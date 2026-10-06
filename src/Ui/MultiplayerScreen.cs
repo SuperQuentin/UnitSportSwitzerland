@@ -25,7 +25,7 @@ public partial class MultiplayerScreen : Screen
     private LineEdit _address = null!;
     private Button _firstJoin = null!;
     private PanelContainer? _banner;
-    private double _sinceBroadcast = 10, _sinceProbe = 10;
+    private double _nextBroadcastAt, _nextProbeAt;   // 0 = due now
     private readonly Dictionary<string, ServerRow> _savedRows = new();
     private readonly Dictionary<string, ServerRow> _lanRows = new();
 
@@ -124,7 +124,7 @@ public partial class MultiplayerScreen : Screen
     {
         _query.Start();
         if (GameSettings.Current.LanDiscovery) _mdns.Start();
-        _sinceBroadcast = _sinceProbe = 10;
+        _nextBroadcastAt = _nextProbeAt = 0;   // ask again as soon as the screen is back
         if (Shell.PlayerName.Length == 0) AskName(mandatory: true);
         else if (_firstJoin != null && IsInstanceValid(_firstJoin)) _firstJoin.CallDeferred(Control.MethodName.GrabFocus);
         else _address.CallDeferred(Control.MethodName.GrabFocus);
@@ -146,10 +146,11 @@ public partial class MultiplayerScreen : Screen
     {
         if (!_query.Running) return;
         bool lanOn = GameSettings.Current.LanDiscovery;
-        if ((_sinceBroadcast += delta) >= 2 && lanOn) { _sinceBroadcast = 0; _query.Broadcast(); }
-        if ((_sinceProbe += delta) >= 4)
+        double real = Core.RealClock.Now;   // wall clock: finding servers is not part of the world
+        if (real >= _nextBroadcastAt && lanOn) { _nextBroadcastAt = real + 2; _query.Broadcast(); }
+        if (real >= _nextProbeAt)
         {
-            _sinceProbe = 0;
+            _nextProbeAt = real + 4;
             foreach (var s in Shell.Book.Servers) _query.Probe(s.Endpoint);
         }
         bool changed = _query.Poll();

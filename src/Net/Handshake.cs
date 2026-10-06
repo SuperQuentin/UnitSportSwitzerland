@@ -91,7 +91,9 @@ public partial class Handshake : Node
                 }
             return;
         }
-        if (_clientWaited < 0 || (_clientWaited += delta) < WaitSeconds) return;
+        if (_clientWaited < 0) return;
+        if (_clientWaited == 0) _clientWaited = Now;   // first frame as a client: start the clock
+        if (Now - _clientWaited < WaitSeconds) return;
         _clientWaited = -1;
         Refused?.Invoke("The server did not answer the version check: it runs an older version of the game.");
     }
