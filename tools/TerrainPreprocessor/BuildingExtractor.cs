@@ -13,7 +13,12 @@ namespace UnitSport.Tools.Preprocessor;
 /// </summary>
 public sealed class BuildingExtractor
 {
-    private readonly string _gpkgPath;
+    /// <summary>
+    /// Where the solids come from: the GeoPackage GDAL used to export, or the FileGDB itself
+    /// (#537), read by <see cref="FileGdb"/>. Both yield the same thing — an OBJEKTART and the
+    /// rings of one solid — so everything below this line is unaware of which it is.
+    /// </summary>
+    private readonly Func<double, double, double, double, IEnumerable<(string? Objektart, List<GeoPackageReader.Ring> Rings)>> _solids;
     private readonly List<GwrPoint> _gwr = new();
     private readonly Dictionary<(int, int), List<GwrPoint>> _gwrGrid = new();
     private const double GwrCellSize = 100.0;
@@ -31,11 +36,82 @@ public sealed class BuildingExtractor
     /// </summary>
     private const double FoundationDepth = 0.8;
 
+    /// <summary>Reads the solids from an exported GeoPackage (what GDAL used to produce).</summary>
     public BuildingExtractor(string gpkgPath, string? gwrSqlitePath)
+        : this(gwrSqlitePath) => _solids = (minE, minN, maxE, maxN) => FromGeoPackage(gpkgPath, minE, minN, maxE, maxN);
+
+    /// <summary>
+    /// Reads the solids straight out of the swissBUILDINGS3D FileGDB zips (#537), with no GDAL and
+    /// no intermediate GeoPackage: one conversion step fewer, and nothing to install.
+    /// </summary>
+    public BuildingExtractor(IReadOnlyList<string> gdbZips, string workDir, string? gwrSqlitePath)
+        : this(gwrSqlitePath) => _solids = (minE, minN, maxE, maxN) => FromFileGdb(gdbZips, workDir, minE, minN, maxE, maxN);
+
+    private BuildingExtractor(string? gwrSqlitePath)
     {
-        _gpkgPath = gpkgPath;
+        _solids = null!;
         if (gwrSqlitePath != null && File.Exists(gwrSqlitePath))
             LoadGwr(gwrSqlitePath);
+    }
+
+    private static IEnumerable<(string?, List<GeoPackageReader.Ring>)> FromGeoPackage(
+        string gpkgPath, double minE, double minN, double maxE, double maxN)
+    {
+        using var conn = GeoPackageReader.Open(gpkgPath);
+        using var cmd = GeoPackageReader.BboxQuery(conn, "buildings",
+            new[] { "OBJEKTART" }, minE, minN, maxE, maxN);
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            string? objektart = reader.IsDBNull(0) ? null : reader.GetString(0);
+            if (reader.IsDBNull(1)) continue;
+            var rings = GeoPackageReader.ParsePolygons((byte[])reader.GetValue(1));
+            if (rings.Count > 0) yield return (objektart, rings);
+        }
+    }
+
+    /// <summary>
+    /// The same solids out of the FileGDB. Each multipatch part is one face, which is exactly the
+    /// ring shape the rest of this class already works on, so the geometry needs no conversion
+    /// beyond flattening. Filtering is by the solid's own vertices rather than an index: a sheet
+    /// holds a few thousand buildings, and skipping the spatial index keeps the reader small.
+    /// </summary>
+    private static IEnumerable<(string?, List<GeoPackageReader.Ring>)> FromFileGdb(
+        IReadOnlyList<string> gdbZips, string workDir, double minE, double minN, double maxE, double maxN)
+    {
+        foreach (string zip in gdbZips)
+        {
+            using var gdb = FileGdb.OpenZip(zip, workDir);
+            if (!gdb.Has("Building_solid")) continue;
+            using var table = gdb.OpenTable("Building_solid");
+            int shape = table.FieldIndex("SHAPE"), kind = table.FieldIndex("OBJEKTART");
+            if (shape < 0 || table.Grid is not { } grid) continue;
+
+            foreach (var row in table.Rows())
+            {
+                if (row.Blob(shape) is not { } blob) continue;
+                var decoded = FileGdbGeometry.DecodeMultiPatch(blob, grid);
+                if (decoded.Vertices.Count == 0) continue;
+
+                bool touches = false;
+                foreach (var v in decoded.Vertices)
+                    if (v.X >= minE && v.X <= maxE && v.Y >= minN && v.Y <= maxN) { touches = true; break; }
+                if (!touches) continue;
+
+                var rings = new List<GeoPackageReader.Ring>(decoded.Parts.Count);
+                foreach (var part in decoded.Parts)
+                {
+                    var xyz = new double[part.Count * 3];
+                    for (int i = 0; i < part.Count; i++)
+                    {
+                        var v = decoded.Vertices[part.Start + i];
+                        xyz[i * 3] = v.X; xyz[i * 3 + 1] = v.Y; xyz[i * 3 + 2] = v.Z;
+                    }
+                    rings.Add(new GeoPackageReader.Ring(xyz));
+                }
+                yield return (kind >= 0 ? row.Text(kind) : null, rings);
+            }
+        }
     }
 
     public int CadastreCount => _gwr.Count;
@@ -80,20 +156,9 @@ public sealed class BuildingExtractor
         double minE = tiles.Min(t => t.MinE), maxE = tiles.Max(t => t.MinE) + ChunkFormat.TileSizeM;
         double minN = tiles.Min(t => t.MinN), maxN = tiles.Max(t => t.MinN) + ChunkFormat.TileSizeM;
 
-        using var conn = GeoPackageReader.Open(_gpkgPath);
-        using var cmd = GeoPackageReader.BboxQuery(conn, "buildings",
-            new[] { "OBJEKTART" }, minE, minN, maxE, maxN);
-        using var reader = cmd.ExecuteReader();
-
-        while (reader.Read())
-        {
-            string? objektart = reader.IsDBNull(0) ? null : reader.GetString(0);
-            if (reader.IsDBNull(1)) continue;
-            var rings = GeoPackageReader.ParsePolygons((byte[])reader.GetValue(1));
-            if (rings.Count == 0) continue;
-
-            AddBuilding(result, objektart, rings);
-        }
+        foreach (var (objektart, rings) in _solids(minE, minN, maxE, maxN))
+            if (rings.Count > 0)
+                AddBuilding(result, objektart, rings);
 
         return result;
     }

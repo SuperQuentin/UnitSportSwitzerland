@@ -141,10 +141,11 @@ public partial class ControlsHelp : CanvasLayer
             new("Flaps a notch down / up", Keys: "{flaps_down} / {flaps_up}", Pad: "{flaps_down} / {flaps_up}"),
             new("Gear up / down (in the air)", PlayerInput.CarDoor),
             new("Speedbrake: retracted, half, full", PlayerInput.Speedbrake),
-            new("Parking brake", PlayerInput.ParkingBrake),
+            new("Parking brake", Keys: "{parking_brake}", Pad: "{speedbrake} (hold)"),
             new("Landing lights", PlayerInput.LightsToggle),
             new("Light sim: start the engines / shut them down", PlayerInput.EngineToggle),
-            new("Light sim: autopilot on / off (then the stick turns the heading and altitude, the levers the speed)", PlayerInput.Autopilot),
+            new("Light sim: autopilot on / off (then the stick turns the heading and altitude, the levers the speed)", Keys: "{autopilot}", Pad: "{lights_toggle} (hold)"),
+            new("Cockpit view, without your body, chase camera", PlayerInput.CameraToggle),
             new("Light sim: pitch trim nose down / up (AN-124, military freighter)", Keys: "{trim_nose_down} / {trim_nose_up}", Pad: "—"),
         }),
         ("Flying", new Row[]

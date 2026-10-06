@@ -14,9 +14,29 @@ public static class BuildingStage
             Console.Error.WriteLine("  run: python tools/export_buildings.py --bbox <minE minN maxE maxN>");
             return 1;
         }
+        return Run(new BuildingExtractor(gpkgPath, gwrPath), outDir, grids);
+    }
 
+    /// <summary>
+    /// The same stage, reading the swissBUILDINGS3D FileGDB zips directly (#537): no GDAL, and no
+    /// intermediate GeoPackage to export first.
+    /// </summary>
+    public static int RunFromGdb(IReadOnlyList<string> gdbZips, string workDir, string? gwrPath,
+        string outDir, Dictionary<TileId, ChunkGrid> grids)
+    {
+        var missing = gdbZips.Where(z => !File.Exists(z)).ToList();
+        if (gdbZips.Count == 0 || missing.Count == gdbZips.Count)
+        {
+            Console.Error.WriteLine("No swissBUILDINGS3D .gdb.zip files to read");
+            return 1;
+        }
+        foreach (var z in missing) Console.Error.WriteLine($"  missing, skipped: {z}");
+        return Run(new BuildingExtractor(gdbZips.Where(File.Exists).ToList(), workDir, gwrPath), outDir, grids);
+    }
+
+    private static int Run(BuildingExtractor extractor, string outDir, Dictionary<TileId, ChunkGrid> grids)
+    {
         var sw = Stopwatch.StartNew();
-        var extractor = new BuildingExtractor(gpkgPath, gwrPath);
         Console.WriteLine($"Buildings: {extractor.CadastreCount} cadastre records loaded");
 
         double? HeightOf(double e, double n)

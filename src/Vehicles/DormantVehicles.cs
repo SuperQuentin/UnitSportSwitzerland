@@ -6,41 +6,40 @@ using UnitSport.Interiors;
 using UnitSport.Player;
 using UnitSport.Terrain;
 using UnitSport.Terrain.Format;
+using UnitSport.World;
 
 namespace UnitSport.Vehicles;
 
 /// <summary>
-/// The cars already standing in the car parks (#499) — and, when #496 phase 3 lands, the fleets in
-/// the industrial yards, through the same layer.
+/// The vehicles already standing in the world until somebody touches one: the cars in the car parks
+/// (#499), an industrial yard's fleet (#516) and a harbour's moored boats (#554).
 ///
 /// <para>
-/// <b>Why they are dormant.</b> A big retail lot is 80 bays. Spawning 80 replicated
-/// <see cref="VehicleBody"/> nodes per lot is not affordable, and scenery you cannot drive away is
-/// not what a car park full of cars should be. So a slot is drawn as instanced geometry and nothing
-/// else until someone actually touches it, and only then is it <b>promoted</b> to a real vehicle.
+/// <b>Why they are dormant.</b> A big retail lot is 80 bays and a city harbour a hundred boats.
+/// Spawning a replicated <see cref="VehicleBody"/> for each is not affordable, and scenery you
+/// cannot take away is not what a full car park should be. So a slot is drawn as instanced geometry
+/// with a static box, and is <b>promoted</b> to a real vehicle only when someone touches it.
 /// </para>
 ///
 /// <para>
-/// <b>Nothing is replicated.</b> <see cref="DormantSlots"/> is a pure function of the tile's bytes,
-/// so the server and every client work out the same fleet independently — the
-/// <see cref="BuildingTypes"/> trick. The only thing that ever goes on the wire is "slot N of owner
-/// X is awake", once, when it wakes.
+/// <b>Nothing is replicated.</b> <see cref="DormantSlots"/> is a pure function of the tile's bytes
+/// (and of the landings, for a harbour), so the server and every client work out the same fleet
+/// independently, the <see cref="BuildingTypes"/> trick. What goes on the wire is "slot N of owner
+/// X is awake", once, when it wakes, and for a slot that respawns, "asleep again".
 /// </para>
 ///
 /// <para>
-/// <b>Waking.</b> Anything that would move one asks <see cref="RequestWake"/>. The server promotes
-/// the slot exactly once through <see cref="VehicleManager.Place"/> under
-/// <see cref="VehicleSlot.NodeName"/> (a server-initiated <c>Place</c> is not subject to
-/// <c>MayPark</c>, which is what <c>AfricaTwinEgg</c> relies on) and tells every peer to stop
-/// drawing the dormant copy. Once woken a slot stays a vehicle for the session: re-sleeping is
-/// deliberately left out until it is measured, as <c>docs/plans/industrial-sites.md</c> says.
+/// <b>Waking.</b> Anything that would move one asks <see cref="Wake"/>. The server promotes the slot
+/// exactly once through <see cref="VehicleManager.Place"/> under <see cref="VehicleSlot.NodeName"/>
+/// (a server-initiated <c>Place</c> is not subject to <c>MayPark</c>, which is what
+/// <c>AfricaTwinEgg</c> relies on) and tells every peer to stop drawing the dormant copy. A woken
+/// slot stays a vehicle while that vehicle exists; a slot that respawns sleeps again a while after
+/// its vehicle is gone (<see cref="Restock"/>).
 /// </para>
 ///
 /// <para>
-/// <b>The look changes on waking</b>, and that is a known wart: a dormant car is drawn from the
-/// shared low-poly meshes <see cref="Traffic"/> already uses for its traffic, and a woken one is a
-/// real catalogue car. <see cref="KindFor"/> keeps the body shape and the paint as close as it can,
-/// so what pops is the detail, not the car.
+/// <b>The look is the woken vehicle's own model</b> (<see cref="DormantLooks"/>), so waking changes
+/// what is alive about it, not what it is (#552).
 /// </para>
 /// </summary>
 /// <summary>
@@ -52,7 +51,7 @@ public partial class DormantBody : StaticBody3D
     public VehicleSlot Slot { get; init; }
 }
 
-public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAware
+public partial class DormantVehicles : Node3D, IOriginContainer
 {
     public static DormantVehicles? Instance { get; private set; }
 
@@ -61,6 +60,21 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
 
     /// <summary>Dormant cars are drawn to here, as <c>Traffic</c> draws its own to 600 m.</summary>
     private const float DrawnM = 400f;
+
+    /// <summary>
+    /// A tile holds its fleet while it is within this many tiles of an anchor's tile (#552): at
+    /// least 500 m round the anchor in every direction, past <see cref="DrawnM"/>. It used to be
+    /// every tile <c>ChunkManager.TileEntered</c> announced — the whole streamed square, 961 tiles
+    /// at render distance 15 — so every car park and yard in a 30 km square got its boxes and
+    /// lorries, Geneva's thousands of them, and none was ever freed.
+    /// </summary>
+    private const int NearRings = 1;
+
+    /// <summary>A fleet is dropped once its tile is further than this from every anchor's tile (hysteresis).</summary>
+    private const int KeepRings = 2;
+
+    /// <summary>How often the anchors' tiles are looked at, in seconds.</summary>
+    private const double CheckEvery = 0.5;
 
     private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
@@ -80,6 +94,11 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
     private readonly List<TileId> _pending = new();
     private bool _busy;
 
+    /// <summary>The anchors' tiles at the last look, and now: the fleets only change when these do.</summary>
+    private readonly List<TileId> _anchorTiles = new(), _anchorTilesNow = new();
+    private readonly List<TileId> _drop = new();
+    private double _sinceCheck = CheckEvery;
+
     public DormantVehicles(ChunkManager chunks, WorldOrigin origin)
     {
         Name = "DormantVehicles";
@@ -90,16 +109,34 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
     public override void _Ready()
     {
         Instance = this;
-        _chunks.TileEntered += OnTileEntered;
+        Landings.Changed += OnLandingsChanged;
         Watch();
     }
 
     public override void _ExitTree()
     {
-        _chunks.TileEntered -= OnTileEntered;
+        Landings.Changed -= OnLandingsChanged;
         if (_watched is { } vm && IsInstanceValid(vm))
+        {
             vm.ChildEnteredTree -= OnVehicleAdded;
+            vm.ChildExitingTree -= OnVehicleRemoved;
+        }
         if (Instance == this) Instance = null;
+    }
+
+    /// <summary>
+    /// The harbour jetties changed (#554): a streaming client gets the server's landings after its
+    /// first tiles, and a marina's slots come from them. Every fleet is worked out again on the next
+    /// look; the awake slots stay awake.
+    /// </summary>
+    private void OnLandingsChanged()
+    {
+        _drop.Clear();
+        _drop.AddRange(_slots.Keys);
+        foreach (var id in _drop) Drop(id);
+        _pending.Clear();
+        _anchorTiles.Clear();
+        _sinceCheck = CheckEvery;
     }
 
     private VehicleManager? _watched;
@@ -122,6 +159,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
         if (_watched != null || VehicleManager.Instance is not { } vehicles) return;
         _watched = vehicles;
         vehicles.ChildEnteredTree += OnVehicleAdded;
+        vehicles.ChildExitingTree += OnVehicleRemoved;
         // anything already standing there when this system started (a join snapshot that arrived first)
         foreach (var child in vehicles.GetChildren()) OnVehicleAdded(child);
     }
@@ -129,60 +167,105 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
     private void OnVehicleAdded(Node node)
     {
         if (SlotOf(node.Name) is not { } key) return;
+        _gone.Remove(key.Key);
         if (!_awake.Add(key.Key)) return;
-        if (_drawn.ContainsKey(key.Tile)) Draw(key.Tile);
+        Forget(key.Tile, key.Key);
     }
 
     /// <summary>
-    /// Whether a slot is a goods vehicle rather than a car (#516): a lone trailer, a tractor, a
-    /// rigid, or a whole coupled artic. They cannot go through the car instancer — a 13.6 m artic
-    /// drawn from <c>TrafficMeshBuilder.Car</c> would be a hatchback standing where a lorry is, and
-    /// would turn into one the moment somebody woke it, with a car's collision box until then.
+    /// A woken slot's vehicle left the world (taken by a player, wrecked and cleared): where the slot
+    /// respawns, the clock starts. Only the peer that decides acts on it (<see cref="Restock"/>).
     /// </summary>
-    private static bool IsHeavy(VehicleSlot s) =>
-        s.Train != 0 || HeavyCatalog.For((RideKind)s.KindId) != null;
-
-    /// <summary>
-    /// Draws a yard's goods vehicles (#516): the real mesh each one wakes as, built through the
-    /// <see cref="Rideable"/> the slot's own <see cref="VehicleState"/> makes, so the dormant artic
-    /// and the artic you get when you touch it are the same object drawn twice. No
-    /// <see cref="MultiMesh"/>: a yard holds a dozen of these where a retail lot holds eighty cars,
-    /// and no two are the same length or load, so there is nothing to instance.
-    ///
-    /// <para>
-    /// Collision is the parked hull plus each section's own box, exactly as <see cref="VehicleBody"/>
-    /// builds them for a real parked train — a trailer you walk through would be worse than none.
-    /// </para>
-    /// </summary>
-    private void DrawHeavies(TileId id, List<VehicleSlot> slots)
+    private void OnVehicleRemoved(Node node)
     {
-        var bodies = _solid.TryGetValue(id, out var existing) ? existing : new List<DormantBody>();
-        foreach (var s in slots)
-        {
-            // the very state Promote would wake it with, so the two cannot drift apart
-            var state = new VehicleState(KindFor(s), new GlobalPos(s.E, s.N, s.Height), s.Yaw,
-                Vector3.Zero, 0f, EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0,
-                Train: s.Train, Load: s.Load);
-            if (state.CreateRide() is not { } ride) continue;
-            var where = _origin.ToWorld(s.E, s.N, s.Height);
-
-            var body = new DormantBody { Slot = s, Position = where, Basis = new Basis(Vector3.Up, s.Yaw) };
-            var box = ride.ParkedBox;
-            body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = box.Size }, Position = box.Centre });
-            int extra = 0;
-            foreach (var (pose, centre, size) in ride.ExtraBoxes())
-                body.AddChild(new CollisionShape3D
-                {
-                    Name = $"Section{++extra}",
-                    Shape = new BoxShape3D { Size = size },
-                    Transform = pose * new Transform3D(Basis.Identity, centre),
-                });
-            body.AddChild(ride.BuildVisual(-1));
-            AddChild(body);
-            bodies.Add(body);
-        }
-        _solid[id] = bodies;
+        if (SlotOf(node.Name) is not { } key || !_awake.Contains(key.Key)) return;
+        _gone[key.Key] = GameClock.Now;
     }
+
+    // ---- respawning (#554) ---------------------------------------------------------------------
+
+    /// <summary>Seconds a respawning slot stays empty after its vehicle is gone (#383's marina boats).</summary>
+    public static double RespawnSeconds { get; set; } = 180;
+
+    /// <summary>Nobody within this of a slot when it is restocked: it must not appear in front of someone.</summary>
+    public const float ClearOfPlayers = 40f;
+
+    /// <summary>No vehicle within this of a slot when it is restocked, flat metres.</summary>
+    public const float ClearOfVehicles = 4f;
+
+    /// <summary>Awake slots whose vehicle is gone, and since when (<see cref="GameClock.Now"/>).</summary>
+    private readonly Dictionary<string, double> _gone = new();
+    private readonly List<string> _restocked = new();
+
+    /// <summary>True on the peer that decides what stands where: the server, or a game played offline.</summary>
+    private bool Decides => !Online || Multiplayer.IsServer();
+
+    /// <summary>
+    /// Puts a respawning slot back to sleep once its vehicle has been gone <see cref="RespawnSeconds"/>,
+    /// its place is clear and nobody is near: the dormant copy is drawn again on every peer
+    /// (<see cref="Slept"/>), so a harbour is restocked as #383's boats were. A slot whose vehicle
+    /// still exists, however far it went, stays awake: that vehicle is the slot's.
+    /// </summary>
+    private void Restock()
+    {
+        if (_gone.Count == 0 || !Decides || VehicleManager.Instance is not { } vehicles) return;
+        double now = GameClock.Now;
+        _restocked.Clear();
+        foreach (var (key, since) in _gone)
+        {
+            if (now - since < RespawnSeconds) continue;
+            int bar = key.LastIndexOf('|');
+            if (Find(key[..bar], int.Parse(key[(bar + 1)..])) is not { } slot) continue;   // its tile is not here
+            if (!slot.Respawns) { _restocked.Add(key); continue; }
+            if (!Clear(vehicles, _origin.ToWorld(slot.E, slot.N, slot.Height))) continue;
+            _restocked.Add(key);
+            if (Online) Rpc(MethodName.Slept, slot.Owner, slot.Ordinal);
+            else Slept(slot.Owner, slot.Ordinal);
+        }
+        foreach (var key in _restocked) _gone.Remove(key);
+    }
+
+    /// <summary>No vehicle within <see cref="ClearOfVehicles"/> of the place and nobody within <see cref="ClearOfPlayers"/>.</summary>
+    private static bool Clear(VehicleManager vehicles, Vector3 at)
+    {
+        foreach (var node in vehicles.GetChildren())
+            if (node is VehicleBody v && MathX.FlatDistance(v.GlobalPosition, at) < ClearOfVehicles) return false;
+        if (vehicles.PlayerPositions?.Invoke() is { } players)
+            foreach (var p in players)
+                if (MathX.FlatDistance(p, at) < ClearOfPlayers) return false;
+        return true;
+    }
+
+    /// <summary>A slot sleeps again: dormant on every peer, drawn where its tile is.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = true, TransferMode = MultiplayerPeerExtension.TransferModeEnum.Reliable)]
+    private void Slept(string owner, int ordinal)
+    {
+        string key = $"{owner}|{ordinal}";
+        _gone.Remove(key);
+        if (!_awake.Remove(key)) return;
+        if (TileOf(owner) is { } id && _slots.ContainsKey(id)) Draw(id);
+    }
+
+    /// <summary>
+    /// The state a slot wakes with. <see cref="Promote"/> places exactly this, and the dormant look
+    /// is built from its ride, so the car or the artic you touch and the one that was standing
+    /// there cannot drift apart.
+    /// </summary>
+    private static VehicleState StateOf(VehicleSlot s) =>
+        new(KindFor(s), new GlobalPos(s.E, s.N, s.Height), s.Yaw,
+            Vector3.Zero, 0f, EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0,
+            Train: s.Train, Load: s.Load);
+
+    /// <summary>Whether anything is drawn at all: a dedicated server or a headless check needs the boxes only.</summary>
+    private static readonly bool Drawn = DisplayServer.GetName() != "headless";
+
+    /// <summary>
+    /// A slot's look (<see cref="DormantLooks"/>): its parked model, merged once per kind, train and
+    /// load and shared by every slot that has it, and its boxes — the parked hull plus each further
+    /// section's, as <see cref="VehicleBody"/> takes them for a real parked train.
+    /// </summary>
+    private static DormantLook? LookOf(VehicleSlot s) =>
+        DormantLooks.For(DormantLooks.KeyOf(s), () => StateOf(s).CreateRide(), Drawn);
 
     /// <summary>
     /// The slot a vehicle node name belongs to: <c>veh_slot_&lt;owner&gt;_&lt;ordinal&gt;</c>, where the
@@ -235,11 +318,75 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
 
     // ---- the fleet of a tile -----------------------------------------------------------------
 
-    private void OnTileEntered(TileId id)
+    /// <summary>
+    /// Twice a second: when an anchor has changed tile, the tiles near one are queued and the
+    /// fleets of those now out of reach are freed. Nothing else happens per frame.
+    /// </summary>
+    public override void _Process(double delta)
     {
-        if (_slots.ContainsKey(id) || _pending.Contains(id)) return;
-        _pending.Add(id);
-        _ = Fill();
+        _sinceCheck += delta;
+        if (_sinceCheck < CheckEvery) return;
+        _sinceCheck = 0;
+        Restock();
+
+        _anchorTilesNow.Clear();
+        foreach (var anchor in _chunks.Anchors)
+            if (IsInstanceValid(anchor) && anchor.IsInsideTree()) _anchorTilesNow.Add(_origin.TileAt(anchor.GlobalPosition));
+        if (SameTiles(_anchorTilesNow, _anchorTiles))
+        {
+            if (_pending.Count > 0) _ = Fill();
+            return;
+        }
+        _anchorTiles.Clear();
+        _anchorTiles.AddRange(_anchorTilesNow);
+
+        _drop.Clear();
+        foreach (var id in _slots.Keys)
+            if (!Within(id, KeepRings)) _drop.Add(id);
+        foreach (var id in _drop) Drop(id);
+        _pending.RemoveAll(id => !Within(id, KeepRings));
+
+        foreach (var at in _anchorTiles)
+            for (int de = -NearRings; de <= NearRings; de++)
+                for (int dn = -NearRings; dn <= NearRings; dn++)
+                {
+                    var id = new TileId(at.E + de, at.N + dn);
+                    if (!_slots.ContainsKey(id) && !_pending.Contains(id)) _pending.Add(id);
+                }
+        if (_drop.Count > 0) Report();
+        if (_pending.Count > 0) _ = Fill();
+    }
+
+    private static bool SameTiles(List<TileId> a, List<TileId> b)
+    {
+        if (a.Count != b.Count) return false;
+        for (int i = 0; i < a.Count; i++)
+            if (a[i] != b[i]) return false;
+        return true;
+    }
+
+    /// <summary>True when the tile is within <paramref name="rings"/> tiles of some anchor's tile.</summary>
+    private bool Within(TileId id, int rings)
+    {
+        foreach (var at in _anchorTiles)
+            if (LodPolicy.Distance(id, at) <= rings) return true;
+        return false;
+    }
+
+    /// <summary>Frees a tile's fleet: drawn, solid and worked out. Its awake slots stay awake.</summary>
+    private void Drop(TileId id)
+    {
+        Clear(id);
+        _slots.Remove(id);
+    }
+
+    /// <summary>One line on what the layer holds, whenever that changes: what a perf log needs to see it.</summary>
+    private void Report()
+    {
+        int slots = 0, bodies = 0;
+        foreach (var (_, list) in _slots) slots += list.Count;
+        foreach (var (_, list) in _solid) bodies += list.Count;
+        GD.Print($"[dormant] {_slots.Count} tiles, {slots} slots, {bodies} bodies, {GetChildCount()} nodes");
     }
 
     /// <summary>
@@ -256,7 +403,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
             {
                 var id = _pending[0];
                 _pending.RemoveAt(0);
-                if (_slots.ContainsKey(id)) continue;
+                if (_slots.ContainsKey(id) || !Within(id, KeepRings)) continue;
                 if (_chunks.Source is not { } source) return;
 
                 // The provider seam. Nothing below this line knows what a bay is: a provider's only
@@ -271,13 +418,20 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
                     if (roads is { Parking.Count: > 0 })
                         DormantSlots.ForParking(id, roads.Parking, ParkedKinds, list);
                     Yards(source, id, roads, list);
+                    Marina(source, id, list);
                     return list;
                 });
                 if (!IsInsideTree()) return;
+                // the anchors moved on while the worker read it
+                if (!Within(id, KeepRings)) continue;
 
                 Watch();
                 _slots[id] = slots;
-                if (slots.Count > 0) Draw(id);
+                if (slots.Count > 0)
+                {
+                    Draw(id);
+                    Report();
+                }
             }
         }
         catch (Exception ex)
@@ -324,17 +478,53 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
     }
 
     /// <summary>
-    /// Draws a tile's dormant fleet: one <see cref="MultiMesh"/> per look and part, so a lot of 80
-    /// cars is a handful of draw calls and no nodes per car. A slot already awake is skipped — its
-    /// real vehicle stands there instead.
+    /// The third provider (#554): a harbour's moored boats. Costs the tile's full grid, cover and
+    /// water, so it is skipped on a tile whose jetties are elsewhere, which is nearly all of them. The
+    /// water comes from the source, as the tile's own build reads it, not from the loaded chunk: the
+    /// tile may not be built yet, and the server and every client must agree on which berths float.
+    /// Worker thread, like the rest of <see cref="Fill"/>.
+    /// </summary>
+    private static void Marina(IChunkSource source, TileId id, List<VehicleSlot> into)
+    {
+        var jetties = Landings.Current.Jetties;
+        bool here = false;
+        foreach (var j in jetties)
+        {
+            var (e, n) = j.Ribbon.Middle;
+            if (TileId.FromLv95(e, n) == id) { here = true; break; }
+        }
+        if (!here) return;
+        if (source.LoadChunkAsync(id).GetAwaiter().GetResult() is not { } grid) return;
+        var cover = source.LoadCoverAsync(id).GetAwaiter().GetResult();
+        if (ChunkManager.LoadWaterLayerAsync(source, id, grid, cover, default).GetAwaiter().GetResult() is not { } water) return;
+        DormantSlots.ForMarina(id, jetties, (e, n) =>
+        {
+            // a berth a few metres across the tile's edge reads the edge's water
+            double x = Math.Clamp(e - id.MinE, 0, ChunkFormat.TileSizeM), z = Math.Clamp(id.MaxN - n, 0, ChunkFormat.TileSizeM);
+            if (!water.TrySample(x, z, out float level, out _)) return null;
+            return (level, (float)grid.SampleHeight(id.MinE + x, id.MaxN - z));
+        }, (int)RideKind.Speedboat, (int)RideKind.Jetski, into);
+    }
+
+    /// <summary>
+    /// Builds a tile's dormant fleet: one static body per slot, its boxes sharing their shapes with
+    /// every slot of the same look, and the drawing (<see cref="DrawLooks"/>). A slot already awake
+    /// is skipped — its real vehicle stands there instead.
     /// </summary>
     private void Draw(TileId id)
     {
         Clear(id);
         if (!_slots.TryGetValue(id, out var slots)) return;
 
-        var byLook = new Dictionary<(byte Paint, bool Van), List<VehicleSlot>>();
-        var heavies = new List<VehicleSlot>();
+        // Every body of the tile, cars and lorries, in ONE list: the lorries' used to be stored and
+        // then overwritten by the cars', so Clear never freed them and every redraw stacked another
+        // copy of every lorry in the yard on top of the last (#552).
+        //
+        // One static body per slot. Only the tiles round an anchor hold a fleet, so they are created
+        // with the tile rather than pooled by distance the way TreeColliders pools its trunks; if
+        // --perflog ever says otherwise, pooling is the next step and the slot list is already the
+        // right input for it.
+        var bodies = new List<DormantBody>();
         foreach (var s in slots)
         {
             if (_awake.Contains(KeyOf(s))) continue;
@@ -344,48 +534,68 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
                 _awake.Add(KeyOf(s));
                 continue;
             }
-            // a lorry is not a car with a different paint: it gets its own mesh, not the car instancer
-            if (IsHeavy(s)) { heavies.Add(s); continue; }
-            var look = (s.Paint, s.Van);
-            if (!byLook.TryGetValue(look, out var list)) byLook[look] = list = new List<VehicleSlot>();
-            list.Add(s);
-        }
-        if (heavies.Count > 0) DrawHeavies(id, heavies);
-        if (byLook.Count == 0) return;
-
-        var instances = new List<MultiMeshInstance3D>(byLook.Count * 2);
-        foreach (var ((paint, van), list) in byLook)
-        {
-            var (body, lamps) = TrafficMeshBuilder.Car(TrafficMeshBuilder.Paints[paint % TrafficMeshBuilder.Paints.Length], van);
-            instances.Add(Instanced(body, list, HumanMeshBuilder.Material()));
-            instances.Add(Instanced(lamps, list, TrafficMeshBuilder.LampMaterial()));
-        }
-        foreach (var mm in instances) AddChild(mm);
-        _drawn[id] = instances;
-
-        // one static box per car. A lot is 80 of them and only a handful of tiles hold a lot, so
-        // they are created with the tile rather than pooled by distance the way TreeColliders pools
-        // its trunks; if --perflog ever says otherwise, pooling is the next step and the slot list
-        // is already the right input for it.
-        var bodies = new List<DormantBody>();
-        foreach (var (_, list) in byLook)
-            foreach (var s in list)
+            if (LookOf(s) is not { } look) continue;
+            var body = new DormantBody
             {
-                var box = new BoxShape3D { Size = new Vector3(s.Van ? 1.9f : 1.75f, s.Van ? 2.0f : 1.45f, s.Van ? 5.0f : 4.2f) };
-                var body = new DormantBody
-                {
-                    Slot = s,
-                    Position = _origin.ToWorld(s.E, s.N, s.Height) + Vector3.Up * box.Size.Y * 0.5f,
-                    Basis = new Basis(Vector3.Up, s.Yaw),
-                };
-                body.AddChild(new CollisionShape3D { Shape = box });
-                AddChild(body);
-                bodies.Add(body);
-            }
+                Slot = s,
+                Position = _origin.ToWorld(s.E, s.N, s.Height),
+                Basis = new Basis(Vector3.Up, s.Yaw),
+            };
+            foreach (var (pose, shape) in look.Boxes)
+                body.AddChild(new CollisionShape3D { Shape = shape, Transform = pose });
+            AddChild(body);
+            bodies.Add(body);
+        }
         _solid[id] = bodies;
+        DrawLooks(id);
     }
 
-    private MultiMeshInstance3D Instanced(Mesh mesh, List<VehicleSlot> slots, Material material)
+    /// <summary>
+    /// (Re)draws a tile's fleet: one <see cref="MultiMesh"/> per look, so a lot of 80 cars of a
+    /// dozen kinds is a dozen instancers and no node per car, and a lorry is drawn as the lorry it
+    /// wakes as. Only these are redone when a slot wakes; the bodies are left alone. Every tile with
+    /// a fleet has an entry, even an empty one: a yard of lorries alone used to have none, so a
+    /// lorry woken there was never undrawn.
+    /// </summary>
+    private void DrawLooks(TileId id)
+    {
+        if (_drawn.Remove(id, out var old)) Free(old);
+        if (!_slots.TryGetValue(id, out var slots)) return;
+
+        var byLook = new Dictionary<DormantLooks.Key, List<VehicleSlot>>();
+        foreach (var s in slots)
+        {
+            if (_awake.Contains(KeyOf(s))) continue;
+            var key = DormantLooks.KeyOf(s);
+            if (!byLook.TryGetValue(key, out var list)) byLook[key] = list = new List<VehicleSlot>();
+            list.Add(s);
+        }
+        var instances = new List<MultiMeshInstance3D>(byLook.Count);
+        foreach (var (_, list) in byLook)
+            if (LookOf(list[0]) is { Mesh: { } mesh })
+                instances.Add(Instanced(mesh, list));
+        foreach (var mm in instances) AddChild(mm);
+        _drawn[id] = instances;
+    }
+
+    /// <summary>
+    /// The real vehicle stands in this slot now: its dormant copy goes, and nothing else is rebuilt —
+    /// its body is freed and the tile's instancers are redone from the shared looks.
+    /// </summary>
+    private void Forget(TileId id, string key)
+    {
+        if (!_solid.TryGetValue(id, out var bodies)) return;
+        for (int i = bodies.Count - 1; i >= 0; i--)
+        {
+            if (KeyOf(bodies[i].Slot) != key) continue;
+            bodies[i].QueueFree();
+            bodies.RemoveAt(i);
+            DrawLooks(id);
+            return;
+        }
+    }
+
+    private MultiMeshInstance3D Instanced(Mesh mesh, List<VehicleSlot> slots)
     {
         var mm = new MultiMesh
         {
@@ -396,58 +606,72 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
         for (int i = 0; i < slots.Count; i++)
         {
             var s = slots[i];
-            // the meshes face -Z like a traffic car, and a yaw about +Y with 0 = -Z is exactly that
+            // a vehicle's model faces -Z, and a yaw about +Y with 0 = -Z is exactly that
             var basis = new Basis(Vector3.Up, s.Yaw);
             mm.SetInstanceTransform(i, new Transform3D(basis, _origin.ToWorld(s.E, s.N, s.Height)));
         }
         return new MultiMeshInstance3D
         {
             Multimesh = mm,
-            MaterialOverride = material,
             VisibilityRangeEnd = DrawnM,
-            // a car park's cars are not worth a shadow pass each at distance
             CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
         };
     }
 
+
     private void Clear(TileId id)
     {
-        if (_drawn.Remove(id, out var list))
-            foreach (var mm in list)
-            {
-                mm.Multimesh?.Dispose();
-                mm.QueueFree();
-            }
+        if (_drawn.Remove(id, out var list)) Free(list);
         if (_solid.Remove(id, out var bodies))
             foreach (var b in bodies) b.QueueFree();
     }
 
-    /// <summary>Every drawn instance moves with the origin: their transforms are world positions (#185).</summary>
-    public void OnOriginShifted(OriginShift shift)
+    private static void Free(List<MultiMeshInstance3D> list)
     {
-        foreach (var id in _drawn.Keys.ToList()) Draw(id);
+        foreach (var mm in list)
+        {
+            mm.Multimesh?.Dispose();
+            mm.QueueFree();
+        }
     }
+
+    // No IOriginShiftAware: this is an IOriginContainer, so the shifter has already moved every body
+    // and instancer by the time it would be told. Redrawing every fleet on top of that rebuilt each
+    // lorry's model at every shift: 98 s for one teleport into Geneva (#552).
 
     // ---- what is standing where --------------------------------------------------------------
 
     /// <summary>
     /// The dormant slot nearest <paramref name="world"/> within <see cref="ReachM"/>, or null. What
-    /// <c>VehicleReach</c> asks before it decides there is nothing to get into.
+    /// <c>VehicleReach</c> asks before it decides there is nothing to get into. With
+    /// <paramref name="awakeToo"/>, a slot already woken counts as well: the bay is taken either way.
     /// </summary>
-    public VehicleSlot? Nearest(Vector3 world)
+    public VehicleSlot? Nearest(Vector3 world, bool awakeToo = false)
     {
         VehicleSlot? best = null;
         float bestD = ReachM * ReachM;
         foreach (var (_, slots) in _slots)
             foreach (var s in slots)
             {
-                if (_awake.Contains(KeyOf(s))) continue;
+                if (!awakeToo && _awake.Contains(KeyOf(s))) continue;
                 float d = _origin.ToWorld(s.E, s.N, s.Height).DistanceSquaredTo(world);
                 if (d >= bestD) continue;
                 bestD = d;
                 best = s;
             }
         return best;
+    }
+
+    /// <summary>
+    /// The slot standing at a place, woken or not, within <paramref name="within"/> flat metres:
+    /// what a check asks to find a berth's or a bay's slot by where it is (LV95).
+    /// </summary>
+    public VehicleSlot? SlotAt(double e, double n, double within = 1.5)
+    {
+        foreach (var (_, slots) in _slots)
+            foreach (var s in slots)
+                if ((s.E - e) * (s.E - e) + (s.N - n) * (s.N - n) < within * within) return s;
+        return null;
     }
 
     /// <summary>True where this slot has already become a real vehicle.</summary>
@@ -497,7 +721,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
         if (Find(owner, ordinal) is not { } slot) return;
         if (!_awake.Add(KeyOf(slot))) return;
         // the real vehicle stands there now: stop drawing the dormant copy of this one
-        if (TileOf(owner) is { } id && _drawn.ContainsKey(id)) Draw(id);
+        if (TileOf(owner) is { } id) Forget(id, KeyOf(slot));
     }
 
     /// <summary>Puts the real vehicle in the slot. Returns false when nothing could be placed.</summary>
@@ -508,15 +732,13 @@ public partial class DormantVehicles : Node3D, IOriginContainer, IOriginShiftAwa
 
         // the state first, then its own ride: CreateRide is what knows a lone trailer from a truck
         // with one coupled to it from a plain car, so the wake path must not assume a mountable kind
-        var state = new VehicleState(KindFor(slot), new GlobalPos(slot.E, slot.N, slot.Height), slot.Yaw,
-            Vector3.Zero, 0f, EngineOn: false, Wrecked: false, Throttle: 0f, SpawnedAt: 0,
-            Train: slot.Train, Load: slot.Load);
+        var state = StateOf(slot);
         if (state.CreateRide() is not { } ride) return false;
         state = state with { Health = ride.MaxHealth };
         if (vehicles.Place(state, slot.NodeName) == null) return false;
 
         _awake.Add(KeyOf(slot));
-        if (TileOf(slot.Owner) is { } id && _drawn.ContainsKey(id)) Draw(id);
+        if (TileOf(slot.Owner) is { } id) Forget(id, KeyOf(slot));
         return true;
     }
 

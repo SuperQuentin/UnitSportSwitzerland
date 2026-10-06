@@ -81,8 +81,9 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | throttle / climb / descend | Shift Space Ctrl / RT LT A B | ok: R / L trigger, analog (#436) | keep |
 | fire / pigeon drop | LMB / RB | ok: R trigger | keep |
 | airliner flaps | F6 F7 / LB RB | ok: grips, or the flap lever by hand (#438) | keep |
-| speedbrake / gear / park brake | / G . / D-pad ← X — | ok: levers and poke by hand (#438) | keep |
-| autopilot / trim | Y Home End / — | ok: AP poke, trim wheel by hand (#438) | keep |
+| speedbrake / gear / park brake | / G . / D-pad ← X, hold D-pad ← (#421) | ok: levers and poke by hand (#438), or hold R stick ← | keep |
+| cockpit view (aircraft, #421) | V / R3 | ok: R3 shows or hides your own body | keep |
+| autopilot / trim | Y Home End / hold D-pad → (AP, #421), trim — | ok: AP poke or hold R stick →, trim wheel by hand (#438) | gap: trim on a pad |
 | wingsuit / canopy | stick, Space | ok: stick, A; arms roll the suit, hands pull the brakes (#438) | keep |
 | pigeon flap / dive | Space Ctrl / A B | ok: A B, flap the arms (#438) | keep |
 

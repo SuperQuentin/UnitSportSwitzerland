@@ -9,7 +9,7 @@ Before, a block of flats was planned as one big house round a single stair core.
 - **Who** (`ApartmentTypeFor`): every `BuildingKind.Apartment`; an `Other` building over three
   storeys or 200 m² (the old plans already made those flats); 60 % of `Commercial` blocks of three
   storeys or more, by a roll of the key, as **shops under flats** (`BuildingType.MixedUse`). Never a
-  bank. `BuildingType.Apartments` / `MixedUse` (8, 9) mark the plan; a footprint the planner cannot
+  bank. `BuildingType.Apartments` / `MixedUse` (9, 10) mark the plan; a footprint the planner cannot
   fit (too narrow, too shallow for a stair) falls back to the old cored plan.
 - **A stairwell per front door.** Every door on the front wall (slot 0 always, extras if far enough
   apart: the stairwell width plus two thin flats, more for mixed blocks) gets one: a core room
@@ -52,7 +52,7 @@ Before, a block of flats was planned as one big house round a single stair core.
   read), `LiftPlan` (cabin rectangle, door side, floors served, the call button and panel
   positions), `InnerDoorPlan` (a flat's front door: floor, hall room, side, centre, `Locked`).
   New rooms `Elevator CarPark TechRoom Corridor`, pieces `Pillar StorageCage Mailboxes BikeRack`.
-  Plan version 16.
+  Plan version 17 (#501 took 16).
 - **Validator**: reachability now runs from every street doorway through doorways, up and down
   every flight and along every elevator, over the whole building (a block's upper floors are
   stairwells that never meet); a hole must cover its flight; each elevator has a cabin with a

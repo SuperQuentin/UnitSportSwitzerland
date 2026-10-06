@@ -882,6 +882,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
     public bool HasAnchor(Node3D anchor) => _anchors.Contains(anchor);
 
+    /// <summary>Every streaming anchor, with or without collision. Check each with <c>IsInstanceValid</c>.</summary>
+    public IReadOnlyList<Node3D> Anchors => _anchors;
+
     public int ActiveChunkCount => _chunks.Count;
 
     /// <summary>Bilinear terrain height at a world position, if that chunk's data is loaded.</summary>
@@ -1753,7 +1756,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// file), else the legacy layer derived from the cover raster, which needs the full grid. Null
     /// when the tile has no water, or when only a coarse grid and no source layer is at hand.
     /// </summary>
-    private static async Task<WaterLayer?> LoadWaterLayerAsync(IChunkSource source, TileId id, ChunkGrid grid,
+    public static async Task<WaterLayer?> LoadWaterLayerAsync(IChunkSource source, TileId id, ChunkGrid grid,
         byte[]? cover, CancellationToken ct)
     {
         if (await source.LoadWaterAsync(id, ct) is { } tile) return WaterLayer.Create(tile, grid);

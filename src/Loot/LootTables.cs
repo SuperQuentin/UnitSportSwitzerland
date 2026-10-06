@@ -51,6 +51,8 @@ public static class LootTables
         [ItemId.Backpack] = Tier.Rare, [ItemId.HikingPack] = Tier.VeryRare,
         // fishing (#493): Gear, so only the barn crate's FishingGear pool gives them
         [ItemId.FishingRod] = Tier.Rare, [ItemId.Spinner] = Tier.Uncommon,
+        // #501: category Cosmetic, which no pool takes by category, so only the Toys pool gives it
+        [ItemId.Blahaj] = Tier.Uncommon,
     });
 
     /// <summary>
@@ -89,6 +91,8 @@ public static class LootTables
     private static readonly ItemId[] Wire = { ItemId.CopperWire };
     private static readonly ItemId[] Hardware = { ItemId.Screws, ItemId.DuctTape, ItemId.CopperWire, ItemId.Rope };
     private static readonly ItemId[] Optics = { ItemId.SmartBinoculars };
+    /// <summary>Soft toys (#501): a bin of them at an IKEA, the odd one in a child's room.</summary>
+    private static readonly ItemId[] Toys = { ItemId.Blahaj };
     private static readonly ItemId[] Tins = { ItemId.CannedFood };
     private static readonly ItemId[] BarnStuff = { ItemId.Rope, ItemId.Firewood, ItemId.Apple };
     private static readonly ItemId[] Fuel = { ItemId.Firewood, ItemId.Coal };
@@ -149,6 +153,7 @@ public static class LootTables
         [FurnitureType.WineRack] = new(0.45f, 1, 1, new[] { P(KitchenScrap, 55), P(Water, 30), P(Food, 15) }),
         [FurnitureType.Barrel] = new(0.60f, 0, 1, new[] { P(Water, 60), P(Scrap, 40) }),
         [FurnitureType.WaterTank] = new(0.40f, 1, 2, new[] { P(Water, 100) }),
+        [FurnitureType.BlahajBin] = new(0.10f, 1, 3, new[] { P(Toys, 100) }),
         [FurnitureType.ToyBox] = new(0.40f, 1, 2, new[] { P(Sweets, 50), P(Gadgets, 25), P(Plastic, 25) }, 0.30f, 1, 15),   // the piggy bank
         [FurnitureType.Bookcase] = new(0.50f, 0, 1, new[] { P(Medical, 20), P(Gadgets, 30), P(Optics, 3), P(Cloth, 20) }, 0.30f, 5, 60),   // notes slipped in a book
         [FurnitureType.Amplifier] = new(0.60f, 0, 1, new[] { P(Gadgets, 50), P(Wire, 50) }),
@@ -182,6 +187,9 @@ public static class LootTables
     /// </summary>
     private static readonly Dictionary<(FurnitureType, RoomType), Container> RoomContainers = new()
     {
+        // #501: a bin on the IKEA shop floor is full of Blåhajs and nothing else — that is what it
+        // is. Rarely empty, and several at a time, because a bin holds dozens.
+        [(FurnitureType.BlahajBin, RoomType.IkeaMarket)] = new(0.05f, 2, 4, new[] { P(Toys, 100) }),
         [(FurnitureType.Shelf, RoomType.Garage)] = new(0.25f, 1, 3, new[] { P(Hardware, 40), P(Parts, 25), P(Scrap, 30), P(Minerals, 5) }),
         [(FurnitureType.Shelf, RoomType.Workshop)] = new(0.25f, 1, 3, new[] { P(Hardware, 40), P(Parts, 25), P(Scrap, 30), P(Minerals, 5) }),
         [(FurnitureType.Shelf, RoomType.Storage)] = new(0.30f, 1, 3, new[] { P(Pantry, 40), P(Scrap, 20), P(Hardware, 10), P(Medical, 10), P(Minerals, 15), P(Parts, 5), P(Optics, 1) }),
@@ -629,6 +637,7 @@ public static class LootTables
         FurnitureType.WineRack => "wine rack",
         FurnitureType.WaterTank => "water tank",
         FurnitureType.ToyBox => "toy box",
+        FurnitureType.BlahajBin => "bin of Blåhajs",
         _ => t.ToString().ToLowerInvariant(),
     };
 }

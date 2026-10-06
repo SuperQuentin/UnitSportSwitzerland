@@ -67,13 +67,13 @@ no AI traffic.
 ## Runtime
 
 - `World/AirportStands` (`Systems.Airports`, created in `ClientWorld`/`ServerWorld` beside
-  `MarinaBoats`) reads the index once, from `IChunkSource.LoadAirportsAsync` or from
+  `SteamerBerth`) reads the index once, from `IChunkSource.LoadAirportsAsync` or from
   `--airports <file>`.
   - `LocalChunkSource` reads `airports.json`. The decorators forward the call.
     `NetworkChunkSource` reads only its local source.
   - `FixtureChunkSource` plans its course's airport.
   - It is not an `AssetKind`: only the deciding peer needs it.
-- **Who decides**: the dedicated server, or a client with no peer, as `MarinaBoats` does. A stand is
+- **Who decides**: the dedicated server, or a client with no peer, as `SteamerBerth` does. A stand is
   registered when its tile enters the rings (`TileEntered`). A review runs every 3 s, nothing per
   frame. It places through `VehicleManager.Place`: owner 0, so the server is the authority at rest.
 - **Names**: `veh_stand_<code>_<ref>`, for example `veh_stand_LSZH_D09`. The stairs are that name

@@ -75,6 +75,8 @@ public static partial class Preprocessor
         var inDirs = new List<string>();
         string? outDir = null, tempDir = null, pngDir = null;
         string? tlmGpkg = null, routeKeys = null, buildingsGpkg = null, gwrPath = null;
+        string? exportRouteKeysDir = null;
+        var buildingsGdb = new List<string>();
         bool verify = false;
         bool roadsOnly = false, featuresOnly = false, doCover = false, doPlaces = false, placesOnly = false;
         // --tiles-file: feature passes only touch these tiles ("E-N" in km per line), so adding one valley
@@ -116,7 +118,12 @@ public static partial class Preprocessor
                 case "--dump-png": pngDir = args[++i]; break;
                 case "--tlm": tlmGpkg = args[++i]; break;
                 case "--route-keys": routeKeys = args[++i]; break;
+                // #537: build route_keys.sqlite from the ASTRA FileGDBs, with no GDAL
+                case "--export-route-keys": exportRouteKeysDir = args[++i]; break;
                 case "--buildings": buildingsGpkg = args[++i]; break;
+                // #537: read the swissBUILDINGS3D FileGDB zips directly, with no GDAL export first.
+                // Repeatable, and globs are expanded by the caller (one zip per map sheet).
+                case "--buildings-gdb": buildingsGdb.Add(args[++i]); break;
                 case "--gwr": gwrPath = args[++i]; break;
                 case "--cover": doCover = true; break;
                 case "--cover-only": doCover = coverOnly = featuresOnly = true; break;
@@ -243,6 +250,14 @@ public static partial class Preprocessor
             return LandingStage.Run(outDir, tlmGpkg, landingsFile);
         }
 
+        // ---- route keys from the ASTRA FileGDBs (#537), standalone: nothing else is needed ------
+        if (exportRouteKeysDir != null)
+        {
+            SetStage("route keys");
+            return RouteKeyStage.Run(exportRouteKeysDir, tempDir ?? Path.Combine(exportRouteKeysDir, "_temp"),
+                Console.WriteLine);
+        }
+
         WaterStage.Options WaterOptions() => new() { Jobs = jobs, BathyDir = bathyDir, PngDir = pngDir, Crops = pngCrops };
 
         // ---- coarse companion tiles: decimate what is already built -----------------------------
@@ -350,9 +365,9 @@ public static partial class Preprocessor
         // ---- feature-only passes: reuse the .terr chunks already in outDir ------------------
         if (roadsOnly || featuresOnly)
         {
-            if (tlmGpkg == null && buildingsGpkg == null && !doPlaces)
+            if (tlmGpkg == null && buildingsGpkg == null && buildingsGdb.Count == 0 && !doPlaces)
             {
-                Console.Error.WriteLine("Nothing to do: pass --tlm, --buildings and/or --places");
+                Console.Error.WriteLine("Nothing to do: pass --tlm, --buildings, --buildings-gdb and/or --places");
                 return 2;
             }
             return RunFeatures(TerrainManifest.FromJson(File.ReadAllText(Path.Combine(outDir, "manifest.json"))));
@@ -462,7 +477,7 @@ public static partial class Preprocessor
                 SetStage("places");
                 int rc = PlaceStage.Run(gwrPath, outDir, existing.Tiles.Select(t => t.Id).ToHashSet(), tlmGpkg);
                 if (rc != 0) return rc;
-                if (placesOnly || (tlmGpkg == null && buildingsGpkg == null)) return 0;
+                if (placesOnly || (tlmGpkg == null && buildingsGpkg == null && buildingsGdb.Count == 0)) return 0;
             }
 
             const int BatchSize = 400;
@@ -502,9 +517,11 @@ public static partial class Preprocessor
                     Console.WriteLine($"=== roads, batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
                     int rc = RoadStage.Run(tlmGpkg!, routeKeys, outDir!, tempDir!, batch, coverOverrides);
                     if (rc != 0) return rc;
-                    if (buildingsGpkg != null)
+                    if (buildingsGpkg != null || buildingsGdb.Count > 0)
                     {
-                        rc = BuildingStage.Run(buildingsGpkg, gwrPath, outDir!, batch);
+                        rc = buildingsGdb.Count > 0
+                            ? BuildingStage.RunFromGdb(buildingsGdb, Path.Combine(tempDir!, "buildgdb"), gwrPath, outDir!, batch)
+                            : BuildingStage.Run(buildingsGpkg!, gwrPath, outDir!, batch);
                         if (rc != 0) return rc;
                     }
                 }
@@ -512,7 +529,7 @@ public static partial class Preprocessor
                 if (nrc != 0) return nrc;
             }
 
-            if (!doCover && (buildingsGpkg == null || roads)) return 0;
+            if (!doCover && ((buildingsGpkg == null && buildingsGdb.Count == 0) || roads)) return 0;
             if (doCover && tlmGpkg == null)
             {
                 Console.Error.WriteLine("--cover requires --tlm <swisstlm3d .gpkg>");
@@ -529,9 +546,11 @@ public static partial class Preprocessor
                     int rc = CoverStage.Run(tlmGpkg!, outDir!, batch, coverOverrides, RawRoads.DirFor(tempDir!));
                     if (rc != 0) return rc;
                 }
-                if (buildingsGpkg != null && !roads)
+                if ((buildingsGpkg != null || buildingsGdb.Count > 0) && !roads)
                 {
-                    int rc = BuildingStage.Run(buildingsGpkg, gwrPath, outDir!, batch);
+                    int rc = buildingsGdb.Count > 0
+                        ? BuildingStage.RunFromGdb(buildingsGdb, Path.Combine(tempDir!, "buildgdb"), gwrPath, outDir!, batch)
+                        : BuildingStage.Run(buildingsGpkg!, gwrPath, outDir!, batch);
                     if (rc != 0) return rc;
                 }
             }

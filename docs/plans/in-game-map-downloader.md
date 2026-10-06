@@ -3,7 +3,7 @@
 
 # In-game map downloader and landing picker
 
-Status: **planned**, nothing built yet. Tracking issue: [#515](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/515).
+Status: **done** (phases 0-5 in #520, phase 6 in #537). Tracking issue: [#515](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/515).
 
 Bring `tools/MapSetup` into the game: a "Map" entry on the main menu that shows which parts of
 Switzerland are downloaded, lets you search, draw and select what to add, downloads it in the
@@ -26,7 +26,7 @@ is actually used for:
 |---|---|---|
 | **Python** | `tools/swiss_data.py` — downloads from the swisstopo STAC API | **Yes, dropped.** `swiss_data.py` is standard library only: HTTPS, JSON, SHA-256, zip. Re-implemented in C# it is ordinary `HttpClient` work (phase 1). Nothing to package. |
 | **.NET SDK** | building `TerrainPreprocessor` (net9) and `RoadGen` (net8) | **Yes, dropped.** No net9-only API appears in either project, so the preprocessor retargets to net8 and the game references it directly — tiles are built in-process, with no subprocess and no SDK (phase 2). This is also what makes "keep downloading while you play" natural. |
-| **GDAL** | `export_buildings.py` and `export_route_keys.py` only | **Not sanely packageable.** GDAL + its Python bindings is 150–250 MB per platform, three platforms, with macOS codesigning on top. But it is only used to read **Esri FileGDB** — building TIN solids, and a route-id attribute table — and write GeoPackage. Phase 6 replaces it with a small C# FileGDB reader. Until then, GDAL is needed for **buildings and cycle routes only**. |
+| **GDAL** | `export_buildings.py` and `export_route_keys.py` only | **Eliminated too (#537).** Was not sanely packageable: GDAL + its Python bindings is 150–250 MB per platform, three platforms, with macOS codesigning on top. But it is only used to read **Esri FileGDB** — building TIN solids, and a route-id attribute table — and write GeoPackage. Phase 6 replaced it with a C# FileGDB reader, so nothing in the pipeline needs GDAL any more. |
 
 So after phases 1–2, with **zero external dependencies**, the game can download and build:
 terrain, roads, railways, watercourses, land cover, trees, cadastre (GWR) and the place index —
@@ -151,7 +151,7 @@ A command-line run with `--at`, and every probe, skips the map exactly as it ski
 | **3** | The game references MapCore. `MapScreen` + `MapCanvas`: relief map, status overlay, search, selection, estimate table, Requirements panel. Keyboard, mouse, gamepad. "Map" on the main menu. | The whole UI, and the first point at which a player can see what they have. |
 | **4** | `DownloadJob` in the background, and live tile arrival: manifest hot-reload, generated fill dropped and re-blended where real data landed. | The only phase that touches terrain streaming; the one with real risk. |
 | **5** | Landing picker: the map on launch and join, `WorldLaunch` landing, last-place memory, the no-terrain-here notice. | Touches joining, so it is the phase that needs the network tier. |
-| **6** | A C# FileGDB reader for buildings and cycle routes. **GDAL eliminated.** Separate issue. | Independent of everything above; until it lands, those two layers carry the setup notice. |
+| **6** | A C# FileGDB reader for buildings and cycle routes. **GDAL eliminated.** Done, #537. | Independent of everything above; until it lands, those two layers carry the setup notice. |
 
 ## Risks
 

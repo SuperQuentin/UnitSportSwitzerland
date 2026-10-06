@@ -18,5 +18,5 @@
 - **Worktrees** have their own root, so they do not see the main checkout's file: copy it in, set
   `UNITSPORT_CHUNKS`, or pass `--chunks`.
 - **The Python helpers default to the repo's `ressources/data`**: MapSetup must hand them the data
-  location explicitly (`export_route_keys.py --dir`, `export_buildings.py --src/--out`,
+  location explicitly (`export_buildings.py --src/--out`,
   `swiss_data.py --out`), or on another drive they fail (`sqlite3 ... unable to open database file`).

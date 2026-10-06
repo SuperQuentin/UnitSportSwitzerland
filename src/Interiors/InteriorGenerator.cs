@@ -32,7 +32,13 @@ public static partial class InteriorGenerator
     private const int MaxFloors = 30;
 
     /// <param name="rural">The building's tile is countryside (<c>Loot.ShopTables.IsRural</c>): only there is a gun shop.</param>
-    public static InteriorLayout Generate(Footprint fp, Building b, bool rural = false)
+    /// <param name="type">
+    /// What <see cref="BuildingTypes"/> made of the building's group, for the types that cannot be
+    /// seen in the footprint alone: an IKEA is recognised from where the tile is (#501), so the
+    /// tile-aware <see cref="Generate(BuildingTile, int, RoadTile?, ChunkGrid?)"/> has to pass it in.
+    /// </param>
+    public static InteriorLayout Generate(Footprint fp, Building b, bool rural = false,
+        BuildingType type = BuildingType.None)
     {
         var rng = new Random(StableHash(fp.Key.ToString()));
         var (h, n) = Storeys(b);
@@ -67,15 +73,20 @@ public static partial class InteriorGenerator
         if (bank) layout.Type = BuildingType.Bank;
         layout.Shop = BuildingFootprint.ShopOf(fp, rural);
 
-        // An industrial site (#497) plans its own hall, so none of the house rules below apply.
-        // Deliberately not an early return: Generate has one exit and one Furnish, so anything
-        // that has to run over every finished plan (#498 cuts the facade doors' doorways here)
-        // is written once and cannot miss this path.
+        // An industrial site (#497) or an IKEA (#501) plans its own hall, so none of the house
+        // rules below apply. Deliberately not an early return: Generate has one exit and one
+        // Furnish, so anything that has to run over every finished plan (#498 cuts the facade
+        // doors' doorways here) is written once and cannot miss either path.
         var site = BuildingTypes.SiteFor(fp.Key.ToString(), b.Kind, fp.Width, fp.Depth, b.MaxY - b.MinY);
+        bool planned = type == BuildingType.Ikea
+            ? TryIkea(layout, fp.Door.Height)
+            : site != BuildingType.None && TryIndustrial(layout, site, fp.Door.Height, rng);
         // a block of flats (#557) plans its stairwells and flats itself, and its street doors with them
-        var flats = site == BuildingType.None ? ApartmentTypeFor(fp, b.Kind, n, bank) : BuildingType.None;
-        bool planned = flats != BuildingType.None && TryApartments(layout, fp, b.Kind, n, flats, rng);
-        if (!planned && (site == BuildingType.None || !TryIndustrial(layout, site, fp.Door.Height, rng)))
+        var flats = !planned && site == BuildingType.None && type == BuildingType.None
+            ? ApartmentTypeFor(fp, b.Kind, n, bank) : BuildingType.None;
+        bool flatsPlanned = flats != BuildingType.None && TryApartments(layout, fp, b.Kind, n, flats, rng);
+        planned |= flatsPlanned;
+        if (!planned)
         {
             bool single = b.Kind is BuildingKind.Industrial or BuildingKind.Agricultural or BuildingKind.Annex
                 or BuildingKind.Garage
@@ -94,7 +105,7 @@ public static partial class InteriorGenerator
 
         // a doorway for every other facade door (#498), before the furniture, which keeps clear
         // of every opening by itself (Clearance)
-        if (fp.Extra.Count > 0 && !planned) Entrances(layout, fp);
+        if (fp.Extra.Count > 0 && !flatsPlanned) Entrances(layout, fp);
 
         Furnish(layout, rng);
         return layout;
@@ -1155,9 +1166,9 @@ public static partial class InteriorGenerator
                 if (f == 0 && BuildingFootprint.VehicleDoor(l.Kind))
                     foreach (var o in r.Openings)
                         if (o.Kind == OpeningKind.Entry && o.Side == Side.Front) blocked.Add(Lane(l.Kind, r, o));
-                // the stairwell is not somewhere to put a sofa. A site hall (#497) is room 0 with
-                // the service block beside it and holds no stair, so it is not one: the strip the
-                // core keeps clear just inside the door would have blocked its whole front bay.
+                // the stairwell is not somewhere to put a sofa. A site hall (#497) or a shop
+                // floor (#501) is room 0 and holds no stair, so it is not one: the strip the core
+                // keeps clear just inside the door would have blocked its whole front bay.
                 bool isCore = ri == 0 && floor.Rooms.Count > 1 && !LaysItselfOut(r.Type) && !apt;
                 // a block of flats has a stair in every stairwell (#557): each flight and a landing's
                 // depth at both ends of it stays clear, wherever it stands
@@ -1175,7 +1186,8 @@ public static partial class InteriorGenerator
                 }
                 foreach (var h in floor.Holes) blocked.Add(h);
 
-                // a site hall is aisles or lines, not pieces scattered round its walls (#497)
+                // a site hall or a shop floor is aisles or rows, not pieces scattered round its
+                // walls (#497, #501)
                 if (LaysItselfOut(r.Type))
                 {
                     HallLayout(l, f, r, placed, blocked, rng);

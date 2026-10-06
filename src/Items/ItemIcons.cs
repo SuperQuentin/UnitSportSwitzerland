@@ -1658,7 +1658,6 @@ public static class ItemIcons
             "..kkkkkkkkkkk...",
         };
 
-
         // fishing (#493): the rod, its bait, the dishes; every fish from one of three shapes (FishIcon)
         d[ItemId.FishingRod] = new[]
         {
@@ -1784,6 +1783,26 @@ public static class ItemIcons
         d[ItemId.Barbel] = FishIcon(FishShape.Long, "NtTnN");
         d[ItemId.Agone] = FishIcon(FishShape.Normal, "bawac");
         d[ItemId.RoundGoby] = FishIcon(FishShape.Normal, "NNndd");
+        // #501: the Blåhaj, swimming right: forked tail, dorsal fin, pale belly, one small eye
+        d[ItemId.Blahaj] = new[]
+        {
+            "................",
+            "................",
+            "........kk......",
+            ".......kcck.....",
+            "kk.....kcck.....",
+            "kck....kcck.....",
+            "kcck..kccccck...",
+            "kcck.kcccccccck.",
+            "kcckkkcccccccck.",
+            "kccccccccccckck.",
+            "kcCCCCCCCCCCCCk.",
+            "kkCCCCCCCCCCCk..",
+            ".kkCCkkkCCCkk...",
+            "...kk..kCCk.....",
+            ".......kkk......",
+            "................",
+        };
         return d;
     }
 }
