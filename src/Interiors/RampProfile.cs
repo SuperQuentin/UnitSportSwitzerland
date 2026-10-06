@@ -11,11 +11,15 @@ namespace UnitSport.Interiors;
 /// </summary>
 public static class RampProfile
 {
-    /// <summary>The grade of the straight part: 25 %, about 14 degrees.</summary>
-    public const float Slope = 0.25f;
+    /// <summary>
+    /// The grade of the straight part: 27 %, about 15 degrees. Steeper than a real ramp (Swiss
+    /// standards say 15 to 18 %), but a gentler one does not fit the 17 to 20 m deep blocks that make
+    /// up most of the real blocks with a car park: the foot would have no room to turn.
+    /// </summary>
+    public const float Slope = 0.27f;
 
     /// <summary>The length of each vertical curve, m.</summary>
-    public const float Bevel = 1.5f;
+    public const float Bevel = 1.2f;
 
     /// <summary>Headroom a car needs under the floor slab the ramp passes beneath, m.</summary>
     public const float Headroom = 2.15f;

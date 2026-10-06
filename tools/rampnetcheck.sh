@@ -23,7 +23,7 @@ if [ -z "${NOWATCH:-}" ]; then
   B=$!
 else B=; : > "$OUT/rampnet_B.log"; fi
 tc_client 300 "$OUT/rampnet_A.log" --connect 127.0.0.1:$PORT --name RampA $WORLD \
-  --garagecheck drive $PW --drive-m 20 --brake-m 24 --park-wait ${PARK_WAIT:-66}
+  --garagecheck drive $PW --drive-m 16 --brake-m 20 --park-wait ${PARK_WAIT:-66}
 tc_stop
 [ -n "$B" ] && wait $B
 code=0

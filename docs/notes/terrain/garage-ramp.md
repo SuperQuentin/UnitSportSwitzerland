@@ -74,13 +74,16 @@ is not in yet: the cars in the bays are props.
 ## The ramp (PR 2)
 
 - **Shape: `RampProfile`** (`src/Interiors/RampProfile.cs`, pure, tier 0: `GarageTests`). One storey's
-  drop at 25 % (14 degrees) with a 1.5 m vertical curve at each end, so a car's hull box (which does
-  not pitch) does not catch on the crest or the foot. `Length(drop) = drop / 0.25 + 1.5` (12.3 m for a
+  drop at 27 % (15 degrees) with a 1.2 m vertical curve at each end, so a car's hull box (which does
+  not pitch) does not catch on the crest or the foot. `Length(drop) = drop / 0.27 + 1.2` (11.2 m for a
   2.7 m storey); `HoleLength(drop, clear)` is where the floor slab over it must stop so a car
   (2.15 m `Headroom`) passes under it. `GarageRule.RampFoot/RampDepth/HasRamp`: from the front wall a
-  2 m flat apron, the run, 3.5 m to turn and a 5.1 m row of bays, so a block needs about 23 m of
-  depth (`Wanted` asks). A block 80 x 26 m does; the shallow 12 to 16 m slabs most real blocks are do
-  not, which is why real garages are rarer than the 40 % roll says.
+  1 m flat apron, the run, and 4 m to turn at the foot, so a block needs about 16.5 m of depth: less
+  than the car park strip itself (stairwell 7.8 m + 9.5 m = 17.3 m), so every block that had a garage
+  door in PR 1 still has one. The first version (25 %, a 2 m apron, a row of bays past the turn)
+  needed 23 m and on the real Geneva, Lausanne and Veyrier tiles **none** of 1176 blocks with three
+  front doors qualified: the grade is the price of a ramp that fits a block 18 m deep, and steeper than
+  a real one (15 to 18 %).
 - **Plan** (`InteriorGenerator.Apartments`, `PlanRamp`, `RampColumn`): the ramp is a column of the plan
   3.6 m wide (`GarageRule.RampWidth`) centred on the garage door, kept out of **every floor's flats**:
   the gap between its two stairwells is split in two there (`gaps`), each side reached from its own
@@ -108,18 +111,18 @@ is not in yet: the cars in the bays are props.
   the opening runs up to the ceiling: that 7 cm horizontal sliver across the lane at the ceiling
   level stopped the first car dead (found by the live drive, not by the plan checks).
 - **Car park furniture** (`Furnish`): the wedge grown by 0.3 m, and a mouth (the lane and 2.2 m each
-  side, from 1 m before the foot to 3.5 m past it) are blocked, so no bay or pillar stands in the way
+  side, from 1 m before the foot to 4 m past it) are blocked, so no bay or pillar stands in the way
   and the aisle is clear where the car turns; `InteriorValidator` fails a plan with a piece in either.
 - **Validator**: both ends of a ramp stand in a room; the slab over it is open as far as
   `HoleLength`; at least 3 m wide; no furniture in its lane or mouth; every vehicle entrance of a
   block of flats has a ramp room behind it with a ramp from its end.
-- **Checks.** `--doorcheck` (the 80 x 26 m blocks: the door arrives at a 3 m doorway, a ramp runs
+- **Checks.** `--doorcheck` (80 x 18 m blocks: the door arrives at a 3 m doorway, a ramp runs
   down, its foot is in the car park, the lane is where the door is along the wall) and `--flatcheck`
-  (`Ramps`: 12 blocks square to the world and 12 turned 31 degrees beside a street, every one that
+  (`Ramps`: 12 blocks 80 x 18 m square to the world, the shallowest a ramp fits, and 12 80 x 24 m turned 31 degrees beside a street, every one that
   rolled a garage planned and validated: grade, width, headroom under the slab, room to turn and a
   row of bays beyond the foot, stairwells either side; writes `test_output/flats/garage_ramp.svg`)
   are quick tier. `tools/rampnetcheck.sh` (net tier, two clients and a server on
-  **`fixture:garage`**: three 80 x 26 m blocks on a street whose keys always roll a garage,
+  **`fixture:garage`**: three 80 x 18 m blocks on a street whose keys always roll a garage,
   `GarageRule.AlwaysRolls`, set by the fixture source on the server and every client) drives a car
   in, down the ramp, parks it, waits a minute (the server shuts the door), gets out and in, and
   reverses up the ramp and out through the door; the watcher on the other client has to see the door
@@ -132,7 +135,9 @@ is not in yet: the cars in the bays are props.
   its building (`SurfacePoint`: 2.7 m under the ground, well inside every interest radius), a parked
   `VehicleBody` there holds still where a peer has not built the interior, and the void rescue only
   fires 10 m under an interior's floor. PR 3 takes the `HallForklifts` pattern for the bay cars.
-- **Known limits.** A grade of 25 % is steep for a real ramp (Swiss standards say 15 to 18 %) but a
-  straight 15 % ramp would need 20 m plus the turn; the profile's constants are the one place to
-  change it. A car's hull box is flat, so a long wheelbase rides the crest on its rear edge for a
+- **Known limits.** A grade of 27 % is steep for a real ramp (Swiss standards say 15 to 18 %) but a
+  straight 18 % ramp would need 16 m plus the turn, more than most real blocks have; the profile's
+  constants (`RampProfile.Slope/Bevel`, `GarageRule.RampApron/RampTurn`) are the one place to change it.
+  A ramp is only planned for a door on the front wall between two stairwells and for a block
+  planned as a whole (an L, U or courtyard block planned wing by wing has none: its door reads as locked). A car's hull box is flat, so a long wheelbase rides the crest on its rear edge for a
   moment (the bevels make it smooth, not perfect).

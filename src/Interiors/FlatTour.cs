@@ -49,7 +49,7 @@ public partial class FlatTour : Node3D
         });
         if (_block == "a garage block")
         {
-            // an 80 x 26 m block whose key rolled an underground garage (#558): its ramp is the tour
+            // an 80 x 18 m block whose key rolled an underground garage (#558): its ramp is the tour
             var (garageTile, roads) = FlatCheck.RampTile();
             int garage = BuildingFootprint.ComputeDoors(garageTile, roads, null).First(d => d.Link.Any).Index;
             _l = InteriorGenerator.Generate(garageTile, garage, roads, null)!;

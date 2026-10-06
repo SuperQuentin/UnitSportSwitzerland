@@ -66,9 +66,11 @@ public class GarageTests
         Assert.False(GarageRule.Wanted(rolled, BuildingType.None, 5, 80, 26, H, 3));
         // too shallow for a car park
         Assert.False(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 80, 14, H, 3));
-        // a car park strip but not the 24 m a ramp down to it takes (PR 2)
-        Assert.True(GarageRule.HasCarPark(rolled, false, 5, 80, 20, H));
-        Assert.False(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 80, 20, H, 3));
+        // a car park strip but not the depth a ramp down to it takes (PR 2): tall storeys drop further
+        Assert.True(GarageRule.HasCarPark(rolled, false, 5, 80, 18, 3.4f));
+        Assert.False(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 80, 18, 3.4f, 3));
+        // 18 m deep with ordinary storeys is enough
+        Assert.True(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 80, 18, H, 3));
     }
 
     [Fact]
@@ -239,11 +241,12 @@ public class GarageTests
     }
 
     [Fact]
-    public void A_block_needs_the_depth_for_the_ramp_its_turn_and_a_row_of_bays()
+    public void A_block_needs_the_depth_for_the_ramp_and_the_turn_at_its_foot()
     {
         float need = GarageRule.RampDepth(H);
-        Assert.Equal(GarageRule.RampApron + RampProfile.Length(H) + GarageRule.RampTurn + GarageRule.BayRow, need, 3);
-        Assert.InRange(need, 22f, 26f);
+        Assert.Equal(GarageRule.RampApron + RampProfile.Length(H) + GarageRule.RampTurn, need, 3);
+        // within the 17.3 m a block needs anyway for its car park strip (stairwell 7.8 m + 9.5 m)
+        Assert.InRange(need, 15f, 18f);
         Assert.True(GarageRule.HasRamp(need, H));
         Assert.False(GarageRule.HasRamp(need - 0.1f, H));
         // a taller storey drops further and needs a longer run

@@ -206,25 +206,25 @@ public static class FlatCheck
     }
 
     /// <summary>
-    /// The synthetic blocks of <see cref="Ramps"/>: <see cref="Copies"/> long blocks 80 x 26 m, square to the
-    /// world, then <see cref="Copies"/> turned 31 degrees, each beside a street running along its front,
+    /// The synthetic blocks of <see cref="Ramps"/>: <see cref="Copies"/> long blocks 80 x 18 m, square to the
+    /// world, then <see cref="Copies"/> 80 x 24 m turned 31 degrees, each beside a street running along its front,
     /// 110 m apart. Garages are a roll of each key, so there are enough of each for both to have some.
     /// </summary>
     internal const int Copies = 12;
 
     internal static (BuildingTile Tile, RoadTile Roads) RampTile()
     {
-        var kinds = new List<(float Turn, int N)> { (0f, Copies), (31f, Copies) };
+        // the first set is as shallow as a ramp fits (80 x 18 m), the turned one has room to spare
+        var kinds = new List<(float Turn, int N, float Depth)> { (0f, Copies, 18f), (31f, Copies, 24f) };
         var blocks = new List<Building>();
         var segments = new List<RoadSegment>();
-        var shell = new Box("a long block", BuildingKind.Apartment, 80, 26, 15, 3);
-        foreach (var (turn, n) in kinds)
+        foreach (var (turn, n, depth) in kinds)
             for (int i = 0; i < n; i++)
             {
                 float cz = 110f * blocks.Count + 60f;
-                blocks.Add(Solid(shell with { Turn = turn }, cz));
+                blocks.Add(Solid(new Box("a long block", BuildingKind.Apartment, 80, depth, 15, 3, Turn: turn), cz));
                 // a minor street 6 m in front, parallel to the wall the door faces (+Z, turned with the block)
-                float t = Mathf.DegToRad(turn), gap = 13f + 6f + 2f;
+                float t = Mathf.DegToRad(turn), gap = depth / 2 + 6f + 2f;
                 var along = new Vector2(Mathf.Cos(t), Mathf.Sin(t));
                 var normal = new Vector2(-Mathf.Sin(t), Mathf.Cos(t));
                 var mid = new Vector2(500, cz) + normal * gap;
@@ -304,8 +304,8 @@ public static class FlatCheck
             Expect(worst >= 2.1f, $"{what}: at least {worst:F2} m of headroom under the slab it passes beneath");
             // the lane through the doorway and the foot's turn are free
             var park = below.Rooms.FirstOrDefault(r => r.Type == RoomType.CarPark && ramp.Bottom.Z > r.Z0 && ramp.Bottom.Z < r.Z1);
-            Expect(park != null && park.Z1 - ramp.ZBottom >= GarageRule.RampTurn + GarageRule.BayRow - 0.3f,
-                $"{what}: {(park == null ? 0 : park.Z1 - ramp.ZBottom):F1} m of car park beyond the foot, to turn and for a row of bays");
+            Expect(park != null && park.Z1 - ramp.ZBottom >= GarageRule.RampTurn - 0.3f,
+                $"{what}: {(park == null ? 0 : park.Z1 - ramp.ZBottom):F1} m of car park beyond the foot, to turn in");
             Expect(l.Furniture.Count(p => p.Floor == l.Below - 1 && p.Type == FurnitureType.Car) > 0, $"{what}: cars still stand in its bays (props)");
             // the stairwells either side still have their flats
             Expect(l.Floors[l.Below].Rooms.Count(r => r.Type == RoomType.Lobby) >= 2, $"{what}: stairwells either side of the ramp");

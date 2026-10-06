@@ -236,9 +236,9 @@ public static class DoorCheck
             GD.Print($"[doorcheck] {(ok ? "ok  " : "FAIL")} {what}");
         }
 
-        // a block 80 x 26 m, 15 m tall: three front doors, a car park strip behind the stairwells and
-        // the 24 m a ramp down to it takes (GarageRule.RampDepth)
-        var block = new Box("a long block", BuildingKind.Apartment, 80, 26, 15, 3, DoorBudget.MaxPerBuilding);
+        // a block 80 x 18 m, 15 m tall: three front doors, a car park strip behind the stairwells and
+        // just the depth a ramp down to it takes (GarageRule.RampDepth)
+        var block = new Box("a long block", BuildingKind.Apartment, 80, 18, 15, 3, DoorBudget.MaxPerBuilding);
         const int copies = 8;
         // street centreline, metres in front of the block's south wall, its class, and what comes of it
         (string What, RoadClass Class, float Gap, LinkKind Want)[] cases =
@@ -262,7 +262,7 @@ public static class DoorCheck
                 Segments = Enumerable.Range(0, copies).Select(i => new RoadSegment
                 {
                     Class = cls, Surface = RoadSurface.Paved, Width = RoadFormat.DefaultWidth(cls),
-                    Points = [380f, 0f, 110f * i + 60f + 13f + gap, 620f, 0f, 110f * i + 60f + 13f + gap],
+                    Points = [380f, 0f, 110f * i + 60f + 9f + gap, 620f, 0f, 110f * i + 60f + 9f + gap],
                 }).ToList(),
             };
             var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
@@ -317,7 +317,7 @@ public static class DoorCheck
             {
                 Id = new TileId(2583, 1113),
                 Buildings = Enumerable.Range(0, mixedCopies)
-                    .Select(i => Solid(new Box("a mixed block", BuildingKind.Commercial, 100, 26, 15, 1, DoorBudget.MaxPerBuilding), 110f * i + 60f)).ToList(),
+                    .Select(i => Solid(new Box("a mixed block", BuildingKind.Commercial, 100, 18, 15, 1, DoorBudget.MaxPerBuilding), 110f * i + 60f)).ToList(),
             };
             var roads = new RoadTile
             {
@@ -325,7 +325,7 @@ public static class DoorCheck
                 Segments = Enumerable.Range(0, mixedCopies).Select(i => new RoadSegment
                 {
                     Class = RoadClass.Minor, Surface = RoadSurface.Paved, Width = RoadFormat.DefaultWidth(RoadClass.Minor),
-                    Points = [360f, 0f, 110f * i + 60f + 13f + 6f, 640f, 0f, 110f * i + 60f + 13f + 6f],
+                    Points = [360f, 0f, 110f * i + 60f + 9f + 6f, 640f, 0f, 110f * i + 60f + 9f + 6f],
                 }).ToList(),
             };
             var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
