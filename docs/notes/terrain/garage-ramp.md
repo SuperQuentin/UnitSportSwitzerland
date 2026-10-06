@@ -147,7 +147,7 @@ is not in yet: the cars in the bays are props.
 - **Real data (PR 2).** `--garagelinks` now also plans each garage door as the server would and says
   whether a ramp came of it and why not (`InteriorGenerator.RampWhy`). Over Lausanne, Geneva, Nendaz and
   Veyrier (2963 blocks, 1176 with 3 or more front doors): the PR 1 rule placed 3 garage doors; two were on
-  blocks planned wing by wing and one on a 120 m facade past the plan box, so they read as locked, and the
+  blocks planned wing by wing (no ramp there), so they read as locked, and the
   footprint now refuses those; **1 door in 2963 blocks remains, and it has a ramp, no validator problems**.
   That is rarer than the 0.3 % guessed in #558: most real blocks with three entrances are neither whole
   rectangles nor 17 m deep.
