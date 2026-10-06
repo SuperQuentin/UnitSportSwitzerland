@@ -162,6 +162,8 @@ public partial class FootPlayer
         if (_ragdollMesh == null)
         {
             _ragdollMesh = new MeshInstance3D { Name = "Ragdoll", TopLevel = true, MaterialOverride = HumanMeshBuilder.FigureMaterial() };
+            // thrown off: seeing stars the whole way (#657)
+            Avatar.Face.FaceAnimator.Apply(_ragdollMesh, Avatar.Face.FaceExpressions.Of(Avatar.Face.FaceExpression.Dizzy));
             AddChild(_ragdollMesh);
         }
         _ragdollMesh.Visible = true;

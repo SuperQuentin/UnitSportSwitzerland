@@ -25,6 +25,8 @@ public enum PalletSource : byte
     Yard,
     /// <summary>One somebody set down: <c>"#&lt;id&gt;"</c>, numbered by the server for the session.</summary>
     Loose,
+    /// <summary>A building site's pallet of bricks or cement (#615): <c>"&lt;building&gt;:c&lt;slot&gt;"</c>.</summary>
+    Site,
 }
 
 /// <summary>A pallet id taken apart.</summary>
@@ -132,6 +134,9 @@ public static class Pallets
     /// <summary>A yard pallet: its site's building key and its slot in the yard (phase 3).</summary>
     public static string YardId(string building, int slot) => $"{building}:y{slot}";
 
+    /// <summary>A building site's pallet of materials (#615): its building key and its slot in the materials' row.</summary>
+    public static string SiteId(string building, int slot) => $"{building}:c{slot}";
+
     /// <summary>A pallet somebody set down, by the server's number for it.</summary>
     public static string LooseId(long id) => "#" + id.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -151,9 +156,9 @@ public static class Pallets
         // a building key, a kind letter and at least one digit
         if (colon <= 0 || colon + 2 >= id.Length) return false;
         char kind = id[colon + 1];
-        if (kind is not ('f' or 'y')) return false;
+        if (kind is not ('f' or 'y' or 'c')) return false;
         if (!int.TryParse(id.AsSpan(colon + 2), System.Globalization.NumberStyles.None, inv, out int index)) return false;
-        parsed = new PalletRef(kind == 'f' ? PalletSource.Hall : PalletSource.Yard, id[..colon], index, 0);
+        parsed = new PalletRef(kind switch { 'f' => PalletSource.Hall, 'y' => PalletSource.Yard, _ => PalletSource.Site }, id[..colon], index, 0);
         return true;
     }
 
@@ -183,6 +188,30 @@ public static class Pallets
         && Across(along) != null
         && Mathf.Abs(x) <= halfSpan
         && ahead >= 0f && ahead <= length;
+
+    // ---- the bucket rule (#615): a loader scoops a pallet up, and dumps it ---------------------
+
+    /// <summary>Under this over the ground, the bucket's floor is down to scoop, m (a bucket on the ground digs in a little).</summary>
+    public const float ScoopHeight = 0.4f;
+
+    /// <summary>
+    /// The bucket's pitch from level (+ rolled back), rad: past <see cref="CurlCarry"/> with a pallet
+    /// in it, it holds it; past <see cref="DumpDrop"/> the other way, it tips it out. Far apart, so a
+    /// pallet just scooped is not dropped by the bucket settling, nor one just dropped scooped again.
+    /// </summary>
+    public const float CurlCarry = 0.35f, DumpDrop = -0.4f;
+
+    public static bool Curled(float pitch) => pitch >= CurlCarry;
+    public static bool Dumped(float pitch) => pitch <= DumpDrop;
+
+    /// <summary>
+    /// Whether a pallet is in a bucket: its centre <paramref name="x"/> across the bucket's middle,
+    /// <paramref name="ahead"/> of the pin it hangs from, <paramref name="up"/> over its floor, in
+    /// the bucket's frame; within the bucket's width less half a deck, out to its lip and a little
+    /// past (a pallet's 1.2 m is near a bucket's depth), and down on its floor.
+    /// </summary>
+    public static bool InBucket(float x, float ahead, float up, float halfWidth, float reach) =>
+        Mathf.Abs(x) <= halfWidth - 0.45f && ahead >= 0.1f && ahead <= reach + 0.5f && Mathf.Abs(up) <= 0.6f;
 
     /// <summary>
     /// How far ahead of the tines' heel a carried pallet's centre rides, m: a pallet's length out from

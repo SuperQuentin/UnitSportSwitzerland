@@ -1,6 +1,20 @@
 # Procedural animated pixel faces (#657)
 
-Status: planned. Issue #657, follow-ups #658-#661.
+Status: phase 1 (renderer + idle life) built in #657 (PR #664); follow-ups #658-#661 open.
+Note: `docs/notes/avatar/procedural-faces.md`.
+
+**Built differently from the plan below:**
+- The genome is in the **mesh** (the face band's UV2, two 24-bit whole numbers), not in instance
+  uniforms. Many vehicles bake their driver or passengers into one mesh (cars, the A320 cabin,
+  the steamer), and one node cannot carry a face per figure.
+- **Blinking and glances run in the shader** (seeded per face, on `TIME`), not in an `IdleDriver`.
+  That costs no CPU and works in merged meshes too. Instance uniforms carry only the driven state,
+  in three vec4s.
+- There is no driver interface yet. `FaceAnimator.Step` takes an expression, a look target and a
+  pain flash; the mic and tracking drivers will add their inputs there (#659-#661).
+- The eyes look at a camera within 8 m, not at the nearest player.
+- The probe is `--bodies faces|expressions|expressions2|seeded` in the avatar preview, not a new
+  `--faces` flag. `tools/emotenetcheck.sh` checks the remote face.
 
 ## Context
 

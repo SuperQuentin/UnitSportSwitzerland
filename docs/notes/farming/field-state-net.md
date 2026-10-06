@@ -20,7 +20,7 @@
   like the pack everywhere else.
 - **Late joiners and newly streamed tiles** get the stored cells in the subscribe snapshot; the
   server forgets who held what on disconnect.
-- **Versions**: all of #494 is `Handshake.Protocol` 26 (fields, farm state, machines, selling), so
+- **Versions**: all of #494 is `Handshake.Protocol` 29 (fields, farm state, machines, selling), so
   two versions never meet. Within it the fields degrade on their own anyway: a source without the
   layer answers `AssetKind.Fields` as missing and the fields stay natural.
 - **Check**: `tools/farmnetcheck.sh` (tier 2): A ploughs a strip (machine stroke) and tills a cell

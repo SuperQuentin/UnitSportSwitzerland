@@ -218,6 +218,10 @@ src/Core/SimClock        net    tools/speednetcheck.sh
 src/Core/SpeedNetProbe   net    tools/speednetcheck.sh
 src/Net/ClockSync        net    tools/speednetcheck.sh
 src/Net/                 net    @netsmoke
+src/Net/Sleeper          net    tools/sleepercheck.sh
+src/Net/PlayerKey        net    tools/sleepercheck.sh
+src/Net/ChatManager      net    tools/transfercheck.sh
+src/Net/TransferProbe    net    tools/transfercheck.sh
 src/Core/ServerWorld     net    @netsmoke
 src/Core/ClientWorld     net    @netsmoke
 src/Core/Debug           net    tools/debugcheck.sh
@@ -322,7 +326,21 @@ src/Vehicles/VehicleBody.Ai quick  --stairscheck --world fixture --traffic 0 --a
 src/Avatar/Forklift      quick  --forkliftcheck --world flat --systems physics,ui
 src/Player/Forklift      quick  --forkliftcheck --world flat --systems physics,ui
 src/Player/FootPlayer.Fo quick  --forkliftcheck --world flat --systems physics,ui
+# #615: a building site's pallets of materials, lifted by a telehandler from a second peer (generated world)
+src/Terrain/Construction/SiteDressing net tools/sitepalletnetcheck.sh
+src/Terrain/Construction/SitePlans net tools/sitepalletnetcheck.sh
+src/Items/SitePalletNetProbe net tools/sitepalletnetcheck.sh
+src/Items/SitePallets     net    tools/sitepalletnetcheck.sh
+src/Items/PalletService   net    tools/sitepalletnetcheck.sh
+src/Terrain/Construction/SiteDressing quick --constructioncheck --systems ui
 # #615: any machine with tines lifts pallets (the telehandler, the fork loader), on the flat; the forklift's own check guards the shared rule
+src/Player/IBucket        quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Player/WheelLoader    quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Avatar/WheelLoader    quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Items/PalletService   quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Items/ForkCheck       quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Player/FootPlayer.Whe quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Player/WheelLoader    net    tools/sitepalletnetcheck.sh
 src/Player/IForks         quick  --forkcheck telehandler --world flat --systems physics,ui
 src/Player/IForks         quick  --forkcheck loaderforks --world flat --systems physics,ui
 src/Player/IForks         quick  --palletcheck --world flat --systems physics,ui
@@ -425,6 +443,9 @@ src/Player/Emote         net    tools/emotenetcheck.sh
 src/Items/SwissItems     net    tools/swisscheck.sh
 src/Items/SwissNetProbe  net    tools/swisscheck.sh
 src/Avatar/HumanMeshBuilder.Emotes net tools/emotenetcheck.sh
+src/Avatar/Face           net    tools/emotenetcheck.sh
+src/Player/FootPlayer.Face net   tools/emotenetcheck.sh
+shaders/body/face        quick  --outfitcheck
 src/Combat/Fight         net    tools/fightnetcheck.sh
 src/Player/FootPlayer.Fight net tools/fightnetcheck.sh
 src/Avatar/HumanMeshBuilder.Fight net tools/fightnetcheck.sh

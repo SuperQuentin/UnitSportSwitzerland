@@ -197,6 +197,70 @@ public partial class PalletService : Node
     }
 
     /// <summary>
+    /// The local driver's bucket (a wheel loader's, #615), once per physics frame: with an empty
+    /// bucket down on the ground and a pallet in it, curled back past <see cref="Pallets.CurlCarry"/>,
+    /// asks to take it; with a pallet in it, dumped past <see cref="Pallets.DumpDrop"/>, asks to tip it
+    /// out under the lip, on the ground the machine stands on. The same requests and checks as the forks'.
+    /// </summary>
+    public void TendBucket(FootPlayer p, IBucket bucket)
+    {
+        if (!bucket.HasBucket || Waiting()) return;
+        var frame = p.GlobalTransform;
+        var b = frame * bucket.BucketFrame;
+        if (Pallets.LoadCarried(bucket.Carrying) is { } load)
+        {
+            if (!Pallets.Dumped(bucket.BucketPitch)) return;
+            var floor = bucket.BucketFloor;
+            // out over the lip: the floor's middle, a pallet's half length past the lip
+            var at = b * new Vector3(0f, floor.Y, -(bucket.BucketReach + Pallets.Length * 0.5f));
+            at.Y = p.GlobalPosition.Y;
+            int carrying = bucket.Carrying;
+            float yaw = (frame * bucket.BucketFrame).Basis.GetEuler().Y + PalletNode.CarriedYaw(Pallets.CarriedAcross(carrying));
+            RequestDrop(load, _origin.ToGlobal(at), yaw, ok =>
+            {
+                if (ok && bucket.Carrying == carrying) bucket.Carrying = 0;
+            });
+            return;
+        }
+        if (bucket.Carrying != 0 || !Pallets.Curled(bucket.BucketPitch)) return;
+        var floorAt = b * bucket.BucketFloor;
+        if (floorAt.Y - p.GlobalPosition.Y > Pallets.ScoopHeight) return;
+
+        // measured level at the pin, not in the curling bucket's own frame (IBucket.BucketPinLevel)
+        var level = frame * bucket.BucketPinLevel;
+        var onBucket = level.AffineInverse();
+        var ahead = new Vector2(-level.Basis.Z.X, -level.Basis.Z.Z).Normalized();
+        foreach (var node in PalletNode.All.Values)
+        {
+            if (node.Taken || !node.IsInsideTree()) continue;
+            var local = onBucket * node.GlobalPosition;
+            if (!Pallets.InBucket(local.X, -local.Z, local.Y - bucket.BucketFloor.Y, bucket.BucketHalfWidth, bucket.BucketReach)) continue;
+            var runners = node.GlobalTransform.Basis.X;
+            bool across = Pallets.Across(Mathf.Abs(ahead.Dot(new Vector2(runners.X, runners.Z).Normalized()))) == true;
+            RequestTake(node.Id, taken =>
+            {
+                if (taken is { } l && ReferenceEquals(p.Vehicle, bucket) && bucket.Carrying == 0) bucket.Carrying = Pallets.Carried(l, across);
+            });
+            return;
+        }
+    }
+
+    /// <summary>An answer is awaited, or the quiet after one is not over: test nothing this frame.</summary>
+    private bool Waiting()
+    {
+        double now = GameClock.Now;
+        if (_askedAt >= 0)
+        {
+            if (now - _askedAt < AnswerTimeout) return true;
+            // never answered (a dropped link): forget it, and keep what is carried
+            _askedAt = -1;
+            _takeDone = null;
+            _dropDone = null;
+        }
+        return now < _quietUntil;
+    }
+
+    /// <summary>
     /// Asks to lift a pallet onto the local forklift. <paramref name="done"/> gets its load byte,
     /// or null if it was refused (taken by someone else first, out of reach).
     /// </summary>
@@ -376,12 +440,18 @@ public partial class PalletService : Node
         }
         else
         {
-            // a site's apron stack (#583 phase 3): worked out from the tile's own files, as every
-            // peer draws it, so nothing the asker sends decides where it is or what is on it
+            // a site's apron stack (#583 phase 3) or a building site's pallet (#615): worked out
+            // from the tile's own files, as every peer draws it, so nothing the asker sends decides
+            // where it is or what is on it
             if (_taken.Contains(id)) { Refuse(peer, id, "It is not there any more."); return; }
             YardPallet? stack = null;
             if (Source?.Invoke() is { } source)
-                try { stack = await Task.Run(() => SiteYards.PalletAt(source, r.Building, r.Index)); }
+                try
+                {
+                    stack = await Task.Run(() => r.Source == PalletSource.Site
+                        ? Terrain.Construction.SitePlans.PalletAt(source, r.Building, r.Index)
+                        : SiteYards.PalletAt(source, r.Building, r.Index));
+                }
                 catch (Exception e) { GD.PushError($"[pallets] yard {r.Building}: {e.Message}"); }
             if (stack is not { } yard) { Refuse(peer, id, "No such pallet."); return; }
             if (_taken.Contains(id)) { Refuse(peer, id, "It is not there any more."); return; }
@@ -448,7 +518,7 @@ public partial class PalletService : Node
     {
         RideKind.Forklift => Mathf.RoundToInt(anim.Z),
         RideKind.Telehandler => TelehandlerLayout.FromPoseLift(anim.Y).Carrying,
-        RideKind.WheelLoaderForks => WheelLoaderLayout.FromPoseLift(anim.Y).Carrying,
+        RideKind.WheelLoaderForks or RideKind.WheelLoader => WheelLoaderLayout.FromPoseLift(anim.Y).Carrying,
         _ => null,
     };
 

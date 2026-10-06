@@ -5,6 +5,7 @@ public enum VehicleIntroKind
 {
     RoadBike, Skis, Car, Motorbike, Truck, Boat, Steamer,
     Helicopter, Plane, Canopy, Wingsuit, Pigeon, Airliner,
+    Forklift, Excavator, MiniExcavator, WheelLoader, CompactRoller, Telehandler,
     /// <summary>Not driven: shown on walking up to a lone trailer, and done from a truck.</summary>
     Trailer,
 }
@@ -36,6 +37,11 @@ public static class VehicleIntros
     private static readonly string[] Steer = { "move_left", "move_right" };
     private static readonly string[] Stick = { "move_forward", "move_back", "move_left", "move_right" };
     private const string Wasd = "{move_forward} {move_left} {move_back} {move_right}";
+    private const string Arrows = "{arm_boom_up} {arm_boom_down} {arm_bucket_curl} {arm_bucket_dump}";
+    private static readonly string[] Tracks = { "throttle", "brake", "move_forward", "move_back" };
+    private static readonly string[] LeftArm = { "arm_slew_left", "arm_slew_right", "arm_stick_out", "arm_stick_in" };
+    private static readonly string[] RightArm = { "arm_boom_up", "arm_boom_down", "arm_bucket_curl", "arm_bucket_dump" };
+    private static readonly string[] Lift = { "arm_boom_up", "arm_boom_down" };
 
     private static readonly VehicleIntro[] All =
     {
@@ -140,6 +146,58 @@ public static class VehicleIntros
             new("Flaps a notch down / up: {flaps_down} / {flaps_up}", new[] { "flaps_down", "flaps_up" }),
             new("Gear up once flying: {car_door}", new[] { "car_door" }),
         }, "Rotate at about 260 km/h · {help} lists every cockpit switch"),
+
+        new(VehicleIntroKind.Forklift, "Forklift", new IntroRow[]
+        {
+            new("Drive with {throttle}", Throttle),
+            new("Brake, then reverse, with {brake}", Brake),
+            new("Steer with {move_left} {move_right}", Steer, Pad: "Steer with {move_forward}"),
+            new("Raise / lower the forks: hold {shift_up} / {shift_down}", new[] { "shift_up", "shift_down" }),
+        }, "Run the forks in under a pallet and raise them to lift it · {interact_mount} gets out"),
+
+        new(VehicleIntroKind.Excavator, "Excavator", new IntroRow[]
+        {
+            new("Tracks forward / back: {move_forward} / {move_back}, turn on the spot: {move_left} {move_right}", Tracks,
+                Pad: "Tracks forward / back: {throttle} / {brake}, turn on the spot: {move_left}"),
+            new("Dig mode on / off: {dig_mode}", new[] { "dig_mode" }),
+            new("Dig: slew and stick with " + Wasd, LeftArm, Pad: "Dig: slew and stick with {arm_slew_left}"),
+            new("Dig: boom and bucket with " + Arrows, RightArm, Pad: "Dig: boom and bucket with {arm_boom_up}"),
+        }, "{interact_mount} gets out"),
+
+        new(VehicleIntroKind.MiniExcavator, "Mini excavator", new IntroRow[]
+        {
+            new("Tracks forward / back: {move_forward} / {move_back}, turn on the spot: {move_left} {move_right}", Tracks,
+                Pad: "Tracks forward / back: {throttle} / {brake}, turn on the spot: {move_left}"),
+            new("Dig mode on / off: {dig_mode}", new[] { "dig_mode" }),
+            new("Dig: the arm on " + Wasd + " and " + Arrows, RightArm,
+                Pad: "Dig: the arm on both sticks, {arm_slew_left} and {arm_boom_up}"),
+            new("Blade up / down: hold {blade_raise} / {blade_lower}", new[] { "blade_raise", "blade_lower" }),
+        }, "The blade works driving or digging · {interact_mount} gets out"),
+
+        new(VehicleIntroKind.WheelLoader, "Wheel loader", new IntroRow[]
+        {
+            new("Drive with {throttle}, brake and reverse with {brake}", Throttle),
+            new("Steer with {move_left} {move_right}: it bends in the middle", Steer, Pad: "Steer with {move_forward}: it bends in the middle"),
+            new("Work mode on / off: {dig_mode} (it still drives)", new[] { "dig_mode" }),
+            new("Work: lift and tilt with " + Arrows, RightArm, Pad: "Work: lift and tilt with {arm_boom_up}"),
+        }, "With forks: run them in under a pallet and lift · {interact_mount} gets out"),
+
+        new(VehicleIntroKind.CompactRoller, "Compact roller", new IntroRow[]
+        {
+            new("Drive with {throttle}", Throttle),
+            new("Brake, then reverse, with {brake}", Brake),
+            new("Steer with {move_left} {move_right}: it bends in the middle", Steer, Pad: "Steer with {move_forward}: it bends in the middle"),
+            new("Vibrate the drums: {dig_mode}", new[] { "dig_mode" }),
+        }, "{interact_mount} gets out"),
+
+        new(VehicleIntroKind.Telehandler, "Telehandler", new IntroRow[]
+        {
+            new("Drive with {throttle}, brake and reverse with {brake}", Throttle),
+            new("Steering front / four-wheel / crab: {roof_toggle}", new[] { "roof_toggle" }),
+            new("Work mode {dig_mode}, then lift the boom with {arm_boom_up} {arm_boom_down}", Lift,
+                Pad: "Work mode {dig_mode}, then lift the boom with {arm_boom_up}"),
+            new("Run the boom out / in: hold {shift_up} / {shift_down}", new[] { "shift_up", "shift_down" }),
+        }, "{arm_bucket_curl} {arm_bucket_dump} tilt the forks · {interact_mount} gets out"),
 
         new(VehicleIntroKind.Trailer, "Trailer", new IntroRow[]
         {

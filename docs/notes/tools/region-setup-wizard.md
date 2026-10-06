@@ -44,6 +44,11 @@
   `--features-only --tiles-file` and `--places-only` (places without re-running roads, which
   would strip junctions), RoadGen `--tiles-file --skip-rewritten`, and `export_buildings.py --src`
   (per-sheet zips).
+- **The map as a selector for other tools**: `--pick-tiles FILE` opens the same map with an empty
+  selection, writes the picked tiles that are **built** (one `E-N` per line) and exits: 0 with a
+  file, 1 when the user quit or nothing picked is built. It saves no state, so `--resume` still
+  continues the last real selection. `--keys "..."` (the `--snapshot` key script) replays keys
+  instead of reading the terminal, for checks. Used by `tools/rebuild-map.sh` (`commands`).
 - **Storage location**: `--pick-location` or "Storage location..." under "Go?" lists the repo's
   folders, every ready drive (`<drive>/UnitSportSwitzerland/{data,terrain_chunks}`, free space
   shown) and a typed folder, then asks whether to move the source data, the built tiles or both.

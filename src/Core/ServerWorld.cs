@@ -29,6 +29,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private WorldOrigin? _origin;
     private Items.PlacedObjects? _placed;
     private Farming.FarmStands? _farmStands;
+    private Net.Sleepers? _sleepers;
     private Items.PalletService? _pallets;
     private Build.Structures? _structures;
     private Occasions.OccasionManager? _occasions;
@@ -238,6 +239,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
         _placed.NameOf = _chat.NameOfPeer;
+        // players who left, asleep where they were (#644)
+        _sleepers = Net.Sleepers.Create(this, origin, server: true);
+        _sleepers.GroundAt = (e, n) => _chunks != null && _chunks.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
         // pallets a forklift has moved (#583): which of the plan's have gone, and where they were put
         _pallets = Items.PalletService.Create(this, origin, server: true);
         _pallets.Source = () => source;
@@ -301,6 +305,10 @@ public partial class ServerWorld : Node3D, IOriginContainer
                 + megabytesPerSecond.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)
                 + " MB/s per client");
         }
+        // a static HTTP mirror of the chunk directory (#651): clients take the bulk files from it
+        _streamer.TilesUrl = CmdArgs.Value("--tiles-url", notFlag: true)
+            ?? (System.Environment.GetEnvironmentVariable("UNITSPORT_TILES_URL") is { Length: > 0 } envUrl ? envUrl : null);
+        if (_streamer.TilesUrl is { } tilesUrl) GD.Print($"[server] clients fetch tiles from {tilesUrl}, the game link as fallback");
         AddChild(_streamer);
         _chat.Streamer = _streamer;
 
@@ -435,6 +443,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
         _farmStands?.SendTo(id);
+        _sleepers?.SendTo(id);
         _pallets?.SendTo(id);
         _structures?.SendTo(id);
         _br?.SendTo(id);
@@ -448,6 +457,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
     {
         GD.Print($"[server] peer {id} disconnected");
         _handshake?.PeerLeft(id);
+        // before the registry forgets its name and the body is freed: it lies down where it was (#644)
+        _sleepers?.PeerLeft(id, _players!.GetNodeOrNull<Player.FootPlayer>(id.ToString()), _chat?.NameOfPeer(id) ?? "");
         _chat?.ReportDisconnect(id);
         // before the vehicles: a host's passengers go on in its vehicle, which it no longer simulates
         _passengers?.PeerLeft(id);

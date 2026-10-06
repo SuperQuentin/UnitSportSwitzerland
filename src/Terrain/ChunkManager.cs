@@ -2167,7 +2167,19 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         }
                     }
                     if (wantCollision)
-                        buildingFaces = ChunkNode.SplitByCell(bTile != null ? BuildingMeshBuilder.BuildCollisionFaces(bTile) : []);
+                    {
+                        // a garage door's access road is drivable ground (#558): the tile's doors
+                        // say whether it has one, so a collision-only build computes them too
+                        var linkDoors = doors;
+                        if (linkDoors == null && bTile != null)
+                        {
+                            var linkRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
+                            ct.ThrowIfCancellationRequested();
+                            linkDoors = Interiors.BuildingFootprint.ComputeDoors(bTile, linkRoads, grid.Stride == 1 ? grid : null);
+                        }
+                        buildingFaces = ChunkNode.SplitByCell(bTile != null
+                            ? [.. BuildingMeshBuilder.BuildCollisionFaces(bTile), .. BuildingMeshBuilder.LinkFaces(linkDoors)] : []);
+                    }
                     Lap(StBldgMesh, stageMs, clock);
                 }
 

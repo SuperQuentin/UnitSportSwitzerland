@@ -60,8 +60,11 @@
   Verbindung 28%. One-way intervals on 1,666 lines (1,086 plain one-way streets, 390 roundabout
   lines); lanes on 1,860 lines, sidewalks 668, cycleways 525, turn:lanes 134; 67 conflicts
   (Riddes alone: 6).
-- **Ceiling**: every node inside the region box is held in memory, fine for a region, ~2 GB for
-  the whole country (two passes would fix it).
+- **Ceiling**: every node within one tile of a built tile is held in memory, fine for a region,
+  ~2 GB for the whole country (two passes would fix it).
+- **Only what the built tiles need** (#678, `tile-region-reads`): the TLM lines and the OSM nodes
+  one tile around the built tiles, not the whole box, so a map made of separate areas has no rows
+  for the gaps between them. The step prints what it reads and how long each part took.
 
 ## Signals, bike boxes, turn restrictions (#347): `osm_nodes.tsv`
 

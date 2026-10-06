@@ -6,7 +6,7 @@
   whose outline holds its centre (`FieldFormat.Rasterise`).
 - **Loading**: `IChunkSource.LoadFieldsAsync` through every decorator: `LocalChunkSource` reads the
   file, `CachingChunkSource` caches it (slot `Fields`), `FallbackChunkSource` gives none on generated
-  ground, `NetworkChunkSource` streams it as `AssetKind.Fields = 13` (shipped -> cache -> server; an
+  ground, `NetworkChunkSource` streams it as `AssetKind.Fields = 14` (shipped -> cache -> HTTP mirror (#651) -> server; an
   older server answers "missing", so no protocol bump), `FixtureChunkSource` writes the course's
   `FixtureCourse.Fields` (flat: wheat east, potatoes north-east, a meadow west of the spawn).
 - **`FarmField`** (`src/Farming/FarmField*.cs`, `World/Farm` on the server and every client, system

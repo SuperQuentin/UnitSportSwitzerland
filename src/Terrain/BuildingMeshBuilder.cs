@@ -15,7 +15,7 @@ namespace UnitSport.Terrain;
 /// slate spire, whatever the cadastre match made each of them.
 /// </para>
 /// </summary>
-public static class BuildingMeshBuilder
+public static partial class BuildingMeshBuilder
 {
     /// <summary>
     /// <see cref="Frames"/> is CUSTOM0, four floats a vertex: the wall's horizontal tangent (x, z),
@@ -145,6 +145,8 @@ public static class BuildingMeshBuilder
             }
             // flush with the ground, or a car would hit a kerb
             Box(-hw - 0.2f, hw + 0.2f, -0.3f, 0.01f, 0, 0.45f, step);
+            // a garage door of a block of flats reaches the road in front of it (#558)
+            if (d.Link.Any) AppendLink(v, c, f, d);
             return;
         }
         Quad(P(-hw, 0, 0.03f), P(hw, 0, 0.03f), P(hw, h, 0.03f), P(-hw, h, 0.03f), leaf);

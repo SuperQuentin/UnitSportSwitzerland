@@ -20,10 +20,10 @@ public static class DoorSearch
 
     /// <summary>
     /// How far a search for one <see cref="BuildingKind"/> looks. A barn or a garage is rarely in
-    /// the village you spawn in, so this is the 1.5 km <see cref="Player.GarageProbe"/> has always
-    /// used rather than <see cref="NearReach"/>, which asking for a kind would otherwise inherit.
+    /// the village you spawn in, so this is the 2.5 km (it was 1.5 km until the generated works drifted to 1.6 km from the spawn, #666) <see cref="Player.GarageProbe"/>
+    /// uses rather than <see cref="NearReach"/>, which asking for a kind would otherwise inherit.
     /// </summary>
-    public const float KindReach = 1500f;
+    public const float KindReach = 2500f;
 
     /// <summary>
     /// Seconds a probe looks before giving up. Doors appear as their tile's buildings commit, so

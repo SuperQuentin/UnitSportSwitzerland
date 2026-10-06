@@ -121,8 +121,35 @@ Plan: `docs/plans/forklift-and-pallets.md`. The machine is `forklift`; this is w
   it. No new action on any device.
 - A quarter of the building sites' loaders park with forks (`DormantVehicles.SiteKind`, the slot's
   own roll).
-- The site's material stacks as liftable pallets are the next part of #615. Buckets carrying loose
-  objects follow, and the tipping bodies after #613.
+- **A building site's pallets of bricks and cement** (#615, second part). They are pallets now,
+  where a deck fits the slot; narrower slots stay drawn.
+  - `SiteDressings.Plan` lists them as `SitePalletSpot`s (slot, centre, runners along the zone, load
+    byte: bricks shrink-wrapped, cement as sacks) instead of drawing them in its mesh.
+  - `SitePlans.PalletsOf` puts them in LV95 on the drawn ground. The dormant layer's site provider
+    hands them to `PalletService.ShowYard` with the yards' stacks.
+  - Their id is `<building>:c<slot>` (`PalletSource.Site`), which the server resolves from the
+    tile's own files (`SitePlans.PalletAt`), as a yard stack's.
+  - Four of the nine generated sites `--constructioncheck` plans near the spawn keep some (it
+    prints each site's count). The site at 2588796,1118441 keeps three.
+- **The wheel loader's bucket** (#615, third part; the loader only, as agreed; the excavators'
+  buckets would need room their parked flags have not got). **`Player/IBucket`**: `Carrying`,
+  `HasBucket`, `BucketFrame` (at the pin, pitched with the bucket), `BucketPinLevel` (the same pin,
+  level), `BucketPitch` (lift + tilt), `BucketFloor`, the bucket's half width and reach.
+  - **The rule** (`PalletService.TendBucket`, `Pallets.InBucket`):
+    - Drive in with the bucket down and level until a pallet is over its floor.
+    - **Curl it back past `CurlCarry` (0.35 rad) and the pallet is taken.** At the arm's lowest
+      point a full curl only reaches 0.13 rad, so the arm has to lift as it curls, as a real
+      loader's does. That keeps a pallet from being swallowed by just driving into it.
+    - **Dump it past `DumpDrop` (-0.4 rad) and it is tipped out** under the lip, on the ground the
+      machine stands on.
+  - **"In the bucket" is measured level at the pin, not in the curling bucket's frame.** This
+    bucket hangs its floor 1.08 m below its pin, so curling swings the floor through a wide arc. In
+    the bucket's own frame, the pallet had moved out behind the pin (traced) before the bucket
+    reached its carry pitch.
+  - Drawn on the bucket's floor (`WheelLoaderFront.Carrying`).
+  - In the pose's lift float, and on the server by kind (`CarryingOf`: `WheelLoader` now too).
+  - Parked, the loader's flags became lift 8, tilt 7, articulation 7, pallet 10 (were 8, 8, 8).
+- The tipping bodies follow after #613.
 
 ## Loot
 
@@ -169,6 +196,21 @@ a container. A small, real loss, stated so it is not found later.
   telehandler and forks the nearest pallet on the ground (an apron stack, `:y9`). The server takes
   it by kind, and B sees the pallet in the telehandler's own pose (`Carrying` 298), drawn on its
   boom, then its forks empty.
+- `--forkcheck loaderbucket[,shots]` (#615): the loader's bucket on the flat. The bucket goes down
+  and level, is driven in, curls back without taking the pallet on the ground (0.13 rad), then is
+  lifted: scooped at 0.35 rad. It carries the pallet, drawn in the bucket, backs 4.7 m, and dumps:
+  tipped out at -0.42 rad, 0.02 m from the lip. The flags keep it.
+- `tools/sitepalletnetcheck.sh` (#615, tier 2, `Items/SitePalletNetProbe`, generated world at a site
+  with pallets, port 7887). After the telehandler, A carries the pallet 33 m out of the cramped
+  yard to open ground found by a box query (a loader cannot line up between the materials, hoarding
+  and office), and sets it down there. A then switches straight onto a wheel loader, so no parked
+  telehandler is left in the way, and scoops the pallet, steering onto it on the way in, and dumps
+  it. B sees it in the loader's pose and drawn in its bucket, then tipped out with its load. A (admin) takes a telehandler and comes at the nearest site pallet across
+  its runners, from the side a ray finds clear, then lifts and sets it down. B passes on the pallet
+  taken by the server and hidden, A's telehandler carrying it in its own pose and drawn on its boom,
+  then a loose one with the same load drawn and A's forks empty. ~60 s.
+- `SiteDressingTests` (#615): a site's pallets have unique slots, stand in the yard and out of the
+  building, hold bricks or cement, and nothing else of the dressing stands on them; some sites keep some.
 - `MachineForksTests` (tier 0, 21): the forklift's rule and load centre unchanged, both arms'
   tines on the ground ahead of the wheels and quick to lift, and the fork loader's flags and both
   machines' pose round trips.
