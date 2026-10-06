@@ -305,6 +305,13 @@ src/Vehicles/VehicleBody.Ai quick  --stairscheck --world fixture --traffic 0 --a
 src/Avatar/Forklift      quick  --forkliftcheck --world flat --systems physics,ui
 src/Player/Forklift      quick  --forkliftcheck --world flat --systems physics,ui
 src/Player/FootPlayer.Fo quick  --forkliftcheck --world flat --systems physics,ui
+# #615: a building site's pallets of materials, lifted by a telehandler from a second peer (generated world)
+src/Terrain/Construction/SiteDressing net tools/sitepalletnetcheck.sh
+src/Terrain/Construction/SitePlans net tools/sitepalletnetcheck.sh
+src/Items/SitePalletNetProbe net tools/sitepalletnetcheck.sh
+src/Items/SitePallets     net    tools/sitepalletnetcheck.sh
+src/Items/PalletService   net    tools/sitepalletnetcheck.sh
+src/Terrain/Construction/SiteDressing quick --constructioncheck --systems ui
 # #615: any machine with tines lifts pallets (the telehandler, the fork loader), on the flat; the forklift's own check guards the shared rule
 src/Player/IForks         quick  --forkcheck telehandler --world flat --systems physics,ui
 src/Player/IForks         quick  --forkcheck loaderforks --world flat --systems physics,ui
