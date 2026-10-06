@@ -173,6 +173,81 @@ public static partial class SwissStacUtil
     }
 
     /// <summary>
+    /// How much of the country an item's own WGS84 bbox spans, in degrees — the wider of the two
+    /// axes. swissBUILDINGS3D's collection mixes per-sheet items with one nationwide asset and
+    /// nothing in the item says which it is, so this is how they are told apart: a map sheet spans
+    /// a fraction of a degree, the nationwide file spans the country. Port of <c>bbox_span</c>.
+    /// </summary>
+    public static double BboxSpan((double W, double S, double E, double N)? bbox) =>
+        bbox is { } b ? Math.Max(b.E - b.W, b.N - b.S) : 0;
+
+    /// <summary>
+    /// An item's footprint as an LV95 rectangle, from its polygon when it has one and from its
+    /// WGS84 bbox otherwise. The polygon is used in preference because a lon/lat box drawn around a
+    /// sheet cut on the LV95 grid is tens of metres too big on every side — enough to count the
+    /// neighbouring sheets as touching. Port of <c>item_lv95_bounds</c>.
+    /// </summary>
+    public static (double MinE, double MinN, double MaxE, double MaxN) ItemLv95Bounds(
+        IReadOnlyList<(double Lon, double Lat)>? footprint, (double W, double S, double E, double N)? bbox)
+    {
+        var points = new List<(double E, double N)>();
+        if (footprint is { Count: >= 3 })
+            foreach (var (lon, lat) in footprint) points.Add(SwissProjection.ToLv95(lat, lon));
+        else if (bbox is { } b)
+        {
+            points.Add(SwissProjection.ToLv95(b.S, b.W));
+            points.Add(SwissProjection.ToLv95(b.N, b.E));
+        }
+        if (points.Count == 0) return (0, 0, 0, 0);
+        return (points.Min(p => p.E), points.Min(p => p.N), points.Max(p => p.E), points.Max(p => p.N));
+    }
+
+    /// <summary>
+    /// Whether an item's footprint overlaps any of the wanted tiles — strictly, and a few metres
+    /// inside each tile: the sheets are cut on the same kilometre lines, so one that merely shares
+    /// an edge with a tile holds none of its buildings. Port of <c>item_touches_tiles</c>.
+    /// </summary>
+    public static bool ItemTouchesTiles((double MinE, double MinN, double MaxE, double MaxN) bounds,
+        IReadOnlyCollection<TileId> tiles)
+    {
+        foreach (var t in tiles)
+            if (t.E * 1000.0 + 5 < bounds.MaxE && (t.E + 1) * 1000.0 - 5 > bounds.MinE
+                && t.N * 1000.0 + 5 < bounds.MaxN && (t.N + 1) * 1000.0 - 5 > bounds.MinN)
+                return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Splits a swissBUILDINGS3D item id into its year and sheet key
+    /// (<c>swissbuildings3d_3_0_2019_1091-12</c> -> 2019, "1091-12"), so the newest flight of each
+    /// sheet can be kept. Ids that do not match keep the whole id as the key and no year, which is
+    /// what the Python tool does.
+    /// </summary>
+    public static (string Year, string Key) BuildingsItemKey(string id)
+    {
+        var m = BuildingsIdPattern().Match(id);
+        return m.Success ? (m.Groups[1].Value, m.Groups[2].Value) : ("", id);
+    }
+
+    [GeneratedRegex(@"^swissbuildings3d_3_0_(\d{4})_(\S+)$")]
+    private static partial Regex BuildingsIdPattern();
+
+    /// <summary>
+    /// The newest dated Geofabrik Switzerland extract named in an index page, or null when it names
+    /// none. <c>switzerland-latest.osm.pbf</c> is deliberately not preferred: it has been seen
+    /// answering with a redirect to itself. Port of the name picking in <c>resolve_osm</c>.
+    /// </summary>
+    public static string? NewestOsmExtract(string indexHtml)
+    {
+        var dates = OsmExtractPattern().Matches(indexHtml).Select(m => m.Groups[1].Value).Distinct()
+            .OrderBy(d => d, StringComparer.Ordinal).ToList();
+        return dates.Count > 0 ? $"switzerland-{dates[^1]}.osm.pbf" : null;
+    }
+
+    [GeneratedRegex(@"switzerland-(\d{6})\.osm\.pbf")]
+    private static partial Regex OsmExtractPattern();
+
+    /// <summary>
     /// The WGS84 bbox around a set of 1 km tiles -- just wide enough to cover every tile's
     /// footprint, for the STAC query that lists candidate items. Port of <c>tiles_bbox_lv95</c>
     /// composed with <see cref="BboxLv95ToWgs84"/>.

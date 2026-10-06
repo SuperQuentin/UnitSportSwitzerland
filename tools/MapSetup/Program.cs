@@ -97,14 +97,13 @@ if (Flag("--resume") || (scripted == false && state.Tiles.Count > 0))
         selection.Add(new TileId(int.Parse(parts[0]), int.Parse(parts[1])));
     }
 
-var python = FindPython();
 Layers layers = state.Layers;
 if (Arg("--layers") is { } layerText) layers = ParseLayers(layerText);
 
 List<Step> Plan() => Planner.Build(new SetupContext
 {
     Paths = paths, Country = country, Local = local, Selection = selection, Layers = layers,
-    Stats = stats, State = state, Python = python,
+    Stats = stats, State = state,
 });
 
 if (Arg("--snapshot") is { } snapshotPath)
@@ -203,7 +202,7 @@ await AnsiConsole.Progress()
             var run = new StepRun(new SetupContext
             {
                 Paths = paths, Country = country, Local = local, Selection = selection, Layers = layers,
-                Stats = stats, State = state, Python = python,
+                Stats = stats, State = state,
             }, new SpectreProgress(task, step.Title), step.Title, log, cts.Token);
             var clock = Stopwatch.StartNew();
             bool ok;
@@ -464,13 +463,6 @@ static Layers ParseLayers(string text)
             _ => throw new ArgumentException($"unknown layer '{part}' (terrain, roads, buildings, cadastre, routes, places, osm, all)"),
         };
     return result;
-}
-
-static string? FindPython()
-{
-    foreach (var exe in new[] { "python", "python3", "py" })
-        if (Run(exe, "--version") == 0) return exe;
-    return null;
 }
 
 static int Run(string exe, params string[] arguments)

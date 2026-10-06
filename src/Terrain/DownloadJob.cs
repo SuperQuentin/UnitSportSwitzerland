@@ -101,9 +101,6 @@ public sealed class DownloadJob
             {
                 Paths = paths, Country = country, Local = local, Selection = selection, Layers = layers,
                 Stats = stats, State = state,
-                // The game has no Python: the downloads are C# and the build is in-process. Only
-                // the swissBUILDINGS3D sheets still need it, and that step says so when it skips.
-                Python = null,
             };
 
             var steps = Planner.Build(context).Where(s => s.Skip == null && s.Run != null).ToList();

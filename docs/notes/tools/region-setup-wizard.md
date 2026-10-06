@@ -17,8 +17,13 @@
   re-downloads the other's files. TLM picks the **latest release** by `datetime` and prefers
   `.gpkg.zip`; GWR is not STAC at all but one zip per canton at
   `public.madd.bfs.admin.ch/<canton>.zip`, with no published checksum, so its skip decision falls
-  back to size/ETag/Last-Modified. Still Python: buildings sheets, cycle routes, OSM and bathymetry,
-  whose per-dataset resolvers are not ported. `swiss_data.py` stays as the standalone tool.
+  back to size/ETag/Last-Modified. **swissBUILDINGS3D** (#564) tells per-sheet items from the one
+  nationwide asset by how much of the country the item spans, keeps only sheets whose **LV95
+  footprint** really touches the wanted tiles (its lon/lat bbox is tens of metres too big on every
+  side, which would pull in the neighbours), and takes the newest year of each sheet. **OSM** is not
+  STAC at all: the newest dated `switzerland-YYMMDD.osm.pbf` on Geofabrik's index, never `-latest`,
+  which has answered with a redirect to itself. Nothing in the pipeline shells out to Python any
+  more; `swiss_data.py` stays as the standalone tool.
 - **The preprocessor runs in-process since #515**: it targets net8 (like the game) and
   `Preprocessor.RunAsync` runs the same argument-driven pipeline as its CLI, so neither the game nor
   this tool needs a .NET SDK or a subprocess to build a tile; `StepRun.Tool` calls it directly and

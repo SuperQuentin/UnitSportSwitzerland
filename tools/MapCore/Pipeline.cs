@@ -72,7 +72,6 @@ public sealed class SetupContext
     public required Layers Layers { get; init; }
     public required Stats Stats { get; init; }
     public required SetupState State { get; init; }
-    public required string? Python { get; init; }
     public int Cores { get; init; } = Environment.ProcessorCount;
 }
 
@@ -114,10 +113,6 @@ public static partial class Planner
         var steps = new List<Step>();
         var sel = c.Selection.Tiles.ToList();
         var stats = c.Stats;
-        bool py = c.Python != null;
-        // Terrain, swissTLM3D and GWR are downloaded by SwissDownload now (#515 phase 1), so only the
-        // datasets whose resolvers are not ported yet still gate on Python.
-        string noPython = "Python not found (needed for this dataset)";
 
         // ---- which tiles need what -------------------------------------------------------
         var toDownload = sel.Where(t => !c.Local.Downloaded.Contains(t) && !c.Local.Built.Contains(t)).ToList();
@@ -182,11 +177,12 @@ public static partial class Planner
             Seconds = sheetBytes / stats.EffectiveDownload + 5,
             Skip = !c.Layers.HasFlag(Layers.Buildings) ? "buildings layer off"
                  : haveNationwideGpkg || haveNationwideZip ? "nationwide buildings already here"
-                 : !needSheets || sheetsToGet.Count == 0 ? "already here" : !py ? noPython : null,
+                 : !needSheets || sheetsToGet.Count == 0 ? "already here" : null,
             Run = r =>
             {
+                // still written: the terminal tool's --resume and swiss_data.py --tiles-file read it
                 WriteTiles(SelectionTilesFile(p), sel);
-                return r.SwissData(["--out", p.BuildingsDir, "swissbuildings3d", "--tiles-file", SelectionTilesFile(p)]);
+                return r.Download(() => SwissDownload.BuildingsAsync(p.BuildingsDir, sel, r.Progress, r.Cancellation));
             },
         });
 
@@ -247,8 +243,8 @@ public static partial class Planner
             DiskBytes = wantOsm && p.OsmPbf == null ? osmPbf : 0,
             DiskPath = p.OsmDir,
             Seconds = osmPbf / stats.EffectiveDownload + 3,
-            Skip = !wantOsm ? "OSM layer off" : p.OsmPbf != null ? "already here" : !py ? noPython : null,
-            Run = r => r.SwissData(["--out", p.OsmDir, "osm"]),
+            Skip = !wantOsm ? "OSM layer off" : p.OsmPbf != null ? "already here" : null,
+            Run = r => r.Download(() => SwissDownload.OsmAsync(p.OsmDir, r.Progress, r.Cancellation)),
         });
 
         // ---- unpack ------------------------------------------------------------------------------
@@ -637,14 +633,6 @@ public sealed partial class StepRun
                 System.Globalization.CultureInfo.InvariantCulture) / total;
     }
 
-    public async Task<bool> Python(string what, IReadOnlyList<string> args, LineProgress parse)
-    {
-        if (_c.Python == null) { Fail("Python not found"); return false; }
-        int code = await Exec(_c.Python, args, parse);
-        if (code != 0) Fail($"{what} exited with {code}");
-        return code == 0;
-    }
-
     /// <summary>The step's progress sink, for a stage that reports its own progress.</summary>
     public IStepProgress Progress => _progress;
 
@@ -652,8 +640,8 @@ public sealed partial class StepRun
     public CancellationToken Cancellation => _ct;
 
     /// <summary>
-    /// Runs one of the C# downloads (#515 phase 1) and folds what it measured back into this
-    /// machine's rate, the way <see cref="SwissData"/> does for the Python tool it replaced.
+    /// Runs one of the C# downloads and folds what it measured back into this machine's rate, so
+    /// the estimates keep converging on the real connection rather than the author's.
     /// </summary>
     public async Task<bool> Download(Func<Task<DownloadResult>> download)
     {
@@ -668,18 +656,6 @@ public sealed partial class StepRun
             _c.Stats.DownloadBytesPerSec = Stats.Blend(_c.Stats.DownloadBytesPerSec, result.Bytes / result.Seconds);
         return true;
     }
-
-    /// <summary>swiss_data.py with machine-readable progress; learns the download rate from it.</summary>
-    public async Task<bool> SwissData(IReadOnlyList<string> args)
-    {
-        _download = (0, 0);
-        bool ok = await Python("swiss_data.py", [_c.Paths.SwissData, "--progress-json", .. args], LineProgress.None);
-        if (ok && _download.Bytes > 50_000_000 && _download.Seconds > 1)
-            _c.Stats.DownloadBytesPerSec = Stats.Blend(_c.Stats.DownloadBytesPerSec, _download.Bytes / _download.Seconds);
-        return ok;
-    }
-
-    private (long Bytes, double Seconds) _download;
 
     public Task<bool> Extract(string dir, string zipPattern, Func<ZipArchiveEntry, bool> pick, string outDir, bool overwrite = false)
     {
@@ -747,7 +723,6 @@ public sealed partial class StepRun
         {
             if (line == null) return;
             Log(line);
-            if (line.StartsWith("@progress ", StringComparison.Ordinal)) { OnJson(line[10..]); return; }
             Show(line);
             var m = parse switch
             {
@@ -774,31 +749,4 @@ public sealed partial class StepRun
         return proc.ExitCode;
     }
 
-    private void OnJson(string json)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            var e = doc.RootElement;
-            switch (e.GetProperty("event").GetString())
-            {
-                case "check":
-                    Show($"checking {e.GetProperty("done").GetInt32():N0}/{e.GetProperty("total").GetInt32():N0} against the server");
-                    break;
-                case "plan":
-                    Show($"{e.GetProperty("files").GetInt32():N0} files, {e.GetProperty("bytes").GetInt64() / 1e9:F2} GB to fetch");
-                    break;
-                case "progress":
-                    long bytes = e.GetProperty("bytes").GetInt64(), total = e.GetProperty("bytes_total").GetInt64();
-                    _progress.Value = total > 0 ? 100.0 * bytes / total : 0;
-                    Show($"{e.GetProperty("done").GetInt32():N0}/{e.GetProperty("total").GetInt32():N0} files, "
-                         + $"{bytes / 1e9:F2}/{total / 1e9:F2} GB, {e.GetProperty("rate").GetDouble() / 1e6:F0} MB/s");
-                    break;
-                case "done":
-                    _download = (_download.Bytes + e.GetProperty("bytes").GetInt64(), _download.Seconds + e.GetProperty("seconds").GetDouble());
-                    break;
-            }
-        }
-        catch (JsonException) { }
-    }
 }
