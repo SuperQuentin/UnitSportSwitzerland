@@ -261,11 +261,12 @@ public static partial class TileRewriter
                 var rightSide = drawnRight ? sides.Right : sides.Left;
                 var leftSide = drawnRight ? sides.Left : sides.Right;
                 // the yellow crossing behind the stop line (#682), over the paths beside the carriageway too
+                bool crosswalk = false;   // the arm has a sidewalk or path: a crosswalk (#682)
                 if (!inside && block.Contains(source.Tile))
                 {
                     var streetRight = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, drawnRight);
                     var streetLeft = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
-                    if (streetRight.OuterDm > 0 || streetLeft.OuterDm > 0)
+                    if (crosswalk = streetRight.OuterDm > 0 || streetLeft.OuterDm > 0)
                         EmitCrossing(paint, source, mid, u, right, MouthSkew(junction, arm) + SignalStopSetback, -(half + (pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0)), to, streetRight, streetLeft, areas, stats,
                             pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } edgeWay, ExitFar: false } ? s => (edgeWay.OuterEdge(Math.Max(s, 0)).P - (mid + u * s)).Dot(right) : null);
                 }
@@ -277,7 +278,7 @@ public static partial class TileRewriter
                 if (!inside && approach && pocket && pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } exitWay, ExitFar: false })
                 {
                     double stopAtArm = MouthSkew(junction, arm) + SignalStopSetback, zebraTo = stopAtArm - ZebraClear;
-                    if (exitWay.Islands(Get(areas, exitWay.Tile), stopAtArm, zebraTo - ZebraDepth, zebraTo) is { } island)
+                    if (exitWay.Islands(Get(areas, exitWay.Tile), stopAtArm, zebraTo - ZebraDepth, zebraTo, crosswalk) is { } island)
                     {
                         secondFlags &= ~SignalPoleFlags.Second;
                         islandPoles.Add(((byte)arms.Count, island.Pole, island.Y, u, right));

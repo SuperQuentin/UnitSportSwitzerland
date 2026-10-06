@@ -1490,7 +1490,7 @@ public static partial class TileRewriter
         /// </summary>
         public TileId Tile => _tile;
 
-        public (Vec2 Pole, float Y)? Islands(List<RoadAreaProp> areas, double near, double zebraFrom, double zebraTo)
+        public (Vec2 Pole, float Y)? Islands(List<RoadAreaProp> areas, double near, double zebraFrom, double zebraTo, bool crosswalk = true)
         {
             const double Margin = 0.25, IslandMinWidth = 1.2, Top = 0.12;
             const double IslandInside = IslandInsideM;
@@ -1528,9 +1528,10 @@ public static partial class TileRewriter
                     Vertices = v.ToArray(), Indices = idx.ToArray(),
                 });
             }
-            double after = zebraFrom - 0.15;
+            // no crosswalk (no sidewalk or path on the arm): one island all along
+            double after = crosswalk ? zebraFrom - 0.15 : near + 2.0;
             Island(-IslandInside, after);
-            Island(zebraTo + 0.15, near + 2.0);
+            if (crosswalk) Island(zebraTo + 0.15, near + 2.0);
             double at = -IslandInside * 0.5 + after * 0.1;
             var spot = At2(at, Margin + iw * 0.5);
             return (new Vec2(_tile.MinE + spot[0], _tile.MaxN - spot[2]), spot[1] + (float)Top);
