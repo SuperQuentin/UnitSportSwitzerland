@@ -71,7 +71,7 @@ public static class Landmarks
     public const float MinHeight = 9f, MaxHeight = 30f;
 
     /// <summary>
-    /// The nine IKEA Einrichtungshäuser. The plan-and-order points (Zürich Pelikanstrasse, Bern
+    /// The ten IKEA Einrichtungshäuser. The plan-and-order points (Zürich Pelikanstrasse, Bern
     /// Gerechtigkeitsgasse, Winterthur Stadthausstrasse) are <b>not</b> here: they are counters in
     /// an ordinary town building, not blue boxes, and the shape band would reject them anyway.
     /// </summary>
@@ -86,6 +86,11 @@ public static class Landmarks
         Ikea1("Pratteln", 47.527800, 7.689300),
         Ikea1("St. Gallen", 47.408400, 9.306900),
         Ikea1("Grancia", 45.972991, 8.926465),
+        // the tenth, and the first in a mountain canton: Zone Commerciale des Babioux. The address
+        // point published for it sits ~200 m off the store, out in the retail zone, so this is the
+        // one that lands on the building — 16,576 m2, 187 x 89 m, which is the 23,000 m2 of sales
+        // floor over two storeys
+        Ikea1("Riddes", 46.165237, 7.210981),
     };
 
     /// <summary>Every landmark, whatever its type. One brand today; a list when there is a second.</summary>

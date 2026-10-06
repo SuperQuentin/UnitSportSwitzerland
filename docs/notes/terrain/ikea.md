@@ -3,7 +3,7 @@
 
 # IKEA stores: landmarks recognised by position (#501)
 
-`Landmarks` (`src/Interiors/Landmarks.cs`) names the nine IKEA Einrichtungshäuser by where they
+`Landmarks` (`src/Interiors/Landmarks.cs`) names the ten IKEA Einrichtungshäuser by where they
 stand, and `BuildingTypes.Detect` turns the solid under each point into a
 `BuildingGroup(BuildingType.Ikea)`. Everything else — the blue facade, the sign, the pylon, the
 market hall of Blåhaj bins — hangs off that one decision.
@@ -45,16 +45,22 @@ only decides which tiles bother looking — that is what lets St. Gallen work �
 answer.
 
 The shape band (`MinArea` 6 000 m², `MaxArea` 45 000, `MinHeight` 9 m, `MaxHeight` 30) was measured
-off the nine real solids. It is what keeps a mall's tower, an eight-storey block, an airport-sized
+off the real solids. It is what keeps a mall's tower, an eight-storey block, an airport-sized
 complex, the garden centre and a trolley shelter from ever being a store, and it keys on **area and
-height, never on kind**: the nine come through the cadastre as `Commercial`, `Industrial` and
+height, never on kind**: the ten come through the cadastre as `Commercial`, `Industrial` and
 `Other`, so a rule on `BuildingKind` would miss some of them.
 
-## The nine rows, and how to re-check them
+## The ten rows, and how to re-check them
 
 The coordinates are each a store's own address geocoded, then confirmed against the real solid.
 **Every one of the first nine guesses was wrong, by 400 m to 2.3 km** — do not trust a remembered
-coordinate here, and do not add a row without checking it.
+coordinate here, and do not add a row without checking it. The tenth row is the sharper lesson:
+**Riddes was missing entirely**, because a list of Swiss stores recalled from memory (and the first
+web search made of it) had nine. It is the newest, the first in a mountain canton, and it is 300 m
+from the Africa Twin spot that people look at most. Search for the current list, do not recall it.
+
+A published address point is not a position either: the one for Riddes sits ~200 m from the store,
+out in the retail zone, so it missed. What a row needs is a point **on the building**.
 
 ```
 godot --headless --path . -- --ikeacheck --systems ui                 # the rules, no data needed
@@ -72,11 +78,11 @@ Dietlikon.
 
 To get real tiles for just these areas: `dotnet run --project tools/MapSetup -- --tiles-file <file>
 --layers buildings --yes`, with each store's tile and its eight neighbours in the file
-(`region-setup-wizard`). About 2 GB and five minutes for all nine. Note that a tile can come back
+(`region-setup-wizard`). About 2 GB and five minutes for all ten. Note that a tile can come back
 with terrain but no `.bldg` if the step-level skip logic sees an existing GeoPackage — re-run
 `TerrainPreprocessor --features-only --tiles-file <file> --force` for those tiles.
 
-Verified 9/9 matching exactly one solid: 9 201–31 717 m², 17–25 m tall.
+Verified 10/10 matching exactly one solid: 9 201–31 717 m², 17–25 m tall.
 
 ## What hangs off the type
 
