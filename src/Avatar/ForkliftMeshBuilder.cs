@@ -125,7 +125,9 @@ public static class ForkliftMeshBuilder
 
     private static ArrayMesh? _front, _rear;
 
+    [Core.Showcase("Parts", "Forklift front wheel")]
     private static ArrayMesh FrontWheel() => _front ??= WheelMesh(ForkliftLayout.FrontRadius, ForkliftLayout.FrontWidth);
+    [Core.Showcase("Parts", "Forklift rear wheel")]
     private static ArrayMesh RearWheel() => _rear ??= WheelMesh(ForkliftLayout.RearRadius, ForkliftLayout.RearWidth);
 
     /// <summary>One cushion tyre on its rim, facing ±X.</summary>
@@ -159,6 +161,7 @@ public static class ForkliftMeshBuilder
     public static ForkliftMast? MastOf(Node3D? visual) => visual?.GetNodeOrNull<ForkliftMast>("Mast");
 
     /// <summary>The inner mast stage, authored at its retracted place: two channels inside the outer pair.</summary>
+    [Core.Showcase("Parts", "Forklift mast, inner stage")]
     internal static ArrayMesh StageMesh()
     {
         var s = new MeshScratch();
@@ -172,6 +175,7 @@ public static class ForkliftMeshBuilder
     /// The carriage and its two tines, authored with the tines' upper faces at y 0, so the node's
     /// own Y <b>is</b> the fork height and nothing has to be rebuilt as it rises.
     /// </summary>
+    [Core.Showcase("Parts", "Forklift fork carriage")]
     internal static ArrayMesh CarriageMesh()
     {
         var s = new MeshScratch();

@@ -5,6 +5,7 @@
 
 Plan: `docs/plans/forklift-and-pallets.md`. The machine is `forklift`; this is what it lifts.
 
+- **In the model viewer** (`--models`, #622): rides show the forklift by themselves; `PalletNode` has a `[Showcase("Pallets")]` set (each goods on each deck, and a forklift carrying one), and the furniture set keeps `Pallet` though it is no longer in the merged mesh.
 - **Which pallets**: a hall's **loose floor pallets** (`FurnitureType.Pallet`, `Lift == 0`:
   `InteriorMeshBuilder.IsLoosePallet`), 5-20 per warehouse or works. Pallets on racking stay drawn
   inside the `PalletRack` piece and are not liftable. And a site's **apron stacks** (phase 3,

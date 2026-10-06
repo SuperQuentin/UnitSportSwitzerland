@@ -100,6 +100,23 @@ public partial class PalletNode : Node3D
         _shape?.SetDeferred(CollisionShape3D.PropertyName.Disabled, taken);
     }
 
+    /// <summary>
+    /// Every pallet the game draws, in the model viewer (--models): each goods on each deck, as it
+    /// rides on the forks, and a forklift carrying one raised.
+    /// </summary>
+    [Core.Showcase("Pallets")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcasePallets()
+    {
+        foreach (var (goods, roll) in new[] { (PalletGoods.Cartons, 0.1f), (PalletGoods.Drums, 0.6f), (PalletGoods.Sacks, 0.8f), (PalletGoods.Wrapped, 0.95f) })
+            foreach (float depth in new[] { Pallets.NarrowDepth, Pallets.SquareDepth })
+            {
+                byte load = Pallets.LoadOf(roll, depth);
+                yield return ($"{goods}, {depth:F1} m deck", () => Carried(load));
+            }
+        yield return ("On the forks", () =>
+            Avatar.ForkliftMeshBuilder.CreateRig(1.4f, null, Pallets.Carried(Pallets.LoadOf(0.6f, Pallets.NarrowDepth))));
+    }
+
     public override void _EnterTree()
     {
         All[Id] = this;
