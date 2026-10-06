@@ -475,7 +475,7 @@ public static class BuildingFootprint
         // can be reached from it: no road in front, no door. It claims its slot in the budget
         // before the pedestrian doors, on the front wall between two of its entrances.
         if (found && door.Width > 0 && main != null && extras.Count + 1 < budget && roads.Streets.Roads.Count > 0
-            && roof.Count > 0 && roof.Sum(r => Math.Abs(Cross2(r.A, r.B, r.C)) * 0.5f) >= 0.9f * w * dpt)
+            && roof.Count > 0 && PlannedAsBox(b, center, u, new Vector2(door.Outward.X, door.Outward.Z), w, dpt))
         {
             var (storeyH, above) = InteriorGenerator.Storeys(b);
             var type = GarageRule.BlockType(key.ToString(), w * dpt, kind, above, false);
@@ -494,6 +494,8 @@ public static class BuildingFootprint
                     var t = new Vector2(-c.Normal.Y, c.Normal.X);
                     var xz = c.Normal * c.Offset + t * mid;
                     if (Covered(xz)) return null;
+                    // inside the plan box (a facade longer than its 120 m clamp has doors past it)
+                    if (Math.Abs((xz - center).Dot(t)) > frontW / 2 - GarageRule.RampWidth / 2 - 0.5f) return null;
                     float ground = grid != null
                         ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
                         : b.MinY + 0.8f;
@@ -524,7 +526,11 @@ public static class BuildingFootprint
                     {
                         Slot = extras.Count + 1, Hang = DoorHang.RollUp, Vehicle = true, Link = link,
                     };
-                    return DoorOnWall(b, spot) && !TooClose(door, spot) && !extras.Any(q => TooClose(q, spot)) ? spot : null;
+                    // clear of every other door by a stairwell and the lane (GarageRule.StairClear): the ramp
+                    // runs between two stairwells, and a pedestrian door within reach would put one in it
+                    bool clear = new Vector2(door.Position.X, door.Position.Z).DistanceTo(xz) >= GarageRule.StairClear
+                        && extras.All(q => new Vector2(q.Position.X, q.Position.Z).DistanceTo(xz) >= GarageRule.StairClear);
+                    return DoorOnWall(b, spot) && clear && !TooClose(door, spot) && !extras.Any(q => TooClose(q, spot)) ? spot : null;
                 }
                 DoorSpot? garage = null;
                 // On the front wall, halfway between two entrances (which stand Spacing apart): the ramp
@@ -581,6 +587,8 @@ public static class BuildingFootprint
                     };
                     if (!DoorOnWall(b, spot)) continue;
                     if (placed.Any(q => TooClose(q, spot))) continue;
+                    // a pedestrian door (and its stairwell) keeps clear of a garage door's ramp (#558)
+                    if (placed.Any(q => q.Link.Any && new Vector2(q.Position.X, q.Position.Z).DistanceTo(xz) < GarageRule.StairClear)) continue;
                     placed.Add(spot);
                     extras.Add(spot);
                 }
@@ -641,6 +649,21 @@ public static class BuildingFootprint
         p0 = hits[0];
         p1 = hits[1].DistanceSquaredTo(p0) > (hits.Count > 2 ? hits[2].DistanceSquaredTo(p0) : -1) ? hits[1] : hits[2];
         return p0.DistanceSquaredTo(p1) > 1e-6f;
+    }
+
+    /// <summary>
+    /// Whether the generator plans this building as its one box and not wing by wing (<see cref="PlanOutline"/>
+    /// on the same frame <c>Compute</c> ends with): a garage's ramp (#558) is planned only in a whole block.
+    /// </summary>
+    private static bool PlannedAsBox(Building b, Vector2 center, Vector2 u, Vector2 outward, float w, float dpt)
+    {
+        var candidates = new[] { u, -u, new Vector2(-u.Y, u.X), new Vector2(u.Y, -u.X) };
+        var edge = candidates.OrderByDescending(c => c.Dot(outward)).First();
+        var back = -edge;
+        var axisU = new Vector2(back.Y, -back.X);
+        bool alongU = Mathf.Abs(axisU.Dot(u)) > 0.5f;
+        float width = alongU ? w : dpt, depth = alongU ? dpt : w;
+        return PlanOutline.Wings(b, center, axisU, Mathf.Clamp(width, MinSide, MaxSide), Mathf.Clamp(depth, MinSide, MaxSide)) is not { Count: >= 1 };
     }
 
     /// <summary>

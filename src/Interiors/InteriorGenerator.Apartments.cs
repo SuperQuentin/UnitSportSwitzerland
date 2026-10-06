@@ -257,7 +257,9 @@ public static partial class InteriorGenerator
         }
 
         // the garage ramp's column (#558): kept out of every floor's flats
+        RampWhy = null;
         if (o.Free == null && o.Below == null && !o.Pinned && o.Links.Count == 0) a.Ramp = PlanRamp(a, fp);
+        else if (fp.Doors.Any(d => d.Vehicle)) RampWhy = "planned wing by wing";
 
         l.Type = type;
         l.Below = below;
@@ -297,23 +299,30 @@ public static partial class InteriorGenerator
     /// (<see cref="GarageRule.HasRamp"/>), and the lane stands clear of every stairwell. A door with no
     /// ramp reads as locked, as it did before the ramp existed.
     /// </summary>
+    /// <summary>Why the last <see cref="PlanRamp"/> of this thread planned none (null: it did, or there was no garage door), for the real-data probe.</summary>
+    internal static string? RampWhy;
+
     private static RampColumn? PlanRamp(Apt a, Footprint fp)
     {
         var l = a.L;
-        if (a.Below < 1 || !a.Stairs || !a.Passage) return null;
+        RampColumn? No(string why) { RampWhy = why; return null; }
+        if (!fp.Doors.Any(d => d.Vehicle && d.Width > 0)) return null;
+        if (a.Below < 1 || !a.Stairs || !a.Passage) return No("no basement or no passage");
         bool strip = a.Hd - a.ZB1 >= GarageRule.StripDepth && l.Width >= GarageRule.StripWidth;
-        if (!strip || !GarageRule.HasRamp(l.Depth, l.StoreyHeight)) return null;
+        if (!strip) return No($"no car park strip ({a.Hd - a.ZB1:F1} m behind the stairwells)");
+        if (!GarageRule.HasRamp(l.Depth, l.StoreyHeight)) return No($"too shallow ({l.Depth:F1} m for {GarageRule.RampDepth(l.StoreyHeight):F1})");
         var axisV = fp.AxisV;
         foreach (var d in fp.Doors)
         {
             if (!d.Vehicle || d.Width <= 0) continue;
             var outward = new Godot.Vector2(d.Outward.X, d.Outward.Z);
-            if (outward.Dot(axisV) > -0.8f) continue;
+            if (outward.Dot(axisV) > -0.8f) return No("the garage door is not on the front wall");
             var rel = new Godot.Vector2(d.Position.X - fp.Center.X, d.Position.Z - fp.Center.Y);
             float x = rel.Dot(fp.AxisU);
             float x0 = x - GarageRule.RampWidth / 2, x1 = x + GarageRule.RampWidth / 2;
-            if (x0 < -a.Hw + 0.3f || x1 > a.Hw - 0.3f) return null;
-            if (a.Wells.Any(w => x1 + 0.4f > w.X0 && x0 - 0.4f < w.X1)) return null;
+            if (x0 < -a.Hw + 0.3f || x1 > a.Hw - 0.3f) return No($"the door is {x:F1} m along a {l.Width:F1} m plan box (the facade is longer than the box)");
+            if (a.Wells.FirstOrDefault(w => x1 + 0.4f > w.X0 && x0 - 0.4f < w.X1) is { } hit)
+                return No($"the lane ({x0:F1}..{x1:F1}) meets the stairwell at {hit.X0:F1}..{hit.X1:F1}");
             float top = -a.Hd + GarageRule.RampApron;
             float foot = -a.Hd + GarageRule.RampFoot(l.StoreyHeight);
             return new RampColumn(x0, x1, top, foot, top + RampProfile.HoleLength(l.StoreyHeight, a.Clear), d.Slot);

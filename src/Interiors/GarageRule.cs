@@ -121,6 +121,13 @@ public static class GarageRule
     /// <summary>The ramp's lane, wall to wall: a car 1.9 m wide, mirrors out, with a hand each side.</summary>
     public const float RampWidth = 3.6f;
 
+    /// <summary>
+    /// How far a garage door stands from any other door, m: the lane, a stairwell either side of it and
+    /// the flats' wall between, so the ramp's column never meets a stairwell's (the stairwell is built
+    /// for the door in front of it, and slides to the end of the block when the sliver beside it is thin).
+    /// </summary>
+    public const float StairClear = 7.0f;
+
     /// <summary>The flat floor behind the door before the ramp tips down, m.</summary>
     public const float RampApron = 1.0f;
 

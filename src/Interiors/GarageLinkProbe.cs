@@ -180,7 +180,7 @@ public partial class GarageLinkProbe : Node
                 {
                     bool ramp = plan.EntranceOf(g.Key.ToString()) != null && plan.Floors.Any(f => f.AllFlights().Any(x => x.Ramp));
                     if (ramp) _ramps++; else _locked++;
-                    GD.Print($"[garage]   {g.Key}: {plan.Width:F0} x {plan.Depth:F0} m, {(ramp ? "a ramp down to the car park" : "no ramp: the door reads as locked")}, "
+                    GD.Print($"[garage]   {g.Key}: {plan.Width:F0} x {plan.Depth:F0} m, {(ramp ? "a ramp down to the car park" : "no ramp: the door reads as locked (" + (InteriorGenerator.RampWhy ?? "?") + ")")}, "
                         + $"{InteriorValidator.Validate(plan).Count} validator problem(s)");
                 }
                 if (g.Link.Kind == LinkKind.Stub) bad += MeasureStub(g);
