@@ -47,6 +47,7 @@ public partial class ChunkNode : Node3D
         if (_lamps != null) _lamps.Visible = Shows(TileLayers.Roads);
         if (_buildingInstance != null) _buildingInstance.Visible = Shows(TileLayers.Buildings);
         if (_siteInstance != null) _siteInstance.Visible = Shows(TileLayers.Buildings);
+        if (_siteCranes != null) _siteCranes.Visible = Shows(TileLayers.Buildings);
         if (_cellInstances != null)
             foreach (var cell in _cellInstances) cell.Visible = Shows(TileLayers.Buildings);
         if (_waterInstance != null) _waterInstance.Visible = Shows(TileLayers.Water);
@@ -219,13 +220,24 @@ public partial class ChunkNode : Node3D
     }
 
     private MeshInstance3D? _siteInstance;
+    private Construction.SiteCranes? _siteCranes;
 
     /// <summary>
     /// The tile's building sites (#608): their half-built shells, one mesh with the prop material,
     /// drawn and dropped with the buildings. Null clears them.
     /// </summary>
-    public void SetSites(ArrayMesh? mesh)
+    public void SetSites(ArrayMesh? mesh, Construction.CraneRig[]? cranes = null, Material? material = null)
     {
+        // the cranes (#610) go with their sites: a rebuild brings its own, or none
+        _siteCranes?.QueueFree();
+        _siteCranes = null;
+        if (cranes is { Length: > 0 } && material != null)
+        {
+            _siteCranes = new Construction.SiteCranes(cranes, material) { Visible = Shows(TileLayers.Buildings) };
+            AddChild(_siteCranes);
+        }
+        else if (cranes != null)
+            foreach (var crane in cranes) crane.Dispose();
         if (mesh == null)
         {
             if (_siteInstance?.Mesh is { } old)

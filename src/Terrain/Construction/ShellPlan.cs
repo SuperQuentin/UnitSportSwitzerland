@@ -15,6 +15,8 @@ public enum ShellPart : byte
     // the yard (#609)
     Container = 12, ContainerTrim = 13, Toilet = 14, ToiletAlt = 15, Skip = 16, Debris = 17, Soil = 18,
     Brick = 19, Cement = 20, Fence = 21, Banner = 22, Lamp = 23, Window = 24, SignBoard = 25,
+    // the cranes (#610)
+    CraneYellow = 26, Cab = 27, HookBlock = 28, Rope = 29, LampRed = 30,
 }
 
 /// <summary>
@@ -108,6 +110,15 @@ public static class ShellPlans
         for (int k = 0; k <= top; k++) plan.Levels.Add(groundHigh + k * storey);
         float L(int k) => plan.Levels[k];
 
+        // ---- cranes standing in the building: an opening round each mast ----------------------
+        var holes = new List<Rect2D>();
+        foreach (var crane in site.Cranes.Where(c => c.Inside))
+        {
+            var d = crane.Base - site.Box.Center;
+            float cx = d.Dot(site.Box.AxisU), cz = d.Dot(site.Box.AxisV);
+            holes.Add(new Rect2D(cx - CraneHole / 2, cz - CraneHole / 2, cx + CraneHole / 2, cz + CraneHole / 2));
+        }
+
         // ---- the stair core, in the biggest wing, its flights along that wing's long side ----
         var main = ws.OrderByDescending(w => w.Width * w.Depth).First();
         bool alongX = main.Width >= main.Depth;
@@ -116,9 +127,22 @@ public static class ShellPlans
         // the near end (the landing) faces the street, so the way up starts on the way in
         float toFront = alongX ? site.Front.Dot(site.Box.AxisU) : site.Front.Dot(site.Box.AxisV);
         int dir = toFront >= 0 ? 1 : -1;
-        var core = alongX
-            ? new Rect2D(mx - coreLen / 2, mz - coreWid / 2, mx + coreLen / 2, mz + coreWid / 2)
-            : new Rect2D(mx - coreWid / 2, mz - coreLen / 2, mx + coreWid / 2, mz + coreLen / 2);
+        Rect2D CoreAt(float x, float z) => alongX
+            ? new Rect2D(x - coreLen / 2, z - coreWid / 2, x + coreLen / 2, z + coreWid / 2)
+            : new Rect2D(x - coreWid / 2, z - coreLen / 2, x + coreWid / 2, z + coreLen / 2);
+        var core = CoreAt(mx, mz);
+        // a crane standing in the building takes the middle first (#610): the core moves along its
+        // wing until it clears every mast's opening by a metre, the nearer way that stays in the wing
+        bool Clear(Rect2D r) => !holes.Any(h => new Rect2D(h.X0 - 1f, h.Z0 - 1f, h.X1 + 1f, h.Z1 + 1f).Overlaps(r))
+            && r.X0 >= main.X0 + 0.5f && r.X1 <= main.X1 - 0.5f && r.Z0 >= main.Z0 + 0.5f && r.Z1 <= main.Z1 - 0.5f;
+        if (!Clear(core))
+            for (float shift = 1f; shift < Math.Max(main.Width, main.Depth); shift += 1f)
+            {
+                var a = alongX ? CoreAt(mx + shift, mz) : CoreAt(mx, mz + shift);
+                var b = alongX ? CoreAt(mx - shift, mz) : CoreAt(mx, mz - shift);
+                if (Clear(a)) { core = a; break; }
+                if (Clear(b)) { core = b; break; }
+            }
         plan.Core = core;
         plan.CoreAlongX = alongX;
         // in the core's own frame: a runs along the flights from the near end (+dir side), b across
@@ -136,15 +160,6 @@ public static class ShellPlans
         var (wx0, wz0) = C(NearLanding, 0);
         var (wx1, wz1) = C(aLen, coreWid);
         var well = new Rect2D(Math.Min(wx0, wx1), Math.Min(wz0, wz1), Math.Max(wx0, wx1), Math.Max(wz0, wz1));
-
-        // ---- cranes standing in the building: an opening round each mast ----------------------
-        var holes = new List<Rect2D>();
-        foreach (var crane in site.Cranes.Where(c => c.Inside))
-        {
-            var d = crane.Base - site.Box.Center;
-            float cx = d.Dot(site.Box.AxisU), cz = d.Dot(site.Box.AxisV);
-            holes.Add(new Rect2D(cx - CraneHole / 2, cz - CraneHole / 2, cx + CraneHole / 2, cz + CraneHole / 2));
-        }
 
         // ---- the ground slab, on a plinth down to the lowest ground --------------------------
         foreach (var w in ws)
