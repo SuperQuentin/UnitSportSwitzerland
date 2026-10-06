@@ -159,6 +159,30 @@ public class ContainerBookTests
         }
     }
 
+    [Fact]
+    public void Woken_slots_stay_awake_a_week_or_while_their_vehicle_sleeps()
+    {
+        double now = 10 * ContainerRules.AwakeFor;
+        var saved = new Dictionary<string, double>
+        {
+            ["2600_1200|3"] = now - 3600,                         // woken an hour ago
+            ["2600_1200|4"] = now - ContainerRules.AwakeFor - 1,  // long ago, its car gone
+            ["2600_1200|5"] = 0,                                  // long ago, its car asleep in a container
+        };
+        var keep = ContainerRules.KeepAwake(saved, now, key => key == "2600_1200|5");
+        Assert.Equal(new[] { "2600_1200|3", "2600_1200|5" }, keep.Keys.Order());
+    }
+
+    [Fact]
+    public void Wake_takes_the_tiles_within_two_rings_of_any_player()
+    {
+        var files = new HashSet<TileId> { new(10, 10), new(12, 10), new(13, 10), new(0, 0) };
+        var wake = ContainerRules.ToWake(new[] { new TileId(10, 10), new TileId(11, 10) }, files.Contains);
+        Assert.Equal(new[] { new TileId(10, 10), new TileId(12, 10), new TileId(13, 10) }, wake.OrderBy(t => t.E));
+        Assert.Equal(0, ContainerRules.Lonely(42, 5, new TileId(13, 10), new[] { new TileId(10, 10) }));
+        Assert.Equal(47, ContainerRules.Lonely(42, 5, new TileId(14, 10), new[] { new TileId(10, 10) }));
+    }
+
     /// <summary>
     /// Thousands of random sleeps, wakes, moves, pick-ups and new entities, with a crash before
     /// some write now and then and a restart from the disk after it. After every restart each

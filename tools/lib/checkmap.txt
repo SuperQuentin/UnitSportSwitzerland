@@ -479,3 +479,8 @@ src/Vehicles/DormantVehicles net tools/sitemachinenetcheck.sh
 src/Vehicles/VehicleSlot net    tools/sitemachinenetcheck.sh
 src/Vehicles/ParkingNetProbe net tools/sitemachinenetcheck.sh
 src/Terrain/Construction/SitePlans net tools/sitemachinenetcheck.sh
+src/World/ObjectContainers net tools/containernetcheck.sh
+src/World/ContainerRules net tools/containernetcheck.sh
+src/World/ContainerNetProbe net tools/containernetcheck.sh
+src/Net/EntityInterest net tools/containernetcheck.sh
+src/Vehicles/DormantVehicles net tools/containernetcheck.sh

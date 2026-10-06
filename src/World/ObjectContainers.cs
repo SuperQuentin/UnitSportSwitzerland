@@ -27,10 +27,10 @@ public partial class ObjectContainers : Node
     public const string NodeName = "Containers";
 
     /// <summary>How often players and entities are looked at, s.</summary>
-    private const double Period = 5;
+    private double _period = 5;
 
     /// <summary>How often what is live is written down, s: the most a hard crash can lose of how things moved.</summary>
-    private const double CheckpointPeriod = 60;
+    private double _checkpointPeriod = 60;
 
     public static ObjectContainers? Instance { get; private set; }
 
@@ -81,6 +81,14 @@ public partial class ObjectContainers : Node
     public override void _Ready()
     {
         Instance = this;
+        // a check (tools/containernetcheck.sh) cannot wait minutes: everything a dozen times faster
+        if (CmdArgs.Has("--containers-quick"))
+        {
+            _period = 1;
+            _checkpointPeriod = 5;
+            ContainerRules.SleepAfter = 5;
+            ContainerRules.StillFor = 2;
+        }
         int filed;
         try { filed = _book.Load(Now); }
         catch (Exception e)
@@ -101,7 +109,37 @@ public partial class ObjectContainers : Node
         _items.ChildExitingTree += OnExiting;
         foreach (var child in _vehicles.GetChildren()) OnEntered(child);
         foreach (var child in _items.GetChildren()) OnEntered(child);
-        DormantVehicles.Instance?.KeepAwake(_book.FiledNamesList);
+        DormantVehicles.Instance?.RestoreAwake(LoadAwake(), _book.FiledNamesList);
+    }
+
+    // ---- the dormant slots woken (#499), kept across restarts --------------------------------
+
+    private string AwakePath => System.IO.Path.Combine(_dir, "awake.json");
+
+    /// <summary>The woken slots the last run left (<c>owner|ordinal</c> → when), or none.</summary>
+    public Dictionary<string, double> LoadAwake()
+    {
+        try
+        {
+            return System.IO.File.Exists(AwakePath)
+                ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, double>>(System.IO.File.ReadAllText(AwakePath)) ?? new()
+                : new();
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"[containers] {AwakePath} does not read: {e.Message}");
+            return new();
+        }
+    }
+
+    /// <summary>
+    /// Writes the woken slots: a car park's woken car outlives the session now, so its bay must
+    /// not be woken again after a restart (two of the same car). Small, written whole, at once.
+    /// </summary>
+    public void SaveAwake(IReadOnlyDictionary<string, double> awake)
+    {
+        try { SaveQueue.WriteAtomic(AwakePath, System.Text.Json.JsonSerializer.Serialize(awake)); }
+        catch (Exception e) { GD.PushError($"[containers] could not write {AwakePath}: {e.Message}"); }
     }
 
     /// <summary>
@@ -195,7 +233,7 @@ public partial class ObjectContainers : Node
     public override void _Process(double delta)
     {
         _sinceLook += delta;
-        if (_sinceLook < Period) return;
+        if (_sinceLook < _period) return;
         double step = _sinceLook;
         _sinceLook = 0;
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -206,7 +244,7 @@ public partial class ObjectContainers : Node
             Watch(step);
             SleepWhere(force: false);
             _sinceCheckpoint += step;
-            if (_sinceCheckpoint >= CheckpointPeriod)
+            if (_sinceCheckpoint >= _checkpointPeriod)
             {
                 _sinceCheckpoint = 0;
                 Checkpoint();

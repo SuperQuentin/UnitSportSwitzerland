@@ -324,11 +324,26 @@ public static class ContainerRules
     /// <summary>An entity sleeps once no player has been within this many tiles of it (hysteresis over <see cref="WakeRings"/>).</summary>
     public const int SleepRings = 3;
 
-    /// <summary>Seconds with nobody within <see cref="SleepRings"/> before an entity sleeps.</summary>
-    public const double SleepAfter = 60;
+    /// <summary>Seconds with nobody within <see cref="SleepRings"/> before an entity sleeps (a check shortens it).</summary>
+    public static double SleepAfter { get; set; } = 60;
 
-    /// <summary>Seconds an entity must have stood still (its server copy) before it may sleep.</summary>
-    public const double StillFor = 10;
+    /// <summary>Seconds an entity must have stood still (its server copy) before it may sleep (a check shortens it).</summary>
+    public static double StillFor { get; set; } = 10;
+
+    /// <summary>A woken dormant slot (#499) stays awake across restarts this long, s: then its bay may fill again.</summary>
+    public const double AwakeFor = 7 * 24 * 3600;
+
+    /// <summary>
+    /// The awake slots kept across a restart: those woken within <see cref="AwakeFor"/>, and any whose
+    /// vehicle is asleep in a container under the slot's name whatever its age.
+    /// </summary>
+    public static Dictionary<string, double> KeepAwake(IReadOnlyDictionary<string, double> saved, double now, Func<string, bool> filed)
+    {
+        var keep = new Dictionary<string, double>();
+        foreach (var (key, since) in saved)
+            if (now - since <= AwakeFor || filed(key)) keep[key] = since;
+        return keep;
+    }
 
     /// <summary>Moving less than this (m) between two looks is standing still.</summary>
     public const double StillWithin = 0.05;
