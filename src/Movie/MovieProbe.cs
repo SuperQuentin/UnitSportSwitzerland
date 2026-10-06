@@ -13,7 +13,9 @@ namespace UnitSport.Movie;
 /// sound (#656): a 120 BPM click track goes through the real import (copy, Godot's decoder, beat
 /// detection) and onto the timeline, where it must sound playing forwards and fall silent backwards.
 /// Last the camera track (#669): a key aimed at the actor must look at it while the movie plays, a
-/// cut must land exactly on the next key with its lens, and "cut all" must cut every lane.
+/// cut must land exactly on the next key with its lens, and "cut all" must cut every lane. Then
+/// several cameras (#675): the program follows the cuts to a second camera, and every camera's
+/// gizmo stands where its camera is, all of them hidden while looking through.
 /// </summary>
 public partial class MovieProbe : Node
 {
@@ -33,7 +35,8 @@ public partial class MovieProbe : Node
     private Clip? _song;
     private string? _clicksPath, _songFile;
     private StudioCamera? _cam;
-    private CameraKey? _cutTo;
+    private CameraKey? _cutTo, _wide;
+    private CameraGizmos? _gizmos;
     private int _seek = -1, _settle, _failures;
     private readonly List<(double T, string Why)> _seeks = new();
 
@@ -272,6 +275,55 @@ public partial class MovieProbe : Node
                 var made = _project.CutAll(1.5);
                 GD.Print($"[moviecheck] cut all at 1.5 s: {covering} clips under it, {made.Count} cut, {before} -> {_project.Clips.Count} clips");
                 if (made.Count != covering || _project.Clips.Count != before + covering) Fail("cut all missed a lane");
+
+                // a second camera, high and wide, and the program cutting to it at 3.5 s
+                var actor = _origin.ToGlobal(_stage.Puppet(0)!.GlobalPosition);
+                var wide = _project.AddCamera();
+                _wide = wide.Set(new CameraKey { T = 0, E = actor.E, N = actor.N - 40, Alt = actor.Alt + 20, Lens = 135 }, 0);
+                _project.CutTo(3.5, 1, 0);
+                _gizmos = new CameraGizmos(_stage, _origin, lane => _stage.Puppet(lane)?.GlobalPosition);
+                AddChild(_gizmos);
+                _stage.Seek(4);
+                _soundFrames = 0;
+                _soundPhase = 8;
+                return;
+            }
+            case 8:
+            {
+                if (++_soundFrames < 3) return;
+                var p = _project!;
+                int before = p.ProgramCamera(3.4), after = p.ProgramCamera(_stage!.Time);
+                p.Cameras[after].Sample(_stage.Time, out var pose);
+                _cam!.ShowPose(pose, lane => _stage.Puppet(lane)?.GlobalPosition);
+                var wideAt = _origin.ToWorld(new GlobalPos(_wide!.E, _wide.N, _wide.Alt));
+                float off = _cam.GlobalPosition.DistanceTo(wideAt);
+                bool program = before == 0 && after == 1 && off < 0.01f && Mathf.IsEqualApprox(_cam.Lens, 135f);
+                GD.Print($"[moviecheck] program: Cam {before + 1} before the cut, Cam {after + 1} after it, the view {off:F3} m "
+                    + $"from Cam 2's key at {_cam.Lens:F0} mm {(program ? "ok" : "WRONG")}");
+                if (!program) Fail("the program does not show the camera cut to");
+
+                // every camera's gizmo where its camera is now
+                float worst = 0;
+                for (int i = 0; i < p.Cameras.Count; i++)
+                {
+                    p.Cameras[i].Sample(_stage.Time, out var at);
+                    var want = StudioCamera.PoseTransform(_origin, at, lane => _stage.Puppet(lane)?.GlobalPosition).Origin;
+                    var gizmo = _gizmos!.Gizmo(i);
+                    worst = gizmo is { Visible: true } ? Math.Max(worst, gizmo.GlobalPosition.DistanceTo(want)) : float.PositiveInfinity;
+                }
+                GD.Print($"[moviecheck] {p.Cameras.Count} camera gizmos, the furthest {worst:F3} m from its camera {(worst < 0.01f ? "ok" : "WRONG")}");
+                if (worst >= 0.01f) Fail("a camera gizmo is not where its camera is");
+                _gizmos!.Hidden = true;
+                _soundFrames = 0;
+                _soundPhase = 9;
+                return;
+            }
+            case 9:
+            {
+                if (++_soundFrames < 2) return;
+                bool hidden = _gizmos!.Gizmo(0) is { Visible: false } && _gizmos.Gizmo(1) is { Visible: false };
+                GD.Print($"[moviecheck] looking through: the gizmos {(hidden ? "hidden" : "STILL SHOWN")}");
+                if (!hidden) Fail("the camera gizmos show while looking through a camera");
                 Finish();
                 return;
             }
