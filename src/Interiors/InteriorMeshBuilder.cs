@@ -116,6 +116,11 @@ public static partial class InteriorMeshBuilder
         RoomType.BreakRoom => (C(0.72f, 0.68f, 0.62f), C(0.90f, 0.88f, 0.80f), C(0.95f, 0.95f, 0.93f)),
         RoomType.PartsStore => (Concrete, C(0.76f, 0.76f, 0.73f), C(0.66f, 0.66f, 0.64f)),
         RoomType.PaintBooth => (C(0.62f, 0.64f, 0.66f), C(0.92f, 0.93f, 0.94f), C(0.90f, 0.91f, 0.92f)),
+        // #557 apartment blocks: a brushed-steel cabin, a bare concrete car park and boiler room
+        RoomType.Elevator => (C(0.36f, 0.36f, 0.38f), C(0.70f, 0.72f, 0.74f), C(0.86f, 0.86f, 0.84f)),
+        RoomType.CarPark => (C(0.50f, 0.50f, 0.49f), C(0.74f, 0.74f, 0.72f), C(0.62f, 0.62f, 0.61f)),
+        RoomType.TechRoom => (Concrete, C(0.78f, 0.78f, 0.75f), C(0.68f, 0.68f, 0.66f)),
+        RoomType.Corridor => (C(0.62f, 0.58f, 0.52f), C(0.88f, 0.86f, 0.80f), C(0.94f, 0.94f, 0.92f)),
         _ => (C(0.52f, 0.38f, 0.25f), C(0.88f, 0.84f, 0.76f), C(0.95f, 0.94f, 0.90f)), // hall, landing
     };
 
@@ -133,7 +138,7 @@ public static partial class InteriorMeshBuilder
             var above = HolesOf(f + 1);
             foreach (var room in floor.Rooms)
                 Room(s, room, y0, l.ClearOf(room), floor.Holes, HolesOf(f + room.Span));
-            if (floor.Flight is { } flight) Flight(s, flight, y0, h);
+            foreach (var flight in floor.AllFlights()) Flight(s, flight, y0, h);
             foreach (var r in floor.Rails)
                 s.Box(new Vector3(Math.Min(r.X0, r.X1) - 0.03f, y0, Math.Min(r.Z0, r.Z1)),
                     new Vector3(Math.Max(r.X0, r.X1) + 0.03f, y0 + 1.0f, Math.Max(r.Z0, r.Z1)), Rail);
@@ -148,6 +153,10 @@ public static partial class InteriorMeshBuilder
                 s.Quad(new(hole.X1, a, hole.Z0), new(hole.X1, a, hole.Z1), new(hole.X1, b, hole.Z1), new(hole.X1, b, hole.Z0), wall);
             }
         }
+
+        foreach (var lift in l.Lifts)
+            for (int f = lift.Bottom; f <= lift.Top && f < l.Floors.Count; f++)
+                LiftDressing(s, lift, l.FloorY(f));
 
         var figures = new List<Figure>();
         foreach (var p in l.Furniture)
@@ -400,6 +409,65 @@ public static partial class InteriorMeshBuilder
         var d = new Vector3(f.X0, y0 + h, f.ZTop);
         s.Col.Add(a); s.Col.Add(b); s.Col.Add(c);
         s.Col.Add(a); s.Col.Add(c); s.Col.Add(d);
+    }
+
+    // ---- elevators (#557) ----------------------------------------------------------------------
+
+    private static readonly Color LiftSteel = C(0.66f, 0.68f, 0.70f);
+    private static readonly Color LiftButton = C(0.95f, 0.78f, 0.30f);
+
+    /// <summary>
+    /// What an elevator has on one floor besides its cabin room: the steel frame round the doors
+    /// and the call button on the landing, and in the cabin the button panel and a handrail. The
+    /// sliding doors themselves move, so they are nodes (<c>InteriorNode</c>), not baked.
+    /// </summary>
+    private static void LiftDressing(Scratch s, LiftPlan lift, float y0)
+    {
+        float half = lift.DoorWidth / 2, top = y0 + lift.DoorTop;
+        void Slab(float a0, float a1, float ya, float yb, float off0, float off1, Color col)
+        {
+            var p = lift.WallPoint(a0, ya, off0);
+            var q = lift.WallPoint(a1, yb, off1);
+            s.Box(new Vector3(Math.Min(p.X, q.X), ya, Math.Min(p.Z, q.Z)), new Vector3(Math.Max(p.X, q.X), yb, Math.Max(p.Z, q.Z)), col);
+        }
+        const float wall = InteriorGenerator.WallInset;
+        Slab(-half - 0.10f, -half, y0, top + 0.10f, wall, wall + 0.04f, LiftSteel);
+        Slab(half, half + 0.10f, y0, top + 0.10f, wall, wall + 0.04f, LiftSteel);
+        Slab(-half - 0.10f, half + 0.10f, top, top + 0.10f, wall, wall + 0.04f, LiftSteel);
+        // the floor indicator over the doors, and the call button beside them
+        Slab(-0.15f, 0.15f, top + 0.16f, top + 0.28f, wall, wall + 0.03f, C(0.08f, 0.08f, 0.09f));
+        Slab(-0.05f, 0.05f, top + 0.19f, top + 0.25f, wall + 0.03f, wall + 0.035f, C(0.95f, 0.30f, 0.12f));
+        float ca = lift.CallAlong, cy = y0 + LiftPlan.ButtonHeight;
+        Slab(ca - 0.06f, ca + 0.06f, cy - 0.11f, cy + 0.11f, wall, wall + 0.02f, LiftSteel * 0.9f);
+        Slab(ca - 0.025f, ca + 0.025f, cy - 0.025f, cy + 0.025f, wall + 0.02f, wall + 0.035f, LiftButton);
+
+        // inside: the panel on the wall beside the doors, a button a floor, the bottom one lowest
+        var pc = lift.PanelPoint(y0 + LiftPlan.ButtonHeight);
+        var (nx, nz) = lift.PanelNormal;
+        var normal = new Vector3(nx, 0, nz);
+        var across = new Vector3(-nz, 0, nx);
+        int buttons = lift.Top - lift.Bottom + 1;
+        float panelH = LiftPlan.PanelHeight(buttons);
+        var pmin = pc - across * 0.13f - new Vector3(0, panelH / 2, 0);
+        var pmax = pc + across * 0.13f + new Vector3(0, panelH / 2, 0) + normal * 0.02f;
+        s.Box(pmin.Min(pmax), pmin.Max(pmax), LiftSteel * 0.85f, false);
+        for (int b = 0; b < buttons; b++)
+        {
+            var at = lift.ButtonPoint(y0, b);
+            var bmin = at - across * 0.025f - new Vector3(0, 0.025f, 0);
+            var bmax = at + across * 0.025f + new Vector3(0, 0.025f, 0) + normal * 0.015f;
+            s.Box(bmin.Min(bmax), bmin.Max(bmax), b == 0 ? C(0.30f, 0.80f, 0.40f) : LiftButton, false);
+        }
+        // a handrail on the back wall
+        float hx0 = lift.X0 + 0.25f, hx1 = lift.X1 - 0.25f, hz0 = lift.Z0 + 0.25f, hz1 = lift.Z1 - 0.25f;
+        var (a, b2) = lift.DoorSide switch
+        {
+            Side.Front => (new Vector3(hx0, y0 + 0.88f, lift.Z1 - wall - 0.08f), new Vector3(hx1, y0 + 0.93f, lift.Z1 - wall - 0.04f)),
+            Side.Back => (new Vector3(hx0, y0 + 0.88f, lift.Z0 + wall + 0.04f), new Vector3(hx1, y0 + 0.93f, lift.Z0 + wall + 0.08f)),
+            Side.Left => (new Vector3(lift.X1 - wall - 0.08f, y0 + 0.88f, hz0), new Vector3(lift.X1 - wall - 0.04f, y0 + 0.93f, hz1)),
+            _ => (new Vector3(lift.X0 + wall + 0.04f, y0 + 0.88f, hz0), new Vector3(lift.X0 + wall + 0.08f, y0 + 0.93f, hz1)),
+        };
+        s.Box(a, b2, LiftSteel, false);
     }
 
     // ---- furniture ---------------------------------------------------------------------------
@@ -1163,6 +1231,70 @@ public static partial class InteriorMeshBuilder
                     for (int k = 0; k < 3; k++)
                         B(x0 + 0.03f, H - 0.16f - k * 0.05f, -d - 0.02f, x1 - 0.03f, H - 0.13f - k * 0.05f, -d - 0.012f, dark);
                     B(x1 - 0.07f, H * 0.5f, -d - 0.03f, x1 - 0.03f, H * 0.5f + 0.1f, -d - 0.012f, metal);
+                }
+                break;
+            }
+            // ---- #557: apartment blocks ------------------------------------------------------
+            case FurnitureType.Pillar:
+                // bare concrete, a darker band at its foot where the bumpers rub
+                B(-w, 0, -d, w, H, d, C(0.66f, 0.66f, 0.64f));
+                B(-w - 0.01f, 0, -d - 0.01f, w + 0.01f, 0.5f, d + 0.01f, C(0.86f, 0.70f, 0.14f));
+                for (int i = 0; i < 3; i++)
+                    B(-w - 0.012f, 0.08f + i * 0.16f, -d - 0.012f, w + 0.012f, 0.16f + i * 0.16f, d + 0.012f, dark);
+                break;
+            case FurnitureType.StorageCage:
+            {
+                // a tenant's compartment: slatted wooden walls with gaps, a door in front, boxes
+                // and a pair of skis inside
+                var lath = C(0.70f, 0.56f, 0.38f);
+                foreach (float cx in new[] { -w, w - 0.05f })
+                    for (float z = -d; z < d - 0.02f; z += 0.14f)
+                        B(cx, 0, z, cx + 0.05f, H, Math.Min(z + 0.09f, d), lath);
+                for (float x = -w; x < w - 0.02f; x += 0.14f)
+                    B(x, 0, -d, Math.Min(x + 0.09f, w), H, -d + 0.04f, lath * 0.9f);
+                for (float x = -w; x < w - 0.02f; x += 0.14f)
+                    B(x, 0.05f, d - 0.04f, Math.Min(x + 0.09f, w), H - 0.05f, d, lath);
+                B(-w, 0.05f, d - 0.05f, w, 0.12f, d, lath * 0.75f);
+                B(-w, H - 0.12f, d - 0.05f, w, H - 0.05f, d, lath * 0.75f);
+                B(w - 0.25f, H * 0.5f, d, w - 0.18f, H * 0.5f + 0.12f, d + 0.04f, dark);
+                B(-w + 0.15f, 0, -d + 0.15f, -w + 0.7f, 0.5f, -d + 0.6f, C(0.62f, 0.50f, 0.32f));
+                B(-w + 0.2f, 0.5f, -d + 0.2f, -w + 0.6f, 0.8f, -d + 0.55f, C(0.66f, 0.54f, 0.36f));
+                if (Hash(p, 3) > 0.5f)
+                    B(w - 0.45f, 0, -d + 0.1f, w - 0.35f, 1.7f, -d + 0.2f, C(0.80f, 0.16f, 0.14f));
+                break;
+            }
+            case FurnitureType.Mailboxes:
+            {
+                // a bank of letterboxes, a slot and a name tag each
+                var steel = C(0.58f, 0.62f, 0.64f);
+                B(-w, H - 0.75f, -d, w, H, d, steel);
+                int cols = Math.Max(2, (int)(p.W / 0.32f));
+                for (int c = 0; c < cols; c++)
+                    for (int r = 0; r < 3; r++)
+                    {
+                        float x0 = -w + 2 * w * c / cols + 0.02f, x1 = -w + 2 * w * (c + 1) / cols - 0.02f;
+                        float ya = H - 0.75f + 0.25f * r + 0.02f, yb = ya + 0.21f;
+                        B(x0, ya, d, x1, yb, d + 0.01f, steel * 0.86f);
+                        B(x0 + 0.03f, yb - 0.05f, d + 0.01f, x1 - 0.03f, yb - 0.035f, d + 0.02f, dark);
+                        B(x0 + 0.04f, ya + 0.03f, d + 0.01f, x0 + 0.12f, ya + 0.06f, d + 0.02f, white);
+                    }
+                break;
+            }
+            case FurnitureType.BikeRack:
+            {
+                // a floor rail and two or three bikes in it, each a frame on two thin wheels
+                B(-w, 0, -d, w, 0.06f, -d + 0.08f, metal);
+                int bikes = Hash(p, 5) < 0.5f ? 2 : 3;
+                for (int i = 0; i < bikes; i++)
+                {
+                    float x = -w + 2 * w * (i + 0.5f) / bikes;
+                    var bikeCol = (Hash(p, i) * 3) switch { < 1 => C(0.16f, 0.30f, 0.62f), < 2 => C(0.70f, 0.12f, 0.12f), _ => C(0.18f, 0.18f, 0.18f) };
+                    foreach (float wz in new[] { -d + 0.05f, d - 0.3f })
+                        B(x - 0.02f, 0, wz, x + 0.02f, 0.62f, wz + 0.26f, dark);
+                    B(x - 0.025f, 0.35f, -d + 0.2f, x + 0.025f, 0.42f, d - 0.15f, bikeCol);
+                    B(x - 0.025f, 0.42f, d - 0.3f, x + 0.025f, 0.85f, d - 0.25f, bikeCol);
+                    B(x - 0.22f, 0.85f, d - 0.3f, x + 0.22f, 0.88f, d - 0.25f, dark);
+                    B(x - 0.06f, 0.8f, -d + 0.25f, x + 0.06f, 0.84f, -d + 0.45f, dark);
                 }
                 break;
             }

@@ -11,6 +11,8 @@ public enum BuildingType : byte
     // stored plans hold these as numbers: new types go on the end
     // #497: industrial sites, a pure function of the building (BuildingTypes.SiteFor)
     Warehouse = 3, Factory = 4, Depot = 5, Mechanic = 6, Dealership = 7,
+    // #557: a block of flats, and a city block with shops under its flats
+    Apartments = 8, MixedUse = 9,
 }
 
 /// <summary>The role one solid plays in its group.</summary>

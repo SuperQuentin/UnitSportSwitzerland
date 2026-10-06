@@ -17,6 +17,8 @@ public enum RoomType
     // #497: industrial sites
     WarehouseHall, ProductionHall, TruckBay, ServiceBay, Showroom,
     ControlRoom, LockerRoom, BreakRoom, PartsStore, Dispatch, PaintBooth,
+    // #557: apartment blocks
+    Elevator, CarPark, TechRoom, Corridor,
 }
 
 public enum OpeningKind { Door, Window, Entry, Arch }
@@ -99,6 +101,13 @@ public sealed class FloorPlan
     public List<RectPlan> Holes { get; set; } = new();
     /// <summary>Flight rising from this floor to the next, if any.</summary>
     public FlightPlan? Flight { get; set; }
+    /// <summary>
+    /// More flights from this floor, one per stairwell of a block with several (#557). Kept
+    /// apart from <see cref="Flight"/> so every plan with one stair reads as it always did.
+    /// </summary>
+    public List<FlightPlan> Flights { get; set; } = new();
+    /// <summary>Every flight rising from this floor.</summary>
+    public IEnumerable<FlightPlan> AllFlights() => Flight == null ? Flights : Flights.Prepend(Flight);
     /// <summary>Guard rails along hole edges, as (x0,z0)-(x1,z1) segments stored in a rect.</summary>
     public List<RectPlan> Rails { get; set; } = new();
 }
@@ -124,6 +133,8 @@ public enum FurnitureType
     TyreStack, OilDrum, Compressor, JerryCan, SafetySign, HardHatRack, FireExtinguisher, Locker,
     Forklift, ShowroomPlinth, TruckProp, DeskCounter, Whiteboard, TimeClock, Banner, FloorMarking,
     Bench,
+    // #557: apartment blocks
+    Pillar, StorageCage, Mailboxes, BikeRack,
 }
 
 public sealed class FurniturePlan
@@ -139,6 +150,118 @@ public sealed class FurniturePlan
     public float H { get; set; }
     /// <summary>Height of its base above the floor: an altar on the chancel step, a bell in its frame.</summary>
     public float Lift { get; set; }
+}
+
+/// <summary>
+/// An elevator (#557): one cabin running in a shaft through floors <see cref="Bottom"/> to
+/// <see cref="Top"/>. On each of them the cabin's rectangle is a <see cref="RoomType.Elevator"/>
+/// room whose sliding doors open on side <see cref="DoorSide"/>. The ride is a teleport: the
+/// cabin is at one floor at a time (server state), and everyone in it is moved together.
+/// </summary>
+public sealed class LiftPlan
+{
+    public float X0 { get; set; }
+    public float Z0 { get; set; }
+    public float X1 { get; set; }
+    public float Z1 { get; set; }
+    public int Bottom { get; set; }
+    public int Top { get; set; }
+    public Side DoorSide { get; set; }
+    /// <summary>Middle of the doorway along its wall, interior-local, as <see cref="OpeningPlan.Center"/>.</summary>
+    public float DoorCenter { get; set; }
+    public float DoorWidth { get; set; }
+    public float DoorTop { get; set; }
+
+    public bool Serves(int floor) => floor >= Bottom && floor <= Top;
+
+    /// <summary>Height of the call button and of the middle of the cabin's panel above the floor.</summary>
+    public const float ButtonHeight = 1.15f;
+
+    /// <summary>Unit vector out of the cabin through its doors, onto the landing (interior-local X, Z).</summary>
+    public (float X, float Z) Outward => DoorSide switch
+    {
+        Side.Front => (0, -1),
+        Side.Back => (0, 1),
+        Side.Left => (-1, 0),
+        _ => (1, 0),
+    };
+
+    /// <summary>
+    /// A point on the door wall: <paramref name="along"/> metres from the doorway's middle (toward
+    /// +X or +Z), <paramref name="y"/> up, <paramref name="off"/> out onto the landing from the
+    /// cabin's rectangle edge.
+    /// </summary>
+    public Godot.Vector3 WallPoint(float along, float y, float off) => DoorSide switch
+    {
+        Side.Front => new(DoorCenter + along, y, Z0 - off),
+        Side.Back => new(DoorCenter + along, y, Z1 + off),
+        Side.Left => new(X0 - off, y, DoorCenter + along),
+        _ => new(X1 + off, y, DoorCenter + along),
+    };
+
+    /// <summary>Where the call button is along the door wall, from the doorway's middle.</summary>
+    public float CallAlong => DoorWidth / 2 + 0.28f;
+
+    /// <summary>The call button on the landing of the floor standing at <paramref name="y0"/>, interior-local.</summary>
+    public Godot.Vector3 CallPoint(float y0) => WallPoint(CallAlong, y0 + ButtonHeight, InteriorGenerator.WallInset + 0.03f);
+
+    /// <summary>
+    /// The wall the cabin's button panel hangs on, beside the doors, as a unit normal pointing
+    /// into the cabin.
+    /// </summary>
+    public (float X, float Z) PanelNormal => DoorSide switch
+    {
+        Side.Front or Side.Back => (-1, 0),
+        _ => (0, -1),
+    };
+
+    /// <summary>The middle of the cabin's panel at height <paramref name="y"/>, on its wall's face, near the doors.</summary>
+    public Godot.Vector3 PanelPoint(float y)
+    {
+        float w = InteriorGenerator.WallInset;
+        return DoorSide switch
+        {
+            Side.Front => new(X1 - w, y, Z0 + 0.45f),
+            Side.Back => new(X1 - w, y, Z1 - 0.45f),
+            Side.Left => new(X0 + 0.45f, y, Z1 - w),
+            _ => new(X1 - 0.45f, y, Z1 - w),
+        };
+    }
+
+    /// <summary>The panel's height for <paramref name="buttons"/> buttons, one above the other.</summary>
+    public static float PanelHeight(int buttons) => Math.Max(0.4f, 0.08f * buttons + 0.12f);
+
+    /// <summary>
+    /// Button <paramref name="index"/> (0 = the bottom floor, <see cref="Bottom"/>) on the panel of
+    /// the cabin standing on the floor at height <paramref name="y0"/>, interior-local.
+    /// </summary>
+    public Godot.Vector3 ButtonPoint(float y0, int index)
+    {
+        float h = PanelHeight(Top - Bottom + 1);
+        var (nx, nz) = PanelNormal;
+        return PanelPoint(y0 + ButtonHeight) + new Godot.Vector3(nx * 0.02f, -h / 2 + 0.1f + 0.08f * index, nz * 0.02f);
+    }
+    public bool Contains(float x, float z, float margin = 0) =>
+        x > X0 - margin && x < X1 + margin && z > Z0 - margin && z < Z1 + margin;
+}
+
+/// <summary>
+/// A door with a real leaf inside the building (#557): a flat's front door off the stairwell.
+/// It hangs in the doorway of room <see cref="Room"/> (the flat's side) on floor
+/// <see cref="Floor"/>, and swings into that room. Its open state is server state, like a
+/// street door's; a <see cref="Locked"/> one is cracked with the dial first.
+/// </summary>
+public sealed class InnerDoorPlan
+{
+    public int Floor { get; set; }
+    public int Room { get; set; }
+    public Side Side { get; set; }
+    public float Center { get; set; }
+    public float Width { get; set; }
+    public float Top { get; set; }
+    /// <summary>The flat it closes (<see cref="RoomPlan.Unit"/>).</summary>
+    public int Unit { get; set; }
+    public bool Locked { get; set; }
 }
 
 /// <summary>
@@ -184,7 +307,7 @@ public sealed class InteriorLayout
     // one number, so whichever of #497/#498 rebases onto the other takes the NEXT one, never a
     // lower one: a version going backwards regenerates the plans saved under the higher one and
     // then collides when it is reissued.
-    public const int CurrentVersion = 15; // 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
+    public const int CurrentVersion = 16; // 16: apartment blocks, a stairwell and elevator per entrance, flats, a shared basement (#557); 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";
@@ -235,6 +358,10 @@ public sealed class InteriorLayout
     public List<FurniturePlan> Furniture { get; set; } = new();
     /// <summary>Every way in. Empty on single-door plans, which use the fields above instead.</summary>
     public List<EntrancePlan> Entrances { get; set; } = new();
+    /// <summary>Elevators (#557).</summary>
+    public List<LiftPlan> Lifts { get; set; } = new();
+    /// <summary>Doors with a leaf inside the building: flats' front doors (#557).</summary>
+    public List<InnerDoorPlan> InnerDoors { get; set; } = new();
 
     public bool Matches(Building b, string group) =>
         Version == CurrentVersion && TriangleCount == b.TriangleCount && Group == group

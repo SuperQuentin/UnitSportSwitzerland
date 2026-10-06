@@ -72,7 +72,10 @@ public static partial class InteriorGenerator
         // that has to run over every finished plan (#498 cuts the facade doors' doorways here)
         // is written once and cannot miss this path.
         var site = BuildingTypes.SiteFor(fp.Key.ToString(), b.Kind, fp.Width, fp.Depth, b.MaxY - b.MinY);
-        if (site == BuildingType.None || !TryIndustrial(layout, site, fp.Door.Height, rng))
+        // a block of flats (#557) plans its stairwells and flats itself, and its street doors with them
+        var flats = site == BuildingType.None ? ApartmentTypeFor(fp, b.Kind, n, bank) : BuildingType.None;
+        bool planned = flats != BuildingType.None && TryApartments(layout, fp, b.Kind, n, flats, rng);
+        if (!planned && (site == BuildingType.None || !TryIndustrial(layout, site, fp.Door.Height, rng)))
         {
             bool single = b.Kind is BuildingKind.Industrial or BuildingKind.Agricultural or BuildingKind.Annex
                 or BuildingKind.Garage
@@ -91,7 +94,7 @@ public static partial class InteriorGenerator
 
         // a doorway for every other facade door (#498), before the furniture, which keeps clear
         // of every opening by itself (Clearance)
-        if (fp.Extra.Count > 0) Entrances(layout, fp);
+        if (fp.Extra.Count > 0 && !planned) Entrances(layout, fp);
 
         Furnish(layout, rng);
         return layout;
@@ -190,7 +193,7 @@ public static partial class InteriorGenerator
     /// shaft to step into.
     /// </summary>
     private static bool FitEntry(InteriorLayout l, FloorPlan ground, Side side, float want, float width,
-        out RoomPlan room, out float center)
+        out RoomPlan room, out float center, Func<RoomPlan, int>? rank = null)
     {
         room = null!;
         center = 0;
@@ -203,7 +206,10 @@ public static partial class InteriorGenerator
             Side.Left => r.X0 <= -hw + 0.05f,
             _ => r.X1 >= hw - 0.05f,
         });
-        foreach (var r in onSide.OrderBy(r => Math.Abs(Fit(want, along ? r.X0 : r.Z0, along ? r.X1 : r.Z1) - want)))
+        if (rank != null) onSide = onSide.Where(r => rank(r) >= 0).OrderBy(rank);
+        foreach (var r in rank == null
+                     ? onSide.OrderBy(r => Math.Abs(Fit(want, along ? r.X0 : r.Z0, along ? r.X1 : r.Z1) - want))
+                     : ((IOrderedEnumerable<RoomPlan>)onSide).ThenBy(r => Math.Abs(Fit(want, along ? r.X0 : r.Z0, along ? r.X1 : r.Z1) - want)))
         {
             float s0 = along ? r.X0 : r.Z0, s1 = along ? r.X1 : r.Z1;
             if (s1 - s0 < width + 0.4f) continue;
@@ -215,7 +221,7 @@ public static partial class InteriorGenerator
                 ? new RectPlan(c - width / 2, side == Side.Front ? r.Z0 : r.Z1 - 1.2f, c + width / 2, side == Side.Front ? r.Z0 + 1.2f : r.Z1)
                 : new RectPlan(side == Side.Left ? r.X0 : r.X1 - 1.2f, c - width / 2, side == Side.Left ? r.X0 + 1.2f : r.X1, c + width / 2);
             if (ground.Holes.Any(h => h.Overlaps(reach))) continue;
-            if (ground.Flight is { } fl && new RectPlan(fl.X0, Math.Min(fl.ZBottom, fl.ZTop), fl.X1, Math.Max(fl.ZBottom, fl.ZTop)).Overlaps(reach))
+            if (ground.AllFlights().Any(fl => new RectPlan(fl.X0, Math.Min(fl.ZBottom, fl.ZTop), fl.X1, Math.Max(fl.ZBottom, fl.ZTop)).Overlaps(reach)))
                 continue;
             room = r;
             center = c;
@@ -772,7 +778,7 @@ public static partial class InteriorGenerator
                     _ => Math.Abs(r.X1 - hw) < 0.02f,
                 };
                 // a vault and a shelter are blind on purpose
-                if (!exterior || r.Type is RoomType.Vault or RoomType.Shelter) continue;
+                if (!exterior || r.Type is RoomType.Vault or RoomType.Shelter or RoomType.Elevator) continue;
                 // the core's front wall is the entrance; its sides are rooms
                 if (core && side == Side.Front) continue;
                 float a = side is Side.Front or Side.Back ? r.X0 : r.Z0;
@@ -1129,6 +1135,7 @@ public static partial class InteriorGenerator
     {
         // a vending machine is the building's own dice roll, so it moves nothing else in the plan
         bool vending = !l.IsBank && Core.Fnv.Unit(l.Key + "|vending") < VendingChance(l.Kind);
+        bool apt = l.Type is BuildingType.Apartments or BuildingType.MixedUse;
         var rooms = new List<(int Floor, RoomPlan Room, List<RectPlan> Placed, List<RectPlan> Blocked)>();
         for (int f = 0; f < l.Floors.Count; f++)
         {
@@ -1151,7 +1158,15 @@ public static partial class InteriorGenerator
                 // the stairwell is not somewhere to put a sofa. A site hall (#497) is room 0 with
                 // the service block beside it and holds no stair, so it is not one: the strip the
                 // core keeps clear just inside the door would have blocked its whole front bay.
-                bool isCore = ri == 0 && floor.Rooms.Count > 1 && !LaysItselfOut(r.Type);
+                bool isCore = ri == 0 && floor.Rooms.Count > 1 && !LaysItselfOut(r.Type) && !apt;
+                // a block of flats has a stair in every stairwell (#557): each flight and a landing's
+                // depth at both ends of it stays clear, wherever it stands
+                if (apt)
+                    foreach (var fl in floor.AllFlights())
+                    {
+                        var run = new RectPlan(fl.X0, Math.Min(fl.ZBottom, fl.ZTop) - 1.2f, fl.X1, Math.Max(fl.ZBottom, fl.ZTop) + 1.2f);
+                        if (run.Overlaps(new RectPlan(r.X0, r.Z0, r.X1, r.Z1))) blocked.Add(run);
+                    }
                 if (isCore)
                 {
                     float zs = FirstStairZ(l);
@@ -1171,6 +1186,13 @@ public static partial class InteriorGenerator
                 if (r.Type == RoomType.Nave) { Pews(l, f, r, placed, blocked); continue; }
                 if (r.Type == RoomType.Classroom) Desks(l, f, r, placed, blocked);
                 if (r.Type == RoomType.Vault) { Vault(l, f, r, placed, blocked, rng); continue; }
+                if (r.Type == RoomType.CarPark) { CarPark(l, f, r, placed, blocked, rng); continue; }
+                if (r.Type == RoomType.Cellar && apt) { Compartments(l, f, r, placed, blocked, rng); continue; }
+                if (apt && AptPieces(r.Type) is { } own)
+                {
+                    foreach (var p in own) TryPlace(l, f, r, p, placed, blocked, rng);
+                    continue;
+                }
 
                 foreach (var p in Pieces(r.Type, r, rng, l.Kind, vending && f == l.Below))
                     TryPlace(l, f, r, p, placed, blocked, rng);

@@ -169,6 +169,9 @@ public static class LootTables
         [FurnitureType.TruckProp] = new(0.30f, 1, 2, new[] { P(VehicleParts, 100) }, 0.15f, 1, 10),
         // the till of a goods office or a sales desk
         [FurnitureType.DeskCounter] = new(0.30f, 1, 2, new[] { P(Gadgets, 40), P(Wire, 25), P(Hardware, 25), P(Optics, 2) }, 0.60f, 10, 90),
+        // #557: a tenant's storage compartment in the basement, and the lobby's letterboxes
+        [FurnitureType.StorageCage] = new(0.30f, 1, 3, new[] { P(Pantry, 30), P(Scrap, 20), P(Minerals, 15), P(Parts, 10), P(Cloth, 10), P(Hardware, 10), P(FishingGear, 3) }),
+        [FurnitureType.Mailboxes] = new(0.55f, 0, 1, new[] { P(Gadgets, 45), P(Sweets, 35), P(Purses, 20) }, 0.25f, 5, 60),
     };
 
     /// <summary>
