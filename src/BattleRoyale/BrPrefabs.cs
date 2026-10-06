@@ -34,6 +34,25 @@ public static class BrPrefabs
     /// A two-cell stair tower: flights alternate between the cells, a landing on each storey, window
     /// walls up both long sides, a railed platform on top. <paramref name="top"/>: what waits up there.
     /// </summary>
+    /// <summary>Every prefab declared here, as its pieces stand (no gadgets, no legs to the ground), in the model viewer (--models).</summary>
+    [Core.Showcase("Battle royale", "Prefab")]
+    private static IEnumerable<(string, Func<Godot.Node3D>)> ShowcasePrefabs() =>
+        typeof(BrPrefabs).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.FieldType == typeof(Prefab))
+            .Select(f => (Prefab)f.GetValue(null)!)
+            .Select(prefab => (prefab.Name, (Func<Godot.Node3D>)(() =>
+            {
+                var root = new Godot.Node3D();
+                foreach (var piece in prefab.Pieces)
+                    root.AddChild(new Godot.MeshInstance3D
+                    {
+                        Mesh = StructureMeshes.Mesh(piece.Kind, piece.Material),
+                        Transform = Structures.LocalTransform(piece),
+                        MaterialOverride = Items.ItemDefs.Material,
+                    });
+                return root;
+            })));
+
     public static Prefab Tower(string name, int storeys, PrefabGadget? top)
     {
         var p = new List<Piece> { F(0, 0, 0, BuildMaterial.Wood, true), F(0, 0, -1, BuildMaterial.Wood, true) };

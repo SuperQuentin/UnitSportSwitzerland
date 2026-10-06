@@ -98,7 +98,7 @@ public partial class OccasionDecor : Node
     public override void _Process(double delta) => OccasionTowns.Poll();
 
     /// <summary>
-    /// Every <see cref="PropKind"/> declared anywhere, under its own material, in the model
+    /// Every <see cref="PropKind"/> declared anywhere (a field or an array of them), under its own material, in the model
     /// viewer (--models): a new occasion's props show by themselves.
     /// </summary>
     [Showcase("Occasions", "Prop")]
@@ -106,8 +106,12 @@ public partial class OccasionDecor : Node
         typeof(PropKind).Assembly.GetTypes()
             .SelectMany(t => t.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
                                          | System.Reflection.BindingFlags.Static))
-            .Where(f => f.FieldType == typeof(PropKind))
-            .Select(f => (PropKind)f.GetValue(null)!)
+            .SelectMany(f => f.GetValue(null) switch
+            {
+                PropKind one => new[] { one },
+                IEnumerable<PropKind> many => many,
+                _ => Enumerable.Empty<PropKind>(),
+            })
             .Select(kind => (kind.Name, (Func<Node3D>)(() =>
                 new MeshInstance3D { Mesh = kind.Mesh, MaterialOverride = MakeMaterial(kind.Candle) })));
 

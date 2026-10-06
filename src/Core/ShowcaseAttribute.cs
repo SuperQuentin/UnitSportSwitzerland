@@ -42,3 +42,15 @@ public sealed class ShowcaseAttribute : Attribute
     /// </summary>
     public bool Figure { get; set; }
 }
+
+/// <summary>
+/// Where procedural meshes get turned into an <c>ArrayMesh</c> call <see cref="Mark"/>. In the game
+/// <see cref="Built"/> is null and it costs a null check; the model viewer's screenshot run
+/// (<c>--models,&lt;dir&gt;</c>) sets it to read the stack and learn which builder classes it showed.
+/// </summary>
+public static class ShowcaseTrace
+{
+    internal static Action? Built;
+
+    public static void Mark() => Built?.Invoke();
+}

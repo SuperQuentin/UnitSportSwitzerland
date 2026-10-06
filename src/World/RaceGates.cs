@@ -12,6 +12,10 @@ public partial class RaceGates : Node3D, Core.IOriginContainer
     private readonly System.Collections.Generic.List<MeshInstance3D> _rings = new();
     private StandardMaterial3D _idle = null!, _next = null!, _finish = null!;
 
+    /// <summary>An air race's next gate and the finish behind it, in the model viewer (--models).</summary>
+    [Core.Showcase("Rides", "Air race gates")]
+    private static Node3D ShowcaseGates() => Build(new[] { Vector3.Zero, new Vector3(0, 0, -50) }, 8f);
+
     public static RaceGates Build(Vector3[] gates, float radius)
     {
         var g = new RaceGates { Name = "RaceGates", TopLevel = true };

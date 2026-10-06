@@ -1274,6 +1274,7 @@ public partial class InteriorNode : Node3D
     /// <summary>The interior's visual mesh; safe on a worker thread, like <c>ChunkNode.ToArrayMesh</c>.</summary>
     public static ArrayMesh BuildMesh(InteriorMeshBuilder.MeshData data, Material material)
     {
+        Core.ShowcaseTrace.Mark();
         using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;

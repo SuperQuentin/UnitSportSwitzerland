@@ -33,6 +33,7 @@ public partial class ModelViewer : Node3D
     private Vector3 _target;
     private float _yaw = 0.6f, _pitch = -0.25f, _distance = 5f;
     private string? _shots;
+    private readonly HashSet<Type> _covered = new();
 
     public static bool Requested() => CmdArgs.FlagWithShot("--models").Requested;
 
@@ -68,6 +69,14 @@ public partial class ModelViewer : Node3D
         _label = new Label { Position = new Vector2(12, 8) };
         ui.AddChild(_label);
         AddChild(ui);
+
+        if (_shots != null)
+            ShowcaseTrace.Built = () =>
+            {
+                foreach (var frame in new System.Diagnostics.StackTrace().GetFrames())
+                    if (frame.GetMethod()?.DeclaringType is { } type)
+                        _covered.Add(Outermost(type));
+            };
 
         _categories = Discover()
             .GroupBy(e => e.Category)
@@ -149,7 +158,7 @@ public partial class ModelViewer : Node3D
 
     /// <summary>
     /// Builder classes (a public static method returning a mesh, or named *MeshBuilder / *Meshes)
-    /// that built nothing during the screenshot run, whose stacks <see cref="MeshScratch.Built"/>
+    /// that built nothing during the screenshot run, whose stacks <see cref="ShowcaseTrace"/>
     /// recorded in <paramref name="covered"/>: where the next model to tag probably is.
     /// </summary>
     private static List<string> Uncovered(HashSet<Type> covered)
@@ -249,13 +258,6 @@ public partial class ModelViewer : Node3D
     {
         DirAccess.MakeDirRecursiveAbsolute(_shots!);
         int count = 0, failed = 0;
-        var covered = new HashSet<Type>();
-        MeshScratch.Built = () =>
-        {
-            foreach (var frame in new System.Diagnostics.StackTrace().GetFrames())
-                if (frame.GetMethod()?.DeclaringType is { } type)
-                    covered.Add(Outermost(type));
-        };
         for (int c = 0; c < _categories.Count; c++)
             for (int i = 0; i < _categories[c].Entries.Count; i++)
             {
@@ -270,8 +272,8 @@ public partial class ModelViewer : Node3D
                 GetViewport().GetTexture().GetImage().SavePng(file);
                 count++;
             }
-        MeshScratch.Built = null;
-        foreach (var name in Uncovered(covered))
+        ShowcaseTrace.Built = null;
+        foreach (var name in Uncovered(_covered))
             GD.Print($"[models] no viewer entry: {name}");
         GD.Print($"[models] wrote {count} models in {_categories.Count} categories to {_shots}");
         GD.Print(failed == 0 ? "[models] RESULT: ok" : $"[models] RESULT: FAILED ({failed} models threw)");

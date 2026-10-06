@@ -485,11 +485,6 @@ public sealed class MeshScratch
     /// </summary>
     public ArrayMesh Build() => Build(Vector3.Zero);
 
-    /// <summary>
-    /// Called on every build, null in the game: the model viewer's screenshot run (--models,dir)
-    /// reads the stack to learn which builder classes it has shown.
-    /// </summary>
-    internal static Action? Built;
 
     /// <summary>
     /// As <see cref="Build()"/>, with <paramref name="pivot"/> (authored space, facing +Z) as the
@@ -498,7 +493,7 @@ public sealed class MeshScratch
     /// </summary>
     public ArrayMesh Build(Vector3 pivot)
     {
-        Built?.Invoke();
+        Core.ShowcaseTrace.Mark();
         var mesh = new ArrayMesh();
         AddSurface(mesh, _vertices, _colors, _normals, _uvs, _indices, pivot, "body");
         AddSurface(mesh, _glassVertices, _glassColors, null, null, _glassIndices, pivot, GlassSurface);
@@ -522,7 +517,7 @@ public sealed class MeshScratch
     /// </summary>
     public ArrayMesh BuildInto(ArrayMesh mesh)
     {
-        Built?.Invoke();
+        Core.ShowcaseTrace.Mark();
         mesh.ClearSurfaces();
         AddSurface(mesh, _vertices, _colors, _normals, _uvs, _indices, Vector3.Zero, "body");
         AddSurface(mesh, _glassVertices, _glassColors, null, null, _glassIndices, Vector3.Zero, GlassSurface);

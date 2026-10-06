@@ -500,6 +500,20 @@ public partial class BrCrates : Node3D, IOriginContainer
         node.Rotation = new Vector3(0, float.IsNaN(c.Yaw) ? (c.Id * 0.7f) % Mathf.Tau : c.Yaw, 0);
     }
 
+    /// <summary>Every crate and site (open too where it differs) and the airdrop's canopy, in the model viewer (--models).</summary>
+    [Showcase("Battle royale")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseCrates()
+    {
+        foreach (var style in Enum.GetValues<CrateStyle>())
+        {
+            var shut = BrSiteMeshes.For(style, true);
+            yield return (style.ToString(), () => ModelViewer.Shaded(BrSiteMeshes.For(style, true) ?? MeshOf(style)));
+            if (shut != null && BrSiteMeshes.For(style, false) is { } open && open != shut)
+                yield return ($"{style} (open)", () => ModelViewer.Shaded(open));
+        }
+        yield return ("Airdrop canopy", () => ModelViewer.Shaded(Canopy()));
+    }
+
     private static readonly Dictionary<CrateStyle, ArrayMesh> Meshes = new();
 
     private static ArrayMesh MeshOf(CrateStyle style)
