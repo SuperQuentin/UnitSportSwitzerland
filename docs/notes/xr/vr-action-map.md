@@ -29,9 +29,15 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | jump | Space / A | ok: A | keep |
 | crouch_slide | Ctrl, C / B | ok: B, or crouch for real (#437) | keep |
 | interact_mount | E / Y | ok: Y; grip a door, an item, a radio, or reach out and grip what E would act on (#437) | keep |
+| elevator call / floor list (#557) | E / Y at the call button or in the cabin | ok: Y, or grip the call button or the cabin's panel; the list is a pointable panel (`XrUi`) | keep |
+| flat door, its lock (#557) | E / Y at the door | ok: Y, or grip the door; the dial on the stick | keep |
 | ride_menu | R / Y with nothing near | ok: Y, wrist menu (#437) | keep |
 | car_door / gather | G / X (tap / hold) | ok: X; doors by grip | gather = **grip and pull** the resource |
 | emote_wheel | B / D-pad ↑ | ok: hold R stick ↑, aim with the right hand (#437) | keep |
+| challenge / accept a fist fight (#495) | E / Y, looking at the player | ok: Y, or reach out and grip | keep |
+| fight step / jump / crouch (#495) | A D, W Space, S Ctrl / L stick, A | ok: L stick towards / away, A, crouch for real (`XrPad.RealCrouch`) | room-scale stepping |
+| fight_punch / fight_kick (#495) | LMB J, RMB K / X RB, Y LB | ok: R / L trigger | **punch and kick for real** (hand speed, R4) |
+| fight_block (#495, hold) | Shift L / B | ok: B (`XrPad.RightB`, not the crouch's B) | forearms raised in front of the face |
 | toggle_mode | T / D-pad ↓ | ok: wrist menu (#437) | keep |
 | climb ladder | W / S on a ladder | ok: stick; rock faces and walls hand over hand (#439, stamina) | keep |
 
@@ -45,7 +51,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | inventory | I, Tab / Back | ok: Menu hold | keep |
 | quick_wheel | X / D-pad ← | ok: hold a grip at the left hip, aim with the right hand, let go to pick (#489) | keep |
 | build_turn, next piece | R, aim+wheel / D-pad ↑, LB+D-pad → | gap | **twist the hand** while aiming; R stick ←/→ steps the piece |
-| bird_journal | J / — | ok: wrist menu (#437) | keep |
+| fishing rod: cast, strike, reel, wind in (#493) | hold LMB + let go, LMB, hold LMB, RMB / the same on RB, LB | ok: R trigger (hold, let go: cast; press: strike; hold: reel), L trigger winds in | gap: **flick the rod hand** to cast (release speed = distance), **crank the reel** with the left hand (R1, R4) |
+| bird_journal (birds and fish pages, #493) | J / — | ok: wrist menu (#437); the page buttons by pointer | keep |
 | farm by hand (#494) | LMB / RB with a hoe, seed or fertiliser in hand | ok: R trigger (`use_item`, no new action) | a hoe **swung down** at the ground |
 | harvest a ripe field cell (#494) | hold G / X | ok: hold X (`gather`, the gathering hold) | **grip and pull** the crop, like gather |
 
@@ -86,8 +93,9 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | throttle / climb / descend | Shift Space Ctrl / RT LT A B | ok: R / L trigger, analog (#436) | keep |
 | fire / pigeon drop | LMB / RB | ok: R trigger | keep |
 | airliner flaps | F6 F7 / LB RB | ok: grips, or the flap lever by hand (#438) | keep |
-| speedbrake / gear / park brake | / G . / D-pad ← X — | ok: levers and poke by hand (#438) | keep |
-| autopilot / trim | Y Home End / — | ok: AP poke, trim wheel by hand (#438) | keep |
+| speedbrake / gear / park brake | / G . / D-pad ← X, hold D-pad ← (#421) | ok: levers and poke by hand (#438), or hold R stick ← | keep |
+| cockpit view (aircraft, #421) | V / R3 | ok: R3 shows or hides your own body | keep |
+| autopilot / trim | Y Home End / hold D-pad → (AP, #421), trim — | ok: AP poke or hold R stick →, trim wheel by hand (#438) | gap: trim on a pad |
 | wingsuit / canopy | stick, Space | ok: stick, A; arms roll the suit, hands pull the brakes (#438) | keep |
 | pigeon flap / dive | Space Ctrl / A B | ok: A B, flap the arms (#438) | keep |
 
@@ -103,6 +111,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | loot, shop, lock, Simon, vending | mouse + keys | ok: laser + trigger | lock dial by **wrist twist** |
 | chat | Enter, / | gap: no keyboard | laser key grid on the `XrUi` panel |
 | watch | — | ok: Swiss watch on the left wrist (#439) | keep |
+| map screen: pan / zoom / draw / tool / search (#515) | arrows, drag, wheel, T, F / L stick, LB RB, A, Y, X | **gap, deferred on purpose**: the screen renders on the `XrPad` panel and says so, but the map itself is not pointable — a laser on a 2D map of a 3D country is the wrong answer to design in a hurry | a table-top relief map of Switzerland you reach into, grab to pan, pinch to zoom and paint tiles on with a finger (#535) |
 
 ## Coherence findings (what violated the rules)
 

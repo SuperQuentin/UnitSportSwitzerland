@@ -62,6 +62,7 @@ public sealed class ChatCompleter
         ("login", false, false, "<password>"),
         ("stream", false, false, ""),
         ("race", false, false, "start | duel <player> | join | leave | list | npc | cancel"),
+        ("fight", false, false, "<player> | accept | decline | leave"),
         ("br", false, false, "open [town|here] [5|6|7] [short|normal|long] [solo|duos|trios|squads] | join | leave | start | cancel | status"),
         ("say", true, false, "<message>"),
         ("admin", true, false, "list | add <player> | remove <player>"),
@@ -206,6 +207,10 @@ public sealed class ChatCompleter
 
             case "pvp":
                 options = argIndex == 0 ? ["on", "off"] : [];
+                break;
+
+            case "fight":
+                options = argIndex == 0 ? [.. PlayerNames(), "accept", "decline", "leave"] : [];
                 break;
 
             case "race":

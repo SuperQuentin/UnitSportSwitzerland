@@ -59,7 +59,14 @@ src/BattleRoyale/BrStruct quick  --prefabcheck --systems ui,physics,build
 src/Loot/                quick  --lootchancecheck
 src/Loot/                quick  --shopcheck
 src/Interiors/           quick  --shopcheck
+src/Interiors/           quick  --sitecheck --systems ui
+src/Loot/LootTables      quick  --sitecheck --systems ui
+src/Interiors/           quick  --doorcheck
+src/Interiors/           quick  --flatcheck
 src/Interiors/Church     quick  --churchstagecheck
+src/Interiors/Landmarks  quick  --ikeacheck --systems ui
+src/Interiors/Ikea       quick  --ikeacheck --systems ui
+src/Interiors/BuildingTypes quick  --ikeacheck --systems ui
 src/Audio/Cd/CdLibrary   quick  --churchstagecheck
 src/Items/Item           quick  --shopcheck
 src/Occasions/           quick  --occasioncheck
@@ -85,6 +92,9 @@ src/Core/TestWorld       quick  --hitboxcheck --world flat
 src/Core/Systems         quick  --hitboxcheck --world flat
 src/Ui/                  quick  --leavecheck --world fixture
 src/Ui/                  quick  --menucheck --systems ui
+src/Ui/Map               quick  --mapcheck --systems ui
+tools/MapCore/           quick  --mapcheck --systems ui
+src/Core/TerrainPaths    quick  --mapcheck --systems ui
 src/Core/GameShell       quick  --menucheck --systems ui
 src/Core/Systems         quick  --menucheck --systems ui
 src/Core/ClientWorld     quick  --leavecheck --world fixture
@@ -105,6 +115,19 @@ src/World/LaneGraph      quick  --drivecheck --chunks fixture:hairpin --traffic 
 src/World/Wa             quick  --watercheck --chunks fixture:lake
 src/World/SeaState       quick  --watercheck --chunks fixture:lake
 src/Terrain/Water        quick  --watercheck --chunks fixture:lake
+src/Terrain/ParkingBuilder quick --parkingcheck --chunks fixture:parking
+src/Terrain/ParkingProbe quick  --parkingcheck --chunks fixture:parking
+src/Vehicles/DormantVehicles quick --parkingcheck --chunks fixture:parking
+src/Vehicles/VehicleSlot quick  --parkingcheck --chunks fixture:parking
+tools/TerrainFormat/ParkingPlanner quick --parkingcheck --chunks fixture:parking
+# waking a dormant vehicle is seamless (#560): the live one where its copy stood, first frame and settled
+src/Vehicles/WakeProbe   quick  --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/Vehicles/WakeProbe   quick  --wakecheck --wakekind boat --chunks fixture:lake --traffic 0
+src/Vehicles/DormantVehicles quick --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/Vehicles/DormantVehicles quick --wakecheck --wakekind boat --chunks fixture:lake --traffic 0
+src/Vehicles/DormantLooks quick --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/Vehicles/VehicleBody quick  --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/World/GroundQuery    quick  --wakecheck --wakekind boat --chunks fixture:lake --traffic 0
 src/Terrain/Fixture/     quick  --watercheck --chunks fixture:lake
 src/Terrain/ChunkManager quick  --watercheck --chunks fixture:lake
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
@@ -147,6 +170,9 @@ src/Player/FootPlayer.Cr quick  --swimcheck --chunks fixture:lake
 src/Player/Wading        quick  --swimcheck --chunks fixture:lake
 src/Items/HeldItemVisual quick  --swimcheck --chunks fixture:lake
 src/Loot/Gathering       quick  --swimcheck --chunks fixture:lake
+src/Items/Fishing        quick  --fishcheck --chunks fixture:lake
+src/Loot/Gathering       quick  --fishcheck --chunks fixture:lake
+src/Items/Fishing        quick  --invcheck
 src/Avatar/WakeFoam      quick  --boatcheck speedboat --chunks fixture:lake
 src/Avatar/HullSlap      quick  --boatcheck speedboat --chunks fixture:lake
 shaders/wake_foam        quick  --boatcheck speedboat --chunks fixture:lake
@@ -166,9 +192,10 @@ src/Terrain/Fixture/     quick  --steamercheck pier --chunks fixture:lake
 src/Player/FootPlayer.Pi quick  --steamercheck pier --chunks fixture:lake
 src/Player/SteamerCheck  quick  --steamercheck pier --chunks fixture:lake
 tools/TerrainFormat/Land quick  --steamercheck pier --chunks fixture:lake
-# the tilting gangway plank and the marina boats (#383)
+# the tilting gangway plank and the marina boats (#383, dormant slots since #554)
 src/World/GangwayFit     quick  --steamercheck pier --chunks fixture:lake
-src/World/MarinaBoats    quick  --steamercheck pier --chunks fixture:lake
+src/Vehicles/DormantVehicles quick --steamercheck pier --chunks fixture:lake
+src/Vehicles/VehicleSlot quick  --steamercheck pier --chunks fixture:lake
 src/Avatar/SteamerMesh   quick  --steamercheck pier --chunks fixture:lake
 # the hull's boarding ladder and the walkable E setting (#384)
 src/Vehicles/VehicleReac quick  --steamercheck walk --chunks fixture:lake
@@ -179,11 +206,15 @@ src/Core/ServerWorld     net    @netsmoke
 src/Core/ClientWorld     net    @netsmoke
 src/Core/Debug           net    tools/debugcheck.sh
 @rpc                     net    @netsmoke
+src/Vehicles/DormantVehicles net tools/parkingnetcheck.sh
+src/Vehicles/ParkingNetProbe net tools/parkingnetcheck.sh
 src/Items/ThrowHits      net    tools/bonkcheck.sh
 src/Items/ItemEvents     net    tools/bonkcheck.sh
 src/Items/DroppedItem    net    tools/bonkcheck.sh
 src/Player/FootPlayer.B  net    tools/bonkcheck.sh
 src/Crafting/            net    tools/campfirecheck.sh
+src/Items/Fishing        net    tools/fishcheck.sh
+src/Items/ItemEvents     net    tools/fishcheck.sh
 src/Items/PlacedObjects  net    tools/campfirecheck.sh
 src/Items/HeldItemVisual net    tools/campfirecheck.sh
 src/Farming/             net    tools/farmnetcheck.sh
@@ -195,6 +226,11 @@ src/Terrain/Water        net    tools/watercheck.sh
 src/Loot/Shop            net    tools/shopcheck.sh
 src/Items/Bank           net    tools/shopcheck.sh
 src/Interiors/BankSigns  net    tools/shopcheck.sh
+src/Interiors/InteriorManager.Lifts net tools/liftsynccheck.sh
+src/Interiors/InteriorManager.InnerDoors net tools/liftsynccheck.sh
+src/Interiors/InteriorNode.Inside net tools/liftsynccheck.sh
+src/Interiors/LiftSyncProbe net tools/liftsynccheck.sh
+src/Interiors/FloorPicker net tools/liftsynccheck.sh
 src/Terrain/ProceduralWorld.Settlements  net  tools/shopcheck.sh
 src/Player/FootPlayer.Sw net    tools/swimnetcheck.sh
 src/Player/SwimNet       net    tools/swimnetcheck.sh
@@ -247,6 +283,8 @@ src/Net/                 full   tools/loadtest.sh 4 testsh 60
 tools/lib/               quick  tools/lib/guard_selftest.sh
 src/Player/Pigeon        quick  --flycheck pigeon --world flat
 src/Player/FlightCheck   quick  --flycheck pigeon --world flat
+src/Player/Pigeon        quick  --flycheck pigeoncrash --systems birds
+src/Birds/BirdLife       quick  --flycheck pigeoncrash --systems birds
 src/Player/FlightCheck   quick  --flycheck a320 --world flat
 src/Player/Airliner      quick  --flycheck a320 --world flat
 src/Player/Airliner      quick  --flycheck a320 --world flat --airliner sim
@@ -265,6 +303,15 @@ src/Player/StairsNet     net    tools/stairsnetcheck.sh
 src/Player/Airstairs     net    tools/stairsnetcheck.sh
 src/Avatar/Airstairs     net    tools/stairsnetcheck.sh
 src/Player/FootPlayer.De net    tools/stairsnetcheck.sh
+# aircraft at the airport stands (#422): the fixture airport planned like the real ones, stairs docked, refills
+src/World/AirportStands  quick  --airportcheck --chunks fixture:airport --traffic 0
+src/World/AirportCheck   quick  --airportcheck --chunks fixture:airport --traffic 0
+src/Terrain/Fixture/FixtureAirport quick --airportcheck --chunks fixture:airport --traffic 0
+tools/TerrainFormat/Airport quick --airportcheck --chunks fixture:airport --traffic 0
+src/Vehicles/AirstairsDock quick --airportcheck --chunks fixture:airport --traffic 0
+src/World/AirportStands  net    tools/airportnetcheck.sh
+src/Vehicles/VehicleBody net    tools/airportnetcheck.sh
+tools/airportnetcheck    net    tools/airportnetcheck.sh
 src/Player/Airliner      net    tools/airlinernetcheck.sh
 src/Avatar/AirlinerRig   net    tools/airlinernetcheck.sh
 src/Avatar/A320Deck      net    tools/airlinernetcheck.sh
@@ -286,6 +333,7 @@ src/BattleRoyale/BrPlane quick  --flycheck freighter --world flat
 src/Player/Airliner      quick  --flycheck an124 --world flat
 src/Avatar/An124         quick  --flycheck an124 --world flat
 src/Player/AirlinerCirc  quick  --flycheck an124 --world flat
+src/Player/Airliner      quick  --flycheck an124 --world flat --airliner sim
 src/Avatar/An124         quick  --an124check --world fixture --traffic 0
 src/Player/An124Check    quick  --an124check --world fixture --traffic 0
 src/Player/Airliner      quick  --an124check --world fixture --traffic 0
@@ -319,6 +367,9 @@ src/Player/Emote         net    tools/emotenetcheck.sh
 src/Items/SwissItems     net    tools/swisscheck.sh
 src/Items/SwissNetProbe  net    tools/swisscheck.sh
 src/Avatar/HumanMeshBuilder.Emotes net tools/emotenetcheck.sh
+src/Combat/Fight         net    tools/fightnetcheck.sh
+src/Player/FootPlayer.Fight net tools/fightnetcheck.sh
+src/Avatar/HumanMeshBuilder.Fight net tools/fightnetcheck.sh
 src/Player/FootPlayer.Hold net   tools/holdnetcheck.sh
 src/Player/HoldNetProbe  net    tools/holdnetcheck.sh
 src/Vehicles/VehicleBody.Hold net tools/holdnetcheck.sh

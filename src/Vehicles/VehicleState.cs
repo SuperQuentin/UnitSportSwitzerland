@@ -63,6 +63,7 @@ public readonly record struct VehicleState(
         if (Airliner.For(Kind) is { } airliner)
         {
             airliner.UnpackFlags(Flags);
+            if (Angles != default) airliner.Aloft(Angles, Velocity);
             return airliner;
         }
         // airstairs at the height they were left (#417)

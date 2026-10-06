@@ -16,6 +16,7 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 `invariant-culture-floats` (French locale), `gdignore-data-dirs`, `godot-ai-mcp-tips`,
 `headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
 `worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand),
+`release-on-merge` (a merged PR releases on GitHub Actions; bursts coalesce into one release),
 `linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
 `twoclient-checks` (server + two-client `tools/*check.sh` go through `tools/lib/twoclient.sh`),
 `testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard),
@@ -24,7 +25,9 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 `test-systems-optin` (every probe declares `--world flat|fixture` / `--systems`, the lightest that works; driving checks run on fixture courses),
 `perf-no-per-frame-allocations` (static `StringName`, no LINQ/strings/lists per frame, UI text and shader params only on change),
 `perf-221-migration` (**read before merging main into a branch started before Oct 2026**: every #221 rule note and the rebase order),
-`new-action-three-devices` (every new key or interaction: keyboard, gamepad and VR decided together).
+`new-action-three-devices` (every new key or interaction: keyboard, gamepad and VR decided together),
+`plans-on-main` (up-front plans commit on `main`; their status updates ride the feature branch),
+`uid-files` (commit a script's `.uid` with it; never `git add -A` after an import).
 
 ## Rules
 
@@ -36,19 +39,26 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
   3. Branch from up-to-date `main` as `feat/<issue#>-name`, in a **worktree**
      (`../UnitSportSwitzerland-<issue#>`): the main checkout stays on `main`
      (`docs/notes/general/worktrees.md`). Never commit features on `main`; `Closes #N` in the PR.
-     **Push local commits on feature branches whenever possible**, so others can build on them
+     **Always push a commit as soon as you make it, on every branch**, so others can build on it
      and a local crash loses nothing.
+     **Open the PR as a draft together with the branch** (`gh pr create --draft`), as soon as the
+     first commit is pushed: an open draft is how parallel workers see the feature exists in
+     step 1. It stays a draft for the whole of the work; mark it ready (`gh pr ready <N>`) only
+     once the feature is complete and the tier of step 4 has been run and recorded in it.
+     **Flipping it ready is the worker's own call, never the reviewer's**: the bar above is
+     objective, so whoever finishes the work runs `gh pr ready <N>` themselves rather than asking
+     anyone. Merging it is the reviewer's.
+  4. **Test the cheapest tier that can catch the bug** (`docs/notes/general/testing.md`):
+     `tools/test.sh quick` on every change; **tier 2 (`tools/test.sh net`) when the change touches
+     network/authority/replicated state**, checking the feature on the **remote** peer (replication,
+     authority, animation, damage). The PR says what was and was not verified. Network model:
+     `src/Net/CLAUDE.md`.
 - **Every new action or interaction is designed for keyboard, gamepad and VR together**: before
   coding a new key, decide its pad button and its VR way (grip the thing, or the pad through
   `XrPad`), show it with `InputHints`, and add its row to `xr/vr-action-map`
   (`docs/notes/general/new-action-three-devices.md`).
 - **Simple tasks** (docs/notes tweaks, one-line fixes) skip the workflow: commit straight on `main`
   in the main checkout and push. No issue, branch, worktree or PR.
-  4. **Test the cheapest tier that can catch the bug** (`docs/notes/general/testing.md`):
-     `tools/test.sh quick` on every change; **tier 2 (`tools/test.sh net`) when the change touches
-     network/authority/replicated state**, checking the feature on the **remote** peer (replication,
-     authority, animation, damage). The PR says what was and was not verified. Network model:
-     `src/Net/CLAUDE.md`.
 - Check and probe output goes in `test_output/` (gitignored), never the repo root.
 - **In conversation, issues and PRs are always links**, e.g.
   [#346](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/346), never a bare `#346`

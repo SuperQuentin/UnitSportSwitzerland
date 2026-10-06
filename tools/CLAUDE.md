@@ -7,6 +7,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 
 ## Architecture
 
+- `delta-updates` — per-release `.delta` files (rsync-style binary patches, SHA-256 checked, Brotli) made by `tools/deltas.sh` from the published archives and uploaded by `release.sh`; staging + swap script; measured 8 KB vs 176 MB (#532)
 - `data-pipeline` — Data pipeline: swissALTI3D XYZ zips (`ressources/data/swiss_chunks/`, LV95/EPSG:2056, 0.5 m grid, 1 km tiles) →...
 - `shared-format-code` — Shared format code: `tools/TerrainFormat` classlib (TileId, ChunkFormat, ChunkGrid, ChunkCodec, TerrainManifest) —...
 - `perf-tile-header` — tile file headers only via `TileHeader.Write/Read` and `ChunkCodec.ReadHeader`; goldens keep the bytes identical
@@ -26,6 +27,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `france` — France (cross-border): IGN BD TOPO® via the Géoplateforme WFS (`data.geopf.fr`, Licence Ouverte 2.0) ->...
 - `land-cover` — Land cover: six TLM area layers are rasterised onto the 501x501 vertex lattice -> `.cover` (deflate, ~2 KB/tile) ->...
 - `landings` (world) — `--landings [--landings-file F]`: boat landings and jetties into `landings.json` (`LandingPlanner`: a head at the steamer's plank height, a neck or a ramp from a TLM `Steg`, moved out for water; jetties over the water), after every water pass given `--tlm`
+- `airports` (world) — `--airports --tlm G --osm PBF [--airports-file F]`: airports, stands and runway profiles into `airports.json` (`AirportPlanner`: OSM lead-in lines, paved and free of buildings, a row of A320s, AN-124 and freighter), seconds
 - `bathymetry` — #298: lake and river beds in `.terr` (swissBATHY3D where surveyed, `WaterBed` shelf/drop-off/channel elsewhere, gap fill toward the survey), the still level in `.water` (USWL, u16 level + fetch), `--water`/`--bathy`, seams by 600 m windows, horizon.bin v2 water section (lakes drawn as water from afar), checks and Petit Lac numbers
 - `land-use-polygon-never-overwrite` — A land-use polygon must never overwrite Water in the cover raster
 - `vineyards-live-nutzungsareal-bodenbedeckung` — Vineyards live in `nutzungsareal`, not `bodenbedeckung`
@@ -43,12 +45,14 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `traffic-signals` — #346/#348/#349: inferred signalised junctions (dense core, two priority roads), left + right pockets on every approach, 0.50 m stop line 3 m back, SGNL record, SignalPlan (groups, chord conflicts, lead/both/lag, T, split; Swiss timing; canton pedestrian heads), --signal-check, Geneva numbers
 - `urban-streets` — #119 build side: UrbanField (walls, local + city scale), RoadHeights (rural +8 cm, town ground − kerb), StreetPlanner sidewalks (facade rays, medians, splits), CornerPlanner, ramp shoulders, TownPaving/TunnelRoof cover, tram PavedBed, cost, --street-svg
 - `bike-infrastructure` — #120: candidates (Major/Road, Minor on Veloland; rural parallel-alternative rule), Radstreifen widths, looser Kernfahrbahn, five path layouts per street (strokes), sloped kerbs, symbols, red crossings at main-road junctions (#406 at lights: straight, red only on a same-phase conflict), Wartelinie/sign moves, format (BufferDm, TrackMid, OuterDm), cost, Nyon test region
+- `parking-lots` — Car parks laid out, not painted (#499): pure `ParkingPlanner` (axis from the lot or its street, modules by depth, planters replacing end bays, entrance + barrier), `RawParking` rings from the road stage, `TileRewriter.Parking`, shared SSV arrows, the bay pattern taken off in CoverStage
 - `tlm-road-attribute-domains` — swissTLM3D `kreisel`, `verkehrsbedeutung`, `eigentuemer`, `stufe` value domains (SELECT DISTINCT counts) and where each goes in v3
 
 ## Commands
 
 - `swiss-relief` — `tools/swiss_relief.py`: rebuilds the generated terrain's 500 m heightmap from one swissALTIRegio overview (GDAL, ~5 s)
-- `region-setup-wizard` — Region setup wizard: `dotnet run --project tools/MapSetup` (`tools/MapSetup/`, Spectre.Console). Terminal map of CH...
+- `filegdb` — Reading Esri FileGDB without GDAL (#537): tables, rows and multipatch geometry; scaled integer deltas, interleaved X/Y, the descriptor tail that ignores its own flags; verified against GDAL
+- `region-setup-wizard` — Region setup wizard: `dotnet run --project tools/MapSetup`, a terminal front-end on `tools/MapCore` (the country map, selection, plan and estimates, shared with the game's map screen since #515)...
 - `gdal-setup` — GDAL setup: installing GDAL's Python bindings (macOS/Linux/Windows) for buildings, cycle routes and swiss_relief; how the wizard detects it
 - `signal-test-region` — #386 `RoadGen --test-region DIR`: synthetic flat region (E 2910-2915 N 1321-1323) with seven designed signalised junctions built by the real network stage; junction table, play/test commands, what it found
 - `commands` — Commands: --bbox, --buildings, --chunks, --coarse, --cover, --photos, --dry-run, --dump-png, --features-only, --force, --france, --fresh, --gwr

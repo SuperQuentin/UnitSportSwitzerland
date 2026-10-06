@@ -37,8 +37,10 @@ public partial class ControlsHelp : CanvasLayer
             new("Run", PlayerInput.Sprint),
             new("Slide (while running)", PlayerInput.CrouchSlide),
             new("Interact: get in or out, search, door", PlayerInput.InteractMount),
+            new("Elevator: call it at its button, choose a floor inside", PlayerInput.InteractMount),
             new("Travel menu: mounts and vehicles", PlayerInput.RideMenu, Pad: "{interact_mount} (nothing near)"),
             new("First / third person (driving: chase, cockpit, cockpit without your body)", PlayerInput.CameraToggle),
+            new("Camera over the other shoulder", PlayerInput.SwapShoulder, Pad: "R3 (aiming a gun)"),
             new("Base jump: jump again while falling", PlayerInput.Jump),
         }),
         ("Items", new Row[]
@@ -55,6 +57,25 @@ public partial class ControlsHelp : CanvasLayer
             new("Inventory", PlayerInput.Inventory),
             new("Gather stone, water, wood (hold)", PlayerInput.Gather),
             new("Bird journal", PlayerInput.BirdJournal),
+        }),
+        ("Fishing (rod in hand)", new Row[]
+        {
+            new("Wind up a cast (hold), cast (let go)", PlayerInput.UseItem),
+            new("Strike when the float dips", PlayerInput.UseItem),
+            new("Reel in (hold); let go when the line strains or the fish runs", PlayerInput.UseItem),
+            new("Wind the line in; cancel a cast", PlayerInput.AimItem),
+        }),
+        ("Fist fight (#495)", new Row[]
+        {
+            new("Challenge a player you look at, or accept their challenge", PlayerInput.InteractMount),
+            new("Step towards / away", Keys: "{move_left} {move_right}", Pad: "{move_right}"),
+            new("Jump / crouch", Keys: "{move_forward} {jump} / {move_back} {crouch_slide}", Pad: "{move_forward} / {move_back}"),
+            new("Punch", PlayerInput.FightPunch),
+            new("Kick", PlayerInput.FightKick),
+            new("Block (hold; crouch to block low)", PlayerInput.FightBlock),
+            new("Uppercut: down, forward + punch", Keys: "{move_back} {move_right} + {fight_punch}", Pad: "{move_back} {move_right} + {fight_punch}"),
+            new("String: punch, punch, kick", Keys: "{fight_punch} {fight_punch} {fight_kick}", Pad: "{fight_punch} {fight_punch} {fight_kick}"),
+            new("Finish them: down, down + kick", Keys: "{move_back} {move_back} + {fight_kick}", Pad: "{move_back} {move_back} + {fight_kick}"),
         }),
         ("Building (hammer in hand)", new Row[]
         {
@@ -79,7 +100,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Car radio: next station", PlayerInput.RadioNext),
             new("Car radio: previous station", PlayerInput.RadioPrev),
             new("Car radio: stations and CDs (passengers too)", PlayerInput.RadioPanel),
-            new("Car: fold the soft top", PlayerInput.RoofToggle),
+            new("Car: fold the soft top / pump the hydraulics (Yaris)", PlayerInput.RoofToggle),
             new("At a car door: open it, then get in", PlayerInput.InteractMount),
             new("Open / shut the car door you are at", PlayerInput.CarDoor),
             new("Get out", PlayerInput.InteractMount),
@@ -136,10 +157,11 @@ public partial class ControlsHelp : CanvasLayer
             new("Flaps a notch down / up", Keys: "{flaps_down} / {flaps_up}", Pad: "{flaps_down} / {flaps_up}"),
             new("Gear up / down (in the air)", PlayerInput.CarDoor),
             new("Speedbrake: retracted, half, full", PlayerInput.Speedbrake),
-            new("Parking brake", PlayerInput.ParkingBrake),
+            new("Parking brake", Keys: "{parking_brake}", Pad: "{speedbrake} (hold)"),
             new("Landing lights", PlayerInput.LightsToggle),
             new("Light sim: start the engines / shut them down", PlayerInput.EngineToggle),
-            new("Light sim: autopilot on / off (then the stick turns the heading and altitude, the levers the speed)", PlayerInput.Autopilot),
+            new("Light sim: autopilot on / off (then the stick turns the heading and altitude, the levers the speed)", Keys: "{autopilot}", Pad: "{lights_toggle} (hold)"),
+            new("Cockpit view, without your body, chase camera", PlayerInput.CameraToggle),
             new("Light sim: pitch trim nose down / up (AN-124, military freighter)", Keys: "{trim_nose_down} / {trim_nose_up}", Pad: "—"),
         }),
         ("Flying", new Row[]
@@ -155,6 +177,17 @@ public partial class ControlsHelp : CanvasLayer
             new("Up", PlayerInput.FlyUp),
             new("Down", PlayerInput.FlyDown),
             new("Fast", PlayerInput.FlyBoost),
+        }),
+        // The map screen on the title menu (#515). Its keys are deliberately the same ones the world
+        // uses for other things, as T and the rest already are: only the map screen reads them, and
+        // there is no free letter left on the keyboard.
+        ("Map screen (main menu)", new Row[]
+        {
+            new("Pan", Keys: "Arrows / WASD, or right-drag", Pad: "Left stick"),
+            new("Zoom", PlayerInput.MapZoomIn),
+            new("Draw / erase the selection", Keys: "Drag, or Enter on the centre tile", Pad: "A"),
+            new("Switch tool (rectangle, brush, erase)", PlayerInput.MapTool),
+            new("Find a place", PlayerInput.MapSearch),
         }),
         ("Game", new Row[]
         {

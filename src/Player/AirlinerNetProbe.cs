@@ -31,6 +31,8 @@ public partial class AirlinerNetProbe : ChatProbe
     public override async void _Ready()
     {
         _role = Role ?? "A";
+        // the cockpits' instruments are compared between the peers, not only shown near a camera (#421)
+        AircraftCockpit.ReadAlways = true;
         if (!await Joined(150))
         {
             await Finish(0);
@@ -39,6 +41,26 @@ public partial class AirlinerNetProbe : ChatProbe
         if (_role == "A") await RunA(Me!); else await RunB(Me!);
         await Finish(2.0);
     }
+
+    private async Task SayScreens(FootPlayer me, Airliner air)
+    {
+        for (int i = 0; i < 40 && !_heard.Any(l => l.Contains("AN B seen gear")); i++)
+        {
+            // once the gear is up and locked: in transit the two copies read it a latency apart
+            if (Cockpit(me) is { Shown.Gear: 0 } flying)
+            {
+                var r = flying.Shown;
+                Say($"deckair {r.Ias} {r.Alt} {r.Hdg} {r.Gear} {(air.State.GearDown ? 1 : 0)}");
+            }
+            await Seconds(1);
+        }
+    }
+
+    private static AircraftCockpit? Cockpit(FootPlayer p) => p.GetChildren().OfType<AirlinerRig>().FirstOrDefault()?.Cockpit;
+
+    /// <summary>The words of the last line <paramref name="who"/> said starting with <paramref name="word"/>, after it.</summary>
+    private string[]? Words(string who, string word) =>
+        _heard.LastOrDefault(l => l.Contains($"AN {who} {word} ")) is { } line ? line[(line.IndexOf($"AN {who} {word} ") + $"AN {who} {word} ".Length)..].Split(' ') : null;
 
     private FootPlayer? Other(FootPlayer me)
     {
@@ -71,6 +93,12 @@ public partial class AirlinerNetProbe : ChatProbe
         Input.ActionRelease(PlayerInput.Sprint);
         Expect(jet.State.FlapLever == 3 && jet.State.SpeedBrake == 1 && jet.State.ParkingBrake, "levers set");
         Say($"levers {jet.State.Spool:F2}");
+        // #421: what A's own cockpit shows, for B's copy to show the same
+        if (Cockpit(me) is { } deck)
+        {
+            var r = deck.Shown;
+            Say($"deck {r.FlapLever} {r.Speedbrake} {(r.Park ? 1 : 0)} {r.N1a} {jet.State.Lever.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}");
+        }
         await Heard("B", "seen levers", 20);
         Input.ActionRelease(PlayerInput.MoveRight);
 
@@ -101,6 +129,9 @@ public partial class AirlinerNetProbe : ChatProbe
         await Seconds(1);
         Expect(!air.State.GearDown && !air.State.OnGround, "gear lever up in the air");
         Say("gear up");
+        // #421: what A's own screens show, said alongside A's steps, which keep main's timing: the walk aboard
+        // later on depends on where the hands-off flight is by then
+        _ = SayScreens(me, air);
         await Heard("B", "seen gear", 30);
 
         // #416: B walks in A's cabin while A flies; both peers must put B at the same spot in it
@@ -111,7 +142,19 @@ public partial class AirlinerNetProbe : ChatProbe
         var b = Other(me);
         var rig = me.GetChildren().OfType<AirlinerRig>().FirstOrDefault();
         if (b == null || rig == null) { Fail("no B or no rig here"); return; }
-        var here = AircraftMeshBuilder.Flip(rig.GlobalTransform.AffineInverse() * b.GlobalPosition);
+        // B's copy is put on the deck in _Process (PlaceOnDeck) and this aircraft moves in the physics step: read at
+        // a point between the two, the copy stands where the aircraft was a tick before (1.9 m aft and 18 cm off at
+        // 116 m/s and its climb), more often the slower the frames (#421). So the closest of 10 frames is taken:
+        // a real disagreement between the peers shows in every one of them.
+        var here = Vector3.Zero;
+        float best = float.MaxValue;
+        for (int i = 0; i < 10; i++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var at = AircraftMeshBuilder.Flip(rig.GlobalTransform.AffineInverse() * b.GlobalPosition);
+            float off = new Vector2(at.X - bx, at.Z - bz).Length() + Mathf.Abs(at.Y - A320Layout.FloorY);
+            if (off < best) { best = off; here = at; }
+        }
         Expect(b.DeckOn == me.Name, $"A's copy of B is aboard A's aircraft (deck '{b.DeckOn}')");
         Expect(Mathf.Abs(here.X - bx) < 0.4f && Mathf.Abs(here.Z - bz) < 0.6f && Mathf.Abs(here.Y - A320Layout.FloorY) < 0.4f,
             $"A sees B where B is in the cabin at {air.State.Velocity.Length():F0} m/s (B {bx:F2},{bz:F2}; here {here.X:F2},{here.Y - A320Layout.FloorY:F2},{here.Z:F2})");
@@ -134,6 +177,18 @@ public partial class AirlinerNetProbe : ChatProbe
             && l.Flaps == 3 && l.Spoilers > 0.4f && l.Stick.X > 0.3f && l.Spool > 0.5f, 15);
         var look = a != null ? Airliner.LookOf(a.Anim) : default;
         Expect(seen, $"B sees A's flaps 3, speedbrake, stick right, spool up ({look.Flaps}, {look.Spoilers:F2}, {look.Stick.X:F2}, {look.Spool:F2})");
+        // #421: B's copy of A's cockpit shows what A's own does: the levers drawn, the screens' readout
+        if (await Heard("A", "deck", 10) && Words("A", "deck") is { Length: >= 5 } d && Rig()?.Cockpit is { } deck)
+        {
+            int flap = int.Parse(d[0]), sb = int.Parse(d[1]), park = int.Parse(d[2]), n1 = int.Parse(d[3]);
+            float lever = Float(d[4]);
+            bool same = await Until(() => deck.Shown is var r && r.FlapLever == flap && r.Speedbrake == sb && (r.Park ? 1 : 0) == park
+                && Mathf.Abs(r.N1a - n1) <= 3 && Mathf.Abs(deck.ThrustDrawn - CockpitInstruments.LeverAngle(lever, false)) < 0.03f, 10);
+            var r = deck.Shown;
+            Expect(same, $"B's copy of A's cockpit shows A's: flap lever {r.FlapLever}/{flap}, speedbrake {r.Speedbrake}/{sb}, park {r.Park}/{park}, "
+                + $"N1 {r.N1a}/{n1}, thrust levers {Mathf.RadToDeg(deck.ThrustDrawn):F1}°/{Mathf.RadToDeg(CockpitInstruments.LeverAngle(lever, false)):F1}°");
+        }
+        else Fail("no cockpit readout from A, or no cockpit here");
         Say("seen levers");
 
         if (!await Heard("A", "parked", 60)) { Fail("A never parked"); return; }
@@ -173,6 +228,23 @@ public partial class AirlinerNetProbe : ChatProbe
         float down = Gear()?.Rotation.X ?? 0f;
         bool travelled = await Until(() => Airliner.LookOf(a!.Anim).Gear == 0f && Mathf.Abs((Gear()?.Rotation.X ?? 0f) - down) > 1.5f, 20);
         Expect(travelled, $"B's copy folds the nose gear up ({down:F2} -> {Gear()?.Rotation.X ?? 0f:F2} rad)");
+        // #421: in flight, B's copy of the screens reads A's speed, height, heading, the gear up and its lever
+        if (await Heard("A", "deckair", 25) && Rig()?.Cockpit is { } panel)
+        {
+            // against A's latest word: A says it every second
+            int ias = 0, alt = 0, hdg = 0, gear = 0;
+            bool same = await Until(() =>
+            {
+                if (Words("A", "deckair") is not { Length: >= 5 } f) return false;
+                ias = int.Parse(f[0]); alt = int.Parse(f[1]); hdg = int.Parse(f[2]); gear = int.Parse(f[3]);
+                return panel.Shown is var r && Mathf.Abs(r.Ias - ias) <= 6 && Mathf.Abs(r.Alt - alt) <= 60
+                    && Mathf.Abs(Mathf.Wrap(r.Hdg - hdg, -180, 180)) <= 2 && r.Gear == gear && panel.GearLeverDrawn > 0f;
+            }, 10);
+            var r = panel.Shown;
+            Expect(same, $"B's copy of A's screens in flight: {r.Ias}/{ias} kt, {r.Alt}/{alt} ft, heading {r.Hdg}/{hdg}, gear {r.Gear}/{gear}, "
+                + $"gear lever {Mathf.RadToDeg(panel.GearLeverDrawn):F0}° (up +)");
+        }
+        else Fail("no cockpit readout in flight from A, or no cockpit here");
         Say("seen gear");
 
         // #416: aboard A's flying A320 (put on its cabin floor: no airstairs in the sky), walk aft, report the spot
@@ -202,7 +274,8 @@ public partial class AirlinerNetProbe : ChatProbe
             var to = (Floor(1f) - me.GlobalPosition) with { Y = 0 };
             return (to.Length() < 0.2f ? Vector3.Zero : to.Normalized(), false);
         };
-        await Seconds(6);
+        // until there, not a fixed 6 s: on a loaded machine it fell short at 2-4 m (on main too, #421)
+        await Until(() => ((Floor(1f) - me.GlobalPosition) with { Y = 0 }).Length() < 0.3f, 20);
         me.WalkControls = () => (Vector3.Zero, false);
         await Seconds(2);
         var at = AircraftMeshBuilder.Flip((Rig() ?? cabin).GlobalTransform.AffineInverse() * me.GlobalPosition);

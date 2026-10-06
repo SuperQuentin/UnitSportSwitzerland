@@ -77,7 +77,7 @@ public class FarmEconomyTests
     [Fact]
     public void Farm_recipes_are_well_formed()
     {
-        var farm = Recipes.All.Where(r => Recipes.Outputs(r).Any(o => (int)o.Id >= 200)).ToArray();
+        var farm = Recipes.All.Where(r => Recipes.Outputs(r).Any(o => (int)o.Id >= 300)).ToArray();
         Assert.NotEmpty(farm);
         Assert.Equal(Recipes.All.Length, Recipes.All.Select(r => r.Key).Distinct().Count());
         // milling is at the workbench, cooking at a fire, a seed from a harvest by hand

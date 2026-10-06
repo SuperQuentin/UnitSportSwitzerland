@@ -172,7 +172,7 @@ public partial class TractorNetProbe : ChatProbe
     // ---- logistics: the auger into a driven trailer, delivering at the co-op (#494) -------------
 
     /// <summary>The stand-in co-op's door on this peer (<see cref="FarmMarket.StandIn"/> from <c>--farmcoop</c>), or null.</summary>
-    private static Interiors.DoorIndex.Entry? Coop() => Interiors.DoorIndex.Find(new Interiors.BuildingKey(FarmMarket.StandInTile.E, FarmMarket.StandInTile.N, 0));
+    private static Interiors.DoorIndex.Entry? Coop() => Interiors.DoorIndex.Find(new Interiors.DoorKey(new Interiors.BuildingKey(FarmMarket.StandInTile.E, FarmMarket.StandInTile.N, 0)));
 
     private const int Augered = 30;
 
@@ -262,7 +262,7 @@ public partial class TractorNetProbe : ChatProbe
         await Seconds(1);
         Expect(me.CanDeliver(tractor), $"B stopped {F(me.GlobalPosition.DistanceTo(door.World))} m from the co-op's door");
         int seed = -1;
-        Loot.ShopService.Instance?.Deliver(ItemId.WheatSeed, 5, me.GlobalPosition, door.Key.ToString(), f => seed = f);
+        Loot.ShopService.Instance?.Deliver(ItemId.WheatSeed, 5, me.GlobalPosition, door.Building.ToString(), f => seed = f);
         await Until(() => seed >= 0, 10);
         Expect(seed == 0, "the server refuses seed at the co-op");
         int cash = ItemController.Instance?.Inventory.Cash ?? 0;
@@ -270,7 +270,7 @@ public partial class TractorNetProbe : ChatProbe
         bool paid = await Until(() => tractor.TrailerTank.Items == 0, 15);
         int gained = (ItemController.Instance?.Inventory.Cash ?? 0) - cash;
         // the market's price at this co-op this week (#494, Farming.FarmPrices: season and wishes)
-        int due = (int)Farming.FarmPrices.Delivery(ItemDefs.Get(ItemId.Wheat)?.Value ?? 0f, ItemId.Wheat, Augered, Farming.FarmSales.Month, door.Key.ToString(), Farming.FarmSales.Week);
+        int due = (int)Farming.FarmPrices.Delivery(ItemDefs.Get(ItemId.Wheat)?.Value ?? 0f, ItemId.Wheat, Augered, Farming.FarmSales.Month, door.Building.ToString(), Farming.FarmSales.Week);
         Expect(paid && tractor.Tipping && me.FarmFrancsPaid == due && gained == due, $"B tips at the co-op: paid {me.FarmFrancsPaid} CHF (pocket +{gained}, due {due}), the trailer {tractor.TrailerTank.Items}");
         Say("tipped");
         if (!await Heard("A", "seen tipped", 30)) Fail("A did not see the tipped, empty trailer");

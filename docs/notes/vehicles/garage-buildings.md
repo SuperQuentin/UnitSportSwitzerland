@@ -58,4 +58,7 @@
   bearing (spawn near a village with `--at`; with none it lists the nearest villages). Online the
   teleport to it is undone ~0.4 s later (both clients, cause not found), so rerun with the logged
   position: driver 12 m out along the bearing, heading the bearing + 180.
+  The search, its 1.5 km reach and the give-up are `Interiors.DoorSearch`, shared with
+  `--interiorcheck` (#507): the give-up lists the doors of the kind that are drawn and why each
+  was refused, before the villages.
   `--portaldemo` has a garage (F): open, rolling, shut, from inside.

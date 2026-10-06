@@ -149,22 +149,43 @@ public enum ItemId
     /// <summary>A fallen squad player's tag (#480): used at a Postauto stop, it brings them back (<c>BrManager.Recall</c>).</summary>
     Dogtag = 193,
 
+    // ---- fishing (#493, docs/notes/items/fishing.md, Items/Fishing) ----
+    /// <summary>Use (hold) casts, Use strikes a bite, hold Use reels in; Aim winds the line back in.</summary>
+    FishingRod = 194,
+    /// <summary>Bread dough on the hook: the peaceful fish take it; one goes with each fish that takes it.</summary>
+    DoughBait = 195,
+    /// <summary>A spinning lure: the hunters take it; lost only when the line snaps.</summary>
+    Spinner = 196,
+    /// <summary>Cooked at a fire from two perch (#493).</summary>
+    PerchFillets = 197,
+    GrilledFish = 198,
+    FishSoup = 199,
+    /// <summary>Caught (never crafted): one item per species that may be kept, <c>FishCatalog</c>.</summary>
+    BrownTrout = 200, LakeTrout = 201, RainbowTrout = 202, BrookTrout = 203, ArcticChar = 204, Namaycush = 205,
+    Grayling = 206, Whitefish = 207, Perch = 208, Pike = 209, Zander = 210, Wels = 211, Burbot = 212,
+    LargemouthBass = 213, Carp = 214, Tench = 215, Roach = 216, Rudd = 217, Bream = 218, Chub = 219,
+    Barbel = 220, Agone = 221, RoundGoby = 222,
+
+    // ---- toys (#501) ----
+    /// <summary>The plush shark, out of a bin at any of the nine IKEA stores (<c>Interiors.Landmarks</c>).</summary>
+    Blahaj = 223,
+
     // ---- farming (#494, docs/notes/farming/): seeds, harvests, what is made of them ----
     /// <summary>Seeds: sown by hand on a ploughed cell or by a seed drill (<c>Farming.FarmTables.SeedFor</c>).</summary>
-    WheatSeed = 200, BarleySeed = 201, MaizeSeed = 202, SeedPotato = 203, RapeSeed = 204,
-    SunflowerSeed = 205, SugarBeetSeed = 206, VegetableSeeds = 207, PeaSeed = 208,
+    WheatSeed = 300, BarleySeed = 301, MaizeSeed = 302, SeedPotato = 303, RapeSeed = 304,
+    SunflowerSeed = 305, SugarBeetSeed = 306, VegetableSeeds = 307, PeaSeed = 308,
     /// <summary>Harvests: a ripe cell by hand, or a combine / tractor's tank unloaded (<c>Farming.FarmTables.YieldOf</c>).</summary>
-    Wheat = 210, Barley = 211, Maize = 212, Potato = 213, Rapeseed = 214,
-    SunflowerSeeds = 215, SugarBeet = 216, Carrot = 217, HayBale = 218, Peas = 219,
+    Wheat = 310, Barley = 311, Maize = 312, Potato = 313, Rapeseed = 314,
+    SunflowerSeeds = 315, SugarBeet = 316, Carrot = 317, HayBale = 318, Peas = 319,
     /// <summary>Made from the harvests (<c>Crafting.Recipes</c>).</summary>
-    Flour = 220, RapeseedOil = 221, Sugar = 222, MaizeMeal = 223,
-    BakedPotato = 224, Roesti = 225, Polenta = 226, Popcorn = 227, VegetableSoup = 228, Raclette = 229,
+    Flour = 320, RapeseedOil = 321, Sugar = 322, MaizeMeal = 323,
+    BakedPotato = 324, Roesti = 325, Polenta = 326, Popcorn = 327, VegetableSoup = 328, Raclette = 329,
     /// <summary>Held: Use tills the cell ahead (plough by hand).</summary>
-    Hoe = 235,
+    Hoe = 335,
     /// <summary>Used on a sown cell (and the cells round it): the crop ripens sooner.</summary>
-    Fertiliser = 236,
+    Fertiliser = 336,
     /// <summary>Placed: a self-service farm stand with an honesty box (<c>PlacedKind.FarmStand</c>, <c>Farming.FarmStands</c>).</summary>
-    FarmStand = 240,
+    FarmStand = 340,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
@@ -214,6 +235,8 @@ public enum ItemUse
     Smoke,
     /// <summary>Use, at a Postauto stop, recalls a fallen team-mate (<see cref="ItemId.Dogtag"/>, #480).</summary>
     Recall,
+    /// <summary>Hold Use to cast, Use on a bite strikes, hold Use reels in, Aim winds in (<see cref="ItemId.FishingRod"/>, #493).</summary>
+    Fish,
     /// <summary>Use works the field cell ahead (#494, <c>Farming.HandFarming</c>): a hoe tills, a seed sows, fertiliser feeds a sown crop.</summary>
     Farm,
 }

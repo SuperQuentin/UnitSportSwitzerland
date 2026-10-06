@@ -60,6 +60,15 @@ public static class VehicleReach
             && At(player, aimed, hit["position"].AsVector3()) is { } pointed)
             return pointed;
 
+        // a car park's dormant car (#499): aiming at one wakes it, and it is a real vehicle a frame
+        // or two later, which the next call finds the ordinary way. Only on the aim ray, never on
+        // mere proximity: walking past a full lot must not promote eighty cars.
+        if (hit.Count > 0 && DormantBodyOf(hit["collider"].AsGodotObject() as Node) is { } dormant)
+        {
+            DormantVehicles.Instance?.Wake(dormant.Slot);
+            return null;
+        }
+
         // else whatever the player stands at, the nearest first
         VehicleAim? best = null;
         float bestD = float.MaxValue;
@@ -71,6 +80,14 @@ public static class VehicleReach
             if (At(player, v, chest) is { } here) { best = here; bestD = hull; }
         }
         return best;
+    }
+
+    /// <summary>The dormant car a collider belongs to, or null (#499).</summary>
+    private static DormantBody? DormantBodyOf(Node? node)
+    {
+        for (var n = node; n != null; n = n.GetParent())
+            if (n is DormantBody body) return body;
+        return null;
     }
 
     /// <summary>

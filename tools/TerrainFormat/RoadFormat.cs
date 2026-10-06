@@ -235,6 +235,8 @@ public enum PaintType : byte
     Hatch = 11,
     /// <summary>Coloured surface of a bike lane or path where it crosses a roadway (#120): a wide polyline.</summary>
     BikeCrossing = 12,
+    /// <summary>The wheelchair symbol painted in a disabled bay (#499): triangles, 1.2 m across.</summary>
+    DisabledBay = 13,
 }
 
 /// <summary><see cref="PaintType.Arrow"/> variant bits; combine for a combined arrow.</summary>
@@ -304,6 +306,10 @@ public enum PointPropType : byte
     YieldSign = 1,       // Swiss "Kein Vortritt", inverted triangle (#121)
     RoundaboutSign = 2,  // Swiss 2.41.1 (#122)
     MainRoadSign = 3,    // Swiss 3.03 "Hauptstrasse", yellow diamond (#121)
+    ParkingSign = 4,     // Swiss 4.17 "Parkieren erlaubt", the blue P (#499)
+    TicketBarrier = 5,   // a car park's boom and its housing (#499); Variant: 0 boom down, 1 up
+    TicketKiosk = 6,     // the pay-and-display machine, or the entry column beside the boom (#499)
+    CartShelter = 7,     // a shopping-trolley shelter at a big-box store (#499)
 }
 
 /// <summary>A prop at one point: a sign on a pole. Y is its foot on the ground.</summary>
@@ -363,6 +369,8 @@ public enum AreaPropType : byte
     BikePath = 5,     // a bike path carried through a junction where no road joins (#120); Height = its level
     Grass = 6,        // a grass strip beside such a path (#120)
     Kerb = 7,         // a sloped kerb strip beside such a path (#120): its vertices carry the slope, Height 0
+    ParkingPad = 8,   // a car park's bays and aisles as one flush paved surface (#499); Height 0
+    ParkingIsland = 9, // a kerbed planter at a row end (#499): Height = kerb, Solid, trees planted on it by CoverStage
 }
 
 /// <summary>Area props that are part of a street's side, drawn and solid like a sidewalk slab.</summary>
@@ -439,6 +447,8 @@ public sealed class RoadTile
     public List<RoadSignal> Signals { get; init; } = new();
     /// <summary>The lanes of each approach with a pocket or traffic lights (#353, <c>LANE</c>).</summary>
     public List<RoadApproach> Approaches { get; init; } = new();
+    /// <summary>Marked bays of the tile's car parks (#499, <c>PARK</c>), in the planner's stable order.</summary>
+    public List<ParkingBay> Parking { get; init; } = new();
 }
 
 public static class RoadFormat

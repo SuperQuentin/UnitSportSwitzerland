@@ -96,7 +96,7 @@ public partial class FarmSales : Node
     /// <summary>The market at a world point: a co-op door within <paramref name="reach"/>, else a buyer's yard (with <paramref name="slack"/>).</summary>
     public Market? MarketAt(Vector3 at, float reach, float slack)
     {
-        if (FarmMarket.CoopDoor(at, reach) is { } door) return new Market(door.Key.ToString(), null);
+        if (FarmMarket.CoopDoor(at, reach) is { } door) return new Market(door.Building.ToString(), null);
         return BuyerNear(at, slack) is { } b ? new Market(null, b) : null;
     }
 

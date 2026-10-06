@@ -106,6 +106,8 @@ public sealed class CachingChunkSource : IChunkSource
     private Task<HorizonIndex?>? _horizon;
 
     /// <summary>Not cached: read once at boot and when a server sends its own.</summary>
+    public Task<AirportIndex?> LoadAirportsAsync(CancellationToken ct = default) => _inner.LoadAirportsAsync(ct);
+
     public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => _inner.LoadLandingsAsync(ct);
 
     /// <summary>The tile's farm fields (#494), cached like the trees (rings: 4 bytes a coordinate).</summary>

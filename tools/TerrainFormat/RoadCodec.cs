@@ -35,6 +35,9 @@ public static class RoadCodec
     /// <summary>#353: the lanes of each approach with a pocket or traffic lights (<see cref="RoadApproach"/>).</summary>
     public static readonly uint TagApproaches = FourCC("LANE");
 
+    /// <summary>Marked parking bays (#499).</summary>
+    public static readonly uint TagParking = FourCC("PARK");
+
     private static uint FourCC(string s) => BitConverter.ToUInt32(Encoding.ASCII.GetBytes(s));
 
     /// <param name="legacySections">Write the pre-#116b ATTR and PANT payloads (format self-check only).</param>
@@ -138,6 +141,8 @@ public static class RoadCodec
             sections.Add((TagSignals, Section(s => RoadSignal.Write(s, tile.Signals))));
         if (tile.Approaches.Count > 0)
             sections.Add((TagApproaches, Section(s => RoadApproach.Write(s, tile.Approaches))));
+        if (tile.Parking.Count > 0)
+            sections.Add((TagParking, Section(s => ParkingBay.Write(s, tile.Parking))));
 
         w.Write((uint)sections.Count);
         foreach (var (tag, payload) in sections)
@@ -310,6 +315,11 @@ public static class RoadCodec
                 {
                     if (RoadApproach.Read(r) is { } approaches) tile.Approaches.AddRange(approaches);
                     else input.Position = end;
+                }
+                else if (tag == TagParking)
+                {
+                    if (ParkingBay.Read(r) is { } bays) tile.Parking.AddRange(bays);
+                    else input.Position = end;   // a newer section version: skipped whole
                 }
                 if (input.Position > end)
                     throw new InvalidDataException($"Road section 0x{tag:X8} overran its length");

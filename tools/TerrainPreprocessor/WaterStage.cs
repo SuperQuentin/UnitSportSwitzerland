@@ -144,7 +144,7 @@ public static class WaterStage
         public readonly Dictionary<string, long> Lakes = new();
     }
 
-    public static int Run(string outDir, Options o)
+    public static int Run(string outDir, Options o, CancellationToken ct = default)
     {
         var clock = Stopwatch.StartNew();
         string manifestPath = Path.Combine(outDir, "manifest.json");
@@ -171,7 +171,7 @@ public static class WaterStage
 
         // ---- A: which tiles hold water, and their surface ---------------------------------------
         var data = new ConcurrentDictionary<TileId, TileData>();
-        Parallel.ForEach(region, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs }, id =>
+        Parallel.ForEach(region, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct }, id =>
         {
             var td = LoadTile(outDir, id);
             if (td != null) data[id] = td;
@@ -254,7 +254,7 @@ public static class WaterStage
         var bodyLock = new object();
         int done = 0;
         long surveyedAll = 0, filledAll = 0, wetAll = 0;
-        Parallel.ForEach(ordered, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs }, id =>
+        Parallel.ForEach(ordered, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct }, id =>
         {
             var r = ComputeTile(outDir, id, data, region, bathy, rootOf, maxDepthOf, sqrtAreaOf, surveyLevelOf);
 
@@ -295,14 +295,14 @@ public static class WaterStage
         foreach (var t in manifest.Tiles)
             if (byId.TryGetValue(t.Id, out var c)) { t.Min = c.Min; t.Max = c.Max; }
         AtomicFile.Write(manifestPath, s => { using var w = new StreamWriter(s); w.Write(manifest.ToJson()); });
-        if (HorizonStage.Run(outDir, o.Jobs) is var hrc && hrc != 0) return hrc;
+        if (HorizonStage.Run(outDir, o.Jobs, ct) is var hrc && hrc != 0) return hrc;
 
         var seamTiles = new HashSet<TileId>();
         foreach (var id in byId.Keys)
             for (int dy = -1; dy <= 1; dy++)
                 for (int dx = -1; dx <= 1; dx++)
                     if (region.Contains(new TileId(id.E + dx, id.N + dy))) seamTiles.Add(new TileId(id.E + dx, id.N + dy));
-        int seamErrors = TerrainBuild.VerifySeams(outDir, seamTiles, o.Jobs);
+        int seamErrors = TerrainBuild.VerifySeams(outDir, seamTiles, o.Jobs, ct);
 
         // ---- report ------------------------------------------------------------------------------
         Console.WriteLine($"Water bodies (area >= 0.02 km²), bed depth below the still level:");

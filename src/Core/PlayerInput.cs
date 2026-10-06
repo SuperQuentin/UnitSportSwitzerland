@@ -65,7 +65,7 @@ public partial class PlayerInput : Node
     public const string Fire = "fire";
     /// <summary>In a car: headlights on/off, raising or folding pop-ups (<see cref="Player.Car.Headlights"/>).</summary>
     public const string LightsToggle = "lights_toggle";
-    /// <summary>In an open car: soft top down/up (<see cref="Player.Car.RoofOpen"/>).</summary>
+    /// <summary>In an open car: soft top down/up (<see cref="Player.Car.RoofOpen"/>); in one with hydraulics, bounce on/off (<see cref="Player.Car.Bouncing"/>).</summary>
     public const string RoofToggle = "roof_toggle";
     /// <summary>In a car, truck or bus: the next / previous live radio station, through off (#179).</summary>
     public const string RadioNext = "radio_next";
@@ -114,6 +114,8 @@ public partial class PlayerInput : Node
     public const string InteractMount = "interact_mount";
     public const string EngineToggle = "engine_toggle";
     public const string CameraToggle = "camera_toggle";
+    /// <summary>On foot: the camera over the other shoulder (#460). A pad swaps with R3 while aiming a gun.</summary>
+    public const string SwapShoulder = "swap_shoulder";
     public const string ToggleMode = "toggle_mode";
     public const string Teleport = "teleport";
     /// <summary>Battle Royale squads (#469): mark the point under the crosshair for your team-mates.</summary>
@@ -145,6 +147,11 @@ public partial class PlayerInput : Node
     public const string QuickWheel = "quick_wheel";
     /// <summary>Hold on foot for the emote wheel (<see cref="Player.EmoteWheel"/>, #404): dances and gestures, any time.</summary>
     public const string EmoteWheel = "emote_wheel";
+    /// <summary>In a fist fight only (#495): the fight is its own context, items and wheels are off, so these share their buttons.</summary>
+    public const string FightPunch = "fight_punch";
+    public const string FightKick = "fight_kick";
+    /// <summary>Held: the guard (high standing, low crouching).</summary>
+    public const string FightBlock = "fight_block";
     /// <summary>Drops one of the item in hand on the ground; with Ctrl, the whole stack (#206).</summary>
     public const string DropItem = "drop_item";
     public const string NextItem = "next_item";
@@ -155,6 +162,18 @@ public partial class PlayerInput : Node
     public const string BirdJournal = "bird_journal";
     /// <summary>The hammer in hand (#359): turns the piece; with Aim, changes its material. R, or D-pad up on a pad.</summary>
     public const string BuildTurn = "build_turn";
+
+    // The map screen (#515). Menu actions, so they may share pad buttons with world ones: no world
+    // is listening while a page is up. VR is deferred — the map renders on the XrPad panel but is
+    // not pointable yet (docs/notes/xr/vr-action-map.md).
+    /// <summary>Map screen: zoom in a step.</summary>
+    public const string MapZoomIn = "map_zoom_in";
+    /// <summary>Map screen: zoom out a step.</summary>
+    public const string MapZoomOut = "map_zoom_out";
+    /// <summary>Map screen: cycle the drawing tool (rectangle, brush, erase).</summary>
+    public const string MapTool = "map_tool";
+    /// <summary>Map screen: jump to the place search box.</summary>
+    public const string MapSearch = "map_search";
 
     /// <summary>Which hotbar slot action <paramref name="e"/> presses (0-based), or -1.</summary>
     public static int SlotPressed(InputEvent e)
@@ -523,6 +542,8 @@ public partial class PlayerInput : Node
         Bind(RideMenu, Keys(Key.R));
         Bind(EngineToggle, Keys(Key.Z), Button(JoyButton.DpadUp));
         Bind(CameraToggle, Keys(Key.V), Button(JoyButton.RightStick));
+        // H only couples or sounds a horn in a vehicle; on foot it is the other shoulder (#460)
+        Bind(SwapShoulder, Keys(Key.H), Mouse(MouseButton.Middle));
         Bind(ToggleMode, Keys(Key.T), Button(JoyButton.DpadDown));
         // The place search is a map in all but drawing, so it sits on M. A pad can open it but
         // not type in it, so it stays keyboard-only rather than trapping a controller player.
@@ -548,6 +569,12 @@ public partial class PlayerInput : Node
         // B only looks behind when mounted; D-pad up is the engine in a vehicle and turns the
         // hammer's piece, so the emote wheel does not open with the hammer in hand
         Bind(EmoteWheel, Keys(Key.B), Button(JoyButton.DpadUp));
+        // a fist fight (#495): its own context, with items and wheels off, so the item buttons
+        // punch and kick (VR's triggers send RB / LB on foot) and B, the crouch, guards (the stick crouches);
+        // J K L for an arcade row under the right hand
+        Bind(FightPunch, Mouse(MouseButton.Left), Keys(Key.J), Button(JoyButton.X), Button(JoyButton.RightShoulder));
+        Bind(FightKick, Mouse(MouseButton.Right), Keys(Key.K), Button(JoyButton.Y), Button(JoyButton.LeftShoulder));
+        Bind(FightBlock, Keys(Key.Shift, Key.L), Button(JoyButton.B));
         // Minecraft's key: Q only means "down" in the fly camera and in the air, never on foot
         Bind(DropItem, Keys(Key.Q));
         // pad X is tuck/sprint only when mounted, so on foot it is free, as RB/LB are for items
@@ -559,6 +586,16 @@ public partial class PlayerInput : Node
         // R is the travel picker on foot, D-pad up the engine in a vehicle: with the hammer in hand
         // the item controller takes either first (Build.BuildTool)
         Bind(BuildTurn, Keys(Key.R), Button(JoyButton.DpadUp));
+
+        // The map screen. The shoulders zoom because they are the one pair of pad controls no menu
+        // uses, and the stick already pans through ui_left/right/up/down.
+        // Letters, not punctuation: these are physical keycodes, so the symbol keys are labelled
+        // differently on every layout ("/" is where "-" is on a Swiss keyboard) and the hint line
+        // ends up reading nonsense. Letters keep the same name everywhere.
+        Bind(MapZoomIn, Keys(Key.Equal), Button(JoyButton.RightShoulder));
+        Bind(MapZoomOut, Keys(Key.Minus), Button(JoyButton.LeftShoulder));
+        Bind(MapTool, Keys(Key.T), Button(JoyButton.Y));
+        Bind(MapSearch, Keys(Key.F), Button(JoyButton.X));
 
         // Godot's built-in UI actions map the D-pad but not the face buttons, so a pad could
         // walk a menu's focus and never press anything. A confirms and B backs out, as on

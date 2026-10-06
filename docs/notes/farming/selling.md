@@ -50,7 +50,7 @@ peer's own body position, not the claim). Only goods they buy; others: "takes on
 
 ## Farm stand (Hofladen, self-service)
 
-- **Item** `ItemId.FarmStand` (240, value 30, workbench: 8 planks, 10 screws, 1 scrap), `ItemUse.Place`
+- **Item** `ItemId.FarmStand` (340, value 30, workbench: 8 planks, 10 screws, 1 scrap), `ItemUse.Place`
   → `PlacedKind.FarmStand` (11) through the placeable path (`Placeables`, `FlagGhost`, `ItemController`):
   placed, saved (`user://placed`), sent on join, packed up with Use and an empty hand like the field
   workbench, refused while stock or cash is on it (`FarmStands.RemoveProblem` from `PlacedObjects.ServeRemove`).
@@ -118,7 +118,7 @@ rows in `Core/ControlsHelp` ("Selling farm produce") and `xr/vr-action-map`.
 
 ## Not done
 
-- No land ownership: stands go anywhere outdoors by a road. No protocol bump (new nodes and RPCs,
-  `PlacedKind` 11: as the rest of #494, bump once when the branch merges).
+- No land ownership: stands go anywhere outdoors by a road. The wire changes (new nodes and RPCs,
+  `PlacedKind` 11) are in `Handshake.Protocol` 18 with the rest of #494.
 - Specialty buyers have no building, sign or map marker; their yards are invisible circles.
 - A stand's passers-by are simulated only while the server runs (12 h catch-up after a restart).

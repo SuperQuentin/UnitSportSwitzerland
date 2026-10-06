@@ -79,6 +79,8 @@ public static class BuildingMeshBuilder
     /// </summary>
     private static void AppendDoor(List<Vector3> v, List<Color> c, List<float> f, Interiors.DoorSpot d, BuildingKind kind)
     {
+        // the leaf follows the door's own hang (#498): a plain leaf even on a barn or a garage
+        var hang = d.Hang;
         var o = d.Outward;
         var t = new Vector3(-o.Z, 0, o.X);
         var at = d.Position;
@@ -110,7 +112,7 @@ public static class BuildingMeshBuilder
         Box(-hw - 0.12f, -hw, 0, h + 0.12f, 0, 0.08f, frame);
         Box(hw, hw + 0.12f, 0, h + 0.12f, 0, 0.08f, frame);
         Box(-hw - 0.12f, hw + 0.12f, h, h + 0.12f, 0, 0.08f, frame);
-        if (kind == BuildingKind.Garage)
+        if (Interiors.DoorLeaf.RollsUp(hang))
         {
             // The shut roll-up door: slats in the leaf's own plane (6 cm out of the facade), the
             // one the building shader drops at every height while the door's portal shows.
@@ -122,18 +124,30 @@ public static class BuildingMeshBuilder
                 Quad(P(-hw, mid, 0.03f), P(hw, mid, 0.03f), P(hw, y1, 0.03f), P(-hw, y1, 0.03f), metal);
                 Quad(P(-hw, y0, 0.03f), P(hw, y0, 0.03f), P(hw, mid, 0.03f), P(-hw, mid, 0.03f), metal * 0.8f);
             }
-            // the sign: a workshop-blue board, and on it a light face the shader lights at night
-            Box(-hw - 0.35f, hw + 0.35f, h + 0.2f, h + 0.85f, 0, 0.12f, new Color(0.16f, 0.30f, 0.58f).SrgbToLinear());
-            int start = f.Count;
-            Quad(P(-hw - 0.22f, h + 0.3f, 0.13f), P(hw + 0.22f, h + 0.3f, 0.13f),
-                P(hw + 0.22f, h + 0.75f, 0.13f), P(-hw - 0.22f, h + 0.75f, 0.13f), Colors.White);
-            for (int i = start; i < f.Count; i++) f[i] = SignFlag;
+            // The sign: a workshop-blue board with a light face the shader lights at night. Only
+            // over the MAIN door — a works has one name over its entrance, not one over every
+            // loading bay (#528). A row of four lit shop signs along a warehouse wall read as a
+            // parade of garages.
+            if (d.Slot == 0)
+            {
+                Box(-hw - 0.35f, hw + 0.35f, h + 0.2f, h + 0.85f, 0, 0.12f, new Color(0.16f, 0.30f, 0.58f).SrgbToLinear());
+                int start = f.Count;
+                Quad(P(-hw - 0.22f, h + 0.3f, 0.13f), P(hw + 0.22f, h + 0.3f, 0.13f),
+                    P(hw + 0.22f, h + 0.75f, 0.13f), P(-hw - 0.22f, h + 0.75f, 0.13f), Colors.White);
+                for (int i = start; i < f.Count; i++) f[i] = SignFlag;
+            }
+            else
+            {
+                // a bay gets a painted lintel band instead, which is what numbers them in a real yard
+                Box(-hw - 0.2f, hw + 0.2f, h + 0.12f, h + 0.42f, 0, 0.1f,
+                    new Color(0.80f, 0.68f, 0.16f).SrgbToLinear());
+            }
             // flush with the ground, or a car would hit a kerb
             Box(-hw - 0.2f, hw + 0.2f, -0.3f, 0.01f, 0, 0.45f, step);
             return;
         }
         Quad(P(-hw, 0, 0.03f), P(hw, 0, 0.03f), P(hw, h, 0.03f), P(-hw, h, 0.03f), leaf);
-        if (Interiors.DoorLeaf.SwingsOut(kind))
+        if (Interiors.DoorLeaf.SwingsOut(hang))
         {
             // a pair (DoorLeaf.CreateOutward): the seam where they meet, a handle each beside it
             Quad(P(-0.015f, 0, 0.035f), P(0.015f, 0, 0.035f), P(0.015f, h, 0.035f), P(-0.015f, h, 0.035f), leaf * 0.6f);
@@ -171,15 +185,20 @@ public static class BuildingMeshBuilder
         {
             var b = tile.Buildings[bi];
             var part = types.PartOf(bi);
-            var kind = KindOf(b, types.TypeOf(bi));
-            var wall = WallColor(kind, b.YearBuilt).SrgbToLinear();
-            var roof = RoofColor(kind).SrgbToLinear();
+            var type = types.TypeOf(bi);
+            var kind = KindOf(b, type);
+            var wall = WallColor(kind, b.YearBuilt, type).SrgbToLinear();
+            var roof = RoofColor(kind, type).SrgbToLinear();
             var (storey, storeyCount) = part switch
             {
                 // one tall storey: the shader's window row becomes a church window
                 BuildingPart.Nave => (Math.Max(3f, (types.Boxes[bi]?.Eave ?? b.MaxY) - b.MinY), 1),
                 // a tower's few openings are not a grid of flats
                 BuildingPart.Tower => (0f, 0),
+                // a big-box store has no windows at all, whatever kind the cadastre calls it: a
+                // grid of flats painted across 200 m of blue sheet is the one thing that would
+                // stop it reading as an IKEA (#501)
+                _ when type == BuildingType.Ikea => (0f, 0),
                 _ => Storeys(b),
             };
             // a spire's faces are steep enough to count as wall; above the eave they are roof
@@ -300,8 +319,12 @@ public static class BuildingMeshBuilder
     private static BuildingKind KindOf(Building b, BuildingType type) =>
         type == BuildingType.Church ? BuildingKind.Sacral : b.Kind;
 
-    private static Color WallColor(BuildingKind kind, ushort year)
+    private static Color WallColor(BuildingKind kind, ushort year, BuildingType type = BuildingType.None)
     {
+        // a brand paints its own box, and does not weather: ApplyAge on IKEA blue would make a
+        // 1973 store a different colour from a 2006 one, and they are the same blue (#501)
+        if (type == BuildingType.Ikea) return IkeaBlue;
+
         var baseColor = kind switch
         {
             BuildingKind.House => new Color(0.82f, 0.76f, 0.65f),        // rendered cream
@@ -319,7 +342,13 @@ public static class BuildingMeshBuilder
         return ApplyAge(baseColor, year);
     }
 
-    private static Color RoofColor(BuildingKind kind) => kind switch
+    /// <summary>IKEA blue, Pantone 294 C (#0051BA): what makes the box recognisable (#501).</summary>
+    public static readonly Color IkeaBlue = new(0.00f, 0.32f, 0.73f);
+
+    private static Color RoofColor(BuildingKind kind, BuildingType type = BuildingType.None) => type == BuildingType.Ikea
+        // plant and ducts on a grey membrane, the way it looks from the motorway bridge
+        ? new Color(0.44f, 0.45f, 0.46f)
+        : kind switch
     {
         BuildingKind.Agricultural => new Color(0.42f, 0.36f, 0.30f),
         BuildingKind.Industrial => new Color(0.46f, 0.48f, 0.49f),

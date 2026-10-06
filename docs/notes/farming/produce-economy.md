@@ -1,6 +1,6 @@
 # Farm produce economy (#494)
 
-- **Items** (`Items/Item.cs`, ids 200-236, drawn icons in `ItemIcons`): `Value` is the producer price of one.
+- **Items** (`Items/Item.cs`, ids 300-340 (200-223 are fish and toys from #493 / #501), drawn icons in `ItemIcons`): `Value` is the producer price of one.
   Seeds (Produce, `ItemUse.Farm`, stack 20): wheat 14, barley 12, maize 12, seed potatoes 12, rapeseed 14,
   sunflower 13, sugar beet 6, vegetables 10, peas 14. Harvests (Produce, Material): wheat 25 (a 50 kg sack,
   ~0.5 CHF/kg), barley 22, maize 22, potatoes 5 (10 kg), rapeseed 42, sunflower seeds 38, sugar beet 3, carrots 6,
@@ -13,7 +13,7 @@
   wheat -> 4 flour, maize -> 3 meal, rapeseed -> 6 oil, beet -> 1 sugar, 2 scrap + plank -> hoe; fire: 1 flour +
   water bottle -> 3 bread, baked potato, rösti (2 potatoes + oil), polenta (meal + water), popcorn (maize + oil
   -> 4), vegetable soup, raclette (cheese + 2 potatoes). Fertiliser is shop-only (`NeverCrafted`, `ShopOnly`).
-- **Farm co-op** (`ShopType.FarmCoop = 11`, name "Farm co-op", olive sign): rural tiles only (`ShopTables.RuralOnly`,
+- **Farm co-op** (`ShopType.FarmCoop = 12` (11 is IKEA, #501), name "Farm co-op", olive sign): rural tiles only (`ShopTables.RuralOnly`,
   like the gun shop): a `Commercial` building 8/107 of the rural weights, or an `Agricultural` building of at least
   120 m² 12 % of the time (GWR agricultural buildings already reach runtime as `BuildingKind.Agricultural`). Adding
   it to the rural weights re-draws the shop types of rural tiles. Sells the nine seeds, hoe, fertiliser, rope and a
@@ -38,7 +38,7 @@
   harvest glut × 0.8, stored crops in spring × 1.2; the co-op's 1-2 wanted crops of the farm week +30..60 %);
   `ShopTables.DeliveryPrice(category, value, count)` is the neutral full value, the market overload and
   `ShopTables.CounterPrice` carry month, co-op and week. Specialty buyers (sugar factories, mills) take loads and
-  sacks for a premium; a farm stand (item 240) sells to passers-by; co-ops post delivery contracts.
+  sacks for a premium; a farm stand (item 340) sells to passers-by; co-ops post delivery contracts.
 - **Loot**: seeds, fertiliser and a rare hoe in barn crates/shelves and a little in garage shelves (`FarmKit`);
   potatoes, carrots, flour in cellar and pantry shelves (`Roots`). This shifts those containers' rolls.
 - **Checks**: `tools/test.sh unit` (`FarmEconomyTests`), `--invcheck` (items, icons, save by name, recipe values),

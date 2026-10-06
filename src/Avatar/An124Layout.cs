@@ -13,46 +13,73 @@ namespace UnitSport.Avatar;
 /// </summary>
 public static class An124Layout
 {
-    // ---- the fuselage: a rounded-square section (superellipse), constant along the barrel ----
+    // ---- the fuselage: one wide oval, flatter under its widest line, from behind the flight deck to the
+    // tail's upsweep; the upper deck and the cockpit are a gentle hump on its crown (#491) ----
     public const float NoseZ = 31.0f, TailZ = -38.1f;
     public const float BarrelFront = 21.5f, BarrelRear = RampHingeZ;
-    public const float BellyY = 2.4f, TopY = 10.2f, HalfWidth = 4.0f;
-    public const float CentreY = (BellyY + TopY) * 0.5f, HalfHeight = (TopY - BellyY) * 0.5f;
-    public const float Squareness = 2.8f, Skin = 0.12f;
+    public const float BellyY = 2.4f, WidestY = 5.6f, TopY = 9.9f, HalfWidth = 4.0f;
+    /// <summary>The hump over the upper deck and the cockpit: the crown rises to <see cref="HumpTopY"/> between these stations.</summary>
+    public const float HumpTopY = 10.7f, HumpFrom = 3.0f, HumpFull = 9.5f;
+    /// <summary>Superellipse exponents under and over the widest line: a flatter belly, a rounder crown.</summary>
+    public const float LowerSquareness = 3.0f, UpperSquareness = 2.3f, Skin = 0.12f;
+    /// <summary>Where the widest line sits between the belly and the crown, along the barrel and the tail.</summary>
+    private const float WidestShare = (WidestY - BellyY) / (TopY - BellyY);
 
-    public static float Across(float a, float h) =>
-        a * Mathf.Pow(Mathf.Max(0f, 1f - Mathf.Pow(Mathf.Min(1f, Mathf.Abs(h)), Squareness)), 1f / Squareness);
+    /// <summary>The half width at fraction <paramref name="h"/> of a section (−1 its bottom, 0 its widest line, 1 its top).</summary>
+    public static float Across(float a, float h)
+    {
+        float n = h < 0f ? LowerSquareness : UpperSquareness;
+        return a * Mathf.Pow(Mathf.Max(0f, 1f - Mathf.Pow(Mathf.Min(1f, Mathf.Abs(h)), n)), 1f / n);
+    }
 
-    /// <summary>The section at station <paramref name="z"/>: half width, bottom and top.</summary>
-    public static (float A, float Bottom, float Top) Section(float z)
+    /// <summary>A section: half width, bottom, widest line and top.</summary>
+    public readonly record struct Ring(float A, float Bottom, float Widest, float Top)
+    {
+        /// <summary>The height at fraction <paramref name="h"/>, <paramref name="inset"/> in from the skin's outside.</summary>
+        public float Y(float h, float inset = 0f) => Widest + h * ((h < 0f ? Widest - Bottom : Top - Widest) - inset);
+        /// <summary>The fraction of the height <paramref name="y"/> (beyond ±1 outside).</summary>
+        public float H(float y) => y < Widest ? (y - Widest) / (Widest - Bottom) : (y - Widest) / (Top - Widest);
+    }
+
+    /// <summary>The crown along the barrel: the hump over the upper deck, the line falling to the tail.</summary>
+    public static float Crown(float z) =>
+        z < -26f ? Mathf.Lerp(TopY, 9.3f, (-26f - z) / (-26f - TailZ))
+        : Mathf.Lerp(TopY, HumpTopY, Mathf.SmoothStep(HumpFrom, HumpFull, z));
+
+    /// <summary>The section at station <paramref name="z"/>.</summary>
+    public static Ring Section(float z)
     {
         if (z > BarrelFront)
         {
-            // the nose: the cockpit's hump holds the roof up, then it drops to the radome; the chin rises
+            // the nose: the cockpit's hump holds the roof up, then it falls to the radome; the chin rises
             float t = Mathf.Clamp((z - BarrelFront) / (NoseZ - BarrelFront), 0f, 1f);
-            float top = TopY - 4.4f * Mathf.Pow(Mathf.Max(0f, (t - 0.45f) / 0.55f), 1.5f);
-            float bottom = BellyY + 2.6f * t * t;
+            float top = HumpTopY - 4.9f * Mathf.Pow(Mathf.Max(0f, (t - 0.45f) / 0.55f), 1.5f);
+            float bottom = BellyY + 2.9f * t * t;
+            top = Mathf.Max(bottom + 0.3f, top);
             float a = HalfWidth * Mathf.Sqrt(Mathf.Max(0f, 1f - Mathf.Pow(t, 2.6f)));
-            return (Mathf.Max(0.15f, a), bottom, Mathf.Max(bottom + 0.3f, top));
+            return new Ring(Mathf.Max(0.15f, a), bottom, Mathf.Lerp(WidestY, (bottom + top) * 0.5f, t * t), top);
         }
         if (z < BarrelRear)
         {
             float u = Mathf.Clamp((BarrelRear - z) / (BarrelRear - TailZ), 0f, 1f);
-            float top = z > -26f ? TopY : Mathf.Lerp(TopY, 9.3f, (-26f - z) / (-26f - TailZ));
-            return (HalfWidth * (1f - 0.8f * Mathf.Pow(u, 1.5f)), BellyLine(z), top);
+            float bottom = BellyLine(z), top = Crown(z);
+            return new Ring(HalfWidth * (1f - 0.8f * Mathf.Pow(u, 1.5f)), bottom, bottom + WidestShare * (top - bottom), top);
         }
-        return (HalfWidth, BellyY, TopY);
+        return new Ring(HalfWidth, BellyY, WidestY, Crown(z));
     }
 
     /// <summary>The underside behind the hold: up the shut ramp and the rear door to the tail.</summary>
     public static float BellyLine(float z) =>
         z >= RampHingeZ ? BellyY : Mathf.Lerp(BellyY, 8.3f, (RampHingeZ - z) / (RampHingeZ - TailZ));
 
+    /// <summary>The fraction of a barrel section's height (−1 bottom, 0 widest, 1 crown aft of the hump) at height <paramref name="y"/>: the skin's rows.</summary>
+    public static float BarrelH(float y) => new Ring(HalfWidth, BellyY, WidestY, TopY).H(y);
+
     public static float OuterX(float z, float y)
     {
-        var (a, b0, b1) = Section(z);
-        float h = (y - (b0 + b1) * 0.5f) / ((b1 - b0) * 0.5f);
-        return Mathf.Abs(h) >= 1f ? 0f : Across(a, h);
+        var s = Section(z);
+        float h = s.H(y);
+        return Mathf.Abs(h) >= 1f ? 0f : Across(s.A, h);
     }
 
     // ---- the hold: drive-through, nose ramp to rear ramp ----
@@ -71,14 +98,10 @@ public static class An124Layout
     public static float NosePlate => RampReach / 3f;
 
     /// <summary>The fraction of the section's height (−1 bottom) where the rear ramp's rows end: the floor's.</summary>
-    public static float RampRowTop => (FloorY - CentreY) / HalfHeight;
+    public static float RampRowTop => BarrelH(FloorY);
 
     /// <summary>The rear ramp's (or the rear door's) top face at z, shut.</summary>
-    public static float RampTop(float z)
-    {
-        var (_, b0, b1) = Section(z);
-        return (b0 + b1) * 0.5f + RampRowTop * (b1 - b0) * 0.5f;
-    }
+    public static float RampTop(float z) => Section(z).Y(RampRowTop);
 
     public static float RampLength => new Vector2(RampHingeZ - RampClosedEndZ, RampTop(RampClosedEndZ) - FloorY).Length();
     public static float RampClosedAngle => Mathf.Atan2(RampTop(RampClosedEndZ) - FloorY, RampHingeZ - RampClosedEndZ);
@@ -143,9 +166,11 @@ public static class An124Layout
     // ---- the gear: five twin-wheel legs a side in the fairings, rising straight up; two twin nose legs ----
     public const float MainGearX = 2.75f, MainWheelRadius = 0.62f, MainWheelWidth = 0.42f, MainGearLift = 1.45f;
     public static readonly float[] MainLegZ = { 4.8f, 2.4f, 0f, -2.4f, -4.8f };
-    public const float FairingFrontZ = 6.4f, FairingRearZ = -6.4f, FairingOutX = 4.6f, FairingBottomY = 1.35f, FairingTopY = 4.2f;
+    /// <summary>The blisters: full between the front and rear stations, faired into the skin over the next metres (#491).</summary>
+    public const float FairingFrontZ = 6.4f, FairingRearZ = -6.4f, FairingNoseZ = 10.0f, FairingTailZ = -11.0f;
+    public const float FairingOutX = 4.6f, FairingBottomY = 1.35f, FairingTopY = 4.2f;
     public const float NoseGearZ = 22.0f, NoseGearX = 0.75f, NoseWheelRadius = 0.6f, NoseStowAngle = 1.6f;
     public static readonly Vector3 NoseHinge = new(0f, 2.2f, NoseGearZ - 0.4f);
-    /// <summary>The outside buttons stand on the fairings' ends at this height (standing).</summary>
-    public const float OutsideButtonY = 1.75f;
+    /// <summary>The outside buttons stand on the blisters' flanks near their ends, at this height (standing), this far out.</summary>
+    public const float OutsideButtonY = 1.9f, OutsideButtonX = FairingOutX - 0.07f;
 }

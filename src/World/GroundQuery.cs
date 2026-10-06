@@ -22,12 +22,26 @@ public static class GroundQuery
     /// the road, threw the tractor up off its wheels.
     /// </summary>
     public static float Under(CollisionObject3D self, RayQuery ray, Godot.Collections.Array<Rid> exclude, Vector3 p,
-        ChunkManager? terrain, bool pastPlayers = false, bool pastVehicles = false)
+        ChunkManager? terrain, bool pastPlayers = false, bool pastVehicles = false) =>
+        Under(self.GetWorld3D(), self.CollisionMask, ray, exclude, p, terrain, pastPlayers, out _, pastVehicles);
+
+    /// <summary>
+    /// The same from a world and a collision mask, for something with no body of its own (a dormant
+    /// train, #560). <paramref name="solid"/> is false where nothing was hit and the terrain's height
+    /// (or <c>p.Y</c>) is the answer: the collision there has not been built.
+    ///
+    /// <para>
+    /// A dormant vehicle's box is never ground (#560): a parked train stood its axles on its own
+    /// dormant copy, still in the physics space the frame it woke, a metre up, and on a neighbour's.
+    /// </para>
+    /// </summary>
+    public static float Under(World3D world, uint collisionMask, RayQuery ray, Godot.Collections.Array<Rid> exclude, Vector3 p,
+        ChunkManager? terrain, bool pastPlayers, out bool solid, bool pastVehicles = false)
     {
-        var space = self.GetWorld3D().DirectSpaceState;
+        var space = world.DirectSpaceState;
         var from = p + Vector3.Up * 3f;
         var to = p + Vector3.Down * 6f;
-        uint mask = self.CollisionMask & ~TreeColliders.Layer;
+        uint mask = collisionMask & ~TreeColliders.Layer;
         var hit = ray.Cast(space, from, to, mask, exclude);
         if (hit.Count > 0 && Past(hit["collider"].AsGodotObject(), pastPlayers, pastVehicles))
         {
@@ -41,10 +55,14 @@ public static class GroundQuery
             }
             if (hit.Count > 0 && Past(hit["collider"].AsGodotObject(), pastPlayers, pastVehicles)) hit.Clear();
         }
-        if (hit.Count > 0) return hit["position"].AsVector3().Y;
+        solid = hit.Count > 0;
+        if (solid) return hit["position"].AsVector3().Y;
         return terrain != null && terrain.TryGetHeight(p, out float g) ? g : p.Y;
     }
 
     private static bool Past(GodotObject? hit, bool players, bool vehicles) =>
-        (players || vehicles) && hit is FootPlayer || hit is Vehicles.VehicleBody { InHold: true } || vehicles && hit is Vehicles.VehicleBody;
+        hit is Vehicles.DormantBody
+        || (players || vehicles) && hit is FootPlayer
+        || hit is Vehicles.VehicleBody { InHold: true }
+        || vehicles && hit is Vehicles.VehicleBody;
 }

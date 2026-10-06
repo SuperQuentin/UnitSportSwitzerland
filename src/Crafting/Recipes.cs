@@ -1,4 +1,5 @@
 using UnitSport.Items;
+using UnitSport.Items.Fishing;
 
 namespace UnitSport.Crafting;
 
@@ -27,8 +28,11 @@ public sealed record Recipe(ItemId Out, int Count, Station Station, Ingredient[]
     /// <summary>Salvage gives several things: the first is <see cref="Out"/>, these are the rest.</summary>
     public Ingredient[] Extra { get; init; } = Array.Empty<Ingredient>();
 
-    /// <summary>Stable name for logs and checks: the output, plus the first input for salvage.</summary>
-    public string Key => Salvage ? $"salvage:{In[0].Id}" : $"{Out}x{Count}";
+    /// <summary>Shown in the panel only while the first ingredient is in the pack: one cook row per fish (#493).</summary>
+    public bool OnlyWhenHeld { get; init; }
+
+    /// <summary>Stable name for logs and checks: the output, plus the first input for salvage and for dishes made of several things.</summary>
+    public string Key => Salvage ? $"salvage:{In[0].Id}" : OnlyWhenHeld ? $"{Out}x{Count}:{In[0].Id}" : $"{Out}x{Count}";
 }
 
 /// <summary>What crafting needs from an inventory: counts, taking and giving. The game's adapter is <c>InventoryStore</c>.</summary>
@@ -64,7 +68,7 @@ public static class Recipes
     /// Every recipe, in the order the panel lists them. Built from items that already exist: the
     /// scrap, minerals and parts found in loot (ids 16-36) are what everything is made of.
     /// </summary>
-    public static readonly Recipe[] All =
+    public static readonly Recipe[] All = new Recipe[]
     {
         // ---- by hand ----
         Hands(ItemId.Bandage, 2, I(ItemId.Cloth, 2)),
@@ -73,6 +77,7 @@ public static class Recipes
         Hands(ItemId.SandBag, 1, I(ItemId.Cloth), I(ItemId.Stone, 3)),
         Hands(ItemId.Campfire, 1, I(ItemId.Firewood, 5), I(ItemId.Stone, 4)),
         Hands(ItemId.Torch, 1, I(ItemId.Firewood), I(ItemId.Cloth), I(ItemId.Coal)),
+        Hands(ItemId.DoughBait, 4, I(ItemId.Bread)),   // fishing (#493): bread kneaded into bait
         // farming (#494): seed kept from a harvest (worth at least what went in)
         Hands(ItemId.WheatSeed, 2, I(ItemId.Wheat)),
         Hands(ItemId.BarleySeed, 2, I(ItemId.Barley)),
@@ -116,12 +121,18 @@ public static class Recipes
         Bench(ItemId.Sugar, 1, 3f, I(ItemId.SugarBeet)),
         Bench(ItemId.Hoe, 1, 3f, I(ItemId.ScrapMetal, 2), I(ItemId.WoodPlanks)),
 
+        // fishing (#493): a rod of planed wood, a line and a reel; a spinner beaten from scrap
+        Bench(ItemId.FishingRod, 1, 5f, I(ItemId.WoodPlanks, 2), I(ItemId.Rope), I(ItemId.ScrapMetal), I(ItemId.Screws, 2)),
+        Bench(ItemId.Spinner, 2, 3f, I(ItemId.ScrapMetal), I(ItemId.Screws)),
+
         // ---- at a fire: a campfire or a stove (#272) ----
         Cook(ItemId.Fondue, 8f, I(ItemId.Cheese, 2), I(ItemId.Bread), I(ItemId.MineralWater)),
         Cook(ItemId.HotChocolate, 4f, I(ItemId.Chocolate), I(ItemId.MineralWater)),
         Cook(ItemId.ToastedBread, 3f, I(ItemId.Bread)),
         Cook(ItemId.CaramelApple, 4f, I(ItemId.Apple), I(ItemId.Candy, 2)),
         Cook(ItemId.MineralWater, 5f, I(ItemId.WaterBottle)),   // boiled
+    }.Concat(FishDishes()).Concat(new[]
+    {
 
         // farm cooking (#494)
         new(ItemId.Bread, 3, Station.Fire, new[] { I(ItemId.Flour), I(ItemId.WaterBottle) }, 6f),   // a bag of flour bakes three loaves
@@ -138,13 +149,24 @@ public static class Recipes
         Strip(ItemId.BikeChain, I(ItemId.ScrapMetal, 3), I(ItemId.Screws, 5)),
         Strip(ItemId.CarBattery, I(ItemId.ScrapMetal, 4), I(ItemId.CopperWire, 2), I(ItemId.Plastic)),
         Strip(ItemId.EnginePart, I(ItemId.ScrapMetal, 6), I(ItemId.Screws, 8), I(ItemId.CopperWire)),
-    };
+    }).ToArray();
+
+    /// <summary>
+    /// One cook row per fish that may be kept (#493), shown only while it is in the pack: two perch make
+    /// filets de perche, two of the carp family (with mineral water) a fish soup, anything else grills.
+    /// </summary>
+    private static IEnumerable<Recipe> FishDishes() => FishCatalog.Items.Select(fish =>
+    {
+        var (dish, n) = FishCatalog.DishOf(fish);
+        var input = dish == Dish.FishSoup ? new[] { I(fish, n), I(ItemId.MineralWater) } : new[] { I(fish, n) };
+        return Cook(FishCatalog.ItemOf(dish), dish == Dish.FishSoup ? 8f : 5f, input) with { OnlyWhenHeld = true };
+    });
 
     /// <summary>
     /// Never made, only found or bought (#270): guns and ammunition, the camera, the biggest bag,
     /// the seasonal treats (but the caramel apple, cooked at a fire) and hats, the flare gun, the shops' own items (#273). Clothes are excluded by category in the game check.
     /// </summary>
-    public static readonly HashSet<ItemId> NeverCrafted = new()
+    public static readonly HashSet<ItemId> NeverCrafted = new HashSet<ItemId>
     {
         ItemId.Shotgun, ItemId.Shells, ItemId.Pistol, ItemId.Rifle, ItemId.HuntingRifle, ItemId.Knife,
         ItemId.Ammo9mm, ItemId.Ammo75, ItemId.ArmorVest, ItemId.FlareGun,
@@ -159,7 +181,7 @@ public static class Recipes
         ItemId.Dogtag,   // a match's own (#480)
         // sold only (#494): the farm co-op's fertiliser
         ItemId.Fertiliser,
-    };
+    }.Concat(FishCatalog.Items).ToHashSet();   // fish are caught (#493)
 
     /// <summary>Everything a recipe gives, the main output first.</summary>
     public static IEnumerable<Ingredient> Outputs(Recipe r)

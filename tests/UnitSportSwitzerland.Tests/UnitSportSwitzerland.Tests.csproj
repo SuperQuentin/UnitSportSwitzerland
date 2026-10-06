@@ -24,21 +24,32 @@
     <ProjectReference Include="..\..\tools\TerrainFormat\TerrainFormat.csproj" />
     <ProjectReference Include="..\..\tools\RoadGen\RoadGen.csproj" />
     <Compile Include="..\..\src\World\TimeCommand.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\TutorialSteps.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\VehicleIntros.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Net\AdminArgs.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\XR\XrControlNames.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\IChunkSource.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Vehicles\VehicleSlot.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Terrain\Fixture\*.cs" Link="Game\Fixture\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\ItemId.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\Recipes.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Items\Fishing\FishCatalog.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Items\Fishing\FishWaters.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Items\Fishing\FishRules.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\CampfireClock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FarmTables.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FarmRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FieldCells.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Farming\FieldTile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\HitGuard.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Combat\FightRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrStats.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\Fnv.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Loot\ShopTables.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\DoorBudget.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\DoorKey.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\LiftRide.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\InnerDoorLock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Loot\ShopLedger.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SaveQueue.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\MathX.cs" Link="Game\%(Filename)%(Extension)" />
@@ -59,8 +70,26 @@
     <Compile Include="..\..\src\Player\AirlinerCatalog.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\TurbopropTone.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\AirlinerFlight.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\CockpitInstruments.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Build\BuildGrid.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrPrefabs.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- site detection (#497) and landmark detection (#501): pure functions of a tile's
+         bytes, Godot maths only -->
+    <Compile Include="..\..\src\Terrain\BuildingTriangles.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\PlanBox.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\BuildingTypes.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- swiss_data.py port (#515): only the pure half (manifest format, skip decisions, STAC
+         id/bbox arithmetic) is linked. SwissDownload.cs itself needs IStepProgress from
+         Pipeline.cs, which would drag in CountryData/LocalState/Selection/Stats and
+         TerrainPreprocessor-only types this project has no ProjectReference for. -->
+    <Compile Include="..\..\tools\MapCore\DownloadManifest.cs" Link="Map\%(Filename)%(Extension)" />
+    <!-- FileGDB reader (#537): the geometry decoding is pure arithmetic and tested here; FileGdb.cs
+         itself is linked only for the GeometryGrid the decoder takes. -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\FileGdbGeometry.cs" Link="Gdb\%(Filename)%(Extension)" />
+    <Compile Include="..\..\tools\TerrainPreprocessor\FileGdb.cs" Link="Gdb\%(Filename)%(Extension)" />
+    <!-- update check (#532): version compare, asset pick, GitHub's JSON, delta updates -->
+    <Compile Include="..\..\src\Core\UpdateInfo.cs;..\..\src\Core\BinaryDelta.cs;..\..\src\Core\UpdatePackage.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Interiors\Landmarks.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the farm machines' tanks, codes and draft (#494) -->
     <Compile Include="..\..\src\Farming\MachineLoad.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- selling (#494): prices, specialty buyers, contracts, the farm stand -->

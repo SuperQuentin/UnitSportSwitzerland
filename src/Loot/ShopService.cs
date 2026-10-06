@@ -460,7 +460,7 @@ public partial class ShopService : Node
         try
         {
             if (total > 0 && where is { } w)
-                coop = Farming.FarmMarket.CoopDoor(w, reach)?.Key.ToString() ?? await CoopPlanNear(w, door, reach);
+                coop = Farming.FarmMarket.CoopDoor(w, reach)?.Building.ToString() ?? await CoopPlanNear(w, door, reach);
         }
         catch (Exception e) { GD.PushError($"[shop] delivery to {door}: {e.Message}"); }
         if (!IsInsideTree()) return;

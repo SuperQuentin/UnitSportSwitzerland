@@ -41,13 +41,14 @@
   clip like the light plane's when flown; parked they are a box at the root's height (`ExtraBoxes`)
   and the fuselage box reaches the ground (`ParkedBox`).
 - **Network**: `Anim` = (spool, lever, the stick quantised into one float, bits: flap lever, gear
-  lever, gear broken, speedbrake, ground spoilers, reverse, lights, doors, parking brake). Remote
+  lever, gear broken, speedbrake, ground spoilers, reverse, lights, doors, parking brake; #421: power, autopilot,
+  the red warning, and the fuel and engines running over the stick: `aircraft-cockpit`). Remote
   copies travel the parts at the aircraft's own rates from the levers (`AirlinerRig.Show`). Parked:
   the same bits in `VehicleState.Flags` (`PackFlags`/`UnpackFlags`).
 - **Sound**: `EngineProfile.Turbofan` (`EngineSynth.Jet`: fan tone 700 Hz–2.4 kHz with its second
   harmonic, a low rumble, broadband roar growing with the thrust), quieter from the cockpit.
-- **HUD** (until the cockpit's screens, #421): kt, ft, fpm, N1, flaps, gear, speedbrake, brakes, STALL,
-  OVERSPEED, TOO LOW GEAR.
+- **HUD**: kt, ft, fpm, N1, flaps, gear, speedbrake, brakes, STALL, OVERSPEED, TOO LOW GEAR; hidden in
+  the cockpit view, whose screens show it (`aircraft-cockpit`, #421), unless `CockpitHud`.
 - **Check**: `--flycheck a320 --world flat` (quick): a scripted pilot (`AirlinerCircuit`) on the real
   actions with analog strengths: take-off, gear up, climb to 600 m, a 180° turn, approach with the
   flaps and gear as the speed allows, flare, brakes and reversers to a stop; fails on a hard landing,
@@ -77,6 +78,16 @@
   L2; replicated in the pose bits (driven) and `VehicleBody.DoorsOpen` (parked, flags bits 13-16).
   `Driverless`: stood up from its seat it stays the player's aircraft and flies on hands off (the law
   holds its path), carrying its walkers at 120 m/s. A parked one's frame is `Posed` by `ApplyPose`.
+  **Left in the air it keeps its attitude** (#456): `VehicleState.Angles` carries it (captured when
+  not `OnGround`; a server that never flew it: above `FlyingSpeed`), `Airliner.Aloft` restores it
+  (not on the ground, path held) in `CreateRide` and when its pilot takes the controls back
+  (`EnterVehicle`, then `ClearFloorContact`). Before, a fresh one came level and "on the ground": a
+  10° climb dropped the nose, the pilot stood up 1+ m above the floor (on the roof at ~15°), and
+  walking back to the seat the deck under the walker was read as a belly scrape (a 4.1 m/s knock).
+  **A body put somewhere by hand keeps its old floor contact until it moves**: `DebugLaunch` takes
+  one still `MoveAndSlide` there (`ClearFloorContact`), or the first flight step at 600 m reads the
+  runway left behind: `Touchdown` with the gear up and a stale `LastSink`, wrecked (#456; headless it
+  hid inside the 2 s settle after taking the controls, windowed the ramp animation used that up).
   Airstairs dock to its doors (#417, vehicles note `airstairs`); E from outside still takes the controls (`BoardWalkableFromOutside`).
   Checks: `--cabincheck [shots] --world fixture` (quick: doors, stand up, aisle, sit, the controls,
   then the same walked in flight; `shots` windowed: `test_output/cabin/`); `tools/airlinernetcheck.sh`
@@ -107,8 +118,10 @@
   re-extended on approach; the circuit now fails a flaps overspeed held 3 s, measured touchdown
   2.35 m/s); `--freightercheck [shots] --world fixture` (quick: G lowers the ramp, the flight deck, the
   stairs, a troop seat, down the ramp onto the ground and back up, the para and crew door buttons,
-  the controls, the ramp opened in flight, walked into the hold at 73 m/s, the controls again;
-  `shots` windowed: `test_output/freighter/`); `tools/freighternetcheck.sh` (net: B sees A's ramp go down,
+  the controls, launched past the settle (#456: flying on unhurt), the ramp opened in flight, stood up
+  onto the flight deck, walked into the hold at 73 m/s, the controls again without a knock;
+  `shots` windowed: `test_output/freighter/`, outside views of the level ramp in flight too; on real
+  terrain windowed the in-flight walk is still flaky, #542); `tools/freighternetcheck.sh` (net: B sees A's ramp go down,
   walks up the parked one's ramp, shuts it by its button, A sees it shut).
   **Vehicles in the hold** (#418's carrying, merged): the hold is a `CargoBay` between the benches; a
   car drives up the open ramp, is carried, ties down with the handbrake and reverses out
@@ -116,18 +129,23 @@
   slope is 11°: a car's hull box does not pitch on a deck (level from 0.45 m up), and at the leaf's own
   17° its nose met the hold's floor at the hinge and it stopped halfway.
 - **The AN-124 Ruslan** (#419, RideKind 128, `AirlinerCatalog.An124`, conventional): `Avatar/An124Layout.cs`
-  (69.1 m, 73.3 m span, a superellipse section 8 × 7.8 m, the hold 36 m × 5.9 m × 4.2 m at 3.3 m from
+  (69.1 m, 73.3 m span; the skin one wide oval 8 m wide, flatter under its widest line at 5.6 m (exponent 3)
+  than over it (2.3), crown 9.9 m, constant from behind the flight deck to the tail's upsweep, with a 0.8 m
+  hump over the upper deck and the cockpit, `An124Layout.Section`/`Crown` (#491: it was a boxy 8 × 7.8 m
+  superellipse that stepped down behind the cockpit); the hold 36 m × 5.9 m × 4.2 m at 3.3 m from
   the nose ramp's hinge to the rear ramp's, the upper deck at 7.7 m over its front third), `An124MeshBuilder`
   (skin rows with real holes like the freighter's; swept anhedral wing, four D-18T pods `Fan0..3`, five
-  twin-wheel legs a side rising into low blisters, two nose legs, conventional tail with a tall fin),
+  twin-wheel legs a side rising into long low blisters faired into the skin at both ends, two nose legs, conventional tail with a tall fin),
   `An124Deck` (the drive-through hold as a `CargoBay` beside the ladder, a 45° ship's ladder on the right
-  wall to the upper deck, 24 upper-deck seats 2+2, the cockpit with pilot, copilot and flight engineer
+  wall to the upper deck, 24 upper-deck seats 2+2 (cushion, back,
+  head rest, arm rests), its linings with the windows cut through and lined out to the skin's panes
+  (behind a plain lining they were hidden), the cockpit with pilot, copilot and flight engineer
   (seats 0, 1, 2), panel and pedestal blocks). Doors: 0 crew door (left, at the hold's floor: a sill
   airstairs dock to), 1 the visor (swings up 125° about its hinge over the windscreen) with the nose ramp
   (three plates folded behind it, unfolding to the ground), 2 the rear ramp (toes) with the rear door
   (`Door2b`, up into the tail) and two side petals folding up inside the tail, 3 **kneeling**. G at the
   controls on the ground works all four ("cargo doors"). Buttons inside on the hold's walls and outside on
-  the gear blisters' ends at 1.75 m (the crew door's also by the door for airstairs). Rates `DoorRate`
+  the gear blisters' flanks near their ends at 1.9 m (the crew door's also by the door for airstairs). Rates `DoorRate`
   (the visor, ramps and kneeling ~8 s).
   **Kneeling** lowers the whole drawn frame by `KneelDrop` 0.85 m (`Flyer.PoseShift`, so the deck, the
   sills and the airstairs' dock come down with it; a remote copy gets it in `BodyPose`, a parked one is
@@ -141,11 +159,17 @@
   both ends. Door buttons on a parked one are reached measured from the parked box's middle
   (`VehicleManager.RequestDoor`; from the origin the visor's were out of reach).
   Checks: `--flycheck an124 --world flat` (quick; the circuit flares a slow-pitching heavy at 24 m with
-  more stick and some thrust: touchdown 0.99 m/s, at 14 m it was 3.2; `--airliner sim`: the four-engine start takes 150 s, the circuit's start and roll timeouts scale with it; it flew the circuit once at touchdown 1.27 m/s, but **flaky**: in 3 of 4 runs the cold AN-124 settles 1-2 m at spawn, pitches and banks a few degrees and takes damage before the start, so that row is not in the checkmap yet); `--an124check [shots] --world
+  more stick and some thrust: touchdown 0.99 m/s, at 14 m it was 3.2; `--airliner sim`: the four-engine start takes 150 s, the circuit's start and roll timeouts scale with it; touchdown 1.29 m/s; in the checkmap since #491). **Spawn drop (#491)**: put down ~1 m up with no way
+  on, the cold aircraft fell with an "alpha" of 90°; a conventional type hand-flown in Sim has no path
+  law, so the static stability, the stalled-wing drop and the weathercocking pitched and banked it in the
+  air, the 24 m belly box's nose end met the ground before the wheels and the solver shoved it up again
+  every half second (8.5 damage a bump; the freighter's shorter box escaped, the A320 is fly-by-wire).
+  Those moments now fade in with the airflow, 6 to 16 m/s (`AirlinerFlight.AirflowFrom`; unit test
+  `A_cold_heavy_dropped_onto_its_wheels_stays_level`); `--an124check [shots] --world
   fixture` (quick: G opens and kneels, the levers do not move it knelt, the crew sill 3.30/2.45 m, the
   pilot stood up, the engineer's and a cabin seat, down the ladder, down and up both ramps, the kneeling
   button raises it with the walker on the floor and kneels it again, up the ladder, G shuts and it rises;
-  `shots` adds a picture in flight); `--an124check car|bus` (a car or a Citaro up the nose ramp, carried,
+  `shots` adds a side view, the upper deck's windows and a picture in flight); `--an124check car|bus` (a car or a Citaro up the nose ramp, carried,
   tied down mid-hold, out down the rear ramp); `tools/an124netcheck.sh` (net: G's doors and the knelt
   frame on B, parked open and knelt, B raises it from inside and shuts the visor, A sees both).
 - **HUD**: the configuration (flaps, gear, brakes, warnings) is on a second line: on one line it ran
@@ -156,5 +180,5 @@
   about once a second, a 10-harmonic sawtooth buzz and tip rasp louder with the blade load (thrust),
   the core's whine 1.1-1.65 kHz; `Airliner.Sound` picks it (cockpit `PlayerFeel._turboprop`, remote,
   parked). `--soundcheck` renders `engine_turboprop_*.wav`.
-- **Not done**: no AI; the AN-124's instruments (#421), its seats are blocks, its upper-deck windows are behind the lining; the BR plane keeps its old drone sample (`SfxSynth.Engine`), not the turboprop voice; wings and tail do not collide in flight; the visual does not pitch with a
+- **Not done**: no AI; the AN-124's seats are blocks, its upper-deck windows are behind the lining; the BR plane keeps its old drone sample (`SfxSynth.Engine`), not the turboprop voice; wings and tail do not collide in flight; the visual does not pitch with a
   sloping taxiway; no wind; no fuel burn or engine start in Arcade (only in Light sim).

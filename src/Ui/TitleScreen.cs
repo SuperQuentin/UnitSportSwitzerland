@@ -4,7 +4,7 @@ using UnitSport.Core;
 namespace UnitSport.Ui;
 
 /// <summary>
-/// The first screen: the name, the running occasion, and five ways in — Play solo, Multiplayer,
+/// The first screen: the name, the running occasion, and the ways in — Play solo, Multiplayer, Map,
 /// Settings, Controls, Quit. The 3D valley (<see cref="TitleDiorama"/>) turns behind it; a dark
 /// gradient on the left keeps the text readable over it. Esc does nothing here (there is nothing
 /// behind it), but it is still consumed.
@@ -14,6 +14,7 @@ public partial class TitleScreen : Screen
     private AudioStreamPlayer _jingle = null!;
     private static readonly HashSet<string> Jingled = new();
     private Button _first = null!;
+    private UpdatePrompt? _update;
 
     public static TitleScreen Create() => new() { Name = "Title" };
 
@@ -45,6 +46,8 @@ public partial class TitleScreen : Screen
 
         _first = Entry(column, "Play solo", () => Shell.Push(SoloScreen.Create()));
         Entry(column, "Multiplayer", () => Shell.Push(MultiplayerScreen.Create()));
+        // The map of Switzerland: what terrain is downloaded, and how to get more (#515)
+        Entry(column, "Map", () => Shell.Push(MapScreen.Create()));
         Entry(column, "Settings", () => Shell.Push(SettingsScreen.Create()));
         // VR (#186): a restart either way, after a confirmation
         Entry(column, XR.XrSession.Active ? "Leave VR" : "Play in VR",
@@ -65,6 +68,7 @@ public partial class TitleScreen : Screen
         _jingle = new AudioStreamPlayer { Bus = Audio.SfxBus.Name, VolumeDb = -6 };
         AddChild(_jingle);
         PlayJingle();
+        _update = UpdatePrompt.Attach(this);
     }
 
     private static Button Entry(Container into, string text, Action pressed, bool dim = false)
@@ -76,7 +80,11 @@ public partial class TitleScreen : Screen
         return b;
     }
 
-    public override void OnShown() => _first.CallDeferred(Control.MethodName.GrabFocus);
+    public override void OnShown()
+    {
+        _first.CallDeferred(Control.MethodName.GrabFocus);
+        _update?.OnTitleShown();
+    }
 
     /// <summary>Nothing behind the title: Esc stays here.</summary>
     public override bool OnBack() => false;

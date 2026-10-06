@@ -19,10 +19,15 @@ public static class Systems
 {
     public const string Terrain = "terrain", Generated = "generated", Traffic = "traffic", Trains = "trains",
         Npcs = "npcs", Birds = "birds", Physics = "physics", Audio = "audio", Network = "network", Sky = "sky",
-        Interiors = "interiors", Loot = "loot", Occasions = "occasions", Ui = "ui", Build = "build", Farming = "farming";
+        Interiors = "interiors", Loot = "loot", Occasions = "occasions", Ui = "ui", Build = "build",
+        // the cars already parked in the car parks, and later the industrial yards' fleets (#499)
+        Dormant = "dormant",
+        Airports = "airports",
+        // the farm fields, their state and the hand/machine farming on them (#494)
+        Farming = "farming";
 
     public static readonly string[] All =
-        { Terrain, Generated, Traffic, Trains, Npcs, Birds, Physics, Audio, Network, Sky, Interiors, Loot, Occasions, Ui, Build, Farming };
+        { Terrain, Generated, Traffic, Trains, Npcs, Birds, Physics, Audio, Network, Sky, Interiors, Loot, Occasions, Ui, Build, Dormant, Airports, Farming };
 
     public enum WorldKind { Real, Fixture, Flat }
 

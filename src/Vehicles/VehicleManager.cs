@@ -97,12 +97,16 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     /// the server spawns it for everyone with itself as the authority, offline it is simply added.
     /// A client online does nothing — the server places those. Returns the node's name, or null.
     /// </summary>
-    public string? Place(VehicleState state, string name)
+    /// <param name="settled">Already standing where it is put (a dormant slot woken, #560): placed
+    /// exactly there and asleep, as a dedicated server places everything, not dropped onto the ground.</param>
+    public string? Place(VehicleState state, string name, bool settled = false)
     {
         state = state with { Owner = 0, Name = name, SpawnedAt = VehicleState.Now };
         if (!Online)
         {
-            AddChild(VehicleBody.Create(state, Terrain, Origin));
+            var body = VehicleBody.Create(state, Terrain, Origin);
+            body.PlacedSettled = settled;
+            AddChild(body);
             return name;
         }
         if (!Multiplayer.IsServer() || _spawner == null) return null;
@@ -205,6 +209,19 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
                 if (d < bestDist && Mathf.Abs(pivot.Y - point.Y) < 2.5f) { bestDist = d; best = v; }
             }
         return best;
+    }
+
+    /// <summary>
+    /// Whether a lone trailer stands within <paramref name="reach"/> of a point, measured flat to
+    /// the body (not its kingpin, which is the far end walking up from behind): the trailer's
+    /// intro card (#517).
+    /// </summary>
+    public bool LoneTrailerNear(Vector3 point, float reach)
+    {
+        foreach (var node in GetChildren())
+            if (node is VehicleBody { Wrecked: false, Trailer: not null } v && Core.MathX.FlatDistance(v.GlobalPosition, point) < reach)
+                return true;
+        return false;
     }
 
     // ---- server side --------------------------------------------------------------------

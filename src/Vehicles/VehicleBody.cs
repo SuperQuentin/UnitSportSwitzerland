@@ -87,6 +87,14 @@ public partial class VehicleBody : CharacterBody3D
     /// </summary>
     public Node3D? Visual => _visual;
 
+    /// <summary>
+    /// Put down already standing (a dormant slot woken offline, #560): exactly where it was put and
+    /// asleep, as a dedicated server places what it places. Not a hand's breadth up to fall onto
+    /// the ground: the dormant copy it replaces stood there, and the drop was the wake's pop. A boat
+    /// still floats: water is not a heightfield to fall through, and it rides the waves.
+    /// </summary>
+    public bool PlacedSettled { get; set; }
+
     private VehicleState _initial;
     private RideMotion _motion;
     private FlightMotion _flight;
@@ -146,6 +154,9 @@ public partial class VehicleBody : CharacterBody3D
         Position = Origin.ToWorld(s.Position) + Vector3.Up * 0.15f;
         AddChild(_place = new Net.NetPlace(Origin, s.Position));
         Rotation = new Vector3(0, s.Yaw, 0);
+        // a flyer's drawn attitude (replicated): its heading until its own flight model poses it. A
+        // server-placed aircraft (#422) is never flown there, and its copies drew it facing north
+        if (Ride is Flyer) Tilt = new Quaternion(Vector3.Up, s.Yaw);
         Velocity = s.Velocity;
         // parked in a hold (#418, VehicleBody.Hold.cs): carried, no physics of its own
         BeginHold(s);
@@ -196,6 +207,11 @@ public partial class VehicleBody : CharacterBody3D
         // Placed by the dedicated server itself (VehicleManager.Place): the server has no ground
         // collision to simulate it on, so it stands exactly where it was put, asleep, until a
         // player claims it. The hand's breadth above is for a body that falls onto the ground.
+        if (PlacedSettled && IsMultiplayerAuthority())
+        {
+            Position = Origin.ToWorld(s.Position);
+            if (Ride is not Boat) _asleep = true;
+        }
         if (Net.NetworkManager.DedicatedServer && IsMultiplayerAuthority())
         {
             Position = Origin.ToWorld(s.Position);
@@ -244,7 +260,11 @@ public partial class VehicleBody : CharacterBody3D
         }
 
         if (!IsMultiplayerAuthority()) SetPhysicsProcess(false);
-        else SetAnchored(true);
+        else if (!_asleep) SetAnchored(true);
+
+        // a train stands on the ground from its first drawn frame, not one frame later from _Process,
+        // where it showed level at its origin first (#560)
+        if (_visual != null) StandOnGround(0f);
 
         // Someone just got out of this car: it arrives with their door open (in the spawn state,
         // so every peer starts with it open), and the authority shuts it behind them — unless they
@@ -305,7 +325,9 @@ public partial class VehicleBody : CharacterBody3D
         _flight.Control, VehicleState.Now, Owner, Name, _initial.Headlights, _initial.RoofOpen, _initial.Tuning,
         Ride is Truck { IsBus: true } ? (byte)0 : DoorsOpen, _initial.Setup,
         // a boat's attitude as it floats now (#302; the replicated one, which the server has too)
-        _initial.Train, Ride is Boat ? new Basis(Tilt).GetEuler() : _initial.Angles,
+        // an airliner's in the air (#456), none on the ground (the server never flew it: its speed says)
+        _initial.Train, Ride is Boat ? new Basis(Tilt).GetEuler()
+            : Ride is Airliner jet ? (jet.State.OnGround || Velocity.LengthSquared() < Airliner.FlyingSpeed * Airliner.FlyingSpeed ? default : new Basis(Tilt).GetEuler()) : _initial.Angles,
         // a bus's doors as they are now, where a truck keeps them
         Ride is Truck { IsBus: true } ? (_initial.Flags & ~(15 << 4)) | ((DoorsOpen & 15) << 4)
             : Ride is Airliner ? (_initial.Flags & ~(15 << 13)) | ((DoorsOpen & 15) << 13) : _initial.Flags, _initial.Load,

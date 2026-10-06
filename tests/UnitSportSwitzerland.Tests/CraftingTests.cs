@@ -154,7 +154,8 @@ public class CraftingTests
     [Fact]
     public void Every_fire_recipe_cooks_one_thing()
     {
-        var cooking = Recipes.All.Where(r => r.Station == Station.Fire).Select(r => r.Out).ToList();
+        // the fish dishes (#493) are FishingTests' business
+        var cooking = Recipes.All.Where(r => r.Station == Station.Fire && !r.OnlyWhenHeld).Select(r => r.Out).ToList();
         // #272's five, then the farm's (#494)
         Assert.Equal(new[] { ItemId.Fondue, ItemId.HotChocolate, ItemId.ToastedBread, ItemId.CaramelApple, ItemId.MineralWater }, cooking.Take(5));
         // one thing a time, but a bag of flour bakes three loaves and a sack of maize pops into four boxes

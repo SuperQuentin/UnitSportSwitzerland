@@ -249,6 +249,61 @@ public static class ItemIcons
     private static string[] Mirror(string[] half) =>
         half.Select(r => r + new string(r.Reverse().ToArray())).ToArray();
 
+    private enum FishShape { Normal, Long, Tall }
+
+    /// <summary>
+    /// A fish facing left (#493): <paramref name="colours"/> paints the template's 1-5 = back, flank, belly,
+    /// fins, marks with palette chars.
+    /// </summary>
+    private static string[] FishIcon(FishShape shape, string colours) => Map(shape switch
+    {
+        FishShape.Normal => new[]
+        {
+            "................",
+            "................",
+            "................",
+            ".....kkkkkk.....",
+            "...kk111111kk.kk",
+            "..k1k11511111kk4",
+            ".k222225222222k4",
+            "k2222222222222kk",
+            ".k3333333333k44k",
+            "..kk33333333k.4k",
+            "....kkk4kkkk..kk",
+            "......kk........",
+        },
+        FishShape.Long => new[]
+        {
+            "................",
+            "................",
+            "................",
+            "................",
+            "...kkkkkkkkkk...",
+            "..k1k1115111kkkk",
+            "kk22222252222k4k",
+            "k222222222222k44",
+            ".k33333333333k4k",
+            "..kkkkk4kkkkkkkk",
+            "................",
+        },
+        FishShape.Tall => new[]
+        {
+            "................",
+            ".....k.k.k......",
+            "....k4k4k4k.....",
+            "...kk11111kk....",
+            "..k111511111k.kk",
+            ".k1k111511111kk4",
+            "k222225222222k44",
+            "k222222522222k4k",
+            ".k33333333333kk.",
+            "..k333333333k.4k",
+            "...kk33333kk..kk",
+            ".....kk4kk......",
+        },
+        _ => throw new ArgumentOutOfRangeException(nameof(shape)),
+    }, "12345", colours);
+
     /// <summary>A tiny painter for the round things: shaded discs, rects, auto outline.</summary>
     private sealed class Painter
     {
@@ -1660,6 +1715,152 @@ public static class ItemIcons
             ".krrrrwrrrrrRk..",
             ".kRRRRRRRRRRRk..",
             "..kkkkkkkkkkk...",
+        };
+
+        // fishing (#493): the rod, its bait, the dishes; every fish from one of three shapes (FishIcon)
+        d[ItemId.FishingRod] = new[]
+        {
+            "..............kk",
+            ".............kgk",
+            "............kgk.",
+            "...........kNk..",
+            "..........kNk...",
+            ".........kNk....",
+            "........kNk.....",
+            ".......kNk......",
+            "......kNk.......",
+            "....kkNk........",
+            "...kaakk........",
+            "...kagGk........",
+            "...kkkk.........",
+            ".kttk...........",
+            "kttk............",
+            "kkk.............",
+        };
+        d[ItemId.DoughBait] = new[]
+        {
+            "................",
+            "................",
+            "................",
+            "......kkk.......",
+            ".....kTTtk......",
+            ".....kTttk..kkk.",
+            "..kkk.kkk..kTTtk",
+            ".kTTtk....k.kttk",
+            ".kTttk...kTk.kk.",
+            "..kkk...kTttk...",
+            "........kttk....",
+            ".........kk.....",
+            "................",
+        };
+        d[ItemId.Spinner] = new[]
+        {
+            "................",
+            ".......k........",
+            "......kgk.......",
+            ".......k........",
+            "......kkk.......",
+            ".....kyylk......",
+            "....kyyyylk.....",
+            "....kyYyyyk.....",
+            "....kYYyyyk.....",
+            ".....kYYyk......",
+            "......kkk.......",
+            ".......k........",
+            ".....k.k.k......",
+            "......kgk.......",
+            ".......k........",
+            "................",
+        };
+        d[ItemId.PerchFillets] = new[]
+        {
+            "................",
+            "................",
+            "................",
+            "...kkkkkkkkkk...",
+            "..kwwwwwwwwwwk..",
+            ".kwkkkkkk.kkkwk.",
+            ".kkTlTlTk.kyykk.",
+            ".kwkkkkkkkyYyk..",
+            ".kkTlTlTlTkkkwk.",
+            ".kwkkkkkkkk.kwk.",
+            "..kwwwwwwwwwwk..",
+            "...kkkkkkkkkk...",
+            "................",
+        };
+        d[ItemId.GrilledFish] = new[]
+        {
+            "................",
+            "................",
+            "................",
+            ".....kkkkkk.....",
+            "...kkOnnnnOkk.kk",
+            "..knkndnndnnnkkO",
+            ".knnndnndnndnkOk",
+            "knnnnnnnnnnnnnkk",
+            ".ktttdttdttdkOOk",
+            "..kkttttttttk.Ok",
+            "....kkkOkkkk..kk",
+            "......kk........",
+        };
+        d[ItemId.FishSoup] = new[]
+        {
+            "................",
+            "................",
+            "....k..k..k.....",
+            ".....k..k..k....",
+            "....k..k..k.....",
+            "..kkkkkkkkkkkk..",
+            ".kooyoooooyoook.",
+            ".kwoooootooooowk",
+            ".kwwooooooooowwk",
+            "..kwwwwwwwwwwwk.",
+            "...kwwwwwwwwwk..",
+            "....kkkkkkkkk...",
+            "................",
+        };
+        d[ItemId.BrownTrout] = FishIcon(FishShape.Normal, "NtTnr");
+        d[ItemId.LakeTrout] = FishIcon(FishShape.Normal, "gawGd");
+        d[ItemId.RainbowTrout] = FishIcon(FishShape.Normal, "Eawgs");
+        d[ItemId.BrookTrout] = FishIcon(FishShape.Normal, "Euooy");
+        d[ItemId.ArcticChar] = FishIcon(FishShape.Normal, "Ggrol");
+        d[ItemId.Namaycush] = FishIcon(FishShape.Long, "GgaGa");
+        d[ItemId.Grayling] = FishIcon(FishShape.Normal, "Gawpd");
+        d[ItemId.Whitefish] = FishIcon(FishShape.Normal, "gawaa");
+        d[ItemId.Perch] = FishIcon(FishShape.Tall, "EuTrE");
+        d[ItemId.Pike] = FishIcon(FishShape.Long, "EeTnu");
+        d[ItemId.Zander] = FishIcon(FishShape.Long, "GawgG");
+        d[ItemId.Wels] = FishIcon(FishShape.Long, "dGgdd");
+        d[ItemId.Burbot] = FishIcon(FishShape.Long, "NntNN");
+        d[ItemId.LargemouthBass] = FishIcon(FishShape.Tall, "EeTEE");
+        d[ItemId.Carp] = FishIcon(FishShape.Tall, "YylOY");
+        d[ItemId.Tench] = FishIcon(FishShape.Tall, "EeuEE");
+        d[ItemId.Roach] = FishIcon(FishShape.Normal, "gawra");
+        d[ItemId.Rudd] = FishIcon(FishShape.Normal, "Yawra");
+        d[ItemId.Bream] = FishIcon(FishShape.Tall, "GgaGg");
+        d[ItemId.Chub] = FishIcon(FishShape.Normal, "Gawoa");
+        d[ItemId.Barbel] = FishIcon(FishShape.Long, "NtTnN");
+        d[ItemId.Agone] = FishIcon(FishShape.Normal, "bawac");
+        d[ItemId.RoundGoby] = FishIcon(FishShape.Normal, "NNndd");
+        // #501: the Blåhaj, swimming right: forked tail, dorsal fin, pale belly, one small eye
+        d[ItemId.Blahaj] = new[]
+        {
+            "................",
+            "................",
+            "........kk......",
+            ".......kcck.....",
+            "kk.....kcck.....",
+            "kck....kcck.....",
+            "kcck..kccccck...",
+            "kcck.kcccccccck.",
+            "kcckkkcccccccck.",
+            "kccccccccccckck.",
+            "kcCCCCCCCCCCCCk.",
+            "kkCCCCCCCCCCCk..",
+            ".kkCCkkkCCCkk...",
+            "...kk..kCCk.....",
+            ".......kkk......",
+            "................",
         };
 
         // ---- farming (#494): seed packets, sacks of harvest, bales, what is made of them ----

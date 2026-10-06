@@ -531,6 +531,48 @@ public static partial class HumanMeshBuilder
         AppendRig(scratch, palette, DriverRig(seat, wheelAngle, throttle, brake), includeLegs: true, helmet: false, hat, body, head);
 
     /// <summary>
+    /// A pilot in <paramref name="seat"/> (#421, author space, +Z forward, +X the figure's left): seated as a
+    /// driver, each hand and foot reaching for what it holds instead of a wheel and pedals: the hand on
+    /// the +X side to <paramref name="handPlusX"/> (the captain's sidestick or yoke), the other to
+    /// <paramref name="handMinusX"/> (the thrust levers), the feet's balls on the rudder pedals.
+    /// </summary>
+    public static void AppendPilot(MeshScratch scratch, HumanPalette palette, DriverSeat seat, Vector3 handPlusX, Vector3 handMinusX,
+        Vector3 footPlusX, Vector3 footMinusX, bool body = true, bool head = true, Headwear hat = Headwear.None) =>
+        AppendRig(scratch, palette, PilotRig(seat, handPlusX, handMinusX, footPlusX, footMinusX), includeLegs: true, helmet: false, hat, body, head);
+
+    /// <summary>How far a pilot's hands and feet fall short of what they hold, m (0 = they reach): <c>--cockpitcheck</c>.</summary>
+    public static (float HandPlusX, float HandMinusX, float FootPlusX, float FootMinusX) PilotReach(DriverSeat seat, Vector3 handPlusX, Vector3 handMinusX, Vector3 footPlusX, Vector3 footMinusX)
+    {
+        var r = PilotRig(seat, handPlusX, handMinusX, footPlusX, footMinusX);
+        static float Short(Vector3 mid, Vector3 end, float lower) => Mathf.Max(0f, (end - mid).Length() - lower);
+        return (Short(r.ElbowR, r.WristR, ForearmLength), Short(r.ElbowL, r.WristL, ForearmLength),
+            Short(r.KneeR, r.AnkleR, ShinLength), Short(r.KneeL, r.AnkleL, ShinLength));
+    }
+
+    private static Rig PilotRig(DriverSeat seat, Vector3 handPlusX, Vector3 handMinusX, Vector3 footPlusX, Vector3 footMinusX)
+    {
+        var r = DriverRig(seat, 0f, 0f, 0f);
+        // the rig's L limbs are on the −X side, its R limbs on +X (as DriverRig's grips)
+        var elbowR = Limb.Solve(r.ShoulderR, handPlusX, UpperArmLength, ForearmLength, new Vector3(0.6f, -0.7f, -0.3f));
+        var elbowL = Limb.Solve(r.ShoulderL, handMinusX, UpperArmLength, ForearmLength, new Vector3(-0.6f, -0.7f, -0.3f));
+        (Vector3 Hip, Vector3 Knee, Vector3 Ankle, Vector3 Toe) Leg(float side, Vector3 ball)
+        {
+            var root = seat.Hip + new Vector3(side * 0.09f, 0, 0);
+            var ankle = ball + new Vector3(0, 0.07f, -0.09f);
+            var knee = Limb.Solve(root, ankle, ThighLength, ShinLength, new Vector3(side * 0.2f, 1f, 0.3f));
+            return (root, knee, ankle, ball + new Vector3(0, 0.01f, 0.05f));
+        }
+        var legL = Leg(-1f, footMinusX);
+        var legR = Leg(1f, footPlusX);
+        return r with
+        {
+            ElbowR = elbowR, WristR = handPlusX, ElbowL = elbowL, WristL = handMinusX,
+            HipL = legL.Hip, KneeL = legL.Knee, AnkleL = legL.Ankle, ToeL = legL.Toe,
+            HipR = legR.Hip, KneeR = legR.Knee, AnkleR = legR.Ankle, ToeR = legR.Toe,
+        };
+    }
+
+    /// <summary>
     /// A seated driver's body (no head) for a wheel angle, throttle and brake quantised to what can
     /// be seen (0.03 rad, eighths) and <see cref="SmoothFigures"/> (#311), from <paramref name="cache"/> or built once into it (#221): a car
     /// or a truck keeps one cache, so a wheel that comes back to straight does not rebuild the figure.
@@ -1150,6 +1192,10 @@ public static partial class HumanMeshBuilder
         RatSwing, RatArmPump, RatHeadBob, RatHop,
         // #404: new dances (also in the style tables) and gestures (emote wheel only)
         Ymca, ChickenDance, CabbagePatch, SwimDance, Wave, Cheer, Salute, Shrug,
+        // #495: fist fights (HumanMeshBuilder.Fight.cs); keep them last, Channels skips the groove from FightStand on
+        FightStand, FightGuardHigh, FightCrouch, FightGuardLow, FightAir, FightHit, FightDazed, FightVictory,
+        FightBlockStun, FightJab, FightKick, FightLowJab, FightSweep, FightJumpKick, FightUppercut,
+        FightStringKick, FightFinisher,
     }
 
     /// <summary>
@@ -1237,6 +1283,7 @@ public static partial class HumanMeshBuilder
     {
         if (index == GroupPogo) return DanceMove.Pogo;
         if (index == GroupJump) return DanceMove.JumpTogether;
+        if (index >= FightMoves) return FightResolve(index - FightMoves);
         if (index >= EmoteMoves) return EmoteMove(index - EmoteMoves);
         var table = DanceTable[DanceStyleIndex(style)];
         return table[((index % table.Length) + table.Length) % table.Length];
@@ -1255,7 +1302,7 @@ public static partial class HumanMeshBuilder
         ch.ArmBlend = 1f;
         Planted(ref ch, 0.098f, 0f);
         EvalMove(move, t, mv, ref ch);
-        if (move is not (DanceMove.Pogo or DanceMove.JumpTogether or DanceMove.Salute)) Groove(ref ch, t, mv);
+        if (move is not (DanceMove.Pogo or DanceMove.JumpTogether or DanceMove.Salute) && move < DanceMove.FightStand) Groove(ref ch, t, mv);
         return ch;
     }
 
@@ -1649,6 +1696,7 @@ public static partial class HumanMeshBuilder
             case DanceMove.Cheer: Cheer(ref ch, t, mv); break;
             case DanceMove.Salute: Salute(ref ch, t, mv); break;
             case DanceMove.Shrug: Shrug(ref ch, t, mv); break;
+            case >= DanceMove.FightStand: EvalFight(move, t, mv, ref ch); break;
         }
     }
 

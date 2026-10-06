@@ -292,6 +292,18 @@ public sealed class Airliner : Flyer
         }
     }
 
+    /// <summary>
+    /// Left in the air (its pilot stood up in flight, #456): it flies on at the attitude it had. Put down
+    /// level and "on the ground" instead, a 10° climb dropped the nose at once and the pilot, stood up in the
+    /// pitched cockpit, landed a metre and more above its floor, on the roof at 15°.
+    /// </summary>
+    public void Aloft(Vector3 angles, Vector3 velocity)
+    {
+        State.OnGround = false;
+        State.Attitude = Basis.FromEuler(angles);
+        State.PathTarget = velocity.LengthSquared() > 1f ? Mathf.Asin(Mathf.Clamp(velocity.Normalized().Y, -1f, 1f)) : 0f;
+    }
+
     public override void Begin(ref FlightMotion m, Vector3 velocity, float yaw)
     {
         State.Velocity = velocity;
@@ -326,6 +338,7 @@ public sealed class Airliner : Flyer
             Trim: TrimHeld);
         _flapsDelta = 0;
         _gear = _speedbrake = _parking = _engines = _autopilot = false;
+        Clearance = env.Clearance;
         var ev = AirlinerFlight.Step(Spec, ref State, c, new AirlinerFlight.Env(env.OnFloor, env.Altitude), dt);
         ToMotion(ref m);
         return ev == AirlinerFlight.Event.Crashed ? FlightEvent.Crashed : FlightEvent.None;
@@ -372,7 +385,28 @@ public sealed class Airliner : Flyer
         Lights = LightsFor(s),
         Doors = DoorsOpen,
         Airborne = !s.OnGround,
+        Lever = s.Lever,
+        FlapLever = s.FlapLever,
+        SpeedbrakeLever = s.SpeedBrake,
+        Lit = (int)s.Lit,
+        Reverse = s.Reverse > 0.5f,
+        ParkingBrake = s.ParkingBrake,
+        GearLever = s.GearDown,
+        GearBroken = s.GearBroken,
+        Power = s.Battery || s.Lit > 0f,
+        Autopilot = s.Autopilot,
+        Warning = WarningOf(s),
+        Fuel = Spec.FuelCapacity > 0f ? s.Fuel / Spec.FuelCapacity : 0f,
     };
+
+    /// <summary>Height over the ground last step, m: the gear warning's "low" (#421).</summary>
+    public float Clearance = 999f;
+
+    /// <summary>The cockpit's red warning (#421), as the HUD's: 1 stall, 2 overspeed (flaps too), 3 low and sinking with the gear not down.</summary>
+    private int WarningOf(in AirlinerFlight.State s) =>
+        !s.OnGround && s.Alpha > s.AlphaStall - 0.04f ? 1
+        : s.Ias > Spec.Vmo || s.FlapLever > 0 && s.Ias > Spec.FlapLimit[s.FlapLever] ? 2
+        : !s.OnGround && s.Gear < 1f && Clearance < 230f && s.Velocity.Y < 0f && s.Ias < 93f ? 3 : 0;
 
     public override void AnimateFlight(Node3D visual, in FlightMotion m, float dt)
     {
@@ -395,7 +429,11 @@ public sealed class Airliner : Flyer
             | (DoorsOpen & 15) << 13
             | (s.ParkingBrake ? 1 << 17 : 0)
             | (s.Lit >= Spec.Engines ? 1 << 18 : 0)
-            | (s.OnGround ? 0 : 1 << 19);
+            | (s.OnGround ? 0 : 1 << 19)
+            // the cockpit (#421): power, autopilot, the red warning (2 bits); a float carries 24 bits exactly
+            | (s.Battery || s.Lit > 0f ? 1 << 20 : 0)
+            | (s.Autopilot ? 1 << 21 : 0)
+            | WarningOf(s) << 22;
     }
 
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight)
@@ -403,6 +441,8 @@ public sealed class Airliner : Flyer
         var look = Look(State);
         // the stick as two quantised halves of one float: −1..1 each, 1/50 steps
         float stick = Mathf.Round((look.Stick.X + 1f) * 50f) * 101f + Mathf.Round((look.Stick.Y + 1f) * 50f);
+        // and over it, for the cockpit (#421): the fuel in % and the engines running (under 2^24, exact)
+        stick += StickSpan * (Mathf.Clamp(Mathf.RoundToInt(look.Fuel * 100f), 0, 100) + 101 * Mathf.Clamp(look.Lit, 0, 4));
         return new Vector4(State.Spool, State.Lever, stick, Bits());
     }
 
@@ -411,6 +451,8 @@ public sealed class Airliner : Flyer
     {
         int bits = (int)pose.W;
         int st = (int)pose.Z;
+        int extra = st / StickSpan;
+        st %= StickSpan;
         var stick = new Vector2(st / 101 / 50f - 1f, st % 101 / 50f - 1f);
         int speedbrake = bits >> 5 & 3;
         return new AirlinerLook
@@ -423,8 +465,23 @@ public sealed class Airliner : Flyer
             Lights = (AirlinerLights)(bits >> 9 & 15),
             Doors = (byte)(bits >> 13 & 15),
             Airborne = (bits & 1 << 19) != 0,
+            Lever = pose.Y,
+            FlapLever = bits & 7,
+            SpeedbrakeLever = speedbrake,
+            Lit = extra / 101,
+            Fuel = extra % 101 / 100f,
+            Reverse = (bits & 1 << 8) != 0,
+            ParkingBrake = (bits & 1 << 17) != 0,
+            GearLever = (bits & 1 << 3) != 0,
+            GearBroken = (bits & 1 << 4) != 0,
+            Power = (bits & 1 << 20) != 0,
+            Autopilot = (bits & 1 << 21) != 0,
+            Warning = bits >> 22 & 3,
         };
     }
+
+    /// <summary>The stick's two halves take this many values in the pose's Z; the cockpit's numbers ride over them.</summary>
+    private const int StickSpan = 101 * 101;
 
     public override void AnimateRemote(Node3D visual, Vector4 pose, float dt)
     {

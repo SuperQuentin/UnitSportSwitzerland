@@ -20,9 +20,9 @@
   like the pack everywhere else.
 - **Late joiners and newly streamed tiles** get the stored cells in the subscribe snapshot; the
   server forgets who held what on disconnect.
-- **Versions**: no `Handshake.Protocol` bump: an older server refuses `AssetKind.Fields` as missing
-  and has no `World/Farm` (a new client's Subscribe is dropped there with an error line, its fields
-  stay natural); an older client never subscribes, so it is never sent `Cells`.
+- **Versions**: all of #494 is `Handshake.Protocol` 18 (fields, farm state, machines, selling), so
+  two versions never meet. Within it the fields degrade on their own anyway: a source without the
+  layer answers `AssetKind.Fields` as missing and the fields stay natural.
 - **Check**: `tools/farmnetcheck.sh` (tier 2): A ploughs a strip (machine stroke) and tills a cell
   by hand, every cell answered; B joins after and gets the strip from the snapshot, sees A's second
   strip live, sees the cell A then tills and sows with a hoe and a seed bag from its pack (hotbar

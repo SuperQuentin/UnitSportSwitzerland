@@ -59,6 +59,8 @@ public sealed record CarBody
     public bool PopUps { get; init; }
     public WingSize Wing { get; init; }
     public bool Scoop { get; init; }
+    /// <summary>Lowrider hydraulics: the body hops on its wheels while <see cref="CarRig.Bouncing"/> (#464).</summary>
+    public bool Hydraulics { get; init; }
 
     // ---- garage parts (Player/CarTuning); the defaults are the catalog look ----
     /// <summary>Under the front bumper: 0 nothing, 1 a lip, 2 a splitter.</summary>
@@ -144,6 +146,8 @@ public partial class CarRig : Node3D, IHingedDoors
     public bool Headlights { get; set; }
     /// <summary>Soft top down (and side glass wound down). Nothing on a car with a fixed roof.</summary>
     public bool RoofOpen { get; set; }
+    /// <summary>Hydraulics pumping: the body hops, nose and tail in turn, to its clip. Nothing on a car without them.</summary>
+    public bool Bouncing { get; set; }
 
     /// <summary>Seconds for the top to fold and the pods to rise.</summary>
     private const float RoofTime = 2.2f, FlapTime = 0.6f;
@@ -167,6 +171,16 @@ public partial class CarRig : Node3D, IHingedDoors
     private Node3D? _top, _windows, _flaps, _flapLamps;
     private float _roof, _pods;   // 0 closed .. 1 open
     private bool _settled;
+    private bool _hydraulics;
+    private float _bodyY;
+    /// <summary>Time into the hops, s, and how far into a bounce the hydraulics are (0 settled .. 1 full hops).</summary>
+    private float _hopTime, _hop;
+    private AudioStreamPlayer3D? _clip, _thud;
+    private static readonly System.Random HopRng = new(464);
+    /// <summary>One hop, s, its height at the body's pivot, m, and the nose-or-tail tilt that leads it, rad.</summary>
+    private const float HopPeriod = 0.62f, HopHeight = 0.32f, HopTilt = 0.09f;
+    /// <summary>The clip played while it bounces, if the file is there; the landings thud either way.</summary>
+    public const string BounceClipRes = "res://assets/audio/yaris_bounce.ogg";
 
     private CarCabin _cabin = null!;
     private Node3D _wheel = null!, _tach = null!, _speedo = null!;
@@ -198,6 +212,8 @@ public partial class CarRig : Node3D, IHingedDoors
         // the wheels stay on the road (they are the rig's own children)
         rig._body.Position += Vector3.Up * body.Lift;
         CarKit.Fit(rig._body, body, wheelbase, rig._spin);
+        rig._bodyY = rig._body.Position.Y;
+        rig._hydraulics = body.Hydraulics;
         return rig;
     }
 
@@ -454,11 +470,80 @@ public partial class CarRig : Node3D, IHingedDoors
         _driverBody.Mesh = HumanMeshBuilder.DriverBody(_driverPoses, pose, palette, _cabin.Seat);
     }
 
+    /// <summary>
+    /// The hydraulics (#464): hops of <see cref="HopPeriod"/>, nose then tail leading, easing in and
+    /// out over a hop; the wheels stay on the road. Each landing thuds, and the clip plays (and plays
+    /// again) for as long as it bounces. Every peer runs this from the replicated flag, so everybody
+    /// near sees and hears the same car. Returns the body's tilt, rad.
+    /// </summary>
+    private float ApplyHydraulics(float dt)
+    {
+        float before = _hopTime;
+        _hop = Mathf.MoveToward(_hop, Bouncing ? 1f : 0f, dt / HopPeriod);
+        if (_hop <= 0f)
+        {
+            if (_hopTime == 0f) return 0f;
+            _hopTime = 0f;
+            _body.Position = new Vector3(_body.Position.X, _bodyY, _body.Position.Z);
+            if (_clip is { Playing: true }) _clip.Stop();
+            return 0f;
+        }
+        _hopTime += dt;
+        float phase = _hopTime / HopPeriod;
+        float up = Mathf.Abs(Mathf.Sin(phase * Mathf.Pi));   // a bounce: sharp at the bottom, round at the top
+        _body.Position = new Vector3(_body.Position.X, _bodyY + HopHeight * _hop * up, _body.Position.Z);
+        if (Mathf.FloorToInt(before / HopPeriod) != Mathf.FloorToInt(phase)) Thud();
+        if (Bouncing) PlayClip();
+        else if (_clip is { Playing: true }) _clip.Stop();
+        // odd hops lead with the nose, even ones with the tail
+        return HopTilt * _hop * up * (Mathf.FloorToInt(phase) % 2 == 0 ? 1f : -1f);
+    }
+
+    private AudioStreamPlayer3D Voice(string name)
+    {
+        var voice = new AudioStreamPlayer3D { Name = name, UnitSize = 8f, MaxDistance = 90f, Bus = Audio.SfxBus.Name };
+        AddChild(voice);
+        return voice;
+    }
+
+    private void Thud()
+    {
+        if (DisplayServer.GetName() == "headless") return;
+        _thud ??= Voice("HopThud");
+        var (stream, pitch, db) = Audio.SfxSynth.LandingBank.Pick(HopRng);
+        _thud.Stream = stream;
+        _thud.PitchScale = 0.7f * pitch;
+        _thud.VolumeDb = db - 2f;
+        _thud.Play();
+    }
+
+    private void PlayClip()
+    {
+        if (_clip is { Playing: true } || DisplayServer.GetName() == "headless" || BounceClip is not { } stream) return;
+        _clip ??= Voice("BounceClip");
+        _clip.Stream = stream;
+        _clip.Play();
+    }
+
+    /// <summary>The clip, loaded once for every car; null when the file is not in the project.</summary>
+    private static AudioStream? BounceClip
+    {
+        get
+        {
+            if (_bounceClipLoaded) return _bounceClip;
+            _bounceClipLoaded = true;
+            return _bounceClip = ResourceLoader.Exists(BounceClipRes) ? ResourceLoader.Load<AudioStream>(BounceClipRes) : null;
+        }
+    }
+    private static AudioStream? _bounceClip;
+    private static bool _bounceClipLoaded;
+
     public override void _Process(double delta)
     {
         if (_body == null) return;
         float dt = (float)delta;
-        _body.Rotation = new Vector3(BodyPitch, 0, 0);   // + rotates −Z (the nose) up
+        float hopPitch = _hydraulics ? ApplyHydraulics(dt) : 0f;
+        _body.Rotation = new Vector3(BodyPitch + hopPitch, 0, 0);   // + rotates −Z (the nose) up
         for (int i = 0; i < 4; i++)
         {
             _steer[i].Rotation = new Vector3(0, i < 2 ? SteerAngle : 0f, 0);   // + yaw turns −Z toward −X: left

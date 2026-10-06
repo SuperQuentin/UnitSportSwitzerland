@@ -185,7 +185,7 @@ Then it runs every step below in order:
 
 1. download (via `tools/swiss_data.py`)
 2. unpack TLM and GWR
-3. GDAL exports
+3. route keys from the ASTRA FileGDBs
 4. terrain build
 5. feature extraction for the selected tiles only
 6. RoadGen junctions
@@ -204,7 +204,7 @@ dotnet run --project tools/MapSetup -- --bbox 2580,1110,2585,1115 --layers all
 ```
 
 The map, tile sizes, cantons and place names come from the committed
-`tools/MapSetup/switzerland.bin`, so nothing is downloaded before you confirm.
+`tools/MapCore/switzerland.bin`, so nothing is downloaded before you confirm.
 `--bake` rebuilds that file from swisstopo. It is slow (about 40k HEAD requests) and only
 needed when swisstopo publishes new surveys.
 
@@ -308,22 +308,21 @@ dotnet run --project tools/TerrainPreprocessor -c Release -- \
   --cover
 ```
 
-Buildings need one extra step, because swissBUILDINGS3D ships as FileGDB which needs GDAL
-(Python only). Export the region to a GeoPackage first, then run the C# stage:
+Buildings are read straight out of the swissBUILDINGS3D FileGDB zips — no GDAL, and no export
+step first (#537):
 
 ```bash
-python tools/export_buildings.py --bbox 2577000 1110000 2586000 1115000
-
 dotnet run --project tools/TerrainPreprocessor -c Release -- \
   --out terrain_chunks --features-only \
-  --buildings ressources/data/buildings3d/buildings.gpkg \
+  --buildings-gdb ressources/data/buildings3d/swissbuildings3d_3_0_2026_1267-14_2056_5728.gdb.zip \
   --gwr ressources/data/gwr/data.sqlite
 ```
 
-Cycling routes are a one-off export, only needed if you refresh the ASTRA data:
+Cycling routes are a one-off export, only needed if you refresh the ASTRA data. It reads the
+ASTRA FileGDBs directly, so it needs nothing installed (#537):
 
 ```bash
-python tools/export_route_keys.py
+dotnet run --project tools/TerrainPreprocessor -c Release -- --export-route-keys ressources/data/routes
 ```
 
 ### 5. Check it
@@ -351,7 +350,7 @@ OpenStreetMap overlay (ODbL, below); see [Licenses](#licenses).
 | **GWR / RegBL**                 | building register: year, floors, category                                                              | `https://public.madd.bfs.admin.ch/{canton}.zip`             |
 | **Veloland / Mountainbikeland** | cycle route networks                                                                                   | STAC `ch.astra.veloland`, `ch.astra.mountainbikeland`       |
 | **swissALTIRegio**              | 10 m terrain incl. border areas, averaged to 500 m for the generated terrain (`tools/swiss_relief.py`) | STAC `ch.swisstopo.swissaltiregio` (one overview read)      |
-| **OpenStreetMap** (optional)    | one-way, lanes, width, sidewalks, cycleways, turn lanes on roads (`--layers osm`)                      | Geofabrik `switzerland-YYMMDD.osm.pbf`                      |
+| **OpenStreetMap** (optional)    | one-way, lanes, width, sidewalks, cycleways, turn lanes on roads (`--layers osm`); airport stands, aprons, runways (`--airports`) | Geofabrik `switzerland-YYMMDD.osm.pbf`                      |
 
 The OpenStreetMap overlay is © OpenStreetMap contributors, available under the
 [Open Database License](https://www.openstreetmap.org/copyright) (ODbL). Road tiles built with it
@@ -531,11 +530,10 @@ src/
 tools/
   TerrainFormat/       binary formats shared by preprocessor and game
   TerrainPreprocessor/ the offline pipeline
-  MapSetup/            region setup wizard
+  MapCore/             country map, selection, plan: shared by MapSetup and the game
+  MapSetup/            region setup wizard (the terminal front-end on MapCore)
   RoadGen/ BlendCheck/ road generation and terrain blend checks
   swiss_data.py, swiss_relief.py    data downloader, 500 m relief for generated terrain
-  export_buildings.py  FileGDB -> GeoPackage (needs GDAL)
-  export_route_keys.py cycle route keys
   *check.sh            multiplayer feature checks (dedicated server + client)
 shaders/     ps1_* terrain, road, building, tree, water and other shaders
 docs/notes/  one topic per file, indexed by each directory's CLAUDE.md
