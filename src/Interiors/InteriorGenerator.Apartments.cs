@@ -34,7 +34,9 @@ public static partial class InteriorGenerator
     /// <summary>Front landing (the lobby on the ground floor), in front of the first step.</summary>
     private const float FrontLanding = 2.0f;
     /// <summary>Back landing, behind the last step: also the width of a corridor running off it.</summary>
-    private const float BackLanding = 1.6f;
+    private const float BackLanding = CorridorWidth;
+    /// <summary>The building's own corridors, and so the back landing they run off (#576): wider than a flat's hall.</summary>
+    private const float CorridorWidth = 2.0f;
     /// <summary>A stairwell's flight (#571): one lane each way, and the open well between them.</summary>
     internal const float StairLane = 1.15f, StairEye = 0.15f;
     private const float StairWidth = 2 * StairLane + StairEye;
@@ -315,9 +317,10 @@ public static partial class InteriorGenerator
             foreach (var w in wells)
             {
                 float m = w.X0 + a.CoreW - 0.9f;
-                int sp = Add(rooms, new RoomPlan { X0 = m - 0.8f, Z0 = a.ZB1, X1 = m + 0.8f, Z1 = a.Hd, Type = RoomType.Corridor });
-                Opening(rooms, sp, Side.Front, w.BackOrCore, m, 1.3f, Math.Min(2.3f, a.Clear - 0.2f), OpeningKind.Arch);
-                spines[w] = (sp, m - 0.8f, m + 0.8f);
+                float half = CorridorWidth / 2;
+                int sp = Add(rooms, new RoomPlan { X0 = m - half, Z0 = a.ZB1, X1 = m + half, Z1 = a.Hd, Type = RoomType.Corridor });
+                Opening(rooms, sp, Side.Front, w.BackOrCore, m, CorridorWidth - 0.4f, Math.Min(2.3f, a.Clear - 0.2f), OpeningKind.Arch);
+                spines[w] = (sp, m - half, m + half);
             }
         float back = deep ? a.ZB1 : a.Hd;
         for (int i = 0; i <= wells.Count; i++)
@@ -656,6 +659,8 @@ public static partial class InteriorGenerator
         float score = 0;
         if (!rooms.Any(r => r.Type == RoomType.Bedroom) || !rooms.Any(r => r.Type == RoomType.Kitchen)
             || !rooms.Any(r => r.Type == RoomType.Bathroom)) score += 1000;
+        // a room only reached through a bedroom, a bathroom or a WC (#576)
+        if (!Reachable(rooms)) score += 500;
         foreach (var r in rooms)
         {
             if (Lit(r, u, v, ext)) continue;
@@ -714,8 +719,11 @@ public static partial class InteriorGenerator
                 if (swap >= 0)
                 {
                     var t = list[swap].Type;
+                    var (was0, was1) = (list[swap], list[i]);
                     list[swap] = list[swap] with { Type = need };
                     list[i] = list[i] with { Type = t };
+                    // not if it leaves a room only reached through the bedroom (#576)
+                    if (Reachable(rooms) && !Reachable(list)) (list[swap], list[i]) = (was0, was1);
                 }
                 else if (need == RoomType.Bedroom && list.Count(r => r.Type == RoomType.Bedroom) > 1)
                     list[i] = list[i] with { Type = RoomType.Storage };
@@ -1104,17 +1112,21 @@ public static partial class InteriorGenerator
         {
             (int A, int B, Side S, float S0, float S1)? best = null;
             int bestScore = int.MinValue;
+            // rooms open only off a hall, a living room or a kitchen (#576): a bedroom, a bathroom or
+            // a WC has the one door. Only a plan with no other way in (the scoring keeps clear of
+            // those) lets one be walked through.
+            for (int pass = 0; pass < 2 && best == null; pass++)
             foreach (int i in inTree)
                 for (int j = first; j < end; j++)
                 {
                     if (inTree.Contains(j) || Touching(rooms[i], rooms[j]) is not { } t) continue;
                     var rf = rooms[i].Type;
                     var rt = rooms[j].Type;
+                    if (pass == 0 && i != root && !Connector(rf)) continue;
                     // a flat's hall, the entrance and any hall off it, is where rooms open from
                     int score = i == root || rf == RoomType.Hall ? 40 + (rt is RoomType.Living or RoomType.Hall ? 5 : 0)
                         : rf == RoomType.Living && rt == RoomType.Kitchen || rf == RoomType.Kitchen && rt == RoomType.Living ? 35
                         : rf == RoomType.Living ? rt is RoomType.Study ? 10 : rt is RoomType.Bedroom ? 6 : 2
-                        : rf == RoomType.Bedroom && rt == RoomType.Bathroom ? 12
                         : 0;
                     if (rt is RoomType.Bathroom or RoomType.WC && rf is RoomType.Living or RoomType.Kitchen) score -= 8;
                     score += (int)Math.Min(t.S1 - t.S0, 4f);
@@ -1135,6 +1147,39 @@ public static partial class InteriorGenerator
             }
             else AddDoor(rooms, new Edge(e.A, e.B, e.S, e.S0, e.S1), clear);
         }
+    }
+
+    /// <summary>
+    /// The rooms of a flat that other rooms may open off (#576): its halls, the living room, the
+    /// kitchen, a dining room, a shop's sales floor. A bedroom, a bathroom, a WC, a box room or a
+    /// study is a dead end, with one door.
+    /// </summary>
+    private static bool Connector(RoomType t) =>
+        t is RoomType.Hall or RoomType.Living or RoomType.Kitchen or RoomType.Dining or RoomType.Shop;
+
+    /// <summary>
+    /// Whether every room of a flat laid out in its own frame can be reached from its entrance hall
+    /// (index 0) going only through <see cref="Connector"/> rooms, as <see cref="ConnectFlat"/> will
+    /// open them.
+    /// </summary>
+    private static bool Reachable(List<Local> rooms)
+    {
+        const float eps = 0.02f, need = InnerDoor + 0.3f;
+        static bool Touch(Local a, Local b, float eps, float need) =>
+            (Math.Abs(a.U1 - b.U0) < eps || Math.Abs(b.U1 - a.U0) < eps) && Math.Min(a.V1, b.V1) - Math.Max(a.V0, b.V0) >= need
+            || (Math.Abs(a.V1 - b.V0) < eps || Math.Abs(b.V1 - a.V0) < eps) && Math.Min(a.U1, b.U1) - Math.Max(a.U0, b.U0) >= need;
+        var seen = new bool[rooms.Count];
+        var queue = new Queue<int>();
+        seen[0] = true;
+        queue.Enqueue(0);
+        while (queue.Count > 0)
+        {
+            int i = queue.Dequeue();
+            if (i != 0 && !Connector(rooms[i].Type)) continue;
+            for (int j = 0; j < rooms.Count; j++)
+                if (!seen[j] && Touch(rooms[i], rooms[j], eps, need)) { seen[j] = true; queue.Enqueue(j); }
+        }
+        return seen.All(x => x);
     }
 
     /// <summary>The wall two rooms share, long enough for a doorway: which side of <paramref name="a"/> and the stretch along it.</summary>
@@ -1167,10 +1212,19 @@ public static partial class InteriorGenerator
         if ((R.X1 - R.X0) * (R.Z1 - R.Z0) < 20f || R.X1 - R.X0 < 2.6f) return;
         var items = new List<FlatItem> { new(RoomType.Shop, 5f, 10) };
         if (R.Z1 - R.Z0 >= 8f) items.Add(new FlatItem(RoomType.Storage, 1.3f, 5));
-        if (R.Z1 - R.Z0 >= 10f) items.Add(new FlatItem(RoomType.WC, 0.5f, 3));
         int first = floor.Rooms.Count;
         foreach (var (it, z0, z1) in Strip(R.Z0, R.Z1, items, new List<FlatItem>()))
+        {
+            // the stockroom and the WC side by side behind the sales floor, each off it (#576)
+            if (it.Type == RoomType.Storage && R.Z1 - R.Z0 >= 10f && R.X1 - R.X0 >= 4.5f)
+            {
+                float wc = Math.Min(1.6f, (R.X1 - R.X0) * 0.35f);
+                floor.Rooms.Add(new RoomPlan { X0 = R.X0, Z0 = z0, X1 = R.X1 - wc, Z1 = z1, Type = RoomType.Storage, Unit = unit });
+                floor.Rooms.Add(new RoomPlan { X0 = R.X1 - wc, Z0 = z0, X1 = R.X1, Z1 = z1, Type = RoomType.WC, Unit = unit });
+                continue;
+            }
             floor.Rooms.Add(new RoomPlan { X0 = R.X0, Z0 = z0, X1 = R.X1, Z1 = z1, Type = it.Type, Unit = unit });
+        }
         int shop = first;
         ConnectFlat(floor.Rooms, first, floor.Rooms.Count, shop, a.Clear, rng);
         var r = floor.Rooms[shop];

@@ -49,7 +49,8 @@ public static class FlatCheck
         System.IO.Directory.CreateDirectory(dir);
         var tile = Tile();
         var doors = BuildingFootprint.ComputeDoors(tile, null, null);
-        int flats = 0, locked = 0, lit = 0, livings = 0, wetLit = 0, wet = 0;
+        int flats = 0, locked = 0, lit = 0, livings = 0, wetLit = 0, wet = 0, deadEnds = 0;
+        var walkedThrough = new List<string>();
         var dark = new List<string>();
 
         for (int i = 0; i < Boxes.Length; i++)
@@ -109,6 +110,13 @@ public static class FlatCheck
                     // daylight (#571): every room people live in has a window, a wet room only if it is on a facade
                     foreach (var r in unit)
                     {
+                        // and a bedroom, a bathroom or a WC is a dead end: one door (#576)
+                        if (r.Type is RoomType.Bedroom or RoomType.Bathroom or RoomType.WC)
+                        {
+                            deadEnds++;
+                            int ways = r.Openings.Count(o => o.Kind is OpeningKind.Door or OpeningKind.Arch);
+                            if (ways != 1) walkedThrough.Add($"{box.What} floor {f} flat {unit.Key} {r.Type} ({ways} doors)");
+                        }
                         bool window = r.Openings.Any(o => o.Kind == OpeningKind.Window);
                         if (r.Type is RoomType.Living or RoomType.Bedroom)
                         {
@@ -157,6 +165,8 @@ public static class FlatCheck
         Expect(livings > 0 && lit == livings, $"{lit} of {livings} living rooms and bedrooms have a window"
             + (dark.Count > 0 ? ": dark " + string.Join("; ", dark.Distinct().Take(6)) : ""));
         GD.Print($"[flatcheck] {wetLit} of {wet} kitchens, bathrooms and WCs have one (those on a facade)");
+        Expect(walkedThrough.Count == 0, $"{deadEnds - walkedThrough.Count} of {deadEnds} bedrooms, bathrooms and WCs have one door"
+            + (walkedThrough.Count > 0 ? ": " + string.Join("; ", walkedThrough.Distinct().Take(6)) : ""));
         GD.Print($"[flatcheck] plans in {dir}");
         GD.Print($"[flatcheck] RESULT: {(failures == 0 ? "ok" : $"FAILED ({failures})")}");
         return failures == 0 ? 0 : 1;
