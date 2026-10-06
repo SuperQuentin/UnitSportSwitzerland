@@ -716,7 +716,7 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
                 return (d, InteriorNode.BuildMesh(d, material));
             });
             if (!IsInsideTree() || _built.ContainsKey(layout.Key)) return;
-            var node = InteriorNode.Create(layout, data, material, PlacementFor(layout, Origin), mesh);
+            var node = InteriorNode.Create(layout, data, material, PlacementFor(layout, Origin), mesh, Origin);
             AddChild(node);
             _built[layout.Key] = node;
             // the collision BVH a frame later, so the two costs do not land on one frame (#221)
@@ -1271,9 +1271,48 @@ public partial class InteriorNode : Node3D
         }
     }
 
+    // ---- pallets a forklift can lift (#583) ----------------------------------------------------
+
+    /// <summary>
+    /// Every forklift parked in the hall as a sleeping vehicle (<see cref="ParkedForklift"/>, #630):
+    /// out of the merged mesh, solid, and woken by being aimed at. <paramref name="origin"/> only
+    /// names its slot in LV95; a probe that builds a hall by hand passes none, and gets a forklift
+    /// that is drawn and solid but wakes nothing.
+    /// </summary>
+    private static void AddForklifts(InteriorNode node, WorldOrigin? origin)
+    {
+        var l = node.Layout;
+        origin ??= WorldOrigin.SwissDefault();
+        for (int i = 0; i < l.Furniture.Count; i++)
+        {
+            if (!HallForklifts.IsParked(l.Furniture[i]) || HallForklifts.SlotOf(l, i, origin) is not { } slot) continue;
+            if (ParkedForklift.Create(l, i, slot) is { } parked) node.AddChild(parked);
+        }
+    }
+
+    /// <summary>
+    /// Every loose floor pallet as a node of its own (<see cref="Items.PalletNode"/>), the way a gun
+    /// locker's door is one: <see cref="InteriorMeshBuilder.Build"/> leaves them out of the merged
+    /// mesh, so a forklift can lift one and leave the floor bare. A pallet already forked away this
+    /// session (<c>PalletService</c>) is hidden as it enters the tree. No plan change.
+    /// </summary>
+    private static void AddPallets(InteriorNode node, Material material)
+    {
+        var l = node.Layout;
+        for (int i = 0; i < l.Furniture.Count; i++)
+        {
+            var f = l.Furniture[i];
+            if (!InteriorMeshBuilder.IsLoosePallet(f)) continue;
+            var pallet = Items.PalletNode.Create(Items.Pallets.HallId(l.Key, i), InteriorMeshBuilder.PalletLoad(f), material);
+            pallet.Transform = new Transform3D(new Basis(Vector3.Up, f.Turns * Mathf.Pi / 2), new Vector3(f.X, l.FloorY(f.Floor), f.Z));
+            node.AddChild(pallet);
+        }
+    }
+
     /// <summary>The interior's visual mesh; safe on a worker thread, like <c>ChunkNode.ToArrayMesh</c>.</summary>
     public static ArrayMesh BuildMesh(InteriorMeshBuilder.MeshData data, Material material)
     {
+        Core.ShowcaseTrace.Mark();
         using var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
         arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices;
@@ -1289,7 +1328,7 @@ public partial class InteriorNode : Node3D
     /// itself (<see cref="AddBody"/>); without one, both are built here.
     /// </summary>
     public static InteriorNode Create(InteriorLayout layout, InteriorMeshBuilder.MeshData data, Material material, Transform3D placement,
-        ArrayMesh? mesh = null)
+        ArrayMesh? mesh = null, WorldOrigin? origin = null)
     {
         var node = new InteriorNode { Name = "Interior_" + layout.Key, Transform = placement, Layout = layout };
         // lit by its own windows and lamps (#388): its own material, holding the building's light
@@ -1326,6 +1365,8 @@ public partial class InteriorNode : Node3D
             (pair ? node._shutters : node._leaves)[e.Door] = leaf;
         }
         AddLockDoors(node, material);
+        AddPallets(node, material);
+        AddForklifts(node, origin);
         // an apartment block's elevator doors and flats' front doors (#557)
         AddLiftDoors(node, material);
         AddInnerDoors(node, material);

@@ -1,4 +1,5 @@
 using UnitSport.Terrain.Format;
+using UnitSport.Terrain.Construction;
 
 namespace UnitSport.Vehicles;
 
@@ -76,6 +77,16 @@ public readonly record struct SiteYard(
     float Heading,
     // The strip, metres: across the building's wall, and out from it.
     float Width, float Depth);
+
+/// <summary>A door on a site's front wall, as the apron sees it: its middle along the facade (the yard's own u) and its half width, m.</summary>
+public readonly record struct DoorSpan(float Along, float Half);
+
+/// <summary>
+/// A site's yard with the front wall it lies against (#583 phase 3): the facade's span in the
+/// yard's own u, which is centred on the main door and so not on the facade, and the doors along
+/// it. What the apron's pallets and forklift keep clear of. Worked out by <c>SiteYards.Fronts</c>.
+/// </summary>
+public readonly record struct SiteFront(SiteYard Yard, float From, float To, DoorSpan[] Doors);
 
 /// <summary>
 /// Where dormant vehicles stand, as a <b>pure function of the tile's own bytes</b> — so the server
@@ -248,6 +259,59 @@ public static class DormantSlots
     }
 
     /// <summary>
+    /// A forklift's ordinal in its yard: past any grid a yard could hold, so adding it renamed none
+    /// of the fleet that was already there.
+    /// </summary>
+    public const int ForkliftOrdinal = 1000;
+
+    /// <summary>How far in from the yard's near edge a forklift stands, m: inside the 7 m apron.</summary>
+    public const float ForkliftIn = 3.5f;
+
+    /// <summary>
+    /// The forklift a warehouse or a works keeps (#583 phase 3), or null for any other site: on the
+    /// apron 1.5 m beyond one end of the facade — never in front of a door, never in a lorry's
+    /// place — forks to the building, as one is left between loads. Which end is the site's own
+    /// roll. A slot of the yard's like the fleet's, so it is woken, named and drawn as they are.
+    /// </summary>
+    public static VehicleSlot? ForkliftOf(TileId id, SiteFront front, int forklift)
+    {
+        var yard = front.Yard;
+        if ((SiteFleet)yard.SiteType is not (SiteFleet.Warehouse or SiteFleet.Factory)) return null;
+        ulong yh = Hash(Key((long)(yard.X * 100), (long)(yard.Z * 100)), 0xF0C7);
+        float u = (yh & 1) == 0 ? front.To + 1.5f : front.From - 1.5f;
+        float v = -yard.Depth / 2 - ForkliftIn;
+        float cos = MathF.Cos(yard.Heading), sin = MathF.Sin(yard.Heading);
+        float x = yard.X + u * cos - v * sin;
+        float z = yard.Z - u * sin - v * cos;
+        return new VehicleSlot(yard.Owner, ForkliftOrdinal, id.MinE + x, id.MaxN - z, yard.Y,
+            Wrap(yard.Heading + MathF.PI), forklift, 0, false);
+    }
+
+    /// <summary>
+    /// The machines parked on a tile's building sites (#616): one slot per <see cref="MachineSlot"/>
+    /// the planner placed, owned by the site's building and named by the slot's own ordinal, so a
+    /// machine that found no room leaves a gap and renames nothing. A role with no rideable machine
+    /// yet (<paramref name="kindOf"/> null) is left out, its place an empty gap in the yard until
+    /// that machine exists; a van is the crew's car, one of <paramref name="cars"/>. The height is
+    /// the site's base: the Godot side stands each on its own ground, as it does a yard's.
+    /// </summary>
+    /// <param name="kindOf">The <c>RideKind</c> a role parks as, or null for none yet.</param>
+    public static void ForConstruction(TileId id, IReadOnlyList<ConstructionSite> sites,
+        Func<MachineRole, int?> kindOf, IReadOnlyList<int> cars, List<VehicleSlot> into)
+    {
+        foreach (var site in sites)
+            foreach (var m in site.Machines)
+            {
+                ulong h = Hash(Key((long)(m.At.X * 100), (long)(m.At.Y * 100)), 0xB0D5);
+                bool van = m.Role == MachineRole.Van;
+                int? kind = !van ? kindOf(m.Role) : cars.Count > 0 ? cars[(int)(h >> 20 & 0xFFFF) % cars.Count] : null;
+                if (kind is not { } k) continue;
+                into.Add(new VehicleSlot(site.Key, m.Ordinal, id.MinE + m.At.X, id.MaxN - m.At.Y, site.Base,
+                    Wrap(m.Yaw), k, (byte)(h >> 36 & 3), van));
+            }
+    }
+
+    /// <summary>
     /// Turns a yard slot into part of the fleet where the site has one: a coupled artic, a lone
     /// trailer dropped on its legs, a bare tractor or a rigid. A warehouse is mostly trailers backed
     /// at the dock with a van among them; a depot is the whole mix, because that is what a haulier's
@@ -277,7 +341,7 @@ public static class DormantSlots
     /// </summary>
     private enum SiteFleet { Warehouse = 3, Factory = 4, Depot = 5, Mechanic = 6, Dealership = 7 }
 
-    private static float Wrap(float a)
+    internal static float Wrap(float a)
     {
         const float tau = MathF.PI * 2;
         a %= tau;
@@ -285,7 +349,7 @@ public static class DormantSlots
     }
 
     /// <summary>FNV-1a over two longs. Never <see cref="string.GetHashCode()"/>: that is randomised per process.</summary>
-    private static ulong Key(long a, long b)
+    internal static ulong Key(long a, long b)
     {
         ulong h = 14695981039346656037UL;
         foreach (long v in (long[])[a, b])
@@ -297,7 +361,7 @@ public static class DormantSlots
         return h;
     }
 
-    private static ulong Hash(ulong seed, ulong salt)
+    internal static ulong Hash(ulong seed, ulong salt)
     {
         ulong h = seed ^ salt;
         h ^= h >> 33; h *= 0xFF51AFD7ED558CCDUL;

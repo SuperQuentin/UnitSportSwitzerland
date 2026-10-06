@@ -130,6 +130,7 @@ public static partial class InteriorMeshBuilder
 
     public static MeshData Build(InteriorLayout l)
     {
+        Core.ShowcaseTrace.Mark();
         var s = new Scratch();
         float h = l.StoreyHeight;
         float clear = h - InteriorGenerator.Slab;
@@ -175,7 +176,13 @@ public static partial class InteriorMeshBuilder
 
         var figures = new List<Figure>();
         foreach (var p in l.Furniture)
+        {
+            // a loose floor pallet is its own node, to be forked up and carried off (#583), and a
+            // parked forklift one to be woken and driven (#630): InteriorManager.AddPallets and
+            // AddForklifts draw them
+            if (IsCarvedOut(p)) continue;
             Furniture(s, p, l.FloorY(p.Floor) + p.Lift, figures);
+        }
 
         return new MeshData(s.V.ToArray(), s.C.ToArray(), s.Col.ToArray(), figures.ToArray());
     }
@@ -599,6 +606,43 @@ public static partial class InteriorMeshBuilder
         return new MeshData(s.V.ToArray(), s.C.ToArray(), Array.Empty<Vector3>());
     }
 
+    // ---- pallets a forklift can lift (#583) ------------------------------------------------------
+
+    /// <summary>
+    /// A pallet standing loose on the floor — not one on a rack beam, which <see cref="FurnitureType.PalletRack"/>
+    /// draws itself — and so one a forklift can lift. <see cref="Build"/> leaves it out of the
+    /// merged mesh; it is its own node (<c>InteriorManager.AddPallets</c>).
+    /// </summary>
+    public static bool IsLoosePallet(FurniturePlan p) => p.Type == FurnitureType.Pallet && p.Lift == 0f;
+
+    /// <summary>A hall's forklift parked on the floor: a vehicle asleep (<see cref="HallForklifts"/>), not furniture (#630).</summary>
+    public static bool IsParkedForklift(FurniturePlan p) => HallForklifts.IsParked(p);
+
+    /// <summary>A piece <see cref="Build"/> leaves out of the merged mesh because it is a node of its own.</summary>
+    public static bool IsCarvedOut(FurniturePlan p) => IsLoosePallet(p) || IsParkedForklift(p);
+
+    /// <summary>The load byte a plan's pallet carries off with it: its goods roll and its deck.</summary>
+    public static byte PalletLoad(FurniturePlan p) => Items.Pallets.LoadOf(Hash(p, 3), p.D);
+
+    /// <summary>
+    /// A pallet on its own, from its load byte: centred on the origin on its underside, its runners
+    /// along X (the way the tines go in). The same mesh in the hall, on the forks and set down
+    /// anywhere, so a pallet looks the same wherever it is. No collision soup: its node has a box.
+    /// </summary>
+    public static MeshData PalletPiece(byte load)
+    {
+        var s = new Scratch();
+        var plan = new FurniturePlan
+        {
+            Type = FurnitureType.Pallet, W = Items.Pallets.Length, D = Items.Pallets.Depth(load), H = Items.Pallets.Height,
+        };
+        Furniture(s, plan, 0f, new List<Figure>(), load);
+        // whole alpha: a goods shade (sacks' 0.94) is a figure shader's effect code where it is drawn outside
+        var colors = s.C.ToArray();
+        for (int i = 0; i < colors.Length; i++) colors[i].A = 1f;
+        return new MeshData(s.V.ToArray(), colors, Array.Empty<Vector3>());
+    }
+
     /// <summary>PAUSA's block letters, 3x5, top row first.</summary>
     private static readonly string[] PausaFont =
     {
@@ -682,7 +726,8 @@ public static partial class InteriorMeshBuilder
         B(-w + 0.1f, 0.3f, f + 0.012f, w * 0.36f, 0.36f, f + 0.02f, C(0.30f, 0.30f, 0.32f));
     }
 
-    private static void Furniture(Scratch s, FurniturePlan p, float y0, List<Figure> figures)
+    /// <param name="load">A pallet's load byte (<see cref="Items.Pallets"/>), drawn instead of its plan's own roll; -1 for none.</param>
+    private static void Furniture(Scratch s, FurniturePlan p, float y0, List<Figure> figures, int load = -1)
     {
         // authored with its back to -Z, centred on the origin, then turned and moved
         var basis = new Basis(Vector3.Up, p.Turns * Mathf.Pi / 2);
@@ -699,7 +744,8 @@ public static partial class InteriorMeshBuilder
         void Goods(float cx, float y, float half, float h, float roll)
         {
             if (h < 0.12f) return;
-            if (roll < 0.45f)
+            var goods = Items.Pallets.GoodsOf(roll);
+            if (goods == Items.PalletGoods.Cartons)
             {
                 // cartons, two or three of them, stacked a little untidily
                 int n = roll < 0.22f ? 2 : 3;
@@ -711,14 +757,14 @@ public static partial class InteriorMeshBuilder
                     B(cx - half * 0.92f + skew, y0, -half * 0.8f, cx + half * 0.92f + skew, y1, half * 0.8f, box);
                 }
             }
-            else if (roll < 0.7f)
+            else if (goods == Items.PalletGoods.Drums)
             {
                 // a pair of drums
                 var col = roll < 0.58f ? C(0.20f, 0.36f, 0.58f) : C(0.62f, 0.44f, 0.14f);
                 foreach (float bx in new[] { cx - half * 0.45f, cx + half * 0.45f })
                     B(bx - half * 0.4f, y, -half * 0.4f, bx + half * 0.4f, y + h, half * 0.4f, col);
             }
-            else if (roll < 0.88f)
+            else if (goods == Items.PalletGoods.Sacks)
             {
                 // sacks, in two crossed courses
                 var sack = C(0.78f, 0.74f, 0.62f);
@@ -1200,7 +1246,7 @@ public static partial class InteriorMeshBuilder
                     B(-w, 0, z, w, 0.08f, z + 0.14f, pine * 0.85f);
                 }
                 B(-w, 0.08f, -d, w, 0.14f, d, pine);
-                Goods(0, 0.14f, w * 0.9f, Math.Max(0.2f, H - 0.14f), Hash(p, 3));
+                Goods(0, 0.14f, w * 0.9f, Math.Max(0.2f, H - 0.14f), load >= 0 ? Items.Pallets.Roll((byte)load) : Hash(p, 3));
                 break;
             }
             case FurnitureType.BarrelStack:

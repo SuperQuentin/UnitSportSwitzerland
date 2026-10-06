@@ -95,6 +95,19 @@ public partial class PlayerInput : Node
     /// <summary>The retarder stalk: 0 off, 1 exhaust brake, 2-4 the retarder.</summary>
     public const string RetarderUp = "retarder_up";
     public const string RetarderDown = "retarder_down";
+    // --- the excavator (#611): a drive / dig toggle, then the arm on the two sticks, ISO pattern ---
+    /// <summary>The excavator: dig mode on / off. In it the tracks hold and the sticks work the arm.</summary>
+    public const string DigMode = "dig_mode";
+    /// <summary>Dig mode, the left stick: slew the house (X), run the stick out and in (Y).</summary>
+    public const string ArmSlewLeft = "arm_slew_left";
+    public const string ArmSlewRight = "arm_slew_right";
+    public const string ArmStickOut = "arm_stick_out";
+    public const string ArmStickIn = "arm_stick_in";
+    /// <summary>Dig mode, the right stick: raise and lower the boom (Y, back is up), curl and dump the bucket (X, left curls).</summary>
+    public const string ArmBoomUp = "arm_boom_up";
+    public const string ArmBoomDown = "arm_boom_down";
+    public const string ArmBucketCurl = "arm_bucket_curl";
+    public const string ArmBucketDump = "arm_bucket_dump";
     /// <summary>An airliner's flap lever a notch down / up, its speedbrake, its parking brake (#414). The gear is <see cref="CarDoor"/> in the air.</summary>
     public const string FlapsDown = "flaps_down";
     public const string FlapsUp = "flaps_up";
@@ -537,6 +550,20 @@ public partial class PlayerInput : Node
         Bind(GearNeutral, Keys(Key.Key0));
         Bind(RetarderUp, Keys(Key.Apostrophe));
         Bind(RetarderDown, Keys(Key.Semicolon));
+        // The excavator (#611): C / pad B toggles dig mode (the clutch's and the crouch's, which mean
+        // nothing in a crawler). In dig mode the sticks are the arm's, ISO pattern, as on a real
+        // one: the left slews (X) and runs the stick out and in (Y), the right raises the boom (Y,
+        // back is up) and curls the bucket (X, left curls). On the keyboard WASD are the left
+        // stick and the arrows the right; the tracks ignore WASD while it digs.
+        Bind(DigMode, Keys(Key.C), Button(JoyButton.B));
+        Bind(ArmSlewLeft, Keys(Key.A), Axis(JoyAxis.LeftX, -1));
+        Bind(ArmSlewRight, Keys(Key.D), Axis(JoyAxis.LeftX, 1));
+        Bind(ArmStickOut, Keys(Key.W), Axis(JoyAxis.LeftY, -1));
+        Bind(ArmStickIn, Keys(Key.S), Axis(JoyAxis.LeftY, 1));
+        Bind(ArmBoomUp, Keys(Key.Up), Axis(JoyAxis.RightY, 1));
+        Bind(ArmBoomDown, Keys(Key.Down), Axis(JoyAxis.RightY, -1));
+        Bind(ArmBucketCurl, Keys(Key.Left), Axis(JoyAxis.RightX, -1));
+        Bind(ArmBucketDump, Keys(Key.Right), Axis(JoyAxis.RightX, 1));
         Bind(FlapsDown, Keys(Key.F7), Button(JoyButton.RightShoulder));
         Bind(FlapsUp, Keys(Key.F6), Button(JoyButton.LeftShoulder));
         Bind(Speedbrake, Keys(Key.Slash), Button(JoyButton.DpadLeft));

@@ -69,6 +69,12 @@ public partial class FootPlayer
         if (who.Ride == RideKind.OnFoot) return null;
         // a copy's own airstairs: their platform is the driver's (Anim), not a shared one's (#417)
         if (who._remoteRide is Airstairs own && who.Ride == RideKind.Airstairs) return own;
+        // and a copy's own forklift: its mast is the driver's (Anim), not a shared one's (#583)
+        if (who._remoteRide is Forklift lifting && who.Ride == RideKind.Forklift) return lifting;
+        // and a copy's own excavator: its arm is the driver's (Anim) (#611)
+        if (who._remoteRide is Excavator digging && who.Ride == RideKind.Excavator) return digging;
+        // and a copy's own wheel loader: its frame, arm and bucket are the driver's (#612)
+        if (who._remoteRide is WheelLoader loading && who.Ride == RideKind.WheelLoader) return loading;
         var key = (who.Ride, who.CarSetupId, who.TuningBits);
         if (_seatRides.TryGetValue(key, out var known)) return known;
         var made = CarSetups.Ride(who.Ride, who.CarSetupId, who.TuningBits);

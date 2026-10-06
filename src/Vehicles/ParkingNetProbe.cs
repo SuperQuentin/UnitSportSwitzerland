@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Core;
+using UnitSport.Player;
 using UnitSport.Terrain;
 using UnitSport.Terrain.Format;
 
@@ -15,6 +16,12 @@ namespace UnitSport.Vehicles;
 /// waits for the real vehicle to appear under its deterministic name. <b>B</b> joins afterwards and
 /// must see the same vehicle, under the same name, standing in the same bay — and must have stopped
 /// drawing its own dormant copy of that slot, or the car would be there twice.
+/// </para>
+///
+/// <para>
+/// <c>--parkingkind site</c> (#616): the same for a building site's machine instead of a car, on the
+/// generated world with <c>--at</c> on a site (<c>tools/sitemachinenetcheck.sh</c>). The first machine
+/// by name, so both peers pick the same one without a word between them.
 /// </para>
 /// </summary>
 public partial class ParkingNetProbe : Node
@@ -36,6 +43,9 @@ public partial class ParkingNetProbe : Node
 
     public static string? Mode() => CmdArgs.Value("--parkingnet");
 
+    /// <summary>A building site's machine (#616) rather than a car of a lot.</summary>
+    private static readonly bool Site = CmdArgs.Value("--parkingkind") == "site";
+
     private string Tag => _wakes ? "A" : "B";
 
     public override void _PhysicsProcess(double delta)
@@ -51,7 +61,7 @@ public partial class ParkingNetProbe : Node
                 if (_t < 5) return;
                 if (Find(dormant) is not { } slot)
                 {
-                    if (_t > 60) { Say("RESULT: FAILED (no dormant car in the lot)"); Finish(1); }
+                    if (_t > 60) { Say($"RESULT: FAILED (no dormant {(Site ? "site machine" : "car in the lot")})"); Finish(1); }
                     return;
                 }
                 _slot = slot;
@@ -86,7 +96,7 @@ public partial class ParkingNetProbe : Node
                 bool gone = dormant.IsAwake(slot);
                 Say($"{slot.NodeName} is a real {live.Kind} here, {off:F2} m from its bay, dormant copy gone: {gone}");
 
-                bool ok = off < 3f && gone;
+                bool ok = off < 3f && gone && live.Kind == (RideKind)slot.KindId;
                 Say(ok ? "RESULT: ok" : $"RESULT: FAILED (off {off:F2} m, dormant copy gone {gone})");
                 Finish(ok ? 0 : 1);
                 return;
@@ -103,6 +113,11 @@ public partial class ParkingNetProbe : Node
     /// </summary>
     private VehicleSlot? Find(DormantVehicles dormant)
     {
+        if (Site)
+            return dormant.Slots()
+                .Where(s => s.KindId is (int)RideKind.Excavator or (int)RideKind.WheelLoader && (!_wakes || !dormant.IsAwake(s)))
+                .OrderBy(s => s.NodeName, StringComparer.Ordinal)
+                .Cast<VehicleSlot?>().FirstOrDefault();
         if (_chunks.Source is not { } source) return null;
         var loaded = new List<(TileId Id, int Stride)>();
         _chunks.ListTiles(loaded);

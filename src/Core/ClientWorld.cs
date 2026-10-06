@@ -107,6 +107,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Interiors.DoorCheck.Requested, Interiors.DoorCheck.Run),
         (() => Interiors.FlatCheck.Requested, Interiors.FlatCheck.Run),
         (() => Interiors.ShapedCheck.Requested, Interiors.ShapedCheck.Run),
+        (() => Terrain.Construction.ConstructionCheck.Requested, Terrain.Construction.ConstructionCheck.Run),
         (() => Items.InventoryCheck.Requested, Items.InventoryCheck.Run),
         (() => ChatCheck.Requested, () => ChatCheck.Run(this)),
         (() => StyleKit.ReportRequested, StyleKit.Report),
@@ -342,6 +343,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             _ambience = new Audio.Ambience(chunksForAudio, EarNode)
                 { Name = "Ambience", Origin = origin, Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume) };
             AddChild(_ambience);
+            // the hammering, vibrator, grinder, beeper, radio and crane motor of a working building site (#617)
+            AddChild(new Terrain.Construction.SiteSounds(chunksForAudio, EarNode));
         }
         await Breathe();
         if (!IsInsideTree()) return;
@@ -655,6 +658,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _garage.ActivePlayer = () => _onFoot ? LocalPlayer : null;
         AddChild(_garage);
         if (Player.GarageProbe.ParseArgs() is { } garageRole) AddChild(new Player.GarageProbe(garageRole, () => LocalPlayer));
+        // a forklift forks a hall pallet and sets it down in the yard; the other client watches (#583)
+        if (Items.PalletNetProbe.ParseArgs() is { } palletRole) AddChild(new Items.PalletNetProbe(palletRole, () => LocalPlayer));
         if (Player.HeavyNetProbe.ParseArgs() is { } heavyRole) AddChild(new Player.HeavyNetProbe(heavyRole, () => LocalPlayer));
         if (Player.CrashNetProbe.ParseArgs() is { } crashRole) AddChild(new Player.CrashNetProbe(crashRole, () => LocalPlayer));
         if (Player.PassengerProbe.ParseArgs() is { } passengerRole) AddChild(new Player.PassengerProbe(passengerRole, () => LocalPlayer));
@@ -681,7 +686,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
             || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Loot.BankProbe.Role != null
-            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
+            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
@@ -713,6 +718,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Birds.PigeonNetProbe.Role != null) AddChild(new Birds.PigeonNetProbe(items));
         if (Player.AirlinerNetProbe.Role != null) AddChild(new Player.AirlinerNetProbe(items));
         if (Player.StairsNetProbe.Role != null) AddChild(new Player.StairsNetProbe(items));
+        if (Player.ExcavatorNetProbe.Role != null) AddChild(new Player.ExcavatorNetProbe(items));
         if (Player.FreighterNetProbe.Role != null) AddChild(new Player.FreighterNetProbe(items));
         if (Player.An124NetProbe.Role != null) AddChild(new Player.An124NetProbe(items));
         if (Player.HoldNetProbe.Role != null) AddChild(new Player.HoldNetProbe(items));
@@ -789,6 +795,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the images of stuck Polaroids, fetched from the server by hash (before the list draws them)
         Items.PhotoTransfer.Create(this, server: false);
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
+        // pallets a forklift has moved (#583): the server keeps them for the session, offline this client does
+        Items.PalletService.Create(this, origin, server: false).Source = () => _chunks?.Source;
         // built structures (#274): the server owns them, offline this client does
         if (Systems.On(Systems.Build))
         {
