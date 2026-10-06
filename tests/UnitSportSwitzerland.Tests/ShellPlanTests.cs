@@ -105,12 +105,15 @@ public class ShellPlanTests
                 }
     }
 
-    [Fact]
-    public void A_crane_in_the_building_has_its_mast_open_through_every_slab()
+    [Theory]
+    // a long thin block hemmed in by neighbours: two cranes stand inside, a quarter from each end (#606)
+    [InlineData(80f)]
+    // a shorter one: one crane, inside, in the middle, where the stair core goes first (#610)
+    [InlineData(30f)]
+    public void A_crane_in_the_building_has_its_mast_open_through_every_slab(float length)
     {
-        // a long thin block hemmed in by neighbours: its cranes stand inside (#606)
         bool Blocked(Vector2 p) => Math.Abs(p.Y - 500) > 9.5f && Math.Abs(p.Y - 500) < 30f && Math.Abs(p.X - 500) < 60f;
-        var (site, shell) = Make("2503_1120_156", 80f, 14f, 9.4f, 6, blocked: Blocked);
+        var (site, shell) = Make("2503_1120_156", length, 14f, 9.4f, 6, blocked: Blocked);
         Assert.Contains(site.Cranes, c => c.Inside);
         foreach (var c in site.Cranes.Where(c => c.Inside))
         {
@@ -118,6 +121,9 @@ public class ShellPlanTests
             float x = d.Dot(site.Box.AxisU), z = d.Dot(site.Box.AxisV);
             for (int k = 1; k < shell.Levels.Count; k++)
                 Assert.False(InSolid(shell, new Vector3(x, shell.Levels[k] - 0.1f, z)), $"slab {k} over the crane mast");
+            // and the stair core is not where the mast is (#610: the core took the middle the crane wanted)
+            var hole = new Rect2D(x - ShellPlans.CraneHole / 2, z - ShellPlans.CraneHole / 2, x + ShellPlans.CraneHole / 2, z + ShellPlans.CraneHole / 2);
+            Assert.False(shell.Core.Overlaps(hole), $"the stair core {shell.Core} on the crane's mast at {x:F1},{z:F1}");
         }
     }
 

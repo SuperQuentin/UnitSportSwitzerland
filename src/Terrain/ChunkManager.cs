@@ -415,7 +415,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         List<(float[] Points, int Count, float Half, float Height)>? Bores = null,
         WaterLayer? WaterLayer = null, SignalBuilder.Lamps? Lamps = null,
         ArrayMesh?[]? BuildingCells = null, Vector3[]? OccluderVertices = null, int[]? OccluderIndices = null,
-        ArrayMesh? Sites = null);
+        ArrayMesh? Sites = null, Construction.CraneRig[]? Cranes = null);
 
     private Material? _roadMaterial;
     private Material? _buildingMaterial;
@@ -1398,7 +1398,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     EnsureNode(result.Id, state).SetBuildings(result.Buildings);
                 // the building sites' shells (#608), or none: a rebuild without them clears them
                 if (result.Sites != null || state.HasBuildings)
-                    EnsureNode(result.Id, state).SetSites(result.Sites);
+                    EnsureNode(result.Id, state).SetSites(result.Sites, result.Cranes, PierMaterial);
                 // what was asked for, not what came back: a tile with no buildings at all (the lake)
                 // has no cells to show, and recording that as "not cells" rebuilt it forever
                 state.BuildingCells = state.PendingCells;
@@ -1875,6 +1875,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         r.Roads?.Dispose();
         r.Buildings?.Dispose();
         r.Sites?.Dispose();
+        if (r.Cranes != null)
+            foreach (var crane in r.Cranes) crane.Dispose();
         if (r.BuildingCells != null)
             foreach (var cell in r.BuildingCells) cell?.Dispose();
         r.Water?.Dispose();
@@ -2104,6 +2106,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 Vector3[][]? buildingFaces = null;
                 Interiors.DoorSpot[]? doors = null;
                 ArrayMesh? siteMesh = null;
+                Construction.CraneRig[]? craneRigs = null;
                 Vector3[]? siteFaces = null;
                 if (wantBuildings || wantCollision)
                 {
@@ -2124,6 +2127,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                             ct.ThrowIfCancellationRequested();
                             if (shells.Mesh is { } shellData) siteMesh = ChunkNode.ToPropMesh(shellData, pierMaterial!);
                             siteFaces = shells.Faces;
+                            // what the cranes slew (#610): meshes made here, nodes on the main thread
+                            if (siteMeshWanted && shells.Cranes.Count > 0)
+                                craneRigs = shells.Cranes.Select(c => Construction.CraneRig.Make(c, pierMaterial!)).ToArray();
                         }
                     }
 
@@ -2249,7 +2255,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     tailMesh, blendedCollision, roads, wantRoads,
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
                     bridgeCollision, stageMs, doors, bores, waterLayer, lamps,
-                    buildingCells, occluders?.Vertices, occluders?.Indices, siteMesh));
+                    buildingCells, occluders?.Vertices, occluders?.Indices, siteMesh, craneRigs));
             }
             catch (OperationCanceledException)
             {

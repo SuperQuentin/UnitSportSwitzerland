@@ -224,3 +224,48 @@ foundations, the office two high, determinism. Pictures: `--shot-queue` on the g
   left. A container outside an interior needs its own identity (#627; loot is keyed by an interior plan's
   furniture index) and server ownership: its own issue.
 - The office has no stair to its upper containers; the lamps do not blink at night.
+
+## The cranes (#610)
+
+- **`CranePlans`** (pure, `CranePlan.cs`): a flat-top tower crane (no tower head, so every piece is
+  an axis-aligned box) and the same at 0.62 scale for a self-erecting one, without a cab. The
+  **mast** (cross base on ballast, four chords, bracing every 2 m, one invisible solid box for
+  collision) stands in the site frame and goes in the site's prop mesh. What **slews** is built in
+  the frame of the pivot at the mast's top, the jib along −Z (yaw 0), the counter-jib with its
+  ballast along +Z: the jib assembly and cab, the trolley, the hook block, a 1 m rope the node
+  scales to the drop, and the load (a concrete skip or a bundle of formwork panels).
+  `MastHeight` = hook height + 1.8 m.
+- **`CraneMotion.Pose`** (pure, tier 0): the pose is a function of the clocks every peer shares,
+  so nothing is sent. **Two clocks on purpose** (`core/three-clocks`): *whether* it works is
+  environment time (07:00-12:00 and 13:00-17:00, not on Sundays: the day number from
+  `EnvNow + HourShift`); *how fast* it moves is the simulation clock
+  (`SimClock.SimAt(ClockSync.ServerNow)`), because a lift is physical motion and a 24-minute day
+  would whirl the jib round 60 times too fast. A cycle is 140 simulated seconds: down at the pick
+  (the materials), hooked on, up, slew the short way round and run the trolley out to a drop (the
+  top slab's corners and middle, one per cycle by hash), down, unhooked, up, back. Each crane has
+  its own phase. Out of hours it **weathervanes**: two slow sines round its rest yaw, trolley in.
+- **`SiteCranes`** (a child of the tile's node, tile-local, so nothing on an origin shift): the
+  meshes are made on the worker (`CraneRig.Make`), the nodes on the main thread in
+  `ChunkNode.SetSites`, and `_Process` poses every crane while the tile shows its buildings, with no
+  allocation. The jib carries a solid box (`JibBounds`) that slews with it: a helicopter hits it.
+  The red **obstacle lamps** (jib tip, counter-jib end, top) are a three-instance MultiMesh with
+  custom data `(seed, 1)`: the prop shader lights only instances with a glow gain
+  (`INSTANCE_CUSTOM.y`), and vertex alpha 1 marks the lamp as a light source.
+- **A crane inside the building took the stair core's place.** With no room for its base outside,
+  the planner stands a lone crane at the middle of the long side, which is where the shell put the
+  core. The shell now moves the core along its wing until it clears every mast's opening by a metre.
+  Found by `--shellwalkcheck` the moment the mast had collision (a body stuck at the stair's foot),
+  pinned by a 30 m case in `ShellPlanTests` that fails without the fix.
+
+### Checks
+
+`CraneMotionTests` (tier 0, 15): working hours at their edges and on Sundays (and a negative day),
+determinism, a cycle that comes down at the pick, carries, and sets down over a drop with the jib
+pointed at it, no jump over 4 cycles at 20 fps, a slow weathervane that still swings over half a
+radian in an hour, the jib inside its collision box. Pictures (`--shot-queue`, `/time set`): the
+same view 25 s apart (the hook down on the bricks), and at 22:30 (the lamps lit).
+
+### Not done
+
+- The hook's load is drawn whenever the pose says loaded: nothing is taken from the materials.
+- Operating a crane is #618.
