@@ -140,7 +140,9 @@ Nendaz, Veyrier, Chene-Bougeries, Lancy, Saxon, Collonge-Bellerive: 4169 blocks 
 distinct, the survey circles of Geneva and Chene-Bougeries overlap) gave **3 distinct garage doors**
 with 3 front doors, 40 % and 20 %. `MinFrontDoors` 3 to 2 (the door goes between two entrances, 22 m
 apart: a block of about 45 m of frontage), `MixedMinFrontDoors` 4 to 3, `Share` 40 to 80 %,
-`MixedRollShare` 20 to 50 %. Where the rest is lost, from a funnel over four villages (a throwaway
+`MixedRollShare` 20 to 50 %: **8 distinct garage doors** over the same tiles (all with a ramp, none locked, 0
+validator problems; one stub floats 0.37 m over the ground, the known limit of a hump that is a sine), about 0.2 % of
+the blocks, short of the 0.3 to 0.5 % hoped for. Where the rest is lost, from a funnel over four villages (a throwaway
 counter, not kept): of the 6000 blocks of flats that are one whole box, 97 % have a single front door
 (the door budget is one per 44 m of perimeter and the garage claims one), and 4150 of the 4500 without a
 car park are shallower than the 17.3 m the strip takes: real blocks of flats are 12 to 15 m deep and no
