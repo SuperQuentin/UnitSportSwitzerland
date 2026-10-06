@@ -629,7 +629,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public bool InCockpit => !_thirdPerson && HasCockpit && ShowroomYaw == null && SeatIndex == 0;
 
     /// <summary>What is ridden has a driver's seat with a cockpit (#69 cars, #157 trucks and buses, #421 aircraft).</summary>
-    private bool HasCockpit => _ride is Car or Truck or Airstairs or Airliner or Excavator or WheelLoader;
+    private bool HasCockpit => _ride is Car or Truck or Airstairs or Airliner or Excavator or WheelLoader or CompactRoller or Telehandler;
 
     private Rideable? _ride;
     private RideMotion _motion;
@@ -1455,6 +1455,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             if (IsMultiplayerAuthority() && !Npc && !_thirdPerson && !XR.XrSession.Active) return;
             _walkPalette = FigurePalette(rider);
             _poseOutfit = OutfitBits;
+            _face.Reset();   // a new node: its face uniforms start over
             _walker = new MeshInstance3D
             {
                 Name = "Body",
@@ -2138,6 +2139,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _walker.Transform *= FlinchPose(dt);
         PlaceHand(mounts);
         PlaceBack(mounts);
+        StepFace(dt);
     }
 
     /// <summary>What the figure was last built from: the same key, the same mesh (#221).</summary>
@@ -2625,6 +2627,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is Forklift parkedLift) parkedLift.UnpackFlags(state.Flags);
         if (_ride is Excavator parkedArm) parkedArm.UnpackFlags(state.Flags);
         if (_ride is WheelLoader parkedLoader) parkedLoader.UnpackFlags(state.Flags);
+        if (_ride is CompactRoller parkedRoller) parkedRoller.UnpackFlags(state.Flags);
+        if (_ride is Telehandler parkedBoom) parkedBoom.UnpackFlags(state.Flags);
         // the steamer's gangways as they were left (#303)
         if (_ride is Steamer berthed) berthed.DoorsOpen = (byte)(state.DoorsOpen & 3);
         EngineOn = true;
@@ -2663,7 +2667,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // an airliner left in the air (stood up from its seat): its attitude, or it is put down level (#456)
             Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler()
                 : _ride is Airliner { State.OnGround: false } aloft ? aloft.State.Attitude.Orthonormalized().GetEuler() : default,
-            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : _ride is Excavator ef ? ef.PackFlags() : _ride is WheelLoader wf ? wf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
+            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : _ride is Excavator ef ? ef.PackFlags() : _ride is WheelLoader wf ? wf.PackFlags() : _ride is CompactRoller rf ? rf.PackFlags() : _ride is Telehandler hf ? hf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
             Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd,
             Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw);
     }
@@ -3276,6 +3280,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
+        // and turns a telehandler's steering mode on: front, four-wheel, crab (#614)
+        if (@event.IsActionPressed(PlayerInput.RoofToggle) && !@event.IsEcho() && _ride is Telehandler steered && SeatIndex == 0 && !Npc)
+        {
+            steered.NextMode();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         // the same key pumps the hydraulics on a car that has them (#464)
         if (@event.IsActionPressed(PlayerInput.RoofToggle) && !@event.IsEcho() && _ride is Car { HasHydraulics: true } hopper)
         {
@@ -3325,7 +3337,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
 
         // an excavator digging has the right stick for its boom and bucket (#611): the mouse still looks
-        if (_ride is Excavator { Digging: true } or WheelLoader { Working: true }) return;
+        if (_ride is Excavator { Digging: true } or WheelLoader { Working: true } or Telehandler { Working: true }) return;
         var look = PlayerInput.LookRate;
         // on foot a steering wheel turns the view; mounted or seated it only steers
         if (_ride == null && RidingWith == 0) look.X += PlayerInput.WheelLookRate;
@@ -4187,6 +4199,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is Excavator digging) WorkArm(digging, dt);
         // and the loader's arm and bucket, in work mode (#612)
         if (_ride is WheelLoader loading) WorkBucket(loading, dt);
+        // and the roller's drums set vibrating or stopped (#614)
+        if (_ride is CompactRoller rolling) WorkDrums(rolling);
+        // and the telehandler's boom, in work mode (#614)
+        if (_ride is Telehandler booming) WorkBoom(booming, dt);
         if (_ride is Car)
         {
             // doors: once seated every door shuts, sooner if the car pulls away before then
@@ -4420,6 +4436,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (InCockpit && ((_visual as Avatar.CarRig)?.EyeFrame ?? (_visual as Avatar.HeavyRig)?.EyeFrame) is { } eyeFrame)
         {
             UpdateCockpitCamera(eyeFrame, dt);
+            ShakeRideCamera();
             return;
         }
 
@@ -4438,6 +4455,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // in VR the eye stays level and the head looks for itself: you lean with your body (#186)
             _camera.Rotation = XR.XrSession.Active ? Vector3.Zero : new Vector3(_pitch, _lookYaw, _motion.Lean * 0.5f);
             ApplyRideFov(dt);
+            ShakeRideCamera();
             return;
         }
 
@@ -4484,6 +4502,25 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_chaseBlend > through) _camera.GlobalTransform = across * _camera.GlobalTransform;
 
         ApplyRideFov(dt);
+        ShakeRideCamera();
+    }
+
+    /// <summary>The ride camera's last tremble, rad (0 when still): what a check reads.</summary>
+    public float RideShake { get; private set; }
+
+    /// <summary>
+    /// A machine that shakes its driver (a vibrating roller, #614): the view trembles by the ride's
+    /// <see cref="Rideable.CameraShake"/>, scaled by the camera-shake setting, the on-foot camera's
+    /// two incommensurate wobbles a side. Never in VR, where a shaken view is a sick stomach.
+    /// </summary>
+    private void ShakeRideCamera()
+    {
+        float shake = _camera == null || _ride == null || XR.XrSession.Active ? 0f : _ride.CameraShake * Core.GameSettings.Current.ScreenShake;
+        RideShake = shake;
+        if (shake <= 0f) return;
+        float now = (float)Time.GetTicksMsec() / 1000f;
+        _camera!.Basis = _camera.Basis * new Basis(Vector3.Right, shake * (Mathf.Sin(now * 61f) + 0.6f * Mathf.Sin(now * 97f)))
+            * new Basis(Vector3.Up, shake * (Mathf.Sin(now * 53f + 1f) + 0.6f * Mathf.Sin(now * 89f)));
     }
 
     /// <summary>

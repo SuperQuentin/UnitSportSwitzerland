@@ -248,8 +248,16 @@ public partial class RideUi : CanvasLayer
                 $"{RideKind.Forklift}|Forklift", () => new Forklift().BuildParkedVisual(0)),
             NewCard(RideKind.Excavator, "Excavator", new Excavator().Blurb, true,
                 $"{RideKind.Excavator}|Excavator", () => new Excavator().BuildParkedVisual(0)),
+            NewCard(RideKind.MiniExcavator, "Mini excavator", new Excavator(mini: true).Blurb, true,
+                $"{RideKind.MiniExcavator}|MiniExcavator", () => new Excavator(mini: true).BuildParkedVisual(0)),
             NewCard(RideKind.WheelLoader, "Wheel loader", new WheelLoader().Blurb, true,
                 $"{RideKind.WheelLoader}|WheelLoader", () => new WheelLoader().BuildParkedVisual(0)),
+            NewCard(RideKind.WheelLoaderForks, "Wheel loader (forks)", new WheelLoader(forks: true).Blurb, true,
+                $"{RideKind.WheelLoaderForks}|WheelLoaderForks", () => new WheelLoader(forks: true).BuildParkedVisual(0)),
+            NewCard(RideKind.CompactRoller, "Compact roller", new CompactRoller().Blurb, true,
+                $"{RideKind.CompactRoller}|CompactRoller", () => new CompactRoller().BuildParkedVisual(0)),
+            NewCard(RideKind.Telehandler, "Telehandler", new Telehandler().Blurb, true,
+                $"{RideKind.Telehandler}|Telehandler", () => new Telehandler().BuildParkedVisual(0)),
         });
         // trailers are not mounts: each card couples one behind the truck being driven, or leaves it
         // in the world ahead to back onto (RideKind.Trailer + its index, decoded in Choose)

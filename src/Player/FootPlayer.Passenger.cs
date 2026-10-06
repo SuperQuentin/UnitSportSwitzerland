@@ -72,9 +72,13 @@ public partial class FootPlayer
         // and a copy's own forklift: its mast is the driver's (Anim), not a shared one's (#583)
         if (who._remoteRide is Forklift lifting && who.Ride == RideKind.Forklift) return lifting;
         // and a copy's own excavator: its arm is the driver's (Anim) (#611)
-        if (who._remoteRide is Excavator digging && who.Ride == RideKind.Excavator) return digging;
+        if (who._remoteRide is Excavator digging && who.Ride == digging.Kind) return digging;
         // and a copy's own wheel loader: its frame, arm and bucket are the driver's (#612)
-        if (who._remoteRide is WheelLoader loading && who.Ride == RideKind.WheelLoader) return loading;
+        if (who._remoteRide is WheelLoader loading && who.Ride == loading.Kind) return loading;
+        // and a copy's own roller: its bend and its vibration are the driver's (#614)
+        if (who._remoteRide is CompactRoller rolling && who.Ride == RideKind.CompactRoller) return rolling;
+        // and a copy's own telehandler: its wheels, mode and boom are the driver's (#614)
+        if (who._remoteRide is Telehandler booming && who.Ride == RideKind.Telehandler) return booming;
         var key = (who.Ride, who.CarSetupId, who.TuningBits);
         if (_seatRides.TryGetValue(key, out var known)) return known;
         var made = CarSetups.Ride(who.Ride, who.CarSetupId, who.TuningBits);

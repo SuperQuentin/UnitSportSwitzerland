@@ -83,9 +83,47 @@ stand either side of the seat, where the VR levers are.
   parked machine keeps the arm A left. A headless client draws no parked vehicle, so there it is the
   parked state that is compared.
 
+**VR knobs mirrored until #614.** `XrCabControls`' eye frame has +x on the driver's right (the
+truck's gear lever is at +0.32), but the excavator's slew and stick knobs were at +0.32 and its
+boom and bucket at -0.32, the reverse of the ISO pattern on the keyboard and pad. The loader's
+"right of the seat" levers were at -0.34. Both were mirrored in #614. Neither was tried in a headset.
+
+## The mini excavator (#614)
+
+`RideKind.MiniExcavator = 196`. It is the same `Excavator` class built with `mini: true`.
+- **Its numbers.** Everything the ride, the arm node and the check read comes from an `ExcavatorSpec`:
+  `ExcavatorLayout.Spec` (the 20 t machine, its constants unchanged) or `MiniExcavatorLayout.Spec`.
+  The mini is a 2.7 t class machine: 1.5 m over rubber tracks, a 2.3 m boom and a 1.25 m stick,
+  about 4.6 m of reach and 2.6 m of dig depth, quicker joints, 4.5 km/h.
+- **Its body** is `MiniExcavatorMeshBuilder`: a short-tail house under an open four-post canopy, the
+  boom on a swing bracket in front of the operator. `ExcavatorArm.Create(spec, meshes)` poses it as
+  it poses the big one.
+- **The dozer blade** is on the undercarriage, so it turns back with the tracks under a slewed house.
+  `Blade` is its arms' angle: 0 puts the edge on the ground, `BladeMax` 0.6 lifts it 0.33 m, and
+  `BladeMin` -0.15 cuts 7 cm in. The plate is counter-rotated so it stays upright as it rises.
+  `blade_raise` / `blade_lower` work **driving or digging** (a mini pushes soil as it drives):
+  - keyboard: Shift / Ctrl;
+  - pad: RB / LB, the gear paddles, which a crawler has no use for;
+  - VR: a lever low and outboard of the left joystick, aft to raise (`XrCabControls` "miniexcavator").
+- **On the wire**, the pose's four floats are all taken. The blade rides in the bucket's float:
+  `ExcavatorSpec.PoseW` = bucket + 8 × one of 32 blade steps. The bucket never leaves ±4 rad, and
+  the big one's W stays the bucket exactly.
+- **Parked**, the flags pack slew, boom, stick, bucket and blade in 7, 8, 8, 6 and 3 bits. The big
+  one stays at 8, 8, 8, 8 and none, bit for bit as before. `Handshake.Protocol` is 22.
+- **On a building site**, `MachineRole.MiniExcavator` now parks as one (`DormantVehicles.SiteKind`).
+- **Checks**:
+  - `--excavatorcheck mini[,shots]`: the same script on the mini, plus the blade at its rate to both
+    stops, drawn at the ride's angle, kept in the flags, and still working while driving. Shots go
+    in `test_output/miniexcavator/`.
+  - A mini round in `tools/excavatornetcheck.sh`: B draws A's arm and blade (0.358 against 0.360),
+    and keeps the blade once parked.
+  - `MiniExcavatorLayoutTests` (tier 0, 12) cover the reach, the blade's heights, the flags and the
+    pose round trips, and the big one's packing unchanged.
+
 ## Not done
 
-- No digging: the ground does not change (#620), and the bucket carries nothing (#615).
-- Not parked on the building sites yet (#616).
+- No digging: the ground does not change (#620), and the bucket carries nothing (#615). The blade
+  pushes nothing either.
+- No boom swing (offset) on the mini: its arm stays on the house's centre line.
 - No hydraulic whine or track squeal: the engine is the diesel profile and the throttle follows the
   hardest-pushed lever (#617 gave a reversing beeper to reuse).

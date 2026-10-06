@@ -21,6 +21,7 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `lan-discovery` — mDNS browse for `_unitsport._udp` (avahi on the server); the Multiplayer screen lists LAN servers, legacy unicast queries, `--discovercheck`
 - `server-query` — UDP status query on port + 1 (`USQ1`/`USR1` + JSON): LAN broadcast list, saved servers' players and ping, `--server-name`, `--query-bind`
 - `udp-receive-loop` — every UDP reader goes through `Udp.ReceiveLoop(udp, token, handler)`; never hand-write a ReceiveAsync loop
+- `http-tiles` — tiles from a static HTTP mirror (`--tiles-url`, `AssetKind.HttpBase`, `HttpAssetSource`): probe, 404 final, ENet fallback, 8 failures drop it; Caddy on the deploy host (#651)
 - `region-file-sync` — region-wide files a client pulls once (horizon, places) go through `ClientTerrainSync.SyncFileAsync`
 - `hosting` — Host from the menu: the client starts itself headless as a server (`--parent-pid` watchdog), joins it, kills it on leave
 - `clock-sync` — One shared clock: `ClockSync.ServerNow` from min-RTT ping/pong samples; song position, beat phase and time of day are functions of it, never of anything local or summed per frame; server Unix stamps compare on `ServerUnixNow` (#452)

@@ -22,7 +22,7 @@
   flat underside that overhangs a straight neck tube (no head-and-neck cone). About 6.5 heads
   tall. `Head.Top(hair)`, `HalfWidth(hair)`, `Point(y, angle, lift)`, `Ear(side)` place what goes
   on it (hats, glasses, masks, piercings).
-- **Face**: `face-atlas`. **Hair** (`HairStyle`, replicated, append only): a slanted cap (high on
+- **Face**: `procedural-faces`. **Hair** (`HairStyle`, replicated, append only): a slanted cap (high on
   the brow, low at the nape, so short hair is not a beanie), a fringe (locks, spiky, blunt cut,
   swept), falls (`Skirt` open over the face), spikes, a crest, tails, a bun. `HairCover.Hat`
   (helmet, beanie, witch or santa hat) drops what would poke through; `HairCover.Head` (pumpkin,

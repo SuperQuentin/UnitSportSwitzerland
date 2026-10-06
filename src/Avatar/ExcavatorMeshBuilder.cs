@@ -196,14 +196,19 @@ public static class ExcavatorMeshBuilder
     /// <param name="driver">The figure in the cab; null parked.</param>
     public static HeavyRig CreateRig(Player.Excavator machine, HumanPalette? driver)
     {
-        var rig = HeavyRig.Create(Parts(), driver);
-        rig.Name = "Excavator";
+        // the mini (#614): its own body and parts, posed by the same arm node
+        var rig = HeavyRig.Create(machine.Mini ? MiniExcavatorMeshBuilder.Parts() : Parts(), driver);
+        rig.Name = machine.Mini ? "MiniExcavator" : "Excavator";
         rig.AirLowAt = -1f;     // the small gauge reads nothing a low-air lamp is about
-        var arm = ExcavatorArm.Create();
+        var arm = ExcavatorArm.Create(machine.Spec, machine.Mini ? MiniExcavatorMeshBuilder.ArmMeshes() : ArmMeshes());
         rig.AddChild(arm);
-        arm.Pose(machine.Slew, machine.Boom, machine.Stick, machine.Bucket, 0f, 0f);
+        arm.Pose(machine.Slew, machine.Boom, machine.Stick, machine.Bucket, 0f, 0f, machine.Blade);
         return rig;
     }
+
+    /// <summary>The meshes <see cref="ExcavatorArm"/> poses for the 20 t machine: no blade.</summary>
+    public static ExcavatorArm.ArmParts ArmMeshes() => new(UndercarriageMesh(), ShoeRowMesh(), ShoePitch,
+        BoomMesh(), StickMesh(), BucketMesh(), null, null);
 
     /// <summary>The arm node of a drawn excavator, or null (headless: nothing drawn).</summary>
     public static ExcavatorArm? ArmOf(Node3D? visual) => visual?.GetNodeOrNull<ExcavatorArm>("Arm");
@@ -212,21 +217,39 @@ public static class ExcavatorMeshBuilder
 /// <summary>
 /// The parts of an excavator that move against its cab (#611): the undercarriage, turned back by
 /// the slew so the tracks stay where they are while the house turns, its grouser rows run by the
-/// tracks' speeds, and the boom, stick and bucket, each a pivot rotated about its own X. Nothing is
-/// rebuilt; a pose that has not changed by a hundredth of a degree is not even reassigned.
+/// tracks' speeds, and the boom, stick and bucket, each a pivot rotated about its own X; a mini's
+/// dozer blade (#614) on the undercarriage, turned about its arms' pivot. Nothing is rebuilt; a
+/// pose that has not changed by a hundredth of a degree is not even reassigned.
 /// </summary>
 public partial class ExcavatorArm : Node3D
 {
+    /// <summary>What an arm is drawn with: one size's parts, the lug spacing its tracks run by, its blade or none.</summary>
+    public sealed record ArmParts(ArrayMesh Undercarriage, ArrayMesh ShoeRow, float ShoePitch,
+        ArrayMesh Boom, ArrayMesh Stick, ArrayMesh Bucket, ArrayMesh? BladeArms, ArrayMesh? Blade);
+
     private Node3D _under = null!, _boom = null!, _stick = null!, _bucket = null!;
+    private Node3D? _blade, _plate;
+    private float _pitch;
     private readonly Node3D[] _shoes = new Node3D[4];
     private Vector4 _drawn = new(float.NaN, 0, 0, 0);
+    private float _drawnBlade = float.NaN;
 
     /// <summary>The joint angles the arm is drawn at: slew, boom, stick, bucket.</summary>
     public Vector4 Drawn => _drawn;
 
-    /// <summary>Poses the undercarriage and the joints, and runs the tracks' grousers (m run by each track so far).</summary>
-    public void Pose(float slew, float boom, float stick, float bucket, float scrollLeft, float scrollRight)
+    /// <summary>The blade's angle as drawn (0 without one).</summary>
+    public float DrawnBlade => _blade == null ? 0f : _drawnBlade;
+
+    /// <summary>Poses the undercarriage, the joints and the blade, and runs the tracks' grousers (m run by each track so far).</summary>
+    public void Pose(float slew, float boom, float stick, float bucket, float scrollLeft, float scrollRight, float blade = 0f)
     {
+        if (_blade != null && !(Mathf.Abs(blade - _drawnBlade) <= 1e-4f))
+        {
+            _drawnBlade = blade;
+            _blade.Rotation = new Vector3(blade, 0, 0);
+            // the plate stays upright as its arms swing it up
+            _plate!.Rotation = new Vector3(-blade, 0, 0);
+        }
         var pose = new Vector4(slew, boom, stick, bucket);
         if (!(float.IsNaN(_drawn.X) || (pose - _drawn).LengthSquared() > 1e-8f))
         {
@@ -250,40 +273,54 @@ public partial class ExcavatorArm : Node3D
         {
             float run = i < 2 ? left : right;
             bool top = (i & 1) == 0;
-            float shift = Mathf.PosMod(top ? run : -run, ExcavatorMeshBuilder.ShoePitch);
+            float shift = Mathf.PosMod(top ? run : -run, _pitch);
             var p = _shoes[i].Position;
             _shoes[i].Position = p with { Z = -shift };
         }
     }
 
-    public static ExcavatorArm Create()
+    /// <summary>The 20 t machine's arm.</summary>
+    public static ExcavatorArm Create() => Create(ExcavatorLayout.Spec, ExcavatorMeshBuilder.ArmMeshes());
+
+    public static ExcavatorArm Create(ExcavatorSpec spec, ArmParts meshes)
     {
         var material = HumanMeshBuilder.FigureMaterial();
         MeshInstance3D Mesh(string name, ArrayMesh mesh) => new() { Name = name, Mesh = mesh, MaterialOverride = material };
-        var node = new ExcavatorArm { Name = "Arm" };
+        var node = new ExcavatorArm { Name = "Arm", _pitch = meshes.ShoePitch };
         node._under = new Node3D { Name = "Under" };
-        node._under.AddChild(Mesh("Tracks", ExcavatorMeshBuilder.UndercarriageMesh()));
+        node._under.AddChild(Mesh("Tracks", meshes.Undercarriage));
         int k = 0;
         foreach (int side in new[] { 1, -1 })
             foreach (bool top in new[] { true, false })
             {
                 var row = new Node3D { Name = $"Shoes{k}" };
-                var at = CarMeshBuilder.Turned(new Vector3(side * ExcavatorLayout.HalfGauge, top ? ExcavatorLayout.TrackHeight + 0.01f : -0.01f, 0));
+                var at = CarMeshBuilder.Turned(new Vector3(side * spec.HalfGauge, top ? spec.TrackHeight + 0.01f : -0.01f, 0));
                 var holder = new Node3D { Name = $"Run{k}", Position = at };
                 holder.AddChild(row);
-                row.AddChild(Mesh("Grousers", ExcavatorMeshBuilder.ShoeRowMesh()));
+                row.AddChild(Mesh("Grousers", meshes.ShoeRow));
                 node._under.AddChild(holder);
                 node._shoes[k++] = row;
             }
+        // the blade rides the tracks, so it is the undercarriage's: it turns back with them under a slewed house
+        if (meshes.BladeArms != null && meshes.Blade != null)
+        {
+            node._blade = new Node3D { Name = "Blade", Position = CarMeshBuilder.Turned(MiniExcavatorLayout.BladePivot) };
+            node._blade.AddChild(Mesh("Arms", meshes.BladeArms));
+            var edge = MiniExcavatorLayout.BladeReach;
+            node._plate = new Node3D { Name = "Plate", Position = CarMeshBuilder.Turned(new Vector3(0, edge.Y, edge.X)) };
+            node._plate.AddChild(Mesh("Plate", meshes.Blade));
+            node._blade.AddChild(node._plate);
+            node._under.AddChild(node._blade);
+        }
         node.AddChild(node._under);
-        node._boom = new Node3D { Name = "Boom", Position = CarMeshBuilder.Turned(ExcavatorLayout.BoomFoot) };
-        node._boom.AddChild(Mesh("Beam", ExcavatorMeshBuilder.BoomMesh()));
+        node._boom = new Node3D { Name = "Boom", Position = CarMeshBuilder.Turned(spec.BoomFoot) };
+        node._boom.AddChild(Mesh("Beam", meshes.Boom));
         node.AddChild(node._boom);
-        node._stick = new Node3D { Name = "Stick", Position = new Vector3(0, 0, -ExcavatorLayout.BoomLength) };
-        node._stick.AddChild(Mesh("Beam", ExcavatorMeshBuilder.StickMesh()));
+        node._stick = new Node3D { Name = "Stick", Position = new Vector3(0, 0, -spec.BoomLength) };
+        node._stick.AddChild(Mesh("Beam", meshes.Stick));
         node._boom.AddChild(node._stick);
-        node._bucket = new Node3D { Name = "Bucket", Position = new Vector3(0, 0, -ExcavatorLayout.StickLength) };
-        node._bucket.AddChild(Mesh("Bucket", ExcavatorMeshBuilder.BucketMesh()));
+        node._bucket = new Node3D { Name = "Bucket", Position = new Vector3(0, 0, -spec.StickLength) };
+        node._bucket.AddChild(Mesh("Bucket", meshes.Bucket));
         node._stick.AddChild(node._bucket);
         return node;
     }

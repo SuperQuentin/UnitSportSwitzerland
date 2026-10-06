@@ -441,7 +441,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                         DormantSlots.ForParking(id, roads.Parking, ParkedKinds, list);
                     var buildings = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
                     Yards(source, id, buildings, roads, list, stacks);
-                    Sites(source, id, buildings, roads, list);
+                    Sites(source, id, buildings, roads, list, stacks);
                     Marina(source, id, list);
                     return (list, stacks);
                 });
@@ -523,25 +523,33 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// tile with no site, which is nearly all of them. Each stands on its own ground; the planner
     /// already kept the yard's places off the building, the roads and the neighbours.
     /// </summary>
-    private static void Sites(IChunkSource source, TileId id, BuildingTile? tile, RoadTile? roads, List<VehicleSlot> into)
+    /// <param name="pallets">The sites' pallets of bricks and cement (#615), handed to <c>PalletService</c> with the yards' stacks.</param>
+    private static void Sites(IChunkSource source, TileId id, BuildingTile? tile, RoadTile? roads, List<VehicleSlot> into, List<YardPallet> pallets)
     {
         if (tile is not { Buildings.Count: > 0 } || !SitePlans.HasSite(tile)) return;
         var sites = SitePlans.For(tile, roads);
         if (sites.Count == 0) return;
         int before = into.Count;
         DormantSlots.ForConstruction(id, sites, SiteKind, ParkedKinds, into);
-        if (into.Count == before || source.LoadChunkAsync(id).GetAwaiter().GetResult() is not { } grid) return;
+        var grid = source.LoadChunkAsync(id).GetAwaiter().GetResult();
+        // the materials' pallets stand on the ground the dressing is drawn on, as the server works them out
+        foreach (var site in sites) pallets.AddRange(SitePlans.PalletsOf(tile, site, grid));
+        if (grid == null) return;
         for (int i = before; i < into.Count; i++) into[i] = into[i] with { Height = GroundUnder(grid, into[i], false) };
     }
 
     /// <summary>
-    /// What a site's machine parks as: the excavator (#611) and the wheel loader (#612). The small
-    /// kit (#614), the tipper and the mixer (#613) join here once they can be driven.
+    /// What a site's machine parks as: the excavator (#611), the wheel loader (#612), a quarter of
+    /// them with forks (#615, from the slot's own roll), and the small kit (#614). The tipper, the
+    /// mixer and the mini dumper (#613) join here once they can be driven.
     /// </summary>
-    private static int? SiteKind(MachineRole role) => role switch
+    private static int? SiteKind(MachineRole role, ulong roll) => role switch
     {
         MachineRole.Excavator => (int)RideKind.Excavator,
-        MachineRole.WheelLoader => (int)RideKind.WheelLoader,
+        MachineRole.MiniExcavator => (int)RideKind.MiniExcavator,
+        MachineRole.Roller => (int)RideKind.CompactRoller,
+        MachineRole.Telehandler => (int)RideKind.Telehandler,
+        MachineRole.WheelLoader => (roll >> 52 & 3) == 0 ? (int)RideKind.WheelLoaderForks : (int)RideKind.WheelLoader,
         _ => null,
     };
 

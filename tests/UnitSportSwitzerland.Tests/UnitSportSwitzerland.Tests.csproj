@@ -41,6 +41,8 @@
     <Compile Include="..\..\src\Items\Fishing\FishWaters.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\Fishing\FishRules.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\CampfireClock.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\Face\FaceGenome.cs" Link="Game\Face\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\Face\FaceState.cs" Link="Game\Face\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\HitGuard.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\FightRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrStats.cs" Link="Game\%(Filename)%(Extension)" />
@@ -89,7 +91,15 @@
     <Compile Include="..\..\src\Audio\SiteSfx.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the excavator (#611): its layout and arm, Godot maths only -->
     <Compile Include="..\..\src\Avatar\ExcavatorLayout.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- and its sizes, the mini's with its blade (#614) -->
+    <Compile Include="..\..\src\Avatar\ExcavatorSpec.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\MiniExcavatorLayout.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\WheelLoaderLayout.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- frame steering, shared with the compact roller (#614), and the roller's numbers -->
+    <Compile Include="..\..\src\Avatar\FrameSteering.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\CompactRollerLayout.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the telehandler (#614): its steering modes, boom and packing -->
+    <Compile Include="..\..\src\Avatar\TelehandlerLayout.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- swiss_data.py port (#515): only the pure half (manifest format, skip decisions, STAC
          id/bbox arithmetic) is linked. SwissDownload.cs itself needs IStepProgress from
          Pipeline.cs, which would drag in CountryData/LocalState/Selection/Stats and

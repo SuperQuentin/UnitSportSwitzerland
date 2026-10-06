@@ -21,7 +21,7 @@ done
 [ $NOCHUNKS = 1 ] && S_CHUNKS=0
 
 # --- config: tools/deploy.env, but variables already set in the environment win ---
-VARS="DEPLOY_HOST DEPLOY_PORT_SSH DEPLOY_DIR DEPLOY_CHUNKS_DIR GAME_PORT WEB_PORTS MDNS_NAME SERVER_ARGS SPACE_MARGIN_MB CHUNKS_SRC GODOT"
+VARS="DEPLOY_HOST DEPLOY_PORT_SSH DEPLOY_DIR DEPLOY_CHUNKS_DIR GAME_PORT WEB_PORTS MDNS_NAME SERVER_ARGS SPACE_MARGIN_MB CHUNKS_SRC GODOT TILES TILES_DOMAIN TILES_URL TILES_PRECOMPRESS"
 for v in $VARS; do [ -n "${!v+x}" ] && eval "_keep_$v=\${$v}"; done
 [ -f tools/deploy.env ] && . tools/deploy.env
 for v in $VARS; do k="_keep_$v"; [ -n "${!k+x}" ] && eval "$v=\${$k}"; done
@@ -29,6 +29,10 @@ for v in $VARS; do k="_keep_$v"; [ -n "${!k+x}" ] && eval "$v=\${$k}"; done
 DEPLOY_PORT_SSH=${DEPLOY_PORT_SSH:-22} DEPLOY_DIR=${DEPLOY_DIR:-/opt/unitsport} GAME_PORT=${GAME_PORT:-7777}
 WEB_PORTS=${WEB_PORTS-80 443} MDNS_NAME=${MDNS_NAME:-UnitSport Server} SERVER_ARGS=${SERVER_ARGS:-}
 SPACE_MARGIN_MB=${SPACE_MARGIN_MB:-2048} CHUNKS_DIR=${DEPLOY_CHUNKS_DIR:-$DEPLOY_DIR/terrain_chunks}
+# tiles over HTTP (#651): Caddy on the host serves the chunk directory, the game server names it to clients
+TILES=${TILES:-1} TILES_DOMAIN=${TILES_DOMAIN:-} TILES_PRECOMPRESS=${TILES_PRECOMPRESS:-1} TILES_SITE=${TILES_DOMAIN:-:80}
+if [ "$TILES" != 1 ]; then TILES_URL=
+elif [ -z "${TILES_URL:-}" ]; then TILES_URL=$([ -n "$TILES_DOMAIN" ] && echo "https://$TILES_DOMAIN/tiles/" || echo "http://${DEPLOY_HOST#*@}/tiles/"); fi
 GODOT=${GODOT:-'/c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.1-stable_mono_win64/godot_v4.7.1-stable_mono_win64_console.exe'}
 OUT=test_output/deploy; mkdir -p "$OUT"
 BUILD=build/linux; BIN=UnitSportSwitzerland.x86_64
@@ -133,10 +137,11 @@ fi
 # --- 3. host setup: packages, .NET, dirs, mDNS, firewall, cron -----------------------------
 if [ $S_SETUP = 1 ]; then
   say "Host setup$([ $DRY = 1 ] && echo ' (report only)')"
-  rdir=$(tar -C tools/deploy -cf - remote-setup.sh unitsport.service.xml | rq 'd=$(mktemp -d) && tar -xf - -C "$d" && echo "$d"')
+  rdir=$(tar -C tools/deploy -cf - remote-setup.sh unitsport.service.xml Caddyfile | rq 'd=$(mktemp -d) && tar -xf - -C "$d" && echo "$d"')
   envs="DRY=$DRY TARGET_USER=\$(id -un) DEPLOY_DIR=$(qd "$DEPLOY_DIR") CHUNKS_DIR=$(qd "$CHUNKS_DIR") GAME_PORT=$GAME_PORT"
   envs+=" SSH_PORT=$DEPLOY_PORT_SSH WEB_PORTS=$(qd "$WEB_PORTS") MDNS_NAME=$(qd "$MDNS_NAME") VERSION=$(qd "$VERSION")"
   envs+=" DOTNET_MAJOR=$DOTNET_MAJOR NEED_DOTNET=$NEED_DOTNET HERE=$rdir"
+  envs+=" TILES=$TILES TILES_SITE=$(qd "$TILES_SITE") TILES_PRECOMPRESS=$TILES_PRECOMPRESS"
   set +e
   "${SSH[@]}" "${SUDO_TTY[@]}" "$DEPLOY_HOST" "$SUDO env $envs bash $rdir/remote-setup.sh; rc=\$?; rm -rf $rdir; exit \$rc"
   rc=$?; set -e
@@ -146,7 +151,7 @@ fi
 stopped=0
 install_start() { # start-server.sh with this config baked in; cron and every restart run it
   sed -e "s|@DEPLOY_DIR@|$DEPLOY_DIR|; s|@CHUNKS_DIR@|$CHUNKS_DIR|; s|@GAME_PORT@|$GAME_PORT|" tools/deploy/start-server.sh \
-    | awk -v a="$SERVER_ARGS" '{gsub(/@SERVER_ARGS@/, a)} 1' > "$OUT/start-server.sh"
+    | awk -v a="$SERVER_ARGS${TILES_URL:+ --tiles-url $TILES_URL}" '{gsub(/@SERVER_ARGS@/, a)} 1' > "$OUT/start-server.sh"
   [ $DRY = 1 ] && return
   rq "cat > $(qd "$DEPLOY_DIR/start-server.sh") && chmod 755 $(qd "$DEPLOY_DIR/start-server.sh")" < "$OUT/start-server.sh"
 }
@@ -178,14 +183,15 @@ if [ $S_CHUNKS = 1 ]; then
   say "Terrain chunks $CHUNKS_SRC -> $DEPLOY_HOST:$CHUNKS_DIR"
   [ -f "$CHUNKS_SRC/manifest.json" ] || die "no $CHUNKS_SRC/manifest.json (set CHUNKS_SRC=, or run from the main checkout)"
   L=$OUT/chunks.local.tsv R=$OUT/chunks.remote.tsv SEND=$OUT/chunks.send.txt EXTRA=$OUT/chunks.extra.txt
-  list='find . -maxdepth 1 -type f -printf "%P\t%s\t%T@\n"'
+  # the .gz copies the host makes for HTTP (step 5b) are not ours to compare or prune
+  list='find . -maxdepth 1 -type f ! -name "*.gz" -printf "%P\t%s\t%T@\n"'
   norm() { awk -F'\t' '{printf "%s\t%s\t%d\n", $1, $2, $3}' | LC_ALL=C sort; }
   echo "  listing local files..."; (cd "$CHUNKS_SRC" && eval "$list") | norm > "$L"
   echo "  listing remote files..."; rq "cd $(qd "$CHUNKS_DIR") 2>/dev/null && $list || true" | norm > "$R"
   if [ $CHECKSUM = 1 ]; then  # content compare: slow (reads every byte on both sides)
     sums() { awk '{n=$2; sub(/^\*/, "", n); print n "\t" $1}' | LC_ALL=C sort; }
     echo "  hashing local files..."; (cd "$CHUNKS_SRC" && find . -maxdepth 1 -type f -printf '%P\0' | xargs -0 md5sum) | sums > "$L.md5"
-    echo "  hashing remote files..."; rq "cd $(qd "$CHUNKS_DIR") 2>/dev/null && find . -maxdepth 1 -type f -printf '%P\0' | xargs -0 -r md5sum || true" | sums > "$R.md5"
+    echo "  hashing remote files..."; rq "cd $(qd "$CHUNKS_DIR") 2>/dev/null && find . -maxdepth 1 -type f ! -name '*.gz' -printf '%P\0' | xargs -0 -r md5sum || true" | sums > "$R.md5"
     LC_ALL=C comm -23 "$L.md5" "$R.md5" | cut -f1 > "$SEND"
   else  # name + size + mtime (tar keeps mtimes, so a synced file matches on the next run)
     LC_ALL=C comm -23 "$L" "$R" | cut -f1 > "$SEND"
@@ -217,6 +223,13 @@ if [ $S_CHUNKS = 1 ]; then
     if [ $PRUNE = 1 ]; then rx "cd $(qd "$CHUNKS_DIR") && xargs -d '\n' rm -f" < "$EXTRA"; echo "  pruned $(wc -l < "$EXTRA" | tr -d ' ') server-only files"
     else echo "  kept server-only files (--prune deletes them; list: $EXTRA)"; fi
   fi
+fi
+
+# --- 5b. gzip copies for the HTTP mirror (#651), made on the host --------------------------------------
+if [ $S_CHUNKS = 1 ] && [ "$TILES" = 1 ] && [ "$TILES_PRECOMPRESS" = 1 ]; then
+  say "Gzip copies for HTTP in $CHUNKS_DIR"
+  if [ $DRY = 1 ]; then echo "  [dry] gzip -k every tile file whose .gz is missing or older (tools/deploy/gzip-tiles.sh)"
+  else echo "  $(rq "bash -s -- $(qd "$CHUNKS_DIR")" < tools/deploy/gzip-tiles.sh) files compressed"; fi
 fi
 
 # --- 6. (re)start --------------------------------------------------------------------------------------

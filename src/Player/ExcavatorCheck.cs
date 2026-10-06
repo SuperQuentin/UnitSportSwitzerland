@@ -7,7 +7,7 @@ using UnitSport.XR;
 namespace UnitSport.Player;
 
 /// <summary>
-/// <c>--excavatorcheck [shots] --world flat</c> (#611): the excavator driven, turned on the spot,
+/// <c>--excavatorcheck [mini][,shots] --world flat</c> (#611; the mini, #614): the excavator driven, turned on the spot,
 /// switched into dig mode and its arm worked through the <b>real bindings</b> (held with
 /// <see cref="XrPad.Press"/>, as the forklift's check holds its paddles), so what it proves is the
 /// control a player, a pad or a VR hand on the cab's levers actually has.
@@ -29,7 +29,11 @@ namespace UnitSport.Player;
 public partial class ExcavatorCheck : Node
 {
     public static bool Requested => CmdArgs.Has("--excavatorcheck");
-    private static bool Shots => CmdArgs.Value("--excavatorcheck") == "shots";
+    private static string Args => CmdArgs.Value("--excavatorcheck") ?? "";
+    private static bool Shots => Args.Split(',').Contains("shots");
+    /// <summary><c>--excavatorcheck mini</c>: the same on the mini (#614), and its blade.</summary>
+    private static bool MiniRun => Args.Split(',').Contains("mini");
+    private static ExcavatorSpec S => MiniRun ? MiniExcavatorLayout.Spec : ExcavatorLayout.Spec;
 
     private readonly WorldOrigin _origin;
     private FootPlayer? _player;
@@ -71,6 +75,8 @@ public partial class ExcavatorCheck : Node
     private async Task Shot(string name, Vector3 eye, Vector3 at)
     {
         if (!Shots || DisplayServer.GetName() == "headless") return;
+        // the mini is about half the size: the same views from closer
+        if (MiniRun) eye = at + (eye - at) * 0.55f;
         var was = GetViewport().GetCamera3D();
         var cam = new Camera3D { Fov = 55f, Near = 0.05f };
         AddChild(cam);
@@ -78,7 +84,7 @@ public partial class ExcavatorCheck : Node
         cam.LookAt(at, Vector3.Up);
         cam.MakeCurrent();
         for (int i = 0; i < 6; i++) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-        string dir = ProjectSettings.GlobalizePath("res://test_output/excavator");
+        string dir = ProjectSettings.GlobalizePath(MiniRun ? "res://test_output/miniexcavator" : "res://test_output/excavator");
         System.IO.Directory.CreateDirectory(dir);
         string path = System.IO.Path.Combine(dir, $"{++_shot:D2}-{name}.png");
         GetViewport().GetTexture().GetImage().SavePng(path);
@@ -107,7 +113,8 @@ public partial class ExcavatorCheck : Node
     {
         var me = _player!;
         for (int i = 0; i < 300 && !me.IsOnFloor(); i++) await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
-        Expect(me.SetRide(RideKind.Excavator) && me.Vehicle is Excavator, "mounted the excavator");
+        var kind = MiniRun ? RideKind.MiniExcavator : RideKind.Excavator;
+        Expect(me.SetRide(kind) && me.Vehicle is Excavator { Mini: var m } && m == MiniRun, $"mounted the {kind}");
         if (me.Vehicle is not Excavator ex) { Finish(); return; }
         me.RideControls = () => new RideInput(0f, 0f, 0f, false);
         await Frames(10);
@@ -145,31 +152,31 @@ public partial class ExcavatorCheck : Node
         yaw0 = me.Rotation.Y;
         await Hold(PlayerInput.ArmSlewLeft, 2.0);
         float slewed = Mathf.AngleDifference(yaw0, me.Rotation.Y);
-        Expect(Mathf.Abs(slewed - ExcavatorLayout.SlewRate * 2f) < ExcavatorLayout.SlewRate * 0.4f,
+        Expect(Mathf.Abs(slewed - S.SlewRate * 2f) < S.SlewRate * 0.4f,
             $"two seconds slewing left turns the house by the slew's rate ({Mathf.RadToDeg(slewed):F0}°)");
         Expect(Mathf.Abs(Mathf.AngleDifference(track0, ex.TrackYaw)) < 0.01f, "the tracks keep their heading while the house slews");
         Expect(Flat(me.GlobalPosition, start) < 0.1f, "and the machine stays where it stands");
 
         // ---- each joint at its rate, to its limits ------------------------------------------------
-        await Hold(PlayerInput.ArmBoomUp, (ExcavatorLayout.BoomMax - ex.Boom) / ExcavatorLayout.BoomRate + 1.0);
-        await Hold(PlayerInput.ArmStickOut, (ExcavatorLayout.StickMax - ex.Stick) / ExcavatorLayout.StickRate + 1.0);
-        await Hold(PlayerInput.ArmBucketDump, (ExcavatorLayout.BucketMax - ex.Bucket) / ExcavatorLayout.BucketRate + 1.0);
-        Expect(Mathf.IsEqualApprox(ex.Boom, ExcavatorLayout.BoomMax) && Mathf.IsEqualApprox(ex.Stick, ExcavatorLayout.StickMax)
-            && Mathf.IsEqualApprox(ex.Bucket, ExcavatorLayout.BucketMax),
+        await Hold(PlayerInput.ArmBoomUp, (S.BoomMax - ex.Boom) / S.BoomRate + 1.0);
+        await Hold(PlayerInput.ArmStickOut, (S.StickMax - ex.Stick) / S.StickRate + 1.0);
+        await Hold(PlayerInput.ArmBucketDump, (S.BucketMax - ex.Bucket) / S.BucketRate + 1.0);
+        Expect(Mathf.IsEqualApprox(ex.Boom, S.BoomMax) && Mathf.IsEqualApprox(ex.Stick, S.StickMax)
+            && Mathf.IsEqualApprox(ex.Bucket, S.BucketMax),
             $"boom up, stick out and bucket open reach their stops ({ex.Boom:F2}, {ex.Stick:F2}, {ex.Bucket:F2})");
         await Shot("reaching", me.GlobalPosition + new Vector3(12f, 5f, 12f), me.GlobalPosition + Vector3.Up * 3f);
         float boomBefore = ex.Boom;
         await Hold(PlayerInput.ArmBoomDown, 1.0);
         float lowered = boomBefore - ex.Boom;
-        Expect(Mathf.Abs(lowered - ExcavatorLayout.BoomRate) < ExcavatorLayout.BoomRate * 0.35f,
+        Expect(Mathf.Abs(lowered - S.BoomRate) < S.BoomRate * 0.35f,
             $"a second of boom down lowers it by its rate ({lowered:F2} rad)");
         await Frames(30);
         Expect(Mathf.Abs(boomBefore - lowered - ex.Boom) < 0.01f, "let go, the boom stays where it is");
-        await Hold(PlayerInput.ArmBoomDown, (ex.Boom - ExcavatorLayout.BoomMin) / ExcavatorLayout.BoomRate + 1.0);
-        await Hold(PlayerInput.ArmStickIn, (ex.Stick - ExcavatorLayout.StickMin) / ExcavatorLayout.StickRate + 1.0);
-        await Hold(PlayerInput.ArmBucketCurl, (ex.Bucket - ExcavatorLayout.BucketMin) / ExcavatorLayout.BucketRate + 1.0);
-        Expect(Mathf.IsEqualApprox(ex.Boom, ExcavatorLayout.BoomMin) && Mathf.IsEqualApprox(ex.Stick, ExcavatorLayout.StickMin)
-            && Mathf.IsEqualApprox(ex.Bucket, ExcavatorLayout.BucketMin),
+        await Hold(PlayerInput.ArmBoomDown, (ex.Boom - S.BoomMin) / S.BoomRate + 1.0);
+        await Hold(PlayerInput.ArmStickIn, (ex.Stick - S.StickMin) / S.StickRate + 1.0);
+        await Hold(PlayerInput.ArmBucketCurl, (ex.Bucket - S.BucketMin) / S.BucketRate + 1.0);
+        Expect(Mathf.IsEqualApprox(ex.Boom, S.BoomMin) && Mathf.IsEqualApprox(ex.Stick, S.StickMin)
+            && Mathf.IsEqualApprox(ex.Bucket, S.BucketMin),
             $"and down, in and curled to the other stops ({ex.Boom:F2}, {ex.Stick:F2}, {ex.Bucket:F2})");
 
         // ---- the drawn arm is the ride's ----------------------------------------------------------
@@ -180,18 +187,49 @@ public partial class ExcavatorCheck : Node
             $"the drawn arm is at the ride's angles ({arm?.Drawn})");
 
         // ---- the parked flags ----------------------------------------------------------------------
-        var packed = new Excavator();
+        // ---- a mini's blade: at its rate to its stops, driving as well as digging ------------------
+        if (MiniRun)
+        {
+            // the arm up off the ground first, so the picture shows both
+            await Hold(PlayerInput.ArmBoomUp, 2.5);
+            await Hold(PlayerInput.BladeRaise, (S.BladeMax - ex.Blade) / S.BladeRate + 0.5);
+            Expect(Mathf.IsEqualApprox(ex.Blade, S.BladeMax) && MiniExcavatorLayout.BladeEdge(ex.Blade) > 0.25f,
+                $"Shift / RB raises the blade to its stop, its edge {MiniExcavatorLayout.BladeEdge(ex.Blade):F2} m up");
+            // from ahead of the tracks, where the blade is, a little to one side (yaw 0 faces -Z)
+            var ahead = new Vector3(-Mathf.Sin(ex.TrackYaw), 0, -Mathf.Cos(ex.TrackYaw));
+            await Shot("blade-up", me.GlobalPosition + ahead * 9f + ahead.Cross(Vector3.Up) * 5f + Vector3.Up * 3f, me.GlobalPosition + Vector3.Up * 0.5f);
+            float before = ex.Blade;
+            await Hold(PlayerInput.BladeLower, 0.5);
+            Expect(Mathf.Abs(before - ex.Blade - S.BladeRate * 0.5f) < S.BladeRate * 0.2f, $"half a second of Ctrl / LB lowers it by its rate ({before - ex.Blade:F2} rad)");
+            await Hold(PlayerInput.BladeLower, (ex.Blade - S.BladeMin) / S.BladeRate + 0.5);
+            Expect(Mathf.IsEqualApprox(ex.Blade, S.BladeMin) && MiniExcavatorLayout.BladeEdge(ex.Blade) < 0f,
+                $"and down to the other stop, cutting in ({MiniExcavatorLayout.BladeEdge(ex.Blade):F2} m)");
+            await Frames(3);
+            var drawnArm = ExcavatorMeshBuilder.ArmOf(me.Visual);
+            Expect(drawnArm == null && DisplayServer.GetName() == "headless" || drawnArm != null && Mathf.Abs(drawnArm.DrawnBlade - ex.Blade) < 0.01f,
+                $"the drawn blade is at the ride's angle ({drawnArm?.DrawnBlade})");
+        }
+
+        var packed = new Excavator(MiniRun);
         packed.UnpackFlags(ex.PackFlags());
         float err = Mathf.Max(Mathf.Max(Mathf.Abs(Mathf.AngleDifference(packed.Slew, ex.Slew)), Mathf.Abs(packed.Boom - ex.Boom)),
             Mathf.Max(Mathf.Abs(packed.Stick - ex.Stick), Mathf.Abs(packed.Bucket - ex.Bucket)));
         Expect(err < 0.03f, $"parked flags round-trip the arm (worst {err:F3} rad)");
+        if (MiniRun) Expect(Mathf.Abs(packed.Blade - ex.Blade) < 0.07f, $"and the blade ({packed.Blade:F2} for {ex.Blade:F2})");
 
         // ---- slewed a quarter turn, out of dig mode: it travels along its tracks -------------------
         await Hold(PlayerInput.ArmBoomUp, 1.5);
         float toQuarter = Mathf.Pi * 0.5f - ex.Slew;
-        await Hold(toQuarter > 0 ? PlayerInput.ArmSlewLeft : PlayerInput.ArmSlewRight, Mathf.Abs(toQuarter) / ExcavatorLayout.SlewRate);
+        await Hold(toQuarter > 0 ? PlayerInput.ArmSlewLeft : PlayerInput.ArmSlewRight, Mathf.Abs(toQuarter) / S.SlewRate);
         await Tap(PlayerInput.DigMode);
         Expect(!ex.Digging, "C / pad B back to driving");
+        if (MiniRun)
+        {
+            // driving, the blade still works: a mini pushes soil with it
+            float down = ex.Blade;
+            await Hold(PlayerInput.BladeRaise, 0.5);
+            Expect(ex.Blade > down + 0.1f, $"driving, the blade still rises ({down:F2} to {ex.Blade:F2})");
+        }
         start = me.GlobalPosition;
         var nose = -me.GlobalTransform.Basis.Z with { Y = 0 };
         me.RideControls = () => new RideInput(1f, 0f, 0f, false);
@@ -212,7 +250,7 @@ public partial class ExcavatorCheck : Node
     private void Finish()
     {
         GD.Print(_failures == 0
-            ? "[excavator] RESULT: ok — tracks, turns on the spot, digs on the real bindings"
+            ? $"[excavator] RESULT: ok — {(MiniRun ? "mini: " : "")}tracks, turns on the spot, digs on the real bindings"
             : $"[excavator] RESULT: FAILED {_failures} check(s)");
         GetTree().Quit(_failures == 0 ? 0 : 1);
     }

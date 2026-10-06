@@ -266,6 +266,34 @@ public static class SiteSfx
         return Finish(s);
     }
 
+    // ----- a roller's vibrating drums ---------------------------------------------------------
+
+    /// <summary>
+    /// A tandem roller's drums vibrating (#614), <paramref name="n"/> samples for a loop: the
+    /// eccentric weights' 55 Hz thump with its harmonics, two weights a hair apart beating slowly
+    /// against each other, and the frame's steel rattling at every stroke. Unnormalised: the loop
+    /// that bakes it normalises.
+    /// </summary>
+    public static float[] RollerDrum(Random rng, int n)
+    {
+        var rattle = BandPass(Noise(rng, n), Coef(1400f), Coef(250f));
+        const float f0 = 55f;
+        var s = new float[n];
+        float pa = 0f, pb = 0f;
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            pa += f0 / Rate;
+            pb += f0 * 1.008f / Rate;
+            float a = Mathf.Sin(Mathf.Tau * pa) + 0.6f * Mathf.Sin(Mathf.Tau * pa * 2f) + 0.35f * Mathf.Sin(Mathf.Tau * pa * 3f);
+            float b = Mathf.Sin(Mathf.Tau * pb) + 0.6f * Mathf.Sin(Mathf.Tau * pb * 2f);
+            // each stroke shakes the frame: the rattle comes in bursts at the drum's rate
+            float stroke = Mathf.Pow(0.5f + 0.5f * Mathf.Sin(Mathf.Tau * pa), 4f);
+            s[i] = (a + b) * 0.5f + rattle[i] * 5f * stroke + 0.05f * Mathf.Sin(Mathf.Tau * 0.9f * t) * a;
+        }
+        return s;
+    }
+
     // ----- helpers --------------------------------------------------------------------------
     // Dsp's own are the same few lines, but Dsp names Godot's AudioStreamWav, which the unit
     // tests do not link; these keep this file Godot-engine-free.

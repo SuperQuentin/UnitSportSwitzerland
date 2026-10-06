@@ -270,6 +270,11 @@ same view 25 s apart (the hook down on the bricks), and at 22:30 (the lamps lit)
 - The hook's load is drawn whenever the pose says loaded: nothing is taken from the materials.
 - Operating a crane is #618.
 
+A site's pallets of bricks and cement (#615) are pallets a machine with tines lifts, not part of
+the dressing's mesh: `vehicles/pallets`, the building-site part.
+
 The sound of a site (#617): hammering, a vibrator, a grinder, a beeper, a radio and a crane motor, in the crane's working hours: `audio/site-sounds`.
 
 The machines on a site (#616): its excavator and wheel loader stand as dormant vehicles and wake when aimed at. The crew's van stands as a car. The rest wait for #613 and #614: `vehicles/dormant-vehicles` (the fourth provider), `tools/sitemachinenetcheck.sh`.
+
+In the model viewer (`--models`): `Construction/SiteShowcase`, "Terrain / Building site", one hand-made site per phase (foundations, shell, a topped-out house and block), planned, shelled, dressed and craned by the game's own builders on flat ground, the cranes slewing by the clocks.
