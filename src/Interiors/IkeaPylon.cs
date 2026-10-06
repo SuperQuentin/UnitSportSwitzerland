@@ -54,13 +54,20 @@ public partial class IkeaPylon : Node
             AlbedoColor = BuildingMeshBuilder.IkeaBlue,
         };
         _grey = new StandardMaterial3D { AlbedoColor = new Color(0.55f, 0.56f, 0.58f) };
-        if (_chunks != null) _chunks.TileFurnished += OnFurnished;
+        if (_chunks == null) return;
+        _chunks.TileFurnished += OnFurnished;
+        _chunks.TileUnfurnished += OnUnfurnished;
     }
 
     public override void _ExitTree()
     {
-        if (_chunks != null) _chunks.TileFurnished -= OnFurnished;
+        if (_chunks == null) return;
+        _chunks.TileFurnished -= OnFurnished;
+        _chunks.TileUnfurnished -= OnUnfurnished;
     }
+
+    /// <summary>The tile shed its buildings (#553): the pylon stands with its store.</summary>
+    private static void OnUnfurnished(TileId id, ChunkNode node) => node.GetNodeOrNull(NodeName)?.QueueFree();
 
     private void OnFurnished(TileId id, ChunkNode node, DoorSpot[] doors)
     {

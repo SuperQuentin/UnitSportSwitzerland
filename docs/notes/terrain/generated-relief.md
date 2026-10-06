@@ -49,5 +49,18 @@
   "largest step per metre" line — generated 1.43, the old one's was below that only because it
   had no rivers crossing floors. Map renders of the network are easiest from a scratch console
   project compiling `src/Terrain/ProceduralWorld*.cs` with the resource embedded.
+- **Towns** (#559, `ProceduralWorld.Towns.cs`): village slots with `HalfLength > 381` (top 15%) are
+  towns when the ground allows it (9 slots in the anchor's world, 6 host the layout). The valley
+  road is a main street built tight +-150 m round the centre (gaps 2-7 m, half apartments, half
+  shops), and a **cross road** (`Road`, 6 m, a priority road) runs straight through it: uphill 110-360
+  m with houses both sides (it replaces the first side street), downhill to the first channel, over
+  it on a **`RoadFlags.Bridge` segment** (bank + 6 m each side, level deck 0.5 m over the higher bank;
+  the street running up to either end ramps to the deck over 30 m, never the deck down to the
+  ground), then 45 m to a `Minor` street along the other bank with houses. The channel is carved
+  under it because `Keep` only reacts to the valley lines, not village streets. No river within
+  300 m, a dry channel, a span over 90 m, a lake or steep ground: stays a village. Every street keeps
+  its `gen-village-<id>-<k>` key. Houses keep 10 m (8 m) off a street's axis and off each other, trees
+  stay 7 m off a town's streets' edge. Harness: `GeneratedRoadsSpike --towns` (+ `--reach`) writes a
+  plan-view SVG per town; 90 of 90 tiles byte-identical, 1-3 lights a town.
 - **Open**: lakes cut the road network (no shore roads; the Rhône road ends at Lake Geneva), roads
   never cross watersheds (no passes), and villages are named "Village <id>".

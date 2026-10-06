@@ -69,7 +69,7 @@ public sealed class Facades(Func<TileId, BuildingTile?> source)
         return bits;
     }
 
-    private static BuildingTile? Read(string chunkDir, TileId id)
+    public static BuildingTile? Read(string chunkDir, TileId id)
     {
         string path = Path.Combine(chunkDir, BuildingFormat.FileName(id));
         if (!File.Exists(path)) return null;
