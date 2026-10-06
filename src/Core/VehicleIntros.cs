@@ -179,7 +179,7 @@ public static class VehicleIntros
             new("Drive with {throttle}, brake and reverse with {brake}", Throttle),
             new("Steer with {move_left} {move_right}: it bends in the middle", Steer, Pad: "Steer with {move_forward}: it bends in the middle"),
             new("Work mode on / off: {dig_mode} (it still drives)", new[] { "dig_mode" }),
-            new("Work: lift and tilt the bucket with " + Arrows, RightArm, Pad: "Work: lift and tilt the bucket with {arm_boom_up}"),
+            new("Work: lift and tilt with " + Arrows, RightArm, Pad: "Work: lift and tilt with {arm_boom_up}"),
         }, "With forks: run them in under a pallet and lift · {interact_mount} gets out"),
 
         new(VehicleIntroKind.CompactRoller, "Compact roller", new IntroRow[]
