@@ -11,7 +11,7 @@ macOS and Linux.
 | **Godot, .NET edition** | **4.7.1** exactly | the editor and the game. It must be the *.NET / mono* build, and match `Godot.NET.Sdk/4.7.1` in `UnitSportSwitzerland.csproj` |
 | **.NET SDK 8** | 8.0.x | the game assembly (`net8.0`) |
 | **.NET SDK 9** | 9.0.x | `tools/TerrainPreprocessor` (`net9.0`). The 9 SDK builds the net8 projects too, so strictly it is the only SDK you need |
-| Python | 3.10+ | *optional*: `tools/swiss_data.py`, the data downloader (standard library only) |
+| Python | 3.10+ | *optional*, and no longer needed to build a region (#564): `tools/swiss_data.py` stays as a standalone downloader, and `tools/swiss_relief.py` rebuilds the embedded coarse heightmap |
 | GDAL (Python bindings) | any recent | *optional*, and no longer part of building a region (#537): only `tools/swiss_relief.py` uses it, to rebuild the embedded coarse heightmap |
 
 A .NET **runtime** is not enough: `dotnet --list-sdks` must list both an 8.x and a 9.x SDK.

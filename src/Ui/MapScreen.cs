@@ -402,9 +402,6 @@ public partial class MapScreen : Screen
         {
             Paths = _paths, Country = _country, Local = _local, Selection = _selection, Layers = _layers,
             Stats = _stats, State = _state,
-            // No Python in the game: the downloads are C# and the build is in-process (#515), and
-            // the FileGDB formats are read directly (#537).
-            Python = null,
         });
 
         long download = steps.Where(s => s.Skip == null).Sum(s => s.DownloadBytes);
@@ -484,13 +481,13 @@ public partial class MapScreen : Screen
 
     /// <summary>
     /// What the machine can and cannot do, named plainly. Downloading and building need nothing
-    /// installed (#515 phases 1 and 2 removed Python and the .NET SDK); buildings and cycle routes
+    /// installed: #515 removed Python and the .NET SDK, #537 removed GDAL, and #564 the last
     /// are read from Esri FileGDB, which still needs GDAL until that reader is ported to C#.
     /// </summary>
     private void BuildRequirements(Container into)
     {
         into.AddChild(UiKit.Section("Requirements"));
-        Requirement(into, true, "Downloading", "Built in — nothing to install.");
+        Requirement(into, true, "Downloading", "Built in — every dataset, straight from swisstopo.");
         Requirement(into, true, "Building tiles", "Built in — the preprocessor runs inside the game.");
         Requirement(into, true, "Buildings and cycle routes",
             "Built in — the Esri FileGDB these come as is read directly, with no GDAL.");

@@ -502,8 +502,101 @@ public static class SwissDownload
     // item id.
     // ---------------------------------------------------------------------------
 
+    /// <summary>
+    /// swissBUILDINGS3D (<c>ch.swisstopo.swissbuildings3d_3_0</c>): the building solids, published
+    /// as one <c>.gdb.zip</c> per map sheet. Three things decide what to fetch, and all three are
+    /// in the data rather than in the query. The collection mixes per-sheet items with a single
+    /// nationwide asset, told apart by how much of the country the item spans. Sheets are then kept
+    /// only if they really touch the wanted tiles, tested on the item's LV95 footprint rather than
+    /// its lon/lat bbox. And swisstopo re-flies sheets, keeping every past flight as its own item,
+    /// so only the newest year of each sheet is taken. Port of <c>resolve_swissbuildings3d</c>.
+    /// </summary>
+    public static async Task<DownloadResult> BuildingsAsync(string outDir, IReadOnlyCollection<TileId> tiles,
+        IStepProgress progress, CancellationToken ct, int jobs = 8, bool nationwide = false)
+    {
+        if (tiles.Count == 0 && !nationwide) return new DownloadResult(0, 0, 0, 0, null);
+
+        progress.Show("resolving swissbuildings3d assets...");
+        var bbox = tiles.Count > 0 ? SwissStacUtil.TilesBboxWgs84(tiles) : ((double, double, double, double)?)null;
+        var items = await ListStacItemsAsync("ch.swisstopo.swissbuildings3d_3_0", bbox, ct);
+        if (items.Count == 0) return new DownloadResult(0, 0, 0, 0, null);
+
+        List<StacItem> wanted;
+        if (nationwide)
+        {
+            // the one asset that covers the country: the widest-spanning item there is
+            wanted = [items.MaxBy(i => SwissStacUtil.BboxSpan(i.Bbox))!];
+        }
+        else
+        {
+            wanted = items.Where(i => SwissStacUtil.BboxSpan(i.Bbox) < NationwideSpanDegrees)
+                .Where(i => SwissStacUtil.ItemTouchesTiles(
+                    SwissStacUtil.ItemLv95Bounds(i.Footprint, i.Bbox), tiles))
+                .ToList();
+        }
+
+        var latestBySheet = new Dictionary<string, (string Year, StacItem Item)>(StringComparer.Ordinal);
+        foreach (var item in wanted)
+        {
+            var (year, key) = SwissStacUtil.BuildingsItemKey(item.Id);
+            if (!latestBySheet.TryGetValue(key, out var current)
+                || string.CompareOrdinal(year, current.Year) > 0)
+                latestBySheet[key] = (year, item);
+        }
+
+        var candidates = new List<(string Url, string Filename, string? Sha256)>();
+        foreach (var (_, item) in latestBySheet.Values)
+            foreach (var asset in item.Assets)
+                if (asset.Key.EndsWith(".gdb.zip", StringComparison.OrdinalIgnoreCase))
+                    candidates.Add((asset.Href, asset.Key, asset.Sha256));
+
+        progress.Show($"{latestBySheet.Count} building sheet(s) to consider");
+        return await RunAsync(outDir, candidates, progress, ct, jobs);
+    }
+
+    /// <summary>
+    /// How wide an item's bbox has to be, in degrees, before it is the nationwide asset rather than
+    /// a map sheet. A sheet is a few hundredths of a degree; the country is several.
+    /// </summary>
+    private const double NationwideSpanDegrees = 0.5;
+
+    /// <summary>
+    /// The OpenStreetMap extract for the optional OSM overlay (ODbL,
+    /// <c>docs/notes/tools/osm-odbl-licence.md</c>). Not STAC at all: Geofabrik publishes an index
+    /// page, and the newest dated <c>switzerland-YYMMDD.osm.pbf</c> on it is taken in preference to
+    /// <c>switzerland-latest.osm.pbf</c>, which has been seen answering with a redirect to itself.
+    /// Port of <c>resolve_osm</c>.
+    /// </summary>
+    public static async Task<DownloadResult> OsmAsync(string outDir, IStepProgress progress,
+        CancellationToken ct, int jobs = 2)
+    {
+        const string index = "https://download.geofabrik.de/europe/";
+        progress.Show("resolving the OpenStreetMap extract...");
+
+        string name = "switzerland-latest.osm.pbf";
+        try
+        {
+            string html = await Stac.Http.GetStringAsync(index, ct);
+            if (SwissStacUtil.NewestOsmExtract(html) is { } dated) name = dated;
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            // the index is a convenience, not the download: fall back to -latest and say so
+            progress.Show($"could not list {index} ({e.Message}); falling back to {name}");
+        }
+
+        return await RunAsync(outDir, [(index + name, name, null)], progress, ct, jobs);
+    }
+
     private sealed record StacAsset(string Key, string Href, string? Sha256);
-    private sealed record StacItem(string Id, string Datetime, List<StacAsset> Assets);
+    /// <summary>
+    /// One STAC item. <see cref="Bbox"/> (WGS84 west, south, east, north) and <see cref="Footprint"/>
+    /// (the geometry ring's lon/lat points) are carried because swissBUILDINGS3D needs them: its
+    /// collection mixes per-sheet items with one nationwide asset, and telling them apart and
+    /// deciding which sheets a selection touches is done from the item's own extent.
+    /// </summary>
+    private sealed record StacItem(string Id, string Datetime, List<StacAsset> Assets,
+        (double W, double S, double E, double N)? Bbox, List<(double Lon, double Lat)>? Footprint);
 
     private static async Task<List<StacItem>> ListStacItemsAsync(string collection,
         (double W, double S, double E, double N)? bbox, CancellationToken ct)
@@ -559,7 +652,31 @@ public static class SwissDownload
                     ? cm.GetString() : null;
                 assets.Add(new StacAsset(prop.Name, href, SwissStacUtil.Sha256OfAsset(multihash)));
             }
-        return new StacItem(id, dt, assets);
+        (double, double, double, double)? bbox = null;
+        if (f.TryGetProperty("bbox", out var bb) && bb.ValueKind == JsonValueKind.Array && bb.GetArrayLength() >= 4)
+        {
+            var v = bb.EnumerateArray().Select(x => x.GetDouble()).ToArray();
+            bbox = (v[0], v[1], v[2], v[3]);
+        }
+
+        // The footprint ring, when the item has one. Its WGS84 bbox would do as a rough extent, but
+        // a lon/lat box drawn round a sheet cut on the LV95 grid is tens of metres too big on every
+        // side — enough to count the neighbouring sheets as touching.
+        List<(double, double)>? ring = null;
+        if (f.TryGetProperty("geometry", out var g) && g.ValueKind == JsonValueKind.Object
+            && g.TryGetProperty("coordinates", out var co) && co.ValueKind == JsonValueKind.Array
+            && co.GetArrayLength() > 0)
+        {
+            var outer = co[0];
+            if (outer.ValueKind == JsonValueKind.Array && outer.GetArrayLength() >= 3)
+            {
+                ring = new List<(double, double)>(outer.GetArrayLength());
+                foreach (var point in outer.EnumerateArray())
+                    if (point.ValueKind == JsonValueKind.Array && point.GetArrayLength() >= 2)
+                        ring.Add((point[0].GetDouble(), point[1].GetDouble()));
+            }
+        }
+        return new StacItem(id, dt, assets, bbox, ring);
     }
 
     private static async Task<string> GetStringWithRetryAsync(string url, CancellationToken ct, int attempts = 4)
