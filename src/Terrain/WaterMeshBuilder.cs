@@ -35,7 +35,8 @@ public static class WaterMeshBuilder
 
     /// <summary>
     /// The water surface of a tile from its still water layer (#299), plus the mapped
-    /// watercourses. A quad wherever all four corners of a lattice square are wet, its vertices on
+    /// watercourses. A quad wherever all four corners of a lattice square are wet, and the
+    /// triangle over the wet three where only one is dry (a diagonal shore, #572), its vertices on
     /// the layer's samples (so a vertex and <see cref="ChunkManager.TryGetWaterLevel"/> agree
     /// exactly) at the still level, with the wave scale in UV.x for the shader's displacement.
     /// LOD: every 2 m sample where the terrain is drawn at stride 1 or 2 (the rings round the
@@ -73,20 +74,36 @@ public static class WaterMeshBuilder
                 return lookup[key];
             }
 
+            void Triangle(int a, int b, int d)
+            {
+                indices.Add(a); indices.Add(b); indices.Add(d);
+            }
+
             for (int r = 0; r + step < m; r += step)
                 for (int c = 0; c + step < m; c += step)
                 {
-                    // all four corners must be water, so the surface stops at the bank
-                    if (!layer.IsWet(c, r) || !layer.IsWet(c + step, r) || !layer.IsWet(c, r + step) || !layer.IsWet(c + step, r + step))
+                    // only wet corners carry a vertex, so the surface stops at the bank
+                    bool w00 = layer.IsWet(c, r), w10 = layer.IsWet(c + step, r);
+                    bool w01 = layer.IsWet(c, r + step), w11 = layer.IsWet(c + step, r + step);
+                    int wet = (w00 ? 1 : 0) + (w10 ? 1 : 0) + (w01 ? 1 : 0) + (w11 ? 1 : 0);
+                    if (wet < 3) continue;
+
+                    if (wet == 4)
+                    {
+                        int v00 = VertexAt(c, r), v10 = VertexAt(c + step, r);
+                        int v01 = VertexAt(c, r + step), v11 = VertexAt(c + step, r + step);
+                        Triangle(v00, v10, v01);
+                        Triangle(v10, v11, v01);
                         continue;
+                    }
 
-                    int v00 = VertexAt(c, r);
-                    int v10 = VertexAt(c + step, r);
-                    int v01 = VertexAt(c, r + step);
-                    int v11 = VertexAt(c + step, r + step);
-
-                    indices.Add(v00); indices.Add(v10); indices.Add(v01);
-                    indices.Add(v10); indices.Add(v11); indices.Add(v01);
+                    // three wet corners: the triangle over them, so a shore running across the
+                    // lattice is a straight diagonal instead of a staircase of whole squares
+                    // (#572); wound as the quad's two triangles are
+                    if (!w00) Triangle(VertexAt(c + step, r), VertexAt(c + step, r + step), VertexAt(c, r + step));
+                    else if (!w11) Triangle(VertexAt(c, r), VertexAt(c + step, r), VertexAt(c, r + step));
+                    else if (!w10) Triangle(VertexAt(c, r), VertexAt(c + step, r + step), VertexAt(c, r + step));
+                    else Triangle(VertexAt(c, r), VertexAt(c + step, r), VertexAt(c + step, r + step));
                 }
         }
 
