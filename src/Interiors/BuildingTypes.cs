@@ -13,6 +13,8 @@ public enum BuildingType : byte
     Warehouse = 3, Factory = 4, Depot = 5, Mechanic = 6, Dealership = 7,
     /// <summary>One of the nine IKEA stores, recognised by position (#501, <see cref="Landmarks"/>).</summary>
     Ikea = 8,
+    // #557: a block of flats, and a city block with shops under its flats
+    Apartments = 9, MixedUse = 10,
 }
 
 /// <summary>The role one solid plays in its group.</summary>

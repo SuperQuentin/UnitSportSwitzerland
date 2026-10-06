@@ -803,6 +803,19 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _pivotY = float.NaN;
     }
 
+    /// <summary>
+    /// An elevator ride (#557): the same spot in the cabin, <paramref name="rise"/> metres up or down,
+    /// at rest. Not a teleport to new ground: the cabin's floor is right there.
+    /// </summary>
+    public void RideLift(float rise)
+    {
+        GlobalPosition += Vector3.Up * rise;
+        Velocity = Vector3.Zero;
+        _fallSpeed = 0f;
+        RememberSafe(GlobalPosition);
+        _pivotY = float.NaN;
+    }
+
     /// <summary>Back outside; null <paramref name="at"/> just drops the state (a teleport is moving us anyway).</summary>
     public void LeaveInterior(Vector3? at, float yaw)
     {
@@ -2472,6 +2485,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             if (_ride == null && !_mantling && _deadTimer <= 0 && TryVehicleAt()) return true;
             var interiors = Interiors.InteriorManager.Instance;
+            // an elevator's call button or cabin, a flat's front door (#557)
+            if (_ride == null && interiors?.TryInside(this) == true) return true;
             if (Interiors.ChurchRadios.TryOpen(this)) return true;
             if (interiors?.AtExit(this) != true && Loot.LootService.Instance?.TrySearch(this) == true) return true;
             // the chess type beat in here: E dances to it, as outdoors (#370)

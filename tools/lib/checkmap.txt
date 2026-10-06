@@ -54,6 +54,7 @@ src/Interiors/           quick  --shopcheck
 src/Interiors/           quick  --sitecheck --systems ui
 src/Loot/LootTables      quick  --sitecheck --systems ui
 src/Interiors/           quick  --doorcheck
+src/Interiors/           quick  --flatcheck
 src/Interiors/Church     quick  --churchstagecheck
 src/Interiors/Landmarks  quick  --ikeacheck --systems ui
 src/Interiors/Ikea       quick  --ikeacheck --systems ui
@@ -200,6 +201,11 @@ src/Terrain/Water        net    tools/watercheck.sh
 src/Loot/Shop            net    tools/shopcheck.sh
 src/Items/Bank           net    tools/shopcheck.sh
 src/Interiors/BankSigns  net    tools/shopcheck.sh
+src/Interiors/InteriorManager.Lifts net tools/liftsynccheck.sh
+src/Interiors/InteriorManager.InnerDoors net tools/liftsynccheck.sh
+src/Interiors/InteriorNode.Inside net tools/liftsynccheck.sh
+src/Interiors/LiftSyncProbe net tools/liftsynccheck.sh
+src/Interiors/FloorPicker net tools/liftsynccheck.sh
 src/Terrain/ProceduralWorld.Settlements  net  tools/shopcheck.sh
 src/Player/FootPlayer.Sw net    tools/swimnetcheck.sh
 src/Player/SwimNet       net    tools/swimnetcheck.sh
