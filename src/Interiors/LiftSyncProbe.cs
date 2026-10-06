@@ -53,7 +53,11 @@ public partial class LiftSyncProbe : ChatProbe
                 if (found != null) { (e, n) = (pe, pn); break; }
             }
             if (found is not { } f || plan == null) { Fail("no block with an elevator and a locked top-floor flat"); return; }
-            Say($"at {f.Key} {e.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)} {n.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)}");
+            // said until B answers: B may still be joining, and chat is not replayed to a late joiner
+            string where = $"at {f.Key} {e.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)} {n.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)}";
+            bool got = false;
+            for (int tries = 0; tries < 120 && !got; tries++) { Say(where); got = await Heard("B", "got", 3); }
+            if (!got) { Fail("B never heard which block"); return; }
         }
         else
         {
@@ -62,6 +66,7 @@ public partial class LiftSyncProbe : ChatProbe
             int i = Array.IndexOf(words, "at");
             string key = words[i + 1];
             (e, n) = (double.Parse(words[i + 2], System.Globalization.CultureInfo.InvariantCulture), double.Parse(words[i + 3], System.Globalization.CultureInfo.InvariantCulture));
+            Say("got");
             (found, plan) = await BlockNear(me, interiors, e, n, key);
             if (found == null || plan == null) { Fail($"could not find A's block {key}"); return; }
         }
