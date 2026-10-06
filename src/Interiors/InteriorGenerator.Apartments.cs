@@ -420,9 +420,19 @@ public static partial class InteriorGenerator
         if (depth < 2.0f || len < 1.2f) return;
         // a flat's size wanders a little round the block's own
         float target = a.Target * (0.8f + 0.4f * (float)rng.NextDouble());
-        int want = Math.Clamp((int)MathF.Round(len * depth / target), 1, Math.Max(1, (int)(len / MinFlatSide)));
+        // a deep region whose only facade is across from its way: each flat needs a living room
+        // and a bedroom side by side on that facade (#571), so they are cut no narrower
+        bool farFacade = reg.Side switch
+        {
+            Side.Left => R.X1 >= a.Hw - 0.02f,
+            Side.Right => R.X0 <= -a.Hw + 0.02f,
+            Side.Front => R.Z1 >= a.Hd - 0.02f,
+            _ => R.Z0 <= -a.Hd + 0.02f,
+        };
+        float least = farFacade && depth >= 9f ? StripMin(RoomType.Living) + StripMin(RoomType.Bedroom) + 0.4f : MinFlatSide;
+        int want = Math.Clamp((int)MathF.Round(len * depth / target), 1, Math.Max(1, (int)(len / least)));
         List<float>? cuts = null;
-        for (int n = want; n >= 1 && cuts == null; n--) cuts = Cuts(reg.Ways, lo, hi, n);
+        for (int n = want; n >= 1 && cuts == null; n--) cuts = Cuts(reg.Ways, lo, hi, n, least);
         if (cuts == null) return; // no way in at all: leave it solid
 
         for (int k = 0; k + 1 < cuts.Count; k++)
@@ -449,12 +459,12 @@ public static partial class InteriorGenerator
     /// each keeps <see cref="WayMin"/> of some way and <see cref="MinFlatSide"/> of length; null if
     /// it cannot be done. Even cuts first, then, for two, the nearest cut that works.
     /// </summary>
-    private static List<float>? Cuts(List<Way> ways, float lo, float hi, int n)
+    private static List<float>? Cuts(List<Way> ways, float lo, float hi, int n, float least = MinFlatSide)
     {
         bool Ok(List<float> c)
         {
             for (int k = 0; k + 1 < c.Count; k++)
-                if (c[k + 1] - c[k] < MinFlatSide - 0.01f && n > 1 || !ways.Any(w => Overlap(w, c[k], c[k + 1]) >= WayMin))
+                if (c[k + 1] - c[k] < least - 0.01f && n > 1 || !ways.Any(w => Overlap(w, c[k], c[k + 1]) >= WayMin))
                     return false;
             return true;
         }
@@ -462,7 +472,7 @@ public static partial class InteriorGenerator
         if (Ok(even)) return even;
         if (n != 2) return null;
         float mid = (lo + hi) / 2;
-        for (float d = 0.25f; d < (hi - lo) / 2; d += 0.25f)
+        for (float d = 0.25f; d < (hi - lo) / 2 - least + MinFlatSide; d += 0.25f)
             foreach (float s in new[] { -1f, 1f })
             {
                 var c = new List<float> { lo, mid + s * d, hi };
@@ -550,26 +560,127 @@ public static partial class InteriorGenerator
     private static List<Local> FlatRooms(float u, float v, float door, (bool U0, bool U1, bool Far) ext, Random rng)
     {
         var program = FlatProgram(u * v, rng);
+        // no more bedrooms than its facades can give a window each, beside the living room's (#571):
+        // a deep flat lit only at its far end is a big flat with few rooms and a dark middle
+        float facade = (ext.U0 ? v : 0) + (ext.U1 ? v : 0) + (ext.Far ? u : 0);
+        int beds = Math.Max(1, (int)((facade - 3.5f) / 2.8f));
+        while (program.Count(p => p.Type == RoomType.Bedroom) > beds)
+            program.Remove(program.Last(p => p.Type == RoomType.Bedroom));
+        if (u * v < 38f) return Daylight(StudioFlat(u, v, door), u, v, ext);
+
+        // every layout the shape allows, the house's usual one first; the one that leaves fewest
+        // living rooms and bedrooms dark wins (#571), ties to the earlier
+        var candidates = new List<(List<Local> Rooms, float Penalty)>();
+        void Try(List<Local>? rooms, float penalty)
+        {
+            if (rooms != null) candidates.Add((rooms, penalty));
+        }
+        if (u >= 4.4f)
+        {
+            // as wide as it is deep: a hall across the middle, wet rooms between it and the landing
+            if (v >= 6.4f && u >= 6.0f && u >= 0.7f * v) Try(TFlat(u, v, door, ext, program), 0);
+            // deeper than it is wide: a hall straight in, rooms either side, living room at the far end
+            Try(SpineFlat(u, v, door, ext, program), 0.5f);
+            // shallow, or with its facades at the two ends of its door wall: a hall along the door wall
+            if (v >= 3.6f) Try(GalleryFlat(u, v, door, ext, program), v < 6.5f || !ext.Far ? 0.2f : 1f);
+        }
+        // a chain of rooms walked through, and one room for everything, only when nothing else fits
+        Try(LinearFlat(u, v, program), u < 4.4f ? 0 : 8);
+        Try(StudioFlat(u, v, door), u * v < 50 ? 4 : 25);
+        var best = candidates.MinBy(c => Score(c.Rooms, u, v, ext, program.Count) + c.Penalty);
+        return Daylight(best.Rooms, u, v, ext);
+    }
+
+    /// <summary>
+    /// How much is wrong with a layout: no bed, kitchen or bathroom; a living room or a bedroom
+    /// with no facade to put a window in (#571); rooms of the program it had to leave out.
+    /// </summary>
+    private static float Score(List<Local> rooms, float u, float v, (bool U0, bool U1, bool Far) ext, int wanted)
+    {
+        float score = 0;
+        if (!rooms.Any(r => r.Type == RoomType.Bedroom) || !rooms.Any(r => r.Type == RoomType.Kitchen)
+            || !rooms.Any(r => r.Type == RoomType.Bathroom)) score += 1000;
+        foreach (var r in rooms)
+        {
+            if (Lit(r, u, v, ext)) continue;
+            if (r.Type == RoomType.Living) score += 30;
+            else if (r.Type == RoomType.Bedroom) score += 12;
+        }
+        score += 3 * Math.Max(0, wanted - (rooms.Count - rooms.Count(r => r.Type == RoomType.Hall)));
+        // and rooms shaped like rooms: nothing much longer than it is wide, nothing a bowling lane
+        foreach (var r in rooms)
+        {
+            if (r.Type == RoomType.Hall) continue;
+            float a = r.U1 - r.U0, b = r.V1 - r.V0, aspect = Math.Max(a, b) / Math.Max(0.1f, Math.Min(a, b));
+            if (aspect > 2.6f) score += (aspect - 2.6f) * 4;
+            if (Math.Max(a, b) > 8f && r.Type != RoomType.Living) score += (Math.Max(a, b) - 8f) * 2;
+        }
+        return score;
+    }
+
+    /// <summary>A window fits in a wall this long (<see cref="AddWindows"/>: 1.1 m and 0.4 m either side).</summary>
+    private const float WindowWall = 1.9f;
+
+    /// <summary>
+    /// Whether a room of a flat has a facade long enough for a window: its u = 0 or u = u end, or
+    /// the far wall, whichever of those are the building's outside (the door wall never is).
+    /// </summary>
+    private static bool Lit(Local r, float u, float v, (bool U0, bool U1, bool Far) ext) =>
+        ext.U0 && r.U0 <= 0.01f && r.V1 - r.V0 >= WindowWall
+        || ext.U1 && r.U1 >= u - 0.01f && r.V1 - r.V0 >= WindowWall
+        || ext.Far && r.V1 >= v - 0.01f && r.U1 - r.U0 >= WindowWall;
+
+    /// <summary>
+    /// The last say on daylight (#571): a living room or a bedroom left with no facade trades
+    /// places with a room that can do without one (bathroom, WC, box room, kitchen, study) and is
+    /// on a facade, where each fits the other's place; a spare bedroom nothing will trade with is
+    /// a box room. A kitchen, a bathroom or a WC keeps a window only if it happens to have one.
+    /// </summary>
+    private static List<Local> Daylight(List<Local> rooms, float u, float v, (bool U0, bool U1, bool Far) ext)
+    {
+        var list = new List<Local>(rooms);
+        static float Least(Local r) => Math.Min(r.U1 - r.U0, r.V1 - r.V0);
+        foreach (var need in new[] { RoomType.Living, RoomType.Bedroom })
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i].Type != need || Lit(list[i], u, v, ext)) continue;
+                int swap = -1;
+                float bestArea = 0;
+                for (int j = 0; j < list.Count; j++)
+                {
+                    var c = list[j];
+                    if (c.Type is not (RoomType.Bathroom or RoomType.WC or RoomType.Storage or RoomType.Kitchen or RoomType.Study)
+                        || !Lit(c, u, v, ext)) continue;
+                    if (Least(c) < StripMin(need) || Least(list[i]) < StripMin(c.Type)) continue;
+                    float area = (c.U1 - c.U0) * (c.V1 - c.V0);
+                    if (area > bestArea) { bestArea = area; swap = j; }
+                }
+                if (swap >= 0)
+                {
+                    var t = list[swap].Type;
+                    list[swap] = list[swap] with { Type = need };
+                    list[i] = list[i] with { Type = t };
+                }
+                else if (need == RoomType.Bedroom && list.Count(r => r.Type == RoomType.Bedroom) > 1)
+                    list[i] = list[i] with { Type = RoomType.Storage };
+            }
+        return list;
+    }
+
+    /// <summary>
+    /// A hall straight in from the front door, rooms stacked either side of it, the living room
+    /// and the kitchen across the far facade (a bedroom too if it is wide). Null if the program
+    /// does not fit.
+    /// </summary>
+    private static List<Local>? SpineFlat(float u, float v, float door, (bool U0, bool U1, bool Far) ext, List<FlatItem> program)
+    {
         var dropped = new List<FlatItem>();
         var rooms = new List<Local>();
-
-        // narrow and deep: a chain of rooms away from the door. Shallow and wide, or with its
-        // facades at the ends of the door wall rather than across from it (a flat between two
-        // stairwells, its far wall the next flat's): a hall along the door wall, the rooms behind
-        // it, the living room and a bedroom at the two facades.
-        if (u * v < 38f) return StudioFlat(u, v, door);
-        if (u < 4.4f) return LinearFlat(u, v, program);
-        // as wide as it is deep: a hall across the middle, wet rooms between it and the landing,
-        // the rooms people live in on the facade side
-        if (v >= 6.4f && u >= 6.0f && u >= 0.7f * v && TFlat(u, v, door, ext, program) is { } t) return t;
-        if (v >= 3.6f && (v < 6.5f || !ext.Far && (ext.U0 || ext.U1) && v <= 9.5f))
-            return GalleryFlat(u, v, door, ext, program) ?? StudioFlat(u, v, door);
-
         float h0 = Fit(door - HallWidth / 2, 0, u - HallWidth), h1 = h0 + HallWidth;
         if (h0 > 0 && h0 < 2.3f) h0 = 0;
         if (u - h1 > 0 && u - h1 < 2.3f) h1 = u;
         bool sides = h0 > 0 || h1 < u;
-        if (!sides) return LinearFlat(u, v, program);
+        if (!sides) return null;
 
         // the far facade: living room across the hall's end, the kitchen beside it, a bedroom if wide
         bool far = v >= 7.0f;
@@ -580,9 +691,19 @@ public static partial class InteriorGenerator
         if (far)
         {
             farItems.Add(program.First(p => p.Type == RoomType.Living));
-            if (u >= 6.8f) farItems.Add(program.First(p => p.Type == RoomType.Kitchen));
-            if (u >= 11f && program.Count(p => p.Type == RoomType.Bedroom) >= 2)
-                farItems.Add(program.Last(p => p.Type == RoomType.Bedroom));
+            if (!ext.U0 && !ext.U1)
+            {
+                // the far wall is its only facade: the bedrooms share it with the living room,
+                // as many as fit, and the kitchen does without a window (#571)
+                int beds = (int)((u - StripMin(RoomType.Living)) / StripMin(RoomType.Bedroom));
+                farItems.AddRange(program.Where(p => p.Type == RoomType.Bedroom).Take(beds));
+            }
+            else
+            {
+                if (u >= 6.8f) farItems.Add(program.First(p => p.Type == RoomType.Kitchen));
+                if (u >= 11f && program.Count(p => p.Type == RoomType.Bedroom) >= 2)
+                    farItems.Add(program.Last(p => p.Type == RoomType.Bedroom));
+            }
         }
         var sideItems = program.Except(farItems).OrderBy(p => NearDoor(p.Type)).ToList();
 
@@ -666,7 +787,7 @@ public static partial class InteriorGenerator
 
         bool complete = rooms.Any(r => r.Type == RoomType.Bedroom) && rooms.Any(r => r.Type == RoomType.Kitchen)
             && rooms.Any(r => r.Type == RoomType.Bathroom);
-        return complete ? rooms : GalleryFlat(u, v, door, ext, program) ?? StudioFlat(u, v, door);
+        return complete ? rooms : null;
     }
 
     /// <summary>

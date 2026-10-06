@@ -811,6 +811,13 @@ public static partial class InteriorGenerator
                 for (int k = 0; k < count; k++)
                 {
                     float c = a + len * (k + 0.5f) / count;
+                    // a doorway where the window would go (a ground-floor flat's garden door) moves
+                    // the window aside within its own stretch of wall, rather than losing it (#571)
+                    float lo = a + len * k / count + width / 2 + 0.2f;
+                    float hi = a + len * (k + 1) / count - width / 2 - 0.2f;
+                    for (float step = 0.3f; Blocked(r, side, c, width) && step < len; step += 0.3f)
+                        foreach (float at in new[] { c - step, c + step })
+                            if (at >= lo && at <= hi && !Blocked(r, side, at, width)) { c = at; break; }
                     if (Blocked(r, side, c, width)) continue;
                     r.Openings.Add(new OpeningPlan
                     {
