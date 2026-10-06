@@ -196,17 +196,23 @@ public static partial class InteriorGenerator
             or RoomType.IkeaMarket;        // #501, laid out in InteriorGenerator.Ikea
 
     /// <summary>Lays out one site hall; the wall dressing is added afterwards by the generic placer.</summary>
+    /// <param name="lanes">
+    /// The strips behind the hall's vehicle doors. Racking, machinery and plinths keep out of them
+    /// — a trailer has to get in. A workshop's bays are the exception: its drive-on ramps stand in
+    /// the lane on purpose, because driving onto one is the point, so <see cref="Bays"/> lays them
+    /// before it takes the lanes in.
+    /// </param>
     private static void HallLayout(InteriorLayout l, int f, RoomPlan r,
-        List<RectPlan> placed, List<RectPlan> blocked, Random rng)
+        List<RectPlan> placed, List<RectPlan> blocked, List<RectPlan> lanes, Random rng)
     {
         switch (r.Type)
         {
-            case RoomType.WarehouseHall: Aisles(l, f, r, placed, blocked, rng); break;
-            case RoomType.ProductionHall: Line(l, f, r, placed, blocked, rng); break;
-            case RoomType.TruckBay: Bays(l, f, r, placed, blocked, rng, truck: true); break;
-            case RoomType.ServiceBay: Bays(l, f, r, placed, blocked, rng, truck: false); break;
-            case RoomType.IkeaMarket: BlahajBins(l, f, r, placed, blocked); break;   // #501
-            default: ShowroomFloor(l, f, r, placed, blocked, rng); break;
+            case RoomType.WarehouseHall: blocked.AddRange(lanes); Aisles(l, f, r, placed, blocked, rng); break;
+            case RoomType.ProductionHall: blocked.AddRange(lanes); Line(l, f, r, placed, blocked, rng); break;
+            case RoomType.TruckBay: Bays(l, f, r, placed, blocked, lanes, rng, truck: true); break;
+            case RoomType.ServiceBay: Bays(l, f, r, placed, blocked, lanes, rng, truck: false); break;
+            case RoomType.IkeaMarket: blocked.AddRange(lanes); BlahajBins(l, f, r, placed, blocked); break;   // #501
+            default: blocked.AddRange(lanes); ShowroomFloor(l, f, r, placed, blocked, rng); break;
         }
     }
 
@@ -377,7 +383,7 @@ public static partial class InteriorGenerator
     /// vehicle standing in one of them.
     /// </summary>
     private static void Bays(InteriorLayout l, int f, RoomPlan r,
-        List<RectPlan> placed, List<RectPlan> blocked, Random rng, bool truck)
+        List<RectPlan> placed, List<RectPlan> blocked, List<RectPlan> lanes, Random rng, bool truck)
     {
         float bayW = truck ? 4.2f : 3.4f;
         float bayD = Math.Min(r.Depth - 1.2f, truck ? 14f : 7.5f);
@@ -427,6 +433,8 @@ public static partial class InteriorGenerator
                 budget--;
             }
         }
+        // the ramps and the vehicle on one are down; now nothing ELSE may stand in a doorway's lane
+        blocked.AddRange(lanes);
     }
 
     /// <summary>

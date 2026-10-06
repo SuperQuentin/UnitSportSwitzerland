@@ -89,7 +89,11 @@ public static class DoorIndex
     /// the answer a matter of luck. A probe asking for "the nearest barn" needs the barn.
     /// </para>
     /// </summary>
-    public static Entry? NearestOfKind(Vector3 at, float reach, BuildingKind kind)
+    /// <summary>The nearest door a vehicle fits through, of any kind of building (#531).</summary>
+    public static Entry? NearestVehicle(Vector3 at, float reach) =>
+        Nearest(at, reach, e => e.Vehicle);
+
+    public static Entry? NearestOfKind(Vector3 at, float reach, BuildingKind kind, bool vehicleOnly = false)
     {
         Entry? best = null;
         float bestScore = float.MaxValue;
@@ -97,10 +101,16 @@ public static class DoorIndex
             foreach (var e in doors)
             {
                 if (e.Kind != kind) continue;
+                // Driving somewhere wants a door a vehicle fits through, and on an industrial site
+                // that is never the main one: a works' slot 0 is the office door and its bays are
+                // the extras (#528). Preferring slot 0 would send a lorry at a 1 m pedestrian door.
+                if (vehicleOnly && !e.Vehicle) continue;
                 float d = e.World.DistanceTo(at);
                 if (d > reach) continue;
-                // a side door only when no main door of the kind is anywhere in reach
-                float score = d + (e.Key.Slot == 0 ? 0f : reach);
+                // a side door only when no main door of the kind is anywhere in reach — but with
+                // vehicleOnly every candidate is already a door to drive through, and a bay is as
+                // good as its neighbour, so the nearest wins
+                float score = vehicleOnly ? d : d + (e.Key.Slot == 0 ? 0f : reach);
                 if (score < bestScore) { bestScore = score; best = e; }
             }
         return best;

@@ -365,8 +365,12 @@ public static partial class Planner
                     else
                         foreach (var sheet in sheets)
                         {
+                            // The newest flight of the sheet, not whichever the filesystem lists
+                            // first: a folder holds two years of a sheet once it has been re-flown
+                            // and re-downloaded (#597).
                             string zip = Directory.Exists(p.BuildingsDir)
-                                ? Directory.EnumerateFiles(p.BuildingsDir, $"swissbuildings3d_3_0_*_{sheet.Key}_*.gdb.zip").FirstOrDefault() ?? ""
+                                ? SwissStacUtil.NewestSheetFile(
+                                    Directory.EnumerateFiles(p.BuildingsDir, $"swissbuildings3d_3_0_*_{sheet.Key}_*.gdb.zip")) ?? ""
                                 : "";
                             if (zip.Length > 0) args.AddRange(["--buildings-gdb", zip]);
                         }

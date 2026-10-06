@@ -229,6 +229,31 @@ public static partial class SwissStacUtil
         return m.Success ? (m.Groups[1].Value, m.Groups[2].Value) : ("", id);
     }
 
+    /// <summary>
+    /// The newest flight of one map sheet among the files on disk. swisstopo re-flies sheets and
+    /// publishes each flight as its own file, so a data folder holds two years of the same sheet
+    /// once a region downloaded a while ago is refreshed. Taking whichever the filesystem listed
+    /// first would silently build the older survey while the newer sat beside it, and would build
+    /// differently on another machine (#597). Same rule the downloader already applies when
+    /// fetching; ties fall back to ordinal name order so the answer never depends on enumeration.
+    /// </summary>
+    public static string? NewestSheetFile(IEnumerable<string> paths) =>
+        paths.OrderByDescending(SheetFileYear).ThenBy(Path.GetFileName, StringComparer.Ordinal).FirstOrDefault();
+
+    /// <summary>
+    /// The flight year in a published sheet's file name
+    /// (<c>swissbuildings3d_3_0_2019_1091-12_2056_5728.gdb.zip</c> -> 2019), or 0 when it carries
+    /// none — an unparsable name sorts oldest rather than winning by accident.
+    /// </summary>
+    public static int SheetFileYear(string path)
+    {
+        var m = SheetFileYearPattern().Match(Path.GetFileName(path));
+        return m.Success ? int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) : 0;
+    }
+
+    [GeneratedRegex(@"^swissbuildings3d_3_0_(\d{4})_")]
+    private static partial Regex SheetFileYearPattern();
+
     [GeneratedRegex(@"^swissbuildings3d_3_0_(\d{4})_(\S+)$")]
     private static partial Regex BuildingsIdPattern();
 
