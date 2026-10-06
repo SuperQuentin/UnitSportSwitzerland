@@ -55,7 +55,7 @@ public partial class TouchControls : CanvasLayer
     public static TouchControls Create() => new() { Name = "TouchControls" };
 
     /// <summary>Whether this device should get the overlay at all.</summary>
-    public static bool Wanted => Platform.IsMobile && DisplayServer.GetName() != "headless";
+    public static bool Wanted => Platform.IsMobile && (DisplayServer.GetName() != "headless" || TouchCheck.Requested);
 
     public override void _Ready()
     {
@@ -127,8 +127,10 @@ public partial class TouchControls : CanvasLayer
 
     public override void _Process(double delta)
     {
-        // in game = the pointer is held; a probe or --nocapture run never holds it, so it counts as in game
-        bool inGame = Input.MouseMode != Input.MouseModeEnum.Visible || MouseCapture.Disabled;
+        // in game = the pointer is held; a probe, --nocapture or headless (--touchcheck) run never
+        // holds it, so it counts as in game
+        bool inGame = Input.MouseMode != Input.MouseModeEnum.Visible || MouseCapture.Disabled
+            || DisplayServer.GetName() == "headless";
         bool show = !_padInUse && inGame && !UiFocus.TextEntryActive;
         if (show != Shown)
         {
@@ -253,9 +255,15 @@ public partial class TouchControls : CanvasLayer
         }
         else if (finger == _lookFinger)
         {
-            // the camera reads mouse motion: this one is marked as ours (PlayerInput.IsLookMotion)
+            // the camera reads mouse motion: this one is marked as ours (PlayerInput.IsLookMotion).
+            // A parsed event is in window pixels and the viewport scales it to the canvas, as it
+            // did the drag: send it back out to window pixels, or the phone's UI scale divides it
+            var toWindow = GetViewport().GetFinalTransform();
             float scale = GameSettings.Current.TouchLookSpeed;
-            Input.ParseInputEvent(new InputEventMouseMotion { Device = Device, Relative = relative * scale, Position = at });
+            Input.ParseInputEvent(new InputEventMouseMotion
+            {
+                Device = Device, Relative = toWindow.BasisXform(relative * scale), Position = toWindow * at,
+            });
         }
     }
 

@@ -23,7 +23,9 @@
 - **Check:** `--touchcheck --mobile --world fixture`.
   - It taps Walk (d-pad ↓), pushes the stick up for 2 s (≥ 1.5 m walked), drags 240 px (≥ 10° turned) and taps A (≥ 0.3 m risen).
   - It sends touches in window pixels through `Viewport.GetFinalTransform`, as a phone does.
-  - Measured: 3.7 m, 41°, 0.93 m, at both 1152×648 and 2220×1080.
+  - Measured: 3.6 m, 45.4° (exactly 240 px × 1.5 × 0.0022 rad), 0.93 m: windowed at 2220×1080 and headless (quick tier, `tools/lib/checkmap.txt`).
+  - It runs headless too: the overlay is built under `--touchcheck` there, and counts as in game.
+- **The look drag goes out in window pixels** (`GetFinalTransform().BasisXform`). Godot scales a parsed mouse event from window to canvas, as it does the touch. Sent in canvas pixels, it was divided by the UI scale: half speed on a phone, and 5,634 px for a 240 px drag headless.
 - **Menus on a phone:**
   - `GameShell.MobileUiScale = 1.15` sizes up every menu. 1.3 overflowed: the Multiplayer card was cut off and Quit hit the title footer.
   - Hidden on a phone: the title's keyboard footer, and the Window / Window size rows.
