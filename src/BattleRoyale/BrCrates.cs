@@ -514,6 +514,29 @@ public partial class BrCrates : Node3D, IOriginContainer
         yield return ("Airdrop canopy", () => ModelViewer.Shaded(Canopy()));
     }
 
+    /// <summary>
+    /// Every prefab <see cref="BrPrefabs"/> declares, as its pieces stand (no gadgets, no legs to the
+    /// ground), in the model viewer (--models). Here, not in BrPrefabs.cs: the unit tests build that
+    /// file without Godot.
+    /// </summary>
+    [Showcase("Battle royale", "Prefab")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcasePrefabs() =>
+        typeof(BrPrefabs).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.FieldType == typeof(Prefab))
+            .Select(f => (Prefab)f.GetValue(null)!)
+            .Select(prefab => (prefab.Name, (Func<Node3D>)(() =>
+            {
+                var root = new Node3D();
+                foreach (var piece in prefab.Pieces)
+                    root.AddChild(new MeshInstance3D
+                    {
+                        Mesh = Build.StructureMeshes.Mesh(piece.Kind, piece.Material),
+                        Transform = Build.Structures.LocalTransform(piece),
+                        MaterialOverride = ItemDefs.Material,
+                    });
+                return root;
+            })));
+
     private static readonly Dictionary<CrateStyle, ArrayMesh> Meshes = new();
 
     private static ArrayMesh MeshOf(CrateStyle style)
