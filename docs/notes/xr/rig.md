@@ -59,4 +59,4 @@
     `VrVignette` setting (off, light, full; #439).
   - `XrRig.Blink()`: black at once, clear again in 0.4 s (the vignette's `blackout`), to hide a cut. Used by the
     crash view (`player/crash-ragdoll`).
-- Hands are small boxes until the avatar's arms are driven (phase 2, see `roadmap`).
+- The hands in the headset are real hands on the grip pose, fingers tracked (#648, `real-hands`).
