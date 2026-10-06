@@ -45,4 +45,9 @@
   `--shopcheck` (barns become co-ops with counters, rural only, delivery beats the counter), `--iconsheet`;
   `--tractorcheck` (offline: refusals far away / seed / flour, the tipper and the combine paid units × value at a
   stand-in) and `tools/tractornetcheck.sh` (online: the server pays a tipped trailer, refuses a claimed position
-  and seed). Not checked: the dedicated server's planned-co-op path on a real map.
+  and seed). `CHUNKS=<terrain_chunks> tools/coopnetcheck.sh [E,N]` (real map, by hand, ~2 min, not in
+  `checkmap.txt`): the dedicated server's planned-co-op path. One client finds the nearest co-op among its
+  loaded doors (default spot 2585000,1208000 by Aarberg: 21 co-ops in 5451 doors, the nearest
+  2584_1208_189 at 374 m), delivers 40 wheat from a combine 12 m out in its yard (the server plans
+  the building and pays 1000 CHF naming it), and is refused the co-op's key from 200 m off and a plain
+  building's key at its own door. Passed Oct 2026.
