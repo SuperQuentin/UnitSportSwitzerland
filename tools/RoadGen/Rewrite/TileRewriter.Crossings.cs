@@ -145,7 +145,7 @@ public static partial class TileRewriter
             });
         }
         Guide(lane.From + 0.1, lead);
-        if (layout.LeftBikeLane is { } bikeLane && exit.Bike) Guide(bikeLane.To - 0.1, lead + exit.Lane - 0.1);
+        if (layout.LeftBikeLane is { } bikeLane && exit.Bike) Guide(bikeLane.From, lead + exit.Lane);   // between the car turn lane and the bike lane
     }
 }
 
