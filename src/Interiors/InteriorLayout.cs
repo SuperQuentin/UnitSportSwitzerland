@@ -108,6 +108,28 @@ public sealed class FlightPlan
 
     /// <summary>Whether this flight is half of a stairwell's turn rather than a whole storey's stair.</summary>
     public bool Half => From > 0 || To < 1;
+
+    /// <summary>
+    /// A flight running along X rather than Z (#577: a wing of a building turned a quarter from
+    /// the plan's frame). Then <see cref="X0"/>/<see cref="X1"/> are its lane's extent in Z and
+    /// <see cref="ZBottom"/>/<see cref="ZTop"/> are X positions; read it through
+    /// <see cref="Point"/> and <see cref="Area"/>.
+    /// </summary>
+    public bool AlongX { get; set; }
+
+    /// <summary>A point of the flight's own frame (across its lane, along its run) in the plan's (X, Z).</summary>
+    public (float X, float Z) Point(float across, float along) => AlongX ? (along, across) : (across, along);
+
+    /// <summary>The middle of its bottom and top ends, plan (X, Z).</summary>
+    public (float X, float Z) Bottom => Point((X0 + X1) / 2, ZBottom);
+    public (float X, float Z) TopEnd => Point((X0 + X1) / 2, ZTop);
+
+    /// <summary>The rectangle it stands on, plan frame.</summary>
+    public RectPlan Area(float before = 0, float after = 0)
+    {
+        float r0 = Math.Min(ZBottom, ZTop) - before, r1 = Math.Max(ZBottom, ZTop) + after;
+        return AlongX ? new RectPlan(r0, X0, r1, X1) : new RectPlan(X0, r0, X1, r1);
+    }
 }
 
 /// <summary>A landing partway up a storey (#571): the half landing a stairwell's flights turn on.</summary>
@@ -338,7 +360,7 @@ public sealed class InteriorLayout
     // one number, so whichever of #497/#498 rebases onto the other takes the NEXT one, never a
     // lower one: a version going backwards regenerates the plans saved under the higher one and
     // then collides when it is reissued.
-    public const int CurrentVersion = 19; // 19: a bedroom, bathroom or WC has one door, wider corridors (#576); 18: flats' living rooms and bedrooms on a facade, stairwells with half landings (#571); 17: apartment blocks, a stairwell and elevator per entrance, flats, a shared basement (#557); 16: IKEA stores at their nine real locations, with bins of Blåhajs (#501); 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
+    public const int CurrentVersion = 20; // 20: apartment blocks follow the building's outline, wing by wing (#577); 19: a bedroom, bathroom or WC has one door, wider corridors (#576); 18: flats' living rooms and bedrooms on a facade, stairwells with half landings (#571); 17: apartment blocks, a stairwell and elevator per entrance, flats, a shared basement (#557); 16: IKEA stores at their nine real locations, with bins of Blåhajs (#501); 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";

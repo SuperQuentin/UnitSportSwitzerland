@@ -273,14 +273,30 @@ public static class BuildingFootprint
             walls.Add((a, c, d, flat.Normalized()));
         }
 
+        // the roof laid flat: what is under the building and what is not (#577), so a wall on the
+        // inside of an L or round a courtyard faces out of the building, not away from its box
+        var roof = new List<(Vector2 A, Vector2 B, Vector2 C)>();
+        for (int t = 0; t < b.TriangleCount; t++)
+        {
+            var (a, c, d) = b.Tri(t);
+            var n = (c - a).Cross(d - a);
+            float len = n.Length();
+            if (len < 1e-6f || Mathf.Abs(n.Y / len) < BuildingTriangles.RoofNormalY) continue;
+            roof.Add((new Vector2(a.X, a.Z), new Vector2(c.X, c.Z), new Vector2(d.X, d.Z)));
+        }
+        bool Under(Vector2 p) => roof.Any(r => InTriangle(p, r.A, r.B, r.C));
+
         // ---- facade facets: coplanar wall triangles, merged along their wall line --------
         var facets = new Dictionary<(int, int), Facet>();
         var cuts = new List<(Vector2 Mid, Vector2 Normal, float Ground)>();
         foreach (var (a, c, d, n0) in walls)
         {
             var mid = new Vector2((a.X + c.X + d.X) / 3f, (a.Z + c.Z + d.Z) / 3f);
-            // TIN winding is not consistent; outward is away from the box centre
+            // TIN winding is not consistent; outward is away from the box centre, unless the roof
+            // says otherwise: roofed a step out and open a step in is a wall facing into the
+            // building, the inner corner of an L or a courtyard's wall (#577). A step clears the eaves.
             var n = n0.Dot(mid - center) < 0 ? -n0 : n0;
+            if (roof.Count > 0 && Under(mid + n * 1.2f) && !Under(mid - n * 1.2f)) n = -n;
             int angle = Mathf.RoundToInt(Mathf.RadToDeg(Mathf.Atan2(n.Y, n.X)) / 6f);
             // tight: coplanar TIN triangles agree to the millimetre, while a recess or a bay only
             // 0.3 m back is a different wall - a coarse bin merged the two and put the door in
@@ -509,6 +525,13 @@ public static class BuildingFootprint
 
     /// <summary>One wall run a door could stand on: its plane, the run along it, and the door it would be.</summary>
     private sealed record Cand(float Score, Vector2 Normal, float Offset, float S0, float S1, DoorSpot Door);
+
+    private static bool InTriangle(Vector2 p, Vector2 a, Vector2 b, Vector2 c)
+    {
+        static float Cross(Vector2 o, Vector2 u, Vector2 v) => (u.X - o.X) * (v.Y - o.Y) - (u.Y - o.Y) * (v.X - o.X);
+        float d1 = Cross(a, b, p), d2 = Cross(b, c, p), d3 = Cross(c, a, p);
+        return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+    }
 
     /// <summary>
     /// Whether two doors of one building are too near each other to both be real, edge to edge:
