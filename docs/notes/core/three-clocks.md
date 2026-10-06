@@ -16,6 +16,39 @@ Environment time rides simulation speed, so at 0.25x the sun and the traffic lig
 with the cars and the world stays internally consistent. Both world clocks are owned by the
 server; real time is per-process and never synced.
 
+## Environment time on the simulation clock (built, phase 3)
+
+`World.WorldClock` is keyed to `Core.SimClock`, not to `Net.ClockSync.ServerNow`:
+
+```
+EnvNow(simNow) = Env0 + (simNow - EnvEpoch) * DayFactor(MinutesPerDay)
+Hour           = HourOf(EnvNow, HourShift)
+DayFactor      = 86400 / (MinutesPerDay * 60)      // 60 at the default 24 min a day
+```
+
+- **A `/speed` needs no message of its own for the sun.** Because the env layer is keyed to
+  *simulated* time, a simulation-speed change carries the sun, the traffic lights and the crops with
+  it and needs no environment rebase. Only a day-length change (`/time speed`) rebases this layer.
+- **`EnvNow` only ever counts up**, which is what makes it safe for things that grow, burn and
+  ripen. `/time set` and `/time add` move `HourShift` instead of the counter, so an admin can turn
+  the sky to 03:00 at 22:00 without a campfire lit ten env-minutes ago becoming one lit in the
+  future. Growth reads `EnvNow`; the sky reads `Hour`.
+- **The wire carries `(Env0, EnvEpoch, HourShift, MinutesPerDay)`** — `EnvEpoch` in *simulated*
+  seconds. The semantics changed, so `Handshake.Protocol` went 17 -> 18 and an older client is
+  refused rather than shown a wrong sky.
+- **Persistence saves the counter, not the hour** (`user://world_clock.cfg`: `env_now`,
+  `hour_shift`, `minutes_per_day`). The wrapped hour alone loses the day count, and anything
+  growing in env time would reset with it. A file written before #579 is still read: its `hour`
+  becomes the shift and the counter starts at zero, so an upgraded dedicated server keeps its sky.
+- Offline, `DayNight` integrates a `delta` the engine has already scaled, so the sun rides
+  simulation speed there too with no extra code.
+- `TimeCommand.HourAt` and `Advance` are unchanged and still unit-tested: the re-key changed *what
+  WorldClock feeds them*, not the maths.
+- Checked by `tools/speednetcheck.sh`: after `/speed 0.25` env time advanced 240.0 s over 16.0 s of
+  server clock where full speed would have been 960.0 s, and both peers agreed about env seconds at
+  the same server instant (gap 0.002 s). `EnvClockTests` pins the composition at tier 0, including
+  that turning the sky back leaves the counter alone.
+
 ## `SimClock` (built, phase 2)
 
 The server owns three numbers — `Sim0` at `Epoch` on its own clock (`Net.ClockSync.ServerNow`),

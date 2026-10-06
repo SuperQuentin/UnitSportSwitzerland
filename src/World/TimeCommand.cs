@@ -119,6 +119,37 @@ public static class TimeCommand
         return true;
     }
 
+    /// <summary>Seconds in a day of environment time.</summary>
+    public const double DaySeconds = 24 * 3600;
+
+    /// <summary>
+    /// Environment seconds per simulated second at this day length; 0 when the clock is stopped.
+    /// At the default 24 min a day this is 60: environment time runs 60x simulated time, which is
+    /// why a duration moved into env units must be re-expressed and never copied (#579).
+    /// </summary>
+    public static double DayFactor(float minutesPerDay) =>
+        minutesPerDay > 0 ? DaySeconds / (minutesPerDay * 60.0) : 0;
+
+    /// <summary>
+    /// Environment seconds at <paramref name="simNow"/>, given <paramref name="env0"/> at
+    /// <paramref name="envEpoch"/> — both on the simulation clock (<c>Core.SimClock</c>), so
+    /// environment time rides simulation speed. Monotonic: it only ever counts up.
+    /// </summary>
+    public static double EnvAt(double env0, double envEpoch, double simNow, float minutesPerDay) =>
+        env0 + (simNow - envEpoch) * DayFactor(minutesPerDay);
+
+    /// <summary>
+    /// The hour of the day a count of environment seconds shows, once
+    /// <paramref name="hourShift"/> is allowed for. The shift is what <c>/time set</c> moves, so an
+    /// admin can turn the sky to any hour without ever winding the monotonic counter back.
+    /// </summary>
+    public static double HourOf(double envSeconds, double hourShift = 0) =>
+        Wrap((envSeconds + hourShift) / 3600.0);
+
+    /// <summary>The shift that makes <paramref name="envSeconds"/> read <paramref name="hour"/>.</summary>
+    public static double ShiftFor(double envSeconds, double hour) =>
+        Wrap(hour - envSeconds / 3600.0) * 3600.0;
+
     /// <summary>Hours after <paramref name="seconds"/> of real time at this day length.</summary>
     public static double Advance(double hour, double seconds, float minutesPerDay) =>
         minutesPerDay > 0 ? Wrap(hour + seconds * 24.0 / (minutesPerDay * 60.0)) : Wrap(hour);

@@ -59,7 +59,7 @@ public partial class SpeedNetProbe : ChatProbe
         Expect(await Until(() => AtScale(0.25), 10), $"A runs at x0.25 ({Describe()})");
         Say("slow");
         Expect(await Heard("B", "saw slow", 15), "B runs at x0.25");
-        await Seconds(3);
+        await EnvSlowedDown(0.25);
         await Compare("2");
 
         Chat?.Send("/speed normal");
@@ -81,6 +81,26 @@ public partial class SpeedNetProbe : ChatProbe
         if (!await Heard("A", "normal", 30)) { Fail("A never restored the speed"); return; }
         if (await Until(() => AtScale(1.0), 10)) Say("saw normal");
         else Fail($"B is at {Describe()}, not normal speed");
+    }
+
+    /// <summary>
+    /// Environment time rides the simulation speed (#579 phase 3): over a stretch of the server's
+    /// real clock the hour must advance at <c>DayFactor * scale</c>, not at <c>DayFactor</c>. This
+    /// is the claim the whole phase exists for, and nothing else would notice if it broke.
+    /// </summary>
+    private async Task EnvSlowedDown(double scale)
+    {
+        double server0 = Net.ClockSync.ServerNow;
+        double env0 = World.WorldClock.EnvNow;
+        await Seconds(4);
+        double elapsed = Net.ClockSync.ServerNow - server0;
+        double advanced = World.WorldClock.EnvNow - env0;
+        double expected = World.WorldClock.DayFactor * scale * elapsed;
+        // 15%: the scale change lands mid-window and ClockSync's estimate of the server moves a little
+        bool ok = expected > 0 && System.Math.Abs(advanced - expected) < expected * 0.15;
+        Expect(ok, string.Format(CultureInfo.InvariantCulture,
+            "env time advanced {0:F1} s over {1:F1} s of server clock at x{2}; at this day length x{2} wants {3:F1} s (full speed would be {4:F1})",
+            advanced, elapsed, scale, expected, World.WorldClock.DayFactor * elapsed));
     }
 
     /// <summary>The clock and the engine both have to be there: one without the other is the bug.</summary>
@@ -118,7 +138,8 @@ public partial class SpeedNetProbe : ChatProbe
     {
         string other = _role == "A" ? "B" : "A";
         double at = Net.ClockSync.ServerNow;
-        Say(string.Format(CultureInfo.InvariantCulture, "at{0} {1:F4} {2:F5}", round, at, SimClock.SimAt(at)));
+        Say(string.Format(CultureInfo.InvariantCulture, "at{0} {1:F4} {2:F5} {3:F5}",
+            round, at, SimClock.SimAt(at), World.WorldClock.EnvAt(SimClock.SimAt(at))));
 
         string key = $"SP {other} at{round} ";
         if (!await Until(() => _heard.Exists(l => l.Contains(key)), 30)) { Fail($"{other} never sent round {round}"); return; }
@@ -126,10 +147,20 @@ public partial class SpeedNetProbe : ChatProbe
         string[] parts = line[(line.IndexOf(key) + key.Length)..].Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
         double theirAt = double.Parse(parts[0], CultureInfo.InvariantCulture);
         double theirSim = double.Parse(parts[1], CultureInfo.InvariantCulture);
+        double theirEnv = double.Parse(parts[2], CultureInfo.InvariantCulture);
         double mineThen = SimClock.SimAt(theirAt);
         double gap = System.Math.Abs(theirSim - mineThen);
         Expect(gap < Tolerance, string.Format(CultureInfo.InvariantCulture,
             "round {0}: {1} was at sim {2:F4} s at server {3:F2} s, here the clock gives {4:F4} (gap {5:F4} s)",
             round, other, theirSim, theirAt, mineThen, gap));
+
+        // environment time is derived from the same sim instant, so two peers that agree about
+        // simulated time must agree about the hour as well (#579 phase 3)
+        double myEnv = World.WorldClock.EnvAt(mineThen);
+        double envGap = System.Math.Abs(theirEnv - myEnv);
+        Expect(envGap < Tolerance * World.WorldClock.DayFactor + Tolerance, string.Format(CultureInfo.InvariantCulture,
+            "round {0}: {1} was at env {2:F2} s ({3}), here the clock gives {4:F2} s ({5}) (gap {6:F3} s)",
+            round, other, theirEnv, World.TimeCommand.Format(World.TimeCommand.HourOf(theirEnv, World.WorldClock.HourShift)),
+            myEnv, World.TimeCommand.Format(World.TimeCommand.HourOf(myEnv, World.WorldClock.HourShift)), envGap));
     }
 }

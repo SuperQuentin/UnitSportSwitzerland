@@ -3,13 +3,13 @@
 
 # Three clocks: environment time, simulation speed, real time
 
-Status: **phases 1-2 built** (PR #594). Tracking issue: #579.
+Status: **phases 1-3 built** (PR #594). Tracking issue: #579.
 
 | Phase | State | What it does |
 |---|---|---|
 | 1 `RealClock` | done | An unscaled wall clock and frame delta, so the real-time bucket survives a time scale |
 | 2 Server-owned sim clock | done | `SimClock`: the server owns `(sim0, epoch, scale)`; every peer flips `Engine.TimeScale` at the same server instant |
-| 3 Env time onto sim time | not done | `WorldClock` re-keyed from `ServerNow` to `SimNow`, with a monotonic persisted `EnvNow` |
+| 3 Env time onto sim time | done | `WorldClock` re-keyed from `ServerNow` to `SimNow`, with a monotonic persisted `EnvNow` |
 | 4 Move the misplaced timers | not done | The ~10 simulation timers currently on the wall clock move to sim or env time |
 | 5 Guards | not done | A lint check for wall-clock use in gameplay, and two-peer probes for sim speed and env scaling |
 
@@ -151,8 +151,14 @@ Replicated state, so **tier 2** (`tools/test.sh net`), checking the scale on the
   24 h. `Hour` stays for the sky.
 - Persist `EnvNow` in `user://world_clock.cfg` next to `minutes_per_day`, replacing the saved
   wrapped `hour`, which loses the day count. On load, `env0 = saved` and `envEpoch = SimNow(now)`.
-- `/time set` and `/time add` rebase the env layer at the current `SimNow`; `/time speed` rebases it
-  and changes `dayFactor`. `/speed` rebases only the sim layer.
+- Built differently from the plan: `/time set` and `/time add` move a **`HourShift`**, they do not
+  rebase the counter. The plan would have let `/time set 3` at 22:00 wind `EnvNow` back nineteen
+  hours, which is fine for a sky and wrong for everything phase 4 is about to hang off it — a
+  campfire lit ten env-minutes ago would have become one lit in the future. Splitting the monotonic
+  counter from the admin-movable hour was cheap to do now, with no consumers to break, and the trap
+  would have been expensive to find in phase 4. `/time speed` still rebases the env layer; `/speed`
+  rebases only the sim layer.
+- The wire semantics changed, so `Handshake.Protocol` goes 17 -> 18.
 - A `docs/notes/core/three-clocks.md` note with the bucket rule, the layering, and the table of
   which system is in which — replacing the looser wording in `docs/notes/general/fast-checks.md`.
 

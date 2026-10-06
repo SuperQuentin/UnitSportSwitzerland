@@ -40,7 +40,7 @@ public partial class Handshake : Node
     /// 16: FootPlayer.NetPose may carry a VR player's two hands after the pose (14 or 17 floats, #439).
     /// 17: item events FishCast/FishEnd, items FishingRod..RoundGoby 194-222 (#493).
     /// </summary>
-    public const int Protocol = 17;
+    public const int Protocol = 18;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

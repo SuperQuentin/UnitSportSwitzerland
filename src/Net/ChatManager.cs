@@ -1026,17 +1026,19 @@ public partial class ChatManager : Node
             return;
         }
 
-        double hour = World.WorldClock.Hour;
-        float speed = World.WorldClock.MinutesPerDay;
+        // set/add turn the sky by moving HourShift; speed rebases the monotonic counter. Neither
+        // ever winds WorldClock.EnvNow back, so nothing growing in environment time goes backwards.
         switch (op)
         {
-            case World.TimeOp.Set: hour = value; break;
-            case World.TimeOp.Add: hour = World.TimeCommand.Wrap(hour + value); break;
-            case World.TimeOp.Speed: speed = (float)value; break;
+            case World.TimeOp.Set: World.WorldClock.SetHour(value); break;
+            case World.TimeOp.Add: World.WorldClock.AddHours(value); break;
+            case World.TimeOp.Speed: World.WorldClock.Rebase((float)value); break;
         }
-        World.WorldClock.Rebase(hour, speed);
+        double hour = World.WorldClock.Hour;
+        float speed = World.WorldClock.MinutesPerDay;
         World.WorldClock.Save();
-        Rpc(MethodName.WorldTime, World.WorldClock.Hour0, World.WorldClock.Epoch, World.WorldClock.MinutesPerDay);
+        Rpc(MethodName.WorldTime, World.WorldClock.Env0, World.WorldClock.EnvEpoch,
+            World.WorldClock.HourShift, World.WorldClock.MinutesPerDay);
         GD.Print($"[admin] {NameOf(sender)} set the clock to {World.TimeCommand.Format(hour)}, {World.TimeCommand.DescribeSpeed(speed)}");
 
         string who = NameOf(sender);
@@ -1149,21 +1151,24 @@ public partial class ChatManager : Node
     public void SendWorldTimeTo(long peerId)
     {
         if (World.WorldClock.Active)
-            RpcId(peerId, MethodName.WorldTime, World.WorldClock.Hour0, World.WorldClock.Epoch, World.WorldClock.MinutesPerDay);
+            RpcId(peerId, MethodName.WorldTime, World.WorldClock.Env0, World.WorldClock.EnvEpoch,
+                World.WorldClock.HourShift, World.WorldClock.MinutesPerDay);
     }
 
     /// <summary>
-    /// Client: the world's clock (#452): the hour at a moment of the server's clock, and its speed.
-    /// <see cref="World.DayNight"/> reads the hour from <see cref="ClockSync.ServerNow"/> from then on,
-    /// so every screen shows the same sky and nothing drifts. Kept even without a sky
-    /// (<c>--systems</c>): the birds and the dawn chorus read it too.
+    /// Client: the world's environment clock (#452, keyed onto the simulation clock in #579): the
+    /// environment seconds at a moment of the *simulation* clock, what <c>/time set</c> has turned
+    /// the sky by, and the day length. <see cref="World.DayNight"/> reads the hour from it from then
+    /// on, so every screen shows the same sky and nothing drifts, and because it is keyed to
+    /// simulated time the sun follows a <c>/speed</c> with no message of its own. Kept even without
+    /// a sky (<c>--systems</c>): the birds and the dawn chorus read it too.
     /// </summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void WorldTime(double hour0, double epoch, float minutesPerDay)
+    private void WorldTime(double env0, double envEpoch, double hourShift, float minutesPerDay)
     {
-        World.WorldClock.Set(hour0, epoch, minutesPerDay);
-        GD.Print($"[time] the server's clock: {World.TimeCommand.Format(hour0)} at {epoch.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)} s, {World.TimeCommand.DescribeSpeed(World.WorldClock.MinutesPerDay)}");
+        World.WorldClock.Set(env0, envEpoch, hourShift, minutesPerDay);
+        GD.Print($"[time] the server's clock: {World.TimeCommand.Format(World.WorldClock.Hour)} at sim {envEpoch.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)} s, {World.TimeCommand.DescribeSpeed(World.WorldClock.MinutesPerDay)}");
     }
 
     /// <summary>
