@@ -315,6 +315,7 @@ public static partial class InteriorGenerator
             float c0 = w.X0, c1 = w.X0 + a.CoreW;
             var lobby = level == 0 ? RoomType.Lobby : RoomType.Landing;
             float arch = Math.Min(2.3f, a.Clear - 0.2f);
+            float open = a.Clear;
             if (!a.Stairs)
                 w.Core = Add(rooms, new RoomPlan { X0 = c0, Z0 = -hd, X1 = c1, Z1 = a.ZB1, Type = lobby });
             else
@@ -324,12 +325,16 @@ public static partial class InteriorGenerator
                 float s1 = c0 + StairWidth;
                 w.Core = Add(rooms, new RoomPlan { X0 = c0, Z0 = -hd, X1 = c1, Z1 = a.RunZ0, Type = lobby });
                 w.Stair = Add(rooms, new RoomPlan { X0 = c0, Z0 = a.RunZ0, X1 = s1, Z1 = a.ZM, Type = RoomType.Stairwell });
-                Opening(rooms, w.Stair, Side.Front, w.Core, (c0 + s1) / 2, StairWidth - 0.2f, arch, OpeningKind.Arch);
+                // no pier between the openings that meet here and no lintel over them: the front landing,
+                // the stair, the passage and the lift lobby read as one open space (#680)
+                Opening(rooms, w.Stair, Side.Front, w.Core, (c0 + s1) / 2, StairWidth, open, OpeningKind.Arch);
                 if (a.Passage)
                 {
                     w.Passage = Add(rooms, new RoomPlan { X0 = s1, Z0 = a.RunZ0, X1 = c1, Z1 = a.ZM, Type = RoomType.Landing });
                     w.Back = Add(rooms, new RoomPlan { X0 = c0, Z0 = a.ZM, X1 = w.X1, Z1 = a.ZB1, Type = RoomType.Landing });
-                    Opening(rooms, w.Passage, Side.Front, w.Core, (s1 + c1) / 2, WalkWidth - 0.2f, arch, OpeningKind.Arch);
+                    Opening(rooms, w.Passage, Side.Front, w.Core, (s1 + c1) / 2, WalkWidth, open, OpeningKind.Arch);
+                    // the stair's wall on the passage is a railing instead (Stair)
+                    Opening(rooms, w.Stair, Side.Right, w.Passage, (a.RunZ0 + a.ZM) / 2, a.ZM - a.RunZ0, open, OpeningKind.Arch);
                     Opening(rooms, w.Passage, Side.Back, w.Back, (s1 + c1) / 2, WalkWidth - 0.2f, arch, OpeningKind.Arch);
                 }
             }
@@ -338,9 +343,9 @@ public static partial class InteriorGenerator
                 float cab0 = a.ZM - CabinDepth;
                 w.Front = Add(rooms, new RoomPlan { X0 = c1, Z0 = -hd, X1 = w.X1, Z1 = cab0, Type = lobby });
                 w.Cabin = Add(rooms, new RoomPlan { X0 = c1, Z0 = cab0, X1 = w.X1, Z1 = a.ZM, Type = RoomType.Elevator });
-                Opening(rooms, w.Core, Side.Right, w.Front, (-hd + a.RunZ0) / 2, a.RunZ0 + hd - 0.4f, arch, OpeningKind.Arch);
+                Opening(rooms, w.Core, Side.Right, w.Front, (-hd + a.RunZ0) / 2, a.RunZ0 + hd, open, OpeningKind.Arch);
                 if (a.Passage && cab0 - a.RunZ0 >= 1.2f)
-                    Opening(rooms, w.Passage, Side.Right, w.Front, (a.RunZ0 + cab0) / 2, cab0 - a.RunZ0 - 0.3f, arch, OpeningKind.Arch);
+                    Opening(rooms, w.Passage, Side.Right, w.Front, (a.RunZ0 + cab0) / 2, cab0 - a.RunZ0, open, OpeningKind.Arch);
                 Opening(rooms, w.Cabin, Side.Front, w.Front, (c1 + w.X1) / 2, LiftDoor, Math.Min(2.1f, a.Clear - 0.15f), OpeningKind.Door);
             }
             if (a.Stairs) Stair(floor, a, f, c0);
@@ -554,6 +559,8 @@ public static partial class InteriorGenerator
             floor.Flights.Add(on);
             floor.Landings.Add(new LandingPlan { X0 = laneA0, Z0 = a.RunZ1, X1 = laneB1, Z1 = a.ZM, Level = 0.5f });
         }
+        // the stair's side on the passage is an open railing, not a wall (#680)
+        if (a.Passage) floor.Guards.Add(new RectPlan(laneB1, a.RunZ0, laneB1, a.ZM));
         if (f > 0)
         {
             floor.Holes.Add(new RectPlan(laneA0, a.RunZ0, laneB1, a.ZM));
