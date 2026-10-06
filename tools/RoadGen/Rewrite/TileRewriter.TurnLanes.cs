@@ -1319,6 +1319,8 @@ public static partial class TileRewriter
                     Edge(PaintType.YellowSolid, 0, o, bikeLine, solidTo);
                     Edge(PaintType.YellowDashed, BikePlanner.Dash, o, solidTo, dashedTo);
                 }
+                // a box: a yellow line closes it from the through lane beside it, which has none (#682)
+                if (box) Edge(PaintType.YellowSolid, 0, through, setback, pocketBack);
                 BikeSymbol(paint, lanes.LeftBikeLane!.Value.Mid, dashedTo - 2);
                 stats.LeftBikeLanes++;
             }
@@ -1340,7 +1342,8 @@ public static partial class TileRewriter
             {
                 // the box: the cars' line behind it across the pocket and the bike lane, the yellow one
                 // in front, a bike symbol in it; the through lane's line where it was
-                Bar(pocketBack, 0.1, through - 0.1, width, PaintEmitter.White);
+                // the cars' line only across the pocket: the left-turn bike lane reaches into the box (#682)
+                Bar(pocketBack, 0.1, pocket - 0.1, width, PaintEmitter.White);
                 Bar(setback, through + 0.1, lanes.Through().To - 0.1, width, PaintEmitter.White);
                 Bar(setback, 0.1, through - 0.1, BikeStopLine, PaintEmitter.Yellow);
                 BikeSymbol(paint, through * 0.5, setback + BikeBoxDepth * 0.5 + BikePlanner.SymbolSize * 0.5);
