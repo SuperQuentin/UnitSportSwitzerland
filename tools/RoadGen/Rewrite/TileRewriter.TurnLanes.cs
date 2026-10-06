@@ -975,6 +975,8 @@ public static partial class TileRewriter
         public void SetExit(double hatch) => _exitHatch = hatch;
         private double? _exitHatch;
         public double HatchAtMouth => _exitHatch ?? _pocket;
+        /// <summary>The width of the exit's car lane (the carriageway's half less a painted bike lane).</summary>
+        public double ExitCar => _car;
         public bool HasLeftBikeLane => _bikeLeft > 0;
 
         /// <summary>What the widening adds at full width: the through lane, and on an approach the left-turn bike lane (#351).</summary>

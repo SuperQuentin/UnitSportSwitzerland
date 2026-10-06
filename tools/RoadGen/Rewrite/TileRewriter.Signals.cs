@@ -208,7 +208,7 @@ public static partial class TileRewriter
             var wantPoles = new List<PoleWish>();
             var islandPoles = new List<(byte Arm, Vec2 At, float Y, Vec2 Facing, Vec2 Across)>();   // #682
             var leftGuides = new List<int>();   // arms with a left pocket: their left turn is guided where its exit has an island (#682)
-            var islandArms = new Dictionary<int, double>();   // arm -> its exit hatch's width at the mouth: where the lane after the island starts
+            var islandArms = new Dictionary<int, IslandExit>();   // arm -> where the lane after its exit island starts (#682)
             var approachArms = new List<(int Arm, int PlanArm, float[] Stop)>();   // their lane records (#353)
             var armInPlan = new int[junction.Arms.Count];   // each junction arm's index in the plan, -1 none (#406)
             Array.Fill(armInPlan, -1);
@@ -280,7 +280,8 @@ public static partial class TileRewriter
                     {
                         secondFlags &= ~SignalPoleFlags.Second;
                         islandPoles.Add(((byte)arms.Count, island.Pole, island.Y, u, right));
-                        islandArms[i] = exitWay.HatchAtMouth;
+                        var exitSide = bikeSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
+                        islandArms[i] = new IslandExit(exitWay.HatchAtMouth, exitWay.ExitCar, exitSide.HasTrack || exitSide.HasLane);
                     }
                 }
                 wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, right, to, u, -right,

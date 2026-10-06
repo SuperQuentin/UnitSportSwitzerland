@@ -102,7 +102,7 @@ public static partial class TileRewriter
     /// arriving along the arm, so the car is led to the right of the island, not into it. Drawn only where the exit has an island.
     /// </summary>
     private static void EmitLeftGuides(Dictionary<TileId, List<RoadPaint>> paint, TileId home, Junction junction, int arm,
-        ApproachLayout? layout, List<(Vec2 At, float Height)> anchors, Dictionary<int, double> islandArms)
+        ApproachLayout? layout, List<(Vec2 At, float Height)> anchors, Dictionary<int, IslandExit> islandArms)
     {
         if (layout?.LeftPocketLane is not { } lane) return;
         var from = junction.Arms[arm];
@@ -116,28 +116,41 @@ public static partial class TileRewriter
             double dot = Vec2.FromHeading(junction.Arms[k].OutwardHeading).Dot(-u.Perp);
             if (dot > best) { best = dot; to = k; }
         }
-        if (to < 0 || !islandArms.TryGetValue(to, out double lead)) return;
+        if (to < 0 || !islandArms.TryGetValue(to, out var exit)) return;
+        double lead = exit.Hatch;
         var target = junction.Arms[to];
         var ut = Vec2.FromHeading(target.OutwardHeading);
         var mid = (target.Left + target.Right) * 0.5;
         // the lane's left edge at the mouth, and the exit lane's inner edge at the target's mouth (the departing side is -ut.Perp)
         // the turn starts past the island of its own arm, and ends where the island at its exit ends, to the right of it
         double beyondOwn = islandArms.ContainsKey(arm) ? IslandInsideM + 0.3 : 0, beyondExit = IslandInsideM + 0.3;
-        Vec2 start = (from.Left + from.Right) * 0.5 + u.Perp * (lane.From + 0.1) - u * beyondOwn;
-        Vec2 end = mid - ut.Perp * lead - ut * beyondExit;
-        // tangent to the way in (along -u) and to the way out (along ut): the control is where their lines meet
-        double den = (-u).Cross(ut);
-        Vec2 control = Math.Abs(den) < 1e-6 ? junction.Centre : start + (-u) * ((end - start).Cross(ut) / den);
-        var line = new List<Vec2>();
-        for (int k = 0; k <= 16; k++)
+        // the inner edge of the turn, and where a bike lane runs at the entry (the left-turn bike lane) and at the exit, its outer edge too
+        void Guide(double entryAt, double exitAt)
         {
-            double t = k / 16.0, mt = 1 - t;
-            line.Add(start * (mt * mt) + control * (2 * mt * t) + end * (t * t));
+            Vec2 start = (from.Left + from.Right) * 0.5 + u.Perp * entryAt - u * beyondOwn;
+            Vec2 end = mid - ut.Perp * exitAt - ut * beyondExit;
+            // tangent to the way in (along -u) and to the way out (along ut): the control is where their lines meet
+            double den = (-u).Cross(ut);
+            Vec2 control = Math.Abs(den) < 1e-6 ? junction.Centre : start + (-u) * ((end - start).Cross(ut) / den);
+            var line = new List<Vec2>();
+            for (int k = 0; k <= 16; k++)
+            {
+                double t = k / 16.0, mt = 1 - t;
+                line.Add(start * (mt * mt) + control * (2 * mt * t) + end * (t * t));
+            }
+            Get(paint, home).Add(new RoadPaint
+            {
+                Shape = PaintShape.Polyline, Type = PaintType.WhiteDashed, Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
+                Dash = 1f, Gap = 1f, Vertices = Local(home, line, p => HeightAt(anchors, p), 0f),
+            });
         }
-        Get(paint, home).Add(new RoadPaint
-        {
-            Shape = PaintShape.Polyline, Type = PaintType.WhiteDashed, Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
-            Dash = 1f, Gap = 1f, Vertices = Local(home, line, p => HeightAt(anchors, p), 0f),
-        });
+        Guide(lane.From + 0.1, lead);
+        if (layout.LeftBikeLane is { } bikeLane && exit.Bike) Guide(bikeLane.To - 0.1, lead + exit.Lane - 0.1);
     }
+}
+
+public static partial class TileRewriter
+{
+    /// <summary>What a left turn needs of its exit arm (#682): the hatch's width at the mouth, where the lane after the island starts; the car lane's width; whether it has a bike lane or path beside it.</summary>
+    private readonly record struct IslandExit(double Hatch, double Lane, bool Bike);
 }
