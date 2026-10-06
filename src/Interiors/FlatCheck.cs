@@ -199,9 +199,118 @@ public static class FlatCheck
         GD.Print($"[flatcheck] {wetLit} of {wet} kitchens, bathrooms and WCs have one (those on a facade)");
         Expect(walkedThrough.Count == 0, $"{deadEnds - walkedThrough.Count} of {deadEnds} bedrooms, bathrooms and WCs have one door"
             + (walkedThrough.Count > 0 ? ": " + string.Join("; ", walkedThrough.Distinct().Take(6)) : ""));
+        failures += Ramps(dir);
         GD.Print($"[flatcheck] plans in {dir}");
         GD.Print($"[flatcheck] RESULT: {(failures == 0 ? "ok" : $"FAILED ({failures})")}");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// The synthetic blocks of <see cref="Ramps"/>: <see cref="Copies"/> long blocks 80 x 26 m, square to the
+    /// world, then <see cref="Copies"/> turned 31 degrees, each beside a street running along its front,
+    /// 110 m apart. Garages are a roll of each key, so there are enough of each for both to have some.
+    /// </summary>
+    internal const int Copies = 12;
+
+    internal static (BuildingTile Tile, RoadTile Roads) RampTile()
+    {
+        var kinds = new List<(float Turn, int N)> { (0f, Copies), (31f, Copies) };
+        var blocks = new List<Building>();
+        var segments = new List<RoadSegment>();
+        var shell = new Box("a long block", BuildingKind.Apartment, 80, 26, 15, 3);
+        foreach (var (turn, n) in kinds)
+            for (int i = 0; i < n; i++)
+            {
+                float cz = 110f * blocks.Count + 60f;
+                blocks.Add(Solid(shell with { Turn = turn }, cz));
+                // a minor street 6 m in front, parallel to the wall the door faces (+Z, turned with the block)
+                float t = Mathf.DegToRad(turn), gap = 13f + 6f + 2f;
+                var along = new Vector2(Mathf.Cos(t), Mathf.Sin(t));
+                var normal = new Vector2(-Mathf.Sin(t), Mathf.Cos(t));
+                var mid = new Vector2(500, cz) + normal * gap;
+                // a point every 10 m: the facade looks for the nearest road point, not the nearest road
+                var pts = new List<float>();
+                for (int k = -12; k <= 12; k++)
+                {
+                    var p = mid + along * (10f * k);
+                    pts.AddRange([p.X, 0f, p.Y]);
+                }
+                segments.Add(new RoadSegment
+                {
+                    Class = RoadClass.Minor, Surface = RoadSurface.Paved, Width = RoadFormat.DefaultWidth(RoadClass.Minor),
+                    Points = pts.ToArray(),
+                });
+            }
+        var tile = new BuildingTile { Id = new TileId(2583, 1113), Buildings = blocks };
+        return (tile, new RoadTile { Id = tile.Id, Segments = segments });
+    }
+
+    /// <summary>
+    /// The garage ramp of a block of flats (#558), through the real footprint (a garage door needs a
+    /// road tile) and generator: every block that rolled a garage door plans a ramp from it down to the
+    /// car park, on the plan's own frame (a turned block too), with the ground floor open over it, a lane
+    /// and a turning area free of furniture, and a car's height under every slab it passes. One plan is
+    /// written as an SVG, <c>test_output/flats/garage_ramp.svg</c>.
+    /// </summary>
+    private static int Ramps(string dir)
+    {
+        int failures = 0;
+        void Expect(bool ok, string what)
+        {
+            if (!ok) failures++;
+            GD.Print($"[flatcheck] {(ok ? "ok  " : "FAIL")} {what}");
+        }
+        var (tile, roads) = RampTile();
+        var doors = BuildingFootprint.ComputeDoors(tile, roads, null);
+        var garages = doors.Where(d => d.Link.Any).ToList();
+        Expect(garages.Count > 0, $"ramps: {garages.Count} of {tile.Buildings.Count} blocks rolled a garage door");
+        int turnedGarages = garages.Count(g => g.Index >= Copies);
+
+        Expect(garages.Any(g => g.Index < Copies) && turnedGarages > 0, $"ramps: some square to the world and {turnedGarages} turned 31 degrees");
+        bool written = false;
+        foreach (var g in garages)
+        {
+            string what = $"ramps: block {g.Index}" + (g.Index >= Copies ? " (turned)" : "");
+            var l = InteriorGenerator.Generate(tile, g.Index, roads, null);
+            if (l == null) { Expect(false, $"{what}: no plan"); continue; }
+            var problems = InteriorValidator.Validate(l);
+            Expect(problems.Count == 0, $"{what}: the plan validates{(problems.Count > 0 ? " â€” " + string.Join("; ", problems.Take(4)) : "")}");
+            var way = l.EntranceOf(g.KeyIn(tile.Id).ToString());
+            var below = l.Floors[Math.Max(0, l.Below - 1)];
+            var ramp = below.AllFlights().FirstOrDefault(x => x.Ramp);
+            Expect(way != null && ramp != null, $"{what}: the door leads to a ramp");
+            if (way == null || ramp == null) continue;
+            if (!written)
+            {
+                System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "garage_ramp.svg"), InteriorValidator.ToSvg(l));
+                written = true;
+            }
+            float fall = l.StoreyHeight, len = Math.Abs(ramp.ZBottom - ramp.ZTop);
+            Expect(Math.Abs(len - RampProfile.Length(fall)) < 0.01f && ramp.X1 - ramp.X0 >= 3f,
+                $"{what}: the ramp drops {fall:F2} m over {len:F1} m, {ramp.X1 - ramp.X0:F1} m wide (a grade of {RampProfile.Slope * 100:F0} %)");
+            var top = l.GroundFloor.Rooms.FirstOrDefault(r => r.Type == RoomType.Ramp);
+            Expect(top != null && top.Openings.Any(o => o.Kind == OpeningKind.Entry && o.Width >= 3f), $"{what}: the ground floor ramp room has the 3 m doorway");
+            var hole = l.GroundFloor.Holes.FirstOrDefault(h => h.X0 <= ramp.X0 + 0.01f && h.X1 >= ramp.X1 - 0.01f);
+            Expect(hole != null, $"{what}: the ground floor is open over the ramp");
+            // a car's height (1.6 m) under whatever stands over it: the slab, or nothing in the hole
+            float clear = l.StoreyHeight - InteriorGenerator.Slab;
+            float worst = float.MaxValue;
+            for (float t = 0; t <= len; t += 0.25f)
+            {
+                float z = ramp.ZTop + t;
+                bool open = hole != null && z >= hole.Z0 - 0.01f && z <= hole.Z1 + 0.01f;
+                if (!open) worst = Math.Min(worst, clear - RampProfile.Height(t, fall));
+            }
+            Expect(worst >= 2.1f, $"{what}: at least {worst:F2} m of headroom under the slab it passes beneath");
+            // the lane through the doorway and the foot's turn are free
+            var park = below.Rooms.FirstOrDefault(r => r.Type == RoomType.CarPark && ramp.Bottom.Z > r.Z0 && ramp.Bottom.Z < r.Z1);
+            Expect(park != null && park.Z1 - ramp.ZBottom >= GarageRule.RampTurn + GarageRule.BayRow - 0.3f,
+                $"{what}: {(park == null ? 0 : park.Z1 - ramp.ZBottom):F1} m of car park beyond the foot, to turn and for a row of bays");
+            Expect(l.Furniture.Count(p => p.Floor == l.Below - 1 && p.Type == FurnitureType.Car) > 0, $"{what}: cars still stand in its bays (props)");
+            // the stairwells either side still have their flats
+            Expect(l.Floors[l.Below].Rooms.Count(r => r.Type == RoomType.Lobby) >= 2, $"{what}: stairwells either side of the ramp");
+        }
+        return failures;
     }
 
     /// <summary>The synthetic tile every box stands on, 150 m apart (also what <c>--flattour</c> walks).</summary>

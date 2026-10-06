@@ -137,9 +137,16 @@ public static class GarageRule
     public static bool HasRamp(float depth, float storeyHeight) => depth >= RampDepth(storeyHeight);
 
 
+    /// <summary>
+    /// Every block rolls a garage, for a live check on a synthetic course (<c>fixture:garage</c>), which
+    /// cannot lean on a hash of the building's key. Set by the fixture source, on the server and every
+    /// client alike; false on the real map and in a generated world.
+    /// </summary>
+    public static bool AlwaysRolls { get; set; }
+
     /// <summary>Whether the key rolls a garage, the same on every peer.</summary>
     public static bool Rolls(string key, bool mixed = false) =>
-        Fnv.Unit(key + "|garage") < (mixed ? MixedRollShare : Share);
+        AlwaysRolls || Fnv.Unit(key + "|garage") < (mixed ? MixedRollShare : Share);
 
     /// <summary>
     /// Whether a block of flats gets an underground garage door: flats (not shops under them), at

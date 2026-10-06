@@ -330,7 +330,9 @@ public static partial class InteriorMeshBuilder
             Vector3 R(float u, float y, float d) => OnWall(side, inner, u, y, d);
             s.Quad(R(s0, ob, 0), R(s0, ot, 0), R(s0, ot, depth), R(s0, ob, depth), reveal);
             s.Quad(R(s1, ob, 0), R(s1, ob, depth), R(s1, ot, depth), R(s1, ot, 0), reveal);
-            s.Quad(R(s0, ot, 0), R(s1, ot, 0), R(s1, ot, depth), R(s0, ot, depth), reveal);
+            // (no soffit where the opening runs up to the ceiling, as a garage ramp's does, #558: a
+            // car's roof would hit that sliver across the lane)
+            if (ot < top - 0.01f) s.Quad(R(s0, ot, 0), R(s1, ot, 0), R(s1, ot, depth), R(s0, ot, depth), reveal);
             if (o.Bottom > 0.01f)
                 s.Quad(R(s0, ob, 0), R(s0, ob, depth), R(s1, ob, depth), R(s1, ob, 0), reveal);
             else
