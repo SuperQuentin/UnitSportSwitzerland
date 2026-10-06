@@ -313,6 +313,12 @@ src/Items/SitePallets    quick  --sitecheck --systems ui
 src/Vehicles/SiteYards   quick  --sitecheck --systems ui
 src/Vehicles/VehicleSlot quick  --sitecheck --systems ui
 src/Items/SitePallets    net    tools/palletnetcheck.sh
+# a hall's forklift is a vehicle asleep (#630): carved out of the hall mesh, woken by aim, driven out
+src/Interiors/HallForklifts quick --sitecheck --systems ui
+src/Interiors/ParkedForklift quick --sitecheck --systems ui
+src/Interiors/HallForklifts net tools/palletnetcheck.sh
+src/Interiors/ParkedForklift net tools/palletnetcheck.sh
+src/Interiors/InteriorGenerator.Industrial net tools/palletnetcheck.sh
 src/Vehicles/SiteYards   net    tools/palletnetcheck.sh
 src/Vehicles/DormantVehicles net tools/palletnetcheck.sh
 src/Player/StairsNet     net    tools/stairsnetcheck.sh
