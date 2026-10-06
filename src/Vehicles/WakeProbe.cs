@@ -7,7 +7,7 @@ using UnitSport.Terrain;
 namespace UnitSport.Vehicles;
 
 /// <summary>
-/// <c>godot --path . -- --wakecheck[,SHOT.png] [--wakekind car|boat|heavy|artic] [--at E,N]</c> (#560):
+/// <c>godot --path . -- --wakecheck[,SHOT.png] [--wakekind car|boat|heavy|artic|site] [--at E,N]</c> (#560):
 /// wakes the dormant slot of that kind nearest the spawn and checks the swap is seamless. The live
 /// vehicle's sections, on the frame it appears and two seconds later, against the poses its dormant
 /// copy was drawn at (<see cref="DormantVehicles.DrawnPoses"/>): a drop, a tilt or a lorry posed a
@@ -18,6 +18,8 @@ namespace UnitSport.Vehicles;
 /// <para>
 /// The fixture courses hold car parks (<c>--chunks fixture:parking</c>) and jetties
 /// (<c>fixture:lake</c>) but no industrial yard, so <c>heavy</c> runs on real terrain, near a depot.
+/// <c>site</c> is a building site's excavator or wheel loader (#616): the generated world holds a site
+/// per village, so it runs there with <c>--at</c> on one (<c>--constructioncheck</c> lists them).
 /// </para>
 /// </summary>
 public partial class WakeProbe : Node
@@ -46,13 +48,16 @@ public partial class WakeProbe : Node
     private static bool IsHeavy(VehicleSlot s) =>
         s.Train != 0 || s.KindId == (int)RideKind.Trailer || HeavyCatalog.For((RideKind)s.KindId) != null;
 
+    private static bool IsMachine(VehicleSlot s) => s.KindId is (int)RideKind.Excavator or (int)RideKind.WheelLoader;
+
     private static bool Wanted(VehicleSlot s) => Kind switch
     {
+        "site" => IsMachine(s),
         "boat" => IsBoat(s),
         "heavy" => IsHeavy(s),
         // a tractor or a rigid with a trailer coupled (and posed behind it: see Run)
         "artic" => s.Train != 0 && s.KindId != (int)RideKind.Trailer,
-        _ => !IsBoat(s) && !IsHeavy(s),
+        _ => !IsBoat(s) && !IsHeavy(s) && !IsMachine(s),
     };
 
     private async Task Run()
