@@ -166,6 +166,10 @@ public partial class LiftSyncProbe : ChatProbe
             }
             Expect(await Until(() => !interiors.InnerDoorLocked(plan, flatDoor) && interiors.InnerDoorOpen(plan.Key, flatDoor), 6) && !ui.IsOpen,
                 "the server unlocked it and swung it open; the dial went");
+            // out of the way, so B can stand square in front of the door
+            me.EnterInterior(plan.Key, node.GlobalTransform * (landing + outward * 1.4f), Mathf.Atan2(-face.X, -face.Z));
+            me.Velocity = Vector3.Zero;
+            await Seconds(0.8);
             Say("cracked");
             if (!await Heard("B", "shut", 60)) { Fail("B never shut it"); return; }
             Expect(await Until(() => !interiors.InnerDoorOpen(plan.Key, flatDoor) && node.InnerSwing(flatDoor) <= 0f, 6),
@@ -178,7 +182,16 @@ public partial class LiftSyncProbe : ChatProbe
                 "B saw it unlocked and swung open without doing anything");
             await Seconds(0.5);
             Shot("flatdoor_open");
-            Expect(me.TryInteract() && await Until(() => !interiors.InnerDoorOpen(plan.Key, flatDoor), 5), "B shuts it with E");
+            // square in front of it: a landing has the elevator's call button beside a flat's door,
+            // and E works whichever is nearer
+            me.EnterInterior(plan.Key, node.GlobalTransform * (at + outward * 0.6f + Vector3.Up * (plan.FloorY(d.Floor) + 0.1f)), Mathf.Atan2(-face.X, -face.Z));
+            me.Velocity = Vector3.Zero;
+            await Seconds(0.8);
+            var stand = node.ToLocal(me.GlobalPosition);
+            var doorway = node.ToLocal(node.GlobalTransform * (at + Vector3.Up * plan.FloorY(d.Floor)));
+            bool pressed = me.TryInteract();
+            Expect(pressed && await Until(() => !interiors.InnerDoorOpen(plan.Key, flatDoor), 5),
+                $"B shuts it with E (pressed {pressed}, {new Vector2(stand.X - doorway.X, stand.Z - doorway.Z).Length():F2} m from the doorway, floor {InteriorManager.FloorAt(plan, stand.Y)} of {d.Floor})");
             Say("shut");
         }
         await Finish(2);

@@ -547,6 +547,42 @@ public class BuildingsAndOsmResolverTests
     }
 
     /// <summary>
+    /// swisstopo re-flies sheets, so a folder holds two years of one sheet once a region is
+    /// refreshed. Taking whichever the filesystem listed first would silently build the older
+    /// survey while the newer sat beside it (#597).
+    /// </summary>
+    [Fact]
+    public void The_newest_flight_of_a_sheet_wins_whatever_order_it_is_listed_in()
+    {
+        string[] files =
+        [
+            "/data/buildings3d/swissbuildings3d_3_0_2019_1091-12_2056_5728.gdb.zip",
+            "/data/buildings3d/swissbuildings3d_3_0_2024_1091-12_2056_5728.gdb.zip",
+            "/data/buildings3d/swissbuildings3d_3_0_2020_1091-12_2056_5728.gdb.zip",
+        ];
+        const string newest = "/data/buildings3d/swissbuildings3d_3_0_2024_1091-12_2056_5728.gdb.zip";
+        Assert.Equal(newest, SwissStacUtil.NewestSheetFile(files));
+        Assert.Equal(newest, SwissStacUtil.NewestSheetFile(files.AsEnumerable().Reverse()));
+        Assert.Equal(newest, SwissStacUtil.NewestSheetFile(files.OrderBy(f => f)));
+    }
+
+    [Theory]
+    [InlineData("swissbuildings3d_3_0_2019_1091-12_2056_5728.gdb.zip", 2019)]
+    [InlineData("swissbuildings3d_3_0_2026_1348-11_2056_5728.gdb.zip", 2026)]
+    [InlineData("something-else.gdb.zip", 0)]
+    public void A_sheet_file_name_gives_up_its_flight_year(string name, int year) =>
+        Assert.Equal(year, SwissStacUtil.SheetFileYear("/data/" + name));
+
+    /// <summary>An unparsable name must sort oldest, not win by accident.</summary>
+    [Fact]
+    public void A_name_with_no_year_never_beats_a_dated_one()
+    {
+        string[] files = ["/d/buildings.gdb.zip", "/d/swissbuildings3d_3_0_2019_1091-12_2056_5728.gdb.zip"];
+        Assert.Equal("/d/swissbuildings3d_3_0_2019_1091-12_2056_5728.gdb.zip", SwissStacUtil.NewestSheetFile(files));
+        Assert.Null(SwissStacUtil.NewestSheetFile([]));
+    }
+
+    /// <summary>
     /// The dated extract is taken in preference to <c>-latest</c>, which has been seen answering
     /// with a redirect to itself.
     /// </summary>

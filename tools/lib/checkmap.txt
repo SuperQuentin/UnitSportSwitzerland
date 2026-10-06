@@ -37,6 +37,7 @@ src/Terrain/             quick  --origincheck
 # #298: a generated lake (Haut-Lac, inside the fill round the default spawn) has its bed 10 m+ under
 # the level the runtime reads, and collision is the bed
 src/Terrain/ProceduralWorld quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
+src/Terrain/ProceduralWorld quick --shapedcheck --systems ui
 src/Terrain/WaterProbe   quick  --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 tools/TerrainFormat/Water quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 src/Items/               quick  --invcheck
@@ -59,6 +60,8 @@ src/Loot/LootTables      quick  --sitecheck --systems ui
 src/Interiors/           quick  --doorcheck
 src/Interiors/           quick  --flatcheck
 src/Interiors/           quick  --stairwalkcheck
+# #598: the generated world's shaped buildings: outline, doors, interiors that follow it
+src/Interiors/           quick  --shapedcheck --systems ui
 src/Interiors/Church     quick  --churchstagecheck
 src/Interiors/Landmarks  quick  --ikeacheck --systems ui
 src/Interiors/Ikea       quick  --ikeacheck --systems ui

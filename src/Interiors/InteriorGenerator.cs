@@ -87,7 +87,7 @@ public static partial class InteriorGenerator
         // a block of flats (#557) plans its stairwells and flats itself, and its street doors with them
         var flats = !planned && site == BuildingType.None && type == BuildingType.None
             ? ApartmentTypeFor(fp, b.Kind, n, bank) : BuildingType.None;
-        bool flatsPlanned = flats != BuildingType.None && TryApartments(layout, fp, b.Kind, n, flats, rng);
+        bool flatsPlanned = flats != BuildingType.None && TryApartments(layout, fp, b, b.Kind, n, flats, rng);
         planned |= flatsPlanned;
         if (!planned)
         {
@@ -239,7 +239,7 @@ public static partial class InteriorGenerator
                 ? new RectPlan(c - width / 2, side == Side.Front ? r.Z0 : r.Z1 - 1.2f, c + width / 2, side == Side.Front ? r.Z0 + 1.2f : r.Z1)
                 : new RectPlan(side == Side.Left ? r.X0 : r.X1 - 1.2f, c - width / 2, side == Side.Left ? r.X0 + 1.2f : r.X1, c + width / 2);
             if (ground.Holes.Any(h => h.Overlaps(reach))) continue;
-            if (ground.AllFlights().Any(fl => new RectPlan(fl.X0, Math.Min(fl.ZBottom, fl.ZTop), fl.X1, Math.Max(fl.ZBottom, fl.ZTop)).Overlaps(reach)))
+            if (ground.AllFlights().Any(fl => fl.Area().Overlaps(reach)))
                 continue;
             room = r;
             center = c;
@@ -1199,7 +1199,7 @@ public static partial class InteriorGenerator
                 if (apt)
                     foreach (var fl in floor.AllFlights())
                     {
-                        var run = new RectPlan(fl.X0, Math.Min(fl.ZBottom, fl.ZTop) - 1.2f, fl.X1, Math.Max(fl.ZBottom, fl.ZTop) + 1.2f);
+                        var run = fl.Area(1.2f, 1.2f);
                         if (run.Overlaps(new RectPlan(r.X0, r.Z0, r.X1, r.Z1))) blocked.Add(run);
                     }
                 if (isCore)

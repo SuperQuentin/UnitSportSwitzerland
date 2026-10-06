@@ -413,6 +413,16 @@ public static partial class InteriorMeshBuilder
     /// </summary>
     private static void Flight(Scratch s, FlightPlan f, float y0, float h)
     {
+        // built in the flight's own frame, across its lane and along its run; a flight along X
+        // (#577) is the same with the two swapped, which the two-sided interior shaders and
+        // collision do not mind
+        Vector3 V(float across, float y, float along) => f.AlongX ? new Vector3(along, y, across) : new Vector3(across, y, along);
+        void B(float a0, float ya, float l0, float a1, float yb, float l1, Color col, bool collide)
+        {
+            var p = V(a0, ya, l0);
+            var q = V(a1, yb, l1);
+            s.Box(p.Min(q), p.Max(q), col, collide);
+        }
         float ya = y0 + h * f.From, yb = y0 + h * f.To, rise = yb - ya;
         bool stone = f.Half;
         int steps = Math.Max(1, (int)MathF.Ceiling(rise / (stone ? 0.18f : 0.19f)));
@@ -429,13 +439,13 @@ public static partial class InteriorMeshBuilder
             {
                 var shade = i % 2 == 0 ? StairWood : StairWood * 0.93f;
                 shade.A = 1;
-                s.Box(new Vector3(x0, y0, z0), new Vector3(x1, top, z1), shade, false);
+                B(x0, y0, z0, x1, top, z1, shade, false);
                 continue;
             }
             // the tread and its riser on a slab 0.35 m thick under the step line
-            s.Box(new Vector3(x0, Math.Max(ya - 0.2f, top - 0.38f), z0), new Vector3(x1, top, z1), StairStone, false);
+            B(x0, Math.Max(ya - 0.2f, top - 0.38f), z0, x1, top, z1, StairStone, false);
             float nose = dir > 0 ? z0 : z1;
-            s.Box(new Vector3(x0, top - 0.03f, nose - 0.02f), new Vector3(x1, top + 0.005f, nose + 0.02f), StairNosing, false);
+            B(x0, top - 0.03f, nose - 0.02f, x1, top + 0.005f, nose + 0.02f, StairNosing, false);
         }
         if (stone && f.Parapet != 0)
         {
@@ -445,30 +455,31 @@ public static partial class InteriorMeshBuilder
             float p0 = f.Parapet > 0 ? f.X1 : f.X0 - InteriorGenerator.StairEye / 2;
             float p1 = f.Parapet > 0 ? f.X1 + InteriorGenerator.StairEye / 2 : f.X0;
             float ra = ya + rise / steps, rb = yb;
-            Prism(s, p0, p1, f.ZBottom, f.ZTop, ra - 0.4f, ra + 0.9f, rb - 0.4f, rb + 0.9f, Parapet, true);
-            Prism(s, p0 - 0.03f, p1 + 0.03f, f.ZBottom, f.ZTop, ra + 0.9f, ra + 0.96f, rb + 0.9f, rb + 0.96f, Handrail, false);
+            Prism(s, f.AlongX, p0, p1, f.ZBottom, f.ZTop, ra - 0.4f, ra + 0.9f, rb - 0.4f, rb + 0.9f, Parapet, true);
+            Prism(s, f.AlongX, p0 - 0.03f, p1 + 0.03f, f.ZBottom, f.ZTop, ra + 0.9f, ra + 0.96f, rb + 0.9f, rb + 0.96f, Handrail, false);
         }
         float zs = f.ZBottom - dir * tread;
-        var a = new Vector3(f.X0, ya, zs);
-        var b = new Vector3(f.X1, ya, zs);
-        var c = new Vector3(f.X1, yb, f.ZTop);
-        var d = new Vector3(f.X0, yb, f.ZTop);
+        var a = V(f.X0, ya, zs);
+        var b = V(f.X1, ya, zs);
+        var c = V(f.X1, yb, f.ZTop);
+        var d = V(f.X0, yb, f.ZTop);
         s.Col.Add(a); s.Col.Add(b); s.Col.Add(c);
         s.Col.Add(a); s.Col.Add(c); s.Col.Add(d);
     }
 
     /// <summary>
-    /// A box sloped along z: x from <paramref name="x0"/> to <paramref name="x1"/>, at
+    /// A box sloped along z (or along x, <paramref name="alongX"/>, the two swapped): x from <paramref name="x0"/> to <paramref name="x1"/>, at
     /// z = <paramref name="za"/> from <paramref name="lowA"/> to <paramref name="highA"/>, at
     /// z = <paramref name="zb"/> from <paramref name="lowB"/> to <paramref name="highB"/>.
     /// </summary>
-    private static void Prism(Scratch s, float x0, float x1, float za, float zb,
+    private static void Prism(Scratch s, bool alongX, float x0, float x1, float za, float zb,
         float lowA, float highA, float lowB, float highB, Color col, bool collide)
     {
-        var a0 = new Vector3(x0, lowA, za); var a1 = new Vector3(x1, lowA, za);
-        var a2 = new Vector3(x1, highA, za); var a3 = new Vector3(x0, highA, za);
-        var b0 = new Vector3(x0, lowB, zb); var b1 = new Vector3(x1, lowB, zb);
-        var b2 = new Vector3(x1, highB, zb); var b3 = new Vector3(x0, highB, zb);
+        Vector3 V(float x, float y, float z) => alongX ? new Vector3(z, y, x) : new Vector3(x, y, z);
+        var a0 = V(x0, lowA, za); var a1 = V(x1, lowA, za);
+        var a2 = V(x1, highA, za); var a3 = V(x0, highA, za);
+        var b0 = V(x0, lowB, zb); var b1 = V(x1, lowB, zb);
+        var b2 = V(x1, highB, zb); var b3 = V(x0, highB, zb);
         var side = col * 0.9f; side.A = col.A;
         s.Quad(a0, b0, b3, a3, side, collide);       // -x face
         s.Quad(a1, a2, b2, b1, side, collide);       // +x face
