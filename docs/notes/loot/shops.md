@@ -11,7 +11,7 @@
   one on the ground floor (a garage has none of its own), like the bank's `Counter`. In a shop the
   counter is the shop: `LootService.NearestContainer` skips it, `LootTables.BuildingChance` too, so
   its till is no longer searched. Plan version 11.
-- **Sign**: `Interiors/BankSigns` draws a coloured plate with the shop's name over every shop door.
+- **Sign**: `Interiors/BankSigns` draws (to 200 m, #553) a coloured plate with the shop's name over every shop door.
 - **Stock is computed, never stored**: `ShopTables.Stock(key, furniture, epoch, type, value, season)`,
   seeded like loot (`LootTables.Epoch`: 24 h, staggered per building, `--lootepoch`). One slot per
   catalogue line (`ShopLine(Id, Chance, Min, Max)`), stock 0 when not carried that period; every line

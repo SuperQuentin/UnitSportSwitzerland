@@ -730,10 +730,12 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     public event Action<TileId, ChunkNode>? TileUnfurnished;
 
     /// <summary>
-    /// Buildings round the camera drawn in cells with occluders, for occlusion culling (#553):
-    /// <c>--occlusion</c>, an experiment until it is measured to pay.
+    /// Buildings round the camera drawn in cells with occluders, for occlusion culling (#553). On:
+    /// measured three times each way, it shortened the frame at street level (p50 4.4 to 4.1 ms,
+    /// p99 5.6 to 5.0 ms, GPU -8 %) and from the air (mean -4 %, GPU -5 %).
+    /// <c>--occlusion off</c> turns it off, for comparisons.
     /// </summary>
-    public static bool OcclusionCells { get; set; } = Core.CmdArgs.Has("--occlusion");
+    public static bool OcclusionCells { get; set; } = Core.CmdArgs.Value("--occlusion", notFlag: true) != "off";
 
     /// <summary>Tiles within this many of an anchor's draw their buildings in cells.</summary>
     public const int CellRings = 1;
