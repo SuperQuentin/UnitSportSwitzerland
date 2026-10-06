@@ -25,6 +25,8 @@ public enum PalletSource : byte
     Yard,
     /// <summary>One somebody set down: <c>"#&lt;id&gt;"</c>, numbered by the server for the session.</summary>
     Loose,
+    /// <summary>A building site's pallet of bricks or cement (#615): <c>"&lt;building&gt;:c&lt;slot&gt;"</c>.</summary>
+    Site,
 }
 
 /// <summary>A pallet id taken apart.</summary>
@@ -132,6 +134,9 @@ public static class Pallets
     /// <summary>A yard pallet: its site's building key and its slot in the yard (phase 3).</summary>
     public static string YardId(string building, int slot) => $"{building}:y{slot}";
 
+    /// <summary>A building site's pallet of materials (#615): its building key and its slot in the materials' row.</summary>
+    public static string SiteId(string building, int slot) => $"{building}:c{slot}";
+
     /// <summary>A pallet somebody set down, by the server's number for it.</summary>
     public static string LooseId(long id) => "#" + id.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -151,9 +156,9 @@ public static class Pallets
         // a building key, a kind letter and at least one digit
         if (colon <= 0 || colon + 2 >= id.Length) return false;
         char kind = id[colon + 1];
-        if (kind is not ('f' or 'y')) return false;
+        if (kind is not ('f' or 'y' or 'c')) return false;
         if (!int.TryParse(id.AsSpan(colon + 2), System.Globalization.NumberStyles.None, inv, out int index)) return false;
-        parsed = new PalletRef(kind == 'f' ? PalletSource.Hall : PalletSource.Yard, id[..colon], index, 0);
+        parsed = new PalletRef(kind switch { 'f' => PalletSource.Hall, 'y' => PalletSource.Yard, _ => PalletSource.Site }, id[..colon], index, 0);
         return true;
     }
 

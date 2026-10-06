@@ -376,12 +376,18 @@ public partial class PalletService : Node
         }
         else
         {
-            // a site's apron stack (#583 phase 3): worked out from the tile's own files, as every
-            // peer draws it, so nothing the asker sends decides where it is or what is on it
+            // a site's apron stack (#583 phase 3) or a building site's pallet (#615): worked out
+            // from the tile's own files, as every peer draws it, so nothing the asker sends decides
+            // where it is or what is on it
             if (_taken.Contains(id)) { Refuse(peer, id, "It is not there any more."); return; }
             YardPallet? stack = null;
             if (Source?.Invoke() is { } source)
-                try { stack = await Task.Run(() => SiteYards.PalletAt(source, r.Building, r.Index)); }
+                try
+                {
+                    stack = await Task.Run(() => r.Source == PalletSource.Site
+                        ? Terrain.Construction.SitePlans.PalletAt(source, r.Building, r.Index)
+                        : SiteYards.PalletAt(source, r.Building, r.Index));
+                }
                 catch (Exception e) { GD.PushError($"[pallets] yard {r.Building}: {e.Message}"); }
             if (stack is not { } yard) { Refuse(peer, id, "No such pallet."); return; }
             if (_taken.Contains(id)) { Refuse(peer, id, "It is not there any more."); return; }
