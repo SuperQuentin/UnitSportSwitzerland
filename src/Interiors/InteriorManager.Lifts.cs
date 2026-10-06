@@ -86,12 +86,26 @@ public partial class InteriorManager
     {
         if (!p.Indoors || _current == null || CurrentNode is not { } node) return false;
         var local = node.ToLocal(p.GlobalPosition);
-        if (_current.Lifts.Count > 0 && LiftAt(_current, local, CallReach) is { } at)
+        if (_current.Lifts.Count > 0 && LiftAt(_current, local, CallReach) is { } at && !DoorNearer(_current, local, at))
         {
             UseLift(at.Lift, at.Floor, at.InCabin);
             return true;
         }
         return TryInnerDoor(p, local);
+    }
+
+    /// <summary>
+    /// Whether a flat's door is nearer than the call button the player is also in reach of: a
+    /// landing has both side by side, and E works the nearer one (#576). In the cabin, never.
+    /// </summary>
+    private static bool DoorNearer(InteriorLayout l, Vector3 local, (int Lift, int Floor, bool InCabin) at)
+    {
+        if (at.InCabin) return false;
+        int door = InnerDoorAt(l, local, InnerDoorReach);
+        if (door < 0) return false;
+        var call = l.Lifts[at.Lift].CallPoint(l.FloorY(at.Floor));
+        var (way, _) = InnerDoorway(l, l.InnerDoors[door]);
+        return new Vector2(way.X - local.X, way.Z - local.Z).Length() < new Vector2(call.X - local.X, call.Z - local.Z).Length();
     }
 
     /// <summary>A VR hand gripping (#557): a button it is on, or a flat's door it holds.</summary>
@@ -116,7 +130,7 @@ public partial class InteriorManager
     {
         if (_current == null || CurrentNode is not { } node) return null;
         var local = node.ToLocal(p.GlobalPosition);
-        if (_current.Lifts.Count > 0 && LiftAt(_current, local, CallReach) is { } at)
+        if (_current.Lifts.Count > 0 && LiftAt(_current, local, CallReach) is { } at && !DoorNearer(_current, local, at))
         {
             var ride = LiftOf(_current, at.Lift);
             if (at.InCabin)

@@ -20,7 +20,9 @@ Before, a block of flats was planned as one big house round a single stair core.
   end, one flat a floor (a three-family house). Doors on other walls open into whatever room
   takes them, circulation first, never a bathroom or a bedroom (`AptEntrances`, `StreetRank`).
 - **Regions and flats.** Round each stairwell, regions touching circulation along one wall (`Way`s:
-  the landing's stretch of wall away from the stair runs). A side wider than 13.5 m gets a corridor
+  the landing's stretch of wall away from the stair runs). The building's corridors (and the back
+  landing they run off) are `CorridorWidth` 2.0 m, wider than a flat's 1.2–1.3 m hall (#576).
+  A side wider than 13.5 m gets a corridor
   off the back landing (`CorridorSide`), flats front and back of it; a block more than 12 m deeper
   than its stairwell gets a corridor from the back landing to the back facade (`DeepBack`), flats
   both sides. Each region is cut along its way into flats of the block's own size
@@ -33,7 +35,11 @@ Before, a block of flats was planned as one big house round a single stair core.
   two ends: a hall along the door wall, living room at one facade, a bedroom at the other, wet rooms
   in the dark middle), *studio* (under 38 m²), *linear* (under 4.4 m wide). Every flat has a bed, a
   kitchen and a bathroom. `ConnectFlat` grows the doorways from the hall; a hall opens into the
-  next with no door, the kitchen half the time into the living room (open kitchen). `Strip` gives
+  next with no door, the kitchen half the time into the living room (open kitchen). Rooms open
+  only off a **connector** (`Connector`: a hall, the living room, the kitchen, a dining room, a
+  shop's floor): a bedroom, a bathroom, a WC, a box room or a study is a dead end with one door,
+  never walked through and no en-suite (#576). `Reachable` checks a layout for it before it is
+  chosen (`Score` +500), and the daylight swap keeps to it. `Strip` gives
   every room its minimum first and shares what is left by weight; when even the minimums do not
   fit, the item easiest to lose goes (`FlatItem.Keep`).
 - **Every floor of flats is the same plan**: one seed (`|flats`) for all of them, as the plumbing
@@ -52,7 +58,7 @@ Before, a block of flats was planned as one big house round a single stair core.
   read), `LiftPlan` (cabin rectangle, door side, floors served, the call button and panel
   positions), `InnerDoorPlan` (a flat's front door: floor, hall room, side, centre, `Locked`).
   New rooms `Elevator CarPark TechRoom Corridor`, pieces `Pillar StorageCage Mailboxes BikeRack`.
-  Plan version 17 (#501 took 16); 18 with #571 (half flights, landings, daylight).
+  Plan version 17 (#501 took 16); 18 with #571 (half flights, landings, daylight); 19 went to #531 (loading bays); 20 with #576 (one door, wider corridors).
 - **Validator**: reachability now runs from every street doorway through doorways, up and down
   every flight and along every elevator, over the whole building (a block's upper floors are
   stairwells that never meet); a hole must cover its flight; each elevator has a cabin with a
@@ -144,7 +150,8 @@ A Swiss *Treppenhaus*, not the house stair the first version reused.
 | Open / shut a flat's door | E | Y | Y, or grip the door |
 | Pick a flat door's lock | E, then the dial (A/D, mouse) | Y, then the stick | Y or grip, then the stick |
 
-Esc / B / E again closes the floor list. Prompts through `InputHints`.
+Esc / B / E again closes the floor list. On a landing where a flat's door stands beside the call
+button, E works whichever is nearer (`DoorNearer`, #576). Prompts through `InputHints`.
 
 ## Checks
 
@@ -159,8 +166,9 @@ Esc / B / E again closes the floor list. Prompts through `InputHints`.
   from every floor in every stairwell, a bed/kitchen/bathroom and a hall at the door of every
   flat, the floors the same plan, the basement's rooms, the car park and its cars, shops in a
   mixed block, every facade door arriving somewhere, some flat doors locked, every living room
-  and bedroom with a window (#571), and two flights round a half landing up from every floor of
-  every stairwell. SVG plans in `test_output/flats/` (render with Edge headless, see
+  and bedroom with a window (#571), every bedroom, bathroom and WC with one door (#576; fails with
+  every room a connector), and two flights round a half landing up from every floor of every
+  stairwell. SVG plans in `test_output/flats/` (render with Edge headless, see
   `cellars-and-room-variety`).
 - `--flattour[,shot.png] [--block NAME]` (windowed, no world): one of those blocks built with the
   real mesh builder, photographed at the lobby, a landing, the cabin, the flat's rooms, the car
