@@ -24,8 +24,11 @@ is not in yet: the cars in the bays are props.
   entrances** (`Spacing / 2`, `3 Spacing / 2`...), which is clear of them by construction, with an
   entrance (and so a stairwell) on both sides: the ramp behind it runs straight in between two
   stairwells, which a door on a side wall could not do (PR 1 preferred a side wall facing the road;
-  PR 2 dropped that). Only rectangular blocks (roof area at least 90 % of the plan box); an L or U
-  block gets none.
+  PR 2 dropped that). Only a block the generator plans whole (`PlannedAsBox`: `PlanOutline.Wings` finds
+  no wing; an L or U block, or one 90 to 92 % covered, is planned wing by wing and has no ramp), a
+  door inside the 120 m plan box, and `GarageRule.StairClear` (7 m) from every other door: the main
+  door and any later pedestrian door (`placed` in the extra-doors loop) keep that distance, so the
+  stairwell built for a door never stands in the ramp's column.
   The door is 3.0 x 2.4 m (`GarageRule.Width/Height`), `Hang = RollUp, Vehicle = true`, and the
   door's `Link` carries the road link.
 - **Road link: `GarageLink.Choose`** (`src/Interiors/GarageLink.cs`, pure, tier 0). It reads the
@@ -141,3 +144,10 @@ is not in yet: the cars in the bays are props.
   A ramp is only planned for a door on the front wall between two stairwells and for a block
   planned as a whole (an L, U or courtyard block planned wing by wing has none: its door reads as locked). A car's hull box is flat, so a long wheelbase rides the crest on its rear edge for a
   moment (the bevels make it smooth, not perfect).
+- **Real data (PR 2).** `--garagelinks` now also plans each garage door as the server would and says
+  whether a ramp came of it and why not (`InteriorGenerator.RampWhy`). Over Lausanne, Geneva, Nendaz and
+  Veyrier (2963 blocks, 1176 with 3 or more front doors): the PR 1 rule placed 3 garage doors; two were on
+  blocks planned wing by wing and one on a 120 m facade past the plan box, so they read as locked, and the
+  footprint now refuses those; **1 door in 2963 blocks remains, and it has a ramp, no validator problems**.
+  That is rarer than the 0.3 % guessed in #558: most real blocks with three entrances are neither whole
+  rectangles nor 17 m deep.
