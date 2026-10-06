@@ -288,6 +288,10 @@ public partial class ServerWorld : Node3D, IOriginContainer
                 + megabytesPerSecond.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)
                 + " MB/s per client");
         }
+        // a static HTTP mirror of the chunk directory (#651): clients take the bulk files from it
+        _streamer.TilesUrl = CmdArgs.Value("--tiles-url", notFlag: true)
+            ?? (System.Environment.GetEnvironmentVariable("UNITSPORT_TILES_URL") is { Length: > 0 } envUrl ? envUrl : null);
+        if (_streamer.TilesUrl is { } tilesUrl) GD.Print($"[server] clients fetch tiles from {tilesUrl}, the game link as fallback");
         AddChild(_streamer);
         _chat.Streamer = _streamer;
 

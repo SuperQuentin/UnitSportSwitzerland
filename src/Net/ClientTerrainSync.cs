@@ -55,6 +55,8 @@ public sealed partial class ClientTerrainSync : Node
     /// </summary>
     public async Task SyncAsync(CancellationToken ct = default)
     {
+        if (Synced) return;
+        await SyncHttpAsync(ct).ConfigureAwait(false);
         bool merged;
         try { merged = await SyncIndex(ct); }
         finally { IndexFinished = true; }
@@ -70,6 +72,22 @@ public sealed partial class ClientTerrainSync : Node
     /// arrive through their events while you play.
     /// </summary>
     public bool IndexFinished { get; private set; }
+
+    /// <summary>
+    /// Asks the server for its HTTP mirror (#651) and, when it answers, routes the bulk files through
+    /// it from here on. A server without one (or an older one) says "missing": ENet only, as before.
+    /// </summary>
+    private async Task SyncHttpAsync(CancellationToken ct)
+    {
+        var result = await _streamer.FetchAsync(AssetKind.HttpBase, new TileId(0, 0), ct).ConfigureAwait(false);
+        if (result.Data is not { Length: > 0 } bytes) return;
+
+        string url = Encoding.UTF8.GetString(bytes).Trim();
+        if (await HttpAssetSource.ProbeAsync(url, ct).ConfigureAwait(false) is not { } http) return;
+
+        _streamer.Http = http;
+        GD.Print($"[stream] tiles from {http.BaseUrl} (HTTP), the game link as fallback");
+    }
 
     /// <summary>Fetches and adopts the server's tile index. False when there is nothing more to sync.</summary>
     private async Task<bool> SyncIndex(CancellationToken ct)
