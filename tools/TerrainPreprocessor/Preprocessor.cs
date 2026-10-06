@@ -77,6 +77,7 @@ public static partial class Preprocessor
         string? tlmGpkg = null, routeKeys = null, buildingsGpkg = null, gwrPath = null;
         string? exportRouteKeysDir = null;
         var buildingsGdb = new List<string>();
+        int? batchSizeArg = null;
         bool verify = false;
         bool roadsOnly = false, featuresOnly = false, doCover = false, doPlaces = false, placesOnly = false;
         // --tiles-file: feature passes only touch these tiles ("E-N" in km per line), so adding one valley
@@ -124,6 +125,7 @@ public static partial class Preprocessor
                 // #537: read the swissBUILDINGS3D FileGDB zips directly, with no GDAL export first.
                 // Repeatable, and globs are expanded by the caller (one zip per map sheet).
                 case "--buildings-gdb": buildingsGdb.Add(args[++i]); break;
+                case "--batch-size": batchSizeArg = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--gwr": gwrPath = args[++i]; break;
                 case "--cover": doCover = true; break;
                 case "--cover-only": doCover = coverOnly = featuresOnly = true; break;
@@ -480,7 +482,11 @@ public static partial class Preprocessor
                 if (placesOnly || (tlmGpkg == null && buildingsGpkg == null && buildingsGdb.Count == 0)) return 0;
             }
 
-            const int BatchSize = 400;
+            // 400 tiles is ~800 MB of chunk grids held at once. --batch-size exists so a check can
+            // force several batches out of a small region (#570); it is not a tuning knob, because
+            // a building's terrain re-seat samples only the grids of its own batch, so moving the
+            // boundaries moves a few buildings at the seams by a few centimetres.
+            int batchSize = batchSizeArg ?? 400;
             var ordered = existing.Tiles.OrderBy(t => t.E).ThenBy(t => t.N).ToList();
             if (tilesFile != null)
             {
@@ -489,11 +495,22 @@ public static partial class Preprocessor
                 Console.WriteLine($"--tiles-file: {ordered.Count} of {wanted.Count} listed tiles are built");
                 if (ordered.Count == 0) return 0;
             }
-            int batches = (ordered.Count + BatchSize - 1) / BatchSize;
+            int batches = (ordered.Count + batchSize - 1) / batchSize;
+
+            // Built once and reused by every batch below (#570). It carries the GWR cadastre —
+            // millions of records, seconds to load — and the per-sheet extents that let a batch
+            // skip the sheets it cannot possibly contain, so rebuilding it per batch turned a
+            // nationwide run from minutes into hours.
+            BuildingExtractor? buildings = null;
+            if (buildingsGdb.Count > 0)
+                buildings = BuildingStage.OpenGdb(buildingsGdb, Path.Combine(tempDir!, "buildgdb"), gwrPath);
+            else if (buildingsGpkg != null)
+                buildings = BuildingStage.OpenGeoPackage(buildingsGpkg, gwrPath);
+            if ((buildingsGdb.Count > 0 || buildingsGpkg != null) && buildings == null) return 1;
 
             Dictionary<TileId, ChunkGrid> LoadBatch(int b, out List<ManifestTile> slice)
             {
-                slice = ordered.Skip(b * BatchSize).Take(BatchSize).ToList();
+                slice = ordered.Skip(b * batchSize).Take(batchSize).ToList();
                 var grids = new System.Collections.Concurrent.ConcurrentDictionary<TileId, ChunkGrid>();
                 Parallel.ForEach(slice, new ParallelOptions { MaxDegreeOfParallelism = jobs, CancellationToken = ct }, t =>
                 {
@@ -517,11 +534,9 @@ public static partial class Preprocessor
                     Console.WriteLine($"=== roads, batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
                     int rc = RoadStage.Run(tlmGpkg!, routeKeys, outDir!, tempDir!, batch, coverOverrides);
                     if (rc != 0) return rc;
-                    if (buildingsGpkg != null || buildingsGdb.Count > 0)
+                    if (buildings != null)
                     {
-                        rc = buildingsGdb.Count > 0
-                            ? BuildingStage.RunFromGdb(buildingsGdb, Path.Combine(tempDir!, "buildgdb"), gwrPath, outDir!, batch)
-                            : BuildingStage.Run(buildingsGpkg!, gwrPath, outDir!, batch);
+                        rc = BuildingStage.Run(buildings, outDir!, batch);
                         if (rc != 0) return rc;
                     }
                 }
@@ -548,9 +563,7 @@ public static partial class Preprocessor
                 }
                 if ((buildingsGpkg != null || buildingsGdb.Count > 0) && !roads)
                 {
-                    int rc = buildingsGdb.Count > 0
-                        ? BuildingStage.RunFromGdb(buildingsGdb, Path.Combine(tempDir!, "buildgdb"), gwrPath, outDir!, batch)
-                        : BuildingStage.Run(buildingsGpkg!, gwrPath, outDir!, batch);
+                    int rc = buildings == null ? 1 : BuildingStage.Run(buildings, outDir!, batch);
                     if (rc != 0) return rc;
                 }
             }

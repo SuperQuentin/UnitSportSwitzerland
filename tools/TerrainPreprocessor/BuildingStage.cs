@@ -3,41 +3,49 @@ using UnitSport.Terrain.Format;
 
 namespace UnitSport.Tools.Preprocessor;
 
+/// <summary>
+/// Turns swissBUILDINGS3D solids into per-tile .bldg files. The solids come either from the
+/// FileGDB zips swisstopo publishes (#537, no GDAL and no export step) or from a GeoPackage left
+/// by an older run; the extractor is opened once and run per batch of tiles (#570).
+/// </summary>
 public static class BuildingStage
 {
-    public static int Run(string gpkgPath, string? gwrPath, string outDir,
-        Dictionary<TileId, ChunkGrid> grids)
-    {
-        if (!File.Exists(gpkgPath))
-        {
-            Console.Error.WriteLine($"Buildings GeoPackage not found: {gpkgPath}");
-            Console.Error.WriteLine("  run: python tools/export_buildings.py --bbox <minE minN maxE maxN>");
-            return 1;
-        }
-        return Run(new BuildingExtractor(gpkgPath, gwrPath), outDir, grids);
-    }
-
     /// <summary>
-    /// The same stage, reading the swissBUILDINGS3D FileGDB zips directly (#537): no GDAL, and no
-    /// intermediate GeoPackage to export first.
+    /// The extractor for the FileGDB route, built <b>once</b> and reused for every batch: it holds
+    /// the GWR cadastre (3.37 M records, several seconds to load) and the per-sheet extents that
+    /// let later batches skip sheets without opening them (#570).
     /// </summary>
-    public static int RunFromGdb(IReadOnlyList<string> gdbZips, string workDir, string? gwrPath,
-        string outDir, Dictionary<TileId, ChunkGrid> grids)
+    public static BuildingExtractor? OpenGdb(IReadOnlyList<string> gdbZips, string workDir, string? gwrPath)
     {
-        var missing = gdbZips.Where(z => !File.Exists(z)).ToList();
-        if (gdbZips.Count == 0 || missing.Count == gdbZips.Count)
+        var present = gdbZips.Where(File.Exists).ToList();
+        foreach (var z in gdbZips.Where(z => !File.Exists(z))) Console.Error.WriteLine($"  missing, skipped: {z}");
+        if (present.Count == 0)
         {
             Console.Error.WriteLine("No swissBUILDINGS3D .gdb.zip files to read");
-            return 1;
+            return null;
         }
-        foreach (var z in missing) Console.Error.WriteLine($"  missing, skipped: {z}");
-        return Run(new BuildingExtractor(gdbZips.Where(File.Exists).ToList(), workDir, gwrPath), outDir, grids);
+        var extractor = new BuildingExtractor(present, workDir, gwrPath);
+        Console.WriteLine($"Buildings: {extractor.CadastreCount} cadastre records loaded, {present.Count} sheet(s)");
+        return extractor;
     }
 
-    private static int Run(BuildingExtractor extractor, string outDir, Dictionary<TileId, ChunkGrid> grids)
+    /// <summary>The GeoPackage route's extractor, likewise built once.</summary>
+    public static BuildingExtractor? OpenGeoPackage(string gpkgPath, string? gwrPath)
+    {
+        if (File.Exists(gpkgPath))
+        {
+            var extractor = new BuildingExtractor(gpkgPath, gwrPath);
+            Console.WriteLine($"Buildings: {extractor.CadastreCount} cadastre records loaded");
+            return extractor;
+        }
+        Console.Error.WriteLine($"Buildings GeoPackage not found: {gpkgPath}");
+        return null;
+    }
+
+    /// <summary>One batch of tiles, against an extractor from <see cref="OpenGdb"/>/<see cref="OpenGeoPackage"/>.</summary>
+    public static int Run(BuildingExtractor extractor, string outDir, Dictionary<TileId, ChunkGrid> grids)
     {
         var sw = Stopwatch.StartNew();
-        Console.WriteLine($"Buildings: {extractor.CadastreCount} cadastre records loaded");
 
         double? HeightOf(double e, double n)
         {

@@ -31,5 +31,15 @@
   exactly the same buildings as tiles built through GDAL's GeoPackage — same count, same triangles,
   same words — written in a different order, because the GeoPackage returns them in spatial-index
   order and the FileGDB in row order.
+- **The feature pass is batched (400 tiles), and the buildings source must be batch-aware** (#570).
+  The extractor is opened **once** and run per batch: it holds the GWR cadastre (millions of
+  records, seconds to load) and a cache of each sheet's extent, taken from the geometry field
+  descriptor, so a batch opens only the sheets it can possibly contain. Built the naive way — a new
+  extractor per batch, every sheet rescanned — a 30-tile batch cost the same 11 s as a 210-tile one,
+  because the cost tracked the sheet count rather than the tiles; nationwide that is 110 batches
+  against 3,230 sheets. Measured after: the first batch pays 5.8 s to open and measure the sheets,
+  the rest 0.2-2.4 s each, and the output is byte-identical at the same batch size.
+- **`--batch-size` is for checks, not tuning**: a building's terrain re-seat samples only the grids
+  of its own batch, so moving the boundaries moves a few buildings at the seams by centimetres.
 - **Still Python**: downloading the swissBUILDINGS3D sheets (`swiss_data.py swissbuildings3d`).
   Everything after the download is C#.

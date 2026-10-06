@@ -54,6 +54,16 @@ public sealed class BuildingExtractor
             LoadGwr(gwrSqlitePath);
     }
 
+    /// <summary>
+    /// Each sheet's extent once it has been looked at, and null for one with no buildings layer.
+    /// Lives on the extractor because it is reused across batches — which is the whole point.
+    /// </summary>
+    private readonly Dictionary<string, (double MinE, double MinN, double MaxE, double MaxN)?> _sheetBounds = new();
+
+    private static bool Overlaps((double MinE, double MinN, double MaxE, double MaxN) b,
+        double minE, double minN, double maxE, double maxN) =>
+        b.MinE < maxE && b.MaxE > minE && b.MinN < maxN && b.MaxN > minN;
+
     private static IEnumerable<(string?, List<GeoPackageReader.Ring>)> FromGeoPackage(
         string gpkgPath, double minE, double minN, double maxE, double maxN)
     {
@@ -76,16 +86,28 @@ public sealed class BuildingExtractor
     /// beyond flattening. Filtering is by the solid's own vertices rather than an index: a sheet
     /// holds a few thousand buildings, and skipping the spatial index keeps the reader small.
     /// </summary>
-    private static IEnumerable<(string?, List<GeoPackageReader.Ring>)> FromFileGdb(
+    private IEnumerable<(string?, List<GeoPackageReader.Ring>)> FromFileGdb(
         IReadOnlyList<string> gdbZips, string workDir, double minE, double minN, double maxE, double maxN)
     {
         foreach (string zip in gdbZips)
         {
+            // A sheet covers about 4.4 x 3 km and a batch of tiles about 400 km², so nearly every
+            // sheet is irrelevant to nearly every batch. Its extent is in the geometry field
+            // descriptor, so this costs one header read the first time and nothing afterwards —
+            // without it a nationwide build decodes all 14.4 GB of sheets once per batch (#570).
+            if (_sheetBounds.TryGetValue(zip, out var known))
+            {
+                if (known is not { } cached || !Overlaps(cached, minE, minN, maxE, maxN)) continue;
+            }
+
             using var gdb = FileGdb.OpenZip(zip, workDir);
-            if (!gdb.Has("Building_solid")) continue;
+            if (!gdb.Has("Building_solid")) { _sheetBounds[zip] = null; continue; }
             using var table = gdb.OpenTable("Building_solid");
             int shape = table.FieldIndex("SHAPE"), kind = table.FieldIndex("OBJEKTART");
-            if (shape < 0 || table.Grid is not { } grid) continue;
+            if (shape < 0 || table.Grid is not { } grid) { _sheetBounds[zip] = null; continue; }
+
+            _sheetBounds[zip] = grid.Bounds;
+            if (!Overlaps(grid.Bounds, minE, minN, maxE, maxN)) continue;
 
             foreach (var row in table.Rows())
             {
