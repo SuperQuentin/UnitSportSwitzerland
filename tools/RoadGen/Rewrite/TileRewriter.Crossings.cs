@@ -2,6 +2,7 @@ namespace UnitSport.Tools.RoadGen.Rewrite;
 
 using UnitSport.Terrain.Format;
 using UnitSport.Tools.RoadGen.Geometry;
+using UnitSport.Tools.RoadGen.Junctions;
 using UnitSport.Tools.RoadGen.Meshing;
 using UnitSport.Tools.RoadGen.Network;
 
@@ -85,6 +86,57 @@ public static partial class TileRewriter
                 Vertices = Local(source.Tile, [mid + u * along + right * (from + 0.1), mid + u * along + right * (to - 0.1)], source.SampleHeight, lift),
             });
             stats.PathStopLines++;
+        }
+    }
+}
+
+public static partial class TileRewriter
+{
+    /// <summary>
+    /// The left turn of arm <paramref name="arm"/> through the junction, from its pocket's lane at the mouth to the lane
+    /// of the arm on its left: two dashed white lines (SSV guide lines, 0.15 m, 1 m / 1 m) a lane's width apart along a
+    /// curve through the junction's centre (#682). Drawn where a centre island leaves the turn its own path.
+    /// </summary>
+    private static void EmitLeftGuides(Dictionary<TileId, List<RoadPaint>> paint, TileId home, Junction junction, int arm,
+        ApproachLayout? layout, List<(Vec2 At, float Height)> anchors, HashSet<int> islandArms)
+    {
+        if (layout?.LeftPocketLane is not { } lane) return;
+        var from = junction.Arms[arm];
+        var u = Vec2.FromHeading(from.OutwardHeading);
+        // the arm on the approaching driver's left (they drive along -u, their right is u.Perp)
+        int to = -1;
+        double best = 0.5;
+        for (int k = 0; k < junction.Arms.Count; k++)
+        {
+            if (k == arm) continue;
+            double dot = Vec2.FromHeading(junction.Arms[k].OutwardHeading).Dot(-u.Perp);
+            if (dot > best) { best = dot; to = k; }
+        }
+        if (to < 0 || !islandArms.Contains(to)) return;
+        var target = junction.Arms[to];
+        var ut = Vec2.FromHeading(target.OutwardHeading);
+        Vec2 start = (from.Left + from.Right) * 0.5 + u.Perp * lane.Mid;
+        Vec2 end = (target.Left + target.Right) * 0.5 - ut.Perp * (target.HalfWidth * 0.5);
+        double half = (lane.To - lane.From) * 0.5;
+        var centre = new List<Vec2>();
+        for (int k = 0; k <= 12; k++)
+        {
+            double t = k / 12.0, mt = 1 - t;
+            centre.Add(start * (mt * mt) + junction.Centre * (2 * mt * t) + end * (t * t));
+        }
+        foreach (double side in (ReadOnlySpan<double>)[-half, half])
+        {
+            var line = new List<Vec2>();
+            for (int k = 0; k < centre.Count; k++)
+            {
+                var d = (centre[Math.Min(k + 1, centre.Count - 1)] - centre[Math.Max(k - 1, 0)]).Normalized();
+                line.Add(centre[k] + d.Perp * side);
+            }
+            Get(paint, home).Add(new RoadPaint
+            {
+                Shape = PaintShape.Polyline, Type = PaintType.WhiteDashed, Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
+                Dash = 1f, Gap = 1f, Vertices = Local(home, line, p => HeightAt(anchors, p), 0f),
+            });
         }
     }
 }

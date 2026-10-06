@@ -292,7 +292,9 @@ public static partial class TileRewriter
             var approach = inSlot.ApproachWay!;
             var departure = outSlot.ExitWay!;
             var armLanes = Arm(pocket.Node, pocket.Arm, pocket.Home);
-            approach.Layout = armLanes.Approach = LanesOf(approach, right);
+            approach.Layout = armLanes.Approach = LanesOf(approach, right, pocket.Signal);
+            if (pocket.Signal && approach.Layout is { Equal: true, LeftPocketLane: { } facing })
+                departure.SetExit(facing.To + approach.Layout.LeftBike, approach.Layout.LaneWidth);
             armLanes.AdvancedBikeLine = approach.HasLeftBikeLane && !pocket.BikeBox;
             armLanes.PlacedLeft(approach, inSlot.Storage, inSlot.Merged, pocket.RightTurn && right is null, pocket.Signal);
             if (pocket.ExitArm >= 0)
@@ -331,7 +333,7 @@ public static partial class TileRewriter
             var (seg, tile, _) = r.Segment;
             var lanes = Arm(r.Node, r.Arm, r.Home);
             // without a left pocket the layout is the right pocket's alone
-            lanes.Approach ??= LanesOf(null, r);
+            lanes.Approach ??= LanesOf(null, r, true);
             r.Way!.Emit(Get(paint, tile), Get(areas, tile), stripOwners);
             r.Way.StopShift = r.Skew;
             r.Way.Layout = lanes.Approach;
@@ -692,18 +694,43 @@ public static partial class TileRewriter
             public double Mid => (From + To) * 0.5;
         }
 
-        /// <summary>Where the car lanes end on the right: the through lane's outer edge.</summary>
-        private double CarEdge(double open) => Half - Bike + LeftFull + RightExtra * open;
+        /// <summary>
+        /// At traffic lights (#682) every car lane across the approach is the same width: what the approach's widened
+        /// edge leaves once the bike lanes are out, over its car lanes (the left pocket's, the through lane, the right
+        /// pocket's). Else the left pocket is the carriageway lane it was cut out of, the through lane what is left of
+        /// it and the right pocket a <see cref="TurnLane"/>.
+        /// </summary>
+        public bool Equal { get; set; }
 
-        public Lane? LeftPocketLane => LeftPocket > 0 ? new Lane(0, LeftPocket) : null;
-        public Lane? LeftBikeLane => LeftBike > 0 ? new Lane(LeftPocket, LeftPocket + LeftBike) : null;
-        public Lane Through(double open = 1) => new(LeftPocket + LeftBike, CarEdge(open));
+        private int CarLanes => (LeftPocket > 0 ? 1 : 0) + 1 + (Right ? 1 : 0);
+
+        /// <summary>The width of a car lane when <see cref="Equal"/>.</summary>
+        public double LaneWidth => (Half + LeftFull + (Right ? TurnLane + RightExtra : 0) - LeftBike - Bike) / CarLanes;
+
+        /// <summary>Where the left pocket's lane ends (its outer edge from the centre line).</summary>
+        private double PocketTo => LeftPocket <= 0 ? 0 : Equal ? LaneWidth : LeftPocket;
+
+        /// <summary>Where the car lanes end on the right: the through lane's outer edge.</summary>
+        private double CarEdge(double open)
+        {
+            double old = Half - Bike + LeftFull + RightExtra * open;
+            if (!Equal) return old;
+            // the lane widens to its width as the right pocket opens
+            double open0 = Half - Bike + LeftFull, full = PocketTo + (LeftPocket > 0 ? LeftBike : 0) + LaneWidth;
+            return Right ? open0 + (full - open0) * open : full;
+        }
+
+        private double RightWidth => Equal ? LaneWidth : TurnLane;
+
+        public Lane? LeftPocketLane => LeftPocket > 0 ? new Lane(0, PocketTo) : null;
+        public Lane? LeftBikeLane => LeftBike > 0 ? new Lane(PocketTo, PocketTo + LeftBike) : null;
+        public Lane Through(double open = 1) => new(PocketTo + LeftBike, CarEdge(open));
         public Lane? RightPocket(double open = 1) => !Right ? null
-            : BikeBetween ? new Lane(CarEdge(open) + Bike, CarEdge(open) + Bike + TurnLane * open)
-            : new Lane(CarEdge(open), CarEdge(open) + TurnLane * open);
+            : BikeBetween ? new Lane(CarEdge(open) + Bike, CarEdge(open) + Bike + RightWidth * open)
+            : new Lane(CarEdge(open), CarEdge(open) + RightWidth * open);
         /// <summary>The painted bike lane carried on through the junction (kerbside, or between in layout (b)).</summary>
         public Lane? BikeLane(double open = 1) => Bike <= 0 ? null
-            : Right && !BikeBetween ? new Lane(CarEdge(open) + TurnLane * open, CarEdge(open) + TurnLane * open + Bike)
+            : Right && !BikeBetween ? new Lane(CarEdge(open) + RightWidth * open, CarEdge(open) + RightWidth * open + Bike)
             : new Lane(CarEdge(open), CarEdge(open) + Bike);
         /// <summary>The carriageway's edge on the approach side, widening included.</summary>
         public double Edge(double open = 1) => Half + LeftFull + (Right ? (TurnLane + RightExtra) * open : 0);
@@ -712,13 +739,15 @@ public static partial class TileRewriter
     }
 
     /// <summary>The lanes of an approach from its left pocket's widening and its right pocket, either may be missing.</summary>
-    private static ApproachLayout LanesOf(Widening? left, RightPlan? right)
+    private static ApproachLayout LanesOf(Widening? left, RightPlan? right, bool equal = false)
     {
         var way = left ?? right!.Way!;
         // a right pocket beside a left one does not see the bike lane (it lies outside it): the left does
         double bike = left?.BikeWidth ?? right!.Way!.BikeWidth;
-        return new ApproachLayout(way.Half, bike, left?.PocketWidth ?? 0, left?.LeftBikeWidth ?? 0, left?.FullWidth ?? 0,
-            right is not null, right?.Way!.Extra ?? 0) { BikeBetween = right is { BikeBetween: true } && bike > 0 };
+        var dbg = new ApproachLayout(way.Half, bike, left?.PocketWidth ?? 0, left?.LeftBikeWidth ?? 0, left?.FullWidth ?? 0,
+            right is not null, right?.Way!.Extra ?? 0) { BikeBetween = right is { BikeBetween: true } && bike > 0, Equal = equal };
+        if (Environment.GetEnvironmentVariable("LAYDBG") == "1") Console.WriteLine($"[layout] half {dbg.Half:F2} bike {dbg.Bike:F2} pocket {dbg.LeftPocket:F2} leftBike {dbg.LeftBike:F2} full {dbg.LeftFull:F2} right {dbg.Right} extra {dbg.RightExtra:F2} through {dbg.Through().From:F2}-{dbg.Through().To:F2} edge {dbg.Edge():F2}");
+        return dbg;
     }
 
     /// <summary>A right-turn pocket being planned at traffic lights (#348): the approach's segment, and the left pocket beside it, if any.</summary>
@@ -934,6 +963,14 @@ public static partial class TileRewriter
         /// <summary>The left-turn bike lane between the pocket and the through lane (#351), 0 none; and whether a bike box lies in front.</summary>
         private readonly double _bikeLeft;
         public bool BikeBox { get; set; }
+
+        /// <summary>
+        /// At traffic lights (#682) the exit's through lane continues the facing approach's through lane: the hatch is as wide as its pocket
+        /// and bike lane at the mouth and the lane after it as wide as an approach lane (<see cref="ApproachLayout.LaneWidth"/>), so it never starts narrow.
+        /// </summary>
+        public void SetExit(double hatch, double lane) => (_exitHatch, _exitLane) = (hatch, lane);
+        private double? _exitHatch, _exitLane;
+        private double HatchAtMouth => _exitHatch ?? _pocket;
         public bool HasLeftBikeLane => _bikeLeft > 0;
 
         /// <summary>What the widening adds at full width: the through lane, and on an approach the left-turn bike lane (#351).</summary>
@@ -1041,6 +1078,7 @@ public static partial class TileRewriter
         /// </summary>
         private double Widen(double dist)
         {
+            if (_exit && _exitHatch is { } hatch && _exitLane is { } lane) return Math.Max(0, hatch * (1 - dist / _length) + lane + _bike - _half);   // #682
             if (_taper <= 0) return Lane + _extra;
             double main = Math.Clamp((_length - dist) / _taper, 0, 1);
             if (_lead <= 0 || (_exit && _bike <= 0)) return (Lane + _extra) * main;
@@ -1222,7 +1260,8 @@ public static partial class TileRewriter
             Painted = true;
             double storage = _length - _taper;
             SolidCentre(paint);
-            Hatch(paint, stats, storage, _length, d => (_pocket + _bikeLeft) * Math.Clamp((_length - d) / _taper, 0, 1));
+            double wide = Layout is { Equal: true, LeftPocketLane: { } own } ? own.To + _bikeLeft : _pocket + _bikeLeft;   // #682: equal lanes
+            Hatch(paint, stats, storage, _length, d => wide * Math.Clamp((_length - d) / _taper, 0, 1));
             Lanes(paint, storage, storage, rightTurn, stats, signal);
         }
 
@@ -1432,7 +1471,7 @@ public static partial class TileRewriter
         {
             Painted = true;
             SolidCentre(paint);
-            Hatch(paint, stats, near, _length, d => _pocket * Math.Clamp(1 - d / _length, 0, 1));
+            Hatch(paint, stats, near, _length, d => HatchAtMouth * Math.Clamp(1 - d / _length, 0, 1));
         }
 
         /// <summary>
@@ -1447,8 +1486,10 @@ public static partial class TileRewriter
         public (Vec2 Pole, float Y)? Islands(List<RoadAreaProp> areas, double near, double zebraFrom, double zebraTo)
         {
             const double Margin = 0.25, IslandMinWidth = 1.2, IslandInside = 3.0, Top = 0.12;
-            double Width(double d) => _pocket * Math.Clamp(1 - d / _length, 0, 1) - 2 * Margin;
-            if (Width(Math.Max(near + 2.0, zebraTo)) < IslandMinWidth) return null;
+            double Width(double d) => HatchAtMouth * Math.Clamp(1 - d / _length, 0, 1) - 2 * Margin;
+            // one width all along, before the crosswalk and after it: what the narrowest end leaves (not a triangle)
+            double iw = Width(Math.Max(near + 2.0, zebraTo));
+            if (iw < IslandMinWidth) return null;
             // a point at distance d from the mouth, inside the junction (d < 0) along the arm's line on
             float[] At2(double d, double offset)
             {
@@ -1466,7 +1507,7 @@ public static partial class TileRewriter
                 int steps = Math.Max(1, (int)Math.Round(b - a));
                 for (int k = 0; k <= steps; k++)
                 {
-                    double d = a + (b - a) * k / steps, w = Width(Math.Max(d, 0));
+                    double d = a + (b - a) * k / steps, w = iw;
                     v.AddRange(At2(d, Margin));
                     v.AddRange(At2(d, Margin + w));
                     if (k == 0) continue;
@@ -1483,7 +1524,7 @@ public static partial class TileRewriter
             Island(-IslandInside, after);
             Island(zebraTo + 0.15, near + 2.0);
             double at = -IslandInside * 0.5 + after * 0.1;
-            var spot = At2(at, Margin + Width(0) * 0.5);
+            var spot = At2(at, Margin + iw * 0.5);
             return (new Vec2(_tile.MinE + spot[0], _tile.MaxN - spot[2]), spot[1] + (float)Top);
         }
 

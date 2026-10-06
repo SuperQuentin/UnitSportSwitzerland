@@ -207,6 +207,8 @@ public static partial class TileRewriter
             var stops = new List<float>();
             var wantPoles = new List<PoleWish>();
             var islandPoles = new List<(byte Arm, Vec2 At, float Y, Vec2 Facing, Vec2 Across)>();   // #682
+            var leftGuides = new List<int>();   // arms with a left pocket: their left turn is guided where its exit has an island (#682)
+            var islandArms = new HashSet<int>();
             var approachArms = new List<(int Arm, int PlanArm, float[] Stop)>();   // their lane records (#353)
             var armInPlan = new int[junction.Arms.Count];   // each junction arm's index in the plan, -1 none (#406)
             Array.Fill(armInPlan, -1);
@@ -269,6 +271,7 @@ public static partial class TileRewriter
                 // none on a link inside a junction of several nodes: its ends are the junction's own
                 var mainFlags = inside ? 0 : (approach ? SignalPoleFlags.Main : 0) | SignalPoleFlags.Pedestrian;
                 var secondFlags = inside ? 0 : (approach && (pocket || rightPocket) ? SignalPoleFlags.Second : 0) | SignalPoleFlags.Pedestrian;
+                if (!inside && approach && pocket) leftGuides.Add(i);
                 // the left repeater signal stands on a small island in the hatched median behind the stop line, not on the far kerb (#682)
                 if (!inside && approach && pocket && pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } exitWay, ExitFar: false })
                 {
@@ -277,6 +280,7 @@ public static partial class TileRewriter
                     {
                         secondFlags &= ~SignalPoleFlags.Second;
                         islandPoles.Add(((byte)arms.Count, island.Pole, island.Y, u, right));
+                        islandArms.Add(i);
                     }
                 }
                 wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, right, to, u, -right,
@@ -358,6 +362,9 @@ public static partial class TileRewriter
                         stats.SignsOnPoles++;
                     }
             }
+            // where the left turn exits beside an island it is guided through the junction: two dashed lines along its path (#682)
+            foreach (int gi in leftGuides)
+                EmitLeftGuides(paint, home, junction, gi, pockets.GetValueOrDefault((junction.NodeId, gi))?.Approach, anchors, islandArms);
             foreach (var ip in islandPoles)
             {
                 var local = Local(home, [ip.At], _ => ip.Y, 0f);
