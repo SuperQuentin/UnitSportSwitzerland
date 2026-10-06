@@ -24,6 +24,8 @@ public sealed record HeavyParts(ArrayMesh Body, ArrayMesh Head, ArrayMesh Tail, 
     public ArrayMesh? Glow { get; init; }
     /// <summary>What a walking player collides with inside and how far aboard reaches (#162), or null: not walkable.</summary>
     public VehicleDeck? Deck { get; init; }
+    /// <summary>A tipping body (built about its hinge), the hinge at its back (node space), tipped up by <c>Angle</c> rad (#494, #613).</summary>
+    public (ArrayMesh Mesh, Vector3 Hinge, float Angle)? Tip { get; init; }
 }
 
 /// <summary>
@@ -50,6 +52,20 @@ public partial class HeavyRig : Node3D
     public string Destination { get; set; } = "";
     /// <summary>Body roll on the springs, rad (+ right side up): the wheels stay on the road.</summary>
     public float BodyRoll { get; set; }
+    /// <summary>
+    /// A tipping body tipped up (#494, #613). The first value a new rig is given is shown at once:
+    /// a rig rebuilt for a new load keeps the body where it was.
+    /// </summary>
+    public bool Tipped
+    {
+        get => _tippedOn;
+        set
+        {
+            if (!_tipDressed) { _tipDressed = true; _tipped = value ? 1f : 0f; }
+            _tippedOn = value;
+        }
+    }
+    private bool _tippedOn, _tipDressed;
 
     // ---- the cockpit (first section of a truck or bus) ----
     /// <summary>The steering wheel's turn, rad (+ anticlockwise as the driver sees it).</summary>
@@ -82,6 +98,10 @@ public partial class HeavyRig : Node3D
     public HeavyCockpit? Cockpit => _cockpit;
 
     private const float DoorTime = 1.2f, KneelTime = 1.5f, KneelDrop = 0.08f;
+    /// <summary>Seconds a tipping body takes to rise or come down.</summary>
+    private const float TipTime = 3f;
+    private Node3D? _tip;
+    private float _tipAngle, _tipped, _tipShown;
 
     private Node3D _body = null!;
     private readonly List<(Node3D Pivot, Node3D Spin, float Steer)> _wheels = new();
@@ -184,6 +204,16 @@ public partial class HeavyRig : Node3D
                 DoubleSided = false,
             };
             rig._body.AddChild(rig._display);
+        }
+        if (p.Tip is { } tip)
+        {
+            // the body's mesh has its origin on the hinge (MeshScratch.Build(pivot)): turned about it
+            rig._tipAngle = tip.Angle;
+            rig._tip = new Node3D { Name = "Tip", Position = tip.Hinge };
+            var bin = new MeshInstance3D { Name = "Bin", Mesh = tip.Mesh };
+            MeshScratch.Paint(bin, body, glass);
+            rig._tip.AddChild(bin);
+            rig._body.AddChild(rig._tip);
         }
         if (p.Cockpit is { } cockpit) rig.AssembleCockpit(cockpit, body);
         rig.ApplyLamps();
@@ -322,6 +352,17 @@ public partial class HeavyRig : Node3D
         {
             pivot.Rotation = new Vector3(0, SteerAngle * steer, 0);
             spin.Rotation = new Vector3(-WheelSpin, 0, 0);
+        }
+
+        if (_tip != null)
+        {
+            float target = Tipped ? 1f : 0f;
+            if (_tipped != target) _tipped = Mathf.MoveToward(_tipped, target, dt / TipTime);
+            if (_tipped != _tipShown)
+            {
+                _tipShown = _tipped;
+                _tip.Rotation = new Vector3(_tipAngle * Mathf.SmoothStep(0f, 1f, _tipped), 0, 0);
+            }
         }
 
         float step = dt / DoorTime;

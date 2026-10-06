@@ -212,6 +212,16 @@ public sealed class Truck : Rideable, IEngined
         if (Spec.Class != HeavyClass.Coach && !_pulledAway) Kneeling = DoorsOpen != 0;
     }
     public int DoorCount => Spec.Look.Doors.Length;
+    /// <summary>
+    /// A tipping body raised (#494, #613): the fourth door bit, which no cab door uses, so it travels in
+    /// the pose and parks with the vehicle; pulling away drops it with the doors.
+    /// </summary>
+    public const byte TipBit = 8;
+    public bool Tipped
+    {
+        get => (DoorsOpen & TipBit) != 0;
+        set => DoorsOpen = (byte)(value ? DoorsOpen | TipBit : DoorsOpen & ~TipBit);
+    }
     /// <summary>Lowered on the door side for boarding (buses).</summary>
     public bool Kneeling { get; set; }
     /// <summary>Index into <see cref="HeavyLook.Destinations"/>.</summary>
@@ -654,6 +664,7 @@ public sealed class Truck : Rideable, IEngined
         rig.ReverseLights = reversing;
         rig.DoorsOpen = DoorsOpen;
         rig.Kneeling = Kneeling;
+        rig.Tipped = Tipped;
         rig.Destination = DestinationText;
         rig.BodyRoll = k < Train.Count && k > 0 ? Mathf.Clamp(-Train.Bodies[k].Accel.Y * 0.02f * Train.Bodies[k].CgHeight, -0.08f, 0.08f) : 0f;
     }
