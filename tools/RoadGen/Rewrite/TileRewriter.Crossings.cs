@@ -107,7 +107,8 @@ public static partial class TileRewriter
     private static void EmitLeftGuides(Dictionary<TileId, List<RoadPaint>> paint, TileId home, Junction junction, int arm,
         ApproachLayout? layout, List<(Vec2 At, float Height)> anchors, Dictionary<int, IslandExit> islandArms)
     {
-        if (layout?.LeftPocketLane is not { } lane) return;
+        // no pocket: the guide starts at the through lane's left edge, the centre line side (where the left turn shares the lane)
+        var lane = layout?.LeftPocketLane ?? new ApproachLayout.Lane(0, 0);
         var from = junction.Arms[arm];
         var u = Vec2.FromHeading(from.OutwardHeading);
         // the arm on the approaching driver's left (they drive along -u, their right is u.Perp)
@@ -150,8 +151,8 @@ public static partial class TileRewriter
                 Dash = 1f, Gap = 1f, Vertices = Local(home, line, p => HeightAt(anchors, p), 0f),
             });
         }
-        Guide(lane.From + 0.1, lead);
-        if (layout.LeftBikeLane is { } bikeLane && exit.Bike) Guide(bikeLane.From, lead + exit.Lane);   // between the car turn lane and the bike lane
+        Guide(layout?.LeftPocketLane is null ? (layout?.Through().From ?? 0) + 0.1 : lane.From + 0.1, lead);
+        if (layout?.LeftBikeLane is { } bikeLane && exit.Bike) Guide(bikeLane.From, lead + exit.Lane);   // between the car turn lane and the bike lane
     }
 }
 
