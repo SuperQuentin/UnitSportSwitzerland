@@ -290,6 +290,9 @@ src/Player/Airstairs     quick  --stairscheck --world fixture --traffic 0 --airl
 src/Player/FootPlayer.Ai quick  --stairscheck --world fixture --traffic 0 --airliner arcade
 src/Vehicles/Airstairs   quick  --stairscheck --world fixture --traffic 0 --airliner arcade
 src/Vehicles/VehicleBody.Ai quick  --stairscheck --world fixture --traffic 0 --airliner arcade
+src/Avatar/Forklift      quick  --forkliftcheck --world flat --systems physics,ui
+src/Player/Forklift      quick  --forkliftcheck --world flat --systems physics,ui
+src/Player/FootPlayer.Fo quick  --forkliftcheck --world flat --systems physics,ui
 src/Player/StairsNet     net    tools/stairsnetcheck.sh
 src/Player/Airstairs     net    tools/stairsnetcheck.sh
 src/Avatar/Airstairs     net    tools/stairsnetcheck.sh

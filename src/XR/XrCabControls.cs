@@ -106,6 +106,7 @@ internal sealed partial class XrCabControls : Node3D
             Car when p.InCockpit => "car",
             Airliner => "airliner",
             _ when p.Ride == RideKind.Steamer => "steamer",
+            _ when p.Ride == RideKind.Forklift => "forklift",
             _ => "",
         };
     }
@@ -148,6 +149,10 @@ internal sealed partial class XrCabControls : Node3D
             // the trim wheel beside the seat: rolled forward, nose down; back, nose up
             Add(Kind.Hold, new(0.22f, -0.52f, -0.12f), Vector3.Forward, PlayerInput.TrimNoseDown, PlayerInput.TrimNoseUp);
         }
+        else if (context == "forklift")
+            // the mast lever right of the wheel (#583): pulled back the forks rise, pushed forward
+            // they fall, and it holds the action down while the hand holds it there
+            Add(Kind.Hold, new(-0.26f, -0.3f, -0.4f), Vector3.Back, PlayerInput.ShiftUp, PlayerInput.ShiftDown);
         else if (context == "steamer")
             // the whistle cord overhead: pulled down, it blows
             Add(Kind.Hold, new(0.15f, 0.3f, -0.25f), Vector3.Down, PlayerInput.Horn, null);

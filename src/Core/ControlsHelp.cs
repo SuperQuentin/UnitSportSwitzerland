@@ -125,6 +125,12 @@ public partial class ControlsHelp : CanvasLayer
             new("Bus: kneel", PlayerInput.Kneel),
             new("Bus: destination display", PlayerInput.Destination),
         }),
+        ("Forklift (#583)", new Row[]
+        {
+            // the paddles, free on a machine with no gearbox: held, the mast runs; let go, it stops
+            new("Raise the forks (hold)", PlayerInput.ShiftUp),
+            new("Lower the forks (hold)", PlayerInput.ShiftDown),
+        }),
         ("Paddle steamer", new Row[]
         {
             new("Telegraph: one step ahead / astern (FULL ASTERN .. STOP .. FULL AHEAD)", Keys: "{move_forward} / {move_back}", Pad: "{move_forward} up / down"),

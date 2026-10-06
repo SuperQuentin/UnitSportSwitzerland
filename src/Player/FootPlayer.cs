@@ -2619,6 +2619,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
         // airstairs at the height they were left, docked or not (#417)
         if (_ride is Airstairs stood) stood.UnpackFlags(state.Flags);
+        // the forklift's forks where they were left, with what was on them (#583)
+        if (_ride is Forklift parkedLift) parkedLift.UnpackFlags(state.Flags);
         // the steamer's gangways as they were left (#303)
         if (_ride is Steamer berthed) berthed.DoorsOpen = (byte)(state.DoorsOpen & 3);
         EngineOn = true;
@@ -2657,7 +2659,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // an airliner left in the air (stood up from its seat): its attitude, or it is put down level (#456)
             Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler()
                 : _ride is Airliner { State.OnGround: false } aloft ? aloft.State.Attitude.Orthonormalized().GetEuler() : default,
-            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
+            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
             Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd,
             Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw);
     }
@@ -4171,6 +4173,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is Truck driven && AfterTruckStep(driven)) return;
         // airstairs let go by an aircraft's door line up with it and raise the platform (#417)
         if (_ride is Airstairs stairs) DockStairs(stairs, input, dt);
+        // the forklift's mast runs while a paddle is held (#583)
+        if (_ride is Forklift lifting) WorkMast(lifting);
         if (_ride is Car)
         {
             // doors: once seated every door shuts, sooner if the car pulls away before then

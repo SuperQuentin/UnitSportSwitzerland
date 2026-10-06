@@ -51,12 +51,13 @@ public partial class TestWorld : Node3D
 
         Node? probe = HitboxProbe.Requested() ? new HitboxProbe(null, origin)
             : SyncProbe.Requested() ? new SyncProbe(null, origin)
+            : ForkliftCheck.Requested ? new ForkliftCheck(origin)
             : RideProbe.ParseArgs() is { } ride ? new RideProbe(null, origin, ride.Kind, ride.Seconds, ride.Shot)
             : FlightCheckProbe.ParseArgs() is { } fly ? new FlightCheckProbe(null, origin, fly.Kind, fly.Shot)
             : null;
         if (probe == null)
         {
-            GD.PushError("[testworld] no probe here runs on --world flat (--hitboxcheck, --synccheck, --ride, --flycheck)");
+            GD.PushError("[testworld] no probe here runs on --world flat (--hitboxcheck, --synccheck, --ride, --flycheck, --forkliftcheck)");
             GetTree().Quit(2);
             return;
         }
