@@ -46,6 +46,8 @@ public partial class ChunkNode : Node3D
         if (_roadInstance != null) _roadInstance.Visible = Shows(TileLayers.Roads);
         if (_lamps != null) _lamps.Visible = Shows(TileLayers.Roads);
         if (_buildingInstance != null) _buildingInstance.Visible = Shows(TileLayers.Buildings);
+        if (_cellInstances != null)
+            foreach (var cell in _cellInstances) cell.Visible = Shows(TileLayers.Buildings);
         if (_waterInstance != null) _waterInstance.Visible = Shows(TileLayers.Water);
         ApplyTreeDensity();
     }
@@ -203,6 +205,7 @@ public partial class ChunkNode : Node3D
 
     public void SetBuildings(ArrayMesh mesh)
     {
+        ClearCells();
         if (_buildingInstance == null)
         {
             _buildingInstance = new MeshInstance3D { Name = "Buildings", Visible = Shows(TileLayers.Buildings) };
@@ -217,9 +220,59 @@ public partial class ChunkNode : Node3D
     /// </summary>
     public void ClearBuildings()
     {
+        ClearCells();
         if (_buildingInstance?.Mesh is not { } mesh) return;
         _buildingInstance.Mesh = null;
         mesh.Dispose();
+    }
+
+    private MeshInstance3D[]? _cellInstances;
+    private OccluderInstance3D? _occluder;
+
+    /// <summary>
+    /// The buildings cut into cells, with the tile's occluders (#553, <see cref="BuildingOcclusion"/>):
+    /// what a tile round the camera draws, so a block hidden behind a row of houses is culled.
+    /// Replaces the one-mesh buildings; <see cref="SetBuildings"/> replaces these.
+    /// </summary>
+    public void SetBuildingCells(ArrayMesh?[] cells, Vector3[]? occluderVertices, int[]? occluderIndices)
+    {
+        ClearCells();
+        if (_buildingInstance?.Mesh is { } whole)
+        {
+            _buildingInstance.Mesh = null;
+            whole.Dispose();
+        }
+        var list = new List<MeshInstance3D>();
+        for (int c = 0; c < cells.Length; c++)
+        {
+            if (cells[c] is not { } mesh) continue;
+            var instance = new MeshInstance3D { Name = $"Buildings{c}", Mesh = mesh, Visible = Shows(TileLayers.Buildings) };
+            AddChild(instance);
+            list.Add(instance);
+        }
+        _cellInstances = list.ToArray();
+        if (occluderVertices != null && occluderIndices != null)
+        {
+            var occluder = new ArrayOccluder3D();
+            occluder.SetArrays(occluderVertices, occluderIndices);
+            _occluder = new OccluderInstance3D { Name = "Occluder", Occluder = occluder };
+            AddChild(_occluder);
+        }
+    }
+
+    private void ClearCells()
+    {
+        if (_cellInstances != null)
+            foreach (var cell in _cellInstances)
+            {
+                var mesh = cell.Mesh;
+                cell.Mesh = null;
+                mesh?.Dispose();
+                cell.QueueFree();
+            }
+        _cellInstances = null;
+        _occluder?.QueueFree();
+        _occluder = null;
     }
 
     /// <summary>The tile has left the road ring (#553): its road mesh (piers, signs and paint with it) and its signal lenses go.</summary>
@@ -761,6 +814,7 @@ public partial class ChunkNode : Node3D
     /// </summary>
     public void ReleaseResources()
     {
+        ClearCells();
         NearTrees.Unregister(this);
         foreach (var instance in new[] { _meshInstance, _roadInstance, _buildingInstance, _waterInstance })
         {
