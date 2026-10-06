@@ -52,7 +52,9 @@ it is let go.
 
 ## Not done
 
-- The bucket carries nothing (#615's next part) and digs nothing (#620). Parked on sites since #616.
+- The bucket digs nothing (#620). It carries a pallet since #615: curled back and lifted with one
+  over its floor it scoops it, dumped it tips it out (`vehicles/pallets`, "The wheel loader's
+  bucket"). Parked on sites since #616.
 - **With forks** (#615): `RideKind.WheelLoaderForks = 199`, the same class (`WheelLoader(forks: true)`),
   a self-levelling fork carriage on the arm instead of the bucket (`Tilt` is then the forks' pitch,
   -0.5..0.3), lifting pallets by the forklift's rule: `vehicles/pallets`, "Any machine with tines".

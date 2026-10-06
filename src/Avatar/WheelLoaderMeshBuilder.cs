@@ -213,24 +213,27 @@ public partial class WheelLoaderFront : Node3D
 
     private bool _forks;
 
-    /// <summary>What rides on the forks (#615), drawn on the carriage; null when they are empty or it has a bucket.</summary>
+    /// <summary>What rides on the forks or in the bucket (#615), drawn on the carriage or the bucket's floor; null when empty.</summary>
     public Node3D? Load { get; private set; }
 
     private int _carrying;
 
-    /// <summary>What is on the forks, as <c>WheelLoader.Carrying</c> holds it: drawn by <see cref="Items.PalletNode.Carried"/>, rebuilt only when it changes.</summary>
+    /// <summary>What is on the forks or in the bucket, as <c>WheelLoader.Carrying</c> holds it: drawn by <see cref="Items.PalletNode.Carried"/>, rebuilt only when it changes.</summary>
     public int Carrying
     {
         get => _carrying;
         set
         {
-            if (value == _carrying || !_forks) return;
+            if (value == _carrying) return;
             _carrying = value;
             if (Load != null) { Load.QueueFree(); Load = null; }
             if (Items.Pallets.LoadCarried(value) is not { } load) return;
             Load = Items.PalletNode.Carried(load, Items.Pallets.CarriedAcross(value));
             Load.Name = "Load";
-            Load.Position = CarMeshBuilder.Turned(new Vector3(0f, -WheelLoaderLayout.ForkTop, WheelLoaderLayout.ForkFace + Items.Pallets.LoadAhead));
+            // on the tines, where the rule says one rides; or on the bucket's floor, its underside on it
+            Load.Position = _forks
+                ? CarMeshBuilder.Turned(new Vector3(0f, -WheelLoaderLayout.ForkTop, WheelLoaderLayout.ForkFace + Items.Pallets.LoadAhead))
+                : CarMeshBuilder.Turned(new Vector3(0f, WheelLoaderLayout.BucketFloorY + Items.Pallets.Seat, WheelLoaderLayout.BucketFloorZ));
             _bucket.AddChild(Load);
         }
     }
