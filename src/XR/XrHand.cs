@@ -111,18 +111,21 @@ internal sealed partial class XrHand : Node3D
         if (_look == look) return;
         _look = look;
         float k = look.Scale;
-        var s = new MeshScratch();
+        // normals in every style: a PS1 figure is lit flat from afar, but a hand seen at 30 cm would be one blob
+        var s = new MeshScratch { Smooth = true };
 
         // the palm, between the knuckles and the wrist, on the far side of the handle from the fingers' wrap
         var palmCentre = new Vector3(_m * 0.032f, 0.03f, 0f) * k;
         _palm.Position = palmCentre;
-        s.Box(Vector3.Zero, new Vector3(0.026f, 0.08f, 0.078f) * k, look.Palm);
+        s.RoundedBox(Vector3.Zero, new Vector3(0.028f, 0.084f, 0.08f) * k, look.Palm);
         _palm.Mesh = s.Build();
         s.Clear();
 
-        // the forearm's end: glove, sleeve or bare skin
-        _cuff.Position = palmCentre + new Vector3(0f, 0.04f, 0.004f) * k;
-        s.Tube(Vector3.Zero, new Vector3(0f, 0.09f, 0f) * k, 0.027f * k, 0.031f * k, look.Cuff, 7);
+        // the forearm's end: glove, sleeve or bare skin. A Touch handle leans forward, so the wrist
+        // bends toward the little finger: the forearm leaves the hand ~40° toward +Z, near level in the world
+        _cuff.Position = palmCentre + new Vector3(0f, 0.036f, 0.008f) * k;
+        // (authored −Z: MeshScratch builds turned round about Y, x and z negated)
+        s.Tube(Vector3.Zero, new Vector3(0f, 0.77f, -0.64f) * 0.09f * k, 0.026f * k, 0.031f * k, look.Cuff, 7);
         _cuff.Mesh = s.Build();
         s.Clear();
 
@@ -146,8 +149,8 @@ internal sealed partial class XrHand : Node3D
             _joints[f * 3].Position = palmCentre + new Vector3(0f, -0.038f + 0.0035f * f, (-1.5f + f) * 0.019f) * k;
 
         // the thumb from the heel of the palm; up: off the controller, down: lying on its face
-        _thumbBase.Position = new Vector3(_m * 0.024f, 0.045f, -0.03f) * k;
-        _thumbUp = Aim(new Vector3(-_m * 0.15f, -0.45f, -0.88f));
+        _thumbBase.Position = new Vector3(_m * 0.026f, 0.052f, -0.034f) * k;
+        _thumbUp = Aim(new Vector3(-_m * 0.2f, -0.6f, -0.78f));
         _thumbDown = Aim(new Vector3(-_m * 0.6f, -0.62f, -0.5f));
         Apply();
     }
@@ -294,15 +297,18 @@ internal sealed partial class XrHand : Node3D
         yield return ("fingerless gloves", () => Posed(true, 0.4f, 0.2f, 1f, gloved));
     }
 
-    /// <summary>A hand held as the controller fallback would hold it, scaled up to be seen.</summary>
+    /// <summary>A hand held as the controller fallback would hold it, raised: fingers up, the right palm to the camera.</summary>
     private static Node3D Posed(bool right, float grip, float trigger, float thumb, HumanPalette palette)
     {
-        var hand = new XrHand(right) { Scale = Vector3.One * 6f };
+        var hand = new XrHand(right)
+        {
+            Basis = new Basis(Vector3.Up, -Mathf.Pi / 2) * new Basis(Vector3.Back, Mathf.Pi),
+            Position = new Vector3(0f, 0.16f, 0f),   // the forearm's end on the viewer's ground
+        };
         hand.SetLook(HumanMeshBuilder.HandsOf(palette));
         hand.Hold(grip, trigger, thumb);
-        // shown as the headset would: the viewer draws every layer
-        foreach (var part in hand.FindChildren("*", nameof(MeshInstance3D), true, false))
-            ((MeshInstance3D)part).Layers = 1;
-        return hand;
+        var raised = new Node3D();
+        raised.AddChild(hand);
+        return raised;
     }
 }

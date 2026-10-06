@@ -355,10 +355,11 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
         if (XrSession.Simulated && Core.CmdArgs.Has("--xrhands"))
         {
             var eye = _camera.GlobalTransform;
-            var hold = new Basis(Vector3.Right, 0.5f);
+            // held as a Touch controller is: the handle (−Z) leaning 40° forward from upright
+            var hold = new Basis(Vector3.Right, 0.69f);
             _leftHand.Visible = _rightHand.Visible = true;
-            _leftHand.GlobalTransform = eye * new Transform3D(new Basis(Vector3.Up, -0.35f) * hold, new Vector3(-0.17f, -0.1f, -0.5f));
-            _rightHand.GlobalTransform = eye * new Transform3D(new Basis(Vector3.Up, 0.35f) * hold, new Vector3(0.17f, -0.1f, -0.5f));
+            _leftHand.GlobalTransform = eye * new Transform3D(new Basis(Vector3.Up, -0.35f) * hold, new Vector3(-0.13f, -0.12f, -0.34f));
+            _rightHand.GlobalTransform = eye * new Transform3D(new Basis(Vector3.Up, 0.35f) * hold, new Vector3(0.13f, -0.12f, -0.34f));
             _leftHand.Hold(1f, 1f, 0f);
             _rightHand.Hold(1f, 0f, 1f);
         }
