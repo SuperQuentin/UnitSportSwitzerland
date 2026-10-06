@@ -28,6 +28,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Interiors.InteriorManager? _interiors;
     private WorldOrigin? _origin;
     private Items.PlacedObjects? _placed;
+    private Net.Sleepers? _sleepers;
     private Items.PalletService? _pallets;
     private Build.Structures? _structures;
     private Occasions.OccasionManager? _occasions;
@@ -233,6 +234,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
         _placed.NameOf = _chat.NameOfPeer;
+        // players who left, asleep where they were (#644)
+        _sleepers = Net.Sleepers.Create(this, origin, server: true);
+        _sleepers.GroundAt = (e, n) => _chunks != null && _chunks.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
         // pallets a forklift has moved (#583): which of the plan's have gone, and where they were put
         _pallets = Items.PalletService.Create(this, origin, server: true);
         _pallets.Source = () => source;
@@ -425,6 +429,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
+        _sleepers?.SendTo(id);
         _pallets?.SendTo(id);
         _structures?.SendTo(id);
         _br?.SendTo(id);
@@ -438,6 +443,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
     {
         GD.Print($"[server] peer {id} disconnected");
         _handshake?.PeerLeft(id);
+        // before the registry forgets its name and the body is freed: it lies down where it was (#644)
+        _sleepers?.PeerLeft(id, _players!.GetNodeOrNull<Player.FootPlayer>(id.ToString()), _chat?.NameOfPeer(id) ?? "");
         _chat?.ReportDisconnect(id);
         // before the vehicles: a host's passengers go on in its vehicle, which it no longer simulates
         _passengers?.PeerLeft(id);
