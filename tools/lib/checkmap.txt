@@ -409,6 +409,13 @@ src/Player/FootPlayer.Exc quick  --excavatorcheck --world flat --systems physics
 src/Player/Excavator      net    tools/excavatornetcheck.sh
 src/Avatar/Excavator      net    tools/excavatornetcheck.sh
 src/Player/FootPlayer.Exc net    tools/excavatornetcheck.sh
+# #614: the mini excavator (the same class over its own spec) and its blade, and from a second peer (the excavator's script)
+src/Player/Excavator      quick  --excavatorcheck mini --world flat --systems physics,ui
+src/Avatar/Excavator      quick  --excavatorcheck mini --world flat --systems physics,ui
+src/Avatar/MiniExcavator  quick  --excavatorcheck mini --world flat --systems physics,ui
+src/Avatar/MiniExcavator  quick  --excavatorcheck --world flat --systems physics,ui
+src/Player/FootPlayer.Exc quick  --excavatorcheck mini --world flat --systems physics,ui
+src/Avatar/MiniExcavator  net    tools/excavatornetcheck.sh
 # #612: the wheel loader: frame steering, work mode, the arm and the bucket (flat), and from a second peer (the excavator's script)
 src/Player/WheelLoader    quick  --loadercheck --world flat --systems physics,ui
 src/Avatar/WheelLoader    quick  --loadercheck --world flat --systems physics,ui

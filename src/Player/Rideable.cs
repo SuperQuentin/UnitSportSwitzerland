@@ -45,6 +45,8 @@ public enum RideKind
     Excavator = 194,
     /// <summary>An articulated wheel loader (#612): a <see cref="Player.WheelLoader"/>, frame steering, a lift arm and a bucket.</summary>
     WheelLoader = 195,
+    /// <summary>A 2.7 t mini excavator (#614): an <see cref="Player.Excavator"/> at the mini's size, with a dozer blade.</summary>
+    MiniExcavator = 196,
     // The next other mount is 194.
 }
 
@@ -485,6 +487,7 @@ public abstract class Rideable
         RideKind.Airstairs => new Airstairs(),
         RideKind.Forklift => new Forklift(),
         RideKind.Excavator => new Excavator(),
+        RideKind.MiniExcavator => new Excavator(mini: true),
         RideKind.WheelLoader => new WheelLoader(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),
         _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),

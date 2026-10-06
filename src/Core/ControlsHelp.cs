@@ -142,6 +142,11 @@ public partial class ControlsHelp : CanvasLayer
             new("Dig: boom up / down (hold)", Keys: "{arm_boom_up} / {arm_boom_down}", Pad: "right stick ↓ ↑"),
             new("Dig: bucket curl / dump (hold)", Keys: "{arm_bucket_curl} / {arm_bucket_dump}", Pad: "right stick ← →"),
         }),
+        ("Mini excavator (#614): the excavator's controls, and", new Row[]
+        {
+            // the excavator's controls, and a dozer blade on the gear paddles, driving or digging
+            new("Blade up / down (hold, driving or digging)", Keys: "{blade_raise} / {blade_lower}", Pad: "RB / LB"),
+        }),
         ("Wheel loader (#612)", new Row[]
         {
             // it bends in the middle to steer, and keeps driving in work mode: only the right stick changes
