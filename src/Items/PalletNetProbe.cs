@@ -196,6 +196,11 @@ public partial class PalletNetProbe : Node
             return false;
         }
 
+        // ---- the hall's own forklift (#630): woken by getting in, as any parked one ----------------
+        if (!await UseHallForklift(me, bay)) return false;
+        if (me.Vehicle is not Forklift again) { Log("not back on the apron forklift"); return false; }
+        fork = again;
+
         // ---- the pallet: lined up square to it, driven at, the forks raised ------------------
         var plan = hall.Layout.Furniture[bay.Pallet];
         string id = Pallets.HallId(hall.Layout.Key, bay.Pallet);
@@ -250,6 +255,86 @@ public partial class PalletNetProbe : Node
         await Seconds(6);
         return outside && carriedOut != 0 && down && set is { Altitude: > InteriorManager.InteriorBaseY + 1000f } && apron
             && (_woke || !_liftSeen);
+    }
+
+    /// <summary>The hall forklift's vehicle node: what B looks for, and A's slot is named for.</summary>
+    private static string? HallForkliftNode(InteriorLayout layout, WorldOrigin origin)
+    {
+        int i = layout.Furniture.FindIndex(HallForklifts.IsParked);
+        return i < 0 ? null : HallForklifts.SlotOf(layout, i, origin)?.NodeName;
+    }
+
+    /// <summary>
+    /// Inside the hall, out of the apron forklift and into the one that stands in the hall (#630):
+    /// aimed at, which wakes it through the server (a client names a furniture index and the server
+    /// works the slot out from its own copy of the plan), then driven a little with its forks
+    /// raised, and left. A climbs back into the apron forklift where it was left, to go on with the
+    /// pallet. True once it has done both.
+    /// </summary>
+    private async Task<bool> UseHallForklift(FootPlayer me, Bay bay)
+    {
+        if (me.Terrain?.Origin is not { } origin || InteriorManager.Instance?.CurrentNode is not { } hall) return false;
+        int index = hall.Layout.Furniture.FindIndex(HallForklifts.IsParked);
+        if (index < 0 || HallForklifts.SlotOf(hall.Layout, index, origin) is not { } slot) { Log("no forklift standing in the hall"); return false; }
+        var step = new Forklift().EntryPoint;
+
+        // leave the apron forklift where it stands, to come back to
+        var parkedAt = me.GlobalPosition;
+        float parkedYaw = me.Rotation.Y;
+        me.ExitVehicle();
+        await Seconds(1);
+
+        // beside the sleeper on its step side, facing it
+        var at = origin.ToWorld(slot.E, slot.N, slot.Height);
+        var side = new Basis(Vector3.Up, slot.Yaw) * step;
+        var stand = at + side + side.Normalized() * 0.6f + Vector3.Up * 0.3f;
+        var look = at - stand;
+        me.PlaceAt(stand, Mathf.Atan2(-look.X, -look.Z));
+        await Seconds(1.5);
+        var parked = hall.GetNodeOrNull<ParkedForklift>($"HallForklift{index}");
+        Log($"the hall's forklift {slot.NodeName}: node {(parked == null ? "missing" : parked.Visible ? "drawn asleep" : "hidden")}, vehicle already there {VehicleManager.Instance?.GetNodeOrNull(slot.NodeName) != null}, solid {(parked?.GetNodeOrNull<DormantBody>("Body")?.GetChildren().OfType<CollisionShape3D>().Any(s => !s.Disabled) == true)}");
+        // Aiming at a sleeper wakes it (VehicleReach), and A's camera swept over this one on the way
+        // in: the real route, through the server's hall path. Woken that way or asked here, it must
+        // end up a vehicle with its sleeping copy gone.
+        bool alreadyUp = VehicleManager.Instance?.GetNodeOrNull(slot.NodeName) != null;
+        if (parked == null || !alreadyUp && !parked.Visible) { Log("the hall's forklift is not there to be woken"); return false; }
+        if (!alreadyUp) DormantVehicles.Instance!.Wake(slot);
+        bool woken = await Until(() => VehicleManager.Instance?.GetNodeOrNull(slot.NodeName) != null, 10);
+        await Seconds(0.5);
+        bool hidden = parked is { Visible: false };
+        Log($"woken {woken}, the sleeping copy gone {hidden}");
+        Log($"  (woken {(alreadyUp ? "by being aimed at on the way in" : "by the probe")}; solid {(parked?.GetNodeOrNull<DormantBody>("Body")?.GetChildren().OfType<CollisionShape3D>().Any(s => !s.Disabled) == true)})");
+        if (!woken || !hidden) return false;
+        me.TryGetIn();
+        bool inIt = await Until(() => me.Vehicle is Forklift, 5);
+        Log($"got into it: {inIt}, {Where(me)}");
+        if (!inIt || me.Vehicle is not Forklift hallLift) return false;
+
+        // driven: forks up a little, backed out from the wall it stands nose in to
+        me.RideControls = () => new RideInput(0f, 0.4f, 0f, false);
+        var from = me.GlobalPosition;
+        XrPad.Press(PlayerInput.ShiftUp, true);
+        await Until(() => hallLift.Lift >= 0.4f, 3);
+        XrPad.Press(PlayerInput.ShiftUp, false);
+        await Until(() => (me.GlobalPosition - from).Length() > 1.5f, 6);
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false, Handbrake: true);
+        await Until(() => me.GroundSpeed < 0.05f, 4);
+        float moved = (me.GlobalPosition - from).Length();
+        Log(FormattableString.Invariant($"drove the hall's forklift {moved:F1} m, forks at {hallLift.Lift:F2} m"));
+        // the watcher needs to see it driven
+        await Seconds(3);
+        me.ExitVehicle();
+        await Seconds(1);
+        if (moved < 1f || hallLift.Lift < 0.3f) return false;
+
+        // back into the apron forklift, from its step side
+        var back = new Basis(Vector3.Up, parkedYaw) * step;
+        me.PlaceAt(parkedAt + back + back.Normalized() * 0.6f + Vector3.Up * 0.3f, parkedYaw);
+        await Seconds(1);
+        me.TryGetIn();
+        bool again = await Until(() => me.Vehicle is Forklift, 5);
+        Log($"back in the apron forklift: {again}");
+        return again;
     }
 
     /// <summary>The bay's site's dormant forklift (phase 3), if the dormant layer has it: its yard is the building's.</summary>
@@ -351,6 +436,9 @@ public partial class PalletNetProbe : Node
         // phase 3: the site's own forklift, dormant on its apron, woken by A (the server spawned it)
         VehicleSlot? yardLift = null;
         bool liftWoken = false;
+        // #630: the forklift standing in the hall, woken by A inside: its vehicle arrives on B too
+        string? hallNode = me.Terrain?.Origin is { } o ? HallForkliftNode(bay.Layout, o) : null;
+        bool hallLiftSeen = false;
         string last = "";
         double end = _clock + 200;
         while (_clock < end)
@@ -379,17 +467,19 @@ public partial class PalletNetProbe : Node
             if (apronTaken && carry != 0) apronCarried = true;
             yardLift ??= YardForklift(bay);
             if (yardLift is { } ys && DormantVehicles.Instance?.IsAwake(ys) == true) liftWoken = true;
+            hallLiftSeen |= hallNode != null && VehicleManager.Instance?.GetNodeOrNull(hallNode) != null;
             bool liftOk = yardLift == null || liftWoken;
 
             string now = $"A: {other.Ride} {(inside ? "inside" : "outside")}, forks carrying {carry} (drawn: {drawn}); "
                 + $"taken {hall ?? "-"} {apron ?? "-"}, loose {(loose == null ? "-" : FormattableString.Invariant($"{Pallets.LooseId(loose.Id)} load {loose.Load} at LV95 {loose.E:F1}/{loose.N:F1} alt {loose.Altitude:F1}"))}";
             if (now != last) { Log(now); last = now; }
-            if (carriedInside && carriedOutside && taken && setDown && drawnDown && emptied && apronTaken && apronCarried && liftOk) break;
+            if (carriedInside && carriedOutside && taken && setDown && drawnDown && emptied && apronTaken && apronCarried && liftOk && hallLiftSeen) break;
         }
         Log($"saw: carried inside {carriedInside}, carried out in the yard {carriedOutside}, the hall's pallet taken {taken}, "
             + $"set down outside {setDown} (drawn here {drawnDown}), forks empty after {emptied}, an apron stack taken {apronTaken} and carried {apronCarried}, "
+            + $"the hall's own forklift {hallNode ?? "-"} arrived here {hallLiftSeen}, "
             + $"the site's forklift {(yardLift == null ? "not on its apron here" : $"{yardLift.Value.NodeName} woken {liftWoken}")}");
         return carriedInside && carriedOutside && taken && setDown && drawnDown && emptied && apronTaken && apronCarried
-            && (yardLift == null || liftWoken);
+            && (yardLift == null || liftWoken) && hallLiftSeen;
     }
 }

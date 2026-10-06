@@ -75,6 +75,29 @@ against its numbers.
 
 ## In the world
 
-A warehouse and a works keep one standing dormant on their apron (#583 phase 3,
-`DormantSlots.ForkliftOf`, see `pallets` and `industrial-yards`): getting in wakes it, as any
-parked yard vehicle. Elsewhere, an admin conjures one (Works tab).
+Every forklift in the game is one you can get into and drive. Three places hold one:
+
+- **Standing in a warehouse's or a works' hall** (#630): the plan's `FurnitureType.Forklift`
+  piece, which is a **vehicle asleep**, not furniture. `HallForklifts` (`src/Interiors/`) is the
+  pure function from a plan to its `VehicleSlot` (owner `<building>_h`, ordinal the furniture
+  index, LV95 + altitude 3 km down, yaw from the piece's turn); `InteriorMeshBuilder.Build` leaves
+  it out of the merged mesh (`IsCarvedOut`, as a loose floor pallet is) and
+  `InteriorManager.AddForklifts` stands a `ParkedForklift` in its place: the dormant look of the
+  real machine (`DormantLooks`, shared with the yards' forklifts) on a `DormantBody` carrying the
+  slot. **Aiming at it wakes it** through the very `VehicleReach` -> `DormantVehicles.Wake` path a
+  car park's car takes (a camera sweep over it on the way in is enough, which is how the net check
+  first found it already awake); the server resolves the slot itself from its copy of the plan
+  (`DormantVehicles.ServerWakeHall`), and only for a peer that is inside that very building. The
+  sleeping node hides and goes non-solid the frame the vehicle node arrives (`ParkedForklift.Woke`),
+  on every peer, and a late joiner never draws it. Session-only, like every woken yard vehicle.
+  **The piece is the machine's size** (1.4 x 3.8 x 2.2 m; it was a 1.3 x 2.1 m box that the real
+  forklift sticks out of by a metre at both ends), so `InteriorLayout.CurrentVersion` is 22 and
+  the generator backs it in nose-first against an end wall of the hall with its forks a hand's
+  breadth off it: reverse out, as a driver does.
+- **On a site's apron** (#583 phase 3, `DormantSlots.ForkliftOf`, `pallets`, `industrial-yards`).
+- **Conjured by an admin** (Works tab).
+
+`--sitecheck`: one in the warehouse and the works only, the whole machine inside its hall, its slot
+pointing the way its piece does (checked back through `VehicleSlot`'s own yaw convention rather
+than the one that laid it out) and nose in. `tools/palletnetcheck.sh`: A, inside the hall, wakes
+the hall's forklift, gets in, raises the forks and drives it; B must see its vehicle arrive.

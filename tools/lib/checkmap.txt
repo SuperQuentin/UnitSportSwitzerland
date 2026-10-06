@@ -319,6 +319,12 @@ src/Items/SitePallets    quick  --sitecheck --systems ui
 src/Vehicles/SiteYards   quick  --sitecheck --systems ui
 src/Vehicles/VehicleSlot quick  --sitecheck --systems ui
 src/Items/SitePallets    net    tools/palletnetcheck.sh
+# a hall's forklift is a vehicle asleep (#630): carved out of the hall mesh, woken by aim, driven out
+src/Interiors/HallForklifts quick --sitecheck --systems ui
+src/Interiors/ParkedForklift quick --sitecheck --systems ui
+src/Interiors/HallForklifts net tools/palletnetcheck.sh
+src/Interiors/ParkedForklift net tools/palletnetcheck.sh
+src/Interiors/InteriorGenerator.Industrial net tools/palletnetcheck.sh
 src/Vehicles/SiteYards   net    tools/palletnetcheck.sh
 src/Vehicles/DormantVehicles net tools/palletnetcheck.sh
 src/Player/StairsNet     net    tools/stairsnetcheck.sh
@@ -396,3 +402,16 @@ src/Player/FootPlayer.Hold net   tools/holdnetcheck.sh
 src/Player/HoldNetProbe  net    tools/holdnetcheck.sh
 src/Vehicles/VehicleBody.Hold net tools/holdnetcheck.sh
 src/Player/FootPlayer.Overlap net tools/holdnetcheck.sh
+# #611: the excavator: tracks, dig mode and the arm on the real bindings (flat), and seen from a second peer
+src/Player/Excavator      quick  --excavatorcheck --world flat --systems physics,ui
+src/Avatar/Excavator      quick  --excavatorcheck --world flat --systems physics,ui
+src/Player/FootPlayer.Exc quick  --excavatorcheck --world flat --systems physics,ui
+src/Player/Excavator      net    tools/excavatornetcheck.sh
+src/Avatar/Excavator      net    tools/excavatornetcheck.sh
+src/Player/FootPlayer.Exc net    tools/excavatornetcheck.sh
+# #612: the wheel loader: frame steering, work mode, the arm and the bucket (flat), and from a second peer (the excavator's script)
+src/Player/WheelLoader    quick  --loadercheck --world flat --systems physics,ui
+src/Avatar/WheelLoader    quick  --loadercheck --world flat --systems physics,ui
+src/Player/FootPlayer.Whe quick  --loadercheck --world flat --systems physics,ui
+src/Player/WheelLoader    net    tools/excavatornetcheck.sh
+src/Avatar/WheelLoader    net    tools/excavatornetcheck.sh

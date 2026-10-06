@@ -41,6 +41,10 @@ public enum RideKind
     // 129..192 are motorbikes again (the second range, MotorbikeCatalog.First2).
     /// <summary>A counterbalance forklift (#583): a <see cref="Player.Forklift"/>, a mast that lifts pallets.</summary>
     Forklift = 193,
+    /// <summary>A tracked excavator (#611): an <see cref="Player.Excavator"/>, a slewing house and a three-joint arm.</summary>
+    Excavator = 194,
+    /// <summary>An articulated wheel loader (#612): a <see cref="Player.WheelLoader"/>, frame steering, a lift arm and a bucket.</summary>
+    WheelLoader = 195,
     // The next other mount is 194.
 }
 
@@ -480,6 +484,8 @@ public abstract class Rideable
         RideKind.Pigeon => new Pigeon(),
         RideKind.Airstairs => new Airstairs(),
         RideKind.Forklift => new Forklift(),
+        RideKind.Excavator => new Excavator(),
+        RideKind.WheelLoader => new WheelLoader(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),
         _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),
         _ when HeavyCatalog.For(kind) is { } heavy => new Truck(heavy),

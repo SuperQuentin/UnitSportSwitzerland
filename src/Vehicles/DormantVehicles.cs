@@ -169,6 +169,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         if (SlotOf(node.Name) is not { } key) return;
         _gone.Remove(key.Key);
         _asked.Remove(key.Key);
+        // a forklift asleep in a hall (#630) is no tile's slot: its own node undraws itself
+        ParkedForklift.Woke(key.Key);
         if (!_awake.Add(key.Key)) return;
         Forget(key.Tile, key.Key);
     }
@@ -841,7 +843,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     private void RequestWake(string owner, int ordinal)
     {
         if (!Multiplayer.IsServer()) return;
-        ServerWake(owner, ordinal);
+        ServerWake(owner, ordinal, Multiplayer.GetRemoteSenderId());
     }
 
     /// <summary>
@@ -849,14 +851,33 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// client cannot conjure a vehicle at a position of its choosing by asking for a slot that is
     /// not there.
     /// </summary>
-    private void ServerWake(string owner, int ordinal)
+    private void ServerWake(string owner, int ordinal, long peer = 0)
     {
+        if (HallForklifts.BuildingOf(owner) is { } hall) { ServerWakeHall(hall, ordinal, peer); return; }
         if (Find(owner, ordinal) is not { } slot) return;
         if (_awake.Contains(KeyOf(slot))) return;
         // No "woken" broadcast (#560). Every peer drops its dormant copy when the vehicle node enters
         // its tree (OnVehicleAdded): the very frame the live one is drawn. A broadcast sent at once
         // could arrive before the spawn, which the server sends at its next poll, and leave the bay
         // empty in between.
+        Promote(slot);
+    }
+
+    /// <summary>
+    /// A hall's forklift (#630): the slot is the plan's, worked out here from the layout the server
+    /// keeps (<see cref="HallForklifts.SlotOf"/>), so a client names a furniture index and nothing
+    /// more. The asker has to be in that very building, as for a container (<c>LootService</c>);
+    /// <paramref name="peer"/> 0 is the server's own, which has nobody to doubt.
+    /// </summary>
+    private async void ServerWakeHall(string building, int furniture, long peer)
+    {
+        if (InteriorManager.Instance is not { } interiors) return;
+        if (peer != 0 && interiors.SpaceOf(peer) != building) return;
+        InteriorLayout? layout;
+        try { layout = await interiors.GetOrCreate(building); }
+        catch (Exception e) { GD.PushError($"[dormant] hall {building}: {e.Message}"); return; }
+        if (layout == null || HallForklifts.SlotOf(layout, furniture, _origin) is not { } slot) return;
+        if (_awake.Contains(KeyOf(slot))) return;
         Promote(slot);
     }
 

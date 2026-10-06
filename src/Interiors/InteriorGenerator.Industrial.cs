@@ -467,17 +467,22 @@ public static partial class InteriorGenerator
             }
     }
 
-    /// <summary>A forklift parked out of the way: against a wall, nose in, where one still fits.</summary>
+    /// <summary>
+    /// A forklift parked out of the way: against a wall, nose in, where one still fits. The size of
+    /// the real machine (<see cref="HallForklifts"/>, #630): it is driven, and a 2.1 m box would
+    /// have been stuck out of at both ends.
+    /// </summary>
     private static void Forklift(InteriorLayout l, int f, RoomPlan r,
         List<RectPlan> placed, List<RectPlan> blocked, Random rng)
     {
         for (int k = 0; k < 6; k++)
         {
             float x = r.X0 + r.Width * (0.1f + 0.8f * (float)rng.NextDouble());
-            float z = r.Z0 + r.Depth * (k < 3 ? 0.08f : 0.92f);
-            var rect = new RectPlan(x - 0.7f, z - 1.1f, x + 0.7f, z + 1.1f);
+            // nose in: its forks a hand's breadth off the wall at one end of the hall or the other
+            float z = k < 3 ? r.Z0 + 0.35f + HallForklifts.Length / 2 : r.Z1 - 0.35f - HallForklifts.Length / 2;
+            var rect = new RectPlan(x - HallForklifts.Width / 2, z - HallForklifts.Length / 2, x + HallForklifts.Width / 2, z + HallForklifts.Length / 2);
             if (!Free(r, rect, placed, blocked, 0.2f)) continue;
-            Put(l, f, FurnitureType.Forklift, x, z, k < 3 ? 2 : 0, 1.3f, 2.1f, 2.0f, placed);
+            Put(l, f, FurnitureType.Forklift, x, z, k < 3 ? 2 : 0, HallForklifts.Width, HallForklifts.Length, HallForklifts.Height, placed);
             return;
         }
     }

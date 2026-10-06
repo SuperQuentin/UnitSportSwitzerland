@@ -41,8 +41,10 @@ public partial class Handshake : Node
     /// 17: item events FishCast/FishEnd, items FishingRod..RoundGoby 194-222 (#493).
     /// 18: the world clock on the wire is (Env0, EnvEpoch, HourShift, MinutesPerDay), EnvEpoch in simulated seconds (#579).
     /// 19: World/Pallets (AskTake/AskDrop/Took/Dropped/Snapshot), RideKind.Forklift and the load in its pose (#583).
+    /// 20: RideKind.Excavator and its arm in the pose (#611).
+    /// 21: RideKind.WheelLoader, its frame, arm and bucket in the pose (#612).
     /// </summary>
-    public const int Protocol = 19;
+    public const int Protocol = 21;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

@@ -85,6 +85,9 @@
     <!-- the sound of a site (#617): the scheduler and the synthesis, Godot maths only -->
     <Compile Include="..\..\src\Terrain\Construction\SiteSoundPlan.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\SiteSfx.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the excavator (#611): its layout and arm, Godot maths only -->
+    <Compile Include="..\..\src\Avatar\ExcavatorLayout.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\WheelLoaderLayout.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- swiss_data.py port (#515): only the pure half (manifest format, skip decisions, STAC
          id/bbox arithmetic) is linked. SwissDownload.cs itself needs IStepProgress from
          Pipeline.cs, which would drag in CountryData/LocalState/Selection/Stats and

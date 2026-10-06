@@ -52,6 +52,8 @@ public partial class TestWorld : Node3D
         Node? probe = HitboxProbe.Requested() ? new HitboxProbe(null, origin)
             : SyncProbe.Requested() ? new SyncProbe(null, origin)
             : ForkliftCheck.Requested ? new ForkliftCheck(origin)
+            : ExcavatorCheck.Requested ? new ExcavatorCheck(origin)
+            : LoaderCheck.Requested ? new LoaderCheck(origin)
             : Items.PalletCheck.Requested ? new Items.PalletCheck()
             : RideProbe.ParseArgs() is { } ride ? new RideProbe(null, origin, ride.Kind, ride.Seconds, ride.Shot)
             : FlightCheckProbe.ParseArgs() is { } fly ? new FlightCheckProbe(null, origin, fly.Kind, fly.Shot)
