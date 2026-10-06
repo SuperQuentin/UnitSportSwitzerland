@@ -1271,6 +1271,27 @@ public partial class InteriorNode : Node3D
         }
     }
 
+    // ---- pallets a forklift can lift (#583) ----------------------------------------------------
+
+    /// <summary>
+    /// Every loose floor pallet as a node of its own (<see cref="Items.PalletNode"/>), the way a gun
+    /// locker's door is one: <see cref="InteriorMeshBuilder.Build"/> leaves them out of the merged
+    /// mesh, so a forklift can lift one and leave the floor bare. A pallet already forked away this
+    /// session (<c>PalletService</c>) is hidden as it enters the tree. No plan change.
+    /// </summary>
+    private static void AddPallets(InteriorNode node, Material material)
+    {
+        var l = node.Layout;
+        for (int i = 0; i < l.Furniture.Count; i++)
+        {
+            var f = l.Furniture[i];
+            if (!InteriorMeshBuilder.IsLoosePallet(f)) continue;
+            var pallet = Items.PalletNode.Create(Items.Pallets.HallId(l.Key, i), InteriorMeshBuilder.PalletLoad(f), material);
+            pallet.Transform = new Transform3D(new Basis(Vector3.Up, f.Turns * Mathf.Pi / 2), new Vector3(f.X, l.FloorY(f.Floor), f.Z));
+            node.AddChild(pallet);
+        }
+    }
+
     /// <summary>The interior's visual mesh; safe on a worker thread, like <c>ChunkNode.ToArrayMesh</c>.</summary>
     public static ArrayMesh BuildMesh(InteriorMeshBuilder.MeshData data, Material material)
     {
@@ -1326,6 +1347,7 @@ public partial class InteriorNode : Node3D
             (pair ? node._shutters : node._leaves)[e.Door] = leaf;
         }
         AddLockDoors(node, material);
+        AddPallets(node, material);
         // an apartment block's elevator doors and flats' front doors (#557)
         AddLiftDoors(node, material);
         AddInnerDoors(node, material);

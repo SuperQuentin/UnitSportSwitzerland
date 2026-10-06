@@ -787,6 +787,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the images of stuck Polaroids, fetched from the server by hash (before the list draws them)
         Items.PhotoTransfer.Create(this, server: false);
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
+        // pallets a forklift has moved (#583): the server keeps them for the session, offline this client does
+        Items.PalletService.Create(this, origin, server: false);
         // built structures (#274): the server owns them, offline this client does
         if (Systems.On(Systems.Build))
         {

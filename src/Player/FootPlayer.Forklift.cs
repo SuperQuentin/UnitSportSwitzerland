@@ -14,6 +14,11 @@ namespace UnitSport.Player;
 /// and in VR either of those through <c>XrPad</c>'s grips or, properly, the cab lever
 /// <c>XrCabControls</c> builds for the "forklift" context. Nothing new was bound for it.
 /// </para>
+///
+/// <para>
+/// Pallets (#583 phase 2) need nothing more: driving the forks in under one and raising them is
+/// the whole interaction, on every device (<c>Items/PalletService.Tend</c>).
+/// </para>
 /// </summary>
 public partial class FootPlayer
 {
@@ -28,5 +33,7 @@ public partial class FootPlayer
         // held): stop where the forks are now, as a real mast does — no drift on to a target.
         fork.TargetLift = up == down ? fork.Lift
             : up ? ForkliftLayout.MaxLift : ForkliftLayout.MinLift;
+        // no pallet button: forks raised under a pallet lift it, lowered with one on them set it down
+        Items.PalletService.Instance?.Tend(this, fork);
     }
 }

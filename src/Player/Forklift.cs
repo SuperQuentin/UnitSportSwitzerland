@@ -103,21 +103,21 @@ public sealed class Forklift : Rideable
     public override SeatAnchor[] Seats => _seats ??= ForkliftMeshBuilder.Parts().Seats;
 
     // ---- flags: what a parked one keeps (the fork height in cm, and its load) -----------------
-    /// <summary>Fork height in centimetres, with what it carries above it (0 = empty forks).</summary>
+    /// <summary>Fork height in centimetres (ten bits), with what it carries above it (nine: 0 = empty forks, else 1 + the load byte).</summary>
     public int PackFlags() =>
-        Mathf.RoundToInt(Mathf.Clamp(Lift, 0f, ForkliftLayout.MaxLift) * 100f) | (Mathf.Clamp(Carrying, 0, 255) << 10);
+        Mathf.RoundToInt(Mathf.Clamp(Lift, 0f, ForkliftLayout.MaxLift) * 100f) | (Mathf.Clamp(Carrying, 0, 0x1FF) << 10);
 
     public void UnpackFlags(int flags)
     {
         if (flags == 0) return;
         Lift = TargetLift = ForkliftLayout.Clamp((flags & 0x3FF) / 100f);
-        Carrying = (flags >> 10) & 0xFF;
+        Carrying = (flags >> 10) & 0x1FF;
     }
 
     public override Node3D BuildVisual(int riderIndex, Outfit outfit = default) =>
-        ForkliftMeshBuilder.CreateRig(Lift, HumanPalette.ForRider(riderIndex) with { Outfit = outfit });
+        ForkliftMeshBuilder.CreateRig(Lift, HumanPalette.ForRider(riderIndex) with { Outfit = outfit }, Carrying);
 
-    public override Node3D BuildParkedVisual(int riderIndex) => ForkliftMeshBuilder.CreateRig(Lift, null);
+    public override Node3D BuildParkedVisual(int riderIndex) => ForkliftMeshBuilder.CreateRig(Lift, null, Carrying);
 
     /// <summary>The forks toward their target, at the mast's rate.</summary>
     public void Mast(float dt) =>
@@ -128,15 +128,19 @@ public sealed class Forklift : Rideable
         // signed speed along the nose: the motion's speed is a magnitude, reversing is Slip = π
         float v = _signed;
         if (Mathf.Abs(Mathf.Abs(v) - motion.Speed) > 0.5f) v = motion.Speed * (Mathf.Abs(MathX.WrapAngle(motion.Slip)) > 1.5f ? -1f : 1f);
-        float brake = Mathf.Max(input.Brake, input.Handbrake ? 1f : 0f);
+        // the pedal held at a standstill is reverse; the handbrake only holds — a machine left on
+        // it with its forks going up must not back away by itself (#583: it did, 3.6 m)
+        float pedal = input.Brake;
+        float brake = Mathf.Max(pedal, input.Handbrake ? 1f : 0f);
         float a = 0f;
         if (input.Throttle > 0.05f)
             a = v < -0.1f ? BrakeDecel * input.Throttle : Accel * input.Throttle;
-        else if (brake > 0.05f)
-            a = v > 0.1f ? -BrakeDecel * brake : -Accel * 0.8f * brake;
-        if (ground.OnFloor) a += SlopeAccel(ground.Grade) * Mathf.Sign(v == 0f ? 1f : v);
+        else if (pedal > 0.05f)
+            a = v > 0.1f ? -BrakeDecel * pedal : -Accel * 0.8f * pedal;
+        if (ground.OnFloor && !input.Handbrake) a += SlopeAccel(ground.Grade) * Mathf.Sign(v == 0f ? 1f : v);
         v += a * dt;
         v = Mathf.MoveToward(v, 0f, (Drag + (input.Throttle < 0.05f && brake < 0.05f && Mathf.Abs(v) < 0.6f ? 2.5f : 0f)) * dt);
+        if (input.Handbrake) v = Mathf.MoveToward(v, 0f, BrakeDecel * dt);
         v = Mathf.Clamp(v, -TopReverse, TopSpeed);
         _signed = v;
 
@@ -179,7 +183,12 @@ public sealed class Forklift : Rideable
         rig.Air = Lift / ForkliftLayout.LiftDial * HeavyDriveline.AirMax;
         // the display: the forks in decimetres
         rig.Gear = Mathf.RoundToInt(Lift * 10f).ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (ForkliftMeshBuilder.MastOf(rig) is { } mast) mast.Lift = Lift;
+        if (ForkliftMeshBuilder.MastOf(rig) is { } mast)
+        {
+            mast.Lift = Lift;
+            // what is on the forks: a pallet, drawn on the carriage, so it crosses a bay's portal with them
+            mast.Carrying = Carrying;
+        }
     }
 
     /// <summary>

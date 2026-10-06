@@ -107,6 +107,7 @@ public partial class ForkliftCheck : Node
         me.RideControls = () => new RideInput(0f, 0f, 0f, false, Handbrake: true);
         await Frames(5);
         Expect(Mathf.Abs(fork.Lift - ForkliftLayout.MinLift) < 0.02f, $"forks start on the ground ({fork.Lift:F2} m)");
+        var parked = me.GlobalPosition;
         await Shot("forks-down", me.GlobalPosition + new Vector3(4.5f, 2.2f, 4.5f), me.GlobalPosition + Vector3.Up * 0.9f);
 
         // ---- held up for a second, let go: it runs at the mast's rate and STOPS there ----------
@@ -143,6 +144,9 @@ public partial class ForkliftCheck : Node
         // ---- held down to the bottom stop ------------------------------------------------------
         await Paddle(PlayerInput.ShiftDown, ForkliftLayout.MaxLift / ForkliftLayout.LiftRate + 1.0);
         Expect(Mathf.Abs(fork.Lift - ForkliftLayout.MinLift) < 0.02f, $"the forks come back to the ground ({fork.Lift:F2} m)");
+        // the handbrake holds: it is not the pedal, which reverses from a stop (it backed off 3.6 m, #583)
+        float crept = (me.GlobalPosition - parked with { Y = me.GlobalPosition.Y }).Length();
+        Expect(crept < 0.05f, $"on the handbrake it stood still through the whole lift ({crept:F2} m)");
 
         // ---- full lock: it turns inside its own length -------------------------------------------
         me.RideControls = () => new RideInput(1f, 0f, 1f, false);

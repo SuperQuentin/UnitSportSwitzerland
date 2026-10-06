@@ -377,6 +377,12 @@ public partial class SiteProbe : Node3D
     /// A tile holding one building of <paramref name="spec"/>'s size whose key the site hash sends to
     /// the type wanted, and the index it is at. Returns the key text, or null if none of 400 is.
     /// </summary>
+    /// <summary>
+    /// One of the hand-made sites, building and all, for another check to plan and stand in: the
+    /// pallet check (#583) forks pallets in the turned warehouse.
+    /// </summary>
+    internal static (BuildingTile? Tile, int Index, string? Key) FindSite(BuildingType want) => Find(Specs.First(s => s.Want == want));
+
     private static (BuildingTile? Tile, int Index, string? Key) Find(Spec spec)
     {
         for (int i = 0; i < 400; i++)
