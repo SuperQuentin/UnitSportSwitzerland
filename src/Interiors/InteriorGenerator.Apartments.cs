@@ -102,6 +102,19 @@ public static partial class InteriorGenerator
         public int Slot;
     }
 
+    /// <summary>
+    /// What a block planned as one wing of a bigger building (#577) is told: the building's basement
+    /// count, so every wing has the same floors; where another wing joins it on a side other than
+    /// its front (a corridor is run to that point, <see cref="Apt.Links"/>); and which stretches of
+    /// its walls are not facades but the next wing, so no flat counts on a window there.
+    /// </summary>
+    internal sealed class AptOptions
+    {
+        public int? Below;
+        public List<(Side Side, float At)> Links = new();
+        public Func<Side, float, float, float>? Free;
+    }
+
     private sealed class Apt
     {
         public InteriorLayout L = null!;
@@ -121,16 +134,23 @@ public static partial class InteriorGenerator
         public bool Mixed;
         /// <summary>The flat size this building runs to, m²: one block is studios, the next family flats.</summary>
         public float Target;
+        /// <summary>Where another wing joins this one off its front (#577): a corridor runs to each.</summary>
+        public List<(Side Side, float At)> Links = new();
+        /// <summary>How much of a stretch [lo, hi] of the wall on a side faces out (not onto the next wing), m.</summary>
+        public Func<Side, float, float, float> Free = (_, lo, hi) => hi - lo;
+        /// <summary>Whether a stretch is a facade: enough of it faces out for a window.</summary>
+        public bool Facade(Side s, float lo, float hi) => Free(s, lo, hi) >= WindowWall + 0.3f;
     }
 
-    internal static bool TryApartments(InteriorLayout l, Footprint fp, BuildingKind kind, int above, BuildingType type, Random rng)
+    /// <summary>One rectangle planned as a block of flats: the whole building, or one wing of it (#577).</summary>
+    internal static bool TryBlock(InteriorLayout l, Footprint fp, BuildingKind kind, int above, BuildingType type, Random rng, AptOptions o)
     {
         float W = l.Width, D = l.Depth, h = l.StoreyHeight;
         float hw = W / 2, hd = D / 2, clear = h - Slab;
         bool mixed = type == BuildingType.MixedUse;
 
         // ---- the stair, which sets the stairwell's depth -----------------------------------
-        int below = AptBasement(l.Key, mixed, above, W * D);
+        int below = o.Below ?? AptBasement(l.Key, mixed, above, W * D);
         int floors = above + below;
         bool stairs = floors > 1;
         // a stairwell climbs a storey in two flights round a half landing (#571): each flight is
@@ -176,11 +196,13 @@ public static partial class InteriorGenerator
             L = l, Hw = hw, Hd = hd, RunZ0 = runZ0, RunZ1 = runZ1, ZM = zM, ZB1 = zB1, CoreW = coreW, Clear = clear,
             Tread = tread, Lift = lift, Stairs = stairs, Passage = passage, Floors = floors, Below = below, Mixed = mixed,
             Target = 55f + 60f * (float)new Random(StableHash(l.Key + "|flatsize")).NextDouble(),
+            Links = o.Links,
         };
+        if (o.Free != null) a.Free = o.Free;
 
         // ---- one stairwell per front door, spaced so there are flats between ------------------
         var axisV = fp.AxisV;
-        var cands = new List<(float X, int Slot)> { (fp.EntryX, 0) };
+        var cands = new List<(float X, int Slot)> { (fp.EntryX, fp.Door.Slot) };
         foreach (var d in fp.Extra)
         {
             var rel = new Godot.Vector2(d.Position.X - fp.Center.X, d.Position.Z - fp.Center.Y);
@@ -200,7 +222,7 @@ public static partial class InteriorGenerator
             if (a.Wells.Count > 0 && w.X0 < a.Wells[^1].X1 + MinFlatSide) continue;
             a.Wells.Add(w);
         }
-        if (a.Wells.All(w => w.Slot != 0)) return false;
+        if (a.Wells.All(w => w.Slot != fp.Door.Slot)) return false;
         // A sliver at either end too thin for a flat: slide the stairwell flush, as the cored plan
         // does with its core. Its lobby's doorway then stands a little off the facade door, which
         // the plan box already allows (inside and outside line up plausibly, not exactly). A small
@@ -246,6 +268,32 @@ public static partial class InteriorGenerator
         AptEntrances(a, fp);
         for (int f = below; f < floors; f++) AddWindows(l, l.Floors[f], f - below);
         return true;
+    }
+
+    /// <summary>
+    /// Where a block's stairwell rows end, front to back, as <see cref="TryBlock"/> lays them out
+    /// for a block <paramref name="w"/> by <paramref name="d"/> of <paramref name="floors"/> floors
+    /// (#577: the wing beyond a corridor's end must meet it there): the back landing from
+    /// <c>ZM</c> to <c>ZB1</c>; null when the block has no back landing or no stair fits.
+    /// </summary>
+    internal static (float ZM, float ZB1)? BackLandingOf(float w, float d, float h, int floors)
+    {
+        bool stairs = floors > 1;
+        int steps = (int)MathF.Ceiling(h / 2 / StairRiser);
+        float tread = 0.28f;
+        if (stairs && FrontLanding + tread * steps + MidLanding + BackLanding > d)
+        {
+            tread = (d - FrontLanding - MidLanding - BackLanding) / steps;
+            if (tread < 0.22f) return null;
+        }
+        bool lift = floors >= 3;
+        float coreW = stairs ? StairWidth + WalkWidth : 2.4f;
+        if (stairs && w < coreW + (lift ? LiftColumn : 0) + MinFlatSide) return null;
+        float run = stairs ? tread * steps : 0, mid = stairs ? MidLanding : 0;
+        float sd = FrontLanding + run + mid + BackLanding;
+        if (d - sd < 5.0f) sd = d;
+        float zB1 = -d / 2 + sd;
+        return (zB1 - BackLanding, zB1);
     }
 
     /// <summary>
@@ -345,7 +393,11 @@ public static partial class InteriorGenerator
                         : new Region(new RectPlan(b0, a.ZB1, b1, a.Hd), Side.Right, new List<Way> { new(spines[right!].Room, a.ZB1, a.Hd) }));
             }
             if (width < 1.2f) continue;
-            bool corridor = what switch
+            // another wing joining this one at its end, or off its back in this gap, is reached by
+            // the corridor off the back landing (#577)
+            bool linked = backed && a.Links.Any(k => k.Side == Side.Left && left == null || k.Side == Side.Right && right == null
+                || k.Side == Side.Back && k.At > g0 && k.At < g1);
+            bool corridor = linked || what switch
             {
                 AptFloor.Basement => backed,
                 AptFloor.Shops => false,
@@ -381,6 +433,8 @@ public static partial class InteriorGenerator
                 regions.Add(new Region(new RectPlan(w.X0, a.ZB1, w.X1, a.Hd), Side.Front, ways));
             }
 
+        if (backed) LinkSpines(a, floor, regions, carStrip);
+
         // ---- filled by what the floor is for -----------------------------------------------------
         int unit = 0;
         switch (what)
@@ -399,6 +453,59 @@ public static partial class InteriorGenerator
                 break;
         }
         return floor;
+    }
+
+    /// <summary>
+    /// Another wing joining this one off its back wall (#577): a corridor from the back landing (or
+    /// the corridor off it) straight to that point, the regions it crosses cut either side of it and
+    /// opening off it. The wing beyond meets it there.
+    /// </summary>
+    private static void LinkSpines(Apt a, FloorPlan floor, List<Region> regions, bool carStrip)
+    {
+        var rooms = floor.Rooms;
+        float half = CorridorWidth / 2, archTop = Math.Min(2.3f, a.Clear - 0.2f);
+        foreach (var (side, at) in a.Links)
+        {
+            if (side != Side.Back || a.Hd - a.ZB1 < 2.5f) continue;
+            // what it starts from: whatever circulation ends on the back landing's line nearest
+            // there, and it slides along to stand wholly in front of it (the wing joining this one
+            // is planned after, and meets the corridor where it really is)
+            int from = -1;
+            float best = float.MaxValue;
+            for (int i = 0; i < rooms.Count; i++)
+            {
+                var r = rooms[i];
+                if (r.Type is not (RoomType.Corridor or RoomType.Landing) || Math.Abs(r.Z1 - a.ZB1) > 0.02f || r.X1 - r.X0 < CorridorWidth) continue;
+                float d = Math.Max(0, Math.Max(r.X0 + half - at, at - (r.X1 - half)));
+                if (d < best) { best = d; from = i; }
+            }
+            if (from < 0) continue;
+            float x = Fit(at, rooms[from].X0 + half, rooms[from].X1 - half);
+            // in the basement the car park already runs across the back
+            if (carStrip) continue;
+            int sp = Add(rooms, new RoomPlan { X0 = x - half, Z0 = a.ZB1, X1 = x + half, Z1 = a.Hd, Type = RoomType.Corridor });
+            Opening(rooms, sp, Side.Front, from, x, CorridorWidth - 0.4f, archTop, OpeningKind.Arch);
+            var cut = new List<Region>();
+            foreach (var reg in regions)
+            {
+                var R = reg.R;
+                if (R.X1 <= x - half + 0.01f || R.X0 >= x + half - 0.01f || R.Z1 <= a.ZB1 + 0.01f) { cut.Add(reg); continue; }
+                // either side of the corridor: each part keeps the ways it still touches, or opens off it
+                foreach (var (p0, p1, faces) in new[] { (R.X0, x - half, Side.Right), (x + half, R.X1, Side.Left) })
+                {
+                    if (p1 - p0 < 1.2f) continue;
+                    var part = new RectPlan(p0, R.Z0, p1, R.Z1);
+                    var keep = AlongX(reg.Side)
+                        ? reg.Ways.Select(w => w with { Lo = Math.Max(w.Lo, p0), Hi = Math.Min(w.Hi, p1) }).Where(w => w.Hi - w.Lo >= WayMin).ToList()
+                        : (reg.Side == Side.Left ? Math.Abs(p0 - R.X0) < 0.01f : Math.Abs(p1 - R.X1) < 0.01f) ? reg.Ways : new List<Way>();
+                    cut.Add(keep.Count > 0
+                        ? new Region(part, reg.Side, keep)
+                        : new Region(part, faces, new List<Way> { new(sp, Math.Max(R.Z0, a.ZB1), R.Z1) }));
+                }
+            }
+            regions.Clear();
+            regions.AddRange(cut);
+        }
     }
 
     private static int Add(List<RoomPlan> rooms, RoomPlan r)
@@ -483,15 +590,37 @@ public static partial class InteriorGenerator
         // and a bedroom side by side on that facade (#571), so they are cut no narrower
         bool farFacade = reg.Side switch
         {
-            Side.Left => R.X1 >= a.Hw - 0.02f,
-            Side.Right => R.X0 <= -a.Hw + 0.02f,
-            Side.Front => R.Z1 >= a.Hd - 0.02f,
-            _ => R.Z0 <= -a.Hd + 0.02f,
+            Side.Left => R.X1 >= a.Hw - 0.02f && a.Facade(Side.Right, R.Z0, R.Z1),
+            Side.Right => R.X0 <= -a.Hw + 0.02f && a.Facade(Side.Left, R.Z0, R.Z1),
+            Side.Front => R.Z1 >= a.Hd - 0.02f && a.Facade(Side.Back, R.X0, R.X1),
+            _ => R.Z0 <= -a.Hd + 0.02f && a.Facade(Side.Front, R.X0, R.X1),
         };
         float least = farFacade && depth >= 9f ? StripMin(RoomType.Living) + StripMin(RoomType.Bedroom) + 0.4f : MinFlatSide;
         int want = Math.Clamp((int)MathF.Round(len * depth / target), 1, Math.Max(1, (int)(len / least)));
-        List<float>? cuts = null;
-        for (int n = want; n >= 1 && cuts == null; n--) cuts = Cuts(reg.Ways, lo, hi, n, least);
+        // every flat keeps facade enough for a lit living room and bedroom (#577: in a wing, a
+        // stretch of the region's far wall may be the next wing's); fewer, wider flats where a cut
+        // would leave one short, else at least some facade each
+        float Lit(List<float> c)
+        {
+            float least = float.MaxValue;
+            for (int k = 0; k + 1 < c.Count; k++)
+            {
+                var piece = alongX ? new RectPlan(c[k], R.Z0, c[k + 1], R.Z1) : new RectPlan(R.X0, c[k], R.X1, c[k + 1]);
+                least = Math.Min(least, FlatExt(a, piece, reg.Side).Total(piece.X1 - piece.X0, piece.Z1 - piece.Z0));
+            }
+            return least;
+        }
+        List<float>? cuts = null, some = null, any = null;
+        for (int n = want; n >= 1 && cuts == null; n--)
+        {
+            var c = Cuts(reg.Ways, lo, hi, n, least);
+            if (c == null) continue;
+            any ??= c;
+            float lit = Lit(c);
+            if (lit >= TwoRooms) cuts = c;
+            else if (lit >= WindowWall) some ??= c;
+        }
+        cuts ??= some ?? any;
         if (cuts == null) return; // no way in at all: leave it solid
 
         for (int k = 0; k + 1 < cuts.Count; k++)
@@ -576,6 +705,22 @@ public static partial class InteriorGenerator
         RoomType.Bedroom => 2.4f, RoomType.Living => 3.0f, RoomType.Hall => 1.2f, _ => 2.2f,
     };
 
+    /// <summary>Facade a flat needs for a living room and a bedroom each with a window, m.</summary>
+    private static readonly float TwoRooms = StripMin(RoomType.Living) + StripMin(RoomType.Bedroom);
+
+    /// <summary>
+    /// Which walls of a flat are facades, in its own frame: its u = 0 end, its u = u end, its far
+    /// wall; and how much of a stretch of one of them faces out (#577: part of a wall may be the
+    /// next wing's), <paramref name="Free"/>(0, 1 or 2 for those, from, to).
+    /// </summary>
+    private sealed record Ext(bool U0, bool U1, bool Far, Func<int, float, float, float> Free)
+    {
+        public static Ext Plain(bool u0, bool u1, bool far) => new(u0, u1, far, (_, a, b) => b - a);
+
+        /// <summary>How much of a u x v flat's walls faces out, m.</summary>
+        public float Total(float u, float v) => (U0 ? Free(0, 0, v) : 0) + (U1 ? Free(1, 0, v) : 0) + (Far ? Free(2, 0, u) : 0);
+    }
+
     /// <summary>A room in the flat's own frame: u along the wall with the front door, v away from it.</summary>
     private sealed record Local(RoomType Type, float U0, float V0, float U1, float V1);
 
@@ -616,16 +761,18 @@ public static partial class InteriorGenerator
     /// its other walls are the building's facades: the u = 0 end, the u = u end, the far wall.
     /// Returns the rooms, the entrance hall first.
     /// </summary>
-    private static List<Local> FlatRooms(float u, float v, float door, (bool U0, bool U1, bool Far) ext, Random rng)
+    private static List<Local> FlatRooms(float u, float v, float door, Ext ext, Random rng)
     {
         var program = FlatProgram(u * v, rng);
         // no more bedrooms than its facades can give a window each, beside the living room's (#571):
         // a deep flat lit only at its far end is a big flat with few rooms and a dark middle
-        float facade = (ext.U0 ? v : 0) + (ext.U1 ? v : 0) + (ext.Far ? u : 0);
+        // (only the wall that really faces out: #577, part of one may be the next wing's)
+        float facade = ext.Total(u, v);
         int beds = Math.Max(1, (int)((facade - 3.5f) / 2.8f));
         while (program.Count(p => p.Type == RoomType.Bedroom) > beds)
             program.Remove(program.Last(p => p.Type == RoomType.Bedroom));
-        if (u * v < 38f) return Daylight(StudioFlat(u, v, door), u, v, ext);
+        // too little facade for a living room and a bedroom both lit: one room for everything
+        if (u * v < 38f || facade < TwoRooms) return Daylight(StudioFlat(u, v, door), u, v, ext);
 
         // every layout the shape allows, the house's usual one first; the one that leaves fewest
         // living rooms and bedrooms dark wins (#571), ties to the earlier
@@ -634,14 +781,23 @@ public static partial class InteriorGenerator
         {
             if (rooms != null) candidates.Add((rooms, penalty));
         }
-        if (u >= 4.4f)
+        // each layout also mirrored end to end, its door and facades with it: where only part of
+        // the far wall faces out (the next wing stands against the rest, #577), the mirror may put
+        // the living room and the bedroom on the open part
+        var mirror = new Ext(ext.U1, ext.U0, ext.Far, (which, a, b) =>
+            which == 2 ? ext.Free(2, u - b, u - a) : ext.Free(1 - which, a, b));
+        foreach (var (e, d, flip) in new[] { (ext, door, false), (mirror, u - door, true) })
         {
+            if (u < 4.4f) break;
+            List<Local>? M(List<Local>? rooms) =>
+                flip ? rooms?.Select(r => r with { U0 = u - r.U1, U1 = u - r.U0 }).ToList() : rooms;
+            float f = flip ? 0.05f : 0;
             // as wide as it is deep: a hall across the middle, wet rooms between it and the landing
-            if (v >= 6.4f && u >= 6.0f && u >= 0.7f * v) Try(TFlat(u, v, door, ext, program), 0);
+            if (v >= 6.4f && u >= 6.0f && u >= 0.7f * v) Try(M(TFlat(u, v, d, e, program)), f);
             // deeper than it is wide: a hall straight in, rooms either side, living room at the far end
-            Try(SpineFlat(u, v, door, ext, program), 0.5f);
+            Try(M(SpineFlat(u, v, d, e, program)), 0.5f + f);
             // shallow, or with its facades at the two ends of its door wall: a hall along the door wall
-            if (v >= 3.6f) Try(GalleryFlat(u, v, door, ext, program), v < 6.5f || !ext.Far ? 0.2f : 1f);
+            if (v >= 3.6f) Try(M(GalleryFlat(u, v, d, e, program)), (v < 6.5f || !e.Far ? 0.2f : 1f) + f);
         }
         // a chain of rooms walked through, and one room for everything, only when nothing else fits
         Try(LinearFlat(u, v, program), u < 4.4f ? 0 : 8);
@@ -654,7 +810,7 @@ public static partial class InteriorGenerator
     /// How much is wrong with a layout: no bed, kitchen or bathroom; a living room or a bedroom
     /// with no facade to put a window in (#571); rooms of the program it had to leave out.
     /// </summary>
-    private static float Score(List<Local> rooms, float u, float v, (bool U0, bool U1, bool Far) ext, int wanted)
+    private static float Score(List<Local> rooms, float u, float v, Ext ext, int wanted)
     {
         float score = 0;
         if (!rooms.Any(r => r.Type == RoomType.Bedroom) || !rooms.Any(r => r.Type == RoomType.Kitchen)
@@ -686,10 +842,10 @@ public static partial class InteriorGenerator
     /// Whether a room of a flat has a facade long enough for a window: its u = 0 or u = u end, or
     /// the far wall, whichever of those are the building's outside (the door wall never is).
     /// </summary>
-    private static bool Lit(Local r, float u, float v, (bool U0, bool U1, bool Far) ext) =>
-        ext.U0 && r.U0 <= 0.01f && r.V1 - r.V0 >= WindowWall
-        || ext.U1 && r.U1 >= u - 0.01f && r.V1 - r.V0 >= WindowWall
-        || ext.Far && r.V1 >= v - 0.01f && r.U1 - r.U0 >= WindowWall;
+    private static bool Lit(Local r, float u, float v, Ext ext) =>
+        ext.U0 && r.U0 <= 0.01f && ext.Free(0, r.V0, r.V1) >= WindowWall
+        || ext.U1 && r.U1 >= u - 0.01f && ext.Free(1, r.V0, r.V1) >= WindowWall
+        || ext.Far && r.V1 >= v - 0.01f && ext.Free(2, r.U0, r.U1) >= WindowWall;
 
     /// <summary>
     /// The last say on daylight (#571): a living room or a bedroom left with no facade trades
@@ -697,7 +853,7 @@ public static partial class InteriorGenerator
     /// on a facade, where each fits the other's place; a spare bedroom nothing will trade with is
     /// a box room. A kitchen, a bathroom or a WC keeps a window only if it happens to have one.
     /// </summary>
-    private static List<Local> Daylight(List<Local> rooms, float u, float v, (bool U0, bool U1, bool Far) ext)
+    private static List<Local> Daylight(List<Local> rooms, float u, float v, Ext ext)
     {
         var list = new List<Local>(rooms);
         static float Least(Local r) => Math.Min(r.U1 - r.U0, r.V1 - r.V0);
@@ -736,7 +892,7 @@ public static partial class InteriorGenerator
     /// and the kitchen across the far facade (a bedroom too if it is wide). Null if the program
     /// does not fit.
     /// </summary>
-    private static List<Local>? SpineFlat(float u, float v, float door, (bool U0, bool U1, bool Far) ext, List<FlatItem> program)
+    private static List<Local>? SpineFlat(float u, float v, float door, Ext ext, List<FlatItem> program)
     {
         var dropped = new List<FlatItem>();
         var rooms = new List<Local>();
@@ -861,7 +1017,7 @@ public static partial class InteriorGenerator
     /// the living room and the kitchen at one facade, the main bedroom at the other, the bathroom,
     /// the WC and the box room in the dark middle. Null if the rooms do not fit.
     /// </summary>
-    private static List<Local>? GalleryFlat(float u, float v, float door, (bool U0, bool U1, bool Far) ext, List<FlatItem> program)
+    private static List<Local>? GalleryFlat(float u, float v, float door, Ext ext, List<FlatItem> program)
     {
         const float hall = 1.2f;
         var rooms = new List<Local> { new(RoomType.Hall, 0, 0, u, hall) };
@@ -946,7 +1102,7 @@ public static partial class InteriorGenerator
     /// of the entrance; beyond the hall, along the facades, the living room with the kitchen
     /// beside it and the bedrooms. Every room opens off the hall. Null if it does not fit.
     /// </summary>
-    private static List<Local>? TFlat(float u, float v, float door, (bool U0, bool U1, bool Far) ext, List<FlatItem> program)
+    private static List<Local>? TFlat(float u, float v, float door, Ext ext, List<FlatItem> program)
     {
         const float hall = 1.2f;
         float band = v >= 8f ? 2.6f : 2.3f;
@@ -1060,16 +1216,7 @@ public static partial class InteriorGenerator
             door = Math.Abs(s - atStart) <= Math.Abs(e - atEnd) ? s : e;
         }
         float du = door - p0;
-        // which of the flat's walls are facades, in its own frame
-        bool exL = piece.X0 <= -a.Hw + 0.02f, exR = piece.X1 >= a.Hw - 0.02f;
-        bool exF = piece.Z0 <= -a.Hd + 0.02f, exB = piece.Z1 >= a.Hd - 0.02f;
-        var ext = side switch
-        {
-            Side.Front => (exL, exR, exB),
-            Side.Back => (exL, exR, exF),
-            Side.Left => (exF, exB, exR),
-            _ => (exF, exB, exL),
-        };
+        var ext = FlatExt(a, piece, side);
         var local = FlatRooms(u, v, du, ext, rng);
 
         // back into the plan: v grows away from the door wall
@@ -1097,6 +1244,47 @@ public static partial class InteriorGenerator
             Floor = f, Room = hall, Side = side, Center = door, Width = FlatDoor, Top = top, Unit = unit,
             Locked = Core.Fnv.Unit($"{a.L.Key}|lock|{f}|{unit}") < LockedShare,
         });
+    }
+
+    /// <summary>
+    /// Which walls of a flat cut from <paramref name="piece"/>, its door on <paramref name="side"/>,
+    /// are facades, in its own frame (<see cref="Ext"/>).
+    /// </summary>
+    private static Ext FlatExt(Apt a, RectPlan piece, Side side)
+    {
+        // which of the flat's walls are facades, in its own frame, and how much of a stretch of
+        // each faces out: the ends of the door wall and the far wall, as sides of the block
+        bool exL = piece.X0 <= -a.Hw + 0.02f && a.Facade(Side.Left, piece.Z0, piece.Z1);
+        bool exR = piece.X1 >= a.Hw - 0.02f && a.Facade(Side.Right, piece.Z0, piece.Z1);
+        bool exF = piece.Z0 <= -a.Hd + 0.02f && a.Facade(Side.Front, piece.X0, piece.X1);
+        bool exB = piece.Z1 >= a.Hd - 0.02f && a.Facade(Side.Back, piece.X0, piece.X1);
+        // (u0 end, u1 end, far wall) as block sides, and a local stretch as the block's
+        var (s0, s1, s2) = side switch
+        {
+            Side.Front => (Side.Left, Side.Right, Side.Back),
+            Side.Back => (Side.Left, Side.Right, Side.Front),
+            Side.Left => (Side.Front, Side.Back, Side.Right),
+            _ => (Side.Front, Side.Back, Side.Left),
+        };
+        (float, float) Span(int which, float p, float q) => (side, which) switch
+        {
+            // the ends run along v, the far wall along u
+            (Side.Front, < 2) => (piece.Z0 + p, piece.Z0 + q),
+            (Side.Back, < 2) => (piece.Z1 - q, piece.Z1 - p),
+            (Side.Left, < 2) => (piece.X0 + p, piece.X0 + q),
+            (Side.Right, < 2) => (piece.X1 - q, piece.X1 - p),
+            (Side.Front or Side.Back, _) => (piece.X0 + p, piece.X0 + q),
+            _ => (piece.Z0 + p, piece.Z0 + q),
+        };
+        return new Ext(
+            side switch { Side.Front or Side.Back => exL, _ => exF },
+            side switch { Side.Front or Side.Back => exR, _ => exB },
+            side switch { Side.Front => exB, Side.Back => exF, Side.Left => exR, _ => exL },
+            (which, p, q) =>
+            {
+                var (lo, hi) = Span(which, p, q);
+                return a.Free(which == 0 ? s0 : which == 1 ? s1 : s2, lo, hi);
+            });
     }
 
     /// <summary>
@@ -1354,6 +1542,7 @@ public static partial class InteriorGenerator
             float width = Math.Min(d.Width, 1.8f);
             float height = Math.Min(d.Height, clear - 0.15f);
             var well = a.Wells.FirstOrDefault(w => w.Slot == d.Slot);
+            bool main = d.Slot == fp.Door.Slot;
             RoomPlan? room = null;
             Side side = Side.Front;
             float center = 0;
@@ -1362,7 +1551,7 @@ public static partial class InteriorGenerator
                 // the lobby's front wall: the core's, or the bit before the elevator
                 var core = ground.Rooms[well.Core];
                 var front = well.Front >= 0 ? ground.Rooms[well.Front] : null;
-                float want = d.Slot == 0 ? fp.EntryX : well.DoorX;
+                float want = main ? fp.EntryX : well.DoorX;
                 room = front != null && want > core.X1 ? front : core;
                 width = Math.Min(width, room.X1 - room.X0 - 0.5f);
                 center = Fit(want, room.X0 + width / 2 + 0.2f, room.X1 - width / 2 - 0.2f);
@@ -1397,7 +1586,7 @@ public static partial class InteriorGenerator
                 Side.Left => new Godot.Vector2(room.X0, center),
                 _ => new Godot.Vector2(room.X1, center),
             };
-            if (d.Slot == 0)
+            if (main)
             {
                 l.EntryX = center;
                 l.EntryWidth = width;
@@ -1412,7 +1601,8 @@ public static partial class InteriorGenerator
             });
         }
         // one door is the plan's single front door: AllEntrances builds it from the fields above
-        if (l.Entrances.Count == 1 && fp.Extra.Count == 0) l.Entrances.Clear();
+        // (a wing of a bigger building keeps it: its door may be a link, #577)
+        if (l.Entrances.Count == 1 && fp.Extra.Count == 0 && fp.Door.Slot == 0) l.Entrances.Clear();
     }
 
     /// <summary>Which rooms a side street door may open into, best first; -1 never.</summary>

@@ -72,11 +72,12 @@ public static class InteriorValidator
                 if (!Stairs(l.Floors[f]).Any()) errors.Add($"no stairs from floor {f}");
                 foreach (var fl in l.Floors[f].AllFlights())
                 {
-                    if (!rooms.Any(core => fl.X0 >= core.X0 - 0.01f && fl.X1 <= core.X1 + 0.01f
-                        && Math.Min(fl.ZBottom, fl.ZTop) >= core.Z0 && Math.Max(fl.ZBottom, fl.ZTop) <= core.Z1))
+                    var area = fl.Area();
+                    if (!rooms.Any(core => area.X0 >= core.X0 - 0.01f && area.X1 <= core.X1 + 0.01f
+                        && area.Z0 >= core.Z0 - 0.01f && area.Z1 <= core.Z1 + 0.01f))
                         errors.Add($"floor {f} stairs outside any room");
-                    if (!l.Floors[f + 1].Holes.Any(h => h.X0 <= fl.X0 + 0.01f && h.X1 >= fl.X1 - 0.01f
-                            && h.Z0 <= Math.Min(fl.ZBottom, fl.ZTop) + 0.01f && h.Z1 >= Math.Max(fl.ZBottom, fl.ZTop) - 0.01f))
+                    if (!l.Floors[f + 1].Holes.Any(h => h.X0 <= area.X0 + 0.01f && h.X1 >= area.X1 - 0.01f
+                            && h.Z0 <= area.Z0 + 0.01f && h.Z1 >= area.Z1 - 0.01f))
                         errors.Add($"floor {f + 1} has no opening over the stairs from below");
                 }
             }
@@ -104,12 +105,12 @@ public static class InteriorValidator
             // a stair from this room's floor, starting in it, lands in the room over its top: one
             // flight, or two round a half landing (#571)
             foreach (var (first, last) in Stairs(floor))
-                if (Inside(room, (first.X0 + first.X1) / 2, first.ZBottom) && f + 1 < l.Floors.Count)
-                    Reach(f + 1, RoomAt(l.Floors[f + 1], (last.X0 + last.X1) / 2, last.ZTop));
+                if (Inside(room, first.Bottom.X, first.Bottom.Z) && f + 1 < l.Floors.Count)
+                    Reach(f + 1, RoomAt(l.Floors[f + 1], last.TopEnd.X, last.TopEnd.Z));
             // and back down one arriving here
             if (f > 0)
                 foreach (var (first, last) in Stairs(l.Floors[f - 1]))
-                    if (Inside(room, (last.X0 + last.X1) / 2, last.ZTop)) Reach(f - 1, RoomAt(l.Floors[f - 1], (first.X0 + first.X1) / 2, first.ZBottom));
+                    if (Inside(room, last.TopEnd.X, last.TopEnd.Z)) Reach(f - 1, RoomAt(l.Floors[f - 1], first.Bottom.X, first.Bottom.Z));
             if (room.Type == RoomType.Elevator)
                 foreach (var lift in l.Lifts)
                     if (lift.Contains((room.X0 + room.X1) / 2, (room.Z0 + room.Z1) / 2))
@@ -188,18 +189,20 @@ public static class InteriorValidator
             var at = first;
             for (int guard = 0; at.To < 0.999f && guard < 8; guard++)
             {
-                var landing = floor.Landings.FirstOrDefault(g => Math.Abs(g.Level - at.To) < 0.01f
-                    && (at.X0 + at.X1) / 2 >= g.X0 - 0.01f && (at.X0 + at.X1) / 2 <= g.X1 + 0.01f
-                    && Math.Abs(Math.Clamp(at.ZTop, g.Z0, g.Z1) - at.ZTop) < 0.05f);
+                var top = at.TopEnd;
+                var landing = floor.Landings.FirstOrDefault(g => Math.Abs(g.Level - at.To) < 0.01f && Near(g, top.X, top.Z));
                 var next = landing == null ? null : flights.FirstOrDefault(x => Math.Abs(x.From - at.To) < 0.01f
-                    && (x.X0 + x.X1) / 2 >= landing.X0 - 0.01f && (x.X0 + x.X1) / 2 <= landing.X1 + 0.01f
-                    && Math.Abs(Math.Clamp(x.ZBottom, landing.Z0, landing.Z1) - x.ZBottom) < 0.05f);
+                    && Near(landing, x.Bottom.X, x.Bottom.Z));
                 if (next == null) break;
                 at = next;
             }
             if (at.To >= 0.999f) yield return (first, at);
         }
     }
+
+    /// <summary>Whether a point is on a landing, give or take a few centimetres.</summary>
+    private static bool Near(LandingPlan g, float x, float z) =>
+        x >= g.X0 - 0.05f && x <= g.X1 + 0.05f && z >= g.Z0 - 0.05f && z <= g.Z1 + 0.05f;
 
     private static bool Inside(RoomPlan r, float x, float z) =>
         x >= r.X0 - 0.01f && x <= r.X1 + 0.01f && z >= r.Z0 - 0.01f && z <= r.Z1 + 0.01f;
@@ -298,9 +301,9 @@ public static class InteriorValidator
                 sb.Append($"<rect x=\"{N(X(g.X0))}\" y=\"{N(Y(g.Z1))}\" width=\"{N((g.X1 - g.X0) * S)}\" height=\"{N((g.Z1 - g.Z0) * S)}\" fill=\"#b8b2a6\"/>");
             foreach (var fl in floor.AllFlights())
             {
-                float z0 = Math.Min(fl.ZBottom, fl.ZTop), z1 = Math.Max(fl.ZBottom, fl.ZTop);
-                sb.Append($"<rect x=\"{N(X(fl.X0))}\" y=\"{N(Y(z1))}\" width=\"{N((fl.X1 - fl.X0) * S)}\" height=\"{N((z1 - z0) * S)}\" fill=\"#a0784c\"/>");
-                sb.Append($"<line x1=\"{N(X((fl.X0 + fl.X1) / 2))}\" y1=\"{N(Y(fl.ZBottom))}\" x2=\"{N(X((fl.X0 + fl.X1) / 2))}\" y2=\"{N(Y(fl.ZTop))}\" stroke=\"#fff\" stroke-width=\"2\" marker-end=\"none\"/>");
+                var ar = fl.Area();
+                sb.Append($"<rect x=\"{N(X(ar.X0))}\" y=\"{N(Y(ar.Z1))}\" width=\"{N((ar.X1 - ar.X0) * S)}\" height=\"{N((ar.Z1 - ar.Z0) * S)}\" fill=\"#a0784c\"/>");
+                sb.Append($"<line x1=\"{N(X(fl.Bottom.X))}\" y1=\"{N(Y(fl.Bottom.Z))}\" x2=\"{N(X(fl.TopEnd.X))}\" y2=\"{N(Y(fl.TopEnd.Z))}\" stroke=\"#fff\" stroke-width=\"2\" marker-end=\"none\"/>");
             }
             // a flat's front door: a short bar across the doorway, red if it is locked
             foreach (var d in l.InnerDoors.Where(d => d.Floor == f))
