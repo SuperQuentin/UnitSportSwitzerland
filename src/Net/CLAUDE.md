@@ -30,6 +30,7 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `perf-player-snapshot-size` — `BodyPose`/`TrainPose` go as one `float[] NetPose` (quat + offset + squash, train angles only on a train); no Transform3D on the wire
 - `perf-relay-delta-interval` — `RelayNear`/`RelayFar` check their OnChange properties at 10 Hz (`DeltaInterval = 0.1f`); per-packet state stays `Always`
 - `perf-interest-round` — `InterestService.Evaluate` reads each target once per round (`_at`/`_agl`/`_ride`), `Together` once per pair, cached `_sight`; nothing per pair from a node
+- `sleepers` — A player who leaves lies asleep where they were (saved), and wakes there on return; identity is a per-install ECDSA key proven on join, never the name (#644)
 
 ## Commands
 

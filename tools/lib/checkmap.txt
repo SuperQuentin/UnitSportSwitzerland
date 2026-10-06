@@ -203,6 +203,8 @@ src/Core/SimClock        net    tools/speednetcheck.sh
 src/Core/SpeedNetProbe   net    tools/speednetcheck.sh
 src/Net/ClockSync        net    tools/speednetcheck.sh
 src/Net/                 net    @netsmoke
+src/Net/Sleeper          net    tools/sleepercheck.sh
+src/Net/PlayerKey        net    tools/sleepercheck.sh
 src/Core/ServerWorld     net    @netsmoke
 src/Core/ClientWorld     net    @netsmoke
 src/Core/Debug           net    tools/debugcheck.sh
