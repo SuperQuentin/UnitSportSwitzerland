@@ -46,6 +46,7 @@ public partial class ChunkNode : Node3D
         if (_roadInstance != null) _roadInstance.Visible = Shows(TileLayers.Roads);
         if (_lamps != null) _lamps.Visible = Shows(TileLayers.Roads);
         if (_buildingInstance != null) _buildingInstance.Visible = Shows(TileLayers.Buildings);
+        if (_siteInstance != null) _siteInstance.Visible = Shows(TileLayers.Buildings);
         if (_cellInstances != null)
             foreach (var cell in _cellInstances) cell.Visible = Shows(TileLayers.Buildings);
         if (_waterInstance != null) _waterInstance.Visible = Shows(TileLayers.Water);
@@ -91,6 +92,9 @@ public partial class ChunkNode : Node3D
     /// The tile's piers (#377) as one more surface of its roads mesh, with their own (prop)
     /// material; a new mesh when the tile has no roads drawn.
     /// </summary>
+    /// <summary>Vertex-coloured triangles with the prop material: the piers' (#377) or the building sites' (#608).</summary>
+    public static ArrayMesh ToPropMesh(PierMeshBuilder.MeshData data, Material material) => WithPiers(null, data, material);
+
     public static ArrayMesh WithPiers(ArrayMesh? roads, PierMeshBuilder.MeshData data, Material material)
     {
         using var arrays = new Godot.Collections.Array();
@@ -214,6 +218,31 @@ public partial class ChunkNode : Node3D
         Swap(_buildingInstance, mesh);
     }
 
+    private MeshInstance3D? _siteInstance;
+
+    /// <summary>
+    /// The tile's building sites (#608): their half-built shells, one mesh with the prop material,
+    /// drawn and dropped with the buildings. Null clears them.
+    /// </summary>
+    public void SetSites(ArrayMesh? mesh)
+    {
+        if (mesh == null)
+        {
+            if (_siteInstance?.Mesh is { } old)
+            {
+                _siteInstance.Mesh = null;
+                old.Dispose();
+            }
+            return;
+        }
+        if (_siteInstance == null)
+        {
+            _siteInstance = new MeshInstance3D { Name = "Sites", Visible = Shows(TileLayers.Buildings) };
+            AddChild(_siteInstance);
+        }
+        Swap(_siteInstance, mesh);
+    }
+
     /// <summary>
     /// The tile has left the building ring (#553): its building mesh goes. The trees and the water,
     /// committed with the buildings, stay: they are drawn far past it.
@@ -221,6 +250,7 @@ public partial class ChunkNode : Node3D
     public void ClearBuildings()
     {
         ClearCells();
+        SetSites(null);
         if (_buildingInstance?.Mesh is not { } mesh) return;
         _buildingInstance.Mesh = null;
         mesh.Dispose();
@@ -816,7 +846,7 @@ public partial class ChunkNode : Node3D
     {
         ClearCells();
         NearTrees.Unregister(this);
-        foreach (var instance in new[] { _meshInstance, _roadInstance, _buildingInstance, _waterInstance })
+        foreach (var instance in new[] { _meshInstance, _roadInstance, _buildingInstance, _siteInstance, _waterInstance })
         {
             var mesh = instance?.Mesh;
             if (mesh == null) continue;

@@ -41,6 +41,9 @@ src/Terrain/ProceduralWorld quick --shapedcheck --systems ui
 # #607: the generated world's building sites (#605) through the site planner, plan views in test_output/construction/
 src/Terrain/ProceduralWorld quick --constructioncheck --systems ui
 src/Terrain/Construction/ quick --constructioncheck --systems ui
+# #608: a body walks every storey of hand-made sites' shells, on their real collision
+src/Terrain/Construction/ quick --shellwalkcheck --world flat
+src/Terrain/BuildingMeshBuilder quick --shellwalkcheck --world flat
 src/Terrain/WaterProbe   quick  --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 tools/TerrainFormat/Water quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 src/Items/               quick  --invcheck

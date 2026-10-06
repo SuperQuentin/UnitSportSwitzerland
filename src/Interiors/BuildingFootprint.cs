@@ -215,8 +215,9 @@ public static class BuildingFootprint
         var doors = new List<DoorSpot>(tile.Buildings.Count);
         for (int i = 0; i < tile.Buildings.Count; i++)
         {
-            var fp = Compute(tile, i, roadIndex, grid);
             var kind = tile.Buildings[i].Kind;
+            // a building site has no door: its shell is walked into in the world (#608)
+            var fp = kind == BuildingKind.UnderConstruction ? null : Compute(tile, i, roadIndex, grid);
             // a landmark's shop is given by where it is, not by the key's hash (#501), and the main
             // door carries it so the sign over it reads IKEA rather than whatever the roll said
             var shop = types.TypeOf(i) == BuildingType.Ikea ? Loot.ShopType.Ikea

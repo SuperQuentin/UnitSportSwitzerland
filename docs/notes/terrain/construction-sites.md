@@ -125,3 +125,70 @@ that all three phases are built. It writes the plan views (`SitePlanSvg`) to
 `test_output/construction/generated.svg`. The issues after it extend it with what they draw.
 `SitePlanSvg` turns into a PNG with headless Edge:
 `msedge --headless=new --screenshot=out.png --window-size=1560,1560 file:///.../generated.svg`.
+
+## The half-built shell (#608)
+
+A site's solid is no longer drawn, collided, given a door or an interior: `BuildingMeshBuilder.Drawn`
+is false for `UnderConstruction`, and `BuildingOcclusion.Occluders` (an open shell hides nothing),
+`BuildingFootprint.ComputeDoors` (an empty door spot, so no `DoorIndex` entry and no portal),
+`InteriorGenerator.Generate` (null) and `TownPerches` (no bird on a roof that is not there) all
+skip it. In its place:
+
+- **`ShellPlans.Plan`** (pure, `ShellPlan.cs`, tier 0): boxes and ramps in the site frame (x along
+  the plan box's `AxisU`, z along `AxisV`, y the tile's height). It follows the building's wings
+  (`PlanOutline.Wings`, #577), so an L is an L and its notch stays open ground.
+  - **Slabs** on the highest drawn ground under the footprint (`SampleMeshHeight` every 2 m, plus
+    0.12 m: five samples let the terrain poke through a foundation slab), a plinth down to the
+    lowest, one more slab per built storey, the stair well and any inside crane's mast
+    (`CraneSpot.Inside`, 2.6 m square) cut out (`Subtract`: a rectangle less holes as strips).
+  - **Columns** on a ~6 m grid per wing; **outer walls** bay by bay between them, a window in each
+    closed bay (85 % of a shell's lower storeys, 45 % of its top one, all of a topped-out building;
+    15 % of ground-floor bays are doors), no wall where two wings meet.
+  - **The stair core** in the biggest wing, its landing end towards the street: a switchback per
+    storey, steps to look at over a **ramp** to stand on (the interiors' rule, a body catches on
+    real risers), a far landing at half height, a **spine wall** between the flights the full
+    height of the core, and a rail only at the top slab, where no flight goes on up. A 1 m landing
+    at the near end stays slab at every level, so the flight from below arrives on floor.
+  - **By phase**: starter bars out of every column and along the edges, the next walls and the
+    core's next lift in yellow formwork (foundations, shell); a roof parapet, a stair house, window
+    frames and insulation on part of the facade (topped out).
+  - **Scaffolding** outside every outer bay (shell and topped out): standards every 2.5 m, a deck
+    and a guard at **every slab's height**, so a deck is a step out of any opening. The guard is
+    solid; where it has no debris netting it is collision only (`ShellPart.Invisible`): drawn as a
+    sheet it read as a blue wall round every lift.
+  - `Route`: the way up, from the ground floor's landing to the top slab.
+- **`SiteShellBuilder`** (Godot, any thread) turns every site of a tile into one vertex-coloured
+  mesh with the **prop** material (`ChunkNode.ToPropMesh`, like the piers) and collision triangles.
+  `ChunkManager` builds them in the buildings block on the worker (`SitePlans.For` with the road
+  tile, loaded if the roads are already drawn); the mesh is `ChunkNode.SetSites`, shown and dropped
+  with the buildings layer; the faces join the tile's road cells, which collide from **both
+  sides** (a slab and a ramp are walked on from above).
+- **Colours**: concrete at 0.53 sRGB, not 0.66, which the realistic style's sun took to white.
+- **Cost**: a 24 x 15 m shell three storeys up is 523 boxes, 5.8k triangles drawn, 2.2k collision
+  triangles; a six-storey 40 x 18 m block topped out 2.0k boxes, 23k drawn, 11.7k collision. No far
+  LOD yet: a 145 m block would be several times that, and is the lever if `--perflog` ever says so.
+
+### Checks
+
+- `ShellPlanTests` (tier 0, 16): a flight per storey meeting at the far landing, at most 35°, a
+  landing to step onto at every level, **headroom over every flight**, the crane's mast open
+  through every slab, an L's notch open and no wall between its wings, a scaffold lift at every
+  slab with a solid guard, determinism, `Subtract` keeping the area. Verified to fail (three
+  headroom cases) with the well left in the slabs.
+- `--shellwalkcheck --world flat` (`ShellWalkProbe`): three hand-made sites (a shell three storeys
+  into four, a house topped out and turned 31°, a six-storey block), their collision built by
+  `SiteShellBuilder` as a tile builds it, and a capsule the player's size walking each `Route`
+  under real physics to the top slab, at the right height at every waypoint. Verified to fail
+  (every walker stuck under the first slab) with the well left in.
+- Windowed: `--shot-queue` on the generated sites (`--generated on`: the fill is a saved setting,
+  off on this machine). Heights must be given: `g` waits for ground that a camera at 2000 m never
+  streams.
+
+### Not done
+
+- `SmartBinocularsHud` labels a building "Building site" through its door (`DoorIndex`), and a site
+  has none now, so the label is gone until the binoculars read the site itself.
+- The `UnderConstruction` loot pools (`LootTables`) have no container left: #609 puts them in the
+  site office.
+- `BrStructures` still stands a BR scaffolding prefab beside every site, which #609's hoarding and
+  yard will meet.
