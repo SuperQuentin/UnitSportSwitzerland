@@ -453,6 +453,14 @@ public partial class GarageProbe : Node
         var from = e.World + o * 9f + tangent * 2.5f + Vector3.Up * 2.4f;
         if (CarCatalog.IsCar(other.Ride) && outward is > -1f and < 2.5f && _shot.Add("entering"))
             ShootView(other, "bay_entering_" + _role, from, e.World + Vector3.Up * 1.2f, 0.05);
+        // a car a storey down a garage's ramp (#558), seen through the doorway from the street
+        if (CarCatalog.IsCar(other.Ride) && InsideTarget(other)
+            && Interiors.InteriorManager.InteriorBaseY - other.GlobalPosition.Y is > 1.2f and < 2.0f && _shot.Add("ramp"))
+        {
+            var seenOnRamp = Interiors.InteriorManager.Instance?.Links.GetValueOrDefault(e.Key.ToString()) is { } rampLink
+                ? rampLink.ToOutside * other.GlobalPosition : e.World;
+            ShootView(other, "ramp_mid_" + _role, from, seenOnRamp + Vector3.Up * 0.8f, 0.05);
+        }
         if (CarCatalog.IsCar(other.Ride) && InsideTarget(other) && _stillFor > 1.5 && _shot.Add("inside"))
         {
             // it is 3 km down: aim at where it shows through the doorway, carried up by the door's map

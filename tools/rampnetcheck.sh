@@ -19,11 +19,11 @@ WORLD="--world fixture --chunks fixture:garage --traffic 0 --doorkind Apartment"
 tc_server 400 120 "$OUT/rampnet_server.log" --server --port $PORT --world fixture --chunks fixture:garage --admin-password $PW
 # B first, so it is already watching the door when A arrives at it
 if [ -z "${NOWATCH:-}" ]; then
-  tc_client 300 "$OUT/rampnet_B.log" --connect 127.0.0.1:$PORT --name RampB $WORLD --garagecheck watch &
+  tc_client 300 "$OUT/rampnet_B.log" --connect 127.0.0.1:$PORT --name RampB $WORLD --garagecheck watch --park-wait ${PARK_WAIT:-66} &
   B=$!
 else B=; : > "$OUT/rampnet_B.log"; fi
 tc_client 300 "$OUT/rampnet_A.log" --connect 127.0.0.1:$PORT --name RampA $WORLD \
-  --garagecheck drive $PW --drive-m 20 --brake-m 24
+  --garagecheck drive $PW --drive-m 20 --brake-m 24 --park-wait ${PARK_WAIT:-66}
 tc_stop
 [ -n "$B" ] && wait $B
 code=0

@@ -168,7 +168,8 @@ public static partial class InteriorMeshBuilder
             foreach (var hole in above)
             {
                 float a = y0 + clear, b = y0 + h;
-                var wall = StairWood * 0.8f;
+                // a stair's shaft is lined with wood, a garage ramp's (#558) is bare concrete
+                var wall = floor.AllFlights().Any(fl => fl.Ramp && fl.Area().Overlaps(hole)) ? RampWall : StairWood * 0.8f;
                 s.Quad(new(hole.X0, a, hole.Z0), new(hole.X1, a, hole.Z0), new(hole.X1, b, hole.Z0), new(hole.X0, b, hole.Z0), wall);
                 s.Quad(new(hole.X0, a, hole.Z1), new(hole.X1, a, hole.Z1), new(hole.X1, b, hole.Z1), new(hole.X0, b, hole.Z1), wall);
                 s.Quad(new(hole.X0, a, hole.Z0), new(hole.X0, a, hole.Z1), new(hole.X0, b, hole.Z1), new(hole.X0, b, hole.Z0), wall);
