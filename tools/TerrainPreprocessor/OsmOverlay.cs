@@ -70,11 +70,21 @@ public static class OsmOverlay
         var clock = Stopwatch.StartNew();
         double minE = tiles.Min(t => t.MinE), maxE = tiles.Max(t => t.MinE) + ChunkFormat.TileSizeM;
         double minN = tiles.Min(t => t.MinN), maxN = tiles.Max(t => t.MinN) + ChunkFormat.TileSizeM;
+        // Lines and OSM nodes one tile around the built ones, not the whole box (#678): a divided
+        // road's partner carriageway, or the far node of a long OSM segment, may touch no built tile.
+        var near = new TileRegion(tiles, TileRegion.RingM);
 
-        var tlm = LoadTlm(tlmGpkg, minE, minN, maxE, maxN);
+        // Said as it goes: the TLM read was most of the run (103 of 114 s on a 94 x 55 km box), and
+        // minutes of silence look like a hang.
+        Console.WriteLine($"OSM overlay: {tiles.Count:N0} tiles, E {minE / 1000:F0}..{maxE / 1000:F0}, N {minN / 1000:F0}..{maxN / 1000:F0} km; "
+            + "reading their swissTLM3D road lines...");
+        var tlm = LoadTlm(tlmGpkg, near);
         double tlmSec = clock.Elapsed.TotalSeconds;
-        var (osm, points, relations, position) = LoadOsm(pbfPath, minE - 200, minN - 200, maxE + 200, maxN + 200, jobs);
+        Console.WriteLine($"  {tlm.Count:N0} TLM line parts in {tlmSec:F0} s; reading {Path.GetFileName(pbfPath)} "
+            + $"({new FileInfo(pbfPath).Length / 1e6:N0} MB)...");
+        var (osm, points, relations, position) = LoadOsm(pbfPath, minE - 200, minN - 200, maxE + 200, maxN + 200, near, jobs);
         double osmSec = clock.Elapsed.TotalSeconds - tlmSec;
+        Console.WriteLine($"  {osm.Count:N0} OSM way pieces in {osmSec:F0} s; matching them to the TLM lines, then signals and turn restrictions...");
         var result = Conflate(tlm, osm);
         // signals, bike boxes and via nodes inside the region box only (the 200 m margin is for the ways)
         bool Inside(double e, double n) => e >= minE && e <= maxE && n >= minN && n <= maxN;
@@ -98,15 +108,20 @@ public static class OsmOverlay
         return 0;
     }
 
-    private static List<TlmLine> LoadTlm(string gpkg, double minE, double minN, double maxE, double maxN)
+    private static List<TlmLine> LoadTlm(string gpkg, TileRegion region)
     {
         var lines = new List<TlmLine>();
         using var conn = GeoPackageReader.Open(gpkg);
-        using var cmd = GeoPackageReader.BboxQuery(conn, "tlm_strassen_strasse", "geom",
-            ["uuid", "objektart", "richtungsgetrennt"], minE, minN, maxE, maxN);
-        using var r = cmd.ExecuteReader();
-        while (r.Read())
+        var clock = Stopwatch.StartNew();
+        double nextSay = 10;
+        foreach (var r in GeoPackageReader.TileRows(conn, "tlm_strassen_strasse", "geom",
+                     ["uuid", "objektart", "richtungsgetrennt"], region))
         {
+            if (clock.Elapsed.TotalSeconds >= nextSay)
+            {
+                Console.WriteLine($"  {lines.Count:N0} TLM line parts so far ({clock.Elapsed.TotalSeconds:F0} s)");
+                nextSay += 10;
+            }
             if (r.IsDBNull(0) || r.IsDBNull(3)) continue;
             string uuid = r.GetString(0);
             string objektart = r.IsDBNull(1) ? "" : r.GetString(1);
@@ -126,7 +141,8 @@ public static class OsmOverlay
     /// position lookup for any node inside the box (a restriction's via node).
     /// </summary>
     private static (List<OsmWay> Ways, List<OsmNodes.Point> Points, List<PbfReader.Relation> Relations,
-        Func<long, (double E, double N)?> Position) LoadOsm(string pbf, double minE, double minN, double maxE, double maxN, int jobs)
+        Func<long, (double E, double N)?> Position) LoadOsm(string pbf, double minE, double minN, double maxE, double maxN,
+            TileRegion near, int jobs)
     {
         // a lat/lon box around the LV95 box; LV95 is not aligned with meridians, so take all four corners
         var corners = new[] { (minE, minN), (minE, maxN), (maxE, minN), (maxE, maxN) }
@@ -134,11 +150,17 @@ public static class OsmOverlay
         double la0 = corners.Min(c => c.Lat), la1 = corners.Max(c => c.Lat);
         double lo0 = corners.Min(c => c.Lon), lo1 = corners.Max(c => c.Lon);
 
-        // ponytail: every node inside the box is held in one dictionary; fine for a region, about
+        // ponytail: every node near a built tile is held in one dictionary; fine for a region, about
         // 2 GB for the whole country. Two passes (ways first, then only their nodes) if that matters.
+        bool Near(double lat, double lon)
+        {
+            var (e, n) = SwissProjection.ToLv95(lat, lon);
+            return near.Touches(e, n);
+        }
         var data = PbfReader.Read(pbf, jobs, new PbfReader.Filter
         {
-            KeepNode = (lat, lon) => lat >= la0 && lat <= la1 && lon >= lo0 && lon <= lo1,
+            // the lat/lon box first: it turns away most of the country before any projection
+            KeepNode = (lat, lon) => lat >= la0 && lat <= la1 && lon >= lo0 && lon <= lo1 && Near(lat, lon),
             KeepWay = tags => tags.GetValueOrDefault("area") != "yes"
                               && ((tags.TryGetValue("highway", out var h) && !IgnoredHighways.Contains(h))
                                   || tags.GetValueOrDefault("railway") == "tram"),
