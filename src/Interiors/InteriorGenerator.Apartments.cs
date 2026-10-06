@@ -32,25 +32,25 @@ namespace UnitSport.Interiors;
 public static partial class InteriorGenerator
 {
     /// <summary>Front landing (the lobby on the ground floor), in front of the first step.</summary>
-    private const float FrontLanding = 2.0f;
+    private const float FrontLanding = GarageRule.FrontLanding;
     /// <summary>Back landing, behind the last step: also the width of a corridor running off it.</summary>
     private const float BackLanding = CorridorWidth;
     /// <summary>The building's own corridors, and so the back landing they run off (#576): wider than a flat's hall.</summary>
-    private const float CorridorWidth = 2.0f;
+    private const float CorridorWidth = GarageRule.CorridorWidth;
     /// <summary>A stairwell's flight (#571): one lane each way, and the open well between them.</summary>
-    internal const float StairLane = 1.15f, StairEye = 0.15f;
+    internal const float StairLane = GarageRule.StairLane, StairEye = GarageRule.StairEye;
     private const float StairWidth = 2 * StairLane + StairEye;
     /// <summary>The half landing the two flights of a storey turn on, front to back.</summary>
-    private const float MidLanding = 1.3f;
+    private const float MidLanding = GarageRule.MidLanding;
     /// <summary>Riser of a stairwell's steps, m: a public stair is gentler than a house's.</summary>
-    private const float StairRiser = 0.175f;
+    private const float StairRiser = GarageRule.StairRiser;
     /// <summary>Width of the elevator column beside the stair.</summary>
-    private const float LiftColumn = 2.0f;
+    private const float LiftColumn = GarageRule.LiftColumn;
     private const float CabinDepth = 1.8f;
     private const float LiftDoor = 0.9f;
     private const float FlatDoor = 0.9f;
     /// <summary>A flat is never narrower than this along the wall it opens off.</summary>
-    private const float MinFlatSide = 3.4f;
+    private const float MinFlatSide = GarageRule.MinFlatSide;
     /// <summary>Wall a doorway needs, jambs included.</summary>
     private const float WayMin = 1.4f;
     /// <summary>A side wider than this is served by a corridor off the back landing, flats front and back of it.</summary>
@@ -60,25 +60,14 @@ public static partial class InteriorGenerator
     private const float HallWidth = 1.3f;
     /// <summary>Share of flats whose front door is locked: cracked with the dial (#557).</summary>
     public const double LockedShare = 0.4;
-    /// <summary>Share of tall commercial blocks that are shops under flats.</summary>
-    private const double MixedShare = 0.6;
 
     /// <summary>
     /// Whether a building is planned as an apartment block (#557): a block of flats, a big
     /// building of no particular kind (the old plans already treated those as flats), and some
     /// commercial blocks of three storeys or more, shops below and flats above. Not a bank.
     /// </summary>
-    public static BuildingType ApartmentTypeFor(Footprint fp, BuildingKind kind, int storeys, bool bank)
-    {
-        if (bank) return BuildingType.None;
-        return kind switch
-        {
-            BuildingKind.Apartment => BuildingType.Apartments,
-            BuildingKind.Other when storeys > 3 || fp.Width * fp.Depth >= 200 => BuildingType.Apartments,
-            BuildingKind.Commercial when storeys >= 3 && Core.Fnv.Unit(fp.Key + "|mixed") < MixedShare => BuildingType.MixedUse,
-            _ => BuildingType.None,
-        };
-    }
+    public static BuildingType ApartmentTypeFor(Footprint fp, BuildingKind kind, int storeys, bool bank) =>
+        GarageRule.BlockType(fp.Key.ToString(), fp.Width * fp.Depth, kind, storeys, bank);
 
     private enum AptFloor { Flats, Shops, Basement }
 
@@ -309,11 +298,8 @@ public static partial class InteriorGenerator
     /// Whether the block has a basement, from its own seed like <see cref="Cellars"/>: nearly every
     /// Swiss block of flats has one, and any of some size certainly does (the shelter, the law said).
     /// </summary>
-    private static int AptBasement(string key, bool mixed, int above, float area)
-    {
-        double chance = above >= 4 || area >= 400 ? 1.0 : mixed ? 0.9 : 0.85;
-        return new Random(StableHash(key + "|cellar")).NextDouble() < chance ? 1 : 0;
-    }
+    private static int AptBasement(string key, bool mixed, int above, float area) =>
+        GarageRule.Basement(key, mixed, above, area);
 
     // ---- one floor ---------------------------------------------------------------------------
 
@@ -365,7 +351,7 @@ public static partial class InteriorGenerator
         var wells = a.Wells;
         // what hangs off the back landing needs one: a block too narrow for the passage has none
         bool backed = a.Passage || !a.Stairs;
-        bool carStrip = backed && what == AptFloor.Basement && a.Hd - a.ZB1 >= 9.5f && a.L.Width >= 12f;
+        bool carStrip = backed && what == AptFloor.Basement && a.Hd - a.ZB1 >= GarageRule.StripDepth && a.L.Width >= GarageRule.StripWidth;
         // A block much deeper than its stairwell: a corridor runs on from each back landing to the
         // back facade, and the flats behind the stairwells' depth open off it, both sides
         bool deep = backed && what != AptFloor.Basement && a.Hd - a.ZB1 > DeepBack;
@@ -1548,6 +1534,9 @@ public static partial class InteriorGenerator
         var axisV = fp.AxisV;
         foreach (var d in fp.Doors)
         {
+            // the underground garage's door (#558): its ramp is not planned yet, so it gets no
+            // doorway and reads as locked (EntranceOf is null), never a portal onto a stairwell
+            if (d.Vehicle) continue;
             float width = Math.Min(d.Width, 1.8f);
             float height = Math.Min(d.Height, clear - 0.15f);
             var well = a.Wells.FirstOrDefault(w => w.Slot == d.Slot);

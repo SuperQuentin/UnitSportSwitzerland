@@ -519,6 +519,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 _ => new Interiors.InteriorProbe(chunks, origin, cache, Interiors.InteriorProbe.ParseArgs().Shot)),
             new(() => Interiors.DoorWatchProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
                 _ => new Interiors.DoorWatchProbe(chunks, origin, Interiors.DoorWatchProbe.ParseArgs().Shot)),
+            new(() => Interiors.GarageLinkProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
+                _ => new Interiors.GarageLinkProbe(chunks, origin, Interiors.GarageLinkProbe.ParseArgs().Shot)),
             new(() => Birds.BirdStrikeProbe.ParseArgs().Requested, ToolAnchor.AtTarget,
                 k => new Birds.BirdStrikeProbe(chunks, origin, k.Birds, Birds.BirdStrikeProbe.ParseArgs().Shot)),
             new(() => Combat.CombatProbe.ParseArgs().Requested, ToolAnchor.AtTarget,

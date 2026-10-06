@@ -24,6 +24,12 @@ public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outw
     /// </summary>
     public bool Vehicle { get; init; }
 
+    /// <summary>
+    /// What joins a garage door to the road in front of it (#558): a pavement with bollards or an
+    /// access road. <see cref="LinkKind.None"/> (the default) on every other door.
+    /// </summary>
+    public GarageLink Link { get; init; }
+
     /// <summary>The building's kind, so door consumers need not keep the tile.</summary>
     public BuildingKind Kind { get; init; }
     /// <summary>A bank (<see cref="BuildingFootprint.IsBank"/>): a sign over the door, a teller desk inside.</summary>
@@ -463,6 +469,75 @@ public static class BuildingFootprint
             }
         }
 
+        // ---- an underground garage door (#558) -------------------------------------------
+        // Only a block of flats with three front doors, a basement car park (GarageRule, the same
+        // predicate the generator's basement answers to) and a good roll, and only where a road
+        // can be reached from it: no road in front, no door. It claims its slot in the budget
+        // before the pedestrian doors, on a wall facing the road that is not the front wall if
+        // there is one, else on the front wall between two of its entrances.
+        if (found && door.Width > 0 && main != null && extras.Count + 1 < budget && roads.Streets.Roads.Count > 0
+            && roof.Count > 0 && roof.Sum(r => Math.Abs(Cross2(r.A, r.B, r.C)) * 0.5f) >= 0.9f * w * dpt)
+        {
+            var (storeyH, above) = InteriorGenerator.Storeys(b);
+            var type = GarageRule.BlockType(key.ToString(), w * dpt, kind, above, false);
+            var frontOut = new Vector2(door.Outward.X, door.Outward.Z);
+            // the plan's own frame: the box edge the main door is on is its front wall
+            bool frontAlongV = Math.Abs(frontOut.Dot(u)) < 0.5f;
+            float frontW = Mathf.Clamp(frontAlongV ? w : dpt, MinSide, MaxSide), frontD = Mathf.Clamp(frontAlongV ? dpt : w, MinSide, MaxSide);
+            int frontDoors = Math.Min(DoorBudget.AlongRun(main.S1 - main.S0, DoorBudget.ServiceWidth, DoorBudget.MaxPerWall).Length, budget - 1);
+            if (GarageRule.Wanted(key.ToString(), type, above, frontW, frontD, storeyH, frontDoors))
+            {
+                DoorSpot? Garage(Cand c, float off)
+                {
+                    float gw = GarageRule.Width;
+                    float mid = (c.S0 + c.S1) * 0.5f + off;
+                    if (mid - gw / 2 < c.S0 + DoorBudget.EndMargin || mid + gw / 2 > c.S1 - DoorBudget.EndMargin) return null;
+                    var t = new Vector2(-c.Normal.Y, c.Normal.X);
+                    var xz = c.Normal * c.Offset + t * mid;
+                    if (Covered(xz)) return null;
+                    float ground = grid != null
+                        ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
+                        : b.MinY + 0.8f;
+                    float baseY = Math.Max(ground, b.MinY);
+                    float gh = Math.Min(GarageRule.Height, box.Eave - baseY - DoorUnderEave);
+                    if (gh < 2.2f || ground < b.MinY - 0.6f || ground > b.MaxY - gh - 0.3f) return null;
+                    var link = GarageLink.Choose(xz + c.Normal * 0.03f, c.Normal, roads.Streets.Roads);
+                    if (!link.Any) return null;
+                    if (link.Kind == LinkKind.Stub && grid != null)
+                    {
+                        // the stub is a straight line between two heights: where the ground between them
+                        // stands higher it would lie buried, so the stub is humped over it
+                        var outV = c.Normal;
+                        var samples = new List<(float, float)>();
+                        for (int i = 1; i < 16; i++)
+                            foreach (float side in new[] { -2.2f, -1f, 0f, 1f, 2.2f })
+                            {
+                                float at = i / 16f, o = link.Length * at;
+                                var p = xz + outV * o + t * side;
+                                float gy = (float)grid.SampleMeshHeight(tile.Id.MinE + p.X, tile.Id.MaxN - p.Y);
+                                samples.Add((at, gy - (baseY + (link.RoadY - baseY) * at) - 0.03f));
+                            }
+                        link = link with { Hump = GarageLink.HumpFor(samples) };
+                    }
+                    var spot = new DoorSpot(index,
+                        new Vector3(xz.X + c.Normal.X * 0.03f, baseY, xz.Y + c.Normal.Y * 0.03f),
+                        new Vector3(c.Normal.X, 0, c.Normal.Y), gw, gh)
+                    {
+                        Slot = extras.Count + 1, Hang = DoorHang.RollUp, Vehicle = true, Link = link,
+                    };
+                    return DoorOnWall(b, spot) && !TooClose(door, spot) && !extras.Any(q => TooClose(q, spot)) ? spot : null;
+                }
+                DoorSpot? garage = null;
+                foreach (var c in ranked.OrderByDescending(r => r.Score).Where(c => c != main))
+                    if ((garage = Garage(c, 0f)) != null) break;
+                // on the front wall, halfway between two entrances (which stand Spacing apart)
+                for (int k = 1; garage == null && k <= DoorBudget.MaxPerWall; k++)
+                    foreach (float off in new[] { DoorBudget.Spacing * (k - 0.5f), -DoorBudget.Spacing * (k - 0.5f) })
+                        if ((garage = Garage(main, off)) != null) break;
+                if (garage is { } g) extras.Add(g);
+            }
+        }
+
         if (found && door.Width > 0 && budget > 1 + extras.Count)
         {
             var (serviceW, serviceH) = ServiceDoorFor(kind);
@@ -526,6 +601,8 @@ public static class BuildingFootprint
 
     /// <summary>One wall run a door could stand on: its plane, the run along it, and the door it would be.</summary>
     private sealed record Cand(float Score, Vector2 Normal, float Offset, float S0, float S1, DoorSpot Door);
+
+    private static float Cross2(Vector2 a, Vector2 b, Vector2 c) => (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
 
     private static bool InTriangle(Vector2 p, Vector2 a, Vector2 b, Vector2 c)
     {
@@ -622,6 +699,9 @@ public static class BuildingFootprint
         private const float Cell = 20f;
         private readonly Dictionary<(int, int), List<Vector2>> _cells = new();
 
+        /// <summary>The streets' and motorways' centrelines, for a garage door's road link (#558); empty in the paths index.</summary>
+        public readonly List<GarageLink.Road> Roads = new();
+
         /// <summary>
         /// Streets only by default: a front door faces the street, and a footpath or farm track
         /// running past the back garden is often nearer than the road in front. With
@@ -634,6 +714,7 @@ public static class BuildingFootprint
             if (roads == null) return r;
             foreach (var s in roads.Segments)
             {
+                if (!paths && s.Class < RoadClass.Railway && s.PointCount >= 2) r.Roads.Add(new GarageLink.Road(s.Class, s.Width, s.Points));
                 // somewhere a front door faces: not motorways, rail or rivers
                 if (s.Class is RoadClass.Motorway or RoadClass.Expressway or RoadClass.Ramp
                     || s.Class >= RoadClass.Railway) continue;

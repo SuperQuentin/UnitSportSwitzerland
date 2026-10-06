@@ -187,6 +187,40 @@ public partial class PortalDemo : Node3D
             return new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, new[] { door })!, World(Styles.MaterialRole.Building)) };
         })));
 
+    /// <summary>
+    /// A block of flats' underground garage door (#558) with each road link: the pavement with its
+    /// bollards and dropped kerb, the access road flaring into a T. A road's own surface is not
+    /// drawn here as the game draws it; a dark strip stands in for the road the link meets.
+    /// </summary>
+    [Showcase("Terrain", "Garage door")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseGarageDoors() =>
+        new[] { (LinkKind.Sidewalk, 5f), (LinkKind.Stub, 14f) }.Select(k => (k.Item1.ToString(), (Func<Node3D>)(() =>
+        {
+            var tile = new BuildingTile
+            {
+                Id = new TileId(0, 0),
+                Buildings = new List<Building>
+                {
+                    new() { Kind = BuildingKind.Apartment, Floors = 5, MinY = 0, MaxY = 15f, Triangles = Solid(Vector2.Zero, 24f, 14f, 15f, 15.5f) },
+                },
+            };
+            var door = new DoorSpot(0, new Vector3(6f, 0, 7.03f), new Vector3(0, 0, 1), GarageRule.Width, GarageRule.Height)
+            {
+                Slot = 1, Hang = DoorHang.RollUp, Vehicle = true,
+                Link = new GarageLink(k.Item1, k.Item2, 0f, new Vector2(1, 0)),
+            };
+            var node = new Node3D();
+            node.AddChild(new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, new[] { door })!, World(Styles.MaterialRole.Building)) });
+            // the road it meets, so the link has something to join
+            node.AddChild(new MeshInstance3D
+            {
+                Mesh = new BoxMesh { Size = new Vector3(40f, 0.02f, 5f) },
+                Position = new Vector3(6f, -0.01f, 7.03f + k.Item2 + 2.5f),
+                MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.2f, 0.2f, 0.21f) },
+            });
+            return node;
+        })));
+
     private static ShaderMaterial World(Styles.MaterialRole role)
     {
         var m = Styles.StyleKit.Material(role);

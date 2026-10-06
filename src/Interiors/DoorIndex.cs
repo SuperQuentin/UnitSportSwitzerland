@@ -18,6 +18,9 @@ public static class DoorIndex
         /// <summary>Whether a ground vehicle is driven through it (<see cref="DoorSpot.Vehicle"/>).</summary>
         public bool Vehicle { get; init; }
 
+        /// <summary>The road link of a garage door (#558), <see cref="LinkKind.None"/> on every other door.</summary>
+        public GarageLink Link { get; init; }
+
         /// <summary>The building the door is on: the key of its plan and of the space behind it.</summary>
         public BuildingKey Building => Key.Building;
     }
@@ -31,7 +34,7 @@ public static class DoorIndex
             if (d.Width > 0)
                 list.Add(new Entry(d.KeyIn(id), tileOrigin + d.Position, d.Outward, d.Width, d.Height, d.Kind)
                 {
-                    Hang = d.Hang, Vehicle = d.Vehicle,
+                    Hang = d.Hang, Vehicle = d.Vehicle, Link = d.Link,
                 });
         Tiles[id] = list.ToArray();
     }
