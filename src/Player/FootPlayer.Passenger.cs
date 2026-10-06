@@ -77,6 +77,8 @@ public partial class FootPlayer
         if (who._remoteRide is WheelLoader loading && who.Ride == RideKind.WheelLoader) return loading;
         // and a copy's own roller: its bend and its vibration are the driver's (#614)
         if (who._remoteRide is CompactRoller rolling && who.Ride == RideKind.CompactRoller) return rolling;
+        // and a copy's own telehandler: its wheels, mode and boom are the driver's (#614)
+        if (who._remoteRide is Telehandler booming && who.Ride == RideKind.Telehandler) return booming;
         var key = (who.Ride, who.CarSetupId, who.TuningBits);
         if (_seatRides.TryGetValue(key, out var known)) return known;
         var made = CarSetups.Ride(who.Ride, who.CarSetupId, who.TuningBits);

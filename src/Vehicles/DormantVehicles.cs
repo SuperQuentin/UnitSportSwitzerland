@@ -543,6 +543,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         MachineRole.Excavator => (int)RideKind.Excavator,
         MachineRole.MiniExcavator => (int)RideKind.MiniExcavator,
         MachineRole.Roller => (int)RideKind.CompactRoller,
+        MachineRole.Telehandler => (int)RideKind.Telehandler,
         MachineRole.WheelLoader => (int)RideKind.WheelLoader,
         _ => null,
     };
