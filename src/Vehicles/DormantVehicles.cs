@@ -145,13 +145,12 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// Watches for a vehicle arriving under a slot's name.
     ///
     /// <para>
-    /// The <see cref="Woken"/> broadcast only reaches the peers that were connected when the slot
-    /// woke. A client that <b>joins afterwards</b> gets the vehicle in its join snapshot and no
-    /// broadcast at all, and <see cref="Draw"/>'s one-off check only helps if the tile happens to be
-    /// drawn after the spawn arrives — so a late joiner drew the dormant copy <i>and</i> the real
-    /// car, one inside the other. The tier-2 check caught exactly that. Keying on the node actually
-    /// existing is the fact rather than the message, so it covers the broadcast, the join snapshot
-    /// and any later spawn alike.
+    /// This is the only thing that undraws a dormant copy. A "woken" broadcast used to, as well: it
+    /// only reached the peers connected when the slot woke (a late joiner gets the vehicle in its
+    /// join snapshot and no broadcast, and drew the copy and the real car one inside the other: the
+    /// tier-2 check caught that), and it could arrive before the spawn and leave the bay empty for a
+    /// frame (#560). Keying on the node existing is the fact rather than the message: it covers the
+    /// spawn, the join snapshot and any later one alike, on the very frame the live vehicle is drawn.
     /// </para>
     /// </summary>
     private void Watch()
@@ -168,6 +167,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     {
         if (SlotOf(node.Name) is not { } key) return;
         _gone.Remove(key.Key);
+        _asked.Remove(key.Key);
         if (!_awake.Add(key.Key)) return;
         Forget(key.Tile, key.Key);
     }
@@ -328,6 +328,22 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         if (_sinceCheck < CheckEvery) return;
         _sinceCheck = 0;
         Restock();
+        if (_unposed.Count > 0)
+        {
+            _repose.Clear();
+            _repose.AddRange(_unposed);
+            foreach (var id in _repose)
+            {
+                if (!_slots.TryGetValue(id, out var slots)) { _unposed.Remove(id); continue; }
+                // only once the collision has come: posing again before would find the same terrain
+                foreach (var s in slots)
+                    if (LookOf(s) is { Bodies: not null } && _chunks.HasCollisionAt(_origin.ToWorld(s.E, s.N, s.Height)))
+                    {
+                        DrawLooks(id);
+                        break;
+                    }
+            }
+        }
 
         _anchorTilesNow.Clear();
         foreach (var anchor in _chunks.Anchors)
@@ -473,8 +489,31 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             var at = new Vector2((float)(s.E - id.MinE), (float)(id.MaxN - s.N));
             // a lorry needs more room round it than a hatchback before it reads as parked in a wall
             float radius = s.Train != 0 || s.KindId != (int)RideKind.Trailer && s.KindId >= HeavyCatalog.First ? 3.2f : 1.6f;
-            if (SiteYards.Blocked(tile, roads, map, at, radius)) into.RemoveAt(i);
+            if (SiteYards.Blocked(tile, roads, map, at, radius)) { into.RemoveAt(i); continue; }
+            // On its own ground, not the yard's (#560): a yard is one height, the ground at its
+            // middle, and on a slope its far rows floated or sank by metres. Online, the server
+            // keeps a woken vehicle exactly at its slot, so the slot's height is where it stands.
+            if (grid != null) into[i] = s with { Height = GroundUnder(grid, s, s.KindId == (int)RideKind.Trailer || s.Train != 0 || s.KindId >= HeavyCatalog.First) };
         }
+    }
+
+    /// <summary>
+    /// The ground a slot stands at: for a car, the highest point under its box's corners and middle,
+    /// where a box set down on a slope comes to rest; for a goods vehicle, the ground at its origin
+    /// (its sections are posed on the ground axle by axle, <see cref="Poses"/>).
+    /// </summary>
+    private static double GroundUnder(ChunkGrid grid, VehicleSlot s, bool heavy)
+    {
+        double ground = grid.SampleMeshHeight(s.E, s.N);
+        if (heavy) return ground;
+        // yaw 0 = -Z = north: forward is (-sin, cos) in LV95 (east, north), right is (cos, sin)
+        double fe = -Math.Sin(s.Yaw), fn = Math.Cos(s.Yaw), re = Math.Cos(s.Yaw), rn = Math.Sin(s.Yaw);
+        const double halfLength = 2.2, halfWidth = 0.9;
+        for (int a = -1; a <= 1; a += 2)
+            for (int b = -1; b <= 1; b += 2)
+                ground = Math.Max(ground, grid.SampleMeshHeight(
+                    s.E + fe * halfLength * a + re * halfWidth * b, s.N + fn * halfLength * a + rn * halfWidth * b));
+        return ground;
     }
 
     /// <summary>
@@ -571,11 +610,86 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             list.Add(s);
         }
         var instances = new List<MultiMeshInstance3D>(byLook.Count);
+        bool flat = false;
         foreach (var (_, list) in byLook)
-            if (LookOf(list[0]) is { Mesh: { } mesh })
-                instances.Add(Instanced(mesh, list));
+        {
+            if (LookOf(list[0]) is not { } look) continue;
+            if (look.Sections is { } sections)
+            {
+                // each section where the live train would stand it, all of a look's slots at once
+                var perSection = new List<Transform3D>[sections.Length];
+                for (int k = 0; k < sections.Length; k++) perSection[k] = new List<Transform3D>(list.Count);
+                foreach (var s in list)
+                {
+                    var poses = Poses(s, look, out bool grounded);
+                    flat |= !grounded;
+                    for (int k = 0; k < sections.Length && k < poses.Length; k++) perSection[k].Add(poses[k]);
+                }
+                for (int k = 0; k < sections.Length; k++)
+                    if (sections[k].GetSurfaceCount() > 0) instances.Add(Instanced(sections[k], perSection[k]));
+            }
+            else if (look.Mesh is { } mesh)
+            {
+                var at = new List<Transform3D>(list.Count);
+                foreach (var s in list) at.Add(SlotTransform(s));
+                instances.Add(Instanced(mesh, at));
+            }
+        }
         foreach (var mm in instances) AddChild(mm);
         _drawn[id] = instances;
+        // a train drawn before the ground under it had loaded stands level: posed again on a later look
+        if (flat) _unposed.Add(id);
+        else _unposed.Remove(id);
+    }
+
+    /// <summary>
+    /// Tiles whose trains were posed before the collision under them was built (on the terrain's
+    /// height, which a live train does not stand on): posed again once it has been.
+    /// </summary>
+    private readonly HashSet<TileId> _unposed = new();
+    private readonly List<TileId> _repose = new();
+
+    /// <summary>Where a slot stands, a vehicle in one piece: its place and its heading.</summary>
+    private Transform3D SlotTransform(VehicleSlot s) =>
+        // a vehicle's model faces -Z, and a yaw about +Y with 0 = -Z is exactly that
+        new(new Basis(Vector3.Up, s.Yaw), _origin.ToWorld(s.E, s.N, s.Height));
+
+    /// <summary>
+    /// A goods vehicle's sections where the live one stands them (#560): <see cref="HeavyGround.Stand"/>
+    /// from the slot, on the ground's height under each axle, which is what <see cref="VehicleBody"/>
+    /// poses a parked train with. Level at the slot where the ground has not loaded
+    /// (<paramref name="grounded"/> false).
+    /// </summary>
+    private Transform3D[] Poses(VehicleSlot s, DormantLook look, out bool grounded)
+    {
+        bool ok = true;
+        var world = GetWorld3D();
+        float Ground(Vector3 p)
+        {
+            // the very query a parked train stands on (VehicleBody.Ground): what a vehicle collides with
+            float y = World.GroundQuery.Under(world, GroundMask, _groundRay, _noExclude, p, _chunks, true, out bool solid);
+            ok &= solid;
+            return y;
+        }
+        var poses = HeavyGround.Stand(SlotTransform(s), look.Bodies!, look.NodeLocal!, Ground);
+        grounded = ok;
+        return poses;
+    }
+
+    /// <summary>What a parked vehicle's ground rays hit: its own collision mask (the default layer), trees aside.</summary>
+    private const uint GroundMask = 1u;
+
+    private readonly RayQuery _groundRay = new();
+    private readonly Godot.Collections.Array<Rid> _noExclude = new();
+
+    /// <summary>
+    /// Where the dormant copy of a slot is drawn, section by section (one entry for a vehicle in one
+    /// piece): what a check compares the woken vehicle with (#560).
+    /// </summary>
+    public Transform3D[] DrawnPoses(VehicleSlot s)
+    {
+        if (LookOf(s) is { Bodies: not null } look) return Poses(s, look, out _);
+        return new[] { SlotTransform(s) };
     }
 
     /// <summary>
@@ -595,21 +709,15 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         }
     }
 
-    private MultiMeshInstance3D Instanced(Mesh mesh, List<VehicleSlot> slots)
+    private static MultiMeshInstance3D Instanced(Mesh mesh, List<Transform3D> at)
     {
         var mm = new MultiMesh
         {
             TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
             Mesh = mesh,
-            InstanceCount = slots.Count,
+            InstanceCount = at.Count,
         };
-        for (int i = 0; i < slots.Count; i++)
-        {
-            var s = slots[i];
-            // a vehicle's model faces -Z, and a yaw about +Y with 0 = -Z is exactly that
-            var basis = new Basis(Vector3.Up, s.Yaw);
-            mm.SetInstanceTransform(i, new Transform3D(basis, _origin.ToWorld(s.E, s.N, s.Height)));
-        }
+        for (int i = 0; i < at.Count; i++) mm.SetInstanceTransform(i, at[i]);
         return new MultiMeshInstance3D
         {
             Multimesh = mm,
@@ -674,6 +782,13 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         return null;
     }
 
+    /// <summary>Every slot worked out round the anchors, woken or not: what a check picks one from.</summary>
+    public IEnumerable<VehicleSlot> Slots()
+    {
+        foreach (var (_, slots) in _slots)
+            foreach (var s in slots) yield return s;
+    }
+
     /// <summary>True where this slot has already become a real vehicle.</summary>
     public bool IsAwake(VehicleSlot s) => _awake.Contains(KeyOf(s));
 
@@ -689,11 +804,22 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// </summary>
     public void Wake(VehicleSlot slot)
     {
-        if (_awake.Contains(KeyOf(slot))) return;
+        string key = KeyOf(slot);
+        if (_awake.Contains(key)) return;
         if (!Online) { Promote(slot); return; }
         if (Multiplayer.IsServer()) { ServerWake(slot.Owner, slot.Ordinal); return; }
+        // the aim ray hits the dormant box every frame until the vehicle arrives: ask once, again
+        // only if no answer came in AskAgainSeconds
+        double now = GameClock.Now;
+        if (_asked.TryGetValue(key, out double at) && now - at < AskAgainSeconds) return;
+        _asked[key] = now;
         RpcId(1, MethodName.RequestWake, slot.Owner, slot.Ordinal);
     }
+
+    /// <summary>Wakes asked of the server and not answered yet, by slot key, and when.</summary>
+    private readonly Dictionary<string, double> _asked = new();
+
+    private const double AskAgainSeconds = 2.0;
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeerExtension.TransferModeEnum.Reliable)]
     private void RequestWake(string owner, int ordinal)
@@ -711,17 +837,11 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     {
         if (Find(owner, ordinal) is not { } slot) return;
         if (_awake.Contains(KeyOf(slot))) return;
-        if (!Promote(slot)) return;
-        Rpc(MethodName.Woken, owner, ordinal);
-    }
-
-    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = true, TransferMode = MultiplayerPeerExtension.TransferModeEnum.Reliable)]
-    private void Woken(string owner, int ordinal)
-    {
-        if (Find(owner, ordinal) is not { } slot) return;
-        if (!_awake.Add(KeyOf(slot))) return;
-        // the real vehicle stands there now: stop drawing the dormant copy of this one
-        if (TileOf(owner) is { } id) Forget(id, KeyOf(slot));
+        // No "woken" broadcast (#560). Every peer drops its dormant copy when the vehicle node enters
+        // its tree (OnVehicleAdded): the very frame the live one is drawn. A broadcast sent at once
+        // could arrive before the spawn, which the server sends at its next poll, and leave the bay
+        // empty in between.
+        Promote(slot);
     }
 
     /// <summary>Puts the real vehicle in the slot. Returns false when nothing could be placed.</summary>
@@ -735,7 +855,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         var state = StateOf(slot);
         if (state.CreateRide() is not { } ride) return false;
         state = state with { Health = ride.MaxHealth };
-        if (vehicles.Place(state, slot.NodeName) == null) return false;
+        // exactly where the dormant copy stood, asleep: not dropped a hand's breadth onto the ground (#560)
+        if (vehicles.Place(state, slot.NodeName, settled: true) == null) return false;
 
         _awake.Add(KeyOf(slot));
         if (TileOf(slot.Owner) is { } id) Forget(id, KeyOf(slot));

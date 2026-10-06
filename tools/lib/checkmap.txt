@@ -111,6 +111,14 @@ src/Terrain/ParkingProbe quick  --parkingcheck --chunks fixture:parking
 src/Vehicles/DormantVehicles quick --parkingcheck --chunks fixture:parking
 src/Vehicles/VehicleSlot quick  --parkingcheck --chunks fixture:parking
 tools/TerrainFormat/ParkingPlanner quick --parkingcheck --chunks fixture:parking
+# waking a dormant vehicle is seamless (#560): the live one where its copy stood, first frame and settled
+src/Vehicles/WakeProbe   quick  --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/Vehicles/WakeProbe   quick  --wakecheck --wakekind boat --chunks fixture:lake --traffic 0
+src/Vehicles/DormantVehicles quick --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/Vehicles/DormantVehicles quick --wakecheck --wakekind boat --chunks fixture:lake --traffic 0
+src/Vehicles/DormantLooks quick --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/Vehicles/VehicleBody quick  --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/World/GroundQuery    quick  --wakecheck --wakekind boat --chunks fixture:lake --traffic 0
 src/Terrain/Fixture/     quick  --watercheck --chunks fixture:lake
 src/Terrain/ChunkManager quick  --watercheck --chunks fixture:lake
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
