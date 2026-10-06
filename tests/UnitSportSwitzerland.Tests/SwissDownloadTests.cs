@@ -474,3 +474,98 @@ public class SwissDownloadTests
         return dir;
     }
 }
+
+/// <summary>
+/// The pure decisions behind the swissBUILDINGS3D and OpenStreetMap resolvers (#564). Each is a
+/// port of a rule in <c>tools/swiss_data.py</c>, and each is the sort of rule that silently fetches
+/// the wrong thing rather than failing when it is a little bit wrong.
+/// </summary>
+public class BuildingsAndOsmResolverTests
+{
+    /// <summary>
+    /// The collection mixes per-sheet items with one nationwide asset and nothing in an item says
+    /// which it is. Get this threshold wrong and a selection of four sheets fetches the country.
+    /// </summary>
+    [Fact]
+    public void A_map_sheet_spans_far_less_than_the_country()
+    {
+        // a real sheet's bbox (1348-11, around Zermatt) against the nationwide item's
+        var sheet = SwissStacUtil.BboxSpan((7.70, 46.00, 7.76, 46.04));
+        var country = SwissStacUtil.BboxSpan((5.95, 45.81, 10.49, 47.81));
+        Assert.True(sheet < 0.5, $"a sheet spans {sheet}");
+        Assert.True(country > 0.5, $"the country spans {country}");
+        Assert.Equal(0, SwissStacUtil.BboxSpan(null));
+    }
+
+    /// <summary>
+    /// Sheets are cut on the same kilometre lines as the tiles, so one that merely shares an edge
+    /// with a tile holds none of its buildings and must not be fetched.
+    /// </summary>
+    [Fact]
+    public void A_sheet_that_only_shares_an_edge_does_not_touch_a_tile()
+    {
+        var tile = new[] { new TileId(2600, 1200) };
+        Assert.True(SwissStacUtil.ItemTouchesTiles((2600_500, 1200_500, 2601_500, 1201_500), tile));
+        // exactly abutting on the east: shares the 2601 km line and nothing else
+        Assert.False(SwissStacUtil.ItemTouchesTiles((2601_000, 1200_000, 2602_000, 1201_000), tile));
+        // and on the north
+        Assert.False(SwissStacUtil.ItemTouchesTiles((2600_000, 1201_000, 2601_000, 1202_000), tile));
+    }
+
+    /// <summary>
+    /// The footprint polygon is preferred over the WGS84 bbox because a lon/lat box drawn round a
+    /// sheet cut on the LV95 grid is tens of metres too big on every side.
+    /// </summary>
+    [Fact]
+    public void The_footprint_polygon_is_used_when_there_is_one()
+    {
+        var ring = new[] { (7.70, 46.00), (7.76, 46.00), (7.76, 46.04), (7.70, 46.04), (7.70, 46.00) };
+        var bounds = SwissStacUtil.ItemLv95Bounds(ring, (0, 0, 0, 0));
+        Assert.InRange(bounds.MinE, 2_400_000, 2_900_000);
+        Assert.InRange(bounds.MinN, 1_000_000, 1_350_000);
+        Assert.True(bounds.MaxE > bounds.MinE && bounds.MaxN > bounds.MinN);
+    }
+
+    [Fact]
+    public void A_footprint_with_too_few_points_falls_back_to_the_bbox()
+    {
+        var bounds = SwissStacUtil.ItemLv95Bounds(null, (7.70, 46.00, 7.76, 46.04));
+        Assert.InRange(bounds.MinE, 2_400_000, 2_900_000);
+        Assert.True(bounds.MaxE > bounds.MinE);
+    }
+
+    /// <summary>swisstopo re-flies sheets, so the year has to come out of the id to keep the newest.</summary>
+    [Theory]
+    [InlineData("swissbuildings3d_3_0_2020_1348-11", "2020", "1348-11")]
+    [InlineData("swissbuildings3d_3_0_2019_1091-12", "2019", "1091-12")]
+    [InlineData("something_else", "", "something_else")]
+    public void A_buildings_item_id_splits_into_year_and_sheet(string id, string year, string key)
+    {
+        var (gotYear, gotKey) = SwissStacUtil.BuildingsItemKey(id);
+        Assert.Equal(year, gotYear);
+        Assert.Equal(key, gotKey);
+    }
+
+    /// <summary>
+    /// The dated extract is taken in preference to <c>-latest</c>, which has been seen answering
+    /// with a redirect to itself.
+    /// </summary>
+    [Fact]
+    public void The_newest_dated_osm_extract_wins()
+    {
+        const string html = """
+            <a href="switzerland-240101.osm.pbf">x</a>
+            <a href="switzerland-260301.osm.pbf">x</a>
+            <a href="switzerland-250601.osm.pbf">x</a>
+            <a href="switzerland-latest.osm.pbf">x</a>
+            """;
+        Assert.Equal("switzerland-260301.osm.pbf", SwissStacUtil.NewestOsmExtract(html));
+    }
+
+    [Fact]
+    public void An_index_naming_no_dated_extract_gives_null()
+    {
+        Assert.Null(SwissStacUtil.NewestOsmExtract("<a href=\"switzerland-latest.osm.pbf\">x</a>"));
+        Assert.Null(SwissStacUtil.NewestOsmExtract(""));
+    }
+}

@@ -17,6 +17,8 @@ public enum RoomType
     // #497: industrial sites
     WarehouseHall, ProductionHall, TruckBay, ServiceBay, Showroom,
     ControlRoom, LockerRoom, BreakRoom, PartsStore, Dispatch, PaintBooth,
+    /// <summary>The blue box's shop floor: one hall, full height (#501). Numbered, to pin it.</summary>
+    IkeaMarket = 42,
 }
 
 public enum OpeningKind { Door, Window, Entry, Arch }
@@ -124,6 +126,8 @@ public enum FurnitureType
     TyreStack, OilDrum, Compressor, JerryCan, SafetySign, HardHatRack, FireExtinguisher, Locker,
     Forklift, ShowroomPlinth, TruckProp, DeskCounter, Whiteboard, TimeClock, Banner, FloorMarking,
     Bench,
+    /// <summary>A bin of Blåhajs on the shop floor (#501): a wire basket heaped with plush sharks.</summary>
+    BlahajBin = 83,
 }
 
 public sealed class FurniturePlan
@@ -184,7 +188,7 @@ public sealed class InteriorLayout
     // one number, so whichever of #497/#498 rebases onto the other takes the NEXT one, never a
     // lower one: a version going backwards regenerates the plans saved under the higher one and
     // then collides when it is reissued.
-    public const int CurrentVersion = 15; // 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
+    public const int CurrentVersion = 16; // 16: IKEA stores at their nine real locations, with bins of Blåhajs (#501); 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";

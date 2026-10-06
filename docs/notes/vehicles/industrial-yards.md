@@ -46,15 +46,14 @@ sites their insides; this parks their fleets on the ground outside.
 
 ## A lorry is not a car with different paint
 
-`DormantVehicles.Draw` instanced **every** slot from `TrafficMeshBuilder.Car` with a car-sized box,
-which is right for a car park where every slot is a car. A yard's are not: a 13.6 m artic would
-have been drawn as a hatchback, collided as one, and turned into a lorry the moment somebody woke
-it. `DrawHeavies` builds the goods vehicles from the `Rideable` the slot's own `VehicleState`
-makes — the very state `Promote` wakes it with, so the dormant artic and the one you get when you
-touch it cannot drift apart — and takes its collision from `ParkedBox` plus each section's
-`ExtraBoxes`, exactly as `VehicleBody` does for a real parked train. No `MultiMesh`: a yard holds a
-dozen of these where a retail lot holds eighty cars, and no two are the same length or load, so
-there is nothing to instance.
+`DormantVehicles.Draw` once instanced **every** slot from `TrafficMeshBuilder.Car` with a car-sized
+box, which would have drawn a 13.6 m artic as a hatchback. #516 gave lorries their own path, which
+built `BuildVisual` per slot — the tractor alone, no trailer, a full cab and dashboard each time,
+and again at every redraw (#552 measured what that cost in Geneva). Since #552 every slot, car or
+lorry, is drawn from its look (`DormantLooks`, see `dormant-vehicles`): the merged
+`BuildParkedVisual` of the very state `Promote` wakes it with, every section posed, built once per
+kind, train and load and instanced. Collision is `ParkedBox` plus each section's `ExtraBoxes`,
+exactly as `VehicleBody` does for a real parked train.
 
 ## Check
 

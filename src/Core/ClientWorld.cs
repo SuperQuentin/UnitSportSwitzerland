@@ -160,6 +160,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.PortalDemo(portalDemo.Shot) { Name = "PortalDemo" });
             return;
         }
+        // the nine IKEA stores and one store built in code (#501): no terrain, no server
+        if (Interiors.IkeaProbe.ParseArgs())
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.IkeaProbe { Name = "IkeaProbe" });
+            return;
+        }
         // the five industrial sites, hand-made (#497): no terrain, no server
         if (Interiors.SiteProbe.ParseArgs() is { Requested: true } siteCheck)
         {
@@ -410,6 +417,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         }
         // a sign over every bank door (#213)
         if (Systems.On(Systems.Interiors)) AddChild(new Interiors.BankSigns(_chunks));
+        // the IKEA totem out by the road (#501), the same tile hook as the door signs
+        if (Systems.On(Systems.Interiors)) AddChild(new Interiors.IkeaPylon(_chunks));
 
         // the clock: sun, light colour, sky and night for every shader and the environment.
         // Off (--systems without sky): no clock, the style's fixed sun and the background colour.

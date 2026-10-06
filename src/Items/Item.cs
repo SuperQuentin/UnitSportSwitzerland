@@ -180,6 +180,10 @@ public static class ItemDefs
         Eat(ItemId.PerchFillets, "Filets de perche", 5, "#e8c070", "PF", 60, ItemCategory.Food, 12),
         Eat(ItemId.GrilledFish, "Grilled fish", 5, "#b87838", "GF", 50, ItemCategory.Food, 22),
         Eat(ItemId.FishSoup, "Fish soup", 3, "#d8a050", "FS", 45, ItemCategory.Food, 16),
+        // #501: the plush shark, out of a bin at any of the nine IKEA stores. Material, so
+        // {aim_item} + {use_item} throws it (ItemDefs.Throwable) — which is the whole point of one.
+        new(ItemId.Blahaj, "Blåhaj", "A plush shark, 100 cm. {aim_item} + {use_item} throws it. Stacks of three, because nobody buys one.",
+            ItemUse.Material, 3, new Color(0.49f, 0.78f, 0.94f), "BH", 0, ItemCategory.Cosmetic, 25f),
     };
 
     /// <summary>A fish's worth in CHF, roughly the Léman fishers' prices per kg times a typical catch (docs/notes/items/fishing.md).</summary>

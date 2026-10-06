@@ -55,7 +55,7 @@ public partial class ParkingNetProbe : Node
                     return;
                 }
                 _slot = slot;
-                Say($"sees dormant {slot.NodeName} at bay {slot.Ordinal}");
+                Say($"sees {(dormant.IsAwake(slot) ? "woken" : "dormant")} {slot.NodeName} at bay {slot.Ordinal}");
                 _phase = 1;
                 _t = 0;
                 return;
@@ -94,7 +94,13 @@ public partial class ParkingNetProbe : Node
         }
     }
 
-    /// <summary>The first dormant car of the lot, by walking the bays the tiles serve.</summary>
+    /// <summary>
+    /// The first car of the lot, by walking the bays the tiles serve: for A the first dormant one,
+    /// for B the first one woken or not, which is the one A woke. B used to look for the first
+    /// DORMANT car as well, which only found A's because B's fleet was drawn before its join
+    /// snapshot arrived; since fleets follow the player (#552) B knows the car is awake from the
+    /// start, as it should, and the first dormant car is the next bay.
+    /// </summary>
     private VehicleSlot? Find(DormantVehicles dormant)
     {
         if (_chunks.Source is not { } source) return null;
@@ -108,7 +114,7 @@ public partial class ParkingNetProbe : Node
             foreach (var bay in tile.Parking)
             {
                 var at = _origin.ToWorld(id.MinE + bay.X, id.MaxN - bay.Z, bay.Y);
-                if (dormant.Nearest(at) is { } s) return s;
+                if (dormant.Nearest(at, awakeToo: !_wakes) is { } s) return s;
             }
         }
         return null;

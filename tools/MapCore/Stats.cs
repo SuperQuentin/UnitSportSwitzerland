@@ -24,8 +24,6 @@ public sealed class Stats
     public double RoadGenSecPerTile { get; set; } = 0.025;
     /// <summary>Unzipping TLM/GWR (deflate, one stream), bytes written per second.</summary>
     public double ExtractBytesPerSec { get; set; } = 180e6;
-    /// <summary>GDAL reading swissBUILDINGS3D zips, bytes of zip per second.</summary>
-    public double GdalBytesPerSec { get; set; } = 25e6;
     /// <summary>Starting a tool and opening its inputs (route keys, the 10 GB TLM), seconds.</summary>
     public double ToolStartSec { get; set; } = 8;
 
