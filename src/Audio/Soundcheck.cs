@@ -44,32 +44,81 @@ public static class Soundcheck
         foreach (var (name, samples) in Occasions.OccasionSounds.All())
             bad += Save(System.IO.Path.Combine(outDir, $"occasion_{name}.wav"), samples);
 
-        var profiles = new (string name, EngineProfile p)[] { ("plane", EngineProfile.PistonAero), ("heli", EngineProfile.Turboshaft), ("turbofan", EngineProfile.Turbofan), ("turboprop", EngineProfile.Turboprop),
-            ("inline4", EngineProfile.Inline4Na), ("rotary", EngineProfile.Rotary), ("boxer", EngineProfile.Boxer4Turbo),
-            ("crossplane4", EngineProfile.Crossplane4), ("vtwin90", EngineProfile.VTwin90),
-            ("twin270", EngineProfile.ParallelTwin270), ("vtwin52", EngineProfile.VTwin52) };
-        foreach (var (pname, profile) in profiles)
+        foreach (var (pname, profile) in EngineProfiles)
             foreach (EngineVoice voice in Enum.GetValues<EngineVoice>())
-            {
-                var synth = new EngineSynth(profile, spatial: false) { VoiceOverride = voice };
-                var all = new List<float>();
-                const float chunkS = 0.05f;
-                int chunkN = (int)(chunkS * Dsp.Rate);
-                for (float t = 0; t < 7f - 1e-4f; t += chunkS)
-                {
-                    float rpm, thr, load;
-                    if (t < 1f) { rpm = 0f; thr = 0.1f; load = 0.1f; }
-                    else if (t < 4f) { rpm = thr = load = (t - 1f) / 3f; }
-                    else if (t < 5f) { rpm = thr = load = 1f; }
-                    else { float k = (t - 5f) / 2f; rpm = Mathf.Lerp(1f, 0.2f, k); thr = load = 0f; }
-                    var buf = new float[chunkN];
-                    synth.Render(buf, rpm, thr, load, 1f);
-                    all.AddRange(buf);
-                }
-                bad += Save(System.IO.Path.Combine(outDir, $"engine_{pname}_{voice.ToString().ToLowerInvariant()}.wav"), all.ToArray());
-                synth.Free();
-            }
+                bad += Save(System.IO.Path.Combine(outDir, $"engine_{pname}_{voice.ToString().ToLowerInvariant()}.wav"), EngineSweep(profile, voice));
         return Verdict(bad);
+    }
+
+    private static readonly (string Name, EngineProfile Profile)[] EngineProfiles =
+    [
+        ("plane", EngineProfile.PistonAero), ("heli", EngineProfile.Turboshaft), ("turbofan", EngineProfile.Turbofan), ("turboprop", EngineProfile.Turboprop),
+        ("inline4", EngineProfile.Inline4Na), ("rotary", EngineProfile.Rotary), ("boxer", EngineProfile.Boxer4Turbo),
+        ("crossplane4", EngineProfile.Crossplane4), ("vtwin90", EngineProfile.VTwin90),
+        ("twin270", EngineProfile.ParallelTwin270), ("vtwin52", EngineProfile.VTwin52),
+    ];
+
+    /// <summary>7 s of an engine through one voice: idle, up to full throttle, held, lifted off and falling to a slow rpm.</summary>
+    private static float[] EngineSweep(EngineProfile profile, EngineVoice voice)
+    {
+        var synth = new EngineSynth(profile, spatial: false) { VoiceOverride = voice };
+        var all = new List<float>();
+        const float chunkS = 0.05f;
+        int chunkN = (int)(chunkS * Dsp.Rate);
+        for (float t = 0; t < 7f - 1e-4f; t += chunkS)
+        {
+            float rpm, thr, load;
+            if (t < 1f) { rpm = 0f; thr = 0.1f; load = 0.1f; }
+            else if (t < 4f) { rpm = thr = load = (t - 1f) / 3f; }
+            else if (t < 5f) { rpm = thr = load = 1f; }
+            else { float k = (t - 5f) / 2f; rpm = Mathf.Lerp(1f, 0.2f, k); thr = load = 0f; }
+            var buf = new float[chunkN];
+            synth.Render(buf, rpm, thr, load, 1f);
+            all.AddRange(buf);
+        }
+        synth.Free();
+        return all.ToArray();
+    }
+
+    /// <summary>Every engine profile through every voice, in the sound player (<c>--sounds</c>).</summary>
+    [SoundShowcase("Engines")]
+    private static IEnumerable<(string Category, string Name, Func<float[]> Make)> EngineSounds() =>
+        EngineProfiles.SelectMany(p => Enum.GetValues<EngineVoice>(),
+            (p, voice) => ("Engines", $"{p.Name} - {voice.ToString().ToLowerInvariant()}", (Func<float[]>)(() => EngineSweep(p.Profile, voice))));
+
+    /// <summary>Footsteps and landings of every surface, in the sound player (<c>--sounds</c>).</summary>
+    [SoundShowcase("Surfaces")]
+    private static IEnumerable<(string Category, string Name, Func<float[]> Make)> SurfaceSounds()
+    {
+        foreach (Surface surf in Enum.GetValues<Surface>())
+        {
+            var step = Surfaces.Steps(surf);
+            for (int i = 0; i < step.Variants.Length; i++)
+            {
+                var v = step.Variants[i];
+                yield return ("Surfaces", $"step {surf} {i + 1}/{step.Variants.Length}", () => Decode(v));
+            }
+            var land = Surfaces.Landing(surf);
+            for (int i = 0; i < land.Variants.Length; i++)
+            {
+                var v = land.Variants[i];
+                yield return ("Surfaces", $"landing {surf} {i + 1}/{land.Variants.Length}", () => Decode(v));
+            }
+        }
+    }
+
+    /// <summary>The occasions' sounds (owl, howl, bells, jingles), in the sound player (<c>--sounds</c>).</summary>
+    [SoundShowcase("Occasions")]
+    private static IEnumerable<(string Category, string Name, Func<float[]> Make)> OccasionSoundSet() =>
+        Occasions.OccasionSounds.All().Select(s => ("Occasions", s.Name, (Func<float[]>)(() => s.Samples)));
+
+    /// <summary>The steamer's paddles at three shaft speeds and a whistle blast, as the game plays them (#380).</summary>
+    [SoundShowcase("Water")]
+    private static IEnumerable<(string Category, string Name, Func<float[]> Make)> SteamerSounds()
+    {
+        foreach (float shaft in new[] { 0.25f, 0.5f, 1f })
+            yield return ("Water", $"paddles {Mathf.RoundToInt(shaft * 100)}%", () => Repitch(Decode(SfxSynth.Paddles), SfxSynth.PaddlePitch(shaft), 4f));
+        yield return ("Water", "whistle blast", () => Blast(Decode(SfxSynth.Whistle), 2f, 3f));
     }
 
     /// <summary>The RESULT line (tools/test.sh reads it) and the exit code: a NaN or a clipped sample fails.</summary>

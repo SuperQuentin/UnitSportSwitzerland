@@ -899,6 +899,12 @@ internal static class AmbienceDsp
         return notes;
     }
 
+    /// <summary>Every species' song, in the sound player (<c>--sounds</c>).</summary>
+    [SoundShowcase("Birds")]
+    private static IEnumerable<(string Category, string Name, Func<float[]> Make)> BirdSongs() =>
+        Enumerable.Range(0, SpeciesCount).Select(i => ("Birds", $"song {i + 1}/{SpeciesCount}",
+            (Func<float[]>)(() => Dsp.Normalise(BirdCall(new Random(i * 977), BirdPattern(i)), 0.8f))));
+
     public static float[] BirdCall(Random rng, Note[] pattern)
     {
         float pitchMul = 1f + ((float)rng.NextDouble() - 0.5f) * 0.08f;
