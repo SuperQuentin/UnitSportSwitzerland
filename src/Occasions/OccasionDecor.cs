@@ -73,6 +73,7 @@ public partial class OccasionDecor : Node
 
         _chunks.TileFurnished += OnFurnished;
         _chunks.TileUnloaded += OnUnloaded;
+        _chunks.TileUnfurnished += OnUnfurnished;
         _chunks.TerrainReplaced += OnReplaced;
         OccasionManager.Changed += RedecorateAll;
         OccasionTowns.Changed += RedecorateAll;
@@ -88,6 +89,7 @@ public partial class OccasionDecor : Node
         {
             _chunks.TileFurnished -= OnFurnished;
             _chunks.TileUnloaded -= OnUnloaded;
+            _chunks.TileUnfurnished -= OnUnfurnished;
             _chunks.TerrainReplaced -= OnReplaced;
         }
         if (Instance == this) Instance = null;
@@ -139,6 +141,13 @@ public partial class OccasionDecor : Node
     }
 
     private void OnUnloaded(TileId id) => _tiles.Remove(id);   // the props went with the tile's node
+
+    /// <summary>The tile shed its buildings (#553): the decorations at their doors go, back with the next furnishing.</summary>
+    private void OnUnfurnished(TileId id, ChunkNode node)
+    {
+        if (!_tiles.Remove(id, out var tile)) return;
+        if (tile.Decor != null && IsInstanceValid(tile.Decor)) tile.Decor.QueueFree();
+    }
 
     private void OnReplaced(Func<TileId, bool>? affected)
     {

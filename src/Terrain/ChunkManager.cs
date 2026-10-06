@@ -714,6 +714,13 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// </summary>
     public event Action<TileId, ChunkNode, Interiors.DoorSpot[]>? TileFurnished;
 
+    /// <summary>
+    /// Main thread: a tile has left the building ring and shed its buildings (#553). Whatever
+    /// <see cref="TileFurnished"/> hung on them (signs, decorations) goes too; they come back with
+    /// the next <see cref="TileFurnished"/> if the tile comes near again.
+    /// </summary>
+    public event Action<TileId, ChunkNode>? TileUnfurnished;
+
     /// <summary>Main thread: a tile has just come into the streamed rings (nothing is built yet).</summary>
     public event Action<TileId>? TileEntered;
 
@@ -1662,6 +1669,26 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         foreach (var (id, want) in _wanted)
             if (_chunks.TryGetValue(id, out var loaded) && loaded.Node != null)
                 loaded.Node.SetTreeDensity(Lod.TreeDensity(want.Dist));
+
+        // A tile past the building or the road ring (and the slack) sheds them (#553). Both used to
+        // stay until the tile itself unloaded, 16 rings out at render distance 15: every building
+        // and street a flight had passed stayed drawn, and lowering the detail kept them all.
+        foreach (var (id, want) in _wanted)
+        {
+            if (!_chunks.TryGetValue(id, out var shed) || shed.Node is not { } shedNode) continue;
+            if (shed.HasBuildings && !shed.PendingBuildings && want.Dist > Lod.BuildingMaxDist + Lod.UnloadSlack)
+            {
+                shedNode.ClearBuildings();
+                shed.HasBuildings = false;
+                Interiors.DoorIndex.ClearTile(id);
+                TileUnfurnished?.Invoke(id, shedNode);
+            }
+            if (shed.HasRoads && !shed.PendingRoads && want.Dist > Lod.RoadMaxDist + Lod.UnloadSlack)
+            {
+                shedNode.ClearRoads();
+                shed.HasRoads = false;
+            }
+        }
 
         // unload with hysteresis
         var toRemove = new List<TileId>();
