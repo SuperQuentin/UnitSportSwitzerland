@@ -17,6 +17,9 @@ public static partial class TileRewriter
     /// <summary>Bars 0.50 m wide at 0.50 m gaps, along the arm 3 m deep, a stop line's width clear of the cars' line.</summary>
     private const double ZebraBar = 0.5, ZebraGap = 0.5, ZebraDepth = 3.0, ZebraClear = 0.3;
 
+    /// <summary>How far an island reaches into the junction past the crosswalk; a left turn starts and ends this much (and a little) beyond it.</summary>
+    private const double IslandInsideM = 3.0;
+
     /// <summary>
     /// The crossing of one arm. <paramref name="mid"/> is the middle of its mouth, <paramref name="u"/> its outward direction,
     /// <paramref name="right"/> the approaching driver's right; <paramref name="stopAt"/> the cars' stop line's distance out
@@ -93,12 +96,13 @@ public static partial class TileRewriter
 public static partial class TileRewriter
 {
     /// <summary>
-    /// The left turn of arm <paramref name="arm"/> through the junction, from its pocket's lane at the mouth to the lane
-    /// of the arm on its left: two dashed white lines (SSV guide lines, 0.15 m, 1 m / 1 m) a lane's width apart along a
-    /// curve through the junction's centre (#682). Drawn where a centre island leaves the turn its own path.
+    /// The left turn of arm <paramref name="arm"/> through the junction (#682): one dashed white line (SSV guide line, 0.15 m,
+    /// 1 m / 1 m), the inner edge of its lane, from the pocket's left edge at the mouth round to the exit lane of the arm on its
+    /// left, ending where that lane starts (past the island, <paramref name="islandArms"/> gives the hatch's width there) and
+    /// arriving along the arm, so the car is led to the right of the island, not into it. Drawn only where the exit has an island.
     /// </summary>
     private static void EmitLeftGuides(Dictionary<TileId, List<RoadPaint>> paint, TileId home, Junction junction, int arm,
-        ApproachLayout? layout, List<(Vec2 At, float Height)> anchors, HashSet<int> islandArms)
+        ApproachLayout? layout, List<(Vec2 At, float Height)> anchors, Dictionary<int, double> islandArms)
     {
         if (layout?.LeftPocketLane is not { } lane) return;
         var from = junction.Arms[arm];
@@ -112,31 +116,28 @@ public static partial class TileRewriter
             double dot = Vec2.FromHeading(junction.Arms[k].OutwardHeading).Dot(-u.Perp);
             if (dot > best) { best = dot; to = k; }
         }
-        if (to < 0 || !islandArms.Contains(to)) return;
+        if (to < 0 || !islandArms.TryGetValue(to, out double lead)) return;
         var target = junction.Arms[to];
         var ut = Vec2.FromHeading(target.OutwardHeading);
-        Vec2 start = (from.Left + from.Right) * 0.5 + u.Perp * lane.Mid;
-        Vec2 end = (target.Left + target.Right) * 0.5 - ut.Perp * (target.HalfWidth * 0.5);
-        double half = (lane.To - lane.From) * 0.5;
-        var centre = new List<Vec2>();
-        for (int k = 0; k <= 12; k++)
+        var mid = (target.Left + target.Right) * 0.5;
+        // the lane's left edge at the mouth, and the exit lane's inner edge at the target's mouth (the departing side is -ut.Perp)
+        // the turn starts past the island of its own arm, and ends where the island at its exit ends, to the right of it
+        double beyondOwn = islandArms.ContainsKey(arm) ? IslandInsideM + 0.3 : 0, beyondExit = IslandInsideM + 0.3;
+        Vec2 start = (from.Left + from.Right) * 0.5 + u.Perp * (lane.From + 0.1) - u * beyondOwn;
+        Vec2 end = mid - ut.Perp * lead - ut * beyondExit;
+        // tangent to the way in (along -u) and to the way out (along ut): the control is where their lines meet
+        double den = (-u).Cross(ut);
+        Vec2 control = Math.Abs(den) < 1e-6 ? junction.Centre : start + (-u) * ((end - start).Cross(ut) / den);
+        var line = new List<Vec2>();
+        for (int k = 0; k <= 16; k++)
         {
-            double t = k / 12.0, mt = 1 - t;
-            centre.Add(start * (mt * mt) + junction.Centre * (2 * mt * t) + end * (t * t));
+            double t = k / 16.0, mt = 1 - t;
+            line.Add(start * (mt * mt) + control * (2 * mt * t) + end * (t * t));
         }
-        foreach (double side in (ReadOnlySpan<double>)[-half, half])
+        Get(paint, home).Add(new RoadPaint
         {
-            var line = new List<Vec2>();
-            for (int k = 0; k < centre.Count; k++)
-            {
-                var d = (centre[Math.Min(k + 1, centre.Count - 1)] - centre[Math.Max(k - 1, 0)]).Normalized();
-                line.Add(centre[k] + d.Perp * side);
-            }
-            Get(paint, home).Add(new RoadPaint
-            {
-                Shape = PaintShape.Polyline, Type = PaintType.WhiteDashed, Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
-                Dash = 1f, Gap = 1f, Vertices = Local(home, line, p => HeightAt(anchors, p), 0f),
-            });
-        }
+            Shape = PaintShape.Polyline, Type = PaintType.WhiteDashed, Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
+            Dash = 1f, Gap = 1f, Vertices = Local(home, line, p => HeightAt(anchors, p), 0f),
+        });
     }
 }

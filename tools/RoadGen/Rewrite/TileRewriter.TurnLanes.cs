@@ -970,7 +970,7 @@ public static partial class TileRewriter
         /// </summary>
         public void SetExit(double hatch, double lane) => (_exitHatch, _exitLane) = (hatch, lane);
         private double? _exitHatch, _exitLane;
-        private double HatchAtMouth => _exitHatch ?? _pocket;
+        public double HatchAtMouth => _exitHatch ?? _pocket;
         public bool HasLeftBikeLane => _bikeLeft > 0;
 
         /// <summary>What the widening adds at full width: the through lane, and on an approach the left-turn bike lane (#351).</summary>
@@ -1485,7 +1485,8 @@ public static partial class TileRewriter
 
         public (Vec2 Pole, float Y)? Islands(List<RoadAreaProp> areas, double near, double zebraFrom, double zebraTo)
         {
-            const double Margin = 0.25, IslandMinWidth = 1.2, IslandInside = 3.0, Top = 0.12;
+            const double Margin = 0.25, IslandMinWidth = 1.2, Top = 0.12;
+            const double IslandInside = IslandInsideM;
             double Width(double d) => HatchAtMouth * Math.Clamp(1 - d / _length, 0, 1) - 2 * Margin;
             // one width all along, before the crosswalk and after it: what the narrowest end leaves (not a triangle)
             double iw = Width(Math.Max(near + 2.0, zebraTo));
