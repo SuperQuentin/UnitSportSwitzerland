@@ -16,6 +16,38 @@ Environment time rides simulation speed, so at 0.25x the sun and the traffic lig
 with the cars and the world stays internally consistent. Both world clocks are owned by the
 server; real time is per-process and never synced.
 
+## The guard that keeps them three (phase 5)
+
+`ClockDisciplineTests` (tier 0, no Godot) fails if any file under `src/` reads
+`Time.GetTicksMsec`, `Time.GetTicksUsec` or `Time.GetUnixTimeFromSystem` without an entry in its
+`Allowed` table giving a reason. **New code must either pick one of the four clocks or justify
+itself there.** This is the only thing that stops the buckets rotting back into one: a raw
+wall-clock read looks harmless, is invisible at 1x speed, and only shows up as "the sun did not slow
+down" long after the commit that did it.
+
+- Reasons are one of three kinds, enforced by a second test: **clock** (it is the clock, or the
+  fallback under it), **plumbing** (network liveness, rate limits, hardware, worker threads) and
+  **presentation** (an animation phase or a UI timeout — the player is not slowed even when their
+  character is).
+- A third test fails on **stale** entries, because an exception list is only safe while every
+  exception is still real: a leftover entry would quietly permit a future wall-clock read in a file
+  that had stopped needing one.
+- Probes and checks (`*Probe.cs`, `*Check.cs`) are exempt by name: for them the rule is the
+  opposite one — wait for threaded work on the wall clock, because threads do not speed up under
+  `--fixed-fps` (`general/fast-checks`).
+- Verified by introducing a violation on purpose: the guard named the file and failed, then passed
+  again when it was reverted.
+
+`ClockSaveTests` covers the restart path, including that a campfire lit before a restart is still
+burning after it and that a pre-#579 file keeps its sky. The parsing lives in `World/ClockSave` —
+pure, out of `WorldClock` — because an end-to-end restart cannot be checked in a test run:
+`WorldClock.Persists` is deliberately false under `--world` / `--systems`, so a probe would have
+nothing to read back.
+
+Not covered, filed as #604: that a **moving** replicated body does not jump across a speed change.
+The probe's players stand still, so asserting it there would pass whatever happened;
+`Net/NetSmoothProbe` and `--synccheck` already measure a driven body's smoothness and are its home.
+
 ## Which system reads which (phase 4)
 
 Moved to **simulation** time, because they are part of the world and must slow with it:

@@ -179,19 +179,11 @@ public static class WorldClock
     {
         var cfg = new ConfigFile();
         if (cfg.Load(File) != Error.Ok) return null;
-        string m = cfg.GetValue("clock", "minutes_per_day", "").AsString();
-        if (!float.TryParse(m, NumberStyles.Float, CultureInfo.InvariantCulture, out float mpd)) return null;
-
-        // a file written before #579 has the wrapped hour and no counter: keep the sky, start the
-        // counter at zero rather than inventing a day count nothing recorded
-        string e = cfg.GetValue("clock", "env_now", "").AsString();
-        string s = cfg.GetValue("clock", "hour_shift", "").AsString();
-        if (double.TryParse(e, NumberStyles.Float, CultureInfo.InvariantCulture, out double envNow)
-            && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out double shift))
-            return (envNow, shift, mpd);
-
-        string h = cfg.GetValue("clock", "hour", "").AsString();
-        return double.TryParse(h, NumberStyles.Float, CultureInfo.InvariantCulture, out double hour)
-            ? (0, TimeCommand.Wrap(hour) * 3600.0, mpd) : null;
+        // the parsing, and the fallback for a pre-#579 file, is pure and unit-tested: ClockSave
+        return ClockSave.Parse(
+            cfg.GetValue("clock", "env_now", "").AsString(),
+            cfg.GetValue("clock", "hour_shift", "").AsString(),
+            cfg.GetValue("clock", "hour", "").AsString(),
+            cfg.GetValue("clock", "minutes_per_day", "").AsString());
     }
 }

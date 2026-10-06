@@ -3,7 +3,7 @@
 
 # Three clocks: environment time, simulation speed, real time
 
-Status: **phases 1-4 built** (PR #594). Tracking issue: #579.
+Status: **all five phases built** (PR #594). Tracking issue: #579.
 
 | Phase | State | What it does |
 |---|---|---|
@@ -11,7 +11,7 @@ Status: **phases 1-4 built** (PR #594). Tracking issue: #579.
 | 2 Server-owned sim clock | done | `SimClock`: the server owns `(sim0, epoch, scale)`; every peer flips `Engine.TimeScale` at the same server instant |
 | 3 Env time onto sim time | done | `WorldClock` re-keyed from `ServerNow` to `SimNow`, with a monotonic persisted `EnvNow` |
 | 4 Move the misplaced timers | done | The ~10 simulation timers currently on the wall clock move to sim or env time |
-| 5 Guards | not done | A lint check for wall-clock use in gameplay, and two-peer probes for sim speed and env scaling |
+| 5 Guards | done | A lint check for wall-clock use in gameplay, and two-peer probes for sim speed and env scaling |
 
 ## Goal
 
@@ -208,11 +208,21 @@ simulation), `Interiors/InteriorManager.cs:433` (4 s door re-ask), `Interiors/Fl
 - A lint-style unit check: no file under the gameplay directories reads `Time.GetTicksMsec`,
   `Time.GetTicksUsec` or `Time.GetUnixTimeFromSystem` unless it is on an explicit allow-list with a
   reason. This is the only thing that stops the three buckets rotting back into one.
-- A two-peer probe that the simulation scale matches on both peers after a `/speed`, and that a
-  replicated body's position does not jump across the flip.
+- A two-peer probe that the simulation scale matches on both peers after a `/speed`: done in
+  phase 2's `speednetcheck`, asserting the scale on **clock and engine** (one without the other is
+  the bug) and that both peers still agree about simulated time afterwards. Phase 5 added that
+  replication keeps flowing across the flip.
+- **Not done, filed as #604:** that a *moving* body does not jump across the flip. The probe's
+  players stand still, so the assertion would have passed whatever happened, and a vacuous assert is
+  worse than none. `Net/NetSmoothProbe` / `--synccheck` already measures a driven body's smoothness
+  and is where it belongs.
 - A two-peer probe that the **hour advances at `scale * dayFactor`**: the whole point of the flipped
   decision, and the thing a future refactor is most likely to break silently.
-- A probe that `EnvNow` survives a server restart and that nothing mid-growth resets.
+- `EnvNow` surviving a restart is covered at tier 0 by `ClockSaveTests`, including that a campfire
+  lit before a restart is still burning after it. Built differently from the plan: an end-to-end
+  restart probe is impossible, because `WorldClock.Persists` is deliberately false under `--world` /
+  `--systems`, so a test server never writes the file. The parsing was extracted into the pure
+  `World/ClockSave` so the part that actually goes wrong — the pre-#579 fallback — is testable.
 
 ## Risks
 

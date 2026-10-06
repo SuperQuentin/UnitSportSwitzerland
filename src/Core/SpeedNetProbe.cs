@@ -64,6 +64,7 @@ public partial class SpeedNetProbe : ChatProbe
 
         Chat?.Send("/speed normal");
         Expect(await Until(() => AtScale(1.0), 10), $"A is back to normal speed ({Describe()})");
+        await ReplicationKeptFlowing();
         Say("normal");
         Expect(await Heard("B", "saw normal", 15), "B is back to normal speed");
     }
@@ -101,6 +102,42 @@ public partial class SpeedNetProbe : ChatProbe
         Expect(ok, string.Format(CultureInfo.InvariantCulture,
             "env time advanced {0:F1} s over {1:F1} s of server clock at x{2}; at this day length x{2} wants {3:F1} s (full speed would be {4:F1})",
             advanced, elapsed, scale, expected, World.WorldClock.DayFactor * elapsed));
+    }
+
+    /// <summary>
+    /// The scale change is scheduled, and every peer applies it at one instant on the server's
+    /// clock — but <see cref="Engine.TimeScale"/> also scales the <c>_Process</c> that drives
+    /// replication. So the thing to prove is that net states kept arriving across the flips: a peer
+    /// whose sending stalled would have its body frozen as a wall by
+    /// <c>FootPlayer.SilentSeconds</c>, which is exactly the #50 failure the silence check exists
+    /// for.
+    ///
+    /// <para>
+    /// This does <b>not</b> prove a <i>moving</i> body does not visibly jump across the flip. That
+    /// needs a driven remote body and belongs in <c>Net.NetSmoothProbe</c> / <c>--synccheck</c>,
+    /// which already measures replicated motion smoothness; asserting it on the stationary players
+    /// here would pass whatever happened.
+    /// </para>
+    /// </summary>
+    private async Task ReplicationKeptFlowing()
+    {
+        var other = Remote();
+        if (other == null) { Say("no remote body to watch"); return; }
+        double before = other.LastNetState;
+        await Seconds(2);
+        double after = other.LastNetState;
+        Expect(after > before, string.Format(CultureInfo.InvariantCulture,
+            "the other peer's net states kept arriving across the speed changes (last at {0:F2} s, then {1:F2} s)",
+            before, after));
+    }
+
+    /// <summary>The other peer's body on this screen, whichever peer id it has.</summary>
+    private Player.FootPlayer? Remote()
+    {
+        if (GetParent()?.GetNodeOrNull("Players") is not { } players) return null;
+        foreach (var child in players.GetChildren())
+            if (child is Player.FootPlayer p && p != Me) return p;
+        return null;
     }
 
     /// <summary>The clock and the engine both have to be there: one without the other is the bug.</summary>
