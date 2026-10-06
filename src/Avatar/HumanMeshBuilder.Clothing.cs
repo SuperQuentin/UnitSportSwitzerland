@@ -688,8 +688,9 @@ public static partial class HumanMeshBuilder
         float ripple = speed > 0.05f ? 0.03f + 0.13f * gust : 0f;
         float phase = Time.GetTicksMsec() / 1000f * (5f + 1.1f * Mathf.Min(speed, 30f));
         var waist = r.Waist;
-        // no hem point below the lower ankle's sole line, however the wind tilts it or the ripple drops it
-        float floor = Mathf.Min(r.AnkleL.Y, r.AnkleR.Y) - 0.06f;
+        // the hem never comes within 9 cm of the ground under the lower foot, however the wind tilts it
+        // or the ripple drops it (#671)
+        float floor = Mathf.Min(r.AnkleL.Y, r.AnkleR.Y) - AnkleHeight + 0.09f;
         const float band = 2f;
         var rings = DrapeRings(ref _drape);
         int count = DrapeAt.Length;
@@ -700,7 +701,7 @@ public static partial class HumanMeshBuilder
             var c = Cols.Of(top);
             if (top.Shape == GarmentShape.Robe)
             {
-                HangSkirt(rings, fit, band, Blown(ankles + Vector3.Up * 0.035f), 0.30f + extra, ripple, phase, floor);
+                HangSkirt(rings, fit, band, Blown(ankles + Vector3.Up * 0.06f), 0.30f + extra, ripple, phase, floor);
                 bands.Fill(c.A);
                 bands[^1] = c.B;   // the trim
                 s.Drape(rings, 0, count, bands);
@@ -736,7 +737,7 @@ public static partial class HumanMeshBuilder
                 break;
             case GarmentShape.SlitMaxi:
                 // to the ankles, with a slit up the front of the right leg (−X)
-                HangSkirt(rings, fit, band, Blown(ankles + Vector3.Up * 0.05f), 0.29f + extra, ripple, phase, floor);
+                HangSkirt(rings, fit, band, Blown(ankles + Vector3.Up * 0.07f), 0.29f + extra, ripple, phase, floor);
                 bands.Fill(b.A);
                 s.Drape(rings, 0, count, bands, new Vector3(-0.55f, 0, 1f), 0.42f);
                 break;
