@@ -21,7 +21,7 @@ public sealed class Forklift : Rideable
     public override RideKind Kind => RideKind.Forklift;
     public override string Label => "Forklift";
     public override string Blurb =>
-        "{move_forward} drive, {move_back} brake / reverse, {move_left}{move_right} steer; {shift_up}{shift_down} raise and lower the forks";
+        "{move_forward} drive, {move_back} brake / reverse, {move_left}{move_right} steer; {shift_up}{shift_down} raise and lower the forks: run them in under a pallet and raise them to lift it";
 
     /// <summary>The forks' height over the ground, m (what the mast is drawn at).</summary>
     public float Lift { get; set; } = ForkliftLayout.MinLift;
@@ -103,15 +103,15 @@ public sealed class Forklift : Rideable
     public override SeatAnchor[] Seats => _seats ??= ForkliftMeshBuilder.Parts().Seats;
 
     // ---- flags: what a parked one keeps (the fork height in cm, and its load) -----------------
-    /// <summary>Fork height in centimetres (ten bits), with what it carries above it (nine: 0 = empty forks, else 1 + the load byte).</summary>
+    /// <summary>Fork height in centimetres (ten bits), with what it carries above it (ten: 0 = empty forks, else <c>Pallets.Carried</c>).</summary>
     public int PackFlags() =>
-        Mathf.RoundToInt(Mathf.Clamp(Lift, 0f, ForkliftLayout.MaxLift) * 100f) | (Mathf.Clamp(Carrying, 0, 0x1FF) << 10);
+        Mathf.RoundToInt(Mathf.Clamp(Lift, 0f, ForkliftLayout.MaxLift) * 100f) | (Mathf.Clamp(Carrying, 0, 0x3FF) << 10);
 
     public void UnpackFlags(int flags)
     {
         if (flags == 0) return;
         Lift = TargetLift = ForkliftLayout.Clamp((flags & 0x3FF) / 100f);
-        Carrying = (flags >> 10) & 0x1FF;
+        Carrying = (flags >> 10) & 0x3FF;
     }
 
     public override Node3D BuildVisual(int riderIndex, Outfit outfit = default) =>

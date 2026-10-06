@@ -46,18 +46,21 @@ public class PalletTests
     }
 
     [Fact]
-    public void What_the_forks_carry_round_trips_every_load()
+    public void What_the_forks_carry_round_trips_every_load_either_way_round()
     {
         Assert.Null(Pallets.LoadCarried(0));
+        Assert.False(Pallets.CarriedAcross(0));
         for (int load = 0; load <= 255; load++)
-        {
-            int carried = Pallets.Carried((byte)load);
-            Assert.InRange(carried, 1, 256);
-            Assert.Equal((byte)load, Pallets.LoadCarried(carried));
-            // nine bits: what the parked flags keep above the ten bits of fork height
-            Assert.True(carried < 1 << 9);
-        }
-        Assert.Null(Pallets.LoadCarried(257));
+            foreach (bool across in new[] { false, true })
+            {
+                int carried = Pallets.Carried((byte)load, across);
+                Assert.InRange(carried, 1, 512);
+                Assert.Equal((byte)load, Pallets.LoadCarried(carried));
+                Assert.Equal(across, Pallets.CarriedAcross(carried));
+                // ten bits: what the parked flags keep above the ten bits of fork height
+                Assert.True(carried < 1 << 10);
+            }
+        Assert.Null(Pallets.LoadCarried(513));
         Assert.Null(Pallets.LoadCarried(-1));
     }
 
@@ -84,17 +87,24 @@ public class PalletTests
         Assert.True(Pallets.Forked(0.25f, HullFace + 0.6f, 0.9f, ForkliftLayout.MinLift, 1f));
         // and going either way along its runners
         Assert.True(Pallets.Forked(0f, HullFace + 0.6f, 1f, 0.2f, 0f));
+        // four-way: square across its runners too, the way a pallet against a wall is reached
+        Assert.True(Pallets.Forked(0f, HullFace + 0.5f, 0f, ForkliftLayout.MinLift, 0f));
+        Assert.True(Pallets.Forked(0f, HullFace + 0.5f, 0.45f, ForkliftLayout.MinLift, 0f));
+        Assert.Equal(false, Pallets.Across(0.95f));
+        Assert.Equal(true, Pallets.Across(0.1f));
     }
 
     [Fact]
-    public void A_pallet_beside_above_beyond_or_across_the_forks_is_not()
+    public void A_pallet_beside_above_beyond_or_at_a_corner_is_not()
     {
         float z = HullFace + 0.6f;
         Assert.False(Pallets.Forked(ForkliftLayout.ForkHalfSpan + 0.05f, z, 1f, ForkliftLayout.MinLift, 0f), "beside");
         Assert.False(Pallets.Forked(0f, z, 1f, ForkliftLayout.ForkEntry + 0.01f, 0f), "forks over the deck");
         Assert.False(Pallets.Forked(0f, ForkliftLayout.MastZ + ForkliftLayout.TineLength + 0.2f, 1f, ForkliftLayout.MinLift, 0f), "beyond the tips");
         Assert.False(Pallets.Forked(0f, ForkliftLayout.MastZ - 0.2f, 1f, ForkliftLayout.MinLift, 0f), "behind the mast");
-        Assert.False(Pallets.Forked(0f, z, 0.5f, ForkliftLayout.MinLift, 0f), "across its runners");
+        // 45°: the tines meet a corner block, between its two open sides
+        Assert.False(Pallets.Forked(0f, z, 0.707f, ForkliftLayout.MinLift, 0f), "at a corner");
+        Assert.Null(Pallets.Across(0.707f));
         Assert.False(Pallets.Forked(0f, z, 1f, ForkliftLayout.MinLift, Pallets.MaxForkSpeed + 0.1f), "driving past");
     }
 

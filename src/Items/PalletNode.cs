@@ -68,20 +68,28 @@ public partial class PalletNode : Node3D
 
     /// <summary>
     /// The pallet as it rides on the forks (<c>ForkliftMast.Carry</c>): no body, its runners along
-    /// the tines, and sitting <see cref="Pallets.Seat"/> below their top face, so it left the floor
-    /// at exactly the height it was lifted from.
+    /// the tines or <paramref name="across"/> them as it was picked up, and sitting
+    /// <see cref="Pallets.Seat"/> below their top face, so it left the floor at exactly the height
+    /// it was lifted from.
     /// </summary>
-    public static Node3D Carried(byte load)
+    public static Node3D Carried(byte load, bool across = false)
     {
         var node = new Node3D();
         node.AddChild(new MeshInstance3D
         {
             Name = "Mesh", Mesh = MeshOf(load), MaterialOverride = Avatar.HumanMeshBuilder.FigureMaterial(),
-            // runners (+X) along the carriage's forward (-Z, the rig is drawn turned)
-            Transform = new Transform3D(new Basis(Vector3.Up, Mathf.Pi * 0.5f), new Vector3(0, -Pallets.Seat, 0)),
+            // runners (+X) along the carriage's forward (-Z, the rig is drawn turned), or across it
+            Transform = new Transform3D(new Basis(Vector3.Up, CarriedYaw(across)), new Vector3(0, -Pallets.Seat, 0)),
         });
         return node;
     }
+
+    /// <summary>
+    /// A pallet's yaw against the forklift carrying it: runners along the tines a quarter turn
+    /// (its +X onto the machine's forward, -Z), across them none. Set down, its yaw is the
+    /// machine's plus this.
+    /// </summary>
+    public static float CarriedYaw(bool across) => across ? 0f : Mathf.Pi * 0.5f;
 
     /// <summary>Hides a taken hall pallet (and lets things through it), or puts it back.</summary>
     public void SetTaken(bool taken)

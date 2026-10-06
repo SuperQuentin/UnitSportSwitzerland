@@ -117,13 +117,14 @@ public partial class PalletService : Node
         if (Pallets.LoadCarried(fork.Carrying) is { } load)
         {
             if (!Pallets.SetsDown(fork.Lift)) return;
-            // where it rode, on the ground the machine stands on, its runners along the machine
+            // where it rode, on the ground the machine stands on, turned as it rode
             var at = frame * CarMeshBuilder.Turned(ForkliftLayout.LoadCentre);
             at.Y = p.GlobalPosition.Y;
-            float yaw = p.GlobalRotation.Y + Mathf.Pi * 0.5f;
+            int carrying = fork.Carrying;
+            float yaw = p.GlobalRotation.Y + PalletNode.CarriedYaw(Pallets.CarriedAcross(carrying));
             RequestDrop(load, _origin.ToGlobal(at), yaw, ok =>
             {
-                if (ok && fork.Carrying == Pallets.Carried(load)) fork.Carrying = 0;
+                if (ok && fork.Carrying == carrying) fork.Carrying = 0;
             });
             return;
         }
@@ -142,9 +143,10 @@ public partial class PalletService : Node
             float along = Mathf.Abs(ahead.Dot(new Vector2(runners.X, runners.Z).Normalized()));
             // the authored frame is the node's turned: +Z ahead, +X the left side
             if (!Pallets.Forked(-local.X, -local.Z, along, fork.Lift, speed)) continue;
+            bool across = Pallets.Across(along) == true;
             RequestTake(node.Id, taken =>
             {
-                if (taken is { } l && p.Vehicle == fork && fork.Carrying == 0) fork.Carrying = Pallets.Carried(l);
+                if (taken is { } l && p.Vehicle == fork && fork.Carrying == 0) fork.Carrying = Pallets.Carried(l, across);
             });
             return;
         }
@@ -335,7 +337,7 @@ public partial class PalletService : Node
             return;
         }
 
-        if (Forks(peer, 0) is { } why) { Refuse(peer, id, why); return; }
+        if (Forks(peer, null) is { } why) { Refuse(peer, id, why); return; }
         if (!InReach(peer, at)) { Refuse(peer, id, "Too far away."); return; }
 
         if (Online)
@@ -349,7 +351,7 @@ public partial class PalletService : Node
     {
         var at = new GlobalPos(e, n, alt);
         string? why = !double.IsFinite(e) || !double.IsFinite(n) || !double.IsFinite(alt) || !float.IsFinite(yaw) ? "Bad position."
-            : Forks(peer, Pallets.Carried(load))
+            : Forks(peer, load)
               ?? (!InReach(peer, at) ? "Too far away." : null);
         if (why != null)
         {
@@ -373,16 +375,16 @@ public partial class PalletService : Node
 
     /// <summary>
     /// Server: why the asker may not do it — not driving a forklift, or its forks not holding
-    /// <paramref name="carrying"/> (0: empty) — or null. From the pose the driver publishes
+    /// <paramref name="load"/> (null: empty forks) — or null. From the pose the driver publishes
     /// (<c>Anim.Z</c> is <c>Forklift.Carrying</c>); offline there is nobody to doubt.
     /// </summary>
-    private string? Forks(long peer, int carrying)
+    private string? Forks(long peer, byte? load)
     {
         if (!Online) return null;
         if (GetNodeOrNull<FootPlayer>("../Players/" + peer) is not { } body) return "Nobody there.";
         if (body.Ride != RideKind.Forklift) return "Not on a forklift.";
-        int on = Mathf.RoundToInt(body.Anim.Z);
-        return on == carrying ? null : carrying == 0 ? "The forks are full." : "That is not on the forks.";
+        var on = Pallets.LoadCarried(Mathf.RoundToInt(body.Anim.Z));
+        return on == load ? null : load == null ? "The forks are full." : "That is not on the forks.";
     }
 
     /// <summary>Server: the asker's body within <see cref="Reach"/>, in LV95 (the server's origin may be far away, #185).</summary>

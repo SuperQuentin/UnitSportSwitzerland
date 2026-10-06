@@ -3,8 +3,8 @@
 
 # A drivable forklift (#583, phase 1 of the forklift epic)
 
-Plan: `docs/plans/forklift-and-pallets.md`. Phase 1 is the machine and its mast; **pallets are
-phase 2** and nothing here lifts anything yet.
+Plan: `docs/plans/forklift-and-pallets.md`. Phase 1 is the machine and its mast; what it lifts
+(phase 2) is `pallets`.
 
 - **What**: `Player/Forklift.cs`, RideKind **193** — a mount of its own, not a `HeavyCatalog` entry,
   for the same reason `Airstairs` (126) is not: it needs none of the heavy driveline, only a slow
@@ -29,6 +29,9 @@ phase 2** and nothing here lifts anything yet.
   (`Kind.Hold`, pulled back the forks rise). Held, the mast runs; **let go, it stops where it is**,
   which is the whole of the control's design and is what `--forkliftcheck` asserts. Rows added to
   `Core/ControlsHelp` and `docs/notes/xr/vr-action-map.md`.
+- **The handbrake holds; the brake pedal reverses** from a stop. They were one input in phase 1,
+  so a forklift left on the handbrake while its forks went up backed away by itself (3.6 m, found
+  by `--palletcheck`); `--forkliftcheck` now asserts it stands still through the whole lift.
 - **Driving**: 18 km/h forward *and* in reverse (it is driven backwards half the time), 1.6 m
   wheelbase on a 54° lock, which is a **1.1 m turning circle** — it turns inside its own length.
   The yaw keeps a car's sign: the machine goes the way the wheel is turned, as any driver expects.
@@ -36,7 +39,10 @@ phase 2** and nothing here lifts anything yet.
   pallet's width short of every pallet, which is the one thing a forklift must be able to do. The
   tines are solid **parked** (`ExtraBoxes`), where a tine on the ground is a thing you trip over.
 - **The cab**: a `HeavyRig` with a `HeavyCabin.Build` cockpit (seat, flat wheel, dials, pedals), so
-  first person, the view cycle and the driver seen from outside are the trucks' own. Its
+  first person, the view cycle and the driver seen from outside are the trucks' own. The seat is
+  a chair's, not a truck's (`HipRise` 0.56, `Recline` 0.08): `SeatFor` keeps hip to pedal at one
+  leg's length, so a truck's 0.4 m hip with the pedals this close put the legs out flat and the
+  driver lounging. Its
   `CabFrame.Front` is pulled back **behind the binnacle on purpose**: `HeavyCabin` only draws its
   full-width dash when the face is ahead of the dials, and a forklift's driver looks out *through
   the mast* — a dash across that is the one thing that would make it unusable. The small gauge
@@ -55,13 +61,12 @@ lock stays inside 3.2 m. The paddles are held with `XrPad.Press`, i.e. through t
 bindings**, so what is proved is the control a player (or a VR hand on the lever) actually has.
 Windowed, `test_output/forklift/*.png`. `--ride forklift,SECONDS[,out.png]` drives one for a look.
 
-**Not in tier 0**: `ForkliftLayout` is `Vector3` and `Aabb` arithmetic, so it cannot be linked into
-the unit-test project (`testing`: no Godot there). Its numbers are asserted in the Godot check
-instead, as the airstairs' are.
+**Tier 0**: `ForkliftLayout` is in a file of its own (Godot maths only, which the unit-test
+project has through `GodotSharp`), linked with `Items/Pallets` so `PalletTests` pin the fork rule
+against its numbers.
 
 ## Not done
 
-- **Nothing to lift**: pallets are phase 2 (`docs/plans/forklift-and-pallets.md`).
 - **Rear-axle steering is modelled as what it buys** — a very tight circle — **not as an offset
   pivot**. The tail does not swing wide, and the machine does not swap stability between forward
   and reverse the way a real rear-steer one does. A slip angle would give both; it was left out

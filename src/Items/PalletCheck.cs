@@ -40,6 +40,9 @@ public partial class PalletCheck : Node
     private FootPlayer? _player;
 
     // the pallet picked, its id and plan, and the way the forklift comes at it (hall frame)
+    /// <summary>How far back from a pallet's centre the forklift sets off, m, and its tail behind that.</summary>
+    public const float RunIn = 3.0f, Tail = 1.6f;
+
     private int _target = -1;
     private Vector3 _toward;
 
@@ -129,7 +132,7 @@ public partial class PalletCheck : Node
         int drawn = PalletNode.All.Values.Count(p => p.GetParent() == _hall);
         Expect(loose > 0 && drawn == loose, $"the warehouse's {loose} loose floor pallet(s) are nodes of their own ({drawn})");
 
-        _target = PickTarget(out _toward);
+        _target = Approach(layout, out _toward);
         Expect(_target >= 0, $"a pallet with a clear run in to it (#{_target})");
         if (_target < 0) { Finish(); return; }
 
@@ -144,36 +147,53 @@ public partial class PalletCheck : Node
     }
 
     /// <summary>
-    /// A loose pallet on the ground floor that a forklift can drive square at along its runners:
-    /// 4 m of floor in front of one of its open ends, inside the hall and clear of everything else.
+    /// A loose pallet on the ground floor that a forklift can drive square at, along its runners for
+    /// choice, else across them: floor clear of the hall's walls and everything else from its face
+    /// back to where the machine sets off (<see cref="RunIn"/>), as wide as the machine and a margin.
+    /// Its index, and <paramref name="toward"/> the way to drive at it (the plan's frame); -1 if none.
+    /// Shared with <c>PalletNetProbe</c>, which looks for a works with one.
     /// </summary>
-    private int PickTarget(out Vector3 toward)
+    /// <param name="why">Told, for each pallet and end, what is in the way (a probe that found none says why).</param>
+    public static int Approach(InteriorLayout l, out Vector3 toward, Action<string>? why = null)
     {
         toward = default;
-        var l = _layout;
-        var hall = l.GroundFloor.Rooms[0];
         for (int i = 0; i < l.Furniture.Count; i++)
         {
             var f = l.Furniture[i];
-            if (!InteriorMeshBuilder.IsLoosePallet(f) || f.Floor != l.Below) continue;
+            if (!InteriorMeshBuilder.IsLoosePallet(f) || f.Floor != l.Below || l.RoomOf(f) is not { } hall) continue;
             var runners = new Basis(Vector3.Up, f.Turns * Mathf.Pi / 2) * Vector3.Right;
-            foreach (float sign in new[] { 1f, -1f })
+            var perpendicular = new Vector3(-runners.Z, 0, runners.X);
+            // along its runners from either end first, then across them (four-way: Pallets.MaxAcross)
+            foreach (var (dir, half, name) in new[]
             {
-                var dir = runners * sign;   // the way the forklift drives
+                (runners, f.W / 2, "along +"), (-runners, f.W / 2, "along -"),
+                (perpendicular, f.D / 2, "across +"), (-perpendicular, f.D / 2, "across -"),
+            })
+            {
                 var side = new Vector3(-dir.Z, 0, dir.X);
                 bool clear = true;
-                for (float back = 0.75f; back <= 4.5f && clear; back += 0.25f)
-                    foreach (float across in new[] { -0.8f, 0f, 0.8f })
+                // from its face back to where the machine's tail is when it sets off
+                for (float back = half + 0.15f; back <= RunIn + Tail && clear; back += 0.25f)
+                    foreach (float across in new[] { -0.75f, 0f, 0.75f })
                     {
                         var p = new Vector3(f.X, 0, f.Z) - dir * back + side * across;
-                        if (p.X < hall.X0 + 0.3f || p.X > hall.X1 - 0.3f || p.Z < hall.Z0 + 0.3f || p.Z > hall.Z1 - 0.3f) { clear = false; break; }
+                        if (p.X < hall.X0 + 0.3f || p.X > hall.X1 - 0.3f || p.Z < hall.Z0 + 0.3f || p.Z > hall.Z1 - 0.3f)
+                        {
+                            why?.Invoke(FormattableString.Invariant($"#{i} {name}: the {hall.Type}'s wall {back:F2} m back"));
+                            clear = false;
+                            break;
+                        }
                         for (int j = 0; j < l.Furniture.Count && clear; j++)
                         {
                             var o = l.Furniture[j];
                             if (j == i || o.Floor != f.Floor || o.Type is FurnitureType.FloorMarking or FurnitureType.Gantry
                                 or FurnitureType.SafetySign or FurnitureType.Banner) continue;
                             float hw = (o.Turns % 2 == 0 ? o.W : o.D) / 2 + 0.1f, hd = (o.Turns % 2 == 0 ? o.D : o.W) / 2 + 0.1f;
-                            if (Mathf.Abs(p.X - o.X) < hw && Mathf.Abs(p.Z - o.Z) < hd) clear = false;
+                            if (Mathf.Abs(p.X - o.X) < hw && Mathf.Abs(p.Z - o.Z) < hd)
+                            {
+                                why?.Invoke(FormattableString.Invariant($"#{i} {name}: {o.Type} #{j} {back:F2} m back"));
+                                clear = false;
+                            }
                         }
                     }
                 if (!clear) continue;
@@ -190,7 +210,7 @@ public partial class PalletCheck : Node
         _started = true;
         var f = _layout.Furniture[_target];
         // 3.4 m back from the pallet's centre, facing it along its runners
-        var start = _hall.GlobalTransform * (new Vector3(f.X, _layout.FloorY(f.Floor), f.Z) - _toward * 3.4f);
+        var start = _hall.GlobalTransform * (new Vector3(f.X, _layout.FloorY(f.Floor), f.Z) - _toward * RunIn);
         _player = new FootPlayer { Name = "Probe" };
         AddChild(_player);
         // on the flat world's ground above the hall: a mount is got on outdoors, never in a building
@@ -231,7 +251,8 @@ public partial class PalletCheck : Node
         // ---- raised: it is lifted -------------------------------------------------------------
         await Paddle(PlayerInput.ShiftUp, 3.0, () => fork.Carrying != 0);
         await Frames(10);
-        Expect(fork.Carrying == Pallets.Carried(load), $"raising the forks lifts it: they carry its load byte ({fork.Carrying - 1} = {load})");
+        Expect(Pallets.LoadCarried(fork.Carrying) == load,
+            $"raising the forks lifts it: they carry its load byte ({Pallets.LoadCarried(fork.Carrying)} = {load}, {(Pallets.CarriedAcross(fork.Carrying) ? "across" : "along")} its runners)");
         Expect(node.Taken && !node.Visible && _pallets.IsTaken(id), "the hall's node is hidden and the service has it taken");
         Expect(Loot.LootService.Moved(_layout.Key, _target), "moved, it is no loot container any more");
         var mast = ForkliftMeshBuilder.MastOf(me.Visual);
@@ -245,7 +266,7 @@ public partial class PalletCheck : Node
         // ---- carried away: backed off three metres --------------------------------------------
         var before = me.GlobalPosition;
         await Drive(me, -0.4f, 8, () => (me.GlobalPosition - before).Length() > 3f);
-        Expect((me.GlobalPosition - before).Length() > 2.5f && fork.Carrying == Pallets.Carried(load),
+        Expect((me.GlobalPosition - before).Length() > 2.5f && Pallets.LoadCarried(fork.Carrying) == load,
             $"backed away {(me.GlobalPosition - before).Length():F1} m with it on the forks");
         if (mast?.Load is { } away)
             Expect(new Vector2(away.GlobalPosition.X - palletAt.X, away.GlobalPosition.Z - palletAt.Z).Length() > 2f,
@@ -275,7 +296,7 @@ public partial class PalletCheck : Node
             await Drive(me, 0.3f, 8, () => Home(me, down));
             await Paddle(PlayerInput.ShiftUp, 3.0, () => fork.Carrying != 0);
             await Frames(10);
-            Expect(fork.Carrying == Pallets.Carried(load) && _pallets.Loose.Count == 0
+            Expect(Pallets.LoadCarried(fork.Carrying) == load && _pallets.Loose.Count == 0
                    && (!IsInstanceValid(down) || down.IsQueuedForDeletion()),
                 $"driven back in and raised, the loose one is lifted ({_pallets.Loose.Count} loose left)");
         }
@@ -284,12 +305,13 @@ public partial class PalletCheck : Node
         bool all = true;
         var parked = new Forklift();
         foreach (int l in new[] { 0, 1, 127, 128, 255 })
-        {
-            var lifting = new Forklift { Lift = 2.5f, Carrying = Pallets.Carried((byte)l) };
-            parked.UnpackFlags(lifting.PackFlags());
-            all &= parked.Carrying == lifting.Carrying && Mathf.Abs(parked.Lift - 2.5f) < 0.011f;
-        }
-        Expect(all, "the parked flags keep the fork height and every load byte");
+            foreach (bool across in new[] { false, true })
+            {
+                var lifting = new Forklift { Lift = 2.5f, Carrying = Pallets.Carried((byte)l, across) };
+                parked.UnpackFlags(lifting.PackFlags());
+                all &= parked.Carrying == lifting.Carrying && Mathf.Abs(parked.Lift - 2.5f) < 0.011f;
+            }
+        Expect(all, "the parked flags keep the fork height, every load byte and which way it sits");
 
         Finish();
     }

@@ -225,7 +225,7 @@ public partial class ForkliftMast : Node3D
         {
             if (value == _carrying) return;
             _carrying = value;
-            Carry(Items.Pallets.LoadCarried(value) is { } load ? Items.PalletNode.Carried(load) : null);
+            Carry(Items.Pallets.LoadCarried(value) is { } load ? Items.PalletNode.Carried(load, Items.Pallets.CarriedAcross(value)) : null);
         }
     }
 

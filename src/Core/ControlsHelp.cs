@@ -128,8 +128,9 @@ public partial class ControlsHelp : CanvasLayer
         ("Forklift (#583)", new Row[]
         {
             // the paddles, free on a machine with no gearbox: held, the mast runs; let go, it stops
-            new("Raise the forks (hold)", PlayerInput.ShiftUp),
-            new("Lower the forks (hold)", PlayerInput.ShiftDown),
+            // pallets need nothing more: forks run in under one and raised lift it, lowered set it down
+            new("Raise the forks (hold); under a pallet, lifts it", PlayerInput.ShiftUp),
+            new("Lower the forks (hold); with a pallet on, sets it down", PlayerInput.ShiftDown),
         }),
         ("Paddle steamer", new Row[]
         {

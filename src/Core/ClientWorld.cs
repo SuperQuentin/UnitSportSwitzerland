@@ -654,6 +654,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _garage.ActivePlayer = () => _onFoot ? LocalPlayer : null;
         AddChild(_garage);
         if (Player.GarageProbe.ParseArgs() is { } garageRole) AddChild(new Player.GarageProbe(garageRole, () => LocalPlayer));
+        // a forklift forks a hall pallet and sets it down in the yard; the other client watches (#583)
+        if (Items.PalletNetProbe.ParseArgs() is { } palletRole) AddChild(new Items.PalletNetProbe(palletRole, () => LocalPlayer));
         if (Player.HeavyNetProbe.ParseArgs() is { } heavyRole) AddChild(new Player.HeavyNetProbe(heavyRole, () => LocalPlayer));
         if (Player.CrashNetProbe.ParseArgs() is { } crashRole) AddChild(new Player.CrashNetProbe(crashRole, () => LocalPlayer));
         if (Player.PassengerProbe.ParseArgs() is { } passengerRole) AddChild(new Player.PassengerProbe(passengerRole, () => LocalPlayer));

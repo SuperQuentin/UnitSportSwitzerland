@@ -3,8 +3,13 @@
 
 # A drivable forklift, and pallets you can pick up
 
-Status: **planned.** Issue #583, the last bullet of #496's original request and part of the #580
-tracking issue. Deferred out of #496 on purpose, because the forklift is the easy half: *making
+Status: **phases 1 and 2 done** on `feat/583-forklift` (PR #600): the forklift and its mast
+(`docs/notes/vehicles/forklift.md`), hall pallets forked, carried and set down over the network
+(`docs/notes/vehicles/pallets.md`). Phase 3 (yard stacks, a forklift in the dormant fleet) is open.
+One change to the decisions below, found building phase 2: pallets are forked **four-way**, along
+their runners or across them, not along only — the wall placer stands a pallet with its runners
+along the wall, which along-only left unliftable. Issue #583, the last bullet of #496's original
+request and part of the #580 tracking issue. Deferred out of #496 on purpose, because the forklift is the easy half: *making
 pallets stop being furniture* is the feature.
 
 A `FurnitureType.Forklift` already stands in every warehouse and works hall (#497). It is a box.

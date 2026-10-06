@@ -70,10 +70,18 @@ public static class Pallets
     public const float MaxForkSpeed = 2f;
 
     /// <summary>
-    /// The tines must run along the runners to within this, as the cosine of the angle between
-    /// them (30°): a pallet forked from its closed side would be pushed, not lifted.
+    /// A Swiss or EUR pallet takes the tines from all four sides, but square to one: they run
+    /// along its runners to within 30° (the cosine of the angle between them at least this), or
+    /// across them to within 30° (at most <see cref="MaxAcross"/>). Half-way between, the tines
+    /// would meet a corner block and push the pallet, not lift it.
     /// </summary>
-    public const float MinAlong = 0.866f;
+    public const float MinAlong = 0.866f, MaxAcross = 0.5f;
+
+    /// <summary>
+    /// <see cref="Carried"/>'s bit for a pallet forked across its runners, so it rides the way it
+    /// was picked up and is set down so, instead of turning a quarter on the forks.
+    /// </summary>
+    public const int AcrossBit = 0x100;
 
     // ---- the load byte ---------------------------------------------------------------------------
 
@@ -99,12 +107,22 @@ public static class Pallets
 
     /// <summary>
     /// What a forklift's <c>Carrying</c> holds for a load: 0 is empty forks, so a pallet is
-    /// 1 + its load byte (1..256, nine bits).
+    /// 1 + its load byte, plus <see cref="AcrossBit"/> when the tines went in across its runners
+    /// (1..512, ten bits).
     /// </summary>
-    public static int Carried(byte load) => 1 + load;
+    public static int Carried(byte load, bool across = false) => 1 + load + (across ? AcrossBit : 0);
 
     /// <summary>The load on the forks, or null for empty ones.</summary>
-    public static byte? LoadCarried(int carrying) => carrying is >= 1 and <= 256 ? (byte)(carrying - 1) : null;
+    public static byte? LoadCarried(int carrying) => carrying is >= 1 and <= 2 * AcrossBit ? (byte)((carrying - 1) & 0xFF) : null;
+
+    /// <summary>Whether the pallet on the forks was picked up across its runners.</summary>
+    public static bool CarriedAcross(int carrying) => LoadCarried(carrying) != null && carrying - 1 >= AcrossBit;
+
+    /// <summary>
+    /// How a pallet sits on the forks, from <paramref name="along"/> (|cos| of the angle between
+    /// the tines and its runners): along them, across them, or neither (null: not forkable so).
+    /// </summary>
+    public static bool? Across(float along) => along >= MinAlong ? false : along <= MaxAcross ? true : null;
 
     // ---- ids -------------------------------------------------------------------------------------
 
@@ -146,12 +164,12 @@ public static class Pallets
     /// the forklift's own authored frame, +Z ahead) inside the rectangle the tines sweep, the
     /// carriage below <see cref="ForkliftLayout.ForkEntry"/> so the tines went in under the deck,
     /// <paramref name="along"/> (|cos| of the angle between the tines and the pallet's runners)
-    /// within <see cref="MinAlong"/>, and the machine under <see cref="MaxForkSpeed"/>.
+    /// square to one of its sides (<see cref="Across"/>), and the machine under <see cref="MaxForkSpeed"/>.
     /// </summary>
     public static bool Forked(float x, float z, float along, float lift, float speed) =>
         lift < ForkliftLayout.ForkEntry
         && speed < MaxForkSpeed
-        && along >= MinAlong
+        && Across(along) != null
         && Mathf.Abs(x) <= ForkliftLayout.ForkHalfSpan
         && z >= ForkliftLayout.MastZ && z <= ForkliftLayout.MastZ + ForkliftLayout.TineLength;
 
