@@ -323,6 +323,26 @@ src/Player/FootPlayer.Fo quick  --forkliftcheck --world flat --systems physics,u
 src/Terrain/Construction/SiteDressing net tools/sitepalletnetcheck.sh
 src/Terrain/Construction/SitePlans net tools/sitepalletnetcheck.sh
 src/Items/SitePalletNetProbe net tools/sitepalletnetcheck.sh
+# #615: a pallet in a tipper's body or a mini dumper's skip: set in from forks or a bucket, tipped out (flat), and over the network
+src/Items/BedCheck        quick  --bedcheck tipper --world flat --systems physics,ui
+src/Items/BedCheck        quick  --bedcheck dumper,bucket --world flat --systems physics,ui
+src/Avatar/BedShape       quick  --bedcheck tipper --world flat --systems physics,ui
+src/Avatar/BedShape       quick  --bedcheck dumper --world flat --systems physics,ui
+src/Player/IBed           quick  --bedcheck tipper --world flat --systems physics,ui
+src/Player/IBed           quick  --bedcheck dumper --world flat --systems physics,ui
+src/Items/PalletService   quick  --bedcheck tipper,bucket --world flat --systems physics,ui
+src/Items/PalletService   quick  --bedcheck dumper --world flat --systems physics,ui
+src/Player/Truck.cs       quick  --bedcheck tipper --world flat --systems physics,ui
+src/Avatar/TruckMeshBuild quick  --bedcheck tipper --world flat --systems physics,ui
+src/Avatar/HeavyRig       quick  --bedcheck tipper --world flat --systems physics,ui
+src/Player/MiniDumper     quick  --bedcheck dumper --world flat --systems physics,ui
+src/Vehicles/VehicleBody  quick  --bedcheck tipper --world flat --systems physics,ui
+src/Vehicles/VehicleManag quick  --bedcheck tipper --world flat --systems physics,ui
+src/Items/BedNetProbe     net    tools/bednetcheck.sh
+src/Items/PalletService   net    tools/bednetcheck.sh
+src/Vehicles/VehicleBody  net    tools/bednetcheck.sh
+src/Vehicles/VehicleManag net    tools/bednetcheck.sh
+src/Player/IBed           net    tools/bednetcheck.sh
 src/Items/SitePallets     net    tools/sitepalletnetcheck.sh
 src/Items/PalletService   net    tools/sitepalletnetcheck.sh
 src/Terrain/Construction/SiteDressing quick --constructioncheck --systems ui

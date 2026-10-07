@@ -11,7 +11,7 @@ namespace UnitSport.Player;
 /// is the heavy rig's tipping node (#677), its state one bit in the pose and in the parked flags.
 /// See <c>docs/notes/vehicles/mini-dumper.md</c>.
 /// </summary>
-public sealed class MiniDumper : Rideable, IEngined
+public sealed class MiniDumper : Rideable, IEngined, IBed
 {
     public override RideKind Kind => RideKind.MiniDumper;
     public override string Label => "Mini dumper";
@@ -20,6 +20,13 @@ public sealed class MiniDumper : Rideable, IEngined
 
     /// <summary>The skip tipped forward.</summary>
     public bool Tipped { get; set; }
+
+    // ---- the pallet in the skip (#615) ---------------------------------------------------------
+    public bool HasBed => true;
+    public int BedLoad { get; set; }
+    public bool BedUp => Tipped;
+    public BedShape Bed => MiniDumperLayout.Bed;
+    public int FlagsWithBed(int flags, int bedLoad) => MiniDumperLayout.Pack(MiniDumperLayout.Unpack(flags), bedLoad);
 
     private float _signed, _yawRate, _throttle, _spin;
 
@@ -64,8 +71,13 @@ public sealed class MiniDumper : Rideable, IEngined
         }
     }
 
-    public int PackFlags() => MiniDumperLayout.Pack(Tipped);
-    public void UnpackFlags(int flags) => Tipped = MiniDumperLayout.Unpack(flags);
+    public int PackFlags() => MiniDumperLayout.Pack(Tipped, BedLoad);
+
+    public void UnpackFlags(int flags)
+    {
+        Tipped = MiniDumperLayout.Unpack(flags);
+        BedLoad = MiniDumperLayout.BedOf(flags);
+    }
 
     public override Node3D BuildVisual(int riderIndex, Outfit outfit = default) =>
         MiniDumperMeshBuilder.CreateRig(this, HumanPalette.ForRider(riderIndex) with { Outfit = outfit });
@@ -104,6 +116,7 @@ public sealed class MiniDumper : Rideable, IEngined
         _spin += speed / MiniDumperMeshBuilder.RollerRadius * dt;
         if (visual is not HeavyRig rig) return;
         rig.Tipped = Tipped;
+        rig.BedLoad = BedLoad;
         rig.WheelSpin = _spin;
         rig.SpeedKmh = Mathf.Abs(speed) * 3.6f;
         rig.Rpm = Rpm;
@@ -112,13 +125,17 @@ public sealed class MiniDumper : Rideable, IEngined
         rig.Gear = speed < -0.1f ? "R" : Tipped ? "T" : "1";
     }
 
-    /// <summary>Remote copies: the skip (1 tipped, else 0), and the signed speed the rollers turn by.</summary>
+    /// <summary>Remote copies: the skip (1 tipped, else 0), the signed speed the rollers turn by, and the pallet in the skip.</summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
-        new(Tipped ? 1f : 0f, _signed, 0f, 0f);
+        new(Tipped ? 1f : 0f, _signed, BedLoad, 0f);
+
+    /// <summary>What a mini dumper's published pose says is in its skip (#615): what the server checks a tip-out against.</summary>
+    public static int BedInPose(Vector4 pose) => Mathf.RoundToInt(pose.Z);
 
     public override void AnimateRemote(Node3D visual, Vector4 pose, float dt)
     {
         Tipped = pose.X > 0.5f;
+        BedLoad = BedInPose(pose);
         Dress(visual, pose.Y, dt);
     }
 }

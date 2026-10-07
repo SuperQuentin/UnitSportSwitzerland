@@ -306,6 +306,25 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         else RpcId(authority, MethodName.DoorToggled, name, bit);
     }
 
+    /// <summary>
+    /// Server (or offline): puts a pallet into a parked tipper's body or mini dumper's skip (#615),
+    /// on the vehicle's authority, whose synchronizer hands it to everyone, as a door is worked.
+    /// <c>PalletService</c> has checked who asks.
+    /// </summary>
+    public void LoadBed(VehicleBody vehicle, int bedLoad)
+    {
+        int authority = vehicle.GetMultiplayerAuthority();
+        if (authority == 1 || !Multiplayer.HasMultiplayerPeer() || Multiplayer.MultiplayerPeer is OfflineMultiplayerPeer) vehicle.BedLoad = bedLoad;
+        else RpcId(authority, MethodName.BedLoadedOn, vehicle.Name, bedLoad);
+    }
+
+    /// <summary>On the vehicle's authority: the server let someone set a pallet in its body.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void BedLoadedOn(string name, int bedLoad)
+    {
+        if (GetNodeOrNull<VehicleBody>(name) is { } vehicle && vehicle.IsMultiplayerAuthority()) vehicle.BedLoad = bedLoad;
+    }
+
     /// <summary>On the car's authority: the server let someone else work one of its doors.</summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void DoorToggled(string name, byte bit)

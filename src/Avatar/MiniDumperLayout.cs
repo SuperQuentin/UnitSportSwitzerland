@@ -40,8 +40,26 @@ public static class MiniDumperLayout
     public static (float Left, float Right) Tracks(float speed, float yawRate) =>
         (speed - yawRate * HalfGauge, speed + yawRate * HalfGauge);
 
-    /// <summary>What a parked one keeps in <c>VehicleState.Flags</c>: whether its skip is up. Zero is "never set": down.</summary>
-    public static int Pack(bool tipped) => tipped ? 2 : 1;
+    /// <summary>
+    /// Where the skip carries a pallet (#615), node space: on its flat floor, tipped out ahead of
+    /// the lip onto the ground.
+    /// </summary>
+    public static readonly BedShape Bed = new(
+        Hinge: new Vector3(-Hinge.X, Hinge.Y, -Hinge.Z),
+        Floor: new Vector3(0f, SkipFloor + 0.06f, -(SkipBack + SkipFront - 0.3f) * 0.5f),
+        HalfWidth: SkipHalf - 0.04f, HalfLength: (SkipFront - SkipBack) * 0.5f, TipAngle: TipAngle,
+        Spill: new Vector3(0f, 0f, -(Hinge.Z + 1.25f)));
 
-    public static bool Unpack(int flags) => flags == 2;
+    /// <summary>
+    /// What a parked one keeps in <c>VehicleState.Flags</c>: whether its skip is up (two bits, 1
+    /// down and 2 up; zero is "never set": down) and the pallet in it (ten bits above, #615).
+    /// </summary>
+    public static int Pack(bool tipped, int bed = 0) => (tipped ? 2 : 1) | (bed & BedMask) << 2;
+
+    public static bool Unpack(int flags) => (flags & 3) == 2;
+
+    /// <summary>The pallet in the skip from the parked flags: 0, else <c>Pallets.Carried</c>.</summary>
+    public static int BedOf(int flags) => (flags >> 2) & BedMask;
+
+    private const int BedMask = 0x3FF;
 }

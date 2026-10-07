@@ -4215,6 +4215,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is CompactRoller rolling) WorkDrums(rolling);
         // and the telehandler's boom, in work mode (#614)
         if (_ride is Telehandler booming) WorkBoom(booming, dt);
+        // a pallet in a tipping body slides out over its open end once it is up (#615)
+        if (_ride is IBed { HasBed: true } tipping && SeatIndex == 0 && !Npc) Items.PalletService.Instance?.TendBed(this, tipping);
         if (_ride is Car)
         {
             // doors: once seated every door shuts, sooner if the car pulls away before then

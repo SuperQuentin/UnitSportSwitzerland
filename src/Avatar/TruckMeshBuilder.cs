@@ -184,6 +184,7 @@ public static class TruckMeshBuilder
             Seats = seats,
             Tip = tipper?.Tip,
             Tailgate = tipper?.Tailgate,
+            Bed = spec.Body == TruckBody.Tipper && section == 0 ? TipperBed(spec, load) : null,
             Drum = mixer?.Drum,
             Chute = mixer?.Chute,
         };
@@ -195,6 +196,30 @@ public static class TruckMeshBuilder
     /// <summary>How far a tipper's body tips, rad: about 50°, as a rear tipper's front ram lifts it.</summary>
     public const float TipAngle = 0.87f;
 
+    /// <summary>A tipper body's floor (its top face) and the top of its sides, m over the ground.</summary>
+    private const float TipFloor = 1.36f, TipTop = 2.85f;
+
+    /// <summary>A tipper body's hinge, authored: low at the back, a little in from the rear bumper.</summary>
+    private static Vector3 TipHinge(SectionSpec s, float cg) => new(0, 1.15f, cg - (s.Length - 0.25f));
+
+    /// <summary>
+    /// Where a tipper's body carries a pallet (#615), node space: on its floor, or on the gravel's
+    /// top where the truck is loaded; tipped out over the tailgate onto the ground clear of it.
+    /// </summary>
+    public static BedShape TipperBed(HeavySpec spec, float load)
+    {
+        var s = spec.Sections[0];
+        float cg = Cg(s, load);
+        float from = 2.25f + 0.25f, to = s.Length - 0.05f, w = s.Width - 0.06f;
+        float l = Mathf.Clamp(load, 0f, 1f);
+        // the gravel's flat top (Tipper), a pallet riding on it
+        float floor = l > 0.02f ? TipFloor + (TipTop - TipFloor) * 0.95f * l + 0.18f * l : TipFloor;
+        var hinge = CarMeshBuilder.Turned(TipHinge(s, cg));
+        return new BedShape(hinge, CarMeshBuilder.Turned(new Vector3(0, floor, cg - (from + to) * 0.5f)),
+            HalfWidth: w * 0.5f - 0.1f, HalfLength: (to - from) * 0.5f - 0.1f, TipAngle: TipAngle,
+            Spill: new Vector3(0, 0, hinge.Z + 1.7f));
+    }
+
     /// <summary>
     /// A rear-tipping body (#613) from behind the cab to the back, built about its hinge low at the
     /// back: a floor, two sides, a headboard with a short canopy over the cab, and the load as a heap
@@ -204,7 +229,7 @@ public static class TruckMeshBuilder
     {
         var bin = new MeshScratch();
         float from = cabLen + 0.25f, to = s.Length - 0.05f, w = s.Width - 0.06f;
-        const float floor0 = 1.24f, floor1 = 1.36f, top = 2.85f;
+        const float floor0 = 1.24f, floor1 = TipFloor, top = TipTop;
         Along(bin, cg, from, to, floor0, floor1, w, look.Cargo);
         foreach (float sx in new[] { -1f, 1f })
         {
@@ -224,7 +249,7 @@ public static class TruckMeshBuilder
             Along(bin, cg, from + 0.6f, to - 0.6f, h, h + 0.18f * load, w - 0.9f, Gravel);
         }
         // the hinge low at the back, a little in from the rear bumper
-        var hinge = new Vector3(0, 1.15f, cg - (s.Length - 0.25f));
+        var hinge = TipHinge(s, cg);
         var gate = new MeshScratch();
         Along(gate, cg, to - 0.06f, to, floor1, top, w, look.Paint);
         Along(gate, cg, to - 0.1f, to, floor1, floor1 + 0.12f, w, look.Accent);

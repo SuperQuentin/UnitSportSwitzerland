@@ -31,6 +31,8 @@ public sealed record HeavyParts(ArrayMesh Body, ArrayMesh Head, ArrayMesh Tail, 
     /// body's own frame: it hangs plumb as the body rises, so it swings open and lets the load out.
     /// </summary>
     public (ArrayMesh Mesh, Vector3 Pivot)? Tailgate { get; init; }
+    /// <summary>Where the tipping body carries a pallet (#615), or null: a body that carries none.</summary>
+    public BedShape? Bed { get; init; }
     /// <summary>
     /// A mixer's drum (#613), built along its own −Z about its axis: at <c>Pivot</c> (node space),
     /// its axis pitched up toward the back by <c>Tilt</c> rad, turned at <see cref="HeavyRig.DrumSpeed"/>.
@@ -89,6 +91,41 @@ public partial class HeavyRig : Node3D
     public float ChuteOut => _chute;
     /// <summary>How far up the tipping body is, 0..1: what a check reads.</summary>
     public float TippedShown => _tipped;
+
+    /// <summary>
+    /// The pallet in the tipping body (#615): 0, else <c>Pallets.Carried</c>. Drawn on its floor, it
+    /// slides toward the open end as the body rises (<see cref="BedShape.Slid"/>).
+    /// </summary>
+    public int BedLoad
+    {
+        get => _bedLoad;
+        set
+        {
+            if (value == _bedLoad) return;
+            _bedLoad = value;
+            _bedNode?.QueueFree();
+            _bedNode = null;
+            if (_tip == null || _bedShape == null || Items.Pallets.LoadCarried(value) is not { } load) return;
+            _bedNode = Items.PalletNode.Carried(load, Items.Pallets.CarriedAcross(value));
+            _bedNode.Name = "BedPallet";
+            _tip.AddChild(_bedNode);
+            PlaceBed();
+        }
+    }
+
+    /// <summary>How far the pallet in the body has slid toward its edge, 0..1 (0 with none): what a check reads.</summary>
+    public float BedSlid => _bedNode == null ? 0f : BedShape.Slid(_tipped);
+
+    private int _bedLoad;
+    private BedShape? _bedShape;
+    private Node3D? _bedNode;
+
+    /// <summary>The pallet on the body's floor, as far along as the body's tip has slid it; standing on its underside.</summary>
+    private void PlaceBed()
+    {
+        if (_bedNode == null || _bedShape is not { } bed) return;
+        _bedNode.Position = bed.FloorOnTip + bed.Out * (bed.Travel * BedShape.Slid(_tipped)) + new Vector3(0, Items.Pallets.Seat, 0);
+    }
     private Node3D? _tailgate, _drum, _chuteNode;
     private float _chute;
     /// <summary>Seconds the chute takes to swing out or back, and how far it swings, rad.</summary>
@@ -237,6 +274,7 @@ public partial class HeavyRig : Node3D
             // the body's mesh has its origin on the hinge (MeshScratch.Build(pivot)): turned about it
             rig._tipAngle = tip.Angle;
             rig._tip = new Node3D { Name = "Tip", Position = tip.Hinge };
+            rig._bedShape = p.Bed;
             var bin = new MeshInstance3D { Name = "Bin", Mesh = tip.Mesh };
             MeshScratch.Paint(bin, body, glass);
             rig._tip.AddChild(bin);
@@ -419,6 +457,7 @@ public partial class HeavyRig : Node3D
                 _tip.Rotation = new Vector3(angle, 0, 0);
                 // the tailgate hangs plumb from its top hinge: open by as much as the body is up
                 if (_tailgate != null) _tailgate.Rotation = new Vector3(-angle, 0, 0);
+                PlaceBed();
             }
         }
         if (_drum != null && DrumSpeed != 0f)
