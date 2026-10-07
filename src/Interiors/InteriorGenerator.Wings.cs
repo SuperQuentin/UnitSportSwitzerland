@@ -233,7 +233,8 @@ public static partial class InteriorGenerator
         // the middle of the shared wall
         bool mixed = type == BuildingType.MixedUse;
         float area = wings.Sum(w => (w.R.X1 - w.R.X0) * (w.R.Z1 - w.R.Z0));
-        int below = AptBasement(l.Key, mixed, above, area);
+        // a garage (#694) has the basement it leads to
+        int below = fp.Doors.Any(d => d.Vehicle && d.Width > 0 && d.Link.Any) ? 1 : AptBasement(l.Key, mixed, above, area);
         int floors = above + below;
         for (int i = 0; i < links.Count; i++)
         {

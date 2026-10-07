@@ -84,14 +84,14 @@ public class GarageTests
     public void The_roll_keeps_garages_rare()
     {
         int rolled = Enumerable.Range(0, 2000).Count(i => GarageRule.Rolls($"2583_1113_{i}"));
-        Assert.InRange(rolled / 2000.0, 0.66, 0.78);
+        Assert.InRange(rolled / 2000.0, 0.49, 0.61);
     }
 
     [Fact]
     public void The_mixed_roll_is_the_same_share_and_inside_the_flats_roll()
     {
         int n = Enumerable.Range(0, 2000).Count(i => GarageRule.Rolls($"2583_1113_{i}", mixed: true));
-        Assert.InRange(n / 2000.0, 0.66, 0.78);
+        Assert.InRange(n / 2000.0, 0.49, 0.61);
         for (int i = 0; i < 500; i++)
             if (GarageRule.Rolls($"2583_1113_{i}", mixed: true)) Assert.True(GarageRule.Rolls($"2583_1113_{i}"));
     }

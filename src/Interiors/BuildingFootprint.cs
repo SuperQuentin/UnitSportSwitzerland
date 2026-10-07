@@ -497,7 +497,7 @@ public static class BuildingFootprint
         float keepX = 0;   // front-wall entrances stay at or beyond this plan x (from the garage's end)
         Func<Vector2, float>? planX = null;
         if (found && door.Width > 0 && main != null && roads.Streets.Roads.Count > 0
-            && roof.Count > 0 && PlannedAsBox(b, center, u, new Vector2(door.Outward.X, door.Outward.Z), w, dpt))
+            && roof.Count > 0 && GarageRect(b, center, u, new Vector2(door.Outward.X, door.Outward.Z), w, dpt, new Vector2(door.Position.X, door.Position.Z)) is { } grect)
         {
             var (storeyH, above) = InteriorGenerator.Storeys(b);
             var type = GarageRule.BlockType(key.ToString(), w * dpt, kind, above, false);
@@ -505,8 +505,8 @@ public static class BuildingFootprint
             if (IsBank(key.ToString(), kind, Mathf.Clamp(w, MinSide, MaxSide), Mathf.Clamp(dpt, MinSide, MaxSide))) type = BuildingType.None;
             var frontOut = new Vector2(door.Outward.X, door.Outward.Z);
             // the plan's own frame: the box edge the main door is on is its front wall
-            bool frontAlongV = Math.Abs(frontOut.Dot(u)) < 0.5f;
-            float frontW = Mathf.Clamp(frontAlongV ? w : dpt, MinSide, MaxSide), frontD = Mathf.Clamp(frontAlongV ? dpt : w, MinSide, MaxSide);
+            // the box, or the one wing of an outline that is no box (#694): the garage is planned in it, its centre the frame's
+            float frontW = grect.X1 - grect.X0, frontD = grect.Z1 - grect.Z0, wingX = (grect.X0 + grect.X1) / 2;
             rampKind = GarageRule.RampFor(key.ToString(), type, above, frontW, frontD, storeyH);
             if (rampKind != GarageRule.RampKind.None)
             {
@@ -517,10 +517,10 @@ public static class BuildingFootprint
                 var planBack = -planCandidates.OrderByDescending(c => c.Dot(frontOut)).First();
                 var planU = new Vector2(planBack.Y, -planBack.X);
                 var tw = new Vector2(-main.Normal.Y, main.Normal.X);
-                float wallX0 = (main.Normal * main.Offset - center).Dot(planU), along = tw.Dot(planU);
-                float mainX = (new Vector2(door.Position.X, door.Position.Z) - center).Dot(planU);
+                float wallX0 = (main.Normal * main.Offset - center).Dot(planU) - wingX, along = tw.Dot(planU);
+                float mainX = (new Vector2(door.Position.X, door.Position.Z) - center).Dot(planU) - wingX;
                 Vector2 AtX(float x) => main.Normal * main.Offset + tw * ((x - wallX0) / along);
-                planX = xz => (xz - center).Dot(planU);
+                planX = xz => (xz - center).Dot(planU) - wingX;
                 float GroundAt(Vector2 xz) => grid != null
                     ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
                     : b.MinY + 0.8f;
@@ -726,13 +726,40 @@ public static class BuildingFootprint
         return p0.DistanceSquaredTo(p1) > 1e-6f;
     }
 
-    /// <summary>
-    /// Whether the generator plans this building as its one box and not wing by wing (<see cref="PlanOutline"/>
-    /// on the same frame <c>Compute</c> ends with): a garage's ramp (#558) is planned only in a whole block.
-    /// </summary>
     /// <summary>Why the last garage door of this thread was not placed (the real-data probe, #694).</summary>
     [ThreadStatic] internal static string? GarageWhyNot;
 
+    /// <summary>
+    /// The rectangle a garage is planned in (#694), in the plan's frame (x across the front wall, z from the front, both from the
+    /// box's centre): the whole box when the generator plans the building as one, else the wing of the outline (an L, a U, a ring,
+    /// or the one wing a bent or skewed block peels into, #598) whose front edge is on the facade the main door is on and that
+    /// stretches across it; the largest if several do. Null when no wing stands on that wall. <paramref name="door"/> is the main
+    /// door in tile-local metres.
+    /// </summary>
+    internal static RectPlan? GarageRect(Building b, Vector2 center, Vector2 u, Vector2 outward, float w, float dpt, Vector2 door)
+    {
+        var candidates = new[] { u, -u, new Vector2(-u.Y, u.X), new Vector2(u.Y, -u.X) };
+        var edge = candidates.OrderByDescending(c => c.Dot(outward)).First();
+        var back = -edge;
+        var axisU = new Vector2(back.Y, -back.X);
+        bool alongU = Mathf.Abs(axisU.Dot(u)) > 0.5f;
+        float width = Mathf.Clamp(alongU ? w : dpt, MinSide, MaxSide), depth = Mathf.Clamp(alongU ? dpt : w, MinSide, MaxSide);
+        var wings = PlanOutline.Wings(b, center, axisU, width, depth);
+        if (wings is not { Count: >= 1 }) return new RectPlan(-width / 2, -depth / 2, width / 2, depth / 2);
+        // the wing on the door's wall: its front edge at the facade, the door along it
+        var q = door - center;
+        float dx = q.Dot(axisU), dz = q.Dot(back);
+        RectPlan? best = null;
+        foreach (var r in wings)
+            if (dx >= r.X0 - 0.5f && dx <= r.X1 + 0.5f && Math.Abs(r.Z0 - dz) <= 2.0f
+                && (best is not { } cur || (r.X1 - r.X0) * (r.Z1 - r.Z0) > (cur.X1 - cur.X0) * (cur.Z1 - cur.Z0))) best = r;
+        return best;
+    }
+
+    /// <summary>
+    /// Whether the generator plans this building as its one box and not wing by wing (<see cref="PlanOutline"/>
+    /// on the same frame <c>Compute</c> ends with).
+    /// </summary>
     internal static bool PlannedAsBox(Building b, Vector2 center, Vector2 u, Vector2 outward, float w, float dpt)
     {
         var candidates = new[] { u, -u, new Vector2(-u.Y, u.X), new Vector2(u.Y, -u.X) };

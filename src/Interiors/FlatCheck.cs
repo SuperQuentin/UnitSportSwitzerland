@@ -216,14 +216,20 @@ public static class FlatCheck
     internal static (BuildingTile Tile, RoadTile Roads) RampTile()
     {
         // the first set is as shallow as a ramp fits (80 x 18 m), the turned one has room to spare
-        var kinds = new List<(float Turn, int N, float Depth)> { (0f, Copies, 18f), (31f, Copies, 24f), (0f, Copies, 14.5f), (31f, Copies, 15f) };
+        // the last two are L-shaped (#694): a 60 x 14 m wing on the street (the ramp runs along it) and a 40 x 24 m one (a square ramp), a wing behind each
+        float[][] lAlong = [[-30, 6, 30, 20], [10, -10, 30, 6]], lSquare = [[-20, -4, 20, 20], [-20, -16, -8, -4]];
+        var kinds = new List<(float Turn, int N, float Depth, float[][]? Parts)>
+        {
+            (0f, Copies, 18f, null), (31f, Copies, 24f, null), (0f, Copies, 14.5f, null), (31f, Copies, 15f, null),
+            (0f, Copies, 40f, lAlong), (31f, Copies, 40f, lSquare),
+        };
         var blocks = new List<Building>();
         var segments = new List<RoadSegment>();
-        foreach (var (turn, n, depth) in kinds)
+        foreach (var (turn, n, depth, parts) in kinds)
             for (int i = 0; i < n; i++)
             {
                 float cz = 110f * blocks.Count + 60f;
-                blocks.Add(Solid(new Box("a long block", BuildingKind.Apartment, 80, depth, 15, 3, Turn: turn), cz));
+                blocks.Add(Solid(new Box("a long block", BuildingKind.Apartment, parts == null ? 80 : 60, depth, 15, 3, Turn: turn, Parts: parts), cz));
                 // a minor street 6 m in front, parallel to the wall the door faces (+Z, turned with the block)
                 float t = Mathf.DegToRad(turn), gap = depth / 2 + 6f + 2f;
                 var along = new Vector2(Mathf.Cos(t), Mathf.Sin(t));
@@ -273,7 +279,7 @@ public static class FlatCheck
         foreach (var g in garages)
         {
             bool alongKind = g.Ramp == GarageRule.RampKind.Along;
-            string what = $"ramps: block {g.Index} ({g.Ramp}{(g.Index >= Copies && g.Index < 2 * Copies || g.Index >= 3 * Copies ? ", turned" : "")})";
+            string what = $"ramps: block {g.Index} ({g.Ramp}{(g.Index >= 4 * Copies ? " in the wing of an L" : "")}{(g.Index >= Copies && g.Index < 2 * Copies || g.Index >= 3 * Copies && g.Index < 4 * Copies || g.Index >= 5 * Copies ? ", turned" : "")})";
             var l = InteriorGenerator.Generate(tile, g.Index, roads, null);
             if (l == null) { Expect(false, $"{what}: no plan"); continue; }
             var problems = InteriorValidator.Validate(l);
