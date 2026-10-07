@@ -154,6 +154,8 @@ install_start() { # start-server.sh with this config baked in; cron and every re
     | awk -v a="$SERVER_ARGS${TILES_URL:+ --tiles-url $TILES_URL}" '{gsub(/@SERVER_ARGS@/, a)} 1' > "$OUT/start-server.sh"
   [ $DRY = 1 ] && return
   rq "cat > $(qd "$DEPLOY_DIR/start-server.sh") && chmod 755 $(qd "$DEPLOY_DIR/start-server.sh")" < "$OUT/start-server.sh"
+  # the in-game /update (#730): fetches a release while the server runs, start-server.sh switches to it
+  rq "cat > $(qd "$DEPLOY_DIR/update-server.sh") && chmod 755 $(qd "$DEPLOY_DIR/update-server.sh")" < tools/deploy/update-server.sh
 }
 stop_server() { [ $stopped = 1 ] && return; rx "tmux kill-session -t unitsport 2>/dev/null || true"; stopped=1; }
 

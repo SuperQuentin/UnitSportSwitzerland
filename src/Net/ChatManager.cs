@@ -439,7 +439,7 @@ public partial class ChatManager : Node
                         Show(line, ChatKind.Private);
                 return;
 
-            case "name" or "login" or "stream" or "race" or "fight" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick" or "pvp" or "br":
+            case "name" or "login" or "stream" or "race" or "fight" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update":
                 Show($"'/{verb}' needs a multiplayer game.", ChatKind.Error);
                 return;
 
@@ -728,6 +728,7 @@ public partial class ChatManager : Node
             case "bring": if (RequiresAvatar(sender, verb)) CommandBring(sender, rest); return;
             case "tpall": CommandTeleportEveryone(sender, rest); return;
             case "kick": CommandKick(sender, parts); return;
+            case "update": CommandUpdate(sender); return;
             case "spawn": if (RequiresAvatar(sender, verb)) CommandSpawn(sender, rest); return;
             case "pvp": CommandPvp(sender, rest); return;
             case "give": CommandGive(sender, parts); return;
@@ -770,7 +771,7 @@ public partial class ChatManager : Node
         if (IsAdmin(sender))
             ReplyTo(sender,
                 "admin: /say <text>  /tp <player>  /bring <player>  /tpall <town>  "
-                + "/kick <player> [reason]  /admin list|add <name>|remove <name>  "
+                + "/kick <player> [reason]  /update  /admin list|add <name>|remove <name>  "
                 + "/occasion start|stop <id>|auto  /spawn <item> [count]  /catalogue  /debug  "
                 + "/give <player> <item> [count]  /clear [player]  /transfer <from> <to>  /money <amount> [player]  "
                 + "/bank <player> [set|add|take <amount>]  "
@@ -1464,6 +1465,46 @@ public partial class ChatManager : Node
 
         KickPeer(target.PeerId, reason);
         Broadcast($"{target.Name} was kicked by {NameOf(sender)} ({reason})", ChatKind.Admin);
+    }
+
+    private readonly ServerUpdater _updater = new();
+
+    /// <summary>
+    /// /update (#730): installs the newest GitHub release on a server started by <c>start-server.sh</c>.
+    /// The download runs while everyone plays; once it is unpacked, <see cref="RestartForUpdate"/>.
+    /// </summary>
+    private void CommandUpdate(long sender)
+    {
+        if (ServerUpdater.Script is not { } script)
+        {
+            ReplyTo(sender, "This server cannot update itself: only one started by tools/deploy-linux.sh can.", ChatKind.Error);
+            return;
+        }
+        if (_updater.Busy)
+        {
+            ReplyTo(sender, "An update is already under way.", ChatKind.Error);
+            return;
+        }
+
+        string current = (string)ProjectSettings.GetSetting("application/config/version", "");
+        ReplyTo(sender, "Looking for a newer release...", ChatKind.Private);
+        _updater.Start(script, current, CmdArgs.Value("--updatefeed", notFlag: true) ?? UpdateInfo.ReleasesUrl,
+            (line, everyone) =>
+            {
+                if (everyone) Broadcast(line, ChatKind.Admin);
+                else if (sender == ConsolePeerId || _registry?.Find(sender) != null) ReplyTo(sender, line, ChatKind.Private);
+            },
+            tag => { if (tag != null) RestartForUpdate(tag); });
+    }
+
+    /// <summary>The new release is unpacked: everyone out, then quit; <c>start-server.sh</c> starts it.</summary>
+    private void RestartForUpdate(string tag)
+    {
+        GD.Print($"[update] {tag} ready: kicking everyone and quitting");
+        foreach (var player in _registry?.Players.ToList() ?? new())
+            KickPeer(player.PeerId, $"The server is updating to {tag}. Update your game, then reconnect in a minute.");
+        // the kicks need their 0.2 s to land; the disconnects then save every sleeper
+        GetTree().CreateTimer(2).Timeout += () => GetTree().Quit(0);
     }
 
     /// <summary>
