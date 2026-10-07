@@ -696,6 +696,11 @@ public static class ItemDefs
             var node = ModelViewer.Shaded(HandMesh(id)!);
             if (HandMaterial(id, null) is { } material) node.MaterialOverride = material;
             if (id == ItemId.Shotgun) node.AddChild(ModelViewer.Shaded(ShotgunForeEnd()));
-            return node;
+            // a held mesh hangs from the grip at its origin (a mess tin hangs below it): lift it onto the viewer's floor,
+            // under a parent so the viewer's box and camera include the lift
+            var lifted = new Node3D();
+            lifted.AddChild(node);
+            node.Position = new Vector3(0, Mathf.Max(0f, -node.GetAabb().Position.Y), 0);
+            return lifted;
         })));
 }

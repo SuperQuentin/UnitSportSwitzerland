@@ -76,19 +76,23 @@ public static class BarracksMeshes
     private static readonly Color ChipBlack = new(0.10f, 0.10f, 0.12f);
 
     /// <summary>
-    /// Two stacks of 39 mm chips side by side, nine and five high, each chip with its four edge spots
+    /// Two stacks of 39 mm chips side by side, fourteen and nine high, each chip with its four edge spots
     /// and the top one an inlay. The stacks stand with their middle at the grip.
     /// </summary>
     public static void AppendChips(MeshScratch s)
     {
-        Stack(s, -0.024f, 0f, new[] { ChipRed, ChipRed, ChipRed, ChipRed, ChipWhite, ChipWhite, ChipBlue, ChipBlue, ChipBlue });
-        Stack(s, 0.024f, 0.012f, new[] { ChipGreen, ChipGreen, ChipGreen, ChipBlack, ChipBlack });
+        Stack(s, -0.024f, 0f, new[]
+        {
+            ChipRed, ChipRed, ChipRed, ChipRed, ChipWhite, ChipWhite, ChipBlue, ChipBlue, ChipBlue, ChipBlue,
+            ChipGreen, ChipGreen, ChipGreen, ChipBlack,
+        });
+        Stack(s, 0.024f, 0.012f, new[] { ChipGreen, ChipGreen, ChipGreen, ChipBlack, ChipBlack, ChipWhite, ChipRed, ChipRed, ChipRed });
     }
 
     private static void Stack(MeshScratch s, float x, float z, Color[] chips)
     {
         const float r = 0.0195f, t = 0.0033f;
-        float y = -0.0165f;
+        float y = -0.023f;   // both stand on one floor, the tall one centred on the grip
         for (int i = 0; i < chips.Length; i++)
         {
             var c = chips[i];
