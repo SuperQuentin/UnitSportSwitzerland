@@ -21,6 +21,10 @@ on:
       min_gap_minutes:
         description: Minutes that must pass since the latest release (0 releases right away)
         default: "60"
+      android_only:
+        description: Build only the Android APK (a run artifact), without releasing
+        type: boolean
+        default: false
 
 # One release at a time. Queued, never cancelled: a cancel could land between "gh release create"
 # and the asset upload and leave a release with no downloads. Superseded runs exit early instead.
@@ -55,6 +59,7 @@ jobs:
       # and stops early if its tip is already released.
       - name: Wait for main to settle
         id: settle
+        if: ${{ !inputs.android_only }}
         run: tools/ci/settle-main.sh
 
       - name: Set up .NET
@@ -103,7 +108,7 @@ jobs:
           GODOT_ANDROID_KEYSTORE_RELEASE_USER: ${{ secrets.ANDROID_KEYSTORE_USER }}
           GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         # via bash: tools/release.sh is mode 644 in the index, like most of tools/
-        run: bash tools/release.sh --ci ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: bash tools/release.sh --ci ${{ inputs.dry_run && '--dry-run' || '' }} ${{ inputs.android_only && '--android-only' || '' }}
 
       - name: Keep the logs and notes
         if: always() && steps.settle.outputs.skip != '1'
@@ -113,4 +118,5 @@ jobs:
           path: |
             test_output/release/notes.md
             test_output/release/subjects.txt
+            test_output/release/*.apk
           if-no-files-found: ignore

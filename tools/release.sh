@@ -11,11 +11,12 @@
 # GODOT_ANDROID_KEYSTORE_RELEASE_PATH/_USER/_PASSWORD; without the keystore it is skipped.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-DRY=0; CI=0; NOUP=0
+DRY=0; CI=0; NOUP=0; ANDROID_ONLY=0
 for a in "$@"; do case $a in
   --dry-run) DRY=1 ;;
   --no-upload) NOUP=1 ;;
   --ci) CI=1 ;;
+  --android-only) ANDROID_ONLY=1; NOUP=1 ;; # checks the APK build alone: no desktop exports, no release
   *) echo "Unknown option: $a"; exit 2 ;;
 esac; done
 GODOT=${GODOT:-'/c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.1-stable_mono_win64/godot_v4.7.1-stable_mono_win64_console.exe'}
@@ -39,6 +40,7 @@ git log --no-merges --format='%s' $range > "$OUT/subjects.txt"
 if git log --no-merges --format='%B' $range | grep -qE 'BREAKING'; then bump=major
 elif grep -qvE '^:(bug|ambulance|recycle|art|white_check_mark|memo|wrench|twisted_rightwards_arrows):' "$OUT/subjects.txt"; then bump=minor
 elif grep -qE '^:(bug|ambulance|recycle|art|white_check_mark):' "$OUT/subjects.txt"; then bump=patch
+elif [ $ANDROID_ONLY = 1 ]; then bump=patch
 else echo "Nothing releasable since ${last:-the start} (docs/chore only)."; exit 0; fi
 case $bump in
   major) MA=$((MA+1)); MI=0; PA=0 ;;
@@ -164,7 +166,7 @@ dotnet build UnitSportSwitzerland.csproj -c Release
 rm -rf build; mkdir -p build/windows build/linux build/macos
 ASSETS=()
 
-if export_preset "Windows Desktop" build/windows/UnitSportSwitzerland.exe; then
+if [ $ANDROID_ONLY = 0 ] && export_preset "Windows Desktop" build/windows/UnitSportSwitzerland.exe; then
   fetch_tools windows build/windows/bin
   ZIP="$REPO/$OUT/UnitSportSwitzerland-v$V-windows.zip"; rm -f "$ZIP"
   if command -v zip >/dev/null; then (cd build/windows && zip -qr "$ZIP" .)
@@ -172,7 +174,7 @@ if export_preset "Windows Desktop" build/windows/UnitSportSwitzerland.exe; then
   ASSETS+=("$ZIP")
 fi
 
-if export_preset "Linux" build/linux/UnitSportSwitzerland.x86_64; then
+if [ $ANDROID_ONLY = 0 ] && export_preset "Linux" build/linux/UnitSportSwitzerland.x86_64; then
   fetch_tools linux build/linux/bin
   TGZ="$REPO/$OUT/UnitSportSwitzerland-v$V-linux-x86_64.tar.gz"
   tarball "$TGZ" build/linux UnitSportSwitzerland.x86_64 bin/yt-dlp bin/qjs bin/ffmpeg
@@ -181,7 +183,7 @@ fi
 
 # Godot can only write a macOS export as a .zip off a Mac; unpacked here so the tools go inside the bundle
 # (Contents/MacOS/bin, next to the executable) and the exec bits are set. Unsigned: first launch needs xattr -cr.
-if export_preset "macOS" build/macos.zip; then
+if [ $ANDROID_ONLY = 0 ] && export_preset "macOS" build/macos.zip; then
   unzip -qo build/macos.zip -d build/macos
   APP=$(cd build/macos && ls -d *.app | head -1)
   fetch_tools macos "build/macos/$APP/Contents/MacOS/bin"
