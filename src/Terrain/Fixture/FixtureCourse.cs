@@ -130,9 +130,9 @@ public sealed class FixtureCourse
     }
 
     /// <summary>
-    /// Three blocks of flats 80 x 18 m (three entrances, a car park, just the depth a ramp takes) along a
+    /// Three blocks of flats 80 x 18 m (a car park strip, just the depth a ramp takes) and a fourth 80 x 14.5 m (the ramp along the facade) along a
     /// minor street, their fronts 6 m from its kerb, on flat ground: each rolls an underground garage
-    /// door, between two of its entrances, with a pavement to the street (#558). The street and the
+    /// door at one end of the front wall, with a pavement to the street (#558, #694). The street and the
     /// blocks stand within one tile of the default spawn.
     /// </summary>
     private static FixtureCourse Garage()
@@ -146,6 +146,8 @@ public sealed class FixtureCourse
         }.Road(RoadClass.Minor, new Pen(-120, 0, FlatHeight, 0, 0).Straight(780));
         foreach (double x in new[] { 100.0, 220, 340 })
             course.Blocks.Add(new Block(x, 17, 80, 18, 15));
+        // a fourth, too shallow for a ramp square to the front wall (#694): its ramp runs along the facade
+        course.Blocks.Add(new Block(460, 15.25, 80, 14.5f, 15));
         return course;
     }
 

@@ -9,13 +9,14 @@
 # and then from the car park, so what the REMOTE peer sees is checked and not only the driver's:
 # the door open, the car going in, and the car inside the building one storey below the door.
 #
-#   GODOT=<exe> [PORT=] [WINDOWED=1] tools/rampnetcheck.sh
+#   GODOT=<exe> [PORT=] [WINDOWED=1] [RAMP=along|square] tools/rampnetcheck.sh
 #
 # `--traffic 0`: a traffic car shoved the test car off a barn's door once (garage-buildings).
 . "$(dirname "$0")/lib/twoclient.sh" rampnet
 PORT=${PORT:-7868}
 PW=pw558
-WORLD="--world fixture --chunks fixture:garage --traffic 0 --doorkind Apartment"
+# RAMP=along drives the block whose ramp runs along the facade (#694), RAMP=square the others; none: the nearest
+WORLD="--world fixture --chunks fixture:garage --traffic 0 --doorkind Apartment${RAMP:+ --garageramp $RAMP}"
 tc_server 400 120 "$OUT/rampnet_server.log" --server --port $PORT --world fixture --chunks fixture:garage --admin-password $PW
 # B first, so it is already watching the door when A arrives at it
 if [ -z "${NOWATCH:-}" ]; then
