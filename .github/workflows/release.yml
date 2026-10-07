@@ -49,7 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ inputs.android_only && github.ref || 'main' }} # an APK check builds the branch it was started from
           fetch-depth: 0      # release.sh needs the tags and the full log for the changelog
           lfs: false          # assets/**/*.{png,glb,...} are docs material, excluded from the export;
                               # keeping LFS out holds this to zero metered LFS bandwidth
