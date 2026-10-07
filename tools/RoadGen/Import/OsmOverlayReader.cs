@@ -15,7 +15,11 @@ public sealed class OsmOverlayReader
     public sealed record Row(double From, double To, string Highway, string OneWay, string Lanes,
         string LanesFwd, string LanesBwd, string Width, string SidewalkLeft, string SidewalkRight,
         string CyclewayLeft, string CyclewayRight, bool Roundabout, bool Tram,
-        TurnMove[] TurnLanesFwd, TurnMove[] TurnLanesBwd);
+        TurnMove[] TurnLanesFwd, TurnMove[] TurnLanesBwd, int MaxSpeedFwd = 0, int MaxSpeedBwd = 0)
+    {
+        /// <summary>The speed limit (km/h, #711) for traffic in TLM drawing order (forward) or against it, 0 where OSM has none.</summary>
+        public int MaxSpeed(bool forward) => forward ? MaxSpeedFwd : MaxSpeedBwd;
+    }
 
     private readonly Dictionary<(string Uuid, int Part), List<Row>> _rows = new();
 
@@ -33,7 +37,8 @@ public sealed class OsmOverlayReader
             var key = (c[0], int.Parse(c[1], CultureInfo.InvariantCulture));
             if (!reader._rows.TryGetValue(key, out var list)) reader._rows[key] = list = new List<Row>();
             list.Add(new Row(D(c[2]), D(c[3]), c[6], c[7], c[8], c[9], c[10], c[11],
-                c[12], c[13], c[14], c[15], c[18] == "1", c[19] == "1", TurnLanes.Parse(c[16]), TurnLanes.Parse(c[17])));
+                c[12], c[13], c[14], c[15], c[18] == "1", c[19] == "1", TurnLanes.Parse(c[16]), TurnLanes.Parse(c[17]),
+                c.Length > 21 ? Int(c[20]) : 0, c.Length > 21 ? Int(c[21]) : 0));   // v2: maxspeed_fwd, maxspeed_bwd (#711)
             reader.RowCount++;
         }
         return reader;

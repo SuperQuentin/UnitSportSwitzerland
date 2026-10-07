@@ -41,15 +41,20 @@
   = 2D distance along that part **from its first vertex in TLM drawing order**, 0.1 m. RoadExtractor
   densifies and RoadGen may split or trim lines, so the stage should carry the uuid and the
   source along-line distance on each piece and take the rows overlapping it.
-- **File** (`osm_overlay.tsv`, v1): line 1 `# osm_overlay v1 osm=<pbf> tlm=<gpkg> bbox=...`, line 2
+- **File** (`osm_overlay.tsv`, v2 since #711): line 1 `# osm_overlay v2 osm=<pbf> tlm=<gpkg> bbox=...`, line 2
   the header, then one row per interval sorted by uuid (ordinal), part, from_m. Same inputs give
   byte-identical output (checked, 6 and 3 jobs). Columns: `uuid part from_m to_m osm_way dir`
   (`+` OSM drawn like TLM) `highway` (OSM value) `oneway` (`1` with TLM drawing, `-1` against,
   `0` two-way, empty = unknown or dropped by a conflict; `junction=roundabout` and
   `highway=motorway` imply one-way) `lanes lanes_fwd lanes_bwd width` (metres) `sidewalk_left
   sidewalk_right cycleway_left cycleway_right` (OSM values, e.g. `yes/no/separate`,
-  `lane/track`) `turn_lanes_fwd turn_lanes_bwd roundabout tram`. Every per-side and
+  `lane/track`) `turn_lanes_fwd turn_lanes_bwd roundabout tram maxspeed_fwd maxspeed_bwd`. Every per-side and
   per-direction column is already in TLM's drawing direction (swapped when `dir` is `-`).
+- **`maxspeed`** (v2, #711): km/h per direction, from `maxspeed:forward`/`:backward`, else `maxspeed`
+  (`OsmSpeed.Kmh`: a number, `N mph`, `CH:urban` 50, `CH:rural` 80, `CH:trunk` 100, `CH:motorway` 120,
+  `walk` 10; empty for `none`, `signals` or anything else). `OsmOverlayReader` reads a v1 file too
+  (`MaxSpeed` 0). Sion test tiles: 1,775 of 3,601 intervals carry one; 93% of the main-road approaches
+  with a right turn. Used for right-turn pockets (`unify-junctions`).
 - **`turn:lanes`** (#347): `OsmOverlayReader.Row.TurnLanesFwd/Bwd` parse the two columns per lane
   (`RoadGen/Import/TurnLanes.cs`, `TurnMove` flags: left/slight/sharp, through, right/slight/sharp,
   reverse, merge_to_*, `None` for an empty lane or `none`, `Unknown` otherwise). Each list keeps

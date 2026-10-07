@@ -117,6 +117,8 @@
     <Compile Include="..\..\tools\TerrainPreprocessor\FileGdb.cs" Link="Gdb\%(Filename)%(Extension)" />
     <!-- which source features a set of tiles needs (#678): pure, over TerrainFormat -->
     <Compile Include="..\..\tools\TerrainPreprocessor\TileRegion.cs" Link="Preprocessor\%(Filename)%(Extension)" />
+    <!-- OSM maxspeed to km/h for the overlay (#711): pure -->
+    <Compile Include="..\..\tools\TerrainPreprocessor\OsmSpeed.cs" Link="Preprocessor\%(Filename)%(Extension)" />
     <!-- update check (#532): version compare, asset pick, GitHub's JSON, delta updates -->
     <Compile Include="..\..\src\Core\UpdateInfo.cs;..\..\src\Core\BinaryDelta.cs;..\..\src\Core\UpdatePackage.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Landmarks.cs" Link="Game\%(Filename)%(Extension)" />

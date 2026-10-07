@@ -29,6 +29,15 @@ public static partial class TileRewriter
     /// allow among <paramref name="allowed"/> (a lane with no marked move, or none that the approach has, shows every
     /// one of them); null where the row has no <c>turn:lanes</c> for the traffic arriving at that end.
     /// </summary>
+    /// <summary>The speed limit OSM maps for traffic arriving at the junction at the link's end (km/h, #711), 0 where none.</summary>
+    private static int ApproachSpeed(OsmOverlayReader? overlay, RoadLink link, LinkEnd end)
+    {
+        if (overlay is null || link.Tag is not Source { Key: { } key } source || source.Plan.Length < 2) return 0;
+        bool atEnd = end == LinkEnd.End;
+        double m = key.FromM + source.AlongOf(atEnd ? source.Plan[^1] : source.Plan[0]);
+        return overlay.AtEnd(key.Uuid, key.Part, m, atEnd)?.MaxSpeed(atEnd) ?? 0;
+    }
+
     private static SignalMoves[]? WishedLanes(OsmOverlayReader? overlay, RoadLink link, LinkEnd end, SignalMoves allowed)
     {
         if (overlay is null || link.Tag is not Source { Key: { } key } source || source.Plan.Length < 2) return null;

@@ -71,6 +71,15 @@ listed rules differing by kind. Stacked on #704 (`lane-data-intersections`).
   lane stays the carriageway's). **Where an OSM crosswalk crosses the exit** the exit lane narrows to a turn lane (3 m)
   and the hatch takes the rest (the user's rule: room for a refuge). Sion keeps its 2 refuges (the narrower pocket alone
   left the hatch 1.6 m wide where the island stands, under the 1.7 m it needs).
+- **Right-turn pockets only above 50 km/h, at every kind of junction** (`RightPocketSpeed`; the user's decision): the
+  approach's OSM speed (`ApproachSpeed`, the overlay row at the junction end, `osm-overlay`'s v2 columns), else
+  Switzerland's general limits: 50 in town (a sidewalk or path along either side at the junction), 80 outside. A
+  segment's Urban flag is not set yet at this stage (it read every approach as rural). Without lights a right pocket
+  has no stop line (its turners give way to no one: the lanes run on to the mouth, `RightLane(signal: false)`), and a
+  painted bike lane runs between it and the through lane (layout (b), no bike signal to guard (a)); the red crossing
+  starts from there. Sion test tiles (overlay rebuilt with `--osm-overlay` from the PBF): approaches with a right turn
+  above 50 km/h 23, at or under 256, no OSM speed in town 8, outside 12; 8 right pockets (were 10, all at the lights
+  then: now 7 without lights, 1 at the lights). Test region: J2 (in town) and J3's west arm lose their right pockets.
 - Tier 0 `Without_lights_the_path_runs_to_the_kerb_and_the_edge_guide_follows_the_widening` (the T: red within 7.5 m of
   the side road's axis, paths carried into both corners, the guide's west end > 0.5 m further out); the corner test now
   checks the kerb arc is lined by the corner or the carried side.

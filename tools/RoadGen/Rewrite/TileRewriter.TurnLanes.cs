@@ -35,7 +35,7 @@ public static partial class TileRewriter
         /// <summary>Junction corners left tight: no right turn rounds them (#700).</summary>
         public int TightCorners;
         /// <summary>Lead-ins split between both edges (#700).</summary>
-        public int SplitLeadIns, ThroughGuides, MirrorGuides;
+        public int SplitLeadIns, ThroughGuides, MirrorGuides, SpeedFast, SpeedSlow, SpeedNoneTown, SpeedNoneRural;
         /// <summary>Hatched medians left out as too narrow or too short (#406).</summary>
         public int HatchesSkipped;
         /// <summary>Kerb corners paved beside a widening (#406), and those whose outline did not work out.</summary>
@@ -46,7 +46,7 @@ public static partial class TileRewriter
         public readonly SortedDictionary<string, List<string>> LayoutExamples = new();
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets ({RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {Corners:N0} corners rounded beside a widening ({CornersRejected:N0} failed, {CornersInTown:N0} left square beside a sidewalk or path, #406), {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120), {TightCorners:N0} junction corners left tight (no right turn rounds them, #700), {SplitLeadIns:N0} lead-ins split between both edges ({MirrorGuides:N0} edge guides moved out onto the other edge, #711), {ThroughGuides:N0} through-lane guides across the junction (#700); " +
+            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets (approaches with a right turn faster than 50 km/h {SpeedFast:N0} / not {SpeedSlow:N0} / no OSM speed in town {SpeedNoneTown:N0}, outside {SpeedNoneRural:N0}, #711; {RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {Corners:N0} corners rounded beside a widening ({CornersRejected:N0} failed, {CornersInTown:N0} left square beside a sidewalk or path, #406), {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120), {TightCorners:N0} junction corners left tight (no right turn rounds them, #700), {SplitLeadIns:N0} lead-ins split between both edges ({MirrorGuides:N0} edge guides moved out onto the other edge, #711), {ThroughGuides:N0} through-lane guides across the junction (#700); " +
             $"rejected (approach or exit): too short {Short:N0}, building {Building:N0}, another line {OtherLine:N0}, ground off the road {Ground:N0}, tile seam {Seam:N0}, no segment {NoSegment:N0}, no main road out {NoExit:N0}, two lanes or more already and no lane data {MultiLane:N0}; OSM lane data (#700): {Wished:N0} approaches, {WishFolded:N0} wished lanes folded, {WishNoLeft:N0} with a road to the left and no left lane, {WishInPlace:N0} assigned in place, {WishArrows:N0} arrows over them\n") +
             string.Concat(LayoutExamples.Select(kv => $"      right pockets beside a bike lane, layout {kv.Key} at LV95 {string.Join("; ", kv.Value)}\n"));
 
@@ -64,6 +64,9 @@ public static partial class TileRewriter
     }
 
     private const double TurnLane = 3.0, TurnSolid = 10, TurnClear = 5;
+
+    /// <summary>A right-turn pocket only where the approach is faster than this, km/h (#711, the user's decision).</summary>
+    private const int RightPocketSpeed = 50;
     /// <summary>The angled closing line of a lead-in hatch runs this far along the road (#700).</summary>
     private const double LeadInClose = 10;
     /// <summary>The kerb leg of a tight corner (#700), as <see cref="JunctionOptions.TightKerb"/> leaves it.</summary>
@@ -235,9 +238,19 @@ public static partial class TileRewriter
                 // assigned to the lanes the carriageway holds; the pockets it wants are built, and none it does not want
                 var banned = restrictions?.Banned(junction, i, net, scratchLanes) ?? SignalMoves.None;
                 var wished = WishedLanes(overlay, net.Links[arm.LinkId], arm.End, can & ~banned);
-                var wish = Assign(wished, ownLanes, rightPocketPossible: signal && right && ownLanes == 1);
+                // a right-turn pocket only on a faster road (#711, the user's decision), at every kind of junction: the speed OSM maps
+                // for the approach, else Switzerland's general limits (50 in a town, 80 outside)
+                int kmh = ApproachSpeed(overlay, net.Links[arm.LinkId], arm.End);
+                // in town: a sidewalk or path along either side at the junction (the street planner's, #119)
+                bool town = streetSide(arm.LinkId, arm.End, true).OuterDm > 0 || streetSide(arm.LinkId, arm.End, false).OuterDm > 0;
+                bool fast = (kmh > 0 ? kmh : town ? 50 : 80) > RightPocketSpeed;
+                var wish = Assign(wished, ownLanes, rightPocketPossible: fast && right && ownLanes == 1);
                 bool wantLeft = wish is null ? left && ownLanes == 1 : left && wish.Pocket.Length > 0;
-                bool wantRight = wish is null ? right && ownLanes == 1 : wish.RightPocket;
+                bool wantRight = wish is null ? right && ownLanes == 1 && fast : wish.RightPocket;
+                if (right && ownLanes == 1)
+                {
+                    if (kmh > RightPocketSpeed) stats.SpeedFast++; else if (kmh > 0) stats.SpeedSlow++; else if (town) stats.SpeedNoneTown++; else stats.SpeedNoneRural++;
+                }
                 if (wished is not null) wishes[(junction.NodeId, i)] = (home, wished, ownLanes, arm.LinkId, arm.End == LinkEnd.End);
                 // a multi-lane approach at the lights without OSM lane data (#700, the user's review of J7): the leftmost lane
                 // also turns left, the rightmost also right, the rest go straight on, with their arrows as OSM's would get
@@ -253,15 +266,16 @@ public static partial class TileRewriter
                     box = !leaving.HasLane && !leaving.HasTrack;
                 }
                 RightPlan? rightPlan = null;
-                if (signal && wantRight && segmentOf.TryGetValue(arm.LinkId, out var rightSeg))
+                if (wantRight && segmentOf.TryGetValue(arm.LinkId, out var rightSeg))
                 {
-                    // a painted bike lane on that side runs kerbside (a) or between the pocket and the
-                    // through lane (b), at random but the same on every run (#351); a path keeps (a)
+                    // a painted bike lane on that side runs kerbside (a) or between the pocket and the through lane (b): at the
+                    // lights at random but the same on every run (#351), a bike signal guarding (a); without lights always (b),
+                    // the right-turning cars never crossing it at the mouth (#711); a path keeps (a)
                     var kerb = arm.End == LinkEnd.End ? rightSeg.Painted.Attributes.Right : rightSeg.Painted.Attributes.Left;
                     bool between = kerb.HasLane && !kerb.HasTrack
-                        && BikePlanner.Fnv(ApproachKey(net.Links[arm.LinkId], arm.End, junction.Centre)) % 2 == 1;
+                        && (!signal || BikePlanner.Fnv(ApproachKey(net.Links[arm.LinkId], arm.End, junction.Centre)) % 2 == 1);
                     rights.Add(rightPlan = new RightPlan(junction.NodeId, i, home, rightSeg, arm.End == LinkEnd.End, left)
-                        { Skew = MouthSkew(junction, junction.Arms[i]), BikeBetween = between, At = junction.Centre, Through = (can & SignalMoves.Through) != 0 });
+                        { Skew = MouthSkew(junction, junction.Arms[i]), BikeBetween = between, At = junction.Centre, Through = (can & SignalMoves.Through) != 0, Signal = signal });
                 }
                 if (!left) continue;
                 stats.Candidates++;
@@ -497,7 +511,7 @@ public static partial class TileRewriter
             r.Way.StopShift = r.Skew;
             r.Way.Layout = lanes.Approach;
             lanes.RightWay = r;   // its lanes are painted once the signal plan has settled layout (a) or (b)
-            lanes.Signal = true;
+            lanes.Signal |= r.Signal;   // (#711: right pockets without lights too)
             stats.SignsMoved += r.Way.PushOut(Get(signs, tile));
             stats.RightPockets++;
         }
@@ -814,7 +828,7 @@ public static partial class TileRewriter
             // it can: the stem of a T has no straight on (#386)
             var inferred = (r.Through ? PaintArrow.Straight : 0) | (r.LeftTurn ? PaintArrow.Left : 0);
             var own = arm.OwnMoves is { Length: > 0 } given ? ArrowOf(given[0]) ?? PaintArrow.None : inferred;   // #700: what OSM gave the own lane
-            way.RightLane(Get(paint, tile), stats, r.Left is { Dropped: false } || own == 0 ? (PaintArrow?)null : own);
+            way.RightLane(Get(paint, tile), stats, r.Left is { Dropped: false } || own == 0 ? (PaintArrow?)null : own, r.Signal);
             // layout (b): the pocket paints the bike lane along its reach, where it does not move out with the kerb
             if (layout.BikeBetween) bikeBetween.Add((seg, way.Side > 0, way.AlongRange()));
             if (layout.Bike <= 0) continue;
@@ -999,6 +1013,8 @@ public static partial class TileRewriter
         public Vec2 At { get; init; }
         /// <summary>The approach has a straight-on exit (the stem of a T has none, #386).</summary>
         public bool Through { get; init; }
+        /// <summary>At traffic lights (#348); without lights since #711 (on a road faster than <see cref="RightPocketSpeed"/>).</summary>
+        public bool Signal { get; init; }
     }
 
     /// <summary>Right-turn pockets, (taper, storage) in metres, longest first: shorter than a left pocket, beside its full width.</summary>
@@ -1900,10 +1916,11 @@ public static partial class TileRewriter
         /// short of it): yellow lines both sides, dashed where the pocket opens (cars cross it there
         /// to reach the pocket), solid along the storage; a bike symbol; the stop line across it too.
         /// </summary>
-        public void RightLane(List<RoadPaint> paint, TurnLaneStats stats, PaintArrow? through)
+        public void RightLane(List<RoadPaint> paint, TurnLaneStats stats, PaintArrow? through, bool signal = true)
         {
             var lanes = Layout!;
-            double storage = _length - _taper, setback = SignalStopSetback + StopShift;
+            // (#711) without lights the main road's right turners give way to no one: no stop line, the lanes run on to the mouth
+            double storage = _length - _taper, setback = (signal ? SignalStopSetback : 0.1) + StopShift;
             double Open(double d) => Math.Clamp((_length - d) / Math.Max(_taper, 1e-6), 0, 1);
             var pocket = lanes.RightPocket()!.Value;
             double inner = lanes.Through().To;   // the through lane's right edge, along the storage
@@ -1936,24 +1953,27 @@ public static partial class TileRewriter
                 paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, _side * inner, TurnSolid + setback, storage));
                 paint.Add(Line(PaintType.WhiteSolid, 0, 0, _side * inner, setback, TurnSolid + setback));
             }
-            // the stop line across the pocket (layout (b): the riders' own yellow one across the bike lane before it, #700)
-            double bar = SignalStopLine * 0.5 + setback;
-            paint.Add(new RoadPaint
+            // the stop line across the pocket (layout (b): the riders' own yellow one across the bike lane before it, #700); at the lights only
+            if (signal)
             {
-                Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.White, Width = SignalStopLine,
-                Vertices = [.. Point(bar, pocket.From + 0.1), .. Point(bar, pocket.To - 0.1)],
-            });
-            if (lanes.BikeBetween)
-            {
-                var bike = lanes.BikeLane()!.Value;
-                double bikeBar = setback + BikeStopLine * 0.5;
+                double bar = SignalStopLine * 0.5 + setback;
                 paint.Add(new RoadPaint
                 {
-                    Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.Yellow, Width = BikeStopLine,
-                    Vertices = [.. Point(bikeBar, bike.From + 0.05), .. Point(bikeBar, bike.To - 0.05)],
+                    Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.White, Width = SignalStopLine,
+                    Vertices = [.. Point(bar, pocket.From + 0.1), .. Point(bar, pocket.To - 0.1)],
                 });
+                if (lanes.BikeBetween)
+                {
+                    var bike = lanes.BikeLane()!.Value;
+                    double bikeBar = setback + BikeStopLine * 0.5;
+                    paint.Add(new RoadPaint
+                    {
+                        Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.Yellow, Width = BikeStopLine,
+                        Vertices = [.. Point(bikeBar, bike.From + 0.05), .. Point(bikeBar, bike.To - 0.05)],
+                    });
+                }
+                stats.StopBars++;
             }
-            stats.StopBars++;
             double second = storage >= 20 + PaintEmitter.ArrowLength ? 20 : 13;
             // the first arrow always: where a short storage behind a skewed line has no room for it 5 m
             // back, it moves up to 1 m from the line; the second only where the storage holds it

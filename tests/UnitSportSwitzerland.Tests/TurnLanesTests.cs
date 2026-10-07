@@ -69,7 +69,45 @@ public class TurnLanesTests
             Assert.NotNull(row);
             Assert.Equal([TurnMove.Left, TurnMove.Through | TurnMove.Right], row!.TurnLanesFwd);
             Assert.Empty(row.TurnLanesBwd);
+            Assert.Equal(0, row.MaxSpeed(true));   // a v1 file has no speed columns (#711)
         }
         finally { File.Delete(path); }
     }
+
+    [Fact]
+    public void Overlay_reader_takes_the_speed_limit_per_direction()
+    {
+        // v2 (#711): maxspeed_fwd / maxspeed_bwd, in TLM drawing order, km/h; empty = none
+        string path = Path.Combine(Path.GetTempPath(), $"osm_overlay_{Guid.NewGuid():N}.tsv");
+        try
+        {
+            File.WriteAllText(path,
+                "# osm_overlay v2 osm=a tlm=b bbox=0,0,1,1\n"
+                + "uuid\tpart\tfrom_m\tto_m\tosm_way\tdir\thighway\toneway\tlanes\tlanes_fwd\tlanes_bwd\twidth"
+                + "\tsidewalk_left\tsidewalk_right\tcycleway_left\tcycleway_right\tturn_lanes_fwd\tturn_lanes_bwd\troundabout\ttram\tmaxspeed_fwd\tmaxspeed_bwd\n"
+                + "{u}\t0\t0.0\t50.0\t7\t+\tsecondary\t0\t\t\t\t\t\t\t\t\t\t\t0\t0\t80\t60\n"
+                + "{u}\t0\t50.0\t90.0\t8\t+\tsecondary\t0\t\t\t\t\t\t\t\t\t\t\t0\t0\t\t\n");
+            var reader = OsmOverlayReader.TryLoad(path)!;
+            var first = reader.Best("{u}", 0, 0, 50)!;
+            Assert.Equal(80, first.MaxSpeed(true));
+            Assert.Equal(60, first.MaxSpeed(false));
+            Assert.Equal(0, reader.Best("{u}", 0, 50, 90)!.MaxSpeed(true));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Theory]
+    [InlineData("50", "50")]
+    [InlineData("CH:urban", "50")]
+    [InlineData("CH:rural", "80")]
+    [InlineData("CH:trunk", "100")]
+    [InlineData("CH:motorway", "120")]
+    [InlineData("30 mph", "48")]
+    [InlineData("walk", "10")]
+    [InlineData("none", "")]
+    [InlineData("signals", "")]
+    [InlineData("", "")]
+    [InlineData(null, "")]
+    public void Osm_maxspeed_reads_as_kmh(string? tag, string kmh) =>
+        Assert.Equal(kmh, UnitSport.Tools.Preprocessor.OsmSpeed.Kmh(tag));
 }
