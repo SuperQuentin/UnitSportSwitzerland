@@ -19,7 +19,7 @@ public static class ArmyMeshBuilder
     private static readonly Color Plank = new(0.34f, 0.27f, 0.18f);
     private static readonly Color BenchFrame = new(0.17f, 0.19f, 0.14f);
     private static readonly Color PlateWhite = new(0.95f, 0.95f, 0.92f);
-    private static readonly Color PlateInk = new(0.06f, 0.06f, 0.07f);
+    private static readonly Color PlateBlack = new(0.03f, 0.03f, 0.035f);
 
     // ---- the canvas body: a Duro's bed and a Trakker's cargo body ----
 
@@ -45,7 +45,7 @@ public static class ArmyMeshBuilder
         float half = c.Width * 0.5f;
         float boardTop = c.Floor + c.Board;
         // the deck on its frame, the boards round it
-        Along(m, cg, c.From, c.To, c.Floor - 0.12f, c.Floor, c.Width, Plank);
+        Along(m, cg, c.From, c.To, c.Floor - 0.12f, c.Floor, c.Width - 0.06f, Plank);
         foreach (float sx in new[] { -1f, 1f })
         {
             Along(m, cg, c.From, c.To, c.Floor, boardTop, 0.05f, look.Paint, sx * (half - 0.025f));
@@ -59,8 +59,8 @@ public static class ArmyMeshBuilder
         float wallX = half - 0.02f;
         var p0 = new Vector2(wallX, boardTop);
         var p1 = new Vector2(wallX, c.Eave);
-        var p2 = new Vector2(half - 0.16f, c.Eave + (c.Ridge - c.Eave) * 0.55f);
-        var p3 = new Vector2(half - 0.46f, c.Ridge);
+        var p2 = new Vector2(half - 0.12f, c.Eave + (c.Ridge - c.Eave) * 0.5f);
+        var p3 = new Vector2(half - 0.36f, c.Ridge);
         Color canvas = look.Cargo, rib = canvas.Darkened(0.35f);
         float z0 = c.From, z1 = c.To;
 
@@ -131,7 +131,7 @@ public static class ArmyMeshBuilder
             float bx = sx * (half - 0.05f - 0.2f);
             Along(m, cg, b0 - 0.05f, b1 + 0.05f, c.Floor, c.Floor + BenchHeight - 0.04f, 0.4f, BenchFrame, bx);
             Along(m, cg, b0 - 0.05f, b1 + 0.05f, c.Floor + BenchHeight - 0.04f, c.Floor + BenchHeight, 0.42f, Plank, bx);
-            Along(m, cg, b0 - 0.05f, b1 + 0.05f, c.Floor + BenchHeight + 0.1f, c.Floor + BenchHeight + 0.5f, 0.04f, Plank, sx * (half - 0.08f));
+            Along(m, cg, b0 - 0.05f, b1 + 0.05f, c.Floor + BenchHeight + 0.1f, c.Floor + BenchHeight + 0.34f, 0.04f, BenchFrame, sx * (half - 0.08f));
             for (int i = 0; i < c.Places; i++)
             {
                 float at = b0 + (i + 0.5f) * step;
@@ -148,23 +148,54 @@ public static class ArmyMeshBuilder
     // ---- small parts ----
 
     /// <summary>
-    /// A Swiss military number plate (#714): white with black figures, which start with an "M". Stands
-    /// proud of the body face at <paramref name="z"/> by a centimetre, readable from the side
-    /// <paramref name="dir"/> points to (+1 the front, −1 the back).
+    /// The number on a vehicle's military plates: five digits from its kind, so each is its own. A Swiss
+    /// military plate reads "M" and the number, as the cantons' read their letters (#714).
     /// </summary>
-    private static void Plate(MeshScratch m, float x, float y, float z, float dir)
+    public static int PlateNumber(RideKind kind) => 10000 + (int)(((long)(int)kind * 48271 + 12345) % 90000);
+
+    /// <summary>The seven segments (a top, b upper right, c lower right, d bottom, e lower left, f upper left, g middle) of each digit.</summary>
+    private static readonly string[] Segments = { "abcdef", "bc", "abdeg", "abcdg", "bcfg", "acdfg", "acdefg", "abc", "abcdefg", "abcdfg" };
+
+    /// <summary>
+    /// A Swiss military number plate (#714): white figures on a black plate, "M" and five digits (the
+    /// civilian plates are black on white). Stands proud of the body face at <paramref name="z"/>, readable
+    /// from the side <paramref name="dir"/> points to (+1 the front, −1 the back); the figures stand over
+    /// a centimetre off it so they do not shimmer at a distance.
+    /// </summary>
+    internal static void Plate(MeshScratch m, float x, float y, float z, float dir, int number)
     {
-        m.Box(new Vector3(x, y, z + dir * 0.01f), new Vector3(0.30f, 0.12f, 0.02f), PlateWhite);
-        float zz = z + dir * 0.022f;
-        void Ink(float dx, float dy, float w, float h, float turn = 0f) =>
-            m.Box(new Vector3(x + dx, y + dy, zz), new Vector3(w, h, 0.012f), PlateInk, new Basis(Vector3.Back, turn));
+        m.Box(new Vector3(x, y, z + dir * 0.01f), new Vector3(0.30f, 0.12f, 0.02f), PlateBlack);
+        float zz = z + dir * 0.026f;
+        // viewer coordinates: right and up as the reader sees them (the back one is read from behind, so mirrored)
+        void Ink(float vx, float vy, float w, float h, float turn = 0f) =>
+            m.Box(new Vector3(x + dir * vx, y + vy, zz), new Vector3(w, h, 0.016f), PlateWhite, new Basis(Vector3.Back, dir * turn));
+        const float pitch = 0.043f, gw = 0.028f, gh = 0.074f, t = 0.008f;
+        float start = -pitch * 2.5f;
         // the M: two uprights and a V between them
-        Ink(-0.105f, 0f, 0.012f, 0.07f);
-        Ink(-0.045f, 0f, 0.012f, 0.07f);
-        Ink(-0.0975f, 0.005f, 0.04f, 0.011f, -0.95f);
-        Ink(-0.0525f, 0.005f, 0.04f, 0.011f, 0.95f);
-        // the figures
-        for (int i = 0; i < 4; i++) Ink(-0.005f + i * 0.04f, 0f, 0.022f, 0.07f);
+        const float mw = 0.038f;
+        Ink(start - mw / 2f + t / 2f + 0.002f, 0f, t, gh);
+        Ink(start + mw / 2f - t / 2f - 0.002f, 0f, t, gh);
+        float diag = Mathf.Sqrt(Mathf.Pow(mw / 2f - t, 2f) + Mathf.Pow(gh * 0.65f, 2f));
+        float ang = Mathf.Atan2(gh * 0.65f, mw / 2f - t);
+        Ink(start - mw / 4f + 0.002f, gh * 0.17f, diag, t, -ang);
+        Ink(start + mw / 4f - 0.002f, gh * 0.17f, diag, t, ang);
+        // the five figures
+        string digits = number.ToString("D5", System.Globalization.CultureInfo.InvariantCulture);
+        for (int i = 0; i < 5; i++)
+        {
+            float cx = start + pitch * (i + 1);
+            foreach (char seg in Segments[digits[i] - '0'])
+                switch (seg)
+                {
+                    case 'a': Ink(cx, gh / 2f - t / 2f, gw, t); break;
+                    case 'd': Ink(cx, -gh / 2f + t / 2f, gw, t); break;
+                    case 'g': Ink(cx, 0f, gw, t); break;
+                    case 'f': Ink(cx - gw / 2f + t / 2f, gh / 4f, t, gh / 2f); break;
+                    case 'b': Ink(cx + gw / 2f - t / 2f, gh / 4f, t, gh / 2f); break;
+                    case 'e': Ink(cx - gw / 2f + t / 2f, -gh / 4f, t, gh / 2f); break;
+                    case 'c': Ink(cx + gw / 2f - t / 2f, -gh / 4f, t, gh / 2f); break;
+                }
+        }
     }
 
     /// <summary>A spare wheel standing on its edge with its axis along z: the tyre, a cover over the rim.</summary>
@@ -215,7 +246,7 @@ public static class ArmyMeshBuilder
 
     // stations (metres behind the bumper) and heights (over the ground)
     private const float DuroWs = 1.28f, DuroBack = 2.80f, DuroBedFrom = 2.86f;
-    private const float DuroFloor = 0.86f, DuroBelt = 1.42f, DuroRoof = 2.25f, DuroGlass = 2.10f, DuroBedFloor = 1.14f;
+    private const float DuroFloor = 0.86f, DuroBelt = 1.42f, DuroRoof = 2.30f, DuroGlass = 2.16f, DuroBedFloor = 1.14f;
     /// <summary>The doors' extent: front edge, back edge.</summary>
     private const float DuroDoor0 = DuroWs + 0.12f, DuroDoor1 = DuroBack - 0.12f;
 
@@ -224,7 +255,7 @@ public static class ArmyMeshBuilder
     {
         Front = cg - DuroWs, Floor = DuroFloor, Ceiling = DuroRoof - 0.1f, WsBase = DuroBelt + 0.03f, WsTop = DuroGlass,
         DashTop = DuroBelt, InnerHalf = (s.Width - 0.1f) * 0.5f - 0.07f,
-        Nose = 0.3f, DriverX = s.Width * 0.5f - 0.6f, HipRise = 0.42f, Recline = 0.25f, ColumnTilt = 0.65f, WheelRadius = 0.22f,
+        Nose = 0.3f, DriverX = s.Width * 0.5f - 0.6f, HipRise = 0.40f, Recline = 0.25f, ColumnTilt = 0.65f, WheelRadius = 0.22f,
         DashToX = -((s.Width - 0.1f) * 0.5f - 0.07f), Clutch = false, PassengerSeat = true,
     };
 
@@ -311,7 +342,7 @@ public static class ArmyMeshBuilder
 
         // ---- the bed: boards on the frame, the benches, the canvas over bows ----
         Skirt(m, s, cg, DuroBedFrom, s.Length, 0.56f, DuroBedFloor, bodyW, look.Paint);
-        var bed = new Canvas(DuroBedFrom, s.Length - 0.12f, DuroBedFloor, 0.5f, 2.2f, 2.65f, bodyW, true, 5);
+        var bed = new Canvas(DuroBedFrom, s.Length - 0.12f, DuroBedFloor, 0.5f, 2.35f, 2.65f, bodyW, true, 5);
         seats.AddRange(CanvasBody(m, cg, bed, look));
         // the chassis between the wheels, the spare wheel hung flat under the tail, the rear bumper bar
         Along(m, cg, DuroBedFrom, s.Length - 0.1f, 0.62f, 0.82f, 0.9f, Trim);
@@ -323,8 +354,8 @@ public static class ArmyMeshBuilder
             Lamp(tail, sx * (bodyW * 0.5f - 0.15f), 0.9f, rear - 0.02f, 0.3f, 0.16f, 0.04f, TailLamp);
             Lamp(rev, sx * (bodyW * 0.5f - 0.45f), 0.9f, rear - 0.02f, 0.14f, 0.12f, 0.04f, White);
         }
-        Plate(m, 0f, 0.6f, front, 1f);
-        Plate(m, 0f, 0.62f, rear, -1f);
+        Plate(m, 0f, 0.6f, front, 1f, PlateNumber(spec.Kind));
+        Plate(m, 0f, 0.62f, rear, -1f, PlateNumber(spec.Kind));
 
         return new HeavyParts(m.Build(), head.Build(), tail.Build(), rev.Build(), Wheels(s, cg), leaves.ToArray())
         {
@@ -451,8 +482,8 @@ public static class ArmyMeshBuilder
             Lamp(tail, sx * (bodyW * 0.5f - 0.06f), 0.95f, rear + (s.Length - GBack) - 0.02f, 0.12f, 0.3f, 0.04f, TailLamp);
             Lamp(rev, sx * (bodyW * 0.5f - 0.06f), 0.7f, rear + (s.Length - GBack) - 0.02f, 0.12f, 0.1f, 0.04f, White);
         }
-        Plate(m, 0f, 0.5f, Z(GBack + 0.14f), -1f);
-        Plate(m, 0f, 0.5f, front, 1f);
+        Plate(m, 0f, 0.5f, Z(GBack + 0.14f), -1f, PlateNumber(spec.Kind));
+        Plate(m, 0f, 0.5f, front, 1f, PlateNumber(spec.Kind));
 
         return new HeavyParts(m.Build(), head.Build(), tail.Build(), rev.Build(), Wheels(s, cg), leaves.ToArray())
         {

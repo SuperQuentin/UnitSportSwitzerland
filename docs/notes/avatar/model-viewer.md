@@ -4,7 +4,7 @@
   a time on a plain backdrop, in categories. Left/Right (A/D, D-pad) step through a category,
   Up/Down (W/S, D-pad) switch category, drag orbits, wheel zooms; the camera fits the model's box
   corners to the view. A dev tool: keyboard and pad only, no VR way (`src/Avatar/ModelViewer.cs`).
-- `--modelsonly <text>` keeps only the models whose category or name holds it (any case), for a quick look or shot.
+- `--modelsonly <text>` keeps only the models whose category or name holds it (any case), for a quick look or shot; `--modelsyaw <deg>` turns the camera round the model (0 behind it, 180 in front) for the other side.
 - `--models,<dir>` (e.g. `test_output/models`) writes one PNG per model, prints
   `[models] no viewer entry: <Class>` for builder classes that built nothing during the run, and a
   `[models] RESULT: ok` line (FAILED when a model throws). Run it windowed: headless renders nothing.

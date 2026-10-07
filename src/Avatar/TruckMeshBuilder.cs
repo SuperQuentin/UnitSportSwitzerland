@@ -148,9 +148,13 @@ public static class TruckMeshBuilder
             // the army lorry's cargo body under its canvas tilt, a bench down each side (#714)
             var body = new ArmyMeshBuilder.Canvas(cabLen + 0.2f, s.Length - 0.12f, 1.25f, 0.6f, 3.0f, s.Height, s.Width, false, 6);
             seats.AddRange(ArmyMeshBuilder.CanvasBody(m, cg, body, look));
-            Sides(m, cg, cabLen + 0.3f, firstRear - 0.7f, 0.5f, 0.7f, s.Width - 0.2f, Steel);
+            Sides(m, cg, cabLen + 0.3f, firstRear - 0.7f, 0.5f, 0.7f, s.Width - 0.2f, look.Lower);
             // the spare wheel slung under the frame behind the cab, flat, opposite the fuel tank
             m.Tube(new Vector3(-0.55f, 0.55f, cg - (cabLen + 1.4f)), new Vector3(-0.55f, 0.88f, cg - (cabLen + 1.4f)), 0.5f, Rubber, 12);
+            // the military plates: on the cab's face, and on a carrier board behind the tail
+            ArmyMeshBuilder.Plate(m, 0f, 0.8f, front, 1f, ArmyMeshBuilder.PlateNumber(spec.Kind));
+            Along(m, cg, s.Length - 0.1f, s.Length - 0.03f, 0.62f, 1.02f, 0.5f, Trim);
+            ArmyMeshBuilder.Plate(m, 0f, 0.82f, rear + 0.03f, -1f, ArmyMeshBuilder.PlateNumber(spec.Kind));
         }
         else if (spec.Body == TruckBody.Mixer)
         {
@@ -181,7 +185,7 @@ public static class TruckMeshBuilder
             Along(m, cg, s.HitchAt - 0.2f, s.HitchAt + 0.12f, s.HitchHeight - 0.12f, s.HitchHeight + 0.08f, 0.35f, Trim);
         }
         // the rear bumper bar and the lamps in it
-        Along(m, cg, s.Length - 0.12f, s.Length, 0.45f, 0.62f, s.Width - 0.2f, Steel);
+        Along(m, cg, s.Length - 0.12f, s.Length, 0.45f, 0.62f, s.Width - 0.2f, army ? look.Lower : Steel);
         foreach (float sx in new[] { -1f, 1f })
         {
             Lamp(tail, sx * (hw - 0.3f), 0.82f, rear - 0.02f, 0.4f, 0.16f, 0.04f, TailLamp);
