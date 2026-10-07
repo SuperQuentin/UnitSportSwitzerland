@@ -59,6 +59,7 @@ public static class HeavyCheck
         Rollover();
         Roads();
         BoatTrailers();
+        Army();
 
         settings.RideProfile = was;
         GD.Print(_failures == 0 ? "[truck] RESULT: ok" : $"[truck] RESULT: FAILED ({_failures})");
@@ -540,6 +541,31 @@ public static class HeavyCheck
         Check(parts.CarDoors && rig.DoorCount == 4 && rig.DoorPivot(Avatar.CarRig.DriverDoor) != null && driver.X < -0.5f && driver.Z < 0f && new Truck(raptor).CarDoors,
             $"the Raptor's doors: {rig.DoorCount}, the driver's at ({F(driver.X, "F2")}, {F(driver.Z, "F2")}): front left");
         rig.Free();
+    }
+
+    /// <summary>
+    /// The army's three (#714): the Duro's two and the G-Class's four car doors with the driver's the
+    /// front left, a bench place for each passenger, the Trakker's tilt over a bench body, and a military
+    /// plate number of five digits each, none the same as another's.
+    /// </summary>
+    private static void Army()
+    {
+        GD.Print("[truck] the army's Duro, G-Class and Trakker");
+        var army = HeavyCatalog.All.Where(h => h.Look.Operator == "Swiss Army").ToArray();
+        Check(army.Length == 3 && army.Select(h => (int)h.Kind).SequenceEqual(new[] { 106, 107, 108 }), "three army entries: 106, 107, 108");
+        var numbers = army.Select(h => Avatar.ArmyMeshBuilder.PlateNumber(h.Kind)).ToArray();
+        Check(numbers.Distinct().Count() == 3 && numbers.All(n => n is >= 10000 and <= 99999), $"plates M {string.Join(", M ", numbers)}: five digits, one each");
+        foreach (var spec in army)
+        {
+            var rig = Avatar.HeavyRig.Create(spec, 0, 0.5f);
+            int doors = spec.Class switch { HeavyClass.Transporter => 2, HeavyClass.Offroader => 4, _ => 0 };
+            int seats = spec.Class switch { HeavyClass.Transporter => 12, HeavyClass.Offroader => 4, _ => 14 };
+            bool doorsOk = doors == 0 || rig.DoorCount == doors && rig.DoorPivot(Avatar.CarRig.DriverDoor) != null && new Truck(spec).CarDoors;
+            var left = rig.Seats.Count(x => x.Yaw > 0f);
+            Check(doorsOk && rig.Seats.Length == seats && (spec.Class == HeavyClass.Offroader || left == (seats - 2) / 2),
+                $"{spec.Label}: {rig.DoorCount} doors, {rig.Seats.Length} seats ({left} on the right bench), olive {spec.Look.Paint.ToHtml(false)}");
+            rig.Free();
+        }
     }
 
     private static void Roads()
