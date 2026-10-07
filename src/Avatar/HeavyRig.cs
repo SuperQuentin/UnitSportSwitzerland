@@ -266,6 +266,8 @@ public partial class HeavyRig : Node3D, IHingedDoors
         {
             HeavyClass.Tractor or HeavyClass.Rigid => TruckMeshBuilder.Build(spec, section, load),
             HeavyClass.Pickup => PickupMeshBuilder.Build(spec, section, load),
+            HeavyClass.Offroader => ArmyMeshBuilder.GClass(spec, section, load),
+            HeavyClass.Transporter => ArmyMeshBuilder.Duro(spec, section, load),
             HeavyClass.FarmTractor => FarmMeshBuilder.Tractor(spec, section, load),
             HeavyClass.Combine => FarmMeshBuilder.Combine(spec, section, load),
             _ => BusMeshBuilder.Build(spec, section, load),

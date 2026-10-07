@@ -176,7 +176,7 @@ fi
 # --- 5. terrain chunks: copy what differs, never delete unless --prune ------------------------------
 if [ $S_CHUNKS = 1 ]; then
   if [ -z "${CHUNKS_SRC:-}" ]; then  # same lookup as the game: MapSetup's terrain_location.json, then terrain_chunks/
-    CHUNKS_SRC=$(sed -n 's/.*"chunks"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' terrain_location.json 2>/dev/null | sed 's/\\\\/\\/g' | head -1)
+    CHUNKS_SRC=$(sed -n 's/.*"chunks"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' terrain_location.json 2>/dev/null | sed 's/\\\\/\\/g' | head -1) || true  # no terrain_location.json: sed fails, pipefail would exit
     [ -n "$CHUNKS_SRC" ] && command -v cygpath >/dev/null && CHUNKS_SRC=$(cygpath -u "$CHUNKS_SRC")
     : "${CHUNKS_SRC:=terrain_chunks}"
   fi

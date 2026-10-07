@@ -40,6 +40,8 @@ public partial class ModelViewer : Node3D
     public override void _Ready()
     {
         _shots = CmdArgs.FlagWithShot("--models").Shot;
+        // --modelsyaw <deg> turns the camera round the model: 0 behind it, 180 in front (screenshots of the other side)
+        if (CmdArgs.Float("--modelsyaw") is { } yawDeg) _yaw = Mathf.DegToRad(yawDeg);
         // screenshots are stills: no face caught mid-blink (#657)
         if (_shots != null) HumanMeshBuilder.FigureMaterial().SetShaderParameter(Face.FaceAnimator.IdleParam, 0f);
         AddChild(new DirectionalLight3D

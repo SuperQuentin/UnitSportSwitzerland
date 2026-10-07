@@ -98,9 +98,9 @@ public static class OsmFields
                 {
                     var w = pool[i];
                     if (w[0] == cur[^1]) cur.AddRange(w.Skip(1));
-                    else if (w[^1] == cur[^1]) cur.AddRange(w.Reverse().Skip(1));
+                    else if (w[^1] == cur[^1]) cur.AddRange(w.AsEnumerable().Reverse().Skip(1));
                     else if (w[^1] == cur[0]) cur.InsertRange(0, w.Take(w.Length - 1));
-                    else if (w[0] == cur[0]) cur.InsertRange(0, w.Reverse().Take(w.Length - 1));
+                    else if (w[0] == cur[0]) cur.InsertRange(0, w.AsEnumerable().Reverse().Take(w.Length - 1));
                     else continue;
                     pool.RemoveAt(i);
                     progress = true;

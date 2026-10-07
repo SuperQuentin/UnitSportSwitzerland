@@ -27,7 +27,8 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 `perf-221-migration` (**read before merging main into a branch started before Oct 2026**: every #221 rule note and the rebase order),
 `new-action-three-devices` (every new key or interaction: keyboard, gamepad and VR decided together),
 `plans-on-main` (up-front plans commit on `main`; their status updates ride the feature branch),
-`uid-files` (commit a script's `.uid` with it; never `git add -A` after an import).
+`uid-files` (commit a script's `.uid` with it; never `git add -A` after an import),
+`dotnet-sdk-pin` (`global.json` pins SDK 9: C# 14 binds `array.Reverse()` to the void Span overload).
 
 ## Rules
 
