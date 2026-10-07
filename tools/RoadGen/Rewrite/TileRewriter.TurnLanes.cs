@@ -1388,9 +1388,9 @@ public static partial class TileRewriter
             double cap = LeadCap;
             Hatch(paint, stats, storage, _length, d => Math.Min(cap, Border(d)), slant: LeadSlant);
             if (cap < wide - 1e-6) ThroughEdge(paint, storage, Border, cap);
-            // the edge right of the hatch runs on to the angled line's outer end: the through lane's for one lane, the line between
-            // the two leftmost lanes for several (the through lane leaves those along the taper)
-            Lanes(paint, storage, cap < wide - 1e-6 ? storage : storage + LeadSlant, rightTurn, stats, signal, separatorTo: storage + LeadSlant);
+            // the through lane's edge runs on to the angled line's outer end for one lane; for several, the lines between the pocket's
+            // lanes start where the left-turn bike lane's do, at the storage (the user's spec, #700)
+            Lanes(paint, storage, cap < wide - 1e-6 ? storage : storage + LeadSlant, rightTurn, stats, signal);
         }
 
 
@@ -1438,7 +1438,7 @@ public static partial class TileRewriter
         /// The left-turn lane's markings: the through lane's left edge dashed from
         /// <paramref name="dashedTo"/> in to <see cref="TurnSolid"/> m, then solid; the stop bar; the arrows.
         /// </summary>
-        private void Lanes(List<RoadPaint> paint, double storage, double dashedTo, bool rightTurn, TurnLaneStats stats, bool signal, double? separatorTo = null)
+        private void Lanes(List<RoadPaint> paint, double storage, double dashedTo, bool rightTurn, TurnLaneStats stats, bool signal)
         {
             // at traffic lights the stop line stands back from the mouth (#348): the lanes end there
             float width = signal ? SignalStopLine : StopBar;
@@ -1482,7 +1482,7 @@ public static partial class TileRewriter
             for (int k = 1; k < lanes.LeftLanes; k++)
             {
                 double between = _side * lanes.LeftLane(k).From;
-                paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, between, TurnSolid + pocketBack - 0.1, k == 1 ? separatorTo ?? dashedTo : dashedTo));
+                paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, between, TurnSolid + pocketBack - 0.1, dashedTo));
                 paint.Add(Line(PaintType.WhiteSolid, 0, 0, between, signal ? pocketBack : 0, TurnSolid + pocketBack - 0.1));   // to the pocket's own stop line
             }
 

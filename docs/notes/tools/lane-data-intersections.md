@@ -78,7 +78,8 @@ Plan and reasoning: `docs/plans/intersection-lanes.md`. What is built:
 - **A lead-in opens one lane** (`Widening.Pocket`, `LeadCap`): on a pocket of several lanes the hatch is at most the
   leftmost lane wide; only that lane opens at the closing line. The lanes right of it carry the approach's own lane
   on, and the through lane leaves them along the taper behind a dashed line (`ThroughEdge`); their lane records move
-  out over the taper with the through lane.
+  out over the taper with the through lane. The dashed lines between the pocket's lanes start at the storage, where the
+  left-turn bike lane's yellow lines start (the user's spec), not at the angled closing line.
 - **Angled closing line** (`Hatch(..., slant)`, `Widening.LeadSlant`): a lead-in hatch closes with a line from the centre
   line at the start of the storage back along the road to its border, 10 m (at most half the taper): the pocket opens
   from its right side, a gentle lead in; its leftmost lane's record opens that much further back. Exit hatches stay square.
