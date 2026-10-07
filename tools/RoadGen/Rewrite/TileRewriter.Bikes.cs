@@ -27,6 +27,54 @@ public static partial class TileRewriter
             : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"~{s.Line.Plan[0].X:F1},{s.Line.Plan[0].Y:F1}");
     }
 
+    /// <summary>A path this short of a junction's mouth is carried on to it (<see cref="PathsToMouth"/>).</summary>
+    private const double CrossingLookIn = 8.0;
+
+    /// <summary>
+    /// A street's separated path (and the sidewalk beside it) that stops within <see cref="CrossingLookIn"/> m of a
+    /// junction's mouth goes on to the mouth (#700, the user's rule: the path reaches the road it crosses before its
+    /// crossing starts). A joining road's corner zone stops it a few metres short where the junction's setback is small;
+    /// the pieces between take the side as it is where it starts. <paramref name="atStart"/>/<paramref name="atEnd"/>:
+    /// which ends of the street are a junction's mouth.
+    /// </summary>
+    private static List<RoadSegment> PathsToMouth(List<RoadSegment> pieces, bool atStart, bool atEnd)
+    {
+        if (pieces.Count < 2) return pieces;
+        var result = new List<RoadSegment>(pieces);
+        foreach (bool fromStart in (ReadOnlySpan<bool>)[true, false])
+        {
+            if (fromStart ? !atStart : !atEnd) continue;
+            foreach (bool right in (ReadOnlySpan<bool>)[false, true])
+            {
+                RoadSide SideOf(RoadSegment s) => right ? s.Attributes.Right : s.Attributes.Left;
+                double gap = 0;
+                int p = 0;
+                for (; p < result.Count; p++)
+                {
+                    var piece = fromStart ? result[p] : result[^(p + 1)];
+                    if (SideOf(piece).HasTrack) break;
+                    gap += RoadPaintGeometry.Length(piece.Points);
+                    if (gap > CrossingLookIn) break;
+                }
+                if (p == 0 || p >= result.Count || gap > CrossingLookIn) continue;
+                var found = SideOf(fromStart ? result[p] : result[^(p + 1)]);
+                ushort shift = fromStart ? found.ShiftStartCm : found.ShiftEndCm;
+                var carried = found with { ShiftStartCm = shift, ShiftEndCm = shift };
+                for (int q = 0; q < p; q++)
+                {
+                    int index = fromStart ? q : result.Count - 1 - q;
+                    var s = result[index];
+                    result[index] = new RoadSegment
+                    {
+                        Class = s.Class, Surface = s.Surface, Flags = s.Flags, Width = s.Width, Points = s.Points,
+                        Attributes = right ? s.Attributes with { Right = carried } : s.Attributes with { Left = carried },
+                    };
+                }
+            }
+        }
+        return result;
+    }
+
     /// <summary>A link end that is a junction's mouth or a dead end (not a road simply carrying on).</summary>
     private static bool EndsAtJunction(RoadNetwork net, int node) =>
         node < 0 || node >= net.Nodes.Count || net.Nodes[node].Degree != 2;
@@ -177,6 +225,9 @@ public static partial class TileRewriter
                 double LaneShift(int armIndex, bool armLeft, double shift) =>
                     armLeft && lanes.GetValueOrDefault((junction.NodeId, armIndex))?.Approach is { BikeBetween: true } l
                         ? l.BikeLane()!.Value.To - l.Half : shift;
+                // how far in from the mouth the side's path or lane starts (#700: with a short setback a joining road's corner
+                // can stop it a few metres in, and the crossing runs on to where it starts)
+                var endInset = new Dictionary<(int, bool), double>();
                 RoadSide SideOf(int armIndex, bool armLeft)
                 {
                     var arm = junction.Arms[armIndex];
@@ -185,6 +236,19 @@ public static partial class TileRewriter
                     if (segmentOf.TryGetValue(arm.LinkId, out var so))
                     {
                         var pieces = finalPieces.TryGetValue(so.Segment, out var list) && list.Count > 0 ? list : [so.Segment];
+                        double inset = 0;
+                        for (int p = 0; p < pieces.Count && inset <= CrossingLookIn; p++)
+                        {
+                            var piece = end == LinkEnd.Start ? pieces[p] : pieces[^(p + 1)];
+                            var side = segRight ? piece.Attributes.Right : piece.Attributes.Left;
+                            if (side.HasTrack || side.HasLane)
+                            {
+                                endShift[(armIndex, armLeft)] = side.ShiftAt(end == LinkEnd.Start ? 0 : 1);
+                                endInset[(armIndex, armLeft)] = inset;
+                                return side;
+                            }
+                            inset += RoadPaintGeometry.Length(piece.Points);
+                        }
                         var seg = end == LinkEnd.Start ? pieces[0] : pieces[^1];
                         var found = segRight ? seg.Attributes.Right : seg.Attributes.Left;
                         endShift[(armIndex, armLeft)] = found.ShiftAt(end == LinkEnd.Start ? 0 : 1);
@@ -208,6 +272,9 @@ public static partial class TileRewriter
                             && Math.Sign(ua.Cross(Vec2.FromHeading(junction.Arms[i].OutwardHeading))) == sideSign)
                         .ToList();
                     Vec2 da = (ca - from).Normalized(), db = (cb - to).Normalized();
+                    // the crossing's ends where the paths or lanes start (#700)
+                    ca += ua * endInset.GetValueOrDefault((ia, k == 0));
+                    cb += ub * endInset.GetValueOrDefault((ib, k != 0));
                     // a curve through the junction, offset from the carriageway edge (+ outward, - inward) at each arm
                     List<Vec2> Bezier(double oa, double ob, bool simplify = true)
                     {

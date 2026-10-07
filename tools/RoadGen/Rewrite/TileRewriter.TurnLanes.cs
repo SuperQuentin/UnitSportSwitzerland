@@ -2190,6 +2190,20 @@ public static partial class TileRewriter
         private const double RefugeClear = 0.5;
 
         /// <summary>
+        /// Where across the arm the refuge for a zebra between <paramref name="zebraFrom"/> and <paramref name="zebraTo"/> stands,
+        /// metres out from the arm's axis toward this side (its near and far edge), null where none fits: the zebra leaves its
+        /// bars out there (#700).
+        /// </summary>
+        public (double Near, double Far)? RefugeSpan(double zebraFrom, double zebraTo)
+        {
+            double a = zebraFrom - 0.15 - RefugeLength, b = zebraTo + 0.15 + RefugeLength;
+            if (a < RefugeClear - 1e-6 || b > _length - 0.5) return null;
+            double iw = Math.Min(HatchAt(a), HatchAt(b)) - 0.5;
+            if (iw < 1.2) return null;
+            return (Frame0 + 0.25, Frame0 + 0.25 + iw);
+        }
+
+        /// <summary>
         /// How far out a zebra between <paramref name="zebraFrom"/> and <paramref name="zebraTo"/> must move for a refuge to fit
         /// on the arm (0: it fits where it is), null where none would fit anyway (the hatch too narrow or too short there).
         /// </summary>

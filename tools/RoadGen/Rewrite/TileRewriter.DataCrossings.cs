@@ -106,10 +106,13 @@ public static partial class TileRewriter
                 var exitWayHere = lanes is { ExitWay: { } ew, ExitFar: false } ? ew : null;
                 double? shift = exitWayHere?.RefugeShift(far - ZebraClear - ZebraDepth, far - ZebraClear);
                 if (shift is > 0) { far += shift.Value; atKerb = false; }
+                // no bars over the refuge (the user's rule); the exit lies on the approaching driver's left (negative across)
+                var span = shift is null ? null : exitWayHere!.RefugeSpan(far - ZebraClear - ZebraDepth, far - ZebraClear);
                 int before = stats.Crossings;
                 EmitCrossing(paint, source, mid, u, right, far, lo, hi, streetRight, streetLeft, areas, stats,
                     insetLeft: atKerb ? junction.KerbInset.GetValueOrDefault((i, false)) : 0,
-                    insetRight: atKerb ? junction.KerbInset.GetValueOrDefault((i, true)) : 0);
+                    insetRight: atKerb ? junction.KerbInset.GetValueOrDefault((i, true)) : 0,
+                    gap: span is { } sp ? (-sp.Far, -sp.Near) : null);
                 if (stats.Crossings > before)
                 {
                     drawn++;

@@ -658,6 +658,8 @@ public static partial class TileRewriter
                 var stripsOf = new Dictionary<RoadSegment, List<RoadAreaProp>>(ReferenceEqualityComparer.Instance);
                 foreach (var (strip, owner) in stripOwners)
                     (stripsOf.TryGetValue(owner, out var owned) ? owned : stripsOf[owner] = new()).Add(strip);
+                var linkOfSegment = new Dictionary<RoadSegment, int>(ReferenceEqualityComparer.Instance);
+                foreach (var (link, so) in segmentOf) linkOfSegment[so.Item1] = link;
                 foreach (var (tileId, list) in output)
                 {
                     for (int i = list.Count - 1; i >= 0; i--)
@@ -669,6 +671,11 @@ public static partial class TileRewriter
                         var final = strips is null ? pieces : pieces.SelectMany(x => ShiftOffPavement(x, strips, netStats.Bikes)).ToList();
                         // a gap in the grass where a left-turn pocket opens, for cyclists to reach it (#352)
                         if (cut) final = CutVerges(list[i], tileId, final, opened!, block.Contains(tileId) && wanted.Contains(tileId) ? netStats.Bikes : null);
+                        // a path stopped a few metres short of a junction's mouth goes on to it (#700, the user's rule): it reaches
+                        // the road it crosses before its crossing starts
+                        if (linkOfSegment.TryGetValue(list[i], out var pathLink))
+                            final = PathsToMouth(final, EndsAtJunction(result.Network, result.Network.Links[pathLink].StartNode),
+                                EndsAtJunction(result.Network, result.Network.Links[pathLink].EndNode));
                         finalPieces[list[i]] = final;
                         list.RemoveAt(i);
                         list.InsertRange(i, final);
