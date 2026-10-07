@@ -162,10 +162,14 @@ public static class SignalTestRegion
             Rows: [new OsmRow(0, 300), new OsmRow(300, 450, LanesFwd: "3", LanesBwd: "1", TurnFwd: "left|left|through;right")]));
         lines.Add(new Line("A13", "8m Strasse", "Durchgangsstrasse", "Kanton", [(j7, n), (2917950, n)], "secondary",
             Rows: [new OsmRow(0, 150, TurnBwd: "through|through;right"), new OsmRow(150, 450)]));
-        Cross("J7S", j7, n - 400, n, "6m Strasse", "Verbindungsstrasse", "tertiary");
-        Cross("J7N", j7, n, n + 400, "6m Strasse", "Verbindungsstrasse", "tertiary");
+        // the cross road is 2+2 (lanes=4, no turn:lanes): the double left turns into two lanes, and the cross road's own two
+        // lanes go on straight across into two; both pairs are kept apart by a dashed line through the junction
+        lines.Add(new Line("J7S", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(j7, n - 400), (j7, n)], "secondary",
+            Rows: [new OsmRow(0, 400, Lanes: "4")]));
+        lines.Add(new Line("J7N", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(j7, n), (j7, n + 400)], "secondary",
+            Rows: [new OsmRow(0, 400, Lanes: "4")]));
         junctions.Add(new Junction("J7-double-left", j7, n, "a double left pocket from lanes:forward=3 and turn:lanes; no left pocket where OSM marks none",
-            Arms("L|L|TR", "TR", "L|T|R", "L|T|R")));
+            Arms("L|L|TR", "TR", "LTR|LTR", "LTR|LTR")));
         return new Design(lines, boxes, junctions);
     }
 

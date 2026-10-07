@@ -1,6 +1,8 @@
 using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Import;
 using UnitSport.Tools.RoadGen.Meshing;
 using UnitSport.Tools.RoadGen.Network;
+using UnitSport.Tools.RoadGen.Rewrite;
 using Xunit;
 
 namespace UnitSport.Tests;
@@ -34,6 +36,7 @@ public class RoadLanesTests
     [InlineData(2, 2, 1000, 12f)]   // 4 lanes of 3 m
     [InlineData(2, 1, 800, 9f)]
     [InlineData(2, 2, 1600, 16f)]   // already wider than its lanes need
+    [InlineData(2, 0, 800, 8f)]     // lanes one way only: a one-way in the making, two lanes, not one more the other way
     public void An_ordinary_two_way_road_is_at_least_its_lanes_wide(int back, int fwd, int widthCm, float expected)
     {
         var line = Planned(RoadClass.Major, new RoadAttributes(LanesForward: (byte)fwd, LanesBackward: (byte)back, WidthCm: (ushort)widthCm), 9f);
@@ -88,7 +91,9 @@ public class RoadLanesTests
         var paint = new List<RoadPaint>();
         PaintEmitter.Emit(seg, 0, paint, startsAtJunction: true, endsAtJunction: true);
         var dashed = paint.Where(p => p.Type == PaintType.WhiteDashed).Select(p => p.Offset).Distinct().OrderBy(o => o).ToList();
-        Assert.Equal(new[] { -3f, 0f, 3f }, dashed);
+        Assert.Equal(new[] { -3f, 3f }, dashed);
+        // four lanes: the centre line is solid
+        Assert.Contains(paint, p => p.Type == PaintType.WhiteSolid && Math.Abs(p.Offset) < 0.01f);
     }
 
     [Theory]
@@ -110,5 +115,55 @@ public class RoadLanesTests
         Assert.Equal(((byte)15, BikePlanner.Why.Lane), BikePlanner.LaneFor(4.5, true, true));
         Assert.Equal(((byte)0, BikePlanner.Why.Narrow), BikePlanner.LaneFor(6.5, true, true, 2));   // 2 x 3.0 + 0.5 < the 1.25 minimum
         Assert.Equal(((byte)15, BikePlanner.Why.Lane), BikePlanner.LaneFor(7.5, true, true, 2));
+    }
+
+    private static readonly SignalMoves L = SignalMoves.Left, T = SignalMoves.Through, R = SignalMoves.Right;
+
+    [Fact]
+    public void Wished_lanes_go_onto_the_carriageway_and_the_leading_left_lanes_become_pockets()
+    {
+        // one lane toward the lights: left | through;right is today's pocket
+        var single = TileRewriter.Assign([L, T | R], 1, rightPocketPossible: true)!;
+        Assert.Equal([L], single.Pocket);
+        Assert.Equal([T | R], single.Own);
+        // a double left
+        Assert.Equal([L, L], TileRewriter.Assign([L, L, T | R], 1, false)!.Pocket);
+        // two lanes already: assigned in place, nothing built
+        var artery = TileRewriter.Assign([L, T | R], 2, false)!;
+        Assert.Empty(artery.Pocket);
+        Assert.Equal([L, T | R], artery.Own);
+        // no left lane in the data: no pocket, the extra through lane folds into the own lane
+        var noLeft = TileRewriter.Assign([T, T | R], 1, true)!;
+        Assert.Empty(noLeft.Pocket);
+        Assert.Equal([T | R], noLeft.Own);
+        Assert.Equal(1, noLeft.Folded);
+        // a right-only lane at the far right is a right pocket where one can be built, else it folds
+        var three = TileRewriter.Assign([L, T, R], 1, true)!;
+        Assert.True(three.RightPocket);
+        Assert.Equal([T], three.Own);
+        Assert.Equal([T | R], TileRewriter.Assign([L, T, R], 1, false)!.Own);
+        // fewer wished lanes than the carriageway holds: the leftmost wished lane fills the lanes on the left
+        Assert.Equal([L, L, T | R], TileRewriter.Assign([L, T | R], 3, false)!.Own);
+        Assert.Null(TileRewriter.Assign(null, 1, true));
+    }
+
+    [Fact]
+    public void The_row_at_a_line_end_is_the_short_way_there_not_the_one_covering_the_line()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "overlay-700-" + Guid.NewGuid().ToString("N") + ".tsv");
+        static string Row(double from, double to, string lanesFwd, string turnFwd) =>
+            $"{{u}}\t0\t{from:F1}\t{to:F1}\t1\t+\tsecondary\t\t\t{lanesFwd}\t\t\t\t\t\t\t{turnFwd}\t\t0\t0";
+        File.WriteAllLines(path, ["uuid\tpart", Row(0, 300, "", ""), Row(300, 450, "3", "left|left|through;right")]);
+        try
+        {
+            var overlay = OsmOverlayReader.TryLoad(path)!;
+            Assert.Equal("", overlay.Best("{u}", 0, 0, 450)!.LanesFwd);   // the line's own row
+            var end = overlay.AtEnd("{u}", 0, 450, towardEnd: true)!;
+            Assert.Equal("3", end.LanesFwd);
+            Assert.Equal([TurnMove.Left, TurnMove.Left, TurnMove.Through | TurnMove.Right], end.TurnLanesFwd);
+            Assert.Equal("", overlay.AtEnd("{u}", 0, 0, towardEnd: false)!.LanesFwd);   // the start of the line
+            Assert.Null(overlay.AtEnd("{other}", 0, 450, true));
+        }
+        finally { File.Delete(path); }
     }
 }

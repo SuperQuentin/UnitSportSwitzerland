@@ -401,7 +401,8 @@ public static partial class TileRewriter
             if (fit.Own.All(m => m == allowed) || count != fit.Own.Length) continue;
             double stop = plansByNode[node].Plan.Kind == PriorityPlanner.Kind.Signal
                 ? MouthSkew(plansByNode[node].Junction, plansByNode[node].Junction.Arms[arm]) + SignalStopSetback + SignalStopLine * 0.5 : 0.1;
-            stats.WishArrows += OwnArrows(so.Segment, so.Tile, w.AtEnd, Get(paint, so.Tile), centre, laneWidth, fit.Own, stop);
+            stats.WishArrows += OwnArrows(so.Segment, so.Painted, so.Tile, w.AtEnd, Get(paint, so.Tile), centre, laneWidth, fit.Own, stop,
+                plansByNode[node].Plan.Kind == PriorityPlanner.Kind.Signal);
         }
         Corners(priority, net, placed, block, wanted, areas, stats, streetSide, arcs);
         return placed;
@@ -1335,6 +1336,28 @@ public static partial class TileRewriter
                 paint.Add(RoadPaint.AlongSegment(_seg, line.Type, line.Rgba, line.Width, line.Dash, line.Gap, line.Offset, from, to, line.Variant));
         }
 
+
+        /// <summary>
+        /// The dashed lines between the approach's own lanes, and the centre line (#700: lanes assigned in place at traffic lights):
+        /// solid over the <see cref="TurnSolid"/> metres before the stop line <paramref name="stop"/> m from the mouth, and none past
+        /// it. Returns how many lines it changed.
+        /// </summary>
+        public int SolidToStop(List<RoadPaint> paint, double stop)
+        {
+            double near = AlongOf(stop), far = AlongOf(stop + TurnSolid);
+            var lines = paint.Where(q => (q.Segment == _painted || q.Segment == _seg) && q.Type == PaintType.WhiteDashed && q.Dash > 0
+                && q.Offset * _side > -0.05 && q.Offset * _side < _half - 0.5).ToList();
+            foreach (var line in lines)
+            {
+                paint.Remove(line);
+                // the dashes as they were, away from the junction
+                double from = _atEnd ? line.From : far, to = _atEnd ? far : line.To;
+                if (Math.Min(to, _total) - from > 1)
+                    paint.Add(RoadPaint.AlongSegment(_seg, line.Type, line.Rgba, line.Width, line.Dash, line.Gap, line.Offset, from, to, line.Variant));
+                paint.Add(RoadPaint.AlongSegment(_seg, PaintType.WhiteSolid, line.Rgba, line.Width, 0, 0, line.Offset, Math.Min(near, far), Math.Max(near, far)));
+            }
+            return lines.Count;
+        }
         /// <summary>A line along the segment between two distances from the mouth.</summary>
         private RoadPaint Line(PaintType type, float dash, float gap, double offset, double d0, double d1)
         {
@@ -1424,8 +1447,8 @@ public static partial class TileRewriter
             for (int k = 1; k < lanes.LeftLanes; k++)
             {
                 double between = _side * lanes.LeftLane(k).From;
-                paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, between, TurnSolid + setback - 0.1, dashedTo));
-                paint.Add(Line(PaintType.WhiteSolid, 0, 0, between, signal ? setback : 0, TurnSolid + setback - 0.1));
+                paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, between, TurnSolid + pocketBack - 0.1, dashedTo));
+                paint.Add(Line(PaintType.WhiteSolid, 0, 0, between, signal ? pocketBack : 0, TurnSolid + pocketBack - 0.1));   // to the pocket's own stop line
             }
 
             // across the pocket, just short of the mouth; at traffic lights across the through lane

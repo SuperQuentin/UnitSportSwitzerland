@@ -152,8 +152,10 @@ public static class PaintEmitter
         {
             // traffic keeps right: the lanes against the drawing are on its left
             int back = Math.Max(1, (int)a.LanesBackward), fwd = Math.Max(1, (int)a.LanesForward);
+            // with four lanes or more the centre line is solid (a Sicherheitslinie: no crossing into the oncoming lanes, #700)
+            bool solidCentre = back + fwd >= 4;
             for (int k = 1; k < back + fwd; k++)   // k == back is the centre
-                Line(RoadCrossSection.TwoWayLineOffset(seg.Width, leftBike, rightBike, back, fwd, k), true);
+                Line(RoadCrossSection.TwoWayLineOffset(seg.Width, leftBike, rightBike, back, fwd, k), !(solidCentre && k == back));
             // Randlinien outside built-up areas, on roads wide enough for a centre line too (BE
             // Handbuch Markierung 1 p. 17, Stadt Bern C 2.10.11; inside a town only exceptionally);
             // none beside a bike lane
@@ -322,7 +324,7 @@ public static class PaintEmitter
         float outside = Math.Min(HighSpeedEdgeWidth * 0.5f, half + edge);
         line(edge - outside, false);
         line(-edge + outside, false);
-        for (int k = 1; k < back + fwd; k++) line(edge + k * lane, true);
+        for (int k = 1; k < back + fwd; k++) line(edge + k * lane, !(back + fwd >= 4 && k == back));   // #700: solid centre with four lanes or more
         return true;
     }
 

@@ -76,6 +76,8 @@ public static partial class TileRewriter
         /// <summary>Where OSM decides, what the inference rule would have said: both, rule only, OSM only (#348 tuning).</summary>
         public int RuleAndOsm, RuleOnly, OsmOnly, InternalArms;
         public int Poles, PolesRejected, SignsOnPoles, BikeSignals, Crossings, PathStopLines;
+        /// <summary>Dashed lines through a junction between two lanes with the same turn (#700).</summary>
+        public int PairGuides;
         public readonly List<string> InvalidExamples = new();
         /// <summary>Where the first inferred junctions are (LV95), to look at them (#353).</summary>
         public readonly List<string> InferredAt = new();
@@ -87,7 +89,7 @@ public static partial class TileRewriter
             var sb = new StringBuilder();
             sb.Append(c, $"    traffic lights (#348): {Junctions:N0} junctions ({Inferred:N0} inferred, {FromData:N0} from data), {Arms:N0} arms, {Approaches:N0} approaches, ");
             sb.Append(c, $"{LeftPockets:N0} with a left-turn pocket, {RightPockets:N0} with a right-turn pocket, {StopLines:N0} stop lines without a left pocket, {Groups:N0} signal groups, ");
-            sb.Append(c, $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key} x{kv.Value}"))}, invalid plans {Invalid:N0}").AppendLine();
+            sb.Append(c, $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key} x{kv.Value}"))}, invalid plans {Invalid:N0}, dashed lines through the junction between two lanes with the same turn {PairGuides:N0} (#700)").AppendLine();
             sb.Append(c, $"      where OSM decides, the inference rule agrees on {RuleAndOsm:N0}, adds {RuleOnly:N0} OSM does not have, misses {OsmOnly:N0}; {InternalArms:N0} arms inside a junction of several nodes; inferred at LV95 {string.Join(" ", InferredAt)}").AppendLine();
             sb.Append(c, $"      poles (#350) {Poles:N0}, rejected (no clear spot) {PolesRejected:N0}, priority signs moved onto a pole {SignsOnPoles:N0}, approaches with a bike signal {BikeSignals:N0} (#351)").AppendLine();
             foreach (var x in InvalidExamples) sb.Append("      invalid: ").Append(x).AppendLine();
@@ -385,9 +387,16 @@ public static partial class TileRewriter
             }
             plans[junction.NodeId] = (signalPlan, armInPlan);   // the bike crossings' conflicts (#406)
             Get(signals, home).Add(new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops.ToArray(), Plan = signalPlan, Poles = poles });
+            var records = new List<(int Arm, RoadApproach Record)>();
             foreach (var (i, planArm, stopAt) in approachArms)
-                Get(approaches, home).Add(SignalApproach(junction, i, net, (short)(Get(signals, home).Count - 1), (byte)planArm, stopAt,
-                    signalPlan, pockets.GetValueOrDefault((junction.NodeId, i)), restrictions, laneStats));
+            {
+                var record = SignalApproach(junction, i, net, (short)(Get(signals, home).Count - 1), (byte)planArm, stopAt,
+                    signalPlan, pockets.GetValueOrDefault((junction.NodeId, i)), restrictions, laneStats);
+                Get(approaches, home).Add(record);
+                records.Add((i, record));
+            }
+            // two lanes side by side with the same turn stay apart through the junction: a dashed line between them (#700)
+            stats.PairGuides += EmitPairGuides(paint, home, junction, net, records, anchors);
             stats.Junctions++;
             if (priority.SignalsFromData.Contains(junction.NodeId)) stats.FromData++;
             else

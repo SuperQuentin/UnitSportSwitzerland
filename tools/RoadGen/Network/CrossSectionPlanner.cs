@@ -239,9 +239,13 @@ public static class CrossSectionPlanner
         // width: lanes for the high-speed classes, TLM's nominal class width for the rest; an ordinary
         // road with more lanes than its class default is at least lanes x LaneWidth wide (#700)
         bool oneWayRoad = oneWayCarriageway || a.OneWay != 0 || row?.OneWay is "1" or "-1";
-        bool crowded = !RoadCrossSection.IsHighSpeed(s.Class) && IsCarRoad(s)
-            && (oneWayRoad ? oneWayLanes > 1 : fwd > 1 || bwd > 1);
-        int crowdedLanes = oneWayRoad ? oneWayLanes : Math.Max(1, fwd) + Math.Max(1, bwd);   // as the paint counts them
+        // lanes in one direction only (OSM lanes:backward=2 and nothing forward) or a roundabout ring: the line turns out
+        // one-way later (ring orientation, connectivity), so it carries those lanes, not one more the other way
+        bool oneSided = !oneWayRoad && ((fwd == 0) != (bwd == 0) || row?.Roundabout == true || a.Has(RoadAttrFlags.Roundabout));
+        int crowdedLanes = oneWayRoad ? oneWayLanes : oneSided ? Math.Max(fwd, bwd) : Math.Max(1, fwd) + Math.Max(1, bwd);   // as the paint counts them
+        // not a divided carriageway: TLM draws the pair a few metres apart and ordinary roads are not shifted apart (#117), so lanes-wide halves would overlap
+        bool crowded = !RoadCrossSection.IsHighSpeed(s.Class) && IsCarRoad(s) && !oneWayCarriageway
+            && (oneWayRoad || oneSided ? crowdedLanes > 1 : fwd > 1 || bwd > 1);
         float width;
         if (RoadCrossSection.IsHighSpeed(s.Class))
             width = oneWayCarriageway
