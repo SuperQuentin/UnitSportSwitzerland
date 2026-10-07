@@ -72,6 +72,20 @@ public partial class CdLibrary : Node
     /// <summary><see cref="CdInfo.Source"/> of the CD burnt from a <see cref="DefaultUrls"/> link.</summary>
     public static string DefaultSource(string url) => "default:" + url;
 
+    /// <summary>What a CD burnt from a check's <c>--cdfixture</c> (or <c>--radiopersonal</c>) file is marked with.</summary>
+    private const string FixturePrefix = "fixture:";
+
+    /// <summary>The checks' fixture CDs burnt before they were marked (their file names in tools/*check.sh).</summary>
+    private static readonly HashSet<string> LegacyFixtures = new() { "radiofixture", "radiofixture2", "radiopersonal", "carcdA", "carcdB" };
+
+    /// <summary>
+    /// A CD a check burnt from a test sound, not music: hidden from an exported game and its files
+    /// deleted there (<see cref="DropFixtures"/>). The checks share the user folder with a release
+    /// on the same machine, so their CDs used to show up in the player's radio.
+    /// </summary>
+    public static bool IsFixture(CdInfo cd) =>
+        cd.Source.StartsWith(FixturePrefix, StringComparison.Ordinal) || (cd.Source.Length == 0 && LegacyFixtures.Contains(cd.Title));
+
     /// <summary>
     /// The shared CD of the chess type beat, or -1 while it is not burnt (or not yet listed here).
     /// Every peer knows it from the library, so the dance needs nothing replicated.
@@ -394,6 +408,7 @@ public partial class CdLibrary : Node
             _all[cd.Id] = Note(cd);
             _nextId = Math.Max(_nextId, cd.Id + 1);
         }
+        if (DropFixtures(Directory, _all)) Save();
         GD.Print($"[cd] library: {_all.Count} CD(s) in {Directory}");
     }
 
@@ -401,10 +416,33 @@ public partial class CdLibrary : Node
     {
         foreach (var cd in LoadIndex(PersonalDirectory))
             if (cd.Id < 0) _personal[cd.Id] = cd;
+        if (DropFixtures(PersonalDirectory, _personal)) SaveIndex(PersonalDirectory, _personal);
         if (_personal.Count > 0) GD.Print($"[cd] {_personal.Count} personal CD(s) in {PersonalDirectory}");
     }
 
     private void Save() => SaveIndex(Directory, _all);
+
+    /// <summary>
+    /// An exported game (not a check burning its own) forgets the checks' fixture CDs and deletes
+    /// their files. True when it removed any, so the caller rewrites the index.
+    /// </summary>
+    private static bool DropFixtures(string directory, Dictionary<int, CdInfo> cds)
+    {
+        if (!OS.HasFeature("template") || CmdArgs.Has("--cdfixture") || CmdArgs.Has("--radiopersonal")) return false;
+        bool any = false;
+        foreach (var cd in cds.Values.Where(IsFixture).ToList())
+        {
+            cds.Remove(cd.Id);
+            any = true;
+            foreach (string ext in new[] { ".ogg", ".json" })
+            {
+                try { File.Delete(Path.Combine(directory, $"{cd.Id}{ext}")); }
+                catch (Exception e) { GD.PushWarning($"[cd] could not delete fixture CD {cd.Id}{ext}: {e.Message}"); }
+            }
+            GD.Print($"[cd] dropped the check's fixture CD {cd.Id} ({cd.Title})");
+        }
+        return any;
+    }
 
     private static readonly System.Text.Json.JsonSerializerOptions IndexJson = new()
     {
@@ -521,6 +559,7 @@ public partial class CdLibrary : Node
             if (!File.Exists(file)) { GD.PushWarning($"[cd] fixture not found: {file}"); continue; }
             string title = Path.GetFileNameWithoutExtension(file);
             if (_all.Values.Any(c => c.Title == title)) { GD.Print($"[cd] fixture already burnt: {title}"); continue; }
+            _sources[file] = FixturePrefix + title;   // marked, so an exported game drops it
             _fixtures.Enqueue(file);   // one at a time, from _Process
         }
     }

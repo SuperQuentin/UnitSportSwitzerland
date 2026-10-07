@@ -23,6 +23,11 @@
   has no CD of yet (`CdInfo.Source = "default:<url>"`) through the fixture queue at start, one at a
   time; a failed one is tried again next start. No audio ships: the songs are not openly licensed.
   Dev runs and checks skip it, offline, so a `--cdfixture` never waits behind a download.
+- **Check fixtures stay out of the release.** The checks (`--cdfixture`, `--radiopersonal`) burn test
+  sounds into the same `user://cds` a release on that machine reads. A fixture CD is marked
+  `Source = "fixture:<name>"` (older ones are known by name: radiofixture, radiofixture2,
+  radiopersonal, carcdA, carcdB), and an exported build that is not itself a check drops them and
+  deletes their files at load (`CdLibrary.DropFixtures`). Dev runs keep them, so checks reuse them.
 - **Threading.** The burn is a `Task.Run`; progress and the result cross back through
   `ConcurrentQueue`s drained in `_Process`, because an RPC sent off the main thread never arrives.
 - **`BeatAnalyzer.Analyse(mono, rate)`** (pure C#, ~0.5 s for 4 min): Hann 1024 / hop 256 spectral
