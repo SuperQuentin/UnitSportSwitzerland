@@ -25,6 +25,8 @@ public readonly struct RadioGroove
     public float Kick { get; init; }
     /// <summary>1 on a bar's first beat, decaying through it; 0 on the other three.</summary>
     public float BarKick { get; init; }
+    /// <summary>The section's kind (<see cref="SectionKind"/>), Groove without an analysis.</summary>
+    public SectionKind Section { get; init; }
     /// <summary>The section's size, 0 calm .. 1 chorus.</summary>
     public float Peak { get; init; }
     /// <summary>1 as a new section starts, decaying over about a second and a half.</summary>
@@ -32,7 +34,7 @@ public readonly struct RadioGroove
     /// <summary>The CD has its loudness envelope (not just the beat grid).</summary>
     public bool HasEnvelope { get; init; }
 
-    public static readonly RadioGroove Silent = new() { Level = 0f, Peak = 0.5f };
+    public static readonly RadioGroove Silent = new() { Level = 0f, Peak = 0.5f, Section = SectionKind.Groove };
 
     /// <summary>The groove of CD <paramref name="cdId"/> started at <paramref name="startedAt"/>, at <paramref name="serverNow"/>.</summary>
     public static RadioGroove Of(int cdId, double startedAt, double serverNow)
@@ -62,6 +64,7 @@ public readonly struct RadioGroove
             // the onsets carry the feel; the grid keeps a little pulse under them so it never goes slack
             Kick = env ? Mathf.Max(kick, 0.35f * beatKick * level) : beatKick,
             BarKick = inBar == 0 ? Mathf.Exp(-phase * 5f) : 0f,
+            Section = kind,
             Peak = kind switch { SectionKind.Calm => 0.1f, SectionKind.Peak => 0.85f, SectionKind.Chorus => 1f, _ => 0.5f },
             Burst = burst,
         };

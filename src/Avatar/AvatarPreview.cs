@@ -733,6 +733,25 @@ public partial class AvatarPreview : Node3D
                 Grid(5);
                 break;
             }
+            case "dancefaces":
+            {
+                // #728: a dancer's face as the music goes (Face.DanceFace), pop then rock, hip-hop, chill
+                var look = looks[3].Look with { Face = 0, HairStyle = HairStyle.None };
+                var cases = new (string Name, int Section, float Level, float Kick, float Bar, float Burst, int Beat, int Floor)[]
+                {
+                    ("calm", 0, 0.3f, 0f, 0f, 0f, 1, 0), ("groove", 1, 0.6f, 0.2f, 0f, 0f, 1, 0),
+                    ("peak, a hit", 2, 0.9f, 1f, 1f, 0f, 0, 0), ("chorus: oh", 3, 0.9f, 0.6f, 0f, 0f, 0, 0),
+                    ("chorus: ee", 3, 0.9f, 0.6f, 0f, 0f, 1, 0), ("new section", 2, 0.9f, 0.3f, 0f, 1f, 0, 0),
+                    ("breaking", 2, 0.9f, 0.5f, 0f, 0f, 1, 1), ("freeze", 2, 0.9f, 0.5f, 0f, 0f, 1, 2),
+                    ("quiet", 1, 0.02f, 0f, 0f, 0f, 1, 0),
+                };
+                foreach (int style in new[] { 0, 1, 3, 4 })
+                    foreach (var c in cases)
+                        Add($"{(Audio.Cd.MusicStyle)style} {c.Name}", look,
+                            Face.DanceFace.Target(new Face.DanceHearing(style, c.Section, c.Level, c.Kick, c.Bar, c.Burst, c.Beat, 2, c.Floor), 0u));
+                Grid(9);
+                break;
+            }
             case "seeded":
                 for (int f = 0; f < 16; f++)
                 {
