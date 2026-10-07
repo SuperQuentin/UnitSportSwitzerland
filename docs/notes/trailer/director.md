@@ -39,3 +39,17 @@
   5 m to `test_output/trailer/routes/shotNN_<road>.csv`, to put a camera where a car will be.
 - **The song** is not committed: `tools/trailer.sh` downloads it from incompetech.com (CC BY 4.0,
   credited on the end card, `Song.Credit`).
+- **Staging gotchas** (each cost a stills pass):
+  - An autopilot put down mid-route must be seeded (`D.Near = IndexAt(arc)`): it searches forward
+    from the start and, on a zigzag like the Tremola, locks onto the leg metres away and drives that.
+  - The race pilot launches motorbikes at walking pace (wheelie, low profile); bikes use
+    `Drive.Follow`, which banks a two-wheeler (`tan φ = v²κ/g`) and slows for bends itself.
+  - A pigeon on the ground (and one launched from there) takes off only on a flap (`Up`), not on the stick.
+  - A boat is mounted on dry ground (`Board`) and then `PlaceBoat`ed: its spot must be water
+    (`WaterField.TryLevelAt`), or it waits forever; the steamer floats at 1.6 m (`Draught`).
+  - Skis are gravity only and carving is their brake: face them down the real fall line (try
+    several headings with `--trailer-log`), keep the steer small.
+  - A road route's direction is the road's, not `Toward`'s: read it off the route dump before
+    giving an actor a negative arc.
+  - A fixed camera beside a road sees whatever stands there (barns, bridge parapets): put it on the
+    road, or high, or check it in a still.
