@@ -83,7 +83,11 @@ forbidden turn gets none. The junction's markings follow:
   tiles; the pieces need one obstacle owner or each stops the other's sidewalks at the cut) but (1) the pieces kept one
   width (the widest), so a short added lane made the whole segment wide (J7's 450 m way 4 lanes wide), and the centre
   line jogged at the cut (no taper); (2) it replaced #700's pockets on the approach side (J7's double left pocket and its
-  lead-in hatch became plain lanes: `A_double_left_lead_in_hatch_is_at_most_one_lane_wide` failed). Pending a decision.
+  lead-in hatch became plain lanes: `A_double_left_lead_in_hatch_is_at_most_one_lane_wide` failed). **The user's
+  decision**: no cut; lanes added before a junction stay #700's pockets, lanes added after it become an exit widening
+  from OSM's lane data. **Deferred**: with the odd-lane rule Sion's exit (`lanes=3`, no split) is an extra lane in, not
+  out; a junction end where OSM explicitly maps more departing lanes than the road has occurs twice on the 20 Sion tiles
+  (LV95 2505792,1137809 and 2506848,1138111), too rare to build the exit widening for now.
 - **Same-turn lanes led through**: `EmitPairGuides` without lights too, from the approach's own lanes and the inferred
   moves, starting at the mouth (`signal: false`). Sion tiles: 20.
 - Sion tiles: 14 approaches' lanes changed from #700's rule (a one-lane straight exit: the inner lane left-only, or the
