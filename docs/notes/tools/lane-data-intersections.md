@@ -138,8 +138,18 @@ Plan and reasoning: `docs/plans/intersection-lanes.md`. What is built:
 - **Straight until the radius starts** (user's rule, `StraightIn`, `ClearOfKerbs` in `TileRewriter.Bikes.cs`): a bike
   crossing at the lights runs straight on along a widened arm's kerb (or a tight corner's straight leg) only where the
   line straight across would cut over that kerb, then across. Cars: #709.
-- **Zebra over an exit hatch** (`Widening.ClearHatch`, `Refuge`): the stripes under it go; where the hatch leaves a 1.2 m
-  island, kerbed refuges 2 m long stand on both sides of the crosswalk (real tiles: 2).
+- **Zebra over an exit hatch** (`Widening.ClearHatch`, `Refuge`, `RefugeShift`, `OpenAtCrosswalk`): the hatch (stripes
+  and lines) starts behind the crosswalk and does not close at the mouth; where it leaves a 1.2 m island, kerbed refuges
+  2 m long stand on both sides of the crosswalk, never in the junction: the zebra moves out along the arm until both fit
+  (real tiles: 2). Bars only over the carriageway and paths, none over verges or the refuge (`EmitCrossing(gap)`).
+- **No centre line through a junction with a left pocket** (`PriorityResult.CentreAt`): its first dash started at the
+  mouth beside the hatch and read as a solid line past the island.
+- **Through-lane guide** (`ThroughGuide`, junctions without lights): dashed 1 m / 1 m from the pocket's edge at the
+  mouth to the exit lane's edge beside the hatch (real tiles: 27).
+- **Paths to the mouth** (`PathsToMouth`): a path stopped within 8 m of a junction's mouth (a joining road's corner zone,
+  now nearer with the tighter setback) runs on to it, so its crossing starts at the road it crosses.
+- Not done here, #711: corners beside a widening at junctions without lights still start from the original edge
+  (bare ground where the arm is widened up to the mouth, e.g. Sion's north-western arm).
 - Test region: J7's east approach marks no right turn (tight north-east corner, diagonal zebras on the north and east
   arms from OSM nodes, J7 has no sidewalks); the unlit T south of J3: zebras on the stem and the west arm, the east arm's
   crossing is unmarked.
