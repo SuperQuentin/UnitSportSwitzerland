@@ -174,7 +174,8 @@ public partial class CdUpload : Node
 
     private static string UploadRoot => Path.Combine(CdLibrary.Directory, "uploads");
 
-    private static double Now => Time.GetTicksMsec() / 1000.0;
+    /// <summary>Real seconds: a rate limit and a stalled upload are about people and links, not game time.</summary>
+    private static double Now => RealClock.Now;
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Begin(string name, long size, string hash)
