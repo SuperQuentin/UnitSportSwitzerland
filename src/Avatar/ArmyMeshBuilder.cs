@@ -45,7 +45,8 @@ public static class ArmyMeshBuilder
         float half = c.Width * 0.5f;
         float boardTop = c.Floor + c.Board;
         // the deck on its frame, the boards round it
-        Along(m, cg, c.From, c.To, c.Floor - 0.12f, c.Floor, c.Width - 0.06f, Plank);
+        Along(m, cg, c.From, c.To, c.Floor - 0.12f, c.Floor - 0.02f, c.Width - 0.06f, Trim);
+        Along(m, cg, c.From, c.To, c.Floor - 0.02f, c.Floor, c.Width - 0.1f, Plank);
         foreach (float sx in new[] { -1f, 1f })
         {
             Along(m, cg, c.From, c.To, c.Floor, boardTop, 0.05f, look.Paint, sx * (half - 0.025f));
