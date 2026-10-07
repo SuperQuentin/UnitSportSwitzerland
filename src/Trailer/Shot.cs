@@ -264,6 +264,12 @@ public sealed record Shot
     /// </summary>
     public Func<Godot.Node3D>? Set { get; init; }
     public Spot SetAt { get; init; }
+    /// <summary>
+    /// A film's moonlight at night (0 = none): a soft blue light from high in the south, this
+    /// strong, over the whole place, so what the game's night leaves black reads on screen. The
+    /// lamps and lit windows stay what they are.
+    /// </summary>
+    public float Moon { get; init; }
     /// <summary>A photo taken at this shot time: a flash, then the frame held as a polaroid to the end.</summary>
     public double? Photo { get; init; }
     /// <summary>Where the photo is taken from (the photographer's view, the film's camera elsewhere); null: the film's frame.</summary>

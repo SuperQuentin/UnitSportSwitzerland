@@ -265,6 +265,20 @@ public partial class TrailerDirector : Node
             _set.GlobalPosition = _origin.ToWorld(shot.SetAt.E, shot.SetAt.N, SetAltitude);
             _props.Add(_set);
         }
+        if (shot.Moon > 0f)
+        {
+            var moon = new DirectionalLight3D
+            {
+                Name = "Moon",
+                LightColor = new Color(0.62f, 0.72f, 1f),
+                LightEnergy = shot.Moon,
+                ShadowEnabled = false,
+                // high in the south-east, pointing down and north-west
+                Rotation = new Vector3(Mathf.DegToRad(-55f), Mathf.DegToRad(150f), 0f),
+            };
+            AddChild(moon);
+            _props.Add(moon);
+        }
         _shotCamera = CameraFor(shot);
         _settledFor = 0;
         _drawnFor = 0;

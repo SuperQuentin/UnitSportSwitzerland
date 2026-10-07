@@ -60,20 +60,22 @@ Times are from the start of the film, cut on the bars.
 5. **Bar 7 · 0:12-0:14 · INT. THE TABLE.** MÜLLER stands, a finger in the air: an idea.
    - MÜLLER: karts in garage 4. who's u-booting?
    - BERNASCONI: polenta-fraktion is in
-6. **Bars 8-9 · 0:14-0:18 · EXT. THE RING ROAD — NIGHT.** Four karts burst round the block,
-   low and loud, past the row of Duros. The horns brighten.
+6. **Bars 8-9 · 0:14-0:18 · EXT. THE RING ROAD — FIRST LIGHT.** After a night of poker, two
+   minutes before the reveille: four army karts burst round the block in the low sun, past the row
+   of Duros. The horns brighten.
+   - Super: **05:58**.
 7. **Bar 10 · 0:18-0:20 · EXT. FROM ABOVE.** The pack round the north block, one diving up the
    inside.
-8. **Bar 11 · 0:20-0:22 · EXT. ONBOARD.** From MÜLLER's seat: between the parked lorries, a G-Class
-   flashing past.
+8. **Bar 11 · 0:20-0:22 · EXT. ONBOARD.** From BERNASCONI's seat, last of the pack: the three karts
+   ahead, the barracks' lit windows going past.
 9. **Bar 12 · 0:22-0:24 · EXT. THE SPORTS PITCH CORNER.** The karts slide round the corner by the
    pitch.
-10. **Bar 13 · 0:24-0:26 · EXT. THE ROAD IN.** Headlights: ROCHAT's G-Class turns in, and the
+10. **Bar 13 · 0:24-0:26 · EXT. THE ROAD IN.** ROCHAT's G-Class rolls in, headlights on, and the
     karts stop dead.
-    - ROCHAT: RECRUITS. landschaden. ZS at 06:00
-11. **Bars 14-15 · 0:26-0:30 · EXT. THE YARD — DAWN.** The four in a row by their karts, saluting,
+    - ROCHAT: RECRUITS. LANDSCHADEN. ZS.
+11. **Bars 14-15 · 0:26-0:30 · EXT. THE YARD — MORNING.** The four in a row by their karts, saluting,
     ROCHAT's G-Class behind them. A flash: the photo settles as a polaroid.
-    - Super: **06:00 · HV**.
+    - Super: **07:30 · HV**.
     - Title: **UNITSPORT SWITZERLAND**, with "Drognens · u-booting since 1972" under it.
     - The credit.
 

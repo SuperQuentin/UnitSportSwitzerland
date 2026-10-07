@@ -34,11 +34,22 @@ public static class DrognensScript
     internal static readonly Character Rochat = new("ROCHAT", new Color("b4b4b4"),
         new Appearance(BodyBuild.Broad, 1, 0, 2, HairStyle.Short, 7), Kit);
 
-    // ---- what they drive: the army's (#714); the kart a stand-in until #715 is in ----------------
+    // ---- what they drive: the army's (#714) and the go-kart (#715) in its army skin --------------
 
     /// <summary>The Mowag Duro II, the Mercedes G 300 and the Iveco Trakker 6x6 (<see cref="HeavyCatalog"/>, #714).</summary>
-    private static readonly RideKind Duro = (RideKind)106, GClass = (RideKind)107, Lorry = (RideKind)108, Kart = Car(Yaris);
+    private static readonly RideKind Duro = (RideKind)106, GClass = (RideKind)107, Lorry = (RideKind)108;
+    /// <summary>The rental kart (#715), in the Army preset: olive, an M plate on the nose.</summary>
+    private static readonly RideKind Kart = CarCatalog.Kart.Kind;
+    private const int Army = CarSetups.ArmyId;
     private const int Beer = (int)ItemId.BeerBottle, Cards = (int)ItemId.PlayingCards;
+
+    /// <summary>
+    /// The race's hour: first light, after a night of poker, before the reveille (the game's night
+    /// leaves olive karts black on black tarmac, its low morning sun shows them off).
+    /// </summary>
+    private const double Race = 7.7;
+    /// <summary>The moonlight of the yard at night.</summary>
+    private const float Moonlight = 1.2f;
 
     // ---- the place ----------------------------------------------------------------------------------
 
@@ -58,10 +69,10 @@ public static class DrognensScript
     /// <summary>The four karts on the ring road, staggered, MÜLLER in front.</summary>
     private static Cast[] Karts(float arc) =>
     [
-        new() { Who = Muller, Ride = Kart, At = RingFrom, Toward = RingTo, Drive = Drive.Road, Route = "ring", Arc = arc, Skill = 1.1f, Aggression = 1f },
-        new() { Who = Krasniqi, Ride = Kart, At = RingFrom, Toward = RingTo, Drive = Drive.Road, Route = "ring", Arc = arc - 7, Skill = 1.15f, Aggression = 1f },
-        new() { Who = Favre, Ride = Kart, At = RingFrom, Toward = RingTo, Drive = Drive.Road, Route = "ring", Arc = arc - 14, Skill = 1.05f, Aggression = 0.8f },
-        new() { Who = Bernasconi, Ride = Kart, At = RingFrom, Toward = RingTo, Drive = Drive.Road, Route = "ring", Arc = arc - 21, Skill = 1.0f, Aggression = 0.6f },
+        new() { Who = Muller, Ride = Kart, Setup = Army, At = RingFrom, Toward = RingTo, Drive = Drive.Road, Route = "ring", Arc = arc, Skill = 1.1f, Aggression = 1f },
+        new() { Who = Krasniqi, Ride = Kart, Setup = Army, At = RingFrom, Toward = RingTo, Drive = Drive.Road, Route = "ring", Arc = arc - 7, Skill = 1.15f, Aggression = 1f },
+        new() { Who = Favre, Ride = Kart, Setup = Army, At = RingFrom, Toward = RingTo, Drive = Drive.Road, Route = "ring", Arc = arc - 14, Skill = 1.05f, Aggression = 0.8f },
+        new() { Who = Bernasconi, Ride = Kart, Setup = Army, At = RingFrom, Toward = RingTo, Drive = Drive.Road, Route = "ring", Arc = arc - 21, Skill = 1.0f, Aggression = 0.6f },
     ];
 
     // ---- the room -----------------------------------------------------------------------------------
@@ -96,7 +107,7 @@ public static class DrognensScript
         // ---- the yard at night ----------------------------------------------------------------------
         new()
         {
-            Number = 1, Name = "Lights out", FromBar = 1, Bars = 2, Song = S, Hour = 22.8, FadeIn = 1.2,
+            Number = 1, Name = "Lights out", FromBar = 1, Bars = 2, Song = S, Hour = 22.8, Moon = Moonlight, FadeIn = 1.2,
             Cast = [.. Yard()],
             Keys =
             [
@@ -172,8 +183,9 @@ public static class DrognensScript
         // ---- the race round the barracks ------------------------------------------------------------
         new()
         {
-            Number = 6, Name = "Out", FromBar = 8, Bars = 2, Song = S, Hour = 22.8, Traffic = 0,
-            Cast = [.. Karts(60), .. Yard()],
+            Number = 6, Name = "Out", FromBar = 8, Bars = 2, Song = S, Hour = Race, Traffic = 0,
+            Supers = [new(0.2, 2.6, "05:58")],
+            Cast = [.. Karts(40), .. Yard()],
             Keys =
             [
                 new(0, Pt.Road("ring", 75, -2.8f, 0.7f), Pt.On(0, 0f, 0.6f), 24),
@@ -183,29 +195,29 @@ public static class DrognensScript
         },
         new()
         {
-            Number = 7, Name = "From above", FromBar = 10, Bars = 1, Song = S, Hour = 22.8, Traffic = 0,
+            Number = 7, Name = "From above", FromBar = 10, Bars = 1, Song = S, Hour = Race, Traffic = 0,
             Cast = [.. Karts(150)],
             Keys =
             [
-                new(0, Pt.On(1, 0f, 30f, 6f), Pt.On(1, 0f, 0f, -4f), 35),
-                new(1.98, Pt.On(1, 0f, 32f, 4f), Pt.On(1, 0f, 0f, -6f), 35),
+                new(0, Pt.On(1, 0f, 14f, 5f), Pt.On(1, 0f, 0f, -4f), 28),
+                new(1.98, Pt.On(1, 0f, 15f, 3f), Pt.On(1, 0f, 0f, -6f), 28),
             ],
             Smooth = 0.15f, Preroll = 3,
         },
         new()
         {
-            Number = 8, Name = "Onboard", FromBar = 11, Bars = 1, Song = S, Hour = 22.8, Traffic = 0,
+            Number = 8, Name = "Onboard", FromBar = 11, Bars = 1, Song = S, Hour = Race, Traffic = 0,
             Cast = [.. Karts(40), .. Yard()],
             Keys =
             [
-                new(0, Pt.Cockpit(0, -0.6f, 0.25f), Pt.Cockpit(0, 20f, -0.5f), 24),
-                new(1.98, Pt.Cockpit(0, -0.6f, 0.25f), Pt.Cockpit(0, 20f, -0.5f), 24),
+                new(0, Pt.Cockpit(3, -0.8f, 0.45f), Pt.Cockpit(3, 20f, -0.6f), 24),
+                new(1.98, Pt.Cockpit(3, -0.8f, 0.45f), Pt.Cockpit(3, 20f, -0.6f), 24),
             ],
             Preroll = 3,
         },
         new()
         {
-            Number = 9, Name = "The pitch corner", FromBar = 12, Bars = 1, Song = S, Hour = 22.8, Traffic = 0,
+            Number = 9, Name = "The pitch corner", FromBar = 12, Bars = 1, Song = S, Hour = Race, Traffic = 0,
             Cast = [.. Karts(100)],
             Keys =
             [
@@ -216,19 +228,19 @@ public static class DrognensScript
         },
         new()
         {
-            Number = 10, Name = "Caught", FromBar = 13, Bars = 1, Song = S, Hour = 22.8, Traffic = 0,
+            Number = 10, Name = "Caught", FromBar = 13, Bars = 1, Song = S, Hour = Race, Traffic = 0,
             Cast =
             [
                 // ROCHAT's G-Class rolls in from the east, lights on, and stops; the karts have stopped dead
                 new()
                 {
-                    Who = Rochat, Ride = GClass, At = new Spot(2558480, 1169508), Heading = 270, Lights = true,
-                    Drive = Drive.Controls, Controls = t => t < 2.1 ? Pedal(0.3f) : Pedal(0f, 0f, 1f),
+                    Who = Rochat, Ride = GClass, At = new Spot(2558434, 1169508), Heading = 270, Lights = true,
+                    Drive = Drive.Controls, Controls = t => t < 1.9 ? Pedal(0.25f) : Pedal(0f, 0f, 1f),
                 },
-                new() { Who = Muller, Ride = Kart, At = new Spot(2558419, 1169506.5), Heading = 92 },
-                new() { Who = Krasniqi, Ride = Kart, At = new Spot(2558414, 1169510.5), Heading = 80 },
-                new() { Who = Favre, Ride = Kart, At = new Spot(2558410, 1169504), Heading = 100 },
-                new() { Who = Bernasconi, Ride = Kart, At = new Spot(2558405, 1169509), Heading = 86 },
+                new() { Who = Muller, Ride = Kart, Setup = Army, At = new Spot(2558419, 1169506.5), Heading = 92 },
+                new() { Who = Krasniqi, Ride = Kart, Setup = Army, At = new Spot(2558414, 1169510.5), Heading = 80 },
+                new() { Who = Favre, Ride = Kart, Setup = Army, At = new Spot(2558410, 1169504), Heading = 100 },
+                new() { Who = Bernasconi, Ride = Kart, Setup = Army, At = new Spot(2558405, 1169509), Heading = 86 },
             ],
             Keys =
             [
@@ -236,14 +248,14 @@ public static class DrognensScript
                 new(1.98, Pt.At(2558399, 1169507.5, 1.0f), Pt.At(2558470, 1169508, 1.3f), 35),
             ],
             Preroll = 1,
-            Chat = [new(0.4, Rochat, "RECRUITS. landschaden. ZS at 06:00")],
+            Chat = [new(0.3, Rochat, "RECRUITS. LANDSCHADEN. ZS.")],
         },
 
         // ---- dawn: the photo ------------------------------------------------------------------------
         new()
         {
-            Number = 11, Name = "Souvenir", FromBar = 14, Bars = 2, Song = S, Hour = 6.4, Traffic = 0,
-            Supers = [new(0.0, 0.9, "06:00 · HV")],
+            Number = 11, Name = "Souvenir", FromBar = 14, Bars = 2, Song = S, Hour = 8.1, Traffic = 0,
+            Supers = [new(0.0, 0.9, "07:30 · HV")],
             Cast =
             [
                 new() { Who = Muller, At = new Spot(2558396, 1169338), Heading = 270, Dance = Salute },
@@ -251,8 +263,6 @@ public static class DrognensScript
                 new() { Who = Favre, At = new Spot(2558396, 1169340.4), Heading = 270, Dance = Salute },
                 new() { Who = Bernasconi, At = new Spot(2558396, 1169341.6), Heading = 270, Dance = Salute },
                 new() { Who = Rochat, Ride = GClass, At = new Spot(2558404, 1169336), Heading = 0 },
-                new() { Ride = Kart, At = new Spot(2558393, 1169343.5), Heading = 200, Seed = 31 },
-                new() { Ride = Kart, At = new Spot(2558392, 1169335.5), Heading = 160, Seed = 32 },
             ],
             Keys =
             [
