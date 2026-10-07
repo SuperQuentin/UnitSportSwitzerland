@@ -80,6 +80,14 @@ listed rules differing by kind. Stacked on #704 (`lane-data-intersections`).
   starts from there. Sion test tiles (overlay rebuilt with `--osm-overlay` from the PBF): approaches with a right turn
   above 50 km/h 23, at or under 256, no OSM speed in town 8, outside 12; 8 right pockets (were 10, all at the lights
   then: now 7 without lights, 1 at the lights). Test region: J2 (in town) and J3's west arm lose their right pockets.
+- **Inferred arrows and solid lines at every junction**: a multi-lane approach without OSM lane data gets the inferred
+  lanes (leftmost also left, rightmost also right) at every junction (`InferredLanes`, was lights only), and the lines
+  between lanes go solid before the junction, to the mouth without lights (`OwnArrows` → `SolidToStop`). Sion tiles:
+  57 approaches assigned in place (was 30), 83 arrows (41).
+- **Lane records**: a right pocket alone without lights gets one (`EmitPocketApproaches`, its lanes from the mouth: no
+  bar). Sion tiles: 98 records (91). **Not done**: a record for every approach (the plan's item). A record ties lanes to
+  the lane graph and sets where cars stop (`LaneGraph.Attach`), so records at every junction without lights change how
+  traffic waits there: left for a decision and a traffic check in the game.
 - Tier 0 `Without_lights_the_path_runs_to_the_kerb_and_the_edge_guide_follows_the_widening` (the T: red within 7.5 m of
   the side road's axis, paths carried into both corners, the guide's west end > 0.5 m further out); the corner test now
   checks the kerb arc is lined by the corner or the carried side.

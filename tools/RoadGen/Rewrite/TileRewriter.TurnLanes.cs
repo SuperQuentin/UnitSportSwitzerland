@@ -252,9 +252,9 @@ public static partial class TileRewriter
                     if (kmh > RightPocketSpeed) stats.SpeedFast++; else if (kmh > 0) stats.SpeedSlow++; else if (town) stats.SpeedNoneTown++; else stats.SpeedNoneRural++;
                 }
                 if (wished is not null) wishes[(junction.NodeId, i)] = (home, wished, ownLanes, arm.LinkId, arm.End == LinkEnd.End);
-                // a multi-lane approach at the lights without OSM lane data (#700, the user's review of J7): the leftmost lane
-                // also turns left, the rightmost also right, the rest go straight on, with their arrows as OSM's would get
-                else if (signal && ownLanes >= 2)
+                // a multi-lane approach without OSM lane data (#700, the user's review of J7; #711: at every junction): the leftmost
+                // lane also turns left, the rightmost also right, the rest go straight on, with their arrows as OSM's would get
+                else if (ownLanes >= 2)
                     wishes[(junction.NodeId, i)] = (home, InferredLanes(can & ~banned, ownLanes), ownLanes, arm.LinkId, arm.End == LinkEnd.End);
                 if (wish is not null) { stats.Wished++; stats.WishFolded += wish.Folded; }
                 else if (ownLanes >= 2) stats.MultiLane++;

@@ -116,8 +116,8 @@ public static partial class TileRewriter
         SignalMoves[] own, double stop, bool signal)
     {
         var way = new Widening(seg, painted, tile, 0, atEnd, atEnd ? 1 : -1, 1, 0);
-        // at the lights the lines between the lanes go solid before the stop line and stop there
-        if (signal && own.Length > 1) way.SolidToStop(paint, stop - SignalStopLine * 0.5);
+        // the lines between the lanes go solid before the junction (#711: at every junction): at the lights up to the stop line, without them to the mouth
+        if (own.Length > 1) way.SolidToStop(paint, signal ? stop - SignalStopLine * 0.5 : stop);
         double total = SegmentLength(seg);
         int made = 0;
         foreach (double tip in (ReadOnlySpan<double>)[5 + PaintEmitter.ArrowLength, 20 + PaintEmitter.ArrowLength])
