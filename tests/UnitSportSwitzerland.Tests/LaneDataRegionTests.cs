@@ -103,9 +103,12 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
         double cz = id.MaxN - j.N;
         // the west approach's hatch (south of the centre line, west of the junction): no stripe further out than one lane
         var hatch = region.Tile(j.E, j.N).Paint.Where(p => p.Type == PaintType.Hatch && p.Vertices[0] < j.E - id.MinE - 20
-            && Enumerable.Range(0, p.Vertices.Length / 3).Average(i => p.Vertices[i * 3 + 2]) > cz).ToList();
+            && Enumerable.Range(0, p.Vertices.Length / 3).Average(i => p.Vertices[i * 3 + 2]) > cz - 3).ToList();
         Assert.NotEmpty(hatch);
-        double widest = hatch.SelectMany(p => Enumerable.Range(0, p.Vertices.Length / 3).Select(i => p.Vertices[i * 3 + 2] - cz)).Max();
+        // across the road, from its own centre line (a split lead-in, #700, moves that off the axis)
+        // each stripe runs from the centre line to the border at 45 degrees: its extent across is the hatch's width there
+        var stripes = hatch.SelectMany(p => Enumerable.Range(0, p.Vertices.Length / 12).Select(q => Enumerable.Range(q * 4, 4).Select(i => (double)p.Vertices[i * 3 + 2]).ToList())).ToList();
+        double widest = stripes.Max(s => s.Max() - s.Min());
         Assert.InRange(widest, 2.5, 3.6);
     }
 

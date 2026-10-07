@@ -244,7 +244,7 @@ public static partial class TileRewriter
         var lanes = new List<ApproachLane>();
         float D(double fromMouth) => (float)Math.Max(0, fromMouth - stop);
         double centre = (layout.Half - layout.Bike) * 0.5;   // the original lane: between the centre line and a bike lane
-        float O(ApproachLayout.Lane lane) => (float)(lane.Mid - centre);
+        float O(ApproachLayout.Lane lane) => (float)(lane.Mid - centre - layout.Shift);   // (#700: from the original lane, less a split lead-in's shift)
 
         // where the lanes right of a left pocket move out over its widening: the taper and the
         // lead-in before it, or held out all along a strip merged with the exit before (#325);

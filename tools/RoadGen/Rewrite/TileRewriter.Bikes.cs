@@ -500,7 +500,7 @@ public static partial class TileRewriter
 
         public static SquareCrossing? For(Junction junction, int armIndex, ArmLanes? lanes, Vec2 fromA, double xa, double xb, bool force = false)
         {
-            double widenIn = lanes?.Approach is { } l ? l.Edge() - l.Half : 0, widenOut = lanes?.ExitWidening ?? 0;
+            double widenIn = lanes?.Approach is { } l ? l.EdgeOut : 0, widenOut = lanes?.ExitWidening ?? 0;
             if (!force && widenIn < 0.05 && widenOut < 0.05 && xa < 0.05 && xb < 0.05) return null;
             var arm = junction.Arms[armIndex];
             var u = Vec2.FromHeading(arm.OutwardHeading);

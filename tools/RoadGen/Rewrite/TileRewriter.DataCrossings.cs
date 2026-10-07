@@ -93,7 +93,7 @@ public static partial class TileRewriter
                 var mid = (arm.Left + arm.Right) * 0.5;
                 var lanes = pockets.GetValueOrDefault((junction.NodeId, i));
                 double half = arm.HalfWidth;
-                double lo = -(half + (lanes?.ExitWidening ?? 0)), hi = lanes?.Approach is { } layout ? half + layout.Edge() - layout.Half : half;
+                double lo = -(half + (lanes?.ExitWidening ?? 0)), hi = lanes?.Approach is { } layout ? half + layout.EdgeOut : half;
                 var end = PriorityPlanner.EndAt(net, junction, arm);
                 bool drawnRight = end == LinkEnd.End;
                 var streetRight = streetSideAt(arm.LinkId, end, drawnRight);

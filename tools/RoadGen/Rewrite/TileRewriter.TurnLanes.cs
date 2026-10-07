@@ -34,6 +34,8 @@ public static partial class TileRewriter
         public int Wished, WishFolded, WishNoLeft, WishInPlace, WishArrows;
         /// <summary>Junction corners left tight: no right turn rounds them (#700).</summary>
         public int TightCorners;
+        /// <summary>Lead-ins split between both edges (#700).</summary>
+        public int SplitLeadIns;
         /// <summary>Hatched medians left out as too narrow or too short (#406).</summary>
         public int HatchesSkipped;
         /// <summary>Kerb corners paved beside a widening (#406), and those whose outline did not work out.</summary>
@@ -44,7 +46,7 @@ public static partial class TileRewriter
         public readonly SortedDictionary<string, List<string>> LayoutExamples = new();
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets ({RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {Corners:N0} corners rounded beside a widening ({CornersRejected:N0} failed, {CornersInTown:N0} left square beside a sidewalk or path, #406), {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120), {TightCorners:N0} junction corners left tight (no right turn rounds them, #700); " +
+            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets ({RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {Corners:N0} corners rounded beside a widening ({CornersRejected:N0} failed, {CornersInTown:N0} left square beside a sidewalk or path, #406), {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120), {TightCorners:N0} junction corners left tight (no right turn rounds them, #700), {SplitLeadIns:N0} lead-ins split between both edges (#700); " +
             $"rejected (approach or exit): too short {Short:N0}, building {Building:N0}, another line {OtherLine:N0}, ground off the road {Ground:N0}, tile seam {Seam:N0}, no segment {NoSegment:N0}, no main road out {NoExit:N0}, two lanes or more already and no lane data {MultiLane:N0}; OSM lane data (#700): {Wished:N0} approaches, {WishFolded:N0} wished lanes folded, {WishNoLeft:N0} with a road to the left and no left lane, {WishInPlace:N0} assigned in place, {WishArrows:N0} arrows over them\n") +
             string.Concat(LayoutExamples.Select(kv => $"      right pockets beside a bike lane, layout {kv.Key} at LV95 {string.Join("; ", kv.Value)}\n"));
 
@@ -66,6 +68,10 @@ public static partial class TileRewriter
     private const double LeadInClose = 10;
     /// <summary>The kerb leg of a tight corner (#700), as <see cref="JunctionOptions.TightKerb"/> leaves it.</summary>
     private static readonly double TightCornerLeg = new JunctionOptions().TightKerb;
+    /// <summary>The other side's share of a split lead-in, tried in turn (#700): half, a quarter, none.</summary>
+    private static readonly double[] VeerShares = [0.5, 0.25];
+    /// <summary>The narrowest exit hatch that still holds a centre island (#682: 1.2 m island, 0.25 m clear each side).</summary>
+    private const double IslandKeepHatch = 1.7;
 
     /// <summary>The arrow a lane with these moves shows: one of the five shapes, none for a lane that turns left and right or does all three.</summary>
     internal static PaintArrow? ArrowOf(SignalMoves m)
@@ -293,6 +299,34 @@ public static partial class TileRewriter
                 }
         }
 
+
+        // the veer share (#700, the user's rule): a left pocket's lead-in widens both edges, the approach's lanes and centre line
+        // moving over by the other side's share, so the through lane veers in about as much as the oncoming traffic veers out.
+        // Half each side where the other edge has room, else more on the approach side, down to all of it; none on a merged
+        // strip (#325) or where the exit is one (it cannot shrink)
+        var shares = new Dictionary<PocketPlan, double>();   // the other side's share of each split lead-in
+        var mirrors = new Dictionary<PocketPlan, Widening>();
+        foreach (var p in pockets)
+        {
+            if (p.Dropped || p.In.Merged || p.Out.Merged || p.In.ApproachWay is not { } way) continue;
+            var (seg, tile, painted) = (p.In.Segment, p.In.Tile, p.In.Painted);
+            // the other side of the segment: no strip coming the other way from the far end that the mirror would run into
+            if (slots.GetValueOrDefault((seg, -way.Side)) is { } other
+                && (other.Merged || other.ApproachWay is { } far && SegmentLength(seg) < way.Reach + far.Reach + TurnClear)) continue;
+            int self = output[tile].IndexOf(seg);
+            foreach (double otherShare in VeerShares)
+            {
+                double share = otherShare;
+                var mirror = new Widening(seg, painted, tile, self, junctionAtEnd: p.InAtEnd, side: -way.Side, way.Length, way.Taper, leadIn: false);
+                mirror.SetWidth(d => shares.GetValueOrDefault(p) * way.FullAt(d));
+                shares[p] = share;
+                if (mirror.Check(Lines(tile), grids, buildings) is not null) { shares.Remove(p); continue; }
+                way.SetFrame(d => -shares.GetValueOrDefault(p) * way.FullAt(d));
+                if (Environment.GetEnvironmentVariable("SPLITDBG") == "1") Console.WriteLine($"[split] at {plansByNode[p.Node].Junction.Centre.X:F0},{plansByNode[p.Node].Junction.Centre.Y:F0} arm {p.Arm} share {share} signal {p.Signal}");
+                mirrors[p] = mirror;
+                break;
+            }
+        }
         // right-turn pockets (#348): outside the through lane, beside the left pocket's full width
         // (or on the right of an approach without one); never on a strip merged with an exit
         foreach (var r in rights)
@@ -319,8 +353,47 @@ public static partial class TileRewriter
             }
             if (r.Way is null) { stats.RightRejected++; continue; }
             lp?.In.ApproachWay!.EdgeFrom(r.Way.Reach);
+            if (lp?.In.ApproachWay?.FrameFunc is { } frame) r.Way.SetFrame(frame);   // beside a split lead-in, in its lane frame (#700)
         }
         var rightOf = rights.Where(r => r.Way is not null).ToDictionary(r => (r.Node, r.Arm));
+
+        // an exit hatch that carries a centre island at the lights (#682) keeps its minimum width (the user's rule): where the two
+        // facing split lead-ins would close it, both shares give way alike. The hatch at the mouth as the lights will make it:
+        // as wide as the facing pocket's lanes and its bike lane (#682, equal lanes)
+        foreach (var p in pockets)
+        {
+            if (!shares.ContainsKey(p) || !p.Signal || p.Out.ExitWay is not { } exitWay) continue;
+            var q = pockets.FirstOrDefault(x => !x.Dropped && x.Node == p.Node && x.Arm == p.ExitArm);
+            if (q is null) continue;
+            var layout = LanesOf(p.In.ApproachWay!, rightOf.GetValueOrDefault((p.Node, p.Arm)), equal: true);
+            // (beside an on-street bike lane the exit keeps the yield junction's own hatch, #682)
+            double hatch = exitWay.BikeWidth <= 0 && layout.LeftPocketLane is { } own ? own.To + layout.LeftBike : exitWay.HatchAtMouth;
+            double cp = shares[p] * p.In.ApproachWay!.FullAt(0), cq = shares.TryGetValue(q, out var sq) ? sq * q.In.ApproachWay!.FullAt(0) : 0;
+            // where the island stands, behind the stop line (and an advanced bike line) and 2 m on, the hatch has closed that much
+            double islandAt = SignalStopSetback + AdvancedBikeLine + 2, open = Math.Max(0.2, 1 - islandAt / exitWay.Length);
+            double room = Math.Max(0, hatch - IslandKeepHatch / open);
+            if (Environment.GetEnvironmentVariable("SPLITDBG") == "1") Console.WriteLine($"[split] node {p.Node} arm {p.Arm}->{p.ExitArm} hatch {hatch:F2} cp {cp:F2} cq {cq:F2} room {room:F2} exitMouth {exitWay.HatchAtMouth:F2}");
+            if (cp + cq <= room) continue;
+            double f = room / (cp + cq);
+            shares[p] *= f;
+            if (shares.ContainsKey(q)) shares[q] *= f;
+        }
+        // the exits shrink (#700): a split lead-in's through lane arrives less shifted, and where the exit's arm has its own split
+        // lead-in its lanes have moved out already: the exit's lanes stand in that frame and its strip is only what is still
+        // missing, drawn as part of that arm's mirror strip (one strip on that side)
+        foreach (var p in pockets)
+        {
+            if (p.Dropped || p.Out.Merged || p.Out.ExitWay is not { } exitWay) continue;
+            double less = shares.TryGetValue(p, out var sp) ? sp * p.In.ApproachWay!.FullAt(0) : 0;
+            var q = pockets.FirstOrDefault(x => !x.Dropped && x.Node == p.Node && x.Arm == p.ExitArm);
+            if (q is not null && mirrors.TryGetValue(q, out var qMirror))
+            {
+                var qWay = q.In.ApproachWay!;
+                exitWay.SetFrame(d => shares.GetValueOrDefault(q) * qWay.FullAt(d));
+                qMirror.SetWidth(d => shares.GetValueOrDefault(q) * qWay.FullAt(d) + exitWay.WidthAt(d));
+            }
+            if (less > 0 || exitWay.Framed) exitWay.SetShrink(less, 0);
+        }
 
         // what each arm got, for the signal plans and poles (#348), bike crossings (#351) and lane records (#353)
         var placed = new Dictionary<(int Node, int Arm), ArmLanes>();
@@ -348,10 +421,19 @@ public static partial class TileRewriter
             if (pocket.ExitArm >= 0)
             {
                 var exitLanes = Arm(pocket.Node, pocket.ExitArm, pocket.Home);
-                exitLanes.ExitWidening = departure.MouthWidth(far: outSlot.Merged);
+                exitLanes.ExitWidening = Math.Max(exitLanes.ExitWidening, departure.MouthWidth(far: outSlot.Merged));   // a split lead-in's mirror there may reach further (#700)
                 (exitLanes.ExitWay, exitLanes.ExitFar) = (departure, outSlot.Merged);
             }
             if (!approach.Emitted) approach.Emit(Get(paint, inSlot.Tile), Get(areas, inSlot.Tile), stripOwners);
+            // a split lead-in's other side (#700): its strip moves that edge out, the arm's departing side starts that much further out
+            if (mirrors.TryGetValue(pocket, out var mirror))
+            {
+                mirror.Emit(Get(paint, inSlot.Tile), Get(areas, inSlot.Tile), stripOwners);
+                armLanes.Mirror = mirror;
+                armLanes.ExitWidening = Math.Max(armLanes.ExitWidening, mirror.MouthWidth());
+                stats.SignsMoved += mirror.PushOut(Get(signs, inSlot.Tile));
+                stats.SplitLeadIns++;
+            }
             if (!approach.Painted)
             {
                 // with a right-turn pocket beside it, the through lane goes straight only
@@ -362,14 +444,16 @@ public static partial class TileRewriter
                 if (inSlot.Merged) approach.Through(Get(paint, inSlot.Tile), inSlot.Storage, rightTurn, stats, pocket.Signal, StopBefore(inSlot.Exit));
                 else approach.Pocket(Get(paint, inSlot.Tile), rightTurn, stats, pocket.Signal);
             }
-            if (!departure.Emitted) departure.Emit(Get(paint, outSlot.Tile), Get(areas, outSlot.Tile), stripOwners);
+            // an exit beside its arm's split lead-in is part of that arm's mirror strip (#700)
+            if (departure.Framed) departure.MarkEmitted();
+            else if (!departure.Emitted) departure.Emit(Get(paint, outSlot.Tile), Get(areas, outSlot.Tile), stripOwners);
             // a merged strip is painted by the pocket at its other end, as its approach (#406: it was
             // painted here when this pocket came first, without the lights' stop line)
             if (!outSlot.Merged && !departure.Painted) departure.Median(Get(paint, outSlot.Tile), stats, StopBefore(pocket));
             Across(approach, departure, exitFar: outSlot.Merged, inSlot.Tile, Get(areas, inSlot.Tile), Get(paint, pocket.Home),
                 pocket.Home, priority.Guides, joined: pocket.RightTurn, guide: !pocket.Signal);
             // a sign beside the old edge (#121's 3.03) would now stand on the widening
-            stats.SignsMoved += approach.PushOut(Get(signs, inSlot.Tile)) + departure.PushOut(Get(signs, outSlot.Tile));
+            stats.SignsMoved += approach.PushOut(Get(signs, inSlot.Tile)) + (departure.Framed ? 0 : departure.PushOut(Get(signs, outSlot.Tile)));
             stats.Storage[inSlot.Storage] = stats.Storage.GetValueOrDefault(inSlot.Storage) + 1;
             if (approach.BesideBike) { stats.BesideBike++; if (approach.HasLeadIn) stats.LeadIns++; }
             if (inSlot.Merged) stats.Merged++;
@@ -455,7 +539,8 @@ public static partial class TileRewriter
                 if (town) stats.CornersInTown++;
                 Vec2 ui = Vec2.FromHeading(ai.OutwardHeading), uj = Vec2.FromHeading(aj.OutwardHeading);
                 (Vec2 P, float Y) EdgeI(double d) => inWay?.OuterEdge(d) ?? (ai.Left + ui * d, si.SampleHeight(ai.Left + ui * d));
-                (Vec2 P, float Y) EdgeJ(double d) => outWay?.OuterEdge(d, outLanes!.ExitFar) ?? (aj.Right + uj * d, sj.SampleHeight(aj.Right + uj * d));
+                // (#700: beside a split lead-in with no exit there, its mirror strip is that edge)
+                (Vec2 P, float Y) EdgeJ(double d) => outWay?.OuterEdge(d, outLanes!.ExitFar) ?? outLanes?.Mirror?.OuterEdge(d) ?? (aj.Right + uj * d, sj.SampleHeight(aj.Right + uj * d));
                 if (town && arcs is not null && ArcOf(junction, i, EdgeI, EdgeJ, Kerb(ai.HalfWidth), Kerb(aj.HalfWidth), true) is { } arc) arcs[(junction.NodeId, i)] = arc;
                 if (CornerPatch(junction, i, EdgeI, EdgeJ, Kerb(ai.HalfWidth), Kerb(aj.HalfWidth), anchors, town) is not { } patches)
                 {
@@ -731,6 +816,8 @@ public static partial class TileRewriter
         /// left pocket's lanes and of the carriageway's own lanes, each left to right.
         /// </summary>
         public SignalMoves[]? PocketMoves, OwnMoves;
+        /// <summary>A split lead-in's strip on the departing side (#700), null none.</summary>
+        public Widening? Mirror;
         public bool Left => Approach is { LeftPocket: > 0 };
         public bool Right => Approach is { Right: true };
 
@@ -781,6 +868,15 @@ public static partial class TileRewriter
         /// <summary>Lanes in the left pocket (#700: a double left is two), each beside the next; the through lane follows them.</summary>
         public int LeftLanes { get; set; } = 1;
 
+        /// <summary>
+        /// A split lead-in (#700): how far the approach's lane frame (its centre line, the lanes, all offsets of this layout) stands
+        /// toward the other side at the stop line. Readers outside the widening subtract it to get offsets from the carriageway's axis.
+        /// </summary>
+        public double Shift { get; set; }
+
+        /// <summary>The approach's widened edge beyond the carriageway's own, at full width: its share of the widening (#700).</summary>
+        public double EdgeOut => Edge() - Half - Shift;
+
         private int CarLanes => (LeftPocket > 0 ? LeftLanes : 0) + 1 + (Right ? 1 : 0);
 
         /// <summary>The width of a car lane when <see cref="Equal"/>.</summary>
@@ -826,7 +922,7 @@ public static partial class TileRewriter
         // a right pocket beside a left one does not see the bike lane (it lies outside it): the left does
         double bike = left?.BikeWidth ?? right!.Way!.BikeWidth;
         var dbg = new ApproachLayout(way.Half, bike, left?.PocketWidth ?? 0, left?.LeftBikeWidth ?? 0, left?.FullWidth ?? 0,
-            right is not null, right?.Way!.Extra ?? 0) { BikeBetween = right is { BikeBetween: true } && bike > 0, Equal = equal, LeftLanes = left?.LaneCount ?? 1 };
+            right is not null, right?.Way!.Extra ?? 0) { BikeBetween = right is { BikeBetween: true } && bike > 0, Equal = equal, LeftLanes = left?.LaneCount ?? 1, Shift = -(left?.Frame0 ?? 0) };
         if (Environment.GetEnvironmentVariable("LAYDBG") == "1") Console.WriteLine($"[layout] half {dbg.Half:F2} bike {dbg.Bike:F2} pocket {dbg.LeftPocket:F2} leftBike {dbg.LeftBike:F2} full {dbg.LeftFull:F2} right {dbg.Right} extra {dbg.RightExtra:F2} through {dbg.Through().From:F2}-{dbg.Through().To:F2} edge {dbg.Edge():F2}");
         return dbg;
     }
@@ -1094,7 +1190,7 @@ public static partial class TileRewriter
         public double Extra => _extra;
 
         /// <summary>The widening's width at the mouth (or at its far end, for a merged strip seen from the junction it leaves).</summary>
-        public double MouthWidth(bool far = false) => Widen(far ? _length : 0);
+        public double MouthWidth(bool far = false) => Widen(far ? _length : 0) + FrameAt(far ? _length : 0);   // beyond the carriageway's own edge
 
         /// <summary>
         /// The strip's outer edge <paramref name="dist"/> metres out from the mouth (from its far end
@@ -1184,6 +1280,15 @@ public static partial class TileRewriter
         /// </summary>
         private double Widen(double dist)
         {
+            if (_width is { } width) return Math.Max(0, width(dist));
+            double full = WidenFull(dist);
+            if (!_exit || (_arrivesLess <= 0 && _frame is null)) return full;
+            // an exit shrunk by the split lead-ins (#700): what the through lane still needs beyond the arm's own moved edge
+            return Math.Max(0, full - ShrinkAt(dist));
+        }
+
+        private double WidenFull(double dist)
+        {
             // #682: the exit lane keeps its width (the carriageway's lane) from the mouth to where the hatch has closed: the edge moves in as fast as the hatch
             if (_exit && _bike <= 0 && _exitHatch is { } hatch) return Math.Max(0, hatch * (1 - dist / _length));   // #682; with an on-street bike lane the yield junction's exit below (a car lane and the bike lane beside the closing hatch, then the lead-out)
             if (_taper <= 0) return Lane + _extra;
@@ -1196,8 +1301,46 @@ public static partial class TileRewriter
             return Math.Max(0, _pocket * (1 - dist / _length) + TurnLane - _car);
         }
 
+
+        // ---- the veer share (#700): a lead-in split between both edges --------------------------------------------
+        /// <summary>
+        /// How far the lane frame stands toward the widened side at a distance from the mouth (#700): an approach whose lead-in
+        /// is split moves its lanes, centre line and hatch toward the other side by the other side's share (negative); an exit
+        /// beside its own arm's split lead-in moves out with that arm's centre line (positive). Null: 0, the carriageway's axis.
+        /// </summary>
+        private Func<double, double>? _frame;
+        /// <summary>The widening's width overridden (a mirror strip: the other side's share of a split lead-in).</summary>
+        private Func<double, double>? _width;
+        /// <summary>An exit's shrink (#700): the through lane arrives this much less shifted at the mouth, closing over the exit.</summary>
+        private double _arrivesLess;
+        /// <summary>... and the narrowest its hatch may get where it carries a centre island (#682), 0 none.</summary>
+        private double _keepHatch;
+
+        private double FrameAt(double dist) => _frame?.Invoke(Math.Clamp(dist, 0, Reach)) ?? 0;
+        public double Frame0 => FrameAt(0);
+        public Func<double, double>? FrameFunc => _frame;
+        public double WidthAt(double dist) => Widen(dist);
+        public bool Framed => _frame is not null;
+        public void MarkEmitted() => Emitted = true;
+        /// <summary>An exit's hatch at a distance from the mouth, shrunk by the split lead-ins (#700).</summary>
+        public double HatchAt(double dist) => Math.Max(0, HatchAtMouth * Math.Clamp(1 - dist / _length, 0, 1) - ShrinkAt(dist));
+
+        /// <summary>Splits the lead-in (#700): the lanes stand <paramref name="shift"/>(d) toward the other side.</summary>
+        public void SetFrame(Func<double, double>? shift) => _frame = shift;
+
+        /// <summary>Shrinks an exit (#700): the through lane arrives <paramref name="less"/> m less shifted; <paramref name="keepHatch"/> the island's minimum hatch.</summary>
+        public void SetShrink(double less, double keepHatch) => (_arrivesLess, _keepHatch) = (less, keepHatch);
+
+        /// <summary>A strip for the other side's share of a split lead-in: its width at a distance from the mouth.</summary>
+        public void SetWidth(Func<double, double> width) => _width = width;
+
+        /// <summary>The full lane widening at a distance from the mouth, before any split (an approach's through-lane shift).</summary>
+        public double FullAt(double dist) => WidenFull(dist);
+
+        /// <summary>What an exit's shrink takes off at a distance from the mouth: the through lane's lesser shift, closing over the exit, and the arm's own centre line moved out.</summary>
+        private double ShrinkAt(double dist) => _exit ? (_arrivesLess + Math.Max(0, FrameAt(0))) * Math.Clamp(1 - dist / _length, 0, 1) : 0;   // in the frame: both close over the exit
         /// <summary>The segment at a distance from the mouth: position, road height, unit vector to the widened side.</summary>
-        private (double X, double Y, double Z, double Sx, double Sz) At(double dist)
+        private (double X, double Y, double Z, double Sx, double Sz) At(double dist, bool shifted = true)
         {
             double a = AlongOf(dist);
             int n = _seg.PointCount, k = 1;
@@ -1207,7 +1350,10 @@ public static partial class TileRewriter
             double x = p[k * 3 - 3] + (p[k * 3] - p[k * 3 - 3]) * t, z = p[k * 3 - 1] + (p[k * 3 + 2] - p[k * 3 - 1]) * t;
             double y = p[k * 3 - 2] + (p[k * 3 + 1] - p[k * 3 - 2]) * t;
             double fx = (p[k * 3] - p[k * 3 - 3]) / span, fz = (p[k * 3 + 2] - p[k * 3 - 1]) / span;
-            return (x, y, z, -fz * _side, fx * _side);   // right of the drawing is (-fz, fx), X east and Z south
+            double sx = -fz * _side, sz = fx * _side;   // right of the drawing is (-fz, fx), X east and Z south
+            if (_frame is null || !shifted) return (x, y, z, sx, sz);
+            double shift = FrameAt(dist);   // the lane frame of a split lead-in (#700)
+            return (x + sx * shift, y, z + sz * shift, sx, sz);
         }
 
         private float[] Point(double dist, double offset)
@@ -1215,6 +1361,20 @@ public static partial class TileRewriter
             var (x, y, z, sx, sz) = At(dist);
             return [(float)(x + sx * offset), (float)y, (float)(z + sz * offset)];
         }
+
+        /// <summary>A point beside the segment at an offset from its own centre line, whatever the lane frame (#700).</summary>
+        private float[] PointRaw(double dist, double offset)
+        {
+            var (x, y, z, sx, sz) = At(dist, shifted: false);
+            return [(float)(x + sx * offset), (float)y, (float)(z + sz * offset)];
+        }
+
+        /// <summary>
+        /// The strip's inner edge: the carriageway's edge (beside a split lead-in's frame moved in, still the edge: the strip
+        /// never lies on the carriageway; moved out with an exit's frame, past the arm's own strip), or a pocket beside another's.
+        /// </summary>
+        private float[] Inner(double dist) =>
+            _base > 0 || _frame is null ? Point(dist, _half + _base) : PointRaw(dist, _half + Math.Max(0, FrameAt(dist)));
 
         /// <summary>
         /// The strip's inner and outer corners at the mouth (less <paramref name="inset"/> on the
@@ -1226,7 +1386,7 @@ public static partial class TileRewriter
             float[] In(float[] p) =>
                 [(float)(p[0] + _tile.MinE - frame.MinE), p[1], (float)(p[2] + frame.MaxN - _tile.MaxN)];
             double at = far ? _length : 0;
-            return (In(Point(at, _half + _base)), In(Point(at, _half + _base + Widen(at) - inset)));
+            return (In(Inner(at)), In(Point(at, _half + _base + Widen(at) - inset)));
         }
 
         /// <summary>
@@ -1259,9 +1419,10 @@ public static partial class TileRewriter
                 double dist = _atEnd ? _total - at : at;
                 if (dist < -1 || dist > Reach) continue;
                 double w = Widen(Math.Clamp(dist, 0, _length));
-                if (w < 0.05 || offset < _half + _base - 0.3 || offset > _half + _base + w + 2.0) continue;
-                var (x, _, z, sx, sz) = At(Math.Clamp(dist, 0, Reach));
-                double o = offset + w;
+                double edgeMove = w + FrameAt(Math.Clamp(dist, 0, _length));   // how far the edge moved out there (a split lead-in, #700: its share)
+                if (edgeMove < 0.05 || offset < _half + _base - 0.3 || offset > _half + _base + edgeMove + 2.0) continue;
+                var (x, _, z, sx, sz) = At(Math.Clamp(dist, 0, Reach), shifted: false);
+                double o = offset + edgeMove;
                 props[i] = prop with { X = (float)(x + sx * o), Z = (float)(z + sz * o) };
                 moved++;
             }
@@ -1303,7 +1464,7 @@ public static partial class TileRewriter
             foreach (double dist in _dists)
             {
                 double w = Widen(dist);
-                v.AddRange(Point(dist, _half + _base));
+                v.AddRange(Inner(dist));
                 v.AddRange(Point(dist, _half + _base + w));
                 if (dist >= _edgeFrom - 1e-6) outer.AddRange(Point(dist, _half + _base + w - PaintEmitter.EdgeLineInset));
             }
@@ -1372,8 +1533,23 @@ public static partial class TileRewriter
         private RoadPaint Line(PaintType type, float dash, float gap, double offset, double d0, double d1)
         {
             double a = AlongOf(d0), b = AlongOf(d1);
-            return RoadPaint.AlongSegment(_seg, type, PaintEmitter.White, PaintEmitter.LineWidth, dash, gap,
-                offset, Math.Min(a, b), Math.Max(a, b));
+            return Along(type, PaintEmitter.White, PaintEmitter.LineWidth, dash, gap, offset, Math.Min(a, b), Math.Max(a, b));
+        }
+
+        /// <summary>
+        /// A line along the segment, <paramref name="offset"/> right of the drawing, between two along-segment metres: as the
+        /// segment's own paint where the lanes keep the axis; in a split lead-in's lane frame (#700) a polyline that follows it.
+        /// </summary>
+        private RoadPaint Along(PaintType type, uint rgba, float width, float dash, float gap, double offset, double from, double to, byte variant = 0)
+        {
+            if (_frame is null) return RoadPaint.AlongSegment(_seg, type, rgba, width, dash, gap, offset, from, to, variant);
+            double Dist(double along) => _atEnd ? _total - along : along;
+            to = Math.Min(to, _total);
+            var line = new List<float>();
+            line.AddRange(Point(Dist(from), offset * _side));
+            foreach (double d in _dists.Select(Dist).Where(a => a > from + 1e-3 && a < to - 1e-3).OrderBy(a => a)) line.AddRange(Point(Dist(d), offset * _side));
+            line.AddRange(Point(Dist(to), offset * _side));
+            return new RoadPaint { Shape = PaintShape.Polyline, Type = type, Rgba = rgba, Width = width, Dash = dash, Gap = gap, Variant = variant, Vertices = line.ToArray() };
         }
 
         /// <summary>
@@ -1467,7 +1643,7 @@ public static partial class TileRewriter
                 double bikeLine = box ? pocketBack : setback;
                 double solidTo = pocketBack + TurnSolid;
                 void Edge(PaintType type, float dash, double o, double d0, double d1) =>
-                    paint.Add(RoadPaint.AlongSegment(_seg, type, PaintEmitter.Yellow, BikePlanner.LineWidth, dash, dash == 0 ? 0 : BikePlanner.Gap,
+                    paint.Add(Along(type, PaintEmitter.Yellow, BikePlanner.LineWidth, dash, dash == 0 ? 0 : BikePlanner.Gap,
                         _side * o, Math.Min(AlongOf(d0), AlongOf(d1)), Math.Max(AlongOf(d0), AlongOf(d1))));
                 foreach (double o in (ReadOnlySpan<double>)[pocket, through])
                 {
@@ -1565,7 +1741,7 @@ public static partial class TileRewriter
             float size = BikePlanner.SymbolSize;
             double a = AlongOf(dist), b = AlongOf(dist - size);
             // the approach drives toward the mouth: with the drawing when the junction is at the end
-            paint.Add(RoadPaint.AlongSegment(_seg, PaintType.BikeSymbol, PaintEmitter.Yellow, size, 0, 0, _side * offset,
+            paint.Add(Along(PaintType.BikeSymbol, PaintEmitter.Yellow, size, 0, 0, _side * offset,
                 Math.Min(a, b), Math.Max(a, b), _atEnd ? (byte)0 : RoadPaintGeometry.BikeReversed));
         }
 
@@ -1589,7 +1765,7 @@ public static partial class TileRewriter
             {
                 var bike = lanes.BikeLane()!.Value;
                 foreach (double o in (ReadOnlySpan<double>)[bike.From, bike.To])
-                    paint.Add(RoadPaint.AlongSegment(_seg, PaintType.YellowSolid, PaintEmitter.Yellow, BikePlanner.LineWidth, 0, 0,
+                    paint.Add(Along(PaintType.YellowSolid, PaintEmitter.Yellow, BikePlanner.LineWidth, 0, 0,
                         _side * o, Math.Min(AlongOf(setback), AlongOf(storage)), Math.Max(AlongOf(setback), AlongOf(storage))));
                 // over the taper, where right-turning cars cross the bike lane: dashed, following its edges
                 foreach (bool outer in (ReadOnlySpan<bool>)[false, true])
@@ -1655,7 +1831,7 @@ public static partial class TileRewriter
         {
             Painted = true;
             SolidCentre(paint);
-            Hatch(paint, stats, near, _length, d => HatchAtMouth * Math.Clamp(1 - d / _length, 0, 1));
+            Hatch(paint, stats, near, _length, HatchAt);   // shrunk where split lead-ins moved the lanes (#700)
         }
 
         /// <summary>
@@ -1671,7 +1847,7 @@ public static partial class TileRewriter
         {
             const double Margin = 0.25, IslandMinWidth = 1.2, Top = 0.12;
             const double IslandInside = IslandInsideM;
-            double Width(double d) => HatchAtMouth * Math.Clamp(1 - d / _length, 0, 1) - 2 * Margin;
+            double Width(double d) => HatchAt(d) - 2 * Margin;
             // one width all along, before the crosswalk and after it: what the narrowest end leaves (not a triangle)
             double iw = Width(Math.Max(near + 2.0, zebraTo));
             if (iw < IslandMinWidth) return null;

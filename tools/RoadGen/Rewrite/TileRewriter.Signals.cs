@@ -234,12 +234,13 @@ public static partial class TileRewriter
                 double half = arm.HalfWidth;
                 // the approach lanes: from the centre (a one-way road: its left edge) to the right
                 // edge, widened by its pockets (#351: the lanes' offsets come from their layout)
-                double from = info.Attributes.OneWay != 0 ? -half : 0, to = layout is null ? half : half + layout.Edge() - layout.Half;
+                // (#700: a split lead-in moves the approach's centre line and lanes over by its Shift)
+                double from = info.Attributes.OneWay != 0 ? -half : -(layout?.Shift ?? 0), to = layout is null ? half : half + layout.EdgeOut;
                 var bar = mid + u * (MouthSkew(junction, arm) + SignalStopSetback + SignalStopLine * 0.5);
                 if (approach && !pocket && block.Contains(source.Tile))
                 {
                     // across the approach's own lane: a right pocket and the bike lane beside it have their own
-                    double through = layout is null ? half : half + layout.Through().To - layout.Half;
+                    double through = layout is null ? half : half + layout.Through().To - layout.Half - layout.Shift;
                     Get(paint, source.Tile).Add(new RoadPaint
                     {
                         Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.White, Width = SignalStopLine,
@@ -291,7 +292,7 @@ public static partial class TileRewriter
                         secondFlags &= ~SignalPoleFlags.Second;
                         islandPoles.Add(((byte)arms.Count, island.Pole, island.Y, u, right));
                         var exitSide = bikeSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
-                        islandArms[i] = new IslandExit(exitWay.HatchAtMouth, exitWay.ExitCar, exitSide.HasTrack || exitSide.HasLane);
+                        islandArms[i] = new IslandExit(exitWay.HatchAt(0) + exitWay.Frame0, exitWay.ExitCar, exitSide.HasTrack || exitSide.HasLane);   // from the axis (#700)
                     }
                 }
                 wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, right, to, u, -right,

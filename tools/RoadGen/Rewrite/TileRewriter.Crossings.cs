@@ -163,8 +163,10 @@ public static partial class TileRewriter
                 Dash = 1f, Gap = 1f, Vertices = Local(home, line, p => HeightAt(anchors, p), 0f),
             });
         }
-        Guide(layout?.LeftPocketLane is null ? (layout?.Through().From ?? 0) + 0.1 : lane.From + 0.1, lead);
-        if (layout?.LeftBikeLane is { } bikeLane && exit.Bike) Guide(bikeLane.From, lead + exit.Lane);   // between the car turn lane and the bike lane
+        // offsets from the carriageway's axis: less a split lead-in's shift (#700)
+        double shift = layout?.Shift ?? 0;
+        Guide((layout?.LeftPocketLane is null ? (layout?.Through().From ?? 0) + 0.1 : lane.From + 0.1) - shift, lead);
+        if (layout?.LeftBikeLane is { } bikeLane && exit.Bike) Guide(bikeLane.From - shift, lead + exit.Lane);   // between the car turn lane and the bike lane
     }
 }
 
