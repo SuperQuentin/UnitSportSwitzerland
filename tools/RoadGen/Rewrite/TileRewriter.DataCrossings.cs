@@ -120,9 +120,10 @@ public static partial class TileRewriter
                         double zebraTo = far - ZebraClear, zebraFrom = zebraTo - ZebraDepth;
                         bool refuge = shift is not null && exitWay.Refuge(Get(areas, exitWay.Tile), zebraFrom, zebraTo);
                         if (refuge) stats.Refuges++;
-                        exitWay.ClearHatch(Get(paint, exitWay.Tile), zebraFrom - (refuge ? 2.3 : 0.3), zebraTo + (refuge ? 2.3 : 0.3));
-                        // its lines stop at the crosswalk; beside a refuge the hatch does not close at the mouth (the user's rule)
-                        exitWay.OpenAtCrosswalk(Get(paint, exitWay.Tile), zebraFrom - 0.1, zebraTo + 0.1, refuge);
+                        // the hatch starts behind the crosswalk: none of it, stripes or lines, between the mouth and the crosswalk
+                        // (the user's rules), and it does not close there
+                        exitWay.ClearHatch(Get(paint, exitWay.Tile), double.NegativeInfinity, zebraTo + (refuge ? 2.3 : 0.3));
+                        exitWay.OpenAtCrosswalk(Get(paint, exitWay.Tile), double.NegativeInfinity, zebraTo + 0.1, refuge);
                     }
                 }
             }
