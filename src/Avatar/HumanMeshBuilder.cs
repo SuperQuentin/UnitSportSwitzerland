@@ -1194,6 +1194,8 @@ public static partial class HumanMeshBuilder
         RatSwing, RatArmPump, RatHeadBob, RatHop,
         // #404: new dances (also in the style tables) and gestures (emote wheel only)
         Ymca, ChickenDance, CabbagePatch, SwimDance, Wave, Cheer, Salute, Shrug,
+        // #728: breakdance (HumanMeshBuilder.Break.cs): toprock stands, the rest builds whole floor rigs
+        Toprock, BreakDown, BreakWindmill, BreakHeadspin,
         // #495: fist fights (HumanMeshBuilder.Fight.cs); keep them last, Channels skips the groove from FightStand on
         FightStand, FightGuardHigh, FightCrouch, FightGuardLow, FightAir, FightHit, FightDazed, FightVictory,
         FightBlockStun, FightJab, FightKick, FightLowJab, FightSweep, FightJumpKick, FightUppercut,
@@ -1237,6 +1239,9 @@ public static partial class HumanMeshBuilder
         new[] { DanceMove.RatSwing, DanceMove.RatArmPump, DanceMove.RatHeadBob, DanceMove.RatHop },
     };
 
+    /// <summary>The name of the move a <see cref="DanceParams.Move"/> stands for (the dance sheet's labels, #728).</summary>
+    public static string MoveName(Audio.Cd.MusicStyle style, int move) => Resolve(style, move).ToString();
+
     /// <summary>Number of moves a style has; <see cref="DanceParams.Move"/> is taken modulo this.</summary>
     public static int MoveCount(Audio.Cd.MusicStyle style) => DanceTable[DanceStyleIndex(style)].Length;
 
@@ -1274,10 +1279,29 @@ public static partial class HumanMeshBuilder
         var beat = new Beat(d.BarPhase, d.Bar);
         float we = DSm(d.Weight);
         float m = DSm(moving);
+        if (IsFloor(move) || IsFloor(prev)) return ApplyFloor(rig, d, prev, move, flow, beat, we, m);
 
         if (m <= 0.001f) return DanceVariant(rig, prev, move, flow, beat, we, false);
         if (m >= 0.999f) return DanceVariant(rig, prev, move, flow, beat, we, true);
         return MixRigs(DanceVariant(rig, prev, move, flow, beat, we, false), DanceVariant(rig, prev, move, flow, beat, we, true), m);
+    }
+
+    /// <summary>
+    /// A break set's slot (#728): the floor rig for the slot clock, flowing out of the move before
+    /// it like any other, weighted in against the gait rig. Walking, the body only toprocks.
+    /// </summary>
+    private static Rig ApplyFloor(in Rig rig, in DanceParams d, DanceMove prev, DanceMove move, float flow, in Beat beat, float we, float m)
+    {
+        float beats = (d.Bar & 1) * 4f + DFrac(d.BarPhase) * 4f;
+        var now = IsFloor(move) ? FloorRig(move, rig, beats, beat) : DanceVariant(rig, move, move, 1f, beat, 1f, false);
+        // a set's halves run into each other by themselves; anything else crossfades as usual
+        if (flow < 1f && !(prev == DanceMove.BreakDown && IsFloor(move)))
+        {
+            var before = IsFloor(prev) ? FloorRig(prev, rig, 8f, beat) : DanceVariant(rig, prev, prev, 1f, beat, 1f, false);
+            now = MixRigs(before, now, flow);
+        }
+        if (m > 0.001f) now = MixRigs(now, DanceVariant(rig, DanceMove.Toprock, DanceMove.Toprock, 1f, beat, 1f, true), m);
+        return we >= 0.999f ? now : MixRigs(rig, now, we);
     }
 
     /// <summary>A move number as the caller has it (a style's table index, or a crowd move) to the move itself.</summary>
@@ -1285,6 +1309,7 @@ public static partial class HumanMeshBuilder
     {
         if (index == GroupPogo) return DanceMove.Pogo;
         if (index == GroupJump) return DanceMove.JumpTogether;
+        if (index >= BreakMoves) return BreakResolve(index);
         if (index >= FightMoves) return FightResolve(index - FightMoves);
         if (index >= EmoteMoves) return EmoteMove(index - EmoteMoves);
         var table = DanceTable[DanceStyleIndex(style)];
@@ -1698,6 +1723,9 @@ public static partial class HumanMeshBuilder
             case DanceMove.Cheer: Cheer(ref ch, t, mv); break;
             case DanceMove.Salute: Salute(ref ch, t, mv); break;
             case DanceMove.Shrug: Shrug(ref ch, t, mv); break;
+            // a floor move's channels (only asked for when walking, or mixing): its toprock
+            case DanceMove.Toprock or DanceMove.BreakDown or DanceMove.BreakWindmill or DanceMove.BreakHeadspin:
+                Toprock(ref ch, t, mv); break;
             case >= DanceMove.FightStand: EvalFight(move, t, mv, ref ch); break;
         }
     }

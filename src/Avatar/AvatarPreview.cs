@@ -323,6 +323,14 @@ public partial class AvatarPreview : Node3D
             return;
         }
 
+        // "--dancesheet <style>[,first,count]": a contact sheet of a style's moves (#728), a row per
+        // move and eight moments across its two bars, to judge and compare them in one picture
+        if (CmdArgs.Value("--dancesheet") is { } sheet)
+        {
+            DanceSheet(sheet, material);
+            return;
+        }
+
         // "--dance <style>,<move>": one standing and one walking (1.4 m/s) figure dancing that move
         // at 120 BPM, rebuilt every frame in _Process. Judge it with --view 180 (front) and 90 (side).
         if (_dance is { } dance)
@@ -439,6 +447,65 @@ public partial class AvatarPreview : Node3D
         }
 
         camera.Current = true;
+    }
+
+    /// <summary>
+    /// The dance contact sheet (#728): <c>style[,first,count]</c>, the style by name (pop, hiphop…,
+    /// or "emotes"), moves <c>first..first+count-1</c> of its table (4 by default), each a row of
+    /// figures at eight moments across two bars, turned by <c>--view</c> (180 = facing the camera),
+    /// with the move's name at the row's start. Static meshes: one screenshot shows it all.
+    /// </summary>
+    private void DanceSheet(string spec, Material material)
+    {
+        var parts = spec.Split(',');
+        bool emotes = parts[0].Equals("emotes", StringComparison.OrdinalIgnoreCase);
+        // "break": the two halves of a break set (both power moves) and toprock on its own
+        int[]? only = parts[0].Equals("break", StringComparison.OrdinalIgnoreCase)
+            ? new[] { HumanMeshBuilder.BreakDown, HumanMeshBuilder.BreakPowerWindmill, HumanMeshBuilder.BreakPowerHeadspin }
+            : null;
+        var style = Audio.Cd.MusicStyle.Pop;
+        if (!emotes && !Enum.TryParse(parts[0], ignoreCase: true, out style)) style = Audio.Cd.MusicStyle.Pop;
+        int total = only?.Length ?? (emotes ? HumanMeshBuilder.EmoteCount : HumanMeshBuilder.MoveCount(style));
+        int first = parts.Length > 1 && int.TryParse(parts[1], out int f) ? Mathf.Clamp(f, 0, total - 1) : 0;
+        int count = parts.Length > 2 && int.TryParse(parts[2], out int c) ? c : 4;
+        count = Mathf.Clamp(count, 1, total - first);
+        const int Cols = 8;
+        float Dx = only != null ? 1.7f : 1.05f;
+        const float Dy = 2.15f;
+        float yaw = Mathf.Pi - Mathf.DegToRad(_viewDegrees);
+        for (int row = 0; row < count; row++)
+        {
+            int move = only?[first + row] ?? (emotes ? HumanMeshBuilder.EmoteMoves : 0) + first + row;
+            float y = (count - 1 - row) * Dy;
+            AddChild(new Label3D
+            {
+                Text = HumanMeshBuilder.MoveName(style, move), FontSize = 64, PixelSize = 0.006f,
+                Position = new Vector3(-0.9f, y + 0.9f, 0), Modulate = Colors.Black, OutlineSize = 0,
+                HorizontalAlignment = HorizontalAlignment.Right,
+            });
+            for (int col = 0; col < Cols; col++)
+            {
+                // one frame a beat, each an eighth further into its beat: the sheet shows the hits and what is between
+                float bars = col * 1.125f / 4f;
+                var dance = new DanceParams(style, move, (bars * 4f) % 1f, bars % 1f, (int)bars, 1f);
+                AddChild(new MeshInstance3D
+                {
+                    Mesh = HumanMeshBuilder.BuildStride(HumanPalette.ForRider(row + 1), 0f, 0f, dance: dance),
+                    MaterialOverride = material,
+                    Position = new Vector3(col * Dx, y, 0),
+                    Rotation = new Vector3(0, yaw, 0),
+                });
+            }
+        }
+        float w = (Cols - 1) * Dx + 5.2f, h = count * Dy;
+        var cam = new Camera3D
+        {
+            Projection = Camera3D.ProjectionType.Orthogonal,
+            Size = Mathf.Max(h + 0.4f, w * 9f / 16f + 0.4f),
+            Position = new Vector3((Cols - 1) * Dx * 0.5f - 2.3f, (count - 1) * Dy * 0.5f + 0.95f, 12f),
+        };
+        AddChild(cam);
+        cam.Current = true;
     }
 
     /// <summary>The dance figures at <paramref name="dt"/> further along a 120 BPM clock.</summary>
