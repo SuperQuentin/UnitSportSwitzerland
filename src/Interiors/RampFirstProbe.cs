@@ -140,7 +140,12 @@ public partial class RampFirstProbe : Node
                             bool ramp = plan.Entrances.Any(en => en.Vehicle) && plan.Floors.Any(f => f.AllFlights().Any(x => x.Ramp));
                             r.Locked = !ramp;
                             r.Bays = plan.Furniture.Count(p => p.Type == FurnitureType.FloorMarking && plan.RoomOf(p)?.Type == RoomType.CarPark);
-                            if (!ramp) r.Plan = (InteriorGenerator.RampWhy ?? "locked") + " / wings: " + (InteriorGenerator.WingFailure ?? "ok");
+                            if (!ramp)
+                            {
+                                r.Plan = (InteriorGenerator.RampWhy ?? "locked") + " / wings: " + (InteriorGenerator.WingFailure ?? "ok");
+                                if (r.Wing && PlanOutline.Wings(b, fp.Center, fp.AxisU, Mathf.Clamp(fp.Width, BuildingFootprint.MinSide, BuildingFootprint.MaxSide), Mathf.Clamp(fp.Depth, BuildingFootprint.MinSide, BuildingFootprint.MaxSide)) is { } wl2)
+                                    lock (_dump) _dump.AppendLine($"LOCKED {r.Key} door x {r.DoorX:F1} wings " + string.Join(" ", wl2.Select(w => $"[{w.X0:F1},{w.Z0:F1}..{w.X1:F1},{w.Z1:F1}]")) + $" garage rect {(grect is { } g ? $"[{g.X0:F1},{g.Z0:F1}..{g.X1:F1},{g.Z1:F1}]" : "none")} kind {r.Kind} plansRamp {InteriorGenerator.PlansGarageRamp(fp, b, map.GroupOf(i)?.Type ?? BuildingType.None)} planType {plan.Type} ents {plan.Entrances.Count} vehEnts {plan.Entrances.Count(en => en.Vehicle)}");
+                            }
                             var problems = InteriorValidator.Validate(plan);
                             r.Valid = problems.Count == 0;
                             if (!r.Valid)

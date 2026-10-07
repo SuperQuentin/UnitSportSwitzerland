@@ -259,7 +259,7 @@ public static partial class InteriorGenerator
         // The garage's lane (#694): a stairwell never slides into it. A square ramp's column, or the
         // along-the-facade ramp's band and car park hall from the end wall.
         (float Lo, float Hi)? lane = null;
-        if (garageDoor && !o.Pinned && o.Links.Count == 0)
+        if (garageDoor && !o.Pinned)
         {
             var gd = fp.Doors.First(d => d.Vehicle && d.Width > 0 && d.Link.Any);
             float gxr = new Godot.Vector2(gd.Position.X - fp.Center.X, gd.Position.Z - fp.Center.Y).Dot(fp.AxisU);
@@ -281,9 +281,9 @@ public static partial class InteriorGenerator
         }
 
         // the garage ramp's column (#558): kept out of every floor's flats
-        RampWhy = null;
-        if (!o.Pinned && o.Links.Count == 0) a.Ramp = PlanRamp(a, fp);
-        else if (fp.Doors.Any(d => d.Vehicle)) RampWhy = "planned wing by wing";
+        if (garageDoor) RampWhy = null;   // only the wing with the garage door says why it has no ramp
+        if (!o.Pinned) a.Ramp = PlanRamp(a, fp);
+        else if (fp.Doors.Any(d => d.Vehicle)) RampWhy = "entered from another wing";
 
         l.Type = type;
         l.Below = below;
@@ -347,6 +347,11 @@ public static partial class InteriorGenerator
             float x = rel.Dot(fp.AxisU);
             float x0 = x - GarageRule.RampWidth / 2, x1 = x + GarageRule.RampWidth / 2;
             if (x0 < -a.Hw + 0.3f || x1 > a.Hw - 0.3f) return No($"the door is {x:F1} m along a {l.Width:F1} m plan box (the facade is longer than the box)");
+            // another wing joined off this one's end is reached by a corridor through the gap that holds the end wall's stairwell: a lane
+            // standing outside every stairwell on that side would wall it off
+            foreach (var (ls, _) in a.Links)
+                if (ls == Side.Left && x0 < a.Wells[0].X0 || ls == Side.Right && x1 > a.Wells[^1].X1)
+                    return No($"the lane stands between the stairwells and the end wall the next wing joins ({ls})");
             if (a.Wells.FirstOrDefault(w => x1 + 0.4f - 0.02f > w.X0 && x0 - 0.4f + 0.02f < w.X1) is { } hit)
                 return No($"the lane ({x0:F1}..{x1:F1}) meets the stairwell at {hit.X0:F1}..{hit.X1:F1}");
             float top = -a.Hd + GarageRule.RampApron;
@@ -581,7 +586,9 @@ public static partial class InteriorGenerator
             if (width < 1.2f) continue;
             // another wing joining this one at its end, or off its back in this gap, is reached by
             // the corridor off the back landing (#577)
-            bool linked = backed && a.Links.Any(k => k.Side == Side.Left && left == null || k.Side == Side.Right && right == null
+            // (the part of a gap beside the garage's lane is not the end of the wall: it runs to the lane, not to the wing beyond)
+            bool linked = backed && a.Links.Any(k => k.Side == Side.Left && left == null && g0 <= -a.Hw + 0.01f
+                || k.Side == Side.Right && right == null && g1 >= a.Hw - 0.01f
                 || k.Side == Side.Back && k.At > g0 && k.At < g1);
             bool corridor = linked || what switch
             {
