@@ -3,8 +3,11 @@
 
 # Roads carry their lanes, intersections laid out from lane data (#700)
 
-Status: **in progress** (branch `feat/700-intersection-lanes`). Phases 1 and 2 are built on the
-synthetic test region (`tools/signal-test-region`), phase 3 waits for an answer on scope (below).
+Status: **phases 1 and 2 built** (branch `feat/700-intersection-lanes`, PR #704; what was built, measured and changed in
+review: `docs/notes/tools/lane-data-intersections.md`). Phase 3 waits for an answer on scope (below). Deviations: J6 uses
+`left|through;right` (two wished lanes on its 2+2, so they are assigned in place; three would build a pocket); pockets
+from data only on one-lane approaches; a bare `lanes:forward` builds nothing. Review added: solid centre line from four
+lanes, dashed guides between same-turn lanes, a lead-in opens one lane, an angled closing line.
 
 ## Why
 
