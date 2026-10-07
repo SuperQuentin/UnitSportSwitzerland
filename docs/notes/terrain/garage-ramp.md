@@ -202,3 +202,14 @@ The rule runs the other way round now: **the box and the road decide, then the b
   frame in `GarageProbe`, in off the door, the 90 degree turn, down to the hall, parked, then out the same way). Real tiles:
   `--rampfirst,test_output/rampfirst.txt --chunks <dir>` (`RampFirstProbe`) and shots with
   `--flattour,out.png --block real:E_N_index --chunks <dir>` (windowed).
+
+### Ramp first in wings (#694, PR B)
+
+About half of the real blocks of flats are not one box (an L, a U, a ring, a bent or skewed outline). `BuildingFootprint.GarageRect` is what a
+garage is planned in: the whole box, or **the wing of the outline that stands on the main door's wall** (its front edge within 2 m of the door's
+wall, stretching across the door; the largest if several). The footprint measures the garage door against that rectangle (its centre is the
+frame's origin, `wingX`), `GarageRule.RampFor` runs on the wing's own sides, the generator plans each wing as before (`TryWings`, the building's
+basement forced to one when it has a garage) and `TryBlock` plans the ramp in the wing whenever no other wing joins it and it is not entered
+from one (`o.Links` empty, not `Pinned`), whatever its `Free`/`Below` options. A wing that is joined by another has no ramp: its door reads as
+locked (about 1 % of the garage doors on the real tiles, 11 of 1192; the probe lists them). `--flatcheck` has L-shaped blocks (a 60 x 14 m wing
+on the street: along the facade; a 40 x 24 m one turned 31 degrees: square), each with the usual ramp checks.

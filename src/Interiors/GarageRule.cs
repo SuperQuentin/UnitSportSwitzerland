@@ -20,10 +20,10 @@ public static class GarageRule
     public const float Width = 3.0f, Height = 2.4f;
 
     /// <summary>Share of the blocks whose box takes a ramp that get one, so garages stay a small part of all the blocks (#694: about 3 to 5 %).</summary>
-    public const double Share = 0.72;
+    public const double Share = 0.55;
 
     /// <summary>The same for shops under flats.</summary>
-    public const double MixedRollShare = 0.72;
+    public const double MixedRollShare = 0.55;
 
 
 

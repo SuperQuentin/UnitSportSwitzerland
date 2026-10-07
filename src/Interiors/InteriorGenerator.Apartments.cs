@@ -175,7 +175,7 @@ public static partial class InteriorGenerator
         // ---- the stair, which sets the stairwell's depth -----------------------------------
         // a block with a garage door (#694) has the basement it leads to, whatever its own seed says
         bool garageDoor = fp.Doors.Any(d => d.Vehicle && d.Width > 0 && d.Link.Any);
-        int below = o.Below ?? (garageDoor ? 1 : AptBasement(l.Key, mixed, above, W * D));
+        int below = o.Below ?? (garageDoor ? 1 : AptBasement(l.Key, mixed, above, W * D));   // a wing is told the building's
         int floors = above + below;
         bool stairs = floors > 1;
         // a stairwell climbs a storey in two flights round a half landing (#571): each flight is
@@ -259,7 +259,7 @@ public static partial class InteriorGenerator
         // The garage's lane (#694): a stairwell never slides into it. A square ramp's column, or the
         // along-the-facade ramp's band and car park hall from the end wall.
         (float Lo, float Hi)? lane = null;
-        if (garageDoor && o.Free == null && !o.Pinned && o.Links.Count == 0)
+        if (garageDoor && !o.Pinned && o.Links.Count == 0)
         {
             var gd = fp.Doors.First(d => d.Vehicle && d.Width > 0 && d.Link.Any);
             float gxr = new Godot.Vector2(gd.Position.X - fp.Center.X, gd.Position.Z - fp.Center.Y).Dot(fp.AxisU);
@@ -282,7 +282,7 @@ public static partial class InteriorGenerator
 
         // the garage ramp's column (#558): kept out of every floor's flats
         RampWhy = null;
-        if (o.Free == null && o.Below == null && !o.Pinned && o.Links.Count == 0) a.Ramp = PlanRamp(a, fp);
+        if (!o.Pinned && o.Links.Count == 0) a.Ramp = PlanRamp(a, fp);
         else if (fp.Doors.Any(d => d.Vehicle)) RampWhy = "planned wing by wing";
 
         l.Type = type;

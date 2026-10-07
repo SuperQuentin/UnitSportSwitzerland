@@ -34,7 +34,7 @@ public partial class RampFirstProbe : Node
         public string Key = "", Type = "", Plan = "";
         public float W, D, H;
         public int Above, FrontDoors;
-        public bool Wing, Road, TooSmall, Door, Locked, Valid, PlainBad, PlainChecked;
+        public bool Lone, Wing, Road, TooSmall, Door, Locked, Valid, PlainBad, PlainChecked;
         public GarageRule.RampKind Kind;
         public TileId Tile;
         public int Index;
@@ -97,7 +97,9 @@ public partial class RampFirstProbe : Node
                         var k1 = GarageRule.KindOf(above, r.WingW, r.WingD, storeyH); var k2 = GarageRule.KindOf(above, r.WingD, r.WingW, storeyH);
                         r.WingKind = k1 != GarageRule.RampKind.None ? k1 : k2;
                     }
-                    r.Kind = GarageRule.KindOf(above, fp.Width, fp.Depth, storeyH);
+                    var grect = BuildingFootprint.GarageRect(b, box.Center, box.AxisU, outward, box.Width, box.Depth, new Vector2(fp.Door.Position.X, fp.Door.Position.Z));
+                    r.Lone = r.Wing && grect != null;
+                    r.Kind = grect is { } gr ? GarageRule.KindOf(above, gr.X1 - gr.X0, gr.Z1 - gr.Z0, storeyH) : GarageRule.RampKind.None;
                     var back = new Vector2(-fp.AxisU.Y, fp.AxisU.X);
                     var wallMid = fp.Center - back * (fp.Depth / 2);
                     var normal = -back;
@@ -125,7 +127,7 @@ public partial class RampFirstProbe : Node
                             bool ramp = plan.Entrances.Any(en => en.Vehicle) && plan.Floors.Any(f => f.AllFlights().Any(x => x.Ramp));
                             r.Locked = !ramp;
                             r.Bays = plan.Furniture.Count(p => p.Type == FurnitureType.FloorMarking && plan.RoomOf(p)?.Type == RoomType.CarPark);
-                            if (!ramp) r.Plan = InteriorGenerator.RampWhy ?? "locked";
+                            if (!ramp) r.Plan = (InteriorGenerator.RampWhy ?? "locked") + " / wings: " + (InteriorGenerator.WingFailure ?? "ok");
                             var problems = InteriorValidator.Validate(plan);
                             r.Valid = problems.Count == 0;
                             if (!r.Valid) r.Plan = "invalid: " + problems[0];
@@ -156,12 +158,12 @@ public partial class RampFirstProbe : Node
         var sb = new StringBuilder();
         void P(string s) { sb.AppendLine(s); GD.Print("[rampfirst] " + s); }
         int N = rows.Count;
-        var whole = rows.Where(r => !r.Wing).ToList();
+        var whole = rows.Where(r => !r.Wing || r.Lone).ToList();
         var gated = whole.Where(r => r.Road && !r.TooSmall).ToList();
         var doors = rows.Where(r => r.Door).ToList();
         P($"Real tiles: {tiles} building tiles, {buildings} buildings.");
         P($"Blocks of flats or shops under flats (not banks): {N}  (flats {rows.Count(r => r.Type == "Apartments")}, mixed {rows.Count(r => r.Type == "MixedUse")})");
-        P($"Gate: wing-planned {rows.Count(r => r.Wing)} ({Pct(rows.Count(r => r.Wing), N)}), whole box without a street {whole.Count(r => !r.Road)}, under {MinArea:F0} m2 {whole.Count(r => r.Road && r.TooSmall)}, pass {gated.Count} ({Pct(gated.Count, N)})");
+        P($"Gate: wing-planned {rows.Count(r => r.Wing)} ({Pct(rows.Count(r => r.Wing), N)}; of them one wing planned alone {rows.Count(r => r.Lone)}), whole box or lone wing without a street {whole.Count(r => !r.Road)}, under {MinArea:F0} m2 {whole.Count(r => r.Road && r.TooSmall)}, pass {gated.Count} ({Pct(gated.Count, N)})");
         P($"Front doors today, whole boxes: 1 door {Pct(whole.Count(r => r.FrontDoors <= 1), whole.Count)}, 2+ {Pct(whole.Count(r => r.FrontDoors >= 2), whole.Count)}");
         P("");
         P("The box takes (gate-passing, any roll):");
