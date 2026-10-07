@@ -57,6 +57,12 @@ jobs:
         id: settle
         run: tools/ci/settle-main.sh
 
+      # LFS stays out of the checkout, except the shipped audio (the church radio's chess type
+      # beat, #370): without it the export packs the LFS pointer text and the game has no track.
+      - name: Fetch the shipped audio from LFS
+        if: steps.settle.outputs.skip != '1'
+        run: git lfs pull --include="assets/audio/**"
+
       - name: Set up .NET
         if: steps.settle.outputs.skip != '1'
         uses: actions/setup-dotnet@v4
