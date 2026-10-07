@@ -53,11 +53,13 @@ public static partial class TileRewriter
                 || !_byLine.TryGetValue((key.Uuid, key.Part), out var list)) return null;
             bool atEnd = PriorityPlanner.EndAt(net, j, a) == LinkEnd.End;
             double m = key.FromM + source.AlongOf(atEnd ? source.Plan[^1] : source.Plan[0]);
+            double length = source.AlongOf(source.Plan[^1]) - source.AlongOf(source.Plan[0]);
             double? best = null;
             foreach (var e in list)
             {
                 double d = atEnd ? m - e.Along : e.Along - m;   // out from the junction node along the arm
-                if (d < -1 || d > CrossingReach) continue;
+                // a node belongs to the nearer end of its link: on a short one, not to both junctions
+                if (d < -1 || d > CrossingReach || d > length - d) continue;
                 if (best is null || d < best) best = d;
             }
             return best - a.Trim;

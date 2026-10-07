@@ -87,6 +87,31 @@ Plan and reasoning: `docs/plans/intersection-lanes.md`. What is built:
   from its right side, a gentle lead in; its leftmost lane's record opens that much further back. Exit hatches stay square.
 - **Lanes assigned in place at the lights**: their lines go solid over the 10 m before the stop line and stop there
   (`Widening.SolidToStop`); a double left's line stops at the pocket's own stop line (behind a bike box or advanced line).
+
+## Phase 3: pedestrian crossings from OSM, tight corners (#700)
+
+- **Crossing nodes** (`TerrainPreprocessor` `OsmNodes`): `highway=crossing` nodes are kept and snapped like signals, row
+  kind `crossing`, value `crossing=*`; the report counts them by value. Real tiles (20, LV95 2505-2509 / 1136-1139): 272
+  read (uncontrolled 149, traffic_signals 47, marked 39, zebra 22, unmarked 13), 244 within 30 m of a line end.
+- **Zebras** (`TileRewriter.DataCrossings`, `CrossingNodes.OnArm`): a marked node (zebra, marked, uncontrolled,
+  traffic_signals) on a junction arm's line, within 30 m of the junction and nearer that end of its link, puts a yellow
+  zebra across the arm (`EmitCrossing`'s bars): at the kerb ends when the node lies within 6 m of the mouth, else where it
+  is. At lights the #682 crosswalk is also drawn where OSM has a crossing and the arm no sidewalk. Unmarked: none. Real
+  tiles: 193 zebras from data. Regenerate `osm_nodes.tsv` (`--osm-overlay`) for old regions: they have no crossing rows.
+- **Tight corners** (`JunctionBuilder.TightCorner`, `TileRewriter.NoRightTurn`, user's rules): the corner between an
+  arm and the next one counter-clockwise keeps a 1.5 m kerb (`TightKerb`) where no car turns right there: none drives in
+  along the arm (a path, a one-way road out), none may leave along the next (a path or track, a one-way road in), OSM
+  forbids the turn (`Restrictions.Forbids`), or the arm's turn:lanes show no right lane. The junction polygon then follows
+  both edges almost to where they meet; `Junction.KerbInset` says how far inside the mouth each kerb ends; the #406
+  corner patch keeps it tight. Real tiles: 552 corners; overlap after junctions as on main (30,963 vs 30,962 m²).
+- **Diagonal crossings**: beside a tight corner a crosswalk's bars move in with the kerb, the band running from kerb end
+  to kerb end, turned at most 30 degrees from square (`MaxCrossingSkew`, the user's cap); its bars stay along the road.
+- **Stripes lean with the traffic**: a stripe runs from the centre line outward the way the hatch pushes a car: away from
+  the mouth on an exit hatch (as before), toward it on a lead-in or a merged strip (`Hatch(..., towardMouth)`).
+- **Taper per lane**: a left pocket of k lanes has a k times longer taper (the same slope).
+- Test region: J7's east approach marks no right turn (tight north-east corner, diagonal zebras on the north and east
+  arms from OSM nodes, J7 has no sidewalks); the unlit T south of J3: zebras on the stem and the west arm, the east arm's
+  crossing is unmarked.
 ## Test region
 
 J6 `2916500` (a 2+2 artery, `lanes=4`, 12 m, `turn:lanes = left|through;right` on every approach: the artery's
@@ -99,5 +124,5 @@ the in-place case. `SignalTestRegionTests` + `LaneDataRegionTests` check them.
 ## Not done
 
 - Pockets on approaches with 2+ lanes toward the junction (the data's extra lanes fold into the lane beside them).
-- Phase 3, pedestrian crossings from OSM `highway=crossing` nodes: waits for the scope to be confirmed (plan).
+- Crossings: kerb ramps, refuge islands and traffic yielding to pedestrians (#292).
 - OSM `lanes` changing mid-line (one row per segment), pockets across a tile seam, overhead heads for inner lanes (#354).
