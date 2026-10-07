@@ -82,6 +82,11 @@ public sealed record CarBody
     public bool Slicks { get; init; }
     /// <summary>A kart's race number, on its plates (1..99); 0 = none (#715).</summary>
     public int Number { get; init; }
+    /// <summary>
+    /// A kart's military plate, white on black ("M 40 245"): the army skin (#715). Empty = the rental
+    /// look, a white plate with the race number on it.
+    /// </summary>
+    public string Plate { get; init; } = "";
 }
 
 /// <summary>What the local driver sees of their own figure from the seat (<see cref="CarRig.View"/>).</summary>

@@ -67,7 +67,23 @@ public static class KartMeshBuilder
     private static int Mod(int value, int by) => ((value % by) + by) % by;
 
     /// <summary><paramref name="body"/> in the colour and number of <paramref name="seed"/>.</summary>
-    public static CarBody Dress(CarBody body, int seed) => body with { Paint = LiveryOf(seed).Paint, Number = NumberOf(seed) };
+    public static CarBody Dress(CarBody body, int seed) => body with { Paint = LiveryOf(seed).Paint, Number = NumberOf(seed), Plate = "" };
+
+    /// <summary>The Swiss army's olive drab: the body, the pods and the nose.</summary>
+    public static readonly Color Olive = new(0.29f, 0.33f, 0.17f);
+
+    /// <summary>
+    /// The army skin (the <c>Army</c> preset, <see cref="Player.CarSetups.ArmyId"/>): olive plastic, a
+    /// black frame and bumpers, a white-on-black military plate on the nose ("M 40 245", Swiss military
+    /// plates are the only black ones and start with M) and the race number stencilled in white on the
+    /// pods. The number and the plate come from <paramref name="seed"/>, as a rental kart's colour does.
+    /// </summary>
+    public static CarBody Army(CarBody body, int seed) =>
+        body with { Paint = Olive, Lower = Black, Number = NumberOf(seed), Plate = MilitaryPlate(seed) };
+
+    /// <summary>"M 40 245": the army's category (two digits) and the vehicle's number (three), from a seed.</summary>
+    public static string MilitaryPlate(int seed) =>
+        string.Create(CultureInfo.InvariantCulture, $"M {10 + Mod(unchecked(seed * 13 + 5), 90)} {100 + Mod(unchecked(seed * 37 + 11), 900)}");
 
     /// <summary>
     /// The driver's seat for a kart of this wheelbase: low, the back reclined 24°, the legs out straight
@@ -112,7 +128,7 @@ public static class KartMeshBuilder
         var c = new MeshScratch();   // the cabin (lit with the driver): floor tray, seat, steering column
 
         Frame(s, frame, axF, axR, rearR);
-        Bodywork(s, paint, body.Number, axF);
+        Bodywork(s, paint, body.Number, body.Plate);
         Engine(s, axR, rearR);
 
         // ---- the floor tray, the moulded seat ----
@@ -182,9 +198,14 @@ public static class KartMeshBuilder
             s.Box(new Vector3(x, rearR - 0.03f, axR), new Vector3(0.05f, 0.06f, 0.06f), Black);   // the bearing carriers
     }
 
-    /// <summary>The nose, the side pods and their plates: all in the livery's plastic.</summary>
-    private static void Bodywork(MeshScratch s, Color paint, int number, float axF)
+    /// <summary>
+    /// The nose, the side pods and their numbers: all in the livery's plastic. A rental kart has white
+    /// plates with the race number on the nose and each pod; an army kart (<paramref name="plate"/>) has
+    /// a black military plate on the nose and the number stencilled on the pods.
+    /// </summary>
+    private static void Bodywork(MeshScratch s, Color paint, int number, string plate)
     {
+        bool army = plate.Length > 0;
         // the nose: a loft from the dash to the tip, the top chamfered, sloping down to the front
         static Vector3[] Section(float z, float half, float top) => new[]
         {
@@ -197,8 +218,10 @@ public static class KartMeshBuilder
         // the plate on the nose faces forward and up, its top edge toward the driver
         float slope = Mathf.Atan2(0.11f, 0.36f);
         var nosePlate = new Vector3(0, 0.30f - 0.11f * (0.68f - 0.50f) / 0.36f + 0.006f, 0.68f);
-        PlateWith(s, nosePlate, new Basis(Vector3.Right, new Vector3(0, Mathf.Sin(slope), -Mathf.Cos(slope)),
-            new Vector3(0, Mathf.Cos(slope), Mathf.Sin(slope))), 0.24f, 0.17f, number);
+        var nose = new Basis(Vector3.Right, new Vector3(0, Mathf.Sin(slope), -Mathf.Cos(slope)),
+            new Vector3(0, Mathf.Cos(slope), Mathf.Sin(slope)));
+        if (army) DrawMilitaryPlate(s, nosePlate, nose, plate);
+        else PlateWith(s, nosePlate, nose, 0.24f, 0.17f, number);
 
         // the side pods: long low sponsons between the wheels, a rounded front; a plate on each
         foreach (float sx in new[] { -1f, 1f })
@@ -208,7 +231,8 @@ public static class KartMeshBuilder
             s.Box(new Vector3(sx * 0.475f, 0.19f, -0.37f), new Vector3(0.11f, 0.12f, 0.06f), paint, new Basis(Vector3.Right, -0.45f));
             // read from outside: a left-hand pod (+X) runs front to back, so its right is −Z
             var side = new Basis(new Vector3(0, 0, -sx), Vector3.Up, new Vector3(sx, 0, 0));
-            PlateWith(s, new Vector3(sx * 0.535f, 0.185f, -0.04f), side, 0.2f, 0.13f, number);
+            if (army) Text(s, number.ToString(CultureInfo.InvariantCulture), new Vector3(sx * 0.533f, 0.175f, -0.04f), side, 0.1f, Plate);
+            else PlateWith(s, new Vector3(sx * 0.535f, 0.185f, -0.04f), side, 0.2f, 0.13f, number);
         }
     }
 
@@ -220,29 +244,52 @@ public static class KartMeshBuilder
         Number(s, number, centre + plane.Z * 0.006f, plane, height * 0.62f);
     }
 
-    /// <summary>
-    /// <paramref name="number"/> in seven-segment strokes, <paramref name="height"/> tall, centred
-    /// on <paramref name="centre"/> in the plane of <paramref name="plane"/>.
-    /// </summary>
-    private static void Number(MeshScratch s, int number, Vector3 centre, Basis plane, float height)
+    /// <summary>A black military plate with its white letters, in the plane of <paramref name="plane"/> (X reads right, Y up, Z out).</summary>
+    private static void DrawMilitaryPlate(MeshScratch s, Vector3 centre, Basis plane, string text)
     {
-        string text = number.ToString(CultureInfo.InvariantCulture);
-        float w = height * 0.52f, gap = height * 0.22f, stroke = height * 0.15f;
-        float x0 = -(text.Length * w + (text.Length - 1) * gap) * 0.5f + w * 0.5f;
-        var ink = new Color(0.05f, 0.05f, 0.06f);
-        for (int i = 0; i < text.Length; i++)
+        s.Box(centre, new Vector3(0.34f, 0.115f, 0.008f), Black, plane);
+        Text(s, text, centre + plane.Z * 0.006f, plane, 0.06f, Plate);
+    }
+
+    private static void Number(MeshScratch s, int number, Vector3 centre, Basis plane, float height) =>
+        Text(s, number.ToString(CultureInfo.InvariantCulture), centre, plane, height, new Color(0.05f, 0.05f, 0.06f));
+
+    /// <summary>
+    /// <paramref name="text"/> (digits, <c>M</c> and spaces) in strokes, <paramref name="height"/> tall,
+    /// centred on <paramref name="centre"/> in the plane of <paramref name="plane"/>: seven segments for
+    /// a digit, two uprights and a V for the M.
+    /// </summary>
+    private static void Text(MeshScratch s, string text, Vector3 centre, Basis plane, float height, Color ink)
+    {
+        float w = height * 0.52f, gap = height * 0.22f, stroke = height * 0.15f, h = height * 0.5f;
+        float total = 0f;
+        foreach (char ch in text) total += (ch == ' ' ? w * 0.6f : w) + gap;
+        total -= gap;
+        float x = -total * 0.5f;
+        foreach (char ch in text)
         {
-            string on = text[i] switch
+            if (ch == ' ') { x += w * 0.6f + gap; continue; }
+            float cx = x + w * 0.5f;
+            x += w + gap;
+            void Stroke(float dx, float dy, Vector3 size, Basis? turn = null) =>
+                s.Box(centre + plane.X * (cx + dx) + plane.Y * dy, size, ink, turn is { } t ? plane * t : plane);
+            if (ch == 'M')
+            {
+                Stroke(-w * 0.5f, 0, new Vector3(stroke, height + stroke, 0.004f));
+                Stroke(w * 0.5f, 0, new Vector3(stroke, height + stroke, 0.004f));
+                float tilt = Mathf.Atan2(w * 0.5f, h), len = Mathf.Sqrt(w * w * 0.25f + h * h);
+                Stroke(-w * 0.25f, h * 0.5f, new Vector3(stroke, len, 0.004f), new Basis(Vector3.Back, tilt));
+                Stroke(w * 0.25f, h * 0.5f, new Vector3(stroke, len, 0.004f), new Basis(Vector3.Back, -tilt));
+                continue;
+            }
+            string on = ch switch
             {
                 '0' => "abcdef", '1' => "bc", '2' => "abged", '3' => "abgcd", '4' => "fgbc",
                 '5' => "afgcd", '6' => "afgedc", '7' => "abc", '9' => "abcdfg", _ => "abcdefg",
             };
-            float cx = x0 + i * (w + gap), h = height * 0.5f;
             void Bar(char id, float dx, float dy, bool across)
             {
-                if (!on.Contains(id)) return;
-                var size = across ? new Vector3(w + stroke, stroke, 0.004f) : new Vector3(stroke, h + stroke, 0.004f);
-                s.Box(centre + plane.X * (cx + dx) + plane.Y * dy, size, ink, plane);
+                if (on.Contains(id)) Stroke(dx, dy, across ? new Vector3(w + stroke, stroke, 0.004f) : new Vector3(stroke, h + stroke, 0.004f));
             }
             Bar('a', 0, h, true);
             Bar('g', 0, 0, true);
@@ -329,5 +376,8 @@ public static class KartMeshBuilder
             yield return ($"{Liveries[i].Name} no. {NumberOf(seed)}", () => CarRig.Create(Dress(spec.Body, seed), spec.Wheelbase, spec.Gauges,
                 HumanPalette.ForRider(seed)));
         }
+        foreach (int seed in new[] { 1, 2, 3 })
+            yield return ($"Army {MilitaryPlate(seed)}", () => CarRig.Create(Army(spec.Body, seed), spec.Wheelbase, spec.Gauges,
+                HumanPalette.ForRider(seed)));
     }
 }
