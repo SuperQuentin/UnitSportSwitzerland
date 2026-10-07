@@ -32,6 +32,8 @@ public static partial class TileRewriter
         public int MultiLane;
         /// <summary>Approaches with OSM lane data at the junction end (#700), lanes of it that fitted nowhere, a road leaves left but no lane wishes a left turn, lanes assigned in place with arrows, arrows painted on them.</summary>
         public int Wished, WishFolded, WishNoLeft, WishInPlace, WishArrows;
+        /// <summary>Junction corners left tight: no right turn rounds them (#700).</summary>
+        public int TightCorners;
         /// <summary>Hatched medians left out as too narrow or too short (#406).</summary>
         public int HatchesSkipped;
         /// <summary>Kerb corners paved beside a widening (#406), and those whose outline did not work out.</summary>
@@ -42,7 +44,7 @@ public static partial class TileRewriter
         public readonly SortedDictionary<string, List<string>> LayoutExamples = new();
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets ({RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {Corners:N0} corners rounded beside a widening ({CornersRejected:N0} failed, {CornersInTown:N0} left square beside a sidewalk or path, #406), {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120); " +
+            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets ({RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {Corners:N0} corners rounded beside a widening ({CornersRejected:N0} failed, {CornersInTown:N0} left square beside a sidewalk or path, #406), {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120), {TightCorners:N0} junction corners left tight (no right turn rounds them, #700); " +
             $"rejected (approach or exit): too short {Short:N0}, building {Building:N0}, another line {OtherLine:N0}, ground off the road {Ground:N0}, tile seam {Seam:N0}, no segment {NoSegment:N0}, no main road out {NoExit:N0}, two lanes or more already and no lane data {MultiLane:N0}; OSM lane data (#700): {Wished:N0} approaches, {WishFolded:N0} wished lanes folded, {WishNoLeft:N0} with a road to the left and no left lane, {WishInPlace:N0} assigned in place, {WishArrows:N0} arrows over them\n") +
             string.Concat(LayoutExamples.Select(kv => $"      right pockets beside a bike lane, layout {kv.Key} at LV95 {string.Join("; ", kv.Value)}\n"));
 
@@ -62,6 +64,8 @@ public static partial class TileRewriter
     private const double TurnLane = 3.0, TurnSolid = 10, TurnClear = 5;
     /// <summary>The angled closing line of a lead-in hatch runs this far along the road (#700).</summary>
     private const double LeadInClose = 10;
+    /// <summary>The kerb leg of a tight corner (#700), as <see cref="JunctionOptions.TightKerb"/> leaves it.</summary>
+    private static readonly double TightCornerLeg = new JunctionOptions().TightKerb;
 
     /// <summary>The arrow a lane with these moves shows: one of the five shapes, none for a lane that turns left and right or does all three.</summary>
     internal static PaintArrow? ArrowOf(SignalMoves m)
@@ -596,6 +600,8 @@ public static partial class TileRewriter
         // the legs run from the corner point back to the mouths where there is room (the trims decided how much), else a kerb allowance
         double leg = Math.Min(-ci, -cj);
         if (!clamp && leg < 1) leg = Math.Min(kerbI, kerbJ);
+        // a tight corner (#700: no right turn rounds it) keeps the junction's small kerb
+        if (junction.TightCorners.Contains(i)) leg = Math.Min(Math.Max(leg, 1.0), TightCornerLeg);
         if (leg < 1) return null;
         // tangent points a leg past the corner point along each widened edge (before a mouth: on the edge's line)
         (Vec2 P, float Y) At(Func<double, (Vec2 P, float Y)> edge, Vec2 m, float my, Vec2 e, double d) =>
@@ -928,7 +934,9 @@ public static partial class TileRewriter
             // normal width, else the two merge (first, where the segment is too short for both apart)
             string? why = null;
             double total = SegmentLength(Segment);
-            bool close = e is not null && total < TurnExit + TurnRejoin + PocketSizes[0].Taper + PocketSizes[0].Storage + TurnClear;
+            // a pocket of several lanes moves the through lane over by each of them: its taper is as many times as long, the same slope (#700)
+            int lanes = Math.Max(1, a.Lanes);
+            bool close = e is not null && total < TurnExit + TurnRejoin + PocketSizes[0].Taper * lanes + PocketSizes[0].Storage + TurnClear;
             bool[] modes = e is null ? [false] : close ? [true, false] : [false, true];
             // a pocket apart tries a lead-in first (#120: a bike lane beside it), then none
             foreach (bool merge in modes)
@@ -941,7 +949,7 @@ public static partial class TileRewriter
                             if (storage + TurnEntry + TurnMinHatch > total) { why = "short"; continue; }
                             way = Way(a, exit: false, total, 0, clear: 0, stations: [storage, storage + TurnEntry], lead: false);
                         }
-                        else way = Way(a, exit: false, taper + storage, taper, clear: e is null ? TurnClear : TurnExit + TurnRejoin, lead: lead,
+                        else way = Way(a, exit: false, taper * lanes + storage, taper * lanes, clear: e is null ? TurnClear : TurnExit + TurnRejoin, lead: lead,
                             bikeLeft: a.Signal ? LeftBikeLane : 0);
                         why = way.Check(lines, grids, buildings);
                         if (why is not null) { if (merge) break; continue; }   // a merged strip is the same for every storage

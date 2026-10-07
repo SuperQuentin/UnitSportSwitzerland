@@ -443,7 +443,8 @@ public static partial class TileRewriter
                     SimplifyTolerance: options.SimplifyTolerance,
                     ChordTolerance: options.ChordTolerance,
                     Analyze: options.Measure,
-                    JoinNearEnds: MayJoinNearEnd));
+                    JoinNearEnds: MayJoinNearEnd,
+                    TightCorner: (n, node, from, to) => NoRightTurn(n, node, from, to, restrictions, overlay)));
                 netStats.Priority.NearEndsJoined += result.NearEndsJoined;
                 // traffic lights: from OSM where the overlay covers a junction, else where two main
                 // roads cross in a dense core (#348)
@@ -599,6 +600,7 @@ public static partial class TileRewriter
                     var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
                     if (!block.Contains(home) || !wanted.Contains(home)) continue;
 
+                    netStats.TurnLanes.TightCorners += junction.TightCorners.Count;   // #700
                     var record = ToJunction(junction, result.Network, home);
                     if (record is null) continue;
 

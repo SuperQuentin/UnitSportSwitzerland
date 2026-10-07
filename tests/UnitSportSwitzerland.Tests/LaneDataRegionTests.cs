@@ -72,8 +72,8 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
     [Fact]
     public void No_left_pocket_where_the_data_marks_no_left_lane()
     {
-        // a road leaves to the left of the east approach, but its way says through | through;right
-        Assert.Equal("TR", Cars(Approach("J7", east: true)));
+        // a road leaves to the left of the east approach, but its way says through | through
+        Assert.Equal("T", Cars(Approach("J7", east: true)));
     }
 
     [Fact]
@@ -107,5 +107,37 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
         Assert.NotEmpty(hatch);
         double widest = hatch.SelectMany(p => Enumerable.Range(0, p.Vertices.Length / 3).Select(i => p.Vertices[i * 3 + 2] - cz)).Max();
         Assert.InRange(widest, 2.5, 3.6);
+    }
+
+    /// <summary>Whether a plan point (tile-local x east, z south) lies on a junction cap or a flush pavement patch.</summary>
+    private static bool Paved(RoadTile tile, double x, double z)
+    {
+        static bool In(float[] v, ushort[] idx, double x, double z)
+        {
+            for (int k = 0; k + 2 < idx.Length; k += 3)
+            {
+                double ax = v[idx[k] * 3], az = v[idx[k] * 3 + 2], bx = v[idx[k + 1] * 3], bz = v[idx[k + 1] * 3 + 2], cx = v[idx[k + 2] * 3], cz = v[idx[k + 2] * 3 + 2];
+                double d1 = (x - bx) * (az - bz) - (ax - bx) * (z - bz), d2 = (x - cx) * (bz - cz) - (bx - cx) * (z - cz), d3 = (x - ax) * (cz - az) - (cx - ax) * (z - az);
+                bool neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;
+                if (!(neg && pos)) return true;
+            }
+            return false;
+        }
+        return tile.Junctions.Any(j => In(j.Vertices, j.Indices, x, z))
+            || tile.AreaProps.Any(a => a.Type == AreaPropType.Pavement && In(a.Vertices, a.Indices, x, z));
+    }
+
+    [Fact]
+    public void A_corner_no_right_turn_rounds_stays_tight()
+    {
+        // J7's east approach has no right turn (turn:lanes through|through): its corner into the north arm stays tight;
+        // the north-west corner (the north arm's approach turns right into the west arm there) keeps its kerb arc
+        var j = region.Junction("J7");
+        var id = TileId.FromLv95(j.E, j.N);
+        var tile = region.Tile(j.E, j.N);
+        double cx = j.E - id.MinE, cz = id.MaxN - j.N;
+        // the north arm is 12 m wide, the east and west arms 8 m: the north-east corner where their edges meet is at (+6, 4 m north)
+        Assert.False(Paved(tile, cx + 7, cz - 5), "the north-east corner is paved past its edges: still rounded");
+        Assert.True(Paved(tile, cx - 7, cz - 5), "the north-west corner should keep its kerb arc");
     }
 }

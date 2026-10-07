@@ -157,11 +157,12 @@ public static class SignalTestRegion
 
         // 7. a 1+1 road whose last 150 m before the lights OSM maps as its own way with lanes:forward=3 and turn:lanes
         // left|left|through;right (the way is too short to change the TLM line's own 1+1): a double left pocket (#700). East of
-        // the lights the way says through|through;right only: no left pocket although a road leaves to the left.
+        // the lights the way says through|through only: no left pocket although a road leaves to the left, and no right turn, so the
+        // corner on that approach's right (into the north arm) stays tight and the crossings beside it run diagonal (#700)
         lines.Add(new Line("A12", "8m Strasse", "Durchgangsstrasse", "Kanton", [(2917050, n), (j7, n)], "secondary",
             Rows: [new OsmRow(0, 300), new OsmRow(300, 450, LanesFwd: "3", LanesBwd: "1", TurnFwd: "left|left|through;right")]));
         lines.Add(new Line("A13", "8m Strasse", "Durchgangsstrasse", "Kanton", [(j7, n), (2917950, n)], "secondary",
-            Rows: [new OsmRow(0, 150, TurnBwd: "through|through;right"), new OsmRow(150, 450)]));
+            Rows: [new OsmRow(0, 150, TurnBwd: "through|through"), new OsmRow(150, 450)]));
         // the cross road is 2+2 (lanes=4, no turn:lanes): the double left turns into two lanes, and the cross road's own two
         // lanes go on straight across into two; both pairs are kept apart by a dashed line through the junction
         lines.Add(new Line("J7S", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(j7, n - 400), (j7, n)], "secondary",
@@ -169,7 +170,7 @@ public static class SignalTestRegion
         lines.Add(new Line("J7N", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(j7, n), (j7, n + 400)], "secondary",
             Rows: [new OsmRow(0, 400, Lanes: "4")]));
         junctions.Add(new Junction("J7-double-left", j7, n, "a double left pocket from lanes:forward=3 and turn:lanes; no left pocket where OSM marks none",
-            Arms("L|L|TR", "TR", "LTR|LTR", "LTR|LTR")));
+            Arms("L|L|TR", "T", "LTR|LTR", "LTR|LTR")));
         return new Design(lines, boxes, junctions);
     }
 

@@ -62,6 +62,24 @@ public static partial class TileRewriter
         }
 
         /// <summary>
+        /// Whether OSM forbids the turn from arm <paramref name="from"/> of a node into arm <paramref name="to"/> (#700, before the
+        /// junction is built): a <c>no_*</c> restriction to that arm's line, or an <c>only_*</c> one to another line.
+        /// </summary>
+        public bool Forbids(RoadNetwork net, RoadNode node, Approach from, Approach to)
+        {
+            if (net.Links[from.LinkId].Tag is not Source { Key: { } key } || !_byFrom.TryGetValue((key.Uuid, key.Part), out var list)
+                || net.Links[to.LinkId].Tag is not Source { Key: { } tk })
+                return false;
+            foreach (var e in list)
+            {
+                if (new Vec2(e.E, e.N).DistanceTo(node.Position) > Reach || e.Value == "no_u_turn") continue;
+                bool toThis = e.ToUuid == tk.Uuid && e.ToPart == tk.Part;
+                if (e.Value.StartsWith("no_", StringComparison.Ordinal) && toThis) return true;
+                if (e.Value.StartsWith("only_", StringComparison.Ordinal) && !toThis) return true;
+            }
+            return false;
+        }
+        /// <summary>
         /// The turns forbidden from arm <paramref name="from"/> of a junction: a <c>no_*</c>
         /// restriction bans the turn to its to-line's arm, an <c>only_*</c> one every other turn
         /// (<c>no_u_turn</c> is not a movement here). Turns as the signal plans name them.

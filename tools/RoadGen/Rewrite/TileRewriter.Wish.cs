@@ -199,3 +199,23 @@ public static partial class TileRewriter
         return new Departing(lanes, c => RoadCrossSection.TwoWayLaneOffset(info.Width, rightBike, leftBike, lanes, other, inner: lanes - 1 - c));
     }
 }
+
+public static partial class TileRewriter
+{
+    /// <summary>
+    /// No traffic turns right from arm <paramref name="from"/> into the next arm counter-clockwise, <paramref name="to"/>
+    /// (#700, the user's rules), so the corner between them can stay tight: no car drives in along <paramref name="from"/>
+    /// (a path, a one-way road out); none may leave along <paramref name="to"/> (a path or track, a one-way road in); OSM
+    /// forbids the turn; or OSM's turn:lanes at the junction end of <paramref name="from"/> show no lane turning right.
+    /// </summary>
+    private static bool NoRightTurn(RoadNetwork net, RoadNode node, Approach from, Approach to, Restrictions? restrictions, OsmOverlayReader? overlay)
+    {
+        if (InfoOf(net.Links[from.LinkId]) is not { } fi || InfoOf(net.Links[to.LinkId]) is not { } ti) return false;   // railways keep their corners
+        bool enters = from.End == LinkEnd.Start ? fi.Attributes.OneWay <= 0 : fi.Attributes.OneWay >= 0;
+        if (!PriorityPlanner.IsCarRoad(fi.Class) || !enters) return true;
+        if (!PriorityPlanner.IsCarRoad(ti.Class) || !PriorityPlanner.Leaves(ti, to.End)) return true;
+        if (restrictions?.Forbids(net, node, from, to) == true) return true;
+        var lanes = WishedLanes(overlay, net.Links[from.LinkId], from.End, SignalMoves.Left | SignalMoves.Through | SignalMoves.Right);
+        return lanes is not null && lanes.All(m => (m & SignalMoves.Right) == 0);
+    }
+}
