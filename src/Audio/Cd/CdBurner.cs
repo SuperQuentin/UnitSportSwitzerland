@@ -144,6 +144,7 @@ public sealed class CdBurner
         int code = await RunAsync("yt-dlp", BundledTools.YtDlpJsArgs().Concat(new[]
         {
             "--no-playlist", "--no-simulate", "--quiet", "--no-warnings",
+            "--encoding", "utf-8",   // else Windows prints the title in the console code page: "V�ronique"
             "-f", "bestaudio/best",
             "--max-filesize", "100m",
             "--print", "title", "--print", "after_move:filepath",
@@ -208,6 +209,7 @@ public sealed class CdBurner
         {
             UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardOutput = true, RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
         };
         foreach (string a in args) start.ArgumentList.Add(a);
 

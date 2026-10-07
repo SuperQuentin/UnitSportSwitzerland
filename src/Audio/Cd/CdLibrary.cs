@@ -37,11 +37,40 @@ public partial class CdLibrary : Node
 
     private const string IndexFile = "library.json";
 
-    /// <summary>The chess type beat, shipped with the game (#370): the church radio's CD and the rat dance.</summary>
+    /// <summary>
+    /// The chess type beat (#370): the church radio's CD and the rat dance. The project keeps a copy
+    /// for dev runs and checks, offline; an export leaves it out (not openly licensed, #718) and
+    /// burns it from <see cref="RatBeatUrl"/> instead.
+    /// </summary>
     public const string RatBeatRes = "res://assets/audio/chess_type_beat.ogg";
 
     /// <summary><see cref="CdInfo.Source"/> of the CD burnt from <see cref="RatBeatRes"/>.</summary>
     public const string RatBeatSource = "bundled:chess_type_beat";
+
+    /// <summary>Where a release burns the chess type beat from (#718).</summary>
+    public const string RatBeatUrl = "https://www.youtube.com/watch?v=EK2w6qA5zz8";
+
+    /// <summary>
+    /// The CDs every release starts with (#718), the chess type beat first: burnt from these links
+    /// by the server (or the offline game) of an exported build, once each, one at a time, so no
+    /// audio ships with the game. A CD burnt from one is marked <see cref="DefaultSource"/>.
+    /// </summary>
+    public static readonly string[] DefaultUrls =
+    {
+        RatBeatUrl,
+        "https://www.youtube.com/watch?v=Zc4r7GGXAvw",
+        "https://www.youtube.com/watch?v=WxJR8L3y4gY",
+        "https://www.youtube.com/watch?v=PHfRJOZ5HpE",
+        "https://www.youtube.com/watch?v=NAogfwwqwGY",
+        "https://www.youtube.com/watch?v=6BEww_j1FmA",
+        "https://www.youtube.com/watch?v=9mxD-mByh0U",
+        "https://www.youtube.com/watch?v=zWMpmScHz9g",
+        "https://www.youtube.com/watch?v=0wRYvsfhsR8",
+        "https://www.youtube.com/watch?v=PGNiXGX2nLU",
+    };
+
+    /// <summary><see cref="CdInfo.Source"/> of the CD burnt from a <see cref="DefaultUrls"/> link.</summary>
+    public static string DefaultSource(string url) => "default:" + url;
 
     /// <summary>
     /// The shared CD of the chess type beat, or -1 while it is not burnt (or not yet listed here).
@@ -100,6 +129,9 @@ public partial class CdLibrary : Node
     private readonly ConcurrentQueue<(long Peer, CdInfo? Cd, bool Personal)> _done = new();
     private readonly Queue<string> _fixtures = new();
 
+    /// <summary>What a queued burn of this process marks its CD with (a default link, the bundled beat).</summary>
+    private readonly Dictionary<string, string> _sources = new();
+
     /// <summary><paramref name="server"/> for the dedicated server's copy, decided up front like <c>Bank</c>.</summary>
     public static CdLibrary Create(Node world, bool server)
     {
@@ -116,6 +148,7 @@ public partial class CdLibrary : Node
         if (!_server) LoadPersonal();
         if (_server) Multiplayer.PeerConnected += SendAll;
         EnsureRatBeat();
+        EnsureDefaults();
         BurnFixture();
     }
 
@@ -235,7 +268,7 @@ public partial class CdLibrary : Node
         var progress = new Progress<string>(text => _status.Enqueue((peer, text)));
         GD.Print($"[cd] burning {(personal ? "personal " : "")}CD {id} for peer {peer}: {(localFile ? Path.GetFileName(url) : url)}");
         // The tools run for a while; RPCs must go out from _Process, so the results are queued.
-        string? source = localFile && url == _ratBeatFile ? RatBeatSource : null;
+        string? source = peer == 0 ? _sources.GetValueOrDefault(url) : null;
         Task.Run(async () =>
         {
             CdInfo? cd = null;
@@ -349,16 +382,13 @@ public partial class CdLibrary : Node
         return id;
     }
 
-    /// <summary>Remembers the chess type beat's id, and gives it its measured grid.</summary>
+    /// <summary>Remembers the chess type beat's id (bundled or from its link), and gives it its measured grid.</summary>
     private CdInfo Note(CdInfo cd)
     {
-        if (cd.Source != RatBeatSource) return cd;
+        if (cd.Source != RatBeatSource && cd.Source != DefaultSource(RatBeatUrl)) return cd;
         RatBeatId = cd.Id;
         return cd with { Bpm = RatBeatBpm, BeatOffset = RatBeatOffset };
     }
-
-    /// <summary>Where the shipped chess type beat is copied for the burner, which needs a real file.</summary>
-    private string? _ratBeatFile;
 
     /// <summary>
     /// The server (or offline game) burns the shipped chess type beat into the shared list once, the
@@ -371,19 +401,40 @@ public partial class CdLibrary : Node
         if (!Owns || RatBeatId >= 0) return;
         try
         {
+            if (!Godot.FileAccess.FileExists(RatBeatRes)) return;   // an export: EnsureDefaults burns it from its link
             using var src = Godot.FileAccess.Open(RatBeatRes, Godot.FileAccess.ModeFlags.Read);
-            if (src == null) { GD.PushWarning($"[cd] {RatBeatRes} is missing: no chess type beat"); return; }
+            if (src == null) { GD.PushWarning($"[cd] could not open {RatBeatRes}: no chess type beat"); return; }
             string dir = Path.Combine(Directory, "_bundled");
             System.IO.Directory.CreateDirectory(dir);
-            _ratBeatFile = Path.Combine(dir, "Chess Type Beat.ogg");
-            File.WriteAllBytes(_ratBeatFile, src.GetBuffer((long)src.GetLength()));
-            _fixtures.Enqueue(_ratBeatFile);
+            string file = Path.Combine(dir, "Chess Type Beat.ogg");
+            File.WriteAllBytes(file, src.GetBuffer((long)src.GetLength()));
+            _sources[file] = RatBeatSource;
+            _fixtures.Enqueue(file);
             GD.Print("[cd] burning the chess type beat");
         }
         catch (Exception e)
         {
             GD.PushWarning($"[cd] could not burn the chess type beat: {e.Message}");
         }
+    }
+
+    /// <summary>
+    /// An exported build (or <c>--defaultcds</c>, to try it from the editor) burns every
+    /// <see cref="DefaultUrls"/> link it has no CD of yet, through the fixture queue. Dev runs and
+    /// checks skip it: they stay offline, and a fixture would wait behind the downloads. A link that
+    /// fails (no internet, a video gone) is tried again on the next start.
+    /// </summary>
+    private void EnsureDefaults()
+    {
+        if (!Owns || !(OS.HasFeature("template") || CmdArgs.Has("--defaultcds"))) return;
+        var have = _all.Values.Select(c => c.Source).ToHashSet();
+        foreach (string url in DefaultUrls)
+        {
+            if (have.Contains(DefaultSource(url)) || (url == RatBeatUrl && (RatBeatId >= 0 || _sources.ContainsValue(RatBeatSource)))) continue;
+            _sources[url] = DefaultSource(url);
+            _fixtures.Enqueue(url);
+        }
+        if (_fixtures.Count > 0) GD.Print($"[cd] burning the default CDs: {_fixtures.Count} to go");
     }
 
     /// <summary>

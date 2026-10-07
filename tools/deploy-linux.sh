@@ -79,7 +79,7 @@ ensure_preset() { # append a "Linux Server" preset to the (gitignored, per-machi
   grep -q '^name="Linux Server"' "$f" 2>/dev/null && return
   n=$(grep -c '^\[preset\.[0-9]*\]$' "$f" 2>/dev/null || true); n=${n:-0}
   excl=$(sed -n 's/^exclude_filter="\(.*\)"$/\1/p' "$f" 2>/dev/null | head -1 || true)
-  : "${excl:=terrain_chunks/*, terrain_chunks_png/*, terrain_chunks_temp/*, ressources/*, roadgen_out/*, video/*, graphify-out/*, tools/*}"
+  : "${excl:=assets/audio/*, terrain_chunks/*, terrain_chunks_png/*, terrain_chunks_temp/*, ressources/*, roadgen_out/*, video/*, graphify-out/*, tools/*}"
   echo "  adding preset.$n \"Linux Server\" to $f"
   [ -s "$f" ] && echo >> "$f"
   cat >> "$f" <<EOF
