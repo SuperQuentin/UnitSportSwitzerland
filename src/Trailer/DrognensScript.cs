@@ -213,15 +213,23 @@ public static class DrognensScript
             Number = 10, Name = "Caught", FromBar = 13, Bars = 1, Song = S, Hour = 22.8, Traffic = 0,
             Cast =
             [
-                new() { Who = Rochat, Ride = GClass, At = RoadIn, Toward = Gate, Drive = Drive.Follow, Route = "in", Speed = 7, StopAt = 30, Lights = true },
-                .. Karts(20),
+                // ROCHAT's G-Class rolls in from the east, lights on, and stops; the karts have stopped dead
+                new()
+                {
+                    Who = Rochat, Ride = GClass, At = new Spot(2558480, 1169508), Heading = 270, Lights = true,
+                    Drive = Drive.Controls, Controls = t => t < 2.1 ? Pedal(0.3f) : Pedal(0f, 0f, 1f),
+                },
+                new() { Who = Muller, Ride = Kart, At = new Spot(2558419, 1169506.5), Heading = 92 },
+                new() { Who = Krasniqi, Ride = Kart, At = new Spot(2558414, 1169510.5), Heading = 80 },
+                new() { Who = Favre, Ride = Kart, At = new Spot(2558410, 1169504), Heading = 100 },
+                new() { Who = Bernasconi, Ride = Kart, At = new Spot(2558405, 1169509), Heading = 86 },
             ],
             Keys =
             [
-                new(0, Pt.Road("ring", 12, 2.5f, 1.0f), Pt.On(0, 0f, 1.0f), 28),
-                new(1.98, Pt.Road("ring", 12, 2.5f, 1.0f), Pt.On(0, 0f, 1.0f), 28),
+                new(0, Pt.At(2558397, 1169507.5, 1.1f), Pt.At(2558470, 1169508, 1.3f), 35),
+                new(1.98, Pt.At(2558399, 1169507.5, 1.0f), Pt.At(2558470, 1169508, 1.3f), 35),
             ],
-            Preroll = 2,
+            Preroll = 1,
             Chat = [new(0.4, Rochat, "RECRUITS. landschaden. ZS at 06:00")],
         },
 
