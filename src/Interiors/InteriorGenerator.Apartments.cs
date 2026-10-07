@@ -163,7 +163,9 @@ public static partial class InteriorGenerator
         bool mixed = type == BuildingType.MixedUse;
 
         // ---- the stair, which sets the stairwell's depth -----------------------------------
-        int below = o.Below ?? AptBasement(l.Key, mixed, above, W * D);
+        // a block with a garage door (#694) has the basement it leads to, whatever its own seed says
+        bool garageDoor = fp.Doors.Any(d => d.Vehicle && d.Width > 0 && d.Link.Any);
+        int below = o.Below ?? (garageDoor ? 1 : AptBasement(l.Key, mixed, above, W * D));
         int floors = above + below;
         bool stairs = floors > 1;
         // a stairwell climbs a storey in two flights round a half landing (#571): each flight is
@@ -244,14 +246,26 @@ public static partial class InteriorGenerator
         // block with one stairwell goes to the nearer end outright: one flat a floor, as a Swiss
         // three-family house is, beats two slivers either side of the stair. Not in a wing
         // entered from the next one: its sliver is a box room instead.
+        // The garage's lane (#694): a stairwell never slides into it. A square ramp's column, or the
+        // along-the-facade ramp's band and car park hall from the end wall.
+        (float Lo, float Hi)? lane = null;
+        if (garageDoor && o.Free == null && !o.Pinned && o.Links.Count == 0)
+        {
+            var gd = fp.Doors.First(d => d.Vehicle && d.Width > 0 && d.Link.Any);
+            float gxr = new Godot.Vector2(gd.Position.X - fp.Center.X, gd.Position.Z - fp.Center.Y).Dot(fp.AxisU);
+            lane = gd.Ramp == GarageRule.RampKind.Along
+                ? (gd.RampDir > 0 ? (gxr - GarageRule.AlongDoorX, gxr - GarageRule.AlongDoorX + GarageRule.AlongKeepOut(h)) : (gxr + GarageRule.AlongDoorX - GarageRule.AlongKeepOut(h), gxr + GarageRule.AlongDoorX))
+                : (gxr - GarageRule.RampWidth / 2, gxr + GarageRule.RampWidth / 2);
+        }
+        bool Hits(float x0, float x1) => lane is { } ln && x1 + GarageRule.LaneGap > ln.Lo + 0.01f && x0 - GarageRule.LaneGap < ln.Hi - 0.01f;
         if (!o.Pinned)
         {
             var w0 = a.Wells[0];
             var wn = a.Wells[^1];
             float gl = w0.X0 + hw, gr = hw - wn.X1;
             bool small = a.Wells.Count == 1 && gl + gr < 2 * (MinFlatSide + 2.6f);
-            if (gl > 0.01f && (gl < MinFlatSide || small && gl <= gr)) { w0.X0 -= gl; w0.X1 -= gl; }
-            else if (gr > 0.01f && (gr < MinFlatSide || small)) { wn.X0 += gr; wn.X1 += gr; }
+            if (gl > 0.01f && (gl < MinFlatSide || small && gl <= gr) && !Hits(w0.X0 - gl, w0.X1 - gl)) { w0.X0 -= gl; w0.X1 -= gl; }
+            else if (gr > 0.01f && (gr < MinFlatSide || small) && !Hits(wn.X0 + gr, wn.X1 + gr)) { wn.X0 += gr; wn.X1 += gr; }
             gr = hw - wn.X1;
             if (a.Wells.Count > 1 && gr > 0.01f && gr < MinFlatSide) { wn.X0 += gr; wn.X1 += gr; }
         }

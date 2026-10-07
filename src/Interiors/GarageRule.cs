@@ -19,15 +19,13 @@ public static class GarageRule
     /// <summary>The door: a car's mouth, narrower than a loading bay (4.5 m) and lower (a van, not a lorry).</summary>
     public const float Width = 3.0f, Height = 2.4f;
 
-    /// <summary>Share of blocks that qualify by size and basement and still get one, so garages stay rare.</summary>
+    /// <summary>Share of the blocks whose box takes a ramp that get one, so garages stay a small part of all the blocks (#694: about 3 to 5 %).</summary>
     public const double Share = 0.8;
 
-    /// <summary>A city block with shops under its flats qualifies too, but rarer and only with a bigger frontage.</summary>
+    /// <summary>The same for shops under flats.</summary>
     public const double MixedRollShare = 0.5;
-    public const int MixedMinFrontDoors = 3;
 
-    /// <summary>A block with a single front door is too small a development for an underground garage (two or more is a block).</summary>
-    public const int MinFrontDoors = 2;
+
 
     /// <summary>A car park strip behind the stairwells is this deep (two rows and an aisle) in a block at least this wide.</summary>
     public const float StripDepth = 9.5f, StripWidth = 12f;
@@ -122,11 +120,11 @@ public static class GarageRule
     public const float RampWidth = 3.6f;
 
     /// <summary>
-    /// How far a garage door stands from any other door, m: the lane, a stairwell either side of it and
+    /// How far a garage door stands from a door on another wall, m (on the front wall the keep-out of the ramp rules); was the lane, a stairwell either side of it and
     /// the flats' wall between, so the ramp's column never meets a stairwell's (the stairwell is built
     /// for the door in front of it, and slides to the end of the block when the sliver beside it is thin).
     /// </summary>
-    public const float StairClear = 7.0f;
+    public const float StairClear = 5.0f;
 
     /// <summary>The flat floor behind the door before the ramp tips down, m.</summary>
     public const float RampApron = 1.0f;
@@ -158,21 +156,74 @@ public static class GarageRule
     public static bool Rolls(string key, bool mixed = false) =>
         AlwaysRolls || Fnv.Unit(key + "|garage") < (mixed ? MixedRollShare : Share);
 
+
+
+    // ---- ramp first (#694) ---------------------------------------------------------------------
+    // The garage is decided from the plan box and the road alone: no front-door count, no car park to
+    // wait for. Two shapes, chosen per block: a ramp square to the front wall (needs depth) or one that
+    // runs along the facade (needs width). A single stairwell stands beside it.
+
+    /// <summary>Which ramp a block's box takes: none, square to the front wall, or along the facade.</summary>
+    public enum RampKind { None, Square, Along }
+
+    /// <summary>Wall left between the end of the facade and the lane, m.</summary>
+    public const float EndMargin = 0.35f;
+    /// <summary>Wall between the lane and a stairwell, m.</summary>
+    public const float LaneGap = 0.4f;
+
+    /// <summary>The stairwell's column wall to wall: its stair, the passage beside it, the lift.</summary>
+    public static float WellWidth(bool lift) => StairWidth + WalkWidth + (lift ? LiftColumn : 0);
+
+    /// <summary>Whether a block of <paramref name="above"/> storeys and a basement has a lift (the generator's rule).</summary>
+    public static bool LiftIn(int above) => above + 1 >= 3;
+
+    /// <summary>The narrowest box a square ramp fits beside its stairwell, m (and the car park strip needs <see cref="StripWidth"/>).</summary>
+    public static float SquareWidth(bool lift) => Math.Max(StripWidth, EndMargin + RampWidth + LaneGap + WellWidth(lift));
+
     /// <summary>
-    /// Whether a block of flats gets an underground garage door: flats (not shops under them), at
-    /// least <see cref="MinFrontDoors"/> front doors, a basement car park and the roll. Flats with
-    /// shops under them (<see cref="BuildingType.MixedUse"/>) qualify too: at least
-    /// <see cref="MixedMinFrontDoors"/> front doors and a <see cref="MixedRollShare"/> roll.
-    /// <paramref name="width"/> is the plan box's length along the front wall.
+    /// Along the facade: the lane is a band as deep as the stairwell up to its half landing (so the corridor behind
+    /// the landing runs straight on behind it), 3.6 m wide against that wall; the door stands 2.2 m in from the
+    /// band start, and the descent starts AlongTurnIn from it (a car turns in off the door).
     /// </summary>
-    public static bool Wanted(string key, BuildingType type, int above, float width, float depth,
-        float storeyHeight, int frontDoors) =>
-        type switch
-        {
-            BuildingType.Apartments => frontDoors >= MinFrontDoors
-                && HasCarPark(key, false, above, width, depth, storeyHeight) && HasRamp(depth, storeyHeight) && Rolls(key),
-            BuildingType.MixedUse => frontDoors >= MixedMinFrontDoors
-                && HasCarPark(key, true, above, width, depth, storeyHeight) && HasRamp(depth, storeyHeight) && Rolls(key, mixed: true),
-            _ => false,
-        };
+    public const float AlongDoorX = 2.2f;
+    /// <summary>From the end wall to the descent's top: the door's column and the turn off it, m.</summary>
+    public const float AlongTurnIn = 6.6f;
+    /// <summary>The car park hall past the ramp's foot is at least this long along the facade (a row of bays and the aisle in front of them).</summary>
+    public const float AlongParkLength = 9.5f;
+    /// <summary>The shallowest box an along-the-facade ramp takes: deep enough that the stairwell keeps its own depth (a row of four bays down the hall's far wall).</summary>
+    public const float AlongMinDepth = 13.0f;
+
+    /// <summary>Where the descent ends along the facade, from the end wall, m.</summary>
+    public static float AlongFoot(float storeyHeight) => EndMargin + AlongTurnIn + RampProfile.Length(storeyHeight);
+    /// <summary>How far from the end wall nothing but the ramp and its car park stands, m.</summary>
+    public static float AlongKeepOut(float storeyHeight) => AlongFoot(storeyHeight) + AlongParkLength;
+    /// <summary>The narrowest box an along-the-facade ramp fits: its band, the car park and a stairwell beyond.</summary>
+    public static float AlongWidth(float storeyHeight, bool lift) => AlongKeepOut(storeyHeight) + LaneGap + WellWidth(lift) + EndMargin;
+
+    /// <summary>
+    /// Which ramp a block of <paramref name="above"/> storeys (and the basement the garage gives it) and a
+    /// plan box <paramref name="width"/> (along the front wall) by <paramref name="depth"/> takes. Square: the
+    /// car park strip behind the stairwell and the depth for the ramp (the #558 rule's geometry). Along: the width
+    /// for the band, the car park hall and the stairwell, and depth for a row of bays.
+    /// </summary>
+    public static RampKind KindOf(int above, float width, float depth, float storeyHeight)
+    {
+        bool lift = LiftIn(above);
+        if (width >= SquareWidth(lift) && HasRamp(depth, storeyHeight)
+            && BehindStairwell(width, depth, above + 1, storeyHeight) >= StripDepth) return RampKind.Square;
+        if (width >= AlongWidth(storeyHeight, lift) && depth >= AlongMinDepth) return RampKind.Along;
+        return RampKind.None;
+    }
+
+    /// <summary>
+    /// The ramp a block of flats (or shops under flats) gets: from the box and the roll, nothing else (the road is
+    /// <see cref="GarageLink"/>'s). <see cref="RampKind.None"/> for anything that is not such a block.
+    /// </summary>
+    public static RampKind RampFor(string key, BuildingType type, int above, float width, float depth, float storeyHeight) =>
+        type is BuildingType.Apartments or BuildingType.MixedUse && Rolls(key, type == BuildingType.MixedUse)
+            ? KindOf(above, width, depth, storeyHeight) : RampKind.None;
+
+    /// <summary>Whether a block of flats gets an underground garage door: <see cref="RampFor"/>.</summary>
+    public static bool Wanted(string key, BuildingType type, int above, float width, float depth, float storeyHeight) =>
+        RampFor(key, type, above, width, depth, storeyHeight) != RampKind.None;
 }

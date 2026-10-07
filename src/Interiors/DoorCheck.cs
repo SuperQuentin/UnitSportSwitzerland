@@ -284,7 +284,7 @@ public static class DoorCheck
                 Expect(BuildingFootprint.DoorOnWall(b, g), $"{what}: slot {g.Slot} is on a wall");
                 Expect(g.Link.Length is > 0.3f and < 25f, $"{what}: its link is {g.Link.Length:F1} m long");
                 int total = doors.Count(d => d.Index == g.Index && d.Width > 0);
-                Expect(total >= 1 + GarageRule.MinFrontDoors, $"{what}: the block has {total} doors, garage included");
+                Expect(total >= 2, $"{what}: the block has {total} doors, garage included");
                 var layout = InteriorGenerator.Generate(tile, g.Index, roads, null);
                 if (layout == null) { Expect(false, $"{what}: no plan"); continue; }
                 var problems = InteriorValidator.Validate(layout);
@@ -336,7 +336,7 @@ public static class DoorCheck
             {
                 Expect(InteriorGenerator.ApartmentTypeFor(BuildingFootprint.Compute(tile, g.Index, roads, null)!, BuildingKind.Commercial, 5, false) == BuildingType.MixedUse,
                     $"mixed blocks: slot {g.Slot} of building {g.Index} is a block with shops under its flats");
-                Expect(doors.Count(x => x.Index == g.Index && x.Width > 0) >= 1 + GarageRule.MixedMinFrontDoors, $"mixed blocks: building {g.Index} has the {GarageRule.MixedMinFrontDoors} front doors it takes");
+                Expect(doors.Count(x => x.Index == g.Index && x.Width > 0) >= 2, $"mixed blocks: building {g.Index} has an entrance beside its garage door");
                 var problems = InteriorValidator.Validate(InteriorGenerator.Generate(tile, g.Index, roads, null)!);
                 Expect(problems.Count == 0, $"mixed blocks: building {g.Index} plans and validates");
             }
