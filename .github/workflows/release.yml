@@ -102,6 +102,18 @@ jobs:
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
           else echo "No ANDROID_KEYSTORE_BASE64 secret: this release ships no APK"; fi
 
+      # Godot reports only "Username and/or Password is invalid"; keytool's own message says which (no secret printed)
+      - name: Check the keystore credentials (APK check only)
+        if: inputs.android_only
+        env:
+          KS_USER: ${{ secrets.ANDROID_KEYSTORE_USER }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME"; "$JAVA_HOME/bin/keytool" -version 2>&1 || true
+          grep -h java_sdk_path ~/.config/godot/editor_settings-*.tres 2>/dev/null || echo "no editor settings yet (seeded at export)"
+          "$JAVA_HOME/bin/keytool" -list -keystore "$GODOT_ANDROID_KEYSTORE_RELEASE_PATH" -storepass "$KS_PASS" -alias "$KS_USER" 2>&1 | sed -E 's/([0-9A-F]{2}:){8,}[0-9A-F]{2}/<fingerprint>/' || true
+          echo "--- all aliases:"; "$JAVA_HOME/bin/keytool" -list -keystore "$GODOT_ANDROID_KEYSTORE_RELEASE_PATH" -storepass "$KS_PASS" 2>&1 | grep -E 'Entry|error|Keystore type' || true
+
       - name: Release
         if: steps.settle.outputs.skip != '1'
         env:
