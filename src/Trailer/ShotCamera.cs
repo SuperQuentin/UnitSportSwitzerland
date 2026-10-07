@@ -22,6 +22,8 @@ public sealed class ShotCamera
 
     /// <summary>A point on a shot's road: (route, arc, right, up), or null while it is not built.</summary>
     public Func<string, Vector3, Vector3?> Road { get; init; } = (_, _) => null;
+    /// <summary>A point of the shot's set, in world space (<see cref="Pt.Set"/>); null with no set.</summary>
+    public Func<Vector3, Vector3?> SetPoint { get; init; } = _ => null;
 
     /// <summary>The surface under a point, for keeping the eye above it.</summary>
     public required Func<Vector3, float?> Surface { get; init; }
@@ -111,6 +113,7 @@ public sealed class ShotCamera
             var dir = new Vector3(Mathf.Sin(b) * Mathf.Cos(pitch), Mathf.Sin(pitch), -Mathf.Cos(b) * Mathf.Cos(pitch));
             return from + dir * 2000f;
         }
+        if (p.InSet is { } local) return SetPoint(local);
         if (p.World is { } spot) return Place(spot);
         if (p.Route is { } route) return Road(route, p.Offset);
         if (p.Seat) return Seat(p.Actor) is { } seat ? seat.Eye + seat.Ahead * p.Offset.Z + Vector3.Up * p.Offset.Y : null;

@@ -591,7 +591,7 @@ public static class TrailerScript
             Captions =
             [
                 new(1.95, 13.6, "UNITSPORT SWITZERLAND", "On foot · on wheels · on water · in the air", Title: true),
-                new(9.8, 5.6, "", Song.Credit),
+                new(9.8, 5.6, "", Song.VoxelRevolution.Credit),
             ],
         },
     };
@@ -625,7 +625,7 @@ public static class TrailerScript
             new(0, Pt.Alt(2635980, 1158700, 1080), Pt.Alt(2635950, 1160600, 860), 35),
             new(5.85, Pt.Alt(2635960, 1159350, 1030), Pt.Alt(2635950, 1161200, 840), 35),
         ],
-        KeysFrom = part * Song.BarLength,
+        KeysFrom = part * Song.VoxelRevolution.BarLength,
         Captions = [new(0.15, 1.7, label)],
         Preroll = 0.5,
     };

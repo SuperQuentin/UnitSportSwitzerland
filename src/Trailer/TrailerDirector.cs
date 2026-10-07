@@ -56,6 +56,13 @@ public partial class TrailerDirector : Node
     private readonly List<Actor> _actors = new();
     private RouteBook _routes = new(0);
     private readonly List<Node3D> _props = new();
+    /// <summary>The shot's film set (<see cref="Shot.Set"/>), freed with the props.</summary>
+    private Node3D? _set;
+    /// <summary>
+    /// How high a set is put, above the sea, m: under every Swiss ground (the lowest, Lake Maggiore,
+    /// is at 193 m) and far above the interiors' floor (<c>InteriorBaseY</c>, −3000).
+    /// </summary>
+    private const float SetAltitude = -400f;
     private double _t, _waitWall, _settledFor, _drawnFor, _preroll;
     private double _phaseStart;
     private string _style = "";
@@ -110,10 +117,15 @@ public partial class TrailerDirector : Node
 
     /// <summary>
     /// Which film: <c>--trailer-film story</c> (the default, "Meet You at the Top",
-    /// <see cref="StoryScript"/>) or <c>showcase</c> (the first cut, <see cref="TrailerScript"/>).
+    /// <see cref="StoryScript"/>), <c>showcase</c> (the first cut, <see cref="TrailerScript"/>) or
+    /// <c>drognens</c> (the music clip at the barracks, <see cref="DrognensScript"/>, #717).
     /// </summary>
-    public static IReadOnlyList<Shot> Film =>
-        CmdArgs.Value("--trailer-film") == "showcase" ? TrailerScript.Shots : StoryScript.Shots;
+    public static IReadOnlyList<Shot> Film => CmdArgs.Value("--trailer-film") switch
+    {
+        "showcase" => TrailerScript.Shots,
+        "drognens" => DrognensScript.Shots,
+        _ => StoryScript.Shots,
+    };
 
     /// <summary>"all", "5", "5-9" or "5,7,12" (shot numbers).</summary>
     private static List<Shot> Select(string arg)
@@ -145,7 +157,7 @@ public partial class TrailerDirector : Node
         if (_recordDir == null && _stillsDir == null && CmdArgs.Value("--trailer-song") is { } songPath) LoadSong(songPath);
         RenderingServer.FramePostDraw += OnFrameDrawn;
         // the cut as a whole, whichever shots this run films: no gap, no overlap, the song's length
-        var problems = Song.CutProblems(Film.Select(s => (s.Number, s.FromBar, s.Bars)).ToList())
+        var problems = (Film.Count > 0 ? Film[0].Song : Song.VoxelRevolution).CutProblems(Film.Select(s => (s.Number, s.FromBar, s.Bars)).ToList())
             .Concat(Film.Where(s => s.Keys.Count == 0).Select(s => $"shot {s.Number} has no camera key"));
         foreach (var problem in problems)
         {
@@ -245,6 +257,14 @@ public partial class TrailerDirector : Node
         var focus = Focus(shot);
         OriginShifter.Instance?.ShiftTo(focus.E, focus.N);
         _camera.GlobalPosition = _origin.ToWorld(focus.E, focus.N, 0) with { Y = 3000f };
+        _set = null;
+        if (shot.Set != null)
+        {
+            _set = shot.Set();
+            AddChild(_set);
+            _set.GlobalPosition = _origin.ToWorld(shot.SetAt.E, shot.SetAt.N, SetAltitude);
+            _props.Add(_set);
+        }
         _shotCamera = CameraFor(shot);
         _settledFor = 0;
         _drawnFor = 0;
@@ -257,14 +277,20 @@ public partial class TrailerDirector : Node
     {
         Place = PlaceSpot,
         Actor = i => i >= 0 && i < _actors.Count ? _actors[i].Frame : null,
-        Surface = p => _chunks.TryGetSurface(p, out float g) ? g : null,
+        // in a set, far under the ground, the camera's floor is the set's own
+        Surface = p => shot.Set == null && _chunks.TryGetSurface(p, out float g) ? g : null,
+        SetPoint = SetPoint,
         Road = (key, at) => _routes.Point(key, at, _chunks),
         Seat = i => i >= 0 && i < _actors.Count ? _actors[i].Seat : null,
     };
 
-    /// <summary>Where a shot happens: its first world key's spot, else its first actor's.</summary>
+    /// <summary>A point of the shot's set in this frame's world space (null: no set).</summary>
+    private Vector3? SetPoint(Vector3 local) => _set != null && IsInstanceValid(_set) ? _set.GlobalTransform * local : null;
+
+    /// <summary>Where a shot happens: the place its set stands for, its first world key's spot, else its first actor's.</summary>
     private static Spot Focus(Shot shot)
     {
+        if (shot.Set != null) return shot.SetAt;
         foreach (var k in shot.Keys) if (k.Eye.World is { } s) return s;
         if (shot.Cast.Count > 0) return shot.Cast[0].At;
         foreach (var k in shot.Keys) if (k.Look.World is { } s) return s;
@@ -299,11 +325,31 @@ public partial class TrailerDirector : Node
             var along = (next - on) with { Y = 0 };
             bearing = Mathf.RadToDeg(Mathf.Atan2(along.X, -along.Z));
         }
+        else if (prop.InSet is { } local)
+        {
+            if (SetPoint(local) is not { } inSet) return;
+            at = inSet;
+        }
+        if (prop.Seated is { } sitter)
+        {
+            // someone sitting there, the hip at the spot: the passengers' figure, in the character's looks and clothes
+            var palette = (Avatar.HumanPalette.Default with { Outfit = Avatar.Outfit.Of(sitter.Wears) }).With(sitter.Looks);
+            var figure = new MeshInstance3D
+            {
+                Name = $"Prop{_props.Count}",
+                Mesh = Avatar.SeatedFigure.Build(palette, new Avatar.SeatAnchor(0, new Vector3(0, 0.46f, 0), 0.05f, 0f)),
+                MaterialOverride = Avatar.HumanMeshBuilder.FigureMaterial(),
+            };
+            AddChild(figure);
+            figure.GlobalTransform = new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(-bearing)), at);
+            _props.Add(figure);
+            return;
+        }
         if (prop.Item != Items.ItemId.None)
         {
             // an item set down: its own mesh, its lowest point on the floor (a path's, a road's: the
-            // pot put on the bare ground was under the Gornergrat's path), no collision
-            float floor = FloorAt(at) ?? at.Y;
+            // pot put on the bare ground was under the Gornergrat's path; in a set, the table), no collision
+            float floor = FloorAt(at, terrain: prop.InSet == null) ?? at.Y;
             var item = new MeshInstance3D
             {
                 Name = $"Prop{_props.Count}",
@@ -336,11 +382,11 @@ public partial class TrailerDirector : Node
     /// <summary>
     /// The top of what is underfoot at <paramref name="at"/>: the collision there (a path, a road, a
     /// pavement drawn over the ground) or the ground's own surface, whichever is higher; null when
-    /// neither is in yet.
+    /// neither is in yet. In a set, far under the ground, only the collision (<paramref name="terrain"/> false).
     /// </summary>
-    private float? FloorAt(Vector3 at)
+    private float? FloorAt(Vector3 at, bool terrain = true)
     {
-        float? floor = _chunks.TryGetSurface(at, out float g) ? g : null;
+        float? floor = terrain && _chunks.TryGetSurface(at, out float g) ? g : null;
         var from = at with { Y = (floor ?? at.Y) + 3f };
         var hit = _camera.GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(from, from + Vector3.Down * 8f));
         if (hit.Count > 0)
@@ -389,7 +435,7 @@ public partial class TrailerDirector : Node
         }
         GD.Print($"[trailer] shot {shot.Number}: ground in after {Wall():F1} s, placing {shot.Cast.Count} actor(s)");
         for (int i = 0; i < shot.Cast.Count; i++)
-            _actors.Add(new Actor(shot.Cast[i], i, this, _chunks, _origin, _routes, k => k >= 0 && k < _actors.Count ? _actors[k] : null));
+            _actors.Add(new Actor(shot.Cast[i], i, this, _chunks, _origin, _routes, k => k >= 0 && k < _actors.Count ? _actors[k] : null) { SetPoint = SetPoint });
         foreach (var prop in shot.Props.Where(p => p.Actor < 0 && p.Route == null)) Build(prop);
         Enter(Phase.Place);
     }
