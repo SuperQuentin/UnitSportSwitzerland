@@ -182,7 +182,7 @@ public partial class RampFirstProbe : Node
             + $"(b) along: width {GarageRule.RampWidth + RampProfile.Length(h) + GarageRule.RampTurn + 2 * Margin:F1} (+{StairCol:F1} stairwell), depth {AlongDepth + 3:F0}+; car park of 4 bays = {4 * BayGross:F0} m2");
         P("");
         P("Qualifies, share of ALL blocks / of gate-passing blocks   [count]:");
-        P("  variant                               all blocks      gate-passing   expected garages (with the roll)");
+        P("  variant                               geometry only (gate ignored)  gate-passing blocks   expected garages (gate + the roll)");
         void Line(string name, Func<Row, bool> f)
         {
             int all = rows.Count(f), gate = gated.Count(f);
