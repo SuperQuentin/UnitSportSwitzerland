@@ -136,8 +136,12 @@ public static partial class TileRewriter
             lanes = [];
             // every lane of a multi-lane carriageway is there all along, from 30 m before the line (#700)
             for (int k = 0; k < n; k++)
-                lanes.Add(n == 1 ? new ApproachLane(0f, 0f, 0f, moves, ApproachLaneKind.Car)
-                    : new ApproachLane(k * laneWidth, OwnLaneFull, OwnLaneFrom, moves, ApproachLaneKind.Car));
+            {
+                // the moves OSM's lane data gave each lane (#700), else every turn the approach has
+                var laneMoves = built?.OwnMoves is { } given && given.Length == n ? given[k] : moves;
+                lanes.Add(n == 1 ? new ApproachLane(0f, 0f, 0f, laneMoves, ApproachLaneKind.Car)
+                    : new ApproachLane(k * laneWidth, OwnLaneFull, OwnLaneFrom, laneMoves, ApproachLaneKind.Car));
+            }
         }
         var record = new RoadApproach
         {
@@ -234,8 +238,12 @@ public static partial class TileRewriter
             // of the lane-wide hatch over the entry diagonal (#325)
             double full = p.Storage, opens = p.Merged ? p.Storage + TurnEntry : p.Storage;
             bool box = p.Signal && lw.HasLeftBikeLane && lw.BikeBox, advanced = p.Signal && lw.HasLeftBikeLane && !lw.BikeBox;
-            lanes.Add(new ApproachLane(O(layout.LeftPocketLane!.Value), D(full), D(opens), SignalMoves.Left, ApproachLaneKind.Car,
-                box ? (float)BikeBoxDepth : advanced ? (float)AdvancedBikeLine : 0f));
+            // the pocket's lanes, left to right (#700: a double left has two); the outer one opens first, so the traffic of
+            // the inner one follows it out of the through lane
+            for (int k = 0; k < layout.LeftLanes; k++)
+                lanes.Add(new ApproachLane(O(layout.LeftLane(k)), D(full), D(opens) + (layout.LeftLanes - 1 - k) * 1.0f,
+                    p.PocketMoves is { } pm && k < pm.Length ? pm[k] : SignalMoves.Left, ApproachLaneKind.Car,
+                    box ? (float)BikeBoxDepth : advanced ? (float)AdvancedBikeLine : 0f));
             if (layout.LeftBikeLane is { } leftBike)   // the left-turn bike lane (#351): stops at the box's front line, or the advanced line
                 lanes.Add(new ApproachLane(O(leftBike), D(full), D(opens), SignalMoves.Left, ApproachLaneKind.Bike,
                     0f));
@@ -260,7 +268,7 @@ public static partial class TileRewriter
         // (#386: only the turns the approach has, so the stem of a T beside its right pocket turns left only)
         var turns = p.Turns == 0 ? SignalMoves.Left | SignalMoves.Through | SignalMoves.Right : p.Turns;
         SignalMoves Can(SignalMoves m) => (m & turns) != 0 ? m & turns : turns & ~SignalMoves.Right;
-        var throughMoves = Can(p.LeftWay is not null
+        var throughMoves = p.OwnMoves is { Length: > 0 } own ? Can(own[0]) : Can(p.LeftWay is not null
             ? SignalMoves.Through | (p.ThroughRight ? SignalMoves.Right : 0)
             : SignalMoves.Through | (p.RightWay is { LeftTurn: true } ? SignalMoves.Left : 0));
         lanes.Add(new ApproachLane(O(through), throughFull, throughFrom, throughMoves, ApproachLaneKind.Car));

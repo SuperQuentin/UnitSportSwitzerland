@@ -302,12 +302,14 @@ public static partial class TileRewriter
                 if (bikeSignal) stats.BikeSignals++;
                 if (approach && !path && layout is { KerbsideBike: true }) kerbside.Add((arms.Count, layout));
                 armInPlan[i] = arms.Count;
-                arms.Add(new SignalArm(arm.OutwardHeading, approach, leaves, pocket, rightPocket, Pedestrians: true,
+                // a lane of its own for the left turn (a pocket, or one of the carriageway's lanes OSM marks left only, #700) gets its own phase
+                bool leftLane = pocket || pockets.GetValueOrDefault((junction.NodeId, i))?.OwnMoves is { } ownMoves && ownMoves.Any(m => m == SignalMoves.Left);
+                arms.Add(new SignalArm(arm.OutwardHeading, approach, leaves, leftLane, rightPocket, Pedestrians: true,
                     BikeSignal: bikeSignal, SpeedKmh: urban ? 50 : 60, CrossingM: (float)(to - from + (info.Attributes.OneWay != 0 ? 0 : half)),
                     Rank: (byte)Math.Clamp(PriorityPlanner.Rank(info) / 4, 1, 255)));
                 stats.Arms++;
                 if (approach) stats.Approaches++;
-                if (pocket) stats.LeftPockets++;
+                if (leftLane) stats.LeftPockets++;
                 if (rightPocket) stats.RightPockets++;
             }
             if (arms.Count(a => a.In) < 2) continue;

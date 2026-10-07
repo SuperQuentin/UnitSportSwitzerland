@@ -21,7 +21,7 @@ using UnitSport.Tools.RoadGen.Rewrite;
 public static class SignalTestRegion
 {
     /// <summary>Tiles written: a row of junction tiles (N 1322) with a flat tile row either side. Outside Switzerland on purpose: no real tile, cached or not, shares an id.</summary>
-    public const int MinTileE = 2910, MaxTileE = 2915, MinTileN = 1321, MaxTileN = 1323;
+    public const int MinTileE = 2910, MaxTileE = 2917, MinTileN = 1321, MaxTileN = 1323;
     /// <summary>The junctions' row, LV95 N: the middle of the tile row N 1322.</summary>
     public const double RowN = 1322500;
     /// <summary>The ground, metres (as the fixture courses).</summary>
@@ -39,13 +39,16 @@ public static class SignalTestRegion
 
     /// <summary>One TLM line as the extractor would read it, with its OSM overlay row.</summary>
     private sealed record Line(string Id, string Objektart, string Verkehrsbedeutung, string Eigentuemer, (double E, double N)[] Points,
-        string Highway, string Sidewalk = "", string Cycleway = "")
+        string Highway, string Sidewalk = "", string Cycleway = "", OsmRow[]? Rows = null)
     {
         public string Uuid => "{386-" + Id + "}";
     }
 
     /// <summary>A box building, LV95 footprint corners and height.</summary>
     private sealed record Box(double E0, double N0, double E1, double N1, double Height);
+
+    /// <summary>An OSM row over part of a line (#700): metres along it, and the lane columns it carries (turn lanes in the line's drawing direction).</summary>
+    private sealed record OsmRow(double From, double To, string Lanes = "", string LanesFwd = "", string LanesBwd = "", string TurnFwd = "", string TurnBwd = "");
 
     private sealed record Design(List<Line> Lines, List<Box> Buildings, List<Junction> Junctions);
 
@@ -64,7 +67,7 @@ public static class SignalTestRegion
 
         // the main road A, west to east through every junction: a 10 m cantonal through road at the two
         // ideal crossroads, 8 m from the mismatched one on; split where TLM would (junctions, attribute changes)
-        double j1 = 2910500, j2 = 2911500, j3 = 2912500, j3b = 2913500, j4 = 2914500, j5a = 2915450, j5b = 2915550;
+        double j1 = 2910500, j2 = 2911500, j3 = 2912500, j3b = 2913500, j4 = 2914500, j5a = 2915450, j5b = 2915550, j6 = 2916500, j7 = 2917500;
         void A(string id, double from, double to, string objektart, string sidewalk = "") =>
             lines.Add(new Line(id, objektart, "Durchgangsstrasse", "Kanton", [(from, n), (to, n)], "secondary", sidewalk));
         A("A0", 2910050, j1, "10m Strasse");
@@ -136,6 +139,33 @@ public static class SignalTestRegion
         }
         junctions.Add(new Junction("J5a-pair-west", j5a, n, "two lights 100 m apart, the west one", Arms("L|T|R", null, "L|T|R", "L|T|R")));
         junctions.Add(new Junction("J5b-pair-east", j5b, n, "two lights 100 m apart, the east one", Arms(null, "L|T|R", "L|T|R", "L|T|R")));
+
+        // 6. a 2+2 artery (OSM lanes=4: 12 m) across a 10 m road, every approach with turn:lanes left|through;right (#700): the
+        // artery's two lanes are assigned in place, L | TR, nothing is widened; the 10 m road holds one lane toward the lights, so its
+        // data builds the left pocket, L | TR too. The artery goes on east to J7 (the stretch between is 2+2 for paint and traffic)
+        const string Arrows = "left|through;right";
+        lines.Add(new Line("A10", "10m Strasse", "Durchgangsstrasse", "Kanton", [(2915950, n), (j6, n)], "secondary",
+            Rows: [new OsmRow(0, 550, Lanes: "4", TurnFwd: Arrows, TurnBwd: Arrows)]));
+        lines.Add(new Line("A11", "10m Strasse", "Durchgangsstrasse", "Kanton", [(j6, n), (2917050, n)], "secondary",
+            Rows: [new OsmRow(0, 550, Lanes: "4", TurnFwd: Arrows, TurnBwd: Arrows)]));
+        lines.Add(new Line("J6S", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(j6, n - 400), (j6, n)], "secondary",
+            Rows: [new OsmRow(0, 400, TurnFwd: Arrows)]));
+        lines.Add(new Line("J6N", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(j6, n), (j6, n + 400)], "secondary",
+            Rows: [new OsmRow(0, 400, TurnBwd: Arrows)]));
+        junctions.Add(new Junction("J6-artery-in-place", j6, n, "2+2 artery, turn:lanes assigned to its lanes in place; the 10 m cross road gets its left pocket from data",
+            Arms("L|TR", "L|TR", "L|TR", "L|TR")));
+
+        // 7. a 1+1 road whose last 150 m before the lights OSM maps as its own way with lanes:forward=3 and turn:lanes
+        // left|left|through;right (the way is too short to change the TLM line's own 1+1): a double left pocket (#700). East of
+        // the lights the way says through|through;right only: no left pocket although a road leaves to the left.
+        lines.Add(new Line("A12", "8m Strasse", "Durchgangsstrasse", "Kanton", [(2917050, n), (j7, n)], "secondary",
+            Rows: [new OsmRow(0, 300), new OsmRow(300, 450, LanesFwd: "3", LanesBwd: "1", TurnFwd: "left|left|through;right")]));
+        lines.Add(new Line("A13", "8m Strasse", "Durchgangsstrasse", "Kanton", [(j7, n), (2917950, n)], "secondary",
+            Rows: [new OsmRow(0, 150, TurnBwd: "through|through;right"), new OsmRow(150, 450)]));
+        Cross("J7S", j7, n - 400, n, "6m Strasse", "Verbindungsstrasse", "tertiary");
+        Cross("J7N", j7, n, n + 400, "6m Strasse", "Verbindungsstrasse", "tertiary");
+        junctions.Add(new Junction("J7-double-left", j7, n, "a double left pocket from lanes:forward=3 and turn:lanes; no left pocket where OSM marks none",
+            Arms("L|L|TR", "TR", "L|T|R", "L|T|R")));
         return new Design(lines, boxes, junctions);
     }
 
@@ -379,8 +409,9 @@ public static class SignalTestRegion
             + "\tsidewalk_left\tsidewalk_right\tcycleway_left\tcycleway_right\tturn_lanes_fwd\tturn_lanes_bwd\troundabout\ttram\n");
         int way = 0;
         foreach (var line in lines.OrderBy(l => l.Uuid, StringComparer.Ordinal))
-            sb.Append(inv, $"{line.Uuid}\t0\t0.0\t{Length(line):F1}\t{386000 + ++way}\t+\t{line.Highway}\t\t\t\t\t")
-                .Append(inv, $"\t{line.Sidewalk}\t{line.Sidewalk}\t{line.Cycleway}\t{line.Cycleway}\t\t\t0\t0\n");
+            foreach (var row in line.Rows ?? [new OsmRow(0, Length(line))])
+                sb.Append(inv, $"{line.Uuid}\t0\t{row.From:F1}\t{row.To:F1}\t{386000 + ++way}\t+\t{line.Highway}\t\t{row.Lanes}\t{row.LanesFwd}\t{row.LanesBwd}\t")
+                    .Append(inv, $"\t{line.Sidewalk}\t{line.Sidewalk}\t{line.Cycleway}\t{line.Cycleway}\t{row.TurnFwd}\t{row.TurnBwd}\t0\t0\n");
         File.WriteAllText(Path.Combine(tempDir, "osm_overlay.tsv"), sb.ToString());
     }
 

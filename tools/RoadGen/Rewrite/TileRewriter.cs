@@ -621,7 +621,7 @@ public static partial class TileRewriter
                 var openings = new List<PocketOpening>();
                 var townArcs = new Dictionary<(int Node, int Arm), CornerArc>();
                 var pockets = EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs,
-                    bikeBetween, stripOwners, netStats.TurnLanes, StreetSideAt, openings, townArcs);
+                    bikeBetween, stripOwners, netStats.TurnLanes, StreetSideAt, openings, townArcs, overlay, restrictions);
                 var openingsOf = openings.GroupBy(o => o.Segment, ReferenceEqualityComparer.Instance)
                     .ToDictionary(g => (RoadSegment)g.Key!, g => g.ToList(), ReferenceEqualityComparer.Instance);
                 // the bike side of a link's end piece (#351): its separated path, else its painted lane
