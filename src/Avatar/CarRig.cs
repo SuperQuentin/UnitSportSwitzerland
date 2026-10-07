@@ -18,6 +18,8 @@ public enum BodyShape
     Roadster,
     /// <summary>Mid-engined: cab forward, long rear deck (MR2, NSX).</summary>
     Midship,
+    /// <summary>A rental go-kart (#715): a tube frame, no body to speak of, built by <see cref="KartMeshBuilder"/> and not by <see cref="CarMeshBuilder"/>.</summary>
+    Kart,
 }
 
 /// <summary>A rear wing, from none to a GT wing on tall stands.</summary>
@@ -78,6 +80,13 @@ public sealed record CarBody
     public int RimSize { get; init; }
     /// <summary>Wide, low racing slicks.</summary>
     public bool Slicks { get; init; }
+    /// <summary>A kart's race number, on its plates (1..99); 0 = none (#715).</summary>
+    public int Number { get; init; }
+    /// <summary>
+    /// A kart's military plate, white on black ("M 40 245"): the army skin (#715). Empty = the rental
+    /// look, a white plate with the race number on it.
+    /// </summary>
+    public string Plate { get; init; } = "";
 }
 
 /// <summary>What the local driver sees of their own figure from the seat (<see cref="CarRig.View"/>).</summary>
@@ -148,6 +157,16 @@ public partial class CarRig : Node3D, IHingedDoors
     public bool RoofOpen { get; set; }
     /// <summary>Hydraulics pumping: the body hops, nose and tail in turn, to its clip. Nothing on a car without them.</summary>
     public bool Bouncing { get; set; }
+    /// <summary>
+    /// A kart over on its side (#715): −1 .. 1, + onto its left side, 0 upright. The body and the wheels
+    /// roll about the outer wheels' contact line; it eases there, and back, over a fraction of a second.
+    /// </summary>
+    public float Tip { get; set; }
+    /// <summary>
+    /// A kart's solid rear axle in a hard corner (#715): −1 .. 1, + = the left rear wheel lifts, − the
+    /// right one, as a share of <see cref="InsideLift"/>. Nothing on a car with suspension.
+    /// </summary>
+    public float Lift { get; set; }
 
     /// <summary>Seconds for the top to fold and the pods to rise.</summary>
     private const float RoofTime = 2.2f, FlapTime = 0.6f;
@@ -179,6 +198,14 @@ public partial class CarRig : Node3D, IHingedDoors
     private static readonly System.Random HopRng = new(464);
     /// <summary>One hop, s, its height at the body's pivot, m, and the nose-or-tail tilt that leads it, rad.</summary>
     private const float HopPeriod = 0.62f, HopHeight = 0.32f, HopTilt = 0.09f;
+    /// <summary>A tipped kart lies this far over, rad; the inside rear wheel of a hard corner rises this far, m.</summary>
+    private const float TipAngle = 1.45f, InsideLift = 0.045f;
+    /// <summary>Seconds to go over, in the eased value's units per second.</summary>
+    private const float TipSpeed = 5f;
+    private float _tipShown;
+    private bool _kartMoved;
+    private readonly Vector3[] _wheelHome = new Vector3[4];
+    private float _kartHalfWidth = 0.7f;
     /// <summary>The clip played while it bounces, if the file is there; the landings thud either way.</summary>
     public const string BounceClipRes = "res://assets/audio/yaris_bounce.ogg";
 
@@ -214,6 +241,7 @@ public partial class CarRig : Node3D, IHingedDoors
         CarKit.Fit(rig._body, body, wheelbase, rig._spin);
         rig._bodyY = rig._body.Position.Y;
         rig._hydraulics = body.Hydraulics;
+        rig._kartHalfWidth = body.Width * 0.5f;
         return rig;
     }
 
@@ -291,11 +319,14 @@ public partial class CarRig : Node3D, IHingedDoors
             var pivot = new Node3D
             {
                 Name = "Wheel" + names[i],
-                Position = new Vector3((left ? -1f : 1f) * p.HalfTrack, p.WheelRadius, front ? -p.FrontAxleZ : -p.RearAxleZ),
+                // a kart's front tyres are smaller than its rear ones (#715)
+                Position = new Vector3((left ? -1f : 1f) * p.HalfTrack, front ? p.FrontWheelRadius ?? p.WheelRadius : p.WheelRadius,
+                    front ? -p.FrontAxleZ : -p.RearAxleZ),
             };
+            _wheelHome[i] = pivot.Position;
             AddChild(pivot);
             var spin = new Node3D { Name = "Spin" };
-            spin.AddChild(new MeshInstance3D { Mesh = p.Wheel, MaterialOverride = body });
+            spin.AddChild(new MeshInstance3D { Mesh = front ? p.FrontWheel ?? p.Wheel : p.Wheel, MaterialOverride = body });
             pivot.AddChild(spin);
             _steer[i] = pivot;
             _spin[i] = spin;
@@ -538,6 +569,42 @@ public partial class CarRig : Node3D, IHingedDoors
     private static AudioStream? _bounceClip;
     private static bool _bounceClipLoaded;
 
+    /// <summary>
+    /// A kart's own movement (#715): the inside rear wheel rising in a hard corner (a solid axle has no
+    /// differential and no suspension, so one wheel comes off), and the whole kart rolling over onto its
+    /// side about the outer wheels' contact line when it trips. Nothing else in the rig moves like this,
+    /// so it costs a car one float compare a frame.
+    /// </summary>
+    private void ApplyKart(float dt)
+    {
+        if (!_kartMoved && Lift == 0f && Tip == 0f) return;
+        float lift = Mathf.Clamp(Lift, -1f, 1f);
+        _tipShown = Mathf.MoveToward(_tipShown, Mathf.Clamp(Tip, -1f, 1f), TipSpeed * dt);
+        // one more pass once both are back at 0 puts every part home
+        _kartMoved = lift != 0f || _tipShown != 0f;
+        var rearLeft = _wheelHome[2] + Vector3.Up * (lift > 0f ? lift * InsideLift : 0f);
+        var rearRight = _wheelHome[3] + Vector3.Up * (lift < 0f ? -lift * InsideLift : 0f);
+        _steer[2].Position = rearLeft;
+        _steer[3].Position = rearRight;
+        if (_tipShown == 0f)
+        {
+            _body.Position = new Vector3(0, _bodyY, 0);
+            _steer[0].Position = _wheelHome[0];
+            _steer[1].Position = _wheelHome[1];
+            return;
+        }
+        // over its left side (−X) for a + tip: roll about the left outer tyre's edge, + about Z lifts +X
+        var edge = new Vector3(-Mathf.Sign(_tipShown) * _kartHalfWidth, 0f, 0f);
+        var over = new Transform3D(new Basis(Vector3.Back, _tipShown * TipAngle), Vector3.Zero);
+        var about = new Transform3D(Basis.Identity, edge) * over * new Transform3D(Basis.Identity, -edge);
+        _body.Transform = about * new Transform3D(Basis.FromEuler(new Vector3(BodyPitch, 0, 0)), new Vector3(0, _bodyY, 0));
+        for (int i = 0; i < 4; i++)
+        {
+            var pos = i == 2 ? rearLeft : i == 3 ? rearRight : _wheelHome[i];
+            _steer[i].Transform = about * new Transform3D(Basis.FromEuler(new Vector3(0, i < 2 ? SteerAngle : 0f, 0)), pos);
+        }
+    }
+
     public override void _Process(double delta)
     {
         if (_body == null) return;
@@ -557,6 +624,7 @@ public partial class CarRig : Node3D, IHingedDoors
             _doorOpen[i] = Mathf.MoveToward(_doorOpen[i], target, step);
             _doorPivots[i].Quaternion = Quaternion.Identity.Slerp(_doors[i].Open, Mathf.SmoothStep(0f, 1f, _doorOpen[i]));
         }
+        ApplyKart(dt);
         ApplyMovingParts(dt);
         ApplyLamps();
         ApplyCabin(dt);
