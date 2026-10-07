@@ -12,7 +12,7 @@
   client sharing the same `user://` does not pick it up), and never fetches one. Others see
   "someone's own CD" and hear nothing; the server takes the owner's length, capped at 10 min.
 - **Burning runs where the library is** (dedicated server, or the offline client), never on a client
-  for someone else. `CdBurner`: `yt-dlp` (best audio stream as is, `--print title`/`after_move:filepath`)
+  for someone else. `CdBurner`: `yt-dlp` (best audio stream as is, `--print title`/`after_move:filepath`, `--encoding utf-8` read as UTF-8: else Windows prints the console code page and "Véronique" lands as U+FFFD)
   → `ffmpeg` to mono 22.05 kHz s16le on stdout for the analyser → `ffmpeg` to stereo Vorbis q2
   (~80 kbit/s, ≤ 10 min, ~6 MB). Tools from `bin/` next to the exe (shipped in releases), else PATH, like the GPX export's ffmpeg; missing → a status
   line, nothing else. Argument lists, never a shell string: the link is user input. Hosts are
