@@ -102,7 +102,8 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
         var id = TileId.FromLv95(j.E, j.N);
         double cz = id.MaxN - j.N;
         // the west approach's hatch (south of the centre line, west of the junction): no stripe further out than one lane
-        var hatch = region.Tile(j.E, j.N).Paint.Where(p => p.Type == PaintType.Hatch && p.Vertices[0] < j.E - id.MinE - 20 && p.Vertices[2] > cz).ToList();
+        var hatch = region.Tile(j.E, j.N).Paint.Where(p => p.Type == PaintType.Hatch && p.Vertices[0] < j.E - id.MinE - 20
+            && Enumerable.Range(0, p.Vertices.Length / 3).Average(i => p.Vertices[i * 3 + 2]) > cz).ToList();
         Assert.NotEmpty(hatch);
         double widest = hatch.SelectMany(p => Enumerable.Range(0, p.Vertices.Length / 3).Select(i => p.Vertices[i * 3 + 2] - cz)).Max();
         Assert.InRange(widest, 2.5, 3.6);

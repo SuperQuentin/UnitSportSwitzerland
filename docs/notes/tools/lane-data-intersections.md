@@ -78,6 +78,9 @@ Plan and reasoning: `docs/plans/intersection-lanes.md`. What is built:
   leftmost lane wide; only that lane opens at the closing line. The lanes right of it carry the approach's own lane
   on, and the through lane leaves them along the taper behind a dashed line (`ThroughEdge`); their lane records move
   out over the taper with the through lane.
+- **Angled closing line** (`Hatch(..., slant)`, `Widening.LeadSlant`): a lead-in hatch closes with a line from the centre
+  line at the start of the storage back along the road to its border, 10 m (at most half the taper): the pocket opens
+  from its right side, a gentle lead in; its leftmost lane's record opens that much further back. Exit hatches stay square.
 - **Lanes assigned in place at the lights**: their lines go solid over the 10 m before the stop line and stop there
   (`Widening.SolidToStop`); a double left's line stops at the pocket's own stop line (behind a bike box or advanced line).
 ## Test region

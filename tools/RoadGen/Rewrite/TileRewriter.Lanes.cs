@@ -236,7 +236,8 @@ public static partial class TileRewriter
         {
             // the pocket appears beside the through lane where the hatch closes (#123), or opens out
             // of the lane-wide hatch over the entry diagonal (#325)
-            double full = p.Storage, opens = p.Merged ? p.Storage + TurnEntry : p.Storage;
+            // (#700: past the angled closing line, the pocket opens over its slant)
+            double full = p.Storage, opens = p.Merged ? p.Storage + TurnEntry : p.Storage + lw.LeadSlant;
             bool box = p.Signal && lw.HasLeftBikeLane && lw.BikeBox, advanced = p.Signal && lw.HasLeftBikeLane && !lw.BikeBox;
             // the pocket's lanes, left to right (#700: a double left has two). Only the leftmost opens where the hatch ends;
             // the ones right of it carry the approach's own lane on, moving out over the taper as the through lane does

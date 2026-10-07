@@ -60,6 +60,8 @@ public static partial class TileRewriter
     }
 
     private const double TurnLane = 3.0, TurnSolid = 10, TurnClear = 5;
+    /// <summary>The angled closing line of a lead-in hatch runs this far along the road (#700).</summary>
+    private const double LeadInClose = 10;
 
     /// <summary>The arrow a lane with these moves shows: one of the five shapes, none for a lane that turns left and right or does all three.</summary>
     internal static PaintArrow? ArrowOf(SignalMoves m)
@@ -1384,11 +1386,19 @@ public static partial class TileRewriter
             // a pocket of several lanes (#700): the hatch is at most the leftmost lane wide, so it opens one lane only; the
             // lanes right of it carry the approach's own lane on, and the through lane leaves them over the taper behind a dashed line
             double cap = LeadCap;
-            Hatch(paint, stats, storage, _length, d => Math.Min(cap, Border(d)));
+            Hatch(paint, stats, storage, _length, d => Math.Min(cap, Border(d)), slant: LeadSlant);
             if (cap < wide - 1e-6) ThroughEdge(paint, storage, Border, cap);
-            Lanes(paint, storage, storage, rightTurn, stats, signal);
+            // the edge right of the hatch runs on to the angled line's outer end: the through lane's for one lane, the line between
+            // the two leftmost lanes for several (the through lane leaves those along the taper)
+            Lanes(paint, storage, cap < wide - 1e-6 ? storage : storage + LeadSlant, rightTurn, stats, signal, separatorTo: storage + LeadSlant);
         }
 
+
+        /// <summary>
+        /// How far along the road a lead-in hatch's closing line runs, from the centre line at the start of the storage back to the
+        /// hatch's border (#700, the user's spec: an angled line, a gentle lead into the left pocket): 10 m, at most half the taper.
+        /// </summary>
+        public double LeadSlant => Math.Min(LeadInClose, _taper * 0.5);
         /// <summary>The hatch's widest: the whole pocket for one lane, the leftmost lane for several (#700).</summary>
         private double LeadCap => _lanes <= 1 ? double.MaxValue
             : Layout is { LeftLanes: > 1 } l ? l.LeftLane(0).To : _pocket;
@@ -1428,7 +1438,7 @@ public static partial class TileRewriter
         /// The left-turn lane's markings: the through lane's left edge dashed from
         /// <paramref name="dashedTo"/> in to <see cref="TurnSolid"/> m, then solid; the stop bar; the arrows.
         /// </summary>
-        private void Lanes(List<RoadPaint> paint, double storage, double dashedTo, bool rightTurn, TurnLaneStats stats, bool signal)
+        private void Lanes(List<RoadPaint> paint, double storage, double dashedTo, bool rightTurn, TurnLaneStats stats, bool signal, double? separatorTo = null)
         {
             // at traffic lights the stop line stands back from the mouth (#348): the lanes end there
             float width = signal ? SignalStopLine : StopBar;
@@ -1472,7 +1482,7 @@ public static partial class TileRewriter
             for (int k = 1; k < lanes.LeftLanes; k++)
             {
                 double between = _side * lanes.LeftLane(k).From;
-                paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, between, TurnSolid + pocketBack - 0.1, dashedTo));
+                paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, between, TurnSolid + pocketBack - 0.1, k == 1 ? separatorTo ?? dashedTo : dashedTo));
                 paint.Add(Line(PaintType.WhiteSolid, 0, 0, between, signal ? pocketBack : 0, TurnSolid + pocketBack - 0.1));   // to the pocket's own stop line
             }
 
@@ -1721,22 +1731,28 @@ public static partial class TileRewriter
         /// the mouth, cut at the ends. Left out, the centre line alone, where it would be narrower
         /// than <see cref="HatchMinWidth"/> or shorter than <see cref="HatchMinLength"/> (#406).
         /// </summary>
-        private void Hatch(List<RoadPaint> paint, TurnLaneStats stats, double near, double far, Func<double, double> border)
+        private void Hatch(List<RoadPaint> paint, TurnLaneStats stats, double near, double far, Func<double, double> border, double slant = 0)
         {
             double wideEnd = border(near) >= border(far) ? near : far;
             if (border(wideEnd) < HatchMinWidth || far - near < HatchMinLength) { stats.HatchesSkipped++; return; }
+            // an angled closing line (#700, a lead-in hatch's near end): from the centre line at near, back along the road to the
+            // border slant metres further out, so the pocket opens from its right side; s = metres along per metre across
+            double width = border(wideEnd);
+            double s = wideEnd == near && slant > 0 ? slant / width : 0;
+            double outer = near + slant * (s > 0 ? 1 : 0);   // where the border starts
             void Solid(List<float> line) => paint.Add(new RoadPaint
             {
                 Shape = PaintShape.Polyline, Type = PaintType.WhiteSolid, Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
                 Vertices = line.ToArray(),
             });
             var line = new List<float>();
-            line.AddRange(Point(near, border(near)));
-            foreach (double dist in _dists.Where(x => x > near + 1e-3 && x < far - 1e-3))
+            line.AddRange(Point(outer, border(outer)));
+            foreach (double dist in _dists.Where(x => x > outer + 1e-3 && x < far - 1e-3))
                 line.AddRange(Point(dist, border(dist)));
             line.AddRange(Point(far, border(far)));
             Solid(line);
-            Solid([.. Point(wideEnd, 0), .. Point(wideEnd, border(wideEnd))]);
+            if (s > 0) Solid([.. Point(near, 0), .. Point(outer, border(outer))]);
+            else Solid([.. Point(wideEnd, 0), .. Point(wideEnd, border(wideEnd))]);
 
             var v = new List<float>();
             var idx = new List<ushort>();
@@ -1747,8 +1763,14 @@ public static partial class TileRewriter
             (double From, double To)? Edge(double d0)
             {
                 double t0 = Math.Max(0, near - d0), tMax = far - d0;
+                if (s > 0)
+                {
+                    // inside the angled line: d0 + t >= near + s t
+                    if (s < 1) t0 = Math.Max(0, (near - d0) / (1 - s));
+                    else if (s > 1) { if (d0 < near) return null; t0 = 0; tMax = Math.Min(tMax, (d0 - near) / (s - 1)); }
+                }
                 if (tMax <= t0 || border(d0 + t0) <= t0) return null;
-                if (border(far) > tMax) return (t0, tMax);
+                if ((s > 0 ? border(d0 + tMax) : border(far)) > tMax) return (t0, tMax);
                 double lo = t0, hi = tMax;
                 for (int k = 0; k < 40; k++)
                 {
