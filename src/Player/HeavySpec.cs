@@ -12,14 +12,19 @@ public enum HeavyClass
     FarmTractor,
     /// <summary>A combine harvester (#494): a header lowered to cut, a grain tank, steered at the rear.</summary>
     Combine,
+    /// <summary>The army's boxy 4x4 estate (#714, the Mercedes G): four car doors, a spare wheel on the tailgate, four seats.</summary>
+    Offroader,
+    /// <summary>The army's troop transporter (#714, the Mowag Duro): a short two-door cab and a canvas-covered bed with benches along its sides.</summary>
+    Transporter,
 }
 
 /// <summary>
 /// What a rigid carries behind its cab (#613): a swap body, a rear-tipping body with a tailgate, or a
 /// concrete mixer's drum. The tipper's body and the mixer's discharge both work on the truck's work
-/// bit (<c>Truck.Tipped</c>) and the destination action.
+/// bit (<c>Truck.Tipped</c>) and the destination action. <see cref="Canvas"/> (#714) is the army
+/// lorry's cargo body under a canvas tilt, with benches along its sides.
 /// </summary>
-public enum TruckBody { Box, Tipper, Mixer }
+public enum TruckBody { Box, Tipper, Mixer, Canvas }
 
 /// <summary>
 /// How the automatic changes gear: an automated manual (a dry clutch the computer works, drive cut
