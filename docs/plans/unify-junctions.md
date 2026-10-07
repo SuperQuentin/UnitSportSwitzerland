@@ -1,6 +1,16 @@
 # Unify junction layout (#711)
 
-Status: **plan**, waiting for the user's review of the split below. Branch `feat/711-unify-junctions`, stacked on #704.
+Status: **plan**, reviewed by the user (decisions below). Branch `feat/711-unify-junctions`, stacked on #704.
+
+## User's decisions (Oct 7 2026)
+
+- Shared by every junction: equal lane widths with the exit lane continuing the through lane; right-turn pockets.
+- **Right-turn pockets only on higher-speed roads**, at every kind of junction. The data has no speed yet: import OSM
+  `maxspeed` into the overlay first, then build a right pocket only where the approach's speed is above 50 km/h.
+- Stay lights-only: left-turn bike lanes, exit-hatch islands without a crosswalk.
+- **Crosswalks follow the data at the lights too**: where OSM maps crossings around a lights junction, crosswalks go
+  only on the mapped arms. A lights junction without crossing data keeps one on every arm with a sidewalk.
+- The four rules the user listed are examples. Further differences are settled as they come up.
 
 ## Why
 
@@ -49,8 +59,11 @@ The list as the code has it, to confirm:
 1. **Corners** (Sion's bug): kerb arcs and bands round every corner at every junction; priority junctions run the
    corner code the lights use, and `CornerPlanner` corners are replaced the same way. Check: Sion and the test region
    have no bare ground between the kerb and the sidewalks; `--street-check`.
-2. **Lanes**: equal lane widths and exit continuity, right pockets, left-turn bike lanes, inferred arrows, solid
-   lines before the junction, lane records for every approach, at every junction.
+2. **Lanes**: equal lane widths and exit continuity, inferred arrows, solid lines before the junction, and lane
+   records for every approach, at every junction. Right pockets at every junction where the speed is above 50 km/h
+   (OSM `maxspeed` imported into `osm_overlay.tsv`, read by `OsmOverlayReader`).
+2b. **Crosswalks from data at the lights**: an arm with an OSM crossing gets one, an arm without gets none, wherever
+   the junction has any crossing data; otherwise every arm with a sidewalk.
 3. **Guides and islands**: pair guides, left guides, through guides, exit islands and refuges at every junction.
 4. **Rules by kind**: the listed differences become one place (a per-kind rule set) that the shared layout asks.
    Tests: the same arms with and without lights differ only in the listed markings.
