@@ -21,8 +21,10 @@
   `Board` spot, then `PlaceBoat` on the water. `Dance`, `Item` (held), `Doors` (the freighter's
   ramp is bit 3), `Trailer`, `Lights`, `Seed` (looks).
 - **Camera** (`ShotCamera`): keys of eye + look, each a world `Spot` (height above the surface, or
-  `Spot.Alt`), a point in an actor's travel frame (`Pt.On(actor, right, up, back)`), or for a look a
-  compass direction (`Pt.Dir`). A cubic through the keys with Catmull-Rom slopes per second (the
+  `Spot.Alt`), a point in an actor's travel frame (`Pt.On(actor, right, up, back)`), a point on a
+  shot's road at an arc (`Pt.Road`), the driver's seat (`Pt.Cockpit`: the rig's `EyeFrame` as the
+  cockpit camera has it; with `Cast.FirstPerson` the car draws its cockpit; 0.7 m behind the eye
+  shows the wheel, dash and hands), or for a look a compass direction (`Pt.Dir`). A cubic through the keys with Catmull-Rom slopes per second (the
   move keeps its speed through every key), the lens eased per key (full-frame mm, 24 mm film height),
   `Smooth` damping, `Shake` (slow sines, not jitter), never under the surface. `KeysFrom` lets
   several shots carry one move on (the three style shots).
@@ -33,7 +35,9 @@
   `RenderingServer.FramePostDraw` and piped raw RGBA into ffmpeg (x264, CRF 16); time in a recorded
   roll is frames written / fps, never the clock. Without `--fixed-fps` it warns: frames follow the
   wall clock. `tools/trailer.sh render` films the shots and cuts them with the song (`-ss` the first
-  shot's start, `-shortest`).
+  shot's start from `shotNN.start`, `-shortest`); `render 19,24` films those again and re-cuts
+  with the rest, `cut` re-cuts only. All 36 shots take ~15 min on this machine; the film is
+  exactly 3810 frames, 127.000 s.
 - **Framing a shot**: `tools/trailer.sh stills 5` (first, middle, last frame) with `LOG=1`
   (`--trailer-log`): every actor's LV95, speed and arc twice a second, and each road dumped every
   5 m to `test_output/trailer/routes/shotNN_<road>.csv`, to put a camera where a car will be.
@@ -56,5 +60,7 @@
     several headings with `--trailer-log`), keep the steer small.
   - A road route's direction is the road's, not `Toward`'s: read it off the route dump before
     giving an actor a negative arc.
+  - A scripted body cannot swim: it is held at the water's surface, and swimming reads the
+    player's own keys, not `WalkControls`.
   - A fixed camera beside a road sees whatever stands there (barns, bridge parapets): put it on the
     road, or high, or check it in a still.
