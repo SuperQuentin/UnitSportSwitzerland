@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1060" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <!-- Names of the parts of a signalised junction approach, as the code and the notes use them (#700). Scale ~10 px/m. -->
+  <defs>
+    <pattern id="hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="10" height="10" fill="#8c8c8c"/><rect width="3" height="10" fill="#fff"/>
+    </pattern>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#fff"/></marker>
+    <marker id="lead" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5"><circle cx="5" cy="5" r="4" fill="#c0392b"/></marker>
+    <style>
+      .t { fill:#222; } .n { fill:#c0392b; font-weight:600; } .c { fill:#555; font-family: Consolas, monospace; font-size:12px; }
+      .ld { stroke:#c0392b; stroke-width:1.2; fill:none; marker-start:url(#lead); }
+      .dim { stroke:#333; stroke-width:1; fill:none; } .w { stroke:#fff; fill:none; }
+    </style>
+  </defs>
+  <rect width="1400" height="1060" fill="#eef0e6"/>
+  <text x="20" y="30" font-size="20" font-weight="700" class="t">Parts of a junction approach (names used in the code and in docs/notes)</text>
+  <text x="20" y="52" class="t">Right-hand traffic. The approach comes from the west (driving east, on the south half); the exit for its through lane is the east arm.</text>
+
+  <!-- cross road (N-S, 8 m) -->
+  <rect x="760" y="70" width="80" height="560" fill="#9a9a9a"/>
+  <!-- junction polygon with kerb corners -->
+  <path d="M700,300 Q760,300 760,240 L840,240 Q840,300 900,300 L900,560 Q840,560 840,620 L760,620 Q760,560 700,560 Z" fill="#8a8a8a"/>
+  <!-- west arm: original carriageway and the widening strip (taper, storage; right pocket) -->
+  <path d="M0,360 L700,360 L700,500 L450,500 L420,470 L350,470 L150,440 L0,440 Z" fill="#9a9a9a"/>
+  <path d="M150,440 L350,470 L420,470 L450,500 L700,500 L700,440 Z" fill="#a9a9a9"/>
+  <!-- east arm with the exit widening -->
+  <path d="M900,360 L1400,360 L1400,440 L1100,440 L900,470 Z" fill="#9a9a9a"/>
+  <path d="M900,440 L1100,440 L900,470 Z" fill="#a9a9a9"/>
+
+  <!-- hatches (striped medians): approach lead-in and exit -->
+  <path d="M150,400 L350,430 L350,400 Z" fill="url(#hatch)" stroke="#fff" stroke-width="1.5"/>
+  <path d="M900,400 L900,430 L1100,400 Z" fill="url(#hatch)" stroke="#fff" stroke-width="1.5"/>
+
+  <!-- centre line: dashed, solid along the pocket and the exit hatch -->
+  <path d="M0,400 L150,400" class="w" stroke-width="2" stroke-dasharray="30 30"/>
+  <path d="M150,400 L700,400" class="w" stroke-width="2"/>
+  <path d="M900,400 L1100,400" class="w" stroke-width="2"/>
+  <path d="M1100,400 L1400,400" class="w" stroke-width="2" stroke-dasharray="30 30"/>
+  <!-- lane lines: through lane's left edge dashed, solid before the stop line; right pocket's line -->
+  <path d="M350,430 L550,430" class="w" stroke-width="2" stroke-dasharray="20 20"/>
+  <path d="M550,430 L650,430" class="w" stroke-width="2"/>
+  <path d="M450,470 L560,470" class="w" stroke-width="2" stroke-dasharray="20 20"/>
+  <path d="M560,470 L650,470" class="w" stroke-width="2"/>
+  <!-- edge lines (Randlinien) -->
+  <path d="M0,437 L150,437 L350,467 L420,467 L450,497 L700,497" class="w" stroke-width="2"/>
+  <path d="M0,363 L700,363 M900,363 L1400,363" class="w" stroke-width="2"/>
+  <path d="M900,467 L1100,437 L1400,437" class="w" stroke-width="2"/>
+  <!-- stop line, crosswalk -->
+  <path d="M650,400 L650,500" stroke="#fff" stroke-width="5"/>
+  <g fill="#e6be33"><rect x="662" y="362" width="26" height="8"/><rect x="662" y="380" width="26" height="8"/><rect x="662" y="398" width="26" height="8"/><rect x="662" y="416" width="26" height="8"/><rect x="662" y="434" width="26" height="8"/><rect x="662" y="452" width="26" height="8"/><rect x="662" y="470" width="26" height="8"/><rect x="662" y="488" width="26" height="8"/></g>
+  <!-- mouth -->
+  <path d="M700,350 L700,515" stroke="#333" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <!-- arrows -->
+  <path d="M560,415 L610,415 L622,405" class="w" stroke-width="3" marker-end="url(#arr)"/>
+  <path d="M560,450 L625,450" class="w" stroke-width="3" marker-end="url(#arr)"/>
+  <path d="M560,485 L610,485 L622,495" class="w" stroke-width="3" marker-end="url(#arr)"/>
+  <!-- guide line through the junction (left turn into the north arm) -->
+  <path d="M700,415 Q820,415 820,240" class="w" stroke-width="1.5" stroke-dasharray="6 6"/>
+  <!-- signal pole -->
+  <circle cx="690" cy="512" r="6" fill="#333"/>
+  <!-- painted bike lane on the north half (westbound) -->
+  <path d="M0,378 L700,378 M900,378 L1400,378" stroke="#e6be33" stroke-width="2" stroke-dasharray="18 18"/>
+
+  <!-- dimensions under the approach -->
+  <g class="dim">
+    <path d="M150,560 L350,560 M150,553 L150,567 M350,553 L350,567 M650,553 L650,567 M350,560 L650,560 M700,553 L700,567 M650,560 L700,560"/>
+    <path d="M420,590 L450,590 M450,590 L650,590 M420,583 L420,597 M450,583 L450,597 M650,583 L650,597"/>
+    <path d="M900,520 L1100,520 M900,513 L900,527 M1100,513 L1100,527"/>
+  </g>
+  <text x="250" y="578" text-anchor="middle" class="t">taper</text>
+  <text x="500" y="578" text-anchor="middle" class="t">storage (left pocket)</text>
+  <text x="675" y="578" text-anchor="middle" class="t">setback</text>
+  <text x="435" y="610" text-anchor="middle" class="t">taper</text>
+  <text x="550" y="610" text-anchor="middle" class="t">storage (right pocket)</text>
+  <text x="1000" y="538" text-anchor="middle" class="t">exit taper</text>
+
+  <!-- labels with leaders -->
+  <g>
+    <path class="ld" d="M250,418 L230,290"/><text x="150" y="282" class="n">hatch</text><text x="196" y="282" class="t">(striped median, Sperrfläche) of the lead-in</text>
+    <path class="ld" d="M350,415 L380,320"/><text x="330" y="312" class="n">closing line</text><text x="418" y="312" class="t">across its wide end; the border along it</text>
+    <path class="ld" d="M450,415 L470,340"/><text x="440" y="334" class="n">left pocket</text><text x="520" y="334" class="t">(left-turn lane)</text>
+    <path class="ld" d="M500,450 L120,480"/><text x="20" y="500" class="n">through lane</text><text x="20" y="516" class="t">moved out by the widening</text>
+    <path class="ld" d="M600,485 L560,660"/><text x="490" y="676" class="n">right pocket</text>
+    <path class="ld" d="M280,455 L250,640"/><text x="150" y="656" class="n">widening</text><text x="216" y="656" class="t">(the paved strip added: lead-in + pocket)</text>
+    <path class="ld" d="M650,450 L640,720"/><text x="590" y="736" class="n">stop line</text>
+    <path class="ld" d="M675,370 L620,90"/><text x="540" y="84" class="n">crosswalk</text><text x="610" y="84" class="t">(yellow zebra)</text>
+    <path class="ld" d="M700,355 L700,120"/><text x="660" y="112" class="n">mouth</text><text x="705" y="112" class="t">where the arm meets the junction</text>
+    <path class="ld" d="M800,330 L960,180"/><text x="965" y="184" class="n">junction (polygon)</text>
+    <path class="ld" d="M745,284 L960,214"/><text x="965" y="218" class="n">kerb corner</text><text x="1050" y="218" class="t">(corner arc)</text>
+    <path class="ld" d="M790,320 L960,250"/><text x="965" y="254" class="n">guide line</text><text x="1042" y="254" class="t">(dashed, through the junction)</text>
+    <path class="ld" d="M690,512 L760,700"/><text x="740" y="716" class="n">signal pole</text>
+    <path class="ld" d="M1000,415 L1100,300"/><text x="1060" y="292" class="n">exit hatch</text>
+    <path class="ld" d="M1000,455 L1100,480"/><text x="1105" y="484" class="n">exit</text><text x="1140" y="484" class="t">(departing side, widened)</text>
+    <path class="ld" d="M1250,400 L1250,330"/><text x="1200" y="322" class="n">centre line</text>
+    <path class="ld" d="M1300,437 L1300,560"/><text x="1250" y="576" class="n">edge line</text><text x="1250" y="592" class="t">(Randlinie)</text>
+    <path class="ld" d="M1200,378 L1180,150"/><text x="1120" y="142" class="n">bike lane</text><text x="1190" y="142" class="t">(Radstreifen)</text>
+    <path class="ld" d="M560,430 L520,770"/><text x="430" y="786" class="n">lane line</text><text x="497" y="786" class="t">dashed, solid before the stop line</text>
+    <path class="ld" d="M590,415 L860,760"/><text x="830" y="776" class="n">arrows</text>
+    <path class="ld" d="M50,420 L60,610"/><text x="20" y="626" class="n">carriageway</text><text x="20" y="642" class="t">(the paved road, lanes both ways)</text>
+  </g>
+  <text x="70" y="398" class="t" font-size="12" fill="#333">west arm = approach</text>
+  <text x="1200" y="455" class="t" font-size="12">east arm</text>
+  <text x="850" y="90" class="t" font-size="12">north arm</text>
+
+  <!-- glossary -->
+  <g transform="translate(20,820)">
+    <text class="t" font-weight="700" font-size="15">Glossary (name: code identifier: meaning)</text>
+    <text y="24" class="t"><tspan class="n">arm</tspan>: <tspan class="c">Junction.Arms[i]</tspan>: a road leaving the junction; <tspan class="n">approach</tspan> its traffic driving in, <tspan class="n">exit</tspan> its traffic driving out (departing side).</text>
+    <text y="44" class="t"><tspan class="n">lead-in</tspan>: the taper with its hatch, where the approach widens before the pocket; <tspan class="n">storage</tspan>: the pocket at full width, mouth side.</text>
+    <text y="64" class="t"><tspan class="n">widening</tspan>: <tspan class="c">Widening</tspan>, the flush pavement strip (<tspan class="c">APRP Pavement</tspan>) along an arm: an approach's (lead-in + storage) or an exit's (exit taper).</text>
+    <text y="84" class="t"><tspan class="n">left / right pocket</tspan>: <tspan class="c">PocketPlan</tspan> / <tspan class="c">RightPlan</tspan>: a turn lane built by widening; a <tspan class="n">double left</tspan> holds two (<tspan class="c">LeftLanes</tspan>); <tspan class="n">own lanes</tspan>: the lanes the carriageway already holds (<tspan class="c">OwnMoves</tspan>).</text>
+    <text y="104" class="t"><tspan class="n">hatch</tspan>: <tspan class="c">PaintType.Hatch</tspan>, striped median; <tspan class="n">closing line</tspan> across its wide end; its <tspan class="n">border</tspan> along it. At most the leftmost pocket lane wide (#700).</text>
+    <text y="124" class="t"><tspan class="n">stop line</tspan> (0.50 m at lights, <tspan class="c">SignalStopLine</tspan>; <tspan class="n">stop bar</tspan> 0.40 m without), <tspan class="n">setback</tspan>: its distance from the mouth (<tspan class="c">SignalStopSetback</tspan>); <tspan class="n">bike box</tspan> / <tspan class="n">advanced bike line</tspan> ahead of it.</text>
+    <text y="144" class="t"><tspan class="n">lane record</tspan>: <tspan class="c">LANE</tspan> / <tspan class="c">RoadApproach</tspan>: the lanes at the stop line, left to right, with their moves (L, T, R), as traffic drives them.</text>
+    <text y="164" class="t"><tspan class="n">guide line</tspan>: dashed (1 m / 1 m) through the junction: a left turn's path (#682) or between two lanes with the same turn (#700).</text>
+  </g>
+</svg>

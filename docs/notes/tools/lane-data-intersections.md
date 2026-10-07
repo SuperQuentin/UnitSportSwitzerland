@@ -63,6 +63,23 @@ Plan and reasoning: `docs/plans/intersection-lanes.md`. What is built:
   road to the left and no left lane in the data; left pockets 32 -> 27 (5 fewer: approaches with no left lane in the data
   or with 2+ lanes toward the junction; the split was not measured), the 8 approaches at lights as before.
 
+
+## Markings asked for in review (#700)
+
+- **Names**: `intersection-parts.svg` beside this note: the parts of an approach and a junction, as the code and the
+  notes name them (approach, exit, mouth, lead-in = taper + hatch, storage, widening, closing line, setback, ...).
+- **Solid centre line from four lanes** (`PaintEmitter`): a two-way road with `back + fwd >= 4` lanes gets a solid
+  centre line; the lines between lanes of one direction stay dashed.
+- **Dashed guides between same-turn lanes** (`TileRewriter.EmitPairGuides`, at lights): two neighbouring lanes that
+  show the same turn (a double left, two through lanes) are kept apart through the junction by a dashed guide line
+  (1 m / 1 m) from the crosswalk's junction edge to the line between the exit's lanes they enter (from the centre
+  line out, a right turn's from the kerb); none where the exit has fewer lanes. Stats: `traffic lights` line.
+- **A lead-in opens one lane** (`Widening.Pocket`, `LeadCap`): on a pocket of several lanes the hatch is at most the
+  leftmost lane wide; only that lane opens at the closing line. The lanes right of it carry the approach's own lane
+  on, and the through lane leaves them along the taper behind a dashed line (`ThroughEdge`); their lane records move
+  out over the taper with the through lane.
+- **Lanes assigned in place at the lights**: their lines go solid over the 10 m before the stop line and stop there
+  (`Widening.SolidToStop`); a double left's line stops at the pocket's own stop line (behind a bike box or advanced line).
 ## Test region
 
 J6 `2916500` (a 2+2 artery, `lanes=4`, 12 m, `turn:lanes = left|through;right` on every approach: the artery's

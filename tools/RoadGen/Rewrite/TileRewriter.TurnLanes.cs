@@ -1380,8 +1380,33 @@ public static partial class TileRewriter
             double storage = _length - _taper;
             SolidCentre(paint);
             double wide = Layout is { Equal: true, LeftPocketLane: { } own } ? own.To + _bikeLeft : PocketRegion + _bikeLeft;   // #682: equal lanes
-            Hatch(paint, stats, storage, _length, d => wide * Math.Clamp((_length - d) / _taper, 0, 1));
+            double Border(double d) => wide * Math.Clamp((_length - d) / _taper, 0, 1);
+            // a pocket of several lanes (#700): the hatch is at most the leftmost lane wide, so it opens one lane only; the
+            // lanes right of it carry the approach's own lane on, and the through lane leaves them over the taper behind a dashed line
+            double cap = LeadCap;
+            Hatch(paint, stats, storage, _length, d => Math.Min(cap, Border(d)));
+            if (cap < wide - 1e-6) ThroughEdge(paint, storage, Border, cap);
             Lanes(paint, storage, storage, rightTurn, stats, signal);
+        }
+
+        /// <summary>The hatch's widest: the whole pocket for one lane, the leftmost lane for several (#700).</summary>
+        private double LeadCap => _lanes <= 1 ? double.MaxValue
+            : Layout is { LeftLanes: > 1 } l ? l.LeftLane(0).To : _pocket;
+
+        /// <summary>The through lane's left edge along a several-lane pocket's taper (#700): a dashed line where it runs right of the hatch.</summary>
+        private void ThroughEdge(List<RoadPaint> paint, double storage, Func<double, double> border, double cap)
+        {
+            // the taper's metre where the edge leaves the capped hatch, then on to where the pocket's lanes are full
+            double from = _length - _taper * Math.Clamp(cap / Math.Max(1e-6, border(storage)), 0, 1);
+            var line = new List<float>();
+            line.AddRange(Point(storage, border(storage)));
+            foreach (double d in _dists.Where(x => x > storage + 1e-3 && x < from - 1e-3)) line.AddRange(Point(d, border(d)));
+            line.AddRange(Point(from, border(from)));
+            paint.Add(new RoadPaint
+            {
+                Shape = PaintShape.Polyline, Type = PaintType.WhiteDashed, Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
+                Dash = 3f, Gap = 3f, Vertices = line.ToArray(),
+            });
         }
 
         /// <summary>
@@ -1395,7 +1420,7 @@ public static partial class TileRewriter
         {
             Painted = true;
             SolidCentre(paint);
-            Hatch(paint, stats, storage, _length - farStop, d => PocketRegion * Math.Clamp((d - storage) / TurnEntry, 0, 1));
+            Hatch(paint, stats, storage, _length - farStop, d => Math.Min(LeadCap, PocketRegion * Math.Clamp((d - storage) / TurnEntry, 0, 1)));   // #700: one lane at most
             Lanes(paint, storage, storage + TurnEntry, rightTurn, stats, signal);
         }
 

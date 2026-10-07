@@ -75,4 +75,36 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
         // a road leaves to the left of the east approach, but its way says through | through;right
         Assert.Equal("TR", Cars(Approach("J7", east: true)));
     }
+
+    [Fact]
+    public void Same_turn_lanes_stay_apart_through_the_junction_with_a_dashed_line()
+    {
+        var j = region.Junction("J7");
+        var id = TileId.FromLv95(j.E, j.N);
+        double cx = j.E - id.MinE, cz = id.MaxN - j.N;
+        var guides = region.Tile(j.E, j.N).Paint.Where(p => p.Type == PaintType.WhiteDashed && p.Dash == 1f && p.Shape == PaintShape.Polyline).ToList();
+        // the cross road's two lanes straight across, each way: a line along the road, 2 m off its centre line, from one side of the junction to the other
+        int straight = guides.Count(p =>
+        {
+            var v = p.Vertices;
+            double x0 = v[0] - cx, z0 = v[2] - cz, x1 = v[^3] - cx, z1 = v[^1] - cz;
+            return Math.Abs(x0 - x1) < 0.2 && Math.Abs(Math.Abs(x0) - 3) < 1.2 && Math.Sign(z0) != Math.Sign(z1) && Math.Abs(z1 - z0) > 15;
+        });
+        Assert.Equal(2, straight);
+        // the double left from the west into the north arm's two lanes: one line from the west arm's side to the north arm's
+        Assert.Contains(guides, p => p.Vertices[0] - cx < -5 && p.Vertices[^1] - cz < -5 && p.Vertices.Length > 12);
+    }
+
+    [Fact]
+    public void A_double_left_lead_in_hatch_is_at_most_one_lane_wide()
+    {
+        var j = region.Junction("J7");
+        var id = TileId.FromLv95(j.E, j.N);
+        double cz = id.MaxN - j.N;
+        // the west approach's hatch (south of the centre line, west of the junction): no stripe further out than one lane
+        var hatch = region.Tile(j.E, j.N).Paint.Where(p => p.Type == PaintType.Hatch && p.Vertices[0] < j.E - id.MinE - 20 && p.Vertices[2] > cz).ToList();
+        Assert.NotEmpty(hatch);
+        double widest = hatch.SelectMany(p => Enumerable.Range(0, p.Vertices.Length / 3).Select(i => p.Vertices[i * 3 + 2] - cz)).Max();
+        Assert.InRange(widest, 2.5, 3.6);
+    }
 }

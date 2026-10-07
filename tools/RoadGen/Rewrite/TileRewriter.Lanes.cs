@@ -238,10 +238,11 @@ public static partial class TileRewriter
             // of the lane-wide hatch over the entry diagonal (#325)
             double full = p.Storage, opens = p.Merged ? p.Storage + TurnEntry : p.Storage;
             bool box = p.Signal && lw.HasLeftBikeLane && lw.BikeBox, advanced = p.Signal && lw.HasLeftBikeLane && !lw.BikeBox;
-            // the pocket's lanes, left to right (#700: a double left has two); the outer one opens first, so the traffic of
-            // the inner one follows it out of the through lane
+            // the pocket's lanes, left to right (#700: a double left has two). Only the leftmost opens where the hatch ends;
+            // the ones right of it carry the approach's own lane on, moving out over the taper as the through lane does
             for (int k = 0; k < layout.LeftLanes; k++)
-                lanes.Add(new ApproachLane(O(layout.LeftLane(k)), D(full), D(opens) + (layout.LeftLanes - 1 - k) * 1.0f,
+                lanes.Add(new ApproachLane(O(layout.LeftLane(k)), D(full),
+                    k == 0 || p.Merged ? D(opens) : D(lw.Length + lw.Lead),
                     p.PocketMoves is { } pm && k < pm.Length ? pm[k] : SignalMoves.Left, ApproachLaneKind.Car,
                     box ? (float)BikeBoxDepth : advanced ? (float)AdvancedBikeLine : 0f));
             if (layout.LeftBikeLane is { } leftBike)   // the left-turn bike lane (#351): stops at the box's front line, or the advanced line
