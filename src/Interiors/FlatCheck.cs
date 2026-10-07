@@ -238,10 +238,14 @@ public static class FlatCheck
         // the first set is as shallow as a ramp fits (80 x 18 m), the turned one has room to spare
         // the last two are L-shaped (#694): a 60 x 14 m wing on the street (the ramp runs along it) and a 40 x 24 m one (a square ramp), a wing behind each
         float[][] lAlong = [[-30, 6, 30, 20], [10, -10, 30, 6]], lSquare = [[-20, -4, 20, 20], [-20, -16, -8, -4]];
+        // and two with a wing joined off the end of the garage's wing, standing out toward the street (#694): the wing the door is on is joined
+        // off its side, which used to leave the door locked; the ramp is there now, or the door is at the other end of the wall
+        float[][] jAlong = [[-40, 6, 20, 20], [20, 6, 40, 24]], jSquare = [[-20, -4, 20, 20], [-36, -4, -20, 24]];
         var kinds = new List<(float Turn, int N, float Depth, float[][]? Parts)>
         {
             (0f, Copies, 18f, null), (31f, Copies, 24f, null), (0f, Copies, 14.5f, null), (31f, Copies, 15f, null),
             (0f, Copies, 40f, lAlong), (31f, Copies, 40f, lSquare),
+            (0f, Copies, 44f, jAlong), (31f, Copies, 44f, jSquare),
         };
         var blocks = new List<Building>();
         var segments = new List<RoadSegment>();
@@ -295,11 +299,13 @@ public static class FlatCheck
         int squares = garages.Count(g => g.Ramp == GarageRule.RampKind.Square), alongs = garages.Count(g => g.Ramp == GarageRule.RampKind.Along);
         Expect(garages.Any(g => g.Index < Copies) && turnedGarages > 0, $"ramps: some square to the world and {turnedGarages} turned 31 degrees");
         Expect(squares > 0 && alongs > 0, $"ramps: {squares} square to the front wall, {alongs} along the facade");
+        int joinedAlong = garages.Count(g => g.Index >= 6 * Copies && g.Index < 7 * Copies), joinedSquare = garages.Count(g => g.Index >= 7 * Copies);
+        Expect(joinedAlong > 0 && joinedSquare > 0, $"ramps: {joinedAlong} along and {joinedSquare} square garage doors in a wing another wing joins");
         bool written = false, writtenAlong = false;
         foreach (var g in garages)
         {
             bool alongKind = g.Ramp == GarageRule.RampKind.Along;
-            string what = $"ramps: block {g.Index} ({g.Ramp}{(g.Index >= 4 * Copies ? " in the wing of an L" : "")}{(g.Index >= Copies && g.Index < 2 * Copies || g.Index >= 3 * Copies && g.Index < 4 * Copies || g.Index >= 5 * Copies ? ", turned" : "")})";
+            string what = $"ramps: block {g.Index} ({g.Ramp}{(g.Index >= 6 * Copies ? " in a wing another wing joins" : g.Index >= 4 * Copies ? " in the wing of an L" : "")}{(g.Index >= Copies && g.Index < 2 * Copies || g.Index >= 3 * Copies && g.Index < 4 * Copies || g.Index >= 5 * Copies && g.Index < 6 * Copies || g.Index >= 7 * Copies ? ", turned" : "")})";
             var l = InteriorGenerator.Generate(tile, g.Index, roads, null);
             if (l == null) { Expect(false, $"{what}: no plan"); continue; }
             var problems = InteriorValidator.Validate(l);
