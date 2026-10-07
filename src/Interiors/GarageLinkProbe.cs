@@ -24,7 +24,7 @@ public partial class GarageLinkProbe : Node
     private int _town, _phase;
     private double _t, _phaseT;
     private bool _shotSidewalk, _shotStub;
-    private int _blocks, _blocks3, _garages, _sidewalks, _stubs, _bad;
+    private int _blocks, _blocks3, _garages, _sidewalks, _stubs, _bad, _ramps, _locked;
     private readonly List<DoorIndex.Entry> _todo = new();
     private DoorIndex.Entry? _shoot;
     private Vector3 _stand, _look;
@@ -175,6 +175,14 @@ public partial class GarageLinkProbe : Node
             {
                 garages++;
                 if (g.Link.Kind == LinkKind.Sidewalk) sw++; else st++;
+                // PR 2: its plan, as the server would make it: a ramp behind the door, or a locked door
+                if (_chunks.Source != null && Task.Run(() => InteriorManager.LoadOrGenerate(_chunks.Source, $"{_dir}/plans", g.Building.ToString())).GetAwaiter().GetResult() is { } plan)
+                {
+                    bool ramp = plan.EntranceOf(g.Key.ToString()) != null && plan.Floors.Any(f => f.AllFlights().Any(x => x.Ramp));
+                    if (ramp) _ramps++; else _locked++;
+                    GD.Print($"[garage]   {g.Key}: {plan.Width:F0} x {plan.Depth:F0} m, {(ramp ? "a ramp down to the car park" : "no ramp: the door reads as locked (" + (InteriorGenerator.RampWhy ?? "?") + ")")}, "
+                        + $"{InteriorValidator.Validate(plan).Count} validator problem(s)");
+                }
                 if (g.Link.Kind == LinkKind.Stub) bad += MeasureStub(g);
                 bool want = g.Link.Kind == LinkKind.Sidewalk ? !_shotSidewalk : !_shotStub;
                 if (want)
@@ -229,7 +237,7 @@ public partial class GarageLinkProbe : Node
     private void Finish(string? failure)
     {
         GD.Print($"[garage] total over {_done} village(s): {_blocks} blocks, {_blocks3} with 3+ front doors, {_garages} garage doors "
-            + $"({_sidewalks} pavement, {_stubs} access road), {_bad} stub defect(s)");
+            + $"({_sidewalks} pavement, {_stubs} access road), {_bad} stub defect(s), {_ramps} with a ramp planned, {_locked} locked");
         bool ok = failure == null && _bad == 0;
         if (failure != null) GD.Print($"[garage] FAIL {failure}");
         GD.Print(ok ? "[garage] RESULT: ok" : "[garage] RESULT: FAILED");

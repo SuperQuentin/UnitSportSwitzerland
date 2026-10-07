@@ -53,12 +53,12 @@ Before, a block of flats was planned as one big house round a single stair core.
   biggest region that takes a row and an aisle, in a block of 300 m² or more. The rest, cut along
   the corridor: a laundry per stairwell (two machines, two dryers), the shelter, the boiler room
   (`TechRoom`), and storage compartments (`Cellar` with `StorageCage`s, wooden slatted cages that
-  hold loot). Driving in is #558.
+  hold loot). A garage door (#558) has a ramp down into the car park: `terrain/garage-ramp`.
 - **Format**: `FloorPlan.Flights` (several stairs a floor; `AllFlights()` everywhere a flight was
   read), `LiftPlan` (cabin rectangle, door side, floors served, the call button and panel
   positions), `InnerDoorPlan` (a flat's front door: floor, hall room, side, centre, `Locked`).
   New rooms `Elevator CarPark TechRoom Corridor`, pieces `Pillar StorageCage Mailboxes BikeRack`.
-  Plan version 17 (#501 took 16); 18 with #571 (half flights, landings, daylight); 19 went to #531 (loading bays); 20 with #576 (one door, wider corridors); 21 with #577 (wings).
+  Plan version 17 (#501 took 16); 18 with #571 (half flights, landings, daylight); 19 went to #531 (loading bays); 20 with #576 (one door, wider corridors); 21 with #577 (wings); 23 with #558 (the garage ramp).
 - **Validator**: reachability now runs from every street doorway through doorways, up and down
   every flight and along every elevator, over the whole building (a block's upper floors are
   stairwells that never meet); a hole must cover its flight; each elevator has a cabin with a

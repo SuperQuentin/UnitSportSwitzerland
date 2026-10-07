@@ -25,7 +25,9 @@ namespace UnitSport.Player;
 /// <item>the mini excavator (#614): its arm and its raised blade, which travels in the pose's bucket
 /// float, drawn by B at A's angles, and kept by B's parked one;</item>
 /// <item>the compact roller (#614): bent and vibrating, as B sees it (and hears it, where drawn);</item>
-/// <item>the telehandler (#614): in crab steering, its boom lifted, run out and its forks tilted, drawn by B as A has it.</item>
+/// <item>the telehandler (#614): in crab steering, its boom lifted, run out and its forks tilted, drawn by B as A has it;</item>
+/// <item>the site's lorries (#613): the tipper's body tipped, and the mixer's drum discharging with its
+/// chute out, then stopped with the engine off, as B sees them.</item>
 /// </list>
 /// </summary>
 public partial class ExcavatorNetProbe : ChatProbe
@@ -204,8 +206,69 @@ public partial class ExcavatorNetProbe : ChatProbe
         await Seconds(1.5);
         at = me.GlobalPosition;
         Say($"tele {(int)th.Mode} {F(th.Steer)} {F(th.Lift)} {F(th.Extend)} {F(th.Tilt)} {F(at.X)} {F(at.Z)}");
-        if (!await Heard("B", "tele seen", 30)) Fail("B never compared the telehandler");
+        if (!await Heard("B", "tele seen", 30)) { Fail("B never compared the telehandler"); return; }
+
+        // the site's lorries (#613): straight from the telehandler into each, stopped, on the real binding
         me.RideControls = null;
+        me.PlaceAt(me.GlobalPosition + new Vector3(-12f, 0.5f, 0f), me.Rotation.Y);
+        await Seconds(1);
+        Expect(me.SetRide((RideKind)104) && me.Heavy is { Spec.Body: TruckBody.Tipper }, "A takes a tipper");
+        if (me.Heavy is not { } tipper) { Fail("not a tipper"); return; }
+        // let go, not braked: a truck's brake held at a standstill engages reverse and backs it away
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false);
+        await Seconds(1.5);
+        XrPad.Press(PlayerInput.Destination, true);
+        await Seconds(0.1);
+        XrPad.Press(PlayerInput.Destination, false);
+        await Seconds(3.5);
+        Expect(tipper.Tipped, "A's tipper has its body up");
+        Say("tipper tipped");
+        if (!await Heard("B", "tipper seen", 30)) { Fail("B never saw the tipper"); return; }
+
+        me.RideControls = null;
+        me.PlaceAt(me.GlobalPosition + new Vector3(-14f, 0.5f, 0f), me.Rotation.Y);
+        await Seconds(1);
+        Expect(me.SetRide((RideKind)105) && me.Heavy is { Spec.Body: TruckBody.Mixer }, "A takes a mixer");
+        if (me.Heavy is not { } mixer) { Fail("not a mixer"); return; }
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false);
+        await Seconds(1.5);
+        XrPad.Press(PlayerInput.Destination, true);
+        await Seconds(0.1);
+        XrPad.Press(PlayerInput.Destination, false);
+        await Seconds(2.5);
+        Expect(mixer.Discharging, "A's mixer discharges");
+        Say("mixer discharging");
+        if (!await Heard("B", "mixer seen", 30)) { Fail("B never saw the mixer discharge"); return; }
+        XrPad.Press(PlayerInput.EngineToggle, true);
+        await Seconds(0.1);
+        XrPad.Press(PlayerInput.EngineToggle, false);
+        await Seconds(1.0);
+        Expect(!me.EngineOn, "A's engine is off");
+        Say("mixer off");
+        if (!await Heard("B", "mixer off seen", 30)) { Fail("B never saw the drum stop"); return; }
+
+        // the mini dumper (#614): its skip tipped on the same binding, then parked up
+        me.RideControls = null;
+        me.ExitVehicle();
+        if (!await Until(() => me.Ride == RideKind.OnFoot, 10)) { Fail("A never got off the mixer"); return; }
+        me.PlaceAt(me.GlobalPosition + new Vector3(-12f, 0.5f, 0f), me.Rotation.Y);
+        await Seconds(1);
+        Expect(me.SetRide(RideKind.MiniDumper) && me.Vehicle is MiniDumper, "A takes a mini dumper");
+        if (me.Vehicle is not MiniDumper dumper) { Fail("not a mini dumper"); return; }
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false);
+        await Seconds(1);
+        XrPad.Press(PlayerInput.Destination, true);
+        await Seconds(0.1);
+        XrPad.Press(PlayerInput.Destination, false);
+        await Seconds(3.5);
+        Expect(dumper.Tipped, "A's mini dumper has its skip up");
+        Say("dumper tipped");
+        if (!await Heard("B", "dumper seen", 30)) { Fail("B never saw the skip"); return; }
+        me.RideControls = null;
+        me.ExitVehicle();
+        if (!await Until(() => me.Ride == RideKind.OnFoot && Parked(RideKind.MiniDumper) != null, 10)) { Fail("the mini dumper is not parked"); return; }
+        Say("dumper parked");
+        if (!await Heard("B", "dumper kept", 30)) Fail("B never compared the parked mini dumper");
     }
 
     private async Task RunB(FootPlayer me)
@@ -309,5 +372,35 @@ public partial class ExcavatorNetProbe : ChatProbe
         float tOff = new Vector2(a.GlobalPosition.X - tAt.X, a.GlobalPosition.Z - tAt.Y).Length();
         Expect(tOff < 0.5f, $"B has A's telehandler where A has it ({tOff:F2} m)");
         Say("tele seen");
+
+        if (!await Heard("A", "tipper tipped", 60)) { Fail("A never tipped a tipper"); return; }
+        // what B has of A is A's pose (its work bit) and the copy drawn from it
+        bool tipped = await Until(() => Truck.TippedInPose(a.Anim)
+            && (a.Visual == null || a.Visual is HeavyRig { TippedShown: > 0.95f }), 10);
+        Expect(tipped, $"B has A's tipper with its body up (pose {Truck.TippedInPose(a.Anim)}, drawn {(a.Visual as HeavyRig)?.TippedShown:F2})");
+        Say("tipper seen");
+
+        if (!await Heard("A", "mixer discharging", 60)) { Fail("A never discharged a mixer"); return; }
+        bool discharging = await Until(() => Truck.TippedInPose(a.Anim)
+            && (a.Visual == null || a.Visual is HeavyRig { DrumSpeed: < 0f, ChuteOut: > 0.95f }), 10);
+        var mixerRig = a.Visual as HeavyRig;
+        Expect(discharging, $"B has A's mixer discharging: its drum backwards and its chute out (drum {mixerRig?.DrumSpeed * 60f / Mathf.Tau:F1} rpm, chute {mixerRig?.ChuteOut:F2})");
+        Say("mixer seen");
+
+        if (!await Heard("A", "mixer off", 60)) { Fail("A never turned the mixer off"); return; }
+        bool stopped = await Until(() => a.Visual == null || a.Visual is HeavyRig { DrumSpeed: 0f }, 10);
+        Expect(stopped, $"B has A's drum stopped with its engine ({(a.Visual as HeavyRig)?.DrumSpeed:F2} rad/s)");
+        Say("mixer off seen");
+
+        if (!await Heard("A", "dumper tipped", 60)) { Fail("A never tipped a mini dumper"); return; }
+        bool skipUp = await Until(() => a.RideModel is MiniDumper { Tipped: true }
+            && (a.Visual == null || a.Visual is HeavyRig { TippedShown: > 0.95f }), 10);
+        Expect(skipUp, $"B has A's mini dumper with its skip up (copy {(a.RideModel as MiniDumper)?.Tipped}, drawn {(a.Visual as HeavyRig)?.TippedShown:F2})");
+        Say("dumper seen");
+
+        if (!await Heard("A", "dumper parked", 60)) { Fail("A never parked the mini dumper"); return; }
+        bool skipKept = await Until(() => Parked(RideKind.MiniDumper) is { Ride: MiniDumper { Tipped: true } }, 15);
+        Expect(skipKept, "B's parked mini dumper keeps its skip up");
+        Say("dumper kept");
     }
 }

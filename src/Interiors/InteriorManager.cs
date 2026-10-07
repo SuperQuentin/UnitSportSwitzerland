@@ -1291,6 +1291,16 @@ public partial class InteriorNode : Node3D
     }
 
     /// <summary>
+    /// Every car standing in the car park's bays as a sleeping vehicle (<see cref="ParkedCars"/>, #558):
+    /// out of the merged mesh, solid, and woken by being aimed at. Without an <paramref name="origin"/>
+    /// (a probe that builds a hall by hand) they are drawn and solid but wake nothing.
+    /// </summary>
+    private static void AddBayCars(InteriorNode node, WorldOrigin? origin)
+    {
+        if (ParkedCars.Create(node.Layout, origin ?? WorldOrigin.SwissDefault()) is { } cars) node.AddChild(cars);
+    }
+
+    /// <summary>
     /// Every loose floor pallet as a node of its own (<see cref="Items.PalletNode"/>), the way a gun
     /// locker's door is one: <see cref="InteriorMeshBuilder.Build"/> leaves them out of the merged
     /// mesh, so a forklift can lift one and leave the floor bare. A pallet already forked away this
@@ -1358,7 +1368,7 @@ public partial class InteriorNode : Node3D
             // a barn's pair or a garage's roll-up door moves on the facade, with its link; in here
             // only its shut face
             bool pair = DoorLeaf.OnFacade(e.Hang);
-            var leaf = pair ? DoorLeaf.CreateShutter(e.Door, doorway, width, top, kind, material)
+            var leaf = pair ? DoorLeaf.CreateShutter(e.Door, doorway, width, top, e.Hang, kind, material)
                 : DoorLeaf.Create(e.Door, doorway, width, top, kind, material);
             node.AddChild(leaf);
             leaf.SetSwing(0);
@@ -1367,6 +1377,7 @@ public partial class InteriorNode : Node3D
         AddLockDoors(node, material);
         AddPallets(node, material);
         AddForklifts(node, origin);
+        AddBayCars(node, origin);
         // an apartment block's elevator doors and flats' front doors (#557)
         AddLiftDoors(node, material);
         AddInnerDoors(node, material);

@@ -102,7 +102,7 @@ internal sealed partial class XrCabControls : Node3D
         return p.Vehicle switch
         {
             Truck t when p.InCockpit => (t.EffectiveMode is HeavyShift.HPattern or HeavyShift.HPatternSplitter ? "truck-h" : "truck-seq")
-                                        + (t.IsBus ? "-bus" : ""),
+                                        + (t.IsBus ? "-bus" : "") + (t.Spec.Body != TruckBody.Box ? "-work" : ""),
             Car when p.InCockpit => "car",
             Airliner => "airliner",
             _ when p.Ride == RideKind.Steamer => "steamer",
@@ -111,6 +111,7 @@ internal sealed partial class XrCabControls : Node3D
             _ when p.Ride == RideKind.MiniExcavator => "miniexcavator",
             _ when p.Ride is RideKind.WheelLoader or RideKind.WheelLoaderForks => "loader",
             _ when p.Ride == RideKind.CompactRoller => "roller",
+            _ when p.Ride == RideKind.MiniDumper => "minidumper",
             _ when p.Ride == RideKind.Telehandler => "telehandler",
             _ => "",
         };
@@ -129,6 +130,9 @@ internal sealed partial class XrCabControls : Node3D
             else Add(Kind.Spring, new(0.32f, -0.5f, -0.25f), Vector3.Back, PlayerInput.ShiftUp, PlayerInput.ShiftDown, 0.06f);
             // the retarder stalk right of the wheel: down for more, up for less
             Add(Kind.Spring, new(0.3f, -0.2f, -0.45f), Vector3.Down, PlayerInput.RetarderUp, PlayerInput.RetarderDown, 0.04f);
+            // a tipper's body or a mixer's discharge (#613): the destination poke, where a bus has it
+            if (context.EndsWith("-work"))
+                Add(Kind.Poke, new(-0.18f, -0.32f, -0.5f), plus: PlayerInput.Destination);
             if (context.EndsWith("-bus"))
             {
                 Add(Kind.Poke, new(-0.28f, -0.32f, -0.5f), plus: PlayerInput.Kneel);
@@ -181,6 +185,9 @@ internal sealed partial class XrCabControls : Node3D
             Add(Kind.Hold, new(0.34f, -0.36f, -0.4f), Vector3.Back, PlayerInput.ArmBucketCurl, PlayerInput.ArmBucketDump);
             Add(Kind.Poke, new(0.24f, -0.32f, -0.46f), plus: PlayerInput.DigMode);
         }
+        else if (context == "minidumper")
+            // the skip's button on the console right of the wheel (#614), the tipper's action
+            Add(Kind.Poke, new(0.28f, -0.48f, -0.34f), plus: PlayerInput.Destination);
         else if (context == "roller")
             // the vibration's red button on the console right of the wheel (#614)
             Add(Kind.Poke, new(0.3f, -0.5f, -0.36f), plus: PlayerInput.DigMode);

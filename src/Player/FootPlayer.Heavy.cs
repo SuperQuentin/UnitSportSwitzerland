@@ -312,6 +312,18 @@ public partial class FootPlayer
             return true;
         }
         if (e.IsActionPressed(PlayerInput.LightsToggle)) { truck.Headlights = !truck.Headlights; return true; }
+        // a tipper tips its body, a mixer discharges its drum (#613): the bus's destination action,
+        // stopped; pulling away drops the body and stops the discharge, as it shuts a bus's doors
+        if (truck.Spec.Body is TruckBody.Tipper or TruckBody.Mixer && e.IsActionPressed(PlayerInput.Destination))
+        {
+            if (GroundSpeed >= 1f && !truck.Tipped)
+            {
+                Announced?.Invoke(truck.Spec.Body == TruckBody.Tipper ? "Stop to tip the body" : "Stop to discharge", false);
+                return true;
+            }
+            truck.Tipped = !truck.Tipped;
+            return true;
+        }
         if (!truck.IsBus) return false;
         bool stopped = GroundSpeed < 1f;
         if (e.IsActionPressed(PlayerInput.CarDoor) && truck.DoorCount > 0)

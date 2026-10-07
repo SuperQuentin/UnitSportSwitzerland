@@ -159,12 +159,20 @@ public partial class PalletService : Node
         var tines = frame * fork.TinesFrame;
         if (Pallets.LoadCarried(fork.Carrying) is { } load)
         {
-            if (!Pallets.SetsDown(fork.ForkHeight)) return;
-            // where it rode, on the ground the machine stands on, turned as it rode
             var at = tines * new Vector3(0f, 0f, -Pallets.LoadAhead);
-            at.Y = p.GlobalPosition.Y;
             int carrying = fork.Carrying;
             float yaw = tines.Basis.GetEuler().Y + PalletNode.CarriedYaw(Pallets.CarriedAcross(carrying));
+            // lowered onto a tipper's body or a mini dumper's skip (#615): into it, never onto the ground under it
+            float tinesTop = p.GlobalPosition.Y + fork.ForkHeight;
+            if (BedUnder(p, at, tinesTop, out var bed) is { } over)
+            {
+                if (tinesTop - over < ForkliftLayout.SetDown && bed is { } host)
+                    RequestBed(host, load, yaw, ok => { if (ok && fork.Carrying == carrying) fork.Carrying = 0; });
+                return;
+            }
+            if (!Pallets.SetsDown(fork.ForkHeight)) return;
+            // where it rode, on the ground the machine stands on, turned as it rode
+            at.Y = p.GlobalPosition.Y;
             RequestDrop(load, _origin.ToGlobal(at), yaw, ok =>
             {
                 if (ok && fork.Carrying == carrying) fork.Carrying = 0;
@@ -213,9 +221,17 @@ public partial class PalletService : Node
             var floor = bucket.BucketFloor;
             // out over the lip: the floor's middle, a pallet's half length past the lip
             var at = b * new Vector3(0f, floor.Y, -(bucket.BucketReach + Pallets.Length * 0.5f));
-            at.Y = p.GlobalPosition.Y;
             int carrying = bucket.Carrying;
             float yaw = (frame * bucket.BucketFrame).Basis.GetEuler().Y + PalletNode.CarriedYaw(Pallets.CarriedAcross(carrying));
+            // tipped out over a tipper's body or a mini dumper's skip (#615): into it, from above its floor
+            float bucketFloor = (b * floor).Y;
+            if (BedUnder(p, at, bucketFloor, out var bed) is { } over)
+            {
+                if (bed is { } host)
+                    RequestBed(host, load, yaw, ok => { if (ok && bucket.Carrying == carrying) bucket.Carrying = 0; });
+                return;
+            }
+            at.Y = p.GlobalPosition.Y;
             RequestDrop(load, _origin.ToGlobal(at), yaw, ok =>
             {
                 if (ok && bucket.Carrying == carrying) bucket.Carrying = 0;
@@ -388,6 +404,230 @@ public partial class PalletService : Node
         _drawn[p.Id] = node;
     }
 
+    // ---- a tipping body's pallet (#615) ----------------------------------------------------------
+
+    /// <summary>A body a pallet can go into: a parked vehicle's, or the one another player drives.</summary>
+    public readonly record struct BedHost(VehicleBody? Parked, long Driver, IBed Bed, Transform3D Frame);
+
+    /// <summary>How much farther than <see cref="Reach"/> a body's pallet may be from its driver or loader, m: a tipper's length.</summary>
+    public const float BedReach = 10f;
+
+    /// <summary>A body loaded is not loaded again for this long, s: the driver's pose has to catch up first.</summary>
+    private const double BedPending = 2.0;
+    private readonly Dictionary<string, double> _bedPending = new();
+
+    /// <summary>
+    /// The floor height (world) of a body under <paramref name="at"/> (world) that a pallet held
+    /// from <paramref name="from"/> m up could go into — a parked tipper's or mini dumper's, or one
+    /// another player drives — with that body as <paramref name="host"/> when it is empty and down;
+    /// null where there is none. A dormant one there is woken, and this frame says only that a body
+    /// is there (no host yet): the pallet waits over it, not on the ground.
+    /// </summary>
+    private float? BedUnder(FootPlayer me, Vector3 at, float from, out BedHost? host)
+    {
+        host = null;
+        ListBeds(me);
+        foreach (var node in _bedNodes)
+        {
+            if (!IsInstanceValid(node)) continue;
+            if (node is not VehicleBody { Wrecked: false } v || v.Ride is not IBed { HasBed: true } bed) continue;
+            var frame = v.GlobalTransform;
+            if (!bed.Bed.Over(frame.AffineInverse() * at)) continue;
+            float floor = (frame * bed.Bed.Floor).Y;
+            if (from < floor - 0.5f) continue;
+            if (v.BedLoad == 0 && !bed.BedUp) host = new BedHost(v, 0, bed, frame);
+            return floor;
+        }
+        foreach (var node in _bedNodes)
+        {
+            if (!IsInstanceValid(node)) continue;
+            if (node is not FootPlayer { SeatIndex: 0 } other || other == me || other.RideModel is not IBed { HasBed: true } bed
+                || !long.TryParse(other.Name, out long driver)) continue;
+            var frame = other.GlobalTransform;
+            if (!bed.Bed.Over(frame.AffineInverse() * at)) continue;
+            float floor = (frame * bed.Bed.Floor).Y;
+            if (from < floor - 0.5f) continue;
+            // what is in it and whether it is up from the driver's published pose, as the server
+            // reads it: a copy's own ride is only dressed where it is drawn
+            if (BedOf(other.Ride, other.Anim) == 0 && !BedUpInPose(other.Ride, other.Anim)) host = new BedHost(null, driver, bed, frame);
+            return floor;
+        }
+        // a dormant site tipper or dumper: woken, as aiming at it to get in does
+        if (DormantVehicles.Instance is { } dormant)
+            foreach (var slot in _bedSlots)
+            {
+                if (dormant.IsAwake(slot) || BedOfKind(slot.KindId) is not { } shape) continue;
+                var poses = dormant.DrawnPoses(slot);
+                if (poses.Length == 0 || !shape.Over(poses[0].AffineInverse() * at)) continue;
+                dormant.Wake(slot);
+                return float.PositiveInfinity;
+            }
+        return null;
+    }
+
+    /// <summary>What may have a body to set a pallet in, listed twice a second while one is carried, not every frame.</summary>
+    private readonly List<Node3D> _bedNodes = new();
+    private readonly List<VehicleSlot> _bedSlots = new();
+    private double _bedsListedAt = double.NegativeInfinity;
+    private const double BedsListEvery = 0.5;
+
+    private void ListBeds(FootPlayer me)
+    {
+        double now = GameClock.Now;
+        if (now - _bedsListedAt < BedsListEvery) return;
+        _bedsListedAt = now;
+        _bedNodes.Clear();
+        _bedSlots.Clear();
+        foreach (var node in GetTree().GetNodesInGroup(VehicleBody.Group))
+            if (node is VehicleBody { Ride: IBed { HasBed: true } } v) _bedNodes.Add(v);
+        foreach (var node in GetTree().GetNodesInGroup(FootPlayer.Group))
+            if (node is FootPlayer { SeatIndex: 0, RideModel: IBed { HasBed: true } } other && other != me) _bedNodes.Add(other);
+        if (DormantVehicles.Instance is { } dormant)
+            foreach (var slot in dormant.Slots())
+                if (BedOfKind(slot.KindId) != null) _bedSlots.Add(slot);
+    }
+
+    /// <summary>The body a parked kind carries a pallet in, for a dormant one's footprint: a tipper's or a mini dumper's.</summary>
+    private static BedShape? BedOfKind(int kind)
+    {
+        if (_bedOfKind.TryGetValue(kind, out var known)) return known;
+        BedShape? shape = kind == (int)RideKind.MiniDumper ? MiniDumperLayout.Bed
+            : HeavyCatalog.For((RideKind)kind) is { Body: TruckBody.Tipper } spec ? TruckMeshBuilder.TipperBed(spec, 0.5f) : null;
+        return _bedOfKind[kind] = shape;
+    }
+    private static readonly Dictionary<int, BedShape?> _bedOfKind = new();
+
+    /// <summary>Asks to set the carried pallet into <paramref name="host"/>'s body, its runners on <paramref name="yaw"/> (world).</summary>
+    private void RequestBed(BedHost host, byte load, float yaw, Action<bool> done)
+    {
+        // runners along the machine or across it, whichever is nearer
+        float rel = yaw - host.Frame.Basis.GetEuler().Y;
+        bool across = Mathf.Abs(Mathf.Cos(rel)) > Mathf.Sqrt2 * 0.5f;
+        _dropDone = done;
+        _askedAt = GameClock.Now;
+        string name = host.Parked?.Name ?? "";
+        if (Online) RpcId(1, MethodName.AskBed, (int)load, across, name, host.Driver);
+        else ServeBed(1, load, across, name, host.Driver);
+    }
+
+    /// <summary>
+    /// The local driver's tipper or mini dumper, once per physics frame: with a pallet in the body
+    /// and the body up far enough that it has slid to the edge (<see cref="BedShape.Slid"/>), asks
+    /// to set it down where it falls, on the ground past the open end.
+    /// </summary>
+    public void TendBed(FootPlayer p, IBed bed)
+    {
+        if (!bed.HasBed || Pallets.LoadCarried(bed.BedLoad) is not { } load || Waiting()) return;
+        float shown = p.Visual is HeavyRig rig ? rig.TippedShown : bed.BedUp ? 1f : 0f;
+        if (BedShape.Slid(shown) < 1f) return;
+        var frame = p.GlobalTransform;
+        var at = frame * bed.Bed.Spill;
+        int carrying = bed.BedLoad;
+        float yaw = frame.Basis.GetEuler().Y + PalletNode.CarriedYaw(Pallets.CarriedAcross(carrying));
+        RequestDrop(load, _origin.ToGlobal(at), yaw, ok => { if (ok && bed.BedLoad == carrying) bed.BedLoad = 0; });
+    }
+
+    /// <summary>The server set this asker's pallet into a body: its forks or bucket are empty now.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Bedded(int bedLoad, string into)
+    {
+        GD.Print($"[pallets] set into {into} (load {bedLoad})");
+        Answered();
+        var done = _dropDone;
+        _dropDone = null;
+        done?.Invoke(true);
+        Changed?.Invoke();
+    }
+
+    /// <summary>On the driver of a tipper or mini dumper: somebody set a pallet in its body (#615).</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void BedLoaded(int bedLoad)
+    {
+        var me = GetNodeOrNull<FootPlayer>("../Players/" + MyPeer);
+        if (me?.Vehicle is IBed { HasBed: true } bed && me.SeatIndex == 0)
+        {
+            bed.BedLoad = bedLoad;
+            GD.Print($"[pallets] a pallet was set in my body (load {bedLoad})");
+        }
+        else GD.PushWarning("[pallets] a pallet was set in a body I no longer drive");
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void AskBed(int load, bool across, string parked, long driver) =>
+        ServeBed(Multiplayer.GetRemoteSenderId(), (byte)Math.Clamp(load, 0, 255), across, parked, driver);
+
+    /// <summary>
+    /// Server: sets the asker's carried pallet into a parked vehicle's body (on its authority,
+    /// replicated, <see cref="VehicleManager.LoadBed"/>) or into the body another player drives (that
+    /// driver is told, and publishes it in its pose). Checked: the asker holds that load, the body is
+    /// a tipper's or a mini dumper's, empty and down by what the server has of it, not loaded in the
+    /// last <see cref="BedPending"/> s, and within <see cref="BedReach"/> of the asker.
+    /// </summary>
+    private void ServeBed(long peer, byte load, bool across, string parked, long driver)
+    {
+        string key = parked != "" ? parked : "#" + driver;
+        double now = GameClock.Now;
+        string? why = Forks(peer, load);
+        GlobalPos where = default;
+        VehicleBody? vehicle = null;
+        if (why == null && parked != "")
+        {
+            vehicle = VehicleManager.Instance?.GetNodeOrNull<VehicleBody>(parked);
+            if (vehicle is not { Wrecked: false } || vehicle.Ride is not IBed { HasBed: true } bed) why = "No such body.";
+            else if (vehicle.BedLoad != 0 || bed.BedUp) why = "There is something in it already.";
+            else where = vehicle.Global;
+        }
+        else if (why == null)
+        {
+            if (driver == peer || GetNodeOrNull<FootPlayer>("../Players/" + driver) is not { SeatIndex: 0 } body) why = "Nobody drives it.";
+            else if (BedOf(body.Ride, body.Anim) is not { } inBody) why = "No such body.";
+            else if (inBody != 0 || BedUpInPose(body.Ride, body.Anim)) why = "There is something in it already.";
+            else where = body.Global;
+        }
+        if (why == null && _bedPending.TryGetValue(key, out double at) && now - at < BedPending) why = "There is something in it already.";
+        if (why == null && !InReach(peer, where, BedReach)) why = "Too far away.";
+        if (why != null)
+        {
+            if (Online && peer != 1) RpcId(peer, MethodName.DropRefused, why);
+            else DropRefused(why);
+            return;
+        }
+        _bedPending[key] = now;
+        int carrying = Pallets.Carried(load, across);
+        if (vehicle != null) VehicleManager.Instance!.LoadBed(vehicle, carrying);
+        else if (Online) RpcId(driver, MethodName.BedLoaded, carrying);
+        GD.Print($"[pallets] peer {peer} set load {load} into {key}");
+        if (Online && peer != 1) RpcId(peer, MethodName.Bedded, carrying, key);
+        else Bedded(carrying, key);
+    }
+
+    /// <summary>
+    /// What a tipper's or mini dumper's published pose says is in its body (#615), or null for a
+    /// machine with none.
+    /// </summary>
+    public static int? BedOf(RideKind kind, Vector4 anim) =>
+        kind == RideKind.MiniDumper ? MiniDumper.BedInPose(anim)
+        : HeavyCatalog.For(kind) is { Body: TruckBody.Tipper } ? Truck.BedInPose(anim) : null;
+
+    private static bool BedUpInPose(RideKind kind, Vector4 anim) =>
+        kind == RideKind.MiniDumper ? anim.X > 0.5f : Truck.TippedInPose(anim);
+
+    /// <summary>Server: how much farther the asker may set a pallet down: a body's length when it drives one.</summary>
+    private float BedReachOf(long peer) =>
+        Online && GetNodeOrNull<FootPlayer>("../Players/" + peer) is { } body && BedOf(body.Ride, body.Anim) != null ? BedReach : 0f;
+
+    /// <summary>
+    /// Server: why the asker may not set <paramref name="load"/> down — it is neither on its tines
+    /// or in its bucket nor in its body — or null.
+    /// </summary>
+    private string? Holds(long peer, byte load)
+    {
+        if (!Online) return null;
+        if (GetNodeOrNull<FootPlayer>("../Players/" + peer) is not { } body) return "Nobody there.";
+        if (BedOf(body.Ride, body.Anim) is { } inBody) return Pallets.LoadCarried(inBody) == load ? null : "That is not in the body.";
+        return Forks(peer, load);
+    }
+
     // ---- server ---------------------------------------------------------------------------------
 
     /// <summary>Server: hands a joining peer what has been moved this session.</summary>
@@ -473,8 +713,8 @@ public partial class PalletService : Node
     {
         var at = new GlobalPos(e, n, alt);
         string? why = !double.IsFinite(e) || !double.IsFinite(n) || !double.IsFinite(alt) || !float.IsFinite(yaw) ? "Bad position."
-            : Forks(peer, load)
-              ?? (!InReach(peer, at) ? "Too far away." : null);
+            : Holds(peer, load)
+              ?? (!InReach(peer, at, BedReachOf(peer)) ? "Too far away." : null);
         if (why != null)
         {
             if (Online && peer != 1) RpcId(peer, MethodName.DropRefused, why);
@@ -522,11 +762,11 @@ public partial class PalletService : Node
         _ => null,
     };
 
-    /// <summary>Server: the asker's body within <see cref="Reach"/>, in LV95 (the server's origin may be far away, #185).</summary>
-    private bool InReach(long peer, GlobalPos at)
+    /// <summary>Server: the asker's body within <see cref="Reach"/> (and <paramref name="more"/>), in LV95 (the server's origin may be far away, #185).</summary>
+    private bool InReach(long peer, GlobalPos at, float more = 0f)
     {
         if (!Online) return true;
         if (GetNodeOrNull<FootPlayer>("../Players/" + peer) is not { } body) return false;
-        return body.Global.DistanceTo(at) <= Reach;
+        return body.Global.DistanceTo(at) <= Reach + more;
     }
 }

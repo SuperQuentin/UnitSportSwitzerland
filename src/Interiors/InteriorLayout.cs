@@ -23,6 +23,8 @@ public enum RoomType
     Elevator, CarPark, TechRoom, Corridor,
     // #571: a block of flats' own stair, round a half landing
     Stairwell,
+    // #558: the ramp down to an apartment block's car park, behind its garage door
+    Ramp,
 }
 
 public enum OpeningKind { Door, Window, Entry, Arch }
@@ -116,6 +118,14 @@ public sealed class FlightPlan
     /// <see cref="Point"/> and <see cref="Area"/>.
     /// </summary>
     public bool AlongX { get; set; }
+
+    /// <summary>
+    /// A garage's ramp (#558), not a stair: a smooth wedge a car drives down (<see cref="RampProfile"/>),
+    /// from <see cref="ZTop"/> (the end of the flat apron, at the storey above's floor level) to
+    /// <see cref="ZBottom"/> (its foot on this floor). It may run on past the room it starts in,
+    /// into the car park.
+    /// </summary>
+    public bool Ramp { get; set; }
 
     /// <summary>A point of the flight's own frame (across its lane, along its run) in the plan's (X, Z).</summary>
     public (float X, float Z) Point(float across, float along) => AlongX ? (along, across) : (across, along);
@@ -360,7 +370,7 @@ public sealed class InteriorLayout
     // one number, so whichever of #497/#498 rebases onto the other takes the NEXT one, never a
     // lower one: a version going backwards regenerates the plans saved under the higher one and
     // then collides when it is reissued.
-    public const int CurrentVersion = 22; // 22: a hall's forklift is the size of the real, drivable machine (#630); 21: apartment blocks follow the building's outline, wing by wing (#577); 20: a bedroom, bathroom or WC has one door, wider corridors (#576); 19: a door driven through keeps its full width inside, so a loading bay is not a 1.8 m hole (#531); 18: flats' living rooms and bedrooms on a facade, stairwells with half landings (#571); 17: apartment blocks, a stairwell and elevator per entrance, flats, a shared basement (#557); 16: IKEA stores at their nine real locations, with bins of Blåhajs (#501); 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
+    public const int CurrentVersion = 23; // 23: a block of flats' underground garage has its ramp down to the car park (#558); 22: a hall's forklift is the size of the real, drivable machine (#630); 21: apartment blocks follow the building's outline, wing by wing (#577); 20: a bedroom, bathroom or WC has one door, wider corridors (#576); 19: a door driven through keeps its full width inside, so a loading bay is not a 1.8 m hole (#531); 18: flats' living rooms and bedrooms on a facade, stairwells with half landings (#571); 17: apartment blocks, a stairwell and elevator per entrance, flats, a shared basement (#557); 16: IKEA stores at their nine real locations, with bins of Blåhajs (#501); 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";
