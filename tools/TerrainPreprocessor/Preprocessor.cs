@@ -106,6 +106,9 @@ public static partial class Preprocessor
         // optional OpenStreetMap overlay (#118): a region-wide intermediate for the road network stage
         string? osmPbf = null;
         bool osmCheck = false;
+        // real farm fields (#494): federal LWB land use per canton from <dir>, OSM fallback for the gated cantons
+        string? fieldsDir = null, osmFieldsPbf = null;
+        bool fieldsCheck = false;
         int jobs = Environment.ProcessorCount;
         int ioJobs = 4;
 
@@ -158,6 +161,9 @@ public static partial class Preprocessor
                 case "--france": franceBox = args[++i]; break;
                 case "--osm-overlay": osmPbf = args[++i]; break;
                 case "--osm-check": osmCheck = true; break;
+                case "--fields": fieldsDir = args[++i]; break;
+                case "--osm-pbf": osmFieldsPbf = args[++i]; break;
+                case "--fields-check": fieldsCheck = true; break;
                 case "--jobs": jobs = int.Parse(args[++i]); break;
                 case "--io-jobs": ioJobs = int.Parse(args[++i]); break;
                 case "--force": force = true; break;
@@ -169,6 +175,24 @@ public static partial class Preprocessor
         }
 
         if (osmCheck) return OsmOverlay.SelfCheck();
+        if (fieldsCheck) return FieldStage.SelfCheck();
+
+        // ---- farm fields (#494): fields_E_N.fld per manifest tile, standalone -------------------------
+        // --gwr (the GWR data.sqlite) tells which OSM fields lie in the cantons without freely published data
+        if (fieldsDir != null)
+        {
+            if (outDir == null)
+            {
+                Console.Error.WriteLine("--fields <lwb dir> requires --out <chunk dir> [--osm-pbf <file>] [--gwr <data.sqlite>] [--tiles-file f]");
+                return 2;
+            }
+            var manifestPath = Path.Combine(outDir, "manifest.json");
+            var region = tilesFile != null ? TileId.ReadList(tilesFile).ToHashSet()
+                : File.Exists(manifestPath) ? TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet()
+                : new HashSet<TileId>();
+            SetStage("fields");
+            return FieldStage.Run(fieldsDir, osmFieldsPbf, gwrPath, outDir, region, jobs);
+        }
 
         // ---- airports: stands and runways (#422) ---------------------------------------------------
         if (airportsOnly)

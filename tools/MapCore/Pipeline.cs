@@ -27,6 +27,8 @@ public enum Layers
     /// (docs/notes/tools/osm-odbl-licence.md).
     /// </summary>
     Osm = 64,
+    /// <summary>Real farm fields (#494): LWB land use per canton from geodienste.ch, fields_E_N.fld per tile.</summary>
+    Fields = 128,
 }
 
 /// <summary>What MapSetup remembers between runs, in terrain_chunks_temp/mapsetup.json.</summary>
@@ -247,6 +249,21 @@ public static partial class Planner
             Run = r => r.Download(() => SwissDownload.OsmAsync(p.OsmDir, r.Progress, r.Cancellation)),
         });
 
+        // ---- farm fields (#494) -----------------------------------------------------------------
+        bool wantFields = c.Layers.HasFlag(Layers.Fields);
+        bool haveLwb = Directory.Exists(p.LwbDir) && Directory.EnumerateFiles(p.LwbDir, "lwb_nutzungsflaechen_*_lv95.zip").Any();
+        steps.Add(new Step
+        {
+            Title = "Download farm fields",
+            Detail = "LWB Nutzungsflaechen per canton (geodienste.ch, the freely published ones)",
+            DownloadBytes = wantFields && !haveLwb ? 1_150_000_000 : 0,
+            DiskBytes = wantFields && !haveLwb ? 1_150_000_000 : 0,
+            DiskPath = p.LwbDir,
+            Seconds = 1_150_000_000 / stats.EffectiveDownload + 5,
+            Skip = !wantFields ? "fields layer off" : haveLwb ? "already here" : null,
+            Run = r => r.Download(() => SwissDownload.LwbAsync(p.LwbDir, r.Progress, r.Cancellation)),
+        });
+
         // ---- unpack ------------------------------------------------------------------------------
         steps.Add(new Step
         {
@@ -433,6 +450,20 @@ public static partial class Planner
                 if (!File.Exists(p.GwrSqlite)) { r.Fail("places need the GWR data.sqlite"); return Task.FromResult(false); }
                 var args = new List<string> { "--out", p.Chunks, "--places-only", "--gwr", p.GwrSqlite };
                 if (p.TlmGpkg is { } tlm) args.AddRange(["--tlm", tlm]);
+                return r.Tool("TerrainPreprocessor", args, LineProgress.None);
+            },
+        });
+
+        steps.Add(new Step
+        {
+            Title = "Farm fields",
+            Detail = "fields_E_N.fld for every built tile (LWB polygons; OSM for the gated cantons if the OSM extract and GWR are here)",
+            Seconds = 60 + builtTotal * 0.02,
+            Skip = !wantFields ? "fields layer off" : null,
+            Run = r =>
+            {
+                var args = new List<string> { "--out", p.Chunks, "--fields", p.LwbDir };
+                if (p.OsmPbf is { } pbf && File.Exists(p.GwrSqlite)) args.AddRange(["--osm-pbf", pbf, "--gwr", p.GwrSqlite]);
                 return r.Tool("TerrainPreprocessor", args, LineProgress.None);
             },
         });

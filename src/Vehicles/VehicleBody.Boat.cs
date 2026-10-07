@@ -122,6 +122,15 @@ public partial class VehicleBody
     private void DrawBoat(Boat boat, float dt)
     {
         if (_visual == null) return;
+        if (_inHold)
+        {
+            // strapped to its trailer (#463): level on the bunks, whatever the waves are doing, and dry
+            _visual.Transform = Transform3D.Identity;
+            Posed = true;
+            PoseHull();
+            if (_visual is BoatRig dry) dry.Water(0f, 0f, 0f, false);
+            return;
+        }
         float speed = Velocity.Length();
         if (IsMultiplayerAuthority())
         {

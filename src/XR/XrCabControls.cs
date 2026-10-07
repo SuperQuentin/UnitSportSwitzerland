@@ -102,7 +102,8 @@ internal sealed partial class XrCabControls : Node3D
         return p.Vehicle switch
         {
             Truck t when p.InCockpit => (t.EffectiveMode is HeavyShift.HPattern or HeavyShift.HPatternSplitter ? "truck-h" : "truck-seq")
-                                        + (t.IsBus ? "-bus" : "") + (t.Spec.Body != TruckBody.Box ? "-work" : ""),
+                                        // a farm machine (#494) has the bus's two pokes: kneel lowers its implement, destination its auger or delivery
+                                        + (t.IsBus || t.Spec.Farm ? "-bus" : "") + (t.Spec.Body != TruckBody.Box ? "-work" : ""),
             Car when p.InCockpit => "car",
             Airliner => "airliner",
             _ when p.Ride == RideKind.Steamer => "steamer",
@@ -130,6 +131,8 @@ internal sealed partial class XrCabControls : Node3D
             else Add(Kind.Spring, new(0.32f, -0.5f, -0.25f), Vector3.Back, PlayerInput.ShiftUp, PlayerInput.ShiftDown, 0.06f);
             // the retarder stalk right of the wheel: down for more, up for less
             Add(Kind.Spring, new(0.3f, -0.2f, -0.45f), Vector3.Down, PlayerInput.RetarderUp, PlayerInput.RetarderDown, 0.04f);
+            // the speed regulator's button right of the wheel, opposite the bus's two (#494)
+            Add(Kind.Poke, new(0.18f, -0.32f, -0.5f), plus: PlayerInput.Cruise);
             // a tipper's body or a mixer's discharge (#613): the destination poke, where a bus has it
             if (context.EndsWith("-work"))
                 Add(Kind.Poke, new(-0.18f, -0.32f, -0.5f), plus: PlayerInput.Destination);
@@ -144,6 +147,8 @@ internal sealed partial class XrCabControls : Node3D
             Add(Kind.Poke, new(0.17f, -0.33f, -0.5f), plus: PlayerInput.RadioPrev);
             Add(Kind.Poke, new(0.27f, -0.33f, -0.5f), plus: PlayerInput.RadioNext);
             Add(Kind.Poke, new(0.22f, -0.27f, -0.5f), plus: PlayerInput.RadioPanel);
+            // the speed regulator's button under the radio's (#494)
+            Add(Kind.Poke, new(0.22f, -0.39f, -0.5f), plus: PlayerInput.Cruise);
         }
         else if (context == "airliner")
         {

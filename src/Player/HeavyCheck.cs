@@ -16,7 +16,9 @@ namespace UnitSport.Player;
 /// <item>the articulated bus through a lane change, the drawbar train through a turn, a semi reversing;</item>
 /// <item>the gearbox by hand: pulling away on the clutch, stalling in twelfth, grinding without the clutch;</item>
 /// <item>the air: pumping the brakes with the engine off lets the spring brakes on;</item>
-/// <item>rollover: a full tanker thrown into a bend too fast.</item>
+/// <item>rollover: a full tanker thrown into a bend too fast;</item>
+/// <item>the pickup and the boat trailers (#463): what takes a ball trailer, the nose weight on the
+/// ball, launching and winching the boat, the server's count of what is driven.</item>
 /// </list>
 /// </summary>
 public static class HeavyCheck
@@ -56,6 +58,7 @@ public static class HeavyCheck
         Air();
         Rollover();
         Roads();
+        BoatTrailers();
 
         settings.RideProfile = was;
         GD.Print(_failures == 0 ? "[truck] RESULT: ok" : $"[truck] RESULT: FAILED ({_failures})");
@@ -76,10 +79,20 @@ public static class HeavyCheck
         int trailer = spec.Takes switch
         {
             Coupling.FifthWheel => TrailerCatalog.Code(0, load),
+            // a farm tractor (#494) pulls the tipping trailer, its harvest the load
+            Coupling.Drawbar when spec.Farm => TrailerTipper(load),
             Coupling.Drawbar => TrailerCatalog.Code(3, load),
+            Coupling.Ball => TrailerCatalog.Code(TrailerCatalog.TrailerFor(RideKind.Speedboat), load),
             _ => 0,
         };
         return new Truck(spec, trailer, load) { ShiftOverride = HeavyShift.Automatic };
+    }
+
+    /// <summary>The tipping trailer (#494) with <paramref name="load"/> of its sacks of wheat.</summary>
+    private static int TrailerTipper(float load)
+    {
+        int i = System.Array.FindIndex(TrailerCatalog.All.ToArray(), t => t.Body == TrailerBody.Tipper);
+        return TrailerCatalog.WithTank(TrailerCatalog.Code(i, 0f), new Farming.Tank(Terrain.Format.CropKind.Wheat, Mathf.RoundToInt(TrailerCatalog.All[i].TankItems * load)));
     }
 
     /// <summary>A train driven on flat ground by a function of time; the tractor's pose integrated alongside.</summary>
@@ -144,6 +157,22 @@ public static class HeavyCheck
             Check(t80 is > 30f and < 90f, $"0-80 km/h at {mass:F0} t in {F(t80)} s (a 450 hp 40 t truck: ~40-60 s)");
         else if (spec.Class == HeavyClass.Coach)
             Check(t50 is > 7f and < 20f, $"0-50 km/h in {F(t50)} s (a 430 hp coach ~9-12 s)");
+        else if (spec.Farm)
+        {
+            // a farm machine (#494) never sees 50: 0-25 km/h, a tractor with 10 t of grain behind ~10-25 s
+            float t25 = float.NaN;
+            var f = new Run2(Loaded(spec));
+            for (int i = 0; i < 90 * 60 && float.IsNaN(t25); i++) { f.Step(new RideInput(1f, 0f, 0f, false)); if (f.U >= 24f / 3.6f) t25 = f.Time; }
+            Check(t25 is > 3f and < 45f, $"0-24 km/h in {F(t25)} s at {mass:F0} t");
+            // and alone, to just under its top: a Fendt 724 takes some 15-20 s to 40, a combine longer to its 25
+            float solo = float.NaN, to = spec.LimiterKmh - 1f;
+            var alone = new Run2(new Truck(spec) { ShiftOverride = HeavyShift.Automatic });
+            for (int i = 0; i < 90 * 60 && float.IsNaN(solo); i++) { alone.Step(new RideInput(1f, 0f, 0f, false)); if (alone.U >= to / 3.6f) solo = alone.Time; }
+            Check(spec.Class == HeavyClass.Combine ? solo is > 18f and < 40f : solo is > 12f and < 24f,
+                $"alone 0-{F(to, "F0")} km/h in {F(solo)} s at {alone.T.Train.Mass / 1000f:F1} t");
+        }
+        else if (spec.Class == HeavyClass.Pickup)
+            Check(t50 is > 2f and < 7f, $"0-50 km/h in {F(t50)} s with 2.6 t of boat behind (a Raptor alone ~2.5 s)");
         else
             Check(t50 is > 10f and < 32f, $"0-50 km/h in {F(t50)} s (a city bus ~15-25 s)");
 
@@ -426,6 +455,86 @@ public static class HeavyCheck
         int busRolled = -1;
         for (int i = 0; i < 6 * 60 && busRolled < 0; i++) { b.Step(Hold(b, 40f, 0.5f)); busRolled = bus.Train.Rolling; }
         Check(busRolled < 0, $"a city bus through the same at 40 km/h stays up (SRT {F(bus.Train.Bodies[0].Srt, "F2")} g)");
+    }
+
+    /// <summary>
+    /// The pickup and the boat trailers (#463): the Raptor alone against its published 0-100, which
+    /// vehicles take a ball trailer, the nose weight its ball carries, the boat launched and winched
+    /// back aboard, and the units the server counts for each state.
+    /// </summary>
+    private static void BoatTrailers()
+    {
+        GD.Print("[truck] the pickup and the boat trailers");
+        var raptor = HeavyCatalog.All.First(h => h.Class == HeavyClass.Pickup);
+        var alone = new Run2(new Truck(raptor, 0, 0f) { ShiftOverride = HeavyShift.Automatic });
+        float t100 = float.NaN;
+        for (int i = 0; i < 20 * 60 && float.IsNaN(t100); i++)
+        {
+            alone.Step(new RideInput(1f, 0f, 0f, false));
+            if (alone.U >= 100f / 3.6f) t100 = alone.Time;
+        }
+        Check(t100 is > 4.5f and < 9f, $"Raptor alone 0-100 km/h in {F(t100)} s (published ~5.5-6 s), {alone.T.GearLabel}");
+
+        int jetski = TrailerCatalog.TrailerFor(RideKind.Jetski), speedboat = TrailerCatalog.TrailerFor(RideKind.Speedboat);
+        Check(jetski >= 0 && speedboat >= 0 && TrailerCatalog.TrailerFor(RideKind.Steamer) < 0, "a trailer for the jetski and the speedboat, none for the steamer");
+        var tractor = HeavyCatalog.All.First(h => h.Class == HeavyClass.Tractor);
+        var rigid = HeavyCatalog.All.First(h => h.Class == HeavyClass.Rigid);
+        foreach (int i in new[] { jetski, speedboat })
+        {
+            var t = TrailerCatalog.All[i];
+            Check(raptor.Accepts(t) && rigid.Accepts(t) && !tractor.Accepts(t), $"{t.Label}: on the pickup's ball and the rigid's combination coupling, not a fifth wheel");
+        }
+        Check(rigid.Accepts(TrailerCatalog.All[3]) && !raptor.Accepts(TrailerCatalog.All[3]) && !raptor.Accepts(TrailerCatalog.All[0]),
+            "the rigid still takes its drawbar trailer; the pickup takes no truck trailer");
+
+        foreach (int i in new[] { jetski, speedboat })
+        {
+            var truck = new Truck(raptor, TrailerCatalog.Code(i, 1f), 0f);
+            var trailer = truck.Train.Bodies[1];
+            float weight = trailer.Mass * HeavyTrain.Gravity;
+            float nose = (weight - trailer.StaticLoad.Sum()) / weight;
+            Check(truck.Trailer != null && nose is > 0.04f and < 0.12f,
+                $"{truck.Trailer?.Label}: {F(trailer.Mass, "F0")} kg, {F(nose * 100f)} % of it on the ball (4-10 % is right)");
+
+            float before = truck.Train.Mass;
+            Check(truck.SetBoatAboard(false) && TrailerCatalog.BoatAboard(truck.TrailerCode) == 0 && before - truck.Train.Mass > 300f,
+                $"launched: {F(before, "F0")} -> {F(truck.Train.Mass, "F0")} kg, the trailer empty");
+            Check(truck.SetBoatAboard(true) && TrailerCatalog.BoatAboard(truck.TrailerCode) == TrailerCatalog.All[i].Boat,
+                "winched back aboard");
+        }
+        Check(TrailerCatalog.BoatAboard(TrailerCatalog.Code(speedboat, 0.3f)) == 0 && TrailerCatalog.BoatAboard(TrailerCatalog.Code(speedboat, 0.6f)) == RideKind.Speedboat,
+            "a boat trailer's load is the boat or nothing");
+
+        // the boat is a boat of its own in the trailer's cradle: the train counts as a truck and a trailer
+        var at = new GlobalPos();
+        int Units(RideKind kind, int train) => new Vehicles.VehicleState(kind, at, 0f, Vector3.Zero, 100f, false, false, 0f, 0, Train: train).Units;
+        int full = TrailerCatalog.Code(speedboat, 1f);
+        Check(Units(raptor.Kind, full) == 2 && Units(RideKind.Trailer, full) == 1 && Units(RideKind.Speedboat, 0) == 1,
+            "units: pickup + trailer 2, a lone trailer 1, its boat 1 of its own");
+
+        // the cradle: a hold on the trailer for its own kind of boat, that boat's hull fits it, its spot on the bunks is in it
+        foreach (int i in new[] { jetski, speedboat })
+        {
+            var t = TrailerCatalog.All[i];
+            foreach (var host in new[] { raptor, rigid })
+            {
+                var train = new Truck(host, TrailerCatalog.Code(i, 1f), 0f);
+                var cradle = train.Decks.Where(d => d.CargoOnly).SelectMany(d => d.CargoBays.Select(b => (d.Section, b))).ToArray();
+                var hull = Rideable.Create(t.Boat)!.ParkedBox.Size;
+                var spot = Avatar.TrailerMeshBuilder.BoatSpot(t, 0, 1f);
+                Check(cradle.Length == 1 && cradle[0].Section == train.SectionCount - 1 && cradle[0].b.Takes(t.Boat) && !cradle[0].b.Takes(RideKind.Jetski + (t.Boat == RideKind.Jetski ? 1 : 0))
+                    && cradle[0].b.Fits(hull) && cradle[0].b.Contains(spot, 0f) && !train.Walkable,
+                    $"{host.Label} + {t.Label}: a cradle in section {(cradle.Length > 0 ? cradle[0].Section : -1)} for the {t.Boat} only, its {F(hull.Z)} m hull fits, the bunks in it, nothing to walk");
+            }
+        }
+
+        // the pickup's doors are a car's: four, the driver's (CarRig.DriverDoor) the front left one
+        var parts = Avatar.PickupMeshBuilder.Build(raptor, 0, 0.5f);
+        var rig = Avatar.HeavyRig.Create(raptor, 0, 0.5f);
+        var driver = parts.Doors.First(d => 1 << d.Door == Avatar.CarRig.DriverDoor).Centre;
+        Check(parts.CarDoors && rig.DoorCount == 4 && rig.DoorPivot(Avatar.CarRig.DriverDoor) != null && driver.X < -0.5f && driver.Z < 0f && new Truck(raptor).CarDoors,
+            $"the Raptor's doors: {rig.DoorCount}, the driver's at ({F(driver.X, "F2")}, {F(driver.Z, "F2")}): front left");
+        rig.Free();
     }
 
     private static void Roads()

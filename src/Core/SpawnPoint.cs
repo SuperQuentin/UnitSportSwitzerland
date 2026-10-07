@@ -75,7 +75,7 @@ public partial class SpawnPoint : Node
     /// </summary>
     public static (double E, double N)? ParseOrigin() => ParseLv95("--origin");
 
-    private static (double E, double N)? ParseLv95(string flag)
+    public static (double E, double N)? ParseLv95(string flag)
     {
         var args = CmdArgs.All;
         var inv = System.Globalization.CultureInfo.InvariantCulture;

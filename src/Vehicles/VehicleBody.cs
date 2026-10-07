@@ -83,6 +83,9 @@ public partial class VehicleBody : CharacterBody3D
     /// <summary>A car's rig, for finding the door a player is at; null for anything else, or headless.</summary>
     public CarRig? Rig => _visual as CarRig;
 
+    /// <summary>Its doors worked one by one, a car's or the pickup's (#463); null when it has none here (or headless).</summary>
+    public IHingedDoors? Doors => _visual is IHingedDoors { DoorCount: > 0 } doors ? doors : null;
+
     /// <summary>
     /// The drawn machine, for outlining it (#261), and the frame of its first section (a parked
     /// train's others are its children named <c>Section{k}</c>). Null on a headless peer, but for a
@@ -357,7 +360,7 @@ public partial class VehicleBody : CharacterBody3D
     /// <summary>Opens or shuts one door. The authority's call: others ask <see cref="VehicleManager.ToggleDoor"/>.</summary>
     public void ToggleDoor(byte bit)
     {
-        if (Wrecked || Ride is not (Car or Truck { IsBus: true } or Steamer or Airliner)) return;
+        if (Wrecked || Ride is not (Car or Truck { IsBus: true } or Truck { CarDoors: true } or Steamer or Airliner)) return;
         DoorsOpen ^= (byte)(bit & 15);
         _shutDriverIn = 0f;   // a door someone chose to leave open stays open
     }
@@ -579,7 +582,7 @@ public partial class VehicleBody : CharacterBody3D
             if (_visual is HeavyRig bedRig) bedRig.BedLoad = BedLoad;
         }
         if (_visual is CarRig doors) doors.DoorsOpen = DoorsOpen;
-        else if (_visual is HeavyRig bus && Ride is Truck { IsBus: true })
+        else if (_visual is HeavyRig bus && Ride is Truck { IsBus: true } or Truck { CarDoors: true })
         {
             // the bus's leaves swing on its rig, an articulated one's on both halves
             bus.DoorsOpen = DoorsOpen;
@@ -634,7 +637,7 @@ public partial class VehicleBody : CharacterBody3D
             truck.UnpackFlags(_initial.Flags);
             if (truck.HasBed) truck.BedLoad = BedLoad;
             // a bus's doors are live, worked by its buttons as it rolls: not as the driver left them
-            if (truck.IsBus) truck.DoorsOpen = DoorsOpen;
+            if (truck.IsBus || truck.CarDoors) truck.DoorsOpen = DoorsOpen;
             _heavySpin += Velocity.Length() / truck.WheelRadius * dt;
             _dressedAtRest = Velocity == Vector3.Zero ? Wrecked : null;
             _heavySections ??= heavy.FindChildren("Section*", "", false, false).OfType<HeavyRig>().Prepend(heavy).ToArray();
@@ -731,7 +734,7 @@ public partial class VehicleBody : CharacterBody3D
             hull.GlobalTransform = poses[0] * new Transform3D(Basis.Identity, Ride.ParkedBox.Centre);
         // the extra boxes are the sections behind, in order — after a semi-trailer's own running
         // gear, which is part of its first section
-        bool gear = Ride is ParkedTrailer && bodies[0].Spec.Pivot != Coupling.Drawbar;
+        bool gear = Ride is ParkedTrailer { HasGearBox: true };
         int extra = 0;
         foreach (var (_, centre, _) in Ride.ExtraBoxes())
         {
@@ -747,7 +750,28 @@ public partial class VehicleBody : CharacterBody3D
         // one query for all its rays (a new one and a new exclude array per ray before, #221); not a
         // player: one standing in a parked bus by its front axle (up from the wheel, #162) was read as
         // the road, and the bus stood on their head, two metres up
-        World.GroundQuery.Under(this, _groundRay, _groundExclude ??= new Godot.Collections.Array<Rid> { GetRid() }, p, Terrain, pastPlayers: true);
+        World.GroundQuery.Under(this, _groundRay, _groundExclude ??= GroundExclude(), p, Terrain, pastPlayers: true);
+
+    /// <summary>Itself and what it carries (a boat on its trailer, #463): a parked trailer stood on its own boat's hull.</summary>
+    private Godot.Collections.Array<Rid> GroundExclude()
+    {
+        var rids = new Godot.Collections.Array<Rid> { GetRid() };
+        foreach (var c in _cargo) if (IsInstanceValid(c)) rids.Add(c.GetRid());
+        return rids;
+    }
+
+    private readonly List<PhysicsBody3D> _cargo = new();
+
+    /// <summary>A parked vehicle hooked to this carrier (<c>VehicleBody.Hold.cs</c>), or let go of it.</summary>
+    internal void Cargo(PhysicsBody3D body, bool on)
+    {
+        if (on == _cargo.Contains(body)) return;
+        if (on) _cargo.Add(body); else _cargo.Remove(body);
+        // stood again, its boxes too: it may have read the cargo as its ground before it was hooked
+        _groundExclude = null;
+        _standIn = 0f;
+        _stoodAsleep = false;
+    }
 
     /// <summary>Blows it up: the flag every peer watches. Only the authority calls this.</summary>
     public void Explode()
