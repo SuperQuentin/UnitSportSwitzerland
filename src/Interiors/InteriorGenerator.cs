@@ -114,6 +114,29 @@ public static partial class InteriorGenerator
         return layout;
     }
 
+    /// <summary>
+    /// Whether a block's underground garage door (#694) gets a ramp behind it: the plan of <see cref="Generate(Footprint, Building, bool, BuildingType)"/>
+    /// as far as the flats, no more. <see cref="BuildingFootprint"/> asks it of every place it considers for the door, so a door is only
+    /// cut where the planner (a wing plan, a stairwell where a joined wing's door stands) has a ramp for it.
+    /// </summary>
+    internal static bool PlansGarageRamp(Footprint fp, Building b, BuildingType type)
+    {
+        // as Generate gates it: an IKEA, a church, an industrial site is never a block of flats
+        if (type != BuildingType.None || BuildingTypes.SiteFor(fp.Key.ToString(), b.Kind, fp.Width, fp.Depth, b.MaxY - b.MinY) != BuildingType.None) return false;
+        var (h, n) = Storeys(b);
+        var layout = new InteriorLayout
+        {
+            Key = fp.Key.ToString(), Kind = b.Kind, Width = fp.Width, Depth = fp.Depth, StoreyHeight = h,
+            EntryX = fp.EntryX, EntryWidth = Math.Min(fp.Door.Width, 1.8f), DoorHeight = fp.Door.Height,
+        };
+        bool bank = BuildingFootprint.IsBank(fp);
+        var flats = ApartmentTypeFor(fp, b.Kind, n, bank);
+        if (flats == BuildingType.None) return false;
+        var rng = new Random(StableHash(fp.Key.ToString()));
+        return TryApartments(layout, fp, b, b.Kind, n, flats, rng)
+            && layout.Entrances.Any(e => e.Vehicle) && layout.Floors.Any(f => f.AllFlights().Any(x => x.Ramp));
+    }
+
     // ---- several ways in (#498) -------------------------------------------------------------
 
     /// <summary>Which way a room's wall faces, interior-local.</summary>

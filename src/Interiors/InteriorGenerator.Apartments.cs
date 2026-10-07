@@ -259,7 +259,7 @@ public static partial class InteriorGenerator
         // The garage's lane (#694): a stairwell never slides into it. A square ramp's column, or the
         // along-the-facade ramp's band and car park hall from the end wall.
         (float Lo, float Hi)? lane = null;
-        if (garageDoor && !o.Pinned && o.Links.Count == 0)
+        if (garageDoor && !o.Pinned)
         {
             var gd = fp.Doors.First(d => d.Vehicle && d.Width > 0 && d.Link.Any);
             float gxr = new Godot.Vector2(gd.Position.X - fp.Center.X, gd.Position.Z - fp.Center.Y).Dot(fp.AxisU);
@@ -281,9 +281,9 @@ public static partial class InteriorGenerator
         }
 
         // the garage ramp's column (#558): kept out of every floor's flats
-        RampWhy = null;
-        if (!o.Pinned && o.Links.Count == 0) a.Ramp = PlanRamp(a, fp);
-        else if (fp.Doors.Any(d => d.Vehicle)) RampWhy = "planned wing by wing";
+        if (garageDoor) RampWhy = null;   // only the wing with the garage door says why it has no ramp
+        if (!o.Pinned) a.Ramp = PlanRamp(a, fp);
+        else if (fp.Doors.Any(d => d.Vehicle)) RampWhy = "entered from another wing";
 
         l.Type = type;
         l.Below = below;
@@ -347,6 +347,11 @@ public static partial class InteriorGenerator
             float x = rel.Dot(fp.AxisU);
             float x0 = x - GarageRule.RampWidth / 2, x1 = x + GarageRule.RampWidth / 2;
             if (x0 < -a.Hw + 0.3f || x1 > a.Hw - 0.3f) return No($"the door is {x:F1} m along a {l.Width:F1} m plan box (the facade is longer than the box)");
+            // another wing joined off this one's end is reached by a corridor through the gap that holds the end wall's stairwell: a lane
+            // standing outside every stairwell on that side would wall it off
+            foreach (var (ls, _) in a.Links)
+                if (ls == Side.Left && x0 < a.Wells[0].X0 || ls == Side.Right && x1 > a.Wells[^1].X1)
+                    return No($"the lane stands between the stairwells and the end wall the next wing joins ({ls})");
             if (a.Wells.FirstOrDefault(w => x1 + 0.4f - 0.02f > w.X0 && x0 - 0.4f + 0.02f < w.X1) is { } hit)
                 return No($"the lane ({x0:F1}..{x1:F1}) meets the stairwell at {hit.X0:F1}..{hit.X1:F1}");
             float top = -a.Hd + GarageRule.RampApron;
@@ -581,7 +586,9 @@ public static partial class InteriorGenerator
             if (width < 1.2f) continue;
             // another wing joining this one at its end, or off its back in this gap, is reached by
             // the corridor off the back landing (#577)
-            bool linked = backed && a.Links.Any(k => k.Side == Side.Left && left == null || k.Side == Side.Right && right == null
+            // (the part of a gap beside the garage's lane is not the end of the wall: it runs to the lane, not to the wing beyond)
+            bool linked = backed && a.Links.Any(k => k.Side == Side.Left && left == null && g0 <= -a.Hw + 0.01f
+                || k.Side == Side.Right && right == null && g1 >= a.Hw - 0.01f
                 || k.Side == Side.Back && k.At > g0 && k.At < g1);
             bool corridor = linked || what switch
             {
@@ -968,7 +975,7 @@ public static partial class InteriorGenerator
     /// wall; and how much of a stretch of one of them faces out (#577: part of a wall may be the
     /// next wing's), <paramref name="Free"/>(0, 1 or 2 for those, from, to).
     /// </summary>
-    private sealed record Ext(bool U0, bool U1, bool Far, Func<int, float, float, float> Free)
+    internal sealed record Ext(bool U0, bool U1, bool Far, Func<int, float, float, float> Free)
     {
         public static Ext Plain(bool u0, bool u1, bool far) => new(u0, u1, far, (_, a, b) => b - a);
 
@@ -977,7 +984,7 @@ public static partial class InteriorGenerator
     }
 
     /// <summary>A room in the flat's own frame: u along the wall with the front door, v away from it.</summary>
-    private sealed record Local(RoomType Type, float U0, float V0, float U1, float V1);
+    internal sealed record Local(RoomType Type, float U0, float V0, float U1, float V1);
 
     /// <summary>
     /// Cuts [<paramref name="a"/>, <paramref name="b"/>] into consecutive slices, the order given:
@@ -1016,7 +1023,7 @@ public static partial class InteriorGenerator
     /// its other walls are the building's facades: the u = 0 end, the u = u end, the far wall.
     /// Returns the rooms, the entrance hall first.
     /// </summary>
-    private static List<Local> FlatRooms(float u, float v, float door, Ext ext, Random rng)
+    internal static List<Local> FlatRooms(float u, float v, float door, Ext ext, Random rng)
     {
         var program = FlatProgram(u * v, rng);
         // no more bedrooms than its facades can give a window each, beside the living room's (#571):
@@ -1089,6 +1096,9 @@ public static partial class InteriorGenerator
         }
         return score;
     }
+
+    /// <summary>The least a studio's kitchenette is deep, m (the validator's floor for a room is 1.0).</summary>
+    private const float MinKitchenette = 1.2f;
 
     /// <summary>A window fits in a wall this long (<see cref="AddWindows"/>: 1.1 m and 0.4 m either side).</summary>
     private const float WindowWall = 1.9f;
@@ -1311,12 +1321,16 @@ public static partial class InteriorGenerator
     /// room behind for sleeping and sitting (a bedroom, so it gets the bed). Where the door wall
     /// is too short for all three side by side, the kitchenette is a slice between them instead.
     /// </summary>
-    private static List<Local> StudioFlat(float u, float v, float door)
+    internal static List<Local> StudioFlat(float u, float v, float door)
     {
         float band = Math.Min(2.3f, v * 0.4f);
         float h0 = Fit(door - HallWidth / 2, 0, u - HallWidth), h1 = h0 + HallWidth;
         var rooms = new List<Local>();
-        if (v < 4.6f)
+        // the kitchenette of the stacked layout below is 35 % of what the band leaves: under 4.8 m deep that is under a metre
+        // (0.98 m at 4.65, a validator reject in 12 of the first garage blocks, #694), so a flat that shallow takes the shallow layout
+        float left0 = h0, right0 = u - h1;
+        bool sideBySide = left0 >= 1.7f && right0 >= 1.9f || right0 >= 1.7f && left0 >= 1.9f;
+        if (v < 4.6f || !sideBySide && (v - band) * 0.35f < MinKitchenette)
         {
             // too shallow to stack: along the wall, the hall at the door, the bathroom over the
             // kitchenette beside it, the room beyond; a sliver the other side of the hall is a cupboard
