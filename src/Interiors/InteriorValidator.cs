@@ -80,12 +80,13 @@ public static class InteriorValidator
                         // far as a car passing under the slab needs
                         foreach (var (px, pz, what) in new[] { (fl.TopEnd.X, fl.TopEnd.Z, "top"), (fl.Bottom.X, fl.Bottom.Z, "foot") })
                             if (RoomAt(l.Floors[f], px, pz) < 0) errors.Add($"floor {f} ramp {what} outside any room");
-                        float holeEnd = Math.Min(fl.ZTop, fl.ZBottom) + RampProfile.HoleLength(l.StoreyHeight * (fl.To - fl.From), l.StoreyHeight - InteriorGenerator.Slab);
-                        var need = new RectPlan(area.X0, Math.Min(fl.ZTop, fl.ZBottom), area.X1, holeEnd);
+                        float runDir = fl.RunDir, holeEnd = fl.ZTop + runDir * RampProfile.HoleLength(l.StoreyHeight * (fl.To - fl.From), l.StoreyHeight - InteriorGenerator.Slab);
+                        float h0 = Math.Min(fl.ZTop, holeEnd), h1 = Math.Max(fl.ZTop, holeEnd);
+                        var need = fl.AlongX ? new RectPlan(h0, fl.X0, h1, fl.X1) : new RectPlan(fl.X0, h0, fl.X1, h1);
                         if (!l.Floors[f + 1].Holes.Any(h => h.X0 <= need.X0 + 0.01f && h.X1 >= need.X1 - 0.01f
                                 && h.Z0 <= need.Z0 + 0.01f && h.Z1 >= need.Z1 - 0.01f))
                             errors.Add($"floor {f + 1} has no opening over the ramp from below");
-                        if (area.X1 - area.X0 < 3.0f) errors.Add($"floor {f} ramp is {area.X1 - area.X0:F1} m wide, a car needs 3");
+                        if (fl.X1 - fl.X0 < 3.0f) errors.Add($"floor {f} ramp is {fl.X1 - fl.X0:F1} m wide, a car needs 3");
                         continue;
                     }
                     if (!rooms.Any(core => area.X0 >= core.X0 - 0.01f && area.X1 <= core.X1 + 0.01f
@@ -162,14 +163,14 @@ public static class InteriorValidator
         {
             var ramps = l.Floors.SelectMany((fl, i) => fl.AllFlights().Where(x => x.Ramp).Select(x => (Floor: i, Flight: x))).ToList();
             if (l.Type is BuildingType.Apartments or BuildingType.MixedUse && !ramps.Any(r => r.Floor == l.Below - 1
-                    && Math.Abs(r.Flight.TopEnd.X - e.X) < r.Flight.X1 - r.Flight.X0 && l.GroundFloor.Rooms.Any(q => q.Type == RoomType.Ramp && Inside(q, r.Flight.TopEnd.X, r.Flight.TopEnd.Z)
+                    && (r.Flight.AlongX || Math.Abs(r.Flight.TopEnd.X - e.X) < r.Flight.X1 - r.Flight.X0) && l.GroundFloor.Rooms.Any(q => q.Type == RoomType.Ramp && Inside(q, r.Flight.TopEnd.X, r.Flight.TopEnd.Z)
                         && q.Openings.Any(o => o.Kind == OpeningKind.Entry && OnWall(q, o, e.X, e.Z)))))
                 errors.Add($"vehicle entrance for {e.Door} has no ramp behind it");
         }
         foreach (var (fi, ramp) in l.Floors.SelectMany((fl, i) => fl.AllFlights().Where(x => x.Ramp).Select(x => (i, x))))
         {
             var lane = ramp.Area();
-            var mouth = new RectPlan(ramp.X0, ramp.ZBottom, ramp.X1, ramp.ZBottom + GarageRule.RampTurn);
+            var mouth = ramp.FootZone(0, GarageRule.RampTurn, 0);
             foreach (var p in l.Furniture.Where(p => p.Floor == fi
                 && p.Type is not (FurnitureType.FloorMarking or FurnitureType.Rug)))
             {

@@ -30,6 +30,12 @@ public readonly record struct DoorSpot(int Index, Vector3 Position, Vector3 Outw
     /// </summary>
     public GarageLink Link { get; init; }
 
+    /// <summary>The ramp behind a garage door (#694): square to the front wall or along the facade; none on every other door.</summary>
+    public GarageRule.RampKind Ramp { get; init; }
+
+    /// <summary>Along the facade, which way the descent runs: +1 toward +X of the plan frame (the garage at its low end), -1 the other way.</summary>
+    public int RampDir { get; init; }
+
     /// <summary>The building's kind, so door consumers need not keep the tile.</summary>
     public BuildingKind Kind { get; init; }
     /// <summary>A bank (<see cref="BuildingFootprint.IsBank"/>): a sign over the door, a teller desk inside.</summary>
@@ -251,6 +257,9 @@ public static class BuildingFootprint
 
     public static Footprint? Compute(BuildingTile tile, int index, RoadTile? roads, ChunkGrid? grid) =>
         Compute(tile, index, (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true)), grid);
+
+    /// <summary>A tile's street centrelines as a garage door's road link reads them (#694 probe).</summary>
+    internal static List<GarageLink.Road> StreetRoads(RoadTile? roads) => RoadPoints.Build(roads).Roads;
 
     /// <summary>The street point a front door here would face, as <see cref="Compute"/> aims doors.</summary>
     public static Vector2? StreetNear(RoadTile? roads, Vector2 at) =>
@@ -476,12 +485,18 @@ public static class BuildingFootprint
             }
         }
 
-        // ---- an underground garage door (#558) -------------------------------------------
-        // Only a block of flats with two front doors, a basement car park (GarageRule, the same
-        // predicate the generator's basement answers to) and a good roll, and only where a road
-        // can be reached from it: no road in front, no door. It claims its slot in the budget
-        // before the pedestrian doors, on the front wall between two of its entrances.
-        if (found && door.Width > 0 && main != null && extras.Count + 1 < budget && roads.Streets.Roads.Count > 0
+        // ---- an underground garage door, ramp first (#694) --------------------------------
+        // Decided from the plan box and the road alone (GarageRule.RampFor: a ramp square to the front wall
+        // or along the facade fits, the roll passes, a street is in reach): no front-door count, no car park
+        // to wait for. The door takes its own slot beyond the budget, flush with one end of the front wall;
+        // the entrance (and its stairwell) keeps clear of the lane, and moves along the wall if it stood in it.
+        DoorSpot? garage = null;
+        GarageRule.RampKind rampKind = GarageRule.RampKind.None;
+        GarageWhyNot = null;
+        bool garageLeft = true;
+        float keepX = 0;   // front-wall entrances stay at or beyond this plan x (from the garage's end)
+        Func<Vector2, float>? planX = null;
+        if (found && door.Width > 0 && main != null && roads.Streets.Roads.Count > 0
             && roof.Count > 0 && PlannedAsBox(b, center, u, new Vector2(door.Outward.X, door.Outward.Z), w, dpt))
         {
             var (storeyH, above) = InteriorGenerator.Storeys(b);
@@ -492,73 +507,122 @@ public static class BuildingFootprint
             // the plan's own frame: the box edge the main door is on is its front wall
             bool frontAlongV = Math.Abs(frontOut.Dot(u)) < 0.5f;
             float frontW = Mathf.Clamp(frontAlongV ? w : dpt, MinSide, MaxSide), frontD = Mathf.Clamp(frontAlongV ? dpt : w, MinSide, MaxSide);
-            int frontDoors = Math.Min(DoorBudget.AlongRun(main.S1 - main.S0, DoorBudget.ServiceWidth, DoorBudget.MaxPerWall).Length, budget - 1);
-            if (GarageRule.Wanted(key.ToString(), type, above, frontW, frontD, storeyH, frontDoors))
+            rampKind = GarageRule.RampFor(key.ToString(), type, above, frontW, frontD, storeyH);
+            if (rampKind != GarageRule.RampKind.None)
             {
-                DoorSpot? Garage(Cand c, float off)
+                bool lift = GarageRule.LiftIn(above);
+                float hw = frontW / 2, wellW = GarageRule.WellWidth(lift);
+                // the plan frame's U axis, as the interior frame below derives it
+                var planCandidates = new[] { u, -u, new Vector2(-u.Y, u.X), new Vector2(u.Y, -u.X) };
+                var planBack = -planCandidates.OrderByDescending(c => c.Dot(frontOut)).First();
+                var planU = new Vector2(planBack.Y, -planBack.X);
+                var tw = new Vector2(-main.Normal.Y, main.Normal.X);
+                float wallX0 = (main.Normal * main.Offset - center).Dot(planU), along = tw.Dot(planU);
+                float mainX = (new Vector2(door.Position.X, door.Position.Z) - center).Dot(planU);
+                Vector2 AtX(float x) => main.Normal * main.Offset + tw * ((x - wallX0) / along);
+                planX = xz => (xz - center).Dot(planU);
+                float GroundAt(Vector2 xz) => grid != null
+                    ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
+                    : b.MinY + 0.8f;
+
+                DoorSpot? Why(string why) { GarageWhyNot = why; return null; }
+                DoorSpot? GarageAt(float x)
                 {
                     float gw = GarageRule.Width;
-                    float mid = (c.S0 + c.S1) * 0.5f + off;
-                    if (mid - gw / 2 < c.S0 + DoorBudget.EndMargin || mid + gw / 2 > c.S1 - DoorBudget.EndMargin) return null;
-                    var t = new Vector2(-c.Normal.Y, c.Normal.X);
-                    var xz = c.Normal * c.Offset + t * mid;
-                    if (Covered(xz)) return null;
-                    // inside the plan box (a facade longer than its 120 m clamp has doors past it)
-                    if (Math.Abs((xz - center).Dot(t)) > frontW / 2 - GarageRule.RampWidth / 2 - 0.5f) return null;
-                    float ground = grid != null
-                        ? (float)grid.SampleMeshHeight(tile.Id.MinE + xz.X, tile.Id.MaxN - xz.Y)
-                        : b.MinY + 0.8f;
+                    var xz = AtX(x);
+                    float s = tw.Dot(xz);
+                    if (s - gw / 2 < main.S0 + DoorBudget.EndMargin || s + gw / 2 > main.S1 - DoorBudget.EndMargin) return Why($"the front wall run ends before the lane (run {main.S1 - main.S0:F1} of {frontW:F1}, door at {s - main.S0:F1} x {x:F1})");
+                    if (Covered(xz)) return Why("covered by another solid");
+                    float ground = GroundAt(xz);
                     float baseY = Math.Max(ground, b.MinY);
                     float gh = Math.Min(GarageRule.Height, box.Eave - baseY - DoorUnderEave);
-                    if (gh < 2.2f || ground < b.MinY - 0.6f || ground > b.MaxY - gh - 0.3f) return null;
-                    var link = GarageLink.Choose(xz + c.Normal * 0.03f, c.Normal, roads.Streets.Roads);
-                    if (!link.Any) return null;
+                    if (gh < 2.2f || ground < b.MinY - 0.6f || ground > b.MaxY - gh - 0.3f) return Why("the wall is too low or on stilts there");
+                    var link = GarageLink.Choose(xz + main.Normal * 0.03f, main.Normal, roads.Streets.Roads);
+                    if (!link.Any) return Why("no road link from that end of the wall");
                     if (link.Kind == LinkKind.Stub && grid != null)
                     {
                         // the stub is a straight line between two heights: where the ground between them
                         // stands higher it would lie buried, so the stub is humped over it
-                        var outV = c.Normal;
                         var samples = new List<(float, float)>();
                         for (int i = 1; i < 16; i++)
                             foreach (float side in new[] { -2.2f, -1f, 0f, 1f, 2.2f })
                             {
                                 float at = i / 16f, o = link.Length * at;
-                                var p = xz + outV * o + t * side;
+                                var p = xz + main.Normal * o + tw * side;
                                 float gy = (float)grid.SampleMeshHeight(tile.Id.MinE + p.X, tile.Id.MaxN - p.Y);
                                 samples.Add((at, gy - (baseY + (link.RoadY - baseY) * at) - 0.03f));
                             }
-                        if (!GarageLink.Humpable(samples)) return null;
+                        if (!GarageLink.Humpable(samples)) return Why("the ground rises too far to the road");
                         link = link with { Hump = GarageLink.HumpFor(samples) };
                     }
                     var spot = new DoorSpot(index,
-                        new Vector3(xz.X + c.Normal.X * 0.03f, baseY, xz.Y + c.Normal.Y * 0.03f),
-                        new Vector3(c.Normal.X, 0, c.Normal.Y), gw, gh)
+                        new Vector3(xz.X + main.Normal.X * 0.03f, baseY, xz.Y + main.Normal.Y * 0.03f),
+                        new Vector3(main.Normal.X, 0, main.Normal.Y), gw, gh)
                     {
                         Slot = extras.Count + 1, Hang = DoorHang.RollUp, Vehicle = true, Link = link,
                     };
-                    // clear of every other door by a stairwell and the lane (GarageRule.StairClear): the ramp
-                    // runs between two stairwells, and a pedestrian door within reach would put one in it
-                    bool clear = new Vector2(door.Position.X, door.Position.Z).DistanceTo(xz) >= GarageRule.StairClear
-                        && extras.All(q => new Vector2(q.Position.X, q.Position.Z).DistanceTo(xz) >= GarageRule.StairClear);
-                    return DoorOnWall(b, spot) && clear && !TooClose(door, spot) && !extras.Any(q => TooClose(q, spot)) ? spot : null;
+                    return DoorOnWall(b, spot) ? spot : Why("not on a wall (the facade has a recess)");
                 }
-                DoorSpot? garage = null;
-                // On the front wall, halfway between two entrances (which stand Spacing apart): the ramp
-                // behind it runs straight in from the door between two stairwells (PR 2). A door on any
-                // other wall had no ramp to lead to.
-                var entrances = DoorBudget.AlongRun(main.S1 - main.S0, DoorBudget.ServiceWidth, budget - 1);
-                bool Entrance(float at) => entrances.Any(e => Math.Abs(e - at) < 0.5f);
-                for (int k = 1; garage == null && k <= DoorBudget.MaxPerWall; k++)
-                    foreach (float off in new[] { DoorBudget.Spacing * (k - 0.5f), -DoorBudget.Spacing * (k - 0.5f) })
-                        // with an entrance, and so a stairwell, on both sides of it: the lane then
-                        // stands in the gap between two of them
-                        if (Entrance(off - DoorBudget.Spacing / 2) && Entrance(off + DoorBudget.Spacing / 2)
-                            && (garage = Garage(main, off)) != null) break;
-                if (garage is { } g) extras.Add(g);
+
+                // the stretch of the plan's X the front wall's run covers (a facade is often stepped: the run the
+                // door can stand on is shorter than the box), the door a metre and a half either side of its centre
+                float xr0 = Math.Min(wallX0 + main.S0 * along, wallX0 + main.S1 * along);
+                float xr1 = Math.Max(wallX0 + main.S0 * along, wallX0 + main.S1 * along);
+                float doorLo = xr0 + DoorBudget.EndMargin + GarageRule.Width / 2 + 0.03f, doorHi = xr1 - DoorBudget.EndMargin - GarageRule.Width / 2 - 0.03f;
+                float keepOut = GarageRule.AlongKeepOut(storeyH), laneHalf = GarageRule.RampWidth / 2;
+                // each candidate: the garage door's x, the stretch of the facade the ramp holds, and which way the
+                // descent runs (+1 toward +X from the low end of the facade, -1 from the high end)
+                var cand = new List<(float Gx, float Lo, float Hi, int Dir)>();
+                if (rampKind == GarageRule.RampKind.Along)
+                {
+                    float gl = Math.Max(-hw + GarageRule.AlongDoorX, doorLo);
+                    if (gl <= doorHi) cand.Add((gl, gl - GarageRule.AlongDoorX, gl - GarageRule.AlongDoorX + keepOut, +1));
+                    float gr = Math.Min(hw - GarageRule.AlongDoorX, doorHi);
+                    if (gr >= doorLo) cand.Add((gr, gr + GarageRule.AlongDoorX - keepOut, gr + GarageRule.AlongDoorX, -1));
+                }
+                else
+                {
+                    float gl = Math.Max(-hw + GarageRule.EndMargin + laneHalf, doorLo);
+                    float gr = Math.Min(hw - GarageRule.EndMargin - laneHalf, doorHi);
+                    if (gl <= Math.Min(hw - GarageRule.EndMargin - laneHalf, doorHi)) cand.Add((gl, gl - laneHalf, gl + laneHalf, +1));
+                    if (gr >= Math.Max(-hw + GarageRule.EndMargin + laneHalf, doorLo)) cand.Add((gr, gr - laneHalf, gr + laneHalf, -1));
+                }
+                // the one the entrance is already clear of first, then the one further from it
+                cand = cand.OrderBy(c => (c.Dir > 0 ? mainX < c.Hi + GarageRule.LaneGap + wellW / 2 : mainX > c.Lo - GarageRule.LaneGap - wellW / 2) ? 1 : 0)
+                    .ThenByDescending(c => Math.Abs(mainX - c.Gx)).ToList();
+                if (cand.Count == 0) GarageWhyNot = $"the front wall run is {main.S1 - main.S0:F1} m of the box's {frontW:F1}: no room for the lane on it";
+                foreach (var (gx, laneLo, laneHi, dir) in cand)
+                {
+                    bool left = dir > 0;
+                    float minIn = left ? laneHi + GarageRule.LaneGap + wellW / 2 : laneLo - GarageRule.LaneGap - wellW / 2;
+                    if (GarageAt(gx) is not { } spot) continue;
+                    // the entrance: where it stands if clear of the lane, else slid along the wall to just clear of it
+                    bool inLane = left ? mainX < minIn : mainX > minIn;
+                    if (inLane)
+                    {
+                        // a stairwell cannot stand there: the main door moves to the lane's edge, if its wall run reaches
+                        float lim = hw - wellW / 2;
+                        if (left ? minIn > lim + 0.01f : minIn < -lim - 0.01f) { GarageWhyNot = "no room for the entrance beside the lane"; continue; }
+                        var xz = AtX(minIn);
+                        float sm = tw.Dot(xz);
+                        if (sm - door.Width / 2 < main.S0 + 0.3f || sm + door.Width / 2 > main.S1 - 0.3f) { GarageWhyNot = "the entrance would stand off the wall run beside the lane"; continue; }
+                        float g0 = GroundAt(xz), by = Math.Max(g0, b.MinY);
+                        var moved = door with { Position = new Vector3(xz.X + main.Normal.X * 0.03f, by, xz.Y + main.Normal.Y * 0.03f) };
+                        if (!DoorOnWall(b, moved) || Covered(xz) || g0 < b.MinY - 0.6f || g0 > b.MaxY - moved.Height - 0.3f) { GarageWhyNot = "the entrance cannot move beside the lane"; continue; }
+                        door = moved;
+                    }
+                    garage = spot with { Ramp = rampKind, RampDir = dir };
+                    garageLeft = left;
+                    keepX = minIn;
+                    break;
+                }
+                if (garage == null) rampKind = GarageRule.RampKind.None;
             }
         }
+        if (garage is { } garageDoor) extras.Add(garageDoor);
 
-        if (found && door.Width > 0 && budget > 1 + extras.Count)
+        int pedBudget = budget + (garage != null ? 1 : 0);   // the garage door has a slot of its own (#694)
+        if (found && door.Width > 0 && pedBudget > 1 + extras.Count)
         {
             var (serviceW, serviceH) = ServiceDoorFor(kind);
             var placed = new List<DoorSpot> { door };
@@ -568,12 +632,12 @@ public static class BuildingFootprint
             order.AddRange(ranked.OrderByDescending(r => r.Score).Where(c => c != main));
             foreach (var c in order)
             {
-                if (placed.Count >= budget) break;
+                if (placed.Count >= pedBudget) break;
                 float mid = (c.S0 + c.S1) * 0.5f;
                 var t = new Vector2(-c.Normal.Y, c.Normal.X);
                 foreach (float off in DoorBudget.AlongRun(c.S1 - c.S0, serviceW, DoorBudget.MaxPerWall))
                 {
-                    if (placed.Count >= budget) break;
+                    if (placed.Count >= pedBudget) break;
                     if (off == 0 && c == main) continue; // the main door already stands there
                     var xz = c.Normal * c.Offset + t * (mid + off);
                     if (Covered(xz)) continue;
@@ -597,7 +661,8 @@ public static class BuildingFootprint
                     };
                     if (!DoorOnWall(b, spot)) continue;
                     if (placed.Any(q => TooClose(q, spot))) continue;
-                    // a pedestrian door (and its stairwell) keeps clear of a garage door's ramp (#558)
+                    // a front-wall entrance (and its stairwell) keeps clear of the ramp's lane and car park (#694), any other door of the garage door
+                    if (garage != null && planX != null && c.Normal.Dot(main!.Normal) > 0.9f && (garageLeft ? planX(xz) < keepX - 0.01f : planX(xz) > keepX + 0.01f)) continue;
                     if (placed.Any(q => q.Link.Any && new Vector2(q.Position.X, q.Position.Z).DistanceTo(xz) < GarageRule.StairClear)) continue;
                     placed.Add(spot);
                     extras.Add(spot);
@@ -665,7 +730,10 @@ public static class BuildingFootprint
     /// Whether the generator plans this building as its one box and not wing by wing (<see cref="PlanOutline"/>
     /// on the same frame <c>Compute</c> ends with): a garage's ramp (#558) is planned only in a whole block.
     /// </summary>
-    private static bool PlannedAsBox(Building b, Vector2 center, Vector2 u, Vector2 outward, float w, float dpt)
+    /// <summary>Why the last garage door of this thread was not placed (the real-data probe, #694).</summary>
+    [ThreadStatic] internal static string? GarageWhyNot;
+
+    internal static bool PlannedAsBox(Building b, Vector2 center, Vector2 u, Vector2 outward, float w, float dpt)
     {
         var candidates = new[] { u, -u, new Vector2(-u.Y, u.X), new Vector2(u.Y, -u.X) };
         var edge = candidates.OrderByDescending(c => c.Dot(outward)).First();

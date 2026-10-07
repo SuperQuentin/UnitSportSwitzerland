@@ -247,7 +247,7 @@ public partial class GarageProbe : Node
     private Interiors.DoorIndex.Entry? StandAtGarage(FootPlayer me, float outward, float aside)
     {
         // a door to DRIVE through: on a works that is a loading bay and never the office door (#531)
-        if (Interiors.DoorIndex.NearestOfKind(me.GlobalPosition, Interiors.DoorSearch.KindReach, TargetKind,
+        if (Interiors.DoorIndex.NearestOfKind(me.GlobalPosition, Interiors.DoorSearch.KindReach, TargetKind, also: RampFilter,
                 vehicleOnly: true) is not { } door) return null;
         var o = door.Outward;
         var at = door.World + o * outward + new Vector3(-o.Z, 0, o.X) * aside;
@@ -297,7 +297,14 @@ public partial class GarageProbe : Node
         if (_readyAt < 0) return;
         if (at(_readyAt + 3)) Log($"SetRide {FirstCar}: {me.SetRide(FirstCar)}");
         // the watcher needs a moment to see the car before it moves
-        if (at(CmdArgs.Float("--drive-at") ?? _readyAt + 7)) { _from = me.GlobalPosition; Input.ActionPress(PlayerInput.Throttle); _drive = 1; Log($"throttle, {Where(me)}"); }
+        if (at(CmdArgs.Float("--drive-at") ?? _readyAt + 7))
+        {
+            _from = me.GlobalPosition;
+            Input.ActionPress(PlayerInput.Throttle);
+            _drive = AlongMode ? 10 : 1;
+            Log($"throttle, {Where(me)}");
+        }
+        if (AlongMode && _drive is 10 or 11 or 12) AlongStep(me);
         float gone = new Vector2(me.GlobalPosition.X - _from.X, me.GlobalPosition.Z - _from.Z).Length();
         // how far below the door's floor the car has been (a garage's ramp is a storey, #558), and a
         // look at it from the driver's seat, windowed, on the way down
@@ -364,7 +371,13 @@ public partial class GarageProbe : Node
             _stepAt = _t;
         }
         // and out again, backwards
-        if (_drive == 5 && _t - _stepAt > 3)
+        if (_drive == 5 && _t - _stepAt > 3 && AlongMode)
+        {
+            // along the facade the way out is a turn: drive it forward from the hall, up the ramp and round to the door
+            Log($"in again: ride {me.Ride}, {Where(me)}; driving out along the ramp");
+            StartOutPath(me);
+        }
+        if (_drive == 5 && _t - _stepAt > 3 && !AlongMode)
         {
             Log($"in again: ride {me.Ride}, {Where(me)}; reversing out");
             _from = me.GlobalPosition;
@@ -396,6 +409,146 @@ public partial class GarageProbe : Node
     /// ramp has to ask it open again (#558).
     /// </summary>
     private static float ParkWait => CmdArgs.Float("--park-wait") ?? 0f;
+
+    // ---- a ramp along the facade (#694): the way in and out is a 90 degree turn, so it is steered ---------------------
+
+    /// <summary><c>--garageramp along</c> (or <c>square</c>): the garage whose ramp has that shape is the one driven.</summary>
+    private static string? RampArg => CmdArgs.Value("--garageramp");
+    private static bool AlongMode => RampArg == "along";
+    private static Func<Interiors.DoorIndex.Entry, bool>? RampFilter => RampArg switch
+    {
+        "along" => e => e.Ramp == Interiors.GarageRule.RampKind.Along,
+        "square" => e => e.Ramp == Interiors.GarageRule.RampKind.Square,
+        _ => null,
+    };
+
+    private List<Vector2>? _path;
+    private int _pathAt;
+    private Interiors.InteriorLayout? _plan;
+    private Transform3D _place;
+    private Vector2 _exitAt;
+    private double _pathLog;
+
+    private Vector3 PathWorld(Vector2 p) => _place * new Vector3(p.X, _plan == null ? 0 : _plan.FloorY(_plan.Below - 1) + 0.1f, p.Y);
+
+    /// <summary>The plan's ramp: the way in is the door, a quarter circle off it, the lane and the hall; the way out is the same backwards.</summary>
+    private (List<Vector2> In, List<Vector2> Out)? BuildPaths(Interiors.InteriorLayout l)
+    {
+        var ramp = l.Floors[Math.Max(0, l.Below - 1)].AllFlights().FirstOrDefault(f => f.Ramp);
+        var door = l.Entrances.FirstOrDefault(e => e.Vehicle);
+        if (ramp == null || door == null || !ramp.AlongX) return null;
+        float dir = ramp.RunDir, lane = (ramp.X0 + ramp.X1) / 2, gx = door.X, front = door.Z;
+        float r = lane - front;
+        var arc = new List<Vector2> { new(gx, front + 0.6f) };
+        foreach (float deg in new[] { 25f, 45f, 65f, 82f })
+        {
+            float th = Mathf.DegToRad(deg);
+            arc.Add(new Vector2(gx + dir * r - dir * r * Mathf.Cos(th), front + r * Mathf.Sin(th)));
+        }
+        var inPath = new List<Vector2>(arc)
+        {
+            new(ramp.ZTop, lane), new((ramp.ZTop + ramp.ZBottom) / 2, lane), new(ramp.ZBottom, lane), new(ramp.ZBottom + dir * 5f, lane),
+        };
+        var outPath = new List<Vector2> { new(ramp.ZBottom + dir * 3f, lane), new(ramp.ZBottom, lane), new((ramp.ZTop + ramp.ZBottom) / 2, lane), new(ramp.ZTop, lane) };
+        for (int i = arc.Count - 1; i >= 0; i--) outPath.Add(arc[i]);
+        outPath.Add(new Vector2(gx, front - 4f));   // on through the door: steered at it until the portal takes the car out
+        _exitAt = new Vector2(gx, front);
+        return (inPath, outPath);
+    }
+
+    private void StartOutPath(FootPlayer me)
+    {
+        if (_plan == null || BuildPaths(_plan) is not { } p) { Log("RESULT: FAILED (no plan for the way out)"); GetTree().Quit(); return; }
+        _path = p.Out;
+        _pathAt = 1;
+        var start = PathWorld(_path[0]);
+        var d = PathWorld(_path[1]) - start;
+        me.PlaceAt(start + Vector3.Up * 0.3f, Mathf.Atan2(-d.X, -d.Z));
+        me.Velocity = Vector3.Zero;
+        Input.ActionPress(PlayerInput.Throttle);
+        _drive = 12;
+    }
+
+    /// <summary>
+    /// Pure pursuit on the plan's own frame, with the arrow keys: throttle up to 14 km/h, steer toward the first
+    /// waypoint 3 m ahead. 10: straight through the door; 11: the way in to the end of the hall; 12: the way out.
+    /// </summary>
+    private void AlongStep(FootPlayer me)
+    {
+        bool inside = Interiors.InteriorManager.InInteriorSpace(me.GlobalPosition);
+        if (_drive == 10)
+        {
+            // outside: straight at the door (the car was lined up), until the portal takes it in
+            if (!inside) return;
+            _plan = Interiors.InteriorManager.Instance?.LayoutAt(me.GlobalPosition);
+            if (_plan == null || me.Terrain?.Origin is not { } origin) return;
+            _place = Interiors.InteriorManager.PlacementFor(_plan, origin);
+            if (BuildPaths(_plan) is not { } paths) { Log("RESULT: FAILED (the plan has no ramp along X)"); GetTree().Quit(); return; }
+            _path = paths.In;
+            _pathAt = 1;
+            _drive = 11;
+            Log($"inside, following the way in ({_path.Count} points)");
+        }
+        if (_path == null && _drive == 12 && (_pathLog -= GetPhysicsProcessDeltaTime()) <= 0)
+        {
+            _pathLog = 0.5;
+            var l2 = _place.AffineInverse() * me.GlobalPosition;
+            Log($"  to the door: at ({l2.X:F1},{l2.Z:F1}) y {me.GlobalPosition.Y - Interiors.InteriorManager.InteriorBaseY:F2} v {me.GroundSpeed * 3.6f:F0} km/h door {(_target is { } tg2 && Interiors.InteriorManager.Instance?.IsOpen(tg2.Key.ToString()) == true ? "open" : "shut")}");
+        }
+        if (_path == null || _drive == 10) return;
+        if (_drive == 12 && !inside)
+        {
+            ReleaseDrive();
+            Input.ActionPress(PlayerInput.Brake);
+            _outAgain = true;
+            _drive = 7;
+            _stepAt = _t;
+            Log($"out through the door, {Where(me)}");
+            return;
+        }
+        var pos = me.GlobalPosition;
+        int last = _path.Count - 1;
+        while (_pathAt < last && new Vector2(PathWorld(_path[_pathAt]).X - pos.X, PathWorld(_path[_pathAt]).Z - pos.Z).Length() < 2.2f) _pathAt++;
+        var aim = PathWorld(_path[_pathAt]);
+        float toEnd = new Vector2(PathWorld(_path[last]).X - pos.X, PathWorld(_path[last]).Z - pos.Z).Length();
+        if (_pathAt == last && toEnd < 1.5f)
+        {
+            ReleaseDrive();
+            if (_drive == 11)
+            {
+                Input.ActionPress(PlayerInput.Brake);
+                Log($"at the end of the way in, {Where(me)}; braking");
+                _drive = 2;
+            }
+            else
+            {
+                // at the door: straight on through it
+                Input.ActionPress(PlayerInput.Throttle);
+                _path = null;
+            }
+            return;
+        }
+        var fwd = -me.GlobalBasis.Z;
+        var to = new Vector3(aim.X - pos.X, 0, aim.Z - pos.Z);
+        float err = new Vector3(fwd.X, 0, fwd.Z).SignedAngleTo(to, Vector3.Up);
+        if (err > 0.05f) { Input.ActionPress(PlayerInput.MoveLeft); Input.ActionRelease(PlayerInput.MoveRight); }
+        else if (err < -0.05f) { Input.ActionPress(PlayerInput.MoveRight); Input.ActionRelease(PlayerInput.MoveLeft); }
+        else { Input.ActionRelease(PlayerInput.MoveLeft); Input.ActionRelease(PlayerInput.MoveRight); }
+        if (me.GroundSpeed * 3.6f < 14f) Input.ActionPress(PlayerInput.Throttle); else Input.ActionRelease(PlayerInput.Throttle);
+        if ((_pathLog -= GetPhysicsProcessDeltaTime()) <= 0)
+        {
+            _pathLog = 0.5;
+            var local = _place.AffineInverse() * pos;
+            Log($"  path {_pathAt}/{last} at ({local.X:F1},{local.Z:F1}) y {pos.Y - Interiors.InteriorManager.InteriorBaseY:F2} err {Mathf.RadToDeg(err):F0} deg v {me.GroundSpeed * 3.6f:F0} km/h");
+        }
+    }
+
+    private static void ReleaseDrive()
+    {
+        Input.ActionRelease(PlayerInput.Throttle);
+        Input.ActionRelease(PlayerInput.MoveLeft);
+        Input.ActionRelease(PlayerInput.MoveRight);
+    }
 
     private double _stepAt;
     private bool _parkedIn, _outAgain;

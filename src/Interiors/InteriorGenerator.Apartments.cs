@@ -119,6 +119,16 @@ public static partial class InteriorGenerator
         public float Center => (X0 + X1) / 2;
         /// <summary>The ground floor's ramp room and the basement's, set as they are laid out.</summary>
         public int GroundRoom = -1, BasementRoom = -1;
+
+        // ---- along the facade (#694): the same numbers, but in X, which way the descent runs, and the room round it
+        /// <summary>Whether the ramp runs along the facade: then <c>Top</c>, <c>Foot</c> and <c>HoleEnd</c> are plan X, <c>X0..X1</c> the ground floor ramp room.</summary>
+        public bool Along;
+        /// <summary>+1: the descent runs toward +X from the facade's low end, -1 the other way.</summary>
+        public int Dir = 1;
+        /// <summary>The lane's extent in Z (3.6 m, against the stairwell's half landing wall); the band is Z <c>-Hd..BandZ1</c>.</summary>
+        public float LaneZ0, LaneZ1, BandZ1;
+        /// <summary>Plan X where the basement's ramp room ends and the car park hall begins, and where that hall ends (the stairwell's wall); the band starts at <c>BandX0</c> (its garage end).</summary>
+        public float ParkX, WellEdge, BandX0;
     }
 
     private sealed class Apt
@@ -163,7 +173,9 @@ public static partial class InteriorGenerator
         bool mixed = type == BuildingType.MixedUse;
 
         // ---- the stair, which sets the stairwell's depth -----------------------------------
-        int below = o.Below ?? AptBasement(l.Key, mixed, above, W * D);
+        // a block with a garage door (#694) has the basement it leads to, whatever its own seed says
+        bool garageDoor = fp.Doors.Any(d => d.Vehicle && d.Width > 0 && d.Link.Any);
+        int below = o.Below ?? (garageDoor ? 1 : AptBasement(l.Key, mixed, above, W * D));
         int floors = above + below;
         bool stairs = floors > 1;
         // a stairwell climbs a storey in two flights round a half landing (#571): each flight is
@@ -244,14 +256,26 @@ public static partial class InteriorGenerator
         // block with one stairwell goes to the nearer end outright: one flat a floor, as a Swiss
         // three-family house is, beats two slivers either side of the stair. Not in a wing
         // entered from the next one: its sliver is a box room instead.
+        // The garage's lane (#694): a stairwell never slides into it. A square ramp's column, or the
+        // along-the-facade ramp's band and car park hall from the end wall.
+        (float Lo, float Hi)? lane = null;
+        if (garageDoor && o.Free == null && !o.Pinned && o.Links.Count == 0)
+        {
+            var gd = fp.Doors.First(d => d.Vehicle && d.Width > 0 && d.Link.Any);
+            float gxr = new Godot.Vector2(gd.Position.X - fp.Center.X, gd.Position.Z - fp.Center.Y).Dot(fp.AxisU);
+            lane = gd.Ramp == GarageRule.RampKind.Along
+                ? (gd.RampDir > 0 ? (gxr - GarageRule.AlongDoorX, gxr - GarageRule.AlongDoorX + GarageRule.AlongKeepOut(h)) : (gxr + GarageRule.AlongDoorX - GarageRule.AlongKeepOut(h), gxr + GarageRule.AlongDoorX))
+                : (gxr - GarageRule.RampWidth / 2, gxr + GarageRule.RampWidth / 2);
+        }
+        bool Hits(float x0, float x1) => lane is { } ln && x1 + GarageRule.LaneGap > ln.Lo + 0.01f && x0 - GarageRule.LaneGap < ln.Hi - 0.01f;
         if (!o.Pinned)
         {
             var w0 = a.Wells[0];
             var wn = a.Wells[^1];
             float gl = w0.X0 + hw, gr = hw - wn.X1;
             bool small = a.Wells.Count == 1 && gl + gr < 2 * (MinFlatSide + 2.6f);
-            if (gl > 0.01f && (gl < MinFlatSide || small && gl <= gr)) { w0.X0 -= gl; w0.X1 -= gl; }
-            else if (gr > 0.01f && (gr < MinFlatSide || small)) { wn.X0 += gr; wn.X1 += gr; }
+            if (gl > 0.01f && (gl < MinFlatSide || small && gl <= gr) && !Hits(w0.X0 - gl, w0.X1 - gl)) { w0.X0 -= gl; w0.X1 -= gl; }
+            else if (gr > 0.01f && (gr < MinFlatSide || small) && !Hits(wn.X0 + gr, wn.X1 + gr)) { wn.X0 += gr; wn.X1 += gr; }
             gr = hw - wn.X1;
             if (a.Wells.Count > 1 && gr > 0.01f && gr < MinFlatSide) { wn.X0 += gr; wn.X1 += gr; }
         }
@@ -308,6 +332,8 @@ public static partial class InteriorGenerator
         RampColumn? No(string why) { RampWhy = why; return null; }
         if (!fp.Doors.Any(d => d.Vehicle && d.Width > 0)) return null;
         if (a.Below < 1 || !a.Stairs || !a.Passage) return No("no basement or no passage");
+        foreach (var gdoor in fp.Doors)
+            if (gdoor.Vehicle && gdoor.Width > 0 && gdoor.Ramp == GarageRule.RampKind.Along) return PlanAlong(a, fp, gdoor);
         bool strip = a.Hd - a.ZB1 >= GarageRule.StripDepth && l.Width >= GarageRule.StripWidth;
         if (!strip) return No($"no car park strip ({a.Hd - a.ZB1:F1} m behind the stairwells)");
         if (!GarageRule.HasRamp(l.Depth, l.StoreyHeight)) return No($"too shallow ({l.Depth:F1} m for {GarageRule.RampDepth(l.StoreyHeight):F1})");
@@ -321,13 +347,52 @@ public static partial class InteriorGenerator
             float x = rel.Dot(fp.AxisU);
             float x0 = x - GarageRule.RampWidth / 2, x1 = x + GarageRule.RampWidth / 2;
             if (x0 < -a.Hw + 0.3f || x1 > a.Hw - 0.3f) return No($"the door is {x:F1} m along a {l.Width:F1} m plan box (the facade is longer than the box)");
-            if (a.Wells.FirstOrDefault(w => x1 + 0.4f > w.X0 && x0 - 0.4f < w.X1) is { } hit)
+            if (a.Wells.FirstOrDefault(w => x1 + 0.4f - 0.02f > w.X0 && x0 - 0.4f + 0.02f < w.X1) is { } hit)
                 return No($"the lane ({x0:F1}..{x1:F1}) meets the stairwell at {hit.X0:F1}..{hit.X1:F1}");
             float top = -a.Hd + GarageRule.RampApron;
             float foot = -a.Hd + GarageRule.RampFoot(l.StoreyHeight);
             return new RampColumn(x0, x1, top, foot, top + RampProfile.HoleLength(l.StoreyHeight, a.Clear), d.Slot);
         }
         return null;
+    }
+
+    /// <summary>
+    /// The ramp that runs along the facade (#694), behind the garage door <paramref name="d"/>: a band as deep as the
+    /// stairwell's half landing wall, along the front wall from the garage's end of it, the descent starting
+    /// <see cref="GarageRule.AlongTurnIn"/> from the band's start and ending in a car park hall that runs on to the
+    /// first stairwell. Null (the door reads as locked) when a stairwell stands in it or the hall is too short.
+    /// </summary>
+    private static RampColumn? PlanAlong(Apt a, Footprint fp, DoorSpot d)
+    {
+        var l = a.L;
+        RampColumn? No(string why) { RampWhy = why; return null; }
+        float h = l.StoreyHeight;
+        int dir = d.RampDir >= 0 ? 1 : -1;
+        var axisV = fp.AxisV;
+        if (new Godot.Vector2(d.Outward.X, d.Outward.Z).Dot(axisV) > -0.8f) return No("the garage door is not on the front wall");
+        float gx = new Godot.Vector2(d.Position.X - fp.Center.X, d.Position.Z - fp.Center.Y).Dot(fp.AxisU);
+        float x0 = gx - dir * GarageRule.AlongDoorX;                    // the band's start, at the garage's end
+        float X(float u) => x0 + dir * u;
+        float uTop = GarageRule.EndMargin + GarageRule.AlongTurnIn, uFoot = uTop + RampProfile.Length(h), uPark = uFoot - 0.3f;
+        if (x0 < -a.Hw - 0.01f || x0 > a.Hw + 0.01f) return No($"the band starts at {x0:F1}, outside the {l.Width:F1} m box");
+        // the first stairwell past the band: the hall runs up to its wall; none may stand inside the band
+        float wellEdge = float.NaN;
+        foreach (var w in a.Wells)
+        {
+            float near = dir > 0 ? w.X0 : w.X1, far = dir > 0 ? w.X1 : w.X0;
+            if (dir * (near - X(uPark)) < -0.01f) return No($"a stairwell at {w.X0:F1}..{w.X1:F1} stands in the ramp's band");
+            if (float.IsNaN(wellEdge) || dir * (near - wellEdge) < 0) wellEdge = near;
+        }
+        if (float.IsNaN(wellEdge)) return No("no stairwell beyond the car park hall");
+        float hall = dir * (wellEdge - X(uPark));
+        if (hall < GarageRule.AlongParkLength - 0.6f) return No($"the car park hall is {hall:F1} m long");
+        if (a.Hd - a.ZM < 3f) return No("no room behind the stairwell's half landing");
+        float z1 = a.ZM - 0.1f, z0 = z1 - GarageRule.RampWidth;
+        float uHole = uTop + RampProfile.HoleLength(h, a.Clear);
+        return new RampColumn(Math.Min(x0, X(uHole)), Math.Max(x0, X(uHole)), X(uTop), X(uFoot), X(uHole), d.Slot)
+        {
+            Along = true, Dir = dir, LaneZ0 = z0, LaneZ1 = z1, BandZ1 = a.ZM, ParkX = X(uPark), WellEdge = wellEdge, BandX0 = x0,
+        };
     }
 
     /// <summary>
@@ -413,7 +478,27 @@ public static partial class InteriorGenerator
         // the flat apron, then the floor slab opens over the descent (the hole), which is the ramp's
         // flight, standing on the basement floor. The basement has its own room as far as the car
         // park, which the ramp runs on into.
-        if (a.Ramp is { } ramp)
+        if (a.Ramp is { Along: true } along)
+        {
+            // along the facade (#694): the ground floor's room is the band as far as the slab opens over the descent;
+            // the basement's runs to where the car park hall begins, and the flight runs along X
+            if (level == 0)
+            {
+                along.GroundRoom = Add(rooms, new RoomPlan { X0 = along.X0, Z0 = -hd, X1 = along.X1, Z1 = along.BandZ1, Type = RoomType.Ramp });
+                float h0 = Math.Min(along.Top, along.HoleEnd), h1 = Math.Max(along.Top, along.HoleEnd);
+                floor.Holes.Add(new RectPlan(h0, along.LaneZ0, h1, along.LaneZ1));
+            }
+            else if (level == -1)
+            {
+                float b0 = Math.Min(along.BandX0, along.ParkX), b1 = Math.Max(along.BandX0, along.ParkX);
+                along.BasementRoom = Add(rooms, new RoomPlan { X0 = b0, Z0 = -hd, X1 = b1, Z1 = along.BandZ1, Type = RoomType.Ramp });
+                floor.Flights.Add(new FlightPlan
+                {
+                    Ramp = true, AlongX = true, X0 = along.LaneZ0, X1 = along.LaneZ1, ZBottom = along.Foot, ZTop = along.Top, From = 0, To = 1,
+                });
+            }
+        }
+        else if (a.Ramp is { } ramp)
         {
             if (level == 0)
             {
@@ -435,7 +520,7 @@ public static partial class InteriorGenerator
         var wells = a.Wells;
         // what hangs off the back landing needs one: a block too narrow for the passage has none
         bool backed = a.Passage || !a.Stairs;
-        bool carStrip = backed && what == AptFloor.Basement && a.Hd - a.ZB1 >= GarageRule.StripDepth && a.L.Width >= GarageRule.StripWidth;
+        bool carStrip = backed && what == AptFloor.Basement && a.Hd - a.ZB1 >= GarageRule.StripDepth && a.L.Width >= GarageRule.StripWidth && a.Ramp is not { Along: true };
         // A block much deeper than its stairwell: a corridor runs on from each back landing to the
         // back facade, and the flats behind the stairwells' depth open off it, both sides
         bool deep = backed && what != AptFloor.Basement && a.Hd - a.ZB1 > DeepBack;
@@ -458,7 +543,7 @@ public static partial class InteriorGenerator
             float gg0 = i == 0 ? -a.Hw : wells[i - 1].X1, gg1 = i == wells.Count ? a.Hw : wells[i].X0;
             var gl = i > 0 ? wells[i - 1] : null;
             var gr = i < wells.Count ? wells[i] : null;
-            if (a.Ramp is { } rp && rp.X0 >= gg0 - 0.01f && rp.X1 <= gg1 + 0.01f)
+            if (a.Ramp is { Along: false } rp && rp.X0 >= gg0 - 0.01f && rp.X1 <= gg1 + 0.01f)
             {
                 gaps.Add((gg0, rp.X0, gl, null));
                 gaps.Add((rp.X1, gg1, null, gr));
@@ -470,6 +555,14 @@ public static partial class InteriorGenerator
             float width = g1 - g0;
             // beside the ramp and at no stairwell: nothing to open off
             if (left == null && right == null) continue;
+            // a strip between the ramp's lane and a stairwell too thin for a flat stays solid (#694)
+            if (a.Ramp is { Along: false } sq && width < MinFlatSide + 1.6f && (Math.Abs(g1 - sq.X0) < 0.01f || Math.Abs(g0 - sq.X1) < 0.01f)) continue;
+            // along the facade (#694) the basement under the gap with the band is its own: the ramp room, the car park hall
+            if (what == AptFloor.Basement && a.Ramp is { Along: true } ar && ar.ParkX >= g0 - 0.01f && ar.ParkX <= g1 + 0.01f)
+            {
+                AlongBasement(a, floor, regions, ar, g0, g1, left, right);
+                continue;
+            }
             if (deep)
             {
                 // behind the stairwells' depth: from one spine to the next
@@ -526,6 +619,9 @@ public static partial class InteriorGenerator
                 regions.Add(new Region(new RectPlan(w.X0, a.ZB1, w.X1, a.Hd), Side.Front, ways));
             }
 
+        // the ramp's room on the ground floor (#694) is no flat's: cut out of whatever region it stands in
+        if (level == 0 && a.Ramp is { Along: true, GroundRoom: >= 0 } groundRamp)
+            regions = Carve(regions, new RectPlan(groundRamp.X0, -hd, groundRamp.X1, groundRamp.BandZ1));
         if (backed) LinkSpines(a, floor, regions, carStrip);
 
         // ---- filled by what the floor is for -----------------------------------------------------
@@ -599,6 +695,72 @@ public static partial class InteriorGenerator
             regions.Clear();
             regions.AddRange(cut);
         }
+    }
+
+    /// <summary>
+    /// The regions with a rectangle taken out of them (#694: the ramp's room on the ground floor): each region the cut
+    /// touches becomes up to four pieces, each keeping the ways into it it still touches along its own wall (clipped
+    /// to the piece), and dropped when none is left or it is too small to be a flat.
+    /// </summary>
+    private static List<Region> Carve(List<Region> regions, RectPlan cut)
+    {
+        var result = new List<Region>();
+        foreach (var reg in regions)
+        {
+            var R = reg.R;
+            if (R.X1 <= cut.X0 + 0.01f || R.X0 >= cut.X1 - 0.01f || R.Z1 <= cut.Z0 + 0.01f || R.Z0 >= cut.Z1 - 0.01f) { result.Add(reg); continue; }
+            float cx0 = Math.Max(R.X0, cut.X0), cx1 = Math.Min(R.X1, cut.X1);
+            var parts = new List<RectPlan>
+            {
+                new(R.X0, R.Z0, cx0, R.Z1), new(cx1, R.Z0, R.X1, R.Z1),
+                new(cx0, R.Z0, cx1, cut.Z0), new(cx0, cut.Z1, cx1, R.Z1),
+            };
+            foreach (var p in parts)
+            {
+                if (p.X1 - p.X0 < 1.2f || p.Z1 - p.Z0 < 1.2f) continue;
+                bool touches = reg.Side switch
+                {
+                    Side.Left => Math.Abs(p.X0 - R.X0) < 0.01f,
+                    Side.Right => Math.Abs(p.X1 - R.X1) < 0.01f,
+                    Side.Front => Math.Abs(p.Z0 - R.Z0) < 0.01f,
+                    _ => Math.Abs(p.Z1 - R.Z1) < 0.01f,
+                };
+                if (!touches) continue;
+                bool alongX = AlongX(reg.Side);
+                float lo = alongX ? p.X0 : p.Z0, hi = alongX ? p.X1 : p.Z1;
+                var ways = reg.Ways.Select(w => w with { Lo = Math.Max(w.Lo, lo), Hi = Math.Min(w.Hi, hi) }).Where(w => w.Hi - w.Lo >= WayMin).ToList();
+                if (ways.Count > 0) result.Add(new Region(p, reg.Side, ways));
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// The basement under the gap that holds the along-the-facade ramp's band (#694): the car park hall from where the
+    /// ramp's room ends to the first stairwell's wall, the whole depth of the block, joined to the ramp room by a lane-wide
+    /// arch and to the stairwell by doors; and behind the ramp room a region for the storerooms, reached through the hall.
+    /// </summary>
+    private static void AlongBasement(Apt a, FloorPlan floor, List<Region> regions, RampColumn r, float g0, float g1, Well? left, Well? right)
+    {
+        var rooms = floor.Rooms;
+        float hd = a.Hd, top = Math.Min(2.05f, a.Clear - 0.2f);
+        bool pos = r.Dir > 0;
+        float c0 = pos ? r.ParkX : r.WellEdge, c1 = pos ? r.WellEdge : r.ParkX;
+        int park = Add(rooms, new RoomPlan { X0 = c0, Z0 = -hd, X1 = c1, Z1 = hd, Type = RoomType.CarPark });
+        if (r.BasementRoom >= 0)
+            Opening(rooms, park, pos ? Side.Left : Side.Right, r.BasementRoom, (r.LaneZ0 + r.LaneZ1) / 2, GarageRule.RampWidth - 0.2f, a.Clear, OpeningKind.Arch);
+        // a door to the stairwell the hall ends at, at its front landing (one, so the wall keeps room for bays)
+        var well = pos ? right : left;
+        if (well != null)
+        {
+            var side = pos ? Side.Right : Side.Left;
+            int front = pos || well.Front < 0 ? well.Core : well.Front;
+            Opening(rooms, park, side, front, (-hd + a.RunZ0) / 2, 1.2f, top, OpeningKind.Door);
+        }
+        // the storerooms behind the ramp room and beside the hall's start, off the hall
+        float s0 = pos ? g0 : r.ParkX, s1 = pos ? r.ParkX : g1;
+        if (s1 - s0 >= 2.4f && hd - r.BandZ1 >= 2.4f)
+            regions.Add(new Region(new RectPlan(s0, r.BandZ1, s1, hd), pos ? Side.Right : Side.Left, new List<Way> { new(park, r.BandZ1 + 0.15f, hd - 0.15f) }));
     }
 
     private static int Add(List<RoomPlan> rooms, RoomPlan r)
@@ -1548,7 +1710,7 @@ public static partial class InteriorGenerator
                 Opening(rooms, park, Side.Front, i, (r.X0 + r.X1) / 2, 1.2f, top, OpeningKind.Door);
             }
         }
-        else if (a.L.Width * a.L.Depth >= 300f)
+        else if (a.L.Width * a.L.Depth >= 300f && a.Ramp is not { Along: true })
         {
             // no strip deep enough: the biggest region that takes a row of bays and an aisle
             var fit = regions.Where(r => (AlongX(r.Side) ? r.R.X1 - r.R.X0 : r.R.Z1 - r.R.Z0) >= 7.5f
@@ -1781,7 +1943,9 @@ public static partial class InteriorGenerator
     /// </summary>
     private static void CarPark(InteriorLayout l, int f, RoomPlan r, List<RectPlan> placed, List<RectPlan> blocked, Random rng)
     {
-        var doorSide = r.Openings.FirstOrDefault(o => o.Kind == OpeningKind.Door)?.Side ?? Side.Front;
+        // the wall the cars come in by: where the ramp arrives (#694: a hall at the foot of a ramp along the facade), else its first door
+        var arch = r.Openings.FirstOrDefault(o => o.Kind == OpeningKind.Arch && o.Other >= 0 && l.Floors[f].Rooms[o.Other].Type == RoomType.Ramp);
+        var doorSide = arch?.Side ?? r.Openings.FirstOrDefault(o => o.Kind == OpeningKind.Door)?.Side ?? Side.Front;
         bool alongX = AlongX(doorSide);
         // the frame: u along the rows of bays, v from the door wall (0) to the far wall
         float u0 = alongX ? r.X0 : r.Z0, u1 = alongX ? r.X1 : r.Z1;
