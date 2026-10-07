@@ -278,6 +278,7 @@ public partial class TractorCheck : Node
         await Wait(2.0);
         Expect(me.FarmStrokes == strokes, "raised, it works nothing");
         await Stop(me);
+        await Cruise(me, tractor);
 
         // ---- the drill: seed from the pack ----
         tractor.Couple(0);   // no-op: one at a time
@@ -404,6 +405,7 @@ public partial class TractorCheck : Node
         // ---- a lowered plough across a paved strip: it rides on the tarmac, pulls and works nothing ----
         await OverTarmac(me);
         await Ridge(me);
+        await CruiseCar(me);
 
         Finish(null);
     }
@@ -745,6 +747,85 @@ public partial class TractorCheck : Node
     }
 
     /// <summary>Brakes to a standstill (in game time or real time alike), then lets the pedals go.</summary>
+    /// <summary>
+    /// The speed regulator: set at about 6 km/h with the plough raised, the pedals let go, it holds the
+    /// speed; the plough lowered under it, it still does; the brake switches it off.
+    /// </summary>
+    private async Task Cruise(FootPlayer me, Truck tractor)
+    {
+        me.RideControls = () => new RideInput(me.GroundSpeed * 3.6f < 6f ? 0.6f : 0f, 0f, 0f, false);
+        await Until(() => me.GroundSpeed * 3.6f >= 6f, 15);
+        me.PressCruise();
+        float set = me.Cruise.SetSpeed * 3.6f;
+        Expect(me.Cruise.On && set is >= 5f and <= 8f, $"the regulator set at {F(set)} km/h");
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false);
+        var (lo, hi) = await SpeedSpan(me, 4.0, 3.0);
+        Expect(me.Cruise.On && lo > set - 1f && hi < set + 1f, $"the pedals let go, it holds {F(lo)}-{F(hi)} km/h");
+        me.ToggleLowered(tractor);
+        (lo, hi) = await SpeedSpan(me, 5.0, 3.0);
+        Expect(me.Cruise.On && lo > set - 1.5f && hi < set + 1f, $"the plough lowered under it, it holds {F(lo)}-{F(hi)} km/h");
+        me.ToggleLowered(tractor);
+        me.RideControls = () => new RideInput(0f, 0.5f, 0f, false);
+        await Wait(0.3);
+        Expect(!me.Cruise.On, "the brake switches it off");
+        await Stop(me);
+    }
+
+    /// <summary>
+    /// The regulator in a car up the course's paved strip: set at about 60 km/h, the pedals let go, it
+    /// holds it through the gearbox; sped up past 75 and pressed again, it holds the new speed.
+    /// </summary>
+    private async Task CruiseCar(FootPlayer me)
+    {
+        if (me.Vehicle != null)
+        {
+            await Stop(me);
+            me.RideControls = null;
+            me.SetRide(RideKind.OnFoot);
+            await Wait(0.5);
+        }
+        var at = new Vector3((float)(Terrain.Fixture.FixtureCourse.PavedFrom + Terrain.Fixture.FixtureCourse.PavedWidth / 2), 0f, 150f);
+        // 150 m south of the start, 390 m north up the strip: inside the tiles the course loads
+        if (!await Until(() => GroundAt(me, at) > 100f, 30)) { Expect(false, "the strip's ground loaded"); return; }
+        at.Y = GroundAt(me, at) + 0.5f;
+        me.PlaceAt(at, North);
+        await Until(() => me.IsOnFloor(), 10);
+        var kind = (RideKind)CarCatalog.First;
+        if (!me.SetRide(kind) || me.Vehicle is not Car) { Expect(false, "a car on the strip"); return; }
+        await Wait(1.0);
+        me.RideControls = () => new RideInput(me.GroundSpeed * 3.6f < 60f ? 1f : 0f, 0f, 0f, false);
+        await Until(() => me.GroundSpeed * 3.6f >= 60f, 20);
+        me.PressCruise();
+        float set = me.Cruise.SetSpeed * 3.6f;
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false);
+        var (lo, hi) = await SpeedSpan(me, 5.0, 3.0);
+        Expect(me.Cruise.On && lo > set - 2f && hi < set + 2f, $"the car: set at {F(set)} km/h, the pedals let go, it holds {F(lo)}-{F(hi)} km/h");
+        me.RideControls = () => new RideInput(me.GroundSpeed * 3.6f < 76f ? 1f : 0f, 0f, 0f, false);
+        await Until(() => me.GroundSpeed * 3.6f >= 76f, 10);
+        me.PressCruise();
+        float again = me.Cruise.SetSpeed * 3.6f;
+        me.RideControls = () => new RideInput(0f, 0f, 0f, false);
+        (lo, hi) = await SpeedSpan(me, 4.0, 2.0);
+        Expect(me.Cruise.On && again > set + 10f && lo > again - 2f && hi < again + 2f, $"sped up and pressed again: set at {F(again)} km/h, it holds {F(lo)}-{F(hi)} km/h");
+        await Stop(me);
+        Expect(!me.Cruise.On, "stopped with the brake, it is off");
+    }
+
+    /// <summary>The slowest and fastest ground speed, km/h, over <paramref name="span"/> s after <paramref name="settle"/> s.</summary>
+    private async Task<(float Lo, float Hi)> SpeedSpan(FootPlayer me, double settle, double span)
+    {
+        await Wait(settle);
+        float lo = float.MaxValue, hi = 0f;
+        for (int i = 0; i < span * 10; i++)
+        {
+            float kmh = me.GroundSpeed * 3.6f;
+            lo = Mathf.Min(lo, kmh);
+            hi = Mathf.Max(hi, kmh);
+            await Wait(0.1);
+        }
+        return (lo, hi);
+    }
+
     private async Task Stop(FootPlayer me)
     {
         me.RideControls = () => new RideInput(0f, 1f, 0f, false, Handbrake: true);

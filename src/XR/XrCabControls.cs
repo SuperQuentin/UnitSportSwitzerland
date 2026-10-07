@@ -130,6 +130,8 @@ internal sealed partial class XrCabControls : Node3D
             else Add(Kind.Spring, new(0.32f, -0.5f, -0.25f), Vector3.Back, PlayerInput.ShiftUp, PlayerInput.ShiftDown, 0.06f);
             // the retarder stalk right of the wheel: down for more, up for less
             Add(Kind.Spring, new(0.3f, -0.2f, -0.45f), Vector3.Down, PlayerInput.RetarderUp, PlayerInput.RetarderDown, 0.04f);
+            // the speed regulator's button right of the wheel, opposite the bus's two (#494)
+            Add(Kind.Poke, new(0.18f, -0.32f, -0.5f), plus: PlayerInput.Cruise);
             if (context.EndsWith("-bus"))
             {
                 Add(Kind.Poke, new(-0.28f, -0.32f, -0.5f), plus: PlayerInput.Kneel);
@@ -141,6 +143,8 @@ internal sealed partial class XrCabControls : Node3D
             Add(Kind.Poke, new(0.17f, -0.33f, -0.5f), plus: PlayerInput.RadioPrev);
             Add(Kind.Poke, new(0.27f, -0.33f, -0.5f), plus: PlayerInput.RadioNext);
             Add(Kind.Poke, new(0.22f, -0.27f, -0.5f), plus: PlayerInput.RadioPanel);
+            // the speed regulator's button under the radio's (#494)
+            Add(Kind.Poke, new(0.22f, -0.39f, -0.5f), plus: PlayerInput.Cruise);
         }
         else if (context == "airliner")
         {

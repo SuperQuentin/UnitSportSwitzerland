@@ -890,6 +890,12 @@ public partial class PlayerFeel : Node3D
         else if (level > 1) sb.Append("    RET ").Append(level - 1);
     }
 
+    /// <summary>The speed regulator's set speed, while it holds one (#494).</summary>
+    private void AppendCruise(System.Text.StringBuilder sb)
+    {
+        if (_player.Cruise.On) sb.Append("    CRUISE ").Append(Mathf.RoundToInt(_player.Cruise.SetSpeed * 3.6f));
+    }
+
     private void UpdateHud(float dt, RideKind ride, float speed)
     {
         // mounted only: on foot the pace is the walk, and a number would be clutter; in the
@@ -914,6 +920,7 @@ public partial class PlayerFeel : Node3D
             wear.Append($"    {heavy.Train.Mass / 1000f:0.0} t");
             AppendFarm(wear, heavy);
         }
+        AppendCruise(wear);
         // a passenger (#158): the vehicle's speed, and the wheel when nobody holds it
         var carrier = _player.Host;
         bool aboard = carrier != null || _player.RollingDriverless;
@@ -948,6 +955,7 @@ public partial class PlayerFeel : Node3D
                 if (t.Box.ClutchPedal > 0.5f) sb.Append("    CLUTCH");
                 sb.Append($"    {t.Train.Mass / 1000f:0.0} t");
                 AppendFarm(sb, t);
+                AppendCruise(sb);
             }
             else if (_player.Vehicle is Car c)
             {
@@ -976,7 +984,10 @@ public partial class PlayerFeel : Node3D
                 else if (boat.Spec.LiftShare > 0f && boat.Spec.Planing(s.WaterSpeed) > 0.8f) sb.Append("    PLANING");
             }
             else if (_player.Vehicle is IEngined e)
+            {
                 sb.Append($"{speed * 3.6f:0} km/h    {e.Gear}    {e.Rpm:0} rpm");
+                AppendCruise(sb);
+            }
             else
                 sb.Append($"{speed * 3.6f:0} km/h");
             SetText(_speedLabel, sb, ref _speedShown);

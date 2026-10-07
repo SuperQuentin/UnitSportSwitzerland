@@ -75,6 +75,7 @@
     <Compile Include="..\..\src\Player\Wading.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\CmdArgs.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\PigeonFlight.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\CruiseControl.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\AirlinerCatalog.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\TurbopropTone.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\AirlinerFlight.cs" Link="Game\%(Filename)%(Extension)" />

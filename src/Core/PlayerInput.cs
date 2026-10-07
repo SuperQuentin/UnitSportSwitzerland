@@ -118,6 +118,8 @@ public partial class PlayerInput : Node
     public const string ParkingBrake = "parking_brake";
     /// <summary>An airliner's autopilot and autothrust on / off, and its pitch trim held (Light sim, #415).</summary>
     public const string Autopilot = "autopilot";
+    /// <summary>A car's, truck's, farm machine's or motorbike's speed regulator (#494): the autopilot's key.</summary>
+    public const string Cruise = "cruise";
     public const string TrimNoseDown = "trim_nose_down";
     public const string TrimNoseUp = "trim_nose_up";
 
@@ -575,6 +577,8 @@ public partial class PlayerInput : Node
         Bind(Speedbrake, Keys(Key.Slash), Button(JoyButton.DpadLeft));
         Bind(ParkingBrake, Keys(Key.Period));
         Bind(Autopilot, Keys(Key.Y));
+        // on the ground the autopilot's key holds a speed; on a pad, as the autopilot, D-pad → held (FootPlayer.Cruise.cs)
+        Bind(Cruise, Keys(Key.Y));
         Bind(TrimNoseDown, Keys(Key.Home));
         Bind(TrimNoseUp, Keys(Key.End));
 

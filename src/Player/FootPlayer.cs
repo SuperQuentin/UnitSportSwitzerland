@@ -3251,6 +3251,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
+        if (HandleCruiseInput(@event))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         if (_ride is Truck truck && HandleTruckInput(@event, truck))
         {
             GetViewport().SetInputAsHandled();
@@ -4156,6 +4162,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _bailTimer -= dt;
             input = new RideInput(0f, 1f, 0f, false);
         }
+        // the speed regulator's pedals on top of the driver's
+        input = CruiseStep(input, dt);
 
         // Tricks: hold the trick button in the air and the stick flips and spins instead of
         // steering. Let go and whatever rotation is left eases to the nearest whole turn, so a

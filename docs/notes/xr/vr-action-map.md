@@ -64,6 +64,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | tuck_boost / trick / boost | Shift F Q / X RB LB | ok: X, grips | keep |
 | engine_toggle | Z / D-pad ↑ | ok: R stick ↑ | keep (R3) |
 | lights_toggle | L / D-pad → | ok: R stick → (#436) | keep |
+| cruise (speed regulator: car, truck, farm machine, motorbike, #494) | Y / hold D-pad → (a tap stays the lights) | ok: a **dash poke** in a car or truck (`XrCabControls`), or hold R stick → | keep |
 | roof / horn / couple | O H / D-pad ← | ok: R stick ← (#436) | keep |
 | tune | T / D-pad ↓ | ok: R stick ↓ (#436) | keep |
 | radio next / prev / panel | U P R / — | ok: dash pokes (#438) | keep |

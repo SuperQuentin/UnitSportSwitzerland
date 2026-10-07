@@ -97,6 +97,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Look behind", PlayerInput.LookBehind),
             new("Engine on / off", PlayerInput.EngineToggle),
             new("Car: headlights / pop-ups", PlayerInput.LightsToggle),
+            new("Cruise control (car, truck, farm machine, motorbike): on at this speed / off; sped up or slowed, the new speed; the brake switches it off", Keys: "{cruise}", Pad: "{lights_toggle} (hold)"),
             new("Car radio: next station", PlayerInput.RadioNext),
             new("Car radio: previous station", PlayerInput.RadioPrev),
             new("Car radio: stations and CDs (passengers too)", PlayerInput.RadioPanel),

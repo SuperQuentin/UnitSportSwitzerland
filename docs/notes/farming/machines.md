@@ -102,6 +102,7 @@ radius, `SpinRadius`). Preview: `--avatars 3 out.png --cockpit --heavy 6|7 --sid
 | lower / raise | K | L3 (new pad binding of `kneel`) | the kneel dash poke, L3 |
 | auger / deliver (combine), tip the bin / deliver (tractor with a tipper) | N (or G) | X | the destination dash poke, X |
 | take a sack (on foot) | E, Shift+E / hold: 10 | Y, hold: 10 | Y, hold |
+| cruise control: hold the working speed (`player/cruise-control`) | Y | hold D-pad → | hold R stick →, or the dash poke |
 
 Hints: `PlayerFeel` (deliver, take a sack), HUD `DOWN/UP`, `n/cap crop`, `AUGER`. Rows in
 `Core/ControlsHelp` ("Farm machines") and `xr/vr-action-map`.
