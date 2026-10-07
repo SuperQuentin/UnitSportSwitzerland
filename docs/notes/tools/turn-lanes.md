@@ -3,6 +3,8 @@
 
 # Turn lanes: left-turn pockets (#123)
 
+Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `intersection-parts` (diagram).
+
 - **Where** (`tools/RoadGen/Rewrite/TileRewriter.TurnLanes.cs`, after the #121 priority output):
   each main-road arm (`Role.Main` at a `Kind.Main` junction) that is a two-way, paved, at-grade
   Major or Road, with a yielding car road (class up to Lane) leaving to the approaching driver's

@@ -3,6 +3,8 @@
 
 # Corner arcs, crossings and path stops at traffic lights (#682)
 
+Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `intersection-parts` (diagram).
+
 - **Kerb allowance** (`JunctionOptions.Kerb`, `JunctionBuilder`): 2.2 x half width, +4.5 m (`SlipExtra`) on roads of
   7 m and up (the width of a right pocket and its bike lane, so the corner keeps its radius beside one), at most
   `LinkShare` 0.3 of the link, x1.4 (`Grow`) on links of 150 m and up, 20 m cap. The arms are trimmed back by it, so

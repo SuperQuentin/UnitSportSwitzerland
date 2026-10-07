@@ -3,6 +3,8 @@
 
 # Roads carry their lanes, intersections laid out from lane data (#700)
 
+Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `intersection-parts` (diagram).
+
 Plan and reasoning: `docs/plans/intersection-lanes.md`. What is built:
 
 ## Phase 1: roads carry their lanes
