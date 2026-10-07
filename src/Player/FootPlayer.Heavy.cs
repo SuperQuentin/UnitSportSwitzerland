@@ -333,6 +333,18 @@ public partial class FootPlayer
         }
         if (e.IsActionPressed(PlayerInput.LightsToggle)) { truck.Headlights = !truck.Headlights; return true; }
         if (e.IsActionPressed(PlayerInput.CarDoor) && truck.Trailer is { Boat: not 0 }) { ToggleBoat(truck); return true; }
+        // a tipper tips its body, a mixer discharges its drum (#613): the bus's destination action,
+        // stopped; pulling away drops the body and stops the discharge, as it shuts a bus's doors
+        if (truck.Spec.Body is TruckBody.Tipper or TruckBody.Mixer && e.IsActionPressed(PlayerInput.Destination))
+        {
+            if (GroundSpeed >= 1f && !truck.Tipped)
+            {
+                Announced?.Invoke(truck.Spec.Body == TruckBody.Tipper ? "Stop to tip the body" : "Stop to discharge", false);
+                return true;
+            }
+            truck.Tipped = !truck.Tipped;
+            return true;
+        }
         // a tractor's implement, a combine's header and tank (#494, FootPlayer.Farm.cs)
         if (truck.Spec.Farm) return HandleFarmInput(e, truck);
         if (!truck.IsBus) return false;

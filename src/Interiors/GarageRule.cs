@@ -20,14 +20,14 @@ public static class GarageRule
     public const float Width = 3.0f, Height = 2.4f;
 
     /// <summary>Share of blocks that qualify by size and basement and still get one, so garages stay rare.</summary>
-    public const double Share = 0.4;
+    public const double Share = 0.8;
 
     /// <summary>A city block with shops under its flats qualifies too, but rarer and only with a bigger frontage.</summary>
-    public const double MixedRollShare = 0.2;
-    public const int MixedMinFrontDoors = 4;
+    public const double MixedRollShare = 0.5;
+    public const int MixedMinFrontDoors = 3;
 
-    /// <summary>A block with fewer front doors is too small a development for an underground garage.</summary>
-    public const int MinFrontDoors = 3;
+    /// <summary>A block with a single front door is too small a development for an underground garage (two or more is a block).</summary>
+    public const int MinFrontDoors = 2;
 
     /// <summary>A car park strip behind the stairwells is this deep (two rows and an aisle) in a block at least this wide.</summary>
     public const float StripDepth = 9.5f, StripWidth = 12f;
@@ -44,7 +44,7 @@ public static class GarageRule
     public const float MinFlatSide = 3.4f;
     public const float WalkWidth = 1.2f;
     /// <summary>Share of tall commercial blocks that are shops under flats.</summary>
-    public const double MixedShare = 0.6;
+    public const double MixedShare = 0.8;
 
     /// <summary>
     /// Whether a building is planned as a block of flats or a city block with shops under flats
@@ -116,9 +116,47 @@ public static class GarageRule
         return BehindStairwell(width, depth, above + below, storeyHeight) >= StripDepth;
     }
 
+    // ---- the ramp (#558, PR 2) -----------------------------------------------------------------
+
+    /// <summary>The ramp's lane, wall to wall: a car 1.9 m wide, mirrors out, with a hand each side.</summary>
+    public const float RampWidth = 3.6f;
+
+    /// <summary>
+    /// How far a garage door stands from any other door, m: the lane, a stairwell either side of it and
+    /// the flats' wall between, so the ramp's column never meets a stairwell's (the stairwell is built
+    /// for the door in front of it, and slides to the end of the block when the sliver beside it is thin).
+    /// </summary>
+    public const float StairClear = 7.0f;
+
+    /// <summary>The flat floor behind the door before the ramp tips down, m.</summary>
+    public const float RampApron = 1.0f;
+
+    /// <summary>
+    /// Clear run past the ramp's foot, m, to turn into the aisle: no bay stands in it (the car park
+    /// leaves the bays in front of the foot out), so a block needs this much behind the foot, not a row.
+    /// </summary>
+    public const float RampTurn = 4.0f;
+
+    /// <summary>How far from the front wall the ramp reaches its foot, m, in a block whose storeys are <paramref name="storeyHeight"/>.</summary>
+    public static float RampFoot(float storeyHeight) => RampApron + RampProfile.Length(storeyHeight);
+
+    /// <summary>The shallowest block a ramp fits: its foot and the room to turn there.</summary>
+    public static float RampDepth(float storeyHeight) => RampFoot(storeyHeight) + RampTurn;
+
+    /// <summary>Whether a block is deep enough for the ramp down to its car park.</summary>
+    public static bool HasRamp(float depth, float storeyHeight) => depth >= RampDepth(storeyHeight);
+
+
+    /// <summary>
+    /// Every block rolls a garage, for a live check on a synthetic course (<c>fixture:garage</c>), which
+    /// cannot lean on a hash of the building's key. Set by the fixture source, on the server and every
+    /// client alike; false on the real map and in a generated world.
+    /// </summary>
+    public static bool AlwaysRolls { get; set; }
+
     /// <summary>Whether the key rolls a garage, the same on every peer.</summary>
     public static bool Rolls(string key, bool mixed = false) =>
-        Fnv.Unit(key + "|garage") < (mixed ? MixedRollShare : Share);
+        AlwaysRolls || Fnv.Unit(key + "|garage") < (mixed ? MixedRollShare : Share);
 
     /// <summary>
     /// Whether a block of flats gets an underground garage door: flats (not shops under them), at
@@ -132,9 +170,9 @@ public static class GarageRule
         type switch
         {
             BuildingType.Apartments => frontDoors >= MinFrontDoors
-                && HasCarPark(key, false, above, width, depth, storeyHeight) && Rolls(key),
+                && HasCarPark(key, false, above, width, depth, storeyHeight) && HasRamp(depth, storeyHeight) && Rolls(key),
             BuildingType.MixedUse => frontDoors >= MixedMinFrontDoors
-                && HasCarPark(key, true, above, width, depth, storeyHeight) && Rolls(key, mixed: true),
+                && HasCarPark(key, true, above, width, depth, storeyHeight) && HasRamp(depth, storeyHeight) && Rolls(key, mixed: true),
             _ => false,
         };
 }

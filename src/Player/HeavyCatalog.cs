@@ -10,8 +10,12 @@ namespace UnitSport.Player;
 /// only, no names or logos are drawn.
 ///
 /// <para>
-/// <b>Append-only.</b> A heavy vehicle's <see cref="RideKind"/> is <c>First + its index here</c>,
-/// replicated as an int. Heavy vehicles own 96..119; <see cref="RideKind.Trailer"/> is 120.
+/// <b>Append-only.</b> A heavy vehicle's <see cref="RideKind"/> is replicated as an int. Heavy
+/// vehicles own 96..119; <see cref="RideKind.Trailer"/> is 120. The first five (96..100) are
+/// numbered by their position here; <b>every later entry names its own</b> (<c>Kind = (RideKind)N</c>),
+/// so branches appending at the same time keep their numbers: 101 is the F-150 (#470), 102 and 103
+/// the farm tractor and the combine (#541), 104 the tipper and 105 the mixer (#613). A clash, or an
+/// unnamed entry past the fifth, throws at start-up.
 /// </para>
 ///
 /// <para>
@@ -35,6 +39,9 @@ public static class HeavyCatalog
     private static readonly Color RaptorOrange = new(1.0f, 0.42f, 0.08f);
     private static readonly Color FendtGreen = new(0.24f, 0.45f, 0.16f);
     private static readonly Color ClaasGreen = new(0.47f, 0.63f, 0.1f);
+    // invented site contractors (#613): colours only, as every operator here
+    private static readonly Color ContractorRed = new(0.78f, 0.12f, 0.08f);
+    private static readonly Color ContractorBlue = new(0.10f, 0.30f, 0.62f);
 
     public static readonly IReadOnlyList<HeavySpec> All = Number(new[]
     {
@@ -237,6 +244,7 @@ public static class HeavyCatalog
         // ---- 101: a full-size pickup with a tow ball, for the boat trailers (#463) ----
         new HeavySpec
         {
+            Kind = (RideKind)101,
             Label = "Ford F-150 Raptor",
             Blurb = "SuperCrew desert pickup, 3.5 L twin-turbo V6, 450 hp, 10-speed automatic, 4x4 on 35-inch tyres. A 50 mm tow ball: back it up to a boat trailer's coupler and {couple}",
             Class = HeavyClass.Pickup,
@@ -276,6 +284,7 @@ public static class HeavyCatalog
         // ---- 102: a mid-size farm tractor (#494) ----
         new HeavySpec
         {
+            Kind = (RideKind)102,
             Label = "Fendt 724 Vario",
             Blurb = "4WD farm tractor, 246 hp, stepless Vario, 40 km/h. A drawbar for the tipping trailer and a three-point linkage for the plough, seed drill or mower: back up to one and {couple}, {kneel} lowers and raises it",
             Class = HeavyClass.FarmTractor,
@@ -317,6 +326,7 @@ public static class HeavyCatalog
         // ---- 103: a combine harvester (#494) ----
         new HeavySpec
         {
+            Kind = (RideKind)103,
             Label = "Claas Lexion 6800",
             Blurb = "Combine harvester, 462 hp, 6 m header, steered at the rear, hydrostatic drive to 25 km/h. {kneel} lowers the header and threshes, {destination} swings the auger out over a tipping trailer",
             Class = HeavyClass.Combine,
@@ -351,6 +361,82 @@ public static class HeavyCatalog
             Reverse = 3.0f, FinalDrive = 25.7f, ShiftTime = 0.3f,
             MaxSteer = 0.75f, Grip = 0.8f, BrakeDecel = 3.5f, LimiterKmh = 25f, Passengers = 1,
         },
+
+        // ---- 104: a four-axle tipper for the building sites (#613; 101-103 are #470's and #541's) ----
+        new HeavySpec
+        {
+            Kind = (RideKind)104,
+            Label = "Arocs 3245 8x4 tipper",
+            Blurb = "Four-axle site tipper, two steered front axles, 450 hp. Stopped, {destination} tips the body up and down; pulling away drops it",
+            Class = HeavyClass.Rigid,
+            Body = TruckBody.Tipper,
+            Look = new HeavyLook { Paint = ContractorRed, Accent = White, Lower = Graphite, Cargo = Graphite, Operator = "Gruber Bau AG" },
+            // source: Mercedes-Benz Arocs 3245 K 8x4/4 (OM 471, 330 kW at 1,600 rpm, 2,200 N·m at
+            // 1,100; PowerShift 3 G281-12, 14.93..1.00); 1,700 + 3,250 + 1,350 mm wheelbase, 32 t GVW.
+            // Assumed: the 14,200 kg kerb with a 16 m³ Meiller body split 7,600 / 6,600, CG heights,
+            // the site axle ratio 3.91, the reverse ratio, the second axle steering 75% of the first,
+            // the engine brake. The operator is invented.
+            Sections = new[]
+            {
+                new SectionSpec
+                {
+                    Name = "tipper", Length = 9.4f, Height = 3.4f, Mass = 14200f, CgAt = 4.3f, CgHeight = 1.45f,
+                    Axles = new[]
+                    {
+                        new AxleSpec(1.45f, 0, Steer: 1f, Tyre: "385/65R22.5"),
+                        new AxleSpec(3.15f, 0, Steer: 0.75f, Tyre: "385/65R22.5"),
+                        new AxleSpec(6.40f, 1, Driven: true, Twin: true),
+                        new AxleSpec(7.75f, 1, Driven: true, Twin: true),
+                    },
+                    DragArea = 6.0f, Track = 2.05f,
+                    PayloadMax = 17800f, PayloadAt = 5.9f, PayloadHeight = 2.1f,
+                },
+            },
+            PeakKw = 330f, PeakRpm = 1600f, IdleRpm = 550f, Redline = 1900f,
+            Torque = new (float, float)[] { (500f, 1200f), (800f, 1900f), (1100f, 2200f), (1400f, 2200f), (1600f, 1970f), (1800f, 1650f), (1900f, 1350f) },
+            EngineBrakeNm = 1400f, RetarderNm = 0f, RetarderKw = 0f,
+            Gears = new[] { 14.93f, 11.67f, 9.02f, 7.06f, 5.61f, 4.39f, 3.40f, 2.66f, 2.11f, 1.65f, 1.28f, 1.00f },
+            Reverse = 13.0f, FinalDrive = 3.91f, ShiftTime = 0.5f,
+            MaxSteer = 0.70f, LimiterKmh = 85f,
+        },
+
+        // ---- 105: a four-axle concrete mixer (#613) ----
+        new HeavySpec
+        {
+            Kind = (RideKind)105,
+            Label = "Arocs 3240 8x4 mixer",
+            Blurb = "Four-axle truck mixer with a 9 m³ drum that turns while the engine runs. Stopped, {destination} reverses it to discharge down its chute",
+            Class = HeavyClass.Rigid,
+            Body = TruckBody.Mixer,
+            Look = new HeavyLook { Paint = White, Accent = ContractorBlue, Lower = Graphite, Cargo = ContractorBlue, Operator = "Betonwerk Aare" },
+            // source: Mercedes-Benz Arocs 3240 B 8x4/4 (OM 470, 290 kW at 1,600 rpm, 1,900 N·m at
+            // 1,100) with a Liebherr HTM 905 (9 m³ drum, 0-14 rpm, hydraulic drive off the engine);
+            // 4,250 + 1,350 mm wheelbase, 32 t GVW. Assumed: the 13,200 kg kerb split 7,100 / 6,100,
+            // the high CG of a loaded drum, the gearbox as the tipper's, the axle ratio 3.91. The
+            // operator is invented.
+            Sections = new[]
+            {
+                new SectionSpec
+                {
+                    Name = "mixer", Length = 9.2f, Height = 3.9f, Mass = 13200f, CgAt = 4.2f, CgHeight = 1.6f,
+                    Axles = new[]
+                    {
+                        new AxleSpec(1.45f, 0, Steer: 1f, Tyre: "385/65R22.5"),
+                        new AxleSpec(3.15f, 0, Steer: 0.75f, Tyre: "385/65R22.5"),
+                        new AxleSpec(6.40f, 1, Driven: true, Twin: true),
+                        new AxleSpec(7.75f, 1, Driven: true, Twin: true),
+                    },
+                    DragArea = 6.4f, Track = 2.05f,
+                    PayloadMax = 18800f, PayloadAt = 5.6f, PayloadHeight = 2.5f, Liquid = true,
+                },
+            },
+            PeakKw = 290f, PeakRpm = 1600f, IdleRpm = 550f, Redline = 1900f,
+            Torque = new (float, float)[] { (500f, 1050f), (800f, 1650f), (1100f, 1900f), (1400f, 1900f), (1600f, 1730f), (1800f, 1450f), (1900f, 1200f) },
+            EngineBrakeNm = 1300f, RetarderNm = 0f, RetarderKw = 0f,
+            Gears = new[] { 14.93f, 11.67f, 9.02f, 7.06f, 5.61f, 4.39f, 3.40f, 2.66f, 2.11f, 1.65f, 1.28f, 1.00f },
+            Reverse = 13.0f, FinalDrive = 3.91f, ShiftTime = 0.5f,
+            MaxSteer = 0.70f, LimiterKmh = 85f,
+        },
     });
 
     /// <summary>
@@ -369,17 +455,24 @@ public static class HeavyCatalog
         return r;
     }
 
-    public static HeavySpec? For(RideKind kind)
-    {
-        int i = (int)kind - First;
-        return i >= 0 && i < All.Count ? All[i] : null;
-    }
+    private static readonly Dictionary<RideKind, HeavySpec> ByKind = All.ToDictionary(s => s.Kind);
+
+    public static HeavySpec? For(RideKind kind) => ByKind.GetValueOrDefault(kind);
+
+    /// <summary>The first entries numbered by their position; every later one names its own kind.</summary>
+    private const int Positional = 5;
 
     private static IReadOnlyList<HeavySpec> Number(HeavySpec[] specs)
     {
-        if (specs.Length > Last - First + 1)
-            throw new System.InvalidOperationException($"{specs.Length} heavy vehicles overflow RideKind {First}..{Last}");
-        for (int i = 0; i < specs.Length; i++) specs[i] = specs[i] with { Kind = (RideKind)(First + i) };
+        var seen = new HashSet<RideKind>();
+        for (int i = 0; i < specs.Length; i++)
+        {
+            if (i < Positional) specs[i] = specs[i] with { Kind = (RideKind)(First + i) };
+            else if ((int)specs[i].Kind is < First or > Last)
+                throw new System.InvalidOperationException($"{specs[i].Label}: heavy entries past the fifth name their RideKind in {First}..{Last}");
+            if (!seen.Add(specs[i].Kind))
+                throw new System.InvalidOperationException($"{specs[i].Label}: RideKind {(int)specs[i].Kind} is taken twice");
+        }
         return specs;
     }
 }

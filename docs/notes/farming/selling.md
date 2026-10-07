@@ -144,7 +144,7 @@ rows in `Core/ControlsHelp` ("Selling farm produce") and `xr/vr-action-map`.
 ## Not done
 
 - No land ownership: stands go anywhere outdoors by a road. The wire changes (new nodes and RPCs,
-  `PlacedKind` 11) are in `Handshake.Protocol` 29 with the rest of #494.
+  `PlacedKind` 11) are in `Handshake.Protocol` 32 with the rest of #494.
 - Specialty buyers have an office and a sign but no marker on a map (there is none in the world);
   the co-op panel gives the direction.
 - A stand's passers-by are simulated only while the server runs (10 days caught up after a restart).

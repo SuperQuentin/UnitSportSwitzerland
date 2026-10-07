@@ -37,7 +37,7 @@ GODOT=${GODOT:-'/c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.1-stab
 OUT=test_output/deploy; mkdir -p "$OUT"
 BUILD=build/linux; BIN=UnitSportSwitzerland.x86_64
 GODOT_VER=$(sed -n 's/.*Godot\.NET\.Sdk\/\([0-9.]*\).*/\1/p' UnitSportSwitzerland.csproj)
-DOTNET_MAJOR=$(sed -n 's/.*<TargetFramework>net\([0-9]*\)\..*/\1/p' UnitSportSwitzerland.csproj)
+DOTNET_MAJOR=$(sed -n 's/.*<TargetFramework>net\([0-9]*\)\..*/\1/p' UnitSportSwitzerland.csproj | head -1)
 VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 say()  { printf '\n== %s\n' "$*"; }

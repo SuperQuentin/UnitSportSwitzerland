@@ -629,7 +629,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public bool InCockpit => !_thirdPerson && HasCockpit && ShowroomYaw == null && SeatIndex == 0;
 
     /// <summary>What is ridden has a driver's seat with a cockpit (#69 cars, #157 trucks and buses, #421 aircraft).</summary>
-    private bool HasCockpit => _ride is Car or Truck or Airstairs or Airliner or Excavator or WheelLoader or CompactRoller or Telehandler;
+    private bool HasCockpit => _ride is Car or Truck or Airstairs or Airliner or Excavator or WheelLoader or CompactRoller or Telehandler or MiniDumper;
 
     private Rideable? _ride;
     private RideMotion _motion;
@@ -2640,6 +2640,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is Excavator parkedArm) parkedArm.UnpackFlags(state.Flags);
         if (_ride is WheelLoader parkedLoader) parkedLoader.UnpackFlags(state.Flags);
         if (_ride is CompactRoller parkedRoller) parkedRoller.UnpackFlags(state.Flags);
+        if (_ride is MiniDumper parkedDumper) parkedDumper.UnpackFlags(state.Flags);
         if (_ride is Telehandler parkedBoom) parkedBoom.UnpackFlags(state.Flags);
         // the steamer's gangways as they were left (#303)
         if (_ride is Steamer berthed) berthed.DoorsOpen = (byte)(state.DoorsOpen & 3);
@@ -2680,7 +2681,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             // an airliner left in the air (stood up from its seat): its attitude, or it is put down level (#456)
             Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler()
                 : _ride is Airliner { State.OnGround: false } aloft ? aloft.State.Attitude.Orthonormalized().GetEuler() : default,
-            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : _ride is Excavator ef ? ef.PackFlags() : _ride is WheelLoader wf ? wf.PackFlags() : _ride is CompactRoller rf ? rf.PackFlags() : _ride is Telehandler hf ? hf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
+            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : _ride is Excavator ef ? ef.PackFlags() : _ride is WheelLoader wf ? wf.PackFlags() : _ride is CompactRoller rf ? rf.PackFlags() : _ride is MiniDumper df ? df.PackFlags() : _ride is Telehandler hf ? hf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
             Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd,
             Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw);
     }
@@ -3299,7 +3300,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
-        // and turns a telehandler's steering mode on: front, four-wheel, crab (#614)
+        // a mini dumper's skip (#614): the tipper's action, stopped
+        if (@event.IsActionPressed(PlayerInput.Destination) && !@event.IsEcho() && _ride is MiniDumper dumper && SeatIndex == 0 && !Npc)
+        {
+            if (GroundSpeed >= 0.5f && !dumper.Tipped) Announced?.Invoke("Stop to tip the skip", false);
+            else dumper.Tipped = !dumper.Tipped;
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        // the roof key also turns a telehandler's steering mode on: front, four-wheel, crab (#614)
         if (@event.IsActionPressed(PlayerInput.RoofToggle) && !@event.IsEcho() && _ride is Telehandler steered && SeatIndex == 0 && !Npc)
         {
             steered.NextMode();
@@ -4225,6 +4235,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is CompactRoller rolling) WorkDrums(rolling);
         // and the telehandler's boom, in work mode (#614)
         if (_ride is Telehandler booming) WorkBoom(booming, dt);
+        // a pallet in a tipping body slides out over its open end once it is up (#615)
+        if (_ride is IBed { HasBed: true } tipping && SeatIndex == 0 && !Npc) Items.PalletService.Instance?.TendBed(this, tipping);
         if (_ride is Car)
         {
             // doors: once seated every door shuts, sooner if the car pulls away before then

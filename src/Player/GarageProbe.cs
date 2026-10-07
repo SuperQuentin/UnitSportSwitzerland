@@ -56,7 +56,7 @@ public partial class GarageProbe : Node
     public override void _PhysicsProcess(double delta)
     {
         _clock += delta;
-        if (_clock > 240) { GD.Print($"[garage] {_role} RESULT: done (timeout)"); GetTree().Quit(); return; }
+        if (_clock > 240 + ParkWait) { GD.Print($"[garage] {_role} RESULT: done (timeout)"); GetTree().Quit(); return; }
         var me = _local();
         if (me == null) return;
         if (_t < 0)
@@ -222,8 +222,13 @@ public partial class GarageProbe : Node
     private static string Where(FootPlayer p)
     {
         if (!Interiors.InteriorManager.InInteriorSpace(p.GlobalPosition)) return "outside";
-        return Interiors.InteriorManager.Instance?.LayoutAt(p.GlobalPosition) is { } l ? $"inside {l.DressedKind()} {l.Key}" : "inside (not built here)";
+        return Interiors.InteriorManager.Instance?.LayoutAt(p.GlobalPosition) is { } l
+            ? $"inside {l.DressedKind()} {l.Key} level {Level(l, p.GlobalPosition)}" : "inside (not built here)";
     }
+
+    /// <summary>The storey a point in interior space is on: 0 the ground floor, -1 a basement (#558).</summary>
+    private static int Level(Interiors.InteriorLayout l, Vector3 at) =>
+        (int)Mathf.Floor((at.Y - Interiors.InteriorManager.InteriorBaseY + 0.3f) / l.StoreyHeight);
 
     /// <summary><c>--doorkind Agricultural</c> drives into the nearest barn instead of a garage.</summary>
     private static Terrain.Format.BuildingKind TargetKind => Interiors.InteriorProbe.DoorKindArg() ?? Terrain.Format.BuildingKind.Garage;
@@ -294,6 +299,18 @@ public partial class GarageProbe : Node
         // the watcher needs a moment to see the car before it moves
         if (at(CmdArgs.Float("--drive-at") ?? _readyAt + 7)) { _from = me.GlobalPosition; Input.ActionPress(PlayerInput.Throttle); _drive = 1; Log($"throttle, {Where(me)}"); }
         float gone = new Vector2(me.GlobalPosition.X - _from.X, me.GlobalPosition.Z - _from.Z).Length();
+        // how far below the door's floor the car has been (a garage's ramp is a storey, #558), and a
+        // look at it from the driver's seat, windowed, on the way down
+        if (Interiors.InteriorManager.InInteriorSpace(me.GlobalPosition))
+        {
+            float below = Interiors.InteriorManager.InteriorBaseY - me.GlobalPosition.Y;
+            _descended = Math.Max(_descended, below);
+            if (DisplayServer.GetName() != "headless" && _drive is 1 or 2)
+            {
+                if (below > 1.2f && _snapped.Add("ramp_down")) SnapSelf("ramp_down_" + _role);
+                if (below > 2.4f && _snapped.Add("ramp_foot")) SnapSelf("ramp_foot_" + _role);
+            }
+        }
         if (_target is { } tg && (_drive is 1 or 2 or 6 || _t < _readyAt + 7) && (_trace -= GetPhysicsProcessDeltaTime()) <= 0)
         {
             // where the car is against the door: metres out of the facade, along it, and its nose's bearing
@@ -306,7 +323,7 @@ public partial class GarageProbe : Node
                 + $"door {(Interiors.InteriorManager.Instance?.IsOpen(tg.Key.ToString()) == true ? "open" : "shut")} link {(link == null ? "none" : $"swing {link.Swing:F2}")}"
                 + string.Concat(Enumerable.Range(0, me.GetSlideCollisionCount()).Select(i => me.GetSlideCollision(i))
                     .Where(c => c.GetNormal().Y < 0.7f)
-                    .Select(c => $" hit {(c.GetCollider() as Node)?.GetPath().ToString().Split('/').LastOrDefault() ?? "?"} n({c.GetNormal().X:F2},{c.GetNormal().Y:F2},{c.GetNormal().Z:F2})")));
+                    .Select(c => $" hit {(c.GetCollider() as Node)?.GetPath().ToString().Split('/').LastOrDefault() ?? "?"} n({c.GetNormal().X:F2},{c.GetNormal().Y:F2},{c.GetNormal().Z:F2}) at {c.GetPosition().X:F2},{c.GetPosition().Y - Interiors.InteriorManager.InteriorBaseY:F2},{c.GetPosition().Z:F2}")));
         }
         float throttleM = CmdArgs.Float("--drive-m") ?? (AutoGarage ? 5f : 15f), brakeM = CmdArgs.Float("--brake-m") ?? (AutoGarage ? 12.5f : throttleM);
         if (_drive == 1 && gone >= throttleM && Input.IsActionPressed(PlayerInput.Throttle))
@@ -339,7 +356,7 @@ public partial class GarageProbe : Node
             _drive = 4;
             _stepAt = _t;
         }
-        if (_drive == 4 && _t - _stepAt > 4)
+        if (_drive == 4 && _t - _stepAt > 4 + ParkWait)
         {
             var parked = VehicleManager.Instance?.Nearest(me.GlobalPosition, 6f);
             Log($"parked car still inside: {parked != null && Interiors.InteriorManager.InInteriorSpace(parked.GlobalPosition)}; get back in: {me.TryGetIn()}");
@@ -364,14 +381,34 @@ public partial class GarageProbe : Node
         if (_drive == 7 && _t - _stepAt > 1.5)
         {
             Input.ActionRelease(PlayerInput.Brake);
-            Log($"RESULT: {(_parkedIn && _outAgain ? "ok" : "FAILED")} (parked inside a garage: {_parkedIn}, reversed out: {_outAgain}), {Where(me)} at {me.GlobalPosition}");
+            // an apartment block's garage (#558) is down a ramp: it must have gone down it, a storey
+            bool down = TargetKind != Terrain.Format.BuildingKind.Apartment || _descended >= 2f;
+            Log($"descended {_descended:F1} m below the door");
+            Log($"RESULT: {(_parkedIn && _outAgain && down ? "ok" : "FAILED")} (parked inside a garage: {_parkedIn}, reversed out: {_outAgain}, down the ramp: {down}), {Where(me)} at {me.GlobalPosition}");
             GetTree().Quit();
         }
-        if (at(90)) { Log($"RESULT: FAILED (timeout at step {_drive}), {Where(me)} at {me.GlobalPosition}"); GetTree().Quit(); }
+        if (at(90 + ParkWait)) { Log($"RESULT: FAILED (timeout at step {_drive}), {Where(me)} at {me.GlobalPosition}"); GetTree().Quit(); }
     }
+
+    /// <summary>
+    /// <c>--park-wait s</c>: how long the driver leaves the parked car before getting back in. Over a
+    /// minute, the server shuts the door nobody is near (<c>TickDoors</c>), so the way out up a garage's
+    /// ramp has to ask it open again (#558).
+    /// </summary>
+    private static float ParkWait => CmdArgs.Float("--park-wait") ?? 0f;
 
     private double _stepAt;
     private bool _parkedIn, _outAgain;
+    private float _descended;
+    private readonly HashSet<string> _snapped = new();
+
+    /// <summary>The window as the player sees it, into test_output/ (windowed runs only).</summary>
+    private void SnapSelf(string name)
+    {
+        string path = ProjectSettings.GlobalizePath($"res://test_output/garage_{name}.png");
+        GetViewport().GetTexture().GetImage().SavePng(path);
+        Log($"screenshot {path}");
+    }
     private Interiors.DoorIndex.Entry? _watchedDoor;
     private bool _standing;
     private Interiors.DoorIndex.Entry? _target;
@@ -387,7 +424,7 @@ public partial class GarageProbe : Node
         _snap += GetPhysicsProcessDeltaTime();
         if (_snap < 0.25) return;
         _snap = 0;
-        if (_clock > 150) { Log("RESULT: done"); GetTree().Quit(); return; }
+        if (_clock > 150 + ParkWait) { Log("RESULT: done"); GetTree().Quit(); return; }
         var other = GetTree().GetNodesInGroup(FootPlayer.Group).OfType<FootPlayer>().FirstOrDefault(p => p != me);
         if (other == null) return;
         // with no --at, stand beside the garage the driver will pick (the nearest to the same spawn)
@@ -416,6 +453,14 @@ public partial class GarageProbe : Node
         var from = e.World + o * 9f + tangent * 2.5f + Vector3.Up * 2.4f;
         if (CarCatalog.IsCar(other.Ride) && outward is > -1f and < 2.5f && _shot.Add("entering"))
             ShootView(other, "bay_entering_" + _role, from, e.World + Vector3.Up * 1.2f, 0.05);
+        // a car a storey down a garage's ramp (#558), seen through the doorway from the street
+        if (CarCatalog.IsCar(other.Ride) && InsideTarget(other)
+            && Interiors.InteriorManager.InteriorBaseY - other.GlobalPosition.Y is > 1.2f and < 2.0f && _shot.Add("ramp"))
+        {
+            var seenOnRamp = Interiors.InteriorManager.Instance?.Links.GetValueOrDefault(e.Key.ToString()) is { } rampLink
+                ? rampLink.ToOutside * other.GlobalPosition : e.World;
+            ShootView(other, "ramp_mid_" + _role, from, seenOnRamp + Vector3.Up * 0.8f, 0.05);
+        }
         if (CarCatalog.IsCar(other.Ride) && InsideTarget(other) && _stillFor > 1.5 && _shot.Add("inside"))
         {
             // it is 3 km down: aim at where it shows through the doorway, carried up by the door's map

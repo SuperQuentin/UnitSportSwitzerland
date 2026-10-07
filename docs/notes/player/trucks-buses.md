@@ -13,6 +13,44 @@
   **code** = `(index+1) | load% << 8`, replicated as `FootPlayer.TrailerCode`. Figures are the
   published ones where they exist; every entry comments what is assumed (CG heights, mass splits,
   retarders, the Setra's box, the Citaro G's joint position).
+- **Numbering from 101 on** (#613): `HeavyCatalog` numbers its first five entries by position;
+  every later one names its own kind (`Kind = (RideKind)N`). Branches appending at the same time
+  then keep their numbers: 101 the F-150 (#470), 102 and 103 the farm tractor and the combine
+  (#541), 104 the tipper and 105 the mixer (#613). A clash, or an unnamed sixth entry, throws at
+  start-up. `HeavyCatalog.For` looks up by kind, not by index.
+- **Site lorries** (#613, epic #605), `HeavySpec.Body` (`TruckBody.Box | Tipper | Mixer`):
+  - **104, Arocs 3245 8x4 tipper**: two steered front axles; its body tips about a hinge low at the
+    back, the rig's tipping node from #677 (`HeavyParts.Tip`, 50°).
+    - The tailgate (`HeavyParts.Tailgate`) hangs plumb from its top hinge as the body rises, so it
+      swings open.
+    - The load is a gravel heap in the body, as high as the truck is loaded. Tipping does not empty
+      the truck (its mass stays).
+  - **105, Arocs 3240 8x4 mixer**: its drum (`HeavyParts.Drum`, axis pitched up 0.2 rad toward the
+    back, stripes so its turning shows) turns while the engine runs. That is 2 to 12 rpm with the
+    engine's speed (`Truck.DrumRate`), backwards and faster while it discharges, when its chute
+    (`HeavyParts.Chute`) swings out.
+  - Liveries: invented contractors, colours only (Gruber Bau AG red, Betonwerk Aare white and
+    blue). Not hashed per truck yet.
+- **The work bit**: both work on `Truck.Tipped` (`TipBit`, from #677) and the bus's
+  **destination** action (N; the destination dash poke in VR, `XrCabControls` "-work"), stopped.
+  The mixer's discharge is the same bit (`Truck.Discharging`).
+  - Moving, it refuses ("Stop to tip the body"). Pulling away drops the body and stops the
+    discharge, as it shuts a bus's doors.
+  - It rides in the pose's door bits (`Truck.TippedInPose`) and parks with the truck.
+  - A mixer's pose carries -1 for its rpm with the engine off, so a copy's drum stops too.
+- **On the building sites** (#616's provider): the plan's tipper parks as 104, its mixer as 105,
+  each standing axle by axle.
+- **A held brake reverses a stopped truck** (an automatic box's shuttle): a check waiting at a
+  standstill lets go of the controls rather than braking. A braked wait backed the tipper away at
+  2 m/s and its tip was refused.
+- **Checks**:
+  - `--tippercheck tipper|mixer[,shots] --world flat --systems physics,ui` (`TipperCheck`), on the
+    real binding. Tipper: driven; tipped in 3 s with the tailgate open; down again; refused at
+    15 km/h; dropped by pulling away; kept up in the flags. Mixer: driven; the drum turning with
+    the engine and stopped without it; discharging backwards and faster with the chute out; back.
+    Shots go in `test_output/tipper/`.
+  - A lorry round in `tools/excavatornetcheck.sh`: B sees the tipper's body up, the mixer's drum
+    backwards with its chute out, then the drum stopped with A's engine.
 - **Physics** (`Player/HeavyTrain`): each section (tractor, trailer, dolly, bus half) is a planar
   rigid body with mass, yaw inertia and its own axles; every axle makes its own force from its
   own slip angle (`sin(C·atan(B·α))`, B 8, a truck tyre's shallow slope), friction circle, EBS

@@ -126,6 +126,8 @@ public partial class ControlsHelp : CanvasLayer
             new("Boat trailer: launch the boat / winch it aboard, stopped", PlayerInput.CarDoor),
             new("Bus: kneel", PlayerInput.Kneel),
             new("Bus: destination display", PlayerInput.Destination),
+            new("Tipper: tip the body up / down (stopped)", PlayerInput.Destination),
+            new("Mixer: discharge / stop (stopped; the drum turns while the engine runs)", PlayerInput.Destination),
         }),
         ("Farm machines", new Row[]
         {
@@ -172,6 +174,12 @@ public partial class ControlsHelp : CanvasLayer
             new("Work: roll the bucket back / dump it (hold)", Keys: "{arm_bucket_curl} / {arm_bucket_dump}", Pad: "right stick ← →"),
             // the variant with a fork carriage (#615): the same controls, the forks lift pallets
             new("With forks: run them in under a pallet and lift the arm to take it, lower it to set it down", PlayerInput.ArmBoomUp),
+        }),
+        ("Mini dumper (#614)", new Row[]
+        {
+            // tracks like the excavator's; the skip on the tipper's action
+            new("Tracks: forward / back, turn on the spot", Keys: "{move_forward} {move_back} / {move_left} {move_right}", Pad: "{throttle} {brake} / {move_left}"),
+            new("Tip the skip / bring it down (stopped)", PlayerInput.Destination),
         }),
         ("Compact roller (#614)", new Row[]
         {

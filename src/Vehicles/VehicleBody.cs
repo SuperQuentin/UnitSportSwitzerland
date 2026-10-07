@@ -43,6 +43,13 @@ public partial class VehicleBody : CharacterBody3D
     [Export] public float Spool { get; set; }
     /// <summary>A car's open doors, one bit each (<see cref="CarRig.DoorLeft"/>..): left open for show, or by whoever just got out.</summary>
     [Export] public byte DoorsOpen { get; set; }
+    /// <summary>
+    /// The pallet in a parked tipper's body or mini dumper's skip (#615): 0, else
+    /// <c>Pallets.Carried</c>. Set on its authority when the server lets someone load it
+    /// (<see cref="VehicleManager.LoadBed"/>), replicated as its doors are, and in the flags it is
+    /// handed to a driver with.
+    /// </summary>
+    [Export] public int BedLoad { get; set; }
     /// <summary>A truck's joints as its authority rolls it on (#162), for the copies: its trailer swings where it does.</summary>
     [Export] public Vector3 TrainAngles { get; set; }
     /// <summary>A boat's height over the waves (#302, <see cref="Boat.Heave"/>): copies draw it on their own waves.</summary>
@@ -132,6 +139,7 @@ public partial class VehicleBody : CharacterBody3D
             EngineOn = state.EngineOn,
             Owner = state.Owner,
         };
+        if (v.Ride is IBed { HasBed: true } bed) v.BedLoad = bed.BedLoad;
         if (state.Owner > 0) v.SetMultiplayerAuthority((int)state.Owner);
         return v;
     }
@@ -190,11 +198,11 @@ public partial class VehicleBody : CharacterBody3D
         }
 
         var replication = new SceneReplicationConfig();
-        foreach (var prop in Net.NetPlace.Properties.Concat(new[] { ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool", ".:DoorsOpen", ".:TrainAngles", ".:Heave" }))
+        foreach (var prop in Net.NetPlace.Properties.Concat(new[] { ".:rotation", ".:velocity", ".:Wrecked", ".:Health", ".:EngineOn", ".:Tilt", ".:Spool", ".:DoorsOpen", ".:TrainAngles", ".:Heave", ".:BedLoad" }))
             replication.AddProperty(prop);
         // states that change a few times per life of a vehicle go reliably on change; the motion
         // at 20 Hz while it moves (every frame before, for a bike standing in a field for hours)
-        foreach (var prop in new[] { ".:Wrecked", ".:Health", ".:EngineOn", ".:DoorsOpen" })
+        foreach (var prop in new[] { ".:Wrecked", ".:Health", ".:EngineOn", ".:DoorsOpen", ".:BedLoad" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         var sync = _sync = new MultiplayerSynchronizer
         {
@@ -330,7 +338,9 @@ public partial class VehicleBody : CharacterBody3D
             : Ride is Airliner jet ? (jet.State.OnGround || Velocity.LengthSquared() < Airliner.FlyingSpeed * Airliner.FlyingSpeed ? default : new Basis(Tilt).GetEuler()) : _initial.Angles,
         // a bus's doors as they are now, where a truck keeps them
         Ride is Truck { IsBus: true } ? (_initial.Flags & ~(15 << 4)) | ((DoorsOpen & 15) << 4)
-            : Ride is Airliner ? (_initial.Flags & ~(15 << 13)) | ((DoorsOpen & 15) << 13) : _initial.Flags, _initial.Load,
+            : Ride is Airliner ? (_initial.Flags & ~(15 << 13)) | ((DoorsOpen & 15) << 13)
+            // a tipper's or a mini dumper's pallet as it is now (#615): loaded since it was parked
+            : Ride is IBed { HasBed: true } bed ? bed.FlagsWithBed(_initial.Flags, BedLoad) : _initial.Flags, _initial.Load,
         _initial.Radio, _initial.Cd,
         // in a hold (#418): its carrier now (it may have changed hands since it was parked) and its spot
         HoldPlace.Key, HoldPlace.Section, HoldPlace.Pos, HoldPlace.Yaw);
@@ -564,6 +574,13 @@ public partial class VehicleBody : CharacterBody3D
         // airstairs: posed where they stand, the platform at the sill they are docked at (#417)
         if (Ride is Airstairs stairs) StandAirstairs(stairs, dt);
         if (_visual == null) return;
+        // the pallet in its body as replicated (#615): a truck's rigs are dressed from the ride below
+        if (Ride is IBed { HasBed: true } bed && bed.BedLoad != BedLoad)
+        {
+            bed.BedLoad = BedLoad;
+            _dressedAtRest = null;
+            if (_visual is HeavyRig bedRig) bedRig.BedLoad = BedLoad;
+        }
         if (_visual is CarRig doors) doors.DoorsOpen = DoorsOpen;
         else if (_visual is HeavyRig bus && Ride is Truck { IsBus: true } or Truck { CarDoors: true })
         {
@@ -618,6 +635,7 @@ public partial class VehicleBody : CharacterBody3D
         {
             // parked as the driver left it: lamps, doors, the display; every section's wheels roll
             truck.UnpackFlags(_initial.Flags);
+            if (truck.HasBed) truck.BedLoad = BedLoad;
             // a bus's doors are live, worked by its buttons as it rolls: not as the driver left them
             if (truck.IsBus || truck.CarDoors) truck.DoorsOpen = DoorsOpen;
             _heavySpin += Velocity.Length() / truck.WheelRadius * dt;
