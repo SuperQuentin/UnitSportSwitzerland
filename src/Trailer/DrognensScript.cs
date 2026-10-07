@@ -99,7 +99,7 @@ public static class DrognensScript
                 new(3.97, Pt.At(2558404, 1169322, 16), Pt.At(2558360, 1169352, 1.5f), 35),
             ],
             Preroll = 0.5,
-            Chat = [new(0.6, Rochat, "lights out at 22:00. goodnight recruits")],
+            Chat = [new(0.6, Rochat, "lichterlöschen 22:00. tagwache 06:00, hä-si-be")],
             Supers = [new(0.3, 3.4, "PLACE D'ARMES DE DROGNENS · 22:47")],
         },
 
@@ -136,8 +136,8 @@ public static class DrognensScript
         {
             Keys =
             [
-                new(0, Pt.Set(-0.15f, 1.15f, -0.45f), Pt.Set(0.35f, 1.1f, -1.6f), 28),
-                new(1.98, Pt.Set(-0.25f, 1.2f, -0.35f), Pt.Set(0.5f, 1.3f, -1.6f), 28),
+                new(0, Pt.Set(-0.35f, 1.3f, 0.35f), Pt.Set(0.55f, 1.05f, -1.45f), 24),
+                new(1.98, Pt.Set(-0.45f, 1.35f, 0.45f), Pt.Set(0.6f, 1.2f, -1.45f), 24),
             ],
             Props = Table(Favre, Muller, null, null),
             Cast =
@@ -145,7 +145,7 @@ public static class DrognensScript
                 new() { Who = Krasniqi, At = default, InSet = new Vector3(0.95f, 0f, -1.4f), Heading = 270, Dance = Cheer },
             ],
             Preroll = 0.4,
-            Chat = [new(0.5, Favre, "all in??")],
+            Chat = [new(0.3, Krasniqi, "all in. SABTA"), new(1.1, Favre, "all in??")],
         },
         Room(5, "The idea", 7, 1) with
         {
@@ -160,7 +160,7 @@ public static class DrognensScript
                 new() { Who = Muller, At = default, InSet = new Vector3(-0.95f, 0f, -0.75f), Heading = 100, Dance = 27 },
             ],
             Preroll = 0.4,
-            Chat = [new(0.3, Muller, "the karts are in garage 4")],
+            Chat = [new(0.2, Muller, "karts in garage 4. who's u-booting?"), new(1.2, Bernasconi, "polenta-fraktion is in")],
         },
 
         // ---- the race round the barracks ------------------------------------------------------------
@@ -222,13 +222,14 @@ public static class DrognensScript
                 new(1.98, Pt.Road("ring", 12, 2.5f, 1.0f), Pt.On(0, 0f, 1.0f), 28),
             ],
             Preroll = 2,
-            Chat = [new(0.5, Rochat, "RECRUITS.")],
+            Chat = [new(0.4, Rochat, "RECRUITS. landschaden. ZS at 06:00")],
         },
 
         // ---- dawn: the photo ------------------------------------------------------------------------
         new()
         {
             Number = 11, Name = "Souvenir", FromBar = 14, Bars = 2, Song = S, Hour = 6.4, Traffic = 0,
+            Supers = [new(0.0, 0.9, "06:00 · HV")],
             Cast =
             [
                 new() { Who = Muller, At = new Spot(2558396, 1169338), Heading = 270, Dance = Salute },
@@ -250,7 +251,7 @@ public static class DrognensScript
             FadeOut = 1.6,
             Captions =
             [
-                new(1.0, 2.97, "UNITSPORT SWITZERLAND", "ER 45 · Drognens", Title: true),
+                new(1.0, 2.97, "UNITSPORT SWITZERLAND", "Drognens · u-booting since 1972", Title: true),
                 new(1.4, 2.57, "", S.Credit),
             ],
         },

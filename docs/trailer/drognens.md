@@ -46,7 +46,7 @@ Times are from the start of the film, cut on the bars.
 1. **Bars 1-2 · 0:00-0:04 · EXT. DROGNENS, THE YARD — NIGHT.** A slow drone over rows of Duros,
    G-Classes and Iveco lorries, the barracks' windows lit behind them.
    - Super: **PLACE D'ARMES DE DROGNENS · 22:47**.
-   - ROCHAT: lights out at 22:00. goodnight recruits
+   - ROCHAT: lichterlöschen 22:00. tagwache 06:00, hä-si-be
 2. **Bar 3 · 0:04-0:06 · INT. CORRIDOR.** The teal door, **61-405 Chambre**, open; light and
    music beyond it. The camera slides toward it (the army's own photo of the room).
 3. **Bars 4-5 · 0:06-0:10 · INT. CHAMBRE 61-405.** Down the aisle between the mirrored rows of
@@ -55,9 +55,11 @@ Times are from the start of the film, cut on the bars.
    - BERNASCONI dances by the radio, a beer in hand, and drinks.
 4. **Bar 6 · 0:10-0:12 · INT. THE TABLE.** Close on the chips. KRASNIQI stands up: all in, and he
    cheers.
+   - KRASNIQI: all in. SABTA
    - FAVRE: all in??
 5. **Bar 7 · 0:12-0:14 · INT. THE TABLE.** MÜLLER stands, a finger in the air: an idea.
-   - MÜLLER: the karts are in garage 4
+   - MÜLLER: karts in garage 4. who's u-booting?
+   - BERNASCONI: polenta-fraktion is in
 6. **Bars 8-9 · 0:14-0:18 · EXT. THE RING ROAD — NIGHT.** Four karts burst round the block,
    low and loud, past the row of Duros. The horns brighten.
 7. **Bar 10 · 0:18-0:20 · EXT. FROM ABOVE.** The pack round the north block, one diving up the
@@ -68,11 +70,30 @@ Times are from the start of the film, cut on the bars.
    pitch.
 10. **Bar 13 · 0:24-0:26 · EXT. THE ROAD IN.** Headlights: ROCHAT's G-Class turns in, and the
     karts stop dead.
-    - ROCHAT: RECRUITS.
+    - ROCHAT: RECRUITS. landschaden. ZS at 06:00
 11. **Bars 14-15 · 0:26-0:30 · EXT. THE YARD — DAWN.** The four in a row by their karts, saluting,
-    ROCHAT's G-Class behind them. A flash: the photo settles as a polaroid ("ER 45, souvenir").
-    - Title: **UNITSPORT SWITZERLAND**.
+    ROCHAT's G-Class behind them. A flash: the photo settles as a polaroid.
+    - Super: **06:00 · HV**.
+    - Title: **UNITSPORT SWITZERLAND**, with "Drognens · u-booting since 1972" under it.
     - The credit.
+
+## The army's words
+
+From the army's own slang (Blick's army ABC) and its ranks, used in the chat and the supers:
+
+| Word | What it means | Where |
+|---|---|---|
+| **Lichterlöschen / Tagwache** | lights out / reveille | ROCHAT's goodnight |
+| **Hä-si-be** | "hält sich bereit", stand by | ROCHAT's goodnight |
+| **SABTA** | "selbstsicheres Auftreten bei totaler Ahnungslosigkeit": full confidence, no idea | KRASNIQI going all in |
+| **U-Booten** | sneaking away from the troop unseen | MÜLLER's idea, the title's sub |
+| **Polenta-Fraktion** | (teasing) the soldiers from Ticino | BERNASCONI joining |
+| **Landschaden** | damage done by army vehicles | ROCHAT catching the karts |
+| **ZS** | a dressing-down ("Zusammenschiss") | ROCHAT |
+| **HV** | the roll call before leave ("Hauptverlesen") | the dawn super |
+| **Recr / Sgtm chef** | recruit / chief sergeant-major, the French abbreviations | the cast |
+| **TAZ** | the camouflage uniform ("Tarnanzug") | what they wear (#716) |
+| **M 12345** | military plates: white on black, M before the number | every army vehicle (#714, #715) |
 
 ## Easter eggs
 

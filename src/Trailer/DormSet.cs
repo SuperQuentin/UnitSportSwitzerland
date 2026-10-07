@@ -71,17 +71,19 @@ public static class DormSet
             for (int i = 0; i < BedsPerSide; i++) BedAt(s, side, i);
         }
         Poker(s);
-        root.AddChild(new MeshInstance3D { Name = "Room", Mesh = s.Build(), MaterialOverride = HumanMeshBuilder.Material() });
+        // MeshScratch bakes a half turn (vehicles are authored facing +Z); the set is authored in
+        // its node's own frame, as its lights, collision and the director's points are, so turned back
+        root.AddChild(new MeshInstance3D { Name = "Room", Mesh = s.Build(), MaterialOverride = HumanMeshBuilder.Material(), Transform = Unturn });
 
         var glow = new MeshScratch();
         for (int row = -1; row <= 1; row += 2)
             foreach (float z in TubeRows) glow.Box(new Vector3(row * 1.4f, Height - 0.3f, z), new Vector3(0.12f, 0.05f, 1.4f), new Color(1f, 1f, 0.96f));
         glow.Box(new Vector3(0f, Height - 0.3f, (HalfLength + CorridorEnd) * 0.5f), new Vector3(1.2f, 0.05f, 0.12f), new Color(1f, 1f, 0.96f));
-        root.AddChild(new MeshInstance3D { Name = "Tubes", Mesh = glow.Build(), MaterialOverride = Unlit(new Color(1f, 1f, 0.95f)) });
+        root.AddChild(new MeshInstance3D { Name = "Tubes", Mesh = glow.Build(), MaterialOverride = Unlit(new Color(1f, 1f, 0.95f)), Transform = Unturn });
 
         var night = new MeshScratch();
         for (int w = -1; w <= 1; w += 2) night.Box(new Vector3(w * 1.6f, 1.75f, -HalfLength + 0.06f), new Vector3(1.5f, 1.6f, 0.02f), new Color(1, 1, 1));
-        root.AddChild(new MeshInstance3D { Name = "Night", Mesh = night.Build(), MaterialOverride = Unlit(new Color(0.06f, 0.09f, 0.2f)) });
+        root.AddChild(new MeshInstance3D { Name = "Night", Mesh = night.Build(), MaterialOverride = Unlit(new Color(0.06f, 0.09f, 0.2f)), Transform = Unturn });
 
         root.AddChild(DoorSign());
         foreach (float z in TubeRows)
@@ -93,6 +95,9 @@ public static class DormSet
     }
 
     private static readonly float[] TubeRows = { -5.2f, -1.6f, 2.0f, 5.6f };
+
+    /// <summary>Undoes the half turn <see cref="MeshScratch.Build()"/> bakes in.</summary>
+    private static readonly Transform3D Unturn = new(new Basis(Vector3.Up, Mathf.Pi), Vector3.Zero);
 
     private static StandardMaterial3D Unlit(Color colour) => new()
     {

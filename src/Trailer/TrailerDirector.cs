@@ -519,6 +519,12 @@ public partial class TrailerDirector : Node
         GD.Print(string.Create(CultureInfo.InvariantCulture, $"[trailer] shot {shot.Number}: rolling, {shot.Length:F2} s ({_framesWanted} frames)"));
         Enter(Phase.Roll);
         Frame(0);
+        if (_set != null)
+        {
+            // where the camera starts in the set's own metres: a key outside its walls films the world beyond them
+            var inSet = _set.GlobalTransform.AffineInverse() * _camera.GlobalPosition;
+            GD.Print(string.Create(CultureInfo.InvariantCulture, $"[trailer] shot {shot.Number}: camera at ({inSet.X:F2}, {inSet.Y:F2}, {inSet.Z:F2}) in the set"));
+        }
     }
 
     private void Roll(double delta)
