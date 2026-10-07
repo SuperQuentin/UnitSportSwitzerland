@@ -62,6 +62,27 @@ listed rules differing by kind. Stacked on #704 (`lane-data-intersections`).
   line's ribbon and the widening strips), not taken from the mouth's widening (Sion: 0.35 m further north).
 - Lane widths (the pocket wider than the through lane) are phase 2, below.
 
+## Lanes from OSM's lane count (the user's rule, Oct 7 2026)
+
+OSM's approach lane count is the truth; its `turn:lanes` (Geneva) say what each lane does; without them the lanes are
+shared out from what the exits take away (`InferredLanes`, tier 0 `LaneInferenceTests`): as many straight on as the
+straight exit's departing lanes (`OutLanes`), the lanes left over left-only on the left (as many as the left exit takes),
+then right-only on the right, still more straight on; a turn without its own lane shares the outermost through lane; a
+forbidden turn gets none. The junction's markings follow:
+
+- **Centre line through the junction** from each arm's own centre line (`PriorityPlanner.CentreLineShift`, the boundary
+  between its lanes the two ways, `RoadCrossSection.TwoWayLineOffset`): a 2+1 road's is off its middle (Sion
+  2507062,1137845: it jumped half a lane). The user: centre lines through the junction at both kinds, edge lines without
+  lights only. **Not done yet at the lights** (they draw no centre line through the junction).
+- **Same-turn lanes led through**: `EmitPairGuides` without lights too, from the approach's own lanes and the inferred
+  moves, starting at the mouth (`signal: false`). Sion tiles: 20.
+- Sion tiles: 14 approaches' lanes changed from #700's rule (a one-lane straight exit: the inner lane left-only, or the
+  outer right-only).
+- **Data limits found**: (1) a segment takes one OSM row, the one covering most of it (`OsmOverlayReader.Best`), so a
+  lane count that changes near the junction is lost (Sion's north-west exit: 3 lanes for its last 24 m, 1+1 before: built
+  1+1, the two lanes merge at the upper node and its outer lane is inferred right-only); (2) an odd `lanes` without
+  `lanes:forward/backward` is split with the extra lane backward (`CrossSectionPlanner.Prepare`), a fixed rule.
+
 ## Phase 2: lanes
 
 - **Equal lane widths at every junction** (`LanesOf(equal: true)` for every pocket, #682 had it at the lights): the T's

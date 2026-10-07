@@ -309,6 +309,23 @@ public static class PriorityPlanner
     }
 
     /// <summary>
+    /// How far an arm's centre line stands from the middle of its mouth (#711), in plan: the boundary between its lanes
+    /// against the drawing and with it, as the road's paint lays it (<see cref="RoadCrossSection.TwoWayLineOffset"/>, a
+    /// direction with no lane count taking one). Zero for a road with as many lanes each way.
+    /// </summary>
+    public static Vec2 CentreLineShift(JunctionArm arm, LinkEnd end, LinkInfo info)
+    {
+        var at = info.Attributes;
+        int back = Math.Max(1, (int)at.LanesBackward), fwd = Math.Max(1, (int)at.LanesForward);
+        float leftBike = at.Left.HasLane ? at.Left.BikeDm / 10f : 0f, rightBike = at.Right.HasLane ? at.Right.BikeDm / 10f : 0f;
+        double off = RoadCrossSection.TwoWayLineOffset(info.Width, leftBike, rightBike, back, fwd, back);
+        // right of the drawing's direction: into the junction where the link ends here (the approaching driver's right,
+        // the outward direction's perpendicular), out of it where it starts
+        var u = Vec2.FromHeading(arm.OutwardHeading);
+        return u.Perp * (end == LinkEnd.End ? off : -off);
+    }
+
+    /// <summary>
     /// The main road's Leitlinie carried through the junction between its two arms' ends, when
     /// both are two-way, paved and wide enough to have one (the paint rules of PaintEmitter), and
     /// the road does not turn sharply there.
@@ -328,12 +345,16 @@ public static class PriorityPlanner
         var b = j.Arms[main[1]];
         if (-Math.Cos(a.OutwardHeading - b.OutwardHeading) < 0.5) return;   // turns more than 60 degrees
         Vec2 from = (a.Left + a.Right) * 0.5, to = (b.Left + b.Right) * 0.5;
+        // (#711) from each arm's own centre line, where its lanes the two ways meet (a 2+1 road's is off its middle)
+        Vec2 centreA = from + CentreLineShift(a, plan.Arms[main[0]].End, infos[main[0]]!.Value);
+        Vec2 centreB = to + CentreLineShift(b, plan.Arms[main[1]].End, infos[main[1]]!.Value);
+        var centreControl = j.Centre + ((centreA - from) + (centreB - to)) * 0.5;
         var line = new List<Vec2>();
         const int Samples = 8;
         for (int s = 0; s <= Samples; s++)
         {
             double t = (double)s / Samples, mt = 1 - t;
-            line.Add(from * (mt * mt) + j.Centre * (2 * mt * t) + to * (t * t));
+            line.Add(centreA * (mt * mt) + centreControl * (2 * mt * t) + centreB * (t * t));
         }
         plan.CentreLine = Polyline.Simplify(line, 0.02);   // mostly straight: 2 points instead of 9
         plan.CentreUrban = infos[main[0]]!.Value.Attributes.Has(RoadAttrFlags.Urban);

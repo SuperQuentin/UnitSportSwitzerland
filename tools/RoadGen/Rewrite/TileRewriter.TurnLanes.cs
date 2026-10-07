@@ -35,7 +35,7 @@ public static partial class TileRewriter
         /// <summary>Junction corners left tight: no right turn rounds them (#700).</summary>
         public int TightCorners;
         /// <summary>Lead-ins split between both edges (#700).</summary>
-        public int SplitLeadIns, ThroughGuides, MirrorGuides, SpeedFast, SpeedSlow, SpeedNoneTown, SpeedNoneRural;
+        public int SplitLeadIns, ThroughGuides, MirrorGuides, PairGuidesNoLights, SpeedFast, SpeedSlow, SpeedNoneTown, SpeedNoneRural;
         /// <summary>Hatched medians left out as too narrow or too short (#406).</summary>
         public int HatchesSkipped;
         /// <summary>Kerb corners paved beside a widening (#406), and those whose outline did not work out.</summary>
@@ -46,7 +46,7 @@ public static partial class TileRewriter
         public readonly SortedDictionary<string, List<string>> LayoutExamples = new();
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets (approaches with a right turn faster than 50 km/h {SpeedFast:N0} / not {SpeedSlow:N0} / no OSM speed in town {SpeedNoneTown:N0}, outside {SpeedNoneRural:N0}, #711; {RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {Corners:N0} corners rounded beside a widening ({CornersRejected:N0} failed, {CornersInTown:N0} left square beside a sidewalk or path, #406), {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120), {TightCorners:N0} junction corners left tight (no right turn rounds them, #700), {SplitLeadIns:N0} lead-ins split between both edges ({MirrorGuides:N0} edge guides moved out onto the other edge, #711), {ThroughGuides:N0} through-lane guides across the junction (#700); " +
+            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets (approaches with a right turn faster than 50 km/h {SpeedFast:N0} / not {SpeedSlow:N0} / no OSM speed in town {SpeedNoneTown:N0}, outside {SpeedNoneRural:N0}, #711; {RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {Corners:N0} corners rounded beside a widening ({CornersRejected:N0} failed, {CornersInTown:N0} left square beside a sidewalk or path, #406), {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120), {TightCorners:N0} junction corners left tight (no right turn rounds them, #700), {SplitLeadIns:N0} lead-ins split between both edges ({MirrorGuides:N0} edge guides moved out onto the other edge, #711), {ThroughGuides:N0} through-lane guides across the junction (#700), {PairGuidesNoLights:N0} lines between two same-turn lanes through a junction without lights (#711); " +
             $"rejected (approach or exit): too short {Short:N0}, building {Building:N0}, another line {OtherLine:N0}, ground off the road {Ground:N0}, tile seam {Seam:N0}, no segment {NoSegment:N0}, no main road out {NoExit:N0}, two lanes or more already and no lane data {MultiLane:N0}; OSM lane data (#700): {Wished:N0} approaches, {WishFolded:N0} wished lanes folded, {WishNoLeft:N0} with a road to the left and no left lane, {WishInPlace:N0} assigned in place, {WishArrows:N0} arrows over them\n") +
             string.Concat(LayoutExamples.Select(kv => $"      right pockets beside a bike lane, layout {kv.Key} at LV95 {string.Join("; ", kv.Value)}\n"));
 
@@ -252,10 +252,27 @@ public static partial class TileRewriter
                     if (kmh > RightPocketSpeed) stats.SpeedFast++; else if (kmh > 0) stats.SpeedSlow++; else if (town) stats.SpeedNoneTown++; else stats.SpeedNoneRural++;
                 }
                 if (wished is not null) wishes[(junction.NodeId, i)] = (home, wished, ownLanes, arm.LinkId, arm.End == LinkEnd.End);
-                // a multi-lane approach without OSM lane data (#700, the user's review of J7; #711: at every junction): the leftmost
-                // lane also turns left, the rightmost also right, the rest go straight on, with their arrows as OSM's would get
+                // a multi-lane approach without OSM lane data (#700, the user's review of J7; #711: at every junction, shared out
+                // by the lanes each exit takes away, InferredLanes), with their arrows as OSM's would get
                 else if (ownLanes >= 2)
-                    wishes[(junction.NodeId, i)] = (home, InferredLanes(can & ~banned, ownLanes), ownLanes, arm.LinkId, arm.End == LinkEnd.End);
+                {
+                    // (#711) the lanes each turn's exit takes away: the most of any arm making that turn
+                    int outL = 0, outT = 0, outR = 0;
+                    for (int k = 0; k < armsHere.Count; k++)
+                    {
+                        if (k == i || !armsHere[k].Out) continue;
+                        int n = OutLanes(junction, k, net);
+                        switch (SignalPlan.Turn(armsHere, i, k))
+                        {
+                            case SignalMoves.Left: outL = Math.Max(outL, n); break;
+                            case SignalMoves.Through: outT = Math.Max(outT, n); break;
+                            case SignalMoves.Right: outR = Math.Max(outR, n); break;
+                        }
+                    }
+                    static int Known(int n) => n > 0 ? n : int.MaxValue;
+                    wishes[(junction.NodeId, i)] = (home, InferredLanes(can & ~banned, ownLanes, Known(outL), Known(outT), Known(outR)),
+                        ownLanes, arm.LinkId, arm.End == LinkEnd.End);
+                }
                 if (wish is not null) { stats.Wished++; stats.WishFolded += wish.Folded; }
                 else if (ownLanes >= 2) stats.MultiLane++;
                 // a bike box where the street the left turn goes into has no bike lane or path (#351)
@@ -528,6 +545,19 @@ public static partial class TileRewriter
             if (!segmentOf.TryGetValue(w.Link, out var so)) continue;
             var (centre, laneWidth, count) = OwnLanes(plansByNode[node].Junction, arm, net);
             var allowed = turns.GetValueOrDefault((node, arm));
+            // (#711) without lights too, two lanes side by side making the same turn are led through the junction into the
+            // exit's lanes (the lights draw theirs from the lane records)
+            if (plansByNode[node].Plan.Kind != PriorityPlanner.Kind.Signal && count >= 2 && count == fit.Own.Length)
+            {
+                var j = plansByNode[node].Junction;
+                var record = new RoadApproach
+                {
+                    LaneCentre = (float)centre,
+                    Lanes = [.. fit.Own.Select((m, k) => new ApproachLane(k * laneWidth, 0f, 0f, m, ApproachLaneKind.Car))],
+                };
+                if (Anchors(j, net) is { Count: > 0 } anchors)
+                    stats.PairGuidesNoLights += EmitPairGuides(paint, w.Home, j, net, [(arm, record)], anchors, signal: false);
+            }
             // arrows only where the data restricts a lane: a lane of every turn the approach has shows none
             if (fit.Own.All(m => m == allowed) || count != fit.Own.Length) continue;
             double stop = plansByNode[node].Plan.Kind == PriorityPlanner.Kind.Signal
