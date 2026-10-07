@@ -34,8 +34,9 @@ Plan and reasoning: `docs/plans/intersection-lanes.md`. What is built:
   hold their lanes (10 m for 3 lanes; 0+2 and 2+0 lines, two lanes in 8 or 10 m). A first version counted 0+2 as
   three lanes (8 -> 9 m) and widened divided carriageways (Road 3 lanes 3.3 -> 9 m, Minor 2 lanes 2.2 -> 6 m: the
   pair would overlap); both fixed. Phases 1 and 2 together change 9 of the 20 road tiles, each holding a line with
-  lane data or an approach with OSM `turn:lanes`; the other 11 are byte-identical. Test region (no lane data):
-  byte-identical on tiles E 2910-2914 (2915 changes only because road A now runs on east to J6).
+  lane data or an approach with OSM `turn:lanes`; the other 11 are byte-identical (the angled closing line added later
+  changes every tile with a lead-in: 14 of 20). Test region (no lane data):
+  byte-identical on tiles E 2910-2914 before the angled closing line (2915 changes because road A runs on east to J6).
 
 ## Phase 2: approaches from OSM lane data
 
