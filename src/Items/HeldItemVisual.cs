@@ -486,15 +486,14 @@ void fragment() {{
             return;
         }
         if (_sparkles == null) _inHand.AddChild(_sparkles = new RadioSparkles());
-        bool beating = RadioBody.BeatOf(play.CdId, play.StartedAt, Net.ClockSync.ServerNow, out float phase, out int beat, out _, out _);
-        _sparkles.Step(true, beating, phase, beat, dt);
+        _sparkles.Step(true, RadioGroove.Of(play.CdId, play.StartedAt, Net.ClockSync.ServerNow), dt);
     }
 
     /// <summary>A playing radio in the hand bounces to its beat (#261), a little less than on the ground; identity otherwise.</summary>
     private Transform3D RadioBounce(float amount) =>
         _shown == ItemId.Radio && _player != null && RadioPlay.Decode(_player.HeldRadio) is { } play
-        && RadioBody.BeatOf(play.CdId, play.StartedAt, Net.ClockSync.ServerNow, out float phase, out int beat, out _, out _)
-            ? RadioBody.Bounce(phase, beat, 0.11f, amount)
+        && RadioGroove.Of(play.CdId, play.StartedAt, Net.ClockSync.ServerNow) is { Beating: true } g
+            ? RadioBody.Bounce(g.Phase, g.Beat, 0.11f, amount * g.BounceScale)
             : Transform3D.Identity;
 
     /// <summary>

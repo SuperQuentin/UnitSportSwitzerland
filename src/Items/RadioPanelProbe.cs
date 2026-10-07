@@ -65,11 +65,24 @@ public partial class RadioPanelProbe : Node
         inv.Select(0);
         await Wait(0.5);
 
+        // a tap of Use switches it on and off without the panel (#725); off keeps the CD for the next tap
+        await Use();
+        Check(RadioUi.Instance?.IsOpen != true, "a tap of Use opens no panel");
+        Check(!Silent(inv), "a tap of Use switches the radio on (the first CD)");
+        int first = RadioPlay.Decode(inv[0].Data)?.CdId ?? 0;
+        await Use();
+        Check(Silent(inv), "a second tap switches it off");
+        Check(RadioPlay.DecodeAny(inv[0].Data)?.CdId == first && first != 0, $"and it keeps its CD ('{inv[0].Data}')");
+        await Use();
+        Check(RadioPlay.Decode(inv[0].Data)?.CdId == first, "a third tap puts the same CD back on");
+        await Use();
+        Check(Silent(inv), "off again");
+
         // twice: closed by a second Use, then by Esc
         foreach (bool esc in new[] { false, true })
         {
-            await Use();
-            Check(RadioUi.Instance?.IsOpen == true, "Use opens the radio's panel");
+            await HoldUse();
+            Check(RadioUi.Instance?.IsOpen == true, "holding Use opens the radio's panel");
             Check(Visible(RadioUi.LibraryLabel) && !RowsShown(), "on the player view: the library button, no CD row");
             await Wait(0.2);
             var cursor = Input.MouseMode == Input.MouseModeEnum.Visible && DisplayServer.GetName() != "headless"
@@ -109,7 +122,7 @@ public partial class RadioPanelProbe : Node
     /// <summary>The library (#392): its button shows the rows, a row plays, Stop stops, the button goes back.</summary>
     private async Task Library(Inventory inv)
     {
-        await Use();
+        await HoldUse();
         await Wait(0.3);
         Shot("radiopanel_player.png");
         Check(Press(RadioUi.LibraryLabel) && RowsShown(), "the library button shows the CDs");
@@ -162,7 +175,7 @@ public partial class RadioPanelProbe : Node
     {
         bool silent = true;
         for (int i = 0; i < inv.Capacity; i++)
-            if (!inv[i].IsEmpty && inv[i].Id == ItemId.Radio && !string.IsNullOrEmpty(inv[i].Data))
+            if (!inv[i].IsEmpty && inv[i].Id == ItemId.Radio && RadioPlay.Decode(inv[i].Data) != null)
             {
                 Log($"slot {i} holds '{inv[i].Data}'");
                 silent = false;
@@ -184,6 +197,15 @@ public partial class RadioPanelProbe : Node
             Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.UseItem, Pressed = down });
             await Wait(0.15);
         }
+        await Wait(0.4);
+    }
+
+    /// <summary>Use held past <see cref="RadioTap.HoldTime"/>: the panel, not the switch (#725).</summary>
+    private async Task HoldUse()
+    {
+        Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.UseItem, Pressed = true });
+        await Wait(RadioTap.HoldTime + 0.25);
+        Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.UseItem, Pressed = false });
         await Wait(0.4);
     }
 
