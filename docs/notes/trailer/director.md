@@ -3,7 +3,7 @@
 - **What it is**: `--trailer all|N|A-B|N,M` stages and films the shots of a film one after the
   other in the real world, with the game's own machines. A `ToolRun` row in `ClientWorld` (it places
   the camera itself: the spectator, freed like `ShotRunner`'s).
-- **Two films** (`--trailer-film`, `FILM=` in `tools/trailer.sh`, each in `test_output/trailer/<film>/`):
+- **Two films** (`--trailer-film`, `FILM=` in `tools/trailer.sh`):
   `story` (default, `StoryScript`, the script `docs/trailer/script.md`: four friends and a fondue,
   the features shown only through what they do) and `showcase` (`TrailerScript`, the storyboard
   `docs/trailer/storyboard.md`: one feature a shot). The story reuses the showcase's helpers,
@@ -55,8 +55,14 @@
   roll is frames written / fps, never the clock. Without `--fixed-fps` it warns: frames follow the
   wall clock. `tools/trailer.sh render` films the shots and cuts them with the song (`-ss` the first
   shot's start from `shotNN.start`, `-shortest`); `render 19,24` films those again and re-cuts
-  with the rest, `cut` re-cuts only. The 36 showcase shots take ~15 min on this machine; either
-  film is exactly 3810 frames, 127.000 s.
+  them with the last version's others, `cut` re-cuts the newest. The 36 showcase shots take
+  ~15 min on this machine, the 38 of the story ~25; either film is exactly 3810 frames, 127.000 s.
+- **Versions**: every render is a new folder, never written over: `test_output/trailer/<film>/v1`,
+  `v2`, ... in the **main checkout** (`TRAILERS=` elsewhere), so a film outlives the worktree it
+  was made in. Each holds `trailer.mp4`, `trailer_share.mp4` (CRF 23, to send), `shots/`,
+  `render.log` and `version.txt` (when, the commit and whether there were local changes, which
+  shots were filmed and from which version the others came). `VERSION=2 tools/trailer.sh cut`
+  re-cuts an older one. Stills stay scratch, in the checkout's `test_output/trailer/<film>/stills`.
 - **Framing a shot**: `tools/trailer.sh stills 5` (first, middle, last frame) with `LOG=1`
   (`--trailer-log`): every actor's LV95, speed and arc twice a second, and each road dumped every
   5 m to `test_output/trailer/routes/shotNN_<road>.csv`, to put a camera where a car will be.

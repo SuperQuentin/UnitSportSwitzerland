@@ -11,7 +11,7 @@ overhead stills (`--trailer-scout`), timings off the actor logs (`--trailer-log`
 [Creative Commons: By Attribution 4.0](https://creativecommons.org/licenses/by/4.0/): free to use,
 credit required (it is on the end card). Download:
 `https://incompetech.com/music/royalty-free/mp3-royaltyfree/Voxel%20Revolution.mp3`
-(`tools/trailer.sh` fetches it into `test_output/trailer/`; the file is not committed).
+(`tools/trailer.sh` fetches it into the main checkout's `test_output/trailer/`; the file is not committed).
 
 Why this one: a bright, driving chiptune-flavoured electro track for a low-poly game with a PS1
 soul, 2:10 long (a trailer's length without edits), and it already has a trailer's shape.
@@ -123,8 +123,9 @@ This is the showcase film: `FILM=showcase` before every command (the default fil
 - Preview a shot in a window, with its part of the song: `FILM=showcase tools/trailer.sh preview 5` (or `5-9`, `5,7`).
 - Frame a shot from its first, middle and last frame: `FILM=showcase tools/trailer.sh stills 5` (`LOG=1` prints
   where every actor is twice a second and dumps the roads, to time a car to a camera).
-- Film it all and cut it on the song: `FILM=showcase tools/trailer.sh render` →
-  `test_output/trailer/showcase/trailer.mp4` (1920x1080, 30 fps, 2:07; ~15 min). `render 19,24` films
-  those shots again and re-cuts the film with the others; `cut` only re-cuts.
+- Film it all and cut it on the song: `FILM=showcase tools/trailer.sh render` → the next version,
+  `test_output/trailer/showcase/vN/trailer.mp4` in the main checkout (1920x1080, 30 fps, 2:07;
+  ~15 min). `render 19,24` films those shots again into a new version, with the last version's
+  others; `cut` re-cuts the newest.
 - Find a place from above: `--trailer-scout "E,N,H"` (a north-up still from H m, H/1080 m a pixel).
 - How the director works, and the staging gotchas: `docs/notes/trailer/director.md`.

@@ -289,7 +289,8 @@ note what the scene reveals of the game, for us only; nothing of it is on screen
 ## How it was made
 
 `StoryScript.cs` is this script as shots; `tools/trailer.sh stills|render [shots]` frames and films it
-(the default film; `test_output/trailer/story/`), the director is `docs/notes/trailer/director.md`.
+(the default film; each render a version of its own, `test_output/trailer/story/vN/` in the main
+checkout), the director is `docs/notes/trailer/director.md`.
 What the script asked of the director, and what it became:
 
 - **Chat lines as dialogue**: the group chat bottom left, names in the characters' colours, typed in;
