@@ -968,7 +968,7 @@ public static partial class InteriorGenerator
     /// wall; and how much of a stretch of one of them faces out (#577: part of a wall may be the
     /// next wing's), <paramref name="Free"/>(0, 1 or 2 for those, from, to).
     /// </summary>
-    private sealed record Ext(bool U0, bool U1, bool Far, Func<int, float, float, float> Free)
+    internal sealed record Ext(bool U0, bool U1, bool Far, Func<int, float, float, float> Free)
     {
         public static Ext Plain(bool u0, bool u1, bool far) => new(u0, u1, far, (_, a, b) => b - a);
 
@@ -977,7 +977,7 @@ public static partial class InteriorGenerator
     }
 
     /// <summary>A room in the flat's own frame: u along the wall with the front door, v away from it.</summary>
-    private sealed record Local(RoomType Type, float U0, float V0, float U1, float V1);
+    internal sealed record Local(RoomType Type, float U0, float V0, float U1, float V1);
 
     /// <summary>
     /// Cuts [<paramref name="a"/>, <paramref name="b"/>] into consecutive slices, the order given:
@@ -1016,7 +1016,7 @@ public static partial class InteriorGenerator
     /// its other walls are the building's facades: the u = 0 end, the u = u end, the far wall.
     /// Returns the rooms, the entrance hall first.
     /// </summary>
-    private static List<Local> FlatRooms(float u, float v, float door, Ext ext, Random rng)
+    internal static List<Local> FlatRooms(float u, float v, float door, Ext ext, Random rng)
     {
         var program = FlatProgram(u * v, rng);
         // no more bedrooms than its facades can give a window each, beside the living room's (#571):
@@ -1089,6 +1089,9 @@ public static partial class InteriorGenerator
         }
         return score;
     }
+
+    /// <summary>The least a studio's kitchenette is deep, m (the validator's floor for a room is 1.0).</summary>
+    private const float MinKitchenette = 1.2f;
 
     /// <summary>A window fits in a wall this long (<see cref="AddWindows"/>: 1.1 m and 0.4 m either side).</summary>
     private const float WindowWall = 1.9f;
@@ -1311,12 +1314,16 @@ public static partial class InteriorGenerator
     /// room behind for sleeping and sitting (a bedroom, so it gets the bed). Where the door wall
     /// is too short for all three side by side, the kitchenette is a slice between them instead.
     /// </summary>
-    private static List<Local> StudioFlat(float u, float v, float door)
+    internal static List<Local> StudioFlat(float u, float v, float door)
     {
         float band = Math.Min(2.3f, v * 0.4f);
         float h0 = Fit(door - HallWidth / 2, 0, u - HallWidth), h1 = h0 + HallWidth;
         var rooms = new List<Local>();
-        if (v < 4.6f)
+        // the kitchenette of the stacked layout below is 35 % of what the band leaves: under 4.8 m deep that is under a metre
+        // (0.98 m at 4.65, a validator reject in 12 of the first garage blocks, #694), so a flat that shallow takes the shallow layout
+        float left0 = h0, right0 = u - h1;
+        bool sideBySide = left0 >= 1.7f && right0 >= 1.9f || right0 >= 1.7f && left0 >= 1.9f;
+        if (v < 4.6f || !sideBySide && (v - band) * 0.35f < MinKitchenette)
         {
             // too shallow to stack: along the wall, the hall at the door, the bathroom over the
             // kitchenette beside it, the room beyond; a sliver the other side of the hall is a cupboard

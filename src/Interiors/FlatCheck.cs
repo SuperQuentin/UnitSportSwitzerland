@@ -57,6 +57,26 @@ public static class FlatCheck
             GD.Print($"[flatcheck] {(ok ? "ok  " : "FAIL")} {what}");
         }
 
+        // flats of every size the cutter can be handed: no room under the validator's metre (a 4.65 m deep studio had a 0.98 m
+        // kitchenette, which rejected 12 of the first garage blocks, #694)
+        int thin = 0, swept = 0;
+        string firstThin = "";
+        for (float v = GarageRule.MinFlatSide; v <= 9f; v += 0.05f)
+            for (float u = 4.4f; u <= 21f; u += 0.37f)
+                foreach (var e in new[] { InteriorGenerator.Ext.Plain(true, false, true), InteriorGenerator.Ext.Plain(true, true, true), InteriorGenerator.Ext.Plain(false, false, true), InteriorGenerator.Ext.Plain(false, true, false) })
+                    foreach (float door in u < 7.4f ? new[] { 0.7f, u - 0.7f } : new[] { 0.7f, u / 2, u - 0.7f })   // Flat() puts a narrow flat's door at an end
+                    {
+                        swept++;
+                        var rooms = InteriorGenerator.FlatRooms(u, v, door, e, new Random(swept));
+                        if (rooms.Find(r => Math.Min(r.U1 - r.U0, r.V1 - r.V0) < 1.0f) is { } bad)
+                        {
+                            thin++;
+                            if (System.Environment.GetEnvironmentVariable("FLATSWEEP") != null) GD.Print($"[flatcheck] thin u {u:F2} v {v:F2} door {door:F2} {bad}");
+                            if (firstThin.Length == 0) firstThin = $"u {u:F2} v {v:F2} door {door:F2}: {bad}";
+                        }
+                    }
+        Expect(thin == 0, $"{swept} flats from 4.4 x 3.4 to 21 x 9 m: {thin} with a room under 1 m ({firstThin})");
+
         string dir = ProjectSettings.GlobalizePath("res://test_output/flats");
         System.IO.Directory.CreateDirectory(dir);
         var tile = Tile();

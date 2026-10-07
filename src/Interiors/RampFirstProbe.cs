@@ -20,6 +20,19 @@ public partial class RampFirstProbe : Node
 {
     private readonly string _out;
     private string _svgDir = "";
+    private readonly StringBuilder _dump = new();
+
+    /// <summary>The rooms of the unit that holds the first bad room of a validator message, for the probe's log.</summary>
+    private static string Dump(InteriorLayout plan, string message)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(message, @"floor (\d+) room (\d+)");
+        if (!m.Success) return "";
+        var fl = plan.Floors[int.Parse(m.Groups[1].Value)];
+        int bad = int.Parse(m.Groups[2].Value);
+        int unit = fl.Rooms[bad].Unit;
+        return string.Join(" | ", fl.Rooms.Select((r, i) => (r, i)).Where(x => x.r.Unit == unit)
+            .Select(x => $"{x.i}:{x.r.Type}[{x.r.X0:F1},{x.r.Z0:F1}..{x.r.X1:F1},{x.r.Z1:F1}]"));
+    }
     private readonly int[] _svgs = new int[8];
 
     public RampFirstProbe(string? shot) => _out = string.IsNullOrEmpty(shot) ? "test_output/rampfirst.txt" : shot;
@@ -130,7 +143,11 @@ public partial class RampFirstProbe : Node
                             if (!ramp) r.Plan = (InteriorGenerator.RampWhy ?? "locked") + " / wings: " + (InteriorGenerator.WingFailure ?? "ok");
                             var problems = InteriorValidator.Validate(plan);
                             r.Valid = problems.Count == 0;
-                            if (!r.Valid) r.Plan = "invalid: " + problems[0];
+                            if (!r.Valid)
+                            {
+                                r.Plan = "invalid: " + problems[0];
+                                lock (_dump) _dump.AppendLine($"{r.Key} {problems[0]} (plan {plan.Width:F1} x {plan.Depth:F1}); " + Dump(plan, problems[0]));
+                            }
                             if (Interlocked.Increment(ref _svgs[(int)r.Kind * 2 + (r.Valid ? 0 : 1)]) <= 8)
                                 File.WriteAllText(Path.Combine(_svgDir, $"{r.Kind}_{(r.Valid ? "ok" : "bad")}_{r.Key}.svg"), InteriorValidator.ToSvg(plan));
                         }
@@ -199,6 +216,7 @@ public partial class RampFirstProbe : Node
         P($"Doors by the front doors the block has today: 1 door {doors.Count(r => r.FrontDoors <= 1)}, 2+ {doors.Count(r => r.FrontDoors >= 2)}");
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_out))!);
         File.WriteAllText(_out, sb.ToString());
+        if (_dump.Length > 0) File.WriteAllText(Path.ChangeExtension(_out, ".invalid.txt"), _dump.ToString());
         var csv = new StringBuilder("key,tile,index,type,w,d,storeyH,above,frontDoors,wing,road,tooSmall,kind,door,doorX,locked,valid,plan\n");
         foreach (var r in rows)
             csv.AppendLine(string.Join(",", r.Key, r.Tile, r.Index, r.Type, F(r.W), F(r.D), F(r.H), r.Above, r.FrontDoors, r.Wing ? 1 : 0,
