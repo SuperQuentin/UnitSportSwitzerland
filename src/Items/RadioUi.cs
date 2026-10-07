@@ -45,7 +45,7 @@ public partial class RadioUi : CanvasLayer
     private const float WalkAway = 4f;
     private const float MaxWidth = 700, MaxHeight = 660, Gutter = 16;
     /// <summary>The player view: this wide, this far above the bottom of the screen (clear of the hotbar).</summary>
-    private const float PlayerWidth = 540, PlayerLift = 96;
+    private const float PlayerWidth = 590, PlayerLift = 96;
     /// <summary>The view toggle's two faces; the probes press them by text.</summary>
     public const string LibraryLabel = "Library  ▸", PlayerLabel = "◂  Player";
 
@@ -70,6 +70,7 @@ public partial class RadioUi : CanvasLayer
     private Label _title = null!, _subtitle = null!;
     private Label _nowTitle = null!, _nowMeta = null!, _time = null!;
     private ProgressBar _bar = null!;
+    private RadioCassette _cassette = null!;
     private Button _prev = null!, _playStop = null!, _next = null!, _mode = null!, _pick = null!;
     private LineEdit _search = null!;
     private Label _count = null!;
@@ -241,48 +242,78 @@ public partial class RadioUi : CanvasLayer
         GetViewport().SizeChanged += Fit;
     }
 
+    /// <summary>
+    /// The player (#725): a cassette deck. The tape turning on the left; the title, its style and
+    /// big round keys on the right; the progress along the bottom.
+    /// </summary>
     private PanelContainer NowPlayingCard()
     {
-        var now = UiKit.VBox(6);
-        now.AddChild(UiKit.Section("Now playing"));
-        _nowTitle = UiKit.Text("", UiTheme.FontBody + 2, UiTheme.Text, bold: true);
+        var card = UiKit.VBox(8);
+        var deck = UiKit.HBox(14);
+        card.AddChild(deck);
+        _cassette = new RadioCassette();
+        deck.AddChild(_cassette);
+
+        var side = UiKit.VBox(4);
+        side.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        deck.AddChild(side);
+        _nowTitle = UiKit.Text("", UiTheme.FontBody + 3, UiTheme.Text, bold: true);
         _nowTitle.ClipText = true;
         _nowTitle.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
-        now.AddChild(_nowTitle);
+        side.AddChild(_nowTitle);
         _nowMeta = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
         _nowMeta.ClipText = true;
         _nowMeta.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
-        now.AddChild(_nowMeta);
-
-        var progress = UiKit.HBox(10);
-        now.AddChild(progress);
-        _bar = Bar(6);
-        _bar.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        _bar.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
-        progress.AddChild(_bar);
-        _time = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim, align: HorizontalAlignment.Right);
-        _time.CustomMinimumSize = new Vector2(86, 0);
-        progress.AddChild(_time);
+        side.AddChild(_nowMeta);
 
         var controls = UiKit.HBox(8);
-        now.AddChild(controls);
-        _prev = UiKit.Button("◀◀", minWidth: 52);
+        controls.AddThemeConstantOverride("separation", 8);
+        side.AddChild(controls);
+        _prev = DeckKey(UiKit.Button("◀◀"), 46, 46);
         _prev.TooltipText = "Previous";
         _prev.Pressed += () => Skip(-1);
         controls.AddChild(_prev);
-        _playStop = UiKit.Button("▶  Play", primary: true, minWidth: 110);
+        _playStop = DeckKey(UiKit.Button("▶  Play", primary: true), 112, 46, UiTheme.Amber);
         _playStop.Pressed += PlayStop;
         controls.AddChild(_playStop);
-        _next = UiKit.Button("▶▶", minWidth: 52);
+        _next = DeckKey(UiKit.Button("▶▶"), 46, 46);
         _next.TooltipText = "Next";
         _next.Pressed += () => Skip(1);
         controls.AddChild(_next);
         controls.AddChild(UiKit.Spacer(expand: true));
-        _mode = UiKit.Button("", minWidth: 150);
+        _mode = UiKit.Button("");
         _mode.TooltipText = "What happens when the CD ends";
+        _mode.AddThemeFontSizeOverride("font_size", UiTheme.FontSmall);
+        _mode.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
         _mode.Pressed += CycleMode;
         controls.AddChild(_mode);
-        return UiKit.Card(now, 0.6f, 14);
+
+        var progress = UiKit.HBox(10);
+        card.AddChild(progress);
+        _bar = Bar(4);
+        _bar.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _bar.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+        progress.AddChild(_bar);
+        _time = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextFaint, align: HorizontalAlignment.Right);
+        _time.CustomMinimumSize = new Vector2(70, 0);
+        progress.AddChild(_time);
+        return UiKit.Card(card, 0.6f, 12);
+    }
+
+    /// <summary>A chunky deck key: fully round when square, a pill when wider.</summary>
+    private static Button DeckKey(Button b, int w, int h, Color? fill = null)
+    {
+        b.CustomMinimumSize = new Vector2(w, h);
+        int r = h / 2;
+        var bg = fill ?? new Color(1, 1, 1, 0.09f);
+        b.AddThemeStyleboxOverride("normal", UiTheme.Flat(bg, r, 10, 6));
+        b.AddThemeStyleboxOverride("hover", UiTheme.Flat(bg.Lightened(0.15f), r, 10, 6));
+        b.AddThemeStyleboxOverride("pressed", UiTheme.Flat(bg.Darkened(0.15f), r, 10, 6));
+        b.AddThemeStyleboxOverride("hover_pressed", UiTheme.Flat(bg.Darkened(0.15f), r, 10, 6));
+        b.AddThemeStyleboxOverride("focus", UiTheme.Flat(new Color(0, 0, 0, 0), r, 10, 6, Colors.White, 2));
+        b.AddThemeStyleboxOverride("disabled", UiTheme.Flat(new Color(bg, bg.A * 0.4f), r, 10, 6));
+        b.AddThemeFontSizeOverride("font_size", UiTheme.FontBody + 2);
+        return b;
     }
 
     /// <summary>A thin amber progress bar on a faint track.</summary>
@@ -529,7 +560,7 @@ public partial class RadioUi : CanvasLayer
                 if (Live() is { } r) RadioManager.Instance?.Stop(r);
                 break;
             case Target.Held:
-                if (HeldLive()) _inventory.SetData(_heldSlot, null);
+                if (HeldLive()) _inventory.SetData(_heldSlot, RadioPlay.Decode(_inventory[_heldSlot].Data) is { } held ? RadioPlay.Off(held) : null);   // a tap puts it back on (#725)
                 break;
             case Target.Car:
                 if (Stereo() is { } me) { me.CarCd = ""; me.CarRadio = 0; }
@@ -887,6 +918,9 @@ public partial class RadioUi : CanvasLayer
             _ => locked ? "Riding along · only the driver changes the music" : "At the wheel · everyone near the car hears it",
         };
         bool playing = now.Cd != 0 || now.Station != 0;
+        _cassette.Playing = playing;
+        _cassette.Progress = (float)_bar.Value;
+        _cassette.Kick = now.Cd != 0 ? RadioGroove.Of(now.Cd, now.StartedAt, ClockSync.ServerNow).Kick : 0f;
         _playStop.Text = playing ? "■  Stop" : "▶  Play";
         _mode.Text = RadioQueue.Label(now.Mode);
         _mode.Disabled = locked;

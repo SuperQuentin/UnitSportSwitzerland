@@ -103,7 +103,7 @@ internal sealed partial class XrCabControls : Node3D
         {
             Truck t when p.InCockpit => (t.EffectiveMode is HeavyShift.HPattern or HeavyShift.HPatternSplitter ? "truck-h" : "truck-seq")
                                         // a farm machine (#494) has the bus's two pokes: kneel lowers its implement, destination its auger or delivery
-                                        + (t.IsBus || t.Spec.Farm ? "-bus" : "") + (t.Spec.Body != TruckBody.Box ? "-work" : ""),
+                                        + (t.IsBus || t.Spec.Farm ? "-bus" : "") + (t.Spec.Body is TruckBody.Tipper or TruckBody.Mixer ? "-work" : ""),
             Car when p.InCockpit => "car",
             Airliner => "airliner",
             _ when p.Ride == RideKind.Steamer => "steamer",

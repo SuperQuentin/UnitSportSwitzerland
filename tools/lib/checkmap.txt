@@ -327,6 +327,8 @@ src/Player/              full   tools/decknetcheck.sh
 src/Vehicles/            full   tools/decknetcheck.sh
 src/Avatar/              full   tools/decknetcheck.sh
 src/Net/                 full   tools/loadtest.sh 4 testsh 60
+# the trailer (#706): a boat, a car on the race autopilot and an airliner staged on the real map (CHUNKS=)
+src/Trailer/             full   tools/trailer.sh stills 2,5,12
 tools/lib/               quick  tools/lib/guard_selftest.sh
 src/Player/Pigeon        quick  --flycheck pigeon --world flat
 src/Player/FlightCheck   quick  --flycheck pigeon --world flat

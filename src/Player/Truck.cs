@@ -329,6 +329,12 @@ public sealed partial class Truck : Rideable, IEngined, IBed
         get
         {
             var s = Spec.Sections[0];
+            // the army's two cars have a seat derived from their own cab (#714)
+            if (Spec.Class is HeavyClass.Offroader or HeavyClass.Transporter)
+            {
+                var (ex, ey, eat) = Avatar.ArmyMeshBuilder.Eye(Spec);
+                return new Vector3(ex, ey, -(Train.Bodies[0].CgAt - eat));
+            }
             var (y, at) = Spec.Class switch
             {
                 HeavyClass.Tractor => (2.55f, 1.25f),
@@ -347,7 +353,8 @@ public sealed partial class Truck : Rideable, IEngined, IBed
     }
     public override float EyeHeight => Spec.Class switch
     {
-        HeavyClass.Pickup => 1.8f,
+        HeavyClass.Pickup or HeavyClass.Offroader => 1.8f,
+        HeavyClass.Transporter => 2.3f,
         HeavyClass.FarmTractor => Avatar.FarmMeshBuilder.TractorEyeY,
         HeavyClass.Combine => Avatar.FarmMeshBuilder.CombineEyeY,
         _ => 2.6f,
@@ -424,6 +431,7 @@ public sealed partial class Truck : Rideable, IEngined, IBed
             float at = IsBus ? Spec.Look.Doors.FirstOrDefault().At : Spec.Class switch
             {
                 HeavyClass.Pickup => 2.6f,
+                HeavyClass.Offroader or HeavyClass.Transporter => Avatar.ArmyMeshBuilder.DoorAt(Spec.Class),
                 HeavyClass.FarmTractor => Avatar.FarmMeshBuilder.TractorDoorAt,
                 HeavyClass.Combine => Avatar.FarmMeshBuilder.CombineDoorAt,
                 _ => 1.4f,
@@ -511,8 +519,8 @@ public sealed partial class Truck : Rideable, IEngined, IBed
         return _trailerDecks[index] = decks.ToArray();
     }
 
-    /// <summary>The pickup's doors are a car's, worked one by one (#463); a bus's open together.</summary>
-    public bool CarDoors => Spec.Class == HeavyClass.Pickup || Spec.Farm;
+    /// <summary>The pickup's doors are a car's, worked one by one (#463), and the army's cars' (#714); a bus's open together.</summary>
+    public bool CarDoors => Spec.Class is HeavyClass.Pickup or HeavyClass.Offroader or HeavyClass.Transporter || Spec.Farm;
 
     private static readonly Dictionary<RideKind, (SeatAnchor[] Seats, VehicleDeck[] Decks)> _models = new();
 

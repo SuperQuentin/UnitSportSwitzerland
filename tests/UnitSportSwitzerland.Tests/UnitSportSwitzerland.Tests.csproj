@@ -138,6 +138,8 @@
     <!-- forklift pallets (#583): the load byte, the ids and the fork rule, against the forks' numbers;
          and the stacks on a site's apron (phase 3) -->
     <Compile Include="..\..\src\Avatar\ForkliftLayout.cs;..\..\src\Items\Pallets.cs;..\..\src\Items\SitePallets.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the trailer (#706): its song's bar clock and the cut check -->
+    <Compile Include="..\..\src\Trailer\Song.cs" Link="Game\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

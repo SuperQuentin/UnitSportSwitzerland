@@ -518,7 +518,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// apart by their jerseys. An NPC is offset from the client that asked for it (#394), so it gets a
     /// figure of its own rather than that player's chosen one (<see cref="Avatar.Appearance.For"/>).
     /// </summary>
-    private int RiderIndex() => Npc && NetId(Name) is long npcId && npcId < 0
+    public int RiderIndex() => Npc && NetId(Name) is long npcId && npcId < 0
         ? unchecked((int)Net.PlayerReplication.NpcOwner(npcId) + 100 * (int)(1 + (-npcId) % 1000))
         : GetMultiplayerAuthority();
 
@@ -592,6 +592,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public float LookScale { get; set; } = 1f;
 
     public bool IsFirstPerson => !_thirdPerson;
+
+    /// <summary>First person as the player chose it: also true while a throw has borrowed third person.</summary>
+    public bool ChoseFirstPerson => !_thirdPerson || _borrowedThird;
 
     /// <summary>
     /// 0..1: an item held ready to throw wants the close over-the-shoulder camera (set every frame by
@@ -1043,6 +1046,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <see cref="RideControls"/>.
     /// </summary>
     public Func<(Vector3 Wish, bool Run)>? WalkControls { get; set; }
+
+    /// <summary>
+    /// Replaces the keys while flying, when set, as <see cref="RideControls"/> does on the ground: a
+    /// scripted pilot (the trailer's aircraft, #706) flies through it, so several craft can fly at
+    /// once without pressing the one global input map.
+    /// </summary>
+    public Func<FlightInput>? FlyControls { get; set; }
 
     private Camera3D? _camera;
     private CollisionShape3D _body = null!;
@@ -2509,10 +2519,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // walking about in a vehicle: a seat, or the wheel (#162)
         if (Aboard) return TryDeckSeat();
 
-        // the radio pointed at: its panel (play a CD, burn one, pick it up)
+        // the radio pointed at (#725): a tap switches it on or off, a hold opens its panel (play a
+        // CD, burn one, pick it up); a VR hand gripping it opens the panel straight away
         if (Items.Highlight.Pointed is Items.RadioBody pointed && IsInstanceValid(pointed))
         {
-            Items.RadioUi.Instance?.Open(pointed);
+            if (byHand) Items.RadioUi.Instance?.Open(pointed);
+            else Items.RadioTap.Begin(Core.PlayerInput.InteractMount, () => Items.RadioTap.Toggle(pointed),
+                () => Items.RadioUi.Instance?.Open(pointed),
+                () => IsInstanceValid(pointed) && Items.Highlight.Pointed == pointed);
             return true;
         }
 
@@ -3915,7 +3929,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (flyer.LookBank > 0f && !typing && !onFloor)
             stick.X = Mathf.Clamp(stick.X - Mathf.Clamp(_lookYaw / 0.8f, -1f, 1f) * flyer.LookBank, -1f, 1f);
 
-        var input = new FlightInput(
+        var input = FlyControls?.Invoke() ?? new FlightInput(
             Stick: stick,
             Up: Mathf.Max(jumpDown ? 1f : 0f, tr),
             Down: Mathf.Max(downHeld ? 1f : 0f, tl),

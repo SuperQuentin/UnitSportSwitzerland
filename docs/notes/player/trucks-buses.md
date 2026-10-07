@@ -5,7 +5,7 @@
   26.440 6x2 rigid with swap body (Migros), Mercedes Citaro 12 m (VBZ), Citaro G 18 m articulated
   pusher (Bernmobil), Setra S 516 HD coach (PostAuto); the Raptor pickup (101, #463); the farm
   machines (#494, `farming/machines`): Fendt 724 Vario tractor (102), Claas Lexion 6800 combine
-  (103). Operators' colours only, no names or logos.
+  (103); the army's Duro 106, G 300 CDI 107 and Trakker 6x6 108 (#714, `vehicles/army-vehicles`). Operators' colours only, no names or logos.
   **Trailers** (`TrailerCatalog`, index append-only): curtainsider 13.6 m, fuel tanker (sloshes),
   timber (the logs are the load), drawbar trailer (dolly + swap body, two pivots); boat trailers
   (4, 5, #463); the farm implements on `Coupling.ThreePoint` (rigid, no wheels: plough 6, drill 7,

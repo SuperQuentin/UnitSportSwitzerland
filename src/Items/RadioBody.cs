@@ -100,7 +100,9 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
         Position = _origin.ToWorld(s.Position);
         AddChild(_place = new NetPlace(_origin, s.Position));
         Rotation = new Vector3(0, s.Yaw, 0);
-        Mass = 3f;
+        // a heavy boombox (#725): it lands with a thud and stays, rather than skittering off
+        Mass = 7f;
+        PhysicsMaterialOverride = new PhysicsMaterial { Bounce = 0.05f, Friction = 1f, Rough = true };
         AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(BodyW, BodyH, BodyD) } });
 
         // the fall: whoever threw it simulates, the others move the box where they are told
@@ -137,7 +139,7 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
         else
         {
             LinearVelocity = s.Velocity;
-            AngularVelocity = new Vector3(GD.Randf() * 6f - 3f, GD.Randf() * 2f - 1f, GD.Randf() * 6f - 3f);
+            AngularVelocity = new Vector3(GD.Randf() * 3f - 1.5f, GD.Randf() * 1f - 0.5f, GD.Randf() * 3f - 1.5f);
             ContactMonitor = false;
             ContinuousCd = true;
             _lastPos = _origin.ToWorld(s.Position);
@@ -191,16 +193,27 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
         _speaker.Length = Length > 0 ? Length : Cd?.Duration ?? 0;
 
         // it bounces and sparkles to the music it is actually making (not while the CD is still downloading)
-        float phase = 0;
-        int beat = 0;
-        bool beating = _speaker.Playing && BeatAt(ClockSync.ServerNow, out phase, out beat, out _, out _);
-        _sparkles?.Step(_speaker.Playing, beating, phase, beat, (float)delta);
+        var groove = _speaker.Playing && Playing ? RadioGroove.Of(CdId, StartedAt, ClockSync.ServerNow) : RadioGroove.Silent;
+        bool beating = groove.Beating;
+        _sparkles?.Step(_speaker.Playing, groove, (float)delta);
         _visual ??= GetNodeOrNull<MeshInstance3D>("Visual");
         if (_visual == null) return;
-        _visual.Transform = beating ? Bounce(phase, beat, BodyH * 0.5f, 1f) : Transform3D.Identity;
+        var dance = beating ? Bounce(groove.Phase, groove.Beat, BodyH * 0.5f, groove.BounceScale) : Transform3D.Identity;
+        // switched on or off with a tap (#725): one big squash and hop
+        if (_poke >= 0f)
+        {
+            dance = Bounce(_poke / PokeTime, 0, BodyH * 0.5f, 1.6f) * dance;
+            if ((_poke += (float)delta) > PokeTime) _poke = -1f;
+        }
+        _visual.Transform = dance;
     }
 
     private MeshInstance3D? _visual;
+    private float _poke = -1f;
+    private const float PokeTime = 0.4f;
+
+    /// <summary>Its key was just pressed (#725): it jumps, here only (the music that follows is everyone's).</summary>
+    public void Poke() => _poke = 0f;
     private RadioSparkles? _sparkles;
 
     /// <summary>The glints round it while it plays, on peers that draw it. For the probes.</summary>
@@ -261,6 +274,12 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
         style = CdLibrary.IsRatBeat(cdId) ? MusicStyle.RatDance : cd.Style;
         return true;
     }
+
+    /// <summary>
+    /// The red key on its front, in the world: a VR fingertip poking it switches the radio on or
+    /// off (#725). Authored at (0.045, 0.06, front) facing +Z; the mesh build turns it to (−x, y, −z).
+    /// </summary>
+    public Vector3 KeyPosition => GlobalTransform * new Vector3(-0.045f, 0.06f, -(BodyD * 0.5f + 0.012f));
 
     // ---- the look -------------------------------------------------------------------------------
 
