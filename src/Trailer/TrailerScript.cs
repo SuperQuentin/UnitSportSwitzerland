@@ -88,8 +88,8 @@ public static class TrailerScript
             Hour = 7.8, FadeIn = 1.6,
             Keys =
             [
-                new(0, Pt.Alt(2627300, 1092800, 3330), Pt.Alt(Matterhorn.E, Matterhorn.N, 4290), 50),
-                new(6.04, Pt.Alt(2626950, 1092720, 3372), Pt.Alt(Matterhorn.E, Matterhorn.N, 4320), 50),
+                new(0, Pt.Alt(2627300, 1092800, 3330), Pt.Alt(Matterhorn.E, Matterhorn.N, 3980), 50),
+                new(6.04, Pt.Alt(2626950, 1092720, 3372), Pt.Alt(Matterhorn.E, Matterhorn.N, 4010), 50),
             ],
             Captions = [new(1.3, 4.5, "The whole of Switzerland.")],
         },
@@ -188,8 +188,9 @@ public static class TrailerScript
             ],
             Keys =
             [
-                new(0, Pt.Road("furka", 1497, -8f, 3.2f), Pt.On(0, 0f, 0.9f), 35),
-                new(1.95, Pt.Road("furka", 1497, -8f, 3.2f), Pt.On(0, 0f, 0.9f), 35),
+                // the bend is on a bridge over the stream: high enough to see over its parapets
+                new(0, Pt.Road("furka", 1497, -9f, 6f), Pt.On(0, 0f, 0.9f), 35),
+                new(1.95, Pt.Road("furka", 1497, -9f, 6f), Pt.On(0, 0f, 0.9f), 35),
             ],
             Smooth = 0.1f, Preroll = 6.5,
         },
@@ -256,8 +257,8 @@ public static class TrailerScript
             ],
             Keys =
             [
-                new(0, Pt.Alt(2560645, 1140368, 373.4f), Pt.At(2560722, 1140450, 9), 35),
-                new(3.9, Pt.Alt(2560643, 1140366, 373.4f), Pt.At(2560716, 1140450, 9), 35),
+                new(0, Pt.Alt(2560628, 1140350, 373.4f), Pt.At(2560720, 1140445, 9), 35),
+                new(3.9, Pt.Alt(2560626, 1140348, 373.4f), Pt.At(2560714, 1140445, 9), 35),
             ],
             Preroll = 1.0,
         },
@@ -359,8 +360,8 @@ public static class TrailerScript
             ],
             Keys =
             [
-                new(0, Pt.At(2600900, 1199664, 0.9f), Pt.On(0, 0f, 0.8f), 35),
-                new(3.9, Pt.At(2600900, 1199664, 0.9f), Pt.On(0, 0f, 0.8f), 35),
+                new(0, Pt.At(2600900, 1199647, 2.6f), Pt.On(0, 0f, 0.8f), 28),
+                new(3.9, Pt.At(2600900, 1199647, 2.6f), Pt.On(0, 0f, 0.8f), 28),
             ],
             Smooth = 0.2f, Preroll = 4,
         },
@@ -521,14 +522,15 @@ public static class TrailerScript
             Hour = 16.5,
             Cast =
             [
-                new() { At = new Spot(2507812, 1137200), Heading = 135, Drive = Drive.Walk, Walk = t => (new Vector2(0f, 1f), true), Seed = 17 },
+                // in the lake off Nyon, swimming along the shore
+                new() { At = new Spot(2507845, 1137188), Heading = 230, Drive = Drive.Walk, Walk = t => (new Vector2(0f, 1f), true), Seed = 17 },
             ],
             Keys =
             [
-                new(0, Pt.On(0, 1.2f, 1.5f, 5f), Pt.On(0, 0f, 0.4f, -6f), 28),
-                new(3.9, Pt.On(0, 1.5f, 1.8f, 6f), Pt.On(0, 0f, 0f, -4f), 28),
+                new(0, Pt.On(0, 1.6f, 0.7f, 3.2f), Pt.On(0, 0f, -0.2f, -5f), 28),
+                new(3.9, Pt.On(0, 2.2f, 0.9f, 2.6f), Pt.On(0, 0f, -0.2f, -5f), 28),
             ],
-            Smooth = 0.25f, Preroll = 0.3,
+            Smooth = 0.25f, Preroll = 2,
         },
         new()
         {
