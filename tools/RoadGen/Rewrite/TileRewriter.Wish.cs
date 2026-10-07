@@ -51,6 +51,25 @@ public static partial class TileRewriter
     }
 
     /// <summary>
+    /// The lanes of a multi-lane approach without OSM lane data (#700): straight on in every lane, the leftmost also
+    /// left and the rightmost also right where the approach has those turns; without a straight on (the stem of a T)
+    /// the left half turns left and the right half right.
+    /// </summary>
+    internal static SignalMoves[] InferredLanes(SignalMoves allowed, int lanes)
+    {
+        var result = new SignalMoves[lanes];
+        for (int k = 0; k < lanes; k++)
+        {
+            var moves = allowed & SignalMoves.Through;
+            if (k == 0) moves |= allowed & SignalMoves.Left;
+            if (k == lanes - 1) moves |= allowed & SignalMoves.Right;
+            if (moves == SignalMoves.None) moves = allowed & (k < lanes / 2.0 ? SignalMoves.Left : SignalMoves.Right);
+            result[k] = moves == SignalMoves.None ? allowed : moves;
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Fits wished lanes onto an approach whose carriageway holds <paramref name="own"/> lanes toward the
     /// junction: the rightmost wished lanes are the carriageway's own, left of them the lanes that turn left are
     /// built as pockets (on a one-lane approach only), a right-only lane at the far right is a right pocket

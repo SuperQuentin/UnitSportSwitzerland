@@ -257,6 +257,8 @@ public static partial class TileRewriter
                             // a widened arm's lane runs on straight along its kerb until the corner's radius starts (#700), then across
                             double maxIn = (from - junction.Centre).Length + (to - junction.Centre).Length;
                             double ta = StraightIn(junction, ca + da * xa, -ua, maxIn), tb = StraightIn(junction, cb + db * xb, -ub, maxIn);
+                            // ... only where the line straight across would cut over a kerb (the user's rule): the least of it that clears
+                            (ta, tb) = ClearOfKerbs(junction, ca + da * (xa - lw), ca + da * xa, da, ua, from, cb + db * (xb - lw), cb + db * xb, db, ub, to, ta, tb);
                             Vec2 LeadA(double oa) => ca + da * oa + backA;
                             Vec2 BendA(double oa) => ca + da * oa - ua * ta;
                             Vec2 BendB(double ob) => cb + db * ob - ub * tb;
@@ -463,6 +465,44 @@ public static partial class TileRewriter
             run = t;
         }
         return run < 0.5 ? 0 : run;
+    }
+
+    /// <summary>
+    /// Of a crossing's straight runs in along each arm's kerb (<paramref name="ta"/>, <paramref name="tb"/>), the least that keeps
+    /// the line across on the junction (#700): none, one side's, the other's, both. A line point counts once it is past both
+    /// arms' mouths (<paramref name="midA"/>, <paramref name="midB"/>); beside an arm's straight kerb (up to its run in) it
+    /// must stay inside that kerb's line, past both runs inside the junction's ring.
+    /// </summary>
+    private static (double, double) ClearOfKerbs(Junction junction, Vec2 lineA, Vec2 kerbA, Vec2 da, Vec2 ua, Vec2 midA,
+        Vec2 lineB, Vec2 kerbB, Vec2 db, Vec2 ub, Vec2 midB, double ta, double tb)
+    {
+        bool Clear(double a, double b)
+        {
+            Vec2 p0 = lineA - ua * a, p1 = lineB - ub * b;
+            for (int s = 1; s < 40; s++)
+            {
+                var p = p0 + (p1 - p0) * (s / 40.0);
+                double inA = -(p - midA).Dot(ua), inB = -(p - midB).Dot(ub);
+                if (inA < 0.3 || inB < 0.3) continue;   // on an arm, not yet in the junction
+                if (inA <= ta) { if ((p - kerbA).Dot(da) > 0.05) return false; }
+                else if (inB <= tb) { if ((p - kerbB).Dot(db) > 0.05) return false; }
+                else if (!Inside(junction.Boundary, p)) return false;
+            }
+            return true;
+        }
+        foreach (var (a, b) in (ReadOnlySpan<(double, double)>)[(0, 0), (ta, 0), (0, tb), (ta, tb)])
+            if (Clear(a, b)) return (a, b);
+        return (ta, tb);
+    }
+
+    private static bool Inside(List<Vec2> ring, Vec2 p)
+    {
+        bool inside = false;
+        for (int i = 0, j = ring.Count - 1; i < ring.Count; j = i++)
+            if ((ring[i].Y > p.Y) != (ring[j].Y > p.Y)
+                && p.X < (ring[j].X - ring[i].X) * (p.Y - ring[i].Y) / (ring[j].Y - ring[i].Y) + ring[i].X)
+                inside = !inside;
+        return inside;
     }
 
     private static double DistanceToSegment(Vec2 p, Vec2 a, Vec2 b)

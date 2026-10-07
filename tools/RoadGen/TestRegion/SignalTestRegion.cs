@@ -173,7 +173,7 @@ public static class SignalTestRegion
         lines.Add(new Line("J7N", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(j7, n), (j7, n + 400)], "secondary",
             Rows: [new OsmRow(0, 400, Lanes: "4")]));
         junctions.Add(new Junction("J7-double-left", j7, n, "a double left pocket from lanes:forward=3 and turn:lanes; no left pocket where OSM marks none",
-            Arms("L|L|TR", "T", "LTR|LTR", "LTR|LTR")));
+            Arms("L|L|TR", "T", "LT|TR", "LT|TR")));
         // pedestrian crossings from OSM (#700): J7 is lit and has no sidewalks, so only the data draws its zebras, the ones beside
         // the tight north-east corner diagonal; the T south of J3 has no lights: zebras on two arms, the unmarked one on its east arm none
         var crossings = new List<CrossingNode>

@@ -239,6 +239,10 @@ public static partial class TileRewriter
                 bool wantLeft = wish is null ? left && ownLanes == 1 : left && wish.Pocket.Length > 0;
                 bool wantRight = wish is null ? right && ownLanes == 1 : wish.RightPocket;
                 if (wished is not null) wishes[(junction.NodeId, i)] = (home, wished, ownLanes, arm.LinkId, arm.End == LinkEnd.End);
+                // a multi-lane approach at the lights without OSM lane data (#700, the user's review of J7): the leftmost lane
+                // also turns left, the rightmost also right, the rest go straight on, with their arrows as OSM's would get
+                else if (signal && ownLanes >= 2)
+                    wishes[(junction.NodeId, i)] = (home, InferredLanes(can & ~banned, ownLanes), ownLanes, arm.LinkId, arm.End == LinkEnd.End);
                 if (wish is not null) { stats.Wished++; stats.WishFolded += wish.Folded; }
                 else if (ownLanes >= 2) stats.MultiLane++;
                 // a bike box where the street the left turn goes into has no bike lane or path (#351)
@@ -347,6 +351,7 @@ public static partial class TileRewriter
                 if (taper + storage > reach) continue;
                 var way = new Widening(seg, painted, tile, self, junctionAtEnd: r.InAtEnd, side, taper + storage, taper,
                     clear: exitHere ? TurnExit + TurnRejoin : TurnClear, leadIn: false, baseOffset: baseOffset);
+                if (lp?.In.ApproachWay is { } leftWay) way.SetBase(d => leftWay.FullAt(d));   // on the left pocket's edge as it is there (#700)
                 if (way.Check(Lines(tile), grids, buildings) is not null) continue;
                 r.Way = way;
                 break;
@@ -1142,6 +1147,14 @@ public static partial class TileRewriter
         /// </summary>
         private readonly double _base;
 
+        /// <summary>
+        /// Where the strip starts at a distance from the mouth (#700): a right pocket beside a left one stands on the left
+        /// one's edge as it is there, still widening over its taper and lead-in, not on its full width (a gap, else).
+        /// </summary>
+        private Func<double, double>? _baseAt;
+        private double BaseAt(double dist) => _baseAt?.Invoke(Math.Max(0, dist)) ?? _base;
+        public void SetBase(Func<double, double> baseAt) => _baseAt = baseAt;
+
         /// <summary>The strip's own outer edge line starts this far from the mouth: a right-turn pocket draws the nearer part (#348).</summary>
         private double _edgeFrom;
 
@@ -1199,7 +1212,7 @@ public static partial class TileRewriter
         public (Vec2 P, float Y) OuterEdge(double dist, bool far = false)
         {
             double d = far ? _length - dist : dist;
-            var p = Point(d, _half + _base + Widen(d));
+            var p = Point(d, _half + BaseAt(d) + Widen(d));
             return (new Vec2(_tile.MinE + p[0], _tile.MaxN - p[2]), p[1]);
         }
 
@@ -1374,7 +1387,7 @@ public static partial class TileRewriter
         /// never lies on the carriageway; moved out with an exit's frame, past the arm's own strip), or a pocket beside another's.
         /// </summary>
         private float[] Inner(double dist) =>
-            _base > 0 || _frame is null ? Point(dist, _half + _base) : PointRaw(dist, _half + Math.Max(0, FrameAt(dist)));
+            _base > 0 || _frame is null ? Point(dist, _half + BaseAt(dist)) : PointRaw(dist, _half + Math.Max(0, FrameAt(dist)));
 
         /// <summary>
         /// The strip's inner and outer corners at the mouth (less <paramref name="inset"/> on the
@@ -1386,7 +1399,7 @@ public static partial class TileRewriter
             float[] In(float[] p) =>
                 [(float)(p[0] + _tile.MinE - frame.MinE), p[1], (float)(p[2] + frame.MaxN - _tile.MaxN)];
             double at = far ? _length : 0;
-            return (In(Inner(at)), In(Point(at, _half + _base + Widen(at) - inset)));
+            return (In(Inner(at)), In(Point(at, _half + BaseAt(at) + Widen(at) - inset)));
         }
 
         /// <summary>
@@ -1420,7 +1433,7 @@ public static partial class TileRewriter
                 if (dist < -1 || dist > Reach) continue;
                 double w = Widen(Math.Clamp(dist, 0, _length));
                 double edgeMove = w + FrameAt(Math.Clamp(dist, 0, _length));   // how far the edge moved out there (a split lead-in, #700: its share)
-                if (edgeMove < 0.05 || offset < _half + _base - 0.3 || offset > _half + _base + edgeMove + 2.0) continue;
+                if (edgeMove < 0.05 || offset < _half + BaseAt(dist) - 0.3 || offset > _half + BaseAt(dist) + edgeMove + 2.0) continue;
                 var (x, _, z, sx, sz) = At(Math.Clamp(dist, 0, Reach), shifted: false);
                 double o = offset + edgeMove;
                 props[i] = prop with { X = (float)(x + sx * o), Z = (float)(z + sz * o) };
@@ -1441,7 +1454,7 @@ public static partial class TileRewriter
                 double w = Widen(dist);
                 if (w < 0.3) continue;
                 var (x, y, z, sx, sz) = At(dist);
-                foreach (double o in (ReadOnlySpan<double>)[_half + _base + w * 0.5, _half + _base + w + 0.5])
+                foreach (double o in (ReadOnlySpan<double>)[_half + BaseAt(dist) + w * 0.5, _half + BaseAt(dist) + w + 0.5])
                 {
                     double px = x + sx * o, pz = z + sz * o;
                     if (px < 0 || pz < 0 || px > TileSizeM || pz > TileSizeM) return "seam";
@@ -1465,8 +1478,8 @@ public static partial class TileRewriter
             {
                 double w = Widen(dist);
                 v.AddRange(Inner(dist));
-                v.AddRange(Point(dist, _half + _base + w));
-                if (dist >= _edgeFrom - 1e-6) outer.AddRange(Point(dist, _half + _base + w - PaintEmitter.EdgeLineInset));
+                v.AddRange(Point(dist, _half + BaseAt(dist) + w));
+                if (dist >= _edgeFrom - 1e-6) outer.AddRange(Point(dist, _half + BaseAt(dist) + w - PaintEmitter.EdgeLineInset));
             }
             var idx = new List<ushort>();
             for (int k = 0; k + 1 < _dists.Count; k++)
