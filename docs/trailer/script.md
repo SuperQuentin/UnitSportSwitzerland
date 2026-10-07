@@ -188,9 +188,10 @@ note what the scene reveals of the game, for us only; nothing of it is on screen
 > Camera: formation flight beside it, 35 mm.
 > *[the Battle Royale plane, never called that]*
 
-**24. INT. FREIGHTER HOLD — CONTINUOUS** · bar 40 · 1:16.3-1:18.2
-> Jonas's view: the edge of the open ramp, and below it the Mattertal in the last sun.
-> Camera: his eyes, in the hold, stepping to the ramp and looking down, 24 mm.
+**24. EXT. ABOVE THE MATTERTAL — CONTINUOUS** · bar 40 · 1:16.3-1:18.2
+> The freighter heads up the valley, the Matterhorn ahead catching the last sun.
+> Camera: just behind its tail, 35 mm. (Filmed from outside: a scripted pilot's ramp does not
+> open, and a body put in the hold wrecked the aircraft.)
 
 ### Act three: everything at once (the drop, bars 41-57)
 
@@ -251,7 +252,7 @@ note what the scene reveals of the game, for us only; nothing of it is on screen
 
 **37. EXT. GORNERGRAT — SUNSET** · bars 58-61 · 1:51.4-1:59.2
 > The four in a row by the pot, the Kulmhotel's domes behind them (from here the hotel stands
-> between them and the Matterhorn). The pigeon glides in and lands by the pot.
+> between them and the Matterhorn). The pigeon is there by the pot.
 > Chat, in the system colour: **PIGEON joined the game**
 > They cheer and wave; Léa has her camera in hand.
 > Camera: a slow pull-out, 28 mm.

@@ -381,18 +381,17 @@ public static class StoryScript
         },
         new()
         {
-            Number = 24, Name = "The edge", FromBar = 40, Bars = 1, Hour = 18.4,
+            Number = 24, Name = "Heading south", FromBar = 40, Bars = 1, Hour = 18.4,
             Cast =
             [
                 new() { Who = Nina, Ride = RideKind.Freighter, At = Spot.Alt(2624000, 1104000, 3300), Heading = 175, Doors = 1 << 3, Drive = Drive.Fly, Launch = 72, Flight = _ => Stick(lever: 0.6f) },
             ],
             Keys =
             [
-                new(0, Pt.On(0, 0.3f, 2.5f, 3.0f), Pt.On(0, 0f, -14f, 30f), 24),
-                new(1.95, Pt.On(0, 0.3f, 2.3f, 5.0f), Pt.On(0, 0f, -30f, 30f), 24),
+                new(0, Pt.On(0, -7f, 3f, 36f), Pt.On(0, 5f, -3f, -80f), 35),
+                new(1.95, Pt.On(0, -5f, 2f, 30f), Pt.On(0, 6f, -4f, -80f), 35),
             ],
-            // the ramp takes seconds to come down
-            Smooth = 0.05f, Preroll = 5,
+            Smooth = 0.05f, Preroll = 1,
         },
 
         // ---- act three: everything at once (the drop) ----------------------------------------------
@@ -557,8 +556,8 @@ public static class StoryScript
     };
 
     /// <summary>
-    /// Shots 37-38, one move cut in two: the four in a row at sunset, the pigeon gliding in to land
-    /// by the pot, the camera drawing back; then the photo from in front of them: the flash, the
+    /// Shots 37-38, one move cut in two: the four in a row at sunset, the pigeon by the pot, the
+    /// camera drawing back; then the photo from in front of them: the flash, the
     /// polaroid, the title, the credit.
     /// </summary>
     private static Shot Ending(int number, int bar, int bars, double from) => new()
@@ -567,11 +566,8 @@ public static class StoryScript
         Cast =
         [
             .. Row(Wave, number == 37 ? 0 : Cheer, number == 37 ? Clap : FistPump, number == 37 ? Cheer : Salute),
-            new()
-            {
-                Ride = RideKind.Pigeon, At = Crew.Toward(92, 24).Up(4), Heading = 272, Drive = Drive.Fly, Launch = 9,
-                Flight = t => Stick(0f, t < 1.9 ? -0.6f : 0.8f), Seed = 90,
-            },
+            // by the pot, in the photo too (one gliding in passed over their heads and out of the frame)
+            new() { Ride = RideKind.Pigeon, At = Crew.Toward(80, 2.6f), Heading = 110, Seed = 90 },
         ],
         Props = PicnicFront,
         Keys =
