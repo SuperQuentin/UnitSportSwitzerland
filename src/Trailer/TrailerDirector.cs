@@ -57,7 +57,7 @@ public partial class TrailerDirector : Node
     private RouteBook _routes = new(0);
     private readonly List<Node3D> _props = new();
     private double _t, _waitWall, _settledFor, _preroll;
-    private ulong _phaseStartMs;
+    private double _phaseStart;
     private string _style = "";
     private float _sea = float.NaN;
     private FrameRecorder? _recorder;
@@ -183,12 +183,13 @@ public partial class TrailerDirector : Node
         }
     }
 
-    private double Wall() => (Time.GetTicksMsec() - _phaseStartMs) / 1000.0;
+    /// <summary>Real seconds in this phase: tiles stream on threads, which no fixed frame rate speeds up.</summary>
+    private double Wall() => RealClock.Now - _phaseStart;
 
     private void Enter(Phase phase)
     {
         _phase = phase;
-        _phaseStartMs = Time.GetTicksMsec();
+        _phaseStart = RealClock.Now;
     }
 
     // --- one shot ----------------------------------------------------------------------------
