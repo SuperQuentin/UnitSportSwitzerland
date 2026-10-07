@@ -83,6 +83,7 @@ public static class MiniDumperMeshBuilder
             Cockpit = cockpit,
             Seats = seats,
             Tip = (SkipMesh(), CarMeshBuilder.Turned(L.Hinge), L.TipAngle),
+            Bed = L.Bed,
         };
     }
 
@@ -132,6 +133,7 @@ public static class MiniDumperMeshBuilder
         rig.Name = "MiniDumper";
         rig.AirLowAt = -1f;
         rig.Tipped = machine.Tipped;
+        rig.BedLoad = machine.BedLoad;
         return rig;
     }
 }

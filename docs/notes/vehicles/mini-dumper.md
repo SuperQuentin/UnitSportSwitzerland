@@ -30,9 +30,12 @@ seated behind it over the engine, under a roll bar, 4.5 km/h. Its numbers are in
 
 ## Replication and parking
 
-- **Driven**: `WritePose = (tipped 1/0, signed speed, 0, 0)`; a copy draws the skip and turns its
-  rollers. `Handshake.Protocol` 30.
-- **Parked**: `MiniDumperLayout.Pack` (1 down, 2 up; 0, never set, is down) in `VehicleState.Flags`.
+- **Driven**: `WritePose = (tipped 1/0, signed speed, the pallet in the skip, 0)`; a copy draws the
+  skip and turns its rollers. `Handshake.Protocol` 30 (31 with the pallet).
+- **Parked**: `MiniDumperLayout.Pack` (1 down, 2 up; 0, never set, is down) in `VehicleState.Flags`,
+  and ten bits above for the pallet in the skip.
+- **A pallet in the skip** (#615): set in from forks or a bucket, it slides out over the lip when
+  the skip tips and is set down ahead of it (`vehicles/pallets`, "Pallets in a tipping body").
 - **On building sites** the plan's `MachineRole.MiniDumper` slots park one
   (`DormantVehicles.SiteKind`): house plots and shells (`terrain/construction-sites`).
 

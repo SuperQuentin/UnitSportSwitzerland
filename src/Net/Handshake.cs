@@ -52,8 +52,10 @@ public partial class Handshake : Node
     /// 28: the wheel loader's bucket carries a pallet, in its pose's lift float as the fork loader's (#615).
     /// 29: the site tipper (104) and mixer (105); a mixer's pose has -1 for its rpm with the engine off (#613).
     /// 30: RideKind.MiniDumper, its skip in the pose and the parked flags (#614).
+    /// 31: a pallet in a tipper's body or a mini dumper's skip (#615): in their pose and parked flags,
+    /// VehicleBody.BedLoad replicated, PalletService's AskBed / Bedded / BedLoaded.
     /// </summary>
-    public const int Protocol = 30;
+    public const int Protocol = 31;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

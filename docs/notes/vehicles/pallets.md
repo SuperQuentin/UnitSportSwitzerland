@@ -151,6 +151,62 @@ Plan: `docs/plans/forklift-and-pallets.md`. The machine is `forklift`; this is w
   - Parked, the loader's flags became lift 8, tilt 7, articulation 7, pallet 10 (were 8, 8, 8).
 - The tipping bodies follow after #613.
 
+## Pallets in a tipping body (#615, last part)
+
+A pallet set into the **tipper's body** or the **mini dumper's skip** rides with it and slides out
+when the body tips. Agreed: **one pallet per body**, set into a parked one or into one another player
+drives.
+
+- **Part of the vehicle**, as one on forks is: `Player/IBed` (`HasBed`, `BedLoad` =
+  `Pallets.Carried`, `BedUp`, `Bed`, `FlagsWithBed`).
+  - The tipper's rides in its pose and parked flags where a bus keeps its destination byte (a tipper
+    has none), plus two bits above the throttle (`Truck.BedInPose` / `BedInFlags`).
+  - The mini dumper's rides in its pose's Z and in ten flag bits above its skip's two (`MiniDumperLayout.Pack`).
+  - Nothing is on the wire per frame. `Handshake.Protocol` 31.
+- **Where**: `Avatar/BedShape` (tier 0, `BedShapeTests`), in node space with the body down: the
+  hinge, the floor's middle, its half sizes, and `Spill`, where a tipped-out pallet lands.
+  - The tipper's is `TruckMeshBuilder.TipperBed(spec, load)`, on the floor, or on the gravel's top
+    when the truck is loaded. Its pallet lands 1.7 m behind the hinge, clear of the hanging tailgate.
+  - The mini dumper's is `MiniDumperLayout.Bed`, on the skip's flat floor. Its pallet lands 1.25 m
+    ahead of the lip.
+- **Into it**: `PalletService.Tend` (forks) and `TendBucket` (bucket) first ask `BedUnder` whether
+  the pallet is over a body's floor. If so, it never goes onto the ground under that body.
+  - Forks lowered to `SetDown` over the body's floor, or a bucket dumped over it, asks `AskBed`.
+    The runners are kept along or across the body, whichever is nearer.
+  - `BedUnder` looks at the parked `VehicleBody`s with a bed and at other players driving one. It
+    reads a driven body's state from the driver's **pose** (`BedOf`), since a headless copy's own
+    ride is never dressed.
+  - It also looks at dormant slots of a bed kind: one under the pallet is **woken**, as aiming at it
+    does, and the pallet waits over it.
+  - The candidates are listed twice a second while a pallet is held, never every frame.
+- **The server** (`ServeBed`) checks:
+  - the asker holds that load;
+  - the body is a tipper's or a mini dumper's, empty and down by what the server has of it;
+  - nothing was put in it in the last 2 s (the driver's pose catching up);
+  - the asker is within `Reach + BedReach` (14 m).
+  Then:
+  - **Parked**: `VehicleManager.LoadBed` sets the replicated `VehicleBody.BedLoad` on the vehicle's
+    authority, as a door is worked (`BedLoadedOn` when that is a client). `Capture()` puts it in the
+    flags it is handed to a driver with, so #690's containers keep it too.
+  - **Driven**: `BedLoaded` tells the driver, whose ride takes it and publishes it in its pose.
+  - The asker gets `Bedded`: its forks or bucket are empty.
+- **Out of it**: as the body rises, the rig slides the pallet (`HeavyRig.BedLoad`, drawn on the tipping
+  node) toward the open end. It holds until 35 % of the tip and is at the edge at 85 %
+  (`BedShape.Slid`). Then the driver's `PalletService.TendBed` asks an ordinary drop at `Spill`. The
+  server's `Holds` accepts a body's pallet from its pose (`BedOf`), within a body's length more.
+- **Not done**: two or more pallets in a tipper (agreed: one). A pallet handed to a driver who got
+  out in the same instant is lost (a warning is logged). The excavators' buckets still carry nothing.
+- **Checks**:
+  - `--bedcheck tipper|dumper[,bucket][,shots] --world flat --systems physics,ui` (tier 1): a telehandler (with
+    `bucket`, a wheel loader) holds a pallet over a parked body and lowers or dumps it in. The
+    body takes it across, drawn on its floor, nothing on the ground. Taken over and driven off, the
+    pallet rides along; tipped, it slides out and is set down at `Spill` with its load; the flags
+    and the pose keep any pallet. The flat world has no terrain under a teleport, so the body is
+    parked under the pallet.
+  - `tools/bednetcheck.sh` (tier 2, `fixture:flat`, port 7891): A (admin) lowers a pallet into its
+    own parked tipper, and B sees the parked body's load. B gets in and tips it out, and A sees it
+    set down. A then lowers another into the body B drives, which B holds and A sees in B's pose.
+
 ## Loot
 
 `FurnitureType.Pallet` is a loot container (0.25). **A pallet still where the plan put it keeps

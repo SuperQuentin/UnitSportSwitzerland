@@ -17,7 +17,7 @@ namespace UnitSport.Player;
 /// (<see cref="HeavyTrain.Contacts"/>).
 /// </para>
 /// </summary>
-public sealed class Truck : Rideable, IEngined
+public sealed class Truck : Rideable, IEngined, IBed
 {
     public HeavySpec Spec { get; }
     /// <summary>The coupled trailer, or null.</summary>
@@ -222,6 +222,20 @@ public sealed class Truck : Rideable, IEngined
         get => (DoorsOpen & TipBit) != 0;
         set => DoorsOpen = (byte)(value ? DoorsOpen | TipBit : DoorsOpen & ~TipBit);
     }
+    // ---- a pallet in a tipper's body (#615) -------------------------------------------------------
+    public bool HasBed => Spec.Body == TruckBody.Tipper;
+    /// <summary>A tipper's pallet: in its pose and parked flags where a bus keeps its destination (a tipper has none), two bits more above the throttle.</summary>
+    public int BedLoad { get; set; }
+    public bool BedUp => Tipped;
+    private BedShape? _bed;
+    public BedShape Bed => _bed ??= Avatar.TruckMeshBuilder.TipperBed(Spec, Load);
+    public int FlagsWithBed(int flags, int bedLoad) =>
+        !HasBed ? flags : (flags & ~(0xFF << PoseDestShift) & ~(3 << PoseBedHighShift)) | BedBits(bedLoad);
+    private static int BedBits(int bedLoad) => ((bedLoad & 0xFF) << PoseDestShift) | (((bedLoad >> 8) & 3) << PoseBedHighShift);
+    /// <summary>What a tipper's published pose (or parked flags) says is in its body: what the server checks a tip-out against.</summary>
+    public static int BedInPose(Vector4 pose) => BedInFlags(Mathf.RoundToInt(pose.W));
+    public static int BedInFlags(int flags) => ((flags >> PoseDestShift) & 0xFF) | (((flags >> PoseBedHighShift) & 3) << 8);
+
     /// <summary>A mixer discharging (#613): its drum turned backwards, its chute out. The tipper's work bit.</summary>
     public bool Discharging => Spec.Body == TruckBody.Mixer && Tipped;
 
@@ -606,6 +620,8 @@ public sealed class Truck : Rideable, IEngined
     private const int PoseBrake = 1, PoseLights = 2, PoseReverse = 4, PoseKneel = 8, PoseDoorShift = 4, PoseDestShift = 8;
     /// <summary>The throttle pedal in eighths (#157: the driver's foot others see), above the destination's byte.</summary>
     private const int PoseThrottleShift = 16, PoseThrottleSteps = 7;
+    /// <summary>A tipper's pallet's top two bits (#615), above the throttle; its low eight are the destination's byte.</summary>
+    private const int PoseBedHighShift = 19;
 
     /// <summary>Front-wheel angle, wheel spin rate, rpm, and in W the lamps, doors, kneel, destination and throttle as bits.</summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
@@ -614,7 +630,7 @@ public sealed class Truck : Rideable, IEngined
             Spec.Body == TruckBody.Mixer && !EngineRunning ? -1f : Rpm01, PackFlags());
 
     public int PackFlags() => (Braking ? PoseBrake : 0) | (Headlights ? PoseLights : 0) | (Reversing ? PoseReverse : 0)
-        | (Kneeling ? PoseKneel : 0) | ((DoorsOpen & 15) << PoseDoorShift) | ((Destination & 0xFF) << PoseDestShift)
+        | (Kneeling ? PoseKneel : 0) | ((DoorsOpen & 15) << PoseDoorShift) | (HasBed ? BedBits(BedLoad) : (Destination & 0xFF) << PoseDestShift)
         | (Mathf.RoundToInt(Mathf.Clamp(ThrottlePedal, 0f, 1f) * PoseThrottleSteps) << PoseThrottleShift);
 
     /// <summary>Whether a truck's published pose has its work bit up: the tipper's body, the mixer's discharge (#613).</summary>
@@ -627,7 +643,8 @@ public sealed class Truck : Rideable, IEngined
         _remoteReverse = (flags & PoseReverse) != 0;
         Kneeling = (flags & PoseKneel) != 0;
         DoorsOpen = (byte)((flags >> PoseDoorShift) & 15);
-        Destination = (flags >> PoseDestShift) & 0xFF;
+        Destination = HasBed ? 0 : (flags >> PoseDestShift) & 0xFF;
+        BedLoad = HasBed ? BedInFlags(flags) : 0;
         ThrottlePedal = ((flags >> PoseThrottleShift) & PoseThrottleSteps) / (float)PoseThrottleSteps;
         BrakePedal = Braking ? 1f : 0f;
     }
@@ -688,6 +705,7 @@ public sealed class Truck : Rideable, IEngined
         rig.DoorsOpen = DoorsOpen;
         rig.Kneeling = Kneeling;
         rig.Tipped = Tipped;
+        if (k == 0) rig.BedLoad = BedLoad;
         rig.Discharging = Discharging;
         rig.Destination = DestinationText;
         rig.BodyRoll = k < Train.Count && k > 0 ? Mathf.Clamp(-Train.Bodies[k].Accel.Y * 0.02f * Train.Bodies[k].CgHeight, -0.08f, 0.08f) : 0f;
