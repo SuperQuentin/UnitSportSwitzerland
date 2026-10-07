@@ -19,24 +19,26 @@ public static class DrognensScript
 
     // ---- the recruits, and the sergeant-major ------------------------------------------------------
 
-    private static readonly ItemId[] Kit = [ItemId.GreenPolo, ItemId.CargoPants, ItemId.CombatBoots];
+    /// <summary>The TAZ (#716): the camouflage jacket and trousers, boots; off duty, the olive T-shirt.</summary>
+    private static readonly ItemId[] Kit = [ItemId.TazJacket, ItemId.TazTrousers, ItemId.CombatBoots];
+    private static readonly ItemId[] OffDuty = [ItemId.ArmyTee, ItemId.TazTrousers, ItemId.CombatBoots];
 
     internal static readonly Character Favre = new("FAVRE", new Color("5ad06e"),
-        new Appearance(BodyBuild.Slim, 2, 1, 1, HairStyle.Short, 1), Kit);
+        new Appearance(BodyBuild.Slim, 2, 1, 1, HairStyle.Short, 1), OffDuty);
     internal static readonly Character Muller = new("MÜLLER", new Color("ffb84d"),
         new Appearance(BodyBuild.Broad, 4, 0, 1, HairStyle.Quiff, 4), Kit);
     internal static readonly Character Bernasconi = new("BERNASCONI", new Color("6ec8ff"),
-        new Appearance(BodyBuild.Slim, 6, 2, 3, HairStyle.Shaggy, 0), [.. Kit, ItemId.BlackBeanie]);
+        new Appearance(BodyBuild.Slim, 6, 2, 3, HairStyle.Shaggy, 0), [.. OffDuty, ItemId.BlackBeanie]);
     internal static readonly Character Krasniqi = new("KRASNIQI", new Color("ff7a45"),
         new Appearance(BodyBuild.Stocky, 8, 0, 4, HairStyle.Short, 0), Kit);
     internal static readonly Character Rochat = new("ROCHAT", new Color("b4b4b4"),
         new Appearance(BodyBuild.Broad, 1, 0, 2, HairStyle.Short, 7), Kit);
 
-    // ---- what they drive: stand-ins until #714 (the army's vehicles) and #715 (the kart) are in ----
+    // ---- what they drive: the army's (#714); the kart a stand-in until #715 is in ----------------
 
-    private static readonly RideKind Duro = Heavy(1), GClass = Heavy(5), Lorry = Heavy(8), Kart = Car(Yaris);
-    /// <summary>Beer: a stand-in until #716's bottle.</summary>
-    private const int Beer = (int)ItemId.WaterBottle;
+    /// <summary>The Mowag Duro II, the Mercedes G 300 and the Iveco Trakker 6x6 (<see cref="HeavyCatalog"/>, #714).</summary>
+    private static readonly RideKind Duro = (RideKind)106, GClass = (RideKind)107, Lorry = (RideKind)108, Kart = Car(Yaris);
+    private const int Beer = (int)ItemId.BeerBottle, Cards = (int)ItemId.PlayingCards;
 
     // ---- the place ----------------------------------------------------------------------------------
 
@@ -80,6 +82,9 @@ public static class DrognensScript
             new(default, 0, default, default) { InSet = DormSet.Table + new Vector3(0.25f, 0.05f, 0.45f), Item = ItemId.Radio, Scale = 1.2f },
             new(default, 40, default, default) { InSet = DormSet.Table + new Vector3(-0.2f, 0.05f, -0.45f), Item = ItemId.Cheese },
             new(default, 0, default, default) { InSet = DormSet.Bed(-1, 3) + new Vector3(0.3f, 0.1f, 0f), Item = ItemId.Biberli },
+            new(default, 30, default, default) { InSet = DormSet.Bed(1, 3) + new Vector3(-0.4f, 0.1f, 0.1f), Item = ItemId.Gamelle },
+            new(default, 10, default, default) { InSet = DormSet.Table + new Vector3(0.05f, 0.05f, 0.1f), Item = ItemId.PokerChips },
+            new(default, 75, default, default) { InSet = DormSet.Table + new Vector3(-0.15f, 0.05f, -0.15f), Item = ItemId.PlayingCards, Scale = 0.8f },
         };
         for (int i = 0; i < seated.Length && i < DormSet.Chairs.Length; i++)
             if (seated[i] is { } who) props.Add(new(default, DormSet.Chairs[i].Bearing, default, default) { InSet = DormSet.Chairs[i].Hip, Seated = who });
@@ -95,8 +100,9 @@ public static class DrognensScript
             Cast = [.. Yard()],
             Keys =
             [
-                new(0, Pt.At(2558412, 1169296, 24), Pt.At(2558362, 1169345, 1.5f), 35),
-                new(3.97, Pt.At(2558404, 1169322, 16), Pt.At(2558360, 1169352, 1.5f), 35),
+                // low along the rows, the vehicles dark against the barracks' lit windows
+                new(0, Pt.At(2558392, 1169306, 6.5f), Pt.At(2558352, 1169352, 3f), 28),
+                new(3.97, Pt.At(2558389, 1169318, 4.5f), Pt.At(2558350, 1169360, 3f), 28),
             ],
             Preroll = 0.5,
             Chat = [new(0.6, Rochat, "lichterlöschen 22:00. tagwache 06:00, hä-si-be")],
@@ -142,7 +148,7 @@ public static class DrognensScript
             Props = Table(Favre, Muller, null, null),
             Cast =
             [
-                new() { Who = Krasniqi, At = default, InSet = new Vector3(0.95f, 0f, -1.4f), Heading = 270, Dance = Cheer },
+                new() { Who = Krasniqi, At = default, InSet = new Vector3(0.95f, 0f, -1.4f), Heading = 270, Dance = Cheer, Item = Cards },
             ],
             Preroll = 0.4,
             Chat = [new(0.3, Krasniqi, "all in. SABTA"), new(1.1, Favre, "all in??")],
@@ -157,7 +163,7 @@ public static class DrognensScript
             Props = Table(Favre, null, null, Krasniqi),
             Cast =
             [
-                new() { Who = Muller, At = default, InSet = new Vector3(-0.95f, 0f, -0.75f), Heading = 100, Dance = 27 },
+                new() { Who = Muller, At = default, InSet = new Vector3(-0.95f, 0f, -0.75f), Heading = 100, Dance = 27, Item = Beer },
             ],
             Preroll = 0.4,
             Chat = [new(0.2, Muller, "karts in garage 4. who's u-booting?"), new(1.2, Bernasconi, "polenta-fraktion is in")],
