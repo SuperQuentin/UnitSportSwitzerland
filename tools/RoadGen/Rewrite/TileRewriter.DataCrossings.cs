@@ -105,7 +105,19 @@ public static partial class TileRewriter
                 EmitCrossing(paint, source, mid, u, right, far, lo, hi, streetRight, streetLeft, areas, stats,
                     insetLeft: atKerb ? junction.KerbInset.GetValueOrDefault((i, false)) : 0,
                     insetRight: atKerb ? junction.KerbInset.GetValueOrDefault((i, true)) : 0);
-                if (stats.Crossings > before) drawn++;
+                if (stats.Crossings > before)
+                {
+                    drawn++;
+                    // over an exit hatch: its stripes stop at the crosswalk, and where it is wide enough a refuge carries the
+                    // walkers across in two goes (#700, the user's review: the zebra ran over the stripes)
+                    if (lanes is { ExitWay: { } exitWay, ExitFar: false })
+                    {
+                        double zebraTo = far - ZebraClear, zebraFrom = zebraTo - ZebraDepth;
+                        bool refuge = exitWay.Refuge(Get(areas, exitWay.Tile), zebraFrom, zebraTo);
+                        if (refuge) stats.Refuges++;
+                        exitWay.ClearHatch(Get(paint, exitWay.Tile), zebraFrom - (refuge ? 2.3 : 0.3), zebraTo + (refuge ? 2.3 : 0.3));
+                    }
+                }
             }
         }
         return drawn;

@@ -1514,10 +1514,10 @@ public static partial class TileRewriter
         {
             paint.Remove(line);
             double far = AlongOf(_length);   // the widening's far end, in along-segment metres
-            double from = _atEnd ? line.From : far, to = _atEnd ? far : line.To;
+            double from = _atEnd ? line.From : Math.Max(far, line.From), to = _atEnd ? Math.Min(far, line.To) : line.To;   // #700: never more than was left of it (a widening cut before kept its part)
             // a line to the end has To = infinity: none is left past a strip as long as the segment (#325)
             if (Math.Min(to, _total) - from > 1)
-                paint.Add(RoadPaint.AlongSegment(_seg, line.Type, line.Rgba, line.Width, line.Dash, line.Gap, line.Offset, from, to, line.Variant));
+                paint.Add(RoadPaint.AlongSegment(line.Segment ?? _seg, line.Type, line.Rgba, line.Width, line.Dash, line.Gap, line.Offset, from, to, line.Variant));   // #700: on the segment it was laid on, where the next cut looks
         }
 
 
@@ -1535,9 +1535,9 @@ public static partial class TileRewriter
             {
                 paint.Remove(line);
                 // the dashes as they were, away from the junction
-                double from = _atEnd ? line.From : far, to = _atEnd ? far : line.To;
+                double from = _atEnd ? line.From : Math.Max(far, line.From), to = _atEnd ? Math.Min(far, line.To) : line.To;   // #700: never more than was left of it (a widening cut before kept its part)
                 if (Math.Min(to, _total) - from > 1)
-                    paint.Add(RoadPaint.AlongSegment(_seg, line.Type, line.Rgba, line.Width, line.Dash, line.Gap, line.Offset, from, to, line.Variant));
+                    paint.Add(RoadPaint.AlongSegment(line.Segment ?? _seg, line.Type, line.Rgba, line.Width, line.Dash, line.Gap, line.Offset, from, to, line.Variant));   // #700: on the segment it was laid on, where the next cut looks
                 paint.Add(RoadPaint.AlongSegment(_seg, PaintType.WhiteSolid, line.Rgba, line.Width, 0, 0, line.Offset, Math.Min(near, far), Math.Max(near, far)));
             }
             return lines.Count;
@@ -2004,6 +2004,7 @@ public static partial class TileRewriter
             // (leaning toward the mouth, those past the far end come in through the border)
             double first = near + 0.6 - Math.Ceiling(border(near) / HatchStep) * HatchStep;
             double last = towardMouth ? far + Math.Ceiling(width / HatchStep + 1) * HatchStep : far;
+            var quads = new List<(double From, double To)>();
             for (double d0 = first; d0 < last; d0 += HatchStep)
             {
                 if (Edge(d0 - h) is not { } a || Edge(d0 + h) is not { } c) continue;
@@ -2012,14 +2013,107 @@ public static partial class TileRewriter
                 v.AddRange(Point(d0 - h + sigma * a.From, a.From)); v.AddRange(Point(d0 - h + sigma * a.To, a.To));
                 v.AddRange(Point(d0 + h + sigma * c.To, c.To)); v.AddRange(Point(d0 + h + sigma * c.From, c.From));
                 idx.AddRange([b, (ushort)(b + 1), (ushort)(b + 2), b, (ushort)(b + 2), (ushort)(b + 3)]);
+                double[] ds = [d0 - h + sigma * a.From, d0 - h + sigma * a.To, d0 + h + sigma * c.To, d0 + h + sigma * c.From];
+                quads.Add((ds.Min(), ds.Max()));
                 stats.Stripes++;
             }
             if (idx.Count > 0)
-                paint.Add(new RoadPaint
+            {
+                var mesh = new RoadPaint
                 {
                     Shape = PaintShape.Triangles, Type = PaintType.Hatch, Rgba = PaintEmitter.White,
                     Vertices = v.ToArray(), Indices = idx.ToArray(),
-                });
+                };
+                paint.Add(mesh);
+                _hatches.Add((mesh, quads));
+            }
         }
+
+        /// <summary>The hatch meshes this widening painted, with each stripe's reach along the road (from the mouth), for <see cref="ClearHatch"/>.</summary>
+        private readonly List<(RoadPaint Mesh, List<(double From, double To)> Quads)> _hatches = new();
+
+        /// <summary>
+        /// Leaves out the hatch stripes that reach between <paramref name="from"/> and <paramref name="to"/> m from the mouth
+        /// (#700: a zebra across the hatch, and its refuge islands, keep it clear). Returns how many went.
+        /// </summary>
+        public int ClearHatch(List<RoadPaint> paint, double from, double to)
+        {
+            int cleared = 0;
+            for (int k = 0; k < _hatches.Count; k++)
+            {
+                var (mesh, quads) = _hatches[k];
+                int at = paint.IndexOf(mesh);
+                if (at < 0) continue;
+                var v = new List<float>();
+                var idx = new List<ushort>();
+                var kept = new List<(double From, double To)>();
+                for (int q = 0; q < quads.Count; q++)
+                {
+                    if (quads[q].To > from && quads[q].From < to) { cleared++; continue; }
+                    ushort b = (ushort)(v.Count / 3);
+                    v.AddRange(mesh.Vertices.AsSpan(q * 12, 12).ToArray());
+                    idx.AddRange([b, (ushort)(b + 1), (ushort)(b + 2), b, (ushort)(b + 2), (ushort)(b + 3)]);
+                    kept.Add(quads[q]);
+                }
+                if (kept.Count == quads.Count) continue;
+                var replaced = new RoadPaint
+                {
+                    Shape = PaintShape.Triangles, Type = PaintType.Hatch, Rgba = PaintEmitter.White,
+                    Vertices = v.ToArray(), Indices = idx.ToArray(),
+                };
+                if (kept.Count == 0) paint.RemoveAt(at); else paint[at] = replaced;
+                _hatches[k] = (replaced, kept);
+            }
+            return cleared;
+        }
+
+        /// <summary>
+        /// A pedestrian refuge (#700) in the hatch where a zebra crosses it between <paramref name="zebraFrom"/> and
+        /// <paramref name="zebraTo"/> m from the mouth: a kerbed island <see cref="RefugeLength"/> m long on each side of the
+        /// crosswalk, which stays level through it, a quarter metre clear of the hatch's edges. False where the hatch is
+        /// narrower there than an island needs.
+        /// </summary>
+        public bool Refuge(List<RoadAreaProp> areas, double zebraFrom, double zebraTo)
+        {
+            const double Margin = 0.25, MinWidth = 1.2, Top = 0.12;
+            double a = zebraFrom - 0.15 - RefugeLength, b = zebraTo + 0.15 + RefugeLength;
+            if (a < -RefugeLength || b > _length - 0.5) return false;   // the near island may stand in the junction, as the lights' (#682)
+            double iw = Math.Min(HatchAt(Math.Max(0, a)), HatchAt(b)) - 2 * Margin;
+            if (iw < MinWidth) return false;
+            float[] At2(double d, double offset)
+            {
+                if (d >= 0) return Point(d, offset);
+                var p0 = Point(0, offset);
+                var p1 = Point(1, offset);
+                double fx = p1[0] - p0[0], fz = p1[2] - p0[2], len = Math.Sqrt(fx * fx + fz * fz);
+                return len < 1e-6 ? p0 : [(float)(p0[0] + fx / len * d), p0[1], (float)(p0[2] + fz / len * d)];
+            }
+            void Island(double d0, double d1)
+            {
+                var v = new List<float>();
+                var idx = new List<ushort>();
+                int steps = Math.Max(1, (int)Math.Round(d1 - d0));
+                for (int k = 0; k <= steps; k++)
+                {
+                    double d = d0 + (d1 - d0) * k / steps;
+                    v.AddRange(At2(d, Margin));
+                    v.AddRange(At2(d, Margin + iw));
+                    if (k == 0) continue;
+                    ushort p = (ushort)(2 * k - 2);
+                    idx.AddRange([p, (ushort)(p + 1), (ushort)(p + 3), p, (ushort)(p + 3), (ushort)(p + 2)]);
+                }
+                areas.Add(new RoadAreaProp
+                {
+                    Type = AreaPropType.Island, Variant = 2, Flags = PropFlags.Solid, Height = (float)Top,
+                    Vertices = v.ToArray(), Indices = idx.ToArray(),
+                });
+            }
+            Island(a, zebraFrom - 0.15);
+            Island(zebraTo + 0.15, b);
+            return true;
+        }
+
+        /// <summary>A refuge island's length on each side of the crosswalk (VSS 40 241: 2 m and more).</summary>
+        private const double RefugeLength = 2.0;
     }
 }
