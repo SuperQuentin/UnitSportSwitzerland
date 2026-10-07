@@ -164,7 +164,7 @@ public static partial class TileRewriter
         Dictionary<TileId, List<RoadPointProp>> signs, List<(RoadSegment Segment, bool Right, (double From, double To) Along)> bikeBetween,
         Dictionary<RoadAreaProp, RoadSegment> stripOwners, TurnLaneStats stats, Func<int, LinkEnd, bool, RoadSide> streetSide,
         List<PocketOpening>? openings = null, Dictionary<(int Node, int Arm), CornerArc>? arcs = null,
-        OsmOverlayReader? overlay = null, Restrictions? restrictions = null)
+        OsmOverlayReader? overlay = null, Restrictions? restrictions = null, CrossingNodes? crossings = null)
     {
         var net = result.Network;
         var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
@@ -420,9 +420,22 @@ public static partial class TileRewriter
             var approach = inSlot.ApproachWay!;
             var departure = outSlot.ExitWay!;
             var armLanes = Arm(pocket.Node, pocket.Arm, pocket.Home);
-            approach.Layout = armLanes.Approach = LanesOf(approach, right, pocket.Signal);
-            if (pocket.Signal && approach.Layout is { Equal: true, LeftPocketLane: { } facing })
-                departure.SetExit(facing.To + approach.Layout.LeftBike, approach.Layout.LaneWidth);
+            // every car lane across the approach as wide as the others, and the exit's lane continuing the through lane, at every
+            // junction (#711, the user's decision; #682 had it at the lights only)
+            approach.Layout = armLanes.Approach = LanesOf(approach, right, equal: true);
+            if (approach.Layout is { Equal: true, LeftPocketLane: { } facing })
+            {
+                double hatch = facing.To + approach.Layout.LeftBike, lane = approach.Layout.LaneWidth;
+                if (!pocket.Signal && pocket.ExitArm >= 0)
+                {
+                    // without lights (#711) the exit lane continues the through lane; where an OSM crosswalk crosses the exit it
+                    // narrows to a turn lane's width and the hatch takes the rest, room for a refuge (the user's rule)
+                    if (lane > TurnLane && crossings?.OnArm(plansByNode[pocket.Node].Junction, pocket.ExitArm, net) is not null)
+                        (hatch, lane) = (hatch + lane - TurnLane, TurnLane);
+                    departure.SetExitLane(lane);
+                }
+                departure.SetExit(hatch, lane);
+            }
             armLanes.AdvancedBikeLine = approach.HasLeftBikeLane && !pocket.BikeBox;
             armLanes.PlacedLeft(approach, inSlot.Storage, inSlot.Merged, pocket.RightTurn && right is null, pocket.Signal);
             (armLanes.PocketMoves, armLanes.OwnMoves) = (approach.PocketMoves, approach.OwnMoves) = (pocket.PocketMoves, pocket.OwnMoves);
@@ -1289,6 +1302,12 @@ public static partial class TileRewriter
         /// </summary>
         public void SetExit(double hatch, double lane) => (_exitHatch, _exitLane) = (hatch, lane);
         private double? _exitHatch, _exitLane;
+        /// <summary>
+        /// (#711, junctions without lights) the exit's car lane at the mouth is <paramref name="lane"/> wide, not the carriageway's
+        /// own lane: the widening is the hatch and that difference, the lane easing back to the carriageway's as the hatch closes.
+        /// </summary>
+        public void SetExitLane(double lane) => _exitLaneSet = lane;
+        private double? _exitLaneSet;
         public double HatchAtMouth => _bike > 0 ? PocketRegion : _exitHatch ?? PocketRegion;   // beside an on-street bike lane the exit is as at a yield junction (#123, #120)
         /// <summary>The width of the exit's car lane (the carriageway's half less a painted bike lane).</summary>
         public double ExitCar => _bike > 0 ? TurnLane : _car;   // beside an on-street bike lane the exit keeps a turn-lane wide car lane and the bike lane (as at a yield junction)
@@ -1417,7 +1436,7 @@ public static partial class TileRewriter
         private double WidenFull(double dist)
         {
             // #682: the exit lane keeps its width (the carriageway's lane) from the mouth to where the hatch has closed: the edge moves in as fast as the hatch
-            if (_exit && _bike <= 0 && _exitHatch is { } hatch) return Math.Max(0, hatch * (1 - dist / _length));   // #682; with an on-street bike lane the yield junction's exit below (a car lane and the bike lane beside the closing hatch, then the lead-out)
+            if (_exit && _bike <= 0 && _exitHatch is { } hatch) return Math.Max(0, (hatch + (_exitLaneSet - _car ?? 0)) * (1 - dist / _length));   // #682, #711; with an on-street bike lane the yield junction's exit below (a car lane and the bike lane beside the closing hatch, then the lead-out)
             if (_taper <= 0) return Lane + _extra;
             double main = Math.Clamp((_length - dist) / _taper, 0, 1);
             if (_lead <= 0 || (_exit && _bike <= 0)) return (Lane + _extra) * main;

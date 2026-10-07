@@ -114,7 +114,7 @@ public static partial class TileRewriter
                 if (!atKerb && CarriagewayAcross(source, station, right, areas.GetValueOrDefault(source.Tile)) is { } edges)
                 {
                     if (CornerPlanner.Debug is { } dbg && junction.Centre.DistanceTo(new Vec2(dbg.E, dbg.N)) < 15)
-                        Console.WriteLine($"[zebra] arm {i}: across {lo:F2}..{hi:F2} from the mouth, {edges.Lo:F2}..{edges.Hi:F2} measured");
+                        Console.WriteLine($"[zebra] arm {i}: across {lo:F2}..{hi:F2} from the mouth, {edges.Lo:F2}..{edges.Hi:F2} measured; hatch at mouth {exitWayHere?.HatchAtMouth:F2}, at 3/6/9 m {exitWayHere?.HatchAt(3):F2}/{exitWayHere?.HatchAt(6):F2}/{exitWayHere?.HatchAt(9):F2}");
                     (lo, hi) = edges;
                 }
                 int before = stats.Crossings;

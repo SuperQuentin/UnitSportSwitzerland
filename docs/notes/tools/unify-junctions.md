@@ -60,7 +60,17 @@ listed rules differing by kind. Stacked on #704 (`lane-data-intersections`).
   out had no bars over it (Sion's east arm, north side). It now takes the side as it will reach the mouth
   (`StreetSideToMouth`). Away from the mouth its span across is measured where it stands (`CarriagewayAcross`: the
   line's ribbon and the widening strips), not taken from the mouth's widening (Sion: 0.35 m further north).
-- Lane widths (the pocket wider than the through lane) are phase 2.
+- Lane widths (the pocket wider than the through lane) are phase 2, below.
+
+## Phase 2: lanes
+
+- **Equal lane widths at every junction** (`LanesOf(equal: true)` for every pocket, #682 had it at the lights): the T's
+  pocket and through lane 4.0 / 4.0 m (were 5 / 3), Sion's 3.5 / 3.5 (4.0 / 3.0). The exit's hatch matches the facing
+  pocket (`SetExit`). Without lights the exit's car lane continues the through lane (`SetExitLane`: the widening is the
+  hatch plus the lane's difference from the carriageway's own lane, easing back as the hatch closes; the lights' exit
+  lane stays the carriageway's). **Where an OSM crosswalk crosses the exit** the exit lane narrows to a turn lane (3 m)
+  and the hatch takes the rest (the user's rule: room for a refuge). Sion keeps its 2 refuges (the narrower pocket alone
+  left the hatch 1.6 m wide where the island stands, under the 1.7 m it needs).
 - Tier 0 `Without_lights_the_path_runs_to_the_kerb_and_the_edge_guide_follows_the_widening` (the T: red within 7.5 m of
   the side road's axis, paths carried into both corners, the guide's west end > 0.5 m further out); the corner test now
   checks the kerb arc is lined by the corner or the carried side.
