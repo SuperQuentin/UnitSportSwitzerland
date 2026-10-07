@@ -12,7 +12,9 @@
 //      vertex colour (the eye colour);
 //   12 checker, 13 stripes, 14 studs (#394).
 // Alpha 1 everywhere else, so every other mesh drawn with this is unchanged. Patterns are laid
-// out in the mesh's own space (origin at the feet), so they move with the figure.
+// out where each point sits on the figure standing at rest (CUSTOM0, MeshScratch.Rest, #724), so
+// they stay on the cloth while it runs, jumps or bends; a mesh without that channel (w = 0) falls
+// back to its own space (origin at the feet).
 
 #include "res://shaders/body/face.gdshaderinc"
 
@@ -20,7 +22,7 @@ varying vec3 v_pos;
 varying flat int v_fx;
 
 void vertex() {
-    v_pos = VERTEX;
+    v_pos = CUSTOM0.w > 0.5 ? CUSTOM0.xyz : VERTEX;
     v_fx = int(round((1.0 - COLOR.a) * 255.0));
     v_face = UV2;
 }

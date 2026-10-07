@@ -85,6 +85,8 @@ public static partial class HumanMeshBuilder
         var look = Dress(palette, o, top, bottom);
         var fit = AppendBody(s, look, rig, includeLegs, body, head, cover);
         var r = rig;
+        // what lies over the body rests with the part it lies on (#724): the trunk unless said otherwise
+        using var trunkRest = s.Resting(TrunkRest(r));
 
         if (body)
         {
@@ -94,10 +96,12 @@ public static partial class HumanMeshBuilder
             {
                 bool left = side < 0;
                 var (shoulder, elbow, wrist) = left ? (r.ShoulderL, r.ElbowL, r.WristL) : (r.ShoulderR, r.ElbowR, r.WristR);
-                ArmDetail(s, fit.Shape, fit.Side * side, shoulder, elbow, wrist, side, top, o[WearSlot.Hands]);
+                using (s.Resting(ArmRest(r, left)))
+                    ArmDetail(s, fit.Shape, fit.Side * side, shoulder, elbow, wrist, side, top, o[WearSlot.Hands]);
                 if (includeLegs)
                 {
                     var (hip, knee, ankle, toe) = left ? (r.HipL, r.KneeL, r.AnkleL, r.ToeL) : (r.HipR, r.KneeR, r.AnkleR, r.ToeR);
+                    using var legRest = s.Resting(LegRest(hip, knee, ankle, fit.Side, left));
                     LegDetail(s, fit.Shape, fit.Side * side, hip, knee, ankle, toe, bottom, o[WearSlot.Legs], o[WearSlot.Feet]);
                 }
             }
@@ -110,6 +114,7 @@ public static partial class HumanMeshBuilder
         bool hair = look.HairStyle != HairStyle.None && cover != HairCover.Head;
         var f = new Frame(h.Side, h.UpAxis, h.Fwd);
         if (o[WearSlot.Neck] is { } neck) AppendNeckwear(s, fit, neck);
+        using var headRest = s.Resting(HeadRest(r));
         if (fullFace)
         {
             // a full-face helmet round the whole head, dark visor at the front
@@ -556,7 +561,8 @@ public static partial class HumanMeshBuilder
         var look = Patterned(Dress(p, o, top, bottom));
         var shape = Physique.Of(look.Build);
         var outward = hip.X < 0 ? Vector3.Left : Vector3.Right;
-        DrawLeg(s, look, shape, hip, knee, ankle, toe, Vector3.Right);
+        DrawLeg(s, look, shape, hip, knee, ankle, toe, Vector3.Right, hip.X < 0);
+        using var legRest = s.Resting(LegRest(hip, knee, ankle, Vector3.Right, hip.X < 0));
         LegDetail(s, shape, outward, hip, knee, ankle, toe, bottom, o[WearSlot.Legs], o[WearSlot.Feet]);
     }
 

@@ -43,6 +43,8 @@ public sealed class MeshScratch
     private readonly List<Vector2> _uvs = new();
     // and its second UV: the face's genome (Face.FaceGenome.Code, #657), filled alongside
     private readonly List<Vector2> _uv2s = new();
+    // filled only once a vertex is drawn under a Rest map (a figure, #724); otherwise no CUSTOM0 at all
+    private readonly List<Vector3> _rest = new();
     // panes go in a second surface, so they can take a translucent material of their own
     private readonly List<Vector3> _glassVertices = new();
     private readonly List<Color> _glassColors = new();
@@ -80,6 +82,49 @@ public sealed class MeshScratch
     public readonly struct SmoothScope(MeshScratch scratch, bool was) : IDisposable
     {
         public void Dispose() => scratch.Smooth = was;
+    }
+
+    /// <summary>
+    /// While set, every vertex also records where it sits on its figure standing at rest (#724):
+    /// the clothes' patterns (<c>shaders/body/avatar.gdshaderinc</c>) are laid out from that, in
+    /// <c>CUSTOM0</c>, so they stay on the cloth while the figure runs, jumps or bends rather than
+    /// the body sliding through a pattern pinned to its feet. The figure builders set it per body
+    /// part (<see cref="Resting"/>); a vertex drawn without it rests where it is drawn.
+    /// </summary>
+    public RestMap? Rest { get; set; }
+
+    /// <summary>Sets <see cref="Rest"/> until the returned scope is disposed, then puts it back.</summary>
+    public RestScope Resting(RestMap? map)
+    {
+        var scope = new RestScope(this, Rest);
+        Rest = map;
+        return scope;
+    }
+
+    public readonly struct RestScope(MeshScratch scratch, RestMap? was) : IDisposable
+    {
+        public void Dispose() => scratch.Rest = was;
+    }
+
+    /// <summary>
+    /// Takes a point of a posed figure back to where it is when the figure stands at rest: one
+    /// bone's rigid motion undone (<see cref="Rigid"/>), or two bones' meeting at a joint (a limb,
+    /// the trunk): <see cref="First"/> before the plane through <see cref="Joint"/> square to
+    /// <see cref="Split"/>, <see cref="Second"/> after it, blended over <see cref="Blend"/> metres
+    /// either side so the cloth over the joint stretches instead of tearing. Both take the joint
+    /// to the same place, so the blend never jumps.
+    /// </summary>
+    public readonly record struct RestMap(Transform3D First, Transform3D Second, Vector3 Joint, Vector3 Split, float Blend)
+    {
+        public static RestMap Rigid(Transform3D t) => new(t, t, Vector3.Zero, Vector3.Zero, 1f);
+
+        public Vector3 Of(Vector3 p)
+        {
+            float d = (p - Joint).Dot(Split);
+            if (d <= -Blend) return First * p;
+            if (d >= Blend) return Second * p;
+            return (First * p).Lerp(Second * p, (d + Blend) / (2f * Blend));
+        }
     }
 
     /// <summary>
@@ -577,8 +622,8 @@ public sealed class MeshScratch
     {
         Core.ShowcaseTrace.Mark();
         var mesh = new ArrayMesh();
-        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _uv2s, _indices, pivot, "body");
-        AddSurface(mesh, _glassVertices, _glassColors, null, null, null, _glassIndices, pivot, GlassSurface);
+        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _uv2s, _rest, _indices, pivot, "body");
+        AddSurface(mesh, _glassVertices, _glassColors, null, null, null, null, _glassIndices, pivot, GlassSurface);
         return mesh;
     }
 
@@ -588,7 +633,7 @@ public sealed class MeshScratch
     /// </summary>
     public void Clear()
     {
-        _vertices.Clear(); _colors.Clear(); _indices.Clear(); _normals.Clear(); _uvs.Clear(); _uv2s.Clear();
+        _vertices.Clear(); _colors.Clear(); _indices.Clear(); _normals.Clear(); _uvs.Clear(); _uv2s.Clear(); _rest.Clear();
         _glassVertices.Clear(); _glassColors.Clear(); _glassIndices.Clear();
     }
 
@@ -601,13 +646,13 @@ public sealed class MeshScratch
     {
         Core.ShowcaseTrace.Mark();
         mesh.ClearSurfaces();
-        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _uv2s, _indices, Vector3.Zero, "body");
-        AddSurface(mesh, _glassVertices, _glassColors, null, null, null, _glassIndices, Vector3.Zero, GlassSurface);
+        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _uv2s, _rest, _indices, Vector3.Zero, "body");
+        AddSurface(mesh, _glassVertices, _glassColors, null, null, null, null, _glassIndices, Vector3.Zero, GlassSurface);
         return mesh;
     }
 
     private static void AddSurface(ArrayMesh mesh, List<Vector3> vertices, List<Color> colors, List<Vector3>? normals,
-        List<Vector2>? uvs, List<Vector2>? uv2s, List<int> indices, Vector3 pivot, string name)
+        List<Vector2>? uvs, List<Vector2>? uv2s, List<Vector3>? rest, List<int> indices, Vector3 pivot, string name)
     {
         if (indices.Count == 0) return;
         var facing = new Vector3[vertices.Count];
@@ -640,8 +685,21 @@ public sealed class MeshScratch
             while (uv2s.Count < vertices.Count) uv2s.Add(Vector2.Zero);
             arrays[(int)Mesh.ArrayType.TexUV2] = uv2s.ToArray();
         }
+        var flags = (Mesh.ArrayFormat)0;
+        if (rest is { Count: > 0 })
+        {
+            // turned round like the positions; w = 1 tells the shader the channel is there
+            var packed = new float[vertices.Count * 4];
+            for (int i = 0; i < vertices.Count; i++)
+            {
+                var v = (i < rest.Count ? rest[i] : vertices[i]) - pivot;
+                packed[i * 4] = -v.X; packed[i * 4 + 1] = v.Y; packed[i * 4 + 2] = -v.Z; packed[i * 4 + 3] = 1f;
+            }
+            arrays[(int)Mesh.ArrayType.Custom0] = packed;
+            flags = (Mesh.ArrayFormat)((long)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom0Shift);
+        }
 
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, flags: flags);
         mesh.SurfaceSetName(mesh.GetSurfaceCount() - 1, name);
     }
 
@@ -762,6 +820,7 @@ public sealed class MeshScratch
 
     private void Add(Vector3 position, Color linear)
     {
+        AddRest(position);
         _vertices.Add(position);
         _colors.Add(linear);
         if (_normals.Count > 0) _normals.Add(NoNormal);
@@ -773,11 +832,24 @@ public sealed class MeshScratch
     {
         // the first normal: every vertex before it gets the one Godot would have given it
         while (_normals.Count < _vertices.Count) _normals.Add(NoNormal);
+        AddRest(position);
         _vertices.Add(position);
         _colors.Add(linear);
         _normals.Add(normal);
         if (_uvs.Count > 0) _uvs.Add(Vector2.Zero);
         if (_uv2s.Count > 0) _uv2s.Add(Vector2.Zero);
+    }
+
+    // the rest position of the vertex about to be added; the first one under a map gives every
+    // vertex before it its own position (a vehicle drawn first, a figure's rider after)
+    private void AddRest(Vector3 position)
+    {
+        if (Rest is { } map)
+        {
+            while (_rest.Count < _vertices.Count) _rest.Add(_vertices[_rest.Count]);
+            _rest.Add(map.Of(position));
+        }
+        else if (_rest.Count > 0) _rest.Add(position);
     }
 
     /// <summary>
