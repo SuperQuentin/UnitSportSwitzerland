@@ -67,6 +67,11 @@ public partial class VehicleBody
         _drawnTilt = Tilt;
         // left at rest: moored where it lies (one left running moors where it comes to a stop)
         if (MathX.FlatLength(s.Velocity) < MoorBelow) Moor(s.Position, s.Yaw);
+        // A boat follows no moving platform: what it rests on is water, and the only thing that
+        // carries one is a hold (#418), which poses it itself. A swimmer under the hull counted as its
+        // floor, so the ship took on the swimmer's motion, and a swimmer put somewhere else (a
+        // respawn, a probe) teleported the whole steamer 28 m with it (--steamercheck under --fixed-fps).
+        PlatformFloorLayers = 0;
         _hull = GetNodeOrNull<CollisionShape3D>("Hull");
         // where the shape was put in the level boat's frame: the box's centre, nothing for a shaped hull
         _hullCentre = _hull?.Position ?? Vector3.Zero;
