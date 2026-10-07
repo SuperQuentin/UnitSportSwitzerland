@@ -27,9 +27,14 @@ public static class CdScanner
     /// What <paramref name="engine"/>'s exit code means: ClamAV 0 clean, 1 a virus found, anything
     /// else an error; Defender's MpCmdRun 0 no threat, 2 threats found, anything else an error.
     /// </summary>
-    public static ScanVerdict Interpret(Engine engine, int exitCode) => engine switch
+    public static ScanVerdict Interpret(Engine engine, int exitCode, string output = "") => engine switch
     {
-        Engine.Defender => exitCode switch { 0 => ScanVerdict.Clean, 2 => ScanVerdict.Infected, _ => ScanVerdict.Failed },
+        // MpCmdRun also exits 2 when the scan itself failed ("Failed with hr = 0x8050..."): a threat
+        // only when it says it found some, a pass only when it says none
+        Engine.Defender => exitCode == 0 || output.Contains("found no threats", StringComparison.OrdinalIgnoreCase) ? ScanVerdict.Clean
+            : exitCode == 2 && output.Contains("threat", StringComparison.OrdinalIgnoreCase) && !output.Contains("Failed with hr", StringComparison.OrdinalIgnoreCase)
+                ? ScanVerdict.Infected
+            : ScanVerdict.Failed,
         _ => exitCode switch { 0 => ScanVerdict.Clean, 1 => ScanVerdict.Infected, _ => ScanVerdict.Failed },
     };
 
@@ -70,6 +75,16 @@ public static class CdScanner
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Windows Defender", "MpCmdRun.exe");
     }
 
+    /// <summary>The last scanner's exit code and its last lines, for the server's log.</summary>
+    public static string LastOutput { get; private set; } = "";
+
+    private static string Last(Task<string> text)
+    {
+        if (!text.IsCompletedSuccessfully) return "";
+        var lines = text.Result.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return lines.Length == 0 ? "" : lines[^1];
+    }
+
     private static Task<bool>? _available;
 
     /// <summary>
@@ -91,6 +106,8 @@ public static class CdScanner
     /// <summary>Scans <paramref name="file"/>: the first engine that starts gives the verdict, with the scanner's name.</summary>
     public static async Task<(ScanVerdict Verdict, string Engine)> ScanAsync(string file, CancellationToken ct)
     {
+        // one kind of separator: Godot's user folder comes with forward slashes, and Defender cannot find a path that mixes both
+        file = Path.GetFullPath(file);
         foreach (var (engine, exe, args) in Engines(file))
         {
             var start = new ProcessStartInfo(exe)
@@ -116,7 +133,9 @@ public static class CdScanner
                     return (ScanVerdict.Failed, engine.ToString());
                 }
                 try { await Task.WhenAll(drainOut, drainErr); } catch { }
-                var verdict = Interpret(engine, p.ExitCode);
+                string said = (drainOut.IsCompletedSuccessfully ? drainOut.Result : "") + "\n" + (drainErr.IsCompletedSuccessfully ? drainErr.Result : "");
+                var verdict = Interpret(engine, p.ExitCode, said);
+                LastOutput = $"{engine} exit {p.ExitCode}: {Last(drainOut)} {Last(drainErr)}".Trim();
                 // the daemon not running is not a verdict on the file: try the stand-alone scanner
                 if (engine == Engine.ClamDaemon && verdict == ScanVerdict.Failed) continue;
                 return (verdict, engine.ToString());

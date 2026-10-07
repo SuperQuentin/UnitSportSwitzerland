@@ -300,11 +300,12 @@ public partial class CdUpload : Node
                     }
                     break;
                 case ScanVerdict.Infected:
-                    GD.PushWarning($"[cd] upload from {s.Peer} flagged by {s.Engine}: deleted");
+                    GD.PushWarning($"[cd] upload from {s.Peer} flagged by {s.Engine}: deleted ({CdScanner.LastOutput})");
                     TryDelete(s.Folder);
                     library?.Report(s.Peer, "The virus scanner flagged that file: it was deleted.");
                     break;
                 default:
+                    GD.Print($"[cd] upload from {s.Peer} not scanned: {s.Verdict} ({CdScanner.LastOutput})");
                     TryDelete(s.Folder);
                     library?.Report(s.Peer, s.Verdict == ScanVerdict.Unavailable
                         ? "This server cannot check files for viruses, so uploads are off."

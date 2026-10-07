@@ -389,6 +389,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         };
         Audio.Cd.CdLibrary.Create(this, server: false);
         Audio.Cd.CdUpload.Create(this, server: false);   // a player's own file, scanned on the server (#736)
+        if (Audio.Cd.CdUploadProbe.Requested) AddChild(new Audio.Cd.CdUploadProbe());
         // the radio by the pastor rat in every church (#370)
         Interiors.ChurchRadios.Create(this);
         Net.ClockSync.Create(this);

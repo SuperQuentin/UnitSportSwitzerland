@@ -33,7 +33,10 @@ public class CdUploadTests
         Assert.Equal(ScanVerdict.Infected, CdScanner.Interpret(CdScanner.Engine.ClamScan, 1));
         Assert.Equal(ScanVerdict.Failed, CdScanner.Interpret(CdScanner.Engine.ClamDaemon, 2));
         Assert.Equal(ScanVerdict.Clean, CdScanner.Interpret(CdScanner.Engine.Defender, 0));
-        Assert.Equal(ScanVerdict.Infected, CdScanner.Interpret(CdScanner.Engine.Defender, 2));
+        Assert.Equal(ScanVerdict.Infected, CdScanner.Interpret(CdScanner.Engine.Defender, 2, "Scanning x found 1 threats."));
+        // MpCmdRun exits 2 when the scan itself fails too: that is no verdict on the file
+        Assert.Equal(ScanVerdict.Failed, CdScanner.Interpret(CdScanner.Engine.Defender, 2, "CmdTool: Failed with hr = 0x80508023."));
+        Assert.Equal(ScanVerdict.Clean, CdScanner.Interpret(CdScanner.Engine.Defender, 0, "Scanning x found no threats."));
         Assert.Equal(ScanVerdict.Failed, CdScanner.Interpret(CdScanner.Engine.Defender, 1));
     }
 }
