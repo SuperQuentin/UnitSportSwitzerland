@@ -40,7 +40,9 @@ public static partial class HumanMeshBuilder
     /// A floor move's whole rig at this instant, from the standing <paramref name="stand"/> (what
     /// the figure gets up into) and the slot clock <paramref name="beats"/> (0..8, two bars).
     /// </summary>
-    private static Rig FloorRig(DanceMove move, in Rig stand, float beats, in Beat t)
+    private static Rig FloorRig(DanceMove move, in Rig stand, float beats, in Beat t) => OffTheFloor(FloorPose(move, stand, beats, t));
+
+    private static Rig FloorPose(DanceMove move, in Rig stand, float beats, in Beat t)
     {
         switch (move)
         {
@@ -70,6 +72,35 @@ public static partial class HumanMeshBuilder
                 return MixRigs(freeze, Compose(stand, ToprockCh(t), 1f, false), DSm(beats - 7f));
             }
         }
+    }
+
+    /// <summary>
+    /// The whole body lifted just enough that nothing sinks into the floor: every joint at least its
+    /// own thickness off it (a hand or a toe can touch, a shoulder or a head is a box around its
+    /// joint). Rolling and spinning moves sweep their limbs round, so this is checked every frame.
+    /// </summary>
+    private static Rig OffTheFloor(in Rig r)
+    {
+        float lift = 0f;
+        void Need(Vector3 j, float clear) => lift = Mathf.Max(lift, clear - j.Y);
+        // the torso is a box up to 0.36 m wide that rolls with the body; the hand hangs ~10 cm past the wrist
+        Need(r.HeadTop, 0.07f); Need(r.HeadBase, 0.12f); Need(r.Neck, 0.12f); Need(r.Chest, 0.20f);
+        Need(r.Waist, 0.18f); Need(r.Hip, 0.16f);
+        Need(r.ShoulderL, 0.14f); Need(r.ShoulderR, 0.14f); Need(r.ElbowL, 0.07f); Need(r.ElbowR, 0.07f);
+        Need(r.WristL, 0.11f); Need(r.WristR, 0.11f);
+        Need(r.HipL, 0.15f); Need(r.HipR, 0.15f); Need(r.KneeL, 0.08f); Need(r.KneeR, 0.08f);
+        Need(r.AnkleL, 0.06f); Need(r.AnkleR, 0.06f); Need(r.ToeL, 0.03f); Need(r.ToeR, 0.03f);
+        if (lift <= 0f) return r;
+        var up = new Vector3(0f, lift, 0f);
+        return r with
+        {
+            HeadTop = r.HeadTop + up, HeadBase = r.HeadBase + up, Neck = r.Neck + up, Chest = r.Chest + up,
+            Waist = r.Waist + up, Hip = r.Hip + up,
+            ShoulderL = r.ShoulderL + up, ElbowL = r.ElbowL + up, WristL = r.WristL + up,
+            ShoulderR = r.ShoulderR + up, ElbowR = r.ElbowR + up, WristR = r.WristR + up,
+            HipL = r.HipL + up, KneeL = r.KneeL + up, AnkleL = r.AnkleL + up, ToeL = r.ToeL + up,
+            HipR = r.HipR + up, KneeR = r.KneeR + up, AnkleR = r.AnkleR + up, ToeR = r.ToeR + up,
+        };
     }
 
     // ---- toprock -------------------------------------------------------------------------------
@@ -226,9 +257,9 @@ public static partial class HumanMeshBuilder
         float roll = 0.55f * Mathf.Sin(spin * 2f);           // back to shoulder to chest, twice a turn
         // lying on the back: the spine nearly flat (pitched back past horizontal), shoulders at the pivot
         var torso = BodyTurn(-1.45f, roll);
-        var shoulders = new Vector3(0f, 0.16f, 0f);
+        var shoulders = new Vector3(0f, 0.27f, 0f);   // the shoulder blades' thickness off the floor
         var hip = shoulders - torso * new Vector3(0f, 0.51f, 0f);
-        hip.Y = Mathf.Max(hip.Y, 0.30f);
+        hip.Y = Mathf.Max(hip.Y, 0.36f);
         var legUp = (torso * Vector3.Down).Normalized() + Vector3.Up * 0.9f;
         var side = torso * Vector3.Right;
         var ankleL = hip + (legUp.Normalized() - side * 0.75f).Normalized() * 0.84f;
@@ -247,7 +278,7 @@ public static partial class HumanMeshBuilder
     {
         float spin = Mathf.Tau * beats;
         var torso = BodyTurn(Mathf.Pi);                          // the spine straight down, chest to the back
-        var neck = new Vector3(0f, 0.255f, 0f);
+        var neck = new Vector3(0f, 0.32f, 0f);        // the crown on the floor: the head box is a little taller than the bone
         var hip = neck - torso * new Vector3(0f, 0.59f, 0f);
         float tripod = 1f - DSm(beats - 0.5f);                // hands on the floor, then out to the sides
         var handL = new Vector3(-0.24f, 0.04f, 0.12f).Lerp(new Vector3(-0.50f, 0.55f, 0f), 1f - tripod);
@@ -271,8 +302,8 @@ public static partial class HumanMeshBuilder
         // the spine runs down toward the figure's right at 30 degrees, chest to the front: the head
         // ends near the floor beside the hand, the hips high over the tucked elbow
         var torso = BodyTurn(0.10f, 2.09f);
-        var hip = new Vector3(0.05f, 0.50f + settle, 0f);
-        var hand = new Vector3(-0.12f, 0.04f, 0.06f);
+        var hip = new Vector3(0.05f, 0.60f + settle, 0f);
+        var hand = new Vector3(-0.12f, 0.07f, 0.06f);
         var up = Vector3.Up;
         var right = new Vector3(1f, 0f, 0f);
         // the straight leg points up and away; the bent one folds its foot onto the other knee (the "4")

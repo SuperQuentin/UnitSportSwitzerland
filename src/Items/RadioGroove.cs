@@ -41,7 +41,7 @@ public readonly struct RadioGroove
             || CdLibrary.Instance?.Find(cdId) is not { } cd)
             return Silent;
         double t = serverNow - startedAt;
-        int inBar = CdAnalysisRuntime.BeatInBar(cd, beat);
+        int inBar = ((beat % 4) + 4) % 4;   // BeatOf already counts from the bar's one (#728)
         float beatKick = Mathf.Exp(-phase * 6f);
         bool env = CdAnalysisRuntime.Sample(cd, t, out float level, out float kick);
         var kind = CdAnalysisRuntime.SectionAt(cd, t, out int section);

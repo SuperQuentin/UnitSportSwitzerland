@@ -268,8 +268,9 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
         double beat = t * cd.Bpm / 60.0;
         double floor = Math.Floor(beat);
         beatPhase = (float)(beat - floor);
-        beatIndex = (int)floor;
-        bar = (int)Math.Floor(floor / 4.0);
+        // counted from the bar's real one (#728): the analysis found which beat of the grid starts a bar
+        beatIndex = (int)floor - (cd.Analysis?.Downbeat ?? 0);
+        bar = (int)Math.Floor(beatIndex / 4.0);
         // the chess type beat is danced as the rat dance, whatever the analyser made of it (#370)
         style = CdLibrary.IsRatBeat(cdId) ? MusicStyle.RatDance : cd.Style;
         return true;
@@ -280,6 +281,29 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
     /// off (#725). Authored at (0.045, 0.06, front) facing +Z; the mesh build turns it to (−x, y, −z).
     /// </summary>
     public Vector3 KeyPosition => GlobalTransform * new Vector3(-0.045f, 0.06f, -(BodyD * 0.5f + 0.012f));
+
+    /// <summary>
+    /// The CD's section at bar <paramref name="bar"/> (counted as <see cref="BeatOf"/> counts them),
+    /// for picking dance moves (#728): its kind and number, whether it runs on through the two move
+    /// slots from <paramref name="slotStart"/>, and the bar it began on (<see cref="int.MinValue"/>
+    /// for the first). A CD with no sections is one long groove that never fits a break set.
+    /// </summary>
+    public static Avatar.DanceSlotMusic SectionOfBar(int cdId, int bar, int slotStart, out int sectionStart)
+    {
+        sectionStart = int.MinValue;
+        if (CdLibrary.Instance?.Find(cdId) is not { Bpm: >= 1f } cd || cd.Analysis is not { SectionStarts.Length: > 0 } a)
+            return new Avatar.DanceSlotMusic(1, 0, false);
+        double spb = 60.0 / cd.Bpm;
+        int down = a.Downbeat;
+        double barTime = cd.BeatOffset + (bar * 4 + down + 0.05) * spb;
+        var kind = CdAnalysisRuntime.SectionAt(cd, barTime, out int index);
+        // the analyser snaps section starts to bar starts: round to the bar
+        int BarOf(float t) => (int)Math.Round(((t - cd.BeatOffset) / spb - down) / 4.0);
+        if (index > 0) sectionStart = BarOf(a.SectionStarts[index]);
+        int end = index + 1 < a.SectionStarts.Length ? BarOf(a.SectionStarts[index + 1]) : int.MaxValue;
+        bool fits = sectionStart <= slotStart && end - slotStart >= 2 * Avatar.HumanMeshBuilder.BarsPerMove;
+        return new Avatar.DanceSlotMusic((int)kind, index, fits);
+    }
 
     // ---- the look -------------------------------------------------------------------------------
 
