@@ -28,6 +28,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Interiors.InteriorManager? _interiors;
     private WorldOrigin? _origin;
     private Items.PlacedObjects? _placed;
+    private Farming.FarmStands? _farmStands;
     private Net.Sleepers? _sleepers;
     private Items.PalletService? _pallets;
     private Build.Structures? _structures;
@@ -161,11 +162,15 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // handed to everyone who walks in afterwards
         _interiors = Interiors.InteriorManager.Create(this, source, origin);
         _interiors.Players = _players;
+        // a check's farm co-op on a fixture world (#494, --farmcoop E,N): the clients are given the same
+        Farming.FarmMarket.StandInFromArgs(local, origin);
 
         // loot in those interiors: the server rolls it and remembers what was taken
         Loot.LootService.Create(this);
         // shops and vending machines (#273): the server keeps what was sold and charges the card
         Loot.ShopService.Create(this);
+        // farm fields (#494): the server keeps the worked cells (user://farm) and checks the work
+        if (Systems.On(Systems.Farming)) Farming.FarmField.Create(this, source, origin, _chunks, dedicated: true);
 
         // occasions run on the server's calendar and are replicated, so every player shares one
         _occasions = Occasions.OccasionManager.Create(this);
@@ -241,6 +246,14 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _pallets = Items.PalletService.Create(this, origin, server: true);
         _pallets.Source = () => source;
         _chat.NameAssigned += bank.SendBalance;
+        // selling farm produce (#494): load prices, specialty buyers, contracts; farm stands' crates and cash
+        if (Systems.On(Systems.Farming))
+        {
+            Farming.FarmSales.Create(this, origin, server: true).NameOf = _chat.NameOfPeer;
+            _farmStands = Farming.FarmStands.Create(this, origin, server: true);
+            _farmStands.NameOf = _chat.NameOfPeer;
+            _farmStands.Source = () => source;
+        }
         // built structures (#274): checked, kept and saved here; match ones cleared after the match
         if (Systems.On(Systems.Build))
         {
@@ -429,6 +442,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
+        _farmStands?.SendTo(id);
         _sleepers?.SendTo(id);
         _pallets?.SendTo(id);
         _structures?.SendTo(id);

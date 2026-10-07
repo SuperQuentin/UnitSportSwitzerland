@@ -52,6 +52,14 @@ src/Crafting/            quick  --campfirecheck --systems ui,physics
 src/Items/PlacedObjects  quick  --campfirecheck --systems ui,physics
 src/Items/FlagGhost      quick  --campfirecheck --systems ui,physics
 src/Items/Placeables     quick  --campfirecheck --systems ui,physics
+src/Farming/             quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Loot/Gathering       quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Items/ItemController quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Terrain/Fixture/FixtureCourse quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Farming/             quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
+src/Loot/Gathering       quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
+src/Items/ItemController quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
+src/Crafting/Recipes     quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
 src/Build/               quick  --buildcheck --systems ui,physics,build
 src/Build/               net    tools/buildnetcheck.sh
 src/Build/Gadget         quick  --gadgetcheck --systems ui,physics,build
@@ -153,6 +161,13 @@ src/Player/FootPlayer.Bo quick  --boatcheck jetski --chunks fixture:lake
 src/Player/FootPlayer.Bo quick  --boatcheck speedboat --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --boatcheck speedboat --chunks fixture:lake
 src/Avatar/BoatMesh      quick  --boatcheck jetski --chunks fixture:lake
+# boat trailers (#463): the Raptor backs a boat trailer down the slipway, launches the boat, winches it back, pulls out
+src/Player/BoatTrailerCh quick  --boattrailercheck speedboat --chunks fixture:lake --traffic 0
+src/Player/BoatTrailerCh quick  --boattrailercheck jetski --chunks fixture:lake --traffic 0
+src/Player/FootPlayer.He quick  --boattrailercheck speedboat --chunks fixture:lake --traffic 0
+src/Player/TrailerCatal  quick  --boattrailercheck jetski --chunks fixture:lake --traffic 0
+src/Avatar/TrailerMesh   quick  --boattrailercheck speedboat --chunks fixture:lake --traffic 0
+src/Avatar/PickupMesh    quick  --boattrailercheck speedboat --chunks fixture:lake --traffic 0
 # the paddle steamer (#303): draught, telegraph, slow way on and long stop, walking its tilting decks in a swell, stairs, saloon, gangway, bow, overboard and back, a seat
 src/Player/Steamer       quick  --steamercheck --chunks fixture:lake
 src/Player/FootPlayer.St quick  --steamercheck --chunks fixture:lake
@@ -222,6 +237,8 @@ src/Items/Fishing        net    tools/fishcheck.sh
 src/Items/ItemEvents     net    tools/fishcheck.sh
 src/Items/PlacedObjects  net    tools/campfirecheck.sh
 src/Items/HeldItemVisual net    tools/campfirecheck.sh
+src/Farming/             net    tools/farmnetcheck.sh
+src/Terrain/NetworkChunkSource net tools/farmnetcheck.sh
 src/World/Wa             net    tools/watercheck.sh
 src/World/SeaState       net    tools/watercheck.sh
 src/Net/ChatManager      net    tools/watercheck.sh
@@ -237,6 +254,25 @@ src/Interiors/FloorPicker net tools/liftsynccheck.sh
 src/Interiors/BuildingFootprint net tools/baycheck.sh
 src/Interiors/DoorBudget net    tools/baycheck.sh
 src/Interiors/InteriorGenerator net tools/baycheck.sh
+src/Interiors/BuildingFootprint net tools/rampnetcheck.sh
+src/Interiors/GarageRule net    tools/rampnetcheck.sh
+src/Interiors/RampProfile net   tools/rampnetcheck.sh
+src/Interiors/InteriorGenerator net tools/rampnetcheck.sh
+src/Interiors/InteriorMeshBuilder net tools/rampnetcheck.sh
+src/Interiors/InteriorValidator net tools/rampnetcheck.sh
+src/Interiors/DoorLink   net    tools/rampnetcheck.sh
+src/Interiors/DoorIndex  net    tools/rampnetcheck.sh
+src/Terrain/Fixture/     net    tools/rampnetcheck.sh
+src/Player/GarageProbe   net    tools/rampnetcheck.sh
+src/Interiors/DoorIndex  net    tools/rampalongnetcheck.sh
+src/Terrain/Fixture/     net    tools/rampalongnetcheck.sh
+src/Player/GarageProbe   net    tools/rampalongnetcheck.sh
+src/Interiors/BuildingFootprint net tools/rampalongnetcheck.sh
+src/Interiors/GarageRule net tools/rampalongnetcheck.sh
+src/Interiors/RampProfile net tools/rampalongnetcheck.sh
+src/Interiors/InteriorGenerator net tools/rampalongnetcheck.sh
+src/Interiors/InteriorMeshBuilder net tools/rampalongnetcheck.sh
+src/Interiors/InteriorValidator net tools/rampalongnetcheck.sh
 src/Terrain/ProceduralWorld.Settlements net tools/baycheck.sh
 src/Terrain/ProceduralWorld.Settlements  net  tools/shopcheck.sh
 src/Player/FootPlayer.Sw net    tools/swimnetcheck.sh
@@ -313,6 +349,26 @@ src/Player/FootPlayer.Fo quick  --forkliftcheck --world flat --systems physics,u
 src/Terrain/Construction/SiteDressing net tools/sitepalletnetcheck.sh
 src/Terrain/Construction/SitePlans net tools/sitepalletnetcheck.sh
 src/Items/SitePalletNetProbe net tools/sitepalletnetcheck.sh
+# #615: a pallet in a tipper's body or a mini dumper's skip: set in from forks or a bucket, tipped out (flat), and over the network
+src/Items/BedCheck        quick  --bedcheck tipper --world flat --systems physics,ui
+src/Items/BedCheck        quick  --bedcheck dumper,bucket --world flat --systems physics,ui
+src/Avatar/BedShape       quick  --bedcheck tipper --world flat --systems physics,ui
+src/Avatar/BedShape       quick  --bedcheck dumper --world flat --systems physics,ui
+src/Player/IBed           quick  --bedcheck tipper --world flat --systems physics,ui
+src/Player/IBed           quick  --bedcheck dumper --world flat --systems physics,ui
+src/Items/PalletService   quick  --bedcheck tipper,bucket --world flat --systems physics,ui
+src/Items/PalletService   quick  --bedcheck dumper --world flat --systems physics,ui
+src/Player/Truck.cs       quick  --bedcheck tipper --world flat --systems physics,ui
+src/Avatar/TruckMeshBuild quick  --bedcheck tipper --world flat --systems physics,ui
+src/Avatar/HeavyRig       quick  --bedcheck tipper --world flat --systems physics,ui
+src/Player/MiniDumper     quick  --bedcheck dumper --world flat --systems physics,ui
+src/Vehicles/VehicleBody  quick  --bedcheck tipper --world flat --systems physics,ui
+src/Vehicles/VehicleManag quick  --bedcheck tipper --world flat --systems physics,ui
+src/Items/BedNetProbe     net    tools/bednetcheck.sh
+src/Items/PalletService   net    tools/bednetcheck.sh
+src/Vehicles/VehicleBody  net    tools/bednetcheck.sh
+src/Vehicles/VehicleManag net    tools/bednetcheck.sh
+src/Player/IBed           net    tools/bednetcheck.sh
 src/Items/SitePallets     net    tools/sitepalletnetcheck.sh
 src/Items/PalletService   net    tools/sitepalletnetcheck.sh
 src/Terrain/Construction/SiteDressing quick --constructioncheck --systems ui
@@ -436,6 +492,24 @@ src/Player/FootPlayer.Hold net   tools/holdnetcheck.sh
 src/Player/HoldNetProbe  net    tools/holdnetcheck.sh
 src/Vehicles/VehicleBody.Hold net tools/holdnetcheck.sh
 src/Player/FootPlayer.Overlap net tools/holdnetcheck.sh
+src/Player/TractorCheck  quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/Truck.Farm    quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/FootPlayer.Fa quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/FootPlayer.He quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/HeavyTrain    quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/TrailerCatal  quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Avatar/FarmMesh      quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Avatar/FarmMesh      quick  --cockpitcheck
+src/Farming/MachineLoad  quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Terrain/Fixture/FixtureCourse quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/TractorNetPro net    tools/tractornetcheck.sh
+src/Player/Truck.Farm    net    tools/tractornetcheck.sh
+src/Player/FootPlayer.Fa net    tools/tractornetcheck.sh
+src/Farming/             quick  --sellcheck --systems ui,physics,loot,farming --farmmonth 7 --selldir test_output/sellcheck_store
+src/Loot/Shop            quick  --sellcheck --systems ui,physics,loot,farming --farmmonth 7 --selldir test_output/sellcheck_store
+src/Items/Place          quick  --sellcheck --systems ui,physics,loot,farming --farmmonth 7 --selldir test_output/sellcheck_store
+src/Farming/             net    tools/sellnetcheck.sh
+src/Items/PlacedObjects  net    tools/sellnetcheck.sh
 # #611: the excavator: tracks, dig mode and the arm on the real bindings (flat), and seen from a second peer
 src/Player/Excavator      quick  --excavatorcheck --world flat --systems physics,ui
 src/Avatar/Excavator      quick  --excavatorcheck --world flat --systems physics,ui
@@ -443,12 +517,30 @@ src/Player/FootPlayer.Exc quick  --excavatorcheck --world flat --systems physics
 src/Player/Excavator      net    tools/excavatornetcheck.sh
 src/Avatar/Excavator      net    tools/excavatornetcheck.sh
 src/Player/FootPlayer.Exc net    tools/excavatornetcheck.sh
+# #613: the site's tipper and mixer on the destination action (flat), and from a second peer (the excavator's script)
+src/Player/TipperCheck    quick  --tippercheck tipper --world flat --systems physics,ui
+src/Player/TipperCheck    quick  --tippercheck mixer --world flat --systems physics,ui
+src/Player/Truck.cs       quick  --tippercheck tipper --world flat --systems physics,ui
+src/Player/Truck.cs       quick  --tippercheck mixer --world flat --systems physics,ui
+src/Player/HeavyCatalog   quick  --tippercheck mixer --world flat --systems physics,ui
+src/Avatar/TruckMeshBuilder quick --tippercheck tipper --world flat --systems physics,ui
+src/Avatar/TruckMeshBuilder quick --tippercheck mixer --world flat --systems physics,ui
+src/Avatar/HeavyRig       quick  --tippercheck mixer --world flat --systems physics,ui
+src/Player/FootPlayer.Hea quick  --tippercheck tipper --world flat --systems physics,ui
+src/Player/Truck.cs       net    tools/excavatornetcheck.sh
+src/Avatar/HeavyRig       net    tools/excavatornetcheck.sh
 # #614: the telehandler: three steering modes and the boom (flat), and from a second peer (the excavator's script)
 src/Player/Telehandler    quick  --telehandlercheck --world flat --systems physics,ui
 src/Avatar/Telehandler    quick  --telehandlercheck --world flat --systems physics,ui
 src/Player/FootPlayer.Tel quick  --telehandlercheck --world flat --systems physics,ui
 src/Player/Telehandler    net    tools/excavatornetcheck.sh
 src/Avatar/Telehandler    net    tools/excavatornetcheck.sh
+# #614: the mini dumper: crawls, turns on the spot, tips its skip (flat), and from a second peer (the excavator's script)
+src/Player/MiniDumper     quick  --dumpercheck --world flat --systems physics,ui
+src/Avatar/MiniDumper     quick  --dumpercheck --world flat --systems physics,ui
+src/Player/DumperCheck    quick  --dumpercheck --world flat --systems physics,ui
+src/Player/MiniDumper     net    tools/excavatornetcheck.sh
+src/Avatar/MiniDumper     net    tools/excavatornetcheck.sh
 # #614: the compact roller: drives, steers on its hinge, vibrates (flat), and from a second peer (the excavator's script)
 src/Player/CompactRoller  quick  --rollercheck --world flat --systems physics,ui
 src/Avatar/CompactRoller  quick  --rollercheck --world flat --systems physics,ui
@@ -479,3 +571,7 @@ src/Vehicles/DormantVehicles net tools/sitemachinenetcheck.sh
 src/Vehicles/VehicleSlot net    tools/sitemachinenetcheck.sh
 src/Vehicles/ParkingNetProbe net tools/sitemachinenetcheck.sh
 src/Terrain/Construction/SitePlans net tools/sitemachinenetcheck.sh
+# #558 PR 3: the cars in an underground car park are vehicles asleep (the rule's tier-0 test is HallCarTests; slot geometry is --flatcheck)
+src/Interiors/HallCar    net    tools/hallcarnetcheck.sh
+src/Interiors/ParkedCars net    tools/hallcarnetcheck.sh
+src/Vehicles/DormantVehicles net tools/hallcarnetcheck.sh

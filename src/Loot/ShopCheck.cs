@@ -81,6 +81,23 @@ public static class ShopCheck
             Expect(share > want * 0.6 && share < want + 0.06, $"{kind}: a PAUSA machine in {share:P0} (dice {want:P0})");
         }
 
+        // the farm co-op (#494): a big barn or a village shop on a rural tile, counter and all; never in town
+        int coops = 0, coopCounters = 0, townCoops = 0;
+        for (int i = 0; i < 400; i++)
+            foreach (var rural in new[] { true, false })
+            {
+                var layout = Synthetic(new BuildingKey(2580, 1110, 1000 + i), BuildingKind.Agricultural, 14f + i % 10, 20f + i % 8, rural);
+                if (layout.Shop != ShopType.FarmCoop) continue;
+                if (!rural) townCoops++;
+                else { coops++; coopCounters += layout.Furniture.Any(f => f.Type == FurnitureType.ShopCounter && f.Floor == layout.Below) ? 1 : 0; }
+            }
+        Expect(coops > 20 && townCoops == 0, $"big barns are farm co-ops on rural tiles only ({coops} of 400, {townCoops} in town)");
+        Expect(coopCounters == coops, $"every farm co-op has its counter ({coopCounters}/{coops})");
+        foreach (var def in ItemDefs.All.Where(d => d.Category == ItemCategory.Produce))
+            Expect(ShopTables.Buys(ShopType.FarmCoop, def.Category) && ShopTables.SellPrice(def.Value) > 0
+                   && ShopTables.DeliveryPrice(def.Category, def.Value, 10) > 10 * ShopTables.SellPrice(def.Value),
+                $"{def.Name}: the co-op buys it ({ShopTables.SellPrice(def.Value)} CHF at the counter, {ShopTables.DeliveryPrice(def.Category, def.Value, 10)} for ten delivered)");
+
         GD.Print($"[shopcheck] RESULT: {(failures == 0 ? "ok" : $"FAILED ({failures})")}");
         return failures == 0 ? 0 : 1;
     }

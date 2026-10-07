@@ -48,38 +48,50 @@ public class GarageTests
     }
 
     [Fact]
-    public void A_garage_is_wanted_only_with_flats_three_front_doors_a_car_park_and_the_roll()
+    public void A_garage_is_wanted_for_flats_whose_box_takes_a_ramp_and_that_roll_it()
     {
         string rolled = Enumerable.Range(0, 400).Select(i => $"2583_1113_{i}").First(k => GarageRule.Rolls(k));
         string unlucky = Enumerable.Range(0, 400).Select(i => $"2583_1113_{i}").First(k => !GarageRule.Rolls(k));
-        Assert.True(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 80, 20, H, 3));
-        Assert.False(GarageRule.Wanted(unlucky, BuildingType.Apartments, 5, 80, 20, H, 3));
-        // two front doors is a small block, not a development with an underground garage
-        Assert.False(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 80, 20, H, 2));
-        // shops under flats and any other kind of building are not blocks of flats
-        // shops under flats qualify too, rarer: 4 front doors and a 20 % roll
+        // 80 x 26 m: a square ramp fits (no front-door count any more)
+        Assert.True(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 80, 26, H));
+        Assert.False(GarageRule.Wanted(unlucky, BuildingType.Apartments, 5, 80, 26, H));
+        // shops under flats qualify the same way; any other kind of building does not
         string mixedRolled = Enumerable.Range(0, 400).Select(i => $"2583_1113_{i}").First(k => GarageRule.Rolls(k, mixed: true));
-        string mixedUnlucky = Enumerable.Range(0, 400).Select(i => $"2583_1113_{i}").First(k => GarageRule.Rolls(k) && !GarageRule.Rolls(k, mixed: true));
-        Assert.True(GarageRule.Wanted(mixedRolled, BuildingType.MixedUse, 5, 80, 20, H, 4));
-        Assert.False(GarageRule.Wanted(mixedRolled, BuildingType.MixedUse, 5, 80, 20, H, 3));
-        Assert.False(GarageRule.Wanted(mixedUnlucky, BuildingType.MixedUse, 5, 80, 20, H, 4));
-        Assert.False(GarageRule.Wanted(rolled, BuildingType.None, 5, 80, 20, H, 3));
-        // too shallow for a car park
-        Assert.False(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 80, 14, H, 3));
+        Assert.True(GarageRule.Wanted(mixedRolled, BuildingType.MixedUse, 5, 80, 26, H));
+        Assert.False(GarageRule.Wanted(rolled, BuildingType.None, 5, 80, 26, H));
+        // too shallow for a car park and a ramp, and too short for the one along the facade
+        Assert.False(GarageRule.Wanted(rolled, BuildingType.Apartments, 5, 20, 14, H));
+        // a tall storey drops further and needs a deeper block for the square ramp
+        Assert.Equal(GarageRule.RampKind.None, GarageRule.KindOf(5, 17.8f, 18, 3.4f));
+        Assert.Equal(GarageRule.RampKind.Square, GarageRule.KindOf(5, 17.8f, 18.5f, H));
+    }
+
+    [Fact]
+    public void A_wide_shallow_block_takes_the_ramp_along_its_facade_and_a_deep_one_the_square_ramp()
+    {
+        // 14 m deep, 60 m long: no room for a square ramp and its car park, but a band along the facade fits
+        Assert.Equal(GarageRule.RampKind.Along, GarageRule.KindOf(5, 60, 14, H));
+        Assert.Equal(GarageRule.RampKind.Square, GarageRule.KindOf(5, 60, 22, H));
+        // narrower than the band, the car park hall and a stairwell, and shallow: none
+        Assert.Equal(GarageRule.RampKind.None, GarageRule.KindOf(5, GarageRule.AlongWidth(H, true) - 0.5f, 14, H));
+        Assert.Equal(GarageRule.RampKind.None, GarageRule.KindOf(5, 60, GarageRule.AlongMinDepth - 0.5f, H));
+        // the along ramp's foot is where the descent ends, the hall runs on from there
+        Assert.True(GarageRule.AlongKeepOut(H) > GarageRule.AlongFoot(H) + 9f);
+        Assert.True(GarageRule.AlongWidth(H, true) > GarageRule.AlongKeepOut(H) + GarageRule.WellWidth(true));
     }
 
     [Fact]
     public void The_roll_keeps_garages_rare()
     {
         int rolled = Enumerable.Range(0, 2000).Count(i => GarageRule.Rolls($"2583_1113_{i}"));
-        Assert.InRange(rolled / 2000.0, 0.34, 0.46);
+        Assert.InRange(rolled / 2000.0, 0.49, 0.61);
     }
 
     [Fact]
-    public void The_mixed_roll_is_a_fifth_and_inside_the_flats_roll()
+    public void The_mixed_roll_is_the_same_share_and_inside_the_flats_roll()
     {
         int n = Enumerable.Range(0, 2000).Count(i => GarageRule.Rolls($"2583_1113_{i}", mixed: true));
-        Assert.InRange(n / 2000.0, 0.15, 0.25);
+        Assert.InRange(n / 2000.0, 0.49, 0.61);
         for (int i = 0; i < 500; i++)
             if (GarageRule.Rolls($"2583_1113_{i}", mixed: true)) Assert.True(GarageRule.Rolls($"2583_1113_{i}"));
     }
@@ -196,6 +208,60 @@ public class GarageTests
         Assert.Equal(0.19f, GarageLink.HumpFor([(0.5f, 0.19f), (0.25f, 0.05f)]), 3);
         // flat or sunken ground needs none; a spike is capped
         Assert.Equal(0f, GarageLink.HumpFor([(0.5f, -0.2f), (0.3f, 0f)]));
+        // a bank higher than the hump can lift the road over is not built on
+        Assert.True(GarageLink.Humpable([(0.5f, 0.4f)]));
+        Assert.False(GarageLink.Humpable([(0.5f, 0.8f)]));
         Assert.Equal(0.5f, GarageLink.HumpFor([(0.5f, 2f)]));
+    }
+
+    // ---- the ramp (#558, PR 2) -------------------------------------------------------------------
+
+    [Fact]
+    public void A_ramp_drops_one_storey_at_no_more_than_the_slope_with_a_vertical_curve_at_each_end()
+    {
+        float len = RampProfile.Length(H);
+        Assert.Equal(H / RampProfile.Slope + RampProfile.Bevel, len, 3);
+        Assert.Equal(0f, RampProfile.Drop(0, H), 4);
+        Assert.Equal(H, RampProfile.Drop(len, H), 3);
+        // monotone, never steeper than the slope, and flat at both ends
+        float prev = 0;
+        for (float t = 0.05f; t <= len; t += 0.05f)
+        {
+            float d = RampProfile.Drop(t, H);
+            Assert.InRange(d - prev, 0f, RampProfile.Slope * 0.05f + 1e-4f);
+            prev = d;
+        }
+        Assert.True(RampProfile.Drop(0.2f, H) < 0.01f);
+        Assert.True(H - RampProfile.Drop(len - 0.2f, H) < 0.01f);
+        // the height above the foot is the drop's complement
+        Assert.Equal(H, RampProfile.Height(0, H), 4);
+        Assert.Equal(0f, RampProfile.Height(len, H), 3);
+    }
+
+    [Fact]
+    public void The_floor_slab_over_a_ramp_stops_where_a_car_fits_under_it()
+    {
+        const float clear = H - 0.2f;
+        float hole = RampProfile.HoleLength(H, clear);
+        Assert.InRange(hole, 0.5f * RampProfile.Length(H), RampProfile.Length(H));
+        // at the end of the hole the surface leaves exactly the headroom
+        Assert.Equal(clear - RampProfile.Headroom, RampProfile.Height(hole, H), 2);
+        // a basement with no headroom to spare is open all the way down
+        Assert.Equal(RampProfile.Length(H), RampProfile.HoleLength(H, RampProfile.Headroom - 0.5f), 2);
+    }
+
+    [Fact]
+    public void A_block_needs_the_depth_for_the_ramp_and_the_turn_at_its_foot()
+    {
+        float need = GarageRule.RampDepth(H);
+        Assert.Equal(GarageRule.RampApron + RampProfile.Length(H) + GarageRule.RampTurn, need, 3);
+        // within the 17.3 m a block needs anyway for its car park strip (stairwell 7.8 m + 9.5 m)
+        Assert.InRange(need, 15f, 18f);
+        Assert.True(GarageRule.HasRamp(need, H));
+        Assert.False(GarageRule.HasRamp(need - 0.1f, H));
+        // a taller storey drops further and needs a longer run
+        Assert.True(GarageRule.RampDepth(3.4f) > need);
+        // the lane is a car's: 3 m door, 3.6 m between the walls
+        Assert.True(GarageRule.RampWidth >= GarageRule.Width + 0.4f);
     }
 }

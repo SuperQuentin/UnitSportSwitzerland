@@ -629,7 +629,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public bool InCockpit => !_thirdPerson && HasCockpit && ShowroomYaw == null && SeatIndex == 0;
 
     /// <summary>What is ridden has a driver's seat with a cockpit (#69 cars, #157 trucks and buses, #421 aircraft).</summary>
-    private bool HasCockpit => _ride is Car or Truck or Airstairs or Airliner or Excavator or WheelLoader or CompactRoller or Telehandler;
+    private bool HasCockpit => _ride is Car or Truck or Airstairs or Airliner or Excavator or WheelLoader or CompactRoller or Telehandler or MiniDumper;
 
     private Rideable? _ride;
     private RideMotion _motion;
@@ -2519,6 +2519,10 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // swimming beside a steamer's gangway: up its ladder onto the deck (#303)
         if (TryClimbAboard()) return true;
 
+        // a farm stand at hand, or a specialty buyer's weighbridge with its goods in the pack (#494)
+        if (Farming.FarmSales.TryInteract(this)) return true;
+        // a loaded tipping trailer or combine tank at hand: a sack of it (#494)
+        if (TryFarmTank()) return true;
         // the door (or the machine) you are at, worked precisely (#261): no more "whatever is in 3.5 m"
         if (TryVehicleAt()) return true;
 
@@ -2605,6 +2609,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             DoorsOpen = (byte)(state.DoorsOpen | Avatar.CarRig.DriverDoor);
             _shutDriverIn = 1f;
         }
+        // the pickup's doors are a car's (#463): in through the driver's, which shuts behind
+        if (_ride is Truck { CarDoors: true } pickup)
+        {
+            pickup.DoorsOpen = (byte)((state.DoorsOpen | Avatar.CarRig.DriverDoor) & 15);
+            _shutDriverIn = 1f;
+        }
         _flight.Control = state.Throttle;
         // a boat as it floated: its attitude (#302)
         if (_ride is Boat boarded && state.Angles != default) boarded.State.Attitude = Quaternion.FromEuler(state.Angles);
@@ -2630,6 +2640,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is Excavator parkedArm) parkedArm.UnpackFlags(state.Flags);
         if (_ride is WheelLoader parkedLoader) parkedLoader.UnpackFlags(state.Flags);
         if (_ride is CompactRoller parkedRoller) parkedRoller.UnpackFlags(state.Flags);
+        if (_ride is MiniDumper parkedDumper) parkedDumper.UnpackFlags(state.Flags);
         if (_ride is Telehandler parkedBoom) parkedBoom.UnpackFlags(state.Flags);
         // the steamer's gangways as they were left (#303)
         if (_ride is Steamer berthed) berthed.DoorsOpen = (byte)(state.DoorsOpen & 3);
@@ -2663,13 +2674,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
             wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now,
             Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true },
-            Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : _ride is Steamer gangways ? gangways.DoorsOpen : DoorsOpen, Setup: CarSetupId,
+            Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : _ride is Steamer gangways ? gangways.DoorsOpen
+                : _ride is Truck { CarDoors: true } pickupDoors ? pickupDoors.DoorsOpen : DoorsOpen, Setup: CarSetupId,
             Train: _ride is Truck t ? t.TrailerCode : 0,
             // a truck's joints; a boat's attitude (Euler, #302), so it is parked as it floated
             // an airliner left in the air (stood up from its seat): its attitude, or it is put down level (#456)
             Angles: _ride is Truck ta ? ta.Angles : _ride is Boat tilted ? new Basis(tilted.State.Attitude).GetEuler()
                 : _ride is Airliner { State.OnGround: false } aloft ? aloft.State.Attitude.Orthonormalized().GetEuler() : default,
-            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : _ride is Excavator ef ? ef.PackFlags() : _ride is WheelLoader wf ? wf.PackFlags() : _ride is CompactRoller rf ? rf.PackFlags() : _ride is Telehandler hf ? hf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
+            Flags: _ride is Truck tf ? tf.PackFlags() & ~5 : _ride is Airliner af ? af.PackFlags() : _ride is Airstairs sf ? sf.PackFlags() : _ride is Forklift lf ? lf.PackFlags() : _ride is Excavator ef ? ef.PackFlags() : _ride is WheelLoader wf ? wf.PackFlags() : _ride is CompactRoller rf ? rf.PackFlags() : _ride is MiniDumper df ? df.PackFlags() : _ride is Telehandler hf ? hf.PackFlags() : 0, Load: _ride is Truck tl ? tl.Load : 0.5f,
             Radio: wrecked ? 0 : CarRadio, Cd: wrecked ? "" : CarCd,
             Carrier: wrecked ? "" : hold.Key, CarrierSection: hold.Section, CarrierPos: hold.Pos, CarrierYaw: hold.Yaw);
     }
@@ -2733,7 +2745,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public bool TryToggleCarDoor(Vector3 hand)
     {
-        if (_ride != null || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
+        if (_ride != null || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Doors: { } rig } vehicle)
             return false;
         var (bit, distance) = rig.NearestDoor(hand);
         if (bit == 0 || distance > HandDoorReach) return false;
@@ -2761,7 +2773,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         bool grounded = IsOnFloor();
         var frame = GlobalTransform;
         // out of a car through the driver's door: it opens, and shuts behind (unless left open)
-        if (vehicle is Car && (state.DoorsOpen & Avatar.CarRig.DriverDoor) == 0)
+        if (vehicle is Car or Truck { CarDoors: true } && (state.DoorsOpen & Avatar.CarRig.DriverDoor) == 0)
             state = state with { DoorsOpen = (byte)(state.DoorsOpen | Avatar.CarRig.DriverDoor | VehicleState.DriverDoorShuts) };
 
         // a vehicle you can walk about in (#162): up from the seat into it, not out beside it
@@ -3240,6 +3252,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
+        if (HandleCruiseInput(@event))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         if (_ride is Truck truck && HandleTruckInput(@event, truck))
         {
             GetViewport().SetInputAsHandled();
@@ -3282,7 +3300,16 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
-        // and turns a telehandler's steering mode on: front, four-wheel, crab (#614)
+        // a mini dumper's skip (#614): the tipper's action, stopped
+        if (@event.IsActionPressed(PlayerInput.Destination) && !@event.IsEcho() && _ride is MiniDumper dumper && SeatIndex == 0 && !Npc)
+        {
+            if (GroundSpeed >= 0.5f && !dumper.Tipped) Announced?.Invoke("Stop to tip the skip", false);
+            else dumper.Tipped = !dumper.Tipped;
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        // the roof key also turns a telehandler's steering mode on: front, four-wheel, crab (#614)
         if (@event.IsActionPressed(PlayerInput.RoofToggle) && !@event.IsEcho() && _ride is Telehandler steered && SeatIndex == 0 && !Npc)
         {
             steered.NextMode();
@@ -3396,6 +3423,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var velocity = Velocity;
         bool onFloor = IsOnFloor();
         TickHealth(dt, onFloor);
+        TickFarmFoot(dt);
 
         // limp after a crash (#214): the body goes where its hips are, so the replicated position follows the ragdoll
         if (_ragdoll != null)
@@ -4144,6 +4172,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _bailTimer -= dt;
             input = new RideInput(0f, 1f, 0f, false);
         }
+        // the speed regulator's pedals on top of the driver's
+        input = CruiseStep(input, dt);
 
         // Tricks: hold the trick button in the air and the stick flips and spins instead of
         // steering. Let go and whatever rotation is left eases to the nearest whole turn, so a
@@ -4205,12 +4235,19 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (_ride is CompactRoller rolling) WorkDrums(rolling);
         // and the telehandler's boom, in work mode (#614)
         if (_ride is Telehandler booming) WorkBoom(booming, dt);
+        // a pallet in a tipping body slides out over its open end once it is up (#615)
+        if (_ride is IBed { HasBed: true } tipping && SeatIndex == 0 && !Npc) Items.PalletService.Instance?.TendBed(this, tipping);
         if (_ride is Car)
         {
             // doors: once seated every door shuts, sooner if the car pulls away before then
             if (_shutDriverIn > 0f && ((_shutDriverIn -= dt) <= 0f || _motion.Speed > DoorsShutSpeed))
                 _shutDriverIn = 0f;
             if (_shutDriverIn <= 0f) DoorsOpen = 0;
+        }
+        else if (_ride is Truck { CarDoors: true } pickup && _shutDriverIn > 0f && ((_shutDriverIn -= dt) <= 0f || _motion.Speed > DoorsShutSpeed))
+        {
+            _shutDriverIn = 0f;
+            pickup.DoorsOpen = 0;
         }
 
         // Boost: the reward for air and tricks, spent as raw acceleration on top of the model.
@@ -4253,6 +4290,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         interiors?.AfterMove(this, from);
         // the sections behind a truck's cab follow it, and report what they hit
         if (_ride is Truck train) StepSections(train, dt);
+        // a farm machine works the ground under its bar (#494, FootPlayer.Farm.cs)
+        if (_ride is Truck { Spec.Farm: true } farm) StepFarm(farm, dt);
 
         // Hitting something has to cost the speed, or the vehicle grinds along the wall at
         // 50 km/h and shoots off the moment the wall ends.

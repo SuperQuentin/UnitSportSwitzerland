@@ -73,11 +73,15 @@ public readonly record struct VehicleState(
         if (Kind is RideKind.Excavator or RideKind.MiniExcavator) { var arm = new Excavator(Kind == RideKind.MiniExcavator); arm.UnpackFlags(Flags); return arm; }
         if (Kind is RideKind.WheelLoader or RideKind.WheelLoaderForks) { var loader = new WheelLoader(Kind == RideKind.WheelLoaderForks); loader.UnpackFlags(Flags); return loader; }
         if (Kind == RideKind.CompactRoller) { var roller = new CompactRoller(); roller.UnpackFlags(Flags); return roller; }
+        if (Kind == RideKind.MiniDumper) { var dumper = new MiniDumper(); dumper.UnpackFlags(Flags); return dumper; }
         if (Kind == RideKind.Telehandler) { var boom = new Telehandler(); boom.UnpackFlags(Flags); return boom; }
         return CarSetups.Ride(Kind, Setup, Tuning);
     }
 
-    /// <summary>How many vehicles this state is to the server's count: a train is a truck and a trailer.</summary>
+    /// <summary>
+    /// How many vehicles this state is to the server's count: a train is a truck and a trailer. A
+    /// boat on its trailer is a boat of its own, parked on it (#463), and counts as itself.
+    /// </summary>
     public int Units => Kind != RideKind.Trailer && Train != 0 ? 2 : 1;
 
     public Godot.Collections.Dictionary ToDict()

@@ -187,7 +187,8 @@ public static partial class InteriorGenerator
             // a lone wing (an outline at other angles, #598) takes every door, wherever on its
             // slanted walls it stands: the wing's own wall facing the same way is its doorway
             bool lone = wings.Count == 1;
-            float bestD = lone ? float.MaxValue : 2.0f;
+            // the garage door (#694) is on the facade's own wall, which a stepped facade can leave up to 4 m off the wing's simplified edge
+            float bestD = lone ? float.MaxValue : d.Vehicle && d.Link.Any ? 4.0f : 2.0f;
             foreach (var w in wings)
             {
                 var R = w.R;
@@ -233,7 +234,8 @@ public static partial class InteriorGenerator
         // the middle of the shared wall
         bool mixed = type == BuildingType.MixedUse;
         float area = wings.Sum(w => (w.R.X1 - w.R.X0) * (w.R.Z1 - w.R.Z0));
-        int below = AptBasement(l.Key, mixed, above, area);
+        // a garage (#694) has the basement it leads to
+        int below = fp.Doors.Any(d => d.Vehicle && d.Width > 0 && d.Link.Any) ? 1 : AptBasement(l.Key, mixed, above, area);
         int floors = above + below;
         for (int i = 0; i < links.Count; i++)
         {

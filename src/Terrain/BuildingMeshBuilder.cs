@@ -188,6 +188,8 @@ public static partial class BuildingMeshBuilder
         // grid at the wall plate instead of letting the roof slice the top row
         var uv2s = new Vector2[triangles * 3];
         var frames = new float[triangles * 3 * 4];
+        // each pitched roof plane's lowest and highest point up its slope (eave and ridge, metres)
+        var roofSpans = new Dictionary<(int, int, int, int), (float Min, float Max)>();
         int v = 0;
 
         for (int bi = 0; bi < tile.Buildings.Count; bi++)
@@ -223,15 +225,106 @@ public static partial class BuildingMeshBuilder
                 storey = 1f; // facade v in metres
             }
 
+            // first pass: where each pitched roof plane starts and ends up its slope, so every
+            // triangle of it measures from the same eave
+            roofSpans.Clear();
+            // and the building's long axis (its longest level wall edge) and how much flat roof
+            // it has: a large one carries solar panels in rows along that axis
+            var axis = Vector3.Right;
+            float axisLen = 0f, flatArea = 0f;
+            for (int t = 0; t < b.TriangleCount; t++)
+            {
+                var (a, c, d) = b.Tri(t);
+                if (!IsRoof(a, c, d, spireFrom))
+                {
+                    for (int k = 0; k < 3; k++)
+                    {
+                        var e = (k == 0 ? c - a : k == 1 ? d - c : a - d);
+                        float l = new Vector2(e.X, e.Z).Length();
+                        if (l > axisLen && Mathf.Abs(e.Y) < 0.2f * l)
+                        {
+                            axisLen = l;
+                            axis = new Vector3(e.X, 0f, e.Z) / l;
+                        }
+                    }
+                    continue;
+                }
+                if (FlatRoof(a, c, d, b.MinY)) flatArea += 0.5f * (c - a).Cross(d - a).Length();
+                if (!PitchedRoof(a, c, d, out var up, out var key)) continue;
+                float s0 = Mathf.Min(a.Dot(up), Mathf.Min(c.Dot(up), d.Dot(up)));
+                float s1 = Mathf.Max(a.Dot(up), Mathf.Max(c.Dot(up), d.Dot(up)));
+                roofSpans[key] = roofSpans.TryGetValue(key, out var span)
+                    ? (Mathf.Min(span.Min, s0), Mathf.Max(span.Max, s1)) : (s0, s1);
+            }
+            // the flat roof's extent in the axis frame (along, across); most large flat roofs
+            // have panels, a church never
+            var across = new Vector3(-axis.Z, 0f, axis.X);
+            bool solar = flatArea >= SolarRoofArea && part == BuildingPart.None
+                && (uint)(bi * 2654435761u + tile.Buildings.Count) % 10 < 7;
+            Vector2 flatMin = new(float.MaxValue, float.MaxValue), flatMax = new(float.MinValue, float.MinValue);
+            for (int t = 0; solar && t < b.TriangleCount; t++)
+            {
+                var (a, c, d) = b.Tri(t);
+                if (!IsRoof(a, c, d, spireFrom) || !FlatRoof(a, c, d, b.MinY)) continue;
+                for (int k = 0; k < 3; k++)
+                {
+                    var p = k == 0 ? a : k == 1 ? c : d;
+                    var q = new Vector2(p.Dot(axis), p.Dot(across));
+                    flatMin = flatMin.Min(q);
+                    flatMax = flatMax.Max(q);
+                }
+            }
+
             for (int t = 0; t < b.TriangleCount; t++)
             {
                 var (a, c, d) = b.Tri(t);
 
                 var normal = (c - a).Cross(d - a);
-                float len = normal.Length();
-                bool isRoof = len > 1e-6f && Mathf.Abs(normal.Y / len) >= BuildingTriangles.RoofNormalY
-                    || (a.Y + c.Y + d.Y) / 3f > spireFrom;
+                bool isRoof = IsRoof(a, c, d, spireFrom);
                 var color = isRoof ? roof : wall;
+
+                // A pitched roof's own frame (#683): CUSTOM0 = the unit up-slope vector and 1,
+                // UV = (metres along the eave, -1: still no windows), UV2 = (metres up the slope
+                // from the eave, the eave-to-ridge length), for the shader's tile courses.
+                if (isRoof && PitchedRoof(a, c, d, out var upSlope, out var plane))
+                {
+                    var (eave, ridge) = roofSpans[plane];
+                    var alongEave = new Vector3(-upSlope.Z, 0f, upSlope.X).Normalized();
+                    for (int k = 0; k < 3; k++)
+                    {
+                        var p = k == 0 ? a : k == 1 ? c : d;
+                        int f = v * 4;
+                        frames[f] = upSlope.X;
+                        frames[f + 1] = upSlope.Y;
+                        frames[f + 2] = upSlope.Z;
+                        frames[f + 3] = 1f;
+                        vertices[v] = p; colors[v] = color;
+                        uvs[v] = new Vector2(p.Dot(alongEave), -1f);
+                        uv2s[v++] = new Vector2(p.Dot(upSlope) - eave, ridge - eave);
+                    }
+                    continue;
+                }
+
+                // A large flat roof's solar field: CUSTOM0 = (its extent along the axis, across
+                // it, the across direction's angle atan2(z, x), 2), UV = (metres along from its edge,
+                // -1), UV2 = (metres across from its edge, 0). The panels are the shader's.
+                if (solar && isRoof && FlatRoof(a, c, d, b.MinY))
+                {
+                    var extent = flatMax - flatMin;
+                    for (int k = 0; k < 3; k++)
+                    {
+                        var p = k == 0 ? a : k == 1 ? c : d;
+                        int f = v * 4;
+                        frames[f] = extent.X;
+                        frames[f + 1] = extent.Y;
+                        frames[f + 2] = Mathf.Atan2(across.Z, across.X);
+                        frames[f + 3] = 2f;
+                        vertices[v] = p; colors[v] = color;
+                        uvs[v] = new Vector2(p.Dot(axis) - flatMin.X, -1f);
+                        uv2s[v++] = new Vector2(p.Dot(across) - flatMin.Y, 0f);
+                    }
+                    continue;
+                }
 
                 // Facade coordinates are baked here rather than derived in the shader:
                 // the fragment normal comes from screen-space derivatives and jitters,
@@ -268,6 +361,48 @@ public static partial class BuildingMeshBuilder
         }
 
         return new MeshData(vertices, colors, uvs, uv2s, frames);
+    }
+
+    // roof or wall by the triangle's slope; a spire's faces above the eave are roof however steep
+    private static bool IsRoof(Vector3 a, Vector3 c, Vector3 d, float spireFrom)
+    {
+        var normal = (c - a).Cross(d - a);
+        float len = normal.Length();
+        return len > 1e-6f && Mathf.Abs(normal.Y / len) >= BuildingTriangles.RoofNormalY
+            || (a.Y + c.Y + d.Y) / 3f > spireFrom;
+    }
+
+    /// <summary>
+    /// A roof triangle that slopes (flat roofs, |normal.y| above 0.97, have no eave to measure
+    /// from): its unit up-slope vector and its plane's key, the upward normal and the plane's
+    /// offset rounded, so the triangles of one roof face group together. The source TINs wind
+    /// faces either way, so the normal is turned to face up.
+    /// </summary>
+    private static bool PitchedRoof(Vector3 a, Vector3 c, Vector3 d, out Vector3 upSlope, out (int, int, int, int) key)
+    {
+        var n = (c - a).Cross(d - a);
+        upSlope = Vector3.Zero;
+        key = default;
+        float len = n.Length();
+        if (len < 1e-6f) return false;
+        n /= len;
+        if (n.Y < 0f) n = -n;
+        if (n.Y > 0.97f) return false;
+        upSlope = (Vector3.Up - n * n.Y).Normalized();
+        key = ((int)MathF.Round(n.X * 50f), (int)MathF.Round(n.Y * 50f), (int)MathF.Round(n.Z * 50f),
+            (int)MathF.Round(n.Dot(a) * 10f));
+        return true;
+    }
+
+    /// <summary>Flat roof area (square metres) from which a building carries solar panels.</summary>
+    public const float SolarRoofArea = 250f;
+
+    // a level roof face; the solid's own floor (also level, and wound either way) is not one
+    private static bool FlatRoof(Vector3 a, Vector3 c, Vector3 d, float baseY)
+    {
+        var n = (c - a).Cross(d - a);
+        float len = n.Length();
+        return len > 1e-6f && Mathf.Abs(n.Y / len) > 0.97f && (a.Y + c.Y + d.Y) / 3f > baseY + 2f;
     }
 
     private static Vector2 FacadeUv(Vector3 p, Vector3 tangent, float baseY, float storey) =>

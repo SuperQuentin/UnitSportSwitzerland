@@ -21,6 +21,6 @@
   (`FloorPlan.Guards`, `InteriorMeshBuilder.Guard`: a handrail, posts, an invisible collider).
   A 12 cm post is left where four rooms meet: the reveal faces that close the seam between the
   rooms' wall lines (without them the void shows through).
-- Plan version 23. `--flatcheck` asks of every finished room: no doorway cut off from the first one,
+- Plan version 26 (main took 24 and 25 first). `--flatcheck` asks of every finished room: no doorway cut off from the first one,
   no more than 1.5 m² sealed off, every TV looking at (or across to) its sofa. Shown to fail with
   `KeepsWay` off (halls with a doorway shut by a plant).

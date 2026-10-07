@@ -66,7 +66,7 @@ public static class CockpitCheck
     /// <summary>
     /// The trucks and buses (#157): the same fit from the cab (<see cref="HeavyCabin.SeatFor"/>), the
     /// eye between the dash and the top of the windscreen, the seat inside the walls, and the seats
-    /// a passenger can take (#158): a truck's cab two, a bus at least twenty.
+    /// a passenger can take (#158): a truck's cab two, the pickup's five (#463), a bus at least twenty.
     /// </summary>
     private static int CheckHeavy()
     {
@@ -75,7 +75,7 @@ public static class CockpitCheck
         foreach (var spec in HeavyCatalog.All)
             failed += CheckCab(spec.Label, Enumerable.Range(0, spec.Sections.Length)
                 .Select(k => HeavyRig.Create(spec, k, 0.5f, k == 0 ? HumanPalette.Default : null)).ToList(),
-                spec.Class is HeavyClass.Tractor or HeavyClass.Rigid ? 1 : 20);
+                spec.Class switch { HeavyClass.Tractor or HeavyClass.Rigid or HeavyClass.FarmTractor or HeavyClass.Combine => 1, HeavyClass.Pickup => 4, _ => 20 });
         // the airstairs' cab (#417): a heavy cockpit in a low cab, its seat in front of the back wall
         var stairs = Avatar.AirstairsMeshBuilder.CreateRig(2.5f, HumanPalette.Default);
         float back = stairs.Cockpit!.Seat.Hip.Z - 0.3f - (Avatar.AirstairsLayout.CabRear + Avatar.AirstairsLayout.CabWall);

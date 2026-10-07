@@ -191,6 +191,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.SiteProbe(siteCheck.Shot) { Name = "SiteProbe" });
             return;
         }
+        // ramp-first garage survey over real tiles (#694): reads the tile files itself, no terrain system
+        if (Interiors.RampFirstProbe.ParseArgs() is { Requested: true } rampFirst)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.RampFirstProbe(rampFirst.Shot) { Name = "RampFirstProbe" });
+            return;
+        }
         // a hand-made church whose radio plays the chess type beat (#370): no terrain, no server
         if (Interiors.ChurchStageProbe.ParseArgs() is { Requested: true } churchStage)
         {
@@ -426,6 +433,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 vehicles.Visible = shown;
             };
         }
+        // a check's farm co-op on a fixture world (#494, --farmcoop E,N): the server is given the same
+        Farming.FarmMarket.StandInFromArgs(source, origin);
 
         var environment = StyleKit.NewEnvironment();
         _worldEnvironment = new WorldEnvironment { Environment = environment };
@@ -674,6 +683,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (World.WaterCheck.Requested) AddChild(new World.WaterCheck(() => LocalPlayer));
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: false));
         if (Player.BoatCheck.Role is { } boatRole) AddChild(new Player.BoatCheck(boatRole, () => LocalPlayer));
+        if (Player.BoatTrailerCheck.Role is { } trailerRole) AddChild(new Player.BoatTrailerCheck(trailerRole, () => LocalPlayer));
+        if (Player.TractorCheck.Role is { } tractorRole) AddChild(new Player.TractorCheck(tractorRole, () => LocalPlayer));
         if (Player.SteamerCheck.Role is { } steamerRole) AddChild(new Player.SteamerCheck(steamerRole, () => LocalPlayer));
         if (Player.SwimCheck.Requested) AddChild(new Player.SwimCheck(() => LocalPlayer));
         if (Items.Fishing.FishProbe.Requested) AddChild(new Items.Fishing.FishProbe(() => LocalPlayer));
@@ -687,11 +698,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // The inventory is this machine's, not the player node's: it outlives a respawn or a
         // reconnect, and the player it acts on is resolved per frame like the picker's.
         var inventory = Items.InventoryUiProbe.Requested || Items.EconomyProbe.Password != null
-            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Loot.BankProbe.Role != null
-            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
+            || Loot.LootSyncProbe.Role != null || Loot.LockSyncProbe.Role != null || Interiors.LiftSyncProbe.Role != null || Interiors.HallCarProbe.Role != null || Loot.BankProbe.Role != null
+            || Items.PlacedProbe.Role != null || Birds.BirdNetProbe.Role != null || Birds.PigeonNetProbe.Role != null || Player.AirlinerNetProbe.Role != null || Player.StairsNetProbe.Role != null || Player.ExcavatorNetProbe.Role != null || Items.SitePalletNetProbe.Role != null || Items.BedNetProbe.Role != null || Player.HoldNetProbe.Role != null || Player.FreighterNetProbe.Role != null || Player.An124NetProbe.Role != null || Items.PhotoProbe.Requested || Items.UseAnimProbe.Role != null
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
+            || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
         if (Items.PlantProbe.Role != null) inventory.Put(Items.Inventory.HotbarSize - 1, new Items.ItemStack(Items.ItemId.SwissFlag, 1));   // on the hotbar for --hold
@@ -712,6 +724,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Loot.LootSyncProbe.Role != null) AddChild(new Loot.LootSyncProbe(items, origin));
         if (Loot.LockSyncProbe.Role != null) AddChild(new Loot.LockSyncProbe(items, origin));
         if (Interiors.LiftSyncProbe.Role != null) AddChild(new Interiors.LiftSyncProbe(items, origin));
+        if (Interiors.HallCarProbe.Role != null) AddChild(new Interiors.HallCarProbe(items, origin));
         if (Loot.BankProbe.Role != null) AddChild(new Loot.BankProbe(items, origin));
         if (Loot.ShopProbe.Role != null) AddChild(new Loot.ShopProbe(items, origin));
         if (Player.WheelProbe.WatchRole != null) AddChild(new Player.WheelProbe { Name = "WheelProbe" });
@@ -720,8 +733,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Birds.PigeonNetProbe.Role != null) AddChild(new Birds.PigeonNetProbe(items));
         if (Player.AirlinerNetProbe.Role != null) AddChild(new Player.AirlinerNetProbe(items));
         if (Player.StairsNetProbe.Role != null) AddChild(new Player.StairsNetProbe(items));
+        if (Player.TractorNetProbe.Role != null) AddChild(new Player.TractorNetProbe(items));
         if (Player.ExcavatorNetProbe.Role != null) AddChild(new Player.ExcavatorNetProbe(items));
         if (Items.SitePalletNetProbe.Role != null) AddChild(new Items.SitePalletNetProbe(items));
+        if (Items.BedNetProbe.Role != null) AddChild(new Items.BedNetProbe(items));
         if (Player.FreighterNetProbe.Role != null) AddChild(new Player.FreighterNetProbe(items));
         if (Player.An124NetProbe.Role != null) AddChild(new Player.An124NetProbe(items));
         if (Player.HoldNetProbe.Role != null) AddChild(new Player.HoldNetProbe(items));
@@ -814,6 +829,20 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Systems.On(Systems.Loot)) Loot.LootService.Create(this).Items = items;
         // shops and PAUSA vending machines (#273): same node path as the server's, which keeps the sold counts
         if (Systems.On(Systems.Loot)) Loot.ShopService.Create(this).Items = items;
+        // selling farm produce (#494): World/FarmSales and World/FarmStands, same paths as the server's; offline this client plays it
+        if (Systems.On(Systems.Farming))
+        {
+            Farming.FarmSales.Create(this, origin, server: false, items);
+            var stands = Farming.FarmStands.Create(this, origin, server: false);
+            stands.Items = items;
+            stands.Source = () => _chunks?.Source;
+            // the specialty buyers' offices and signs, beside their access roads
+            Farming.FarmBuyerYards.Create(this, origin, () => _chunks?.Source, p => _chunks != null && _chunks.TryGetHeight(p, out float h) ? h : null);
+            if (Farming.SellCheck.Requested) AddChild(new Farming.SellCheck(items, origin));
+            if (Farming.BuyerCheck.Requested) AddChild(new Farming.BuyerCheck(origin));
+            if (Farming.SellNetProbe.Role != null) AddChild(new Farming.SellNetProbe(items));
+            if (Farming.CoopNetProbe.Role != null) AddChild(new Farming.CoopNetProbe(items));
+        }
         // the radio's panel: CDs to play, burn a new one, pick it up (opened from FootPlayer.TryInteract)
         _radioUi = Items.RadioUi.Create(() => LocalPlayer, items.Inventory);
         _radioUi.Give = items.Give;
@@ -824,6 +853,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // (null only with loot or birds off, when no probe that needs them runs)
         Loot.Gathering gathering = null!;
         if (Systems.On(Systems.Loot)) AddChild(gathering = new Loot.Gathering(_chunks, origin, items));
+        // farm fields (#494): the worked cells near the camera, drawn, and the hoe / seeds / harvest by hand.
+        // World/Farm, same path as the server's, which owns the cells; offline this client does
+        if (Systems.On(Systems.Farming))
+        {
+            Farming.FarmField.Create(this, _chunks?.Source, origin, _chunks, dedicated: false);
+            AddChild(new Farming.HandFarming(items, origin));
+            if (Farming.FarmProbe.Requested) AddChild(new Farming.FarmProbe(items, origin));
+            if (Farming.HandFarmCheck.Requested) AddChild(new Farming.HandFarmCheck(items, origin));
+            if (Farming.FarmNetProbe.Role != null) AddChild(new Farming.FarmNetProbe(items, origin));
+        }
         // birds around the player, from the real land cover; the shotgun hunts them (J: journal)
         Birds.BirdLife birds = null!;
         if (Systems.On(Systems.Birds))
