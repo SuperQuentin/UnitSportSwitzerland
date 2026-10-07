@@ -518,7 +518,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// apart by their jerseys. An NPC is offset from the client that asked for it (#394), so it gets a
     /// figure of its own rather than that player's chosen one (<see cref="Avatar.Appearance.For"/>).
     /// </summary>
-    private int RiderIndex() => Npc && NetId(Name) is long npcId && npcId < 0
+    public int RiderIndex() => Npc && NetId(Name) is long npcId && npcId < 0
         ? unchecked((int)Net.PlayerReplication.NpcOwner(npcId) + 100 * (int)(1 + (-npcId) % 1000))
         : GetMultiplayerAuthority();
 
@@ -1046,6 +1046,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <see cref="RideControls"/>.
     /// </summary>
     public Func<(Vector3 Wish, bool Run)>? WalkControls { get; set; }
+
+    /// <summary>
+    /// Replaces the keys while flying, when set, as <see cref="RideControls"/> does on the ground: a
+    /// scripted pilot (the trailer's aircraft, #706) flies through it, so several craft can fly at
+    /// once without pressing the one global input map.
+    /// </summary>
+    public Func<FlightInput>? FlyControls { get; set; }
 
     private Camera3D? _camera;
     private CollisionShape3D _body = null!;
@@ -3922,7 +3929,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (flyer.LookBank > 0f && !typing && !onFloor)
             stick.X = Mathf.Clamp(stick.X - Mathf.Clamp(_lookYaw / 0.8f, -1f, 1f) * flyer.LookBank, -1f, 1f);
 
-        var input = new FlightInput(
+        var input = FlyControls?.Invoke() ?? new FlightInput(
             Stick: stick,
             Up: Mathf.Max(jumpDown ? 1f : 0f, tr),
             Down: Mathf.Max(downHeld ? 1f : 0f, tl),
