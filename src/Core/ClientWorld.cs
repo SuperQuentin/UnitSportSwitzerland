@@ -1674,6 +1674,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
                         break;
                 }
             }
+            else if (Items.ItemController.Instance is { Inventory.HeldId: Items.ItemId.Radio, Throw.Active: false, UsablePlayer: not null })
+            {
+                // the radio in hand (#725): tap it on or off, hold for its panel, aim to throw it
+                yield return (PlayerInput.UseItem, Items.RadioTap.Prompt);
+                yield return (PlayerInput.AimItem, "Aim a throw");
+            }
             else if (Items.ItemController.Instance?.Throw.Active == true)
             {
                 yield return (PlayerInput.UseItem, Items.ItemController.Instance.Throw.Charging ? "Let go to throw" : "Hold to wind up a throw");
@@ -1684,7 +1690,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             else if (Items.Highlight.Pointed is Items.RadioBody)
             {
                 if (Items.ItemController.Instance?.Inventory.Held.IsEmpty == true) yield return (PlayerInput.UseItem, "Take the radio");
-                yield return (PlayerInput.InteractMount, "Radio");
+                yield return (PlayerInput.InteractMount, Items.RadioTap.Prompt);
             }
             else if (Vehicles.VehicleReach.Current == null && Combat.FightManager.Client is { } fights
                      && NetLink.Online(this) && p.PointedFighter() is { } rival && FootPlayer.NetId(rival.Name) is { } rivalId)

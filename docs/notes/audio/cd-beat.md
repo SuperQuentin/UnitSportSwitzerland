@@ -30,8 +30,26 @@
   half/double check preferring 90–150 → parabolic refinement → comb phase search snapped to onsets
   for `BeatOffset` → rule table (bpm, onsets/s, <150 Hz share, centroid, RMS variance) for
   `MusicStyle` (Pop/Rock/Electronic/HipHop/Chill/Folk). Style thresholds were tuned on synthetic
-  signals only. `--beatcheck` runs `SelfCheck()` on synthetic clicks (bpm ±2, offset ±30 ms).
-- **What a CD carries** (`CdInfo`): id, title, duration, bpm, beat offset, style, energy. Radios and
-  dancers derive everything else from `StartedAt` on the shared clock (`docs/notes/net/clock-sync.md`).
+  signals only. `--beatcheck` runs `SelfCheck()` on synthetic clicks (bpm ±2, offset ±30 ms; downbeat
+  from an accented kick, kick envelope on the clicks ±1 frame, quiet/loud halves -> one boundary
+  ±1 bar, Calm then Peak, JSON and dict round trip).
+- **What a CD carries** (`CdInfo`): id, title, duration, bpm, beat offset, style, energy, and
+  `Analysis` (#725, JSON `"analysis"`, null on older CDs). Radios and dancers derive everything else
+  from `StartedAt` on the shared clock (`docs/notes/net/clock-sync.md`): nothing per frame on the wire.
+- **`CdAnalysis`** (`BeatAnalyzer.AnalyseFull`, same STFT pass, ~1.3 s for 4 min): `av` version
+  (`CdAnalysis.CurrentVersion`), `env` base64 of 20 Hz frames x 2 bytes (RMS loudness, <150 Hz onset
+  "kick", each 0..255 per track), `downbeat` 0..3 (beat phase with the most low onset + band change),
+  `sections`/`kinds` (bar features -> z-scored cosine self-similarity -> Foote novelty over 8 bars,
+  peaks >= 4 bars apart, snapped to bars; `SectionKind` Calm/Groove/Peak by loudness vs the track's
+  bars, Chorus = loud sections alike). RPC dict: `env` as string, `ss`/`sk` packed arrays, keys
+  optional. The chess type beat is analysed on its hand-set grid (`CdBurner.Grid`).
+- **Backfill**: at start the library queues its CDs (shared where it owns them, and personal) whose
+  block is missing or older than `CurrentVersion`, one at a time on a worker: ffmpeg decodes the Ogg
+  (`CdBurner.ReanalyseAsync`, stored grid), `.json` + `library.json` rewritten, the server re-sends
+  it with `Added` (a listed id is replaced). No ffmpeg: stops quietly. Separate from the burn queue,
+  so a `--cdfixture` never waits. Bump `CurrentVersion` when the analyser changes.
+- **Runtime** (`CdAnalysisRuntime`, allocation free, env decoded once per block): `Sample(cd, t, out
+  level, out kick)` (t = seconds into the file; kick holds the previous frame fading),
+  `SectionAt(cd, t, out index)`, `BeatInBar(cd, beatIndex)` (0 = bar start).
 - **Playback at runtime**: `AudioStreamOggVorbis.LoadFromFile` on the main thread (header only), on an
   `AudioStreamPlayer3D` in `RadioBody` — the first audio file the game plays; everything else is synthesised.

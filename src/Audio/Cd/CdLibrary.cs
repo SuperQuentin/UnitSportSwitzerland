@@ -112,7 +112,7 @@ public partial class CdLibrary : Node
         return File.Exists(path) ? path : null;
     }
 
-    /// <summary>A CD was added (or the whole list arrived).</summary>
+    /// <summary>A CD was added or updated (or the whole list arrived).</summary>
     public event Action? Changed;
 
     /// <summary>Client (and offline): what the burner is doing with the link you gave it.</summary>
@@ -128,6 +128,11 @@ public partial class CdLibrary : Node
     private readonly ConcurrentQueue<(long Peer, string Text)> _status = new();
     private readonly ConcurrentQueue<(long Peer, CdInfo? Cd, bool Personal)> _done = new();
     private readonly Queue<string> _fixtures = new();
+
+    /// <summary>CDs whose <see cref="CdAnalysis"/> is missing or old (#725), re-analysed one at a time.</summary>
+    private readonly Queue<(int Id, bool Personal)> _stale = new();
+    private readonly ConcurrentQueue<(int Id, bool Personal, CdAnalysis? Analysis, bool NoFfmpeg)> _reanalysed = new();
+    private bool _reanalysing, _noFfmpeg;
 
     /// <summary>What a queued burn of this process marks its CD with (a default link, the bundled beat).</summary>
     private readonly Dictionary<string, string> _sources = new();
@@ -150,6 +155,7 @@ public partial class CdLibrary : Node
         EnsureRatBeat();
         EnsureDefaults();
         BurnFixture();
+        QueueBackfill();
     }
 
     public override void _ExitTree()
@@ -195,6 +201,7 @@ public partial class CdLibrary : Node
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Status(string text) => BurnStatus?.Invoke(text);
 
+    /// <summary>A new CD, or a new version of a listed one (same id: replaced, e.g. its analysis backfilled).</summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Added(Godot.Collections.Dictionary cd)
     {
@@ -264,11 +271,17 @@ public partial class CdLibrary : Node
         _burning = true;
         _lastBurn[peer] = now;
         int id = personal ? NewPersonalId() : _nextId++;
-        var burner = new CdBurner { CdDirectory = personal ? PersonalDirectory : Directory };
+        string? source = peer == 0 ? _sources.GetValueOrDefault(url) : null;
+        // the chess type beat's grid is set by hand (Note): lay its downbeat and sections on that one
+        bool ratBeat = source == RatBeatSource || source == DefaultSource(RatBeatUrl);
+        var burner = new CdBurner
+        {
+            CdDirectory = personal ? PersonalDirectory : Directory,
+            Grid = ratBeat ? (RatBeatBpm, RatBeatOffset) : null,
+        };
         var progress = new Progress<string>(text => _status.Enqueue((peer, text)));
         GD.Print($"[cd] burning {(personal ? "personal " : "")}CD {id} for peer {peer}: {(localFile ? Path.GetFileName(url) : url)}");
         // The tools run for a while; RPCs must go out from _Process, so the results are queued.
-        string? source = peer == 0 ? _sources.GetValueOrDefault(url) : null;
         Task.Run(async () =>
         {
             CdInfo? cd = null;
@@ -313,6 +326,62 @@ public partial class CdLibrary : Node
             Begin(0, next, false, out string refusal);
             if (refusal.Length > 0) GD.PushWarning($"[cd] fixture refused: {refusal}");
         }
+        while (_reanalysed.TryDequeue(out var r)) Reanalysed(r.Id, r.Personal, r.Analysis, r.NoFfmpeg);
+        if (!_reanalysing && !_noFfmpeg && _stale.TryDequeue(out var stale)) Reanalyse(stale.Id, stale.Personal);
+    }
+
+    // ---- analysis backfill (#725) ---------------------------------------------------------------
+
+    /// <summary>
+    /// Queues every CD of this library (the shared one where this copy owns it, and this player's
+    /// own) whose <see cref="CdAnalysis"/> is missing or older than the analyser. Its own flag, not
+    /// the burn queue's, so a <c>--cdfixture</c> never waits behind it.
+    /// </summary>
+    private void QueueBackfill()
+    {
+        if (Owns)
+            foreach (var cd in _all.Values) if (CdAnalysis.IsStale(cd)) _stale.Enqueue((cd.Id, false));
+        foreach (var cd in _personal.Values) if (CdAnalysis.IsStale(cd)) _stale.Enqueue((cd.Id, true));
+        if (_stale.Count > 0) GD.Print($"[cd] analysing {_stale.Count} older CD(s) again");
+    }
+
+    /// <summary>Decodes one CD's Ogg on a worker and analyses it on its stored grid; the result comes back through <see cref="_reanalysed"/>.</summary>
+    private void Reanalyse(int id, bool personal)
+    {
+        var cd = personal ? _personal.GetValueOrDefault(id) : _all.GetValueOrDefault(id);
+        if (cd == null) return;
+        string ogg = Path.Combine(personal ? PersonalDirectory : Directory, $"{id}.ogg");
+        if (!File.Exists(ogg)) return;
+        _reanalysing = true;
+        float bpm = cd.Bpm, offset = cd.BeatOffset;
+        Task.Run(async () =>
+        {
+            CdAnalysis? analysis = null;
+            bool noFfmpeg = false;
+            try { analysis = await CdBurner.ReanalyseAsync(ogg, bpm, offset, CancellationToken.None); }
+            catch (System.ComponentModel.Win32Exception) { noFfmpeg = true; }   // ffmpeg missing: skip quietly
+            catch (Exception e) { GD.Print($"[cd] could not analyse CD {id} again: {e.Message}"); }
+            _reanalysed.Enqueue((id, personal, analysis, noFfmpeg));
+        });
+    }
+
+    /// <summary>Main thread: stores the new block in the list and the CD's files, and gives the server's to every client.</summary>
+    private void Reanalysed(int id, bool personal, CdAnalysis? analysis, bool noFfmpeg)
+    {
+        _reanalysing = false;
+        if (noFfmpeg) { _noFfmpeg = true; _stale.Clear(); return; }
+        var list = personal ? _personal : _all;
+        if (analysis == null || !list.TryGetValue(id, out var cd)) return;
+        cd = cd with { Analysis = analysis };
+        list[id] = cd;
+        string dir = personal ? PersonalDirectory : Directory;
+        SaveIndex(dir, list);
+        try { Core.JsonStore.Save(Path.Combine(dir, $"{id}.json"), cd, CdInfo.Json); }
+        catch (Exception e) { GD.PushWarning($"[cd] could not save CD {id}: {e.Message}"); }
+        GD.Print($"[cd] CD {id} analysed again: {analysis.SectionStarts.Length} section(s), downbeat {analysis.Downbeat}");
+        Changed?.Invoke();
+        // Added replaces a listed id on the clients
+        if (!personal && _server && Online) Rpc(MethodName.Added, cd.ToDict());
     }
 
     // ---- storage --------------------------------------------------------------------------------
