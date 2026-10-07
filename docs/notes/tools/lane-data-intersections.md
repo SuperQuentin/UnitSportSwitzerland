@@ -148,8 +148,8 @@ Plan and reasoning: `docs/plans/intersection-lanes.md`. What is built:
   mouth to the exit lane's edge beside the hatch (real tiles: 27).
 - **Paths to the mouth** (`PathsToMouth`): a path stopped within 8 m of a junction's mouth (a joining road's corner zone,
   now nearer with the tighter setback) runs on to it, so its crossing starts at the road it crosses.
-- Not done here, #711: corners beside a widening at junctions without lights still start from the original edge
-  (bare ground where the arm is widened up to the mouth, e.g. Sion's north-western arm).
+- Corners beside a widening at junctions without lights started from the original edge: fixed in #711 (`unify-junctions`)
+  (bare ground where the arm was widened up to the mouth, e.g. Sion's north-western arm).
 - Test region: J7's east approach marks no right turn (tight north-east corner, diagonal zebras on the north and east
   arms from OSM nodes, J7 has no sidewalks); the unlit T south of J3: zebras on the stem and the west arm, the east arm's
   crossing is unmarked.

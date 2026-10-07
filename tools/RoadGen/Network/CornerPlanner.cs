@@ -32,11 +32,11 @@ public static class CornerPlanner
 
     public sealed class Stats
     {
-        public int Corners, Built, OneSided, Squared, Banded, Facade, Road, Shape;
+        public int Corners, Built, OneSided, Squared, Banded, Arcs, Facade, Road, Shape;
         public double Area;
 
         public string Format() => string.Create(CultureInfo.InvariantCulture, $"""
-                corners: {Corners:N0} with a sidewalk on either side, {Built:N0} built ({Squared:N0} squared, {Banded:N0} along the kerb, {Area:N0} m2), {OneSided:N0} one-sided; rejected: a wall {Facade:N0}, a carriageway {Road:N0}, shape {Shape:N0}
+                corners: {Corners:N0} with a sidewalk on either side, {Built:N0} built ({Squared:N0} squared, {Banded:N0} along the kerb, {Area:N0} m2; {Arcs:N0} round a widening's kerb arc, #711), {OneSided:N0} one-sided; rejected: a wall {Facade:N0}, a carriageway {Road:N0}, shape {Shape:N0}
             """);
     }
 
@@ -51,8 +51,17 @@ public static class CornerPlanner
     /// <summary>One arm's sidewalk on the side facing a corner: kerb line from the node out to where the sidewalk starts.</summary>
     private sealed record Chain(List<(Vec2 P, float Y)> Kerb, Vec2 Out, double Width, float Kerb_, Vec2 Inward);
 
+    /// <summary>
+    /// A kerb arc round a widened corner (#682, #711), tile-local plan (x east, y = -z): the kerb line from arm A's
+    /// mouth round to arm B's, and each arm's direction out of the junction along its widened edge.
+    /// </summary>
+    public sealed record KerbArc(List<(Vec2 P, float Y)> Line, Vec2 OutA, Vec2 OutB);
+
+    /// <summary>The arms' directions match an arc's within this (cosine of 30 degrees).</summary>
+    private const double ArcArmCos = 0.866;
+
     public static List<RoadAreaProp> Plan(TileId id, IReadOnlyList<RoadSegment> segments, IReadOnlyList<RoadJunction> caps,
-        Facades facades, Stats stats, IReadOnlyList<RoadAreaProp>? pavement = null)
+        Facades facades, Stats stats, IReadOnlyList<RoadAreaProp>? pavement = null, IReadOnlyList<KerbArc>? arcs = null)
     {
         // a turn lane's widening (#123) is carriageway too: a corner never stands on it (#120:
         // the sidewalk beside a pocket now carries on, and its corner reached across the lane)
@@ -84,7 +93,9 @@ public static class CornerPlanner
                     if (DistanceToRing(Plan(segments[e.Seg].Points, e.AtStart ? 0 : segments[e.Seg].PointCount - 1), ring) < 0.3)
                         arms.Add(e);
             foreach (var e in arms) claimed.Add(e);
-            Corners(id, segments, ends, arms, ring, cap, facades, stats, props);
+            // the cap's kerb arcs: both ends at its ring (an arc is clamped to the mouths, which lie on it)
+            var capArcs = arcs?.Where(k => DistanceToRing(k.Line[0].P, ring) < ArcReach && DistanceToRing(k.Line[^1].P, ring) < ArcReach).ToList();
+            Corners(id, segments, ends, arms, ring, cap, facades, stats, props, capArcs);
         }
 
         // bare bends: two street ends sharing a point, no cap
@@ -95,13 +106,14 @@ public static class CornerPlanner
             var b = Outward(segments[list[1].Seg], list[1].AtStart);
             double turn = 180 - Math.Acos(Math.Clamp(a.Dot(b), -1, 1)) * 180 / Math.PI;
             if (turn < MinBendDeg) continue;
-            Corners(id, segments, ends, list, null, null, facades, stats, props);
+            Corners(id, segments, ends, list, null, null, facades, stats, props, null);
         }
         return props;
     }
 
     private static void Corners(TileId id, IReadOnlyList<RoadSegment> segments, Dictionary<(long, long), List<End>> ends,
-        List<End> arms, List<(Vec2 P, float Y)>? ring, RoadJunction? cap, Facades facades, Stats stats, List<RoadAreaProp> props)
+        List<End> arms, List<(Vec2 P, float Y)>? ring, RoadJunction? cap, Facades facades, Stats stats, List<RoadAreaProp> props,
+        List<KerbArc>? arcs)
     {
         if (arms.Count < 2) return;
         var ordered = arms
@@ -123,7 +135,18 @@ public static class CornerPlanner
             if (ca == null && cb == null) continue;
             stats.Corners++;
             if (ca == null || cb == null || (ca.Kerb_ > 0) != (cb.Kerb_ > 0)) { stats.OneSided++; continue; }
-            if (Build(id, segments, ca, cb, ring, cap, facades, stats) is { } prop) props.Add(prop);
+            // round the kerb arc beside a widening (#711), else (or where that corner cannot stand) round the cap
+            RoadAreaProp? prop = null;
+            if (ArcOf(arcs, a.Out, b.Out) is { } arc)
+            {
+                var (facade, road, shape) = (stats.Facade, stats.Road, stats.Shape);
+                prop = Build(id, segments, ca, cb, ring, cap, facades, stats, arc);
+                if (prop == null) (stats.Facade, stats.Road, stats.Shape) = (facade, road, shape);
+                else stats.Arcs++;
+                if (Traced(id, node)) Console.WriteLine($"[corner]   round a kerb arc of {arc.Line.Count} points: {(prop == null ? "failed" : "built")}");
+            }
+            prop ??= Build(id, segments, ca, cb, ring, cap, facades, stats);
+            if (prop != null) props.Add(prop);
             if (ordered.Count == 2 && ring == null)
             {
                 // the bend's other corner: B's left and A's right
@@ -178,13 +201,25 @@ public static class CornerPlanner
     }
 
     private static RoadAreaProp? Build(TileId id, IReadOnlyList<RoadSegment> segments, Chain a, Chain b,
-        List<(Vec2 P, float Y)>? ring, RoadJunction? cap, Facades facades, Stats stats)
+        List<(Vec2 P, float Y)>? ring, RoadJunction? cap, Facades facades, Stats stats, KerbArc? arc = null)
     {
-        // kerb: A's sidewalk start in to the node, round the cap, out to B's sidewalk start
+        // kerb: A's sidewalk start in to the node, round the cap, out to B's sidewalk start; beside a widening
+        // (#711) in to A's mouth, round the kerb arc, out from B's mouth: the cap's own corner lies under the widening
         var poly = new List<(Vec2 P, float Y)>();
-        for (int k = a.Kerb.Count - 1; k >= 0; k--) poly.Add(a.Kerb[k]);
-        if (ring != null) poly.AddRange(RingBetween(ring, a.Kerb[0].P, b.Kerb[0].P));
-        poly.AddRange(b.Kerb);
+        if (arc != null)
+        {
+            for (int k = a.Kerb.Count - 1; k >= 0; k--)
+                if ((arc.Line[0].P - a.Kerb[k].P).Dot(a.Inward) > 0.05) poly.Add(a.Kerb[k]);
+            poly.AddRange(arc.Line);
+            foreach (var p in b.Kerb)
+                if ((arc.Line[^1].P - p.P).Dot(b.Inward) > 0.05) poly.Add(p);
+        }
+        else
+        {
+            for (int k = a.Kerb.Count - 1; k >= 0; k--) poly.Add(a.Kerb[k]);
+            if (ring != null) poly.AddRange(RingBetween(ring, a.Kerb[0].P, b.Kerb[0].P));
+            poly.AddRange(b.Kerb);
+        }
         poly = Thin(Dedupe(poly));
         int kerbCount = poly.Count;
         if (kerbCount < 2) { stats.Shape++; return null; }
@@ -496,6 +531,27 @@ public static class CornerPlanner
                 if (OnPavement(q)) return "road";
             }
         return null;
+    }
+
+    /// <summary>A kerb arc ends this close (m) to its cap's ring.</summary>
+    private const double ArcReach = 4.0;
+
+    /// <summary>
+    /// The kerb arc of the corner between arm A's left and arm B's right (#711), matched by the arms' directions
+    /// out of the junction, not by distance: the best match within <see cref="ArcArmCos"/> on both arms, or null.
+    /// </summary>
+    private static KerbArc? ArcOf(List<KerbArc>? arcs, Vec2 outA, Vec2 outB)
+    {
+        if (arcs is null) return null;
+        KerbArc? best = null;
+        double score = double.MinValue;
+        foreach (var k in arcs)
+        {
+            double sa = k.OutA.Dot(outA), sb = k.OutB.Dot(outB);
+            if (sa < ArcArmCos || sb < ArcArmCos || sa + sb <= score) continue;
+            (best, score) = (k, sa + sb);
+        }
+        return best;
     }
 
     /// <summary>The ring's vertices strictly between the two points nearest <paramref name="from"/> and <paramref name="to"/>, the shorter way round.</summary>

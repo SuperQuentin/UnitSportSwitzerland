@@ -108,7 +108,7 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   the mouths and that point. Laid out before the signal poles (test region 19 placed / 35
   rejected, was 21/33; Geneva 1,493 / 255, was 1,504 / 244). **Not in town**: where a sidewalk or
   path runs round the corner (`OuterDm`), it stays square (the sidewalk corner, `CornerPlanner`,
-  would have to follow the new kerb: open question); test region 18 rounded, 8 square (J2, J3);
+  would have to follow the new kerb: done in #711, `unify-junctions`); test region 18 rounded, 8 square (J2, J3);
   Geneva 31 rounded, 186 square, 2 failed outlines. Fixed on the way: a merged strip was painted
   by whichever pocket came first, from the exiting one without the lights' stop line (J5b's west
   approach: a 0.4 m bar at the mouth, no line across its TR lane).

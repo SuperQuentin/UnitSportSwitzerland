@@ -24,6 +24,8 @@ public static class SignalTestRegion
     public const int MinTileE = 2910, MaxTileE = 2917, MinTileN = 1321, MaxTileN = 1323;
     /// <summary>The junctions' row, LV95 N: the middle of the tile row N 1322.</summary>
     public const double RowN = 1322500;
+    /// <summary>The T without lights in town (#711), LV95 E on <see cref="RowN"/>: a split lead-in from the west.</summary>
+    public const double TownTeeE = 2911750;
     /// <summary>The ground, metres (as the fixture courses).</summary>
     public const double Ground = 500;
     /// <summary>Region centre: the manifest's suggested origin.</summary>
@@ -71,12 +73,14 @@ public static class SignalTestRegion
         // the main road A, west to east through every junction: a 10 m cantonal through road at the two
         // ideal crossroads, 8 m from the mismatched one on; split where TLM would (junctions, attribute changes)
         double j1 = 2910500, j2 = 2911500, j3 = 2912500, j3b = 2913500, j4 = 2914500, j5a = 2915450, j5b = 2915550, j6 = 2916500, j7 = 2917500;
+        const double jt = TownTeeE;   // a T without lights in town (#711), east of J2
         void A(string id, double from, double to, string objektart, string sidewalk = "") =>
             lines.Add(new Line(id, objektart, "Durchgangsstrasse", "Kanton", [(from, n), (to, n)], "secondary", sidewalk));
         A("A0", 2910050, j1, "10m Strasse");
         A("A1", j1, 2910900, "10m Strasse");
         A("A2", 2910900, j2, "10m Strasse", "yes");
-        A("A3", j2, 2911900, "10m Strasse", "yes");
+        A("A3", j2, jt, "10m Strasse", "yes");
+        A("A3b", jt, 2911900, "10m Strasse", "yes");
         A("A4", 2911900, j3, "8m Strasse");
         A("A5", j3, j3b, "8m Strasse");
         A("A6", j3b, j4, "8m Strasse");
@@ -102,6 +106,11 @@ public static class SignalTestRegion
         Cross("J2N", j2, n, n + 400, "10m Strasse", "Verbindungsstrasse", "secondary", sidewalk: "yes");
         junctions.Add(new Junction("J2-ideal-paths", j2, n, "ideal crossroads in town, separated bike paths: bike signals, square crossings",
             Arms("L|T|R", "L|T|R", "L|T|R", "L|T|R")));
+
+        // 2t. a T without lights in town (#711): a 6 m road gives way to the main road from the north. The main road's left
+        // pocket from the west splits its lead-in between both edges (#700), so its corners round a widened kerb on both
+        // sides of the west arm: the sidewalk corners follow those kerb arcs. No designed junction: no lights
+        Cross("JTN", jt, n, n + 300, "6m Strasse", "Verbindungsstrasse", "tertiary", sidewalk: "yes");
 
         // 3. mismatched room. W: a long arm, L|T|R. E: houses 1.5 m from the kerb from 68 m out (the corner radius of #682 takes ~16 m of the arm): only the
         // shortest left pocket (20 + 20 m) fits, and a right pocket reaches at most 8 m past the left's storage (#682):

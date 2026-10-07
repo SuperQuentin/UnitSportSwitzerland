@@ -34,6 +34,9 @@
 - **Main road A**: a cantonal Durchgangsstrasse west to east, `10m Strasse` at J1/J2, `8m` from
   J3 on. Painted bike lanes come from the #120 rule (rural Major/Road; 8 m roads get a
   Kernfahrbahn), paths from OSM sidewalks (town) + the rule.
+- **Unlit town T** (#711, `unify-junctions`): 2911750 (`TownTeeE`, in J2's tile), a 6 m road gives way from the north;
+  the main road's left pocket from the west splits its lead-in, so the north-west corner rounds a widened kerb. No
+  designed junction (no lights, not in the table or the lane check).
 
 ## Junctions (designed vs built)
 

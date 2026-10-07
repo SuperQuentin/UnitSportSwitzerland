@@ -186,6 +186,29 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
     }
 
     [Fact]
+    public void Sidewalk_corners_follow_the_kerb_arc_beside_a_split_lead_in()
+    {
+        // the T without lights (#711): the west arm's lead-in widens both its edges, so its corner beside the side road
+        // (north-west: x < 0, z < 0) rounds a widened kerb (the mirror strip's: before #711 that corner had no kerb patch, and
+        // the sidewalk corner followed the junction's own ring, a bare triangle between); the sidewalk corner's kerb is the
+        // pavement patch's arc, point for point. (The east arm widens only its south side, for the exit: that corner stays.)
+        double e = SignalTestRegion.TownTeeE, n = SignalTestRegion.RowN;
+        var id = TileId.FromLv95(e, n);
+        double cx = e - id.MinE, cz = id.MaxN - n;
+        var tile = region.Tile(e, n);
+        List<List<(double X, double Z)>> In(AreaPropType type, int sx) => tile.AreaProps.Where(a => a.Type == type)
+            .Select(a => Points(a.Vertices))
+            .Where(p => p.Average(q => q.X) - cx is var x && Math.Sign(x) == sx && Math.Abs(x) < 15
+                && p.Average(q => q.Z) - cz is var z && z < -1 && z > -15).ToList();
+        var kerbs = In(AreaPropType.Pavement, -1);
+        var walks = In(AreaPropType.Sidewalk, -1);
+        Assert.True(kerbs.Count > 0, "no kerb patch at the north-west corner");
+        int Shared(List<(double X, double Z)> walk) =>
+            walk.Count(p => kerbs.Any(k => k.Any(q => Math.Abs(q.X - p.X) < 0.02 && Math.Abs(q.Z - p.Z) < 0.02)));
+        Assert.True(walks.Any(w => Shared(w) >= 5), $"the north-west sidewalk corner does not follow the kerb arc ({string.Join(", ", walks.Select(Shared))} points shared)");
+    }
+
+    [Fact]
     public void Bike_lanes_across_the_lights_are_red_only_where_a_car_crosses_in_the_same_phase()
     {
         int Red(string name, double radius)

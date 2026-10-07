@@ -422,6 +422,7 @@ public static partial class TileRewriter
             var rails = new RailRoadOverlap(lines, netStats.Rail);
             var output = new Dictionary<TileId, List<RoadSegment>>();
             var caps = new Dictionary<TileId, List<RoadJunction>>();
+            var kerbArcs = new Dictionary<TileId, List<CornerPlanner.KerbArc>>();   // sidewalk corners round a widening (#711)
             var paint = new Dictionary<TileId, List<RoadPaint>>();
             var signs = new Dictionary<TileId, List<RoadPointProp>>();
             var signalRecords = new Dictionary<TileId, List<RoadSignal>>();   // traffic lights (#348)
@@ -718,6 +719,7 @@ public static partial class TileRewriter
                 EmitBikeCrossings(priority, result, segmentOf, finalPieces, pockets, block, wanted, paint, signs, bikeBridges, netStats.Bikes,
                     stopsAt, signalPlans, townArcs);
                 EmitTownCorners(priority, result.Network, segmentOf, finalPieces, townArcs, block, wanted, bikeBridges, paint, netStats.Bikes);
+                KerbArcs(priority, townArcs, kerbArcs);
             }
 
             // car parks (#499): one layout per lot, from the whole polygon, before the tiles are
@@ -758,7 +760,7 @@ public static partial class TileRewriter
                     Paint = paint.TryGetValue(id, out var p) ? p : new List<RoadPaint>(),
                     LinearProps = walls,
                     AreaProps = [.. islands.TryGetValue(id, out var isl) ? isl : [],
-                        .. Unbridged(id, CornerPlanner.Plan(id, segments, junctions, facades, cornerStats, isl), bridges, netStats.Bikes),   // sidewalk corners (#119)
+                        .. Unbridged(id, CornerPlanner.Plan(id, segments, junctions, facades, cornerStats, isl, kerbArcs.GetValueOrDefault(id)), bridges, netStats.Bikes),   // sidewalk corners (#119)
                         .. bridges.Select(x => x.Band),
                         .. parkAreas.TryGetValue(id, out var pa) ? pa : []],   // car park pad, islands, walks (#499)
                     PointProps = pointProps,
