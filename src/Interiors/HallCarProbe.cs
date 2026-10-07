@@ -110,7 +110,8 @@ public partial class HallCarProbe : ChatProbe
 
         var cp = node.GetNodeOrNull<ParkedCars>("HallCars");
         Expect(cp != null && cp.Count == cars.Count, $"{_role}: the car park has {cp?.Count ?? 0} sleeping car(s) of {cars.Count} bay cars");
-        Expect(cars.All(i => cp?.IsDrawn(i) == true), $"{_role}: every bay's car is drawn at first");
+        // a late joiner already has the car A woke as a vehicle: that bay's sleeper is never drawn (checked below)
+        Expect(cars.All(i => cp?.IsDrawn(i) == true || late && i == mine), $"{_role}: every bay's car is drawn at first");
         Expect(node.FindChild("Mesh", false, false) != null, $"{_role}: the interior itself is drawn");
         if (cp == null) { Fail("no HallCars node"); return; }
 
