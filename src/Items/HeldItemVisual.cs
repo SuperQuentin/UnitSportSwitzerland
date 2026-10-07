@@ -364,12 +364,16 @@ void fragment() {{
         }
 
         // --- on the figure ---
+        // a VR player's own gun is the one in the hand, pointing where the controller points (#460):
+        // there is no viewmodel to aim down, and a second gun stuck before the eyes was
+        bool vrGun = XR.XrSession.Active && Weapons.Get(id) != null && _player.IsMultiplayerAuthority();
         if (_player.HandLocal is { } hand && any)
         {
             _inHand.Visible = true;
             // the wrist is the end of the arm, so the grip sits a hand's length past it
             _inHand.Scale = Vector3.One * ItemScale;
-            _inHand.Transform = new Transform3D(hand.Basis, hand.Origin + hand.Basis * new Vector3(0, -0.05f, -0.03f))
+            var basis = vrGun && XR.XrSession.ItemHand is { } aim ? GlobalBasis.Inverse() * aim.Basis.Orthonormalized() : hand.Basis;
+            _inHand.Transform = new Transform3D(basis, hand.Origin + basis * new Vector3(0, -0.05f, -0.03f))
                 * RadioBounce(0.7f);
         }
         else _inHand.Visible = false;
@@ -378,7 +382,7 @@ void fragment() {{
 
         // --- in front of the local camera ---
         if (!_player.IsMultiplayerAuthority()) return;
-        bool firstPerson = _player.IsFirstPerson || _player.ScopeView;
+        bool firstPerson = (_player.IsFirstPerson || _player.ScopeView) && !vrGun;
         StepShot(dt);
         EnsureViewmodel();
         if (_viewmodel == null) return;
