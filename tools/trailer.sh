@@ -29,7 +29,10 @@ if [ -z "${CHUNKS:-}" ]; then
   fi
 fi
 
-[ -f "$song" ] || curl -fsSL -o "$song" "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Voxel%20Revolution.mp3"
+# the song only for what plays or cuts it
+if [ "$mode" != stills ] && [ ! -f "$song" ]; then
+  curl -fsSL -o "$song" "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Voxel%20Revolution.mp3"
+fi
 
 log=()
 [ "${LOG:-}" = 1 ] && log=(--trailer-log)
