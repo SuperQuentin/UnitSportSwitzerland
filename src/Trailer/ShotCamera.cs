@@ -17,6 +17,9 @@ public sealed class ShotCamera
     public required Func<Spot, Vector3?> Place { get; init; }
     /// <summary>An actor's position and its flat travel direction, or null when it is not there.</summary>
     public required Func<int, (Vector3 At, Vector3 Ahead)?> Actor { get; init; }
+    /// <summary>A point on a shot's road: (route, arc, right, up), or null while it is not built.</summary>
+    public Func<string, Vector3, Vector3?> Road { get; init; } = (_, _) => null;
+
     /// <summary>The surface under a point, for keeping the eye above it.</summary>
     public required Func<Vector3, float?> Surface { get; init; }
 
@@ -80,7 +83,7 @@ public sealed class ShotCamera
         if (Surface(at) is { } ground && at.Y < ground + Clearance) at.Y = ground + Clearance;
         var forward = _look - at;
         if (forward.LengthSquared() < 1e-6f) forward = Vector3.Forward;
-        var basis = Basis.LookingAt(forward.Normalized(), Mathf.Abs(forward.Normalized().Y) > 0.999f ? Vector3.Back : Vector3.Up);
+        var basis = Basis.LookingAt(forward.Normalized(), Mathf.Abs(forward.Normalized().Y) > 0.999f ? Vector3.Forward : Vector3.Up);
         if (_shot.Shake > 0f)
         {
             // a slow handheld drift: three incommensurate sines per axis, never a jitter
@@ -106,6 +109,7 @@ public sealed class ShotCamera
             return from + dir * 2000f;
         }
         if (p.World is { } spot) return Place(spot);
+        if (p.Route is { } route) return Road(route, p.Offset);
         if (Actor(p.Actor) is not { } frame) return null;
         var right = frame.Ahead.Cross(Vector3.Up).Normalized();
         return frame.At + right * p.Offset.X + Vector3.Up * p.Offset.Y - frame.Ahead * p.Offset.Z;

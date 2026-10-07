@@ -39,6 +39,16 @@ public sealed record Pt
     public static Pt On(int actor, float right = 0f, float up = 1f, float back = 0f) =>
         new() { Actor = actor, Offset = new Vector3(right, up, back) };
 
+    /// <summary>
+    /// On the shot's road <paramref name="route"/>, <paramref name="arc"/> m along it (counted like
+    /// <see cref="Cast.Arc"/>), <paramref name="right"/> m to the right of its way, <paramref name="up"/> m
+    /// over the ground: a camera at a bend the cars will reach.
+    /// </summary>
+    public static Pt Road(string route, float arc, float right = 0f, float up = 1.5f) =>
+        new() { Route = route, Offset = new Vector3(right, up, arc) };
+
+    public string? Route { get; private init; }
+
     /// <summary>A look along a compass bearing (0 north, 90 east), pitched up (+) or down (−), degrees.</summary>
     public static Pt Dir(float bearing, float pitch = 0f) => new() { Bearing = bearing, Pitch = pitch };
 
@@ -105,8 +115,12 @@ public sealed record Cast
 
     public Func<double, RideInput>? Controls { get; init; }
     public Func<double, FlightInput>? Flight { get; init; }
-    /// <summary>Metres a second along <see cref="Heading"/> when launched (<see cref="Drive.Fly"/>).</summary>
+    /// <summary>Metres a second along <see cref="Heading"/> when launched (<see cref="Drive.Fly"/>), or put on the water.</summary>
     public float Launch { get; init; }
+    /// <summary>Launched climbing (+) or diving (−) this many degrees.</summary>
+    public float Climb { get; init; }
+    /// <summary>A trailer coupled behind its truck (<see cref="TrailerCatalog"/> index), −1 = none.</summary>
+    public int Trailer { get; init; } = -1;
     /// <summary>On foot: a wish in its own frame (x right, y ahead, length ≤ 1) and whether it runs.</summary>
     public Func<double, (Vector2 Wish, bool Run)>? Walk { get; init; }
 
@@ -123,10 +137,23 @@ public sealed record Cast
     public byte Doors { get; init; }
     /// <summary>A boat: a dry spot to get in at, before it is put on the water at <see cref="At"/>.</summary>
     public Spot? Board { get; init; }
+    /// <summary>A boat: how deep its body is put under the surface, m (the steamer floats at 1.6).</summary>
+    public float Draught { get; init; } = 0.2f;
 }
 
-/// <summary>A plain box standing on the ground (a wall to crash into), <paramref name="Bearing"/> its long side's normal.</summary>
-public sealed record Prop(Spot At, float Bearing, Vector3 Size, Color Colour);
+/// <summary>
+/// A plain box standing on the ground (a wall to crash into), <paramref name="Bearing"/> its long
+/// side's normal; or, with <see cref="Actor"/>, <see cref="Ahead"/> m in front of that actor once it
+/// is placed, square across its way; or across a road at an arc.
+/// </summary>
+public sealed record Prop(Spot At, float Bearing, Vector3 Size, Color Colour)
+{
+    public int Actor { get; init; } = -1;
+    public float Ahead { get; init; }
+    /// <summary>Or on the shot's road <see cref="Route"/>, <see cref="Arc"/> m along it, square across it.</summary>
+    public string? Route { get; init; }
+    public float Arc { get; init; }
+}
 
 /// <summary>
 /// One shot of the trailer: where and when, who is in it, how the camera moves, what it says.

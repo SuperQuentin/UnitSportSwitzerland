@@ -31,7 +31,7 @@ namespace UnitSport.Trailer;
 /// </summary>
 public partial class TrailerDirector : Node
 {
-    public static bool Requested => CmdArgs.Has("--trailer");
+    public static bool Requested => CmdArgs.Has("--trailer") || CmdArgs.Has("--trailer-scout");
 
     /// <summary>Runs a chat line (<c>/style cartoon</c>); the client world sends it to its chat.</summary>
     public System.Action<string>? RunCommand { get; set; }
@@ -78,12 +78,27 @@ public partial class TrailerDirector : Node
         _camera = camera;
         _chunks = chunks;
         _origin = origin;
-        _shots = Select(CmdArgs.Value("--trailer") ?? "all");
+        _shots = CmdArgs.Value("--trailer-scout") is { } scout ? Scout(scout) : Select(CmdArgs.Value("--trailer") ?? "all");
         _size = CmdArgs.Value("--trailer-size")?.Split('x') is [var w, var h] && int.TryParse(w, out int sw) && int.TryParse(h, out int sh)
             ? new Vector2I(sw, sh) : new Vector2I(1920, 1080);
         // the trailer drives itself: no tutorial cards, no hints
         ProcessPriority = 100;
     }
+
+    /// <summary>
+    /// "--trailer-scout E,N,H;E,N,H": a still looking straight down from H m over each spot, north
+    /// up, through a 24 mm lens (H/1080 m a pixel at 1920x1080), to read a place's layout off.
+    /// </summary>
+    private static List<Shot> Scout(string arg) =>
+        arg.Split(';').Select((spot, i) =>
+        {
+            var p = spot.Split(',').Select(v => double.Parse(v, CultureInfo.InvariantCulture)).ToArray();
+            return new Shot
+            {
+                Number = 100 + i, Name = $"scout {p[0]:F0},{p[1]:F0}", FromBar = 1, Bars = 1, Hour = 12, Preroll = 0,
+                Keys = [new Key(0, Pt.At(p[0], p[1], (float)p[2]), Pt.At(p[0], p[1], 0), 24)],
+            };
+        }).ToList();
 
     /// <summary>"all", "5", "5-9" or "5,7,12" (shot numbers).</summary>
     private static List<Shot> Select(string arg)
@@ -208,6 +223,7 @@ public partial class TrailerDirector : Node
             Place = PlaceSpot,
             Actor = i => i >= 0 && i < _actors.Count ? _actors[i].Frame : null,
             Surface = p => _chunks.TryGetSurface(p, out float g) ? g : null,
+            Road = (key, at) => _routes.Point(key, at, _chunks),
         };
         _settledFor = 0;
         _waitWall = 0;
@@ -235,6 +251,22 @@ public partial class TrailerDirector : Node
     private void Build(Prop prop)
     {
         var at = _origin.ToWorld(prop.At.E, prop.At.N, 0);
+        float bearing = prop.Bearing;
+        if (prop.Actor >= 0)
+        {
+            if (prop.Actor >= _actors.Count || _actors[prop.Actor].Body is not { } who) return;
+            var ahead = (-who.GlobalBasis.Z with { Y = 0 }).Normalized();
+            at = who.GlobalPosition + ahead * prop.Ahead;
+            bearing = Mathf.RadToDeg(Mathf.Atan2(ahead.X, -ahead.Z));
+        }
+        else if (prop.Route != null)
+        {
+            if (_routes.Point(prop.Route, new Vector3(0f, 0f, prop.Arc), _chunks) is not { } on
+                || _routes.Point(prop.Route, new Vector3(0f, 0f, prop.Arc + 3f), _chunks) is not { } next) return;
+            at = on;
+            var along = (next - on) with { Y = 0 };
+            bearing = Mathf.RadToDeg(Mathf.Atan2(along.X, -along.Z));
+        }
         float g = _chunks.TryGetHeight(at, out float h) ? h : 0f;
         var body = new StaticBody3D { Name = $"Prop{_props.Count}" };
         body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = prop.Size } });
@@ -244,7 +276,7 @@ public partial class TrailerDirector : Node
             MaterialOverride = new StandardMaterial3D { AlbedoColor = prop.Colour, Roughness = 0.9f },
         });
         AddChild(body);
-        float b = Mathf.DegToRad(prop.Bearing);
+        float b = Mathf.DegToRad(bearing);
         var face = new Vector3(Mathf.Sin(b), 0f, -Mathf.Cos(b));
         body.GlobalTransform = new Transform3D(Basis.LookingAt(face, Vector3.Up), at with { Y = g + prop.Size.Y * 0.5f - 0.3f });
         _props.Add(body);
@@ -285,7 +317,7 @@ public partial class TrailerDirector : Node
         GD.Print($"[trailer] shot {shot.Number}: ground in after {Wall():F1} s, placing {shot.Cast.Count} actor(s)");
         for (int i = 0; i < shot.Cast.Count; i++)
             _actors.Add(new Actor(shot.Cast[i], i, this, _chunks, _origin, _routes));
-        foreach (var prop in shot.Props) Build(prop);
+        foreach (var prop in shot.Props.Where(p => p.Actor < 0 && p.Route == null)) Build(prop);
         Enter(Phase.Place);
     }
 
@@ -304,6 +336,7 @@ public partial class TrailerDirector : Node
             GD.PrintErr($"[trailer] shot {shot.Number}: actor {a.Index} ({a.Spec.Ride}) left out: {a.Failed ?? why}");
             _failures++;
         }
+        foreach (var prop in shot.Props.Where(p => p.Actor >= 0 || p.Route != null)) Build(prop);
         foreach (var a in _actors) a.Go(Others);
         _preroll = 0;
         _shotCamera!.Reset();
@@ -340,7 +373,8 @@ public partial class TrailerDirector : Node
             clock.Hour = shot.Hour;
             clock.DayLengthOverride = shot.MinutesPerDay ?? 60000f;
         }
-        _framesWanted = (int)System.Math.Round(shot.Length * _fps);
+        // from the song's clock, not the shot's length: every cut stays within a frame of its bar line
+        _framesWanted = (int)System.Math.Round(shot.End * _fps) - (int)System.Math.Round(shot.Start * _fps);
         if (_recordDir != null)
         {
             string path = Path.Combine(_recordDir, $"shot{shot.Number:00}.mp4");

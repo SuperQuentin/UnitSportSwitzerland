@@ -60,8 +60,10 @@ public partial class Captions : CanvasLayer
             {
                 Font = font,
                 FontColor = Colors.White,
-                ShadowColor = new Color(0, 0, 0, 0.55f),
-                ShadowSize = 6,
+                OutlineColor = new Color(0, 0, 0, 0.45f),
+                OutlineSize = 6,
+                ShadowColor = new Color(0, 0, 0, 0.5f),
+                ShadowSize = 10,
                 ShadowOffset = new Vector2(0, 3),
             },
         };

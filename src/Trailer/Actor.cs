@@ -90,13 +90,14 @@ public sealed class Actor
             if (Spec.Setup != 0) Body.SetCarSetup(Spec.Setup);
             if (Body.Vehicle is Car car) car.Headlights = Spec.Lights;
             Body.DoorsOpen = Spec.Doors;
+            if (Spec.Trailer >= 0 && !Body.SpawnTrailer(Spec.Trailer, 1f)) GD.PrintErr($"[trailer] actor {Index}: trailer {Spec.Trailer} refused");
         }
         if (Boat && !_afloat)
         {
             // got in on the shore: now on the water at its spot
             var at = _origin.ToWorld(Spec.At.E, Spec.At.N, 0);
             if (!World.WaterField.TryLevelAt(at, out float level)) return;
-            Body.PlaceBoat(at with { Y = level - 0.2f }, -Mathf.DegToRad(Spec.Heading),
+            Body.PlaceBoat(at with { Y = level - Spec.Draught }, -Mathf.DegToRad(Spec.Heading),
                 Forward(Spec.Heading) * Spec.Launch);
             _afloat = true;
         }
@@ -106,7 +107,8 @@ public sealed class Actor
             float floor = _chunks.TryGetSurface(at, out float g) ? g : Body.GlobalPosition.Y;
             float y = Spec.At.Agl ? floor + Spec.At.H : Spec.At.H;
             Body.Rotation = new Vector3(0, -Mathf.DegToRad(Spec.Heading), 0);
-            Body.DebugLaunch(at with { Y = y }, Forward(Spec.Heading) * Spec.Launch);
+            float climb = Mathf.DegToRad(Spec.Climb);
+            Body.DebugLaunch(at with { Y = y }, (Forward(Spec.Heading) * Mathf.Cos(climb) + Vector3.Up * Mathf.Sin(climb)) * Spec.Launch);
             _launched = true;
         }
         if (_route != null && Spec.Drive == Drive.Road)
@@ -115,6 +117,9 @@ public sealed class Actor
             if (_pilot == null) { Failed = $"no autopilot for {Spec.Ride}"; return; }
             _pilot.Temperament(Spec.Skill, Spec.Aggression, 4000 + Index);
             _pilot.Go = false;
+            // the pilot looks for its place on the line forward from the start: one put down along a
+            // zigzag would stop at the leg before, metres away, and drive that one
+            _pilot.D.Near = _route.Line.IndexAt(_arc);
         }
         Body.DanceId = Spec.Dance;
         Body.HeldItemId = Spec.Item;
@@ -303,5 +308,18 @@ public sealed class RouteBook
     }
 
     public RaceRoute? Route(string key) => _routes.TryGetValue(key, out var e) ? e.Route : null;
+
+    /// <summary>A point on road <paramref name="key"/>: <c>at.Z</c> m along it from its spot, <c>at.X</c> to the right, <c>at.Y</c> over the ground.</summary>
+    public Vector3? Point(string key, Vector3 at, ChunkManager chunks)
+    {
+        if (Route(key) is not { } route) return null;
+        float s = Mathf.Clamp(StartArc(key) + at.Z, 0f, route.Line.Length);
+        var p = route.Line.PointAt(s);
+        var fwd = MathX.Flat(route.Line.PointAt(s + 2f) - route.Line.PointAt(Mathf.Max(0f, s - 2f))).Normalized();
+        var right = fwd.Cross(Vector3.Up).Normalized();
+        p += right * at.X;
+        float g = chunks.TryGetSurface(p, out float h) ? h : p.Y;
+        return p with { Y = Mathf.Max(g, p.Y) + at.Y };
+    }
     public float StartArc(string key) => _routes.TryGetValue(key, out var e) ? e.Start : 0f;
 }
