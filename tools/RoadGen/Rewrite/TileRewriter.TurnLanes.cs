@@ -1923,7 +1923,8 @@ public static partial class TileRewriter
             // an angled closing line (#700, a lead-in hatch's near end): from the centre line at near, back along the road to the
             // border slant metres further out, so the pocket opens from its right side; s = metres along per metre across
             double width = border(wideEnd);
-            double s = wideEnd == near && slant > 0 ? slant / width : 0;
+            // the line runs to the border slant m on, where the hatch may already be narrower than at its widest (on the taper)
+            double s = wideEnd == near && slant > 0 ? slant / Math.Max(0.1, border(near + slant)) : 0;
             double outer = near + slant * (s > 0 ? 1 : 0);   // where the border starts
             void Solid(List<float> line) => paint.Add(new RoadPaint
             {
