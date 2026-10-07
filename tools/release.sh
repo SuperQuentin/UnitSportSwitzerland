@@ -24,7 +24,7 @@ OUT=test_output/release; mkdir -p "$OUT"
 # The exports run dotnet publish; reused MSBuild nodes outlive it holding Godot's console pipe, so the export never returns
 export MSBUILDDISABLENODEREUSE=1
 
-if [ $CI = 0 ]; then
+if [ $CI = 0 ] && [ $ANDROID_ONLY = 0 ]; then # an APK check builds any branch, it never releases
   [ "$(git branch --show-current)" = main ] || { echo "Not on main"; exit 1; }
   git fetch -q origin --tags
   [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || { echo "main is not in sync with origin/main (push or pull first)"; exit 1; }
