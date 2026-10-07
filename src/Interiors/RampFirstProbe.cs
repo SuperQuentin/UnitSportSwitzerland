@@ -34,12 +34,16 @@ public partial class RampFirstProbe : Node
         public string Key = "", Type = "", Plan = "";
         public float W, D, H;
         public int Above, FrontDoors;
-        public bool Wing, Road, TooSmall, Door, Locked, Valid;
+        public bool Wing, Road, TooSmall, Door, Locked, Valid, PlainBad, PlainChecked;
         public GarageRule.RampKind Kind;
         public TileId Tile;
         public int Index;
         public float DoorX;
         public int Bays;
+        /// <summary>For a wing-planned block: how many wings, and the largest one's sides (plan frame X, Z), m; and whether either way round it takes a ramp.</summary>
+        public int WingCount;
+        public float WingW, WingD;
+        public GarageRule.RampKind WingKind;
     }
 
     public override void _Ready()
@@ -85,6 +89,14 @@ public partial class RampFirstProbe : Node
                     var outward = new Vector2(fp.Door.Outward.X, fp.Door.Outward.Z);
                     r.Wing = !BuildingFootprint.PlannedAsBox(b, box.Center, box.AxisU, outward, box.Width, box.Depth);
                     r.TooSmall = fp.Width * fp.Depth < MinArea;
+                    if (r.Wing && PlanOutline.Wings(b, fp.Center, fp.AxisU, Mathf.Clamp(fp.Width, BuildingFootprint.MinSide, BuildingFootprint.MaxSide), Mathf.Clamp(fp.Depth, BuildingFootprint.MinSide, BuildingFootprint.MaxSide)) is { Count: >= 1 } wl)
+                    {
+                        r.WingCount = wl.Count;
+                        var big = wl.OrderByDescending(x => (x.X1 - x.X0) * (x.Z1 - x.Z0)).First();
+                        r.WingW = big.X1 - big.X0; r.WingD = big.Z1 - big.Z0;
+                        var k1 = GarageRule.KindOf(above, r.WingW, r.WingD, storeyH); var k2 = GarageRule.KindOf(above, r.WingD, r.WingW, storeyH);
+                        r.WingKind = k1 != GarageRule.RampKind.None ? k1 : k2;
+                    }
                     r.Kind = GarageRule.KindOf(above, fp.Width, fp.Depth, storeyH);
                     var back = new Vector2(-fp.AxisU.Y, fp.AxisU.X);
                     var wallMid = fp.Center - back * (fp.Depth / 2);
@@ -94,6 +106,15 @@ public partial class RampFirstProbe : Node
                     var gd = fp.Extra.FirstOrDefault(d => d.Vehicle && d.Link.Any);
                     r.Door = fp.Extra.Any(d => d.Vehicle && d.Link.Any);
                     if (!r.Door && r.Kind != GarageRule.RampKind.None && !r.Wing) r.Plan = "no door: " + (BuildingFootprint.GarageWhyNot ?? "not attempted");
+                    if (!r.Door && !r.Wing && CmdArgs.Has("--rampfirst-all") && i % 5 == 0)
+                    {
+                        // a block with no garage, for the baseline: how many of every plan fail the validator (kitchens 1 m wide and the like)
+                        bool saved = GarageRule.AlwaysRolls; GarageRule.AlwaysRolls = false;
+                        if (InteriorGenerator.Generate(tile, i, roads, null) is { } plain && InteriorValidator.Validate(plain) is { Count: > 0 } bad)
+                        { r.Plan = "plain invalid: " + bad[0]; r.PlainBad = true; }
+                        GarageRule.AlwaysRolls = saved;
+                        r.PlainChecked = true;
+                    }
                     if (r.Door)
                     {
                         r.DoorX = new Vector2(gd.Position.X - fp.Center.X, gd.Position.Z - fp.Center.Y).Dot(fp.AxisU);
@@ -147,6 +168,10 @@ public partial class RampFirstProbe : Node
         foreach (var k in new[] { GarageRule.RampKind.Square, GarageRule.RampKind.Along, GarageRule.RampKind.None })
             P($"  {k,-8}{gated.Count(r => r.Kind == k),6} = {Pct(gated.Count(r => r.Kind == k), gated.Count)} of gate-passing, {Pct(gated.Count(r => r.Kind == k), N)} of all");
         P("");
+        var wingRows = rows.Where(r => r.Wing).ToList();
+        P($"Wing-planned blocks: {wingRows.Count}; by wings: " + string.Join(", ", wingRows.GroupBy(r => Math.Min(r.WingCount, 4)).OrderBy(g => g.Key).Select(g => $"{(g.Key >= 4 ? "4+" : g.Key.ToString())} wing(s) {g.Count()}")));
+        var wingOk = wingRows.Where(r => r.WingKind != GarageRule.RampKind.None).ToList();
+        P($"  whose largest wing would take a ramp (either way round, any road, any roll): {wingOk.Count} = {Pct(wingOk.Count, N)} of all blocks (Square {wingOk.Count(r => r.WingKind == GarageRule.RampKind.Square)}, Along {wingOk.Count(r => r.WingKind == GarageRule.RampKind.Along)}); single wing {wingOk.Count(r => r.WingCount == 1)}, several {wingOk.Count(r => r.WingCount > 1)}");
         P($"Doors the footprint places with every roll passing: {doors.Count} = {Pct(doors.Count, N)} of all blocks");
         foreach (var k in new[] { GarageRule.RampKind.Square, GarageRule.RampKind.Along })
             P($"  {k,-8}{doors.Count(r => r.Kind == k),6}  (the box takes it: {gated.Count(r => r.Kind == k)}; the rest: no wall for the door, no link)");
@@ -162,6 +187,7 @@ public partial class RampFirstProbe : Node
             var bays = doors.Where(r => r.Kind == k && !r.Locked).Select(r => r.Bays).OrderBy(x => x).ToList();
             if (bays.Count > 0) P($"  {k} car park bays: min {bays[0]}, median {bays[bays.Count / 2]}, max {bays[^1]}, under 4: {bays.Count(x => x < 4)}");
         }
+        if (rows.Any(r => r.PlainChecked)) P($"Plans without a garage, validator: {rows.Count(r => r.PlainBad)} invalid of {rows.Count(r => r.PlainChecked)} checked (every fifth block)");
         P($"Roll share {GarageRule.Share:F2} (mixed {GarageRule.MixedRollShare:F2}): expected garage doors {exp:F0} = {100.0 * exp / N:F2} % of all blocks");
         P($"Roll share that gives 4 % of all blocks: {0.04 * N / Math.Max(1, doors.Count):F2}");
         P("Why gate-passing blocks take no ramp: "
