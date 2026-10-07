@@ -1,6 +1,6 @@
 using System.Diagnostics;
-using System.Net.Http;
 using Godot;
+using HttpClient = System.Net.Http.HttpClient;
 using UnitSport.Core;
 
 namespace UnitSport.Net;
