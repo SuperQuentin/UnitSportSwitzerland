@@ -252,6 +252,7 @@ public static partial class TileRewriter
             ? OsmNodesReader.TryLoad(Path.Combine(Path.GetDirectoryName(nodesBeside) ?? ".", OsmNodesReader.FileName)) : null;
         var signalSites = SignalSites.From(osmNodes);
         var restrictions = Restrictions.From(osmNodes);   // turns forbidden at an approach (#353)
+        var crossingNodes = CrossingNodes.From(osmNodes);   // pedestrian crossings (#700)
         if (signalSites is not null) log($"  OSM traffic signals: {signalSites.Count:N0} junction signals");
         if (overlay is not null) log($"  OSM overlay: {overlay.RowCount:N0} rows from {options.OsmOverlay}");
 
@@ -264,7 +265,7 @@ public static partial class TileRewriter
             Grid = id => LoadGrid(chunkDir, id),
             Buildings = id => Facades.Read(chunkDir, id),
             Parking = id => RawParking.Read(parkDir, id),
-            Overlay = overlay, Cantons = cantons, SignalSites = signalSites, Restrictions = restrictions,
+            Overlay = overlay, Cantons = cantons, SignalSites = signalSites, Restrictions = restrictions, Crossings = crossingNodes,
         });
 
         int blockIndex = 0;
@@ -321,6 +322,7 @@ public static partial class TileRewriter
         internal Cantons? Cantons { get; init; }
         internal SignalSites? SignalSites { get; init; }
         internal Restrictions? Restrictions { get; init; }
+        internal CrossingNodes? Crossings { get; init; }
     }
 
     /// <summary>
@@ -361,6 +363,7 @@ public static partial class TileRewriter
             var cantons = inputs.Cantons;
             var signalSites = inputs.SignalSites;
             var restrictions = inputs.Restrictions;
+            var crossingNodes = inputs.Crossings;
             var built = new List<RoadTile>();
 
             var context = WithHalo(block, options.Halo);
@@ -643,7 +646,8 @@ public static partial class TileRewriter
                 var stopsAt = new Dictionary<(int Link, LinkEnd End), double>();
                 var signalPlans = new Dictionary<int, (SignalPlan Plan, int[] PlanArm)>();
                 EmitSignals(priority, result, pockets, BikeSideAt, block, wanted, paint, signalRecords, cantons, field, buildings, islands, signs, netStats.Signals,
-                    approachRecords, restrictions, netStats.Lanes, stopsAt, signalPlans, StreetSideAt);
+                    approachRecords, restrictions, netStats.Lanes, stopsAt, signalPlans, StreetSideAt, crossingNodes);
+                netStats.Signals.DataCrossings += EmitDataCrossings(priority, result, pockets, crossingNodes, block, wanted, paint, islands, netStats.Signals, StreetSideAt);
                 EmitRightLanes(pockets, paint, bikeBetween, netStats.TurnLanes);
                 EmitPocketApproaches(priority, result, pockets, approachRecords, restrictions, netStats.Lanes);
 

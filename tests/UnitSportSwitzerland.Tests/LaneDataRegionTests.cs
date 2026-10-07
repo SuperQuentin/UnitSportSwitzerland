@@ -140,4 +140,41 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
         Assert.False(Paved(tile, cx + 7, cz - 5), "the north-east corner is paved past its edges: still rounded");
         Assert.True(Paved(tile, cx - 7, cz - 5), "the north-west corner should keep its kerb arc");
     }
+
+    /// <summary>The zebras (yellow bar triangles) within <paramref name="radius"/> m of a point, each as its bars' corner points.</summary>
+    private static List<List<(double X, double Z)>> Zebras(RoadTile tile, double cx, double cz, double radius) =>
+        tile.Paint.Where(p => p.Type == PaintType.YellowSolid && p.Shape == PaintShape.Triangles)
+            .Select(p => Enumerable.Range(0, p.Vertices.Length / 3).Select(i => ((double)p.Vertices[i * 3], (double)p.Vertices[i * 3 + 2])).ToList())
+            .Where(pts => pts.All(q => Math.Abs(q.Item1 - cx) < radius && Math.Abs(q.Item2 - cz) < radius)).ToList();
+
+    [Fact]
+    public void Marked_osm_crossings_get_zebras_and_unmarked_ones_none()
+    {
+        // the T 52 m south of J3, without lights: zebras on the stem (north) and the west arm, none on the east arm (unmarked)
+        var j3 = region.Junction("J3-");
+        var id = TileId.FromLv95(j3.E, j3.N - 52);
+        double cx = j3.E - id.MinE, cz = id.MaxN - (j3.N - 52);
+        var zebras = Zebras(region.Tile(j3.E, j3.N - 52), cx, cz, 25);
+        Assert.Equal(2, zebras.Count);
+        Assert.Contains(zebras, z => z.Average(q => q.Z) < cz - 3);   // on the stem, north of the T
+        Assert.Contains(zebras, z => z.Average(q => q.X) < cx - 3);   // on the west arm
+        Assert.DoesNotContain(zebras, z => z.Average(q => q.X) > cx + 3);
+    }
+
+    [Fact]
+    public void A_crossing_beside_a_tight_corner_runs_diagonal_at_most_30_degrees()
+    {
+        // J7 has no sidewalks: its zebras come from the data, on the north and east arms beside the tight north-east corner
+        var j = region.Junction("J7");
+        var id = TileId.FromLv95(j.E, j.N);
+        double cx = j.E - id.MinE, cz = id.MaxN - j.N;
+        var zebras = Zebras(region.Tile(j.E, j.N), cx, cz, 45);
+        Assert.Equal(2, zebras.Count);
+        // the north arm's: its bars run north-south; the band's ends differ along the arm by up to tan 30 deg x its width
+        var north = zebras.Single(z => z.Average(q => q.Z) < cz - 8);
+        double west = north.Where(q => q.X < cx - 4).Average(q => q.Z), east = north.Where(q => q.X > cx + 4).Average(q => q.Z);
+        double span = north.Max(q => q.X) - north.Min(q => q.X);
+        Assert.True(east - west > 2, $"not diagonal: {east - west:F1} m");   // nearer the junction (south, larger z) on the tight east side
+        Assert.True(east - west <= Math.Tan(Math.PI / 6) * span + 0.6, $"more than 30 degrees: {east - west:F1} m over {span:F1} m");
+    }
 }

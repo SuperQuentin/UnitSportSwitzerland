@@ -78,6 +78,8 @@ public static partial class TileRewriter
         public int Poles, PolesRejected, SignsOnPoles, BikeSignals, Crossings, PathStopLines;
         /// <summary>Dashed lines through a junction between two lanes with the same turn (#700).</summary>
         public int PairGuides;
+        /// <summary>Pedestrian crossings drawn from OSM crossing nodes (#700): at junctions without lights, and at lit arms with no sidewalk.</summary>
+        public int DataCrossings;
         public readonly List<string> InvalidExamples = new();
         /// <summary>Where the first inferred junctions are (LV95), to look at them (#353).</summary>
         public readonly List<string> InferredAt = new();
@@ -89,7 +91,7 @@ public static partial class TileRewriter
             var sb = new StringBuilder();
             sb.Append(c, $"    traffic lights (#348): {Junctions:N0} junctions ({Inferred:N0} inferred, {FromData:N0} from data), {Arms:N0} arms, {Approaches:N0} approaches, ");
             sb.Append(c, $"{LeftPockets:N0} with a left-turn pocket, {RightPockets:N0} with a right-turn pocket, {StopLines:N0} stop lines without a left pocket, {Groups:N0} signal groups, ");
-            sb.Append(c, $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key} x{kv.Value}"))}, invalid plans {Invalid:N0}, dashed lines through the junction between two lanes with the same turn {PairGuides:N0} (#700)").AppendLine();
+            sb.Append(c, $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key} x{kv.Value}"))}, invalid plans {Invalid:N0}, dashed lines through the junction between two lanes with the same turn {PairGuides:N0} (#700), crossings from OSM crossing nodes {DataCrossings:N0} (#700)").AppendLine();
             sb.Append(c, $"      where OSM decides, the inference rule agrees on {RuleAndOsm:N0}, adds {RuleOnly:N0} OSM does not have, misses {OsmOnly:N0}; {InternalArms:N0} arms inside a junction of several nodes; inferred at LV95 {string.Join(" ", InferredAt)}").AppendLine();
             sb.Append(c, $"      poles (#350) {Poles:N0}, rejected (no clear spot) {PolesRejected:N0}, priority signs moved onto a pole {SignsOnPoles:N0}, approaches with a bike signal {BikeSignals:N0} (#351)").AppendLine();
             foreach (var x in InvalidExamples) sb.Append("      invalid: ").Append(x).AppendLine();
@@ -193,7 +195,7 @@ public static partial class TileRewriter
         Dictionary<TileId, List<RoadAreaProp>> areas, Dictionary<TileId, List<RoadPointProp>> signs, SignalStats stats,
         Dictionary<TileId, List<RoadApproach>> approaches, Restrictions? restrictions, LaneStats laneStats,
         Dictionary<(int Link, LinkEnd End), double> stopsAt, Dictionary<int, (SignalPlan Plan, int[] PlanArm)> plans,
-        Func<int, LinkEnd, bool, RoadSide> streetSideAt)
+        Func<int, LinkEnd, bool, RoadSide> streetSideAt, CrossingNodes? crossings = null)
     {
         var net = result.Network;
         PriorityPlanner.Clearance? clearance = null;
@@ -268,9 +270,13 @@ public static partial class TileRewriter
                 {
                     var streetRight = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, drawnRight);
                     var streetLeft = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
-                    if (crosswalk = streetRight.SidewalkDm > 0 || streetLeft.SidewalkDm > 0)   // a crosswalk only where there is a sidewalk (#682)
+                    // a crosswalk where there is a sidewalk (#682), or where OSM maps a marked crossing on the arm (#700)
+                    bool osmCrossing = crossings?.OnArm(junction, i, net) is not null;
+                    if (osmCrossing && streetRight.SidewalkDm == 0 && streetLeft.SidewalkDm == 0) stats.DataCrossings++;
+                    if (crosswalk = streetRight.SidewalkDm > 0 || streetLeft.SidewalkDm > 0 || osmCrossing)
                         EmitCrossing(paint, source, mid, u, right, MouthSkew(junction, arm) + SignalStopSetback, -(half + (pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0)), to, streetRight, streetLeft, areas, stats,
-                            pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } edgeWay, ExitFar: false } ? s => (edgeWay.OuterEdge(Math.Max(s, 0)).P - (mid + u * s)).Dot(right) : null);
+                            pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } edgeWay, ExitFar: false } ? s => (edgeWay.OuterEdge(Math.Max(s, 0)).P - (mid + u * s)).Dot(right) : null,
+                            insetLeft: junction.KerbInset.GetValueOrDefault((i, false)), insetRight: junction.KerbInset.GetValueOrDefault((i, true)));   // diagonal beside a tight corner (#700)
                 }
                 // none on a link inside a junction of several nodes: its ends are the junction's own
                 var mainFlags = inside ? 0 : (approach ? SignalPoleFlags.Main : 0) | SignalPoleFlags.Pedestrian;

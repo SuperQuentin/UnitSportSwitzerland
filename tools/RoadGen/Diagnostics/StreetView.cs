@@ -168,9 +168,19 @@ public static class StreetView
                 }
             }
 
-            // bike paint (#120): lines and crossings as drawn, a symbol as a dot
+            // bike paint (#120): lines and crossings as drawn, a symbol as a dot; yellow triangles (zebras, #682/#700) filled
             foreach (var paint in tile.Paint)
             {
+                if (paint.Shape == PaintShape.Triangles && paint.Rgba == Meshing.PaintEmitter.Yellow)
+                {
+                    var tv = paint.Vertices;
+                    for (int k = 0; k + 2 < paint.Indices.Length; k += 3)
+                    {
+                        int i0 = paint.Indices[k] * 3, i1 = paint.Indices[k + 1] * 3, i2 = paint.Indices[k + 2] * 3;
+                        bikes.Append(c, $"<path d=\"M{X(id.MinE + tv[i0])} {Y(id.MaxN - tv[i0 + 2])}L{X(id.MinE + tv[i1])} {Y(id.MaxN - tv[i1 + 2])}L{X(id.MinE + tv[i2])} {Y(id.MaxN - tv[i2 + 2])}Z\" fill=\"#e6be33\"/>");
+                    }
+                    continue;
+                }
                 if ((paint.Type is not (PaintType.YellowDashed or PaintType.YellowSolid or PaintType.BikeCrossing or PaintType.BikeSymbol) && paint.Rgba != Meshing.PaintEmitter.Yellow) || paint.Shape != PaintShape.Polyline || paint.Vertices.Length < 6) continue;
                 var v = paint.Vertices;
                 var pts = new (double E, double N)[v.Length / 3];

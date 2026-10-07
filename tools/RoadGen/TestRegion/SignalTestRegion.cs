@@ -50,7 +50,10 @@ public static class SignalTestRegion
     /// <summary>An OSM row over part of a line (#700): metres along it, and the lane columns it carries (turn lanes in the line's drawing direction).</summary>
     private sealed record OsmRow(double From, double To, string Lanes = "", string LanesFwd = "", string LanesBwd = "", string TurnFwd = "", string TurnBwd = "");
 
-    private sealed record Design(List<Line> Lines, List<Box> Buildings, List<Junction> Junctions);
+    /// <summary>An OSM <c>highway=crossing</c> node (#700) on a line, metres along it, with its <c>crossing=*</c> value.</summary>
+    private sealed record CrossingNode(string LineId, double Along, string Value);
+
+    private sealed record Design(List<Line> Lines, List<Box> Buildings, List<Junction> Junctions, List<CrossingNode> Crossings);
 
     // ---- the design ----------------------------------------------------------------------------
 
@@ -171,7 +174,14 @@ public static class SignalTestRegion
             Rows: [new OsmRow(0, 400, Lanes: "4")]));
         junctions.Add(new Junction("J7-double-left", j7, n, "a double left pocket from lanes:forward=3 and turn:lanes; no left pocket where OSM marks none",
             Arms("L|L|TR", "T", "LTR|LTR", "LTR|LTR")));
-        return new Design(lines, boxes, junctions);
+        // pedestrian crossings from OSM (#700): J7 is lit and has no sidewalks, so only the data draws its zebras, the ones beside
+        // the tight north-east corner diagonal; the T south of J3 has no lights: zebras on two arms, the unmarked one on its east arm none
+        var crossings = new List<CrossingNode>
+        {
+            new("A13", 8, "zebra"), new("J7N", 8, "zebra"),
+            new("J3S", 6, "zebra"), new("J3D0", 294, "marked"), new("J3D1", 6, "unmarked"),
+        };
+        return new Design(lines, boxes, junctions, crossings);
     }
 
     // ---- build ---------------------------------------------------------------------------------
@@ -395,6 +405,22 @@ public static class SignalTestRegion
         return dense;
     }
 
+
+    /// <summary>The point <paramref name="along"/> metres along a line.</summary>
+    private static (double E, double N) PointAlong(Line line, double along)
+    {
+        for (int i = 1; i < line.Points.Length; i++)
+        {
+            double d = Dist(line.Points[i - 1], line.Points[i]);
+            if (along <= d || i == line.Points.Length - 1)
+            {
+                double t = d < 1e-9 ? 0 : Math.Clamp(along / d, 0, 1);
+                return (line.Points[i - 1].E + (line.Points[i].E - line.Points[i - 1].E) * t, line.Points[i - 1].N + (line.Points[i].N - line.Points[i - 1].N) * t);
+            }
+            along -= d;
+        }
+        return line.Points[^1];
+    }
     private static double Length(Line line)
     {
         double total = 0;
@@ -442,6 +468,17 @@ public static class SignalTestRegion
         sb.Append(inv, $"# osm_nodes v1 {FileTag} bbox={MinTileE * 1000},{MinTileN * 1000},{(MaxTileE + 1) * 1000},{(MaxTileN + 1) * 1000} synthetic (#386)\n");
         sb.Append("kind\tosm_id\te\tn\tuuid\tpart\talong_m\tjunction\tline_end\tend_e\tend_n\tdir\tvalue\tto_uuid\tto_part\tto_end\ttags\n");
         foreach (var (_, text) in rows.OrderBy(r => r.Uuid, StringComparer.Ordinal)) sb.Append(text);
+        // the crossing nodes (#700): on their line, an approach to the line end within 30 m
+        long crossingId = 386500;
+        foreach (var c in design.Crossings.OrderBy(c => design.Lines.First(l => l.Id == c.LineId).Uuid, StringComparer.Ordinal))
+        {
+            var line = design.Lines.First(l => l.Id == c.LineId);
+            double length = Length(line);
+            var (e, nn) = PointAlong(line, c.Along);
+            bool atEnd = length - c.Along < c.Along;
+            var end = atEnd ? line.Points[^1] : line.Points[0];
+            sb.Append(inv, $"crossing\t{++crossingId}\t{e:F1}\t{nn:F1}\t{line.Uuid}\t0\t{c.Along:F1}\tapproach\t{(atEnd ? "end" : "start")}\t{end.E:F1}\t{end.N:F1}\t\t{c.Value}\t\t\t\thighway=crossing;crossing={c.Value}\n");
+        }
         File.WriteAllText(Path.Combine(tempDir, OsmNodesReader.FileName), sb.ToString());
     }
 
