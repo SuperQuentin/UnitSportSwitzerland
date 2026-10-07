@@ -376,6 +376,21 @@ public static class KartMeshBuilder
             yield return ($"{Liveries[i].Name} no. {NumberOf(seed)}", () => CarRig.Create(Dress(spec.Body, seed), spec.Wheelbase, spec.Gauges,
                 HumanPalette.ForRider(seed)));
         }
+        // what it does at the limit: over on its side, and the inside rear wheel of a hard corner in the air
+        yield return ("tipped over", () =>
+        {
+            var rig = CarRig.Create(Dress(spec.Body, 5), spec.Wheelbase, spec.Gauges, HumanPalette.ForRider(5));
+            rig.Tip = 1f;
+            return rig;
+        });
+        yield return ("cornering on three wheels", () =>
+        {
+            var rig = CarRig.Create(Dress(spec.Body, 2), spec.Wheelbase, spec.Gauges, HumanPalette.ForRider(2));
+            rig.Lift = 1f;
+            rig.WheelTurn = 1.2f;
+            rig.SteerAngle = 0.3f;
+            return rig;
+        });
         foreach (int seed in new[] { 1, 2, 3 })
             yield return ($"Army {MilitaryPlate(seed)}", () => CarRig.Create(Army(spec.Body, seed), spec.Wheelbase, spec.Gauges,
                 HumanPalette.ForRider(seed)));
