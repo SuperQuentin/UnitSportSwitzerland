@@ -191,6 +191,13 @@ public partial class ClientWorld : Node3D, IOriginContainer
             AddChild(new Interiors.SiteProbe(siteCheck.Shot) { Name = "SiteProbe" });
             return;
         }
+        // ramp-first garage survey over real tiles (#694): reads the tile files itself, no terrain system
+        if (Interiors.RampFirstProbe.ParseArgs() is { Requested: true } rampFirst)
+        {
+            MouseCapture.Disabled = true;
+            AddChild(new Interiors.RampFirstProbe(rampFirst.Shot) { Name = "RampFirstProbe" });
+            return;
+        }
         // a hand-made church whose radio plays the chess type beat (#370): no terrain, no server
         if (Interiors.ChurchStageProbe.ParseArgs() is { Requested: true } churchStage)
         {

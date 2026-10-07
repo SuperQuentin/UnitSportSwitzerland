@@ -174,3 +174,7 @@ roll changes that. Two fixes found on the way, both pre-existing and made visibl
   footprint now refuses those; **1 door in 2963 blocks remains, and it has a ramp, no validator problems**.
   That is rarer than the 0.3 % guessed in #558: most real blocks with three entrances are neither whole
   rectangles nor 17 m deep.
+
+- **Ramp-first survey (#694)**: `--rampfirst,test_output/rampfirst.txt --chunks <terrain_chunks>` (`RampFirstProbe`, headless, no window, about 40 s
+  over 626 building tiles). Reads the tiles itself and prints, for every block of flats or shops under flats, how many a ramp square to the
+  front wall, or running along the facade, would fit (stairwell and car park of a few bays included) and why the rest fail. Real-data only, in no tier.

@@ -252,6 +252,9 @@ public static class BuildingFootprint
     public static Footprint? Compute(BuildingTile tile, int index, RoadTile? roads, ChunkGrid? grid) =>
         Compute(tile, index, (RoadPoints.Build(roads), RoadPoints.Build(roads, paths: true)), grid);
 
+    /// <summary>A tile's street centrelines as a garage door's road link reads them (#694 probe).</summary>
+    internal static List<GarageLink.Road> StreetRoads(RoadTile? roads) => RoadPoints.Build(roads).Roads;
+
     /// <summary>The street point a front door here would face, as <see cref="Compute"/> aims doors.</summary>
     public static Vector2? StreetNear(RoadTile? roads, Vector2 at) =>
         RoadPoints.Build(roads).Nearest(at, 60f) ?? RoadPoints.Build(roads, paths: true).Nearest(at, 40f);
@@ -665,7 +668,7 @@ public static class BuildingFootprint
     /// Whether the generator plans this building as its one box and not wing by wing (<see cref="PlanOutline"/>
     /// on the same frame <c>Compute</c> ends with): a garage's ramp (#558) is planned only in a whole block.
     /// </summary>
-    private static bool PlannedAsBox(Building b, Vector2 center, Vector2 u, Vector2 outward, float w, float dpt)
+    internal static bool PlannedAsBox(Building b, Vector2 center, Vector2 u, Vector2 outward, float w, float dpt)
     {
         var candidates = new[] { u, -u, new Vector2(-u.Y, u.X), new Vector2(u.Y, -u.X) };
         var edge = candidates.OrderByDescending(c => c.Dot(outward)).First();
