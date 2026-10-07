@@ -174,3 +174,42 @@ roll changes that. Two fixes found on the way, both pre-existing and made visibl
   footprint now refuses those; **1 door in 2963 blocks remains, and it has a ramp, no validator problems**.
   That is rarer than the 0.3 % guessed in #558: most real blocks with three entrances are neither whole
   rectangles nor 17 m deep.
+
+- **Ramp-first survey (#694)**: `--rampfirst,test_output/rampfirst.txt --chunks <terrain_chunks>` (`RampFirstProbe`, headless, no window, about 40 s
+  over 626 building tiles). Reads the tiles itself and prints, for every block of flats or shops under flats, how many a ramp square to the
+  front wall, or running along the facade, would fit (stairwell and car park of a few bays included) and why the rest fail. Real-data only, in no tier.
+
+## Ramp first (#694, PR A: whole blocks)
+
+The rule runs the other way round now: **the box and the road decide, then the block is planned around the ramp.**
+
+- **`GarageRule.RampFor(key, type, above, W, D, h)`** is pure: flats or shops under flats, the roll (`Share` = `MixedRollShare` = 0.72, so
+  about 4 % of all blocks of flats on the real tiles), and `KindOf`: **Square** (a ramp square to the front wall: the strip behind the
+  stairwell and the depth for the ramp, as before, plus a width for four bays, `SquareWidth`, about 17.5 m) or **Along** (the ramp runs along
+  the facade: `AlongWidth` = band 6.95 + descent + car park hall 9.5 + stairwell, about 36 m, and 13 m deep). Neither needs a front-door count
+  or an existing car park: a garage block gets the basement it leads to (`TryBlock`, `garageDoor`).
+- **Footprint** (`BuildingFootprint.Compute`): the garage door has a slot of its own beyond the budget, flush with the end of the front wall's
+  **run** (the longest coplanar stretch, often much shorter than the box: a stepped facade) that the lane fits; a square ramp takes either end,
+  the along ramp either end too, descending away from it (`DoorSpot.Ramp`, `RampDir`). The entrance (main door) moves along the wall to just
+  clear of the lane (stairwell width, `LaneGap`), or the block gets no garage; other front-wall entrances keep clear too (`keepX`).
+- **Along the facade** (`PlanAlong`, `AlongBasement`, `Carve`): the band is as deep as the stairwell's half landing wall (`a.ZM`), so the
+  corridor behind runs straight on; the ground floor has a `Ramp` room (carved out of the flats' regions) as far as the slab opens over the
+  descent, and the basement a ramp room to where the **car park hall** begins, a full-depth room from there to the first stairwell, joined by an
+  arch and by one door to that stairwell (one, so the wall keeps room for bays). Storerooms behind the ramp room open off the hall. The flight is
+  `FlightPlan { Ramp, AlongX }`; `RunDir` is its direction, `FootZone` the ground round its foot (mesh, validator and furniture use them).
+- **Checks.** `--doorcheck` (80 x 14.5 m blocks: along the facade), `--flatcheck` (12 + 12 + 12 + 12 blocks, the last two too shallow for the
+  square ramp), `tools/rampnetcheck.sh` (square) and `tools/rampalongnetcheck.sh` (along the facade: **steered** by pure pursuit on the plan's
+  frame in `GarageProbe`, in off the door, the 90 degree turn, down to the hall, parked, then out the same way). Real tiles:
+  `--rampfirst,test_output/rampfirst.txt --chunks <dir>` (`RampFirstProbe`) and shots with
+  `--flattour,out.png --block real:E_N_index --chunks <dir>` (windowed).
+
+### Ramp first in wings (#694, PR B)
+
+About half of the real blocks of flats are not one box (an L, a U, a ring, a bent or skewed outline). `BuildingFootprint.GarageRect` is what a
+garage is planned in: the whole box, or **the wing of the outline that stands on the main door's wall** (its front edge within 2 m of the door's
+wall, stretching across the door; the largest if several). The footprint measures the garage door against that rectangle (its centre is the
+frame's origin, `wingX`), `GarageRule.RampFor` runs on the wing's own sides, the generator plans each wing as before (`TryWings`, the building's
+basement forced to one when it has a garage) and `TryBlock` plans the ramp in the wing whenever no other wing joins it and it is not entered
+from one (`o.Links` empty, not `Pinned`), whatever its `Free`/`Below` options. A wing that is joined by another has no ramp: its door reads as
+locked (about 1 % of the garage doors on the real tiles, 11 of 1192; the probe lists them). `--flatcheck` has L-shaped blocks (a 60 x 14 m wing
+on the street: along the facade; a 40 x 24 m one turned 31 degrees: square), each with the usual ramp checks.

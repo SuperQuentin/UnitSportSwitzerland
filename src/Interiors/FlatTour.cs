@@ -54,6 +54,18 @@ public partial class FlatTour : Node3D
             int garage = BuildingFootprint.ComputeDoors(garageTile, roads, null).First(d => d.Link.Any).Index;
             _l = InteriorGenerator.Generate(garageTile, garage, roads, null)!;
         }
+        else if (_block.StartsWith("real:", StringComparison.Ordinal))
+        {
+            // a block of a real tile (#694): --block real:E_N_index --chunks <terrain_chunks>, planned with its streets as the game does
+            var p = _block[5..].Split('_');
+            var id = new Terrain.Format.TileId(int.Parse(p[0]), int.Parse(p[1]));
+            var src = new Terrain.LocalChunkSource(CmdArgs.Value("--chunks") ?? "terrain_chunks");
+            var realTile = src.LoadBuildingsAsync(id).GetAwaiter().GetResult()!;
+            var realRoads = src.LoadRoadsAsync(id).GetAwaiter().GetResult();
+            GarageRule.AlwaysRolls = true;
+            _l = InteriorGenerator.Generate(realTile, int.Parse(p[2]), realRoads, null)!;
+            GarageRule.AlwaysRolls = false;
+        }
         else
         {
             var tile = FlatCheck.Tile();
@@ -82,13 +94,24 @@ public partial class FlatTour : Node3D
         if (_l.Floors[Math.Max(0, ground - 1)].AllFlights().FirstOrDefault(f => f.Ramp) is { } ramp)
         {
             float cx = (ramp.X0 + ramp.X1) / 2, h = _l.StoreyHeight, len = RampProfile.Length(h);
-            Vector3 OnRamp(float t, float up) => new(cx, _l.FloorY(ground) - RampProfile.Drop(t, h) + up, ramp.ZTop + t);
+            float dir = ramp.RunDir;
+            // along the ramp's own run, whichever way it goes (square to the front wall or along the facade)
+            Vector3 OnRamp(float t, float up)
+            {
+                var (px, pz) = ramp.Point(cx, ramp.ZTop + dir * t);
+                return new(px, _l.FloorY(ground) - RampProfile.Drop(t, h) + up, pz);
+            }
+            Vector3 Past(float up, float across, float beyond)
+            {
+                var (px, pz) = ramp.Point(across, ramp.ZBottom + dir * beyond);
+                return new(px, _l.FloorY(ground - 1) + up, pz);
+            }
             var way = _l.AllEntrances().First(e => e.Vehicle);
-            _views.Add(("ramp_door", At(ground, way.X, way.Z + 0.4f, 1.4f), OnRamp(9f, 0.2f)));
+            _views.Add(("ramp_door", At(ground, way.X, way.Z + 0.4f, 1.4f), OnRamp(Math.Min(9f, len - 1f), 0.2f)));
             _views.Add(("ramp_top", OnRamp(0.5f, 1.6f), OnRamp(8f, 0.2f)));
             _views.Add(("ramp_mid", OnRamp(5f, 1.5f), OnRamp(len, 0.5f)));
-            _views.Add(("ramp_foot", OnRamp(len - 0.5f, 1.5f) with { Z = ramp.ZBottom + 3.5f }, OnRamp(3f, 0.3f)));
-            _views.Add(("ramp_aisle", OnRamp(len, 1.6f) with { Z = ramp.ZBottom + 0.5f, X = ramp.X0 - 2f }, new Vector3(cx + 8f, _l.FloorY(ground - 1) + 0.6f, ramp.ZBottom + 2.5f)));
+            _views.Add(("ramp_foot", Past(1.6f, cx, 3.5f), OnRamp(3f, 0.3f)));
+            _views.Add(("ramp_aisle", Past(1.7f, ramp.X0 - 2f, 0.5f), Past(0.6f, cx + 8f, 2.5f)));
         }
         _views.Add(("lobby", At(ground, main.X + 0.3f, main.Z + 0.5f), At(ground, main.X + 1.2f, main.Z + 5f, 1.2f)));
         // the stairwell (#571): up the stair from the front landing, from the half landing, and

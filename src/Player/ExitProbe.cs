@@ -30,12 +30,13 @@ public partial class ExitProbe : Node, Core.IOriginShiftAware
     private readonly System.Func<FootPlayer?> _local;
     private int _failed;
     /// <summary>The last patch used, and where the vehicle was got out of: world space, moved with the origin (offline, #185).</summary>
-    private Vector3 _spot, _where;
+    private Vector3 _spot, _where, _start;
 
     public void OnOriginShifted(Core.OriginShift shift)
     {
         _spot = shift.Point(_spot);
         _where = shift.Point(_where);
+        _start = shift.Point(_start);
     }
 
     public ExitProbe(System.Func<FootPlayer?> local)
@@ -73,13 +74,16 @@ public partial class ExitProbe : Node, Core.IOriginShiftAware
             await Wait(1.5);
         }
         _spot = me.GlobalPosition;
+        _start = _spot;
         var kinds = new List<RideKind> { CarCatalog.All[0].Kind };
         foreach (var heavy in HeavyCatalog.All) kinds.Add(heavy.Kind);
         foreach (var kind in kinds)
             foreach (bool walled in new[] { false, true })
             {
                 // each its own clear patch: online the last one's vehicle is still parked there
-                if (FindSpot(me, _spot + new Vector3(30f, 0, 0)) is not { } clear) { Fail(Rideable.Create(kind)!.Label, "no clear spot"); continue; }
+                // east until the course runs out (the flat fixture's ridge, #494), then from the start again:
+                // the earlier cases' vehicles and walls are in the way, FindSpot steps past them
+                if ((FindSpot(me, _spot + new Vector3(30f, 0, 0)) ?? FindSpot(me, _start)) is not { } clear) { Fail(Rideable.Create(kind)!.Label, "no clear spot"); continue; }
                 _spot = clear;
                 await Case(me, kind, walled, clear);
             }

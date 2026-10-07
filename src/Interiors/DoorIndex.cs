@@ -21,6 +21,10 @@ public static class DoorIndex
         /// <summary>The road link of a garage door (#558), <see cref="LinkKind.None"/> on every other door.</summary>
         public GarageLink Link { get; init; }
 
+        /// <summary>The ramp behind a garage door (#694) and, along the facade, which way it descends in the plan's X.</summary>
+        public GarageRule.RampKind Ramp { get; init; }
+        public int RampDir { get; init; }
+
         /// <summary>The building the door is on: the key of its plan and of the space behind it.</summary>
         public BuildingKey Building => Key.Building;
 
@@ -37,7 +41,7 @@ public static class DoorIndex
             if (d.Width > 0)
                 list.Add(new Entry(d.KeyIn(id), tileOrigin + d.Position, d.Outward, d.Width, d.Height, d.Kind)
                 {
-                    Hang = d.Hang, Vehicle = d.Vehicle, Link = d.Link, Shop = d.Shop,
+                    Hang = d.Hang, Vehicle = d.Vehicle, Link = d.Link, Ramp = d.Ramp, RampDir = d.RampDir, Shop = d.Shop,
                 });
         Tiles[id] = list.ToArray();
     }
@@ -99,7 +103,7 @@ public static class DoorIndex
     public static Entry? NearestVehicle(Vector3 at, float reach) =>
         Nearest(at, reach, e => e.Vehicle);
 
-    public static Entry? NearestOfKind(Vector3 at, float reach, BuildingKind kind, bool vehicleOnly = false)
+    public static Entry? NearestOfKind(Vector3 at, float reach, BuildingKind kind, bool vehicleOnly = false, Func<Entry, bool>? also = null)
     {
         Entry? best = null;
         float bestScore = float.MaxValue;
@@ -111,6 +115,7 @@ public static class DoorIndex
                 // that is never the main one: a works' slot 0 is the office door and its bays are
                 // the extras (#528). Preferring slot 0 would send a lorry at a 1 m pedestrian door.
                 if (vehicleOnly && !e.Vehicle) continue;
+                if (also != null && !also(e)) continue;
                 float d = e.World.DistanceTo(at);
                 if (d > reach) continue;
                 // a side door only when no main door of the kind is anywhere in reach — but with

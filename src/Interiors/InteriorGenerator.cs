@@ -1206,7 +1206,7 @@ public static partial class InteriorGenerator
                         if (!fl.Ramp) continue;
                         var wedge = fl.Area().Grow(0.3f);
                         if (wedge.Overlaps(new RectPlan(r.X0, r.Z0, r.X1, r.Z1))) blocked.Add(wedge);
-                        var mouth = new RectPlan(fl.X0 - 2.2f, fl.ZBottom - 1f, fl.X1 + 2.2f, fl.ZBottom + GarageRule.RampTurn);
+                        var mouth = fl.FootZone(1f, GarageRule.RampTurn, 2.2f);
                         if (mouth.Overlaps(new RectPlan(r.X0, r.Z0, r.X1, r.Z1))) blocked.Add(mouth);
                     }
                 if (isCore)
