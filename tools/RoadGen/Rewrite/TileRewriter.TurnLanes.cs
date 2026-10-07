@@ -27,6 +27,8 @@ public static partial class TileRewriter
         public int AtSignals, RightPockets, RightRejected;
         public int LeftBikeLanes, BikeBoxes, AdvancedBikeLines, KerbsideBike, BetweenBike, BetweenForced;
         public int Candidates, Placed, Merged, Short, Building, OtherLine, Ground, Seam, NoSegment, NoExit, Arrows, Stripes, StopBars, SignsMoved, BesideBike, LeadIns;
+        /// <summary>Approaches whose carriageway already holds two or more lanes toward the junction: no pocket is built (#700).</summary>
+        public int MultiLane;
         /// <summary>Hatched medians left out as too narrow or too short (#406).</summary>
         public int HatchesSkipped;
         /// <summary>Kerb corners paved beside a widening (#406), and those whose outline did not work out.</summary>
@@ -38,7 +40,7 @@ public static partial class TileRewriter
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
             $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets ({RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {Corners:N0} corners rounded beside a widening ({CornersRejected:N0} failed, {CornersInTown:N0} left square beside a sidewalk or path, #406), {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120); " +
-            $"rejected (approach or exit): too short {Short:N0}, building {Building:N0}, another line {OtherLine:N0}, ground off the road {Ground:N0}, tile seam {Seam:N0}, no segment {NoSegment:N0}, no main road out {NoExit:N0}\n") +
+            $"rejected (approach or exit): too short {Short:N0}, building {Building:N0}, another line {OtherLine:N0}, ground off the road {Ground:N0}, tile seam {Seam:N0}, no segment {NoSegment:N0}, no main road out {NoExit:N0}, two lanes or more already {MultiLane:N0} (#700)\n") +
             string.Concat(LayoutExamples.Select(kv => $"      right pockets beside a bike lane, layout {kv.Key} at LV95 {string.Join("; ", kv.Value)}\n"));
 
         public void Reject(string why)
@@ -168,6 +170,12 @@ public static partial class TileRewriter
                 var arm = plan.Arms[i];
                 if ((signal ? !arm.Approach || Internal(net.Links[arm.LinkId], junction.NodeId, signalNodes) : arm.Role != PriorityPlanner.Role.Main)
                     || !TurnLaneRoad(net.Links[arm.LinkId])) continue;
+                // two lanes toward the junction or more: the carriageway holds them, no pocket (#700)
+                if (segmentOf.TryGetValue(arm.LinkId, out var laneSeg) && CarLanesIn(laneSeg.Segment, arm.End == LinkEnd.End) >= 2)
+                {
+                    stats.MultiLane++;
+                    continue;
+                }
 
                 // the approaching driver's way, and whether a car road leaves to their left / right
                 var d = Vec2.FromHeading(junction.Arms[i].OutwardHeading) * -1;
@@ -921,6 +929,10 @@ public static partial class TileRewriter
         });
     }
 
+
+    /// <summary>The car lanes a two-way segment holds in the direction toward a junction at its end (<paramref name="atEnd"/>) or its start (#700).</summary>
+    private static int CarLanesIn(RoadSegment seg, bool atEnd) =>
+        Math.Max(1, (int)(atEnd ? seg.Attributes.LanesForward : seg.Attributes.LanesBackward));
     /// <summary>A main-road arm a pocket can be built on: two-way, paved, at grade, Major or Road.</summary>
     private static bool TurnLaneRoad(RoadLink link) =>
         link.Tag is Source { Segment: var s } source

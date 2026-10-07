@@ -152,8 +152,8 @@ public static class PaintEmitter
         {
             // traffic keeps right: the lanes against the drawing are on its left
             int back = Math.Max(1, (int)a.LanesBackward), fwd = Math.Max(1, (int)a.LanesForward);
-            float lo = -half + leftBike, w = (2 * half - leftBike - rightBike) / (back + fwd);
-            for (int k = 1; k < back + fwd; k++) Line(lo + k * w, true);   // k == back is the centre
+            for (int k = 1; k < back + fwd; k++)   // k == back is the centre
+                Line(RoadCrossSection.TwoWayLineOffset(seg.Width, leftBike, rightBike, back, fwd, k), true);
             // Randlinien outside built-up areas, on roads wide enough for a centre line too (BE
             // Handbuch Markierung 1 p. 17, Stadt Bern C 2.10.11; inside a town only exceptionally);
             // none beside a bike lane

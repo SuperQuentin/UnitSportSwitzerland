@@ -107,6 +107,9 @@ public static partial class TileRewriter
         return arms;
     }
 
+    /// <summary>The lanes a carriageway already holds (#700) take their own lines over these distances before the stop line: fully there at 15 m, from 30 m.</summary>
+    private const float OwnLaneFull = 15f, OwnLaneFrom = 30f;
+
     /// <summary>The stop bar across a #123 pocket without lights lies this far from the mouth (its middle).</summary>
     private const double PocketBarMiddle = 0.1 + StopBar * 0.5;
 
@@ -128,8 +131,13 @@ public static partial class TileRewriter
             var moves = SignalMoves.None;
             for (int k = 0; k < plan.Arms.Count; k++)
                 if (k != planArm && plan.Arms[k].Out) moves |= SignalPlan.Turn(plan.Arms, planArm, k);
-            centre = (float)OwnLaneCentre(j, arm, net);
-            lanes = [new ApproachLane(0f, 0f, 0f, moves, ApproachLaneKind.Car)];
+            var (own, laneWidth, n) = OwnLanes(j, arm, net);
+            centre = (float)own;
+            lanes = [];
+            // every lane of a multi-lane carriageway is there all along, from 30 m before the line (#700)
+            for (int k = 0; k < n; k++)
+                lanes.Add(n == 1 ? new ApproachLane(0f, 0f, 0f, moves, ApproachLaneKind.Car)
+                    : new ApproachLane(k * laneWidth, OwnLaneFull, OwnLaneFrom, moves, ApproachLaneKind.Car));
         }
         var record = new RoadApproach
         {
@@ -163,6 +171,32 @@ public static partial class TileRewriter
                 Get(approaches, built.Home).Add(record);
                 stats.Count(record);
             }
+    }
+
+    /// <summary>
+    /// The car lanes an approach already has in its carriageway (#700): how many drive toward the
+    /// junction, the leftmost lane's centre from the carriageway's centre line (where
+    /// <see cref="OwnLaneCentre"/> has the single lane's), and one lane's width. One lane: as before.
+    /// </summary>
+    private static (double Centre, float LaneWidth, int Lanes) OwnLanes(Junction j, int arm, RoadNetwork net)
+    {
+        var a = j.Arms[arm];
+        if (InfoOf(net.Links[a.LinkId]) is not { } info) return (0, 0, 1);
+        var at = info.Attributes;
+        bool atEnd = PriorityPlanner.EndAt(net, j, a) == LinkEnd.End;
+        if (at.OneWay != 0)
+        {
+            int n = Math.Max(1, Math.Max((int)at.LanesForward, at.LanesBackward));
+            float lane = RoadCrossSection.LaneWidth(info.Class);
+            float right = RoadCrossSection.RightLaneOffset(info.Class, info.Width, n);
+            return n == 1 || right == 0 ? (0, 0, 1) : (right - (n - 1) * lane, lane, n);
+        }
+        int into = Math.Max(1, (int)(atEnd ? at.LanesForward : at.LanesBackward)), outOf = Math.Max(1, (int)(atEnd ? at.LanesBackward : at.LanesForward));
+        if (into == 1) return (OwnLaneCentre(j, arm, net), 0, 1);
+        float rightBike = (atEnd ? at.Right : at.Left) is { HasLane: true } r ? r.BikeDm / 10f : 0f;
+        float leftBike = (atEnd ? at.Left : at.Right) is { HasLane: true } l ? l.BikeDm / 10f : 0f;
+        return (RoadCrossSection.TwoWayLaneOffset(info.Width, rightBike, leftBike, into, outOf, inner: into - 1),
+            RoadCrossSection.TwoWayLaneWidth(info.Width, leftBike, rightBike, into, outOf), into);
     }
 
     /// <summary>The middle of the approach's own lane (no pocket): between the centre line and a painted bike lane on its right, 0 on a one-way road.</summary>
