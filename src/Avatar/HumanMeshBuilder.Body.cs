@@ -293,6 +293,94 @@ public static partial class HumanMeshBuilder
         }
     }
 
+    // ---- rest maps (#724): where each bit of a posed figure is when it stands at rest, for the
+    // clothes' patterns (MeshScratch.Rest), so they ride on the cloth instead of the body moving
+    // through them
+
+    // the standing figure every pose is taken back to; built on first use, not from another
+    // partial's statics (#221)
+    private static Rig? _restRig;
+    private static Rig RestRig => _restRig ??= RigFor(HumanPose.Standing);
+
+    /// <summary>
+    /// A frame on the bone <paramref name="a"/>→<paramref name="b"/>: origin at <paramref name="a"/>,
+    /// Y along the bone, X <paramref name="hint"/> made square to it, turning smoothly toward
+    /// <paramref name="fallback"/> as the bone comes within 30° of the hint (an arm raised sideways).
+    /// </summary>
+    private static Transform3D BoneFrame(Vector3 a, Vector3 b, Vector3 hint, Vector3 fallback)
+    {
+        var y = b - a;
+        y = y.LengthSquared() > 1e-10f ? y.Normalized() : Vector3.Up;
+        var x = hint - y * hint.Dot(y);
+        var f = fallback - y * fallback.Dot(y);
+        x += f * (1f - Mathf.Min(x.Length() * 2f, 1f));
+        if (x.LengthSquared() < 1e-8f) x = y.Cross(Mathf.Abs(y.Z) < 0.9f ? Vector3.Back : Vector3.Right);
+        x = x.Normalized();
+        return new Transform3D(new Basis(x, y, x.Cross(y)), a);
+    }
+
+    /// <summary>The rigid motion taking a posed bone back to the same bone at rest.</summary>
+    private static Transform3D BoneRest(Vector3 a, Vector3 b, Vector3 hint, Vector3 fallback,
+        Vector3 restA, Vector3 restB, Vector3 restHint, Vector3 restFallback) =>
+        BoneFrame(restA, restB, restHint, restFallback) * BoneFrame(a, b, hint, fallback).AffineInverse();
+
+    /// <summary>Two bones meeting at a joint (a limb), split at the joint's mitre and blended over <paramref name="blend"/> metres.</summary>
+    private static MeshScratch.RestMap TwoBoneRest(Vector3 root, Vector3 joint, Vector3 end, Vector3 hint, Vector3 fallback,
+        Vector3 restRoot, Vector3 restJoint, Vector3 restEnd, Vector3 restHint, Vector3 restFallback, float blend)
+    {
+        var mitre = (joint - root).Normalized() + (end - joint).Normalized();
+        if (mitre.LengthSquared() < 1e-8f) mitre = end - joint;
+        return new MeshScratch.RestMap(
+            BoneRest(root, joint, hint, fallback, restRoot, restJoint, restHint, restFallback),
+            BoneRest(joint, end, hint, fallback, restJoint, restEnd, restHint, restFallback),
+            joint, mitre.Normalized(), blend);
+    }
+
+    private static Vector3 ShoulderLine(in Rig r) => (r.ShoulderR - r.ShoulderL).Normalized();
+    private static Vector3 TrunkUp(in Rig r) => (r.Neck - r.Hip).Normalized();
+    private static Vector3 TrunkFwd(in Rig r) => ShoulderLine(r).Cross(TrunkUp(r));
+
+    /// <summary>The trunk: hips to waist, waist to neck.</summary>
+    private static MeshScratch.RestMap TrunkRest(in Rig r)
+    {
+        var q = RestRig;
+        // forward as the fallback: the trunk never lies along its own shoulder line
+        return TwoBoneRest(r.Hip, r.Waist, r.Neck, ShoulderLine(r), TrunkFwd(r), q.Hip, q.Waist, q.Neck, ShoulderLine(q), TrunkFwd(q), 0.08f);
+    }
+
+    /// <summary>An arm, shoulder to wrist (and the hand, on the forearm).</summary>
+    private static MeshScratch.RestMap ArmRest(in Rig r, bool left)
+    {
+        var q = RestRig;
+        return left
+            ? TwoBoneRest(r.ShoulderL, r.ElbowL, r.WristL, ShoulderLine(r), TrunkUp(r), q.ShoulderL, q.ElbowL, q.WristL, ShoulderLine(q), TrunkUp(q), 0.04f)
+            : TwoBoneRest(r.ShoulderR, r.ElbowR, r.WristR, ShoulderLine(r), TrunkUp(r), q.ShoulderR, q.ElbowR, q.WristR, ShoulderLine(q), TrunkUp(q), 0.04f);
+    }
+
+    /// <summary>A leg from free joints (a cyclist's too), hip to ankle, <paramref name="side"/> across the figure.</summary>
+    private static MeshScratch.RestMap LegRest(Vector3 hip, Vector3 knee, Vector3 ankle, Vector3 side, bool left)
+    {
+        var q = RestRig;
+        var (rh, rk, ra) = left ? (q.HipL, q.KneeL, q.AnkleL) : (q.HipR, q.KneeR, q.AnkleR);
+        return TwoBoneRest(hip, knee, ankle, side, Vector3.Back, rh, rk, ra, ShoulderLine(q), Vector3.Back, 0.05f);
+    }
+
+    /// <summary>A foot, ankle to toe.</summary>
+    private static MeshScratch.RestMap FootRest(Vector3 ankle, Vector3 toe, Vector3 side, bool left)
+    {
+        var q = RestRig;
+        var (ra, rt) = left ? (q.AnkleL, q.ToeL) : (q.AnkleR, q.ToeR);
+        return MeshScratch.RestMap.Rigid(BoneRest(ankle, toe, side, Vector3.Up, ra, rt, ShoulderLine(q), Vector3.Up));
+    }
+
+    /// <summary>The head and the neck under it.</summary>
+    private static MeshScratch.RestMap HeadRest(in Rig r)
+    {
+        var q = RestRig;
+        return MeshScratch.RestMap.Rigid(BoneRest(r.HeadBase, r.HeadTop, ShoulderLine(r), TrunkFwd(r),
+            q.HeadBase, q.HeadTop, ShoulderLine(q), TrunkFwd(q)));
+    }
+
     /// <summary>
     /// The figure itself: trunk, limbs, hands, boots, neck, head, face and hair, coloured by where
     /// <paramref name="look"/>'s clothes start and end. <paramref name="body"/> and
@@ -306,6 +394,8 @@ public static partial class HumanMeshBuilder
         // the patterns ride in the colours' alpha, as the clothes' finishes do
         look = Patterned(look);
         var fit = new Fit(r, look.Build);
+        // the patterns stay on the cloth however the figure moves (#724): the trunk unless a part says otherwise
+        using var trunkRest = s.Resting(TrunkRest(r));
         var shape = fit.Shape;
         var torso = fit.Torso;
 
@@ -326,7 +416,7 @@ public static partial class HumanMeshBuilder
                 if (includeLegs)
                 {
                     var (hip, knee, ankle, toe) = left ? (r.HipL, r.KneeL, r.AnkleL, r.ToeL) : (r.HipR, r.KneeR, r.AnkleR, r.ToeR);
-                    DrawLeg(s, look, shape, hip, knee, ankle, toe, fit.Side);
+                    DrawLeg(s, look, shape, hip, knee, ankle, toe, fit.Side, left);
                 }
 
                 var (shoulder, elbow, wrist) = left ? (r.ShoulderL, r.ElbowL, r.WristL) : (r.ShoulderR, r.ElbowR, r.WristR);
@@ -339,6 +429,7 @@ public static partial class HumanMeshBuilder
                     new(0.022f / upper, shape.Deltoid), new(0.12f / upper, shape.UpperArm), new(0.5f, shape.UpperArm * 0.93f),
                     new(1f, shape.Elbow), new(1.3f, shape.Forearm), new(2f, shape.Wrist),
                 ];
+                using var armRest = s.Resting(ArmRest(r, left));
                 LimbLoft(s, shoulder, elbow, wrist, arm, armZones, fit.Side);
                 var palm = look.Gloves ?? look.Skin;
                 var fingers = look.Gloves is { } gloves && !look.Fingerless ? gloves : look.Skin;
@@ -347,6 +438,7 @@ public static partial class HumanMeshBuilder
         }
         if (!head) return fit;
 
+        using var headRest = s.Resting(HeadRest(r));
         // a straight neck up into the skull behind the jaw: the jaw's underside overhangs it, so the
         // head reads as a head on a neck rather than one cone running down into the collar
         s.Tube(r.Neck - torso.Up(4f) * 0.03f, fit.Head.NeckTop, shape.Neck, look.Skin, 8);
@@ -371,8 +463,9 @@ public static partial class HumanMeshBuilder
         };
 
     /// <summary>One leg: thigh and shin in the bottom's, the skin's and the legwear's colours, then the boot.</summary>
-    private static void DrawLeg(MeshScratch s, BodyLook look, Physique shape, Vector3 hip, Vector3 knee, Vector3 ankle, Vector3 toe, Vector3 sideAxis)
+    private static void DrawLeg(MeshScratch s, BodyLook look, Physique shape, Vector3 hip, Vector3 knee, Vector3 ankle, Vector3 toe, Vector3 sideAxis, bool left)
     {
+        using var legRest = s.Resting(LegRest(hip, knee, ankle, sideAxis, left));
         var legwear = look.Legwear is { } w && !look.LegwearOver ? w : look.Skin;
         var zones = new Zones(look.LegTo, look.LegwearFrom, look.BootFrom, look.Bottom, look.Skin, legwear, look.Shoes, 0.012f);
         // one skin from a little inside the pelvis (so no seam opens when it swings) to the ankle, mitred at the knee
@@ -386,6 +479,7 @@ public static partial class HumanMeshBuilder
         // a net over the bare leg, a few mm proud, from where it starts to the boot
         if (look.LegwearOver && look.Legwear is { } over)
             LimbBand(s, hip, knee, ankle, Mathf.Clamp(look.LegwearFrom, 0f, 2f), Mathf.Clamp(look.BootFrom, 0f, 2f), shape, arm: false, 0.003f, over);
+        using var footRest = s.Resting(FootRest(ankle, toe, sideAxis, left));
         Boot(s, ankle, toe, sideAxis, look);
     }
 
