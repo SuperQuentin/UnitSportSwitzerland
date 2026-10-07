@@ -410,6 +410,9 @@ public static partial class TileRewriter
         foreach (var pocket in pockets)
         {
             if (pocket.Dropped) continue;
+            // the main road's centre line through the junction would start beside the hatch, at the mouth, and run past
+            // its island (#700, the user's review of Sion): the left-turn guide takes its place
+            if (priority.CentreAt.Remove(pocket.Node, out var centreLine)) Get(paint, centreLine.Tile).Remove(centreLine.Paint);
             var right = rightOf.GetValueOrDefault((pocket.Node, pocket.Arm));
             var (inSlot, outSlot) = (pocket.In, pocket.Out);
             // where the left-turn lane appears (#352): the end of the hatch, or of a merged strip's entry
@@ -1927,7 +1930,85 @@ public static partial class TileRewriter
             double middle = ((a.Left.HasLane ? a.Left.BikeDm : 0) - (a.Right.HasLane ? a.Right.BikeDm : 0)) / 20.0;
             var centre = paint.FirstOrDefault(q => q.Segment == _painted && q.Dash > 0 && Math.Abs(q.Offset - middle) < 0.3);
             if (centre is not null) Cut(paint, centre);
-            paint.Add(Line(PaintType.WhiteSolid, 0, 0, centre?.Offset ?? middle, 0, _length));
+            _centre = (Line(PaintType.WhiteSolid, 0, 0, centre?.Offset ?? middle, 0, _length), centre?.Offset ?? middle);
+            paint.Add(_centre.Value.Paint);
+        }
+
+        /// <summary>The solid centre line along the widening and its offset, for <see cref="OpenAtCrosswalk"/>.</summary>
+        private (RoadPaint Paint, double Offset)? _centre;
+        /// <summary>The hatches' outlines: each one's points (distance from the mouth, offset) and whether it is a closing line.</summary>
+        private readonly List<(RoadPaint Paint, List<(double D, double O)> At, bool Closing)> _outlines = new();
+
+        private RoadPaint OutlinePaint(List<(double D, double O)> at)
+        {
+            var v = new List<float>(at.Count * 3);
+            foreach (var (d, o) in at) v.AddRange(Point(d, o));
+            return new RoadPaint
+            {
+                Shape = PaintShape.Polyline, Type = PaintType.WhiteSolid, Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
+                Vertices = v.ToArray(),
+            };
+        }
+
+        /// <summary>
+        /// A crosswalk over the hatch between <paramref name="from"/> and <paramref name="to"/> m from the mouth (#700, the user's
+        /// rule): the hatch's outline and the centre line stop at it; with a centre island (<paramref name="island"/>) the
+        /// hatch does not close at its mouth end either.
+        /// </summary>
+        public void OpenAtCrosswalk(List<RoadPaint> paint, double from, double to, bool island)
+        {
+            for (int k = _outlines.Count - 1; k >= 0; k--)
+            {
+                var (mesh, at, closing) = _outlines[k];
+                int index = paint.IndexOf(mesh);
+                if (index < 0) continue;
+                paint.RemoveAt(index);
+                _outlines.RemoveAt(k);
+                if (closing && (island || at.All(p => p.D > from && p.D < to))) continue;
+                foreach (var piece in Outside(at, from, to))
+                {
+                    var cut = OutlinePaint(piece);
+                    paint.Add(cut);
+                    _outlines.Add((cut, piece, closing));
+                }
+            }
+            if (_centre is { } c && paint.Remove(c.Paint))
+            {
+                if (from > 0.3) paint.Add(Line(PaintType.WhiteSolid, 0, 0, c.Offset, 0, from));
+                if (_length - to > 0.3) paint.Add(Line(PaintType.WhiteSolid, 0, 0, c.Offset, to, _length));
+                _centre = null;
+            }
+        }
+
+        /// <summary>The pieces of a polyline of (distance, offset) points outside the band from..to.</summary>
+        private static List<List<(double D, double O)>> Outside(List<(double D, double O)> at, double from, double to)
+        {
+            var pieces = new List<List<(double D, double O)>>();
+            List<(double D, double O)>? cur = null;
+            bool In(double d) => d > from && d < to;
+            for (int i = 0; i < at.Count; i++)
+            {
+                if (i > 0)
+                {
+                    var (a, b) = (at[i - 1], at[i]);
+                    // the band's edges this step crosses, in the order it meets them
+                    var edges = new List<double>();
+                    foreach (double edge in (ReadOnlySpan<double>)[from, to])
+                        if ((a.D - edge) * (b.D - edge) < 0) edges.Add(edge);
+                    if (edges.Count == 2 && Math.Abs(edges[1] - a.D) < Math.Abs(edges[0] - a.D)) edges.Reverse();
+                    foreach (double edge in edges)
+                    {
+                        double t = (edge - a.D) / (b.D - a.D);
+                        (double D, double O) p = (edge, a.O + (b.O - a.O) * t);
+                        if (cur is not null) { cur.Add(p); pieces.Add(cur); cur = null; }
+                        else cur = [p];
+                    }
+                }
+                if (In(at[i].D)) { if (cur is not null) { pieces.Add(cur); cur = null; } continue; }
+                (cur ??= new()).Add(at[i]);
+            }
+            if (cur is not null) pieces.Add(cur);
+            return pieces.Where(p => p.Count >= 2 && Math.Abs(p[^1].D - p[0].D) + Math.Abs(p[^1].O - p[0].O) > 0.2).ToList();
         }
 
         /// <summary>
@@ -1949,19 +2030,20 @@ public static partial class TileRewriter
             // the line runs to the border slant m on, where the hatch may already be narrower than at its widest (on the taper)
             double s = wideEnd == near && slant > 0 ? slant / Math.Max(0.1, border(near + slant)) : 0;
             double outer = near + slant * (s > 0 ? 1 : 0);   // where the border starts
-            void Solid(List<float> line) => paint.Add(new RoadPaint
+            // each outline keeps its points as (distance from the mouth, offset), for OpenAtCrosswalk (#700)
+            void Solid(List<(double D, double O)> at, bool closing)
             {
-                Shape = PaintShape.Polyline, Type = PaintType.WhiteSolid, Rgba = PaintEmitter.White, Width = PaintEmitter.LineWidth,
-                Vertices = line.ToArray(),
-            });
-            var line = new List<float>();
-            line.AddRange(Point(outer, border(outer)));
+                var mesh = OutlinePaint(at);
+                paint.Add(mesh);
+                _outlines.Add((mesh, at, closing));
+            }
+            var line = new List<(double D, double O)> { (outer, border(outer)) };
             foreach (double dist in _dists.Where(x => x > outer + 1e-3 && x < far - 1e-3))
-                line.AddRange(Point(dist, border(dist)));
-            line.AddRange(Point(far, border(far)));
-            Solid(line);
-            if (s > 0) Solid([.. Point(near, 0), .. Point(outer, border(outer))]);
-            else Solid([.. Point(wideEnd, 0), .. Point(wideEnd, border(wideEnd))]);
+                line.Add((dist, border(dist)));
+            line.Add((far, border(far)));
+            Solid(line, false);
+            if (s > 0) Solid([(near, 0), (outer, border(outer))], true);
+            else Solid([(wideEnd, 0), (wideEnd, border(wideEnd))], true);
 
             var v = new List<float>();
             var idx = new List<ushort>();
@@ -2067,6 +2149,21 @@ public static partial class TileRewriter
             return cleared;
         }
 
+        /// <summary>The near refuge island starts at least this far out from the mouth.</summary>
+        private const double RefugeClear = 0.5;
+
+        /// <summary>
+        /// How far out a zebra between <paramref name="zebraFrom"/> and <paramref name="zebraTo"/> must move for a refuge to fit
+        /// on the arm (0: it fits where it is), null where none would fit anyway (the hatch too narrow or too short there).
+        /// </summary>
+        public double? RefugeShift(double zebraFrom, double zebraTo)
+        {
+            double shift = Math.Max(0, RefugeClear + 0.15 + RefugeLength - zebraFrom);
+            double a = zebraFrom + shift - 0.15 - RefugeLength, b = zebraTo + shift + 0.15 + RefugeLength;
+            if (b > _length - 0.5 || Math.Min(HatchAt(a), HatchAt(b)) - 0.5 < 1.2) return null;
+            return shift;
+        }
+
         /// <summary>
         /// A pedestrian refuge (#700) in the hatch where a zebra crosses it between <paramref name="zebraFrom"/> and
         /// <paramref name="zebraTo"/> m from the mouth: a kerbed island <see cref="RefugeLength"/> m long on each side of the
@@ -2077,7 +2174,7 @@ public static partial class TileRewriter
         {
             const double Margin = 0.25, MinWidth = 1.2, Top = 0.12;
             double a = zebraFrom - 0.15 - RefugeLength, b = zebraTo + 0.15 + RefugeLength;
-            if (a < -RefugeLength || b > _length - 0.5) return false;   // the near island may stand in the junction, as the lights' (#682)
+            if (a < RefugeClear - 1e-6 || b > _length - 0.5) return false;   // both on the arm: none in the junction, where cars turn into the arm (#700, the user's review of Sion)
             double iw = Math.Min(HatchAt(Math.Max(0, a)), HatchAt(b)) - 2 * Margin;
             if (iw < MinWidth) return false;
             float[] At2(double d, double offset)

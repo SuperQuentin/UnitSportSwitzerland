@@ -101,6 +101,11 @@ public static partial class TileRewriter
                 // near the mouth: at the kerb ends, 0.5 m out (diagonal where a tight corner pulled one in); further out: where the node is
                 bool atKerb = at <= CrossingAtKerb;
                 double far = atKerb ? 0.5 + ZebraDepth + ZebraClear : at + ZebraDepth * 0.5 + ZebraClear;
+                // over an exit hatch wide enough for a refuge: the zebra moves out along the arm until both islands stand on it,
+                // none in the junction, where cars turn into the arm (#700, the user's review of Sion)
+                var exitWayHere = lanes is { ExitWay: { } ew, ExitFar: false } ? ew : null;
+                double? shift = exitWayHere?.RefugeShift(far - ZebraClear - ZebraDepth, far - ZebraClear);
+                if (shift is > 0) { far += shift.Value; atKerb = false; }
                 int before = stats.Crossings;
                 EmitCrossing(paint, source, mid, u, right, far, lo, hi, streetRight, streetLeft, areas, stats,
                     insetLeft: atKerb ? junction.KerbInset.GetValueOrDefault((i, false)) : 0,
@@ -110,12 +115,14 @@ public static partial class TileRewriter
                     drawn++;
                     // over an exit hatch: its stripes stop at the crosswalk, and where it is wide enough a refuge carries the
                     // walkers across in two goes (#700, the user's review: the zebra ran over the stripes)
-                    if (lanes is { ExitWay: { } exitWay, ExitFar: false })
+                    if (exitWayHere is { } exitWay)
                     {
                         double zebraTo = far - ZebraClear, zebraFrom = zebraTo - ZebraDepth;
-                        bool refuge = exitWay.Refuge(Get(areas, exitWay.Tile), zebraFrom, zebraTo);
+                        bool refuge = shift is not null && exitWay.Refuge(Get(areas, exitWay.Tile), zebraFrom, zebraTo);
                         if (refuge) stats.Refuges++;
                         exitWay.ClearHatch(Get(paint, exitWay.Tile), zebraFrom - (refuge ? 2.3 : 0.3), zebraTo + (refuge ? 2.3 : 0.3));
+                        // its lines stop at the crosswalk; beside a refuge the hatch does not close at the mouth (the user's rule)
+                        exitWay.OpenAtCrosswalk(Get(paint, exitWay.Tile), zebraFrom - 0.1, zebraTo + 0.1, refuge);
                     }
                 }
             }

@@ -22,6 +22,8 @@ public static partial class TileRewriter
         public readonly HashSet<RoadPaint> Guides = new();
         /// <summary>Each guide by (junction node, side 0 = first main arm's left / 1 = its right): a bike crossing (#120) replaces it.</summary>
         public readonly Dictionary<(int Node, int Side), (TileId Tile, RoadPaint Paint)> GuideAt = new();
+        /// <summary>The main road's dashed centre line through each junction: a left pocket there (#123) leaves it out (#700).</summary>
+        public readonly Dictionary<int, (TileId Tile, RoadPaint Paint)> CentreAt = new();
         /// <summary>A yielding link's Wartelinie rows, and its signs (tile, index in the tile's props): a path crossing (#120) moves them back.</summary>
         public readonly Dictionary<int, List<(TileId Tile, RoadPaint Paint)>> TeethOf = new();
         public readonly Dictionary<int, List<(TileId Tile, int Index)>> SignsOf = new();
@@ -102,12 +104,14 @@ public static partial class TileRewriter
                 if (anchors.Count > 0)
                 {
                     float dash = 3f, gap = plan.CentreUrban ? 3f : 6f;   // PaintEmitter.Leitlinie
-                    Get(paint, home).Add(new RoadPaint
+                    var centre = new RoadPaint
                     {
                         Shape = PaintShape.Polyline, Type = PaintType.WhiteDashed, Rgba = PaintEmitter.White,
                         Width = PaintEmitter.LineWidth, Dash = dash, Gap = gap,
                         Vertices = Local(home, line, p => HeightAt(anchors, p), 0f),
-                    });
+                    };
+                    Get(paint, home).Add(centre);
+                    priority.CentreAt[junction.NodeId] = (home, centre);
                     stats.CentreLines++;
 
                     // the edges through the junction: dashed across a joining road's mouth
