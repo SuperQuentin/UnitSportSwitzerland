@@ -34,7 +34,9 @@
   Check: `curl -sI -H 'Accept-Encoding: gzip' <url>chunk_2593_1119.terr` shows `Content-Encoding: gzip`.
 - **Server process:** a detached tmux session `unitsport`, so its stdin console still works:
   `ssh -t user@host tmux attach -t unitsport` (detach Ctrl-b d). A deploy kills the session (no graceful save exists) and
-  restarts it, then waits for the UDP port (about 30 s) and prints the log tail.
+  restarts it, then waits for the UDP port (about 30 s) and prints the log tail. **Ctrl-d in the console ends its stdin**:
+  the server keeps running but reads no more commands until a restart. Inside the session `start-server.sh run`
+  loops so the in-game `/update` can restart on a new release (`net/server-update`, `update-server.sh` installed beside it).
 - **Terrain chunks** (the real set is ~111 GB in ~246k files, one flat directory): the source is MapSetup's
   `terrain_location.json` `"chunks"`, else `terrain_chunks/`, else `CHUNKS_SRC=`; run from the main checkout (worktrees have no tiles).
   Files whose name, size or mtime differ are copied (`--checksum` compares md5 instead: reads every byte on both sides).
