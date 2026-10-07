@@ -340,7 +340,7 @@ public sealed class Car : Rideable, IEngined
     /// nose and its travel (rad) for this long (s), at speed. Loose ground digs in sooner than tarmac.
     /// </summary>
     private const float TripTime = 0.12f, TripSpeed = 7f;
-    private static float TripAngle(Audio.Surface surface) => surface switch
+    internal static float TripAngle(Audio.Surface surface) => surface switch
     {
         Audio.Surface.Asphalt or Audio.Surface.Wood or Audio.Surface.Indoor => 0.8f,
         Audio.Surface.Gravel or Audio.Surface.Snow or Audio.Surface.Ice => 0.6f,

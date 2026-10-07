@@ -13,12 +13,34 @@ namespace UnitSport.Player;
 /// </summary>
 public static class CockpitCheck
 {
+    /// <summary>
+    /// A kart has no roof, glass or bulkhead to fit the driver under: only that the hands and feet reach
+    /// the wheel and the pedals however the wheel is turned, and that the rig seats a driver (#715).
+    /// </summary>
+    private static int CheckKart(CarSpec spec)
+    {
+        var seat = CarMeshBuilder.SeatFor(spec.Body, spec.Wheelbase);
+        float reach = 0f;
+        foreach (float turn in new[] { 0f, HumanMeshBuilder.MaxGripTurn, -HumanMeshBuilder.MaxGripTurn })
+        {
+            var (hr, hl, fr, fl) = HumanMeshBuilder.DriverReach(seat, turn);
+            reach = Mathf.Max(reach, Mathf.Max(Mathf.Max(hr, hl), Mathf.Max(fr, fl)));
+        }
+        var rig = CarRig.Create(spec.Body, spec.Wheelbase, spec.Gauges, HumanPalette.Default);
+        bool driver = rig.GetNode<Node3D>("Body").HasNode("Driver");
+        rig.Free();
+        bool ok = reach < 0.01f && driver;
+        GD.Print($"[cockpitcheck] {spec.Label,-24} {spec.Body.Shape,-10} reach {reach * 1000,4:F0}mm  {(ok ? "ok" : "FAIL" + (driver ? "" : " no driver"))}");
+        return ok ? 0 : 1;
+    }
+
     public static int Run()
     {
         int failed = 0;
         GD.Print("[cockpitcheck] car                      shape      recline  eye (x, y, z)         head  ahead  behind  reach  pedals");
         foreach (var spec in CarCatalog.All)
         {
+            if (spec.Body.Shape == BodyShape.Kart) { failed += CheckKart(spec); continue; }
             var d = CarMeshBuilder.For(spec.Body, spec.Wheelbase);
             var seat = CarMeshBuilder.SeatFor(d);
             var eye = HumanMeshBuilder.DriverEye(seat.Hip, seat.Recline);
