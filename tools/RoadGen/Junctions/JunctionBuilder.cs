@@ -14,8 +14,8 @@ public sealed record JunctionOptions(
     /// </summary>
     double SlipExtra = 4.5,
     double SlipMinHalf = 3.5,
-    /// <summary>The share of a link its kerb allowance may take at most, so the road keeps room for pockets and the next junction.</summary>
-    double LinkShare = 0.3,
+    /// <summary>What a link keeps for a left pocket (storage and taper) before its two ends share the rest as kerb allowance, so the pockets still fit (#682).</summary>
+    double PocketReserve = 55.0,
     /// <summary>Where the link has room the kerb allowance (and so the turn radius) grows to this many times the nominal one.</summary>
     double Grow = 1.4,
     double GrowFromLength = 150.0,
@@ -134,7 +134,10 @@ public sealed class JunctionBuilder
             if (net.Links[ordered[i].Approach.LinkId].Alignment is { IsEmpty: false } alignment)
             {
                 // never more than its share of the link; on a long one up to `Grow` times the nominal allowance
-                double room = Math.Max(_options.MinKerb, alignment.Length * _options.LinkShare);
+                // the link keeps room for a left pocket (storage and taper, about PocketReserve) between its two ends: each end's kerb allowance
+                // takes at most half of what is left, never less than the small one a junction had before (0.6 x half width, 5 m at most)
+                double floor = Math.Clamp(0.6 * ordered[i].Half, _options.MinKerb, 5.0);
+                double room = Math.Max(floor, (alignment.Length - _options.PocketReserve) * 0.5);
                 kerb = Math.Min(kerb, room);
                 if (alignment.Length >= _options.GrowFromLength) kerb = Math.Min(kerb * _options.Grow, _options.MaxKerb);
             }

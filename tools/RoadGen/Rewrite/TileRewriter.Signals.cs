@@ -331,6 +331,13 @@ public static partial class TileRewriter
                     break;
                 }
             }
+            // a bike group that finds no phase (a T with a right pocket whose arrow always runs with the through lane) goes without its signal, not the junction without its plan (#682)
+            if (signalPlan.Validate().Any(e => e.Contains("(Bike arm")) && arms.Any(a => a.BikeSignal))
+            {
+                stats.BikeSignals -= arms.Count(a => a.BikeSignal);
+                for (int a = 0; a < arms.Count; a++) arms[a] = arms[a] with { BikeSignal = false };
+                signalPlan = SignalPlan.Build(arms, seed, amber);
+            }
             if (signalPlan.Validate() is { Count: > 0 } errors)
             {
                 stats.Invalid++;
