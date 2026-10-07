@@ -219,3 +219,27 @@ public static partial class TileRewriter
         return lanes is not null && lanes.All(m => (m & SignalMoves.Right) == 0);
     }
 }
+
+public static partial class TileRewriter
+{
+    private static readonly LaneStats NoCount = new();
+
+    /// <summary>
+    /// The turns a signalised approach may not make (#700): those no lane of its OSM lane data shows, and those an OSM
+    /// restriction forbids. The plan leaves them out of its groups, so nothing waits for a turn nobody can make.
+    /// </summary>
+    private static SignalMoves BannedTurns(Junction j, int arm, RoadNetwork net, Dictionary<(int Node, int Arm), ArmLanes> pockets, Restrictions? restrictions)
+    {
+        var all = SignalMoves.Left | SignalMoves.Through | SignalMoves.Right;
+        var banned = restrictions?.Banned(j, arm, net, NoCount) ?? SignalMoves.None;
+        if (pockets.GetValueOrDefault((j.NodeId, arm)) is { } lanes && (lanes.OwnMoves is not null || lanes.PocketMoves is not null))
+        {
+            var shown = SignalMoves.None;
+            foreach (var m in lanes.OwnMoves ?? []) shown |= m;
+            foreach (var m in lanes.PocketMoves ?? []) shown |= m;
+            if (lanes.RightWay is not null) shown |= SignalMoves.Right;   // a right pocket from data
+            banned |= all & ~shown;
+        }
+        return banned & all;
+    }
+}

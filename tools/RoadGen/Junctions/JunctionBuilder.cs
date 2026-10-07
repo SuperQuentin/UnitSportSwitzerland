@@ -135,7 +135,7 @@ public sealed class JunctionBuilder
             if (tj > trims[j]) trims[j] = tj;
         }
 
-        var arms = new List<PendingArm>(n);
+        var kerbs = new double[n];
         for (int i = 0; i < n; i++)
         {
             double kerb = _options.Kerb(ordered[i].Half);
@@ -149,19 +149,43 @@ public sealed class JunctionBuilder
                 kerb = Math.Min(kerb, room);
                 if (alignment.Length >= _options.GrowFromLength) kerb = Math.Min(kerb * _options.Grow, _options.MaxKerb);
             }
-            double limit = Math.Min(_options.MaxTrimWidths * ordered[i].Half * 2, _options.MaxTrimAbsolute);
-
-            double wanted = Math.Max(trims[i], 0) + kerb;
-            if (wanted > limit) { wanted = limit; clamped[i] = true; }
-
-            arms.Add(new PendingArm(
-                ordered[i].Approach.LinkId, ordered[i].Approach.End,
-                ordered[i].Approach.OutwardHeading, ordered[i].Half, wanted, clamped[i]));
+            kerbs[i] = kerb;
         }
-
         var tight = new bool[n];
         if (TightCorner is { } tightCorner)
             for (int i = 0; i < n; i++) tight[i] = tightCorner(net, node, ordered[i].Approach, ordered[(i + 1) % n].Approach);
+
+        // each arm is cut back as far as its corners' kerb arcs reach (#700): an arc's legs are the smaller of its two arms'
+        // allowances (a main road beside a minor one keeps the minor road's radius), a tight corner's its small kerb; an arm
+        // trimmed by its own allowance past where its arcs end stood its mouth, stop line and crossing far out for nothing
+        var wanted = new double[n];
+        var reached = new bool[n];
+        for (int i = 0; i < n; i++)
+        {
+            if (!cornerValid[i]) continue;
+            int j = (i + 1) % n;
+            var c = corners[i];
+            double ti = (c - node.Position).Dot(Vec2.FromHeading(ordered[i].Approach.OutwardHeading));
+            double tj = (c - node.Position).Dot(Vec2.FromHeading(ordered[j].Approach.OutwardHeading));
+            double leg = tight[i] ? _options.TightKerb : Math.Min(kerbs[i], kerbs[j]);
+            wanted[i] = Math.Max(wanted[i], ti + leg);
+            wanted[j] = Math.Max(wanted[j], tj + leg);
+            reached[i] = reached[j] = true;
+        }
+
+        var arms = new List<PendingArm>(n);
+        for (int i = 0; i < n; i++)
+        {
+            double limit = Math.Min(_options.MaxTrimWidths * ordered[i].Half * 2, _options.MaxTrimAbsolute);
+            // never short of where the edges meet (the overlap), and with no corner at all the arm's own allowance as before
+            double trim = reached[i] ? Math.Max(wanted[i], trims[i]) : Math.Max(trims[i], 0) + kerbs[i];
+            if (trim > limit) { trim = limit; clamped[i] = true; }
+
+            arms.Add(new PendingArm(
+                ordered[i].Approach.LinkId, ordered[i].Approach.End,
+                ordered[i].Approach.OutwardHeading, ordered[i].Half, trim, clamped[i]));
+        }
+
         return new PendingJunction(node, arms, corners, cornerValid, tight);
     }
 

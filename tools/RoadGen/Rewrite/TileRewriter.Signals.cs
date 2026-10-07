@@ -315,7 +315,7 @@ public static partial class TileRewriter
                 bool leftLane = pocket || pockets.GetValueOrDefault((junction.NodeId, i))?.OwnMoves is { } ownMoves && ownMoves.Any(m => m == SignalMoves.Left);
                 arms.Add(new SignalArm(arm.OutwardHeading, approach, leaves, leftLane, rightPocket, Pedestrians: true,
                     BikeSignal: bikeSignal, SpeedKmh: urban ? 50 : 60, CrossingM: (float)(to - from + (info.Attributes.OneWay != 0 ? 0 : half)),
-                    Rank: (byte)Math.Clamp(PriorityPlanner.Rank(info) / 4, 1, 255)));
+                    Rank: (byte)Math.Clamp(PriorityPlanner.Rank(info) / 4, 1, 255), Banned: approach ? BannedTurns(junction, i, net, pockets, restrictions) : SignalMoves.None));
                 stats.Arms++;
                 if (approach) stats.Approaches++;
                 if (leftLane) stats.LeftPockets++;
