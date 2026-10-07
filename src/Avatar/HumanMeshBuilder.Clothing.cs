@@ -166,6 +166,7 @@ public static partial class HumanMeshBuilder
                 GarmentShape.CropTop => look with { Top = c.A, TopFrom = 2.5f, SleeveTo = goth ? 0f : 0.38f },
                 GarmentShape.Longsleeve => look with { Top = c.A, SleeveTo = 2f },
                 GarmentShape.Hoodie => look with { Top = c.A, SleeveTo = 2f, TopFrom = 1.55f },
+                GarmentShape.FieldJacket => look with { Top = c.A, SleeveTo = 2f, TopFrom = 1.55f },
                 // the blouse under a short jacket: the jacket is laid over it (TopDetail)
                 GarmentShape.CroppedJacket => look with { Top = c.B, SleeveTo = 2f },
                 GarmentShape.Robe => look with { Top = c.A, SleeveTo = 1f, TopFrom = 1.5f },
@@ -349,6 +350,22 @@ public static partial class HumanMeshBuilder
                 break;
             }
 
+            case GarmentShape.FieldJacket:
+            {
+                // the army's field jacket (#716): a stand collar, the zip down the front, a flapped pocket
+                // on each breast, a band at the hem
+                var (side, _, _) = t.Frame(3.15f);
+                t.Band(s, 3.80f, 4f, c.B, 0.008f);
+                t.Band(s, 1.55f, 1.66f, c.B, 0.006f);
+                s.Box(t.Front(2.75f, 0.006f), new Vector3(0.012f, 0.42f, 0.008f), c.C, TrunkBasis(fit, 2.75f));
+                foreach (float x in stackalloc[] { -0.068f, 0.068f })
+                {
+                    s.Box(t.Front(3.12f, 0.006f) + side * x, new Vector3(0.062f, 0.058f, 0.012f), c.A, TrunkBasis(fit, 3.12f));
+                    s.Box(t.Front(3.25f, 0.007f) + side * x, new Vector3(0.066f, 0.022f, 0.014f), c.B, TrunkBasis(fit, 3.25f));
+                }
+                break;
+            }
+
             case GarmentShape.CroppedJacket:
             {
                 // a short blue jacket over the white blouse; jabot and brooch at the throat, a strap across
@@ -442,6 +459,10 @@ public static partial class HumanMeshBuilder
                     break;
                 case GarmentShape.Hoodie:
                     LimbBand(s, shoulder, elbow, wrist, 1.86f, 2f, p, arm: true, 0.006f, c.B);
+                    break;
+                case GarmentShape.FieldJacket:
+                    // the cuff
+                    LimbBand(s, shoulder, elbow, wrist, 1.84f, 2f, p, arm: true, 0.006f, c.B);
                     break;
                 case GarmentShape.CroppedJacket:
                     // puffed at the shoulder, the jacket's sleeve over the blouse's, a white cuff

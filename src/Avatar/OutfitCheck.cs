@@ -118,7 +118,7 @@ public static class OutfitCheck
         foreach (var c in colours)
         {
             int id = Mathf.RoundToInt((1f - c.A) * 255f);
-            if (id < 0 || id > (int)Finish.Studs) return $"alpha {c.A} decodes to no finish ({id})";
+            if (id < 0 || id > (int)Finish.Camo) return $"alpha {c.A} decodes to no finish ({id})";
             if (id == (int)finish) seen = true;
         }
         return seen ? null : $"its {finish} finish is nowhere in the mesh";
