@@ -90,6 +90,10 @@ src/Player/              quick  --cockpitcheck
 src/Player/              quick  --motocheck
 src/Player/              quick  --truckcheck
 src/Player/              quick  --driftcheck
+src/Player/Car           quick  --kartcheck
+src/Player/Kart          quick  --kartcheck
+src/Avatar/Kart          quick  --kartcheck
+src/Avatar/CarRig        quick  --kartcheck
 src/Player/              quick  --spincheck
 src/Vehicles/            quick  --driftcheck
 src/Vehicles/            quick  --truckcheck

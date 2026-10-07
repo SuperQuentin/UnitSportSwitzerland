@@ -97,6 +97,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Has("--outfitcheck"), Avatar.OutfitCheck.Run),
         (() => Has("--emotecheck"), Avatar.EmoteCheck.Run),
         (() => Has("--cockpitcheck"), Player.CockpitCheck.Run),
+        (() => Has("--kartcheck"), Player.KartCheck.Run),
         (() => Has("--spincheck"), Player.DriftCheck.Spin),
         (() => Has("--setupcheck"), Player.CarSetups.Check),
         (() => Has("--motocheck"), Player.Motorbike.Check),
