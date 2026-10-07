@@ -369,7 +369,7 @@ public static class KartMeshBuilder
     [Core.Showcase("Cars", "Rental kart")]
     private static IEnumerable<(string Name, Func<Node3D> Make)> ShowcaseLiveries()
     {
-        var spec = Player.CarCatalog.All.First(c => c.Body.Shape == BodyShape.Kart);
+        var spec = Player.CarCatalog.Kart;
         for (int i = 0; i < Liveries.Length; i++)
         {
             int seed = i;

@@ -678,6 +678,10 @@ public static class CarCatalog
         return i >= 0 && i < All.Count ? All[i] : null;
     }
 
+    /// <summary>The rental go-kart (#715), <see cref="RideKind"/> 36.</summary>
+    public static CarSpec Kart => _kart ??= All.First(c => c.Body.Shape == BodyShape.Kart);
+    private static CarSpec? _kart;
+
     public static bool IsCar(RideKind kind) => (int)kind >= First && (int)kind <= Last;
 
     private static IReadOnlyList<CarSpec> Number(CarSpec[] cars)

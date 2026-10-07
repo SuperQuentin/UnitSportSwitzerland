@@ -59,8 +59,9 @@ driver sits low with the legs out ahead (`SeatFor`: hip 0.2 m, back reclined 24Â
 ## How to get one
 
 - The ride picker (E, Cars page, "Rental kart"), then "Army" in the Car preset list for the army skin.
-- A probe: `--ride car:28,15 --world flat` (`--setup army` for the skin). `RideProbe` has no kart word: `car:28`.
-- Code: `player.SetRide((RideKind)36)`; `CarCatalog.All.First(c => c.Body.Shape == BodyShape.Kart)`.
+- A probe: `--ride kart,15 --world flat` (`--setup army` for the skin; `car:28` is the same kart).
+
+- Code: `player.SetRide(CarCatalog.Kart.Kind)` (36); then `player.SetCarSetup(CarSetups.ArmyId)` at a standstill for the skin.
 
 ## Checks
 

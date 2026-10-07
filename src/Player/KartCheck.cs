@@ -23,7 +23,7 @@ public static class KartCheck
         var fails = new List<string>();
         void Check(bool ok, string what) { if (!ok) fails.Add(what); GD.Print($"[kartcheck] {(ok ? "ok  " : "FAIL")} {what}"); }
 
-        var spec = CarCatalog.All.First(c => c.Body.Shape == BodyShape.Kart);
+        var spec = CarCatalog.Kart;
         Check(spec.Kind == (RideKind)36, $"the kart is RideKind {(int)spec.Kind} (36), car number {(int)spec.Kind - CarCatalog.First}");
         Check(Rideable.Create(spec.Kind) is Car { IsKart: true }, "Rideable.Create gives a Car that knows it is a kart");
 
