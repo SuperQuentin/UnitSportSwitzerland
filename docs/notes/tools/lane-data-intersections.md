@@ -108,6 +108,19 @@ Plan and reasoning: `docs/plans/intersection-lanes.md`. What is built:
   to kerb end, turned at most 30 degrees from square (`MaxCrossingSkew`, the user's cap); its bars stay along the road.
 - **Stripes lean with the traffic**: a stripe runs from the centre line outward the way the hatch pushes a car: away from
   the mouth on an exit hatch (as before), toward it on a lead-in or a merged strip (`Hatch(..., towardMouth)`).
+- **The veer share** (user's rule: the through traffic veers in about as much as the oncoming traffic veers out):
+  a left pocket's lead-in widens both edges. `Widening.SetFrame`: the approach's lane frame (centre line, lanes,
+  hatch, arrows, bars, every offset its paint takes) stands toward the other side by that side's share of the
+  widening; a mirror strip (`SetWidth`) widens the other edge by it; right pockets follow the frame. The other side's
+  share is tried at half, then a quarter (`VeerShares`), as its edge has room (building, other line, ground, seam),
+  else none; none on a merged strip (#325), where its exit is one, or where a strip from the segment's far end would
+  meet it. Exits shrink (`SetShrink`): the through lane arrives less shifted, and beside its arm's own split lead-in
+  the exit stands in that frame and only what is still missing is added, drawn as part of that arm's mirror strip:
+  at a crossroads with facing split lead-ins the exits vanish. At the lights an exit hatch that carries a centre
+  island (#682) keeps 1.7 m where the island stands (`IslandKeepHatch`; the user's exception): both facing shares give
+  way alike. Readers outside the widening (stop lines, crossings, poles, left guides, lane records) use the layout's
+  `Shift`/`EdgeOut`. Real tiles: 18 of 27 pockets split (17 by half, 1 by a quarter); overlap after junctions as
+  before. Not done: oncoming departing traffic keeps its old line (on a single pocket it stays in its moved lane).
 - **Taper per lane**: a left pocket of k lanes has a k times longer taper (the same slope).
 - Test region: J7's east approach marks no right turn (tight north-east corner, diagonal zebras on the north and east
   arms from OSM nodes, J7 has no sidewalks); the unlit T south of J3: zebras on the stem and the west arm, the east arm's
