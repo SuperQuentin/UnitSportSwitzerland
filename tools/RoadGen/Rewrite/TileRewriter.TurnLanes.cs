@@ -1394,7 +1394,7 @@ public static partial class TileRewriter
             // a pocket of several lanes (#700): the hatch is at most the leftmost lane wide, so it opens one lane only; the
             // lanes right of it carry the approach's own lane on, and the through lane leaves them over the taper behind a dashed line
             double cap = LeadCap;
-            Hatch(paint, stats, storage, _length, d => Math.Min(cap, Border(d)), slant: LeadSlant);
+            Hatch(paint, stats, storage, _length, d => Math.Min(cap, Border(d)), slant: LeadSlant, towardMouth: true);
             if (cap < wide - 1e-6) ThroughEdge(paint, storage, Border, cap);
             // the through lane's edge runs on to the angled line's outer end for one lane; for several, the lines between the pocket's
             // lanes start where the left-turn bike lane's do, at the storage (the user's spec, #700)
@@ -1438,7 +1438,7 @@ public static partial class TileRewriter
         {
             Painted = true;
             SolidCentre(paint);
-            Hatch(paint, stats, storage, _length - farStop, d => Math.Min(LeadCap, PocketRegion * Math.Clamp((d - storage) / TurnEntry, 0, 1)));   // #700: one lane at most
+            Hatch(paint, stats, storage, _length - farStop, d => Math.Min(LeadCap, PocketRegion * Math.Clamp((d - storage) / TurnEntry, 0, 1)), towardMouth: true);   // #700: one lane at most; leaning with the traffic driving in
             Lanes(paint, storage, storage + TurnEntry, rightTurn, stats, signal);
         }
 
@@ -1739,7 +1739,8 @@ public static partial class TileRewriter
         /// the mouth, cut at the ends. Left out, the centre line alone, where it would be narrower
         /// than <see cref="HatchMinWidth"/> or shorter than <see cref="HatchMinLength"/> (#406).
         /// </summary>
-        private void Hatch(List<RoadPaint> paint, TurnLaneStats stats, double near, double far, Func<double, double> border, double slant = 0)
+        private void Hatch(List<RoadPaint> paint, TurnLaneStats stats, double near, double far, Func<double, double> border, double slant = 0,
+            bool towardMouth = false)
         {
             double wideEnd = border(near) >= border(far) ? near : far;
             if (border(wideEnd) < HatchMinWidth || far - near < HatchMinLength) { stats.HatchesSkipped++; return; }
@@ -1768,34 +1769,48 @@ public static partial class TileRewriter
             // each stripe edge (d0 + t, t), t metres out from the centre line: where it enters the
             // median (the centre line, or the closing line at its near end) and where it meets the
             // border (border(d0 + t) = t, by bisection), or the closing line at its far end
+            // a stripe runs from the centre line outward, away from the mouth (sigma +1: an exit's, along its traffic) or toward
+            // it (sigma -1: a lead-in's, along the traffic driving in): either way it leans the way the hatch pushes a car (#700)
+            double sigma = towardMouth ? -1 : 1;
             (double From, double To)? Edge(double d0)
             {
-                double t0 = Math.Max(0, near - d0), tMax = far - d0;
-                if (s > 0)
+                double t0, tMax;
+                if (!towardMouth)
                 {
-                    // inside the angled line: d0 + t >= near + s t
-                    if (s < 1) t0 = Math.Max(0, (near - d0) / (1 - s));
-                    else if (s > 1) { if (d0 < near) return null; t0 = 0; tMax = Math.Min(tMax, (d0 - near) / (s - 1)); }
+                    t0 = Math.Max(0, near - d0); tMax = far - d0;
+                    if (s > 0)
+                    {
+                        // inside the angled line: d0 + t >= near + s t
+                        if (s < 1) t0 = Math.Max(0, (near - d0) / (1 - s));
+                        else if (s > 1) { if (d0 < near) return null; t0 = 0; tMax = Math.Min(tMax, (d0 - near) / (s - 1)); }
+                    }
                 }
-                if (tMax <= t0 || border(d0 + t0) <= t0) return null;
-                if ((s > 0 ? border(d0 + tMax) : border(far)) > tMax) return (t0, tMax);
+                else
+                {
+                    // d0 - t within [near + s t, far]: t <= (d0 - near) / (1 + s), t >= d0 - far
+                    t0 = Math.Max(0, d0 - far); tMax = (d0 - near) / (1 + s);
+                }
+                if (tMax <= t0 || border(d0 + sigma * t0) <= t0) return null;
+                if ((s > 0 || towardMouth ? border(d0 + sigma * tMax) : border(far)) > tMax) return (t0, tMax);
                 double lo = t0, hi = tMax;
                 for (int k = 0; k < 40; k++)
                 {
                     double mid = (lo + hi) * 0.5;
-                    if (border(d0 + mid) > mid) lo = mid; else hi = mid;
+                    if (border(d0 + sigma * mid) > mid) lo = mid; else hi = mid;
                 }
                 return (t0, lo);
             }
             // stripes keep their phase from near + 0.6; those starting before the wide near end come in through its closing line
+            // (leaning toward the mouth, those past the far end come in through the border)
             double first = near + 0.6 - Math.Ceiling(border(near) / HatchStep) * HatchStep;
-            for (double d0 = first; d0 < far; d0 += HatchStep)
+            double last = towardMouth ? far + Math.Ceiling(width / HatchStep + 1) * HatchStep : far;
+            for (double d0 = first; d0 < last; d0 += HatchStep)
             {
                 if (Edge(d0 - h) is not { } a || Edge(d0 + h) is not { } c) continue;
                 if (Math.Max(a.To - a.From, c.To - c.From) < 0.4) continue;   // where the border is still near the centre line
                 ushort b = (ushort)(v.Count / 3);
-                v.AddRange(Point(d0 - h + a.From, a.From)); v.AddRange(Point(d0 - h + a.To, a.To));
-                v.AddRange(Point(d0 + h + c.To, c.To)); v.AddRange(Point(d0 + h + c.From, c.From));
+                v.AddRange(Point(d0 - h + sigma * a.From, a.From)); v.AddRange(Point(d0 - h + sigma * a.To, a.To));
+                v.AddRange(Point(d0 + h + sigma * c.To, c.To)); v.AddRange(Point(d0 + h + sigma * c.From, c.From));
                 idx.AddRange([b, (ushort)(b + 1), (ushort)(b + 2), b, (ushort)(b + 2), (ushort)(b + 3)]);
                 stats.Stripes++;
             }

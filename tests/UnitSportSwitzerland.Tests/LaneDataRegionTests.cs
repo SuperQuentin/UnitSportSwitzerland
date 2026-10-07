@@ -177,4 +177,29 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
         Assert.True(east - west > 2, $"not diagonal: {east - west:F1} m");   // nearer the junction (south, larger z) on the tight east side
         Assert.True(east - west <= Math.Tan(Math.PI / 6) * span + 0.6, $"more than 30 degrees: {east - west:F1} m over {span:F1} m");
     }
+
+    [Fact]
+    public void Hatch_stripes_lean_the_way_they_push_the_traffic()
+    {
+        // J1's west arm: the lead-in hatch (south of the centre line, traffic driving east, in) leans toward the mouth; the exit
+        // hatch (north of it, traffic driving west, out) away from it: going with the traffic, a stripe runs out toward its lane
+        var j = region.Junction("J1");
+        var id = TileId.FromLv95(j.E, j.N);
+        double cx = j.E - id.MinE, cz = id.MaxN - j.N;
+        int leadIn = 0, exit = 0;
+        foreach (var hatch in region.Tile(j.E, j.N).Paint.Where(p => p.Type == PaintType.Hatch && p.Vertices[0] < cx - 15))
+        {
+            var v = hatch.Vertices;
+            for (int q = 0; q + 3 < v.Length / 3; q += 4)
+            {
+                var pts = Enumerable.Range(q, 4).Select(i => (X: (double)v[i * 3], Z: (double)v[i * 3 + 2])).ToList();
+                bool south = pts.Average(p => p.Z) > cz;
+                var inner = south ? pts.MinBy(p => p.Z) : pts.MaxBy(p => p.Z);   // at the centre line
+                var outer = south ? pts.MaxBy(p => p.Z) : pts.MinBy(p => p.Z);   // at the border
+                if (south) { Assert.True(outer.X > inner.X, "a lead-in stripe leans away from the mouth"); leadIn++; }
+                else { Assert.True(outer.X < inner.X, "an exit stripe leans toward the mouth"); exit++; }
+            }
+        }
+        Assert.True(leadIn > 3 && exit > 3, $"{leadIn} lead-in and {exit} exit stripes");
+    }
 }
