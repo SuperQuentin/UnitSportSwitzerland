@@ -173,8 +173,9 @@ public sealed record Shot
     /// <summary>A whole day lasts this many real minutes during the shot (a time-lapse); null: the clock stands.</summary>
     public float? MinutesPerDay { get; init; }
     public string Style { get; init; } = "ps1";
-    /// <summary>The sea state for the lakes, 0..1; null: leave it.</summary>
+    /// <summary>The sea state for the lakes, 0..1; null: <see cref="CalmSea"/>.</summary>
     public float? Sea { get; init; }
+    public const float CalmSea = 0.15f;
     /// <summary>Traffic cars around the camera; null: the player's setting.</summary>
     public int? Traffic { get; init; }
 

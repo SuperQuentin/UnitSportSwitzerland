@@ -59,6 +59,7 @@ public partial class TrailerDirector : Node
     private double _t, _waitWall, _settledFor, _preroll;
     private ulong _phaseStartMs;
     private string _style = "";
+    private float _sea = float.NaN;
     private FrameRecorder? _recorder;
     private int _framesWanted;
     private readonly Queue<(double T, string Path)> _stills = new();
@@ -129,8 +130,34 @@ public partial class TrailerDirector : Node
             GD.PrintErr("[trailer] --trailer-record without --fixed-fps: frames follow the wall clock, the film will stutter");
         if (_recordDir == null && _stillsDir == null && CmdArgs.Value("--trailer-song") is { } songPath) LoadSong(songPath);
         RenderingServer.FramePostDraw += OnFrameDrawn;
+        foreach (var problem in CutProblems(TrailerScript.Shots))
+        {
+            GD.PrintErr($"[trailer] cut: {problem}");
+            _failures++;
+        }
         GD.Print($"[trailer] {_shots.Count} shot(s): {string.Join(" ", _shots.Select(s => s.Number))}; "
             + (_recordDir != null ? $"recording to {_recordDir} at {_fps} fps, {_size.X}x{_size.Y}" : _stillsDir != null ? $"stills to {_stillsDir}" : "preview"));
+    }
+
+    /// <summary>
+    /// What is wrong with the cut: shots out of order, a gap or an overlap between two (each starts
+    /// on the bar the one before ends), a shot under a bar, or a film that does not end with the song.
+    /// </summary>
+    public static IEnumerable<string> CutProblems(IReadOnlyList<Shot> shots)
+    {
+        for (int i = 0; i < shots.Count; i++)
+        {
+            var s = shots[i];
+            if (s.Bars < 1) yield return $"shot {s.Number} lasts {s.Bars} bars";
+            if (s.Keys.Count == 0) yield return $"shot {s.Number} has no camera key";
+            if (i == 0) continue;
+            var before = shots[i - 1];
+            if (s.Number <= before.Number) yield return $"shot {s.Number} comes after shot {before.Number}";
+            if (s.FromBar != before.FromBar + before.Bars)
+                yield return $"shot {s.Number} starts at bar {s.FromBar}, shot {before.Number} ends at bar {before.FromBar + before.Bars}";
+        }
+        if (shots.Count > 0 && System.Math.Abs(shots[^1].End - Song.End) > 0.05)
+            yield return string.Create(CultureInfo.InvariantCulture, $"the last shot ends at {shots[^1].End:F2} s, the song at {Song.End:F2} s");
     }
 
     public override void _ExitTree()
@@ -209,7 +236,10 @@ public partial class TrailerDirector : Node
             RunCommand?.Invoke($"/style {shot.Style}");
             _style = shot.Style;
         }
-        if (shot.Sea is { } sea) RunCommand?.Invoke(string.Create(CultureInfo.InvariantCulture, $"/seastate {sea:F2}"));
+        // every shot its own sea: a storm must not carry over into the next lake
+        float sea = shot.Sea ?? Shot.CalmSea;
+        if (sea != _sea) RunCommand?.Invoke(string.Create(CultureInfo.InvariantCulture, $"/seastate {sea:F2}"));
+        _sea = sea;
         GameSettings.Current.TrafficCars = shot.Traffic ?? _defaultTraffic;
         World.Traffic.Current?.Forget();
         HoldClock(shot.Hour);

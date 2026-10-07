@@ -72,7 +72,7 @@ public static class TrailerScript
     private static readonly Spot FurkaTop = new(2673420, 1158140);
     private static readonly Spot Gotthard = new(2686600, 1154120);
     /// <summary>Bern's Kramgasse, east end and west end (the Zytglogge).</summary>
-    private static readonly Spot KramgasseEast = new(2601080, 1199681), KramgasseWest = new(2600720, 1199668);
+    private static readonly Spot KramgasseEast = new(2601080, 1199661), KramgasseWest = new(2600720, 1199655);
     /// <summary>The flat by the Gornergrat Kulmhotel, the Matterhorn to the west-south-west.</summary>
     private static readonly Spot Crew = new(2626790, 1092478);
     /// <summary>The Riddes straight (VS), west end and east end.</summary>
@@ -137,7 +137,7 @@ public static class TrailerScript
             Hour = 10.5,
             Cast =
             [
-                new() { Ride = RideKind.Pigeon, At = KramgasseEast.Up(12), Heading = 268, Drive = Drive.Fly, Launch = 14, Climb = -8, Flight = _ => Stick(0f, -1f) },
+                new() { Ride = RideKind.Pigeon, At = KramgasseEast.Up(15), Heading = 268, Drive = Drive.Fly, Launch = 14, Flight = t => Stick(0f, -0.5f, up: t % 0.9 < 0.3 ? 1f : 0f) },
             ],
             Keys =
             [
@@ -157,10 +157,10 @@ public static class TrailerScript
             ],
             Keys =
             [
-                new(0, Pt.Road("tremola", 378, -9f, 1.4f), Pt.On(0, 0f, 0.7f), 50),
-                new(3.9, Pt.Road("tremola", 378, -9f, 1.4f), Pt.On(0, 0f, 0.7f), 50),
+                new(0, Pt.Road("tremola", 378, -9f, 2.3f), Pt.On(0, 0f, 0.7f), 50),
+                new(3.9, Pt.Road("tremola", 378, -9f, 2.3f), Pt.On(0, 0f, 0.7f), 50),
             ],
-            Smooth = 0.1f, Preroll = 4,
+            Smooth = 0.1f, Preroll = 5.8,
         },
         new()
         {
@@ -184,14 +184,14 @@ public static class TrailerScript
             Hour = 11.5, Traffic = 0,
             Cast =
             [
-                new() { Ride = Moto(AfricaTwin), At = Furka, Toward = FurkaTop, Drive = Drive.Road, Route = "furka", Arc = 1380, Seed = 11 },
+                new() { Ride = Moto(AfricaTwin), At = Furka, Toward = FurkaTop, Drive = Drive.Follow, Route = "furka", Arc = 1380, Speed = 22, Seed = 11 },
             ],
             Keys =
             [
-                new(0, Pt.Road("furka", 1497, 9f, 1.0f), Pt.On(0, 0f, 0.9f), 50),
-                new(1.95, Pt.Road("furka", 1497, 9f, 1.0f), Pt.On(0, 0f, 0.9f), 50),
+                new(0, Pt.Road("furka", 1497, -8f, 3.2f), Pt.On(0, 0f, 0.9f), 35),
+                new(1.95, Pt.Road("furka", 1497, -8f, 3.2f), Pt.On(0, 0f, 0.9f), 35),
             ],
-            Smooth = 0.1f, Preroll = 6,
+            Smooth = 0.1f, Preroll = 6.5,
         },
         new()
         {
@@ -199,18 +199,19 @@ public static class TrailerScript
             Hour = 12.0,
             Cast =
             [
+                // the fall line runs west here (35 m down over 60 m), toward the Matterhorn
                 new()
                 {
-                    Ride = RideKind.Skis, At = new Spot(2622250, 1090800), Heading = 350, Drive = Drive.Controls, Seed = 21,
-                    Controls = t => new RideInput(0f, 0f, 0.5f * Mathf.Sin((float)t * 2.2f), true),
+                    Ride = RideKind.Skis, At = new Spot(2621770, 1089700), Heading = 290, Drive = Drive.Controls, Seed = 21,
+                    Controls = t => new RideInput(0f, 0f, 0.15f * Mathf.Sin((float)t * 2.4f), true),
                 },
             ],
             Keys =
             [
-                new(0, Pt.On(0, 0.8f, 1.3f, 4.5f), Pt.On(0, 0f, 0.5f, -8f), 28),
-                new(1.95, Pt.On(0, -0.8f, 1.2f, 4.2f), Pt.On(0, 0f, 0.5f, -8f), 28),
+                new(0, Pt.On(0, 2.5f, 1.5f, 5f), Pt.On(0, -0.5f, 0.3f, -10f), 28),
+                new(1.95, Pt.On(0, 2.0f, 1.4f, 4.5f), Pt.On(0, -0.5f, 0.3f, -10f), 28),
             ],
-            Smooth = 0.1f, Preroll = 4,
+            Smooth = 0.08f, Preroll = 2,
         },
         new()
         {
@@ -219,7 +220,6 @@ public static class TrailerScript
             Cast =
             [
                 new() { Ride = Heavy(Scania), Trailer = Curtainsider, At = Gotthard, Toward = new Spot(2686150, 1154560), Drive = Drive.Follow, Route = "gotthard", Arc = 560, Speed = 14 },
-                new() { Ride = Heavy(Setra), At = Gotthard, Toward = new Spot(2686150, 1154560), Drive = Drive.Follow, Route = "gotthard", Arc = 515, Speed = 14, Seed = 2 },
             ],
             Keys =
             [
@@ -251,13 +251,13 @@ public static class TrailerScript
             Hour = 14.0, Sea = 0.25f,
             Cast =
             [
-                new() { Ride = RideKind.Jetski, At = new Spot(2560720, 1140305), Heading = 318, Board = ChillonBoard, Launch = 15, Drive = Drive.Controls, Controls = t => Pedal(1f, 0.1f * Mathf.Sin((float)t * 1.6f)), Seed = 8 },
-                new() { Ride = RideKind.Speedboat, At = new Spot(2560770, 1140262), Heading = 318, Board = ChillonBoard, Launch = 14, Drive = Drive.Controls, Controls = _ => Pedal(1f), Seed = 9 },
+                new() { Ride = RideKind.Jetski, At = new Spot(2560693, 1140362), Heading = 315, Board = ChillonBoard, Launch = 15, Drive = Drive.Controls, Controls = t => Pedal(1f, 0.1f * Mathf.Sin((float)t * 1.6f)), Seed = 8 },
+                new() { Ride = RideKind.Speedboat, At = new Spot(2560689, 1140349), Heading = 315, Board = ChillonBoard, Launch = 14, Drive = Drive.Controls, Controls = _ => Pedal(1f), Seed = 9 },
             ],
             Keys =
             [
-                new(0, Pt.Alt(2560600, 1140335, 373.5f), Pt.At(2560722, 1140450, 9), 35),
-                new(3.9, Pt.Alt(2560598, 1140333, 373.5f), Pt.At(2560715, 1140450, 9), 35),
+                new(0, Pt.Alt(2560645, 1140368, 373.4f), Pt.At(2560722, 1140450, 9), 35),
+                new(3.9, Pt.Alt(2560643, 1140366, 373.4f), Pt.At(2560716, 1140450, 9), 35),
             ],
             Preroll = 1.0,
         },
@@ -355,12 +355,12 @@ public static class TrailerScript
             Hour = 22.5, Traffic = 0,
             Cast =
             [
-                new() { Ride = Car(Yaris), At = KramgasseEast, Toward = KramgasseWest, Drive = Drive.Follow, Route = "kram", Arc = 20, Speed = 8, Lights = true },
+                new() { Ride = Car(Yaris), At = KramgasseEast, Toward = KramgasseWest, Drive = Drive.Follow, Route = "kram", Arc = -223, Speed = 9, Lights = true },
             ],
             Keys =
             [
-                new(0, Pt.At(2600900, 1199659, 0.9f), Pt.On(0, 0f, 0.8f), 35),
-                new(3.9, Pt.At(2600900, 1199659, 0.9f), Pt.On(0, 0f, 0.8f), 35),
+                new(0, Pt.At(2600900, 1199664, 0.9f), Pt.On(0, 0f, 0.8f), 35),
+                new(3.9, Pt.At(2600900, 1199664, 0.9f), Pt.On(0, 0f, 0.8f), 35),
             ],
             Smooth = 0.2f, Preroll = 4,
         },
@@ -386,8 +386,8 @@ public static class TrailerScript
             ],
             Keys =
             [
-                new(0, Pt.On(0, -70f, 12f, 30f), Pt.On(0, 0f, 0f, 5f), 35),
-                new(1.95, Pt.On(0, -55f, 6f, 40f), Pt.On(0, 0f, -1f, 8f), 35),
+                new(0, Pt.On(0, -48f, 8f, 18f), Pt.On(0, 0f, 0f, 4f), 35),
+                new(1.95, Pt.On(0, -40f, 5f, 26f), Pt.On(0, 0f, -1f, 6f), 35),
             ],
             Smooth = 0.2f, Preroll = 1,
             Captions = [new(0.1, 1.8, "Drop in.")],
@@ -403,16 +403,16 @@ public static class TrailerScript
                 new() { Ride = RideKind.Freighter, At = Spot.Alt(2638000, 1163000, 3100), Heading = 200, Doors = 1 << 3, Drive = Drive.Fly, Launch = 72, Flight = _ => Stick(lever: 0.6f) },
                 .. Enumerable.Range(0, 4).Select(i => new Cast
                 {
-                    Ride = RideKind.Wingsuit, At = Spot.Alt(2638000, 1163000, 3094 - i * 2).Toward(20, 26 + i * 7).Toward(110, (i % 2 - 0.5f) * 3f),
+                    Ride = RideKind.Wingsuit, At = Spot.Alt(2638000, 1163000, 3096 - i * 2).Toward(20, 16 + i * 6).Toward(110, (i % 2 - 0.5f) * 3f),
                     Heading = 200, Drive = Drive.Fly, Launch = 58 - i * 3, Climb = -8, Flight = _ => Stick(0f, -0.3f), Seed = 40 + i,
                 }),
             ],
             Keys =
             [
-                new(0, Pt.On(0, 0f, 2.5f, 14f), Pt.On(2, 0f, 0f), 24),
-                new(1.95, Pt.On(0, 0f, 2.5f, 14f), Pt.On(3, 0f, 0f), 24),
+                new(0, Pt.On(0, 0f, 2.5f, 13f), Pt.On(2, 0f, 0f), 35),
+                new(1.95, Pt.On(0, 0f, 2.5f, 13f), Pt.On(3, 0f, 0f), 35),
             ],
-            Smooth = 0.05f, Preroll = 0.25,
+            Smooth = 0.05f, Preroll = 0.05,
         },
         new()
         {
@@ -420,13 +420,12 @@ public static class TrailerScript
             Hour = 17.4,
             Cast = Enumerable.Range(0, 3).Select(i => new Cast
             {
-                Ride = RideKind.Wingsuit, At = Spot.Alt(2635950 + (i - 1) * 9, 1158640 + i * 6, 1545 + i * 3), Heading = 180,
+                Ride = RideKind.Wingsuit, At = Spot.Alt(2635950 + (i - 1) * 9, 1158575 + i * 6, 1515 + i * 3), Heading = 180,
                 Drive = Drive.Fly, Launch = 50, Climb = -18, Flight = _ => Stick(0f, -0.4f), Seed = 50 + i,
             }).ToArray(),
             Keys =
             [
-                new(0, Pt.Alt(2635954, 1158500, 1500), Pt.Dir(0, 10), 24),
-                new(0.9, Pt.Alt(2635954, 1158500, 1500), Pt.On(1, 0f, 0f), 24),
+                new(0, Pt.Alt(2635954, 1158500, 1500), Pt.On(1, 0f, 0f), 24),
                 new(1.95, Pt.Alt(2635954, 1158500, 1500), Pt.On(1, 0f, 0f), 24),
             ],
             Smooth = 0.05f, Preroll = 0.3, Shake = 0.3f,
@@ -437,14 +436,14 @@ public static class TrailerScript
             Hour = 16.0, Traffic = 0,
             Cast =
             [
-                new() { Ride = Car(Gc8), At = RiddesWest, Toward = RiddesEast, Drive = Drive.Follow, Route = "riddes", Speed = 24 },
+                new() { Ride = Car(Gc8), At = RiddesWest, Toward = RiddesEast, Drive = Drive.Follow, Route = "riddes", Arc = 60, Speed = 24 },
             ],
             Props = [new(default, 0, new Vector3(12f, 3f, 0.8f), new Color(0.62f, 0.6f, 0.56f)) { Route = "riddes", Arc = 150 }],
             Keys =
             [
-                new(0, Pt.Road("riddes", 146, 14f, 1.3f), Pt.Road("riddes", 138, 0f, 0.8f), 35),
+                new(0, Pt.Road("riddes", 125, -3.5f, 1.3f), Pt.Road("riddes", 151, 0f, 1.0f), 35),
             ],
-            Preroll = 7.4,
+            Preroll = 4.7,
         },
         new()
         {
@@ -453,8 +452,8 @@ public static class TrailerScript
             Cast = Grid([Supra, Bnr32, Fd3s, Evo3, Nsx, S13], Furka, FurkaTop, "grid", 1350, goAt: 1.25),
             Keys =
             [
-                new(0, Pt.Road("grid", 1362, 2.0f, 0.7f), Pt.On(2, 0f, 0.8f), 24),
-                new(1.95, Pt.Road("grid", 1364, 2.2f, 0.8f), Pt.On(2, 0f, 0.8f), 24),
+                new(0, Pt.Road("grid", 1362, -3.0f, 0.9f), Pt.On(1, 0f, 0.8f), 50),
+                new(1.95, Pt.Road("grid", 1363, -3.2f, 1.0f), Pt.On(1, 0f, 0.8f), 50),
             ],
             Preroll = 1,
         },
@@ -476,13 +475,13 @@ public static class TrailerScript
             Hour = 15.5, Traffic = 0,
             Cast =
             [
-                new() { Ride = Car(Bnr32), At = Furka, Toward = FurkaTop, Drive = Drive.Road, Route = "lean", Arc = 450, Skill = 1.0f },
-                new() { Ride = Moto(Monster), At = Furka, Toward = FurkaTop, Drive = Drive.Road, Route = "lean", Arc = 400, Skill = 1.2f, Aggression = 0.9f, Seed = 15 },
+                new() { Ride = Car(Bnr32), At = Furka, Toward = FurkaTop, Drive = Drive.Follow, Route = "lean", Arc = 460, Speed = 20 },
+                new() { Ride = Moto(Monster), At = Furka, Toward = FurkaTop, Drive = Drive.Follow, Route = "lean", Arc = 430, Speed = 23, Seed = 15 },
             ],
             Keys =
             [
-                new(0, Pt.On(1, -2.6f, 0.7f, 2f), Pt.On(0, 0f, 0.8f), 50),
-                new(1.95, Pt.On(1, -2.4f, 0.7f, 0f), Pt.On(0, 0f, 0.8f), 50),
+                new(0, Pt.On(1, -3.6f, 0.9f, 3.5f), Pt.On(0, 0f, 0.8f), 35),
+                new(1.95, Pt.On(1, -3.4f, 0.9f, 2.0f), Pt.On(0, 0f, 0.8f), 35),
             ],
             Smooth = 0.12f, Preroll = 6,
         },
@@ -496,8 +495,8 @@ public static class TrailerScript
             ],
             Keys =
             [
-                new(0, Pt.On(0, 4f, 0.8f, -6f), Pt.On(0, 0f, 0.6f), 24),
-                new(1.95, Pt.On(0, 5f, 0.9f, 2f), Pt.On(0, 0f, 0.6f), 24),
+                new(0, Pt.On(0, -4f, 1.2f, -14f), Pt.On(0, 0f, 0.6f), 24),
+                new(1.95, Pt.On(0, -5f, 1.4f, -4f), Pt.On(0, 0f, 0.6f), 24),
             ],
             Smooth = 0.2f, Preroll = 2,
         },
@@ -507,14 +506,14 @@ public static class TrailerScript
             Hour = 18.6,
             Cast =
             [
-                new() { Ride = RideKind.An124, At = Spot.Alt(2508013, 1137031, 470), Heading = 313.5f, Drive = Drive.Fly, Launch = 82, Flight = _ => Stick(lever: 0.7f) },
+                new() { Ride = RideKind.An124, At = Spot.Alt(2508144, 1137170, 440), Heading = 222, Drive = Drive.Fly, Launch = 80, Flight = _ => Stick(lever: 0.7f) },
             ],
             Keys =
             [
-                new(0, Pt.Alt(2507835, 1137200, 374.8f), Pt.On(0, 0f, 0f), 24),
-                new(3.9, Pt.Alt(2507835, 1137200, 374.8f), Pt.On(0, 0f, 0f), 24),
+                new(0, Pt.Alt(2507835, 1137200, 374.8f), Pt.On(0, 0f, 0f), 35),
+                new(3.9, Pt.Alt(2507835, 1137200, 374.8f), Pt.On(0, 0f, 0f), 35),
             ],
-            Smooth = 0.06f, Preroll = 0.5,
+            Smooth = 0.06f, Preroll = 0.3,
         },
         new()
         {
@@ -522,7 +521,7 @@ public static class TrailerScript
             Hour = 16.5,
             Cast =
             [
-                new() { At = new Spot(2507880, 1137300), Heading = 105, Drive = Drive.Walk, Walk = t => (new Vector2(0f, 1f), true), Seed = 17 },
+                new() { At = new Spot(2507812, 1137200), Heading = 135, Drive = Drive.Walk, Walk = t => (new Vector2(0f, 1f), true), Seed = 17 },
             ],
             Keys =
             [

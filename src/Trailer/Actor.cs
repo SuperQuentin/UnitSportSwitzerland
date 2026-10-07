@@ -197,7 +197,9 @@ public sealed class Actor
     }
 
     /// <summary>
-    /// <see cref="Drive.Follow"/>: steer at the road a speed-scaled distance ahead, hold the speed.
+    /// <see cref="Drive.Follow"/>: steer at the road a speed-scaled distance ahead (pure pursuit; a
+    /// two-wheeler as a bank, <c>tan φ = v²κ/g</c>, as the race pilot does), and hold
+    /// <see cref="Cast.Speed"/>, slowed for the bends ahead (6 m/s² across, braking at 4 m/s² to them).
     /// The arc is searched near the last one, so a road that comes back on itself is not jumped.
     /// </summary>
     private RideInput Follow(FootPlayer body)
@@ -211,14 +213,39 @@ public sealed class Actor
             if (d < best) { best = d; _arc = s; }
         }
         float speed = body.RideSpeed;
-        var target = line.PointAt(Mathf.Min(line.Length, _arc + Mathf.Clamp(speed * 1.1f, 7f, 30f)));
         var fwd = (-body.GlobalBasis.Z with { Y = 0 }).Normalized();
-        var want = MathX.Flat(target - pos).Normalized();
+        var target = line.PointAt(Mathf.Min(line.Length, _arc + Mathf.Clamp(speed * 1.1f, 7f, 30f)));
+        var to = MathX.Flat(target - pos);
+        var want = to.Normalized();
         float angle = Mathf.Atan2(fwd.Cross(want).Y, fwd.Dot(want));   // + = to the left
-        float steer = Mathf.Clamp(-angle * 2.2f, -1f, 1f);
-        float err = Spec.Speed - speed;
+        float steer;
+        if (body.Vehicle is Motorbike or Bicycle or Skis)
+        {
+            float kappa = 2f * Mathf.Sin(angle) / Mathf.Max(to.Length(), 1f);
+            float bank = Mathf.Atan(Mathf.Max(speed, 2f) * Mathf.Max(speed, 2f) * kappa / Rideable.Gravity);
+            steer = Mathf.Clamp(-bank / 0.75f, -1f, 1f);
+        }
+        else steer = Mathf.Clamp(-angle * 2.2f, -1f, 1f);
+
+        float limit = Spec.Speed;
+        for (float d = 4f; d < Mathf.Max(30f, speed * 3f); d += 4f)
+        {
+            float k = Curvature(line, _arc + d);
+            float corner = Mathf.Sqrt(6f / Mathf.Max(k, 1e-4f));
+            limit = Mathf.Min(limit, Mathf.Sqrt(corner * corner + 2f * 4f * d));
+        }
+        float err = limit - speed;
         bool end = _arc > line.Length - 15f;
         return new RideInput(end ? 0f : Mathf.Clamp(err * 0.35f, 0f, 1f), end ? 1f : Mathf.Clamp(-err * 0.3f, 0f, 1f), steer, false);
+    }
+
+    /// <summary>How sharply the line bends at arc <paramref name="s"/>, 1/m.</summary>
+    private static float Curvature(RaceLine line, float s)
+    {
+        var a = MathX.Flat(line.PointAt(s) - line.PointAt(s - 4f));
+        var b = MathX.Flat(line.PointAt(s + 4f) - line.PointAt(s));
+        if (a.LengthSquared() < 0.01f || b.LengthSquared() < 0.01f) return 0f;
+        return Mathf.Abs(Mathf.Atan2(a.Cross(b).Y, a.Dot(b))) / 8f;
     }
 
     /// <summary>Its pilot's state for another car's racecraft.</summary>
