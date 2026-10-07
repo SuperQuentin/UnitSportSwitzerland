@@ -30,6 +30,7 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 - `floating-origin` — Floating origin (#185): world space follows the camera, online too (each peer its own origin, LV95 on the wire); keep `GlobalPos` or handle `IOriginShiftAware`; containers; `Follow` for shared point lists; Jolt kinematic teleport; the renderer across a shift (SDFGI, shadows, particles, snow); `--origincheck`, `--originstress`
 - `json-store` — Persist JSON only via `JsonStore.Save` (atomic, `user://` ok, static options); never `FileAccess` Write / `File.WriteAllText`; InteriorManager still to migrate
 - `perf-saves-background` — Gameplay saves (plant, deposit, loot, claim) via `JsonStore.SaveAsync` (one ordered background writer, `SaveQueue`, flushed on quit); never `JsonStore.Save` in an RPC handler
+- `collision-matrix` (general) — `Core/Collision`: `CollisionTargets` (every collidable thing from the registries, the known gaps), `--collidecheck` (car + walker vs every target, drawn vs solid: ghost / invisible wall), `--collidesandbox` (#699)
 - `mathx` — `MathX.Flat/FlatLength/FlatDistance/Damp/WrapAngle` and `Mathf.SmoothStep`, never a private copy; only where floats stay identical (`-dt / tau` is not `Damp`); tier-0 tested (#221)
 
 ## Commands

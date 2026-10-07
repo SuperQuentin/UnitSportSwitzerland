@@ -27,7 +27,8 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
 `perf-221-migration` (**read before merging main into a branch started before Oct 2026**: every #221 rule note and the rebase order),
 `new-action-three-devices` (every new key or interaction: keyboard, gamepad and VR decided together),
 `plans-on-main` (up-front plans commit on `main`; their status updates ride the feature branch),
-`uid-files` (commit a script's `.uid` with it; never `git add -A` after an import).
+`uid-files` (commit a script's `.uid` with it; never `git add -A` after an import),
+`collision-matrix` (`--collidecheck` rams every vehicle, prop, piece and door with a car and a walker; `--collidesandbox` to drive into them; the known-gaps table).
 
 ## Rules
 

@@ -79,36 +79,7 @@ public partial class RideProbe : Node
             if (args[i] != "--ride") continue;
 
             var parts = args[i + 1].Split(',');
-            var name = parts[0].ToLowerInvariant();
-            var kind = name switch
-            {
-                "bike" or "roadbike" => RideKind.RoadBike,
-                "skis" or "ski" => RideKind.Skis,
-                "r1" => (RideKind)MotorbikeCatalog.First,
-                // the aircraft (#421): parked, on their brakes
-                "a320" => RideKind.A320,
-                "freighter" => RideKind.Freighter,
-                "an124" => RideKind.An124,
-                "monster" => (RideKind)(MotorbikeCatalog.First + 1),
-                // works machinery (#583): the mast is worked with the shift paddles while driving
-                "forklift" => RideKind.Forklift,
-                "excavator" => RideKind.Excavator,
-                "miniexcavator" => RideKind.MiniExcavator,
-                "loader" => RideKind.WheelLoader,
-                "loaderforks" => RideKind.WheelLoaderForks,
-                "roller" => RideKind.CompactRoller,
-                "dumper" => RideKind.MiniDumper,
-                "telehandler" => RideKind.Telehandler,
-                // moto:N = MotorbikeCatalog.All[N]
-                _ when name.StartsWith("moto:") && int.TryParse(name[5..], out int b) => MotorbikeCatalog.All[b].Kind,
-                // truck:N = HeavyCatalog.All[N]; --trailer M couples TrailerCatalog.All[M], full
-                _ when name.StartsWith("truck") => (RideKind)(HeavyCatalog.First
-                    + (name.Length > 6 && int.TryParse(name[6..], out int h) ? h : 0)),
-                // car = the first in the roster, car:N = CarCatalog.All[N]
-                _ when name.StartsWith("car") => (RideKind)(CarCatalog.First
-                    + (name.Length > 4 && int.TryParse(name[4..], out int n) ? n : 0)),
-                _ => RideKind.OnFoot,
-            };
+            var kind = KindNamed(parts[0]);
             double seconds = 20;
             if (parts.Length > 1) double.TryParse(parts[1],
                 System.Globalization.NumberStyles.Float,
@@ -116,6 +87,45 @@ public partial class RideProbe : Node
             return (kind, seconds, parts.Length > 2 ? parts[2] : null);
         }
         return null;
+    }
+
+    /// <summary>
+    /// A ride by its probe name (<c>bike</c>, <c>car:N</c>, <c>truck:N</c>, <c>forklift</c>...), else by
+    /// its <see cref="RideKind"/> name; <see cref="RideKind.OnFoot"/> for anything else.
+    /// </summary>
+    public static RideKind KindNamed(string word)
+    {
+        var name = word.ToLowerInvariant();
+        return name switch
+        {
+            "bike" or "roadbike" => RideKind.RoadBike,
+            "skis" or "ski" => RideKind.Skis,
+            "r1" => (RideKind)MotorbikeCatalog.First,
+            // the aircraft (#421): parked, on their brakes
+            "a320" => RideKind.A320,
+            "freighter" => RideKind.Freighter,
+            "an124" => RideKind.An124,
+            "monster" => (RideKind)(MotorbikeCatalog.First + 1),
+            // works machinery (#583): the mast is worked with the shift paddles while driving
+            "forklift" => RideKind.Forklift,
+            "excavator" => RideKind.Excavator,
+            "miniexcavator" => RideKind.MiniExcavator,
+            "loader" => RideKind.WheelLoader,
+            "loaderforks" => RideKind.WheelLoaderForks,
+            "roller" => RideKind.CompactRoller,
+            "dumper" => RideKind.MiniDumper,
+            "telehandler" => RideKind.Telehandler,
+            // moto:N = MotorbikeCatalog.All[N]
+            _ when name.StartsWith("moto:") && int.TryParse(name[5..], out int b) => MotorbikeCatalog.All[b].Kind,
+            // truck:N = HeavyCatalog.All[N]; --trailer M couples TrailerCatalog.All[M], full
+            _ when name.StartsWith("truck") => (RideKind)(HeavyCatalog.First
+                + (name.Length > 6 && int.TryParse(name[6..], out int h) ? h : 0)),
+            // car = the first in the roster, car:N = CarCatalog.All[N]
+            _ when name.StartsWith("car") => (RideKind)(CarCatalog.First
+                + (name.Length > 4 && int.TryParse(name[4..], out int n) ? n : 0)),
+            _ when Enum.TryParse<RideKind>(word, true, out var named) => named,
+            _ => RideKind.OnFoot,
+        };
     }
 
     public override void _PhysicsProcess(double delta)
