@@ -106,7 +106,7 @@ jobs:
       - name: Check the keystore credentials (APK check only)
         if: inputs.android_only
         env:
-          KS_USER: ${{ secrets.ANDROID_KEYSTORE_USER }}
+          KS_USER: ${{ vars.ANDROID_KEYSTORE_USER }}
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           echo "JAVA_HOME=$JAVA_HOME"; "$JAVA_HOME/bin/keytool" -version 2>&1 || true
@@ -117,7 +117,7 @@ jobs:
       - name: Release
         if: steps.settle.outputs.skip != '1'
         env:
-          GODOT_ANDROID_KEYSTORE_RELEASE_USER: ${{ secrets.ANDROID_KEYSTORE_USER }}
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: ${{ vars.ANDROID_KEYSTORE_USER }}
           GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         # via bash: tools/release.sh is mode 644 in the index, like most of tools/
         run: bash tools/release.sh --ci ${{ inputs.dry_run && '--dry-run' || '' }} ${{ inputs.android_only && '--android-only' || '' }}
