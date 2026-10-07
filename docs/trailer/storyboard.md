@@ -117,7 +117,11 @@ Licensed under Creative Commons: By Attribution 4.0*.
 
 ## Making it
 
-- Preview one shot in a window: `tools/trailer.sh preview 5` (or a range, `5-9`).
-- Render everything and cut it on the song: `tools/trailer.sh render` → `test_output/trailer/trailer.mp4`.
-- Stills of a shot's start, middle and end to frame it: `tools/trailer.sh stills 5`.
-- How the director works: `docs/notes/trailer/director.md`.
+- Preview a shot in a window, with its part of the song: `tools/trailer.sh preview 5` (or `5-9`, `5,7`).
+- Frame a shot from its first, middle and last frame: `tools/trailer.sh stills 5` (`LOG=1` prints where every
+  actor is twice a second and dumps the roads, to time a car to a camera).
+- Film it all and cut it on the song: `tools/trailer.sh render` → `test_output/trailer/trailer.mp4`
+  (1920x1080, 30 fps, 2:07; ~15 min). `tools/trailer.sh render 19,24` films those shots again and
+  re-cuts the film with the others; `tools/trailer.sh cut` only re-cuts.
+- Find a place from above: `--trailer-scout "E,N,H"` (a north-up still from H m, H/1080 m a pixel).
+- How the director works, and the staging gotchas: `docs/notes/trailer/director.md`.
