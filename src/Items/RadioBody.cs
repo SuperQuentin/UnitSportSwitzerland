@@ -245,6 +245,22 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
     public RadioPlay? NowPlaying => Playing && WantedPosition < Length ? new RadioPlay(CdId, StartedAt, Length) : null;
 
     /// <summary>
+    /// The stack data a pick-up carries into the hand (#732): what plays, else the CD it last played
+    /// switched off (<see cref="RadioPlay.Off"/>), so the next tap puts that one back on; null for a
+    /// radio that never had one.
+    /// </summary>
+    public string? CarriedData
+    {
+        get
+        {
+            var mode = RadioQueue.Clamp(Mode);
+            if (NowPlaying is { } p) return (p with { Mode = mode }).Encode();
+            float length = Length > 0 ? Length : Cd?.Duration ?? 0f;
+            return CdId != 0 && length > 0 ? RadioPlay.Off(new RadioPlay(CdId, 0, length, mode)) : null;
+        }
+    }
+
+    /// <summary>
     /// The beat the CD is on, from the shared clock alone. False when nothing plays or the CD is
     /// unknown here. <paramref name="beatPhase"/> 0..1 within the beat, <paramref name="bar"/>
     /// counts four-beat bars from the first beat.

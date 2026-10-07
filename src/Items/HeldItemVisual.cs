@@ -484,7 +484,7 @@ void fragment() {{
     /// <summary>A playing radio in the figure's hand sparkles (#387); anything else in the hand, at once nothing.</summary>
     private void StepSparkles(bool shown, float dt)
     {
-        if (!shown || _shown != ItemId.Radio || RadioPlay.Decode(_player.HeldRadio) is not { } play)
+        if (!shown || _shown != ItemId.Radio || RadioPlay.Decode(_player.HeldRadio) is not { } play || !play.Sounding(Net.ClockSync.ServerNow))
         {
             _sparkles?.Off();
             return;
