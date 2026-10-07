@@ -116,6 +116,21 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
         RpcId(1, MethodName.RequestPlay, radio.Name, cdId, length);
     }
 
+    /// <summary>Turns a world radio's own volume (#734), for everyone.</summary>
+    public void SetVolume(RadioBody radio, float volume)
+    {
+        volume = RadioLoudness.Clamp(volume);
+        if (!Online) { radio.Volume = volume; return; }
+        RpcId(1, MethodName.RequestVolume, radio.Name, volume);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestVolume(string name, float volume)
+    {
+        if (!Multiplayer.IsServer()) return;
+        if (GetNodeOrNull<RadioBody>(name) is { } radio) radio.Volume = RadioLoudness.Clamp(volume);
+    }
+
     public void Stop(RadioBody radio)
     {
         if (!Online) { radio.Playing = false; return; }
@@ -372,6 +387,7 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
             speaker.CdId = p.CdId;
             speaker.StartedAt = p.StartedAt;
             speaker.Length = p.Length;
+            speaker.Volume = player.RadioVolume;
             speaker.On = true;
         }
     }

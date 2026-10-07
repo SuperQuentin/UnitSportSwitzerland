@@ -65,6 +65,12 @@ public partial class ChurchRadios : Node
     public RadioPlay? PlayOf(string plan) =>
         _plays.TryGetValue(plan, out var play) && play.Sounding(ClockSync.ServerNow) ? play : null;
 
+    /// <summary>The CD it last played, sounding or not (#734): what a tap puts back on; 0 for none.</summary>
+    public int LastCdOf(string plan) => _lastCd.GetValueOrDefault(plan);
+
+    /// <summary>Each church's last CD on this peer (every peer sees every play go by), kept through a Stop.</summary>
+    private readonly Dictionary<string, int> _lastCd = new();
+
     /// <summary>Its mode: the playing CD's, else the one chosen, else repeat (the chess type beat loops).</summary>
     public RadioMode ModeOf(string plan) =>
         _plays.TryGetValue(plan, out var play) ? play.Mode : _modes.GetValueOrDefault(plan, RadioMode.Repeat);
@@ -108,13 +114,15 @@ public partial class ChurchRadios : Node
     public static bool TryOpen(FootPlayer p)
     {
         if (At(p) is not { } plan || RadioUi.Instance is not { } ui) return false;
-        ui.OpenChurch(plan);
+        // a tap of E switches it on or off, a hold opens its panel (#734), like a radio in the world
+        RadioTap.Begin(Core.PlayerInput.InteractMount, () => RadioTap.ToggleChurch(plan), () => ui.OpenChurch(plan),
+            () => IsInstanceValid(p) && At(p) == plan);
         return true;
     }
 
     /// <summary>The prompt at the church radio, or null.</summary>
     public static string? PromptFor(FootPlayer p) =>
-        At(p) == null ? null : $"{Core.InputHints.Tag(Core.PlayerInput.InteractMount)} Radio";
+        At(p) == null ? null : $"{Core.InputHints.Tag(Core.PlayerInput.InteractMount)} {RadioTap.Prompt}";
 
     // ---- client: asking --------------------------------------------------------------------------
 
@@ -196,6 +204,7 @@ public partial class ChurchRadios : Node
         {
             _plays[plan] = p;
             _modes[plan] = p.Mode;
+            _lastCd[plan] = p.CdId;
         }
         else _plays.Remove(plan);
         Changed?.Invoke(plan);

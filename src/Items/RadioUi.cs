@@ -77,7 +77,7 @@ public partial class RadioUi : CanvasLayer
     private VBoxContainer _rows = null!;
     private ScrollContainer _scroll = null!;
     private HSlider _volume = null!;
-    private Label _volumeValue = null!;
+    private Label _volumeValue = null!, _volumeLabel = null!;
     private LineEdit _link = null!;
     private CheckBox _mine = null!;
     private ProgressBar _burnBar = null!;
@@ -169,13 +169,16 @@ public partial class RadioUi : CanvasLayer
         // volume: one for every radio this player hears; then the way into (or out of) the library
         var volume = UiKit.HBox(12);
         box.AddChild(volume);
-        var volumeLabel = UiKit.Text("Volume", UiTheme.FontSmall, UiTheme.TextDim);
+        _volumeLabel = UiKit.Text("Volume", UiTheme.FontSmall, UiTheme.TextDim);
+        var volumeLabel = _volumeLabel;
+        volumeLabel.TooltipText = "This radio's volume, for everyone: how loud it plays and how far it is heard";
+        volumeLabel.MouseFilter = Control.MouseFilterEnum.Pass;
         volumeLabel.CustomMinimumSize = new Vector2(64, 0);
         volumeLabel.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
         volume.AddChild(volumeLabel);
         _volume = new HSlider
         {
-            MinValue = 0, MaxValue = 1, Step = 0.05, Value = RadioSpeaker.UserVolume,
+            MinValue = 0, MaxValue = 1, Step = 0.05, Value = RadioLoudness.Default,
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
             SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
             CustomMinimumSize = new Vector2(0, 22),
@@ -184,10 +187,9 @@ public partial class RadioUi : CanvasLayer
         _volumeValue = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim, align: HorizontalAlignment.Right);
         _volume.ValueChanged += v =>
         {
-            RadioSpeaker.UserVolume = (float)v;
+            SetRadioVolume((float)v);
             _volumeValue.Text = Percent((float)v);
         };
-        _volume.DragEnded += _ => RadioSpeaker.SaveVolume();
         volume.AddChild(_volume);
         _volumeValue.CustomMinimumSize = new Vector2(48, 0);
         _volumeValue.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
@@ -436,8 +438,11 @@ public partial class RadioUi : CanvasLayer
         _pick.Visible = target == Target.World;
         _search.Text = "";
         _search.PlaceholderText = target == Target.Car ? "Search CDs and stations   ( / )" : "Search CDs   ( / )";
-        _volume.SetValueNoSignal(RadioSpeaker.UserVolume);
-        _volumeValue.Text = Percent(RadioSpeaker.UserVolume);
+        // the radio's own volume (#734); the church radio's is the church's, not the player's to turn
+        float volume = RadioVolume();
+        _volume.SetValueNoSignal(volume);
+        _volumeValue.Text = Percent(volume);
+        _volume.Editable = target != Target.Church;
         if (!_burning) ShowStatus("", UiTheme.TextDim, 0);
         _panel.Visible = true;
         Input.MouseMode = Input.MouseModeEnum.Visible;
@@ -470,7 +475,6 @@ public partial class RadioUi : CanvasLayer
         _churchPlan = "";
         _link.ReleaseFocus();
         _search.ReleaseFocus();
-        RadioSpeaker.SaveVolume();
         UiFocus.Set(this, false);
         MouseCapture.Capture();
     }
@@ -629,9 +633,35 @@ public partial class RadioUi : CanvasLayer
         library.RemovePersonal(id);
     }
 
+    /// <summary>The volume of the radio the panel is on, 0..1 (#734).</summary>
+    private float RadioVolume() => _target switch
+    {
+        Target.World => Live()?.Volume ?? RadioLoudness.Default,
+        Target.Held or Target.Car => _local()?.RadioVolume ?? RadioLoudness.Default,
+        _ => RadioLoudness.Default,
+    };
+
+    /// <summary>Turns the radio the panel is on, for everyone (#734): the server's for a world radio, the player's own otherwise.</summary>
+    private void SetRadioVolume(float volume)
+    {
+        switch (_target)
+        {
+            case Target.World:
+                if (Live() is { } radio) RadioManager.Instance?.SetVolume(radio, volume);
+                break;
+            case Target.Held:
+                if (_local() is { } me) me.RadioVolume = RadioLoudness.Clamp(volume);
+                break;
+            case Target.Car:
+                if (Stereo() is { } driver && driver == _local()) driver.RadioVolume = RadioLoudness.Clamp(volume);
+                break;
+        }
+    }
+
     private void PickUp()
     {
         if (Live() is not { } radio || RadioManager.Instance is not { } manager) return;
+        if (_local() is { } taker) taker.RadioVolume = radio.Volume;   // as loud in the hand (#734)
         // what it plays carries on in the hand: the stack keeps the CD, its start and its mode (#168)
         string? playing = radio.NowPlaying is { } p ? (p with { Mode = RadioQueue.Clamp(radio.Mode) }).Encode() : null;
         manager.PickUp(radio, () =>
