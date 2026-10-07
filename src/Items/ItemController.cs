@@ -211,6 +211,7 @@ public partial class ItemController : Node
     public override void _Process(double delta)
     {
         var player = CurrentPlayer();
+        RadioTap.Tick((float)delta);
         _ui.PlayerPresent = player is { IsViewing: true };
         _ui.ItemsActive = UsablePlayer != null;
         UpdateDevelop((float)delta);
@@ -270,8 +271,9 @@ public partial class ItemController : Node
         var weapon = Weapons.Get(_inventory.HeldId);
         // a scoped gun is held to the eye like the binoculars, and drawn as their overlay
         bool scoped = aiming && weapon is { AimFov: < 20f };
-        // any other gun is shouldered over a close shoulder camera, zoomed to its aim FOV (#460); VR stays at the eye
-        bool shouldered = aiming && def!.Use == ItemUse.Shoot && !scoped && !XR.XrSession.Active;
+        // any other gun is shouldered over a close shoulder camera, zoomed to its aim FOV (#460);
+        // first person and VR stay at the eye, down the barrel
+        bool shouldered = aiming && def!.Use == ItemUse.Shoot && !scoped && !XR.XrSession.Active && !player.ChoseFirstPerson;
         player.GunAim = shouldered;
         player.FovOverride = aiming ? def!.Use switch { ItemUse.Optic => 9f * breathFov, ItemUse.Photo => FovFromFocal(_focalMm), _ => weapon?.AimFov ?? 50f } : null;
         player.ScopeView = aiming && !shouldered;
@@ -680,10 +682,14 @@ public partial class ItemController : Node
 
             case ItemUse.Throw:
             {
-                // Use alone opens the radio's panel in the hand; Aim + Use throws it (#168)
+                // Use alone in the hand: a tap switches the radio on or off, a hold opens its panel
+                // (#725; Use again closes it at once, #375); Aim + Use throws it (#168)
                 if (!PlayerInput.Held(PlayerInput.AimItem) && !_forceAim && slot == _inventory.Selected)
                 {
-                    RadioUi.Instance?.OpenHeld(slot);
+                    if (RadioUi.Instance?.IsOpen == true) { RadioUi.Instance.OpenHeld(slot); break; }
+                    RadioTap.Begin(PlayerInput.UseItem, () => RadioTap.ToggleHeld(_inventory, slot),
+                        () => RadioUi.Instance?.OpenHeld(slot),
+                        () => _inventory.Selected == slot && _inventory.HeldId == ItemId.Radio);
                     break;
                 }
                 // Aim + Use from the pack panel (no wind-up there): a medium throw
@@ -787,6 +793,7 @@ public partial class ItemController : Node
     {
         bool throwing = usable && !aiming && !UiFocus.TextEntryActive && !_ui.IsOpen && !_useBusy && !_planting
                         && ItemDefs.Throwable(def) && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+        _throw.Heft = ThrowAim.HeftOf(_inventory.HeldId);
         if (_throw.Step(player, throwing, PlayerInput.Held(PlayerInput.UseItem) || ForceUse, dt))
             ThrowSlot(player, _inventory.Selected, _throw.ReleasePower);
 
@@ -810,7 +817,7 @@ public partial class ItemController : Node
     private void ThrowSlot(FootPlayer player, int slot, float power)
     {
         if (_inventory[slot].IsEmpty) return;
-        if (!Release(player, slot, 1, ThrowAim.Origin(player), ThrowAim.Launch(player, power), power)) return;
+        if (!Release(player, slot, 1, ThrowAim.Origin(player), ThrowAim.Launch(player, power, ThrowAim.HeftOf(_inventory[slot].Id)), power)) return;
         Kick(player);
         player.Punch(Mathf.DegToRad(1.2f + 2.5f * power));
         var bank = SfxSynth.WhooshBank;
@@ -1023,6 +1030,9 @@ public partial class ItemController : Node
     /// </summary>
     public static (Vector3 Eye, Vector3 Aim) AimFrom(FootPlayer player, float range)
     {
+        // VR: a weapon goes where the hand holding it points
+        if (XR.XrSession.ItemHand is { } hand && Weapons.Get((ItemId)player.HeldItemId) != null)
+            return (hand.Origin, -hand.Basis.Z.Normalized());
         var cam = player.Camera;
         var eye = player.EyePosition;
         var look = -cam.GlobalTransform.Basis.Z;

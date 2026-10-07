@@ -593,6 +593,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     public bool IsFirstPerson => !_thirdPerson;
 
+    /// <summary>First person as the player chose it: also true while a throw has borrowed third person.</summary>
+    public bool ChoseFirstPerson => !_thirdPerson || _borrowedThird;
+
     /// <summary>
     /// 0..1: an item held ready to throw wants the close over-the-shoulder camera (set every frame by
     /// <see cref="Items.ItemController"/>, like <see cref="FovOverride"/>). In first person the view
@@ -2516,10 +2519,14 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // walking about in a vehicle: a seat, or the wheel (#162)
         if (Aboard) return TryDeckSeat();
 
-        // the radio pointed at: its panel (play a CD, burn one, pick it up)
+        // the radio pointed at (#725): a tap switches it on or off, a hold opens its panel (play a
+        // CD, burn one, pick it up); a VR hand gripping it opens the panel straight away
         if (Items.Highlight.Pointed is Items.RadioBody pointed && IsInstanceValid(pointed))
         {
-            Items.RadioUi.Instance?.Open(pointed);
+            if (byHand) Items.RadioUi.Instance?.Open(pointed);
+            else Items.RadioTap.Begin(Core.PlayerInput.InteractMount, () => Items.RadioTap.Toggle(pointed),
+                () => Items.RadioUi.Instance?.Open(pointed),
+                () => IsInstanceValid(pointed) && Items.Highlight.Pointed == pointed);
             return true;
         }
 

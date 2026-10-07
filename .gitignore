@@ -104,3 +104,6 @@ graphify-out/
 
 # tools/deploy-linux.sh config (host names, paths)
 tools/deploy.env
+
+# the editor writes a default OpenXR action map when VR is on; nothing uses it, the game maps controllers in code (XrPad, XrHands)
+/openxr_action_map.tres
