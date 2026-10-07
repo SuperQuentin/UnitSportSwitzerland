@@ -251,7 +251,7 @@ public static class CornerPlanner
             b = b with { Kerb = [q], Out = q.P, Width = 0, Inward = eb.Out };
         }
         poly = Thin(Dedupe(poly));
-        if ((ends.A ?? ends.B) != null && (poly.Count < 2 || PolylineLength(poly) < 0.3)) { covered = true; return null; }
+        if ((ends.A ?? ends.B) != null && (poly.Count < 2 || PolylineLength(poly) < 0.02)) { covered = true; return null; }
         int kerbCount = poly.Count;
         if (kerbCount < 2) { stats.Shape++; return null; }
 
@@ -282,6 +282,8 @@ public static class CornerPlanner
         if (Strip(id, segments, poly, bandOuter, facades, a, stats, out var bandWhy) is { } strip) return strip;
         if (Traced(id, a.Kerb[0].P)) Console.WriteLine($"[corner]   band: {bandWhy}");
         if (Polygon(id, segments, chord, kerbCount, cap, facades, a, out why) is { } cut) return cut;
+        // (#711) beside a side carried on to the kerb, what is left may be a sliver: nothing to lay, the sides meet
+        if ((ends.A ?? ends.B) != null && Math.Abs(SignedArea(withCorner.Select(p => p.P).ToList())) < 0.2) { covered = true; return null; }
         if (why != null && why.StartsWith("wall")) stats.Facade++; else if (why == "road") stats.Road++; else stats.Shape++;
         if (Traced(id, a.Kerb[0].P)) Console.WriteLine($"[corner]   rejected: {why}");
         return null;

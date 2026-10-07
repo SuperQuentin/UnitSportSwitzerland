@@ -44,8 +44,14 @@ listed rules differing by kind. Stacked on #704 (`lane-data-intersections`).
   kerb patch in its tile, a joining arm's lanes). The red crossing and its yellow edges run only between the path ends,
   kerb to kerb. The sidewalk corner beside starts where the carried side's outer edge meets the kerb
   (`CornerPlanner.PathEnd`: that end narrowed to nothing, its outer edge the carried side's); where that point lies past
-  the side road's sidewalk start the corner is covered (none). Real tiles: 91 of 100 path crossings, 119 corners covered.
+  the side road's sidewalk start the corner is covered (none). Real tiles: 91 of 100 path crossings.
   The lights keep #682's (bands round the arc, red by phase).
+- **No two surfaces in one place** (`SideUnder`, `CutBack`): the carried side runs over the joining road's own side
+  (the game draws area props at their height with no depth bias: different colours at one height flicker). The joining
+  road's side gives way: over its first metres, up to where the carried outer edge crosses both its kerb and its outer
+  edge, it keeps only a painted bike lane (the piece split there, before the paths' paint). The corner planner fills
+  the wedge left between; a sliver under 0.2 m² counts as covered. Real tiles: 156 sides cut back, 56 corners covered,
+  8 that fail beside a carried side (small gaps of a few dm, e.g. LV95 2507692,1138201).
 - **The dashed edge guide follows the widening** (`GuideOut`): beside a split lead-in's mirror strip the guide's end at
   the old edge moves onto the strip's edge (edge-line inset), the move fading to its other end. The pocket side already
   moved (`Across`). Real tiles: 20.

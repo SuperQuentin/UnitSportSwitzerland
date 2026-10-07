@@ -178,7 +178,8 @@ public static partial class TileRewriter
         Dictionary<(int Node, int Arm), ArmLanes> lanes, HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadPaint>> paint,
         Dictionary<TileId, List<RoadPointProp>> signs, Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges,
         BikePlanner.Stats stats, Dictionary<(int Link, LinkEnd End), double> stopsAt, Dictionary<int, (SignalPlan Plan, int[] PlanArm)> signalPlans,
-        Dictionary<(int Node, int Arm), CornerArc> townArcs, Dictionary<TileId, List<RoadAreaProp>> islands, Dictionary<TileId, List<CornerPlanner.PathEnd>> pathEnds)
+        Dictionary<(int Node, int Arm), CornerArc> townArcs, Dictionary<TileId, List<RoadAreaProp>> islands, Dictionary<TileId, List<CornerPlanner.PathEnd>> pathEnds,
+        List<SideCut> cutBacks)
     {
         var net = result.Network;
         bool IsCar(int linkId) => net.Links[linkId].Tag is Source s && PriorityPlanner.IsCarRoad(s.Segment.Class)
@@ -383,6 +384,10 @@ public static partial class TileRewriter
                         {
                             Get(bridges, home).AddRange(toKerb.Bands);
                             Get(pathEnds, home).AddRange(toKerb.Ends);
+                            // the joining road's side under the carried one starts behind it: no two surfaces in one place
+                            foreach (var (pathEnd, c, d, u, w) in new[] { (toKerb.Ends[0], ca, da, ua, sa.OuterDm / 10.0 + xa), (toKerb.Ends[1], cb, db, ub, sb.OuterDm / 10.0 + xb) })
+                                if (SideUnder(junction, plan, joined, new Vec2(pathEnd.At.X + home.MinE, pathEnd.At.Y + home.MaxN), c + d * w, u, segmentOf, finalPieces) is { } under)
+                                    cutBacks.Add(under);
                             var (kerbA, kerbB) = (toKerb.KerbA, toKerb.KerbB);
                             List<Vec2> Across(double oa, double ob) => Densify(kerbA(oa), kerbB(ob), 2.0);
                             float across = (float)(Math.Min(sa.BikeDm, sb.BikeDm) / 10.0 - 2 * lw - 2 * RedInset);
@@ -940,6 +945,50 @@ public static partial class TileRewriter
             new(Local(cb + db * wb - ub * outB), ub),
         };
         return (bands, Kerb(ca, da, ua), Kerb(cb, db, ub), ends);
+    }
+
+    /// <summary>
+    /// The joining road's side that a side carried on to the kerb (#711, <see cref="PathsToKerb"/>) lies over: the joined arm
+    /// whose kerb the carried side's outer edge meets (<paramref name="kerbPoint"/>, LV95, past that arm's mouth), and how far
+    /// out from the mouth its side must start, the carried outer edge (through <paramref name="edgeAt"/> along
+    /// <paramref name="u"/>) crossing both that side's kerb and its outer edge. Null where it meets no joined arm's kerb.
+    /// </summary>
+    private static SideCut? SideUnder(Junction junction, PriorityPlanner.Plan plan, List<int> joined, Vec2 kerbPoint, Vec2 edgeAt, Vec2 u,
+        Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<RoadSegment, List<RoadSegment>> finalPieces)
+    {
+        (int Arm, bool Left, double Off)? best = null;
+        foreach (int j in joined)
+        {
+            var arm = junction.Arms[j];
+            var uj = Vec2.FromHeading(arm.OutwardHeading);
+            foreach (bool left in (ReadOnlySpan<bool>)[true, false])
+            {
+                var e = left ? arm.Left : arm.Right;
+                double s = (kerbPoint - e).Dot(uj), off = Math.Abs((kerbPoint - e).Cross(uj));
+                if (s > 0.2 && off < 0.5 && (best is null || off < best.Value.Off)) best = (j, left, off);
+            }
+        }
+        if (best is not { } b) return null;
+        var joinedArm = junction.Arms[b.Arm];
+        var end = plan.Arms[b.Arm].End;
+        bool segRight = (end == LinkEnd.End) == b.Left;
+        if (!segmentOf.TryGetValue(joinedArm.LinkId, out var so)) return null;
+        var pieces = finalPieces.TryGetValue(so.Segment, out var list) && list.Count > 0 ? list : [so.Segment];
+        var piece = end == LinkEnd.Start ? pieces[0] : pieces[^1];
+        var side = segRight ? piece.Attributes.Right : piece.Attributes.Left;
+        var edge = b.Left ? joinedArm.Left : joinedArm.Right;
+        var uJ = Vec2.FromHeading(joinedArm.OutwardHeading);
+        var outward = (edge - (joinedArm.Left + joinedArm.Right) * 0.5).Normalized();
+        // how far out along the joined arm the carried outer edge crosses a line along it through q
+        double? Cross(Vec2 q)
+        {
+            double den = uJ.Cross(u);
+            return Math.Abs(den) < 0.2 ? null : (edgeAt - q).Cross(u) / den;
+        }
+        if (Cross(edge) is not { } atKerb || Cross(edge + outward * (side.OuterDm / 10.0 + side.ShiftAt(end == LinkEnd.Start ? 0 : 1))) is not { } atOuter) return null;
+        double length = Math.Max(atKerb, atOuter) + 0.05;
+        if (length < 0.3 || length > 20) return null;
+        return new SideCut(so.Segment, so.Tile, end == LinkEnd.End, segRight, length);
     }
 
     /// <summary>

@@ -109,7 +109,7 @@ public static class BikePlanner
         /// <summary>Final pieces (km): lane per side, path per side by layout.</summary>
         public double LaneSideKm, UrbanLaneSideKm;
         public readonly double[] TrackSideKm = new double[6];
-        public int Symbols, Crossings, CrossingsLane, CrossingsTrack, LanesThrough, PathsThrough, PathsToKerb, CornersReplaced, PathsShiftedOffTurnLanes, TeethMoved, SignsMoved;
+        public int Symbols, Crossings, CrossingsLane, CrossingsTrack, LanesThrough, PathsThrough, PathsToKerb, SidesCutBack, CornersReplaced, PathsShiftedOffTurnLanes, TeethMoved, SignsMoved;
         /// <summary>Bike lanes across a signalised junction (#406): red where a car crosses them in the same phase, else only their dashed edges.</summary>
         public int SignalLanesRed, SignalLanesDashed;
         /// <summary>Gaps cut in a grass verge where a left-turn pocket opens (#352), and openings too near a segment end to cut.</summary>
@@ -125,7 +125,7 @@ public static class BikePlanner
                   bikes (#120): {Candidates:N0} candidate lines {CandidateKm:F1} km: lanes {LaneKm:F1} km, Kernfahrbahn {KernKm:F1} km, too narrow {NarrowKm:F1} km, parallel alternative {ParallelKm:F1} km ({Parallel:N0} lines), OSM {OsmKm:F1} km
                     final: lane sides {LaneSideKm:F1} km ({UrbanLaneSideKm:F1} in town); path sides by layout 1..5 {TrackSideKm[1]:F2}/{TrackSideKm[2]:F2}/{TrackSideKm[3]:F2}/{TrackSideKm[4]:F2}/{TrackSideKm[5]:F2} km
                     urban stations wanting a path: none fits {Pct(TrackStations[0])}, layouts 1..5 {Pct(TrackStations[1])}/{Pct(TrackStations[2])}/{Pct(TrackStations[3])}/{Pct(TrackStations[4])}/{Pct(TrackStations[5])}, narrowed {TrackNarrowed:N0}; streets with a path {TrackStreets:N0}, keeping lanes {LaneStreets:N0}
-                    paint: {Symbols:N0} bike symbols, {Crossings:N0} red crossings ({CrossingsLane:N0} lane, {CrossingsTrack:N0} path, {PathsToKerb:N0} of them with the path on to the kerb, #711), {LanesThrough:N0} lanes and {PathsThrough:N0} paths carried through ({CornersReplaced:N0} sidewalk corners replaced); teeth moved behind a path crossing {TeethMoved:N0}, signs moved off a path {SignsMoved:N0}; path pieces moved out past a turn lane's widening {PathsShiftedOffTurnLanes:N0}; at traffic lights, lanes straight from the stop line: red {SignalLanesRed:N0} (a car crosses in the same phase), dashed edges only {SignalLanesDashed:N0} (#406); verge gaps for cyclists into a left-turn pocket {VergeCuts:N0} (#352, {VergeCutsRejected:N0} too near a segment end; first at LV95 {string.Join(" ", VergeCutsAt)})
+                    paint: {Symbols:N0} bike symbols, {Crossings:N0} red crossings ({CrossingsLane:N0} lane, {CrossingsTrack:N0} path, {PathsToKerb:N0} of them with the path on to the kerb, #711, {SidesCutBack:N0} joining sides cut back behind it), {LanesThrough:N0} lanes and {PathsThrough:N0} paths carried through ({CornersReplaced:N0} sidewalk corners replaced); teeth moved behind a path crossing {TeethMoved:N0}, signs moved off a path {SignsMoved:N0}; path pieces moved out past a turn lane's widening {PathsShiftedOffTurnLanes:N0}; at traffic lights, lanes straight from the stop line: red {SignalLanesRed:N0} (a car crosses in the same phase), dashed edges only {SignalLanesDashed:N0} (#406); verge gaps for cyclists into a left-turn pocket {VergeCuts:N0} (#352, {VergeCutsRejected:N0} too near a segment end; first at LV95 {string.Join(" ", VergeCutsAt)})
                 """);
         }
     }
