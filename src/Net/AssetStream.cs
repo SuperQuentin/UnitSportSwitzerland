@@ -79,6 +79,12 @@ public enum AssetKind
     /// kind), answers "missing" and every file streams over ENet as before.
     /// </summary>
     HttpBase = 13,
+
+    /// <summary>
+    /// <c>fields_E_N.fld</c>, a tile's farm fields (#494). Only tiles with fields have one: the
+    /// others answer "missing" and their fields stay natural.
+    /// </summary>
+    Fields = 14,
 }
 
 /// <summary>
@@ -128,6 +134,7 @@ public static class AssetStream
         AssetKind.Water => WaterFormat.FileName(id),
         AssetKind.Landings => LandingIndex.FileName,
         AssetKind.HttpBase => "",
+        AssetKind.Fields => FieldFormat.FileName(id),
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 

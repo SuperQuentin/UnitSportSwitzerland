@@ -695,6 +695,12 @@ public partial class ItemController : Node
                 _ui.Toast($"{def.Name}: keep it for trading or building.");
                 break;
 
+            case ItemUse.Farm:
+                // the hoe, a seed, fertiliser: the field cell ahead (#494, Farming/HandFarming)
+                if (Farming.HandFarming.Instance is { } farming) farming.Use(player, slot, stack.Id);
+                else _ui.Toast("No field here.");
+                break;
+
             case ItemUse.Bag:
                 // worn: off into the pack; carried: on, swapping with the one worn
                 if (slot == Inventory.BagSlot) _inventory.QuickMove(slot);

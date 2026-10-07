@@ -41,6 +41,10 @@
     <Compile Include="..\..\src\Items\Fishing\FishWaters.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\Fishing\FishRules.cs" Link="Game\Fishing\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Crafting\CampfireClock.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmTables.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmRules.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FieldCells.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FieldTile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\Face\FaceGenome.cs" Link="Game\Face\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\Face\FaceState.cs" Link="Game\Face\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\HitGuard.cs" Link="Game\%(Filename)%(Extension)" />
@@ -73,6 +77,7 @@
     <Compile Include="..\..\src\Player\Wading.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\CmdArgs.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\PigeonFlight.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Player\CruiseControl.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\AirlinerCatalog.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\TurbopropTone.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Player\AirlinerFlight.cs" Link="Game\%(Filename)%(Extension)" />
@@ -120,6 +125,14 @@
     <!-- update check (#532): version compare, asset pick, GitHub's JSON, delta updates -->
     <Compile Include="..\..\src\Core\UpdateInfo.cs;..\..\src\Core\BinaryDelta.cs;..\..\src\Core\UpdatePackage.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\Landmarks.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- the farm machines' tanks, codes and draft (#494) -->
+    <Compile Include="..\..\src\Farming\MachineLoad.cs" Link="Game\%(Filename)%(Extension)" />
+    <!-- selling (#494): prices, specialty buyers, contracts, the farm stand -->
+    <Compile Include="..\..\src\Farming\FarmPrices.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmBuyers.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmBuyerSite.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmContracts.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Farming\FarmStandRules.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- the road blend (#603): plain C# over TerrainFormat, as tools/BlendCheck links it -->
     <Compile Include="..\..\src\Terrain\TerrainMeshBuilder.RoadBlend.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- forklift pallets (#583): the load byte, the ids and the fork rule, against the forks' numbers;

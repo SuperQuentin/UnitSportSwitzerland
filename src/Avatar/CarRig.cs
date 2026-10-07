@@ -102,7 +102,7 @@ public enum CockpitView
 /// <c>_Process</c>, the roof and the pods moving there over a moment rather than snapping —
 /// except on the first frame, so a car built with its top down does not fold it in front of you.
 /// </summary>
-public partial class CarRig : Node3D
+public partial class CarRig : Node3D, IHingedDoors
 {
     /// <summary>Front road-wheel angle, radians, + = left.</summary>
     public float SteerAngle { get; set; }

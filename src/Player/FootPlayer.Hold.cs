@@ -139,7 +139,7 @@ public partial class FootPlayer
                 var local = frame.AffineInverse() * feet;
                 bool current = set.Key == DeckOn && deck.Section == DeckSection;
                 foreach (var bay in deck.CargoBays)
-                    if (bay.Fits(hull) && bay.Contains(local, current ? 0.3f : 0f)) return (set.Key, deck.Section, frame);
+                    if (bay.Takes(_ride.Kind) && bay.Fits(hull) && bay.Contains(local, current ? 0.3f : 0f)) return (set.Key, deck.Section, frame);
             }
         return null;
     }
@@ -243,7 +243,7 @@ public partial class FootPlayer
     /// <paramref name="hull"/> standing at <paramref name="feet"/> is in: its key, section and that
     /// section's frame now. For a parked vehicle whose carrier changed hands (a new key).
     /// </summary>
-    public static (Node3D Host, string Key, int Section, Transform3D Frame)? CarrierAt(Node from, Vector3 feet, Vector3 hull, Node? self)
+    public static (Node3D Host, string Key, int Section, Transform3D Frame)? CarrierAt(Node from, Vector3 feet, Vector3 hull, Node? self, RideKind kind = 0)
     {
         IEnumerable<Node3D> hosts = from.GetTree().GetNodesInGroup(Group).OfType<FootPlayer>().Cast<Node3D>()
             .Concat(VehicleManager.Instance?.GetChildren().OfType<VehicleBody>() ?? Enumerable.Empty<VehicleBody>());
@@ -256,7 +256,7 @@ public partial class FootPlayer
                 var frame = node.GlobalTransform.Orthonormalized();
                 var local = frame.AffineInverse() * feet;
                 foreach (var bay in deck.CargoBays)
-                    if (bay.Fits(hull) && bay.Contains(local, 0.3f)) return (host, KeyOf(host), deck.Section, frame);
+                    if (bay.Takes(kind) && bay.Fits(hull) && bay.Contains(local, 0.3f)) return (host, KeyOf(host), deck.Section, frame);
             }
         }
         return null;

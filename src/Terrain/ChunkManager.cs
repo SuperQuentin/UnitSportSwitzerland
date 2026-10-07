@@ -1152,6 +1152,13 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         return true;
     }
 
+    /// <summary>
+    /// The height grid a tile is drawn from now (full or decimated, roads blended), null when not
+    /// loaded. Main thread; the grid itself is never changed after it is published (a rebuild swaps
+    /// in a new one), so a worker may sample it (farm crops draped on the ground, #494).
+    /// </summary>
+    public ChunkGrid? GridAt(TileId id) => _chunks.TryGetValue(id, out var state) ? state.Grid : null;
+
     public bool TryGetHeight(Vector3 worldPos, out float height)
     {
         height = 0f;

@@ -52,6 +52,14 @@ src/Crafting/            quick  --campfirecheck --systems ui,physics
 src/Items/PlacedObjects  quick  --campfirecheck --systems ui,physics
 src/Items/FlagGhost      quick  --campfirecheck --systems ui,physics
 src/Items/Placeables     quick  --campfirecheck --systems ui,physics
+src/Farming/             quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Loot/Gathering       quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Items/ItemController quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Terrain/Fixture/FixtureCourse quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Farming/             quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
+src/Loot/Gathering       quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
+src/Items/ItemController quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
+src/Crafting/Recipes     quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
 src/Build/               quick  --buildcheck --systems ui,physics,build
 src/Build/               net    tools/buildnetcheck.sh
 src/Build/Gadget         quick  --gadgetcheck --systems ui,physics,build
@@ -153,6 +161,13 @@ src/Player/FootPlayer.Bo quick  --boatcheck jetski --chunks fixture:lake
 src/Player/FootPlayer.Bo quick  --boatcheck speedboat --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --boatcheck speedboat --chunks fixture:lake
 src/Avatar/BoatMesh      quick  --boatcheck jetski --chunks fixture:lake
+# boat trailers (#463): the Raptor backs a boat trailer down the slipway, launches the boat, winches it back, pulls out
+src/Player/BoatTrailerCh quick  --boattrailercheck speedboat --chunks fixture:lake --traffic 0
+src/Player/BoatTrailerCh quick  --boattrailercheck jetski --chunks fixture:lake --traffic 0
+src/Player/FootPlayer.He quick  --boattrailercheck speedboat --chunks fixture:lake --traffic 0
+src/Player/TrailerCatal  quick  --boattrailercheck jetski --chunks fixture:lake --traffic 0
+src/Avatar/TrailerMesh   quick  --boattrailercheck speedboat --chunks fixture:lake --traffic 0
+src/Avatar/PickupMesh    quick  --boattrailercheck speedboat --chunks fixture:lake --traffic 0
 # the paddle steamer (#303): draught, telegraph, slow way on and long stop, walking its tilting decks in a swell, stairs, saloon, gangway, bow, overboard and back, a seat
 src/Player/Steamer       quick  --steamercheck --chunks fixture:lake
 src/Player/FootPlayer.St quick  --steamercheck --chunks fixture:lake
@@ -222,6 +237,8 @@ src/Items/Fishing        net    tools/fishcheck.sh
 src/Items/ItemEvents     net    tools/fishcheck.sh
 src/Items/PlacedObjects  net    tools/campfirecheck.sh
 src/Items/HeldItemVisual net    tools/campfirecheck.sh
+src/Farming/             net    tools/farmnetcheck.sh
+src/Terrain/NetworkChunkSource net tools/farmnetcheck.sh
 src/World/Wa             net    tools/watercheck.sh
 src/World/SeaState       net    tools/watercheck.sh
 src/Net/ChatManager      net    tools/watercheck.sh
@@ -475,6 +492,24 @@ src/Player/FootPlayer.Hold net   tools/holdnetcheck.sh
 src/Player/HoldNetProbe  net    tools/holdnetcheck.sh
 src/Vehicles/VehicleBody.Hold net tools/holdnetcheck.sh
 src/Player/FootPlayer.Overlap net tools/holdnetcheck.sh
+src/Player/TractorCheck  quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/Truck.Farm    quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/FootPlayer.Fa quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/FootPlayer.He quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/HeavyTrain    quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/TrailerCatal  quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Avatar/FarmMesh      quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Avatar/FarmMesh      quick  --cockpitcheck
+src/Farming/MachineLoad  quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Terrain/Fixture/FixtureCourse quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/TractorNetPro net    tools/tractornetcheck.sh
+src/Player/Truck.Farm    net    tools/tractornetcheck.sh
+src/Player/FootPlayer.Fa net    tools/tractornetcheck.sh
+src/Farming/             quick  --sellcheck --systems ui,physics,loot,farming --farmmonth 7 --selldir test_output/sellcheck_store
+src/Loot/Shop            quick  --sellcheck --systems ui,physics,loot,farming --farmmonth 7 --selldir test_output/sellcheck_store
+src/Items/Place          quick  --sellcheck --systems ui,physics,loot,farming --farmmonth 7 --selldir test_output/sellcheck_store
+src/Farming/             net    tools/sellnetcheck.sh
+src/Items/PlacedObjects  net    tools/sellnetcheck.sh
 # #611: the excavator: tracks, dig mode and the arm on the real bindings (flat), and seen from a second peer
 src/Player/Excavator      quick  --excavatorcheck --world flat --systems physics,ui
 src/Avatar/Excavator      quick  --excavatorcheck --world flat --systems physics,ui

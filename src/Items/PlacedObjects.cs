@@ -30,6 +30,8 @@ public enum PlacedKind
     LaunchPad = 8,
     CamoNet = 9,
     HayHideout = 10,
+    /// <summary>A self-service farm stand (#494): its crates and honesty box are <c>Farming.FarmStands</c>' state. Only its owner packs it up, empty.</summary>
+    FarmStand = 11,
 }
 
 /// <summary>
@@ -100,6 +102,7 @@ public partial class PlacedObjects : Node
         [PlacedKind.LaunchPad] = Build.GadgetMeshes.Visual,
         [PlacedKind.CamoNet] = Build.GadgetMeshes.Visual,
         [PlacedKind.HayHideout] = Build.GadgetMeshes.Visual,
+        [PlacedKind.FarmStand] = Farming.FarmStandVisual.Visual,
     };
 
     /// <summary>
@@ -379,7 +382,7 @@ public partial class PlacedObjects : Node
         string? refused = !_objects.TryGetValue(id, out var o) ? "It is not there any more."
             : !AnyoneMayRemove(o) && o.Owner != OwnerName(peer) ? "That is not yours."
             : !InReach(peer, o.E, o.N, o.Altitude) ? "Too far away."
-            : null;
+            : Farming.FarmStands.RemoveProblem(o);
         if (refused != null)
         {
             Reply(peer, req, 0, refused);
