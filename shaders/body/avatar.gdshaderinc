@@ -89,13 +89,13 @@ void fragment() {
             float mid = noise3(p * 15.0 + vec3(7.3, 1.9, 4.1));
             float fleck = noise3(p * 26.0 + vec3(2.7, 8.8, 5.5));
             vec3 camo = base;
-            if (big < 0.43) {
-                camo = base * vec3(0.52, 0.60, 0.50);
+            if (big < 0.45) {
+                camo = base * vec3(0.55, 0.62, 0.48);
             }
-            if (mid > 0.58) {
+            if (mid > 0.60) {
                 camo = vec3(0.13, 0.062, 0.022);   // brown (these are linear albedo, like the vertex colour)
             }
-            if (fleck > 0.66) {
+            if (fleck > 0.71) {
                 camo = vec3(0.008, 0.009, 0.007);
             }
             ALBEDO = camo;

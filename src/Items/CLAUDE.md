@@ -28,6 +28,7 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 - `throw-drop` — Drop (Q / Ctrl+Q / pack panel), pointing outline (inverted hull overlay), E pick-up, grenade-style charged throw (arc, ring, shoulder cam, wind-up arm pose), local proxy + remote prediction, CCD + under-terrain rescue, ImpactFx, Minecraft-style floating/spinning look at rest (DropFloat); `tools/dropcheck.sh` (#206)
 - `throw-hits` — A thrown item hitting a player (#261): thrower-side path test, `ItemEventKind.Bonk` relayed by the server, non-lethal damage (floor 5), flinch on every copy, bonk + oof + dizzy tune
 - `catalogue` — Item catalogue (#262): every item as tiles, tabs + search, click 1 / right 10 / shift stack, money + clear buttons; only sends chat commands, so the server checks admin
+- `barracks-items` — Cards, chips, beer, Gamelle and the TAZ 90 uniform (#716): held meshes in `BarracksMeshes`, camo as `Finish.Camo`, where they are sold and found, viewer commands
 - `smart-binoculars` — Held at a building's door (or inside): reads out its loot table (LootTables.BuildingTable); no aim, no zoom (#165)
 
 - `vehicles/pallets` (in docs/notes/vehicles/) — `Pallets` (load byte, ids, fork rule), `PalletNode`, `PalletService` at World/Pallets (server-owned, session-only), `PalletCheck`, `PalletNetProbe` (#583)

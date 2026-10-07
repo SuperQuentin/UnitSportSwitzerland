@@ -23,7 +23,7 @@
 - **Prefer a set read from the area's own registry or enum** over single entries, so new content
   shows by itself: `Rideable.Create` over every `RideKind` (every car, motorbike, truck, boat,
   aircraft), every `ItemId` with a held mesh, `BirdCatalog.All`, every `PropKind` field, every
-  `HumanPose`/`Headwear`/emote/fight pose, `BuildGrid.Allowed` pieces, `FurnitureType` at the
+  `HumanPose`/`Headwear`/emote/fight pose, every `Garments.All` look ("Clothes", #716), `BuildGrid.Allowed` pieces, `FurnitureType` at the
   generator's own sizes. Put the method next to the builder (a `*.Showcase.cs` partial for big
   partial classes): it reaches private builders, and nobody edits a central file.
 - Untagged parameterless static methods returning a mesh show under **Unlisted** by themselves.
