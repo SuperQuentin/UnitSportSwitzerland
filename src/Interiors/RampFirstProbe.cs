@@ -19,6 +19,8 @@ namespace UnitSport.Interiors;
 public partial class RampFirstProbe : Node
 {
     private readonly string _out;
+    private string _svgDir = "";
+    private readonly int[] _svgs = new int[8];
 
     public RampFirstProbe(string? shot) => _out = string.IsNullOrEmpty(shot) ? "test_output/rampfirst.txt" : shot;
 
@@ -37,6 +39,7 @@ public partial class RampFirstProbe : Node
         public TileId Tile;
         public int Index;
         public float DoorX;
+        public int Bays;
     }
 
     public override void _Ready()
@@ -51,6 +54,8 @@ public partial class RampFirstProbe : Node
         }
         GD.Print($"[rampfirst] {ids.Count} building tiles in {dir}");
         GarageRule.AlwaysRolls = true;
+        _svgDir = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(_out))!, "rampfirst");
+        Directory.CreateDirectory(_svgDir);
         var rows = new List<Row>();
         int buildings = 0, tilesDone = 0;
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -98,10 +103,13 @@ public partial class RampFirstProbe : Node
                         {
                             bool ramp = plan.Entrances.Any(en => en.Vehicle) && plan.Floors.Any(f => f.AllFlights().Any(x => x.Ramp));
                             r.Locked = !ramp;
+                            r.Bays = plan.Furniture.Count(p => p.Type == FurnitureType.FloorMarking && plan.RoomOf(p)?.Type == RoomType.CarPark);
                             if (!ramp) r.Plan = InteriorGenerator.RampWhy ?? "locked";
                             var problems = InteriorValidator.Validate(plan);
                             r.Valid = problems.Count == 0;
                             if (!r.Valid) r.Plan = "invalid: " + problems[0];
+                            if (Interlocked.Increment(ref _svgs[(int)r.Kind * 2 + (r.Valid ? 0 : 1)]) <= 8)
+                                File.WriteAllText(Path.Combine(_svgDir, $"{r.Kind}_{(r.Valid ? "ok" : "bad")}_{r.Key}.svg"), InteriorValidator.ToSvg(plan));
                         }
                     }
                     mine.Add(r);
@@ -149,6 +157,11 @@ public partial class RampFirstProbe : Node
             P($"    {g.Count(),5}  {g.Key}");
         P("");
         double exp = doors.Count(r => r.Type == "Apartments") * GarageRule.Share + doors.Count(r => r.Type == "MixedUse") * GarageRule.MixedRollShare;
+        foreach (var k in new[] { GarageRule.RampKind.Square, GarageRule.RampKind.Along })
+        {
+            var bays = doors.Where(r => r.Kind == k && !r.Locked).Select(r => r.Bays).OrderBy(x => x).ToList();
+            if (bays.Count > 0) P($"  {k} car park bays: min {bays[0]}, median {bays[bays.Count / 2]}, max {bays[^1]}, under 4: {bays.Count(x => x < 4)}");
+        }
         P($"Roll share {GarageRule.Share:F2} (mixed {GarageRule.MixedRollShare:F2}): expected garage doors {exp:F0} = {100.0 * exp / N:F2} % of all blocks");
         P($"Roll share that gives 4 % of all blocks: {0.04 * N / Math.Max(1, doors.Count):F2}");
         P("Why gate-passing blocks take no ramp: "

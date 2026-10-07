@@ -20,10 +20,10 @@ public static class GarageRule
     public const float Width = 3.0f, Height = 2.4f;
 
     /// <summary>Share of the blocks whose box takes a ramp that get one, so garages stay a small part of all the blocks (#694: about 3 to 5 %).</summary>
-    public const double Share = 0.8;
+    public const double Share = 0.72;
 
     /// <summary>The same for shops under flats.</summary>
-    public const double MixedRollShare = 0.5;
+    public const double MixedRollShare = 0.72;
 
 
 
@@ -178,7 +178,12 @@ public static class GarageRule
     public static bool LiftIn(int above) => above + 1 >= 3;
 
     /// <summary>The narrowest box a square ramp fits beside its stairwell, m (and the car park strip needs <see cref="StripWidth"/>).</summary>
-    public static float SquareWidth(bool lift) => Math.Max(StripWidth, EndMargin + RampWidth + LaneGap + WellWidth(lift));
+    public static float SquareWidth(bool lift) => Math.Max(Math.Max(StripWidth, EndMargin + RampWidth + LaneGap + WellWidth(lift)),
+        EndMargin + RampWidth / 2 + 2.2f + MinBays * BayWidth + 1.3f);
+
+    /// <summary>A garage has room for at least this many bays of this width (a car park strip loses the ramp's mouth: its lane and 2.2 m each side).</summary>
+    public const int MinBays = 4;
+    public const float BayWidth = 2.5f;
 
     /// <summary>
     /// Along the facade: the lane is a band as deep as the stairwell up to its half landing (so the corridor behind
@@ -211,7 +216,8 @@ public static class GarageRule
         bool lift = LiftIn(above);
         if (width >= SquareWidth(lift) && HasRamp(depth, storeyHeight)
             && BehindStairwell(width, depth, above + 1, storeyHeight) >= StripDepth) return RampKind.Square;
-        if (width >= AlongWidth(storeyHeight, lift) && depth >= AlongMinDepth) return RampKind.Along;
+        if (width >= AlongWidth(storeyHeight, lift) && depth >= AlongMinDepth
+            && BehindStairwell(width, depth, above + 1, storeyHeight) >= 5.0f) return RampKind.Along;
         return RampKind.None;
     }
 

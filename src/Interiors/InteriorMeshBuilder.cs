@@ -492,29 +492,36 @@ public static partial class InteriorMeshBuilder
     /// stair's drawn steps over one collision ramp). Where it runs on into the car park, which has
     /// no wall of its own along the lane, a parapet each side from the floor to a metre above the
     /// surface keeps a car from driving off its edge; in its own room the room's walls do that.
-    /// The ramp runs along +Z from <see cref="FlightPlan.ZTop"/>.
+    /// The ramp runs along Z (or X, `AlongX`) from <see cref="FlightPlan.ZTop"/>, toward larger values or smaller (<see cref="FlightPlan.RunDir"/>).
     /// </summary>
     private static void Ramp(Scratch s, FlightPlan f, FloorPlan floor, float y0, float h)
     {
         float inset = InteriorGenerator.WallInset;
-        float x0 = f.X0 + inset, x1 = f.X1 - inset;
+        float x0 = f.X0 + inset, x1 = f.X1 - inset;   // across the lane (along Z for a ramp running along X)
         float rise = h * (f.To - f.From);
+        float dir = f.RunDir;
         // where the car park begins along the lane
         float zPark = float.MaxValue;
         foreach (var q in floor.Rooms)
-            if (q.Type == RoomType.CarPark && q.X0 <= x0 + 0.01f && q.X1 >= x1 - 0.01f) zPark = Math.Min(zPark, q.Z0);
+        {
+            if (q.Type != RoomType.CarPark) continue;
+            float a0 = f.AlongX ? q.Z0 : q.X0, a1 = f.AlongX ? q.Z1 : q.X1;
+            if (a0 > x0 + 0.01f || a1 < x1 - 0.01f) continue;
+            zPark = Math.Min(zPark, dir > 0 ? (f.AlongX ? q.X0 : q.Z0) : -(f.AlongX ? q.X1 : q.Z1));
+        }
+        Vector3 V(float across, float y, float along) => f.AlongX ? new Vector3(along, y, across) : new Vector3(across, y, along);
         var pts = RampProfile.Polyline(rise);
         for (int i = 1; i < pts.Count; i++)
         {
-            float za = f.ZTop + pts[i - 1].T, zb = f.ZTop + pts[i].T;
+            float za = f.ZTop + dir * pts[i - 1].T, zb = f.ZTop + dir * pts[i].T;
             float ya = y0 + pts[i - 1].Y, yb = y0 + pts[i].Y;
             var col = i % 2 == 0 ? RampSurface : RampSurface * 0.93f;
             col.A = 1;
-            s.Quad(new(x0, ya, za), new(x1, ya, za), new(x1, yb, zb), new(x0, yb, zb), col);
-            if ((za + zb) / 2 < zPark) continue;
+            s.Quad(V(x0, ya, za), V(x1, ya, za), V(x1, yb, zb), V(x0, yb, zb), col);
+            if (dir * (za + zb) / 2 < zPark) continue;
             // the part in the car park: the wedge's own sides, and a parapet over each
-            Prism(s, false, x0 - 0.15f, x0, za, zb, y0, ya + 0.9f, y0, yb + 0.9f, RampWall, true);
-            Prism(s, false, x1, x1 + 0.15f, za, zb, y0, ya + 0.9f, y0, yb + 0.9f, RampWall, true);
+            Prism(s, f.AlongX, x0 - 0.15f, x0, za, zb, y0, ya + 0.9f, y0, yb + 0.9f, RampWall, true);
+            Prism(s, f.AlongX, x1, x1 + 0.15f, za, zb, y0, ya + 0.9f, y0, yb + 0.9f, RampWall, true);
         }
     }
 

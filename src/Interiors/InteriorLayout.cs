@@ -134,6 +134,20 @@ public sealed class FlightPlan
     public (float X, float Z) Bottom => Point((X0 + X1) / 2, ZBottom);
     public (float X, float Z) TopEnd => Point((X0 + X1) / 2, ZTop);
 
+    /// <summary>Which way a ramp's run goes along its axis: +1 from <see cref="ZTop"/> toward larger values (always, for a ramp square to the front wall), -1 the other way.</summary>
+    public int RunDir => ZBottom >= ZTop ? 1 : -1;
+
+    /// <summary>
+    /// The ground round the end of a ramp's run, plan frame: from <paramref name="before"/> metres up the run from the foot to
+    /// <paramref name="after"/> metres past it, and <paramref name="side"/> metres beyond the lane each side.
+    /// </summary>
+    public RectPlan FootZone(float before, float after, float side)
+    {
+        float a0 = ZBottom - RunDir * before, a1 = ZBottom + RunDir * after;
+        float lo = Math.Min(a0, a1), hi = Math.Max(a0, a1);
+        return AlongX ? new RectPlan(lo, X0 - side, hi, X1 + side) : new RectPlan(X0 - side, lo, X1 + side, hi);
+    }
+
     /// <summary>The rectangle it stands on, plan frame.</summary>
     public RectPlan Area(float before = 0, float after = 0)
     {
