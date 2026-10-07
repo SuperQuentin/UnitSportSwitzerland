@@ -593,6 +593,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     public bool IsFirstPerson => !_thirdPerson;
 
+    /// <summary>First person as the player chose it: also true while a throw has borrowed third person.</summary>
+    public bool ChoseFirstPerson => !_thirdPerson || _borrowedThird;
+
     /// <summary>
     /// 0..1: an item held ready to throw wants the close over-the-shoulder camera (set every frame by
     /// <see cref="Items.ItemController"/>, like <see cref="FovOverride"/>). In first person the view
