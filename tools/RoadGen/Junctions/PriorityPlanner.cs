@@ -289,7 +289,9 @@ public static class PriorityPlanner
             }
         }
 
-        if (plan.Kind == Kind.Main) CentreLine(plan, j, main, infos);
+        // the main road's centre line through the junction: at the lights too, along their best pair, the bigger road (#711, the
+        // user's rule); the edge lines only without lights
+        if (plan.Kind is Kind.Main or Kind.Signal) CentreLine(plan, j, main, infos, edges: plan.Kind == Kind.Main);
         return plan;
     }
 
@@ -330,7 +332,7 @@ public static class PriorityPlanner
     /// both are two-way, paved and wide enough to have one (the paint rules of PaintEmitter), and
     /// the road does not turn sharply there.
     /// </summary>
-    private static void CentreLine(Plan plan, Junction j, int[] main, LinkInfo?[] infos)
+    private static void CentreLine(Plan plan, Junction j, int[] main, LinkInfo?[] infos, bool edges = true)
     {
         if (main.Length != 2) return;
         foreach (int i in main)
@@ -358,6 +360,7 @@ public static class PriorityPlanner
         }
         plan.CentreLine = Polyline.Simplify(line, 0.02);   // mostly straight: 2 points instead of 9
         plan.CentreUrban = infos[main[0]]!.Value.Attributes.Has(RoadAttrFlags.Urban);
+        if (!edges) return;
 
         // the edges: a's corner on one side meets b's corner on the same side of the road, which
         // looking outward along b is its other hand; inset like an edge line (Randlinie)

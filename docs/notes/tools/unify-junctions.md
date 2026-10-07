@@ -73,7 +73,17 @@ forbidden turn gets none. The junction's markings follow:
 - **Centre line through the junction** from each arm's own centre line (`PriorityPlanner.CentreLineShift`, the boundary
   between its lanes the two ways, `RoadCrossSection.TwoWayLineOffset`): a 2+1 road's is off its middle (Sion
   2507062,1137845: it jumped half a lane). The user: centre lines through the junction at both kinds, edge lines without
-  lights only. **Not done yet at the lights** (they draw no centre line through the junction).
+  lights only. At the lights along their best pair, the bigger road (the user's choice; `CentreLine(edges: false)`), left
+  out beside a left pocket as without lights (#700). Sion tiles: 413 centre lines through junctions (391).
+- **Odd lane counts** (`CrossSectionPlanner.OddLanesTowardJunctions`, the user's choice): OSM `lanes=3` with no
+  forward/backward split gives the extra lane to the traffic arriving at a junction, at the end where more car roads meet;
+  neither or both alike: the fixed split (extra lane backward).
+- **Segments cut where OSM's lane count changes** (the user's choice, tried, not merged; patch in
+  `test_output/711/split-attempt.patch`): cutting raw segments at OSM row boundaries worked at Sion (68 cuts on the
+  tiles; the pieces need one obstacle owner or each stops the other's sidewalks at the cut) but (1) the pieces kept one
+  width (the widest), so a short added lane made the whole segment wide (J7's 450 m way 4 lanes wide), and the centre
+  line jogged at the cut (no taper); (2) it replaced #700's pockets on the approach side (J7's double left pocket and its
+  lead-in hatch became plain lanes: `A_double_left_lead_in_hatch_is_at_most_one_lane_wide` failed). Pending a decision.
 - **Same-turn lanes led through**: `EmitPairGuides` without lights too, from the approach's own lanes and the inferred
   moves, starting at the mouth (`signal: false`). Sion tiles: 20.
 - Sion tiles: 14 approaches' lanes changed from #700's rule (a one-lane straight exit: the inner lane left-only, or the
