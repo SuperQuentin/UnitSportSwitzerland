@@ -6,4 +6,4 @@ The game's showcase trailer (#706), staged and filmed in the game: the storyboar
 Index only: one line per note in `docs/notes/trailer/<name>.md`. Read a note only when the task
 touches its topic; search with `grep -ril <word> docs/notes/trailer`.
 
-- `director` — `--trailer` shots in order (stage, place, pre-roll, roll), actors as NPC `FootPlayer`s (autopilot, follow, scripted ride/flight/walk, boats boarded on the shore), keyed camera (world/actor/direction points, cubic, lens, damping), 1920x1080 at any window size, frame-exact MP4s under `--fixed-fps`, `--trailer-stills`, `--trailer-log` and route dumps for framing, the song
+- `director` — `--trailer` shots in order (stage, place, pre-roll, roll), actors as NPC `FootPlayer`s (autopilot, follow, scripted ride/flight/walk, boats boarded on the shore), keyed camera (world/actor/road/direction points, cubic, lens, damping), 1920x1080 at any window size, frame-exact MP4s under `--fixed-fps`, the cut checked at start, `--trailer-stills`, `--trailer-scout` overhead stills, `--trailer-log` and route dumps for framing, the song, staging gotchas

@@ -37,6 +37,11 @@
 - **Framing a shot**: `tools/trailer.sh stills 5` (first, middle, last frame) with `LOG=1`
   (`--trailer-log`): every actor's LV95, speed and arc twice a second, and each road dumped every
   5 m to `test_output/trailer/routes/shotNN_<road>.csv`, to put a camera where a car will be.
+- **Placing a shot**: `--trailer-scout "E,N,H;E,N,H"` takes a still straight down from H m over each
+  spot, north up, 24 mm (so H/1080 m a pixel at 1920x1080): put an LV95 grid over it to read off a
+  street's axis, a shore, a castle, a runway end. `--trailer-log` then times the actors.
+- **The cut** is checked at start (`CutProblems`): shot numbers ascending, each shot starting on the
+  bar the one before ends, the last ending with the song; a problem fails the run's RESULT.
 - **The song** is not committed: `tools/trailer.sh` downloads it from incompetech.com (CC BY 4.0,
   credited on the end card, `Song.Credit`).
 - **Staging gotchas** (each cost a stills pass):
