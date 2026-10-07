@@ -518,7 +518,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// apart by their jerseys. An NPC is offset from the client that asked for it (#394), so it gets a
     /// figure of its own rather than that player's chosen one (<see cref="Avatar.Appearance.For"/>).
     /// </summary>
-    private int RiderIndex() => Npc && NetId(Name) is long npcId && npcId < 0
+    public int RiderIndex() => Npc && NetId(Name) is long npcId && npcId < 0
         ? unchecked((int)Net.PlayerReplication.NpcOwner(npcId) + 100 * (int)(1 + (-npcId) % 1000))
         : GetMultiplayerAuthority();
 

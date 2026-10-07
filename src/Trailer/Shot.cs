@@ -74,6 +74,26 @@ public sealed record Key(double T, Pt Eye, Pt Look, float Lens = 35f, float Roll
 /// <summary>A line of text over the picture from <paramref name="T"/> for <paramref name="Seconds"/>.</summary>
 public sealed record Caption(double T, double Seconds, string Text, string? Sub = null, bool Title = false);
 
+/// <summary>
+/// A person in a story: the name the chat shows in <paramref name="Colour"/>, a face and build
+/// (<paramref name="Looks"/>), and the clothes they wear (<see cref="Avatar.Garments"/> items), the
+/// same in every shot so they read as the same person.
+/// </summary>
+public sealed record Character(string Name, Color Colour, Avatar.Appearance Looks, Items.ItemId[] Wears)
+{
+    public int AppearanceBits => Looks.Pack();
+    public long OutfitBits => Avatar.Outfit.Of(Wears).Bits;
+}
+
+/// <summary>
+/// A line of the in-game chat as dialogue, typed in at <paramref name="T"/>; a null speaker is the
+/// game's own system line ("PIGEON joined the game"). Lines stay up to the end of their shot.
+/// </summary>
+public sealed record Line(double T, Character? Who, string Text);
+
+/// <summary>A documentary place and time card ("AIROLO · 08:15"), top left, from <paramref name="T"/> for <paramref name="Seconds"/>.</summary>
+public sealed record Super(double T, double Seconds, string Text);
+
 /// <summary>What moves an actor.</summary>
 public enum Drive
 {
@@ -121,6 +141,8 @@ public sealed record Cast
 
     /// <summary>Metres a second it holds along its road (<see cref="Drive.Follow"/>).</summary>
     public float Speed { get; init; } = 12f;
+    /// <summary>On a road (<see cref="Drive.Follow"/>): it stops this many metres along it from its spot (the end of a road).</summary>
+    public float StopAt { get; init; } = float.NaN;
 
     public Func<double, RideInput>? Controls { get; init; }
     public Func<double, FlightInput>? Flight { get; init; }
@@ -135,8 +157,19 @@ public sealed record Cast
 
     /// <summary>A dance move or emote (<see cref="FootPlayer.DanceId"/>), 0 = none.</summary>
     public int Dance { get; init; }
-    /// <summary>The seed of its looks (<see cref="Avatar.Appearance.ForSeed"/>).</summary>
+    /// <summary>The seed of its looks (<see cref="Avatar.Appearance.ForSeed"/>), when it plays nobody in particular.</summary>
     public int Seed { get; init; } = 1;
+    /// <summary>Who it plays: the looks and clothes of a story's character.</summary>
+    public Character? Who { get; init; }
+    /// <summary>Comes out of the nearest front door to <see cref="At"/>: put on its step facing out, the door opened.</summary>
+    public bool FromDoor { get; init; }
+    /// <summary>
+    /// Aboard actor <see cref="Aboard"/>'s machine: put at <see cref="Deck"/> in its frame (x right,
+    /// y up, −z ahead) once it is under way, moving with it (the steamer's deck, the freighter's hold);
+    /// its <see cref="Heading"/> is then from the machine's (180: facing aft). It walks, an NPC never boards.
+    /// </summary>
+    public int Aboard { get; init; } = -1;
+    public Vector3 Deck { get; init; }
     public bool Lights { get; init; }
     /// <summary>A car preset (<see cref="CarSetups"/>), 0 = none.</summary>
     public int Setup { get; init; }
@@ -159,6 +192,9 @@ public sealed record Cast
 /// </summary>
 public sealed record Prop(Spot At, float Bearing, Vector3 Size, Color Colour)
 {
+    /// <summary>An item set down instead of a box (the fondue pot, the radio, the flag planted), <see cref="Scale"/> times its size.</summary>
+    public Items.ItemId Item { get; init; }
+    public float Scale { get; init; } = 1f;
     public int Actor { get; init; } = -1;
     public float Ahead { get; init; }
     /// <summary>Or on the shot's road <see cref="Route"/>, <see cref="Arc"/> m along it, square across it.</summary>
@@ -203,6 +239,12 @@ public sealed record Shot
     public double Preroll { get; init; } = 2;
 
     public IReadOnlyList<Caption> Captions { get; init; } = Array.Empty<Caption>();
+    public IReadOnlyList<Line> Chat { get; init; } = Array.Empty<Line>();
+    public IReadOnlyList<Super> Supers { get; init; } = Array.Empty<Super>();
+    /// <summary>A photo taken at this shot time: a flash, then the frame held as a polaroid to the end.</summary>
+    public double? Photo { get; init; }
+    /// <summary>Where the photo is taken from (the photographer's view, the film's camera elsewhere); null: the film's frame.</summary>
+    public Key? PhotoFrom { get; init; }
     /// <summary>Seconds of fade from black at the start and to black at the end.</summary>
     public double FadeIn { get; init; }
     public double FadeOut { get; init; }

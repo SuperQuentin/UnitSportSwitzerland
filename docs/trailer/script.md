@@ -105,10 +105,11 @@ note what the scene reveals of the game, for us only; nothing of it is on screen
 > *[real building sites, works machinery]*
 
 **10. EXT. LAKE GENEVA OFF CHILLON — NOON** · bars 17-18 · 0:31.4-0:35.3
-> Léa on the steamer's upper deck (her bike against the rail), the castle sliding past. A jetski
-> rips across the steamer's bow; a fisherman in a rowing boat doesn't even look up.
-> Camera: on the deck behind her, the castle beyond, 35 mm.
-> *[boats; walking on a moving deck; fishing; the castle]*
+> The paddle steamer lies off Chillon castle. A jetski rips across in front of it.
+> **LÉA:** on the boat. chillon says hi
+> Camera: low on the water, a slow drift, the steamer and the castle, 35 mm.
+> *[boats; the castle]* (Filmed: a figure put aboard a moving machine wrecked it, see the director
+> note, so she is on board by the chat line.)
 
 **11. EXT. FURKA PASS — NOON** · bars 19-20 · 0:35.3-0:39.2
 > From straight above: the FD3S leads the AE86 into a bend over the young Rhône, and Marco dives
@@ -188,9 +189,8 @@ note what the scene reveals of the game, for us only; nothing of it is on screen
 > *[the Battle Royale plane, never called that]*
 
 **24. INT. FREIGHTER HOLD — CONTINUOUS** · bar 40 · 1:16.3-1:18.2
-> On the riser: Jonas, hi-vis and all, walks to the edge of the open ramp. Below: the Mattertal,
-> the Matterhorn catching the last sun.
-> Camera: inside the hold, behind him, the ramp framing the view, 24 mm.
+> Jonas's view: the edge of the open ramp, and below it the Mattertal in the last sun.
+> Camera: his eyes, in the hold, stepping to the ramp and looking down, 24 mm.
 
 ### Act three: everything at once (the drop, bars 41-57)
 
@@ -250,16 +250,16 @@ note what the scene reveals of the game, for us only; nothing of it is on screen
 ### Ending: the photo (outro, bars 58-65)
 
 **37. EXT. GORNERGRAT — SUNSET** · bars 58-61 · 1:51.4-1:59.2
-> The four around the pot, the Matterhorn red behind them. The pigeon lands on the pot's rim and
-> takes the bread.
+> The four in a row by the pot, the Kulmhotel's domes behind them (from here the hotel stands
+> between them and the Matterhorn). The pigeon glides in and lands by the pot.
 > Chat, in the system colour: **PIGEON joined the game**
-> They laugh. Léa raises her camera.
+> They cheer and wave; Léa has her camera in hand.
 > Camera: a slow pull-out, 28 mm.
 > *[multiplayer; the camera item]*
 
 **38. EXT. GORNERGRAT — SUNSET** · bars 62-65 · 1:59.2-2:07.0
-> A flash. The frame freezes as a polaroid: the four friends, the pigeon with the bread, the
-> Matterhorn. The photo settles in its white border.
+> A flash. The photo, taken from in front of them, settles as a polaroid: the four friends, the
+> pot, the hotel. The pull-out goes on behind it.
 > Title: **UNITSPORT SWITZERLAND**
 > Under it: *Meet you at the top.*
 > The music credit, then fade to black.

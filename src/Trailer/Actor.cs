@@ -41,7 +41,10 @@ public sealed class Actor
     private bool _launched, _afloat;
     private float _arc = float.NaN;
 
-    public Actor(Cast spec, int index, Node stage, ChunkManager chunks, WorldOrigin origin, RouteBook routes)
+    /// <summary>The shot's other actors by index, for one that boards another's machine.</summary>
+    private readonly System.Func<int, Actor?> _cast;
+
+    public Actor(Cast spec, int index, Node stage, ChunkManager chunks, WorldOrigin origin, RouteBook routes, System.Func<int, Actor?> cast)
     {
         Spec = spec;
         Index = index;
@@ -49,6 +52,7 @@ public sealed class Actor
         _chunks = chunks;
         _origin = origin;
         _routes = routes;
+        _cast = cast;
     }
 
     private bool OnRoad => Spec.Drive is Drive.Road or Drive.Follow || Spec.Route != null;
@@ -84,6 +88,9 @@ public sealed class Actor
         }
 
         if (!Body.IsOnFloor() && !_launched && !_afloat) return;
+        // a boat is mounted and put on the water in one step: a steamer left mounted on its dry spot
+        // for a frame stands in whatever is there (Chillon's castle and railway), and is wrecked
+        if (Boat && !_afloat && !World.WaterField.TryLevelAt(_origin.ToWorld(Spec.At.E, Spec.At.N, 0), out _)) return;
         if (Spec.Ride != RideKind.OnFoot && Body.Ride != Spec.Ride)
         {
             if (!Body.SetRide(Spec.Ride)) { Failed = $"mount {Spec.Ride} refused"; return; }
@@ -135,7 +142,30 @@ public sealed class Actor
     {
         Vector3 at;
         float bearing = Spec.Heading;
-        if (_route != null)
+        Vector3? carried = null;
+        FootPlayer? carrier = null;
+        if (Spec.Aboard >= 0)
+        {
+            // on another actor's machine once that one is afloat or in the air, moving as it moves
+            if (_cast(Spec.Aboard) is not { Ready: true, Body: { } host }) return;
+            at = host.GlobalTransform * Spec.Deck;
+            bearing = Mathf.RadToDeg(-host.Rotation.Y) + Spec.Heading;
+            carried = host.Velocity;
+            carrier = host;
+        }
+        else if (Spec.FromDoor)
+        {
+            // on the step of the nearest front door, facing out, the door asked open
+            var near = _origin.ToWorld(Spec.At.E, Spec.At.N, 0);
+            if (!_chunks.TryGetSurface(near, out float ng)) return;
+            if (Interiors.DoorIndex.NearestEntrance(near with { Y = ng }, 40f) is not { } door) return;
+            var outward = (door.Outward with { Y = 0 }).Normalized();
+            at = door.World + outward * 0.8f;
+            if (_chunks.TryGetSurface(at, out float dg)) at.Y = dg;
+            bearing = Mathf.RadToDeg(Mathf.Atan2(outward.X, -outward.Z));
+            Interiors.InteriorManager.Instance?.OpenDoorForCamera(door.World + outward * 1.5f, 6f);
+        }
+        else if (_route != null)
         {
             float s = Mathf.Clamp(_routes.StartArc(RouteKey) + Spec.Arc, 2f, _route.Line.Length - 2f);
             at = _route.Line.PointAt(s);
@@ -148,12 +178,32 @@ public sealed class Actor
         else if (Ground(Boat ? Spec.Board!.Value : Spec.At) is { } g) at = g;
         else return;
 
-        // an NPC body anchors its own ground and has no camera; one on foot only stands, so a walker is not one
-        var body = new FootPlayer { Name = $"Actor{Index}", Terrain = _chunks, Npc = Spec.Drive != Drive.Walk };
+        // an NPC body anchors its own ground and has no camera; one on foot only stands (on the ground,
+        // under a deck: it never boards one), so a walker is not one, nor one aboard a machine
+        bool npc = Spec.Drive != Drive.Walk && Spec.Aboard < 0;
+        // a figure's look is found by its rider index (Appearance.For): a player's is its peer's, the
+        // same for every actor here, so an NPC is named as a race entrant of owner 0 (an index of its
+        // own) and its look registered there; a walker registers its own, the one walking in its shot
+        var name = npc ? Net.PlayerReplication.NodeName(Net.PlayerReplication.NpcId(0, Index + 1)) : $"Actor{Index}";
+        var body = new FootPlayer { Name = name, Terrain = _chunks, Npc = npc };
         body.Rotation = new Vector3(0, -Mathf.DegToRad(bearing), 0);
-        body.AppearanceBits = Avatar.Appearance.ForSeed(Spec.Seed).Pack();
+        body.AppearanceBits = Spec.Who?.AppearanceBits ?? Avatar.Appearance.ForSeed(Spec.Seed).Pack();
+        if (npc) Avatar.Appearance.Register(body.RiderIndex(), body.AppearanceBits);
+        if (Spec.Who is { } who) body.OutfitBits = who.OutfitBits;
         _stage.AddChild(body);
-        body.GlobalPosition = at + Vector3.Up * 1.2f;
+        // put down inside the machine's hull, which would take it for a crash (a wrecked steamer, a
+        // wrecked freighter): only the deck the walk builds round it is solid to it, as for a player aboard
+        if (carrier != null)
+        {
+            body.AddCollisionExceptionWith(carrier);
+            carrier.AddCollisionExceptionWith(body);
+        }
+        if (carried is { } v)
+        {
+            body.DebugLaunch(at + Vector3.Up * 0.3f, v);
+            _launched = true;
+        }
+        else body.GlobalPosition = at + Vector3.Up * (Spec.FromDoor ? 0.95f : 1.2f);
         _ahead = Forward(bearing);
         Body = body;
     }
@@ -193,6 +243,10 @@ public sealed class Actor
                 break;
             case Drive.Stand when Spec.Ride != RideKind.OnFoot:
                 body.RideControls = () => new RideInput(0f, 0f, 0f, false, Handbrake: true);
+                break;
+            case Drive.Stand when Spec.Aboard >= 0:
+                // a walking body (see Spawn) standing on the deck: no keys of the player's moving it
+                body.WalkControls = () => (Vector3.Zero, false);
                 break;
         }
     }
@@ -235,9 +289,16 @@ public sealed class Actor
             float corner = Mathf.Sqrt(6f / Mathf.Max(k, 1e-4f));
             limit = Mathf.Min(limit, Mathf.Sqrt(corner * corner + 2f * 4f * d));
         }
+        // a stop asked for along the road: braking to it at 3 m/s², stood still past it
+        if (!float.IsNaN(Spec.StopAt))
+        {
+            float left = _routes.StartArc(RouteKey) + Spec.StopAt - _arc;
+            limit = Mathf.Min(limit, left <= 0f ? 0f : Mathf.Sqrt(2f * 3f * left));
+        }
         float err = limit - speed;
-        bool end = _arc > line.Length - 15f;
-        return new RideInput(end ? 0f : Mathf.Clamp(err * 0.35f, 0f, 1f), end ? 1f : Mathf.Clamp(-err * 0.3f, 0f, 1f), steer, false);
+        bool end = _arc > line.Length - 15f || limit <= 0.01f;
+        return new RideInput(end ? 0f : Mathf.Clamp(err * 0.35f, 0f, 1f), end ? 1f : Mathf.Clamp(-err * 0.3f, 0f, 1f), steer, false,
+            Handbrake: end && speed < 0.5f);
     }
 
     /// <summary>How sharply the line bends at arc <paramref name="s"/>, 1/m.</summary>
@@ -257,6 +318,8 @@ public sealed class Actor
     {
         if (Body == null || !GodotObject.IsInstanceValid(Body)) return;
         if (_moving >= 0) _moving += dt;
+        if (Ready && Body.HeldItemId != Spec.Item) Body.HeldItemId = Spec.Item;
+        if (Body.BackItemId != 0) Body.BackItemId = 0;
         var v = Body.IsFlying ? Body.Flight.Velocity : Body.Ride == RideKind.OnFoot ? Body.Velocity : Body.WorldVelocity;
         var flat = v with { Y = 0 };
         var want = flat.Length() > 2f ? flat.Normalized() : (-Body.GlobalBasis.Z with { Y = 0 }).Normalized();

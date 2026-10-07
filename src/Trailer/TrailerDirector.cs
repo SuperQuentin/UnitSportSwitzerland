@@ -56,9 +56,11 @@ public partial class TrailerDirector : Node
     private readonly List<Actor> _actors = new();
     private RouteBook _routes = new(0);
     private readonly List<Node3D> _props = new();
-    private double _t, _waitWall, _settledFor, _preroll;
+    private double _t, _waitWall, _settledFor, _drawnFor, _preroll;
     private double _phaseStart;
     private string _style = "";
+    private Texture2D? _photo;
+    private bool _photoAsked;
     private float _sea = float.NaN;
     private FrameRecorder? _recorder;
     private int _framesWanted;
@@ -69,9 +71,14 @@ public partial class TrailerDirector : Node
 
     /// <summary>Wall seconds a shot may take to stage or place before it is filmed as it is.</summary>
     private const double StageTimeout = 150, PlaceTimeout = 60;
-    /// <summary>Tile rings round the camera that must have settled, and for how long, before the actors come.</summary>
+    /// <summary>
+    /// Tile rings round the camera that must be complete (<see cref="ChunkManager.CompleteNear"/>: each
+    /// tile at its wanted detail, with its roads, buildings and collision), and for how long, before
+    /// the actors come. A world merely drawn (some mesh on every tile) for <see cref="CompleteGrace"/>
+    /// s without completing is filmed as it is, with a warning.
+    /// </summary>
     private const int SettleRings = 3;
-    private const double SettleHold = 2.0;
+    private const double SettleHold = 3.0, CompleteGrace = 45;
 
     public TrailerDirector(Camera3D camera, ChunkManager chunks, WorldOrigin origin)
     {
@@ -101,10 +108,17 @@ public partial class TrailerDirector : Node
             };
         }).ToList();
 
+    /// <summary>
+    /// Which film: <c>--trailer-film story</c> (the default, "Meet You at the Top",
+    /// <see cref="StoryScript"/>) or <c>showcase</c> (the first cut, <see cref="TrailerScript"/>).
+    /// </summary>
+    public static IReadOnlyList<Shot> Film =>
+        CmdArgs.Value("--trailer-film") == "showcase" ? TrailerScript.Shots : StoryScript.Shots;
+
     /// <summary>"all", "5", "5-9" or "5,7,12" (shot numbers).</summary>
     private static List<Shot> Select(string arg)
     {
-        var all = TrailerScript.Shots;
+        var all = Film;
         if (arg == "all" || arg.Length == 0) return all.ToList();
         var want = new HashSet<int>();
         foreach (var part in arg.Split(','))
@@ -131,8 +145,8 @@ public partial class TrailerDirector : Node
         if (_recordDir == null && _stillsDir == null && CmdArgs.Value("--trailer-song") is { } songPath) LoadSong(songPath);
         RenderingServer.FramePostDraw += OnFrameDrawn;
         // the cut as a whole, whichever shots this run films: no gap, no overlap, the song's length
-        var problems = Song.CutProblems(TrailerScript.Shots.Select(s => (s.Number, s.FromBar, s.Bars)).ToList())
-            .Concat(TrailerScript.Shots.Where(s => s.Keys.Count == 0).Select(s => $"shot {s.Number} has no camera key"));
+        var problems = Song.CutProblems(Film.Select(s => (s.Number, s.FromBar, s.Bars)).ToList())
+            .Concat(Film.Where(s => s.Keys.Count == 0).Select(s => $"shot {s.Number} has no camera key"));
         foreach (var problem in problems)
         {
             GD.PrintErr($"[trailer] cut: {problem}");
@@ -231,18 +245,22 @@ public partial class TrailerDirector : Node
         var focus = Focus(shot);
         OriginShifter.Instance?.ShiftTo(focus.E, focus.N);
         _camera.GlobalPosition = _origin.ToWorld(focus.E, focus.N, 0) with { Y = 3000f };
-        _shotCamera = new ShotCamera(shot)
-        {
-            Place = PlaceSpot,
-            Actor = i => i >= 0 && i < _actors.Count ? _actors[i].Frame : null,
-            Surface = p => _chunks.TryGetSurface(p, out float g) ? g : null,
-            Road = (key, at) => _routes.Point(key, at, _chunks),
-            Seat = i => i >= 0 && i < _actors.Count ? _actors[i].Seat : null,
-        };
+        _shotCamera = CameraFor(shot);
         _settledFor = 0;
+        _drawnFor = 0;
         _waitWall = 0;
         Enter(Phase.Stage);
     }
+
+    /// <summary>A camera path through <paramref name="shot"/>'s keys, its points placed in this shot's world.</summary>
+    private ShotCamera CameraFor(Shot shot) => new(shot)
+    {
+        Place = PlaceSpot,
+        Actor = i => i >= 0 && i < _actors.Count ? _actors[i].Frame : null,
+        Surface = p => _chunks.TryGetSurface(p, out float g) ? g : null,
+        Road = (key, at) => _routes.Point(key, at, _chunks),
+        Seat = i => i >= 0 && i < _actors.Count ? _actors[i].Seat : null,
+    };
 
     /// <summary>Where a shot happens: its first world key's spot, else its first actor's.</summary>
     private static Spot Focus(Shot shot)
@@ -281,6 +299,25 @@ public partial class TrailerDirector : Node
             var along = (next - on) with { Y = 0 };
             bearing = Mathf.RadToDeg(Mathf.Atan2(along.X, -along.Z));
         }
+        if (prop.Item != Items.ItemId.None)
+        {
+            // an item set down: its own mesh, its lowest point on the floor (a path's, a road's: the
+            // pot put on the bare ground was under the Gornergrat's path), no collision
+            float floor = FloorAt(at) ?? at.Y;
+            var item = new MeshInstance3D
+            {
+                Name = $"Prop{_props.Count}",
+                Mesh = Items.ItemDefs.HandMesh(prop.Item),
+                MaterialOverride = Items.ItemDefs.Material,
+            };
+            AddChild(item);
+            float yaw = Mathf.DegToRad(-bearing);
+            float bottom = item.Mesh.GetAabb().Position.Y * prop.Scale;
+            item.GlobalTransform = new Transform3D(new Basis(Vector3.Up, yaw).Scaled(Vector3.One * prop.Scale),
+                at with { Y = floor - bottom + prop.At.H });
+            _props.Add(item);
+            return;
+        }
         float g = _chunks.TryGetHeight(at, out float h) ? h : 0f;
         var body = new StaticBody3D { Name = $"Prop{_props.Count}" };
         body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = prop.Size } });
@@ -294,6 +331,24 @@ public partial class TrailerDirector : Node
         var face = new Vector3(Mathf.Sin(b), 0f, -Mathf.Cos(b));
         body.GlobalTransform = new Transform3D(Basis.LookingAt(face, Vector3.Up), at with { Y = g + prop.Size.Y * 0.5f - 0.3f });
         _props.Add(body);
+    }
+
+    /// <summary>
+    /// The top of what is underfoot at <paramref name="at"/>: the collision there (a path, a road, a
+    /// pavement drawn over the ground) or the ground's own surface, whichever is higher; null when
+    /// neither is in yet.
+    /// </summary>
+    private float? FloorAt(Vector3 at)
+    {
+        float? floor = _chunks.TryGetSurface(at, out float g) ? g : null;
+        var from = at with { Y = (floor ?? at.Y) + 3f };
+        var hit = _camera.GetWorld3D().DirectSpaceState.IntersectRay(PhysicsRayQueryParameters3D.Create(from, from + Vector3.Down * 8f));
+        if (hit.Count > 0)
+        {
+            float y = hit["position"].AsVector3().Y;
+            floor = floor is { } f ? Mathf.Max(f, y) : y;
+        }
+        return floor;
     }
 
     /// <summary>The clock at <paramref name="hour"/>, standing still (a day of a thousand hours).</summary>
@@ -319,18 +374,22 @@ public partial class TrailerDirector : Node
         if (shot.Keys[0].Look.World is { } look && PlaceSpot(look) is { } lp && lp != _camera.GlobalPosition)
             _camera.LookAt(lp, Vector3.Up);
 
-        bool settled = eye != null || shot.Keys[0].Eye.World == null;
-        settled &= _chunks.SettledNear(_camera.GlobalPosition, SettleRings);
+        bool placed = eye != null || shot.Keys[0].Eye.World == null;
+        bool drawn = placed && _chunks.SettledNear(_camera.GlobalPosition, SettleRings);
+        bool settled = drawn && _chunks.CompleteNear(_camera.GlobalPosition, SettleRings);
         _settledFor = settled ? _settledFor + delta : 0;
-        if (_settledFor < SettleHold && Wall() < StageTimeout) return;
-        if (_settledFor < SettleHold)
+        _drawnFor = drawn ? _drawnFor + delta : 0;
+        if (_settledFor < SettleHold && _drawnFor < CompleteGrace && Wall() < StageTimeout) return;
+        if (_settledFor < SettleHold && _drawnFor >= CompleteGrace)
+            GD.PrintErr($"[trailer] shot {shot.Number}: the ground was drawn but never complete in {CompleteGrace:F0} s; filming it as it is");
+        else if (_settledFor < SettleHold)
         {
             GD.PrintErr($"[trailer] shot {shot.Number}: the ground never settled in {StageTimeout:F0} s; filming it as it is");
             _failures++;
         }
         GD.Print($"[trailer] shot {shot.Number}: ground in after {Wall():F1} s, placing {shot.Cast.Count} actor(s)");
         for (int i = 0; i < shot.Cast.Count; i++)
-            _actors.Add(new Actor(shot.Cast[i], i, this, _chunks, _origin, _routes));
+            _actors.Add(new Actor(shot.Cast[i], i, this, _chunks, _origin, _routes, k => k >= 0 && k < _actors.Count ? _actors[k] : null));
         foreach (var prop in shot.Props.Where(p => p.Actor < 0 && p.Route == null)) Build(prop);
         Enter(Phase.Place);
     }
@@ -408,6 +467,9 @@ public partial class TrailerDirector : Node
         {
             _song.Play((float)shot.Start);
         }
+        _captions.SetChat(shot.Chat);
+        _photo = null;
+        _photoAsked = false;
         GD.Print(string.Create(CultureInfo.InvariantCulture, $"[trailer] shot {shot.Number}: rolling, {shot.Length:F2} s ({_framesWanted} frames)"));
         Enter(Phase.Roll);
         Frame(0);
@@ -431,7 +493,29 @@ public partial class TrailerDirector : Node
     {
         var shot = _shot!;
         _shotCamera!.Apply(_camera, _t, delta);
-        _captions.Show(shot.Captions, _t, shot.Length, shot.FadeIn, shot.FadeOut);
+        // the photo's picture is rendered a few frames before its flash, from the camera alone
+        // (PhotoCapture: no captions, no flash in it)
+        if (shot.Photo is { } at && !_photoAsked && _t >= at - 0.15)
+        {
+            _photoAsked = true;
+            _ = TakePhoto();
+        }
+        _captions.Show(shot, _t, _photo);
+    }
+
+    private async System.Threading.Tasks.Task TakePhoto()
+    {
+        var eye = _camera;
+        if (_shot!.PhotoFrom is { } view)
+        {
+            // the photographer's view: a camera of its own, the film's left where it is
+            eye = new Camera3D { Name = "PhotoEye" };
+            AddChild(eye);
+            CameraFor(_shot with { Keys = [view with { T = 0 }], KeysFrom = 0, Smooth = 0, Shake = 0 }).Apply(eye, 0, 0);
+        }
+        var image = await Items.PhotoCapture.Render(this, eye, eye.Fov);
+        if (eye != _camera) eye.QueueFree();
+        _photo = ImageTexture.CreateFromImage(image);
     }
 
     /// <summary>After the renderer has drawn: the frame into the film, or a still when one is due.</summary>

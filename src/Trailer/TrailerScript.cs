@@ -14,32 +14,32 @@ namespace UnitSport.Trailer;
 /// </summary>
 public static class TrailerScript
 {
-    private static RideKind Car(int i) => (RideKind)(CarCatalog.First + i);
-    private static RideKind Moto(int i) => MotorbikeCatalog.All[i].Kind;
-    private static RideKind Heavy(int i) => (RideKind)(HeavyCatalog.First + i);
+    internal static RideKind Car(int i) => (RideKind)(CarCatalog.First + i);
+    internal static RideKind Moto(int i) => MotorbikeCatalog.All[i].Kind;
+    internal static RideKind Heavy(int i) => (RideKind)(HeavyCatalog.First + i);
 
     // cars by CarCatalog index
-    private const int Ae86 = 0, Fd3s = 1, Gc8 = 2, Bnr32 = 4, S13 = 6, Evo3 = 11, Nsx = 14, Supra = 19, Yaris = 26;
+    internal const int Ae86 = 0, Fd3s = 1, Gc8 = 2, Bnr32 = 4, S13 = 6, Evo3 = 11, Nsx = 14, Supra = 19, Yaris = 26;
     // motorbikes by MotorbikeCatalog index
-    private const int R1 = 0, Monster = 1, AfricaTwin = 11;
+    internal const int R1 = 0, Monster = 1, AfricaTwin = 11;
     // heavies by HeavyCatalog index; trailers by TrailerCatalog index
-    private const int Scania = 0, Setra = 4, Curtainsider = 0;
+    internal const int Scania = 0, Setra = 4, Curtainsider = 0;
     // emotes: DanceId = 2 + EmoteTable index (HumanMeshBuilder.EmoteName)
-    private const int Wave = 2, Cheer = 3, Salute = 4, Clap = 6, FistPump = 8, ArmWave = 11, Floss = 12, Macarena = 13,
+    internal const int Wave = 2, Cheer = 3, Salute = 4, Clap = 6, FistPump = 8, ArmWave = 11, Floss = 12, Macarena = 13,
         Ymca = 14, Chicken = 15, Cabbage = 16, Robot = 18, Griddy = 20, Carlton = 21, Gangnam = 22, Orange = 23, RunningMan = 24;
 
     /// <summary>Scripted flight input: the stick (x right; y forward = dive, back = climb), climb power, thrust lever.</summary>
-    private static FlightInput Stick(float x = 0f, float y = 0f, float up = 0f, float lever = 0f, bool effort = false) =>
+    internal static FlightInput Stick(float x = 0f, float y = 0f, float up = 0f, float lever = 0f, bool effort = false) =>
         new(new Vector2(x, y), up, 0f, Mathf.Max(0f, lever), Mathf.Max(0f, -lever), false, effort, 0f);
 
-    private static RideInput Pedal(float throttle, float steer = 0f, float brake = 0f) => new(throttle, brake, steer, false);
+    internal static RideInput Pedal(float throttle, float steer = 0f, float brake = 0f) => new(throttle, brake, steer, false);
 
     /// <summary>
     /// Keys orbiting a world point on the ground: the eye from bearing <paramref name="from"/> to
     /// <paramref name="to"/> (where it stands, seen from the point), <paramref name="r0"/> to
     /// <paramref name="r1"/> m out, <paramref name="h0"/> to <paramref name="h1"/> m up.
     /// </summary>
-    private static Key[] Orbit(Spot c, float r0, float r1, float h0, float h1, float from, float to, double seconds,
+    internal static Key[] Orbit(Spot c, float r0, float r1, float h0, float h1, float from, float to, double seconds,
         float lens, float lookUp = 1.5f, int steps = 4) =>
         Enumerable.Range(0, steps + 1).Select(i =>
         {
@@ -49,7 +49,7 @@ public static class TrailerScript
         }).ToArray();
 
     /// <summary>Keys orbiting an actor in its travel frame: angle 0 behind it, 90 to its right.</summary>
-    private static Key[] Around(int actor, float r, float h, float from, float to, double seconds, float lens,
+    internal static Key[] Around(int actor, float r, float h, float from, float to, double seconds, float lens,
         float lookUp = 0.5f, int steps = 4) =>
         Enumerable.Range(0, steps + 1).Select(i =>
         {
@@ -57,7 +57,7 @@ public static class TrailerScript
             return new Key(seconds * i / steps, Pt.On(actor, r * Mathf.Sin(a), h, r * Mathf.Cos(a)), Pt.On(actor, 0f, lookUp), lens);
         }).ToArray();
 
-    private static Pt Ground(Spot s, float bearing, float metres, float up)
+    internal static Pt Ground(Spot s, float bearing, float metres, float up)
     {
         var at = s.Toward(bearing, metres);
         return Pt.At(at.E, at.N, up);
@@ -65,19 +65,19 @@ public static class TrailerScript
 
     // --- places ----------------------------------------------------------------------------------
 
-    private static readonly Spot Matterhorn = Spot.Alt(2617049, 1091673, 4478);
-    private static readonly Spot Tremola = new(2686790, 1156030);
-    private static readonly Spot TremolaFoot = new(2686800, 1155445);
-    private static readonly Spot Furka = new(2672150, 1157560);
-    private static readonly Spot FurkaTop = new(2673420, 1158140);
-    private static readonly Spot Gotthard = new(2686600, 1154120);
+    internal static readonly Spot Matterhorn = Spot.Alt(2617049, 1091673, 4478);
+    internal static readonly Spot Tremola = new(2686790, 1156030);
+    internal static readonly Spot TremolaFoot = new(2686800, 1155445);
+    internal static readonly Spot Furka = new(2672150, 1157560);
+    internal static readonly Spot FurkaTop = new(2673420, 1158140);
+    internal static readonly Spot Gotthard = new(2686600, 1154120);
     /// <summary>Bern's Kramgasse, east end and west end (the Zytglogge).</summary>
-    private static readonly Spot KramgasseEast = new(2601080, 1199661), KramgasseWest = new(2600720, 1199655);
+    internal static readonly Spot KramgasseEast = new(2601080, 1199661), KramgasseWest = new(2600720, 1199655);
     /// <summary>The flat by the Gornergrat Kulmhotel, the Matterhorn to the west-south-west.</summary>
-    private static readonly Spot Crew = new(2626790, 1092478);
+    internal static readonly Spot Crew = new(2626790, 1092478);
     /// <summary>The Riddes straight (VS), west end and east end.</summary>
     private static readonly Spot RiddesWest = new(2583100, 1113236), RiddesEast = new(2583390, 1113236);
-    private static readonly Spot ChillonBoard = new(2560770, 1140430);
+    internal static readonly Spot ChillonBoard = new(2560770, 1140430);
 
     public static readonly IReadOnlyList<Shot> Shots = new List<Shot>
     {
@@ -597,7 +597,7 @@ public static class TrailerScript
     };
 
     /// <summary>Dancers in a ring round <paramref name="c"/>, facing in, each with its own move.</summary>
-    private static Cast[] Circle(Spot c, float r, int[] dances, int seed) =>
+    internal static Cast[] Circle(Spot c, float r, int[] dances, int seed) =>
         dances.Select((d, i) =>
         {
             float b = 360f * i / dances.Length;
@@ -605,7 +605,7 @@ public static class TrailerScript
         }).ToArray();
 
     /// <summary>A race grid on one road: single file, 11 m apart, the first <paramref name="arc"/> m along it.</summary>
-    private static Cast[] Grid(int[] cars, Spot from, Spot toward, string route, float arc, double goAt) =>
+    internal static Cast[] Grid(int[] cars, Spot from, Spot toward, string route, float arc, double goAt) =>
         cars.Select((c, i) => new Cast
         {
             Ride = Car(c), At = from, Toward = toward, Drive = Drive.Road, Route = route, Arc = arc - i * 11f,

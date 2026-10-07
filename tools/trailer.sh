@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# The trailer (#706, docs/trailer/storyboard.md): preview its shots, frame them, or film the
-# whole thing and cut it on its song. One game launch per run; the director stages each shot.
+# The trailer (#706): preview its shots, frame them, or film the whole thing and cut it on its
+# song. One game launch per run; the director stages each shot. Two films: FILM=story (default,
+# docs/trailer/script.md, StoryScript.cs) and FILM=showcase (docs/trailer/storyboard.md,
+# TrailerScript.cs), each in its own test_output/trailer/<film>/.
 #
 #   tools/trailer.sh preview [shots]   play in a window, each shot with its part of the song
 #   tools/trailer.sh stills  [shots]   first, middle and last frame of each shot as PNGs
@@ -9,7 +11,7 @@
 #                                      shots are filmed again and cut with the ones already there
 #   tools/trailer.sh cut               cut the filmed shots again (after replacing one by hand)
 #
-# shots: all (default), 5, 5-9 or 5,7,12 (shot numbers, TrailerScript.cs).
+# shots: all (default), 5, 5-9 or 5,7,12 (shot numbers of the film).
 # Env: GODOT (default godot), CHUNKS (terrain; default ./terrain_chunks, or the main checkout's
 # from a worktree), SIZE (default 1920x1080), LOG=1 prints every actor twice a second.
 # The song, "Voxel Revolution" by Kevin MacLeod (incompetech.com, CC BY 4.0), is downloaded once
@@ -21,9 +23,10 @@ mode=${1:-preview}
 shots=${2:-all}
 GODOT=${GODOT:-godot}
 SIZE=${SIZE:-1920x1080}
-out=test_output/trailer
+FILM=${FILM:-story}
+out=test_output/trailer/$FILM
 mkdir -p "$out"
-song=$out/voxel_revolution.mp3
+song=test_output/trailer/voxel_revolution.mp3
 
 if [ -z "${CHUNKS:-}" ]; then
   if [ -f terrain_chunks/manifest.json ]; then CHUNKS=terrain_chunks
@@ -38,7 +41,7 @@ fi
 
 log=()
 [ "${LOG:-}" = 1 ] && log=(--trailer-log)
-game=(--chunks "$CHUNKS" --title "trailer $mode $shots" --trailer "$shots" --trailer-size "$SIZE" "${log[@]}")
+game=(--chunks "$CHUNKS" --title "trailer $mode $shots" --trailer "$shots" --trailer-film "$FILM" --trailer-size "$SIZE" "${log[@]}")
 
 case $mode in
   preview)
