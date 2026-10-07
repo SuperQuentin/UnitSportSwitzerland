@@ -423,6 +423,7 @@ public static partial class TileRewriter
             var output = new Dictionary<TileId, List<RoadSegment>>();
             var caps = new Dictionary<TileId, List<RoadJunction>>();
             var kerbArcs = new Dictionary<TileId, List<CornerPlanner.KerbArc>>();   // sidewalk corners round a widening (#711)
+            var pathEnds = new Dictionary<TileId, List<CornerPlanner.PathEnd>>();   // sidewalk corners beside a path carried to the kerb (#711)
             var paint = new Dictionary<TileId, List<RoadPaint>>();
             var signs = new Dictionary<TileId, List<RoadPointProp>>();
             var signalRecords = new Dictionary<TileId, List<RoadSignal>>();   // traffic lights (#348)
@@ -624,6 +625,22 @@ public static partial class TileRewriter
                     var piece = end == LinkEnd.Start ? ends[0] : ends[^1];
                     return right ? piece.Attributes.Right : piece.Attributes.Left;
                 }
+                // ... as it will reach the mouth (#711): a path stopping within CrossingLookIn of it is carried on to it (PathsToMouth),
+                // so a crosswalk laid before that crosses it too
+                RoadSide StreetSideToMouth(int linkId, LinkEnd end, bool right)
+                {
+                    if (!segmentOf.TryGetValue(linkId, out var so)) return default;
+                    var ends = streetPieces.TryGetValue(so.Item1, out var cut) && cut.Count > 0 ? cut : [so.Item1];
+                    double gap = 0;
+                    for (int p = 0; p < ends.Count && gap <= CrossingLookIn; p++)
+                    {
+                        var piece = end == LinkEnd.Start ? ends[p] : ends[^(p + 1)];
+                        var side = right ? piece.Attributes.Right : piece.Attributes.Left;
+                        if (side.HasTrack) return p == 0 ? side : side with { ShiftStartCm = 0, ShiftEndCm = 0 };
+                        gap += RoadPaintGeometry.Length(piece.Points);
+                    }
+                    return StreetSideAt(linkId, end, right);
+                }
                 var openings = new List<PocketOpening>();
                 var townArcs = new Dictionary<(int Node, int Arm), CornerArc>();
                 var pockets = EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs,
@@ -648,7 +665,7 @@ public static partial class TileRewriter
                 var signalPlans = new Dictionary<int, (SignalPlan Plan, int[] PlanArm)>();
                 EmitSignals(priority, result, pockets, BikeSideAt, block, wanted, paint, signalRecords, cantons, field, buildings, islands, signs, netStats.Signals,
                     approachRecords, restrictions, netStats.Lanes, stopsAt, signalPlans, StreetSideAt, crossingNodes);
-                netStats.Signals.DataCrossings += EmitDataCrossings(priority, result, pockets, crossingNodes, block, wanted, paint, islands, netStats.Signals, StreetSideAt);
+                netStats.Signals.DataCrossings += EmitDataCrossings(priority, result, pockets, crossingNodes, block, wanted, paint, islands, netStats.Signals, StreetSideToMouth);
                 EmitRightLanes(pockets, paint, bikeBetween, netStats.TurnLanes);
                 EmitPocketApproaches(priority, result, pockets, approachRecords, restrictions, netStats.Lanes);
 
@@ -717,7 +734,7 @@ public static partial class TileRewriter
                 foreach (var (segment, tileId, start, end) in trackPaint)
                     EmitTrackPaint(finalPieces.TryGetValue(segment, out var pieces) ? pieces : [segment], start, end, Get(paint, tileId));
                 EmitBikeCrossings(priority, result, segmentOf, finalPieces, pockets, block, wanted, paint, signs, bikeBridges, netStats.Bikes,
-                    stopsAt, signalPlans, townArcs);
+                    stopsAt, signalPlans, townArcs, islands, pathEnds);
                 EmitTownCorners(priority, result.Network, segmentOf, finalPieces, townArcs, block, wanted, bikeBridges, paint, netStats.Bikes);
                 KerbArcs(priority, townArcs, kerbArcs);
             }
@@ -760,7 +777,7 @@ public static partial class TileRewriter
                     Paint = paint.TryGetValue(id, out var p) ? p : new List<RoadPaint>(),
                     LinearProps = walls,
                     AreaProps = [.. islands.TryGetValue(id, out var isl) ? isl : [],
-                        .. Unbridged(id, CornerPlanner.Plan(id, segments, junctions, facades, cornerStats, isl, kerbArcs.GetValueOrDefault(id)), bridges, netStats.Bikes),   // sidewalk corners (#119)
+                        .. Unbridged(id, CornerPlanner.Plan(id, segments, junctions, facades, cornerStats, isl, kerbArcs.GetValueOrDefault(id), pathEnds.GetValueOrDefault(id)), bridges, netStats.Bikes),   // sidewalk corners (#119)
                         .. bridges.Select(x => x.Band),
                         .. parkAreas.TryGetValue(id, out var pa) ? pa : []],   // car park pad, islands, walks (#499)
                     PointProps = pointProps,

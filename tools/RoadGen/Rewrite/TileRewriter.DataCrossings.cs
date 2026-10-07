@@ -108,6 +108,15 @@ public static partial class TileRewriter
                 if (shift is > 0) { far += shift.Value; atKerb = false; }
                 // no bars over the refuge (the user's rule); the exit lies on the approaching driver's left (negative across)
                 var span = shift is null ? null : exitWayHere!.RefugeSpan(far - ZebraClear - ZebraDepth, far - ZebraClear);
+                // (#711) the carriageway's edges where the zebra stands, measured: the widening the arm records is the one at its
+                // mouth, which a shrunk exit or a taper does not keep out here (Sion: the bars ran 1.5 m on over the path)
+                var station = mid + u * (far - ZebraClear - ZebraDepth * 0.5);
+                if (!atKerb && CarriagewayAcross(source, station, right, areas.GetValueOrDefault(source.Tile)) is { } edges)
+                {
+                    if (CornerPlanner.Debug is { } dbg && junction.Centre.DistanceTo(new Vec2(dbg.E, dbg.N)) < 15)
+                        Console.WriteLine($"[zebra] arm {i}: across {lo:F2}..{hi:F2} from the mouth, {edges.Lo:F2}..{edges.Hi:F2} measured");
+                    (lo, hi) = edges;
+                }
                 int before = stats.Crossings;
                 EmitCrossing(paint, source, mid, u, right, far, lo, hi, streetRight, streetLeft, areas, stats,
                     insetLeft: atKerb ? junction.KerbInset.GetValueOrDefault((i, false)) : 0,
@@ -132,5 +141,50 @@ public static partial class TileRewriter
             }
         }
         return drawn;
+    }
+
+    /// <summary>
+    /// The carriageway across an arm at <paramref name="at"/> (LV95), as offsets along <paramref name="right"/> (negative to the
+    /// left), 5 cm steps out from the line: on the road's own ribbon (the line's half width) or on a turn lane's widening in
+    /// the line's tile (<paramref name="pavement"/>, tile-local). Null where the line is not there.
+    /// </summary>
+    private static (double Lo, double Hi)? CarriagewayAcross(Source source, Vec2 at, Vec2 right, List<RoadAreaProp>? pavement)
+    {
+        double half = source.Segment.Width * 0.5;
+        var tile = source.Tile;
+        var strips = (pavement ?? []).Where(a => a.Type == AreaPropType.Pavement && a.Vertices.Length >= 9).ToList();
+        double DistanceToLine(Vec2 p)
+        {
+            double best = double.MaxValue;
+            for (int k = 1; k < source.Plan.Length; k++) best = Math.Min(best, DistanceToSegment(p, source.Plan[k - 1], source.Plan[k]));
+            return best;
+        }
+        bool OnStrip(Vec2 p)
+        {
+            double x = p.X - tile.MinE, z = tile.MaxN - p.Y;
+            foreach (var a in strips)
+            {
+                var v = a.Vertices;
+                for (int t = 0; t + 2 < a.Indices.Length; t += 3)
+                {
+                    int i0 = a.Indices[t] * 3, i1 = a.Indices[t + 1] * 3, i2 = a.Indices[t + 2] * 3;
+                    double d1 = (x - v[i1]) * (v[i0 + 2] - v[i1 + 2]) - (v[i0] - v[i1]) * (z - v[i1 + 2]);
+                    double d2 = (x - v[i2]) * (v[i1 + 2] - v[i2 + 2]) - (v[i1] - v[i2]) * (z - v[i2 + 2]);
+                    double d3 = (x - v[i0]) * (v[i2 + 2] - v[i0 + 2]) - (v[i2] - v[i0]) * (z - v[i0 + 2]);
+                    bool neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;
+                    if (!(neg && pos)) return true;
+                }
+            }
+            return false;
+        }
+        bool OnRoad(Vec2 p) => DistanceToLine(p) < half - 0.01 || OnStrip(p);
+        if (!OnRoad(at)) return null;
+        double Edge(double sign)
+        {
+            double l = 0;
+            while (l < half + 12 && OnRoad(at + right * (sign * (l + 0.05)))) l += 0.05;
+            return l;
+        }
+        return (-Edge(-1), Edge(1));
     }
 }

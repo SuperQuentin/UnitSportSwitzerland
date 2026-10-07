@@ -35,7 +35,7 @@ public static partial class TileRewriter
         /// <summary>Junction corners left tight: no right turn rounds them (#700).</summary>
         public int TightCorners;
         /// <summary>Lead-ins split between both edges (#700).</summary>
-        public int SplitLeadIns, ThroughGuides;
+        public int SplitLeadIns, ThroughGuides, MirrorGuides;
         /// <summary>Hatched medians left out as too narrow or too short (#406).</summary>
         public int HatchesSkipped;
         /// <summary>Kerb corners paved beside a widening (#406), and those whose outline did not work out.</summary>
@@ -46,7 +46,7 @@ public static partial class TileRewriter
         public readonly SortedDictionary<string, List<string>> LayoutExamples = new();
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets ({RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {Corners:N0} corners rounded beside a widening ({CornersRejected:N0} failed, {CornersInTown:N0} left square beside a sidewalk or path, #406), {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120), {TightCorners:N0} junction corners left tight (no right turn rounds them, #700), {SplitLeadIns:N0} lead-ins split between both edges, {ThroughGuides:N0} through-lane guides across the junction (#700); " +
+            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets ({RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {Corners:N0} corners rounded beside a widening ({CornersRejected:N0} failed, {CornersInTown:N0} left square beside a sidewalk or path, #406), {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120), {TightCorners:N0} junction corners left tight (no right turn rounds them, #700), {SplitLeadIns:N0} lead-ins split between both edges ({MirrorGuides:N0} edge guides moved out onto the other edge, #711), {ThroughGuides:N0} through-lane guides across the junction (#700); " +
             $"rejected (approach or exit): too short {Short:N0}, building {Building:N0}, another line {OtherLine:N0}, ground off the road {Ground:N0}, tile seam {Seam:N0}, no segment {NoSegment:N0}, no main road out {NoExit:N0}, two lanes or more already and no lane data {MultiLane:N0}; OSM lane data (#700): {Wished:N0} approaches, {WishFolded:N0} wished lanes folded, {WishNoLeft:N0} with a road to the left and no left lane, {WishInPlace:N0} assigned in place, {WishArrows:N0} arrows over them\n") +
             string.Concat(LayoutExamples.Select(kv => $"      right pockets beside a bike lane, layout {kv.Key} at LV95 {string.Join("; ", kv.Value)}\n"));
 
@@ -441,6 +441,7 @@ public static partial class TileRewriter
                 armLanes.ExitWidening = Math.Max(armLanes.ExitWidening, mirror.MouthWidth());
                 stats.SignsMoved += mirror.PushOut(Get(signs, inSlot.Tile));
                 stats.SplitLeadIns++;
+                if (!pocket.Signal && GuideOut(mirror, Get(paint, pocket.Home), pocket.Home, priority)) stats.MirrorGuides++;
             }
             if (!approach.Painted)
             {
@@ -1143,6 +1144,50 @@ public static partial class TileRewriter
         });
     }
 
+
+    /// <summary>
+    /// The junction's guide line (#121) beside a split lead-in's mirror strip (#711, the user's rule: the edge line follows
+    /// the widening): its end at the old edge moves out onto the strip's edge, edge-line inset, the move fading to nothing
+    /// at its other end, so the line keeps its curve and still meets the other arm's edge. False where no guide ends there.
+    /// </summary>
+    private static bool GuideOut(Widening mirror, List<RoadPaint> homePaint, TileId home, PriorityResult priority)
+    {
+        var (corner, edge) = mirror.Mouth(home, PaintEmitter.EdgeLineInset);
+        static double Gap(float[] v, int i, float[] p) => Math.Sqrt(Sq(v[i] - p[0]) + Sq(v[i + 2] - p[2]));
+        var old = homePaint.FirstOrDefault(q => priority.Guides.Contains(q)
+            && (Gap(q.Vertices, 0, corner) < 1.5 || Gap(q.Vertices, q.Vertices.Length - 3, corner) < 1.5));
+        if (old is null) return false;
+        var v = (float[])old.Vertices.Clone();
+        int n = v.Length / 3, end = Gap(v, 0, corner) <= Gap(v, v.Length - 3, corner) ? 0 : n - 1;
+        float dx = edge[0] - v[end * 3], dz = edge[2] - v[end * 3 + 2];
+        if (Math.Sqrt(dx * dx + dz * dz) < 0.05) return false;
+        // the share of the move each vertex takes: 1 at the moved end, 0 at the other, by length along the line
+        var along = new double[n];
+        for (int i = 1; i < n; i++)
+        {
+            int a = end == 0 ? i - 1 : n - i, b = end == 0 ? i : n - 1 - i;
+            along[i] = along[i - 1] + Math.Sqrt(Sq(v[a * 3] - v[b * 3]) + Sq(v[a * 3 + 2] - v[b * 3 + 2]));
+        }
+        double total = Math.Max(along[^1], 1e-6);
+        for (int i = 0; i < n; i++)
+        {
+            int k = end == 0 ? i : n - 1 - i;
+            float w = (float)(1 - along[i] / total);
+            v[k * 3] += dx * w;
+            v[k * 3 + 2] += dz * w;
+        }
+        var moved = new RoadPaint
+        {
+            Shape = old.Shape, Type = old.Type, Variant = old.Variant, Rgba = old.Rgba,
+            Width = old.Width, Dash = old.Dash, Gap = old.Gap, Vertices = v,
+        };
+        homePaint[homePaint.IndexOf(old)] = moved;
+        priority.Guides.Remove(old);
+        priority.Guides.Add(moved);
+        foreach (var key in priority.GuideAt.Where(kv => ReferenceEquals(kv.Value.Paint, old)).Select(kv => kv.Key).ToList())
+            priority.GuideAt[key] = (home, moved);
+        return true;
+    }
 
     /// <summary>
     /// The through lane's guide on its left across the junction (#700, the user's rule): a dashed line (0.15 m, 1 m / 1 m, as

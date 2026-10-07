@@ -32,7 +32,29 @@ listed rules differing by kind. Stacked on #704 (`lane-data-intersections`).
   north, the main road's left pocket from the west splitting its lead-in). Tier 0
   `Sidewalk_corners_follow_the_kerb_arc_beside_a_split_lead_in`: its north-west sidewalk corner shares the kerb
   patch's arc (fails on the code before).
-- **Debug**: `--rewrite --debug-street E,N` prints `[corner] ... round a kerb arc of N points: built|failed`.
-- Left over: where the main road's side carries a path, the corner is a sidewalk the side's full width (the red
-  crossing carries the path on over it); a thin sidewalk sliver along the side road's outer edge where the chord
-  corner overlaps it (Sion SW/SE).
+- **Debug**: `--rewrite --debug-street E,N` prints `[corner] ... round a kerb arc of N points: built|failed|covered`,
+  `beside a path carried to the kerb (A|B)`, `squared: <why not>`, and `[zebra]` (crosswalk span from the mouth vs measured).
+
+## The user's review of phase 1 (Oct 7 2026)
+
+- **The path goes up to the kerb, where it turns into the red crossing** (`PathsToKerb`, junctions without lights, a
+  path on both arms of the road carried through and a road joining on that side): each band of the side (grass, path,
+  sidewalk; `BridgePath` with `across: 0.2`, strips no wider than 0.2 m so the band ends follow a curved kerb) runs on
+  straight from the mouth until its line meets the carriageway (`Carriageway`: the junction's outline, a widening or
+  kerb patch in its tile, a joining arm's lanes). The red crossing and its yellow edges run only between the path ends,
+  kerb to kerb. The sidewalk corner beside starts where the carried side's outer edge meets the kerb
+  (`CornerPlanner.PathEnd`: that end narrowed to nothing, its outer edge the carried side's); where that point lies past
+  the side road's sidewalk start the corner is covered (none). Real tiles: 91 of 100 path crossings, 119 corners covered.
+  The lights keep #682's (bands round the arc, red by phase).
+- **The dashed edge guide follows the widening** (`GuideOut`): beside a split lead-in's mirror strip the guide's end at
+  the old edge moves onto the strip's edge (edge-line inset), the move fading to its other end. The pocket side already
+  moved (`Across`). Real tiles: 20.
+- **A crosswalk crosses the path on both sides** (`EmitDataCrossings`): it took each side as the street planner cut it,
+  before `PathsToMouth` carries a path stopping within 8 m on to the mouth, so a side whose path started a few metres
+  out had no bars over it (Sion's east arm, north side). It now takes the side as it will reach the mouth
+  (`StreetSideToMouth`). Away from the mouth its span across is measured where it stands (`CarriagewayAcross`: the
+  line's ribbon and the widening strips), not taken from the mouth's widening (Sion: 0.35 m further north).
+- Lane widths (the pocket wider than the through lane) are phase 2.
+- Tier 0 `Without_lights_the_path_runs_to_the_kerb_and_the_edge_guide_follows_the_widening` (the T: red within 7.5 m of
+  the side road's axis, paths carried into both corners, the guide's west end > 0.5 m further out); the corner test now
+  checks the kerb arc is lined by the corner or the carried side.

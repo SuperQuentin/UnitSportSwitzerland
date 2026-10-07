@@ -32,11 +32,11 @@ public static class CornerPlanner
 
     public sealed class Stats
     {
-        public int Corners, Built, OneSided, Squared, Banded, Arcs, Facade, Road, Shape;
+        public int Corners, Built, OneSided, Squared, Banded, Arcs, Covered, Facade, Road, Shape;
         public double Area;
 
         public string Format() => string.Create(CultureInfo.InvariantCulture, $"""
-                corners: {Corners:N0} with a sidewalk on either side, {Built:N0} built ({Squared:N0} squared, {Banded:N0} along the kerb, {Area:N0} m2; {Arcs:N0} round a widening's kerb arc, #711), {OneSided:N0} one-sided; rejected: a wall {Facade:N0}, a carriageway {Road:N0}, shape {Shape:N0}
+                corners: {Corners:N0} with a sidewalk on either side, {Built:N0} built ({Squared:N0} squared, {Banded:N0} along the kerb, {Area:N0} m2; {Arcs:N0} round a widening's kerb arc, #711), {Covered:N0} covered by a side carried on to the kerb (#711), {OneSided:N0} one-sided; rejected: a wall {Facade:N0}, a carriageway {Road:N0}, shape {Shape:N0}
             """);
     }
 
@@ -57,12 +57,20 @@ public static class CornerPlanner
     /// </summary>
     public sealed record KerbArc(List<(Vec2 P, float Y)> Line, Vec2 OutA, Vec2 OutB);
 
+    /// <summary>
+    /// Where an arm's side, carried on to the kerb of the road its path crosses (#711), meets that kerb with its outer edge,
+    /// tile-local plan; <c>Out</c> the arm's direction out of the junction. The sidewalk corner beside it starts there.
+    /// </summary>
+    public sealed record PathEnd(Vec2 At, Vec2 Out);
+
     /// <summary>The arms' directions match an arc's within this (cosine of 30 degrees).</summary>
     private const double ArcArmCos = 0.866;
 
     public static List<RoadAreaProp> Plan(TileId id, IReadOnlyList<RoadSegment> segments, IReadOnlyList<RoadJunction> caps,
-        Facades facades, Stats stats, IReadOnlyList<RoadAreaProp>? pavement = null, IReadOnlyList<KerbArc>? arcs = null)
+        Facades facades, Stats stats, IReadOnlyList<RoadAreaProp>? pavement = null, IReadOnlyList<KerbArc>? arcs = null,
+        IReadOnlyList<PathEnd>? pathEnds = null)
     {
+        _pathEnds = pathEnds;
         // a turn lane's widening (#123) is carriageway too: a corner never stands on it (#120:
         // the sidewalk beside a pocket now carries on, and its corner reached across the lane)
         _pavement = pavement?.Where(a => a.Type == AreaPropType.Pavement && a.Vertices.Length >= 9).ToList() ?? [];
@@ -135,17 +143,23 @@ public static class CornerPlanner
             if (ca == null && cb == null) continue;
             stats.Corners++;
             if (ca == null || cb == null || (ca.Kerb_ > 0) != (cb.Kerb_ > 0)) { stats.OneSided++; continue; }
+            // beside a side carried on to the kerb (#711) the corner starts where that side's outer edge meets the kerb
+            var nodeB = Plan(segments[b.End.Seg].Points, b.End.AtStart ? 0 : segments[b.End.Seg].PointCount - 1);
+            var carried = ring == null ? (null, null) : (EndOf(node, a.Out, left: true), EndOf(nodeB, b.Out, left: false));
+            if (Traced(id, node) && (carried.Item1 ?? carried.Item2) != null) Console.WriteLine($"[corner]   beside a path carried to the kerb ({(carried.Item1 != null ? "A" : "")}{(carried.Item2 != null ? "B" : "")})");
             // round the kerb arc beside a widening (#711), else (or where that corner cannot stand) round the cap
             RoadAreaProp? prop = null;
+            bool covered = false;
             if (ArcOf(arcs, a.Out, b.Out) is { } arc)
             {
                 var (facade, road, shape) = (stats.Facade, stats.Road, stats.Shape);
-                prop = Build(id, segments, ca, cb, ring, cap, facades, stats, arc);
+                prop = Build(id, segments, ca, cb, ring, cap, facades, stats, arc, carried, out covered);
                 if (prop == null) (stats.Facade, stats.Road, stats.Shape) = (facade, road, shape);
                 else stats.Arcs++;
-                if (Traced(id, node)) Console.WriteLine($"[corner]   round a kerb arc of {arc.Line.Count} points: {(prop == null ? "failed" : "built")}");
+                if (Traced(id, node)) Console.WriteLine($"[corner]   round a kerb arc of {arc.Line.Count} points: {(prop == null ? covered ? "covered by the carried side" : "failed" : "built")}");
             }
-            prop ??= Build(id, segments, ca, cb, ring, cap, facades, stats);
+            if (prop == null && !covered) prop = Build(id, segments, ca, cb, ring, cap, facades, stats, null, carried, out covered);
+            if (covered) stats.Covered++;
             if (prop != null) props.Add(prop);
             if (ordered.Count == 2 && ring == null)
             {
@@ -153,7 +167,7 @@ public static class CornerPlanner
                 var cb2 = Walk(segments, ends, b.End, left: true);
                 var ca2 = Walk(segments, ends, a.End, left: false);
                 if (ca2 != null && cb2 != null && (ca2.Kerb_ > 0) == (cb2.Kerb_ > 0)
-                    && Build(id, segments, cb2, ca2, null, null, facades, stats) is { } p2) props.Add(p2);
+                    && Build(id, segments, cb2, ca2, null, null, facades, stats, null, (null, null), out _) is { } p2) props.Add(p2);
             }
         }
     }
@@ -201,8 +215,10 @@ public static class CornerPlanner
     }
 
     private static RoadAreaProp? Build(TileId id, IReadOnlyList<RoadSegment> segments, Chain a, Chain b,
-        List<(Vec2 P, float Y)>? ring, RoadJunction? cap, Facades facades, Stats stats, KerbArc? arc = null)
+        List<(Vec2 P, float Y)>? ring, RoadJunction? cap, Facades facades, Stats stats, KerbArc? arc,
+        (PathEnd? A, PathEnd? B) ends, out bool covered)
     {
+        covered = false;
         // kerb: A's sidewalk start in to the node, round the cap, out to B's sidewalk start; beside a widening
         // (#711) in to A's mouth, round the kerb arc, out from B's mouth: the cap's own corner lies under the widening
         var poly = new List<(Vec2 P, float Y)>();
@@ -220,7 +236,22 @@ public static class CornerPlanner
             if (ring != null) poly.AddRange(RingBetween(ring, a.Kerb[0].P, b.Kerb[0].P));
             poly.AddRange(b.Kerb);
         }
+        // a side carried on to the kerb (#711) covers the kerb up to where its outer edge meets it: the corner starts there,
+        // narrowed to nothing at that end, and its outer edge is the carried side's (out along the arm from there)
+        if (ends.A is { } ea)
+        {
+            var (s, q) = Project(poly, ea.At);
+            poly = [q, .. poly.Skip(s + 1)];
+            a = a with { Kerb = [q], Out = q.P, Width = 0, Inward = ea.Out };
+        }
+        if (ends.B is { } eb)
+        {
+            var (s, q) = Project(poly, eb.At);
+            poly = [.. poly.Take(s + 1), q];
+            b = b with { Kerb = [q], Out = q.P, Width = 0, Inward = eb.Out };
+        }
         poly = Thin(Dedupe(poly));
+        if ((ends.A ?? ends.B) != null && (poly.Count < 2 || PolylineLength(poly) < 0.3)) { covered = true; return null; }
         int kerbCount = poly.Count;
         if (kerbCount < 2) { stats.Shape++; return null; }
 
@@ -228,10 +259,14 @@ public static class CornerPlanner
         // the outer edges, carried on toward the node, meet at the block's corner
         var corner = Meet(b.Out, b.Inward, a.Out, a.Inward);
         bool squared = corner is { } c && c.DistanceTo(a.Out) < 15 && c.DistanceTo(b.Out) < 15;
-        var withCorner = new List<(Vec2 P, float Y)>(poly) { (b.Out, yb) };
+        // (#711: an end narrowed to nothing has its outer point on the kerb already)
+        var withCorner = new List<(Vec2 P, float Y)>(poly);
+        if (b.Width > 0) withCorner.Add((b.Out, yb));
         if (squared) withCorner.Add((corner!.Value, (ya + yb) * 0.5f));
-        withCorner.Add((a.Out, ya));
-        var chord = new List<(Vec2 P, float Y)>(poly) { (b.Out, yb), (a.Out, ya) };
+        if (a.Width > 0) withCorner.Add((a.Out, ya));
+        var chord = new List<(Vec2 P, float Y)>(poly);
+        if (b.Width > 0) chord.Add((b.Out, yb));
+        if (a.Width > 0) chord.Add((a.Out, ya));
         var bandOuter = Band(poly, a, b, p => facades.Occupied(id.MinE + p.X, id.MaxN + p.Y));
         // squared only where the corner is compact (near a right angle): at an acute junction the
         // outer edges meet deep inside the block, and the band along the kerb is the sidewalk
@@ -243,6 +278,7 @@ public static class CornerPlanner
             stats.Squared++;
             return square;
         }
+        if (Traced(id, poly[0].P)) Console.WriteLine($"[corner]   squared: {(corner is null ? "outer edges do not meet ahead" : !compact ? "not compact" : why)}");
         if (Strip(id, segments, poly, bandOuter, facades, a, stats, out var bandWhy) is { } strip) return strip;
         if (Traced(id, a.Kerb[0].P)) Console.WriteLine($"[corner]   band: {bandWhy}");
         if (Polygon(id, segments, chord, kerbCount, cap, facades, a, out why) is { } cut) return cut;
@@ -400,6 +436,11 @@ public static class CornerPlanner
         // which side of the line is away from the road: the side A's own sidewalk lies on
         var d0 = kerb[1].P - kerb[0].P;
         double sign = Math.Sign(new Vec2(-d0.Y, d0.X).Dot(a.Out - kerb[0].P));
+        if (a.Width <= 0)   // (#711) A's end narrowed to nothing beside a side carried on to the kerb: B's tells
+        {
+            var d1 = kerb[^1].P - kerb[^2].P;
+            sign = Math.Sign(new Vec2(-d1.Y, d1.X).Dot(b.Out - kerb[^1].P));
+        }
         if (sign == 0) sign = 1;
         var outer = new List<(Vec2 P, float Y)>(n);
         for (int k = 0; k < n; k++)
@@ -535,6 +576,50 @@ public static class CornerPlanner
 
     /// <summary>A kerb arc ends this close (m) to its cap's ring.</summary>
     private const double ArcReach = 4.0;
+
+    /// <summary>The tile's sides carried on to the kerb while a tile is planned (<see cref="Plan"/>, #711).</summary>
+    [ThreadStatic] private static IReadOnlyList<PathEnd>? _pathEnds;
+
+    /// <summary>
+    /// The side carried on to the kerb (#711) on an arm's left (or right) looking out from <paramref name="node"/>: its
+    /// direction within <see cref="ArcArmCos"/> of the arm's, on that side of it, the nearest within 25 m; or null.
+    /// </summary>
+    private static PathEnd? EndOf(Vec2 node, Vec2 armOut, bool left)
+    {
+        PathEnd? best = null;
+        if (_pathEnds is null) return null;
+        foreach (var e in _pathEnds)
+        {
+            if (e.Out.Dot(armOut) < ArcArmCos || e.At.DistanceTo(node) > 25 || (armOut.Cross(e.At - node) > 0) != left) continue;
+            if (best == null || e.At.DistanceTo(node) < best.At.DistanceTo(node)) best = e;
+        }
+        return best;
+    }
+
+    /// <summary>The point of a polyline nearest <paramref name="p"/>, with its height, and the index of the piece it lies on.</summary>
+    private static (int Piece, (Vec2 P, float Y) Point) Project(List<(Vec2 P, float Y)> line, Vec2 p)
+    {
+        if (line.Count == 1) return (0, line[0]);
+        (int, (Vec2, float)) best = (0, line[0]);
+        double nearest = double.MaxValue;
+        for (int i = 0; i + 1 < line.Count; i++)
+        {
+            var ab = line[i + 1].P - line[i].P;
+            double l2 = ab.LengthSquared, t = l2 < 1e-12 ? 0 : Math.Clamp((p - line[i].P).Dot(ab) / l2, 0, 1);
+            var q = line[i].P + ab * t;
+            if (q.DistanceTo(p) >= nearest) continue;
+            nearest = q.DistanceTo(p);
+            best = (i, (q, line[i].Y + (line[i + 1].Y - line[i].Y) * (float)t));
+        }
+        return best;
+    }
+
+    private static double PolylineLength(List<(Vec2 P, float Y)> line)
+    {
+        double length = 0;
+        for (int i = 1; i < line.Count; i++) length += line[i].P.DistanceTo(line[i - 1].P);
+        return length;
+    }
 
     /// <summary>
     /// The kerb arc of the corner between arm A's left and arm B's right (#711), matched by the arms' directions
