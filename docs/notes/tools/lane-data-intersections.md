@@ -122,6 +122,24 @@ Plan and reasoning: `docs/plans/intersection-lanes.md`. What is built:
   `Shift`/`EdgeOut`. Real tiles: 18 of 27 pockets split (17 by half, 1 by a quarter); overlap after junctions as
   before. Not done: oncoming departing traffic keeps its old line, its body reaching ~0.45 m onto the pocket (~1.95 m beside a double left): `split-lead-in-oncoming.png` (schema); precomputed junction trajectories, #709.
 - **Taper per lane**: a left pocket of k lanes has a k times longer taper (the same slope).
+- **Setback from the corners** (`JunctionBuilder.Plan`): a corner's kerb arc has legs of the smaller of its two arms'
+  allowances (a tight corner its `TightKerb`), and each arm is trimmed only as far as its arcs reach. Before, an arm was
+  cut back by its own allowance: a main road beside minor ones stood its mouth, stop line and zebra ~20 m out (Sion).
+  Real tiles: 31 pockets fit (was 27), overlap unchanged.
+- **Plan follows the lanes** (`SignalArm.Banned`, `TileRewriter.BannedTurns`): an approach's signal groups leave out the
+  turns its lanes (OSM's or inferred) show on no lane, or OSM forbids; a bike crossing goes red only where a real move
+  crosses it.
+- **Arrows without lane data** (`InferredLanes`): a multi-lane approach at the lights gets left+straight in its leftmost
+  lane, straight+right in its rightmost, straight between, with arrows and lane records (J7 north and south: `LT | TR`).
+- **Bike stop line**: a painted bike lane at the lights ends at its own yellow 0.30 m line level with the cars' (a right
+  pocket's layout (b) lane too).
+- **Right pocket on the left one's edge** (`Widening.SetBase`): it starts from the left pocket's widening as it is at
+  each distance (still on its taper and lead-in), not its full width: no gap, no jog in the bike lane.
+- **Straight until the radius starts** (user's rule, `StraightIn`, `ClearOfKerbs` in `TileRewriter.Bikes.cs`): a bike
+  crossing at the lights runs straight on along a widened arm's kerb (or a tight corner's straight leg) only where the
+  line straight across would cut over that kerb, then across. Cars: #709.
+- **Zebra over an exit hatch** (`Widening.ClearHatch`, `Refuge`): the stripes under it go; where the hatch leaves a 1.2 m
+  island, kerbed refuges 2 m long stand on both sides of the crosswalk (real tiles: 2).
 - Test region: J7's east approach marks no right turn (tight north-east corner, diagonal zebras on the north and east
   arms from OSM nodes, J7 has no sidewalks); the unlit T south of J3: zebras on the stem and the west arm, the east arm's
   crossing is unmarked.
@@ -137,5 +155,6 @@ the in-place case. `SignalTestRegionTests` + `LaneDataRegionTests` check them.
 ## Not done
 
 - Pockets on approaches with 2+ lanes toward the junction (the data's extra lanes fold into the lane beside them).
-- Crossings: kerb ramps, refuge islands and traffic yielding to pedestrians (#292).
+- Crossings: kerb ramps and traffic yielding to pedestrians (#292); sidewalks and paths continuous across minor side
+  roads (#710).
 - OSM `lanes` changing mid-line (one row per segment), pockets across a tile seam, overhead heads for inner lanes (#354).
