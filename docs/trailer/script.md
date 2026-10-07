@@ -286,23 +286,23 @@ note what the scene reveals of the game, for us only; nothing of it is on screen
 | Items (fondue pot, radio, flag, camera) | 2, 34, 36, 37, 38 | The fondue itself |
 | Emotes and dances | 20, 30, 34, 35 | Waiting, joy, the party |
 
-## What the director needs for it (production notes)
+## How it was made
 
-Already there: places, hours, styles, actors on roads and in the air, boats, cockpit views, held
-items, emotes, time-lapses, captions. New for this script:
+`StoryScript.cs` is this script as shots; `tools/trailer.sh stills|render [shots]` frames and films it
+(the default film; `test_output/trailer/story/`), the director is `docs/notes/trailer/director.md`.
+What the script asked of the director, and what it became:
 
-- **Chat lines as dialogue**: a chat-styled overlay (name in the character's colour), lines typed
-  in on the beat. Supers in a small lower-left documentary style.
-- **Characters that read as the same person across scenes**: a fixed appearance and a signature
-  outfit per character (`AppearanceBits`, `OutfitBits`), not just a seed.
-- **A camera inside a door and inside a cab** (scenes 2, 12, 14): the interior door camera
-  `ShotRunner` already uses, and a cab eye like `Pt.Cockpit`.
-- **Standing on a moving deck** (scene 10): Léa on the steamer. Fallback: the camera on the deck,
-  her silhouette at the rail as a static figure on the deck.
-- **The hold of a flying freighter** (24). Fallback: the camera on the ramp, Jonas seen jumping.
-- **Landings**: the canopy (29, 33) and the helicopter (32) set down at the Gornergrat by scripted
-  flight.
-- **The polaroid freeze** (38): the last frame held, a white border and a slight tilt, the title over it.
-- **The pigeon and the bread** (37): the pigeon lands on a perch at the pot; the bread is in its beak.
+- **Chat lines as dialogue**: the group chat bottom left, names in the characters' colours, typed in;
+  supers top left.
+- **Characters**: a fixed face and outfit each (`Character`); each NPC actor has a rider index of its
+  own, or every figure wore the same look.
+- **A door**: Léa stands on the step of the nearest front door (walking out of it on a slope, she
+  vaulted the bank). **A cab**: seen from beside it, at its driver's eye.
+- **On a moving deck, in a flying hold** (10, 24): a figure put aboard a moving machine wrecked it,
+  so 10 is the steamer from the water with Léa's chat line, 24 the freighter from behind.
+- **Landings**: the canopy comes in low and touches down; the helicopter rises over the ridge.
+- **The polaroid** (38): a photographer's camera of its own renders the four in a row, the card
+  settles tilted, the title under it and the credit over it.
+- **The pigeon** (37): it stands by the pot; one gliding in passed over their heads.
 
 The song is the same, and the cut stays on its bars: 38 scenes, every one starting on a bar line.

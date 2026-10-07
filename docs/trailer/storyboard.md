@@ -117,11 +117,14 @@ Licensed under Creative Commons: By Attribution 4.0*.
 
 ## Making it
 
-- Preview a shot in a window, with its part of the song: `tools/trailer.sh preview 5` (or `5-9`, `5,7`).
-- Frame a shot from its first, middle and last frame: `tools/trailer.sh stills 5` (`LOG=1` prints where every
-  actor is twice a second and dumps the roads, to time a car to a camera).
-- Film it all and cut it on the song: `tools/trailer.sh render` → `test_output/trailer/trailer.mp4`
-  (1920x1080, 30 fps, 2:07; ~15 min). `tools/trailer.sh render 19,24` films those shots again and
-  re-cuts the film with the others; `tools/trailer.sh cut` only re-cuts.
+This is the showcase film: `FILM=showcase` before every command (the default film is the story,
+`docs/trailer/script.md`).
+
+- Preview a shot in a window, with its part of the song: `FILM=showcase tools/trailer.sh preview 5` (or `5-9`, `5,7`).
+- Frame a shot from its first, middle and last frame: `FILM=showcase tools/trailer.sh stills 5` (`LOG=1` prints
+  where every actor is twice a second and dumps the roads, to time a car to a camera).
+- Film it all and cut it on the song: `FILM=showcase tools/trailer.sh render` →
+  `test_output/trailer/showcase/trailer.mp4` (1920x1080, 30 fps, 2:07; ~15 min). `render 19,24` films
+  those shots again and re-cuts the film with the others; `cut` only re-cuts.
 - Find a place from above: `--trailer-scout "E,N,H"` (a north-up still from H m, H/1080 m a pixel).
 - How the director works, and the staging gotchas: `docs/notes/trailer/director.md`.
