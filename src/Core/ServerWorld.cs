@@ -155,7 +155,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // vehicles and items far from everyone go to sleep in their tile's container and come back
         // when someone does, and after a restart (#689); after the dormant fleets, whose woken
         // slots it keeps awake
-        World.ObjectContainers.CreateServer(this, _vehicles, _dropped, _players);
+        World.ObjectContainers.CreateServer(this, _vehicles, _dropped, _radios, _players);
         // the paddle steamer at the Nyon landing (#303), put back each time its tile loads
         AddChild(new World.SteamerBerth(_chunks));
         // jetskis and speedboats along the harbour jetties (#383), put back a while after they are taken

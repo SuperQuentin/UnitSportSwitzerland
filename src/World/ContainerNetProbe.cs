@@ -13,13 +13,14 @@ namespace UnitSport.World;
 /// entity interest and object containers checked on the peers that did not do the thing.
 /// <list type="bullet">
 /// <item><b>A</b> wakes two dormant cars, gets into the first and parks it 8 m on (a client-owned
-/// car, relayed by the server), drops an item, says where both stand, and waits for the script's go.
-/// Then it stands 5 km away long enough for the server to put everything to sleep, comes back,
-/// and wants each of them back exactly where it was, under its oid, and both bays still awake.</item>
-/// <item><b>B</b> sees A's car and item at the lot, then from 5 km away has neither (and no vehicle
-/// at all), and back at the lot has them again where they were.</item>
+/// car, relayed by the server), drops an item, throws a radio, says where they stand, and waits for
+/// the script's go. Then it stands 5 km away long enough for the server to put everything to sleep,
+/// comes back, and wants the car, the item and the radio back exactly where they were, under their
+/// oids, the first bay still awake, and the second car, never touched, scenery in its bay again.</item>
+/// <item><b>B</b> sees A's car, item and radio at the lot, then from 5 km away has none of them (and
+/// no vehicle at all), and back at the lot has them again where they were.</item>
 /// <item><b>C</b> joins a server restarted on the same containers (killed, not stopped: the crash
-/// path), and wants A's car and item back where A left them, and both bays awake.</item>
+/// path), and wants the same as A did on coming back.</item>
 /// </list>
 /// A player 5 km off the fixture stands over nothing: the probe holds it in the air there.
 /// </summary>
@@ -35,8 +36,8 @@ public partial class ContainerNetProbe : Node
     private VehicleSlot? _slot1, _slot2;
     /// <summary>Where the probe keeps its player, LV95 and height; null = let it be.</summary>
     private (double E, double N, double Alt)? _hold;
-    private long _carOid, _itemOid;
-    private GlobalPos _carAt, _itemAt;
+    private long _carOid, _itemOid, _radioOid;
+    private GlobalPos _carAt, _itemAt, _radioAt;
     private bool _claimed, _ok = true;
 
     /// <summary>How far the player goes to be out of everyone's interest and every container's reach, m.</summary>
@@ -132,23 +133,35 @@ public partial class ContainerNetProbe : Node
                 if (_t < 3) return;
                 _itemOid = dropped.Oid;
                 _itemAt = dropped.Capture().Position;
-                Say(FormattableString.Invariant($"PARKED car {_carOid} {_carAt.E:F3} {_carAt.N:F3} {_carAt.Alt:F3} item {_itemOid} {_itemAt.E:F3} {_itemAt.N:F3} {_itemAt.Alt:F3}"));
+                RadioManager.Instance?.Throw(new RadioState("", 0, new GlobalPos(s1.E + 4, s1.N + 6, s1.Height + 0.6), 0f, Vector3.Zero));
+                Next();
+                return;
+            case 4:   // the radio, at rest
+                if (Radio(mine: true) is not { Settled: true } radio)
+                {
+                    if (_t > 30) Done("FAILED (the thrown radio never settled)");
+                    return;
+                }
+                if (_t < 3) return;
+                _radioOid = radio.Oid;
+                _radioAt = radio.Capture().Position;
+                Say(FormattableString.Invariant($"PARKED car {_carOid} {_carAt.E:F3} {_carAt.N:F3} {_carAt.Alt:F3} item {_itemOid} {_itemAt.E:F3} {_itemAt.N:F3} {_itemAt.Alt:F3} radio {_radioOid} {_radioAt.E:F3} {_radioAt.N:F3} {_radioAt.Alt:F3}"));
                 Say("ready: waiting for the go");
                 Next();
                 return;
-            case 4:   // the script says B is done
+            case 5:   // the script says B is done
                 if (CmdArgs.Value("--containernet-go") is not { } go || !System.IO.File.Exists(go)) return;
                 Say("go: standing 5 km away for the containers");
                 _hold = (s1.E + Away, s1.N, s1.Height + 2);
                 Next();
                 return;
-            case 5:   // away: nothing near, so everything sleeps on the server
+            case 6:   // away: nothing near, so everything sleeps on the server
                 if (_t < 20) return;
                 Say("back at the lot");
                 _hold = (s1.E, s1.N - 20, s1.Height + 2);
                 Next();
                 return;
-            case 6:
+            case 7:
                 if (_t < 8) return;
                 CheckBack(dormant, vehicles, items, "woken from its container");
                 Done(_ok ? "ok" : "FAILED");
@@ -162,9 +175,10 @@ public partial class ContainerNetProbe : Node
         switch (_phase)
         {
             case 1:   // A's car and item reach B, relayed by the server
-                if (Theirs(vehicles) is not { } car || items.Items.FirstOrDefault(i => !i.Proxy && i.Owner != Multiplayer.GetUniqueId()) is not { Settled: true } item)
+                if (Theirs(vehicles) is not { } car || items.Items.FirstOrDefault(i => !i.Proxy && i.Owner != Multiplayer.GetUniqueId()) is not { Settled: true } item
+                    || Radio(mine: false) is not { Settled: true } radio)
                 {
-                    if (_t > 90) Done("FAILED (A's car and item never reached B)");
+                    if (_t > 90) Done("FAILED (A's car, item and radio never reached B)");
                     return;
                 }
                 if (_t < 3) return;
@@ -172,6 +186,8 @@ public partial class ContainerNetProbe : Node
                 _carAt = car.Global;
                 _itemOid = item.Oid;
                 _itemAt = item.Capture().Position;
+                _radioOid = radio.Oid;
+                _radioAt = radio.Capture().Position;
                 Expect(dormant.IsAwake($"{s1.Owner}|{s1.Ordinal}"), "the bay A's car left is empty here too");
                 Say($"sees A's car {car.Name} and item {item.Name}; going 5 km away");
                 _hold = (s1.E + Away, s1.N, s1.Height + 2);
@@ -180,7 +196,8 @@ public partial class ContainerNetProbe : Node
             case 2:   // out of everyone's range: none of it exists here
                 if (_t < 6) return;
                 int cars = vehicles.GetChildren().OfType<VehicleBody>().Count(), drops = items.Items.Count(i => !i.Proxy);
-                Expect(cars == 0 && drops == 0, $"5 km away: {cars} vehicles and {drops} items here (want none)");
+                int radios = RadioManager.Instance?.GetChildren().OfType<RadioBody>().Count() ?? 0;
+                Expect(cars == 0 && drops == 0 && radios == 0, $"5 km away: {cars} vehicles, {drops} items and {radios} radios here (want none)");
                 _hold = (s1.E, s1.N - 30, s1.Height + 2);
                 Next();
                 return;
@@ -190,6 +207,8 @@ public partial class ContainerNetProbe : Node
                 var back = items.Items.FirstOrDefault(i => i.Oid == _itemOid);
                 Expect(again != null && again.Global.DistanceTo(_carAt) < 0.05, $"back at the lot: A's car {(again == null ? "missing" : FormattableString.Invariant($"{again.Global.DistanceTo(_carAt):F3} m off"))}");
                 Expect(back != null && back.Capture().Position.DistanceTo(_itemAt) < 0.05, $"back at the lot: A's item {(back == null ? "missing" : "there")}");
+                var music = RadioManager.Instance?.GetChildren().OfType<RadioBody>().FirstOrDefault(r => r.Oid == _radioOid);
+                Expect(music != null && music.Capture().Position.DistanceTo(_radioAt) < 0.05, $"back at the lot: A's radio {(music == null ? "missing" : "there")}");
                 Done(_ok ? "ok" : "FAILED");
                 return;
         }
@@ -214,21 +233,33 @@ public partial class ContainerNetProbe : Node
         Expect(item != null && item.Capture().Position.DistanceTo(_itemAt) < 0.05,
             $"{when}: item {_itemOid} {(item == null ? "missing" : FormattableString.Invariant($"{item.Name}, {item.Capture().Position.DistanceTo(_itemAt):F3} m from where it fell"))}");
         Expect(vehicles.GetChildren().OfType<VehicleBody>().Count(v => v.Oid == _carOid) == 1, $"{when}: the car exactly once");
-        Expect(vehicles.GetNodeOrNull(s2.NodeName) != null, $"{when}: the second woken car {s2.NodeName} is there");
-        Expect(dormant.IsAwake($"{s1.Owner}|{s1.Ordinal}") && dormant.IsAwake($"{s2.Owner}|{s2.Ordinal}"), $"{when}: both bays stay awake (no dormant copy, no second wake)");
+        var radio = RadioManager.Instance?.GetChildren().OfType<RadioBody>().FirstOrDefault(r => r.Oid == _radioOid);
+        Expect(radio != null && radio.Capture().Position.DistanceTo(_radioAt) < 0.05 && !radio.Playing,
+            $"{when}: radio {_radioOid} {(radio == null ? "missing" : FormattableString.Invariant($"{radio.Name}, {radio.Capture().Position.DistanceTo(_radioAt):F3} m from where it landed, silent {!radio.Playing}"))}");
+        // the first car was driven off: it is a real car in a container, its bay stays empty
+        Expect(dormant.IsAwake($"{s1.Owner}|{s1.Ordinal}"), $"{when}: the first bay stays awake (no dormant copy, no second wake)");
+        // the second was woken and never touched: back in its bay, it is the slot's scenery again
+        Expect(vehicles.GetNodeOrNull(s2.NodeName) == null && !dormant.IsAwake($"{s2.Owner}|{s2.Ordinal}"),
+            $"{when}: the untouched second car {s2.NodeName} is dormant scenery again (node {(vehicles.GetNodeOrNull(s2.NodeName) == null ? "gone" : "still there")})");
     }
 
-    /// <summary>C knows what A left from the script: <c>--containernet-expect carOid,E,N,Alt,itemOid,E,N,Alt</c>.</summary>
+    /// <summary>C knows what A left from the script: <c>--containernet-expect carOid,E,N,Alt,itemOid,E,N,Alt,radioOid,E,N,Alt</c>.</summary>
     private void ExpectFromArgs()
     {
         var p = (CmdArgs.Value("--containernet-expect") ?? "").Split(',');
-        if (p.Length != 8) { Done("FAILED (no --containernet-expect)"); return; }
+        if (p.Length != 12) { Done("FAILED (no --containernet-expect)"); return; }
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         _carOid = long.Parse(p[0], inv);
         _carAt = new GlobalPos(double.Parse(p[1], inv), double.Parse(p[2], inv), double.Parse(p[3], inv));
         _itemOid = long.Parse(p[4], inv);
         _itemAt = new GlobalPos(double.Parse(p[5], inv), double.Parse(p[6], inv), double.Parse(p[7], inv));
+        _radioOid = long.Parse(p[8], inv);
+        _radioAt = new GlobalPos(double.Parse(p[9], inv), double.Parse(p[10], inv), double.Parse(p[11], inv));
     }
+
+    private RadioBody? Radio(bool mine) =>
+        RadioManager.Instance?.GetChildren().OfType<RadioBody>()
+            .FirstOrDefault(r => mine ? r.Owner == Multiplayer.GetUniqueId() : r.Owner > 0 && r.Owner != Multiplayer.GetUniqueId());
 
     private VehicleBody? Mine(VehicleManager vehicles) =>
         vehicles.GetChildren().OfType<VehicleBody>().FirstOrDefault(v => v.Owner == Multiplayer.GetUniqueId());

@@ -176,8 +176,12 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         MarkAwake(key.Key);
         if (fresh && Decides && World.ObjectContainers.Instance is { } containers)
         {
-            _awakeSince[key.Key] = VehicleState.Now;
-            containers.SaveAwake(_awakeSince);
+            // where it stood and what it was, while its tile is known here: for putting it back (#689)
+            int bar = key.Key.LastIndexOf('|');
+            _awakeInfo[key.Key] = Find(key.Key[..bar], int.Parse(key.Key[(bar + 1)..])) is { } s
+                ? new World.AwakeSlot(VehicleState.Now, s.E, s.N, s.Yaw, s.KindId, s.Train, s.Load)
+                : new World.AwakeSlot(VehicleState.Now);
+            containers.SaveAwake(_awakeInfo);
         }
         // every peer is told, near or not (#689): with entity interest a peer far away never gets
         // the node, and its bay must still be empty when it comes; the fact is global, the car local
@@ -211,26 +215,53 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// <summary>Whether a slot (<c>owner|ordinal</c>) is awake: its vehicle is somewhere in the world, or asleep in a container.</summary>
     public bool IsAwake(string key) => _awake.Contains(key);
 
-    /// <summary>Server: when each slot woke (unix s), kept across restarts by the containers (#689).</summary>
-    private Dictionary<string, double> _awakeSince = new();
+    /// <summary>Server: when each slot woke (unix s) and where its car stood, kept across restarts by the containers (#689).</summary>
+    private readonly Dictionary<string, World.AwakeSlot> _awakeInfo = new();
 
     /// <summary>
     /// Server, starting: the slots the last run had woken stay awake (<see cref="World.ContainerRules.KeepAwake"/>):
     /// those woken this past week, and any whose vehicle is asleep in a container under the slot's name.
     /// </summary>
-    public void RestoreAwake(IReadOnlyDictionary<string, double> saved, IEnumerable<string> filedNames)
+    public void RestoreAwake(IReadOnlyDictionary<string, World.AwakeSlot> saved, IEnumerable<string> filedNames)
     {
         var filedSlots = new HashSet<string>();
         foreach (var name in filedNames)
             if (SlotOf(name) is { } key) filedSlots.Add(key.Key);
         var keep = World.ContainerRules.KeepAwake(saved, VehicleState.Now, filedSlots.Contains);
-        foreach (var key in filedSlots) keep.TryAdd(key, VehicleState.Now);
-        foreach (var (key, since) in keep)
+        foreach (var key in filedSlots) keep.TryAdd(key, new World.AwakeSlot(VehicleState.Now));
+        foreach (var (key, slot) in keep)
         {
-            _awakeSince[key] = since;
+            _awakeInfo[key] = slot;
             MarkAwake(key);
         }
         if (keep.Count > 0) GD.Print($"[dormant] {keep.Count} slots stay awake from the last run");
+    }
+
+    /// <summary>
+    /// Server: puts <paramref name="vehicle"/> back to sleep as its slot's dormant copy, when it is
+    /// that slot's car standing back in its bay as the slot put it (<see cref="World.ContainerRules.BackInBay"/>):
+    /// the woken car itself, or one driven off and parked back under another name. The slot sleeps
+    /// on every peer (<see cref="Slept"/>) and the caller frees the node. A car anywhere else, or
+    /// changed, sleeps in its container instead (#689).
+    /// </summary>
+    public bool TryResleep(VehicleBody vehicle)
+    {
+        if (!Decides || _awakeInfo.Count == 0 || vehicle.Wrecked || vehicle.InHold) return false;
+        var s = vehicle.Capture();
+        bool pristine = s.Health >= vehicle.Ride.MaxHealth - 0.01f && s.Tuning == 0 && s.Setup == 0
+            && (s.DoorsOpen & 15) == 0 && s.Cd == "" && s.Radio == 0 && !s.EngineOn;
+        foreach (var (key, slot) in _awakeInfo)
+        {
+            if (!World.ContainerRules.BackInBay(slot, s.Position.E, s.Position.N, s.Yaw, (int)s.Kind, s.Train, s.Load, pristine)) continue;
+            int bar = key.LastIndexOf('|');
+            string owner = key[..bar];
+            int ordinal = int.Parse(key[(bar + 1)..]);
+            if (Online) Rpc(MethodName.Slept, owner, ordinal);
+            else Slept(owner, ordinal);
+            GD.Print($"[dormant] {vehicle.Name} is back in its bay: slot {key} dormant again");
+            return true;
+        }
+        return false;
     }
 
     /// <summary>Server: a joining peer gets every awake slot, wherever its vehicle is.</summary>
@@ -338,7 +369,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         string key = $"{owner}|{ordinal}";
         _gone.Remove(key);
         _awaiting.Remove(key);
-        if (_awakeSince.Remove(key) && Decides) World.ObjectContainers.Instance?.SaveAwake(_awakeSince);
+        if (_awakeInfo.Remove(key) && Decides) World.ObjectContainers.Instance?.SaveAwake(_awakeInfo);
         if (!_awake.Remove(key)) return;
         if (TileOf(owner) is { } id && _slots.ContainsKey(id)) Draw(id);
     }

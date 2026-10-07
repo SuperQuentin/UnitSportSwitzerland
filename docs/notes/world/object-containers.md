@@ -15,16 +15,18 @@ The server-side half of Star Citizen's object container streaming. The client-si
 
   Nothing outlived a restart.
 - **Now.** `World/ObjectContainers` (server only) does the following:
-  - **Sleep.** A vehicle or dropped item goes to sleep when no player has been within
+  - **Sleep.** A vehicle, dropped item or radio goes to sleep when no player has been within
     `SleepRings` (3) tiles of it for `SleepAfter` (60 s), its server copy has stood still for
     `StillFor` (10 s), and nothing holds it. Things that hold it:
     - a claim or a pick-up in flight;
     - a fall still going;
+    - a radio still playing its CD (it sleeps once the CD ends, or at shutdown);
     - burning;
     - being in a hold (#418), or carrying something in one.
   - **Storage.** It is written into `user://containers/server/E_N.json` (its 1 km tile) and freed.
   - **Wake.** It comes back exactly as it was when a player gets within `WakeRings` (2) tiles.
-    It is server-owned and placed settled.
+    It is server-owned and placed settled. A radio comes back silent: nobody was there to hear
+    it, and the clock its CD was started by (`ClockSync.ServerNow`) is the process's own.
 - **Ownership on logout.** A leaving player's vehicles become the server's where they stand
   (`VehicleManager.ForgetOwner` → `Restore`), instead of vanishing.
 - **Wrecks** are still cleared after 90 s.
@@ -53,8 +55,8 @@ The server-side half of Star Citizen's object container streaming. The client-si
 - **Model check.** `Model_check_every_entity_stays_exactly_once_through_crashes` runs random
   sleep, wake, pick-up, spawn and move sequences, crashing before random writes. It catches a
   swapped write order: tried, it fails.
-- **Caps.** At most 64 vehicles and 200 items per tile; past that the oldest go. An item expires
-  24 h after it was filed.
+- **Caps.** At most 64 vehicles, 200 items and 20 radios per tile; past that the oldest go. An
+  item expires 24 h after it was filed; vehicles and radios do not expire.
 - **Names.**
   - A woken entity keeps its name unless something holds it now; then it gets `veh_r_N` or
     `drop_r_N`.
@@ -66,13 +68,24 @@ The server-side half of Star Citizen's object container streaming. The client-si
 
 - **Slots stay awake.** A woken slot (#499) whose car outlives the session must not be woken again
   after a restart, or there would be two of that car. `DormantVehicles` therefore writes its awake
-  set, with when each slot woke, to `awake.json` beside the containers.
+  set to `awake.json` beside the containers: per slot an `AwakeSlot` with when it woke and, when
+  the slot was known on waking, where its car stood and what it was (kind, trailer, load).
 - **Restart.** `RestoreAwake` keeps the slots woken within the past week
   (`ContainerRules.AwakeFor`), plus any whose car is asleep under the slot's name.
 - **Filed is not gone.** A filed node is in `ObjectContainers.IsFiling` while it leaves, so
   `DormantVehicles.OnVehicleRemoved` does not start a boat's respawn clock for it.
-- **Not done.** Re-sleeping a woken car that stands back in its own bay into a dormant copy. It
-  sleeps in the container instead, which is correct, only heavier.
+- **Back in its bay, it is scenery again.** Before filing a vehicle, the containers ask
+  `DormantVehicles.TryResleep`. If the vehicle stands where an awake slot put its car, it turns
+  back into that slot's dormant copy on every peer (`Slept`), its node is freed, and it leaves the
+  book. This applies whether it is the woken car itself or one driven off and parked back under
+  another name. The match is `ContainerRules.BackInBay`:
+  - **Same car:** the slot's kind, trailer and load.
+  - **Same place:** within 0.3 m and 5° of the slot's pose, the bound #497 set.
+  - **Pristine:** full health, no tuning or preset, doors shut, no CD or station, engine off.
+
+  Anything else stays a real car in its container, because turning it back into the slot's own
+  look would silently repair or undo it. A slot whose pose is unknown (woken where the server had
+  no slots loaded) can only stay awake.
 
 ## Switches and checks
 
@@ -81,13 +94,14 @@ The server-side half of Star Citizen's object container streaming. The client-si
     run's cars.
   - `--containers-quick` (checks only): 1 s rounds, sleep after 5 s, still for 2 s.
 - **Check.** `tools/containernetcheck.sh` (tier 2, `World/ContainerNetProbe`):
-  - A parks a client-owned car and drops an item, leaves for 5 km, and comes back to find both
-    woken in the same place, under the same oid.
+  - A parks a client-owned car, drops an item and throws a radio, leaves for 5 km, and comes back
+    to find all three woken in the same place, under the same oid, the radio silent.
+  - The second woken car, never touched, is dormant scenery again ("is back in its bay" in the
+    server log). The first bay, whose car was driven off, stays awake.
   - The server is then killed, not stopped (the crash path), and restarted on the same
     containers.
-  - C joins and finds the car, the item and both woken bays.
+  - C joins and finds the car, the item, the radio, the first bay awake and the second dormant.
 - **Not done.**
   - Offline play: containers run on the server only, and offline still clears lonely vehicles.
-  - Radios.
   - Pallets.
   - Per-region join snapshots for `Structures` and `PlacedObjects` (option C of #689).

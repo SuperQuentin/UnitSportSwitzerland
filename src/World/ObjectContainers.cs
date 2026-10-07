@@ -37,6 +37,7 @@ public partial class ObjectContainers : Node
     private readonly ContainerBook _book;
     private readonly VehicleManager _vehicles;
     private readonly DroppedItems _items;
+    private readonly RadioManager? _radios;
     private readonly Node _players;
     private readonly string _dir;
 
@@ -48,23 +49,24 @@ public partial class ObjectContainers : Node
     private readonly HashSet<string> _carriers = new();
     private double _sinceLook, _sinceCheckpoint;
 
-    private ObjectContainers(string dir, VehicleManager vehicles, DroppedItems items, Node players)
+    private ObjectContainers(string dir, VehicleManager vehicles, DroppedItems items, RadioManager? radios, Node players)
     {
         Name = NodeName;
         _dir = dir;
         _book = new ContainerBook(new ContainerFileDisk(dir));
         _vehicles = vehicles;
         _items = items;
+        _radios = radios;
         _players = players;
     }
 
     /// <summary>Server: the containers, when this run keeps them (see the class summary), else null.</summary>
-    public static ObjectContainers? CreateServer(Node world, VehicleManager vehicles, DroppedItems items, Node players)
+    public static ObjectContainers? CreateServer(Node world, VehicleManager vehicles, DroppedItems items, RadioManager? radios, Node players)
     {
         if (!Systems.On(Systems.Containers)) return null;
         string? dir = CmdArgs.Value("--containers-dir");
         if (dir == null && Systems.FixtureCourse != null) return null;
-        var containers = new ObjectContainers(ProjectSettings.GlobalizePath(dir ?? "user://containers/server"), vehicles, items, players);
+        var containers = new ObjectContainers(ProjectSettings.GlobalizePath(dir ?? "user://containers/server"), vehicles, items, radios, players);
         world.AddChild(containers);
         return containers;
     }
@@ -107,6 +109,14 @@ public partial class ObjectContainers : Node
         _vehicles.ChildExitingTree += OnExiting;
         _items.ChildEnteredTree += OnEntered;
         _items.ChildExitingTree += OnExiting;
+        if (_radios != null)
+        {
+            _radios.Keeps = r => r.Oid != 0;
+            _radios.Removing = r => Removed(r.Oid, r.Name);
+            _radios.ChildEnteredTree += OnEntered;
+            _radios.ChildExitingTree += OnExiting;
+            foreach (var child in _radios.GetChildren()) OnEntered(child);
+        }
         foreach (var child in _vehicles.GetChildren()) OnEntered(child);
         foreach (var child in _items.GetChildren()) OnEntered(child);
         DormantVehicles.Instance?.RestoreAwake(LoadAwake(), _book.FiledNamesList);
@@ -116,13 +126,13 @@ public partial class ObjectContainers : Node
 
     private string AwakePath => System.IO.Path.Combine(_dir, "awake.json");
 
-    /// <summary>The woken slots the last run left (<c>owner|ordinal</c> → when), or none.</summary>
-    public Dictionary<string, double> LoadAwake()
+    /// <summary>The woken slots the last run left (<c>owner|ordinal</c> → when, and where its car stood), or none.</summary>
+    public Dictionary<string, AwakeSlot> LoadAwake()
     {
         try
         {
             return System.IO.File.Exists(AwakePath)
-                ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, double>>(System.IO.File.ReadAllText(AwakePath)) ?? new()
+                ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, AwakeSlot>>(System.IO.File.ReadAllText(AwakePath)) ?? new()
                 : new();
         }
         catch (Exception e)
@@ -136,7 +146,7 @@ public partial class ObjectContainers : Node
     /// Writes the woken slots: a car park's woken car outlives the session now, so its bay must
     /// not be woken again after a restart (two of the same car). Small, written whole, at once.
     /// </summary>
-    public void SaveAwake(IReadOnlyDictionary<string, double> awake)
+    public void SaveAwake(IReadOnlyDictionary<string, AwakeSlot> awake)
     {
         try { SaveQueue.WriteAtomic(AwakePath, System.Text.Json.JsonSerializer.Serialize(awake)); }
         catch (Exception e) { GD.PushError($"[containers] could not write {AwakePath}: {e.Message}"); }
@@ -151,6 +161,7 @@ public partial class ObjectContainers : Node
     {
         _vehicles.ChildEnteredTree -= OnEntered;
         _items.ChildEnteredTree -= OnEntered;
+        if (_radios != null) _radios.ChildEnteredTree -= OnEntered;
         try
         {
             int filed = SleepWhere(force: true);
@@ -164,6 +175,12 @@ public partial class ObjectContainers : Node
         _vehicles.Removing = null;
         _items.Keeps = null;
         _items.Removing = null;
+        if (_radios != null)
+        {
+            _radios.ChildExitingTree -= OnExiting;
+            _radios.Keeps = null;
+            _radios.Removing = null;
+        }
         if (Instance == this) Instance = null;
     }
 
@@ -178,6 +195,7 @@ public partial class ObjectContainers : Node
         {
             VehicleBody v when _vehicles.Keeps?.Invoke(v) == true => v.Oid,
             DroppedItem i when _items.Keeps?.Invoke(i) == true => i.Oid,
+            RadioBody r when _radios?.Keeps?.Invoke(r) == true => r.Oid,
             _ => 0,
         };
         if (oid == 0) return;
@@ -197,7 +215,7 @@ public partial class ObjectContainers : Node
         ulong id = node.GetInstanceId();
         _watch.Remove(id);
         if (Filing.Remove(id)) return;
-        long oid = node switch { VehicleBody v => v.Oid, DroppedItem i => i.Oid, _ => 0 };
+        long oid = OidOf(node);
         if (oid != 0) Removed(oid, node.Name);
     }
 
@@ -222,6 +240,13 @@ public partial class ObjectContainers : Node
             {
                 var state = i.Capture();
                 return new ContainerRecord(i.Oid, 0, ContainerRecord.Item, i.Name, state.Position.E, state.Position.N, Now,
+                    GD.VarToStr(state.ToDict()));
+            }
+            case RadioBody r when _radios?.Keeps?.Invoke(r) == true:
+            {
+                // asleep silent: nobody is there to hear it, and the clock it played by is this run's
+                var state = r.Capture() with { Playing = false, StartedAt = 0 };
+                return new ContainerRecord(r.Oid, 0, ContainerRecord.Radio, r.Name, state.Position.E, state.Position.N, Now,
                     GD.VarToStr(state.ToDict()));
             }
             default:
@@ -287,7 +312,8 @@ public partial class ObjectContainers : Node
             var dict = GD.StrToVar(rec.Data).AsGodotDictionary();
             string? name = rec.Kind == ContainerRecord.Vehicle
                 ? _vehicles.Restore(VehicleState.FromDict(dict) with { Oid = rec.Oid })
-                : _items.Restore(DropState.FromDict(dict) with { Oid = rec.Oid });
+                : rec.Kind == ContainerRecord.Item ? _items.Restore(DropState.FromDict(dict) with { Oid = rec.Oid })
+                : _radios?.Restore(RadioState.FromDict(dict) with { Oid = rec.Oid });
             if (name != null) return true;
         }
         catch (Exception e) { GD.PushWarning($"[containers] {rec.Name} does not read: {e.Message}"); }
@@ -302,7 +328,7 @@ public partial class ObjectContainers : Node
         foreach (var node in Entities())
         {
             ulong id = node.GetInstanceId();
-            var at = node is VehicleBody v ? v.Global : ((DroppedItem)node).Capture().Position;
+            var at = ((Net.IInterestEntity)node).InterestAt;
             var tile = TileId.FromLv95(at.E, at.N);
             if (!_watch.TryGetValue(id, out var w)) w = (0, 0, at);
             double lonely = ContainerRules.Lonely(w.Lonely, step, tile, _playerTiles);
@@ -317,6 +343,9 @@ public partial class ObjectContainers : Node
             if (child is VehicleBody v && !v.IsQueuedForDeletion() && _vehicles.Keeps?.Invoke(v) == true) yield return v;
         foreach (var child in _items.GetChildren())
             if (child is DroppedItem i && !i.IsQueuedForDeletion() && _items.Keeps?.Invoke(i) == true) yield return i;
+        if (_radios != null)
+            foreach (var child in _radios.GetChildren())
+                if (child is RadioBody r && !r.IsQueuedForDeletion() && _radios.Keeps?.Invoke(r) == true) yield return r;
     }
 
     /// <summary>
@@ -338,12 +367,21 @@ public partial class ObjectContainers : Node
             {
                 VehicleBody v => v.Wrecked || v.InHold || _vehicles.IsClaimed(v.Name) || _carriers.Contains("v:" + v.Name),
                 DroppedItem i => !i.Settled || _items.IsClaimedOnServer(i.Name),
+                // one still playing finishes its CD first (force, at shutdown, files it silent)
+                RadioBody r => !r.Settled || _radios!.IsClaimedOnServer(r.Name) || r.Playing && !force,
                 _ => true,
             };
             if (busy) continue;
             if (!force)
             {
                 if (!_watch.TryGetValue(node.GetInstanceId(), out var w) || !ContainerRules.MaySleep(w.Lonely, w.Still, busy)) continue;
+            }
+            // a woken car back in its own bay becomes the slot's scenery again: no container, no node
+            // (its leaving takes it off the book, OnExiting)
+            if (node is VehicleBody bay && DormantVehicles.Instance?.TryResleep(bay) == true)
+            {
+                bay.QueueFree();
+                continue;
             }
             if (Record(node) is not { } rec) continue;
             nodes.Add(node);
@@ -353,7 +391,7 @@ public partial class ObjectContainers : Node
         var filed = _book.Sleep(records, Now);
         foreach (var node in nodes)
         {
-            long oid = node is VehicleBody v ? v.Oid : ((DroppedItem)node).Oid;
+            long oid = OidOf(node);
             if (!filed.Contains(oid)) continue;
             Filing.Add(node.GetInstanceId());
             node.QueueFree();
@@ -361,6 +399,14 @@ public partial class ObjectContainers : Node
         if (!force) GD.Print($"[containers] {filed.Count} put to sleep; {_book.LiveCount} live, {_book.FiledCount} asleep");
         return filed.Count;
     }
+
+    private static long OidOf(Node node) => node switch
+    {
+        VehicleBody v => v.Oid,
+        DroppedItem i => i.Oid,
+        RadioBody r => r.Oid,
+        _ => 0,
+    };
 
     /// <summary>Writes where everything live stands now.</summary>
     private void Checkpoint()

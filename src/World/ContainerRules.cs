@@ -15,11 +15,11 @@ namespace UnitSport.World;
 /// </summary>
 /// <param name="Oid">Given when it first entered the world; never changes, through every sleep, wake, rename and restart.</param>
 /// <param name="Gen">Bumped on every sleep and every wake: of two copies of one <paramref name="Oid"/>, the higher is the truth.</param>
-/// <param name="Kind"><see cref="ContainerRecord.Vehicle"/> or <see cref="ContainerRecord.Item"/>.</param>
+/// <param name="Kind"><see cref="ContainerRecord.Vehicle"/>, <see cref="ContainerRecord.Item"/> or <see cref="ContainerRecord.Radio"/>.</param>
 /// <param name="SavedAt">Server wall clock (unix seconds) of the last time this record was written.</param>
 public sealed record ContainerRecord(long Oid, int Gen, string Kind, string Name, double E, double N, double SavedAt, string Data)
 {
-    public const string Vehicle = "v", Item = "i";
+    public const string Vehicle = "v", Item = "i", Radio = "r";
 
     public TileId Tile => TileId.FromLv95(E, N);
 }
@@ -114,7 +114,10 @@ public sealed class ContainerBook
     /// <summary>Most items one tile's container holds; past it the oldest are let go.</summary>
     public const int MaxItemsPerTile = 200;
 
-    /// <summary>A dropped item left this long (seconds) is gone: the world is not a landfill.</summary>
+    /// <summary>Most radios one tile's container holds; past it the oldest are let go.</summary>
+    public const int MaxRadiosPerTile = 20;
+
+    /// <summary>A dropped item left this long (seconds) is gone: the world is not a landfill. Radios and vehicles stay.</summary>
     public const double ItemLifetime = 24 * 3600;
 
     private readonly IContainerDisk _disk;
@@ -200,7 +203,7 @@ public sealed class ContainerBook
     public static int Cap(List<ContainerRecord> list)
     {
         int dropped = 0;
-        foreach (var (kind, max) in new[] { (ContainerRecord.Vehicle, MaxVehiclesPerTile), (ContainerRecord.Item, MaxItemsPerTile) })
+        foreach (var (kind, max) in new[] { (ContainerRecord.Vehicle, MaxVehiclesPerTile), (ContainerRecord.Item, MaxItemsPerTile), (ContainerRecord.Radio, MaxRadiosPerTile) })
         {
             int count = list.Count(r => r.Kind == kind);
             if (count <= max) continue;
@@ -315,6 +318,13 @@ public sealed class ContainerBook
     }
 }
 
+/// <summary>
+/// A woken dormant slot (#499) as the server keeps it across restarts (#689): when it woke, and where
+/// its car stood and what it was, when the slot was known then, so a car put back in its bay can
+/// become scenery again (<see cref="ContainerRules.BackInBay"/>). No pose: it can only stay awake.
+/// </summary>
+public sealed record AwakeSlot(double Since, double? E = null, double? N = null, float Yaw = 0f, int KindId = -1, int Train = 0, float Load = 0f);
+
 /// <summary>The decisions of the containers (#689), pure: which tiles wake, what may sleep.</summary>
 public static class ContainerRules
 {
@@ -337,12 +347,33 @@ public static class ContainerRules
     /// The awake slots kept across a restart: those woken within <see cref="AwakeFor"/>, and any whose
     /// vehicle is asleep in a container under the slot's name whatever its age.
     /// </summary>
-    public static Dictionary<string, double> KeepAwake(IReadOnlyDictionary<string, double> saved, double now, Func<string, bool> filed)
+    public static Dictionary<string, AwakeSlot> KeepAwake(IReadOnlyDictionary<string, AwakeSlot> saved, double now, Func<string, bool> filed)
     {
-        var keep = new Dictionary<string, double>();
-        foreach (var (key, since) in saved)
-            if (now - since <= AwakeFor || filed(key)) keep[key] = since;
+        var keep = new Dictionary<string, AwakeSlot>();
+        foreach (var (key, slot) in saved)
+            if (now - slot.Since <= AwakeFor || filed(key)) keep[key] = slot;
         return keep;
+    }
+
+    /// <summary>A car back in its bay stands within this of the slot's spot, flat m...</summary>
+    public const double BayReach = 0.3;
+
+    /// <summary>...and within this of its heading, degrees: one that re-sleeps anywhere else would teleport in front of whoever looks (#497).</summary>
+    public const double BayYawDeg = 5;
+
+    /// <summary>
+    /// Whether a vehicle is the slot's car back in its bay, so it may become scenery again rather
+    /// than sleep in a container: the slot's kind, trailer and load, where the slot put it, facing
+    /// the same way, and <paramref name="pristine"/> (undamaged, untuned, doors shut, nothing playing):
+    /// anything else would be silently repaired or undone by turning back into the slot's own look.
+    /// </summary>
+    public static bool BackInBay(AwakeSlot slot, double e, double n, float yaw, int kindId, int train, float load, bool pristine)
+    {
+        if (!pristine || slot.E is not { } se || slot.N is not { } sn) return false;
+        if (kindId != slot.KindId || train != slot.Train || Math.Abs(load - slot.Load) > 0.05f) return false;
+        if (Math.Sqrt((e - se) * (e - se) + (n - sn) * (n - sn)) > BayReach) return false;
+        double turn = Math.IEEERemainder(yaw - slot.Yaw, 2 * Math.PI);
+        return Math.Abs(turn) <= BayYawDeg * Math.PI / 180;
     }
 
     /// <summary>Moving less than this (m) between two looks is standing still.</summary>

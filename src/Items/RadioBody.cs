@@ -233,7 +233,10 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware, IInterestEntity
     }
 
     /// <summary>The state to respawn it from: where it is now, what it plays.</summary>
-    public RadioState Capture() => new(Name, Owner, _place.Global, Rotation.Y, Vector3.Zero, CdId, StartedAt, Playing, Settled, Length);
+    public RadioState Capture() => new(Name, Owner, _place.Global, Rotation.Y, Vector3.Zero, CdId, StartedAt, Playing, Settled, Length, _initial.Oid);
+
+    /// <summary>Which radio this is to the object containers (#689); 0 = not persisted.</summary>
+    public long Oid => _initial.Oid;
 
     /// <summary>What it plays, as the item carries it when picked up; null when silent or finished.</summary>
     public RadioPlay? NowPlaying => Playing && WantedPosition < Length ? new RadioPlay(CdId, StartedAt, Length) : null;

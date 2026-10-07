@@ -163,14 +163,52 @@ public class ContainerBookTests
     public void Woken_slots_stay_awake_a_week_or_while_their_vehicle_sleeps()
     {
         double now = 10 * ContainerRules.AwakeFor;
-        var saved = new Dictionary<string, double>
+        var saved = new Dictionary<string, AwakeSlot>
         {
-            ["2600_1200|3"] = now - 3600,                         // woken an hour ago
-            ["2600_1200|4"] = now - ContainerRules.AwakeFor - 1,  // long ago, its car gone
-            ["2600_1200|5"] = 0,                                  // long ago, its car asleep in a container
+            ["2600_1200|3"] = new(now - 3600),                         // woken an hour ago
+            ["2600_1200|4"] = new(now - ContainerRules.AwakeFor - 1),  // long ago, its car gone
+            ["2600_1200|5"] = new(0),                                  // long ago, its car asleep in a container
         };
         var keep = ContainerRules.KeepAwake(saved, now, key => key == "2600_1200|5");
         Assert.Equal(new[] { "2600_1200|3", "2600_1200|5" }, keep.Keys.Order());
+    }
+
+    [Fact]
+    public void A_car_is_back_in_its_bay_only_as_the_slot_left_it()
+    {
+        var bay = new AwakeSlot(0, 2600100.0, 1200200.0, 1.5f, KindId: 70, Train: 0, Load: 0.5f);
+        // the woken car never moved, or was parked back 20 cm off and 3 degrees round
+        Assert.True(ContainerRules.BackInBay(bay, 2600100, 1200200, 1.5f, 70, 0, 0.5f, pristine: true));
+        Assert.True(ContainerRules.BackInBay(bay, 2600100.2, 1200200, 1.5f + 3 * MathF.PI / 180, 70, 0, 0.5f, true));
+        // a heading a whole turn round is the same heading
+        Assert.True(ContainerRules.BackInBay(bay, 2600100, 1200200, 1.5f + 2 * MathF.PI, 70, 0, 0.5f, true));
+        // half a metre off, backed in, another car, a trailer on, damaged or tuned: it stays a real car
+        Assert.False(ContainerRules.BackInBay(bay, 2600100.5, 1200200, 1.5f, 70, 0, 0.5f, true));
+        Assert.False(ContainerRules.BackInBay(bay, 2600100, 1200200, 1.5f + MathF.PI, 70, 0, 0.5f, true));
+        Assert.False(ContainerRules.BackInBay(bay, 2600100, 1200200, 1.5f, 71, 0, 0.5f, true));
+        Assert.False(ContainerRules.BackInBay(bay, 2600100, 1200200, 1.5f, 70, 3, 0.5f, true));
+        Assert.False(ContainerRules.BackInBay(bay, 2600100, 1200200, 1.5f, 70, 0, 0.5f, pristine: false));
+        // a slot restored without its pose (an old save) can only stay awake
+        Assert.False(ContainerRules.BackInBay(new AwakeSlot(0), 2600100, 1200200, 1.5f, 70, 0, 0.5f, true));
+    }
+
+    [Fact]
+    public void Radios_have_their_own_cap()
+    {
+        var list = Enumerable.Range(0, ContainerBook.MaxRadiosPerTile + 2).Select(i => Rec(i, 0, 0, ContainerRecord.Radio, savedAt: i))
+            .Concat(new[] { Rec(1000, 0, 0) }).ToList();
+        Assert.Equal(2, ContainerBook.Cap(list));
+        Assert.Equal(ContainerBook.MaxRadiosPerTile, list.Count(r => r.Kind == ContainerRecord.Radio));
+        Assert.Contains(list, r => r.Oid == 1000);
+    }
+
+    [Fact]
+    public void Awake_slots_round_trip_through_json()
+    {
+        var saved = new Dictionary<string, AwakeSlot> { ["1_2|3"] = new(5, 1.5, 2.5, 0.25f, 70, 0, 0.5f), ["1_2|4"] = new(6) };
+        var back = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, AwakeSlot>>(System.Text.Json.JsonSerializer.Serialize(saved))!;
+        Assert.Equal(saved["1_2|3"], back["1_2|3"]);
+        Assert.Null(back["1_2|4"].E);
     }
 
     [Fact]
