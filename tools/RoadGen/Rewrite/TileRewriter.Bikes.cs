@@ -79,9 +79,10 @@ public static partial class TileRewriter
                 if (!side.HasTrack) continue;
                 // beside a turn lane's widening the side is shifted out (#123): along a steady shift the
                 // paint moves with it, along a taper (a varying shift) there is none
-                if (side.ShiftStartCm != side.ShiftEndCm) continue;
+                bool dashed = side.Bike == BikeKind.Track && side.BufferDm == 0 && side.SidewalkDm > 0;
+                if (side.ShiftStartCm != side.ShiftEndCm) { if (dashed) PaintEmitter.TaperTrackLine(p, right, into); continue; }
                 float sign = right ? 1f : -1f, half = p.Width * 0.5f + side.ShiftStartCm / 100f;
-                if (side.Bike == BikeKind.Track && side.BufferDm == 0 && side.SidewalkDm > 0)
+                if (dashed)
                     PaintEmitter.AddDashed(p, sign * (half + (side.VergeDm + side.BikeDm) / 10f), 0, into,
                         PaintType.YellowDashed, PaintEmitter.Yellow, BikePlanner.LineWidth, BikePlanner.Dash, BikePlanner.Gap);
                 bool atStart = i == 0 ? startsAtJunction : !Track(pieces[i - 1], right);
@@ -111,7 +112,8 @@ public static partial class TileRewriter
         Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf, Dictionary<RoadSegment, List<RoadSegment>> finalPieces,
         Dictionary<(int Node, int Arm), ArmLanes> lanes, HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadPaint>> paint,
         Dictionary<TileId, List<RoadPointProp>> signs, Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges,
-        BikePlanner.Stats stats, Dictionary<(int Link, LinkEnd End), double> stopsAt, Dictionary<int, (SignalPlan Plan, int[] PlanArm)> signalPlans)
+        BikePlanner.Stats stats, Dictionary<(int Link, LinkEnd End), double> stopsAt, Dictionary<int, (SignalPlan Plan, int[] PlanArm)> signalPlans,
+        Dictionary<(int Node, int Arm), CornerArc> townArcs)
     {
         var net = result.Network;
         bool IsCar(int linkId) => net.Links[linkId].Tag is Source s && PriorityPlanner.IsCarRoad(s.Segment.Class)
@@ -204,9 +206,11 @@ public static partial class TileRewriter
                         return simplify ? Polyline.Simplify(line, 0.02) : line;
                     }
                     // at traffic lights, across a widened arm or from one: square across the arm it crosses (#351)
+                    bool round = townArcs.Keys.Any(k => k.Node == junction.NodeId);   // kerb arcs with paths round them (#682)
                     SquareCrossing? square = plan.Kind == PriorityPlanner.Kind.Signal && joined.Count == 1
-                        ? SquareCrossing.For(junction, joined[0], lanes.GetValueOrDefault((junction.NodeId, joined[0])), from, xa, xb)
+                        ? SquareCrossing.For(junction, joined[0], lanes.GetValueOrDefault((junction.NodeId, joined[0])), from, xa, xb, force: round)
                         : null;
+                    if (square is not null && round) square.Straight = true;
                     List<Vec2> Curve(double oa, double ob, bool simplify = true) =>
                         square is null ? Bezier(oa, ob, simplify)
                             : square.Line(ca + da * oa, ua, cb + db * ob, Vec2.FromHeading(b.OutwardHeading), oa - xa, ob - xb);
@@ -234,10 +238,15 @@ public static partial class TileRewriter
                             double stop = stopsAt.GetValueOrDefault((junction.Arms[riders].LinkId, plan.Arms[riders].End));
                             Vec2 backA = k == 0 ? ua * stop : Vec2.Zero, backB = k == 0 ? Vec2.Zero : ub * stop;
                             List<Vec2> Straight(double oa, double ob) => Densify(ca + da * oa + backA, cb + db * ob + backB, 2.0);
-                            bool crossed = CrossedInPhase(lights, riders, joined, lanes.GetValueOrDefault((junction.NodeId, riders))?.Approach);
                             double ra = (lw + la - lw * 0.5) * 0.5, rb = (lw + lb - lw * 0.5) * 0.5;
                             float band = (float)(Math.Min(la, lb) - lw * 1.5 - 2 * RedInset);
-                            if (crossed && band > 0.3f) Add(Straight(-ra + xa, -rb + xb), PaintType.BikeCrossing, PaintEmitter.Red, band, 0);
+                            // red only on the half (or halves) where a car movement crosses it while the riders have green (#682)
+                            Vec2 s0 = ca + da * (-ra + xa) + backA, s1 = cb + db * (-rb + xb) + backB;
+                            var runs = RedRuns(ConflictsOf(lights, riders, joined, lanes.GetValueOrDefault((junction.NodeId, riders))?.Approach, junction, s0, s1));
+                            bool crossed = runs.Count > 0;
+                            if (band > 0.3f)
+                                foreach (var (from0, to0) in runs)
+                                    Add(Densify(s0 + (s1 - s0) * from0, s0 + (s1 - s0) * to0, 2.0), PaintType.BikeCrossing, PaintEmitter.Red, band, 0);
                             Add(Straight(-lw * 0.5 + xa, -lw * 0.5 + xb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
                             Add(Straight(-la + xa, -lb + xb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
                             if (crossed) stats.SignalLanesRed++; else stats.SignalLanesDashed++;
@@ -266,10 +275,21 @@ public static partial class TileRewriter
                         double ta = RoadStreetSection.TrackCentre(sa) + xa, tb = RoadStreetSection.TrackCentre(sb) + xb;
                         double ha = sa.BikeDm / 20.0 - lw * 0.5, hb = sb.BikeDm / 20.0 - lw * 0.5;
                         square?.Place(Bezier, ta - xa, tb - xb, xa, xb, Math.Max(ha, hb) + lw * 0.5);
+                        // kerb arcs round the corners (#682): Swiss crossings are not set back, the band runs straight from the path in to the path out
+                        bool straight = round && plan.Kind == PriorityPlanner.Kind.Signal;
+                        List<Vec2> Run(double oa, double ob) => straight ? Densify(ca + da * oa, cb + db * ob, 2.0) : Curve(oa, ob);
                         float red = (float)(Math.Min(sa.BikeDm, sb.BikeDm) / 10.0 - 2 * lw - 2 * RedInset);
-                        if (red > 0.3f) Add(Curve(ta, tb), PaintType.BikeCrossing, PaintEmitter.Red, red, 0);
-                        Add(Curve(ta - ha, tb - hb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
-                        Add(Curve(ta + ha, tb + hb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+                        if (red > 0.3f && straight && signalPlans.TryGetValue(junction.NodeId, out var pathLights))
+                        {
+                            // at the lights red only on the half or halves where a car crosses while the riders go (#682)
+                            int pathRiders = k == 0 ? ia : ib;
+                            Vec2 s0 = ca + da * ta, s1 = cb + db * tb;
+                            foreach (var (from0, to0) in RedRuns(ConflictsOf(pathLights, pathRiders, joined, lanes.GetValueOrDefault((junction.NodeId, pathRiders))?.Approach, junction, s0, s1)))
+                                Add(Densify(s0 + (s1 - s0) * from0, s0 + (s1 - s0) * to0, 2.0), PaintType.BikeCrossing, PaintEmitter.Red, red, 0);
+                        }
+                        else if (red > 0.3f) Add(Run(ta, tb), PaintType.BikeCrossing, PaintEmitter.Red, red, 0);
+                        Add(Run(ta - ha, tb - hb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
+                        Add(Run(ta + ha, tb + hb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
                         stats.Crossings++;
                         stats.CrossingsTrack++;
                         // the joining road gives way before the path, not on it
@@ -283,6 +303,74 @@ public static partial class TileRewriter
                             Get(bridges, home).AddRange(bands);
                             stats.PathsThrough++;
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sidewalk, verge and path bands round the kerb arcs of a signalised junction in town (#682):
+    /// from the end of arm i's left side, along the arc offset by each band, to the end of arm j's
+    /// right side. Where the two sides' profiles differ the sidewalk corner stays.
+    /// </summary>
+    /// <summary>A path turns a corner only where its outer edge keeps this much radius (m) beyond the bands' width.</summary>
+    private const double RoundPathRoom = 4.0;
+
+    private static void EmitTownCorners(PriorityResult priority, RoadNetwork net, Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf,
+        Dictionary<RoadSegment, List<RoadSegment>> finalPieces, Dictionary<(int Node, int Arm), CornerArc> arcs, HashSet<TileId> block, HashSet<TileId> wanted,
+        Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges, Dictionary<TileId, List<RoadPaint>> paint, BikePlanner.Stats stats)
+    {
+        RoadSide EndSide(Junction junction, PriorityPlanner.Plan plan, int armIndex, bool armLeft)
+        {
+            var arm = junction.Arms[armIndex];
+            var end = plan.Arms[armIndex].End;
+            bool segRight = (end == LinkEnd.End) == armLeft;
+            if (!segmentOf.TryGetValue(arm.LinkId, out var so)) return default;
+            var pieces = finalPieces.TryGetValue(so.Segment, out var list) && list.Count > 0 ? list : [so.Segment];
+            var seg = end == LinkEnd.Start ? pieces[0] : pieces[^1];
+            return segRight ? seg.Attributes.Right : seg.Attributes.Left;
+        }
+        foreach (var (junction, plan) in priority.Plans)
+        {
+            if (plan.Kind != PriorityPlanner.Kind.Signal || plan.Arms.Count != junction.Arms.Count) continue;
+            var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
+            if (!block.Contains(home) || !wanted.Contains(home)) continue;
+            var anchors = Anchors(junction, net);
+            if (anchors.Count == 0) continue;
+            int n = junction.Arms.Count;
+            for (int i = 0; i < n; i++)
+            {
+                if (!arcs.TryGetValue((junction.NodeId, i), out var arc)) continue;
+                int j = (i + 1) % n;
+                var sa = EndSide(junction, plan, i, armLeft: true);
+                var sb = EndSide(junction, plan, j, armLeft: false);
+                var ua = Vec2.FromHeading(junction.Arms[i].OutwardHeading);
+                var ub = Vec2.FromHeading(junction.Arms[j].OutwardHeading);
+                // round the arc the green strip beside a path is gone (the path meets the kerb, so the straight red crossing
+                // runs on from it) where the radius leaves room for the path's bands; else a path does not turn the corner:
+                // the sidewalk takes its width and cyclists keep to the crossings (#682)
+                RoadSide Round(RoadSide s)
+                {
+                    if (!s.HasTrack) return s;
+                    if (arc.R >= s.OuterDm / 10.0 + RoundPathRoom) return s with { BikeDm = (byte)(s.BikeDm + s.VergeDm), VergeDm = 0 };
+                    return new RoadSide(SidewalkDm: (byte)Math.Min(255, s.OuterDm), KerbCm: s.KerbCm);
+                }
+                var (ra, rb) = (Round(sa), Round(sb));
+                if (BridgePath(home, ra, rb, arc.Ei, arc.Ej, arc.Offset, p => HeightAt(anchors, p)) is { } bands)
+                {
+                    Get(bridges, home).AddRange(bands);
+                    stats.PathsThrough++;
+                    // the yellow dashes between path and sidewalk go round the corner too (#682)
+                    if (ra.HasTrack && ra.BufferDm == 0 && ra.SidewalkDm > 0)
+                    {
+                        double d = (sa.VergeDm + sa.BikeDm) / 10.0;
+                        float lift = RoadStreetSection.HeightAt(sa, (float)d);
+                        Get(paint, home).Add(new RoadPaint
+                        {
+                            Shape = PaintShape.Polyline, Type = PaintType.YellowDashed, Rgba = PaintEmitter.Yellow, Width = BikePlanner.LineWidth,
+                            Dash = BikePlanner.Dash, Gap = BikePlanner.Gap, Vertices = Local(home, arc.Offset(d, d), p => HeightAt(anchors, p), lift),
+                        });
                     }
                 }
             }
@@ -308,11 +396,13 @@ public static partial class TileRewriter
     /// through group; two groups run together when their greens overlap in the built plan (a
     /// protected arrow held red then does not count). An approach missing from the plan: red.
     /// </summary>
-    private static bool CrossedInPhase((SignalPlan Plan, int[] PlanArm) lights, int from, List<int> joined, ApproachLayout? layout)
+    private static List<double> ConflictsOf((SignalPlan Plan, int[] PlanArm) lights, int from, List<int> joined, ApproachLayout? layout,
+        Junction junction, Vec2 lineA, Vec2 lineB)
     {
+        var found = new List<double>();
         var (plan, armInPlan) = lights;
         int pa = armInPlan[from];
-        if (pa < 0) return true;
+        if (pa < 0) return [0.25, 0.75];
         var junctionArm = new int[plan.Arms.Count];
         for (int j = 0; j < armInPlan.Length; j++) if (armInPlan[j] >= 0) junctionArm[armInPlan[j]] = j;
         int riders = -1;
@@ -322,7 +412,7 @@ public static partial class TileRewriter
             if (plan.Groups[g].Kind == SignalGroupKind.Car && plan.Groups[g].Arm == pa && (plan.Groups[g].Moves & SignalMoves.Through) != 0) riders = g;
         for (int g = 0; g < plan.Groups.Count && riders < 0; g++)
             if (plan.Groups[g].Kind == SignalGroupKind.Car && plan.Groups[g].Arm == pa) riders = g;
-        if (riders < 0) return true;
+        if (riders < 0) return [0.25, 0.75];
         bool kerbsidePocket = layout is { BikeBetween: true, Right: true };
         foreach (var m in plan.Movements())
         {
@@ -330,11 +420,50 @@ public static partial class TileRewriter
             int jf = junctionArm[m.From], jt = junctionArm[m.To];
             bool inside = joined.Contains(jf) || (jf == from && m.Turn == SignalMoves.Right && kerbsidePocket);
             if (inside == joined.Contains(jt)) continue;
-            if (GreenTogether(plan, riders, m.Group)) return true;
+            if (!GreenTogether(plan, riders, m.Group)) continue;
+            found.Add(CrossesAt(junction, jf, jt, lineA, lineB));
         }
-        return false;
+        return found;
     }
 
+    /// <summary>
+    /// Where a car movement from arm <paramref name="from"/> to arm <paramref name="to"/> crosses the line from
+    /// <paramref name="a"/> to <paramref name="b"/>, as a fraction of it (the movement as a curve from its entry lane at the
+    /// mouth through the junction's centre to its exit lane); the middle where it does not.
+    /// </summary>
+    private static double CrossesAt(Junction junction, int from, int to, Vec2 a, Vec2 b)
+    {
+        Vec2 Lane(int arm, bool entering)
+        {
+            var arm_ = junction.Arms[arm];
+            var u = Vec2.FromHeading(arm_.OutwardHeading);
+            var mid = (arm_.Left + arm_.Right) * 0.5;
+            return mid + u.Perp * (arm_.HalfWidth * 0.5 * (entering ? 1 : -1));
+        }
+        Vec2 p0 = Lane(from, true), p2 = Lane(to, false), c = junction.Centre;
+        Vec2 prev = p0;
+        for (int k = 1; k <= 16; k++)
+        {
+            double t = k / 16.0, mt = 1 - t;
+            var q = p0 * (mt * mt) + c * (2 * mt * t) + p2 * (t * t);
+            if (SegmentsCross(prev, q, a, b) is { } hit)
+            {
+                double len = a.DistanceTo(b);
+                return len < 1e-6 ? 0.5 : Math.Clamp(a.DistanceTo(hit) / len, 0, 1);
+            }
+            prev = q;
+        }
+        return 0.5;
+    }
+
+    /// <summary>The red stretches of a crossing from its conflicts: the half or halves of it where cars cross (#682).</summary>
+    private static List<(double From, double To)> RedRuns(List<double> conflicts)
+    {
+        bool first = conflicts.Any(t => t < 0.5), second = conflicts.Any(t => t >= 0.5);
+        if (first && second) return [(0, 1)];
+        if (first) return [(0, 0.5)];
+        return second ? [(0.5, 1)] : [];
+    }
     /// <summary>Whether two groups of a plan are ever green at the same time.</summary>
     private static bool GreenTogether(SignalPlan plan, int a, int b)
     {
@@ -366,11 +495,13 @@ public static partial class TileRewriter
         private bool _aOnApproach;
         /// <summary>The band's centre: its distance along the arm, and the offsets it was placed for.</summary>
         private double _at, _centre;
+        /// <summary>The paths run round kerb arcs to the crossing (#682): only the crossing itself is drawn, not the jogs to the arms' path ends.</summary>
+        public bool Straight;
 
-        public static SquareCrossing? For(Junction junction, int armIndex, ArmLanes? lanes, Vec2 fromA, double xa, double xb)
+        public static SquareCrossing? For(Junction junction, int armIndex, ArmLanes? lanes, Vec2 fromA, double xa, double xb, bool force = false)
         {
             double widenIn = lanes?.Approach is { } l ? l.Edge() - l.Half : 0, widenOut = lanes?.ExitWidening ?? 0;
-            if (widenIn < 0.05 && widenOut < 0.05 && xa < 0.05 && xb < 0.05) return null;
+            if (!force && widenIn < 0.05 && widenOut < 0.05 && xa < 0.05 && xb < 0.05) return null;
             var arm = junction.Arms[armIndex];
             var u = Vec2.FromHeading(arm.OutwardHeading);
             var mid = (arm.Left + arm.Right) * 0.5;
@@ -420,6 +551,7 @@ public static partial class TileRewriter
             double at = _at + (oa + ob) * 0.5 - _centre;
             var onApproach = _mid + _u * at + _n * _in;
             var onExit = _mid + _u * at - _n * _out;
+            if (Straight) return _aOnApproach ? [onApproach, onExit] : [onExit, onApproach];
             pa = Clear(pa, ua, _aOnApproach ? 1 : -1, at);
             pb = Clear(pb, ub, _aOnApproach ? -1 : 1, at);
             return _aOnApproach ? [pa, onApproach, onExit, pb] : [pa, onExit, onApproach, pb];
