@@ -199,6 +199,36 @@ public partial class CdLibrary : Node
         if (refusal.Length > 0) BurnStatus?.Invoke(refusal);
     }
 
+    /// <summary>
+    /// Burns an audio file from this computer (#736). For "just for me", offline or on the host it
+    /// is burnt here; on someone else's server it is uploaded (<see cref="CdUpload"/>), virus-scanned
+    /// there and burnt into the shared list.
+    /// </summary>
+    public void BurnFile(string path, bool personal = false)
+    {
+        if (!File.Exists(path)) { BurnStatus?.Invoke("That file is gone."); return; }
+        if (!personal && !Owns)
+        {
+            if (CdUpload.Instance is { } upload) upload.Send(path);
+            return;
+        }
+        Begin(0, path, personal, out string refusal);
+        if (refusal.Length > 0) BurnStatus?.Invoke(refusal);
+    }
+
+    /// <summary>
+    /// Server: burns a player's upload that passed the virus scan (<see cref="CdUpload"/>) into the
+    /// shared list; its folder is deleted once the burn is done, whatever came of it.
+    /// </summary>
+    internal bool BurnUpload(long peer, string file, string folder, out string refusal)
+    {
+        Begin(peer, file, false, out refusal, deleteAfter: folder);
+        return refusal.Length == 0;
+    }
+
+    /// <summary>Server or offline: a status line for <paramref name="peer"/>'s burn box (0 = this process).</summary>
+    internal void Report(long peer, string text) => _status.Enqueue((peer, text));
+
     /// <summary>Forgets one of this player's own CDs and deletes its files.</summary>
     public void RemovePersonal(int id)
     {
@@ -268,10 +298,11 @@ public partial class CdLibrary : Node
     }
 
     /// <summary>Starts a burn on the worker, or says why not. <paramref name="peer"/> 0 = this process.</summary>
-    private void Begin(long peer, string url, bool personal, out string refusal)
+    private void Begin(long peer, string url, bool personal, out string refusal, string? deleteAfter = null)
     {
         refusal = "";
-        bool localFile = peer == 0 && File.Exists(url);
+        // a file only from this process, or a player's upload the server has scanned (#736)
+        bool localFile = (peer == 0 || deleteAfter != null) && File.Exists(url);
         if (!localFile && !AllowedSource(url)) { refusal = "Only YouTube links can be burnt."; return; }
         if (_burning) { refusal = personal ? "Already burning a CD; try again when it is done." : "Someone is already burning a CD; try again in a minute."; return; }
         double now = Time.GetTicksMsec() / 1000.0;
@@ -280,7 +311,13 @@ public partial class CdLibrary : Node
             refusal = $"One CD a minute: {(int)(BurnCooldown - (now - last))} s to wait.";
             return;
         }
-        if (!CdBurner.ToolsAvailable(out string why)) { refusal = why; return; }
+        // a file needs ffmpeg only; a link yt-dlp too
+        string why = "";
+        if (!(localFile ? CdBurner.FfmpegAvailable() : CdBurner.ToolsAvailable(out why)))
+        {
+            refusal = localFile ? "ffmpeg is missing: a file cannot be burnt here." : why;
+            return;
+        }
 
         _burning = true;
         _lastBurn[peer] = now;
@@ -305,6 +342,13 @@ public partial class CdLibrary : Node
                 if (cd != null && source != null) cd = cd with { Source = source };
             }
             catch (Exception e) { _status.Enqueue((peer, $"Burn failed: {e.Message}")); }
+            finally
+            {
+                // an upload is kept only as the re-encoded Ogg: the original goes (#736)
+                if (deleteAfter != null)
+                    try { System.IO.Directory.Delete(deleteAfter, recursive: true); }
+                    catch (Exception e) { GD.PushWarning($"[cd] could not delete the upload {deleteAfter}: {e.Message}"); }
+            }
             _done.Enqueue((peer, cd, personal));
         });
     }
