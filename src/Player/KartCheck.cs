@@ -56,6 +56,11 @@ public static class KartCheck
             $"Sim: on grass it trips too ({grass.TippedAt:F2} s), and at a smaller angle than on gravel or tarmac ({Mathf.RadToDeg(Car.TripAngle(Surface.Grass)):F0}°, {Mathf.RadToDeg(Car.TripAngle(Surface.Gravel)):F0}°, {Mathf.RadToDeg(Car.TripAngle(Surface.Asphalt)):F0}°)");
         GameSettings.Current.RideProfile = was;
 
+        // another peer draws what this one drove: the pose flags carry the tip and the lifted wheel
+        var (tipTip, tipLift, liftSide) = Replicated(spec);
+        Check(Mathf.Abs(tipTip) == 1f, $"a remote copy lies over as the driven kart does (Tip {tipTip:F0} from the pose flags)");
+        Check(tipLift > 0.3f && liftSide, $"and lifts the inside rear wheel of a hard left turn (Lift {tipLift:F2}, left {liftSide})");
+
         // the driver in the seat, hands on the wheel and feet on the pedals, however the wheel is turned
         var seat = KartMeshBuilder.SeatFor(spec.Wheelbase);
         float reach = 0f;
@@ -93,6 +98,38 @@ public static class KartCheck
 
         GD.Print(fails.Count == 0 ? "[kartcheck] RESULT: ok" : $"[kartcheck] RESULT: FAILED — {fails.Count}: {string.Join("; ", fails)}");
         return fails.Count == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// What a remote copy of the kart shows, read back from <see cref="Car.WritePose"/>'s flags into a rig
+    /// by <see cref="Car.AnimateRemote"/>: the tip after a Sim handbrake slide, and the lifted wheel
+    /// (+ left) of a hard left turn.
+    /// </summary>
+    private static (float Tip, float Lift, bool LeftWheel) Replicated(CarSpec spec)
+    {
+        var was = GameSettings.Current.RideProfile;
+        GameSettings.Current.RideProfile = RideProfile.Sim;
+        var ground = new RideGround(true, 0f);
+        var car = new Car(spec);
+        var m = new RideMotion { Speed = 60f / 3.6f };
+        for (float t = 0; t < 1f; t += Dt) { m.Speed = 60f / 3.6f; car.Step(new RideInput(0.3f, 0f, 0f, false), ground, Dt, ref m); }
+        for (float t = 0; t < 3f && !car.Tipped; t += Dt) car.Step(new RideInput(0f, 0f, t < 0.5f ? -1f : 0f, false, Handbrake: t < 0.3f), ground, Dt, ref m);
+        var remote = new Car(spec);
+        var rig = CarRig.Create(spec.Body, spec.Wheelbase, spec.Gauges);
+        remote.AnimateRemote(rig, car.WritePose(null!, m, default), Dt);
+        float tip = rig.Tip;
+
+        // a left turn at the limit: the left (inside) rear wheel comes up
+        var turning = new Car(spec);
+        var tm = new RideMotion { Speed = 40f / 3.6f };
+        for (float t = 0; t < 4f; t += Dt)
+            turning.Step(new RideInput(Mathf.Clamp(0.4f + (40f / 3.6f - tm.Speed) * 0.5f, 0f, 1f), 0f, -Mathf.Min(1f, t / 2f), false), ground, Dt, ref tm);
+        remote.AnimateRemote(rig, turning.WritePose(null!, tm, default), Dt);
+        float lift = Mathf.Abs(rig.Lift);
+        bool left = rig.Lift > 0f;
+        rig.Free();
+        GameSettings.Current.RideProfile = was;
+        return (tip, lift, left);
     }
 
     /// <summary>Governed top speed, km/h, and the time to 50 km/h, s, full throttle on the flat.</summary>
