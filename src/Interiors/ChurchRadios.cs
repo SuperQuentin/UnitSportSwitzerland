@@ -138,6 +138,25 @@ public partial class ChurchRadios : Node
         else ServeStop(MyId, plan);
     }
 
+    /// <summary>Moves church <paramref name="plan"/>'s song to <paramref name="at"/> seconds in (#734).</summary>
+    public void Seek(string plan, double at)
+    {
+        if (Online) RpcId(1, MethodName.AskSeek, plan, at);
+        else ServeSeek(MyId, plan, at);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void AskSeek(string plan, double at)
+    {
+        if (Multiplayer.IsServer()) ServeSeek(Multiplayer.GetRemoteSenderId(), plan, at);
+    }
+
+    private void ServeSeek(long peer, string plan, double at)
+    {
+        if (!Inside(peer, plan) || !_plays.TryGetValue(plan, out var play) || !double.IsFinite(at)) return;
+        Broadcast(plan, (play with { StartedAt = ClockSync.ServerNow - Math.Clamp(at, 0, play.Length - 0.5) }).Encode());
+    }
+
     public void SetMode(string plan, RadioMode mode)
     {
         if (Online) RpcId(1, MethodName.AskMode, plan, (int)mode);

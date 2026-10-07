@@ -69,7 +69,9 @@ public partial class RadioUi : CanvasLayer
     private PanelContainer _panel = null!;
     private Label _title = null!, _subtitle = null!;
     private Label _nowTitle = null!, _nowMeta = null!, _time = null!;
-    private ProgressBar _bar = null!;
+    /// <summary>Where the song is, and a scrubber (#734): drag or click it to move through the song, for everyone.</summary>
+    private HSlider _bar = null!;
+    private bool _scrubbing;
     private RadioCassette _cassette = null!;
     private Button _prev = null!, _playStop = null!, _next = null!, _mode = null!, _pick = null!;
     private LineEdit _search = null!;
@@ -292,7 +294,10 @@ public partial class RadioUi : CanvasLayer
 
         var progress = UiKit.HBox(10);
         card.AddChild(progress);
-        _bar = Bar(4);
+        _bar = Scrubber();
+        _bar.DragStarted += () => _scrubbing = true;
+        _bar.DragEnded += changed => { _scrubbing = false; if (changed) Scrub((float)_bar.Value); };
+        _bar.ValueChanged += v => { if (!_scrubbing) Scrub((float)v); };
         _bar.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         _bar.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
         progress.AddChild(_bar);
@@ -316,6 +321,51 @@ public partial class RadioUi : CanvasLayer
         b.AddThemeStyleboxOverride("disabled", UiTheme.Flat(new Color(bg, bg.A * 0.4f), r, 10, 6));
         b.AddThemeFontSizeOverride("font_size", UiTheme.FontBody + 2);
         return b;
+    }
+
+    /// <summary>The song's progress as a thin amber track with a grabber (#734): set in code without a signal, dragged by the player.</summary>
+    private static HSlider Scrubber()
+    {
+        var s = new HSlider
+        {
+            MinValue = 0, MaxValue = 1, Step = 0.001, Value = 0,
+            CustomMinimumSize = new Vector2(0, 16),
+            FocusMode = Control.FocusModeEnum.All,
+            TooltipText = "Drag to move through the song",
+        };
+        s.AddThemeStyleboxOverride("slider", UiTheme.Flat(new Color(1, 1, 1, 0.10f), 3, 0, 3));
+        s.AddThemeStyleboxOverride("grabber_area", UiTheme.Flat(UiTheme.Amber, 3, 0, 3));
+        s.AddThemeStyleboxOverride("grabber_area_highlight", UiTheme.Flat(UiTheme.Amber.Lightened(0.15f), 3, 0, 3));
+        return s;
+    }
+
+    /// <summary>
+    /// Moves the song to <paramref name="fraction"/> of its length (#734): a new start on the shared
+    /// clock, which every speaker follows by itself (it seeks back into line). Whoever owns the play
+    /// says so: the server for a world or church radio, the holder or driver for theirs.
+    /// </summary>
+    private void Scrub(float fraction)
+    {
+        var now = Now();
+        if (now.Cd == 0 || now.Length <= 0 || Refuse()) return;
+        double at = Math.Clamp(fraction, 0f, 0.995f) * now.Length;
+        double start = ClockSync.ServerNow - at;
+        switch (_target)
+        {
+            case Target.World:
+                if (Live() is { } radio) RadioManager.Instance?.Seek(radio, at);
+                break;
+            case Target.Held:
+                if (HeldLive() && RadioPlay.Decode(_inventory[_heldSlot].Data) is { } held)
+                    _inventory.SetData(_heldSlot, (held with { StartedAt = start }).Encode());
+                break;
+            case Target.Car:
+                if (Stereo() is { } me && RadioPlay.Decode(me.CarCd) is { } car) me.CarCd = (car with { StartedAt = start }).Encode();
+                break;
+            case Target.Church:
+                Interiors.ChurchRadios.Instance?.Seek(_churchPlan, at);
+                break;
+        }
     }
 
     /// <summary>A thin amber progress bar on a faint track.</summary>
@@ -914,7 +964,8 @@ public partial class RadioUi : CanvasLayer
         {
             _nowTitle.Text = Stations.Name(now.Station);
             _nowMeta.Text = "Live station · relayed by the server";
-            _bar.Value = 1;
+            _bar.SetValueNoSignal(1);
+            _bar.Editable = false;
             _time.Text = "LIVE";
         }
         else if (now.Cd != 0)
@@ -927,7 +978,8 @@ public partial class RadioUi : CanvasLayer
                 + (index >= 0 ? $" · CD {index + 1} of {order.Count}" : "")
                 + (now.Cd < 0 ? " · yours, only you hear it" : "");
             double at = Math.Clamp(ClockSync.ServerNow - now.StartedAt, 0, now.Length);
-            _bar.Value = now.Length > 0 ? at / now.Length : 0;
+            if (!_scrubbing) _bar.SetValueNoSignal(now.Length > 0 ? at / now.Length : 0);
+            _bar.Editable = !locked;
             _time.Text = $"{Clock(at)} / {Clock(now.Length)}";
         }
         else
@@ -937,7 +989,8 @@ public partial class RadioUi : CanvasLayer
                 : _target == Target.Church && CdLibrary.Instance is { RatBeatId: > 0 } ? "Chess Type Beat is loaded: press Play."
                 : _libraryShown ? (_target == Target.Car ? "Pick a station or a CD below." : "Pick a CD below.")
                 : "Press Play, or pick a CD in the Library.";
-            _bar.Value = 0;
+            _bar.SetValueNoSignal(0);
+            _bar.Editable = false;
             _time.Text = "";
         }
         _subtitle.Text = _target switch
