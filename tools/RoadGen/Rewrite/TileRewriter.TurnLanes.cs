@@ -1790,13 +1790,23 @@ public static partial class TileRewriter
                 paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, _side * inner, TurnSolid + setback, storage));
                 paint.Add(Line(PaintType.WhiteSolid, 0, 0, _side * inner, setback, TurnSolid + setback));
             }
-            // the stop line across the pocket (layout (b): across the bike lane before it too)
+            // the stop line across the pocket (layout (b): the riders' own yellow one across the bike lane before it, #700)
             double bar = SignalStopLine * 0.5 + setback;
             paint.Add(new RoadPaint
             {
                 Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.White, Width = SignalStopLine,
-                Vertices = [.. Point(bar, (lanes.BikeBetween ? inner : pocket.From) + 0.1), .. Point(bar, pocket.To - 0.1)],
+                Vertices = [.. Point(bar, pocket.From + 0.1), .. Point(bar, pocket.To - 0.1)],
             });
+            if (lanes.BikeBetween)
+            {
+                var bike = lanes.BikeLane()!.Value;
+                double bikeBar = setback + BikeStopLine * 0.5;
+                paint.Add(new RoadPaint
+                {
+                    Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.Yellow, Width = BikeStopLine,
+                    Vertices = [.. Point(bikeBar, bike.From + 0.05), .. Point(bikeBar, bike.To - 0.05)],
+                });
+            }
             stats.StopBars++;
             double second = storage >= 20 + PaintEmitter.ArrowLength ? 20 : 13;
             // the first arrow always: where a short storage behind a skewed line has no room for it 5 m
