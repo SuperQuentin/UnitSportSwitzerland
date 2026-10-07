@@ -480,6 +480,9 @@ public partial class AvatarPreview : Node3D
         (new[] { Items.ItemId.MaskCat, Items.ItemId.StripedLongsleeve, Items.ItemId.RuffledMini, Items.ItemId.GothStockings, Items.ItemId.PlatformBoots }, Headwear.None),
         (new[] { Items.ItemId.WhiteMarcel, Items.ItemId.Jeans, Items.ItemId.WhiteSneakers, Items.ItemId.SilverStuds }, Headwear.None),
         (new[] { Items.ItemId.GothicRobe, Items.ItemId.MaskBlack, Items.ItemId.ChainNecklace }, Headwear.None),
+        // #716: the recruit
+        (new[] { Items.ItemId.BlackBeanie, Items.ItemId.TazJacket, Items.ItemId.TazTrousers, Items.ItemId.CombatBoots }, Headwear.None),
+        (new[] { Items.ItemId.ArmyTee, Items.ItemId.TazTrousers, Items.ItemId.CombatBoots }, Headwear.None),
     };
 
     private void BuildOutfits()

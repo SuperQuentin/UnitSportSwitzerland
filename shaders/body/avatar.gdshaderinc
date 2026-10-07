@@ -10,7 +10,7 @@
 //   11 the procedural pixel face (#657, face.gdshaderinc): drawn at UV from the genome in UV2,
 //      its clear pixels discarded so the head's skin behind shows through; the iris is the
 //      vertex colour (the eye colour);
-//   12 checker, 13 stripes, 14 studs (#394).
+//   12 checker, 13 stripes, 14 studs (#394), 15 camo (#716: the army's TAZ 90).
 // Alpha 1 everywhere else, so every other mesh drawn with this is unchanged. Patterns are laid
 // out in the mesh's own space (origin at the feet), so they move with the figure.
 
@@ -73,7 +73,7 @@ void fragment() {
             discard;
         }
         ALBEDO = face.rgb;
-    } else if (v_fx >= 12 && v_fx <= 14) {
+    } else if (v_fx >= 12 && v_fx <= 15) {
         vec3 p = v_pos;
         if (v_fx == 12) {
             // checker: squares the size of a hand's width, the colour and near black
@@ -82,6 +82,23 @@ void fragment() {
         } else if (v_fx == 13) {
             // stripes round the body: a dark band in every three
             ALBEDO = fract(p.y * 16.0) < 0.36 ? base * 0.2 : base;
+        } else if (v_fx == 15) {
+            // camo (TAZ 90): blotches of four tones in the body's own space, hard-edged like the
+            // printed cloth. The colour is the light green; the rest are laid out from it.
+            float big = noise3(p * 9.0);
+            float mid = noise3(p * 15.0 + vec3(7.3, 1.9, 4.1));
+            float fleck = noise3(p * 26.0 + vec3(2.7, 8.8, 5.5));
+            vec3 camo = base;
+            if (big < 0.43) {
+                camo = base * vec3(0.52, 0.60, 0.50);
+            }
+            if (mid > 0.58) {
+                camo = vec3(0.13, 0.062, 0.022);   // brown (these are linear albedo, like the vertex colour)
+            }
+            if (fleck > 0.66) {
+                camo = vec3(0.008, 0.009, 0.007);
+            }
+            ALBEDO = camo;
         } else {
             // studs: bright metal dots in a grid on the dark cloth
             vec2 g = fract(vec2(around(p) * 22.0, p.y * 22.0)) - 0.5;

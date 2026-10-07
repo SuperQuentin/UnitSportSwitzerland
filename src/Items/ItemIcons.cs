@@ -26,6 +26,7 @@ public static class ItemIcons
         ['b'] = C("3c78d0"), ['B'] = C("24408a"), ['c'] = C("7cc8f0"), ['C'] = C("cbeefa"),
         ['e'] = C("48a840"), ['E'] = C("2a6a2c"), ['u'] = C("98d472"),
         ['p'] = C("8a5ab0"), ['P'] = C("4e2e70"), ['v'] = C("b894dc"), ['s'] = C("f2a4b4"),
+        ['m'] = C("8a9460"), ['M'] = C("5a6640"), ['h'] = C("b4bc90"),                         // olive: the army's aluminium (#716)
     };
 
     private static Color C(string hex) => new(hex);
@@ -1960,6 +1961,87 @@ public static class ItemIcons
             p.Rect(9, 3, 14, 3, 'g');
             p.Rect(13, 4, 14, 6, 'g');
         });
+
+        // ---- the barracks (#716, docs/notes/items/barracks-items.md) ----
+        d[ItemId.PlayingCards] = new[]
+        {
+            "................",
+            "................",
+            "...kkkkkk.......",
+            "..kBBB.kkkkkk...",
+            "..kBbbkwwwwwak..",
+            "..kBbbkwrwwwak..",
+            "..kBbckwrwwwak..",
+            "..kBcckwwwrwak..",
+            "..kBbckwwqrrak..",
+            "..kBbbkwrrRrrk..",
+            "..kBbbkwwrrrak..",
+            "..kBBBkwwwrwak..",
+            "...kkkkaaaaaak..",
+            ".......kkkkkk...",
+            "................",
+            "................",
+        };
+
+        d[ItemId.PokerChips] = new[]
+        {
+            "................",
+            "..kkkkkk........",
+            ".kqqqqqqk.......",
+            ".krwrrwrk.......",
+            ".kRRRRRRk.......",
+            ".krwrrwrk.......",
+            ".kRRRRRRk.......",
+            ".kwrwwrwk..kkkk.",
+            ".kaaaaaak.kcccck",
+            ".krwrrwrk.kbwwbk",
+            ".kRRRRRRk.kBBBBk",
+            ".krwrrwrk.kbwwbk",
+            ".kRRRRRRk.kBBBBk",
+            ".krwrrwrk.kewwek",
+            ".kRRRRRRk.kEEEEk",
+            "..kkkkkk...kkkk.",
+        };
+
+        d[ItemId.BeerBottle] = new[]
+        {
+            ".......kk.......",
+            "......kyyk......",
+            "......kYYk......",
+            "......knNk......",
+            "......knNk......",
+            "......knNk......",
+            "......knNk......",
+            ".....knNNNk.....",
+            "....knNNNNNk....",
+            "....knNNNNNk....",
+            "....kTTTTTTk....",
+            "....kTrrrrTk....",
+            "....kTTTTTTk....",
+            "....knNNNNNk....",
+            "....kNNNNNNk....",
+            ".....kkkkkk.....",
+        };
+
+        d[ItemId.Gamelle] = new[]
+        {
+            "................",
+            "......GGGG......",
+            "....GGG..GGG....",
+            "...GG......GG...",
+            "..GG........GG..",
+            "..G....kk....G..",
+            ".kkkkkkkkkkkkkk.",
+            ".khhhhhhhhhhhmk.",
+            ".kmmmmmmmmmmmMk.",
+            "kkkkkkkkkkkkkkkk",
+            "khmmmmmmmmmmmmMk",
+            "kmmmmmmmmmmmmMMk",
+            ".kkkkkkkkkkkkkk.",
+            ".khMMMMMMMMMMMk.",
+            ".kMMMMMMMMMMMMk.",
+            "..kkkkkkkkkkkk..",
+        };
 
         return d;
     }
