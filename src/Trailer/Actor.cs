@@ -123,6 +123,7 @@ public sealed class Actor
         }
         Body.DanceId = Spec.Dance;
         Body.HeldItemId = Spec.Item;
+        if (Spec.FirstPerson) Body.ViewForCheck(thirdPerson: false);
         Ready = true;
     }
 
@@ -267,6 +268,26 @@ public sealed class Actor
             string arc = _pilot != null ? $" arc {_pilot.Arc:F0} m" : !float.IsNaN(_arc) ? $" arc {_arc:F0} m" : "";
             GD.Print(string.Create(CultureInfo.InvariantCulture,
                 $"[trailer] shot {shot} t={_moving:F1} actor {Index} {Body.Ride} at {g.E:F0},{g.N:F0} alt {g.Alt:F0} {v.Length() * 3.6f:F0} km/h{arc}"));
+        }
+    }
+
+    /// <summary>
+    /// The driver's eye in the world and the way it looks, as the cockpit camera has it: the rig's
+    /// <c>EyeFrame</c> on the vehicle's body (so the dash stays put when the nose dips); else the
+    /// ride's first-person eye on the body.
+    /// </summary>
+    public (Vector3 Eye, Vector3 Ahead)? Seat
+    {
+        get
+        {
+            if (Body == null || !GodotObject.IsInstanceValid(Body) || Body.Vehicle is not { } ride) return null;
+            if (Body.Visual is { } visual
+                && ((visual as Avatar.CarRig)?.EyeFrame ?? (visual as Avatar.HeavyRig)?.EyeFrame) is { } frame)
+            {
+                var eye = visual.GlobalTransform * frame;
+                return (eye.Origin, (-eye.Basis.Z).Normalized());
+            }
+            return (Body.GlobalTransform * ride.FirstPersonEye, (-Body.GlobalBasis.Z).Normalized());
         }
     }
 

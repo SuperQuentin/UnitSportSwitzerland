@@ -368,7 +368,7 @@ public static class TrailerScript
         new()
         {
             Number = 19, Name = "Party", FromBar = 35, Bars = 2, Feature = "emotes, dances, together",
-            Hour = 19.4,
+            Hour = 19.15,
             Cast = Circle(new Spot(2507810, 1137290), 2.6f, [Ymca, Cabbage, Chicken, Macarena, Griddy, Gangnam], 30),
             Keys = Orbit(new Spot(2507810, 1137290), 7f, 6.2f, 1.4f, 1.6f, 200f, 260f, 3.9, 28, lookUp: 1.1f),
             Captions = [new(0.25, 3.5, "Together.")],
@@ -410,8 +410,9 @@ public static class TrailerScript
             ],
             Keys =
             [
-                new(0, Pt.On(0, 0f, 2.5f, 13f), Pt.On(2, 0f, 0f), 35),
-                new(1.95, Pt.On(0, 0f, 2.5f, 13f), Pt.On(3, 0f, 0f), 35),
+                // above and behind the tail, clear of the ramp, looking down on them falling away
+                new(0, Pt.On(0, 6f, 4f, 26f), Pt.On(2, 0f, 0f), 35),
+                new(1.95, Pt.On(0, 6f, 4f, 26f), Pt.On(3, 0f, 0f), 35),
             ],
             Smooth = 0.05f, Preroll = 0.05,
         },
@@ -518,19 +519,19 @@ public static class TrailerScript
         },
         new()
         {
-            Number = 32, Name = "Swim", FromBar = 51, Bars = 2, Feature = "swimming",
-            Hour = 16.5,
+            Number = 32, Name = "Cockpit", FromBar = 51, Bars = 2, Feature = "first-person driving, car cabins",
+            Hour = 16.5, Traffic = 0,
             Cast =
             [
-                // in the lake off Nyon, swimming along the shore
-                new() { At = new Spot(2507845, 1137188), Heading = 230, Drive = Drive.Walk, Walk = t => (new Vector2(0f, 1f), true), Seed = 17 },
+                new() { Ride = Car(Supra), At = Furka, Toward = FurkaTop, Drive = Drive.Road, Route = "cockpit", Arc = 900, Skill = 1.05f, FirstPerson = true },
             ],
             Keys =
             [
-                new(0, Pt.On(0, 1.6f, 0.7f, 3.2f), Pt.On(0, 0f, -0.2f, -5f), 28),
-                new(3.9, Pt.On(0, 2.2f, 0.9f, 2.6f), Pt.On(0, 0f, -0.2f, -5f), 28),
+                // over the driver's shoulder: the wheel, the dash and the road through the windscreen
+                new(0, Pt.Cockpit(0, -0.7f, 0.12f), Pt.Cockpit(0, 30f, -1.5f), 28),
+                new(3.9, Pt.Cockpit(0, -0.7f, 0.12f), Pt.Cockpit(0, 30f, -1.5f), 28),
             ],
-            Smooth = 0.25f, Preroll = 2,
+            Preroll = 5,
         },
         new()
         {

@@ -236,6 +236,7 @@ public partial class TrailerDirector : Node
             Actor = i => i >= 0 && i < _actors.Count ? _actors[i].Frame : null,
             Surface = p => _chunks.TryGetSurface(p, out float g) ? g : null,
             Road = (key, at) => _routes.Point(key, at, _chunks),
+            Seat = i => i >= 0 && i < _actors.Count ? _actors[i].Seat : null,
         };
         _settledFor = 0;
         _waitWall = 0;
@@ -392,6 +393,8 @@ public partial class TrailerDirector : Node
             string path = Path.Combine(_recordDir, $"shot{shot.Number:00}.mp4");
             _recorder = FrameRecorder.Start(path, _size.X, _size.Y, _fps);
             if (_recorder == null) { _failures++; GD.PrintErr($"[trailer] shot {shot.Number}: no recorder, not filmed"); }
+            // where in the song it starts, for tools/trailer.sh to lay the music under a cut of any shots
+            else File.WriteAllText(Path.ChangeExtension(path, ".start"), shot.Start.ToString("F3", CultureInfo.InvariantCulture));
         }
         _stills.Clear();
         if (_stillsDir != null)

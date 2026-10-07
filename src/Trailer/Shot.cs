@@ -49,6 +49,15 @@ public sealed record Pt
 
     public string? Route { get; private init; }
 
+    /// <summary>
+    /// From actor <paramref name="actor"/>'s own seat: its ride's first-person eye
+    /// (<see cref="Rideable.FirstPersonEye"/>), or <paramref name="ahead"/> m ahead of it along the way
+    /// its body faces: the driver's view through the windscreen.
+    /// </summary>
+    public static Pt Cockpit(int actor, float ahead = 0f, float up = 0f) => new() { Actor = actor, Seat = true, Offset = new Vector3(0f, up, ahead) };
+
+    public bool Seat { get; private init; }
+
     /// <summary>A look along a compass bearing (0 north, 90 east), pitched up (+) or down (−), degrees.</summary>
     public static Pt Dir(float bearing, float pitch = 0f) => new() { Bearing = bearing, Pitch = pitch };
 
@@ -131,6 +140,8 @@ public sealed record Cast
     public bool Lights { get; init; }
     /// <summary>A car preset (<see cref="CarSetups"/>), 0 = none.</summary>
     public int Setup { get; init; }
+    /// <summary>Seen from its own seat (<see cref="Pt.Cockpit"/>): its machine draws the cockpit, as for its driver.</summary>
+    public bool FirstPerson { get; init; }
     /// <summary>What it holds (<see cref="Items.ItemId"/>), 0 = nothing.</summary>
     public int Item { get; init; }
     /// <summary>Its machine's doors (<see cref="FootPlayer.DoorsOpen"/>): the freighter's ramp is bit 3.</summary>

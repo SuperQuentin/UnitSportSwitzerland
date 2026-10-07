@@ -101,7 +101,7 @@ Times are song time. Lens in mm (full-frame equivalent; the director converts to
 | 29 | 47 | 1:29.9-1:31.9 | **Lean.** A Ducati Monster chases a Skyline through the Furka sweepers. | Tracking, low beside the bike, 50 mm | Motorbikes |
 | 30 | 48 | 1:31.9-1:33.8 | **Air.** A jetski through a storm sea off Chillon. | Ahead of it at water level, 24 mm | Boats, sea state |
 | 31 | 49-50 | 1:33.8-1:37.8 | **Heavy metal.** The AN-124 low along the shore off Nyon at sunset. | From the jetty, panning as it passes, 35 mm | AN-124 |
-| 32 | 51-52 | 1:37.8-1:41.7 | **Swim.** A player runs off the grass into the lake at Nyon and swims. | Behind her, 28 mm | Swimming |
+| 32 | 51-52 | 1:37.8-1:41.7 | **Cockpit.** From the driver's seat of a Supra up the Furka sweepers: dash, dials, wheel, the road through the windscreen. | The driver's eye, 24 mm | First-person driving, car cabins |
 | 33 | 53-54 | 1:41.7-1:45.6 | **Downhill.** A road cyclist down the Tremola's hairpins. | Chase, 35 mm | Road bike |
 | 34 | 55-56 | 1:45.6-1:49.5 | **Gridlock.** Zürich at dusk from above Bellevue: lit blocks, traffic. | High, slow pan, 50 mm | City traffic |
 | 35 | 57 | 1:49.5-1:51.4 | **Flag.** A player cheers with the Swiss flag on the Gornergrat, the Matterhorn behind. | Low hero angle, 24 mm | The Swiss flag |

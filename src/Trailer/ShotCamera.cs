@@ -17,6 +17,9 @@ public sealed class ShotCamera
     public required Func<Spot, Vector3?> Place { get; init; }
     /// <summary>An actor's position and its flat travel direction, or null when it is not there.</summary>
     public required Func<int, (Vector3 At, Vector3 Ahead)?> Actor { get; init; }
+    /// <summary>An actor's first-person eye and the way its body faces, or null when it rides nothing.</summary>
+    public Func<int, (Vector3 Eye, Vector3 Ahead)?> Seat { get; init; } = _ => null;
+
     /// <summary>A point on a shot's road: (route, arc, right, up), or null while it is not built.</summary>
     public Func<string, Vector3, Vector3?> Road { get; init; } = (_, _) => null;
 
@@ -110,6 +113,7 @@ public sealed class ShotCamera
         }
         if (p.World is { } spot) return Place(spot);
         if (p.Route is { } route) return Road(route, p.Offset);
+        if (p.Seat) return Seat(p.Actor) is { } seat ? seat.Eye + seat.Ahead * p.Offset.Z + Vector3.Up * p.Offset.Y : null;
         if (Actor(p.Actor) is not { } frame) return null;
         var right = frame.Ahead.Cross(Vector3.Up).Normalized();
         return frame.At + right * p.Offset.X + Vector3.Up * p.Offset.Y - frame.Ahead * p.Offset.Z;
