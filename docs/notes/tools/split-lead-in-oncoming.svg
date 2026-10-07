@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 760" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14">
+  <!-- 1 m = 20 px across, 1 m = 4 px along (stretched across so the offsets read). Road axis at y = 330. -->
+  <defs>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2e8b57"/></marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2364aa"/></marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#c0392b"/></marker>
+  </defs>
+  <rect width="1300" height="760" fill="#eef0e6"/>
+  <text x="20" y="30" font-size="20" font-weight="700" fill="#222">Split lead-in: what the oncoming traffic does today</text>
+  <text x="20" y="54" fill="#333">An 8 m road (4 m each way), a single left pocket split half and half: the centre line moves 1.5 m north over the 20 m taper, each edge widens 1.5 m. Across stretched x5.</text>
+
+  <!-- carriageway: 8 m wide, widening 1.5 m each side over the taper (x 160..400), then storage to the mouth (x 1040) -->
+  <path d="M40,250 L160,250 L400,220 L1040,220 L1040,440 L400,440 L160,410 L40,410 Z" fill="#9a9a9a"/>
+  <path d="M1040,200 L1120,200 L1120,460 L1040,460 Z" fill="#8a8a8a"/>
+  <text x="1050" y="190" fill="#333">junction</text>
+  <!-- edges -->
+  <path d="M40,250 L160,250 L400,220 L1040,220 M40,410 L160,410 L400,440 L1040,440" stroke="#fff" stroke-width="2" fill="none"/>
+  <!-- the old axis (where the centre line was) and the moved centre line -->
+  <path d="M40,330 L1040,330" stroke="#666" stroke-width="1.5" stroke-dasharray="6 6" fill="none"/>
+  <text x="44" y="324" fill="#555" font-size="12">road axis (old centre line)</text>
+  <path d="M40,330 L160,330 L400,300 L1040,300" stroke="#fff" stroke-width="3" fill="none"/>
+  <text x="430" y="318" fill="#fff" font-size="12">moved centre line (1.5 m north of the axis)</text>
+  <!-- hatch and pocket lane -->
+  <path d="M160,330 L400,360 L400,300 Z" fill="#b0b0b0" stroke="#fff" stroke-width="1.5"/>
+  <path d="M400,360 L1040,360" stroke="#fff" stroke-width="2" stroke-dasharray="14 10" fill="none"/>
+  <text x="700" y="350" fill="#222" font-size="13">left pocket (1.5 m north .. 1.5 m south)</text>
+  <text x="700" y="410" fill="#222" font-size="13">through lane</text>
+  <text x="700" y="240" fill="#222" font-size="13">oncoming lane, as painted (1.5 .. 5.5 m north)</text>
+  <!-- labels for directions -->
+  <text x="44" y="400" fill="#222" font-size="12">approach, driving east →</text>
+  <text x="44" y="268" fill="#222" font-size="12">← oncoming, leaving the junction westward</text>
+
+  <!-- trajectories -->
+  <!-- through car: from 2 m south to the through lane's middle 3.5 m south: veers 1.5 m -->
+  <path d="M60,370 L160,370 L400,400 L1030,400" stroke="#2e8b57" stroke-width="3" fill="none" marker-end="url(#g)"/>
+  <!-- left-turner: into the pocket's middle (axis) -->
+  <path d="M60,372 L250,372 L400,330 L1030,330" stroke="#2364aa" stroke-width="3" fill="none" stroke-dasharray="2 0" marker-end="url(#b)" opacity="0.85"/>
+  <!-- oncoming today: keeps 2 m north of the old axis (its old lane's middle) -->
+  <path d="M1030,290 L50,290" stroke="#c0392b" stroke-width="3" fill="none" marker-end="url(#r)"/>
+  <!-- its body: 1.9 m wide, edges at 1.05 and 2.95 m north: shaded along the storage -->
+  <rect x="420" y="271" width="600" height="38" fill="#c0392b" opacity="0.18"/>
+  <!-- oncoming as it should: the moved lane's middle, 3.5 m north, back to 2 m over the taper -->
+  <path d="M1030,260 L400,260 L160,290 L50,290" stroke="#c0392b" stroke-width="2.5" stroke-dasharray="10 7" fill="none"/>
+
+  <!-- legend -->
+  <g transform="translate(20,500)">
+    <path d="M0,0 L40,0" stroke="#2e8b57" stroke-width="3"/><text x="50" y="5" fill="#222">through car: veers 1.5 m right (was 3 m before the split)</text>
+    <path d="M0,28 L40,28" stroke="#2364aa" stroke-width="3"/><text x="50" y="33" fill="#222">left-turner: into the pocket, which now starts 1.5 m north of the axis</text>
+    <path d="M0,56 L40,56" stroke="#c0392b" stroke-width="3"/><text x="50" y="61" fill="#222">oncoming car today: keeps its old line, 2 m north of the axis (traffic keeps right of the road axis; nothing tells it the lane moved)</text>
+    <rect x="0" y="76" width="40" height="14" fill="#c0392b" opacity="0.18"/><text x="50" y="88" fill="#222">its body (1.9 m): edge at 1.05 m north, the moved centre line at 1.5 m: 0.45 m over the line, onto the pocket</text>
+    <path d="M0,112 L40,112" stroke="#c0392b" stroke-width="2.5" stroke-dasharray="10 7"/><text x="50" y="117" fill="#222">what it should drive: veer out 1.5 m with its lane over the taper, as the through car veers in</text>
+    <text x="0" y="152" fill="#222" font-weight="600">Double left (3 m to the other side): the oncoming body would cover 1.95 m of the left pocket.</text>
+    <text x="0" y="178" fill="#222">Why: a car's lateral line is its edge's keep-right offset from the road axis; only an approach (lane record, LANE) moves cars near a junction,</text>
+    <text x="0" y="198" fill="#222">and cars leaving a junction read no record. The fix: a departing-side shift per arm (the mirror strip's width over distance) that traffic adds to its line.</text>
+  </g>
+</svg>

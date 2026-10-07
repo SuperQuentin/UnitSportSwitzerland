@@ -120,7 +120,7 @@ Plan and reasoning: `docs/plans/intersection-lanes.md`. What is built:
   island (#682) keeps 1.7 m where the island stands (`IslandKeepHatch`; the user's exception): both facing shares give
   way alike. Readers outside the widening (stop lines, crossings, poles, left guides, lane records) use the layout's
   `Shift`/`EdgeOut`. Real tiles: 18 of 27 pockets split (17 by half, 1 by a quarter); overlap after junctions as
-  before. Not done: oncoming departing traffic keeps its old line (on a single pocket it stays in its moved lane).
+  before. Not done: oncoming departing traffic keeps its old line, its body reaching ~0.45 m onto the pocket (~1.95 m beside a double left): `split-lead-in-oncoming.png` (schema); precomputed junction trajectories, #709.
 - **Taper per lane**: a left pocket of k lanes has a k times longer taper (the same slope).
 - Test region: J7's east approach marks no right turn (tight north-east corner, diagonal zebras on the north and east
   arms from OSM nodes, J7 has no sidewalks); the unlit T south of J3: zebras on the stem and the west arm, the east arm's
