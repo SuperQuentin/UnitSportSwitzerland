@@ -181,6 +181,8 @@ public static class Recipes
         ItemId.Dogtag,   // a match's own (#480)
         // sold only (#494): the farm co-op's fertiliser
         ItemId.Fertiliser,
+        // found or bought (#716): the barracks' small goods
+        ItemId.PlayingCards, ItemId.PokerChips, ItemId.BeerBottle, ItemId.Gamelle,
     }.Concat(FishCatalog.Items).ToHashSet();   // fish are caught (#493)
 
     /// <summary>Everything a recipe gives, the main output first.</summary>

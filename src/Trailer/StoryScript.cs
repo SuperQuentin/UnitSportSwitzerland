@@ -536,7 +536,7 @@ public static class StoryScript
 
         // ---- ending: the photo (outro) -------------------------------------------------------------
         Ending(37, 58, 4, 0),
-        Ending(38, 62, 4, 4 * Song.BarLength),
+        Ending(38, 62, 4, 4 * Song.VoxelRevolution.BarLength),
     };
 
     /// <summary>
@@ -551,7 +551,7 @@ public static class StoryScript
             new(0, Pt.Alt(2635980, 1158700, 1080), Pt.Alt(2635950, 1160600, 860), 35),
             new(3.9, Pt.Alt(2635960, 1159350, 1030), Pt.Alt(2635950, 1161200, 840), 35),
         ],
-        KeysFrom = part * Song.BarLength,
+        KeysFrom = part * Song.VoxelRevolution.BarLength,
         Preroll = 0.5,
     };
 
@@ -586,7 +586,7 @@ public static class StoryScript
             ?
             [
                 new(1.2, 6.6, "UNITSPORT SWITZERLAND", "Meet you at the top.", Title: true),
-                new(3.6, 4.2, "", Song.Credit),
+                new(3.6, 4.2, "", Song.VoxelRevolution.Credit),
             ]
             : [],
     };

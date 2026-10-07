@@ -62,6 +62,11 @@ public sealed record Pt
     public static Pt Dir(float bearing, float pitch = 0f) => new() { Bearing = bearing, Pitch = pitch };
 
     public bool IsDirection => !float.IsNaN(Bearing);
+
+    /// <summary>A point of the shot's set (<see cref="Shot.Set"/>), in its own metres (the dormitory's: see <see cref="DormSet"/>).</summary>
+    public static Pt Set(float x, float y, float z) => new() { InSet = new Vector3(x, y, z) };
+
+    public Vector3? InSet { get; private init; }
 }
 
 /// <summary>
@@ -177,6 +182,13 @@ public sealed record Cast
     public bool FirstPerson { get; init; }
     /// <summary>What it holds (<see cref="Items.ItemId"/>), 0 = nothing.</summary>
     public int Item { get; init; }
+    /// <summary>When it uses what it holds (<see cref="FootPlayer.ItemAction"/> 2): a drink goes to the mouth.</summary>
+    public Func<double, bool>? Use { get; init; }
+    /// <summary>
+    /// In the shot's set (<see cref="Shot.Set"/>) at this point of it, facing <see cref="Heading"/>
+    /// (0 = the set's −Z): inside, as a player in an interior, the terrain's rules off.
+    /// </summary>
+    public Vector3? InSet { get; init; }
     /// <summary>Its machine's doors (<see cref="FootPlayer.DoorsOpen"/>): the freighter's ramp is bit 3.</summary>
     public byte Doors { get; init; }
     /// <summary>A boat: a dry spot to get in at, before it is put on the water at <see cref="At"/>.</summary>
@@ -200,6 +212,10 @@ public sealed record Prop(Spot At, float Bearing, Vector3 Size, Color Colour)
     /// <summary>Or on the shot's road <see cref="Route"/>, <see cref="Arc"/> m along it, square across it.</summary>
     public string? Route { get; init; }
     public float Arc { get; init; }
+    /// <summary>Or in the shot's set, at this point of it (an item rests on whatever is under it there: the table).</summary>
+    public Vector3? InSet { get; init; }
+    /// <summary>A character sitting there instead, the hip at the spot, facing <see cref="Bearing"/>: a still figure, as a passenger sits.</summary>
+    public Character? Seated { get; init; }
 }
 
 /// <summary>
@@ -241,6 +257,19 @@ public sealed record Shot
     public IReadOnlyList<Caption> Captions { get; init; } = Array.Empty<Caption>();
     public IReadOnlyList<Line> Chat { get; init; } = Array.Empty<Line>();
     public IReadOnlyList<Super> Supers { get; init; } = Array.Empty<Super>();
+    /// <summary>
+    /// A film set built for the shot (the dormitory, <see cref="DormSet.Build"/>): put far under
+    /// <see cref="SetAt"/> (the place it stands for), lit by its own lamps; the camera's
+    /// <see cref="Pt.Set"/> points, the actors' <see cref="Cast.InSet"/> and props are in it.
+    /// </summary>
+    public Func<Godot.Node3D>? Set { get; init; }
+    public Spot SetAt { get; init; }
+    /// <summary>
+    /// A film's moonlight at night (0 = none): a soft blue light from high in the south, this
+    /// strong, over the whole place, so what the game's night leaves black reads on screen. The
+    /// lamps and lit windows stay what they are.
+    /// </summary>
+    public float Moon { get; init; }
     /// <summary>A photo taken at this shot time: a flash, then the frame held as a polaroid to the end.</summary>
     public double? Photo { get; init; }
     /// <summary>Where the photo is taken from (the photographer's view, the film's camera elsewhere); null: the film's frame.</summary>
@@ -251,5 +280,7 @@ public sealed record Shot
 
     public double Start => Song.Bar(FromBar);
     public double End => Math.Min(Song.Bar(FromBar + Bars), Song.End);
+    /// <summary>The film's song, whose bars the shot is cut on.</summary>
+    public Song Song { get; init; } = Song.VoxelRevolution;
     public double Length => End - Start;
 }
