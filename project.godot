@@ -49,6 +49,14 @@ world_disco_beat={
 "type": "float",
 "value": 0.0
 }
+world_music={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+world_music_beat={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
 xr_smooth={
 "type": "bool",
 "value": false

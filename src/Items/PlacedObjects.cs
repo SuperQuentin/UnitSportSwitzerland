@@ -289,6 +289,9 @@ public partial class PlacedObjects : Node
         node.Transform = o.WorldTransform(_origin);
         AddChild(node);
         _visuals[o.Id] = node;
+        // near music (#734) its meshes squash and hop on the beat; the body and its colliders stay
+        foreach (var child in node.GetChildren())
+            if (child is MeshInstance3D mesh) BeatField.Add(mesh, 0.7f, 0.15f);
     }
 
     private void Redraw()

@@ -364,7 +364,12 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
     /// </summary>
     public override void _Process(double delta)
     {
-        if (!NetworkManager.DedicatedServer && DisplayServer.GetName() != "headless") UpdateHeld();
+        if (!NetworkManager.DedicatedServer && DisplayServer.GetName() != "headless")
+        {
+            UpdateHeld();
+            // things near the music move with it (#734): drawn only, never physics
+            BeatField.Step(this, GetViewport()?.GetCamera3D()?.GlobalPosition, ClockSync.ServerNow);
+        }
         if (!NetLink.IsServer(this)) return;   // a client, or the link is down (#211)
         _housekeeping += delta;
         if (_housekeeping < 1) return;

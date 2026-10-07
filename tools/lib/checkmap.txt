@@ -314,6 +314,8 @@ src/Combat/              full   tools/pvpcheck.sh
 src/Items/Weapons        full   tools/pvpcheck.sh
 src/Items/               full   tools/gunshotcheck.sh
 src/Items/Radio          full   tools/sparklecheck.sh
+src/Items/Beat           full   tools/beatfieldcheck.sh
+src/Items/Radio          full   tools/beatfieldcheck.sh
 src/Items/               full   tools/placedcheck.sh
 src/Items/               full   tools/plantcheck.sh
 src/Items/               full   tools/useanimcheck.sh

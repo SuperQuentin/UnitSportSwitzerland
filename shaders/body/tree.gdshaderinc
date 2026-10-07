@@ -55,6 +55,7 @@ float near_keep(vec3 v) {
 // and the silhouette and the flat facets match the 3D tree from any angle: a camera-facing
 // sprite would shrink to a sliver seen from above, and the forest floor would show through.
 global uniform vec3 world_cam_pos;
+#include "res://shaders/common/music.gdshaderinc"
 uniform bool tree_lod = false;   // the 3D trees: collapse beyond tree_near (the tile has billboards)
 uniform float tree_near = 220.0;
 uniform float tree_fade = 40.0;
@@ -122,8 +123,20 @@ void vertex() {
         }
     }
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-    view_pos = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
-    POSITION = retro_snap(PROJECTION_MATRIX * MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
+    // near music (#734): the crown sways a swing per two beats, louder wider, and leans away on
+    // the kicks; the trunk's foot stays put (the sway grows with the height up the tree)
+    vec3 base = MODEL_MATRIX[3].xyz;
+    float mr = music_reach(base);
+    if (mr > 0.0) {
+        float tall = max(length(MODEL_MATRIX[1].xyz), 0.5);
+        float up = clamp((world_pos.y - base.y) / tall, 0.0, 1.0);
+        vec3 away = normalize(vec3(base.x - world_music.x, 0.0, base.z - world_music.z) + vec3(1e-4, 0.0, 0.0));
+        vec3 side = vec3(-away.z, 0.0, away.x);
+        float swing = sin(6.2831853 * world_music_beat.w) * (0.3 + 0.7 * world_music_beat.y);
+        world_pos += (side * swing * 0.05 + away * world_music_beat.x * 0.035) * tall * mr * up * up;
+    }
+    view_pos = (VIEW_MATRIX * vec4(world_pos, 1.0)).xyz;
+    POSITION = retro_snap(PROJECTION_MATRIX * VIEW_MATRIX * vec4(world_pos, 1.0));
 #endif
 }
 
