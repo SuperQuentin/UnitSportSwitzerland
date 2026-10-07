@@ -201,7 +201,7 @@ public sealed class Car : Rideable, IEngined
     public override bool IsVehicle => true;
     public override bool HasEngine => true;
     public override bool CanHop => false;
-    public override float MaxHealth => 160f;
+    public override float MaxHealth => IsKart ? 110f : 160f;
     public override float WheelLock => Core.SteeringWheel.LockOverride ?? Spec.LockTurns * Mathf.Tau;
     /// <summary>Steering-wheel turn over road-wheel angle: the spec's, unless <c>--wheellock</c> sets another lock.</summary>
     private float Ratio => Core.SteeringWheel.LockOverride is { } l ? l * 0.5f / Spec.MaxSteer : Spec.SteerRatio;
@@ -214,19 +214,23 @@ public sealed class Car : Rideable, IEngined
         HumanMeshBuilder.MountsForDriver(CarMeshBuilder.SeatFor(Spec.Body, Spec.Wheelbase)).Eye
         + new Vector3(0, Spec.Body.Lift - Spec.Body.Drop, 0);
     private Vector3? _eye;
-    public override float EyeHeight => 1.1f;
+    public override float EyeHeight => IsKart ? 0.8f : 1.1f;
     // Up and behind, looking down ~25° over the roof: from a level camera at roof height the car
-    // itself hid the road you were about to drive onto.
-    public override float ChaseDistance => 6.2f;
-    public override float ChaseHeight => 4.1f;
-    public override float ChasePitch => -0.44f;
+    // itself hid the road you were about to drive onto. A kart is 1 m high: closer and lower.
+    public override float ChaseDistance => IsKart ? 4.2f : 6.2f;
+    public override float ChaseHeight => IsKart ? 2.4f : 4.1f;
+    public override float ChasePitch => IsKart ? -0.34f : -0.44f;
     // stays above the car in a drift rather than swinging round to the side of it
     public override float ChaseFollowsTravel => 0.15f;
     public override float BaseFov => 68f;
     public override float MaxFov => 90f;
-    public override float FovSpeed => 45f;
-    public override float BodyRadius => 0.85f;
-    public override float BodyHeight => 1.7f;
+    // a kart tops out at 18 m/s: the view opens fully there, so 65 km/h at ground level feels like it
+    public override float FovSpeed => IsKart ? 18f : 45f;
+    // a kart is 1.4 m wide and 1.1 m high with its driver: the car's capsule would be a van's
+    public override float BodyRadius => IsKart ? 0.7f : 0.85f;
+    public override float BodyHeight => IsKart ? 1.2f : 1.7f;
+    // its hull starts where the frame does, not at a car's 0.45 m, or only the driver would collide
+    public override float HullLift => IsKart ? 0.1f : 0.45f;
     public override float DismountSpeed => 1.5f;
     // measured from this model's own mesh (Rideable.Measured): an AE86 is not an NSX. Cached per
     // model and preset (an SUV stands taller than the same car on semi-slicks), so always that
@@ -295,6 +299,8 @@ public sealed class Car : Rideable, IEngined
     /// <summary>Hydraulics pumping, as the driver set them: O / D-pad left on a car that has them (#464).</summary>
     public bool Bouncing { get; set; }
     public bool HasHydraulics => Spec.Body.Hydraulics;
+    /// <summary>A rental go-kart (#715): no suspension, a solid rear axle, a driver who sits on the road, and a body that can trip and tip over.</summary>
+    public bool IsKart => Spec.Body.Shape == BodyShape.Kart;
     /// <summary>Longitudinal and lateral acceleration, m/s² (+ forward, + left), for body pitch and roll.</summary>
     public float AccelX { get; private set; }
     public float AccelY { get; private set; }
@@ -336,7 +342,15 @@ public sealed class Car : Rideable, IEngined
     public Car Clone() => (Car)MemberwiseClone();
 
     public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) =>
-        CarRig.Create(Spec.Body, Spec.Wheelbase, Spec.Gauges, HumanPalette.ForRider(riderIndex) with { Outfit = outfit });
+        CarRig.Create(Dressed(riderIndex), Spec.Wheelbase, Spec.Gauges, HumanPalette.ForRider(riderIndex) with { Outfit = outfit });
+
+    /// <summary>
+    /// The body as <paramref name="riderIndex"/> sees it: a rental kart wears the colour and number its
+    /// rider's seed picks (<see cref="KartMeshBuilder.Dress"/>), unless the garage has painted it; every
+    /// other car is the catalog's own.
+    /// </summary>
+    private CarBody Dressed(int riderIndex) =>
+        IsKart && Tuning[TuneSlot.Paint] == 0 ? KartMeshBuilder.Dress(Spec.Body, riderIndex) : Spec.Body;
 
     public override Avatar.SeatAnchor[] Seats => SeatsOf((Kind, Spec.SetupId), () =>
     {
@@ -349,7 +363,7 @@ public sealed class Car : Rideable, IEngined
     public override bool Driverless => true;
 
     /// <summary>Left in the world: the same car with nobody at the wheel.</summary>
-    public override Node3D BuildParkedVisual(int riderIndex) => CarRig.Create(Spec.Body, Spec.Wheelbase, Spec.Gauges);
+    public override Node3D BuildParkedVisual(int riderIndex) => CarRig.Create(Dressed(riderIndex), Spec.Wheelbase, Spec.Gauges);
 
     public override void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion)
     {
