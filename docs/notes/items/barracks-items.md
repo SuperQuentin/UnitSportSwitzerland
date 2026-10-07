@@ -35,5 +35,7 @@ Items for a night in the barracks and the recruit's kit (the Drognens music clip
   onto its floor, so a hanging Gamelle is not under it); `--modelsonly TAZ` and every other look: the
   `[Showcase("Clothes")]` set in `HumanMeshBuilder.Showcase.cs` (one figure per garment). Whole outfits:
   `--avatars 1.5 out.png --outfits 0 --focus 15 --count 2 --view 180` (the two recruits).
+- **Remote check**: `tools/useanimcheck.sh` (full tier) has A drink a beer and B must see `ItemAction 2` / Mouth with a `BeerBottle` held;
+  B polls the live remote body of A (`Other()`), because A's body is replaced on B when it leaves and re-enters its view.
 - **Tests**: `BarracksTests` (pinned numbers, where it is sold, appended slots); `--outfitcheck` builds the
   garments in every pose and reads the Camo finish back; `--iconsheet`, `--shopcheck`, `--lootchancecheck`.
