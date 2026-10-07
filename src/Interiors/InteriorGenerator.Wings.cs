@@ -459,6 +459,12 @@ public static partial class InteriorGenerator
                 var b = ToBox(w, rail.X1, rail.Z1);
                 into.Rails.Add(new RectPlan(a.X, a.Z, b.X, b.Z));
             }
+            foreach (var guard in from.Guards)
+            {
+                var a = ToBox(w, guard.X0, guard.Z0);
+                var b = ToBox(w, guard.X1, guard.Z1);
+                into.Guards.Add(new RectPlan(a.X, a.Z, b.X, b.Z));
+            }
             foreach (var fl in from.AllFlights())
             {
                 var t = TurnFlight(w, fl);

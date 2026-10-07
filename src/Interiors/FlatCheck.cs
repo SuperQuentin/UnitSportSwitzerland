@@ -84,6 +84,9 @@ public static class FlatCheck
         int flats = 0, locked = 0, lit = 0, livings = 0, wetLit = 0, wet = 0, deadEnds = 0;
         var walkedThrough = new List<string>();
         var dark = new List<string>();
+        var blockedRooms = new List<string>();
+        var turnedAway = new List<string>();
+        int tvs = 0, tvsFacing = 0;
 
         for (int i = 0; i < Boxes.Length; i++)
         {
@@ -206,6 +209,30 @@ public static class FlatCheck
             if (box.Shops)
                 Expect(ground.Rooms.Any(r => r.Type == RoomType.Shop), $"{box.What}: shops on the ground floor");
 
+            // furniture leaves a way through (#680): from a room's first doorway, every other is reachable
+            for (int f = 0; f < l.Floors.Count; f++)
+                foreach (var r in l.Floors[f].Rooms)
+                {
+                    var pieces = l.Furniture.Where(p => p.Floor == f && p.H > 0.05f && p.X > r.X0 && p.X < r.X1 && p.Z > r.Z0 && p.Z < r.Z1)
+                        .Select(p => p.Turns % 2 == 0
+                            ? new RectPlan(p.X - p.W / 2, p.Z - p.D / 2, p.X + p.W / 2, p.Z + p.D / 2)
+                            : new RectPlan(p.X - p.D / 2, p.Z - p.W / 2, p.X + p.D / 2, p.Z + p.W / 2)).ToList();
+                    if (InteriorGenerator.ShutDoorways(r, pieces) > 0) blockedRooms.Add($"{box.What} floor {f} {r.Type} {r.X0:F1},{r.Z0:F1}");
+                    // and no corner of it is walled off by a cage or a cupboard (a 1.5 m² pocket at most)
+                    if (InteriorGenerator.SealedFloor(r, pieces) > 1.5f) blockedRooms.Add($"{box.What} floor {f} {r.Type} {r.X0:F1},{r.Z0:F1}: {InteriorGenerator.SealedFloor(r, pieces):F1} m² sealed off");
+                    // a TV looks at its sofa
+                    if (r.Type != RoomType.Living) continue;
+                    foreach (var tv in l.Furniture.Where(p => p.Floor == f && p.Type == FurnitureType.Tv && p.X > r.X0 && p.X < r.X1 && p.Z > r.Z0 && p.Z < r.Z1))
+                    {
+                        var sofa = l.Furniture.FirstOrDefault(p => p.Floor == f && p.Type == FurnitureType.Sofa && p.X > r.X0 && p.X < r.X1 && p.Z > r.Z0 && p.Z < r.Z1);
+                        if (sofa == null) continue;
+                        tvs++;
+                        var (fx, fz) = (tv.Turns & 3) switch { 0 => (0f, 1f), 1 => (1f, 0f), 2 => (0f, -1f), _ => (-1f, 0f) };
+                        if (fx * (sofa.X - tv.X) + fz * (sofa.Z - tv.Z) > -0.5f) tvsFacing++;
+                        else turnedAway.Add($"{box.What} floor {f} room {r.X0:F1},{r.Z0:F1}-{r.X1:F1},{r.Z1:F1} sofa {sofa.X:F1},{sofa.Z:F1} t{sofa.Turns} tv {tv.X:F1},{tv.Z:F1} t{tv.Turns}");
+                    }
+                }
+
             var mine = doors.Where(d => d.Index == i && d.Width > 0).ToList();
             foreach (var d in mine)
                 Expect(l.EntranceOf(d.KeyIn(tile.Id).ToString()) != null,
@@ -220,6 +247,8 @@ public static class FlatCheck
         GD.Print($"[flatcheck] {wetLit} of {wet} kitchens, bathrooms and WCs have one (those on a facade)");
         Expect(walkedThrough.Count == 0, $"{deadEnds - walkedThrough.Count} of {deadEnds} bedrooms, bathrooms and WCs have one door"
             + (walkedThrough.Count > 0 ? ": " + string.Join("; ", walkedThrough.Distinct().Take(6)) : ""));
+        Expect(blockedRooms.Count == 0, "no room has a doorway or a corner shut off by its furniture" + (blockedRooms.Count > 0 ? ": " + string.Join("; ", blockedRooms.Take(6)) : ""));
+        Expect(tvs == 0 || tvsFacing == tvs, $"{tvsFacing} of {tvs} TVs face their sofa" + (turnedAway.Count > 0 ? ": " + string.Join("; ", turnedAway.Distinct().Take(8)) : ""));
         failures += Ramps(dir);
         GD.Print($"[flatcheck] plans in {dir}");
         GD.Print($"[flatcheck] RESULT: {(failures == 0 ? "ok" : $"FAILED ({failures})")}");

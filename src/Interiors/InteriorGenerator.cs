@@ -1261,7 +1261,10 @@ public static partial class InteriorGenerator
                 }
 
                 foreach (var p in Pieces(r.Type, r, rng, l.Kind, vending && f == l.Below))
-                    TryPlace(l, f, r, p, placed, blocked, rng);
+                {
+                    if (p.Type == FurnitureType.Tv) PlaceTv(l, f, r, p, placed, blocked, rng);
+                    else TryPlace(l, f, r, p, placed, blocked, rng);
+                }
                 if (vending && l.Furniture.Count > 0 && l.Furniture[^1].Type == FurnitureType.VendingMachine) vending = false;
             }
         }
@@ -1460,14 +1463,18 @@ public static partial class InteriorGenerator
         return !placed.Any(q => q.Overlaps(grown)) && !blocked.Any(q => q.Overlaps(p));
     }
 
+    /// <param name="sides">The walls to try, in order (default: back, left, right, front).</param>
+    /// <param name="near">With <paramref name="sides"/>: the spot along the wall to stand nearest to.</param>
     private static void TryPlace(InteriorLayout l, int f, RoomPlan r, Piece p,
-        List<RectPlan> placed, List<RectPlan> blocked, Random rng)
+        List<RectPlan> placed, List<RectPlan> blocked, Random rng, Side[]? sides = null, float near = float.NaN)
     {
         const float inset = WallInset + 0.02f;
+        // a floor decal is walked over; everything else must leave a way through (#680)
+        bool solid = p.H > 0.05f;
         if (p.Wall)
         {
             // back wall first, then the sides, the front (door) wall last
-            var order = new[] { Side.Back, Side.Left, Side.Right, Side.Front };
+            var order = sides ?? new[] { Side.Back, Side.Left, Side.Right, Side.Front };
             int startShift = rng.Next(0, 2);
             foreach (var side in order)
             {
@@ -1476,10 +1483,13 @@ public static partial class InteriorGenerator
                 float len = b - a;
                 if (len < p.W) continue;
                 int steps = Math.Max(1, (int)((len - p.W) / 0.15f));
-                for (int k = 0; k <= steps; k++)
-                {
+                var tries = Enumerable.Range(0, steps + 1)
                     // alternate from both ends toward the middle, so pieces hug corners
-                    int idx = (k + startShift) % 2 == 0 ? k / 2 : steps - k / 2;
+                    .Select(k => (k + startShift) % 2 == 0 ? k / 2 : steps - k / 2);
+                // or, told where, from there outward
+                if (!float.IsNaN(near)) tries = tries.OrderBy(i => Math.Abs(a + p.W / 2 + (len - p.W) * i / steps - near));
+                foreach (int idx in tries)
+                {
                     float c = a + p.W / 2 + (len - p.W) * idx / steps;
                     var rect = side switch
                     {
@@ -1488,7 +1498,7 @@ public static partial class InteriorGenerator
                         Side.Left => new RectPlan(r.X0 + inset, c - p.W / 2, r.X0 + inset + p.D, c + p.W / 2),
                         _ => new RectPlan(r.X1 - inset - p.D, c - p.W / 2, r.X1 - inset, c + p.W / 2),
                     };
-                    if (!Free(r, rect, placed, blocked, 0.05f)) continue;
+                    if (!Free(r, rect, placed, blocked, 0.05f) || solid && !KeepsWay(r, placed, rect)) continue;
                     // tall pieces stay out of windows
                     if (p.H > 1.0f && r.Openings.Any(o => o.Kind == OpeningKind.Window && o.Side == side
                         && Math.Abs(o.Center - c) < (o.Width + p.W) / 2)) continue;
@@ -1512,6 +1522,7 @@ public static partial class InteriorGenerator
                         var rect = new RectPlan(x - w / 2, z - d / 2, x + w / 2, z + d / 2);
                         bool rug = p.Type == FurnitureType.Rug;
                         if (!Free(r, rect, rug ? new List<RectPlan>() : placed, blocked, rug ? 0 : 0.45f)) continue;
+                        if (solid && !KeepsWay(r, placed, rect)) continue;
                         Add(l, f, p, rect, rotate ? 1 : 0, rug ? new List<RectPlan>() : placed);
                         return;
                     }
