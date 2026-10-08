@@ -145,6 +145,7 @@ public partial class WebRadio : Node
                 node.AddChild(speaker);
             }
             speaker.Station = station;
+            speaker.Volume = node is FootPlayer driver ? driver.RadioVolume : Items.RadioLoudness.Default;
             float d = ear is { } at ? at.DistanceTo(node.GlobalPosition) : 0f;
             if (d < HearRadius) near.Add((d, station));
         }
@@ -179,6 +180,7 @@ public partial class WebRadio : Node
         speaker.CdId = play.CdId;
         speaker.StartedAt = play.StartedAt;
         speaker.Length = play.Length;
+        speaker.Volume = node is FootPlayer driver ? driver.RadioVolume : Items.RadioLoudness.Default;
         speaker.On = true;
     }
 

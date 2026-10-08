@@ -111,7 +111,7 @@ public enum CockpitView
 /// <c>_Process</c>, the roof and the pods moving there over a moment rather than snapping —
 /// except on the first frame, so a car built with its top down does not fold it in front of you.
 /// </summary>
-public partial class CarRig : Node3D, IHingedDoors
+public partial class CarRig : Node3D, IHingedDoors, Items.IBeatReactive
 {
     /// <summary>Front road-wheel angle, radians, + = left.</summary>
     public float SteerAngle { get; set; }
@@ -605,12 +605,27 @@ public partial class CarRig : Node3D, IHingedDoors
         }
     }
 
+    private float _beatDy, _beatShown, _beatRoll;
+
+    /// <summary>Music reaching the parked car (#734): sink on the kick, rock side to side over two beats.</summary>
+    public void OnBeat(float reach, in Items.RadioGroove groove)
+    {
+        _beatDy = -0.06f * reach * groove.Kick * groove.BounceScale;
+        _beatRoll = 0.025f * reach * groove.Level * Mathf.Sin(Mathf.Pi * ((groove.Beat & 1) + groove.Phase));
+    }
+
     public override void _Process(double delta)
     {
         if (_body == null) return;
         float dt = (float)delta;
         float hopPitch = _hydraulics ? ApplyHydraulics(dt) : 0f;
-        _body.Rotation = new Vector3(BodyPitch + hopPitch, 0, 0);   // + rotates −Z (the nose) up
+        _body.Rotation = new Vector3(BodyPitch + hopPitch, 0, _beatRoll);   // + rotates −Z (the nose) up
+        // parked near music (#734): the body sinks on the bass and rocks with the swing, drawing only
+        if (_beatDy != _beatShown)
+        {
+            _body.Position += new Vector3(0, _beatDy - _beatShown, 0);
+            _beatShown = _beatDy;
+        }
         for (int i = 0; i < 4; i++)
         {
             _steer[i].Rotation = new Vector3(0, i < 2 ? SteerAngle : 0f, 0);   // + yaw turns −Z toward −X: left

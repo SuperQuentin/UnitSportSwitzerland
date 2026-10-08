@@ -82,7 +82,7 @@
   first load, never cleared) and a sticky `_fetchFailed`: a new CD loaded the *old* file on the new
   CD's clock, everywhere, so "Play" looked like it did nothing. Everything loaded or fetching is now
   keyed by CD id (`RadioSpeaker.TryLoad`); `LoadedCd`/`LoadedLength` let the probe check the file.
-- **Loudness.** `RadioSpeaker`: −8 dB base, unit size 3, max 45 m (was 0 dB, 8, 120 m — it drowned
+- **Loudness.** Since #734 each radio has its own volume, shared, that sets its gain and reach (`docs/notes/items/beat-field.md`); the panel slider turns it, the slider can also scrub the song (the progress bar). Before: `RadioSpeaker`: −8 dB base, unit size 3, max 45 m (was 0 dB, 8, 120 m — it drowned
   the world), on the Music bus (the panel slider is Settings' Music volume) and muffled by walls
   and doorways (`docs/notes/audio/hearing.md`).
 - **In the hand (#168).** The playing CD lives in the radio's `ItemStack.Data` as a `RadioPlay`

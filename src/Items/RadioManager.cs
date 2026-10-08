@@ -116,6 +116,41 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
         RpcId(1, MethodName.RequestPlay, radio.Name, cdId, length);
     }
 
+    /// <summary>Moves a world radio's song to <paramref name="at"/> seconds in (#734), for everyone: a new start on the clock.</summary>
+    public void Seek(RadioBody radio, double at)
+    {
+        if (!Online) { SeekOn(radio, at); return; }
+        RpcId(1, MethodName.RequestSeek, radio.Name, at);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestSeek(string name, double at)
+    {
+        if (!Multiplayer.IsServer()) return;
+        if (GetNodeOrNull<RadioBody>(name) is { } radio) SeekOn(radio, at);
+    }
+
+    private static void SeekOn(RadioBody radio, double at)
+    {
+        if (!radio.Playing || radio.Length <= 0 || !double.IsFinite(at)) return;
+        radio.StartedAt = ClockSync.ServerNow - Math.Clamp(at, 0, radio.Length - 0.5);
+    }
+
+    /// <summary>Turns a world radio's own volume (#734), for everyone.</summary>
+    public void SetVolume(RadioBody radio, float volume)
+    {
+        volume = RadioLoudness.Clamp(volume);
+        if (!Online) { radio.Volume = volume; return; }
+        RpcId(1, MethodName.RequestVolume, radio.Name, volume);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestVolume(string name, float volume)
+    {
+        if (!Multiplayer.IsServer()) return;
+        if (GetNodeOrNull<RadioBody>(name) is { } radio) radio.Volume = RadioLoudness.Clamp(volume);
+    }
+
     public void Stop(RadioBody radio)
     {
         if (!Online) { radio.Playing = false; return; }
@@ -329,7 +364,12 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
     /// </summary>
     public override void _Process(double delta)
     {
-        if (!NetworkManager.DedicatedServer && DisplayServer.GetName() != "headless") UpdateHeld();
+        if (!NetworkManager.DedicatedServer && DisplayServer.GetName() != "headless")
+        {
+            UpdateHeld();
+            // things near the music move with it (#734): drawn only, never physics
+            BeatField.Step(this, GetViewport()?.GetCamera3D()?.GlobalPosition, ClockSync.ServerNow);
+        }
         if (!NetLink.IsServer(this)) return;   // a client, or the link is down (#211)
         _housekeeping += delta;
         if (_housekeeping < 1) return;
@@ -372,6 +412,7 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
             speaker.CdId = p.CdId;
             speaker.StartedAt = p.StartedAt;
             speaker.Length = p.Length;
+            speaker.Volume = player.RadioVolume;
             speaker.On = true;
         }
     }

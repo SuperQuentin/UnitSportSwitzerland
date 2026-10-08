@@ -1247,6 +1247,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:Down");
         replication.AddProperty(".:CarRadio");
         replication.AddProperty(".:CarCd");
+        replication.AddProperty(".:RadioVolume");
         if (Npc)
         {
             // spawn-only: a peer spawning this NPC after a handoff must learn who simulates it now
@@ -1260,7 +1261,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:DeckYaw");
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:RadioVolume", ".:Down" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         Terrain ??= GetNodeOrNull<ChunkManager>("/root/Main/World/Terrain");
         if (Origin is { } start) NetGlobal = start.ToGlobal(Position);

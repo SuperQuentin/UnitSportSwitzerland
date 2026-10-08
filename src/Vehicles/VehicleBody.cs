@@ -235,6 +235,10 @@ public partial class VehicleBody : CharacterBody3D
             _visual = Ride.BuildParkedVisual((int)Math.Max(1, Owner));
             _visual.Name = "Visual";
             AddChild(_visual);
+            // parked near music (#734): the body bounces on its springs, the wheels and the collider stay
+            if (_visual is Items.IBeatReactive reactive) Items.BeatField.Add(reactive, _visual);
+            else if (_visual.FindChildren("*", "", true, false).OfType<Items.IBeatReactive>().FirstOrDefault() is { } inner)
+                Items.BeatField.Add(inner, _visual);
             Hurtbox.Fit(_visual);
             if (Ride is Helicopter or Plane or Airliner or IEngined)
             {

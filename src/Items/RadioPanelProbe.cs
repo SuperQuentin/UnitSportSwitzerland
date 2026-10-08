@@ -1,3 +1,5 @@
+using System.Linq;
+using System;
 using System.Threading.Tasks;
 using Godot;
 using UnitSport.Audio.Cd;
@@ -134,6 +136,18 @@ public partial class RadioPanelProbe : Node
         await Wait(0.5);
         Check(!Silent(inv), $"pressing \"{row?.Text}\" plays it");
         Check(RadioUi.Instance?.IsOpen == true && RowsShown(), "and the library stays open");
+        // #734: the scrubber moves the song, for everyone: a new start on the clock
+        if (RadioUi.Instance?.FindChildren("*", nameof(HSlider), true, false).OfType<HSlider>()
+                .FirstOrDefault(sl => sl.TooltipText.StartsWith("Drag to move")) is { } scrub
+            && RadioPlay.Decode(inv[0].Data) is { Length: > 4f } before)
+        {
+            scrub.Value = 0.5;
+            await Wait(0.2);
+            var after = RadioPlay.Decode(inv[0].Data);
+            double at = after is { } a2 ? Net.ClockSync.ServerNow - a2.StartedAt : -1;
+            Check(after != null && Math.Abs(at - before.Length * 0.5) < 1.0, $"the scrubber moves the song to the middle ({at:F1} s of {before.Length:F1})");
+        }
+        else Log("no scrubber or a CD too short: the scrub case is skipped");
         Shot("radiopanel_library.png");
         Check(Press("■  Stop"), "Stop");
         await Wait(0.5);
