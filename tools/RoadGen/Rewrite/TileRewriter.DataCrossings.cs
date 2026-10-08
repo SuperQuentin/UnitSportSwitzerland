@@ -131,7 +131,7 @@ public static partial class TileRewriter
                     {
                         double zebraTo = far - ZebraClear, zebraFrom = zebraTo - ZebraDepth;
                         bool refuge = shift is not null && exitWay.Refuge(Get(areas, exitWay.Tile), zebraFrom, zebraTo);
-                        if (refuge) stats.Refuges++;
+                        if (refuge) { stats.Refuges++; exitWay.HasIsland = true; }   // (#711: the through guide passes it)
                         // the hatch starts behind the crosswalk: none of it, stripes or lines, between the mouth and the crosswalk
                         // (the user's rules), and it does not close there
                         exitWay.ClearHatch(Get(paint, exitWay.Tile), double.NegativeInfinity, zebraTo + (refuge ? 2.3 : 0.3));

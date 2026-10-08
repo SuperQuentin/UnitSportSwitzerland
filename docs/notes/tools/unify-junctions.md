@@ -97,6 +97,20 @@ forbidden turn gets none. The junction's markings follow:
   1+1, the two lanes merge at the upper node and its outer lane is inferred right-only); (2) an odd `lanes` without
   `lanes:forward/backward` is split with the extra lane backward (`CrossSectionPlanner.Prepare`), a fixed rule.
 
+## Phase 3: guides (the user's rule, Oct 8 2026)
+
+**A guide line through a junction only for**: the main road's continuity (its centre line, and its edge lines without
+lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, at every junction).
+
+- **Through-lane guide** (`ThroughGuide`, #700): at every junction, but only past an island in the exit's hatch (the
+  lights' repeater island, a refuge: `Widening.HasIsland`, set where they are built) and only where the lane jogs at least
+  `ThroughGuideJog` (0.3 m) sideways across the junction, so the straight line would cut into the hatch. Queued in
+  `EmitTurnLanes` (`pendingGuides`), drawn after the signals and the crosswalks have placed the islands. Sion tiles 2
+  (were 27, all without lights, none past an island but these); test region 11 (J1's split lead-ins jog 1.4 m).
+- **Left-turn guide** (`EmitLeftGuides`): stays at the lights, toward an island. Without lights tried (from the pocket
+  into the side road) and dropped by the user.
+- Exit-hatch islands without a crosswalk stay lights only (the user's decision).
+
 ## Phase 2: lanes
 
 - **Equal lane widths at every junction** (`LanesOf(equal: true)` for every pocket, #682 had it at the lights): the T's

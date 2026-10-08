@@ -643,8 +643,9 @@ public static partial class TileRewriter
                 }
                 var openings = new List<PocketOpening>();
                 var townArcs = new Dictionary<(int Node, int Arm), CornerArc>();
+                var pendingGuides = new List<(TileId Home, RoadPaint Guide, Widening Exit)>();   // through guides, drawn past an island only (#711)
                 var pockets = EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs,
-                    bikeBetween, stripOwners, netStats.TurnLanes, StreetSideAt, openings, townArcs, overlay, restrictions, crossingNodes);
+                    bikeBetween, stripOwners, netStats.TurnLanes, StreetSideAt, openings, townArcs, overlay, restrictions, crossingNodes, pendingGuides);
                 var openingsOf = openings.GroupBy(o => o.Segment, ReferenceEqualityComparer.Instance)
                     .ToDictionary(g => (RoadSegment)g.Key!, g => g.ToList(), ReferenceEqualityComparer.Instance);
                 // the bike side of a link's end piece (#351): its separated path, else its painted lane
@@ -666,6 +667,9 @@ public static partial class TileRewriter
                 EmitSignals(priority, result, pockets, BikeSideAt, block, wanted, paint, signalRecords, cantons, field, buildings, islands, signs, netStats.Signals,
                     approachRecords, restrictions, netStats.Lanes, stopsAt, signalPlans, StreetSideAt, crossingNodes);
                 netStats.Signals.DataCrossings += EmitDataCrossings(priority, result, pockets, crossingNodes, block, wanted, paint, islands, netStats.Signals, StreetSideToMouth);
+                // the islands are known now (the lights' and the refuges): a through guide only where it keeps off one (#711, the user's rule)
+                foreach (var (home, guide, exit) in pendingGuides)
+                    if (exit.HasIsland) { Get(paint, home).Add(guide); netStats.TurnLanes.ThroughGuides++; }
                 EmitRightLanes(pockets, paint, bikeBetween, netStats.TurnLanes);
                 EmitPocketApproaches(priority, result, pockets, approachRecords, restrictions, netStats.Lanes);
 

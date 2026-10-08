@@ -46,7 +46,7 @@ public static partial class TileRewriter
         public readonly SortedDictionary<string, List<string>> LayoutExamples = new();
 
         public string Format() => string.Create(CultureInfo.InvariantCulture,
-            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets (approaches with a right turn faster than 50 km/h {SpeedFast:N0} / not {SpeedSlow:N0} / no OSM speed in town {SpeedNoneTown:N0}, outside {SpeedNoneRural:N0}, #711; {RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {Corners:N0} corners rounded beside a widening ({CornersRejected:N0} failed, {CornersInTown:N0} left square beside a sidewalk or path, #406), {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120), {TightCorners:N0} junction corners left tight (no right turn rounds them, #700), {SplitLeadIns:N0} lead-ins split between both edges ({MirrorGuides:N0} edge guides moved out onto the other edge, #711), {ThroughGuides:N0} through-lane guides across the junction (#700), {PairGuidesNoLights:N0} lines between two same-turn lanes through a junction without lights (#711); " +
+            $"    turn lanes (#123): {Candidates:N0} main-road approaches with a left turn, {Placed:N0} pockets placed with their exit taper (storage m: {string.Join(", ", Storage.Select(kv => $"{kv.Key:F0} x{kv.Value}"))}), {Merged:N0} of them merged with the exit of the junction before (#325), {AtSignals:N0} at traffic lights (#348), {RightPockets:N0} right-turn pockets (approaches with a right turn faster than 50 km/h {SpeedFast:N0} / not {SpeedSlow:N0} / no OSM speed in town {SpeedNoneTown:N0}, outside {SpeedNoneRural:N0}, #711; {RightRejected:N0} rejected; beside a bike lane: kerbside (a) {KerbsideBike:N0}, between (b) by hash {BetweenBike:N0}, (b) forced by the plan {BetweenForced:N0}, #351), {LeftBikeLanes:N0} left-turn bike lanes ({BikeBoxes:N0} bike boxes, {AdvancedBikeLines:N0} advanced bike lines, #351), {Arrows:N0} arrows, {StopBars:N0} stop bars, {Stripes:N0} median stripes ({HatchesSkipped:N0} hatches left out: narrower than 1.5 m or shorter than 20 m, #406), {SignsMoved:N0} signs moved off the widening, {Corners:N0} corners rounded beside a widening ({CornersRejected:N0} failed, {CornersInTown:N0} left square beside a sidewalk or path, #406), {BesideBike:N0} approaches widened for a bike lane ({LeadIns:N0} with a lead-in, #120), {TightCorners:N0} junction corners left tight (no right turn rounds them, #700), {SplitLeadIns:N0} lead-ins split between both edges ({MirrorGuides:N0} edge guides moved out onto the other edge, #711), {ThroughGuides:N0} through-lane guides across the junction past an island (#700, #711), {PairGuidesNoLights:N0} lines between two same-turn lanes through a junction without lights (#711); " +
             $"rejected (approach or exit): too short {Short:N0}, building {Building:N0}, another line {OtherLine:N0}, ground off the road {Ground:N0}, tile seam {Seam:N0}, no segment {NoSegment:N0}, no main road out {NoExit:N0}, two lanes or more already and no lane data {MultiLane:N0}; OSM lane data (#700): {Wished:N0} approaches, {WishFolded:N0} wished lanes folded, {WishNoLeft:N0} with a road to the left and no left lane, {WishInPlace:N0} assigned in place, {WishArrows:N0} arrows over them\n") +
             string.Concat(LayoutExamples.Select(kv => $"      right pockets beside a bike lane, layout {kv.Key} at LV95 {string.Join("; ", kv.Value)}\n"));
 
@@ -167,7 +167,8 @@ public static partial class TileRewriter
         Dictionary<TileId, List<RoadPointProp>> signs, List<(RoadSegment Segment, bool Right, (double From, double To) Along)> bikeBetween,
         Dictionary<RoadAreaProp, RoadSegment> stripOwners, TurnLaneStats stats, Func<int, LinkEnd, bool, RoadSide> streetSide,
         List<PocketOpening>? openings = null, Dictionary<(int Node, int Arm), CornerArc>? arcs = null,
-        OsmOverlayReader? overlay = null, Restrictions? restrictions = null, CrossingNodes? crossings = null)
+        OsmOverlayReader? overlay = null, Restrictions? restrictions = null, CrossingNodes? crossings = null,
+        List<(TileId Home, RoadPaint Guide, Widening Exit)>? pendingGuides = null)
     {
         var net = result.Network;
         var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
@@ -505,11 +506,11 @@ public static partial class TileRewriter
             if (!outSlot.Merged && !departure.Painted) departure.Median(Get(paint, outSlot.Tile), stats, StopBefore(pocket));
             Across(approach, departure, exitFar: outSlot.Merged, inSlot.Tile, Get(areas, inSlot.Tile), Get(paint, pocket.Home),
                 pocket.Home, priority.Guides, joined: pocket.RightTurn, guide: !pocket.Signal);
-            if (!pocket.Signal && !outSlot.Merged && ThroughGuide(approach, departure, pocket.Home) is { } throughGuide)
-            {
-                Get(paint, pocket.Home).Add(throughGuide);
-                stats.ThroughGuides++;
-            }
+            // the through lane's guide past the pocket, at every junction, but only where the exit's hatch holds an island to
+            // keep off (#711, the user's rule: a guide only for the main road's continuity, an island to avoid, or several
+            // lanes turning alike): drawn once the islands are known (the lights' and the refuges, later)
+            if (!outSlot.Merged && ThroughGuide(approach, departure, pocket.Home) is { } throughGuide)
+                pendingGuides?.Add((pocket.Home, throughGuide, departure));
             // a sign beside the old edge (#121's 3.03) would now stand on the widening
             stats.SignsMoved += approach.PushOut(Get(signs, inSlot.Tile)) + (departure.Framed ? 0 : departure.PushOut(Get(signs, outSlot.Tile)));
             stats.Storage[inSlot.Storage] = stats.Storage.GetValueOrDefault(inSlot.Storage) + 1;
@@ -1254,6 +1255,9 @@ public static partial class TileRewriter
     /// edge of the exit's lane at the far mouth, beside its hatch, so the through traffic keeps off the pocket and the
     /// island. Tangent to both ways; null where the exit has no hatch to keep off.
     /// </summary>
+    /// <summary>The through lane jogs at least this far sideways across the junction before it gets a guide (#711), metres.</summary>
+    private const double ThroughGuideJog = 0.3;
+
     private static RoadPaint? ThroughGuide(Widening approach, Widening exit, TileId home)
     {
         if (approach.Layout is not { } layout || exit.HatchAt(0) < 0.5) return null;
@@ -1262,6 +1266,9 @@ public static partial class TileRewriter
         float[] e0 = exit.At(home, 0, outer), e1 = exit.At(home, 1, outer);
         Vec2 P(float[] p) => new(p[0], p[2]);
         Vec2 start = P(a0), end = P(e0), din = (P(a0) - P(a1)).Normalized(), dout = (P(e1) - P(e0)).Normalized();
+        // (#711, the user's rule: a guide only where there is an island to avoid) none where the lane runs on straight into the
+        // exit lane beside the hatch: the straight line from the approach's edge passes the exit's within ThroughGuideJog
+        if (Math.Abs((end - start).Cross(din)) < ThroughGuideJog) return null;
         var line = new List<float>();
         double den = din.Cross(dout);
         Vec2 control = Math.Abs(den) < 0.05 ? (start + end) * 0.5 : start + din * ((end - start).Cross(dout) / den);
@@ -1353,6 +1360,8 @@ public static partial class TileRewriter
         /// own lane: the widening is the hatch and that difference, the lane easing back to the carriageway's as the hatch closes.
         /// </summary>
         public void SetExitLane(double lane) => _exitLaneSet = lane;
+        /// <summary>An island stands in the exit's hatch (#711): the lights' repeater island (#682) or a refuge (#700); a through guide passes it.</summary>
+        public bool HasIsland { get; set; }
         private double? _exitLaneSet;
         public double HatchAtMouth => _bike > 0 ? PocketRegion : _exitHatch ?? PocketRegion;   // beside an on-street bike lane the exit is as at a yield junction (#123, #120)
         /// <summary>The width of the exit's car lane (the carriageway's half less a painted bike lane).</summary>

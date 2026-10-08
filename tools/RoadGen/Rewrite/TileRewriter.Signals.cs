@@ -290,6 +290,7 @@ public static partial class TileRewriter
                     if (exitWay.Islands(Get(areas, exitWay.Tile), stopAtArm, zebraTo - ZebraDepth, zebraTo, crosswalk) is { } island)
                     {
                         secondFlags &= ~SignalPoleFlags.Second;
+                        exitWay.HasIsland = true;   // the through guide passes it (#711)
                         islandPoles.Add(((byte)arms.Count, island.Pole, island.Y, u, right));
                         var exitSide = bikeSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
                         islandArms[i] = new IslandExit(exitWay.HatchAt(0) + exitWay.Frame0, exitWay.ExitCar, exitSide.HasTrack || exitSide.HasLane);   // from the axis (#700)
