@@ -1970,16 +1970,20 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _danceCrowdAt = now;
             _danceCrowd = DancersAround(m.Source.GlobalPosition);
         }
-        // The move changes every couple of bars. Each dancer has its own pick (a hash of the bar
-        // slot, the style and who it is), so a crowd is not a drill team; but with two or more
-        // dancing to the same music, one slot in three is a crowd move everyone hits together —
-        // the same hash with no "who" in it, so every peer lands on it on the same bar (#261).
-        int slot = Mathf.FloorToInt(bar / (float)Avatar.HumanMeshBuilder.BarsPerMove);
-        int move = DanceMoveFor(slot, style), prev = DanceMoveFor(slot - 1, style);
+        // The move changes every couple of bars, and when the song moves into a new section (#728).
+        // Each dancer has its own pick (Avatar.DancePick: a hash of the slot, the section, the style
+        // and who it is), so a crowd is not a drill team; but with two or more dancing to the same
+        // music, one slot in three is a crowd move everyone hits together (#261), and now and then,
+        // in a big part of a HipHop or Electronic song, someone breaks.
+        const int per = Avatar.HumanMeshBuilder.BarsPerMove;
+        int slot = Mathf.FloorToInt(bar / (float)per);
+        m.SectionOfBar(bar, slot * per, out int sectionStart);
+        int start = System.Math.Max(slot * per, sectionStart);
+        int move = DanceMoveAt(m, bar, style), prev = DanceMoveAt(m, start - 1, style);
         if (DanceMoveOverride >= 0) move = prev = DanceMoveOverride;
         float barPhase = (beat - bar * 4 + phase) / 4f;
-        // beats into this slot: the first one flows out of the last move instead of cutting to the next
-        float into = (bar - slot * Avatar.HumanMeshBuilder.BarsPerMove) * 4 + (beat - bar * 4) + phase;
+        // beats into this move: the first one flows out of the last move instead of cutting to the next
+        float into = (bar - start) * 4 + (beat - bar * 4) + phase;
         return new Avatar.DanceParams(style, move, phase, barPhase, bar, _danceWeight, prev, Mathf.Clamp(into / 0.9f, 0f, 1f));
     }
 
@@ -2017,21 +2021,27 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     internal static int DanceMoveOverride = -1;
 
     /// <summary>This dancer's move for a bar slot: its own, or the crowd's when the slot is a crowd one.</summary>
-    private int DanceMoveFor(int slot, Audio.Cd.MusicStyle style)
+    /// <summary>The move this dancer does at <paramref name="bar"/> of <paramref name="m"/> (#728, <see cref="Avatar.DancePick"/>).</summary>
+    private int DanceMoveAt(Items.RadioManager.Music m, int bar, Audio.Cd.MusicStyle style)
     {
-        uint shared = DanceHash((uint)slot * 2654435761u ^ (uint)style * 40503u);
-        // to the chess type beat the crowd's move is the rat's swing, the first of its moves (#370)
-        if (_danceCrowd >= 2 && shared % 3u == 1u)
-            return style == Audio.Cd.MusicStyle.RatDance ? 0
-                : (shared >> 8) % 2u == 0u ? Avatar.HumanMeshBuilder.GroupJump : Avatar.HumanMeshBuilder.GroupPogo;
-        uint own = DanceHash(shared ^ DanceSeed());
-        return (int)(own % (uint)Avatar.HumanMeshBuilder.MoveCount(style));
-    }
-
-    private static uint DanceHash(uint h)
-    {
-        h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
-        return h;
+        const int per = Avatar.HumanMeshBuilder.BarsPerMove;
+        int slot = Mathf.FloorToInt(bar / (float)per);
+        var now = m.SectionOfBar(bar, slot * per, out _);
+        var prev = m.SectionOfBar((slot - 1) * per, (slot - 1) * per, out _);
+        var prev2 = m.SectionOfBar((slot - 2) * per, (slot - 2) * per, out _);
+        var (kind, index) = Avatar.DancePick.Pick(slot, (int)style, DanceSeed(), _danceCrowd >= 2, now, prev, prev2,
+            Avatar.HumanMeshBuilder.MoveEnergy(style));
+        bool rat = style == Audio.Cd.MusicStyle.RatDance;
+        return kind switch
+        {
+            // to the chess type beat the crowd's move is the rat's swing, the first of its moves (#370)
+            Avatar.DanceSlotKind.CrowdPogo => rat ? 0 : Avatar.HumanMeshBuilder.GroupPogo,
+            Avatar.DanceSlotKind.CrowdJump => rat ? 0 : Avatar.HumanMeshBuilder.GroupJump,
+            Avatar.DanceSlotKind.BreakDown => Avatar.HumanMeshBuilder.BreakDown,
+            Avatar.DanceSlotKind.BreakWindmill => Avatar.HumanMeshBuilder.BreakPowerWindmill,
+            Avatar.DanceSlotKind.BreakHeadspin => Avatar.HumanMeshBuilder.BreakPowerHeadspin,
+            _ => index,
+        };
     }
 
     /// <summary>A number of this player's own, the same on every peer (FNV-1a of the node name; string.GetHashCode differs per process).</summary>

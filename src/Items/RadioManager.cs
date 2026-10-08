@@ -190,6 +190,10 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
     {
         public bool BeatAt(double now, out float phase, out int beat, out int bar, out MusicStyle style) =>
             RadioBody.BeatOf(CdId, StartedAt, now, out phase, out beat, out bar, out style);
+
+        /// <summary>The CD's section at a bar, for picking dance moves (#728, <see cref="RadioBody.SectionOfBar"/>).</summary>
+        public Avatar.DanceSlotMusic SectionOfBar(int bar, int slotStart, out int sectionStart) =>
+            RadioBody.SectionOfBar(CdId, bar, slotStart, out sectionStart);
     }
 
     /// <summary>

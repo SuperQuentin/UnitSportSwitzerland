@@ -42,3 +42,12 @@ Replaced the #394 face atlas (16×16 pixel faces drawn from text). Plan: `docs/p
 - Check: `--avatars 2 <png> --bodies faces|expressions|expressions2|seeded --view 180 [--style ...]`
   (heads in a grid); model viewer category **Faces** (Preset, Expression, Seeded);
   `tools/emotenetcheck.sh` checks a remote copy's face shows its emote's expression.
+- **Dancing faces (#728)**: dancing to music with no emote picked, the walker's face follows the CD's
+  analysis (`Face.DanceFace.Target`, pure C#, `DanceFaceTests`; fed by `FootPlayer.DanceFaceNow` from
+  `RadioGroove` and the drawn dance): calm dreams half-lidded, groove smiles, peak grins and opens
+  on the hits, chorus sings "oh"/"ee" a beat each, a new section is a "wow", the bar's one lifts the
+  brows; styles have a temper (rock snarls, hip-hop half-lidded smirk, chill eyes closed, folk
+  beams, the rat dance hearts), dancers a personality from their seed (singer, winker, blusher);
+  breaking concentrates, the freeze smirks, a near-silent song rests the face. `FaceAnimator.Step`
+  takes a `FaceState` for it. Preview: `--avatars 2 <png> --bodies dancefaces --view 180`.
+- **Bigger eyes (#728)**: the genome's eye size steps are 1.0 + 0.14 k (were 0.85 + 0.12 k).

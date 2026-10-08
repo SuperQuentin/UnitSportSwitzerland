@@ -25,6 +25,7 @@
     <ProjectReference Include="..\..\tools\RoadGen\RoadGen.csproj" />
     <Compile Include="..\..\src\World\TimeCommand.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SimClock.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\DancePick.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Items\RadioLoudness.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\Cd\CdUploadRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Audio\Cd\CdScanner.cs" Link="Game\%(Filename)%(Extension)" />
@@ -50,6 +51,7 @@
     <Compile Include="..\..\src\Farming\FieldTile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\Face\FaceGenome.cs" Link="Game\Face\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Avatar\Face\FaceState.cs" Link="Game\Face\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Avatar\Face\DanceFace.cs" Link="Game\Face\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\HitGuard.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Combat\FightRules.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\BattleRoyale\BrStats.cs" Link="Game\%(Filename)%(Extension)" />
