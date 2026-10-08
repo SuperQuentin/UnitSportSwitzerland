@@ -325,18 +325,21 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Multiplayer.PeerConnected += OnPeerConnected;
         Multiplayer.PeerDisconnected += OnPeerDisconnected;
 
+        string name = QueryResponder.ParseServerName();
+        string version = (string)ProjectSettings.GetSetting("application/config/version", "");
+        string world = manifest.Tiles.Count > 0 ? "real" : "generated";
+        var registry = _registry;
         // status queries on port + 1: LAN lists find this server, saved lists show it is up
         // and how full it is (Net/QueryResponder, docs/notes/net/server-query.md)
         if (QueryResponder.ParsePort(port) is { } queryPort)
-        {
-            string name = QueryResponder.ParseServerName();
-            string version = (string)ProjectSettings.GetSetting("application/config/version", "");
-            string world = manifest.Tiles.Count > 0 ? "real" : "generated";
-            var registry = _registry;
             AddChild(new QueryResponder(queryPort, () => new ServerStatus(
                 name, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients, version, world) { Wire = Handshake.Protocol },
                 QueryResponder.ParseBind()));
-        }
+        // the same, as a file the web page beside a deployed server reads (#740, docs/notes/net/status-page.md)
+        if (StatusFile.ParsePath() is { } statusPath)
+            AddChild(new StatusFile(statusPath, () => new StatusFileData(
+                name, version, world, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients,
+                registry is null ? [] : registry.Players.Select(p => p.Name).Order(StringComparer.OrdinalIgnoreCase).ToArray())));
         _parentPid = HostedServer.ParseParentPid();
     }
 

@@ -1,0 +1,197 @@
+<!doctype html>
+<!-- Served at / by Caddy on a deployed server (#740, docs/notes/net/status-page.md). Reads status.json, which the game
+     server writes beside it (--status-file), and the newest GitHub release for the downloads. No build step, no deps. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UnitSport Switzerland</title>
+<meta name="description" content="Live server status and downloads for UnitSport Switzerland.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23d52b1e'/><path d='M13 6h6v7h7v6h-7v7h-6v-7H6v-6h7z' fill='white'/></svg>">
+<style>
+:root {
+  --bg: #f4f5f7; --card: #ffffff; --text: #16181d; --muted: #646b78; --line: #e3e6eb;
+  --accent: #d52b1e; --accent-ink: #ffffff; --ok: #1f9d55; --off: #9aa1ad; --chip: #eef0f3;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0f1115; --card: #171a21; --text: #eef0f4; --muted: #9aa1ad; --line: #262a33;
+          --ok: #34c77b; --off: #5d6470; --chip: #222631; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25); }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.wrap { max-width: 920px; margin: 0 auto; padding: 0 16px 48px; }
+header { padding: 40px 0 28px; display: flex; align-items: center; gap: 16px; }
+.logo { width: 52px; height: 52px; flex: none; border-radius: 12px; background: var(--accent); display: grid; place-items: center; }
+h1 { margin: 0; font-size: clamp(24px, 4vw, 34px); letter-spacing: -.02em; line-height: 1.15; }
+.tag { margin: 2px 0 0; color: var(--muted); }
+.grid { display: grid; gap: 16px; grid-template-columns: 1fr; }
+@media (min-width: 760px) { .grid { grid-template-columns: 1.15fr 1fr; } }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; box-shadow: var(--shadow); min-width: 0; }
+.card h2 { margin: 0 0 14px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.status { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 650; }
+.dot { width: 12px; height: 12px; border-radius: 50%; background: var(--off); flex: none; }
+.dot.on { background: var(--ok); box-shadow: 0 0 0 0 var(--ok); animation: pulse 2s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 55%, transparent); } 100% { box-shadow: 0 0 0 10px transparent; } }
+@media (prefers-reduced-motion: reduce) { .dot.on { animation: none; } }
+.count { font-size: 44px; font-weight: 750; letter-spacing: -.03em; margin: 14px 0 4px; font-variant-numeric: tabular-nums; }
+.count small { font-size: 20px; color: var(--muted); font-weight: 600; }
+.bar { height: 8px; border-radius: 99px; background: var(--chip); overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width .4s; }
+.names { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0 0; padding: 0; list-style: none; }
+.names li { background: var(--chip); border-radius: 99px; padding: 3px 11px; font-size: 14px; overflow-wrap: anywhere; }
+.empty { color: var(--muted); font-size: 14px; margin: 16px 0 0; }
+dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 18px 0 0; font-size: 14px; }
+dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
+.addr { display: flex; gap: 8px; margin-top: 18px; }
+.addr code { flex: 1; min-width: 0; background: var(--chip); border-radius: 10px; padding: 10px 12px; font: 15px ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+button, .btn { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; padding: 9px 14px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+button:hover, .btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 650; padding: 13px 18px; width: 100%; }
+.btn.primary:hover { filter: brightness(1.08); }
+.dl-list { display: grid; gap: 8px; margin-top: 12px; }
+.dl-list .btn { justify-content: space-between; }
+.size { color: var(--muted); font-size: 13px; }
+.ver { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+.note { color: var(--muted); font-size: 13px; margin: 14px 0 0; }
+.steps { margin: 0; padding-left: 20px; } .steps li { margin: 4px 0; }
+footer { margin-top: 28px; color: var(--muted); font-size: 13px; text-align: center; }
+a { color: inherit; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 32 32"><path d="M13 5h6v8h8v6h-8v8h-6v-8H5v-6h8z" fill="#fff"/></svg></div>
+    <div>
+      <h1 id="title">UnitSport Switzerland</h1>
+      <p class="tag">All of Switzerland, low-poly, together: on foot, mounted, driving or flying.</p>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="card" aria-labelledby="st-h">
+      <h2 id="st-h">Server</h2>
+      <div class="status"><span class="dot" id="dot"></span><span id="state">Checking…</span></div>
+      <div class="count" id="count">–</div>
+      <div class="bar" aria-hidden="true"><i id="fill"></i></div>
+      <ul class="names" id="names"></ul>
+      <p class="empty" id="empty" hidden>Nobody online right now. Be the first.</p>
+      <dl>
+        <dt>Version</dt><dd id="version">–</dd>
+        <dt>World</dt><dd id="world">–</dd>
+        <dt>Up since</dt><dd id="uptime">–</dd>
+      </dl>
+      <div class="addr"><code id="addr">–</code><button id="copy" type="button">Copy</button></div>
+    </section>
+
+    <section class="card" aria-labelledby="dl-h">
+      <h2 id="dl-h">Download</h2>
+      <p class="ver" id="rel">Looking for the latest release…</p>
+      <a class="btn primary" id="main-dl" href="https://github.com/SuperQuentin/UnitSportSwitzerland/releases/latest">Download</a>
+      <div class="dl-list" id="others"></div>
+      <h2 style="margin-top:22px">Join</h2>
+      <ol class="steps">
+        <li>Unpack and start the game.</li>
+        <li>Open <b>Multiplayer</b> and add the address above.</li>
+        <li>Connect. The terrain streams in as you go.</li>
+      </ol>
+      <p class="note" id="mac-note" hidden>macOS: the app is unsigned. After unpacking, run <code>xattr -cr UnitSportSwitzerland.app</code> once.</p>
+    </section>
+  </div>
+
+  <footer><a href="https://github.com/SuperQuentin/UnitSportSwitzerland">Source on GitHub</a> · status refreshes every 10 s</footer>
+</div>
+
+<script>
+const REPO = "SuperQuentin/UnitSportSwitzerland";
+const $ = id => document.getElementById(id);
+const fmtSize = b => b > 1e9 ? (b / 1e9).toFixed(1) + " GB" : Math.round(b / 1e6) + " MB";
+
+function since(unix) {
+  const s = Math.max(0, Date.now() / 1000 - unix);
+  if (s < 3600) return Math.floor(s / 60) + " min";
+  if (s < 86400) return Math.floor(s / 3600) + " h " + Math.floor(s % 3600 / 60) + " min";
+  return Math.floor(s / 86400) + " d " + Math.floor(s % 86400 / 3600) + " h";
+}
+
+function showStatus(st) {
+  // the server rewrites the file at least every 20 s; older than a minute = it is gone
+  const online = st && st.online && Date.now() / 1000 - st.updated < 60;
+  $("dot").classList.toggle("on", !!online);
+  $("state").textContent = online ? "Online" : "Offline";
+  if (st && st.name) { $("title").textContent = st.name; document.title = st.name + " · UnitSport Switzerland"; }
+  const players = online ? st.players : 0, max = st ? st.max : 0;
+  $("count").innerHTML = online ? `${players}<small> / ${max} players</small>` : "–";
+  $("fill").style.width = online && max ? Math.min(100, players / max * 100) + "%" : "0";
+  const ul = $("names"); ul.replaceChildren();
+  for (const n of online ? st.names : []) { const li = document.createElement("li"); li.textContent = n; ul.append(li); }
+  $("empty").hidden = !online || players > 0;
+  $("version").textContent = st && st.version ? "v" + st.version : "–";
+  $("world").textContent = st ? (st.world === "real" ? "Real Switzerland" : "Generated") : "–";
+  $("uptime").textContent = online ? since(st.started) : "–";
+  const port = st && st.port ? st.port : 7777;
+  $("addr").textContent = location.hostname + (port === 7777 ? "" : ":" + port);
+}
+
+async function poll() {
+  try {
+    const r = await fetch("status.json", { cache: "no-store" });
+    showStatus(r.ok ? await r.json() : null);
+  } catch { showStatus(null); }
+}
+
+function platform() {
+  const ua = navigator.userAgent;
+  if (/Android/i.test(ua)) return "android";
+  if (/Mac/i.test(ua) && !/iPhone|iPad/.test(ua)) return "macos";
+  if (/Linux|X11/i.test(ua)) return "linux";
+  return "windows";
+}
+const LABEL = { windows: "Windows", linux: "Linux", macos: "macOS", android: "Android" };
+const kindOf = name => /windows/i.test(name) ? "windows" : /linux/i.test(name) ? "linux"
+  : /macos/i.test(name) ? "macos" : /android.*\.apk$/i.test(name) ? "android" : null;
+
+async function releases() {
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
+    if (!r.ok) throw 0;
+    const rel = await r.json();
+    // full games only: delta updates (#532) are for the in-game updater
+    const assets = rel.assets.filter(a => kindOf(a.name) && !/delta/i.test(a.name));
+    const mine = platform();
+    const main = assets.find(a => kindOf(a.name) === mine) || assets[0];
+    $("rel").textContent = `${rel.tag_name} · released ${new Date(rel.published_at).toLocaleDateString()}`;
+    if (main) {
+      const k = kindOf(main.name);
+      $("main-dl").href = main.browser_download_url;
+      $("main-dl").textContent = `Download for ${LABEL[k]} · ${fmtSize(main.size)}`;
+      $("mac-note").hidden = k !== "macos";
+    }
+    const others = $("others");
+    for (const a of assets) {
+      if (a === main) continue;
+      const link = document.createElement("a");
+      link.className = "btn"; link.href = a.browser_download_url;
+      link.innerHTML = `<span></span><span class="size">${fmtSize(a.size)}</span>`;
+      link.firstChild.textContent = LABEL[kindOf(a.name)];
+      others.append(link);
+    }
+  } catch {
+    $("rel").textContent = "All versions are on GitHub.";
+    $("main-dl").textContent = "Open the releases page";
+  }
+}
+
+$("copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("addr").textContent); $("copy").textContent = "Copied"; }
+  catch { $("copy").textContent = "Select it"; }
+  setTimeout(() => $("copy").textContent = "Copy", 1500);
+});
+
+poll(); setInterval(poll, 10000);
+releases();
+</script>
+</body>
+</html>

@@ -32,6 +32,9 @@
   The `.gz` files are left out of the compare and of `--prune`. The server starts with `--tiles-url`: `https://TILES_DOMAIN/tiles/`,
   else `http://<DEPLOY_HOST without user@>/tiles/`. Set `TILES_URL` when `DEPLOY_HOST` is an ssh alias, or for a CDN.
   Check: `curl -sI -H 'Accept-Encoding: gzip' <url>chunk_2593_1119.terr` shows `Content-Encoding: gzip`.
+- **Status page** (#740, `net/status-page`): the same Caddy serves `$DEPLOY_DIR/web` at `/`: `index.html` uploaded on
+  every start install, `status.json` written by the server (`--status-file`). Players, names, version and the latest
+  release's downloads at `http(s)://<host>/`. Needs `TILES=1`; a host set up before it needs `--setup` once.
 - **Server process:** a detached tmux session `unitsport`, so its stdin console still works:
   `ssh -t user@host tmux attach -t unitsport` (detach Ctrl-b d). A deploy kills the session (no graceful save exists) and
   restarts it, then waits for the UDP port (about 30 s) and prints the log tail. **Ctrl-d in the console ends its stdin**:
