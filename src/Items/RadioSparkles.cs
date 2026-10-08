@@ -26,6 +26,13 @@ public partial class RadioSparkles : MeshInstance3D
 
     private const float FadeIn = 2.5f, FadeOut = 1.5f;   // per second
 
+    /// <summary>Below this loudness (0..1 of the song's own range) the glints go out (#732).</summary>
+    private const float QuietLevel = 0.08f;
+    /// <summary>Seconds that quiet before they go out.</summary>
+    private const float QuietHold = 0.4f;
+
+    private float _quiet;
+
     private static readonly StringName UOn = "on", UPulse = "pulse", UBeat = "beat",
         ULevel = "level", UBar = "bar", UBurst = "burst", UPeak = "peak";
 
@@ -55,6 +62,13 @@ public partial class RadioSparkles : MeshInstance3D
     /// </summary>
     public void Step(bool playing, in RadioGroove groove, float dt)
     {
+        // nearly silent for a moment (a fade-out, a quiet bridge, the CD run out) puts them out (#732);
+        // a dip between two hits does not: out after QuietHold below the level, back above 1.5x it
+        if (!groove.Beating) _quiet = QuietHold;
+        else if (groove.HasEnvelope)
+            _quiet = groove.Level < QuietLevel ? _quiet + dt : groove.Level > QuietLevel * 1.5f ? 0f : _quiet;
+        else _quiet = 0f;
+        playing &= _quiet < QuietHold;
         Step(playing, groove.Beating, groove.Phase, groove.Beat, dt, groove.Kick);
         if (!Visible) return;
         Set(ULevel, groove.Beating ? groove.Level : 0.8f, ref _shownLevel);

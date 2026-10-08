@@ -585,8 +585,22 @@ public partial class RadioUi : CanvasLayer
         if (now.Cd != 0 || now.Station != 0) { StopRadio(); return; }
         // the church radio has the chess type beat loaded (#370)
         if (_target == Target.Church && CdLibrary.Instance is { RatBeatId: > 0 and var rat }) { PlayCd(rat); return; }
+        // the radio stays on the song it last played (#732), not the first of the list
+        if (LastCd() is int last && CdLibrary.Instance?.Find(last) != null) { PlayCd(last); return; }
         if (FocusedRow() is { } focused) { focused.EmitSignal(BaseButton.SignalName.Pressed); return; }
         PressFirstRow();
+    }
+
+    /// <summary>The CD this radio last played and still holds (switched off, or run out), or null.</summary>
+    private int? LastCd()
+    {
+        int cd = _target switch
+        {
+            Target.World => Live()?.CdId ?? 0,
+            Target.Held => HeldLive() ? RadioPlay.DecodeAny(_inventory[_heldSlot].Data)?.CdId ?? 0 : 0,
+            _ => 0,
+        };
+        return cd != 0 ? cd : null;
     }
 
     /// <summary>The previous or next CD (or station, when one is on), round the list.</summary>
@@ -640,7 +654,7 @@ public partial class RadioUi : CanvasLayer
     {
         if (Live() is not { } radio || RadioManager.Instance is not { } manager) return;
         // what it plays carries on in the hand: the stack keeps the CD, its start and its mode (#168)
-        string? playing = radio.NowPlaying is { } p ? (p with { Mode = RadioQueue.Clamp(radio.Mode) }).Encode() : null;
+        string? playing = radio.CarriedData;
         manager.PickUp(radio, () =>
         {
             if (Give != null) Give(new ItemStack(ItemId.Radio, 1, playing));
