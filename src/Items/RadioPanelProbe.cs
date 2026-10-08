@@ -116,6 +116,7 @@ public partial class RadioPanelProbe : Node
         }
 
         await Library(inv);
+        await LastSong(inv);
 
         Log(_failed == 0 ? "RESULT: ok" : $"RESULT: FAIL {_failed}");
         GetTree().Quit(_failed == 0 ? 0 : 1);
@@ -154,6 +155,24 @@ public partial class RadioPanelProbe : Node
         Check(Press(RadioUi.PlayerLabel) && !RowsShown(), "back to the player");
         await Key(Godot.Key.Escape);
         Check(RadioUi.Instance?.IsOpen != true, "Esc closes it");
+    }
+
+    /// <summary>
+    /// #732: a radio switched off on a CD that is not the first of the list plays that one again from
+    /// the panel's Play, rather than starting the list over.
+    /// </summary>
+    private async Task LastSong(Inventory inv)
+    {
+        var order = RadioQueue.Order(CdLibrary.Instance, withPersonal: true);
+        if (order.Count < 2 || CdLibrary.Instance?.Find(order[^1]) is not { } last) { Log("only one CD: the last-song case is skipped"); return; }
+        inv.Put(0, new ItemStack(ItemId.Radio, 1, RadioPlay.Off(new RadioPlay(last.Id, 0, last.Duration))));
+        inv.Select(0);
+        await Wait(0.3);
+        await HoldUse();
+        Check(Press("▶  Play"), "Play in the panel");
+        await Wait(0.5);
+        Check(RadioPlay.Decode(inv[0].Data)?.CdId == last.Id, $"Play puts the last CD back on ({inv[0].Data}), not the first of the list");
+        await Key(Godot.Key.Escape);
     }
 
     /// <summary>A screenshot into test_output/ when windowed (headless has no image).</summary>

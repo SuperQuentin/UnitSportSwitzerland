@@ -58,7 +58,7 @@ public partial class FootPlayer
 
         // it dances (a little less than on the ground) and sparkles on the back too
         var play = RadioPlay.Decode(HeldRadio);
-        bool playing = play.HasValue;
+        bool playing = play is { } pl && pl.Sounding(Net.ClockSync.ServerNow);   // a CD run out does not sparkle (#732)
         var groove = playing ? RadioGroove.Of(play!.Value.CdId, play.Value.StartedAt, Net.ClockSync.ServerNow) : RadioGroove.Silent;
         if (groove.Beating) frame *= RadioBody.Bounce(groove.Phase, groove.Beat, 0.11f, 0.55f * groove.BounceScale);
         _backItem.Transform = frame;

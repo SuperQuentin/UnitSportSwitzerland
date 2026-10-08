@@ -890,10 +890,12 @@ public partial class ItemController : Node
         float yaw = Mathf.Atan2(-ahead.X, -ahead.Z);
         if (stack.Id == ItemId.Radio)
         {
+            // a radio switched off flies with its CD in it, silent: a tap where it lands puts it back on (#732)
             var play = RadioPlay.Decode(stack.Data);
+            var held = play ?? RadioPlay.DecodeAny(stack.Data);
             for (int i = 0; i < stack.Count; i++)
                 RadioManager.Instance!.Throw(new RadioState("", 0, _origin.ToGlobal(origin + Vector3.Up * (0.25f * i)), yaw, velocity,
-                    play?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, play?.Length ?? 0, player.RadioVolume));
+                    held?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, held?.Length ?? 0, player.RadioVolume));
             return;
         }
         var right = ahead.Cross(Vector3.Up);
@@ -946,7 +948,7 @@ public partial class ItemController : Node
     public void TakeRadio(FootPlayer player, RadioBody radio)
     {
         if (RadioManager.Instance is not { } manager) return;
-        string? playing = radio.NowPlaying is { } p ? (p with { Mode = RadioQueue.Clamp(radio.Mode) }).Encode() : null;
+        string? playing = radio.CarriedData;
         if (_inventory.Room(ItemId.Radio, playing) < 1)
         {
             _ui.Toast("No room in your pack.");

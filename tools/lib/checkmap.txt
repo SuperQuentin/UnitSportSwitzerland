@@ -323,6 +323,8 @@ src/Loot/                full   tools/lootsynccheck.sh
 src/Loot/                full   tools/locksynccheck.sh
 src/World/               full   tools/racecheck.sh
 src/Audio/               full   tools/radiocheck.sh
+src/Audio/Cd/CdUpload    net    tools/uploadcheck.sh
+src/Audio/Cd/CdScanner   net    tools/uploadcheck.sh
 src/Player/              full   tools/switchcheck.sh
 src/Vehicles/            full   tools/switchcheck.sh
 src/Player/              full   tools/decknetcheck.sh
