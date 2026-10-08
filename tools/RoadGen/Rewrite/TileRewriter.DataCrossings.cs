@@ -12,7 +12,8 @@ using UnitSport.Tools.RoadGen.Network;
 /// arm's TLM line within 30 m of the junction gets a yellow zebra across that arm (SSV 6.17; the bars of
 /// <see cref="EmitCrossing"/>), at the kerb ends when the node is near the mouth (diagonal beside a tight corner),
 /// else square where the node is. At traffic lights the #682 crosswalk is drawn where OSM has one even without a
-/// sidewalk. Kerb ramps, islands and traffic yielding to pedestrians stay with #292.
+/// sidewalk, and where OSM maps any crossing round the lights only there (#711). Kerb ramps, islands and traffic
+/// yielding to pedestrians stay with #292.
 /// </summary>
 public static partial class TileRewriter
 {
@@ -33,20 +34,24 @@ public static partial class TileRewriter
             var r = new CrossingNodes();
             foreach (var e in nodes.All)
             {
-                // marked ones only: an unmarked crossing (or crossing=no, informal) has no paint
-                if (e.Kind != OsmNodesReader.NodeKind.Crossing || e.Value is not ("zebra" or "marked" or "uncontrolled" or "traffic_signals")) continue;
+                // marked ones are drawn; an unmarked one (no paint, no signals) is kept as data only: at the lights it tells the
+                // arm was mapped and has no crosswalk (#711). crossing=no is on no highway=crossing node, so never read
+                if (e.Kind != OsmNodesReader.NodeKind.Crossing || !(Marked(e) || e.Value == "unmarked")) continue;
                 if (!r._byLine.TryGetValue((e.Uuid, e.Part), out var list)) r._byLine[(e.Uuid, e.Part)] = list = new();
                 list.Add(e);
-                r.Count++;
+                if (Marked(e)) r.Count++;
             }
             return r;
         }
 
+        private static bool Marked(OsmNodesReader.Entry e) => e.Value is "zebra" or "marked" or "uncontrolled" or "traffic_signals";
+
         /// <summary>
         /// The nearest marked crossing on arm <paramref name="arm"/> of a junction: its distance from the mouth along the arm
         /// (negative inside it), null where none lies within <see cref="CrossingReach"/> of the junction on that arm.
+        /// <paramref name="unmarked"/>: an unmarked one counts too (whether OSM maps any crossing there, #711).
         /// </summary>
-        public double? OnArm(Junction j, int arm, RoadNetwork net)
+        public double? OnArm(Junction j, int arm, RoadNetwork net, bool unmarked = false)
         {
             var a = j.Arms[arm];
             if (net.Links[a.LinkId].Tag is not Source { Key: { } key } source || source.Plan.Length < 2
@@ -59,7 +64,7 @@ public static partial class TileRewriter
             {
                 double d = atEnd ? m - e.Along : e.Along - m;   // out from the junction node along the arm
                 // a node belongs to the nearer end of its link: on a short one, not to both junctions
-                if (d < -1 || d > CrossingReach || d > length - d) continue;
+                if (d < -1 || d > CrossingReach || d > length - d || !unmarked && !Marked(e)) continue;
                 if (best is null || d < best) best = d;
             }
             return best - a.Trim;

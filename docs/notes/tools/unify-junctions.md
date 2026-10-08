@@ -113,6 +113,23 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   into the side road) and dropped by the user.
 - Exit-hatch islands without a crosswalk stay lights only (the user's decision).
 
+## Phase 2b: crosswalks from the data at the lights (the user's rule, Oct 8 2026)
+
+- **Where OSM maps any crossing round a lights junction, crosswalks only on the mapped arms**; a lights junction with no
+  crossing data keeps one on every arm with a sidewalk (`EmitSignals`, `CrossingsMapped`: the junction and the signal
+  nodes linked to it by links inside it). A mapped marked crossing draws one even without a sidewalk (#700).
+- **An unmarked crossing counts as data** (draws nothing): OSM's `crossing=unmarked` is a crossing with neither markings
+  nor signals, so at the lights it says the arm was mapped and has no crosswalk (`CrossingNodes.OnArm(unmarked: true)`).
+  `crossing=no` is on no `highway=crossing` node, so the extractor never reads it.
+- **No crosswalk, no pedestrian signal** (the user's decision): such an arm gets no pedestrian heads on its poles and no
+  pedestrian group in the plan (`SignalArm.Pedestrians`). Before every lit arm had them, even one without a sidewalk.
+  An arm whose street lies in another block keeps them (its sides cannot be read there).
+- Sion tiles: 21 of 22 lights junctions have crossing data, 14 arms with a sidewalk lose their crosswalk (two checked
+  against live OSM: right), 33 arms without a pedestrian signal; cycles 60 x5, 61, 63 x10, 64 x6 -> 60 x6, 62 x3, 63 x10,
+  64 x3. Test region: J3 maps one crossing (west arm, `A4` at 592 m): the north arm's sidewalks get none; 28 of 35 lit
+  arms have no pedestrian signal (most region junctions are rural, no sidewalks). Tier 0
+  `At_lights_with_crossing_data_the_crosswalks_go_only_on_the_mapped_arms` (fails on the code before).
+
 ## Phase 2: lanes
 
 - **Equal lane widths at every junction** (`LanesOf(equal: true)` for every pocket, #682 had it at the lights): the T's

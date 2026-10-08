@@ -186,10 +186,11 @@ public static class SignalTestRegion
         junctions.Add(new Junction("J7-double-left", j7, n, "a double left pocket from lanes:forward=3 and turn:lanes; no left pocket where OSM marks none",
             Arms("L|L|TR", "T", "LT|TR", "LT|TR")));
         // pedestrian crossings from OSM (#700): J7 is lit and has no sidewalks, so only the data draws its zebras, the ones beside
-        // the tight north-east corner diagonal; the T south of J3 has no lights: zebras on two arms, the unmarked one on its east arm none
+        // the tight north-east corner diagonal; the T south of J3 has no lights: zebras on two arms, the unmarked one on its east arm none.
+        // J3 maps one crossing, on its west arm: its crosswalks follow the data, none on the north arm's sidewalks (#711)
         var crossings = new List<CrossingNode>
         {
-            new("A13", 8, "zebra"), new("J7N", 8, "zebra"),
+            new("A13", 8, "zebra"), new("J7N", 8, "zebra"), new("A4", 592, "traffic_signals"),
             new("J3S", 6, "zebra"), new("J3D0", 294, "marked"), new("J3D1", 6, "unmarked"),
         };
         return new Design(lines, boxes, junctions, crossings);

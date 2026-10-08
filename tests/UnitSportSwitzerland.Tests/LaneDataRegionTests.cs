@@ -165,6 +165,24 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
     }
 
     [Fact]
+    public void At_lights_with_crossing_data_the_crosswalks_go_only_on_the_mapped_arms()
+    {
+        // J3 has sidewalks on its north arm, but OSM maps its only crossing on the west arm (#711)
+        var j3 = region.Junction("J3-");
+        var id = TileId.FromLv95(j3.E, j3.N);
+        double cx = j3.E - id.MinE, cz = id.MaxN - j3.N;
+        var zebras = Zebras(region.Tile(j3.E, j3.N), cx, cz, 30);
+        Assert.Contains(zebras, z => z.Average(q => q.X) < cx - 3);   // on the west arm
+        Assert.DoesNotContain(zebras, z => z.Average(q => q.Z) < cz - 3);   // none on the north arm
+        // a pedestrian signal only where there is a crosswalk: on the west arm
+        var signal = region.Tile(j3.E, j3.N).Signals.MinBy(s => Math.Abs(s.X - cx) + Math.Abs(s.Z - cz))!;
+        var walk = signal.Plan.Groups.Where(g => g.Kind == SignalGroupKind.Pedestrian).ToList();
+        Assert.Single(walk);
+        Assert.True(Math.Abs(Math.Cos(signal.Plan.Arms[walk[0].Arm].Heading) + 1) < 0.1, "the pedestrian group should cross the west arm");
+        Assert.All(signal.Poles.Where(p => (p.Flags & SignalPoleFlags.Pedestrian) != 0), p => Assert.Equal(walk[0].Arm, p.Arm));
+    }
+
+    [Fact]
     public void A_crossing_beside_a_tight_corner_runs_diagonal_at_most_30_degrees()
     {
         // J7 has no sidewalks: its zebras come from the data, on the north and east arms beside the tight north-east corner
