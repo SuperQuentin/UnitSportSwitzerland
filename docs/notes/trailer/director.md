@@ -3,7 +3,8 @@
 - **What it is**: `--trailer all|N|A-B|N,M` stages and films the shots of a film one after the
   other in the real world, with the game's own machines. A `ToolRun` row in `ClientWorld` (it places
   the camera itself: the spectator, freed like `ShotRunner`'s).
-- **Two films** (`--trailer-film`, `FILM=` in `tools/trailer.sh`):
+- **The films** (`--trailer-film`, `FILM=` in `tools/trailer.sh`): `drognens` (`DrognensScript`,
+  `docs/trailer/drognens.md`, #717: the 30 s music clip at the barracks) and
   `story` (default, `StoryScript`, the script `docs/trailer/script.md`: four friends and a fondue,
   the features shown only through what they do) and `showcase` (`TrailerScript`, the storyboard
   `docs/trailer/storyboard.md`: one feature a shot). The story reuses the showcase's helpers,
@@ -18,6 +19,20 @@
   prop item is set with its lowest point on the floor, a path's or a road's collision included) →
   `Preroll` (the actors move for `Shot.Preroll` s, the camera already on its first key) → `Roll`
   (the keys for the shot's length, the captions on top) → the next shot.
+- **A song per film** (`Song` is a record, `Shot.Song`; the cut is checked against the film's): `VoxelRevolution` for
+  the trailers, `IGotAStick` for the clip (121 BPM, first downbeat 0.322 s, 15 bars to 30.07 s);
+  `tools/trailer.sh` fetches the film's own.
+- **Film sets** (`Shot.Set`, `SetAt`): a room the director builds (the dormitory, `DormSet`, after
+  the army's photo of room 61-405), put 400 m under the sea under the place it stands for and lit by
+  its own lamps. Camera points `Pt.Set`, actors `Cast.InSet` (put inside with `EnterInterior`, so
+  nothing measures them against the terrain), props `Prop.InSet` (items rest on what is under them:
+  the table), `Prop.Seated` (a character sitting, the passengers' `SeatedFigure`), `Cast.Use` (the
+  held item used on cue: a drink at the mouth). `MeshScratch.Build` bakes a half turn, so a set's
+  meshes are turned back (`Unturn`) to match its lights, collision and points; the roll logs where
+  the camera starts in the set's metres.
+- **Night**: the game's night leaves olive and dark machines black on black tarmac, a directional
+  light barely lifts them (the terrain's shaders keep their night); `Shot.Moon` adds a soft blue one
+  anyway. A race was moved to first light instead.
 - **Time**: shots run from a bar line of the song (`Song.Bar(k)`: 123 BPM, first downbeat 0.186 s);
   a recorded shot has `round(End·fps) − round(Start·fps)` frames, so cuts never drift off the bars.
 - **Actors** (`Actor`, a `Cast` each): a `FootPlayer` with `Npc = true` (no camera, anchors its own

@@ -72,6 +72,20 @@ public partial class CdLibrary : Node
     /// <summary><see cref="CdInfo.Source"/> of the CD burnt from a <see cref="DefaultUrls"/> link.</summary>
     public static string DefaultSource(string url) => "default:" + url;
 
+    /// <summary>What a CD burnt from a check's <c>--cdfixture</c> (or <c>--radiopersonal</c>) file is marked with.</summary>
+    private const string FixturePrefix = "fixture:";
+
+    /// <summary>The checks' fixture CDs burnt before they were marked (their file names in tools/*check.sh).</summary>
+    private static readonly HashSet<string> LegacyFixtures = new() { "radiofixture", "radiofixture2", "radiopersonal", "carcdA", "carcdB" };
+
+    /// <summary>
+    /// A CD a check burnt from a test sound, not music: hidden from an exported game and its files
+    /// deleted there (<see cref="DropFixtures"/>). The checks share the user folder with a release
+    /// on the same machine, so their CDs used to show up in the player's radio.
+    /// </summary>
+    public static bool IsFixture(CdInfo cd) =>
+        cd.Source.StartsWith(FixturePrefix, StringComparison.Ordinal) || (cd.Source.Length == 0 && LegacyFixtures.Contains(cd.Title));
+
     /// <summary>
     /// The shared CD of the chess type beat, or -1 while it is not burnt (or not yet listed here).
     /// Every peer knows it from the library, so the dance needs nothing replicated.
@@ -185,6 +199,36 @@ public partial class CdLibrary : Node
         if (refusal.Length > 0) BurnStatus?.Invoke(refusal);
     }
 
+    /// <summary>
+    /// Burns an audio file from this computer (#736). For "just for me", offline or on the host it
+    /// is burnt here; on someone else's server it is uploaded (<see cref="CdUpload"/>), virus-scanned
+    /// there and burnt into the shared list.
+    /// </summary>
+    public void BurnFile(string path, bool personal = false)
+    {
+        if (!File.Exists(path)) { BurnStatus?.Invoke("That file is gone."); return; }
+        if (!personal && !Owns)
+        {
+            if (CdUpload.Instance is { } upload) upload.Send(path);
+            return;
+        }
+        Begin(0, path, personal, out string refusal);
+        if (refusal.Length > 0) BurnStatus?.Invoke(refusal);
+    }
+
+    /// <summary>
+    /// Server: burns a player's upload that passed the virus scan (<see cref="CdUpload"/>) into the
+    /// shared list; its folder is deleted once the burn is done, whatever came of it.
+    /// </summary>
+    internal bool BurnUpload(long peer, string file, string folder, out string refusal)
+    {
+        Begin(peer, file, false, out refusal, deleteAfter: folder);
+        return refusal.Length == 0;
+    }
+
+    /// <summary>Server or offline: a status line for <paramref name="peer"/>'s burn box (0 = this process).</summary>
+    internal void Report(long peer, string text) => _status.Enqueue((peer, text));
+
     /// <summary>Forgets one of this player's own CDs and deletes its files.</summary>
     public void RemovePersonal(int id)
     {
@@ -254,10 +298,11 @@ public partial class CdLibrary : Node
     }
 
     /// <summary>Starts a burn on the worker, or says why not. <paramref name="peer"/> 0 = this process.</summary>
-    private void Begin(long peer, string url, bool personal, out string refusal)
+    private void Begin(long peer, string url, bool personal, out string refusal, string? deleteAfter = null)
     {
         refusal = "";
-        bool localFile = peer == 0 && File.Exists(url);
+        // a file only from this process, or a player's upload the server has scanned (#736)
+        bool localFile = (peer == 0 || deleteAfter != null) && File.Exists(url);
         if (!localFile && !AllowedSource(url)) { refusal = "Only YouTube links can be burnt."; return; }
         if (_burning) { refusal = personal ? "Already burning a CD; try again when it is done." : "Someone is already burning a CD; try again in a minute."; return; }
         double now = Time.GetTicksMsec() / 1000.0;
@@ -266,7 +311,13 @@ public partial class CdLibrary : Node
             refusal = $"One CD a minute: {(int)(BurnCooldown - (now - last))} s to wait.";
             return;
         }
-        if (!CdBurner.ToolsAvailable(out string why)) { refusal = why; return; }
+        // a file needs ffmpeg only; a link yt-dlp too
+        string why = "";
+        if (!(localFile ? CdBurner.FfmpegAvailable() : CdBurner.ToolsAvailable(out why)))
+        {
+            refusal = localFile ? "ffmpeg is missing: a file cannot be burnt here." : why;
+            return;
+        }
 
         _burning = true;
         _lastBurn[peer] = now;
@@ -291,6 +342,13 @@ public partial class CdLibrary : Node
                 if (cd != null && source != null) cd = cd with { Source = source };
             }
             catch (Exception e) { _status.Enqueue((peer, $"Burn failed: {e.Message}")); }
+            finally
+            {
+                // an upload is kept only as the re-encoded Ogg: the original goes (#736)
+                if (deleteAfter != null)
+                    try { System.IO.Directory.Delete(deleteAfter, recursive: true); }
+                    catch (Exception e) { GD.PushWarning($"[cd] could not delete the upload {deleteAfter}: {e.Message}"); }
+            }
             _done.Enqueue((peer, cd, personal));
         });
     }
@@ -394,6 +452,7 @@ public partial class CdLibrary : Node
             _all[cd.Id] = Note(cd);
             _nextId = Math.Max(_nextId, cd.Id + 1);
         }
+        if (DropFixtures(Directory, _all)) Save();
         GD.Print($"[cd] library: {_all.Count} CD(s) in {Directory}");
     }
 
@@ -401,10 +460,33 @@ public partial class CdLibrary : Node
     {
         foreach (var cd in LoadIndex(PersonalDirectory))
             if (cd.Id < 0) _personal[cd.Id] = cd;
+        if (DropFixtures(PersonalDirectory, _personal)) SaveIndex(PersonalDirectory, _personal);
         if (_personal.Count > 0) GD.Print($"[cd] {_personal.Count} personal CD(s) in {PersonalDirectory}");
     }
 
     private void Save() => SaveIndex(Directory, _all);
+
+    /// <summary>
+    /// An exported game (not a check burning its own) forgets the checks' fixture CDs and deletes
+    /// their files. True when it removed any, so the caller rewrites the index.
+    /// </summary>
+    private static bool DropFixtures(string directory, Dictionary<int, CdInfo> cds)
+    {
+        if (!OS.HasFeature("template") || CmdArgs.Has("--cdfixture") || CmdArgs.Has("--radiopersonal")) return false;
+        bool any = false;
+        foreach (var cd in cds.Values.Where(IsFixture).ToList())
+        {
+            cds.Remove(cd.Id);
+            any = true;
+            foreach (string ext in new[] { ".ogg", ".json" })
+            {
+                try { File.Delete(Path.Combine(directory, $"{cd.Id}{ext}")); }
+                catch (Exception e) { GD.PushWarning($"[cd] could not delete fixture CD {cd.Id}{ext}: {e.Message}"); }
+            }
+            GD.Print($"[cd] dropped the check's fixture CD {cd.Id} ({cd.Title})");
+        }
+        return any;
+    }
 
     private static readonly System.Text.Json.JsonSerializerOptions IndexJson = new()
     {
@@ -521,6 +603,7 @@ public partial class CdLibrary : Node
             if (!File.Exists(file)) { GD.PushWarning($"[cd] fixture not found: {file}"); continue; }
             string title = Path.GetFileNameWithoutExtension(file);
             if (_all.Values.Any(c => c.Title == title)) { GD.Print($"[cd] fixture already burnt: {title}"); continue; }
+            _sources[file] = FixturePrefix + title;   // marked, so an exported game drops it
             _fixtures.Enqueue(file);   // one at a time, from _Process
         }
     }

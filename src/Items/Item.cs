@@ -225,6 +225,15 @@ public static class ItemDefs
             ItemUse.Farm, 20, new Color("#c8c8b0"), "FE", 0, ItemCategory.Produce, 12f),
         new(ItemId.FarmStand, "Farm stand", "{use_item} sets it up where you look, by a road: a self-service stand with an honesty box. {interact_mount} at it stocks it with produce and takes the cash; passers-by and other players buy from it. Packed up empty with {use_item} and an empty hand.",
             ItemUse.Place, 1, new Color("#8a5a30"), "FS", 0, ItemCategory.Gear, 30f),
+        // the barracks (#716, docs/notes/items/barracks-items.md): a night in the army. Cards and chips do nothing
+        // but look right in the hand (and fly when thrown); the beer is a drink like the others
+        new(ItemId.PlayingCards, "Playing cards", "A Jass deck: held, a fanned hand of five. A night in the barracks needs one.",
+            ItemUse.Material, 4, new Color("#ece6d6"), "PC", 0, ItemCategory.Cosmetic, 4f),
+        new(ItemId.PokerChips, "Poker chips", "A stack of chips in red, blue, green and white. Worth nothing but the bragging.",
+            ItemUse.Material, 50, new Color("#c82a2a"), "PK", 0, ItemCategory.Cosmetic, 12f),
+        Eat(ItemId.BeerBottle, "Beer", 6, "#7a4a1a", "BE", 10, ItemCategory.Water, 3),
+        new(ItemId.Gamelle, "Gamelle", "The army's three-part mess tin in olive aluminium: pot, dish and lid on a wire bail.",
+            ItemUse.Material, 2, new Color("#707a58"), "GA", 0, ItemCategory.Gear, 14f),
     };
 
     private static ItemDef Seed(ItemId id, string name, string tint, string glyph, float value) =>
@@ -304,6 +313,7 @@ public static class ItemDefs
             GarmentStyle.Gothic => " Gothic.",
             GarmentStyle.Kawaii => " Kawaii.",
             GarmentStyle.Special => $" Rare: a {Garments.FinishName(g.Finish)} finish that moves.",
+            _ when g.Finish == Finish.Camo => " The army's TAZ 90 camouflage.",
             _ => "",
         };
         string covers = g.CoversBottom ? " One piece: it takes the bottom slot too." : "";
@@ -562,6 +572,18 @@ public static class ItemDefs
                 s.Box(new Vector3(0, 0.43f, 0), new Vector3(0.035f, 0.07f, 0.035f), new Color(1f, 0.88f, 0.35f));
                 break;
             }
+            case ItemId.PlayingCards:
+                BarracksMeshes.AppendCards(s);
+                break;
+            case ItemId.PokerChips:
+                BarracksMeshes.AppendChips(s);
+                break;
+            case ItemId.BeerBottle:
+                BarracksMeshes.AppendBeer(s);
+                break;
+            case ItemId.Gamelle:
+                BarracksMeshes.AppendGamelle(s);
+                break;
             case ItemId.Radio:
                 // the grip is the handle: the box hangs from the hand at its real 0.46 m
                 AppendRadio(s, new Vector3(0, -0.16f, 0));
@@ -674,6 +696,11 @@ public static class ItemDefs
             var node = ModelViewer.Shaded(HandMesh(id)!);
             if (HandMaterial(id, null) is { } material) node.MaterialOverride = material;
             if (id == ItemId.Shotgun) node.AddChild(ModelViewer.Shaded(ShotgunForeEnd()));
-            return node;
+            // a held mesh hangs from the grip at its origin (a mess tin hangs below it): lift it onto the viewer's floor,
+            // under a parent so the viewer's box and camera include the lift
+            var lifted = new Node3D();
+            lifted.AddChild(node);
+            node.Position = new Vector3(0, Mathf.Max(0f, -node.GetAabb().Position.Y), 0);
+            return lifted;
         })));
 }

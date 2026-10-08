@@ -186,6 +186,18 @@ public enum ItemId
     Fertiliser = 336,
     /// <summary>Placed: a self-service farm stand with an honesty box (<c>PlacedKind.FarmStand</c>, <c>Farming.FarmStands</c>).</summary>
     FarmStand = 340,
+
+    // ---- the barracks (#716, docs/notes/items/barracks-items.md): a night in the army, and the recruit's uniform ----
+    /// <summary>Held, a fanned hand of five; nothing to use, it just looks right (shops: kiosk).</summary>
+    PlayingCards = 350,
+    /// <summary>Held, a short stack of coloured chips.</summary>
+    PokerChips = 351,
+    /// <summary>A 33 cl brown bottle: drunk, it plays the mouth pose like the other drinks.</summary>
+    BeerBottle = 352,
+    /// <summary>The army's three-part mess tin.</summary>
+    Gamelle = 353,
+    /// <summary>Garments (Avatar.Garments): the Swiss camouflage TAZ 90, and an olive army T-shirt.</summary>
+    TazJacket = 354, TazTrousers = 355, ArmyTee = 356,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>

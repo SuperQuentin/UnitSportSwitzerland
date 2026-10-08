@@ -18,7 +18,7 @@ instance uniform float burst = 0.0;   // 1 when a new section starts, decaying o
 instance uniform float peak = 0.5;    // 0 calm .. 1 chorus: the section's size
 
 uniform float rise = 0.32;            // m a glint climbs over its life
-uniform float size = 0.034;           // m, half a glint's width at its peak
+uniform float size = 0.026;           // m, half a glint's width at its peak (#732: was 0.034, too loud)
 
 varying vec3 tint;
 varying float glow;
@@ -32,13 +32,13 @@ const vec3 PALETTE[4] = vec3[4](
 
 void vertex() {
     float h = UV2.x, h2 = UV2.y;
-    bool is_note = fract(h * 13.7) < 0.26;
+    bool is_note = fract(h * 13.7) < 0.18;
     // louder parts live faster; a big section adds more of them
     float speed = 0.75 + 0.5 * level + 0.25 * peak;
     float life = (1.1 + 0.9 * h2) * (is_note ? 1.5 : 1.0);
     float age = fract(TIME * speed / life + h * 7.0);
     // how many show: a quiet passage keeps a handful, the chorus all of them
-    float density = clamp(0.25 + 0.55 * level + 0.3 * peak + 0.6 * burst, 0.0, 1.0);
+    float density = clamp(0.10 + 0.45 * level + 0.20 * peak + 0.40 * burst, 0.0, 0.85);
     float present = step(fract(h * 31.0), density);
 
     vec3 home = VERTEX;
@@ -46,7 +46,7 @@ void vertex() {
     float kick = max(pulse, bar);
     vec3 pos = home
         + vec3(0.0, rise * age * (is_note ? 1.3 : 1.0) * (0.8 + 0.4 * peak), 0.0)
-        + out_dir * (0.05 * age + 0.06 * kick + 0.14 * burst * (1.0 - age))
+        + out_dir * (0.05 * age + 0.04 * kick + 0.08 * burst * (1.0 - age))
         + vec3(sin(TIME * (1.7 + h2) + h * 30.0), 0.0, cos(TIME * (1.3 + h) + h2 * 30.0)) * 0.025 * age;
     // a note wobbles side to side as it floats up
     if (is_note) {
@@ -57,7 +57,7 @@ void vertex() {
     float env = smoothstep(0.0, 0.12, age) * (1.0 - smoothstep(0.55, 1.0, age));
     float twinkle = is_note ? 0.85 + 0.15 * sin(TIME * 6.0 + h * 20.0)
                             : 0.45 + 0.55 * abs(sin(TIME * (7.0 + 9.0 * h2) + h * 50.0));
-    float grow = 1.0 + 0.9 * pulse + 0.7 * bar + 0.8 * burst;
+    float grow = 1.0 + 0.5 * pulse + 0.35 * bar + 0.4 * burst;
     float s = size * (is_note ? 1.6 : 1.0) * env * twinkle * grow * on * present;
 
     vec3 view = (MODELVIEW_MATRIX * vec4(pos, 1.0)).xyz;
@@ -65,7 +65,7 @@ void vertex() {
     VERTEX = view;
 
     tint = PALETTE[int(mod(floor(h * 4.0) + beat, 4.0))];
-    glow = (0.8 + 0.4 * level + 1.4 * pulse + 0.8 * bar) * twinkle;
+    glow = (0.55 + 0.3 * level + 0.7 * pulse + 0.4 * bar) * twinkle;
     note = is_note ? (fract(h * 5.3) < 0.5 ? 1.0 : 2.0) : 0.0;
 }
 

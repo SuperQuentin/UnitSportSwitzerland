@@ -7,6 +7,7 @@
 #include "res://shaders/world_occasion.gdshaderinc"
 #include "res://shaders/door_light.gdshaderinc"
 #include "res://shaders/portal_clip.gdshaderinc"
+#include "res://shaders/common/music.gdshaderinc"
 
 // Occasion props (src/Occasions/OccasionDecor): jack-o'-lanterns, treat bowls, pumpkins, lights,
 // town trees. Same PS1 treatment as the trees — vertex snap, stepped sun, dither, fog — plus a
@@ -49,6 +50,11 @@ void fragment() {
 
     float wobble = 0.82 + 0.18 * sin(TIME * (6.0 + seed * 5.0) + seed * 40.0) * sin(TIME * 2.3 + seed * 13.0);
     float glow = mask * glow_gain * world_night * mix(1.0, wobble, flicker);
+    // near music (#734) the lights flash with the kicks, by day too
+    float mr = music_reach(world_pos);
+    if (mr > 0.0) {
+        glow = max(glow * (1.0 + 1.2 * world_music_beat.x * mr), mask * glow_gain * mr * (0.15 + 0.85 * world_music_beat.x));
+    }
 #ifdef STYLE_LIT
     col = style_grade(occasion_mist(col, world_pos, length(VERTEX)));
     ALBEDO = col;

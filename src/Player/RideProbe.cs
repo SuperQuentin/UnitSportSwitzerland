@@ -90,6 +90,7 @@ public partial class RideProbe : Node
                 "freighter" => RideKind.Freighter,
                 "an124" => RideKind.An124,
                 "monster" => (RideKind)(MotorbikeCatalog.First + 1),
+                "kart" => CarCatalog.Kart.Kind,
                 // works machinery (#583): the mast is worked with the shift paddles while driving
                 "forklift" => RideKind.Forklift,
                 "excavator" => RideKind.Excavator,

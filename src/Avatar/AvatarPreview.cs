@@ -355,7 +355,8 @@ public partial class AvatarPreview : Node3D
             for (int i = 0; i < setups.Length; i++)
             {
                 var spec = setups[i].Apply(car);
-                var rig = CarRig.Create(spec.Body, spec.Wheelbase);
+                // as the game builds it: a kart wears its rider's colours (rider 1) or the army's skin (#715)
+                var rig = (CarRig)new Player.Car(spec).BuildParkedVisual(1);
                 rig.Rotation = new Vector3(0, Mathf.Pi - (_viewDegrees == 90 ? 0.6f : Mathf.DegToRad(_viewDegrees)), 0);
                 Place((i - (setups.Length - 1) * 0.5f) * 3.6f, rig);
                 GD.Print($"[carsetups] {i + 1}. {car.Label} {setups[i].Name}: lift {spec.Body.Lift:F2} m, wheel {spec.Body.WheelRadius:F2} m, "
@@ -547,6 +548,9 @@ public partial class AvatarPreview : Node3D
         (new[] { Items.ItemId.MaskCat, Items.ItemId.StripedLongsleeve, Items.ItemId.RuffledMini, Items.ItemId.GothStockings, Items.ItemId.PlatformBoots }, Headwear.None),
         (new[] { Items.ItemId.WhiteMarcel, Items.ItemId.Jeans, Items.ItemId.WhiteSneakers, Items.ItemId.SilverStuds }, Headwear.None),
         (new[] { Items.ItemId.GothicRobe, Items.ItemId.MaskBlack, Items.ItemId.ChainNecklace }, Headwear.None),
+        // #716: the recruit
+        (new[] { Items.ItemId.BlackBeanie, Items.ItemId.TazJacket, Items.ItemId.TazTrousers, Items.ItemId.CombatBoots }, Headwear.None),
+        (new[] { Items.ItemId.ArmyTee, Items.ItemId.TazTrousers, Items.ItemId.CombatBoots }, Headwear.None),
     };
 
     private void BuildOutfits()

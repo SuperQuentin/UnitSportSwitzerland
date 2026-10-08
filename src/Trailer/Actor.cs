@@ -55,6 +55,9 @@ public sealed class Actor
         _cast = cast;
     }
 
+    /// <summary>A point of the shot's set in world space (<see cref="Cast.InSet"/>); null with no set.</summary>
+    public System.Func<Vector3, Vector3?> SetPoint { get; init; } = _ => null;
+
     private bool OnRoad => Spec.Drive is Drive.Road or Drive.Follow || Spec.Route != null;
     private bool Boat => Spec.Board != null;
 
@@ -153,6 +156,12 @@ public sealed class Actor
             carried = host.Velocity;
             carrier = host;
         }
+        else if (Spec.InSet is { } local)
+        {
+            // in the shot's set: on its floor, inside (see below)
+            if (SetPoint(local) is not { } inSet) return;
+            at = inSet;
+        }
         else if (Spec.FromDoor)
         {
             // on the step of the nearest front door, facing out, the door asked open
@@ -203,6 +212,8 @@ public sealed class Actor
             body.DebugLaunch(at + Vector3.Up * 0.3f, v);
             _launched = true;
         }
+        // in a set, far under the ground: inside, as in an interior, so nothing measures it against the terrain
+        else if (Spec.InSet != null) body.EnterInterior("trailer-set", at + Vector3.Up * 0.95f, -Mathf.DegToRad(bearing));
         else body.GlobalPosition = at + Vector3.Up * (Spec.FromDoor ? 0.95f : 1.2f);
         _ahead = Forward(bearing);
         Body = body;
@@ -319,6 +330,7 @@ public sealed class Actor
         if (Body == null || !GodotObject.IsInstanceValid(Body)) return;
         if (_moving >= 0) _moving += dt;
         if (Ready && Body.HeldItemId != Spec.Item) Body.HeldItemId = Spec.Item;
+        if (Ready && Spec.Use != null) Body.ItemAction = _moving >= 0 && Spec.Use(_moving) ? 2 : 0;
         if (Body.BackItemId != 0) Body.BackItemId = 0;
         var v = Body.IsFlying ? Body.Flight.Velocity : Body.Ride == RideKind.OnFoot ? Body.Velocity : Body.WorldVelocity;
         var flat = v with { Y = 0 };

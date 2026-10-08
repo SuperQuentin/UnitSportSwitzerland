@@ -219,7 +219,7 @@ void fragment() {{
             ViewPose.Eye when use == ItemUse.Optic => (new Vector3(0f, -0.03f, -0.20f), Vector3.Zero),
             ViewPose.Eye => (new Vector3(0f, -0.12f, -0.38f), Vector3.Zero),
             // a bottle is upright in the hand: tipped ~70 degrees so its neck comes to the mouth; food jabs up and in
-            ViewPose.Mouth when _shown == ItemId.WaterBottle => (new Vector3(0.06f, -0.17f, -0.30f), new Vector3(1.25f, 0, -0.25f)),
+            ViewPose.Mouth when _shown is ItemId.WaterBottle or ItemId.BeerBottle => (new Vector3(0.06f, -0.17f, -0.30f), new Vector3(1.25f, 0, -0.25f)),
             ViewPose.Mouth => (new Vector3(0.0f, -0.10f, -0.26f), new Vector3(0.45f, 0, 0)),
             // GPS held up: low centre, top tipped away so the screen faces the eye
             ViewPose.Read => (new Vector3(0.0f, -0.16f, -0.30f), new Vector3(-0.65f, 0, 0)),
@@ -484,7 +484,7 @@ void fragment() {{
     /// <summary>A playing radio in the figure's hand sparkles (#387); anything else in the hand, at once nothing.</summary>
     private void StepSparkles(bool shown, float dt)
     {
-        if (!shown || _shown != ItemId.Radio || RadioPlay.Decode(_player.HeldRadio) is not { } play)
+        if (!shown || _shown != ItemId.Radio || RadioPlay.Decode(_player.HeldRadio) is not { } play || !play.Sounding(Net.ClockSync.ServerNow))
         {
             _sparkles?.Off();
             return;

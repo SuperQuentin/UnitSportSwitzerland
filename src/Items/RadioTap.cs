@@ -100,6 +100,20 @@ public static class RadioTap
         NowPlaying(cd);
     }
 
+    /// <summary>On or off, the radio by the pastor rat (#734): off stops it, on plays its last CD, else the chess type beat.</summary>
+    public static void ToggleChurch(string plan)
+    {
+        if (Interiors.ChurchRadios.Instance is not { } church) return;
+        Clack();
+        if (church.PlayOf(plan) != null) { church.Stop(plan); return; }
+        int last = church.LastCdOf(plan);
+        var cd = last != 0 ? CdLibrary.Instance?.Find(last) : null;
+        cd ??= CdLibrary.Instance is { RatBeatId: > 0 and var rat } lib ? lib.Find(rat) : Pick(0);
+        if (cd == null) { Empty(); return; }
+        church.Play(plan, cd.Id, cd.Duration);
+        NowPlaying(cd);
+    }
+
     /// <summary>The CD to put on: <paramref name="last"/> when the library still has it, else the first in play order.</summary>
     private static CdInfo? Pick(int last)
     {

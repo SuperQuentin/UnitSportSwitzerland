@@ -28,6 +28,12 @@ public static partial class HumanMeshBuilder
         Each(Enum.GetValues<BodyBuild>(),
             (build, i) => Build(HumanPalette.ForRider(i).With(Appearance.Default with { Build = build })));
 
+    // every garment of the wardrobe on a figure that keeps the rest plain, so a new look shows by itself (#716)
+    [Showcase("Clothes")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseClothes() =>
+        Garments.All.Select((g, i) => (g.Name, (Func<Node3D>)(() =>
+            Figure(Build(HumanPalette.ForRider(i) with { Outfit = Outfit.Empty.With(g.Slot, g.Code) })))));
+
     [Showcase("Figures", "Hair")]
     private static IEnumerable<(string, Func<Node3D>)> ShowcaseHair() =>
         Each(Enum.GetValues<HairStyle>(),

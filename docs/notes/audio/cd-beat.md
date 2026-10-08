@@ -23,6 +23,32 @@
   has no CD of yet (`CdInfo.Source = "default:<url>"`) through the fixture queue at start, one at a
   time; a failed one is tried again next start. No audio ships: the songs are not openly licensed.
   Dev runs and checks skip it, offline, so a `--cdfixture` never waits behind a download.
+- **Check fixtures stay out of the release.** The checks (`--cdfixture`, `--radiopersonal`) burn test
+  sounds into the same `user://cds` a release on that machine reads. A fixture CD is marked
+  `Source = "fixture:<name>"` (older ones are known by name: radiofixture, radiofixture2,
+  radiopersonal, carcdA, carcdB), and an exported build that is not itself a check drops them and
+  deletes their files at load (`CdLibrary.DropFixtures`). Dev runs keep them, so checks reuse them.
+- **From a player's own file (#736).** The burn box's "From a file…" opens the system picker
+  (`CdUploadRules.Extensions`: mp3 ogg wav flac m4a opus aac, up to 20 MB). "Just for me", offline
+  or on the host it is burnt here (ffmpeg only, no yt-dlp). Online, shared: `CdUpload` (at
+  `World/CdUpload`) asks the server with the name, size and SHA-256, then streams 32 KB chunks, 16
+  ahead of the server's acks (a 20 MB song does not choke the game's link). The server refuses
+  before a byte is kept unless: the player may burn, one upload a minute each and two at once, the
+  size and extension, a **working antivirus** (`CdScanner`: ClamAV `clamdscan` then `clamscan` on
+  Linux/macOS, Windows Defender `MpCmdRun.exe` from ProgramData's newest platform folder; checked on
+  a harmless file at boot, `AvailableAsync`) and **free disk space** (500 MB left after 3x the file).
+  No antivirus means uploads are off ("this server cannot check files for viruses"), YouTube links
+  still work. Chunks go in order from that peer only into `user://cds/uploads/<peer>_<guid>/`
+  (`CdUploadRules.SafeName`: no folders, plain characters, an audio extension), then the size and
+  hash must match, the scan must say clean (`CdScanner.Interpret`: ClamAV exit 0/1, Defender by its
+  text, since MpCmdRun also exits 2 when the scan itself fails), and only then `CdLibrary.BurnUpload`
+  runs the normal burn: ffmpeg decodes it (no audio, no CD), cuts it at 10 min, re-encodes it, and
+  only that Ogg is kept; the upload folder is deleted whatever happens. A stalled upload (30 s), a
+  peer leaving, or a crash (the folder is wiped at server start) leaves nothing behind. **A Linux
+  server needs ClamAV** (`apt install clamav clamav-daemon`, `freshclam`) for uploads.
+  Check: `tools/uploadcheck.sh` (net tier): a client uploads a generated song, the server scans it
+  (Defender here), it lands in the shared list; a second upload straight after is refused.
+  Tests: `CdUploadTests` (extensions, names that try to climb out of the folder, scanner verdicts).
 - **Threading.** The burn is a `Task.Run`; progress and the result cross back through
   `ConcurrentQueue`s drained in `_Process`, because an RPC sent off the main thread never arrives.
 - **`BeatAnalyzer.Analyse(mono, rate)`** (pure C#, ~0.5 s for 4 min): Hann 1024 / hop 256 spectral

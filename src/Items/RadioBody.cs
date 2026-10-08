@@ -83,6 +83,7 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
             Playing = state.Playing,
             Settled = state.Settled,
             Length = state.Length,
+            Volume = RadioLoudness.Clamp(state.Volume),
         };
         r.SetMultiplayerAuthority(state.Owner > 0 ? (int)state.Owner : 1);
         return r;
@@ -119,7 +120,7 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
 
         // what plays: the server's word, reliably on change, and with the spawn for late joiners
         var play = new SceneReplicationConfig();
-        foreach (var prop in new[] { ".:CdId", ".:StartedAt", ".:Playing", ".:Length", ".:Mode" })
+        foreach (var prop in new[] { ".:CdId", ".:StartedAt", ".:Playing", ".:Length", ".:Mode", ".:Volume" })
         {
             play.AddProperty(prop);
             play.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
@@ -190,6 +191,7 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
         _speaker.CdId = CdId;
         _speaker.StartedAt = StartedAt;
         _speaker.On = Playing;
+        _speaker.Volume = Volume;
         _speaker.Length = Length > 0 ? Length : Cd?.Duration ?? 0;
 
         // it bounces and sparkles to the music it is actually making (not while the CD is still downloading)
@@ -239,10 +241,29 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
     }
 
     /// <summary>The state to respawn it from: where it is now, what it plays.</summary>
-    public RadioState Capture() => new(Name, Owner, _place.Global, Rotation.Y, Vector3.Zero, CdId, StartedAt, Playing, Settled, Length);
+    public RadioState Capture() => new(Name, Owner, _place.Global, Rotation.Y, Vector3.Zero, CdId, StartedAt, Playing, Settled, Length, Volume);
+
+    /// <summary>Its own volume, 0..1 (#734): the server's word, on the State synchronizer.</summary>
+    [Export] public float Volume { get; set; } = RadioLoudness.Default;
 
     /// <summary>What it plays, as the item carries it when picked up; null when silent or finished.</summary>
     public RadioPlay? NowPlaying => Playing && WantedPosition < Length ? new RadioPlay(CdId, StartedAt, Length) : null;
+
+    /// <summary>
+    /// The stack data a pick-up carries into the hand (#732): what plays, else the CD it last played
+    /// switched off (<see cref="RadioPlay.Off"/>), so the next tap puts that one back on; null for a
+    /// radio that never had one.
+    /// </summary>
+    public string? CarriedData
+    {
+        get
+        {
+            var mode = RadioQueue.Clamp(Mode);
+            if (NowPlaying is { } p) return (p with { Mode = mode }).Encode();
+            float length = Length > 0 ? Length : Cd?.Duration ?? 0f;
+            return CdId != 0 && length > 0 ? RadioPlay.Off(new RadioPlay(CdId, 0, length, mode)) : null;
+        }
+    }
 
     /// <summary>
     /// The beat the CD is on, from the shared clock alone. False when nothing plays or the CD is

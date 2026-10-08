@@ -22,6 +22,10 @@
   buttons. VR: poke the red key with a controller tip (`XrHands.PokeRadio`, `RadioBody.KeyPosition`);
   the grip still opens the panel. The prompt reads "Radio on / off · hold: open it", then
   "Keep holding". `--radiopanelcheck` taps on, off (CD kept), on, off, then holds to open.
+- **It stays on the last song (#732).** A world radio keeps its `CdId` when stopped or run out;
+  picking it up carries that CD switched off (`RadioBody.CarriedData`, `RadioPlay.Off`), throwing a
+  switched-off one keeps it in the thrown radio (silent), and the panel's Play with nothing on plays
+  that CD (`RadioUi.LastCd`) before falling back to the first of the list. `--radiopanelcheck` checks it.
 - **Heavy (#725):** throws at `ThrowAim.HeftOf` 0.55 of the speed, 7 kg, low bounce (`throw-drop`).
 - **The back harness (#725):** `FootPlayer.Back.StrapMesh`, per side a closed loop (handle, padded
   shoulder, front, chest, under the arm, a tab at the radio's lower corner), a slider on each front
@@ -78,7 +82,7 @@
   first load, never cleared) and a sticky `_fetchFailed`: a new CD loaded the *old* file on the new
   CD's clock, everywhere, so "Play" looked like it did nothing. Everything loaded or fetching is now
   keyed by CD id (`RadioSpeaker.TryLoad`); `LoadedCd`/`LoadedLength` let the probe check the file.
-- **Loudness.** `RadioSpeaker`: −8 dB base, unit size 3, max 45 m (was 0 dB, 8, 120 m — it drowned
+- **Loudness.** Since #734 each radio has its own volume, shared, that sets its gain and reach (`docs/notes/items/beat-field.md`); the panel slider turns it, the slider can also scrub the song (the progress bar). Before: `RadioSpeaker`: −8 dB base, unit size 3, max 45 m (was 0 dB, 8, 120 m — it drowned
   the world), on the Music bus (the panel slider is Settings' Music volume) and muffled by walls
   and doorways (`docs/notes/audio/hearing.md`).
 - **In the hand (#168).** The playing CD lives in the radio's `ItemStack.Data` as a `RadioPlay`

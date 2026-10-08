@@ -134,6 +134,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _dropped = Items.DroppedItems.Create(this, origin);
         _dropped.PlayerPositions = _vehicles.PlayerPositions;
         Audio.Cd.CdLibrary.Create(this, server: true);
+        Audio.Cd.CdUpload.Create(this, server: true);   // a player's own file, scanned on the server (#736)
         // the radio by the pastor rat in every church (#370)
         _churchRadios = Interiors.ChurchRadios.Create(this);
         Net.ClockSync.Create(this);
