@@ -217,6 +217,13 @@ public partial class RadioUi : CanvasLayer
         var burnButton = UiKit.Button("Burn");
         burnButton.Pressed += Burn;
         burn.AddChild(burnButton);
+        // a file of the player's own (#736): burnt here for "just for me" or offline, else uploaded
+        // and virus-scanned on the server
+        var fromFile = UiKit.Button("From a file…");
+        fromFile.TooltipText = "Burn a song from your computer (" + string.Join(" ", CdUpload.Extensions)
+            + $", up to {CdUpload.MaxBytes / (1024 * 1024)} MB). Online, the server checks it for viruses first.";
+        fromFile.Pressed += PickFile;
+        burn.AddChild(fromFile);
 
         var status = UiKit.HBox(10);
         _library.AddChild(status);
@@ -656,6 +663,31 @@ public partial class RadioUi : CanvasLayer
         });
     }
 
+    private FileDialog? _picker;
+
+    /// <summary>The system's file picker on audio files; the chosen one is burnt (#736).</summary>
+    private void PickFile()
+    {
+        if (_picker == null)
+        {
+            _picker = new FileDialog
+            {
+                FileMode = FileDialog.FileModeEnum.OpenFile, Access = FileDialog.AccessEnum.Filesystem,
+                UseNativeDialog = true, Title = "A song to burn",
+                Filters = new[] { string.Join(", ", System.Array.ConvertAll(CdUpload.Extensions, e => "*" + e)) + " ; Audio" },
+            };
+            _picker.FileSelected += path =>
+            {
+                if (CdLibrary.Instance is not { } library) return;
+                _burning = true;
+                ShowStatus($"Burning {System.IO.Path.GetFileName(path)}…", UiTheme.TextDim, 0, progress: -1);
+                library.BurnFile(path, _mine.ButtonPressed);
+            };
+            AddChild(_picker);
+        }
+        _picker.PopupCentered(new Vector2I(760, 520));
+    }
+
     private void Burn()
     {
         string text = _link.Text.Trim();
@@ -673,11 +705,16 @@ public partial class RadioUi : CanvasLayer
         Callable.From(() =>
         {
             if (!IsInstanceValid(this)) return;
-            int stage = line.StartsWith("Downloading") ? 1 : line.StartsWith("Analysing") ? 2 : line.StartsWith("Encoding") ? 3 : 0;
-            if (stage > 0)
+            // the steps of a burn, an upload's first (#736): how far along the bar is at each
+            float at = line.StartsWith("Uploading") ? 0.05f + 0.3f * UploadShare(line)
+                : line.StartsWith("Scanning") ? 0.4f
+                : line.StartsWith("Downloading") ? 0.2f
+                : line.StartsWith("Analysing") ? 0.6f
+                : line.StartsWith("Encoding") ? 0.85f : -1f;
+            if (at >= 0f)
             {
                 _burning = true;
-                ShowStatus($"Burning, step {stage} of 3: {line}", UiTheme.Text, 0, progress: (stage - 0.5f) / 3f);
+                ShowStatus($"Burning: {line}", UiTheme.Text, 0, progress: at);
             }
             else if (line.StartsWith("Burnt"))
             {
@@ -690,6 +727,15 @@ public partial class RadioUi : CanvasLayer
                 ShowStatus(line, UiTheme.Warn, 10);
             }
         }).CallDeferred();
+    }
+
+    /// <summary>"Uploading… 45 %" as 0.45; 0 before the first percentage.</summary>
+    private static float UploadShare(string line)
+    {
+        int pct = line.IndexOf('%');
+        if (pct < 0) return 0f;
+        int start = line.LastIndexOf(' ', Math.Max(0, pct - 2)) + 1;
+        return int.TryParse(line.AsSpan(start, pct - start).Trim(), out int n) ? Mathf.Clamp(n / 100f, 0f, 1f) : 0f;
     }
 
     /// <summary>A line under the burn box; <paramref name="seconds"/> 0 keeps it, <paramref name="progress"/> &lt; 0 animates the bar, NaN hides it.</summary>
