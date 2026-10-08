@@ -187,6 +187,29 @@ public sealed class FileGdb : IDisposable
             var block = new byte[length];
             _table.ReadExactly(block);
 
+            // A credible-looking spatial index count can be a coincidence: in a few
+            // swissBUILDINGS3D sheets the Z bound holds four zero bytes, which reads as "no bounds
+            // pairs, zero grids" (#744). So a guess that does not parse the block to its end is
+            // retried with the next one, and only when every guess fails is the first error thrown.
+            Exception? first = null;
+            for (int skip = 0; skip <= 2; skip++)
+            {
+                try { return ParseFields(block, skip); }
+                catch (Exception e) when (e is ArgumentException or IndexOutOfRangeException or InvalidDataException)
+                {
+                    first ??= e;
+                }
+            }
+            throw first!;
+        }
+
+        /// <summary>
+        /// One reading of the field block, taking the geometry descriptor's
+        /// <paramref name="skipGuesses"/>-th credible bounds-pairs guess rather than the first.
+        /// </summary>
+        private (List<Field>, GeometryGrid?) ParseFields(byte[] block, int skipGuesses)
+        {
+            int length = block.Length;
             int count = BitConverter.ToUInt16(block, 8);
             int off = 10;
             var fields = new List<Field>(count);
@@ -215,7 +238,7 @@ public sealed class FileGdb : IDisposable
                     case FieldType.Geometry:
                         width = block[off++];
                         nullable = (block[off++] & 1) != 0;
-                        grid = ReadGeometryGrid(block, ref off);
+                        grid = ReadGeometryGrid(block, ref off, skipGuesses);
                         break;
 
                     default:
@@ -254,7 +277,7 @@ public sealed class FileGdb : IDisposable
         /// and spatial-index grid sizes) is skipped rather than kept: nothing here needs it, and the
         /// field block's total length check above is what proves it was skipped by the right amount.
         /// </summary>
-        private static GeometryGrid ReadGeometryGrid(byte[] block, ref int off)
+        private static GeometryGrid ReadGeometryGrid(byte[] block, ref int off, int skipGuesses)
         {
             int srsBytes = BitConverter.ToUInt16(block, off); off += 2 + srsBytes;   // WKT, unused
 
@@ -284,14 +307,15 @@ public sealed class FileGdb : IDisposable
             // not follow the hasZ/hasM flags — the swisstopo route networks set both flags but write
             // only the Z pair — so rather than guess, try each possibility and keep the one whose
             // grid count is credible. The field block's total length check in ReadFields is what
-            // finally proves the choice was right.
+            // finally proves the choice was right; when it does not, ReadFields asks again with
+            // skipGuesses + 1 and the next credible guess is taken instead.
             int afterBounds = -1, grids = 0;
             for (int pairs = 0; pairs <= 2 && afterBounds < 0; pairs++)
             {
                 int candidate = off + pairs * 16;
                 if (candidate + 5 > block.Length) break;
                 int count = BitConverter.ToInt32(block, candidate + 1);
-                if (count is >= 0 and <= 4 && candidate + 5 + 8 * count <= block.Length)
+                if (count is >= 0 and <= 4 && candidate + 5 + 8 * count <= block.Length && skipGuesses-- == 0)
                 {
                     afterBounds = candidate;
                     grids = count;
