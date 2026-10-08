@@ -143,11 +143,12 @@ public static partial class TileRewriter
     /// from the centre line toward the approaching driver's right, <paramref name="laneWidth"/> one lane's width.
     /// </summary>
     private static int OwnArrows(RoadSegment seg, RoadSegment painted, TileId tile, bool atEnd, List<RoadPaint> paint, double centre, double laneWidth,
-        SignalMoves[] own, double stop, bool signal)
+        SignalMoves[] own, double stop, JunctionRules rules)
     {
         var way = new Widening(seg, painted, tile, 0, atEnd, atEnd ? 1 : -1, 1, 0);
         // the lines between the lanes go solid before the junction (#711: at every junction): at the lights up to the stop line, without them to the mouth
-        if (own.Length > 1) way.SolidToStop(paint, signal ? stop - SignalStopLine * 0.5 : stop);
+        if (own.Length > 1) way.SolidToStop(paint, rules.Has(JunctionRule.StopLine) ? stop - SignalStopLine * 0.5 : stop,
+            rules.Has(JunctionRule.SolidCentreBeforeStop) ? CentreSolidAtLights : TurnSolid);
         double total = SegmentLength(seg);
         int made = 0;
         foreach (double tip in (ReadOnlySpan<double>)[5 + PaintEmitter.ArrowLength, 20 + PaintEmitter.ArrowLength])
@@ -178,8 +179,9 @@ public static partial class TileRewriter
     /// Returns how many it drew.
     /// </summary>
     private static int EmitPairGuides(Dictionary<TileId, List<RoadPaint>> paint, TileId home, Junction junction, RoadNetwork net,
-        List<(int Arm, RoadApproach Record)> records, List<(Vec2 At, float Height)> anchors, bool signal = true)
+        List<(int Arm, RoadApproach Record)> records, List<(Vec2 At, float Height)> anchors, JunctionRules? rules = null)
     {
+        bool stopLine = (rules ?? JunctionRules.Lights).Has(JunctionRule.StopLine);
         int drawn = 0;
         foreach (var (arm, record) in records)
         {
@@ -213,8 +215,8 @@ public static partial class TileRewriter
                     var target = junction.Arms[to];
                     var ut = Vec2.FromHeading(target.OutwardHeading);
                     // at the lights from the crosswalk's junction edge; without them from the mouth (#711)
-                    double crossIn = MouthSkew(junction, from) + (signal ? SignalStopSetback - ZebraClear - ZebraDepth : 0);
-                    double crossOut = MouthSkew(junction, target) + (signal ? SignalStopSetback - ZebraClear - ZebraDepth : 0);
+                    double crossIn = MouthSkew(junction, from) + (stopLine ? SignalStopSetback - ZebraClear - ZebraDepth : 0);
+                    double crossOut = MouthSkew(junction, target) + (stopLine ? SignalStopSetback - ZebraClear - ZebraDepth : 0);
                     Vec2 start = (from.Left + from.Right) * 0.5 + u.Perp * entry + u * Math.Max(0, crossIn);
                     Vec2 end = (target.Left + target.Right) * 0.5 - ut.Perp * outAt + ut * Math.Max(0, crossOut);
                     var line = new List<Vec2>();

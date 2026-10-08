@@ -241,6 +241,7 @@ public static partial class TileRewriter
             var islandPoles = new List<(byte Arm, Vec2 At, float Y, Vec2 Facing, Vec2 Across)>();   // #682
             var leftGuides = new List<int>();   // arms with a left pocket: their left turn is guided where its exit has an island (#682)
             var islandArms = new Dictionary<int, IslandExit>();   // arm -> where the lane after its exit island starts (#682)
+            var exitArms = new Dictionary<int, IslandExit>();   // arm -> where its exit lane starts at the mouth, no island (#711)
             var approachArms = new List<(int Arm, int PlanArm, float[] Stop)>();   // their lane records (#353)
             var armInPlan = new int[junction.Arms.Count];   // each junction arm's index in the plan, -1 none (#406)
             Array.Fill(armInPlan, -1);
@@ -308,7 +309,7 @@ public static partial class TileRewriter
                     if (osmCrossing && !sidewalk) stats.DataCrossings++;
                     if (crossingsMapped && sidewalk && !osmCrossing && stats.CrosswalksUnmapped++ < 12)
                         stats.UnmappedAt.Add(string.Create(CultureInfo.InvariantCulture, $"{junction.Centre.X:F0},{junction.Centre.Y:F0}"));
-                    if (crosswalk = osmCrossing || sidewalk && !crossingsMapped)
+                    if (crosswalk = osmCrossing || sidewalk && !crossingsMapped && JunctionRules.Lights.Has(JunctionRule.CrosswalkOnSidewalkArms))
                         EmitCrossing(paint, source, mid, u, right, MouthSkew(junction, arm) + SignalStopSetback, -(half + (pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0)), to, streetRight, streetLeft, areas, stats,
                             pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } edgeWay, ExitFar: false } ? s => (edgeWay.OuterEdge(Math.Max(s, 0)).P - (mid + u * s)).Dot(right) : null,
                             insetLeft: junction.KerbInset.GetValueOrDefault((i, false)), insetRight: junction.KerbInset.GetValueOrDefault((i, true)));   // diagonal beside a tight corner (#700)
@@ -333,6 +334,15 @@ public static partial class TileRewriter
                         var exitSide = bikeSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
                         islandArms[i] = new IslandExit(exitWay.HatchAt(0) + exitWay.Frame0, exitWay.ExitCar, exitSide.HasTrack || exitSide.HasLane);   // from the axis (#700)
                     }
+                }
+                if (!inside && leaves)
+                {
+                    // the exit lane at the mouth (#711): past the exit's hatch where a pocket's through lane widened it, else from the centre line
+                    var exitSide = bikeSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
+                    double bikeLane = exitSide.HasLane ? exitSide.BikeDm / 10.0 : 0;
+                    exitArms[i] = pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } way, ExitFar: false }
+                        ? new IslandExit(way.HatchAt(0) + way.Frame0, way.ExitCar, exitSide.HasTrack || exitSide.HasLane)
+                        : new IslandExit(info.Attributes.OneWay != 0 ? -half : 0, info.Attributes.OneWay != 0 ? 2 * half - bikeLane : half - bikeLane, exitSide.HasTrack || exitSide.HasLane);
                 }
                 wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, right, to, u, -right,
                     rightSide.OuterDm > 0 ? rightSide.KerbCm / 100f : 0f, mainFlags, plan.Arms[i].LinkId));
@@ -424,7 +434,7 @@ public static partial class TileRewriter
             }
             // where the left turn exits beside an island it is guided through the junction: two dashed lines along its path (#682)
             foreach (int gi in leftGuides)
-                if (EmitLeftGuides(paint, home, junction, gi, pockets.GetValueOrDefault((junction.NodeId, gi))?.Approach, anchors, islandArms) is int into and >= 0)
+                if (EmitLeftGuides(paint, home, junction, gi, pockets.GetValueOrDefault((junction.NodeId, gi))?.Approach, anchors, islandArms, exitArms) is int into and >= 0)
                     priority.LeftGuideInto.Add((junction.NodeId, into));   // a through guide to the same exit is left out (#711)
             foreach (var ip in islandPoles)
             {

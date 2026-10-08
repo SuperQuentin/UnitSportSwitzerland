@@ -84,7 +84,7 @@ public static partial class TileRewriter
         int drawn = 0;
         foreach (var (junction, plan) in priority.Plans)
         {
-            if (plan.Kind == PriorityPlanner.Kind.Signal) continue;   // the lights draw their own (#682)
+            if (JunctionRules.Of(plan.Kind).Has(JunctionRule.StopLine)) continue;   // the lights draw theirs with the stop line (#682)
             var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
             if (!block.Contains(home) || !wanted.Contains(home)) continue;
             for (int i = 0; i < junction.Arms.Count; i++)

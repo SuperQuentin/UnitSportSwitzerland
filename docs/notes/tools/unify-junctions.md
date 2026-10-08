@@ -113,6 +113,30 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   into the side road) and dropped by the user.
 - Exit-hatch islands without a crosswalk stay lights only (the user's decision).
 
+## Phase 4: the rules by kind in one place (Oct 8 2026)
+
+- **`JunctionRules`** (`tools/RoadGen/Junctions/JunctionRules.cs`): the enum `JunctionRule` lists every layout rule that
+  differs by kind, each with its doc; `JunctionRules.Lights` and `.NoLights` hold theirs, `JunctionRules.Of(kind)` picks one.
+  The layout asks `rules.Has(rule)` (TurnLanes, Bikes, Wish, Crossings, DataCrossings, Signals, `PriorityPlanner` teeth and
+  edge guides), never the kind; `StopAt`/`StopSetback`/`StopWidth` give the stop line or pocket bar. Pocket plans and arm
+  lanes carry their junction's `Rules` (was a `Signal` bool). Left as kind checks: which junctions get a layout at all
+  (Main, Signal), and who writes the lights' lane records and pair guides (`EmitSignals`), not layout rules.
+  `PaintOf(rule)` lists the paint (type, colour) a rule draws that the other kind does not.
+- The refactor alone was byte-identical on the Sion tiles and the test region.
+- **Test**: the region's twins (`SignalTestRegion.TwinLitE` / `TwinUnlitE` on `TwinRowN`, J8): the same T in town, a 10 m main
+  road with sidewalks and a 4 m road from the north (a class with no pockets, so planning is alike), once with lights. Their line
+  ids are chosen so both main roads hash to the same path layout (`BikePlanner.StrokeLayouts`). Tier 0 `JunctionRulesTests`:
+  paint within 45 m counted by (type, colour) differs only where a rule one kind has draws it; arrows and hatches equal;
+  stop lines and crosswalks at the lights, teeth without. Each rule belongs to exactly one kind.
+- **The user's review of J3 (Oct 8)**: (1) a left turn is guided where a left-turn bike lane turns with it, not only toward an
+  island (`EmitLeftGuides`, `exitArms`: the exit lane at the mouth, the guide running on straight to the exit's crosswalk
+  edge; both lines, the cars' inner edge and between cars and bikes). (2) At the lights the centre line is solid 20 m before
+  the stop line on a two-way approach without a left pocket (`SolidCentreBeforeStop`, `CentreSolidAtLights`; the user: lights
+  only, 20 m); a core lane between bike lanes (no centre line) gets one there; a narrow road without bike lanes keeps none.
+  Sion tiles: 31 centre lines; region 6. Not done: where the junction's first segment is shorter than the stop line + 20 m the
+  solid line ends with it (no carry onto the next segment). Tier 0
+  `At_lights_a_left_turn_with_its_bike_lane_is_guided_and_the_centre_line_is_solid_before_the_stop_line`.
+
 ## Phase 2b: crosswalks from the data at the lights (the user's rule, Oct 8 2026)
 
 - **Where OSM maps any crossing round a lights junction, crosswalks only on the mapped arms**; a lights junction with no

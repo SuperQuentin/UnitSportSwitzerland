@@ -26,6 +26,11 @@ public static class SignalTestRegion
     public const double RowN = 1322500;
     /// <summary>The T without lights in town (#711), LV95 E on <see cref="RowN"/>: a split lead-in from the west.</summary>
     public const double TownTeeE = 2911750;
+    /// <summary>
+    /// The twins (#711 phase 4): the same T in town, LV95 E on <see cref="TwinRowN"/>, once with lights and once without. Their
+    /// paint differs only in what <see cref="UnitSport.Tools.RoadGen.Junctions.JunctionRules"/> lists.
+    /// </summary>
+    public const double TwinRowN = 1321400, TwinLitE = 2910750, TwinUnlitE = 2912250;
     /// <summary>The ground, metres (as the fixture courses).</summary>
     public const double Ground = 500;
     /// <summary>Region centre: the manifest's suggested origin.</summary>
@@ -183,6 +188,17 @@ public static class SignalTestRegion
             Rows: [new OsmRow(0, 400, Lanes: "4")]));
         lines.Add(new Line("J7N", "10m Strasse", "Verbindungsstrasse", "Gemeinde", [(j7, n), (j7, n + 400)], "secondary",
             Rows: [new OsmRow(0, 400, Lanes: "4")]));
+        // 8. the twins (#711 phase 4): the same T twice in town, a 10 m main road with sidewalks and a 4 m road joining from the
+        // north (a class with no pockets, so planning is alike: the main road's left pocket from the west at both), once with
+        // lights. Each main road is its own line from a dead end 650 m west to one 650 m east, nothing else near
+        foreach (var (id, e) in new[] { ("TA", TwinLitE), ("TB", TwinUnlitE) })   // ids whose hash gives both mains the same path layout (5)
+        {
+            lines.Add(new Line(id + "W", "10m Strasse", "Durchgangsstrasse", "Kanton", [(e - 650, TwinRowN), (e, TwinRowN)], "secondary", "yes"));
+            lines.Add(new Line(id + "E", "10m Strasse", "Durchgangsstrasse", "Kanton", [(e, TwinRowN), (e + 650, TwinRowN)], "secondary", "yes"));
+            Cross(id + "N", e, TwinRowN, TwinRowN + 300, "4m Strasse", "k_W", "unclassified", sidewalk: "yes");
+        }
+        junctions.Add(new Junction("J8-twin-lights", TwinLitE, TwinRowN, "the twins' T with lights (the other, 1.5 km east, has none)",
+            Arms(null, null, null, null)));
         junctions.Add(new Junction("J7-double-left", j7, n, "a double left pocket from lanes:forward=3 and turn:lanes; no left pocket where OSM marks none",
             Arms("L|L|TR", "T", "LT|TR", "LT|TR")));
         // pedestrian crossings from OSM (#700): J7 is lit and has no sidewalks, so only the data draws its zebras, the ones beside

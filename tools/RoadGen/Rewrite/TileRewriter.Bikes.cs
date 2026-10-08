@@ -292,7 +292,8 @@ public static partial class TileRewriter
                     }
                     // at traffic lights, across a widened arm or from one: square across the arm it crosses (#351)
                     bool round = townArcs.Keys.Any(k => k.Node == junction.NodeId);   // kerb arcs with paths round them (#682)
-                    SquareCrossing? square = plan.Kind == PriorityPlanner.Kind.Signal && joined.Count == 1
+                    var rules = JunctionRules.Of(plan.Kind);
+                    SquareCrossing? square = rules.Has(JunctionRule.BikeCrossingByPhase) && joined.Count == 1
                         ? SquareCrossing.For(junction, joined[0], lanes.GetValueOrDefault((junction.NodeId, joined[0])), from, xa, xb, force: round)
                         : null;
                     if (square is not null && round) square.Straight = true;
@@ -378,7 +379,7 @@ public static partial class TileRewriter
                         double ha = sa.BikeDm / 20.0 - lw * 0.5, hb = sb.BikeDm / 20.0 - lw * 0.5;
                         // (#711, the user's rule) without lights the path runs on to the kerb of the road it crosses, and only
                         // that road's carriageway is red: each band of the side straight on from the mouth to where it meets the kerb
-                        if (plan.Kind != PriorityPlanner.Kind.Signal && square is null
+                        if (rules.Has(JunctionRule.PathsToKerb) && square is null
                             && PathsToKerb(home, junction, islands.GetValueOrDefault(home), joined, sa, sb, ca, da, ua, xa, cb, db, ub, xb, ca.DistanceTo(cb) + 5,
                                 p => HeightAt(anchors, p)) is { } toKerb)
                         {
@@ -403,7 +404,7 @@ public static partial class TileRewriter
                         }
                         square?.Place(Bezier, ta - xa, tb - xb, xa, xb, Math.Max(ha, hb) + lw * 0.5);
                         // kerb arcs round the corners (#682): Swiss crossings are not set back, the band runs straight from the path in to the path out
-                        bool straight = round && plan.Kind == PriorityPlanner.Kind.Signal;
+                        bool straight = round && rules.Has(JunctionRule.BikeCrossingByPhase);
                         List<Vec2> Run(double oa, double ob) => straight ? Densify(ca + da * oa, cb + db * ob, 2.0) : Curve(oa, ob);
                         float red = (float)(Math.Min(sa.BikeDm, sb.BikeDm) / 10.0 - 2 * lw - 2 * RedInset);
                         if (red > 0.3f && straight && signalPlans.TryGetValue(junction.NodeId, out var pathLights))
@@ -460,7 +461,7 @@ public static partial class TileRewriter
         }
         foreach (var (junction, plan) in priority.Plans)
         {
-            if (plan.Kind != PriorityPlanner.Kind.Signal || plan.Arms.Count != junction.Arms.Count) continue;
+            if (!JunctionRules.Of(plan.Kind).Has(JunctionRule.BandsRoundArcs) || plan.Arms.Count != junction.Arms.Count) continue;
             var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
             if (!block.Contains(home) || !wanted.Contains(home)) continue;
             var anchors = Anchors(junction, net);

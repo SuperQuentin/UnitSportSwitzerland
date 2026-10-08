@@ -247,7 +247,7 @@ public static class PriorityPlanner
             double h = arm.HalfWidth;
 
             // SSV Art. 75 al. 4: not on roads without a hard surface; a signalised arm has a stop line instead (#348)
-            if (info.Surface == RoadSurface.Paved && plan.Kind != Kind.Signal)
+            if (info.Surface == RoadSurface.Paved && JunctionRules.Of(plan.Kind).Has(JunctionRule.GiveWay))
             {
                 bool all = info.Attributes.OneWay != 0;   // a one-way approach: every lane approaches
                 double from = all ? -h + TeethMargin : TeethMargin, to = h - TeethMargin;
@@ -291,7 +291,7 @@ public static class PriorityPlanner
 
         // the main road's centre line through the junction: at the lights too, along their best pair, the bigger road (#711, the
         // user's rule); the edge lines only without lights
-        if (plan.Kind is Kind.Main or Kind.Signal) CentreLine(plan, j, main, infos, edges: plan.Kind == Kind.Main);
+        if (plan.Kind is Kind.Main or Kind.Signal) CentreLine(plan, j, main, infos, edges: JunctionRules.Of(plan.Kind).Has(JunctionRule.EdgeGuides));
         return plan;
     }
 

@@ -183,6 +183,26 @@ public class LaneDataRegionTests(SignalTestRegionFixture region) : IClassFixture
     }
 
     [Fact]
+    public void At_lights_a_left_turn_with_its_bike_lane_is_guided_and_the_centre_line_is_solid_before_the_stop_line()
+    {
+        // J3 (#711, the user's review): the west and east pockets' left turns go with a left-turn bike lane into exits without an
+        // island: each guided by two dashed lines (the cars' inner edge, between cars and bikes); the north and south ones toward
+        // an island by one. The north arm (one lane each way) has its centre line solid before the stop line
+        var j3 = region.Junction("J3-");
+        var id = TileId.FromLv95(j3.E, j3.N);
+        double cx = j3.E - id.MinE, cz = id.MaxN - j3.N;
+        var paint = region.Tile(j3.E, j3.N).Paint;
+        bool Near(RoadPaint p, double r) => Enumerable.Range(0, p.Vertices.Length / 3)
+            .All(i => Math.Abs(p.Vertices[i * 3] - cx) < r && Math.Abs(p.Vertices[i * 3 + 2] - cz) < r);
+        int guides = paint.Count(p => p.Type == PaintType.WhiteDashed && p.Dash == 1f && p.Gap == 1f && Near(p, 30));
+        Assert.True(guides >= 6, $"{guides} left-turn guides");
+        // the north arm runs north (z smaller); its centre line is on its axis, solid from the stop line 20 m out
+        Assert.Contains(paint, p => p.Type == PaintType.WhiteSolid && p.Shape == PaintShape.Polyline && p.Vertices.Length >= 6
+            && Enumerable.Range(0, p.Vertices.Length / 3).All(i => Math.Abs(p.Vertices[i * 3] - cx) < 0.5 && p.Vertices[i * 3 + 2] < cz - 10)
+            && p.Vertices.Where((_, k) => k % 3 == 2).Max() - p.Vertices.Where((_, k) => k % 3 == 2).Min() > 18);
+    }
+
+    [Fact]
     public void A_crossing_beside_a_tight_corner_runs_diagonal_at_most_30_degrees()
     {
         // J7 has no sidewalks: its zebras come from the data, on the north and east arms beside the tight north-east corner
