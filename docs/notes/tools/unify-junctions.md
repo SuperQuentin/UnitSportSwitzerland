@@ -106,7 +106,9 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   lights' repeater island, a refuge: `Widening.HasIsland`, set where they are built) and only where the lane jogs at least
   `ThroughGuideJog` (0.3 m) sideways across the junction, so the straight line would cut into the hatch. Queued in
   `EmitTurnLanes` (`pendingGuides`), drawn after the signals and the crosswalks have placed the islands. Sion tiles 2
-  (were 27, all without lights, none past an island but these); test region 11 (J1's split lead-ins jog 1.4 m).
+  (were 27, all without lights, none past an island but these). **Left out where a left-turn guide already leads into
+  the same exit** (the user's rule; `PriorityResult.LeftGuideInto`, recorded as the lights draw theirs): test region 0
+  (J1's four, beside its left-turn guides, are gone).
 - **Left-turn guide** (`EmitLeftGuides`): stays at the lights, toward an island. Without lights tried (from the pocket
   into the side road) and dropped by the user.
 - Exit-hatch islands without a crosswalk stay lights only (the user's decision).

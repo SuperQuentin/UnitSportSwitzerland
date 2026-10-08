@@ -168,7 +168,7 @@ public static partial class TileRewriter
         Dictionary<RoadAreaProp, RoadSegment> stripOwners, TurnLaneStats stats, Func<int, LinkEnd, bool, RoadSide> streetSide,
         List<PocketOpening>? openings = null, Dictionary<(int Node, int Arm), CornerArc>? arcs = null,
         OsmOverlayReader? overlay = null, Restrictions? restrictions = null, CrossingNodes? crossings = null,
-        List<(TileId Home, RoadPaint Guide, Widening Exit)>? pendingGuides = null)
+        List<(TileId Home, RoadPaint Guide, Widening Exit, int Node, int ExitArm)>? pendingGuides = null)
     {
         var net = result.Network;
         var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
@@ -510,7 +510,7 @@ public static partial class TileRewriter
             // keep off (#711, the user's rule: a guide only for the main road's continuity, an island to avoid, or several
             // lanes turning alike): drawn once the islands are known (the lights' and the refuges, later)
             if (!outSlot.Merged && ThroughGuide(approach, departure, pocket.Home) is { } throughGuide)
-                pendingGuides?.Add((pocket.Home, throughGuide, departure));
+                pendingGuides?.Add((pocket.Home, throughGuide, departure, pocket.Node, pocket.ExitArm));
             // a sign beside the old edge (#121's 3.03) would now stand on the widening
             stats.SignsMoved += approach.PushOut(Get(signs, inSlot.Tile)) + (departure.Framed ? 0 : departure.PushOut(Get(signs, outSlot.Tile)));
             stats.Storage[inSlot.Storage] = stats.Storage.GetValueOrDefault(inSlot.Storage) + 1;

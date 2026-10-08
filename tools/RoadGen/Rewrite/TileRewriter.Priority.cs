@@ -24,6 +24,8 @@ public static partial class TileRewriter
         public readonly Dictionary<(int Node, int Side), (TileId Tile, RoadPaint Paint)> GuideAt = new();
         /// <summary>The main road's dashed centre line through each junction: a left pocket there (#123) leaves it out (#700).</summary>
         public readonly Dictionary<int, (TileId Tile, RoadPaint Paint)> CentreAt = new();
+        /// <summary>The exits a left-turn guide leads into, by (junction node, arm) (#711): a through guide to the same exit is left out.</summary>
+        public readonly HashSet<(int Node, int Arm)> LeftGuideInto = new();
         /// <summary>A yielding link's Wartelinie rows, and its signs (tile, index in the tile's props): a path crossing (#120) moves them back.</summary>
         public readonly Dictionary<int, List<(TileId Tile, RoadPaint Paint)>> TeethOf = new();
         public readonly Dictionary<int, List<(TileId Tile, int Index)>> SignsOf = new();

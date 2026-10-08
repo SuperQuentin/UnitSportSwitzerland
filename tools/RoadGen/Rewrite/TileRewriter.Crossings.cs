@@ -120,9 +120,9 @@ public static partial class TileRewriter
     /// The left turn of arm <paramref name="arm"/> through the junction (#682): one dashed white line (SSV guide line, 0.15 m,
     /// 1 m / 1 m), the inner edge of its lane, from the pocket's left edge at the mouth round to the exit lane of the arm on its
     /// left, ending where that lane starts (past the island, <paramref name="islandArms"/> gives the hatch's width there) and
-    /// arriving along the arm, so the car is led to the right of the island, not into it. Drawn only where the exit has an island.
+    /// arriving along the arm, so the car is led to the right of the island, not into it. Drawn only where the exit has an island. Returns the exit arm it leads into, -1 none.
     /// </summary>
-    private static void EmitLeftGuides(Dictionary<TileId, List<RoadPaint>> paint, TileId home, Junction junction, int arm,
+    private static int EmitLeftGuides(Dictionary<TileId, List<RoadPaint>> paint, TileId home, Junction junction, int arm,
         ApproachLayout? layout, List<(Vec2 At, float Height)> anchors, Dictionary<int, IslandExit> islandArms)
     {
         // no pocket: the guide starts at the through lane's left edge, the centre line side (where the left turn shares the lane)
@@ -138,7 +138,7 @@ public static partial class TileRewriter
             double dot = Vec2.FromHeading(junction.Arms[k].OutwardHeading).Dot(-u.Perp);
             if (dot > best) { best = dot; to = k; }
         }
-        if (to < 0 || !islandArms.TryGetValue(to, out var exit)) return;
+        if (to < 0 || !islandArms.TryGetValue(to, out var exit)) return -1;
         double lead = exit.Hatch;
         var target = junction.Arms[to];
         var ut = Vec2.FromHeading(target.OutwardHeading);
@@ -173,6 +173,7 @@ public static partial class TileRewriter
         double shift = layout?.Shift ?? 0;
         Guide((layout?.LeftPocketLane is null ? (layout?.Through().From ?? 0) + 0.1 : lane.From + 0.1) - shift, lead);
         if (layout?.LeftBikeLane is { } bikeLane && exit.Bike) Guide(bikeLane.From - shift, lead + exit.Lane);   // between the car turn lane and the bike lane
+        return to;
     }
 }
 

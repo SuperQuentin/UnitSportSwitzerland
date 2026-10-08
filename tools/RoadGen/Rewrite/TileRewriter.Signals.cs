@@ -386,7 +386,8 @@ public static partial class TileRewriter
             }
             // where the left turn exits beside an island it is guided through the junction: two dashed lines along its path (#682)
             foreach (int gi in leftGuides)
-                EmitLeftGuides(paint, home, junction, gi, pockets.GetValueOrDefault((junction.NodeId, gi))?.Approach, anchors, islandArms);
+                if (EmitLeftGuides(paint, home, junction, gi, pockets.GetValueOrDefault((junction.NodeId, gi))?.Approach, anchors, islandArms) is int into and >= 0)
+                    priority.LeftGuideInto.Add((junction.NodeId, into));   // a through guide to the same exit is left out (#711)
             foreach (var ip in islandPoles)
             {
                 var local = Local(home, [ip.At], _ => ip.Y, 0f);
