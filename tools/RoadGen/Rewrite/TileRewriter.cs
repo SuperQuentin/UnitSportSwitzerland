@@ -784,7 +784,7 @@ public static partial class TileRewriter
                     Paint = paint.TryGetValue(id, out var p) ? p : new List<RoadPaint>(),
                     LinearProps = walls,
                     AreaProps = [.. islands.TryGetValue(id, out var isl) ? isl : [],
-                        .. Unbridged(id, CornerPlanner.Plan(id, segments, junctions, facades, cornerStats, isl, kerbArcs.GetValueOrDefault(id), pathEnds.GetValueOrDefault(id)), bridges, netStats.Bikes),   // sidewalk corners (#119)
+                        .. Unbridged(id, CornerPlanner.Plan(id, segments, junctions, facades, cornerStats, isl, kerbArcs.GetValueOrDefault(id), pathEnds.GetValueOrDefault(id), bridges.Select(x => x.Band)), bridges, netStats.Bikes),   // sidewalk corners (#119)
                         .. bridges.Select(x => x.Band),
                         .. parkAreas.TryGetValue(id, out var pa) ? pa : []],   // car park pad, islands, walks (#499)
                     PointProps = pointProps,

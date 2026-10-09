@@ -147,9 +147,16 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   are gone (shared now). The note's phase-1 line "the lights keep #682's" no longer holds.
 - Sion tiles: path crossings to the kerb 91 -> 100 (all); corners built 1,592 -> 1,584, covered by a carried side 56 -> 65,
   rejected as a carriageway 33 -> 31, shape 36 -> 35.
-- **Open**: at a two-node lights junction (LV95 2506163,1137797) both sides of a corner count as carried (`[corner] beside a
-  path carried to the kerb (AB)`, then "covered"), but the carried bands only reach the kerb strip: a bare triangle stays
-  between the two sidewalk ends (the #682 bands used to fill it). `--debug-street` now prints `round the cap: built|covered|failed`.
+- **The wedge before the carried bands** (the user: fix it): the carried bands start square across their arm at its mouth;
+  where the sidewalk starts further out on a slanted line (a skewed mouth, a junction of several nodes: LV95
+  2506163,1137797) the corner was taken as covered and a bare triangle stayed. `CornerPlanner.Build`'s `Gap`: the corner as
+  it would be with no side carried on (`whole`), in triangles, less the carried bands' own triangles (`Subtract`, three
+  half-plane clips per triangle; the bands passed to `Plan`), laid as one sidewalk prop; only where both sidewalks start
+  within `GapReach` (8 m) of the corner (else a long sliver along an arm). Sion tiles: 19 wedges (corners that were bare,
+  e.g. 2506547,1137658), covered 65 -> 49. `--debug-street` prints `round the cap: ...` and `the wedge before the carried
+  bands: ... m2 in N part(s)`; `CORNERGAPS=1` lists where.
+- **The outer corner where two sidewalks meet is rounded a bit** (the user): `RoundAt`, a curve tangent to both outer edges,
+  `OuterRound` 1.5 m radius, its tangent points at most 45 % along each edge, on every squared corner and the wedges.
 
 ## Phase 2b: crosswalks from the data at the lights (the user's rule, Oct 8 2026)
 

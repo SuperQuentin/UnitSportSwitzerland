@@ -881,8 +881,8 @@ public static partial class TileRewriter
         Vec2 Local(Vec2 p) => new(p.X - home.MinE, p.Y - home.MaxN);
         var ends = new List<CornerPlanner.PathEnd>
         {
-            new(Local(ca + da * wa - ua * outA), ua),
-            new(Local(cb + db * wb - ub * outB), ub),
+            new(Local(ca + da * wa - ua * outA), ua, Local(ca + da * wa)),
+            new(Local(cb + db * wb - ub * outB), ub, Local(cb + db * wb)),
         };
         return (bands, Kerb(ca, da, ua), Kerb(cb, db, ub), ends);
     }
