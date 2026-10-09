@@ -10,10 +10,10 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 - `avatars` — Avatars: (`src/Avatar/`): procedural low-poly figures and a road bike, built from two primitives only — a tapered...
 - `dance-moves` — Dance moves: breakdance floor sets (Posed/Spun/OffTheFloor), section-aware DancePick, new moves and refinements, `--dancesheet` (#728); joint-level spec per style and move, crowd moves (#261), emotes at `EmoteMoves` + catalog index and the #404 moves (YMCA, chicken, cabbage patch, swim, wave, cheer, salute, shrug); `--emotecheck`
 - `riding-position-derived-from-bike` — A riding position is derived from the bike, never eyeballed
-- `model-viewer` — `--models`: every procedural model by category, found by reflection from `[Showcase]` builders (prefer a set over the area's registry); `--models,<dir>` screenshots all, names builders with no entry
+- `model-viewer` — `--models`: every procedural model by category, found by reflection from `[Showcase]` builders (prefer a set over the area's registry); `--models,<dir>` screenshots all, names builders with no entry; `--style` (#760)
 - `judge-model-proportions-long-lens` — Judge model proportions with a long lens: The avatar preview's focus camera sits 9 m back at 13° FOV,...
 
-- `car-cabin` — Car cabin (#69): hollow body, glass as panes in a second surface, dash/dials/wheel/pedals/mirrors, the driver's seat derived from the body and the figure posed from it; `--cockpitcheck`
+- `car-cabin` — Car cabin (#69): hollow body, glass as panes in a second surface, dash/dials/wheel/pedals/mirrors, the driver's seat derived from the body and the figure posed from it; left-hand drive, automatics, the Prius's centre display and HUD, the `TallHatch`/`Liftback` shapes, rounded Cartoon bodies and cabins (`CarMeshBuilder.Rounded.cs`, hull always from PS1) (#760); `--cockpitcheck`
 - (`VehicleDeck`/`DeckBuilder`, a vehicle's walkable deck built with its model: see the player note `walk-aboard`)
 - `heavy-cabin` — Truck cabs and bus driver's place and saloon (#157): hollow cabs with panes, derived seat and flat wheel (hands' reach at `MaxGrip`), air gauge and gear display, binnacle square to the dials, 2+2 bus seats, seat anchors for passengers
 - `aircraft-cockpit` (player) — `AircraftCockpit` + `CockpitLayout` per airliner, `InstrumentCanvas` atlas, `CockpitInstruments` pure math (tier 0), `HumanMeshBuilder.AppendPilot`; builders keep only the static boxes

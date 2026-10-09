@@ -372,6 +372,8 @@ public partial class PlayerFeel : Node3D
             _carEngine.Set(engine.Rpm01, engine.Throttle, Mathf.Clamp(engine.Throttle * 0.8f + 0.2f * engine.Rpm01, 0f, 1f),
                 // half what it was: at 0.75 a car at redline drowned every other sound in the game
                 !_player.EngineOn ? 0f
+                // a hybrid on its motor alone is silent (#760)
+                : engine is Car { EngineAsleep: true } ? 0f
                 // a steam engine at STOP is silent (#303)
                 : engine is Steamer ? (engine.Rpm01 > 0.02f ? 0.18f + 0.25f * engine.Rpm01 : 0f)
                 : 0.15f + 0.22f * engine.Rpm01);

@@ -597,8 +597,9 @@ public static class CarCatalog
             Blurb = "2005 Toyota Yaris 1.3: a tall, light front-drive city hatch, and this one has lowrider hydraulics. {roof_toggle} makes it bounce",
             Body = new CarBody
             {
-                Shape = BodyShape.Hatchback, Length = 3.75f, Width = 1.695f, Height = 1.53f, WheelRadius = 0.29f,
-                Paint = new Color(0.62f, 0.78f, 0.9f), Rim = Silver, Hydraulics = true,
+                // a European car, as on Swiss roads: left-hand drive (#760)
+                Shape = BodyShape.TallHatch, Length = 3.75f, Width = 1.695f, Height = 1.53f, WheelRadius = 0.29f,
+                Paint = new Color(0.62f, 0.78f, 0.9f), Rim = Silver, Hydraulics = true, LeftHandDrive = true,
             },
             Engine = EngineLayout.Inline4,
             // source: Toyota Yaris 1.3 VVT-i 3-door (XP90, 2SZ-FE 87 PS/6000, 121 Nm/4400, 5MT, 175/65R14, kerb ~1030 kg); Toyota claims 0-100 11.5 s, 170 km/h; ratios and final drive est.; curve fitted to published peaks
@@ -621,15 +622,16 @@ public static class CarCatalog
             Blurb = "2004 Toyota Prius: the hybrid that made hybrids normal, a 1.5 Atkinson four and an electric motor through a planetary e-CVT. Quiet, smooth, front drive",
             Body = new CarBody
             {
-                // the kamm-tailed liftback is nearest the raked fastback
-                Shape = BodyShape.Fastback, Length = 4.45f, Width = 1.725f, Height = 1.49f, WheelRadius = 0.31f,
-                Paint = new Color(0.55f, 0.6f, 0.58f), Rim = Silver,
+                Shape = BodyShape.Liftback, Length = 4.45f, Width = 1.725f, Height = 1.49f, WheelRadius = 0.31f,
+                Paint = new Color(0.55f, 0.6f, 0.58f), Rim = Silver, LeftHandDrive = true, CentreDisplay = true,
             },
             Engine = EngineLayout.Inline4,
-            // source: Toyota Prius (XW20, 1NZ-FXE 78 PS/5000 + 50 kW motor 400 Nm, system 110 PS, e-CVT, 185/65R15, kerb ~1300 kg); Toyota claims 0-100 10.9 s, 170 km/h. The e-CVT is approximated by five close ratios (no CVT in the car model), the torque curve is the system's at the crank: the motor's pull low down, the engine's on top
+            // source: Toyota Prius (XW20, 1NZ-FXE 78 PS/5000 + 50 kW motor 400 Nm, system 110 PS, e-CVT, 185/65R15, kerb ~1300 kg); Toyota claims 0-100 10.9 s, 170 km/h. The torque curve is the system's at the crank: the motor's pull low down, the engine's on top
             Mass = 1375f, FrontAxle = 1.08f, RearAxle = 1.62f, CgHeight = 0.55f, Grip = 1f,
             PeakKw = 82f, PeakRpm = 5000f, IdleRpm = 1000f, Redline = 5600f,
-            Gears = new[] { 3.1f, 1.95f, 1.4f, 1.08f, 0.86f }, FinalDrive = 4.113f, Reverse = 3.1f,
+            // the e-CVT (#760): no steps, the ends of its range; the top end lets the redline cap it near 170 km/h
+            Transmission = CarTransmission.ECvt,
+            Gears = new[] { 3.1f, 0.92f }, FinalDrive = 4.113f, Reverse = 3.1f,
             Torque = new (float, float)[] { (1000f, 200f), (2000f, 190f), (3000f, 175f), (4000f, 165f), (5000f, 156.6f), (5600f, 140f) },
             Tyre = "185/65R15", BrakeDecel = 9.1f, Diff = Differential.Open,
             RefZeroTo100 = 10.9f, RefTopKmh = 170f,
@@ -669,6 +671,32 @@ public static class CarCatalog
             // no suspension: the tyres' sidewalls are all the travel it has, and every bump goes straight into the grip
             TyreType = KartTyre, Travel = 0.06f, Stiffness = 3f,
         },
+        // ---- 37: the next Prius (#760) ----
+        new CarSpec
+        {
+            Label = "XW30 Prius",
+            Style = DriveStyle.Grip,
+            Blurb = "2009 Toyota Prius: the third generation, a bigger 1.8 Atkinson four and a stronger motor through the e-CVT, and the speed shown in the windscreen. Quiet, smooth, front drive",
+            Body = new CarBody
+            {
+                Shape = BodyShape.Liftback, Length = 4.46f, Width = 1.745f, Height = 1.49f, WheelRadius = 0.32f,
+                Paint = new Color(0.18f, 0.35f, 0.62f), Rim = Silver, LeftHandDrive = true, CentreDisplay = true, Hud = true,
+            },
+            Engine = EngineLayout.Inline4,
+            // source: Toyota Prius (XW30, 2ZR-FXE 99 PS/5200 + 60 kW motor 207 Nm, system 136 PS, e-CVT, 195/65R15, kerb ~1380 kg, Cd 0.25); Toyota claims 0-100 10.4 s, 180 km/h. The torque curve is the system's at the crank: the motor's pull low down, the engine's on top
+            // Grip 1.04, a newer and wider tyre than the XW20's: at 1 its 100 kW pulled the nose straight out of the Game drift --driftcheck asks of every car (17° max)
+            Mass = 1455f, FrontAxle = 1.08f, RearAxle = 1.62f, CgHeight = 0.55f, Grip = 1.04f,
+            PeakKw = 100f, PeakRpm = 5200f, IdleRpm = 1000f, Redline = 5800f,
+            // the e-CVT: the ends of its range, the top end letting the redline cap it near 180 km/h
+            Transmission = CarTransmission.ECvt,
+            Gears = new[] { 3.1f, 0.92f }, FinalDrive = 4.113f, Reverse = 3.0f,
+            Torque = new (float, float)[] { (1000f, 215f), (2000f, 205f), (3000f, 195f), (4000f, 190f), (5200f, 183.6f), (5800f, 160f) },
+            Tyre = "195/65R15", BrakeDecel = 9.3f, Diff = Differential.Open,
+            RefZeroTo100 = 10.4f, RefTopKmh = 180f,
+            Drive = Drivetrain.Front,
+            MaxSteer = 0.6f, DragArea = 0.56f,
+            LockTurns = 3.2f, // lock to lock, est.: electric power steering
+        },
     });
 
     /// <summary>The spec for a car kind, or null when the kind is not a car.</summary>
@@ -688,7 +716,13 @@ public static class CarCatalog
     {
         if (cars.Length > Last - First + 1)
             throw new System.InvalidOperationException($"{cars.Length} cars overflow RideKind {First}..{Last}");
-        for (int i = 0; i < cars.Length; i++) cars[i] = cars[i] with { Kind = (RideKind)(First + i) };
+        // the body's pedals and selector follow the gearbox (#760)
+        for (int i = 0; i < cars.Length; i++)
+            cars[i] = cars[i] with
+            {
+                Kind = (RideKind)(First + i),
+                Body = cars[i].Body with { Automatic = cars[i].Transmission != CarTransmission.Stepped },
+            };
         return cars;
     }
 }
