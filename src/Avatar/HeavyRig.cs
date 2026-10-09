@@ -508,6 +508,9 @@ public partial class HeavyRig : Node3D, IHingedDoors, Items.IBeatReactive
     public Transform3D EyeFrame => _cockpit == null ? Transform3D.Identity
         : _body.Transform * new Transform3D(Basis.Identity, _cockpit.Eye);
 
+    /// <summary>The driver's seat, author space, and the frame its figure is drawn in (as <see cref="CarRig.DriverSeat"/>); null on a section with no cockpit.</summary>
+    public (DriverSeat Seat, Transform3D Frame)? Driver => _cockpit is { } c ? (c.Seat, _body.Transform) : null;
+
     /// <summary>The steering wheel for VR hands (#243), as <see cref="CarRig.SteeringGrip"/>. Null on a section with no cockpit.</summary>
     public (Node3D Wheel, Vector3 Axis, float Radius)? SteeringGrip =>
         _cockpit is { } c ? (_wheel, c.ColumnAxis, c.Seat.WheelRadius) : null;

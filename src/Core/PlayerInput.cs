@@ -155,6 +155,8 @@ public partial class PlayerInput : Node
     public const string Help = "help";
     /// <summary>The debug menu (<see cref="DebugMenu"/>): overlays, terrain layers, view modes. Offline or as an admin.</summary>
     public const string DebugMenu = "debug_menu";
+    /// <summary>The playtest panel (<c>Playtest/PlaytestPanel</c>, #751): Debug builds run with <c>--playtest</c> only; a pad uses both stick clicks.</summary>
+    public const string PlaytestPanel = "playtest_panel";
 
     // --- items (on foot) ---
     public const string UseItem = "use_item";
@@ -612,6 +614,10 @@ public partial class PlayerInput : Node
         Bind(CarDoor, Keys(Key.G), Button(JoyButton.X));
         Bind(Help, Keys(Key.F1));
         Bind(DebugMenu, Keys(Key.F9));
+#if PLAYTEST
+        // a pad opens it with L3+R3 together (PlaytestPanel reads the chord): no single button is free
+        Bind(PlaytestPanel, Keys(Key.F10));
+#endif
 
         // Items are an on-foot thing, so they reuse the shoulders that only mean something
         // mounted (RB trick, LB boost). The inventory is on the two keys players try first, I
