@@ -37,7 +37,7 @@ void fragment() {
     if (portal_clipped(world_pos, CAMERA_POSITION_WORLD)) {
         discard;
     }
-    vec3 n = normalize(cross(dFdy(world_pos), dFdx(world_pos)));
+    vec3 n = facet_normal(VERTEX, INV_VIEW_MATRIX);
 
     float mask = COLOR.a;
     // an unlit lamp by day is the dark hollow it really is

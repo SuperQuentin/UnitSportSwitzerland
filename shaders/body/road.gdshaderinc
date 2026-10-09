@@ -131,7 +131,7 @@ void fragment() {
 #ifdef STYLE_LIT
     // the facet, toward the eye: carriageways face up, the walls and railings of the network
     // stage stand upright and are lit as such
-    vec3 n = normalize(cross(dFdy(world_pos), dFdx(world_pos)));
+    vec3 n = facet_normal(VERTEX, INV_VIEW_MATRIX);
     if (dot(n, CAMERA_POSITION_WORLD - world_pos) < 0.0) {
         n = -n;
     }
