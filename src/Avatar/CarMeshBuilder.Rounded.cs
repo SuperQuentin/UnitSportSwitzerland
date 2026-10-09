@@ -80,17 +80,60 @@ public static partial class CarMeshBuilder
     /// <summary>One side's wall at z, as a ring: out round the section foot to shoulder, back down inside it.</summary>
     private static Vector3[] WallRing(Dims d, float z, float sx, bool rollTail)
     {
-        float hw = PlanHalf(d, z), y0 = SideFoot(d, z), y1 = SideTop(d, z, rollTail);
+        float hw = PlanHalf(d, z), y0 = SideFoot(d, z) + Chin(d, z), y1 = SideTop(d, z, rollTail);
         int n = SideProfile.Length;
         var ring = new Vector3[n * 2];
         for (int i = 0; i < n; i++)
         {
             var (t, inset) = SideProfile[i];
             float y = Mathf.Lerp(y0, y1, t), x = hw - inset;
-            ring[i] = new Vector3(sx * x, y, z);
-            ring[2 * n - 1 - i] = new Vector3(sx * (x - RoundSkin), y, z);
+            ring[i] = Bent(d, new Vector3(sx * x, y, z));
+            ring[2 * n - 1 - i] = Bent(d, new Vector3(sx * (x - RoundSkin), y, z));
         }
         return ring;
+    }
+
+    /// <summary>
+    /// The nose's shape in plan and profile (#760): over its last half metre (never into the front
+    /// arch) a point is pushed back by how far out it is, squared (the face bows out in the middle)
+    /// and by how high it is (the face leans back from the chin to the bonnet's edge). No faster than
+    /// the stations themselves advance, so the loft never folds over.
+    /// </summary>
+    internal static Vector3 Bent(Dims d, Vector3 p)
+    {
+        float hl = d.Length * 0.5f;
+        float from = Mathf.Max(hl - 0.5f, d.Wheelbase * 0.5f + ArchRadius(d) + 0.02f), length = hl - from;
+        if (p.Z <= from || length < 0.05f) return p;
+        float u = Mathf.Clamp((p.Z - from) / length, 0f, 1f);
+        float ramp = u * u * u * (u * (u * 6f - 15f) + 10f);   // smootherstep: its steepest is 1.875 / length
+        float most = 0.85f * length / 1.875f, bow = Mathf.Min(0.12f, most * 0.5f), rake = Mathf.Min(0.12f, most * 0.5f);
+        float hw = d.Width * 0.5f, top = Mathf.Max(SideTop(d, p.Z, true), SillY0 + 0.1f);
+        float across = Mathf.Clamp(p.X / hw, -1f, 1f), up = Mathf.Clamp((p.Y - SillY0) / (top - SillY0), 0f, 1f);
+        return p with { Z = p.Z - ramp * (bow * across * across + rake * up) };
+    }
+
+    /// <summary>The chin tucked under over the nose's last 15 cm, m.</summary>
+    private static float Chin(Dims d, float z)
+    {
+        float u = Mathf.Clamp((z - (d.Length * 0.5f - 0.15f)) / 0.15f, 0f, 1f);
+        return 0.07f * u * u;
+    }
+
+    /// <summary>The front face's point at (x, y): where the bent nose is, a few millimetres proud.</summary>
+    internal static Vector3 OnFace(Dims d, float x, float y, float proud = 0.006f) =>
+        Bent(d, new Vector3(x, y, d.Length * 0.5f + proud));
+
+    /// <summary>A strip lying on the bent front face from x0 to x1 and y0 to y1: an intake, a grille's slot, the plate.</summary>
+    internal static void FaceStrip(MeshScratch m, Dims d, float x0, float x1, float y0, float y1, Color colour)
+    {
+        const int n = 8;
+        var rings = new List<Vector3[]>(n + 1);
+        for (int i = 0; i <= n; i++)
+        {
+            float x = Mathf.Lerp(x0, x1, i / (float)n);
+            rings.Add(new[] { OnFace(d, x, y0, 0.001f), OnFace(d, x, y1, 0.001f), OnFace(d, x, y1, 0.008f), OnFace(d, x, y0, 0.008f) });
+        }
+        m.Loft(rings, new[] { colour, colour, colour, colour }, colour);
     }
 
     /// <summary>The wall's bands: the lower body's colour low down, paint to the shoulder and over it, trim inside, dark under the foot.</summary>
@@ -113,20 +156,26 @@ public static partial class CarMeshBuilder
     {
         float hw = PlanHalf(d, z), top = SideTop(d, z, rollTail);
         float edge = hw - Shoulder, side = hw - 0.09f;
-        // over a wheel the block stops above it (the well); beyond the arches it comes down to the sill
-        float foot = SideFoot(d, z) > SillY0 + 0.01f || NearArch(d, z) ? SillY1 : SillY0 + 0.02f;
-        return new[]
+        // over a wheel the block stops above it (the well); beyond the arches it comes down to the
+        // sill, tucked under at the chin
+        float foot = (SideFoot(d, z) > SillY0 + 0.01f || NearArch(d, z) ? SillY1 : SillY0 + 0.02f) + Chin(d, z);
+        float mid = (foot + top - 0.06f) * 0.5f;
+        // points across the foot and up the sides as well, so the bent face is curved, not one fan
+        var ring = new[]
         {
-            new Vector3(-side, foot, z), new Vector3(side, foot, z), new Vector3(side, top - 0.06f, z),
+            new Vector3(-side, foot, z), new Vector3(-side * 0.5f, foot, z), new Vector3(0, foot, z), new Vector3(side * 0.5f, foot, z),
+            new Vector3(side, foot, z), new Vector3(side, mid, z), new Vector3(side, top - 0.06f, z),
             new Vector3(edge, top, z), new Vector3(edge * 0.5f, top + 0.012f, z), new Vector3(0, top + 0.016f, z),
-            new Vector3(-edge * 0.5f, top + 0.012f, z), new Vector3(-edge, top, z), new Vector3(-side, top - 0.06f, z),
+            new Vector3(-edge * 0.5f, top + 0.012f, z), new Vector3(-edge, top, z), new Vector3(-side, top - 0.06f, z), new Vector3(-side, mid, z),
         };
+        for (int i = 0; i < ring.Length; i++) ring[i] = Bent(d, ring[i]);
+        return ring;
     }
 
     private static bool NearArch(Dims d, float z) =>
         Mathf.Abs(z - d.Wheelbase * 0.5f) < ArchRadius(d) + 0.03f || Mathf.Abs(z + d.Wheelbase * 0.5f) < ArchRadius(d) + 0.03f;
 
-    private static Color[] BlockColours(Color top) => new[] { Trim, Trim, top, top, top, top, top, top, Trim };
+    private static Color[] BlockColours(Color top) => new[] { Trim, Trim, Trim, Trim, Trim, Trim, top, top, top, top, top, top, Trim, Trim };
 
     /// <summary>
     /// Where the rounded body has a station: its ends and their rounding, the bonnet's stations, the
@@ -255,12 +304,12 @@ public static partial class CarMeshBuilder
             var ring = new Vector3[8];
             for (int i = 0; i < 4; i++)
             {
-                ring[i] = on[i] + outward[i] * 0.006f;
-                ring[7 - i] = on[i] + outward[i] * 0.001f;
+                ring[i] = Bent(d, on[i] + outward[i] * 0.006f);
+                ring[7 - i] = Bent(d, on[i] + outward[i] * 0.001f);
             }
             rings.Add(ring);
         }
-        head.Loft(rings, Enumerable.Repeat(Head, 8).ToArray(), Head);
+        head.Loft(rings, Enumerable.Repeat(ClearLens, 8).ToArray(), ClearLens);
     }
 
     /// <summary>

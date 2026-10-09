@@ -372,13 +372,22 @@ public static partial class CarMeshBuilder
         else
             foreach (float sx in new[] { -1f, 1f })
                 head.Box(new Vector3(sx * (hw - 0.36f), d.Hood - 0.06f, hl + 0.005f), new Vector3(0.4f, 0.13f, 0.02f), Head);
-        if (body.Shape == BodyShape.Liftback)
+        if (body.Shape == BodyShape.Liftback && round)
+        {
+            // on the bent face (CarMeshBuilder.Rounded.cs): the intake, the fog lamps, the plate
+            FaceStrip(s, d, -0.47f, 0.47f, SillY0 + 0.1f, SillY0 + 0.24f, Trim);
+            foreach (float sx in new[] { -1f, 1f })
+                s.RoundedBox(OnFace(d, sx * (hw - 0.27f), SillY0 + 0.17f, 0.0f), new Vector3(0.12f, 0.07f, 0.04f), FogLamp);
+        }
+        else if (body.Shape == BodyShape.Liftback)
         {
             // the Prius's big lower intake across the bumper, a fog lamp in each corner pod
             s.RoundedBox(new Vector3(0, SillY0 + 0.16f, hl - 0.01f), new Vector3(0.95f, 0.16f, 0.05f), Trim);
             foreach (float sx in new[] { -1f, 1f })
-                s.RoundedBox(new Vector3(sx * (hw - 0.27f), SillY0 + 0.15f, hl - 0.005f), new Vector3(0.12f, 0.07f, 0.04f), new Color(0.85f, 0.86f, 0.82f));
+                s.RoundedBox(new Vector3(sx * (hw - 0.27f), SillY0 + 0.15f, hl - 0.005f), new Vector3(0.12f, 0.07f, 0.04f), FogLamp);
         }
+        else if (round)
+            FaceStrip(s, d, -0.45f, 0.45f, SillY1 - 0.17f, SillY1 - 0.03f, Trim);
         else
             s.Box(new Vector3(0, SillY1 - 0.1f, hl - 0.03f), new Vector3(0.9f, 0.14f, 0.05f), Trim);   // grille intake
 
@@ -445,7 +454,21 @@ public static partial class CarMeshBuilder
             s.Pane(stackalloc Vector3[] { new(-gx, gy0, gz), new(gx, gy0, gz), new(gx, gy1, gz), new(-gx, gy1, gz) }, Tinted(TailGlass));
         }
         s.Box(new Vector3(0, SillY1 + 0.03f, -hl - 0.005f), new Vector3(0.5f, 0.05f, 0.01f), Steel);   // number plate blanks
-        s.Box(new Vector3(0, SillY1 + 0.03f, hl + 0.005f), new Vector3(0.5f, 0.05f, 0.01f), Steel);
+        // the Prius's plate sits on the bumper just over its intake, under the slot
+        float plateY = body.Shape == BodyShape.Liftback ? SillY0 + 0.28f : SillY1 + 0.03f;
+        if (round)
+            FaceStrip(s, d, -0.25f, 0.25f, plateY - 0.025f, plateY + 0.025f, Steel);
+        else
+            s.Box(new Vector3(0, plateY, hl + 0.005f), new Vector3(0.5f, 0.05f, 0.01f), Steel);
+        // the maker's badge on the nose above the slot and on the tailgate (the Toyotas, #760)
+        if (sloped)
+        {
+            var st = NoseStations(d);
+            var front = round ? OnFace(d, 0, st[2].Top - 0.025f, 0.004f) : new Vector3(0, st[2].Top - 0.025f, hl + 0.008f);
+            Badge(s, front, round ? (front - OnFace(d, 0, st[2].Top - 0.025f, 0f)).Normalized() : Vector3.Back, 0.11f, 0.075f);
+            float backY = body.Shape == BodyShape.Liftback ? d.Deck - 0.27f : d.Deck - 0.12f;
+            Badge(s, new Vector3(0, backY, -hl - 0.008f), Vector3.Forward, 0.1f, 0.068f);
+        }
 
         // underglow: neon strips along both sills, in the unshaded lamp mesh so they glow
         if (body.Underglow is { } neon)
@@ -475,6 +498,40 @@ public static partial class CarMeshBuilder
     }
 
     private static readonly Color Liner = new(0.5f, 0.48f, 0.45f);
+    private static readonly Color FogLamp = new(0.85f, 0.86f, 0.82f);
+    /// <summary>A swept headlamp's clear lens: grey glass while off (the rig dims it), near white lit.</summary>
+    private static readonly Color ClearLens = new(0.88f, 0.93f, 1f);
+    private static readonly Color Chrome = new(0.86f, 0.87f, 0.9f);
+
+    /// <summary>
+    /// The maker's badge (#760): three chrome ovals, an outer one round a flat one across its top and
+    /// an upright one, <paramref name="width"/> by <paramref name="height"/>, facing
+    /// <paramref name="normal"/>; each oval a ring of short bars.
+    /// </summary>
+    private static void Badge(MeshScratch s, Vector3 at, Vector3 normal, float width, float height)
+    {
+        var right = Vector3.Up.Cross(normal).Normalized();
+        var up = normal.Cross(right).Normalized();
+        var basis = new Basis(right, up, normal);
+        float a = width * 0.5f, b = height * 0.5f;
+        void Oval(float ox, float oy, float ra, float rb)
+        {
+            const int n = 20;
+            for (int i = 0; i < n; i++)
+            {
+                float t0 = Mathf.Tau * i / n, t1 = Mathf.Tau * (i + 1) / n;
+                var p0 = new Vector2(ox + ra * Mathf.Cos(t0), oy + rb * Mathf.Sin(t0));
+                var p1 = new Vector2(ox + ra * Mathf.Cos(t1), oy + rb * Mathf.Sin(t1));
+                var mid = (p0 + p1) * 0.5f;
+                var dir = p1 - p0;
+                var turn = new Basis(Vector3.Back, Mathf.Atan2(dir.Y, dir.X));
+                s.Box(at + basis * new Vector3(mid.X, mid.Y, 0), new Vector3(dir.Length() + 0.002f, 0.007f, 0.006f), Chrome, basis * turn);
+            }
+        }
+        Oval(0, 0, a, b);
+        Oval(0, b * 0.32f, a * 0.62f, b * 0.36f);
+        Oval(0, -b * 0.08f, a * 0.3f, b * 0.78f);
+    }
     /// <summary>The liftback's upright strip of rear glass, dark against the tailgate.</summary>
     private static readonly Color TailGlass = new(0.1f, 0.12f, 0.15f);
 
@@ -533,13 +590,18 @@ public static partial class CarMeshBuilder
                 RoundedLamp(head, d, sx, back, width);
             else
             {
-                Plate(head, sx, st[2], st[1], width - 0.04f, Head);
-                Plate(head, sx, st[1], tip, width, Head);
+                Plate(head, sx, st[2], st[1], width - 0.04f, ClearLens);
+                Plate(head, sx, st[1], tip, width, ClearLens);
             }
-            s.Box(new Vector3(sx * (st[2].Width * 0.5f - 0.05f), st[2].Top - 0.07f, hl + 0.006f), new Vector3(0.07f, 0.05f, 0.02f), Amber);
+            var indicator = new Vector3(sx * (st[2].Width * 0.5f - 0.05f), st[2].Top - 0.07f, hl + 0.006f);
+            s.Box(round ? OnFace(d, indicator.X, indicator.Y, 0.002f) : indicator, new Vector3(0.07f, 0.05f, 0.02f), Amber);
         }
-        // the slot grille between the lamps
-        s.Box(new Vector3(0, st[2].Top - 0.06f, hl + 0.006f), new Vector3(yaris ? 0.42f : 0.5f, 0.05f, 0.02f), Trim);
+        // the slot grille between the lamps (under the badge)
+        float slot = yaris ? 0.21f : 0.25f;
+        if (round)
+            FaceStrip(s, d, -slot, slot, st[2].Top - 0.105f, st[2].Top - 0.065f, Trim);
+        else
+            s.Box(new Vector3(0, st[2].Top - 0.085f, hl + 0.006f), new Vector3(slot * 2f, 0.04f, 0.02f), Trim);
 
         // a thin plate lying on the nose between two stations, its outer edge in from the chamfer
         static void Plate(MeshScratch m, float sx, (float Z, float Top, float Width) a, (float Z, float Top, float Width) b, float w, Color c)
