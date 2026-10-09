@@ -167,7 +167,9 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   stretch is short (< `TurnReach` 8 m, the side starting at the mouth): the corner planner lays that corner in bands round
   its kerb line (`Gap`: each inner band, verge and path, offset from the kerb line, the sidewalk the rest), cut round the
   carried bands and the car roads' ribbons (`RoadTriangles`; footpaths and tracks excluded: they end in the corner). Where
-  only one side has a path, the corner is sidewalk. Beside any carried side the corner is now this banded fill first.
+  only one side has a path, the corner is sidewalk. A turning side still lays its path's straight strip, from the mouth on
+  to the kerb (its crossing leaves straight from the corner): it cuts through the turning corner's verge there (the user's
+  review, LV95 2507355,1138482), a grass triangle staying at the kerb between two crossings. Beside any carried side the corner is now this banded fill first.
   A footpath arm no longer splits a junction's corner (`Corners`: corners between the streets only). Carried sides are laid
   after every junction (`carriedSides`); two that overlap are both left to the corner. `PAIRDBG=E,N` traces the pairs and
   each side's decision. Sion tiles: 22 sides turn; corners built 1,601 -> ~1,860 (footpath arms no longer split them).

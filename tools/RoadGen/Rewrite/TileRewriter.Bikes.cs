@@ -401,7 +401,13 @@ public static partial class TileRewriter
                             {
                                 var under = SideUnder(junction, plan, joined, new Vec2(pathEnd.At.X + home.MinE, pathEnd.At.Y + home.MaxN), c + d * w, u, segmentOf, finalPieces);
                                 if (under is { Length: > 0 }) cutBacks.Add(under);   // the corner owns that ground either way
-                                if (under is { Path: true } && inset < 1 && pathEnd.Start.DistanceTo(pathEnd.At) < TurnReach) stats.PathsToKerbTurning++;
+                                if (under is { Path: true } && inset < 1 && pathEnd.Start.DistanceTo(pathEnd.At) < TurnReach)
+                                {
+                                    // the path turns the corner, but its crossing still leaves straight from it: the path's own strip,
+                                    // from the mouth on to the kerb, cuts through the corner's verge there (the user's review)
+                                    stats.PathsToKerbTurning++;
+                                    carriedSides.Add((home, sideBands[sideIndex].Where(b => b.Band.Type == AreaPropType.BikePath).ToList()));
+                                }
                                 else carriedSides.Add((home, sideBands[sideIndex]));
                                 if (Environment.GetEnvironmentVariable("PAIRDBG") is { } pd2 && junction.Centre.DistanceTo(new Vec2(double.Parse(pd2.Split(',')[0], CultureInfo.InvariantCulture), double.Parse(pd2.Split(',')[1], CultureInfo.InvariantCulture))) < 20)
                                     Console.WriteLine($"[pair]   side {sideIndex} kerb at {pathEnd.At.X + home.MinE:F1},{pathEnd.At.Y + home.MaxN:F1}: {(under is null ? "meets no joining side" : under.Path ? "joining side has a path" : "carried")}, inset {inset:F1}, stretch {pathEnd.Start.DistanceTo(pathEnd.At):F1}");
