@@ -155,8 +155,13 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   within `GapReach` (8 m) of the corner (else a long sliver along an arm). Sion tiles: 19 wedges (corners that were bare,
   e.g. 2506547,1137658), covered 65 -> 49. `--debug-street` prints `round the cap: ...` and `the wedge before the carried
   bands: ... m2 in N part(s)`; `CORNERGAPS=1` lists where.
-- **The outer corner where two sidewalks meet is rounded a bit** (the user): `RoundAt`, a curve tangent to both outer edges,
-  `OuterRound` 1.5 m radius, its tangent points at most 45 % along each edge, on every squared corner and the wedges.
+- **The outside of the corner where two sidewalks meet is rounded a bit** (the user: on the exterior): `CornerPlanner.Fillet`,
+  once per corner, a sidewalk patch on the block's side where the two sidewalks' outer edges meet (lines, so a carried
+  band's edge counts: it runs on the sidewalk's), filled up to a curve tangent to both, `OuterRound` 1.5 m radius (tangent
+  points at most 3 m out); only where both sidewalks reach that corner (a squared piece or a wedge built there, the
+  sidewalk starting there, or a carried band through it: else it floats), the edges meeting within 8 m, turning 20-160
+  degrees, off walls and carriageways. Sion tiles: 671 corners. A first try rounded the corner piece's own vertex: it cut a
+  hole where two sidewalks start at one point, and missed every corner without a squared piece.
 
 ## Phase 2b: crosswalks from the data at the lights (the user's rule, Oct 8 2026)
 

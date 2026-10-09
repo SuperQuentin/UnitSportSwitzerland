@@ -32,11 +32,11 @@ public static class CornerPlanner
 
     public sealed class Stats
     {
-        public int Corners, Built, OneSided, Squared, Banded, Arcs, Gaps, Covered, Facade, Road, Shape;
+        public int Corners, Built, OneSided, Squared, Banded, Arcs, Gaps, Fillets, Covered, Facade, Road, Shape;
         public double Area;
 
         public string Format() => string.Create(CultureInfo.InvariantCulture, $"""
-                corners: {Corners:N0} with a sidewalk on either side, {Built:N0} built ({Squared:N0} squared, {Banded:N0} along the kerb, {Area:N0} m2; {Arcs:N0} round a widening's kerb arc, #711), {Covered:N0} covered by a side carried on to the kerb ({Gaps:N0} wedges laid before its bands, #711), {OneSided:N0} one-sided; rejected: a wall {Facade:N0}, a carriageway {Road:N0}, shape {Shape:N0}
+                corners: {Corners:N0} with a sidewalk on either side, {Built:N0} built ({Squared:N0} squared, {Banded:N0} along the kerb, {Area:N0} m2; {Arcs:N0} round a widening's kerb arc, #711), {Covered:N0} covered by a side carried on to the kerb ({Gaps:N0} wedges laid before its bands, #711), {OneSided:N0} one-sided, {Fillets:N0} outer corners rounded (#711); rejected: a wall {Facade:N0}, a carriageway {Road:N0}, shape {Shape:N0}
             """);
     }
 
@@ -161,6 +161,7 @@ public static class CornerPlanner
             // round the kerb arc beside a widening (#711), else (or where that corner cannot stand) round the cap
             RoadAreaProp? prop = null;
             bool covered = false;
+            var (squaredBefore, gapsBefore) = (stats.Squared, stats.Gaps);
             if (ArcOf(arcs, a.Out, b.Out) is { } arc)
             {
                 var (facade, road, shape) = (stats.Facade, stats.Road, stats.Shape);
@@ -177,6 +178,9 @@ public static class CornerPlanner
             }
             if (covered) stats.Covered++;
             if (prop != null) props.Add(prop);
+            bool pieceAtCorner = stats.Squared > squaredBefore || stats.Gaps > gapsBefore;   // a corner piece reaching the block's corner
+            if (Fillet(id, segments, cap, facades, stats, ca, cb, carried, pieceAtCorner, out var filletWhy) is { } fillet) props.Add(fillet);
+            if (Traced(id, node)) Console.WriteLine($"[corner]   outer corner: {filletWhy ?? "rounded"}");
             if (ordered.Count == 2 && ring == null)
             {
                 // the bend's other corner: B's left and A's right
@@ -255,16 +259,9 @@ public static class CornerPlanner
         // the corner as it would be with no side carried on: what is left of it before the carried bands' starts (#711)
         var whole = new List<(Vec2 P, float Y)>(poly);
         if (b.Width > 0) whole.Add((b.Out, b.Kerb[^1].Y));
-        // the outer corner, rounded a bit (the user's rule, #711): where both outer edges meet, or the one point both start at
-        int outerCorner = -1;
         if (Meet(b.Out, b.Inward, a.Out, a.Inward) is { } wc && wc.DistanceTo(a.Out) < 8 && wc.DistanceTo(b.Out) < 8)
-        {
-            outerCorner = whole.Count;
             whole.Add((wc, (a.Kerb[^1].Y + b.Kerb[^1].Y) * 0.5f));
-        }
-        else if (a.Width > 0 && b.Width > 0 && a.Out.DistanceTo(b.Out) < 0.1) outerCorner = whole.Count - 1;
-        if (a.Width > 0 && (outerCorner < 0 || whole[outerCorner].P.DistanceTo(a.Out) > 0.1)) whole.Add((a.Out, a.Kerb[^1].Y));
-        if (outerCorner >= 0) whole = RoundAt(whole, outerCorner);
+        if (a.Width > 0 && whole[^1].P.DistanceTo(a.Out) > 0.1) whole.Add((a.Out, a.Kerb[^1].Y));
         var (chainA, chainB) = (a, b);
         // a side carried on to the kerb (#711) covers the kerb up to where its outer edge meets it: the corner starts there,
         // narrowed to nothing at that end, and its outer edge is the carried side's (out along the arm from there)
@@ -294,7 +291,6 @@ public static class CornerPlanner
         if (b.Width > 0) withCorner.Add((b.Out, yb));
         if (squared) withCorner.Add((corner!.Value, (ya + yb) * 0.5f));
         if (a.Width > 0) withCorner.Add((a.Out, ya));
-        if (squared) withCorner = RoundAt(withCorner, poly.Count + (b.Width > 0 ? 1 : 0));   // the outer corner rounded a bit (#711)
         var chord = new List<(Vec2 P, float Y)>(poly);
         if (b.Width > 0) chord.Add((b.Out, yb));
         if (a.Width > 0) chord.Add((a.Out, ya));
@@ -671,47 +667,69 @@ public static class CornerPlanner
         return r;
     }
 
-    /// <summary>The outer corner where two sidewalks meet is rounded with this radius (m), less where its edges are short (#711, the user's rule).</summary>
+    /// <summary>The outer corner where two sidewalks meet is rounded with this radius (m), less where an edge is short (#711, the user's rule).</summary>
     private const double OuterRound = 1.5;
 
     /// <summary>
-    /// A polygon with vertex <paramref name="i"/> rounded (#711): a curve tangent to its two edges, <see cref="OuterRound"/> in
-    /// radius, its tangent points at most 45 % along each edge; unchanged where the edges run on nearly straight.
+    /// The outside of a corner where two sidewalks meet, rounded a bit (#711, the user's rule): where their outer edges meet at
+    /// the block's corner, a sidewalk patch on the block's side fills it up to a
+    /// curve tangent to both edges, <see cref="OuterRound"/> in radius. None where the edges meet far out, run on nearly
+    /// straight or turn back sharply, or the patch would stand on a wall or a carriageway.
     /// </summary>
-    private static List<(Vec2 P, float Y)> RoundAt(List<(Vec2 P, float Y)> poly, int i)
+    private static RoadAreaProp? Fillet(TileId id, IReadOnlyList<RoadSegment> segments, RoadJunction? cap, Facades facades, Stats stats,
+        Chain a, Chain b, (PathEnd? A, PathEnd? B) carried, bool pieceAtCorner, out string? why)
     {
-        int n = poly.Count;
-        if (n < 3 || i < 0 || i >= n) return poly;
-        var (p, y) = poly[i];
-        // the neighbours past any point on top of the corner (two outer edges starting at one point)
-        int ip = (i + n - 1) % n, inx = (i + 1) % n;
-        while (ip != i && poly[ip].P.DistanceTo(p) < 0.1) ip = (ip + n - 1) % n;
-        while (inx != i && poly[inx].P.DistanceTo(p) < 0.1) inx = (inx + 1) % n;
-        if (ip == i || inx == i || ip == inx) return poly;
-        Vec2 prev = poly[ip].P, next = poly[inx].P;
-        double lp = prev.DistanceTo(p), ln = next.DistanceTo(p);
-        if (lp < 0.1 || ln < 0.1) return poly;
-        Vec2 u1 = (prev - p) / lp, u2 = (next - p) / ln;
-        double angle = Math.Acos(Math.Clamp(u1.Dot(u2), -1, 1));
-        if (angle > 170 * Math.PI / 180 || angle < 1e-3) return poly;
-        double t = Math.Min(OuterRound / Math.Tan(angle / 2), Math.Min(lp, ln) * 0.45);
-        Vec2 t1 = p + u1 * t, t2 = p + u2 * t;
-        var arc = new List<(Vec2 P, float Y)>();
-        const int Steps = 6;
+        why = null;
+        // each outer edge: where its sidewalk starts and its way toward the node (a side carried on to the kerb: its band's
+        // outer edge carries on the same line); the lines meet at the block's corner, ahead of the starts or behind
+        var (pa, ia) = (a.Out, a.Inward);
+        var (pb, ib) = (b.Out, b.Inward);
+        if (ia.Length < 1e-9 || ib.Length < 1e-9) { why = "no edge"; return null; }
+        ia /= ia.Length;
+        ib /= ib.Length;
+        double den = ia.Cross(ib);
+        if (Math.Abs(den) < 1e-6) { why = "edges parallel"; return null; }
+        var x = pa + ia * ((pb - pa).Cross(ib) / den);
+        if (x.DistanceTo(pa) > 8 || x.DistanceTo(pb) > 8) { why = "edges meet far out"; return null; }
+        // only where both sidewalks reach that corner: a corner piece up to it, the sidewalk starting there, or a band carried through it
+        bool Reaches(Chain c, PathEnd? e) => pieceAtCorner || c.Out.DistanceTo(x) < 0.5
+            || e != null && DistanceToSegment(x, e.Start, e.At) < 0.5;
+        if (!Reaches(a, carried.A) || !Reaches(b, carried.B)) { why = "the sidewalks do not reach the corner"; return null; }
+        // along the block's sides, out from its corner
+        Vec2 da = ia * -1, db = ib * -1;
+        double angle = Math.Acos(Math.Clamp(da.Dot(db), -1, 1));
+        if (angle < 20 * Math.PI / 180 || angle > 160 * Math.PI / 180) { why = $"angle {angle * 180 / Math.PI:F0}"; return null; }
+        double t = Math.Min(OuterRound / Math.Tan(angle / 2), 3.0);
+        float y = (a.Kerb[^1].Y + b.Kerb[^1].Y) * 0.5f;
+        var poly = new List<(Vec2 P, float Y)> { (x, y) };
+        Vec2 t1 = x + da * t, t2 = x + db * t;
+        const int Steps = 8;
         for (int k = 0; k <= Steps; k++)
         {
             double s = (double)k / Steps, ms = 1 - s;
-            arc.Add((t1 * (ms * ms) + p * (2 * ms * s) + t2 * (s * s), y));   // a quadratic curve with the corner as its control
+            poly.Add((t1 * (ms * ms) + x * (2 * ms * s) + t2 * (s * s), y));   // the curve, the corner its control
         }
-        // the corner and the points on top of it give way to the curve
-        var result = new List<(Vec2 P, float Y)>();
-        for (int k = (inx + 0) % n; ; k = (k + 1) % n)
+        poly = Dedupe(poly);
+        if (poly.Count < 4 || (why = Check(id, segments, poly, 0, cap, facades, minArea: 0.05)) != null) { why ??= "shape"; return null; }
+        var plan = poly.Select(p => p.P).ToList();
+        var tris = EarClip.Triangulate(plan);
+        if (tris.Count != 3 * (plan.Count - 2)) { why = "shape"; return null; }
+        stats.Fillets++;
+        var verts = new float[poly.Count * 3];
+        for (int k = 0; k < poly.Count; k++)
+            (verts[k * 3], verts[k * 3 + 1], verts[k * 3 + 2]) = ((float)poly[k].P.X, poly[k].Y, (float)-poly[k].P.Y);
+        return new RoadAreaProp
         {
-            result.Add(poly[k]);
-            if (k == ip) break;
-        }
-        result.AddRange(arc);
-        return result;
+            Type = AreaPropType.Sidewalk, Flags = a.Kerb_ > 0 ? PropFlags.Solid : PropFlags.None, Height = a.Kerb_,
+            Vertices = verts, Indices = tris.Select(k => (ushort)k).ToArray(),
+        };
+    }
+
+    private static double DistanceToSegment(Vec2 p, Vec2 a, Vec2 b)
+    {
+        var ab = b - a;
+        double t = ab.Dot(ab) < 1e-12 ? 0 : Math.Clamp((p - a).Dot(ab) / ab.Dot(ab), 0, 1);
+        return p.DistanceTo(a + ab * t);
     }
 
     /// <summary>A kerb arc ends this close (m) to its cap's ring.</summary>
