@@ -67,10 +67,8 @@ public partial class VehicleBody
         _drawnTilt = Tilt;
         // left at rest: moored where it lies (one left running moors where it comes to a stop)
         if (MathX.FlatLength(s.Velocity) < MoorBelow) Moor(s.Position, s.Yaw);
-        // A boat follows no moving platform: what it rests on is water, and the only thing that
-        // carries one is a hold (#418), which poses it itself. A swimmer under the hull counted as its
-        // floor, so the ship took on the swimmer's motion, and a swimmer put somewhere else (a
-        // respawn, a probe) teleported the whole steamer 28 m with it (--steamercheck under --fixed-fps).
+        // a hull is never carried by what it rests on: a swimmer under it (on layer 1 like the
+        // ground) teleported away was a moving platform, and dragged a parked steamer 28 m with it (#738)
         PlatformFloorLayers = 0;
         _hull = GetNodeOrNull<CollisionShape3D>("Hull");
         // where the shape was put in the level boat's frame: the box's centre, nothing for a shaped hull
@@ -127,6 +125,15 @@ public partial class VehicleBody
     private void DrawBoat(Boat boat, float dt)
     {
         if (_visual == null) return;
+        if (_inHold)
+        {
+            // strapped to its trailer (#463): level on the bunks, whatever the waves are doing, and dry
+            _visual.Transform = Transform3D.Identity;
+            Posed = true;
+            PoseHull();
+            if (_visual is BoatRig dry) dry.Water(0f, 0f, 0f, false);
+            return;
+        }
         float speed = Velocity.Length();
         if (IsMultiplayerAuthority())
         {

@@ -47,8 +47,18 @@ public readonly record struct GarageLink(LinkKind Kind, float Length, float Road
     /// </summary>
     public float Hump { get; init; }
 
+    /// <summary>
+    /// The most an access road is humped over the ground, m. Where the ground between the door and the
+    /// road rises past what this lifts it over, the door is not cut (<see cref="Humpable"/>): a stub
+    /// buried to the knee on a bank is worse than no garage there.
+    /// </summary>
+    public const float MaxHump = 0.5f;
+
+    /// <summary>Whether a hump of <see cref="MaxHump"/> clears the ground sampled along the link.</summary>
+    public static bool Humpable(IEnumerable<(float At, float Above)> samples) => HumpFor(samples, float.MaxValue) <= MaxHump;
+
     /// <summary>The hump needed for a link of <paramref name="length"/> over ground heights <paramref name="above"/> the line, sampled at <paramref name="at"/> (0..1 along it).</summary>
-    public static float HumpFor(IEnumerable<(float At, float Above)> samples, float max = 0.5f)
+    public static float HumpFor(IEnumerable<(float At, float Above)> samples, float max = MaxHump)
     {
         float hump = 0;
         foreach (var (at, above) in samples)

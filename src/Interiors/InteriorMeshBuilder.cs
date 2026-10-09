@@ -44,6 +44,17 @@ public static partial class InteriorMeshBuilder
             Tri(a, c, d, col, collide);
         }
 
+        /// <summary>A box that is only collision: nothing drawn, something to walk against.</summary>
+        public void Collider(Vector3 min, Vector3 max)
+        {
+            void Face(Vector3 a, Vector3 b, Vector3 c, Vector3 d) { Col.Add(a); Col.Add(b); Col.Add(c); Col.Add(a); Col.Add(c); Col.Add(d); }
+            Face(new(min.X, max.Y, min.Z), new(max.X, max.Y, min.Z), new(max.X, max.Y, max.Z), new(min.X, max.Y, max.Z));
+            Face(new(min.X, min.Y, min.Z), new(max.X, min.Y, min.Z), new(max.X, max.Y, min.Z), new(min.X, max.Y, min.Z));
+            Face(new(min.X, min.Y, max.Z), new(min.X, max.Y, max.Z), new(max.X, max.Y, max.Z), new(max.X, min.Y, max.Z));
+            Face(new(min.X, min.Y, min.Z), new(min.X, max.Y, min.Z), new(min.X, max.Y, max.Z), new(min.X, min.Y, max.Z));
+            Face(new(max.X, min.Y, min.Z), new(max.X, min.Y, max.Z), new(max.X, max.Y, max.Z), new(max.X, max.Y, min.Z));
+        }
+
         /// <summary>Quad with a darker lower edge — cheap ambient occlusion where wall meets floor.</summary>
         public void WallQuad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color col, float y0, float height)
         {
@@ -153,6 +164,7 @@ public static partial class InteriorMeshBuilder
             // a stairwell's half landings (#571): a stone slab, stood on, its underside seen from below
             foreach (var g in floor.Landings)
                 s.Box(new Vector3(g.X0 + 0.02f, y0 + h * g.Level - 0.22f, g.Z0), new Vector3(g.X1 - 0.02f, y0 + h * g.Level, g.Z1 - 0.02f), StairStone);
+            foreach (var g in floor.Guards) Guard(s, g, y0);
             foreach (var r in floor.Rails)
             {
                 var lo = new Vector3(Math.Min(r.X0, r.X1) - 0.03f, y0, Math.Min(r.Z0, r.Z1));
@@ -187,7 +199,7 @@ public static partial class InteriorMeshBuilder
             // a loose floor pallet is its own node, to be forked up and carried off (#583), and a
             // parked forklift one to be woken and driven (#630): InteriorManager.AddPallets and
             // AddForklifts draw them
-            if (IsCarvedOut(p)) continue;
+            if (IsCarvedOut(l, p)) continue;
             Furniture(s, p, l.FloorY(p.Floor) + p.Lift, figures);
         }
 
@@ -412,6 +424,36 @@ public static partial class InteriorMeshBuilder
         return pieces;
     }
 
+    /// <summary>
+    /// An open railing along <paramref name="g"/> (#680): square balusters under a handrail, with
+    /// a collision slab you cannot pass, so the stair is seen from its passage and not walled off.
+    /// </summary>
+    private static void Guard(Scratch s, RectPlan g, float y0)
+    {
+        bool alongX = Math.Abs(g.X1 - g.X0) > Math.Abs(g.Z1 - g.Z0);
+        float a = alongX ? Math.Min(g.X0, g.X1) : Math.Min(g.Z0, g.Z1);
+        float b = alongX ? Math.Max(g.X0, g.X1) : Math.Max(g.Z0, g.Z1);
+        float at = alongX ? (g.Z0 + g.Z1) / 2 : (g.X0 + g.X1) / 2;
+        Vector3 P(float u, float y, float d) => alongX ? new Vector3(u, y, at + d) : new Vector3(at + d, y, u);
+        void Block(float u0, float u1, float ya, float yb, float half, bool collide, Color col)
+        {
+            var p = P(u0, y0 + ya, -half);
+            var q = P(u1, y0 + yb, half);
+            s.Box(new Vector3(Math.Min(p.X, q.X), p.Y, Math.Min(p.Z, q.Z)), new Vector3(Math.Max(p.X, q.X), q.Y, Math.Max(p.Z, q.Z)), col, collide);
+        }
+        Block(a, b, 0.0f, 0.08f, 0.03f, false, Handrail);
+        Block(a, b, 0.90f, 0.96f, 0.045f, false, Handrail);
+        int posts = Math.Max(2, (int)MathF.Round((b - a) / 0.14f));
+        for (int i = 0; i <= posts; i++)
+        {
+            float u = a + 0.02f + (b - a - 0.04f) * i / posts;
+            Block(u - 0.015f, u + 0.015f, 0.08f, 0.90f, 0.015f, false, Rail);
+        }
+        var lo = P(a, y0, -0.03f);
+        var hi = P(b, y0 + 1.0f, 0.03f);
+        s.Collider(new Vector3(Math.Min(lo.X, hi.X), y0, Math.Min(lo.Z, hi.Z)), new Vector3(Math.Max(lo.X, hi.X), y0 + 1.0f, Math.Max(lo.Z, hi.Z)));
+    }
+
     // ---- stairs ------------------------------------------------------------------------------
 
     private static readonly Color StairStone = C(0.72f, 0.70f, 0.66f);
@@ -492,29 +534,36 @@ public static partial class InteriorMeshBuilder
     /// stair's drawn steps over one collision ramp). Where it runs on into the car park, which has
     /// no wall of its own along the lane, a parapet each side from the floor to a metre above the
     /// surface keeps a car from driving off its edge; in its own room the room's walls do that.
-    /// The ramp runs along +Z from <see cref="FlightPlan.ZTop"/>.
+    /// The ramp runs along Z (or X, `AlongX`) from <see cref="FlightPlan.ZTop"/>, toward larger values or smaller (<see cref="FlightPlan.RunDir"/>).
     /// </summary>
     private static void Ramp(Scratch s, FlightPlan f, FloorPlan floor, float y0, float h)
     {
         float inset = InteriorGenerator.WallInset;
-        float x0 = f.X0 + inset, x1 = f.X1 - inset;
+        float x0 = f.X0 + inset, x1 = f.X1 - inset;   // across the lane (along Z for a ramp running along X)
         float rise = h * (f.To - f.From);
+        float dir = f.RunDir;
         // where the car park begins along the lane
         float zPark = float.MaxValue;
         foreach (var q in floor.Rooms)
-            if (q.Type == RoomType.CarPark && q.X0 <= x0 + 0.01f && q.X1 >= x1 - 0.01f) zPark = Math.Min(zPark, q.Z0);
+        {
+            if (q.Type != RoomType.CarPark) continue;
+            float a0 = f.AlongX ? q.Z0 : q.X0, a1 = f.AlongX ? q.Z1 : q.X1;
+            if (a0 > x0 + 0.01f || a1 < x1 - 0.01f) continue;
+            zPark = Math.Min(zPark, dir > 0 ? (f.AlongX ? q.X0 : q.Z0) : -(f.AlongX ? q.X1 : q.Z1));
+        }
+        Vector3 V(float across, float y, float along) => f.AlongX ? new Vector3(along, y, across) : new Vector3(across, y, along);
         var pts = RampProfile.Polyline(rise);
         for (int i = 1; i < pts.Count; i++)
         {
-            float za = f.ZTop + pts[i - 1].T, zb = f.ZTop + pts[i].T;
+            float za = f.ZTop + dir * pts[i - 1].T, zb = f.ZTop + dir * pts[i].T;
             float ya = y0 + pts[i - 1].Y, yb = y0 + pts[i].Y;
             var col = i % 2 == 0 ? RampSurface : RampSurface * 0.93f;
             col.A = 1;
-            s.Quad(new(x0, ya, za), new(x1, ya, za), new(x1, yb, zb), new(x0, yb, zb), col);
-            if ((za + zb) / 2 < zPark) continue;
+            s.Quad(V(x0, ya, za), V(x1, ya, za), V(x1, yb, zb), V(x0, yb, zb), col);
+            if (dir * (za + zb) / 2 < zPark) continue;
             // the part in the car park: the wedge's own sides, and a parapet over each
-            Prism(s, false, x0 - 0.15f, x0, za, zb, y0, ya + 0.9f, y0, yb + 0.9f, RampWall, true);
-            Prism(s, false, x1, x1 + 0.15f, za, zb, y0, ya + 0.9f, y0, yb + 0.9f, RampWall, true);
+            Prism(s, f.AlongX, x0 - 0.15f, x0, za, zb, y0, ya + 0.9f, y0, yb + 0.9f, RampWall, true);
+            Prism(s, f.AlongX, x1, x1 + 0.15f, za, zb, y0, ya + 0.9f, y0, yb + 0.9f, RampWall, true);
         }
     }
 
@@ -662,8 +711,11 @@ public static partial class InteriorMeshBuilder
     /// <summary>A hall's forklift parked on the floor: a vehicle asleep (<see cref="HallForklifts"/>), not furniture (#630).</summary>
     public static bool IsParkedForklift(FurniturePlan p) => HallForklifts.IsParked(p);
 
+    /// <summary>A car standing in a car park's bay: a vehicle asleep (<see cref="HallCars"/>), not furniture (#558).</summary>
+    public static bool IsBayCar(InteriorLayout l, FurniturePlan p) => HallCars.IsBayCar(l, p);
+
     /// <summary>A piece <see cref="Build"/> leaves out of the merged mesh because it is a node of its own.</summary>
-    public static bool IsCarvedOut(FurniturePlan p) => IsLoosePallet(p) || IsParkedForklift(p);
+    public static bool IsCarvedOut(InteriorLayout l, FurniturePlan p) => IsLoosePallet(p) || IsParkedForklift(p) || IsBayCar(l, p);
 
     /// <summary>The load byte a plan's pallet carries off with it: its goods roll and its deck.</summary>
     public static byte PalletLoad(FurniturePlan p) => Items.Pallets.LoadOf(Hash(p, 3), p.D);

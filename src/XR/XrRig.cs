@@ -62,6 +62,9 @@ public partial class XrRig : Node3D, Core.IOriginShiftAware
 
     /// <summary>Following a camera in the world: not the title's backdrop, not before any camera.</summary>
     public bool InWorld => Anchor != null && !_anchorIsBackdrop;
+
+    /// <summary>The (logical) right controller's aim pose, -Z along the pointer; null when not tracked.</summary>
+    public Transform3D? AimHand => _right.GetHasTrackingData() ? _right.GlobalTransform : null;
     private XrHands _hands = null!;
     private XrUi _ui = null!;
     private MeshInstance3D _vignette = null!;

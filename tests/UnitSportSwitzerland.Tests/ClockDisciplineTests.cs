@@ -39,6 +39,7 @@ public class ClockDisciplineTests
         ["src/Net/ServerStats.cs"] = "plumbing: the stats sampling window",
         ["src/Net/Swarm.cs"] = "plumbing: a load tool that measures frame times, so it wants the engine's own delta",
         ["src/Net/ChatManager.cs"] = "plumbing: the rate limit on asking the server for player names",
+        ["src/Net/StatusFile.cs"] = "plumbing: Unix stamps a web page compares with its own clock",
         ["src/Core/SteeringWheel.Force.cs"] = "plumbing: force feedback goes to hardware on the wall clock",
         ["src/Items/RadioSpeaker.cs"] = "plumbing: the backoff before retrying a failed network stream",
         ["src/Occasions/OccasionHunt.cs"] = "plumbing: a probe's wall-clock timeout on a tile load (#522)",

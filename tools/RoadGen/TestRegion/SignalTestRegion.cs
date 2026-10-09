@@ -64,7 +64,7 @@ public static class SignalTestRegion
 
         // the main road A, west to east through every junction: a 10 m cantonal through road at the two
         // ideal crossroads, 8 m from the mismatched one on; split where TLM would (junctions, attribute changes)
-        double j1 = 2910500, j2 = 2911500, j3 = 2912500, j3b = 2913500, j4 = 2914500, j5a = 2915470, j5b = 2915530;
+        double j1 = 2910500, j2 = 2911500, j3 = 2912500, j3b = 2913500, j4 = 2914500, j5a = 2915450, j5b = 2915550;
         void A(string id, double from, double to, string objektart, string sidewalk = "") =>
             lines.Add(new Line(id, objektart, "Durchgangsstrasse", "Kanton", [(from, n), (to, n)], "secondary", sidewalk));
         A("A0", 2910050, j1, "10m Strasse");
@@ -97,23 +97,23 @@ public static class SignalTestRegion
         junctions.Add(new Junction("J2-ideal-paths", j2, n, "ideal crossroads in town, separated bike paths: bike signals, square crossings",
             Arms("L|T|R", "L|T|R", "L|T|R", "L|T|R")));
 
-        // 3. mismatched room. W: a long arm, L|T|R. E: houses 1.5 m from the kerb from 52 m out: only the
-        // shortest left pocket (20 + 20 m) fits, and a right pocket never reaches past the left's storage:
-        // L|TR. N: houses 1 m from the kerb from the corner on: no room for a widening, one lane. S: a 6 m
+        // 3. mismatched room. W: a long arm, L|T|R. E: houses 1.5 m from the kerb from 68 m out (the corner radius of #682 takes ~16 m of the arm): only the
+        // shortest left pocket (20 + 20 m) fits, and a right pocket reaches at most 8 m past the left's storage (#682):
+        // L|T|R. N: houses 1 m from the kerb from the corner on: no room for a widening, one lane. S: a 6 m
         // road 52 m long to a T where it gives way: too short for a left pocket, long enough for a right.
         Cross("J3N", j3, n, n + 400, "8m Strasse", "Verbindungsstrasse", "tertiary");
         Cross("J3S", j3, n - 52, n, "6m Strasse", "k_W", "tertiary");
         lines.Add(new Line("J3D0", "6m Strasse", "k_W", "Gemeinde", [(j3 - 300, n - 52), (j3, n - 52)], "tertiary"));
         lines.Add(new Line("J3D1", "6m Strasse", "k_W", "Gemeinde", [(j3, n - 52), (j3 + 300, n - 52)], "tertiary"));
-        boxes.Add(new Box(j3 + 52, n + 5.5, j3 + 68, n + 15.5, 9));
-        boxes.Add(new Box(j3 + 71, n + 5.5, j3 + 88, n + 15.5, 12));
-        boxes.Add(new Box(j3 + 91, n + 5.5, j3 + 108, n + 15.5, 9));
+        boxes.Add(new Box(j3 + 68, n + 5.5, j3 + 84, n + 15.5, 9));
+        boxes.Add(new Box(j3 + 87, n + 5.5, j3 + 104, n + 15.5, 12));
+        boxes.Add(new Box(j3 + 107, n + 5.5, j3 + 124, n + 15.5, 9));
         boxes.Add(new Box(j3 - 17, n + 12, j3 - 5, n + 30, 12));
         boxes.Add(new Box(j3 - 17, n + 33, j3 - 5, n + 52, 9));
         boxes.Add(new Box(j3 - 17, n + 55, j3 - 5, n + 75, 12));
         boxes.Add(new Box(j3 - 17, n + 78, j3 - 5, n + 100, 9));
         junctions.Add(new Junction("J3-mismatch", j3, n, "mismatched room: long arm, houses at the kerb, a short arm",
-            Arms("L|T|R", "L|TR", "LT|R", "LTR")));
+            Arms("L|T|R", "L|T|R", "LT|R", "LTR")));
 
         // 3b. a narrower road class: a 4 m road (no pockets on that class) meets an 8 m and a 6 m road. The 6 m
         // road's left pocket has no through lane to carry on into the 4 m road (#123: no main road out), so
@@ -128,14 +128,14 @@ public static class SignalTestRegion
         junctions.Add(new Junction("J4-tee", j4, n, "T junction: the main road's left-pocket phase",
             Arms("T|R", "L|T", "L|R", null)));
 
-        // 5. two crossroads 60 m apart: queues reach back across the one before
+        // 5. two crossroads 100 m apart: queues reach back across the one before
         foreach (var (id, e) in new[] { ("J5a", j5a), ("J5b", j5b) })
         {
             Cross(id + "S", e, n - 400, n, "6m Strasse", "Verbindungsstrasse", "tertiary");
             Cross(id + "N", e, n, n + 400, "6m Strasse", "Verbindungsstrasse", "tertiary");
         }
-        junctions.Add(new Junction("J5a-pair-west", j5a, n, "two lights 60 m apart, the west one", Arms("L|T|R", null, "L|T|R", "L|T|R")));
-        junctions.Add(new Junction("J5b-pair-east", j5b, n, "two lights 60 m apart, the east one", Arms(null, "L|T|R", "L|T|R", "L|T|R")));
+        junctions.Add(new Junction("J5a-pair-west", j5a, n, "two lights 100 m apart, the west one", Arms("L|T|R", null, "L|T|R", "L|T|R")));
+        junctions.Add(new Junction("J5b-pair-east", j5b, n, "two lights 100 m apart, the east one", Arms(null, "L|T|R", "L|T|R", "L|T|R")));
         return new Design(lines, boxes, junctions);
     }
 
@@ -469,7 +469,7 @@ public static class SignalTestRegion
                 seen.Add(dir);
                 string car = string.Join("|", a.Lanes.Where(l => l.Kind == ApproachLaneKind.Car).Select(l => Moves(l.Moves)));
                 string all = string.Join(" | ", a.Lanes.Select(l => (l.Kind == ApproachLaneKind.Bike ? "b" : "") + Moves(l.Moves)
-                    + (l.StopBehind > 0.01f ? "[box]" : l.StopBehind < -0.01f ? "[adv]" : "")));
+                    + (l.StopBehind > 3.5f ? "[box]" : l.StopBehind > 0.01f ? "[adv]" : "")));
                 var arm = plan.Arms[a.SignalArm];
                 string designed = j.Design.GetValueOrDefault(dir) ?? "-";
                 bool ok = designed == "-" || designed == car;

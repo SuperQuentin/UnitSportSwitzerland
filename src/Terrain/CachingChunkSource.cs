@@ -43,7 +43,7 @@ public sealed class CachingChunkSource : IChunkSource
 
     public double HitRate => Hits + Misses == 0 ? 0 : (double)Hits / (Hits + Misses);
 
-    private enum AssetSlot { Chunk, Coarse, Roads, Holes, Buildings, Cover, Trees, Water }
+    private enum AssetSlot { Chunk, Coarse, Roads, Holes, Buildings, Cover, Trees, Water, Fields }
 
     private sealed class Entry
     {
@@ -109,6 +109,11 @@ public sealed class CachingChunkSource : IChunkSource
     public Task<AirportIndex?> LoadAirportsAsync(CancellationToken ct = default) => _inner.LoadAirportsAsync(ct);
 
     public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => _inner.LoadLandingsAsync(ct);
+
+    /// <summary>The tile's farm fields (#494), cached like the trees (rings: 4 bytes a coordinate).</summary>
+    public Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default) =>
+        GetAsync(AssetSlot.Fields, id, () => _inner.LoadFieldsAsync(id, ct),
+            f => 64 + f.Sum(p => 48 + p.Rings.Sum(r => r.LongLength * 4 + 24)));
 
     private static long Weigh(ChunkGrid g) => g.Heights.LongLength * 2 + 64;
     private static long Weigh(RoadTile t)

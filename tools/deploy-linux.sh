@@ -21,7 +21,7 @@ done
 [ $NOCHUNKS = 1 ] && S_CHUNKS=0
 
 # --- config: tools/deploy.env, but variables already set in the environment win ---
-VARS="DEPLOY_HOST DEPLOY_PORT_SSH DEPLOY_DIR DEPLOY_CHUNKS_DIR GAME_PORT WEB_PORTS MDNS_NAME SERVER_ARGS SPACE_MARGIN_MB CHUNKS_SRC GODOT TILES TILES_DOMAIN TILES_URL TILES_PRECOMPRESS"
+VARS="DEPLOY_HOST DEPLOY_PORT_SSH DEPLOY_DIR DEPLOY_CHUNKS_DIR GAME_PORT WEB_PORTS MDNS_NAME SERVER_ARGS SPACE_MARGIN_MB CHUNKS_SRC GODOT TILES TILES_DOMAIN TILES_URL TILES_PRECOMPRESS WEB_MEDIA"
 for v in $VARS; do [ -n "${!v+x}" ] && eval "_keep_$v=\${$v}"; done
 [ -f tools/deploy.env ] && . tools/deploy.env
 for v in $VARS; do k="_keep_$v"; [ -n "${!k+x}" ] && eval "$v=\${$k}"; done
@@ -33,11 +33,13 @@ SPACE_MARGIN_MB=${SPACE_MARGIN_MB:-2048} CHUNKS_DIR=${DEPLOY_CHUNKS_DIR:-$DEPLOY
 TILES=${TILES:-1} TILES_DOMAIN=${TILES_DOMAIN:-} TILES_PRECOMPRESS=${TILES_PRECOMPRESS:-1} TILES_SITE=${TILES_DOMAIN:-:80}
 if [ "$TILES" != 1 ]; then TILES_URL=
 elif [ -z "${TILES_URL:-}" ]; then TILES_URL=$([ -n "$TILES_DOMAIN" ] && echo "https://$TILES_DOMAIN/tiles/" || echo "http://${DEPLOY_HOST#*@}/tiles/"); fi
+WEB=$([ "$TILES" = 1 ] && echo "$DEPLOY_DIR/web" || true)   # the status page (#740) needs the tiles' Caddy
+WEB_MEDIA=${WEB_MEDIA:-test_output/web-media}                # its clips and pictures, made by tools/web-media.sh
 GODOT=${GODOT:-'/c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.1-stable_mono_win64/godot_v4.7.1-stable_mono_win64_console.exe'}
 OUT=test_output/deploy; mkdir -p "$OUT"
 BUILD=build/linux; BIN=UnitSportSwitzerland.x86_64
 GODOT_VER=$(sed -n 's/.*Godot\.NET\.Sdk\/\([0-9.]*\).*/\1/p' UnitSportSwitzerland.csproj)
-DOTNET_MAJOR=$(sed -n 's/.*<TargetFramework>net\([0-9]*\)\..*/\1/p' UnitSportSwitzerland.csproj)
+DOTNET_MAJOR=$(sed -n 's/.*<TargetFramework>net\([0-9]*\)\..*/\1/p' UnitSportSwitzerland.csproj | head -1)
 VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 say()  { printf '\n== %s\n' "$*"; }
@@ -79,7 +81,7 @@ ensure_preset() { # append a "Linux Server" preset to the (gitignored, per-machi
   grep -q '^name="Linux Server"' "$f" 2>/dev/null && return
   n=$(grep -c '^\[preset\.[0-9]*\]$' "$f" 2>/dev/null || true); n=${n:-0}
   excl=$(sed -n 's/^exclude_filter="\(.*\)"$/\1/p' "$f" 2>/dev/null | head -1 || true)
-  : "${excl:=terrain_chunks/*, terrain_chunks_png/*, terrain_chunks_temp/*, ressources/*, roadgen_out/*, video/*, graphify-out/*, tools/*}"
+  : "${excl:=assets/audio/*, terrain_chunks/*, terrain_chunks_png/*, terrain_chunks_temp/*, ressources/*, roadgen_out/*, video/*, graphify-out/*, tools/*}"
   echo "  adding preset.$n \"Linux Server\" to $f"
   [ -s "$f" ] && echo >> "$f"
   cat >> "$f" <<EOF
@@ -151,9 +153,22 @@ fi
 stopped=0
 install_start() { # start-server.sh with this config baked in; cron and every restart run it
   sed -e "s|@DEPLOY_DIR@|$DEPLOY_DIR|; s|@CHUNKS_DIR@|$CHUNKS_DIR|; s|@GAME_PORT@|$GAME_PORT|" tools/deploy/start-server.sh \
-    | awk -v a="$SERVER_ARGS${TILES_URL:+ --tiles-url $TILES_URL}" '{gsub(/@SERVER_ARGS@/, a)} 1' > "$OUT/start-server.sh"
+    | awk -v a="$SERVER_ARGS${TILES_URL:+ --tiles-url $TILES_URL}${WEB:+ --status-file $WEB/status.json}" '{gsub(/@SERVER_ARGS@/, a)} 1' > "$OUT/start-server.sh"
   [ $DRY = 1 ] && return
+  # the status page (#740), served by the same Caddy as the tiles; the server keeps status.json beside it
+  [ -n "$WEB" ] && rq "mkdir -p $(qd "$WEB") && cat > $(qd "$WEB/index.html")" < tools/deploy/web/index.html
+  if [ -n "$WEB" ] && [ -d "$WEB_MEDIA" ]; then  # sent only when the listing (name, size, mtime) differs: the trailer alone is ~35 MB
+    list='find . -maxdepth 1 -type f -printf "%P %s %Ts\n" | LC_ALL=C sort'
+    here=$(cd "$WEB_MEDIA" && eval "$list")
+    there=$(rq "cd $(qd "$WEB/media") 2>/dev/null && $list" || true)
+    if [ "$here" != "$there" ]; then
+      tar -C "$WEB_MEDIA" -cf - . | rq "rm -rf $(qd "$WEB/media") && mkdir -p $(qd "$WEB/media") && tar -xf - -C $(qd "$WEB/media")"
+      echo "  web media uploaded ($(du -sh "$WEB_MEDIA" | cut -f1))"
+    fi
+  elif [ -n "$WEB" ]; then echo "  no $WEB_MEDIA: the page shows its drawn background (make the clips with tools/web-media.sh)"; fi
   rq "cat > $(qd "$DEPLOY_DIR/start-server.sh") && chmod 755 $(qd "$DEPLOY_DIR/start-server.sh")" < "$OUT/start-server.sh"
+  # the in-game /update (#730): fetches a release while the server runs, start-server.sh switches to it
+  rq "cat > $(qd "$DEPLOY_DIR/update-server.sh") && chmod 755 $(qd "$DEPLOY_DIR/update-server.sh")" < tools/deploy/update-server.sh
 }
 stop_server() { [ $stopped = 1 ] && return; rx "tmux kill-session -t unitsport 2>/dev/null || true"; stopped=1; }
 
@@ -176,7 +191,7 @@ fi
 # --- 5. terrain chunks: copy what differs, never delete unless --prune ------------------------------
 if [ $S_CHUNKS = 1 ]; then
   if [ -z "${CHUNKS_SRC:-}" ]; then  # same lookup as the game: MapSetup's terrain_location.json, then terrain_chunks/
-    CHUNKS_SRC=$(sed -n 's/.*"chunks"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' terrain_location.json 2>/dev/null | sed 's/\\\\/\\/g' | head -1)
+    CHUNKS_SRC=$(sed -n 's/.*"chunks"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' terrain_location.json 2>/dev/null | sed 's/\\\\/\\/g' | head -1) || true  # no terrain_location.json: sed fails, pipefail would exit
     [ -n "$CHUNKS_SRC" ] && command -v cygpath >/dev/null && CHUNKS_SRC=$(cygpath -u "$CHUNKS_SRC")
     : "${CHUNKS_SRC:=terrain_chunks}"
   fi

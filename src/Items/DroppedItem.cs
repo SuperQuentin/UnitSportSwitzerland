@@ -274,6 +274,15 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware, IInterestEnti
         float bob = (1f + Mathf.Sin(time * DropFloat.BobSpeed + _floatPhase)) * 0.5f * DropFloat.BobHeight;
         var center = new Vector3(rest.X, rest.Y - restHalfY + DropFloat.Hover + bob + _box.Size.Y * s * 0.5f, rest.Z);
         var spin = new Basis(Vector3.Up, time * DropFloat.SpinSpeed + _floatPhase).Scaled(Vector3.One * s);
+        // near music (#734) it hops on every beat and squashes as it lands: the drawing only
+        if (BeatField.Count > 0 && BeatField.At(GlobalPosition, out var groove) is var reach and > 0.01f && groove.Beating)
+        {
+            float k = reach * groove.BounceScale;
+            float hop = Mathf.Sin(Mathf.Pi * Mathf.Clamp(groove.Phase / 0.6f, 0f, 1f));
+            float squash = Mathf.Exp(-groove.Phase * 8f);
+            center.Y += 0.12f * k * hop;
+            spin = spin.Scaled(new Vector3(1f + 0.12f * k * squash, 1f - 0.16f * k * squash, 1f + 0.12f * k * squash));
+        }
         // from world axes back into the body's: it lies however it landed
         var inv = b.Inverse();
         Visual.Transform = new Transform3D(inv * spin, inv * (center - spin * _box.GetCenter()));

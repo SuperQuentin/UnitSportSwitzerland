@@ -49,7 +49,8 @@ public partial class ControlsHelp : CanvasLayer
             new("Aim (binoculars, camera, shotgun); with anything else, a throw", PlayerInput.AimItem),
             new("Throw: hold Aim, hold Use to wind up, let go", Keys: "{aim_item} + {use_item}", Pad: "{aim_item} + {use_item}"),
             new("Drop the item in hand (Ctrl: the whole stack)", PlayerInput.DropItem),
-            new("Pick up what you point at; a radio: open it", PlayerInput.InteractMount),
+            new("Pick up what you point at; a radio: tap to switch it on / off, hold to open it", PlayerInput.InteractMount),
+            new("Radio in hand: tap to switch it on / off, hold to open it; aim + hold to throw it", PlayerInput.UseItem),
             new("Take the radio you point at into your hand", PlayerInput.UseItem),
             new("Pick a hotbar slot", Keys: "1–6 / Wheel", Pad: "{next_item}"),
             new("Quick wheel (hold)", PlayerInput.QuickWheel),
@@ -97,6 +98,7 @@ public partial class ControlsHelp : CanvasLayer
             new("Look behind", PlayerInput.LookBehind),
             new("Engine on / off", PlayerInput.EngineToggle),
             new("Car: headlights / pop-ups", PlayerInput.LightsToggle),
+            new("Cruise control (car, truck, farm machine, motorbike): on at this speed / off; sped up or slowed, the new speed; the brake switches it off", Keys: "{cruise}", Pad: "{lights_toggle} (hold)"),
             new("Car radio: next station", PlayerInput.RadioNext),
             new("Car radio: previous station", PlayerInput.RadioPrev),
             new("Car radio: stations and CDs (passengers too)", PlayerInput.RadioPanel),
@@ -122,8 +124,26 @@ public partial class ControlsHelp : CanvasLayer
             new("Retarder stalk more / less", Keys: "{retarder_up} / {retarder_down}", Pad: "—"),
             new("Parking brake (hold)", PlayerInput.Jump),
             new("Bus: doors", PlayerInput.CarDoor),
+            new("Boat trailer: launch the boat / winch it aboard, stopped", PlayerInput.CarDoor),
             new("Bus: kneel", PlayerInput.Kneel),
             new("Bus: destination display", PlayerInput.Destination),
+            new("Tipper: tip the body up / down (stopped)", PlayerInput.Destination),
+            new("Mixer: discharge / stop (stopped; the drum turns while the engine runs)", PlayerInput.Destination),
+        }),
+        ("Farm machines", new Row[]
+        {
+            new("Couple an implement (linkage) or the tipping trailer (drawbar)", PlayerInput.Couple),
+            new("Lower / raise the implement or the combine's header", PlayerInput.Kneel),
+            new("Combine: swing the auger out / in (over a parked or a driven tipping trailer); at a farm co-op: deliver the load", Keys: "{destination}", Pad: "{car_door}"),
+            new("Tipping trailer: tip the bin (at a farm co-op: deliver the load)", Keys: "{destination}", Pad: "{car_door}"),
+            new("On foot at a loaded trailer or combine tank: take a sack (hold, or with run held: ten)", PlayerInput.InteractMount),
+        }),
+        ("Selling farm produce", new Row[]
+        {
+            new("Farm stand: set it up by a road (stand in hand) / pack it up empty (empty hand)", PlayerInput.UseItem),
+            new("At a farm stand: open it (yours: stock, take back, collect the honesty box; another's: buy)", PlayerInput.InteractMount),
+            new("At a sugar factory or a mill on foot: sell the sacks it buys", PlayerInput.InteractMount),
+            new("Farm machine at a co-op or a specialty buyer: deliver the load (the prompt shows the price)", Keys: "{destination}", Pad: "{car_door}"),
         }),
         ("Forklift (#583)", new Row[]
         {
@@ -155,6 +175,12 @@ public partial class ControlsHelp : CanvasLayer
             new("Work: roll the bucket back / dump it (hold)", Keys: "{arm_bucket_curl} / {arm_bucket_dump}", Pad: "right stick ← →"),
             // the variant with a fork carriage (#615): the same controls, the forks lift pallets
             new("With forks: run them in under a pallet and lift the arm to take it, lower it to set it down", PlayerInput.ArmBoomUp),
+        }),
+        ("Mini dumper (#614)", new Row[]
+        {
+            // tracks like the excavator's; the skip on the tipper's action
+            new("Tracks: forward / back, turn on the spot", Keys: "{move_forward} {move_back} / {move_left} {move_right}", Pad: "{throttle} {brake} / {move_left}"),
+            new("Tip the skip / bring it down (stopped)", PlayerInput.Destination),
         }),
         ("Compact roller (#614)", new Row[]
         {
@@ -221,12 +247,16 @@ public partial class ControlsHelp : CanvasLayer
         ("Game", new Row[]
         {
             new("Map: search a place and go", PlayerInput.Teleport),
+            new("Free the mouse cursor (tap; Alt again or click the world to look)", PlayerInput.FreeCursor, Pad: "—"),
             new("Battle Royale: ping for your team (also middle-click on the map)", PlayerInput.Ping),
             new("Menu", PlayerInput.Menu),
             new("Chat / command", Keys: "Enter or /", Pad: "—"),
             new("This screen", PlayerInput.Help),
             new("Performance overlay / log", Keys: "F3 / F4", Pad: "—"),
             new("Debug menu (offline or admin)", PlayerInput.DebugMenu),
+#if PLAYTEST
+            new("Playtest panel (--playtest, Debug builds)", Keys: "F10", Pad: "L3 + R3"),
+#endif
         }),
     };
 

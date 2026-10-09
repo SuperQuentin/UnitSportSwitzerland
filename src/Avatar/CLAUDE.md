@@ -8,7 +8,7 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 ## Architecture
 
 - `avatars` — Avatars: (`src/Avatar/`): procedural low-poly figures and a road bike, built from two primitives only — a tapered...
-- `dance-moves` — Dance moves: joint-level spec per style and move, crowd moves (#261), emotes at `EmoteMoves` + catalog index and the #404 moves (YMCA, chicken, cabbage patch, swim, wave, cheer, salute, shrug); `--emotecheck`
+- `dance-moves` — Dance moves: breakdance floor sets (Posed/Spun/OffTheFloor), section-aware DancePick, new moves and refinements, `--dancesheet` (#728); joint-level spec per style and move, crowd moves (#261), emotes at `EmoteMoves` + catalog index and the #404 moves (YMCA, chicken, cabbage patch, swim, wave, cheer, salute, shrug); `--emotecheck`
 - `riding-position-derived-from-bike` — A riding position is derived from the bike, never eyeballed
 - `model-viewer` — `--models`: every procedural model by category, found by reflection from `[Showcase]` builders (prefer a set over the area's registry); `--models,<dir>` screenshots all, names builders with no entry
 - `judge-model-proportions-long-lens` — Judge model proportions with a long lens: The avatar preview's focus camera sits 9 m back at 13° FOV,...

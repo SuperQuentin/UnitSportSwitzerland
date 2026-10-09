@@ -270,6 +270,8 @@ same view 25 s apart (the hook down on the bricks), and at 22:30 (the lamps lit)
 - The hook's load is drawn whenever the pose says loaded: nothing is taken from the materials.
 - Operating a crane is #618.
 
+A site's tipper and mixer (#613) park on it as the lorries they are: `player/trucks-buses`, "Site lorries".
+
 A site's pallets of bricks and cement (#615) are pallets a machine with tines lifts, not part of
 the dressing's mesh: `vehicles/pallets`, the building-site part.
 

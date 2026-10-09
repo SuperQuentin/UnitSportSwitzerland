@@ -90,6 +90,7 @@ public partial class RideProbe : Node
                 "freighter" => RideKind.Freighter,
                 "an124" => RideKind.An124,
                 "monster" => (RideKind)(MotorbikeCatalog.First + 1),
+                "kart" => CarCatalog.Kart.Kind,
                 // works machinery (#583): the mast is worked with the shift paddles while driving
                 "forklift" => RideKind.Forklift,
                 "excavator" => RideKind.Excavator,
@@ -97,6 +98,7 @@ public partial class RideProbe : Node
                 "loader" => RideKind.WheelLoader,
                 "loaderforks" => RideKind.WheelLoaderForks,
                 "roller" => RideKind.CompactRoller,
+                "dumper" => RideKind.MiniDumper,
                 "telehandler" => RideKind.Telehandler,
                 // moto:N = MotorbikeCatalog.All[N]
                 _ when name.StartsWith("moto:") && int.TryParse(name[5..], out int b) => MotorbikeCatalog.All[b].Kind,

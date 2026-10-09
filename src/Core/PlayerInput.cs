@@ -118,6 +118,8 @@ public partial class PlayerInput : Node
     public const string ParkingBrake = "parking_brake";
     /// <summary>An airliner's autopilot and autothrust on / off, and its pitch trim held (Light sim, #415).</summary>
     public const string Autopilot = "autopilot";
+    /// <summary>A car's, truck's, farm machine's or motorbike's speed regulator (#494): the autopilot's key.</summary>
+    public const string Cruise = "cruise";
     public const string TrimNoseDown = "trim_nose_down";
     public const string TrimNoseUp = "trim_nose_up";
 
@@ -153,6 +155,8 @@ public partial class PlayerInput : Node
     public const string Help = "help";
     /// <summary>The debug menu (<see cref="DebugMenu"/>): overlays, terrain layers, view modes. Offline or as an admin.</summary>
     public const string DebugMenu = "debug_menu";
+    /// <summary>The playtest panel (<c>Playtest/PlaytestPanel</c>, #751): Debug builds run with <c>--playtest</c> only; a pad uses both stick clicks.</summary>
+    public const string PlaytestPanel = "playtest_panel";
 
     // --- items (on foot) ---
     public const string UseItem = "use_item";
@@ -163,6 +167,12 @@ public partial class PlayerInput : Node
     public const string QuickWheel = "quick_wheel";
     /// <summary>Hold on foot for the emote wheel (<see cref="Player.EmoteWheel"/>, #404): dances and gestures, any time.</summary>
     public const string EmoteWheel = "emote_wheel";
+    /// <summary>
+    /// Tap Alt: the mouse is let go in game, MMO style (#654, <see cref="CursorToggle"/>, which reads the key
+    /// itself to tell a tap from Alt+Enter). Bound for the hints and the help only. No pad or VR way: a pad
+    /// has no cursor, VR points with the laser.
+    /// </summary>
+    public const string FreeCursor = "free_cursor";
     /// <summary>In a fist fight only (#495): the fight is its own context, items and wheels are off, so these share their buttons.</summary>
     public const string FightPunch = "fight_punch";
     public const string FightKick = "fight_kick";
@@ -543,7 +553,8 @@ public partial class PlayerInput : Node
         Bind(Horn, Keys(Key.H), Button(JoyButton.DpadLeft));
         // a passenger never does tricks: the trick keys are free in a seat
         Bind(TakeWheel, Keys(Key.F), Button(JoyButton.RightShoulder));
-        Bind(Kneel, Keys(Key.K));
+        // L3 means nothing in a cab: a bus kneels and a farm machine lowers its implement or header (#494)
+        Bind(Kneel, Keys(Key.K), Button(JoyButton.LeftStick));
         Bind(Destination, Keys(Key.N));
         Bind(ShiftUp, Keys(Key.Shift), Button(JoyButton.RightShoulder));
         Bind(ShiftDown, Keys(Key.Ctrl), Button(JoyButton.LeftShoulder));
@@ -574,6 +585,8 @@ public partial class PlayerInput : Node
         Bind(Speedbrake, Keys(Key.Slash), Button(JoyButton.DpadLeft));
         Bind(ParkingBrake, Keys(Key.Period));
         Bind(Autopilot, Keys(Key.Y));
+        // on the ground the autopilot's key holds a speed; on a pad, as the autopilot, D-pad → held (FootPlayer.Cruise.cs)
+        Bind(Cruise, Keys(Key.Y));
         Bind(TrimNoseDown, Keys(Key.Home));
         Bind(TrimNoseUp, Keys(Key.End));
 
@@ -607,6 +620,11 @@ public partial class PlayerInput : Node
         Bind(CarDoor, Keys(Key.G), Button(JoyButton.X));
         Bind(Help, Keys(Key.F1));
         Bind(DebugMenu, Keys(Key.F9));
+        Bind(FreeCursor, Keys(Key.Alt));
+#if PLAYTEST
+        // a pad opens it with L3+R3 together (PlaytestPanel reads the chord): no single button is free
+        Bind(PlaytestPanel, Keys(Key.F10));
+#endif
 
         // Items are an on-foot thing, so they reuse the shoulders that only mean something
         // mounted (RB trick, LB boost). The inventory is on the two keys players try first, I

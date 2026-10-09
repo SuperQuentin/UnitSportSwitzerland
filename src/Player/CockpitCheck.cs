@@ -13,12 +13,34 @@ namespace UnitSport.Player;
 /// </summary>
 public static class CockpitCheck
 {
+    /// <summary>
+    /// A kart has no roof, glass or bulkhead to fit the driver under: only that the hands and feet reach
+    /// the wheel and the pedals however the wheel is turned, and that the rig seats a driver (#715).
+    /// </summary>
+    private static int CheckKart(CarSpec spec)
+    {
+        var seat = CarMeshBuilder.SeatFor(spec.Body, spec.Wheelbase);
+        float reach = 0f;
+        foreach (float turn in new[] { 0f, HumanMeshBuilder.MaxGripTurn, -HumanMeshBuilder.MaxGripTurn })
+        {
+            var (hr, hl, fr, fl) = HumanMeshBuilder.DriverReach(seat, turn);
+            reach = Mathf.Max(reach, Mathf.Max(Mathf.Max(hr, hl), Mathf.Max(fr, fl)));
+        }
+        var rig = CarRig.Create(spec.Body, spec.Wheelbase, spec.Gauges, HumanPalette.Default);
+        bool driver = rig.GetNode<Node3D>("Body").HasNode("Driver");
+        rig.Free();
+        bool ok = reach < 0.01f && driver;
+        GD.Print($"[cockpitcheck] {spec.Label,-24} {spec.Body.Shape,-10} reach {reach * 1000,4:F0}mm  {(ok ? "ok" : "FAIL" + (driver ? "" : " no driver"))}");
+        return ok ? 0 : 1;
+    }
+
     public static int Run()
     {
         int failed = 0;
         GD.Print("[cockpitcheck] car                      shape      recline  eye (x, y, z)         head  ahead  behind  reach  pedals");
         foreach (var spec in CarCatalog.All)
         {
+            if (spec.Body.Shape == BodyShape.Kart) { failed += CheckKart(spec); continue; }
             var d = CarMeshBuilder.For(spec.Body, spec.Wheelbase);
             var seat = CarMeshBuilder.SeatFor(d);
             var eye = HumanMeshBuilder.DriverEye(seat.Hip, seat.Recline);
@@ -66,7 +88,7 @@ public static class CockpitCheck
     /// <summary>
     /// The trucks and buses (#157): the same fit from the cab (<see cref="HeavyCabin.SeatFor"/>), the
     /// eye between the dash and the top of the windscreen, the seat inside the walls, and the seats
-    /// a passenger can take (#158): a truck's cab two, a bus at least twenty.
+    /// a passenger can take (#158): a truck's cab two, the pickup's five (#463), a bus at least twenty.
     /// </summary>
     private static int CheckHeavy()
     {
@@ -75,7 +97,7 @@ public static class CockpitCheck
         foreach (var spec in HeavyCatalog.All)
             failed += CheckCab(spec.Label, Enumerable.Range(0, spec.Sections.Length)
                 .Select(k => HeavyRig.Create(spec, k, 0.5f, k == 0 ? HumanPalette.Default : null)).ToList(),
-                spec.Class is HeavyClass.Tractor or HeavyClass.Rigid ? 1 : 20);
+                spec.Class switch { HeavyClass.Tractor or HeavyClass.Rigid or HeavyClass.FarmTractor or HeavyClass.Combine => 1, HeavyClass.Pickup => 4, HeavyClass.Offroader => 3, HeavyClass.Transporter => 10, _ => 20 });
         // the airstairs' cab (#417): a heavy cockpit in a low cab, its seat in front of the back wall
         var stairs = Avatar.AirstairsMeshBuilder.CreateRig(2.5f, HumanPalette.Default);
         float back = stairs.Cockpit!.Seat.Hip.Z - 0.3f - (Avatar.AirstairsLayout.CabRear + Avatar.AirstairsLayout.CabWall);

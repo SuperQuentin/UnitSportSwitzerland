@@ -36,6 +36,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `roadgen` — RoadGen: (`tools/RoadGen/`, standalone, no Godot): a lab for road *geometry*. Builds a road network graph (endpoint...
 - `road-format-v2` — `.road` format v2: adds junction polygons after the segments, counted in the header word v1 left reserved, so every...
 - `road-format-v3` — `.road` format v3 (#115): v2 bytes + FourCC sections (ATTR per-segment one-way/lanes/width/cross-section/priority/layer, PANT paint, PPRP/LPRP/APRP props, SGNL lights, LANE lanes per approach #353); header flags Osm, Network
+- `farm-fields` — Real farm fields (#494): LWB Nutzungsflächen per canton (geodienste.ch) + OSM fallback for VD/NE/TI/NW/OW -> `fields_E_N.fld`; `swiss_data.py lwb`, `--fields`, `--fields-check`, MapSetup `fields` layer
 - `osm-overlay` — Optional OpenStreetMap overlay: OSM one-way/lanes/width/sidewalks/cycleways conflated onto TLM lines -> `osm_overlay.tsv` keyed by TLM uuid + part + along-line interval, for #115; #347 `osm_nodes.tsv`: signal nodes, bike boxes, turn restrictions snapped to TLM line ends, turn:lanes parsed per lane
 - `osm-odbl-licence` — OSM is ODbL: attribution in README and Settings > Licenses; tiles built with the overlay are a derived database; release.sh ships no tiles...
 - `road-widths-lanes-oneway` — #117: per-carriageway width (TLM nominal / lanes / OSM), lanes, one-way order (roundabout, partner, OSM ramps, connectivity), priority; motorway median measured (TLM 2.3 m vs OSM 9.9 m) -> carriageways shifted outward; region stats
@@ -55,6 +56,7 @@ touches its topic; search with `grep -ril <word> docs/notes/tools`.
 - `region-setup-wizard` — Region setup wizard: `dotnet run --project tools/MapSetup`, a terminal front-end on `tools/MapCore` (the country map, selection, plan and estimates, shared with the game's map screen since #515)...
 - `gdal-setup` — GDAL setup: installing GDAL's Python bindings (macOS/Linux/Windows) for buildings, cycle routes and swiss_relief; how the wizard detects it
 - `signal-test-region` — #386 `RoadGen --test-region DIR`: synthetic flat region (E 2910-2915 N 1321-1323) with seven designed signalised junctions built by the real network stage; junction table, play/test commands, what it found
+- `junction-corner-arcs` — #682 circular kerb arcs sized by room, bands round them, straight half-red bike crossings, yellow zebra and path stop lines, signal timing
 - `commands` — Commands: --bbox, --buildings, --chunks, --coarse, --cover, --photos, --dry-run, --dump-png, --features-only, --force, --france, --fresh, --gwr
 
 ## Gotchas

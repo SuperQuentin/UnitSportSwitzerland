@@ -24,6 +24,24 @@ public static class PavementBuilder
     /// <summary>A car park's own tarmac: the carriageway's, lifted and desaturated a little.</summary>
     private static readonly Color LotAsphalt = new(0.355f, 0.350f, 0.340f);
 
+    /// <summary>The tint of the nearest junction cap of the tile within 80 m of the patch's first vertex, null when none (sRGB).</summary>
+    private static Color? CapColour(RoadTile tile, RoadAreaProp p)
+    {
+        float best = 80f * 80f;
+        Color? found = null;
+        foreach (var junction in tile.Junctions)
+        {
+            if (junction.Vertices.Length < 3) continue;
+            // the cap's first vertex is its centre
+            float dx = junction.Vertices[0] - p.Vertices[0], dz = junction.Vertices[2] - p.Vertices[2];
+            float d = dx * dx + dz * dz;
+            if (d >= best) continue;
+            best = d;
+            found = RoadMeshBuilder.CapColour(junction);
+        }
+        return found;
+    }
+
     public static void Append(RoadTile tile, List<Vector3> vertices, List<Color> colors, List<Vector2> uvs,
         List<Vector2> uv2s, List<int> indices)
     {
@@ -32,7 +50,8 @@ public static class PavementBuilder
         foreach (var p in tile.AreaProps)
         {
             if (p.Type is not (AreaPropType.Pavement or AreaPropType.ParkingPad) || p.Vertices.Length < 9) continue;
-            var colour = p.Type == AreaPropType.ParkingPad ? lot : road;
+            // a widening or a corner's fill is the asphalt of the junction it belongs to: its cap's tint, so they read as one surface (#682)
+            var colour = p.Type == AreaPropType.ParkingPad ? lot : CapColour(tile, p)?.SrgbToLinear() ?? road;
             for (int t = 0; t + 2 < p.Indices.Length; t += 3)
             {
                 int i0 = vertices.Count;

@@ -134,6 +134,20 @@ public sealed class FlightPlan
     public (float X, float Z) Bottom => Point((X0 + X1) / 2, ZBottom);
     public (float X, float Z) TopEnd => Point((X0 + X1) / 2, ZTop);
 
+    /// <summary>Which way a ramp's run goes along its axis: +1 from <see cref="ZTop"/> toward larger values (always, for a ramp square to the front wall), -1 the other way.</summary>
+    public int RunDir => ZBottom >= ZTop ? 1 : -1;
+
+    /// <summary>
+    /// The ground round the end of a ramp's run, plan frame: from <paramref name="before"/> metres up the run from the foot to
+    /// <paramref name="after"/> metres past it, and <paramref name="side"/> metres beyond the lane each side.
+    /// </summary>
+    public RectPlan FootZone(float before, float after, float side)
+    {
+        float a0 = ZBottom - RunDir * before, a1 = ZBottom + RunDir * after;
+        float lo = Math.Min(a0, a1), hi = Math.Max(a0, a1);
+        return AlongX ? new RectPlan(lo, X0 - side, hi, X1 + side) : new RectPlan(X0 - side, lo, X1 + side, hi);
+    }
+
     /// <summary>The rectangle it stands on, plan frame.</summary>
     public RectPlan Area(float before = 0, float after = 0)
     {
@@ -169,6 +183,11 @@ public sealed class FloorPlan
     public IEnumerable<FlightPlan> AllFlights() => Flight == null ? Flights : Flights.Prepend(Flight);
     /// <summary>Guard rails along hole edges, as (x0,z0)-(x1,z1) segments stored in a rect.</summary>
     public List<RectPlan> Rails { get; set; } = new();
+    /// <summary>
+    /// Open railings standing where a wall was left out (#680): a stair's edge on its passage. A
+    /// segment as a rail's, drawn with balusters and a handrail, solid to walk against.
+    /// </summary>
+    public List<RectPlan> Guards { get; set; } = new();
     /// <summary>Half landings between this floor and the next (#571).</summary>
     public List<LandingPlan> Landings { get; set; } = new();
 }
@@ -370,7 +389,7 @@ public sealed class InteriorLayout
     // one number, so whichever of #497/#498 rebases onto the other takes the NEXT one, never a
     // lower one: a version going backwards regenerates the plans saved under the higher one and
     // then collides when it is reissued.
-    public const int CurrentVersion = 23; // 23: a block of flats' underground garage has its ramp down to the car park (#558); 22: a hall's forklift is the size of the real, drivable machine (#630); 21: apartment blocks follow the building's outline, wing by wing (#577); 20: a bedroom, bathroom or WC has one door, wider corridors (#576); 19: a door driven through keeps its full width inside, so a loading bay is not a 1.8 m hole (#531); 18: flats' living rooms and bedrooms on a facade, stairwells with half landings (#571); 17: apartment blocks, a stairwell and elevator per entrance, flats, a shared basement (#557); 16: IKEA stores at their nine real locations, with bins of Blåhajs (#501); 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
+    public const int CurrentVersion = 26; // 26: open stairwells with a railing, TVs facing the sofa, furniture that leaves a way through (#680); 25: a studio under 5.7 m deep keeps its kitchenette at least 1.2 m (#694); 24: ramp-first garages, a ramp square to the front wall or along the facade beside a single stairwell (#694); 23: a block of flats' underground garage has its ramp down to the car park (#558); 22: a hall's forklift is the size of the real, drivable machine (#630); 21: apartment blocks follow the building's outline, wing by wing (#577); 20: a bedroom, bathroom or WC has one door, wider corridors (#576); 19: a door driven through keeps its full width inside, so a loading bay is not a 1.8 m hole (#531); 18: flats' living rooms and bedrooms on a facade, stairwells with half landings (#571); 17: apartment blocks, a stairwell and elevator per entrance, flats, a shared basement (#557); 16: IKEA stores at their nine real locations, with bins of Blåhajs (#501); 15: every main door kept under its own eave, and the opening inside it the same hole (#509); 14: a doorway per facade door, so big buildings have several (#498); 13: industrial sites — warehouses, works, depots, body shops and dealerships (#497); 12: the church radio by the rat (#370); 11: shops (a counter guaranteed, garages' too) and PAUSA vending machines (#273); 10: the rat's congregation in the front pews; 9: the pastor rat by every altar (#241); 8: room variety, basements with shelters, banks (#213); 7: room/kind-aware furnishing, gun lockers and safes (#165); 2: doors on the wall cross-section, not the triangle extent; 3: Garage kind; 4: big barn doors; 5: barn doors nearly wall-sized; 6: garages driven into
 
     public int Version { get; set; } = CurrentVersion;
     public string Key { get; set; } = "";

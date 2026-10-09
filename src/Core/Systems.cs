@@ -23,11 +23,13 @@ public static class Systems
         // the cars already parked in the car parks, and later the industrial yards' fleets (#499)
         Dormant = "dormant",
         Airports = "airports",
+        // the farm fields, their state and the hand/machine farming on them (#494)
+        Farming = "farming",
         // vehicles and dropped items far from everyone saved per tile and brought back (#689)
         Containers = "containers";
 
     public static readonly string[] All =
-        { Terrain, Generated, Traffic, Trains, Npcs, Birds, Physics, Audio, Network, Sky, Interiors, Loot, Occasions, Ui, Build, Dormant, Airports, Containers };
+        { Terrain, Generated, Traffic, Trains, Npcs, Birds, Physics, Audio, Network, Sky, Interiors, Loot, Occasions, Ui, Build, Dormant, Airports, Farming, Containers };
 
     public enum WorldKind { Real, Fixture, Flat }
 
@@ -74,6 +76,9 @@ public static class Systems
         }
         // a fixture world is a client world on code-built tiles: everything but the generated fill and the map
         if (world == WorldKind.Fixture) on ??= All.Where(s => s is not (Generated or Terrain)).ToHashSet();
+        // a playtest stages its own vehicles: no ambient traffic, trains or parked fleets crossing the scene (#751)
+        if (world == WorldKind.Fixture && Array.IndexOf(args, "--playtest") >= 0 && Array.IndexOf(args, "--systems") < 0)
+            on!.ExceptWith(new[] { Traffic, Trains, Dormant });
         if (world == WorldKind.Flat) on ??= new HashSet<string> { Physics };
         if (on != null) GD.Print($"[systems] world {world.ToString().ToLowerInvariant()}, on: {(on.Count == 0 ? "none" : string.Join(',', on.Order()))}");
         return (world, on);

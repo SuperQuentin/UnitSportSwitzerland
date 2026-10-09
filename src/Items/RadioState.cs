@@ -23,6 +23,7 @@ public readonly record struct RadioState(
     bool Playing = false,
     bool Settled = false,
     float Length = 0,
+    float Volume = RadioLoudness.Default,
     // which radio this is to the object containers (#689): given by the server; 0 = not persisted
     long Oid = 0)
 {
@@ -39,6 +40,7 @@ public readonly record struct RadioState(
         ["playing"] = Playing,
         ["settled"] = Settled,
         ["len"] = Length,
+        ["vol"] = Volume,
         };
         if (Oid != 0) d["oid"] = Oid;
         Position.Write(d);
@@ -56,5 +58,6 @@ public readonly record struct RadioState(
         d["playing"].AsBool(),
         d["settled"].AsBool(),
         d.TryGetValue("len", out var len) ? len.AsSingle() : 0f,
+        d.TryGetValue("vol", out var vol) ? RadioLoudness.Clamp(vol.AsSingle()) : RadioLoudness.Default,
         d.TryGetValue("oid", out var oid) ? oid.AsInt64() : 0);
 }

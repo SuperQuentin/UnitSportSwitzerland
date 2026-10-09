@@ -99,7 +99,7 @@ vec4 face_px(vec2 uv, vec2 code, vec3 iris_col, float t) {
     int lo = int(round(code.x));
     int hi = int(round(code.y));
     int shape = lo & 7;
-    float size = 0.85 + 0.12 * float((lo >> 3) & 3);
+    float size = 1.0 + 0.14 * float((lo >> 3) & 3);   // #728: a size up from 0.85 + 0.12 (bigger eyes)
     float spacing = 3.3 + 0.35 * float((lo >> 5) & 3);
     float eye_y = 6.9 + 0.45 * float((lo >> 7) & 3);
     float iris_k = 0.5 + 0.1 * float((lo >> 9) & 3);

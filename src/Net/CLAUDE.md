@@ -21,6 +21,7 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `lean-dedicated-server` — Dedicated server: proxy players, fps cap, coarse grids, asset prep off the main thread, throttled vehicles
 - `lan-discovery` — mDNS browse for `_unitsport._udp` (avahi on the server); the Multiplayer screen lists LAN servers, legacy unicast queries, `--discovercheck`
 - `server-query` — UDP status query on port + 1 (`USQ1`/`USR1` + JSON): LAN broadcast list, saved servers' players and ping, `--server-name`, `--query-bind`
+- `status-page` — `--status-file` JSON (players, names, version) + `tools/deploy/web/index.html` (clips from `tools/web-media.sh`) served by the deploy's Caddy at `/`, downloads from the latest GitHub release (#740)
 - `udp-receive-loop` — every UDP reader goes through `Udp.ReceiveLoop(udp, token, handler)`; never hand-write a ReceiveAsync loop
 - `http-tiles` — tiles from a static HTTP mirror (`--tiles-url`, `AssetKind.HttpBase`, `HttpAssetSource`): probe, 404 final, ENet fallback, 8 failures drop it; Caddy on the deploy host (#651)
 - `region-file-sync` — region-wide files a client pulls once (horizon, places) go through `ClientTerrainSync.SyncFileAsync`
@@ -33,6 +34,7 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `perf-relay-delta-interval` — `RelayNear`/`RelayFar` check their OnChange properties at 10 Hz (`DeltaInterval = 0.1f`); per-packet state stays `Always`
 - `perf-interest-round` — `InterestService.Evaluate` reads each target once per round (`_at`/`_agl`/`_ride`), `Together` once per pair, cached `_sight`; nothing per pair from a node
 - `sleepers` — A player who leaves lies asleep where they were (saved), and wakes there on return; identity is a per-install ECDSA key proven on join, never the name (#644)
+- `server-update` — `/update` (admin, never automatic): newest GitHub release fetched while players play, then kick all and quit; `start-server.sh run` switches `current` and restarts (#730)
 
 ## Commands
 

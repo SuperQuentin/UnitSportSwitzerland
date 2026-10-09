@@ -141,10 +141,10 @@
   fleet and fills them again on the next look.
 - **Building sites are the fourth provider** (#616): `DormantSlots.ForConstruction` turns a site
   plan's `MachineSlot`s (`terrain/construction-sites`) into slots. The owner is the site's
-  building key and the ordinal is the plan's, so a machine that found no room leaves a gap. Today
-  that means the excavator (#611), the wheel loader (#612) and the mini excavator (#614), plus the crew's van as one of the
-  lot's cars. A role nothing can drive yet (tipper, mixer, the small kit) is left out, and its place
-  stays empty until #613 and #614 map it in `DormantVehicles.SiteKind`.
+  building key and the ordinal is the plan's, so a machine that found no room leaves a gap. Every
+  role has its machine (`DormantVehicles.SiteKind`): the excavator (#611), the wheel loader (#612;
+  a quarter of them on forks, #615), the tipper and the mixer (#613), the small kit (#614: mini
+  excavator, roller, telehandler, mini dumper), plus the crew's van as one of the lot's cars.
   `DormantVehicles.Sites` plans the tile's sites with `SitePlans.For`, the plan the shell is built
   from, only on a tile that has one. It stands each machine on its own ground. Fill loads the `.bldg`
   once for the yards and the sites. Not respawning.

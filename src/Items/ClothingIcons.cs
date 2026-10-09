@@ -305,7 +305,7 @@ public static class ClothingIcons
     {
         GarmentShape.TShirt or GarmentShape.PrintTee or GarmentShape.Polo => Tee,
         GarmentShape.Marcel or GarmentShape.Corset => Tank,
-        GarmentShape.Longsleeve or GarmentShape.Hoodie or GarmentShape.CroppedJacket => Long,
+        GarmentShape.Longsleeve or GarmentShape.Hoodie or GarmentShape.CroppedJacket or GarmentShape.FieldJacket => Long,
         GarmentShape.CropTop => Crop,
         GarmentShape.Robe or GarmentShape.Dress => Dress,
         GarmentShape.Shorts => Shorts,
@@ -339,6 +339,20 @@ public static class ClothingIcons
         return bad;
     }
 
+    /// <summary>A pixel of the TAZ 90 camouflage on <paramref name="light"/> (#716): dark green, brown and black blotches, fixed by the pixel.</summary>
+    private static Color CamoPixel(Color light, int x, int y)
+    {
+        // a few hand-picked cells, not noise: the icon should look the same on every machine
+        uint h = (uint)(x * 73856093 ^ y * 19349663) % 11u;
+        return h switch
+        {
+            0 or 1 or 2 => light.Darkened(0.35f),
+            3 or 4 => new Color("56402a"),
+            5 => new Color("1a1c14"),
+            _ => light,
+        };
+    }
+
     /// <summary>The icon of a look: its garment's template in its colours.</summary>
     public static Image Image(Garment g)
     {
@@ -359,7 +373,8 @@ public static class ClothingIcons
                 var colour = rows[y][x] switch
                 {
                     'k' => outline,
-                    '1' => g.Finish == Finish.Rainbow ? Color.FromHsv((float)y / rows.Length, 0.8f, 1f) : main,
+                    '1' => g.Finish == Finish.Rainbow ? Color.FromHsv((float)y / rows.Length, 0.8f, 1f)
+                        : g.Finish == Finish.Camo ? CamoPixel(main, x, y) : main,
                     '2' => g.IsSpecial ? main.Lightened(0.35f) : second,
                     '3' => g.IsSpecial ? main.Darkened(0.25f) : third,
                     _ => new Color(0, 0, 0, 0),

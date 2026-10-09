@@ -34,7 +34,7 @@ public static partial class InteriorGenerator
             var piece = sizes.GetValueOrDefault(type) ?? new Piece(type, 1f, 1f, 1f, false);
             var (layout, data) = Layout(type, piece);
             // (a loose floor pallet and a parked forklift are nodes of their own now: InteriorNode.Create draws them)
-            if (data.Vertices.Length == 0 && !layout.Furniture.Any(InteriorMeshBuilder.IsCarvedOut)) continue;
+            if (data.Vertices.Length == 0 && !layout.Furniture.Any(f => InteriorMeshBuilder.IsCarvedOut(layout, f))) continue;
             yield return (type.ToString(), () =>
             {
                 var node = InteriorNode.Create(layout, data, Styles.StyleKit.Material(Styles.MaterialRole.Interior), Transform3D.Identity);
