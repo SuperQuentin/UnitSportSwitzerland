@@ -148,7 +148,7 @@ public static partial class TileRewriter
         var way = new Widening(seg, painted, tile, 0, atEnd, atEnd ? 1 : -1, 1, 0);
         // the lines between the lanes go solid before the junction (#711: at every junction): at the lights up to the stop line, without them to the mouth
         if (own.Length > 1) way.SolidToStop(paint, rules.Has(JunctionRule.StopLine) ? stop - SignalStopLine * 0.5 : stop,
-            rules.Has(JunctionRule.SolidCentreBeforeStop) ? CentreSolidAtLights : TurnSolid);
+            rules.Has(JunctionRule.SolidCentreBeforeStop) ? CentreSolidAtLights : TurnSolid, centreAt: centre - laneWidth * 0.5);
         double total = SegmentLength(seg);
         int made = 0;
         foreach (double tip in (ReadOnlySpan<double>)[5 + PaintEmitter.ArrowLength, 20 + PaintEmitter.ArrowLength])

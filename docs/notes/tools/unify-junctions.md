@@ -155,6 +155,17 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   within `GapReach` (8 m) of the corner (else a long sliver along an arm). Sion tiles: 19 wedges (corners that were bare,
   e.g. 2506547,1137658), covered 65 -> 49. `--debug-street` prints `round the cap: ...` and `the wedge before the carried
   bands: ... m2 in N part(s)`; `CORNERGAPS=1` lists where.
+- **The wedge in its sides' bands** (the user: the bike path's connection to the crossing was missing): the wedge is no longer
+  plain sidewalk; split along the corner's bisector, each half is cut into its side's verge, path and sidewalk at their offsets
+  from that side's kerb (sloped kerb strips left out, the next band takes them; the first band reaches in to the kerb), so a
+  path runs on through it. Laid as extra props (`_extra`), kept by `TileRewriter.Unbridged` (`CornerPlanner.IsClearOfBands`:
+  cut around the carried bands already). **Open**: at the two-node lights junction LV95 2506163,1137797 both sides of that
+  corner are carried straight on (W east across the SW road, SW north-east across the W road), so the two carried sides cross
+  in the corner: patchy. A corner where two carried paths meet wants the path to turn the corner instead.
+- **The stop line and the centre line of an approach with more lanes in than out** (the user's review, Sion 2506148,1137808):
+  lanes in place, the approach's centre line lies past the axis. The lights' stop line now starts there (`OwnLanes`), not at
+  the axis (it left the left-turn lane without one), and `SolidToStop(centreAt:)` finds that centre line (it searched the
+  approach's half only, so it stayed dashed).
 - **The outside of the corner where two sidewalks meet is rounded a bit** (the user: on the exterior): `CornerPlanner.Fillet`,
   once per corner, a sidewalk patch on the block's side where the two sidewalks' outer edges meet (lines, so a carried
   band's edge counts: it runs on the sidewalk's), filled up to a curve tangent to both, `OuterRound` 1.5 m radius (tangent

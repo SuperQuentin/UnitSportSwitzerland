@@ -1746,12 +1746,14 @@ public static partial class TileRewriter
         /// line over <paramref name="centreSolid"/> (#711), and none past it. <paramref name="centreOnly"/>: the centre line alone.
         /// Returns how many lines it changed.
         /// </summary>
-        public int SolidToStop(List<RoadPaint> paint, double stop, double centreSolid = TurnSolid, bool centreOnly = false)
+        public int SolidToStop(List<RoadPaint> paint, double stop, double centreSolid = TurnSolid, bool centreOnly = false, double? centreAt = null)
         {
-            // the centre line: the dashed line nearest the axis (a 2+1 road's is off its middle, never by a lane)
-            static bool Centre(double across) => across < 1.0;
+            // the centre line: where the approach's lanes begin (#711: with more lanes toward the junction than away it lies past
+            // the axis, on the far side), else the dashed line nearest the axis (a 2+1 road's is off its middle, never by a lane)
+            bool Centre(double across) => centreAt is { } c ? Math.Abs(across - c) < 0.3 : across < 1.0;
+            double nearest = Math.Min(-0.05, (centreAt ?? 0) - 0.3);
             var lines = paint.Where(q => (q.Segment == _painted || q.Segment == _seg) && q.Type == PaintType.WhiteDashed && q.Dash > 0
-                && q.Offset * _side > -0.05 && q.Offset * _side < _half - 0.5 && (!centreOnly || Centre(q.Offset * _side))).ToList();
+                && q.Offset * _side > nearest && q.Offset * _side < _half - 0.5 && (!centreOnly || Centre(q.Offset * _side))).ToList();
             foreach (var line in lines)
             {
                 double near = AlongOf(stop), far = AlongOf(stop + (Centre(line.Offset * _side) ? centreSolid : TurnSolid));

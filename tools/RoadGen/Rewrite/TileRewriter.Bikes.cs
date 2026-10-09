@@ -766,7 +766,7 @@ public static partial class TileRewriter
             double x = 0, z = 0;
             for (int i = 0; i < n; i++) { x += v[i * 3]; z += v[i * 3 + 2]; }
             var centre = new Vec2(id.MinE + x / Math.Max(n, 1), id.MaxN - z / Math.Max(n, 1));
-            if (n > 0 && bridges.Any(b => PriorityPlanner.Inside(b.Ring, centre))) { stats.CornersReplaced++; continue; }
+            if (n > 0 && !CornerPlanner.IsClearOfBands(corner) && bridges.Any(b => PriorityPlanner.Inside(b.Ring, centre))) { stats.CornersReplaced++; continue; }
             yield return corner;
         }
     }
@@ -853,6 +853,7 @@ public static partial class TileRewriter
             Vec2 ca, Vec2 da, Vec2 ua, double xa, Vec2 cb, Vec2 db, Vec2 ub, double xb, double reach, Func<Vec2, float> height)
     {
         var road = Carriageway(junction, home, pavement, joined);
+
         // from the edge's point at offset o, inward along the arm, the first step on the carriageway (the line along the edge
         // itself is the outline's: 5 cm out)
         double? Run(Vec2 c, Vec2 d, Vec2 u, double o)

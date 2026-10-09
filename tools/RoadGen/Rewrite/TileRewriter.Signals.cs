@@ -268,6 +268,9 @@ public static partial class TileRewriter
                 // edge, widened by its pockets (#351: the lanes' offsets come from their layout)
                 // (#700: a split lead-in moves the approach's centre line and lanes over by its Shift)
                 double from = info.Attributes.OneWay != 0 ? -half : -(layout?.Shift ?? 0), to = layout is null ? half : half + layout.EdgeOut;
+                // (#711) lanes in place, more toward the junction than away: the approach begins at its own centre line, past the axis
+                if (layout is null && info.Attributes.OneWay == 0 && OwnLanes(junction, i, net) is { Lanes: > 1 } own)
+                    from = Math.Min(from, own.Centre - own.LaneWidth * 0.5);
                 var bar = mid + u * (MouthSkew(junction, arm) + SignalStopSetback + SignalStopLine * 0.5);
                 if (approach && !pocket && block.Contains(source.Tile))
                 {

@@ -49,7 +49,7 @@ public static class CornerPlanner
         Debug is { } d && Math.Abs(id.MinE + p.X - d.E) < 15 && Math.Abs(id.MaxN + p.Y - d.N) < 15;
 
     /// <summary>One arm's sidewalk on the side facing a corner: kerb line from the node out to where the sidewalk starts.</summary>
-    private sealed record Chain(List<(Vec2 P, float Y)> Kerb, Vec2 Out, double Width, float Kerb_, Vec2 Inward);
+    private sealed record Chain(List<(Vec2 P, float Y)> Kerb, Vec2 Out, double Width, float Kerb_, Vec2 Inward, RoadSide Side = default);
 
     /// <summary>
     /// A kerb arc round a widened corner (#682, #711), tile-local plan (x east, y = -z): the kerb line from arm A's
@@ -72,6 +72,7 @@ public static class CornerPlanner
         IReadOnlyList<PathEnd>? pathEnds = null, IEnumerable<RoadAreaProp>? bands = null)
     {
         _pathEnds = pathEnds;
+        _extra = [];
         _bandTris = [];
         foreach (var band in bands ?? [])
         {
@@ -178,6 +179,7 @@ public static class CornerPlanner
             }
             if (covered) stats.Covered++;
             if (prop != null) props.Add(prop);
+            if (_extra is { Count: > 0 } extra) { props.AddRange(extra); extra.Clear(); }   // a wedge laid in its sides' bands (#711)
             bool pieceAtCorner = stats.Squared > squaredBefore || stats.Gaps > gapsBefore;   // a corner piece reaching the block's corner
             if (Fillet(id, segments, cap, facades, stats, ca, cb, carried, pieceAtCorner, out var filletWhy) is { } fillet) props.Add(fillet);
             if (Traced(id, node)) Console.WriteLine($"[corner]   outer corner: {filletWhy ?? "rounded"}");
@@ -218,7 +220,7 @@ public static class CornerPlanner
                 // away from the carriageway: left of the outward direction for a left side
                 var across = left ? new Vec2(-dir.Y, dir.X) : new Vec2(dir.Y, -dir.X);
                 double w = side.OuterDm / 10.0;
-                return new Chain(kerb, edge[0].P + across * w, w, side.KerbCm / 100f, dir * -1);
+                return new Chain(kerb, edge[0].P + across * w, w, side.KerbCm / 100f, dir * -1, side);
             }
             if (!IsStreet(seg)) return null;
             kerb.AddRange(kerb.Count == 0 ? edge : edge.Skip(1));
@@ -331,30 +333,78 @@ public static class CornerPlanner
             foreach (var tri in _bandTris ?? [])
                 pieces = [.. pieces.SelectMany(pc => Subtract(pc, tri)).Select(Dedupe)
                     .Where(pc => pc.Count >= 3 && Math.Abs(SignedArea(pc.Select(p => p.P).ToList())) >= 0.005)];
-            var parts = new List<RoadAreaProp>();
             string? gapWhy = null;
             double area = pieces.Sum(pc => Math.Abs(SignedArea(pc.Select(p => p.P).ToList())));
+            var laid = new List<List<(Vec2 P, float Y)>>();
             if (area >= 0.2)
                 foreach (var pc in pieces)
                 {
-                    if (Polygon(id, segments, pc, 0, cap, facades, chainA, out var why, minArea: 0.005) is { } part) parts.Add(part);
-                    else gapWhy = why;
+                    if (Check(id, segments, pc, 0, cap, facades, minArea: 0.005) is { } why) gapWhy = why;
+                    else laid.Add(pc);
                 }
-            if (Traced(id, chainA.Out)) Console.WriteLine($"[corner]   the wedge before the carried bands: {area:F2} m2 in {parts.Count} of {pieces.Count} part(s){(gapWhy != null ? ", " + gapWhy : "")}");
-            if (parts.Count == 0) return null;
-            covered = false;
-            stats.Gaps++;
-            if (Environment.GetEnvironmentVariable("CORNERGAPS") == "1") Console.WriteLine($"[gap] {id.MinE + chainA.Out.X:F0},{id.MaxN + chainA.Out.Y:F0} {area:F1} m2");
-            stats.Built -= parts.Count - 1;   // one corner, in parts
-            var verts = new List<float>();
-            var indices = new List<ushort>();
-            foreach (var part in parts)
+            if (Traced(id, chainA.Out)) Console.WriteLine($"[corner]   the wedge before the carried bands: {area:F2} m2 in {laid.Count} of {pieces.Count} part(s){(gapWhy != null ? ", " + gapWhy : "")}");
+            if (laid.Count == 0) return null;
+            // in the sides' own bands (the user: the path runs on through it to the crossing): split along the corner's bisector,
+            // each half cut into its side's verge, path and sidewalk at their offsets from that side's kerb
+            var apex = (chainA.Out + chainB.Out) * 0.5;
+            var bisector = chainA.Inward / Math.Max(chainA.Inward.Length, 1e-9) + chainB.Inward / Math.Max(chainB.Inward.Length, 1e-9);
+            var across = new Vec2(-bisector.Y, bisector.X);
+            if ((chainA.Kerb[^1].P - apex).Dot(across) < 0) across = across * -1;
+            var bands = new Dictionary<(AreaPropType Type, float Height, bool Kerb), (List<float> V, List<ushort> I)>();
+            foreach (var (chain, sign) in new[] { (chainA, 1.0), (chainB, -1.0) })
             {
-                int n0 = verts.Count / 3;
-                verts.AddRange(part.Vertices);
-                indices.AddRange(part.Indices.Select(k => (ushort)(k + n0)));
+                var k0 = chain.Kerb[^1].P;   // the kerb where the side starts
+                var inward = chain.Inward / Math.Max(chain.Inward.Length, 1e-9);
+                var n = new Vec2(-inward.Y, inward.X);
+                if ((chain.Out - k0).Dot(n) < 0) n = n * -1;   // out from the kerb
+                var profile = RoadStreetSection.For(chain.Side);
+                // the side's bands without its sloped kerb strips (inside the corner they edge nothing: the next band takes them)
+                var cut = new List<(double To, StreetSurface Surface, float Height)>();
+                if (profile is null) cut.Add((chain.Width, StreetSurface.Sidewalk, chain.Kerb_));
+                else
+                    for (int b = 0; b + 1 < profile.Count; b++)
+                        if (profile.Surface[b] != StreetSurface.Kerb) cut.Add((profile.D[b + 1], profile.Surface[b], profile.H[b + 1]));
+                if (Traced(id, chainA.Out)) Console.WriteLine($"[corner]   wedge side {(sign > 0 ? "A" : "B")}: {string.Join(" ", cut.Select(c => $"{c.Surface} to {c.To:F1} at {c.Height:F2}"))}");
+                for (int b = 0; b < cut.Count; b++)
+                {
+                    var (to, surface, height) = cut[b];
+                    double from = b == 0 ? 0 : cut[b - 1].To;
+                    var type = surface switch
+                    {
+                        StreetSurface.Track => AreaPropType.BikePath,
+                        StreetSurface.Verge or StreetSurface.Buffer => AreaPropType.Grass,
+                        _ => AreaPropType.Sidewalk,
+                    };
+                    foreach (var pc in laid)
+                    {
+                        var part = ClipBefore(pc, apex, across * sign);
+                        if (b > 0) part = ClipBefore(part, k0 + n * from, n);   // the first band reaches in to the kerb, the last runs on out
+                        if (b + 1 < cut.Count) part = ClipBefore(part, k0 + n * to, n * -1);
+                        part = Dedupe(part);
+                        if (part.Count < 3 || Math.Abs(SignedArea(part.Select(q => q.P).ToList())) < 0.002) continue;
+                        if (!bands.TryGetValue((type, height, false), out var mesh)) bands[(type, height, false)] = mesh = ([], []);
+                        int v0 = mesh.V.Count / 3;
+                        foreach (var (q, y) in part) mesh.V.AddRange([(float)q.X, y, (float)-q.Y]);
+                        for (int t = 1; t + 1 < part.Count; t++) mesh.I.AddRange([(ushort)v0, (ushort)(v0 + t), (ushort)(v0 + t + 1)]);   // convex: a fan
+                    }
+                }
             }
-            return new RoadAreaProp { Type = parts[0].Type, Flags = parts[0].Flags, Height = parts[0].Height, Vertices = [.. verts], Indices = [.. indices] };
+            if (bands.Count == 0) return null;
+            stats.Gaps++;
+            stats.Built++;
+            stats.Area += area;
+            if (Environment.GetEnvironmentVariable("CORNERGAPS") == "1") Console.WriteLine($"[gap] {id.MinE + chainA.Out.X:F0},{id.MaxN + chainA.Out.Y:F0} {area:F1} m2");
+            foreach (var ((type, height, isKerb), mesh) in bands)
+            {
+                var band = new RoadAreaProp
+                {
+                    Type = type, Flags = height > 0 || isKerb ? PropFlags.Solid : PropFlags.None, Height = height,
+                    Vertices = [.. mesh.V], Indices = [.. mesh.I],
+                };
+                ClearOfBands.AddOrUpdate(band, true);
+                _extra!.Add(band);
+            }
+            return null;   // laid as its bands (covered stays true: no single corner piece)
         }
 
         RoadAreaProp? Polygon(TileId id, IReadOnlyList<RoadSegment> segments, List<(Vec2 P, float Y)> candidate, int kerbCount,
@@ -737,6 +787,15 @@ public static class CornerPlanner
 
     /// <summary>A wedge before carried bands is laid only where both sidewalks start within this (m, along the kerb) of the corner (#711).</summary>
     private const double GapReach = 8.0;
+
+    /// <summary>Props a corner lays besides its own piece (a wedge in its sides' bands, #711), while a tile is planned.</summary>
+    [ThreadStatic] private static List<RoadAreaProp>? _extra;
+
+    /// <summary>The wedges laid in their sides' bands (#711): cut around the carried bands already, they are never replaced by them.</summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RoadAreaProp, object> ClearOfBands = new();
+
+    /// <summary>Whether a corner prop was cut around the carried bands already (<c>TileRewriter.Unbridged</c> keeps it).</summary>
+    public static bool IsClearOfBands(RoadAreaProp prop) => ClearOfBands.TryGetValue(prop, out _);
 
     /// <summary>The tile's carried bands (paths through and to the kerb) as tile-local plan triangles, while a tile is planned (#711).</summary>
     [ThreadStatic] private static List<(Vec2 A, Vec2 B, Vec2 C)>? _bandTris;
