@@ -91,11 +91,10 @@ public static class SignalBuilder
     private static readonly Color Window = new(0.04f, 0.04f, 0.05f);
 
     /// <summary>Appends every pole, housing and backboard of the tile to a road mesh under construction.</summary>
-    /// <param name="detail">Cartoon's (<see cref="Styles.MeshDetail.High"/>) plates have rounded corners.</param>
+    /// <param name="rounded">The plates' corners are rounded (Cartoon's mesh detail, #759).</param>
     public static void Append(RoadTile tile, List<Vector3> vertices, List<Color> colors, List<Vector2> uvs,
-        List<Vector2> uv2s, List<int> indices, Styles.MeshDetail detail = Styles.MeshDetail.Low)
+        List<Vector2> uv2s, List<int> indices, bool rounded = false)
     {
-        bool rounded = detail == Styles.MeshDetail.High;
         foreach (var signal in tile.Signals)
             foreach (var pole in signal.Poles)
             {

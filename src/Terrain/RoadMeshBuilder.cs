@@ -74,7 +74,7 @@ public static class RoadMeshBuilder
         PavementBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // turn lane widenings (#123)
         RoadSignBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // junction signs (#121)
         ParkingBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);    // car park barrier, kiosk, shelter, P (#499)
-        SignalBuilder.Append(tile, vertices, colors, uvs, uv2s, indices, detail);   // traffic-light poles and heads (#350)
+        SignalBuilder.Append(tile, vertices, colors, uvs, uv2s, indices, rounded: detail == Styles.MeshDetail.High);   // traffic-light poles and heads (#350)
         RoadStreetBuilder.Append(tile, vertices, colors, uvs, uv2s, indices); // sidewalks (#119)
 
         return vertices.Count == 0

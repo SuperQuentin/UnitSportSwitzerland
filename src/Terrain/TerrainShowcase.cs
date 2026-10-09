@@ -100,7 +100,7 @@ public static class TerrainShowcase
         var v = new List<Vector3>(); var c = new List<Color>(); var uv = new List<Vector2>(); var uv2 = new List<Vector2>(); var ix = new List<int>();
         RoadSignBuilder.Append(tile, v, c, uv, uv2, ix);
         ParkingBuilder.Append(tile, v, c, uv, uv2, ix);
-        SignalBuilder.Append(tile, v, c, uv, uv2, ix, StyleKit.Detail);
+        SignalBuilder.Append(tile, v, c, uv, uv2, ix, rounded: StyleKit.Detail == MeshDetail.High);
         return new RoadMeshBuilder.MeshData(v.ToArray(), c.ToArray(), uv.ToArray(), uv2.ToArray(), ix.ToArray());
     }
 
