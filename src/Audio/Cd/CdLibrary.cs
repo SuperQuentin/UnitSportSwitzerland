@@ -183,6 +183,12 @@ public partial class CdLibrary : Node
     /// <summary>The copy that runs the burner: the server, or the client offline.</summary>
     private bool Owns => _server || !Online;
 
+    /// <summary>
+    /// Whether this process keeps the shared CDs' files in <see cref="Directory"/> (the server, or
+    /// offline). A client joined to a server must not play its own folder: its ids name other songs.
+    /// </summary>
+    public bool OwnsFiles => Owns;
+
     // ---- client ---------------------------------------------------------------------------------
 
     /// <summary>
