@@ -97,6 +97,10 @@
   `FocusIn` reopens it (a refused reopen retries every second) and remakes the effects 1.5 s later, when
   G HUB has switched its profile. `--ffbcheck` holds the forces whatever the focus (a terminal-launched
   window may never get it). Without this the forces broke when another window came up.
+- **No effect made = reopen** (#290): a remake while another program held the wheel failed for every
+  effect ("Unable to create effect") and left the wheel silent for good, nothing ever being sent to
+  fail. `MakeEffects` now schedules `RecoverHaptic` when the constant force could not be made; focus
+  coming back clears a given-up wheel (`_hapticFailed`) for a fresh round of tries.
 - **Forces silent at launch until toggled** (G29, #290): something resets the wheel after the effects
   are made (G HUB switching profiles as the window comes to the front, or Godot's own SDL opening the
   device while the world loads, not proven which) and every update still succeeds, so `Send` has nothing

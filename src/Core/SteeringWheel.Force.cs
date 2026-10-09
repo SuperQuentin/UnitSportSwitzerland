@@ -337,7 +337,12 @@ public partial class SteeringWheel
     /// <summary>The focus decides whether the forces are held (<see cref="UpdateForces"/>): released on the way out, reopened on the way in.</summary>
     public override void _Notification(int what)
     {
-        if (what == NotificationApplicationFocusIn) _focused = true;
+        if (what == NotificationApplicationFocusIn)
+        {
+            _focused = true;
+            // a wheel given up on while another program held it gets a fresh round of tries
+            (_hapticFailed, _openFailures, _openRetryAt) = (false, 0, 0);
+        }
         else if (what == NotificationApplicationFocusOut) _focused = false;
     }
 
@@ -391,6 +396,11 @@ public partial class SteeringWheel
         GD.Print($"[wheel] force feedback on {SDL_GetHapticName(_haptic)}: features 0x{_features:x}, "
             + $"constant {(int)_constant >= 0}, road {(int)_road >= 0}, engine {(int)_engine >= 0}, knock {(int)_knock >= 0}, "
             + $"damper {(int)_damper >= 0}, friction {(int)_friction >= 0}");
+        // the device takes constant forces but would not make one: another program holds the wheel
+        // (a window that came up, G HUB). Left like that it stayed silent for good, nothing ever being
+        // sent to fail; closed and reopened a second later instead, as a refused update is (#290)
+        if ((_features & SDL_HAPTIC_CONSTANT) != 0 && (int)_constant < 0 && _reopenAt <= 0)
+            _reopenAt = Time.GetTicksMsec() / 1000.0 + 1.0;
     }
 
     /// <summary>Creates (and with <paramref name="run"/>, starts) an effect the device supports; −1 otherwise.</summary>
