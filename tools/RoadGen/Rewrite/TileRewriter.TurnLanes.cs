@@ -633,8 +633,7 @@ public static partial class TileRewriter
                 var outLanes = placed.GetValueOrDefault((junction.NodeId, j));
                 var outWay = outLanes?.ExitWay;
                 // (#711: a split lead-in's mirror strip widens arm j's departing side too)
-                var rules = JunctionRules.Of(plan.Kind);
-                if (inWay is null && outWay is null && outLanes?.Mirror is null && !rules.Has(JunctionRule.BandsRoundArcs)) continue;
+                if (inWay is null && outWay is null && outLanes?.Mirror is null) continue;
                 if (net.Links[ai.LinkId].Tag is not Source si || net.Links[aj.LinkId].Tag is not Source sj) continue;
                 // in town a sidewalk or path runs round the corner (#119, #120): its corner follows the kerb arc
                 // (#682 bands at the lights, #711 CornerPlanner elsewhere), clamped to the mouths where the sidewalk begins
@@ -646,7 +645,7 @@ public static partial class TileRewriter
                 (Vec2 P, float Y) EdgeI(double d) => inWay?.OuterEdge(d) ?? (ai.Left + ui * d, si.SampleHeight(ai.Left + ui * d));
                 // (#700: beside a split lead-in with no exit there, its mirror strip is that edge)
                 (Vec2 P, float Y) EdgeJ(double d) => outWay?.OuterEdge(d, outLanes!.ExitFar) ?? outLanes?.Mirror?.OuterEdge(d) ?? (aj.Right + uj * d, sj.SampleHeight(aj.Right + uj * d));
-                bool pastMouth = !rules.Has(JunctionRule.BandsRoundArcs);   // #711: no path bands round the arc there
+                const bool pastMouth = true;   // #711: no path bands round the arc, at the lights neither (the user's review)
                 if (town && arcs is not null && ArcOf(junction, i, EdgeI, EdgeJ, Kerb(ai.HalfWidth), Kerb(aj.HalfWidth), true, pastMouth) is { } arc) arcs[(junction.NodeId, i)] = arc;
                 if (CornerPatch(junction, i, EdgeI, EdgeJ, Kerb(ai.HalfWidth), Kerb(aj.HalfWidth), anchors, town, town && pastMouth) is not { } patches)
                 {

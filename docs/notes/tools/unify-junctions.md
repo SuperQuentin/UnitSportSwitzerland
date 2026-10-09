@@ -137,6 +137,20 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   solid line ends with it (no carry onto the next segment). Tier 0
   `At_lights_a_left_turn_with_its_bike_lane_is_guided_and_the_centre_line_is_solid_before_the_stop_line`.
 
+## The user's review of the twins (Oct 9 2026): the lights' corners as without lights
+
+- At the lights the corner was #682's: sidewalk, verge and path bands bent round the kerb arc (`EmitTownCorners`), the path
+  stopping at the crosswalk and the red crossing starting mid-sidewalk. **The user: same as without lights, red by phase.**
+  The path is now carried to the kerb at every junction (`PathsToKerb`), the sidewalk corner laid by `CornerPlanner` (kerb
+  arcs only beside a widening, past the mouth), and at the lights the red stays only where a car crosses in the same phase
+  (`RedRuns(ConflictsOf(...))` between the two kerb points). `EmitTownCorners` and the rules `PathsToKerb`/`BandsRoundArcs`
+  are gone (shared now). The note's phase-1 line "the lights keep #682's" no longer holds.
+- Sion tiles: path crossings to the kerb 91 -> 100 (all); corners built 1,592 -> 1,584, covered by a carried side 56 -> 65,
+  rejected as a carriageway 33 -> 31, shape 36 -> 35.
+- **Open**: at a two-node lights junction (LV95 2506163,1137797) both sides of a corner count as carried (`[corner] beside a
+  path carried to the kerb (AB)`, then "covered"), but the carried bands only reach the kerb strip: a bare triangle stays
+  between the two sidewalk ends (the #682 bands used to fill it). `--debug-street` now prints `round the cap: built|covered|failed`.
+
 ## Phase 2b: crosswalks from the data at the lights (the user's rule, Oct 8 2026)
 
 - **Where OSM maps any crossing round a lights junction, crosswalks only on the mapped arms**; a lights junction with no

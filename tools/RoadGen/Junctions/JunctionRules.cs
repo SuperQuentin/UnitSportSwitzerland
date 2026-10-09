@@ -38,12 +38,8 @@ public enum JunctionRule
     CrosswalkOnSidewalkArms,
     /// <summary>Without lights: the exit lane continues the through lane (wider than the carriageway's own lane), narrowing to a turn lane where an OSM crosswalk crosses it.</summary>
     ExitLaneContinuesThrough,
-    /// <summary>Lights: a bike crossing square across a widened arm, its band straight beside kerb arcs, red only where a car crosses it in the same phase.</summary>
+    /// <summary>Lights: a bike crossing red only where a car crosses it in the same phase (#682); without lights red wherever a road joins (SSV 74a). Where the path cannot be carried to the kerb (shared, #711), square across a widened arm.</summary>
     BikeCrossingByPhase,
-    /// <summary>Without lights: a path carried on straight up to the kerb of the road it crosses, red over that road wherever a road joins (SSV 74a).</summary>
-    PathsToKerb,
-    /// <summary>Lights: the sidewalk, verge and path bands laid round every kerb arc (#682), the arcs clamped to the mouths. Without: the sidewalk corner planner rounds the arcs, which may run past a mouth.</summary>
-    BandsRoundArcs,
 }
 
 /// <summary>The rules one kind of junction follows (<see cref="JunctionRule"/>), and the markings that only it draws.</summary>
@@ -59,11 +55,10 @@ public sealed class JunctionRules
     public static readonly JunctionRules Lights = new("lights",
         JunctionRule.PocketsOnEveryApproach, JunctionRule.StopLine, JunctionRule.SolidCentreBeforeStop, JunctionRule.LeftTurnGuides, JunctionRule.BikeBoxes,
         JunctionRule.LeftTurnBikeLane, JunctionRule.KerbsideBikeLane, JunctionRule.ExitIslands, JunctionRule.CrosswalkOnSidewalkArms,
-        JunctionRule.BikeCrossingByPhase, JunctionRule.BandsRoundArcs);
+        JunctionRule.BikeCrossingByPhase);
 
     public static readonly JunctionRules NoLights = new("no lights",
-        JunctionRule.PocketStopBar, JunctionRule.GiveWay, JunctionRule.EdgeGuides, JunctionRule.ExitLaneContinuesThrough,
-        JunctionRule.PathsToKerb);
+        JunctionRule.PocketStopBar, JunctionRule.GiveWay, JunctionRule.EdgeGuides, JunctionRule.ExitLaneContinuesThrough);
 
     /// <summary>The rules of a junction planned as <paramref name="kind"/>: lights or not.</summary>
     public static JunctionRules Of(PriorityPlanner.Kind kind) => kind == PriorityPlanner.Kind.Signal ? Lights : NoLights;
@@ -100,7 +95,7 @@ public sealed class JunctionRules
         JunctionRule.BikeBoxes => [(PaintType.BikeSymbol, Yellow), (PaintType.YellowSolid, Yellow), (PaintType.BikeCrossing, Red)],
         JunctionRule.LeftTurnBikeLane => [(PaintType.YellowSolid, Yellow), (PaintType.BikeSymbol, Yellow)],
         JunctionRule.CrosswalkOnSidewalkArms => [(PaintType.YellowSolid, Yellow)],
-        JunctionRule.BikeCrossingByPhase or JunctionRule.PathsToKerb => [(PaintType.BikeCrossing, Red), (PaintType.YellowDashed, Yellow)],
+        JunctionRule.BikeCrossingByPhase => [(PaintType.BikeCrossing, Red), (PaintType.YellowDashed, Yellow)],
         _ => [],
     };
 

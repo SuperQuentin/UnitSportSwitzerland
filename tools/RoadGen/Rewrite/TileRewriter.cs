@@ -743,7 +743,6 @@ public static partial class TileRewriter
                 foreach (var cutBack in cutBacks) CutBack(cutBack, finalPieces, output, netStats.Bikes);
                 foreach (var (segment, tileId, start, end) in trackPaint)
                     EmitTrackPaint(finalPieces.TryGetValue(segment, out var pieces) ? pieces : [segment], start, end, Get(paint, tileId));
-                EmitTownCorners(priority, result.Network, segmentOf, finalPieces, townArcs, block, wanted, bikeBridges, paint, netStats.Bikes);
                 KerbArcs(priority, townArcs, kerbArcs);
             }
 

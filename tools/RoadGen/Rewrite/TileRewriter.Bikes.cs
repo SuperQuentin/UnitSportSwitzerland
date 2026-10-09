@@ -377,10 +377,10 @@ public static partial class TileRewriter
                     {
                         double ta = RoadStreetSection.TrackCentre(sa) + xa, tb = RoadStreetSection.TrackCentre(sb) + xb;
                         double ha = sa.BikeDm / 20.0 - lw * 0.5, hb = sb.BikeDm / 20.0 - lw * 0.5;
-                        // (#711, the user's rule) without lights the path runs on to the kerb of the road it crosses, and only
-                        // that road's carriageway is red: each band of the side straight on from the mouth to where it meets the kerb
-                        if (rules.Has(JunctionRule.PathsToKerb) && square is null
-                            && PathsToKerb(home, junction, islands.GetValueOrDefault(home), joined, sa, sb, ca, da, ua, xa, cb, db, ub, xb, ca.DistanceTo(cb) + 5,
+                        // (#711, the user's rule) the path runs on to the kerb of the road it crosses, and only that road's
+                        // carriageway is crossed: each band of the side straight on from the mouth to where it meets the kerb. At
+                        // every junction (the lights too, the user's review: before, their bands went round the kerb arc)
+                        if (PathsToKerb(home, junction, islands.GetValueOrDefault(home), joined, sa, sb, ca, da, ua, xa, cb, db, ub, xb, ca.DistanceTo(cb) + 5,
                                 p => HeightAt(anchors, p)) is { } toKerb)
                         {
                             Get(bridges, home).AddRange(toKerb.Bands);
@@ -392,7 +392,14 @@ public static partial class TileRewriter
                             var (kerbA, kerbB) = (toKerb.KerbA, toKerb.KerbB);
                             List<Vec2> Across(double oa, double ob) => Densify(kerbA(oa), kerbB(ob), 2.0);
                             float across = (float)(Math.Min(sa.BikeDm, sb.BikeDm) / 10.0 - 2 * lw - 2 * RedInset);
-                            if (across > 0.3f) Add(Across(ta, tb), PaintType.BikeCrossing, PaintEmitter.Red, across, 0);
+                            if (across > 0.3f && rules.Has(JunctionRule.BikeCrossingByPhase) && signalPlans.TryGetValue(junction.NodeId, out var kerbLights))
+                            {
+                                // at the lights red only on the half or halves where a car crosses while the riders go (#682)
+                                Vec2 s0 = kerbA(ta), s1 = kerbB(tb);
+                                foreach (var (from0, to0) in RedRuns(ConflictsOf(kerbLights, k == 0 ? ia : ib, joined, lanes.GetValueOrDefault((junction.NodeId, k == 0 ? ia : ib))?.Approach, junction, s0, s1)))
+                                    Add(Densify(s0 + (s1 - s0) * from0, s0 + (s1 - s0) * to0, 2.0), PaintType.BikeCrossing, PaintEmitter.Red, across, 0);
+                            }
+                            else if (across > 0.3f) Add(Across(ta, tb), PaintType.BikeCrossing, PaintEmitter.Red, across, 0);
                             Add(Across(ta - ha, tb - hb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
                             Add(Across(ta + ha, tb + hb), PaintType.YellowDashed, PaintEmitter.Yellow, lw, BikePlanner.JunctionDash);
                             stats.Crossings++;
@@ -431,74 +438,6 @@ public static partial class TileRewriter
                             Get(bridges, home).AddRange(bands);
                             stats.PathsThrough++;
                         }
-                    }
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Sidewalk, verge and path bands round the kerb arcs of a signalised junction in town (#682):
-    /// from the end of arm i's left side, along the arc offset by each band, to the end of arm j's
-    /// right side. Where the two sides' profiles differ the sidewalk corner stays.
-    /// </summary>
-    /// <summary>A path turns a corner only where its outer edge keeps this much radius (m) beyond the bands' width.</summary>
-    private const double RoundPathRoom = 4.0;
-
-    private static void EmitTownCorners(PriorityResult priority, RoadNetwork net, Dictionary<int, (RoadSegment Segment, TileId Tile, RoadSegment Painted)> segmentOf,
-        Dictionary<RoadSegment, List<RoadSegment>> finalPieces, Dictionary<(int Node, int Arm), CornerArc> arcs, HashSet<TileId> block, HashSet<TileId> wanted,
-        Dictionary<TileId, List<(RoadAreaProp Band, List<Vec2> Ring)>> bridges, Dictionary<TileId, List<RoadPaint>> paint, BikePlanner.Stats stats)
-    {
-        RoadSide EndSide(Junction junction, PriorityPlanner.Plan plan, int armIndex, bool armLeft)
-        {
-            var arm = junction.Arms[armIndex];
-            var end = plan.Arms[armIndex].End;
-            bool segRight = (end == LinkEnd.End) == armLeft;
-            if (!segmentOf.TryGetValue(arm.LinkId, out var so)) return default;
-            var pieces = finalPieces.TryGetValue(so.Segment, out var list) && list.Count > 0 ? list : [so.Segment];
-            var seg = end == LinkEnd.Start ? pieces[0] : pieces[^1];
-            return segRight ? seg.Attributes.Right : seg.Attributes.Left;
-        }
-        foreach (var (junction, plan) in priority.Plans)
-        {
-            if (!JunctionRules.Of(plan.Kind).Has(JunctionRule.BandsRoundArcs) || plan.Arms.Count != junction.Arms.Count) continue;
-            var home = TileId.FromLv95(junction.Centre.X, junction.Centre.Y);
-            if (!block.Contains(home) || !wanted.Contains(home)) continue;
-            var anchors = Anchors(junction, net);
-            if (anchors.Count == 0) continue;
-            int n = junction.Arms.Count;
-            for (int i = 0; i < n; i++)
-            {
-                if (!arcs.TryGetValue((junction.NodeId, i), out var arc)) continue;
-                int j = (i + 1) % n;
-                var sa = EndSide(junction, plan, i, armLeft: true);
-                var sb = EndSide(junction, plan, j, armLeft: false);
-                var ua = Vec2.FromHeading(junction.Arms[i].OutwardHeading);
-                var ub = Vec2.FromHeading(junction.Arms[j].OutwardHeading);
-                // round the arc the green strip beside a path is gone (the path meets the kerb, so the straight red crossing
-                // runs on from it) where the radius leaves room for the path's bands; else a path does not turn the corner:
-                // the sidewalk takes its width and cyclists keep to the crossings (#682)
-                RoadSide Round(RoadSide s)
-                {
-                    if (!s.HasTrack) return s;
-                    if (arc.R >= s.OuterDm / 10.0 + RoundPathRoom) return s with { BikeDm = (byte)(s.BikeDm + s.VergeDm), VergeDm = 0 };
-                    return new RoadSide(SidewalkDm: (byte)Math.Min(255, s.OuterDm), KerbCm: s.KerbCm);
-                }
-                var (ra, rb) = (Round(sa), Round(sb));
-                if (BridgePath(home, ra, rb, arc.Ei, arc.Ej, arc.Offset, p => HeightAt(anchors, p)) is { } bands)
-                {
-                    Get(bridges, home).AddRange(bands);
-                    stats.PathsThrough++;
-                    // the yellow dashes between path and sidewalk go round the corner too (#682)
-                    if (ra.HasTrack && ra.BufferDm == 0 && ra.SidewalkDm > 0)
-                    {
-                        double d = (sa.VergeDm + sa.BikeDm) / 10.0;
-                        float lift = RoadStreetSection.HeightAt(sa, (float)d);
-                        Get(paint, home).Add(new RoadPaint
-                        {
-                            Shape = PaintShape.Polyline, Type = PaintType.YellowDashed, Rgba = PaintEmitter.Yellow, Width = BikePlanner.LineWidth,
-                            Dash = BikePlanner.Dash, Gap = BikePlanner.Gap, Vertices = Local(home, arc.Offset(d, d), p => HeightAt(anchors, p), lift),
-                        });
                     }
                 }
             }

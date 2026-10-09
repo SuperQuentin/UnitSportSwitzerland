@@ -158,7 +158,12 @@ public static class CornerPlanner
                 else stats.Arcs++;
                 if (Traced(id, node)) Console.WriteLine($"[corner]   round a kerb arc of {arc.Line.Count} points: {(prop == null ? covered ? "covered by the carried side" : "failed" : "built")}");
             }
-            if (prop == null && !covered) prop = Build(id, segments, ca, cb, ring, cap, facades, stats, null, carried, out covered);
+            if (prop == null && !covered)
+            {
+                var (facade, road, shape) = (stats.Facade, stats.Road, stats.Shape);
+                prop = Build(id, segments, ca, cb, ring, cap, facades, stats, null, carried, out covered);
+                if (Traced(id, node)) Console.WriteLine($"[corner]   round the cap: {(prop != null ? "built" : covered ? "covered by the carried side" : $"failed (facade {stats.Facade - facade}, road {stats.Road - road}, shape {stats.Shape - shape})")}");
+            }
             if (covered) stats.Covered++;
             if (prop != null) props.Add(prop);
             if (ordered.Count == 2 && ring == null)
