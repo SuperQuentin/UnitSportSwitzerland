@@ -172,7 +172,7 @@ changed is how you get there.
   watches the same door from 8 m: door state, portal, the other player visible through it (put
   back on its spot if traffic carries it off: doors face the road). `--doorkind Agricultural` makes
   both use the nearest barn door instead of the nearest door; a kind is looked for within
-  `DoorSearch.KindReach` (1.5 km, as `--garagecheck` always did), not the 400 m of "a door in
+  `DoorSearch.KindReach` (2.5 km: the generated works stands 1.6 km from the spawn, #666), not the 400 m of "a door in
   reach" — a barn is rarely in the village you spawn in. Every door line carries the door's
   `--at E,N`, so a run that failed at one is walked back into.
   **When step 0 cannot start** (no ground under the spawn, no player from the server, never landed,

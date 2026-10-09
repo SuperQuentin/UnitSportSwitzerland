@@ -36,7 +36,7 @@ public class WheelLoaderLayoutTests
     [InlineData(0.2f, 0f, 0.31f)]
     public void Parked_flags_keep_the_arm_the_bucket_and_the_bend(float lift, float tilt, float articulation)
     {
-        var (l, t, a) = WheelLoaderLayout.Unpack(WheelLoaderLayout.Pack(lift, tilt, articulation));
+        var (l, t, a, _) = WheelLoaderLayout.Unpack(WheelLoaderLayout.Pack(lift, tilt, articulation));
         Assert.True(MathF.Abs(l - lift) < 0.012f, $"lift {lift} came back {l}");
         Assert.True(MathF.Abs(t - tilt) < 0.012f, $"tilt {tilt} came back {t}");
         Assert.True(MathF.Abs(a - articulation) < 0.012f, $"articulation {articulation} came back {a}");
@@ -45,6 +45,6 @@ public class WheelLoaderLayoutTests
     [Fact]
     public void A_fresh_loader_parks_straight_in_its_carry_pose()
     {
-        Assert.Equal((WheelLoaderLayout.RestLift, WheelLoaderLayout.RestTilt, 0f), WheelLoaderLayout.Unpack(0));
+        Assert.Equal((WheelLoaderLayout.RestLift, WheelLoaderLayout.RestTilt, 0f, 0), WheelLoaderLayout.Unpack(0));
     }
 }

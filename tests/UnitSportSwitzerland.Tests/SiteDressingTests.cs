@@ -2,6 +2,7 @@ using Godot;
 using UnitSport.Interiors;
 using UnitSport.Terrain.Construction;
 using UnitSport.Terrain.Format;
+using UnitSport.Items;
 using Xunit;
 
 namespace UnitSportSwitzerland.Tests;
@@ -84,6 +85,38 @@ public class SiteDressingTests
         float runs = site.Hoarding.Sum(r => r.A.DistanceTo(r.B));
         Assert.Equal(runs, fence, 1);
         Assert.All(yard.Boxes.Where(b => b.Part == ShellPart.Fence), b => Assert.Equal(SiteDressings.FenceHeight, b.Max.Y, 2));
+    }
+
+    [Theory]
+    [MemberData(nameof(Sites))]
+    public void Its_pallets_of_materials_are_real_pallets_in_the_yard_not_boxes(string key, float w, float d, float h, byte floors)
+    {
+        // #615: a pallet of bricks or cement that a machine with tines can lift is not drawn in the
+        // dressing's mesh (PalletService draws it), stands in the yard clear of the building, and is
+        // named by its slot, which the server finds again from the same plan
+        var (site, yard) = Make(key, w, d, h, floors);
+        float hx = site.Box.Width / 2 + ConstructionSites.Scaffold, hz = site.Box.Depth / 2 + ConstructionSites.Scaffold;
+        Assert.Equal(yard.Pallets.Count, yard.Pallets.Select(p => p.Slot).Distinct().Count());
+        foreach (var p in yard.Pallets)
+        {
+            var world = site.Box.Center + site.Box.AxisU * p.Centre.X + site.Box.AxisV * p.Centre.Z;
+            Assert.True(site.Area.Contains(world, 0.6f), $"{key}: pallet {p.Slot} outside the site");
+            Assert.False(MathF.Abs(p.Centre.X) < hx && MathF.Abs(p.Centre.Z) < hz, $"{key}: pallet {p.Slot} in the building");
+            Assert.True(Pallets.Goods(p.Load) is PalletGoods.Wrapped or PalletGoods.Sacks, $"{key}: pallet {p.Slot} holds {Pallets.Goods(p.Load)}");
+            // nothing else of the yard stands where it stands
+            float half = Pallets.Length / 2;
+            foreach (var b in yard.Boxes.Where(b => b.Solid && b.Part != ShellPart.Rebar))
+                Assert.False(b.Max.X > p.Centre.X - half + 0.05f && b.Min.X < p.Centre.X + half - 0.05f
+                    && b.Max.Z > p.Centre.Z - half + 0.05f && b.Min.Z < p.Centre.Z + half - 0.05f,
+                    $"{key}: a {b.Part} stands on pallet {p.Slot}");
+        }
+    }
+
+    [Fact]
+    public void Some_sites_keep_pallets_of_materials()
+    {
+        int pallets = Sites().Sum(s => Make((string)s[0], (float)s[1], (float)s[2], (float)s[3], (byte)s[4]).Yard.Pallets.Count);
+        Assert.True(pallets > 0, "no site of the four keeps a pallet of bricks or cement");
     }
 
     [Fact]

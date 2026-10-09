@@ -77,11 +77,11 @@ public sealed class SignalPlan
     public static float Yellow(float speedKmh) => speedKmh <= 50.5f ? 3f : speedKmh <= 60.5f ? 4f : 5f;
 
     public const float RedAmberCar = 2f, RedAmberBike = 1f, YellowBike = 2f;
-    public const float MinGreen = 4f, AllRed = 2f, BikeLead = 3f;
+    public const float MinGreen = 4f, AllRed = 2f, AllRedAfterArrow = 1f, BikeLead = 3f;
     /// <summary>A pedestrian clears 2/3 of the crossing at this pace in the clearance time (2-8 s).</summary>
     public const float WalkSpeed = 1.2f;
     /// <summary>The green of a leading or lagging left-turn phase.</summary>
-    public const float TurnPhaseGreen = 8f;
+    public const float TurnPhaseGreen = 5f;
     public const float MaxCycle = 120f;
 
     // ---- the plan ----------------------------------------------------------------------------
@@ -499,6 +499,14 @@ public sealed class SignalPlan
         };
     }
 
+    /// <summary>
+    /// The all-red after a group ends (the next group's red-yellow, 2 s, starts that much before it
+    /// is over, so 2 s means no overlap): a turn arrow (a lagging left turn, say) ends with its last
+    /// car a few metres past the stop line and the cars that follow need a moment to reach the
+    /// conflict (the entry time), so 1 s: the red-yellow overlaps its last second of yellow.
+    /// </summary>
+    private float AllRedAfter(int g) => Groups[g].Kind is SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow or SignalGroupKind.Pedestrian ? AllRedAfterArrow : AllRed;
+
     private float RedAmberOf(int g) => Groups[g].Kind switch
     {
         SignalGroupKind.Pedestrian or SignalGroupKind.Flasher => 0,
@@ -516,12 +524,12 @@ public sealed class SignalPlan
         {
             var next = phases[(i + 1) % n];
             var ending = phases[i].Green.Where(g => !next.Green.Contains(g)).ToList();
-            inter[i] = ending.Count == 0 || n == 1 ? 0 : ending.Max(plan.ClearanceOf) + AllRed;
+            inter[i] = ending.Count == 0 || n == 1 ? 0 : ending.Max(g => plan.ClearanceOf(g) + plan.AllRedAfter(g));
             // a bike group starting next leads its cars (Vorgrün): they wait that much longer
             if (n > 1 && next.Green.Any(g => plan.Groups[g].Kind == SignalGroupKind.Bike && !phases[i].Green.Contains(g))) inter[i] += BikeLead;
         }
 
-        float target = n <= 2 ? 60 : n <= 4 ? 75 : 90;
+        float target = n <= 2 ? 60 : n <= 4 ? 60 : 70;
         float fixedSum = phases.Sum(p => p.FixedGreen) + inter.Sum();
         float weights = phases.Sum(p => p.FixedGreen > 0 ? 0 : p.Weight);
         float cycle = target;
@@ -712,11 +720,15 @@ public sealed class SignalPlan
             }
         }
         static bool Live(SignalAspect a) => a is SignalAspect.Green or SignalAspect.Amber or SignalAspect.RedAmber;
+        // a turn arrow's last yellow second may overlap the next group's red-yellow (AllRedAfterArrow)
+        bool EntryOverlap(int a, int b, double t) =>
+            (State(a, t) == SignalAspect.Amber && Groups[a].Kind is SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow or SignalGroupKind.Pedestrian && State(b, t) == SignalAspect.RedAmber)
+            || (State(b, t) == SignalAspect.Amber && Groups[b].Kind is SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow or SignalGroupKind.Pedestrian && State(a, t) == SignalAspect.RedAmber);
         var seen = new HashSet<(int, int)>();
         for (double t = 0.05; t < Cycle; t += 0.1)
             for (int a = 0; a < n; a++)
             for (int b = a + 1; b < n; b++)
-                if (conflicts[a, b] == Conflict.Hard && Live(State(a, t - Offset)) && Live(State(b, t - Offset)) && seen.Add((a, b)))
+                if (conflicts[a, b] == Conflict.Hard && Live(State(a, t - Offset)) && Live(State(b, t - Offset)) && !EntryOverlap(a, b, t - Offset) && seen.Add((a, b)))
                     errors.Add($"groups {a} ({Groups[a].Kind} arm {Groups[a].Arm}) and {b} ({Groups[b].Kind} arm {Groups[b].Arm}) conflict at {t:F1} s");
         return errors;
     }

@@ -55,6 +55,8 @@ internal sealed class XrHands
         public required XRController3D Ctl;
         public required Node3D Marker;
         public bool Closed;
+        /// <summary>The fingertip has left the radio's key since it last pressed it (#725).</summary>
+        public bool PokeArmed = true;
         /// <summary>The grip is spent (holding, or it worked a door) until it opens.</summary>
         public bool Busy;
         public bool OnWheel;
@@ -97,6 +99,7 @@ internal sealed class XrHands
             var local = hand.Ctl.Position;
             hand.Speed = (local - hand.PrevLocal).Length() / Mathf.Max(dt, 1e-3f);
             hand.PrevLocal = local;
+            PokeRadio(hand);
 
             float g = hand.Ctl.GetHasTrackingData() ? hand.Ctl.GetFloat("grip") : 0f;
             bool closing = !hand.Closed && g > GripClose;
@@ -204,6 +207,37 @@ internal sealed class XrHands
         var to = at - _head.Origin;
         if (to.Length() < ReachOut || (-_head.Basis.Z).Dot(to.Normalized()) < 0.5f) return false;
         return player.TryInteract(byHand: true);
+    }
+
+    /// <summary>A fingertip this near a radio's key presses it; this far away it can press again, m.</summary>
+    private const float PokeReach = 0.04f, PokeRearm = 0.08f;
+
+    /// <summary>
+    /// A controller's tip poked into a radio's red key switches it on or off (#725), as a tap of E
+    /// does; the grip still opens its panel. No allocation: the radios are walked by index.
+    /// </summary>
+    private static void PokeRadio(Hand hand)
+    {
+        if (Items.RadioManager.Instance is not { } radios || !hand.Ctl.GetHasTrackingData()
+            || Input.MouseMode != Input.MouseModeEnum.Captured) return;
+        var tip = hand.Ctl.GlobalPosition;
+        Items.RadioBody? nearest = null;
+        float best = float.MaxValue;
+        for (int i = 0, n = radios.GetChildCount(); i < n; i++)
+            if (radios.GetChild(i) is Items.RadioBody r && r.KeyPosition.DistanceSquaredTo(tip) is var d && d < best)
+            {
+                best = d;
+                nearest = r;
+            }
+        if (nearest == null) return;
+        best = Mathf.Sqrt(best);
+        if (hand.PokeArmed && best < PokeReach)
+        {
+            hand.PokeArmed = false;
+            Items.RadioTap.Toggle(nearest);
+            Buzz(hand, 0.35f, 0.03f);
+        }
+        else if (best > PokeRearm) hand.PokeArmed = true;
     }
 
     /// <summary>A dropped item at the hand goes into the inventory; a radio there opens its panel.</summary>

@@ -91,6 +91,122 @@ Plan: `docs/plans/forklift-and-pallets.md`. The machine is `forklift`; this is w
   own files (`PalletService.Source`, the world's chunk source), off the main thread. Nothing about
   the stacks is ever sent but which have been taken.
 
+## Any machine with tines (#615)
+
+- The telehandler and the wheel loader with forks (`RideKind.WheelLoaderForks = 199`) lift
+  pallets as the forklift does: the same rule, the same service, no button.
+- **`Player/IForks`** is what the service asks of a machine:
+  - `Carrying`, and `HasTines` (a bucket loader has none);
+  - `ForkHeight`: the tines' top face over the ground;
+  - `TinesFrame`: their heel, in the vehicle's node space and turned with them, so the loader's
+    swing with its front frame;
+  - `TineLength` and `TineHalfSpan`.
+- `PalletService.Tend(player, IForks)` tests a pallet in the tines' frame
+  (`Pallets.OnTines(across, ahead, ...)`) and sets it down `Pallets.LoadAhead` (0.72 m) ahead of
+  their heel. `Pallets.Forked` is now `OnTines` at the forklift's tines, pinned equal in
+  `MachineForksTests`, with `LoadCentre = MastZ + LoadAhead`. The telehandler's tines are right of
+  its middle, under the boom.
+- **The server's check by kind**: `PalletService.CarryingOf(kind, anim)` reads what a machine's
+  published pose says is on its tines:
+  - the forklift's is `Anim.Z`;
+  - the telehandler's and the fork loader's is packed with the lift in `Anim.Y`
+    (`PoseLift`: lift + 4 × carrying);
+  - every other kind returns null ("Not on a machine with forks.").
+- **Parked**, the flags hold `Carrying` in their top ten bits. The telehandler's lift and extension
+  went from 8 to 7 bits to make room; the fork loader packs lift 8, fork pitch 7, articulation 7.
+- **Their carriages level themselves**, as a telehandler's and a loader's fork linkage do. Each
+  draws the carried pallet (`PalletNode.Carried`) at the tines' heel + `LoadAhead`.
+- **Driven by the arm**: lift (`arm_boom_up`) in work mode takes the pallet and lowering sets it
+  down, as the forklift's paddles do. On the telehandler, `shift_up/down` runs the boom out with
+  it. No new action on any device.
+- A quarter of the building sites' loaders park with forks (`DormantVehicles.SiteKind`, the slot's
+  own roll).
+- **A building site's pallets of bricks and cement** (#615, second part). They are pallets now,
+  where a deck fits the slot; narrower slots stay drawn.
+  - `SiteDressings.Plan` lists them as `SitePalletSpot`s (slot, centre, runners along the zone, load
+    byte: bricks shrink-wrapped, cement as sacks) instead of drawing them in its mesh.
+  - `SitePlans.PalletsOf` puts them in LV95 on the drawn ground. The dormant layer's site provider
+    hands them to `PalletService.ShowYard` with the yards' stacks.
+  - Their id is `<building>:c<slot>` (`PalletSource.Site`), which the server resolves from the
+    tile's own files (`SitePlans.PalletAt`), as a yard stack's.
+  - Four of the nine generated sites `--constructioncheck` plans near the spawn keep some (it
+    prints each site's count). The site at 2588796,1118441 keeps three.
+- **The wheel loader's bucket** (#615, third part; the loader only, as agreed; the excavators'
+  buckets would need room their parked flags have not got). **`Player/IBucket`**: `Carrying`,
+  `HasBucket`, `BucketFrame` (at the pin, pitched with the bucket), `BucketPinLevel` (the same pin,
+  level), `BucketPitch` (lift + tilt), `BucketFloor`, the bucket's half width and reach.
+  - **The rule** (`PalletService.TendBucket`, `Pallets.InBucket`):
+    - Drive in with the bucket down and level until a pallet is over its floor.
+    - **Curl it back past `CurlCarry` (0.35 rad) and the pallet is taken.** At the arm's lowest
+      point a full curl only reaches 0.13 rad, so the arm has to lift as it curls, as a real
+      loader's does. That keeps a pallet from being swallowed by just driving into it.
+    - **Dump it past `DumpDrop` (-0.4 rad) and it is tipped out** under the lip, on the ground the
+      machine stands on.
+  - **"In the bucket" is measured level at the pin, not in the curling bucket's frame.** This
+    bucket hangs its floor 1.08 m below its pin, so curling swings the floor through a wide arc. In
+    the bucket's own frame, the pallet had moved out behind the pin (traced) before the bucket
+    reached its carry pitch.
+  - Drawn on the bucket's floor (`WheelLoaderFront.Carrying`).
+  - In the pose's lift float, and on the server by kind (`CarryingOf`: `WheelLoader` now too).
+  - Parked, the loader's flags became lift 8, tilt 7, articulation 7, pallet 10 (were 8, 8, 8).
+- The tipping bodies follow after #613.
+
+## Pallets in a tipping body (#615, last part)
+
+A pallet set into the **tipper's body** or the **mini dumper's skip** rides with it and slides out
+when the body tips. Agreed: **one pallet per body**, set into a parked one or into one another player
+drives.
+
+- **Part of the vehicle**, as one on forks is: `Player/IBed` (`HasBed`, `BedLoad` =
+  `Pallets.Carried`, `BedUp`, `Bed`, `FlagsWithBed`).
+  - The tipper's rides in its pose and parked flags where a bus keeps its destination byte (a tipper
+    has none), plus two bits above the throttle (`Truck.BedInPose` / `BedInFlags`).
+  - The mini dumper's rides in its pose's Z and in ten flag bits above its skip's two (`MiniDumperLayout.Pack`).
+  - Nothing is on the wire per frame. `Handshake.Protocol` 31.
+- **Where**: `Avatar/BedShape` (tier 0, `BedShapeTests`), in node space with the body down: the
+  hinge, the floor's middle, its half sizes, and `Spill`, where a tipped-out pallet lands.
+  - The tipper's is `TruckMeshBuilder.TipperBed(spec, load)`, on the floor, or on the gravel's top
+    when the truck is loaded. Its pallet lands 1.7 m behind the hinge, clear of the hanging tailgate.
+  - The mini dumper's is `MiniDumperLayout.Bed`, on the skip's flat floor. Its pallet lands 1.25 m
+    ahead of the lip.
+- **Into it**: `PalletService.Tend` (forks) and `TendBucket` (bucket) first ask `BedUnder` whether
+  the pallet is over a body's floor. If so, it never goes onto the ground under that body.
+  - Forks lowered to `SetDown` over the body's floor, or a bucket dumped over it, asks `AskBed`.
+    The runners are kept along or across the body, whichever is nearer.
+  - `BedUnder` looks at the parked `VehicleBody`s with a bed and at other players driving one. It
+    reads a driven body's state from the driver's **pose** (`BedOf`), since a headless copy's own
+    ride is never dressed.
+  - It also looks at dormant slots of a bed kind: one under the pallet is **woken**, as aiming at it
+    does, and the pallet waits over it.
+  - The candidates are listed twice a second while a pallet is held, never every frame.
+- **The server** (`ServeBed`) checks:
+  - the asker holds that load;
+  - the body is a tipper's or a mini dumper's, empty and down by what the server has of it;
+  - nothing was put in it in the last 2 s (the driver's pose catching up);
+  - the asker is within `Reach + BedReach` (14 m).
+  Then:
+  - **Parked**: `VehicleManager.LoadBed` sets the replicated `VehicleBody.BedLoad` on the vehicle's
+    authority, as a door is worked (`BedLoadedOn` when that is a client). `Capture()` puts it in the
+    flags it is handed to a driver with, so #690's containers keep it too.
+  - **Driven**: `BedLoaded` tells the driver, whose ride takes it and publishes it in its pose.
+  - The asker gets `Bedded`: its forks or bucket are empty.
+- **Out of it**: as the body rises, the rig slides the pallet (`HeavyRig.BedLoad`, drawn on the tipping
+  node) toward the open end. It holds until 35 % of the tip and is at the edge at 85 %
+  (`BedShape.Slid`). Then the driver's `PalletService.TendBed` asks an ordinary drop at `Spill`. The
+  server's `Holds` accepts a body's pallet from its pose (`BedOf`), within a body's length more.
+- **Not done**: two or more pallets in a tipper (agreed: one). A pallet handed to a driver who got
+  out in the same instant is lost (a warning is logged). The excavators' buckets still carry nothing.
+- **Checks**:
+  - `--bedcheck tipper|dumper[,bucket][,shots] --world flat --systems physics,ui` (tier 1): a telehandler (with
+    `bucket`, a wheel loader) holds a pallet over a parked body and lowers or dumps it in. The
+    body takes it across, drawn on its floor, nothing on the ground. Taken over and driven off, the
+    pallet rides along; tipped, it slides out and is set down at `Spill` with its load; the flags
+    and the pose keep any pallet. The flat world has no terrain under a teleport, so the body is
+    parked under the pallet.
+  - `tools/bednetcheck.sh` (tier 2, `fixture:flat`, port 7891): A (admin) lowers a pallet into its
+    own parked tipper, and B sees the parked body's load. B gets in and tips it out, and A sees it
+    set down. A then lowers another into the body B drives, which B holds and A sees in B's pose.
+
 ## Loot
 
 `FurnitureType.Pallet` is a loot container (0.25). **A pallet still where the plan put it keeps
@@ -124,6 +240,36 @@ a container. A small, real loss, stated so it is not found later.
   side and sets it down, and B must see the yard id taken and A's forks loaded. ~60 s.
   The probe re-reads its door from `DoorIndex` at every use: the teleport to the bay rebases the
   origin, and a copy of the entry kept from before was 3.6 km off.
+- `--forkcheck telehandler|loaderforks[,shots] --world flat --systems physics,ui` (#615,
+  `Items/ForkCheck`), on the real bindings with an offline service. A loose pallet is set down in
+  the open ahead of the machine. With the arm down its tines are under the entry height, and driven
+  in, the pallet is on them (0.00 across, 0.70 ahead of their heel). The lift takes it, and it is
+  drawn on the carriage 0.15 m under the tines. Lifted, run out and backed 4 m, it rides along.
+  Lowered, it is set down where it rode, 0.00-0.01 m off. The parked flags keep every load byte.
+  Shots go in `test_output/forks/`. **No handbrake in it**: on these machines the brake reverses
+  from a standstill, and a held one backed the telehandler 18 m.
+- `tools/palletnetcheck.sh` has a #615 round: after the forklift's apron stack, A takes a
+  telehandler and forks the nearest pallet on the ground (an apron stack, `:y9`). The server takes
+  it by kind, and B sees the pallet in the telehandler's own pose (`Carrying` 298), drawn on its
+  boom, then its forks empty.
+- `--forkcheck loaderbucket[,shots]` (#615): the loader's bucket on the flat. The bucket goes down
+  and level, is driven in, curls back without taking the pallet on the ground (0.13 rad), then is
+  lifted: scooped at 0.35 rad. It carries the pallet, drawn in the bucket, backs 4.7 m, and dumps:
+  tipped out at -0.42 rad, 0.02 m from the lip. The flags keep it.
+- `tools/sitepalletnetcheck.sh` (#615, tier 2, `Items/SitePalletNetProbe`, generated world at a site
+  with pallets, port 7887). After the telehandler, A carries the pallet 33 m out of the cramped
+  yard to open ground found by a box query (a loader cannot line up between the materials, hoarding
+  and office), and sets it down there. A then switches straight onto a wheel loader, so no parked
+  telehandler is left in the way, and scoops the pallet, steering onto it on the way in, and dumps
+  it. B sees it in the loader's pose and drawn in its bucket, then tipped out with its load. A (admin) takes a telehandler and comes at the nearest site pallet across
+  its runners, from the side a ray finds clear, then lifts and sets it down. B passes on the pallet
+  taken by the server and hidden, A's telehandler carrying it in its own pose and drawn on its boom,
+  then a loose one with the same load drawn and A's forks empty. ~60 s.
+- `SiteDressingTests` (#615): a site's pallets have unique slots, stand in the yard and out of the
+  building, hold bricks or cement, and nothing else of the dressing stands on them; some sites keep some.
+- `MachineForksTests` (tier 0, 21): the forklift's rule and load centre unchanged, both arms'
+  tines on the ground ahead of the wheels and quick to lift, and the fork loader's flags and both
+  machines' pose round trips.
 - `--sitecheck --systems ui` (phase 3): per trade, apron pallets or none, none inside the building
   and none in front of any of the footprint's doors (measured against the doors themselves, not the
   spans the row was laid out from), a forklift at the warehouse and the works only, clear of the

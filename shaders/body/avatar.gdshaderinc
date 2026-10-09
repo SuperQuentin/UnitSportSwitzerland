@@ -7,21 +7,24 @@
 // (Avatar.Garments.Fx; ids are Avatar.Finish):
 //   1 rainbow, 2 disco ball, 3 galaxy, 4 holographic, 5 glitch, 6 lava, 7 neon,
 //   8 tartan, 9 fishnet, 10 lace;
-//   11 the pixel face (#394, Avatar.FaceAtlas): the atlas at UV, its clear pixels discarded so
-//      the head's skin behind shows through; its magenta pixels are the iris, drawn in the
-//      vertex colour (the eye colour) at their brightness;
-//   12 checker, 13 stripes, 14 studs (#394).
+//   11 the procedural pixel face (#657, face.gdshaderinc): drawn at UV from the genome in UV2,
+//      its clear pixels discarded so the head's skin behind shows through; the iris is the
+//      vertex colour (the eye colour);
+//   12 checker, 13 stripes, 14 studs (#394), 15 camo (#716: the army's TAZ 90).
 // Alpha 1 everywhere else, so every other mesh drawn with this is unchanged. Patterns are laid
-// out in the mesh's own space (origin at the feet), so they move with the figure.
+// out where each point sits on the figure standing at rest (CUSTOM0, MeshScratch.Rest, #724), so
+// they stay on the cloth while it runs, jumps or bends; a mesh without that channel (w = 0) falls
+// back to its own space (origin at the feet).
 
-uniform sampler2D face_atlas : source_color, filter_nearest, hint_default_transparent;
+#include "res://shaders/body/face.gdshaderinc"
 
 varying vec3 v_pos;
 varying flat int v_fx;
 
 void vertex() {
-    v_pos = VERTEX;
+    v_pos = CUSTOM0.w > 0.5 ? CUSTOM0.xyz : VERTEX;
     v_fx = int(round((1.0 - COLOR.a) * 255.0));
+    v_face = UV2;
 }
 
 float hash13(vec3 p) {
@@ -67,14 +70,12 @@ void fragment() {
     if (v_fx == 0) {
         // the plain figure
     } else if (v_fx == 11) {
-        vec4 face = texture(face_atlas, UV);
+        vec4 face = face_px(UV, v_face, base, TIME);
         if (face.a < 0.5) {
             discard;
         }
-        // magenta is the iris key: (k, 0, k), k its shade
-        bool iris = face.g < 0.02 && abs(face.r - face.b) < 0.02 && face.r > 0.05;
-        ALBEDO = iris ? base * min(1.0, face.r * 1.4) : face.rgb;
-    } else if (v_fx >= 12 && v_fx <= 14) {
+        ALBEDO = face.rgb;
+    } else if (v_fx >= 12 && v_fx <= 15) {
         vec3 p = v_pos;
         if (v_fx == 12) {
             // checker: squares the size of a hand's width, the colour and near black
@@ -83,6 +84,23 @@ void fragment() {
         } else if (v_fx == 13) {
             // stripes round the body: a dark band in every three
             ALBEDO = fract(p.y * 16.0) < 0.36 ? base * 0.2 : base;
+        } else if (v_fx == 15) {
+            // camo (TAZ 90): blotches of four tones in the body's own space, hard-edged like the
+            // printed cloth. The colour is the light green; the rest are laid out from it.
+            float big = noise3(p * 9.0);
+            float mid = noise3(p * 15.0 + vec3(7.3, 1.9, 4.1));
+            float fleck = noise3(p * 26.0 + vec3(2.7, 8.8, 5.5));
+            vec3 camo = base;
+            if (big < 0.45) {
+                camo = base * vec3(0.55, 0.62, 0.48);
+            }
+            if (mid > 0.60) {
+                camo = vec3(0.13, 0.062, 0.022);   // brown (these are linear albedo, like the vertex colour)
+            }
+            if (fleck > 0.71) {
+                camo = vec3(0.008, 0.009, 0.007);
+            }
+            ALBEDO = camo;
         } else {
             // studs: bright metal dots in a grid on the dark cloth
             vec2 g = fract(vec2(around(p) * 22.0, p.y * 22.0)) - 0.5;

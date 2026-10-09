@@ -361,6 +361,9 @@ public sealed class GameSettings
 
         loaded.Clamp();
         loaded.ApplyCommandLine(CmdArgs.All);
+        // a probe that asked for the generated world gets it whatever the player's saved toggle
+        // says (#666: a machine with "Generated terrain" off never loaded a near tile)
+        if (WantsGeneratedWorld(CmdArgs.All)) loaded.GeneratedFill = true;
         Current = loaded;
         GD.Print($"[settings] rings={loaded.RenderDistanceRings} horizon={loaded.HorizonKm}km "
             + $"detail={loaded.Detail} fog={loaded.Fog} builds={loaded.MaxConcurrentBuilds} "
@@ -484,6 +487,13 @@ public sealed class GameSettings
     /// "--generated on|off", "--generated-roads raw|on", "--style ps1|cartoon|real-|real+" — for
     /// screenshotting one configuration against another without touching the saved file.
     /// </summary>
+    private static bool WantsGeneratedWorld(string[] args)
+    {
+        if (args.Contains("--generated")) return false;   // explicit: ApplyCommandLine has the last word
+        return args.Contains("--generated-world") || args.Contains("--shot") || args.Contains("--shot-queue")
+            || (Systems.Narrowed && Systems.On(Systems.Generated));
+    }
+
     private void ApplyCommandLine(string[] args)
     {
         for (int i = 0; i + 1 < args.Length; i++)

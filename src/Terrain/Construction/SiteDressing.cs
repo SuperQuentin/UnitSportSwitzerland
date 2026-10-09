@@ -12,11 +12,21 @@ namespace UnitSport.Terrain.Construction;
 /// </summary>
 public readonly record struct ShellMound(Vector2 Center, float RadiusX, float RadiusZ, float Height, float Ground, ShellPart Part);
 
-/// <summary>What a site's yard holds, in the site frame: boxes and heaps.</summary>
+/// <summary>
+/// A pallet of bricks or cement in a site's materials (#615): a pallet a machine with tines can lift
+/// (<c>Items/Pallets</c>), not part of the dressing's mesh. <see cref="Slot"/> is its place in the
+/// zone's row, counted before anything is skipped, so it names the pallet
+/// (<c>Pallets.SiteId</c>); <see cref="Centre"/> is the middle of its underside in the site frame;
+/// its runners run along the site's X, or else its Z.
+/// </summary>
+public readonly record struct SitePalletSpot(int Slot, Vector3 Centre, bool AlongX, byte Load);
+
+/// <summary>What a site's yard holds, in the site frame: boxes, heaps, and the pallets a machine can lift.</summary>
 public sealed class SiteDressingPlan
 {
     public List<ShellBox> Boxes { get; } = new();
     public List<ShellMound> Mounds { get; } = new();
+    public List<SitePalletSpot> Pallets { get; } = new();
 }
 
 /// <summary>
@@ -163,18 +173,26 @@ public static class SiteDressings
                         double roll = R($"mat{i}");
                         float w0 = 1.2f, w1 = Math.Min(width - 0.2f, w0 + 1.2f);
                         if (w1 - w0 < 0.6f) break;
-                        if (roll < 0.3)
+                        if (roll < 0.55)
                         {
-                            // a pallet of bricks
-                            ZoneBox(u, g, w0, u + 1.2f, g + 0.15f, w1, ShellPart.Deck, true);
-                            ZoneBox(u + 0.05f, g + 0.15f, w0 + 0.05f, u + 1.15f, g + 1.0f, w1 - 0.05f, ShellPart.Brick, true);
-                            u += 1.6f;
-                        }
-                        else if (roll < 0.55)
-                        {
-                            // a pallet of cement bags
-                            ZoneBox(u, g, w0, u + 1.2f, g + 0.15f, w1, ShellPart.Deck, true);
-                            ZoneBox(u + 0.05f, g + 0.15f, w0 + 0.05f, u + 1.15f, g + 0.95f, w1 - 0.05f, ShellPart.Cement, true);
+                            // a pallet of bricks (shrink-wrapped) or of cement bags (sacks): a real
+                            // pallet a machine with tines lifts (#615) where its deck fits, else drawn
+                            bool bricks = roll < 0.3;
+                            float depth = w1 - w0;
+                            if (depth >= Items.Pallets.NarrowDepth - 0.01f)
+                            {
+                                float deck = depth >= Items.Pallets.SquareDepth - 0.01f ? Items.Pallets.SquareDepth : Items.Pallets.NarrowDepth;
+                                // runners along the zone's long side, the deck centred in the slot
+                                float mu = u + Items.Pallets.Length / 2, mw = (w0 + w1) / 2;
+                                var centre = longX ? new Vector3(x0 + mu, g, z0 + mw) : new Vector3(x0 + mw, g, z0 + mu);
+                                plan.Pallets.Add(new SitePalletSpot(i, centre, longX, Items.Pallets.LoadOf(bricks ? 0.95f : 0.8f, deck)));
+                            }
+                            else
+                            {
+                                ZoneBox(u, g, w0, u + 1.2f, g + 0.15f, w1, ShellPart.Deck, true);
+                                ZoneBox(u + 0.05f, g + 0.15f, w0 + 0.05f, u + 1.15f, g + (bricks ? 1.0f : 0.95f), w1 - 0.05f,
+                                    bricks ? ShellPart.Brick : ShellPart.Cement, true);
+                            }
                             u += 1.6f;
                         }
                         else if (roll < 0.8)

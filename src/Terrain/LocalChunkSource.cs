@@ -147,6 +147,17 @@ public sealed class LocalChunkSource : IChunkSource
             return null;
         }
     }, ct);
+    /// <summary>The preprocessor's <c>fields_E_N.fld</c> (#494); null where the tile has no fields.</summary>
+    public Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default)
+    {
+        return Task.Run(() =>
+        {
+            string path = Path.Combine(_dir, FieldFormat.FileName(id));
+            if (!File.Exists(path)) return (List<FieldPolygon>?)null;
+            using var fs = File.OpenRead(path);
+            return FieldFormat.Decode(fs);
+        }, ct);
+    }
 
     /// <summary><c>landings.json</c> in a directory, or null; a file that does not parse is logged and skipped.</summary>
     public static Task<LandingIndex?> ReadLandingsAsync(string dir, CancellationToken ct = default)

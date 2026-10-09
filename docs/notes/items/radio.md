@@ -12,9 +12,30 @@
   The dedicated server never simulates (no ground): a radio whose thrower left is re-spawned by
   `ForgetOwner` server-owned and `Settled`. The **server** owns what plays (`State` synchronizer,
   authority 1: `CdId`, `StartedAt`, `Playing`, on-change and with the spawn for late joiners).
+- **Tap on, tap off; hold for the panel (#725).** `RadioTap`: E on the pointed radio, or Use on the
+  one in the hand (Aim + Use still throws), is timed from the press; up before `HoldTime` (0.35 s)
+  it is a tap and switches the radio on or off, still down then it opens `RadioUi`. Looking away or
+  changing slot cancels it. A tap clacks (`SfxSynth.Clack`, local), the world radio hops
+  (`RadioBody.Poke`), and switching on toasts "♪ title". Off -> on plays the CD it had (the world
+  radio's `CdId`; for the held one `RadioPlay.Off`, "cd;0;len;mode;off", which `Decode` reads as
+  silence and `DecodeAny` as the CD to put back), else the first in play order. Pad: the same
+  buttons. VR: poke the red key with a controller tip (`XrHands.PokeRadio`, `RadioBody.KeyPosition`);
+  the grip still opens the panel. The prompt reads "Radio on / off · hold: open it", then
+  "Keep holding". `--radiopanelcheck` taps on, off (CD kept), on, off, then holds to open.
+- **It stays on the last song (#732).** A world radio keeps its `CdId` when stopped or run out;
+  picking it up carries that CD switched off (`RadioBody.CarriedData`, `RadioPlay.Off`), throwing a
+  switched-off one keeps it in the thrown radio (silent), and the panel's Play with nothing on plays
+  that CD (`RadioUi.LastCd`) before falling back to the first of the list. `--radiopanelcheck` checks it.
+- **Heavy (#725):** throws at `ThrowAim.HeftOf` 0.55 of the speed, 7 kg, low bounce (`throw-drop`).
+- **The back harness (#725):** `FootPlayer.Back.StrapMesh`, per side a closed loop (handle, padded
+  shoulder, front, chest, under the arm, a tab at the radio's lower corner), a slider on each front
+  run and a chest strap with a buckle; "Radio backpack" in the model viewer.
+- **The player view is a cassette deck (#725):** `RadioCassette` (reels turn while it plays, the tape
+  winds left to right with the progress), title and style, round ◀◀ / Play-Stop pill / ▶▶ keys,
+  the mode as a small button, a thin progress bar. The library view is unchanged.
 - **Pointed at, Use (click) with an empty hand takes it straight into the hand (#261, #390)**: `ItemController.TakeRadio` (the
   mesh flies to the hand, the server's pick-up as before, the stack keeps the CD/start/mode, the
-  slot is selected or swapped in from the pack). **E** on the pointed radio opens `RadioUi`, and only
+  slot is selected or swapped in from the pack). **E** on the pointed radio switches it or opens `RadioUi` (#725), and only
   then (#390): a radio merely within reach but not looked at no longer takes E from the door or the
   dance, nor Use from a held tool (`core/input-conventions`). Use opens the panel on the radio in the hand, R on a car stereo (below).
 - **Carried, it keeps playing (#261)**: `Inventory.RadioSlot()` (the hand's radio, else the first
@@ -61,7 +82,7 @@
   first load, never cleared) and a sticky `_fetchFailed`: a new CD loaded the *old* file on the new
   CD's clock, everywhere, so "Play" looked like it did nothing. Everything loaded or fetching is now
   keyed by CD id (`RadioSpeaker.TryLoad`); `LoadedCd`/`LoadedLength` let the probe check the file.
-- **Loudness.** `RadioSpeaker`: −8 dB base, unit size 3, max 45 m (was 0 dB, 8, 120 m — it drowned
+- **Loudness.** Since #734 each radio has its own volume, shared, that sets its gain and reach (`docs/notes/items/beat-field.md`); the panel slider turns it, the slider can also scrub the song (the progress bar). Before: `RadioSpeaker`: −8 dB base, unit size 3, max 45 m (was 0 dB, 8, 120 m — it drowned
   the world), on the Music bus (the panel slider is Settings' Music volume) and muffled by walls
   and doorways (`docs/notes/audio/hearing.md`).
 - **In the hand (#168).** The playing CD lives in the radio's `ItemStack.Data` as a `RadioPlay`

@@ -28,6 +28,8 @@ public partial class VehicleBody
 
     /// <summary>For checks: where it stands in its carrier's section frame.</summary>
     public Vector3 CarrierPos => _carrierPos;
+    /// <summary>The carrier's section it stands in (a boat on the trailer behind a truck, #463).</summary>
+    public int CarrierSection => _carrierSection;
 
     private void BeginHold(VehicleState s)
     {
@@ -57,7 +59,7 @@ public partial class VehicleBody
             if (Carrier != "" && FootPlayer.CarrierNamed(this, Carrier) is { } named && FootPlayer.RideOfHost(named) is { } r && FootPlayer.HasHolds(r))
                 Hook(named);
             // where it stands now: its carrier's new form is standing round it
-            else if (FootPlayer.CarrierAt(this, GlobalPosition, Ride.ParkedBox.Size, this) is { } found)
+            else if (FootPlayer.CarrierAt(this, GlobalPosition, Ride.ParkedBox.Size, this, Ride.Kind) is { } found)
             {
                 var b = GlobalTransform.Basis;
                 Carrier = found.Key;
@@ -80,6 +82,9 @@ public partial class VehicleBody
     private void Hook(Node3D host)
     {
         _carrierHost = host;
+        // the carrier's own rays (its ground under its wheels) go past this one
+        if (host is FootPlayer driver) driver.Cargo(this, true);
+        else if (host is VehicleBody parked) parked.Cargo(this, true);
         foreach (var body in FootPlayer.CarrierBodies(host))
         {
             AddCollisionExceptionWith(body);
@@ -97,6 +102,8 @@ public partial class VehicleBody
                 body.RemoveCollisionExceptionWith(this);
             }
         _carrierBodies.Clear();
+        if (_carrierHost is FootPlayer driver && IsInstanceValid(driver)) driver.Cargo(this, false);
+        else if (_carrierHost is VehicleBody parked && IsInstanceValid(parked)) parked.Cargo(this, false);
         _carrierHost = null;
     }
 

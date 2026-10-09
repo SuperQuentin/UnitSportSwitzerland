@@ -157,6 +157,27 @@ public static class SwissDownload
     }
 
     /// <summary>
+    /// geodienste.ch's per-canton INTERLIS zips of the LWB Nutzungsflaechen (MGDM 153.1, #494),
+    /// swiss_data.py's <c>lwb</c>: only the cantons published "Frei erhaeltlich"; the others need a
+    /// registration or a release and are filled from OpenStreetMap by the fields stage.
+    /// </summary>
+    public static async Task<DownloadResult> LwbAsync(string outDir, IStepProgress progress, CancellationToken ct, int jobs = 4)
+    {
+        const string Services = "https://geodienste.ch/info/services.json?base_topics=lwb_nutzungsflaechen";
+        using var doc = JsonDocument.Parse(await GetStringWithRetryAsync(Services, ct));
+        var candidates = new List<(string Url, string Filename, string? Sha256)>();
+        foreach (var s in doc.RootElement.GetProperty("services").EnumerateArray())
+        {
+            if (!s.TryGetProperty("dataset_url", out var u) || u.ValueKind != JsonValueKind.String) continue;
+            string url = u.GetString()!;
+            bool free = s.TryGetProperty("publication_data", out var pub) && pub.ValueKind == JsonValueKind.String
+                && pub.GetString()!.StartsWith("Frei erh", StringComparison.Ordinal);
+            if (url.Length > 0 && free) candidates.Add((url, url[(url.LastIndexOf('/') + 1)..], null));
+        }
+        return await RunAsync(outDir, candidates, progress, ct, jobs);
+    }
+
+    /// <summary>
     /// Downloads every asset of every STAC item in <paramref name="collection"/>, inside
     /// <paramref name="bbox"/> (LV95) when one is given, optionally narrowed to assets whose key
     /// matches <paramref name="assetFilter"/>. The generic building block the per-dataset

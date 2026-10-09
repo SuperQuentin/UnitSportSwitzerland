@@ -167,6 +167,20 @@ public static class RoadMeshBuilder
     /// renders exactly as it did.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The cap borrows the dominant arm's tint via a stand-in segment, so a junction between
+    /// farm tracks stays dirt-coloured instead of turning into a slab of asphalt (sRGB). The
+    /// flush pavement beside it (turn-lane widenings, corner fill) takes the same (#682).
+    /// </summary>
+    public static Color CapColour(RoadJunction junction) => ColorFor(new RoadSegment
+    {
+        Class = junction.Class,
+        Surface = junction.Class is RoadClass.Track or RoadClass.Path ? RoadSurface.Natural : RoadSurface.Paved,
+        Flags = RoadFlags.None,
+        Width = 0,
+        Points = Array.Empty<float>(),
+    });
+
     private static void AppendJunction(RoadJunction junction, List<Vector3> vertices,
         List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices)
     {
@@ -177,18 +191,7 @@ public static class RoadMeshBuilder
         // cap sinks into the soffit
         float lift = junction.Layer > 0 ? BridgeLift : 0f;
 
-        // the cap borrows the dominant arm's tint via a stand-in segment, so a junction between
-        // farm tracks stays dirt-coloured instead of turning into a slab of asphalt
-        var probe = new RoadSegment
-        {
-            Class = junction.Class,
-            Surface = junction.Class is RoadClass.Track or RoadClass.Path
-                ? RoadSurface.Natural : RoadSurface.Paved,
-            Flags = RoadFlags.None,
-            Width = 0,
-            Points = Array.Empty<float>(),
-        };
-        var color = ColorFor(probe).SrgbToLinear();
+        var color = CapColour(junction).SrgbToLinear();
 
         int baseIndex = vertices.Count;
         for (int i = 0; i < n; i++)

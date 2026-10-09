@@ -105,7 +105,8 @@ public static partial class CarMeshBuilder
     private static CockpitSpec? _kit;
 
     /// <summary>The seat and everything the driver reaches, for this body. Cheap: no meshes.</summary>
-    public static DriverSeat SeatFor(CarBody body, float wheelbase) => SeatFor(For(body, wheelbase));
+    public static DriverSeat SeatFor(CarBody body, float wheelbase) =>
+        body.Shape == BodyShape.Kart ? KartMeshBuilder.SeatFor(wheelbase) : SeatFor(For(body, wheelbase));
 
     internal static DriverSeat SeatFor(Dims d)
     {

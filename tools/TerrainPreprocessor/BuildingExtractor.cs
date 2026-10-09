@@ -64,6 +64,15 @@ public sealed class BuildingExtractor
         double minE, double minN, double maxE, double maxN) =>
         b.MinE < maxE && b.MaxE > minE && b.MinN < maxN && b.MaxN > minN;
 
+    // The tiles of the batch being extracted. A batch is not a rectangle when the map is made of
+    // separate areas, and a sheet between two of them overlaps the batch's box without holding a
+    // single building for it (#678).
+    private TileRegion? _region;
+
+    private bool Wanted((double MinE, double MinN, double MaxE, double MaxN) b,
+        double minE, double minN, double maxE, double maxN) =>
+        Overlaps(b, minE, minN, maxE, maxN) && (_region?.Touches(b.MinE, b.MaxE, b.MinN, b.MaxN) ?? true);
+
     private static IEnumerable<(string?, List<GeoPackageReader.Ring>)> FromGeoPackage(
         string gpkgPath, double minE, double minN, double maxE, double maxN)
     {
@@ -97,7 +106,7 @@ public sealed class BuildingExtractor
             // without it a nationwide build decodes all 14.4 GB of sheets once per batch (#570).
             if (_sheetBounds.TryGetValue(zip, out var known))
             {
-                if (known is not { } cached || !Overlaps(cached, minE, minN, maxE, maxN)) continue;
+                if (known is not { } cached || !Wanted(cached, minE, minN, maxE, maxN)) continue;
             }
 
             using var gdb = FileGdb.OpenZip(zip, workDir);
@@ -107,7 +116,7 @@ public sealed class BuildingExtractor
             if (shape < 0 || table.Grid is not { } grid) { _sheetBounds[zip] = null; continue; }
 
             _sheetBounds[zip] = grid.Bounds;
-            if (!Overlaps(grid.Bounds, minE, minN, maxE, maxN)) continue;
+            if (!Wanted(grid.Bounds, minE, minN, maxE, maxN)) continue;
 
             foreach (var row in table.Rows())
             {
@@ -177,6 +186,7 @@ public sealed class BuildingExtractor
 
         double minE = tiles.Min(t => t.MinE), maxE = tiles.Max(t => t.MinE) + ChunkFormat.TileSizeM;
         double minN = tiles.Min(t => t.MinN), maxN = tiles.Max(t => t.MinN) + ChunkFormat.TileSizeM;
+        _region = new TileRegion(tiles);
 
         foreach (var (objektart, rings) in _solids(minE, minN, maxE, maxN))
             if (rings.Count > 0)

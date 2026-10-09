@@ -67,6 +67,7 @@ Moved to **environment** time, with every constant re-expressed in env units:
 | Campfire burn | `Crafting/CampfireClock.BurnEnvSeconds` | 20 real min | 12 env h (~12 real min at the default day) |
 | Resource regrowth | `Loot/Gathering.RegrowSeconds` | 20 real min | 12 env h (~12 real min) |
 | Craft stations | `Crafting/CraftStations` | — | only passes the campfire its clock |
+| Crops, the farm calendar, stands (#494) | `Farming/FarmField.Now`, `FarmSales.Now` | real seconds, a 24-real-min farm day | `GrowSeconds` 25-55 env h, a farm day = an env day, stands 3 sales an env day |
 
 Deliberately **left real**, and now saying so by name rather than on a bare `Time.GetTicksMsec`:
 `FootPlayer.LastNetState` and `SilentSeconds` (a packet arrival time — a crashed peer stops sending

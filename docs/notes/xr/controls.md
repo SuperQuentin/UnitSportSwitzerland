@@ -28,7 +28,7 @@ The full per-action design and rules: `xr/vr-action-map`.
   (slide while running, dive while swimming), never while a menu is open (B is back there).
 - **Hands (#243, `XR/XrHands`).** A grip closing (> 0.7, opens < 0.35) is the hand closing.
   - **Steering wheel**, first person in the driver's seat (car, truck, bus): a hand within 0.14 m of
-    the rim catches it; its marker snaps onto the rim and rides round with it. The hands' turn about
+    the rim catches it; its hand (`real-hands`) snaps onto the rim and rides round with it. The hands' turn about
     the column (in the column's frame, so the vehicle turning does not count) accumulates into an
     absolute, multi-turn angle clamped to ±`WheelLock`/2, sent as `XrSession.WheelAngle` and merged
     in `FootPlayer.RidePhysics` as `RideInput.WheelAngle` (the #68 real-wheel channel). Two hands:
@@ -111,7 +111,6 @@ The full per-action design and rules: `xr/vr-action-map`.
   - It is in the menu style (`ui/style-guide`): the beam is a faint white line, and an amber
     reticle sits on the panel, filling to full amber while the trigger is held. The panel ignores
     fog (`DisableFog`). The pointer only shows while the hand is tracked.
-  - The controller markers use the menus' dark glass, with an amber tip.
   - Input stays with the root viewport. The panel is the root's size, so the right hand's ray
     becomes mouse events at that canvas point, and the hand's trigger clicks. This only happens
     while the mouse is not captured, i.e. while a menu is open.
