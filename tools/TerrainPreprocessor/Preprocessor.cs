@@ -284,7 +284,7 @@ public static partial class Preprocessor
                 Console.WriteLine);
         }
 
-        WaterStage.Options WaterOptions() => new() { Jobs = jobs, BathyDir = bathyDir, PngDir = pngDir, Crops = pngCrops };
+        WaterStage.Options WaterOptions() => new() { Jobs = jobs, BathyDir = bathyDir, PngDir = pngDir, Crops = pngCrops, TempDir = tempDir };
 
         // ---- coarse companion tiles: decimate what is already built -----------------------------
         // Standalone because it needs nothing but the .terr files themselves. A region built before
