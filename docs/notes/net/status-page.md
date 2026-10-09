@@ -24,3 +24,7 @@
   for the new Caddyfile.
 - **Local check:** a `--generated-world` server with `--status-file test_output/web/status.json`, `--swarm 3` to
   fill it, `index.html` copied beside the JSON and `python -m http.server` in that folder.
+- **Live** (Oct 2026): `https://unitsport.infrack.ch/`. TLS ends on the infrack edge proxy (195.48.14.221), which
+  redirects http to https and passes everything to Caddy `:80` on the host; UDP 7777/7778 are forwarded too. The tiles
+  go through the same name (`TILES_URL=https://unitsport.infrack.ch/tiles/` in `tools/deploy.env`), since
+  `unit-tiles.infrack.ch` stopped answering from outside. Caddy itself stays plain HTTP (`TILES_DOMAIN` empty).
