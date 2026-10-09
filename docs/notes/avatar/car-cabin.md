@@ -39,3 +39,48 @@
   separate surface, a driver in the seat. First run: 20 of 26 failed (pedals 1 cm through the
   bulkhead; the Miatas' heads through the soft top's rear window) → footwell between the wheel wells,
   knees a little bent, and the roadster rear glass top from −0.16 to −0.18 of the half-length.
+- **Left-hand drive, automatics, the Prius's dash (#760).** `CarBody.LeftHandDrive` puts the seat on
+  +X authored (`SeatFor(d, lhd)`); everything else (pedals, dials, figure) is relative to the seat.
+  The front door bits follow the driver: `CarRig.DriverDoor` is the driver's door on either side
+  (`PassengerDoor` the other), so getting in and out needs no change; `Car.ExitLeft` follows the
+  flag. `CarBody.Automatic` (set by `CarCatalog.Number` from `CarSpec.Transmission`, never by hand):
+  two pedals, a joystick selector on the driver's side of the stack, the gear digit reads `d`.
+  `CarBody.CentreDisplay` (XW20 Prius): no binnacle or dials; a display in a hood at the top middle
+  of the dash turned to the eye (speed figures `CarCabin.SpeedDigits`, swapped by the rig only when
+  the whole km/h changes, gear, READY, fuel bar, the three lamps) and the touchscreen in the dash's
+  face; the needles are empty meshes. `--cockpitcheck` fails a car whose driver or driver's door is on
+  the wrong side.
+- **Two body shapes off real cars (#760)**: `TallHatch` (XP90 Yaris) and `Liftback` (XW20 Prius), per-shape
+  proportions in `CarMeshBuilder.For` plus belt/bonnet/deck fractions. Both have a sloped nose (`Nose`:
+  one `Loft` through three chamfered stations, screen foot to bumper) with `SweptLamps` lying on it.
+  A liftback's rear glass starts at its high tail (`Dims.RgFoot` = deck, the belt elsewhere: the
+  rear side glass then ends square under it), it has four doors (`FourDoor`) with spans of its own and
+  a B-pillar at the split, a spoiler and an upright glass strip on the tail, and its rear bench is
+  moved forward and lowered until the heads (leaning back with the seat) clear the rear glass.
+- **Rounded Cartoon cars (#760; the rest of the roster #763).** With `MeshDetail.High` (Cartoon, the
+  realistic styles) a `TallHatch` or `Liftback` is built by `CarMeshBuilder.Rounded.cs` instead of boxes:
+  each side a lofted thick wall (`SideProfile`: tucked under at the sill, widest at a third, rolled in
+  `Shoulder` 0.1 m at the top, where the side glass stands), its foot lifted in a round arch over each
+  wheel (`SideFoot`), its top down the bonnet's stations / the belt / the deck (`SideTop`), the corners
+  rounded in plan (`PlanHalf`); crowned blocks between the walls over the nose and the tail (dark where
+  they show in the wheel wells); the doors the same wall between their pillars; a rounded roof; thick
+  pillars; head and tail lamps lofted a few mm over the surface (a plate standing off a curve casts a
+  hard cel shadow); round tyres; dark wheel tubs inside. The cabin's seats, bench, dash, stack and
+  display hood are `RoundedBox`es (a box when the scratch is not smooth, so PS1 and the trucks are
+  unchanged) and the steering wheel round (`CockpitKit.Wheel` follows its shell's `Smooth`).
+  `MeshScratch.Loft(averaged: true)`: each ring point's normal the mean of its faces, a repeated point a
+  crease; `Ring` writes normals under `Smooth`; both in `--meshcheck`. **The hull is always measured
+  from the PS1 body** (`CarRig.Create(..., smooth: false)` in `Car.ParkedBox`): collision never depends
+  on a client's style. A live `/style` switch reaches a car at its next build.
+- **The XW30's HUD** (`CarBody.Hud`): the speed reflected into the windscreen where the eye's line 6°
+  under level meets the glass, turned to the eye, an eco bar under it; a second readout in
+  `CarCabin.SpeedDigits` (readouts of `SpeedPlaces` places, units first).
+- **The liftback's roof is one arc (#760)** (`Dims.Arched`, `RoofAt`): two cubic Hermites, from the
+  windscreen's foot (slope 0.5) up to a level peak at `PeakZ` (−0.15 of the half-length, over the
+  B-pillar, for the rear heads) and down to the rear glass's foot on the deck (slope 0.45).
+  `ArchedGreenhouse` lays the windscreen and rear glass as strips along it, lofts the roof panel and
+  headlining along it and runs one rail each side (A-pillar, roof rail, C-pillar), flush with the
+  roof's line; `ArchedOutline` gives the side windows the arc for a top. `FrontAt(y)` / `RearAt(y)`
+  are the glass at a height (the old straight rakes on a flat roof, so `--cockpitcheck` reads the
+  same for every other car); the rear bench, the HUD and the rear-view mirror use them. The Prius's
+  B-pillar is black and its bumper has the big lower intake and fog lamps.

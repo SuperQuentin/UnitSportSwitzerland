@@ -60,11 +60,12 @@ public static class CockpitKit
         var left = n.Cross(up);
         var wc = seat.WheelCentre;
         shell.Tube(wc - n * k.ColumnFrom, wc - n * k.ColumnTo, k.ColumnRadius, k.ColumnFoot, k.Column, 6);
-        var wheel = new MeshScratch();
+        // smooth with its cabin (a lit style's rounded car, #760): a round rim, a rounded hub
+        var wheel = new MeshScratch { Smooth = shell.Smooth };
         float r = seat.WheelRadius;
-        wheel.Ring(wc, n, r - k.RimIn, r + k.RimOut, k.RimDepth, k.Trim, k.RimSides);
+        wheel.Ring(wc, n, r - k.RimIn, r + k.RimOut, k.RimDepth, k.Trim, shell.Smooth ? Mathf.Max(k.RimSides, 32) : k.RimSides);
         var hubBasis = new Basis(-left, up, n);
-        wheel.Box(wc - n * k.HubBack, k.Hub, k.Trim, hubBasis);
+        wheel.RoundedBox(wc - n * k.HubBack, k.Hub, k.Trim, hubBasis);
         foreach (var dir in new[] { left, -left, -up })
             wheel.Tube(wc - n * k.SpokeBack, wc + dir * (r - k.SpokeShort), k.SpokeRadius, HeavyMesh.Steel, 4);
         wheel.Box(wc + up * r + n * 0.004f, k.Mark, HeavyMesh.Amber, hubBasis);

@@ -35,17 +35,35 @@ public static class CarGearboxCheck
         var was = settings.RideProfile;
         settings.RideProfile = RideProfile.Sim;
 
-        foreach (var spec in CarCatalog.All.Where(s => s.Body.Shape != BodyShape.Kart)) Launch(spec);
+        // every car with a box to shift; a hybrid's e-CVT has none (#760: Hybrid below)
+        foreach (var spec in CarCatalog.All.Where(s => s.Body.Shape != BodyShape.Kart && s.Transmission == CarTransmission.Stepped)) Launch(spec);
         Manual();
         Sequential();
         Shifter();
         Selector();
         Converter();
         Kart();
+        Hybrid();
 
         settings.RideProfile = was;
         GD.Print(_failures == 0 ? "[cargear] RESULT: ok" : $"[cargear] RESULT: FAILED ({_failures})");
         return _failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// A hybrid (#760) stays the automatic whichever box the driver picks: no neutral to start in,
+    /// no clutch to stall on, away on the gas as on the pedals.
+    /// </summary>
+    private static void Hybrid()
+    {
+        foreach (var spec in CarCatalog.All.Where(s => s.Transmission == CarTransmission.ECvt))
+            foreach (var box in new[] { CarGearbox.Sequential, CarGearbox.Manual })
+            {
+                var run = new Run1(new Car(spec), box);
+                run.For(4f, 0.6f);
+                Check(run.C.Gearbox == CarGearbox.Automatic && run.C.Gear == 1 && run.U > 8f,
+                    $"{spec.Label} in {box}: still the automatic, {F(run.U * 3.6f)} km/h after 4 s at 60% throttle, gear {run.C.Gear}");
+            }
     }
 
     private static void Check(bool ok, string what)

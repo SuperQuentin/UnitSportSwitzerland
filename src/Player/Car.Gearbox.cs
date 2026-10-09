@@ -137,7 +137,8 @@ public sealed partial class Car
     /// </summary>
     public void SetGearbox(CarGearbox mode, float u)
     {
-        if (IsKart) mode = CarGearbox.Automatic;
+        // a kart has one gear; a hybrid's e-CVT has no gears to pick (#760)
+        if (IsKart || IsECvt) mode = CarGearbox.Automatic;
         if (mode != CarGearbox.Automatic) Selector = DriveSelector.None;
         if (mode == Gearbox) return;
         Gearbox = mode;
