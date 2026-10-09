@@ -11,6 +11,9 @@
   the brake, R is driven on the gas and is N while rolling forward faster than 1 m/s, N revs in place,
   P is N plus the brake once below 1.5 m/s (a pawl ratchets past faster). HUD: `Car.GearText` (P, R,
   N, D3). Keyboard and pad keep the pedal-picked reverse. Parked, the selector is cleared.
+  **Idle creep** in D and R (`Car.Creep`): 5% of the car's weight at a standstill, none by 2.5 m/s (5-6
+  km/h on the flat), full when rolling the wrong way; the brake holds it, nothing with the engine off.
+  Only with the selector: on the pedals a held brake picks reverse, so a creeping car could not be held.
 - **Sequential** (`Car.Gearbox.cs`): the driver shifts with `shift_up` / `shift_down`; the automated
   clutch needs no pedal and never stalls. It drives on the automatic's model (engine speed = the
   wheels' through the gearing, floored at idle: the clutch slipping from a standstill), with a 0.18 s

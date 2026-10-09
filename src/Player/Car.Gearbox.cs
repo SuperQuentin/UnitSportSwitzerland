@@ -48,6 +48,21 @@ public sealed partial class Car
         }
     }
 
+    /// <summary>
+    /// An automatic's idle creep on the selector, N at the wheels: a torque converter at idle pushes
+    /// about 5% of the car's weight from a standstill, nothing by 2.5 m/s (it settles at ~6.5 km/h on the
+    /// flat and holds on a gentle slope), and its full push the moment the car rolls the wrong way.
+    /// Only with a selector: on the pedals the brake held at a standstill is reverse, so a creeping car
+    /// could never be held still. Not with the engine off.
+    /// </summary>
+    private float Creep(float u, bool reverse)
+    {
+        if (Selector is not (DriveSelector.Drive or DriveSelector.Reverse) || !EngineRunning) return 0f;
+        float along = reverse ? -u : u;
+        return CreepShare * Spec.Mass * Gravity * Mathf.Clamp(1f - along / CreepSpeed, 0f, 1f);
+    }
+    private const float CreepShare = 0.05f, CreepSpeed = 2.5f;
+
     /// <summary>The gear as the HUD says it: P R N D3 with a selector, else the gear (R for reverse, N for neutral).</summary>
     public string GearText => Selector switch
     {

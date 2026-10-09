@@ -499,6 +499,8 @@ public sealed partial class Car : Rideable, IEngined
                 Rpm = Mathf.Max(s.IdleRpm, wheelRpm * ratio);
                 float torque = Rpm >= s.Redline ? 0f : s.TorqueAt(Rpm) * powerScale;
                 drive = _shiftTimer > 0 ? 0f : pedal * torque * ratio * Driveline / WheelRadius;
+                // in D or R on the selector, the converter creeps the car at walking pace off the pedals
+                drive = Mathf.Max(drive, Creep(u, reverse));
                 if (reverse) drive = -drive;
             }
 
@@ -530,8 +532,8 @@ public sealed partial class Car : Rideable, IEngined
                 case Drivetrain.Front: fxF += drive; break;
                 default: fxR += drive; break;
             }
-            // no force to push against below walking pace once stopped
-            if (Mathf.Abs(u) < 0.3f && drive == 0f) { fxF = 0f; fxR = 0f; u = Mathf.MoveToward(u, 0f, 3f * h); }
+            // no force to push against below walking pace once stopped; nor when the brake holds the creep
+            if (Mathf.Abs(u) < 0.3f && (drive == 0f || brakeForce >= Mathf.Abs(drive) && pedal < 0.02f)) { fxF = 0f; fxR = 0f; u = Mathf.MoveToward(u, 0f, 3f * h); }
             float capF = grip * nf * WornGrip(TyreWearFront), capR = grip * nr * WornGrip(TyreWearRear);
             // demand past the circle, on whichever axle is driven
             float wheelspin = Mathf.Max(0f, Mathf.Max(Mathf.Abs(fxR) / capR, Mathf.Abs(fxF) / capF) - 0.9f) * 10f;

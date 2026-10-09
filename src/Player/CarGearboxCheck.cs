@@ -270,16 +270,30 @@ public static class CarGearboxCheck
         Check(c.Gear >= 1 && r.U > 5f && c.GearText.StartsWith('D'), $"D on the gas: {c.GearText}, {F(r.U * 3.6f)} km/h");
         r.For(8f, 0f, 1f);
         r.For(1f, 0f, 1f);
-        Check(c.Gear >= 1 && Mathf.Abs(r.U) < 0.1f, $"D, the brake held at a standstill: stays in drive ({c.GearText}), does not back up");
+        Check(c.Gear >= 1 && Mathf.Abs(r.U) < 0.1f, $"D, the brake held at a standstill: stays in drive ({c.GearText}), does not back up, does not creep");
+        r.For(10f, 0f);
+        Check(r.U > 4f / 3.6f && r.U < 9f / 3.6f, $"D off the pedals: creeps at {F(r.U * 3.6f)} km/h");
+        r.For(8f, 0f, 1f);
+        c.EngineRunning = false;
+        r.For(3f, 0f);
+        bool still = Mathf.Abs(r.U) < 0.1f;
+        c.EngineRunning = true;
+        Check(still, "engine off in D: no creep");
 
         c.Selector = DriveSelector.Reverse;
         r.For(3f, 0.4f);
         Check(c.Gear == -1 && r.U < -1f && c.GearText == "R", $"R on the gas, not the brake: {F(r.U * 3.6f)} km/h");
         r.For(4f, 0f, 1f);
+        r.For(8f, 0f);
+        Check(r.U < -4f / 3.6f && r.U > -9f / 3.6f, $"R off the pedals: creeps back at {F(-r.U * 3.6f)} km/h");
+        r.For(4f, 0f, 1f);
 
         c.Selector = DriveSelector.Neutral;
         r.For(2f, 0.6f);
         Check(c.Gear == 0 && Mathf.Abs(r.U) < 0.1f && c.Rpm > c.Spec.IdleRpm * 2f && c.GearText == "N", $"N on the gas: revs to {F(c.Rpm, "F0")} rpm, stands still");
+        var pedals = new Run1(Ae86(), CarGearbox.Automatic);
+        pedals.For(3f, 0f);
+        Check(Mathf.Abs(pedals.U) < 0.05f, "no selector (keyboard, pad): no creep, the car stands");
 
         // rolling at 50 km/h, the lever into R: neutral until it has slowed, never reverse at speed
         var m = new Run1(Ae86(), CarGearbox.Automatic) { M = new RideMotion { Speed = 50f / 3.6f } };
