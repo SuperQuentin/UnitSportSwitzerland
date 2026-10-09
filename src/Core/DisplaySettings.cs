@@ -55,13 +55,20 @@ public partial class DisplaySettings : Node
     }
 
     /// <summary>
+    /// <c>--aa off|fxaa|msaa2x|msaa4x|msaa8x</c>: this run's anti-aliasing whatever the saved setting
+    /// says, for shots that compare them (#768).
+    /// </summary>
+    private static readonly AntiAliasing? AaOverride =
+        Enum.TryParse<AntiAliasing>(CmdArgs.Value("--aa"), ignoreCase: true, out var aa) ? aa : null;
+
+    /// <summary>
     /// The main view's MSAA or FXAA (#768), off in PS1, whose jagged low-resolution edges are its
     /// look. Door portals and photos copy the main viewport's, the headset has its own (VrMsaa).
     /// </summary>
     private void ApplyAntiAliasing()
     {
         var view = GetViewport();
-        var aa = Styles.StyleKit.Style == Styles.VisualStyle.Ps1 ? AntiAliasing.Off : GameSettings.Current.AntiAliasing;
+        var aa = Styles.StyleKit.Style == Styles.VisualStyle.Ps1 ? AntiAliasing.Off : AaOverride ?? GameSettings.Current.AntiAliasing;
         view.Msaa3D = aa switch
         {
             AntiAliasing.Msaa2x => Viewport.Msaa.Msaa2X,

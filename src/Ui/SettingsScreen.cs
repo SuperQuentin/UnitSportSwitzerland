@@ -66,9 +66,7 @@ public partial class SettingsScreen : Screen
                     (w, h) => (GameSettings.Current.WindowWidth, GameSettings.Current.WindowHeight) = (w, h));
             }
             ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
-            UiKit.OptionRow(rows, "Anti-aliasing", new[] { "Off", "FXAA", "MSAA 2x", "MSAA 4x", "MSAA 8x" },
-                (int)s.AntiAliasing, i => GameSettings.Current.AntiAliasing = (AntiAliasing)i,
-                "Smooths the edges of everything 3D, in Cartoon and Realistic: PS1 keeps its jagged ones");
+            AntiAliasingRow(rows, s.AntiAliasing);
             // Realistic+ needs Forward+ through a relaunch, which a phone cannot do (#63)
             var styles = Styles.StyleKit.MenuStyles.Where(v => Platform.CanSpawnProcesses || !Styles.StyleKit.NeedsForwardPlus(v)).ToArray();
             var styleOption = UiKit.OptionRow(rows, "Visual style", styles.Select(Styles.StyleKit.Label).ToArray(),
@@ -474,6 +472,21 @@ public partial class SettingsScreen : Screen
             ? "PS1 keeps its low resolution on any screen; lower is chunkier"
             : "100 % is the window's own resolution; lower is chunkier and faster";
         UiKit.OptionRow(into, name, labels, index, i => set(scales[i]), hint);
+    }
+
+    /// <summary>
+    /// The main view's anti-aliasing (#768), greyed out while the style is PS1, which turns it off
+    /// as it keeps its own low resolution (<see cref="DisplaySettings"/>); it follows a live style switch.
+    /// </summary>
+    private static void AntiAliasingRow(Container into, AntiAliasing current)
+    {
+        var option = UiKit.OptionRow(into, "Anti-aliasing", new[] { "Off", "FXAA", "MSAA 2x", "MSAA 4x", "MSAA 8x" },
+            (int)current, i => GameSettings.Current.AntiAliasing = (AntiAliasing)i,
+            "Smooths 3D edges; off in PS1, whose jagged edges are its look. MSAA is sharper, but distant ground sparkles");
+        void Sync() => option.Disabled = Styles.StyleKit.Style == Styles.VisualStyle.Ps1;
+        Sync();
+        Styles.StyleKit.ChoiceChanged += Sync;
+        option.TreeExiting += () => Styles.StyleKit.ChoiceChanged -= Sync;
     }
 
     /// <summary>Common window sizes that fit on the screen the window is on.</summary>

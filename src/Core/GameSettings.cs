@@ -120,10 +120,13 @@ public sealed class GameSettings
 
     /// <summary>
     /// The main view's anti-aliasing in Cartoon and Realistic (#768); PS1 keeps its jagged
-    /// low-resolution edges, which are its look (<see cref="DisplaySettings"/>).
+    /// low-resolution edges, which are its look (<see cref="DisplaySettings"/>). FXAA by default:
+    /// MSAA shades a pixel for any triangle covering one of its samples, with the vertex colours
+    /// extrapolated past the triangle (shaders have no centroid interpolation here), and the
+    /// distant ground's sub-pixel triangles then sparkle along the horizon.
     /// </summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public AntiAliasing AntiAliasing { get; set; } = AntiAliasing.Msaa4x;
+    public AntiAliasing AntiAliasing { get; set; } = AntiAliasing.Fxaa;
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public PerfOverlayMode PerfOverlay { get; set; } = PerfOverlayMode.Off;
@@ -396,7 +399,6 @@ public sealed class GameSettings
         HorizonKm = 25;
         Detail = DetailPreset.Low;
         RenderScale = 0.6f;
-        AntiAliasing = AntiAliasing.Msaa2x;
         TrafficCars = 10;
         CockpitMirrors = false;
         CommitBudgetMs = 3;
