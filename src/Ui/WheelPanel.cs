@@ -26,6 +26,20 @@ public partial class WheelPanel : VBoxContainer
         ("Menu", PlayerInput.Menu),
     };
 
+    /// <summary>The gearbox (#290): paddles, and an H-shifter's gates, which it holds down while in gear.</summary>
+    private static readonly (string Label, string Action)[] GearTargets =
+    {
+        ("Shift up (paddle)", PlayerInput.ShiftUp),
+        ("Shift down (paddle)", PlayerInput.ShiftDown),
+        ("H-shifter 1st", PlayerInput.Gates[0]),
+        ("H-shifter 2nd", PlayerInput.Gates[1]),
+        ("H-shifter 3rd", PlayerInput.Gates[2]),
+        ("H-shifter 4th", PlayerInput.Gates[3]),
+        ("H-shifter 5th", PlayerInput.Gates[4]),
+        ("H-shifter 6th", PlayerInput.Gates[5]),
+        ("H-shifter reverse", PlayerInput.GearReverse),
+    };
+
     private const float AssignSeconds = 8f;
 
     private Label _status = null!;
@@ -78,6 +92,10 @@ public partial class WheelPanel : VBoxContainer
         AxisRow("Handbrake", Target.Handbrake);
         AddChild(UiKit.Section("Buttons"));
         foreach (var (label, action) in ButtonTargets) ButtonRow(label, action);
+        AddChild(UiKit.Section("Gearbox"));
+        AddChild(UiKit.Text("Paddles shift a truck, or a car whose gearbox is not automatic (Settings → Vehicles). "
+            + "The H-shifter drives the H-pattern boxes: out of a gate is neutral.", UiTheme.FontSmall, UiTheme.TextDim, wrap: true));
+        foreach (var (label, action) in GearTargets) ButtonRow(label, action);
 
         ForceRows();
 

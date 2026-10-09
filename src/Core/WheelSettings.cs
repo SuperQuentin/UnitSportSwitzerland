@@ -88,6 +88,8 @@ public sealed class WheelSettings
 
     /// <summary>The preset these bindings started from, so a new device of the same kind is not re-preset.</summary>
     public string Preset { get; set; } = "";
+    /// <summary>The version of <see cref="Preset"/> these bindings have (<see cref="WheelPresets.Upgrade"/>); 0 for settings older than versions.</summary>
+    public int PresetVersion { get; set; }
 
     public void Clamp()
     {

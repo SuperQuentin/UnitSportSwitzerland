@@ -523,6 +523,7 @@ public partial class VehicleBody : CharacterBody3D
             // would creep on for ever, with nobody aboard to stop it
             truck.EngineRunning = false;
             truck.Box.ClutchHeld = false;
+            truck.Box.ClutchFoot = 0f;
         }
         _motion.Yaw = Rotation.Y;
         Ride.Step(new RideInput(0f, 0f, 0f, false), new RideGround(onFloor, grade, surface), dt, ref _motion);

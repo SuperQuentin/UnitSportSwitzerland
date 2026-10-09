@@ -298,6 +298,15 @@ public partial class PlayerInput : Node
     public static bool Held(string action) =>
         !Blocked && (Input.IsActionPressed(ActionName(action)) || SteeringWheel.Strength(action) > 0.5f);
 
+    /// <summary>
+    /// Held on a key or a button, leaving out a wheel's pedal: for a control that takes the pedal's
+    /// travel separately (<see cref="WheelPedal"/>), as the clutch does (#290).
+    /// </summary>
+    public static bool HeldButton(string action) => !Blocked && Input.IsActionPressed(ActionName(action));
+
+    /// <summary>A steering wheel's pedal behind <paramref name="action"/>, 0..1; 0 without one.</summary>
+    public static float WheelPedal(string action) => Blocked ? 0f : SteeringWheel.Strength(action);
+
     /// <summary>0..1 — a trigger's or a pedal's travel, or 1 for a pressed key.</summary>
     public static float Strength(string action) =>
         Blocked ? 0f : Mathf.Max(Input.GetActionStrength(ActionName(action)), SteeringWheel.Strength(action));

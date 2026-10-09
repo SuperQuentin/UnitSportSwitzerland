@@ -141,6 +141,11 @@ public partial class SettingsScreen : Screen
             UiKit.ToggleRow(rows, "Brake wear and fade (cars)", s.BrakeWear, on => GameSettings.Current.BrakeWear = on);
             UiKit.OptionRow(rows, "Truck gearbox", new[] { "Automatic", "Sequential", "Sequential + clutch", "H-pattern + splitter", "H-pattern (auto splitter)" },
                 (int)s.HeavyGearbox, i => GameSettings.Current.HeavyGearbox = (Player.HeavyShift)i);
+            UiKit.OptionRow(rows, "Car gearbox", new[] { "Automatic", "Sequential", "Manual (clutch)" },
+                (int)s.CarGearbox, i => GameSettings.Current.CarGearbox = (Player.CarGearbox)i,
+                "Sequential: shift up and down yourself, the clutch is automatic. Manual: the gates (1-6, R, N or a wheel's H-shifter) "
+                + "and the clutch pedal; it grinds without the clutch and stalls when the clutch is dropped. "
+                + "In either, the pad's shoulders shift instead of the trick and the boost");
             UiKit.OptionRow(rows, "Airliner handling", new[] { "Arcade", "Light sim" }, (int)s.Airliner,
                 i => GameSettings.Current.Airliner = (Player.AirlinerHandling)i,
                 "Arcade: protected, wings level on their own, ready to taxi. Light sim: engine start, autopilot, trim, fuel");

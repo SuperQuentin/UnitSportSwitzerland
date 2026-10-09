@@ -129,6 +129,8 @@ public partial class CarRig : Node3D, IHingedDoors, Items.IBeatReactive
     /// <summary>Pedals, 0..1: they swing on their hinges and the driver's right foot presses them.</summary>
     public float Throttle { get; set; }
     public float Brake { get; set; }
+    /// <summary>The clutch pedal, 0..1: a manual car's (#290), up in an automatic.</summary>
+    public float Clutch { get; set; }
     public bool Handbrake { get; set; }
     public float SpeedKmh { get; set; }
     public float Rpm { get; set; }
@@ -485,6 +487,8 @@ public partial class CarRig : Node3D, IHingedDoors, Items.IBeatReactive
         _lamps[CarCabin.LampEngine].Visible = !EngineRunning;
         _pedals[CarCabin.PedalThrottle].Basis = new Basis(Vector3.Right, DriverSeat.PedalTravel * Mathf.Clamp(Throttle, 0f, 1f));
         _pedals[CarCabin.PedalBrake].Basis = new Basis(Vector3.Right, DriverSeat.PedalTravel * Mathf.Clamp(Brake, 0f, 1f));
+        if (_pedals.Length > CarCabin.PedalClutch)
+            _pedals[CarCabin.PedalClutch].Basis = new Basis(Vector3.Right, DriverSeat.PedalTravel * Mathf.Clamp(Clutch, 0f, 1f));
 
         _glass.AlbedoColor = Colors.White with { A = View == CockpitView.Outside ? 1f : GlassFromSeat };
 

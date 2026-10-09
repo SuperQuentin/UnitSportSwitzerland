@@ -179,7 +179,7 @@ public sealed record CarSpec
 /// Game adds grip, power and a counter-steer assist on the same equations; Sim has none of them.
 /// </para>
 /// </summary>
-public sealed class Car : Rideable, IEngined
+public sealed partial class Car : Rideable, IEngined
 {
     /// <summary>The car as tuned: the catalog's numbers under the garage's body (<see cref="CarTuning.Apply"/>).</summary>
     public CarSpec Spec { get; }
@@ -248,7 +248,7 @@ public sealed class Car : Rideable, IEngined
     private EngineProfile? _sound;
     /// <summary>idle 0 .. redline 1, for <c>EngineSynth.Set</c>.</summary>
     public float Rpm01 => Mathf.Clamp((Rpm - Spec.IdleRpm) / (Spec.Redline - Spec.IdleRpm), 0f, 1f);
-    /// <summary>1-based forward gear, −1 reverse.</summary>
+    /// <summary>1-based forward gear, −1 reverse; 0 neutral, only in the driver's own box (<see cref="Gearbox"/>).</summary>
     public int Gear { get; private set; } = 1;
     /// <summary>Throttle actually applied (the pedal, or the brake pedal in reverse), 0..1.</summary>
     public float Throttle { get; private set; }
@@ -414,14 +414,17 @@ public sealed class Car : Rideable, IEngined
         float w = motion.Speed * Mathf.Sin(motion.Slip);
         float r = motion.YawRate;
 
-        // gear: brake at a standstill selects reverse, throttle selects first
-        if (Gear > 0 && u < 0.5f && input.Brake > 0.3f && input.Throttle < 0.05f) Gear = -1;
-        else if (Gear < 0 && u > -0.5f && input.Throttle > 0.3f) Gear = 1;
+        // gear: brake at a standstill selects reverse, throttle selects first. The driver's own box
+        // (#290) has a reverse gear of its own, driven on the gas like any other
+        bool auto = Gearbox == CarGearbox.Automatic;
+        StepClutch(dt);
+        if (auto && Gear > 0 && u < 0.5f && input.Brake > 0.3f && input.Throttle < 0.05f) Gear = -1;
+        else if (auto && Gear < 0 && u > -0.5f && input.Throttle > 0.3f) Gear = 1;
         bool reverse = Gear < 0;
-        float pedal = reverse ? input.Brake : input.Throttle;
-        float brake = reverse ? input.Throttle : input.Brake;
+        float pedal = reverse && auto ? input.Brake : input.Throttle;
+        float brake = reverse && auto ? input.Throttle : input.Brake;
         // in reverse the brake pedal drives; braking then is the gas pedal against the motion
-        if (reverse && u > 0.5f) { brake = Mathf.Max(brake, pedal); pedal = 0f; }
+        if (reverse && auto && u > 0.5f) { brake = Mathf.Max(brake, pedal); pedal = 0f; }
         Throttle = pedal;
         Braking = brake > 0.05f;
         BrakePedal = brake;
@@ -476,12 +479,23 @@ public sealed class Car : Rideable, IEngined
             }
 
             // --- engine and gearbox ---
-            float ratio = (reverse ? s.Reverse : s.Gears[Gear - 1]) * s.FinalDrive;
-            float wheelRpm = Mathf.Abs(u) / WheelRadius * 60f / Mathf.Tau;
-            Rpm = Mathf.Max(s.IdleRpm, wheelRpm * ratio);
-            float torque = Rpm >= s.Redline ? 0f : s.TorqueAt(Rpm) * powerScale;
-            float drive = _shiftTimer > 0 ? 0f : pedal * torque * ratio * Driveline / WheelRadius;
-            if (reverse) drive = -drive;
+            float drive;
+            if (Gearbox == CarGearbox.Manual) drive = ManualDrive(pedal, u, powerScale, h);
+            else if (Gear == 0)
+            {
+                // the sequential box in neutral: the engine revs on the throttle, nothing drives
+                Rpm = Mathf.MoveToward(Rpm, Mathf.Lerp(s.IdleRpm, s.Redline * 0.95f, pedal), 15000f * h);
+                drive = 0f;
+            }
+            else
+            {
+                float ratio = GearRatio(Gear);
+                float wheelRpm = Mathf.Abs(u) / WheelRadius * 60f / Mathf.Tau;
+                Rpm = Mathf.Max(s.IdleRpm, wheelRpm * ratio);
+                float torque = Rpm >= s.Redline ? 0f : s.TorqueAt(Rpm) * powerScale;
+                drive = _shiftTimer > 0 ? 0f : pedal * torque * ratio * Driveline / WheelRadius;
+                if (reverse) drive = -drive;
+            }
 
             // --- load transfer from last substep's longitudinal acceleration ---
             float nf = m * (Gravity * b - AccelX * s.CgHeight) / L;
@@ -612,7 +626,8 @@ public sealed class Car : Rideable, IEngined
 
         // automatic gearbox: up near the redline, down when it bogs; a brief cut of drive on each
         _shiftTimer = Mathf.Max(0f, _shiftTimer - dt);
-        if (!reverse && ground.OnFloor)
+        CheckStall();
+        if (auto && !reverse && ground.OnFloor)
         {
             if (Rpm > s.Redline * 0.94f && Gear < s.Gears.Length && pedal > 0.2f) { Gear++; _shiftTimer = 0.18f; }
             else if (Gear > 1 && Rpm < s.PeakRpm * 0.55f) Gear--;
@@ -747,6 +762,7 @@ public sealed class Car : Rideable, IEngined
         rig.WheelTurn = SteerAngle * Ratio;
         rig.Throttle = Throttle;
         rig.Brake = BrakePedal;
+        rig.Clutch = ClutchPedal;
         rig.Handbrake = HandbrakeOn;
         rig.Rpm = Rpm;
         rig.Gear = Gear;
