@@ -3179,7 +3179,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _shutDriverIn = 0f;
         ShowroomYaw = null;
         TrailerCode = _ride is Truck fresh ? fresh.TrailerCode : 0;
-        _truckPitch = 0f;
+        _truckPitch = _carPitch = _carRoll = 0f;
         // The pose travels with the kind, and each kind reads Anim its own way: left as it was, the
         // next update would hand a bike its rider's stride phase as a crank angle (seen: 0.93 rad).
         Anim = default;
@@ -3291,6 +3291,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
 
         if (_ride is Truck truck && HandleTruckInput(@event, truck))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (_ride is Car car && HandleCarGearInput(@event, car))
         {
             GetViewport().SetInputAsHandled();
             return;
@@ -4216,7 +4222,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (!onFloor)
         {
             _rideAir += dt;
-            if (_rideAir > 0.15f && !Npc && PlayerInput.Held(PlayerInput.Trick))
+            if (_rideAir > 0.15f && !Npc && PlayerInput.Held(PlayerInput.Trick) && !ShouldersShift)
             {
                 _airPitch += stick.Y * FlipRate * dt;     // stick forward: nose down, a front flip
                 _airSpin -= stick.X * SpinRate * dt;      // stick right: clockwise from above
@@ -4250,6 +4256,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         Draft = onFloor && _ride is Car or Motorbike or Truck && _motion.Speed > 10f
             ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
         if (_ride is Truck driving) PrepareTruck(driving);
+        else if (_ride is Car shifting) PrepareCar(shifting);
         _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft), dt, ref _motion);
         // a wheelie taken over the top (#410): the bike goes on its back, the rider off it
         if (_ride is Motorbike { LoopedOut: true })
@@ -4258,6 +4265,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
         if (_ride is Truck driven && AfterTruckStep(driven)) return;
+        if (_ride is Car shifted) AfterCarStep(shifted);
         // airstairs let go by an aircraft's door line up with it and raise the platform (#417)
         if (_ride is Airstairs stairs) DockStairs(stairs, input, dt);
         // the forklift's mast runs while a paddle is held (#583)
@@ -4288,7 +4296,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // Boost: the reward for air and tricks, spent as raw acceleration on top of the model.
         // Game profile only; in Sim the watts are the rider's, and nothing else may add to them.
         Boosting = Rideable.Arcade && _ride is not Truck && _bailTimer <= 0 && BoostMeter > 0.01f
-            && !Npc && PlayerInput.Held(PlayerInput.Boost);
+            && !Npc && PlayerInput.Held(PlayerInput.Boost) && !ShouldersShift;
         if (Boosting)
         {
             _motion.Speed += BoostAccel * dt;
@@ -4327,6 +4335,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         ShoveInto(dt, velocity with { Y = 0 });
         // the sections behind a truck's cab follow it, and report what they hit
         if (_ride is Truck train) StepSections(train, dt);
+        else if (_ride is Car car) TiltCar(car, dt);
         // a farm machine works the ground under its bar (#494, FootPlayer.Farm.cs)
         if (_ride is Truck { Spec.Farm: true } farm) StepFarm(farm, dt);
 
@@ -4497,7 +4506,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
         var pivot = Vector3.Up * (_bailTimer > 0 ? 0.3f : 0.9f);
-        _visual.Transform = new Transform3D(_holdTilt, Vector3.Zero) * new Transform3D(basis, pivot - basis * pivot);
+        // a car stands on the ground under its wheels (TiltCar), tipped about its contact patch
+        var ground = _ride is Car ? new Basis(Vector3.Right, _carPitch) * new Basis(Vector3.Back, _carRoll) : Basis.Identity;
+        _visual.Transform = new Transform3D(_holdTilt * ground, Vector3.Zero) * new Transform3D(basis, pivot - basis * pivot);
     }
 
     private void UpdateRideCamera(float dt)

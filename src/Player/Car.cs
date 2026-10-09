@@ -24,11 +24,11 @@ public enum Differential { Open, Viscous, Mechanical, Torsen }
 public enum Drivetrain { Rear, All, Front }
 
 /// <summary>
-/// What turns the engine's revs into the wheels': a stepped box with a clutch and a lever (shifted
-/// for the driver by the automatic logic in <see cref="Car"/>), or a hybrid's power-split e-CVT,
-/// with no steps and no clutch, that holds the engine at the revs the pedal asks for (#760).
+/// What the car itself has between the engine and the wheels: a stepped box with a clutch and a
+/// lever (shifted as the driver's <see cref="CarGearbox"/> setting says), or a hybrid's power-split
+/// e-CVT, with no steps and no clutch, that holds the engine at the revs the pedal asks for (#760).
 /// </summary>
-public enum CarGearbox { Stepped, ECvt }
+public enum CarTransmission { Stepped, ECvt }
 
 /// <summary>
 /// One car as numbers. Real-world figures for the machines each one stands for, so the Sim
@@ -62,7 +62,7 @@ public sealed record CarSpec
     /// <summary>Forward gear ratios, first to top; an e-CVT's are the two ends of its range, lowest first.</summary>
     public float[] Gears { get; init; } = System.Array.Empty<float>();
     /// <summary>Stepped with a clutch, or a hybrid's e-CVT; the catalog gives the body two pedals and a selector to match.</summary>
-    public CarGearbox Gearbox { get; init; }
+    public CarTransmission Transmission { get; init; }
     public float FinalDrive { get; init; }
     public float Reverse { get; init; } = 3.5f;
     public Drivetrain Drive { get; init; } = Drivetrain.Rear;
@@ -188,7 +188,7 @@ public sealed record CarSpec
 /// Game adds grip, power and a counter-steer assist on the same equations; Sim has none of them.
 /// </para>
 /// </summary>
-public sealed class Car : Rideable, IEngined
+public sealed partial class Car : Rideable, IEngined
 {
     /// <summary>The car as tuned: the catalog's numbers under the garage's body (<see cref="CarTuning.Apply"/>).</summary>
     public CarSpec Spec { get; }
@@ -263,8 +263,9 @@ public sealed class Car : Rideable, IEngined
     public float Rpm01 => EngineAsleep ? 0f : Mathf.Clamp((Rpm - Spec.IdleRpm) / (Spec.Redline - Spec.IdleRpm), 0f, 1f);
     /// <summary>A hybrid's (#760): the petrol engine stopped and the car moving on its motor alone — creeping, gently away, coasting, in reverse. Silent.</summary>
     public bool EngineAsleep { get; private set; }
-    public bool IsECvt => Spec.Gearbox == CarGearbox.ECvt;
-    /// <summary>1-based forward gear, −1 reverse.</summary>
+    /// <summary>A hybrid's power-split e-CVT (#760): always the automatic, whatever box the driver picks (<see cref="SetGearbox"/>).</summary>
+    public bool IsECvt => Spec.Transmission == CarTransmission.ECvt;
+    /// <summary>1-based forward gear, −1 reverse; 0 neutral, only in the driver's own box (<see cref="Gearbox"/>).</summary>
     public int Gear { get; private set; } = 1;
     /// <summary>Throttle actually applied (the pedal, or the brake pedal in reverse), 0..1.</summary>
     public float Throttle { get; private set; }
@@ -434,14 +435,22 @@ public sealed class Car : Rideable, IEngined
         float w = motion.Speed * Mathf.Sin(motion.Slip);
         float r = motion.YawRate;
 
-        // gear: brake at a standstill selects reverse, throttle selects first
-        if (Gear > 0 && u < 0.5f && input.Brake > 0.3f && input.Throttle < 0.05f) Gear = -1;
-        else if (Gear < 0 && u > -0.5f && input.Throttle > 0.3f) Gear = 1;
+        // gear: brake at a standstill selects reverse, throttle selects first. The driver's own box
+        // (#290) has a reverse gear of its own, driven on the gas like any other
+        // An automatic worked by a wheel's selector (P R N D) takes its gear from the lever instead
+        bool auto = Gearbox == CarGearbox.Automatic;
+        bool pedalsPick = auto && Selector == DriveSelector.None;
+        StepClutch(dt);
+        if (auto && !pedalsPick) SelectGear(u);
+        else if (pedalsPick && Gear > 0 && u < 0.5f && input.Brake > 0.3f && input.Throttle < 0.05f) Gear = -1;
+        else if (pedalsPick && Gear < 0 && u > -0.5f && input.Throttle > 0.3f) Gear = 1;
         bool reverse = Gear < 0;
-        float pedal = reverse ? input.Brake : input.Throttle;
-        float brake = reverse ? input.Throttle : input.Brake;
+        float pedal = reverse && pedalsPick ? input.Brake : input.Throttle;
+        float brake = reverse && pedalsPick ? input.Throttle : input.Brake;
         // in reverse the brake pedal drives; braking then is the gas pedal against the motion
-        if (reverse && u > 0.5f) { brake = Mathf.Max(brake, pedal); pedal = 0f; }
+        if (reverse && pedalsPick && u > 0.5f) { brake = Mathf.Max(brake, pedal); pedal = 0f; }
+        // P: the pawl holds the car once it is down to walking pace
+        if (auto && Selector == DriveSelector.Park && Mathf.Abs(u) < 1.5f) brake = 1f;
         Throttle = pedal;
         bool cvt = IsECvt;
         if (cvt)
@@ -509,15 +518,32 @@ public sealed class Car : Rideable, IEngined
             }
 
             // --- engine and gearbox ---
-            float wheelRpm = Mathf.Abs(u) / WheelRadius * 60f / Mathf.Tau;
-            // an e-CVT's ratio puts the engine at its held revs, within the ends of its range
-            float ratio = (reverse ? s.Reverse
-                : cvt ? Mathf.Clamp(_cvtRpm / Mathf.Max(wheelRpm * s.FinalDrive, 1f), s.Gears[^1], s.Gears[0])
-                : s.Gears[Gear - 1]) * s.FinalDrive;
-            Rpm = Mathf.Max(s.IdleRpm, wheelRpm * ratio);
-            float torque = Rpm >= s.Redline ? 0f : s.TorqueAt(Rpm) * powerScale;
-            float drive = _shiftTimer > 0 ? 0f : pedal * torque * ratio * Driveline / WheelRadius;
-            if (reverse) drive = -drive;
+            float drive;
+            if (Gearbox == CarGearbox.Manual) drive = ManualDrive(pedal, u, powerScale, h);
+            else if (Gear == 0)
+            {
+                // the sequential box in neutral: the engine revs on the throttle, nothing drives
+                Rpm = Mathf.MoveToward(Mathf.Max(Rpm, s.IdleRpm), Mathf.Lerp(s.IdleRpm, s.Redline * 0.95f, pedal), 15000f * h);
+                drive = 0f;
+            }
+            else
+            {
+                float wheelRpm = Mathf.Abs(u) / WheelRadius * 60f / Mathf.Tau;
+                // an e-CVT's ratio puts the engine at its held revs, within the ends of its range (#760)
+                float ratio = cvt && Gear > 0
+                    ? Mathf.Clamp(_cvtRpm / Mathf.Max(wheelRpm * s.FinalDrive, 1f), s.Gears[^1], s.Gears[0]) * s.FinalDrive
+                    : GearRatio(Gear);
+                // the drive and the box's shift points take the engine as coupled to the wheels; what
+                // the tach, the sound and the wheel's shake follow is the converter's slipping engine
+                // (an e-CVT has no converter: its engine is where the ratio holds it)
+                _coupledRpm = Mathf.Max(s.IdleRpm, wheelRpm * ratio);
+                Rpm = auto && !cvt ? ConverterRpm(wheelRpm * ratio, pedal, h) : _coupledRpm;
+                float torque = _coupledRpm >= s.Redline ? 0f : s.TorqueAt(_coupledRpm) * powerScale;
+                drive = _shiftTimer > 0 ? 0f : pedal * torque * ratio * Driveline / WheelRadius;
+                // in D or R on the selector, the converter creeps the car at walking pace off the pedals
+                drive = Mathf.Max(drive, Creep(u, reverse));
+                if (reverse) drive = -drive;
+            }
 
             // --- load transfer from last substep's longitudinal acceleration ---
             float nf = m * (Gravity * b - AccelX * s.CgHeight) / L;
@@ -547,8 +573,8 @@ public sealed class Car : Rideable, IEngined
                 case Drivetrain.Front: fxF += drive; break;
                 default: fxR += drive; break;
             }
-            // no force to push against below walking pace once stopped
-            if (Mathf.Abs(u) < 0.3f && drive == 0f) { fxF = 0f; fxR = 0f; u = Mathf.MoveToward(u, 0f, 3f * h); }
+            // no force to push against below walking pace once stopped; nor when the brake holds the creep
+            if (Mathf.Abs(u) < 0.3f && (drive == 0f || brakeForce >= Mathf.Abs(drive) && pedal < 0.02f)) { fxF = 0f; fxR = 0f; u = Mathf.MoveToward(u, 0f, 3f * h); }
             float capF = grip * nf * WornGrip(TyreWearFront), capR = grip * nr * WornGrip(TyreWearRear);
             // demand past the circle, on whichever axle is driven
             float wheelspin = Mathf.Max(0f, Mathf.Max(Mathf.Abs(fxR) / capR, Mathf.Abs(fxF) / capF) - 0.9f) * 10f;
@@ -648,10 +674,11 @@ public sealed class Car : Rideable, IEngined
 
         // automatic gearbox: up near the redline, down when it bogs; a brief cut of drive on each
         _shiftTimer = Mathf.Max(0f, _shiftTimer - dt);
-        if (!reverse && !cvt && ground.OnFloor)
+        CheckStall();
+        if (auto && !cvt && Gear > 0 && ground.OnFloor)
         {
-            if (Rpm > s.Redline * 0.94f && Gear < s.Gears.Length && pedal > 0.2f) { Gear++; _shiftTimer = 0.18f; }
-            else if (Gear > 1 && Rpm < s.PeakRpm * 0.55f) Gear--;
+            if (_coupledRpm > s.Redline * 0.94f && Gear < s.Gears.Length && pedal > 0.2f) { Gear++; _shiftTimer = 0.18f; }
+            else if (Gear > 1 && _coupledRpm < s.PeakRpm * 0.55f) Gear--;
         }
 
         TyreSlide = ground.OnFloor ? Mathf.Clamp(slideAccum / Substeps, 0f, 1f) * Mathf.Clamp(Mathf.Abs(u) / 4f, 0f, 1f) : 0f;
@@ -783,6 +810,7 @@ public sealed class Car : Rideable, IEngined
         rig.WheelTurn = SteerAngle * Ratio;
         rig.Throttle = Throttle;
         rig.Brake = BrakePedal;
+        rig.Clutch = ClutchPedal;
         rig.Handbrake = HandbrakeOn;
         // a hybrid's stopped engine drops the rev needle to nothing
         rig.Rpm = EngineAsleep ? 0f : Rpm;

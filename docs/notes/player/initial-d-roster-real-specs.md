@@ -22,7 +22,7 @@
   under 0.55 × `PeakRpm`; if first-to-second drops the revs under that, the car hunts 1-2 forever and
   tops out in first (the Yaris at 6,500 rpm did 43 km/h; check `Redline·0.94·g2/g1 > PeakRpm·0.55`).
   And `--driftcheck` Game wants every car to hold a drift: a 0.9 eco-tyre `Grip` did not (14° max).
-- **Gearbox and drive side (#760)**: `CarSpec.Gearbox` is `Stepped` (a lever and a clutch, shifted
+- **Gearbox and drive side (#760)**: `CarSpec.Transmission` is `Stepped` (a lever and a clutch, shifted
   by the automatic logic) or `ECvt` (the XW20 Prius). An e-CVT's `Gears` are the two ends of its
   range; `Car.Step` holds the engine at `_cvtRpm` (just off idle at a light foot, `PeakRpm` floored,
   swept at 4,000 rpm/s) and the ratio follows the road speed, clamped to the range; no shifts. Its

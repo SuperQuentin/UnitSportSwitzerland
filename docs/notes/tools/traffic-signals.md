@@ -92,6 +92,65 @@
   comparison per junction per frame, no allocation. Tier 0 `SignalBuilderTests` (layout,
   facings, the second pole's missing right arrow, 2-lens Geneva heads, flashers). Screenshots:
   driver's view by day and night at LV95 2499901,1118599.
+- **Lenses seen from afar** (#759). The road shader pulls the whole road mesh toward the eye by
+  0.04 % of its distance (`road_depth_bias`, plus `far_lift_*` past 800 m), and the heads are in
+  that mesh: a lens 6 mm in front of its housing was hidden by it past about 15 m, lit or not.
+  `SignalLamps`' own shader applies the same pull plus 0.02 % (0.04 % for a lit lens, over the
+  dark ones beside it); it mirrors the road shader's defaults, so change both together. A lit car
+  lens (round, arrows, flasher) never covers less than 1.5 px of radius: it grows with distance,
+  fading back to its size between 500 m and 1 km (else every junction down a straight road
+  stacks into one band of dots on the horizon). Pedestrian and bike lenses keep their size (grown,
+  the crossings smeared across the junction). A lens seen from behind is not drawn (the pull would
+  show it through its head). `PROJECTION_MATRIX[1][1]` is negative in Godot's Vulkan projection:
+  take its `abs`. Before/after shots: signal test region, J2 west approach at 50-900 m
+  (`x,g1.5,2,0,-90` with x = -1500 - distance).
+- **Bloom and plates** (#759). A lit car lens also gets a bloom: a camera-facing additive quad
+  per car lens (`SignalLamps` "Halos" MultiMesh, recoloured with its lens), radius 0.25 m / 3 px
+  minimum by day and 0.45 m / 5 px at night (`world_night`), strength 0.3 / 0.7, faded out by
+  1 km (1.5 km at night) and off-axis (the cross street's heads do not glow down your road). 9 px
+  at night blew every light into a disc and the next junction into a band. Car heads stand on a
+  plate flush with the housings' faces, 2 cm clear of them, its white band (RAL 9016) 8 cm wide all
+  round (5 cm between the plates of heads side by side; corners rounded in Cartoon, from
+  `MeshDetail.High` passed through `RoadMeshBuilder.Build`), black behind, one face drawn with the road
+  shader's style 8 (`FRONT_FACING` picks black; wound clockwise from the front, Godot's front
+  face). User's review of a photo of a Swiss junction: the black is the white plate's back; the
+  Zürich
+  Wegleitung LSA only says the visible housing is matt RAL 9017 and the Kontrastblenden are
+  aluminium after SN 640 836 (not public). Some cantons' plates run on below each car and bike
+  head and carry its arrow (the lenses keep their arrows: user's review), their bike heads on a
+  plate too: `SignalPlan.ArrowPlates` (bit 1 of the SGNL pedestrian byte, old data reads false), set by
+  RoadGen's `ArrowPlates(canton)`: Vaud yes, Geneva no (user, 2026-10-10), others not checked (no). Elsewhere a bike head
+  has a small arrow plate of its own below it (`ArrowPanel` 16 cm, the arrow `ArrowFill` of it). The plate arrows and the lens arrows share
+  `SignalGlyphs.Arrow(moves)`. The model viewer's Vaud pole has them, its Geneva pole not. Pedestrian heads have
+  no board at all (user's review). Geneva's pedestrian head (the two-lens one, `!PedestrianAmber`,
+  after the user's photo) is a light grey housing with one dark window, the red standing figure
+  left and the green walking one right, side by side at 1.45 times a lens (`Head.SideBySide`);
+  the model viewer shows a Vaud and a Geneva pole.
+- **Arrows in the round lenses** (#759, user: "when the ball would not allow every direction, a
+  straight or combined arrow"): `SignalBuilder.ArrowMoves(plan, group)` gives a car group's moves
+  when they are not every move its approach has (the union of the arm's Car, LeftArrow and
+  RightArrow groups), else None: a ball. `SignalLamps` draws straight on, straight and left,
+  straight and right, or the lone turn; left plus right with no straight on stays a ball, the
+  flasher stays round. A crossroads approach with both pockets shows straight on in its middle
+  head. Tier 0 `MainHead_ABallOnlyWhereItGivesEveryMove_ElseItsArrow`. Red and yellow arrows are
+  the inverse (user: "a coloured background with an inverted arrow"): the lens lit whole, the
+  arrow dark in it, 2 mm in front (the `Mask` icons; its dark vertices keep their dimming in
+  alpha, which the lens shader divides out, so the whole lens agrees on being lit). Green is the
+  lit arrow on black. A mask's mesh is cached under the mask, not its arrow (a reassigned key
+  once drew every green arrow masked). Not done: the photo's arrows printed on the plate under each
+  head (ours are arrow masks in the lenses, which Basel-Stadt also uses).
+- **Detailed heads** (#759, "less blocky"): `SignalBuilder` draws rounded housings
+  (`RoundedHousing`, 2-segment corners), a visor over each lens (`LensFittings`: an arc over the
+  top and down the sides, open below, 0.13 m at the crown, flaring), a ring round each lens (a
+  square frame round a pedestrian lens), a 12-sided pole with a cap and 6-sided brackets
+  (collision stays the square column). The road shader's style 7 (`PropStyle`) keeps the props'
+  colours (no Real asphalt on them), style 8 (`PlateStyle`) the same with a black back face. `SignalLamps` picks the lens mesh per `Icon`, from
+  shape and role, without touching `SignalBuilder.Shape`: a standing figure in the red pedestrian
+  lens, a walking one in the green and the yellow, a bicycle in every bike lens (`Flat`: fans,
+  round-ended strokes, rings, in lens radii). The white of plates and sign borders speckles at
+  some sun angles in Cartoon: it does so on the road signs too, not from this change. Check:
+  model viewer `--modelsonly "Traffic light" --modelsyaw 160 --modelspitch -5`, and close-ups of
+  J2's south-west pole (x -1508.6, z 13; cars face west, pedestrians north, bike head low).
 - **Bikes at signals** (#351). A signalised left pocket (not a merged strip) carries a 1.50 m
   left-turn bike lane between it and the through lane (`LeftBikeLane`: the widening grows by it,
   the hatch opens to the through lane's edge, yellow dashes both sides from where the pocket opens,

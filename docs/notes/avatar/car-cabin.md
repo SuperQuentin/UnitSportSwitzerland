@@ -43,7 +43,7 @@
   +X authored (`SeatFor(d, lhd)`); everything else (pedals, dials, figure) is relative to the seat.
   The front door bits follow the driver: `CarRig.DriverDoor` is the driver's door on either side
   (`PassengerDoor` the other), so getting in and out needs no change; `Car.ExitLeft` follows the
-  flag. `CarBody.Automatic` (set by `CarCatalog.Number` from `CarSpec.Gearbox`, never by hand):
+  flag. `CarBody.Automatic` (set by `CarCatalog.Number` from `CarSpec.Transmission`, never by hand):
   two pedals, a joystick selector on the driver's side of the stack, the gear digit reads `d`.
   `CarBody.CentreDisplay` (XW20 Prius): no binnacle or dials; a display in a hood at the top middle
   of the dash turned to the eye (speed figures `CarCabin.SpeedDigits`, swapped by the rig only when

@@ -116,6 +116,14 @@ public sealed class HeavyDriveline
     /// <summary>Held: the clutch pedal goes down. Released, it comes back up over ~0.6 s.</summary>
     public bool ClutchHeld { get; set; }
 
+    /// <summary>
+    /// A real clutch pedal's travel, 0 up .. 1 floored (a steering wheel's, #290). Followed as it is,
+    /// at whatever pace the foot sets: let out slowly it slips at the biting point, dropped it stalls.
+    /// </summary>
+    public float ClutchFoot { get; set; }
+    /// <summary>Where the keys' clutch has got to: down fast, up at a foot's pace.</summary>
+    private float _keyClutch;
+
     /// <summary>Sequential up (or the splitter up in the H-pattern).</summary>
     public void ShiftUp(float speed) => Request(+1, speed);
     public void ShiftDown(float speed) => Request(-1, speed);
@@ -145,26 +153,27 @@ public sealed class HeavyDriveline
         Engage(to, speed);
     }
 
-    /// <summary>H-pattern: a gate on the number keys, 1..6; 0 neutral, −1 reverse.</summary>
-    public void SelectGate(int gate, float speed)
+    /// <summary>H-pattern: a gate on the number keys or the wheel's shifter, 1..6; 0 neutral, −1 reverse. True if it went in.</summary>
+    public bool SelectGate(int gate, float speed)
     {
-        if (Mode is not (HeavyShift.HPatternSplitter or HeavyShift.HPattern) || !_s.SixGates) return;
-        if (gate == 0) { Gear = 0; Locked = false; return; }   // out of gear needs no clutch
-        if (ClutchPedal < 0.75f) { Event = "grind"; return; }
+        if (Mode is not (HeavyShift.HPatternSplitter or HeavyShift.HPattern) || !_s.SixGates) return false;
+        if (gate == 0) { Gear = 0; Locked = false; return true; }   // out of gear needs no clutch
+        if (ClutchPedal < 0.75f) { Event = "grind"; return false; }
         if (gate < 0)
         {
-            if (Mathf.Abs(speed) > 1f) { Event = "grind"; return; }
+            if (Mathf.Abs(speed) > 1f) { Event = "grind"; return false; }
             Gear = -1;
-            return;
+            return true;
         }
         int split = Splitter;
         if (Mode == HeavyShift.HPattern)
             // the box picks the half of the gate that keeps the engine in its band
             split = RpmAt((gate - 1) * 2 + 2, speed) > _s.Redline * 0.47f ? 1 : 0;
         int to = (gate - 1) * 2 + 1 + split;
-        if (RpmAt(to, speed) > _s.Redline * 1.05f) { Event = "overrev"; return; }
+        if (RpmAt(to, speed) > _s.Redline * 1.05f) { Event = "overrev"; return false; }
         Gear = to;
         Splitter = split;
+        return true;
     }
 
     /// <summary>The gate in the H-pattern (1..6), 0 neutral, −1 reverse.</summary>
@@ -196,8 +205,10 @@ public sealed class HeavyDriveline
         float speed = d.Speed;
         float v = Mathf.Abs(speed);
 
-        // the clutch pedal: down fast, back up at the pace a foot lets it
-        ClutchPedal = ClutchHeld ? Mathf.MoveToward(ClutchPedal, 1f, 6f * dt) : Mathf.MoveToward(ClutchPedal, 0f, 1.7f * dt);
+        // the clutch pedal: a key's goes down fast and back up at the pace a foot lets it; a real
+        // pedal is wherever the foot has it
+        _keyClutch = ClutchHeld ? Mathf.MoveToward(_keyClutch, 1f, 6f * dt) : Mathf.MoveToward(_keyClutch, 0f, 1.7f * dt);
+        ClutchPedal = Mathf.Max(_keyClutch, Mathf.Clamp(ClutchFoot, 0f, 1f));
 
         UpdateAir(d, dt);
 
@@ -384,6 +395,11 @@ public sealed class HeavyDriveline
         _gaining = Mathf.Lerp(_gaining, (Mathf.Abs(speed) - _lastSpeed) / Mathf.Max(dt, 1e-3f), MathX.Damp(3f, dt));
         _lastSpeed = Mathf.Abs(speed);
         if (_shift > 0f) return;
+        if (HoldNeutral)
+        {
+            if (Gear != 0) { Gear = 0; Locked = false; }
+            return;
+        }
         int top = _s.Gears.Length;
         float v = Mathf.Abs(speed);
 
@@ -446,6 +462,9 @@ public sealed class HeavyDriveline
     /// reverse, the throttle for forward again.
     /// </summary>
     public bool WantsReverse { get; set; }
+
+    /// <summary>The automatic held in neutral by a selector's N or P (#290): it picks no gear until let go.</summary>
+    public bool HoldNeutral { get; set; }
 
     /// <summary>
     /// The gear to pull away in, as Opticruise picks it: the highest of the lower third that still
@@ -538,7 +557,7 @@ public sealed class HeavyDriveline
         Gear = Mode == HeavyShift.Automatic || Converter ? GearFor(speed) : 0;
         if (Gear > 0 && Mathf.Abs(speed) > 1f) EngineRpm = RpmAt(Gear, speed);
         Locked = Gear > 0 && Mathf.Abs(speed) > 1f;
-        ClutchPedal = 0f;
+        ClutchPedal = _keyClutch = 0f;
         _shift = 0f;
         AirTank = AirMax;
         BrakePressure = 0f;

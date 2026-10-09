@@ -630,7 +630,7 @@ public static class CarCatalog
             Mass = 1375f, FrontAxle = 1.08f, RearAxle = 1.62f, CgHeight = 0.55f, Grip = 1f,
             PeakKw = 82f, PeakRpm = 5000f, IdleRpm = 1000f, Redline = 5600f,
             // the e-CVT (#760): no steps, the ends of its range; the top end lets the redline cap it near 170 km/h
-            Gearbox = CarGearbox.ECvt,
+            Transmission = CarTransmission.ECvt,
             Gears = new[] { 3.1f, 0.92f }, FinalDrive = 4.113f, Reverse = 3.1f,
             Torque = new (float, float)[] { (1000f, 200f), (2000f, 190f), (3000f, 175f), (4000f, 165f), (5000f, 156.6f), (5600f, 140f) },
             Tyre = "185/65R15", BrakeDecel = 9.1f, Diff = Differential.Open,
@@ -688,7 +688,7 @@ public static class CarCatalog
             Mass = 1455f, FrontAxle = 1.08f, RearAxle = 1.62f, CgHeight = 0.55f, Grip = 1.04f,
             PeakKw = 100f, PeakRpm = 5200f, IdleRpm = 1000f, Redline = 5800f,
             // the e-CVT: the ends of its range, the top end letting the redline cap it near 180 km/h
-            Gearbox = CarGearbox.ECvt,
+            Transmission = CarTransmission.ECvt,
             Gears = new[] { 3.1f, 0.92f }, FinalDrive = 4.113f, Reverse = 3.0f,
             Torque = new (float, float)[] { (1000f, 215f), (2000f, 205f), (3000f, 195f), (4000f, 190f), (5200f, 183.6f), (5800f, 160f) },
             Tyre = "195/65R15", BrakeDecel = 9.3f, Diff = Differential.Open,
@@ -721,7 +721,7 @@ public static class CarCatalog
             cars[i] = cars[i] with
             {
                 Kind = (RideKind)(First + i),
-                Body = cars[i].Body with { Automatic = cars[i].Gearbox != CarGearbox.Stepped },
+                Body = cars[i].Body with { Automatic = cars[i].Transmission != CarTransmission.Stepped },
             };
         return cars;
     }

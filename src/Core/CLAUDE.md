@@ -7,9 +7,10 @@ touches its topic; search with `grep -ril <word> docs/notes/core`.
 
 ## Architecture
 
+- `free-cursor` — Tap Alt in game frees the mouse, MMO style (#654, `Core/CursorToggle`): a tap not a chord, a world click recaptures, never touches a pointer a menu owns
 - `modes` — Modes: (`GameMode`, `Core/WorldLaunch`): Explore / GpxReplay / Multiplayer, picked on the title screen or by --connect/--gpx; Esc = pause menu
 - `ground-start` — Explore from the menus starts on foot on open ground (#517, `Core/GroundStart`): waits for building collision, ring search for dry, open-sky, room-to-stand; command-line runs keep the fly camera
-- `steering-wheel` — Steering wheel: (`Core/SteeringWheel`, #68): SDL3 wheel and pedals, 1:1 direct steering, force feedback (aligning, soft lock, road, engine, knocks), Godot's copy of the device ignored, presets + Settings → Wheel tab
+- `steering-wheel` — Steering wheel: (`Core/SteeringWheel`, #68): SDL3 wheel and pedals, 1:1 direct steering, force feedback (aligning, soft lock, road, engine, knocks), paddles, H-shifter lever and clutch travel (#290), Godot's copy of the device ignored, versioned presets + Settings → Wheel tab
 - `input` — Input: (`Core/PlayerInput`): every gameplay control is a named `InputMap` action registered in code at boot...
 - `settings` — Settings: (`Core/GameSettings`, `Ui/SettingsScreen` tabs, `user://settings.json`): render distance in tile rings (6..40,...
 - `performance-overlay` — Performance overlay: (`Core/PerfOverlay`, F3 cycles Off / FPS / Detailed, saved as `GameSettings.PerfOverlay`, also...
