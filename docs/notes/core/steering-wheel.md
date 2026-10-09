@@ -92,6 +92,11 @@
   (version 3; `Upgrade` gives it to saved settings still at the 20° default). At 20° a kart's ±99° lock
   was not felt on the G29 (7° past it: 0.54). `--ffbcheck` on the G29 at 6°: a 35% push into a 60° lock
   stops at 61-63° and settles in 0.3 s (65° at 20°).
+- **Forces silent at launch until toggled** (G29, #290): something resets the wheel after the effects
+  are made (G HUB switching profiles as the window comes to the front, or Godot's own SDL opening the
+  device while the world loads, not proven which) and every update still succeeds, so `Send` has nothing
+  to recover. `Refresh` makes the effects afresh, as the settings toggle does, when a drive starts after
+  2 s without a feel and on `NotificationApplicationFocusIn`; the log says `force feedback made afresh`.
 - **Soft lock at full device force**, whatever `FfbStrength`: capped at 70% a hand pushed 121° through it.
 - **Engine** (`WheelFeel.EngineFrom`, added by `PlayerFeel`, which knows `EngineOn`): a sine at the
   crank's rate (rpm/60, 8–60 Hz), 0.15 at idle to 0.5 at the redline, gain `FfbEngine`. **Road** is

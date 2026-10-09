@@ -166,6 +166,16 @@ public partial class SteeringWheel
         RecoverHaptic();
         if (!_hapticOpen) return;
 
+        // a drive starting after a pause (the first one, or after a menu or a walk) gets its effects
+        // made afresh: anything that reset the wheel meanwhile would have left them silent (#290)
+        bool starting = _feelAge <= StaleSeconds && _wasIdle;
+        _wasIdle = _feelAge > RefreshAfterIdle;
+        if (starting || _refreshOnFocus)
+        {
+            Refresh(starting ? "a drive starts" : "the game window came to the front");
+            if (!_hapticOpen) return;
+        }
+
         _feelAge += dt;
         float constant, road, damper, friction, engine;
         float hz = _feel.RoadHz;
@@ -282,6 +292,34 @@ public partial class SteeringWheel
     }
 
     private bool _hapticFailed;
+
+    /// <summary>Seconds without a vehicle's feel after which the next drive makes the effects afresh.</summary>
+    private const float RefreshAfterIdle = 2f;
+    private bool _wasIdle = true, _refreshOnFocus;
+
+    /// <summary>
+    /// The effects made afresh, as turning the forces off and on in the settings does. Something can
+    /// reset the wheel behind the game's back after the effects are made: Logitech G HUB switching
+    /// profiles as the game window comes to the front, or another SDL (Godot's own joypad layer)
+    /// opening the device while the world loads. The effects then go silent while every update still
+    /// succeeds, so <see cref="Send"/> sees nothing to recover: forces off at launch until toggled
+    /// (seen on a G29, #290). Done when a drive starts and when the window comes to the front;
+    /// it takes a few milliseconds.
+    /// </summary>
+    private void Refresh(string why)
+    {
+        _refreshOnFocus = false;
+        if (!_hapticOpen) return;
+        GD.Print($"[wheel] force feedback made afresh: {why}");
+        CloseHaptic();
+        _hapticFailed = false;
+        OpenHaptic();
+    }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationApplicationFocusIn) _refreshOnFocus = _hapticOpen;
+    }
 
     private unsafe void OpenHaptic()
     {
