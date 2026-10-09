@@ -31,7 +31,7 @@ uniform float paint_depth_bias = 0.002;
 // The whole road mesh (ribbons, sidewalks, rails) is pulled this fraction of its distance toward
 // the eye: with roads at the ground (#119) the decimated terrain of the stride-2/4 rings lies in
 // the road's plane beside it, and only a bias that grows with distance wins that depth test.
-uniform float road_depth_bias = 0.0004;
+uniform float road_depth_bias = 0.0004;   // and far_lift_*: SignalLamps mirrors them for the lenses (#759)
 // Past the rings whose terrain is blended under the roads (stride <= 4), roads are still drawn on
 // coarse terrain that was never cut for them, and a road at the ground would sink into it. Past
 // far_lift_start the whole road mesh is pulled this many metres per metre toward the eye, up to

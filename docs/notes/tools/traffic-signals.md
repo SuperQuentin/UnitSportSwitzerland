@@ -92,6 +92,18 @@
   comparison per junction per frame, no allocation. Tier 0 `SignalBuilderTests` (layout,
   facings, the second pole's missing right arrow, 2-lens Geneva heads, flashers). Screenshots:
   driver's view by day and night at LV95 2499901,1118599.
+- **Lenses seen from afar** (#759). The road shader pulls the whole road mesh toward the eye by
+  0.04 % of its distance (`road_depth_bias`, plus `far_lift_*` past 800 m), and the heads are in
+  that mesh: a lens 6 mm in front of its housing was hidden by it past about 15 m, lit or not.
+  `SignalLamps`' own shader applies the same pull plus 0.02 % (0.04 % for a lit lens, over the
+  dark ones beside it); it mirrors the road shader's defaults, so change both together. A lit car
+  lens (round, arrows, flasher) never covers less than 1.5 px of radius: it grows with distance,
+  fading back to its size between 500 m and 1 km (else every junction down a straight road
+  stacks into one band of dots on the horizon). Pedestrian and bike lenses keep their size (grown,
+  the crossings smeared across the junction). A lens seen from behind is not drawn (the pull would
+  show it through its head). `PROJECTION_MATRIX[1][1]` is negative in Godot's Vulkan projection:
+  take its `abs`. Before/after shots: signal test region, J2 west approach at 50-900 m
+  (`x,g1.5,2,0,-90` with x = -1500 - distance).
 - **Bikes at signals** (#351). A signalised left pocket (not a merged strip) carries a 1.50 m
   left-turn bike lane between it and the through lane (`LeftBikeLane`: the widening grows by it,
   the hatch opens to the through lane's edge, yellow dashes both sides from where the pocket opens,

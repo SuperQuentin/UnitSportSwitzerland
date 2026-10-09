@@ -21,16 +21,63 @@ public partial class SignalLamps : Node3D
     /// <summary>Flashing yellow: on for half a second, off for half a second, on the server clock.</summary>
     private const double BlinkHalf = 0.5;
 
-    private static Material? _material;
+    private static Shader? _shader;
+    private static readonly Material?[] Materials = new Material?[SignalBuilder.ShapeCount];
     private static readonly Mesh?[] Meshes = new Mesh?[SignalBuilder.ShapeCount];
 
-    /// <summary>Lenses must stay lit (unshaded) and show their colour whatever the light.</summary>
-    private static Material Material() => _material ??= new StandardMaterial3D
+    /// <summary>
+    /// Lenses stay lit (unshaded) and show their colour whatever the light (#759):
+    /// <list type="bullet">
+    /// <item>The road mesh the heads are part of is pulled toward the eye by a fraction of its
+    /// distance (<c>shaders/body/road.gdshaderinc</c>: <c>road_depth_bias</c>, <c>far_lift_*</c>),
+    /// which put a head's housing in front of its lenses, 6 mm ahead of it, past about 15 m. A
+    /// lens is pulled the same way and a hair more.</item>
+    /// <item>A 90 mm lens covers less than a pixel past about 150 m, so a lit lens of a car head
+    /// never covers less than <c>min_pixels</c> of radius: it grows with distance, the glare of a
+    /// lamp seen from afar, and is pulled a hair further to draw over the dark lenses beside it.
+    /// The glare fades between 500 m and 1 km, or a straight road with lights every kilometre
+    /// stacks them into one row of dots on the horizon. Pedestrian and bike lenses keep their
+    /// size: grown, a junction's crossings smeared into a band of colour.</item>
+    /// <item>A lens seen from behind is not drawn: the pull would show it through its head.</item>
+    /// </list>
+    /// </summary>
+    private static Material Material(SignalBuilder.Shape shape)
     {
-        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-        VertexColorUseAsAlbedo = true,
-        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-    };
+        if (Materials[(int)shape] is { } done) return done;
+        _shader ??= new Shader { Code = @"
+shader_type spatial;
+render_mode unshaded, cull_disabled;
+uniform float lens_radius;
+uniform float min_pixels;   // the smallest radius a lit lens is drawn at; 0 keeps it at its size
+// shaders/body/road.gdshaderinc's defaults: the pull of the road mesh the heads belong to
+const float ROAD_DEPTH_BIAS = 0.0004, FAR_LIFT_START = 800.0, FAR_LIFT_RATE = 0.001, FAR_LIFT_MAX = 2.0;
+const float LENS_BIAS = 0.0002;   // a lens's own pull past its head's, twice that for a lit lens
+const float GLARE_FADE_START = 500.0, GLARE_FADE_END = 1000.0;
+void vertex() {
+    vec3 centre = (MODELVIEW_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    vec3 front = (MODELVIEW_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz;
+    float facing = step(0.0, dot(front, -centre));
+    float lit = step(0.5, max(COLOR.r, max(COLOR.g, COLOR.b)));
+    // the world size of a pixel at the lens's depth (the projection flips y: its sign is not ours)
+    float depth = max(-centre.z, 0.0);
+    float pixel = 2.0 * depth / (abs(PROJECTION_MATRIX[1][1]) * VIEWPORT_SIZE.y);
+    float glare = min_pixels * (1.0 - smoothstep(GLARE_FADE_START, GLARE_FADE_END, depth));
+    float grow = facing * mix(1.0, max(1.0, glare * pixel / lens_radius), lit);
+    vec4 view = MODELVIEW_MATRIX * vec4(VERTEX.xy * grow, VERTEX.z, 1.0);
+    float dist = length(view.xyz);
+    float lift = clamp((dist - FAR_LIFT_START) * FAR_LIFT_RATE, 0.0, FAR_LIFT_MAX);
+    view.xyz *= 1.0 - lift / max(dist, 1.0) - ROAD_DEPTH_BIAS - LENS_BIAS * (1.0 + lit);
+    POSITION = PROJECTION_MATRIX * view;
+}
+void fragment() {
+    ALBEDO = COLOR.rgb;
+}" };
+        var m = new ShaderMaterial { Shader = _shader };
+        float r = SignalBuilder.LensRadius;
+        m.SetShaderParameter("lens_radius", shape == SignalBuilder.Shape.Bike ? r * 0.5f : r);
+        m.SetShaderParameter("min_pixels", shape is SignalBuilder.Shape.Square or SignalBuilder.Shape.Bike ? 0f : 1.5f);
+        return Materials[(int)shape] = m;
+    }
 
     private SignalPlan[] _plans = [];
     private SignalBuilder.Lens[] _lenses = [];
@@ -71,7 +118,7 @@ public partial class SignalLamps : Node3D
             _multi[s] = multi;
             AddChild(new MultiMeshInstance3D
             {
-                Multimesh = multi, MaterialOverride = Material(),
+                Multimesh = multi, MaterialOverride = Material((SignalBuilder.Shape)s),
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             });
         }
