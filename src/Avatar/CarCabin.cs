@@ -162,10 +162,11 @@ public static partial class CarMeshBuilder
     /// The cabin, built into <paramref name="s"/> (the shell) where it is part of the body — the
     /// outside mirrors — and into meshes of its own otherwise.
     /// </summary>
-    private static CarCabin BuildCabin(MeshScratch s, CarBody body, Dims d, float cw, CarGauges gauges)
+    private static CarCabin BuildCabin(MeshScratch s, CarBody body, Dims d, float cw, CarGauges gauges, bool round = false)
     {
         var seat = SeatFor(d, body.LeftHandDrive);
-        var c = new MeshScratch();
+        // a rounded car's cabin (#760): the seats, dash and stack rounded boxes, the wheel round
+        var c = new MeshScratch { Smooth = round };
         float hw = d.Width * 0.5f, inner = hw - Skin - Lining;
         float firewall = Firewall(d), back = d.RgBase;
         var eye = HumanMeshBuilder.DriverEye(seat.Hip, seat.Recline);
@@ -212,9 +213,9 @@ public static partial class CarMeshBuilder
                     seats.Add(new SeatAnchor(0, Turned(new Vector3(side * Mathf.Min(0.36f, inner - 0.26f),
                         benchHip, rear + 0.28f)), seat.Recline + 0.1f, FloorY));
                 float cushionY = FloorY + 0.22f;
-                c.Box(new Vector3(0, cushionY, (front + rear) * 0.5f + 0.04f), new Vector3(inner * 2f - 0.06f, 0.12f, front - rear - 0.08f), Seat);
+                c.RoundedBox(new Vector3(0, cushionY, (front + rear) * 0.5f + 0.04f), new Vector3(inner * 2f - 0.06f, 0.12f, front - rear - 0.08f), Seat);
                 float h = d.Belt + 0.12f - cushionY;
-                c.Box(new Vector3(0, cushionY + h * 0.5f, rear + 0.02f), new Vector3(inner * 2f - 0.06f, h, 0.1f), Seat,
+                c.RoundedBox(new Vector3(0, cushionY + h * 0.5f, rear + 0.02f), new Vector3(inner * 2f - 0.06f, h, 0.1f), Seat,
                     new Basis(Vector3.Right, -0.25f));
             }
         }
@@ -234,31 +235,31 @@ public static partial class CarMeshBuilder
         float dashBottom = Mathf.Min(Mathf.Max(d.Belt - 0.2f, seat.Hip.Y + 0.3f), dashTop - 0.08f);
         float dashRear = dialZ + 0.035f;
         float dashFront = Mathf.Max(d.WsBase + 0.02f, dashRear + 0.1f);
-        c.Box(new Vector3(0, (dashTop + dashBottom) * 0.5f, (dashRear + dashFront) * 0.5f),
+        c.RoundedBox(new Vector3(0, (dashTop + dashBottom) * 0.5f, (dashRear + dashFront) * 0.5f),
             new Vector3(inner * 2f, dashTop - dashBottom, dashFront - dashRear), Dash);
         // the binnacle box behind the dials and its hood over them
         if (!body.CentreDisplay)
         {
-            c.Box(face + new Vector3(0, 0, 0.07f), new Vector3(spread * 2f + 0.16f, 0.16f, 0.14f), Dash);
-            c.Box(face + new Vector3(0, 0.088f, 0.02f), new Vector3(spread * 2f + 0.18f, 0.02f, 0.2f), Dash);
+            c.RoundedBox(face + new Vector3(0, 0, 0.07f), new Vector3(spread * 2f + 0.16f, 0.16f, 0.14f), Dash);
+            c.RoundedBox(face + new Vector3(0, 0.088f, 0.02f), new Vector3(spread * 2f + 0.18f, 0.02f, 0.2f), Dash);
         }
         // centre stack, gear lever
-        c.Box(new Vector3(0, (FloorY + dashBottom) * 0.5f + 0.05f, dashRear - 0.08f), new Vector3(0.22f, dashBottom - FloorY - 0.1f, 0.18f), Dash);
+        c.RoundedBox(new Vector3(0, (FloorY + dashBottom) * 0.5f + 0.05f, dashRear - 0.08f), new Vector3(0.22f, dashBottom - FloorY - 0.1f, 0.18f), Dash);
         c.Box(new Vector3(0, dashBottom - 0.02f, dashRear - 0.172f), new Vector3(0.16f, 0.06f, 0.01f), Trim);
         if (body.Automatic)
         {
             // a selector, not a lever (#760): the Prius's little joystick standing out of the dash
             // on the driver's side of the stack, within a hand's reach of the wheel
             var stub = new Vector3(Mathf.Sign(seat.Hip.X) * 0.13f, dashBottom + 0.04f, dashRear - 0.01f);
-            c.Box(stub, new Vector3(0.07f, 0.05f, 0.03f), Trim);
+            c.RoundedBox(stub, new Vector3(0.07f, 0.05f, 0.03f), Trim);
             c.Tube(stub, stub + new Vector3(0, 0.02f, -0.06f), 0.007f, Steel, 4);
-            c.Box(stub + new Vector3(0, 0.025f, -0.07f), new Vector3(0.03f, 0.03f, 0.03f), Steel);
+            c.RoundedBox(stub + new Vector3(0, 0.025f, -0.07f), new Vector3(0.03f, 0.03f, 0.03f), Steel);
         }
         else
         {
             var gate = new Vector3(0, FloorY + 0.16f, seat.Hip.Z + 0.3f);
             c.Tube(gate, gate + new Vector3(0, 0.17f, -0.04f), 0.012f, Steel, 4);
-            c.Box(gate + new Vector3(0, 0.19f, -0.045f), new Vector3(0.045f, 0.045f, 0.045f), Trim);
+            c.RoundedBox(gate + new Vector3(0, 0.19f, -0.045f), new Vector3(0.045f, 0.045f, 0.045f), Trim);
         }
 
         // an automatic's forward gears all read D (#760)
@@ -372,8 +373,8 @@ public static partial class CarMeshBuilder
         Vector3 P(float u, float v, float lift) => at + right * u + up * v + n * lift;
 
         // the hood, sunk into the dash, its visor over the face, and the face black glass
-        c.Box(P(0, -0.01f, -0.045f), new Vector3(0.4f, 0.12f, 0.09f), Dash, basis);
-        c.Box(P(0, 0.055f, -0.005f), new Vector3(0.42f, 0.015f, 0.1f), Dash, basis);
+        c.RoundedBox(P(0, -0.01f, -0.045f), new Vector3(0.4f, 0.12f, 0.09f), Dash, basis);
+        c.RoundedBox(P(0, 0.055f, -0.005f), new Vector3(0.42f, 0.015f, 0.1f), Dash, basis);
         inst.Box(P(0, 0, 0.001f), new Vector3(0.36f, 0.085f, 0.002f), Screen, basis);
 
         // the speed, three figures to the left of the middle, units first; the gear right of them
@@ -425,13 +426,14 @@ public static partial class CarMeshBuilder
         var ahead = new Vector3(0, Mathf.Sin(recline), Mathf.Cos(recline));
         var tilt = new Basis(Vector3.Right, -recline);
         float cushion = hip.Y - 0.09f;
-        s.Box(new Vector3(hip.X, (cushion + floor) * 0.5f, hip.Z + 0.12f), new Vector3(0.46f, cushion - floor, 0.46f), colour,
+        // rounded where the scratch is smooth (a lit style's rounded car, #760), boxes otherwise
+        s.RoundedBox(new Vector3(hip.X, (cushion + floor) * 0.5f, hip.Z + 0.12f), new Vector3(0.46f, cushion - floor, 0.46f), colour,
             new Basis(Vector3.Right, -0.08f));
-        s.Box(hip + back * 0.3f - ahead * 0.17f, new Vector3(0.48f, 0.62f, 0.1f), colour, tilt);
-        s.Box(hip + back * 0.7f - ahead * 0.17f, new Vector3(0.26f, 0.17f, 0.1f), colour, tilt);
+        s.RoundedBox(hip + back * 0.3f - ahead * 0.17f, new Vector3(0.48f, 0.62f, 0.1f), colour, tilt);
+        s.RoundedBox(hip + back * 0.7f - ahead * 0.17f, new Vector3(0.26f, 0.17f, 0.1f), colour, tilt);
         // side bolsters
         foreach (float sx in new[] { -1f, 1f })
-            s.Box(hip + new Vector3(sx * 0.22f, 0, 0) + back * 0.28f - ahead * 0.1f, new Vector3(0.05f, 0.5f, 0.1f), colour, tilt);
+            s.RoundedBox(hip + new Vector3(sx * 0.22f, 0, 0) + back * 0.28f - ahead * 0.1f, new Vector3(0.05f, 0.5f, 0.1f), colour, tilt);
     }
 
     /// <summary>

@@ -262,10 +262,11 @@ public partial class CarRig : Node3D, IHingedDoors, Items.IBeatReactive
 
     /// <param name="gauges">The dials' full scales; the default suits a sports car.</param>
     /// <param name="driver">The figure at the wheel, in its colours; null for an empty car (parked, previewed).</param>
-    public static CarRig Create(CarBody body, float wheelbase, CarGauges? gauges = null, HumanPalette? driver = null)
+    /// <param name="smooth">The lit styles' rounded body where the shape has one (#760); null = as the style says, false for the hull's measure.</param>
+    public static CarRig Create(CarBody body, float wheelbase, CarGauges? gauges = null, HumanPalette? driver = null, bool? smooth = null)
     {
         var rig = new CarRig { Name = "Car", _driverPalette = driver };
-        rig.Assemble(CarMeshBuilder.Build(body, wheelbase, gauges));
+        rig.Assemble(CarMeshBuilder.Build(body, wheelbase, gauges, smooth));
         // a preset's ride height, tread and off-road kit: the body moves with everything on it,
         // the wheels stay on the road (they are the rig's own children)
         rig._body.Position += Vector3.Up * body.Lift;

@@ -246,11 +246,12 @@ public sealed class Car : Rideable, IEngined
     public override bool ExitLeft => Spec.Body.LeftHandDrive;
     // measured from this model's own mesh (Rideable.Measured): an AE86 is not an NSX. Cached per
     // model and preset (an SUV stands taller than the same car on semi-slicks), so always that
-    // preset's look with stock garage parts and the doors shut: an open door is not hull
+    // preset's look with stock garage parts and the doors shut: an open door is not hull. Always
+    // the PS1 body, never a lit style's rounded one (#760): what you hit is the same on every client
     public override (Vector3 Centre, Vector3 Size) ParkedBox => Measured((Kind, Spec.SetupId), _ =>
     {
         var body = CarCatalog.For(Kind) is { } stock ? CarSetups.For(Spec.SetupId).Apply(stock).Body : Spec.Body;
-        return CarRig.Create(body, Spec.Wheelbase);
+        return CarRig.Create(body, Spec.Wheelbase, smooth: false);
     });
 
     // ---- what the feel layer and the rig read ----
