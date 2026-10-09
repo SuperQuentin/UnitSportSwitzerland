@@ -959,7 +959,7 @@ public static partial class TileRewriter
     /// A joining road's side cut back from a junction (#711): <c>Length</c> metres from the segment's end there
     /// (<c>AtEnd</c>) on the drawing's right or left (<c>Right</c>), where a crossing road's side carried on to the kerb covers it.
     /// </summary>
-    private sealed record SideCut(RoadSegment Whole, TileId Tile, bool AtEnd, bool Right, double Length);
+    private sealed record SideCut(RoadSegment Whole, TileId Tile, bool AtEnd, bool Right, double Length, bool Path = false);
 
     /// <summary>
     /// Cuts a joining road's side back (#711, <see cref="SideCut"/>): over its first <c>Length</c> metres from the junction the

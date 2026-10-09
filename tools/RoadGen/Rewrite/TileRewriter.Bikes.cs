@@ -1,4 +1,5 @@
 namespace UnitSport.Tools.RoadGen.Rewrite;
+using System.Globalization;
 
 using UnitSport.Terrain.Format;
 using UnitSport.Tools.RoadGen.Geometry;
@@ -182,6 +183,8 @@ public static partial class TileRewriter
         List<SideCut> cutBacks)
     {
         var net = result.Network;
+        // the sides carried on to the kerb, each on its own: laid once every junction is done (#711)
+        var carriedSides = new List<(TileId Home, List<(RoadAreaProp Band, List<Vec2> Ring)> Bands)>();
         bool IsCar(int linkId) => net.Links[linkId].Tag is Source s && PriorityPlanner.IsCarRoad(s.Segment.Class)
             && (s.Segment.Flags & RoadFlags.Stairs) == 0;
         foreach (var (junction, plan) in priority.Plans)
@@ -273,6 +276,8 @@ public static partial class TileRewriter
                             && Math.Sign(ua.Cross(Vec2.FromHeading(junction.Arms[i].OutwardHeading))) == sideSign)
                         .ToList();
                     Vec2 da = (ca - from).Normalized(), db = (cb - to).Normalized();
+                    if (Environment.GetEnvironmentVariable("PAIRDBG") is { } pd && junction.Centre.DistanceTo(new Vec2(double.Parse(pd.Split(',')[0], CultureInfo.InvariantCulture), double.Parse(pd.Split(',')[1], CultureInfo.InvariantCulture))) < 20)
+                        Console.WriteLine($"[pair] node {junction.NodeId} at {junction.Centre.X:F1},{junction.Centre.Y:F1} arms {ia}->{ib} ({a.OutwardHeading * 180 / Math.PI:F0} / {b.OutwardHeading * 180 / Math.PI:F0}) side {k}: a {(sa.HasTrack ? "track" : sa.HasLane ? "lane" : "-")} b {(sb.HasTrack ? "track" : sb.HasLane ? "lane" : "-")} joined [{string.Join(",", joined)}] ca {ca.X:F1},{ca.Y:F1} cb {cb.X:F1},{cb.Y:F1}");
                     // the crossing's ends where the paths or lanes start (#700)
                     ca += ua * endInset.GetValueOrDefault((ia, k == 0));
                     cb += ub * endInset.GetValueOrDefault((ib, k != 0));
@@ -383,12 +388,25 @@ public static partial class TileRewriter
                         if (PathsToKerb(home, junction, islands.GetValueOrDefault(home), joined, sa, sb, ca, da, ua, xa, cb, db, ub, xb, ca.DistanceTo(cb) + 5,
                                 p => HeightAt(anchors, p)) is { } toKerb)
                         {
-                            Get(bridges, home).AddRange(toKerb.Bands);
+
                             Get(pathEnds, home).AddRange(toKerb.Ends);
                             // the joining road's side under the carried one starts behind it: no two surfaces in one place
-                            foreach (var (pathEnd, c, d, u, w) in new[] { (toKerb.Ends[0], ca, da, ua, sa.OuterDm / 10.0 + xa), (toKerb.Ends[1], cb, db, ub, sb.OuterDm / 10.0 + xb) })
-                                if (SideUnder(junction, plan, joined, new Vec2(pathEnd.At.X + home.MinE, pathEnd.At.Y + home.MaxN), c + d * w, u, segmentOf, finalPieces) is { } under)
-                                    cutBacks.Add(under);
+                            // a side whose kerb meets a joining road's side with a path of its own is not carried straight on (#711, the
+                            // user's review): the path turns that corner, and the corner planner lays it in both sides' bands. Only a
+                            // compact corner: the side starting at the mouth, its carried stretch short (else it stays carried)
+                            var sideBands = new[] { toKerb.Bands.GetRange(0, toKerb.SplitAt), toKerb.Bands.GetRange(toKerb.SplitAt, toKerb.Bands.Count - toKerb.SplitAt) };
+                            int sideIndex = 0;
+                            foreach (var (pathEnd, c, d, u, w, inset) in new[] { (toKerb.Ends[0], ca, da, ua, sa.OuterDm / 10.0 + xa, endInset.GetValueOrDefault((ia, k == 0))),
+                                         (toKerb.Ends[1], cb, db, ub, sb.OuterDm / 10.0 + xb, endInset.GetValueOrDefault((ib, k != 0))) })
+                            {
+                                var under = SideUnder(junction, plan, joined, new Vec2(pathEnd.At.X + home.MinE, pathEnd.At.Y + home.MaxN), c + d * w, u, segmentOf, finalPieces);
+                                if (under is { Length: > 0 }) cutBacks.Add(under);   // the corner owns that ground either way
+                                if (under is { Path: true } && inset < 1 && pathEnd.Start.DistanceTo(pathEnd.At) < TurnReach) stats.PathsToKerbTurning++;
+                                else carriedSides.Add((home, sideBands[sideIndex]));
+                                if (Environment.GetEnvironmentVariable("PAIRDBG") is { } pd2 && junction.Centre.DistanceTo(new Vec2(double.Parse(pd2.Split(',')[0], CultureInfo.InvariantCulture), double.Parse(pd2.Split(',')[1], CultureInfo.InvariantCulture))) < 20)
+                                    Console.WriteLine($"[pair]   side {sideIndex} kerb at {pathEnd.At.X + home.MinE:F1},{pathEnd.At.Y + home.MaxN:F1}: {(under is null ? "meets no joining side" : under.Path ? "joining side has a path" : "carried")}, inset {inset:F1}, stretch {pathEnd.Start.DistanceTo(pathEnd.At):F1}");
+                                sideIndex++;
+                            }
                             var (kerbA, kerbB) = (toKerb.KerbA, toKerb.KerbB);
                             List<Vec2> Across(double oa, double ob) => Densify(kerbA(oa), kerbB(ob), 2.0);
                             float across = (float)(Math.Min(sa.BikeDm, sb.BikeDm) / 10.0 - 2 * lw - 2 * RedInset);
@@ -442,7 +460,26 @@ public static partial class TileRewriter
                 }
             }
         }
+        // (#711) two sides carried on to the kerb that cross in one corner (a junction of several nodes: each arm's path carried
+        // across the other's road) would lie over each other: neither is laid, the corner planner lays that corner in its sides'
+        // bands (path along the kerb, sidewalk outside), and both crossings start at its kerb
+        static bool Over(List<(RoadAreaProp Band, List<Vec2> Ring)> x, List<(RoadAreaProp Band, List<Vec2> Ring)> y) =>
+            x.Any(a => y.Any(b => b.Ring.Any(p => PriorityPlanner.Inside(a.Ring, p)) || a.Ring.Any(p => PriorityPlanner.Inside(b.Ring, p))));
+        var crossing = new HashSet<int>();
+        for (int x = 0; x < carriedSides.Count; x++)
+            for (int y = x + 1; y < carriedSides.Count; y++)
+                if (carriedSides[x].Home == carriedSides[y].Home && Over(carriedSides[x].Bands, carriedSides[y].Bands))
+                {
+                    crossing.Add(x);
+                    crossing.Add(y);
+                }
+        stats.PathsToKerbCrossing += crossing.Count;
+        for (int x = 0; x < carriedSides.Count; x++)
+            if (!crossing.Contains(x)) Get(bridges, carriedSides[x].Home).AddRange(carriedSides[x].Bands);
     }
+
+    /// <summary>A side carried on to the kerb turns the corner instead only where its carried stretch is shorter than this (m, #711).</summary>
+    private const double TurnReach = 8.0;
 
     /// <summary>Points every <paramref name="step"/> metres or less from <paramref name="a"/> to <paramref name="b"/>, both ends included (paint heights follow the junction).</summary>
     private static List<Vec2> Densify(Vec2 a, Vec2 b, double step)
@@ -848,7 +885,7 @@ public static partial class TileRewriter
     /// (shift included) meets the kerb, the crossing's ends; <c>Ends</c>: where each side's outer edge meets it, tile-local,
     /// for the sidewalk corner beside (<see cref="CornerPlanner.PathEnd"/>). Null where a side's outer edge never meets it.
     /// </summary>
-    private static (List<(RoadAreaProp Band, List<Vec2> Ring)> Bands, Func<double, Vec2> KerbA, Func<double, Vec2> KerbB, List<CornerPlanner.PathEnd> Ends)?
+    private static (List<(RoadAreaProp Band, List<Vec2> Ring)> Bands, int SplitAt, Func<double, Vec2> KerbA, Func<double, Vec2> KerbB, List<CornerPlanner.PathEnd> Ends)?
         PathsToKerb(TileId home, Junction junction, List<RoadAreaProp>? pavement, List<int> joined, RoadSide sa, RoadSide sb,
             Vec2 ca, Vec2 da, Vec2 ua, double xa, Vec2 cb, Vec2 db, Vec2 ub, double xb, double reach, Func<Vec2, float> height)
     {
@@ -867,8 +904,10 @@ public static partial class TileRewriter
         if (Run(ca, da, ua, wa) is not { } outA || Run(cb, db, ub, wb) is not { } outB) return null;
         Func<double, Vec2> Kerb(Vec2 c, Vec2 d, Vec2 u) => o => c + d * o - u * (Run(c, d, u, o) ?? 0);
         var bands = new List<(RoadAreaProp Band, List<Vec2> Ring)>();
-        foreach (var (side, c, d, u, x) in new[] { (sa, ca, da, ua, xa), (sb, cb, db, ub, xb) })
+        int splitAt = 0;
+        foreach (var (side, c, d, u, x, first) in new[] { (sa, ca, da, ua, xa, true), (sb, cb, db, ub, xb, false) })
         {
+            if (!first) splitAt = bands.Count;   // side B's bands from here
             // a fixed count of points per line, so every band's lines pair up (BridgePath keeps the outer edge's samples)
             List<Vec2> Line(double o, double _)
             {
@@ -885,7 +924,7 @@ public static partial class TileRewriter
             new(Local(ca + da * wa - ua * outA), ua, Local(ca + da * wa)),
             new(Local(cb + db * wb - ub * outB), ub, Local(cb + db * wb)),
         };
-        return (bands, Kerb(ca, da, ua), Kerb(cb, db, ub), ends);
+        return (bands, splitAt, Kerb(ca, da, ua), Kerb(cb, db, ub), ends);
     }
 
     /// <summary>
@@ -906,7 +945,7 @@ public static partial class TileRewriter
             {
                 var e = left ? arm.Left : arm.Right;
                 double s = (kerbPoint - e).Dot(uj), off = Math.Abs((kerbPoint - e).Cross(uj));
-                if (s > 0.2 && off < 0.5 && (best is null || off < best.Value.Off)) best = (j, left, off);
+                if (s > -1.5 && off < 0.5 && (best is null || off < best.Value.Off)) best = (j, left, off);   // (#711: at the mouth too, or just inside it)
             }
         }
         if (best is not { } b) return null;
@@ -926,10 +965,12 @@ public static partial class TileRewriter
             double den = uJ.Cross(u);
             return Math.Abs(den) < 0.2 ? null : (edgeAt - q).Cross(u) / den;
         }
-        if (Cross(edge) is not { } atKerb || Cross(edge + outward * (side.OuterDm / 10.0 + side.ShiftAt(end == LinkEnd.Start ? 0 : 1))) is not { } atOuter) return null;
+        if (Cross(edge) is not { } atKerb || Cross(edge + outward * (side.OuterDm / 10.0 + side.ShiftAt(end == LinkEnd.Start ? 0 : 1))) is not { } atOuter)
+            return new SideCut(so.Segment, so.Tile, end == LinkEnd.End, segRight, 0, side.HasTrack);
         double length = Math.Max(atKerb, atOuter) + 0.05;
-        if (length < 0.3 || length > 20) return null;
-        return new SideCut(so.Segment, so.Tile, end == LinkEnd.End, segRight, length);
+        // nothing to cut back (it meets the side at its start), or too far: what the side is still tells (#711)
+        if (length < 0.3 || length > 20) length = 0;
+        return new SideCut(so.Segment, so.Tile, end == LinkEnd.End, segRight, length, side.HasTrack);
     }
 
     /// <summary>

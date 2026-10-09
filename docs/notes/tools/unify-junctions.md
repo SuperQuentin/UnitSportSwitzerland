@@ -159,9 +159,18 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   plain sidewalk; split along the corner's bisector, each half is cut into its side's verge, path and sidewalk at their offsets
   from that side's kerb (sloped kerb strips left out, the next band takes them; the first band reaches in to the kerb), so a
   path runs on through it. Laid as extra props (`_extra`), kept by `TileRewriter.Unbridged` (`CornerPlanner.IsClearOfBands`:
-  cut around the carried bands already). **Open**: at the two-node lights junction LV95 2506163,1137797 both sides of that
-  corner are carried straight on (W east across the SW road, SW north-east across the W road), so the two carried sides cross
-  in the corner: patchy. A corner where two carried paths meet wants the path to turn the corner instead.
+  cut around the carried bands already). The two carried paths crossing in the corner at LV95 2506163,1137797: fixed below
+  (the path turns the corner).
+- **The path turns the corner where both roads have one** (the user's loop: holes, sidewalk clipping, a broken path at the
+  two-node lights junction LV95 2506168,1137801): a side carried on to the kerb whose kerb meets a joining road's side that
+  has a path of its own (`SideUnder`, now at the mouth too, `SideCut.Path`) is not carried straight on when its carried
+  stretch is short (< `TurnReach` 8 m, the side starting at the mouth): the corner planner lays that corner in bands round
+  its kerb line (`Gap`: each inner band, verge and path, offset from the kerb line, the sidewalk the rest), cut round the
+  carried bands and the car roads' ribbons (`RoadTriangles`; footpaths and tracks excluded: they end in the corner). Where
+  only one side has a path, the corner is sidewalk. Beside any carried side the corner is now this banded fill first.
+  A footpath arm no longer splits a junction's corner (`Corners`: corners between the streets only). Carried sides are laid
+  after every junction (`carriedSides`); two that overlap are both left to the corner. `PAIRDBG=E,N` traces the pairs and
+  each side's decision. Sion tiles: 22 sides turn; corners built 1,601 -> ~1,860 (footpath arms no longer split them).
 - **The stop line and the centre line of an approach with more lanes in than out** (the user's review, Sion 2506148,1137808):
   lanes in place, the approach's centre line lies past the axis. The lights' stop line now starts there (`OwnLanes`), not at
   the axis (it left the left-turn lane without one), and `SolidToStop(centreAt:)` finds that centre line (it searched the
