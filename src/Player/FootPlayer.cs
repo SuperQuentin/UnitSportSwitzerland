@@ -3179,7 +3179,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _shutDriverIn = 0f;
         ShowroomYaw = null;
         TrailerCode = _ride is Truck fresh ? fresh.TrailerCode : 0;
-        _truckPitch = 0f;
+        _truckPitch = _carPitch = _carRoll = 0f;
         // The pose travels with the kind, and each kind reads Anim its own way: left as it was, the
         // next update would hand a bike its rider's stride phase as a crank angle (seen: 0.93 rad).
         Anim = default;
@@ -4327,6 +4327,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         ShoveInto(dt, velocity with { Y = 0 });
         // the sections behind a truck's cab follow it, and report what they hit
         if (_ride is Truck train) StepSections(train, dt);
+        else if (_ride is Car car) TiltCar(car, dt);
         // a farm machine works the ground under its bar (#494, FootPlayer.Farm.cs)
         if (_ride is Truck { Spec.Farm: true } farm) StepFarm(farm, dt);
 
@@ -4497,7 +4498,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
         var pivot = Vector3.Up * (_bailTimer > 0 ? 0.3f : 0.9f);
-        _visual.Transform = new Transform3D(_holdTilt, Vector3.Zero) * new Transform3D(basis, pivot - basis * pivot);
+        // a car stands on the ground under its wheels (TiltCar), tipped about its contact patch
+        var ground = _ride is Car ? new Basis(Vector3.Right, _carPitch) * new Basis(Vector3.Back, _carRoll) : Basis.Identity;
+        _visual.Transform = new Transform3D(_holdTilt * ground, Vector3.Zero) * new Transform3D(basis, pivot - basis * pivot);
     }
 
     private void UpdateRideCamera(float dt)
