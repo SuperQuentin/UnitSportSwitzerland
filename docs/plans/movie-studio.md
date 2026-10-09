@@ -9,6 +9,7 @@ Tracking: #637. Status: **milestone 1 built** (PR #642).
 |---|---|---|
 | 1 Replay buffer + clip editing | done: notes `movie/movie-studio`, `movie/movie-puppets` | #638 |
 | 1b Acted takes (layering) | planned | — |
+| 1c Sound: songs, game sound, beat markers, snapping | done: `movie/movie-sound` | #656 |
 | 2 Virtual cameras, lenses, lock, cuts, export | planned | — |
 | 3 VR performance + VR handheld camera | planned | — |
 | 4 Webcam/phone body tracking (VMC) | planned | — |
