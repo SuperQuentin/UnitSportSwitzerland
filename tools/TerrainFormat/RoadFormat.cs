@@ -362,7 +362,7 @@ public sealed class RoadLinearProp
 public enum AreaPropType : byte
 {
     None = 0,
-    Island = 1,       // roundabout centre island (#122)
+    Island = 1,       // roundabout centre island (#122); Variant 1 a flush mini disc, 2 a paved traffic island at traffic lights (#682)
     SplitterIsland = 2, // raised island at a roundabout entry (#122)
     Sidewalk = 3,     // a sidewalk patch not carried by a segment, e.g. a junction corner (#119)
     Pavement = 4,     // flush carriageway beside a segment: a turn lane's widening (#123); Height 0

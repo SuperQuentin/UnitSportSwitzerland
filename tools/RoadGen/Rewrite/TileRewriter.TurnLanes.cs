@@ -117,7 +117,7 @@ public static partial class TileRewriter
     private static double ExitStop(PocketPlan? exiting, PocketPlan? facing) =>
         exiting is not { ExitStopLine: true } p ? 0
         : SignalStopSetback + p.ExitSkew + SignalStopLine * 0.5
-          + (facing is { Dropped: false, BikeBox: true, In.ApproachWay.HasLeftBikeLane: true } ? BikeBoxDepth : 0);
+          + (facing is { Dropped: false, In.ApproachWay.HasLeftBikeLane: true } ? (facing.BikeBox ? BikeBoxDepth : AdvancedBikeLine) : 0);
 
     private static double Sq(double v) => v * v;
 
@@ -131,7 +131,7 @@ public static partial class TileRewriter
         Dictionary<TileId, List<RoadPaint>> paint, Dictionary<TileId, List<RoadAreaProp>> areas,
         Dictionary<TileId, List<RoadPointProp>> signs, List<(RoadSegment Segment, bool Right, (double From, double To) Along)> bikeBetween,
         Dictionary<RoadAreaProp, RoadSegment> stripOwners, TurnLaneStats stats, Func<int, LinkEnd, bool, RoadSide> streetSide,
-        List<PocketOpening>? openings = null)
+        List<PocketOpening>? openings = null, Dictionary<(int Node, int Arm), CornerArc>? arcs = null)
     {
         var net = result.Network;
         var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
@@ -259,9 +259,12 @@ public static partial class TileRewriter
             int side = r.InAtEnd ? 1 : -1;
             bool exitHere = slots.TryGetValue((seg, side), out var slot) && slot.ExitWay is not null && slot.Exit is { Dropped: false };
             double baseOffset = lp?.In.ApproachWay!.FullWidth ?? 0;
-            double reach = lp?.In.Storage ?? double.MaxValue;
+            // a little earlier than the left pocket is full (#682): the two widenings run into each other, no straight edge between
+            double reach = lp is null ? double.MaxValue : lp.In.Storage + RightEarlier;
             int self = output[tile].IndexOf(seg);
-            foreach (var (taper, storage) in RightPocketSizes)
+            // beside a left pocket the right one starts to widen where the left one has finished (#682): no stretch of straight edge between them
+            var sizes = lp is not null && reach >= 25 ? [(Math.Min(15.0, Math.Round(reach * 0.35)), reach - Math.Min(15.0, Math.Round(reach * 0.35))), .. RightPocketSizes] : RightPocketSizes;
+            foreach (var (taper, storage) in sizes)
             {
                 if (taper + storage > reach) continue;
                 var way = new Widening(seg, painted, tile, self, junctionAtEnd: r.InAtEnd, side, taper + storage, taper,
@@ -292,7 +295,9 @@ public static partial class TileRewriter
             var approach = inSlot.ApproachWay!;
             var departure = outSlot.ExitWay!;
             var armLanes = Arm(pocket.Node, pocket.Arm, pocket.Home);
-            approach.Layout = armLanes.Approach = LanesOf(approach, right);
+            approach.Layout = armLanes.Approach = LanesOf(approach, right, pocket.Signal);
+            if (pocket.Signal && approach.Layout is { Equal: true, LeftPocketLane: { } facing })
+                departure.SetExit(facing.To + approach.Layout.LeftBike, approach.Layout.LaneWidth);
             armLanes.AdvancedBikeLine = approach.HasLeftBikeLane && !pocket.BikeBox;
             armLanes.PlacedLeft(approach, inSlot.Storage, inSlot.Merged, pocket.RightTurn && right is null, pocket.Signal);
             if (pocket.ExitArm >= 0)
@@ -331,7 +336,7 @@ public static partial class TileRewriter
             var (seg, tile, _) = r.Segment;
             var lanes = Arm(r.Node, r.Arm, r.Home);
             // without a left pocket the layout is the right pocket's alone
-            lanes.Approach ??= LanesOf(null, r);
+            lanes.Approach ??= LanesOf(null, r, true);
             r.Way!.Emit(Get(paint, tile), Get(areas, tile), stripOwners);
             r.Way.StopShift = r.Skew;
             r.Way.Layout = lanes.Approach;
@@ -340,7 +345,7 @@ public static partial class TileRewriter
             stats.SignsMoved += r.Way.PushOut(Get(signs, tile));
             stats.RightPockets++;
         }
-        Corners(priority, net, placed, block, wanted, areas, stats, streetSide);
+        Corners(priority, net, placed, block, wanted, areas, stats, streetSide, arcs);
         return placed;
     }
 
@@ -355,10 +360,10 @@ public static partial class TileRewriter
     /// </summary>
     private static void Corners(PriorityResult priority, RoadNetwork net, Dictionary<(int Node, int Arm), ArmLanes> placed,
         HashSet<TileId> block, HashSet<TileId> wanted, Dictionary<TileId, List<RoadAreaProp>> areas, TurnLaneStats stats,
-        Func<int, LinkEnd, bool, RoadSide> streetSide)
+        Func<int, LinkEnd, bool, RoadSide> streetSide, Dictionary<(int Node, int Arm), CornerArc>? arcs)
     {
         var kerb = new JunctionOptions();
-        double Kerb(double half) => Math.Clamp(kerb.KerbFactor * half, kerb.MinKerb, kerb.MaxKerb);
+        double Kerb(double half) => kerb.Kerb(half);
         foreach (var (junction, plan) in priority.Plans)
         {
             int n = junction.Arms.Count;
@@ -375,23 +380,21 @@ public static partial class TileRewriter
                 var inWay = placed.GetValueOrDefault((junction.NodeId, i)) is { } li ? li.RightWay?.Way ?? li.LeftWay : null;
                 var outLanes = placed.GetValueOrDefault((junction.NodeId, j));
                 var outWay = outLanes?.ExitWay;
-                if (inWay is null && outWay is null) continue;
+                if (inWay is null && outWay is null && plan.Kind != PriorityPlanner.Kind.Signal) continue;
                 if (net.Links[ai.LinkId].Tag is not Source si || net.Links[aj.LinkId].Tag is not Source sj) continue;
                 // in town a sidewalk or path runs round the corner (#119, #120): its corner would have to
                 // follow the new kerb too, not done (#406): the corner stays square there
                 var ei = plan.Arms[i].End;
                 var ej = plan.Arms[j].End;
-                if (streetSide(ai.LinkId, ei, ei == LinkEnd.End).OuterDm > 0 || streetSide(aj.LinkId, ej, ej != LinkEnd.End).OuterDm > 0)
-                {
-                    stats.CornersInTown++;
-                    continue;
-                }
+                bool town = streetSide(ai.LinkId, ei, ei == LinkEnd.End).OuterDm > 0 || streetSide(aj.LinkId, ej, ej != LinkEnd.End).OuterDm > 0;
+                if (town) stats.CornersInTown++;
                 Vec2 ui = Vec2.FromHeading(ai.OutwardHeading), uj = Vec2.FromHeading(aj.OutwardHeading);
                 (Vec2 P, float Y) EdgeI(double d) => inWay?.OuterEdge(d) ?? (ai.Left + ui * d, si.SampleHeight(ai.Left + ui * d));
                 (Vec2 P, float Y) EdgeJ(double d) => outWay?.OuterEdge(d, outLanes!.ExitFar) ?? (aj.Right + uj * d, sj.SampleHeight(aj.Right + uj * d));
-                if (CornerPatch(junction, i, EdgeI, EdgeJ, Kerb(ai.HalfWidth), Kerb(aj.HalfWidth), anchors) is not { } patches)
+                if (town && arcs is not null && ArcOf(junction, i, EdgeI, EdgeJ, Kerb(ai.HalfWidth), Kerb(aj.HalfWidth), true) is { } arc) arcs[(junction.NodeId, i)] = arc;
+                if (CornerPatch(junction, i, EdgeI, EdgeJ, Kerb(ai.HalfWidth), Kerb(aj.HalfWidth), anchors, town) is not { } patches)
                 {
-                    stats.CornersRejected++;
+                    stats.CornersRejected++; if (Environment.GetEnvironmentVariable("CORNERDBG") == "1") Console.WriteLine($"[corner] rejected (simple) at {junction.Centre.X:F0},{junction.Centre.Y:F0} corner {i}");
                     continue;
                 }
                 if (patches.Count == 0) continue;
@@ -399,7 +402,7 @@ public static partial class TileRewriter
                 {
                     var outline = patch.Select(p => p.P).ToList();
                     var tris = Junctions.EarClip.Triangulate(outline);
-                    if (tris.Count != 3 * (outline.Count - 2)) { stats.CornersRejected++; continue; }
+                    if (tris.Count != 3 * (outline.Count - 2)) { stats.CornersRejected++; if (Environment.GetEnvironmentVariable("CORNERDBG") == "1") Console.WriteLine($"[corner] rejected (tris) at {junction.Centre.X:F0},{junction.Centre.Y:F0} corner {i}"); continue; }
                     var v = new float[patch.Count * 3];
                     for (int k = 0; k < patch.Count; k++)
                         (v[k * 3], v[k * 3 + 1], v[k * 3 + 2]) = ((float)(patch[k].P.X - home.MinE), patch[k].Y, (float)(home.MaxN - patch[k].P.Y));
@@ -427,54 +430,43 @@ public static partial class TileRewriter
     /// (a straight road's two sides carried on); null when an outline is not simple.
     /// </summary>
     private static List<List<(Vec2 P, float Y)>>? CornerPatch(Junction junction, int i, Func<double, (Vec2 P, float Y)> edgeI,
-        Func<double, (Vec2 P, float Y)> edgeJ, double kerbI, double kerbJ, List<(Vec2 At, float Height)> anchors)
+        Func<double, (Vec2 P, float Y)> edgeJ, double kerbI, double kerbJ, List<(Vec2 At, float Height)> anchors, bool clamp)
     {
         int n = junction.Arms.Count, j = (i + 1) % n;
         Vec2 ai = junction.Arms[i].Left, aj = junction.Arms[j].Right;
-        var mi = edgeI(0).P;
-        var mj = edgeJ(0).P;
-        // the widened edges as lines near the mouths (a taper leans in a little)
-        var ei = (edgeI(5).P - mi).Normalized();
-        var ej = (edgeJ(5).P - mj).Normalized();
-        double den = ei.Cross(ej);
-        if (Math.Abs(den) < 0.2) return [];   // within ~12 degrees of parallel: the two sides of a road carried on
-        double ci = (mj - mi).Cross(ej) / den, cj = (mj - mi).Cross(ei) / den;
-        var c = mi + ei * ci;
-        double reach = Math.Max(junction.Arms[i].Trim, junction.Arms[j].Trim) * 1.5 + 10;
-        if (c.DistanceTo(junction.Centre) > reach || ci < -reach || cj < -reach) return [];
-        float yc = (edgeI(Math.Max(ci, 0)).Y + edgeJ(Math.Max(cj, 0)).Y) * 0.5f;
-        // the kerb's ends: an allowance past the corner point along each widened edge, never inside the mouth
-        var (fi, fyi) = edgeI(Math.Max(ci + kerbI, 0));
-        var (fj, fyj) = edgeJ(Math.Max(cj + kerbJ, 0));
-        var round = new List<(Vec2 P, float Y)> { (c, yc) };
-        for (int k = 0; k <= 8; k++)
-        {
-            double t = k / 8.0, mt = 1 - t;
-            round.Add((fi * (mt * mt) + c * (2 * mt * t) + fj * (t * t), (float)(fyi + (fyj - fyi) * t)));
-        }
-        // the junction polygon's own corner, from arm j's right end back to arm i's left end
+        if (ArcOf(junction, i, edgeI, edgeJ, kerbI, kerbJ, clamp) is not { } arc) return [];
+        var (c, fi, fyi, fj, fyj) = (arc.C, arc.Fi, arc.Yi, arc.Fj, arc.Yj);
+        // the pavement the corner adds: from the junction out along each mouth and widened edge, round the kerb arc
+        var head = new List<(Vec2 P, float Y)> { (ai, HeightAt(anchors, ai)), edgeI(0), (fi, fyi) };
+        var arcPoints = arc.Arc(0, 0);
+        for (int k = 0; k < arcPoints.Count; k++)
+            head.Add((arcPoints[k], (float)(fyi + (fyj - fyi) * k / (arcPoints.Count - 1))));
+        head.Add(edgeJ(0));
+        // back along the junction polygon's own corner, from arm j's right end to arm i's left end (it
+        // is paved inside it already). Its curve and the arc leave the arms together, so a point or two
+        // at each end may have to go for the outline to stay simple; through the centre as a last resort
         var ring = junction.Boundary;
-        int ri = Nearest(ring, ai), rj = Nearest(ring, aj);
+        int ri = NearestOnRing(ring, ai), rj = NearestOnRing(ring, aj);
         var back = new List<(Vec2 P, float Y)>();
         for (int k = rj; k != ri; k = (k - 1 + ring.Count) % ring.Count) back.Add((ring[k], HeightAt(anchors, ring[k])));
         back.Add((ai, HeightAt(anchors, ai)));
-        // between the junction, the mouths and the corner point; where the mouths' edges cross
-        // (both widened edges meet past both mouths) only the part inside them
-        var inner = new List<(Vec2 P, float Y)>();
-        if (SegmentsCross(ai, mi, mj, aj) is { } x) inner.Add((x, HeightAt(anchors, x)));
-        else inner.AddRange([edgeI(0), (c, yc), edgeJ(0)]);
-        inner.AddRange(back);
-        var patches = new List<List<(Vec2 P, float Y)>>();
-        foreach (var patch in (ReadOnlySpan<List<(Vec2 P, float Y)>>)[round, inner])
+        List<(Vec2 P, float Y)>? clean = null;
+        for (int skip = 0; skip <= 3 && clean is null; skip++)
         {
-            var clean = Clean(patch);
-            if (clean.Count < 3 || Area(clean) < 0.05) continue;   // nothing there (a widening ending right at the corner point)
-            if (!Simple(clean)) return null;
-            patches.Add(clean);
+            if (back.Count - 2 * skip < 2) break;
+            var outline = Clean([.. head, .. back.Skip(skip).Take(back.Count - 2 * skip)]);
+            if (outline.Count >= 3 && Simple(outline)) clean = outline;
         }
-        return patches;
+        if (clean is null)
+        {
+            var viaCentre = Clean([.. head, (aj, HeightAt(anchors, aj)), (junction.Centre, HeightAt(anchors, junction.Centre))]);
+            if (viaCentre.Count >= 3 && Simple(viaCentre)) clean = viaCentre;
+        }
+        if (clean is null) return null;
+        if (Area(clean) < 0.05) return [];   // nothing there
+        return [clean];
 
-        static int Nearest(List<Vec2> ring, Vec2 p)
+        static int NearestOnRing(List<Vec2> ring, Vec2 p)
         {
             int best = 0;
             for (int k = 1; k < ring.Count; k++) if (ring[k].DistanceSquaredTo(p) < ring[best].DistanceSquaredTo(p)) best = k;
@@ -482,6 +474,80 @@ public static partial class TileRewriter
         }
     }
 
+    /// <summary>
+    /// The kerb arc of one corner (#682): a circle of radius <c>R</c> round <c>O</c>, tangent to
+    /// both widened edges at <c>Fi</c> and <c>Fj</c>, which lie the same distance from their meeting
+    /// point <c>C</c> (<c>R</c> = that tangent length x tan(half the angle between the edges)); the
+    /// mouths <c>Mi</c>, <c>Mj</c>; each edge's direction out from its mouth (<c>Ei</c>, <c>Ej</c>) and
+    /// heights. A sidewalk or path round the corner is a concentric arc, its radius less by its offset.
+    /// </summary>
+    private sealed record CornerArc(Vec2 C, Vec2 O, double R, Vec2 Fi, float Yi, Vec2 Fj, float Yj, Vec2 Mi, Vec2 Mj, Vec2 Ei, Vec2 Ej)
+    {
+        private const int Samples = 12;
+
+        /// <summary>The arc <paramref name="di"/> / <paramref name="dj"/> outward from the kerb at its two ends (towards the circle's centre), radius by radius.</summary>
+        public List<Vec2> Arc(double di, double dj)
+        {
+            double ai = Math.Atan2(Fi.Y - O.Y, Fi.X - O.X), aj = Math.Atan2(Fj.Y - O.Y, Fj.X - O.X);
+            double delta = Math.IEEERemainder(aj - ai, 2 * Math.PI);
+            double ri = Math.Max(R - di, 0.1), rj = Math.Max(R - dj, 0.1);
+            var line = new List<Vec2>(Samples + 1);
+            for (int k = 0; k <= Samples; k++)
+            {
+                double t = (double)k / Samples, a = ai + delta * t, r = ri + (rj - ri) * t;
+                line.Add(new Vec2(O.X + Math.Cos(a) * r, O.Y + Math.Sin(a) * r));
+            }
+            return line;
+        }
+
+        /// <summary>The arc offset <paramref name="di"/> / <paramref name="dj"/>, led in and out along the edges from the mouths when it ends short of them.</summary>
+        public List<Vec2> Offset(double di, double dj)
+        {
+            var line = Arc(di, dj);
+            if (Fi.DistanceTo(Mi) > 0.05) line.Insert(0, Mi + Ei.Perp * di);
+            if (Fj.DistanceTo(Mj) > 0.05) line.Add(Mj - Ej.Perp * dj);
+            return line;
+        }
+    }
+
+    /// <summary>
+    /// The kerb arc between arm i's widened approach edge and arm j's widened departing edge, null where
+    /// they do not meet near the junction. Its tangent length is the shorter kerb allowance past the
+    /// corner point; in town (<paramref name="clamp"/>) never past a mouth, where the arm's own sidewalk
+    /// or path begins: no longer than the corner point's distance back to either mouth, and no
+    /// shorter than 1 m (a widening that leaves no room: the corner stays square).
+    /// </summary>
+    private static CornerArc? ArcOf(Junction junction, int i, Func<double, (Vec2 P, float Y)> edgeI, Func<double, (Vec2 P, float Y)> edgeJ,
+        double kerbI, double kerbJ, bool clamp)
+    {
+        int j = (i + 1) % junction.Arms.Count;
+        var (mi, myi) = edgeI(0);
+        var (mj, myj) = edgeJ(0);
+        // the widened edges as lines near the mouths (a taper leans in a little)
+        var ei = (edgeI(5).P - mi).Normalized();
+        var ej = (edgeJ(5).P - mj).Normalized();
+        double den = ei.Cross(ej);
+        if (Math.Abs(den) < 0.2) return null;   // within ~12 degrees of parallel: the two sides of a road carried on
+        double ci = (mj - mi).Cross(ej) / den, cj = (mj - mi).Cross(ei) / den;
+        var c = mi + ei * ci;
+        double reach = Math.Max(junction.Arms[i].Trim, junction.Arms[j].Trim) * 1.5 + 10;
+        if (c.DistanceTo(junction.Centre) > reach || ci < -reach || cj < -reach) return null;
+        // the legs run from the corner point back to the mouths where there is room (the trims decided how much), else a kerb allowance
+        double leg = Math.Min(-ci, -cj);
+        if (!clamp && leg < 1) leg = Math.Min(kerbI, kerbJ);
+        if (leg < 1) return null;
+        // tangent points a leg past the corner point along each widened edge (before a mouth: on the edge's line)
+        (Vec2 P, float Y) At(Func<double, (Vec2 P, float Y)> edge, Vec2 m, float my, Vec2 e, double d) =>
+            d >= 0 ? edge(d) : (m + e * d, my);
+        var (fi, fyi) = At(edgeI, mi, myi, ei, ci + leg);
+        var (fj, fyj) = At(edgeJ, mj, myj, ej, cj + leg);
+        // the angle between the legs (out from the corner point) and the circle that touches both
+        double alpha = Math.Acos(Math.Clamp(ei.Dot(ej), -1, 1));
+        if (alpha < 0.3 || alpha > Math.PI - 0.3) return null;
+        double radius = leg * Math.Tan(alpha / 2);
+        var centre = c + (ei + ej).Normalized() * (radius / Math.Sin(alpha / 2));
+        return new CornerArc(c, centre, radius, fi, fyi, fj, fyj, mi, mj, ei, ej);
+    }
     private static double Area(List<(Vec2 P, float Y)> poly)
     {
         double area = 0;
@@ -509,7 +575,7 @@ public static partial class TileRewriter
             for (int b = a + 2; b < n; b++)
             {
                 if (a == 0 && b == n - 1) continue;
-                if (SegmentsCross(p[a], p[(a + 1) % n], p[b], p[(b + 1) % n]) is not null) return false;
+                if (SegmentsCross(p[a], p[(a + 1) % n], p[b], p[(b + 1) % n]) is { } hit) { if (Environment.GetEnvironmentVariable("CORNERDBG") == "1") Console.WriteLine($"[corner]   edges {a}-{a + 1} ({p[a].X:F1},{p[a].Y:F1})-({p[(a + 1) % n].X:F1},{p[(a + 1) % n].Y:F1}) and {b}-{b + 1} ({p[b].X:F1},{p[b].Y:F1})-({p[(b + 1) % n].X:F1},{p[(b + 1) % n].Y:F1}) cross at ({hit.X:F1},{hit.Y:F1})"); return false; }
             }
         return true;
     }
@@ -631,18 +697,43 @@ public static partial class TileRewriter
             public double Mid => (From + To) * 0.5;
         }
 
-        /// <summary>Where the car lanes end on the right: the through lane's outer edge.</summary>
-        private double CarEdge(double open) => Half - Bike + LeftFull + RightExtra * open;
+        /// <summary>
+        /// At traffic lights (#682) every car lane across the approach is the same width: what the approach's widened
+        /// edge leaves once the bike lanes are out, over its car lanes (the left pocket's, the through lane, the right
+        /// pocket's). Else the left pocket is the carriageway lane it was cut out of, the through lane what is left of
+        /// it and the right pocket a <see cref="TurnLane"/>.
+        /// </summary>
+        public bool Equal { get; set; }
 
-        public Lane? LeftPocketLane => LeftPocket > 0 ? new Lane(0, LeftPocket) : null;
-        public Lane? LeftBikeLane => LeftBike > 0 ? new Lane(LeftPocket, LeftPocket + LeftBike) : null;
-        public Lane Through(double open = 1) => new(LeftPocket + LeftBike, CarEdge(open));
+        private int CarLanes => (LeftPocket > 0 ? 1 : 0) + 1 + (Right ? 1 : 0);
+
+        /// <summary>The width of a car lane when <see cref="Equal"/>.</summary>
+        public double LaneWidth => (Half + LeftFull + (Right ? TurnLane + RightExtra : 0) - LeftBike - Bike) / CarLanes;
+
+        /// <summary>Where the left pocket's lane ends (its outer edge from the centre line).</summary>
+        private double PocketTo => LeftPocket <= 0 ? 0 : Equal ? LaneWidth : LeftPocket;
+
+        /// <summary>Where the car lanes end on the right: the through lane's outer edge.</summary>
+        private double CarEdge(double open)
+        {
+            double old = Half - Bike + LeftFull + RightExtra * open;
+            if (!Equal) return old;
+            // the lane widens to its width as the right pocket opens
+            double open0 = Half - Bike + LeftFull, full = PocketTo + (LeftPocket > 0 ? LeftBike : 0) + LaneWidth;
+            return Right ? open0 + (full - open0) * open : full;
+        }
+
+        private double RightWidth => Equal ? LaneWidth : TurnLane;
+
+        public Lane? LeftPocketLane => LeftPocket > 0 ? new Lane(0, PocketTo) : null;
+        public Lane? LeftBikeLane => LeftBike > 0 ? new Lane(PocketTo, PocketTo + LeftBike) : null;
+        public Lane Through(double open = 1) => new(PocketTo + LeftBike, CarEdge(open));
         public Lane? RightPocket(double open = 1) => !Right ? null
-            : BikeBetween ? new Lane(CarEdge(open) + Bike, CarEdge(open) + Bike + TurnLane * open)
-            : new Lane(CarEdge(open), CarEdge(open) + TurnLane * open);
+            : BikeBetween ? new Lane(CarEdge(open) + Bike, CarEdge(open) + Bike + RightWidth * open)
+            : new Lane(CarEdge(open), CarEdge(open) + RightWidth * open);
         /// <summary>The painted bike lane carried on through the junction (kerbside, or between in layout (b)).</summary>
         public Lane? BikeLane(double open = 1) => Bike <= 0 ? null
-            : Right && !BikeBetween ? new Lane(CarEdge(open) + TurnLane * open, CarEdge(open) + TurnLane * open + Bike)
+            : Right && !BikeBetween ? new Lane(CarEdge(open) + RightWidth * open, CarEdge(open) + RightWidth * open + Bike)
             : new Lane(CarEdge(open), CarEdge(open) + Bike);
         /// <summary>The carriageway's edge on the approach side, widening included.</summary>
         public double Edge(double open = 1) => Half + LeftFull + (Right ? (TurnLane + RightExtra) * open : 0);
@@ -651,13 +742,15 @@ public static partial class TileRewriter
     }
 
     /// <summary>The lanes of an approach from its left pocket's widening and its right pocket, either may be missing.</summary>
-    private static ApproachLayout LanesOf(Widening? left, RightPlan? right)
+    private static ApproachLayout LanesOf(Widening? left, RightPlan? right, bool equal = false)
     {
         var way = left ?? right!.Way!;
         // a right pocket beside a left one does not see the bike lane (it lies outside it): the left does
         double bike = left?.BikeWidth ?? right!.Way!.BikeWidth;
-        return new ApproachLayout(way.Half, bike, left?.PocketWidth ?? 0, left?.LeftBikeWidth ?? 0, left?.FullWidth ?? 0,
-            right is not null, right?.Way!.Extra ?? 0) { BikeBetween = right is { BikeBetween: true } && bike > 0 };
+        var dbg = new ApproachLayout(way.Half, bike, left?.PocketWidth ?? 0, left?.LeftBikeWidth ?? 0, left?.FullWidth ?? 0,
+            right is not null, right?.Way!.Extra ?? 0) { BikeBetween = right is { BikeBetween: true } && bike > 0, Equal = equal };
+        if (Environment.GetEnvironmentVariable("LAYDBG") == "1") Console.WriteLine($"[layout] half {dbg.Half:F2} bike {dbg.Bike:F2} pocket {dbg.LeftPocket:F2} leftBike {dbg.LeftBike:F2} full {dbg.LeftFull:F2} right {dbg.Right} extra {dbg.RightExtra:F2} through {dbg.Through().From:F2}-{dbg.Through().To:F2} edge {dbg.Edge():F2}");
+        return dbg;
     }
 
     /// <summary>A right-turn pocket being planned at traffic lights (#348): the approach's segment, and the left pocket beside it, if any.</summary>
@@ -679,6 +772,7 @@ public static partial class TileRewriter
     }
 
     /// <summary>Right-turn pockets, (taper, storage) in metres, longest first: shorter than a left pocket, beside its full width.</summary>
+    private const double RightEarlier = 8;
     private static readonly (double Taper, double Storage)[] RightPocketSizes = [(15, 30), (10, 25), (10, 15)];
 
     /// <summary>
@@ -873,6 +967,16 @@ public static partial class TileRewriter
         /// <summary>The left-turn bike lane between the pocket and the through lane (#351), 0 none; and whether a bike box lies in front.</summary>
         private readonly double _bikeLeft;
         public bool BikeBox { get; set; }
+
+        /// <summary>
+        /// At traffic lights (#682) the exit's through lane continues the facing approach's through lane: the hatch is as wide as its pocket
+        /// and bike lane at the mouth and the lane after it as wide as an approach lane (<see cref="ApproachLayout.LaneWidth"/>), so it never starts narrow.
+        /// </summary>
+        public void SetExit(double hatch, double lane) => (_exitHatch, _exitLane) = (hatch, lane);
+        private double? _exitHatch, _exitLane;
+        public double HatchAtMouth => _bike > 0 ? _pocket : _exitHatch ?? _pocket;   // beside an on-street bike lane the exit is as at a yield junction (#123, #120)
+        /// <summary>The width of the exit's car lane (the carriageway's half less a painted bike lane).</summary>
+        public double ExitCar => _bike > 0 ? TurnLane : _car;   // beside an on-street bike lane the exit keeps a turn-lane wide car lane and the bike lane (as at a yield junction)
         public bool HasLeftBikeLane => _bikeLeft > 0;
 
         /// <summary>What the widening adds at full width: the through lane, and on an approach the left-turn bike lane (#351).</summary>
@@ -980,6 +1084,8 @@ public static partial class TileRewriter
         /// </summary>
         private double Widen(double dist)
         {
+            // #682: the exit lane keeps its width (the carriageway's lane) from the mouth to where the hatch has closed: the edge moves in as fast as the hatch
+            if (_exit && _bike <= 0 && _exitHatch is { } hatch) return Math.Max(0, hatch * (1 - dist / _length));   // #682; with an on-street bike lane the yield junction's exit below (a car lane and the bike lane beside the closing hatch, then the lead-out)
             if (_taper <= 0) return Lane + _extra;
             double main = Math.Clamp((_length - dist) / _taper, 0, 1);
             if (_lead <= 0 || (_exit && _bike <= 0)) return (Lane + _extra) * main;
@@ -1161,7 +1267,8 @@ public static partial class TileRewriter
             Painted = true;
             double storage = _length - _taper;
             SolidCentre(paint);
-            Hatch(paint, stats, storage, _length, d => (_pocket + _bikeLeft) * Math.Clamp((_length - d) / _taper, 0, 1));
+            double wide = Layout is { Equal: true, LeftPocketLane: { } own } ? own.To + _bikeLeft : _pocket + _bikeLeft;   // #682: equal lanes
+            Hatch(paint, stats, storage, _length, d => wide * Math.Clamp((_length - d) / _taper, 0, 1));
             Lanes(paint, storage, storage, rightTurn, stats, signal);
         }
 
@@ -1191,17 +1298,18 @@ public static partial class TileRewriter
             double setback = signal ? SignalStopSetback + StopShift : 0.1;
             // the lanes across the approach (#351): pocket, left-turn bike lane, through lane
             var lanes = Layout ?? new ApproachLayout(_half, _bike, _pocket, _bikeLeft, FullWidth, false, 0);
-            double pocket = lanes.LeftPocket, through = lanes.Through().From;
+            double pocket = lanes.LeftPocketLane?.To ?? lanes.LeftPocket, through = lanes.Through().From;   // #682: the equal lane widths, not the carriageway lane it was cut from
             bool box = _bikeLeft > 0 && BikeBox;
             // the pocket's arrows and its stop line stand behind a bike box (#351)
-            double pocketBack = setback + (box ? BikeBoxDepth : 0);
+            bool advanced = _bikeLeft > 0 && !BikeBox;
+            double pocketBack = setback + (box ? BikeBoxDepth : advanced ? AdvancedBikeLine : 0);   // #682: the advanced line stands level with the through lane's, the cars' behind it
             if (_bikeLeft > 0)
             {
                 // the left-turn bike lane (#351): yellow lines both sides, from where the pocket opens
                 // to the line it stops at (the bike box, or its advanced line ahead of the cars'),
                 // dashed, then solid over the last TurnSolid metres before the cars' line (#406: as
                 // the car lanes' lines), and its symbol where riders come in
-                double bikeLine = box ? pocketBack : Math.Max(0.2, setback - AdvancedBikeLine);
+                double bikeLine = box ? pocketBack : setback;
                 double solidTo = pocketBack + TurnSolid;
                 void Edge(PaintType type, float dash, double o, double d0, double d1) =>
                     paint.Add(RoadPaint.AlongSegment(_seg, type, PaintEmitter.Yellow, BikePlanner.LineWidth, dash, dash == 0 ? 0 : BikePlanner.Gap,
@@ -1211,6 +1319,8 @@ public static partial class TileRewriter
                     Edge(PaintType.YellowSolid, 0, o, bikeLine, solidTo);
                     Edge(PaintType.YellowDashed, BikePlanner.Dash, o, solidTo, dashedTo);
                 }
+                // a box: a yellow line closes it from the through lane beside it, which has none (#682)
+                if (box) Edge(PaintType.YellowSolid, 0, through, setback, pocketBack);
                 BikeSymbol(paint, lanes.LeftBikeLane!.Value.Mid, dashedTo - 2);
                 stats.LeftBikeLanes++;
             }
@@ -1232,7 +1342,8 @@ public static partial class TileRewriter
             {
                 // the box: the cars' line behind it across the pocket and the bike lane, the yellow one
                 // in front, a bike symbol in it; the through lane's line where it was
-                Bar(pocketBack, 0.1, through - 0.1, width, PaintEmitter.White);
+                // the cars' line only across the pocket: the left-turn bike lane reaches into the box (#682)
+                Bar(pocketBack, 0.1, pocket - 0.1, width, PaintEmitter.White);
                 Bar(setback, through + 0.1, lanes.Through().To - 0.1, width, PaintEmitter.White);
                 Bar(setback, 0.1, through - 0.1, BikeStopLine, PaintEmitter.Yellow);
                 BikeSymbol(paint, through * 0.5, setback + BikeBoxDepth * 0.5 + BikePlanner.SymbolSize * 0.5);
@@ -1243,10 +1354,10 @@ public static partial class TileRewriter
                 if (_bikeLeft > 0)
                 {
                     // the cars' line stops at the bike lane's edges (#406): riders go on to their own line
-                    Bar(setback, 0.1, pocket - 0.1, width, PaintEmitter.White);
+                    Bar(pocketBack, 0.1, pocket - 0.1, width, PaintEmitter.White);
                     Bar(setback, through + 0.1, lanes.Through().To - 0.1, width, PaintEmitter.White);
-                    // an advanced bike stop line across the bike lane, 3 m ahead of the cars'
-                    Bar(Math.Max(0.2, setback - AdvancedBikeLine), pocket + 0.05, through - 0.05, BikeStopLine, PaintEmitter.Yellow);
+                    // an advanced bike stop line across the bike lane, level with the through lane's; the pocket's cars stop behind it (#682)
+                    Bar(setback, pocket + 0.05, through - 0.05, BikeStopLine, PaintEmitter.Yellow);
                     stats.AdvancedBikeLines++;
                 }
                 else Bar(setback, 0.1, (signal ? lanes.Through().To : pocket) - 0.1, width, PaintEmitter.White);
@@ -1264,10 +1375,12 @@ public static partial class TileRewriter
                 // the through lane lies on the driver's right (sx, sz): their forward is that turned a quarter left
                 double fx = sz, fz = -sx;
                 var (px, py, pz, _, _) = At(tip + pocketBack - 0.1);
+                // each arrow climbs with the road to its tip, ArrowLength nearer the mouth (#639)
+                double tipY = At(back - PaintEmitter.ArrowLength).Y, pocketTipY = At(tip + pocketBack - 0.1 - PaintEmitter.ArrowLength).Y;
                 double left = lanes.LeftPocketLane!.Value.Mid, ahead = lanes.Through().Mid;
-                paint.Add(PaintEmitter.Arrow(px + sx * left, py, pz + sz * left, fx, fz, PaintArrow.Left));
+                paint.Add(PaintEmitter.Arrow(px + sx * left, py, pz + sz * left, fx, fz, PaintArrow.Left, pocketTipY));
                 paint.Add(PaintEmitter.Arrow(x + sx * ahead, y, z + sz * ahead, fx, fz,
-                    rightTurn ? PaintArrow.Straight | PaintArrow.Right : PaintArrow.Straight));
+                    rightTurn ? PaintArrow.Straight | PaintArrow.Right : PaintArrow.Straight, tipY));
                 stats.Arrows += 2;
             }
         }
@@ -1345,12 +1458,13 @@ public static partial class TileRewriter
                 if (tip > first && back > storage + 1) continue;
                 var (x, y, z, sx, sz) = At(back);
                 double fx = sz, fz = -sx;
-                paint.Add(PaintEmitter.Arrow(x + sx * pocket.Mid, y, z + sz * pocket.Mid, fx, fz, PaintArrow.Right));
+                double tipY = At(back - PaintEmitter.ArrowLength).Y;   // climbing with the road (#639)
+                paint.Add(PaintEmitter.Arrow(x + sx * pocket.Mid, y, z + sz * pocket.Mid, fx, fz, PaintArrow.Right, tipY));
                 stats.Arrows++;
                 if (through is { } kind)
                 {
                     double own = lanes.Through().Mid;
-                    paint.Add(PaintEmitter.Arrow(x + sx * own, y, z + sz * own, fx, fz, kind));
+                    paint.Add(PaintEmitter.Arrow(x + sx * own, y, z + sz * own, fx, fz, kind, tipY));
                     stats.Arrows++;
                 }
             }
@@ -1367,7 +1481,63 @@ public static partial class TileRewriter
         {
             Painted = true;
             SolidCentre(paint);
-            Hatch(paint, stats, near, _length, d => _pocket * Math.Clamp(1 - d / _length, 0, 1));
+            Hatch(paint, stats, near, _length, d => HatchAtMouth * Math.Clamp(1 - d / _length, 0, 1));
+        }
+
+        /// <summary>
+        /// Small kerbed islands (#682) in the exit's hatched median, cut through by the crosswalk (which stays level):
+        /// one in the junction past the crosswalk, <see cref="IslandInside"/> m deep, carrying the left repeater signal,
+        /// and one behind it from the bars to just behind the stop line (<paramref name="near"/> from the mouth).
+        /// Each lies between the centre line and the through lane's edge, a quarter metre clear of both. Returns where
+        /// the pole stands (LV95 and the island's top height), null when there is no room.
+        /// </summary>
+        public TileId Tile => _tile;
+
+        public (Vec2 Pole, float Y)? Islands(List<RoadAreaProp> areas, double near, double zebraFrom, double zebraTo, bool crosswalk = true)
+        {
+            const double Margin = 0.25, IslandMinWidth = 1.2, Top = 0.12;
+            const double IslandInside = IslandInsideM;
+            double Width(double d) => HatchAtMouth * Math.Clamp(1 - d / _length, 0, 1) - 2 * Margin;
+            // one width all along, before the crosswalk and after it: what the narrowest end leaves (not a triangle)
+            double iw = Width(Math.Max(near + 2.0, zebraTo));
+            if (iw < IslandMinWidth) return null;
+            // a point at distance d from the mouth, inside the junction (d < 0) along the arm's line on
+            float[] At2(double d, double offset)
+            {
+                if (d >= 0) return Point(d, offset);
+                var a = Point(0, offset);
+                var b = Point(1, offset);
+                double fx = b[0] - a[0], fz = b[2] - a[2], len = Math.Sqrt(fx * fx + fz * fz);
+                return len < 1e-6 ? a : [(float)(a[0] + fx / len * d), a[1], (float)(a[2] + fz / len * d)];
+            }
+            void Island(double a, double b)
+            {
+                if (b - a < 0.8) return;
+                var v = new List<float>();
+                var idx = new List<ushort>();
+                int steps = Math.Max(1, (int)Math.Round(b - a));
+                for (int k = 0; k <= steps; k++)
+                {
+                    double d = a + (b - a) * k / steps, w = iw;
+                    v.AddRange(At2(d, Margin));
+                    v.AddRange(At2(d, Margin + w));
+                    if (k == 0) continue;
+                    ushort p = (ushort)(2 * k - 2);
+                    idx.AddRange([p, (ushort)(p + 1), (ushort)(p + 3), p, (ushort)(p + 3), (ushort)(p + 2)]);
+                }
+                areas.Add(new RoadAreaProp
+                {
+                    Type = AreaPropType.Island, Variant = 2, Flags = PropFlags.Solid, Height = (float)Top,
+                    Vertices = v.ToArray(), Indices = idx.ToArray(),
+                });
+            }
+            // no crosswalk (no sidewalk or path on the arm): one island all along
+            double after = crosswalk ? zebraFrom - 0.15 : near + 2.0;
+            Island(-IslandInside, after);
+            if (crosswalk) Island(zebraTo + 0.15, near + 2.0);
+            double at = -IslandInside * 0.5 + after * 0.1;
+            var spot = At2(at, Margin + iw * 0.5);
+            return (new Vec2(_tile.MinE + spot[0], _tile.MaxN - spot[2]), spot[1] + (float)Top);
         }
 
         /// <summary>Set once its lane markings are painted (a merged strip is painted once, by the pocket it leads to).</summary>

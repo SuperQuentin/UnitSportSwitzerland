@@ -69,12 +69,21 @@ public partial class FootPlayer
         if (who.Ride == RideKind.OnFoot) return null;
         // a copy's own airstairs: their platform is the driver's (Anim), not a shared one's (#417)
         if (who._remoteRide is Airstairs own && who.Ride == RideKind.Airstairs) return own;
+        // a copy's truck with its trailer as the owner coupled it (FitSections): a boat trailer's cradle
+        // is in it, which the boat on it follows (#463)
+        if (who._remoteRide is Truck train && train.Kind == who.Ride) return train;
         // and a copy's own forklift: its mast is the driver's (Anim), not a shared one's (#583)
         if (who._remoteRide is Forklift lifting && who.Ride == RideKind.Forklift) return lifting;
         // and a copy's own excavator: its arm is the driver's (Anim) (#611)
-        if (who._remoteRide is Excavator digging && who.Ride == RideKind.Excavator) return digging;
+        if (who._remoteRide is Excavator digging && who.Ride == digging.Kind) return digging;
         // and a copy's own wheel loader: its frame, arm and bucket are the driver's (#612)
-        if (who._remoteRide is WheelLoader loading && who.Ride == RideKind.WheelLoader) return loading;
+        if (who._remoteRide is WheelLoader loading && who.Ride == loading.Kind) return loading;
+        // and a copy's own roller: its bend and its vibration are the driver's (#614)
+        if (who._remoteRide is CompactRoller rolling && who.Ride == RideKind.CompactRoller) return rolling;
+        // and a copy's own mini dumper: its skip is the driver's (#614)
+        if (who._remoteRide is MiniDumper dumping && who.Ride == RideKind.MiniDumper) return dumping;
+        // and a copy's own telehandler: its wheels, mode and boom are the driver's (#614)
+        if (who._remoteRide is Telehandler booming && who.Ride == RideKind.Telehandler) return booming;
         var key = (who.Ride, who.CarSetupId, who.TuningBits);
         if (_seatRides.TryGetValue(key, out var known)) return known;
         var made = CarSetups.Ride(who.Ride, who.CarSetupId, who.TuningBits);

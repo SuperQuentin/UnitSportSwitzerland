@@ -73,3 +73,9 @@
   behind them; over purely generated ground, 0 in 2 runs. Suspected: blend maths on every core
   starving the main thread. **Open.** Check: `dotnet run --project tools/BlendCheck -c
   Release` (see Commands).
+
+**Saved toggle vs probes (#666)**: Settings → "Generated terrain" is saved in `settings.json` (`generatedFill`). With it
+off and no real tiles the world is empty: `0/0 tiles near`, players hang at y ≈ 4801, `--waterprobe` says "no water
+level here", `tools/baycheck.sh` never sees a bay. `GameSettings.WantsGeneratedWorld` makes `--generated-world`,
+`--shot`, `--shot-queue` and a `--systems` list naming `generated` switch it on for that run, unless `--generated off`
+is given. Check logs for `[terrain] generated fill on|off` first when a probe shows only the horizon.

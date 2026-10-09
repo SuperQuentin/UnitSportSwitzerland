@@ -29,6 +29,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | jump | Space / A | ok: A | keep |
 | crouch_slide | Ctrl, C / B | ok: B, or crouch for real (#437) | keep |
 | interact_mount | E / Y | ok: Y; grip a door, an item, a radio, or reach out and grip what E would act on (#437) | keep |
+| radio on / off (#725) | tap E (pointed) or tap Use (held) / tap Y or the Use button; hold either for the panel | ok: poke the radio's red key with a controller tip (`XrHands.PokeRadio`); grip still opens the panel | keep |
 | elevator call / floor list (#557) | E / Y at the call button or in the cabin | ok: Y, or grip the call button or the cabin's panel; the list is a pointable panel (`XrUi`) | keep |
 | flat door, its lock (#557) | E / Y at the door | ok: Y, or grip the door; the dial on the stick | keep |
 | ride_menu | R / Y with nothing near | ok: Y, wrist menu (#437) | keep |
@@ -53,6 +54,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | build_turn, next piece | R, aim+wheel / D-pad ↑, LB+D-pad → | gap | **twist the hand** while aiming; R stick ←/→ steps the piece |
 | fishing rod: cast, strike, reel, wind in (#493) | hold LMB + let go, LMB, hold LMB, RMB / the same on RB, LB | ok: R trigger (hold, let go: cast; press: strike; hold: reel), L trigger winds in | gap: **flick the rod hand** to cast (release speed = distance), **crank the reel** with the left hand (R1, R4) |
 | bird_journal (birds and fish pages, #493) | J / — | ok: wrist menu (#437); the page buttons by pointer | keep |
+| farm by hand (#494) | LMB / RB with a hoe, seed or fertiliser in hand | ok: R trigger (`use_item`, no new action) | a hoe **swung down** at the ground |
+| harvest a ripe field cell (#494) | hold G / X | ok: hold X (`gather`, the gathering hold) | **grip and pull** the crop, like gather |
 
 ## Mounted and driving
 
@@ -62,19 +65,36 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | tuck_boost / trick / boost | Shift F Q / X RB LB | ok: X, grips | keep |
 | engine_toggle | Z / D-pad ↑ | ok: R stick ↑ | keep (R3) |
 | lights_toggle | L / D-pad → | ok: R stick → (#436) | keep |
+| cruise (speed regulator: car, truck, farm machine, motorbike, #494) | Y / hold D-pad → (a tap stays the lights) | ok: a **dash poke** in a car or truck (`XrCabControls`), or hold R stick → | keep |
 | roof / horn / couple | O H / D-pad ← | ok: R stick ← (#436) | keep |
 | tune | T / D-pad ↓ | ok: R stick ↓ (#436) | keep |
 | radio next / prev / panel | U P R / — | ok: dash pokes (#438) | keep |
 | take_wheel (passenger) | F / RB | ambiguous (free grip) | **grip the wheel** from the passenger seat |
 | shift up / down, clutch | Shift Ctrl C / RB LB B | ok: grips, B | keep |
+| couple a trailer (fifth wheel, drawbar, tow ball #463) | H / D-pad ← | ok: R stick ← (#436) | keep from the seat; **on foot, grip the coupler's latch** to couple / drop a trailer standing on the hitch |
+| boat trailer: launch / winch the boat (#463) | G / X | ok: X (left controller) | + **grip and crank the winch handle** on the post |
 | forklift mast up / down (#583, hold) | Shift Ctrl / RB LB | ok: grips, or the **mast lever** by hand (`XrCabControls` "forklift", `Kind.Hold`: pulled back the forks rise) | keep |
+| roof_toggle as the telehandler's steering mode (#614: front, four-wheel, crab) | O / D-pad left | ok: a **dash button** (`XrCabControls` "telehandler", `Kind.Poke`) | keep |
+| telehandler lift / extend / tilt (#614, hold, in work mode; arm_boom, shift_up/down and arm_bucket actions) | ↑ ↓, Shift Ctrl, ← → / R stick, RB LB | ok: the **boom's joystick** right of the seat as two levers (aft lifts, aft tilts back) and the **extend rocker** beside it (forward runs it out); work mode on the dash | keep |
+| dig_mode as the roller's vibration (#614) | C / B | ok: the **red button on the console right of the wheel** (`XrCabControls` "roller", `Kind.Poke`) | keep |
 | dig_mode (#611, excavator) | C / B | ok: B, or the **button on the left console** (`XrCabControls` "excavator", `Kind.Poke`) | keep |
 | arm_slew_left/right, arm_stick_out/in (#611, hold) | A D, W S / L stick X, Y in dig mode | ok: the **left joystick** by hand, as two levers (`Kind.Hold`: side to side slews, fore and aft runs the stick) | one two-axis grip per joystick |
 | wheel loader lift / tilt (#612, hold; the excavator's arm_boom and arm_bucket actions in work mode) | ↑ ↓ ← → / R stick in work mode | ok: the **two levers right of the seat** (`XrCabControls` "loader", `Kind.Hold`: aft lifts, aft rolls back), work mode on the console | keep |
+| blade_raise / blade_lower (#614, mini excavator, hold, driving or digging) | Shift / Ctrl, RB / LB (the gear paddles, which a crawler has no use for) | ok: the **blade lever** low and outboard of the left joystick (`XrCabControls` "miniexcavator", `Kind.Hold`: aft raises) | keep |
 | arm_boom_up/down, arm_bucket_curl/dump (#611, hold) | ↑ ↓, ← → / R stick Y, X in dig mode | ok: the **right joystick** by hand, as two levers (aft raises the boom, side to side the bucket); the right stick itself stays R3's action pad | one two-axis grip per joystick |
 | gear 1-6, R, N | 1-6 ` 0 / — | ok: H-pattern lever by hand (#438) | keep |
 | retarder | ' ; / — | ok: stalk by hand (#438) | keep |
-| bus kneel / destination | K N / — | ok: dash pokes (#438) | keep |
+| bus kneel / destination | K N / L3 — | ok: dash pokes (#438) | keep |
+| farm: lower / raise the implement or header (#494) | K / L3 | ok: the kneel dash poke, or L3 | **grip the linkage lever** on the right console |
+| farm: combine auger out / in (over a parked or a driven tipper), deliver at a co-op (#494) | N / X | ok: the destination dash poke, or X | **grip the auger joystick** on the console |
+| farm: tip the tipping trailer's bin, delivering at a co-op (#494) | N / X (the same action, coupled to a tipper) | ok: the destination dash poke, or X | **grip the tipping valve lever** on the right console |
+| farm: couple an implement or tipping trailer (#494) | H / D-pad ← | ok: R stick ← | **on foot, grip the lower link** to hitch it |
+| farm: take a sack from a tank or trailer, on foot (#494) | E (hold / with Shift: 10) / Y (hold: 10) | ok: Y, hold for ten | **grip a sack** off the heap |
+| farm: open a farm stand (stock, take back, collect / buy) (#494) | E / Y | ok: Y, or reach out and grip the stand (`TryInteract(byHand)`); the panel by laser + trigger | **grip the honesty box** to open it |
+| farm: sell sacks on foot at a sugar factory or mill (#494) | E / Y | ok: Y, or reach out and grip (`TryInteract(byHand)`) | keep |
+| farm: set up / pack up a farm stand (#494) | LMB / RB with the stand in hand, empty hand to pack up | ok: R trigger (`use_item`) | keep |
+| mini dumper: tip the skip (#614; the destination action, stopped) | N / — | ok: the **skip's button** on the console right of the wheel (`XrCabControls` "minidumper", `Kind.Poke`) | keep |
+| tipper: tip the body / mixer: discharge (#613; the destination action, stopped) | N / — | ok: the destination dash poke (`XrCabControls` "-work") | grip a tipping valve lever |
 | steamer whistle | H / D-pad ← | ok: R stick ←, or pull the cord (#438) | keep |
 | look_behind | B / wheel button | ok: turn your head; held on a keyboard or wheel the view turns round (#436) | keep |
 
@@ -99,6 +119,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | menu | Esc / Start | ok: Menu tap | keep |
 | teleport (place search, BR map) | M / — | ok: wrist menu (#437), hand-held map with point and pull (#439) | keep |
 | help / debug | F1 F9 / — | help: wrist menu (#437); debug: gap | debug in the wrist menu for admins |
+| playtest_panel (Debug `--playtest`, #751) | F10 / L3 + R3 | ok: both stick clicks (XrPad), the panel on the XrUi screen; typing to Claude: gap (no keyboard) | the laser key grid planned for the chat |
 | fly camera up / down / boost | Space Ctrl… / A B L3 | ok: A B L3 | keep |
 | BR jump out / spectate | E, ←→ / Y, D-pad | ok | spectate on R stick ←/→ |
 | loot, shop, lock, Simon, vending | mouse + keys | ok: laser + trigger | lock dial by **wrist twist** |
@@ -106,6 +127,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | watch | — | ok: Swiss watch on the left wrist (#439) | keep |
 | save_clip: the replay buffer into the movie studio (#638) | F5 / Start > Save clip | ok: Menu tap > Save clip | a wrist-menu entry |
 | movie studio timeline (#638, markers #656, camera keys #669) | Space J K L, ← →, S, Del, M, I, V / Y, LT RT, D-pad, X, R3, View, R stick, LB RB | ok: the same pad buttons through `XrPad`, the panel by laser | grip the playhead and scrub by hand; timeline on the `XrUi` panel (#637 milestone 3) |
+| free_cursor (#654) | tap Alt / — | n/a: VR points with the laser, a pad has no cursor | keep |
 | map screen: pan / zoom / draw / tool / search (#515) | arrows, drag, wheel, T, F / L stick, LB RB, A, Y, X | **gap, deferred on purpose**: the screen renders on the `XrPad` panel and says so, but the map itself is not pointable — a laser on a 2D map of a 3D country is the wrong answer to design in a hurry | a table-top relief map of Switzerland you reach into, grab to pan, pinch to zoom and paint tiles on with a finger (#535) |
 
 ## Coherence findings (what violated the rules)

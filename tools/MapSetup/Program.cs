@@ -53,6 +53,26 @@ var local = Flag("--fresh") ? new LocalState()
 var selection = new Selection(country);
 Directory.CreateDirectory(paths.Temp);
 
+// ---- pick only: the map as a tile selector for another tool (tools/rebuild-map.sh) ---------------
+// Starts empty and saves nothing, so the last selection stays what --resume continues. Only built
+// tiles are written: the file is a list of tiles to build again. --keys replays keys instead of
+// reading the terminal, for checks.
+if (Arg("--pick-tiles") is { } pickFile)
+{
+    var view = new MapView(country, local, selection, PickSummary, "Quit without picking anything? (y/n)");
+    if (Arg("--keys") is { } pickKeys) view.Snapshot(140, 45, Snapshot.ParseKeys(pickKeys));
+    else if (!view.Run()) return 1;
+    var builtTiles = selection.Tiles.Where(local.Built.Contains).OrderBy(t => t.E).ThenBy(t => t.N).ToList();
+    if (builtTiles.Count == 0)
+    {
+        AnsiConsole.MarkupLine($"[yellow]None of the {selection.Count:N0} selected tiles is built in {Markup.Escape(paths.Chunks)}.[/]");
+        return 1;
+    }
+    File.WriteAllLines(pickFile, builtTiles.Select(SetupState.Key));
+    AnsiConsole.MarkupLine($"{builtTiles.Count:N0} built tiles of {selection.Count:N0} selected -> {Markup.Escape(pickFile)}");
+    return 0;
+}
+
 // ---- 1. the selection ----------------------------------------------------------------------------
 bool scripted = false;
 if (Arg("--tiles-file") is { } tilesFile)
@@ -286,6 +306,22 @@ IReadOnlyList<(string, string)> MapSummary(Selection sel)
     ];
 }
 
+// the panel of --pick-tiles: what of the selection is built, since only that is written
+IReadOnlyList<(string, string)> PickSummary(Selection sel)
+{
+    int n = sel.Count;
+    if (n == 0) return [("Tiles", "none yet"), ("", ""), ("R, Space, B, F or C", "to select"), ("", ""), ("Built on this machine", $"{local.Built.Count:N0}")];
+    int built = sel.Tiles.Count(local.Built.Contains);
+    var cantons = sel.Tiles.Select(t => country.CantonAt(t)?.Code).OfType<string>().Distinct().OrderBy(c => c).ToList();
+    return
+    [
+        ("Tiles", $"{n:N0} km²"),
+        ("Built, picked", $"{built:N0}"),
+        ("Not built, ignored", $"{n - built:N0}"),
+        ("Cantons", cantons.Count > 6 ? $"{cantons.Count}" : string.Join(" ", cantons)),
+    ];
+}
+
 void ShowPlan(List<Step> steps)
 {
     AnsiConsole.MarkupLine($"[grey]Storage: {Markup.Escape(Where(paths))}[/]");
@@ -426,6 +462,7 @@ Layers AskLayers(Layers current)
         (Layers.Cadastre, "Building use, age and storeys  [grey](GWR register)[/]"),
         (Layers.Routes, "Cycle and MTB route flags  [grey](ASTRA, ~90 MB)[/]"),
         (Layers.Places, "Place index for the in-game search  [grey](needs the GWR register)[/]"),
+        (Layers.Fields, "Real farm fields  [grey](LWB land use per canton, geodienste.ch, ~1.1 GB once; OSM fills the gated cantons if downloaded)[/]"),
         (Layers.Osm, "OpenStreetMap road attributes: one-way, lanes, sidewalks  [grey](Geofabrik, ~550 MB once; ODbL, needs roads)[/]"),
     };
     var prompt = new MultiSelectionPrompt<string>()
@@ -457,10 +494,11 @@ static Layers ParseLayers(string text)
             "cadastre" or "gwr" => Layers.Cadastre,
             "routes" => Layers.Routes,
             "places" => Layers.Places | Layers.Cadastre,
+            "fields" => Layers.Fields,
             // never part of "all": tiles built with it fall under the ODbL (docs/notes/tools/osm-odbl-licence.md)
             "osm" => Layers.Osm | Layers.Roads,
-            "all" => Layers.Roads | Layers.Buildings | Layers.Cadastre | Layers.Routes | Layers.Places,
-            _ => throw new ArgumentException($"unknown layer '{part}' (terrain, roads, buildings, cadastre, routes, places, osm, all)"),
+            "all" => Layers.Roads | Layers.Buildings | Layers.Cadastre | Layers.Routes | Layers.Places | Layers.Fields,
+            _ => throw new ArgumentException($"unknown layer '{part}' (terrain, roads, buildings, cadastre, routes, places, fields, osm, all)"),
         };
     return result;
 }
@@ -531,7 +569,7 @@ static void PrintHelp()
           --tiles-file FILE            one "E-N" per line
           --resume                     the last selection and layers
         Layers:
-          --layers terrain,roads,buildings,cadastre,routes,places,osm|all
+          --layers terrain,roads,buildings,cadastre,routes,places,fields,osm|all
                                        (osm is optional and never implied by all)
         Folders:
           --data DIR                   source data instead of ressources/data (dataset subfolders inside)
@@ -540,6 +578,9 @@ static void PrintHelp()
           --pick-location              choose a drive or folder first (also under "Go?")
                                        The choice is saved in terrain_location.json (repo root,
                                        gitignored); --data/--chunks override it for one run.
+        Pick only:
+          --pick-tiles FILE            the map as a selector: writes the built tiles picked, one "E-N"
+                                       per line, and builds nothing (tools/rebuild-map.sh uses it)
         Run:
           --plan-only                  show the estimate and stop
           --yes                        do not ask before starting

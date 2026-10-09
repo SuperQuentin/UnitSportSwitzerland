@@ -24,6 +24,7 @@ public partial class FootPlayer
         if (SeatIndex != 0 || Npc)
         {
             ex.Levers = default;
+            ex.BladeLever = 0f;
             ex.Work(ref _motion, dt);
             return;
         }
@@ -34,6 +35,8 @@ public partial class FootPlayer
             PlayerInput.Strength(PlayerInput.ArmBoomUp) - PlayerInput.Strength(PlayerInput.ArmBoomDown),
             // the bucket's angle grows as it opens: curling it in is the negative way
             PlayerInput.Strength(PlayerInput.ArmBucketDump) - PlayerInput.Strength(PlayerInput.ArmBucketCurl));
+        // a mini's blade (#614), driving or digging: the gear paddles, which a crawler has no use for
+        ex.BladeLever = PlayerInput.Strength(PlayerInput.BladeRaise) - PlayerInput.Strength(PlayerInput.BladeLower);
         ex.Work(ref _motion, dt);
     }
 }

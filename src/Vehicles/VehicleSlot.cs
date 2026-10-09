@@ -1,4 +1,5 @@
 using UnitSport.Terrain.Format;
+using UnitSport.Terrain.Construction;
 
 namespace UnitSport.Vehicles;
 
@@ -284,6 +285,31 @@ public static class DormantSlots
         float z = yard.Z - u * sin - v * cos;
         return new VehicleSlot(yard.Owner, ForkliftOrdinal, id.MinE + x, id.MaxN - z, yard.Y,
             Wrap(yard.Heading + MathF.PI), forklift, 0, false);
+    }
+
+    /// <summary>
+    /// The machines parked on a tile's building sites (#616): one slot per <see cref="MachineSlot"/>
+    /// the planner placed, owned by the site's building and named by the slot's own ordinal, so a
+    /// machine that found no room leaves a gap and renames nothing. A role with no rideable machine
+    /// yet (<paramref name="kindOf"/> null) is left out, its place an empty gap in the yard until
+    /// that machine exists; a van is the crew's car, one of <paramref name="cars"/>. The height is
+    /// the site's base: the Godot side stands each on its own ground, as it does a yard's.
+    /// </summary>
+    /// <param name="kindOf">The <c>RideKind</c> a role parks as, or null for none yet, given the slot's
+    /// own roll (a variant: a loader with forks, #615).</param>
+    public static void ForConstruction(TileId id, IReadOnlyList<ConstructionSite> sites,
+        Func<MachineRole, ulong, int?> kindOf, IReadOnlyList<int> cars, List<VehicleSlot> into)
+    {
+        foreach (var site in sites)
+            foreach (var m in site.Machines)
+            {
+                ulong h = Hash(Key((long)(m.At.X * 100), (long)(m.At.Y * 100)), 0xB0D5);
+                bool van = m.Role == MachineRole.Van;
+                int? kind = !van ? kindOf(m.Role, h) : cars.Count > 0 ? cars[(int)(h >> 20 & 0xFFFF) % cars.Count] : null;
+                if (kind is not { } k) continue;
+                into.Add(new VehicleSlot(site.Key, m.Ordinal, id.MinE + m.At.X, id.MaxN - m.At.Y, site.Base,
+                    Wrap(m.Yaw), k, (byte)(h >> 36 & 3), van));
+            }
     }
 
     /// <summary>

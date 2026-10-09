@@ -31,15 +31,8 @@ public sealed class ParkingAreaExtractor(string gpkgPath)
     public void Extract(IReadOnlyCollection<TileId> tiles, string? overridesPath)
     {
         if (tiles.Count == 0) return;
-        double minE = tiles.Min(t => t.MinE), maxE = tiles.Max(t => t.MinE) + ChunkFormat.TileSizeM;
-        double minN = tiles.Min(t => t.MinN), maxN = tiles.Max(t => t.MinN) + ChunkFormat.TileSizeM;
-
         using var conn = GeoPackageReader.Open(gpkgPath);
-        using var cmd = GeoPackageReader.BboxQuery(conn, "tlm_areale_verkehrsareal",
-            new[] { "objektart" }, minE, minN, maxE, maxN);
-        using var reader = cmd.ExecuteReader();
-
-        while (reader.Read())
+        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_areale_verkehrsareal", new[] { "objektart" }, new TileRegion(tiles)))
         {
             string? kind = reader.IsDBNull(0) ? null : reader.GetString(0);
             var cover = CoverFormat.ParseTrafficArea(kind);

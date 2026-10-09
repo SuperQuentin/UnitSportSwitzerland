@@ -6,7 +6,7 @@
 - **Data**: `Avatar.Garments.All` is the wardrobe. Each `Garment` row is one look (ItemId, name,
   `WearSlot`, `Code`, `GarmentShape`, `GarmentStyle` Basic/Gothic/Kawaii/Special, colours A/B/C,
   `Finish`, mask `MaskFace`). The item rows (`ItemDefs.All`) are generated from it (`ItemDefs.Cloth`),
-  so a new look is one `Garments` line plus an `ItemId` (65-149 so far, append only).
+  so a new look is one `Garments` line plus an `ItemId` (65-149, then 354-356 of #716; append only).
 - **Slots**: `WearSlot` Head, Eyes, Face, Ears, Neck, Top, Bottom, Legs, Feet, Hands. Occasion hats are
   Head items too. A Robe/Dress (`CoversBottom`) takes the bottom slot as well.
 - **Replication**: `Outfit` packs 6 bits of `Garment.Code` per slot (1-63, 0 = nothing) into a
@@ -18,9 +18,7 @@
   boots' height and platform, gloves), so trousers, sleeves and tights are the body's surface in
   the garment's colour. What does not follow the skin is laid over it on the body's real surfaces
   (`Torso.Surface`/`Front`, `LimbBand`, `Head.Point`): prints, collars, straps, a hood, a jacket
-  over a blouse, belts, chains, cuffs, sock tops, buckles, skirts (an open `MeshScratch.Skirt`
-  whose start radius clears each build's hips, `ConeStart`; double-sided, hem follows the
-  knees/ankles, optional slit), headwear on the head or its hair (`Head.Top(hair)`), glasses,
+  over a blouse, belts, chains, cuffs, sock tops, buckles, skirts (draped, see below), headwear on the head or its hair (`Head.Top(hair)`), glasses,
   masks with their 15×7 pixel faces (`MaskFaces`), piercings. Holed legwear (fishnet, lace) is
   drawn over the skin, never as it. Head clothes replace a hat; an occasion hat shows only with
   the head slot empty; under a full-face helmet nothing on the head is drawn.
@@ -29,14 +27,23 @@
   style's `MaterialRole.Figure` wrapper: `avatar` in PS1, `cartoon_avatar` toon and rim, `real_avatar`
   GGX) reproduces
   `Material()` for alpha 1 and decodes rainbow, disco, galaxy, holo, glitch, lava, neon, and the
-  patterns tartan, fishnet (discard over skin), lace, checker, stripes, studs (12-14, #394); 11 is
-  the pixel face (`face-atlas`). Every mesh that carries a figure must use it (#394: the face only draws there); the shared
+  patterns tartan, fishnet (discard over skin), lace, checker, stripes, studs (12-14, #394), camo (15, #716: the army's TAZ 90, `barracks-items`); 11 is
+  the pixel face (`procedural-faces`). Every mesh that carries a figure must use it (#394: the face only draws there); the shared
   `Material()` is untouched. Specials put the finish on all three
   colours, patterns only on A. Effects that need an angle compute a facet normal from derivatives:
   `MeshScratch` writes no normals.
+- **Patterns ride on the cloth** (#724): the shader lays them out from each vertex's *rest* position
+  (`CUSTOM0`, w = 1), never `VERTEX`: the figure is rebuilt per pose, so mesh space made the body run,
+  jump and bend *through* a pattern pinned to its feet. `MeshScratch.Rest` (`Resting(map)` scopes) is a
+  `RestMap`: one bone's motion undone, or two blended over the joint's mitre (limbs, trunk). The
+  builder sets it per part from the posed rig and `RestRig` (standing): `TrunkRest` by default,
+  `ArmRest`, `LegRest`, `FootRest`, `HeadRest`. Anything new drawn on a figure goes inside the scope
+  of the part it lies on. Standing, rest = drawn position, so the standing look is unchanged.
+  The same rule for `interior.gdshaderinc`: plaster and boards come from the mesh's own space, so
+  door leaves, lift doors and pallets carry their texture along.
 - **Checks**: `--outfitcheck` (headless: data, packing, every look built in six poses, finish alpha
   round trip); `--avatars <s> <png> --outfits [page|slot name] [--focus N [--count k]] [--walk]` renders
-  them (`page 0` = 15 whole outfits; a slot name lines up every look for it).
+  them (`page 0` = 17 whole outfits; a slot name lines up every look for it).
 - **Riders and drivers**: `Rideable.BuildVisual(rider, outfit)` gets `FootPlayer.OutfitBits` and every
   figure-carrying visual is dressed and drawn in `FigureMaterial` (`Cyclist`, `Motorcyclist` — a dressed
   rider is its own "Rider" mesh —, `CarRig`/`HeavyRig` drivers, skier, wingsuit, paraglider);
@@ -46,7 +53,16 @@
   from the figure node's own motion each frame (owner and remote copies alike, nothing replicated);
   the walker, cyclist and motorcyclist rebuild while `HumanMeshBuilder.Flutters(outfit)` (a skirt, robe
   or dress). `AppendSkirt` carries the hem downwind (full by ~14 m/s, length kept) and
-  `MeshScratch.Skirt(ripple, phase)` waves the hem round its edge faster with speed. `BuildStride` with
+  the hem ripples round its edge faster with speed. `BuildStride` with
   no measured wind uses the stride's own speed. Cars give no wind (closed cabin, driver pose cached).
 - Preview: `--avatars <s> <png> --outfits riders [--speed m/s] [--focus 0..3]` moves a dressed cyclist,
   motorcyclist, driver and runner together with the camera, so the skirts blow as in the game.
+- **Skirts, dresses and robes are draped** (#671): `HangSkirt` fills 11 rings × 24 sides
+  (`DrapeAt`, per-thread buffers) and `MeshScratch.Drape` draws them two-sided, a colour per band
+  (a robe's trim is the last band), an optional slit. The top ring is `Torso.Surface` at the
+  waist, 6 mm proud, so it fits every build; each ring below flares toward the hem radius but is
+  pushed out round the trunk and leg points (`LegRadius` + 14 mm) within reach of its plane, and
+  never comes in again below, so a knee thrown forward in a run lifts the cloth rather than
+  cutting through. `Tier` (petticoat, ruffle) starts just inside the skirt and grows to its own
+  hem. No point comes within 9 cm of the ground under the lower foot (ankle − `AnkleHeight`).
+  Check: `--outfits bottom|top --walk --speed 6 --focus N --count k --view 75`, and `--outfitcheck`.

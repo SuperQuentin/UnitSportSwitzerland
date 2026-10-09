@@ -251,7 +251,7 @@ public partial class ShopService : Node
 
     /// <summary>What the open shop pays for one of these, 0 when it does not buy them.</summary>
     public int SellPriceOf(ItemId id) =>
-        Open is { } o && ItemDefs.Get(id) is { } def && ShopTables.Buys(o.Type, def.Category) ? ShopTables.SellPrice(def.Value) : 0;
+        Open is { } o && ItemDefs.Get(id) is { } def ? ShopTables.CounterPrice(o.Type, id, def.Category, def.Value, Farming.FarmSales.Month, o.Key, Farming.FarmSales.Week) : 0;
 
     /// <summary>Sells <paramref name="count"/> plain stacks of an item to the open shop: the cash comes when the server agrees.</summary>
     public bool Sell(ItemId id, int count)
@@ -392,6 +392,35 @@ public partial class ShopService : Node
         Changed?.Invoke();
     }
 
+    // ---- client: delivering a load (#494, Farming.FarmMarket) ---------------------------------------
+
+    private readonly Queue<Action<int>> _deliveries = new();
+
+    /// <summary>
+    /// Asks the server to pay for a load by a farm co-op (<paramref name="door"/>: the co-op door this
+    /// client sees, "" for none); <paramref name="done"/> gets the francs added to the pocket (0: refused).
+    /// </summary>
+    public void Deliver(ItemId id, int count, Vector3 at, string door, Action<int> done)
+    {
+        _deliveries.Enqueue(done);
+        if (Online) RpcId(1, MethodName.RequestDeliver, (int)id, count, at, door);
+        else ServeDeliver(1, (int)id, count, at, door);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Delivered(int id, int count, int total)
+    {
+        if (_deliveries.Count == 0) return;
+        var done = _deliveries.Dequeue();
+        if (total > 0 && count > 0)
+        {
+            Items?.Inventory.Add(ItemId.Francs, total);
+            Items?.Ui.Toast($"Delivered {count} {ItemDefs.Get((ItemId)id)?.Name}: +{total} CHF cash");
+            Play(SfxSynth.Chime, 1.1f);
+        }
+        done(count > 0 ? total : 0);
+    }
+
     // ---- server ---------------------------------------------------------------------------------------
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -407,6 +436,52 @@ public partial class ShopService : Node
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void RequestBump(string key, int furniture) => ServeBump(Multiplayer.GetRemoteSenderId(), key, furniture);
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void RequestDeliver(int id, int count, Vector3 at, string door) => ServeDeliver(Multiplayer.GetRemoteSenderId(), id, count, at, door);
+
+    /// <summary>
+    /// Server: pays for a load. Online the peer's own replicated position must be by a farm co-op's
+    /// door (the claimed <paramref name="at"/> is not trusted); offline there is no one to lie, so it
+    /// is the vehicle's. The door is one this peer has in its <c>DoorIndex</c> (offline, a listen
+    /// host, a check's stand-in) or else the co-op the client named: a dedicated server draws no
+    /// buildings, so it plans that building (<see cref="InteriorManager.GetOrCreate"/>) and checks
+    /// it is a co-op and the peer stands by its door. The pack is the client's, as when selling at
+    /// a counter.
+    /// </summary>
+    private async void ServeDeliver(long peer, int id, int count, Vector3 at, string door)
+    {
+        var def = ItemDefs.Get((ItemId)id);
+        Vector3? where = at;
+        if (Online) where = GetParent()?.GetNodeOrNull<Node3D>($"Players/{peer}")?.GlobalPosition;
+        long total = def == null || !Farming.FarmTables.IsHarvest((ItemId)id) || count is <= 0 or > Farming.FarmMarket.MaxLoad ? 0 : ShopTables.DeliveryPrice(def.Category, def.Value, count);
+        float reach = Farming.FarmMarket.DeliverReach + (Online ? Farming.FarmMarket.ServerSlack : 0f);
+        string? coop = null;
+        try
+        {
+            if (total > 0 && where is { } w)
+                coop = Farming.FarmMarket.CoopDoor(w, reach)?.Building.ToString() ?? await CoopPlanNear(w, door, reach);
+        }
+        catch (Exception e) { GD.PushError($"[shop] delivery to {door}: {e.Message}"); }
+        if (!IsInsideTree()) return;
+        // the market's price (#494, Farming.FarmSales): the co-op's wishes and the season, or a specialty buyer's yard
+        string market = "the farm co-op";
+        if (total > 0 && Farming.FarmSales.Instance is { } sales)
+            (total, market) = sales.PriceLoad(peer, (ItemId)id, count, where, coop, Online ? Farming.FarmMarket.ServerSlack : 0f);
+        bool ok = total > 0 && (coop != null || market.Length > 0);
+        if (ok) GD.Print($"[shop] peer {peer} delivered {count} {(ItemId)id} to {market} {coop} for {total} CHF");
+        else GD.Print($"[shop] peer {peer} delivery of {count} {(ItemId)id} refused");
+        Reply(peer, MethodName.Delivered, id, ok ? count : 0, ok ? (int)total : 0);
+    }
+
+    /// <summary>The co-op <paramref name="door"/> names, if its building is a farm co-op and <paramref name="at"/> is by its door; else null.</summary>
+    private static async Task<string?> CoopPlanNear(Vector3 at, string door, float reach)
+    {
+        if (door.Length == 0 || !BuildingKey.TryParse(door, out _) || InteriorManager.Instance is not { } interiors) return null;
+        var layout = await interiors.GetOrCreate(door);
+        if (layout is not { Shop: ShopType.FarmCoop }) return null;
+        return at.DistanceTo(interiors.OutsideDoorAt(layout, layout.EntranceFor(door))) <= reach ? door : null;
+    }
 
     /// <summary>Server: what a piece of furniture sells, if the peer stands in its building: a shop's counter or a machine.</summary>
     private async Task<(InteriorLayout Layout, ShopType Type)?> ShopFor(long peer, string key, int furniture)
@@ -487,10 +562,13 @@ public partial class ShopService : Node
     {
         var shop = await ShopFor(peer, key, furniture);
         var def = ItemDefs.Get((ItemId)id);
-        int each = def == null ? 0 : ShopTables.SellPrice(def.Value);
+        // produce at a co-op follows the market (#494, Farming.FarmPrices): the season, its wishes of the week
+        int each = def == null || shop is not { } at ? 0 : ShopTables.CounterPrice(at.Type, (ItemId)id, def.Category, def.Value, Farming.FarmSales.Month, key, Farming.FarmSales.Week);
         // the pack is the client's, like the cash: what the server checks is where, what and how many at most
         bool ok = shop is { } s && def != null && ShopTables.Buys(s.Type, def.Category) && each > 0 && count is > 0 and <= 999;
         if (ok) GD.Print($"[shop] peer {peer} sold {count} {(ItemId)id} at {key} ({shop!.Value.Type}) for {count * each} CHF");
+        // sacks sold at a co-op's counter count toward the seller's delivery contracts there (#494)
+        if (ok && shop!.Value.Type == ShopType.FarmCoop) Farming.FarmSales.Instance?.Counted(peer, key, (ItemId)id, count);
         Reply(peer, MethodName.SoldBack, key, id, ok ? count : 0, ok ? each : 0);
     }
 

@@ -52,5 +52,11 @@ it is let go.
 
 ## Not done
 
-- The bucket carries nothing (#615) and digs nothing (#620); not parked on sites yet (#616).
-- The forks attachment #612 mentions is #615's, with the carrying.
+- The bucket digs nothing (#620). It carries a pallet since #615: curled back and lifted with one
+  over its floor it scoops it, dumped it tips it out (`vehicles/pallets`, "The wheel loader's
+  bucket"). Parked on sites since #616.
+- **With forks** (#615): `RideKind.WheelLoaderForks = 199`, the same class (`WheelLoader(forks: true)`),
+  a self-levelling fork carriage on the arm instead of the bucket (`Tilt` is then the forks' pitch,
+  -0.5..0.3), lifting pallets by the forklift's rule: `vehicles/pallets`, "Any machine with tines".
+  A variant of its own in the ride menu and on a quarter of the sites, not an attachment swapped in
+  play (agreed in session).

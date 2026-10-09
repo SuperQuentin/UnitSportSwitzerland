@@ -6,7 +6,7 @@
   up to 16 rows (the drawing is auto-centred). Palette chars (light from the top left, 1 px `k` outline):
   `k` outline; `w a g G d` white/light/mid/dark grey/near-black; `r R q` red/dark/light;
   `o O y Y l` orange/dark/yellow/dark/pale; `n N t T` brown/dark/tan/light tan; `b B c C` blue/dark/cyan/pale;
-  `e E u` green/dark/light; `p P v s` purple/dark/light/pink.
+  `e E u` green/dark/light; `p P v s` purple/dark/light/pink; `m M h` olive/dark/pale (the army's aluminium, #716).
   `Map(grid, from, to)` recolours a grid, `Mirror` doubles a half, `Round(p => ...)` paints discs with auto outline.
 - **Fallback**: an item with no grid gets `Generic(def.Tint, def.Glyph, ShapeFor(def))`: a silhouette
   (`IconShape`: Box, Can, Bottle, Pouch, Scrap, Tool; chosen by category/use) shaded from the tint, plus the

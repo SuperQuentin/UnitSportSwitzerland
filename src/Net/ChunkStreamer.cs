@@ -64,17 +64,20 @@ public partial class ChunkStreamer : Node
     private readonly Dictionary<uint, PendingRequest> _pending = new();
     private uint _nextRequestId = 1;
 
-    /// <summary>Bytes this client has received since it connected.</summary>
-    public long BytesReceived { get; private set; }
+    /// <summary>Bytes this client has received since it connected, over ENet and HTTP.</summary>
+    public long BytesReceived => Interlocked.Read(ref _bytesReceived);
+    private long _bytesReceived;
 
     /// <summary>Terrain bytes received since the game started, across every server joined (#63: Settings → Data, the perf overlay).</summary>
-    public static long SessionBytes { get; private set; }
+    public static long SessionBytes => Interlocked.Read(ref _sessionBytes);
+    private static long _sessionBytes;
     private const long TenMb = 10L * 1024 * 1024;
 
     /// <summary>Files this client has received since it connected.</summary>
-    public int FilesReceived { get; private set; }
+    public int FilesReceived => _filesReceived;
+    private int _filesReceived;
 
-    /// <summary>Raised on the client when a transfer completes, for progress display.</summary>
+    /// <summary>Raised on the client when a transfer completes, for progress display. Any thread.</summary>
     public event Action<AssetKind, TileId, int>? AssetReceived;
 
     /// <summary>
@@ -89,6 +92,18 @@ public partial class ChunkStreamer : Node
     /// the server's steamer lies at. Null: the file in the chunk directory, if any.
     /// </summary>
     public byte[]? LandingsOverride { get; set; }
+
+    /// <summary>
+    /// Server: the HTTP mirror of the chunk directory (<c>--tiles-url</c>, #651), handed to every
+    /// client that asks for <see cref="AssetKind.HttpBase"/>. Null: tiles stream over ENet only.
+    /// </summary>
+    public string? TilesUrl { get; set; }
+
+    /// <summary>
+    /// Client: the HTTP mirror tried before the server for <see cref="AssetStream.ServedOverHttp"/>
+    /// kinds (#651), set by <see cref="ClientTerrainSync"/> once the server named one that answers.
+    /// </summary>
+    public HttpAssetSource? Http { get; set; }
 
     /// <summary>
     /// Server: where burnt CDs live (<c>Audio/Cd</c>). <see cref="AssetKind.Cd"/> requests are
@@ -160,6 +175,26 @@ public partial class ChunkStreamer : Node
     {
         if (IsServing) return Task.FromResult(new AssetResult(null, true));
 
+        if (Http is { Usable: true } http && AssetStream.ServedOverHttp(kind))
+            return FetchHttpFirstAsync(http, kind, id, ct);
+
+        return FetchEnetAsync(kind, id, ct);
+    }
+
+    /// <summary>The HTTP mirror, then the game link when the mirror failed for a transient reason.</summary>
+    private async Task<AssetResult> FetchHttpFirstAsync(HttpAssetSource http, AssetKind kind, TileId id, CancellationToken ct)
+    {
+        if (await http.FetchAsync(kind, id, ct).ConfigureAwait(false) is { } result
+            && (result.Data is not null || result.PermanentlyMissing || ct.IsCancellationRequested))
+        {
+            if (result.Data is { } data) Received(kind, id, data.Length);
+            return result;
+        }
+        return await FetchEnetAsync(kind, id, ct).ConfigureAwait(false);
+    }
+
+    private Task<AssetResult> FetchEnetAsync(AssetKind kind, TileId id, CancellationToken ct)
+    {
         // Quitting while tiles are still in flight used to take the process down with an access
         // violation inside CallDeferred: the worker threads outlive the tree, and deferring onto
         // a freed native object is not a managed exception, it is a 0xC0000005. The flag is set
@@ -255,7 +290,12 @@ public partial class ChunkStreamer : Node
         // prepares it; the RPCs go out from _Process, because an RPC sent off the main thread
         // never arrives (see the net notes).
         queue.Preparing++;
-        var manifestOverride = assetKind == AssetKind.Landings ? LandingsOverride : ManifestOverride;   // read on the main thread
+        var manifestOverride = assetKind switch   // read on the main thread
+        {
+            AssetKind.Landings => LandingsOverride,
+            AssetKind.HttpBase => TilesUrl is { } url ? System.Text.Encoding.UTF8.GetBytes(url) : null,
+            _ => ManifestOverride,
+        };
         System.Threading.Tasks.Task.Run(() => _prepared.Enqueue(Prepare(peer, requestId, assetKind, path, manifestOverride)));
     }
 
@@ -268,8 +308,10 @@ public partial class ChunkStreamer : Node
         try
         {
             byte[] payload;
-            if (kind is AssetKind.Manifest or AssetKind.Landings && manifestOverride is { } manifest)
+            if (kind is AssetKind.Manifest or AssetKind.Landings or AssetKind.HttpBase && manifestOverride is { } manifest)
                 payload = manifest;
+            else if (kind == AssetKind.HttpBase)
+                return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
             else if (!System.IO.File.Exists(path))
                 return new Prepared(peer, requestId, null, 0, 0, false, Missing: true);
             else payload = System.IO.File.ReadAllBytes(path);
@@ -340,13 +382,18 @@ public partial class ChunkStreamer : Node
             return;
         }
 
-        BytesReceived += result.Length;
-        FilesReceived++;
-        long before = SessionBytes;
-        SessionBytes += result.Length;
-        if (SessionBytes / TenMb != before / TenMb) GD.Print($"[stream] {SessionBytes / (1024.0 * 1024):F0} MB received this session");
-        AssetReceived?.Invoke(pending.Kind, pending.Tile, result.Length);
+        Received(pending.Kind, pending.Tile, result.Length);
         pending.Completion.TrySetResult(new AssetResult(result, false));
+    }
+
+    /// <summary>Counts a received file. Any thread: HTTP fetches complete on the pool.</summary>
+    private void Received(AssetKind kind, TileId tile, int length)
+    {
+        Interlocked.Add(ref _bytesReceived, length);
+        Interlocked.Increment(ref _filesReceived);
+        long after = Interlocked.Add(ref _sessionBytes, length);
+        if (after / TenMb != (after - length) / TenMb) GD.Print($"[stream] {after / (1024.0 * 1024):F0} MB received this session");
+        AssetReceived?.Invoke(kind, tile, length);
     }
 
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,

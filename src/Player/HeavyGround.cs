@@ -45,15 +45,22 @@ public static class HeavyGround
             float zRear = b.CgAt - HeavyTrain.RearGroupAt(b.Spec);   // + forward of the CG
             float g = ground(flat.Origin + (-flat.Basis.Z) * zRear);
             float pitch = 0f;
-            if (b.Spec.Pivot is Coupling.FifthWheel or Coupling.Turntable or Coupling.BusJoint)
+            if (HeavyTrain.Carries(b.Spec.Pivot))
             {
                 // the pin, where the section ahead carries it
                 var pin = poses[k - 1] * new Vector3(0, parent.Spec.HitchHeight, -parent.HitchZ);
                 float d = Mathf.Max(b.PivotZ - zRear, 0.5f);
-                pitch = Mathf.Clamp(Mathf.Atan2(pin.Y - g, d) - Mathf.Atan2(parent.Spec.HitchHeight, d), -0.4f, 0.4f);
+                pitch = Mathf.Clamp(Mathf.Atan2(pin.Y - g, d) - Mathf.Atan2(LevelPivot(b.Spec, parent.Spec), d), -0.4f, 0.4f);
             }
             poses[k] = new Transform3D(flat.Basis * new Basis(Vector3.Right, pitch), flat.Origin with { Y = g - zRear * Mathf.Sin(pitch) });
         }
         return poses;
     }
+
+    /// <summary>
+    /// How high a carried section's pivot is when it stands level: its own coupler's height (a ball
+    /// trailer's), else the hitch it hangs on (a kingpin is built for its fifth wheel).
+    /// </summary>
+    public static float LevelPivot(SectionSpec section, SectionSpec parent) =>
+        float.IsNaN(section.PivotHeight) ? parent.HitchHeight : section.PivotHeight;
 }

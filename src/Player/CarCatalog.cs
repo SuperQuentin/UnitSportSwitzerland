@@ -28,6 +28,8 @@ public static class CarCatalog
     private static readonly Color Black = new(0.06f, 0.06f, 0.07f);
     private static readonly Color Silver = new(0.78f, 0.79f, 0.82f);
     private static readonly Color White = new(0.94f, 0.94f, 0.92f);
+    /// <summary>A rental kart's hard slick: it grips tarmac, and little else (#715).</summary>
+    private static readonly TyreType KartTyre = new("Kart slick", 1f, 0.7f, 0.5f, 0.3f, 0.1f);
 
     public static readonly IReadOnlyList<CarSpec> All = Number(new[]
     {
@@ -635,6 +637,38 @@ public static class CarCatalog
             MaxSteer = 0.6f, DragArea = 0.57f,
             LockTurns = 3.3f, // lock to lock, est.: electric power steering
         },
+        // ---- 36: the rental go-kart (#715) ----
+        new CarSpec
+        {
+            Label = "Rental kart",
+            Style = DriveStyle.Grip,
+            Blurb = "A 270 cc rental kart: 9 hp on a bare tube frame, a solid rear axle and no suspension, 65 km/h with your backside on the road. "
+                + "It grips hard and is twitchy at the limit; slide it sideways and it will tip. {throttle} gas, {brake} brake",
+            Body = new CarBody
+            {
+                // the colour and number are the rider's (KartMeshBuilder.Dress); this is the hall's first kart
+                Shape = BodyShape.Kart, Length = 1.8f, Width = 1.38f, Height = 0.95f, WheelRadius = 0.136f,
+                Paint = new Color(0.88f, 0.07f, 0.08f), Rim = Silver, Number = 7,
+            },
+            Engine = EngineLayout.Single,
+            // source: Honda GX270 on a rental kart (OTK / Sodikart class): 270 cc, 6.6 kW (9 hp) gross at 3,600, 19.1 N·m at 2,500, a governor that cuts it at ~3,900 rpm and a
+            // centrifugal clutch that holds the engine at 2,000 when it slips (the idle here); frame 75 kg + driver 90 kg, wheelbase 1.05 m, track 1.2 m, rear 11x7.10-5 (140/55R5 is the nearest to
+            // its 0.136 m rolling radius); one fixed ratio, fitted so the governed engine gives 65 km/h; the CG is the driver's torso over a 0.12 m frame; rear-heavy (58%)
+            Mass = 165f, FrontAxle = 0.609f, RearAxle = 0.441f, CgHeight = 0.26f, Grip = 1.15f,
+            PeakKw = 6.6f, PeakRpm = 3600f, IdleRpm = 2000f, Redline = 3900f,
+            Gears = new[] { 1f }, FinalDrive = 3f, Reverse = 3f,
+            Torque = new (float, float)[] { (1400f, 13f), (2000f, 17f), (2500f, 19.1f), (3000f, 18.7f), (3600f, 17.5f), (3800f, 10f), (3900f, 2f) },
+            Tyre = "140/55R5", BrakeDecel = 8.5f,
+            // a solid axle: both rear wheels turn together, which is a locked diff
+            Diff = Differential.Mechanical,
+            RefZeroTo100 = 0f, RefTopKmh = 65f,
+            // the lock is a kart's, 26°, on a wheel that goes about half a turn lock to lock; a bare steering box
+            MaxSteer = 0.46f, DragArea = 0.5f,
+            LockTurns = 0.55f,
+            PowerSteering = false,
+            // no suspension: the tyres' sidewalls are all the travel it has, and every bump goes straight into the grip
+            TyreType = KartTyre, Travel = 0.06f, Stiffness = 3f,
+        },
     });
 
     /// <summary>The spec for a car kind, or null when the kind is not a car.</summary>
@@ -643,6 +677,10 @@ public static class CarCatalog
         int i = (int)kind - First;
         return i >= 0 && i < All.Count ? All[i] : null;
     }
+
+    /// <summary>The rental go-kart (#715), <see cref="RideKind"/> 36.</summary>
+    public static CarSpec Kart => _kart ??= All.First(c => c.Body.Shape == BodyShape.Kart);
+    private static CarSpec? _kart;
 
     public static bool IsCar(RideKind kind) => (int)kind >= First && (int)kind <= Last;
 
