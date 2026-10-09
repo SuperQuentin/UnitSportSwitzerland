@@ -199,6 +199,8 @@ public sealed partial class Truck : Rideable, IEngined, IBed
 
     /// <summary>The ignition, set by the owner each step (<see cref="FootPlayer.EngineOn"/>).</summary>
     public bool EngineRunning { get; set; } = true;
+    /// <summary>The automatic's selector from a wheel's H-shifter (#290), set by the driver each step; None: the pedals pick reverse.</summary>
+    public DriveSelector Selector { get; set; }
     /// <summary>A probe's choice of shifting, over Settings.</summary>
     public HeavyShift? ShiftOverride { get; set; }
 
@@ -300,7 +302,7 @@ public sealed partial class Truck : Rideable, IEngined, IBed
     public float BrakePedal { get; private set; }
 
     /// <summary>The gear as the dash shows it: N, R, A7 (automatic), 4H (a gate and the splitter), 7.</summary>
-    public string GearLabel => Box.Gear == 0 ? "N" : Box.Gear < 0 ? "R" : EffectiveMode switch
+    public string GearLabel => Box.Gear == 0 ? (Selector == DriveSelector.Park ? "P" : "N") : Box.Gear < 0 ? "R" : EffectiveMode switch
     {
         HeavyShift.Automatic => $"A{Box.Gear}",
         HeavyShift.HPattern or HeavyShift.HPatternSplitter => $"{Box.Gate}{(Box.Splitter == 1 ? "H" : "L")}",
@@ -600,12 +602,18 @@ public sealed partial class Truck : Rideable, IEngined, IBed
         // would back 40 t into whatever is behind — or down the hill it was crawling up.
         if (Mathf.Abs(u) > 0.5f) _reverseArmed = false;
         else if (Mathf.Abs(u) < 0.3f && input.Brake < 0.1f) _reverseArmed = true;
-        if (mode == HeavyShift.Automatic)
+        // a wheel's H-shifter as the selector (#290): P R N D from the lever, not from the pedals. R
+        // rolling forward is N until the truck is nearly stopped; P sets the spring brakes once slow
+        var selector = mode == HeavyShift.Automatic ? Selector : DriveSelector.None;
+        Box.HoldNeutral = selector is DriveSelector.Neutral or DriveSelector.Park
+            || selector == DriveSelector.Reverse && Box.Gear >= 0 && Mathf.Abs(u) >= 0.5f;
+        if (selector != DriveSelector.None) Box.WantsReverse = selector == DriveSelector.Reverse;
+        else if (mode == HeavyShift.Automatic)
         {
             if (Box.Gear >= 0 && Mathf.Abs(u) < 0.5f && input.Brake > 0.3f && input.Throttle < 0.05f && _reverseArmed) Box.WantsReverse = true;
             else if (Box.Gear < 0 && u > -0.5f && input.Throttle > 0.3f) Box.WantsReverse = false;
         }
-        bool swap = mode == HeavyShift.Automatic && Box.Gear < 0;
+        bool swap = mode == HeavyShift.Automatic && Box.Gear < 0 && selector == DriveSelector.None;
         float pedal = swap ? input.Brake : input.Throttle;
         float brake = swap ? input.Throttle : input.Brake;
         if (swap && u > 0.5f) { brake = Mathf.Max(brake, pedal); pedal = 0f; }
@@ -636,7 +644,8 @@ public sealed partial class Truck : Rideable, IEngined, IBed
         SteerAngle = delta;
 
         PrepareFarm(dt, u);
-        var (drive, retard) = Box.Step(new DriveDemand(pedal, brake, input.Handbrake, u, ground.Grade, Train.Mass, EngineRunning), dt);
+        bool parked = selector == DriveSelector.Park && Mathf.Abs(u) < 1.5f;
+        var (drive, retard) = Box.Step(new DriveDemand(pedal, brake, input.Handbrake || parked, u, ground.Grade, Train.Mass, EngineRunning), dt);
 
         float grip = Spec.Grip * SurfaceFactor(ground.Surface) * (arcade ? 1.15f : 1f);
 

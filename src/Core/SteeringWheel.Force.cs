@@ -32,9 +32,11 @@ public partial class SteeringWheel
     /// <summary>A feel this old means nobody is driving with this wheel any more.</summary>
     public const float StaleSeconds = 0.25f;
     /// <summary>
-    /// Past the lock, the soft lock is at full force within this much more rotation, radians (20°).
-    /// 8° made a stiff spring that, updated at the frame rate, bounced a fast rim off the lock and
-    /// back (measured on the HORI: 88° → 40° → 77°) instead of stopping it.
+    /// Past the lock, the soft lock is at full force within this much more rotation, radians (20°):
+    /// the default, now per wheel (<see cref="WheelSettings.SoftLockRampDeg"/>, #290). On the HORI 8°
+    /// made a stiff spring that, updated at the frame rate, bounced a fast rim off the lock and back
+    /// (88° → 40° → 77°) instead of stopping it. The G29 holds a 6° ramp without bouncing, and at 20°
+    /// a kart's lock (±99°) was not felt at all: 7° past it the force was only half.
     /// </summary>
     public const float SoftLockRamp = 0.35f;
     /// <summary>Past the lock, force per rad/s of rim speed (either way): it soaks up the bounce.</summary>
@@ -112,10 +114,10 @@ public partial class SteeringWheel
     /// The soft lock's push, + right: none inside <paramref name="halfLock"/> (radians of wheel either
     /// side of centre), then back toward centre, full within <see cref="SoftLockRamp"/> more.
     /// </summary>
-    public static float SoftLock(float angle, float halfLock)
+    public static float SoftLock(float angle, float halfLock, float ramp = SoftLockRamp)
     {
         float excess = Mathf.Abs(angle) - halfLock;
-        return excess <= 0f ? 0f : -Mathf.Sign(angle) * Mathf.Clamp(excess / SoftLockRamp, 0f, 1f);
+        return excess <= 0f ? 0f : -Mathf.Sign(angle) * Mathf.Clamp(excess / Mathf.Max(ramp, 0.01f), 0f, 1f);
     }
 
     /// <summary>
@@ -136,7 +138,7 @@ public partial class SteeringWheel
         float master = s.FfbStrength;
         // The soft lock is a wall, so it takes the device's whole force whatever the strength: capped
         // at 70% it was pushed straight through on the HORI (121° past a 90° lock, force maxed out).
-        float wall = SoftLock(angle, softAt);
+        float wall = SoftLock(angle, softAt, Mathf.DegToRad(s.SoftLockRampDeg));
         if (Mathf.Abs(angle) > softAt) wall -= Math.Clamp(rate * SoftLockDamping, -0.5f, 0.5f);
         float constant = feel.Torque * s.FfbAligning * master + wall;
         // the wheel's damper takes over from 6° short of the lock, fully at it
@@ -157,12 +159,36 @@ public partial class SteeringWheel
     private unsafe void UpdateForces(float dt)
     {
         var s = Settings;
-        bool want = s.ForceFeedback && _claimed;
-        if (want && !_hapticOpen && _hapticSdl && !_hapticFailed) OpenHaptic();
-        else if (!want && _hapticOpen) CloseHaptic();
+        // the forces only while the game has the focus: another window gets the wheel back at once
+        // (#290). --ffbcheck keeps them: launched from a terminal its window may never get the focus
+        bool want = s.ForceFeedback && _claimed && (_focused || Player.WheelProbe.ForceCheckRequested);
+        if (want && !_hapticOpen && _hapticSdl && !_hapticFailed)
+        {
+            OpenHaptic();
+            // G HUB switches its profile a moment after the game comes to the front, which can leave
+            // the fresh effects silent: made once more a little later
+            if (_hapticOpen) _remakeAt = Time.GetTicksMsec() / 1000.0 + 1.5;
+        }
+        else if (!want && _hapticOpen)
+        {
+            GD.Print("[wheel] force feedback released: the game window lost the focus");
+            CloseHaptic();
+        }
         if (!_hapticOpen) return;
         RecoverHaptic();
         if (!_hapticOpen) return;
+
+        // a drive starting after a pause (the first one, or after a menu or a walk) gets its effects
+        // made afresh: anything that reset the wheel meanwhile would have left them silent (#290)
+        bool starting = _feelAge <= StaleSeconds && _wasIdle;
+        _wasIdle = _feelAge > RefreshAfterIdle;
+        bool late = _remakeAt > 0 && Time.GetTicksMsec() / 1000.0 >= _remakeAt;
+        if (starting || late)
+        {
+            if (late) _remakeAt = 0;
+            Refresh(starting ? "a drive starts" : "the game came to the front a moment ago");
+            if (!_hapticOpen) return;
+        }
 
         _feelAge += dt;
         float constant, road, damper, friction, engine;
@@ -281,17 +307,73 @@ public partial class SteeringWheel
 
     private bool _hapticFailed;
 
+    /// <summary>Seconds without a vehicle's feel after which the next drive makes the effects afresh.</summary>
+    private const float RefreshAfterIdle = 2f;
+    private bool _wasIdle = true;
+    /// <summary>The game window has the focus; the forces are only held while it does.</summary>
+    private bool _focused = true;
+    /// <summary>When the effects are made once more after the game came to the front (0: not pending).</summary>
+    private double _remakeAt;
+
+    /// <summary>
+    /// The effects made afresh on the open device. Something can reset the wheel behind the game's
+    /// back after the effects are made: Logitech G HUB switching profiles as the game window comes to
+    /// the front, or another SDL (Godot's own joypad layer) opening the device while the world loads.
+    /// The effects then go silent while every update still succeeds, so <see cref="Send"/> sees
+    /// nothing to recover: forces off at launch until toggled (seen on a G29, #290). Done when a drive
+    /// starts and 1.5 s after the device is opened (the game came to the front). The device stays open:
+    /// closed and reopened at once, Windows refuses the reopen (the G29 then had no forces at all).
+    /// </summary>
+    private unsafe void Refresh(string why)
+    {
+        if (!_hapticOpen) return;
+        GD.Print($"[wheel] force feedback made afresh: {why}");
+        SDL_StopHapticEffects(_haptic);
+        foreach (var id in new[] { _constant, _road, _engine, _knock, _damper, _friction })
+            if ((int)id >= 0) SDL_DestroyHapticEffect(_haptic, id);
+        MakeEffects();
+    }
+
+    /// <summary>The focus decides whether the forces are held (<see cref="UpdateForces"/>): released on the way out, reopened on the way in.</summary>
+    public override void _Notification(int what)
+    {
+        if (what == NotificationApplicationFocusIn)
+        {
+            _focused = true;
+            // a wheel given up on while another program held it gets a fresh round of tries
+            (_hapticFailed, _openFailures, _openRetryAt) = (false, 0, 0);
+        }
+        else if (what == NotificationApplicationFocusOut) _focused = false;
+    }
+
+    /// <summary>Opens that failed in a row; after <see cref="OpenTries"/> the wheel is left without forces.</summary>
+    private int _openFailures;
+    private double _openRetryAt;
+    private const int OpenTries = 5;
+
     private unsafe void OpenHaptic()
     {
         if (_joy == null || !SDL_IsJoystickHaptic(_joy)) { _hapticFailed = true; return; }
+        if (Time.GetTicksMsec() / 1000.0 < _openRetryAt) return;
         _haptic = SDL_OpenHapticFromJoystick(_joy);
         if (_haptic == null)
         {
-            GD.PushWarning($"[wheel] force feedback: could not open {_name}: {SDL_GetError()}");
-            _hapticFailed = true;
+            // Windows refuses a device closed a moment ago (the recovery's reopen, a quick toggle):
+            // try again a second later, a few times, before giving up for the session
+            _openFailures++;
+            GD.PushWarning($"[wheel] force feedback: could not open {_name} (try {_openFailures} of {OpenTries}): {SDL_GetError()}");
+            _hapticFailed = _openFailures >= OpenTries;
+            _openRetryAt = Time.GetTicksMsec() / 1000.0 + 1.0;
             return;
         }
+        _openFailures = 0;
         _hapticOpen = true;
+        MakeEffects();
+    }
+
+    /// <summary>The device's gain and autocentre set, and every effect it supports made and started.</summary>
+    private unsafe void MakeEffects()
+    {
         _features = SDL_GetHapticFeatures(_haptic);
         if ((_features & SDL_HAPTIC_GAIN) != 0) SDL_SetHapticGain(_haptic, 100);
         // the wheel's own centring spring would fight the aligning torque
@@ -314,6 +396,11 @@ public partial class SteeringWheel
         GD.Print($"[wheel] force feedback on {SDL_GetHapticName(_haptic)}: features 0x{_features:x}, "
             + $"constant {(int)_constant >= 0}, road {(int)_road >= 0}, engine {(int)_engine >= 0}, knock {(int)_knock >= 0}, "
             + $"damper {(int)_damper >= 0}, friction {(int)_friction >= 0}");
+        // the device takes constant forces but would not make one: another program holds the wheel
+        // (a window that came up, G HUB). Left like that it stayed silent for good, nothing ever being
+        // sent to fail; closed and reopened a second later instead, as a refused update is (#290)
+        if ((_features & SDL_HAPTIC_CONSTANT) != 0 && (int)_constant < 0 && _reopenAt <= 0)
+            _reopenAt = Time.GetTicksMsec() / 1000.0 + 1.0;
     }
 
     /// <summary>Creates (and with <paramref name="run"/>, starts) an effect the device supports; −1 otherwise.</summary>

@@ -93,6 +93,13 @@ public sealed class SignalPlan
     public float Offset { get; set; }
     /// <summary>Pedestrian heads have a yellow lens (3-lens canton heads, e.g. Vaud); else red after green (e.g. Geneva).</summary>
     public bool PedestrianAmber { get; set; } = true;
+    /// <summary>
+    /// The canton's white plates run on below each car and bike head and carry its arrow (the lenses
+    /// keep theirs), and its bike heads stand on one too; elsewhere a bike head has a small arrow
+    /// plate of its own (#759). Bit 1 of the byte that holds <see cref="PedestrianAmber"/>:
+    /// data written before reads false.
+    /// </summary>
+    public bool ArrowPlates { get; set; }
 
     /// <summary>The aspect of a group at server time <paramref name="t"/> (seconds).</summary>
     public SignalAspect State(int group, double t)
@@ -789,7 +796,7 @@ public sealed class RoadSignal
             var p = s.Plan;
             w.Write(s.X); w.Write(s.Y); w.Write(s.Z);
             w.Write(p.Cycle); w.Write(p.Offset);
-            w.Write((byte)(p.PedestrianAmber ? 1 : 0));
+            w.Write((byte)((p.PedestrianAmber ? 1 : 0) | (p.ArrowPlates ? 2 : 0)));
             w.Write(checked((byte)p.Arms.Count));
             w.Write(checked((byte)p.Groups.Count));
             for (int i = 0; i < p.Arms.Count; i++)
@@ -839,9 +846,10 @@ public sealed class RoadSignal
         {
             float x = r.ReadSingle(), y = r.ReadSingle(), z = r.ReadSingle();
             float cycle = r.ReadSingle(), offset = r.ReadSingle();
-            bool pedAmber = (r.ReadByte() & 1) != 0;
+            byte kinds = r.ReadByte();
+            bool pedAmber = (kinds & 1) != 0, arrowPlates = (kinds & 2) != 0;
             int arms = r.ReadByte(), groups = r.ReadByte();
-            var plan = new SignalPlan { Cycle = cycle, Offset = offset, PedestrianAmber = pedAmber };
+            var plan = new SignalPlan { Cycle = cycle, Offset = offset, PedestrianAmber = pedAmber, ArrowPlates = arrowPlates };
             var stops = new float[arms * 3];
             for (int i = 0; i < arms; i++)
             {

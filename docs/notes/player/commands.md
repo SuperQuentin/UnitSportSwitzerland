@@ -4,6 +4,16 @@
   holds the throttle via `RideControls`, and prints speed/altitude/clearance every 2 s with a
   non-zero exit if the rider went nowhere or ended under the terrain. Riding is the one part
   that cannot be judged from a screenshot; add `--ridemenu [tab card]` (with `--shot`) to capture the picker (see the ui `travel-menu` note).
+- **Start in a ride, to play**: `--seat kart|car:N|truck:N|moto:N|bike|...` (the `--ride` names,
+  `RideProbe.KindNamed`) with `--at E,N` and `--heading deg`: `Core/SeatStart` puts up its own screen
+  (`SeatOverlay`: "Getting into the …", the step it is on; it swallows all input and holds the body
+  still), since a command-line run has no loading screen (`GameShell.Direct`); the body lands on open
+  ground (`GroundStart`), is stood on the nearest road (`RaceRoute`) facing along it (the way nearer
+  `--heading`), and is seated; the controls are then the player's. A kart on a Geneva street:
+  `--at 2500300,1118450 --heading 207 --seat kart`.
+  `--ride` is the probe: its own body, the throttle held, then it quits.
+- Car gearbox (#290): `--cargearbox auto|seq|manual` sets it for one run; `--cargearcheck [trace]`
+  (headless, no world) checks the sequential and manual boxes and the H-shifter's lever (`car-gearbox`).
 - Trucks and buses: `--truckcheck [trace]` (headless, numbers), `--truckprobe N[,s[,shot]] [--trailer M] [--kmh V] [--minor] [--trace] --at E,N` (a real road), `--heavynet a|b [pw]` (two clients), `--passengernet a|b|c [pw]` (three clients, `passengers`), `--decknet a|b|solo [pw]` (walking in a bus, `walk-aboard`), `--ride truck:N --trailer M [--steer x]`, `--gearbox auto|seq|seqclutch|hsplit|h`; see `trucks-buses`. `--exitcheck [pw] --world fixture` / `--exitcheck watch`: getting out of a car, truck or bus, walled in or not, up from a bus's wheel into its aisle (`vehicle-hull-collision`, `walk-aboard`). `tools/decknetcheck.sh`: walking in a bus over loopback.
 - Crash check (#214): `--ride car,19,out.png --wall 70 [--crashshots 0.4,1,2.5]` drives into a wall 70 m ahead and prints the throw, flight and rest (`crash-ragdoll`); over loopback `tools/crashnetcheck.sh` (`CHUNKS=` from a worktree).
 - Cockpit check: `<godot> --headless --path . -- --cockpitcheck` — every car's, truck's and bus's driver fits

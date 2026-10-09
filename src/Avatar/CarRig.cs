@@ -20,6 +20,10 @@ public enum BodyShape
     Midship,
     /// <summary>A rental go-kart (#715): a tube frame, no body to speak of, built by <see cref="KartMeshBuilder"/> and not by <see cref="CarMeshBuilder"/>.</summary>
     Kart,
+    /// <summary>A tall supermini: short sloping nose, the windscreen far forward, a high roof and an upright hatch (XP90 Yaris, #760).</summary>
+    TallHatch,
+    /// <summary>A five-door liftback in one arc: raked windscreen, the roof's peak over the B-pillar, a long rear glass down to a high Kamm tail split by a spoiler (XW20 Prius, #760).</summary>
+    Liftback,
 }
 
 /// <summary>A rear wing, from none to a GT wing on tall stands.</summary>
@@ -63,6 +67,23 @@ public sealed record CarBody
     public bool Scoop { get; init; }
     /// <summary>Lowrider hydraulics: the body hops on its wheels while <see cref="CarRig.Bouncing"/> (#464).</summary>
     public bool Hydraulics { get; init; }
+    /// <summary>
+    /// The driver sits on the left (a European car); off, on the right, as in the Japanese Initial D
+    /// cars. The driver's door is <see cref="CarRig.DriverDoor"/> either way (#760).
+    /// </summary>
+    public bool LeftHandDrive { get; init; }
+    /// <summary>
+    /// Two pedals and a selector on the dash, the gear display reading D: set by the catalog from the
+    /// car's gearbox (<c>CarSpec.Transmission</c>), never by hand (#760).
+    /// </summary>
+    public bool Automatic { get; init; }
+    /// <summary>
+    /// No dials behind the wheel: a digital display in a hood at the top middle of the dash (speed in
+    /// figures, the gear, READY, the lamps) and a touchscreen under it, as in the XW20 Prius (#760).
+    /// </summary>
+    public bool CentreDisplay { get; init; }
+    /// <summary>The speed reflected into the windscreen above the wheel, in the driver's line of sight (the XW30 Prius, #760).</summary>
+    public bool Hud { get; init; }
 
     // ---- garage parts (Player/CarTuning); the defaults are the catalog look ----
     /// <summary>Under the front bumper: 0 nothing, 1 a lip, 2 a splitter.</summary>
@@ -129,6 +150,8 @@ public partial class CarRig : Node3D, IHingedDoors, Items.IBeatReactive
     /// <summary>Pedals, 0..1: they swing on their hinges and the driver's right foot presses them.</summary>
     public float Throttle { get; set; }
     public float Brake { get; set; }
+    /// <summary>The clutch pedal, 0..1: a manual car's (#290), up in an automatic.</summary>
+    public float Clutch { get; set; }
     public bool Handbrake { get; set; }
     public float SpeedKmh { get; set; }
     public float Rpm { get; set; }
@@ -146,9 +169,16 @@ public partial class CarRig : Node3D, IHingedDoors, Items.IBeatReactive
     /// <summary>The seats a player can take, the driver's first (#158).</summary>
     public SeatAnchor[] Seats => _cabin.Seats;
 
+    /// <summary>
+    /// The door bits, named for a right-hand-drive car. The front two follow the driver: on a
+    /// left-hand-drive car (<see cref="CarBody.LeftHandDrive"/>) <see cref="DoorRight"/> is the left
+    /// door and <see cref="DoorLeft"/> the right one, as on the pickup (#760).
+    /// </summary>
     public const byte DoorLeft = 1, DoorRight = 2, DoorRearLeft = 4, DoorRearRight = 8;
-    /// <summary>These are right-hand-drive cars: the driver gets in and out on the right.</summary>
+    /// <summary>The driver's door, on whichever side the driver sits; the driver gets in and out through it.</summary>
     public const byte DriverDoor = DoorRight;
+    /// <summary>The front passenger's door.</summary>
+    public const byte PassengerDoor = DoorLeft;
     /// <summary>Seconds for a door to swing fully open or shut.</summary>
     private const float DoorTime = 0.4f;
     /// <summary>Headlights on. On a car with pop-ups this also raises them.</summary>
@@ -212,6 +242,9 @@ public partial class CarRig : Node3D, IHingedDoors, Items.IBeatReactive
     private CarCabin _cabin = null!;
     private Node3D _wheel = null!, _tach = null!, _speedo = null!;
     private MeshInstance3D _digit = null!;
+    /// <summary>A digital speedometer's figures, units first, and the km/h they show (#760); empty on a car with dials.</summary>
+    private MeshInstance3D[] _speedDigits = System.Array.Empty<MeshInstance3D>();
+    private int _kmhShown = -1;
     private MeshInstance3D[] _lamps = System.Array.Empty<MeshInstance3D>();
     private Node3D[] _pedals = System.Array.Empty<Node3D>();
     private HumanPalette? _driverPalette;
@@ -231,10 +264,11 @@ public partial class CarRig : Node3D, IHingedDoors, Items.IBeatReactive
 
     /// <param name="gauges">The dials' full scales; the default suits a sports car.</param>
     /// <param name="driver">The figure at the wheel, in its colours; null for an empty car (parked, previewed).</param>
-    public static CarRig Create(CarBody body, float wheelbase, CarGauges? gauges = null, HumanPalette? driver = null)
+    /// <param name="smooth">The lit styles' rounded body where the shape has one (#760); null = as the style says, false for the hull's measure.</param>
+    public static CarRig Create(CarBody body, float wheelbase, CarGauges? gauges = null, HumanPalette? driver = null, bool? smooth = null)
     {
         var rig = new CarRig { Name = "Car", _driverPalette = driver };
-        rig.Assemble(CarMeshBuilder.Build(body, wheelbase, gauges));
+        rig.Assemble(CarMeshBuilder.Build(body, wheelbase, gauges, smooth));
         // a preset's ride height, tread and off-road kit: the body moves with everything on it,
         // the wheels stay on the road (they are the rig's own children)
         rig._body.Position += Vector3.Up * body.Lift;
@@ -361,6 +395,11 @@ public partial class CarRig : Node3D, IHingedDoors, Items.IBeatReactive
         _speedo = NeedleNode("Speedo", cabin.Speedo);
         _digit = new MeshInstance3D { Name = "Gear", MaterialOverride = lit, Position = offset };
         _body.AddChild(_digit);
+        if (cabin.SpeedDigits is { } figures)
+        {
+            _speedDigits = figures.Select((_, i) => new MeshInstance3D { Name = $"Speed{i}", MaterialOverride = lit, Position = offset }).ToArray();
+            foreach (var figure in _speedDigits) _body.AddChild(figure);
+        }
         _lamps = cabin.Lamps.Select((mesh, i) => new MeshInstance3D { Name = $"Lamp{i}", Mesh = mesh, MaterialOverride = lit, Position = offset, Visible = false }).ToArray();
         foreach (var lamp in _lamps) _body.AddChild(lamp);
         _pedals = cabin.Pedals.Select((pedal, i) =>
@@ -480,11 +519,29 @@ public partial class CarRig : Node3D, IHingedDoors, Items.IBeatReactive
         _tach.Basis = new Basis(_cabin.Tach.Axis, CarNeedle.Angle(_rpmShown / _cabin.Gauges.TachRpm));
         _speedo.Basis = new Basis(_cabin.Speedo.Axis, CarNeedle.Angle(_speedShown / _cabin.Gauges.SpeedoKmh));
         _digit.Mesh = _cabin.GearDigits[CarCabin.DigitFor(Gear)];
+        if (_cabin.SpeedDigits is { } figures)
+        {
+            // the figures change only when the whole km/h does: no leading zeros
+            int kmh = Mathf.Clamp(Mathf.RoundToInt(_speedShown), 0, 999);
+            if (kmh != _kmhShown)
+            {
+                _kmhShown = kmh;
+                // readouts of CarCabin.SpeedPlaces places each, units first: the display, then the HUD
+                for (int place = 0; place < _speedDigits.Length; place++)
+                {
+                    int k = place % CarCabin.SpeedPlaces, div = k == 0 ? 1 : k == 1 ? 10 : 100;
+                    _speedDigits[place].Visible = k == 0 || kmh >= div;
+                    _speedDigits[place].Mesh = figures[place][kmh / div % 10];
+                }
+            }
+        }
         _lamps[CarCabin.LampHandbrake].Visible = Handbrake;
         _lamps[CarCabin.LampLights].Visible = Headlights;
         _lamps[CarCabin.LampEngine].Visible = !EngineRunning;
         _pedals[CarCabin.PedalThrottle].Basis = new Basis(Vector3.Right, DriverSeat.PedalTravel * Mathf.Clamp(Throttle, 0f, 1f));
         _pedals[CarCabin.PedalBrake].Basis = new Basis(Vector3.Right, DriverSeat.PedalTravel * Mathf.Clamp(Brake, 0f, 1f));
+        if (_pedals.Length > CarCabin.PedalClutch)
+            _pedals[CarCabin.PedalClutch].Basis = new Basis(Vector3.Right, DriverSeat.PedalTravel * Mathf.Clamp(Clutch, 0f, 1f));
 
         _glass.AlbedoColor = Colors.White with { A = View == CockpitView.Outside ? 1f : GlassFromSeat };
 

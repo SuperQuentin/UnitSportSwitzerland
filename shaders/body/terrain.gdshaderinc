@@ -78,7 +78,7 @@ void fragment() {
             discard;
         }
     }
-    vec3 n = normalize(cross(dFdy(world_pos), dFdx(world_pos)));
+    vec3 n = facet_normal(VERTEX, INV_VIEW_MATRIX);
     if (n.y < 0.0) {
         n = -n;
     }
