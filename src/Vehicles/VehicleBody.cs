@@ -529,7 +529,7 @@ public partial class VehicleBody : CharacterBody3D
         Rotation = new Vector3(0, _motion.Yaw, 0);
         heading = -GlobalTransform.Basis.Z with { Y = 0 };
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
-        var v = heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed;
+        var v = heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed + Slide(dt, onFloor);
         v.Y = onFloor ? Mathf.Min(Velocity.Y, 0f) : Velocity.Y - Rideable.Gravity * dt;
         Velocity = v;
         MoveAndSlide();
@@ -546,7 +546,7 @@ public partial class VehicleBody : CharacterBody3D
         _motion.Speed = Mathf.MoveToward(_motion.Speed, 0f, (onFloor ? 3f : 0.3f) * dt);
         var heading = -GlobalTransform.Basis.Z with { Y = 0 };
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
-        var v = heading * _motion.Speed;
+        var v = heading * _motion.Speed + Slide(dt, onFloor);
         v.Y = onFloor ? Mathf.Min(Velocity.Y, 0f) : Velocity.Y - Rideable.Gravity * dt;
         Velocity = v;
         MoveAndSlide();

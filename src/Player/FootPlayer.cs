@@ -4323,6 +4323,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         interiors?.BeforeMove(this);
         MoveAndSlide();
         interiors?.AfterMove(this, from);
+        // a parked vehicle in the way takes its share of the blow (#756): judged on the speed before the move
+        ShoveInto(dt, velocity with { Y = 0 });
         // the sections behind a truck's cab follow it, and report what they hit
         if (_ride is Truck train) StepSections(train, dt);
         // a farm machine works the ground under its bar (#494, FootPlayer.Farm.cs)

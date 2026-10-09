@@ -172,6 +172,38 @@ public partial class FootPlayer
         return true;
     }
 
+    private float _shoveCooldown;
+
+    /// <summary>
+    /// Driven into a parked vehicle (#756): this one gives up its share of the momentum by mass,
+    /// the other takes the rest (<c>VehicleBody.TakeShove</c>). <paramref name="mine"/> is the
+    /// velocity before the move: after it, MoveAndSlide has both reading as stopped. Once per
+    /// blow: pressed against a heavy one, the wall logic holds the speed to what it can push.
+    /// </summary>
+    private void ShoveInto(float dt, Vector3 mine)
+    {
+        if (_shoveCooldown > 0f) { _shoveCooldown -= dt; return; }
+        if (_ride is not { IsVehicle: true } ride || ride is Flyer or Boat) return;
+        for (int i = 0; i < GetSlideCollisionCount(); i++)
+        {
+            var c = GetSlideCollision(i);
+            var other = c.GetCollider() as Node;
+            if (other is not UnitSport.Vehicles.VehicleBody && other?.GetParent() is UnitSport.Vehicles.VehicleBody section) other = section;
+            if (other is not UnitSport.Vehicles.VehicleBody parked || parked.Wrecked) continue;
+            var n = -c.GetNormal() with { Y = 0 };
+            if (n.LengthSquared() < 1e-4f) continue;
+            float closing = (mine - parked.Velocity with { Y = 0 }).Dot(n.Normalized());
+            if (closing < 0.3f) continue;
+            float md = UnitSport.Vehicles.VehicleBody.MassOf(ride), m = UnitSport.Vehicles.VehicleBody.MassOf(parked.Ride);
+            float share = (1f + UnitSport.Vehicles.VehicleBody.ShoveRestitution) * closing / (md + m);
+            parked.TakeShove(n.Normalized() * (share * md));
+            _motion.Speed = Mathf.Sign(_motion.Speed) * Mathf.Max(0f, Mathf.Abs(_motion.Speed) - share * m);
+            GD.Print($"[shove] {ride.Label} into {parked.Ride.Label} closing {closing:0.0} m/s: it takes {share * md:0.0}, this loses {share * m:0.0}");
+            _shoveCooldown = 0.3f;
+            return;
+        }
+    }
+
     /// <summary>
     /// Probes (#380): thrown from <paramref name="at"/> as if off a bike that hit something, on foot,
     /// with <paramref name="launch"/>: the ragdoll, its replication and the crash camera as in a crash.
