@@ -22,20 +22,30 @@ public partial class SignalLamps : Node3D
     private const double BlinkHalf = 0.5;
 
     /// <summary>
-    /// What a lens shows (#759): a car lens its shape; a pedestrian lens a standing figure in the
-    /// red and a walking one in the green and yellow; a bike lens a bicycle. One mesh, material
-    /// and MultiMesh each.
+    /// What a lens shows (#759): a car lens its shape, a round one the arrow of its moves when it
+    /// does not give them all (<see cref="SignalBuilder.ArrowMoves"/>); a pedestrian lens a standing
+    /// figure in the red and a walking one in the green and yellow; a bike lens a bicycle. One
+    /// mesh, material and MultiMesh each.
     /// </summary>
-    private enum Icon : byte { Round, LeftArrow, RightArrow, Standing, Walking, Bike }
-    private const int IconCount = 6;
+    private enum Icon : byte { Round, LeftArrow, RightArrow, Standing, Walking, Bike, Straight, StraightLeft, StraightRight }
+    private const int IconCount = 9;
 
-    private static Icon IconOf(SignalBuilder.Lens lens) => lens.Shape switch
+    private static Icon IconOf(SignalBuilder.Lens lens, SignalPlan plan) => lens.Shape switch
     {
         SignalBuilder.Shape.LeftArrow => Icon.LeftArrow,
         SignalBuilder.Shape.RightArrow => Icon.RightArrow,
         SignalBuilder.Shape.Square => lens.Role == SignalBuilder.Role.Red ? Icon.Standing : Icon.Walking,
         SignalBuilder.Shape.Bike => Icon.Bike,
-        _ => Icon.Round,
+        _ when lens.Role == SignalBuilder.Role.Flash => Icon.Round,
+        _ => SignalBuilder.ArrowMoves(plan, lens.Group) switch
+        {
+            SignalMoves.Through => Icon.Straight,
+            SignalMoves.Through | SignalMoves.Left => Icon.StraightLeft,
+            SignalMoves.Through | SignalMoves.Right => Icon.StraightRight,
+            SignalMoves.Left => Icon.LeftArrow,
+            SignalMoves.Right => Icon.RightArrow,
+            _ => Icon.Round,
+        },
     };
 
     private static Shader? _shader;
@@ -158,7 +168,7 @@ void fragment() {
     }
 
     /// <summary>A car head's lens blooms and grows with distance; a pedestrian or bike lens does not.</summary>
-    private static bool Blooms(Icon icon) => icon is Icon.Round or Icon.LeftArrow or Icon.RightArrow;
+    private static bool Blooms(Icon icon) => icon is not (Icon.Standing or Icon.Walking or Icon.Bike);
 
     private SignalPlan[] _plans = [];
     private SignalBuilder.Lens[] _lenses = [];
@@ -191,7 +201,7 @@ void fragment() {
         _slot = new int[_lenses.Length];
         _icon = new Icon[_lenses.Length];
         var counts = new int[IconCount];
-        for (int i = 0; i < _lenses.Length; i++) _slot[i] = counts[(int)(_icon[i] = IconOf(_lenses[i]))]++;
+        for (int i = 0; i < _lenses.Length; i++) _slot[i] = counts[(int)(_icon[i] = IconOf(_lenses[i], _plans[_lenses[i].Junction]))]++;
         for (int s = 0; s < IconCount; s++)
         {
             if (counts[s] == 0) continue;
@@ -292,6 +302,12 @@ void fragment() {
         {
             case Icon.LeftArrow: flat.Arrow(-1); break;
             case Icon.RightArrow: flat.Arrow(1); break;
+            case Icon.Straight:
+                flat.Fan([new(0f, 0.95f), new(-0.62f, 0.22f), new(0.62f, 0.22f)]);
+                flat.Line(new(0f, 0.3f), new(0f, -0.85f), 0.4f);
+                break;
+            case Icon.StraightLeft: flat.StraightAndTurn(-1); break;
+            case Icon.StraightRight: flat.StraightAndTurn(1); break;
             case Icon.Standing:
                 // the red figure: upright, arms at its sides, feet together
                 flat.Disc(new(0f, 0.64f), 0.17f, 10);
@@ -369,6 +385,19 @@ void fragment() {
                 var d1 = new Vector2(Mathf.Cos(Mathf.Tau * (i + 1) / n), Mathf.Sin(Mathf.Tau * (i + 1) / n));
                 Fan([centre + d0 * (r - width * 0.5f), centre + d0 * (r + width * 0.5f), centre + d1 * (r + width * 0.5f), centre + d1 * (r - width * 0.5f)]);
             }
+        }
+
+        /// <summary>
+        /// Straight on and a turn to <paramref name="dir"/> (-1 left, +1 right as the viewer sees
+        /// it): a stem up with its head, and a branch off its middle with its own.
+        /// </summary>
+        public void StraightAndTurn(float dir)
+        {
+            float x = -0.3f * dir;
+            Fan([new(x, 0.95f), new(x - 0.5f, 0.4f), new(x + 0.5f, 0.4f)]);
+            Line(new(x, 0.45f), new(x, -0.85f), 0.32f);
+            Line(new(x, -0.25f), new(x + 0.7f * dir, -0.25f), 0.32f);
+            Fan([new(x + 1.22f * dir, -0.25f), new(x + 0.7f * dir, 0.25f), new(x + 0.7f * dir, -0.75f)]);
         }
 
         /// <summary>An arrow pointing along <paramref name="dir"/> (-1 left, +1 right as the viewer sees it): a head, then a shaft.</summary>

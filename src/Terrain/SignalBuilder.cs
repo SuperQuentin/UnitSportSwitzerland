@@ -221,6 +221,24 @@ public static class SignalBuilder
         return lamps.Lenses.Count == 0 ? null : lamps;
     }
 
+    /// <summary>
+    /// What a car head's round lenses show (#759): a ball where its group gives every move the
+    /// approach has (<see cref="SignalMoves.None"/>); else, as in Switzerland, an arrow of the moves
+    /// it does give: straight on, straight on and a turn, or the turn alone (a pocket with its own
+    /// arrow head takes the rest).
+    /// </summary>
+    public static SignalMoves ArrowMoves(SignalPlan plan, int group)
+    {
+        var g = plan.Groups[group];
+        if (g.Kind != SignalGroupKind.Car || g.Moves == SignalMoves.None) return SignalMoves.None;
+        var all = SignalMoves.None;
+        foreach (var o in plan.Groups)
+            if (o.Arm == g.Arm && o.Kind is SignalGroupKind.Car or SignalGroupKind.LeftArrow or SignalGroupKind.RightArrow)
+                all |= o.Moves;
+        // left and right without straight on has no Swiss arrow: a ball
+        return (g.Moves & all) == all || g.Moves == (SignalMoves.Left | SignalMoves.Right) ? SignalMoves.None : g.Moves;
+    }
+
     private static int Flasher(SignalPlan plan, int group)
     {
         for (int g = 0; g < plan.Groups.Count; g++)

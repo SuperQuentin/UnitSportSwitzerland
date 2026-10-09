@@ -122,7 +122,14 @@
   no board at all (user's review). Geneva's pedestrian head (the two-lens one, `!PedestrianAmber`,
   after the user's photo) is a light grey housing with one dark window, the red standing figure
   left and the green walking one right, side by side at 1.45 times a lens (`Head.SideBySide`);
-  the model viewer shows a Vaud and a Geneva pole. Not done: the photo's arrows printed on the plate under each
+  the model viewer shows a Vaud and a Geneva pole.
+- **Arrows in the round lenses** (#759, user: "when the ball would not allow every direction, a
+  straight or combined arrow"): `SignalBuilder.ArrowMoves(plan, group)` gives a car group's moves
+  when they are not every move its approach has (the union of the arm's Car, LeftArrow and
+  RightArrow groups), else None: a ball. `SignalLamps` draws straight on, straight and left,
+  straight and right, or the lone turn; left plus right with no straight on stays a ball, the
+  flasher stays round. A crossroads approach with both pockets shows straight on in its middle
+  head. Tier 0 `MainHead_ABallOnlyWhereItGivesEveryMove_ElseItsArrow`. Not done: the photo's arrows printed on the plate under each
   head (ours are arrow masks in the lenses, which Basel-Stadt also uses).
 - **Detailed heads** (#759, "less blocky"): `SignalBuilder` draws rounded housings
   (`RoundedHousing`, 2-segment corners), a visor over each lens (`LensFittings`: an arc over the
