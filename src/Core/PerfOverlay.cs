@@ -152,7 +152,9 @@ public partial class PerfOverlay : CanvasLayer
         }
         if (GameSettings.Current.PerfOverlay == PerfOverlayMode.Fps)
         {
-            _label.Text = string.Format(ci, "{0,4:F0} fps  {1,5:F1} ms", fps, avgMs) + (rec == "" ? "" : "\n" + rec);
+            string where = Where();
+            _label.Text = string.Format(ci, "{0,4:F0} fps  {1,5:F1} ms", fps, avgMs) + (where == "" ? "" : "\n" + where)
+                + (rec == "" ? "" : "\n" + rec);
             return;
         }
 
@@ -168,6 +170,7 @@ public partial class PerfOverlay : CanvasLayer
 
         var sb = new StringBuilder();
         sb.AppendFormat(ci, "{0,4:F0} fps  {1,5:F1} ms avg\n", fps, avgMs);
+        if (Where() is { Length: > 0 } here) sb.Append(here).Append('\n');
         sb.AppendFormat(ci, "frame  p99 {0:F1}  max {1:F1} ms  >33ms {2}\n", p99, max * 1000, over33);
         var (gpuMs, renderCpuMs) = PerfRecorder.RenderTimes(GetViewport());
         sb.AppendFormat(ci, "gpu    {0:F1} ms  render cpu {1:F1} ms\n", gpuMs, renderCpuMs);
@@ -213,5 +216,22 @@ public partial class PerfOverlay : CanvasLayer
 
         if (rec != "") sb.Append(rec).Append('\n');
         _label.Text = sb.ToString().TrimEnd('\n');
+    }
+
+    private static readonly string[] Compass = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+
+    /// <summary>
+    /// Where the camera is and which way it looks (#772): LV95 E,N, altitude, and its facing as a compass point and
+    /// degrees (0 north, 90 east). Empty with no tiles bound.
+    /// </summary>
+    private string Where()
+    {
+        if (_chunks.Origin is not { } origin || GetViewport().GetCamera3D() is not { } cam) return "";
+        var p = cam.GlobalPosition;
+        var (e, n) = origin.ToLv95(p);
+        var forward = -cam.GlobalBasis.Z;
+        double bearing = (Math.Atan2(forward.X, -forward.Z) * 180 / Math.PI + 360) % 360;   // world -Z is north
+        return string.Format(CultureInfo.InvariantCulture, "LV95 {0:F0},{1:F0}  alt {2:F0} m  facing {3} {4:F0}°",
+            e, n, p.Y, Compass[(int)Math.Round(bearing / 45) % 8], bearing);
     }
 }
