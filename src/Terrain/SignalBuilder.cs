@@ -115,9 +115,10 @@ public static class SignalBuilder
                     // the backboard (#759): a car head's plate flush with the housing's face, clear of it by
                     // a hair, white in front and black behind (one face, PlateStyle); a bike head's only in
                     // some cantons; a pedestrian head has none
-                    if (h.Shape != Shape.Square && (h.Shape != Shape.Bike || signal.Plan.BikeBoard))
+                    bool board = h.Shape != Shape.Square && (h.Shape != Shape.Bike || signal.Plan.BikeBoard);
+                    float gap = BorderGap * h.Scale, band = BorderWidth * h.Scale, corner = rounded ? CornerRadius * h.Scale : 0f;
+                    if (board)
                     {
-                        float gap = BorderGap * h.Scale, band = BorderWidth * h.Scale, corner = rounded ? CornerRadius * h.Scale : 0f;
                         BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), h.Centre - h.Front * 0.002f,
                             h.Right, w * 0.5f + gap, half + gap, band, corner);
                     }
@@ -145,6 +146,10 @@ public static class SignalBuilder
                         RoundedHousing(vertices, colors, uvs, uv2s, indices, at - h.Front * (HeadDepth * 0.5f), h.Right, h.Front,
                             HeadWidth * 0.5f, HeadDepth * 0.5f, Pitch * 0.5f, CornerRadius);
                         LensFittings(vertices, colors, uvs, uv2s, indices, at, h.Right, h.Front, 1f, square: false);
+                        // its own white band: it overlaps the head's, white on white in one plane, so the two read as one
+                        if (board)
+                            BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), at - h.Front * 0.002f,
+                                h.Right, HeadWidth * 0.5f + gap, Pitch * 0.5f + gap, band, corner);
                     }
                 }
             }
