@@ -170,6 +170,10 @@ public static class SignalBuilder
                         RoundedHousing(vertices, colors, uvs, uv2s, indices, at - h.Front * (HeadDepth * 0.5f), h.Right, h.Front,
                             HeadWidth * 0.5f, HeadDepth * 0.5f, Pitch * 0.5f, CornerRadius);
                         LensFittings(vertices, colors, uvs, uv2s, indices, at, h.Right, h.Front, 1f, square: false);
+                        // held by a bracket from the side of its head's housing, behind the plates (#771)
+                        var back = h.Front * (HeadDepth * 0.6f);
+                        Tube(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(),
+                            at - h.Right * (HeadSpacing - w * 0.5f) - back, at - h.Right * (HeadWidth * 0.5f) - back, 0.025f);
                         // its own white band, clear of the head's like the next head's
                         if (board)
                             BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), at - h.Front * 0.002f,
