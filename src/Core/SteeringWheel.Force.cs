@@ -298,22 +298,23 @@ public partial class SteeringWheel
     private bool _wasIdle = true, _refreshOnFocus;
 
     /// <summary>
-    /// The effects made afresh, as turning the forces off and on in the settings does. Something can
-    /// reset the wheel behind the game's back after the effects are made: Logitech G HUB switching
-    /// profiles as the game window comes to the front, or another SDL (Godot's own joypad layer)
-    /// opening the device while the world loads. The effects then go silent while every update still
-    /// succeeds, so <see cref="Send"/> sees nothing to recover: forces off at launch until toggled
-    /// (seen on a G29, #290). Done when a drive starts and when the window comes to the front;
-    /// it takes a few milliseconds.
+    /// The effects made afresh on the open device. Something can reset the wheel behind the game's
+    /// back after the effects are made: Logitech G HUB switching profiles as the game window comes to
+    /// the front, or another SDL (Godot's own joypad layer) opening the device while the world loads.
+    /// The effects then go silent while every update still succeeds, so <see cref="Send"/> sees
+    /// nothing to recover: forces off at launch until toggled (seen on a G29, #290). Done when a drive
+    /// starts and when the window comes to the front. The device stays open: closed and reopened at
+    /// once, Windows refuses the reopen (the G29 then had no forces at all).
     /// </summary>
-    private void Refresh(string why)
+    private unsafe void Refresh(string why)
     {
         _refreshOnFocus = false;
         if (!_hapticOpen) return;
         GD.Print($"[wheel] force feedback made afresh: {why}");
-        CloseHaptic();
-        _hapticFailed = false;
-        OpenHaptic();
+        SDL_StopHapticEffects(_haptic);
+        foreach (var id in new[] { _constant, _road, _engine, _knock, _damper, _friction })
+            if ((int)id >= 0) SDL_DestroyHapticEffect(_haptic, id);
+        MakeEffects();
     }
 
     public override void _Notification(int what)
@@ -321,17 +322,34 @@ public partial class SteeringWheel
         if (what == NotificationApplicationFocusIn) _refreshOnFocus = _hapticOpen;
     }
 
+    /// <summary>Opens that failed in a row; after <see cref="OpenTries"/> the wheel is left without forces.</summary>
+    private int _openFailures;
+    private double _openRetryAt;
+    private const int OpenTries = 5;
+
     private unsafe void OpenHaptic()
     {
         if (_joy == null || !SDL_IsJoystickHaptic(_joy)) { _hapticFailed = true; return; }
+        if (Time.GetTicksMsec() / 1000.0 < _openRetryAt) return;
         _haptic = SDL_OpenHapticFromJoystick(_joy);
         if (_haptic == null)
         {
-            GD.PushWarning($"[wheel] force feedback: could not open {_name}: {SDL_GetError()}");
-            _hapticFailed = true;
+            // Windows refuses a device closed a moment ago (the recovery's reopen, a quick toggle):
+            // try again a second later, a few times, before giving up for the session
+            _openFailures++;
+            GD.PushWarning($"[wheel] force feedback: could not open {_name} (try {_openFailures} of {OpenTries}): {SDL_GetError()}");
+            _hapticFailed = _openFailures >= OpenTries;
+            _openRetryAt = Time.GetTicksMsec() / 1000.0 + 1.0;
             return;
         }
+        _openFailures = 0;
         _hapticOpen = true;
+        MakeEffects();
+    }
+
+    /// <summary>The device's gain and autocentre set, and every effect it supports made and started.</summary>
+    private unsafe void MakeEffects()
+    {
         _features = SDL_GetHapticFeatures(_haptic);
         if ((_features & SDL_HAPTIC_GAIN) != 0) SDL_SetHapticGain(_haptic, 100);
         // the wheel's own centring spring would fight the aligning torque

@@ -95,8 +95,11 @@
 - **Forces silent at launch until toggled** (G29, #290): something resets the wheel after the effects
   are made (G HUB switching profiles as the window comes to the front, or Godot's own SDL opening the
   device while the world loads, not proven which) and every update still succeeds, so `Send` has nothing
-  to recover. `Refresh` makes the effects afresh, as the settings toggle does, when a drive starts after
+  to recover. `Refresh` destroys and remakes the effects **on the open device** when a drive starts after
   2 s without a feel and on `NotificationApplicationFocusIn`; the log says `force feedback made afresh`.
+  **Never close and reopen at once**: Windows refuses the reopen ("SDL_SYS_HapticOpenFromJoystick
+  failed") and the wheel had no forces at all. A failed open now retries every second, 5 times
+  (`OpenHaptic`), which also covers `RecoverHaptic`'s reopen. `--ffbcheck` PASS with the refresh.
 - **Soft lock at full device force**, whatever `FfbStrength`: capped at 70% a hand pushed 121° through it.
 - **Engine** (`WheelFeel.EngineFrom`, added by `PlayerFeel`, which knows `EngineOn`): a sine at the
   crank's rate (rpm/60, 8–60 Hz), 0.15 at idle to 0.5 at the redline, gain `FfbEngine`. **Road** is
