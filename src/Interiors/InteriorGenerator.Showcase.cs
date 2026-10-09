@@ -34,7 +34,7 @@ public static partial class InteriorGenerator
             var piece = sizes.GetValueOrDefault(type) ?? new Piece(type, 1f, 1f, 1f, false);
             var (layout, data) = Layout(type, piece);
             // (a loose floor pallet and a parked forklift are nodes of their own now: InteriorNode.Create draws them)
-            if (data.Vertices.Length == 0 && !layout.Furniture.Any(InteriorMeshBuilder.IsCarvedOut)) continue;
+            if (data.Vertices.Length == 0 && !layout.Furniture.Any(f => InteriorMeshBuilder.IsCarvedOut(layout, f))) continue;
             yield return (type.ToString(), () =>
             {
                 var node = InteriorNode.Create(layout, data, Styles.StyleKit.Material(Styles.MaterialRole.Interior), Transform3D.Identity);
@@ -44,6 +44,19 @@ public static partial class InteriorGenerator
                 return node;
             });
         }
+    }
+
+    /// <summary>
+    /// A block of flats' underground garage (#558): the plan of an 80 x 18 m block that rolled a garage
+    /// door (<c>FlatCheck.RampTile</c>), its ground floor and basement with the ramp between them.
+    /// </summary>
+    [Showcase("Terrain", "Garage ramp")]
+    private static Node3D ShowcaseGarageRamp()
+    {
+        var (tile, roads) = FlatCheck.RampTile();
+        int index = BuildingFootprint.ComputeDoors(tile, roads, null).First(d => d.Link.Any).Index;
+        var layout = Generate(tile, index, roads, null)!;
+        return InteriorNode.Create(layout, InteriorMeshBuilder.Build(layout), Styles.StyleKit.Material(Styles.MaterialRole.Interior), Transform3D.Identity);
     }
 
     private static (InteriorLayout, InteriorMeshBuilder.MeshData) Layout(FurnitureType type, Piece piece)

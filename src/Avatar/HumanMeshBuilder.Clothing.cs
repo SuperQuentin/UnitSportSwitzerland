@@ -85,6 +85,8 @@ public static partial class HumanMeshBuilder
         var look = Dress(palette, o, top, bottom);
         var fit = AppendBody(s, look, rig, includeLegs, body, head, cover);
         var r = rig;
+        // what lies over the body rests with the part it lies on (#724): the trunk unless said otherwise
+        using var trunkRest = s.Resting(TrunkRest(r));
 
         if (body)
         {
@@ -94,10 +96,12 @@ public static partial class HumanMeshBuilder
             {
                 bool left = side < 0;
                 var (shoulder, elbow, wrist) = left ? (r.ShoulderL, r.ElbowL, r.WristL) : (r.ShoulderR, r.ElbowR, r.WristR);
-                ArmDetail(s, fit.Shape, fit.Side * side, shoulder, elbow, wrist, side, top, o[WearSlot.Hands]);
+                using (s.Resting(ArmRest(r, left)))
+                    ArmDetail(s, fit.Shape, fit.Side * side, shoulder, elbow, wrist, side, top, o[WearSlot.Hands]);
                 if (includeLegs)
                 {
                     var (hip, knee, ankle, toe) = left ? (r.HipL, r.KneeL, r.AnkleL, r.ToeL) : (r.HipR, r.KneeR, r.AnkleR, r.ToeR);
+                    using var legRest = s.Resting(LegRest(hip, knee, ankle, fit.Side, left));
                     LegDetail(s, fit.Shape, fit.Side * side, hip, knee, ankle, toe, bottom, o[WearSlot.Legs], o[WearSlot.Feet]);
                 }
             }
@@ -110,6 +114,7 @@ public static partial class HumanMeshBuilder
         bool hair = look.HairStyle != HairStyle.None && cover != HairCover.Head;
         var f = new Frame(h.Side, h.UpAxis, h.Fwd);
         if (o[WearSlot.Neck] is { } neck) AppendNeckwear(s, fit, neck);
+        using var headRest = s.Resting(HeadRest(r));
         if (fullFace)
         {
             // a full-face helmet round the whole head, dark visor at the front
@@ -166,6 +171,7 @@ public static partial class HumanMeshBuilder
                 GarmentShape.CropTop => look with { Top = c.A, TopFrom = 2.5f, SleeveTo = goth ? 0f : 0.38f },
                 GarmentShape.Longsleeve => look with { Top = c.A, SleeveTo = 2f },
                 GarmentShape.Hoodie => look with { Top = c.A, SleeveTo = 2f, TopFrom = 1.55f },
+                GarmentShape.FieldJacket => look with { Top = c.A, SleeveTo = 2f, TopFrom = 1.55f },
                 // the blouse under a short jacket: the jacket is laid over it (TopDetail)
                 GarmentShape.CroppedJacket => look with { Top = c.B, SleeveTo = 2f },
                 GarmentShape.Robe => look with { Top = c.A, SleeveTo = 1f, TopFrom = 1.5f },
@@ -232,6 +238,22 @@ public static partial class HumanMeshBuilder
             };
         }
         return look;
+    }
+
+    /// <summary>A hand drawn apart from its figure (the VR hands, #648): its colours and its build's size.</summary>
+    public readonly record struct HandLook(Color Palm, Color Fingers, Color Cuff, float Scale);
+
+    /// <summary>The figure's hands in its clothes: skin or gloves, and the glove or sleeve just above the wrist.</summary>
+    public static HandLook HandsOf(HumanPalette p)
+    {
+        var o = p.Outfit;
+        var top = o[WearSlot.Top];
+        var look = Dress(p, o, top, top is { CoversBottom: true } ? null : o[WearSlot.Bottom]);
+        var palm = look.Gloves ?? look.Skin;
+        var fingers = look.Gloves is { } gloves && !look.Fingerless ? gloves : look.Skin;
+        // the forearm by the wrist (limb parameter ~1.85: elbow 1, wrist 2)
+        var cuff = look.Gloves is { } g && look.GloveFrom < 1.85f ? g : look.SleeveTo > 1.85f ? look.Top : look.Skin;
+        return new HandLook(palm, fingers, cuff, Physique.Of(look.Build).Hand);
     }
 
     // ------------------------------------------------------------------------------------
@@ -333,6 +355,22 @@ public static partial class HumanMeshBuilder
                 break;
             }
 
+            case GarmentShape.FieldJacket:
+            {
+                // the army's field jacket (#716): a stand collar, the zip down the front, a flapped pocket
+                // on each breast, a band at the hem
+                var (side, _, _) = t.Frame(3.15f);
+                t.Band(s, 3.80f, 4f, c.B, 0.008f);
+                t.Band(s, 1.55f, 1.66f, c.B, 0.006f);
+                s.Box(t.Front(2.75f, 0.006f), new Vector3(0.012f, 0.42f, 0.008f), c.C, TrunkBasis(fit, 2.75f));
+                foreach (float x in stackalloc[] { -0.068f, 0.068f })
+                {
+                    s.Box(t.Front(3.12f, 0.006f) + side * x, new Vector3(0.062f, 0.058f, 0.012f), c.A, TrunkBasis(fit, 3.12f));
+                    s.Box(t.Front(3.25f, 0.007f) + side * x, new Vector3(0.066f, 0.022f, 0.014f), c.B, TrunkBasis(fit, 3.25f));
+                }
+                break;
+            }
+
             case GarmentShape.CroppedJacket:
             {
                 // a short blue jacket over the white blouse; jabot and brooch at the throat, a strap across
@@ -426,6 +464,10 @@ public static partial class HumanMeshBuilder
                     break;
                 case GarmentShape.Hoodie:
                     LimbBand(s, shoulder, elbow, wrist, 1.86f, 2f, p, arm: true, 0.006f, c.B);
+                    break;
+                case GarmentShape.FieldJacket:
+                    // the cuff
+                    LimbBand(s, shoulder, elbow, wrist, 1.84f, 2f, p, arm: true, 0.006f, c.B);
                     break;
                 case GarmentShape.CroppedJacket:
                     // puffed at the shoulder, the jacket's sleeve over the blouse's, a white cuff
@@ -540,37 +582,129 @@ public static partial class HumanMeshBuilder
         var look = Patterned(Dress(p, o, top, bottom));
         var shape = Physique.Of(look.Build);
         var outward = hip.X < 0 ? Vector3.Left : Vector3.Right;
-        DrawLeg(s, look, shape, hip, knee, ankle, toe, Vector3.Right);
+        DrawLeg(s, look, shape, hip, knee, ankle, toe, Vector3.Right, hip.X < 0);
+        using var legRest = s.Resting(LegRest(hip, knee, ankle, Vector3.Right, hip.X < 0));
         LegDetail(s, shape, outward, hip, knee, ankle, toe, bottom, o[WearSlot.Legs], o[WearSlot.Feet]);
     }
 
-    /// <summary>The radius a cone from the waist must start at to clear the hips on its way to a hem of radius <paramref name="hem"/>.</summary>
-    private static float ConeStart(in Fit fit, Vector3 hemAt, float hem)
+    // a skirt's rings (#671): fractions of the way from the waistband to the hem, close at the top
+    // where it fits the hips, the last band a trim's
+    private static readonly float[] DrapeAt = { 0f, 0.07f, 0.15f, 0.24f, 0.35f, 0.47f, 0.59f, 0.71f, 0.83f, 0.94f, 1f };
+    private const int DrapeSides = 24;
+    [ThreadStatic] private static Vector3[][]? _drape, _tier;
+
+    private static Vector3[][] DrapeRings(ref Vector3[][]? rings)
     {
-        var t = fit.Torso;
-        float waist = Mathf.Max(t.Width(2f), 0.075f) + 0.014f;
-        float length = Mathf.Max((hemAt - t.At(2f)).Length(), 0.05f);
-        float down = (t.At(2f) - t.At(1f)).Length() / length;   // how far down the cone the widest of the hips is
-        float hips = t.Width(1f) + 0.016f;
-        if (down >= 1f) return Mathf.Max(waist, hips);
-        // radius at the hips, straight from the start to the hem, must clear them
-        float needed = (hips - hem * down) / (1f - down);
-        return Mathf.Max(waist, needed);
+        if (rings != null) return rings;
+        rings = new Vector3[DrapeAt.Length][];
+        for (int i = 0; i < rings.Length; i++) rings[i] = new Vector3[DrapeSides];
+        return rings;
+    }
+
+    private static Vector3 RingCentre(Vector3[] ring)
+    {
+        var c = Vector3.Zero;
+        foreach (var p in ring) c += p;
+        return c / ring.Length;
     }
 
     /// <summary>
-    /// A skirt, or the lower half of a robe or dress: an open cone from the waist, its hem following
-    /// the knees or the ankles so it swings with the stride, blown back by <paramref name="wind"/>
-    /// (<see cref="HumanPalette.Wind"/>) and fluttering faster the harder it blows.
+    /// The rings of a skirt hung from the waistband (spine <paramref name="band"/>) to a hem round
+    /// <paramref name="hem"/> of radius <paramref name="hemRadius"/> (#671). The top ring is the trunk's
+    /// own section there, a few mm proud, so the waist fits whatever the build. Each ring below flares
+    /// toward the hem, but is pushed out round whatever of the hips and legs crosses it (a knee
+    /// thrown forward in a run), and never comes in again on the way down, so the cloth hangs over
+    /// the knee instead of the knee going through it. No point drops below <paramref name="floor"/>.
+    /// </summary>
+    private static void HangSkirt(Vector3[][] rings, in Fit fit, float band, Vector3 hem, float hemRadius,
+        float ripple, float phase, float floor)
+    {
+        var t = fit.Torso;
+        var r = fit.Rig;
+        var top = rings[0];
+        for (int k = 0; k < DrapeSides; k++) top[k] = t.Surface(band, Mathf.Tau * k / DrapeSides, 0.006f);
+        var c0 = RingCentre(top);
+        var axis = hem - c0;
+        float length = Mathf.Max(axis.Length(), 0.05f);
+        axis /= length;
+        var frame = t.Frame(band);
+        var side = (frame.Side - axis * frame.Side.Dot(axis)).Normalized();
+        var fwd = axis.Cross(side);
+        if (fwd.Dot(frame.Fwd) < 0f) fwd = -fwd;
+
+        // what the skirt must clear: the trunk below the band, then each leg, as points with a radius
+        Span<Vector4> body = stackalloc Vector4[128];
+        int n = 0;
+        for (float sp = 0f; sp < band - 0.05f; sp += 0.25f)
+            for (int k = 0; k < 10; k++)
+            {
+                var q = t.Surface(sp, Mathf.Tau * k / 10f, 0.010f);
+                body[n++] = new Vector4(q.X, q.Y, q.Z, 0f);
+            }
+        for (int leg = 0; leg < 2; leg++)
+        {
+            var (hip, knee, ankle) = leg == 0 ? (r.HipL, r.KneeL, r.AnkleL) : (r.HipR, r.KneeR, r.AnkleR);
+            for (int j = 0; j <= 14 && n < body.Length; j++)
+            {
+                float lt = j / 7f;
+                var q = Along(hip, knee, ankle, lt);
+                body[n++] = new Vector4(q.X, q.Y, q.Z, LegRadius(fit.Shape, lt) + 0.014f);
+            }
+        }
+        body = body[..n];
+
+        Span<float> radius = stackalloc float[DrapeSides];
+        float topRadius = 0f;
+        for (int k = 0; k < DrapeSides; k++)
+        {
+            var off = top[k] - c0;
+            radius[k] = (off - axis * off.Dot(axis)).Length();
+            topRadius += radius[k] / DrapeSides;
+        }
+        Span<float> start = stackalloc float[DrapeSides];
+        radius.CopyTo(start);
+        for (int i = 1; i < rings.Length; i++)
+        {
+            float f = DrapeAt[i];
+            var c = c0 + axis * length * f;
+            float flare = Mathf.Max(hemRadius - topRadius, 0f) * Mathf.Pow(f, 1.5f);
+            float reach = (DrapeAt[i] - DrapeAt[i - 1]) * length * 0.6f + 0.02f;
+            for (int k = 0; k < DrapeSides; k++)
+            {
+                float a = Mathf.Tau * k / DrapeSides;
+                var d = side * Mathf.Cos(a) + fwd * Mathf.Sin(a);
+                // the waist's own shape, flared in proportion toward the hem
+                float need = Mathf.Max(radius[k], start[k] * (1f + flare / topRadius));
+                foreach (var b in body)
+                {
+                    var q = new Vector3(b.X, b.Y, b.Z) - c;
+                    if (Mathf.Abs(q.Dot(axis)) > reach) continue;
+                    need = Mathf.Max(need, q.Dot(d) + b.W);
+                }
+                radius[k] = need;   // never in again below
+                var p = c + d * need;
+                if (i == rings.Length - 1 && ripple > 0f)
+                {
+                    float wave = Mathf.Sin(phase + k * 2.4f) * 0.7f + Mathf.Sin(phase * 1.7f + k * 1.1f) * 0.3f;
+                    p += d * need * ripple * wave + axis * (need * ripple * 0.6f * Mathf.Cos(phase * 1.3f + k * 1.9f));
+                }
+                p.Y = Mathf.Max(p.Y, floor);
+                rings[i][k] = p;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A skirt, or the lower half of a robe or dress, draped from the waist (<see cref="HangSkirt"/>),
+    /// its hem following the knees or the ankles so it swings with the stride, blown back by
+    /// <paramref name="wind"/> (<see cref="HumanPalette.Wind"/>) and fluttering faster the harder it blows.
     /// </summary>
     private static void AppendSkirt(MeshScratch s, in Fit fit, Garment? top, Garment? bottom, Vector3 wind)
     {
         var r = fit.Rig;
+        var figure = fit;   // the local functions cannot read an in parameter
         var knees = (r.KneeL + r.KneeR) * 0.5f;
         var ankles = (r.AnkleL + r.AnkleR) * 0.5f;
-        // how wide the legs are apart at the hem, so a stride does not poke through it
-        float spreadK = (r.KneeL - r.KneeR).Length() * 0.5f;
-        float spreadA = (r.AnkleL - r.AnkleR).Length() * 0.5f;
         // hips wider than the old figure's (a curvy build) widen every hem with them
         float extra = Mathf.Max(0f, fit.Torso.Width(1f) - 0.135f);
 
@@ -580,35 +714,31 @@ public static partial class HumanMeshBuilder
         var downwind = speed > 0.05f ? wind / speed : Vector3.Zero;
         float ripple = speed > 0.05f ? 0.03f + 0.13f * gust : 0f;
         float phase = Time.GetTicksMsec() / 1000f * (5f + 1.1f * Mathf.Min(speed, 30f));
-        // the hem carried downwind, never further than the skirt is long, nor up past the waist
-        Vector3 Blown(Vector3 from, Vector3 hem)
-        {
-            if (gust <= 0f) return hem;
-            float length = (hem - from).Length();
-            var shifted = hem + downwind * length * 0.65f * gust;
-            return from + (shifted - from).Normalized() * length;
-        }
         var waist = r.Waist;
-        void Cone(Vector3 from, Vector3 hem, float ra, float rb, Color colour, int sides, Vector3 gap = default, float gapAngle = 0f) =>
-            s.Skirt(from, Blown(waist, hem) + (from - waist), ra, rb, colour, sides, gap, gapAngle, ripple, phase);
+        // the hem never comes within 9 cm of the ground under the lower foot, however the wind tilts it
+        // or the ripple drops it (#671)
+        float floor = Mathf.Min(r.AnkleL.Y, r.AnkleR.Y) - AnkleHeight + 0.09f;
+        const float band = 2f;
+        var rings = DrapeRings(ref _drape);
+        int count = DrapeAt.Length;
+        Span<Color> bands = stackalloc Color[count - 1];
 
         if (top is { CoversBottom: true })
         {
             var c = Cols.Of(top);
             if (top.Shape == GarmentShape.Robe)
             {
-                var hem = ankles + Vector3.Up * 0.035f;
-                float rh = Mathf.Max(0.30f, spreadA + 0.07f) + extra;
-                Cone(waist, hem, ConeStart(fit, hem, rh), rh, c.A, 12);
-                Cone(waist.Lerp(hem, 0.95f), hem, rh * 0.97f + 0.004f, rh + 0.004f, c.B, 12);
+                HangSkirt(rings, fit, band, Blown(ankles + Vector3.Up * 0.06f), 0.30f + extra, ripple, phase, floor);
+                bands.Fill(c.A);
+                bands[^1] = c.B;   // the trim
+                s.Drape(rings, 0, count, bands);
             }
             else
             {
+                // the dress, the petticoat frothing out under it
                 var hem = r.Hip.Lerp(knees, 0.85f);
-                float rh = Mathf.Max(0.29f, spreadK + 0.12f) + extra;
-                Cone(waist, hem, ConeStart(fit, hem, rh), rh, c.A, 12);
-                // the petticoat frothing out under it
-                Cone(waist.Lerp(hem, 0.78f), hem - Vector3.Up * 0.035f, rh * 0.9f, rh + 0.03f, c.B, 12);
+                Hang(hem, 0.29f + extra, c.A, bands);
+                Tier(s, fit, rings, 0.78f, Blown(hem - Vector3.Up * 0.035f), 0.32f + extra, c.B, ripple, phase, floor);
             }
             return;
         }
@@ -618,53 +748,80 @@ public static partial class HumanMeshBuilder
         switch (bottom!.Shape)
         {
             case GarmentShape.PleatedSkirt:
-            {
-                var hem = r.Hip.Lerp(knees, 0.55f);
-                float rh = Mathf.Max(0.25f, spreadK + 0.09f) + extra;
-                Cone(waist, hem, ConeStart(fit, hem, rh), rh, b.A, 14);
+                Hang(r.Hip.Lerp(knees, 0.55f), 0.25f + extra, b.A, bands);
                 break;
-            }
             case GarmentShape.RuffleMini:
             {
                 var hem = r.Hip.Lerp(knees, 0.40f);
-                float rh = Mathf.Max(0.22f, spreadK + 0.08f) + extra;
-                Cone(waist, hem, ConeStart(fit, hem, rh), rh, b.A, 12);
+                Hang(hem, 0.22f + extra, b.A, bands);
                 // a second tier of ruffle under the first
-                Cone(waist.Lerp(hem, 0.55f), hem - Vector3.Up * 0.045f, rh * 0.95f, rh + 0.035f, b.B, 12);
+                Tier(s, fit, rings, 0.55f, Blown(hem - Vector3.Up * 0.045f), 0.255f + extra, b.B, ripple, phase, floor);
                 break;
             }
             case GarmentShape.HighLowSkirt:
-            {
                 // the axis leans back, so the hem rides high in front and trails low behind
-                var hem = r.Hip.Lerp(knees, 0.85f) + new Vector3(0, -0.04f, -0.14f);
-                float rh = Mathf.Max(0.27f, spreadK + 0.11f) + extra;
-                Cone(waist, hem, ConeStart(fit, hem, rh), rh, b.A, 14);
+                Hang(r.Hip.Lerp(knees, 0.85f) + new Vector3(0, -0.04f, -0.14f), 0.27f + extra, b.A, bands);
                 break;
-            }
             case GarmentShape.SlitMaxi:
-            {
                 // to the ankles, with a slit up the front of the right leg (−X)
-                var hem = ankles + Vector3.Up * 0.05f;
-                float rh = Mathf.Max(0.29f, spreadA + 0.08f) + extra;
-                Cone(waist, hem, ConeStart(fit, hem, rh), rh, b.A, 14, gap: new Vector3(-0.55f, 0, 1f), gapAngle: 0.42f);
+                HangSkirt(rings, fit, band, Blown(ankles + Vector3.Up * 0.07f), 0.29f + extra, ripple, phase, floor);
+                bands.Fill(b.A);
+                s.Drape(rings, 0, count, bands, new Vector3(-0.55f, 0, 1f), 0.42f);
                 break;
-            }
             case GarmentShape.LongPleated:
             {
-                // to mid-calf, brown straps running down it front and back
-                var hem = Blown(waist, r.Hip.Lerp(ankles, 0.80f));
-                float rh = Mathf.Max(0.29f, spreadK + 0.12f) + extra;
-                float ra = ConeStart(fit, hem, rh);
-                s.Skirt(waist, hem, ra, rh, b.A, 16, ripple: ripple, phase: phase);
-                var axis = Frame.Along(waist - hem);
-                foreach (float a in stackalloc[] { -0.45f, 0.45f, Mathf.Pi - 0.45f, Mathf.Pi + 0.45f })
-                {
-                    var dir = axis.Fwd * Mathf.Cos(a) + axis.Side * Mathf.Sin(a);
-                    s.Tube(waist + dir * (ra + 0.008f), hem + dir * (rh + 0.006f), 0.007f, b.B, 4);
-                }
+                // to mid-calf, brown straps running down it front and back, following the drape
+                Hang(r.Hip.Lerp(ankles, 0.80f), 0.29f + extra, b.A, bands);
+                foreach (int k in stackalloc[] { 5, 7, 17, 19 })
+                    for (int i = 0; i + 1 < count; i++)
+                    {
+                        Vector3 p0 = rings[i][k], p1 = rings[i + 1][k];
+                        s.Tube(p0 + (p0 - RingCentre(rings[i])).Normalized() * 0.006f,
+                            p1 + (p1 - RingCentre(rings[i + 1])).Normalized() * 0.006f, 0.007f, b.B, 4);
+                    }
                 break;
             }
         }
+
+        // the hem carried downwind, never further than the skirt is long, nor up past the waist
+        Vector3 Blown(Vector3 hem)
+        {
+            if (gust <= 0f) return hem;
+            float length = (hem - waist).Length();
+            var shifted = hem + downwind * length * 0.65f * gust;
+            return waist + (shifted - waist).Normalized() * length;
+        }
+
+        // the skirt in one colour
+        void Hang(Vector3 hem, float rh, Color colour, Span<Color> bands)
+        {
+            HangSkirt(rings, figure, band, Blown(hem), rh, ripple, phase, floor);
+            bands.Fill(colour);
+            s.Drape(rings, 0, bands.Length + 1, bands);
+        }
+    }
+
+    /// <summary>
+    /// A tier under the skirt in <paramref name="over"/>: from just inside it at fraction
+    /// <paramref name="from"/> out to its own longer, wider hem (#671).
+    /// </summary>
+    private static void Tier(MeshScratch s, in Fit fit, Vector3[][] over, float from, Vector3 hem, float rh, Color colour,
+        float ripple, float phase, float floor)
+    {
+        var tier = DrapeRings(ref _tier);
+        HangSkirt(tier, fit, 2f, hem, rh, ripple, phase, floor);
+        int count = DrapeAt.Length;
+        int i0 = 1;
+        while (i0 < count - 2 && DrapeAt[i0] < from) i0++;
+        for (int i = i0; i < count; i++)
+        {
+            float w = (DrapeAt[i] - DrapeAt[i0]) / (1f - DrapeAt[i0]);
+            var centre = RingCentre(over[i]);
+            for (int k = 0; k < DrapeSides; k++)
+                tier[i][k] = centre.Lerp(over[i][k], 0.97f).Lerp(tier[i][k], w);
+        }
+        Span<Color> one = [colour];
+        s.Drape(tier, i0, count - i0, one);
     }
 
     /// <summary>Whether the outfit has something that blows in the wind: a skirt, a robe, a dress.</summary>

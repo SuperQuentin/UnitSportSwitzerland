@@ -45,7 +45,7 @@ public static class ShapedCheck
             .SelectMany(g => g.OrderBy(p => Sq(p.E - e0) + Sq(p.N - n0)).Take(PerShape)).ToList();
         var tiles = new Dictionary<TileId, (BuildingTile? Tile, DoorSpot[] Doors)>();
         var built = new HashSet<string>();
-        int dropped = 0;
+        int dropped = 0, garages = 0;
         foreach (var p in picks)
         {
             var id = TileId.FromLv95(p.E, p.N);
@@ -144,7 +144,26 @@ public static class ShapedCheck
                 }
             }
             else GD.Print($"[shapedcheck] {inside} (a {l.Type} plan: not checked)");
+
+            // ramp first (#694): a block of flats whose wing takes a ramp, with every roll passing, has its garage door and
+            // a ramp behind it that validates, in the wing the door is on
+            if (flats)
+            {
+                GarageRule.AlwaysRolls = true;
+                var roadTile = world.BuildRoads(id);
+                var gdoor = BuildingFootprint.ComputeDoors(t.Tile, roadTile, null).Where(d => d.Index == index && d.Link.Any).ToList();
+                if (gdoor.Count > 0 && InteriorGenerator.Generate(t.Tile, index, roadTile, null) is { } gl)
+                {
+                    garages++;
+                    var gproblems = InteriorValidator.Validate(gl);
+                    bool ramp = gl.Entrances.Any(e => e.Vehicle) && gl.Floors.Any(f => f.AllFlights().Any(x => x.Ramp));
+                    Expect(ramp && gproblems.Count == 0, $"{what}: a garage door ({gdoor[0].Ramp}) has a ramp behind it in the plan, which validates{(gproblems.Count > 0 ? " - " + string.Join("; ", gproblems.Take(3)) : "")}");
+                    System.IO.File.WriteAllText(System.IO.Path.Combine(dir, $"{p.Shape}_{p.E:F0}_{p.N:F0}_garage.svg"), InteriorValidator.ToSvg(gl));
+                }
+                GarageRule.AlwaysRolls = false;
+            }
         }
+        GD.Print($"[shapedcheck] {garages} shaped block(s) of flats got a garage door with every roll passing");
 
         foreach (var name in ProceduralWorld.ShapeNames)
             Expect(built.Contains(name), $"a {name} building stands within {Radius / 1000:F0} km of the spawn");

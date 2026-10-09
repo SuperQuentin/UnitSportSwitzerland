@@ -619,8 +619,9 @@ public static partial class TileRewriter
                     return right ? piece.Attributes.Right : piece.Attributes.Left;
                 }
                 var openings = new List<PocketOpening>();
+                var townArcs = new Dictionary<(int Node, int Arm), CornerArc>();
                 var pockets = EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs,
-                    bikeBetween, stripOwners, netStats.TurnLanes, StreetSideAt, openings);
+                    bikeBetween, stripOwners, netStats.TurnLanes, StreetSideAt, openings, townArcs);
                 var openingsOf = openings.GroupBy(o => o.Segment, ReferenceEqualityComparer.Instance)
                     .ToDictionary(g => (RoadSegment)g.Key!, g => g.ToList(), ReferenceEqualityComparer.Instance);
                 // the bike side of a link's end piece (#351): its separated path, else its painted lane
@@ -640,7 +641,7 @@ public static partial class TileRewriter
                 var stopsAt = new Dictionary<(int Link, LinkEnd End), double>();
                 var signalPlans = new Dictionary<int, (SignalPlan Plan, int[] PlanArm)>();
                 EmitSignals(priority, result, pockets, BikeSideAt, block, wanted, paint, signalRecords, cantons, field, buildings, islands, signs, netStats.Signals,
-                    approachRecords, restrictions, netStats.Lanes, stopsAt, signalPlans);
+                    approachRecords, restrictions, netStats.Lanes, stopsAt, signalPlans, StreetSideAt);
                 EmitRightLanes(pockets, paint, bikeBetween, netStats.TurnLanes);
                 EmitPocketApproaches(priority, result, pockets, approachRecords, restrictions, netStats.Lanes);
 
@@ -702,7 +703,8 @@ public static partial class TileRewriter
                 foreach (var (segment, tileId, start, end) in trackPaint)
                     EmitTrackPaint(finalPieces.TryGetValue(segment, out var pieces) ? pieces : [segment], start, end, Get(paint, tileId));
                 EmitBikeCrossings(priority, result, segmentOf, finalPieces, pockets, block, wanted, paint, signs, bikeBridges, netStats.Bikes,
-                    stopsAt, signalPlans);
+                    stopsAt, signalPlans, townArcs);
+                EmitTownCorners(priority, result.Network, segmentOf, finalPieces, townArcs, block, wanted, bikeBridges, paint, netStats.Bikes);
             }
 
             // car parks (#499): one layout per lot, from the whole polygon, before the tiles are

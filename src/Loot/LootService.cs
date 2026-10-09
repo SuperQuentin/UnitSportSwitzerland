@@ -113,11 +113,11 @@ public partial class LootService : Node
 
     /// <summary>
     /// The lootable piece of furniture the player is facing, if any, as an index into the layout. A
-    /// pallet a forklift has moved is no container any more (#583): its loot was where it stood.
+    /// pallet a forklift has moved is no container any more (#583): its loot was where it stood. Nor is a car in a car park's bay (#558): it is a vehicle asleep, or gone.
     /// </summary>
     public static int NearestContainer(FootPlayer p, InteriorLayout layout, InteriorNode node) =>
         NearestOf(p, layout, node, t => LootTables.IsLootable(t) && !(t == FurnitureType.ShopCounter && layout.Shop != ShopType.None),
-            skip: i => Moved(layout.Key, i));
+            skip: i => Moved(layout.Key, i) || Interiors.HallCars.IsBayCar(layout, layout.Furniture[i]));
 
     /// <summary>A hall's own pallet that a forklift has taken from where the plan put it (#583).</summary>
     public static bool Moved(string key, int furniture) => UnitSport.Items.PalletService.Instance?.IsTakenHall(key, furniture) == true;

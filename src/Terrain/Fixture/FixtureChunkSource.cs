@@ -20,6 +20,7 @@ public sealed class FixtureChunkSource : IChunkSource
     private readonly HashSet<TileId> _tiles = new();
     private readonly Dictionary<TileId, List<RoadSegment>> _roads = new();
     private readonly Dictionary<TileId, List<TreeInstance>> _trees = new();
+    private readonly Dictionary<TileId, List<Building>> _buildings = new();
     // a laid-out car park (#499), by the tile each piece falls in
     private readonly Dictionary<TileId, List<RoadAreaProp>> _parkAreas = new();
     private readonly Dictionary<TileId, List<RoadPaint>> _parkPaint = new();
@@ -28,6 +29,9 @@ public sealed class FixtureChunkSource : IChunkSource
     private readonly ConcurrentDictionary<TileId, Lazy<double[]>> _lattices = new();
 
     public FixtureCourse Course => _course;
+
+    /// <summary>The course's ground height at an LV95 point, m.</summary>
+    public double GroundAt(double e, double n) => _course.Ground(e - _startE, n - _startN);
 
     public FixtureChunkSource(FixtureCourse course, double startE, double startN)
     {
@@ -56,7 +60,14 @@ public sealed class FixtureChunkSource : IChunkSource
                 });
             }
         PlanCarParks();
-
+        // buildings (#558), filed by the tile their middle is in
+        Interiors.GarageRule.AlwaysRolls = course.AlwaysGarage;
+        foreach (var block in course.Blocks)
+        {
+            double e = startE + block.X, n = startN + block.Y;
+            var tile = TileId.FromLv95(e, n);
+            Add(_buildings, tile, FixtureBlocks.Solid(block, (float)(e - tile.MinE), (float)(tile.MaxN - n)));
+        }
         foreach (var (x, y, _, height) in course.Trees)
         {
             double e = startE + x, n = startN + y;
@@ -357,7 +368,7 @@ public sealed class FixtureChunkSource : IChunkSource
         Task.FromResult(_tiles.Contains(id) ? new HashSet<int>() : null);
 
     public Task<BuildingTile?> LoadBuildingsAsync(TileId id, CancellationToken ct = default) =>
-        Task.FromResult(_tiles.Contains(id) ? new BuildingTile { Id = id, Buildings = new() } : null);
+        Task.FromResult(_tiles.Contains(id) ? new BuildingTile { Id = id, Buildings = _buildings.TryGetValue(id, out var b) ? b : new() } : null);
 
     /// <summary>The course's cover; all open ground (grass, the cover's zero class) by default.</summary>
     public Task<byte[]?> LoadCoverAsync(TileId id, CancellationToken ct = default)
@@ -393,6 +404,30 @@ public sealed class FixtureChunkSource : IChunkSource
     public Task<List<TreeInstance>?> LoadTreesAsync(TileId id, CancellationToken ct = default) =>
         Task.FromResult(_tiles.Contains(id) ? (_trees.TryGetValue(id, out var t) ? t : new()) : null);
 
+
+    /// <summary>
+    /// The course's farm fields (#494), each written whole into every tile its box touches, ring
+    /// points in metres from the tile's south-west corner (<see cref="FieldFormat"/>); empty, not null.
+    /// </summary>
+    public Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default)
+    {
+        if (!_tiles.Contains(id)) return Task.FromResult<List<FieldPolygon>?>(null);
+        var fields = new List<FieldPolygon>();
+        foreach (var (fid, crop, outline) in _course.Fields)
+        {
+            double minE = outline.Min(p => p.X) + _startE, maxE = outline.Max(p => p.X) + _startE;
+            double minN = outline.Min(p => p.Y) + _startN, maxN = outline.Max(p => p.Y) + _startN;
+            if (maxE < id.MinE || minE > id.MinE + ChunkFormat.TileSizeM || maxN < id.MinN || minN > id.MaxN) continue;
+            var ring = new float[outline.Length * 2];
+            for (int i = 0; i < outline.Length; i++)
+            {
+                ring[i * 2] = (float)(_startE + outline[i].X - id.MinE);
+                ring[i * 2 + 1] = (float)(_startN + outline[i].Y - id.MinN);
+            }
+            fields.Add(new FieldPolygon(fid, crop, FieldSource.Osm, 0, [ring]));
+        }
+        return Task.FromResult<List<FieldPolygon>?>(fields);
+    }
     public Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default) => Task.FromResult<HorizonIndex?>(null);
 
     /// <summary>The course's stops and jetties (#377), planned over its own ground and water as the preprocessor plans the real ones.</summary>

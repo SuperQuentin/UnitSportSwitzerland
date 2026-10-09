@@ -1,4 +1,5 @@
 using Godot;
+using FaceGenome = UnitSport.Avatar.Face.FaceGenome;
 
 namespace UnitSport.Avatar;
 
@@ -95,7 +96,8 @@ public readonly record struct Appearance(BodyBuild Build, int Face, int Eyes, in
         int Next(int n) { h = h * 1103515245u + 12345u; return (int)(h >> 16) % n; }
         var build = (BodyBuild)Next(Builds);
         bool masc = build >= BodyBuild.Broad;
-        ReadOnlySpan<int> faces = masc ? [5, 6, 7, 1, 2] : [0, 1, 2, 3, 4];
+        // the preset faces (FaceGenome), the #657 ones too; the draw advances the same whatever the count
+        ReadOnlySpan<int> faces = masc ? [5, 6, 7, 1, 2, 9, 11, 15] : [0, 1, 2, 3, 4, 8, 9, 10, 12, 13, 14];
         ReadOnlySpan<HairStyle> hairs = masc
             ? [HairStyle.Short, HairStyle.Quiff, HairStyle.Shaggy, HairStyle.Spiky, HairStyle.Mohawk, HairStyle.Long, HairStyle.Bun]
             : [HairStyle.Bob, HairStyle.Ponytail, HairStyle.Long, HairStyle.BluntBangs, HairStyle.SideSwept, HairStyle.Twintails, HairStyle.Bun, HairStyle.Spiky];
@@ -199,6 +201,8 @@ public readonly record struct BodyLook(BodyBuild Build, Color Skin)
     public Color Hair { get; init; } = new(0.20f, 0.13f, 0.08f);
     public HairStyle HairStyle { get; init; }
     public int Face { get; init; }
+    /// <summary>A face of its own instead of preset <see cref="Face"/> (#657): a seeded one (<see cref="FaceGenome.ForSeed"/>).</summary>
+    public FaceGenome? Genome { get; init; }
     /// <summary>The iris, whatever the face (the atlas keys it, the shader paints it).</summary>
     public Color Eyes { get; init; } = new(0.35f, 0.22f, 0.12f);
     /// <summary>Cloth patterns (<see cref="Finish"/>: Checker, Stripes, Studs, Tartan, Fishnet…) on the top, the bottom and the legwear.</summary>
@@ -259,7 +263,13 @@ public static partial class HumanMeshBuilder
     }
 
     // a colour carrying the pixel face's finish id in its alpha (the clothes' Garments.Fx convention)
-    private static Color FaceMark(Color eyes) => new(eyes.R, eyes.G, eyes.B, 1f - FaceAtlas.FinishId / 255f);
+    private static Color FaceMark(Color eyes) => new(eyes.R, eyes.G, eyes.B, 1f - (int)Finish.Face / 255f);
+
+    // where a face's blink and glances start (#657): from the look, so two figures side by side in
+    // one mesh (a bus's passengers) blink apart, and a figure rebuilt every frame keeps its rhythm
+    private static int FaceSeed(BodyLook look) =>
+        (int)((uint)look.Eyes.ToRgba32() * 2654435761u >> 24 ^ (uint)look.Skin.ToRgba32() * 40503u >> 24
+            ^ (uint)look.Hair.ToRgba32() * 2246822519u >> 24 ^ (uint)look.Top.ToRgba32() * 3266489917u >> 24) & 0xFF;
 
     /// <summary>
     /// Everything a dressed figure's clothes need to know about the body under them: the trunk's
@@ -283,6 +293,94 @@ public static partial class HumanMeshBuilder
         }
     }
 
+    // ---- rest maps (#724): where each bit of a posed figure is when it stands at rest, for the
+    // clothes' patterns (MeshScratch.Rest), so they ride on the cloth instead of the body moving
+    // through them
+
+    // the standing figure every pose is taken back to; built on first use, not from another
+    // partial's statics (#221)
+    private static Rig? _restRig;
+    private static Rig RestRig => _restRig ??= RigFor(HumanPose.Standing);
+
+    /// <summary>
+    /// A frame on the bone <paramref name="a"/>→<paramref name="b"/>: origin at <paramref name="a"/>,
+    /// Y along the bone, X <paramref name="hint"/> made square to it, turning smoothly toward
+    /// <paramref name="fallback"/> as the bone comes within 30° of the hint (an arm raised sideways).
+    /// </summary>
+    private static Transform3D BoneFrame(Vector3 a, Vector3 b, Vector3 hint, Vector3 fallback)
+    {
+        var y = b - a;
+        y = y.LengthSquared() > 1e-10f ? y.Normalized() : Vector3.Up;
+        var x = hint - y * hint.Dot(y);
+        var f = fallback - y * fallback.Dot(y);
+        x += f * (1f - Mathf.Min(x.Length() * 2f, 1f));
+        if (x.LengthSquared() < 1e-8f) x = y.Cross(Mathf.Abs(y.Z) < 0.9f ? Vector3.Back : Vector3.Right);
+        x = x.Normalized();
+        return new Transform3D(new Basis(x, y, x.Cross(y)), a);
+    }
+
+    /// <summary>The rigid motion taking a posed bone back to the same bone at rest.</summary>
+    private static Transform3D BoneRest(Vector3 a, Vector3 b, Vector3 hint, Vector3 fallback,
+        Vector3 restA, Vector3 restB, Vector3 restHint, Vector3 restFallback) =>
+        BoneFrame(restA, restB, restHint, restFallback) * BoneFrame(a, b, hint, fallback).AffineInverse();
+
+    /// <summary>Two bones meeting at a joint (a limb), split at the joint's mitre and blended over <paramref name="blend"/> metres.</summary>
+    private static MeshScratch.RestMap TwoBoneRest(Vector3 root, Vector3 joint, Vector3 end, Vector3 hint, Vector3 fallback,
+        Vector3 restRoot, Vector3 restJoint, Vector3 restEnd, Vector3 restHint, Vector3 restFallback, float blend)
+    {
+        var mitre = (joint - root).Normalized() + (end - joint).Normalized();
+        if (mitre.LengthSquared() < 1e-8f) mitre = end - joint;
+        return new MeshScratch.RestMap(
+            BoneRest(root, joint, hint, fallback, restRoot, restJoint, restHint, restFallback),
+            BoneRest(joint, end, hint, fallback, restJoint, restEnd, restHint, restFallback),
+            joint, mitre.Normalized(), blend);
+    }
+
+    private static Vector3 ShoulderLine(in Rig r) => (r.ShoulderR - r.ShoulderL).Normalized();
+    private static Vector3 TrunkUp(in Rig r) => (r.Neck - r.Hip).Normalized();
+    private static Vector3 TrunkFwd(in Rig r) => ShoulderLine(r).Cross(TrunkUp(r));
+
+    /// <summary>The trunk: hips to waist, waist to neck.</summary>
+    private static MeshScratch.RestMap TrunkRest(in Rig r)
+    {
+        var q = RestRig;
+        // forward as the fallback: the trunk never lies along its own shoulder line
+        return TwoBoneRest(r.Hip, r.Waist, r.Neck, ShoulderLine(r), TrunkFwd(r), q.Hip, q.Waist, q.Neck, ShoulderLine(q), TrunkFwd(q), 0.08f);
+    }
+
+    /// <summary>An arm, shoulder to wrist (and the hand, on the forearm).</summary>
+    private static MeshScratch.RestMap ArmRest(in Rig r, bool left)
+    {
+        var q = RestRig;
+        return left
+            ? TwoBoneRest(r.ShoulderL, r.ElbowL, r.WristL, ShoulderLine(r), TrunkUp(r), q.ShoulderL, q.ElbowL, q.WristL, ShoulderLine(q), TrunkUp(q), 0.04f)
+            : TwoBoneRest(r.ShoulderR, r.ElbowR, r.WristR, ShoulderLine(r), TrunkUp(r), q.ShoulderR, q.ElbowR, q.WristR, ShoulderLine(q), TrunkUp(q), 0.04f);
+    }
+
+    /// <summary>A leg from free joints (a cyclist's too), hip to ankle, <paramref name="side"/> across the figure.</summary>
+    private static MeshScratch.RestMap LegRest(Vector3 hip, Vector3 knee, Vector3 ankle, Vector3 side, bool left)
+    {
+        var q = RestRig;
+        var (rh, rk, ra) = left ? (q.HipL, q.KneeL, q.AnkleL) : (q.HipR, q.KneeR, q.AnkleR);
+        return TwoBoneRest(hip, knee, ankle, side, Vector3.Back, rh, rk, ra, ShoulderLine(q), Vector3.Back, 0.05f);
+    }
+
+    /// <summary>A foot, ankle to toe.</summary>
+    private static MeshScratch.RestMap FootRest(Vector3 ankle, Vector3 toe, Vector3 side, bool left)
+    {
+        var q = RestRig;
+        var (ra, rt) = left ? (q.AnkleL, q.ToeL) : (q.AnkleR, q.ToeR);
+        return MeshScratch.RestMap.Rigid(BoneRest(ankle, toe, side, Vector3.Up, ra, rt, ShoulderLine(q), Vector3.Up));
+    }
+
+    /// <summary>The head and the neck under it.</summary>
+    private static MeshScratch.RestMap HeadRest(in Rig r)
+    {
+        var q = RestRig;
+        return MeshScratch.RestMap.Rigid(BoneRest(r.HeadBase, r.HeadTop, ShoulderLine(r), TrunkFwd(r),
+            q.HeadBase, q.HeadTop, ShoulderLine(q), TrunkFwd(q)));
+    }
+
     /// <summary>
     /// The figure itself: trunk, limbs, hands, boots, neck, head, face and hair, coloured by where
     /// <paramref name="look"/>'s clothes start and end. <paramref name="body"/> and
@@ -296,6 +394,8 @@ public static partial class HumanMeshBuilder
         // the patterns ride in the colours' alpha, as the clothes' finishes do
         look = Patterned(look);
         var fit = new Fit(r, look.Build);
+        // the patterns stay on the cloth however the figure moves (#724): the trunk unless a part says otherwise
+        using var trunkRest = s.Resting(TrunkRest(r));
         var shape = fit.Shape;
         var torso = fit.Torso;
 
@@ -316,22 +416,21 @@ public static partial class HumanMeshBuilder
                 if (includeLegs)
                 {
                     var (hip, knee, ankle, toe) = left ? (r.HipL, r.KneeL, r.AnkleL, r.ToeL) : (r.HipR, r.KneeR, r.AnkleR, r.ToeR);
-                    DrawLeg(s, look, shape, hip, knee, ankle, toe, fit.Side);
+                    DrawLeg(s, look, shape, hip, knee, ankle, toe, fit.Side, left);
                 }
 
                 var (shoulder, elbow, wrist) = left ? (r.ShoulderL, r.ElbowL, r.WristL) : (r.ShoulderR, r.ElbowR, r.WristR);
-                // the shoulder's round: the deltoid, a dome over the joint along the arm, then down into it
-                var down = (elbow - shoulder).Normalized();
-                var outward = fit.Side * side;
-                var deltoid = look.SleeveTo > 0.05f ? look.Top : look.Skin;
-                var crown = shoulder - down * 0.032f - outward * 0.006f;
-                var belly = shoulder + down * 0.022f;
-                s.Tube(crown, belly, shape.Deltoid * 0.45f, shape.Deltoid, deltoid, 7);
-                s.Tube(belly, shoulder + down * 0.12f, shape.Deltoid, shape.UpperArm, deltoid, 7);
-                Span(s, shoulder, shoulder.Lerp(elbow, 0.5f), shape.UpperArm, shape.UpperArm * 0.93f, 0f, 0.5f, armZones);
-                Span(s, shoulder.Lerp(elbow, 0.5f), elbow, shape.UpperArm * 0.93f, shape.Elbow, 0.5f, 1f, armZones);
-                Span(s, elbow, elbow.Lerp(wrist, 0.3f), shape.Elbow, shape.Forearm, 1f, 1.3f, armZones);
-                Span(s, elbow.Lerp(wrist, 0.3f), wrist, shape.Forearm, shape.Wrist, 1.3f, 2f, armZones);
+                // one skin from the shoulder's round (the deltoid, a dome over the joint) down to the
+                // wrist, mitred at the elbow, so no seam opens where the parts meet
+                float upper = Mathf.Max(shoulder.DistanceTo(elbow), 0.05f);
+                Span<Vector2> arm =
+                [
+                    new(-0.032f / upper, shape.Deltoid * 0.45f), new(-0.016f / upper, shape.Deltoid * 0.85f),
+                    new(0.022f / upper, shape.Deltoid), new(0.12f / upper, shape.UpperArm), new(0.5f, shape.UpperArm * 0.93f),
+                    new(1f, shape.Elbow), new(1.3f, shape.Forearm), new(2f, shape.Wrist),
+                ];
+                using var armRest = s.Resting(ArmRest(r, left));
+                LimbLoft(s, shoulder, elbow, wrist, arm, armZones, fit.Side);
                 var palm = look.Gloves ?? look.Skin;
                 var fingers = look.Gloves is { } gloves && !look.Fingerless ? gloves : look.Skin;
                 Hand(s, elbow, wrist, side, shape.Hand, palm, fingers);
@@ -339,13 +438,14 @@ public static partial class HumanMeshBuilder
         }
         if (!head) return fit;
 
+        using var headRest = s.Resting(HeadRest(r));
         // a straight neck up into the skull behind the jaw: the jaw's underside overhangs it, so the
         // head reads as a head on a neck rather than one cone running down into the collar
         s.Tube(r.Neck - torso.Up(4f) * 0.03f, fit.Head.NeckTop, shape.Neck, look.Skin, 8);
         fit.Head.Draw(s, look.Skin);
         if (cover != HairCover.Head)
         {
-            fit.Head.Face(s, look.Face, look.Eyes);
+            fit.Head.Face(s, look.Genome ?? FaceGenome.Preset(look.Face).WithSeed(FaceSeed(look)), look.Eyes);
             fit.Head.Ears(s, look.Skin);
             fit.Head.Hair(s, look.HairStyle, look.Hair, look.Skin, cover);
         }
@@ -363,19 +463,23 @@ public static partial class HumanMeshBuilder
         };
 
     /// <summary>One leg: thigh and shin in the bottom's, the skin's and the legwear's colours, then the boot.</summary>
-    private static void DrawLeg(MeshScratch s, BodyLook look, Physique shape, Vector3 hip, Vector3 knee, Vector3 ankle, Vector3 toe, Vector3 sideAxis)
+    private static void DrawLeg(MeshScratch s, BodyLook look, Physique shape, Vector3 hip, Vector3 knee, Vector3 ankle, Vector3 toe, Vector3 sideAxis, bool left)
     {
+        using var legRest = s.Resting(LegRest(hip, knee, ankle, sideAxis, left));
         var legwear = look.Legwear is { } w && !look.LegwearOver ? w : look.Skin;
         var zones = new Zones(look.LegTo, look.LegwearFrom, look.BootFrom, look.Bottom, look.Skin, legwear, look.Shoes, 0.012f);
-        // the thigh starts a little inside the pelvis, so no seam opens when it swings
-        var thighRoot = hip + (hip - knee).Normalized() * 0.035f;
-        Span(s, thighRoot, hip.Lerp(knee, 0.4f), shape.ThighTop, shape.ThighMid, 0f, 0.4f, zones);
-        Span(s, hip.Lerp(knee, 0.4f), knee, shape.ThighMid, shape.Knee, 0.4f, 1f, zones);
-        Span(s, knee, knee.Lerp(ankle, 0.3f), shape.Knee, shape.Calf, 1f, 1.3f, zones);
-        Span(s, knee.Lerp(ankle, 0.3f), ankle, shape.Calf, shape.Ankle, 1.3f, 2f, zones);
+        // one skin from a little inside the pelvis (so no seam opens when it swings) to the ankle, mitred at the knee
+        float thigh = Mathf.Max(hip.DistanceTo(knee), 0.05f);
+        Span<Vector2> leg =
+        [
+            new(-0.035f / thigh, shape.ThighTop), new(0.4f, shape.ThighMid), new(1f, shape.Knee),
+            new(1.3f, shape.Calf), new(2f, shape.Ankle),
+        ];
+        LimbLoft(s, hip, knee, ankle, leg, zones, sideAxis);
         // a net over the bare leg, a few mm proud, from where it starts to the boot
         if (look.LegwearOver && look.Legwear is { } over)
             LimbBand(s, hip, knee, ankle, Mathf.Clamp(look.LegwearFrom, 0f, 2f), Mathf.Clamp(look.BootFrom, 0f, 2f), shape, arm: false, 0.003f, over);
+        using var footRest = s.Resting(FootRest(ankle, toe, sideAxis, left));
         Boot(s, ankle, toe, sideAxis, look);
     }
 
@@ -432,23 +536,79 @@ public static partial class HumanMeshBuilder
             t >= C ? (C3, Inflate3) : t < A ? (C0, 0f) : t >= B ? (C2, 0f) : (C1, 0f);
     }
 
-    /// <summary>A tapered tube from <paramref name="a"/> (limb parameter <paramref name="ta"/>) to <paramref name="b"/>, cut where its colour changes.</summary>
-    private static void Span(MeshScratch s, Vector3 a, Vector3 b, float ra, float rb, float ta, float tb, Zones z, int sides = 7)
+    /// <summary>
+    /// A whole limb as one loft through <paramref name="stations"/> (limb parameter, radius; root 0,
+    /// joint 1, end 2, below 0 back past the root), cut where its colour changes. Every ring is
+    /// square to the limb, the joint's on the bisector and stretched across the bend, like a mitre,
+    /// so the skin runs through the elbow or knee with no seam, gap or overlap. The rings are
+    /// carried along without twisting from <paramref name="sideHint"/>.
+    /// </summary>
+    private static void LimbLoft(MeshScratch s, Vector3 root, Vector3 joint, Vector3 end, ReadOnlySpan<Vector2> stations, Zones z, Vector3 sideHint)
     {
-        Span<float> cuts = stackalloc float[5];
+        // the stations, with a cut at every colour change
+        Span<Vector2> at = stackalloc Vector2[stations.Length + 3];
         int n = 0;
-        cuts[n++] = ta;
-        Span<float> marks = stackalloc float[3];
-        marks[0] = z.A; marks[1] = z.B; marks[2] = z.C;
-        marks.Sort();
-        foreach (float c in marks)
-            if (c > ta + 1e-3f && c < tb - 1e-3f && c > cuts[n - 1] + 1e-3f) cuts[n++] = c;
-        cuts[n++] = tb;
-        for (int i = 0; i + 1 < n; i++)
+        foreach (var st in stations) at[n++] = st;
+        float first = stations[0].X, last = stations[^1].X;
+        foreach (float c in stackalloc[] { z.A, z.B, z.C })
         {
-            float f0 = (cuts[i] - ta) / (tb - ta), f1 = (cuts[i + 1] - ta) / (tb - ta);
-            var (colour, inflate) = z.At((cuts[i] + cuts[i + 1]) * 0.5f);
-            s.Tube(a.Lerp(b, f0), a.Lerp(b, f1), Mathf.Lerp(ra, rb, f0) + inflate, Mathf.Lerp(ra, rb, f1) + inflate, colour, sides);
+            if (c <= first + 1e-3f || c >= last - 1e-3f) continue;
+            int k = 1;
+            while (stations[k].X < c) k++;
+            var (a, b) = (stations[k - 1], stations[k]);
+            at[n++] = new Vector2(c, Mathf.Lerp(a.Y, b.Y, (c - a.X) / (b.X - a.X)));
+        }
+        at = at[..n];
+        at.Sort((p, q) => p.X.CompareTo(q.X));
+
+        var d1 = (joint - root).Normalized();
+        var d2 = (end - joint).Normalized();
+        var mitre = (d1 + d2).LengthSquared() > 1e-6f ? (d1 + d2).Normalized() : d1;
+        var bend = d1.Cross(d2);
+        var across = bend.LengthSquared() > 1e-6f ? mitre.Cross(bend).Normalized() : Vector3.Zero;
+        float stretch = 1f / Mathf.Max(mitre.Dot(d1), 0.7f) - 1f;
+
+        // each station's centre, direction and side, the side carried from one to the next
+        Span<Vector3> centres = stackalloc Vector3[n], dirs = stackalloc Vector3[n], sides = stackalloc Vector3[n];
+        var u = sideHint;
+        for (int i = 0; i < n; i++)
+        {
+            float t = at[i].X;
+            bool atJoint = Mathf.Abs(t - 1f) < 1e-4f;
+            centres[i] = t <= 1f ? root.Lerp(joint, t) : joint.Lerp(end, t - 1f);
+            dirs[i] = atJoint ? mitre : t < 1f ? d1 : d2;
+            u -= dirs[i] * u.Dot(dirs[i]);
+            if (u.LengthSquared() < 1e-8f) u = dirs[i].Cross(Mathf.Abs(dirs[i].Y) < 0.9f ? Vector3.Up : Vector3.Right);
+            sides[i] = u = u.Normalized();
+        }
+
+        int m = s.Smooth ? MeshScratch.SmoothSides : 7;
+        var pool = Rings;
+        // one loft per run of bands in the same colour; neighbouring runs share their ring
+        int start = 0;
+        while (start + 1 < n)
+        {
+            var (colour, inflate) = z.At(Mathf.Max((at[start].X + at[start + 1].X) * 0.5f, 0f));
+            int stop = start + 1;
+            while (stop + 1 < n && z.At(Mathf.Max((at[stop].X + at[stop + 1].X) * 0.5f, 0f)) == (colour, inflate)) stop++;
+            pool.Begin();
+            for (int i = start; i <= stop; i++)
+            {
+                var ring = pool.Ring(m);
+                var v = dirs[i].Cross(sides[i]);
+                bool atJoint = Mathf.Abs(at[i].X - 1f) < 1e-4f;
+                float r = at[i].Y + inflate;
+                for (int k = 0; k < m; k++)
+                {
+                    float a = Mathf.Tau * k / m;
+                    var off = (sides[i] * Mathf.Cos(a) + v * Mathf.Sin(a)) * r;
+                    if (atJoint) off += across * off.Dot(across) * stretch;
+                    ring[k] = centres[i] + off;
+                }
+                pool.Sections.Add(ring);
+            }
+            s.Loft(pool.Sections, pool.Fill(colour), colour);
+            start = stop;
         }
     }
 
@@ -740,20 +900,23 @@ public static partial class HumanMeshBuilder
         private const int Sides = 12;
 
         // (half width, front depth, back depth, forward offset) at each height, metres at scale 1
-        private static readonly float[] Heights = { -0.035f, -0.022f, 0.010f, 0.050f, 0.105f, 0.160f, 0.215f, 0.250f };
+        // #671: round rather than an egg, a full jaw and a short, blunt chin, the crown a dome
+        private static readonly float[] Heights = { -0.022f, -0.008f, 0.012f, 0.050f, 0.105f, 0.160f, 0.212f, 0.238f, 0.250f };
         private static readonly Vector4[] Soft =
         {
-            new(0.018f, 0.014f, 0.012f, 0.058f), new(0.046f, 0.040f, 0.020f, 0.034f),
-            new(0.060f, 0.058f, 0.046f, 0.020f), new(0.074f, 0.072f, 0.070f, 0.010f),
-            new(0.081f, 0.084f, 0.088f, 0f), new(0.084f, 0.080f, 0.097f, -0.006f),
-            new(0.071f, 0.062f, 0.088f, -0.012f), new(0.036f, 0.030f, 0.048f, -0.012f),
+            new(0.034f, 0.024f, 0.020f, 0.044f), new(0.060f, 0.052f, 0.036f, 0.026f),
+            new(0.072f, 0.068f, 0.060f, 0.014f), new(0.081f, 0.078f, 0.079f, 0.006f),
+            new(0.085f, 0.085f, 0.091f, 0f), new(0.086f, 0.082f, 0.097f, -0.006f),
+            new(0.076f, 0.068f, 0.090f, -0.010f), new(0.058f, 0.050f, 0.072f, -0.010f),
+            new(0.030f, 0.026f, 0.040f, -0.010f),
         };
         private static readonly Vector4[] Square =
         {
-            new(0.032f, 0.014f, 0.012f, 0.052f), new(0.060f, 0.040f, 0.028f, 0.030f),
-            new(0.071f, 0.058f, 0.054f, 0.018f), new(0.079f, 0.072f, 0.075f, 0.008f),
-            new(0.082f, 0.084f, 0.089f, 0f), new(0.084f, 0.080f, 0.097f, -0.006f),
-            new(0.071f, 0.062f, 0.088f, -0.012f), new(0.036f, 0.030f, 0.048f, -0.012f),
+            new(0.046f, 0.024f, 0.022f, 0.042f), new(0.068f, 0.052f, 0.040f, 0.024f),
+            new(0.078f, 0.068f, 0.064f, 0.013f), new(0.083f, 0.078f, 0.081f, 0.006f),
+            new(0.085f, 0.085f, 0.091f, 0f), new(0.086f, 0.082f, 0.097f, -0.006f),
+            new(0.076f, 0.068f, 0.090f, -0.010f), new(0.058f, 0.050f, 0.072f, -0.010f),
+            new(0.030f, 0.026f, 0.040f, -0.010f),
         };
 
         /// <summary>The height of the top of the scalp, and of the hair cap over it (profile metres).</summary>
@@ -824,7 +987,7 @@ public static partial class HumanMeshBuilder
         public float HatScale(bool hair) => K * (hair ? 1.06f : 1f);
 
         /// <summary>Half the head's width at its widest, with hair on or not.</summary>
-        public float HalfWidth(bool hair) => (0.084f + (hair ? 0.013f : 0f)) * K;
+        public float HalfWidth(bool hair) => (0.086f + (hair ? 0.013f : 0f)) * K;
 
         private Vector3[] Ring(RingPool pool, float y, float inflate)
         {
@@ -841,8 +1004,8 @@ public static partial class HumanMeshBuilder
             s.Loft(pool.Sections, pool.Fill(skin), skin);
         }
 
-        /// <summary>The pixel face: a band over the front of the head, from brow to chin, sampling <see cref="FaceAtlas"/>; its vertex colour is the eye colour.</summary>
-        public void Face(MeshScratch s, int face, Color eyes)
+        /// <summary>The pixel face: a band over the front of the head, from brow to chin, drawn from <paramref name="face"/> by the shader (#657); its vertex colour is the eye colour.</summary>
+        public void Face(MeshScratch s, FaceGenome face, Color eyes)
         {
             ReadOnlySpan<float> rows = [0.178f, 0.135f, 0.090f, 0.045f, 0.010f];
             const int columns = 9;
@@ -855,7 +1018,8 @@ public static partial class HumanMeshBuilder
                     row[i] = Point(rows[r], Mathf.DegToRad(Mathf.Lerp(145f, 35f, i / (columns - 1f))), 0.004f);
                 pool.Sections.Add(row);
             }
-            s.FaceBand(pool.Sections, FaceAtlas.Uv(face), FaceMark(eyes), Centre(0.10f));
+            var (low, high) = face.Code;
+            s.FaceBand(pool.Sections, new Rect2(0f, 0f, 1f, 1f), FaceMark(eyes), Centre(0.10f), new Vector2(low, high));
         }
 
         /// <summary>Where an ear is (<paramref name="side"/> −1 the figure's right, +1 its left).</summary>
@@ -896,6 +1060,7 @@ public static partial class HumanMeshBuilder
             }
             pool.Sections.Add(hairline);
             pool.Sections.Add(Ring(pool, 0.200f, inflate));
+            pool.Sections.Add(Ring(pool, 0.238f, inflate));   // over the crown's dome (#671)
             pool.Sections.Add(Ring(pool, Crown, inflate));
             pool.Sections.Add(Ring(pool, Crown + inflate * 2f, inflate - 0.013f));   // the top profile, raised over the scalp
             s.Loft(pool.Sections, pool.Fill(colour), colour);

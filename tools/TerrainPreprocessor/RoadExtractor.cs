@@ -185,8 +185,8 @@ public sealed class RoadExtractor
         var result = tiles.ToDictionary(t => t, t => new RoadTile { Id = t, Segments = new() });
         if (tiles.Count == 0) return result;
 
-        double minE = tiles.Min(t => t.MinE), maxE = tiles.Max(t => t.MinE) + ChunkFormat.TileSizeM;
-        double minN = tiles.Min(t => t.MinN), maxN = tiles.Max(t => t.MinN) + ChunkFormat.TileSizeM;
+        // lines look at their neighbours (bridge ends, tunnel portals), hence the ring
+        var region = new TileRegion(tiles, TileRegion.RingM);
 
         _pending.Clear();
         SourceKeys.Clear();
@@ -195,11 +195,11 @@ public sealed class RoadExtractor
         _structureEndCount.Clear();
 
         using var conn = GeoPackageReader.Open(_gpkgPath);
-        ExtractRoads(conn, minE, minN, maxE, maxN);
-        ExtractRailways(conn, minE, minN, maxE, maxN);
-        ExtractAerial(conn, minE, minN, maxE, maxN);
-        ExtractWatercourses(conn, minE, minN, maxE, maxN);
-        ExtractDefences(conn, minE, minN, maxE, maxN);
+        ExtractRoads(conn, region);
+        ExtractRailways(conn, region);
+        ExtractAerial(conn, region);
+        ExtractWatercourses(conn, region);
+        ExtractDefences(conn, region);
 
         // Where a deck or bore ends, note the height it ends at. The approach road is a
         // separate TLM feature, so this is the only way it can learn what to ramp up to —
@@ -237,14 +237,9 @@ public sealed class RoadExtractor
         return result;
     }
 
-    private void ExtractRoads(SqliteConnection conn,
-        double minE, double minN, double maxE, double maxN)
+    private void ExtractRoads(SqliteConnection conn, TileRegion region)
     {
-        using var cmd = GeoPackageReader.BboxQuery(conn, "tlm_strassen_strasse", "geom",
-            RoadColumns, minE, minN, maxE, maxN);
-        using var reader = cmd.ExecuteReader();
-
-        while (reader.Read())
+        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_strassen_strasse", "geom", RoadColumns, region))
         {
             string? uuid = reader.IsDBNull(0) ? null : reader.GetString(0);
             if (RoadFormat.IsNotDrivableSurface(Str(reader, 1))) continue;
@@ -271,14 +266,9 @@ public sealed class RoadExtractor
     /// Aerial ropeways. These keep their surveyed Z — see <see cref="RoadFormat.IsAerial"/> —
     /// so unlike everything else here the height is the answer, not a starting point.
     /// </summary>
-    private void ExtractAerial(SqliteConnection conn,
-        double minE, double minN, double maxE, double maxN)
+    private void ExtractAerial(SqliteConnection conn, TileRegion region)
     {
-        using var cmd = GeoPackageReader.BboxQuery(conn, "tlm_oev_uebrige_bahn", "geom",
-            TypeOnlyColumns, minE, minN, maxE, maxN);
-        using var reader = cmd.ExecuteReader();
-
-        while (reader.Read())
+        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_oev_uebrige_bahn", "geom", TypeOnlyColumns, region))
         {
             if (RoadFormat.ParseAerial(Str(reader, 0)) is not { } cls) continue;
             Collect(reader, cls, RoadSurface.Unknown, RoadFlags.None, RoadFormat.DefaultWidth(cls));
@@ -289,14 +279,9 @@ public sealed class RoadExtractor
     /// Watercourses. Draped like a road, because their surveyed Z sits on the ground anyway —
     /// measured against our own heightfield, the median offset is −0.14 m.
     /// </summary>
-    private void ExtractWatercourses(SqliteConnection conn,
-        double minE, double minN, double maxE, double maxN)
+    private void ExtractWatercourses(SqliteConnection conn, TileRegion region)
     {
-        using var cmd = GeoPackageReader.BboxQuery(conn, "tlm_gewaesser_fliessgewaesser", "geom",
-            WaterColumns, minE, minN, maxE, maxN);
-        using var reader = cmd.ExecuteReader();
-
-        while (reader.Read())
+        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_gewaesser_fliessgewaesser", "geom", WaterColumns, region))
         {
             if (RoadFormat.ParseWatercourse(Str(reader, 0)) is not { } cls) continue;
 
@@ -315,38 +300,22 @@ public sealed class RoadExtractor
     /// avalanche barrier that Z is the top of the structure; the mesh builder grows each wall
     /// from the terrain up to it.
     /// </summary>
-    private void ExtractDefences(SqliteConnection conn,
-        double minE, double minN, double maxE, double maxN)
+    private void ExtractDefences(SqliteConnection conn, TileRegion region)
     {
-        using (var cmd = GeoPackageReader.BboxQuery(conn, "tlm_bauten_verbauung", "geom",
-            TypeOnlyColumns, minE, minN, maxE, maxN))
-        using (var reader = cmd.ExecuteReader())
+        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_bauten_verbauung", "geom", TypeOnlyColumns, region))
         {
-            while (reader.Read())
-            {
-                if (RoadFormat.ParseDefence(Str(reader, 0)) is not { } cls) continue;
-                Collect(reader, cls, RoadSurface.Unknown, RoadFlags.None, RoadFormat.DefaultWidth(cls));
-            }
+            if (RoadFormat.ParseDefence(Str(reader, 0)) is not { } cls) continue;
+            Collect(reader, cls, RoadSurface.Unknown, RoadFlags.None, RoadFormat.DefaultWidth(cls));
         }
 
-        using (var cmd = GeoPackageReader.BboxQuery(conn, "tlm_bauten_mauer", "geom",
-            TypeOnlyColumns, minE, minN, maxE, maxN))
-        using (var reader = cmd.ExecuteReader())
-        {
-            while (reader.Read())
-                Collect(reader, RoadClass.Wall, RoadSurface.Unknown, RoadFlags.None,
-                    RoadFormat.DefaultWidth(RoadClass.Wall));
-        }
+        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_bauten_mauer", "geom", TypeOnlyColumns, region))
+            Collect(reader, RoadClass.Wall, RoadSurface.Unknown, RoadFlags.None,
+                RoadFormat.DefaultWidth(RoadClass.Wall));
     }
 
-    private void ExtractRailways(SqliteConnection conn,
-        double minE, double minN, double maxE, double maxN)
+    private void ExtractRailways(SqliteConnection conn, TileRegion region)
     {
-        using var cmd = GeoPackageReader.BboxQuery(conn, "tlm_oev_eisenbahn", "geom",
-            RailColumns, minE, minN, maxE, maxN);
-        using var reader = cmd.ExecuteReader();
-
-        while (reader.Read())
+        foreach (var reader in GeoPackageReader.TileRows(conn, "tlm_oev_eisenbahn", "geom", RailColumns, region))
         {
             string? objektart = Str(reader, 0);
             var flags = RoadFormat.ParseFlags(null, Str(reader, 1), null, null);
@@ -372,7 +341,7 @@ public sealed class RoadExtractor
         }
     }
 
-    private void Collect(SqliteDataReader reader, RoadClass cls, RoadSurface surface,
+    private void Collect(GeoPackageReader.Row reader, RoadClass cls, RoadSurface surface,
         RoadFlags flags, float width, RoadAttributes attr = default, string? uuid = null)
     {
         int geomIndex = reader.FieldCount - 1;
@@ -642,7 +611,7 @@ public sealed class RoadExtractor
         return outPts;
     }
 
-    private static string? Str(SqliteDataReader r, int i) => r.IsDBNull(i) ? null : r.GetString(i);
+    private static string? Str(GeoPackageReader.Row r, int i) => r.IsDBNull(i) ? null : r.GetString(i);
 
     /// <summary>TLM3D booleans arrive as German words, not 0/1.</summary>
     private static bool IsTrue(string? v) => v is "Wahr" or "true" or "Ja" or "1";

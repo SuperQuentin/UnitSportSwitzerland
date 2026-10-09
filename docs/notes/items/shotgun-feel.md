@@ -1,16 +1,16 @@
 # Shotgun feel (#100)
 
-- **Shoulder aim (#460)**: Aim with an unscoped gun (shotgun, pistol, assault rifle) no longer looks from
+- **Shoulder aim (#460)**: in third person, Aim with an unscoped gun (shotgun, pistol, assault rifle) no longer looks from
   the eye: `ItemController` sets `FootPlayer.GunAim`, which brings out the throw's shoulder camera
-  (`StepThrowView`, lent third person from first person) at `GunCamOffset` 0.62 m / `GunCamDistance` 1.5 m,
+  (`StepThrowView`) at `GunCamOffset` 0.62 m / `GunCamDistance` 1.5 m,
   zoomed to the weapon's `AimFov`. The body squares up to the view with the gun in `ShoulderAim`, off to the
   side of the screen; the `Crosshair` (`InventoryUi`, four ticks and a dot) marks the centre, where
-  `AimFrom`'s camera ray sends the shot. The hunting rifle's scope and VR keep the eye view (`ScopeView`).
-  The barrel stays level (no pitch in the arm pose). Screenshot: `--ride foot,10,out.png --hold Rifle --aim
-  --view first [--shoulder left]`.
+  `AimFrom`'s camera ray sends the shot. The hunting rifle's scope, first person (`FootPlayer.ChoseFirstPerson`) and VR keep the eye view
+  (`ScopeView`, 1P ADS below). The barrel stays level (no pitch in the arm pose). Screenshot: `--ride foot,10,out.png
+  --hold Rifle --aim --view third [--shoulder left]`.
 - **Other shoulder (#460)**: `swap_shoulder` (H / middle mouse; pad R3 while `GunAim`) flips
   `GameSettings.LeftShoulder`; `_shoulderSide` eases across for the throw, gun and normal third-person cameras.
-- **1P ADS** (VR only since #460): `ViewPose.Aim` for Shoot = `(0, -0.105, -0.42)` pitched up 0.085 rad: the lighter rib
+- **1P ADS** (first person and VR): `ViewPose.Aim` for Shoot = `(0, -0.105, -0.42)` pitched up 0.085 rad: the lighter rib
   between the barrels runs up from the receiver to the yellow front bead, which sits inside a small ring
   reticle (was `BeadReticle`, now the #460 `Crosshair`) at the screen centre. Shotgun mesh:
   rib + bead added, barrels at y 0.03; retune the pose in screenshots (`gunshotcheck.sh`, `a_aimed`).
