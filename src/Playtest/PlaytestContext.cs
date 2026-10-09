@@ -18,6 +18,8 @@ public sealed class PlaytestContext
     private readonly Action<string> _command;
     private readonly List<string> _vehicles = [];
     private readonly List<Node> _nodes = [];
+    /// <summary>Numbers every placed vehicle of the session: a name never comes back while the last one is still being freed.</summary>
+    private int _serial;
 
     /// <summary>The scenario's knobs, as Claude last set them (<c>set_param</c>), else the defaults.</summary>
     internal Dictionary<string, double> Params { get; set; } = [];
@@ -162,7 +164,7 @@ public sealed class PlaytestContext
         var velocity = Forward(yaw) * (kmh / 3.6f);
         var state = new VehicleState(kind, origin.ToGlobal(at with { Y = Ground(at) }), yaw, velocity, ride.MaxHealth,
             EngineOn: kmh > 0, Wrecked: false, Throttle: 0f, SpawnedAt: 0);
-        string name = vehicles.Place(state, $"playtest_{_vehicles.Count}_{(int)kind}_{Time.GetTicksMsec()}")
+        string name = vehicles.Place(state, $"playtest_{++_serial}_{(int)kind}")
             ?? throw new InvalidOperationException($"{ride.Label} was refused");
         _vehicles.Add(name);
         // Posed is only ever set by the bodies whose frame stands on its own (trucks, buses, aircraft, boats):

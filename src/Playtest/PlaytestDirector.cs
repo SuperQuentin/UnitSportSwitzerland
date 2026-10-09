@@ -42,7 +42,7 @@ public partial class PlaytestDirector : Node
     private readonly PlaytestLog _log = new();
     private LoopbackHttp? _http;
     private bool _stageSet;
-    private double _setupStarted = -1;
+    private bool _settingUp;
 
     /// <summary>The scenarios, ordered as the panel lists them.</summary>
     public List<PlaytestEntry> Entries { get; private set; } = [];
@@ -146,7 +146,7 @@ public partial class PlaytestDirector : Node
     public override void _Process(double delta)
     {
         while (_main.TryDequeue(out var work)) _ = work();
-        if (Current?.Scenario.Tick is { } tick && SetupError == null && _setupStarted < 0) tick(_ctx, delta);
+        if (Current?.Scenario.Tick is { } tick && SetupError == null && !_settingUp) tick(_ctx, delta);
     }
 
     // ---- main thread ---------------------------------------------------------------------
@@ -232,7 +232,7 @@ public partial class PlaytestDirector : Node
         SetupError = null;
         _ctx.Params = new Dictionary<string, double>(e.Scenario.Params);
         if (parameters != null) foreach (var (k, v) in parameters) _ctx.Params[k] = v;
-        _setupStarted = Time.GetTicksMsec();
+        _settingUp = true;
         Say("system", $"▶ {e.Title}");
         Changed?.Invoke();
         try
@@ -259,7 +259,7 @@ public partial class PlaytestDirector : Node
         }
         finally
         {
-            _setupStarted = -1;
+            _settingUp = false;
             Changed?.Invoke();
         }
     }
