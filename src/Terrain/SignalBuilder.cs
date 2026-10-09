@@ -20,10 +20,16 @@ public static class SignalBuilder
     private static readonly Color PoleColour = new(0.55f, 0.59f, 0.62f);   // RAL 7001 silver grey
     private static readonly Color Housing = new(0.07f, 0.07f, 0.08f);      // RAL 9017 traffic black
     private static readonly Color Border = new(0.90f, 0.90f, 0.88f);
+    private static readonly Color WhitePlate = new(0.93f, 0.93f, 0.91f);   // RAL 9016 traffic white
 
     /// <summary>Lens pitch and the 200 mm lens drawn a little smaller than its housing's cell.</summary>
     public const float Pitch = 0.3f, LensRadius = 0.09f;
     private const float HeadWidth = 0.3f, HeadDepth = 0.22f, BoardMargin = 0.1f, BoardBorder = 0.04f, BoardThickness = 0.02f;
+    /// <summary>
+    /// A car head's white plate (#759, from a photo of a Swiss junction): a narrow margin above and
+    /// below, and at the sides half the gap to the next head, so heads side by side share one plate.
+    /// </summary>
+    private const float PlateMargin = 0.05f, PlateSide = (HeadSpacing - HeadWidth) * 0.5f;
     /// <summary>Head centre to head centre across a pole.</summary>
     private const float HeadSpacing = 0.55f;
     /// <summary>Lower edge of the car heads at the roadside, 2.35-3.50 m (SSV Art. 71): low alone, high above a pedestrian head.</summary>
@@ -80,12 +86,19 @@ public static class SignalBuilder
                     if (reach.Length() > PoleRadius * 2)
                         Box(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(),
                             new Vector3(foot.X, h.Centre.Y, foot.Z) + reach * 0.5f, reach.Normalized(), 0.04f, reach.Length() * 0.5f, 0.04f);
-                    // the backboard: white border, black field, then the housing in front
+                    // the backboard: a car head's white plate (#759); a bike head's only in some cantons;
+                    // a pedestrian head's black field in a white border; then the housing in front
                     var board = h.Centre - h.Front * (depth + BoardThickness * 0.5f);
-                    Plate(vertices, colors, uvs, uv2s, indices, Border.SrgbToLinear(), board, h.Front, h.Right,
-                        w * 0.5f + margin, half + margin);
-                    Plate(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(), board + h.Front * 0.004f, h.Front, h.Right,
-                        w * 0.5f + margin - border, half + margin - border);
+                    if (h.Shape == Shape.Square)
+                    {
+                        Plate(vertices, colors, uvs, uv2s, indices, Border.SrgbToLinear(), board, h.Front, h.Right,
+                            w * 0.5f + margin, half + margin);
+                        Plate(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(), board + h.Front * 0.004f, h.Front, h.Right,
+                            w * 0.5f + margin - border, half + margin - border);
+                    }
+                    else if (h.Shape != Shape.Bike || signal.Plan.BikeBoard)
+                        Plate(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), board, h.Front, h.Right,
+                            w * 0.5f + PlateSide * h.Scale, half + PlateMargin * h.Scale);
                     Box(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(), h.Centre - h.Front * (depth * 0.5f), h.Right,
                         w * 0.5f, depth * 0.5f, half, h.Front);
                     if (h.Flasher)

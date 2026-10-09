@@ -79,6 +79,70 @@ void fragment() {
         return Materials[(int)shape] = m;
     }
 
+    private static Material? _haloMaterial;
+    private static Mesh? _haloMesh;
+
+    /// <summary>
+    /// The bloom round a lit car lens (#759): a quad facing the camera at the lens, added onto
+    /// what is behind it, bright in the middle and fading to nothing at its edge. It is never
+    /// smaller than a few pixels and larger at night (<c>world_night</c>, set by World/DayNight),
+    /// when it also reaches further. A head shines along its axis: seen from the side its bloom
+    /// fades out, so the heads of the cross street do not glow down the road you are on. The pull
+    /// toward the eye is the lit lens's, so the bloom hides behind what hides the lens.
+    /// </summary>
+    private static Material HaloMaterial() => _haloMaterial ??= new ShaderMaterial { Shader = new Shader { Code = @"
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, fog_disabled;
+global uniform float world_night;
+// shaders/body/road.gdshaderinc's defaults, and the lens shader's pull of a lit lens
+const float ROAD_DEPTH_BIAS = 0.0004, FAR_LIFT_START = 800.0, FAR_LIFT_RATE = 0.001, FAR_LIFT_MAX = 2.0;
+const float LIT_BIAS = 0.0004;
+const vec2 RADIUS_M = vec2(0.25, 0.45);       // day, night: the bloom's radius up close
+const vec2 RADIUS_PX = vec2(3.0, 5.0);        // and the smallest it is drawn, in pixels
+const vec2 STRENGTH = vec2(0.3, 0.7);
+const vec2 FADE_START = vec2(500.0, 800.0), FADE_END = vec2(1000.0, 1500.0);
+varying vec2 corner;
+varying float strength;
+void vertex() {
+    vec3 centre = (MODELVIEW_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    vec3 front = normalize((MODELVIEW_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
+    float night = clamp(world_night, 0.0, 1.0);
+    float lit = step(0.5, max(COLOR.r, max(COLOR.g, COLOR.b)));
+    float beam = smoothstep(0.3, 0.85, dot(front, normalize(-centre)));
+    float depth = max(-centre.z, 0.0);
+    float fade = 1.0 - smoothstep(mix(FADE_START.x, FADE_START.y, night), mix(FADE_END.x, FADE_END.y, night), depth);
+    float pixel = 2.0 * depth / (abs(PROJECTION_MATRIX[1][1]) * VIEWPORT_SIZE.y);
+    float radius = max(mix(RADIUS_M.x, RADIUS_M.y, night), mix(RADIUS_PX.x, RADIUS_PX.y, night) * pixel);
+    strength = lit * beam * fade * mix(STRENGTH.x, STRENGTH.y, night);
+    corner = VERTEX.xy;
+    vec4 view = vec4(centre + vec3(VERTEX.xy * radius * step(0.001, strength), 0.0), 1.0);
+    float dist = length(view.xyz);
+    float lift = clamp((dist - FAR_LIFT_START) * FAR_LIFT_RATE, 0.0, FAR_LIFT_MAX);
+    view.xyz *= 1.0 - lift / max(dist, 1.0) - ROAD_DEPTH_BIAS - LIT_BIAS;
+    POSITION = PROJECTION_MATRIX * view;
+}
+void fragment() {
+    float d = clamp(1.0 - length(corner), 0.0, 1.0);
+    ALBEDO = COLOR.rgb * strength * d * d;
+}" } };
+
+    /// <summary>The bloom's quad, corners at ±1 (main thread).</summary>
+    private static Mesh HaloMesh()
+    {
+        if (_haloMesh != null) return _haloMesh;
+        var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = new Vector3[] { new(-1, -1, 0), new(1, -1, 0), new(1, 1, 0), new(-1, 1, 0) };
+        arrays[(int)Mesh.ArrayType.Normal] = new Vector3[] { Vector3.Back, Vector3.Back, Vector3.Back, Vector3.Back };
+        arrays[(int)Mesh.ArrayType.Index] = new[] { 0, 1, 2, 0, 2, 3 };
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        return _haloMesh = mesh;
+    }
+
+    /// <summary>A car head's lens blooms; a pedestrian or bike lens does not.</summary>
+    private static bool Blooms(SignalBuilder.Shape shape) => shape is not (SignalBuilder.Shape.Square or SignalBuilder.Shape.Bike);
+
     private SignalPlan[] _plans = [];
     private SignalBuilder.Lens[] _lenses = [];
     /// <summary>Per lens, its index in its shape's MultiMesh.</summary>
@@ -87,6 +151,9 @@ void fragment() {
     private (int Start, int Count)[] _byJunction = [];
     private double[] _next = [];
     private readonly MultiMesh?[] _multi = new MultiMesh?[SignalBuilder.ShapeCount];
+    /// <summary>Per lens, its index in <see cref="_halos"/>, or -1 for a lens that does not bloom.</summary>
+    private int[] _haloSlot = [];
+    private MultiMesh? _halos;
 
     /// <summary>The time source: the server's clock; a probe may pin it.</summary>
     public static Func<double> Clock { get; set; } = () => Net.ClockSync.ServerNow;
@@ -125,6 +192,27 @@ void fragment() {
         for (int i = 0; i < _lenses.Length; i++)
             _multi[(int)_lenses[i].Shape]!.SetInstanceTransform(_slot[i], _lenses[i].Transform);
 
+        _haloSlot = new int[_lenses.Length];
+        int halos = 0;
+        for (int i = 0; i < _lenses.Length; i++) _haloSlot[i] = Blooms(_lenses[i].Shape) ? halos++ : -1;
+        if (halos > 0)
+        {
+            _halos = new MultiMesh
+            {
+                TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                UseColors = true,
+                Mesh = HaloMesh(),
+                InstanceCount = halos,
+            };
+            AddChild(new MultiMeshInstance3D
+            {
+                Name = "Halos", Multimesh = _halos, MaterialOverride = HaloMaterial(),
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            });
+            for (int i = 0; i < _lenses.Length; i++)
+                if (_haloSlot[i] >= 0) _halos.SetInstanceTransform(_haloSlot[i], _lenses[i].Transform);
+        }
+
         _byJunction = new (int, int)[_plans.Length];
         for (int i = 0; i < _lenses.Length; i++)
         {
@@ -155,7 +243,9 @@ void fragment() {
             var lens = _lenses[i];
             var aspect = plan.State(lens.Group, now);
             if (aspect == SignalAspect.FlashingAmber) blinking = true;
-            _multi[(int)lens.Shape]!.SetInstanceColor(_slot[i], Colour(lens.Role, aspect, blinkOn));
+            var colour = Colour(lens.Role, aspect, blinkOn);
+            _multi[(int)lens.Shape]!.SetInstanceColor(_slot[i], colour);
+            if (_haloSlot[i] >= 0) _halos!.SetInstanceColor(_haloSlot[i], colour);   // dark lenses do not bloom
             until = Math.Min(until, plan.UntilChange(lens.Group, now));
         }
         if (blinking) until = Math.Min(until, BlinkHalf - (now % BlinkHalf));

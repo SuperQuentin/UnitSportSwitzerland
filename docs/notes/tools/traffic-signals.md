@@ -104,6 +104,19 @@
   show it through its head). `PROJECTION_MATRIX[1][1]` is negative in Godot's Vulkan projection:
   take its `abs`. Before/after shots: signal test region, J2 west approach at 50-900 m
   (`x,g1.5,2,0,-90` with x = -1500 - distance).
+- **Bloom and plates** (#759). A lit car lens also gets a bloom: a camera-facing additive quad
+  per car lens (`SignalLamps` "Halos" MultiMesh, recoloured with its lens), radius 0.25 m / 3 px
+  minimum by day and 0.45 m / 5 px at night (`world_night`), strength 0.3 / 0.7, faded out by
+  1 km (1.5 km at night) and off-axis (the cross street's heads do not glow down your road). 9 px
+  at night blew every light into a disc and the next junction into a band. Car heads stand on a
+  white plate (RAL 9016, after the user's photo of a Swiss junction: one white plate behind the
+  black housings, side margins of half the head gap so a pole's heads share it); the Zürich
+  Wegleitung LSA only says the visible housing is matt RAL 9017 and the Kontrastblenden are
+  aluminium after SN 640 836 (not public). Bike heads get the plate only in some cantons:
+  `SignalPlan.BikeBoard` (bit 1 of the SGNL pedestrian byte, old data reads false), set by
+  RoadGen's `BikeBoard(canton)`, false everywhere until a canton is known. Pedestrian heads keep
+  the black field in a white border. Not done: the photo's arrows printed on the plate under each
+  head (ours are arrow masks in the lenses, which Basel-Stadt also uses).
 - **Bikes at signals** (#351). A signalised left pocket (not a merged strip) carries a 1.50 m
   left-turn bike lane between it and the through lane (`LeftBikeLane`: the widening grows by it,
   the hatch opens to the through lane's edge, yellow dashes both sides from where the pocket opens,
