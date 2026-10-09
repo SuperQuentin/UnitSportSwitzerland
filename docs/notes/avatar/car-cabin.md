@@ -75,3 +75,12 @@
 - **The XW30's HUD** (`CarBody.Hud`): the speed reflected into the windscreen where the eye's line 6°
   under level meets the glass, turned to the eye, an eco bar under it; a second readout in
   `CarCabin.SpeedDigits` (readouts of `SpeedPlaces` places, units first).
+- **The liftback's roof is one arc (#760)** (`Dims.Arched`, `RoofAt`): two cubic Hermites, from the
+  windscreen's foot (slope 0.5) up to a level peak at `PeakZ` (−0.15 of the half-length, over the
+  B-pillar, for the rear heads) and down to the rear glass's foot on the deck (slope 0.45).
+  `ArchedGreenhouse` lays the windscreen and rear glass as strips along it, lofts the roof panel and
+  headlining along it and runs one rail each side (A-pillar, roof rail, C-pillar), flush with the
+  roof's line; `ArchedOutline` gives the side windows the arc for a top. `FrontAt(y)` / `RearAt(y)`
+  are the glass at a height (the old straight rakes on a flat roof, so `--cockpitcheck` reads the
+  same for every other car); the rear bench, the HUD and the rear-view mirror use them. The Prius's
+  B-pillar is black and its bumper has the big lower intake and fog lamps.
