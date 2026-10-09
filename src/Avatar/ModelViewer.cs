@@ -220,7 +220,7 @@ public partial class ModelViewer : Node3D
 
         _label.Text = $"{_categories[_category].Name}  ({_category + 1}/{_categories.Count})   ›   " +
                       $"{entry.Name}  ({_index + 1}/{entries.Count})   " +
-                      $"{box.Size.X:0.00} x {box.Size.Y:0.00} x {box.Size.Z:0.00} m{error}\n" +
+                      $"{box.Size.X:0.00} x {box.Size.Y:0.00} x {box.Size.Z:0.00} m   {Styles.StyleKit.Style}{error}\n" +
                       "Left/Right: model   Up/Down: category   drag: orbit   wheel: zoom";
     }
 

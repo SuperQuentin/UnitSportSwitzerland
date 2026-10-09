@@ -66,12 +66,21 @@ public static partial class CarMeshBuilder
     internal sealed record Dims(
         float Length, float Width, float Roof, float Wheelbase, float WheelR, float TyreW, float Track,
         float Belt, float Hood, float Deck,
-        float WsBase, float WsTop, float RgTop, float RgBase);
+        float WsBase, float WsTop, float RgTop, float RgBase)
+    {
+        /// <summary>
+        /// The rear glass's foot: the belt, except on a liftback, whose glass starts at its high tail
+        /// (<see cref="Deck"/>) and whose rear side glass ends square under it.
+        /// </summary>
+        public float RgFoot { get; init; } = Belt;
+    }
 
-    // Belt = body top through the doors, Hood/Deck = top of the bonnet / boot lid; the four Z
-    // values are the base and top of the windscreen and rear glass. Heights in metres. Derived
-    // from the body's real length and height by per-shape proportions, measured off the three
-    // hand-built originals (AE86 hatch, FD, GC8) and extended to the other shapes.
+    // Belt = body top through the doors, Hood/Deck = top of the bonnet / boot lid (on a sloped
+    // nose, the bonnet's front edge); the four Z values are the base and top of the windscreen and
+    // rear glass. Heights in metres. Derived from the body's real length and height by per-shape
+    // proportions, measured off the three hand-built originals (AE86 hatch, FD, GC8) and extended
+    // to the other shapes; the tall hatch and the liftback off side views of the XP90 Yaris and
+    // the XW20 Prius (#760).
     internal static Dims For(CarBody b, float wheelbase)
     {
         float hl = b.Length * 0.5f, h = b.Height;
@@ -83,13 +92,34 @@ public static partial class CarMeshBuilder
             BodyShape.Sedan => (0.43f, 0.11f, -0.27f, -0.43f),
             BodyShape.Roadster => (0.28f, 0.14f, -0.18f, -0.23f),
             BodyShape.Midship => (0.22f, -0.10f, -0.36f, -0.46f),
+            // the windscreen's foot out over the front wheels, a short roof, the hatch raked a third off upright
+            BodyShape.TallHatch => (0.60f, 0.06f, -0.74f, -0.95f),
+            // the screen raked as far forward, a short roof, the glass all the way down to the tail
+            BodyShape.Liftback => (0.55f, 0.02f, -0.45f, -0.95f),
             _ => (0.42f, 0.12f, -0.20f, -0.39f),   // Coupe
         };
-        float deck = b.Shape == BodyShape.Midship ? 0.70f : b.Shape == BodyShape.Fastback ? 0.63f : 0.66f;
+        // fractions of the height: belt, bonnet, boot lid
+        var (belt, hood, deck) = b.Shape switch
+        {
+            BodyShape.Midship => (0.62f, 0.60f, 0.70f),
+            BodyShape.Fastback => (0.62f, 0.60f, 0.63f),
+            BodyShape.TallHatch => (0.62f, 0.50f, 0.62f),
+            BodyShape.Liftback => (0.64f, 0.48f, 0.72f),
+            _ => (0.62f, 0.60f, 0.66f),
+        };
         return new Dims(b.Length, b.Width, h, wheelbase, b.WheelRadius,
             Mathf.Clamp(0.19f + (b.Width - 1.63f) * 0.33f, 0.18f, 0.27f), b.Width - 0.24f,
-            h * 0.62f, h * 0.60f, h * deck, hl * wsB, hl * wsT, hl * rgT, hl * rgB);
+            h * belt, h * hood, h * deck, hl * wsB, hl * wsT, hl * rgT, hl * rgB)
+        {
+            RgFoot = h * (b.Shape == BodyShape.Liftback ? deck : belt),
+        };
     }
+
+    /// <summary>The noses that slope from the windscreen's foot down to the bumper, not a flat bonnet (#760).</summary>
+    internal static bool SlopedNose(BodyShape shape) => shape is BodyShape.TallHatch or BodyShape.Liftback;
+
+    /// <summary>A front and a rear door each side.</summary>
+    internal static bool FourDoor(BodyShape shape) => shape is BodyShape.Sedan or BodyShape.Liftback;
 
     // the lower body: sills from here to there, the cabin floor pan on top of the bottom
     private const float SillY0 = 0.20f, SillY1 = 0.52f;
@@ -178,8 +208,14 @@ public static partial class CarMeshBuilder
                 foreach (float sx in new[] { -1f, 1f })
                     Wall(s, sx, hw, bot, d.Belt, z0, z1, paint);
         float noseZ = hl - (hl - d.WsBase) * 0.3f;   // the nose is a little lower and narrower
-        s.Box(new Vector3(0, (bot + d.Hood) * 0.5f, (d.WsBase + noseZ) * 0.5f), new Vector3(d.Width, d.Hood - bot, noseZ - d.WsBase), body.Bonnet ?? paint);
-        s.Box(new Vector3(0, (bot + d.Hood - 0.06f) * 0.5f, (noseZ + hl) * 0.5f), new Vector3(d.Width - 0.1f, d.Hood - 0.06f - bot, hl - noseZ), paint);
+        bool sloped = SlopedNose(body.Shape);
+        if (sloped)
+            Nose(s, d, bot, body.Bonnet ?? paint);
+        else
+        {
+            s.Box(new Vector3(0, (bot + d.Hood) * 0.5f, (d.WsBase + noseZ) * 0.5f), new Vector3(d.Width, d.Hood - bot, noseZ - d.WsBase), body.Bonnet ?? paint);
+            s.Box(new Vector3(0, (bot + d.Hood - 0.06f) * 0.5f, (noseZ + hl) * 0.5f), new Vector3(d.Width - 0.1f, d.Hood - 0.06f - bot, hl - noseZ), paint);
+        }
         s.Box(new Vector3(0, (bot + d.Deck) * 0.5f, (d.RgBase - hl) * 0.5f), new Vector3(d.Width, d.Deck - bot, d.RgBase + hl), paint);
 
         // ---- greenhouse ----
@@ -191,7 +227,7 @@ public static partial class CarMeshBuilder
         var glass = Tinted(body.Glass ?? Glass);
         const float roofSkin = 0.05f;
         SlopedPane(s, cw - 0.02f, d.Belt, d.WsBase, d.Roof - roofSkin, d.WsTop, glass);
-        SlopedPane(top, cw - 0.02f, d.Belt, d.RgBase, d.Roof - roofSkin, d.RgTop, glass);
+        SlopedPane(top, cw - 0.02f, d.RgFoot, d.RgBase, d.Roof - roofSkin, d.RgTop, glass);
         // the side glass not in a door: the quarter lights behind and ahead of the doors (a
         // roadster's doors carry none, its whole side glass winds down into the body)
         foreach (float sx in new[] { -1f, 1f })
@@ -212,9 +248,13 @@ public static partial class CarMeshBuilder
         {
             float px = sx * (cw * 0.5f + 0.005f);
             s.Tube(new Vector3(px, d.Belt, d.WsBase), new Vector3(px, d.Roof, d.WsTop), 0.03f, paint, 4);
-            top.Tube(new Vector3(px, d.Belt, d.RgBase), new Vector3(px, d.Roof, d.RgTop), 0.035f, open ? Trim : paint, 4);
-            if (body.Shape == BodyShape.Sedan)
-                s.Box(new Vector3(px, (d.Belt + d.Roof) * 0.5f, (d.WsTop + d.RgTop) * 0.5f), new Vector3(0.03f, d.Roof - d.Belt, 0.09f), paint);
+            top.Tube(new Vector3(px, d.RgFoot, d.RgBase), new Vector3(px, d.Roof, d.RgTop), 0.035f, open ? Trim : paint, 4);
+            // the B-pillar between a four-door's doors (a sedan's where it always stood)
+            if (FourDoor(body.Shape))
+            {
+                float bz = body.Shape == BodyShape.Sedan ? (d.WsTop + d.RgTop) * 0.5f : doors[1].Z1;
+                s.Box(new Vector3(px, (d.Belt + d.Roof) * 0.5f, bz), new Vector3(0.03f, d.Roof - d.Belt, 0.09f), paint);
+            }
         }
 
         // ---- the cabin: seat, dash, gauges, wheel, pedals, mirrors (CarCabin.cs) ----
@@ -237,6 +277,8 @@ public static partial class CarMeshBuilder
                 s.Box(new Vector3(sx * (hw - 0.22f), lampY - 0.12f, hl + 0.005f), new Vector3(0.2f, 0.06f, 0.02f), Amber);   // indicators
             }
         }
+        else if (sloped)
+            SweptLamps(s, head, d, body.Shape);
         else
             foreach (float sx in new[] { -1f, 1f })
                 head.Box(new Vector3(sx * (hw - 0.36f), d.Hood - 0.06f, hl + 0.005f), new Vector3(0.4f, 0.13f, 0.02f), Head);
@@ -271,8 +313,31 @@ public static partial class CarMeshBuilder
         float tailY = d.Deck - 0.08f;
         foreach (float sx in new[] { -1f, 1f })
         {
-            tail.Box(new Vector3(sx * (hw - 0.3f), tailY, -hl - 0.005f), new Vector3(0.4f, 0.12f, 0.02f), Tail);
+            switch (body.Shape)
+            {
+                case BodyShape.TallHatch:
+                    // the Yaris's tall lamps up the corners beside the hatch, round onto the sides
+                    tail.Box(new Vector3(sx * (hw - 0.1f), d.Deck - 0.2f, -hl - 0.005f), new Vector3(0.18f, 0.4f, 0.02f), Tail);
+                    tail.Box(new Vector3(sx * (hw + 0.005f), d.Deck - 0.2f, -hl + 0.07f), new Vector3(0.02f, 0.4f, 0.14f), Tail);
+                    break;
+                case BodyShape.Liftback:
+                    // the Prius's lamps under the spoiler, wrapping round the corners
+                    tail.Box(new Vector3(sx * (hw - 0.2f), d.Deck - 0.11f, -hl - 0.005f), new Vector3(0.36f, 0.13f, 0.02f), Tail);
+                    tail.Box(new Vector3(sx * (hw + 0.005f), d.Deck - 0.11f, -hl + 0.09f), new Vector3(0.02f, 0.13f, 0.18f), Tail);
+                    break;
+                default:
+                    tail.Box(new Vector3(sx * (hw - 0.3f), tailY, -hl - 0.005f), new Vector3(0.4f, 0.12f, 0.02f), Tail);
+                    break;
+            }
             s.Tube(new Vector3(sx * 0.45f, SillY0 + 0.1f, -hl + 0.25f), new Vector3(sx * 0.45f, SillY0 + 0.1f, -hl - 0.05f), 0.04f, Steel, 6);
+        }
+        if (body.Shape == BodyShape.Liftback)
+        {
+            // the Kamm tail: a spoiler across the top of the tailgate, and under it the second,
+            // upright strip of rear glass between the lamps
+            s.Box(new Vector3(0, d.Deck + 0.02f, -hl + 0.03f), new Vector3(d.Width - 0.1f, 0.05f, 0.14f), paint);
+            float gx = hw - 0.4f, gy0 = d.Deck - 0.2f, gy1 = d.Deck - 0.03f, gz = -hl - 0.004f;
+            s.Pane(stackalloc Vector3[] { new(-gx, gy0, gz), new(gx, gy0, gz), new(gx, gy1, gz), new(-gx, gy1, gz) }, Tinted(TailGlass));
         }
         s.Box(new Vector3(0, SillY1 + 0.03f, -hl - 0.005f), new Vector3(0.5f, 0.05f, 0.01f), Steel);   // number plate blanks
         s.Box(new Vector3(0, SillY1 + 0.03f, hl + 0.005f), new Vector3(0.5f, 0.05f, 0.01f), Steel);
@@ -305,6 +370,81 @@ public static partial class CarMeshBuilder
     }
 
     private static readonly Color Liner = new(0.5f, 0.48f, 0.45f);
+    /// <summary>The liftback's upright strip of rear glass, dark against the tailgate.</summary>
+    private static readonly Color TailGlass = new(0.1f, 0.12f, 0.15f);
+
+    /// <summary>
+    /// A sloped nose (#760): one solid from the windscreen's foot, at the belt, down the bonnet to
+    /// its front edge (<see cref="Dims.Hood"/>) and round onto the bumper, narrowing as it goes,
+    /// its top corners chamfered.
+    /// </summary>
+    private static void Nose(MeshScratch s, Dims d, float bot, Color paint)
+    {
+        var stations = NoseStations(d);
+        var rings = new Vector3[stations.Length][];
+        for (int i = 0; i < stations.Length; i++)
+        {
+            var (z, top, w) = stations[i];
+            float hx = w * 0.5f, ch = 0.08f;
+            rings[i] = new[]
+            {
+                new Vector3(-hx, bot, z), new Vector3(hx, bot, z), new Vector3(hx, top - ch, z),
+                new Vector3(hx - ch, top, z), new Vector3(-hx + ch, top, z), new Vector3(-hx, top - ch, z),
+            };
+        }
+        s.Loft(rings, new[] { paint, paint, paint, paint, paint, paint }, paint);
+    }
+
+    /// <summary>The sloped nose's stations, back to front, as (z, top, width): the screen's foot, the bonnet's front edge, the bumper's face.</summary>
+    private static (float Z, float Top, float Width)[] NoseStations(Dims d)
+    {
+        float hl = d.Length * 0.5f;
+        return new[]
+        {
+            (d.WsBase, d.Belt - 0.01f, d.Width),
+            (hl - 0.18f, d.Hood + 0.04f, d.Width - 0.04f),
+            (hl, d.Hood - 0.06f, d.Width - 0.16f),
+        };
+    }
+
+    /// <summary>
+    /// Headlamps swept back from the nose's corners up the bonnet (#760): the Yaris's long
+    /// teardrops, the Prius's shorter wedges. Each lies on the nose in two plates, the face and the
+    /// bonnet, a centimetre proud of it; an amber indicator at the outer end, a slot grille between.
+    /// </summary>
+    private static void SweptLamps(MeshScratch s, MeshScratch head, Dims d, BodyShape shape)
+    {
+        var st = NoseStations(d);
+        float hl = d.Length * 0.5f;
+        bool yaris = shape == BodyShape.TallHatch;
+        float back = yaris ? 0.62f : 0.5f, width = yaris ? 0.34f : 0.36f;
+        // where the lamp's tail lies on the bonnet, between the front edge and the screen's foot
+        float tz = hl - back;
+        var tip = (Z: tz, Top: Mathf.Lerp(st[1].Top, st[0].Top, (st[1].Z - tz) / (st[1].Z - st[0].Z)),
+            Width: Mathf.Lerp(st[1].Width, st[0].Width, (st[1].Z - tz) / (st[1].Z - st[0].Z)));
+        foreach (float sx in new[] { -1f, 1f })
+        {
+            Plate(head, sx, st[2], st[1], width - 0.04f, Head);
+            Plate(head, sx, st[1], tip, width, Head);
+            s.Box(new Vector3(sx * (st[2].Width * 0.5f - 0.05f), st[2].Top - 0.07f, hl + 0.006f), new Vector3(0.07f, 0.05f, 0.02f), Amber);
+        }
+        // the slot grille between the lamps
+        s.Box(new Vector3(0, st[2].Top - 0.06f, hl + 0.006f), new Vector3(yaris ? 0.42f : 0.5f, 0.05f, 0.02f), Trim);
+
+        // a thin plate lying on the nose between two stations, its outer edge in from the chamfer
+        static void Plate(MeshScratch m, float sx, (float Z, float Top, float Width) a, (float Z, float Top, float Width) b, float w, Color c)
+        {
+            var from = new Vector3(0, a.Top, a.Z);
+            var to = new Vector3(0, b.Top, b.Z);
+            float len = (to - from).Length();
+            var dir = (to - from) / len;
+            var normal = dir.Cross(Vector3.Right).Normalized();
+            if (normal.Y < 0) normal = -normal;
+            float x = sx * ((a.Width + b.Width) * 0.25f - 0.09f - w * 0.5f);
+            var basis = new Basis(Vector3.Right, normal, Vector3.Right.Cross(normal));
+            m.Box(new Vector3(x, 0, 0) + (from + to) * 0.5f + normal * 0.012f, new Vector3(w, 0.02f, len), c, basis);
+        }
+    }
 
     /// <summary>An authored (+Z facing) point in node space, as <see cref="MeshScratch.Build()"/> turns it.</summary>
     internal static Vector3 Turned(Vector3 p) => new(-p.X, p.Y, -p.Z);
@@ -334,7 +474,7 @@ public static partial class CarMeshBuilder
         float yTop = d.Roof - 0.05f - inset, yBot = d.Belt + inset;
         // the rakes, as z at a height
         float Front(float y) => Mathf.Lerp(d.WsBase, d.WsTop, (y - d.Belt) / (d.Roof - d.Belt)) - inset;
-        float Rear(float y) => Mathf.Lerp(d.RgBase, d.RgTop, (y - d.Belt) / (d.Roof - d.Belt)) + inset;
+        float Rear(float y) => Mathf.Lerp(d.RgBase, d.RgTop, (y - d.RgFoot) / (d.Roof - d.RgFoot)) + inset;
         var poly = new List<Vector2> { new(Rear(yBot), yBot), new(Front(yBot), yBot), new(Front(yTop), yTop), new(Rear(yTop), yTop) };
         poly = Clip(poly, z0 + inset, 1f);
         return Clip(poly, z1 - inset, -1f);
@@ -377,9 +517,26 @@ public static partial class CarMeshBuilder
     private static (float Z0, float Z1, bool Rear)[] DoorSpans(BodyShape shape, Dims d)
     {
         float dz = (d.WsBase + d.RgBase) * 0.5f;
-        return shape == BodyShape.Sedan
-            ? new[] { (dz, Mathf.Min(dz + 0.95f, d.WsBase), false), (Mathf.Max(dz - 0.85f, d.RgBase), dz, true) }
-            : new[] { (Mathf.Max(dz - 0.5f, d.RgBase), Mathf.Min(dz + 0.55f, d.WsBase), false) };
+        switch (shape)
+        {
+            case BodyShape.Sedan:
+                return new[] { (dz, Mathf.Min(dz + 0.95f, d.WsBase), false), (Mathf.Max(dz - 0.85f, d.RgBase), dz, true) };
+            case BodyShape.Liftback:
+            {
+                // the B-pillar a quarter metre behind the screen's top; a small fixed glass ahead
+                // of the front door and behind the rear one
+                float split = d.WsTop - 0.25f;
+                return new[] { (split, Mathf.Min(split + 1.1f, d.WsBase - 0.12f), false), (Mathf.Max(split - 0.9f, d.RgBase + 0.1f), split, true) };
+            }
+            case BodyShape.TallHatch:
+            {
+                // one long door from just behind the screen's foot, a quarter light ahead of it
+                float z1 = d.WsBase - 0.2f;
+                return new[] { (Mathf.Max(z1 - 1.1f, d.RgBase), z1, false) };
+            }
+            default:
+                return new[] { (Mathf.Max(dz - 0.5f, d.RgBase), Mathf.Min(dz + 0.55f, d.WsBase), false) };
+        }
     }
 
     /// <summary>
@@ -425,7 +582,9 @@ public static partial class CarMeshBuilder
                 _ => new Basis(Vector3.Back, side * 1.9f),
             };
             string name = (span.Rear ? "DoorR" : "Door") + (left ? "L" : "R");
-            byte bit = span.Rear ? (left ? CarRig.DoorRearLeft : CarRig.DoorRearRight) : (left ? CarRig.DoorLeft : CarRig.DoorRight);
+            // the front doors' bits follow the driver: theirs is CarRig.DriverDoor on either side
+            bool driverSide = left == body.LeftHandDrive;
+            byte bit = span.Rear ? (left ? CarRig.DoorRearLeft : CarRig.DoorRearRight) : driverSide ? CarRig.DriverDoor : CarRig.PassengerDoor;
             yield return new CarDoor(name, bit, m.Build(), Turned(hinge), open.GetRotationQuaternion(),
                 Turned(new Vector3(sx * hw, midY, midZ)));
         }

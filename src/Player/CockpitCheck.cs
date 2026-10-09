@@ -42,15 +42,15 @@ public static class CockpitCheck
         {
             if (spec.Body.Shape == BodyShape.Kart) { failed += CheckKart(spec); continue; }
             var d = CarMeshBuilder.For(spec.Body, spec.Wheelbase);
-            var seat = CarMeshBuilder.SeatFor(d);
+            var seat = CarMeshBuilder.SeatFor(d, spec.Body.LeftHandDrive);
             var eye = HumanMeshBuilder.DriverEye(seat.Hip, seat.Recline);
 
             // the head box's top is ~10 cm above the eye; the headlining hangs 7 cm under the roof
             float head = d.Roof - 0.07f - (eye.Y + 0.1f);
-            float Rake(float y, float bottom, float top) => Mathf.Lerp(bottom, top, (y - d.Belt) / (d.Roof - d.Belt));
-            float ahead = Rake(eye.Y, d.WsBase, d.WsTop) - eye.Z;
+            float Rake(float y, float bottom, float top, float foot) => Mathf.Lerp(bottom, top, (y - foot) / (d.Roof - foot));
+            float ahead = Rake(eye.Y, d.WsBase, d.WsTop, d.Belt) - eye.Z;
             // the back of the head is ~19 cm behind the eye
-            float behind = eye.Z - 0.19f - Rake(eye.Y + 0.05f, d.RgBase, d.RgTop);
+            float behind = eye.Z - 0.19f - Rake(eye.Y + 0.05f, d.RgBase, d.RgTop, d.RgFoot);
             float reach = 0f;
             foreach (float turn in new[] { 0f, HumanMeshBuilder.MaxGripTurn, -HumanMeshBuilder.MaxGripTurn })
             {
@@ -66,13 +66,17 @@ public static class CockpitCheck
             bool glass = shell.Mesh is ArrayMesh m && Enumerable.Range(0, m.GetSurfaceCount())
                 .Any(i => m.SurfaceGetName(i) == MeshScratch.GlassSurface);
             bool driver = rig.GetNode<Node3D>("Body").HasNode("Driver");
+            // the driver sits on the side the car is built for, and gets in through the door there
+            // (#760): authored +X is the driver's left, node −X the car's left
+            bool lhd = spec.Body.LeftHandDrive;
+            bool side = seat.Hip.X > 0f == lhd && rig.DoorPivot(CarRig.DriverDoor) is { } door && door.Position.X < 0f == lhd;
             rig.Free();
 
-            bool ok = head >= 0f && ahead >= 0.2f && behind >= 0f && reach < 0.01f && pedals >= 0f && glass && driver;
+            bool ok = head >= 0f && ahead >= 0.2f && behind >= 0f && reach < 0.01f && pedals >= 0f && glass && driver && side;
             if (!ok) failed++;
             GD.Print($"[cockpitcheck] {spec.Label,-24} {spec.Body.Shape,-10} {Mathf.RadToDeg(seat.Recline),5:F0}°  "
                 + $"({eye.X,5:F2}, {eye.Y,4:F2}, {eye.Z,5:F2})  {head * 100,4:F0}  {ahead * 100,5:F0}  {behind * 100,6:F0}  "
-                + $"{reach * 1000,4:F0}mm {pedals * 100,5:F0}  {(ok ? "ok" : "FAIL" + (glass ? "" : " no glass surface") + (driver ? "" : " no driver"))}");
+                + $"{reach * 1000,4:F0}mm {pedals * 100,5:F0}  {(lhd ? "LHD" : "RHD")}  {(ok ? "ok" : "FAIL" + (glass ? "" : " no glass surface") + (driver ? "" : " no driver") + (side ? "" : " driver on the wrong side"))}");
         }
         GD.Print("[cockpitcheck] head/ahead/behind/pedals in cm of room (head under the headlining, windscreen ahead of the eye, "
             + "rear glass behind the head, pedal hinges behind the bulkhead); reach = how far a hand or foot falls short");

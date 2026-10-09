@@ -134,6 +134,9 @@ public partial class Main : Node
 
 		if (UnitSport.Avatar.ModelViewer.Requested())
 		{
+			// shaded for the visual style, as the turntable above: the saved one, or --style (#760:
+			// without this every model showed in PS1 whatever the flag said)
+			GameSettings.Load();
 			AddChild(new UnitSport.Avatar.ModelViewer { Name = "ModelViewer" });
 			return;
 		}
