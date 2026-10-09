@@ -2011,8 +2011,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             bar = (int)System.Math.Floor(beats / 4.0);
         }
         float barPhase = (beat - bar * 4 + phase) / 4f;
-        int move = Avatar.HumanMeshBuilder.EmoteMoves + _emoteDrawn;
-        int prev = _emotePrev >= 0 ? Avatar.HumanMeshBuilder.EmoteMoves + _emotePrev : -1;
+        int move = Avatar.HumanMeshBuilder.EmoteMoveAt(_emoteDrawn, bar);
+        int prev = _emotePrev >= 0 ? Avatar.HumanMeshBuilder.EmoteMoveAt(_emotePrev, bar) : -1;
         float blend = Mathf.Clamp((float)(Time.GetTicksMsec() / 1000.0 - _emoteSince) / 0.25f, 0f, 1f);
         return new Avatar.DanceParams(style, move, phase, barPhase, bar, _danceWeight, prev, blend);
     }

@@ -85,7 +85,7 @@ Crowd moves (#261), outside the tables: `Move = HumanMeshBuilder.GroupPogo` (100
 Emotes (#404), outside the tables too: `Move = HumanMeshBuilder.EmoteMoves` (2000) + the index in
 `EmoteTable` (`HumanMeshBuilder.Emotes.cs`, append only) is that emote whatever the style. Four
 gestures are emote-only (`Wave`, `Cheer`, `Salute`, `Shrug`); the rest of the catalog reuses the
-moves above. The wheel and the free clock: `docs/notes/player/emote-wheel.md`.
+moves above (the #728 ones too, page 4, #748; the floor emotes run whole break sets). The wheel and the free clock: `docs/notes/player/emote-wheel.md`.
 
 ## Picking, flowing and crowds (#261, #728)
 
