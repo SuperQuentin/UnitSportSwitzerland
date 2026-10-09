@@ -26,6 +26,7 @@ public static class ItemIcons
         ['b'] = C("3c78d0"), ['B'] = C("24408a"), ['c'] = C("7cc8f0"), ['C'] = C("cbeefa"),
         ['e'] = C("48a840"), ['E'] = C("2a6a2c"), ['u'] = C("98d472"),
         ['p'] = C("8a5ab0"), ['P'] = C("4e2e70"), ['v'] = C("b894dc"), ['s'] = C("f2a4b4"),
+        ['m'] = C("8a9460"), ['M'] = C("5a6640"), ['h'] = C("b4bc90"),                         // olive: the army's aluminium (#716)
     };
 
     private static Color C(string hex) => new(hex);
@@ -368,6 +369,44 @@ public static class ItemIcons
         rows.Add("..kkkkkkkkkkkk..");
         return rows.ToArray();
     }
+
+    /// <summary>A sack with a tied neck: <paramref name="body"/> and <paramref name="shade"/> palette chars, a patch of <paramref name="mark"/> on the front.</summary>
+    private static string[] Sack(char body, char shade, char mark) => new[]
+    {
+        "................",
+        ".....kk..kk.....",
+        "....kXXkkXXk....",
+        "....kXXXXXXk....",
+        "...kkXXXXXXkk...",
+        "..kXXXXXXXXXXk..",
+        ".kXXXXMMMMXXXXk.",
+        ".kXXXMmmmmMXXXk.",
+        ".kXXXXMMMMXXXXk.",
+        ".kXXXXXXXXXXXZk.",
+        ".kXXXXXXXXXXXZk.",
+        ".kXXXXXXXXXXZZk.",
+        "..kZZZZZZZZZZk..",
+        "...kkkkkkkkkk...",
+    }.Select(r => r.Replace('X', body).Replace('Z', shade).Replace('M', mark).Replace('m', mark)).ToArray();
+
+    /// <summary>A seed packet: white paper, a picture of <paramref name="mark"/> over a band of <paramref name="band"/>.</summary>
+    private static string[] Packet(char mark, char band) => new[]
+    {
+        "................",
+        "...kkkkkkkkkk...",
+        "...kaaaaaaaak...",
+        "...kkkkkkkkkk...",
+        "...kwwwwwwwwk...",
+        "...kwwMMMMwwk...",
+        "...kwMMMMMMwk...",
+        "...kwMMMMMMwk...",
+        "...kwwMMMMwwk...",
+        "...kwwwwwwwwk...",
+        "...kBBBBBBBBk...",
+        "...kBBBBBBBBk...",
+        "...kwwwwwwwwk...",
+        "...kkkkkkkkkk...",
+    }.Select(r => r.Replace('M', mark).Replace('B', band)).ToArray();
 
     private static string[] Round(Action<Painter> draw)
     {
@@ -1423,6 +1462,27 @@ public static class ItemIcons
             "..kkk...........",
         };
 
+        // a farm stand (#494): a red roof over a table of crates, the honesty box on its post
+        d[ItemId.FarmStand] = new[]
+        {
+            "................",
+            "..kkkkkkkkkkkk..",
+            ".kRrrrrrrrrrrRk.",
+            "kRrrrrrrrrrrrrRk",
+            "kkkkkkkkkkkkkkkk",
+            ".kN..........Nk.",
+            ".kN..........Nk.",
+            ".kN.kkk......Nk.",
+            ".kN.kok.kkk..Nk.",
+            ".kNkkkkkkekkkNk.",
+            ".kyyyooeeeyyykkk",
+            ".kttttttttttttkr",
+            ".kN.........NkkR",
+            ".kN.........Nk.k",
+            ".kN.........Nk.k",
+            ".kk.........kk.k",
+        };
+
         d[ItemId.FieldWorkbench] = new[]
         {
             "..........kkk...",
@@ -1803,6 +1863,186 @@ public static class ItemIcons
             ".......kkk......",
             "................",
         };
+
+        // ---- farming (#494): seed packets, sacks of harvest, bales, what is made of them ----
+        d[ItemId.WheatSeed] = Packet('y', 't');
+        d[ItemId.BarleySeed] = Packet('t', 'n');
+        d[ItemId.MaizeSeed] = Packet('y', 'o');
+        d[ItemId.SeedPotato] = Packet('n', 't');
+        d[ItemId.RapeSeed] = Packet('y', 'd');
+        d[ItemId.SunflowerSeed] = Packet('o', 'd');
+        d[ItemId.SugarBeetSeed] = Packet('v', 'p');
+        d[ItemId.VegetableSeeds] = Packet('o', 'e');
+        d[ItemId.PeaSeed] = Packet('e', 'u');
+        d[ItemId.Wheat] = Sack('t', 'n', 'y');
+        d[ItemId.Barley] = Sack('T', 't', 'n');
+        d[ItemId.Maize] = Sack('y', 'Y', 'o');
+        d[ItemId.Potato] = Sack('n', 'N', 't');
+        d[ItemId.Rapeseed] = Sack('y', 'Y', 'd');
+        d[ItemId.SunflowerSeeds] = Sack('G', 'd', 'y');
+        d[ItemId.SugarBeet] = Sack('T', 'a', 'v');
+        d[ItemId.Carrot] = Sack('o', 'O', 'e');
+        d[ItemId.Peas] = Sack('u', 'e', 'E');
+        d[ItemId.Flour] = Sack('w', 'a', 't');
+        d[ItemId.Sugar] = Sack('w', 'a', 'c');
+        d[ItemId.MaizeMeal] = Sack('l', 'Y', 'y');
+        d[ItemId.Fertiliser] = Sack('b', 'B', 'w');
+        d[ItemId.RapeseedOil] = Map(d[ItemId.WaterBottle], "cCbBw", "yloOT");
+
+        d[ItemId.HayBale] = Round(p =>
+        {
+            p.Disc(7.5f, 7.5f, 7f, 7f, 'l', 'y', 'Y');
+            p.Disc(7.5f, 7.5f, 4.5f, 4.5f, 'y', 'Y', 'n');
+            p.Disc(7.5f, 7.5f, 2f, 2f, 'Y', 'n', 'N');
+        });
+
+        d[ItemId.BakedPotato] = Round(p =>
+        {
+            p.Disc(7.5f, 9f, 6.5f, 4.5f, 't', 'n', 'N');
+            p.Rect(4, 6, 11, 6, 'T');
+            p.Rect(5, 7, 10, 7, 'l');
+            p.Set(7, 7, 'y'); p.Set(8, 7, 'y');
+        });
+
+        d[ItemId.Roesti] = Round(p =>
+        {
+            p.Disc(7.5f, 9f, 7f, 4.5f, 'w', 'a', 'g');
+            p.Disc(7.5f, 8.5f, 5.5f, 3.2f, 'y', 'o', 'O');
+            foreach (var (x, y) in new[] { (5, 8), (8, 7), (10, 9), (7, 10), (6, 7) }) p.Set(x, y, 'Y');
+        });
+
+        d[ItemId.Polenta] = Round(p =>
+        {
+            p.Disc(7.5f, 10f, 7f, 4f, 'w', 'a', 'g');
+            p.Rect(4, 5, 11, 9, 'y');
+            p.Rect(4, 5, 11, 5, 'l');
+            p.Rect(4, 9, 11, 9, 'Y');
+            p.Set(6, 7, 'Y'); p.Set(9, 6, 'Y');
+        });
+
+        d[ItemId.Popcorn] = Round(p =>
+        {
+            for (int x = 3; x <= 12; x++) p.Rect(x, 8, x, 14, x % 2 == 0 ? 'r' : 'w');
+            p.Disc(5f, 6f, 2.5f, 2.5f, 'w', 'l', 'T');
+            p.Disc(8f, 4.5f, 2.5f, 2.5f, 'w', 'l', 'T');
+            p.Disc(11f, 6f, 2.5f, 2.5f, 'w', 'l', 'T');
+            p.Set(8, 5, 'y'); p.Set(5, 6, 'y');
+        });
+
+        d[ItemId.VegetableSoup] = Round(p =>
+        {
+            p.Disc(7.5f, 6f, 7f, 7.5f, 'a', 'g', 'G');
+            p.Rect(0, 0, 15, 5, '.');
+            p.Rect(1, 6, 14, 6, 'w');
+            p.Disc(7.5f, 7f, 6f, 1.6f, 'o', 'o', 'O');
+            p.Set(5, 6, 'e'); p.Set(9, 7, 'e'); p.Set(7, 6, 'y'); p.Set(11, 6, 'y');
+        });
+
+        d[ItemId.Raclette] = new[]
+        {
+            "................",
+            "................",
+            "....kkkkkkkk....",
+            "..kkyyyyyyllkk..",
+            ".kyyyyyyyyyllyk.",
+            ".kylyyyyyyyyyyk.",
+            ".kyyyyoyyyyoyYk.",
+            ".kyyyyyyyyyyyYk.",
+            ".kYYYYYYYYYYYYk.",
+            ".kyyyyk.........",
+            ".kYYYk..........",
+            "..kkk...........",
+        };
+
+        d[ItemId.Hoe] = Round(p =>
+        {
+            for (int i = 0; i < 11; i++) { p.Set(2 + i, 14 - i, 'n'); p.Set(3 + i, 14 - i, 'N'); }
+            p.Rect(9, 1, 14, 2, 'a');
+            p.Rect(9, 3, 14, 3, 'g');
+            p.Rect(13, 4, 14, 6, 'g');
+        });
+
+        // ---- the barracks (#716, docs/notes/items/barracks-items.md) ----
+        d[ItemId.PlayingCards] = new[]
+        {
+            "................",
+            "................",
+            "...kkkkkk.......",
+            "..kBBB.kkkkkk...",
+            "..kBbbkwwwwwak..",
+            "..kBbbkwrwwwak..",
+            "..kBbckwrwwwak..",
+            "..kBcckwwwrwak..",
+            "..kBbckwwqrrak..",
+            "..kBbbkwrrRrrk..",
+            "..kBbbkwwrrrak..",
+            "..kBBBkwwwrwak..",
+            "...kkkkaaaaaak..",
+            ".......kkkkkk...",
+            "................",
+            "................",
+        };
+
+        d[ItemId.PokerChips] = new[]
+        {
+            "................",
+            "..kkkkkk........",
+            ".kqqqqqqk.......",
+            ".krwrrwrk.......",
+            ".kRRRRRRk.......",
+            ".krwrrwrk.......",
+            ".kRRRRRRk.......",
+            ".kwrwwrwk..kkkk.",
+            ".kaaaaaak.kcccck",
+            ".krwrrwrk.kbwwbk",
+            ".kRRRRRRk.kBBBBk",
+            ".krwrrwrk.kbwwbk",
+            ".kRRRRRRk.kBBBBk",
+            ".krwrrwrk.kewwek",
+            ".kRRRRRRk.kEEEEk",
+            "..kkkkkk...kkkk.",
+        };
+
+        d[ItemId.BeerBottle] = new[]
+        {
+            ".......kk.......",
+            "......kyyk......",
+            "......kYYk......",
+            "......knNk......",
+            "......knNk......",
+            "......knNk......",
+            "......knNk......",
+            ".....knNNNk.....",
+            "....knNNNNNk....",
+            "....knNNNNNk....",
+            "....kTTTTTTk....",
+            "....kTrrrrTk....",
+            "....kTTTTTTk....",
+            "....knNNNNNk....",
+            "....kNNNNNNk....",
+            ".....kkkkkk.....",
+        };
+
+        d[ItemId.Gamelle] = new[]
+        {
+            "................",
+            "......GGGG......",
+            "....GGG..GGG....",
+            "...GG......GG...",
+            "..GG........GG..",
+            "..G....kk....G..",
+            ".kkkkkkkkkkkkkk.",
+            ".khhhhhhhhhhhmk.",
+            ".kmmmmmmmmmmmMk.",
+            "kkkkkkkkkkkkkkkk",
+            "khmmmmmmmmmmmmMk",
+            "kmmmmmmmmmmmmMMk",
+            ".kkkkkkkkkkkkkk.",
+            ".khMMMMMMMMMMMk.",
+            ".kMMMMMMMMMMMMk.",
+            "..kkkkkkkkkkkk..",
+        };
+
         return d;
     }
 }

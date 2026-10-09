@@ -28,6 +28,8 @@ public enum DamageCause { Other, Weapon, Blast, Fall, Crash, Zone, Drown }
 public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 {
     public const string Group = "players";
+    /// <summary>A vehicle's walkable deck (<c>FootPlayer.Deck.cs</c>): part of the vehicle to whatever passes through it (a thrown body).</summary>
+    public const string DeckGroup = "vehicle_decks";
 
     [Export] public float SimWalkSpeed { get; set; } = 1.6f;   // ~5.8 km/h, brisk walk
     [Export] public float SimRunSpeed { get; set; } = 4.6f;    // ~16.6 km/h, steady run
@@ -518,7 +520,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// apart by their jerseys. An NPC is offset from the client that asked for it (#394), so it gets a
     /// figure of its own rather than that player's chosen one (<see cref="Avatar.Appearance.For"/>).
     /// </summary>
-    private int RiderIndex() => Npc && NetId(Name) is long npcId && npcId < 0
+    public int RiderIndex() => Npc && NetId(Name) is long npcId && npcId < 0
         ? unchecked((int)Net.PlayerReplication.NpcOwner(npcId) + 100 * (int)(1 + (-npcId) % 1000))
         : GetMultiplayerAuthority();
 
@@ -592,6 +594,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     public float LookScale { get; set; } = 1f;
 
     public bool IsFirstPerson => !_thirdPerson;
+
+    /// <summary>First person as the player chose it: also true while a throw has borrowed third person.</summary>
+    public bool ChoseFirstPerson => !_thirdPerson || _borrowedThird;
 
     /// <summary>
     /// 0..1: an item held ready to throw wants the close over-the-shoulder camera (set every frame by
@@ -1044,6 +1049,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public Func<(Vector3 Wish, bool Run)>? WalkControls { get; set; }
 
+    /// <summary>
+    /// Replaces the keys while flying, when set, as <see cref="RideControls"/> does on the ground: a
+    /// scripted pilot (the trailer's aircraft, #706) flies through it, so several craft can fly at
+    /// once without pressing the one global input map.
+    /// </summary>
+    public Func<FlightInput>? FlyControls { get; set; }
+
     private Camera3D? _camera;
     private CollisionShape3D _body = null!;
     private CapsuleShape3D _capsule = null!;
@@ -1237,6 +1249,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:Down");
         replication.AddProperty(".:CarRadio");
         replication.AddProperty(".:CarCd");
+        replication.AddProperty(".:RadioVolume");
         if (Npc)
         {
             // spawn-only: a peer spawning this NPC after a handoff must learn who simulates it now
@@ -1250,7 +1263,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:DeckYaw");
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down" })
+        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:RadioVolume", ".:Down" })
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
         Terrain ??= GetNodeOrNull<ChunkManager>("/root/Main/World/Terrain");
         if (Origin is { } start) NetGlobal = start.ToGlobal(Position);
@@ -1745,7 +1758,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _seenSeatFrame = GlobalTransform * _visual.Transform * rig.DriverFrame;
             _seenSeatAt = GameClock.Now;
         }
-        else if (_visual is Avatar.HeavyRig heavyRig) heavyRig.DriverShown = SeatIndex == 0;
+        else if (_visual is Avatar.HeavyRig heavyRig)
+        {
+            heavyRig.DriverShown = SeatIndex == 0;
+            if (heavyRig.Driver is var (seat, frame))
+                (_seenSeat, _seenSeatFrame, _seenSeatAt) = (seat, GlobalTransform * _visual.Transform * frame, GameClock.Now);
+        }
         else if (_visual is Avatar.BoatRig boatRig) boatRig.DriverShown = SeatIndex == 0;
         else if (_visual is Avatar.SteamerRig steamerRig) steamerRig.DriverShown = SeatIndex == 0;
         else if (_visual is Avatar.AirlinerRig { Cockpit: { } deck })
@@ -1959,16 +1977,20 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _danceCrowdAt = now;
             _danceCrowd = DancersAround(m.Source.GlobalPosition);
         }
-        // The move changes every couple of bars. Each dancer has its own pick (a hash of the bar
-        // slot, the style and who it is), so a crowd is not a drill team; but with two or more
-        // dancing to the same music, one slot in three is a crowd move everyone hits together —
-        // the same hash with no "who" in it, so every peer lands on it on the same bar (#261).
-        int slot = Mathf.FloorToInt(bar / (float)Avatar.HumanMeshBuilder.BarsPerMove);
-        int move = DanceMoveFor(slot, style), prev = DanceMoveFor(slot - 1, style);
+        // The move changes every couple of bars, and when the song moves into a new section (#728).
+        // Each dancer has its own pick (Avatar.DancePick: a hash of the slot, the section, the style
+        // and who it is), so a crowd is not a drill team; but with two or more dancing to the same
+        // music, one slot in three is a crowd move everyone hits together (#261), and now and then,
+        // in a big part of a HipHop or Electronic song, someone breaks.
+        const int per = Avatar.HumanMeshBuilder.BarsPerMove;
+        int slot = Mathf.FloorToInt(bar / (float)per);
+        m.SectionOfBar(bar, slot * per, out int sectionStart);
+        int start = System.Math.Max(slot * per, sectionStart);
+        int move = DanceMoveAt(m, bar, style), prev = DanceMoveAt(m, start - 1, style);
         if (DanceMoveOverride >= 0) move = prev = DanceMoveOverride;
         float barPhase = (beat - bar * 4 + phase) / 4f;
-        // beats into this slot: the first one flows out of the last move instead of cutting to the next
-        float into = (bar - slot * Avatar.HumanMeshBuilder.BarsPerMove) * 4 + (beat - bar * 4) + phase;
+        // beats into this move: the first one flows out of the last move instead of cutting to the next
+        float into = (bar - start) * 4 + (beat - bar * 4) + phase;
         return new Avatar.DanceParams(style, move, phase, barPhase, bar, _danceWeight, prev, Mathf.Clamp(into / 0.9f, 0f, 1f));
     }
 
@@ -1996,8 +2018,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             bar = (int)System.Math.Floor(beats / 4.0);
         }
         float barPhase = (beat - bar * 4 + phase) / 4f;
-        int move = Avatar.HumanMeshBuilder.EmoteMoves + _emoteDrawn;
-        int prev = _emotePrev >= 0 ? Avatar.HumanMeshBuilder.EmoteMoves + _emotePrev : -1;
+        int move = Avatar.HumanMeshBuilder.EmoteMoveAt(_emoteDrawn, bar);
+        int prev = _emotePrev >= 0 ? Avatar.HumanMeshBuilder.EmoteMoveAt(_emotePrev, bar) : -1;
         float blend = Mathf.Clamp((float)(Time.GetTicksMsec() / 1000.0 - _emoteSince) / 0.25f, 0f, 1f);
         return new Avatar.DanceParams(style, move, phase, barPhase, bar, _danceWeight, prev, blend);
     }
@@ -2006,21 +2028,27 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     internal static int DanceMoveOverride = -1;
 
     /// <summary>This dancer's move for a bar slot: its own, or the crowd's when the slot is a crowd one.</summary>
-    private int DanceMoveFor(int slot, Audio.Cd.MusicStyle style)
+    /// <summary>The move this dancer does at <paramref name="bar"/> of <paramref name="m"/> (#728, <see cref="Avatar.DancePick"/>).</summary>
+    private int DanceMoveAt(Items.RadioManager.Music m, int bar, Audio.Cd.MusicStyle style)
     {
-        uint shared = DanceHash((uint)slot * 2654435761u ^ (uint)style * 40503u);
-        // to the chess type beat the crowd's move is the rat's swing, the first of its moves (#370)
-        if (_danceCrowd >= 2 && shared % 3u == 1u)
-            return style == Audio.Cd.MusicStyle.RatDance ? 0
-                : (shared >> 8) % 2u == 0u ? Avatar.HumanMeshBuilder.GroupJump : Avatar.HumanMeshBuilder.GroupPogo;
-        uint own = DanceHash(shared ^ DanceSeed());
-        return (int)(own % (uint)Avatar.HumanMeshBuilder.MoveCount(style));
-    }
-
-    private static uint DanceHash(uint h)
-    {
-        h ^= h >> 13; h *= 0x5bd1e995u; h ^= h >> 15;
-        return h;
+        const int per = Avatar.HumanMeshBuilder.BarsPerMove;
+        int slot = Mathf.FloorToInt(bar / (float)per);
+        var now = m.SectionOfBar(bar, slot * per, out _);
+        var prev = m.SectionOfBar((slot - 1) * per, (slot - 1) * per, out _);
+        var prev2 = m.SectionOfBar((slot - 2) * per, (slot - 2) * per, out _);
+        var (kind, index) = Avatar.DancePick.Pick(slot, (int)style, DanceSeed(), _danceCrowd >= 2, now, prev, prev2,
+            Avatar.HumanMeshBuilder.MoveEnergy(style));
+        bool rat = style == Audio.Cd.MusicStyle.RatDance;
+        return kind switch
+        {
+            // to the chess type beat the crowd's move is the rat's swing, the first of its moves (#370)
+            Avatar.DanceSlotKind.CrowdPogo => rat ? 0 : Avatar.HumanMeshBuilder.GroupPogo,
+            Avatar.DanceSlotKind.CrowdJump => rat ? 0 : Avatar.HumanMeshBuilder.GroupJump,
+            Avatar.DanceSlotKind.BreakDown => Avatar.HumanMeshBuilder.BreakDown,
+            Avatar.DanceSlotKind.BreakWindmill => Avatar.HumanMeshBuilder.BreakPowerWindmill,
+            Avatar.DanceSlotKind.BreakHeadspin => Avatar.HumanMeshBuilder.BreakPowerHeadspin,
+            _ => index,
+        };
     }
 
     /// <summary>A number of this player's own, the same on every peer (FNV-1a of the node name; string.GetHashCode differs per process).</summary>
@@ -2509,16 +2537,24 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // walking about in a vehicle: a seat, or the wheel (#162)
         if (Aboard) return TryDeckSeat();
 
-        // the radio pointed at: its panel (play a CD, burn one, pick it up)
+        // the radio pointed at (#725): a tap switches it on or off, a hold opens its panel (play a
+        // CD, burn one, pick it up); a VR hand gripping it opens the panel straight away
         if (Items.Highlight.Pointed is Items.RadioBody pointed && IsInstanceValid(pointed))
         {
-            Items.RadioUi.Instance?.Open(pointed);
+            if (byHand) Items.RadioUi.Instance?.Open(pointed);
+            else Items.RadioTap.Begin(Core.PlayerInput.InteractMount, () => Items.RadioTap.Toggle(pointed),
+                () => Items.RadioUi.Instance?.Open(pointed),
+                () => IsInstanceValid(pointed) && Items.Highlight.Pointed == pointed);
             return true;
         }
 
         // swimming beside a steamer's gangway: up its ladder onto the deck (#303)
         if (TryClimbAboard()) return true;
 
+        // a farm stand at hand, or a specialty buyer's weighbridge with its goods in the pack (#494)
+        if (Farming.FarmSales.TryInteract(this)) return true;
+        // a loaded tipping trailer or combine tank at hand: a sack of it (#494)
+        if (TryFarmTank()) return true;
         // the door (or the machine) you are at, worked precisely (#261): no more "whatever is in 3.5 m"
         if (TryVehicleAt()) return true;
 
@@ -2605,6 +2641,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             DoorsOpen = (byte)(state.DoorsOpen | Avatar.CarRig.DriverDoor);
             _shutDriverIn = 1f;
         }
+        // the pickup's doors are a car's (#463): in through the driver's, which shuts behind
+        if (_ride is Truck { CarDoors: true } pickup)
+        {
+            pickup.DoorsOpen = (byte)((state.DoorsOpen | Avatar.CarRig.DriverDoor) & 15);
+            _shutDriverIn = 1f;
+        }
         _flight.Control = state.Throttle;
         // a boat as it floated: its attitude (#302)
         if (_ride is Boat boarded && state.Angles != default) boarded.State.Attitude = Quaternion.FromEuler(state.Angles);
@@ -2664,7 +2706,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _ride is Flyer ? _flight.Yaw : Rotation.Y, velocity,
             wrecked ? 0f : VehicleHealth, EngineOn && !wrecked, wrecked, _flight.Control, VehicleState.Now,
             Headlights: _ride is Car { Headlights: true }, RoofOpen: _ride is Car { RoofOpen: true },
-            Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : _ride is Steamer gangways ? gangways.DoorsOpen : DoorsOpen, Setup: CarSetupId,
+            Tuning: TuningBits, DoorsOpen: wrecked ? (byte)0 : _ride is Steamer gangways ? gangways.DoorsOpen
+                : _ride is Truck { CarDoors: true } pickupDoors ? pickupDoors.DoorsOpen : DoorsOpen, Setup: CarSetupId,
             Train: _ride is Truck t ? t.TrailerCode : 0,
             // a truck's joints; a boat's attitude (Euler, #302), so it is parked as it floated
             // an airliner left in the air (stood up from its seat): its attitude, or it is put down level (#456)
@@ -2734,7 +2777,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public bool TryToggleCarDoor(Vector3 hand)
     {
-        if (_ride != null || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Rig: { } rig } vehicle)
+        if (_ride != null || Vehicles?.Nearest(GlobalPosition, VehicleManager.DoorReach) is not { Doors: { } rig } vehicle)
             return false;
         var (bit, distance) = rig.NearestDoor(hand);
         if (bit == 0 || distance > HandDoorReach) return false;
@@ -2762,7 +2805,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         bool grounded = IsOnFloor();
         var frame = GlobalTransform;
         // out of a car through the driver's door: it opens, and shuts behind (unless left open)
-        if (vehicle is Car && (state.DoorsOpen & Avatar.CarRig.DriverDoor) == 0)
+        if (vehicle is Car or Truck { CarDoors: true } && (state.DoorsOpen & Avatar.CarRig.DriverDoor) == 0)
             state = state with { DoorsOpen = (byte)(state.DoorsOpen | Avatar.CarRig.DriverDoor | VehicleState.DriverDoorShuts) };
 
         // a vehicle you can walk about in (#162): up from the seat into it, not out beside it
@@ -3241,6 +3284,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
+        if (HandleCruiseInput(@event))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         if (_ride is Truck truck && HandleTruckInput(@event, truck))
         {
             GetViewport().SetInputAsHandled();
@@ -3406,6 +3455,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var velocity = Velocity;
         bool onFloor = IsOnFloor();
         TickHealth(dt, onFloor);
+        TickFarmFoot(dt);
 
         // limp after a crash (#214): the body goes where its hips are, so the replicated position follows the ragdoll
         if (_ragdoll != null)
@@ -3426,6 +3476,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             else RidePhysics(dt, onFloor);
             return;
         }
+
+        // a vehicle into this body on foot (#751 playtest): knocked over, limp from the next step
+        if (KnockedByVehicle(dt)) return;
 
         if (_mantling)
         {
@@ -3897,7 +3950,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (flyer.LookBank > 0f && !typing && !onFloor)
             stick.X = Mathf.Clamp(stick.X - Mathf.Clamp(_lookYaw / 0.8f, -1f, 1f) * flyer.LookBank, -1f, 1f);
 
-        var input = new FlightInput(
+        var input = FlyControls?.Invoke() ?? new FlightInput(
             Stick: stick,
             Up: Mathf.Max(jumpDown ? 1f : 0f, tr),
             Down: Mathf.Max(downHeld ? 1f : 0f, tl),
@@ -4154,6 +4207,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _bailTimer -= dt;
             input = new RideInput(0f, 1f, 0f, false);
         }
+        // the speed regulator's pedals on top of the driver's
+        input = CruiseStep(input, dt);
 
         // Tricks: hold the trick button in the air and the stick flips and spins instead of
         // steering. Let go and whatever rotation is left eases to the nearest whole turn, so a
@@ -4224,6 +4279,11 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 _shutDriverIn = 0f;
             if (_shutDriverIn <= 0f) DoorsOpen = 0;
         }
+        else if (_ride is Truck { CarDoors: true } pickup && _shutDriverIn > 0f && ((_shutDriverIn -= dt) <= 0f || _motion.Speed > DoorsShutSpeed))
+        {
+            _shutDriverIn = 0f;
+            pickup.DoorsOpen = 0;
+        }
 
         // Boost: the reward for air and tricks, spent as raw acceleration on top of the model.
         // Game profile only; in Sim the watts are the rider's, and nothing else may add to them.
@@ -4263,8 +4323,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         interiors?.BeforeMove(this);
         MoveAndSlide();
         interiors?.AfterMove(this, from);
+        // a parked vehicle in the way takes its share of the blow (#756): judged on the speed before the move
+        ShoveInto(dt, velocity with { Y = 0 });
         // the sections behind a truck's cab follow it, and report what they hit
         if (_ride is Truck train) StepSections(train, dt);
+        // a farm machine works the ground under its bar (#494, FootPlayer.Farm.cs)
+        if (_ride is Truck { Spec.Farm: true } farm) StepFarm(farm, dt);
 
         // Hitting something has to cost the speed, or the vehicle grinds along the wall at
         // 50 km/h and shoots off the moment the wall ends.

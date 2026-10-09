@@ -68,11 +68,17 @@ public sealed record CarSetup(string Name, string Blurb)
     public bool RoofRack { get; init; }
     public bool BullBar { get; init; }
     public WingSize? Wing { get; init; }
+    /// <summary>A repaint and nothing else (the army's olive): the car's physics stay its own.</summary>
+    public Color? Paint { get; init; }
 
     /// <summary>The car with this preset on: the same car, other parts. Stock returns the spec itself.</summary>
     public CarSpec Apply(CarSpec spec)
     {
         if (Id == 0) return spec;
+        // the army: the same car in olive drab (a kart wears its own army skin, KartMeshBuilder.Army)
+        if (Paint is { } paint) return spec with { SetupId = Id, Body = spec.Body with { Paint = paint } };
+        // a kart has no suspension to raise and no body to lift: the road and off-road presets are for cars
+        if (spec.Body.Shape == BodyShape.Kart) return spec;
         var tyre = Tyre ?? TyreType.Road;
         var body = spec.Body;
         // bigger wheels need the body up at least by their growth, or the tyre tops go through the arches
@@ -155,7 +161,19 @@ public static class CarSetups
             Tyre = TyreType.GravelRally, Lift = 0.06f, Travel = 0.2f, Stiffness = 1.1f, MassDelta = -60f,
             Power = 1.2f, FinalDrive = 1.15f, Diff = Differential.Mechanical, Drive = Drivetrain.All, Drag = 1.05f,
         },
+        // #715: the Swiss army's olive drab; the one preset that changes the look and not the car
+        new CarSetup("Army", "Swiss army issue: olive drab, black bumpers, a military plate. The car underneath is unchanged.")
+        {
+            Paint = new Color(0.29f, 0.33f, 0.17f),
+        },
     });
+
+    /// <summary>
+    /// The army preset's id (append-only, so a constant): <c>player.SetCarSetup(CarSetups.ArmyId)</c> at
+    /// a standstill, or <c>Setup = CarSetups.ArmyId</c> where a spawn takes a preset. On a kart it is
+    /// the army skin (<see cref="KartMeshBuilder.Army"/>); on any other car, olive paint.
+    /// </summary>
+    public const int ArmyId = 8;
 
     private static IReadOnlyList<CarSetup> Number(CarSetup[] all)
     {
@@ -259,9 +277,10 @@ public static class CarSetups
         if (Clamp(-1) != 0 || Clamp(All.Count) != 0 || Clamp(int.MaxValue) != 0) fails.Add("out-of-range id is not Stock");
         foreach (var spec in CarCatalog.All)
             foreach (var s in All)
-                if (s.Apply(spec) is var c && (c.Kind != spec.Kind || c.Mass <= 0 || c.WheelRadius <= 0.1f || (s.WheelScale > 1f && c.Body.Lift < 2f * spec.Body.WheelRadius * (s.WheelScale - 1f) - 1e-4f)))
+                if (s.Apply(spec) is var c && (c.Kind != spec.Kind || c.Mass <= 0 || c.WheelRadius <= 0.1f || (s.WheelScale > 1f && spec.Body.Shape != BodyShape.Kart && c.Body.Lift < 2f * spec.Body.WheelRadius * (s.WheelScale - 1f) - 1e-4f)))
                     fails.Add($"{s.Name} on {spec.Label} builds a bad car");
         if (!ReferenceEquals(All[0].Apply(CarCatalog.All[0]), CarCatalog.All[0])) fails.Add("Stock changed the spec");
+        if (All[ArmyId].Name != "Army" || All[ArmyId].Paint is null) fails.Add("ArmyId is not the Army preset");
 
         var was = Core.GameSettings.Current.RideProfile;
         Core.GameSettings.Current.RideProfile = Core.RideProfile.Sim;

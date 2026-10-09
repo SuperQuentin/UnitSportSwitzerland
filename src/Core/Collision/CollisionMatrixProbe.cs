@@ -173,6 +173,9 @@ public partial class CollisionMatrixProbe : Node3D
 
             var p = new FootPlayer { Name = $"Mover_{r.Root!.Name}" };
             p.Rotation = new Vector3(0, Mathf.Atan2(-r.Dir.X, -r.Dir.Z), 0);
+            // put at its start before it enters the tree: added at the run's centre first, Jolt swept it
+            // out from under the target, and a parked combine standing on it was carried along 20 m
+            p.Position = r.Start - r.Root.GlobalPosition;
             r.Root.AddChild(p);
             p.GlobalPosition = r.Start;
             p.DebugLaunch(r.Start, Vector3.Zero);

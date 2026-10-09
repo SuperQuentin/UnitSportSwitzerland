@@ -95,6 +95,8 @@ public static class Gadgets
             }
             case PlacedKind.RopeLadder:
                 return LadderLength(o.Payload) is { } l && l >= LadderMin - 0.01f && l <= LadderMax + 0.01f ? null : "A ladder is 1.5 to 8 m long.";
+            case PlacedKind.FarmStand:
+                return Farming.FarmStands.SiteProblem(o);   // by a road, apart from other stands (#494)
             default:
                 return null;
         }

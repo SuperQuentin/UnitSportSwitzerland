@@ -60,7 +60,11 @@ public static class CollisionTargets
                 PlacedKind.RopeLadder => "4",
                 _ => "",
             });
-            yield return new("Placed", kind.ToString(), (_, at) => Placed(PlacedObjects.VisualOf(placed) ?? new Node3D(), at));
+            // a node that draws only once in the tree (the farm stand) is measured by its placing ghost's mesh
+            Func<Node3D>? drawn = Placeables.ForKind(kind) is { } placeable
+                && PlacedObjects.VisualOf(placed) is { } off && Drawless(off)
+                ? () => new MeshInstance3D { Mesh = placeable.Mesh() } : null;
+            yield return new("Placed", kind.ToString(), (_, at) => Placed(PlacedObjects.VisualOf(placed) ?? new Node3D(), at), drawn);
         }
 
         foreach (var piece in Enum.GetValues<PieceKind>())
@@ -91,10 +95,7 @@ public static class CollisionTargets
         ("Doors/Barn pair", "*", new[] { "*" }, "a facade leaf is never solid, the building's wall is"),
         ("Doors/Garage roll-up", "*", new[] { "*" }, "a facade leaf is never solid, the building's wall is"),
         // parked under the VehicleManager, as in the game
-        ("Aircraft/Airbus A320", "car", new[] { "side", "side-", "end" }, "a car goes through the parked fuselage"),
         ("Aircraft/Airbus A320", "walk", new[] { "end" }, "a walker goes through the parked nose"),
-        ("Aircraft/Military cargo plane", "car", new[] { "side", "end", "end-" }, "a car goes through the parked fuselage"),
-        ("Aircraft/Military cargo plane", "walk", new[] { "side", "end", "end-" }, "a walker goes through the parked fuselage"),
         ("Aircraft/Antonov AN-124", "car", new[] { "side", "end", "end-" }, "a car goes through the parked fuselage"),
         ("Aircraft/Antonov AN-124", "walk", new[] { "side", "end" }, "a walker goes through the parked fuselage"),
         // Excavator.ParkedBox: the tracks and the house, not the boom, stick and bucket
@@ -106,8 +107,8 @@ public static class CollisionTargets
         ("Machines/Telehandler", "*", new[] { "side-" }, "the parked box leaves out the boom"),
         // Rideable.ParkedBox, measured without the rotor: one box from the ground up, under the tail boom too
         ("Aircraft/Helicopter", "car", new[] { "side+" }, "the parked box is solid under the tail boom"),
-        // CampfireNode's cylinder is wider and taller than the logs drawn
-        ("Placed/Campfire", "walk", new[] { "side", "end" }, "its collider stands round the low logs"),
+        // Steamer.BuildParkedHull: the hull's own sections, the paddle boxes either side left out
+        ("Boats/Paddle steamer", "*", new[] { "end-", "end+" }, "the parked hull leaves out the paddle boxes"),
     };
 
     /// <summary>
@@ -203,6 +204,14 @@ public static class CollisionTargets
                 if (dp >= 0 != dq >= 0) to.Add(p + (q - p) * (dp / (dp - dq)));
             }
         }
+    }
+
+    /// <summary>Whether <paramref name="node"/> draws nothing off the tree; it is freed.</summary>
+    private static bool Drawless(Node3D node)
+    {
+        bool none = DrawnTriangles(node).Count == 0;
+        node.Free();
+        return none;
     }
 
     /// <summary>Whether <paramref name="collider"/> is <paramref name="target"/> or a body under it.</summary>

@@ -58,6 +58,12 @@ public static class XrSession
 
     internal static bool HandAimZeroAsked;
 
+    /// <summary>
+    /// The hand that holds the item, in the world: the right controller's aim pose, -Z along the
+    /// pointer. Null outside VR and when that hand is not tracked. A gun points and fires along it.
+    /// </summary>
+    public static Transform3D? ItemHand => Active ? Rig?.AimHand : null;
+
     /// <summary>Makes where the right hand is now the centre of <see cref="HandAim"/>.</summary>
     public static void ZeroHandAim() => HandAimZeroAsked = true;
 

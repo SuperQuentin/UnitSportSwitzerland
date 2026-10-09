@@ -393,7 +393,8 @@ vec3 solar_field(vec3 col, inout vec3 n, inout float glass, vec2 q, vec2 ext, fl
     return mix(avg, p, near);
 }
 
-varying float garage_flag;  // UV2.y: 0 plain, 1 neon sign, 2 garage wall (storey_count = eave m)
+varying float garage_flag;  // UV2.y: 0 plain, 1 neon sign, 2 garage wall (storey_count = eave m),
+                            // 3 a wall run too short for a window (bands and plinth only)
 
 void vertex() {
     world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -451,7 +452,7 @@ void fragment() {
     // stop a little below the wall plate so the eave never cuts a row in half
     float top = storey_count - 0.22;
     vec3 glow = vec3(0.0);
-    bool garage_wall = garage_flag > 1.5;
+    bool garage_wall = garage_flag > 1.5 && garage_flag < 2.5;
     if (!garage_wall && facade.y >= 0.0 && facade.y < top && detail < 0.6) {
         float u = facade.x;
         float wall_v = fract(facade.y);
@@ -476,7 +477,7 @@ void fragment() {
         vec2 lo = vec2(0.30 * window_spacing, 0.32 * storey_h);
         vec2 hi = vec2(0.70 * window_spacing, 0.76 * storey_h);
         vec2 q = vec2(col_u * window_spacing, wall_v * storey_h);
-        bool windowed = facade.y > 0.35;
+        bool windowed = facade.y > 0.35 && garage_flag < 2.5;
 
         // shutters on some houses, not on blocks of flats or a church: one paint a house
         float house = hash(floor(pattern_xz(world_pos) / 24.0) + 0.37);

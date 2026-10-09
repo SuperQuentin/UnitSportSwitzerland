@@ -4,7 +4,9 @@
   (`src/Core/Collision/CollisionMatrixProbe.cs`).
   - Every target is run into by every mover, on several lanes.
   - It prints one line per run, then `[collide] RESULT`.
-  - The full matrix is 169 targets, 884 runs, about 4.5 min headless at `--fixed-fps 60`.
+  - The full matrix is 177 targets, 944 runs, about 9 min headless at `--fixed-fps 60`; the quick
+    tier runs it in two `--targets` halves (vehicles on two wheels and cars; the rest) to stay under
+    the per-check timeout.
   - `--targets` filters by substring of `Category/Name`, e.g. `machines/`, `doors/`, `a320`.
   - `--movers` takes any ride name `RideProbe.KindNamed` knows (`bike`, `truck:2`, `forklift`,
     `Helicopter`...), or `walk`.
@@ -44,13 +46,19 @@
   - Listed when it was written (Oct 2026):
     - the facade barn pair and the garage roll-up leaves are never solid (the facade's building
       collision is);
-    - cars and walkers go through parked airliners' fuselages (A320, military cargo plane, AN-124),
-      but only when parked under a `VehicleManager`, as in the game;
+    - cars and walkers go through the parked AN-124's fuselage, and a walker through the A320's
+      nose, but only when parked under a `VehicleManager`, as in the game (the A320's car lanes and
+      the military cargo plane went once movers were put at their start before entering the tree);
     - the excavator's parked box leaves out the boom, stick and bucket; the loaders', mini
       excavator's and telehandler's leave out one end;
     - the helicopter's parked box is solid under its tail boom;
-    - the campfire's cylinder stands round its low logs.
+    - the paddle steamer's parked hull leaves out the paddle boxes (`end-`/`end+`; hidden until #738
+      stopped a teleported mover dragging the steamer into the lane).
 - **Traps found on the way:**
+  - **A placed node that builds its mesh in `_Ready`** (campfire, farm stand) draws nothing off the
+    tree, so every run read as an invisible wall. Such a kind is measured by its `Placeables` ghost mesh.
+  - **Put the mover at its start before `AddChild`.** Added at the run's centre and then moved, Jolt
+    swept it out from under the target, and a parked combine standing on it rode along 20 m.
   - **Park vehicles under a `VehicleManager`.** A walkable vehicle (bus, airstairs, steamer)
     excepts any player within 1 m of its deck from its hull (`FootPlayer.WatchGuests`). The player
     then walks on its own copy of the deck, which `ScanDecks` builds only for vehicles under

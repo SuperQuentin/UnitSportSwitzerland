@@ -3,9 +3,13 @@
 - **Roster** (`Player/HeavyCatalog`, `RideKind` **96..119**, append-only; `RideKind.Trailer` = 120 is a
   lone trailer in the world, never mounted): Scania R 450 tractor (Swiss Post yellow), MAN TGS
   26.440 6x2 rigid with swap body (Migros), Mercedes Citaro 12 m (VBZ), Citaro G 18 m articulated
-  pusher (Bernmobil), Setra S 516 HD coach (PostAuto). Operators' colours only, no names or logos.
+  pusher (Bernmobil), Setra S 516 HD coach (PostAuto); the Raptor pickup (101, #463); the farm
+  machines (#494, `farming/machines`): Fendt 724 Vario tractor (102), Claas Lexion 6800 combine
+  (103); the army's Duro 106, G 300 CDI 107 and Trakker 6x6 108 (#714, `vehicles/army-vehicles`). Operators' colours only, no names or logos.
   **Trailers** (`TrailerCatalog`, index append-only): curtainsider 13.6 m, fuel tanker (sloshes),
-  timber (the logs are the load), drawbar trailer (dolly + swap body, two pivots). A trailer's
+  timber (the logs are the load), drawbar trailer (dolly + swap body, two pivots); boat trailers
+  (4, 5, #463); the farm implements on `Coupling.ThreePoint` (rigid, no wheels: plough 6, drill 7,
+  mower 8) and the tipping trailer (9, drawbar, its sacks in the code's farm bits). A trailer's
   **code** = `(index+1) | load% << 8`, replicated as `FootPlayer.TrailerCode`. Figures are the
   published ones where they exist; every entry comments what is assumed (CG heights, mass splits,
   retarders, the Setra's box, the Citaro G's joint position).
@@ -50,7 +54,8 @@
 - **Physics** (`Player/HeavyTrain`): each section (tractor, trailer, dolly, bus half) is a planar
   rigid body with mass, yaw inertia and its own axles; every axle makes its own force from its
   own slip angle (`sin(C·atan(B·α))`, B 8, a truck tyre's shallow slope), friction circle, EBS
-  share of the brakes and ABS limit. Pins (fifth wheel, drawbar, turntable, bus joint) are
+  share of the brakes and ABS limit. Pins (fifth wheel, drawbar, turntable, bus joint, a
+  three-point linkage welded rigid, #494) are
   velocity constraints solved by sequential impulses (2x2 per pin, 12 iterations, Baumgarte 0.2)
   plus a one-sided articulation stop. Static axle loads from the tail forward (a fifth wheel or
   turntable carries the front of the section behind; a drawbar carries nothing); longitudinal
@@ -93,6 +98,52 @@
   with its own angles). The picker's **Trailers** fold couples one at once behind a stopped truck
   that takes it, or leaves it 14 m ahead. Getting out parks the whole train (`VehicleState.Train`, stood on the slope as it was driven by `HeavyGround`;
   `Angles`, `Flags`, `Load`; the server counts it as two vehicles for `MayPark`).
+- **Pickup and boat trailers** (#463): the **Ford F-150 Raptor** (`HeavyCatalog` 101,
+  `HeavyClass.Pickup`, `PickupMeshBuilder`: SuperCrew cab with the heavy cockpit, 5.5 ft bed, five
+  seats) runs on the same train model: 10R80 converter automatic (`StallRpm` 2600), a petrol V6's
+  `EngineInertia` 0.3 (a truck diesel's is 3.5), hydraulic brakes (`AirBrakes = false`: no chamber
+  lag, no tank, no hiss), 4x4, fords 0.8 m. Its hitch is `Coupling.Ball` (0.55 m up, 0.12 m behind
+  the bumper), which **carries** like a fifth wheel (`HeavyTrain.Carries`): the nose weight is on
+  the ball. `HeavySpec.Accepts`: a ball trailer also hangs on the rigid's drawbar jaw (a
+  combination coupling's ball); the tractor takes none.
+  - **Doors** are a car's (`Truck.CarDoors`): four `HeavyDoorLeaf`s hinged at their front edge
+    (`HeavyParts.CarDoors`), worked one by one through `Avatar.IHingedDoors` (now `CarRig` and
+    `HeavyRig`; `VehicleBody.Doors`): G at a door, E opens then gets in, a VR hand grips it, the
+    server passes it on (`RequestDoor`). Bit 2 is the driver's (front left), as `CarRig.DriverDoor`:
+    it opens getting in and out and shuts behind. Replicated driving in `Anim`'s door bits, parked
+    in `VehicleBody.DoorsOpen`.
+  - **Collision** (`Truck.HullBoxes`): the body up to the bonnet and bed rails, above that only the
+    cab (measured, one box ran to the roof over the bonnet and bed).
+  - **Boat trailers** (`TrailerCatalog` 4 jetski, 5 speedboat; `TrailerBody.Boat`,
+    `TrailerSpec.Boat/BoatAt/BoatKeel`). **The boat is a boat of its own**: a parked boat
+    `VehicleBody` in the trailer's **cradle**, a hold (`vehicles/vehicles-in-holds`) that takes only
+    that kind (`CargoBay.Only`) on a deck that is only a hold (`VehicleDeck.CargoOnly`: nothing to
+    walk, `Rideable.Walkable` ignores it). `Truck.Decks` adds the trailer's cradle as the train's
+    section; `ParkedTrailer.Decks` has it too, so the boat rides the driven train, the parked train
+    and a dropped trailer, on every peer (a copy's driver is found from its `_remoteRide` truck with
+    its trailer). Strapped, it is drawn level and dry, never got into (`VehicleManager.OnTrailer`).
+    The trailer's code load says only the weight: boat aboard (100) or not (0). The menu preview
+    draws the boat on it (`HeavyParts.Cargo`, `boatShown`). `SectionSpec.PivotHeight` is the
+    coupler's level height: on the truck's higher jaw the trailer rides nose up
+    (`HeavyGround.LevelPivot`). Measured: 7-10 % nose weight.
+  - **Trap**: a carrier's ground rays hit its own cargo: the trailer stood itself on its boat's
+    hull, 2.5 m up and pitched, and dragged on the slipway. A hooked boat is excluded from its
+    carrier's rays (`FootPlayer.Cargo`, `VehicleBody.Cargo`); `GroundQuery` looks past any vehicle
+    in a hold for the moments before it hooks (a dropped trailer standing on its boat lifted it out
+    of the cradle, and it never found it).
+  - **Launch / winch** (`{car_door}` with a boat trailer, stopped; `FootPlayer.Heavy` `ToggleBoat`):
+    the boat's spot is behind the trailer, bow clear of its back (`BoatSpot`); water there at least
+    0.55 of the hull's depth (about its draft; `WaterField` level minus the terrain) launches it: the
+    strapped boat is claimed and parked afloat there. With the trailer empty, a free boat of its kind
+    within 6 m of that spot is claimed and parked on the bunks (`OnBunks`). Claim + park keep the
+    server's count (`VehicleState.Units`) even, so anyone may, not only an admin. The picker's trailer
+    with load half or more parks its boat on it too (admin). The HUD hint says when either works.
+  - **Controls** on every device (`general/new-action-three-devices`): couple H / D-pad ← / VR right
+    stick ← (with #436, `XrPad`); launch / winch G / X / VR X; doors G / X / VR grip, E to get in; the
+    hints come from `InputHints`. VR target (`xr/vr-action-map`): latch the coupler and crank the
+    winch by hand.
+  - Not done: no slipway driving physics (the trailer's wheels in water are ordinary ground), the
+    boat appears at its spot rather than sliding off; a sunk trailer is not wrecked; no two-client run.
 - **Walking in a bus** (#162): its deck, the joint's passage and hollow bellows, see `walk-aboard`.
 - **Buses**: `G` doors (all at once, stopped; a city bus kneels with them), `K` kneel, `N`
   destination (Label3D on the front, `HeavyLook.Destinations`). Door leaves swing out of real
@@ -109,7 +160,10 @@
   trailer axles on 7.6 m against 7.7 m from the chain. Swept width at a 12.5 m outer radius 7.19 m
   (the EU turning-circle rule allows 7.2). Empty trailer, snow, retarder full: Sim folds to 82°,
   Game holds it to 10°. Full tanker at 70 km/h in a 0.5 g bend: the tanker goes over first.
-- **Checks**: `--truckcheck [trace]` (above, non-zero on a miss); `--truckprobe N[,s[,shot]]
+- **Checks**: `--truckcheck [trace]` (above, non-zero on a miss; the pickup's 0-100, which hitch takes
+  which trailer, nose weight, the cradles, the Raptor's doors, the units: `BoatTrailers`);
+  `--boattrailercheck jetski|speedboat[,shots] --chunks fixture:lake --traffic 0`: the slipway, launch,
+  winch, the boat on the bunks within 5 cm, the parked train, the doors, a dropped and re-coupled trailer; `--truckprobe N[,s[,shot]]
   [--trailer M] [--kmh V] [--load x] [--minor] [--trace] --at E,N` drives the real road from the
   spawn (Road class and wider unless `--minor`), prints off-tracking against the centreline,
   section hits and a road-width report (the swept width at each bend against the TLM width);

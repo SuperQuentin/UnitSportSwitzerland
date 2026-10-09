@@ -265,7 +265,7 @@ public partial class RideUi : CanvasLayer
         // in the world ahead to back onto (RideKind.Trailer + its index, decoded in Choose)
         AddTab(bar, pages, "Trailers", TrailerCatalog.All.Select((t, i) => NewCard((RideKind)(TrailerRow + i), t.Label,
             t.Blurb + (t.Operator.Length > 0 ? $" ({t.Operator} colours)" : ""), true,
-            $"Trailer{i}|{t}", () => HeavyRig.CreateTrailer(t, 0, 0.5f))).ToList());
+            $"Trailer{i}|{t}", () => HeavyRig.CreateTrailer(t, 0, 0.5f, boatShown: true))).ToList());
     }
 
     /// <param name="path">The folders a card goes in, outermost first; null or empty for none.</param>

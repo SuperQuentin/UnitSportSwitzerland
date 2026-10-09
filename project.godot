@@ -40,15 +40,22 @@ enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
 
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="mobile"
-lights_and_shadows/directional_shadow/size.mobile=2048
-scaling_3d/scale=0.75
 textures/vram_compression/import_etc2_astc=true
+scaling_3d/scale=0.75
 
 [shader_globals]
 
 world_disco_beat={
 "type": "float",
 "value": 0.0
+}
+world_music={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+world_music_beat={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
 }
 xr_smooth={
 "type": "bool",

@@ -6,7 +6,7 @@
 - **Data**: `Avatar.Garments.All` is the wardrobe. Each `Garment` row is one look (ItemId, name,
   `WearSlot`, `Code`, `GarmentShape`, `GarmentStyle` Basic/Gothic/Kawaii/Special, colours A/B/C,
   `Finish`, mask `MaskFace`). The item rows (`ItemDefs.All`) are generated from it (`ItemDefs.Cloth`),
-  so a new look is one `Garments` line plus an `ItemId` (65-149 so far, append only).
+  so a new look is one `Garments` line plus an `ItemId` (65-149, then 354-356 of #716; append only).
 - **Slots**: `WearSlot` Head, Eyes, Face, Ears, Neck, Top, Bottom, Legs, Feet, Hands. Occasion hats are
   Head items too. A Robe/Dress (`CoversBottom`) takes the bottom slot as well.
 - **Replication**: `Outfit` packs 6 bits of `Garment.Code` per slot (1-63, 0 = nothing) into a
@@ -27,14 +27,23 @@
   style's `MaterialRole.Figure` wrapper: `avatar` in PS1, `cartoon_avatar` toon and rim, `real_avatar`
   GGX) reproduces
   `Material()` for alpha 1 and decodes rainbow, disco, galaxy, holo, glitch, lava, neon, and the
-  patterns tartan, fishnet (discard over skin), lace, checker, stripes, studs (12-14, #394); 11 is
+  patterns tartan, fishnet (discard over skin), lace, checker, stripes, studs (12-14, #394), camo (15, #716: the army's TAZ 90, `barracks-items`); 11 is
   the pixel face (`procedural-faces`). Every mesh that carries a figure must use it (#394: the face only draws there); the shared
   `Material()` is untouched. Specials put the finish on all three
   colours, patterns only on A. Effects that need an angle compute a facet normal from derivatives:
   `MeshScratch` writes no normals.
+- **Patterns ride on the cloth** (#724): the shader lays them out from each vertex's *rest* position
+  (`CUSTOM0`, w = 1), never `VERTEX`: the figure is rebuilt per pose, so mesh space made the body run,
+  jump and bend *through* a pattern pinned to its feet. `MeshScratch.Rest` (`Resting(map)` scopes) is a
+  `RestMap`: one bone's motion undone, or two blended over the joint's mitre (limbs, trunk). The
+  builder sets it per part from the posed rig and `RestRig` (standing): `TrunkRest` by default,
+  `ArmRest`, `LegRest`, `FootRest`, `HeadRest`. Anything new drawn on a figure goes inside the scope
+  of the part it lies on. Standing, rest = drawn position, so the standing look is unchanged.
+  The same rule for `interior.gdshaderinc`: plaster and boards come from the mesh's own space, so
+  door leaves, lift doors and pallets carry their texture along.
 - **Checks**: `--outfitcheck` (headless: data, packing, every look built in six poses, finish alpha
   round trip); `--avatars <s> <png> --outfits [page|slot name] [--focus N [--count k]] [--walk]` renders
-  them (`page 0` = 15 whole outfits; a slot name lines up every look for it).
+  them (`page 0` = 17 whole outfits; a slot name lines up every look for it).
 - **Riders and drivers**: `Rideable.BuildVisual(rider, outfit)` gets `FootPlayer.OutfitBits` and every
   figure-carrying visual is dressed and drawn in `FigureMaterial` (`Cyclist`, `Motorcyclist` — a dressed
   rider is its own "Rider" mesh —, `CarRig`/`HeavyRig` drivers, skier, wingsuit, paraglider);

@@ -28,6 +28,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Interiors.InteriorManager? _interiors;
     private WorldOrigin? _origin;
     private Items.PlacedObjects? _placed;
+    private Farming.FarmStands? _farmStands;
     private Net.Sleepers? _sleepers;
     private Items.PalletService? _pallets;
     private Build.Structures? _structures;
@@ -133,6 +134,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _dropped = Items.DroppedItems.Create(this, origin);
         _dropped.PlayerPositions = _vehicles.PlayerPositions;
         Audio.Cd.CdLibrary.Create(this, server: true);
+        Audio.Cd.CdUpload.Create(this, server: true);   // a player's own file, scanned on the server (#736)
         // the radio by the pastor rat in every church (#370)
         _churchRadios = Interiors.ChurchRadios.Create(this);
         Net.ClockSync.Create(this);
@@ -161,11 +163,15 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // handed to everyone who walks in afterwards
         _interiors = Interiors.InteriorManager.Create(this, source, origin);
         _interiors.Players = _players;
+        // a check's farm co-op on a fixture world (#494, --farmcoop E,N): the clients are given the same
+        Farming.FarmMarket.StandInFromArgs(local, origin);
 
         // loot in those interiors: the server rolls it and remembers what was taken
         Loot.LootService.Create(this);
         // shops and vending machines (#273): the server keeps what was sold and charges the card
         Loot.ShopService.Create(this);
+        // farm fields (#494): the server keeps the worked cells (user://farm) and checks the work
+        if (Systems.On(Systems.Farming)) Farming.FarmField.Create(this, source, origin, _chunks, dedicated: true);
 
         // occasions run on the server's calendar and are replicated, so every player shares one
         _occasions = Occasions.OccasionManager.Create(this);
@@ -241,6 +247,14 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _pallets = Items.PalletService.Create(this, origin, server: true);
         _pallets.Source = () => source;
         _chat.NameAssigned += bank.SendBalance;
+        // selling farm produce (#494): load prices, specialty buyers, contracts; farm stands' crates and cash
+        if (Systems.On(Systems.Farming))
+        {
+            Farming.FarmSales.Create(this, origin, server: true).NameOf = _chat.NameOfPeer;
+            _farmStands = Farming.FarmStands.Create(this, origin, server: true);
+            _farmStands.NameOf = _chat.NameOfPeer;
+            _farmStands.Source = () => source;
+        }
         // built structures (#274): checked, kept and saved here; match ones cleared after the match
         if (Systems.On(Systems.Build))
         {
@@ -311,18 +325,21 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Multiplayer.PeerConnected += OnPeerConnected;
         Multiplayer.PeerDisconnected += OnPeerDisconnected;
 
+        string name = QueryResponder.ParseServerName();
+        string version = (string)ProjectSettings.GetSetting("application/config/version", "");
+        string world = manifest.Tiles.Count > 0 ? "real" : "generated";
+        var registry = _registry;
         // status queries on port + 1: LAN lists find this server, saved lists show it is up
         // and how full it is (Net/QueryResponder, docs/notes/net/server-query.md)
         if (QueryResponder.ParsePort(port) is { } queryPort)
-        {
-            string name = QueryResponder.ParseServerName();
-            string version = (string)ProjectSettings.GetSetting("application/config/version", "");
-            string world = manifest.Tiles.Count > 0 ? "real" : "generated";
-            var registry = _registry;
             AddChild(new QueryResponder(queryPort, () => new ServerStatus(
                 name, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients, version, world) { Wire = Handshake.Protocol },
                 QueryResponder.ParseBind()));
-        }
+        // the same, as a file the web page beside a deployed server reads (#740, docs/notes/net/status-page.md)
+        if (StatusFile.ParsePath() is { } statusPath)
+            AddChild(new StatusFile(statusPath, () => new StatusFileData(
+                name, version, world, port, registry?.Players.Count ?? 0, NetworkManager.MaxClients,
+                registry is null ? [] : registry.Players.Select(p => p.Name).Order(StringComparer.OrdinalIgnoreCase).ToArray())));
         _parentPid = HostedServer.ParseParentPid();
     }
 
@@ -429,6 +446,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _passengers?.SendTo(id);
         _occasions?.SendTo(id);
         _placed?.SendTo(id);
+        _farmStands?.SendTo(id);
         _sleepers?.SendTo(id);
         _pallets?.SendTo(id);
         _structures?.SendTo(id);

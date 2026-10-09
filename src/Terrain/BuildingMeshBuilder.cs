@@ -27,9 +27,10 @@ public static partial class BuildingMeshBuilder
     /// <summary>
     /// UV2.y flags read by <c>ps1_building.gdshader</c>: 0 plain, <see cref="SignFlag"/> a garage
     /// sign's light face (lit at night), <see cref="GarageWallFlag"/> a garage wall, whose UV is
-    /// (metres along, metres above the base) and UV2.x the eave height the painted stripe runs under.
+    /// (metres along, metres above the base) and UV2.x the eave height the painted stripe runs under,
+    /// <see cref="BlankWallFlag"/> a wall run too short for a window (bands and plinth only, #742).
     /// </summary>
-    public const float SignFlag = 1f, GarageWallFlag = 2f;
+    public const float SignFlag = 1f, GarageWallFlag = 2f, BlankWallFlag = 3f;
 
     /// <summary>
     /// The building mesh plus a front door on each building. The doors are a few boxes appended
@@ -190,6 +191,7 @@ public static partial class BuildingMeshBuilder
         var frames = new float[triangles * 3 * 4];
         // each pitched roof plane's lowest and highest point up its slope (eave and ridge, metres)
         var roofSpans = new Dictionary<(int, int, int, int), (float Min, float Max)>();
+        var runs = new List<WallRun>();
         int v = 0;
 
         for (int bi = 0; bi < tile.Buildings.Count; bi++)
@@ -224,6 +226,9 @@ public static partial class BuildingMeshBuilder
                 uv2 = new Vector2(Mathf.Max(wallHeight * 0.78f, Mathf.Min(wallHeight - 0.1f, 4f)), GarageWallFlag);
                 storey = 1f; // facade v in metres
             }
+            // the window grid's frame on each wall triangle: its wall run's outward axis, and
+            // the column grid fitted to the run's ends
+            if (storey > 0f) WallRuns(b, spireFrom, runs);
 
             // first pass: where each pitched roof plane starts and ends up its slope, so every
             // triangle of it measures from the same eave
@@ -328,23 +333,25 @@ public static partial class BuildingMeshBuilder
 
                 // Facade coordinates are baked here rather than derived in the shader:
                 // the fragment normal comes from screen-space derivatives and jitters,
-                // which turned the window grid into speckle. The triangle normal is exact
-                // and shared by coplanar faces, so u stays continuous across a wall.
+                // which turned the window grid into speckle. Every triangle of a wall run
+                // shares the run's axis and grid, so u stays continuous across the wall and
+                // whatever way the TIN wound each triangle (#742).
                 Vector2 uvA, uvB, uvC;
                 var tangent = Vector3.Zero;
+                var triUv2 = uv2;
                 if (isRoof || storey <= 0f)
                 {
                     uvA = uvB = uvC = new Vector2(0f, -1f);
                 }
                 else
                 {
-                    var flat = new Vector3(normal.X, 0f, normal.Z);
-                    tangent = flat.LengthSquared() > 1e-8f
-                        ? new Vector3(-flat.Z, 0f, flat.X).Normalized()
-                        : Vector3.Right;
-                    uvA = FacadeUv(a, tangent, b.MinY, storey);
-                    uvB = FacadeUv(c, tangent, b.MinY, storey);
-                    uvC = FacadeUv(d, tangent, b.MinY, storey);
+                    var run = runs[t];
+                    tangent = run.Tangent;
+                    uvA = FacadeUv(a, run, b.MinY, storey);
+                    uvB = FacadeUv(c, run, b.MinY, storey);
+                    uvC = FacadeUv(d, run, b.MinY, storey);
+                    // too short for one window: the wall's bands and plinth, no glass
+                    if (run.Scale == 0f && uv2.Y == 0f) triUv2 = new Vector2(uv2.X, BlankWallFlag);
                 }
                 for (int k = 0; k < 3; k++)
                 {
@@ -354,9 +361,9 @@ public static partial class BuildingMeshBuilder
                     frames[f + 2] = storey;
                 }
 
-                vertices[v] = a; colors[v] = color; uvs[v] = uvA; uv2s[v++] = uv2;
-                vertices[v] = c; colors[v] = color; uvs[v] = uvB; uv2s[v++] = uv2;
-                vertices[v] = d; colors[v] = color; uvs[v] = uvC; uv2s[v++] = uv2;
+                vertices[v] = a; colors[v] = color; uvs[v] = uvA; uv2s[v++] = triUv2;
+                vertices[v] = c; colors[v] = color; uvs[v] = uvB; uv2s[v++] = triUv2;
+                vertices[v] = d; colors[v] = color; uvs[v] = uvC; uv2s[v++] = triUv2;
             }
         }
 
@@ -405,8 +412,127 @@ public static partial class BuildingMeshBuilder
         return len > 1e-6f && Mathf.Abs(n.Y / len) > 0.97f && (a.Y + c.Y + d.Y) / 3f > baseY + 2f;
     }
 
-    private static Vector2 FacadeUv(Vector3 p, Vector3 tangent, float baseY, float storey) =>
-        new(p.X * tangent.X + p.Z * tangent.Z, (p.Y - baseY) / storey);
+    // u: the run's grid, whole columns from end to end; v: the storey coordinate
+    private static Vector2 FacadeUv(Vector3 p, WallRun run, float baseY, float storey) =>
+        new((p.X * run.Tangent.X + p.Z * run.Tangent.Z - run.Start) * (run.Scale > 0f ? run.Scale : 1f),
+            (p.Y - baseY) / storey);
+
+    /// <summary>
+    /// The window grid's column pitch in metres: <c>window_spacing</c> in the building shader.
+    /// A wall run stretches it a little so whole columns fit it end to end.
+    /// </summary>
+    public const float WindowSpacing = 3.2f;
+
+    /// <summary>
+    /// A wall triangle's window frame: its run's outward-facing horizontal axis (u grows that
+    /// way), where the run starts along it, and how much u is stretched so whole columns fit
+    /// the run (0: too short for a window, u in plain metres).
+    /// </summary>
+    private readonly record struct WallRun(Vector3 Tangent, float Start, float Scale);
+
+    /// <summary>
+    /// Groups a building's wall triangles into wall runs and gives each triangle its run's frame
+    /// in <paramref name="runs"/> (indexed by triangle). A run is the triangles that touch and
+    /// face the same way within 3 degrees: the surveyed walls are not quite flat, so their
+    /// facets differ by up to a degree or two, and comparing plane offsets would split a wall
+    /// hundreds of metres from the tile's origin.
+    ///
+    /// The window grid used to be <c>dot(xz, tangent)</c> with the tangent from each triangle's
+    /// own winding (#742): the columns were not anchored to the wall, so a window straddled its
+    /// end or corner and was cut in half; each facet of a curved wall had its own axis and
+    /// sliced the windows at every seam; and the two triangles of one wall wound either way
+    /// mirrored u, so a window was lit or furnished differently on each side of the diagonal.
+    /// </summary>
+    private static void WallRuns(Building b, float spireFrom, List<WallRun> runs)
+    {
+        runs.Clear();
+        int count = b.TriangleCount;
+        var flats = new Vector2[count]; // horizontal unit normal, either way; zero off the walls
+        var parent = new int[count];
+        var touching = new Dictionary<(int, int, int), List<int>>();
+        int Find(int t)
+        {
+            while (parent[t] != t) t = parent[t] = parent[parent[t]];
+            return t;
+        }
+
+        float cx = 0f, cz = 0f; // the plan's centre
+        for (int t = 0; t < count; t++)
+        {
+            runs.Add(new WallRun(Vector3.Right, 0f, 0f));
+            parent[t] = t;
+            var (a, c, d) = b.Tri(t);
+            cx += a.X + c.X + d.X;
+            cz += a.Z + c.Z + d.Z;
+            if (IsRoof(a, c, d, spireFrom)) continue;
+            var n = (c - a).Cross(d - a);
+            var flat = new Vector2(n.X, n.Z);
+            if (flat.LengthSquared() < 1e-10f) continue;
+            flats[t] = flat = flat.Normalized();
+            // the same wall: a corner it shares with a triangle facing the same way (a vertex,
+            // not an edge, so a T-junction in the TIN still joins)
+            for (int k = 0; k < 3; k++)
+            {
+                var p = k == 0 ? a : k == 1 ? c : d;
+                var key = ((int)MathF.Round(p.X * 100f), (int)MathF.Round(p.Y * 100f), (int)MathF.Round(p.Z * 100f));
+                if (!touching.TryGetValue(key, out var others)) touching[key] = others = new List<int>(4);
+                foreach (int s in others)
+                    if (Mathf.Abs(flats[s].Dot(flat)) > 0.9986f) parent[Find(s)] = Find(t);
+                others.Add(t);
+            }
+        }
+        cx /= count * 3;
+        cz /= count * 3;
+
+        // each run's facing (area-weighted, every facet turned the root's way) and centre
+        var facing = new Dictionary<int, (Vector2 Normal, Vector2 Centre, float Area)>();
+        for (int t = 0; t < count; t++)
+        {
+            if (flats[t] == Vector2.Zero) continue;
+            var (a, c, d) = b.Tri(t);
+            int r = Find(t);
+            float area = (c - a).Cross(d - a).Length() + 1e-6f;
+            var normal = flats[t].Dot(flats[r]) < 0f ? -flats[t] : flats[t];
+            var centre = new Vector2(a.X + c.X + d.X, a.Z + c.Z + d.Z) / 3f;
+            facing.TryGetValue(r, out var sum);
+            facing[r] = (sum.Normal + normal * area, sum.Centre + centre * area, sum.Area + area);
+        }
+        // turned away from the plan's centre, so u runs the same way whatever the winding
+        var axes = new Dictionary<int, (Vector3 Tangent, float U0, float U1)>(facing.Count);
+        foreach (var (r, (sum, weighted, area)) in facing)
+        {
+            var o = sum.LengthSquared() > 1e-12f ? sum.Normalized() : flats[r];
+            var centre = weighted / area;
+            float side = o.X * (centre.X - cx) + o.Y * (centre.Y - cz);
+            if (side < -0.05f || (Mathf.Abs(side) <= 0.05f && (o.X < 0f || (o.X == 0f && o.Y < 0f)))) o = -o;
+            axes[r] = (new Vector3(-o.Y, 0f, o.X), float.MaxValue, float.MinValue);
+        }
+        // each run's span along its axis
+        for (int t = 0; t < count; t++)
+        {
+            if (flats[t] == Vector2.Zero) continue;
+            var (a, c, d) = b.Tri(t);
+            int r = Find(t);
+            var (tangent, u0, u1) = axes[r];
+            for (int k = 0; k < 3; k++)
+            {
+                var p = k == 0 ? a : k == 1 ? c : d;
+                float u = p.X * tangent.X + p.Z * tangent.Z;
+                u0 = Mathf.Min(u0, u);
+                u1 = Mathf.Max(u1, u);
+            }
+            axes[r] = (tangent, u0, u1);
+        }
+        // whole columns from end to end: the pitch stretched to fit, or none on a sliver
+        for (int t = 0; t < count; t++)
+        {
+            if (flats[t] == Vector2.Zero) continue;
+            var (tangent, u0, u1) = axes[Find(t)];
+            float len = u1 - u0;
+            int columns = Mathf.RoundToInt(len / WindowSpacing);
+            runs[t] = new WallRun(tangent, u0, columns > 0 ? columns * WindowSpacing / len : 0f);
+        }
+    }
 
     /// <summary>Flat triangle list for ConcavePolygonShape3D.</summary>
     public static Vector3[] BuildCollisionFaces(BuildingTile tile)

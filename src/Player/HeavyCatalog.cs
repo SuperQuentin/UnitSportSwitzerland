@@ -14,8 +14,9 @@ namespace UnitSport.Player;
 /// vehicles own 96..119; <see cref="RideKind.Trailer"/> is 120. The first five (96..100) are
 /// numbered by their position here; <b>every later entry names its own</b> (<c>Kind = (RideKind)N</c>),
 /// so branches appending at the same time keep their numbers: 101 is the F-150 (#470), 102 and 103
-/// the farm tractor and the combine (#541), 104 the tipper and 105 the mixer (#613). A clash, or an
-/// unnamed entry past the fifth, throws at start-up.
+/// the farm tractor and the combine (#541), 104 the tipper and 105 the mixer (#613), 106 the Duro,
+/// 107 the G-Class and 108 the Trakker of the army (#714). A clash, or an unnamed entry past the
+/// fifth, throws at start-up.
 /// </para>
 ///
 /// <para>
@@ -36,9 +37,15 @@ public static class HeavyCatalog
     private static readonly Color MigrosOrange = new(1.0f, 0.40f, 0.0f);
     private static readonly Color VbzBlue = new(0.0f, 0.35f, 0.65f);
     private static readonly Color BernRed = new(0.80f, 0.07f, 0.12f);
+    private static readonly Color RaptorOrange = new(1.0f, 0.42f, 0.08f);
+    private static readonly Color FendtGreen = new(0.24f, 0.45f, 0.16f);
+    private static readonly Color ClaasGreen = new(0.47f, 0.63f, 0.1f);
     // invented site contractors (#613): colours only, as every operator here
     private static readonly Color ContractorRed = new(0.78f, 0.12f, 0.08f);
     private static readonly Color ContractorBlue = new(0.10f, 0.30f, 0.62f);
+    // the Swiss Army's matt olive and its canvas (#714): colours only, no insignia; black tyres, bumpers and steps
+    private static readonly Color ArmyOlive = new(0.25f, 0.28f, 0.17f);
+    private static readonly Color ArmyCanvas = new(0.29f, 0.32f, 0.20f);
 
     public static readonly IReadOnlyList<HeavySpec> All = Number(new[]
     {
@@ -238,6 +245,127 @@ public static class HeavyCatalog
             MaxSteer = 0.70f, LimiterKmh = 100f, Passengers = 53,
         },
 
+        // ---- 101: a full-size pickup with a tow ball, for the boat trailers (#463) ----
+        new HeavySpec
+        {
+            Kind = (RideKind)101,
+            Label = "Ford F-150 Raptor",
+            Blurb = "SuperCrew desert pickup, 3.5 L twin-turbo V6, 450 hp, 10-speed automatic, 4x4 on 35-inch tyres. A 50 mm tow ball: back it up to a boat trailer's coupler and {couple}",
+            Class = HeavyClass.Pickup,
+            Look = new HeavyLook { Paint = RaptorOrange, Accent = Black, Lower = Graphite, Cargo = Black },
+            Engine = EngineLayout.V6Turbo,
+            // source: Ford F-150 Raptor (P702, 2021+): 3.5 L EcoBoost HO V6, 450 hp (336 kW) at
+            // 5,850 rpm, 510 lb-ft (691 N·m) at 3,500; 10R80 10-speed automatic 4.696..0.636, reverse
+            // 4.866, 4.10 axle; 5,890 x 2,200 x 1,990 mm, wheelbase 3,686 (SuperCrew 5.5 ft bed),
+            // 315/70R17 tyres, track 1.86 m, ~2,600 kg, 3.7 t braked towing, governed 172 km/h.
+            // Assumed: the 57/43 split, CG height, the torque curve between the published points,
+            // the converter's stall, the engine's inertia and braking, the ball 0.55 m up on a drop
+            // hitch 0.12 m behind the bumper, a 600 kg bed load.
+            Sections = new[]
+            {
+                new SectionSpec
+                {
+                    Name = "pickup", Length = 5.89f, Width = 2.2f, Height = 1.99f, Mass = 2650f, CgAt = 2.55f, CgHeight = 0.75f,
+                    Axles = new[]
+                    {
+                        new AxleSpec(0.97f, 0, Steer: 1f, Driven: true, Tyre: "315/70R17"),
+                        new AxleSpec(4.656f, 1, Driven: true, Tyre: "315/70R17"),
+                    },
+                    HitchAt = 6.01f, HitchHeight = 0.55f, Hitch = Coupling.Ball,
+                    DragArea = 1.65f, Track = 1.86f,
+                    PayloadMax = 600f, PayloadAt = 4.9f, PayloadHeight = 1.15f,
+                },
+            },
+            PeakKw = 336f, PeakRpm = 5850f, IdleRpm = 650f, Redline = 6250f,
+            Torque = new (float, float)[] { (650f, 300f), (1500f, 560f), (2500f, 670f), (3500f, 691f), (4500f, 640f), (5850f, 548f), (6250f, 470f) },
+            EngineBrakeNm = 90f, EngineInertia = 0.3f, StallRpm = 2600f, AirBrakes = false,
+            Box = Transmission.TorqueConverter,
+            Gears = new[] { 4.696f, 2.985f, 2.146f, 1.769f, 1.520f, 1.275f, 1.000f, 0.854f, 0.689f, 0.636f },
+            Reverse = 4.866f, FinalDrive = 4.10f, ShiftTime = 0.25f,
+            MaxSteer = 0.6f, Grip = 0.92f, BrakeDecel = 8.5f, LimiterKmh = 172f, Passengers = 4,
+        },
+
+        // ---- 102: a mid-size farm tractor (#494) ----
+        new HeavySpec
+        {
+            Kind = (RideKind)102,
+            Label = "Fendt 724 Vario",
+            Blurb = "4WD farm tractor, 246 hp, stepless Vario, 40 km/h. A drawbar for the tipping trailer and a three-point linkage for the plough, seed drill or mower: back up to one and {couple}, {kneel} lowers and raises it",
+            Class = HeavyClass.FarmTractor,
+            Look = new HeavyLook { Paint = FendtGreen, Accent = Graphite, Lower = Black, Cargo = FendtGreen },
+            // source: Fendt 724 Vario Gen6 (technical data sheet): Deutz TCD 6.1 L6, 174 kW rated,
+            // 181 kW (246 hp) max, 1,072 N·m at 1,500 rpm; ML 220 Vario CVT, 40 km/h; wheelbase
+            // 2,900 mm; 9,250 kg operating weight; 540/65R30 front, 650/65R42 rear.
+            // Assumed: 5.05 m long and 3.1 m to the cab roof, the 45/55 split, CG height, the
+            // torque curve between the published points, the Vario as 84 close ratios walked
+            // through without a pause (HeavySpec.Stepless; no CVT model) at its default
+            // acceleration stage's pace (TractorRatios: 0-40 km/h ~17 s), the hitch 0.85 m behind
+            // the rear axle and 0.55 m up (drawbar and lower links at one point), hydraulic brakes
+            // to 4.5 m/s², a 55° lock, the engine brake.
+            Sections = new[]
+            {
+                new SectionSpec
+                {
+                    Name = "tractor", Length = 5.05f, Width = 2.55f, Height = 3.1f, Mass = 9250f, CgAt = 2.895f, CgHeight = 1.0f,
+                    Axles = new[]
+                    {
+                        new AxleSpec(1.30f, 0, Steer: 1f, Driven: true, Tyre: "540/65R30"),
+                        new AxleSpec(4.20f, 1, Driven: true, Tyre: "650/65R42"),
+                    },
+                    HitchAt = 5.05f, HitchHeight = 0.55f, Hitch = Coupling.Drawbar,
+                    DragArea = 4.5f, Track = 1.95f,
+                },
+            },
+            Mount = Coupling.ThreePoint,
+            PeakKw = 181f, PeakRpm = 1700f, IdleRpm = 800f, Redline = 2100f,
+            Torque = new (float, float)[] { (800f, 700f), (1000f, 920f), (1200f, 1040f), (1500f, 1072f), (1700f, 1015f), (1900f, 840f), (2100f, 500f) },
+            EngineBrakeNm = 300f, EngineInertia = 1.6f, AirBrakes = false,
+            Stepless = true,
+            // 40 km/h at 1,700 rpm on the 0.93 m rear wheels: 14.9 overall in the top ratio
+            Gears = SteplessRatios(26.8f, TractorRatios),
+            Reverse = 3.0f, FinalDrive = 14.9f, ShiftTime = 0.05f,
+            MaxSteer = 0.95f, Grip = 0.85f, BrakeDecel = 4.5f, LimiterKmh = 40f, Passengers = 1,
+        },
+
+        // ---- 103: a combine harvester (#494) ----
+        new HeavySpec
+        {
+            Kind = (RideKind)103,
+            Label = "Claas Lexion 6800",
+            Blurb = "Combine harvester, 462 hp, 6 m header, steered at the rear, hydrostatic drive to 25 km/h. {kneel} lowers the header and threshes, {destination} swings the auger out over a tipping trailer",
+            Class = HeavyClass.Combine,
+            Look = new HeavyLook { Paint = ClaasGreen, Accent = White, Lower = Graphite, Cargo = Graphite },
+            // source: Claas Lexion 6800 (2020+): 340 kW (462 hp); a Vario 620 header cuts 6.2 m;
+            // 800/65R32 drive wheels, 600/70R28 steered rear; hydrostatic drive with a range box,
+            // 25 km/h on the road. Assumed: 10.4 m with the header on (the section's front is the
+            // cutter bar), 3.3 m body width, 3.95 m tall, a 3.95 m wheelbase, 18 t with the header
+            // split 65/35, CG height, the torque curve, the hydrostat as a stepless box of 64
+            // close ratios (CombineRatios: 0-24 km/h ~22 s), hydraulic brakes, a 140-sack (7 t) tank where the brochure gives ~11,000 l.
+            Sections = new[]
+            {
+                new SectionSpec
+                {
+                    Name = "combine", Length = 10.4f, Width = 3.3f, Height = 3.95f, Mass = 18000f, CgAt = 4.98f, CgHeight = 1.6f,
+                    Axles = new[]
+                    {
+                        new AxleSpec(3.6f, 0, Driven: true, Tyre: "800/65R32"),
+                        new AxleSpec(7.55f, 1, Steer: -1f, Tyre: "600/70R28"),
+                    },
+                    DragArea = 8f, Track = 2.6f,
+                    PayloadMax = 7000f, PayloadAt = 5.4f, PayloadHeight = 3.0f,
+                },
+            },
+            Tool = Farming.FarmTool.Harvest, WorkWidth = 6.0f, WorkAt = 0.35f, TankItems = 140, WorkKmh = 10f,
+            PeakKw = 340f, PeakRpm = 1900f, IdleRpm = 900f, Redline = 2100f,
+            Torque = new (float, float)[] { (900f, 1300f), (1200f, 1900f), (1500f, 2100f), (1700f, 1950f), (1900f, 1709f), (2100f, 900f) },
+            EngineBrakeNm = 250f, EngineInertia = 3.0f, AirBrakes = false,
+            Stepless = true,
+            // 25 km/h at ~1,850 rpm on the 0.93 m drive wheels; the lowest ratio crawls at 2 km/h
+            Gears = SteplessRatios(12f, CombineRatios),
+            Reverse = 3.0f, FinalDrive = 25.7f, ShiftTime = 0.3f,
+            MaxSteer = 0.75f, Grip = 0.8f, BrakeDecel = 3.5f, LimiterKmh = 25f, Passengers = 1,
+        },
+
         // ---- 104: a four-axle tipper for the building sites (#613; 101-103 are #470's and #541's) ----
         new HeavySpec
         {
@@ -313,7 +441,139 @@ public static class HeavyCatalog
             Reverse = 13.0f, FinalDrive = 3.91f, ShiftTime = 0.5f,
             MaxSteer = 0.70f, LimiterKmh = 85f,
         },
+
+        // ---- 106: the army's troop transporter (#714) ----
+        new HeavySpec
+        {
+            Kind = (RideKind)106,
+            Label = "Mowag Duro II 4x4",
+            Blurb = "Swiss Army troop transporter, 6.5 L turbodiesel, 245 hp, 5-speed Allison automatic, 4x4. A short cab ({car_door}) and a canvas-covered bed with a bench down each side for ten",
+            Class = HeavyClass.Transporter,
+            Look = new HeavyLook { Paint = ArmyOlive, Accent = Black, Lower = Black, Cargo = ArmyCanvas, Operator = "Swiss Army" },
+            // source: Mowag Duro 4x4 (the family's data sheet): 5.70 x 2.16 x 2.65 m, wheelbase 3.53 m,
+            // 4,800 kg empty, 9,000 kg gross (4,200 kg payload), Allison five-speed automatic 3.51..0.74
+            // (reverse 4.80) with a high and a low range, permanent four-wheel drive, 100 km/h in the
+            // high range, 245 hp and 925 N·m. The 6.5 L displacement is the brief's; the rating is the
+            // family's. Assumed: 335/80R20 tyres, the 1.02 m front overhang, CG 2.55 m back and 1.0 m up,
+            // the torque curve between the published points (183 kW at 2,500 rpm), the 6.65 axle ratio
+            // (axle, hubs and high range together), the converter's stall, hydraulic brakes to 7 m/s²,
+            // a 1.78 m track, the bed's bench places.
+            Sections = new[]
+            {
+                new SectionSpec
+                {
+                    Name = "transporter", Length = 5.70f, Width = 2.16f, Height = 2.65f, Mass = 4800f, CgAt = 2.55f, CgHeight = 1.0f,
+                    Axles = new[]
+                    {
+                        new AxleSpec(1.02f, 0, Steer: 1f, Driven: true, Tyre: "335/80R20"),
+                        new AxleSpec(4.55f, 1, Driven: true, Tyre: "335/80R20"),
+                    },
+                    DragArea = 3.2f, Track = 1.78f,
+                    PayloadMax = 4200f, PayloadAt = 4.3f, PayloadHeight = 1.6f,
+                },
+            },
+            PeakKw = 183f, PeakRpm = 2500f, IdleRpm = 700f, Redline = 2800f,
+            Torque = new (float, float)[] { (700f, 380f), (1000f, 720f), (1300f, 900f), (1500f, 925f), (1800f, 890f), (2100f, 800f), (2500f, 699f), (2800f, 480f) },
+            EngineBrakeNm = 220f, EngineInertia = 0.9f, StallRpm = 1700f, AirBrakes = false,
+            Box = Transmission.TorqueConverter,
+            Gears = new[] { 3.51f, 1.91f, 1.43f, 1.00f, 0.74f },
+            Reverse = 4.80f, FinalDrive = 6.65f, ShiftTime = 0.3f,
+            MaxSteer = 0.55f, Grip = 0.9f, BrakeDecel = 7.0f, LimiterKmh = 100f, Passengers = 11,
+        },
+
+        // ---- 107: the army's estate (#714) ----
+        new HeavySpec
+        {
+            Kind = (RideKind)107,
+            Label = "Mercedes-Benz G 300 CDI",
+            Blurb = "Swiss Army G-Class estate, the Puch's successor: 3.0 L V6 diesel, 184 hp, 5-speed automatic, permanent 4x4 with three locks. Four doors ({car_door}), the spare wheel on the tailgate, four seats",
+            Class = HeavyClass.Offroader,
+            Look = new HeavyLook { Paint = ArmyOlive, Accent = Black, Lower = Black, Cargo = Black, Operator = "Swiss Army" },
+            // source: the army's G 300 CDI (W461 estate; Mercedes-Benz, 2013): OM 642 V6, 135 kW at 3,800 rpm,
+            // 400 N·m at 1,600-2,800 rpm, 5G-Tronic five-speed automatic 3.59/2.19/1.41/1.00/0.83 (reverse
+            // 3.16), permanent four-wheel drive with a reduction and three locks, 265/70R16, 160 km/h,
+            // 3,500 kg gross, 3.2 t braked towing, 210 mm clearance, 600 mm wading. Assumed: 4.50 x 1.76 x
+            // 1.97 m on a 2.85 m wheelbase, 2,550 kg empty with the driver and fuel, CG 2.15 m back and
+            // 0.85 m up, the torque curve between the published points, the 4.38 axle, the converter's
+            // stall, the engine's inertia and braking, hydraulic brakes to 8 m/s², a 1.47 m track.
+            Sections = new[]
+            {
+                new SectionSpec
+                {
+                    Name = "estate", Length = 4.50f, Width = 1.76f, Height = 1.97f, Mass = 2550f, CgAt = 2.15f, CgHeight = 0.85f,
+                    Axles = new[]
+                    {
+                        new AxleSpec(0.82f, 0, Steer: 1f, Driven: true, Tyre: "265/70R16"),
+                        new AxleSpec(3.67f, 1, Driven: true, Tyre: "265/70R16"),
+                    },
+                    DragArea = 1.6f, Track = 1.47f,
+                    PayloadMax = 450f, PayloadAt = 3.9f, PayloadHeight = 1.0f,
+                },
+            },
+            PeakKw = 135f, PeakRpm = 3800f, IdleRpm = 750f, Redline = 4500f,
+            Torque = new (float, float)[] { (750f, 170f), (1000f, 290f), (1300f, 380f), (1600f, 400f), (2800f, 400f), (3400f, 375f), (3800f, 339f), (4500f, 250f) },
+            EngineBrakeNm = 80f, EngineInertia = 0.35f, StallRpm = 2000f, AirBrakes = false,
+            Box = Transmission.TorqueConverter,
+            Gears = new[] { 3.59f, 2.19f, 1.41f, 1.00f, 0.83f },
+            Reverse = 3.16f, FinalDrive = 4.38f, ShiftTime = 0.25f,
+            MaxSteer = 0.5f, Grip = 0.9f, BrakeDecel = 8.0f, LimiterKmh = 160f, Passengers = 4,
+        },
+
+        // ---- 108: the army's cargo lorry (#714) ----
+        new HeavySpec
+        {
+            Kind = (RideKind)108,
+            Label = "Iveco Trakker 6x6 lorry",
+            Blurb = "Swiss Army cargo lorry, 12.9 L Cursor 13 diesel, 450 hp, 12-speed automated EuroTronic, 6x6. A cab-over and a canvas-covered cargo body with a bench down each side",
+            Class = HeavyClass.Rigid,
+            Body = TruckBody.Canvas,
+            Look = new HeavyLook { Paint = ArmyOlive, Accent = Black, Lower = Black, Cargo = ArmyCanvas, Operator = "Swiss Army" },
+            // source: Iveco Trakker 6x6 (AD380, the army's Euro 6 order of 2015: Cursor 13 engines, EuroTronic
+            // automated boxes, automatic drivetrain management): Cursor 13, 12.9 L, 330 kW (450 hp) at 1,900 rpm,
+            // 2,100 N·m at 1,000-1,500; 33 t chassis gross. Assumed: 8.0 x 2.5 x 3.4 m (under the tilt) on a
+            // 4.05 + 1.32 m wheelbase, 365/85R20 tyres, 11,500 kg empty with the cargo body split 5,200 /
+            // 6,300, a 9 t payload, CG height, the torque curve between the published points, the
+            // gearbox as a 12-speed ZF-type 14.94..1.00, the 4.13 axle (axle and hubs together), the
+            // reverse ratio, the engine brake, a 90 km/h limiter, air brakes as the other trucks.
+            Sections = new[]
+            {
+                new SectionSpec
+                {
+                    Name = "lorry", Length = 8.0f, Width = 2.5f, Height = 3.4f, Mass = 11500f, CgAt = 4.1f, CgHeight = 1.35f,
+                    Axles = new[]
+                    {
+                        new AxleSpec(1.40f, 0, Steer: 1f, Driven: true, Tyre: "365/85R20"),
+                        new AxleSpec(5.45f, 1, Driven: true, Tyre: "365/85R20"),
+                        new AxleSpec(6.77f, 1, Driven: true, Tyre: "365/85R20"),
+                    },
+                    DragArea = 6.2f, Track = 2.03f,
+                    PayloadMax = 9000f, PayloadAt = 5.2f, PayloadHeight = 2.1f,
+                },
+            },
+            PeakKw = 330f, PeakRpm = 1900f, IdleRpm = 600f, Redline = 2200f,
+            Torque = new (float, float)[] { (500f, 1000f), (800f, 1750f), (1000f, 2100f), (1500f, 2100f), (1700f, 1850f), (1900f, 1659f), (2100f, 1300f), (2200f, 1000f) },
+            EngineBrakeNm = 1400f, RetarderNm = 0f, RetarderKw = 0f,
+            Gears = new[] { 14.94f, 11.67f, 9.12f, 7.13f, 5.57f, 4.35f, 3.40f, 2.66f, 2.08f, 1.62f, 1.27f, 1.00f },
+            Reverse = 13.0f, FinalDrive = 4.13f, ShiftTime = 0.5f,
+            MaxSteer = 0.62f, Grip = 0.85f, LimiterKmh = 90f, Passengers = 12,
+        },
     });
+
+    /// <summary>
+    /// How many close ratios stand in for the Vario CVT and the combine's hydrostat (#494). A
+    /// stepless box walks them one by one at its own pace (<c>HeavyDriveline</c>: a short hold each),
+    /// so their number is how fast the ratio sweeps: a real Vario takes ~15-20 s to 40 km/h on its
+    /// default acceleration stage, a combine's hydrostat lever longer to its 25 km/h.
+    /// </summary>
+    private const int TractorRatios = 84, CombineRatios = 64;
+
+    /// <summary><paramref name="count"/> ratios from <paramref name="low"/> down to 1, evenly spaced on a log scale (a stepless box, #494).</summary>
+    private static float[] SteplessRatios(float low, int count)
+    {
+        var r = new float[count];
+        for (int i = 0; i < count; i++) r[i] = Mathf.Pow(low, 1f - i / (float)(count - 1));
+        return r;
+    }
 
     private static readonly Dictionary<RideKind, HeavySpec> ByKind = All.ToDictionary(s => s.Kind);
 

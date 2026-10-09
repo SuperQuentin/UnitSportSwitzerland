@@ -52,6 +52,14 @@ src/Crafting/            quick  --campfirecheck --systems ui,physics
 src/Items/PlacedObjects  quick  --campfirecheck --systems ui,physics
 src/Items/FlagGhost      quick  --campfirecheck --systems ui,physics
 src/Items/Placeables     quick  --campfirecheck --systems ui,physics
+src/Farming/             quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Loot/Gathering       quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Items/ItemController quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Terrain/Fixture/FixtureCourse quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Farming/             quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
+src/Loot/Gathering       quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
+src/Items/ItemController quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
+src/Crafting/Recipes     quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
 src/Build/               quick  --buildcheck --systems ui,physics,build
 src/Build/               net    tools/buildnetcheck.sh
 src/Build/Gadget         quick  --gadgetcheck --systems ui,physics,build
@@ -82,6 +90,10 @@ src/Player/              quick  --cockpitcheck
 src/Player/              quick  --motocheck
 src/Player/              quick  --truckcheck
 src/Player/              quick  --driftcheck
+src/Player/Car           quick  --kartcheck
+src/Player/Kart          quick  --kartcheck
+src/Avatar/Kart          quick  --kartcheck
+src/Avatar/CarRig        quick  --kartcheck
 src/Player/              quick  --spincheck
 src/Vehicles/            quick  --driftcheck
 src/Vehicles/            quick  --truckcheck
@@ -153,6 +165,13 @@ src/Player/FootPlayer.Bo quick  --boatcheck jetski --chunks fixture:lake
 src/Player/FootPlayer.Bo quick  --boatcheck speedboat --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --boatcheck speedboat --chunks fixture:lake
 src/Avatar/BoatMesh      quick  --boatcheck jetski --chunks fixture:lake
+# boat trailers (#463): the Raptor backs a boat trailer down the slipway, launches the boat, winches it back, pulls out
+src/Player/BoatTrailerCh quick  --boattrailercheck speedboat --chunks fixture:lake --traffic 0
+src/Player/BoatTrailerCh quick  --boattrailercheck jetski --chunks fixture:lake --traffic 0
+src/Player/FootPlayer.He quick  --boattrailercheck speedboat --chunks fixture:lake --traffic 0
+src/Player/TrailerCatal  quick  --boattrailercheck jetski --chunks fixture:lake --traffic 0
+src/Avatar/TrailerMesh   quick  --boattrailercheck speedboat --chunks fixture:lake --traffic 0
+src/Avatar/PickupMesh    quick  --boattrailercheck speedboat --chunks fixture:lake --traffic 0
 # the paddle steamer (#303): draught, telegraph, slow way on and long stop, walking its tilting decks in a swell, stairs, saloon, gangway, bow, overboard and back, a seat
 src/Player/Steamer       quick  --steamercheck --chunks fixture:lake
 src/Player/FootPlayer.St quick  --steamercheck --chunks fixture:lake
@@ -222,6 +241,8 @@ src/Items/Fishing        net    tools/fishcheck.sh
 src/Items/ItemEvents     net    tools/fishcheck.sh
 src/Items/PlacedObjects  net    tools/campfirecheck.sh
 src/Items/HeldItemVisual net    tools/campfirecheck.sh
+src/Farming/             net    tools/farmnetcheck.sh
+src/Terrain/NetworkChunkSource net tools/farmnetcheck.sh
 src/World/Wa             net    tools/watercheck.sh
 src/World/SeaState       net    tools/watercheck.sh
 src/Net/ChatManager      net    tools/watercheck.sh
@@ -293,6 +314,8 @@ src/Combat/              full   tools/pvpcheck.sh
 src/Items/Weapons        full   tools/pvpcheck.sh
 src/Items/               full   tools/gunshotcheck.sh
 src/Items/Radio          full   tools/sparklecheck.sh
+src/Items/Beat           full   tools/beatfieldcheck.sh
+src/Items/Radio          full   tools/beatfieldcheck.sh
 src/Items/               full   tools/placedcheck.sh
 src/Items/               full   tools/plantcheck.sh
 src/Items/               full   tools/useanimcheck.sh
@@ -300,12 +323,16 @@ src/Loot/                full   tools/lootsynccheck.sh
 src/Loot/                full   tools/locksynccheck.sh
 src/World/               full   tools/racecheck.sh
 src/Audio/               full   tools/radiocheck.sh
+src/Audio/Cd/CdUpload    net    tools/uploadcheck.sh
+src/Audio/Cd/CdScanner   net    tools/uploadcheck.sh
 src/Player/              full   tools/switchcheck.sh
 src/Vehicles/            full   tools/switchcheck.sh
 src/Player/              full   tools/decknetcheck.sh
 src/Vehicles/            full   tools/decknetcheck.sh
 src/Avatar/              full   tools/decknetcheck.sh
 src/Net/                 full   tools/loadtest.sh 4 testsh 60
+# the trailer (#706): a boat, a car on the race autopilot and an airliner staged on the real map (CHUNKS=)
+src/Trailer/             full   tools/trailer.sh stills 2,5,12
 tools/lib/               quick  tools/lib/guard_selftest.sh
 src/Player/Pigeon        quick  --flycheck pigeon --world flat
 src/Player/FlightCheck   quick  --flycheck pigeon --world flat
@@ -475,6 +502,24 @@ src/Player/FootPlayer.Hold net   tools/holdnetcheck.sh
 src/Player/HoldNetProbe  net    tools/holdnetcheck.sh
 src/Vehicles/VehicleBody.Hold net tools/holdnetcheck.sh
 src/Player/FootPlayer.Overlap net tools/holdnetcheck.sh
+src/Player/TractorCheck  quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/Truck.Farm    quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/FootPlayer.Fa quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/FootPlayer.He quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/HeavyTrain    quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/TrailerCatal  quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Avatar/FarmMesh      quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Avatar/FarmMesh      quick  --cockpitcheck
+src/Farming/MachineLoad  quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Terrain/Fixture/FixtureCourse quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/TractorNetPro net    tools/tractornetcheck.sh
+src/Player/Truck.Farm    net    tools/tractornetcheck.sh
+src/Player/FootPlayer.Fa net    tools/tractornetcheck.sh
+src/Farming/             quick  --sellcheck --systems ui,physics,loot,farming --farmmonth 7 --selldir test_output/sellcheck_store
+src/Loot/Shop            quick  --sellcheck --systems ui,physics,loot,farming --farmmonth 7 --selldir test_output/sellcheck_store
+src/Items/Place          quick  --sellcheck --systems ui,physics,loot,farming --farmmonth 7 --selldir test_output/sellcheck_store
+src/Farming/             net    tools/sellnetcheck.sh
+src/Items/PlacedObjects  net    tools/sellnetcheck.sh
 # #611: the excavator: tracks, dig mode and the arm on the real bindings (flat), and seen from a second peer
 src/Player/Excavator      quick  --excavatorcheck --world flat --systems physics,ui
 src/Avatar/Excavator      quick  --excavatorcheck --world flat --systems physics,ui
@@ -542,11 +587,15 @@ src/Interiors/ParkedCars net    tools/hallcarnetcheck.sh
 src/Vehicles/DormantVehicles net tools/hallcarnetcheck.sh
 
 # collision matrix (#699, docs/notes/general/collision-matrix.md): the whole catalog where it is
-# built, the slice a collider change touches elsewhere
-src/Core/Collision/      quick  --collidecheck --world flat
-src/Player/Rideable      quick  --collidecheck --world flat
-src/Vehicles/VehicleBody quick  --collidecheck --world flat
-src/Avatar/MeshBounds    quick  --collidecheck --world flat
+# built (in two halves, each under the per-check timeout), the slice a collider change touches elsewhere
+src/Core/Collision/      quick  --collidecheck --world flat --targets Cars/,Motorbikes/,Bicycles/
+src/Core/Collision/      quick  --collidecheck --world flat --targets Trucks/,Boats/,Aircraft/,Machines/,Placed/,Build/,Props/,Doors/
+src/Player/Rideable      quick  --collidecheck --world flat --targets Cars/,Motorbikes/,Bicycles/
+src/Player/Rideable      quick  --collidecheck --world flat --targets Trucks/,Boats/,Aircraft/,Machines/,Placed/,Build/,Props/,Doors/
+src/Vehicles/VehicleBody quick  --collidecheck --world flat --targets Cars/,Motorbikes/,Bicycles/
+src/Vehicles/VehicleBody quick  --collidecheck --world flat --targets Trucks/,Boats/,Aircraft/,Machines/,Placed/,Build/,Props/,Doors/
+src/Avatar/MeshBounds    quick  --collidecheck --world flat --targets Cars/,Motorbikes/,Bicycles/
+src/Avatar/MeshBounds    quick  --collidecheck --world flat --targets Trucks/,Boats/,Aircraft/,Machines/,Placed/,Build/,Props/,Doors/
 src/Player/Excavator     quick  --collidecheck --world flat --targets machines/
 src/Player/WheelLoader   quick  --collidecheck --world flat --targets machines/
 src/Player/Telehandler   quick  --collidecheck --world flat --targets machines/
@@ -560,3 +609,8 @@ src/Items/PlacedObjects  quick  --collidecheck --world flat --targets placed/
 src/Items/PalletNode     quick  --collidecheck --world flat --targets props/
 src/Crafting/StationVisuals quick --collidecheck --world flat --targets placed/
 src/Interiors/DoorLeaf   quick  --collidecheck --world flat --targets doors/
+
+# the playtest suite (#751): scenarios well-formed, MCP over HTTP, the ledger; then every flat-course scenario set up
+src/Playtest/            quick  --playtestcheck
+src/Playtest/            quick  --playtest --playtest-smoke --world fixture --chunks fixture:flat
+src/Player/FootPlayer.Deck quick --playtest --playtest-smoke --world fixture --chunks fixture:flat

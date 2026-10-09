@@ -17,7 +17,7 @@ namespace UnitSport.Player;
 /// (<see cref="HeavyTrain.Contacts"/>).
 /// </para>
 /// </summary>
-public sealed class Truck : Rideable, IEngined, IBed
+public sealed partial class Truck : Rideable, IEngined, IBed
 {
     public HeavySpec Spec { get; }
     /// <summary>The coupled trailer, or null.</summary>
@@ -40,10 +40,13 @@ public sealed class Truck : Rideable, IEngined, IBed
     {
         Spec = spec;
         Load = Mathf.Clamp(load, 0f, 1f);
-        var driven = System.Array.Find(spec.Sections.SelectMany(s => s.Axles).ToArray(), a => a.Driven) ?? spec.Sections[0].Axles[^1];
+        // a combine's load is its grain tank (#494): empty until its flags say otherwise
+        if (spec.TankItems > 0) Load = 0f;
+        // the last driven axle: a tractor's big rear wheels set its gearing, not the smaller front ones (#494)
+        var driven = System.Array.FindLast(spec.Sections.SelectMany(s => s.Axles).ToArray(), a => a.Driven) ?? spec.Sections[0].Axles[^1];
         WheelRadius = Tyre.Radius(driven.Tyre) * 0.97f;   // loaded: ~3% squat
         Box = new HeavyDriveline(spec, WheelRadius);
-        if (TrailerCatalog.For(trailerCode) is { } t && t.Couples == spec.Takes && t.Couples != Coupling.None)
+        if (TrailerCatalog.For(trailerCode) is { } t && spec.Accepts(t))
         {
             Trailer = t;
             TrailerCode = TrailerCatalog.Clean(trailerCode);
@@ -89,7 +92,7 @@ public sealed class Truck : Rideable, IEngined, IBed
 
     // ---- coupling --------------------------------------------------------------------------
 
-    public bool Accepts(TrailerSpec t) => Spec.Takes != Coupling.None && t.Couples == Spec.Takes;
+    public bool Accepts(TrailerSpec t) => Spec.Accepts(t);
 
     /// <summary>
     /// Hangs a trailer on the hitch, at the angles it stands at (<paramref name="angles"/>: its
@@ -126,6 +129,18 @@ public sealed class Truck : Rideable, IEngined, IBed
         TrailerCode = 0;
         Rebuild();
         return (code, at, yaw, angles);
+    }
+
+    /// <summary>
+    /// A boat trailer's boat launched or winched back aboard (#463): the same trailer, at the same
+    /// angles, its load the boat or nothing. False when the coupled trailer carries no boat.
+    /// </summary>
+    public bool SetBoatAboard(bool aboard)
+    {
+        if (Trailer is not { Boat: not 0 }) return false;
+        TrailerCode = TrailerCatalog.WithBoat(TrailerCode, aboard);
+        Rebuild();   // the same sections: the joints keep their angles
+        return true;
     }
 
     /// <summary>All the joint angles, for a parked vehicle's state.</summary>
@@ -193,6 +208,8 @@ public sealed class Truck : Rideable, IEngined, IBed
         get
         {
             var mode = ShiftOverride ?? Core.GameSettings.Current.HeavyGearbox;
+            // a tractor's CVT (#494) has no clutch and no gates: the automatic is all there is
+            if (Spec.Stepless) return HeavyShift.Automatic;
             if (Spec.Box == Transmission.TorqueConverter) return mode == HeavyShift.Automatic ? mode : HeavyShift.Sequential;
             if (!Spec.SixGates && mode is HeavyShift.HPattern or HeavyShift.HPatternSplitter) return HeavyShift.SequentialClutch;
             return mode;
@@ -209,7 +226,7 @@ public sealed class Truck : Rideable, IEngined, IBed
     {
         if (door < 0 || door >= DoorCount) return;
         DoorsOpen ^= (byte)(1 << door);
-        if (Spec.Class != HeavyClass.Coach && !_pulledAway) Kneeling = DoorsOpen != 0;
+        if (Spec.Class != HeavyClass.Coach && !Spec.Farm && !_pulledAway) Kneeling = DoorsOpen != 0;
     }
     public int DoorCount => Spec.Look.Doors.Length;
     /// <summary>
@@ -312,18 +329,36 @@ public sealed class Truck : Rideable, IEngined, IBed
         get
         {
             var s = Spec.Sections[0];
+            // the army's two cars have a seat derived from their own cab (#714)
+            if (Spec.Class is HeavyClass.Offroader or HeavyClass.Transporter)
+            {
+                var (ex, ey, eat) = Avatar.ArmyMeshBuilder.Eye(Spec);
+                return new Vector3(ex, ey, -(Train.Bodies[0].CgAt - eat));
+            }
             var (y, at) = Spec.Class switch
             {
                 HeavyClass.Tractor => (2.55f, 1.25f),
                 HeavyClass.Rigid => (2.45f, 1.2f),
                 HeavyClass.Coach => (2.3f, 1.1f),
+                HeavyClass.Pickup => (1.68f, 2.9f),
+                HeavyClass.FarmTractor => (Avatar.FarmMeshBuilder.TractorEyeY, Avatar.FarmMeshBuilder.TractorEyeAt),
+                HeavyClass.Combine => (Avatar.FarmMeshBuilder.CombineEyeY, Avatar.FarmMeshBuilder.CombineEyeAt),
                 _ => (2.05f, 1.2f),
             };
+            // a tractor's and a combine's seat is in the middle of the cab (#494)
+            if (Spec.Farm) return new Vector3(0f, y, -(Train.Bodies[0].CgAt - at));
             // left-hand drive: the driver's left is −X
             return new Vector3(-(s.Width * 0.5f - 0.6f), y, -(Train.Bodies[0].CgAt - at));
         }
     }
-    public override float EyeHeight => 2.6f;
+    public override float EyeHeight => Spec.Class switch
+    {
+        HeavyClass.Pickup or HeavyClass.Offroader => 1.8f,
+        HeavyClass.Transporter => 2.3f,
+        HeavyClass.FarmTractor => Avatar.FarmMeshBuilder.TractorEyeY,
+        HeavyClass.Combine => Avatar.FarmMeshBuilder.CombineEyeY,
+        _ => 2.6f,
+    };
     // behind the whole train and high enough to see over it: a semi's camera sits ~24 m back
     public override float ChaseDistance => 5f + TrainLength * 0.95f;
     public override float ChaseHeight => 3.5f + TrainLength * 0.28f;
@@ -357,6 +392,8 @@ public sealed class Truck : Rideable, IEngined, IBed
     {
         get
         {
+            if (Spec.Class == HeavyClass.Pickup) return PickupHull;
+            if (Spec.Farm) return FarmHull;
             if (Spec.Class != HeavyClass.Tractor) return null;
             var s = Spec.Sections[0];
             float cg = Train.Bodies[0].CgAt, cab = 2.35f;
@@ -366,13 +403,39 @@ public sealed class Truck : Rideable, IEngined, IBed
         }
     }
 
+    /// <summary>
+    /// The pickup (#463) collides as its body to the bonnet and bed rails, and above that only as its
+    /// cab: measured, the upper box ran the whole length to the roof, a wall over the bonnet and the
+    /// bed that stopped a trailer's nose and a walker alike.
+    /// </summary>
+    private (Aabb, Aabb) PickupHull
+    {
+        get
+        {
+            var s = Spec.Sections[0];
+            float cg = Train.Bodies[0].CgAt, w = s.Width - 0.1f;
+            var body = new Aabb(new Vector3(-w * 0.5f, 0f, -cg), new Vector3(w, Avatar.PickupMeshBuilder.BodyTop, s.Length));
+            float cab0 = Avatar.PickupMeshBuilder.CabFrom, cab1 = Avatar.PickupMeshBuilder.CabTo;
+            var cab = new Aabb(new Vector3(-w * 0.5f, Avatar.PickupMeshBuilder.BodyTop, cab0 - cg),
+                new Vector3(w, s.Height - Avatar.PickupMeshBuilder.BodyTop, cab1 - cab0));
+            return (body, cab);
+        }
+    }
+
     /// <summary>The driver's door: a cab's on the left, a bus's front door on the right.</summary>
     public override Vector3 EntryPoint
     {
         get
         {
             var s = Spec.Sections[0];
-            float at = IsBus ? Spec.Look.Doors.FirstOrDefault().At : 1.4f;
+            float at = IsBus ? Spec.Look.Doors.FirstOrDefault().At : Spec.Class switch
+            {
+                HeavyClass.Pickup => 2.6f,
+                HeavyClass.Offroader or HeavyClass.Transporter => Avatar.ArmyMeshBuilder.DoorAt(Spec.Class),
+                HeavyClass.FarmTractor => Avatar.FarmMeshBuilder.TractorDoorAt,
+                HeavyClass.Combine => Avatar.FarmMeshBuilder.CombineDoorAt,
+                _ => 1.4f,
+            };
             return new Vector3((IsBus ? 1f : -1f) * (s.Width * 0.5f + 0.4f), 0f, -(Train.Bodies[0].CgAt - at));
         }
     }
@@ -391,7 +454,11 @@ public sealed class Truck : Rideable, IEngined, IBed
     public override Aabb Solid(Aabb measured, int section)
     {
         if (section >= OwnSections) return measured;   // a trailer has no mirrors
-        float half = Spec.Sections[section].Width * 0.5f + BodyFlare;
+        // a combine's header is wider than its body (#494): the body and its wheels here, the header
+        // a box of its own (ExtraBoxes), or getting out puts the driver 3.9 m out, past the cab door's reach
+        float half = Spec.Class == HeavyClass.Combine && section == 0
+            ? Mathf.Max(Spec.Sections[0].Width * 0.5f, Spec.Sections[0].Track * 0.5f + 0.45f)
+            : Spec.Sections[section].Width * 0.5f + BodyFlare;
         float left = Mathf.Max(measured.Position.X, -half), right = Mathf.Min(measured.End.X, half);
         if (right <= left) return measured;
         return new Aabb(measured.Position with { X = left }, measured.Size with { X = right - left });
@@ -418,8 +485,42 @@ public sealed class Truck : Rideable, IEngined, IBed
     /// <summary>Every seat of the truck's own sections (a bus's both halves), the driver's first (#158).</summary>
     public override SeatAnchor[] Seats => Model.Seats;
 
-    /// <summary>The bus's saloon, each half of it, for walking about in (#162); none on a truck.</summary>
-    public override VehicleDeck[] Decks => Model.Decks;
+    /// <summary>
+    /// The bus's saloon, each half of it, for walking about in (#162); none on a truck. With a boat
+    /// trailer, its cradle too (#463), numbered as the train's section.
+    /// </summary>
+    public override VehicleDeck[] Decks
+    {
+        get
+        {
+            if (Trailer == null) return Model.Decks;
+            var key = (Kind, TrailerCatalog.Index(TrailerCode));
+            if (_trainDecks.TryGetValue(key, out var known)) return known;
+            var decks = Model.Decks.Concat(TrailerDecks(Trailer, TrailerCode).Select(d => d with { Section = d.Section + OwnSections })).ToArray();
+            return _trainDecks[key] = decks;
+        }
+    }
+
+    private static readonly Dictionary<(RideKind, int), VehicleDeck[]> _trainDecks = new();
+    private static readonly Dictionary<int, VehicleDeck[]> _trailerDecks = new();
+
+    /// <summary>A trailer's own decks (a boat trailer's cradle), by its sections, read once from a throwaway build.</summary>
+    public static VehicleDeck[] TrailerDecks(TrailerSpec trailer, int code)
+    {
+        int index = TrailerCatalog.Index(code);
+        if (_trailerDecks.TryGetValue(index, out var known)) return known;
+        var decks = new List<VehicleDeck>();
+        for (int k = 0; k < trailer.Sections.Length; k++)
+        {
+            var rig = HeavyRig.CreateTrailer(trailer, k, 0f);
+            if (rig.Deck != null) decks.Add(rig.Deck);
+            rig.Free();
+        }
+        return _trailerDecks[index] = decks.ToArray();
+    }
+
+    /// <summary>The pickup's doors are a car's, worked one by one (#463), and the army's cars' (#714); a bus's open together.</summary>
+    public bool CarDoors => Spec.Class is HeavyClass.Pickup or HeavyClass.Offroader or HeavyClass.Transporter || Spec.Farm;
 
     private static readonly Dictionary<RideKind, (SeatAnchor[] Seats, VehicleDeck[] Decks)> _models = new();
 
@@ -451,11 +552,13 @@ public sealed class Truck : Rideable, IEngined, IBed
     public override Node3D BuildParkedVisual(int riderIndex)
     {
         var root = HeavyRig.Create(Spec, 0, Load);
+        DressFarm(root, 0);
         for (int k = 1; k < Train.Count; k++)
         {
             var rig = SectionRig(k);
             rig.Name = $"Section{k}";
             rig.Transform = NodeLocal(k);
+            DressFarm(rig, k);
             root.AddChild(rig);
         }
         return root;
@@ -463,6 +566,13 @@ public sealed class Truck : Rideable, IEngined, IBed
 
     public override IEnumerable<(Transform3D Pose, Vector3 Centre, Vector3 Size)> ExtraBoxes()
     {
+        // the combine's header, across the front, wider than its body (raised or lowered: to 2 m up)
+        if (Spec.Class == HeavyClass.Combine)
+        {
+            float cg = Train.Bodies[0].CgAt, from = Avatar.FarmMeshBuilder.HeaderFrom, to = Avatar.FarmMeshBuilder.HeaderTo;
+            yield return (Transform3D.Identity, new Vector3(0f, 1f, -cg + (from + to) * 0.5f),
+                new Vector3(Avatar.FarmMeshBuilder.HeaderWidth, 2f, to - from));
+        }
         for (int k = 1; k < Train.Count; k++)
         {
             var (centre, size) = SectionBox(k);
@@ -525,6 +635,7 @@ public sealed class Truck : Rideable, IEngined, IBed
         }
         SteerAngle = delta;
 
+        PrepareFarm(dt, u);
         var (drive, retard) = Box.Step(new DriveDemand(pedal, brake, input.Handbrake, u, ground.Grade, Train.Mass, EngineRunning), dt);
 
         float grip = Spec.Grip * SurfaceFactor(ground.Surface) * (arcade ? 1.15f : 1f);
@@ -596,7 +707,8 @@ public sealed class Truck : Rideable, IEngined, IBed
         // a bus shuts its doors and comes up off its knees as it pulls away; a door opened after
         // that (a passenger's button, #162) stays open, at their own risk
         bool moving = motion.Speed > 1.5f;
-        if (moving && !_pulledAway) { DoorsOpen = 0; Kneeling = false; }
+        // a farm machine's kneel is its implement or header (#494): it works on the move
+        if (moving && !_pulledAway && !Spec.Farm) { DoorsOpen = 0; Kneeling = false; }
         _pulledAway = moving;
     }
 
@@ -631,7 +743,9 @@ public sealed class Truck : Rideable, IEngined, IBed
 
     public int PackFlags() => (Braking ? PoseBrake : 0) | (Headlights ? PoseLights : 0) | (Reversing ? PoseReverse : 0)
         | (Kneeling ? PoseKneel : 0) | ((DoorsOpen & 15) << PoseDoorShift) | (HasBed ? BedBits(BedLoad) : (Destination & 0xFF) << PoseDestShift)
-        | (Mathf.RoundToInt(Mathf.Clamp(ThrottlePedal, 0f, 1f) * PoseThrottleSteps) << PoseThrottleShift);
+        | (Mathf.RoundToInt(Mathf.Clamp(ThrottlePedal, 0f, 1f) * PoseThrottleSteps) << PoseThrottleShift)
+        // a combine's grain tank (#494), where a bus has its destination: sacks and crop
+        | (Spec.TankItems > 0 ? Farming.MachineLoad.TankFlags(Tank) : 0);
 
     /// <summary>Whether a truck's published pose has its work bit up: the tipper's body, the mixer's discharge (#613).</summary>
     public static bool TippedInPose(Vector4 pose) => ((Mathf.RoundToInt(pose.W) >> PoseDoorShift) & TipBit) != 0;
@@ -643,8 +757,9 @@ public sealed class Truck : Rideable, IEngined, IBed
         _remoteReverse = (flags & PoseReverse) != 0;
         Kneeling = (flags & PoseKneel) != 0;
         DoorsOpen = (byte)((flags >> PoseDoorShift) & 15);
-        Destination = HasBed ? 0 : (flags >> PoseDestShift) & 0xFF;
+        Destination = HasBed || Spec.TankItems > 0 ? 0 : (flags >> PoseDestShift) & 0xFF;
         BedLoad = HasBed ? BedInFlags(flags) : 0;
+        if (Spec.TankItems > 0) SetTank(Farming.MachineLoad.TankFromFlags(flags), keepPartial: true);
         ThrottlePedal = ((flags >> PoseThrottleShift) & PoseThrottleSteps) / (float)PoseThrottleSteps;
         BrakePedal = Braking ? 1f : 0f;
     }
@@ -709,5 +824,6 @@ public sealed class Truck : Rideable, IEngined, IBed
         rig.Discharging = Discharging;
         rig.Destination = DestinationText;
         rig.BodyRoll = k < Train.Count && k > 0 ? Mathf.Clamp(-Train.Bodies[k].Accel.Y * 0.02f * Train.Bodies[k].CgHeight, -0.08f, 0.08f) : 0f;
+        DressFarm(rig, k);
     }
 }

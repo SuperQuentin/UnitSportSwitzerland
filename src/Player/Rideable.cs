@@ -17,7 +17,7 @@ public enum RideKind
     // 8..63 are cars: CarCatalog.All[kind - CarCatalog.First]. The catalog is append-only.
     // 64..95 are motorbikes: MotorbikeCatalog.All[kind - MotorbikeCatalog.First], append-only too;
     // entries 32 onwards continue at 129..192 (MotorbikeCatalog.First2, #410).
-    // 96..119 are trucks and buses: HeavyCatalog.All[kind - HeavyCatalog.First], append-only too.
+    // 96..119 are trucks and buses (and the pickup, 101, #463): HeavyCatalog.All[kind - HeavyCatalog.First], append-only too.
     /// <summary>
     /// Not a mount: a trailer standing in the world on its own (<c>Vehicles.VehicleState.Train</c>
     /// says which). Nobody rides it; a truck backs under it and couples.
@@ -311,7 +311,16 @@ public abstract class Rideable
     /// </summary>
     public virtual Avatar.VehicleDeck[] Decks => System.Array.Empty<Avatar.VehicleDeck>();
 
-    public bool Walkable => Decks.Length > 0;
+    public bool Walkable
+    {
+        get
+        {
+            // a hold alone (a boat trailer's cradle, #463) is nothing to walk about in
+            foreach (var deck in Decks)
+                if (!deck.CargoOnly) return true;
+            return false;
+        }
+    }
 
     /// <summary>
     /// A walkable vehicle is driven from its wheel inside (#384, E from outside only with the

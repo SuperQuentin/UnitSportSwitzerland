@@ -43,6 +43,11 @@
   Settings → **Wheel** tab: device picker, range, live bars, and
   **Assign** = move the control (turn right / press the pedal / press the button); an axis resting
   mid-travel binds as half of a combined gas/brake axis. Hats are buttons from `HatBase` (1000).
+- **Logitech G29 on hardware** (046d:c24f, PC mode, G HUB; with the Driving Force Shifter): 4 axes, 25
+  buttons, 1 hat, the shifter reporting through the wheel base. The preset's documented layout is right:
+  gas/brake/clutch axes 1/2/3 resting at +1 and −1 fully pressed, right/left paddle buttons 4/5,
+  shifter 1–6 and R buttons 12–18, **held while in gear and released in neutral**. `--ffbcheck` PASS:
+  push right +34°, push left −50°, a 35% push into the 60° soft lock held at 65° (no overshoot).
 - Gearbox: the trucks (#70) shift from `shift_up`/`shift_down`/`gear_*`/`clutch` and a wheel pedal holds `clutch` past half way; binding paddles and the H-shifter, and an analog clutch, are a follow-up.
 - **Force feedback** (`SteeringWheel.Force.cs`, `WheelFeel`): SDL3 haptics on the claimed wheel. Each step
   `Car`/`Truck` set `Rideable.Feel`: **aligning torque** = steered axle's side force × trail (pneumatic
