@@ -31,6 +31,13 @@ public static class SignalBuilder
     /// and <see cref="BorderGap"/> clear of it. Heads side by side keep 5 cm between their plates.
     /// </summary>
     private const float BorderGap = 0.02f, BorderWidth = 0.08f;
+    /// <summary>
+    /// The arrow under a head (#759): where the canton's plates carry it (<see cref="SignalPlan.ArrowPlates"/>)
+    /// the white band runs on this far below the housing; a bike head elsewhere has a plate of its
+    /// own this tall, just below its housing. The arrow is this much of the panel's height.
+    /// </summary>
+    private const float ArrowPanel = 0.16f, ArrowFill = 0.62f;
+
     /// <summary>Between a head's housing and its flasher's, beside the green (#759: 2 cm looked glued on).</summary>
     private const float FlasherGap = 0.06f;
     /// <summary>
@@ -108,8 +115,8 @@ public static class SignalBuilder
                 foreach (var h in heads)
                 {
                     float half = h.Half, w = HeadWidth * h.Scale, depth = HeadDepth * h.Scale;
-                    // a bracket from the pole to a head beside it
-                    var reach = h.Centre - foot;
+                    // a bracket from the pole into the back of the head's housing (not through to its face)
+                    var reach = h.Centre - h.Front * ((h.SideBySide ? GenevaDepth : depth) * 0.8f) - foot;
                     reach.Y = 0;
                     if (reach.Length() > PoleRadius * 2)
                         Tube(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(),
@@ -117,12 +124,29 @@ public static class SignalBuilder
                     // the backboard (#759): a car head's plate flush with the housing's face, clear of it by
                     // a hair, white in front and black behind (one face, PlateStyle); a bike head's only in
                     // some cantons; a pedestrian head has none
-                    bool board = h.Shape != Shape.Square && (h.Shape != Shape.Bike || signal.Plan.BikeBoard);
+                    bool plates = signal.Plan.ArrowPlates;
+                    bool board = h.Shape != Shape.Square && (h.Shape != Shape.Bike || plates);
                     float gap = BorderGap * h.Scale, band = BorderWidth * h.Scale, corner = rounded ? CornerRadius * h.Scale : 0f;
+                    // the arrow under the head: on the band run on below it where the canton does that,
+                    // on a small plate of its own under a bike head elsewhere
+                    var arrow = h.Shape == Shape.Bike || plates ? HeadMoves(signal.Plan, h) : SignalMoves.None;
+                    float panel = arrow != SignalMoves.None ? ArrowPanel * h.Scale : 0f;
+                    var face = h.Centre - h.Front * 0.002f;
                     if (board)
                     {
-                        BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), h.Centre - h.Front * 0.002f,
-                            h.Right, w * 0.5f + gap, half + gap, band, corner);
+                        BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), face,
+                            h.Right, w * 0.5f + gap, half + gap, band, corner, below: panel);
+                        if (panel > 0f)
+                            ArrowOn(vertices, colors, uvs, uv2s, indices, arrow, face + h.Front * 0.003f + Vector3.Down * (half + gap + (band + panel) * 0.5f),
+                                h.Right, (band + panel) * 0.5f * ArrowFill);
+                    }
+                    else if (panel > 0f)
+                    {
+                        // a bike head's own arrow plate, white with its back black, just below the housing
+                        float below = half + gap, height = panel + band;
+                        var at = face + Vector3.Down * (below + height * 0.5f);
+                        RoundedPlate(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), at, h.Right, w * 0.5f + gap, height * 0.5f, corner);
+                        ArrowOn(vertices, colors, uvs, uv2s, indices, arrow, at + h.Front * 0.003f, h.Right, height * 0.5f * ArrowFill);
                     }
                     if (h.SideBySide)
                     {
@@ -238,6 +262,16 @@ public static class SignalBuilder
         // left and right without straight on has no Swiss arrow: a ball
         return (g.Moves & all) == all || g.Moves == (SignalMoves.Left | SignalMoves.Right) ? SignalMoves.None : g.Moves;
     }
+
+    /// <summary>The moves a head's arrow shows on a plate: a pocket head's turn, a car head's <see cref="ArrowMoves"/>, a bike head's group's.</summary>
+    private static SignalMoves HeadMoves(SignalPlan plan, Head h) => h.Shape switch
+    {
+        Shape.LeftArrow => SignalMoves.Left,
+        Shape.RightArrow => SignalMoves.Right,
+        Shape.Bike => plan.Groups[h.Group].Moves is var m and not SignalMoves.None ? m : SignalMoves.Through,
+        Shape.Circle => ArrowMoves(plan, h.Group),
+        _ => SignalMoves.None,
+    };
 
     private static int Flasher(SignalPlan plan, int group)
     {
@@ -445,12 +479,14 @@ public static class SignalBuilder
     /// <paramref name="centre"/>, facing the viewer in front; its corners rounded by
     /// <paramref name="corner"/> inside and that plus the band outside, or square when it is 0.
     /// </summary>
+    /// <param name="below">How much further the band runs on below the opening (an arrow panel), 0 for none.</param>
     private static void BorderFrame(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
-        Color colour, Vector3 centre, Vector3 right, float innerW, float innerH, float band, float corner)
+        Color colour, Vector3 centre, Vector3 right, float innerW, float innerH, float band, float corner, float below = 0f)
     {
         int seg = corner > 0f ? 3 : 0;
         var inner = Outline(innerW, innerH, corner, seg);
-        var outer = Outline(innerW + band, innerH + band, corner + band, seg);
+        var outer = Outline(innerW + band, innerH + band + below * 0.5f, corner + band, seg);
+        for (int i = 0; i < outer.Count; i++) outer[i] -= new Vector2(0f, below * 0.5f);   // down: Vector2.Down is +y
         Vector3 Q(Vector2 p) => centre + right * p.X + Vector3.Up * p.Y;
         // the outlines run counter-clockwise as the viewer in front sees them; each quad is wound
         // clockwise, Godot's front face (PlateStyle draws the back black)
@@ -458,6 +494,30 @@ public static class SignalBuilder
         {
             int j = (i + 1) % inner.Count;
             Polygon(vertices, colors, uvs, uv2s, indices, colour, [Q(inner[i]), Q(inner[j]), Q(outer[j]), Q(outer[i])], PlateStyle);
+        }
+    }
+
+    /// <summary>A flat rounded rectangle facing the viewer in front, its back black (<see cref="PlateStyle"/>).</summary>
+    private static void RoundedPlate(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
+        Color colour, Vector3 centre, Vector3 right, float halfWidth, float halfHeight, float corner)
+    {
+        var outline = Outline(halfWidth, halfHeight, corner, corner > 0f ? 3 : 0);
+        var ring = new Vector3[outline.Count];
+        // clockwise from the front: Godot's front face
+        for (int i = 0; i < outline.Count; i++) ring[outline.Count - 1 - i] = centre + right * outline[i].X + Vector3.Up * outline[i].Y;
+        Polygon(vertices, colors, uvs, uv2s, indices, colour, ring, PlateStyle);
+    }
+
+    /// <summary>The black arrow of <paramref name="moves"/> (<see cref="SignalGlyphs"/>), <paramref name="size"/> metres to a lens radius, round <paramref name="centre"/>.</summary>
+    private static void ArrowOn(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
+        SignalMoves moves, Vector3 centre, Vector3 right, float size)
+    {
+        var colour = Housing.SrgbToLinear();
+        foreach (var polygon in SignalGlyphs.Arrow(moves))
+        {
+            var ring = new Vector3[polygon.Length];
+            for (int i = 0; i < polygon.Length; i++) ring[i] = centre + right * (polygon[i].X * size) + Vector3.Up * (polygon[i].Y * size);
+            Polygon(vertices, colors, uvs, uv2s, indices, colour, ring);
         }
     }
 

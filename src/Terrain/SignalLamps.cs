@@ -24,19 +24,34 @@ public partial class SignalLamps : Node3D
     /// <summary>
     /// What a lens shows (#759): a car lens its shape, a round one the arrow of its moves when it
     /// does not give them all (<see cref="SignalBuilder.ArrowMoves"/>); a pedestrian lens a standing
-    /// figure in the red and a walking one in the green and yellow; a bike lens a bicycle. One
-    /// mesh, material and MultiMesh each.
+    /// figure in the red and a walking one in the green and yellow; a bike lens a bicycle. A red or
+    /// yellow arrow is the inverse, as in Switzerland: the whole lens lit, the arrow dark in it
+    /// (the <c>Mask</c> icons). One mesh, material and MultiMesh each.
     /// </summary>
-    private enum Icon : byte { Round, LeftArrow, RightArrow, Standing, Walking, Bike, Straight, StraightLeft, StraightRight }
-    private const int IconCount = 9;
-
-    private static Icon IconOf(SignalBuilder.Lens lens, SignalPlan plan) => lens.Shape switch
+    private enum Icon : byte
     {
-        SignalBuilder.Shape.LeftArrow => Icon.LeftArrow,
-        SignalBuilder.Shape.RightArrow => Icon.RightArrow,
+        Round, LeftArrow, RightArrow, Standing, Walking, Bike, Straight, StraightLeft, StraightRight,
+        LeftArrowMask, RightArrowMask, StraightMask, StraightLeftMask, StraightRightMask,
+    }
+    private const int IconCount = 14;
+    /// <summary>The arrows, and how many there are before their masks.</summary>
+    private static readonly Icon[] Arrows = [Icon.LeftArrow, Icon.RightArrow, Icon.Straight, Icon.StraightLeft, Icon.StraightRight];
+
+    private static Icon IconOf(SignalBuilder.Lens lens, SignalPlan plan)
+    {
+        var icon = SymbolOf(lens, plan);
+        int arrow = Array.IndexOf(Arrows, icon);
+        return arrow >= 0 && lens.Role is SignalBuilder.Role.Red or SignalBuilder.Role.Amber ? (Icon)((int)Icon.LeftArrowMask + arrow) : icon;
+    }
+
+    private static Icon SymbolOf(SignalBuilder.Lens lens, SignalPlan plan) => lens.Shape switch
+    {
+        SignalBuilder.Shape.LeftArrow => plan.ArrowPlates ? Icon.Round : Icon.LeftArrow,
+        SignalBuilder.Shape.RightArrow => plan.ArrowPlates ? Icon.Round : Icon.RightArrow,
         SignalBuilder.Shape.Square => lens.Role == SignalBuilder.Role.Red ? Icon.Standing : Icon.Walking,
         SignalBuilder.Shape.Bike => Icon.Bike,
-        _ when lens.Role == SignalBuilder.Role.Flash => Icon.Round,
+        // where the plate under the head carries the arrow, its lenses are balls
+        _ when lens.Role == SignalBuilder.Role.Flash || plan.ArrowPlates => Icon.Round,
         _ => SignalBuilder.ArrowMoves(plan, lens.Group) switch
         {
             SignalMoves.Through => Icon.Straight,
@@ -84,7 +99,9 @@ void vertex() {
     vec3 centre = (MODELVIEW_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
     vec3 front = (MODELVIEW_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz;
     float facing = step(0.0, dot(front, -centre));
-    float lit = step(0.5, max(COLOR.r, max(COLOR.g, COLOR.b)));
+    // a masked arrow's dark vertices carry their dimming in alpha: divided out, every vertex of
+    // a lens agrees on whether it is lit
+    float lit = step(0.5, max(COLOR.r, max(COLOR.g, COLOR.b)) / max(COLOR.a, 0.001));
     // the world size of a pixel at the lens's depth (the projection flips y: its sign is not ours)
     float depth = max(-centre.z, 0.0);
     float pixel = 2.0 * depth / (abs(PROJECTION_MATRIX[1][1]) * VIEWPORT_SIZE.y);
@@ -293,21 +310,26 @@ void fragment() {
     };
 
     /// <summary>A flat lens facing +Z, built once per icon (main thread). Figures in lens radii.</summary>
-    private static Mesh LensMesh(Icon icon)
+    private static Mesh LensMesh(Icon key)
     {
-        if (Meshes[(int)icon] is { } done) return done;
+        if (Meshes[(int)key] is { } done) return done;
+        var icon = key;   // a mask draws its arrow's symbol: the cache stays under the mask
         float r = SignalBuilder.LensRadius;
         var flat = new Flat(icon == Icon.Bike ? r * 0.5f : r);   // a 100 mm bike lens (#351)
+        if (icon >= Icon.LeftArrowMask)
+        {
+            // the lit disc, and the arrow dark in it, a hair in front
+            flat.Disc(Vector2.Zero, 1f, 14);
+            flat.Ink();
+            icon = Arrows[icon - Icon.LeftArrowMask];
+        }
         switch (icon)
         {
-            case Icon.LeftArrow: flat.Arrow(-1); break;
-            case Icon.RightArrow: flat.Arrow(1); break;
-            case Icon.Straight:
-                flat.Fan([new(0f, 0.95f), new(-0.62f, 0.22f), new(0.62f, 0.22f)]);
-                flat.Line(new(0f, 0.3f), new(0f, -0.85f), 0.4f);
-                break;
-            case Icon.StraightLeft: flat.StraightAndTurn(-1); break;
-            case Icon.StraightRight: flat.StraightAndTurn(1); break;
+            case Icon.LeftArrow: flat.Glyph(SignalMoves.Left); break;
+            case Icon.RightArrow: flat.Glyph(SignalMoves.Right); break;
+            case Icon.Straight: flat.Glyph(SignalMoves.Through); break;
+            case Icon.StraightLeft: flat.Glyph(SignalMoves.Through | SignalMoves.Left); break;
+            case Icon.StraightRight: flat.Glyph(SignalMoves.Through | SignalMoves.Right); break;
             case Icon.Standing:
                 // the red figure: upright, arms at its sides, feet together
                 flat.Disc(new(0f, 0.64f), 0.17f, 10);
@@ -344,20 +366,39 @@ void fragment() {
             }
             default: flat.Disc(Vector2.Zero, 1f, 10); break;
         }
-        return Meshes[(int)icon] = flat.Mesh();
+        return Meshes[(int)key] = flat.Mesh();
     }
 
     /// <summary>Flat triangles in the lens plane, in units of the lens radius.</summary>
     private sealed class Flat(float radius)
     {
         private readonly List<Vector3> _vertices = new();
+        private readonly List<Color> _colors = new();
         private readonly List<int> _indices = new();
+        private Color _paint = Colors.White;
+        private float _z, _scale = 1f;
+
+        /// <summary>
+        /// What follows is dark (its dimming in alpha too, for the lens shader), a little smaller
+        /// and 2 mm in front: a red or yellow arrow's mask.
+        /// </summary>
+        public void Ink()
+        {
+            const float Dark = 0.08f;
+            _paint = new Color(Dark, Dark, Dark, Dark);
+            _z = 0.002f;
+            _scale = 0.82f;
+        }
 
         /// <summary>A convex polygon.</summary>
         public void Fan(Vector2[] ring)
         {
             int start = _vertices.Count;
-            foreach (var p in ring) _vertices.Add(new Vector3(p.X * radius, p.Y * radius, 0f));
+            foreach (var p in ring)
+            {
+                _vertices.Add(new Vector3(p.X * radius * _scale, p.Y * radius * _scale, _z));
+                _colors.Add(_paint);
+            }
             for (int i = 1; i + 1 < ring.Length; i++) _indices.AddRange([start, start + i, start + i + 1]);
         }
 
@@ -387,24 +428,10 @@ void fragment() {
             }
         }
 
-        /// <summary>
-        /// Straight on and a turn to <paramref name="dir"/> (-1 left, +1 right as the viewer sees
-        /// it): a stem up with its head, and a branch off its middle with its own.
-        /// </summary>
-        public void StraightAndTurn(float dir)
+        /// <summary>The arrow of <paramref name="moves"/> (<see cref="SignalGlyphs"/>).</summary>
+        public void Glyph(SignalMoves moves)
         {
-            float x = -0.3f * dir;
-            Fan([new(x, 0.95f), new(x - 0.5f, 0.4f), new(x + 0.5f, 0.4f)]);
-            Line(new(x, 0.45f), new(x, -0.85f), 0.32f);
-            Line(new(x, -0.25f), new(x + 0.7f * dir, -0.25f), 0.32f);
-            Fan([new(x + 1.22f * dir, -0.25f), new(x + 0.7f * dir, 0.25f), new(x + 0.7f * dir, -0.75f)]);
-        }
-
-        /// <summary>An arrow pointing along <paramref name="dir"/> (-1 left, +1 right as the viewer sees it): a head, then a shaft.</summary>
-        public void Arrow(float dir)
-        {
-            Fan([new(dir, 0f), new(0f, 0.75f), new(0f, -0.75f)]);
-            Fan([new(0f, -0.28f), new(0f, 0.28f), new(-dir, 0.28f), new(-dir, -0.28f)]);
+            foreach (var polygon in SignalGlyphs.Arrow(moves)) Fan(polygon);
         }
 
         public Mesh Mesh()
@@ -415,6 +442,7 @@ void fragment() {
             arrays.Resize((int)Godot.Mesh.ArrayType.Max);
             arrays[(int)Godot.Mesh.ArrayType.Vertex] = _vertices.ToArray();
             arrays[(int)Godot.Mesh.ArrayType.Normal] = normals;
+            arrays[(int)Godot.Mesh.ArrayType.Color] = _colors.ToArray();
             arrays[(int)Godot.Mesh.ArrayType.Index] = _indices.ToArray();
             var mesh = new ArrayMesh();
             mesh.AddSurfaceFromArrays(Godot.Mesh.PrimitiveType.Triangles, arrays);

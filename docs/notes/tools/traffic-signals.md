@@ -116,9 +116,13 @@
   face). User's review of a photo of a Swiss junction: the black is the white plate's back; the
   Zürich
   Wegleitung LSA only says the visible housing is matt RAL 9017 and the Kontrastblenden are
-  aluminium after SN 640 836 (not public). Bike heads get the plate only in some cantons:
-  `SignalPlan.BikeBoard` (bit 1 of the SGNL pedestrian byte, old data reads false), set by
-  RoadGen's `BikeBoard(canton)`, false everywhere until a canton is known. Pedestrian heads have
+  aluminium after SN 640 836 (not public). Some cantons' plates run on below each car and bike
+  head and carry its arrow, their bike heads on a plate too, and their car lenses are then plain
+  balls: `SignalPlan.ArrowPlates` (bit 1 of the SGNL pedestrian byte, old data reads false), set by
+  RoadGen's `ArrowPlates(canton)`, false everywhere until a canton is known. Elsewhere a bike head
+  has a small arrow plate of its own below it (`ArrowPanel` 16 cm, the arrow `ArrowFill` of it),
+  and the car lenses carry the arrows. The plate arrows and the lens arrows share
+  `SignalGlyphs.Arrow(moves)`. The model viewer's "Arrow plates" pole shows such a canton. Pedestrian heads have
   no board at all (user's review). Geneva's pedestrian head (the two-lens one, `!PedestrianAmber`,
   after the user's photo) is a light grey housing with one dark window, the red standing figure
   left and the green walking one right, side by side at 1.45 times a lens (`Head.SideBySide`);
@@ -129,7 +133,12 @@
   RightArrow groups), else None: a ball. `SignalLamps` draws straight on, straight and left,
   straight and right, or the lone turn; left plus right with no straight on stays a ball, the
   flasher stays round. A crossroads approach with both pockets shows straight on in its middle
-  head. Tier 0 `MainHead_ABallOnlyWhereItGivesEveryMove_ElseItsArrow`. Not done: the photo's arrows printed on the plate under each
+  head. Tier 0 `MainHead_ABallOnlyWhereItGivesEveryMove_ElseItsArrow`. Red and yellow arrows are
+  the inverse (user: "a coloured background with an inverted arrow"): the lens lit whole, the
+  arrow dark in it, 2 mm in front (the `Mask` icons; its dark vertices keep their dimming in
+  alpha, which the lens shader divides out, so the whole lens agrees on being lit). Green is the
+  lit arrow on black. A mask's mesh is cached under the mask, not its arrow (a reassigned key
+  once drew every green arrow masked). Not done: the photo's arrows printed on the plate under each
   head (ours are arrow masks in the lenses, which Basel-Stadt also uses).
 - **Detailed heads** (#759, "less blocky"): `SignalBuilder` draws rounded housings
   (`RoundedHousing`, 2-segment corners), a visor over each lens (`LensFittings`: an arc over the

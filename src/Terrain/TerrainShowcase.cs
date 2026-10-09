@@ -66,9 +66,10 @@ public static class TerrainShowcase
     [
         ("Vaud", () => TrafficLight(pedestrianAmber: true)),
         ("Geneva", () => TrafficLight(pedestrianAmber: false)),
+        ("Arrow plates", () => TrafficLight(pedestrianAmber: true, arrowPlates: true)),
     ];
 
-    private static Node3D TrafficLight(bool pedestrianAmber)
+    private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false)
     {
         var plan = SignalPlan.Build(
         [
@@ -77,6 +78,7 @@ public static class TerrainShowcase
             new SignalArm(Math.PI, true, true, LeftPocket: true, Pedestrians: true, Rank: 2),
             new SignalArm(-Math.PI / 2, true, true, Pedestrians: true),
         ], 353, pedestrianAmber);
+        plan.ArrowPlates = arrowPlates;
         var tile = Tile();
         tile.Signals.Add(new RoadSignal
         {
