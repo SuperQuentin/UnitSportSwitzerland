@@ -22,6 +22,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Items.RadioManager? _radios;
     private Interiors.ChurchRadios? _churchRadios;
     private Items.DroppedItems? _dropped;
+    private EntityInterest? _entityInterest;
     private PlayerRegistry? _registry;
     private ChatManager? _chat;
     private ChunkStreamer? _streamer;
@@ -133,6 +134,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // items dropped and thrown on the ground (#206), the same spawn-and-claim pattern
         _dropped = Items.DroppedItems.Create(this, origin);
         _dropped.PlayerPositions = _vehicles.PlayerPositions;
+        // which peer has which of those (#689): only what it could see from where it stands; before
+        // anything is spawned, every entity's synchronizers ask it
+        _entityInterest = EntityInterest.CreateServer(this, _players, _interest, _vehicles, _dropped, _radios);
         Audio.Cd.CdLibrary.Create(this, server: true);
         Audio.Cd.CdUpload.Create(this, server: true);   // a player's own file, scanned on the server (#736)
         // the radio by the pastor rat in every church (#370)
@@ -150,6 +154,10 @@ public partial class ServerWorld : Node3D, IOriginContainer
         // touched, every peer works the fleet out for itself from the tile and nothing is sent
         if (Systems.On(Systems.Dormant) && _chunks.Origin is { } dormantOrigin)
             AddChild(new Vehicles.DormantVehicles(_chunks, dormantOrigin));
+        // vehicles and items far from everyone go to sleep in their tile's container and come back
+        // when someone does, and after a restart (#689); after the dormant fleets, whose woken
+        // slots it keeps awake
+        World.ObjectContainers.CreateServer(this, _vehicles, _dropped, _radios, _players);
         // the paddle steamer at the Nyon landing (#303), put back each time its tile loads
         AddChild(new World.SteamerBerth(_chunks));
         // jetskis and speedboats along the harbour jetties (#383), put back a while after they are taken
@@ -449,6 +457,8 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _farmStands?.SendTo(id);
         _sleepers?.SendTo(id);
         _pallets?.SendTo(id);
+        // the dormant slots woken anywhere (#689): a far one's car is not sent, its bay must be empty
+        Vehicles.DormantVehicles.Instance?.SendTo(id);
         _structures?.SendTo(id);
         _br?.SendTo(id);
         _brCrates?.SendTo(id);
@@ -474,6 +484,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         _interiors?.ForgetPeer(id);
         _streamer?.ForgetPeer(id);
         _interest?.ForgetPeer(id);
+        _entityInterest?.ForgetPeer(id);
         _npcs?.PeerLeft(id);   // its race NPCs go to someone near them, or retire
 
         if (_players!.GetNodeOrNull<Node3D>(id.ToString()) is { } player)

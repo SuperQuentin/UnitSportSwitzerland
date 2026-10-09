@@ -583,6 +583,11 @@ src/Vehicles/DormantVehicles net tools/sitemachinenetcheck.sh
 src/Vehicles/VehicleSlot net    tools/sitemachinenetcheck.sh
 src/Vehicles/ParkingNetProbe net tools/sitemachinenetcheck.sh
 src/Terrain/Construction/SitePlans net tools/sitemachinenetcheck.sh
+src/World/ObjectContainers net tools/containernetcheck.sh
+src/World/ContainerRules net tools/containernetcheck.sh
+src/World/ContainerNetProbe net tools/containernetcheck.sh
+src/Net/EntityInterest net tools/containernetcheck.sh
+src/Vehicles/DormantVehicles net tools/containernetcheck.sh
 # #558 PR 3: the cars in an underground car park are vehicles asleep (the rule's tier-0 test is HallCarTests; slot geometry is --flatcheck)
 src/Interiors/HallCar    net    tools/hallcarnetcheck.sh
 src/Interiors/ParkedCars net    tools/hallcarnetcheck.sh

@@ -96,6 +96,9 @@ public partial class InterestService : Node
         return s;
     }
 
+    /// <summary>Server: the lens a peer reported (<see cref="ReportView"/>), or the default; entity interest uses it too (#689).</summary>
+    public Interest.View ViewOf(long peer) => _views.TryGetValue(peer, out var v) ? v : Interest.View.Default;
+
     /// <summary>
     /// Server: whether <paramref name="viewer"/> may be sent <paramref name="target"/>. Everyone
     /// always has their own player. A viewer with no set yet (just joined) sees nobody else until

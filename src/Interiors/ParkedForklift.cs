@@ -45,7 +45,8 @@ public partial class ParkedForklift : Node3D
     {
         All[Key] = this;
         // a late joiner, or a hall built again after it was woken: the vehicle is already in the world
-        if (VehicleManager.Instance?.GetNodeOrNull(Slot.NodeName) != null) Show(false);
+        // (or elsewhere, out of this peer's interest, or asleep in a container: the awake set says, #689)
+        if (VehicleManager.Instance?.GetNodeOrNull(Slot.NodeName) != null || DormantVehicles.Instance?.IsAwake(Key) == true) Show(false);
     }
 
     public override void _ExitTree()

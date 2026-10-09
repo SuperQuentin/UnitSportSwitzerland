@@ -724,6 +724,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
+            || World.ContainerNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
@@ -773,6 +774,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // waking a dormant car over the network (#499), checked on the remote peer
         if (Vehicles.ParkingNetProbe.Mode() is { } parkingNet && _chunks.Origin is { } parkingOrigin)
             AddChild(new Vehicles.ParkingNetProbe(parkingNet, _chunks, parkingOrigin));
+        if (World.ContainerNetProbe.Role is { } containerNet && _chunks.Origin is { } containerOrigin)
+            AddChild(new World.ContainerNetProbe(containerNet, _chunks, containerOrigin));
         if (BattleRoyale.PrefabProbe.Requested) AddChild(new BattleRoyale.PrefabProbe());
         if (BattleRoyale.BrProbe.Role != null) AddChild(new BattleRoyale.BrProbe(items));
         if (Crafting.CampfireProbe.Requested) AddChild(new Crafting.CampfireProbe(items));

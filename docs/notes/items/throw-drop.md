@@ -4,8 +4,10 @@
   any `ItemStack` lying in the world as a `RigidBody3D`, the `RadioManager` pattern (offline `AddChild`;
   online `RequestDrop` / `RequestPickUp`, one winner, spawner removes it everywhere). The dropper is the
   authority over the fall (`Sync`: position, rotation, `Settled`), then frozen. Spawn data `DropState`
-  carries the stack (id, count, `Data`), so a photo or a CD-carrying stack keeps its data. Not saved;
-  `MaxItems` 400 (oldest goes), cleared after 15 min with nobody within 3 km, `ForgetOwner` respawns
+  carries the stack (id, count, `Data`), so a photo or a CD-carrying stack keeps its data. On a server
+  with object containers (#689, `world/object-containers`) an item nobody is near sleeps in its tile and
+  comes back, for 24 h; without them it is cleared after 15 min with nobody within 3 km.
+  `MaxItems` 400 live (oldest goes), `ForgetOwner` respawns
   a leaver's items server-owned. Radios still go through `RadioManager` (they play); everything else here.
 - **No waiting on the network.** The dropper adds a local `Proxy` at once (token in `DropState.Token`);
   the server's spawn takes over from wherever it got to (`MultiplayerSpawner.Spawned` -> `TakeOver`).

@@ -24,10 +24,12 @@ public static class Systems
         Dormant = "dormant",
         Airports = "airports",
         // the farm fields, their state and the hand/machine farming on them (#494)
-        Farming = "farming";
+        Farming = "farming",
+        // vehicles and dropped items far from everyone saved per tile and brought back (#689)
+        Containers = "containers";
 
     public static readonly string[] All =
-        { Terrain, Generated, Traffic, Trains, Npcs, Birds, Physics, Audio, Network, Sky, Interiors, Loot, Occasions, Ui, Build, Dormant, Airports, Farming };
+        { Terrain, Generated, Traffic, Trains, Npcs, Birds, Physics, Audio, Network, Sky, Interiors, Loot, Occasions, Ui, Build, Dormant, Airports, Farming, Containers };
 
     public enum WorldKind { Real, Fixture, Flat }
 
