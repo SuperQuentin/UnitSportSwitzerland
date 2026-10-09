@@ -47,16 +47,29 @@ case $bump in
 esac
 V="$MA.$MI.$PA"
 
+REPO_URL=$(git remote get-url origin | sed -E 's#git@github.com:#https://github.com/#; s#\.git$##')
+# feature clips (#487, tools/record-clip.sh): every GIF in $OUT/clips/ is uploaded with the release and shown
+# at the top of its notes, captioned by <name>.txt beside it or else its name; moved to clips/released/ after
+shopt -s nullglob; CLIPS=("$PWD/$OUT"/clips/*.gif); shopt -u nullglob
+
 section() { # title, ERE on the leading emoji code
   local body; body=$(git log --no-merges --format='%s' $range | grep -E "$2" | sed -E 's/^:[a-z0-9_+-]+: *//; s/^/- /') || true
   if [ -n "$body" ]; then printf '### %s\n%s\n\n' "$1" "$body"; fi
 }
 {
+  if [ ${#CLIPS[@]} -gt 0 ]; then
+    echo '### Highlights'
+    for c in "${CLIPS[@]}"; do
+      n=$(basename "$c" .gif); cap=${n//[-_]/ }
+      if [ -s "${c%.gif}.txt" ]; then cap=$(head -1 "${c%.gif}.txt"); fi
+      printf '**%s**\n\n![%s](%s/releases/download/v%s/%s)\n\n' "$cap" "$cap" "$REPO_URL" "$V" "$n.gif"
+    done
+  fi
   f=$(git log --no-merges --format='%s' $range | grep -vE '^:(bug|ambulance|memo|wrench|recycle|art|white_check_mark|boom):' | sed -E 's/^:[a-z0-9_+-]+: *//; s/^/- /') || true
   if [ -n "$f" ]; then printf '### Features and changes\n%s\n\n' "$f"; fi
   section "Fixes" '^:(bug|ambulance):'
   section "Docs and maintenance" '^:(memo|wrench|recycle|art|white_check_mark):'
-  if [ -n "$last" ]; then echo "**Full diff:** $(git remote get-url origin | sed -E 's#git@github.com:#https://github.com/#; s#\.git$##')/compare/$last...v$V"; fi
+  if [ -n "$last" ]; then echo "**Full diff:** $REPO_URL/compare/$last...v$V"; fi
 } > "$OUT/notes.md"
 
 echo "Next version: v$V ($bump)"; cat "$OUT/notes.md"
@@ -215,7 +228,11 @@ if [ $NOUP = 1 ]; then
   exit 0
 fi
 
-gh release create "v$V" "${ASSETS[@]}" --target "$SHA" --title "v$V" --notes-file "$REPO/$OUT/notes.md"
+gh release create "v$V" "${ASSETS[@]}" "${CLIPS[@]}" --target "$SHA" --title "v$V" --notes-file "$REPO/$OUT/notes.md"
+if [ ${#CLIPS[@]} -gt 0 ]; then
+  mkdir -p "$REPO/$OUT/clips/released/v$V"
+  for c in "${CLIPS[@]}" "${CLIPS[@]/%.gif/.txt}"; do if [ -e "$c" ]; then mv "$c" "$REPO/$OUT/clips/released/v$V/"; fi; done
+fi
 echo "Released v$V with ${#ASSETS[@]} asset(s)${SKIPPED[0]+, skipping ${SKIPPED[*]}}"
 
 # delta updates (#532): the game updates from $last with these instead of the full archive

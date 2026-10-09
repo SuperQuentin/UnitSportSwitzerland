@@ -33,6 +33,8 @@ public partial class Main : Node
 	public override void _Ready()
 	{
 		SetWindowTitle(GetWindow());
+		// --clip name,delay,seconds: films whatever follows, a probe or a shot queue (#487)
+		ClipRecorder.StartFromArgs(GetTree());
 
 		// the quick self-checks (--interestcheck, --beatcheck…) run in ClientWorld.QuickChecks
 
