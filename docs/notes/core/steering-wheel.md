@@ -48,7 +48,18 @@
   gas/brake/clutch axes 1/2/3 resting at +1 and −1 fully pressed, right/left paddle buttons 4/5,
   shifter 1–6 and R buttons 12–18, **held while in gear and released in neutral**. `--ffbcheck` PASS:
   push right +34°, push left −50°, a 35% push into the 60° soft lock held at 65° (no overshoot).
-- Gearbox: the trucks (#70) shift from `shift_up`/`shift_down`/`gear_*`/`clutch` and a wheel pedal holds `clutch` past half way; binding paddles and the H-shifter, and an analog clutch, are a follow-up.
+- **Gearbox** (#290): the paddles are `shift_up`/`shift_down`, the H-shifter's gates `gear_1`..`gear_6`/`gear_r`
+  (G29 preset version 2; Settings → Wheel → Gearbox to assign them on any wheel). **The lever is the
+  gear**: `SteeringWheel.ShifterGate` is the gate whose bound button is held (0 none, null with no gate
+  bound), polled each step by `Player/HeldShifter` for the truck and the manual car: out of the gate is
+  neutral; a gate pushed without the clutch grinds once and goes in, silently, as the clutch goes down.
+  The wheel's raised `gear_*` events are swallowed (`FootPlayer.ShifterEvent`) so a gate is not picked
+  twice. **The clutch pedal is travel**, not held past half way: `PlayerInput.WheelPedal(clutch)` into
+  `HeavyDriveline.ClutchFoot` / `Car.ClutchFoot`, followed as it is; keys stay `HeldButton` with their
+  own pace. The cars' boxes: `player/car-gearbox`.
+- **Preset versions**: `WheelPresets.Preset.Version`, saved as `WheelSettings.PresetVersion`. Bindings
+  saved from an older version gain each new button on the next claim (`WheelPresets.Upgrade`), unless
+  that button or that action is already bound elsewhere.
 - **Force feedback** (`SteeringWheel.Force.cs`, `WheelFeel`): SDL3 haptics on the claimed wheel. Each step
   `Car`/`Truck` set `Rideable.Feel`: **aligning torque** = steered axle's side force × trail (pneumatic
   0.035 m falling to 0 by 0.3 rad of slip, plus 0.02 m caster) over what that axle gives at its tarmac
