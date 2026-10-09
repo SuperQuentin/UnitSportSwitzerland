@@ -172,7 +172,8 @@ public partial class FootPlayer
         return true;
     }
 
-    private float _shoveCooldown;
+    // each vehicle struck, and when it was last: once per blow per vehicle (a bus takes three cars at once)
+    private readonly Dictionary<ulong, double> _shoved = new();
 
     /// <summary>
     /// Driven into a parked vehicle (#756): this one gives up its share of the momentum by mass,
@@ -182,7 +183,6 @@ public partial class FootPlayer
     /// </summary>
     private void ShoveInto(float dt, Vector3 mine)
     {
-        if (_shoveCooldown > 0f) { _shoveCooldown -= dt; return; }
         if (_ride is not { IsVehicle: true } ride || ride is Flyer or Boat) return;
         for (int i = 0; i < GetSlideCollisionCount(); i++)
         {
@@ -190,17 +190,25 @@ public partial class FootPlayer
             var other = c.GetCollider() as Node;
             if (other is not UnitSport.Vehicles.VehicleBody && other?.GetParent() is UnitSport.Vehicles.VehicleBody section) other = section;
             if (other is not UnitSport.Vehicles.VehicleBody parked || parked.Wrecked) continue;
-            var n = -c.GetNormal() with { Y = 0 };
-            if (n.LengthSquared() < 1e-4f) continue;
-            float closing = (mine - parked.Velocity with { Y = 0 }).Dot(n.Normalized());
+            if (mine.LengthSquared() < 0.01f || (-c.GetNormal()).Dot(mine) <= 0f) continue;
+            // on along the way this one goes, and out to the side it was hit off-centre: a car
+            // caught by a bus's corner was only pushed ahead of it, and wedged it (#751 playtest)
+            var fwd = mine.Normalized();
+            var rel = (parked.GlobalPosition - GlobalPosition) with { Y = 0 };
+            var lateral = rel - fwd * rel.Dot(fwd);
+            var n = lateral.LengthSquared() > 1e-4f
+                ? (fwd + lateral.Normalized() * Mathf.Clamp(lateral.Length() / 2f, 0f, 1.2f)).Normalized() : fwd;
+            float closing = (mine - parked.Velocity with { Y = 0 }).Dot(n);
             if (closing < 0.3f) continue;
             float md = UnitSport.Vehicles.VehicleBody.MassOf(ride), m = UnitSport.Vehicles.VehicleBody.MassOf(parked.Ride);
+            ulong id = parked.GetInstanceId();
+            if (_shoved.TryGetValue(id, out double last) && GameClock.Now - last < 0.3) continue;
+            if (_shoved.Count > 16) _shoved.Clear();
+            _shoved[id] = GameClock.Now;
             float share = (1f + UnitSport.Vehicles.VehicleBody.ShoveRestitution) * closing / (md + m);
-            parked.TakeShove(n.Normalized() * (share * md));
+            parked.TakeShove(n * (share * md), c.GetPosition());
             _motion.Speed = Mathf.Sign(_motion.Speed) * Mathf.Max(0f, Mathf.Abs(_motion.Speed) - share * m);
             GD.Print($"[shove] {ride.Label} into {parked.Ride.Label} closing {closing:0.0} m/s: it takes {share * md:0.0}, this loses {share * m:0.0}");
-            _shoveCooldown = 0.3f;
-            return;
         }
     }
 

@@ -22,6 +22,11 @@ public partial class VehicleBody
 
     /// <summary>The sideways part of a shove, sliding across its own heading until the tyres stop it.</summary>
     private Vector3 _shove;
+    /// <summary>Yaw rate from an off-centre blow, rad/s, until the tyres stop it.</summary>
+    private float _spin;
+    /// <summary>A shoved vehicle's spin dies at this rate, rad/s².</summary>
+    [Tunable("rad/s² a shoved vehicle's spin dies at; 1-8")]
+    public static float SpinGrip = 3f;
 
     /// <summary>Mass in kg of a ride, for who shoves whom; a guess where the ride carries none.</summary>
     public static float MassOf(Rideable? ride) => ride switch
@@ -36,23 +41,28 @@ public partial class VehicleBody
     /// A driver's blow (<c>FootPlayer.ShoveInto</c>): this vehicle's velocity changes by
     /// <paramref name="kick"/>, on its authority (asked over the network when that is not here).
     /// </summary>
-    public void TakeShove(Vector3 kick)
+    public void TakeShove(Vector3 kick, Vector3 at)
     {
         if (Wrecked || _inHold || Ride is Flyer or Boat or Airstairs) return;
-        if (IsMultiplayerAuthority()) Shove(kick);
-        else RpcId(GetMultiplayerAuthority(), MethodName.ShovedBy, kick);
+        // where it was struck, from its middle: origin-free, so it means the same on every peer
+        var lever = (at - GlobalPosition) with { Y = 0 };
+        if (IsMultiplayerAuthority()) Shove(kick, lever);
+        else RpcId(GetMultiplayerAuthority(), MethodName.ShovedBy, kick, lever);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void ShovedBy(Vector3 kick)
+    private void ShovedBy(Vector3 kick, Vector3 lever)
     {
-        // a blow is a few m/s: anything past a fast car's worth is not one
-        if (IsMultiplayerAuthority() && kick.Length() < 40f) TakeShove(kick);
+        // a blow is a few m/s, from somewhere on the body: anything past that is not one
+        if (IsMultiplayerAuthority() && kick.Length() < 40f && lever.Length() < 30f) Shove(kick, lever);
     }
 
     /// <summary>A change of velocity from a blow: along its heading it rolls, across it slides; asleep, it wakes.</summary>
-    private void Shove(Vector3 kick)
+    private void Shove(Vector3 kick, Vector3 lever)
     {
+        // turned by a blow off its middle: the kick's moment over the body's own (a box's, from the hull)
+        var size = GetNodeOrNull<CollisionShape3D>("Hull")?.Shape is BoxShape3D box ? box.Size : new Vector3(1.8f, 1.4f, 4.4f);
+        _spin += lever.Cross(kick).Y / Mathf.Max((size.X * size.X + size.Z * size.Z) / 12f, 0.5f);
         var heading = -GlobalTransform.Basis.Z with { Y = 0 };
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
         float along = kick.Dot(heading);
@@ -65,6 +75,14 @@ public partial class VehicleBody
             SetAnchored(true);
             if (_sync != null) _sync.ReplicationInterval = 0.05f;
         }
+    }
+
+    /// <summary>The spin of a shove on top of a step's yaw, and its decay: radians to turn this step.</summary>
+    private float Spin(float dt, bool onFloor)
+    {
+        float turn = _spin * dt;
+        _spin = Mathf.MoveToward(_spin, 0f, (onFloor ? SpinGrip : 0.3f) * dt);
+        return turn;
     }
 
     /// <summary>The slide of a shove on top of a step's velocity, and its decay.</summary>
