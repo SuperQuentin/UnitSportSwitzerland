@@ -34,6 +34,19 @@ public partial class MovieStudio : Screen
     private CheckButton _worldSound = null!;
     private bool _shownPlaying;
 
+    // the camera track (#669)
+    private WorldOrigin _origin = null!;
+    private CheckButton _lookThrough = null!;
+    private OptionButton _ease = null!, _aim = null!;
+    private HSlider _lens = null!;
+    private Label _lensLabel = null!;
+    private Button _deleteKey = null!;
+    private HScrollBar _scroll = null!;
+    private bool _syncingScroll;
+    private int _aimLanes = -1;
+    private PopupMenu? _keyMenu;
+    private Button _fly = null!;
+
     private static readonly StringName Forward = PlayerInput.TriggerRight, Backward = PlayerInput.TriggerLeft;
     private static readonly double[] Speeds = { 0.1, 0.25, 0.5, 1, 2, 4 };
 
@@ -49,8 +62,10 @@ public partial class MovieStudio : Screen
     public static MovieStudio Create(ClientWorld world, double? startAt = null) => new(world, startAt) { Name = "MovieStudio" };
 
     private static string Hints(InputDevice device) => device == InputDevice.KeyboardMouse
-        ? "Space play  ·  J / L play back / forward  ·  ← → frame (Shift 1 s)  ·  S split  ·  Del delete  ·  Ctrl+D duplicate  ·  Tab next actor  ·  M marker, Ctrl+← → between markers, double-click a beat  ·  drop a song on the window  ·  right-drag orbit, wheel zoom"
-        : "Y play  ·  LT / RT shuttle  ·  X split  ·  R3 marker on the beat  ·  D-pad on the timeline: frame  ·  right stick orbit, LB / RB zoom  ·  B back";
+        ? "Space play  ·  J / L back / forward  ·  ← → frame (Shift 1 s)  ·  S split, Shift+S cut all, Ctrl+click a clip: blade  ·  Del delete  ·  Ctrl+D duplicate  ·  "
+          + "M marker, Ctrl+← → between markers, double-click a beat  ·  wheel on the timeline zooms (Shift scrolls), = / − too  ·  "
+          + "F fly the camera (or right mouse + WASD), Tab follow an actor  ·  I camera key, V look through, right-click a key: options  ·  drop a song on the window"
+        : "Y play  ·  LT / RT shuttle  ·  X split / cut all  ·  R3 marker on the beat  ·  L3 fly the camera  ·  View: camera key  ·  right stick turn, LB / RB zoom (on the timeline: zoom it)  ·  D-pad on the timeline: frame  ·  B back";
 
     public override void _Ready()
     {
@@ -58,7 +73,16 @@ public partial class MovieStudio : Screen
         var origin = _chunks?.Origin ?? _world.StudioPlayer?.Origin ?? new WorldOrigin(2_600_000, 1_200_000);
         _stage = new MovieStage(MovieSession.Project, origin);
         _world.AddChild(_stage);
-        _camera = new StudioCamera { Target = FocusPoint };
+        _origin = origin;
+        _camera = new StudioCamera(origin) { Target = FocusPoint, PadBusy = () => _timeline?.HasFocus() == true };
+        _camera.TookOver += () => _lookThrough.SetPressedNoSignal(false);
+        _camera.FlyingChanged += () =>
+        {
+            _fly.Text = _camera.Flying ? "✈ Flying (F)" : "✈ Fly";
+            _hint.Text = _camera.Flying
+                ? "Flying: mouse to look  ·  W A S D move, Space / E up, Shift / Q down, Ctrl faster, wheel speed  ·  I camera key  ·  F or Esc: the cursor back"
+                : Hints(PlayerInput.HintDevice);
+        };
         _world.AddChild(_camera);
         _chunks?.AddAnchor(_camera);
         Freeze();
@@ -103,7 +127,8 @@ public partial class MovieStudio : Screen
         var column = UiKit.VBox(8);
         panel.AddChild(column);
 
-        var transport = UiKit.HBox(6);
+        // rows that wrap rather than run off a narrow (or big-UI) screen
+        var transport = Row();
         column.AddChild(transport);
         Tool(transport, "|◀", "To the start (Home)", () => Seek(0));
         _reverse = Tool(transport, "◀", "Play backwards (J)", () => Play(-1));
@@ -118,21 +143,57 @@ public partial class MovieStudio : Screen
         _time = UiKit.Text("", UiTheme.FontBody, UiTheme.Amber, bold: true);
         _time.CustomMinimumSize = new Vector2(150, 0);
         transport.AddChild(_time);
-        transport.AddChild(UiKit.Spacer(expand: true));
-        Tool(transport, "Split", "Cut the selected clip at the playhead (S)", Split);
-        Tool(transport, "Duplicate", "A copy after it (Ctrl+D)", Duplicate);
-        Tool(transport, "Delete", "Remove the selected clip (Del)", Delete);
-        transport.AddChild(UiKit.Spacer(w: 12));
-        Tool(transport, "Music…", "Add a song (.wav, .ogg, .mp3) at the playhead; or drop it on the window", PickMusic);
+        transport.AddChild(UiKit.Spacer(w: 10));
+        transport.AddChild(UiKit.Text("Zoom", UiTheme.FontSmall, UiTheme.TextDim));
+        Tool(transport, "−", "Zoom out (− , the wheel on the timeline)", () => _timeline.ZoomBy(0.66f));
+        Tool(transport, "Fit", "The whole movie in view", () => _timeline.Fit());
+        Tool(transport, "+", "Zoom in (= , the wheel on the timeline)", () => _timeline.ZoomBy(1.5f));
+
+        var edits = Row();
+        column.AddChild(edits);
+        Tool(edits, "Split", "Cut the selected clip at the playhead, or every lane if it is not under it (S)", Split);
+        Tool(edits, "Cut all", "Cut every clip under the playhead (Shift+S); Ctrl+click a clip cuts it there", CutAll);
+        Tool(edits, "Duplicate", "A copy after it (Ctrl+D)", Duplicate);
+        Tool(edits, "Delete", "Remove the selected clip or camera key (Del)", Delete);
+        edits.AddChild(UiKit.Spacer(w: 10));
+        Tool(edits, "Music…", "Add a song (.wav, .ogg, .mp3) at the playhead; or drop it on the window", PickMusic);
         _worldSound = new CheckButton { Text = "World sound", ButtonPressed = true, TooltipText = "The puppets' live engines and steps; off when the recorded game sound plays instead" };
         _worldSound.Toggled += WorldSound;
-        transport.AddChild(_worldSound);
+        edits.AddChild(_worldSound);
+        edits.AddChild(UiKit.Spacer(w: 10));
+        // the camera track: a key from the view, the view through the track, and the key's options
+        _fly = Tool(edits, "✈ Fly", "Fly the camera freely: mouse to look, WASD, Space / Shift up and down, Ctrl faster, wheel speed; F or Esc for the cursor (pad: L3)", () => _camera.SetFlying(!_camera.Flying));
+        Tool(edits, "◆ Key", "A camera key from this view at the playhead (I, also while flying; pad View)", SetKey);
+        _lookThrough = new CheckButton { Text = "Look through camera", TooltipText = "Play the movie through the camera track (V); moving the view takes it over" };
+        edits.AddChild(_lookThrough);
+        _ease = new OptionButton { TooltipText = "How the camera goes on to the next key" };
+        foreach (var name in new[] { "Smooth", "Linear", "Cut" }) _ease.AddItem(name);
+        _ease.ItemSelected += i => { if (_timeline.SelectedKey is { } k) k.Ease = (KeyEase)(int)i; };
+        edits.AddChild(_ease);
+        _aim = new OptionButton { TooltipText = "Keep the camera aimed at an actor from this key" };
+        _aim.ItemSelected += i => { if (_timeline.SelectedKey is { } k) k.LookAt = (int)i - 1; };
+        edits.AddChild(_aim);
+        _lens = new HSlider { MinValue = CameraTrack.MinLens, MaxValue = CameraTrack.MaxLens, Step = 1, Value = 24, CustomMinimumSize = new Vector2(110, 0), TooltipText = "Lens, mm (the key's, or the view's)" };
+        _lens.ValueChanged += OnLens;
+        edits.AddChild(_lens);
+        _lensLabel = UiKit.Text("24 mm", UiTheme.FontSmall, UiTheme.Text);
+        _lensLabel.CustomMinimumSize = new Vector2(52, 0);
+        edits.AddChild(_lensLabel);
+        _deleteKey = Tool(edits, "✕", "Delete this camera key", () => { if (_timeline.SelectedKey is { } k) DeleteKey(k); });
 
         _timeline = new TimelineView(_stage);
-        _timeline.SelectionChanged += () => { FocusSelected(); Frame(); };
-        var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(0, 150), HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
+        // picking a clip only picks it: the camera is the studio's own, it does not jump to the actor
+        _timeline.SelectionChanged += FocusSelected;
+        _timeline.KeySelectionChanged += ShowKeyOptions;
+        _timeline.KeyMenuRequested += OpenKeyMenu;
+        _timeline.ViewChanged += SyncScroll;
+        var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(0, 170), HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
         scroll.AddChild(_timeline);
         column.AddChild(scroll);
+        _scroll = new HScrollBar { Step = 0, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _scroll.ValueChanged += v => { if (!_syncingScroll) _timeline.Left = v; };
+        column.AddChild(_scroll);
+        ShowKeyOptions();
 
         PlayerInput.DeviceChanged += ShowHints;
         ShowHints();
@@ -150,7 +211,8 @@ public partial class MovieStudio : Screen
                 Seek(_startAt ?? last.Start);
             }
             else Seek(0);
-            Frame();
+            // a free camera of its own, placed once looking at the action
+            Callable.From(PlaceCamera).CallDeferred();
         }).CallDeferred();
     }
 
@@ -160,6 +222,7 @@ public partial class MovieStudio : Screen
     {
         PlayerInput.DeviceChanged -= ShowHints;
         GetWindow().FilesDropped -= OnFilesDropped;
+        if (IsInstanceValid(_camera) && _camera.Flying) _camera.SetFlying(false);
         Audio.SfxBus.ApplyVolumes();   // the world's buses as the settings have them again
         if (IsInstanceValid(_camera))
         {
@@ -206,6 +269,8 @@ public partial class MovieStudio : Screen
         // a pad's triggers shuttle: the harder, the faster
         if (_import != null) StepImport();
         float shuttle = Input.GetActionStrength(Forward) - Input.GetActionStrength(Backward);
+        if (_lookThrough.ButtonPressed) ShowThroughCamera();
+        if (MovieSession.Project.Lanes.Count != _aimLanes) FillAim();
         if (Math.Abs(shuttle) > 0.15f) { _stage.Playing = false; _stage.Seek(_stage.Time + shuttle * 2 * delta); }
 
         // text only when the second shown changes, not every frame of playback
@@ -238,7 +303,16 @@ public partial class MovieStudio : Screen
         return null;
     }
 
-    /// <summary>The view jumps to the focused actor, close for a figure, further back for whatever it rides.</summary>
+    /// <summary>The free camera behind whoever is on screen, close for a figure, further back for a ride.</summary>
+    private void PlaceCamera()
+    {
+        var puppet = _stage.Puppet(_focusLane);
+        for (int lane = 0; lane < MovieSession.Project.Lanes.Count && puppet == null; lane++) puppet = _stage.Puppet(lane);
+        if (puppet != null) _camera.PlaceNear(puppet.GlobalPosition, puppet.Ride == RideKind.OnFoot ? 7f : 24f);
+        else _camera.PlaceNear(_camera.GlobalPosition, 7f);
+    }
+
+    /// <summary>Follow the focused actor (Tab): the view orbits them, close for a figure, further back for a ride.</summary>
     private void Frame()
     {
         var puppet = _stage.Puppet(_focusLane);
@@ -249,7 +323,7 @@ public partial class MovieStudio : Screen
 
     private void FocusSelected()
     {
-        if (MovieSession.Project.Find(_timeline.Selected) is { } clip) _focusLane = clip.Lane;
+        if (MovieSession.Project.Find(_timeline.Selected) is { Audio: false } clip) _focusLane = clip.Lane;
     }
 
     // ---- input -----------------------------------------------------------------------------------
@@ -258,8 +332,11 @@ public partial class MovieStudio : Screen
     {
         switch (e)
         {
+            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right }:
+                _camera.Steering = true;   // held: W A S D, Q E fly the view
+                break;
             case InputEventMouseMotion m when (m.ButtonMask & (MouseButtonMask.Right | MouseButtonMask.Middle)) != 0:
-                _camera.Orbit(m.Relative * 0.006f);
+                _camera.Turn(m.Relative * 0.006f);
                 break;
             case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp }:
                 _camera.Zoom(0.88f);
@@ -273,6 +350,7 @@ public partial class MovieStudio : Screen
     public override void _Input(InputEvent e)
     {
         if (Modal.Current != null || UiFocus.TextEntryActive || !Visible) return;
+        if (_camera.Flying) { FlyingInput(e); return; }
         if (e is InputEventKey { Pressed: true } k)
         {
             bool handled = true;
@@ -289,10 +367,18 @@ public partial class MovieStudio : Screen
                 case Key.M: Mark(); break;
                 case Key.Home: Seek(0); break;
                 case Key.End: Seek(_stage.Duration); break;
-                case Key.S when !k.CtrlPressed: Split(); break;
+                case Key.S when !k.CtrlPressed && k.ShiftPressed: CutAll(); break;
+                case Key.S when !k.CtrlPressed && !_camera.Steering: Split(); break;
+                case Key.I: SetKey(); break;
+                case Key.V: _lookThrough.ButtonPressed = !_lookThrough.ButtonPressed; break;
+                case Key.Equal: _timeline.ZoomBy(1.5f); break;
+                case Key.Minus: _timeline.ZoomBy(0.66f); break;
                 case Key.Delete: Delete(); break;
                 case Key.D when k.CtrlPressed: Duplicate(); break;
                 case Key.Tab: NextActor(); break;
+                case Key.F: _camera.SetFlying(true); break;
+                // flying: W A S D Q E belong to the view, not to the shortcuts above (S, D)
+                case Key.W or Key.A or Key.D or Key.Q or Key.E when _camera.Steering: break;
                 default: handled = false; break;
             }
             if (handled) GetViewport().SetInputAsHandled();
@@ -303,10 +389,40 @@ public partial class MovieStudio : Screen
             if (b.ButtonIndex == JoyButton.Y) { Play(1); GetViewport().SetInputAsHandled(); }
             else if (b.ButtonIndex == JoyButton.X) { Split(); GetViewport().SetInputAsHandled(); }
             else if (b.ButtonIndex == JoyButton.RightStick) { Mark(); GetViewport().SetInputAsHandled(); }
+            else if (b.ButtonIndex == JoyButton.Back) { SetKey(); GetViewport().SetInputAsHandled(); }
+            else if (b.ButtonIndex == JoyButton.LeftStick) { _camera.SetFlying(true); GetViewport().SetInputAsHandled(); }
         }
     }
 
+    /// <summary>
+    /// While flying, every key and button belongs to the camera (it polls them): none reaches a button
+    /// with focus or closes the studio. Only I (a key), F, Esc / L3 / Start (stop flying) and the pad's
+    /// View (a key) do something here.
+    /// </summary>
+    private void FlyingInput(InputEvent e)
+    {
+        if (e is InputEventKey { Pressed: true, Echo: false } k)
+        {
+            if (k.PhysicalKeycode == Key.I) SetKey();
+            else if (k.PhysicalKeycode is Key.F or Key.Escape) _camera.SetFlying(false);
+        }
+        else if (e is InputEventJoypadButton { Pressed: true } b)
+        {
+            if (b.ButtonIndex == JoyButton.Back) SetKey();
+            else if (b.ButtonIndex is JoyButton.LeftStick or JoyButton.Start) _camera.SetFlying(false);
+        }
+        if (e is InputEventKey or InputEventJoypadButton or InputEventJoypadMotion) GetViewport().SetInputAsHandled();
+    }
+
     // ---- actions ---------------------------------------------------------------------------------
+
+    private static HFlowContainer Row()
+    {
+        var row = new HFlowContainer();
+        row.AddThemeConstantOverride("h_separation", 6);
+        row.AddThemeConstantOverride("v_separation", 6);
+        return row;
+    }
 
     private static Button Tool(Container into, string text, string tip, Action pressed)
     {
@@ -341,9 +457,21 @@ public partial class MovieStudio : Screen
         }
     }
 
+    /// <summary>The selected clip cut at the playhead; with none selected under it, every lane (#669).</summary>
     private void Split()
     {
-        if (MovieSession.Project.Split(_timeline.Selected, _stage.Time) is { } right) _timeline.Select(right.Id);
+        var p = MovieSession.Project;
+        if (p.Find(_timeline.Selected) is { } c && c.Covers(_stage.Time))
+        {
+            if (p.Split(c.Id, _stage.Time) is { } right) _timeline.Select(right.Id);
+        }
+        else CutAll();
+        _stage.Apply();
+    }
+
+    private void CutAll()
+    {
+        MovieSession.Project.CutAll(_stage.Time);
         _stage.Apply();
     }
 
@@ -355,6 +483,7 @@ public partial class MovieStudio : Screen
 
     private void Delete()
     {
+        if (_timeline.SelectedKey is { } key) { DeleteKey(key); return; }
         if (MovieSession.Project.Delete(_timeline.Selected)) _timeline.Select(0);
         _stage.Seek(_stage.Time);
     }
@@ -462,6 +591,136 @@ public partial class MovieStudio : Screen
         if (to is { } t) Seek(t);
     }
 
+    // ---- the camera track (#669) -------------------------------------------------------------------
+
+    /// <summary>A key from the view as it is now, at the playhead; one within a frame is replaced.</summary>
+    private void SetKey()
+    {
+        var at = _origin.ToGlobal(_camera.GlobalPosition);
+        var q = _camera.GlobalTransform.Basis.GetRotationQuaternion();
+        var key = MovieSession.Project.Camera.Set(new CameraKey
+        {
+            T = _stage.Time, E = at.E, N = at.N, Alt = at.Alt, Qx = q.X, Qy = q.Y, Qz = q.Z, Qw = q.W, Lens = _camera.Lens,
+        }, 1 / Channels.Rate);
+        _timeline.SelectKey(key);
+        ShowKeyOptions();
+    }
+
+    private Vector3? ActorAt(int lane) => _stage.Puppet(lane)?.GlobalPosition;
+
+    /// <summary>
+    /// <c>--moviekeys</c>, for screenshots: three camera keys a few seconds apart from views round the
+    /// actor (a smooth one aimed at it, a linear one, a cut), the first picked, the timeline zoomed in.
+    /// </summary>
+    public void ScreenshotKeys()
+    {
+        double t0 = _stage.Time;
+        for (int i = 0; i < 3; i++)
+        {
+            _stage.Seek(Math.Max(0, t0 - 4 + i * 3));
+            _camera.Turn(new Vector2(0.9f, 0));
+            SetKey();
+            var key = _timeline.SelectedKey!;
+            key.Ease = (KeyEase)i;
+            key.Lens = new[] { 24f, 50f, 85f }[i];
+            if (i == 0) key.LookAt = 0;
+        }
+        _timeline.SelectKey(MovieSession.Project.Camera.Keys[0]);
+        _stage.Seek(t0);
+        _timeline.ZoomBy(3f);
+        ShowKeyOptions();
+    }
+
+    private void DeleteKey(CameraKey key)
+    {
+        MovieSession.Project.Camera.Remove(key);
+        _timeline.SelectKey(null);
+    }
+
+    /// <summary>The view as the camera track has it at the playhead, aimed at an actor when the key says so.</summary>
+    private void ShowThroughCamera()
+    {
+        if (MovieSession.Project.Camera.Sample(_stage.Time, out var pose)) _camera.ShowPose(pose, ActorAt);
+    }
+
+    /// <summary>The key strip shows the selected key's options; with none, the lens is the view's own.</summary>
+    private void ShowKeyOptions()
+    {
+        var key = _timeline.SelectedKey;
+        _ease.Disabled = _aim.Disabled = _deleteKey.Disabled = key == null;
+        if (key != null)
+        {
+            _ease.Selected = (int)key.Ease;
+            FillAim();
+            _aim.Selected = Math.Clamp(key.LookAt + 1, 0, _aim.ItemCount - 1);
+        }
+        _lens.SetValueNoSignal(key?.Lens ?? _camera.Lens);
+        _lensLabel.Text = $"{_lens.Value:F0} mm";
+    }
+
+    /// <summary>"Free look" and one entry per actor lane, for the aim.</summary>
+    private void FillAim()
+    {
+        var lanes = MovieSession.Project.Lanes;
+        _aimLanes = lanes.Count;
+        int keep = _aim.Selected;
+        _aim.Clear();
+        _aim.AddItem("Free look");
+        foreach (var lane in lanes) _aim.AddItem($"Look at {lane.Label}");
+        _aim.Selected = Math.Clamp(keep, 0, _aim.ItemCount - 1);
+    }
+
+    private void OnLens(double mm)
+    {
+        _lensLabel.Text = $"{mm:F0} mm";
+        if (_timeline.SelectedKey is { } key) key.Lens = (float)mm;
+        else _camera.Lens = (float)mm;
+    }
+
+    /// <summary>Right-click on a key: its motion, its aim, delete, in a menu where the pointer is.</summary>
+    private void OpenKeyMenu(CameraKey key, Vector2 at)
+    {
+        _keyMenu?.QueueFree();
+        var menu = new PopupMenu();
+        menu.AddRadioCheckItem("Smooth", 0);
+        menu.AddRadioCheckItem("Linear", 1);
+        menu.AddRadioCheckItem("Cut", 2);
+        menu.SetItemChecked((int)key.Ease, true);
+        menu.AddSeparator();
+        menu.AddRadioCheckItem("Free look", 10);
+        menu.SetItemChecked(menu.ItemCount - 1, key.LookAt < 0);
+        var lanes = MovieSession.Project.Lanes;
+        for (int i = 0; i < lanes.Count; i++)
+        {
+            menu.AddRadioCheckItem($"Look at {lanes[i].Label}", 11 + i);
+            menu.SetItemChecked(menu.ItemCount - 1, key.LookAt == i);
+        }
+        menu.AddSeparator();
+        menu.AddItem("Set from the view", 98);
+        menu.AddItem("Delete key", 99);
+        menu.IdPressed += id =>
+        {
+            if (id <= 2) key.Ease = (KeyEase)(int)id;
+            else if (id == 10) key.LookAt = -1;
+            else if (id >= 11 && id < 98) key.LookAt = (int)id - 11;
+            else if (id == 98) { _stage.Seek(key.T); SetKey(); }
+            else if (id == 99) DeleteKey(key);
+            ShowKeyOptions();
+        };
+        AddChild(menu);
+        _keyMenu = menu;
+        menu.Popup(new Rect2I((Vector2I)at, Vector2I.Zero));
+    }
+
+    private void SyncScroll()
+    {
+        _syncingScroll = true;
+        _scroll.MaxValue = Math.Max(_stage.Duration + 5, _timeline.VisibleSeconds);
+        _scroll.Page = _timeline.VisibleSeconds;
+        _scroll.Value = _timeline.Left;
+        _syncingScroll = false;
+    }
+
     /// <summary>The stage and timeline on the session's project again: after New, Open or Save.</summary>
     private void Reload()
     {
@@ -470,7 +729,9 @@ public partial class MovieStudio : Screen
         _timeline.Select(0);
         _timeline.Fit();
         _timeline.Resync();
+        _timeline.SelectKey(null);
         _shownTime = -1;
+        _aimLanes = -1;
         ShowHints();
     }
 }
