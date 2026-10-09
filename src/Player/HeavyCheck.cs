@@ -500,6 +500,27 @@ public static class HeavyCheck
         bool inGate = h.Box.Gate == 3;
         for (int i = 0; i < 3; i++) Frame(0);
         Check(ground && inGate && h.Gear == 0, $"the shifter: gate 3 grinds without the clutch, goes in with it ({inGate}), out of the gate is neutral (gear {h.Gear})");
+
+        // the automatic with the shifter as its selector
+        var a = new Truck(HeavyCatalog.All[0], 0, 0.5f) { ShiftOverride = HeavyShift.Automatic };
+        var ar = new Run2(a);
+        a.Selector = DriveSelector.Neutral;
+        for (int i = 0; i < 2 * 60; i++) ar.Step(new RideInput(0.5f, 0f, 0f, false));
+        bool held = a.Gear == 0 && Mathf.Abs(ar.U) < 0.1f;
+        a.Selector = DriveSelector.Drive;
+        for (int i = 0; i < 6 * 60; i++) ar.Step(new RideInput(0.5f, 0f, 0f, false));
+        bool drove = a.Gear > 0 && ar.U > 1f;
+        for (int i = 0; i < 20 * 60 && ar.U > 0.05f; i++) ar.Step(new RideInput(0f, 1f, 0f, false));
+        for (int i = 0; i < 2 * 60; i++) ar.Step(new RideInput(0f, 1f, 0f, false));
+        bool noBackUp = a.Gear > 0;
+        a.Selector = DriveSelector.Reverse;
+        for (int i = 0; i < 6 * 60; i++) ar.Step(new RideInput(0.4f, 0f, 0f, false));
+        bool backed = a.Gear < 0 && ar.U < -0.5f;
+        for (int i = 0; i < 6 * 60 && ar.U < -0.05f; i++) ar.Step(new RideInput(0f, 1f, 0f, false));
+        a.Selector = DriveSelector.Park;
+        for (int i = 0; i < 60; i++) ar.Step(new RideInput(0f, 0f, 0f, false));
+        Check(held && drove && noBackUp && backed && a.Box.SpringBrakes && a.GearLabel == "P",
+            $"selector: N holds on the gas {held}, D drives {drove}, D braked to a stop stays in D {noBackUp}, R backs up on the gas {backed}, P sets the spring brakes ({a.GearLabel})");
     }
 
     private static void Air()

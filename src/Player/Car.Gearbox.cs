@@ -26,6 +26,41 @@ public sealed partial class Car
     /// <summary>The box this car is shifted with; the driver sets it (<see cref="SetGearbox"/>), everyone else's car stays automatic.</summary>
     public CarGearbox Gearbox { get; private set; }
 
+    /// <summary>
+    /// The automatic's selector from a wheel's H-shifter (<see cref="HeldShifter.Selector"/>), set by
+    /// the driver each step; <see cref="DriveSelector.None"/>: the pedals pick reverse, as always.
+    /// </summary>
+    public DriveSelector Selector { get; set; }
+
+    /// <summary>
+    /// The automatic with a selector: D drives forward (the brake at a standstill no longer backs it
+    /// up), R backs up on the gas once it is nearly stopped (rolling forward it is N until then),
+    /// N and P drive nothing, and P holds it once it is down to walking pace (a parking pawl ratchets
+    /// past faster than that).
+    /// </summary>
+    private void SelectGear(float u)
+    {
+        switch (Selector)
+        {
+            case DriveSelector.Drive: if (Gear <= 0) Gear = 1; break;
+            case DriveSelector.Reverse: Gear = u < 1f ? -1 : 0; break;
+            default: Gear = 0; break;
+        }
+    }
+
+    /// <summary>The gear as the HUD says it: P R N D3 with a selector, else the gear (R for reverse, N for neutral).</summary>
+    public string GearText => Selector switch
+    {
+        DriveSelector.Park => "P",
+        DriveSelector.Neutral => "N",
+        DriveSelector.Reverse when Gear < 0 => "R",
+        DriveSelector.Drive => DriveText[Mathf.Clamp(Gear, 0, 9)],
+        _ => Gear < 0 ? "R" : Gear == 0 ? "N" : GearDigits[Mathf.Clamp(Gear, 0, 9)],
+    };
+    // built once: the HUD asks every frame
+    private static readonly string[] DriveText = { "D", "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9" };
+    private static readonly string[] GearDigits = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+
     /// <summary>The clutch key or button held: the pedal goes down fast and comes back up over ~0.6 s.</summary>
     public bool ClutchHeld { get; set; }
     /// <summary>A real clutch pedal's travel (a steering wheel's), 0 up .. 1 floored, followed as it is.</summary>
@@ -66,6 +101,7 @@ public sealed partial class Car
     public void SetGearbox(CarGearbox mode, float u)
     {
         if (IsKart) mode = CarGearbox.Automatic;
+        if (mode != CarGearbox.Automatic) Selector = DriveSelector.None;
         if (mode == Gearbox) return;
         Gearbox = mode;
         _locked = false;

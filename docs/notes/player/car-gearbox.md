@@ -4,7 +4,13 @@
   Only the local driver's car takes it (`FootPlayer.PrepareCar` → `Car.SetGearbox` every step); NPC,
   traffic, a script's `RideControls` and a kart (centrifugal clutch) stay `Automatic`. Nothing is
   replicated: the box is the owner's, the pose already carries the rpm.
-- **Automatic**: unchanged (`Car.Step`'s own box; the brake at a standstill is reverse).
+- **Automatic**: unchanged (`Car.Step`'s own box; the brake at a standstill is reverse), unless a
+  wheel's H-shifter is bound: then the lever is a **P R N D selector** (`HeldShifter.Selector`, the
+  user's layout): gate 1 P, gate 3 and the R gate R, out of every gate N, every other gate D (4 above
+  all; no gear limit per gate). `Car.Selector`, set by `FootPlayer.PrepareCar`: D never backs up on
+  the brake, R is driven on the gas and is N while rolling forward faster than 1 m/s, N revs in place,
+  P is N plus the brake once below 1.5 m/s (a pawl ratchets past faster). HUD: `Car.GearText` (P, R,
+  N, D3). Keyboard and pad keep the pedal-picked reverse. Parked, the selector is cleared.
 - **Sequential** (`Car.Gearbox.cs`): the driver shifts with `shift_up` / `shift_down`; the automated
   clutch needs no pedal and never stalls. It drives on the automatic's model (engine speed = the
   wheels' through the gearing, floored at idle: the clutch slipping from a standstill), with a 0.18 s

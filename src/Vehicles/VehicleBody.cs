@@ -524,7 +524,10 @@ public partial class VehicleBody : CharacterBody3D
             truck.EngineRunning = false;
             truck.Box.ClutchHeld = false;
             truck.Box.ClutchFoot = 0f;
+            truck.Selector = Player.DriveSelector.None;
         }
+        // nobody's hand on a selector either (#290): the parked car behaves as it always has
+        if (Ride is Player.Car parkedCar) parkedCar.Selector = Player.DriveSelector.None;
         _motion.Yaw = Rotation.Y;
         Ride.Step(new RideInput(0f, 0f, 0f, false), new RideGround(onFloor, grade, surface), dt, ref _motion);
         Rotation = new Vector3(0, _motion.Yaw, 0);

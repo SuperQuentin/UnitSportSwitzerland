@@ -280,8 +280,12 @@ public partial class FootPlayer
         truck.Box.ClutchHeld = driver && PlayerInput.HeldButton(PlayerInput.Clutch);
         // a wheel's clutch pedal is its travel, not held past half way (#290)
         truck.Box.ClutchFoot = driver ? PlayerInput.WheelPedal(PlayerInput.Clutch) : 0f;
-        // a wheel's H-shifter: where the lever is, is the gate; out of the gate is neutral
-        if (driver && SteeringWheel.ShifterGate is { } lever
+        // a wheel's H-shifter: where the lever is, is the gate, out of the gate is neutral; on the
+        // automatic it is the selector, P R N D
+        int? wheelLever = driver ? SteeringWheel.ShifterGate : null;
+        bool automatic = truck.EffectiveMode == HeavyShift.Automatic;
+        truck.Selector = automatic && wheelLever is { } sel ? HeldShifter.Selector(sel) : DriveSelector.None;
+        if (!automatic && wheelLever is { } lever
             && _shifter.Step(lever, truck.Box.Gate, truck.Box.ClutchPedal, out bool retry) is { } gate)
         {
             bool took = truck.Box.SelectGate(gate, _motion.Speed * Mathf.Cos(_motion.Slip));

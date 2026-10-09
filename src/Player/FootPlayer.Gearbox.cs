@@ -34,7 +34,10 @@ public partial class FootPlayer
         car.EngineRunning = EngineOn;
         car.ClutchHeld = driver && PlayerInput.HeldButton(PlayerInput.Clutch);
         car.ClutchFoot = driver ? PlayerInput.WheelPedal(PlayerInput.Clutch) : 0f;
-        if (driver && car.Gearbox == CarGearbox.Manual && SteeringWheel.ShifterGate is { } lever
+        int? wheelLever = driver ? SteeringWheel.ShifterGate : null;
+        // on the automatic the H-shifter is the selector: P R N D
+        car.Selector = car.Gearbox == CarGearbox.Automatic && wheelLever is { } sel ? HeldShifter.Selector(sel) : DriveSelector.None;
+        if (car.Gearbox == CarGearbox.Manual && wheelLever is { } lever
             && _shifter.Step(lever, car.Gear, car.ClutchPedal, out bool retry) is { } gate)
         {
             bool took = car.SelectGate(gate, u);

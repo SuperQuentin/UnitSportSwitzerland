@@ -56,7 +56,8 @@
   The wheel's raised `gear_*` events are swallowed (`FootPlayer.ShifterEvent`) so a gate is not picked
   twice. **The clutch pedal is travel**, not held past half way: `PlayerInput.WheelPedal(clutch)` into
   `HeavyDriveline.ClutchFoot` / `Car.ClutchFoot`, followed as it is; keys stay `HeldButton` with their
-  own pace. The cars' boxes: `player/car-gearbox`.
+  own pace. The cars' boxes: `player/car-gearbox`. **On an automatic** (car or truck) the lever is a
+  P R N D selector instead: gate 1 P, 3 and R reverse, out of a gate N, the rest D (`DriveSelector`).
 - **Preset versions**: `WheelPresets.Preset.Version`, saved as `WheelSettings.PresetVersion`. Bindings
   saved from an older version gain each new button on the next claim (`WheelPresets.Upgrade`), unless
   that button or that action is already bound elsewhere.

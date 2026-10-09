@@ -395,6 +395,11 @@ public sealed class HeavyDriveline
         _gaining = Mathf.Lerp(_gaining, (Mathf.Abs(speed) - _lastSpeed) / Mathf.Max(dt, 1e-3f), MathX.Damp(3f, dt));
         _lastSpeed = Mathf.Abs(speed);
         if (_shift > 0f) return;
+        if (HoldNeutral)
+        {
+            if (Gear != 0) { Gear = 0; Locked = false; }
+            return;
+        }
         int top = _s.Gears.Length;
         float v = Mathf.Abs(speed);
 
@@ -457,6 +462,9 @@ public sealed class HeavyDriveline
     /// reverse, the throttle for forward again.
     /// </summary>
     public bool WantsReverse { get; set; }
+
+    /// <summary>The automatic held in neutral by a selector's N or P (#290): it picks no gear until let go.</summary>
+    public bool HoldNeutral { get; set; }
 
     /// <summary>
     /// The gear to pull away in, as Opticruise picks it: the highest of the lower third that still

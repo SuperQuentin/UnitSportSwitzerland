@@ -39,6 +39,7 @@ public static class CarGearboxCheck
         Manual();
         Sequential();
         Shifter();
+        Selector();
         Kart();
 
         settings.RideProfile = was;
@@ -251,6 +252,46 @@ public static class CarGearboxCheck
         c.Event = null;
         for (int i = 0; i < 10; i++) Frame(5);
         Check(refused && c.Gear == 0 && c.Event == null, "lever into fifth without the clutch: grinds once, stays in neutral while held there");
+    }
+
+    /// <summary>The automatic with the H-shifter as its selector: P R N D.</summary>
+    private static void Selector()
+    {
+        GD.Print("[cargear] the automatic's selector from the H-shifter (AE86 hatch)");
+        Check(HeldShifter.Selector(1) == DriveSelector.Park && HeldShifter.Selector(3) == DriveSelector.Reverse
+            && HeldShifter.Selector(-1) == DriveSelector.Reverse && HeldShifter.Selector(0) == DriveSelector.Neutral
+            && HeldShifter.Selector(4) == DriveSelector.Drive && HeldShifter.Selector(2) == DriveSelector.Drive
+            && HeldShifter.Selector(6) == DriveSelector.Drive, "gate 1 P, 3 and R reverse, out of a gate N, the others D");
+
+        var r = new Run1(Ae86(), CarGearbox.Automatic);
+        var c = r.C;
+        c.Selector = DriveSelector.Drive;
+        r.For(4f, 0.5f);
+        Check(c.Gear >= 1 && r.U > 5f && c.GearText.StartsWith('D'), $"D on the gas: {c.GearText}, {F(r.U * 3.6f)} km/h");
+        r.For(8f, 0f, 1f);
+        r.For(1f, 0f, 1f);
+        Check(c.Gear >= 1 && Mathf.Abs(r.U) < 0.1f, $"D, the brake held at a standstill: stays in drive ({c.GearText}), does not back up");
+
+        c.Selector = DriveSelector.Reverse;
+        r.For(3f, 0.4f);
+        Check(c.Gear == -1 && r.U < -1f && c.GearText == "R", $"R on the gas, not the brake: {F(r.U * 3.6f)} km/h");
+        r.For(4f, 0f, 1f);
+
+        c.Selector = DriveSelector.Neutral;
+        r.For(2f, 0.6f);
+        Check(c.Gear == 0 && Mathf.Abs(r.U) < 0.1f && c.Rpm > c.Spec.IdleRpm * 2f && c.GearText == "N", $"N on the gas: revs to {F(c.Rpm, "F0")} rpm, stands still");
+
+        // rolling at 50 km/h, the lever into R: neutral until it has slowed, never reverse at speed
+        var m = new Run1(Ae86(), CarGearbox.Automatic) { M = new RideMotion { Speed = 50f / 3.6f } };
+        m.C.Selector = DriveSelector.Reverse;
+        m.For(0.5f, 0.5f);
+        Check(m.C.Gear == 0 && m.U > 10f, $"R at {F(m.U * 3.6f)} km/h forward: neutral until stopped");
+
+        // P: rolling slowly, it holds; on a steep grade too
+        var p = new Run1(Ae86(), CarGearbox.Automatic) { M = new RideMotion { Speed = 1f } };
+        p.C.Selector = DriveSelector.Park;
+        p.For(2f, 0.8f);
+        Check(p.C.GearText == "P" && Mathf.Abs(p.U) < 0.05f, $"P at walking pace, gas down: held ({F(p.U * 3.6f, "F2")} km/h)");
     }
 
     private static void Kart()

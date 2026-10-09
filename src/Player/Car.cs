@@ -416,15 +416,20 @@ public sealed partial class Car : Rideable, IEngined
 
         // gear: brake at a standstill selects reverse, throttle selects first. The driver's own box
         // (#290) has a reverse gear of its own, driven on the gas like any other
+        // An automatic worked by a wheel's selector (P R N D) takes its gear from the lever instead
         bool auto = Gearbox == CarGearbox.Automatic;
+        bool pedalsPick = auto && Selector == DriveSelector.None;
         StepClutch(dt);
-        if (auto && Gear > 0 && u < 0.5f && input.Brake > 0.3f && input.Throttle < 0.05f) Gear = -1;
-        else if (auto && Gear < 0 && u > -0.5f && input.Throttle > 0.3f) Gear = 1;
+        if (auto && !pedalsPick) SelectGear(u);
+        else if (pedalsPick && Gear > 0 && u < 0.5f && input.Brake > 0.3f && input.Throttle < 0.05f) Gear = -1;
+        else if (pedalsPick && Gear < 0 && u > -0.5f && input.Throttle > 0.3f) Gear = 1;
         bool reverse = Gear < 0;
-        float pedal = reverse && auto ? input.Brake : input.Throttle;
-        float brake = reverse && auto ? input.Throttle : input.Brake;
+        float pedal = reverse && pedalsPick ? input.Brake : input.Throttle;
+        float brake = reverse && pedalsPick ? input.Throttle : input.Brake;
         // in reverse the brake pedal drives; braking then is the gas pedal against the motion
-        if (reverse && auto && u > 0.5f) { brake = Mathf.Max(brake, pedal); pedal = 0f; }
+        if (reverse && pedalsPick && u > 0.5f) { brake = Mathf.Max(brake, pedal); pedal = 0f; }
+        // P: the pawl holds the car once it is down to walking pace
+        if (auto && Selector == DriveSelector.Park && Mathf.Abs(u) < 1.5f) brake = 1f;
         Throttle = pedal;
         Braking = brake > 0.05f;
         BrakePedal = brake;
@@ -627,7 +632,7 @@ public sealed partial class Car : Rideable, IEngined
         // automatic gearbox: up near the redline, down when it bogs; a brief cut of drive on each
         _shiftTimer = Mathf.Max(0f, _shiftTimer - dt);
         CheckStall();
-        if (auto && !reverse && ground.OnFloor)
+        if (auto && Gear > 0 && ground.OnFloor)
         {
             if (Rpm > s.Redline * 0.94f && Gear < s.Gears.Length && pedal > 0.2f) { Gear++; _shiftTimer = 0.18f; }
             else if (Gear > 1 && Rpm < s.PeakRpm * 0.55f) Gear--;
