@@ -38,8 +38,6 @@ public static class SignalBuilder
     /// </summary>
     private const float ArrowPanel = 0.16f, ArrowFill = 0.62f;
 
-    /// <summary>Between a head's housing and its flasher's, beside the green (#759: 2 cm looked glued on).</summary>
-    private const float FlasherGap = 0.06f;
     /// <summary>
     /// The housing's rounded edges, each lens's visor over its top (open below, longer at the
     /// crown) and the ring round it (#759: the heads were plain boxes). Scaled with the head.
@@ -167,12 +165,12 @@ public static class SignalBuilder
                             h.Right, h.Front, h.Scale, square: h.Shape == Shape.Square);
                     if (h.Flasher)
                     {
-                        // the flasher's own small housing beside the green
-                        var at = h.Centre + h.Right * (HeadWidth + FlasherGap) + Vector3.Down * (half - Pitch * 0.5f);
+                        // the flasher's own small housing beside the green, spaced as a head beside it (#759)
+                        var at = h.Centre + h.Right * HeadSpacing + Vector3.Down * (half - Pitch * 0.5f);
                         RoundedHousing(vertices, colors, uvs, uv2s, indices, at - h.Front * (HeadDepth * 0.5f), h.Right, h.Front,
                             HeadWidth * 0.5f, HeadDepth * 0.5f, Pitch * 0.5f, CornerRadius);
                         LensFittings(vertices, colors, uvs, uv2s, indices, at, h.Right, h.Front, 1f, square: false);
-                        // its own white band: it overlaps the head's, white on white in one plane, so the two read as one
+                        // its own white band, clear of the head's like the next head's
                         if (board)
                             BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), at - h.Front * 0.002f,
                                 h.Right, HeadWidth * 0.5f + gap, Pitch * 0.5f + gap, band, corner);
@@ -237,7 +235,7 @@ public static class SignalBuilder
                     }
                     if (h.Flasher && Flasher(signal.Plan, h.Group) is int f and >= 0)
                     {
-                        var at = h.Centre + h.Right * (HeadWidth + FlasherGap) + Vector3.Down * (half - Pitch * 0.5f) + face;
+                        var at = h.Centre + h.Right * HeadSpacing + Vector3.Down * (half - Pitch * 0.5f) + face;
                         lamps.Lenses.Add(new Lens(Shape.Circle, new Transform3D(basis, at), j, f, Role.Flash));
                     }
                 }
