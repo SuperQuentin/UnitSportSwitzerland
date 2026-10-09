@@ -117,6 +117,18 @@
   RoadGen's `BikeBoard(canton)`, false everywhere until a canton is known. Pedestrian heads keep
   the black field in a white border. Not done: the photo's arrows printed on the plate under each
   head (ours are arrow masks in the lenses, which Basel-Stadt also uses).
+- **Detailed heads** (#759, "less blocky"): `SignalBuilder` draws rounded housings
+  (`RoundedHousing`, 2-segment corners), a visor over each lens (`LensFittings`: an arc over the
+  top and down the sides, open below, 0.13 m at the crown, flaring), a ring round each lens (a
+  square frame round a pedestrian lens), a 12-sided pole with a cap and 6-sided brackets
+  (collision stays the square column). The road shader's style 7 (`PropStyle`) keeps the props'
+  colours (no Real asphalt on the plates). `SignalLamps` picks the lens mesh per `Icon`, from
+  shape and role, without touching `SignalBuilder.Shape`: a standing figure in the red pedestrian
+  lens, a walking one in the green and the yellow, a bicycle in every bike lens (`Flat`: fans,
+  round-ended strokes, rings, in lens radii). The white of plates and sign borders speckles at
+  some sun angles in Cartoon: it does so on the road signs too, not from this change. Check:
+  model viewer `--modelsonly "Traffic light" --modelsyaw 160 --modelspitch -5`, and close-ups of
+  J2's south-west pole (x -1508.6, z 13; cars face west, pedestrians north, bike head low).
 - **Bikes at signals** (#351). A signalised left pocket (not a merged strip) carries a 1.50 m
   left-turn bike lane between it and the through lane (`LeftBikeLane`: the widening grows by it,
   the hatch opens to the through lane's edge, yellow dashes both sides from where the pocket opens,

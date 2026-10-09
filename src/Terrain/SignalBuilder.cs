@@ -21,6 +21,7 @@ public static class SignalBuilder
     private static readonly Color Housing = new(0.07f, 0.07f, 0.08f);      // RAL 9017 traffic black
     private static readonly Color Border = new(0.90f, 0.90f, 0.88f);
     private static readonly Color WhitePlate = new(0.93f, 0.93f, 0.91f);   // RAL 9016 traffic white
+    private static readonly Color Rim = new(0.20f, 0.20f, 0.22f);           // the lens ring, a shade off the housing
 
     /// <summary>Lens pitch and the 200 mm lens drawn a little smaller than its housing's cell.</summary>
     public const float Pitch = 0.3f, LensRadius = 0.09f;
@@ -30,6 +31,14 @@ public static class SignalBuilder
     /// below, and at the sides half the gap to the next head, so heads side by side share one plate.
     /// </summary>
     private const float PlateMargin = 0.05f, PlateSide = (HeadSpacing - HeadWidth) * 0.5f;
+    /// <summary>
+    /// The housing's rounded edges, each lens's visor over its top (open below, longer at the
+    /// crown) and the ring round it (#759: the heads were plain boxes). Scaled with the head.
+    /// </summary>
+    private const float CornerRadius = 0.04f, VisorLength = 0.13f, VisorGap = 0.02f, RimWidth = 0.018f;
+    private const int PoleSides = 12, VisorSegments = 6, RimSegments = 12;
+    /// <summary>The road shader's style for a prop that keeps its colour (no asphalt over the plates, #759).</summary>
+    private const float PropStyle = 7f;
     /// <summary>Head centre to head centre across a pole.</summary>
     private const float HeadSpacing = 0.55f;
     /// <summary>Lower edge of the car heads at the roadside, 2.35-3.50 m (SSV Art. 71): low alone, high above a pedestrian head.</summary>
@@ -84,8 +93,8 @@ public static class SignalBuilder
                     var reach = h.Centre - foot;
                     reach.Y = 0;
                     if (reach.Length() > PoleRadius * 2)
-                        Box(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(),
-                            new Vector3(foot.X, h.Centre.Y, foot.Z) + reach * 0.5f, reach.Normalized(), 0.04f, reach.Length() * 0.5f, 0.04f);
+                        Tube(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(),
+                            new Vector3(foot.X, h.Centre.Y, foot.Z), new Vector3(foot.X, h.Centre.Y, foot.Z) + reach, 0.025f);
                     // the backboard: a car head's white plate (#759); a bike head's only in some cantons;
                     // a pedestrian head's black field in a white border; then the housing in front
                     var board = h.Centre - h.Front * (depth + BoardThickness * 0.5f);
@@ -99,14 +108,19 @@ public static class SignalBuilder
                     else if (h.Shape != Shape.Bike || signal.Plan.BikeBoard)
                         Plate(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), board, h.Front, h.Right,
                             w * 0.5f + PlateSide * h.Scale, half + PlateMargin * h.Scale);
-                    Box(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(), h.Centre - h.Front * (depth * 0.5f), h.Right,
-                        w * 0.5f, depth * 0.5f, half, h.Front);
+                    RoundedHousing(vertices, colors, uvs, uv2s, indices, h.Centre - h.Front * (depth * 0.5f), h.Right, h.Front,
+                        w * 0.5f, depth * 0.5f, half, CornerRadius * h.Scale);
+                    float pitch = Pitch * h.Scale;
+                    for (int k = 0; k < h.Lenses; k++)
+                        LensFittings(vertices, colors, uvs, uv2s, indices, h.Centre + Vector3.Up * (half - pitch * (k + 0.5f)),
+                            h.Right, h.Front, h.Scale, square: h.Shape == Shape.Square);
                     if (h.Flasher)
                     {
                         // the flasher's own small housing beside the green
                         var at = h.Centre + h.Right * (HeadWidth + 0.02f) + Vector3.Down * (half - Pitch * 0.5f);
-                        Box(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(), at - h.Front * (HeadDepth * 0.5f), h.Right,
-                            HeadWidth * 0.5f, HeadDepth * 0.5f, Pitch * 0.5f, h.Front);
+                        RoundedHousing(vertices, colors, uvs, uv2s, indices, at - h.Front * (HeadDepth * 0.5f), h.Right, h.Front,
+                            HeadWidth * 0.5f, HeadDepth * 0.5f, Pitch * 0.5f, CornerRadius);
+                        LensFittings(vertices, colors, uvs, uv2s, indices, at, h.Right, h.Front, 1f, square: false);
                     }
                 }
             }
@@ -258,15 +272,123 @@ public static class SignalBuilder
     private static void Column(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
         Vector3 foot, float top)
     {
+        // a round pole with a cap a little wider than it (collision stays the square column)
         var colour = PoleColour.SrgbToLinear();
-        var c = new[] { new Vector3(PoleRadius, 0, PoleRadius), new Vector3(-PoleRadius, 0, PoleRadius),
-            new Vector3(-PoleRadius, 0, -PoleRadius), new Vector3(PoleRadius, 0, -PoleRadius) };
-        for (int k = 0; k < 4; k++)
+        var ring = new Vector3[PoleSides];
+        for (int k = 0; k < PoleSides; k++)
+        {
+            float a = Mathf.Tau * k / PoleSides;
+            ring[k] = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+        }
+        const float CapRise = 0.03f, CapOver = 1.25f;
+        var cap = new Vector3[PoleSides];
+        for (int k = 0; k < PoleSides; k++)
+        {
+            var a = ring[k] * PoleRadius;
+            var b = ring[(k + 1) % PoleSides] * PoleRadius;
             Polygon(vertices, colors, uvs, uv2s, indices, colour,
-                [foot + c[k] + Vector3.Down * Sink, foot + c[(k + 1) % 4] + Vector3.Down * Sink,
-                 foot + c[(k + 1) % 4] + Vector3.Up * top, foot + c[k] + Vector3.Up * top]);
-        Polygon(vertices, colors, uvs, uv2s, indices, colour,
-            [foot + c[3] + Vector3.Up * top, foot + c[2] + Vector3.Up * top, foot + c[1] + Vector3.Up * top, foot + c[0] + Vector3.Up * top]);
+                [foot + a + Vector3.Down * Sink, foot + b + Vector3.Down * Sink, foot + b + Vector3.Up * top, foot + a + Vector3.Up * top]);
+            Polygon(vertices, colors, uvs, uv2s, indices, colour,
+                [foot + a + Vector3.Up * top, foot + b + Vector3.Up * top,
+                 foot + b * CapOver + Vector3.Up * (top + CapRise), foot + a * CapOver + Vector3.Up * (top + CapRise)]);
+            cap[PoleSides - 1 - k] = foot + a * CapOver + Vector3.Up * (top + CapRise);
+        }
+        Polygon(vertices, colors, uvs, uv2s, indices, colour, cap);
+    }
+
+    /// <summary>
+    /// A housing round <paramref name="centre"/> with its edges along <paramref name="front"/>
+    /// rounded: a rounded rectangle in the right-up plane, extruded front to back.
+    /// </summary>
+    private static void RoundedHousing(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
+        Vector3 centre, Vector3 right, Vector3 front, float halfWidth, float halfDepth, float halfHeight, float radius)
+    {
+        const int Seg = 2;
+        var colour = Housing.SrgbToLinear();
+        radius = Mathf.Min(radius, Mathf.Min(halfWidth, halfHeight) * 0.9f);
+        var outline = new List<Vector2>();
+        (float X, float Y)[] corners = [(halfWidth - radius, halfHeight - radius), (radius - halfWidth, halfHeight - radius),
+            (radius - halfWidth, radius - halfHeight), (halfWidth - radius, radius - halfHeight)];
+        for (int c = 0; c < 4; c++)
+            for (int k = 0; k <= Seg; k++)
+            {
+                float a = Mathf.Pi * 0.5f * (c + k / (float)Seg);
+                outline.Add(new Vector2(corners[c].X + radius * Mathf.Cos(a), corners[c].Y + radius * Mathf.Sin(a)));
+            }
+        Vector3 P(Vector2 p, float z) => centre + right * p.X + Vector3.Up * p.Y + front * z;
+        int n = outline.Count;
+        var face = new Vector3[n];
+        var back = new Vector3[n];
+        for (int i = 0; i < n; i++)
+        {
+            face[i] = P(outline[i], halfDepth);
+            back[n - 1 - i] = P(outline[i], -halfDepth);
+            var a = outline[i];
+            var b = outline[(i + 1) % n];
+            Polygon(vertices, colors, uvs, uv2s, indices, colour, [P(a, halfDepth), P(a, -halfDepth), P(b, -halfDepth), P(b, halfDepth)]);
+        }
+        Polygon(vertices, colors, uvs, uv2s, indices, colour, face);
+        Polygon(vertices, colors, uvs, uv2s, indices, colour, back);
+    }
+
+    /// <summary>
+    /// The ring round a lens (a square frame round a pedestrian lens) just proud of the housing
+    /// at <paramref name="centre"/>, and the visor over it: an arc over the top and down the
+    /// sides, open below, longest at the crown and flaring a little toward its mouth.
+    /// </summary>
+    private static void LensFittings(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
+        Vector3 centre, Vector3 right, Vector3 front, float scale, bool square)
+    {
+        float r = LensRadius * scale, rim = RimWidth * scale;
+        var rimColour = Rim.SrgbToLinear();
+        var ringAt = centre + front * 0.003f;
+        Vector3 Q(float x, float y, Vector3 at) => at + right * x + Vector3.Up * y;
+        if (square)
+        {
+            float a = r, b = r + rim;
+            Polygon(vertices, colors, uvs, uv2s, indices, rimColour, [Q(-b, a, ringAt), Q(b, a, ringAt), Q(b, b, ringAt), Q(-b, b, ringAt)]);
+            Polygon(vertices, colors, uvs, uv2s, indices, rimColour, [Q(-b, -b, ringAt), Q(b, -b, ringAt), Q(b, -a, ringAt), Q(-b, -a, ringAt)]);
+            Polygon(vertices, colors, uvs, uv2s, indices, rimColour, [Q(-b, -a, ringAt), Q(-a, -a, ringAt), Q(-a, a, ringAt), Q(-b, a, ringAt)]);
+            Polygon(vertices, colors, uvs, uv2s, indices, rimColour, [Q(a, -a, ringAt), Q(b, -a, ringAt), Q(b, a, ringAt), Q(a, a, ringAt)]);
+        }
+        else
+            for (int k = 0; k < RimSegments; k++)
+            {
+                float a0 = Mathf.Tau * k / RimSegments, a1 = Mathf.Tau * (k + 1) / RimSegments;
+                Polygon(vertices, colors, uvs, uv2s, indices, rimColour,
+                    [Q(r * Mathf.Cos(a0), r * Mathf.Sin(a0), ringAt), Q((r + rim) * Mathf.Cos(a0), (r + rim) * Mathf.Sin(a0), ringAt),
+                     Q((r + rim) * Mathf.Cos(a1), (r + rim) * Mathf.Sin(a1), ringAt), Q(r * Mathf.Cos(a1), r * Mathf.Sin(a1), ringAt)]);
+            }
+        // the visor: from 20 degrees below the horizontal on one side, over the top, to the other
+        var colour = Housing.SrgbToLinear();
+        float inner = r + rim + VisorGap * scale, length = VisorLength * scale;
+        const float From = -0.35f, To = Mathf.Pi + 0.35f;
+        for (int k = 0; k < VisorSegments; k++)
+        {
+            float a0 = Mathf.Lerp(From, To, k / (float)VisorSegments), a1 = Mathf.Lerp(From, To, (k + 1) / (float)VisorSegments);
+            float l0 = length * (0.55f + 0.45f * Mathf.Max(0f, Mathf.Sin(a0))), l1 = length * (0.55f + 0.45f * Mathf.Max(0f, Mathf.Sin(a1)));
+            float o0 = inner * (1f + 0.25f * l0 / length), o1 = inner * (1f + 0.25f * l1 / length);
+            Polygon(vertices, colors, uvs, uv2s, indices, colour,
+                [Q(inner * Mathf.Cos(a0), inner * Mathf.Sin(a0), centre), Q(inner * Mathf.Cos(a1), inner * Mathf.Sin(a1), centre),
+                 Q(o1 * Mathf.Cos(a1), o1 * Mathf.Sin(a1), centre + front * l1), Q(o0 * Mathf.Cos(a0), o0 * Mathf.Sin(a0), centre + front * l0)]);
+        }
+    }
+
+    /// <summary>A six-sided tube from <paramref name="a"/> to <paramref name="b"/>.</summary>
+    private static void Tube(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
+        Color colour, Vector3 a, Vector3 b, float radius)
+    {
+        const int Sides = 6;
+        var axis = (b - a).Normalized();
+        var u = axis.Cross(Vector3.Up).Normalized();
+        var v = axis.Cross(u);
+        for (int k = 0; k < Sides; k++)
+        {
+            float a0 = Mathf.Tau * k / Sides, a1 = Mathf.Tau * (k + 1) / Sides;
+            var d0 = (u * Mathf.Cos(a0) + v * Mathf.Sin(a0)) * radius;
+            var d1 = (u * Mathf.Cos(a1) + v * Mathf.Sin(a1)) * radius;
+            Polygon(vertices, colors, uvs, uv2s, indices, colour, [a + d0, a + d1, b + d1, b + d0]);
+        }
     }
 
     /// <summary>A flat rectangle facing <paramref name="front"/>, both sides drawn (the road material is two-sided).</summary>
@@ -278,23 +400,6 @@ public static class SignalBuilder
         Polygon(vertices, colors, uvs, uv2s, indices, colour, [centre - r - u, centre + r - u, centre + r + u, centre - r + u]);
     }
 
-    /// <summary>A box round <paramref name="centre"/>: half sizes along <paramref name="right"/>, the horizontal at right angles to it, and up.</summary>
-    private static void Box(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
-        Color colour, Vector3 centre, Vector3 right, float halfRight, float halfDepth, float halfUp, Vector3? front = null)
-    {
-        var f = front ?? new Vector3(-right.Z, 0, right.X);
-        var x = right * halfRight;
-        var z = f * halfDepth;
-        var y = Vector3.Up * halfUp;
-        Vector3 P(int sx, int sy, int sz) => centre + x * sx + y * sy + z * sz;
-        Polygon(vertices, colors, uvs, uv2s, indices, colour, [P(-1, -1, 1), P(1, -1, 1), P(1, 1, 1), P(-1, 1, 1)]);     // front
-        Polygon(vertices, colors, uvs, uv2s, indices, colour, [P(1, -1, -1), P(-1, -1, -1), P(-1, 1, -1), P(1, 1, -1)]); // back
-        Polygon(vertices, colors, uvs, uv2s, indices, colour, [P(-1, -1, -1), P(-1, -1, 1), P(-1, 1, 1), P(-1, 1, -1)]); // left
-        Polygon(vertices, colors, uvs, uv2s, indices, colour, [P(1, -1, 1), P(1, -1, -1), P(1, 1, -1), P(1, 1, 1)]);     // right
-        Polygon(vertices, colors, uvs, uv2s, indices, colour, [P(-1, 1, 1), P(1, 1, 1), P(1, 1, -1), P(-1, 1, -1)]);     // top
-        Polygon(vertices, colors, uvs, uv2s, indices, colour, [P(-1, -1, -1), P(1, -1, -1), P(1, -1, 1), P(-1, -1, 1)]); // bottom
-    }
-
     private static void Polygon(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s,
         List<int> indices, Color color, Vector3[] ring)
     {
@@ -304,7 +409,7 @@ public static class SignalBuilder
             vertices.Add(v);
             colors.Add(color);
             uvs.Add(Vector2.Zero);
-            uv2s.Add(Vector2.Zero);
+            uv2s.Add(new Vector2(PropStyle, 0f));
         }
         for (int i = 1; i + 1 < ring.Length; i++) { indices.Add(start); indices.Add(start + i); indices.Add(start + i + 1); }
     }

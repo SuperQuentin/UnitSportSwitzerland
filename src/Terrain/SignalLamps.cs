@@ -21,9 +21,26 @@ public partial class SignalLamps : Node3D
     /// <summary>Flashing yellow: on for half a second, off for half a second, on the server clock.</summary>
     private const double BlinkHalf = 0.5;
 
+    /// <summary>
+    /// What a lens shows (#759): a car lens its shape; a pedestrian lens a standing figure in the
+    /// red and a walking one in the green and yellow; a bike lens a bicycle. One mesh, material
+    /// and MultiMesh each.
+    /// </summary>
+    private enum Icon : byte { Round, LeftArrow, RightArrow, Standing, Walking, Bike }
+    private const int IconCount = 6;
+
+    private static Icon IconOf(SignalBuilder.Lens lens) => lens.Shape switch
+    {
+        SignalBuilder.Shape.LeftArrow => Icon.LeftArrow,
+        SignalBuilder.Shape.RightArrow => Icon.RightArrow,
+        SignalBuilder.Shape.Square => lens.Role == SignalBuilder.Role.Red ? Icon.Standing : Icon.Walking,
+        SignalBuilder.Shape.Bike => Icon.Bike,
+        _ => Icon.Round,
+    };
+
     private static Shader? _shader;
-    private static readonly Material?[] Materials = new Material?[SignalBuilder.ShapeCount];
-    private static readonly Mesh?[] Meshes = new Mesh?[SignalBuilder.ShapeCount];
+    private static readonly Material?[] Materials = new Material?[IconCount];
+    private static readonly Mesh?[] Meshes = new Mesh?[IconCount];
 
     /// <summary>
     /// Lenses stay lit (unshaded) and show their colour whatever the light (#759):
@@ -41,9 +58,9 @@ public partial class SignalLamps : Node3D
     /// <item>A lens seen from behind is not drawn: the pull would show it through its head.</item>
     /// </list>
     /// </summary>
-    private static Material Material(SignalBuilder.Shape shape)
+    private static Material Material(Icon icon)
     {
-        if (Materials[(int)shape] is { } done) return done;
+        if (Materials[(int)icon] is { } done) return done;
         _shader ??= new Shader { Code = @"
 shader_type spatial;
 render_mode unshaded, cull_disabled;
@@ -74,9 +91,9 @@ void fragment() {
 }" };
         var m = new ShaderMaterial { Shader = _shader };
         float r = SignalBuilder.LensRadius;
-        m.SetShaderParameter("lens_radius", shape == SignalBuilder.Shape.Bike ? r * 0.5f : r);
-        m.SetShaderParameter("min_pixels", shape is SignalBuilder.Shape.Square or SignalBuilder.Shape.Bike ? 0f : 1.5f);
-        return Materials[(int)shape] = m;
+        m.SetShaderParameter("lens_radius", icon == Icon.Bike ? r * 0.5f : r);
+        m.SetShaderParameter("min_pixels", Blooms(icon) ? 1.5f : 0f);
+        return Materials[(int)icon] = m;
     }
 
     private static Material? _haloMaterial;
@@ -97,9 +114,9 @@ global uniform float world_night;
 // shaders/body/road.gdshaderinc's defaults, and the lens shader's pull of a lit lens
 const float ROAD_DEPTH_BIAS = 0.0004, FAR_LIFT_START = 800.0, FAR_LIFT_RATE = 0.001, FAR_LIFT_MAX = 2.0;
 const float LIT_BIAS = 0.0004;
-const vec2 RADIUS_M = vec2(0.25, 0.45);       // day, night: the bloom's radius up close
-const vec2 RADIUS_PX = vec2(3.0, 5.0);        // and the smallest it is drawn, in pixels
-const vec2 STRENGTH = vec2(0.3, 0.7);
+const vec2 RADIUS_M = vec2(0.2, 0.32);        // day, night: the bloom's radius up close
+const vec2 RADIUS_PX = vec2(2.5, 4.0);        // and the smallest it is drawn, in pixels
+const vec2 STRENGTH = vec2(0.18, 0.45);
 const vec2 FADE_START = vec2(500.0, 800.0), FADE_END = vec2(1000.0, 1500.0);
 varying vec2 corner;
 varying float strength;
@@ -140,8 +157,8 @@ void fragment() {
         return _haloMesh = mesh;
     }
 
-    /// <summary>A car head's lens blooms; a pedestrian or bike lens does not.</summary>
-    private static bool Blooms(SignalBuilder.Shape shape) => shape is not (SignalBuilder.Shape.Square or SignalBuilder.Shape.Bike);
+    /// <summary>A car head's lens blooms and grows with distance; a pedestrian or bike lens does not.</summary>
+    private static bool Blooms(Icon icon) => icon is Icon.Round or Icon.LeftArrow or Icon.RightArrow;
 
     private SignalPlan[] _plans = [];
     private SignalBuilder.Lens[] _lenses = [];
@@ -150,7 +167,9 @@ void fragment() {
     /// <summary>Per junction, its lenses (start, count) in <see cref="_lenses"/>, sorted by junction.</summary>
     private (int Start, int Count)[] _byJunction = [];
     private double[] _next = [];
-    private readonly MultiMesh?[] _multi = new MultiMesh?[SignalBuilder.ShapeCount];
+    private readonly MultiMesh?[] _multi = new MultiMesh?[IconCount];
+    /// <summary>Per lens, its <see cref="Icon"/>.</summary>
+    private Icon[] _icon = [];
     /// <summary>Per lens, its index in <see cref="_halos"/>, or -1 for a lens that does not bloom.</summary>
     private int[] _haloSlot = [];
     private MultiMesh? _halos;
@@ -170,31 +189,32 @@ void fragment() {
         _plans = lamps.Plans.ToArray();
         _lenses = lamps.Lenses.OrderBy(l => l.Junction).ToArray();
         _slot = new int[_lenses.Length];
-        var counts = new int[SignalBuilder.ShapeCount];
-        for (int i = 0; i < _lenses.Length; i++) _slot[i] = counts[(int)_lenses[i].Shape]++;
-        for (int s = 0; s < SignalBuilder.ShapeCount; s++)
+        _icon = new Icon[_lenses.Length];
+        var counts = new int[IconCount];
+        for (int i = 0; i < _lenses.Length; i++) _slot[i] = counts[(int)(_icon[i] = IconOf(_lenses[i]))]++;
+        for (int s = 0; s < IconCount; s++)
         {
             if (counts[s] == 0) continue;
             var multi = new MultiMesh
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
                 UseColors = true,
-                Mesh = LensMesh((SignalBuilder.Shape)s),
+                Mesh = LensMesh((Icon)s),
                 InstanceCount = counts[s],
             };
             _multi[s] = multi;
             AddChild(new MultiMeshInstance3D
             {
-                Multimesh = multi, MaterialOverride = Material((SignalBuilder.Shape)s),
+                Multimesh = multi, MaterialOverride = Material((Icon)s),
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             });
         }
         for (int i = 0; i < _lenses.Length; i++)
-            _multi[(int)_lenses[i].Shape]!.SetInstanceTransform(_slot[i], _lenses[i].Transform);
+            _multi[(int)_icon[i]]!.SetInstanceTransform(_slot[i], _lenses[i].Transform);
 
         _haloSlot = new int[_lenses.Length];
         int halos = 0;
-        for (int i = 0; i < _lenses.Length; i++) _haloSlot[i] = Blooms(_lenses[i].Shape) ? halos++ : -1;
+        for (int i = 0; i < _lenses.Length; i++) _haloSlot[i] = Blooms(_icon[i]) ? halos++ : -1;
         if (halos > 0)
         {
             _halos = new MultiMesh
@@ -244,7 +264,7 @@ void fragment() {
             var aspect = plan.State(lens.Group, now);
             if (aspect == SignalAspect.FlashingAmber) blinking = true;
             var colour = Colour(lens.Role, aspect, blinkOn);
-            _multi[(int)lens.Shape]!.SetInstanceColor(_slot[i], colour);
+            _multi[(int)_icon[i]]!.SetInstanceColor(_slot[i], colour);
             if (_haloSlot[i] >= 0) _halos!.SetInstanceColor(_haloSlot[i], colour);   // dark lenses do not bloom
             until = Math.Min(until, plan.UntilChange(lens.Group, now));
         }
@@ -262,51 +282,114 @@ void fragment() {
         _ => aspect == SignalAspect.FlashingAmber && blinkOn ? AmberOn : AmberOff,
     };
 
-    /// <summary>A flat lens facing +Z, built once per shape (main thread).</summary>
-    private static Mesh LensMesh(SignalBuilder.Shape shape)
+    /// <summary>A flat lens facing +Z, built once per icon (main thread). Figures in lens radii.</summary>
+    private static Mesh LensMesh(Icon icon)
     {
-        if (Meshes[(int)shape] is { } done) return done;
+        if (Meshes[(int)icon] is { } done) return done;
         float r = SignalBuilder.LensRadius;
-        Vector2[] outline = shape switch
+        var flat = new Flat(icon == Icon.Bike ? r * 0.5f : r);   // a 100 mm bike lens (#351)
+        switch (icon)
         {
-            SignalBuilder.Shape.Square => [new(-r, -r), new(r, -r), new(r, r), new(-r, r)],
-            SignalBuilder.Shape.LeftArrow => Arrow(r, -1),
-            SignalBuilder.Shape.RightArrow => Arrow(r, 1),
-            SignalBuilder.Shape.Bike => Circle(r * 0.5f, 8),   // a 100 mm bike lens (#351)
-            _ => Circle(r, 10),
-        };
-        var vertices = new Vector3[outline.Length];
-        var normals = new Vector3[outline.Length];
-        for (int i = 0; i < outline.Length; i++) { vertices[i] = new Vector3(outline[i].X, outline[i].Y, 0); normals[i] = Vector3.Back; }
-        var indices = new List<int>();
-        if (shape is SignalBuilder.Shape.LeftArrow or SignalBuilder.Shape.RightArrow)
-        {
-            // the head (0, 1, 2) and the shaft (3, 4, 5, 6)
-            indices.AddRange([0, 1, 2, 3, 4, 5, 3, 5, 6]);
+            case Icon.LeftArrow: flat.Arrow(-1); break;
+            case Icon.RightArrow: flat.Arrow(1); break;
+            case Icon.Standing:
+                // the red figure: upright, arms at its sides, feet together
+                flat.Disc(new(0f, 0.64f), 0.17f, 10);
+                flat.Fan([new(-0.21f, 0.43f), new(0.21f, 0.43f), new(0.17f, -0.14f), new(-0.17f, -0.14f)]);
+                flat.Line(new(-0.27f, 0.38f), new(-0.3f, -0.1f), 0.11f);
+                flat.Line(new(0.27f, 0.38f), new(0.3f, -0.1f), 0.11f);
+                flat.Line(new(-0.09f, -0.12f), new(-0.1f, -0.84f), 0.14f);
+                flat.Line(new(0.09f, -0.12f), new(0.1f, -0.84f), 0.14f);
+                break;
+            case Icon.Walking:
+                // the green figure, striding to the right
+                flat.Disc(new(0.08f, 0.66f), 0.17f, 10);
+                flat.Line(new(0.04f, 0.44f), new(-0.04f, -0.08f), 0.27f);
+                flat.Line(new(0.02f, 0.36f), new(0.32f, 0.04f), 0.1f);
+                flat.Line(new(0.02f, 0.36f), new(-0.3f, 0.1f), 0.1f);
+                flat.Line(new(-0.04f, -0.1f), new(0.36f, -0.84f), 0.14f);
+                flat.Line(new(-0.04f, -0.1f), new(-0.12f, -0.44f), 0.14f);
+                flat.Line(new(-0.12f, -0.44f), new(-0.4f, -0.82f), 0.14f);
+                break;
+            case Icon.Bike:
+            {
+                // two wheels, the diamond frame, saddle and bars
+                Vector2 rear = new(-0.5f, -0.28f), crank = new(-0.02f, -0.28f), seat = new(-0.18f, 0.2f),
+                    head = new(0.36f, 0.2f), front = new(0.5f, -0.28f);
+                flat.Ring(rear, 0.34f, 0.1f, 12);
+                flat.Ring(front, 0.34f, 0.1f, 12);
+                const float W = 0.09f;
+                flat.Line(rear, crank, W); flat.Line(rear, seat, W); flat.Line(seat, crank, W);
+                flat.Line(seat, head, W); flat.Line(head, crank, W); flat.Line(head, front, W);
+                flat.Line(new(-0.32f, 0.3f), new(-0.06f, 0.3f), 0.08f);
+                flat.Line(head, new(0.3f, 0.38f), W);
+                flat.Line(new(0.24f, 0.4f), new(0.44f, 0.36f), 0.08f);
+                break;
+            }
+            default: flat.Disc(Vector2.Zero, 1f, 10); break;
         }
-        else
-            for (int i = 1; i + 1 < outline.Length; i++) indices.AddRange([0, i, i + 1]);
-        var arrays = new Godot.Collections.Array();
-        arrays.Resize((int)Mesh.ArrayType.Max);
-        arrays[(int)Mesh.ArrayType.Vertex] = vertices;
-        arrays[(int)Mesh.ArrayType.Normal] = normals;
-        arrays[(int)Mesh.ArrayType.Index] = indices.ToArray();
-        var mesh = new ArrayMesh();
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-        return Meshes[(int)shape] = mesh;
+        return Meshes[(int)icon] = flat.Mesh();
     }
 
-    private static Vector2[] Circle(float r, int n)
+    /// <summary>Flat triangles in the lens plane, in units of the lens radius.</summary>
+    private sealed class Flat(float radius)
     {
-        var p = new Vector2[n];
-        for (int i = 0; i < n; i++) p[i] = new Vector2(r * Mathf.Cos(Mathf.Tau * i / n), r * Mathf.Sin(Mathf.Tau * i / n));
-        return p;
-    }
+        private readonly List<Vector3> _vertices = new();
+        private readonly List<int> _indices = new();
 
-    /// <summary>An arrow pointing along <paramref name="dir"/> (-1 left, +1 right as the viewer sees it): a head, then a shaft.</summary>
-    private static Vector2[] Arrow(float r, float dir) =>
-    [
-        new(dir * r, 0), new(0, r * 0.75f), new(0, -r * 0.75f),
-        new(0, -r * 0.28f), new(0, r * 0.28f), new(-dir * r, r * 0.28f), new(-dir * r, -r * 0.28f),
-    ];
+        /// <summary>A convex polygon.</summary>
+        public void Fan(Vector2[] ring)
+        {
+            int start = _vertices.Count;
+            foreach (var p in ring) _vertices.Add(new Vector3(p.X * radius, p.Y * radius, 0f));
+            for (int i = 1; i + 1 < ring.Length; i++) _indices.AddRange([start, start + i, start + i + 1]);
+        }
+
+        public void Disc(Vector2 centre, float r, int n)
+        {
+            var ring = new Vector2[n];
+            for (int i = 0; i < n; i++) ring[i] = centre + r * new Vector2(Mathf.Cos(Mathf.Tau * i / n), Mathf.Sin(Mathf.Tau * i / n));
+            Fan(ring);
+        }
+
+        /// <summary>A stroke with round ends, so strokes that meet join cleanly.</summary>
+        public void Line(Vector2 a, Vector2 b, float width)
+        {
+            var n = (b - a).Normalized().Orthogonal() * (width * 0.5f);
+            Fan([a - n, b - n, b + n, a + n]);
+            Disc(a, width * 0.5f, 6);
+            Disc(b, width * 0.5f, 6);
+        }
+
+        public void Ring(Vector2 centre, float r, float width, int n)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                var d0 = new Vector2(Mathf.Cos(Mathf.Tau * i / n), Mathf.Sin(Mathf.Tau * i / n));
+                var d1 = new Vector2(Mathf.Cos(Mathf.Tau * (i + 1) / n), Mathf.Sin(Mathf.Tau * (i + 1) / n));
+                Fan([centre + d0 * (r - width * 0.5f), centre + d0 * (r + width * 0.5f), centre + d1 * (r + width * 0.5f), centre + d1 * (r - width * 0.5f)]);
+            }
+        }
+
+        /// <summary>An arrow pointing along <paramref name="dir"/> (-1 left, +1 right as the viewer sees it): a head, then a shaft.</summary>
+        public void Arrow(float dir)
+        {
+            Fan([new(dir, 0f), new(0f, 0.75f), new(0f, -0.75f)]);
+            Fan([new(0f, -0.28f), new(0f, 0.28f), new(-dir, 0.28f), new(-dir, -0.28f)]);
+        }
+
+        public Mesh Mesh()
+        {
+            var normals = new Vector3[_vertices.Count];
+            Array.Fill(normals, Vector3.Back);
+            var arrays = new Godot.Collections.Array();
+            arrays.Resize((int)Godot.Mesh.ArrayType.Max);
+            arrays[(int)Godot.Mesh.ArrayType.Vertex] = _vertices.ToArray();
+            arrays[(int)Godot.Mesh.ArrayType.Normal] = normals;
+            arrays[(int)Godot.Mesh.ArrayType.Index] = _indices.ToArray();
+            var mesh = new ArrayMesh();
+            mesh.AddSurfaceFromArrays(Godot.Mesh.PrimitiveType.Triangles, arrays);
+            return mesh;
+        }
+    }
 }
