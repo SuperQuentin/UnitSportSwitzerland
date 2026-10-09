@@ -427,6 +427,79 @@ public static class HeavyCheck
         sc.Box.ShiftDown(0f);
         for (int i = 0; i < 2; i++) h.Step(new RideInput(0f, 0f, 0f, false));
         Check(grind && sc.Gear == 3 && sc.GearLabel == "2L", $"H-pattern: gate 2 with the clutch, splitter down: {sc.GearLabel} (gear {sc.Gear})");
+
+        WheelClutch();
+    }
+
+    /// <summary>
+    /// A steering wheel's clutch pedal and H-shifter (#290), in the Scania on the H-pattern: the
+    /// pedal's travel, not held or released, slips at the biting point; dropped in a high gate it
+    /// stalls; the shifter's lever out of its gate is neutral.
+    /// </summary>
+    private static void WheelClutch()
+    {
+        GD.Print("[truck] a wheel's clutch pedal and H-shifter (Scania, H-pattern + splitter)");
+        var t = new Truck(HeavyCatalog.All[0], 0, 0.5f) { ShiftOverride = HeavyShift.HPatternSplitter };
+        t.Box.Mode = HeavyShift.HPatternSplitter;
+        t.Box.Reset(true);
+        var r = new Run2(t);
+        t.Box.ClutchFoot = 1f;
+        for (int i = 0; i < 30; i++) r.Step(new RideInput(0f, 0f, 0f, false));
+        t.Box.SelectGate(1, 0f);
+        bool slipped = false, stalled = false;
+        float atBite = 0f;
+        for (float s = 0f; s < 8f; s += Dt)
+        {
+            // let out over two seconds, as a foot does
+            t.Box.ClutchFoot = Mathf.Clamp(1f - s / 2f, 0f, 1f);
+            r.Step(new RideInput(0.4f, 0f, 0f, false));
+            if (t.Box.ClutchFoot is > 0.3f and < 0.6f && t.Box.Clutch is > 0.05f and < 0.95f && !t.Box.Locked && r.U > 0.05f)
+            {
+                slipped = true;
+                atBite = t.Box.Clutch;
+            }
+            stalled |= t.Box.Stalled;
+        }
+        Check(Mathf.Abs(t.Box.ClutchPedal - t.Box.ClutchFoot) < 1e-3f, "the pedal is where the foot has it, at no pace of its own");
+        Check(slipped && !stalled && t.Box.Locked && r.U > 1.5f,
+            $"first let out over 2 s on 40% throttle: slipped at the bite (clutch {F(atBite, "F2")}), {F(r.U * 3.6f)} km/h after 8 s, locked, no stall");
+
+        var d = new Truck(HeavyCatalog.All[0], 0, 0.5f) { ShiftOverride = HeavyShift.HPatternSplitter };
+        d.Box.Mode = HeavyShift.HPatternSplitter;
+        d.Box.Reset(true);
+        var s2 = new Run2(d);
+        d.Box.ClutchFoot = 1f;
+        for (int i = 0; i < 30; i++) s2.Step(new RideInput(0f, 0f, 0f, false));
+        d.Box.SelectGate(5, 0f);
+        d.Box.ClutchFoot = 0f;
+        bool died = false;
+        for (int i = 0; i < 3 * 60 && !died; i++) { s2.Step(new RideInput(0f, 0f, 0f, false)); died = d.Box.Stalled; }
+        Check(died, $"the pedal dropped in gate 5 ({d.GearLabel}) at a standstill: it stalls");
+
+        // the lever, polled as FootPlayer does
+        var h = new Truck(HeavyCatalog.All[0], 0, 0.5f) { ShiftOverride = HeavyShift.HPatternSplitter };
+        h.Box.Mode = HeavyShift.HPatternSplitter;
+        h.Box.Reset(true);
+        var hr = new Run2(h);
+        var lever = new HeldShifter();
+        void Frame(int gate)
+        {
+            if (lever.Step(gate, h.Box.Gate, h.Box.ClutchPedal, out bool retry) is { } g)
+            {
+                bool took = h.Box.SelectGate(g, hr.U);
+                lever.Took(took);
+                if (retry && !took) h.Box.Event = null;
+            }
+            hr.Step(new RideInput(0f, 0f, 0f, false));
+        }
+        Frame(3);
+        bool ground = h.Gear == 0 && h.Box.Event == "grind";
+        h.Box.Event = null;
+        h.Box.ClutchFoot = 1f;
+        for (int i = 0; i < 3; i++) Frame(3);
+        bool inGate = h.Box.Gate == 3;
+        for (int i = 0; i < 3; i++) Frame(0);
+        Check(ground && inGate && h.Gear == 0, $"the shifter: gate 3 grinds without the clutch, goes in with it ({inGate}), out of the gate is neutral (gear {h.Gear})");
     }
 
     private static void Air()

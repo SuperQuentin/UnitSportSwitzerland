@@ -102,6 +102,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Has("--setupcheck"), Player.CarSetups.Check),
         (() => Has("--motocheck"), Player.Motorbike.Check),
         (() => Has("--truckcheck"), Player.HeavyCheck.Run),
+        (() => Has("--cargearcheck"), Player.CarGearboxCheck.Run),
         (() => Items.IconSheet.Requested, Items.IconSheet.Run),
         (() => Loot.LootChanceCheck.Requested, Loot.LootChanceCheck.Run),
         (() => Loot.ShopCheck.Requested, Loot.ShopCheck.Run),

@@ -47,8 +47,8 @@ public sealed partial class Car
     private float PeakTorque => _peakTorque ??= MeasurePeak();
     private float? _peakTorque;
 
-    /// <summary>Crankshaft and flywheel of a 1.5 to 3 l engine, kg·m².</summary>
-    private const float EngineInertia = 0.15f;
+    /// <summary>Crankshaft and flywheel of a 1.5 to 3 l engine, kg·m²: blipped, it falls from the limiter to idle in under two seconds.</summary>
+    private const float EngineInertia = 0.1f;
     /// <summary>What the clutch holds fully closed, as a share of the engine's peak torque.</summary>
     private const float ClutchMargin = 1.5f;
 
@@ -178,15 +178,23 @@ public sealed partial class Car
         return transmitted * GearRatio(Gear) * Driveline / WheelRadius * Mathf.Sign(Gear);
     }
 
-    /// <summary>Torque at the crank: the curve on the throttle, an idle governor, friction; off, only the friction.</summary>
+    /// <summary>
+    /// Torque at the crank: the curve on the throttle, an idle governor, and the drag of an engine
+    /// whose throttle is shut (friction and pumping, which brings it from the limiter to idle in a
+    /// couple of seconds and brakes the car in gear). The published curve is what it gives at full
+    /// throttle, drag already paid. A throttle body opens most of the torque in its first third at
+    /// low revs, so the pedal is progressive: a third of it pulls away.
+    /// </summary>
     private float ManualEngineTorque(float rpm, float throttle, float powerScale)
     {
         float peak = PeakTorque;
-        float friction = rpm > 5f ? peak * (0.04f + 0.06f * rpm / Spec.Redline) : 0f;
-        if (!EngineRunning) return -friction;
-        float fuel = rpm >= Spec.Redline ? 0f : throttle * Spec.TorqueAt(rpm) * powerScale;
-        // the idle governor holds idle against the clutch biting, up to about half the peak
-        float governor = rpm < Spec.IdleRpm ? Mathf.Min(0.45f * peak, (Spec.IdleRpm - rpm) / Spec.IdleRpm * 4f * peak) : 0f;
+        float drag = rpm > 5f ? peak * (0.15f + 0.2f * rpm / Spec.Redline) : 0f;
+        if (!EngineRunning) return -drag;
+        float open = 1f - (1f - throttle) * (1f - throttle);
+        float friction = drag * (1f - open);
+        float fuel = rpm >= Spec.Redline ? 0f : open * Spec.TorqueAt(rpm) * powerScale;
+        // the idle governor holds idle against its own drag and the clutch biting, up to about half the peak
+        float governor = rpm < Spec.IdleRpm ? Mathf.Min(0.45f * peak, friction + (Spec.IdleRpm - rpm) / Spec.IdleRpm * 4f * peak) : 0f;
         return Mathf.Max(fuel, governor) - friction;
     }
 
