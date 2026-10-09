@@ -99,11 +99,15 @@ public static class StreetView
                     var side = right ? a.Right : a.Left;
                     double sign = right ? 1 : -1;
                     // a path's bands first, then the sidewalk behind them, past a turn lane's widening (#120)
-                    double inner = (side.ShiftStartCm + side.ShiftEndCm) / 200.0;
+                    // past a turn lane's widening the bands ramp with it, point by point, as the game builds them (RoadStreetBuilder)
+                    var along = RoadStreetSection.Fractions(seg);
+                    double Shift(int i) => side.ShiftAt(along[i]);
+                    string Strip(double from, double width, string fill) =>
+                        string.Create(c, $"<path d=\"{Offset(pts, i => sign * (half + Shift(i) + from), X, Y)}{Offset(pts, i => sign * (half + Shift(i) + from + width), X, Y, reverse: true)}Z\" fill=\"{fill}\"/>");
+                    double inner = 0;
                     if (side.HasTrack)
                     {
-                        void Band(double from, double width, string fill) =>
-                            walks.Append(c, $"<path d=\"{Offset(pts, sign * (half + from + width / 2), X, Y)}\" stroke=\"{fill}\" stroke-width=\"{(width * PxPerM):F1}\" fill=\"none\" stroke-linecap=\"butt\"/>");
+                        void Band(double from, double width, string fill) => walks.Append(Strip(from, width, fill));
                         double verge = side.VergeDm / 10.0, path = side.BikeDm / 10.0, buffer = side.BufferDm / 10.0;
                         if (verge > 0) Band(inner, verge, "#7caa4a");
                         Band(inner + verge, path, LayoutColours[Rewrite.TileRewriter.LayoutOf(side)]);
@@ -115,7 +119,7 @@ public static class StreetView
                     {
                         double w = side.SidewalkDm / 10.0;
                         string fill = side.KerbCm == 0 ? "#b9a6d6" : w < 1.5 ? "#d9534f" : w <= 2.5 ? "#d8c08a" : "#f0a040";
-                        walks.Append(c, $"<path d=\"{Offset(pts, sign * (half + inner + w / 2), X, Y)}\" stroke=\"{fill}\" stroke-width=\"{(w * PxPerM):F1}\" fill=\"none\" stroke-linecap=\"butt\"/>");
+                        walks.Append(Strip(inner, w, fill));
                         sides++;
                     }
                     else if (a.Has(RoadAttrFlags.Urban))
@@ -168,9 +172,31 @@ public static class StreetView
                 }
             }
 
-            // bike paint (#120): lines and crossings as drawn, a symbol as a dot
+            // raised islands (roundabouts #122, the exit hatch's #682): kerbed, over the paint
+            foreach (var area in tile.AreaProps)
+            {
+                if (area.Type != AreaPropType.Island) continue;
+                var v = area.Vertices;
+                for (int k = 0; k + 2 < area.Indices.Length; k += 3)
+                {
+                    int i0 = area.Indices[k] * 3, i1 = area.Indices[k + 1] * 3, i2 = area.Indices[k + 2] * 3;
+                    bikes.Append(c, $"<path d=\"M{X(id.MinE + v[i0])} {Y(id.MaxN - v[i0 + 2])}L{X(id.MinE + v[i1])} {Y(id.MaxN - v[i1 + 2])}L{X(id.MinE + v[i2])} {Y(id.MaxN - v[i2 + 2])}Z\" fill=\"#c8c2b4\" stroke=\"#c8c2b4\" stroke-width=\"0.5\"/>");
+                }
+            }
+
+            // bike paint (#120): lines and crossings as drawn, a symbol as a dot; yellow triangles (zebras, #682/#700) filled
             foreach (var paint in tile.Paint)
             {
+                if (paint.Shape == PaintShape.Triangles && paint.Rgba == Meshing.PaintEmitter.Yellow)
+                {
+                    var tv = paint.Vertices;
+                    for (int k = 0; k + 2 < paint.Indices.Length; k += 3)
+                    {
+                        int i0 = paint.Indices[k] * 3, i1 = paint.Indices[k + 1] * 3, i2 = paint.Indices[k + 2] * 3;
+                        bikes.Append(c, $"<path d=\"M{X(id.MinE + tv[i0])} {Y(id.MaxN - tv[i0 + 2])}L{X(id.MinE + tv[i1])} {Y(id.MaxN - tv[i1 + 2])}L{X(id.MinE + tv[i2])} {Y(id.MaxN - tv[i2 + 2])}Z\" fill=\"#e6be33\"/>");
+                    }
+                    continue;
+                }
                 if ((paint.Type is not (PaintType.YellowDashed or PaintType.YellowSolid or PaintType.BikeCrossing or PaintType.BikeSymbol) && paint.Rgba != Meshing.PaintEmitter.Yellow) || paint.Shape != PaintShape.Polyline || paint.Vertices.Length < 6) continue;
                 var v = paint.Vertices;
                 var pts = new (double E, double N)[v.Length / 3];
@@ -264,6 +290,22 @@ public static class StreetView
     }
 
     /// <summary>The polyline offset sideways by <paramref name="offset"/> (+ right of travel), per-vertex bisector.</summary>
+
+    /// <summary>The polyline offset point by point (a band beside a widening, #120); reversed to close a strip.</summary>
+    private static string Offset((double E, double N)[] p, Func<int, double> offset, Func<double, string> x, Func<double, string> y, bool reverse = false)
+    {
+        var sb = new StringBuilder();
+        for (int n = 0; n < p.Length; n++)
+        {
+            int i = reverse ? p.Length - 1 - n : n;
+            int a = Math.Max(0, i - 1), b = Math.Min(p.Length - 1, i + 1);
+            double fe = p[b].E - p[a].E, fn = p[b].N - p[a].N, fl = Math.Sqrt(fe * fe + fn * fn);
+            if (fl < 1e-9) { fe = 0; fn = 1; fl = 1; }
+            double o = offset(i), ee = p[i].E + fn / fl * o, nn = p[i].N - fe / fl * o;
+            sb.Append(n == 0 && !reverse ? 'M' : 'L').Append(x(ee)).Append(' ').Append(y(nn));
+        }
+        return sb.ToString();
+    }
     private static string Offset((double E, double N)[] p, double offset, Func<double, string> x, Func<double, string> y)
     {
         var sb = new StringBuilder();

@@ -3,6 +3,8 @@
 
 # Traffic lights: where, approaches, plans (#346: #348, #349)
 
+Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `intersection-parts` (diagram).
+
 - **Where** (`PriorityPlanner.InferSignal`, `Kind.Signal`): without data, a junction with 4+
   car arms, at grade, paved, no roundabout or motorway class, at least 2 arms in and 2 out (an
   all-in junction is a divided road cut into nodes), two roads crossing that are both priority

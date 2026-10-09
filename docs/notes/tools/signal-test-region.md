@@ -20,7 +20,7 @@
   `--generated off`: outside Switzerland the generated fill has no relief to follow. Tab (or
   `--goto J3`) finds the junctions: `places.json` names them (towns with no buildings, so no
   occasion or town sound picks them).
-- **Where**: tiles E 2910-2915 N 1321-1323 (18 tiles, flat at 500 m, one 6 km rewrite block),
+- **Where**: tiles E 2910-2917 N 1321-1323 (24 tiles; J6/J7 #700 in 2916-2917), flat at 500 m, one 6 km rewrite block),
   outside Switzerland on purpose: no real tile, streamed or cached, shares an id. Manifest origin
   2913000,1322500 (shots' world x = E - 2913000, z = 1322500 - N). Junctions on one row, N 1322500,
   1 km apart (each in its own tile, arms within it: a pocket never meets a seam).
@@ -48,6 +48,8 @@ a bike box, `[adv]` an advanced bike line); the approach is named by where it co
 | J3b-narrow-arm | 2913500,1322500 | an 8 m road, a 6 m road S, a 4 m road N | W `L[box] \| bL \| T \| bT \| R` (box: the 4 m road has no bike lane), E `L | bL[adv] | T | R` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682)\| bL[adv] \| T \| bT \| R`, N `LTR` (no pockets on that class), S `LT \| R \| bTR` (no lane out on the 4 m road: "no main road out") | 75 s |
 | J4-tee | 2914500,1322500 | T, stem south | W `T \| bT \| R`, E `L | bL[adv] | T | R` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682)\| bL[adv] \| T \| bT`, S `L \| bL \| R` | 75 s: main, main left + its through, side |
 | J5a/J5b-pair | 2915470 / 2915530,1322500 | two crossroads 60 m apart, 6 m cross roads | between them a merged strip (#325): `L \| TR \| bTR` both ways; the other arms `L \|E `L | bL[adv] | T | R` (20+20 pocket, the right pocket reaching 8 m past the left's storage, #682)\| T \| R` | 99 s each |
+| J6-artery-in-place | 2916500,1322500 | #700: a 2+2 artery (OSM `lanes=4`, 12 m) across a 10 m road, turn:lanes `left\|through;right` on every approach | W, E `L \| TR` assigned in place (arrows, no widening, left phase); N, S `L \| bL \| TR \| bTR` (pocket from data, no right pocket) | 73 s |
+| J7-double-left | 2917500,1322500 | #700: the way before the lights `lanes:forward=3`, `left\|left\|through;right`; east way `through\|through;right`; cross road 2+2 | W `L \| L \| bL \| TR \| bTR` (double left, hatch one lane wide), E `TR` (no left pocket), N, S `LTR \| LTR`; dashed guides for the double left and the cross road's through lanes | 60 s |
 
 Rewrite numbers: 7 junctions (all from data), 27 approaches, 21 left pockets (storage 40 x18, 20
 x3, 2 merged), 21 right pockets (4 rejected), layout (a) 8, (b) 6, (b) forced 1, 19 left-turn

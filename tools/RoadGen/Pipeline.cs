@@ -19,7 +19,9 @@ public sealed record PipelineOptions(
     /// <summary>Off skips the overlap rasterisation, which dominates the cost on a large run.</summary>
     bool Analyze = true,
     /// <summary>Which dead ends may be carried onto a road flank within its half width (#121); null = none.</summary>
-    Func<RoadLink, RoadLink, bool>? JoinNearEnds = null);
+    Func<RoadLink, RoadLink, bool>? JoinNearEnds = null,
+    /// <summary>Which junction corners stay tight (#700, <see cref="JunctionBuilder.TightCorner"/>); null = none.</summary>
+    Func<RoadNetwork, RoadNode, Approach, Approach, bool>? TightCorner = null);
 
 public sealed class RoadGenResult
 {
@@ -68,7 +70,7 @@ public static class Pipeline
         NetworkBuilder.RefreshHeadings(net);
 
         var junctions = opts.BuildJunctions && opts.Smooth
-            ? new JunctionBuilder().Build(net)
+            ? new JunctionBuilder { TightCorner = opts.TightCorner }.Build(net)
             : new List<Junction>();
 
         var ribbons = new List<Ribbon>();

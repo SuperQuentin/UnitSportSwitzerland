@@ -83,6 +83,10 @@ public static class CrossSectionPlanner
         internal sbyte PartnerVote;
         internal double Length;
         internal bool OsmLanes, OsmWidth, OsmPriority;
+        /// <summary>More lanes than the class default (#700) and the carriageway wider than its class width for them.</summary>
+        internal bool Crowded, LaneWidened;
+        internal int CrowdedLanes;
+        internal float ClassWidth;
     }
 
     /// <summary>Region numbers, over written lines only.</summary>
@@ -95,6 +99,10 @@ public static class CrossSectionPlanner
         public double ShiftedKm;
         /// <summary>km per (class, width to 0.1 m).</summary>
         public readonly SortedDictionary<(RoadClass, double), double> WidthKm = new();
+        /// <summary>Lines with more lanes than the class default (#700): per (class, lanes, class width m, width m) lines and km, and how many OSM widths were refused for leaving a lane under MinCarLane.</summary>
+        public readonly SortedDictionary<(RoadClass, string, double, double), (int Lines, double Km)> CrowdedKm = new();
+        public int CrowdedLines, CrowdedWidened;
+        public readonly SortedSet<string> CrowdedTiles = new();
 
         public string Format()
         {
@@ -108,6 +116,10 @@ public static class CrossSectionPlanner
             sb.Append(c, $"    roundabout lines oriented {RoundaboutLines:N0}; connectivity conflicts {ConnectivityConflicts}\n");
             sb.Append(c, $"    OSM overrides: one-way {OsmOneWay:N0}, lanes {OsmLanes:N0}, width {OsmWidth:N0}, priority {OsmPriority:N0}\n");
             sb.Append(c, $"    motorway offset: {ShiftedLines:N0} lines ({ShiftedKm:F1} km) shifted, {PinnedEnds} ends pinned at tunnels, {DraggedLines} attached lines dragged, {LooseAttachments} ends touching a shifted line off its nodes\n");
+            sb.Append(c, $"    lanes above the class default (#700): {CrowdedLines:N0} lines, {CrowdedWidened:N0} wider than their class width; class, lanes (back+fwd), class width -> width: lines, km\n");
+            foreach (var (k, v) in CrowdedKm)
+                sb.Append(c, $"      {k.Item1,-8} {k.Item2,-10} {k.Item3:0.0} -> {k.Item4:0.0} m: {v.Lines:N0} lines, {v.Km:F2} km\n");
+            sb.Append(c, $"      tiles with such a line: {string.Join(" ", CrowdedTiles)}\n");
             sb.Append("    width histogram, km per class (width m: km):\n");
             foreach (var cls in WidthKm.Keys.Select(k => k.Item1).Distinct())
                 sb.Append(c, $"      {cls,-10} ").Append(string.Join("  ", WidthKm.Where(kv => kv.Key.Item1 == cls)
@@ -224,7 +236,16 @@ public static class CrossSectionPlanner
         line.LanesOneWay = oneWayLanes;
         (line.LanesFwd, line.LanesBwd) = (Math.Clamp(fwd, 0, 6), Math.Clamp(bwd, 0, 6));
 
-        // width: lanes for the high-speed classes, TLM's nominal class width for the rest
+        // width: lanes for the high-speed classes, TLM's nominal class width for the rest; an ordinary
+        // road with more lanes than its class default is at least lanes x LaneWidth wide (#700)
+        bool oneWayRoad = oneWayCarriageway || a.OneWay != 0 || row?.OneWay is "1" or "-1";
+        // lanes in one direction only (OSM lanes:backward=2 and nothing forward) or a roundabout ring: the line turns out
+        // one-way later (ring orientation, connectivity), so it carries those lanes, not one more the other way
+        bool oneSided = !oneWayRoad && ((fwd == 0) != (bwd == 0) || row?.Roundabout == true || a.Has(RoadAttrFlags.Roundabout));
+        int crowdedLanes = oneWayRoad ? oneWayLanes : oneSided ? Math.Max(fwd, bwd) : Math.Max(1, fwd) + Math.Max(1, bwd);   // as the paint counts them
+        // not a divided carriageway: TLM draws the pair a few metres apart and ordinary roads are not shifted apart (#117), so lanes-wide halves would overlap
+        bool crowded = !RoadCrossSection.IsHighSpeed(s.Class) && IsCarRoad(s) && !oneWayCarriageway
+            && (oneWayRoad || oneSided ? crowdedLanes > 1 : fwd > 1 || bwd > 1);
         float width;
         if (RoadCrossSection.IsHighSpeed(s.Class))
             width = oneWayCarriageway
@@ -234,12 +255,17 @@ public static class CrossSectionPlanner
             width = a.WidthCm / 100f;
         else
             width = s.Width;   // divided ordinary roads keep the extractor's halved width; paths etc. their class width
+        float classWidth = width;
+        if (crowded) width = Math.Max(width, crowdedLanes * RoadCrossSection.LaneWidth(s.Class));
         if (double.TryParse(row?.Width, NumberStyles.Float, CultureInfo.InvariantCulture, out double osmWidth)
-            && osmWidth >= 0.6 * width && osmWidth <= 1.6 * width && IsCarRoad(s))
+            && osmWidth >= 0.6 * width && osmWidth <= 1.6 * width && IsCarRoad(s)
+            && (!crowded || osmWidth >= crowdedLanes * BikePlanner.MinCarLane))
         {
             width = (float)osmWidth;
             line.OsmWidth = true;
         }
+        (line.Crowded, line.CrowdedLanes, line.ClassWidth) = (crowded, crowdedLanes, classWidth);
+        line.LaneWidened = crowded && width > classWidth + 0.01f;
         line.Width = width;
 
         // priority: TLM verkehrsbedeutung + class (extractor); OSM's road hierarchy where TLM has none
@@ -538,6 +564,15 @@ public static class CrossSectionPlanner
         if (line.OsmLanes) st.OsmLanes++;
         if (line.OsmWidth) st.OsmWidth++;
         if (line.OsmPriority) st.OsmPriority++;
+        if (line.Crowded)
+        {
+            st.CrowdedLines++;
+            st.CrowdedTiles.Add(line.Tile.ToString());
+            if (line.LaneWidened) st.CrowdedWidened++;
+            var ck = (s.Class, line.OneWay != 0 || (s.Flags & RoadFlags.Divided) != 0 ? $"{line.CrowdedLanes} one-way" : $"{line.LanesBwd}+{line.LanesFwd}", Math.Round((double)line.ClassWidth, 1), Math.Round(line.Width, 1));
+            var (n, km) = st.CrowdedKm.GetValueOrDefault(ck);
+            st.CrowdedKm[ck] = (n + 1, km + line.Length / 1000);
+        }
         if (s.Class <= RoadClass.Square)
         {
             var k = (s.Class, Math.Round(line.Width, 1));

@@ -29,7 +29,9 @@ public sealed record JunctionOptions(
     /// merged, which is what a gore area physically is.
     /// </summary>
     double MaxTrimWidths = 5.0,
-    double MaxTrimAbsolute = 30.0);
+    double MaxTrimAbsolute = 30.0,
+    /// <summary>A tight corner (#700: the approach on its side has no right turn): its kerb runs on along both edges to this far from where they meet.</summary>
+    double TightKerb = 1.5);
 
 public static class JunctionOptionsExtensions
 {
@@ -55,10 +57,16 @@ public sealed class JunctionBuilder
 
     public JunctionBuilder(JunctionOptions? options = null) => _options = options ?? new JunctionOptions();
 
+    /// <summary>
+    /// Whether the corner between an arm's left edge and the next arm's right edge (counter-clockwise) is tight (#700): no
+    /// traffic turns right from the first arm into the second, so the kerb need not round it. Null: no tight corners.
+    /// </summary>
+    public Func<RoadNetwork, RoadNode, Approach, Approach, bool>? TightCorner { get; init; }
+
     private readonly record struct PendingArm(
         int LinkId, LinkEnd End, double NodeOutwardHeading, double HalfWidth, double Trim, bool Clamped);
 
-    private sealed record PendingJunction(RoadNode Node, List<PendingArm> Arms, Vec2[] Corners, bool[] CornerValid);
+    private sealed record PendingJunction(RoadNode Node, List<PendingArm> Arms, Vec2[] Corners, bool[] CornerValid, bool[] Tight);
 
     /// <summary>
     /// Three passes, and the order is the whole point. Trims are decided first for every node,
@@ -127,7 +135,7 @@ public sealed class JunctionBuilder
             if (tj > trims[j]) trims[j] = tj;
         }
 
-        var arms = new List<PendingArm>(n);
+        var kerbs = new double[n];
         for (int i = 0; i < n; i++)
         {
             double kerb = _options.Kerb(ordered[i].Half);
@@ -141,17 +149,44 @@ public sealed class JunctionBuilder
                 kerb = Math.Min(kerb, room);
                 if (alignment.Length >= _options.GrowFromLength) kerb = Math.Min(kerb * _options.Grow, _options.MaxKerb);
             }
-            double limit = Math.Min(_options.MaxTrimWidths * ordered[i].Half * 2, _options.MaxTrimAbsolute);
+            kerbs[i] = kerb;
+        }
+        var tight = new bool[n];
+        if (TightCorner is { } tightCorner)
+            for (int i = 0; i < n; i++) tight[i] = tightCorner(net, node, ordered[i].Approach, ordered[(i + 1) % n].Approach);
 
-            double wanted = Math.Max(trims[i], 0) + kerb;
-            if (wanted > limit) { wanted = limit; clamped[i] = true; }
+        // each arm is cut back as far as its corners' kerb arcs reach (#700): an arc's legs are the smaller of its two arms'
+        // allowances (a main road beside a minor one keeps the minor road's radius), a tight corner's its small kerb; an arm
+        // trimmed by its own allowance past where its arcs end stood its mouth, stop line and crossing far out for nothing
+        var wanted = new double[n];
+        var reached = new bool[n];
+        for (int i = 0; i < n; i++)
+        {
+            if (!cornerValid[i]) continue;
+            int j = (i + 1) % n;
+            var c = corners[i];
+            double ti = (c - node.Position).Dot(Vec2.FromHeading(ordered[i].Approach.OutwardHeading));
+            double tj = (c - node.Position).Dot(Vec2.FromHeading(ordered[j].Approach.OutwardHeading));
+            double leg = tight[i] ? _options.TightKerb : Math.Min(kerbs[i], kerbs[j]);
+            wanted[i] = Math.Max(wanted[i], ti + leg);
+            wanted[j] = Math.Max(wanted[j], tj + leg);
+            reached[i] = reached[j] = true;
+        }
+
+        var arms = new List<PendingArm>(n);
+        for (int i = 0; i < n; i++)
+        {
+            double limit = Math.Min(_options.MaxTrimWidths * ordered[i].Half * 2, _options.MaxTrimAbsolute);
+            // never short of where the edges meet (the overlap), and with no corner at all the arm's own allowance as before
+            double trim = reached[i] ? Math.Max(wanted[i], trims[i]) : Math.Max(trims[i], 0) + kerbs[i];
+            if (trim > limit) { trim = limit; clamped[i] = true; }
 
             arms.Add(new PendingArm(
                 ordered[i].Approach.LinkId, ordered[i].Approach.End,
-                ordered[i].Approach.OutwardHeading, ordered[i].Half, wanted, clamped[i]));
+                ordered[i].Approach.OutwardHeading, ordered[i].Half, trim, clamped[i]));
         }
 
-        return new PendingJunction(node, arms, corners, cornerValid);
+        return new PendingJunction(node, arms, corners, cornerValid, tight);
     }
 
     // ------------------------------------------------------------------ pass 2: reconcile
@@ -250,8 +285,27 @@ public sealed class JunctionBuilder
             double reach = Math.Max(junction.Arms[i].Trim, junction.Arms[j].Trim) * 1.5 + 2.0;
             if (pending.CornerValid[i]
                 && (pending.Corners[i] - pending.Node.Position).Length <= reach)
-                AppendFillet(junction.Boundary, junction.Arms[i].Left, pending.Corners[i],
-                    junction.Arms[j].Right, _options.FilletSamples);
+            {
+                // a tight corner (#700): the kerb runs on along both edges to TightKerb from where they meet, then a small fillet
+                var c = pending.Corners[i];
+                var di = Vec2.FromHeading(pending.Arms[i].NodeOutwardHeading);
+                var dj = Vec2.FromHeading(pending.Arms[j].NodeOutwardHeading);
+                double a = _options.TightKerb;
+                double li = (junction.Arms[i].Left - c).Dot(di), rj = (junction.Arms[j].Right - c).Dot(dj);
+                if (pending.Tight[i] && li > a + 0.3 && rj > a + 0.3)
+                {
+                    Vec2 p1 = c + di * a, p2 = c + dj * a;
+                    junction.Boundary.Add(p1);
+                    AppendFillet(junction.Boundary, p1, c, p2, _options.FilletSamples);
+                    junction.Boundary.Add(p2);
+                    junction.TightCorners.Add(i);
+                    // where each kerb now ends: this far inside its arm's mouth
+                    junction.KerbInset[(i, true)] = li - a;
+                    junction.KerbInset[(j, false)] = rj - a;
+                }
+                else
+                    AppendFillet(junction.Boundary, junction.Arms[i].Left, c, junction.Arms[j].Right, _options.FilletSamples);
+            }
         }
 
         DedupeRing(junction.Boundary);

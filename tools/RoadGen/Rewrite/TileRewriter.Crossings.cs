@@ -17,16 +17,21 @@ public static partial class TileRewriter
     /// <summary>Bars 0.50 m wide at 0.50 m gaps, along the arm 3 m deep, a stop line's width clear of the cars' line.</summary>
     private const double ZebraBar = 0.5, ZebraGap = 0.5, ZebraDepth = 3.0, ZebraClear = 0.3;
 
+    /// <summary>A crossing beside a tight corner turns at most this far from square to the arm (#700, the user's cap), radians.</summary>
+    private const double MaxCrossingSkew = Math.PI / 6;
+
     /// <summary>How far an island reaches into the junction past the crosswalk; a left turn starts and ends this much (and a little) beyond it.</summary>
     private const double IslandInsideM = 3.0;
 
     /// <summary>
     /// The crossing of one arm. <paramref name="mid"/> is the middle of its mouth, <paramref name="u"/> its outward direction,
     /// <paramref name="right"/> the approaching driver's right; <paramref name="stopAt"/> the cars' stop line's distance out
-    /// from the mouth; the carriageway runs from <paramref name="lo"/> to <paramref name="hi"/> across it (negative to the left).
+    /// from the mouth; the carriageway runs from <paramref name="lo"/> to <paramref name="hi"/> across it (negative to the left);
+    /// <paramref name="gap"/>: across offsets with no bars (a refuge island, #700).
     /// </summary>
     private static void EmitCrossing(Dictionary<TileId, List<RoadPaint>> paint, Source source, Vec2 mid, Vec2 u, Vec2 right,
-        double stopAt, double lo, double hi, RoadSide rightSide, RoadSide leftSide, Dictionary<TileId, List<RoadAreaProp>> areas, SignalStats stats, Func<double, double>? leftEdgeAt = null)
+        double stopAt, double lo, double hi, RoadSide rightSide, RoadSide leftSide, Dictionary<TileId, List<RoadAreaProp>> areas, SignalStats stats, Func<double, double>? leftEdgeAt = null,
+        double insetLeft = 0, double insetRight = 0, (double From, double To)? gap = null)
     {
         static double Strip(RoadSide s) => s.HasTrack ? (s.VergeDm + s.BikeDm + s.BufferDm) / 10.0 : 0;
         double pathR = Strip(rightSide), pathL = Strip(leftSide);
@@ -47,12 +52,25 @@ public static partial class TileRewriter
         lo = LeftAt((s0 + s1) * 0.5);
         // bars from the left end to the right end; one on a path or verge stands at its height
         double start = lo - pathL, end = hi + pathR;
+        // beside a tight corner (#700) the kerb ends inside the mouth: the bars there move in with it, the band runs from kerb end
+        // to kerb end (diagonal), each bar still along the road
+        // never more than 30 degrees from square (the user's cap): past that the band stops short of the tight kerb end
+        double most = Math.Tan(MaxCrossingSkew) * (hi - lo);
+        if (insetRight > insetLeft + most) insetRight = insetLeft + most;
+        if (insetLeft > insetRight + most) insetLeft = insetRight + most;
+        double Shift(double l) => insetLeft + (insetRight - insetLeft) * Math.Clamp((l - lo) / Math.Max(0.01, hi - lo), 0, 1);
+        // bars only where the walkers cross traffic (#700, the user's rule): the carriageway and a path, not a verge or buffer
+        // (grass, or its paved cut) nor a refuge island (gap)
+        static bool OnPath(RoadSide s, double d) => d >= s.VergeDm / 10.0 && d <= (s.VergeDm + s.BikeDm) / 10.0;
         for (double l = start; l + ZebraBar <= end + 1e-6; l += ZebraBar + ZebraGap)
         {
             double centre = l + ZebraBar * 0.5;
+            if (centre > hi && !OnPath(rightSide, centre - hi) || centre < lo && !OnPath(leftSide, lo - centre)) continue;
+            if (gap is { } g && centre > g.From && centre < g.To) continue;
             float lift = centre > hi ? RoadStreetSection.HeightAt(rightSide, (float)(centre - hi))
                 : centre < lo ? RoadStreetSection.HeightAt(leftSide, (float)(lo - centre)) : 0f;
-            Quad(s0, s1, l, l + ZebraBar, lift);
+            double shift = Shift(centre);
+            Quad(s0 - shift, s1 - shift, l, l + ZebraBar, lift);
         }
         if (verts.Count == 0) return;
         Get(paint, source.Tile).Add(new RoadPaint
@@ -151,8 +169,10 @@ public static partial class TileRewriter
                 Dash = 1f, Gap = 1f, Vertices = Local(home, line, p => HeightAt(anchors, p), 0f),
             });
         }
-        Guide(layout?.LeftPocketLane is null ? (layout?.Through().From ?? 0) + 0.1 : lane.From + 0.1, lead);
-        if (layout?.LeftBikeLane is { } bikeLane && exit.Bike) Guide(bikeLane.From, lead + exit.Lane);   // between the car turn lane and the bike lane
+        // offsets from the carriageway's axis: less a split lead-in's shift (#700)
+        double shift = layout?.Shift ?? 0;
+        Guide((layout?.LeftPocketLane is null ? (layout?.Through().From ?? 0) + 0.1 : lane.From + 0.1) - shift, lead);
+        if (layout?.LeftBikeLane is { } bikeLane && exit.Bike) Guide(bikeLane.From - shift, lead + exit.Lane);   // between the car turn lane and the bike lane
     }
 }
 

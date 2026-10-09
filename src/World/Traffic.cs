@@ -418,7 +418,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         bool van = _rng.NextDouble() < 0.18;
         var (body, lamps) = TrafficMeshBuilder.Car(TrafficMeshBuilder.Paints[_rng.Next(TrafficMeshBuilder.Paints.Length)], van);
         var v = new Vehicle(route, CruiseSpeed(route.Edge.Class) * 0.8f, new[] { 0f },
-            new[] { Unit(body, lamps, CarDrawn) }) { Reaction = 0.5f + 0.5f * (float)_rng.NextDouble() };
+            new[] { Unit(body, lamps, CarDrawn) }) { Reaction = 0.5f + 0.5f * (float)_rng.NextDouble(), Habit = (uint)_rng.Next() };
         AddVehicle(v);
         _cars.Add(v);
     }
@@ -524,7 +524,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             target = Mathf.Min(target, Mathf.Max(0f, other.Speed + (along - 9f) * 0.6f));
         }
 
-        float half = edge.Width * 0.5f, keep = KeepRight(edge);
+        float half = edge.Width * 0.5f, keep = KeepRight(edge, car.Route.Forward, car.Habit);
         bool twoWay = (edge.Flags & RoadFlags.Divided) == 0 && edge.OneWay == 0;
         // a lane of its own each way is 7.5 m of road; on less, meeting means someone makes room
         bool narrow = twoWay && edge.Width < 7.5f;
@@ -711,7 +711,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         // lane changes (#353): following a taper at its speed, else over ~2.5 s; after the line back to its usual line
         car.Lane = Mathf.MoveToward(car.Lane, car.LaneWanted, Mathf.Max(1.2f, 0.35f * car.Speed) * dt);
         float lane = car.Lane;
-        car.Place(e => KeepRight(e) + pull + lane);
+        car.Place(e => KeepRight(e, car.Route.Forward, car.Habit) + pull + lane);
         car.Vel = dt > 0f ? MathX.Flat(car.Head - before) / dt : Vector3.Zero;
         // where its lane takes it, 0.5 s apart at this speed: a racer reads it to see it coming out of a side road
         for (int k = 0; k < PathSteps; k++) car.Path[k] = car.Route.At(-car.Speed * 0.5f * (k + 1)).Pos;
@@ -852,7 +852,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             if (approach is not null)
             {
                 car.Turn = TurnOf(approach, WayPast(legs, leg));
-                car.LaneIndex = approach.LaneFor(car.Turn);
+                car.LaneIndex = approach.LaneFor(car.Turn, car.Habit);
                 car.Group = approach.Site is { } s ? GroupFor(s, approach.Arm, car.Turn) : -1;
             }
         }
@@ -863,7 +863,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         {
             float d = Mathf.Max(0f, toLine);
             float onto = Mathf.Clamp((approach.Reach + 15f - d) / 15f, 0f, 1f);
-            car.LaneWanted = (approach.LaneCentre - KeepRight(car.Route.Edge)) * onto + approach.Lateral(car.LaneIndex, d);
+            car.LaneWanted = (approach.LaneCentre - KeepRight(car.Route.Edge, car.Route.Forward, car.Habit)) * onto + approach.Lateral(car.LaneIndex, d);
         }
         bool crossed = before > 0f && before < float.MaxValue && toLine <= 0f;
         bool pocketLeft = car.Turn == SignalMoves.Left && car.LaneIndex >= 0 && approach.Parent[car.LaneIndex] >= 0
@@ -875,7 +875,7 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
             approach.LaneError = Mathf.Max(approach.LaneError, Mathf.Abs(car.Lane - car.LaneWanted));
             approach.Crossings[car.LaneIndex]++;
             // from the original lane's centre, as the records give the lanes (car.Lane is from its usual line)
-            approach.OffsetSum[car.LaneIndex] += car.Lane - (approach.LaneCentre - KeepRight(car.Route.Edge));
+            approach.OffsetSum[car.LaneIndex] += car.Lane - (approach.LaneCentre - KeepRight(car.Route.Edge, car.Route.Forward, car.Habit));
         }
 
         if (approach.Site is not { } site || car.Group < 0)
@@ -1081,11 +1081,19 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// <summary>Cars stopped or slowing at a side road's Wartelinie for main-road traffic right now.</summary>
     public int GivingWayCars => _cars.Count(c => c.GivingWay);
 
-    /// <summary>Right-hand traffic: an undivided road is shared, so each car keeps to its half.</summary>
-    private static float KeepRight(LaneEdge e) =>
-        e.OneWay != 0 ? e.RightLane
-        : (e.Flags & RoadFlags.Divided) != 0 || e.Class == RoadClass.Ramp ? 0f
-        : e.Width < 4.5f ? 0.3f : e.Width * 0.25f;
+    /// <summary>
+    /// Right-hand traffic: an undivided road is shared, so each car keeps to the rightmost lane of its
+    /// direction (#700: where the road has the lanes and a car's habit takes the next lane in: a third of
+    /// them on 2+ lanes), clear of a painted bike lane.
+    /// </summary>
+    private static float KeepRight(LaneEdge e, bool forward, uint habit)
+    {
+        if (e.OneWay != 0) return e.OneWayLanes > 1 && !RoadCrossSection.IsHighSpeed(e.Class) && habit % 3 == 0 ? e.RightLane - e.LaneWidth : e.RightLane;
+        if ((e.Flags & RoadFlags.Divided) != 0 || e.Class == RoadClass.Ramp) return 0f;
+        float right = forward ? e.RightLaneFwd : e.RightLaneBwd;
+        int lanes = forward ? e.LanesFwd : e.LanesBwd;
+        return lanes > 1 && habit % 3 == 0 ? right - e.LaneWidth : right;
+    }
 
     private (LaneEdge, bool)? NextRoad((LaneEdge Edge, bool Forward) leg)
     {
@@ -1323,6 +1331,8 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
         public float Reaction = 0.75f, Alert, SawAgo = 99f, LookIn, Startle;
         /// <summary>When it was spawned (ms): a car met just after it appeared (#159 logs).</summary>
         public readonly ulong Born = Time.GetTicksMsec();
+        /// <summary>The car's own roll: which lane it takes on a road with several in its direction (#700).</summary>
+        public uint Habit;
         public bool StartleBrake;
 
         /// <summary>A search key for <see cref="Traffic._byX"/>: a vehicle that is only a position east-west.</summary>

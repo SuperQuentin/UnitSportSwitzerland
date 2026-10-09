@@ -98,25 +98,29 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
                 var along = pts.Select(p => (p.X - mx) * u.X + (p.Z - mz) * u.Z).ToList();
                 var across = pts.Select(p => (p.X - mx) * n.X + (p.Z - mz) * n.Z).ToList();
                 double reach = along.Max() - along.Min(), wide = across.Max() - across.Min();
-                // a solid line across its wide end: short, square to it, at one end of its stripes; the
+                // a solid line across its wide end: short, square to it or angled back along the road (#700: a lead-in's,
+                // the gentle lead into the pocket), at one end of its stripes; the
                 // border runs on from that line's outer end to the narrow end
                 var closer = closers.FirstOrDefault(c =>
                 {
                     var q = Points(c.Vertices);
                     double dx = q[1].X - q[0].X, dz = q[1].Z - q[0].Z, len = Math.Sqrt(dx * dx + dz * dz);
-                    if (len < 0.5 || len > 8 || Math.Abs((dx * u.X + dz * u.Z) / len) > 0.3) return false;
+                    double alongIt = Math.Abs(dx * u.X + dz * u.Z);
+                    if (len < 0.5 || len > 15 || (alongIt / len > 0.3 && Math.Abs(dx * n.X + dz * n.Z) < 1)) return false;
                     double at = ((q[0].X + q[1].X) * 0.5 - mx) * u.X + ((q[0].Z + q[1].Z) * 0.5 - mz) * u.Z;
                     double off = ((q[0].X + q[1].X) * 0.5 - mx) * n.X + ((q[0].Z + q[1].Z) * 0.5 - mz) * n.Z;
-                    return Math.Min(Math.Abs(at - along.Min()), Math.Abs(at - along.Max())) < 1.5 && Math.Abs(off) < wide;
+                    return Math.Min(Math.Abs(at - along.Min()), Math.Abs(at - along.Max())) < 1.5 + alongIt * 0.5 && Math.Abs(off) < wide;
                 });
                 Assert.True(closer is not null, $"{path}: a hatch around ({mx:F0},{mz:F0}) has no line across its wide end");
                 var ends = Points(closer!.Vertices);
-                double width = Math.Sqrt(Math.Pow(ends[1].X - ends[0].X, 2) + Math.Pow(ends[1].Z - ends[0].Z, 2));
+                // its width: across the road; an angled line adds its run along the road to the border's length
+                double width = Math.Abs((ends[1].X - ends[0].X) * n.X + (ends[1].Z - ends[0].Z) * n.Z);
+                double slanted = Math.Abs((ends[1].X - ends[0].X) * u.X + (ends[1].Z - ends[0].Z) * u.Z);
                 var border = tile.Paint.Where(p => p.Type == PaintType.WhiteSolid && p.Shape == PaintShape.Polyline && p.Vertices.Length >= 9)
                     .Select(p => Points(p.Vertices))
                     .FirstOrDefault(q => ends.Any(e => Math.Abs(q[0].X - e.X) + Math.Abs(q[0].Z - e.Z) < 0.02 || Math.Abs(q[^1].X - e.X) + Math.Abs(q[^1].Z - e.Z) < 0.02));
                 Assert.True(border is not null, $"{path}: a hatch around ({mx:F0},{mz:F0}) has no border from its closing line");
-                double length = 0;
+                double length = slanted > 1 ? slanted : 0;
                 for (int k = 1; k < border!.Count; k++) length += Math.Sqrt(Math.Pow(border[k].X - border[k - 1].X, 2) + Math.Pow(border[k].Z - border[k - 1].Z, 2));
                 Assert.True(length >= 20 - 0.05 && width >= 1.5 - 0.05 && reach <= length + 0.5,
                     $"{path}: a hatch {length:F1} m long, {width:F1} m wide at its wide end (stripes over {reach:F1} m)");

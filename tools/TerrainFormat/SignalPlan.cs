@@ -46,7 +46,9 @@ public readonly record struct SignalArm(
     bool BikeSignal = false,
     float SpeedKmh = 50,
     float CrossingM = 7,
-    byte Rank = 1);
+    byte Rank = 1,
+    /// <summary>Turns this approach may not make (#700: its lane data or an OSM restriction): its groups leave them out. Not stored: the groups carry it.</summary>
+    SignalMoves Banned = SignalMoves.None);
 
 public readonly record struct SignalInterval(SignalAspect Aspect, float From, float To);
 
@@ -304,6 +306,8 @@ public sealed class SignalPlan
             var moves = SignalMoves.None;
             for (int to = 0; to < arms.Count; to++)
                 if (to != a && arms[to].Out) moves |= Turn(arms, a, to);
+            // what the approach may not do (#700): none of its groups shows it, unless that leaves it nothing
+            if ((moves & ~arms[a].Banned) != SignalMoves.None) moves &= ~arms[a].Banned;
             // pockets get their own arrows only beside a main lane: an approach whose every
             // movement a pocket would take (a right turn out, say) is one group
             var pockets = (arms[a].LeftPocket ? SignalMoves.Left : 0) | (arms[a].RightPocket ? SignalMoves.Right : 0);

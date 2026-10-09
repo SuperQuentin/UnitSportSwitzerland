@@ -12,7 +12,8 @@ public sealed class OsmNodesReader
 {
     public const string FileName = "osm_nodes.tsv";
 
-    public enum NodeKind : byte { Signal, Asl, Restriction }
+    /// <summary>Crossing: a pedestrian crossing (#700, <c>highway=crossing</c>; <see cref="Entry.Value"/> its <c>crossing=*</c>).</summary>
+    public enum NodeKind : byte { Signal, Asl, Restriction, Crossing }
 
     /// <summary>Node: on an OSM node where car ways meet. Approach: within 30 m of <see cref="Entry.LineEnd"/>. Via: a restriction.</summary>
     public enum JunctionKind : byte { Node, Approach, Mid, Via }
@@ -49,7 +50,7 @@ public sealed class OsmNodesReader
             var c = line.Split('\t');
             if (c.Length < 17) continue;
             var entry = new Entry(
-                c[0] switch { "signal" => NodeKind.Signal, "asl" => NodeKind.Asl, _ => NodeKind.Restriction },
+                c[0] switch { "signal" => NodeKind.Signal, "asl" => NodeKind.Asl, "crossing" => NodeKind.Crossing, _ => NodeKind.Restriction },
                 long.Parse(c[1], CultureInfo.InvariantCulture), D(c[2]), D(c[3]), c[4], int.Parse(c[5], CultureInfo.InvariantCulture), D(c[6]),
                 c[7] switch { "node" => JunctionKind.Node, "approach" => JunctionKind.Approach, "via" => JunctionKind.Via, _ => JunctionKind.Mid },
                 EndOf(c[8]), c[9] == "" ? 0 : D(c[9]), c[10] == "" ? 0 : D(c[10]),
