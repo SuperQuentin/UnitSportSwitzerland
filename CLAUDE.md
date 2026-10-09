@@ -29,7 +29,8 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 `plans-on-main` (up-front plans commit on `main`; their status updates ride the feature branch),
 `uid-files` (commit a script's `.uid` with it; never `git add -A` after an import),
 `dotnet-sdk-pin` (`global.json` pins SDK 9: C# 14 binds `array.Reverse()` to the void Span overload),
-`playtest` (`tools/playtest.sh`: scenarios a person judges in one game, Claude live through the in-game MCP server, committed ledger in `tests/playtests/`).
+`playtest` (`tools/playtest.sh`: scenarios a person judges in one game, Claude live through the in-game MCP server, committed ledger in `tests/playtests/`),
+`collision-matrix` (`--collidecheck` rams every vehicle, prop, piece and door with a car and a walker; `--collidesandbox` to drive into them; the known-gaps table).
 
 ## Rules
 

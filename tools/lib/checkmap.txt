@@ -587,6 +587,31 @@ src/Terrain/Construction/SitePlans net tools/sitemachinenetcheck.sh
 src/Interiors/HallCar    net    tools/hallcarnetcheck.sh
 src/Interiors/ParkedCars net    tools/hallcarnetcheck.sh
 src/Vehicles/DormantVehicles net tools/hallcarnetcheck.sh
+
+# collision matrix (#699, docs/notes/general/collision-matrix.md): the whole catalog where it is
+# built (in two halves, each under the per-check timeout), the slice a collider change touches elsewhere
+src/Core/Collision/      quick  --collidecheck --world flat --targets Cars/,Motorbikes/,Bicycles/
+src/Core/Collision/      quick  --collidecheck --world flat --targets Trucks/,Boats/,Aircraft/,Machines/,Placed/,Build/,Props/,Doors/
+src/Player/Rideable      quick  --collidecheck --world flat --targets Cars/,Motorbikes/,Bicycles/
+src/Player/Rideable      quick  --collidecheck --world flat --targets Trucks/,Boats/,Aircraft/,Machines/,Placed/,Build/,Props/,Doors/
+src/Vehicles/VehicleBody quick  --collidecheck --world flat --targets Cars/,Motorbikes/,Bicycles/
+src/Vehicles/VehicleBody quick  --collidecheck --world flat --targets Trucks/,Boats/,Aircraft/,Machines/,Placed/,Build/,Props/,Doors/
+src/Avatar/MeshBounds    quick  --collidecheck --world flat --targets Cars/,Motorbikes/,Bicycles/
+src/Avatar/MeshBounds    quick  --collidecheck --world flat --targets Trucks/,Boats/,Aircraft/,Machines/,Placed/,Build/,Props/,Doors/
+src/Player/Excavator     quick  --collidecheck --world flat --targets machines/
+src/Player/WheelLoader   quick  --collidecheck --world flat --targets machines/
+src/Player/Telehandler   quick  --collidecheck --world flat --targets machines/
+src/Player/Flight        quick  --collidecheck --world flat --targets aircraft/
+src/Player/Airliner      quick  --collidecheck --world flat --targets aircraft/
+src/Player/Truck         quick  --collidecheck --world flat --targets trucks/
+src/Player/Boat          quick  --collidecheck --world flat --targets boats/
+src/Player/Steamer       quick  --collidecheck --world flat --targets boats/
+src/Build/               quick  --collidecheck --world flat --targets build/,placed/
+src/Items/PlacedObjects  quick  --collidecheck --world flat --targets placed/
+src/Items/PalletNode     quick  --collidecheck --world flat --targets props/
+src/Crafting/StationVisuals quick --collidecheck --world flat --targets placed/
+src/Interiors/DoorLeaf   quick  --collidecheck --world flat --targets doors/
+
 # the playtest suite (#751): scenarios well-formed, MCP over HTTP, the ledger; then every flat-course scenario set up
 src/Playtest/            quick  --playtestcheck
 src/Playtest/            quick  --playtest --playtest-smoke --world fixture --chunks fixture:flat

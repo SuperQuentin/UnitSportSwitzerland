@@ -64,10 +64,12 @@ public partial class TestWorld : Node3D
             : RideProbe.ParseArgs() is { } ride ? new RideProbe(null, origin, ride.Kind, ride.Seconds, ride.Shot)
             : FlightCheckProbe.ParseArgs() is { } fly ? new FlightCheckProbe(null, origin, fly.Kind, fly.Shot)
             : Terrain.Construction.ShellWalkProbe.Requested() ? new Terrain.Construction.ShellWalkProbe()
+            : Collision.CollisionMatrixProbe.Requested() ? new Collision.CollisionMatrixProbe(origin)
+            : Collision.CollisionSandbox.Requested() ? new Collision.CollisionSandbox(origin)
             : null;
         if (probe == null)
         {
-            GD.PushError("[testworld] no probe here runs on --world flat (--hitboxcheck, --synccheck, --ride, --flycheck, --forkliftcheck, --palletcheck, --shellwalkcheck)");
+            GD.PushError("[testworld] no probe here runs on --world flat (--hitboxcheck, --synccheck, --ride, --flycheck, --forkliftcheck, --palletcheck, --shellwalkcheck, --collidecheck, --collidesandbox)");
             GetTree().Quit(2);
             return;
         }
