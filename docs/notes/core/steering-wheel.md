@@ -87,6 +87,11 @@
 - **Low speed**: below 4 m/s the car blends to kinematic steering, and the feel blends with it (front
   mass × u × kinematic yaw rate, not the tyre curve at noise-sized slip angles): a parked wheel pulled
   back harder the further it turned, −0.5 at 2 m/s, and hid the soft lock. Now nothing to 1 m/s.
+- **Soft lock ramp per wheel** (#290): `WheelSettings.SoftLockRampDeg` (3–30°, Settings → Wheel), the
+  degrees past the lock to full force. The HORI keeps 20° (it bounced at 8°); the G29 preset sets 6°
+  (version 3; `Upgrade` gives it to saved settings still at the 20° default). At 20° a kart's ±99° lock
+  was not felt on the G29 (7° past it: 0.54). `--ffbcheck` on the G29 at 6°: a 35% push into a 60° lock
+  stops at 61-63° and settles in 0.3 s (65° at 20°).
 - **Soft lock at full device force**, whatever `FfbStrength`: capped at 70% a hand pushed 121° through it.
 - **Engine** (`WheelFeel.EngineFrom`, added by `PlayerFeel`, which knows `EngineOn`): a sine at the
   crank's rate (rpm/60, 8–60 Hz), 0.15 at idle to 0.5 at the redline, gain `FfbEngine`. **Road** is

@@ -32,9 +32,11 @@ public partial class SteeringWheel
     /// <summary>A feel this old means nobody is driving with this wheel any more.</summary>
     public const float StaleSeconds = 0.25f;
     /// <summary>
-    /// Past the lock, the soft lock is at full force within this much more rotation, radians (20°).
-    /// 8° made a stiff spring that, updated at the frame rate, bounced a fast rim off the lock and
-    /// back (measured on the HORI: 88° → 40° → 77°) instead of stopping it.
+    /// Past the lock, the soft lock is at full force within this much more rotation, radians (20°):
+    /// the default, now per wheel (<see cref="WheelSettings.SoftLockRampDeg"/>, #290). On the HORI 8°
+    /// made a stiff spring that, updated at the frame rate, bounced a fast rim off the lock and back
+    /// (88° → 40° → 77°) instead of stopping it. The G29 holds a 6° ramp without bouncing, and at 20°
+    /// a kart's lock (±99°) was not felt at all: 7° past it the force was only half.
     /// </summary>
     public const float SoftLockRamp = 0.35f;
     /// <summary>Past the lock, force per rad/s of rim speed (either way): it soaks up the bounce.</summary>
@@ -112,10 +114,10 @@ public partial class SteeringWheel
     /// The soft lock's push, + right: none inside <paramref name="halfLock"/> (radians of wheel either
     /// side of centre), then back toward centre, full within <see cref="SoftLockRamp"/> more.
     /// </summary>
-    public static float SoftLock(float angle, float halfLock)
+    public static float SoftLock(float angle, float halfLock, float ramp = SoftLockRamp)
     {
         float excess = Mathf.Abs(angle) - halfLock;
-        return excess <= 0f ? 0f : -Mathf.Sign(angle) * Mathf.Clamp(excess / SoftLockRamp, 0f, 1f);
+        return excess <= 0f ? 0f : -Mathf.Sign(angle) * Mathf.Clamp(excess / Mathf.Max(ramp, 0.01f), 0f, 1f);
     }
 
     /// <summary>
@@ -136,7 +138,7 @@ public partial class SteeringWheel
         float master = s.FfbStrength;
         // The soft lock is a wall, so it takes the device's whole force whatever the strength: capped
         // at 70% it was pushed straight through on the HORI (121° past a 90° lock, force maxed out).
-        float wall = SoftLock(angle, softAt);
+        float wall = SoftLock(angle, softAt, Mathf.DegToRad(s.SoftLockRampDeg));
         if (Mathf.Abs(angle) > softAt) wall -= Math.Clamp(rate * SoftLockDamping, -0.5f, 0.5f);
         float constant = feel.Torque * s.FfbAligning * master + wall;
         // the wheel's damper takes over from 6° short of the lock, fully at it

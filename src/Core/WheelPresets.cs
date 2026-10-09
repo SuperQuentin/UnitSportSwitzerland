@@ -21,10 +21,12 @@ public static class WheelPresets
         // 2 circle, 3 triangle, 4/5 right/left paddle, 6/7 R2/L2, 8 share, 9 options, 10/11 R3/L3,
         // 12-18 the H-shifter's 1-6 and R, 23 enter, 24 PS; the D-pad is hat 0. Recorded on a G29 with
         // the Driving Force Shifter (#290): all of that holds, and the shifter holds its gate's button
-        // down while in gear, released in neutral. Version 2: the paddles and the shifter.
+        // down while in gear, released in neutral. Version 2: the paddles and the shifter; version 3:
+        // a firmer soft lock, which the G29 holds without bouncing (--ffbcheck: 65° in a 60° lock).
         new("Logitech G29", n => Has(n, "G29") || Has(n, "G923") || Has(n, "Driving Force"), s =>
         {
             s.RangeDeg = 900f;
+            s.SoftLockRampDeg = 6f;
             s.SteerAxis = 0;
             s.Throttle = Pedal(1);
             s.Brake = Pedal(2);
@@ -50,7 +52,7 @@ public static class WheelPresets
                 [17] = PlayerInput.Gates[5],
                 [18] = PlayerInput.GearReverse,
             };
-        }, Version: 2),
+        }, Version: 3),
         // HORI Force Feedback Truck Control System ("HORI TRUCK CONTROL SYSTEM WHEEL", 0f0d:017a),
         // recorded on the device: 8 axes, 54 buttons, 1 hat. Steering on axis 0 (left negative);
         // clutch, brake and gas on axes 4, 5, 6, each resting at −1 and reading +1 floored. 1800° of rotation.
@@ -101,8 +103,8 @@ public static class WheelPresets
 
     /// <summary>
     /// Bindings saved from an older version of their preset gain what it has added since: each new
-    /// button, unless the player has already put that button or that action somewhere else. True
-    /// when anything changed.
+    /// button, unless the player has already put that button or that action somewhere else, and its
+    /// values for settings still at their defaults. True when anything changed.
     /// </summary>
     public static bool Upgrade(WheelSettings s)
     {
@@ -112,6 +114,8 @@ public static class WheelPresets
         foreach (var (button, action) in fresh.Buttons)
             if (!s.Buttons.ContainsKey(button) && !s.Buttons.ContainsValue(action))
                 s.Buttons[button] = action;
+        // a setting the player never moved takes the preset's
+        if (s.SoftLockRampDeg == WheelSettings.DefaultSoftLockRampDeg) s.SoftLockRampDeg = fresh.SoftLockRampDeg;
         s.PresetVersion = preset.Version;
         return true;
     }

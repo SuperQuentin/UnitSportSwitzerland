@@ -229,6 +229,9 @@ public partial class WheelPanel : VBoxContainer
         UiKit.SliderRow(this, "Knocks", 0, 1, 0.05, W.FfbKnocks, v => W.FfbKnocks = (float)v, Percent, "Crashes and hard landings");
         UiKit.SliderRow(this, "Weight", 0, 1, 0.05, W.FfbWeight, v => W.FfbWeight = (float)v, Percent,
             "Damping, and the steering's weight when parked");
+        UiKit.SliderRow(this, "Soft lock ramp", WheelSettings.MinSoftLockRampDeg, WheelSettings.MaxSoftLockRampDeg, 1,
+            W.SoftLockRampDeg, v => W.SoftLockRampDeg = (float)v, v => $"{v:F0}°",
+            "Past the vehicle's lock, how far until the wall is at full force: less is harder. Raise it if the rim bounces off the lock");
         UiKit.ToggleRow(this, "Invert force", W.FfbInvert, on => W.FfbInvert = on,
             "If \"Push right\" turns your wheel left");
 
