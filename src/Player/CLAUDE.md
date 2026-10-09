@@ -7,6 +7,7 @@ touches its topic; search with `grep -ril <word> docs/notes/player`.
 
 ## Architecture
 
+- `car-ground-tilt` — A driven car pitches and rolls to the ground under its four wheels (`TiltCar`, #764), as buses do; carried by `BodyPose`; `--ride car --sideview` prints pitch/roll
 - `vehicle-hull-collision` — Cars and motorbikes collide as a box hull above the carrying capsule; no more cars sinking a third into each other; trucks and buses no wider than their body, getting out never inside the vehicle (#209, `--exitcheck`)
 - `aircraft-cockpit` — Aircraft cockpits (#421): V at the captain's eye, `AircraftCockpit` (controls, pilot's hands and feet, lamps, signs), `InstrumentCanvas` A320 glass / steam gauges in a SubViewport redrawn on change near a camera, pose bits 20-23 + fuel/engines in Z, pad holds for autopilot / parking brake, windscreen rays in `--cockpitcheck`
 - `cockpit` — First-person driving (#69, trucks and buses #157): V cycles chase / cockpit with body / without, eye on the car body, head sway, held free look, seat and FOV settings, SubViewport mirrors (+0.5 ms), HUD setting, what is replicated, checks

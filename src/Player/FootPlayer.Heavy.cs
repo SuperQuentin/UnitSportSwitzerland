@@ -31,6 +31,7 @@ public partial class FootPlayer
     private readonly List<CharacterBody3D> _sections = new();
     private int _visualTrailer;
     private float _truckPitch;
+    private float _carPitch, _carRoll;
     private readonly float[] _shownAngles = new float[Truck.MaxJoints];
 
     /// <summary>How close a hitch must come to a trailer's kingpin or drawbar eye to couple, m.</summary>
@@ -151,6 +152,27 @@ public partial class FootPlayer
         var r = ToGlobal(new Vector3(0, 0, -(cg - rear)));
         float target = Mathf.Atan2(GroundUnder(f, exclude) - GroundUnder(r, exclude), rear - front);
         _truckPitch = Mathf.Lerp(_truckPitch, Mathf.Clamp(target, -0.35f, 0.35f), 0.3f);
+    }
+
+    /// <summary>
+    /// A car's body on the ground under its four wheels, as <see cref="PitchCab"/> stands a bus: nose
+    /// up a climb, leaning across a camber. Without it a car stayed level on any slope, its nose in
+    /// the hill ahead. Held in the air, so a jump keeps the attitude it left the ramp with.
+    /// </summary>
+    private void TiltCar(Car car, float dt)
+    {
+        if (!IsOnFloor()) return;
+        var exclude = TrainRids();
+        float half = car.Spec.Wheelbase * 0.5f, track = car.Spec.Body.Width * 0.42f;
+        float fl = GroundUnder(ToGlobal(new Vector3(-track, 0, -half)), exclude);
+        float fr = GroundUnder(ToGlobal(new Vector3(track, 0, -half)), exclude);
+        float rl = GroundUnder(ToGlobal(new Vector3(-track, 0, half)), exclude);
+        float rr = GroundUnder(ToGlobal(new Vector3(track, 0, half)), exclude);
+        float pitch = Mathf.Atan2((fl + fr) - (rl + rr), 4f * half);    // + raises the nose
+        float roll = Mathf.Atan2((fr + rr) - (fl + rl), 4f * track);    // + raises the right side
+        float ease = MathX.Damp(12f, dt);
+        _carPitch = Mathf.Lerp(_carPitch, Mathf.Clamp(pitch, -0.45f, 0.45f), ease);
+        _carRoll = Mathf.Lerp(_carRoll, Mathf.Clamp(roll, -0.35f, 0.35f), ease);
     }
 
     /// <summary>

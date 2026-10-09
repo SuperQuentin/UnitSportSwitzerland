@@ -14,7 +14,8 @@ namespace UnitSport.Player;
 /// go of the throttle and brake from then on, to stop somewhere, say inside a garage;
 /// <c>--midshot</c>: one more screenshot then, next to out.png as out_mid.png; <c>--setup name</c>: a car
 /// preset, <see cref="CarSetups"/>; <c>--wall D</c>: a solid wall D m ahead, to crash into (#214), with
-/// <c>--crashshots t1,t2,...</c> screenshots that many seconds after the rider is thrown)
+/// <c>--crashshots t1,t2,...</c> screenshots that many seconds after the rider is thrown; <c>--sideview</c>:
+/// out.png from a camera keeping pace abeam for the last second)
 /// </para>
 ///
 /// <para>
@@ -234,6 +235,20 @@ public partial class RideProbe : Node
             _closeCam.LookAt(at, a.Basis.Y.Normalized());
             _closeCam.MakeCurrent();
         }
+        // --sideview (#764): the last second from 9 m abeam on the left, level, keeping pace, so the
+        // body's pitch on a slope shows against the horizon
+        if (_shot != null && CmdArgs.Has("--sideview") && _elapsed >= _seconds - 1.0)
+        {
+            if (_closeCam == null)
+            {
+                _closeCam = new Camera3D { Fov = 50f };
+                AddChild(_closeCam);
+                _closeCam.MakeCurrent();
+            }
+            var at = _player.GlobalPosition + Vector3.Up * 0.8f;
+            _closeCam.GlobalPosition = at - _player.GlobalBasis.X * 9f + Vector3.Up * 1.5f;
+            _closeCam.LookAt(at, Vector3.Up);
+        }
 
         _sinceReport += delta;
         if (_sinceReport >= 1.0)
@@ -244,7 +259,8 @@ public partial class RideProbe : Node
             GD.Print($"[ride] t={_elapsed,5:F1}s  v={_player.RideSpeed,5:F1} m/s "
                 + $"({_player.RideSpeed * 3.6f,5:F1} km/h)  alt={p.Y,7:F1}  clearance={clearance,5:F2}"
                 + (_player.Vehicle is Motorbike bike ? $"  on {bike.Surface}  gear {bike.Gear}" : "")
-                + (_player.Vehicle is Car car ? $"  on {(_chunks is { } c ? Audio.Surfaces.At(c, p, false) : Audio.Surface.Asphalt)}  gear {car.Gear}" : "")
+                + (_player.Vehicle is Car car ? $"  on {(_chunks is { } c ? Audio.Surfaces.At(c, p, false) : Audio.Surface.Asphalt)}  gear {car.Gear}"
+                    + $"  pitch {Mathf.RadToDeg(_player.BodyPose.Basis.GetEuler().X),5:F1}°  roll {Mathf.RadToDeg(_player.BodyPose.Basis.GetEuler().Z),5:F1}°" : "")
                 + (_player.Vehicle is Truck truck ? $"  on {(_chunks is { } tc ? Audio.Surfaces.At(tc, p, false) : Audio.Surface.Asphalt)}  gear {truck.GearLabel} {truck.Rpm:F0} rpm"
                     + $"  joints {string.Join(" ", truck.Articulation.Take(truck.SectionCount - 1).Select(j => $"{Mathf.RadToDeg(j):F0}°"))}" : "")
                 + (Vehicles.GarageUi.GarageNear?.Invoke(p) == true ? "  at a garage" : "")
