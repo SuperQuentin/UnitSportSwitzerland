@@ -14,7 +14,7 @@ panel (F10) with the scenario, its checklist and a chat with you. You reach the 
 1. `status`: what is running and what is due. If the game doesn't answer, ask the user to start
    `tools/playtest.sh` (default course `flat`) and check that `/mcp` lists `unitsport-playtest`.
 2. `say` a one-line hello naming the current scenario, or suggest `start_scenario next`.
-3. `wait_for_player` (timeout 300). It returns the player's lines and events: messages,
+3. `wait_for_player` (timeout 50: the MCP client drops a call past about a minute, "The operation timed out"). It returns the player's lines and events: messages,
    `VALIDATED`/`FAILED <id>: <note>`, `scenario started`. On "nothing yet", call it again.
 4. Act on what they said, briefly `say` what you changed, and go back to 3. Never leave the player
    waiting without a `wait_for_player` pending: the panel shows "Claude is working…" until you do.
