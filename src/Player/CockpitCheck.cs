@@ -46,11 +46,10 @@ public static class CockpitCheck
             var eye = HumanMeshBuilder.DriverEye(seat.Hip, seat.Recline);
 
             // the head box's top is ~10 cm above the eye; the headlining hangs 7 cm under the roof
-            float head = d.Roof - 0.07f - (eye.Y + 0.1f);
-            float Rake(float y, float bottom, float top, float foot) => Mathf.Lerp(bottom, top, (y - foot) / (d.Roof - foot));
-            float ahead = Rake(eye.Y, d.WsBase, d.WsTop, d.Belt) - eye.Z;
+            float head = d.RoofAt(eye.Z) - 0.07f - (eye.Y + 0.1f);
+            float ahead = d.FrontAt(eye.Y) - eye.Z;
             // the back of the head is ~19 cm behind the eye
-            float behind = eye.Z - 0.19f - Rake(eye.Y + 0.05f, d.RgBase, d.RgTop, d.RgFoot);
+            float behind = eye.Z - 0.19f - d.RearAt(eye.Y + 0.05f);
             float reach = 0f;
             foreach (float turn in new[] { 0f, HumanMeshBuilder.MaxGripTurn, -HumanMeshBuilder.MaxGripTurn })
             {

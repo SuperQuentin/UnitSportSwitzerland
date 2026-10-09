@@ -202,8 +202,9 @@ public static partial class CarMeshBuilder
                 // the heads, leaning back with the seat, are under it
                 benchHip = Mathf.Min(FloorY + 0.3f, seat.Hip.Y);
                 float lean = seat.Recline + 0.1f, crown = benchHip + 0.88f * Mathf.Cos(lean) + 0.01f;
-                float under = d.RgBase + (crown - d.RgFoot) / (d.Roof - 0.05f - d.RgFoot) * (d.RgTop - d.RgBase);
-                rear = Mathf.Max(rear, Mathf.Min(under, d.RgTop) + 0.88f * Mathf.Sin(lean) - 0.28f);
+                // the glass is the roof's skin under its outer line
+                float under = d.RearAt(crown + 0.05f);
+                rear = Mathf.Max(rear, Mathf.Min(under, d.Arched ? d.PeakZ : d.RgTop) + 0.88f * Mathf.Sin(lean) - 0.28f);
             }
             if (front - rear > 0.3f)
             {
@@ -300,9 +301,11 @@ public static partial class CarMeshBuilder
         var mirrors = new List<CarMirror>();
         void Mirror(string name, MeshScratch into, Vector3 at, Vector2 size, Color housing, float depth) =>
             mirrors.Add(CockpitKit.Mirror(into, eye, Kit, name, at, size, housing, depth));
-        var rearView = new Vector3(0, d.Roof - 0.05f - 0.09f, d.WsTop + 0.01f);
+        // (under an arched roof, where the arc is at the screen's top)
+        float mirrorRoof = d.RoofAt(d.WsTop);
+        var rearView = new Vector3(0, mirrorRoof - 0.05f - 0.09f, d.WsTop + 0.01f);
         // the stem comes down from the headlining to the back of the housing, not through the glass
-        c.Tube(new Vector3(0, d.Roof - 0.06f, d.WsTop + 0.05f), rearView - CockpitKit.Facing(eye, rearView) * 0.03f, 0.008f, Trim, 4);
+        c.Tube(new Vector3(0, mirrorRoof - 0.06f, d.WsTop + 0.05f), rearView - CockpitKit.Facing(eye, rearView) * 0.03f, 0.008f, Trim, 4);
         Mirror("MirrorRear", c, rearView, new Vector2(0.18f, 0.05f), Trim, 0.03f);
         foreach (float sx in new[] { -1f, 1f })
         {
@@ -332,15 +335,17 @@ public static partial class CarMeshBuilder
     /// </summary>
     private static IEnumerable<ArrayMesh[]> Hud(MeshScratch inst, Vector3 eye, Dims d)
     {
-        // the windscreen as a line in (z, y): from its foot on the belt to its top under the roof
-        var foot = new Vector2(d.WsBase, d.Belt);
-        var top = new Vector2(d.WsTop, d.Roof - 0.05f);
+        // along the line of sight until it meets the glass (the roof's skin, 5 cm under its outer line)
         var look = new Vector2(Mathf.Cos(0.11f), -Mathf.Sin(0.11f));   // 6° under level
         var from = new Vector2(eye.Z, eye.Y);
-        // from + look·t on the glass: solve against foot + (top − foot)·s
-        var edge = top - foot;
-        float t = ((foot.X - from.X) * edge.Y - (foot.Y - from.Y) * edge.X) / (look.X * edge.Y - look.Y * edge.X);
-        var hit = from + look * t;
+        var hit = from;
+        for (float t = 0f; t < 3f; t += 0.005f)
+        {
+            hit = from + look * t;
+            float glassY = d.Arched ? d.RoofAt(hit.X) - 0.05f
+                : Mathf.Lerp(d.Belt, d.Roof - 0.05f, Mathf.Clamp((d.WsBase - hit.X) / (d.WsBase - d.WsTop), 0f, 1f));
+            if (hit.X > eye.Z + 0.2f && hit.Y >= glassY) break;
+        }
         var at = new Vector3(eye.X, hit.Y, hit.X);
         var n = (eye - at).Normalized();
         at += n * 0.01f;

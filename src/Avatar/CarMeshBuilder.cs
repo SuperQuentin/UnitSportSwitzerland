@@ -73,7 +73,58 @@ public static partial class CarMeshBuilder
         /// (<see cref="Deck"/>) and whose rear side glass ends square under it.
         /// </summary>
         public float RgFoot { get; init; } = Belt;
+
+        /// <summary>
+        /// A roof in one arc (the liftback, #760): from the windscreen's foot up to a level peak at
+        /// <see cref="PeakZ"/>, then down to the rear glass's foot, the glass and the roof panel
+        /// following it (<see cref="RoofAt"/>). Off, a flat roof between two straight panes.
+        /// </summary>
+        public bool Arched { get; init; }
+        public float PeakZ { get; init; }
+
+        /// <summary>The roof's outer line at z: the arc on an arched roof, the flat <see cref="Roof"/> otherwise.</summary>
+        public float RoofAt(float z)
+        {
+            if (!Arched) return Roof;
+            if (z >= PeakZ)
+            {
+                float span = WsBase - PeakZ;
+                return Hermite(Roof, 0f, Belt, -ScreenSlope, span, Mathf.Clamp((z - PeakZ) / span, 0f, 1f));
+            }
+            float back = PeakZ - RgBase;
+            return Hermite(RgFoot, RearSlope, Roof, 0f, back, Mathf.Clamp((z - RgBase) / back, 0f, 1f));
+        }
+
+        /// <summary>Where the windscreen is at height y (on the roof's outer line).</summary>
+        public float FrontAt(float y) => Arched
+            ? Solve(PeakZ, WsBase, y, falling: true)
+            : Mathf.Lerp(WsBase, WsTop, (y - Belt) / (Roof - Belt));
+
+        /// <summary>Where the rear glass is at height y (on the roof's outer line).</summary>
+        public float RearAt(float y) => Arched
+            ? Solve(RgBase, PeakZ, y, falling: false)
+            : Mathf.Lerp(RgBase, RgTop, (y - RgFoot) / (Roof - RgFoot));
+
+        // the arc's z at height y between z0 and z1, where it only rises or only falls
+        private float Solve(float z0, float z1, float y, bool falling)
+        {
+            for (int i = 0; i < 30; i++)
+            {
+                float mid = (z0 + z1) * 0.5f;
+                if (RoofAt(mid) > y == falling) z0 = mid; else z1 = mid;
+            }
+            return (z0 + z1) * 0.5f;
+        }
+
+        private static float Hermite(float y0, float m0, float y1, float m1, float span, float t)
+        {
+            float t2 = t * t, t3 = t2 * t;
+            return (2 * t3 - 3 * t2 + 1) * y0 + (t3 - 2 * t2 + t) * span * m0 + (-2 * t3 + 3 * t2) * y1 + (t3 - t2) * span * m1;
+        }
     }
+
+    /// <summary>An arched roof's slope (rise over run) at the windscreen's foot and at the rear glass's.</summary>
+    private const float ScreenSlope = 0.5f, RearSlope = 0.45f;
 
     // Belt = body top through the doors, Hood/Deck = top of the bonnet / boot lid (on a sloped
     // nose, the bonnet's front edge); the four Z values are the base and top of the windscreen and
@@ -94,8 +145,9 @@ public static partial class CarMeshBuilder
             BodyShape.Midship => (0.22f, -0.10f, -0.36f, -0.46f),
             // the windscreen's foot out over the front wheels, a short roof, the hatch raked a third off upright
             BodyShape.TallHatch => (0.60f, 0.06f, -0.74f, -0.95f),
-            // the screen raked as far forward, a short roof, the glass all the way down to the tail
-            BodyShape.Liftback => (0.55f, 0.02f, -0.45f, -0.95f),
+            // one arc (Dims.Arched): the screen from far forward up to just ahead of the peak, the
+            // rear glass from half a metre behind it all the way down to the tail
+            BodyShape.Liftback => (0.55f, 0.01f, -0.37f, -0.95f),
             _ => (0.42f, 0.12f, -0.20f, -0.39f),   // Coupe
         };
         // fractions of the height: belt, bonnet, boot lid
@@ -112,6 +164,9 @@ public static partial class CarMeshBuilder
             h * belt, h * hood, h * deck, hl * wsB, hl * wsT, hl * rgT, hl * rgB)
         {
             RgFoot = h * (b.Shape == BodyShape.Liftback ? deck : belt),
+            // the Prius's roof peaks over the B-pillar, a little behind the middle (its rear headroom)
+            Arched = b.Shape == BodyShape.Liftback,
+            PeakZ = -0.15f * hl,
         };
     }
 
@@ -244,8 +299,13 @@ public static partial class CarMeshBuilder
         float cw = d.Width - 0.2f;
         var glass = Tinted(body.Glass ?? Glass);
         const float roofSkin = 0.05f;
-        SlopedPane(s, cw - 0.02f, d.Belt, d.WsBase, d.Roof - roofSkin, d.WsTop, glass);
-        SlopedPane(top, cw - 0.02f, d.RgFoot, d.RgBase, d.Roof - roofSkin, d.RgTop, glass);
+        if (d.Arched)
+            ArchedGreenhouse(s, d, cw, paint, glass, round);
+        else
+        {
+            SlopedPane(s, cw - 0.02f, d.Belt, d.WsBase, d.Roof - roofSkin, d.WsTop, glass);
+            SlopedPane(top, cw - 0.02f, d.RgFoot, d.RgBase, d.Roof - roofSkin, d.RgTop, glass);
+        }
         // the side glass not in a door: the quarter lights behind and ahead of the doors (a
         // roadster's doors carry none, its whole side glass winds down into the body)
         foreach (float sx in new[] { -1f, 1f })
@@ -256,26 +316,34 @@ public static partial class CarMeshBuilder
                 SidePane(win, d, sx * cw * 0.5f, d.RgBase, open0, 0f, glass);
                 SidePane(win, d, sx * cw * 0.5f, open1, d.WsBase, 0f, glass);
             }
-        // a roadster's roof is its soft top, up: dark cloth rather than paint
-        if (round)
+        // a roadster's roof is its soft top, up: dark cloth rather than paint (an arched roof has its own)
+        if (d.Arched) { }
+        else if (round)
             RoundedRoof(top, d, cw, paint);
         else
             top.Box(new Vector3(0, d.Roof - roofSkin * 0.5f, (d.WsTop + d.RgTop) * 0.5f), new Vector3(cw + 0.02f, roofSkin, d.WsTop - d.RgTop), open ? Trim : paint);
         // the headlining under it, pale, so looking up from the seat is not into black
-        top.Box(new Vector3(0, d.Roof - roofSkin - 0.01f, (d.WsTop + d.RgTop) * 0.5f), new Vector3(cw - 0.04f, 0.02f, d.WsTop - d.RgTop - 0.04f),
-            open ? Cabin : Liner);
+        if (!d.Arched)
+            top.Box(new Vector3(0, d.Roof - roofSkin - 0.01f, (d.WsTop + d.RgTop) * 0.5f), new Vector3(cw - 0.04f, 0.02f, d.WsTop - d.RgTop - 0.04f),
+                open ? Cabin : Liner);
         // pillars: A, B (four doors only) and C (cloth on a roadster)
         foreach (float sx in new[] { -1f, 1f })
         {
             float px = sx * (cw * 0.5f + 0.005f);
             // a rounded car's pillars as thick as a real one's
-            s.Tube(new Vector3(px, d.Belt, d.WsBase), new Vector3(px, d.Roof, d.WsTop), round ? 0.045f : 0.03f, paint, 4);
-            top.Tube(new Vector3(px, d.RgFoot, d.RgBase), new Vector3(px, d.Roof, d.RgTop), round ? 0.06f : 0.035f, open ? Trim : paint, 4);
+            if (!d.Arched)
+            {
+                s.Tube(new Vector3(px, d.Belt, d.WsBase), new Vector3(px, d.Roof, d.WsTop), round ? 0.045f : 0.03f, paint, 4);
+                top.Tube(new Vector3(px, d.RgFoot, d.RgBase), new Vector3(px, d.Roof, d.RgTop), round ? 0.06f : 0.035f, open ? Trim : paint, 4);
+            }
             // the B-pillar between a four-door's doors (a sedan's where it always stood)
             if (FourDoor(body.Shape))
             {
                 float bz = body.Shape == BodyShape.Sedan ? (d.WsTop + d.RgTop) * 0.5f : doors[1].Z1;
-                s.RoundedBox(new Vector3(px, (d.Belt + d.Roof) * 0.5f, bz), new Vector3(round ? 0.05f : 0.03f, d.Roof - d.Belt, round ? 0.11f : 0.09f), paint);
+                // up to the roof where it stands; black on the liftback, as on the Prius
+                float bTop = d.RoofAt(bz) - (d.Arched ? 0.03f : 0f);
+                s.RoundedBox(new Vector3(px, (d.Belt + bTop) * 0.5f, bz), new Vector3(round ? 0.05f : 0.03f, bTop - d.Belt, round ? 0.11f : 0.09f),
+                    body.Shape == BodyShape.Liftback ? Trim : paint);
             }
         }
 
@@ -304,7 +372,15 @@ public static partial class CarMeshBuilder
         else
             foreach (float sx in new[] { -1f, 1f })
                 head.Box(new Vector3(sx * (hw - 0.36f), d.Hood - 0.06f, hl + 0.005f), new Vector3(0.4f, 0.13f, 0.02f), Head);
-        s.Box(new Vector3(0, SillY1 - 0.1f, hl - 0.03f), new Vector3(0.9f, 0.14f, 0.05f), Trim);   // grille intake
+        if (body.Shape == BodyShape.Liftback)
+        {
+            // the Prius's big lower intake across the bumper, a fog lamp in each corner pod
+            s.RoundedBox(new Vector3(0, SillY0 + 0.16f, hl - 0.01f), new Vector3(0.95f, 0.16f, 0.05f), Trim);
+            foreach (float sx in new[] { -1f, 1f })
+                s.RoundedBox(new Vector3(sx * (hw - 0.27f), SillY0 + 0.15f, hl - 0.005f), new Vector3(0.12f, 0.07f, 0.04f), new Color(0.85f, 0.86f, 0.82f));
+        }
+        else
+            s.Box(new Vector3(0, SillY1 - 0.1f, hl - 0.03f), new Vector3(0.9f, 0.14f, 0.05f), Trim);   // grille intake
 
         float wingZ = -hl + 0.55f;
         switch (body.Wing)
@@ -505,6 +581,7 @@ public static partial class CarMeshBuilder
     /// </summary>
     internal static List<Vector2> SideOutline(Dims d, float z0, float z1, float inset)
     {
+        if (d.Arched) return ArchedOutline(d, z0, z1, inset);
         float yTop = d.Roof - 0.05f - inset, yBot = d.Belt + inset;
         // the rakes, as z at a height
         float Front(float y) => Mathf.Lerp(d.WsBase, d.WsTop, (y - d.Belt) / (d.Roof - d.Belt)) - inset;
@@ -512,6 +589,86 @@ public static partial class CarMeshBuilder
         var poly = new List<Vector2> { new(Rear(yBot), yBot), new(Front(yBot), yBot), new(Front(yTop), yTop), new(Rear(yTop), yTop) };
         poly = Clip(poly, z0 + inset, 1f);
         return Clip(poly, z1 - inset, -1f);
+    }
+
+    /// <summary>
+    /// An arched roof's side window between z0 and z1 (#760): the belt along the bottom, the roof's
+    /// arc along the top, square at the rear glass's foot, clipped to the span and inset.
+    /// </summary>
+    private static List<Vector2> ArchedOutline(Dims d, float z0, float z1, float inset)
+    {
+        float yBot = d.Belt + inset;
+        float Top(float z) => d.RoofAt(z) - 0.05f - inset;
+        // the front end: where the arc comes down to the belt, ahead of the peak
+        float front = d.FrontAt(yBot + 0.05f + inset) - inset, back = d.RgBase + inset;
+        var poly = new List<Vector2> { new(back, yBot), new(front, yBot) };
+        const int n = 24;
+        for (int i = 1; i < n; i++)
+        {
+            float z = Mathf.Lerp(front, back, i / (float)n);
+            poly.Add(new Vector2(z, Mathf.Max(Top(z), yBot)));
+        }
+        poly.Add(new Vector2(back, Mathf.Max(Top(back), yBot)));
+        poly = Clip(poly, z0 + inset, 1f);
+        return Clip(poly, z1 - inset, -1f);
+    }
+
+    /// <summary>
+    /// An arched roof's greenhouse (#760, the liftback): the windscreen and the rear glass as strips
+    /// following the arc, the roof panel between them lofted along it (crowned and rolled at the
+    /// edges on a rounded body) with the headlining under it, and each side one rail along the
+    /// arc, A-pillar, roof rail and C-pillar in one, thicker at the back.
+    /// </summary>
+    private static void ArchedGreenhouse(MeshScratch s, Dims d, float cw, Color paint, Color glass, bool round)
+    {
+        const float skin = 0.05f;
+        float Glass(float z) => d.RoofAt(z) - skin;
+        float hx = (cw - 0.02f) * 0.5f;
+        void Strips(float from, float to, int n)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                float za = Mathf.Lerp(from, to, i / (float)n), zb = Mathf.Lerp(from, to, (i + 1) / (float)n);
+                s.Pane(stackalloc Vector3[] { new(-hx, Glass(za), za), new(hx, Glass(za), za), new(hx, Glass(zb), zb), new(-hx, Glass(zb), zb) }, glass);
+            }
+        }
+        Strips(d.WsTop, d.WsBase, 10);
+        Strips(d.RgBase, d.RgTop, 10);
+
+        // the roof panel, a little past the glass at each end, and the headlining under it
+        float rx = cw * 0.5f + 0.01f;
+        var roof = new List<Vector3[]>();
+        var liner = new List<Vector3[]>();
+        const int stations = 9;
+        for (int i = 0; i < stations; i++)
+        {
+            float z = Mathf.Lerp(d.RgTop - 0.03f, d.WsTop + 0.03f, i / (stations - 1f)), y1 = d.RoofAt(z), y0 = y1 - skin;
+            roof.Add(round
+                ? new[]
+                {
+                    new Vector3(-rx, y0, z), new Vector3(rx, y0, z), new Vector3(rx, y1 - 0.025f, z), new Vector3(rx - 0.06f, y1 - 0.004f, z),
+                    new Vector3(0, y1, z), new Vector3(-rx + 0.06f, y1 - 0.004f, z), new Vector3(-rx, y1 - 0.025f, z),
+                }
+                : new[] { new Vector3(-rx, y0, z), new Vector3(rx, y0, z), new Vector3(rx, y1, z), new Vector3(-rx, y1, z) });
+            float lx = cw * 0.5f - 0.02f, ly = y0 - 0.01f;
+            liner.Add(new[] { new Vector3(-lx, ly - 0.02f, z), new Vector3(lx, ly - 0.02f, z), new Vector3(lx, ly, z), new Vector3(-lx, ly, z) });
+        }
+        s.Loft(roof, Enumerable.Repeat(paint, roof[0].Length).ToArray(), paint, averaged: true);
+        s.Loft(liner, Enumerable.Repeat(Liner, 4).ToArray(), Liner, averaged: true);
+
+        // the rails along the arc, from the screen's foot over the roof to the rear glass's
+        const int railSteps = 18;
+        foreach (float sx in new[] { -1f, 1f })
+        {
+            float x = sx * (cw * 0.5f + 0.005f);
+            for (int i = 0; i < railSteps; i++)
+            {
+                float za = Mathf.Lerp(d.RgBase, d.WsBase, i / (float)railSteps), zb = Mathf.Lerp(d.RgBase, d.WsBase, (i + 1) / (float)railSteps);
+                // its top flush with the roof's outer line, not standing proud of it
+                float r = (za + zb) * 0.5f < d.RgTop ? (round ? 0.045f : 0.035f) : (round ? 0.035f : 0.03f);
+                s.Tube(new Vector3(x, d.RoofAt(za) - r, za), new Vector3(x, d.RoofAt(zb) - r, zb), r, paint, 4);
+            }
+        }
     }
 
     /// <summary>Sutherland–Hodgman against one edge: keeps what is on the <paramref name="sign"/> side of z = <paramref name="at"/>.</summary>
