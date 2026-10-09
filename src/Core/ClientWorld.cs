@@ -1069,8 +1069,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return;
         }
 
-        // Explore from the menus starts on foot, on open ground (#517), behind this screen
-        if (Launch is { Mode: GameMode.Explore, FromCommandLine: false } && !_groundStarted)
+        // Explore from the menus starts on foot, on open ground (#517), behind this screen; so does
+        // a --seat run, which then takes its seat here too, so nothing is played before it is in
+        var seat = Launch.Mode == GameMode.Explore ? SeatStart.Requested : null;
+        if ((Launch is { Mode: GameMode.Explore, FromCommandLine: false } || seat != null) && !_groundStarted)
         {
             _groundStarted = true;
             if (!_onFoot && _player == null)
@@ -1078,11 +1080,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 AddChild(_player = new FootPlayer { Name = "Player", Terrain = _chunks });
                 EnterFootMode(_player);
                 _groundStart = new GroundStart(_chunks, _player);
+                if (seat is { } kind) _seatStart = new SeatStart(_player, kind);
             }
         }
         if (_groundStart is { Done: false } ground && !ground.Step(delta))
         {
-            Report(LoadStage.PlacingYou, 0.34f);
+            Report(LoadStage.PlacingYou, 0.34f, _seatStart?.Status ?? "");
+            return;
+        }
+        if (_seatStart is { Done: false } seated && !seated.Step(delta))
+        {
+            Report(LoadStage.PlacingYou, 0.34f, seated.Status);
             return;
         }
 
@@ -1819,6 +1827,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// <summary>The spawn point has not found the ground under the spawn yet.</summary>
     private bool _groundStarted;
     private GroundStart? _groundStart;
+    /// <summary><c>--seat</c>: the ride taken behind the loading screen, after <see cref="_groundStart"/>.</summary>
+    private SeatStart? _seatStart;
 
     private bool SpawnPending => _spawn != null && IsInstanceValid(_spawn) && _spawn.IsInsideTree();
 
