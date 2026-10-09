@@ -43,6 +43,13 @@ public partial class ModelViewer : Node3D
         // --modelsyaw <deg>: the camera's turn round the model (0 behind, 180 in front) and --modelspitch <deg>, for a shot of its front
         if (CmdArgs.Float("--modelsyaw") is { } yawDeg) _yaw = Mathf.DegToRad(yawDeg);
         if (CmdArgs.Float("--modelspitch") is { } pitchDeg) _pitch = Mathf.DegToRad(pitchDeg);
+        // a model on show, not a frame budget: the window's own pixels (not the game's 75 %) and
+        // smooth edges, except in PS1, whose low resolution is its look (#759)
+        if (Styles.StyleKit.Style != Styles.VisualStyle.Ps1)
+        {
+            GetViewport().Scaling3DScale = 1f;
+            GetViewport().Msaa3D = Viewport.Msaa.Msaa4X;
+        }
         // screenshots are stills: no face caught mid-blink (#657)
         if (_shots != null) HumanMeshBuilder.FigureMaterial().SetShaderParameter(Face.FaceAnimator.IdleParam, 0f);
         AddChild(new DirectionalLight3D
