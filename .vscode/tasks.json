@@ -699,6 +699,48 @@
             "problemMatcher": []
         },
         {
+            "label": "data: rebuild all",
+            "detail": "Every stage again from the source data on disk (tools/rebuild-map.sh all); asks for the area: pick it on the map, the whole map, or a box",
+            "type": "process",
+            "command": "C:/Program Files/Git/bin/bash.exe",
+            "args": [
+                "tools/rebuild-map.sh",
+                "all"
+            ],
+            "osx": {
+                "command": "bash"
+            },
+            "linux": {
+                "command": "bash"
+            },
+            "presentation": {
+                "focus": true,
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "data: rebuild roads and signals",
+            "detail": "TerrainPreprocessor road pass again on the built terrain (tools/rebuild-map.sh); asks for the area: pick it on the map, the whole map, or a box",
+            "type": "process",
+            "command": "C:/Program Files/Git/bin/bash.exe",
+            "args": [
+                "tools/rebuild-map.sh",
+                "${input:rebuildMode}"
+            ],
+            "osx": {
+                "command": "bash"
+            },
+            "linux": {
+                "command": "bash"
+            },
+            "presentation": {
+                "focus": true,
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
             "label": "data: junctions dry run",
             "detail": "RoadGen --rewrite --dry-run: measure without touching .road files",
             "type": "process",
@@ -835,6 +877,15 @@
                 { "label": "J5 two lights 60 m apart (2915470,1322500 / 2915530,1322500)", "value": "2915500,1322470" }
             ],
             "default": "2910475,1322475"
+        },
+        {
+            "id": "rebuildMode", "type": "pickString", "description": "What to rebuild",
+            "options": [
+                { "label": "roads, then cover, trees, water and landings", "value": "roads" },
+                { "label": "roads only (faster; trees and town paving keep the old road lines)", "value": "roads-only" },
+                { "label": "OSM overlay for the whole map first (signal nodes, lanes, one-way), then roads and cover", "value": "osm" }
+            ],
+            "default": "roads"
         },
         {
             "id": "fixtureCourse", "type": "pickString", "description": "Fixture course (Terrain/Fixture/FixtureCourse.Names)",

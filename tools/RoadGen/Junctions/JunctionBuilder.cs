@@ -5,9 +5,20 @@ using UnitSport.Tools.RoadGen.Network;
 
 public sealed record JunctionOptions(
     /// <summary>Extra trim past the geometric corner, so there is room for a kerb curve.</summary>
-    double KerbFactor = 0.6,
+    double KerbFactor = 2.2,
     double MinKerb = 0.5,
-    double MaxKerb = 5.0,
+    double MaxKerb = 20.0,
+    /// <summary>
+    /// Roads at least <see cref="SlipMinHalf"/> wide (half width) get this much more room before their mouth, the width of a right-turn pocket
+    /// and its bike lane (#682): beside one the corner's kerb arc keeps its radius.
+    /// </summary>
+    double SlipExtra = 4.5,
+    double SlipMinHalf = 3.5,
+    /// <summary>What a link keeps for a left pocket (storage and taper) before its two ends share the rest as kerb allowance, so the pockets still fit (#682).</summary>
+    double PocketReserve = 55.0,
+    /// <summary>Where the link has room the kerb allowance (and so the turn radius) grows to this many times the nominal one.</summary>
+    double Grow = 1.4,
+    double GrowFromLength = 150.0,
     /// <summary>Points used to draw each rounded inner corner.</summary>
     int FilletSamples = 6,
     /// <summary>
@@ -19,6 +30,13 @@ public sealed record JunctionOptions(
     /// </summary>
     double MaxTrimWidths = 5.0,
     double MaxTrimAbsolute = 30.0);
+
+public static class JunctionOptionsExtensions
+{
+    /// <summary>The kerb allowance of an arm of this half width: the room its corners' kerb arcs get past the geometric corner.</summary>
+    public static double Kerb(this JunctionOptions o, double half) =>
+        Math.Clamp(o.KerbFactor * half + (half >= o.SlipMinHalf ? o.SlipExtra : 0), o.MinKerb, o.MaxKerb);
+}
 
 /// <summary>
 /// Builds junction polygons and decides how far each road is cut back.
@@ -112,7 +130,17 @@ public sealed class JunctionBuilder
         var arms = new List<PendingArm>(n);
         for (int i = 0; i < n; i++)
         {
-            double kerb = Math.Clamp(_options.KerbFactor * ordered[i].Half, _options.MinKerb, _options.MaxKerb);
+            double kerb = _options.Kerb(ordered[i].Half);
+            if (net.Links[ordered[i].Approach.LinkId].Alignment is { IsEmpty: false } alignment)
+            {
+                // never more than its share of the link; on a long one up to `Grow` times the nominal allowance
+                // the link keeps room for a left pocket (storage and taper, about PocketReserve) between its two ends: each end's kerb allowance
+                // takes at most half of what is left, never less than the small one a junction had before (0.6 x half width, 5 m at most)
+                double floor = Math.Clamp(0.6 * ordered[i].Half, _options.MinKerb, 5.0);
+                double room = Math.Max(floor, (alignment.Length - _options.PocketReserve) * 0.5);
+                kerb = Math.Min(kerb, room);
+                if (alignment.Length >= _options.GrowFromLength) kerb = Math.Min(kerb * _options.Grow, _options.MaxKerb);
+            }
             double limit = Math.Min(_options.MaxTrimWidths * ordered[i].Half * 2, _options.MaxTrimAbsolute);
 
             double wanted = Math.Max(trims[i], 0) + kerb;

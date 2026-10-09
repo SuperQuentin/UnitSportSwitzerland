@@ -17,7 +17,7 @@ public enum RideKind
     // 8..63 are cars: CarCatalog.All[kind - CarCatalog.First]. The catalog is append-only.
     // 64..95 are motorbikes: MotorbikeCatalog.All[kind - MotorbikeCatalog.First], append-only too;
     // entries 32 onwards continue at 129..192 (MotorbikeCatalog.First2, #410).
-    // 96..119 are trucks and buses: HeavyCatalog.All[kind - HeavyCatalog.First], append-only too.
+    // 96..119 are trucks and buses (and the pickup, 101, #463): HeavyCatalog.All[kind - HeavyCatalog.First], append-only too.
     /// <summary>
     /// Not a mount: a trailer standing in the world on its own (<c>Vehicles.VehicleState.Train</c>
     /// says which). Nobody rides it; a truck backs under it and couples.
@@ -45,7 +45,17 @@ public enum RideKind
     Excavator = 194,
     /// <summary>An articulated wheel loader (#612): a <see cref="Player.WheelLoader"/>, frame steering, a lift arm and a bucket.</summary>
     WheelLoader = 195,
-    // The next other mount is 194.
+    /// <summary>A 2.7 t mini excavator (#614): an <see cref="Player.Excavator"/> at the mini's size, with a dozer blade.</summary>
+    MiniExcavator = 196,
+    /// <summary>A compact tandem roller (#614): a <see cref="Player.CompactRoller"/>, frame steering and vibrating drums.</summary>
+    CompactRoller = 197,
+    /// <summary>A telehandler (#614): a <see cref="Player.Telehandler"/>, a telescopic boom with forks and three steering modes.</summary>
+    Telehandler = 198,
+    /// <summary>A wheel loader with a fork carriage instead of its bucket (#615): a <see cref="Player.WheelLoader"/> that lifts pallets.</summary>
+    WheelLoaderForks = 199,
+    /// <summary>A tracked mini dumper (#614): a <see cref="Player.MiniDumper"/>, a skip that tips forward.</summary>
+    MiniDumper = 200,
+    // The next other mount is 201.
 }
 
 /// <summary>
@@ -210,6 +220,8 @@ public abstract class Rideable
     public virtual float ChasePitch => 0f;
     /// <summary>How far the chase camera swings toward the direction of travel in a slide, 0..1.</summary>
     public virtual float ChaseFollowsTravel => 0f;
+    /// <summary>How hard the machine shakes its driver's view, rad either way (a vibrating roller, #614); 0 for nearly everything.</summary>
+    public virtual float CameraShake => 0f;
 
     /// <summary>FOV at rest, and the speed at which it has widened to <see cref="MaxFov"/>.</summary>
     public virtual float BaseFov => 70f;
@@ -299,7 +311,16 @@ public abstract class Rideable
     /// </summary>
     public virtual Avatar.VehicleDeck[] Decks => System.Array.Empty<Avatar.VehicleDeck>();
 
-    public bool Walkable => Decks.Length > 0;
+    public bool Walkable
+    {
+        get
+        {
+            // a hold alone (a boat trailer's cradle, #463) is nothing to walk about in
+            foreach (var deck in Decks)
+                if (!deck.CargoOnly) return true;
+            return false;
+        }
+    }
 
     /// <summary>
     /// A walkable vehicle is driven from its wheel inside (#384, E from outside only with the
@@ -485,7 +506,12 @@ public abstract class Rideable
         RideKind.Airstairs => new Airstairs(),
         RideKind.Forklift => new Forklift(),
         RideKind.Excavator => new Excavator(),
+        RideKind.MiniExcavator => new Excavator(mini: true),
         RideKind.WheelLoader => new WheelLoader(),
+        RideKind.WheelLoaderForks => new WheelLoader(forks: true),
+        RideKind.MiniDumper => new MiniDumper(),
+        RideKind.CompactRoller => new CompactRoller(),
+        RideKind.Telehandler => new Telehandler(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),
         _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),
         _ when HeavyCatalog.For(kind) is { } heavy => new Truck(heavy),

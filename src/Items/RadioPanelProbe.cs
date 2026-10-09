@@ -1,3 +1,5 @@
+using System.Linq;
+using System;
 using System.Threading.Tasks;
 using Godot;
 using UnitSport.Audio.Cd;
@@ -65,11 +67,24 @@ public partial class RadioPanelProbe : Node
         inv.Select(0);
         await Wait(0.5);
 
+        // a tap of Use switches it on and off without the panel (#725); off keeps the CD for the next tap
+        await Use();
+        Check(RadioUi.Instance?.IsOpen != true, "a tap of Use opens no panel");
+        Check(!Silent(inv), "a tap of Use switches the radio on (the first CD)");
+        int first = RadioPlay.Decode(inv[0].Data)?.CdId ?? 0;
+        await Use();
+        Check(Silent(inv), "a second tap switches it off");
+        Check(RadioPlay.DecodeAny(inv[0].Data)?.CdId == first && first != 0, $"and it keeps its CD ('{inv[0].Data}')");
+        await Use();
+        Check(RadioPlay.Decode(inv[0].Data)?.CdId == first, "a third tap puts the same CD back on");
+        await Use();
+        Check(Silent(inv), "off again");
+
         // twice: closed by a second Use, then by Esc
         foreach (bool esc in new[] { false, true })
         {
-            await Use();
-            Check(RadioUi.Instance?.IsOpen == true, "Use opens the radio's panel");
+            await HoldUse();
+            Check(RadioUi.Instance?.IsOpen == true, "holding Use opens the radio's panel");
             Check(Visible(RadioUi.LibraryLabel) && !RowsShown(), "on the player view: the library button, no CD row");
             await Wait(0.2);
             var cursor = Input.MouseMode == Input.MouseModeEnum.Visible && DisplayServer.GetName() != "headless"
@@ -101,6 +116,7 @@ public partial class RadioPanelProbe : Node
         }
 
         await Library(inv);
+        await LastSong(inv);
 
         Log(_failed == 0 ? "RESULT: ok" : $"RESULT: FAIL {_failed}");
         GetTree().Quit(_failed == 0 ? 0 : 1);
@@ -109,7 +125,7 @@ public partial class RadioPanelProbe : Node
     /// <summary>The library (#392): its button shows the rows, a row plays, Stop stops, the button goes back.</summary>
     private async Task Library(Inventory inv)
     {
-        await Use();
+        await HoldUse();
         await Wait(0.3);
         Shot("radiopanel_player.png");
         Check(Press(RadioUi.LibraryLabel) && RowsShown(), "the library button shows the CDs");
@@ -120,6 +136,18 @@ public partial class RadioPanelProbe : Node
         await Wait(0.5);
         Check(!Silent(inv), $"pressing \"{row?.Text}\" plays it");
         Check(RadioUi.Instance?.IsOpen == true && RowsShown(), "and the library stays open");
+        // #734: the scrubber moves the song, for everyone: a new start on the clock
+        if (RadioUi.Instance?.FindChildren("*", nameof(HSlider), true, false).OfType<HSlider>()
+                .FirstOrDefault(sl => sl.TooltipText.StartsWith("Drag to move")) is { } scrub
+            && RadioPlay.Decode(inv[0].Data) is { Length: > 4f } before)
+        {
+            scrub.Value = 0.5;
+            await Wait(0.2);
+            var after = RadioPlay.Decode(inv[0].Data);
+            double at = after is { } a2 ? Net.ClockSync.ServerNow - a2.StartedAt : -1;
+            Check(after != null && Math.Abs(at - before.Length * 0.5) < 1.0, $"the scrubber moves the song to the middle ({at:F1} s of {before.Length:F1})");
+        }
+        else Log("no scrubber or a CD too short: the scrub case is skipped");
         Shot("radiopanel_library.png");
         Check(Press("■  Stop"), "Stop");
         await Wait(0.5);
@@ -127,6 +155,24 @@ public partial class RadioPanelProbe : Node
         Check(Press(RadioUi.PlayerLabel) && !RowsShown(), "back to the player");
         await Key(Godot.Key.Escape);
         Check(RadioUi.Instance?.IsOpen != true, "Esc closes it");
+    }
+
+    /// <summary>
+    /// #732: a radio switched off on a CD that is not the first of the list plays that one again from
+    /// the panel's Play, rather than starting the list over.
+    /// </summary>
+    private async Task LastSong(Inventory inv)
+    {
+        var order = RadioQueue.Order(CdLibrary.Instance, withPersonal: true);
+        if (order.Count < 2 || CdLibrary.Instance?.Find(order[^1]) is not { } last) { Log("only one CD: the last-song case is skipped"); return; }
+        inv.Put(0, new ItemStack(ItemId.Radio, 1, RadioPlay.Off(new RadioPlay(last.Id, 0, last.Duration))));
+        inv.Select(0);
+        await Wait(0.3);
+        await HoldUse();
+        Check(Press("▶  Play"), "Play in the panel");
+        await Wait(0.5);
+        Check(RadioPlay.Decode(inv[0].Data)?.CdId == last.Id, $"Play puts the last CD back on ({inv[0].Data}), not the first of the list");
+        await Key(Godot.Key.Escape);
     }
 
     /// <summary>A screenshot into test_output/ when windowed (headless has no image).</summary>
@@ -162,7 +208,7 @@ public partial class RadioPanelProbe : Node
     {
         bool silent = true;
         for (int i = 0; i < inv.Capacity; i++)
-            if (!inv[i].IsEmpty && inv[i].Id == ItemId.Radio && !string.IsNullOrEmpty(inv[i].Data))
+            if (!inv[i].IsEmpty && inv[i].Id == ItemId.Radio && RadioPlay.Decode(inv[i].Data) != null)
             {
                 Log($"slot {i} holds '{inv[i].Data}'");
                 silent = false;
@@ -184,6 +230,15 @@ public partial class RadioPanelProbe : Node
             Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.UseItem, Pressed = down });
             await Wait(0.15);
         }
+        await Wait(0.4);
+    }
+
+    /// <summary>Use held past <see cref="RadioTap.HoldTime"/>: the panel, not the switch (#725).</summary>
+    private async Task HoldUse()
+    {
+        Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.UseItem, Pressed = true });
+        await Wait(RadioTap.HoldTime + 0.25);
+        Input.ParseInputEvent(new InputEventAction { Action = PlayerInput.UseItem, Pressed = false });
         await Wait(0.4);
     }
 

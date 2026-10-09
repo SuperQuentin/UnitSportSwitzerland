@@ -12,6 +12,8 @@
   `ChunkManager._available` — without that merge the LOD rings skip unknown tiles and nothing
   is ever requested. It also saves that index to the cache, so tiles streamed in an earlier
   session are reachable offline.
+- **HTTP first** when the server names a mirror (`--tiles-url`, #651): the bulk files come from a
+  static HTTP server and ENet is the fallback (`net/http-tiles`).
 - **Cache writes use a unique temp name** (`NetworkChunkSource.WriteCache`, issue #65): two
   fetches of the same asset can complete together (e.g. a blend and the rings), and a shared
   `<file>.part` was moved away by one under the other ("cache write failed ... .terrc.part", 19 in

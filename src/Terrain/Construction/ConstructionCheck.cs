@@ -100,6 +100,9 @@ public static class ConstructionCheck
                 $"{what}: hoarding {site.Hoarding.Sum(r => r.A.DistanceTo(r.B)):F0} m in {site.Hoarding.Count} run(s)");
             Expect(site.Zones.Any(z => z.Kind == SiteZoneKind.Office), $"{what}: has its site office");
             Expect(site.Machines.Count > 0, $"{what}: {site.Machines.Count} machine slot(s): {string.Join(", ", site.Machines.Select(m => m.Role))}");
+            // the pallets of bricks and cement a machine with tines can lift (#615): not a failure when none fit
+            int pallets = SiteShellBuilder.Dressing(t.Tile, site, null).Pallets.Count;
+            GD.Print($"[constructioncheck]      {what}: {pallets} pallet(s) of materials");
             foreach (var corner in site.Box.Corners())
                 if (site.Cranes.Count > 0 && !site.Cranes.Any(k => k.Base.DistanceTo(corner) <= k.JibLength))
                     Expect(false, $"{what}: no crane reaches the corner at {corner}");

@@ -28,6 +28,12 @@ public readonly record struct CargoBay(Vector3 Centre, Vector3 Size)
         return Vehicles.CargoFit.Inside(p.X, p.Y, p.Z, Size.X, Size.Y, Size.Z, grow);
     }
 
+    /// <summary>Only this kind is carried in it (a boat trailer's boat, #463); 0: any ground vehicle that fits.</summary>
+    public Player.RideKind Only { get; init; }
+
+    /// <summary>A vehicle of <paramref name="kind"/> may be carried in it.</summary>
+    public bool Takes(Player.RideKind kind) => Only == 0 || Only == kind;
+
     /// <summary>A hull this size (across, height, length) fits in it, driven in nose or tail first.</summary>
     public bool Fits(Vector3 hull) => Vehicles.CargoFit.Fits(hull.X, hull.Y, hull.Z, Size.X, Size.Y, Size.Z);
 }
@@ -50,6 +56,12 @@ public sealed record VehicleDeck(int Section, DeckBox[] Boxes, Aabb Aboard, Vect
 
     /// <summary>The holds a ground vehicle can be driven into and carried in (#418).</summary>
     public CargoBay[] CargoBays { get; init; } = System.Array.Empty<CargoBay>();
+
+    /// <summary>
+    /// Only a hold, nothing to walk (a boat trailer's cradle, #463): the vehicle is not walkable for
+    /// it, and nobody is ever aboard it.
+    /// </summary>
+    public bool CargoOnly { get; init; }
 
     /// <summary>
     /// The floor plan aboard, node frame (x, z), a polygon round its edge; null: the whole
@@ -178,7 +190,15 @@ public sealed class DeckBuilder
     private readonly List<CargoBay> _bays = new();
 
     /// <summary>A hold vehicles are carried in (<see cref="VehicleDeck.CargoBays"/>): authored centre and size (x, y, length).</summary>
-    public void CargoBay(Vector3 centre, Vector3 size) => _bays.Add(new CargoBay(Node(centre), size));
+    public void CargoBay(Vector3 centre, Vector3 size, Player.RideKind only = 0) => _bays.Add(new CargoBay(Node(centre), size) { Only = only });
+
+    /// <summary>A deck that is only a hold (<see cref="VehicleDeck.CargoOnly"/>): nothing solid, nobody aboard.</summary>
+    public VehicleDeck BuildCargo(int section) =>
+        new(section, System.Array.Empty<DeckBox>(), new Aabb(new Vector3(0f, -1000f, 0f), Vector3.Zero), System.Array.Empty<Vector2>())
+        {
+            CargoBays = _bays.ToArray(),
+            CargoOnly = true,
+        };
 
     /// <summary>A pole or rail to hold, as an authored point on the floor plan.</summary>
     public void Hold(float x, float at) => _holds.Add(new Vector2(-x, -(_cg - at)));

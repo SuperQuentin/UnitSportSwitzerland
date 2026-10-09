@@ -37,11 +37,54 @@ public partial class CdLibrary : Node
 
     private const string IndexFile = "library.json";
 
-    /// <summary>The chess type beat, shipped with the game (#370): the church radio's CD and the rat dance.</summary>
+    /// <summary>
+    /// The chess type beat (#370): the church radio's CD and the rat dance. The project keeps a copy
+    /// for dev runs and checks, offline; an export leaves it out (not openly licensed, #718) and
+    /// burns it from <see cref="RatBeatUrl"/> instead.
+    /// </summary>
     public const string RatBeatRes = "res://assets/audio/chess_type_beat.ogg";
 
     /// <summary><see cref="CdInfo.Source"/> of the CD burnt from <see cref="RatBeatRes"/>.</summary>
     public const string RatBeatSource = "bundled:chess_type_beat";
+
+    /// <summary>Where a release burns the chess type beat from (#718).</summary>
+    public const string RatBeatUrl = "https://www.youtube.com/watch?v=EK2w6qA5zz8";
+
+    /// <summary>
+    /// The CDs every release starts with (#718), the chess type beat first: burnt from these links
+    /// by the server (or the offline game) of an exported build, once each, one at a time, so no
+    /// audio ships with the game. A CD burnt from one is marked <see cref="DefaultSource"/>.
+    /// </summary>
+    public static readonly string[] DefaultUrls =
+    {
+        RatBeatUrl,
+        "https://www.youtube.com/watch?v=Zc4r7GGXAvw",
+        "https://www.youtube.com/watch?v=WxJR8L3y4gY",
+        "https://www.youtube.com/watch?v=PHfRJOZ5HpE",
+        "https://www.youtube.com/watch?v=NAogfwwqwGY",
+        "https://www.youtube.com/watch?v=6BEww_j1FmA",
+        "https://www.youtube.com/watch?v=9mxD-mByh0U",
+        "https://www.youtube.com/watch?v=zWMpmScHz9g",
+        "https://www.youtube.com/watch?v=0wRYvsfhsR8",
+        "https://www.youtube.com/watch?v=PGNiXGX2nLU",
+    };
+
+    /// <summary><see cref="CdInfo.Source"/> of the CD burnt from a <see cref="DefaultUrls"/> link.</summary>
+    public static string DefaultSource(string url) => "default:" + url;
+
+    /// <summary>What a CD burnt from a check's <c>--cdfixture</c> (or <c>--radiopersonal</c>) file is marked with.</summary>
+    private const string FixturePrefix = "fixture:";
+
+    /// <summary>The checks' fixture CDs burnt before they were marked (their file names in tools/*check.sh).</summary>
+    private static readonly HashSet<string> LegacyFixtures = new() { "radiofixture", "radiofixture2", "radiopersonal", "carcdA", "carcdB" };
+
+    /// <summary>
+    /// A CD a check burnt from a test sound, not music: hidden from an exported game and its files
+    /// deleted there (<see cref="DropFixtures"/>). The checks share the user folder with a release
+    /// on the same machine, so their CDs used to show up in the player's radio.
+    /// </summary>
+    public static bool IsFixture(CdInfo cd) =>
+        cd.Source.StartsWith(FixturePrefix, StringComparison.Ordinal) || (cd.Source.Length == 0 && LegacyFixtures.Contains(cd.Title));
 
     /// <summary>
     /// The shared CD of the chess type beat, or -1 while it is not burnt (or not yet listed here).
@@ -83,7 +126,7 @@ public partial class CdLibrary : Node
         return File.Exists(path) ? path : null;
     }
 
-    /// <summary>A CD was added (or the whole list arrived).</summary>
+    /// <summary>A CD was added or updated (or the whole list arrived).</summary>
     public event Action? Changed;
 
     /// <summary>Client (and offline): what the burner is doing with the link you gave it.</summary>
@@ -99,6 +142,14 @@ public partial class CdLibrary : Node
     private readonly ConcurrentQueue<(long Peer, string Text)> _status = new();
     private readonly ConcurrentQueue<(long Peer, CdInfo? Cd, bool Personal)> _done = new();
     private readonly Queue<string> _fixtures = new();
+
+    /// <summary>CDs whose <see cref="CdAnalysis"/> is missing or old (#725), re-analysed one at a time.</summary>
+    private readonly Queue<(int Id, bool Personal)> _stale = new();
+    private readonly ConcurrentQueue<(int Id, bool Personal, CdAnalysis? Analysis, bool NoFfmpeg)> _reanalysed = new();
+    private bool _reanalysing, _noFfmpeg;
+
+    /// <summary>What a queued burn of this process marks its CD with (a default link, the bundled beat).</summary>
+    private readonly Dictionary<string, string> _sources = new();
 
     /// <summary><paramref name="server"/> for the dedicated server's copy, decided up front like <c>Bank</c>.</summary>
     public static CdLibrary Create(Node world, bool server)
@@ -116,7 +167,9 @@ public partial class CdLibrary : Node
         if (!_server) LoadPersonal();
         if (_server) Multiplayer.PeerConnected += SendAll;
         EnsureRatBeat();
+        EnsureDefaults();
         BurnFixture();
+        QueueBackfill();
     }
 
     public override void _ExitTree()
@@ -146,6 +199,36 @@ public partial class CdLibrary : Node
         if (refusal.Length > 0) BurnStatus?.Invoke(refusal);
     }
 
+    /// <summary>
+    /// Burns an audio file from this computer (#736). For "just for me", offline or on the host it
+    /// is burnt here; on someone else's server it is uploaded (<see cref="CdUpload"/>), virus-scanned
+    /// there and burnt into the shared list.
+    /// </summary>
+    public void BurnFile(string path, bool personal = false)
+    {
+        if (!File.Exists(path)) { BurnStatus?.Invoke("That file is gone."); return; }
+        if (!personal && !Owns)
+        {
+            if (CdUpload.Instance is { } upload) upload.Send(path);
+            return;
+        }
+        Begin(0, path, personal, out string refusal);
+        if (refusal.Length > 0) BurnStatus?.Invoke(refusal);
+    }
+
+    /// <summary>
+    /// Server: burns a player's upload that passed the virus scan (<see cref="CdUpload"/>) into the
+    /// shared list; its folder is deleted once the burn is done, whatever came of it.
+    /// </summary>
+    internal bool BurnUpload(long peer, string file, string folder, out string refusal)
+    {
+        Begin(peer, file, false, out refusal, deleteAfter: folder);
+        return refusal.Length == 0;
+    }
+
+    /// <summary>Server or offline: a status line for <paramref name="peer"/>'s burn box (0 = this process).</summary>
+    internal void Report(long peer, string text) => _status.Enqueue((peer, text));
+
     /// <summary>Forgets one of this player's own CDs and deletes its files.</summary>
     public void RemovePersonal(int id)
     {
@@ -162,6 +245,7 @@ public partial class CdLibrary : Node
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Status(string text) => BurnStatus?.Invoke(text);
 
+    /// <summary>A new CD, or a new version of a listed one (same id: replaced, e.g. its analysis backfilled).</summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void Added(Godot.Collections.Dictionary cd)
     {
@@ -214,10 +298,11 @@ public partial class CdLibrary : Node
     }
 
     /// <summary>Starts a burn on the worker, or says why not. <paramref name="peer"/> 0 = this process.</summary>
-    private void Begin(long peer, string url, bool personal, out string refusal)
+    private void Begin(long peer, string url, bool personal, out string refusal, string? deleteAfter = null)
     {
         refusal = "";
-        bool localFile = peer == 0 && File.Exists(url);
+        // a file only from this process, or a player's upload the server has scanned (#736)
+        bool localFile = (peer == 0 || deleteAfter != null) && File.Exists(url);
         if (!localFile && !AllowedSource(url)) { refusal = "Only YouTube links can be burnt."; return; }
         if (_burning) { refusal = personal ? "Already burning a CD; try again when it is done." : "Someone is already burning a CD; try again in a minute."; return; }
         double now = Time.GetTicksMsec() / 1000.0;
@@ -226,16 +311,28 @@ public partial class CdLibrary : Node
             refusal = $"One CD a minute: {(int)(BurnCooldown - (now - last))} s to wait.";
             return;
         }
-        if (!CdBurner.ToolsAvailable(out string why)) { refusal = why; return; }
+        // a file needs ffmpeg only; a link yt-dlp too
+        string why = "";
+        if (!(localFile ? CdBurner.FfmpegAvailable() : CdBurner.ToolsAvailable(out why)))
+        {
+            refusal = localFile ? "ffmpeg is missing: a file cannot be burnt here." : why;
+            return;
+        }
 
         _burning = true;
         _lastBurn[peer] = now;
         int id = personal ? NewPersonalId() : _nextId++;
-        var burner = new CdBurner { CdDirectory = personal ? PersonalDirectory : Directory };
+        string? source = peer == 0 ? _sources.GetValueOrDefault(url) : null;
+        // the chess type beat's grid is set by hand (Note): lay its downbeat and sections on that one
+        bool ratBeat = source == RatBeatSource || source == DefaultSource(RatBeatUrl);
+        var burner = new CdBurner
+        {
+            CdDirectory = personal ? PersonalDirectory : Directory,
+            Grid = ratBeat ? (RatBeatBpm, RatBeatOffset) : null,
+        };
         var progress = new Progress<string>(text => _status.Enqueue((peer, text)));
         GD.Print($"[cd] burning {(personal ? "personal " : "")}CD {id} for peer {peer}: {(localFile ? Path.GetFileName(url) : url)}");
         // The tools run for a while; RPCs must go out from _Process, so the results are queued.
-        string? source = localFile && url == _ratBeatFile ? RatBeatSource : null;
         Task.Run(async () =>
         {
             CdInfo? cd = null;
@@ -245,6 +342,13 @@ public partial class CdLibrary : Node
                 if (cd != null && source != null) cd = cd with { Source = source };
             }
             catch (Exception e) { _status.Enqueue((peer, $"Burn failed: {e.Message}")); }
+            finally
+            {
+                // an upload is kept only as the re-encoded Ogg: the original goes (#736)
+                if (deleteAfter != null)
+                    try { System.IO.Directory.Delete(deleteAfter, recursive: true); }
+                    catch (Exception e) { GD.PushWarning($"[cd] could not delete the upload {deleteAfter}: {e.Message}"); }
+            }
             _done.Enqueue((peer, cd, personal));
         });
     }
@@ -280,6 +384,62 @@ public partial class CdLibrary : Node
             Begin(0, next, false, out string refusal);
             if (refusal.Length > 0) GD.PushWarning($"[cd] fixture refused: {refusal}");
         }
+        while (_reanalysed.TryDequeue(out var r)) Reanalysed(r.Id, r.Personal, r.Analysis, r.NoFfmpeg);
+        if (!_reanalysing && !_noFfmpeg && _stale.TryDequeue(out var stale)) Reanalyse(stale.Id, stale.Personal);
+    }
+
+    // ---- analysis backfill (#725) ---------------------------------------------------------------
+
+    /// <summary>
+    /// Queues every CD of this library (the shared one where this copy owns it, and this player's
+    /// own) whose <see cref="CdAnalysis"/> is missing or older than the analyser. Its own flag, not
+    /// the burn queue's, so a <c>--cdfixture</c> never waits behind it.
+    /// </summary>
+    private void QueueBackfill()
+    {
+        if (Owns)
+            foreach (var cd in _all.Values) if (CdAnalysis.IsStale(cd)) _stale.Enqueue((cd.Id, false));
+        foreach (var cd in _personal.Values) if (CdAnalysis.IsStale(cd)) _stale.Enqueue((cd.Id, true));
+        if (_stale.Count > 0) GD.Print($"[cd] analysing {_stale.Count} older CD(s) again");
+    }
+
+    /// <summary>Decodes one CD's Ogg on a worker and analyses it on its stored grid; the result comes back through <see cref="_reanalysed"/>.</summary>
+    private void Reanalyse(int id, bool personal)
+    {
+        var cd = personal ? _personal.GetValueOrDefault(id) : _all.GetValueOrDefault(id);
+        if (cd == null) return;
+        string ogg = Path.Combine(personal ? PersonalDirectory : Directory, $"{id}.ogg");
+        if (!File.Exists(ogg)) return;
+        _reanalysing = true;
+        float bpm = cd.Bpm, offset = cd.BeatOffset;
+        Task.Run(async () =>
+        {
+            CdAnalysis? analysis = null;
+            bool noFfmpeg = false;
+            try { analysis = await CdBurner.ReanalyseAsync(ogg, bpm, offset, CancellationToken.None); }
+            catch (System.ComponentModel.Win32Exception) { noFfmpeg = true; }   // ffmpeg missing: skip quietly
+            catch (Exception e) { GD.Print($"[cd] could not analyse CD {id} again: {e.Message}"); }
+            _reanalysed.Enqueue((id, personal, analysis, noFfmpeg));
+        });
+    }
+
+    /// <summary>Main thread: stores the new block in the list and the CD's files, and gives the server's to every client.</summary>
+    private void Reanalysed(int id, bool personal, CdAnalysis? analysis, bool noFfmpeg)
+    {
+        _reanalysing = false;
+        if (noFfmpeg) { _noFfmpeg = true; _stale.Clear(); return; }
+        var list = personal ? _personal : _all;
+        if (analysis == null || !list.TryGetValue(id, out var cd)) return;
+        cd = cd with { Analysis = analysis };
+        list[id] = cd;
+        string dir = personal ? PersonalDirectory : Directory;
+        SaveIndex(dir, list);
+        try { Core.JsonStore.Save(Path.Combine(dir, $"{id}.json"), cd, CdInfo.Json); }
+        catch (Exception e) { GD.PushWarning($"[cd] could not save CD {id}: {e.Message}"); }
+        GD.Print($"[cd] CD {id} analysed again: {analysis.SectionStarts.Length} section(s), downbeat {analysis.Downbeat}");
+        Changed?.Invoke();
+        // Added replaces a listed id on the clients
+        if (!personal && _server && Online) Rpc(MethodName.Added, cd.ToDict());
     }
 
     // ---- storage --------------------------------------------------------------------------------
@@ -292,6 +452,7 @@ public partial class CdLibrary : Node
             _all[cd.Id] = Note(cd);
             _nextId = Math.Max(_nextId, cd.Id + 1);
         }
+        if (DropFixtures(Directory, _all)) Save();
         GD.Print($"[cd] library: {_all.Count} CD(s) in {Directory}");
     }
 
@@ -299,10 +460,33 @@ public partial class CdLibrary : Node
     {
         foreach (var cd in LoadIndex(PersonalDirectory))
             if (cd.Id < 0) _personal[cd.Id] = cd;
+        if (DropFixtures(PersonalDirectory, _personal)) SaveIndex(PersonalDirectory, _personal);
         if (_personal.Count > 0) GD.Print($"[cd] {_personal.Count} personal CD(s) in {PersonalDirectory}");
     }
 
     private void Save() => SaveIndex(Directory, _all);
+
+    /// <summary>
+    /// An exported game (not a check burning its own) forgets the checks' fixture CDs and deletes
+    /// their files. True when it removed any, so the caller rewrites the index.
+    /// </summary>
+    private static bool DropFixtures(string directory, Dictionary<int, CdInfo> cds)
+    {
+        if (!OS.HasFeature("template") || CmdArgs.Has("--cdfixture") || CmdArgs.Has("--radiopersonal")) return false;
+        bool any = false;
+        foreach (var cd in cds.Values.Where(IsFixture).ToList())
+        {
+            cds.Remove(cd.Id);
+            any = true;
+            foreach (string ext in new[] { ".ogg", ".json" })
+            {
+                try { File.Delete(Path.Combine(directory, $"{cd.Id}{ext}")); }
+                catch (Exception e) { GD.PushWarning($"[cd] could not delete fixture CD {cd.Id}{ext}: {e.Message}"); }
+            }
+            GD.Print($"[cd] dropped the check's fixture CD {cd.Id} ({cd.Title})");
+        }
+        return any;
+    }
 
     private static readonly System.Text.Json.JsonSerializerOptions IndexJson = new()
     {
@@ -349,16 +533,13 @@ public partial class CdLibrary : Node
         return id;
     }
 
-    /// <summary>Remembers the chess type beat's id, and gives it its measured grid.</summary>
+    /// <summary>Remembers the chess type beat's id (bundled or from its link), and gives it its measured grid.</summary>
     private CdInfo Note(CdInfo cd)
     {
-        if (cd.Source != RatBeatSource) return cd;
+        if (cd.Source != RatBeatSource && cd.Source != DefaultSource(RatBeatUrl)) return cd;
         RatBeatId = cd.Id;
         return cd with { Bpm = RatBeatBpm, BeatOffset = RatBeatOffset };
     }
-
-    /// <summary>Where the shipped chess type beat is copied for the burner, which needs a real file.</summary>
-    private string? _ratBeatFile;
 
     /// <summary>
     /// The server (or offline game) burns the shipped chess type beat into the shared list once, the
@@ -371,19 +552,40 @@ public partial class CdLibrary : Node
         if (!Owns || RatBeatId >= 0) return;
         try
         {
+            if (!Godot.FileAccess.FileExists(RatBeatRes)) return;   // an export: EnsureDefaults burns it from its link
             using var src = Godot.FileAccess.Open(RatBeatRes, Godot.FileAccess.ModeFlags.Read);
-            if (src == null) { GD.PushWarning($"[cd] {RatBeatRes} is missing: no chess type beat"); return; }
+            if (src == null) { GD.PushWarning($"[cd] could not open {RatBeatRes}: no chess type beat"); return; }
             string dir = Path.Combine(Directory, "_bundled");
             System.IO.Directory.CreateDirectory(dir);
-            _ratBeatFile = Path.Combine(dir, "Chess Type Beat.ogg");
-            File.WriteAllBytes(_ratBeatFile, src.GetBuffer((long)src.GetLength()));
-            _fixtures.Enqueue(_ratBeatFile);
+            string file = Path.Combine(dir, "Chess Type Beat.ogg");
+            File.WriteAllBytes(file, src.GetBuffer((long)src.GetLength()));
+            _sources[file] = RatBeatSource;
+            _fixtures.Enqueue(file);
             GD.Print("[cd] burning the chess type beat");
         }
         catch (Exception e)
         {
             GD.PushWarning($"[cd] could not burn the chess type beat: {e.Message}");
         }
+    }
+
+    /// <summary>
+    /// An exported build (or <c>--defaultcds</c>, to try it from the editor) burns every
+    /// <see cref="DefaultUrls"/> link it has no CD of yet, through the fixture queue. Dev runs and
+    /// checks skip it: they stay offline, and a fixture would wait behind the downloads. A link that
+    /// fails (no internet, a video gone) is tried again on the next start.
+    /// </summary>
+    private void EnsureDefaults()
+    {
+        if (!Owns || !(OS.HasFeature("template") || CmdArgs.Has("--defaultcds"))) return;
+        var have = _all.Values.Select(c => c.Source).ToHashSet();
+        foreach (string url in DefaultUrls)
+        {
+            if (have.Contains(DefaultSource(url)) || (url == RatBeatUrl && (RatBeatId >= 0 || _sources.ContainsValue(RatBeatSource)))) continue;
+            _sources[url] = DefaultSource(url);
+            _fixtures.Enqueue(url);
+        }
+        if (_fixtures.Count > 0) GD.Print($"[cd] burning the default CDs: {_fixtures.Count} to go");
     }
 
     /// <summary>
@@ -401,6 +603,7 @@ public partial class CdLibrary : Node
             if (!File.Exists(file)) { GD.PushWarning($"[cd] fixture not found: {file}"); continue; }
             string title = Path.GetFileNameWithoutExtension(file);
             if (_all.Values.Any(c => c.Title == title)) { GD.Print($"[cd] fixture already burnt: {title}"); continue; }
+            _sources[file] = FixturePrefix + title;   // marked, so an exported game drops it
             _fixtures.Enqueue(file);   // one at a time, from _Process
         }
     }

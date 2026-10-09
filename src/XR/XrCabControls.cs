@@ -102,13 +102,18 @@ internal sealed partial class XrCabControls : Node3D
         return p.Vehicle switch
         {
             Truck t when p.InCockpit => (t.EffectiveMode is HeavyShift.HPattern or HeavyShift.HPatternSplitter ? "truck-h" : "truck-seq")
-                                        + (t.IsBus ? "-bus" : ""),
+                                        // a farm machine (#494) has the bus's two pokes: kneel lowers its implement, destination its auger or delivery
+                                        + (t.IsBus || t.Spec.Farm ? "-bus" : "") + (t.Spec.Body is TruckBody.Tipper or TruckBody.Mixer ? "-work" : ""),
             Car when p.InCockpit => "car",
             Airliner => "airliner",
             _ when p.Ride == RideKind.Steamer => "steamer",
             _ when p.Ride == RideKind.Forklift => "forklift",
             _ when p.Ride == RideKind.Excavator => "excavator",
-            _ when p.Ride == RideKind.WheelLoader => "loader",
+            _ when p.Ride == RideKind.MiniExcavator => "miniexcavator",
+            _ when p.Ride is RideKind.WheelLoader or RideKind.WheelLoaderForks => "loader",
+            _ when p.Ride == RideKind.CompactRoller => "roller",
+            _ when p.Ride == RideKind.MiniDumper => "minidumper",
+            _ when p.Ride == RideKind.Telehandler => "telehandler",
             _ => "",
         };
     }
@@ -126,6 +131,11 @@ internal sealed partial class XrCabControls : Node3D
             else Add(Kind.Spring, new(0.32f, -0.5f, -0.25f), Vector3.Back, PlayerInput.ShiftUp, PlayerInput.ShiftDown, 0.06f);
             // the retarder stalk right of the wheel: down for more, up for less
             Add(Kind.Spring, new(0.3f, -0.2f, -0.45f), Vector3.Down, PlayerInput.RetarderUp, PlayerInput.RetarderDown, 0.04f);
+            // the speed regulator's button right of the wheel, opposite the bus's two (#494)
+            Add(Kind.Poke, new(0.18f, -0.32f, -0.5f), plus: PlayerInput.Cruise);
+            // a tipper's body or a mixer's discharge (#613): the destination poke, where a bus has it
+            if (context.EndsWith("-work"))
+                Add(Kind.Poke, new(-0.18f, -0.32f, -0.5f), plus: PlayerInput.Destination);
             if (context.EndsWith("-bus"))
             {
                 Add(Kind.Poke, new(-0.28f, -0.32f, -0.5f), plus: PlayerInput.Kneel);
@@ -137,6 +147,8 @@ internal sealed partial class XrCabControls : Node3D
             Add(Kind.Poke, new(0.17f, -0.33f, -0.5f), plus: PlayerInput.RadioPrev);
             Add(Kind.Poke, new(0.27f, -0.33f, -0.5f), plus: PlayerInput.RadioNext);
             Add(Kind.Poke, new(0.22f, -0.27f, -0.5f), plus: PlayerInput.RadioPanel);
+            // the speed regulator's button under the radio's (#494)
+            Add(Kind.Poke, new(0.22f, -0.39f, -0.5f), plus: PlayerInput.Cruise);
         }
         else if (context == "airliner")
         {
@@ -155,24 +167,45 @@ internal sealed partial class XrCabControls : Node3D
             // the mast lever right of the wheel (#583): pulled back the forks rise, pushed forward
             // they fall, and it holds the action down while the hand holds it there
             Add(Kind.Hold, new(-0.26f, -0.3f, -0.4f), Vector3.Back, PlayerInput.ShiftUp, PlayerInput.ShiftDown);
-        else if (context == "excavator")
+        else if (context is "excavator" or "miniexcavator")
         {
             // the two joysticks either side of the seat (#611), each as the two levers it is: the
-            // left slews (side to side) and runs the stick (fore and aft), the right raises the
-            // boom (aft is up) and curls the bucket (side to side); dig mode on the left console
-            Add(Kind.Hold, new(0.32f, -0.42f, -0.18f), Vector3.Left, PlayerInput.ArmSlewLeft, PlayerInput.ArmSlewRight);
-            Add(Kind.Hold, new(0.32f, -0.42f, -0.32f), Vector3.Forward, PlayerInput.ArmStickOut, PlayerInput.ArmStickIn);
-            Add(Kind.Hold, new(-0.32f, -0.42f, -0.18f), Vector3.Back, PlayerInput.ArmBoomUp, PlayerInput.ArmBoomDown);
-            Add(Kind.Hold, new(-0.32f, -0.42f, -0.32f), Vector3.Left, PlayerInput.ArmBucketCurl, PlayerInput.ArmBucketDump);
-            Add(Kind.Poke, new(0.26f, -0.34f, -0.45f), plus: PlayerInput.DigMode);
+            // left (−x: this frame's x is the driver's right) slews (side to side) and runs the stick
+            // (fore and aft), the right raises the boom (aft is up) and curls the bucket (side to
+            // side); dig mode on the left console. They were mirrored until #614.
+            Add(Kind.Hold, new(-0.32f, -0.42f, -0.18f), Vector3.Left, PlayerInput.ArmSlewLeft, PlayerInput.ArmSlewRight);
+            Add(Kind.Hold, new(-0.32f, -0.42f, -0.32f), Vector3.Forward, PlayerInput.ArmStickOut, PlayerInput.ArmStickIn);
+            Add(Kind.Hold, new(0.32f, -0.42f, -0.18f), Vector3.Back, PlayerInput.ArmBoomUp, PlayerInput.ArmBoomDown);
+            Add(Kind.Hold, new(0.32f, -0.42f, -0.32f), Vector3.Left, PlayerInput.ArmBucketCurl, PlayerInput.ArmBucketDump);
+            Add(Kind.Poke, new(-0.26f, -0.34f, -0.45f), plus: PlayerInput.DigMode);
+            // a mini's blade lever (#614), low and outboard of the left joystick: aft raises it
+            if (context == "miniexcavator")
+                Add(Kind.Hold, new(-0.48f, -0.48f, -0.06f), Vector3.Back, PlayerInput.BladeRaise, PlayerInput.BladeLower);
         }
         else if (context == "loader")
         {
-            // the arm's two levers right of the seat (#612): the inner one lifts (aft is up), the
-            // outer one tilts the bucket (aft rolls it back); work mode on the console
-            Add(Kind.Hold, new(-0.34f, -0.36f, -0.28f), Vector3.Back, PlayerInput.ArmBoomUp, PlayerInput.ArmBoomDown);
-            Add(Kind.Hold, new(-0.34f, -0.36f, -0.4f), Vector3.Back, PlayerInput.ArmBucketCurl, PlayerInput.ArmBucketDump);
-            Add(Kind.Poke, new(-0.24f, -0.32f, -0.46f), plus: PlayerInput.DigMode);
+            // the arm's two levers right of the seat (#612, +x: on the left until #614): the near
+            // one lifts (aft is up), the far one tilts the bucket (aft rolls it back); work mode on the console
+            Add(Kind.Hold, new(0.34f, -0.36f, -0.28f), Vector3.Back, PlayerInput.ArmBoomUp, PlayerInput.ArmBoomDown);
+            Add(Kind.Hold, new(0.34f, -0.36f, -0.4f), Vector3.Back, PlayerInput.ArmBucketCurl, PlayerInput.ArmBucketDump);
+            Add(Kind.Poke, new(0.24f, -0.32f, -0.46f), plus: PlayerInput.DigMode);
+        }
+        else if (context == "minidumper")
+            // the skip's button on the console right of the wheel (#614), the tipper's action
+            Add(Kind.Poke, new(0.28f, -0.48f, -0.34f), plus: PlayerInput.Destination);
+        else if (context == "roller")
+            // the vibration's red button on the console right of the wheel (#614)
+            Add(Kind.Poke, new(0.3f, -0.5f, -0.36f), plus: PlayerInput.DigMode);
+        else if (context == "telehandler")
+        {
+            // the boom's joystick right of the seat (#614), as the loader's levers: aft lifts, aft
+            // tilts the forks back; the extend rocker beside it, pushed forward to run the boom out;
+            // work mode and the steering mode as two buttons on the dash
+            Add(Kind.Hold, new(0.32f, -0.4f, -0.22f), Vector3.Back, PlayerInput.ArmBoomUp, PlayerInput.ArmBoomDown);
+            Add(Kind.Hold, new(0.32f, -0.4f, -0.36f), Vector3.Back, PlayerInput.ArmBucketCurl, PlayerInput.ArmBucketDump);
+            Add(Kind.Hold, new(0.44f, -0.42f, -0.28f), Vector3.Forward, PlayerInput.ShiftUp, PlayerInput.ShiftDown);
+            Add(Kind.Poke, new(0.22f, -0.3f, -0.48f), plus: PlayerInput.DigMode);
+            Add(Kind.Poke, new(-0.16f, -0.26f, -0.5f), plus: PlayerInput.RoofToggle);
         }
         else if (context == "steamer")
             // the whistle cord overhead: pulled down, it blows

@@ -187,6 +187,38 @@ public static class PaintEmitter
         }
     }
 
+    /// <summary>
+    /// The yellow dashed line between a separated path and its sidewalk along a turn lane's taper
+    /// (#682): its offset follows the shift vertex by vertex, on the side's profile, so the line
+    /// does not stop where the path moves out round the widening.
+    /// </summary>
+    public static void TaperTrackLine(RoadSegment seg, bool right, List<RoadPaint> into)
+    {
+        var side = right ? seg.Attributes.Right : seg.Attributes.Left;
+        float sign = right ? 1f : -1f, half = seg.Width * 0.5f, d = (side.VergeDm + side.BikeDm) / 10f;
+        float height = RoadStreetSection.HeightAt(side, d);
+        var along = RoadStreetSection.Fractions(seg);
+        var p = seg.Points;
+        int n = seg.PointCount;
+        float lift = ((seg.Flags & RoadFlags.Bridge) != 0 ? RoadPaintGeometry.BridgeLift : 0f) + height;
+        var v = new List<float>(n * 3);
+        for (int i = 0; i < n; i++)
+        {
+            int i0 = Math.Max(0, i - 1), i1 = Math.Min(n - 1, i + 1);
+            float fx = p[i1 * 3] - p[i0 * 3], fz = p[i1 * 3 + 2] - p[i0 * 3 + 2], fl = MathF.Sqrt(fx * fx + fz * fz);
+            if (fl < 1e-4f) continue;
+            fx /= fl; fz /= fl;
+            float o = sign * (half + side.ShiftAt(along[i]) + d);
+            v.Add(p[i * 3] - fz * o); v.Add(p[i * 3 + 1] + lift); v.Add(p[i * 3 + 2] + fx * o);
+        }
+        if (v.Count < 6) return;
+        Add(into, new RoadPaint
+        {
+            Shape = PaintShape.Polyline, Type = PaintType.YellowDashed, Rgba = Yellow, Width = BikePlanner.LineWidth,
+            Dash = BikePlanner.Dash, Gap = BikePlanner.Gap, Vertices = RoadPaintGeometry.Simplify(v.ToArray()),
+        });
+    }
+
     /// <summary>A bike lane's line along a turn lane's taper: its offset follows the shift vertex by vertex.</summary>
     private static void TaperLane(RoadSegment seg, bool right, List<RoadPaint> into)
     {
@@ -404,9 +436,12 @@ public static class PaintEmitter
 
     /// <summary>
     /// A lane arrow (#123) as paint triangles, its tail at (x, z) and pointing along (fx, fz)
-    /// (tile-local, X east and Z south); shapes in <see cref="ArrowShapes"/>.
+    /// (tile-local, X east and Z south); shapes in <see cref="ArrowShapes"/>. Its height runs from
+    /// <paramref name="y"/> at the tail to <paramref name="tipY"/> <see cref="ArrowLength"/> ahead
+    /// (#639): one height for the whole arrow put the head of one on a climbing approach under the
+    /// road, where it vanished up close. Across the arrow the road is level.
     /// </summary>
-    public static RoadPaint Arrow(double x, double y, double z, double fx, double fz, PaintArrow kind)
+    public static RoadPaint Arrow(double x, double y, double z, double fx, double fz, PaintArrow kind, double tipY)
     {
         double len = Math.Sqrt(fx * fx + fz * fz);
         fx /= len; fz /= len;
@@ -417,7 +452,7 @@ public static class PaintEmitter
         for (int i = 0; i < pts.Length; i++)
         {
             v[i * 3] = (float)(x + fx * pts[i].X + lx * pts[i].Y);
-            v[i * 3 + 1] = (float)y;
+            v[i * 3 + 1] = (float)(y + (tipY - y) * pts[i].X / ArrowLength);
             v[i * 3 + 2] = (float)(z + fz * pts[i].X + lz * pts[i].Y);
         }
         return new RoadPaint

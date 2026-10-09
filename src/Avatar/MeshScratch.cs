@@ -41,6 +41,10 @@ public sealed class MeshScratch
     private readonly List<Vector3> _normals = new();
     // filled only once a textured primitive is drawn (FaceBand, #394); otherwise no UVs at all
     private readonly List<Vector2> _uvs = new();
+    // and its second UV: the face's genome (Face.FaceGenome.Code, #657), filled alongside
+    private readonly List<Vector2> _uv2s = new();
+    // filled only once a vertex is drawn under a Rest map (a figure, #724); otherwise no CUSTOM0 at all
+    private readonly List<Vector3> _rest = new();
     // panes go in a second surface, so they can take a translucent material of their own
     private readonly List<Vector3> _glassVertices = new();
     private readonly List<Color> _glassColors = new();
@@ -78,6 +82,49 @@ public sealed class MeshScratch
     public readonly struct SmoothScope(MeshScratch scratch, bool was) : IDisposable
     {
         public void Dispose() => scratch.Smooth = was;
+    }
+
+    /// <summary>
+    /// While set, every vertex also records where it sits on its figure standing at rest (#724):
+    /// the clothes' patterns (<c>shaders/body/avatar.gdshaderinc</c>) are laid out from that, in
+    /// <c>CUSTOM0</c>, so they stay on the cloth while the figure runs, jumps or bends rather than
+    /// the body sliding through a pattern pinned to its feet. The figure builders set it per body
+    /// part (<see cref="Resting"/>); a vertex drawn without it rests where it is drawn.
+    /// </summary>
+    public RestMap? Rest { get; set; }
+
+    /// <summary>Sets <see cref="Rest"/> until the returned scope is disposed, then puts it back.</summary>
+    public RestScope Resting(RestMap? map)
+    {
+        var scope = new RestScope(this, Rest);
+        Rest = map;
+        return scope;
+    }
+
+    public readonly struct RestScope(MeshScratch scratch, RestMap? was) : IDisposable
+    {
+        public void Dispose() => scratch.Rest = was;
+    }
+
+    /// <summary>
+    /// Takes a point of a posed figure back to where it is when the figure stands at rest: one
+    /// bone's rigid motion undone (<see cref="Rigid"/>), or two bones' meeting at a joint (a limb,
+    /// the trunk): <see cref="First"/> before the plane through <see cref="Joint"/> square to
+    /// <see cref="Split"/>, <see cref="Second"/> after it, blended over <see cref="Blend"/> metres
+    /// either side so the cloth over the joint stretches instead of tearing. Both take the joint
+    /// to the same place, so the blend never jumps.
+    /// </summary>
+    public readonly record struct RestMap(Transform3D First, Transform3D Second, Vector3 Joint, Vector3 Split, float Blend)
+    {
+        public static RestMap Rigid(Transform3D t) => new(t, t, Vector3.Zero, Vector3.Zero, 1f);
+
+        public Vector3 Of(Vector3 p)
+        {
+            float d = (p - Joint).Dot(Split);
+            if (d <= -Blend) return First * p;
+            if (d >= Blend) return Second * p;
+            return (First * p).Lerp(Second * p, (d + Blend) / (2f * Blend));
+        }
     }
 
     /// <summary>
@@ -135,10 +182,11 @@ public sealed class MeshScratch
     /// <paramref name="gapAngle"/> radians of <paramref name="gap"/> are left out, which makes a
     /// slit. Not closed, so like <see cref="Pane"/> it has no volume for <c>--meshcheck</c>.
     /// <paramref name="ripple"/> (a fraction of the hem radius) waves the hem in and out and up and
-    /// down round its edge, at <paramref name="phase"/>: a skirt fluttering in the wind.
+    /// down round its edge, at <paramref name="phase"/>: a skirt fluttering in the wind. No hem point
+    /// goes below height <paramref name="floor"/> (the ground under a figure, #671).
     /// </summary>
     public void Skirt(Vector3 a, Vector3 b, float radiusA, float radiusB, Color colour, int sides = 10,
-        Vector3 gap = default, float gapAngle = 0f, float ripple = 0f, float phase = 0f)
+        Vector3 gap = default, float gapAngle = 0f, float ripple = 0f, float phase = 0f, float floor = float.NegativeInfinity)
     {
         var axis = b - a;
         float length = axis.Length();
@@ -164,6 +212,7 @@ public sealed class MeshScratch
             float lift = Mathf.Cos(phase * 1.3f + i * 1.9f);
             var top = a + offset * radiusA;
             var hem = b + offset * radiusB * (1f + ripple * wave) + axis * (radiusB * ripple * 0.6f * lift);
+            hem.Y = Mathf.Max(hem.Y, floor);
             if (Smooth)
             {
                 // the outside and the inside each their own vertices: shared, their normals cancel
@@ -189,6 +238,81 @@ public sealed class MeshScratch
             Quad(p, p + 1, q + 1, q);   // outside
             Quad(p + inside, q + inside, q + inside + 1, p + inside + 1);   // inside
         }
+    }
+
+    /// <summary>
+    /// An open sheet through closed rings <paramref name="rings"/>[<paramref name="from"/>] to
+    /// [<paramref name="from"/> + <paramref name="count"/> − 1], seen from inside and out: a draped
+    /// skirt (#671). Band <c>i</c> (between ring <c>from + i</c> and the next) is
+    /// <paramref name="bands"/>[i]. Faces round the rings within <paramref name="gapAngle"/> radians
+    /// of <paramref name="slit"/> are left out. Under <see cref="Smooth"/> each point gets a normal
+    /// from its neighbours, so the light rolls over the folds.
+    /// </summary>
+    public void Drape(Vector3[][] rings, int from, int count, ReadOnlySpan<Color> bands, Vector3 slit = default, float gapAngle = 0f)
+    {
+        if (count < 2) return;
+        int m = rings[from].Length;
+        int last = from + count - 1;
+        Span<Vector3> centres = stackalloc Vector3[count];
+        for (int i = 0; i < count; i++)
+        {
+            var c = Vector3.Zero;
+            foreach (var p in rings[from + i]) c += p;
+            centres[i] = c / m;
+        }
+        var axis = (centres[^1] - centres[0]).Normalized();
+        var cut = slit - axis * slit.Dot(axis);
+        bool open = gapAngle > 0f && cut.LengthSquared() > 1e-8f;
+        if (open) cut = cut.Normalized();
+
+        for (int i = 0; i + 1 < count; i++)
+        {
+            var linear = bands[Math.Min(i, bands.Length - 1)].SrgbToLinear();
+            var (r0, r1) = (rings[from + i], rings[from + i + 1]);
+            var middle = (centres[i] + centres[i + 1]) * 0.5f;
+            for (int k = 0; k < m; k++)
+            {
+                int k1 = (k + 1) % m;
+                Vector3 a = r0[k], b = r1[k], c = r1[k1], d = r0[k1];
+                var outward = (a + b + c + d) * 0.25f - middle;
+                if (open && (outward - axis * outward.Dot(axis)).AngleTo(cut) < gapAngle) continue;
+                // the outside clockwise seen from outside, as everywhere in the scratch
+                bool flip = (c - a).Cross(b - a).Dot(outward) < 0f;
+                if (flip) (b, d) = (d, b);
+                int s = _vertices.Count;
+                if (Smooth)
+                {
+                    int ib = flip ? k1 : k, id = flip ? k : k1;
+                    int jb = flip ? i : i + 1, jd = flip ? i + 1 : i;
+                    var na = DrapeNormal(rings, from, last, from + i, k, centres[i]);
+                    var nb = DrapeNormal(rings, from, last, from + jb, ib, centres[jb]);
+                    var nc = DrapeNormal(rings, from, last, from + i + 1, k1, centres[i + 1]);
+                    var nd = DrapeNormal(rings, from, last, from + jd, id, centres[jd]);
+                    Add(a, linear, na); Add(b, linear, nb); Add(c, linear, nc); Add(d, linear, nd);
+                    Add(a, linear, -na); Add(b, linear, -nb); Add(c, linear, -nc); Add(d, linear, -nd);
+                }
+                else
+                {
+                    Add(a, linear); Add(b, linear); Add(c, linear); Add(d, linear);
+                    Add(a, linear); Add(b, linear); Add(c, linear); Add(d, linear);
+                }
+                Quad(s, s + 1, s + 2, s + 3);           // outside
+                Quad(s + 4, s + 7, s + 6, s + 5);       // inside
+            }
+        }
+    }
+
+    // a drape point's outward normal: across its ring and along the drape, away from the ring's middle
+    private static Vector3 DrapeNormal(Vector3[][] rings, int first, int last, int i, int k, Vector3 centre)
+    {
+        var ring = rings[i];
+        int m = ring.Length;
+        var around = ring[(k + 1) % m] - ring[(k + m - 1) % m];
+        var along = rings[Math.Min(i + 1, last)][k] - rings[Math.Max(i - 1, first)][k];
+        var n = around.Cross(along);
+        if (n.LengthSquared() < 1e-12f) n = ring[k] - centre;
+        n = n.Normalized();
+        return n.Dot(ring[k] - centre) < 0f ? -n : n;
     }
 
     /// <summary>An axis-aligned box, optionally rotated about its own centre.</summary>
@@ -367,8 +491,7 @@ public sealed class MeshScratch
                 (_indices[i + 1], _indices[i + 2]) = (_indices[i + 2], _indices[i + 1]);
         // a lit style's figure (#394: the lofted torso, head and boots): the caps flat, each face out of
         // itself; the bands round, every ring point's normal straight out from its ring's middle, so
-        // the cel light rolls round the trunk and the Cartoon ink outline (which pushes along the
-        // normals) closes over the edges instead of cracking open at each facet
+        // the cel light rolls round the trunk instead of breaking at each facet
         if (Smooth)
         {
             while (_normals.Count < _vertices.Count) _normals.Add(NoNormal);
@@ -415,15 +538,18 @@ public sealed class MeshScratch
     /// are polylines of the same length, top to bottom, joined quad by quad. Texture coordinates run
     /// across <paramref name="uv"/>, u along a row and v down the rows; every other primitive has
     /// UV (0, 0). Each face is wound clockwise as seen from away from <paramref name="centre"/>.
-    /// Not closed (like <see cref="Pane"/>), so <c>--meshcheck</c> leaves it out.
+    /// Not closed (like <see cref="Pane"/>), so <c>--meshcheck</c> leaves it out. Every vertex of
+    /// it carries <paramref name="code"/> as its second UV: the procedural face's genome (#657,
+    /// <c>Face.FaceGenome.Code</c>), whole numbers below 2^24 so a float holds them exactly.
     /// </summary>
-    public void FaceBand(IReadOnlyList<Vector3[]> rows, Rect2 uv, Color colour, Vector3 centre)
+    public void FaceBand(IReadOnlyList<Vector3[]> rows, Rect2 uv, Color colour, Vector3 centre, Vector2 code = default)
     {
         if (rows.Count < 2) return;
         int n = rows[0].Length;
         if (n < 2) return;
         var linear = colour.SrgbToLinear();
         while (_uvs.Count < _vertices.Count) _uvs.Add(Vector2.Zero);
+        while (_uv2s.Count < _vertices.Count) _uv2s.Add(Vector2.Zero);
         int start = _vertices.Count;
         for (int r = 0; r < rows.Count; r++)
             for (int i = 0; i < n; i++)
@@ -432,6 +558,7 @@ public sealed class MeshScratch
                 if (Smooth) Add(p, linear, (p - centre).Normalized());
                 else Add(p, linear);
                 _uvs[^1] = uv.Position + uv.Size * new Vector2(i / (n - 1f), r / (rows.Count - 1f));
+                _uv2s[^1] = code;
             }
         for (int r = 0; r + 1 < rows.Count; r++)
             for (int i = 0; i + 1 < n; i++)
@@ -495,8 +622,8 @@ public sealed class MeshScratch
     {
         Core.ShowcaseTrace.Mark();
         var mesh = new ArrayMesh();
-        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _indices, pivot, "body");
-        AddSurface(mesh, _glassVertices, _glassColors, null, null, _glassIndices, pivot, GlassSurface);
+        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _uv2s, _rest, _indices, pivot, "body");
+        AddSurface(mesh, _glassVertices, _glassColors, null, null, null, null, _glassIndices, pivot, GlassSurface);
         return mesh;
     }
 
@@ -506,7 +633,7 @@ public sealed class MeshScratch
     /// </summary>
     public void Clear()
     {
-        _vertices.Clear(); _colors.Clear(); _indices.Clear(); _normals.Clear(); _uvs.Clear();
+        _vertices.Clear(); _colors.Clear(); _indices.Clear(); _normals.Clear(); _uvs.Clear(); _uv2s.Clear(); _rest.Clear();
         _glassVertices.Clear(); _glassColors.Clear(); _glassIndices.Clear();
     }
 
@@ -519,13 +646,13 @@ public sealed class MeshScratch
     {
         Core.ShowcaseTrace.Mark();
         mesh.ClearSurfaces();
-        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _indices, Vector3.Zero, "body");
-        AddSurface(mesh, _glassVertices, _glassColors, null, null, _glassIndices, Vector3.Zero, GlassSurface);
+        AddSurface(mesh, _vertices, _colors, _normals, _uvs, _uv2s, _rest, _indices, Vector3.Zero, "body");
+        AddSurface(mesh, _glassVertices, _glassColors, null, null, null, null, _glassIndices, Vector3.Zero, GlassSurface);
         return mesh;
     }
 
     private static void AddSurface(ArrayMesh mesh, List<Vector3> vertices, List<Color> colors, List<Vector3>? normals,
-        List<Vector2>? uvs, List<int> indices, Vector3 pivot, string name)
+        List<Vector2>? uvs, List<Vector2>? uv2s, List<Vector3>? rest, List<int> indices, Vector3 pivot, string name)
     {
         if (indices.Count == 0) return;
         var facing = new Vector3[vertices.Count];
@@ -553,8 +680,26 @@ public sealed class MeshScratch
             while (uvs.Count < vertices.Count) uvs.Add(Vector2.Zero);
             arrays[(int)Mesh.ArrayType.TexUV] = uvs.ToArray();
         }
+        if (uv2s is { Count: > 0 })
+        {
+            while (uv2s.Count < vertices.Count) uv2s.Add(Vector2.Zero);
+            arrays[(int)Mesh.ArrayType.TexUV2] = uv2s.ToArray();
+        }
+        var flags = (Mesh.ArrayFormat)0;
+        if (rest is { Count: > 0 })
+        {
+            // turned round like the positions; w = 1 tells the shader the channel is there
+            var packed = new float[vertices.Count * 4];
+            for (int i = 0; i < vertices.Count; i++)
+            {
+                var v = (i < rest.Count ? rest[i] : vertices[i]) - pivot;
+                packed[i * 4] = -v.X; packed[i * 4 + 1] = v.Y; packed[i * 4 + 2] = -v.Z; packed[i * 4 + 3] = 1f;
+            }
+            arrays[(int)Mesh.ArrayType.Custom0] = packed;
+            flags = (Mesh.ArrayFormat)((long)Mesh.ArrayCustomFormat.RgbaFloat << (int)Mesh.ArrayFormat.FormatCustom0Shift);
+        }
 
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, flags: flags);
         mesh.SurfaceSetName(mesh.GetSurfaceCount() - 1, name);
     }
 
@@ -675,20 +820,36 @@ public sealed class MeshScratch
 
     private void Add(Vector3 position, Color linear)
     {
+        AddRest(position);
         _vertices.Add(position);
         _colors.Add(linear);
         if (_normals.Count > 0) _normals.Add(NoNormal);
         if (_uvs.Count > 0) _uvs.Add(Vector2.Zero);
+        if (_uv2s.Count > 0) _uv2s.Add(Vector2.Zero);
     }
 
     private void Add(Vector3 position, Color linear, Vector3 normal)
     {
         // the first normal: every vertex before it gets the one Godot would have given it
         while (_normals.Count < _vertices.Count) _normals.Add(NoNormal);
+        AddRest(position);
         _vertices.Add(position);
         _colors.Add(linear);
         _normals.Add(normal);
         if (_uvs.Count > 0) _uvs.Add(Vector2.Zero);
+        if (_uv2s.Count > 0) _uv2s.Add(Vector2.Zero);
+    }
+
+    // the rest position of the vertex about to be added; the first one under a map gives every
+    // vertex before it its own position (a vehicle drawn first, a figure's rider after)
+    private void AddRest(Vector3 position)
+    {
+        if (Rest is { } map)
+        {
+            while (_rest.Count < _vertices.Count) _rest.Add(_vertices[_rest.Count]);
+            _rest.Add(map.Of(position));
+        }
+        else if (_rest.Count > 0) _rest.Add(position);
     }
 
     /// <summary>

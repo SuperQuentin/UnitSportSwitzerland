@@ -14,7 +14,14 @@
   tile. Flying a few km away coarsens a tile while its roads stay drawn (out to `RoadMaxDist`);
   coming back refined it with no road tile, so the stride-1 ground came back unblended and
   swallowed the roads and railways that looked fine at spawn. `roadsForBlend` is now
-  `(needCollision || near-field needMesh) && want.Roads`.
+  `(needCollision || near-field stride) && want.Roads`.
+- **Any build at a near-field stride, not just one that changes it (#603).** `StartBuild` redraws
+  the surface whenever meshes are on, whatever asked for the build. The switch to building cells
+  when the camera comes below 40 m (#553) is a buildings-only build at the same stride, so
+  `needMesh` was false, no road tile was read, and the bare ground went out over every road, path
+  and car park round the camera: raw terrain through the ribbons and pads in straight-edged
+  lattice triangles, at street level only, and only with occlusion on (`--occlusion off` hid it).
+  Repro on main before the fix: Geneva `--origin 2499641,1118692`, shot `0,g20,0,-35,0,12`.
 - **And a refined mesh waits for its blend when ground is already on screen.** The surface goes
   out as an interim result before the road tile is read, which put the bare stride-1 ground over
   the roads for ~0.5 s on every return. When the tile already shows a coarser mesh and this one

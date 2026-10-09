@@ -1161,8 +1161,10 @@ public static partial class HumanMeshBuilder
 
     /// <summary>
     /// <see cref="Material"/> as a shader that also draws the clothes' finishes (rainbow, disco
-    /// ball, galaxy…, <c>shaders/body/avatar.gdshaderinc</c>), read from the vertex alpha. One
-    /// shared instance: it has no per-figure parameters. The visual style swaps its shader
+    /// ball, galaxy…, <c>shaders/body/avatar.gdshaderinc</c>), read from the vertex alpha, and the
+    /// procedural faces (#657). One shared instance: what is per figure is in the mesh (the face's
+    /// genome) or in instance uniforms on its node (the face's state,
+    /// <see cref="Face.FaceAnimator"/>). The visual style swaps its shader
     /// (<see cref="Styles.MaterialRole.Figure"/>).
     /// </summary>
     public static ShaderMaterial FigureMaterial() =>
@@ -1192,6 +1194,10 @@ public static partial class HumanMeshBuilder
         RatSwing, RatArmPump, RatHeadBob, RatHop,
         // #404: new dances (also in the style tables) and gestures (emote wheel only)
         Ymca, ChickenDance, CabbagePatch, SwimDance, Wave, Cheer, Salute, Shrug,
+        // #728: breakdance (HumanMeshBuilder.Break.cs): toprock stands, the rest builds whole floor rigs
+        Toprock, BreakDown, BreakWindmill, BreakHeadspin,
+        // #728: more standing moves (HumanMeshBuilder.MoreMoves.cs)
+        BodyRoll, Charleston, Skank, AirDrums, Shuffle, Wop,
         // #495: fist fights (HumanMeshBuilder.Fight.cs); keep them last, Channels skips the groove from FightStand on
         FightStand, FightGuardHigh, FightCrouch, FightGuardLow, FightAir, FightHit, FightDazed, FightVictory,
         FightBlockStun, FightJab, FightKick, FightLowJab, FightSweep, FightJumpKick, FightUppercut,
@@ -1214,26 +1220,50 @@ public static partial class HumanMeshBuilder
         // Pop
         new[] { DanceMove.SideStepClap, DanceMove.HipSway, DanceMove.ClapBackbeat, DanceMove.Carlton,
             DanceMove.Macarena, DanceMove.DiscoPoint, DanceMove.Floss, DanceMove.OrangeJustice,
-            DanceMove.GangnamStyle, DanceMove.Ymca },
+            DanceMove.GangnamStyle, DanceMove.Ymca, DanceMove.BodyRoll, DanceMove.Charleston },
         // Rock
         new[] { DanceMove.Headbang, DanceMove.AirGuitar, DanceMove.FistPump, DanceMove.Bounce,
-            DanceMove.ClapBackbeat, DanceMove.ArmWave, DanceMove.Pogo },
+            DanceMove.ClapBackbeat, DanceMove.ArmWave, DanceMove.Pogo, DanceMove.Skank, DanceMove.AirDrums },
         // Electronic
         new[] { DanceMove.Bounce, DanceMove.FistPump, DanceMove.RunningMan, DanceMove.TStep,
-            DanceMove.Robot, DanceMove.Sprinkler, DanceMove.ArmWave, DanceMove.Pogo },
+            DanceMove.Robot, DanceMove.Sprinkler, DanceMove.ArmWave, DanceMove.Pogo, DanceMove.Shuffle, DanceMove.Toprock },
         // HipHop
         new[] { DanceMove.Bounce, DanceMove.ShoulderLean, DanceMove.Twerk, DanceMove.Dab,
-            DanceMove.Griddy, DanceMove.Moonwalk, DanceMove.RunningMan, DanceMove.Floss, DanceMove.CabbagePatch },
+            DanceMove.Griddy, DanceMove.Moonwalk, DanceMove.RunningMan, DanceMove.Floss, DanceMove.CabbagePatch,
+            DanceMove.Wop, DanceMove.Toprock, DanceMove.BodyRoll },
         // Chill
         new[] { DanceMove.Sway, DanceMove.HipSway, DanceMove.ArmWave, DanceMove.ClapBackbeat,
-            DanceMove.Moonwalk, DanceMove.Bounce, DanceMove.SwimDance },
+            DanceMove.Moonwalk, DanceMove.Bounce, DanceMove.SwimDance, DanceMove.BodyRoll },
         // Folk
         new[] { DanceMove.FolkClap, DanceMove.HandsOnHipsSkip, DanceMove.SideStepClap,
             DanceMove.HipSway, DanceMove.ClapBackbeat, DanceMove.Macarena, DanceMove.GangnamStyle,
-            DanceMove.ChickenDance },
+            DanceMove.ChickenDance, DanceMove.Charleston },
         // RatDance (#370): the chess type beat, whatever it was analysed as; RatSwing first, the crowd's move
         new[] { DanceMove.RatSwing, DanceMove.RatArmPump, DanceMove.RatHeadBob, DanceMove.RatHop },
     };
+
+    /// <summary>
+    /// How big a move is (#728), for picking by the music's section (<see cref="DancePick"/>):
+    /// 0 calm, 1 middle, 2 big. A calm part keeps off the big ones, a chorus off the calm ones.
+    /// </summary>
+    private static byte EnergyOf(DanceMove m) => m switch
+    {
+        DanceMove.Sway or DanceMove.HipSway or DanceMove.ClapBackbeat or DanceMove.ArmWave or DanceMove.SwimDance
+            or DanceMove.Moonwalk or DanceMove.BodyRoll or DanceMove.FolkClap => 0,
+        DanceMove.Pogo or DanceMove.Headbang or DanceMove.Floss or DanceMove.Twerk or DanceMove.Griddy
+            or DanceMove.RunningMan or DanceMove.GangnamStyle or DanceMove.Ymca or DanceMove.ChickenDance
+            or DanceMove.FistPump or DanceMove.Carlton or DanceMove.OrangeJustice or DanceMove.Toprock
+            or DanceMove.Shuffle or DanceMove.Skank or DanceMove.Charleston or DanceMove.HandsOnHipsSkip => 2,
+        _ => 1,
+    };
+
+    private static readonly byte[][] DanceEnergy = Array.ConvertAll(DanceTable, t => Array.ConvertAll(t, EnergyOf));
+
+    /// <summary>The energy of each move of a style's table, in table order (<see cref="DancePick"/>).</summary>
+    public static ReadOnlySpan<byte> MoveEnergy(Audio.Cd.MusicStyle style) => DanceEnergy[DanceStyleIndex(style)];
+
+    /// <summary>The name of the move a <see cref="DanceParams.Move"/> stands for (the dance sheet's labels, #728).</summary>
+    public static string MoveName(Audio.Cd.MusicStyle style, int move) => Resolve(style, move).ToString();
 
     /// <summary>Number of moves a style has; <see cref="DanceParams.Move"/> is taken modulo this.</summary>
     public static int MoveCount(Audio.Cd.MusicStyle style) => DanceTable[DanceStyleIndex(style)].Length;
@@ -1272,10 +1302,29 @@ public static partial class HumanMeshBuilder
         var beat = new Beat(d.BarPhase, d.Bar);
         float we = DSm(d.Weight);
         float m = DSm(moving);
+        if (IsFloor(move) || IsFloor(prev)) return ApplyFloor(rig, d, prev, move, flow, beat, we, m);
 
         if (m <= 0.001f) return DanceVariant(rig, prev, move, flow, beat, we, false);
         if (m >= 0.999f) return DanceVariant(rig, prev, move, flow, beat, we, true);
         return MixRigs(DanceVariant(rig, prev, move, flow, beat, we, false), DanceVariant(rig, prev, move, flow, beat, we, true), m);
+    }
+
+    /// <summary>
+    /// A break set's slot (#728): the floor rig for the slot clock, flowing out of the move before
+    /// it like any other, weighted in against the gait rig. Walking, the body only toprocks.
+    /// </summary>
+    private static Rig ApplyFloor(in Rig rig, in DanceParams d, DanceMove prev, DanceMove move, float flow, in Beat beat, float we, float m)
+    {
+        float beats = (d.Bar & 1) * 4f + DFrac(d.BarPhase) * 4f;
+        var now = IsFloor(move) ? FloorRig(move, rig, beats, beat) : DanceVariant(rig, move, move, 1f, beat, 1f, false);
+        // a set's halves run into each other by themselves; anything else crossfades as usual
+        if (flow < 1f && !(prev == DanceMove.BreakDown && IsFloor(move)))
+        {
+            var before = IsFloor(prev) ? FloorRig(prev, rig, 8f, beat) : DanceVariant(rig, prev, prev, 1f, beat, 1f, false);
+            now = MixRigs(before, now, flow);
+        }
+        if (m > 0.001f) now = MixRigs(now, DanceVariant(rig, DanceMove.Toprock, DanceMove.Toprock, 1f, beat, 1f, true), m);
+        return we >= 0.999f ? now : MixRigs(rig, now, we);
     }
 
     /// <summary>A move number as the caller has it (a style's table index, or a crowd move) to the move itself.</summary>
@@ -1283,6 +1332,7 @@ public static partial class HumanMeshBuilder
     {
         if (index == GroupPogo) return DanceMove.Pogo;
         if (index == GroupJump) return DanceMove.JumpTogether;
+        if (index >= BreakMoves) return BreakResolve(index);
         if (index >= FightMoves) return FightResolve(index - FightMoves);
         if (index >= EmoteMoves) return EmoteMove(index - EmoteMoves);
         var table = DanceTable[DanceStyleIndex(style)];
@@ -1696,6 +1746,15 @@ public static partial class HumanMeshBuilder
             case DanceMove.Cheer: Cheer(ref ch, t, mv); break;
             case DanceMove.Salute: Salute(ref ch, t, mv); break;
             case DanceMove.Shrug: Shrug(ref ch, t, mv); break;
+            case DanceMove.BodyRoll: BodyRoll(ref ch, t, mv); break;
+            case DanceMove.Charleston: Charleston(ref ch, t, mv); break;
+            case DanceMove.Skank: Skank(ref ch, t, mv); break;
+            case DanceMove.AirDrums: AirDrums(ref ch, t, mv); break;
+            case DanceMove.Shuffle: Shuffle(ref ch, t, mv); break;
+            case DanceMove.Wop: Wop(ref ch, t, mv); break;
+            // a floor move's channels (only asked for when walking, or mixing): its toprock
+            case DanceMove.Toprock or DanceMove.BreakDown or DanceMove.BreakWindmill or DanceMove.BreakHeadspin:
+                Toprock(ref ch, t, mv); break;
             case >= DanceMove.FightStand: EvalFight(move, t, mv, ref ch); break;
         }
     }
@@ -1892,14 +1951,15 @@ public static partial class HumanMeshBuilder
     private static void Floss(ref DanceCh ch, in Beat t, bool mv)
     {
         float ar = mv ? 0.7f : 1f;
-        ch.Px = mv ? -0.03f * t.D : -0.07f * t.D;
+        ch.Px = mv ? -0.03f * t.D : -0.10f * t.D;
         ch.Py = -0.06f - 0.02f * DDip(t.B);
         ch.Theta = 0.05f; ch.Phi = 0.08f * t.D; ch.PhH = 0.05f * t.D;
         for (int i = 0; i < 2; i++)
         {
             float s = i * 2f - 1f;
             // an ellipse about the body axis, radius at least 0.29 m: the fists never enter the torso
-            AimH(ref ch, s, 0.20f * ar * t.D, 0.22f, s * 0.22f * ar * t.E, HLow(s));
+            // #728: a wider swing, so the fists clearly pass in front of and behind the hips
+            AimH(ref ch, s, 0.30f * ar * t.D, 0.22f, s * 0.28f * ar * t.E, HLow(s));
         }
         Planted(ref ch, 0.15f, 0.15f);
         for (int i = 0; i < 2; i++) { float s = i * 2f - 1f; HeelUp(ref ch, s, 0.02f * Mathf.Max(0f, -s * t.D)); }
@@ -2069,16 +2129,18 @@ public static partial class HumanMeshBuilder
 
     private static void HipSway(ref DanceCh ch, in Beat t, bool mv)
     {
-        ch.Px = 0.06f * t.E; ch.Py = -0.02f; ch.Tilt = 0.015f * t.E;
-        ch.Phi = -0.07f * t.E; ch.Psi = 0.10f * t.D; ch.PhH = 0.05f * t.E;
+        // #728: bigger hips, and the hands up loose at the chest with the beat instead of hanging
+        float dip = DDip(t.B);
+        ch.Px = 0.09f * t.E; ch.Py = -0.03f - 0.02f * dip; ch.Tilt = 0.025f * t.E;
+        ch.Phi = -0.10f * t.E; ch.Psi = 0.14f * t.D; ch.PhH = 0.08f * t.E; ch.ThN = 0.06f * dip;
         for (int i = 0; i < 2; i++)
         {
             float s = i * 2f - 1f;
-            Aim(ref ch, s, 0.04f, -0.49f, 0.02f + 0.05f * s * t.D, HLow(s));   // HANG, hands counter-swinging
+            Aim(ref ch, s, 0.22f, -0.16f - 0.05f * dip + 0.04f * s * t.E, 0.20f, new Vector3(s, -0.6f, -0.3f));
         }
         Planted(ref ch, 0.11f, 0.15f);
-        HeelUp(ref ch, -1f, 0.02f * Mathf.Max(0f, t.E)); HeelUp(ref ch, 1f, 0.02f * Mathf.Max(0f, -t.E));
-        if (mv) { MovingScale(ref ch, 0.5f, 0f); }
+        HeelUp(ref ch, -1f, 0.03f * Mathf.Max(0f, t.E)); HeelUp(ref ch, 1f, 0.03f * Mathf.Max(0f, -t.E));
+        if (mv) { MovingScale(ref ch, 0.5f, 0.4f); }
     }
 
     private static void ClapBackbeat(ref DanceCh ch, in Beat t, bool mv)
@@ -2170,14 +2232,21 @@ public static partial class HumanMeshBuilder
 
     private static void Bounce(ref DanceCh ch, in Beat t, bool mv)
     {
+        // #728: was akimbo and nearly still; now the fists pump down into every beat at the chest,
+        // elbows out, the shoulders bouncing a little after, the head nodding with it
         float dip = DDip(t.B);
-        ch.Py = -0.07f * dip;
-        ch.Theta = 0.05f + 0.05f * dip; ch.Phi = 0.03f * t.D; ch.ThN = 0.10f * dip; ch.PhH = 0.04f * t.D;
-        Aim(ref ch, -1f, 0.10f, -0.30f - 0.05f * dip, 0.22f, HLow(-1f));
-        Aim(ref ch, 1f, 0.10f, -0.30f - 0.05f * dip, 0.22f, HLow(1f));
+        float late = DDip(DFrac(t.B - 0.1f));
+        ch.Py = -0.09f * dip;
+        ch.Theta = 0.07f + 0.07f * dip; ch.Phi = 0.05f * t.D; ch.ThN = 0.16f * dip; ch.PhH = 0.05f * t.D;
+        ch.ShL = 0.02f * late; ch.ShR = 0.02f * late;
+        for (int i = 0; i < 2; i++)
+        {
+            float s = i * 2f - 1f;
+            Aim(ref ch, s, 0.14f, -0.08f - 0.12f * dip, 0.30f + 0.04f * s * t.D, new Vector3(s, -0.5f, -0.5f));
+        }
         Planted(ref ch, 0.13f, 0.15f);
         Lift(ref ch, -1f, 0.03f * (1f - dip)); Lift(ref ch, 1f, 0.03f * (1f - dip));   // heels rise as the body rises
-        if (mv) { MovingScale(ref ch, 0.5f, 0.6f); ch.Py = -0.03f * dip; }
+        if (mv) { MovingScale(ref ch, 0.5f, 0.7f); ch.Py = -0.03f * dip; }
     }
 
     private static float Bump(float r, float node)
@@ -2305,18 +2374,24 @@ public static partial class HumanMeshBuilder
 
     private static void ShoulderLean(ref DanceCh ch, in Beat t, bool mv)
     {
+        // #728: the lean was too small to tell from Bounce; now a real lean to each side over two
+        // beats, the arm on the leaning side hanging low and out, the other shoulder up with its
+        // elbow cocked, the head tipping against the lean
         float dip = DDip(t.B);
-        ch.Px = -0.04f * t.E; ch.Py = -0.03f - 0.04f * dip;
-        ch.Phi = 0.18f * t.E; ch.Theta = 0.06f; ch.Psi = 0.05f * t.D;
-        ch.ShL = 0.02f * t.E; ch.ShR = -0.02f * t.E;           // the leaning side drops a little extra
-        ch.ThN = 0.08f * dip; ch.PhH = -0.10f * t.E;
+        float e = t.E;
+        ch.Px = -0.07f * e; ch.Py = -0.04f - 0.04f * dip;
+        ch.Phi = 0.30f * e; ch.Theta = 0.08f; ch.Psi = 0.10f * t.D;
+        ch.ShL = 0.05f * e; ch.ShR = -0.05f * e;
+        ch.ThN = 0.10f * dip; ch.PhH = -0.18f * e;
         for (int i = 0; i < 2; i++)
         {
             float s = i * 2f - 1f;
-            Aim(ref ch, s, 0.12f, -0.32f, 0.18f + 0.05f * s * t.D, HLow(s));
+            float low = DSm(0.5f + 0.5f * -s * e);              // this side is the one leaned toward
+            SetArm(ref ch, s, new Vector3(s * 0.12f, -0.18f, 0.24f).Lerp(new Vector3(s * 0.20f, -0.44f, 0.04f), low),
+                new Vector3(s, -0.3f, -0.4f));
         }
-        Planted(ref ch, 0.15f, 0.15f);
-        HeelUp(ref ch, -1f, 0.02f * Mathf.Max(0f, t.E)); HeelUp(ref ch, 1f, 0.02f * Mathf.Max(0f, -t.E));
+        Planted(ref ch, 0.17f, 0.15f);
+        HeelUp(ref ch, -1f, 0.03f * Mathf.Max(0f, e)); HeelUp(ref ch, 1f, 0.03f * Mathf.Max(0f, -e));
         if (mv) MovingScale(ref ch, 0.6f, 0.5f);
     }
 
@@ -2340,10 +2415,14 @@ public static partial class HumanMeshBuilder
 
     private static void Moonwalk(ref DanceCh ch, in Beat t, bool mv)
     {
+        // #728: was hands at the hips, nearly still; now the arms work with the glide, one forearm
+        // up in front with the fist loose, the other hanging back, swapping each step
         for (int i = 0; i < 2; i++)
         {
             float s = i * 2f - 1f;
-            SetArm(ref ch, s, new Vector3(s * 0.10f, -0.30f + 0.03f * s * t.D, 0.12f + 0.08f * s * t.D), HLow(s));
+            float front = DSm(0.5f + 0.5f * s * t.D);
+            SetArm(ref ch, s, new Vector3(s * 0.12f, -0.44f, -0.10f).Lerp(new Vector3(s * 0.04f, -0.18f, 0.28f), front),
+                new Vector3(s * 0.5f, -0.6f, -0.5f));
         }
         if (mv)
         {

@@ -28,12 +28,14 @@ public enum Finish : byte
     Tartan = 8,
     Fishnet = 9,
     Lace = 10,
-    /// <summary>Not a cloth: the pixel face's band (#394, <see cref="FaceAtlas"/>); listed so no pattern takes its id.</summary>
+    /// <summary>Not a cloth: the pixel face's band (#394; procedural since #657, <c>shaders/body/face.gdshaderinc</c>); listed so no pattern takes its id.</summary>
     Face = 11,
     // #394: the references' cloth patterns
     Checker = 12,
     Stripes = 13,
     Studs = 14,
+    /// <summary>#716: the Swiss army's TAZ 90 camouflage (a pattern on colour A: light green, dark green, brown, black).</summary>
+    Camo = 15,
 }
 
 /// <summary>How a garment is built out of tubes and boxes (<c>HumanMeshBuilder.Clothing.cs</c>).</summary>
@@ -50,7 +52,7 @@ public enum GarmentShape
     // neck
     SpikedChoker, HeartChoker, Chain, BellCollar,
     // top
-    TShirt, PrintTee, Polo, Marcel, Corset, CropTop, Longsleeve, Hoodie, CroppedJacket, Robe, Dress,
+    TShirt, PrintTee, Polo, Marcel, Corset, CropTop, Longsleeve, Hoodie, CroppedJacket, Robe, Dress, FieldJacket,
     // bottom
     Shorts, Pants, Cargo, HighLowSkirt, SlitMaxi, RuffleMini, PleatedSkirt, LongPleated,
     // legs
@@ -132,6 +134,8 @@ public static class Garments
     private static readonly Color Silver = new("b8bcc4"), Bone = new("e8e6e2"), White = new("f4f4f0"), Gold = new("e0b848");
     private static readonly Color Pink = new("ff8fc8"), Blush = new("ffb0d4"), Candy = new("ff5fa8"), Rose = new("ffc2dc");
     private static readonly Color Lilac = new("c8a8f0"), Mint = new("a8e8d0"), Sky = new("a8d0f8"), Lemon = new("ffe070");
+    /// <summary>The TAZ 90's light green, the colour the camouflage pattern is laid out from (shaders/body/avatar.gdshaderinc).</summary>
+    private static readonly Color TazGreen = new("6f7c46");
 
     public static readonly Garment[] All =
     {
@@ -203,6 +207,10 @@ public static class Garments
         new(ItemId.LavaTee, "Lava tee", WearSlot.Top, 20, GarmentShape.TShirt, GarmentStyle.Special, new("2a1410"), new("2a1410"), new("2a1410"), Finish.Lava),
         new(ItemId.GalaxyDress, "Galaxy dress", WearSlot.Top, 21, GarmentShape.Dress, GarmentStyle.Special, Plum, Plum, Plum, Finish.Galaxy),
         new(ItemId.GlitchTee, "Glitch tee", WearSlot.Top, 22, GarmentShape.TShirt, GarmentStyle.Special, White, White, White, Finish.Glitch),
+        // #716: the barracks. TAZ 90 is the army's four-colour camouflage (Finish.Camo, drawn by the shader on colour A);
+        // B is the jacket's dark trim and the trousers' pockets, C the near-black of the buckle
+        new(ItemId.TazJacket, "TAZ 90 jacket", WearSlot.Top, 23, GarmentShape.FieldJacket, GarmentStyle.Basic, TazGreen, new("3a4428"), new("1f2418"), Finish.Camo),
+        new(ItemId.ArmyTee, "Olive army T-shirt", WearSlot.Top, 24, GarmentShape.TShirt, GarmentStyle.Basic, new("5a6638"), new("5a6638"), new("5a6638")),
 
         // ---- bottom ----
         new(ItemId.JoggingShorts, "Grey jogging shorts", WearSlot.Bottom, 1, GarmentShape.Shorts, GarmentStyle.Basic, new("8a8a8e"), White, new("8a8a8e")),
@@ -215,6 +223,7 @@ public static class Garments
         new(ItemId.Jeans, "Jeans", WearSlot.Bottom, 8, GarmentShape.Pants, GarmentStyle.Basic, new("3a5a8a"), new("c8a060"), new("2e4a72")),
         new(ItemId.CargoPants, "Black cargo pants", WearSlot.Bottom, 9, GarmentShape.Cargo, GarmentStyle.Gothic, Charcoal, new("2a2a30"), Silver),
         new(ItemId.HoloSkirt, "Holo skirt", WearSlot.Bottom, 10, GarmentShape.PleatedSkirt, GarmentStyle.Special, White, White, White, Finish.Holo),
+        new(ItemId.TazTrousers, "TAZ 90 trousers", WearSlot.Bottom, 11, GarmentShape.Cargo, GarmentStyle.Basic, TazGreen, new("3a4428"), new("1f2418"), Finish.Camo),
 
         // ---- legs ----
         new(ItemId.GothStockings, "Black-white thigh-highs", WearSlot.Legs, 1, GarmentShape.StripedThighHigh, GarmentStyle.Gothic, Black, White, Black),

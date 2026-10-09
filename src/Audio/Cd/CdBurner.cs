@@ -31,31 +31,58 @@ public sealed class CdBurner
 
     private static readonly TimeSpan ToolTimeout = TimeSpan.FromSeconds(120);
 
+    /// <summary>
+    /// The beat grid the <see cref="CdAnalysis"/> block is laid on, when the CD's grid is set by
+    /// hand (the chess type beat, <see cref="CdLibrary.RatBeatBpm"/>); null = the analyser's own.
+    /// </summary>
+    public (float Bpm, float Offset)? Grid { get; init; }
+
     /// <summary>Whether both tools start; <paramref name="why"/> names the missing one.</summary>
     public static bool ToolsAvailable(out string why)
     {
         foreach (string tool in new[] { "yt-dlp", "ffmpeg" })
         {
-            try
-            {
-                using var p = Process.Start(new ProcessStartInfo(BundledTools.Resolve(tool), "-version")
-                {
-                    UseShellExecute = false, CreateNoWindow = true,
-                    RedirectStandardOutput = true, RedirectStandardError = true,
-                });
-                if (p == null) { why = $"{tool} did not start"; return false; }
-                p.StandardOutput.ReadToEnd();
-                p.StandardError.ReadToEnd();
-                p.WaitForExit(5000);
-            }
-            catch (Exception)
-            {
-                why = $"{tool} is not installed on the server (it must be on PATH)";
-                return false;
-            }
+            if (!ToolStarts(tool, out why)) return false;
         }
         why = "";
         return true;
+    }
+
+    /// <summary>Whether ffmpeg starts: all a re-analysis needs.</summary>
+    public static bool FfmpegAvailable() => ToolStarts("ffmpeg", out _);
+
+    private static bool ToolStarts(string tool, out string why)
+    {
+        try
+        {
+            using var p = Process.Start(new ProcessStartInfo(BundledTools.Resolve(tool), "-version")
+            {
+                UseShellExecute = false, CreateNoWindow = true,
+                RedirectStandardOutput = true, RedirectStandardError = true,
+            });
+            if (p == null) { why = $"{tool} did not start"; return false; }
+            p.StandardOutput.ReadToEnd();
+            p.StandardError.ReadToEnd();
+            p.WaitForExit(5000);
+        }
+        catch (Exception)
+        {
+            why = $"{tool} is not installed on the server (it must be on PATH)";
+            return false;
+        }
+        why = "";
+        return true;
+    }
+
+    /// <summary>
+    /// The <see cref="CdAnalysis"/> of a CD already burnt (#725 backfill): its Ogg decoded again to
+    /// mono, analysed on its stored grid. Null when ffmpeg fails. Runs on a worker.
+    /// </summary>
+    public static async Task<CdAnalysis?> ReanalyseAsync(string ogg, float bpm, float beatOffset, CancellationToken ct)
+    {
+        var pcm = await DecodeMonoAsync(ogg, ct);
+        if (pcm == null || pcm.Length < AnalysisRate) return null;
+        return BeatAnalyzer.AnalyseFull(pcm, AnalysisRate, bpm, beatOffset).analysis;
     }
 
     /// <summary>
@@ -91,7 +118,8 @@ public sealed class CdBurner
                 status.Report("ffmpeg could not decode the audio (is ffmpeg installed on the server?)");
                 return null;
             }
-            var (bpm, offset, style, energy) = BeatAnalyzer.Analyse(pcm, AnalysisRate);
+            var (bpm, offset, style, energy, analysis) =
+                BeatAnalyzer.AnalyseFull(pcm, AnalysisRate, Grid?.Bpm ?? 0f, Grid?.Offset ?? 0f);
             float duration = pcm.Length / (float)AnalysisRate;
 
             status.Report("Encoding…");
@@ -102,7 +130,7 @@ public sealed class CdBurner
                 return null;
             }
 
-            var info = new CdInfo(id, Clean(title), duration, bpm, offset, style, energy);
+            var info = new CdInfo(id, Clean(title), duration, bpm, offset, style, energy, Analysis: analysis);
             Core.JsonStore.Save(Path.Combine(CdDirectory, $"{id}.json"), info, CdInfo.Json);
             status.Report($"Burnt: {info.Describe()}");
             return info;
@@ -144,6 +172,7 @@ public sealed class CdBurner
         int code = await RunAsync("yt-dlp", BundledTools.YtDlpJsArgs().Concat(new[]
         {
             "--no-playlist", "--no-simulate", "--quiet", "--no-warnings",
+            "--encoding", "utf-8",   // else Windows prints the title in the console code page: "V�ronique"
             "-f", "bestaudio/best",
             "--max-filesize", "100m",
             "--print", "title", "--print", "after_move:filepath",
@@ -208,6 +237,7 @@ public sealed class CdBurner
         {
             UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardOutput = true, RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
         };
         foreach (string a in args) start.ArgumentList.Add(a);
 

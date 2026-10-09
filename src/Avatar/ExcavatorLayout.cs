@@ -57,44 +57,41 @@ public static class ExcavatorLayout
     /// <summary>A full counter-rotation of the tracks, turning on the spot, rad/s.</summary>
     public const float TurnRate = 0.55f;
 
-    public static float ClampBoom(float a) => Mathf.Clamp(a, BoomMin, BoomMax);
-    public static float ClampStick(float a) => Mathf.Clamp(a, StickMin, StickMax);
-    public static float ClampBucket(float a) => Mathf.Clamp(a, BucketMin, BucketMax);
+    /// <summary>These numbers as the spec the ride, the arm node and the checks work from.</summary>
+    public static readonly ExcavatorSpec Spec = new()
+    {
+        TrackHalfLength = TrackHalfLength, HalfGauge = HalfGauge, ShoeWidth = ShoeWidth, TrackHeight = TrackHeight, RingTop = RingTop,
+        HouseHalf = HouseHalf, HouseFront = HouseFront, HouseBack = HouseBack, HouseTop = HouseTop,
+        BoomFoot = BoomFoot, BoomLength = BoomLength, StickLength = StickLength, BucketLength = BucketLength,
+        BoomMin = BoomMin, BoomMax = BoomMax, StickMin = StickMin, StickMax = StickMax, BucketMin = BucketMin, BucketMax = BucketMax,
+        SlewRate = SlewRate, BoomRate = BoomRate, StickRate = StickRate, BucketRate = BucketRate,
+        RestBoom = RestBoom, RestStick = RestStick, RestBucket = RestBucket,
+        TopSpeed = TopSpeed, Accel = Accel, TurnRate = TurnRate,
+        Bits = (8, 8, 8, 8, 0),
+    };
+
+    public static float ClampBoom(float a) => Spec.ClampBoom(a);
+    public static float ClampStick(float a) => Spec.ClampStick(a);
+    public static float ClampBucket(float a) => Spec.ClampBucket(a);
 
     /// <summary>
     /// Where the bucket's cutting edge is in the arm's own plane: metres forward of the slewing
     /// ring and up from the ground, for these joint angles.
     /// </summary>
-    public static Vector2 Edge(float boom, float stick, float bucket)
-    {
-        float a1 = boom, a2 = a1 + stick, a3 = a2 + bucket;
-        var p = new Vector2(BoomFoot.Z, BoomFoot.Y);
-        p += new Vector2(Mathf.Cos(a1), Mathf.Sin(a1)) * BoomLength;
-        p += new Vector2(Mathf.Cos(a2), Mathf.Sin(a2)) * StickLength;
-        p += new Vector2(Mathf.Cos(a3), Mathf.Sin(a3)) * BucketLength;
-        return p;
-    }
+    public static Vector2 Edge(float boom, float stick, float bucket) => Spec.Edge(boom, stick, bucket);
 
     /// <summary>
     /// What a parked one keeps of its arm, in the 32 bits of <c>VehicleState.Flags</c>: the slew
     /// and the three joints, eight bits each over their travel (1.4° of slew, under a degree of a
     /// joint). Zero is "never set": a fresh machine parks in its rest pose.
     /// </summary>
-    public static int Pack(float slew, float boom, float stick, float bucket)
-    {
-        static int Q(float v, float lo, float hi) => Mathf.Clamp(Mathf.RoundToInt((v - lo) / (hi - lo) * 254f), 0, 254) + 1;
-        float s = Mathf.PosMod(slew, Mathf.Tau);
-        return Q(s, 0f, Mathf.Tau) | Q(boom, BoomMin, BoomMax) << 8 | Q(stick, StickMin, StickMax) << 16 | Q(bucket, BucketMin, BucketMax) << 24;
-    }
+    public static int Pack(float slew, float boom, float stick, float bucket) => Spec.Pack(slew, boom, stick, bucket);
 
     /// <summary>The slew and joints a packed word holds, or the rest pose for zero.</summary>
     public static (float Slew, float Boom, float Stick, float Bucket) Unpack(int flags)
     {
-        if (flags == 0) return (0f, RestBoom, RestStick, RestBucket);
-        static float U(int q, float lo, float hi) => lo + (Mathf.Clamp(q, 1, 255) - 1) / 254f * (hi - lo);
-        float slew = U(flags & 0xFF, 0f, Mathf.Tau);
-        return (slew > Mathf.Pi ? slew - Mathf.Tau : slew, U(flags >> 8 & 0xFF, BoomMin, BoomMax),
-            U(flags >> 16 & 0xFF, StickMin, StickMax), U(flags >> 24 & 0xFF, BucketMin, BucketMax));
+        var (s, b, k, u, _) = Spec.Unpack(flags);
+        return (s, b, k, u);
     }
 
     /// <summary>
@@ -102,6 +99,5 @@ public static class ExcavatorLayout
     /// drawn tracks run at, and what makes it a crawler — on the spot, one runs back as the other
     /// runs forward.
     /// </summary>
-    public static (float Left, float Right) Tracks(float speed, float yawRate) =>
-        (speed - yawRate * HalfGauge, speed + yawRate * HalfGauge);
+    public static (float Left, float Right) Tracks(float speed, float yawRate) => Spec.Tracks(speed, yawRate);
 }
