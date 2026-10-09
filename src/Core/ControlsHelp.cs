@@ -247,6 +247,7 @@ public partial class ControlsHelp : CanvasLayer
         ("Game", new Row[]
         {
             new("Map: search a place and go", PlayerInput.Teleport),
+            new("Free the mouse cursor (tap; Alt again or click the world to look)", PlayerInput.FreeCursor, Pad: "—"),
             new("Battle Royale: ping for your team (also middle-click on the map)", PlayerInput.Ping),
             new("Menu", PlayerInput.Menu),
             new("Chat / command", Keys: "Enter or /", Pad: "—"),
