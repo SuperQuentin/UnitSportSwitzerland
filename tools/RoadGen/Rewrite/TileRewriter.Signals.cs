@@ -312,7 +312,8 @@ public static partial class TileRewriter
             }
             if (arms.Count(a => a.In) < 2) continue;
 
-            bool amber = PedestrianAmber(cantons?.CodeAt(junction.Centre.X, junction.Centre.Y));
+            string? canton = cantons?.CodeAt(junction.Centre.X, junction.Centre.Y);
+            bool amber = PedestrianAmber(canton);
             uint seed = (uint)(long)Math.Round(junction.Centre.X) * 73856093u ^ (uint)(long)Math.Round(junction.Centre.Y) * 19349663u;
             var signalPlan = SignalPlan.Build(arms, seed, amber);
             // layout (a) only where the plan gives the kerbside bike lane a phase with the right arrow
@@ -381,6 +382,7 @@ public static partial class TileRewriter
                 poles.Add(new SignalPole(local[0], local[1], local[2], Heading(ip.Facing), Heading(ip.Across), ip.Arm, SignalPoleFlags.Second));
                 stats.Poles++;
             }
+            signalPlan.ArrowPlates = ArrowPlates(canton);
             plans[junction.NodeId] = (signalPlan, armInPlan);   // the bike crossings' conflicts (#406)
             Get(signals, home).Add(new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops.ToArray(), Plan = signalPlan, Poles = poles });
             foreach (var (i, planArm, stopAt) in approachArms)
@@ -461,6 +463,14 @@ public static partial class TileRewriter
     /// three (with a yellow). Cantons not checked yet keep three (#350 records the table).
     /// </summary>
     private static bool PedestrianAmber(string? canton) => canton != "GE";
+
+    /// <summary>
+    /// Whether the canton's white plates run on below the car and bike heads with their arrows on
+    /// them, its bike heads on one too (<see cref="SignalPlan.ArrowPlates"/>): Vaud does, Geneva
+    /// does not (#759, the user, 2026-10-10). Cantons not checked yet do not; add a canton's code
+    /// here once it is known.
+    /// </summary>
+    private static bool ArrowPlates(string? canton) => canton == "VD";
 
     /// <summary>
     /// The canton of each kilometre tile, from MapSetup's committed <c>switzerland.bin</c>

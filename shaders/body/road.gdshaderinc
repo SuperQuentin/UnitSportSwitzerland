@@ -19,6 +19,9 @@
 //   uv2 = (style id, unused)
 // A v3 tile (network stage) carries its markings as paint geometry instead (#116): style 6, a
 // second surface, colour from the vertex, uv = (along, lateral across the line in [-1,1]).
+// Style 7: a prop in the road mesh that keeps its own colour, no asphalt over it (traffic-light
+// poles and housings, #759). Style 8: the same, on a plate whose back face is black (a signal
+// head's white plate: one face instead of two).
 
 uniform float fog_start = 3500.0;
 uniform float fog_end = 8000.0;
@@ -31,7 +34,7 @@ uniform float paint_depth_bias = 0.002;
 // The whole road mesh (ribbons, sidewalks, rails) is pulled this fraction of its distance toward
 // the eye: with roads at the ground (#119) the decimated terrain of the stride-2/4 rings lies in
 // the road's plane beside it, and only a bias that grows with distance wins that depth test.
-uniform float road_depth_bias = 0.0004;
+uniform float road_depth_bias = 0.0004;   // and far_lift_*: SignalLamps mirrors them for the lenses (#759)
 // Past the rings whose terrain is blended under the roads (stride <= 4), roads are still drawn on
 // coarse terrain that was never cut for them, and a road at the ground would sink into it. Past
 // far_lift_start the whole road mesh is pulled this many metres per metre toward the eye, up to
@@ -69,10 +72,13 @@ void fragment() {
     }
     vec3 col = COLOR.rgb;
     int s = int(style + 0.5);
+    if (s == 8 && !FRONT_FACING) {
+        col = vec3(0.006, 0.006, 0.007);   // RAL 9017, linear: the plate's back
+    }
 #ifdef STYLE_REAL
     // the carriageway asphalt, the ballast gravel; paint (style 6) and the markings drawn below
     // keep their own colour
-    if (s != 6) {
+    if (s != 6 && s < 7) {
         vec2 ruv = pattern_xz(world_pos) / 3.0;
         col = s == 4 ? style_tinted(tex_gravel, ruv, col, 0.3) : style_tinted(tex_asphalt, ruv, col, 0.25);
     }
