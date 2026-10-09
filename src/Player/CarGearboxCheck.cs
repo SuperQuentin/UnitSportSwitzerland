@@ -40,6 +40,7 @@ public static class CarGearboxCheck
         Sequential();
         Shifter();
         Selector();
+        Converter();
         Kart();
 
         settings.RideProfile = was;
@@ -306,6 +307,42 @@ public static class CarGearboxCheck
         p.C.Selector = DriveSelector.Park;
         p.For(2f, 0.8f);
         Check(p.C.GearText == "P" && Mathf.Abs(p.U) < 0.05f, $"P at walking pace, gas down: held ({F(p.U * 3.6f, "F2")} km/h)");
+    }
+
+    /// <summary>The automatic's engine speed through its converter: it flares, floats down, never under idle.</summary>
+    private static void Converter()
+    {
+        GD.Print("[cargear] the automatic's converter (AE86 hatch): what the tach and the sound follow");
+        var r = new Run1(Ae86(), CarGearbox.Automatic);
+        var c = r.C;
+        var s = c.Spec;
+        float idle = s.IdleRpm, stall = idle + 0.25f * (s.Redline - idle);
+        r.For(0.5f, 0f);
+        bool atIdle = Mathf.Abs(c.Rpm - idle) < 1f;
+        r.For(0.4f, 1f);
+        float flare = c.Rpm;
+        float coupled = r.U / s.WheelRadius * s.Gears[0] * s.FinalDrive * 60f / Mathf.Tau;
+        Check(atIdle && flare > idle + 0.6f * (stall - idle) && flare > coupled + 500f,
+            $"standing at idle, then floored: {F(flare, "F0")} rpm after 0.4 s while the wheels turn it at {F(coupled, "F0")} (stall {F(stall, "F0")})");
+
+        // up through the box: no drop on an upshift faster than the converter lets the revs float down
+        float lowest = float.MaxValue, steepest = 0f, last = c.Rpm;
+        int shifts = 0, gear = c.Gear;
+        for (float t = 0f; t < 15f; t += Dt)
+        {
+            r.Step(1f);
+            lowest = Mathf.Min(lowest, c.Rpm);
+            steepest = Mathf.Max(steepest, (last - c.Rpm) / Dt);
+            last = c.Rpm;
+            if (c.Gear != gear) { shifts++; gear = c.Gear; }
+        }
+        Check(shifts >= 2 && steepest < 15000f, $"{shifts} upshifts flat out: the revs fall at most {F(steepest, "F0")} rpm/s (they used to drop in one frame)");
+
+        float before = c.Rpm;
+        r.Step(0f);
+        float oneFrame = before - c.Rpm;
+        for (float t = 0f; t < 3f; t += Dt) { r.Step(0f); lowest = Mathf.Min(lowest, c.Rpm); }
+        Check(oneFrame < 400f && lowest >= idle - 1f, $"lifted at {F(r.U * 3.6f, "F0")} km/h: {F(oneFrame, "F0")} rpm lost in the first frame; never under idle (lowest {F(lowest, "F0")})");
     }
 
     private static void Kart()

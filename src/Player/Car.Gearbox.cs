@@ -63,6 +63,28 @@ public sealed partial class Car
     }
     private const float CreepShare = 0.05f, CreepSpeed = 2.5f;
 
+    /// <summary>The engine's speed as the wheels would turn it through the gearing, floored at idle: what drives and shifts the automatic.</summary>
+    private float _coupledRpm;
+
+    /// <summary>
+    /// The automatic's engine speed through its torque converter, for the tach, the sound and the
+    /// wheel's engine shake: on the throttle the converter slips, so the engine flares toward its stall
+    /// speed (a quarter of the way from idle to the redline) at a standstill and runs above the wheels
+    /// until they catch up, the slip fading out by 1.4x the stall speed (lock-up). It follows that
+    /// target with a lag, quicker up than down: a lift or an upshift lets the revs float down rather
+    /// than drop. Never under idle.
+    /// </summary>
+    private float ConverterRpm(float coupled, float pedal, float h)
+    {
+        var s = Spec;
+        float stall = s.IdleRpm + 0.25f * (s.Redline - s.IdleRpm);
+        float slip = pedal * (stall - s.IdleRpm) * Mathf.Clamp(1f - coupled / (stall * 1.4f), 0f, 1f);
+        float target = Mathf.Clamp(Mathf.Max(coupled, s.IdleRpm) + slip, s.IdleRpm, s.Redline);
+        float from = Mathf.Max(Rpm, s.IdleRpm);
+        float tau = target > from ? 0.15f : 0.35f;
+        return from + (target - from) * (1f - Mathf.Exp(-h / tau));
+    }
+
     /// <summary>The gear as the HUD says it: P R N D3 with a selector, else the gear (R for reverse, N for neutral).</summary>
     public string GearText => Selector switch
     {

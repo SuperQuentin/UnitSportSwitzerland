@@ -489,15 +489,18 @@ public sealed partial class Car : Rideable, IEngined
             else if (Gear == 0)
             {
                 // the sequential box in neutral: the engine revs on the throttle, nothing drives
-                Rpm = Mathf.MoveToward(Rpm, Mathf.Lerp(s.IdleRpm, s.Redline * 0.95f, pedal), 15000f * h);
+                Rpm = Mathf.MoveToward(Mathf.Max(Rpm, s.IdleRpm), Mathf.Lerp(s.IdleRpm, s.Redline * 0.95f, pedal), 15000f * h);
                 drive = 0f;
             }
             else
             {
                 float ratio = GearRatio(Gear);
                 float wheelRpm = Mathf.Abs(u) / WheelRadius * 60f / Mathf.Tau;
-                Rpm = Mathf.Max(s.IdleRpm, wheelRpm * ratio);
-                float torque = Rpm >= s.Redline ? 0f : s.TorqueAt(Rpm) * powerScale;
+                // the drive and the box's shift points take the engine as coupled to the wheels; what
+                // the tach, the sound and the wheel's shake follow is the converter's slipping engine
+                _coupledRpm = Mathf.Max(s.IdleRpm, wheelRpm * ratio);
+                Rpm = auto ? ConverterRpm(wheelRpm * ratio, pedal, h) : _coupledRpm;
+                float torque = _coupledRpm >= s.Redline ? 0f : s.TorqueAt(_coupledRpm) * powerScale;
                 drive = _shiftTimer > 0 ? 0f : pedal * torque * ratio * Driveline / WheelRadius;
                 // in D or R on the selector, the converter creeps the car at walking pace off the pedals
                 drive = Mathf.Max(drive, Creep(u, reverse));
@@ -636,8 +639,8 @@ public sealed partial class Car : Rideable, IEngined
         CheckStall();
         if (auto && Gear > 0 && ground.OnFloor)
         {
-            if (Rpm > s.Redline * 0.94f && Gear < s.Gears.Length && pedal > 0.2f) { Gear++; _shiftTimer = 0.18f; }
-            else if (Gear > 1 && Rpm < s.PeakRpm * 0.55f) Gear--;
+            if (_coupledRpm > s.Redline * 0.94f && Gear < s.Gears.Length && pedal > 0.2f) { Gear++; _shiftTimer = 0.18f; }
+            else if (Gear > 1 && _coupledRpm < s.PeakRpm * 0.55f) Gear--;
         }
 
         TyreSlide = ground.OnFloor ? Mathf.Clamp(slideAccum / Substeps, 0f, 1f) * Mathf.Clamp(Mathf.Abs(u) / 4f, 0f, 1f) : 0f;

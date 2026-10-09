@@ -14,6 +14,12 @@
   **Idle creep** in D and R (`Car.Creep`): 5% of the car's weight at a standstill, none by 2.5 m/s (5-6
   km/h on the flat), full when rolling the wrong way; the brake holds it, nothing with the engine off.
   Only with the selector: on the pedals a held brake picks reverse, so a creeping car could not be held.
+- **Converter feel** (automatic only, `Car.ConverterRpm`): `Car.Rpm` (tach, engine sound, the wheel's
+  engine shake, the replicated pose) is a torque converter's slipping engine: floored from rest it
+  flares toward a stall speed a quarter of the way from idle to the redline, runs above the wheels
+  until they catch up, the slip gone by 1.4x the stall speed; it follows with a lag (0.15 s up, 0.35 s
+  down) so lifts and upshifts float down; never under idle. **The drive and the shift points still
+  use the coupled speed** (`_coupledRpm`): acceleration, AI and the drift checks are unchanged.
 - **Sequential** (`Car.Gearbox.cs`): the driver shifts with `shift_up` / `shift_down`; the automated
   clutch needs no pedal and never stalls. It drives on the automatic's model (engine speed = the
   wheels' through the gearing, floored at idle: the clutch slipping from a standstill), with a 0.18 s
