@@ -121,11 +121,13 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | menu | Esc / Start | ok: Menu tap | keep |
 | teleport (place search, BR map) | M / — | ok: wrist menu (#437), hand-held map with point and pull (#439) | keep |
 | help / debug | F1 F9 / — | help: wrist menu (#437); debug: gap | debug in the wrist menu for admins |
+| playtest_panel (Debug `--playtest`, #751) | F10 / L3 + R3 | ok: both stick clicks (XrPad), the panel on the XrUi screen; typing to Claude: gap (no keyboard) | the laser key grid planned for the chat |
 | fly camera up / down / boost | Space Ctrl… / A B L3 | ok: A B L3 | keep |
 | BR jump out / spectate | E, ←→ / Y, D-pad | ok | spectate on R stick ←/→ |
 | loot, shop, lock, Simon, vending | mouse + keys | ok: laser + trigger | lock dial by **wrist twist** |
 | chat | Enter, / | gap: no keyboard | laser key grid on the `XrUi` panel |
 | watch | — | ok: Swiss watch on the left wrist (#439) | keep |
+| free_cursor (#654) | tap Alt / — | n/a: VR points with the laser, a pad has no cursor | keep |
 | map screen: pan / zoom / draw / tool / search (#515) | arrows, drag, wheel, T, F / L stick, LB RB, A, Y, X | **gap, deferred on purpose**: the screen renders on the `XrPad` panel and says so, but the map itself is not pointable — a laser on a 2D map of a 3D country is the wrong answer to design in a hurry | a table-top relief map of Switzerland you reach into, grab to pan, pinch to zoom and paint tiles on with a finger (#535) |
 
 ## Coherence findings (what violated the rules)

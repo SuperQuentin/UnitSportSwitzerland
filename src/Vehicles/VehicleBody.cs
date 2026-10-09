@@ -411,7 +411,7 @@ public partial class VehicleBody : CharacterBody3D
 
         // at rest long enough: sleep, and stop asking for collision
         // (a boat: barely moving on water too flat to move it, or aground)
-        bool still = Ride is Boat ? _boatCalm : onFloor && Velocity.LengthSquared() < 0.04f && _flight.Spool < 0.05f;
+        bool still = Ride is Boat ? _boatCalm : onFloor && Velocity.LengthSquared() < 0.04f && _flight.Spool < 0.05f && Mathf.Abs(_spin) < 0.05f;
         _restTime = still ? _restTime + dt : 0f;
         if (_restTime > 1f)
         {
@@ -530,10 +530,11 @@ public partial class VehicleBody : CharacterBody3D
         if (Ride is Player.Car parkedCar) parkedCar.Selector = Player.DriveSelector.None;
         _motion.Yaw = Rotation.Y;
         Ride.Step(new RideInput(0f, 0f, 0f, false), new RideGround(onFloor, grade, surface), dt, ref _motion);
+        _motion.Yaw += Spin(dt, onFloor);
         Rotation = new Vector3(0, _motion.Yaw, 0);
         heading = -GlobalTransform.Basis.Z with { Y = 0 };
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
-        var v = heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed;
+        var v = heading.Rotated(Vector3.Up, _motion.Slip) * _motion.Speed + Slide(dt, onFloor);
         v.Y = onFloor ? Mathf.Min(Velocity.Y, 0f) : Velocity.Y - Rideable.Gravity * dt;
         Velocity = v;
         MoveAndSlide();
@@ -550,7 +551,7 @@ public partial class VehicleBody : CharacterBody3D
         _motion.Speed = Mathf.MoveToward(_motion.Speed, 0f, (onFloor ? 3f : 0.3f) * dt);
         var heading = -GlobalTransform.Basis.Z with { Y = 0 };
         heading = heading.LengthSquared() > 1e-6f ? heading.Normalized() : Vector3.Forward;
-        var v = heading * _motion.Speed;
+        var v = heading * _motion.Speed + Slide(dt, onFloor);
         v.Y = onFloor ? Mathf.Min(Velocity.Y, 0f) : Velocity.Y - Rideable.Gravity * dt;
         Velocity = v;
         MoveAndSlide();

@@ -250,12 +250,16 @@ public partial class ControlsHelp : CanvasLayer
         ("Game", new Row[]
         {
             new("Map: search a place and go", PlayerInput.Teleport),
+            new("Free the mouse cursor (tap; Alt again or click the world to look)", PlayerInput.FreeCursor, Pad: "—"),
             new("Battle Royale: ping for your team (also middle-click on the map)", PlayerInput.Ping),
             new("Menu", PlayerInput.Menu),
             new("Chat / command", Keys: "Enter or /", Pad: "—"),
             new("This screen", PlayerInput.Help),
             new("Performance overlay / log", Keys: "F3 / F4", Pad: "—"),
             new("Debug menu (offline or admin)", PlayerInput.DebugMenu),
+#if PLAYTEST
+            new("Playtest panel (--playtest, Debug builds)", Keys: "F10", Pad: "L3 + R3"),
+#endif
         }),
     };
 

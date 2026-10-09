@@ -97,7 +97,9 @@ __pycache__/
 .serena/
 .fr_backup/
 graphify-out/
-.claude/
+# Claude Code: local settings and worktrees stay private; the shared skills (/playtest, #751) are committed
+.claude/*
+!.claude/skills/
 
 # GPX recordings (personal tracks used for replay testing)
 *.gpx

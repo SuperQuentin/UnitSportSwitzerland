@@ -587,3 +587,7 @@ src/Terrain/Construction/SitePlans net tools/sitemachinenetcheck.sh
 src/Interiors/HallCar    net    tools/hallcarnetcheck.sh
 src/Interiors/ParkedCars net    tools/hallcarnetcheck.sh
 src/Vehicles/DormantVehicles net tools/hallcarnetcheck.sh
+# the playtest suite (#751): scenarios well-formed, MCP over HTTP, the ledger; then every flat-course scenario set up
+src/Playtest/            quick  --playtestcheck
+src/Playtest/            quick  --playtest --playtest-smoke --world fixture --chunks fixture:flat
+src/Player/FootPlayer.Deck quick --playtest --playtest-smoke --world fixture --chunks fixture:flat
