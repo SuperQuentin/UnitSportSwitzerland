@@ -57,3 +57,21 @@
   rear side glass then ends square under it), it has four doors (`FourDoor`) with spans of its own and
   a B-pillar at the split, a spoiler and an upright glass strip on the tail, and its rear bench is
   moved forward and lowered until the heads (leaning back with the seat) clear the rear glass.
+- **Rounded Cartoon cars (#760; the rest of the roster #763).** With `MeshDetail.High` (Cartoon, the
+  realistic styles) a `TallHatch` or `Liftback` is built by `CarMeshBuilder.Rounded.cs` instead of boxes:
+  each side a lofted thick wall (`SideProfile`: tucked under at the sill, widest at a third, rolled in
+  `Shoulder` 0.1 m at the top, where the side glass stands), its foot lifted in a round arch over each
+  wheel (`SideFoot`), its top down the bonnet's stations / the belt / the deck (`SideTop`), the corners
+  rounded in plan (`PlanHalf`); crowned blocks between the walls over the nose and the tail (dark where
+  they show in the wheel wells); the doors the same wall between their pillars; a rounded roof; thick
+  pillars; head and tail lamps lofted a few mm over the surface (a plate standing off a curve casts a
+  hard cel shadow); round tyres; dark wheel tubs inside. The cabin's seats, bench, dash, stack and
+  display hood are `RoundedBox`es (a box when the scratch is not smooth, so PS1 and the trucks are
+  unchanged) and the steering wheel round (`CockpitKit.Wheel` follows its shell's `Smooth`).
+  `MeshScratch.Loft(averaged: true)`: each ring point's normal the mean of its faces, a repeated point a
+  crease; `Ring` writes normals under `Smooth`; both in `--meshcheck`. **The hull is always measured
+  from the PS1 body** (`CarRig.Create(..., smooth: false)` in `Car.ParkedBox`): collision never depends
+  on a client's style. A live `/style` switch reaches a car at its next build.
+- **The XW30's HUD** (`CarBody.Hud`): the speed reflected into the windscreen where the eye's line 6°
+  under level meets the glass, turned to the eye, an eco bar under it; a second readout in
+  `CarCabin.SpeedDigits` (readouts of `SpeedPlaces` places, units first).

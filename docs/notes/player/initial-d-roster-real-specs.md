@@ -30,3 +30,6 @@
   13 m/s, waking over 0.35 or 15 m/s): `Rpm01` 0, silent in `PlayerFeel`, the tach at zero. The top
   ratio sets the top speed (the redline caps it): 0.84 gave 184 km/h, +8% on the 170 published.
   The Yaris and Prius are left-hand drive (`CarBody.LeftHandDrive`), the Japanese cars right-hand.
+- **XW30 Prius** (RideKind 37, #760): the 2009 car beside the XW20, system 100 kW, e-CVT, centre display
+  and HUD. Its 100 kW pulled the nose straight out of the Game drift at Grip 1 (17°); Grip 1.04 (a newer,
+  wider tyre) holds it.
