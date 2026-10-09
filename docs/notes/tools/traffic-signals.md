@@ -109,13 +109,15 @@
   minimum by day and 0.45 m / 5 px at night (`world_night`), strength 0.3 / 0.7, faded out by
   1 km (1.5 km at night) and off-axis (the cross street's heads do not glow down your road). 9 px
   at night blew every light into a disc and the next junction into a band. Car heads stand on a
-  white plate (RAL 9016, after the user's photo of a Swiss junction: one white plate behind the
-  black housings, side margins of half the head gap so a pole's heads share it); the Zürich
+  black backboard (side margins of half the head gap, so a pole's heads share it) whose white
+  border (RAL 9016) is flush with the housings' faces, 2 cm clear of them, with black edges back
+  to the plate (user's review of a photo of a Swiss junction: "the real backplate is black",
+  "the border at the same depth as the box"); the Zürich
   Wegleitung LSA only says the visible housing is matt RAL 9017 and the Kontrastblenden are
   aluminium after SN 640 836 (not public). Bike heads get the plate only in some cantons:
   `SignalPlan.BikeBoard` (bit 1 of the SGNL pedestrian byte, old data reads false), set by
-  RoadGen's `BikeBoard(canton)`, false everywhere until a canton is known. Pedestrian heads keep
-  the black field in a white border. Not done: the photo's arrows printed on the plate under each
+  RoadGen's `BikeBoard(canton)`, false everywhere until a canton is known. Pedestrian heads have
+  no board at all (user's review). Not done: the photo's arrows printed on the plate under each
   head (ours are arrow masks in the lenses, which Basel-Stadt also uses).
 - **Detailed heads** (#759, "less blocky"): `SignalBuilder` draws rounded housings
   (`RoundedHousing`, 2-segment corners), a visor over each lens (`LensFittings`: an arc over the
