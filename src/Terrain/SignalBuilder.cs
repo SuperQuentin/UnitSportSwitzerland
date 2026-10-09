@@ -26,12 +26,11 @@ public static class SignalBuilder
     public const float Pitch = 0.3f, LensRadius = 0.09f;
     private const float HeadWidth = 0.3f, HeadDepth = 0.22f, BoardMargin = 0.1f, BoardThickness = 0.02f;
     /// <summary>
-    /// A car head's plate (#759, from a photo of a Swiss junction and the user's review): white in
-    /// front and black behind, flush with the housing's face and <see cref="BorderGap"/> clear of
-    /// it; a narrow margin above and below the housing and at the sides half the gap to the next
-    /// head, so heads side by side share one.
+    /// A car head's plate (#759, from a photo of a Swiss junction and the user's review): a white
+    /// band <see cref="BorderWidth"/> wide all round, black behind, flush with the housing's face
+    /// and <see cref="BorderGap"/> clear of it. Heads side by side keep 5 cm between their plates.
     /// </summary>
-    private const float PlateMargin = 0.05f, PlateSide = (HeadSpacing - HeadWidth) * 0.5f, BorderGap = 0.02f;
+    private const float BorderGap = 0.02f, BorderWidth = 0.08f;
     /// <summary>
     /// The housing's rounded edges, each lens's visor over its top (open below, longer at the
     /// crown) and the ring round it (#759: the heads were plain boxes). Scaled with the head.
@@ -75,23 +74,39 @@ public static class SignalBuilder
     }
 
     /// <summary>A head on a pole: its centre, the way it faces and its right as the viewer sees it, its group, its lenses.</summary>
-    private readonly record struct Head(Vector3 Centre, Vector3 Front, Vector3 Right, int Group, Shape Shape, int Lenses, bool Flasher, float Scale = 1f);
+    private readonly record struct Head(Vector3 Centre, Vector3 Front, Vector3 Right, int Group, Shape Shape, int Lenses, bool Flasher,
+        float Scale = 1f, bool SideBySide = false)
+    {
+        /// <summary>Half the housing's height.</summary>
+        public float Half => SideBySide ? GenevaHalfHeight : Lenses * Pitch * Scale * 0.5f;
+    }
+
+    /// <summary>
+    /// Geneva's pedestrian head (#759, from the user's photo): a light grey housing with one dark
+    /// window, the red standing figure on the left and the green walking one on the right, side
+    /// by side and larger than a 200 mm lens. The two-lens heads (no yellow) are Geneva's.
+    /// </summary>
+    private const float GenevaHalfWidth = 0.21f, GenevaHalfHeight = 0.17f, GenevaDepth = 0.14f, GenevaFigureX = 0.1f, GenevaFigure = 1.45f;
+    private static readonly Color GenevaGrey = new(0.70f, 0.72f, 0.74f);
+    private static readonly Color Window = new(0.04f, 0.04f, 0.05f);
 
     /// <summary>Appends every pole, housing and backboard of the tile to a road mesh under construction.</summary>
+    /// <param name="detail">Cartoon's (<see cref="Styles.MeshDetail.High"/>) plates have rounded corners.</param>
     public static void Append(RoadTile tile, List<Vector3> vertices, List<Color> colors, List<Vector2> uvs,
-        List<Vector2> uv2s, List<int> indices)
+        List<Vector2> uv2s, List<int> indices, Styles.MeshDetail detail = Styles.MeshDetail.Low)
     {
+        bool rounded = detail == Styles.MeshDetail.High;
         foreach (var signal in tile.Signals)
             foreach (var pole in signal.Poles)
             {
                 var heads = Heads(signal.Plan, pole);
                 var foot = new Vector3(pole.X, pole.Y, pole.Z);
                 float top = 0f;
-                foreach (var h in heads) top = Mathf.Max(top, h.Centre.Y - pole.Y + h.Lenses * Pitch * h.Scale * 0.5f + BoardMargin);
+                foreach (var h in heads) top = Mathf.Max(top, h.Centre.Y - pole.Y + h.Half + BoardMargin);
                 Column(vertices, colors, uvs, uv2s, indices, foot, top);
                 foreach (var h in heads)
                 {
-                    float half = h.Lenses * Pitch * h.Scale * 0.5f, w = HeadWidth * h.Scale, depth = HeadDepth * h.Scale;
+                    float half = h.Half, w = HeadWidth * h.Scale, depth = HeadDepth * h.Scale;
                     // a bracket from the pole to a head beside it
                     var reach = h.Centre - foot;
                     reach.Y = 0;
@@ -103,10 +118,20 @@ public static class SignalBuilder
                     // some cantons; a pedestrian head has none
                     if (h.Shape != Shape.Square && (h.Shape != Shape.Bike || signal.Plan.BikeBoard))
                     {
-                        var face = h.Centre - h.Front * 0.002f;
-                        float outerW = w * 0.5f + PlateSide * h.Scale, outerH = half + PlateMargin * h.Scale, gap = BorderGap * h.Scale;
-                        BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), face,
-                            h.Front, h.Right, outerW, outerH, w * 0.5f + gap, half + gap);
+                        float gap = BorderGap * h.Scale, band = BorderWidth * h.Scale, corner = rounded ? CornerRadius * h.Scale : 0f;
+                        BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), h.Centre - h.Front * 0.002f,
+                            h.Right, w * 0.5f + gap, half + gap, band, corner);
+                    }
+                    if (h.SideBySide)
+                    {
+                        RoundedHousing(vertices, colors, uvs, uv2s, indices, h.Centre - h.Front * (GenevaDepth * 0.5f), h.Right, h.Front,
+                            GenevaHalfWidth, GenevaDepth * 0.5f, GenevaHalfHeight, CornerRadius, GenevaGrey);
+                        var window = Outline(GenevaHalfWidth - 0.025f, GenevaHalfHeight - 0.025f, CornerRadius * 0.6f, 2);
+                        var ring = new Vector3[window.Count];
+                        for (int i = 0; i < window.Count; i++)
+                            ring[window.Count - 1 - i] = h.Centre + h.Front * 0.003f + h.Right * window[i].X + Vector3.Up * window[i].Y;
+                        Polygon(vertices, colors, uvs, uv2s, indices, Window.SrgbToLinear(), ring);
+                        continue;
                     }
                     RoundedHousing(vertices, colors, uvs, uv2s, indices, h.Centre - h.Front * (depth * 0.5f), h.Right, h.Front,
                         w * 0.5f, depth * 0.5f, half, CornerRadius * h.Scale);
@@ -164,7 +189,15 @@ public static class SignalBuilder
                 {
                     var basis = new Basis(h.Right, Vector3.Up, h.Front);
                     var face = h.Front * 0.006f;
-                    float pitch = Pitch * h.Scale, half = h.Lenses * pitch * 0.5f;
+                    float pitch = Pitch * h.Scale, half = h.Half;
+                    if (h.SideBySide)
+                    {
+                        // red standing on the left, green walking on the right, as the walker sees them
+                        var figure = new Basis(h.Right * GenevaFigure, Vector3.Up * GenevaFigure, h.Front);
+                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(figure, h.Centre - h.Right * GenevaFigureX + face), j, h.Group, Role.Red));
+                        lamps.Lenses.Add(new Lens(h.Shape, new Transform3D(figure, h.Centre + h.Right * GenevaFigureX + face), j, h.Group, Role.Green));
+                        continue;
+                    }
                     for (int k = 0; k < h.Lenses; k++)
                     {
                         // top down: red, (yellow), green
@@ -233,8 +266,9 @@ public static class SignalBuilder
             var (front, right) = Frame(pole.PedHeading);
             int g = Find(plan, SignalGroupKind.Pedestrian, pole.Arm, SignalMoves.None);
             int lenses = plan.PedestrianAmber ? 3 : 2;
-            var at = foot + front * InFront + Vector3.Up * (PedestrianLowerEdge + lenses * Pitch * 0.5f);
-            heads.Add(new Head(at, front, right, g, Shape.Square, lenses, false));
+            bool geneva = !plan.PedestrianAmber;
+            var at = foot + front * InFront + Vector3.Up * (PedestrianLowerEdge + (geneva ? GenevaHalfHeight : lenses * Pitch * 0.5f));
+            heads.Add(new Head(at, front, right, g, Shape.Square, lenses, false, SideBySide: geneva));
         }
         return heads;
     }
@@ -301,20 +335,10 @@ public static class SignalBuilder
     /// rounded: a rounded rectangle in the right-up plane, extruded front to back.
     /// </summary>
     private static void RoundedHousing(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
-        Vector3 centre, Vector3 right, Vector3 front, float halfWidth, float halfDepth, float halfHeight, float radius)
+        Vector3 centre, Vector3 right, Vector3 front, float halfWidth, float halfDepth, float halfHeight, float radius, Color? tint = null)
     {
-        const int Seg = 2;
-        var colour = Housing.SrgbToLinear();
-        radius = Mathf.Min(radius, Mathf.Min(halfWidth, halfHeight) * 0.9f);
-        var outline = new List<Vector2>();
-        (float X, float Y)[] corners = [(halfWidth - radius, halfHeight - radius), (radius - halfWidth, halfHeight - radius),
-            (radius - halfWidth, radius - halfHeight), (halfWidth - radius, radius - halfHeight)];
-        for (int c = 0; c < 4; c++)
-            for (int k = 0; k <= Seg; k++)
-            {
-                float a = Mathf.Pi * 0.5f * (c + k / (float)Seg);
-                outline.Add(new Vector2(corners[c].X + radius * Mathf.Cos(a), corners[c].Y + radius * Mathf.Sin(a)));
-            }
+        var colour = (tint ?? Housing).SrgbToLinear();
+        var outline = Outline(halfWidth, halfHeight, radius, 2);
         Vector3 P(Vector2 p, float z) => centre + right * p.X + Vector3.Up * p.Y + front * z;
         int n = outline.Count;
         var face = new Vector3[n];
@@ -391,16 +415,48 @@ public static class SignalBuilder
         }
     }
 
-    /// <summary>A flat rectangular frame facing <paramref name="front"/>: the outer rectangle less the inner one.</summary>
+    /// <summary>
+    /// A flat band <paramref name="band"/> wide round an opening of half sizes
+    /// <paramref name="innerW"/> x <paramref name="innerH"/> in the right-up plane through
+    /// <paramref name="centre"/>, facing the viewer in front; its corners rounded by
+    /// <paramref name="corner"/> inside and that plus the band outside, or square when it is 0.
+    /// </summary>
     private static void BorderFrame(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
-        Color colour, Vector3 centre, Vector3 front, Vector3 right, float outerW, float outerH, float innerW, float innerH)
+        Color colour, Vector3 centre, Vector3 right, float innerW, float innerH, float band, float corner)
     {
-        // wound clockwise as the viewer in front sees it: Godot's front face
-        Vector3 Q(float x, float y) => centre + right * x + Vector3.Up * y;
-        Polygon(vertices, colors, uvs, uv2s, indices, colour, [Q(-outerW, outerH), Q(outerW, outerH), Q(outerW, innerH), Q(-outerW, innerH)], PlateStyle);
-        Polygon(vertices, colors, uvs, uv2s, indices, colour, [Q(-outerW, -innerH), Q(outerW, -innerH), Q(outerW, -outerH), Q(-outerW, -outerH)], PlateStyle);
-        Polygon(vertices, colors, uvs, uv2s, indices, colour, [Q(-outerW, innerH), Q(-innerW, innerH), Q(-innerW, -innerH), Q(-outerW, -innerH)], PlateStyle);
-        Polygon(vertices, colors, uvs, uv2s, indices, colour, [Q(innerW, innerH), Q(outerW, innerH), Q(outerW, -innerH), Q(innerW, -innerH)], PlateStyle);
+        int seg = corner > 0f ? 3 : 0;
+        var inner = Outline(innerW, innerH, corner, seg);
+        var outer = Outline(innerW + band, innerH + band, corner + band, seg);
+        Vector3 Q(Vector2 p) => centre + right * p.X + Vector3.Up * p.Y;
+        // the outlines run counter-clockwise as the viewer in front sees them; each quad is wound
+        // clockwise, Godot's front face (PlateStyle draws the back black)
+        for (int i = 0; i < inner.Count; i++)
+        {
+            int j = (i + 1) % inner.Count;
+            Polygon(vertices, colors, uvs, uv2s, indices, colour, [Q(inner[i]), Q(inner[j]), Q(outer[j]), Q(outer[i])], PlateStyle);
+        }
+    }
+
+    /// <summary>
+    /// A rectangle of half sizes <paramref name="halfWidth"/> x <paramref name="halfHeight"/> with
+    /// corners rounded by <paramref name="radius"/> in <paramref name="seg"/> steps, counter-clockwise
+    /// from the top of its right side; one point per corner when <paramref name="seg"/> is 0.
+    /// </summary>
+    private static List<Vector2> Outline(float halfWidth, float halfHeight, float radius, int seg)
+    {
+        radius = Mathf.Min(radius, Mathf.Min(halfWidth, halfHeight) * 0.9f);
+        var outline = new List<Vector2>();
+        (float X, float Y)[] corners = [(halfWidth - radius, halfHeight - radius), (radius - halfWidth, halfHeight - radius),
+            (radius - halfWidth, radius - halfHeight), (halfWidth - radius, radius - halfHeight)];
+        for (int c = 0; c < 4; c++)
+            for (int k = 0; k <= seg; k++)
+            {
+                float a = Mathf.Pi * 0.5f * (c + (seg == 0 ? 0.5f : k / (float)seg));
+                outline.Add(seg == 0
+                    ? new Vector2(Mathf.Sign(Mathf.Cos(a)) * halfWidth, Mathf.Sign(Mathf.Sin(a)) * halfHeight)
+                    : new Vector2(corners[c].X + radius * Mathf.Cos(a), corners[c].Y + radius * Mathf.Sin(a)));
+            }
+        return outline;
     }
 
     /// <summary>A flat rectangle facing <paramref name="front"/>, both sides drawn (the road material is two-sided).</summary>

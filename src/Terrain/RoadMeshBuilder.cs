@@ -13,7 +13,8 @@ public static class RoadMeshBuilder
     public sealed record MeshData(Vector3[] Vertices, Color[] Colors, Vector2[] Uvs, Vector2[] Uv2s, int[] Indices);
 
 
-    public static MeshData? Build(RoadTile tile, ChunkGrid? grid = null)
+    /// <param name="detail">The visual style's mesh detail: Cartoon's rounds the signal plates' corners (#759).</param>
+    public static MeshData? Build(RoadTile tile, ChunkGrid? grid = null, Styles.MeshDetail detail = Styles.MeshDetail.Low)
     {
         // Bridge piers, cableway pylons and wall footings are grown from the ground up, so a
         // decimated grid would stand them on a 20 m approximation of it.
@@ -73,7 +74,7 @@ public static class RoadMeshBuilder
         PavementBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // turn lane widenings (#123)
         RoadSignBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);   // junction signs (#121)
         ParkingBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);    // car park barrier, kiosk, shelter, P (#499)
-        SignalBuilder.Append(tile, vertices, colors, uvs, uv2s, indices);     // traffic-light poles and heads (#350)
+        SignalBuilder.Append(tile, vertices, colors, uvs, uv2s, indices, detail);   // traffic-light poles and heads (#350)
         RoadStreetBuilder.Append(tile, vertices, colors, uvs, uv2s, indices); // sidewalks (#119)
 
         return vertices.Count == 0

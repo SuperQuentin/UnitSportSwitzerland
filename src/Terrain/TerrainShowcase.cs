@@ -57,17 +57,26 @@ public static class TerrainShowcase
         _ => 2.2f,
     };
 
-    /// <summary>A crossroads' main pole: left arrow, car head, pedestrian head, lenses cycling on the clock.</summary>
+    /// <summary>
+    /// A crossroads' main pole: left arrow, car head, bike head, pedestrian head, lenses cycling on
+    /// the clock; with a three-lens pedestrian head (Vaud) and Geneva's side-by-side one (#759).
+    /// </summary>
     [Showcase("Terrain", "Traffic light")]
-    private static Node3D TrafficLight()
+    private static IEnumerable<(string, Func<Node3D>)> TrafficLights() =>
+    [
+        ("Vaud", () => TrafficLight(pedestrianAmber: true)),
+        ("Geneva", () => TrafficLight(pedestrianAmber: false)),
+    ];
+
+    private static Node3D TrafficLight(bool pedestrianAmber)
     {
         var plan = SignalPlan.Build(
         [
-            new SignalArm(0, true, true, LeftPocket: true, Pedestrians: true, Rank: 2),
+            new SignalArm(0, true, true, LeftPocket: true, Pedestrians: true, BikeSignal: true, Rank: 2),
             new SignalArm(Math.PI / 2, true, true, Pedestrians: true),
             new SignalArm(Math.PI, true, true, LeftPocket: true, Pedestrians: true, Rank: 2),
             new SignalArm(-Math.PI / 2, true, true, Pedestrians: true),
-        ], 353);
+        ], 353, pedestrianAmber);
         var tile = Tile();
         tile.Signals.Add(new RoadSignal
         {
@@ -91,7 +100,7 @@ public static class TerrainShowcase
         var v = new List<Vector3>(); var c = new List<Color>(); var uv = new List<Vector2>(); var uv2 = new List<Vector2>(); var ix = new List<int>();
         RoadSignBuilder.Append(tile, v, c, uv, uv2, ix);
         ParkingBuilder.Append(tile, v, c, uv, uv2, ix);
-        SignalBuilder.Append(tile, v, c, uv, uv2, ix);
+        SignalBuilder.Append(tile, v, c, uv, uv2, ix, StyleKit.Detail);
         return new RoadMeshBuilder.MeshData(v.ToArray(), c.ToArray(), uv.ToArray(), uv2.ToArray(), ix.ToArray());
     }
 

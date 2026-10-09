@@ -109,8 +109,9 @@
   minimum by day and 0.45 m / 5 px at night (`world_night`), strength 0.3 / 0.7, faded out by
   1 km (1.5 km at night) and off-axis (the cross street's heads do not glow down your road). 9 px
   at night blew every light into a disc and the next junction into a band. Car heads stand on a
-  plate flush with the housings' faces, 2 cm clear of them (side margins of half the head gap, so
-  a pole's heads share it): white (RAL 9016) in front, black behind, one face drawn with the road
+  plate flush with the housings' faces, 2 cm clear of them, its white band (RAL 9016) 8 cm wide all
+  round (5 cm between the plates of heads side by side; corners rounded in Cartoon, from
+  `MeshDetail.High` passed through `RoadMeshBuilder.Build`), black behind, one face drawn with the road
   shader's style 8 (`FRONT_FACING` picks black; wound clockwise from the front, Godot's front
   face). User's review of a photo of a Swiss junction: the black is the white plate's back; the
   Zürich
@@ -118,7 +119,10 @@
   aluminium after SN 640 836 (not public). Bike heads get the plate only in some cantons:
   `SignalPlan.BikeBoard` (bit 1 of the SGNL pedestrian byte, old data reads false), set by
   RoadGen's `BikeBoard(canton)`, false everywhere until a canton is known. Pedestrian heads have
-  no board at all (user's review). Not done: the photo's arrows printed on the plate under each
+  no board at all (user's review). Geneva's pedestrian head (the two-lens one, `!PedestrianAmber`,
+  after the user's photo) is a light grey housing with one dark window, the red standing figure
+  left and the green walking one right, side by side at 1.45 times a lens (`Head.SideBySide`);
+  the model viewer shows a Vaud and a Geneva pole. Not done: the photo's arrows printed on the plate under each
   head (ours are arrow masks in the lenses, which Basel-Stadt also uses).
 - **Detailed heads** (#759, "less blocky"): `SignalBuilder` draws rounded housings
   (`RoundedHousing`, 2-segment corners), a visor over each lens (`LensFittings`: an arc over the
