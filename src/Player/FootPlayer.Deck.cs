@@ -493,7 +493,8 @@ public partial class FootPlayer
             foreach (var set in _decks.Values.OrderBy(s => s.Key == DeckOn ? 0 : 1))
                 foreach (var (deck, body, _) in set.Sections)
                 {
-                    if (SectionFrame(set.Host, deck.Section) is not { } node) continue;
+                    // a vehicle freed since the last deck refresh (a playtest scenario clearing its bus, #751) is skipped until then
+                    if (!IsInstanceValid(set.Host) || SectionFrame(set.Host, deck.Section) is not { } node || !IsInstanceValid(node)) continue;
                     var frame = IsInstanceValid(body) && body.CollisionLayer != 0 ? body.GlobalTransform : node.GlobalTransform.Orthonormalized();
                     var local = frame.AffineInverse() * GlobalPosition;
                     bool current = set.Key == DeckOn && deck.Section == DeckSection;

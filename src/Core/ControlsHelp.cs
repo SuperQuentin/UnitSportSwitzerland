@@ -253,6 +253,9 @@ public partial class ControlsHelp : CanvasLayer
             new("This screen", PlayerInput.Help),
             new("Performance overlay / log", Keys: "F3 / F4", Pad: "—"),
             new("Debug menu (offline or admin)", PlayerInput.DebugMenu),
+#if PLAYTEST
+            new("Playtest panel (--playtest, Debug builds)", Keys: "F10", Pad: "L3 + R3"),
+#endif
         }),
     };
 

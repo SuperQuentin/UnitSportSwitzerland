@@ -17,6 +17,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private Audio.Ambience? _ambience;
     private SpectatorCamera? _spectator;
     private FootPlayer? _player;
+    /// <summary>The fixture course's start in LV95, on a fixture world (the playtest scenarios place things by course coordinates).</summary>
+    private (double E, double N)? _fixtureStart;
     private bool _onFoot;
     private bool _networked;
     private World.Traffic? _traffic;
@@ -121,6 +123,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Has("--beatcheck"), () => Verdict("beatcheck", Audio.Cd.BeatAnalyzer.SelfCheck())),
         // a VR player's hands packed into the pose and back (#439)
         (() => Has("--vrposecheck"), () => Verdict("vrposecheck", Player.FootPlayer.VrPoseSelfCheck())),
+#if PLAYTEST
+        // the playtest suite's scenarios, MCP endpoint and ledger (#751)
+        (() => Playtest.PlaytestCheck.Requested, Playtest.PlaytestCheck.Run),
+        (() => Playtest.PlaytestCheck.ListRequested, Playtest.PlaytestCheck.List),
+#endif
     };
 
     public override async void _Ready()
@@ -214,6 +221,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (fixture)
         {
             var (fE, fN) = SpawnPoint.ParseTarget(Launch);
+            _fixtureStart = (fE, fN);
             source = Terrain.Fixture.FixtureChunkSource.Create(Systems.FixtureCourse!, fE, fN)
                 ?? throw new ArgumentException($"no fixture course '{Systems.FixtureCourse}' (known: {string.Join(", ", Terrain.Fixture.FixtureCourse.Names)})");
             GD.Print($"[world] fixture course {Systems.FixtureCourse}");
@@ -803,6 +811,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the item catalogue types its commands into the chat, so the server checks them (#262)
         items.RunCommand = _chat.Send;
         _chat.CatalogueRequested += () => items.Catalogue.Open();
+#if PLAYTEST
+        // the playtest suite (#751, docs/notes/general/playtest.md): Debug builds with --playtest, offline
+        if (Playtest.PlaytestDirector.Requested && !Launch.Networked)
+            AddChild(new Playtest.PlaytestDirector(() => LocalPlayer, _chat.Send, _fixtureStart));
+#endif
 
         // bottom right: the controls that apply here (F1, every control, is the shell's)
         var prompts = PromptBar.Create();
