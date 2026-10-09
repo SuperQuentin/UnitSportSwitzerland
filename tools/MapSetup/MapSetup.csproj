@@ -14,13 +14,9 @@
     <PackageReference Include="Spectre.Console" Version="0.49.1" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
     <ProjectReference Include="..\TerrainFormat\TerrainFormat.csproj" />
-    <!-- canton polygons are read with the preprocessor's GDAL-free GeoPackage reader -->
-    <Compile Include="..\TerrainPreprocessor\GeoPackageReader.cs" Link="GeoPackageReader.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- the baked country map ships next to the binary, so a fresh clone draws it offline -->
-    <None Include="switzerland.bin" CopyToOutputDirectory="PreserveNewest" Condition="Exists('switzerland.bin')" />
+    <!-- the country map, selection, local scan, plan and estimates: shared with the game (#515).
+         It brings the GDAL-free GeoPackage reader (canton polygons) and the embedded country map. -->
+    <ProjectReference Include="..\MapCore\MapCore.csproj" />
   </ItemGroup>
 
 </Project>

@@ -252,11 +252,22 @@ public static class A320MeshBuilder
         }
         // the flight deck: side windows, and the windscreen over the nose
         // (separated by dark frames: the windscreen pillars)
-        if (k == 7) { holes.Add(new Hole(15.2f, 16.05f, true)); holes.Add(new Hole(16.17f, 16.7f, true)); holes.Add(new Hole(16.82f, 17.3f, true)); }
-        if (k == 8) { holes.Add(new Hole(16.0f, 16.7f, true)); holes.Add(new Hole(16.82f, 17.3f, true)); }
+        // (separated by dark frames: the windscreen pillars). Cut in every row the pilots look through at
+        // that station: the nose's rows close in and come down, so which rows those are depends on where (#421)
+        foreach (var (f, t) in FlightDeckGlass)
+            if (InSight(k, (f + t) * 0.5f)) holes.Add(new Hole(f, t, true));
         holes.Sort((x, y) => x.From.CompareTo(y.From));
         return holes;
     }
+
+    /// <summary>The flight deck's glass along each side: two side windows and the windscreen to the nose, between pillars.</summary>
+    private static readonly (float From, float To)[] FlightDeckGlass = { (15.2f, 16.05f), (16.17f, 16.7f), (16.82f, 17.5f) };
+
+    /// <summary>The pilots' sight: from under the glareshield's line to over their heads, around the eye (4.51 m).</summary>
+    private const float SightLow = 4.0f, SightHigh = 5.0f;
+
+    /// <summary>Row <paramref name="k"/> is in the pilots' sight at station <paramref name="z"/>: part of its height is between <see cref="SightLow"/> and <see cref="SightHigh"/>.</summary>
+    private static bool InSight(int k, float z) => Po(z, H[k + 1], 1).Y > SightLow + 0.35f && Po(z, H[k], 1).Y < SightHigh;
 
     private static void SkinRow(MeshScratch m, int sg, int k, Color tail)
     {
@@ -391,6 +402,9 @@ public static class A320MeshBuilder
 
     // ---- the flight deck ---------------------------------------------------------------------
 
+    /// <summary>The instrument panel's half width (#421): as wide as the nose allows at its height.</summary>
+    public static float CockpitPanelHalf => Mathf.Min(0.95f, InnerX(16.55f, 4.3f) - 0.04f);
+
     private static void Cockpit(MeshScratch m)
     {
         // the wall behind it, with the door opening
@@ -410,29 +424,20 @@ public static class A320MeshBuilder
                 m.Box(new Vector3(x + s * 0.27f, hip.Y + 0.1f, hip.Z + 0.1f), new Vector3(0.05f, 0.05f, 0.4f), UpholsteryDark);
         }
 
-        // side consoles with the sidesticks
+        // side consoles (the sidesticks on them) and the centre pedestal: the moving controls, the
+        // screens and the lamps are the cockpit's own (#421, AircraftCockpit)
         foreach (int sg in new[] { 1, -1 })
-        {
             m.Box(new Vector3(sg * 1.0f, FloorY + 0.4f, 15.95f), new Vector3(0.2f, 0.4f, 0.7f), PanelGrey);
-            m.Tube(new Vector3(sg * 1.0f, FloorY + 0.62f, 15.85f), new Vector3(sg * 0.95f, FloorY + 0.9f, 15.95f), 0.025f, 0.02f, Dark, 5);
-        }
-        // centre pedestal, two thrust levers
         m.Box(new Vector3(0, FloorY + 0.22f, 15.95f), new Vector3(0.3f, 0.44f, 0.7f), PanelGrey);
-        foreach (float s in new[] { -1f, 1f })
-            m.Tube(new Vector3(s * 0.06f, FloorY + 0.44f, 15.75f), new Vector3(s * 0.06f, FloorY + 0.66f, 15.92f), 0.02f, 0.015f, Dark, 5);
 
         // instrument panel with dark screens, glareshield
         const float panelZ = 16.55f;
-        float hw = Mathf.Min(0.95f, InnerX(panelZ, 4.55f) - 0.04f);
-        m.Box(new Vector3(0, 4.2f, panelZ), new Vector3(hw * 2, 0.75f, 0.12f), PanelGrey);
-        for (int i = 0; i < 6; i++)
-        {
-            float x = (i % 3 - 1) * hw * 0.62f;
-            m.Box(new Vector3(x, i < 3 ? 4.38f : 4.06f, panelZ - 0.065f), new Vector3(hw * 0.5f, 0.24f, 0.02f), Screen);
-        }
-        m.Box(new Vector3(0, 5.05f, 17.12f), new Vector3(0.07f, 0.9f, 0.07f), Frame);
-        float gw = Mathf.Min(0.95f, InnerX(16.7f, 4.68f) - 0.04f);
-        m.Box(new Vector3(0, 4.64f, 16.7f), new Vector3(gw * 2, 0.06f, 0.4f), Dark);
+        // its top under the pilots' line of sight (the eye 4.51 m): the glareshield 4.41, the panel under it
+        m.Box(new Vector3(0, 3.98f, panelZ), new Vector3(CockpitPanelHalf * 2, 0.7f, 0.12f), PanelGrey);
+        // the windscreen's centre post, from the glareshield up into the roof (#421: it hung free over the lowered glareshield)
+        m.Box(new Vector3(0, 4.93f, 17.12f), new Vector3(0.07f, 1.1f, 0.07f), Frame);
+        float gw = Mathf.Min(0.95f, InnerX(16.7f, 4.38f) - 0.04f);
+        m.Box(new Vector3(0, 4.38f, 16.7f), new Vector3(gw * 2, 0.06f, 0.4f), Dark);
     }
 
     // ---- wings -------------------------------------------------------------------------------

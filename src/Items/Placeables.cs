@@ -22,13 +22,15 @@ public static class Placeables
             0.85f, Crafting.StationVisuals.CampfireMesh, false),
         new(ItemId.FieldWorkbench, PlacedKind.FieldWorkbench, "set it up", "Field workbench set up.", "Too steep for a bench.",
             0.85f, Crafting.StationVisuals.WorkbenchMesh, false),
+        new(ItemId.FarmStand, PlacedKind.FarmStand, "set up the stand", "Farm stand set up: stock it with E.", "Too steep for a stand.",
+            0.85f, Farming.FarmStandVisual.StandMesh, false),
     };
 
     public static Placeable? ForItem(ItemId id) => All.FirstOrDefault(p => p.Item == id);
     public static Placeable? ForKind(PlacedKind kind) => All.FirstOrDefault(p => p.Kind == kind);
 
     /// <summary>Taken back with an empty hand (a fire to put out, a bench to pack up); a flag is picked up holding a flag.</summary>
-    public static bool TakenByHand(PlacedKind kind) => kind is PlacedKind.Campfire or PlacedKind.FieldWorkbench;
+    public static bool TakenByHand(PlacedKind kind) => kind is PlacedKind.Campfire or PlacedKind.FieldWorkbench or PlacedKind.FarmStand;
 
     /// <summary>What taking one back gives: the flag and the bench come back, a fire is spent.</summary>
     public static ItemId Refund(PlacedKind kind) => kind == PlacedKind.Campfire ? ItemId.None : ForKind(kind)?.Item ?? ItemId.None;
@@ -36,8 +38,8 @@ public static class Placeables
     /// <summary>The hint over something that can be taken back.</summary>
     public static string TakeVerb(PlacedObject o) => o.Kind switch
     {
-        PlacedKind.Campfire => Crafting.CampfireClock.Burning(o.Payload, Net.ClockSync.ServerUnixNow) ? "put it out" : "clear the ashes",
-        PlacedKind.FieldWorkbench => "pack it up",
+        PlacedKind.Campfire => Crafting.CampfireClock.Burning(o.Payload, World.WorldClock.EnvNow) ? "put it out" : "clear the ashes",
+        PlacedKind.FieldWorkbench or PlacedKind.FarmStand => "pack it up",
         _ => "pick up",
     };
 }

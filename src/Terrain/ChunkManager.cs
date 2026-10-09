@@ -128,17 +128,23 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// per-frame commit budget is the real limiter there, so a small number costs nothing
     /// locally and is what makes streaming usable.
     /// </summary>
-    private const int PlayMaxConcurrentBuilds = 6;
+    private static readonly int PlayMaxConcurrentBuilds = Platform.IsMobile ? MobileMaxConcurrentBuilds : 6;
+
+    /// <summary>
+    /// A phone (#63): half its cores, 2 to 4. They are big.LITTLE: more builds than big cores
+    /// only heat it and starve the main thread, and every build holds megabytes of grids.
+    /// </summary>
+    private static readonly int MobileMaxConcurrentBuilds = Math.Clamp(System.Environment.ProcessorCount / 2, 2, 4);
 
     /// <summary>
     /// Offline the disk and the CPU are the only limits, so use the cores that are there.
     /// Two per core because each build is IO then CPU, and the halves interleave.
     /// </summary>
-    private static readonly int OfflineMaxConcurrentBuilds =
-        Math.Max(PlayMaxConcurrentBuilds, System.Environment.ProcessorCount * 2);
+    private static readonly int OfflineMaxConcurrentBuilds = Platform.IsMobile ? MobileMaxConcurrentBuilds
+        : Math.Max(PlayMaxConcurrentBuilds, System.Environment.ProcessorCount * 2);
 
-    private static readonly int LocalMaxConcurrentBuilds =
-        Math.Max(PlayMaxConcurrentBuilds, System.Environment.ProcessorCount);
+    private static readonly int LocalMaxConcurrentBuilds = Platform.IsMobile ? MobileMaxConcurrentBuilds
+        : Math.Max(PlayMaxConcurrentBuilds, System.Environment.ProcessorCount);
 
     private int MaxConcurrentBuilds =>
         OfflineMode ? OfflineMaxConcurrentBuilds
@@ -345,6 +351,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         public bool PendingRoads;
         public bool HasBuildings;
         public bool PendingBuildings;
+        /// <summary>Its buildings were built as cells with occluders (#553), not as one mesh; and what the build in flight asked for.</summary>
+        public bool BuildingCells, PendingCells;
         public bool HasBuildingCollision;
 
         // Collision waiting for its frame, one piece at a time (see CommitCollisionPieces).
@@ -405,7 +413,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         Vector3[][]? RoadCollisionFaces = null, long[]? StageMs = null,
         Interiors.DoorSpot[]? Doors = null,
         List<(float[] Points, int Count, float Half, float Height)>? Bores = null,
-        WaterLayer? WaterLayer = null, SignalBuilder.Lamps? Lamps = null);
+        WaterLayer? WaterLayer = null, SignalBuilder.Lamps? Lamps = null,
+        ArrayMesh?[]? BuildingCells = null, Vector3[]? OccluderVertices = null, int[]? OccluderIndices = null,
+        ArrayMesh? Sites = null, Construction.CraneRig[]? Cranes = null);
 
     private Material? _roadMaterial;
     private Material? _buildingMaterial;
@@ -469,6 +479,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             Horizon.DistanceM = s.HorizonKm * 1000.0;
             FogUniforms.Apply(Horizon.Material);
         }
+        ApplyOcclusion();
         _sinceEval = double.MaxValue;
     }
 
@@ -557,6 +568,10 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// </summary>
     public void SetSightlineCut(Vector3 from, Vector3 to, float radius)
     {
+        // the cut dissolves the buildings between the camera and its subject; their occluders
+        // would still hide it (#553)
+        bool cut = radius > 0f;
+        if (cut != _cutting) { _cutting = cut; ApplyOcclusion(); }
         foreach (var m in new[] { _buildingMaterial, _treeMaterial })
         {
             if (m is not ShaderMaterial shader) continue;
@@ -713,6 +728,60 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// unloads with it. Doors are tile-local, like <see cref="Interiors.DoorSpot.Position"/>.
     /// </summary>
     public event Action<TileId, ChunkNode, Interiors.DoorSpot[]>? TileFurnished;
+
+    /// <summary>
+    /// Main thread: a tile has left the building ring and shed its buildings (#553). Whatever
+    /// <see cref="TileFurnished"/> hung on them (signs, decorations) goes too; they come back with
+    /// the next <see cref="TileFurnished"/> if the tile comes near again.
+    /// </summary>
+    public event Action<TileId, ChunkNode>? TileUnfurnished;
+
+    /// <summary>
+    /// Buildings round the camera drawn in cells with occluders, for occlusion culling (#553). On:
+    /// measured three times each way, it shortened the frame at street level (p50 4.4 to 4.1 ms,
+    /// p99 5.6 to 5.0 ms, GPU -8 %) and from the air (mean -4 %, GPU -5 %).
+    /// <c>--occlusion off</c> turns it off, for comparisons.
+    /// </summary>
+    public static bool OcclusionCells { get; set; } = Core.CmdArgs.Value("--occlusion", notFlag: true) != "off";
+
+    /// <summary>Tiles within this many of an anchor's draw their buildings in cells.</summary>
+    public const int CellRings = 1;
+
+    private bool _cutting;
+
+    /// <summary>An anchor this close above the ground is at street level: building cells round it (#553).</summary>
+    public const float StreetEnterM = 40f;
+
+    /// <summary>...and back to one mesh a tile once every anchor is this high (slack, so a hop does not rebuild).</summary>
+    public const float StreetLeaveM = 120f;
+
+    private bool _street;
+
+    /// <summary>True while some anchor is near the ground, with hysteresis: where buildings hide things.</summary>
+    private bool StreetLevel()
+    {
+        float lowest = float.MaxValue;
+        foreach (var anchor in _anchors)
+            if (IsInstanceValid(anchor) && TryGetHeight(anchor.GlobalPosition, out float ground))
+                lowest = Math.Min(lowest, anchor.GlobalPosition.Y - ground);
+        if (lowest == float.MaxValue) return _street;
+        if (_street && lowest > StreetLeaveM) _street = false;
+        else if (!_street && lowest < StreetEnterM) _street = true;
+        return _street;
+    }
+
+    /// <summary>
+    /// Occlusion culling on the main view (#553) while the buildings are occluders: off in VR (two
+    /// eyes, one occlusion buffer) and while a sightline cut dissolves the buildings in the way.
+    /// The portal cameras' viewports never cull: they stand inside the walls.
+    /// </summary>
+    public void ApplyOcclusion()
+    {
+        if (!IsInsideTree()) return;
+        bool on = OcclusionCells && !_cutting && !XR.XrSession.Active;
+        if (on) ProjectSettings.SetSetting("rendering/occlusion_culling/use_occlusion_culling", true);
+        GetViewport().UseOcclusionCulling = on;
+    }
 
     /// <summary>Main thread: a tile has just come into the streamed rings (nothing is built yet).</summary>
     public event Action<TileId>? TileEntered;
@@ -882,6 +951,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
     public bool HasAnchor(Node3D anchor) => _anchors.Contains(anchor);
 
+    /// <summary>Every streaming anchor, with or without collision. Check each with <c>IsInstanceValid</c>.</summary>
+    public IReadOnlyList<Node3D> Anchors => _anchors;
+
     public int ActiveChunkCount => _chunks.Count;
 
     /// <summary>Bilinear terrain height at a world position, if that chunk's data is loaded.</summary>
@@ -943,6 +1015,32 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             if (BuildMeshes && state.ActiveStride < 0) return false;
         }
 
+        return true;
+    }
+
+    /// <summary>
+    /// True when every tile within <paramref name="rings"/> of <paramref name="eye"/> is finished as
+    /// the last ring evaluation wants it: its mesh at the wanted stride (not a coarse one standing in
+    /// for the fine one still to come), its roads, buildings and collision built and committed.
+    /// <see cref="SettledNear"/> is true as soon as each tile has some mesh, enough for a frame in
+    /// play; a film shot (the trailer, #706) waits for this instead, or the ground beside the camera
+    /// is still the coarse one when the actors arrive.
+    /// </summary>
+    public bool CompleteNear(Vector3 eye, int rings)
+    {
+        if (_origin == null) return Settled;
+        if (!_ready.IsEmpty) return false;
+        var centre = _origin.TileAt(eye);
+        foreach (var (id, want) in _ordered)
+        {
+            if (LodPolicy.Distance(id, centre) > rings) continue;
+            if (!_chunks.TryGetValue(id, out var state) || state.PendingStride >= 0 || state.Grid == null) return false;
+            if (BuildMeshes && state.ActiveStride != want.Stride) return false;
+            if (want.Roads && (!state.HasRoads || state.PendingRoads || state.QueuedRoadCells != null)) return false;
+            if (want.Buildings && (!state.HasBuildings || state.PendingBuildings || state.QueuedBuildingCells != null)) return false;
+            if (want.Collision && (!state.HasCollision || !state.HasBuildingCollision || state.PendingCollision || state.CollisionQueued))
+                return false;
+        }
         return true;
     }
 
@@ -1080,6 +1178,13 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         return true;
     }
 
+    /// <summary>
+    /// The height grid a tile is drawn from now (full or decimated, roads blended), null when not
+    /// loaded. Main thread; the grid itself is never changed after it is published (a rebuild swaps
+    /// in a new one), so a worker may sample it (farm crops draped on the ground, #494).
+    /// </summary>
+    public ChunkGrid? GridAt(TileId id) => _chunks.TryGetValue(id, out var state) ? state.Grid : null;
+
     public bool TryGetHeight(Vector3 worldPos, out float height)
     {
         height = 0f;
@@ -1138,6 +1243,18 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         int cell = ChunkNode.CollisionCell((int)(e - id.MinE), (int)(id.MaxN - n));
         return (state.HeightCellsDone & (1 << cell)) != 0
             && ((state.RoadCellsQueued & (1 << cell)) == 0 || (state.RoadCellsDone & (1 << cell)) != 0);
+    }
+
+    /// <summary>
+    /// Whether the tile under a world position has every cell of its buildings' collision
+    /// committed: until then a spot can look free and be inside a house (#517, the on-foot start).
+    /// </summary>
+    public bool BuildingCollisionDoneAt(Vector3 worldPos)
+    {
+        if (_origin == null) return false;
+        var (e, n) = _origin.ToLv95(worldPos);
+        return _chunks.TryGetValue(TileId.FromLv95(e, n), out var state)
+            && state.HasBuildingCollision && state.BuildingCellsQueued == 0;
     }
 
     private long _allocatedAtLastCollect;
@@ -1308,8 +1425,16 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             }
             if (result.BuildingsRequested)
             {
-                if (result.Buildings != null)
+                if (result.BuildingCells != null)
+                    EnsureNode(result.Id, state).SetBuildingCells(result.BuildingCells, result.OccluderVertices, result.OccluderIndices);
+                else if (result.Buildings != null)
                     EnsureNode(result.Id, state).SetBuildings(result.Buildings);
+                // the building sites' shells (#608), or none: a rebuild without them clears them
+                if (result.Sites != null || state.HasBuildings)
+                    EnsureNode(result.Id, state).SetSites(result.Sites, result.Cranes, PierMaterial);
+                // what was asked for, not what came back: a tile with no buildings at all (the lake)
+                // has no cells to show, and recording that as "not cells" rebuilt it forever
+                state.BuildingCells = state.PendingCells;
                 if (result.Doors != null)
                     Interiors.DoorIndex.SetTile(result.Id, _origin!.ToWorld(result.Id.MinE, result.Id.MaxN, 0), result.Doors);
                 TileFurnished?.Invoke(result.Id, EnsureNode(result.Id, state), result.Doors ?? []);
@@ -1552,6 +1677,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             SortByView(view);
         }
 
+        bool street = OcclusionCells && StreetLevel();
         foreach (var (id, want) in _ordered)
         {
             if (!_chunks.TryGetValue(id, out var state))
@@ -1564,7 +1690,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
             bool needCollision = want.Collision && !state.PendingCollision && !state.CollisionQueued
                 && (!state.HasCollision || !state.HasBuildingCollision);
             bool needRoads = want.Roads && !state.HasRoads && !state.PendingRoads;
-            bool needBuildings = want.Buildings && !state.HasBuildings && !state.PendingBuildings;
+            // A tile round the camera draws its buildings in cells with occluders, one farther out
+            // as one mesh (#553), and only near the ground: from the air a building hides next to
+            // nothing, and flying across a city rebuilt three tiles a crossing for no gain. Rebuilt
+            // (buildings only) when it crosses, with a ring of slack so it does not flap.
+            bool wantCells = OcclusionCells && street && want.Buildings && want.Dist <= CellRings;
+            bool cellSwitch = state.HasBuildings && state.BuildingCells != wantCells
+                && (wantCells || want.Dist > CellRings + 1 || !street);
+            bool needBuildings = want.Buildings && !state.PendingBuildings && (!state.HasBuildings || cellSwitch);
             bool needGrid = state.Grid == null;
 
             // A fine build for a tile that is now far away is work the player has left behind:
@@ -1600,9 +1733,14 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // and then dropping on foot, and flying away and back: the tile coarsens with its
                 // roads kept (out to RoadMaxDist), and refined without the road tile its stride-1
                 // ground came back unblended, burying the roads it had been lowered under.
-                bool nearMesh = needMesh && want.Stride <= TerrainMeshBuilder.MaxHoleStride;
+                // Not only when the stride changes: every build redraws the surface, and the
+                // switch to building cells when the camera comes down to the street (#553, a
+                // buildings-only build) drew the bare ground over every road and car park round
+                // it (#603).
+                bool nearMesh = BuildMeshes && want.Stride > 0 && want.Stride <= TerrainMeshBuilder.MaxHoleStride;
                 StartBuild(id, state, want.Stride, needCollision, needRoads, needBuildings,
-                    roadsForBlend: (needCollision || nearMesh) && want.Roads, fine: fine);
+                    roadsForBlend: (needCollision || nearMesh) && want.Roads, fine: fine, cells: wantCells,
+                    buildingsOnly: needBuildings && cellSwitch);
             }
         }
     }
@@ -1647,6 +1785,26 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         foreach (var (id, want) in _wanted)
             if (_chunks.TryGetValue(id, out var loaded) && loaded.Node != null)
                 loaded.Node.SetTreeDensity(Lod.TreeDensity(want.Dist));
+
+        // A tile past the building or the road ring (and the slack) sheds them (#553). Both used to
+        // stay until the tile itself unloaded, 16 rings out at render distance 15: every building
+        // and street a flight had passed stayed drawn, and lowering the detail kept them all.
+        foreach (var (id, want) in _wanted)
+        {
+            if (!_chunks.TryGetValue(id, out var shed) || shed.Node is not { } shedNode) continue;
+            if (shed.HasBuildings && !shed.PendingBuildings && want.Dist > Lod.BuildingMaxDist + Lod.UnloadSlack)
+            {
+                shedNode.ClearBuildings();
+                shed.HasBuildings = false;
+                Interiors.DoorIndex.ClearTile(id);
+                TileUnfurnished?.Invoke(id, shedNode);
+            }
+            if (shed.HasRoads && !shed.PendingRoads && want.Dist > Lod.RoadMaxDist + Lod.UnloadSlack)
+            {
+                shedNode.ClearRoads();
+                shed.HasRoads = false;
+            }
+        }
 
         // unload with hysteresis
         var toRemove = new List<TileId>();
@@ -1741,7 +1899,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// file), else the legacy layer derived from the cover raster, which needs the full grid. Null
     /// when the tile has no water, or when only a coarse grid and no source layer is at hand.
     /// </summary>
-    private static async Task<WaterLayer?> LoadWaterLayerAsync(IChunkSource source, TileId id, ChunkGrid grid,
+    public static async Task<WaterLayer?> LoadWaterLayerAsync(IChunkSource source, TileId id, ChunkGrid grid,
         byte[]? cover, CancellationToken ct)
     {
         if (await source.LoadWaterAsync(id, ct) is { } tile) return WaterLayer.Create(tile, grid);
@@ -1753,12 +1911,18 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         r.Mesh?.Dispose();
         r.Roads?.Dispose();
         r.Buildings?.Dispose();
+        r.Sites?.Dispose();
+        if (r.Cranes != null)
+            foreach (var crane in r.Cranes) crane.Dispose();
+        if (r.BuildingCells != null)
+            foreach (var cell in r.BuildingCells) cell?.Dispose();
         r.Water?.Dispose();
         r.Trees?.Dispose();
     }
 
     private void StartBuild(TileId id, ChunkState state, int stride, bool wantCollision,
-        bool wantRoads, bool wantBuildings, bool roadsForBlend = false, bool fine = false)
+        bool wantRoads, bool wantBuildings, bool roadsForBlend = false, bool fine = false, bool cells = false,
+        bool buildingsOnly = false)
     {
         if (fine) Interlocked.Increment(ref _fineBuildsInFlight);
         state.PendingStride = stride;
@@ -1767,6 +1931,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         state.PendingCollision = wantCollision;
         state.PendingRoads = wantRoads;
         state.PendingBuildings = wantBuildings;
+        if (wantBuildings) state.PendingCells = cells;
         var cts = state.Cts = new CancellationTokenSource();
         var ct = cts.Token;
         int generation = state.Generation;
@@ -1930,7 +2095,9 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
 
                 ChunkNode.TreeMeshes? trees = null;
                 ArrayMesh? water = null;
-                if (wantBuildings)
+                // a switch to or from building cells (#553) redoes the buildings, not the trees and
+                // the water committed with them, which stay where they are
+                if (wantBuildings && !buildingsOnly)
                 {
                     var treeList = await source.LoadTreesAsync(id, ct);
                     ct.ThrowIfCancellationRequested();
@@ -1971,13 +2138,37 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 // town tile), and only the tile a body stands on needs one. Empty faces still
                 // mark the tile done, so it is not asked again.
                 ArrayMesh? buildings = null;
+                ArrayMesh?[]? buildingCells = null;
+                (Vector3[] Vertices, int[] Indices)? occluders = null;
                 Vector3[][]? buildingFaces = null;
                 Interiors.DoorSpot[]? doors = null;
+                ArrayMesh? siteMesh = null;
+                Construction.CraneRig[]? craneRigs = null;
+                Vector3[]? siteFaces = null;
                 if (wantBuildings || wantCollision)
                 {
                     var bTile = await source.LoadBuildingsAsync(id, ct);
                     ct.ThrowIfCancellationRequested();
                     Lap(StBldgLoad, stageMs, clock);
+
+                    // the building sites (#605): planned from the tile and its roads, the same on
+                    // every peer, their shells drawn in place of their solids (#608)
+                    if (bTile != null && Construction.SitePlans.HasSite(bTile))
+                    {
+                        var siteRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
+                        ct.ThrowIfCancellationRequested();
+                        var sites = Construction.SitePlans.For(bTile, siteRoads);
+                        bool siteMeshWanted = wantBuildings && pierMaterial != null;
+                        if (Construction.SiteShellBuilder.Build(bTile, sites, grid, siteMeshWanted, wantCollision) is { } shells)
+                        {
+                            ct.ThrowIfCancellationRequested();
+                            if (shells.Mesh is { } shellData) siteMesh = ChunkNode.ToPropMesh(shellData, pierMaterial!);
+                            siteFaces = shells.Faces;
+                            // what the cranes slew (#610): meshes made here, nodes on the main thread
+                            if (siteMeshWanted && shells.Cranes.Count > 0)
+                                craneRigs = shells.Cranes.Select(c => Construction.CraneRig.Make(c, pierMaterial!)).ToArray();
+                        }
+                    }
 
                     if (wantBuildings && bTile != null && buildingMaterial != null)
                     {
@@ -1990,11 +2181,31 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         if (BuildingMeshBuilder.Build(bTile, doors, detail) is { } buildingData)
                         {
                             ct.ThrowIfCancellationRequested();
-                            buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial);
+                            if (cells)
+                            {
+                                var parts = BuildingOcclusion.SplitByCell(buildingData);
+                                buildingCells = new ArrayMesh?[parts.Length];
+                                for (int c = 0; c < parts.Length; c++)
+                                    if (parts[c] is { } part) buildingCells[c] = ChunkNode.ToArrayMesh(part, buildingMaterial);
+                                occluders = BuildingOcclusion.Occluders(bTile);
+                            }
+                            else buildings = ChunkNode.ToArrayMesh(buildingData, buildingMaterial);
                         }
                     }
                     if (wantCollision)
-                        buildingFaces = ChunkNode.SplitByCell(bTile != null ? BuildingMeshBuilder.BuildCollisionFaces(bTile) : []);
+                    {
+                        // a garage door's access road is drivable ground (#558): the tile's doors
+                        // say whether it has one, so a collision-only build computes them too
+                        var linkDoors = doors;
+                        if (linkDoors == null && bTile != null)
+                        {
+                            var linkRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
+                            ct.ThrowIfCancellationRequested();
+                            linkDoors = Interiors.BuildingFootprint.ComputeDoors(bTile, linkRoads, grid.Stride == 1 ? grid : null);
+                        }
+                        buildingFaces = ChunkNode.SplitByCell(bTile != null
+                            ? [.. BuildingMeshBuilder.BuildCollisionFaces(bTile), .. BuildingMeshBuilder.LinkFaces(linkDoors)] : []);
+                    }
                     Lap(StBldgMesh, stageMs, clock);
                 }
 
@@ -2031,6 +2242,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         .. RoadWallBuilder.BuildCollisionFaces(roadTile), .. RailingBuilder.BuildCollisionFaces(roadTile),
                         .. IslandBuilder.BuildCollisionFaces(roadTile),   // roundabout islands (#122)
                         .. RoadSignBuilder.BuildCollisionFaces(roadTile),   // sign poles (#121)
+                        .. ParkingBuilder.BuildCollisionFaces(roadTile),   // car park props (#499)
                         .. SignalBuilder.BuildCollisionFaces(roadTile),     // traffic-light poles (#350)
                         .. RoadStreetBuilder.BuildCollisionFaces(roadTile)]);   // sidewalks and kerbs (#119)
                     bores = RoadTunnels.Bores(roadTile);
@@ -2041,6 +2253,15 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 if (wantCollision && PierMeshBuilder.Build(landings, id, grid, mesh: false, collision: true) is { Faces.Length: > 0 } piers)
                 {
                     var cells = ChunkNode.SplitByCell(piers.Faces);
+                    if (bridgeCollision == null) bridgeCollision = cells;
+                    else
+                        for (int c = 0; c < cells.Length; c++)
+                            if (cells[c].Length > 0) bridgeCollision[c] = [.. bridgeCollision[c], .. cells[c]];
+                }
+                // and so are the building sites' slabs, flights and scaffold lifts (#608)
+                if (wantCollision && siteFaces is { Length: > 0 })
+                {
+                    var cells = ChunkNode.SplitByCell(siteFaces);
                     if (bridgeCollision == null) bridgeCollision = cells;
                     else
                         for (int c = 0; c < cells.Length; c++)
@@ -2082,7 +2303,8 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                 _ready.Enqueue(new BuildResult(id, stride, generation, grid, Interim: false,
                     tailMesh, blendedCollision, roads, wantRoads,
                     holes, cover, buildings, buildingFaces, wantBuildings, trees, water,
-                    bridgeCollision, stageMs, doors, bores, waterLayer, lamps));
+                    bridgeCollision, stageMs, doors, bores, waterLayer, lamps,
+                    buildingCells, occluders?.Vertices, occluders?.Indices, siteMesh, craneRigs));
             }
             catch (OperationCanceledException)
             {

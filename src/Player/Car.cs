@@ -201,7 +201,7 @@ public sealed class Car : Rideable, IEngined
     public override bool IsVehicle => true;
     public override bool HasEngine => true;
     public override bool CanHop => false;
-    public override float MaxHealth => 160f;
+    public override float MaxHealth => IsKart ? 110f : 160f;
     public override float WheelLock => Core.SteeringWheel.LockOverride ?? Spec.LockTurns * Mathf.Tau;
     /// <summary>Steering-wheel turn over road-wheel angle: the spec's, unless <c>--wheellock</c> sets another lock.</summary>
     private float Ratio => Core.SteeringWheel.LockOverride is { } l ? l * 0.5f / Spec.MaxSteer : Spec.SteerRatio;
@@ -214,19 +214,23 @@ public sealed class Car : Rideable, IEngined
         HumanMeshBuilder.MountsForDriver(CarMeshBuilder.SeatFor(Spec.Body, Spec.Wheelbase)).Eye
         + new Vector3(0, Spec.Body.Lift - Spec.Body.Drop, 0);
     private Vector3? _eye;
-    public override float EyeHeight => 1.1f;
+    public override float EyeHeight => IsKart ? 0.8f : 1.1f;
     // Up and behind, looking down ~25° over the roof: from a level camera at roof height the car
-    // itself hid the road you were about to drive onto.
-    public override float ChaseDistance => 6.2f;
-    public override float ChaseHeight => 4.1f;
-    public override float ChasePitch => -0.44f;
+    // itself hid the road you were about to drive onto. A kart is 1 m high: closer and lower.
+    public override float ChaseDistance => IsKart ? 4.2f : 6.2f;
+    public override float ChaseHeight => IsKart ? 2.4f : 4.1f;
+    public override float ChasePitch => IsKart ? -0.34f : -0.44f;
     // stays above the car in a drift rather than swinging round to the side of it
     public override float ChaseFollowsTravel => 0.15f;
     public override float BaseFov => 68f;
     public override float MaxFov => 90f;
-    public override float FovSpeed => 45f;
-    public override float BodyRadius => 0.85f;
-    public override float BodyHeight => 1.7f;
+    // a kart tops out at 18 m/s: the view opens fully there, so 65 km/h at ground level feels like it
+    public override float FovSpeed => IsKart ? 18f : 45f;
+    // a kart is 1.4 m wide and 1.1 m high with its driver: the car's capsule would be a van's
+    public override float BodyRadius => IsKart ? 0.7f : 0.85f;
+    public override float BodyHeight => IsKart ? 1.2f : 1.7f;
+    // its hull starts where the frame does, not at a car's 0.45 m, or only the driver would collide
+    public override float HullLift => IsKart ? 0.1f : 0.45f;
     public override float DismountSpeed => 1.5f;
     // measured from this model's own mesh (Rideable.Measured): an AE86 is not an NSX. Cached per
     // model and preset (an SUV stands taller than the same car on semi-slicks), so always that
@@ -292,6 +296,11 @@ public sealed class Car : Rideable, IEngined
     public bool RoofOpen { get; set; }
     /// <summary>An open car: its top folds away.</summary>
     public bool HasSoftTop => Spec.Body.Shape == BodyShape.Roadster;
+    /// <summary>Hydraulics pumping, as the driver set them: O / D-pad left on a car that has them (#464).</summary>
+    public bool Bouncing { get; set; }
+    public bool HasHydraulics => Spec.Body.Hydraulics;
+    /// <summary>A rental go-kart (#715): no suspension, a solid rear axle, a driver who sits on the road, and a body that can trip and tip over.</summary>
+    public bool IsKart => Spec.Body.Shape == BodyShape.Kart;
     /// <summary>Longitudinal and lateral acceleration, m/s² (+ forward, + left), for body pitch and roll.</summary>
     public float AccelX { get; private set; }
     public float AccelY { get; private set; }
@@ -315,6 +324,29 @@ public sealed class Car : Rideable, IEngined
     private const int Substeps = 4;
 
     private float _steer;   // eased steering input, −1..1
+
+    // ---- a kart that has tripped (#715) ----
+    /// <summary>Seconds left on its side, and which side: + onto its left.</summary>
+    private float _tipTime;
+    private float _tipSide;
+    /// <summary>How long it has been sliding sideways past what its tyres hold, s.</summary>
+    private float _trip;
+    /// <summary>Lying on its side: the kart scrapes to a halt and nobody steers it.</summary>
+    public bool Tipped => _tipTime > 0f;
+    /// <summary>Seconds a tripped kart lies there before it is stood up again, and how hard the road scrapes it to a stop, m/s².</summary>
+    private const float TipDuration = 1.8f, TipScrape = 11f;
+    /// <summary>
+    /// A kart trips when it slides sideways, wheels square to nothing: past this angle between its
+    /// nose and its travel (rad) for this long (s), at speed. Loose ground digs in sooner than tarmac.
+    /// </summary>
+    private const float TripTime = 0.12f, TripSpeed = 7f;
+    internal static float TripAngle(Audio.Surface surface) => surface switch
+    {
+        Audio.Surface.Asphalt or Audio.Surface.Wood or Audio.Surface.Indoor => 0.8f,
+        Audio.Surface.Gravel or Audio.Surface.Snow or Audio.Surface.Ice => 0.6f,
+        Audio.Surface.Grass or Audio.Surface.Forest => 0.45f,
+        _ => 0.7f,
+    };
     /// <summary>
     /// Game: how much of the arcade help is left, 1 all .. 0 none. The foot brake taking the whole
     /// rear circle while the rear slides past its peak (a locked rear let go, last step) takes it away: the counter-steer assist, the yaw
@@ -333,7 +365,17 @@ public sealed class Car : Rideable, IEngined
     public Car Clone() => (Car)MemberwiseClone();
 
     public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default) =>
-        CarRig.Create(Spec.Body, Spec.Wheelbase, Spec.Gauges, HumanPalette.ForRider(riderIndex) with { Outfit = outfit });
+        CarRig.Create(Dressed(riderIndex), Spec.Wheelbase, Spec.Gauges, HumanPalette.ForRider(riderIndex) with { Outfit = outfit });
+
+    /// <summary>
+    /// The body as <paramref name="riderIndex"/> sees it: a rental kart wears the colour and number its
+    /// rider's seed picks (<see cref="KartMeshBuilder.Dress"/>), unless the garage has painted it; every
+    /// other car is the catalog's own.
+    /// </summary>
+    private CarBody Dressed(int riderIndex) =>
+        !IsKart ? Spec.Body
+        : Spec.SetupId == CarSetups.ArmyId ? KartMeshBuilder.Army(Spec.Body, riderIndex)
+        : Tuning[TuneSlot.Paint] == 0 ? KartMeshBuilder.Dress(Spec.Body, riderIndex) : Spec.Body;
 
     public override Avatar.SeatAnchor[] Seats => SeatsOf((Kind, Spec.SetupId), () =>
     {
@@ -346,7 +388,7 @@ public sealed class Car : Rideable, IEngined
     public override bool Driverless => true;
 
     /// <summary>Left in the world: the same car with nobody at the wheel.</summary>
-    public override Node3D BuildParkedVisual(int riderIndex) => CarRig.Create(Spec.Body, Spec.Wheelbase, Spec.Gauges);
+    public override Node3D BuildParkedVisual(int riderIndex) => CarRig.Create(Dressed(riderIndex), Spec.Wheelbase, Spec.Gauges);
 
     public override void Step(in RideInput input, in RideGround ground, float dt, ref RideMotion motion)
     {
@@ -364,6 +406,8 @@ public sealed class Car : Rideable, IEngined
         float grip = onGround * CarSetups.BumpGrip(harsh) * (arcade ? ArcadeGrip : 1f);
         float roughDrag = CarSetups.RoughDrag(ground.Surface, harsh);
         float tyreC = (arcade ? ArcadeTyreC : SimTyreC) * Tyres.CurveC;
+
+        if (IsKart && TipStep(ground, dt, ref motion)) return;
 
         // planar state in the body frame: u forward, w to the left
         float u = motion.Speed * Mathf.Cos(motion.Slip);
@@ -596,6 +640,40 @@ public sealed class Car : Rideable, IEngined
     }
 
     /// <summary>
+    /// A kart's trip (#715): sliding sideways at speed (the angle between its nose and its travel past
+    /// <see cref="TripAngle"/>) long enough digs the tyres in and it goes over onto the side it was
+    /// sliding toward. Over, it scrapes to a stop in a second or two with nothing to steer or drive, then
+    /// is stood up again. True while it lies there: the step is over.
+    /// </summary>
+    private bool TipStep(in RideGround ground, float dt, ref RideMotion motion)
+    {
+        if (_tipTime <= 0f)
+        {
+            float across = Mathf.Atan2(Mathf.Abs(Mathf.Sin(motion.Slip)), Mathf.Abs(Mathf.Cos(motion.Slip)));
+            if (ground.OnFloor && motion.Speed > TripSpeed && across > TripAngle(ground.Surface)) _trip += dt;
+            else _trip = Mathf.Max(0f, _trip - 2f * dt);
+            if (_trip < TripTime) return false;
+            (_trip, _tipTime, _tipSide) = (0f, TipDuration, motion.Slip >= 0f ? 1f : -1f);
+        }
+        _tipTime -= dt;
+        Throttle = BrakePedal = 0f;
+        Braking = HandbrakeOn = false;
+        Rpm = Spec.IdleRpm;
+        float before = motion.Speed;
+        motion.Speed = Mathf.MoveToward(motion.Speed, 0f, TipScrape * dt);
+        motion.YawRate = Mathf.MoveToward(motion.YawRate, 0f, 5f * dt);
+        motion.Yaw += motion.YawRate * dt;
+        motion.Lean = motion.Bank = 0f;
+        AccelX = (motion.Speed - before) / dt;
+        AccelY = 0f;
+        TyreSlide = motion.Speed > 1f ? 1f : 0f;
+        SteerAngle = Mathf.MoveToward(SteerAngle, 0f, 2f * dt);
+        _steer = 0f;
+        if (_tipTime <= 0f) { _tipSide = 0f; motion.Slip = 0f; }
+        return true;
+    }
+
+    /// <summary>
     /// What another player needs to draw this car's moving parts: the body's slide already travels
     /// in the replicated transform, so these are the front-wheel angle (which also turns the
     /// driver's wheel and hands), the wheels' spin RATE (each peer turns its own wheels by it — an
@@ -606,11 +684,27 @@ public sealed class Car : Rideable, IEngined
     /// </summary>
     public override Vector4 WritePose(Node3D visual, in RideMotion motion, in FlightMotion flight) =>
         new(SteerAngle, motion.Speed * Mathf.Cos(motion.Slip) / WheelRadius, Rpm01,
-            (Braking ? PoseBrake : 0) | (Headlights ? PoseHeadlights : 0) | (RoofOpen ? PoseRoof : 0)
-            | Mathf.RoundToInt(Mathf.Clamp(Throttle, 0f, 1f) * PoseThrottleSteps) << PoseThrottleShift);
+            (Braking ? PoseBrake : 0) | (Headlights ? PoseHeadlights : 0) | (RoofOpen ? PoseRoof : 0) | (Bouncing ? PoseBounce : 0)
+            | Mathf.RoundToInt(Mathf.Clamp(Throttle, 0f, 1f) * PoseThrottleSteps) << PoseThrottleShift
+            | KartPose());
 
     private const int PoseBrake = 1, PoseHeadlights = 2, PoseRoof = 4;
     private const int PoseThrottleShift = 3, PoseThrottleSteps = 7;
+    /// <summary>Above the throttle's three bits.</summary>
+    private const int PoseBounce = 64;
+    /// <summary>A kart's (#715): over on its left side / its right, then the lifted rear wheel's height in eighths (3 bits) and whether it is the left one.</summary>
+    private const int PoseTipLeft = 128, PoseTipRight = 256, PoseLiftShift = 9, PoseLiftSteps = 7, PoseLiftLeft = 4096;
+
+    /// <summary>How far the inside rear wheel comes up in a corner: 0 below 0.65 g of side force, 1 at 1 g, + the left wheel.</summary>
+    private float Lift => IsKart ? Mathf.Clamp((Mathf.Abs(AccelY) / Gravity - 0.65f) / 0.35f, 0f, 1f) * Mathf.Sign(AccelY) : 0f;
+
+    private int KartPose()
+    {
+        if (!IsKart) return 0;
+        float lift = Lift;
+        return (_tipTime > 0f ? (_tipSide > 0f ? PoseTipLeft : PoseTipRight) : 0)
+            | Mathf.RoundToInt(Mathf.Abs(lift) * PoseLiftSteps) << PoseLiftShift | (lift > 0f ? PoseLiftLeft : 0);
+    }
 
     private float _remoteSpin;
 
@@ -624,6 +718,12 @@ public sealed class Car : Rideable, IEngined
         rig.BrakeLights = (flags & PoseBrake) != 0;
         rig.Headlights = (flags & PoseHeadlights) != 0;
         rig.RoofOpen = (flags & PoseRoof) != 0;
+        rig.Bouncing = (flags & PoseBounce) != 0;
+        if (IsKart)
+        {
+            rig.Tip = (flags & PoseTipLeft) != 0 ? 1f : (flags & PoseTipRight) != 0 ? -1f : 0f;
+            rig.Lift = ((flags >> PoseLiftShift) & PoseLiftSteps) / (float)PoseLiftSteps * ((flags & PoseLiftLeft) != 0 ? 1f : -1f);
+        }
         Rpm = Mathf.Lerp(Spec.IdleRpm, Spec.Redline, pose.Z);
         rig.WheelTurn = pose.X * Ratio;
         rig.Throttle = ((flags >> PoseThrottleShift) & PoseThrottleSteps) / (float)PoseThrottleSteps;
@@ -637,10 +737,13 @@ public sealed class Car : Rideable, IEngined
         if (visual is not CarRig rig) return;
         rig.SteerAngle = SteerAngle;
         rig.WheelSpin = WheelSpin;
-        rig.BodyPitch = Mathf.Clamp(AccelX * 0.006f / Spec.Stiffness, -0.05f, 0.05f);
+        // a kart has no suspension: it does not pitch, and its inside rear wheel lifts instead
+        rig.BodyPitch = IsKart ? 0f : Mathf.Clamp(AccelX * 0.006f / Spec.Stiffness, -0.05f, 0.05f);
+        if (IsKart) (rig.Tip, rig.Lift) = (_tipTime > 0f ? _tipSide : 0f, Lift);
         rig.BrakeLights = Braking;
         rig.Headlights = Headlights;
         rig.RoofOpen = RoofOpen;
+        rig.Bouncing = Bouncing;
         rig.WheelTurn = SteerAngle * Ratio;
         rig.Throttle = Throttle;
         rig.Brake = BrakePedal;

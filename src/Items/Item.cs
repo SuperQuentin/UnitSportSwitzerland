@@ -1,5 +1,6 @@
 using Godot;
 using UnitSport.Avatar;
+using UnitSport.Core;
 
 namespace UnitSport.Items;
 
@@ -28,7 +29,8 @@ public sealed record ItemDef(
 public static class ItemDefs
 {
     /// <summary>Every item: the authored rows, then one per look in the wardrobe (<see cref="Garments.All"/>).</summary>
-    public static readonly ItemDef[] All = Authored().Concat(Garments.All.Select(Cloth)).ToArray();
+    public static readonly ItemDef[] All = Authored().Concat(Fishing.FishCatalog.All.Where(f => f.Item != ItemId.None).Select(Fish))
+        .Concat(Garments.All.Select(Cloth)).ToArray();
 
     private static ItemDef[] Authored() => new[]
     {
@@ -103,7 +105,7 @@ public static class ItemDefs
         new(ItemId.Photo, "Photo", "A Polaroid you took. {use_item} to look at it; {aim_item} + {use_item} sticks it on a wall or the ground, {use_item} on it again takes it back.",
             ItemUse.Print, 1, new Color(0.96f, 0.95f, 0.90f), "PH"),
         // radio (#104): thrown into the world, plays burned CDs for whoever stands near
-        new(ItemId.Radio, "Radio", "{use_item} opens it in your hand; put away, it rides on your back and keeps playing. {aim_item} + {use_item} throws it (it hurts whoever it hits). Lying in the world: point at it, {use_item} takes it in hand, {interact_mount} opens it to play a CD.",
+        new(ItemId.Radio, "Radio", "Tap {use_item} to switch it on or off, hold {use_item} to open it; put away, it rides on your back and keeps playing. {aim_item} + {use_item} throws it, not far: it is heavy (and it hurts whoever it hits). Lying in the world: point at it, tap {interact_mount} on / off, hold {interact_mount} to open it, {use_item} takes it in hand.",
             ItemUse.Throw, 1, new Color(0.16f, 0.17f, 0.19f), "RD", 0, ItemCategory.Gear, 80f),
 
         // weapons (#178): they hurt players only while the server allows it (/pvp, a Battle Royale match)
@@ -168,7 +170,124 @@ public static class ItemDefs
         Eat(ItemId.IsotonicDrink, "Isotonic drink", 6, "#3ab0e8", "ID", 20, ItemCategory.Water, 4),
         new(ItemId.SwissArmyKnife, "Swiss army knife", "A tool, not a weapon: kept anywhere in your pack, every tree you chop gives one more log.",
             ItemUse.Material, 1, new Color(0.80f, 0.10f, 0.12f), "SK", 0, ItemCategory.Gear, 45f),
+
+        // fishing (#493, Items/Fishing): the rod and its bait; the fish themselves are the Fish rows
+        new(ItemId.FishingRod, "Fishing rod", "Hold {use_item} to swing back, let go to cast at water. When the float dips, {use_item} strikes. Then hold {use_item} to reel, and let go when the line strains. {aim_item} winds the line in. It takes the bait in your pack: a spinner first, else dough.",
+            ItemUse.Fish, 1, new Color(0.36f, 0.25f, 0.14f), "RD", 0, ItemCategory.Gear, 35f),
+        new(ItemId.DoughBait, "Dough bait", "Bread kneaded into bait. In your pack, the rod uses it: carp, roach, whitefish and trout take it, and eat it.",
+            ItemUse.Material, 20, new Color(0.93f, 0.85f, 0.62f), "DB", 0, ItemCategory.Gear, 1f),
+        new(ItemId.Spinner, "Spinner", "A spinning lure. In your pack, the rod uses it before dough: pike, perch, trout and zander chase it. Lost only when the line snaps.",
+            ItemUse.Material, 5, new Color(0.85f, 0.80f, 0.30f), "SP", 0, ItemCategory.Gear, 6f),
+        Eat(ItemId.PerchFillets, "Filets de perche", 5, "#e8c070", "PF", 60, ItemCategory.Food, 12),
+        Eat(ItemId.GrilledFish, "Grilled fish", 5, "#b87838", "GF", 50, ItemCategory.Food, 22),
+        Eat(ItemId.FishSoup, "Fish soup", 3, "#d8a050", "FS", 45, ItemCategory.Food, 16),
+        // #501: the plush shark, out of a bin at any of the nine IKEA stores. Material, so
+        // {aim_item} + {use_item} throws it (ItemDefs.Throwable) — which is the whole point of one.
+        new(ItemId.Blahaj, "Blåhaj", "A plush shark, 100 cm. {aim_item} + {use_item} throws it. Stacks of three, because nobody buys one.",
+            ItemUse.Material, 3, new Color(0.49f, 0.78f, 0.94f), "BH", 0, ItemCategory.Cosmetic, 25f),
+        // farming (#494, docs/notes/farming/produce-economy.md): seeds are sown by hand, harvests are
+        // sacks (grain 50 kg, potatoes / beet / carrots 10 kg, peas 50 kg) and a 250 kg round bale of hay;
+        // Value is the producer price of one, which the farm co-op pays for a load
+        Seed(ItemId.WheatSeed, "Wheat seed", "#d8c070", "WS", 14),
+        Seed(ItemId.BarleySeed, "Barley seed", "#c8b060", "BS", 12),
+        Seed(ItemId.MaizeSeed, "Maize seed", "#e8c830", "MS", 12),
+        Seed(ItemId.SeedPotato, "Seed potatoes", "#b89868", "SP", 12),
+        Seed(ItemId.RapeSeed, "Rapeseed seed", "#b8c030", "RS", 14),
+        Seed(ItemId.SunflowerSeed, "Sunflower seed", "#e8a818", "SS", 13),
+        Seed(ItemId.SugarBeetSeed, "Sugar beet seed", "#d8d0c0", "BT", 6),
+        Seed(ItemId.VegetableSeeds, "Vegetable seeds", "#e07830", "VS", 10),
+        Seed(ItemId.PeaSeed, "Pea seed", "#70b040", "PS", 14),
+        Crop(ItemId.Wheat, "Wheat", "A 50 kg sack of wheat.", 10, "#d8b858", "WH", 25),
+        Crop(ItemId.Barley, "Barley", "A 50 kg sack of barley.", 10, "#c8aa50", "BA", 22),
+        Crop(ItemId.Maize, "Maize", "A 50 kg sack of maize.", 10, "#e8c020", "MZ", 22),
+        Crop(ItemId.Potato, "Potatoes", "A 10 kg sack of potatoes.", 10, "#b08c58", "PO", 5),
+        Crop(ItemId.Rapeseed, "Rapeseed", "A 50 kg sack of rapeseed.", 10, "#2a2a22", "RA", 42),
+        Crop(ItemId.SunflowerSeeds, "Sunflower seeds", "A 50 kg sack of sunflower seeds.", 10, "#4a4034", "SU", 38),
+        Crop(ItemId.SugarBeet, "Sugar beet", "A 10 kg sack of sugar beet.", 10, "#d8cdb8", "SB", 3),
+        Crop(ItemId.Carrot, "Carrots", "A 10 kg sack of carrots.", 10, "#e87a1c", "CA", 6),
+        Crop(ItemId.HayBale, "Hay bale", "A 250 kg round bale of hay.", 3, "#c8b448", "HB", 40),
+        Crop(ItemId.Peas, "Peas", "A 50 kg sack of dried peas.", 10, "#88b848", "PE", 28),
+        // milled at a workbench (a wheat sack = 4 flour): still produce, so the co-op buys them
+        Crop(ItemId.Flour, "Flour", "A bag of flour. Bread at a fire, with water.", 20, "#f0ead8", "FL", 7),
+        Crop(ItemId.RapeseedOil, "Rapeseed oil", "A bottle of rapeseed oil, for frying.", 10, "#e0c838", "OI", 7),
+        Crop(ItemId.Sugar, "Sugar", "A bag of sugar.", 20, "#f4f4f0", "SG", 3),
+        Crop(ItemId.MaizeMeal, "Maize meal", "Coarse maize meal, for polenta.", 20, "#e8c850", "MM", 8),
+        // cooked at a fire (Recipes): worth more than what went in
+        Eat(ItemId.BakedPotato, "Baked potato", 5, "#c89858", "BP", 25, ItemCategory.Food, 6),
+        Eat(ItemId.Roesti, "Rösti", 5, "#d8a838", "RO", 60, ItemCategory.Food, 20),
+        Eat(ItemId.Polenta, "Polenta", 5, "#e8c030", "PL", 45, ItemCategory.Food, 11),
+        Eat(ItemId.Popcorn, "Popcorn", 10, "#f4ecc8", "PC", 15, ItemCategory.Food, 8),
+        Eat(ItemId.VegetableSoup, "Vegetable soup", 5, "#c87838", "VS", 55, ItemCategory.Food, 14),
+        Eat(ItemId.Raclette, "Raclette", 3, "#f0d070", "RC", 75, ItemCategory.Food, 22),
+        new(ItemId.Hoe, "Hoe", "{use_item} tills the ground ahead: stubble or grass turns to ploughed soil, ready to sow by hand.",
+            ItemUse.Farm, 1, new Color("#8a6a40"), "HO", 0, ItemCategory.Gear, 25f),
+        new(ItemId.Fertiliser, "Fertiliser", "{use_item} on a sown field cell: the crop there ripens sooner.",
+            ItemUse.Farm, 20, new Color("#c8c8b0"), "FE", 0, ItemCategory.Produce, 12f),
+        new(ItemId.FarmStand, "Farm stand", "{use_item} sets it up where you look, by a road: a self-service stand with an honesty box. {interact_mount} at it stocks it with produce and takes the cash; passers-by and other players buy from it. Packed up empty with {use_item} and an empty hand.",
+            ItemUse.Place, 1, new Color("#8a5a30"), "FS", 0, ItemCategory.Gear, 30f),
+        // the barracks (#716, docs/notes/items/barracks-items.md): a night in the army. Cards and chips do nothing
+        // but look right in the hand (and fly when thrown); the beer is a drink like the others
+        new(ItemId.PlayingCards, "Playing cards", "A Jass deck: held, a fanned hand of five. A night in the barracks needs one.",
+            ItemUse.Material, 4, new Color("#ece6d6"), "PC", 0, ItemCategory.Cosmetic, 4f),
+        new(ItemId.PokerChips, "Poker chips", "A stack of chips in red, blue, green and white. Worth nothing but the bragging.",
+            ItemUse.Material, 50, new Color("#c82a2a"), "PK", 0, ItemCategory.Cosmetic, 12f),
+        Eat(ItemId.BeerBottle, "Beer", 6, "#7a4a1a", "BE", 10, ItemCategory.Water, 3),
+        new(ItemId.Gamelle, "Gamelle", "The army's three-part mess tin in olive aluminium: pot, dish and lid on a wire bail.",
+            ItemUse.Material, 2, new Color("#707a58"), "GA", 0, ItemCategory.Gear, 14f),
     };
+
+    private static ItemDef Seed(ItemId id, string name, string tint, string glyph, float value) =>
+        new(id, name, "{use_item} sows the ploughed field cell ahead: one bag covers about 800 m².",
+            ItemUse.Farm, 20, new Color(tint), glyph, 0, ItemCategory.Produce, value);
+
+    private static ItemDef Crop(ItemId id, string name, string blurb, int stack, string tint, string glyph, float value) =>
+        new(id, name, blurb + " Sell it at a farm co-op, or make something of it.",
+            ItemUse.Material, stack, new Color(tint), glyph, 0, ItemCategory.Produce, value);
+
+    /// <summary>A fish's worth in CHF, roughly the Léman fishers' prices per kg times a typical catch (docs/notes/items/fishing.md).</summary>
+    // a method, not a table: All (above) is built before any later static field is set
+    private static (float Value, string Tint, int Stack) FishLook(ItemId id) => id switch
+    {
+        ItemId.BrownTrout => (8, "#8a7a4a", 5),
+        ItemId.LakeTrout => (16, "#9aa0a0", 2),
+        ItemId.RainbowTrout => (5, "#b0a0c0", 5),
+        ItemId.BrookTrout => (5, "#6a6a4a", 5),
+        ItemId.ArcticChar => (12, "#c86a4a", 5),
+        ItemId.Namaycush => (14, "#707a68", 2),
+        ItemId.Grayling => (9, "#8a90a0", 5),
+        ItemId.Whitefish => (7, "#c8d0d8", 5),
+        ItemId.Perch => (4, "#8aa040", 10),
+        ItemId.Pike => (14, "#6a8a40", 2),
+        ItemId.Zander => (15, "#a0a088", 2),
+        ItemId.Wels => (20, "#4a4a48", 1),
+        ItemId.Burbot => (7, "#7a6a40", 5),
+        ItemId.LargemouthBass => (6, "#6a8a50", 5),
+        ItemId.Carp => (6, "#b89a40", 2),
+        ItemId.Tench => (4, "#6a7a30", 5),
+        ItemId.Roach => (1, "#c0c8d0", 10),
+        ItemId.Rudd => (1, "#c8b070", 10),
+        ItemId.Bream => (3, "#a8a890", 5),
+        ItemId.Chub => (2, "#9aa0a8", 5),
+        ItemId.Barbel => (4, "#a08a60", 5),
+        ItemId.Agone => (3, "#d0d8e0", 10),
+        ItemId.RoundGoby => (1, "#6a6050", 10),
+        _ => throw new ArgumentException($"no look for fish {id}"),
+    };
+
+    /// <summary>Raw fish: eaten raw it barely feeds; cooked at a fire it is a meal (Crafting.Recipes).</summary>
+    private static ItemDef Fish(Fishing.FishSpecies f)
+    {
+        var (value, tint, stack) = FishLook(f.Item);
+        string dish = Fishing.FishCatalog.DishOf(f.Item) switch
+        {
+            (Fishing.Dish.PerchFillets, var n) => $"{n} make filets de perche",
+            (Fishing.Dish.FishSoup, var n) => $"{n} make a fish soup",
+            _ => "grill it",
+        };
+        string glyph = string.Concat(f.Name.Split(' ').Take(2).Select(w => char.ToUpperInvariant(w[0])));
+        return new(f.Item, f.Name, $"{f.German} / {f.French}, {f.Latin}. {f.Fact} At a fire, {dish}; groceries buy it. {{use_item}} eats it raw (+8).",
+            ItemUse.Consume, stack, new Color(tint), glyph, 8, ItemCategory.Food, value);
+    }
 
     private static ItemDef Gadget(ItemId id, string name, string blurb, string tint, string glyph, float value) =>
         new(id, name, blurb + " {aim_item} + {use_item} on your own takes it back.", ItemUse.Gadget, 1, new Color(tint), glyph, 0, ItemCategory.Gear, value);
@@ -194,6 +313,7 @@ public static class ItemDefs
             GarmentStyle.Gothic => " Gothic.",
             GarmentStyle.Kawaii => " Kawaii.",
             GarmentStyle.Special => $" Rare: a {Garments.FinishName(g.Finish)} finish that moves.",
+            _ when g.Finish == Finish.Camo => " The army's TAZ 90 camouflage.",
             _ => "",
         };
         string covers = g.CoversBottom ? " One piece: it takes the bottom slot too." : "";
@@ -237,6 +357,7 @@ public static class ItemDefs
     private static ArrayMesh? _foreEnd;
 
     /// <summary>The shotgun's slide handle, origin where it sits at rest (the viewmodel and the hand slide it along Z to pump).</summary>
+    [Showcase("Parts", "Shotgun fore-end")]
     public static ArrayMesh ShotgunForeEnd()
     {
         if (_foreEnd != null) return _foreEnd;
@@ -389,6 +510,18 @@ public static class ItemDefs
                 s.Tube(new Vector3(0, -0.24f, 0.88f), new Vector3(0, -0.26f, 0.92f), 0.04f, new Color(0.25f, 0.15f, 0.08f), 8);   // a band
                 break;
             }
+            case ItemId.FishingRod:
+            {
+                // a 2.3 m rod held up ahead: cork grip, a reel under it, the blank tapering to a light tip
+                var cork = new Color(0.72f, 0.56f, 0.36f);
+                var blank = new Color(0.20f, 0.24f, 0.20f);
+                s.Tube(new Vector3(0, -0.05f, -0.28f), new Vector3(0, 0.02f, 0.12f), 0.016f, 0.014f, cork, 8);
+                s.Tube(new Vector3(0, 0.02f, 0.12f), Fishing.FishingVisuals.RodTip, 0.010f, 0.003f, blank, 6);
+                s.Tube(new Vector3(0, -0.06f, -0.02f), new Vector3(0, -0.06f, 0.05f), 0.035f, new Color(0.70f, 0.70f, 0.72f), 10);   // the reel
+                s.Box(new Vector3(0, -0.035f, 0.015f), new Vector3(0.01f, 0.03f, 0.012f), new Color(0.55f, 0.55f, 0.58f));
+                s.Box(new Vector3(0.045f, -0.06f, 0.015f), new Vector3(0.012f, 0.05f, 0.008f), new Color(0.15f, 0.15f, 0.15f));   // the crank
+                break;
+            }
             case ItemId.FonduePot:
             {
                 var red = new Color(0.80f, 0.15f, 0.12f);
@@ -439,6 +572,18 @@ public static class ItemDefs
                 s.Box(new Vector3(0, 0.43f, 0), new Vector3(0.035f, 0.07f, 0.035f), new Color(1f, 0.88f, 0.35f));
                 break;
             }
+            case ItemId.PlayingCards:
+                BarracksMeshes.AppendCards(s);
+                break;
+            case ItemId.PokerChips:
+                BarracksMeshes.AppendChips(s);
+                break;
+            case ItemId.BeerBottle:
+                BarracksMeshes.AppendBeer(s);
+                break;
+            case ItemId.Gamelle:
+                BarracksMeshes.AppendGamelle(s);
+                break;
             case ItemId.Radio:
                 // the grip is the handle: the box hangs from the hand at its real 0.46 m
                 AppendRadio(s, new Vector3(0, -0.16f, 0));
@@ -510,6 +655,7 @@ public static class ItemDefs
     }
 
     /// <summary>A flag planted in the ground: origin at the foot of the pole.</summary>
+    [Showcase("Items", "Planted flag")]
     public static ArrayMesh PlantedFlagMesh()
     {
         if (_plantedFlag != null) return _plantedFlag;
@@ -541,4 +687,20 @@ public static class ItemDefs
         s.Box(centre, new Vector3(span, arm, CrossDepth), white);
         s.Box(centre, new Vector3(arm, span, CrossDepth), white);
     }
+
+    /// <summary>Every item with a held mesh, as held, in the model viewer (--models): new items show by themselves.</summary>
+    [Showcase("Items")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseHeld() =>
+        Enum.GetValues<ItemId>().Where(id => id != ItemId.None).Select(id => (id.ToString(), (Func<Node3D>)(() =>
+        {
+            var node = ModelViewer.Shaded(HandMesh(id)!);
+            if (HandMaterial(id, null) is { } material) node.MaterialOverride = material;
+            if (id == ItemId.Shotgun) node.AddChild(ModelViewer.Shaded(ShotgunForeEnd()));
+            // a held mesh hangs from the grip at its origin (a mess tin hangs below it): lift it onto the viewer's floor,
+            // under a parent so the viewer's box and camera include the lift
+            var lifted = new Node3D();
+            lifted.AddChild(node);
+            node.Position = new Vector3(0, Mathf.Max(0f, -node.GetAabb().Position.Y), 0);
+            return lifted;
+        })));
 }

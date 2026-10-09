@@ -58,12 +58,16 @@ public partial class SettingsScreen : Screen
 
         Tab("Video", rows =>
         {
-            UiKit.OptionRow(rows, "Window", new[] { "Windowed", "Borderless fullscreen", "Fullscreen" }, (int)s.WindowMode,
-                i => GameSettings.Current.WindowMode = (WindowMode)i, "F11 or Alt+Enter toggles it anywhere");
-            SizeRow(rows, "Window size", WindowSizes(), s.WindowWidth, s.WindowHeight, "Keep current",
-                (w, h) => (GameSettings.Current.WindowWidth, GameSettings.Current.WindowHeight) = (w, h));
+            if (!Platform.IsMobile) // a phone's window is the screen (#63)
+            {
+                UiKit.OptionRow(rows, "Window", new[] { "Windowed", "Borderless fullscreen", "Fullscreen" }, (int)s.WindowMode,
+                    i => GameSettings.Current.WindowMode = (WindowMode)i, "F11 or Alt+Enter toggles it anywhere");
+                SizeRow(rows, "Window size", WindowSizes(), s.WindowWidth, s.WindowHeight, "Keep current",
+                    (w, h) => (GameSettings.Current.WindowWidth, GameSettings.Current.WindowHeight) = (w, h));
+            }
             ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
-            var styles = Styles.StyleKit.MenuStyles;
+            // Realistic+ needs Forward+ through a relaunch, which a phone cannot do (#63)
+            var styles = Styles.StyleKit.MenuStyles.Where(v => Platform.CanSpawnProcesses || !Styles.StyleKit.NeedsForwardPlus(v)).ToArray();
             var styleOption = UiKit.OptionRow(rows, "Visual style", styles.Select(Styles.StyleKit.Label).ToArray(),
                 Math.Max(0, Array.IndexOf(styles, s.VisualStyle)),
                 i =>
@@ -80,9 +84,12 @@ public partial class SettingsScreen : Screen
             UiKit.ToggleRow(rows, "VSync", s.VSync, on => GameSettings.Current.VSync = on);
             UiKit.ToggleRow(rows, "Distance fog", s.Fog, on => GameSettings.Current.Fog = on, "Off by default: the far horizon is the point");
             UiKit.ToggleRow(rows, "Speed lines", s.SpeedLines, on => GameSettings.Current.SpeedLines = on, "Streaks at the screen edge at speed");
-            rows.AddChild(UiKit.Spacer(6));
-            rows.AddChild(UiKit.Section("Virtual reality"));
-            VrRow(rows);
+            if (Platform.CanSpawnProcesses) // VR is a relaunch with OpenXR (#63)
+            {
+                rows.AddChild(UiKit.Spacer(6));
+                rows.AddChild(UiKit.Section("Virtual reality"));
+                VrRow(rows);
+            }
         });
 
         Tab("Audio", rows =>
@@ -107,8 +114,24 @@ public partial class SettingsScreen : Screen
                 "Over the shoulder on foot, chase view mounted (V in game)");
             UiKit.SliderRow(rows, "Camera shake", 0, 1, 0.05, s.ScreenShake,
                 v => GameSettings.Current.ScreenShake = (float)v, Percent);
+            UiKit.ToggleRow(rows, "Pigeon flies tail first", s.TailFirstPigeon, on => GameSettings.Current.TailFirstPigeon = on,
+                "The backwards bird of old, kept as an option; drawing only, every pigeon on your screen");
             UiKit.ToggleRow(rows, "Find servers on your network", s.LanDiscovery, on => GameSettings.Current.LanDiscovery = on,
                 "Lists LAN servers on the Multiplayer screen");
+            // the first-run tutorial (#517): now if a world is up (it shows when the menus close), else in the next one
+            Button replay = null!;
+            replay = UiKit.ActionRow(rows, "Tutorial", "Play again", () =>
+            {
+                GameSettings.Current.TutorialDone = false;
+                GameSettings.SaveOnly(nameof(GameSettings.TutorialDone), false);
+                // and each ride's mini tutorial again
+                GameSettings.Current.VehicleIntrosSeen.Clear();
+                GameSettings.SaveOnly(nameof(GameSettings.VehicleIntrosSeen), new System.Text.Json.Nodes.JsonArray());
+                if (Shell.InWorld) Shell.World?.StartTutorial();
+                replay.Text = Shell.InWorld ? "Playing" : "In the next world";
+                replay.Disabled = true;
+            }, "Look, walk, travel, the map and the fly camera, then each ride's controls the first time");
+            if (Tutorial.Current != null) { replay.Text = "Playing"; replay.Disabled = true; }
         });
 
         Tab("Vehicles", rows =>
@@ -141,6 +164,9 @@ public partial class SettingsScreen : Screen
         {
             UiKit.SliderRow(rows, "Stick look speed", 0.2, 3, 0.1, s.StickSensitivity,
                 v => GameSettings.Current.StickSensitivity = (float)v, v => $"{v:F1}x");
+            if (Platform.IsMobile)
+                UiKit.SliderRow(rows, "Touch look speed", 0.3, 4, 0.1, s.TouchLookSpeed,
+                    v => GameSettings.Current.TouchLookSpeed = (float)v, v => $"{v:F1}x");
             UiKit.SliderRow(rows, "Stick deadzone", 0.05, 0.5, 0.01, s.StickDeadzone,
                 v => GameSettings.Current.StickDeadzone = (float)v, v => $"{v * 100:F0} %");
             UiKit.ToggleRow(rows, "Invert look Y", s.InvertY, on => GameSettings.Current.InvertY = on);
@@ -150,7 +176,8 @@ public partial class SettingsScreen : Screen
         });
 
         // a steering wheel and its pedals (#68): its own tab, it is a page of bindings
-        Tab("Wheel", rows => rows.AddChild(new WheelPanel { Name = "WheelPanel" }));
+        if (!Platform.IsMobile) // SDL, desktop only (#63)
+            Tab("Wheel", rows => rows.AddChild(new WheelPanel { Name = "WheelPanel" }));
 
         Tab("World", rows =>
         {
@@ -175,6 +202,18 @@ public partial class SettingsScreen : Screen
 
         Tab("Performance", rows =>
         {
+            if (Platform.IsMobile)
+            {
+                var phone = UiKit.Button("Use phone defaults");
+                phone.Pressed += () =>
+                {
+                    GameSettings.Current.UsePhoneDefaults();
+                    GameSettings.Current.Commit();
+                    Shell.Back();               // reopened, so the rows show the new values
+                    Shell.Push(Create());
+                };
+                rows.AddChild(phone);
+            }
             UiKit.SliderRow(rows, "Render distance", GameSettings.MinRings, GameSettings.MaxRings, 1,
                 s.RenderDistanceRings, v => GameSettings.Current.RenderDistanceRings = (int)v, RingsText);
             UiKit.OptionRow(rows, "Detail", new[] { "Low", "Medium", "High" }, (int)s.Detail,
@@ -191,6 +230,7 @@ public partial class SettingsScreen : Screen
             UiKit.ActionRow(rows, "Performance logs", "Open folder", PerfRecorder.OpenLogsFolder, "F4 records a session");
         });
 
+        Tab("Data", DataRows);
         Tab("About", LicenseRows);
         _about = _tabs.Count - 1;
 
@@ -302,7 +342,7 @@ public partial class SettingsScreen : Screen
         }, "Meta Quest over Link (OpenXR). Changing it restarts the game");
         UiKit.OptionRow(rows, "Monitor view in VR", Enum.GetValues<XR.MonitorView>().Select(XR.XrMonitor.Label).ToArray(),
             (int)GameSettings.Current.VrMonitor, i => GameSettings.Current.VrMonitor = (XR.MonitorView)i,
-            "What the computer screen shows while you play in the headset (F7 cycles it)");
+            "What the computer screen shows while you play in the headset (F8 cycles it)");
         // the headset's picture (#244, docs/notes/xr/air-link.md)
         int[] samples = { 0, 2, 4, 8 };
         UiKit.OptionRow(rows, "VR anti-aliasing", new[] { "Off", "MSAA 2x", "MSAA 4x", "MSAA 8x" },
@@ -314,12 +354,56 @@ public partial class SettingsScreen : Screen
             i => GameSettings.Current.VrRenderScale = scales[i], "Of the eye size the headset asks for. Lower it if the picture stutters");
         UiKit.ToggleRow(rows, "VR foveated rendering", GameSettings.Current.VrFoveation, on => GameSettings.Current.VrFoveation = on,
             "Coarser shading towards the edge of each eye (GPUs with variable rate shading)");
+        // comfort (#439, docs/notes/xr/rig.md)
+        int[] snaps = { 0, 15, 30, 45 };
+        UiKit.OptionRow(rows, "VR turning", new[] { "Smooth", "Snap 15°", "Snap 30°", "Snap 45°" },
+            Math.Max(0, Array.IndexOf(snaps, GameSettings.Current.VrSnapDegrees)), i => GameSettings.Current.VrSnapDegrees = snaps[i],
+            "The right stick on foot. Snapping is easier on the stomach");
+        UiKit.OptionRow(rows, "VR walking", new[] { "Stick", "Teleport" }, GameSettings.Current.VrTeleport ? 1 : 0,
+            i => GameSettings.Current.VrTeleport = i == 1, "Teleport: push the stick forward, aim the arc, let go. No faster than walking");
+        float[] vignettes = { 0f, 0.5f, 1f };
+        int vig = Array.FindIndex(vignettes, v => Math.Abs(v - GameSettings.Current.VrVignette) < 0.01f);
+        UiKit.OptionRow(rows, "VR comfort vignette", new[] { "Off", "Light", "Full" }, vig < 0 ? 2 : vig,
+            i => GameSettings.Current.VrVignette = vignettes[i], "Narrows the view while the world moves and you do not");
+        UiKit.ToggleRow(rows, "VR left-handed", GameSettings.Current.VrLeftHanded, on => GameSettings.Current.VrLeftHanded = on,
+            "Swap the hands: the right controller moves, the left one uses and turns");
     }
 
     /// <summary>
     /// Asks before restarting into VR or out of it, then saves the choice and relaunches. Shared
     /// by the Settings toggle and the title screen's entry.
     /// </summary>
+    /// <summary>
+    /// What streaming costs and keeps (#63), on every platform. Low data, the cache cap and its
+    /// Clear work everywhere; the data saver and the metered warning need Android to tell.
+    /// </summary>
+    private void DataRows(VBoxContainer rows)
+    {
+        var s = GameSettings.Current;
+        UiKit.OptionRow(rows, "Data use", new[] { "Standard", "Low data" }, (int)s.Data,
+            i => GameSettings.Current.Data = (DataPreset)i,
+            $"Low data streams full detail only round you: about {Core.StreamEstimate.ArrivalLowMb} MB on arrival instead of {Core.StreamEstimate.ArrivalMb}");
+        if (Platform.IsMobile)
+        {
+            UiKit.ToggleRow(rows, "Low data with data saver", s.AutoLowData, on => GameSettings.Current.AutoLowData = on,
+                "Follows the phone's data saver" + (GameSettings.DataSaverOn ? " (on now)" : ""));
+            UiKit.ToggleRow(rows, "Ask on mobile data", s.WarnMetered, on => GameSettings.Current.WarnMetered = on,
+                "Before joining over cellular or a hotspot");
+        }
+        UiKit.SliderRow(rows, "Tile cache size", 0.25, 8, 0.25, s.CacheGb,
+            v => GameSettings.Current.CacheGb = (float)v, v => $"{v:0.##} GB");
+        string dir = TerrainPaths.FindCacheDir();
+        long cached = Terrain.NetworkChunkSource.MeasureCache(dir);
+        UiKit.ActionRow(rows, "Downloaded tiles", "Clear", () =>
+        {
+            Terrain.NetworkChunkSource.ClearCache(dir);
+            Shell.Back();               // reopened, so the sizes are the new ones
+            Shell.Push(Create());
+        }, $"{Mb(cached)} on this device · {Mb(Net.ChunkStreamer.SessionBytes)} streamed this session");
+    }
+
+    private static string Mb(long bytes) => $"{bytes / (1024.0 * 1024):0} MB";
+
     internal static void AskVr(Control host, GameShell shell, bool on, Action? cancel = null)
     {
         string message = on

@@ -54,6 +54,7 @@
   (`HeavyCockpit.SteerRatio`, ~2.5 turns to full lock); remote copies get it from the replicated
   steer, the throttle from 3 bits in `Truck`'s pose W (shift 16) and the brake from its bit;
   `--heavynet` b logs the remote cab (wheel against steer × ratio, feet, driver) and shoots it.
+- **Aircraft** (#421): the airliners are in the same cycle, at the captain's eye: `aircraft-cockpit`.
 - **Limits**: the hands follow a car's rim to ±100° (a heavy's to ±46°) and slide past that rather than shuffle; a remote driver's head does not turn with
   their free look (only yaw is replicated); the dials of a remote car read its rpm and wheel speed
   and its lights lamp follows the headlights, but the gear digit and the handbrake and engine lamps

@@ -6,6 +6,13 @@ using Godot;
 namespace UnitSport.Core;
 
 /// <summary>How finely the inner LOD rings and their roads/buildings are drawn.</summary>
+/// <summary>How much the client streams (#63): Low data keeps fine tiles to the nearest rings.</summary>
+public enum DataPreset
+{
+    Standard = 0,
+    Low = 1,
+}
+
 public enum DetailPreset
 {
     Low = 0,
@@ -110,6 +117,28 @@ public sealed class GameSettings
     // --- controls ---
     /// <summary>Right-stick look speed multiplier; 1 turns at <see cref="PlayerInput.StickTurnRate"/>.</summary>
     public float StickSensitivity { get; set; } = 1f;
+    /// <summary>Data (#63, every platform): Standard, or Low data (fewer full tiles fetched).</summary>
+    public DataPreset Data { get; set; } = DataPreset.Standard;
+    /// <summary>Low data whenever the phone's data saver is on (Android; ignored elsewhere).</summary>
+    public bool AutoLowData { get; set; } = true;
+    /// <summary>Ask before joining a server over a metered connection (cellular, a hotspot).</summary>
+    public bool WarnMetered { get; set; } = true;
+    /// <summary>Cap on the downloaded-tile cache on disk, GB (oldest evicted first).</summary>
+    public float CacheGb { get; set; } = 2f;
+
+    /// <summary>Android's data saver, as last read (<see cref="DataWatch"/>); never saved.</summary>
+    [JsonIgnore]
+    public static bool DataSaverOn { get; set; }
+
+    /// <summary>Whether the client streams as Low data now: chosen, or the data saver with auto on.</summary>
+    [JsonIgnore]
+    public bool LowDataActive => Data == DataPreset.Low || AutoLowData && DataSaverOn;
+
+    /// <summary>Low data's render distance cap, in rings: past it the horizon draws the land.</summary>
+    public const int LowDataRings = 5;
+
+    /// <summary>Touch look (#63): camera turn per pixel of drag, as a multiple of the mouse's.</summary>
+    public float TouchLookSpeed { get; set; } = 1.5f;
     public bool InvertY { get; set; }
 
     /// <summary>Stick travel ignored around centre. Worn pads drift, so it is a setting.</summary>
@@ -185,6 +214,17 @@ public sealed class GameSettings
     /// <summary>Over-the-shoulder view on foot and a chase view mounted; V / R3 toggles it in game.</summary>
     public bool ThirdPerson { get; set; } = true;
 
+    /// <summary>The on-foot camera over the left shoulder instead of the right; <c>swap_shoulder</c> flips it in game (#460).</summary>
+    public bool LeftShoulder { get; set; }
+
+    /// <summary>
+    /// Draw the pigeon tail first, the way it flew before the fix: the bird keeps the half turn
+    /// <see cref="Player.Pigeon.BuildVisual"/> used to give a mesh that already faced the right way.
+    /// Off by default. Client-only and never replicated, like <see cref="VisualStyle"/>: it decides
+    /// how the birds on this screen are drawn — your own and everyone else's — never how they fly.
+    /// </summary>
+    public bool TailFirstPigeon { get; set; }
+
     // --- network ---
     /// <summary>List the dedicated servers found on the LAN over mDNS in the main menu (<see cref="Net.LanDiscovery"/>).</summary>
     public bool LanDiscovery { get; set; } = true;
@@ -199,10 +239,29 @@ public sealed class GameSettings
     public string PlayerName { get; set; } = "";
 
     /// <summary>
+    /// The first-run tutorial (#517, <see cref="Tutorial"/>) was finished or skipped. Off until
+    /// then; Settings › Gameplay turns it off again to replay it.
+    /// </summary>
+    public bool TutorialDone { get; set; }
+
+    /// <summary>
+    /// The rides whose mini tutorial (#517, <see cref="VehicleIntroCard"/>) was done, by
+    /// <see cref="VehicleIntroKind"/> name. Cleared with <see cref="TutorialDone"/> by "Play again".
+    /// </summary>
+    public List<string> VehicleIntrosSeen { get; set; } = new();
+
+    /// <summary>
     /// The player's figure (#394): <see cref="Avatar.Appearance.Pack"/>ed, 0 until one is chosen in
     /// the inventory's Body row (till then the figure comes from the player's network id).
     /// </summary>
     public int AppearanceBits { get; set; }
+
+    /// <summary>
+    /// Where the player landed last (#515), LV95 metres, so the map screen opens on it instead of
+    /// sending everyone back to Riddes every session. Zero until a world has been entered.
+    /// </summary>
+    public double LastLandingE { get; set; }
+    public double LastLandingN { get; set; }
 
     /// <summary>GPX files replayed recently, newest first (the Play solo track picker lists them).</summary>
     public List<string> RecentGpx { get; set; } = new();
@@ -214,7 +273,7 @@ public sealed class GameSettings
     /// </summary>
     public bool VrMode { get; set; }
 
-    /// <summary>What the monitor shows while in VR (<see cref="XR.XrMonitor"/>); F7 cycles it.</summary>
+    /// <summary>What the monitor shows while in VR (<see cref="XR.XrMonitor"/>); F8 cycles it.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public XR.MonitorView VrMonitor { get; set; } = XR.MonitorView.FirstPerson;
 
@@ -229,6 +288,16 @@ public sealed class GameSettings
     public const float MinVrRenderScale = 0.5f, MaxVrRenderScale = 1.5f;
     /// <summary>Foveated rendering: coarser shading towards the edge of each eye (variable rate shading).</summary>
     public bool VrFoveation { get; set; } = true;
+
+    // --- VR comfort (#439) ---
+    /// <summary>The right stick's turn on foot: a snap of 15, 30 or 45 degrees, or 0 for a smooth turn.</summary>
+    public int VrSnapDegrees { get; set; } = 30;
+    /// <summary>On foot the left stick aims a teleport arc instead of walking.</summary>
+    public bool VrTeleport { get; set; }
+    /// <summary>How much the view narrows while the world moves under you: 0 off, 1 full.</summary>
+    public float VrVignette { get; set; } = 1f;
+    /// <summary>The hands swapped: the right controller moves and the left one uses and turns.</summary>
+    public bool VrLeftHanded { get; set; }
 
     // --- cockpit: first person at the wheel of a car (#69) ---
     /// <summary>Your own arms and legs at the wheel. V cycles chase → cockpit with them → cockpit without.</summary>
@@ -263,7 +332,9 @@ public sealed class GameSettings
     /// <summary>Reads the file (if any), then the command line. Call once at boot.</summary>
     public static void Load()
     {
+        // a phone's first launch starts from its own defaults (#63); a saved file keeps what it says
         var loaded = new GameSettings();
+        if (Platform.IsMobile && !Godot.FileAccess.FileExists(File)) loaded.UsePhoneDefaults();
         try
         {
             if (Godot.FileAccess.FileExists(File))
@@ -284,11 +355,32 @@ public sealed class GameSettings
 
         loaded.Clamp();
         loaded.ApplyCommandLine(CmdArgs.All);
+        // a probe that asked for the generated world gets it whatever the player's saved toggle
+        // says (#666: a machine with "Generated terrain" off never loaded a near tile)
+        if (WantsGeneratedWorld(CmdArgs.All)) loaded.GeneratedFill = true;
         Current = loaded;
         GD.Print($"[settings] rings={loaded.RenderDistanceRings} horizon={loaded.HorizonKm}km "
             + $"detail={loaded.Detail} fog={loaded.Fog} builds={loaded.MaxConcurrentBuilds} "
             + $"commit={loaded.CommitBudgetMs}ms scale={loaded.RenderScale} vsync={loaded.VSync} "
             + $"window={loaded.WindowMode} perf={loaded.PerfOverlay}");
+    }
+
+    /// <summary>
+    /// What a phone starts with (#63), and what Settings → Performance → "Use phone defaults" puts
+    /// back: about a third of the desktop's world in view, a low LOD table, a shorter horizon, a
+    /// lower 3D resolution, less traffic and no cockpit mirrors (each one another camera).
+    /// </summary>
+    public void UsePhoneDefaults()
+    {
+        RenderDistanceRings = 8;
+        HorizonKm = 25;
+        Detail = DetailPreset.Low;
+        RenderScale = 0.6f;
+        TrafficCars = 10;
+        CockpitMirrors = false;
+        CommitBudgetMs = 3;
+        MaxConcurrentBuilds = 0; // auto, which ChunkManager caps on a phone
+        CacheGb = 0.5f;
     }
 
     public void Save()
@@ -313,9 +405,9 @@ public sealed class GameSettings
     /// <summary>
     /// Writes one setting into the file without the rest of this run's values (a command-line
     /// <c>--view</c> or <c>--traffic</c> must not become the saved choice): the radio panel's
-    /// volume slider, saved as it is dragged.
+    /// volume slider, saved as it is dragged; the tutorial's done flag.
     /// </summary>
-    public static void SaveOnly(string key, float value)
+    public static void SaveOnly(string key, System.Text.Json.Nodes.JsonNode value)
     {
         try
         {
@@ -336,6 +428,9 @@ public sealed class GameSettings
         }
     }
 
+    /// <summary>Something not saved changed what the settings mean (the data saver): tell the world.</summary>
+    public static void NotifyChanged() => Changed?.Invoke();
+
     /// <summary>Applies a change made in the UI: clamps, notifies the world, persists.</summary>
     public void Commit()
     {
@@ -350,10 +445,12 @@ public sealed class GameSettings
         HorizonKm = Math.Clamp(HorizonKm, 0, MaxHorizonKm);
         MaxConcurrentBuilds = Math.Clamp(MaxConcurrentBuilds, 0, MaxBuildsCap);
         CommitBudgetMs = Math.Clamp(CommitBudgetMs, 1, 16);
+        CacheGb = Math.Clamp(CacheGb, 0.1f, 20f);
         RenderScale = Math.Clamp(RenderScale, MinRenderScale, MaxRenderScale);
         VrMsaa = VrMsaa switch { <= 0 => 0, <= 2 => 2, <= 4 => 4, _ => 8 };
         VrRenderScale = Math.Clamp(VrRenderScale, MinVrRenderScale, MaxVrRenderScale);
         StickSensitivity = Math.Clamp(StickSensitivity, 0.2f, 3f);
+        TouchLookSpeed = Math.Clamp(TouchLookSpeed, 0.3f, 4f);
         MasterVolume = Math.Clamp(MasterVolume, 0f, 1f);
         SfxVolume = Math.Clamp(SfxVolume, 0f, 1f);
         AmbienceVolume = Math.Clamp(AmbienceVolume, 0f, 1f);
@@ -363,6 +460,8 @@ public sealed class GameSettings
         TrafficCars = Math.Clamp(TrafficCars, 0, 150);
         ScreenShake = Math.Clamp(ScreenShake, 0f, 1f);
         StickDeadzone = Math.Clamp(StickDeadzone, 0.05f, 0.5f);
+        if (VrSnapDegrees is not (0 or 15 or 30 or 45)) VrSnapDegrees = 30;
+        VrVignette = Math.Clamp(VrVignette, 0f, 1f);
         CockpitFov = Math.Clamp(CockpitFov, 50f, 100f);
         SeatHeight = Math.Clamp(SeatHeight, -0.1f, 0.1f);
         SeatForward = Math.Clamp(SeatForward, -0.15f, 0.15f);
@@ -371,15 +470,23 @@ public sealed class GameSettings
         OccasionPreferences ??= new();
         RecentGpx ??= new();
         PlayerName ??= "";
+        VehicleIntrosSeen ??= new();
         Wheel ??= new();
         Wheel.Clamp();
     }
 
     /// <summary>
     /// "--rings N", "--horizon km", "--fog on|off", "--detail low|medium|high",
-    /// "--generated on|off", "--style ps1|cartoon|real-|real+" — for
+    /// "--generated on|off", "--generated-roads raw|on", "--style ps1|cartoon|real-|real+" — for
     /// screenshotting one configuration against another without touching the saved file.
     /// </summary>
+    private static bool WantsGeneratedWorld(string[] args)
+    {
+        if (args.Contains("--generated")) return false;   // explicit: ApplyCommandLine has the last word
+        return args.Contains("--generated-world") || args.Contains("--shot") || args.Contains("--shot-queue")
+            || (Systems.Narrowed && Systems.On(Systems.Generated));
+    }
+
     private void ApplyCommandLine(string[] args)
     {
         for (int i = 0; i + 1 < args.Length; i++)
@@ -391,7 +498,10 @@ public sealed class GameSettings
                 case "--horizon" when int.TryParse(v, out int h): HorizonKm = h; break;
                 case "--fog": Fog = v != "off" && v != "0" && v != "false"; break;
                 case "--generated": GeneratedFill = v != "off" && v != "0" && v != "false"; break;
+                // raw: generated roads without the road network stage (#559), to compare; not saved
+                case "--generated-roads": Terrain.FallbackChunkSource.RewriteRoads = v != "raw" && v != "off"; break;
                 case "--detail" when Enum.TryParse<DetailPreset>(v, true, out var d): Detail = d; break;
+                case "--data" when Enum.TryParse<DataPreset>(v, true, out var dp): Data = dp; break;
                 case "--builds" when int.TryParse(v, out int b): MaxConcurrentBuilds = b; break;
                 case "--commit" when double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double c):
                     CommitBudgetMs = c; break;
@@ -432,6 +542,9 @@ public sealed class GameSettings
                     ThirdPerson = v is not ("first" or "1st" or "body" or "bare");
                     if (v is "body" or "bare") CockpitBody = v == "body";
                     break;
+                // left | right: the on-foot camera's shoulder (#460)
+                case "--shoulder": LeftShoulder = v is "left" or "l"; break;
+                case "--tailfirstpigeon": TailFirstPigeon = v is "on" or "1" or "true"; break;
                 case "--mirrors": CockpitMirrors = v is "on" or "1" or "true"; break;
                 // what the monitor shows in VR (#186): off | first | eyes | third
                 case "--vrmonitor":

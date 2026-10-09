@@ -17,7 +17,7 @@ public enum RideKind
     // 8..63 are cars: CarCatalog.All[kind - CarCatalog.First]. The catalog is append-only.
     // 64..95 are motorbikes: MotorbikeCatalog.All[kind - MotorbikeCatalog.First], append-only too;
     // entries 32 onwards continue at 129..192 (MotorbikeCatalog.First2, #410).
-    // 96..119 are trucks and buses: HeavyCatalog.All[kind - HeavyCatalog.First], append-only too.
+    // 96..119 are trucks and buses (and the pickup, 101, #463): HeavyCatalog.All[kind - HeavyCatalog.First], append-only too.
     /// <summary>
     /// Not a mount: a trailer standing in the world on its own (<c>Vehicles.VehicleState.Train</c>
     /// says which). Nobody rides it; a truck backs under it and couples.
@@ -36,8 +36,26 @@ public enum RideKind
     Airstairs = 126,
     /// <summary>The military cargo plane (#420, the Battle Royale's model): an <see cref="Player.Airliner"/>, walkable, a ramp and a hold.</summary>
     Freighter = 127,
-    // 128 is the AN-124 (#419). 129..192 are motorbikes again (the second range, MotorbikeCatalog.First2).
-    // The next other mount is 193.
+    /// <summary>The Antonov AN-124 Ruslan (#419): an <see cref="Player.Airliner"/>, walkable, a visor, two ramps, kneeling, a drive-through hold.</summary>
+    An124 = 128,
+    // 129..192 are motorbikes again (the second range, MotorbikeCatalog.First2).
+    /// <summary>A counterbalance forklift (#583): a <see cref="Player.Forklift"/>, a mast that lifts pallets.</summary>
+    Forklift = 193,
+    /// <summary>A tracked excavator (#611): an <see cref="Player.Excavator"/>, a slewing house and a three-joint arm.</summary>
+    Excavator = 194,
+    /// <summary>An articulated wheel loader (#612): a <see cref="Player.WheelLoader"/>, frame steering, a lift arm and a bucket.</summary>
+    WheelLoader = 195,
+    /// <summary>A 2.7 t mini excavator (#614): an <see cref="Player.Excavator"/> at the mini's size, with a dozer blade.</summary>
+    MiniExcavator = 196,
+    /// <summary>A compact tandem roller (#614): a <see cref="Player.CompactRoller"/>, frame steering and vibrating drums.</summary>
+    CompactRoller = 197,
+    /// <summary>A telehandler (#614): a <see cref="Player.Telehandler"/>, a telescopic boom with forks and three steering modes.</summary>
+    Telehandler = 198,
+    /// <summary>A wheel loader with a fork carriage instead of its bucket (#615): a <see cref="Player.WheelLoader"/> that lifts pallets.</summary>
+    WheelLoaderForks = 199,
+    /// <summary>A tracked mini dumper (#614): a <see cref="Player.MiniDumper"/>, a skip that tips forward.</summary>
+    MiniDumper = 200,
+    // The next other mount is 201.
 }
 
 /// <summary>
@@ -202,6 +220,8 @@ public abstract class Rideable
     public virtual float ChasePitch => 0f;
     /// <summary>How far the chase camera swings toward the direction of travel in a slide, 0..1.</summary>
     public virtual float ChaseFollowsTravel => 0f;
+    /// <summary>How hard the machine shakes its driver's view, rad either way (a vibrating roller, #614); 0 for nearly everything.</summary>
+    public virtual float CameraShake => 0f;
 
     /// <summary>FOV at rest, and the speed at which it has widened to <see cref="MaxFov"/>.</summary>
     public virtual float BaseFov => 70f;
@@ -291,7 +311,16 @@ public abstract class Rideable
     /// </summary>
     public virtual Avatar.VehicleDeck[] Decks => System.Array.Empty<Avatar.VehicleDeck>();
 
-    public bool Walkable => Decks.Length > 0;
+    public bool Walkable
+    {
+        get
+        {
+            // a hold alone (a boat trailer's cradle, #463) is nothing to walk about in
+            foreach (var deck in Decks)
+                if (!deck.CargoOnly) return true;
+            return false;
+        }
+    }
 
     /// <summary>
     /// A walkable vehicle is driven from its wheel inside (#384, E from outside only with the
@@ -475,6 +504,14 @@ public abstract class Rideable
         RideKind.Plane => new Plane(),
         RideKind.Pigeon => new Pigeon(),
         RideKind.Airstairs => new Airstairs(),
+        RideKind.Forklift => new Forklift(),
+        RideKind.Excavator => new Excavator(),
+        RideKind.MiniExcavator => new Excavator(mini: true),
+        RideKind.WheelLoader => new WheelLoader(),
+        RideKind.WheelLoaderForks => new WheelLoader(forks: true),
+        RideKind.MiniDumper => new MiniDumper(),
+        RideKind.CompactRoller => new CompactRoller(),
+        RideKind.Telehandler => new Telehandler(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),
         _ when MotorbikeCatalog.For(kind) is { } bike => new Motorbike(bike),
         _ when HeavyCatalog.For(kind) is { } heavy => new Truck(heavy),
@@ -482,4 +519,31 @@ public abstract class Rideable
         _ when Airliner.For(kind) is { } airliner => airliner,
         _ => null,
     };
+
+    /// <summary>
+    /// Every ride <see cref="Create"/> knows, ridden and (when it differs) parked, in the model
+    /// viewer (--models): a new car, bike, truck, boat or aircraft shows by itself.
+    /// </summary>
+    [Core.Showcase("Rides")]
+    private static IEnumerable<(string, string, Func<Node3D>)> ShowcaseRides()
+    {
+        for (int k = 0; k <= byte.MaxValue; k++)
+        {
+            if (Create((RideKind)k) is not { } ride) continue;
+            string category = ride switch
+            {
+                Car => "Cars",
+                Motorbike => "Motorbikes",
+                Truck => "Trucks and buses",
+                Boat => "Boats",
+                Airliner or Helicopter or Plane => "Aircraft",
+                _ => "Rides",
+            };
+            int rider = k;
+            yield return (category, ride.Label, () => ride.BuildVisual(rider));
+            var parked = ride.GetType().GetMethod(nameof(BuildParkedVisual))!;
+            if (parked.DeclaringType != typeof(Rideable))
+                yield return (category, $"{ride.Label} (parked)", () => ride.BuildParkedVisual(rider));
+        }
+    }
 }

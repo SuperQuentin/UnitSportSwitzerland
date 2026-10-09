@@ -102,6 +102,8 @@ public partial class FootPlayer
     /// <summary>The section frame this player was last carried from.</summary>
     private Transform3D _carriedFrom;
     private bool _deckCarried;
+    /// <summary>Aboard: the section frame this player is carried in, where its deck's body stands (a check aims in it, #542).</summary>
+    public Transform3D? DeckFrame => Aboard && _deckCarried ? _carriedFrom : null;
     /// <summary>Just stood up or left the wheel: carried at this velocity until the vehicle's deck is here to stand on.</summary>
     private float _deckWait;
     private Vector3 _deckWaitVelocity;
@@ -151,10 +153,11 @@ public partial class FootPlayer
         // a freighter's open ramp: down on the ground, level in the air (#420)
         FootPlayer { Ride: RideKind.Freighter } f => Avatar.FreighterLayout.DeckDoors(f.BusDoors,
             f.Vehicle is Airliner own ? !own.State.OnGround : Airliner.LookOf(f.Anim).Airborne),
-        FootPlayer p => p.BusDoors,
+        // the AN-124's ramps have a slope for standing and one for kneeling (#419)
+        FootPlayer p => Airliner.DeckDoors(p.Ride, p.BusDoors),
         VehicleBody { Kind: RideKind.Freighter } parked => Avatar.FreighterLayout.DeckDoors(parked.BusDoors, parked.Ride is Airliner { State.OnGround: false }
             || parked.Velocity.LengthSquared() > Airliner.FlyingSpeed * Airliner.FlyingSpeed),
-        VehicleBody v => v.BusDoors,
+        VehicleBody v => Airliner.DeckDoors(v.Kind, v.BusDoors),
         _ => 0,
     };
 
@@ -389,6 +392,7 @@ public partial class FootPlayer
         foreach (var deck in ride.Decks)
         {
             var body = new StaticBody3D { Name = $"Deck_{key.Replace(':', '_')}_{deck.Section}", TopLevel = true, CollisionLayer = 0, CollisionMask = 0 };
+            body.AddToGroup(DeckGroup);
             // created where it stands: put there after entering the world, Jolt sweeps a body from the
             // origin to its place in the next step, and a deck's roof swept up through the player
             // standing in the aisle, who came out on top of it (#162)
@@ -480,14 +484,19 @@ public partial class FootPlayer
     {
         ExceptHulls();
         // which deck it stands in, if any: the one it is on first, a little stickier than the others
-        // (a bus's two halves overlap only in the bellows)
+        // (a bus's two halves overlap only in the bellows). Measured where the deck's body stands
+        // (put there in the last _Process: the frame the walker collides with and is carried from),
+        // not where the vehicle is drawn now: stepped in the physics, a vehicle leads its deck by its
+        // motion since that frame, 1.1 m a step at 68 m/s, several steps in a long frame, and a walker
+        // on the aft end of a flying freighter's ramp read as out of it and fell (#542).
         (DeckSet Set, VehicleDeck Deck, Transform3D Frame)? Inside()
         {
             foreach (var set in _decks.Values.OrderBy(s => s.Key == DeckOn ? 0 : 1))
-                foreach (var (deck, _, _) in set.Sections)
+                foreach (var (deck, body, _) in set.Sections)
                 {
-                    if (SectionFrame(set.Host, deck.Section) is not { } node) continue;
-                    var frame = node.GlobalTransform.Orthonormalized();
+                    // a vehicle freed since the last deck refresh (a playtest scenario clearing its bus, #751) is skipped until then
+                    if (!IsInstanceValid(set.Host) || SectionFrame(set.Host, deck.Section) is not { } node || !IsInstanceValid(node)) continue;
+                    var frame = IsInstanceValid(body) && body.CollisionLayer != 0 ? body.GlobalTransform : node.GlobalTransform.Orthonormalized();
                     var local = frame.AffineInverse() * GlobalPosition;
                     bool current = set.Key == DeckOn && deck.Section == DeckSection;
                     if (deck.Contains(local, current ? 0.15f : 0f)) return (set, deck, frame);

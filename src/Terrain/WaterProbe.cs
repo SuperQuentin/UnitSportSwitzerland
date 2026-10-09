@@ -19,7 +19,7 @@ public partial class WaterProbe : Node3D
     private readonly ChunkManager _chunks;
     private readonly WorldOrigin _origin;
     private readonly double _e, _n, _settle, _minDepth;
-    private double _elapsed;
+    private ulong _startMs;
     private bool _done;
 
     public WaterProbe(ChunkManager chunks, WorldOrigin origin, double e, double n, double settle, double minDepth)
@@ -34,6 +34,7 @@ public partial class WaterProbe : Node3D
 
     public override void _Ready()
     {
+        _startMs = Time.GetTicksMsec();
         Position = _origin.ToWorld(_e, _n, 0);
         _chunks.AddAnchor(this, collision: true);
     }
@@ -57,8 +58,8 @@ public partial class WaterProbe : Node3D
     public override void _PhysicsProcess(double delta)
     {
         if (_done) return;
-        _elapsed += delta;
-        if (_elapsed < _settle) return;
+        // wall-clock settle: the tiles generate on threads, which --fixed-fps would outrun
+        if ((Time.GetTicksMsec() - _startMs) / 1000.0 < _settle) return;
         _done = true;
 
         var at = _origin.ToWorld(_e, _n, 0);

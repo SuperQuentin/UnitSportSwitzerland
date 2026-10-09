@@ -111,9 +111,16 @@ public partial class LootService : Node
 
     // ---- client: finding something to search ---------------------------------------------------
 
-    /// <summary>The lootable piece of furniture the player is facing, if any, as an index into the layout.</summary>
+    /// <summary>
+    /// The lootable piece of furniture the player is facing, if any, as an index into the layout. A
+    /// pallet a forklift has moved is no container any more (#583): its loot was where it stood. Nor is a car in a car park's bay (#558): it is a vehicle asleep, or gone.
+    /// </summary>
     public static int NearestContainer(FootPlayer p, InteriorLayout layout, InteriorNode node) =>
-        NearestOf(p, layout, node, t => LootTables.IsLootable(t) && !(t == FurnitureType.ShopCounter && layout.Shop != ShopType.None));
+        NearestOf(p, layout, node, t => LootTables.IsLootable(t) && !(t == FurnitureType.ShopCounter && layout.Shop != ShopType.None),
+            skip: i => Moved(layout.Key, i) || Interiors.HallCars.IsBayCar(layout, layout.Furniture[i]));
+
+    /// <summary>A hall's own pallet that a forklift has taken from where the plan put it (#583).</summary>
+    public static bool Moved(string key, int furniture) => UnitSport.Items.PalletService.Instance?.IsTakenHall(key, furniture) == true;
 
     /// <summary>The bank's teller desk the player is facing, if any (#213).</summary>
     public static int NearestCounter(FootPlayer p, InteriorLayout layout, InteriorNode node) =>
@@ -124,7 +131,7 @@ public partial class LootService : Node
     /// the layout, or -1. <paramref name="facing"/> also prefers what is in front and skips what is behind.
     /// </summary>
     public static int NearestOf(FootPlayer p, InteriorLayout layout, InteriorNode node, Func<FurnitureType, bool> wanted,
-        float reach = SearchReach, bool facing = true)
+        float reach = SearchReach, bool facing = true, Func<int, bool>? skip = null)
     {
         var local = node.ToLocal(p.GlobalPosition);
         var look = node.GlobalTransform.Basis.Inverse() * -p.Camera.GlobalTransform.Basis.Z;
@@ -136,7 +143,7 @@ public partial class LootService : Node
         for (int i = 0; i < layout.Furniture.Count; i++)
         {
             var f = layout.Furniture[i];
-            if (!wanted(f.Type)) continue;
+            if (!wanted(f.Type) || skip?.Invoke(i) == true) continue;
             float floorY = layout.FloorY(f.Floor);
             if (local.Y < floorY - 0.5f || local.Y > floorY + layout.StoreyHeight - 0.5f) continue;
 
@@ -229,6 +236,35 @@ public partial class LootService : Node
 
     /// <summary>The locked crate whose dial is being worked (a bunker door), if any.</summary>
     private long? _pickingCrate;
+
+    /// <summary>Where the numbers of a dial on something else go: a flat's locked front door (#557).</summary>
+    private Action<int[]>? _pickingOther;
+
+    /// <summary>
+    /// Opens the dial on a lock that is not a container (a flat's front door, #557): its numbers go
+    /// to <paramref name="submit"/>, which asks its own server; <see cref="OtherPicked"/> or
+    /// <see cref="OtherRefused"/> is the answer.
+    /// </summary>
+    public void PickOther(FootPlayer p, string title, int[] combo, float tolerance, Action<int[]> submit)
+    {
+        Close();
+        StopPicking();
+        _pickingOther = submit;
+        _searcher = p;
+        _lockUi?.Open(title, combo, tolerance);
+    }
+
+    /// <summary>The lock <see cref="PickOther"/> opened the dial on was cracked: the dial goes.</summary>
+    public void OtherPicked()
+    {
+        if (_pickingOther != null) StopPicking();
+    }
+
+    /// <summary>The server said no to the numbers: the dial shakes and starts again.</summary>
+    public void OtherRefused()
+    {
+        if (_pickingOther != null) _lockUi?.Refused();
+    }
 
     /// <summary>Opens the dial on a locked crate; the numbers it settles on go to the crate's server.</summary>
     public void PickCrate(FootPlayer p, long id, string title, int[] combo)
@@ -451,6 +487,12 @@ public partial class LootService : Node
         var layout = await LayoutFor(peer, key);
         if (layout == null || furniture < 0 || furniture >= layout.Furniture.Count) return;
         long epoch = LootTables.Epoch(key, Now);
+        // a pallet forked away (#583) holds nothing: what it held was where it stood
+        if (Moved(key, furniture))
+        {
+            Reply(peer, MethodName.Contents, key, furniture, epoch, Array.Empty<int>(), Array.Empty<int>(), 0);
+            return;
+        }
         var stacks = LootTables.ContentsOf(layout, furniture, epoch);
         int mask = MaskOf(key, furniture, epoch);
         if (LootTables.IsLocked(layout.Furniture[furniture].Type) && (mask & UnlockedBit) == 0)
@@ -465,7 +507,7 @@ public partial class LootService : Node
     private async void ServeTake(long peer, string key, int furniture, long epoch, int index)
     {
         var layout = await LayoutFor(peer, key);
-        if (layout == null || furniture < 0 || furniture >= layout.Furniture.Count) return;
+        if (layout == null || furniture < 0 || furniture >= layout.Furniture.Count || Moved(key, furniture)) return;
         long now = LootTables.Epoch(key, Now);
         var stacks = LootTables.ContentsOf(layout, furniture, now);
         int mask = MaskOf(key, furniture, now);
@@ -507,7 +549,7 @@ public partial class LootService : Node
     /// <summary>Client: whether this client knows the locked container to be cracked this period.</summary>
     public bool IsUnlocked(string key, int furniture) => key == _lockKey && _unlocked.Contains(furniture);
 
-    public bool Picking => _picking != null;
+    public bool Picking => _picking != null || _pickingOther != null;
     public LockPickUi? LockUi => _lockUi;
 
     private void StartPicking(FootPlayer p, InteriorLayout layout, int furniture)
@@ -525,6 +567,7 @@ public partial class LootService : Node
     {
         _picking = null;
         _pickingCrate = null;
+        _pickingOther = null;
         _dialDone = null;
         _lockUi?.Close();
         _simonUi?.Close();
@@ -551,6 +594,11 @@ public partial class LootService : Node
     /// </summary>
     public void SubmitCombination(int[] combo)
     {
+        if (_pickingOther is { } submit)
+        {
+            submit(combo);
+            return;
+        }
         if (_pickingCrate is long crate)
         {
             BattleRoyale.BrCrates.Instance?.Unlock(crate, combo);

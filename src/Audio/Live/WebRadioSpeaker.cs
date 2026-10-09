@@ -45,10 +45,15 @@ public partial class WebRadioSpeaker : AudioStreamPlayer3D
 
     private readonly Hearing _hearing = new(6000f);
 
+    /// <summary>The stereo's own volume, 0..1, everyone's (#734): gain and reach (<see cref="Items.RadioLoudness"/>).</summary>
+    public float Volume { get; set; } = Items.RadioLoudness.Default;
+    private float _rangeFor = float.NaN;
+
     public override void _Process(double delta)
     {
         _hearing.Step(this, (float)delta);
-        VolumeDb = BaseDb + _hearing.Db;
+        VolumeDb = BaseDb + Items.RadioLoudness.Db(Volume) + _hearing.Db;
+        if (Volume != _rangeFor) { _rangeFor = Volume; MaxDistance = Items.RadioLoudness.Radius(Volume); }
         var buffer = WebRadio.Instance?.Buffer(Station);
         if (buffer == null || buffer.End == 0)
         {

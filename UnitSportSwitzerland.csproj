@@ -11,6 +11,15 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- keep the offline tools, the tests and the data folders out of the game assembly's wildcard compile -->
     <DefaultItemExcludes>$(DefaultItemExcludes);tools/**;tests/**;terrain_chunks/**;ressources/**</DefaultItemExcludes>
+    <!-- MapCore references the TerrainPreprocessor and RoadGen exe projects (#515). Their apphost, deps.json and
+         runtimeconfig.json collide when Godot publishes for a RID (NETSDK1152), and the export then ships without
+         the game assemblies (#548). The game never runs those files, so whichever copy wins doesn't matter. -->
+    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
+  </PropertyGroup>
+
+  <!-- Android APK (tools/release.sh, #544): Godot's prebuilt Android template only runs net9.0 -->
+  <PropertyGroup Condition=" '$(GodotTargetPlatform)' == 'android' ">
+    <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,6 +31,9 @@
 
   <ItemGroup>
     <ProjectReference Include="tools\TerrainFormat\TerrainFormat.csproj" />
+    <!-- The map screen's country map, selection, plan and estimates, shared with the terminal
+         region wizard (tools/MapSetup). It embeds switzerland.bin, so no data folder is involved. -->
+    <ProjectReference Include="tools\MapCore\MapCore.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -29,6 +41,16 @@
          and WithCulture because MSBuild otherwise reads ".bin"-like infixes as a culture -->
     <EmbeddedResource Include="src/Terrain/swiss_relief.gz" LogicalName="swiss_relief.gz" WithCulture="false" />
     <PackageReference Include="ppy.SDL3-CS" Version="2026.722.0" />
+  </ItemGroup>
+
+  <!-- The playtest suite (#751, docs/notes/general/playtest.md): an in-game MCP server Claude Code drives the
+       running game through (scenarios, tunables, screenshots, chat). A local control port, so it is compiled
+       only into the editor's Debug configuration: ExportDebug, ExportRelease and Android builds carry none of it. -->
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DefineConstants>$(DefineConstants);PLAYTEST</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition=" '$(Configuration)' != 'Debug' ">
+    <Compile Remove="src/Playtest/**" />
   </ItemGroup>
 
 </Project>

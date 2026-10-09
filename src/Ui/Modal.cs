@@ -52,7 +52,7 @@ public partial class Modal : Control
         // fade and lift in
         m.Modulate = new Color(1, 1, 1, 0);
         panel.Position += new Vector2(0, 10);
-        var tw = m.CreateTween().SetParallel().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+        var tw = m.CreateTween().SetIgnoreTimeScale(true).SetParallel().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
         tw.TweenProperty(m, "modulate:a", 1f, 0.16f);
         UiFocus.Set(m, true);
         return m;
@@ -112,9 +112,30 @@ public partial class Modal : Control
         return m;
     }
 
+    /// <summary>
+    /// A question with several answers, the first one primary (#63: the metered-connection
+    /// warning). Escape or a click outside picks none.
+    /// </summary>
+    public static Modal Choose(Control host, string title, string message, params (string Text, Action Act)[] answers)
+    {
+        var m = Build(host, title, message, out var body);
+        var buttons = UiKit.HBox(10);
+        buttons.Alignment = BoxContainer.AlignmentMode.End;
+        body.AddChild(UiKit.Spacer(4));
+        body.AddChild(buttons);
+        for (int i = answers.Length - 1; i >= 0; i--)
+        {
+            var (text, act) = answers[i];
+            var b = UiKit.Button(text, primary: i == 0, minWidth: 96);
+            b.Pressed += () => { m.CloseModal(); act(); };
+            buttons.AddChild(b);
+        }
+        return m;
+    }
+
     /// <summary>A yes/no question.</summary>
     public static Modal Confirm(Control host, string title, string message, string okText, Action ok,
-        Action? cancel = null, bool danger = false)
+        Action? cancel = null, bool danger = false, string cancelText = "Cancel")
     {
         var m = Build(host, title, message, out var body);
         m._cancel = cancel;
@@ -122,7 +143,7 @@ public partial class Modal : Control
         buttons.Alignment = BoxContainer.AlignmentMode.End;
         body.AddChild(UiKit.Spacer(4));
         body.AddChild(buttons);
-        var c = UiKit.Button("Cancel", minWidth: 96);
+        var c = UiKit.Button(cancelText, minWidth: 96);
         c.Pressed += m.Cancel;
         buttons.AddChild(c);
         var okButton = UiKit.Button(okText, primary: true, minWidth: 110);
@@ -186,6 +207,29 @@ public partial class Modal : Control
         okButton.Pressed += m.Cancel;
         buttons.AddChild(okButton);
         okButton.CallDeferred(Control.MethodName.GrabFocus);
+        return m;
+    }
+
+    /// <summary>
+    /// A progress bar, a status line under it and Cancel (also Esc / B). The caller fills both and
+    /// closes the modal with <see cref="CloseModal"/> when the work ends.
+    /// </summary>
+    public static Modal Progress(Control host, string title, string? message, Action cancel,
+        out ProgressBar bar, out Label status)
+    {
+        var m = Build(host, title, message, out var body);
+        m._cancel = cancel;
+        bar = new ProgressBar { MinValue = 0, MaxValue = 1, Step = 0, ShowPercentage = false, CustomMinimumSize = new Vector2(0, 12) };
+        body.AddChild(bar);
+        status = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
+        body.AddChild(status);
+        var buttons = UiKit.HBox(10);
+        buttons.Alignment = BoxContainer.AlignmentMode.End;
+        body.AddChild(buttons);
+        var c = UiKit.Button("Cancel", minWidth: 96);
+        c.Pressed += m.Cancel;
+        buttons.AddChild(c);
+        c.CallDeferred(Control.MethodName.GrabFocus);
         return m;
     }
 

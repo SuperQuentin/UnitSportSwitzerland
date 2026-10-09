@@ -28,7 +28,7 @@ namespace UnitSport.Terrain;
 ///
 /// <para>No Godot types: <c>tools/BlendCheck</c> compiles it to test the source end to end.</para>
 /// </summary>
-public sealed class FallbackChunkSource : IChunkSource
+public sealed partial class FallbackChunkSource : IChunkSource
 {
     /// <summary>How far the fill reaches past the spawn tile and past the real set, in tiles.</summary>
     public const int FillRadiusTiles = ProceduralWorld.RadiusTiles;
@@ -169,8 +169,7 @@ public sealed class FallbackChunkSource : IChunkSource
     public async Task<RoadTile?> LoadRoadsAsync(TileId id, CancellationToken ct = default)
     {
         if (!Covers(id)) return await _inner.LoadRoadsAsync(id, ct).ConfigureAwait(false);
-        var blend = await BlendFor(id, full: true, ct).ConfigureAwait(false);
-        return await Task.Run(() => World.BuildRoads(id, blend), ct).ConfigureAwait(false);
+        return await BuildRoadsAsync(id, ct).ConfigureAwait(false);
     }
 
     // no tunnels, so no carved portals
@@ -325,7 +324,13 @@ public sealed class FallbackChunkSource : IChunkSource
     /// here, which only shows past the rings: a tile drawn by the loader discards the horizon.
     /// </summary>
     /// <summary>The real region's landings: the generated lakes have none.</summary>
+    public Task<AirportIndex?> LoadAirportsAsync(CancellationToken ct = default) => _inner.LoadAirportsAsync(ct);
+
     public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => _inner.LoadLandingsAsync(ct);
+
+    /// <summary>Farm fields (#494): the real tile's; a generated tile has none.</summary>
+    public Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default) =>
+        Covers(id) ? Task.FromResult<List<FieldPolygon>?>(null) : _inner.LoadFieldsAsync(id, ct);
 
     public async Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default)
     {

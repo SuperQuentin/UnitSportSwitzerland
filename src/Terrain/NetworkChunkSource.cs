@@ -11,7 +11,7 @@ namespace UnitSport.Terrain;
 /// <list type="number">
 /// <item><b>shipped</b> — the local <c>terrain_chunks/</c> directory, unchanged;</item>
 /// <item><b>cache</b> — <c>user://chunk_cache/</c>, everything fetched in earlier sessions;</item>
-/// <item><b>server</b> — streamed over ENet, then written into the cache.</item>
+/// <item><b>server</b> — the server's HTTP mirror when it names one (#651), else ENet; then written into the cache.</item>
 /// </list>
 ///
 /// <para>
@@ -68,13 +68,13 @@ public sealed class NetworkChunkSource : IChunkSource
         _cacheDirectory = cacheDirectory ?? ProjectSettings.GlobalizePath("user://chunk_cache");
 
         Directory.CreateDirectory(_cacheDirectory);
-        _cacheBytes = MeasureCache();
+        _cacheBytes = MeasureCache(_cacheDirectory);
 
         GD.Print($"[stream] cache at {_cacheDirectory} holding {_cacheBytes / (1024.0 * 1024):F0} MB");
     }
 
     /// <summary>
-    /// Cap on the on-disk cache. The full region is 5.3 GB, so an unbounded cache would
+    /// Cap on the on-disk cache. The full region is ~112 GB, so an unbounded cache would
     /// quietly fill a disk over a few sessions.
     /// </summary>
     public long MaxCacheBytes { get; set; } = 2L * 1024 * 1024 * 1024;
@@ -166,6 +166,16 @@ public sealed class NetworkChunkSource : IChunkSource
             .ConfigureAwait(false);
     }
 
+    /// <summary>The farm fields (#494): shipped, cached, else streamed like the trees. An older server answers "missing".</summary>
+    public async Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default)
+    {
+        if (await _local.LoadFieldsAsync(id, ct).ConfigureAwait(false) is { } local) return local;
+
+        return await ObtainAsync(AssetKind.Fields, id, ct,
+            bytes => { using var ms = new MemoryStream(bytes); return FieldFormat.Decode(ms); })
+            .ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Shipped copy first, else the one <see cref="ClientTerrainSync"/> pulled into the cache
     /// during sync. Not fetched on demand here: it is a single region-wide file, and the sync
@@ -185,6 +195,8 @@ public sealed class NetworkChunkSource : IChunkSource
     }
 
     /// <summary>The shipped landings first, else the server's, pulled into the cache during sync (#377).</summary>
+    public Task<AirportIndex?> LoadAirportsAsync(CancellationToken ct = default) => _local.LoadAirportsAsync(ct);
+
     public async Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) =>
         await _local.LoadLandingsAsync(ct).ConfigureAwait(false)
         ?? await LocalChunkSource.ReadLandingsAsync(_cacheDirectory, ct).ConfigureAwait(false);
@@ -384,7 +396,16 @@ public sealed class NetworkChunkSource : IChunkSource
             try
             {
                 File.WriteAllBytes(temp, bytes);
-                File.Move(temp, path, overwrite: true);
+                try
+                {
+                    File.Move(temp, path, overwrite: true);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException && File.Exists(path))
+                {
+                    // Windows refuses to replace a file another thread is reading: the twin fetch
+                    // already put the same bytes there (HTTP delivers fast enough to hit this often).
+                    return;
+                }
             }
             finally
             {
@@ -400,11 +421,12 @@ public sealed class NetworkChunkSource : IChunkSource
         }
     }
 
-    private long MeasureCache()
+    /// <summary>Bytes the tile cache in <paramref name="directory"/> holds (Settings → Data shows it).</summary>
+    public static long MeasureCache(string directory)
     {
         try
         {
-            return new DirectoryInfo(_cacheDirectory)
+            return new DirectoryInfo(directory)
                 .EnumerateFiles()
                 .Sum(f => f.Length);
         }
@@ -412,6 +434,38 @@ public sealed class NetworkChunkSource : IChunkSource
         {
             return 0;
         }
+    }
+
+    /// <summary>The source of the world being played, if any: Settings → Data clears through it.</summary>
+    public static NetworkChunkSource? Active { get; set; }
+
+    /// <summary>
+    /// Settings → Data → Clear (#63): deletes the cached tiles in <paramref name="directory"/>
+    /// (never a download in progress, a <c>.part</c>). Tiles already loaded stay; they come back
+    /// from the server when next needed. Returns the bytes freed.
+    /// </summary>
+    public static long ClearCache(string directory)
+    {
+        long freed = 0;
+        try
+        {
+            foreach (var file in new DirectoryInfo(directory).EnumerateFiles())
+            {
+                if (file.Extension == ".part") continue;
+                try
+                {
+                    long size = file.Length;
+                    file.Delete();
+                    freed += size;
+                }
+                catch (IOException) { }
+            }
+        }
+        catch (DirectoryNotFoundException) { }
+        if (Active is { } live && Path.GetFullPath(live._cacheDirectory) == Path.GetFullPath(directory))
+            lock (live._gate) live._cacheBytes = MeasureCache(directory);
+        GD.Print($"[stream] cache cleared: {freed / (1024.0 * 1024):F0} MB");
+        return freed;
     }
 
     /// <summary>

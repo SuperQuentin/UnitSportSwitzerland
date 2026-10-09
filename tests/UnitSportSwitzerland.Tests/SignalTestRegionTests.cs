@@ -122,9 +122,11 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
                     $"{path}: a hatch {length:F1} m long, {width:F1} m wide at its wide end (stripes over {reach:F1} m)");
             }
         }
-        Assert.True(hatches >= 40, $"{hatches} hatches");
+        Assert.True(hatches >= 30, $"{hatches} hatches");   // islands (#682) take the wide end of an exit hatch and its stripes with it
     }
 
+[Fact]    public void Left_repeater_signals_stand_on_islands_past_the_crosswalk()    {        int islands = 0, poles = 0;        foreach (var (_, tile) in region.Tiles())        {            islands += tile.AreaProps.Count(a => a.Type == AreaPropType.Island && a.Variant == 2 && (a.Flags & PropFlags.Solid) != 0 && a.Height > 0);            poles += tile.Signals.Sum(s => s.Poles.Count(p => (p.Flags & SignalPoleFlags.Second) != 0));        }        Assert.True(islands >= 10, $"{islands} islands");        // two islands an arm (past the crosswalk, with the pole, and behind it), cut by the crosswalk
+        Assert.True(poles >= islands / 2, $"{poles} second poles for {islands} islands");    }
     [Fact]
     public void No_car_stop_line_crosses_a_bike_lane_with_an_advanced_line()
     {
@@ -159,6 +161,9 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         Assert.True(advanced >= 10, $"{advanced} advanced bike lines");
     }
 
+    private static double Extent(IReadOnlyList<(double X, double Z)> p) =>
+        Math.Max(p.Max(q => q.X) - p.Min(q => q.X), p.Max(q => q.Z) - p.Min(q => q.Z));
+
     [Fact]
     public void Widened_arms_get_rounded_corners()
     {
@@ -167,8 +172,8 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
             var j = region.Junction(name);
             var id = TileId.FromLv95(j.E, j.N);
             double cx = j.E - id.MinE, cz = id.MaxN - j.N;
-            // a corner's kerb patch: its corner point and the curve (9 points), off every arm's axis
-            var corners = region.Tile(j.E, j.N).AreaProps.Where(a => a.Type == AreaPropType.Pavement && a.Vertices.Length / 3 == 10)
+            // a corner's kerb patch (#682: the pavement between the junction's own corner and the kerb arc, 9 points on it): a small polygon off every arm's axis
+            var corners = region.Tile(j.E, j.N).AreaProps.Where(a => a.Type == AreaPropType.Pavement && a.Vertices.Length / 3 >= 13 && Extent(Points(a.Vertices)) < 25)
                 .Select(a => Points(a.Vertices)).Select(p => (X: p.Average(q => q.X) - cx, Z: p.Average(q => q.Z) - cz))
                 .Where(c => Math.Abs(c.X) > 1.5 && Math.Abs(c.Z) > 1.5 && Math.Abs(c.X) < 30 && Math.Abs(c.Z) < 30).ToList();
             foreach (var (sx, sz) in (ReadOnlySpan<(int, int)>)[(1, 1), (1, -1), (-1, 1), (-1, -1)])

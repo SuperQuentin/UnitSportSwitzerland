@@ -21,9 +21,19 @@ public class PigeonFlightTests
     {
         var s = Run(new State { Mode = Mode.Air }, new Controls(Vector2.Zero, true, false, false), false, 5f);
         Assert.Equal(Mode.Air, s.Mode);
-        Assert.InRange(s.Velocity.Y, 3f, 3.6f);
+        Assert.InRange(s.Velocity.Y, 5.5f, 6.1f);
         Assert.InRange(new Vector2(s.Velocity.X, s.Velocity.Z).Length(), 15f, 16.1f);
         Assert.True(s.Flap > 0.95f);
+    }
+
+    [Fact]
+    public void Flapping_forward_still_climbs()
+    {
+        // #519: forward used to cancel the whole climb, so W + flap never gained height
+        var s = Run(new State { Mode = Mode.Air }, new Controls(new Vector2(0, -1), true, false, false), false, 5f);
+        Assert.InRange(s.Velocity.Y, 4f, 4.6f);
+        var hard = Run(new State { Mode = Mode.Air }, new Controls(new Vector2(0, -1), true, false, true), false, 5f);
+        Assert.True(hard.Velocity.Y > 7f);
     }
 
     [Fact]

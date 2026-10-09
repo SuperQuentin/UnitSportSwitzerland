@@ -68,7 +68,7 @@ public partial class InventoryUi
             rows.AddChild(BuildRecipeRow(r));
         }
 
-        column.AddChild(UiKit.Text("Shift-click Make to craft as many as you can.",
+        column.AddChild(UiKit.Text($"{Core.InputHints.Keyboard(Key.Shift)}-click Make to craft as many as you can.",
             UiTheme.FontTiny, UiTheme.TextFaint, wrap: true));
     }
 
@@ -126,13 +126,16 @@ public partial class InventoryUi
         foreach (var row in _recipeRows)
         {
             var r = row.Recipe;
+            // a fish's cook row only while that fish is in the pack (#493): twenty-odd species would bury the fire
+            row.Root.Visible = !r.OnlyWhenHeld || Store.Count(r.In[0].Id) > 0;
+            if (!row.Root.Visible) continue;
             bool here = (r.Station & _station) != 0;
             int max = Recipes.MaxTimes(Store, r);
             row.Root.Modulate = here && max > 0 ? Colors.White : new Color(1, 1, 1, 0.55f);
             row.Make.Disabled = !here || max == 0 || _making != null;
             row.Make.TooltipText = !here ? CraftStations.WhereToFind(r.Station)
                 : max == 0 ? "Missing ingredients."
-                : $"Takes {r.Seconds:0.#} s. Shift-click: make all {max}.";
+                : $"Takes {r.Seconds:0.#} s. {Core.InputHints.Keyboard(Key.Shift)}-click: make all {max}.";
             row.Needs.Text = Describe(r, here);
         }
     }

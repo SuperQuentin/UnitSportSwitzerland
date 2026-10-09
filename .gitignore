@@ -49,6 +49,8 @@
 # Export output. export_presets.cfg holds local paths and can hold signing
 # credentials, so it stays out too.
 export_presets.cfg
+# except the committed CI presets, which hold no local path (.github/workflows/release.yml)
+!tools/ci/export_presets.cfg
 /build/
 /export/
 *.pck
@@ -95,10 +97,15 @@ __pycache__/
 .serena/
 .fr_backup/
 graphify-out/
-.claude/
+# Claude Code: local settings and worktrees stay private; the shared skills (/playtest, #751) are committed
+.claude/*
+!.claude/skills/
 
 # GPX recordings (personal tracks used for replay testing)
 *.gpx
 
 # tools/deploy-linux.sh config (host names, paths)
 tools/deploy.env
+
+# the editor writes a default OpenXR action map when VR is on; nothing uses it, the game maps controllers in code (XrPad, XrHands)
+/openxr_action_map.tres

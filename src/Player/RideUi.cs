@@ -241,11 +241,31 @@ public partial class RideUi : CanvasLayer
         // ground equipment at an airport (#417): the airstairs that dock to an airliner's doors
         AddTab(bar, pages, "Airport", new List<Card> { NewCard(RideKind.Airstairs, "Airstairs", new Airstairs().Blurb, true,
             $"{RideKind.Airstairs}|Airstairs", () => new Airstairs().BuildParkedVisual(0)) });
+        // works machinery (#583): the forklift, which is driven rather than dispatched
+        AddTab(bar, pages, "Works", new List<Card>
+        {
+            NewCard(RideKind.Forklift, "Forklift", new Forklift().Blurb, true,
+                $"{RideKind.Forklift}|Forklift", () => new Forklift().BuildParkedVisual(0)),
+            NewCard(RideKind.Excavator, "Excavator", new Excavator().Blurb, true,
+                $"{RideKind.Excavator}|Excavator", () => new Excavator().BuildParkedVisual(0)),
+            NewCard(RideKind.MiniExcavator, "Mini excavator", new Excavator(mini: true).Blurb, true,
+                $"{RideKind.MiniExcavator}|MiniExcavator", () => new Excavator(mini: true).BuildParkedVisual(0)),
+            NewCard(RideKind.WheelLoader, "Wheel loader", new WheelLoader().Blurb, true,
+                $"{RideKind.WheelLoader}|WheelLoader", () => new WheelLoader().BuildParkedVisual(0)),
+            NewCard(RideKind.WheelLoaderForks, "Wheel loader (forks)", new WheelLoader(forks: true).Blurb, true,
+                $"{RideKind.WheelLoaderForks}|WheelLoaderForks", () => new WheelLoader(forks: true).BuildParkedVisual(0)),
+            NewCard(RideKind.MiniDumper, "Mini dumper", new MiniDumper().Blurb, true,
+                $"{RideKind.MiniDumper}|MiniDumper", () => new MiniDumper().BuildParkedVisual(0)),
+            NewCard(RideKind.CompactRoller, "Compact roller", new CompactRoller().Blurb, true,
+                $"{RideKind.CompactRoller}|CompactRoller", () => new CompactRoller().BuildParkedVisual(0)),
+            NewCard(RideKind.Telehandler, "Telehandler", new Telehandler().Blurb, true,
+                $"{RideKind.Telehandler}|Telehandler", () => new Telehandler().BuildParkedVisual(0)),
+        });
         // trailers are not mounts: each card couples one behind the truck being driven, or leaves it
         // in the world ahead to back onto (RideKind.Trailer + its index, decoded in Choose)
         AddTab(bar, pages, "Trailers", TrailerCatalog.All.Select((t, i) => NewCard((RideKind)(TrailerRow + i), t.Label,
             t.Blurb + (t.Operator.Length > 0 ? $" ({t.Operator} colours)" : ""), true,
-            $"Trailer{i}|{t}", () => HeavyRig.CreateTrailer(t, 0, 0.5f))).ToList());
+            $"Trailer{i}|{t}", () => HeavyRig.CreateTrailer(t, 0, 0.5f, boatShown: true))).ToList());
     }
 
     /// <param name="path">The folders a card goes in, outermost first; null or empty for none.</param>
@@ -579,9 +599,10 @@ public partial class RideUi : CanvasLayer
     private void Relabel()
     {
         if (_hint == null) return;
-        bool pad = PlayerInput.LastDevice == InputDevice.Gamepad;
+        bool pad = InputHints.Pad;
         _hint.Text = InputHints.Format(pad
-            ? "LB / RB switch tabs · (A) ride or open a folder · (B) up a folder, else closes · {ride_menu} closes. Vehicles stay where you get off ({interact_mount}); {interact_mount} next to one gets back in."
+            ? $"{InputHints.Button(JoyButton.LeftShoulder)} / {InputHints.Button(JoyButton.RightShoulder)} switch tabs · "
+              + "{ui_accept} ride or open a folder · {ui_cancel} up a folder, else closes · {ride_menu} closes. Vehicles stay where you get off ({interact_mount}); {interact_mount} next to one gets back in."
             : "Tab / Shift+Tab or click a tab · click a card to select it, then Ride (or double-click, or 1–9); a folder opens on a click, Backspace goes back · drag the preview to turn it · {ride_menu} / Esc closes. "
               + "Vehicles stay where you get off ({interact_mount}); {interact_mount} next to one gets back in.");
 

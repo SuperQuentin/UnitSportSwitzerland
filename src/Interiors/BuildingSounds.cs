@@ -125,6 +125,13 @@ public partial class BuildingSounds : Node
         return new Vector3(o.Center.X + p.X, o.Center.Y, o.Center.Z + p.Y);
     }
 
+    /// <summary>An elevator (#557): the chime as its cabin arrives, or its doors sliding.</summary>
+    public void Lift(Vector3 at, bool chime)
+    {
+        if (chime) Play(at, SfxSynth.ChimeBank, 1.35f, -8f, 20500f);
+        else Play(at, SfxSynth.DoorCloseBank, 1.6f, -14f, 6000f);
+    }
+
     private void Play(Vector3 at, SfxBank bank, float pitch, float db, float cutoff)
     {
         var p = _pool[_next];

@@ -15,19 +15,25 @@ touches its topic; search with `grep -ril <word> docs/notes/items`.
 - `shotgun-feel` — Shotgun ADS pose + bead reticle, recoil/camera punch, pump fore-end + sound, rate limit, eye-origin shots, remote jolt
 - `camera-zoom` — Camera focal-length zoom (wheel while aiming), LookScale, viewfinder readout + autofocus hunt, --zoom
 - `cash-account` — Money is a counter, not an item: `Inventory.Cash`, lost when knocked out, deposited at a bank counter to the server-kept account...
-- `radio` — Radio: a thrown RigidBody world item (thrower simulates the fall, server owns what plays), plays in the hand too (stack data + FootPlayer.HeldRadio), RadioSpeaker keyed by CD id (the track-change bug), volume, E to dance; music-picker panel (search, now playing, prev/next, modes once/repeat/list/shuffle), car stereo CDs (FootPlayer.CarCd, R in a vehicle); `tools/radiocheck.sh`, `tools/carcdcheck.sh`
+- `inventory-transfer` — `/transfer <from> <to>`: a whole inventory and pocket cash to another online player, through the server; your own is yours, others' an admin's (#649)
+- `radio` — Radio: tap E / Use on or off, hold for the panel (`RadioTap`, #725), heavy throw; a thrown RigidBody world item (thrower simulates the fall, server owns what plays), plays in the hand too (stack data + FootPlayer.HeldRadio), RadioSpeaker keyed by CD id (the track-change bug), volume, E to dance; music-picker panel (search, now playing, prev/next, modes once/repeat/list/shuffle), car stereo CDs (FootPlayer.CarCd, R in a vehicle); `tools/radiocheck.sh`, `tools/carcdcheck.sh`
+- `beat-field` — Things near a radio move with its music (#734): per-radio shared volume sets gain and reach (RadioLoudness), BeatField sources + At(), visual-only reactions (dropped items, registered meshes, IBeatReactive parked cars, tree/prop shaders via world_music globals), panel scrubber; `tools/beatfieldcheck.sh`
 - `radio-sparkles` — Beat-synced star glints on a playing radio (world, hand, back): one shared static mesh + vertex-shader particles from TIME, one draw call, instance uniforms only on change; `--sparklecheck`
 - `church-radio` — The radio by the pastor rat (#370): the shipped chess type beat burnt once (`CdLibrary.RatBeatId`), `ChurchRadios` play table, rat + congregation as figures (`ChurchStage`), intro camera cuts, night club shader/lights, instant reset, players' `RatDance` moves anywhere; `--churchstagecheck`
 - `polaroid` — Camera prints photos: shoots only through the viewfinder, PhotoCapture renders the eye's view (no HUD), ItemId.Photo + ItemStack.Data, develop, album, sticking, wall posters, PhotoTransfer sharing, --photocheck
 - `item-net-events` — ItemEvents.Send (shot, photo flash relayed to others) and PlacedObjects (server-kept, saved flags/photos, kind factories)
+- `fishing` — Rod (#493): cast/strike/reel on use/aim (all three devices), float + line as item events 9-10, 38 real species by basin, lake (by level) and water kind, Red List / closed seasons / min sizes / Constance whitefish ban, FishFight, cooking, catch book + journal Fish page; `--fishcheck`, `tools/fishcheck.sh`
 - `swiss-items` — alphorn (radar for the blower, a marker for whoever hears it), fondue pot (feeds everyone within 4 m), smoke canister (hides from the radar), item events 6-8 (#478)
 - `flag-plant` — Swiss flag: placement ghost (green/red, pick-up halo), raise-and-stab / pull-up strokes, replicated Plant arms, spawn thud + dirt
 - `bags` — Bag slot adds pack rows (pouch/handbag/backpack/hiking +9..+36), one array with a moving Capacity, ChangeBag compacts or refuses, found in wardrobes/halls/nightstands (#208)
 - `throw-drop` — Drop (Q / Ctrl+Q / pack panel), pointing outline (inverted hull overlay), E pick-up, grenade-style charged throw (arc, ring, shoulder cam, wind-up arm pose), local proxy + remote prediction, CCD + under-terrain rescue, ImpactFx, Minecraft-style floating/spinning look at rest (DropFloat); `tools/dropcheck.sh` (#206)
 - `throw-hits` — A thrown item hitting a player (#261): thrower-side path test, `ItemEventKind.Bonk` relayed by the server, non-lethal damage (floor 5), flinch on every copy, bonk + oof + dizzy tune
 - `catalogue` — Item catalogue (#262): every item as tiles, tabs + search, click 1 / right 10 / shift stack, money + clear buttons; only sends chat commands, so the server checks admin
+- `barracks-items` — Cards, chips, beer, Gamelle and the TAZ 90 uniform (#716): held meshes in `BarracksMeshes`, camo as `Finish.Camo`, where they are sold and found, viewer commands
 - `smart-binoculars` — Held at a building's door (or inside): reads out its loot table (LootTables.BuildingTable); no aim, no zoom (#165)
+
+- `vehicles/pallets` (in docs/notes/vehicles/) — `Pallets` (load byte, ids, fork rule), `PalletNode`, `PalletService` at World/Pallets (server-owned, session-only), `PalletCheck`, `PalletNetProbe` (#583)
 
 ## Commands
 
-- `commands` — Commands: --invcheck, --invuicheck, --econcheck, --iconsheet, tools/placedcheck.sh, --photocheck, tools/gunshotcheck.sh, tools/useanimcheck.sh, tools/radiocheck.sh, tools/carcdcheck.sh, --carcdcheck shots, --cdfixture, tools/dropcheck.sh, tools/bonkcheck.sh, --interactcheck, --churchstagecheck
+- `commands` — Commands: --invcheck, --invuicheck, --econcheck, --iconsheet, tools/placedcheck.sh, --photocheck, tools/gunshotcheck.sh, tools/useanimcheck.sh, tools/radiocheck.sh, tools/carcdcheck.sh, --carcdcheck shots, --cdfixture, tools/dropcheck.sh, tools/bonkcheck.sh, --interactcheck, --churchstagecheck, --fishcheck, tools/fishcheck.sh

@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Spectre.Console;
 using UnitSport.Terrain.Format;
 using UnitSport.Tools.Preprocessor;
+using UnitSport.Map;
 
 namespace UnitSport.Tools.MapSetup;
 

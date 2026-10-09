@@ -57,27 +57,37 @@ public partial class DoorLeaf : Node3D
     /// </summary>
     public bool Shutter { get; private init; }
 
-    /// <summary>Whether a building's front door is an outward pair: barns, whose doors open onto the yard.</summary>
-    public static bool SwingsOut(BuildingKind kind) => kind == BuildingKind.Agricultural;
+    /// <summary>Whether a door is an outward pair: a barn's, swinging onto the yard.</summary>
+    public static bool SwingsOut(DoorHang hang) => hang == DoorHang.OutwardPair;
 
-    /// <summary>Whether a building's front door rolls up into its lintel: garages.</summary>
-    public static bool RollsUp(BuildingKind kind) => kind == BuildingKind.Garage;
+    /// <summary>Whether a door rolls up into its lintel: a garage's, or a loading bay.</summary>
+    public static bool RollsUp(DoorHang hang) => hang == DoorHang.RollUp;
 
-    /// <summary>Whether a building's front door hangs on the facade, with its link, not in the interior.</summary>
-    public static bool OnFacade(BuildingKind kind) => SwingsOut(kind) || RollsUp(kind);
+    /// <summary>Whether a door hangs on the facade, with its link, rather than in the interior.</summary>
+    public static bool OnFacade(DoorHang hang) => hang != DoorHang.Inward;
 
-    /// <summary>The facade leaf for a kind of building, on its doorway frame (<see cref="DoorLink.Outside"/>).</summary>
-    public static DoorLeaf CreateOnFacade(string door, Transform3D doorway, float width, float height, BuildingKind kind, Material material) =>
-        RollsUp(kind) ? CreateRollUp(door, doorway, width, height, material) : CreateOutward(door, doorway, width, height, kind, material);
+    /// <summary>How a kind of building's main door hangs: the default every door starts from.</summary>
+    public static bool SwingsOut(BuildingKind kind) => SwingsOut(DoorBudget.HangFor(kind));
+    public static bool RollsUp(BuildingKind kind) => RollsUp(DoorBudget.HangFor(kind));
+    public static bool OnFacade(BuildingKind kind) => OnFacade(DoorBudget.HangFor(kind));
 
-    /// <summary>A leaf's width: a barn's pair splits the opening, any other door is one leaf.</summary>
-    public static float LeafWidth(BuildingKind kind, float doorWidth) => SwingsOut(kind) ? doorWidth / 2 : doorWidth;
+    /// <summary>
+    /// The facade leaf for a door, on its doorway frame (<see cref="DoorLink.Outside"/>). The
+    /// hang says how it moves, the kind only how it is painted.
+    /// </summary>
+    public static DoorLeaf CreateOnFacade(string door, Transform3D doorway, float width, float height,
+        DoorHang hang, BuildingKind kind, Material material) =>
+        RollsUp(hang) ? CreateRollUp(door, doorway, width, height, material)
+            : CreateOutward(door, doorway, width, height, kind, material);
+
+    /// <summary>A leaf's width: a pair splits the opening, any other door is one leaf.</summary>
+    public static float LeafWidth(DoorHang hang, float doorWidth) => SwingsOut(hang) ? doorWidth / 2 : doorWidth;
 
     /// <summary>
     /// How much deeper than usual an open door is in reach, on the side its leaves stand: a big
     /// leaf is worked by its free edge, as far out as it sticks. Nothing for a house door's 1 m leaf.
     /// </summary>
-    public static float OpenReach(BuildingKind kind, float doorWidth) => Math.Max(0f, LeafWidth(kind, doorWidth) - 1f);
+    public static float OpenReach(DoorHang hang, float doorWidth) => Math.Max(0f, LeafWidth(hang, doorWidth) - 1f);
 
     /// <summary>
     /// A leaf for an entrance, in the interior node's frame: <paramref name="doorway"/> is the
@@ -156,11 +166,11 @@ public partial class DoorLeaf : Node3D
     /// anyone walk (or drive) out through it. Shown and solid only
     /// while the door is shut; open, or swinging, the portal shows the real leaves.
     /// </summary>
-    public static DoorLeaf CreateShutter(string door, Transform3D doorway, float width, float height, BuildingKind kind, Material material)
+    public static DoorLeaf CreateShutter(string door, Transform3D doorway, float width, float height, DoorHang hang, BuildingKind kind, Material material)
     {
         var leaf = new DoorLeaf { Name = "Shutter_" + door, Transform = doorway, Shutter = true };
         float half = width / 2, z = -InteriorGenerator.WallInset;
-        if (RollsUp(kind))
+        if (RollsUp(hang))
             // a garage's roll-up door: its slats, the same as outside
             leaf.AddHinge(new Vector3(0, height, 0), 0, InteriorMeshBuilder.RollUpLeaf(width, height, z - Thickness, z), 0, material);
         else

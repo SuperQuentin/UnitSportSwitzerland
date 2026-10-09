@@ -42,8 +42,8 @@ public partial class ClockSync : Node
     /// </summary>
     public static double ServerUnixNow => _synced ? ServerNow + _serverUnixOffset : Time.GetUnixTimeFromSystem();
 
-    /// <summary>This process's own monotonic clock, seconds.</summary>
-    public static double LocalNow => Time.GetTicksUsec() / 1_000_000.0;
+    /// <summary>This process's own monotonic clock, seconds; game time under <c>--fixed-fps</c> (<see cref="Core.GameClock"/>).</summary>
+    public static double LocalNow => Core.GameClock.Fixed ? Core.GameClock.Now : Time.GetTicksUsec() / 1_000_000.0;
 
     /// <summary>Round trip to the server of the sample in use, or NaN before the first pong.</summary>
     public static double Rtt => _rtt;
@@ -54,7 +54,7 @@ public partial class ClockSync : Node
     private readonly (double Rtt, double Offset)[] _ring = new (double, double)[Samples];
     private int _ringCount, _ringNext;
     private int _seq;
-    private double _sincePing, _alive;
+    private double _startedAt, _nextPingAt;
 
     public static ClockSync Create(Node world)
     {
@@ -65,6 +65,10 @@ public partial class ClockSync : Node
 
     public override void _ExitTree()
     {
+        Core.SimClock.Reset();
+        Engine.TimeScale = 1;
+        _startedAt = 0;
+        _nextPingAt = 0;
         _offset = 0;
         _rtt = double.NaN;
         _synced = false;
@@ -72,14 +76,21 @@ public partial class ClockSync : Node
 
     private bool Online => NetLink.Online(this);
 
+    // Paced on the wall clock (Core.RealClock), never on the engine's delta: under a time scale a
+    // delta-accumulated period stretches by 1 / TimeScale, and this is the one cadence the sim and
+    // env clocks are both derived from, so it has to hold its pace whatever the world is doing.
     public override void _Process(double delta)
     {
+        // Every peer, the server included: a scheduled simulation-speed change is promoted here,
+        // and SimClock.Tick rebases at the instant it was scheduled for rather than at this frame,
+        // so a peer that notices late still agrees about simulated time (#579).
+        if (Core.SimClock.Tick(ServerNow)) Engine.TimeScale = Core.SimClock.Scale;
+
         if (!Online || Multiplayer.IsServer()) return;
-        _alive += delta;
-        _sincePing += delta;
-        double period = _alive < FastFor ? FastPeriod : SlowPeriod;
-        if (_sincePing < period) return;
-        _sincePing = 0;
+        double real = Core.RealClock.Now;
+        if (_startedAt == 0) _startedAt = real;
+        if (real < _nextPingAt) return;
+        _nextPingAt = real + (real - _startedAt < FastFor ? FastPeriod : SlowPeriod);
         RpcId(1, MethodName.Ping, ++_seq, LocalNow);
     }
 

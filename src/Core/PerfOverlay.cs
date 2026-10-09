@@ -190,6 +190,10 @@ public partial class PerfOverlay : CanvasLayer
 
         sb.Append("-- tiles --\n");
         sb.AppendFormat(ci, "loaded {0}/{1}  horizon blocks {2}\n", stats.Loaded, stats.Desired, stats.HorizonBlocks);
+        // what streaming has cost (#63): Settings → Data shows the same
+        if (Net.ChunkStreamer.SessionBytes > 0)
+            sb.AppendFormat(ci, "streamed {0:F0} MB this session{1}\n", Net.ChunkStreamer.SessionBytes / 1048576.0,
+                GameSettings.Current.LowDataActive ? "  (low data)" : "");
         sb.AppendFormat(ci, "build  {0} in flight  {1} pending  {2} ready\n",
             stats.InFlight, stats.Pending, stats.ReadyQueue);
         sb.AppendFormat(ci, "done   {0} ({1:F1}/s)  cancelled {2}\n", stats.Completed, _buildsPerSecond, stats.Cancelled);

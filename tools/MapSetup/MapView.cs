@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using UnitSport.Terrain.Format;
+using UnitSport.Map;
 
 namespace UnitSport.Tools.MapSetup;
 
@@ -20,6 +21,7 @@ public sealed class MapView
     private readonly LocalState _local;
     private readonly Selection _sel;
     private readonly Func<Selection, IReadOnlyList<(string Label, string Value)>> _summary;
+    private readonly string _quitQuestion;
 
     // cursor = top-left tile of the pixel block under it, aligned to the zoom grid
     private int _cE = 2600, _cN = 1199;
@@ -51,12 +53,14 @@ public sealed class MapView
     private enum Mode { Map, Search, Radius, Canton }
 
     public MapView(CountryData country, LocalState local, Selection selection,
-        Func<Selection, IReadOnlyList<(string Label, string Value)>> summary)
+        Func<Selection, IReadOnlyList<(string Label, string Value)>> summary,
+        string quitQuestion = "Quit without downloading anything? (y/n)")
     {
         _country = country;
         _local = local;
         _sel = selection;
         _summary = summary;
+        _quitQuestion = quitQuestion;
     }
 
     /// <summary>True: continue with the selection (Enter). False: the user quit.</summary>
@@ -231,7 +235,7 @@ public sealed class MapView
                 _anchor = null;
                 break;
             case ConsoleKey.Escape or ConsoleKey.Q:
-                _confirm = ("Quit without downloading anything? (y/n)", () => _result = false);
+                _confirm = (_quitQuestion, () => _result = false);
                 break;
             default:
                 // '?' has no ConsoleKey of its own on every layout

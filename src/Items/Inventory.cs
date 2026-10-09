@@ -166,7 +166,7 @@ public sealed class Inventory
         for (int i = 0; i < Capacity; i++)
         {
             if (_slots[i].IsEmpty || _slots[i].Id != ItemId.Radio) continue;
-            if (!string.IsNullOrEmpty(_slots[i].Data)) return i;
+            if (RadioPlay.Decode(_slots[i].Data) != null) return i;   // one playing (not one switched off, #725)
             if (any < 0) any = i;
         }
         return any;

@@ -2,7 +2,8 @@
 
 - **The surface is its own mesh, laid on the tile's still water layer** (`WaterMeshBuilder` from
   `WaterLayer`, #299; the layer's shape and sources: `water-level-layer`). A quad where all four
-  corners of a 2 m lattice square are wet, vertices at the still level, the wave scale in UV.x;
+  corners of a 2 m lattice square are wet and the triangle over the three where one is dry (a
+  diagonal shore is straight, not a 2 m staircase, #572), vertices at the still level, the wave scale in UV.x;
   every 2 m sample where the terrain is drawn at stride 1-2 (round the camera), every 4 m further
   out. No collision: the terrain's collision is the bed. Bounds grown by 3 m
   (`WaterMeshBuilder.WaveMargin`) for the crests the shader raises.

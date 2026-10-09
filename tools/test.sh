@@ -11,7 +11,10 @@
 # Env: GODOT (the Godot executable; on Windows the full path of the *_console.exe, see
 #      docs/notes/general/godot-exe.md), TEST_BASE (origin/main), TEST_TIMEOUT (600 s per check),
 #      TEST_RAM_GB (3, free RAM before each light Godot run), TEST_HEAVY_RAM_GB (6, before the
-#      net/full tiers), TEST_PORT (7821), CHUNKS (passed on to the tools/*check.sh scripts).
+#      net/full tiers), TEST_PORT (7821), CHUNKS (passed on to the tools/*check.sh scripts),
+#      TEST_REALTIME (1: run the quick tier in real time, without --fixed-fps).
+# Quick-tier Godot checks run with --fixed-fps 60: game time, as fast as the CPU allows
+# (docs/notes/general/fast-checks.md); a map row whose check starts with @realtime opts out.
 # Prints one PASS/FAIL table; every log goes to test_output/tests/. Exit code 0 only if all passed.
 set -u
 TIER=${1:-}
@@ -35,6 +38,9 @@ GODOT=${GODOT:-godot}
 export GODOT
 OUT=test_output/tests
 TIMEOUT=${TEST_TIMEOUT:-600}
+# one physics tick (project default 60 Hz) per frame, no real-time sync; net/full stay real time
+FAST=--fixed-fps\ 60
+[ "${TEST_REALTIME:-}" = 1 ] && FAST=
 BASE=${TEST_BASE:-origin/main}
 mkdir -p "$OUT"
 
@@ -91,7 +97,9 @@ while read -r prefix tier check; do
   [ -z "$prefix" ] || [[ $prefix == \#* ]] && continue
   [[ $WANT == *" $tier "* ]] || continue
   if [ -n "$AREA" ]; then
-    [[ ${prefix,,} == *"${AREA,,}"* ]] || continue
+    # tr, not ${x,,}: macOS ships bash 3.2, where that expansion is a syntax error and the
+    # whole area match silently fell through to "no Godot check matches <area>"
+    [[ $(printf %s "$prefix" | tr '[:upper:]' '[:lower:]') == *"$(printf %s "$AREA" | tr '[:upper:]' '[:lower:]')"* ]] || continue
   elif [ "$TIER" != full ]; then
     if [ "$prefix" = @rpc ]; then
       [ -z "$RPC" ] && { rpc_touched && RPC=yes || RPC=no; }
@@ -162,7 +170,9 @@ if [ ${#CHECKS[@]} -gt 0 ]; then
         case $check in
           @netsmoke) netsmoke "$log" ;;
           tools/*) guard_run "$TIMEOUT" "$log" bash $check ;;
-          *) guard_run "$TIMEOUT" "$log" "$GODOT" --headless --path . -- $check ;;
+          @realtime\ *) guard_run "$TIMEOUT" "$log" "$GODOT" --headless --path . -- ${check#@realtime } ;;
+          *) [ "$tier" = quick ] && eng=$FAST || eng=
+             guard_run "$TIMEOUT" "$log" "$GODOT" --headless $eng --path . -- $check ;;
         esac
         record "$check" "$(verdict $? "$log")" $((SECONDS - t0)) "$log"
       done

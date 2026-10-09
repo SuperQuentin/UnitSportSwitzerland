@@ -59,8 +59,13 @@ public partial class SpawnPoint : Node
         }
     }
 
-    /// <summary>Reads an optional "--at E,N" override, in LV95 metres.</summary>
-    public static (double E, double N) ParseTarget() => ParseLv95("--at") ?? (DefaultLv95E, DefaultLv95N);
+    /// <summary>
+    /// Where this session starts, in LV95 metres: <c>--at E,N</c> wins (every probe and screenshot
+    /// run depends on that), then the landing the player picked on the map screen (#515), then
+    /// Riddes.
+    /// </summary>
+    public static (double E, double N) ParseTarget(WorldLaunch? launch = null) =>
+        ParseLv95("--at") ?? launch?.Landing ?? (DefaultLv95E, DefaultLv95N);
 
     /// <summary>
     /// Reads an optional "--origin E,N" (LV95 metres) that pins the starting world origin, so
@@ -70,7 +75,7 @@ public partial class SpawnPoint : Node
     /// </summary>
     public static (double E, double N)? ParseOrigin() => ParseLv95("--origin");
 
-    private static (double E, double N)? ParseLv95(string flag)
+    public static (double E, double N)? ParseLv95(string flag)
     {
         var args = CmdArgs.All;
         var inv = System.Globalization.CultureInfo.InvariantCulture;

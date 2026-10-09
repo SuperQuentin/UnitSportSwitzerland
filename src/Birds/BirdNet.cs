@@ -149,13 +149,50 @@ public partial class BirdNet : Node
         if (!_server) return;
         long sender = Multiplayer.GetRemoteSenderId();
         var from = new GlobalPos(e, n, alt);
-        double now = Time.GetTicksMsec() / 1000.0;
+        // wall clock (#579): a rate limit on what a client may send must not loosen when that
+        // client slows its own simulation
+        double now = Core.RealClock.Now;
         if (GetNodeOrNull<FootPlayer>("../Players/" + sender) is not { } body || body.RideKindId != (int)RideKind.Pigeon
             || !from.IsFinite || body.Global.DistanceTo(from) > 4f || !vel.IsFinite() || vel.Length() > 60f
             || _lastDrop.TryGetValue(sender, out double last) && now - last < DropInterval) return;
         _lastDrop[sender] = now;
         var at = Life!.Origin.ToWorld(from);
         BroadcastDropping(at, vel, Victim(at, sender), sender);
+    }
+
+    /// <summary>Client: the local player crashed as a pigeon (#519); the server shows the splat to everyone near.</summary>
+    public void SendSplat(Vector3 at, Vector3 vel)
+    {
+        if (!Online || Life == null) return;
+        var g = Life.Origin.ToGlobal(at);
+        RpcId(1, MethodName.SplatRpc, g.E, g.N, g.Alt, vel);
+    }
+
+    private readonly Dictionary<long, double> _lastSplat = new();
+
+    /// <summary>
+    /// Server: a splat only looks like something, so the check is light: from where the sender's body is
+    /// (its ride may already read on foot), at most one a second.
+    /// </summary>
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void SplatRpc(double e, double n, double alt, Vector3 vel)
+    {
+        if (!_server) return;
+        long sender = Multiplayer.GetRemoteSenderId();
+        var from = new GlobalPos(e, n, alt);
+        double now = Core.RealClock.Now;   // wall clock, as in DropRpc
+        if (GetNodeOrNull<FootPlayer>("../Players/" + sender) is not { } body || !from.IsFinite || body.Global.DistanceTo(from) > 8f
+            || !vel.IsFinite() || vel.Length() > 80f || _lastSplat.TryGetValue(sender, out double last) && now - last < 1.0) return;
+        _lastSplat[sender] = now;
+        foreach (int peer in Multiplayer.GetPeers())
+            if (peer != sender && GetNodeOrNull<FootPlayer>("../Players/" + peer) is { } other && other.Global.DistanceTo(from) < DroppingRange)
+                RpcId(peer, MethodName.Splat, e, n, alt, vel);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void Splat(double e, double n, double alt, Vector3 vel)
+    {
+        if (!_server && Life != null) Life.Splat(Life.Origin.ToWorld(e, n, alt), vel);
     }
 
     /// <summary>Who a dropping from <paramref name="at"/> lands on: a person on foot nearly straight below, else nobody.</summary>

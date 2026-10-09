@@ -2,6 +2,7 @@ namespace UnitSport.Tools.RoadGen.Meshing;
 
 using System.Globalization;
 using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Geometry;
 using UnitSport.Tools.RoadGen.Network;
 
 /// <summary>
@@ -186,6 +187,38 @@ public static class PaintEmitter
         }
     }
 
+    /// <summary>
+    /// The yellow dashed line between a separated path and its sidewalk along a turn lane's taper
+    /// (#682): its offset follows the shift vertex by vertex, on the side's profile, so the line
+    /// does not stop where the path moves out round the widening.
+    /// </summary>
+    public static void TaperTrackLine(RoadSegment seg, bool right, List<RoadPaint> into)
+    {
+        var side = right ? seg.Attributes.Right : seg.Attributes.Left;
+        float sign = right ? 1f : -1f, half = seg.Width * 0.5f, d = (side.VergeDm + side.BikeDm) / 10f;
+        float height = RoadStreetSection.HeightAt(side, d);
+        var along = RoadStreetSection.Fractions(seg);
+        var p = seg.Points;
+        int n = seg.PointCount;
+        float lift = ((seg.Flags & RoadFlags.Bridge) != 0 ? RoadPaintGeometry.BridgeLift : 0f) + height;
+        var v = new List<float>(n * 3);
+        for (int i = 0; i < n; i++)
+        {
+            int i0 = Math.Max(0, i - 1), i1 = Math.Min(n - 1, i + 1);
+            float fx = p[i1 * 3] - p[i0 * 3], fz = p[i1 * 3 + 2] - p[i0 * 3 + 2], fl = MathF.Sqrt(fx * fx + fz * fz);
+            if (fl < 1e-4f) continue;
+            fx /= fl; fz /= fl;
+            float o = sign * (half + side.ShiftAt(along[i]) + d);
+            v.Add(p[i * 3] - fz * o); v.Add(p[i * 3 + 1] + lift); v.Add(p[i * 3 + 2] + fx * o);
+        }
+        if (v.Count < 6) return;
+        Add(into, new RoadPaint
+        {
+            Shape = PaintShape.Polyline, Type = PaintType.YellowDashed, Rgba = Yellow, Width = BikePlanner.LineWidth,
+            Dash = BikePlanner.Dash, Gap = BikePlanner.Gap, Vertices = RoadPaintGeometry.Simplify(v.ToArray()),
+        });
+    }
+
     /// <summary>A bike lane's line along a turn lane's taper: its offset follows the shift vertex by vertex.</summary>
     private static void TaperLane(RoadSegment seg, bool right, List<RoadPaint> into)
     {
@@ -343,4 +376,120 @@ public static class PaintEmitter
         float x = p[i * 3], z = p[i * 3 + 2];
         return MathF.Abs(x) < eps || MathF.Abs(z) < eps || MathF.Abs(x - TileSize) < eps || MathF.Abs(z - TileSize) < eps;
     }
+
+    // ---- lane arrows (#123, shared with #499's aisle arrows) --------------------------------
+    //
+    // These outlines were traced once, from the real SSV drawing, after two attempts from memory
+    // came out wrong (`turn-lanes`). They live here rather than in the turn-lane planner so that
+    // the car park aisles draw the same arrow rather than a second copy of it
+    // (`dead-code-and-shared-helpers`).
+    /// <summary>Length of a straight lane arrow, tail to tip.</summary>
+    public const double ArrowLength = 6.5;
+
+    /// <summary>
+    /// Lane arrows (Einspurpfeile, SSV 6.06), outlines traced from the Wikimedia Commons diagram
+    /// <c>CH-Markierung-606-Einspurpfeile.svg</c> (path data in its units, y up = the driver's left;
+    /// tail x, shaft centre y): straight, a dart head with notches where the barbs meet the shaft;
+    /// left, the shaft jogging left near its end into an open corner head pointing 45 degrees
+    /// forward-left; straight + right, the straight arrow with a short barb leaving its shaft to the
+    /// right. Right and straight + left are their mirrors. Scaled so the straight one is
+    /// <see cref="ArrowLength"/> long (the Stadt Bern Normalien's 6.50 m); the shaft comes out
+    /// 0.175 m.
+    /// </summary>
+    private static readonly (double Tail, double Centre, double[] Xy) StraightOutline = (449.281, 390.959,
+    [
+        912.961, 362.883, 1026, 380.879, 449.281, 380.879, 449.281, 401.039, 1027.44, 401.039, 912.961, 420.48,
+        912.961, 438.48, 1198.08, 391.68, 912.961, 344.16,
+    ]);
+
+    private static readonly (double Tail, double Centre, double[] Xy) LeftOutline = (449.281, 671.039,
+    [
+        1057.68, 654.48, 1110.24, 701.277, 939.602, 660.961, 449.281, 660.961, 449.281, 681.117, 927.359, 681.117,
+        1066.32, 712.078, 912.961, 712.078, 913.684, 733.684, 1210.32, 733.684, 1091.52, 619.199,
+    ]);
+
+    private static readonly (double Tail, double Centre, double[] Xy) StraightRightOutline = (443.52, 141.838,
+    [
+        907.203, 113.762, 1020.24, 131.758, 616.316, 131.758, 699.121, 65.5195, 704.879, 113.762, 740.879, 110.16,
+        731.52, 29.5195, 585.359, 47.5195, 586.801, 66.957, 668.16, 56.879, 570.961, 131.758, 443.52, 131.758,
+        443.52, 151.918, 1021.68, 151.918, 907.203, 170.641, 907.203, 189.359, 1192.32, 141.84, 907.203, 95.0391,
+    ]);
+
+    private static readonly Dictionary<PaintArrow, (Vec2[] Points, int[] Triangles)> ArrowShapes = new()
+    {
+        [PaintArrow.Straight] = Shape(StraightOutline, mirror: false),
+        [PaintArrow.Left] = Shape(LeftOutline, mirror: false),
+        [PaintArrow.Right] = Shape(LeftOutline, mirror: true),
+        [PaintArrow.Straight | PaintArrow.Right] = Shape(StraightRightOutline, mirror: false),
+        [PaintArrow.Straight | PaintArrow.Left] = Shape(StraightRightOutline, mirror: true),
+    };
+
+    /// <summary>An outline in metres, (forward, left) from the tail, and its triangles.</summary>
+    private static (Vec2[] Points, int[] Triangles) Shape((double Tail, double Centre, double[] Xy) o, bool mirror)
+    {
+        double scale = ArrowLength / (1198.08 - 449.281);
+        var pts = new Vec2[o.Xy.Length / 2];
+        for (int i = 0; i < pts.Length; i++)
+            pts[i] = new Vec2((o.Xy[i * 2] - o.Tail) * scale, (o.Xy[i * 2 + 1] - o.Centre) * scale * (mirror ? -1 : 1));
+        return (pts, Junctions.EarClip.Triangulate(pts).ToArray());
+    }
+
+    /// <summary>
+    /// A lane arrow (#123) as paint triangles, its tail at (x, z) and pointing along (fx, fz)
+    /// (tile-local, X east and Z south); shapes in <see cref="ArrowShapes"/>. Its height runs from
+    /// <paramref name="y"/> at the tail to <paramref name="tipY"/> <see cref="ArrowLength"/> ahead
+    /// (#639): one height for the whole arrow put the head of one on a climbing approach under the
+    /// road, where it vanished up close. Across the arrow the road is level.
+    /// </summary>
+    public static RoadPaint Arrow(double x, double y, double z, double fx, double fz, PaintArrow kind, double tipY)
+    {
+        double len = Math.Sqrt(fx * fx + fz * fz);
+        fx /= len; fz /= len;
+        // the driver's left, X east and Z south: forward (fx, fz) turned a quarter to the left
+        double lx = fz, lz = -fx;
+        var (pts, tris) = ArrowShapes[kind];
+        var v = new float[pts.Length * 3];
+        for (int i = 0; i < pts.Length; i++)
+        {
+            v[i * 3] = (float)(x + fx * pts[i].X + lx * pts[i].Y);
+            v[i * 3 + 1] = (float)(y + (tipY - y) * pts[i].X / ArrowLength);
+            v[i * 3 + 2] = (float)(z + fz * pts[i].X + lz * pts[i].Y);
+        }
+        return new RoadPaint
+        {
+            Shape = PaintShape.Triangles, Type = PaintType.Arrow, Variant = (byte)kind, Rgba = PaintEmitter.White,
+            Vertices = v, Indices = tris.Select(i => (ushort)i).ToArray(),
+        };
+    }
+
+    /// <summary>
+    /// The wheelchair symbol in a disabled bay (#499): a 1.2 m roundel, drawn as a filled disc with
+    /// the figure cut out of it in the bay's own direction. Triangles, like every other glyph.
+    /// </summary>
+    public static RoadPaint DisabledBay(double x, double y, double z, double headingRad, double size)
+    {
+        // a disc of 24 segments, then the figure as three bars laid over it in the bay's direction:
+        // at a car park's scale the roundel is what reads, and a traced pictogram would be invisible
+        const int segments = 24;
+        double r = size * 0.5;
+        var v = new List<float>((segments + 1) * 3);
+        var idx = new List<ushort>(segments * 3);
+        v.AddRange([(float)x, (float)y, (float)z]);
+        for (int i = 0; i <= segments; i++)
+        {
+            double a = headingRad + i * Math.Tau / segments;
+            v.AddRange([(float)(x + Math.Cos(a) * r), (float)y, (float)(z - Math.Sin(a) * r)]);
+        }
+        for (int i = 0; i < segments; i++)
+            idx.AddRange([0, (ushort)(i + 1), (ushort)(i + 2)]);
+
+        return new RoadPaint
+        {
+            Shape = PaintShape.Triangles, Type = PaintType.DisabledBay, Rgba = Blue,
+            Vertices = v.ToArray(), Indices = idx.ToArray(),
+        };
+    }
+
+    /// <summary>The blue of a Swiss parking sign and a disabled bay roundel (SNV 640 877).</summary>
+    public const uint Blue = 0x1F5FA8FF;
 }

@@ -30,6 +30,8 @@ public enum PlacedKind
     LaunchPad = 8,
     CamoNet = 9,
     HayHideout = 10,
+    /// <summary>A self-service farm stand (#494): its crates and honesty box are <c>Farming.FarmStands</c>' state. Only its owner packs it up, empty.</summary>
+    FarmStand = 11,
 }
 
 /// <summary>
@@ -100,6 +102,7 @@ public partial class PlacedObjects : Node
         [PlacedKind.LaunchPad] = Build.GadgetMeshes.Visual,
         [PlacedKind.CamoNet] = Build.GadgetMeshes.Visual,
         [PlacedKind.HayHideout] = Build.GadgetMeshes.Visual,
+        [PlacedKind.FarmStand] = Farming.FarmStandVisual.Visual,
     };
 
     /// <summary>
@@ -108,7 +111,7 @@ public partial class PlacedObjects : Node
     /// </summary>
     public static bool AnyoneMayRemove(PlacedObject o) =>
         RemovableByAnyone.Contains(o.Kind)
-        || o.Kind == PlacedKind.Campfire && !Crafting.CampfireClock.Burning(o.Payload, Net.ClockSync.ServerUnixNow);
+        || o.Kind == PlacedKind.Campfire && !Crafting.CampfireClock.Burning(o.Payload, World.WorldClock.EnvNow);
 
     /// <summary>
     /// Sets (or replaces) how a kind is drawn: the factory returns a node whose origin is the
@@ -286,6 +289,9 @@ public partial class PlacedObjects : Node
         node.Transform = o.WorldTransform(_origin);
         AddChild(node);
         _visuals[o.Id] = node;
+        // near music (#734) its meshes squash and hop on the beat; the body and its colliders stay
+        foreach (var child in node.GetChildren())
+            if (child is MeshInstance3D mesh) BeatField.Add(mesh, 0.7f, 0.15f);
     }
 
     private void Redraw()
@@ -339,7 +345,7 @@ public partial class PlacedObjects : Node
         }
 
         // a campfire is lit now, by the server's clock: what the client sent does not count
-        if ((PlacedKind)kind == PlacedKind.Campfire) payload = Crafting.CampfireClock.Lit(Net.ClockSync.ServerUnixNow);
+        if ((PlacedKind)kind == PlacedKind.Campfire) payload = Crafting.CampfireClock.Lit(World.WorldClock.EnvNow);
         var o = new PlacedObject(_nextId++, (PlacedKind)kind, owner, e, n, alt, rot.Normalized(), payload);
         Spawned(Put(o));   // offline the client plays the server's part; a dedicated server has no visual, so it is a no-op there
         Save();
@@ -379,7 +385,7 @@ public partial class PlacedObjects : Node
         string? refused = !_objects.TryGetValue(id, out var o) ? "It is not there any more."
             : !AnyoneMayRemove(o) && o.Owner != OwnerName(peer) ? "That is not yours."
             : !InReach(peer, o.E, o.N, o.Altitude) ? "Too far away."
-            : null;
+            : Farming.FarmStands.RemoveProblem(o);
         if (refused != null)
         {
             Reply(peer, req, 0, refused);

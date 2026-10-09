@@ -61,4 +61,16 @@ public interface IChunkSource
     /// region has none or was built before them. Decorators forward it.
     /// </summary>
     Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => Task.FromResult<LandingIndex?>(null);
+
+    /// <summary>
+    /// The region's airports and their stands (#422, <c>airports.json</c>); null when the region has
+    /// none. Only the deciding peer reads it (the server, or a client offline): it is not streamed.
+    /// Decorators forward it.
+    /// </summary>
+    Task<AirportIndex?> LoadAirportsAsync(CancellationToken ct = default) => Task.FromResult<AirportIndex?>(null);
+    /// The tile's farm fields (#494, <c>fields_E_N.fld</c>, <see cref="FieldFormat"/>); null when the
+    /// tile has none or the source has no field layer. Decorators forward it; a network client streams
+    /// it like the cover (<c>AssetKind.Fields</c>).
+    /// </summary>
+    Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default) => Task.FromResult<List<FieldPolygon>?>(null);
 }

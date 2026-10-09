@@ -39,7 +39,7 @@ public partial class QueryResponder : Node
     private UdpClient? _udp;
     private CancellationTokenSource? _cts;
     private byte[] _snapshot = Array.Empty<byte>();
-    private double _sinceSnapshot = 10;
+    private double _nextSnapshotAt;   // 0 = due now
     private readonly ConcurrentDictionary<IPAddress, (long Second, int Count)> _perSource = new();
     private long _globalSecond;
     private int _globalCount;
@@ -78,13 +78,13 @@ public partial class QueryResponder : Node
 
     public override void _Process(double delta)
     {
-        _sinceSnapshot += delta;
-        if (_sinceSnapshot >= 1) Refresh();
+        // wall clock: answering a LAN query is not part of the world (Core.RealClock)
+        if (Core.RealClock.Now >= _nextSnapshotAt) Refresh();
     }
 
     private void Refresh()
     {
-        _sinceSnapshot = 0;
+        _nextSnapshotAt = Core.RealClock.Now + 1;
         // a record of scalars: equal means the same JSON, so only a change is serialised (#221)
         var status = _status();
         if (status == _last) return;

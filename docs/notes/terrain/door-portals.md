@@ -171,7 +171,15 @@ changed is how you get there.
   (`--connect`), it drives the networked player. `--doorwatch[,shot.png]` on a second client
   watches the same door from 8 m: door state, portal, the other player visible through it (put
   back on its spot if traffic carries it off: doors face the road). `--doorkind Agricultural` makes
-  both use the nearest barn door instead of the nearest door.
+  both use the nearest barn door instead of the nearest door; a kind is looked for within
+  `DoorSearch.KindReach` (2.5 km: the generated works stands 1.6 km from the spawn, #666), not the 400 m of "a door in
+  reach" — a barn is rarely in the village you spawn in. Every door line carries the door's
+  `--at E,N`, so a run that failed at one is walked back into.
+  **When step 0 cannot start** (no ground under the spawn, no player from the server, never landed,
+  no door of the kind) it gives up after 25 s naming what it waited for, and a missing door prints
+  the ones that *are* drawn with the rule that ruled each out — `753 m below us`, `behind its wall`
+  — or the nearest villages when none is. Before #507 it returned silently every frame until the
+  400 s guard, which said only "timed out in step 0".
   `--film` (with a shot path) saves every frame of each walk-through. After the church, it opens
   both church doors and checks both show at once from inside, then finds two neighbours' doors
   and two facing each other across a street, when the generated village has them.

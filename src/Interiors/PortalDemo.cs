@@ -49,7 +49,7 @@ public partial class PortalDemo : Node3D
             new[] { FurnitureType.Sofa, FurnitureType.Shelf, FurnitureType.Plant, FurnitureType.Rug }),
         // B: across the street, facing A
         new("B", new Vector2(0, 12), 10, 8, BuildingKind.House, new[] { (0f, false) },
-            new[] { FurnitureType.Table, FurnitureType.Wardrobe, FurnitureType.Tv }),
+            new[] { FurnitureType.Table, FurnitureType.Wardrobe, FurnitureType.Tv, FurnitureType.Sink }),
         new("C", new Vector2(14, -12), 9, 8, BuildingKind.House, new[] { (0f, true) },
             new[] { FurnitureType.Sofa, FurnitureType.Tv, FurnitureType.Rug }),
         new("D", new Vector2(26, -12), 9, 8, BuildingKind.Apartment, new[] { (0f, true) },
@@ -128,10 +128,10 @@ public partial class PortalDemo : Node3D
                 link.Swing = 1f;
                 link.Leaf = node.Leaf(e.Door);
                 link.Shutter = node.Shutter(e.Door);
-                if (link.Leaf == null && DoorLeaf.OnFacade(layout.DressedKind()))
+                if (link.Leaf == null && DoorLeaf.OnFacade(link.Hang))
                 {
                     link.Leaf = DoorLeaf.CreateOnFacade(e.Door, link.Outside, link.OutsideWidth, link.OutsideHeight,
-                        layout.DressedKind(), interiorMaterial);
+                        link.Hang, layout.DressedKind(), interiorMaterial);
                     AddChild(link.Leaf);
                 }
                 link.SetLeaves(1f);
@@ -166,6 +166,61 @@ public partial class PortalDemo : Node3D
         _walker.Visible = false;
     }
 
+    /// <summary>
+    /// One gabled house per <see cref="BuildingKind"/>, 10 x 8 m with a door, as a tile brings it,
+    /// for the model viewer (--models): the facade each kind gets.
+    /// </summary>
+    [Showcase("Terrain", "Building")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseBuildings() =>
+        // a building under construction has no facade: it is drawn as its site (#608)
+        Enum.GetValues<BuildingKind>().Where(kind => kind != BuildingKind.UnderConstruction).Select(kind => (kind.ToString(), (Func<Node3D>)(() =>
+        {
+            var tile = new BuildingTile
+            {
+                Id = new TileId(0, 0),
+                Buildings = new List<Building>
+                {
+                    new() { Kind = kind, Floors = 2, MinY = 0, MaxY = 8.5f, Triangles = Solid(Vector2.Zero, 10f, 8f, 6.2f, 8.5f) },
+                },
+            };
+            var door = new DoorSpot(0, new Vector3(0, 0, 4.03f), new Vector3(0, 0, 1), 1.1f, 2.2f);
+            return new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, new[] { door })!, World(Styles.MaterialRole.Building)) };
+        })));
+
+    /// <summary>
+    /// A block of flats' underground garage door (#558) with each road link: the pavement with its
+    /// bollards and dropped kerb, the access road flaring into a T. A road's own surface is not
+    /// drawn here as the game draws it; a dark strip stands in for the road the link meets.
+    /// </summary>
+    [Showcase("Terrain", "Garage door")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseGarageDoors() =>
+        new[] { (LinkKind.Sidewalk, 5f), (LinkKind.Stub, 14f) }.Select(k => (k.Item1.ToString(), (Func<Node3D>)(() =>
+        {
+            var tile = new BuildingTile
+            {
+                Id = new TileId(0, 0),
+                Buildings = new List<Building>
+                {
+                    new() { Kind = BuildingKind.Apartment, Floors = 5, MinY = 0, MaxY = 15f, Triangles = Solid(Vector2.Zero, 24f, 14f, 15f, 15.5f) },
+                },
+            };
+            var door = new DoorSpot(0, new Vector3(6f, 0, 7.03f), new Vector3(0, 0, 1), GarageRule.Width, GarageRule.Height)
+            {
+                Slot = 1, Hang = DoorHang.RollUp, Vehicle = true,
+                Link = new GarageLink(k.Item1, k.Item2, 0f, new Vector2(1, 0)),
+            };
+            var node = new Node3D();
+            node.AddChild(new MeshInstance3D { Mesh = ChunkNode.ToArrayMesh(BuildingMeshBuilder.Build(tile, new[] { door })!, World(Styles.MaterialRole.Building)) });
+            // the road it meets, so the link has something to join
+            node.AddChild(new MeshInstance3D
+            {
+                Mesh = new BoxMesh { Size = new Vector3(40f, 0.02f, 5f) },
+                Position = new Vector3(6f, -0.01f, 7.03f + k.Item2 + 2.5f),
+                MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.2f, 0.2f, 0.21f) },
+            });
+            return node;
+        })));
+
     private static ShaderMaterial World(Styles.MaterialRole role)
     {
         var m = Styles.StyleKit.Material(role);
@@ -195,6 +250,7 @@ public partial class PortalDemo : Node3D
         ("garage_shut", 2.0),    // and down: the leaf over the facade's baked door, no flicker
         ("garage_inside", 2.0),  // from inside F, out through its door
         ("garage_inside_shut", 2.0), // and shut: its slats from inside, not a hole
+        ("mirror", 2.0),         // in front of B's washbasin: its wall mirror (#439)
         ("crossing", 4.0),       // the figure walks in through A's front door
     };
 
@@ -275,6 +331,10 @@ public partial class PortalDemo : Node3D
             case "barn_inside":
             case "barn_inside_shut":
                 _camera.GlobalTransform = Look(barn.Inside * new Vector3(1.2f, 1.7f, -5f), barn.Inside * new Vector3(0, 2f, 2f));
+                break;
+            case "mirror":
+                if (GetTree().GetFirstNodeInGroup(WallMirror.Group) is WallMirror m)
+                    _camera.GlobalTransform = Look(m.GlobalTransform * new Vector3(0.35f, 0.05f, 1.3f), m.GlobalPosition);
                 break;
             case "two_houses":
                 _camera.GlobalTransform = Look(new Vector3(20.5f, 1.7f, 4.5f), new Vector3(20f, 1.3f, -8f));
@@ -392,15 +452,17 @@ public partial class PortalDemo : Node3D
             var outward = new Vector3(0, 0, doorSouth ? 1 : -1);
             layout.Entrances.Add(new EntrancePlan
             {
-                Door = n++ == 0 ? layout.Key : $"0_0_{index + 10}", X = local.X, Z = front ? -hd : hd,
+                // the back door is slot 1 of the same building, as a real second door is (#498)
+                Door = new DoorKey(0, 0, index, n++).ToString(), X = local.X, Z = front ? -hd : hd,
                 InX = 0, InZ = front ? 1 : -1, Width = h.DoorWidth,
                 DoorX = world.X, DoorY = 0, DoorZ = world.Z + outward.Z * 0.03f,
-                DoorOutX = 0, DoorOutZ = outward.Z,
+                DoorOutX = 0, DoorOutZ = outward.Z, DoorWidth = h.DoorWidth, DoorHeight = h.DoorHeight,
             });
         }
         var main = layout.Entrances[0];
         layout.DoorX = main.DoorX; layout.DoorY = main.DoorY; layout.DoorZ = main.DoorZ;
-        layout.DoorOutX = main.DoorOutX; layout.DoorOutZ = main.DoorOutZ; layout.DoorWidth = h.DoorWidth;
+        layout.DoorOutX = main.DoorOutX; layout.DoorOutZ = main.DoorOutZ;
+        layout.DoorWidth = h.DoorWidth; layout.DoorHeight = h.DoorHeight;
         layout.EntryX = main.X;
 
         foreach (var side in new[] { Side.Left, Side.Right })

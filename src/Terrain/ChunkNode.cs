@@ -46,6 +46,10 @@ public partial class ChunkNode : Node3D
         if (_roadInstance != null) _roadInstance.Visible = Shows(TileLayers.Roads);
         if (_lamps != null) _lamps.Visible = Shows(TileLayers.Roads);
         if (_buildingInstance != null) _buildingInstance.Visible = Shows(TileLayers.Buildings);
+        if (_siteInstance != null) _siteInstance.Visible = Shows(TileLayers.Buildings);
+        if (_siteCranes != null) _siteCranes.Visible = Shows(TileLayers.Buildings);
+        if (_cellInstances != null)
+            foreach (var cell in _cellInstances) cell.Visible = Shows(TileLayers.Buildings);
         if (_waterInstance != null) _waterInstance.Visible = Shows(TileLayers.Water);
         ApplyTreeDensity();
     }
@@ -89,6 +93,9 @@ public partial class ChunkNode : Node3D
     /// The tile's piers (#377) as one more surface of its roads mesh, with their own (prop)
     /// material; a new mesh when the tile has no roads drawn.
     /// </summary>
+    /// <summary>Vertex-coloured triangles with the prop material: the piers' (#377) or the building sites' (#608).</summary>
+    public static ArrayMesh ToPropMesh(PierMeshBuilder.MeshData data, Material material) => WithPiers(null, data, material);
+
     public static ArrayMesh WithPiers(ArrayMesh? roads, PierMeshBuilder.MeshData data, Material material)
     {
         using var arrays = new Godot.Collections.Array();
@@ -154,6 +161,7 @@ public partial class ChunkNode : Node3D
 
     private static ArrayMesh Finish(Godot.Collections.Array arrays, Material material, Mesh.ArrayFormat flags = 0)
     {
+        Core.ShowcaseTrace.Mark();
         var mesh = new ArrayMesh();
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays, flags: flags);
         mesh.SurfaceSetMaterial(0, material);
@@ -203,12 +211,120 @@ public partial class ChunkNode : Node3D
 
     public void SetBuildings(ArrayMesh mesh)
     {
+        ClearCells();
         if (_buildingInstance == null)
         {
             _buildingInstance = new MeshInstance3D { Name = "Buildings", Visible = Shows(TileLayers.Buildings) };
             AddChild(_buildingInstance);
         }
         Swap(_buildingInstance, mesh);
+    }
+
+    private MeshInstance3D? _siteInstance;
+    private Construction.SiteCranes? _siteCranes;
+
+    /// <summary>
+    /// The tile's building sites (#608): their half-built shells, one mesh with the prop material,
+    /// drawn and dropped with the buildings. Null clears them.
+    /// </summary>
+    public void SetSites(ArrayMesh? mesh, Construction.CraneRig[]? cranes = null, Material? material = null)
+    {
+        // the cranes (#610) go with their sites: a rebuild brings its own, or none
+        _siteCranes?.QueueFree();
+        _siteCranes = null;
+        if (cranes is { Length: > 0 } && material != null)
+        {
+            _siteCranes = new Construction.SiteCranes(cranes, material) { Visible = Shows(TileLayers.Buildings) };
+            AddChild(_siteCranes);
+        }
+        else if (cranes != null)
+            foreach (var crane in cranes) crane.Dispose();
+        if (mesh == null)
+        {
+            if (_siteInstance?.Mesh is { } old)
+            {
+                _siteInstance.Mesh = null;
+                old.Dispose();
+            }
+            return;
+        }
+        if (_siteInstance == null)
+        {
+            _siteInstance = new MeshInstance3D { Name = "Sites", Visible = Shows(TileLayers.Buildings) };
+            AddChild(_siteInstance);
+        }
+        Swap(_siteInstance, mesh);
+    }
+
+    /// <summary>
+    /// The tile has left the building ring (#553): its building mesh goes. The trees and the water,
+    /// committed with the buildings, stay: they are drawn far past it.
+    /// </summary>
+    public void ClearBuildings()
+    {
+        ClearCells();
+        SetSites(null);
+        if (_buildingInstance?.Mesh is not { } mesh) return;
+        _buildingInstance.Mesh = null;
+        mesh.Dispose();
+    }
+
+    private MeshInstance3D[]? _cellInstances;
+    private OccluderInstance3D? _occluder;
+
+    /// <summary>
+    /// The buildings cut into cells, with the tile's occluders (#553, <see cref="BuildingOcclusion"/>):
+    /// what a tile round the camera draws, so a block hidden behind a row of houses is culled.
+    /// Replaces the one-mesh buildings; <see cref="SetBuildings"/> replaces these.
+    /// </summary>
+    public void SetBuildingCells(ArrayMesh?[] cells, Vector3[]? occluderVertices, int[]? occluderIndices)
+    {
+        ClearCells();
+        if (_buildingInstance?.Mesh is { } whole)
+        {
+            _buildingInstance.Mesh = null;
+            whole.Dispose();
+        }
+        var list = new List<MeshInstance3D>();
+        for (int c = 0; c < cells.Length; c++)
+        {
+            if (cells[c] is not { } mesh) continue;
+            var instance = new MeshInstance3D { Name = $"Buildings{c}", Mesh = mesh, Visible = Shows(TileLayers.Buildings) };
+            AddChild(instance);
+            list.Add(instance);
+        }
+        _cellInstances = list.ToArray();
+        if (occluderVertices != null && occluderIndices != null)
+        {
+            var occluder = new ArrayOccluder3D();
+            occluder.SetArrays(occluderVertices, occluderIndices);
+            _occluder = new OccluderInstance3D { Name = "Occluder", Occluder = occluder };
+            AddChild(_occluder);
+        }
+    }
+
+    private void ClearCells()
+    {
+        if (_cellInstances != null)
+            foreach (var cell in _cellInstances)
+            {
+                var mesh = cell.Mesh;
+                cell.Mesh = null;
+                mesh?.Dispose();
+                cell.QueueFree();
+            }
+        _cellInstances = null;
+        _occluder?.QueueFree();
+        _occluder = null;
+    }
+
+    /// <summary>The tile has left the road ring (#553): its road mesh (piers, signs and paint with it) and its signal lenses go.</summary>
+    public void ClearRoads()
+    {
+        SetSignalLamps(null);
+        if (_roadInstance?.Mesh is not { } mesh) return;
+        _roadInstance.Mesh = null;
+        mesh.Dispose();
     }
 
     /// <summary>The tile's building collision, once built: a player in an open doorway is let through it.</summary>
@@ -741,8 +857,9 @@ public partial class ChunkNode : Node3D
     /// </summary>
     public void ReleaseResources()
     {
+        ClearCells();
         NearTrees.Unregister(this);
-        foreach (var instance in new[] { _meshInstance, _roadInstance, _buildingInstance, _waterInstance })
+        foreach (var instance in new[] { _meshInstance, _roadInstance, _buildingInstance, _siteInstance, _waterInstance })
         {
             var mesh = instance?.Mesh;
             if (mesh == null) continue;

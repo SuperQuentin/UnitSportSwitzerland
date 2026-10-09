@@ -60,6 +60,15 @@ public static class VehicleReach
             && At(player, aimed, hit["position"].AsVector3()) is { } pointed)
             return pointed;
 
+        // a car park's dormant car (#499): aiming at one wakes it, and it is a real vehicle a frame
+        // or two later, which the next call finds the ordinary way. Only on the aim ray, never on
+        // mere proximity: walking past a full lot must not promote eighty cars.
+        if (hit.Count > 0 && DormantBodyOf(hit["collider"].AsGodotObject() as Node) is { } dormant)
+        {
+            DormantVehicles.Instance?.Wake(dormant.Slot);
+            return null;
+        }
+
         // else whatever the player stands at, the nearest first
         VehicleAim? best = null;
         float bestD = float.MaxValue;
@@ -73,6 +82,14 @@ public static class VehicleReach
         return best;
     }
 
+    /// <summary>The dormant car a collider belongs to, or null (#499).</summary>
+    private static DormantBody? DormantBodyOf(Node? node)
+    {
+        for (var n = node; n != null; n = n.GetParent())
+            if (n is DormantBody body) return body;
+        return null;
+    }
+
     /// <summary>
     /// Whether E from outside may take this vehicle (#384): always, but a walkable one (a bus, the
     /// steamer) only with <see cref="Core.GameSettings.BoardWalkableFromOutside"/> on; off, it is
@@ -84,7 +101,7 @@ public static class VehicleReach
     private static VehicleAim? At(FootPlayer player, VehicleBody v, Vector3 point)
     {
         var feet = player.GlobalPosition;
-        if (v.Rig is { DoorCount: > 0 } rig)
+        if (v.Doors is { } rig)
         {
             var (bit, _) = rig.NearestDoor(point);
             if (bit != 0 && Reaches(feet, rig.DoorCentre(bit))) return new VehicleAim(v, bit);
@@ -125,7 +142,7 @@ public static class VehicleReach
     {
         Current = aim;
         Node3D? target = aim is { } a && GodotObject.IsInstanceValid(a.Vehicle)
-            ? (a.HasDoor ? a.Vehicle.Rig?.DoorPivot(a.Door) : null) ?? a.Vehicle.Visual
+            ? (a.HasDoor ? a.Vehicle.Doors?.DoorPivot(a.Door) : null) ?? a.Vehicle.Visual
             : null;
         if (target == _outlined && (target == null || GodotObject.IsInstanceValid(target))) return;
         if (_outlined != null && GodotObject.IsInstanceValid(_outlined)) Items.Highlight.Set(_outlined, false);

@@ -245,6 +245,55 @@ public partial class ChatManager : Node
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     private void ClearInventory(string by) => LineReceived?.Invoke(Clear(by.Length == 0 ? null : by), ChatKind.Admin);
 
+    /// <summary>
+    /// Client: <c>/transfer</c> (#649) gives this inventory to <paramref name="to"/>: everything
+    /// <c>/clear</c> empties plus the pocket's cash goes to the server, and leaves here.
+    /// </summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void HandOver(string by, string to)
+    {
+        var ids = new List<int>();
+        var counts = new List<int>();
+        var data = new List<string>();
+        int cash = 0;
+        if (Inventory is { InMatch: false } inv)
+        {
+            var (slots, carried) = inv.Snapshot();
+            foreach (var st in slots.Take(Items.Inventory.FirstWearSlot).Append(carried))
+            {
+                if (st.IsEmpty) continue;
+                ids.Add((int)st.Id);
+                counts.Add(st.Count);
+                data.Add(st.Data ?? "");
+            }
+            cash = inv.Cash;
+            inv.Clear();
+            inv.TakeCash(cash);
+        }
+        RpcId(1, MethodName.HandedOver, ids.ToArray(), counts.ToArray(), data.ToArray(), cash);
+        LineReceived?.Invoke(by.Length == 0 ? $"You gave your inventory to {to}." : $"{by} gave your inventory to {to}.", ChatKind.Admin);
+    }
+
+    /// <summary>Client: another player's inventory arrives (#649); what does not fit drops at our feet.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void ReceiveInventory(int[] ids, int[] counts, string[] data, int cash, string from)
+    {
+        if (Inventory is null) return;
+        int stacks = 0;
+        for (int i = 0; i < ids.Length && i < counts.Length && i < data.Length; i++)
+        {
+            if (!Enum.IsDefined((Items.ItemId)ids[i]) || counts[i] <= 0) continue;
+            var st = new Items.ItemStack((Items.ItemId)ids[i], counts[i], data[i].Length == 0 ? null : data[i]);
+            if (GiveOrDrop is { } give) give(st);
+            else Inventory.Add(st);
+            stacks++;
+        }
+        if (cash > 0) Inventory.Add(Items.ItemId.Francs, cash);
+        LineReceived?.Invoke($"{from}'s inventory is now yours: {stacks} stack(s), {cash} CHF.", ChatKind.Admin);
+    }
+
     /// <summary>Client: an admin put cash in this pocket, or took it (<c>/money</c>).</summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -307,7 +356,7 @@ public partial class ChatManager : Node
         {
             case "help":
                 Show("/help  /who  /me <action>  /city <town>  /spawn <item> [count]  /catalogue  /clear  /money <amount>  "
-                    + "/bank [set|add|take <amount>]  /occasion  /time  /seastate  /style  /debug  — Tab completes.", ChatKind.Private);
+                    + "/bank [set|add|take <amount>]  /occasion  /time  /speed  /seastate  /style  /debug  — Tab completes.", ChatKind.Private);
                 Show("Offline: the server commands (/race, /tp, /kick ...) need a multiplayer game.", ChatKind.Private);
                 return;
 
@@ -339,6 +388,18 @@ public partial class ChatManager : Node
                 Show(LocalTime(parts[1..], out bool failed), failed ? ChatKind.Error : ChatKind.Admin);
                 return;
 
+            case "speed":
+                if (parts.Length == 1) Show($"The simulation runs at {Core.SimClock.Describe(Core.SimClock.Scale)}.", ChatKind.Private);
+                else if (Core.SimClock.TryParse(rest, out double simScale, out string speedError))
+                {
+                    // offline there is no RPC to wait for, but it goes through the same scheduled
+                    // path so there is one way a speed change ever takes effect (ClockSync.Tick)
+                    Core.SimClock.Schedule(simScale, ClockSync.ServerNow);
+                    Show($"The simulation runs at {Core.SimClock.Describe(simScale)}.", ChatKind.Admin);
+                }
+                else Show(speedError, ChatKind.Error);
+                return;
+
             case "water":
                 Show(World.WaterField.Command(rest, GetViewport().GetCamera3D()?.GlobalPosition), ChatKind.Private);
                 return;
@@ -361,6 +422,10 @@ public partial class ChatManager : Node
                 Show(Clear(null), ChatKind.Admin);
                 return;
 
+            case "transfer":
+                Show("Offline you are the only player: nobody to transfer to.", ChatKind.Error);
+                return;
+
             case "money":
                 if (parts.Length == 2 && AdminArgs.TryAmount(parts[1], out long cash))
                     Show(Cash((int)Math.Clamp(cash, -MaxCashGrant, MaxCashGrant)), ChatKind.Admin);
@@ -380,7 +445,7 @@ public partial class ChatManager : Node
                         Show(line, ChatKind.Private);
                 return;
 
-            case "name" or "login" or "stream" or "race" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick" or "pvp" or "br":
+            case "name" or "login" or "stream" or "race" or "fight" or "say" or "admin" or "tp" or "bring" or "tpall" or "kick" or "pvp" or "br" or "update":
                 Show($"'/{verb}' needs a multiplayer game.", ChatKind.Error);
                 return;
 
@@ -506,6 +571,7 @@ public partial class ChatManager : Node
     /// <summary>Called by <see cref="ServerWorld"/> when a peer drops.</summary>
     public void ReportDisconnect(long peerId)
     {
+        _transfers.Remove(peerId);
         if (_registry?.Find(peerId) is not { } player) return;
         _registry.Remove(peerId);
         Broadcast($"{player.Name} left", ChatKind.System);
@@ -518,6 +584,9 @@ public partial class ChatManager : Node
 
     /// <summary>Races (<c>/race</c>), wired by ServerWorld.</summary>
     public World.RaceManager? Race { get; set; }
+
+    /// <summary>Fist fights (<c>/fight</c>, #495), wired by ServerWorld.</summary>
+    public Combat.FightManager? Fight { get; set; }
 
     /// <summary>Server: the Battle Royale mode, for /br (#177).</summary>
     public BattleRoyale.BrManager? BattleRoyale { get; set; }
@@ -597,6 +666,7 @@ public partial class ChatManager : Node
                 return;
             // anyone may ask; set/add/speed are checked inside, against the same IsAdmin
             case "time": CommandTime(sender, parts[1..]); return;
+            case "speed": CommandSpeed(sender, rest); return;
             // anyone may ask; setting it is an admin's (checked inside)
             case "seastate": CommandSeaState(sender, rest); return;
             // the water at a point as the server sees it (#299): a debug line, two peers compare it
@@ -618,6 +688,8 @@ public partial class ChatManager : Node
                 return;
             // your own inventory is yours to empty; someone else's is an admin's (checked inside)
             case "clear": CommandClear(sender, rest); return;
+            // your own inventory is yours to give; moving someone else's is an admin's (checked inside)
+            case "transfer": CommandTransfer(sender, parts); return;
             case "br":
                 if (BattleRoyale == null) ReplyTo(sender, "Battle Royale is not available on this server.", ChatKind.Error);
                 else ReplyTo(sender, BattleRoyale.Command(sender, rest, IsAdmin(sender)), ChatKind.Private);
@@ -626,6 +698,11 @@ public partial class ChatManager : Node
                 if (Race == null) ReplyTo(sender, "Races are not available on this server.", ChatKind.Error);
                 else if (sender == ConsolePeerId && !rest.StartsWith("cancel") && !rest.StartsWith("list")) ReplyTo(sender, "'/race' needs a player.", ChatKind.Error);
                 else ReplyTo(sender, Race.Command(sender, rest), ChatKind.Private);
+                return;
+            case "fight":
+                if (Fight == null) ReplyTo(sender, "Fights are not available on this server.", ChatKind.Error);
+                else if (sender == ConsolePeerId) ReplyTo(sender, "'/fight' needs a player.", ChatKind.Error);
+                else ReplyTo(sender, Fight.Command(sender, rest), ChatKind.Private);
                 return;
         }
 
@@ -657,6 +734,7 @@ public partial class ChatManager : Node
             case "bring": if (RequiresAvatar(sender, verb)) CommandBring(sender, rest); return;
             case "tpall": CommandTeleportEveryone(sender, rest); return;
             case "kick": CommandKick(sender, parts); return;
+            case "update": CommandUpdate(sender); return;
             case "spawn": if (RequiresAvatar(sender, verb)) CommandSpawn(sender, rest); return;
             case "pvp": CommandPvp(sender, rest); return;
             case "give": CommandGive(sender, parts); return;
@@ -691,7 +769,7 @@ public partial class ChatManager : Node
 
     private void SendHelp(long sender)
     {
-        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /br join|leave|status  /occasion  /time  /seastate  /clear", ChatKind.Private);
+        ReplyTo(sender, "/help  /who  /name <name>  /city <town>  /me <action>  /stream  /race start|duel|join|leave|list|npc  /fight <player>|accept|decline|leave  /br join|leave|status  /occasion  /time  /speed  /seastate  /clear  /transfer me <player>", ChatKind.Private);
 
         if (_registry?.LoginEnabled == true && !IsAdmin(sender))
             ReplyTo(sender, "/login <password>  — become an operator", ChatKind.Private);
@@ -699,11 +777,12 @@ public partial class ChatManager : Node
         if (IsAdmin(sender))
             ReplyTo(sender,
                 "admin: /say <text>  /tp <player>  /bring <player>  /tpall <town>  "
-                + "/kick <player> [reason]  /admin list|add <name>|remove <name>  "
+                + "/kick <player> [reason]  /update  /admin list|add <name>|remove <name>  "
                 + "/occasion start|stop <id>|auto  /spawn <item> [count]  /catalogue  /debug  "
-                + "/give <player> <item> [count]  /clear [player]  /money <amount> [player]  "
+                + "/give <player> <item> [count]  /clear [player]  /transfer <from> <to>  /money <amount> [player]  "
                 + "/bank <player> [set|add|take <amount>]  "
-                + "/time set <hh:mm|noon|night...>|add <h>|speed <min>  /seastate <0..1|calm|chop|storm|gamey>  — Tab completes",
+                + "/time set <hh:mm|noon|night...>|add <h>|speed <min>  /speed <0.05..8|normal>  "
+                + "/seastate <0..1|calm|chop|storm|gamey>  — Tab completes",
                 ChatKind.Private);
     }
 
@@ -1010,17 +1089,19 @@ public partial class ChatManager : Node
             return;
         }
 
-        double hour = World.WorldClock.Hour;
-        float speed = World.WorldClock.MinutesPerDay;
+        // set/add turn the sky by moving HourShift; speed rebases the monotonic counter. Neither
+        // ever winds WorldClock.EnvNow back, so nothing growing in environment time goes backwards.
         switch (op)
         {
-            case World.TimeOp.Set: hour = value; break;
-            case World.TimeOp.Add: hour = World.TimeCommand.Wrap(hour + value); break;
-            case World.TimeOp.Speed: speed = (float)value; break;
+            case World.TimeOp.Set: World.WorldClock.SetHour(value); break;
+            case World.TimeOp.Add: World.WorldClock.AddHours(value); break;
+            case World.TimeOp.Speed: World.WorldClock.Rebase((float)value); break;
         }
-        World.WorldClock.Rebase(hour, speed);
+        double hour = World.WorldClock.Hour;
+        float speed = World.WorldClock.MinutesPerDay;
         World.WorldClock.Save();
-        Rpc(MethodName.WorldTime, World.WorldClock.Hour0, World.WorldClock.Epoch, World.WorldClock.MinutesPerDay);
+        Rpc(MethodName.WorldTime, World.WorldClock.Env0, World.WorldClock.EnvEpoch,
+            World.WorldClock.HourShift, World.WorldClock.MinutesPerDay);
         GD.Print($"[admin] {NameOf(sender)} set the clock to {World.TimeCommand.Format(hour)}, {World.TimeCommand.DescribeSpeed(speed)}");
 
         string who = NameOf(sender);
@@ -1070,25 +1151,87 @@ public partial class ChatManager : Node
         GD.Print($"[water] the server's sea state: {World.SeaStateCommand.Describe(World.WaterField.SeaState)}");
     }
 
+    /// <summary>
+    /// Server <c>/speed</c>: the simulation's pace, which carries environment time with it (#579).
+    /// Scheduled a moment ahead so every peer flips at the same instant on the server's clock
+    /// rather than whenever its RPC happened to land.
+    /// </summary>
+    private void CommandSpeed(long sender, string arg)
+    {
+        if (arg.Length == 0)
+        {
+            ReplyTo(sender, $"The simulation runs at {Core.SimClock.Describe(Core.SimClock.Scale)}.", ChatKind.Private);
+            return;
+        }
+        if (!Core.SimClock.TryParse(arg, out double scale, out string error))
+        {
+            ReplyTo(sender, error, ChatKind.Error);
+            return;
+        }
+        if (!IsAdmin(sender))
+        {
+            ReplyTo(sender, "Changing the simulation speed is an admin command.", ChatKind.Error);
+            return;
+        }
+
+        double applyAt = ClockSync.ServerNow + SpeedApplyDelay;
+        Core.SimClock.Schedule(scale, applyAt);
+        Rpc(MethodName.WorldSpeed, Core.SimClock.Sim0, Core.SimClock.Epoch, Core.SimClock.Scale, scale, applyAt);
+        GD.Print($"[admin] {NameOf(sender)} set the simulation to {Core.SimClock.Describe(scale)}");
+        Broadcast($"{NameOf(sender)} set the simulation to {Core.SimClock.Describe(scale)}", ChatKind.Admin);
+    }
+
+    /// <summary>
+    /// Long enough for the change to reach every peer before it takes effect, short enough that an
+    /// admin does not notice the wait. A peer whose RPC arrives after the instant still lands on the
+    /// same numbers; it just applies them a frame late (<c>Core.SimClock.Tick</c>).
+    /// </summary>
+    private const double SpeedApplyDelay = 0.3;
+
+    /// <summary>Server: tells a newly connected peer the simulation's pace, and any change already scheduled.</summary>
+    public void SendWorldSpeedTo(long peerId) =>
+        RpcId(peerId, MethodName.WorldSpeed, Core.SimClock.Sim0, Core.SimClock.Epoch, Core.SimClock.Scale,
+            Core.SimClock.HasPending ? Core.SimClock.PendingScale : Core.SimClock.Scale,
+            Core.SimClock.HasPending ? Core.SimClock.PendingAt : 0.0);
+
+    /// <summary>
+    /// Client: the simulation's pace (#579). The three numbers in force now, plus a change waiting
+    /// for the server's clock to reach <paramref name="pendingAt"/> (0 = none). Environment time is
+    /// derived from this, so this one message also moves the sun and the traffic lights.
+    /// </summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void WorldSpeed(double sim0, double epoch, double scale, double pendingScale, double pendingAt)
+    {
+        Core.SimClock.Set(sim0, epoch, scale);
+        Engine.TimeScale = Core.SimClock.Scale;
+        if (pendingAt > 0) Core.SimClock.Schedule(pendingScale, pendingAt);
+        GD.Print($"[speed] the server's simulation: {Core.SimClock.Describe(Core.SimClock.Scale)}"
+            + (pendingAt > 0 ? $", going to {Core.SimClock.Describe(pendingScale)}" : ""));
+    }
+
     /// <summary>Server: tells a newly connected peer the world's time.</summary>
     public void SendWorldTimeTo(long peerId)
     {
         if (World.WorldClock.Active)
-            RpcId(peerId, MethodName.WorldTime, World.WorldClock.Hour0, World.WorldClock.Epoch, World.WorldClock.MinutesPerDay);
+            RpcId(peerId, MethodName.WorldTime, World.WorldClock.Env0, World.WorldClock.EnvEpoch,
+                World.WorldClock.HourShift, World.WorldClock.MinutesPerDay);
     }
 
     /// <summary>
-    /// Client: the world's clock (#452): the hour at a moment of the server's clock, and its speed.
-    /// <see cref="World.DayNight"/> reads the hour from <see cref="ClockSync.ServerNow"/> from then on,
-    /// so every screen shows the same sky and nothing drifts. Kept even without a sky
-    /// (<c>--systems</c>): the birds and the dawn chorus read it too.
+    /// Client: the world's environment clock (#452, keyed onto the simulation clock in #579): the
+    /// environment seconds at a moment of the *simulation* clock, what <c>/time set</c> has turned
+    /// the sky by, and the day length. <see cref="World.DayNight"/> reads the hour from it from then
+    /// on, so every screen shows the same sky and nothing drifts, and because it is keyed to
+    /// simulated time the sun follows a <c>/speed</c> with no message of its own. Kept even without
+    /// a sky (<c>--systems</c>): the birds and the dawn chorus read it too.
     /// </summary>
     [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
         TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    private void WorldTime(double hour0, double epoch, float minutesPerDay)
+    private void WorldTime(double env0, double envEpoch, double hourShift, float minutesPerDay)
     {
-        World.WorldClock.Set(hour0, epoch, minutesPerDay);
-        GD.Print($"[time] the server's clock: {World.TimeCommand.Format(hour0)} at {epoch.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)} s, {World.TimeCommand.DescribeSpeed(World.WorldClock.MinutesPerDay)}");
+        World.WorldClock.Set(env0, envEpoch, hourShift, minutesPerDay);
+        GD.Print($"[time] the server's clock: {World.TimeCommand.Format(World.WorldClock.Hour)} at sim {envEpoch.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)} s, {World.TimeCommand.DescribeSpeed(World.WorldClock.MinutesPerDay)}");
     }
 
     /// <summary>
@@ -1140,6 +1283,73 @@ public partial class ChatManager : Node
             ReplyTo(sender, $"Gave {target.Name} {count} x {def.Name}.", ChatKind.Admin);
         }
         GD.Print($"[admin] {NameOf(sender)} gave {target.Name} {count} x {def.Name}");
+    }
+
+    /// <summary>Server: the <c>/transfer</c>s waiting for the giver's inventory, by the giver's peer id (#649).</summary>
+    private readonly Dictionary<long, (long To, string ToName, long By)> _transfers = new();
+
+    /// <summary>The most stacks one hand-over may carry: more than any inventory holds.</summary>
+    private const int MaxTransferStacks = 128;
+
+    /// <summary>
+    /// <c>/transfer &lt;from&gt; &lt;to&gt;</c> (#649): every item and the pocket's cash of one player go to
+    /// another. Anyone may give their own; someone else's is an admin's. Inventories live on the
+    /// clients, so the giver's hands it over (<see cref="HandOver"/>) and the server passes it on.
+    /// </summary>
+    private void CommandTransfer(long sender, string[] parts)
+    {
+        if (parts.Length != 3)
+        {
+            ReplyTo(sender, "Usage: /transfer <from> <to>  (me for yourself)", ChatKind.Error);
+            return;
+        }
+        if (Target(sender, parts[1]) is not { } from || Target(sender, parts[2]) is not { } to) return;
+        if (from.PeerId == to.PeerId)
+        {
+            ReplyTo(sender, "That is the same player.", ChatKind.Error);
+            return;
+        }
+        if (from.PeerId != sender && !IsAdmin(sender))
+        {
+            ReplyTo(sender, "Moving someone else's inventory is an admin command.", ChatKind.Error);
+            return;
+        }
+        if (RefusedInMatch(sender, from.PeerId) || RefusedInMatch(sender, to.PeerId)) return;
+        if (_transfers.ContainsKey(from.PeerId))
+        {
+            ReplyTo(sender, $"{from.Name}'s inventory is already on its way.", ChatKind.Error);
+            return;
+        }
+
+        _transfers[from.PeerId] = (to.PeerId, to.Name, sender);
+        RpcId(from.PeerId, MethodName.HandOver, from.PeerId == sender ? "" : NameOf(sender), to.Name);
+        GD.Print($"[transfer] {NameOf(sender)} moves {from.Name}'s inventory to {to.Name}");
+    }
+
+    /// <summary>Server: the giver's inventory, for the <c>/transfer</c> it was asked for; on to the receiver.</summary>
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
+        TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void HandedOver(int[] ids, int[] counts, string[] data, int cash)
+    {
+        long from = Multiplayer.GetRemoteSenderId();
+        // only an answer to a transfer the server asked for
+        if (!_transfers.Remove(from, out var t)) return;
+        int n = Math.Min(Math.Min(ids.Length, counts.Length), Math.Min(data.Length, MaxTransferStacks));
+        ids = ids[..n];
+        counts = counts[..n].Select(c => Math.Clamp(c, 0, Items.ItemLookup.MaxSpawnFrancs)).ToArray();
+        data = data[..n].Select(d => d.Length > 256 ? "" : d).ToArray();
+        cash = Math.Clamp(cash, 0, MaxCashGrant);
+        string fromName = NameOf(from);
+
+        // the receiver left meanwhile: it all goes back
+        bool there = _registry?.Find(t.To) != null;
+        long dest = there ? t.To : from;
+        RpcId(dest, MethodName.ReceiveInventory, ids, counts, data, cash, there ? fromName : t.ToName + " left, so your own");
+        string what = $"{n} stack(s) and {cash} CHF";
+        if (t.By != from && t.By != dest)
+            ReplyTo(t.By, there ? $"Moved {fromName}'s inventory to {t.ToName}: {what}." : $"{t.ToName} left; {fromName} got the inventory back.",
+                there ? ChatKind.Admin : ChatKind.Error);
+        GD.Print($"[transfer] {fromName} -> {(there ? t.ToName : fromName + " (back)")}: {what}");
     }
 
     /// <summary><c>/clear [player]</c>: empties an inventory, cash aside. Anyone may clear their own.</summary>
@@ -1261,6 +1471,46 @@ public partial class ChatManager : Node
 
         KickPeer(target.PeerId, reason);
         Broadcast($"{target.Name} was kicked by {NameOf(sender)} ({reason})", ChatKind.Admin);
+    }
+
+    private readonly ServerUpdater _updater = new();
+
+    /// <summary>
+    /// /update (#730): installs the newest GitHub release on a server started by <c>start-server.sh</c>.
+    /// The download runs while everyone plays; once it is unpacked, <see cref="RestartForUpdate"/>.
+    /// </summary>
+    private void CommandUpdate(long sender)
+    {
+        if (ServerUpdater.Script is not { } script)
+        {
+            ReplyTo(sender, "This server cannot update itself: only one started by tools/deploy-linux.sh can.", ChatKind.Error);
+            return;
+        }
+        if (_updater.Busy)
+        {
+            ReplyTo(sender, "An update is already under way.", ChatKind.Error);
+            return;
+        }
+
+        string current = (string)ProjectSettings.GetSetting("application/config/version", "");
+        ReplyTo(sender, "Looking for a newer release...", ChatKind.Private);
+        _updater.Start(script, current, CmdArgs.Value("--updatefeed", notFlag: true) ?? UpdateInfo.ReleasesUrl,
+            (line, everyone) =>
+            {
+                if (everyone) Broadcast(line, ChatKind.Admin);
+                else if (sender == ConsolePeerId || _registry?.Find(sender) != null) ReplyTo(sender, line, ChatKind.Private);
+            },
+            tag => { if (tag != null) RestartForUpdate(tag); });
+    }
+
+    /// <summary>The new release is unpacked: everyone out, then quit; <c>start-server.sh</c> starts it.</summary>
+    private void RestartForUpdate(string tag)
+    {
+        GD.Print($"[update] {tag} ready: kicking everyone and quitting");
+        foreach (var player in _registry?.Players.ToList() ?? new())
+            KickPeer(player.PeerId, $"The server is updating to {tag}. Update your game, then reconnect in a minute.");
+        // the kicks need their 0.2 s to land; the disconnects then save every sleeper
+        GetTree().CreateTimer(2).Timeout += () => GetTree().Quit(0);
     }
 
     /// <summary>

@@ -51,6 +51,23 @@ public static class XrSession
     public static float WheelAngle { get; internal set; } = float.NaN;
 
     /// <summary>
+    /// The right hand as a stick (#437), x right, y down like a stick's: how far it moved, across
+    /// the view, since <see cref="ZeroHandAim"/>, 0.15 m being full. For radial menus aimed by hand.
+    /// </summary>
+    public static Vector2 HandAim { get; internal set; }
+
+    internal static bool HandAimZeroAsked;
+
+    /// <summary>
+    /// The hand that holds the item, in the world: the right controller's aim pose, -Z along the
+    /// pointer. Null outside VR and when that hand is not tracked. A gun points and fires along it.
+    /// </summary>
+    public static Transform3D? ItemHand => Active ? Rig?.AimHand : null;
+
+    /// <summary>Makes where the right hand is now the centre of <see cref="HandAim"/>.</summary>
+    public static void ZeroHandAim() => HandAimZeroAsked = true;
+
+    /// <summary>
     /// Makes this client a VR client if OpenXR came up. Returns false (and changes nothing) when
     /// it did not; prints how to start it when <c>--vr</c> asked for it.
     /// </summary>

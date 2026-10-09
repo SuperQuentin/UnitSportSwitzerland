@@ -1,4 +1,5 @@
 using Godot;
+using UnitSport.Core;
 using UnitSport.Items;
 using UnitSport.Player;
 
@@ -84,7 +85,7 @@ public partial class CampfireProbe : Node
         await Seconds(0.3);
         var node = fire == null ? null : placed.GetNodeOrNull<Node3D>($"P{fire.Id}");
         Expect(node?.FindChild(StationVisuals.LightName, true, false) is OmniLight3D, "it burns: its light is there");
-        Expect(fire != null && CampfireClock.SecondsLeft(fire.Payload, Net.ClockSync.ServerUnixNow) > CampfireClock.BurnSeconds - 30,
+        Expect(fire != null && CampfireClock.SecondsLeft(fire.Payload, World.WorldClock.EnvNow) > CampfireClock.BurnEnvSeconds - 1800,
             $"lit just now, by the server's clock ({fire?.Payload})");
 
         // 3. a fire station: cook
@@ -158,12 +159,20 @@ public partial class CampfireProbe : Node
         if (fire != null)
         {
             inv.Select(EmptyHotbarSlot());   // the bench came back into the empty hand
-            var at = fire.WorldTransform(placed.Origin).Origin;
-            var to = at - me.GlobalPosition;
-            me.LookYaw = Mathf.Atan2(-to.X, -to.Z);
-            me.LookPitch = -Mathf.Atan2(me.Camera.GlobalPosition.Y - at.Y - 0.1f, new Vector2(to.X, to.Z).Length());
-            await Seconds(0.8);   // and the bench's stroke is over
-            aim = FlagGhost.Aim(me, null);
+            var at = fire.WorldTransform(placed.Origin).Origin + Vector3.Up * 0.1f;
+            // from the camera, as the aim ray goes: the third-person camera (the default) swings round
+            // behind the shoulder as the view turns, so aim again from where it went until the ray
+            // finds the fire (#738)
+            await Seconds(0.5);   // the bench's stroke is over
+            for (int pass = 0; pass < 12; pass++)
+            {
+                var to = at - me.Camera.GlobalPosition;
+                me.LookYaw = Mathf.Atan2(-to.X, -to.Z);
+                me.LookPitch = Mathf.Atan2(to.Y, new Vector2(to.X, to.Z).Length());
+                await Seconds(0.2);
+                aim = FlagGhost.Aim(me, null);
+                if (aim.Kind == FlagAimKind.PickUp) break;
+            }
             Expect(aim is { Kind: FlagAimKind.PickUp, Target: PlacedKind.Campfire }, $"an empty hand points at the fire ({aim.Kind}, {aim.Target})");
             if (aim.Kind != FlagAimKind.PickUp) placed.RequestRemove(fire.Id);   // still clean up
             else _items.UseHeld(me);
@@ -205,10 +214,10 @@ public partial class CampfireProbe : Node
 
     private async Task<bool> Until(Func<bool> condition, double seconds)
     {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
+        double end = GameClock.Now + seconds;
         while (!condition())
         {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
+            if (GameClock.Now > end) return false;
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }
         return true;

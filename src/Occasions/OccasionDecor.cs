@@ -73,6 +73,7 @@ public partial class OccasionDecor : Node
 
         _chunks.TileFurnished += OnFurnished;
         _chunks.TileUnloaded += OnUnloaded;
+        _chunks.TileUnfurnished += OnUnfurnished;
         _chunks.TerrainReplaced += OnReplaced;
         OccasionManager.Changed += RedecorateAll;
         OccasionTowns.Changed += RedecorateAll;
@@ -88,12 +89,31 @@ public partial class OccasionDecor : Node
         {
             _chunks.TileFurnished -= OnFurnished;
             _chunks.TileUnloaded -= OnUnloaded;
+            _chunks.TileUnfurnished -= OnUnfurnished;
             _chunks.TerrainReplaced -= OnReplaced;
         }
         if (Instance == this) Instance = null;
     }
 
     public override void _Process(double delta) => OccasionTowns.Poll();
+
+    /// <summary>
+    /// Every <see cref="PropKind"/> declared anywhere (a field or an array of them), under its own material, in the model
+    /// viewer (--models): a new occasion's props show by themselves.
+    /// </summary>
+    [Showcase("Occasions", "Prop")]
+    private static IEnumerable<(string, Func<Node3D>)> ShowcaseProps() =>
+        typeof(PropKind).Assembly.GetTypes()
+            .SelectMany(t => t.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
+                                         | System.Reflection.BindingFlags.Static))
+            .SelectMany(f => f.GetValue(null) switch
+            {
+                PropKind one => new[] { one },
+                IEnumerable<PropKind> many => many,
+                _ => Enumerable.Empty<PropKind>(),
+            })
+            .Select(kind => (kind.Name, (Func<Node3D>)(() =>
+                new MeshInstance3D { Mesh = kind.Mesh, MaterialOverride = MakeMaterial(kind.Candle) })));
 
     private static ShaderMaterial MakeMaterial(bool candle)
     {
@@ -139,6 +159,13 @@ public partial class OccasionDecor : Node
     }
 
     private void OnUnloaded(TileId id) => _tiles.Remove(id);   // the props went with the tile's node
+
+    /// <summary>The tile shed its buildings (#553): the decorations at their doors go, back with the next furnishing.</summary>
+    private void OnUnfurnished(TileId id, ChunkNode node)
+    {
+        if (!_tiles.Remove(id, out var tile)) return;
+        if (tile.Decor != null && IsInstanceValid(tile.Decor)) tile.Decor.QueueFree();
+    }
 
     private void OnReplaced(Func<TileId, bool>? affected)
     {

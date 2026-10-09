@@ -227,7 +227,13 @@ public class TerrainFormatTests
         Assert.Equal(CoverClass.Open, CoverFormat.Parse(null));
         Assert.Equal(CoverClass.Vineyard, CoverFormat.ParseLandUse("Reben"));
         Assert.Equal(CoverClass.PavedArea, CoverFormat.ParseTrafficArea("Gleisareal"));
-        Assert.Equal(SurfacePattern.ParkingBays, CoverFormat.PatternFor(CoverFormat.ParseTrafficArea("Rastplatzareal")));
+        // no car park paints a bay grid any more: #499 lays real bays out as geometry, and a
+        // world-aligned painted set on top of them read as a second lot at a different angle
+        Assert.Equal(SurfacePattern.None, CoverFormat.PatternFor(CoverFormat.ParseTrafficArea("Rastplatzareal")));
+        Assert.Equal(SurfacePattern.None, CoverFormat.PatternFor(CoverClass.ParkingPublic));
+        Assert.Equal(SurfacePattern.None, CoverFormat.PatternFor(CoverClass.ParkingPrivate));
+        // the patterns that are still drawn
+        Assert.Equal(SurfacePattern.VineRows, CoverFormat.PatternFor(CoverClass.Vineyard));
         Assert.True(CoverFormat.IsWooded(CoverClass.Shrub));
         Assert.Equal(0f, CoverFormat.TreeDensity(CoverClass.Open));
     }

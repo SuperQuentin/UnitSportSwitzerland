@@ -43,7 +43,7 @@ public static class CraftStations
 
         if (PlacedObjects.Instance is { } placed)
         {
-            double now = Net.ClockSync.ServerUnixNow;
+            double now = World.WorldClock.EnvNow;   // the campfire below burns in environment time (#579)
             var at = p.GlobalPosition;
             foreach (var o in placed.All.Values)
             {

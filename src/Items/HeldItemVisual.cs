@@ -219,7 +219,7 @@ void fragment() {{
             ViewPose.Eye when use == ItemUse.Optic => (new Vector3(0f, -0.03f, -0.20f), Vector3.Zero),
             ViewPose.Eye => (new Vector3(0f, -0.12f, -0.38f), Vector3.Zero),
             // a bottle is upright in the hand: tipped ~70 degrees so its neck comes to the mouth; food jabs up and in
-            ViewPose.Mouth when _shown == ItemId.WaterBottle => (new Vector3(0.06f, -0.17f, -0.30f), new Vector3(1.25f, 0, -0.25f)),
+            ViewPose.Mouth when _shown is ItemId.WaterBottle or ItemId.BeerBottle => (new Vector3(0.06f, -0.17f, -0.30f), new Vector3(1.25f, 0, -0.25f)),
             ViewPose.Mouth => (new Vector3(0.0f, -0.10f, -0.26f), new Vector3(0.45f, 0, 0)),
             // GPS held up: low centre, top tipped away so the screen faces the eye
             ViewPose.Read => (new Vector3(0.0f, -0.16f, -0.30f), new Vector3(-0.65f, 0, 0)),
@@ -364,12 +364,16 @@ void fragment() {{
         }
 
         // --- on the figure ---
+        // a VR player's own gun is the one in the hand, pointing where the controller points (#460):
+        // there is no viewmodel to aim down, and a second gun stuck before the eyes was
+        bool vrGun = XR.XrSession.Active && Weapons.Get(id) != null && _player.IsMultiplayerAuthority();
         if (_player.HandLocal is { } hand && any)
         {
             _inHand.Visible = true;
             // the wrist is the end of the arm, so the grip sits a hand's length past it
             _inHand.Scale = Vector3.One * ItemScale;
-            _inHand.Transform = new Transform3D(hand.Basis, hand.Origin + hand.Basis * new Vector3(0, -0.05f, -0.03f))
+            var basis = vrGun && XR.XrSession.ItemHand is { } aim ? GlobalBasis.Inverse() * aim.Basis.Orthonormalized() : hand.Basis;
+            _inHand.Transform = new Transform3D(basis, hand.Origin + basis * new Vector3(0, -0.05f, -0.03f))
                 * RadioBounce(0.7f);
         }
         else _inHand.Visible = false;
@@ -378,7 +382,7 @@ void fragment() {{
 
         // --- in front of the local camera ---
         if (!_player.IsMultiplayerAuthority()) return;
-        bool firstPerson = _player.IsFirstPerson || _player.ScopeView;
+        bool firstPerson = (_player.IsFirstPerson || _player.ScopeView) && !vrGun;
         StepShot(dt);
         EnsureViewmodel();
         if (_viewmodel == null) return;
@@ -480,21 +484,20 @@ void fragment() {{
     /// <summary>A playing radio in the figure's hand sparkles (#387); anything else in the hand, at once nothing.</summary>
     private void StepSparkles(bool shown, float dt)
     {
-        if (!shown || _shown != ItemId.Radio || RadioPlay.Decode(_player.HeldRadio) is not { } play)
+        if (!shown || _shown != ItemId.Radio || RadioPlay.Decode(_player.HeldRadio) is not { } play || !play.Sounding(Net.ClockSync.ServerNow))
         {
             _sparkles?.Off();
             return;
         }
         if (_sparkles == null) _inHand.AddChild(_sparkles = new RadioSparkles());
-        bool beating = RadioBody.BeatOf(play.CdId, play.StartedAt, Net.ClockSync.ServerNow, out float phase, out int beat, out _, out _);
-        _sparkles.Step(true, beating, phase, beat, dt);
+        _sparkles.Step(true, RadioGroove.Of(play.CdId, play.StartedAt, Net.ClockSync.ServerNow), dt);
     }
 
     /// <summary>A playing radio in the hand bounces to its beat (#261), a little less than on the ground; identity otherwise.</summary>
     private Transform3D RadioBounce(float amount) =>
         _shown == ItemId.Radio && _player != null && RadioPlay.Decode(_player.HeldRadio) is { } play
-        && RadioBody.BeatOf(play.CdId, play.StartedAt, Net.ClockSync.ServerNow, out float phase, out int beat, out _, out _)
-            ? RadioBody.Bounce(phase, beat, 0.11f, amount)
+        && RadioGroove.Of(play.CdId, play.StartedAt, Net.ClockSync.ServerNow) is { Beating: true } g
+            ? RadioBody.Bounce(g.Phase, g.Beat, 0.11f, amount * g.BounceScale)
             : Transform3D.Identity;
 
     /// <summary>
@@ -542,6 +545,19 @@ void fragment() {{
         _screenVp.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
         _screenQuad!.Visible = _viewmodel!.Visible;
         if (_screenLabel != null && _screenLabel.Text != (ScreenText ?? "")) _screenLabel.Text = ScreenText ?? "";
+    }
+
+    /// <summary>
+    /// Where a point of the held item's mesh (authored space, facing +Z, <c>MeshScratch</c>) is in the
+    /// world: on the viewmodel in first person, else in the figure's hand; null when neither is drawn.
+    /// The fishing line starts at the rod's tip (#493).
+    /// </summary>
+    public Vector3? ItemPoint(Vector3 authored)
+    {
+        var local = new Vector3(-authored.X, authored.Y, -authored.Z);
+        if (_viewmodel != null && IsInstanceValid(_viewmodel) && _viewmodel.Visible) return _viewmodel.GlobalTransform * local;
+        if (_inHand.Visible) return _inHand.GlobalTransform * local;
+        return null;
     }
 
     private void EnsureViewmodel()

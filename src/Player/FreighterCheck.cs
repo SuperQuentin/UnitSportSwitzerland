@@ -31,7 +31,7 @@ public partial class FreighterCheck : Node
     private static bool CarMode => CmdArgs.Value("--freightercheck") is "car" or "carshots";
 
     private readonly System.Func<FootPlayer?> _player;
-    private int _failures, _shot;
+    private int _failures, _shot, _impacts;
 
     public FreighterCheck(System.Func<FootPlayer?> player) => _player = player;
 
@@ -45,10 +45,10 @@ public partial class FreighterCheck : Node
 
     private async Task<bool> Until(System.Func<bool> condition, double seconds)
     {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
+        double end = GameClock.Now + seconds;
         while (!condition())
         {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
+            if (GameClock.Now > end) return false;
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
         }
         return true;
@@ -63,6 +63,21 @@ public partial class FreighterCheck : Node
         string path = System.IO.Path.Combine(dir, $"{++_shot:00}-{name}.png");
         GetViewport().GetTexture().GetImage().SavePng(path);
         GD.Print($"[freightercheck] wrote {path}");
+    }
+
+    /// <summary>A picture from a camera of its own, at an authored eye looking at an authored point of the aircraft.</summary>
+    private async Task ShotAt(string name, Vector3 eye, Vector3 at)
+    {
+        if (!Shots || !Drawn || Frame() is not { } frame) return;
+        var was = GetViewport().GetCamera3D();
+        var cam = new Camera3D { Fov = 60f, Far = 4000f };
+        AddChild(cam);
+        cam.GlobalPosition = frame.GlobalTransform * AircraftMeshBuilder.Flip(eye);
+        cam.LookAt(frame.GlobalTransform * AircraftMeshBuilder.Flip(at), Vector3.Up);
+        cam.MakeCurrent();
+        await Shot(name);
+        cam.QueueFree();
+        was?.MakeCurrent();
     }
 
     private static bool Drawn => DisplayServer.GetName() != "headless";
@@ -82,13 +97,27 @@ public partial class FreighterCheck : Node
     /// <summary>The doors as the walk sees them: the player's own aircraft, or the parked one.</summary>
     private byte Doors(FootPlayer me) => me.Vehicle is Airliner own ? own.DoorsOpen : Parked()?.BusDoors ?? 0;
 
-    /// <summary>An authored point at height <paramref name="y"/> (+Z forward, +X left) in the world, as the aircraft is drawn now.</summary>
-    private Vector3 Spot(float x, float y, float z) => Frame()!.GlobalTransform * AircraftMeshBuilder.Flip(new Vector3(x, y, z));
+    /// <summary>
+    /// The aircraft's frame as the walker knows it: aboard, the deck's frame it is carried in (#542);
+    /// the aircraft as drawn now leads it by its motion since the last frame, 1.1 m a physics step
+    /// at 68 m/s and several in a long frame, and the walk aimed that far ahead of the spot.
+    /// </summary>
+    private Transform3D Pose() => _player()?.DeckFrame ?? Frame()!.GlobalTransform;
+
+    /// <summary>An authored point at height <paramref name="y"/> (+Z forward, +X left) in the world, as the walker's deck stands now.</summary>
+    private Vector3 Spot(float x, float y, float z) => Pose() * AircraftMeshBuilder.Flip(new Vector3(x, y, z));
 
     /// <summary>The player's spot, authored (x, height, z).</summary>
-    private Vector3 Local(FootPlayer me) => AircraftMeshBuilder.Flip(Frame()!.GlobalTransform.AffineInverse() * me.GlobalPosition);
+    private Vector3 Local(FootPlayer me) => AircraftMeshBuilder.Flip(Pose().AffineInverse() * me.GlobalPosition);
 
     private string Where(FootPlayer me) { var l = Local(me); return $"({l.X:F2}, {l.Y:F2}, {l.Z:F2})"; }
+
+    /// <summary>Turns the view to an authored spot of the aircraft (the shots: forward, aft at the ramp).</summary>
+    private void Face(FootPlayer me, float x, float z)
+    {
+        var d = Spot(x, FloorY, z) - me.GlobalPosition;
+        me.LookYaw = Mathf.Atan2(-d.X, -d.Z);
+    }
 
     private async Task<bool> WalkTo(FootPlayer me, float x, float z, double seconds)
     {
@@ -118,7 +147,9 @@ public partial class FreighterCheck : Node
     {
         await Seconds(2);
         // offline the world starts on the free camera: the player comes with the mode key
-        for (int i = 0; i < 1800 && (_player() is null || !_player()!.IsOnFloor()); i++)
+        // the world loads on threads: a wall-clock bound, as the runner's --fixed-fps outruns them
+        ulong deadline = Time.GetTicksMsec() + 30_000;
+        for (int i = 0; Time.GetTicksMsec() < deadline && (_player() is null || !_player()!.IsOnFloor()); i++)
         {
             if (_player() == null && i % 50 == 25) Key(PlayerInput.ToggleMode);
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
@@ -126,7 +157,7 @@ public partial class FreighterCheck : Node
         if (_player() is not { } me || !me.IsOnFloor()) { Finish("no player"); return; }
         if (CarMode) { await CarStage(me); Finish(null); return; }
         me.Announced += (text, good) => GD.Print($"[freightercheck] announce: {text}");
-        me.Impacted += lost => GD.Print($"[freightercheck] impact: lost {lost:F1} m/s, ride {me.Ride}");
+        me.Impacted += lost => { _impacts++; GD.Print($"[freightercheck] impact: lost {lost:F1} m/s, ride {me.Ride}"); };
         Expect(me.SetRide(RideKind.Freighter), "at the controls of the military freighter");
         await Seconds(2);
         if (me.Vehicle is not Airliner jet) { Finish("not an airliner"); return; }
@@ -144,6 +175,9 @@ public partial class FreighterCheck : Node
         Expect(jet.DoorsOpen == (1 << RampDoor | 1 << CrewDoor) && (!Drawn || Rig()?.DoorOpen(RampDoor) >= 1f && Rig()?.DoorOpen(CrewDoor) >= 1f),
             $"G lowered the ramp and opened the crew door (doors {jet.DoorsOpen})");
         await Shot("ramp_open");
+        // from low behind and beside: the sides stop at the skin, only the ramp reaches the ground (#545)
+        await ShotAt("ramp_open_rear_quarter", new Vector3(-9f, 2f, -21f), new Vector3(0, 1.6f, -8f));
+        await ShotAt("ramp_open_side", new Vector3(-13f, 1.4f, -8.5f), new Vector3(0, 1.6f, -8.5f));
 
         // up from the captain's seat onto the flight deck, then down the stairs into the hold
         Expect(me.TryInteract() && await Until(() => me.Aboard && me.Ride == RideKind.OnFoot, 5),
@@ -210,40 +244,101 @@ public partial class FreighterCheck : Node
             flying = again;
         }
 
-        // in flight below the drop speed: the ramp opens, stand up, walk aft into the hold, carried along
-        float y0Launch = me.GlobalPosition.Y;
+        // in flight below the drop speed: the ramp opens, stand up, walk aft into the hold, carried along.
+        // Past the settling after taking the controls, as windowed (the ramp's animation takes that long):
+        // headless the launch came inside it and never saw the stale floor contact that wrecked it (#456).
+        await Until(() => flying.State.Settle <= 0f, 5);
+        float y0Launch = me.GlobalPosition.Y, health0 = me.VehicleHealth;
+        int impacts0 = _impacts;
         me.DebugLaunch(me.GlobalPosition + Vector3.Up * 600f, -me.GlobalTransform.Basis.Z * 65f);
         await Seconds(3);
         GD.Print($"[freightercheck] launched: ride {me.Ride}, same aircraft {me.Vehicle == flying}, on the ground {flying.State.OnGround}, {flying.State.Ias / 0.5144f:0} kt, {me.GlobalPosition.Y - y0Launch:F0} m up");
+        Expect(me.Vehicle == flying && !flying.State.OnGround && me.VehicleHealth >= health0,
+            $"launched at 600 m: flying on, unhurt (ride {me.Ride}, health {me.VehicleHealth:F0} of {health0:F0})");
+        if (me.Vehicle != flying) { Finish("the aircraft was lost at the launch"); return; }
         flying.ToggleDoor(RampDoor);
         Expect((flying.DoorsOpen & 1 << RampDoor) != 0, $"the ramp opens in flight at {flying.State.Ias / 0.5144f:0} kt (a drop)");
         float y0 = me.GlobalPosition.Y;
         bool up = me.TryInteract();
         Expect(up && await Until(() => me.Aboard && me.Ride == RideKind.OnFoot, 5), $"E stood up in flight (aboard {me.Aboard}, ride {me.Ride})");
+        // on the flight deck of the aircraft as it flies on, pitched as it was: not left level, the pilot on its roof (#456)
+        await Seconds(1);
+        l = Local(me);
+        Expect(me.Aboard && Mathf.Abs(l.Y - FlightDeckY) < 0.3f, $"stood up in flight onto the flight deck {Where(me)}, pitch {Mathf.RadToDeg(Frame()!.GlobalRotation.X):F1}°");
         bool walked = await WalkTo(me, 0f, HoldFrontZ + 0.6f, 15) && await WalkTo(me, 0f, 0f, 25);
         l = Local(me);
         float speed = me.Vehicle?.Kind == RideKind.Freighter ? 0f : (Parked()?.Velocity.Length() ?? 0f);
         Expect(walked && me.Aboard && Mathf.Abs(l.Y - FloorY) < 0.35f, $"walked into the hold in flight, on the floor {Where(me)}");
         Expect(me.GlobalPosition.Y > y0 - 200f, $"it flew on by itself ({me.GlobalPosition.Y - y0:+0;-0} m, {speed:F0} m/s)");
+        await LongFrames(me);
         await Until(() => !Drawn || Rig()?.DoorOpen(RampDoor) >= 1f, 10);
+        Face(me, 0f, HoldFrontZ);
+        await Seconds(0.5);
         await Shot("hold_in_flight_looking_forward");
         // aft, down the hold to the open ramp and the sky behind
-        me.TurnView(Mathf.Pi);
+        Face(me, 0f, RampToeZ);
         await Seconds(0.5);
         await Shot("hold_in_flight_ramp_open_looking_aft");
-        me.TurnView(Mathf.Pi);
         // out onto the open ramp: level with the floor in the air (#420), walked on, not a slope down
         bool onRamp = await WalkTo(me, 0f, RampHingeZ - 1.4f, 20);
         l = Local(me);
         Expect(onRamp && me.Aboard && Mathf.Abs(l.Y - FloorY) < 0.15f, $"on the ramp in flight, level with the floor {Where(me)}");
-        me.TurnView(Mathf.Pi);
+        Face(me, 0f, RampToeZ - 20f);
         await Seconds(0.5);
         await Shot("on_the_level_ramp_in_flight");
-        me.TurnView(Mathf.Pi);
         await WalkTo(me, 0f, 0f, 20);
         Expect(await ToCockpit(me) && me.TryInteract() && await Until(() => me.Vehicle is Airliner && me.SeatIndex == 0, 6), $"back at the controls in flight ({me.Ride})");
+        await Seconds(1);
+        Expect(_impacts == impacts0 && me.VehicleHealth >= health0,
+            $"the controls taken back in flight without a knock ({_impacts - impacts0} impacts, health {me.VehicleHealth:F0}, pitch {Mathf.RadToDeg(AirlinerFlight.PitchOf((me.Vehicle as Airliner)?.State.Attitude ?? Basis.Identity)):F1}°)");
         await Shot("controls_in_flight");
+        // at the end: a parked one stood up from flies on only over the fixture's ground (a frozen
+        // body past its edge), so the walk comes first
+        if (Shots)
+        {
+            // from outside, the chase camera: the ramp level with the hold's floor in the air (#456)
+            await Until(() => Rig()?.DoorOpen(RampDoor) >= 1f, 10);
+            await Shot("outside_in_flight_ramp_level");
+            me.OrbitView(2.4f);
+            await Seconds(0.8);
+            await Shot("outside_in_flight_ramp_level_quarter");
+            me.OrbitView(-2.4f);
+        }
         Finish(null);
+    }
+
+    /// <summary>
+    /// Standing at the aft end of the level ramp in flight through long frames (a tile's build, an
+    /// origin shift): several physics steps each, in which the aircraft moves on while its deck is put
+    /// where it is drawn only once a frame. Read from where the aircraft was drawn, the walker stood
+    /// past the deck's end, stepped off it and fell out (#542). The physics at 16 times its rate (16
+    /// steps a frame under the quick tier's <c>--fixed-fps</c>, fewer at a window's frame rate), the
+    /// aircraft pushed 1.1 m a step, 68 m/s in real steps: a frame of 70 ms or more each, flown whether
+    /// or not the fixture's ground still lies under it (past it a parked aircraft holds still).
+    /// </summary>
+    private async Task LongFrames(FootPlayer me)
+    {
+        bool atEnd = await WalkTo(me, 0f, RampHingeZ - RampLength + 0.15f, 15);
+        if (Parked() is not { } jet) { Expect(false, "no parked aircraft to stand in"); return; }
+        var forward = (Spot(0f, 0f, 1f) - Spot(0f, 0f, 0f)).Normalized();
+        var from = jet.GlobalPosition;
+        int steps = 0;
+        void Push() { jet.GlobalPosition += forward * (68f / 60f); steps++; }
+        int ticks = Engine.PhysicsTicksPerSecond, most = Engine.MaxPhysicsStepsPerFrame;
+        Engine.MaxPhysicsStepsPerFrame = 16;
+        Engine.PhysicsTicksPerSecond = ticks * 16;
+        ulong frame0 = Engine.GetProcessFrames();
+        GetTree().PhysicsFrame += Push;
+        while (steps < 160) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GetTree().PhysicsFrame -= Push;
+        float perFrame = steps / (float)System.Math.Max(1UL, Engine.GetProcessFrames() - frame0);
+        Engine.PhysicsTicksPerSecond = ticks;
+        Engine.MaxPhysicsStepsPerFrame = most;
+        await Seconds(0.3);
+        float moved = jet.GlobalPosition.DistanceTo(from);
+        var l = Local(me);
+        Expect(atEnd && perFrame >= 4f && me.Aboard && Mathf.Abs(l.Y - FloorY) < 0.15f,
+            $"stood at the ramp's aft end through long frames, still aboard {Where(me)}, {perFrame:F1} steps a frame, the aircraft {moved:F0} m on");
     }
 
     /// <summary>

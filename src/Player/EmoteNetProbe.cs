@@ -80,11 +80,23 @@ public partial class EmoteNetProbe : ChatProbe
             }, 6);
             Expect(ok, $"A's copy dances {name} at full weight, on this peer's beat (off by {lag:F3} bar)");
             await Seconds(0.8);
+            // and its face (#657): the emote's expression, from the replicated DanceId alone
+            if (Copy() is { } seen)
+            {
+                var mood = Avatar.Face.FaceExpressions.ForEmote(emote);
+                Expect(seen.FaceMood == mood, $"A's copy's face shows {mood} for {name} (shows {seen.FaceMood})");
+                var want = Avatar.Face.FaceExpressions.Of(mood);
+                var drawn = seen.DrawnFace;
+                if (GetViewport().GetCamera3D() is not { } cam || cam.GlobalPosition.DistanceTo(seen.GlobalPosition) < FootPlayer.FaceDrawDistance)
+                    Expect(drawn.Special == want.Special && Mathf.Abs(drawn.Smile - want.Smile) < 0.1f && Mathf.Abs(drawn.Jaw - want.Jaw) < 0.1f,
+                        $"A's copy's face drawn as {mood} (smile {drawn.Smile:F2}, jaw {drawn.Jaw:F2}, eyes {drawn.Special})");
+            }
             ShotOfA($"B_{name.ToLowerInvariant()}");
             Say($"seen {emote}");
         }
         if (!await Heard("A", "stopped", 20)) { Fail("A never stopped"); return; }
         Expect(await Until(() => Copy() is { DanceId: 0, DrawnDance: null }, 3), "A's copy eases back to rest");
+        Expect(Copy() is { FaceMood: Avatar.Face.FaceExpression.Neutral }, "A's copy's face back to neutral");
         Say("seen stopped");
     }
 

@@ -13,6 +13,8 @@ using static System.Console;
 //   dotnet run --project tools/BlendCheck -c Release
 
 if (args.Contains("--roads")) return RoadBlendCheck.Run(args);
+if (args.Contains("--generated-water")) return GeneratedWaterCheck.Run(args);
+if (args.Contains("--generated-roads")) return await GeneratedRoadsCheck.Run(args);
 
 const double AnchorE = 2583250, AnchorN = 1113250;   // SpawnPoint.DefaultLv95E/N
 var world = new ProceduralWorld(AnchorE, AnchorN);
@@ -284,7 +286,7 @@ Parallel.ForEach(gen.Where(t => MakeBlend(t, 1) != null), new ParallelOptions { 
     double te = 0, re = 0;
     foreach (var x in tr) te = Math.Max(te, Math.Abs(x.Y - full[t].SampleMeshHeight(t.MinE + x.X, t.MaxN - x.Z)));
     if (world.BuildRoads(t, fb) is { } roads)
-        foreach (var s in roads.Segments)
+        foreach (var s in roads.Segments.Where(s => (s.Flags & RoadFlags.Bridge) == 0))   // a deck stands over the ground by design (#559)
             for (int i = 0; i < s.Points.Length; i += 3)
                 re = Math.Max(re, Math.Abs(s.Points[i + 1] - full[t].SampleMeshHeight(t.MinE + s.Points[i], t.MaxN - s.Points[i + 2])));
     int b = world.BuildBuildings(t, fb)?.Buildings.Count ?? 0;
@@ -530,7 +532,7 @@ WriteLine("water:");
                 // (the cover's 10 m fields put the water's edge up to ~15 m into the shelf)
                 bool shore = (c > 0 && float.IsNaN(w.Level[r * n + c - 1])) || (c < n - 1 && float.IsNaN(w.Level[r * n + c + 1]))
                     || (r > 0 && float.IsNaN(w.Level[(r - 1) * n + c])) || (r < n - 1 && float.IsNaN(w.Level[(r + 1) * n + c]));
-                if (shore && lakeTiles.Contains(t)) { shoreSamples++; if (depth > 1.5) notFlush++; }
+                if (shore && lakeTiles.Contains(t)) { shoreSamples++; if (depth > 1.5 && notFlush++ < 5) WriteLine($"    deep shore: {t} ({c},{r}) at {t.MinE + c * WaterTile.Stride},{t.MaxN - r * WaterTile.Stride} depth {depth:F2}"); }
             }
     }
     foreach (var (t, w) in tiles)

@@ -9,22 +9,28 @@ on foot, mounted, driving or flying, over ENet multiplayer.
 Knowledge lives in ~180 micro notes, `docs/notes/<area>/<name>.md`, one topic each. Each code
 directory's `CLAUDE.md` (auto-loaded when you touch files there) is only an **index**: one line per
 note. Read a note only when the task needs it; find one with `grep -ril <word> docs/notes`.
-Areas: tools, terrain, net, player, vehicles, avatar, audio, gpx, world, combat, br, birds, items, crafting, build, loot,
-occasions, core, ui, xr, styles, general. New knowledge goes in a new or existing note plus one index line — never in this file.
+Areas: tools, terrain, net, player, vehicles, avatar, audio, gpx, world, combat, br, birds, items, crafting, build, loot, trailer,
+occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new or existing note plus one index line — never in this file.
 
 `docs/notes/general/`: `subagents` (model choice, fan-out limits), `never-lookat-data-driven`,
 `invariant-culture-floats` (French locale), `gdignore-data-dirs`, `godot-ai-mcp-tips`,
 `headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
 `worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand),
+`release-on-merge` (a merged PR releases on GitHub Actions; bursts coalesce into one release, at most one an hour),
 `feature-clips` (`/clip`, `tools/record-clip.sh`: GIFs of a feature, shown in the next release),
 `linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
 `twoclient-checks` (server + two-client `tools/*check.sh` go through `tools/lib/twoclient.sh`),
 `testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard),
+`fast-checks` (the quick tier runs `--fixed-fps 60`: time waits with `GameClock.Now`, wait for threads on the wall clock),
 `dead-code-and-shared-helpers` (use `Terrain.Format.SwissProjection`, `TileId.ReadList`; prove a member unused before deleting it),
 `test-systems-optin` (every probe declares `--world flat|fixture` / `--systems`, the lightest that works; driving checks run on fixture courses),
 `perf-no-per-frame-allocations` (static `StringName`, no LINQ/strings/lists per frame, UI text and shader params only on change),
 `perf-221-migration` (**read before merging main into a branch started before Oct 2026**: every #221 rule note and the rebase order),
-`new-action-three-devices` (every new key or interaction: keyboard, gamepad and VR decided together).
+`new-action-three-devices` (every new key or interaction: keyboard, gamepad and VR decided together),
+`plans-on-main` (up-front plans commit on `main`; their status updates ride the feature branch),
+`uid-files` (commit a script's `.uid` with it; never `git add -A` after an import),
+`dotnet-sdk-pin` (`global.json` pins SDK 9: C# 14 binds `array.Reverse()` to the void Span overload),
+`playtest` (`tools/playtest.sh`: scenarios a person judges in one game, Claude live through the in-game MCP server, committed ledger in `tests/playtests/`).
 
 ## Rules
 
@@ -36,19 +42,32 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
   3. Branch from up-to-date `main` as `feat/<issue#>-name`, in a **worktree**
      (`../UnitSportSwitzerland-<issue#>`): the main checkout stays on `main`
      (`docs/notes/general/worktrees.md`). Never commit features on `main`; `Closes #N` in the PR.
-     **Push local commits on feature branches whenever possible**, so others can build on them
+     **Always push a commit as soon as you make it, on every branch**, so others can build on it
      and a local crash loses nothing.
-- **Every new action or interaction is designed for keyboard, gamepad and VR together**: before
-  coding a new key, decide its pad button and its VR way (grip the thing, or the pad through
-  `XrPad`), show it with `InputHints`, and add its row to `xr/vr-action-map`
-  (`docs/notes/general/new-action-three-devices.md`).
-- **Simple tasks** (docs/notes tweaks, one-line fixes) skip the workflow: commit straight on `main`
-  in the main checkout and push. No issue, branch, worktree or PR.
+     **Open the PR as a draft together with the branch** (`gh pr create --draft`), as soon as the
+     first commit is pushed: an open draft is how parallel workers see the feature exists in
+     step 1. It stays a draft for the whole of the work; mark it ready (`gh pr ready <N>`) only
+     once the feature is complete and the tier of step 4 has been run and recorded in it.
+     **Flipping it ready is the worker's own call, never the reviewer's**: the bar above is
+     objective, so whoever finishes the work runs `gh pr ready <N>` themselves rather than asking
+     anyone. Merging it is the reviewer's.
   4. **Test the cheapest tier that can catch the bug** (`docs/notes/general/testing.md`):
      `tools/test.sh quick` on every change; **tier 2 (`tools/test.sh net`) when the change touches
      network/authority/replicated state**, checking the feature on the **remote** peer (replication,
      authority, animation, damage). The PR says what was and was not verified. Network model:
      `src/Net/CLAUDE.md`.
+- **Every new action or interaction is designed for keyboard, gamepad and VR together**: before
+  coding a new key, decide its pad button and its VR way (grip the thing, or the pad through
+  `XrPad`), show it with `InputHints`, and add its row to `xr/vr-action-map`
+  (`docs/notes/general/new-action-three-devices.md`).
+- **Every new procedural model is in the model viewer**: tag its builder `[Showcase("Category")]`,
+  or extend the set that already covers it (a new enum value or catalog row usually shows by
+  itself), and check it with `--models,test_output/models` (`docs/notes/avatar/model-viewer.md`).
+- **Every new synthesised sound is in the sound player**: a static `SfxBank`/`AudioStreamWav` shows by itself;
+  a sound built per call (surface, species, voice) gets a `[SoundShowcase]` set; check with
+  `--sounds,check` (`docs/notes/audio/sound-player.md`).
+- **Simple tasks** (docs/notes tweaks, one-line fixes) skip the workflow: commit straight on `main`
+  in the main checkout and push. No issue, branch, worktree or PR.
 - Check and probe output goes in `test_output/` (gitignored), never the repo root.
 - **In conversation, issues and PRs are always links**, e.g.
   [#346](https://github.com/SuperQuentin/UnitSportSwitzerland/issues/346), never a bare `#346`

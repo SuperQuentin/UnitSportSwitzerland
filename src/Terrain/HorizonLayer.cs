@@ -23,7 +23,8 @@ public partial class HorizonLayer : Node3D, IOriginContainer, IOriginShiftAware
     private const int BlockTiles = TerrainMeshBuilder.HorizonBlockTiles;
     private const double BlockM = BlockTiles * ChunkFormat.TileSizeM;
     private const double UnloadSlackM = 10_000;
-    private static readonly int MaxBuildsInFlight = Math.Clamp(System.Environment.ProcessorCount / 2, 2, 8);
+    private static readonly int MaxBuildsInFlight = Core.Platform.IsMobile ? 2   // a phone's cores are the tiles' (#63)
+        : Math.Clamp(System.Environment.ProcessorCount / 2, 2, 8);
 
     /// <summary>Main-thread time a frame may spend committing blocks; one always goes through.</summary>
     private const double CommitBudgetMs = 3;

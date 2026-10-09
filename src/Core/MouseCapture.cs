@@ -13,6 +13,9 @@ public static class MouseCapture
 
     public static void Capture()
     {
-        if (!Disabled) Input.MouseMode = Input.MouseModeEnum.Captured;
+        if (Disabled) return;
+        // a desktop --mobile run keeps the pointer, which plays the finger (TouchControls, #63);
+        // confined still says "in game", as captured does
+        Input.MouseMode = Platform.IsMobile && !OS.HasFeature("mobile") ? Input.MouseModeEnum.Confined : Input.MouseModeEnum.Captured;
     }
 }

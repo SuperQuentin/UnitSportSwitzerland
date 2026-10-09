@@ -149,7 +149,7 @@ public partial class PlaybackCamera : Camera3D, Core.IOriginShiftAware
     public override void _UnhandledInput(InputEvent @event)
     {
         if (Mode != CameraMode.Free) return;
-        if (@event is InputEventMouseMotion m && Input.MouseMode == Input.MouseModeEnum.Captured)
+        if (@event is InputEventMouseMotion m && Core.PlayerInput.IsLookMotion(m))
         {
             _yaw -= m.Relative.X * 0.0022f;
             _pitch = Mathf.Clamp(_pitch - m.Relative.Y * 0.0022f, -1.55f, 1.55f);
@@ -265,7 +265,7 @@ public partial class PlaybackCamera : Camera3D, Core.IOriginShiftAware
                 bool typing = Core.UiFocus.TextEntryActive;
                 float up = typing ? 0f
                     : (Input.IsPhysicalKeyPressed(Key.E) ? 1f : 0f) - (Input.IsPhysicalKeyPressed(Key.Q) ? 1f : 0f)
-                      + Input.GetJoyAxis(0, JoyAxis.TriggerRight) - Input.GetJoyAxis(0, JoyAxis.TriggerLeft);
+                      + Core.PlayerInput.Strength(Core.PlayerInput.TriggerRight) - Core.PlayerInput.Strength(Core.PlayerInput.TriggerLeft);
                 var move = basis * new Vector3(stick.X, 0, stick.Y) + Vector3.Up * up;
                 if (move.LengthSquared() > 1e-6f)
                 {

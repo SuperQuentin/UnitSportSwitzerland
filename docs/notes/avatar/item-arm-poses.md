@@ -6,7 +6,12 @@
   the pose's and re-solves the elbows with `Limb.Solve`. Legs and gait are untouched. The item hand is
   the rig's -X wrist (the figure's right once the mesh faces -Z); pass `arm` + `armBlend` to
   `BuildStride` / `MountsFor` / `BuildPosed` / `MountsForPose`.
-- Nothing arm-related is sent. Every peer derives the pose from `HeldItemId` (kind via `ItemDefs`) plus
+- **VR hands (#439)** override every arm pose on foot while striding (not dancing): the figure's
+  wrists go to `FootPlayer.VrHands` (each hand from the eyes, body frame, replicated in `NetPose`),
+  measured from `HeadBase + (0, 0.1, 0.08)` and pulled back to arm's reach; elbows re-solved with
+  `Limb.Solve`; the item hand is the right hand. Keyed to 2 cm in `FootPoseKey`. `--xrsim --xrhands`
+  poses them (right hand raised ahead) for a screenshot with `--vrmonitor third`.
+- Nothing else arm-related is sent. Every peer derives the pose from `HeldItemId` (kind via `ItemDefs`) plus
   ONE replicated int, `FootPlayer.ItemAction` (0 idle, 1 aim, 2 use, 3 throw wind-up, 4 throw release: `throw-drop`), which the owner's
   `ItemController` writes (today: aim = 1). Idle held item = `Hold`; aim: `Shoot` -> `ShoulderAim`,
   `Optic`/`Photo` -> `TwoHandEye`; use: `Consume` -> `Mouth`, `Place` -> `Plant`.
@@ -19,7 +24,8 @@
   to tilt them.
 - `GaitMounts.HandBasis` / `FootPlayer.HandLocal` (a full transform) carry the item direction: the pose's
   direction blended from the forearm; `HeldItemVisual` in-hand mode uses it instead of identity.
-- The owner in 3P while aiming still gets the forced eye view (`ScopeView`); its own body is hidden.
+- The owner aiming an optic, a camera or a scoped rifle gets the forced eye view (`ScopeView`), its own body
+  hidden; an unscoped gun is aimed over the shoulder camera with the body shown (#460, `shotgun-feel`).
 - Check: `--synccheck` (fresh hand error must stay < 0.02); loopback `--server --generated-world` + two
   clients, one `--hold Shotgun --aim`, the other `--shot` at the holder (the remote copy shoulders it).
 - Use poses (#108): `ItemAction` 2 is set by `ItemController` for the length of an eat/drink/put-on-hat one-shot;

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 using UnitSport.Core;
 using UnitSport.Terrain;
@@ -5,7 +6,7 @@ using UnitSport.Terrain;
 namespace UnitSport.Player;
 
 /// <summary>
-/// <c>godot --path . -- --flycheck wingsuit|glide|paraglider|heli|plane|pigeon|a320|freighter[,out.png] [--at E,N] [--world flat] [--airliner arcade|sim]</c>
+/// <c>godot --path . -- --flycheck wingsuit|glide|paraglider|heli|plane|pigeon|pigeoncrash|a320|freighter[,out.png] [--at E,N] [--world flat] [--airliner arcade|sim]</c>
 ///
 /// <para>
 /// Flies one craft through a scripted sortie with the real input actions and prints what the
@@ -27,7 +28,8 @@ public partial class FlightCheckProbe : Node
     /// <summary>Where the sortie started, kept in LV95: the origin may move under it (#185).</summary>
     private GlobalPos _from;
     private string _last = "";
-    private float _walk, _peak;
+    private float _walk, _peak, _hit;
+    private double _splatAt = -1;
 
     public FlightCheckProbe(ChunkManager? chunks, WorldOrigin origin, string kind, string? shot)
     {
@@ -61,7 +63,8 @@ public partial class FlightCheckProbe : Node
             _player.GlobalPosition = new Vector3(at.X, g + 1f, at.Z);
             if (_chunks == null) _player.DebugLaunch(_player.GlobalPosition, Vector3.Zero);   // flat world: no terrain to wait for
             _player.Announced += (text, good) => { _last = text; GD.Print($"[flycheck] announce: {text}"); };
-            _player.Impacted += lost => { if (lost >= 8) _crashed = true; };
+            // the crash sortie is meant to hit: it judges its own impact
+            _player.Impacted += lost => { if (lost >= 8 && _kind != "pigeoncrash") _crashed = true; };
             return;
         }
         if (!_started)
@@ -109,6 +112,7 @@ public partial class FlightCheckProbe : Node
                 p.SetRide(RideKind.Helicopter);
                 break;
             case "pigeon":
+            case "pigeoncrash":
                 p.SetRide(RideKind.Pigeon);
                 break;
             case "plane":
@@ -117,8 +121,9 @@ public partial class FlightCheckProbe : Node
                 break;
             case "a320":
             case "freighter":
+            case "an124":
                 // a whole circuit on the real keys: take-off, climb, a 180° turn, approach, landing, stop (#414, #420)
-                p.SetRide(_kind == "freighter" ? RideKind.Freighter : RideKind.A320);
+                p.SetRide(_kind switch { "freighter" => RideKind.Freighter, "an124" => RideKind.An124, _ => RideKind.A320 });
                 // --heading deg (true, 0 north, 90 east): lined up on a real runway (GVA 05 is 46°)
                 if (CmdArgs.Value("--heading") is { } h && float.TryParse(h, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float deg)
                     && p.Vehicle is Airliner lined)
@@ -190,8 +195,27 @@ public partial class FlightCheckProbe : Node
                 }
                 if (t > 40) End("still airborne");
                 break;
+            case "pigeoncrash":
+                // #519: climb, then dive forward into the ground past CrashSpeed: a splat, back on foot, unhurt
+                Hold(PlayerInput.Jump, t > 0.5 && t < 5);
+                Hold(PlayerInput.CrouchSlide, t > 5);
+                Hold(PlayerInput.MoveForward, t > 0.5);
+                _peak = Mathf.Max(_peak, Agl(_player!.GlobalPosition));
+                if (_player.Ride == RideKind.Pigeon) _hit = _player.Flight.Velocity.Length();
+                else if (_splatAt < 0) _splatAt = t;
+                // a moment later, so a picture catches the feathers
+                if (_splatAt >= 0 && t > _splatAt + 0.35)
+                {
+                    int splats = Birds.BirdLife.Instance?.CrashSplats ?? -1;
+                    GD.Print($"[flycheck] pigeon crashed at {_hit:F1} m/s from {_peak:F1} m agl: now {_player.Ride}, health {_player.Health:F0}, splats {splats}");
+                    if (_player.Ride != RideKind.OnFoot || _hit < 20f || _player.Health < FootPlayer.MaxHealth || splats == 0) _crashed = true;
+                    End("splat");
+                }
+                if (t > 30) { _crashed = true; End("never crashed"); }
+                break;
             case "a320":
             case "freighter":
+            case "an124":
                 if (_player!.Vehicle is not Airliner jet) { _crashed = true; End("not in an airliner"); break; }
                 if (_circuit!.Step(jet, _player, Agl(_player.GlobalPosition), (float)t, Hold) is { } how)
                 {
@@ -208,10 +232,29 @@ public partial class FlightCheckProbe : Node
         }
     }
 
+    /// <summary>Wall-clock frame times, ms, while flying: what a windowed run costs (#421, the cockpit's screens with <c>--instruments off</c> to compare).</summary>
+    private readonly List<float> _frameMs = new();
+    private ulong _lastFrameUs;
+
+    public override void _Process(double delta)
+    {
+        ulong now = Time.GetTicksUsec();
+        if (_lastFrameUs != 0 && _player != null && !_done) _frameMs.Add((now - _lastFrameUs) / 1000f);
+        _lastFrameUs = now;
+    }
+
     private void End(string how)
     {
         if (_done) return;
         _done = true;
+        if (_frameMs.Count > 10)
+        {
+            _frameMs.Sort();
+            float sum = 0f;
+            foreach (float f in _frameMs) sum += f;
+            GD.Print($"[flycheck] frames {_frameMs.Count}: avg {sum / _frameMs.Count:F2} ms, p50 {_frameMs[_frameMs.Count / 2]:F2}, "
+                + $"p95 {_frameMs[_frameMs.Count * 95 / 100]:F2}, max {_frameMs[^1]:F2} (time scale {Engine.TimeScale:F0})");
+        }
         var p = _player!.GlobalPosition;
         float dist = (float)_origin.ToGlobal(p).HorizontalDistanceTo(_from);
         float drop = (float)_from.Alt - p.Y;
@@ -232,7 +275,7 @@ public partial class FlightCheckProbe : Node
     private AirlinerCircuit? _circuit;
 
     /// <summary>A heavy aircraft's whole circuit: a long sortie (#414, #420).</summary>
-    private bool Heavy => _kind is "a320" or "freighter";
+    private bool Heavy => _kind is "a320" or "freighter" or "an124";
 
     private void Finish(int code)
     {

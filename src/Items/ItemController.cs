@@ -39,6 +39,10 @@ public partial class ItemController : Node
 
     /// <summary>The throw in progress, for probes and the prompt bar.</summary>
     public ThrowAim Throw => _throw;
+
+    /// <summary>The fishing rod's cast, bite and fight (#493), for the hints and the probes.</summary>
+    public Fishing.FishingRod Rod => _fishing;
+    private Fishing.FishingRod _fishing = null!;
     private AudioStreamPlayer _sfx = null!;
     private bool _capturing;
     private bool _forceAim;
@@ -134,6 +138,8 @@ public partial class ItemController : Node
         AddChild(_flagGhost);
         _throw = new ThrowAim { Name = "ThrowAim" };
         AddChild(_throw);
+        _fishing = new Fishing.FishingRod(this, _inventory, _origin);
+        AddChild(_fishing);
         _build = new Build.BuildTool(this) { Name = "BuildTool" };
         AddChild(_build);
         _gadgets = new Build.GadgetTool(this) { Name = "GadgetTool" };
@@ -189,8 +195,8 @@ public partial class ItemController : Node
         get
         {
             var p = CurrentPlayer();
-            // downed (#475): no items until a team-mate picks you up
-            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false, Downed: false } && p.Ride == RideKind.OnFoot ? p : null;
+            // downed (#475): no items until a team-mate picks you up; in a fist fight (#495) the hands are fists
+            return p is { IsViewing: true, RidingAlong: false, IsSwimming: false, Downed: false, Fighting: false } && p.Ride == RideKind.OnFoot ? p : null;
         }
     }
 
@@ -205,6 +211,7 @@ public partial class ItemController : Node
     public override void _Process(double delta)
     {
         var player = CurrentPlayer();
+        RadioTap.Tick((float)delta);
         _ui.PlayerPresent = player is { IsViewing: true };
         _ui.ItemsActive = UsablePlayer != null;
         UpdateDevelop((float)delta);
@@ -216,6 +223,7 @@ public partial class ItemController : Node
             Highlight.Point(null);
             Vehicles.VehicleReach.Point(null);
             _throw.Step(null, false, false, (float)delta);
+            _fishing.Step(null, false, false, (float)delta);
             return;
         }
 
@@ -263,8 +271,12 @@ public partial class ItemController : Node
         var weapon = Weapons.Get(_inventory.HeldId);
         // a scoped gun is held to the eye like the binoculars, and drawn as their overlay
         bool scoped = aiming && weapon is { AimFov: < 20f };
+        // any other gun is shouldered over a close shoulder camera, zoomed to its aim FOV (#460);
+        // first person and VR stay at the eye, down the barrel
+        bool shouldered = aiming && def!.Use == ItemUse.Shoot && !scoped && !XR.XrSession.Active && !player.ChoseFirstPerson;
+        player.GunAim = shouldered;
         player.FovOverride = aiming ? def!.Use switch { ItemUse.Optic => 9f * breathFov, ItemUse.Photo => FovFromFocal(_focalMm), _ => weapon?.AimFov ?? 50f } : null;
-        player.ScopeView = aiming;
+        player.ScopeView = aiming && !shouldered;
         player.ItemAction = _planting || _useBusy ? 2 : aiming ? 1 : 0;   // replicated: remote peers pose the arms from it
         player.LookScale = aiming ? def!.Use switch { ItemUse.Optic => 0.2f, ItemUse.Photo => Mathf.Clamp(FovFromFocal(_focalMm) / 76f, 0.04f, 1f), _ => scoped ? 0.15f : 0.6f } : 1f;
         // held items stay visible while aiming: they are raised to a pose. Binoculars and the
@@ -285,7 +297,7 @@ public partial class ItemController : Node
         {
             visual.SetPose(_raiseFlag ? ViewPose.Raise : !aiming ? ViewPose.Rest : def!.Use switch
             {
-                ItemUse.Shoot => ViewPose.Aim,
+                ItemUse.Shoot => shouldered ? ViewPose.Rest : ViewPose.Aim,
                 _ => ViewPose.Eye,
             });
             if (!aiming && def?.Use == ItemUse.Readout) visual.SetPose(ViewPose.Read);   // the GPS is held up to read
@@ -297,6 +309,13 @@ public partial class ItemController : Node
         _ui.Scope = scoped ? (poseSettled ? ItemUse.Optic : null)
             : aiming && (def!.Use == ItemUse.Shoot || poseSettled) ? def!.Use : null;
         StepThrow(player, def, usable, aiming, (float)delta);
+        // the rod (#493): put away, in a menu or off foot, the line comes in
+        bool fishing = usable && _inventory.HeldId == ItemId.FishingRod && !_ui.IsOpen && !UiFocus.TextEntryActive;
+        _fishing.Step(fishing ? player : null, PlayerInput.Held(PlayerInput.UseItem) || ForceUse,
+            PlayerInput.Held(PlayerInput.AimItem) || _forceAim, (float)delta);
+        bool lineInUse = fishing && _fishing.State != UnitSport.Items.Fishing.FishingRod.Phase.Idle;
+        if (lineInUse) player.ItemAction = 2;
+        player.SquareToView = lineInUse;
 
         // the smart binoculars read out the building at hand while held (#165): no aiming
         _smart.Held = usable && _inventory.HeldId == ItemId.SmartBinoculars;
@@ -380,6 +399,9 @@ public partial class ItemController : Node
     }
 
     private void Click() => Play(SfxSynth.Tick, 1.4f);
+
+    /// <summary>A sound in the player's ears (the item channel): the rod's reel and its plop (#493).</summary>
+    internal void PlaySound(AudioStream stream, float pitch = 1f) => Play(stream, pitch);
 
     private void Play(AudioStream stream, float pitch = 1f)
     {
@@ -511,7 +533,7 @@ public partial class ItemController : Node
             {
                 if (Weapons.Get(stack.Id) is not { } weapon) break;
                 // the action has to cycle before the next round (the shotgun's pump, a rifle's bolt)
-                if (Time.GetTicksMsec() < _nextShotMs) break;
+                if (Core.GameClock.Now < _nextShotAt) break;
                 int ammo = -1;
                 for (int i = 0; i < Inventory.Size && ammo < 0; i++)
                     if (_inventory[i].Id == weapon.Ammo && !_inventory[i].IsEmpty) ammo = i;
@@ -522,7 +544,7 @@ public partial class ItemController : Node
                     break;
                 }
                 _inventory.TakeOne(ammo);
-                _nextShotMs = Time.GetTicksMsec() + (ulong)(weapon.Interval * 1000f);
+                _nextShotAt = Core.GameClock.Now + weapon.Interval;
                 Recoil(player, weapon);
                 Shoot(player, weapon);
                 break;
@@ -530,8 +552,8 @@ public partial class ItemController : Node
 
             case ItemUse.Melee:
             {
-                if (Weapons.Get(stack.Id) is not { } blade || Time.GetTicksMsec() < _nextShotMs) break;
-                _nextShotMs = Time.GetTicksMsec() + (ulong)(blade.Interval * 1000f);
+                if (Weapons.Get(stack.Id) is not { } blade || Core.GameClock.Now < _nextShotAt) break;
+                _nextShotAt = Core.GameClock.Now + blade.Interval;
                 Kick(player);
                 Play(SfxSynth.WhooshBank.Variants[SfxRng.Next(SfxSynth.WhooshBank.Variants.Length)], 1.3f);
                 var (eye, aim) = AimFrom(player, blade.Range);
@@ -545,7 +567,7 @@ public partial class ItemController : Node
             case ItemUse.Horn:
             {
                 if (_useBusy) break;
-                double now = Time.GetTicksMsec() / 1000.0;
+                double now = Core.GameClock.Now;
                 if (now < _hornReadyAt)
                 {
                     _ui.Toast($"Out of breath: blow again in {_hornReadyAt - now:F0} s.");
@@ -553,7 +575,7 @@ public partial class ItemController : Node
                 }
                 StartUse(player, slot, def, ViewPose.Mouth, 2.8f, 0.3f, 0.4f, () =>
                 {
-                    _hornReadyAt = Time.GetTicksMsec() / 1000.0 + SwissItems.HornCooldown;
+                    _hornReadyAt = Core.GameClock.Now + SwissItems.HornCooldown;
                     var bell = player.GlobalPosition + Vector3.Up * 1.2f - player.Camera.GlobalTransform.Basis.Z * 1.6f;
                     ItemEvents.Instance?.Send(ItemEventKind.Horn, bell, Vector3.Up);
                     _ui.Toast("The alphorn rings out: you see who is near, and they know where you are.");
@@ -573,8 +595,8 @@ public partial class ItemController : Node
             }
             case ItemUse.Smoke:
             {
-                if (Time.GetTicksMsec() < _nextShotMs) break;
-                _nextShotMs = Time.GetTicksMsec() + 800;
+                if (Core.GameClock.Now < _nextShotAt) break;
+                _nextShotAt = Core.GameClock.Now + 0.8;
                 var (eye, aim) = AimFrom(player, SwissItems.SmokeThrow);
                 var space = player.GetWorld3D().DirectSpaceState;
                 var hit = AimRay.Cast(space, eye, eye + aim * SwissItems.SmokeThrow, uint.MaxValue, player.SelfExclude);
@@ -587,6 +609,12 @@ public partial class ItemController : Node
                 ItemEvents.Instance?.Send(ItemEventKind.Smoke, at, aim);
                 break;
             }
+
+            case ItemUse.Fish:
+                // only from the hand: the pack panel's Use has nothing to cast with (#493)
+                if (slot == _inventory.Selected) _fishing.Press(player);
+                else _ui.Toast("Put the rod in your hand to fish.");
+                break;
 
             case ItemUse.Recall:
             {
@@ -654,10 +682,14 @@ public partial class ItemController : Node
 
             case ItemUse.Throw:
             {
-                // Use alone opens the radio's panel in the hand; Aim + Use throws it (#168)
+                // Use alone in the hand: a tap switches the radio on or off, a hold opens its panel
+                // (#725; Use again closes it at once, #375); Aim + Use throws it (#168)
                 if (!PlayerInput.Held(PlayerInput.AimItem) && !_forceAim && slot == _inventory.Selected)
                 {
-                    RadioUi.Instance?.OpenHeld(slot);
+                    if (RadioUi.Instance?.IsOpen == true) { RadioUi.Instance.OpenHeld(slot); break; }
+                    RadioTap.Begin(PlayerInput.UseItem, () => RadioTap.ToggleHeld(_inventory, slot),
+                        () => RadioUi.Instance?.OpenHeld(slot),
+                        () => _inventory.Selected == slot && _inventory.HeldId == ItemId.Radio);
                     break;
                 }
                 // Aim + Use from the pack panel (no wind-up there): a medium throw
@@ -667,6 +699,12 @@ public partial class ItemController : Node
 
             case ItemUse.Material:
                 _ui.Toast($"{def.Name}: keep it for trading or building.");
+                break;
+
+            case ItemUse.Farm:
+                // the hoe, a seed, fertiliser: the field cell ahead (#494, Farming/HandFarming)
+                if (Farming.HandFarming.Instance is { } farming) farming.Use(player, slot, stack.Id);
+                else _ui.Toast("No field here.");
                 break;
 
             case ItemUse.Bag:
@@ -718,7 +756,9 @@ public partial class ItemController : Node
         _ => 0f,
     };
 
-    private ulong _nextShotMs;
+    // simulation time (#579), like _hornReadyAt above: a weapon's action cycling is part of the
+    // world, so the rate of fire slows when the world does
+    private double _nextShotAt;
 
     /// <summary>When the alphorn may be blown again (#478), local seconds.</summary>
     private double _hornReadyAt;
@@ -731,7 +771,7 @@ public partial class ItemController : Node
     /// <summary>This shot's cone half-angle, degrees, and the bloom it leaves for the next one.</summary>
     private float Bloom(WeaponDef weapon)
     {
-        double now = Time.GetTicksMsec() / 1000.0;
+        double now = Core.GameClock.Now;   // game time: the gun cools with the simulation (fast-checks)
         float heat = weapon.Id == _heatGun ? WeaponDef.Cool(_heat, (float)(now - _heatAt)) : 0f;
         float spread = weapon.SpreadAt(heat);
         _heat = weapon.Heat(heat);
@@ -753,6 +793,7 @@ public partial class ItemController : Node
     {
         bool throwing = usable && !aiming && !UiFocus.TextEntryActive && !_ui.IsOpen && !_useBusy && !_planting
                         && ItemDefs.Throwable(def) && (PlayerInput.Held(PlayerInput.AimItem) || _forceAim);
+        _throw.Heft = ThrowAim.HeftOf(_inventory.HeldId);
         if (_throw.Step(player, throwing, PlayerInput.Held(PlayerInput.UseItem) || ForceUse, dt))
             ThrowSlot(player, _inventory.Selected, _throw.ReleasePower);
 
@@ -776,7 +817,7 @@ public partial class ItemController : Node
     private void ThrowSlot(FootPlayer player, int slot, float power)
     {
         if (_inventory[slot].IsEmpty) return;
-        if (!Release(player, slot, 1, ThrowAim.Origin(player), ThrowAim.Launch(player, power), power)) return;
+        if (!Release(player, slot, 1, ThrowAim.Origin(player), ThrowAim.Launch(player, power, ThrowAim.HeftOf(_inventory[slot].Id)), power)) return;
         Kick(player);
         player.Punch(Mathf.DegToRad(1.2f + 2.5f * power));
         var bank = SfxSynth.WhooshBank;
@@ -849,10 +890,12 @@ public partial class ItemController : Node
         float yaw = Mathf.Atan2(-ahead.X, -ahead.Z);
         if (stack.Id == ItemId.Radio)
         {
+            // a radio switched off flies with its CD in it, silent: a tap where it lands puts it back on (#732)
             var play = RadioPlay.Decode(stack.Data);
+            var held = play ?? RadioPlay.DecodeAny(stack.Data);
             for (int i = 0; i < stack.Count; i++)
                 RadioManager.Instance!.Throw(new RadioState("", 0, _origin.ToGlobal(origin + Vector3.Up * (0.25f * i)), yaw, velocity,
-                    play?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, play?.Length ?? 0));
+                    held?.CdId ?? 0, play?.StartedAt ?? 0, play != null, false, held?.Length ?? 0, player.RadioVolume));
             return;
         }
         var right = ahead.Cross(Vector3.Up);
@@ -905,7 +948,7 @@ public partial class ItemController : Node
     public void TakeRadio(FootPlayer player, RadioBody radio)
     {
         if (RadioManager.Instance is not { } manager) return;
-        string? playing = radio.NowPlaying is { } p ? (p with { Mode = RadioQueue.Clamp(radio.Mode) }).Encode() : null;
+        string? playing = radio.CarriedData;
         if (_inventory.Room(ItemId.Radio, playing) < 1)
         {
             _ui.Toast("No room in your pack.");
@@ -919,8 +962,10 @@ public partial class ItemController : Node
         }
         Highlight.Point(null);
         Play(SfxSynth.Tick, 1.9f);
+        float volume = radio.Volume;
         manager.PickUp(radio, () =>
         {
+            player.RadioVolume = volume;   // it plays on in the hand as loud as it was (#734)
             Give(new ItemStack(ItemId.Radio, 1, playing));
             InHand(ItemId.Radio, playing);
             Play(SfxSynth.Chime, 1.8f);
@@ -989,6 +1034,9 @@ public partial class ItemController : Node
     /// </summary>
     public static (Vector3 Eye, Vector3 Aim) AimFrom(FootPlayer player, float range)
     {
+        // VR: a weapon goes where the hand holding it points
+        if (XR.XrSession.ItemHand is { } hand && Weapons.Get((ItemId)player.HeldItemId) != null)
+            return (hand.Origin, -hand.Basis.Z.Normalized());
         var cam = player.Camera;
         var eye = player.EyePosition;
         var look = -cam.GlobalTransform.Basis.Z;
@@ -1027,7 +1075,7 @@ public partial class ItemController : Node
         if (weapon.Id == ItemId.Shotgun) Fire?.Invoke(player, eye, aim);
     }
 
-    private static void Kick(FootPlayer player)
+    internal static void Kick(FootPlayer player)
     {
         if (player.GetNodeOrNull<HeldItemVisual>("HeldItem") is { } v) v.Kick = 1f;
     }

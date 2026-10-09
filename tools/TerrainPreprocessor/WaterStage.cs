@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.IO.Compression;
+using System.Runtime.InteropServices;
 using UnitSport.Terrain.Format;
 
 namespace UnitSport.Tools.Preprocessor;
@@ -101,8 +103,10 @@ public static class WaterStage
 
     /// <summary>
     /// The survey only counts in a body this large, at vertices within
-    /// <see cref="SurveyLevelToleranceM"/> of the body's mean level: swissBATHY3D's grid reaches up
-    /// the streams around Nyon, 2-10 m above the lake, where it would dig a 3 m pit in a brook.
+    /// <see cref="SurveyLevelToleranceM"/> of the body's most common level: swissBATHY3D's grid
+    /// reaches up the streams around Nyon, 2-10 m above the lake, where it would dig a 3 m pit in a
+    /// brook. Not the mean: nationwide a lake's body takes in its rivers (Léman the Rhône up the
+    /// Valais), which lifted Léman's mean 4 m off its 372.14 m surface and dropped the whole survey.
     /// </summary>
     private const double MinSurveyAreaM2 = 200_000, SurveyLevelToleranceM = 1.0;
 
@@ -117,9 +121,17 @@ public static class WaterStage
         public int Jobs = Environment.ProcessorCount;
         public string? BathyDir;
         public string? PngDir;
+        /// <summary>Where the per-tile input is cached between the passes; null = <c>&lt;out&gt;_temp</c>.</summary>
+        public string? TempDir;
         /// <summary>Extra 1 m/px crops for the PNG check: LV95 centre E,N and side in metres.</summary>
         public List<(double E, double N, int Size)> Crops = new();
     }
+
+    /// <summary>
+    /// What phase B needs of a tile once its arrays are gone: its label count and the labels on its
+    /// four edges, where water bodies are joined to the neighbours'.
+    /// </summary>
+    private sealed record Edges(int Count, int[] Top, int[] Bottom, int[] Left, int[] Right);
 
     /// <summary>One tile's input: which vertices are water, and the surface (still level) there.</summary>
     private sealed class TileData
@@ -135,7 +147,17 @@ public static class WaterStage
     private sealed class Body
     {
         public long Count;
-        public double LevelSum;
+        public readonly Dictionary<ushort, long> LevelCounts = new();   // quantized level -> vertices
+        public double SurveyLevel;   // ModeLevel(), once all tiles are summed
+
+        /// <summary>The most common level (a lake is flat; the lowest on a tie).</summary>
+        public double ModeLevel()
+        {
+            ushort best = 0; long n = -1;
+            foreach (var (q, k) in LevelCounts)
+                if (k > n || (k == n && q < best)) { best = q; n = k; }
+            return ChunkFormat.Dequantize(best);
+        }
         public int MinE = int.MaxValue, MaxE = int.MinValue, MinN = int.MaxValue, MaxN = int.MinValue;
         public double MaxDepth, AreaM2;
         // results
@@ -144,7 +166,7 @@ public static class WaterStage
         public readonly Dictionary<string, long> Lakes = new();
     }
 
-    public static int Run(string outDir, Options o)
+    public static int Run(string outDir, Options o, CancellationToken ct = default)
     {
         var clock = Stopwatch.StartNew();
         string manifestPath = Path.Combine(outDir, "manifest.json");
@@ -170,62 +192,83 @@ public static class WaterStage
         else Console.WriteLine("No --bathy: every bed is synthetic");
 
         // ---- A: which tiles hold water, and their surface ---------------------------------------
-        var data = new ConcurrentDictionary<TileId, TileData>();
-        Parallel.ForEach(region, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs }, id =>
+        // Holding every water tile's arrays at once is 7 MB a tile: 17,180 tiles nationwide, over
+        // 120 GB (#747). So each tile is read and labelled once, its input cached to disk, and only
+        // its label count and edge labels kept; phases B and C read the cache back as they go.
+        string cacheDir = Path.Combine(o.TempDir ?? outDir.TrimEnd('/', '\\') + "_temp", "water_cache");
+        Directory.CreateDirectory(cacheDir);
+        var edges = new ConcurrentDictionary<TileId, Edges>();
+        Parallel.ForEach(region, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct }, id =>
         {
             var td = LoadTile(outDir, id);
-            if (td != null) data[id] = td;
+            if (td == null) return;
+            int n = LabelTile(td);
+            WriteCache(cacheDir, td);
+            edges[id] = EdgesOf(td, n);
         });
-        Console.WriteLine($"Water pass: {data.Count} of {region.Count} tiles hold water (or did) "
+        Console.WriteLine($"Water pass: {edges.Count} of {region.Count} tiles hold water (or did) "
             + $"[{clock.Elapsed.TotalSeconds:F1}s]");
-        if (data.IsEmpty) return 0;
+        if (edges.IsEmpty) return 0;
 
         // ---- B: water bodies across the region (union of per-tile flood fills along the seams) ---
-        var ordered = data.Keys.OrderBy(t => t.E).ThenBy(t => t.N).ToList();
+        var ordered = edges.Keys.OrderBy(t => t.E).ThenBy(t => t.N).ToList();
+        var labelBase = new Dictionary<TileId, int>(ordered.Count);
         int total = 0;
         foreach (var id in ordered)
         {
-            var td = data[id];
-            int n = LabelTile(td);
-            td.LabelBase = total;
-            total += n;
+            labelBase[id] = total;
+            total += edges[id].Count;
         }
         var parent = new int[total + 1];
         for (int i = 0; i <= total; i++) parent[i] = i;
+        int GlobalAt(TileId id, int label) => label == 0 ? 0 : labelBase[id] + label;
         foreach (var id in ordered)
         {
-            var td = data[id];
-            if (data.TryGetValue(new TileId(id.E + 1, id.N), out var east))
+            var te = edges[id];
+            var eastId = new TileId(id.E + 1, id.N);
+            if (edges.TryGetValue(eastId, out var east))
                 for (int r = 0; r < S; r++)
-                    Union(parent, Global(td, td.Labels[r * S + Q]), Global(east, east.Labels[r * S]));
-            if (data.TryGetValue(new TileId(id.E, id.N - 1), out var south))
+                    Union(parent, GlobalAt(id, te.Right[r]), GlobalAt(eastId, east.Left[r]));
+            var southId = new TileId(id.E, id.N - 1);
+            if (edges.TryGetValue(southId, out var south))
                 for (int c = 0; c < S; c++)
-                    Union(parent, Global(td, td.Labels[Q * S + c]), Global(south, south.Labels[c]));
+                    Union(parent, GlobalAt(id, te.Bottom[c]), GlobalAt(southId, south.Top[c]));
         }
+        // in the same tile, row and column order as ever, so the level sums add up bit for bit;
+        // a batch is read in parallel, then summed in order
         var bodies = new Dictionary<int, Body>();
-        foreach (var id in ordered)
+        int batch = Math.Max(1, 4 * o.Jobs);
+        for (int from = 0; from < ordered.Count; from += batch)
         {
-            var td = data[id];
-            for (int r = 1; r < S; r++)          // a tile owns rows 1..1000 and columns 0..999
-                for (int c = 0; c < Q; c++)
-                {
-                    int l = td.Labels[r * S + c];
-                    if (l == 0) continue;
-                    int root = Find(parent, td.LabelBase + l);
-                    if (!bodies.TryGetValue(root, out var b)) bodies[root] = b = new Body();
-                    b.Count++;
-                    b.LevelSum += ChunkFormat.Dequantize(td.Surface[r * S + c]);
-                    int e = id.E * 1000 + c, nn = (id.N + 1) * 1000 - r;
-                    if (e < b.MinE) b.MinE = e;
-                    if (e > b.MaxE) b.MaxE = e;
-                    if (nn < b.MinN) b.MinN = nn;
-                    if (nn > b.MaxN) b.MaxN = nn;
-                }
+            var ids = ordered.GetRange(from, Math.Min(batch, ordered.Count - from));
+            var loaded = new TileData[ids.Count];
+            Parallel.For(0, ids.Count, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct },
+                i => loaded[i] = ReadCache(cacheDir, ids[i], labelBase[ids[i]]));
+            foreach (var td in loaded)
+            {
+                var id = td.Id;
+                for (int r = 1; r < S; r++)          // a tile owns rows 1..1000 and columns 0..999
+                    for (int c = 0; c < Q; c++)
+                    {
+                        int l = td.Labels[r * S + c];
+                        if (l == 0) continue;
+                        int root = Find(parent, td.LabelBase + l);
+                        if (!bodies.TryGetValue(root, out var b)) bodies[root] = b = new Body();
+                        b.Count++;
+                        b.LevelCounts[td.Surface[r * S + c]] = b.LevelCounts.GetValueOrDefault(td.Surface[r * S + c]) + 1;
+                        int e = id.E * 1000 + c, nn = (id.N + 1) * 1000 - r;
+                        if (e < b.MinE) b.MinE = e;
+                        if (e > b.MaxE) b.MaxE = e;
+                        if (nn < b.MinN) b.MinN = nn;
+                        if (nn > b.MaxN) b.MaxN = nn;
+                    }
+            }
         }
         foreach (var b in bodies.Values)
         {
             b.AreaM2 = b.Count * ChunkFormat.SpacingM * ChunkFormat.SpacingM;
             b.MaxDepth = WaterBed.MaxDepthForArea(b.AreaM2);
+            b.SurveyLevel = b.ModeLevel();
         }
         // per global label, read-only from here on (Find compresses paths, so not in parallel)
         var maxDepthOf = new double[total + 1];
@@ -240,7 +283,7 @@ public static class WaterStage
             {
                 maxDepthOf[i] = b.MaxDepth;
                 sqrtAreaOf[i] = Math.Sqrt(b.AreaM2);
-                if (b.AreaM2 >= MinSurveyAreaM2) surveyLevelOf[i] = b.LevelSum / b.Count;
+                if (b.AreaM2 >= MinSurveyAreaM2) surveyLevelOf[i] = b.SurveyLevel;
             }
             else maxDepthOf[i] = WaterBed.MinMaxDepthM;   // a body that only touches seams it does not own
         }
@@ -248,61 +291,75 @@ public static class WaterStage
             + $"[{clock.Elapsed.TotalSeconds:F1}s]");
 
         // ---- C: bed and level per tile ----------------------------------------------------------
+        // Column by column, west to east: a tile's window reads the columns either side of it, so
+        // only three columns of cached input are held at a time. Every read comes from the cache,
+        // never from the files this phase is rewriting.
         var changed = new ConcurrentBag<ManifestTile>();
         var joinSteps = new ConcurrentBag<float>();
         var worstJoin = (Step: 0f, E: 0.0, N: 0.0);
         var bodyLock = new object();
         int done = 0;
         long surveyedAll = 0, filledAll = 0, wetAll = 0;
-        Parallel.ForEach(ordered, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs }, id =>
+        var held = new ConcurrentDictionary<TileId, Lazy<TileData>>();
+        TileData? Input(TileId id) => labelBase.TryGetValue(id, out int lb)
+            ? held.GetOrAdd(id, k => new Lazy<TileData>(() => ReadCache(cacheDir, k, lb))).Value
+            : null;
+        foreach (var column in ordered.GroupBy(t => t.E))
         {
-            var r = ComputeTile(outDir, id, data, region, bathy, rootOf, maxDepthOf, sqrtAreaOf, surveyLevelOf);
-
-            // the level first: a run interrupted between the two files repeats safely
-            string waterPath = Path.Combine(outDir, WaterFormat.FileName(id));
-            if (r.Layer != null) AtomicFile.Write(waterPath, s => WaterFormat.Encode(r.Layer, s));
-            else if (File.Exists(waterPath)) File.Delete(waterPath);
-
-            AtomicFile.Write(Path.Combine(outDir, ChunkFormat.ChunkFileName(id)), s => ChunkCodec.Encode(r.Grid, s));
-            AtomicFile.Write(Path.Combine(outDir, ChunkFormat.CoarseFileName(id)),
-                s => ChunkCodec.Encode(r.Grid.Decimate(ChunkFormat.CoarseStride), s));
-            changed.Add(new ManifestTile { E = id.E, N = id.N, Min = r.Grid.MinHeight, Max = r.Grid.MaxHeight });
-            foreach (var step in r.JoinSteps) joinSteps.Add(step);
-            lock (bodyLock) if (r.WorstJoin.Step > worstJoin.Step) worstJoin = r.WorstJoin;
-
-            lock (bodyLock)
+            foreach (var key in held.Keys)
+                if (key.E < column.Key - 1) held.TryRemove(key, out _);
+            Parallel.ForEach(column, new ParallelOptions { MaxDegreeOfParallelism = o.Jobs, CancellationToken = ct }, id =>
             {
-                foreach (var (root, st) in r.Stats)
+                var r = ComputeTile(outDir, id, Input, region, bathy, rootOf, maxDepthOf, sqrtAreaOf, surveyLevelOf);
+
+                // the level first: a run interrupted between the two files repeats safely
+                string waterPath = Path.Combine(outDir, WaterFormat.FileName(id));
+                if (r.Layer != null) AtomicFile.Write(waterPath, s => WaterFormat.Encode(r.Layer, s));
+                else if (File.Exists(waterPath)) File.Delete(waterPath);
+
+                AtomicFile.Write(Path.Combine(outDir, ChunkFormat.ChunkFileName(id)), s => ChunkCodec.Encode(r.Grid, s));
+                AtomicFile.Write(Path.Combine(outDir, ChunkFormat.CoarseFileName(id)),
+                    s => ChunkCodec.Encode(r.Grid.Decimate(ChunkFormat.CoarseStride), s));
+                changed.Add(new ManifestTile { E = id.E, N = id.N, Min = r.Grid.MinHeight, Max = r.Grid.MaxHeight });
+                foreach (var step in r.JoinSteps) joinSteps.Add(step);
+                lock (bodyLock) if (r.WorstJoin.Step > worstJoin.Step) worstJoin = r.WorstJoin;
+
+                lock (bodyLock)
                 {
-                    if (!bodies.TryGetValue(root, out var b)) continue;
-                    b.OutCount += st.Count;
-                    b.OutDepthSum += st.DepthSum;
-                    b.OutMaxDepth = Math.Max(b.OutMaxDepth, st.MaxDepth);
-                    b.Surveyed += st.Surveyed;
-                    b.Filled += st.Filled;
-                    if (st.Lake != null) b.Lakes[st.Lake] = b.Lakes.GetValueOrDefault(st.Lake) + st.Surveyed;
-                    surveyedAll += st.Surveyed;
-                    filledAll += st.Filled;
-                    wetAll += st.Count;
+                    foreach (var (root, st) in r.Stats)
+                    {
+                        if (!bodies.TryGetValue(root, out var b)) continue;
+                        b.OutCount += st.Count;
+                        b.OutDepthSum += st.DepthSum;
+                        b.OutMaxDepth = Math.Max(b.OutMaxDepth, st.MaxDepth);
+                        b.Surveyed += st.Surveyed;
+                        b.Filled += st.Filled;
+                        if (st.Lake != null) b.Lakes[st.Lake] = b.Lakes.GetValueOrDefault(st.Lake) + st.Surveyed;
+                        surveyedAll += st.Surveyed;
+                        filledAll += st.Filled;
+                        wetAll += st.Count;
+                    }
                 }
-            }
-            int k = Interlocked.Increment(ref done);
-            if (k % 25 == 0) Console.WriteLine($"  [{k}/{ordered.Count}] {clock.Elapsed.TotalSeconds:F0}s");
-        });
+                int k = Interlocked.Increment(ref done);
+                if (k % 25 == 0) Console.WriteLine($"  [{k}/{ordered.Count}] {clock.Elapsed.TotalSeconds:F0}s");
+            });
+        }
+        held.Clear();
+        Directory.Delete(cacheDir, recursive: true);
 
         // ---- D: manifest, horizon, seams ---------------------------------------------------------
         var byId = changed.ToDictionary(t => t.Id);
         foreach (var t in manifest.Tiles)
             if (byId.TryGetValue(t.Id, out var c)) { t.Min = c.Min; t.Max = c.Max; }
         AtomicFile.Write(manifestPath, s => { using var w = new StreamWriter(s); w.Write(manifest.ToJson()); });
-        if (HorizonStage.Run(outDir, o.Jobs) is var hrc && hrc != 0) return hrc;
+        if (HorizonStage.Run(outDir, o.Jobs, ct) is var hrc && hrc != 0) return hrc;
 
         var seamTiles = new HashSet<TileId>();
         foreach (var id in byId.Keys)
             for (int dy = -1; dy <= 1; dy++)
                 for (int dx = -1; dx <= 1; dx++)
                     if (region.Contains(new TileId(id.E + dx, id.N + dy))) seamTiles.Add(new TileId(id.E + dx, id.N + dy));
-        int seamErrors = TerrainBuild.VerifySeams(outDir, seamTiles, o.Jobs);
+        int seamErrors = TerrainBuild.VerifySeams(outDir, seamTiles, o.Jobs, ct);
 
         // ---- report ------------------------------------------------------------------------------
         Console.WriteLine($"Water bodies (area >= 0.02 km²), bed depth below the still level:");
@@ -313,7 +370,7 @@ public static class WaterStage
             string name = lake.Length > 0 ? $"{lake} (swissBATHY3D)" : SyntheticName(b);
             string published = PublishedMaxDepth(lake);
             Console.WriteLine($"  {name,-28} {(b.MinE + b.MaxE) / 2000.0:F1},{(b.MinN + b.MaxN) / 2000.0:F1}".PadRight(48)
-                + $" {b.AreaM2 / 1e6,7:F2} {b.LevelSum / b.Count,8:F2} {b.OutMaxDepth,6:F1}m {(b.OutCount > 0 ? b.OutDepthSum / b.OutCount : 0),5:F1}m"
+                + $" {b.AreaM2 / 1e6,7:F2} {b.SurveyLevel,8:F2} {b.OutMaxDepth,6:F1}m {(b.OutCount > 0 ? b.OutDepthSum / b.OutCount : 0),5:F1}m"
                 + $" {100.0 * b.Surveyed / Math.Max(1, b.OutCount),6:F1}% {100.0 * b.Filled / Math.Max(1, b.OutCount),5:F1}%  {published}");
         }
         int small = bodies.Values.Count(b => b.AreaM2 < 20_000);
@@ -395,7 +452,50 @@ public static class WaterStage
         }
     }
 
-    private static int Global(TileData td, int label) => label == 0 ? 0 : td.LabelBase + label;
+    private static Edges EdgesOf(TileData td, int count)
+    {
+        var top = new int[S]; var bottom = new int[S]; var left = new int[S]; var right = new int[S];
+        for (int i = 0; i < S; i++)
+        {
+            top[i] = td.Labels[i];
+            bottom[i] = td.Labels[Q * S + i];
+            left[i] = td.Labels[i * S];
+            right[i] = td.Labels[i * S + Q];
+        }
+        return new Edges(count, top, bottom, left, right);
+    }
+
+    private static string CachePath(string cacheDir, TileId id) => Path.Combine(cacheDir, $"water_{id.E}_{id.N}.bin");
+
+    /// <summary>A tile's input as phase A read it: the wet flags and surface, deflated.</summary>
+    private static void WriteCache(string cacheDir, TileData td)
+    {
+        using var file = File.Create(CachePath(cacheDir, td.Id));
+        using var z = new DeflateStream(file, CompressionLevel.Fastest);
+        z.WriteByte(td.HadWater ? (byte)1 : (byte)0);
+        z.Write(td.Wet);
+        z.Write(MemoryMarshal.AsBytes(td.Surface.AsSpan()));
+    }
+
+    /// <summary>Reads a cached tile back and labels it again: the flood fill is a function of the wet flags alone.</summary>
+    private static TileData ReadCache(string cacheDir, TileId id, int labelBase)
+    {
+        var wet = new byte[S * S];
+        var surface = new ushort[S * S];
+        bool hadWater;
+        using (var file = File.OpenRead(CachePath(cacheDir, id)))
+        using (var z = new DeflateStream(file, CompressionMode.Decompress))
+        {
+            int flag = z.ReadByte();
+            if (flag < 0) throw new EndOfStreamException(CachePath(cacheDir, id));
+            hadWater = flag != 0;
+            z.ReadExactly(wet);
+            z.ReadExactly(MemoryMarshal.AsBytes(surface.AsSpan()));
+        }
+        var td = new TileData { Id = id, Wet = wet, Surface = surface, HadWater = hadWater, LabelBase = labelBase };
+        LabelTile(td);
+        return td;
+    }
 
     private static int Find(int[] parent, int i)
     {
@@ -421,11 +521,11 @@ public static class WaterStage
     private sealed record TileResult(ChunkGrid Grid, WaterGrid? Layer, Dictionary<int, LabelStats> Stats,
         List<float> JoinSteps, (float Step, double E, double N) WorstJoin);
 
-    private static TileResult ComputeTile(string outDir, TileId id, ConcurrentDictionary<TileId, TileData> data,
+    private static TileResult ComputeTile(string outDir, TileId id, Func<TileId, TileData?> data,
         HashSet<TileId> region, BathySource? bathy, int[] rootOf, double[] maxDepthOf, double[] sqrtAreaOf,
         double[] surveyLevelOf)
     {
-        var td = data[id];
+        var td = data(id)!;
         ChunkGrid grid;
         using (var fs = File.OpenRead(Path.Combine(outDir, ChunkFormat.ChunkFileName(id)))) grid = ChunkCodec.Decode(fs);
 
@@ -445,7 +545,7 @@ public static class WaterStage
             {
                 var nb = new TileId(id.E + dx, id.N + dy);
                 if (!region.Contains(nb)) continue;
-                data.TryGetValue(nb, out var nd);
+                var nd = data(nb);
                 int ox = Halo + dx * Q, oy = Halo - dy * Q;
                 for (int r = 0; r < S; r++)
                 {

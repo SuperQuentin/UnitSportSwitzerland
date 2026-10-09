@@ -1,7 +1,9 @@
 # How to release
 
-Releases are built on your own machine and uploaded to GitHub. Nothing releases automatically: no push hook,
-no GitHub Actions. One release ships three downloads:
+Every merged pull request releases automatically on GitHub Actions, coalescing a burst of merges into one
+release: [`docs/notes/general/release-on-merge.md`](docs/notes/general/release-on-merge.md). This file is about
+releasing **by hand** with `tools/release.sh`, which still works and is how you release without waiting for a merge.
+One release ships three downloads:
 
 | Platform | Asset |
 |---|---|

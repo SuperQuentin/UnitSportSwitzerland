@@ -32,6 +32,7 @@ public partial class RideProbe : Node
     private readonly RideKind _kind;
     private readonly double _seconds;
     private readonly string? _shot;
+    private Camera3D? _closeCam;
 
     private FootPlayer? _player;
     private double _elapsed;
@@ -84,7 +85,21 @@ public partial class RideProbe : Node
                 "bike" or "roadbike" => RideKind.RoadBike,
                 "skis" or "ski" => RideKind.Skis,
                 "r1" => (RideKind)MotorbikeCatalog.First,
+                // the aircraft (#421): parked, on their brakes
+                "a320" => RideKind.A320,
+                "freighter" => RideKind.Freighter,
+                "an124" => RideKind.An124,
                 "monster" => (RideKind)(MotorbikeCatalog.First + 1),
+                "kart" => CarCatalog.Kart.Kind,
+                // works machinery (#583): the mast is worked with the shift paddles while driving
+                "forklift" => RideKind.Forklift,
+                "excavator" => RideKind.Excavator,
+                "miniexcavator" => RideKind.MiniExcavator,
+                "loader" => RideKind.WheelLoader,
+                "loaderforks" => RideKind.WheelLoaderForks,
+                "roller" => RideKind.CompactRoller,
+                "dumper" => RideKind.MiniDumper,
+                "telehandler" => RideKind.Telehandler,
                 // moto:N = MotorbikeCatalog.All[N]
                 _ when name.StartsWith("moto:") && int.TryParse(name[5..], out int b) => MotorbikeCatalog.All[b].Kind,
                 // truck:N = HeavyCatalog.All[N]; --trailer M couples TrailerCatalog.All[M], full
@@ -140,6 +155,9 @@ public partial class RideProbe : Node
             var ahead = -_player.GlobalBasis.Z with { Y = 0 };
             _player.WalkControls = () => (_elapsed < stopAt ? ahead.Normalized() : Vector3.Zero, true);
             GD.Print("[ride] on foot");
+            // "--trailer M" on foot: that trailer parked 14 m ahead, to walk up to (the trailer's intro, #517)
+            if (CmdArgs.Int("--trailer") is int lone)
+                GD.Print(_player.SpawnTrailer(lone, 0.5f) ? $"[ride] parked {TrailerCatalog.All[lone].Label} ahead" : "[ride] TRAILER REFUSED");
             return;
         }
 
@@ -194,6 +212,19 @@ public partial class RideProbe : Node
         }
 
         WatchCrash(delta);
+
+        // --closeup (#421): the last second from a camera in front of the captain's screens or gauges
+        if (_shot != null && CmdArgs.Has("--closeup") && _closeCam == null && _elapsed >= _seconds - 1.0
+            && _player.GetChildren().OfType<Avatar.AirlinerRig>().FirstOrDefault()?.Cockpit is { } deck
+            && deck.ScreenFrame(0) is { } a && deck.ScreenFrame(1) is { } b)
+        {
+            var at = (a.Origin + b.Origin) * 0.5f;
+            _closeCam = new Camera3D { Fov = 40f, Near = 0.02f };
+            AddChild(_closeCam);
+            _closeCam.GlobalPosition = at + a.Basis.Z.Normalized() * 0.5f;
+            _closeCam.LookAt(at, a.Basis.Y.Normalized());
+            _closeCam.MakeCurrent();
+        }
 
         _sinceReport += delta;
         if (_sinceReport >= 1.0)

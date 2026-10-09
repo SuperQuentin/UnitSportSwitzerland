@@ -3,7 +3,19 @@
 
 # Android client: play on a phone against a PC server
 
-Status: **proposed** (issue #63), nothing built yet.
+Status: **phases 1–6 built** (PR #556), phase 0's on-phone measurement and phase 7 wait for a real
+phone. The APK is built by every release (#544).
+
+| Phase | State | Where |
+|---|---|---|
+| 0 Spike | APK automated; emulator boots and joins a PC server but cannot render or time it | `general/local-release`, `core/platform` |
+| 1 Paths | done | `TerrainPaths` → `user://terrain_chunks` |
+| 2 No command line | already true: "Join a server" prefills `LastHost`, `ServerBook` keeps servers | — |
+| 3 Touch | done, `--touchcheck` in the quick tier | `core/touch-controls` |
+| 4 Mobile perf | done: phone defaults, build caps, 96 MB RAM cache, half-size portals, 2048 shadows | `core/platform` |
+| 5 Data | done: Settings → Data, Low data, metered warning, data saver; 260 / 70 MB on arrival | `core/data-usage` |
+| 6 Gating | done: no updater, SDL, hosting, Realistic+/VR relaunch, ffmpeg; multicast lock | `core/platform` |
+| 7 Multiplayer on a phone | not done: needs a phone | — |
 
 ## Goal
 
@@ -43,9 +55,11 @@ Out of scope: iOS, a phone-hosted server, the Play Store, and shipping real terr
 
 ### 0. Spike: does it run at all? (go / no-go)
 
-1. Install the Android SDK, JDK 17 and the Godot 4.7 .NET export templates. Add an Android preset
-   (arm64-v8a only) to `export_presets.cfg`.
-2. Export a debug APK with **no** `terrain_chunks/`, then install it with `adb install`.
+1. ~~Install the Android SDK, JDK 17 and the Godot 4.7 .NET export templates. Add an Android preset
+   (arm64-v8a only) to `export_presets.cfg`.~~ **Done (#544):** every release ships
+   `-android-arm64.apk`, built by `tools/release.sh` (locally or in CI) with no `terrain_chunks/`.
+   The csproj targets net9.0 for Android, which Godot's APK template needs (`general/local-release`).
+2. Install the release APK with `adb install -r`.
 3. On the PC: `<godot> --headless --path . -- --server --generated-world`. On the phone: "Join a
    server" at the PC's LAN IP.
 4. Measure frame rate, memory (`adb shell dumpsys meminfo`) and heat over about 10 minutes on

@@ -10,7 +10,7 @@
   deposit refused outside a bank (#213); `/money` `/give` refused, then as admin `/money`,
   `/give me`, `/bank set` (restored after), `/clear` (#262); the counter itself: `tools/bankcheck.sh` (loot `banks` note).
 - `--invuicheck`/`--econcheck` use a scratch inventory (`Inventory.Scratch`, `Persist = false`).
-- `GODOT=<exe> tools/useanimcheck.sh`: loopback server + A (first person: drink, eat, GPS, hat, clothes) + B (remote: sees Mouth arm pose, hat, OutfitBits); screenshots in `test_output/useanim_*.png`.
+- `GODOT=<exe> tools/useanimcheck.sh`: loopback server + A (first person: drink, beer (#716), eat, GPS, hat, clothes) + B (remote: sees Mouth arm pose, hat, OutfitBits); screenshots in `test_output/useanim_*.png`.
 - `<godot> --headless --path . -- --iconsheet`: renders every item icon to `test_output/iconsheet.png` (see `pixel-icons`).
 - `tools/radiocheck.sh` (`CHUNKS=<terrain_chunks dir>` from a worktree): dedicated server with `--cdfixture <wav>` (repeatable),
   `--radiocheck thrower --radiopersonal <wav>` (headless) and `--radiocheck watch` (windowed) on loopback; see `radio`.
@@ -29,3 +29,5 @@
 - `<godot> --path . -- --ride foot,120 --view first --photocheck --photo-dir <abs dir>`: the Polaroid offline
   with screenshots (see `polaroid`).
 - `tools/bonkcheck.sh` (net tier, no terrain) and `--interactcheck` (offline, windowed, `--view third`, needs `--chunks`): thrown hits over loopback, and the #261 interactions photographed; see `throw-hits`.
+- `--fishcheck --chunks fixture:lake` (quick, #493): the rod on the lake course, offline; `tools/fishcheck.sh`
+  (net, two clients): B sees A's float and line come and go. Details: `fishing`.

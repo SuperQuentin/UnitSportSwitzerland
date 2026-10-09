@@ -183,7 +183,7 @@ public partial class InventoryUi : CanvasLayer
         _root.AddChild(_viewfinder);
 
         // the shotgun's bead: a small open ring at the screen centre, where the front bead sits
-        _crosshair = new BeadReticle { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+        _crosshair = new Crosshair { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
         _crosshair.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _root.AddChild(_crosshair);
 
@@ -563,9 +563,8 @@ public partial class InventoryUi : CanvasLayer
 
     private void RefreshDropHint()
     {
-        bool pad = PlayerInput.LastDevice == InputDevice.Gamepad;
         _dropHint.Text = !IsOpen || Inv.Carried.IsEmpty ? ""
-            : pad ? "(B) put it back" : "Click outside the panel to drop it on the ground  ·  right click: drop one";
+            : InputHints.Pad ? InputHints.Format("{ui_cancel} put it back") : "Click outside the panel to drop it on the ground  ·  right click: drop one";
     }
 
     private static string Chf(long amount) =>
@@ -574,10 +573,12 @@ public partial class InventoryUi : CanvasLayer
     /// <summary>The key reference under the slots, for the device in hand.</summary>
     private void OnDeviceChanged()
     {
-        _controlsHint.Text = PlayerInput.LastDevice == InputDevice.Gamepad
-            ? "(A) pick up / put down   (X) take half / put one   (Y) send across   (B) put back, then close"
-            : "LMB pick up / put down   RMB half / one   Shift+LMB send across   Drag to spread   Double-click gather\n"
-              + $"1–6 over a slot: into hotbar   Q drop one, Ctrl+Q stack   MMB use   {InputHints.Label(PlayerInput.Inventory)} / Esc close";
+        _controlsHint.Text = InputHints.Pad
+            ? $"{InputHints.Button(JoyButton.A)} pick up / put down   {InputHints.Button(JoyButton.X)} take half / put one   "
+              + $"{InputHints.Button(JoyButton.Y)} send across   {InputHints.Button(JoyButton.B)} put back, then close"
+            : $"LMB pick up / put down   RMB half / one   {InputHints.Keyboard(Key.Shift)}+LMB send across   Drag to spread   Double-click gather\n"
+              + $"1–6 over a slot: into hotbar   {InputHints.Label(PlayerInput.DropItem)} drop one, {InputHints.Keyboard(Key.Ctrl)}+{InputHints.Label(PlayerInput.DropItem)} stack   MMB use   "
+              + InputHints.Format("{inventory} / {menu} close");
         RefreshMoney();
         RefreshDropHint();
     }
@@ -647,7 +648,7 @@ public partial class InventoryUi : CanvasLayer
         a = part switch
         {
             0 => a with { Build = (Avatar.BodyBuild)Mathf.PosMod((int)a.Build + by, Avatar.Appearance.Builds) },
-            1 => a with { Face = Mathf.PosMod(a.Face + by, Avatar.FaceAtlas.Count) },
+            1 => a with { Face = Mathf.PosMod(a.Face + by, Avatar.Face.FaceGenome.PresetCount) },
             2 => a with { Eyes = Mathf.PosMod(a.Eyes + by, Avatar.Appearance.EyeColours.Length) },
             3 => a with { Skin = Mathf.PosMod(a.Skin + by, Avatar.Appearance.SkinTones.Length) },
             4 => a with { Hair = (Avatar.HairStyle)Mathf.PosMod((int)a.Hair + by, Avatar.Appearance.HairStyles) },
@@ -662,7 +663,7 @@ public partial class InventoryUi : CanvasLayer
     {
         if (_bodyValues[0] == null) return;
         _bodyValues[0].Text = a.Build.ToString();
-        _bodyValues[1].Text = char.ToUpperInvariant(Avatar.FaceAtlas.Name(a.Face)[0]) + Avatar.FaceAtlas.Name(a.Face)[1..];
+        _bodyValues[1].Text = char.ToUpperInvariant(Avatar.Face.FaceGenome.PresetName(a.Face)[0]) + Avatar.Face.FaceGenome.PresetName(a.Face)[1..];
         _bodyValues[2].Text = EyeNames[Mathf.PosMod(a.Eyes, EyeNames.Length)];
         _bodyValues[3].Text = $"Tone {Mathf.PosMod(a.Skin, Avatar.Appearance.SkinTones.Length) + 1}";
         _bodyValues[4].Text = a.Hair.ToString();
@@ -773,6 +774,8 @@ public partial class InventoryUi : CanvasLayer
     private void OpenWheel()
     {
         _wheelAim = Vector2.Zero;
+        // in VR the right hand aims, from where it is now (#489)
+        if (XR.XrSession.Active) XR.XrSession.ZeroHandAim();
         _wheel.Highlight = -1;
         _wheel.Visible = true;
         UiFocus.Set(_wheel, true);
@@ -1095,7 +1098,8 @@ public partial class InventoryUi : CanvasLayer
 
         _binoculars.Visible = Scope == ItemUse.Optic;
         _viewfinder.Visible = Scope == ItemUse.Photo;
-        _crosshair.Visible = false;   // no reticle for the shotgun: the barrel is the aim
+        // a shouldered gun aims over the shoulder camera's centre (#460); VR aims down the barrel
+        _crosshair.Visible = Scope == ItemUse.Shoot && !XR.XrSession.Active;
         if (_binoculars.Visible && _binoculars.Material is ShaderMaterial sm)
         {
             sm.SetShaderParameter("aspect", _root.Size.X / Mathf.Max(1f, _root.Size.Y));
@@ -1119,6 +1123,8 @@ public partial class InventoryUi : CanvasLayer
             var stick = Input.GetVector(PlayerInput.LookLeft, PlayerInput.LookRight,
                 PlayerInput.LookUp, PlayerInput.LookDown);
             if (stick.Length() > 0.5f) _wheelAim = stick;
+            // in VR the right hand points at a slot, as a stick would (#489)
+            else if (XR.XrSession.Active) _wheelAim = XR.XrSession.HandAim.LimitLength(1.2f);
             int before = _wheel.Highlight;
             _wheel.Highlight = _wheelAim.Length() < 0.35f
                 ? before
@@ -1316,15 +1322,26 @@ public partial class WheelView : Control
 /// A camera's viewfinder: thirds grid, corner brackets, focal length readout with a zoom scale,
 /// an autofocus brace that hunts after every zoom change, and shots / time / battery at the corners.
 /// </summary>
-/// <summary>The shotgun's aiming dot: a thin dark-edged ring around the centre, small enough to leave the front bead visible.</summary>
-public partial class BeadReticle : Control
+/// <summary>A shouldered gun's crosshair (#460): four dark-edged ticks round a gap and a centre dot, where the shot goes.</summary>
+public partial class Crosshair : Control
 {
+    private static readonly Color Edge = new(0, 0, 0, 0.6f), Line = new(1f, 0.95f, 0.85f, 0.95f);
+
     public override void _Draw()
     {
-        var c = Size / 2f;
-        DrawArc(c, 5.5f, 0f, Mathf.Tau, 28, new Color(0, 0, 0, 0.55f), 3.5f, true);
-        DrawArc(c, 5.5f, 0f, Mathf.Tau, 28, new Color(1f, 0.92f, 0.6f, 0.95f), 1.6f, true);
+        var c = (Size / 2f).Round();
+        for (int pass = 0; pass < 2; pass++)
+        {
+            var color = pass == 0 ? Edge : Line;
+            float width = pass == 0 ? 4f : 2f, grow = pass == 0 ? 1f : 0f;
+            foreach (var d in Dirs)
+                DrawLine(c + d * (Gap - grow), c + d * (Gap + Tick + grow), color, width);
+            DrawCircle(c, pass == 0 ? 2.5f : 1.5f, color);
+        }
     }
+
+    private const float Gap = 6f, Tick = 9f;
+    private static readonly Vector2[] Dirs = { Vector2.Up, Vector2.Down, Vector2.Left, Vector2.Right };
 
     public override void _Notification(int what)
     {

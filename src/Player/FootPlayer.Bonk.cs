@@ -20,6 +20,7 @@ public partial class FootPlayer
         _flinchDir = local.LengthSquared() > 1e-4f ? local.Normalized() : Vector3.Back;
         _flinchStrength = Mathf.Clamp(strength, 0f, 1.5f);
         _flinchTime = 0f;
+        _face.Hurt();   // and grimaces (#657), on every peer like the rock
     }
 
     /// <summary>

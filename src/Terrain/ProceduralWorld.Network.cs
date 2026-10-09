@@ -35,7 +35,11 @@ public sealed partial class ProceduralWorld
     }
 
     /// <summary>Where a village stands: a stretch of a valley road, centred <see cref="S"/> along it.</summary>
-    private sealed record VillageSlot(int Id, int Line, double S, double HalfLength, double E, double N);
+    private sealed record VillageSlot(int Id, int Line, double S, double HalfLength, double E, double N)
+    {
+        /// <summary>The biggest slots (#559): a town if the ground allows it, see <c>PlanTown</c>.</summary>
+        public bool IsTown => HalfLength > TownHalfLength;
+    }
 
     private sealed class Network
     {

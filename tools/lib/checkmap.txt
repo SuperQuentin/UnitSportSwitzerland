@@ -7,12 +7,16 @@
 #         full: the windowed / two-client / load scripts (tier 3), only under `test.sh full`.
 # check   "--flag [args]" runs `godot --headless --path . -- --flag [args]`; a tools/ path runs
 #         that script; "@netsmoke" is the runner's own headless server + client.
+#         quick-tier Godot checks run with --fixed-fps 60 (game time, docs/notes/general/fast-checks.md);
+#         "@realtime --flag ..." keeps one in real time.
 # Only list a check that ends by itself and prints a RESULT line or exits non-zero on failure.
 # Give each check the lightest world it works on (Core/Systems): `--world flat` (TestWorld, no
 # map), `--systems ui` (only what is named), `--world fixture` / `--chunks fixture:<course>`
 # (tiles built in code). Never the real map in quick/net.
 
 src/Net/                 quick  --interestcheck
+src/Player/FootPlayer.cs  quick  --vrposecheck
+src/XR/                  quick  --vrposecheck
 src/Audio/Cd/            quick  --beatcheck
 src/Audio/               quick  --earscheck --world fixture --view third
 src/Items/Radio          quick  --radiopanelcheck --world fixture
@@ -21,6 +25,9 @@ src/Avatar/              quick  --meshcheck
 src/Avatar/              quick  --outfitcheck
 src/Avatar/              quick  --emotecheck
 src/Player/EmoteWheel    quick  --emotewheelcheck --world fixture
+src/Core/TouchControls   quick  --touchcheck --mobile --world fixture
+src/Core/PlayerInput.cs  quick  --touchcheck --mobile --world fixture
+src/Core/Platform.cs     quick  --touchcheck --mobile --world fixture
 src/Player/FootPlayer.cs quick  --emotewheelcheck --world fixture
 src/Avatar/              quick  --cockpitcheck
 src/Core/Chat            quick  --chatcheck
@@ -30,6 +37,13 @@ src/Terrain/             quick  --origincheck
 # #298: a generated lake (Haut-Lac, inside the fill round the default spawn) has its bed 10 m+ under
 # the level the runtime reads, and collision is the bed
 src/Terrain/ProceduralWorld quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
+src/Terrain/ProceduralWorld quick --shapedcheck --systems ui
+# #607: the generated world's building sites (#605) through the site planner, plan views in test_output/construction/
+src/Terrain/ProceduralWorld quick --constructioncheck --systems ui
+src/Terrain/Construction/ quick --constructioncheck --systems ui
+# #608: a body walks every storey of hand-made sites' shells, on their real collision
+src/Terrain/Construction/ quick --shellwalkcheck --world flat
+src/Terrain/BuildingMeshBuilder quick --shellwalkcheck --world flat
 src/Terrain/WaterProbe   quick  --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 tools/TerrainFormat/Water quick --waterprobe 2553000,1139500,30,10 --systems terrain,generated,physics
 src/Items/               quick  --invcheck
@@ -38,6 +52,14 @@ src/Crafting/            quick  --campfirecheck --systems ui,physics
 src/Items/PlacedObjects  quick  --campfirecheck --systems ui,physics
 src/Items/FlagGhost      quick  --campfirecheck --systems ui,physics
 src/Items/Placeables     quick  --campfirecheck --systems ui,physics
+src/Farming/             quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Loot/Gathering       quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Items/ItemController quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Terrain/Fixture/FixtureCourse quick  --farmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/farmcheck_store --farmfresh
+src/Farming/             quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
+src/Loot/Gathering       quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
+src/Items/ItemController quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
+src/Crafting/Recipes     quick  --handfarmcheck --systems ui,physics,loot,farming --farmmonth 7 --farmdir test_output/handfarm_store --farmfresh
 src/Build/               quick  --buildcheck --systems ui,physics,build
 src/Build/               net    tools/buildnetcheck.sh
 src/Build/Gadget         quick  --gadgetcheck --systems ui,physics,build
@@ -47,7 +69,17 @@ src/BattleRoyale/BrStruct quick  --prefabcheck --systems ui,physics,build
 src/Loot/                quick  --lootchancecheck
 src/Loot/                quick  --shopcheck
 src/Interiors/           quick  --shopcheck
+src/Interiors/           quick  --sitecheck --systems ui
+src/Loot/LootTables      quick  --sitecheck --systems ui
+src/Interiors/           quick  --doorcheck
+src/Interiors/           quick  --flatcheck
+src/Interiors/           quick  --stairwalkcheck
+# #598: the generated world's shaped buildings: outline, doors, interiors that follow it
+src/Interiors/           quick  --shapedcheck --systems ui
 src/Interiors/Church     quick  --churchstagecheck
+src/Interiors/Landmarks  quick  --ikeacheck --systems ui
+src/Interiors/Ikea       quick  --ikeacheck --systems ui
+src/Interiors/BuildingTypes quick  --ikeacheck --systems ui
 src/Audio/Cd/CdLibrary   quick  --churchstagecheck
 src/Items/Item           quick  --shopcheck
 src/Occasions/           quick  --occasioncheck
@@ -58,6 +90,10 @@ src/Player/              quick  --cockpitcheck
 src/Player/              quick  --motocheck
 src/Player/              quick  --truckcheck
 src/Player/              quick  --driftcheck
+src/Player/Car           quick  --kartcheck
+src/Player/Kart          quick  --kartcheck
+src/Avatar/Kart          quick  --kartcheck
+src/Avatar/CarRig        quick  --kartcheck
 src/Player/              quick  --spincheck
 src/Vehicles/            quick  --driftcheck
 src/Vehicles/            quick  --truckcheck
@@ -73,6 +109,9 @@ src/Core/TestWorld       quick  --hitboxcheck --world flat
 src/Core/Systems         quick  --hitboxcheck --world flat
 src/Ui/                  quick  --leavecheck --world fixture
 src/Ui/                  quick  --menucheck --systems ui
+src/Ui/Map               quick  --mapcheck --systems ui
+tools/MapCore/           quick  --mapcheck --systems ui
+src/Core/TerrainPaths    quick  --mapcheck --systems ui
 src/Core/GameShell       quick  --menucheck --systems ui
 src/Core/Systems         quick  --menucheck --systems ui
 src/Core/ClientWorld     quick  --leavecheck --world fixture
@@ -93,6 +132,19 @@ src/World/LaneGraph      quick  --drivecheck --chunks fixture:hairpin --traffic 
 src/World/Wa             quick  --watercheck --chunks fixture:lake
 src/World/SeaState       quick  --watercheck --chunks fixture:lake
 src/Terrain/Water        quick  --watercheck --chunks fixture:lake
+src/Terrain/ParkingBuilder quick --parkingcheck --chunks fixture:parking
+src/Terrain/ParkingProbe quick  --parkingcheck --chunks fixture:parking
+src/Vehicles/DormantVehicles quick --parkingcheck --chunks fixture:parking
+src/Vehicles/VehicleSlot quick  --parkingcheck --chunks fixture:parking
+tools/TerrainFormat/ParkingPlanner quick --parkingcheck --chunks fixture:parking
+# waking a dormant vehicle is seamless (#560): the live one where its copy stood, first frame and settled
+src/Vehicles/WakeProbe   quick  --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/Vehicles/WakeProbe   quick  --wakecheck --wakekind boat --chunks fixture:lake --traffic 0
+src/Vehicles/DormantVehicles quick --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/Vehicles/DormantVehicles quick --wakecheck --wakekind boat --chunks fixture:lake --traffic 0
+src/Vehicles/DormantLooks quick --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/Vehicles/VehicleBody quick  --wakecheck --wakekind car --chunks fixture:parking --traffic 0
+src/World/GroundQuery    quick  --wakecheck --wakekind boat --chunks fixture:lake --traffic 0
 src/Terrain/Fixture/     quick  --watercheck --chunks fixture:lake
 src/Terrain/ChunkManager quick  --watercheck --chunks fixture:lake
 src/Player/FootPlayer.Wa quick  --watercheck --chunks fixture:lake
@@ -113,6 +165,13 @@ src/Player/FootPlayer.Bo quick  --boatcheck jetski --chunks fixture:lake
 src/Player/FootPlayer.Bo quick  --boatcheck speedboat --chunks fixture:lake
 src/Vehicles/VehicleBody quick  --boatcheck speedboat --chunks fixture:lake
 src/Avatar/BoatMesh      quick  --boatcheck jetski --chunks fixture:lake
+# boat trailers (#463): the Raptor backs a boat trailer down the slipway, launches the boat, winches it back, pulls out
+src/Player/BoatTrailerCh quick  --boattrailercheck speedboat --chunks fixture:lake --traffic 0
+src/Player/BoatTrailerCh quick  --boattrailercheck jetski --chunks fixture:lake --traffic 0
+src/Player/FootPlayer.He quick  --boattrailercheck speedboat --chunks fixture:lake --traffic 0
+src/Player/TrailerCatal  quick  --boattrailercheck jetski --chunks fixture:lake --traffic 0
+src/Avatar/TrailerMesh   quick  --boattrailercheck speedboat --chunks fixture:lake --traffic 0
+src/Avatar/PickupMesh    quick  --boattrailercheck speedboat --chunks fixture:lake --traffic 0
 # the paddle steamer (#303): draught, telegraph, slow way on and long stop, walking its tilting decks in a swell, stairs, saloon, gangway, bow, overboard and back, a seat
 src/Player/Steamer       quick  --steamercheck --chunks fixture:lake
 src/Player/FootPlayer.St quick  --steamercheck --chunks fixture:lake
@@ -128,6 +187,9 @@ src/Player/FootPlayer.Cr quick  --swimcheck --chunks fixture:lake
 src/Player/Wading        quick  --swimcheck --chunks fixture:lake
 src/Items/HeldItemVisual quick  --swimcheck --chunks fixture:lake
 src/Loot/Gathering       quick  --swimcheck --chunks fixture:lake
+src/Items/Fishing        quick  --fishcheck --chunks fixture:lake
+src/Loot/Gathering       quick  --fishcheck --chunks fixture:lake
+src/Items/Fishing        quick  --invcheck
 src/Avatar/WakeFoam      quick  --boatcheck speedboat --chunks fixture:lake
 src/Avatar/HullSlap      quick  --boatcheck speedboat --chunks fixture:lake
 shaders/wake_foam        quick  --boatcheck speedboat --chunks fixture:lake
@@ -147,26 +209,40 @@ src/Terrain/Fixture/     quick  --steamercheck pier --chunks fixture:lake
 src/Player/FootPlayer.Pi quick  --steamercheck pier --chunks fixture:lake
 src/Player/SteamerCheck  quick  --steamercheck pier --chunks fixture:lake
 tools/TerrainFormat/Land quick  --steamercheck pier --chunks fixture:lake
-# the tilting gangway plank and the marina boats (#383)
+# the tilting gangway plank and the marina boats (#383, dormant slots since #554)
 src/World/GangwayFit     quick  --steamercheck pier --chunks fixture:lake
-src/World/MarinaBoats    quick  --steamercheck pier --chunks fixture:lake
+src/Vehicles/DormantVehicles quick --steamercheck pier --chunks fixture:lake
+src/Vehicles/VehicleSlot quick  --steamercheck pier --chunks fixture:lake
 src/Avatar/SteamerMesh   quick  --steamercheck pier --chunks fixture:lake
 # the hull's boarding ladder and the walkable E setting (#384)
 src/Vehicles/VehicleReac quick  --steamercheck walk --chunks fixture:lake
 src/Core/GameSettings    quick  --exitcheck --world fixture
 
+src/Core/SimClock        net    tools/speednetcheck.sh
+src/Core/SpeedNetProbe   net    tools/speednetcheck.sh
+src/Net/ClockSync        net    tools/speednetcheck.sh
 src/Net/                 net    @netsmoke
+src/Net/Sleeper          net    tools/sleepercheck.sh
+src/Net/PlayerKey        net    tools/sleepercheck.sh
+src/Net/ChatManager      net    tools/transfercheck.sh
+src/Net/TransferProbe    net    tools/transfercheck.sh
 src/Core/ServerWorld     net    @netsmoke
 src/Core/ClientWorld     net    @netsmoke
 src/Core/Debug           net    tools/debugcheck.sh
 @rpc                     net    @netsmoke
+src/Vehicles/DormantVehicles net tools/parkingnetcheck.sh
+src/Vehicles/ParkingNetProbe net tools/parkingnetcheck.sh
 src/Items/ThrowHits      net    tools/bonkcheck.sh
 src/Items/ItemEvents     net    tools/bonkcheck.sh
 src/Items/DroppedItem    net    tools/bonkcheck.sh
 src/Player/FootPlayer.B  net    tools/bonkcheck.sh
 src/Crafting/            net    tools/campfirecheck.sh
+src/Items/Fishing        net    tools/fishcheck.sh
+src/Items/ItemEvents     net    tools/fishcheck.sh
 src/Items/PlacedObjects  net    tools/campfirecheck.sh
 src/Items/HeldItemVisual net    tools/campfirecheck.sh
+src/Farming/             net    tools/farmnetcheck.sh
+src/Terrain/NetworkChunkSource net tools/farmnetcheck.sh
 src/World/Wa             net    tools/watercheck.sh
 src/World/SeaState       net    tools/watercheck.sh
 src/Net/ChatManager      net    tools/watercheck.sh
@@ -174,6 +250,34 @@ src/Terrain/Water        net    tools/watercheck.sh
 src/Loot/Shop            net    tools/shopcheck.sh
 src/Items/Bank           net    tools/shopcheck.sh
 src/Interiors/BankSigns  net    tools/shopcheck.sh
+src/Interiors/InteriorManager.Lifts net tools/liftsynccheck.sh
+src/Interiors/InteriorManager.InnerDoors net tools/liftsynccheck.sh
+src/Interiors/InteriorNode.Inside net tools/liftsynccheck.sh
+src/Interiors/LiftSyncProbe net tools/liftsynccheck.sh
+src/Interiors/FloorPicker net tools/liftsynccheck.sh
+src/Interiors/BuildingFootprint net tools/baycheck.sh
+src/Interiors/DoorBudget net    tools/baycheck.sh
+src/Interiors/InteriorGenerator net tools/baycheck.sh
+src/Interiors/BuildingFootprint net tools/rampnetcheck.sh
+src/Interiors/GarageRule net    tools/rampnetcheck.sh
+src/Interiors/RampProfile net   tools/rampnetcheck.sh
+src/Interiors/InteriorGenerator net tools/rampnetcheck.sh
+src/Interiors/InteriorMeshBuilder net tools/rampnetcheck.sh
+src/Interiors/InteriorValidator net tools/rampnetcheck.sh
+src/Interiors/DoorLink   net    tools/rampnetcheck.sh
+src/Interiors/DoorIndex  net    tools/rampnetcheck.sh
+src/Terrain/Fixture/     net    tools/rampnetcheck.sh
+src/Player/GarageProbe   net    tools/rampnetcheck.sh
+src/Interiors/DoorIndex  net    tools/rampalongnetcheck.sh
+src/Terrain/Fixture/     net    tools/rampalongnetcheck.sh
+src/Player/GarageProbe   net    tools/rampalongnetcheck.sh
+src/Interiors/BuildingFootprint net tools/rampalongnetcheck.sh
+src/Interiors/GarageRule net tools/rampalongnetcheck.sh
+src/Interiors/RampProfile net tools/rampalongnetcheck.sh
+src/Interiors/InteriorGenerator net tools/rampalongnetcheck.sh
+src/Interiors/InteriorMeshBuilder net tools/rampalongnetcheck.sh
+src/Interiors/InteriorValidator net tools/rampalongnetcheck.sh
+src/Terrain/ProceduralWorld.Settlements net tools/baycheck.sh
 src/Terrain/ProceduralWorld.Settlements  net  tools/shopcheck.sh
 src/Player/FootPlayer.Sw net    tools/swimnetcheck.sh
 src/Player/SwimNet       net    tools/swimnetcheck.sh
@@ -210,6 +314,8 @@ src/Combat/              full   tools/pvpcheck.sh
 src/Items/Weapons        full   tools/pvpcheck.sh
 src/Items/               full   tools/gunshotcheck.sh
 src/Items/Radio          full   tools/sparklecheck.sh
+src/Items/Beat           full   tools/beatfieldcheck.sh
+src/Items/Radio          full   tools/beatfieldcheck.sh
 src/Items/               full   tools/placedcheck.sh
 src/Items/               full   tools/plantcheck.sh
 src/Items/               full   tools/useanimcheck.sh
@@ -217,15 +323,21 @@ src/Loot/                full   tools/lootsynccheck.sh
 src/Loot/                full   tools/locksynccheck.sh
 src/World/               full   tools/racecheck.sh
 src/Audio/               full   tools/radiocheck.sh
+src/Audio/Cd/CdUpload    net    tools/uploadcheck.sh
+src/Audio/Cd/CdScanner   net    tools/uploadcheck.sh
 src/Player/              full   tools/switchcheck.sh
 src/Vehicles/            full   tools/switchcheck.sh
 src/Player/              full   tools/decknetcheck.sh
 src/Vehicles/            full   tools/decknetcheck.sh
 src/Avatar/              full   tools/decknetcheck.sh
 src/Net/                 full   tools/loadtest.sh 4 testsh 60
+# the trailer (#706): a boat, a car on the race autopilot and an airliner staged on the real map (CHUNKS=)
+src/Trailer/             full   tools/trailer.sh stills 2,5,12
 tools/lib/               quick  tools/lib/guard_selftest.sh
 src/Player/Pigeon        quick  --flycheck pigeon --world flat
 src/Player/FlightCheck   quick  --flycheck pigeon --world flat
+src/Player/Pigeon        quick  --flycheck pigeoncrash --systems birds
+src/Birds/BirdLife       quick  --flycheck pigeoncrash --systems birds
 src/Player/FlightCheck   quick  --flycheck a320 --world flat
 src/Player/Airliner      quick  --flycheck a320 --world flat
 src/Player/Airliner      quick  --flycheck a320 --world flat --airliner sim
@@ -240,10 +352,91 @@ src/Player/Airstairs     quick  --stairscheck --world fixture --traffic 0 --airl
 src/Player/FootPlayer.Ai quick  --stairscheck --world fixture --traffic 0 --airliner arcade
 src/Vehicles/Airstairs   quick  --stairscheck --world fixture --traffic 0 --airliner arcade
 src/Vehicles/VehicleBody.Ai quick  --stairscheck --world fixture --traffic 0 --airliner arcade
+src/Avatar/Forklift      quick  --forkliftcheck --world flat --systems physics,ui
+src/Player/Forklift      quick  --forkliftcheck --world flat --systems physics,ui
+src/Player/FootPlayer.Fo quick  --forkliftcheck --world flat --systems physics,ui
+# #615: a building site's pallets of materials, lifted by a telehandler from a second peer (generated world)
+src/Terrain/Construction/SiteDressing net tools/sitepalletnetcheck.sh
+src/Terrain/Construction/SitePlans net tools/sitepalletnetcheck.sh
+src/Items/SitePalletNetProbe net tools/sitepalletnetcheck.sh
+# #615: a pallet in a tipper's body or a mini dumper's skip: set in from forks or a bucket, tipped out (flat), and over the network
+src/Items/BedCheck        quick  --bedcheck tipper --world flat --systems physics,ui
+src/Items/BedCheck        quick  --bedcheck dumper,bucket --world flat --systems physics,ui
+src/Avatar/BedShape       quick  --bedcheck tipper --world flat --systems physics,ui
+src/Avatar/BedShape       quick  --bedcheck dumper --world flat --systems physics,ui
+src/Player/IBed           quick  --bedcheck tipper --world flat --systems physics,ui
+src/Player/IBed           quick  --bedcheck dumper --world flat --systems physics,ui
+src/Items/PalletService   quick  --bedcheck tipper,bucket --world flat --systems physics,ui
+src/Items/PalletService   quick  --bedcheck dumper --world flat --systems physics,ui
+src/Player/Truck.cs       quick  --bedcheck tipper --world flat --systems physics,ui
+src/Avatar/TruckMeshBuild quick  --bedcheck tipper --world flat --systems physics,ui
+src/Avatar/HeavyRig       quick  --bedcheck tipper --world flat --systems physics,ui
+src/Player/MiniDumper     quick  --bedcheck dumper --world flat --systems physics,ui
+src/Vehicles/VehicleBody  quick  --bedcheck tipper --world flat --systems physics,ui
+src/Vehicles/VehicleManag quick  --bedcheck tipper --world flat --systems physics,ui
+src/Items/BedNetProbe     net    tools/bednetcheck.sh
+src/Items/PalletService   net    tools/bednetcheck.sh
+src/Vehicles/VehicleBody  net    tools/bednetcheck.sh
+src/Vehicles/VehicleManag net    tools/bednetcheck.sh
+src/Player/IBed           net    tools/bednetcheck.sh
+src/Items/SitePallets     net    tools/sitepalletnetcheck.sh
+src/Items/PalletService   net    tools/sitepalletnetcheck.sh
+src/Terrain/Construction/SiteDressing quick --constructioncheck --systems ui
+# #615: any machine with tines lifts pallets (the telehandler, the fork loader), on the flat; the forklift's own check guards the shared rule
+src/Player/IBucket        quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Player/WheelLoader    quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Avatar/WheelLoader    quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Items/PalletService   quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Items/ForkCheck       quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Player/FootPlayer.Whe quick  --forkcheck loaderbucket --world flat --systems physics,ui
+src/Player/WheelLoader    net    tools/sitepalletnetcheck.sh
+src/Player/IForks         quick  --forkcheck telehandler --world flat --systems physics,ui
+src/Player/IForks         quick  --forkcheck loaderforks --world flat --systems physics,ui
+src/Player/IForks         quick  --palletcheck --world flat --systems physics,ui
+src/Items/ForkCheck       quick  --forkcheck telehandler --world flat --systems physics,ui
+src/Items/ForkCheck       quick  --forkcheck loaderforks --world flat --systems physics,ui
+src/Items/PalletService   quick  --forkcheck telehandler --world flat --systems physics,ui
+src/Items/Pallets         quick  --forkcheck loaderforks --world flat --systems physics,ui
+src/Player/Telehandler    quick  --forkcheck telehandler --world flat --systems physics,ui
+src/Player/WheelLoader    quick  --forkcheck loaderforks --world flat --systems physics,ui
+src/Avatar/WheelLoader    quick  --forkcheck loaderforks --world flat --systems physics,ui
+src/Avatar/Telehandler    quick  --forkcheck telehandler --world flat --systems physics,ui
+src/Player/Telehandler    net    tools/palletnetcheck.sh
+# pallets a forklift lifts (#583 phase 2): forked, carried and set down in the hand-made warehouse; and over the wire
+src/Items/Pallet         quick  --palletcheck --world flat --systems physics,ui
+src/Avatar/Forklift      quick  --palletcheck --world flat --systems physics,ui
+src/Player/Forklift      quick  --palletcheck --world flat --systems physics,ui
+src/Player/FootPlayer.Fo quick  --palletcheck --world flat --systems physics,ui
+src/Interiors/InteriorMeshBuilder quick --palletcheck --world flat --systems physics,ui
+src/Loot/LootService     quick  --palletcheck --world flat --systems physics,ui
+src/Items/Pallet         net    tools/palletnetcheck.sh
+src/Player/Forklift      net    tools/palletnetcheck.sh
+# phase 3: the stacks on a site's apron and the forklift beside it, drawn with the dormant fleet
+src/Items/SitePallets    quick  --sitecheck --systems ui
+src/Vehicles/SiteYards   quick  --sitecheck --systems ui
+src/Vehicles/VehicleSlot quick  --sitecheck --systems ui
+src/Items/SitePallets    net    tools/palletnetcheck.sh
+# a hall's forklift is a vehicle asleep (#630): carved out of the hall mesh, woken by aim, driven out
+src/Interiors/HallForklifts quick --sitecheck --systems ui
+src/Interiors/ParkedForklift quick --sitecheck --systems ui
+src/Interiors/HallForklifts net tools/palletnetcheck.sh
+src/Interiors/ParkedForklift net tools/palletnetcheck.sh
+src/Interiors/InteriorGenerator.Industrial net tools/palletnetcheck.sh
+src/Vehicles/SiteYards   net    tools/palletnetcheck.sh
+src/Vehicles/DormantVehicles net tools/palletnetcheck.sh
 src/Player/StairsNet     net    tools/stairsnetcheck.sh
 src/Player/Airstairs     net    tools/stairsnetcheck.sh
 src/Avatar/Airstairs     net    tools/stairsnetcheck.sh
 src/Player/FootPlayer.De net    tools/stairsnetcheck.sh
+# aircraft at the airport stands (#422): the fixture airport planned like the real ones, stairs docked, refills
+src/World/AirportStands  quick  --airportcheck --chunks fixture:airport --traffic 0
+src/World/AirportCheck   quick  --airportcheck --chunks fixture:airport --traffic 0
+src/Terrain/Fixture/FixtureAirport quick --airportcheck --chunks fixture:airport --traffic 0
+tools/TerrainFormat/Airport quick --airportcheck --chunks fixture:airport --traffic 0
+src/Vehicles/AirstairsDock quick --airportcheck --chunks fixture:airport --traffic 0
+src/World/AirportStands  net    tools/airportnetcheck.sh
+src/Vehicles/VehicleBody net    tools/airportnetcheck.sh
+tools/airportnetcheck    net    tools/airportnetcheck.sh
 src/Player/Airliner      net    tools/airlinernetcheck.sh
 src/Avatar/AirlinerRig   net    tools/airlinernetcheck.sh
 src/Avatar/A320Deck      net    tools/airlinernetcheck.sh
@@ -262,6 +455,24 @@ src/Player/Airliner      net    tools/freighternetcheck.sh
 src/Player/FreighterNet  net    tools/freighternetcheck.sh
 src/Avatar/Freighter     net    tools/freighternetcheck.sh
 src/BattleRoyale/BrPlane quick  --flycheck freighter --world flat
+src/Player/Airliner      quick  --flycheck an124 --world flat
+src/Avatar/An124         quick  --flycheck an124 --world flat
+src/Player/AirlinerCirc  quick  --flycheck an124 --world flat
+src/Player/Airliner      quick  --flycheck an124 --world flat --airliner sim
+src/Avatar/An124         quick  --an124check --world fixture --traffic 0
+src/Player/An124Check    quick  --an124check --world fixture --traffic 0
+src/Player/Airliner      quick  --an124check --world fixture --traffic 0
+src/Avatar/AirlinerRig   quick  --an124check --world fixture --traffic 0
+src/Player/Flight.cs     quick  --an124check --world fixture --traffic 0
+src/Player/FootPlayer.De quick  --an124check --world fixture --traffic 0
+src/Avatar/An124         quick  --an124check bus --world fixture --traffic 0
+src/Player/An124Check    quick  --an124check bus --world fixture --traffic 0
+src/Player/FootPlayer.Hold quick --an124check bus --world fixture --traffic 0
+src/Player/An124Check    quick  --an124check car --world fixture --traffic 0
+src/Avatar/An124         net    tools/an124netcheck.sh
+src/Player/An124NetProbe net    tools/an124netcheck.sh
+src/Player/Airliner      net    tools/an124netcheck.sh
+src/Vehicles/VehicleManager net tools/an124netcheck.sh
 src/Player/FootPlayer.Hold quick --holdcheck --world fixture --traffic 0
 src/Player/HoldCheck     quick  --holdcheck --world fixture --traffic 0
 src/Player/FootPlayer.De quick  --holdcheck --world fixture --traffic 0
@@ -281,7 +492,100 @@ src/Player/Emote         net    tools/emotenetcheck.sh
 src/Items/SwissItems     net    tools/swisscheck.sh
 src/Items/SwissNetProbe  net    tools/swisscheck.sh
 src/Avatar/HumanMeshBuilder.Emotes net tools/emotenetcheck.sh
+src/Avatar/Face           net    tools/emotenetcheck.sh
+src/Player/FootPlayer.Face net   tools/emotenetcheck.sh
+shaders/body/face        quick  --outfitcheck
+src/Combat/Fight         net    tools/fightnetcheck.sh
+src/Player/FootPlayer.Fight net tools/fightnetcheck.sh
+src/Avatar/HumanMeshBuilder.Fight net tools/fightnetcheck.sh
 src/Player/FootPlayer.Hold net   tools/holdnetcheck.sh
 src/Player/HoldNetProbe  net    tools/holdnetcheck.sh
 src/Vehicles/VehicleBody.Hold net tools/holdnetcheck.sh
 src/Player/FootPlayer.Overlap net tools/holdnetcheck.sh
+src/Player/TractorCheck  quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/Truck.Farm    quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/FootPlayer.Fa quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/FootPlayer.He quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/HeavyTrain    quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/TrailerCatal  quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Avatar/FarmMesh      quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Avatar/FarmMesh      quick  --cockpitcheck
+src/Farming/MachineLoad  quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Terrain/Fixture/FixtureCourse quick  --tractorcheck --chunks fixture:flat --traffic 0
+src/Player/TractorNetPro net    tools/tractornetcheck.sh
+src/Player/Truck.Farm    net    tools/tractornetcheck.sh
+src/Player/FootPlayer.Fa net    tools/tractornetcheck.sh
+src/Farming/             quick  --sellcheck --systems ui,physics,loot,farming --farmmonth 7 --selldir test_output/sellcheck_store
+src/Loot/Shop            quick  --sellcheck --systems ui,physics,loot,farming --farmmonth 7 --selldir test_output/sellcheck_store
+src/Items/Place          quick  --sellcheck --systems ui,physics,loot,farming --farmmonth 7 --selldir test_output/sellcheck_store
+src/Farming/             net    tools/sellnetcheck.sh
+src/Items/PlacedObjects  net    tools/sellnetcheck.sh
+# #611: the excavator: tracks, dig mode and the arm on the real bindings (flat), and seen from a second peer
+src/Player/Excavator      quick  --excavatorcheck --world flat --systems physics,ui
+src/Avatar/Excavator      quick  --excavatorcheck --world flat --systems physics,ui
+src/Player/FootPlayer.Exc quick  --excavatorcheck --world flat --systems physics,ui
+src/Player/Excavator      net    tools/excavatornetcheck.sh
+src/Avatar/Excavator      net    tools/excavatornetcheck.sh
+src/Player/FootPlayer.Exc net    tools/excavatornetcheck.sh
+# #613: the site's tipper and mixer on the destination action (flat), and from a second peer (the excavator's script)
+src/Player/TipperCheck    quick  --tippercheck tipper --world flat --systems physics,ui
+src/Player/TipperCheck    quick  --tippercheck mixer --world flat --systems physics,ui
+src/Player/Truck.cs       quick  --tippercheck tipper --world flat --systems physics,ui
+src/Player/Truck.cs       quick  --tippercheck mixer --world flat --systems physics,ui
+src/Player/HeavyCatalog   quick  --tippercheck mixer --world flat --systems physics,ui
+src/Avatar/TruckMeshBuilder quick --tippercheck tipper --world flat --systems physics,ui
+src/Avatar/TruckMeshBuilder quick --tippercheck mixer --world flat --systems physics,ui
+src/Avatar/HeavyRig       quick  --tippercheck mixer --world flat --systems physics,ui
+src/Player/FootPlayer.Hea quick  --tippercheck tipper --world flat --systems physics,ui
+src/Player/Truck.cs       net    tools/excavatornetcheck.sh
+src/Avatar/HeavyRig       net    tools/excavatornetcheck.sh
+# #614: the telehandler: three steering modes and the boom (flat), and from a second peer (the excavator's script)
+src/Player/Telehandler    quick  --telehandlercheck --world flat --systems physics,ui
+src/Avatar/Telehandler    quick  --telehandlercheck --world flat --systems physics,ui
+src/Player/FootPlayer.Tel quick  --telehandlercheck --world flat --systems physics,ui
+src/Player/Telehandler    net    tools/excavatornetcheck.sh
+src/Avatar/Telehandler    net    tools/excavatornetcheck.sh
+# #614: the mini dumper: crawls, turns on the spot, tips its skip (flat), and from a second peer (the excavator's script)
+src/Player/MiniDumper     quick  --dumpercheck --world flat --systems physics,ui
+src/Avatar/MiniDumper     quick  --dumpercheck --world flat --systems physics,ui
+src/Player/DumperCheck    quick  --dumpercheck --world flat --systems physics,ui
+src/Player/MiniDumper     net    tools/excavatornetcheck.sh
+src/Avatar/MiniDumper     net    tools/excavatornetcheck.sh
+# #614: the compact roller: drives, steers on its hinge, vibrates (flat), and from a second peer (the excavator's script)
+src/Player/CompactRoller  quick  --rollercheck --world flat --systems physics,ui
+src/Avatar/CompactRoller  quick  --rollercheck --world flat --systems physics,ui
+src/Avatar/FrameSteering  quick  --rollercheck --world flat --systems physics,ui
+src/Avatar/FrameSteering  quick  --loadercheck --world flat --systems physics,ui
+src/Player/FootPlayer.Com quick  --rollercheck --world flat --systems physics,ui
+src/Player/RollerCheck    quick  --rollercheck --world flat --systems physics,ui
+src/Player/CompactRoller  net    tools/excavatornetcheck.sh
+src/Avatar/CompactRoller  net    tools/excavatornetcheck.sh
+src/XR/XrCabControls      quick  --excavatorcheck --world flat --systems physics,ui
+# #614: the mini excavator (the same class over its own spec) and its blade, and from a second peer (the excavator's script)
+src/Player/Excavator      quick  --excavatorcheck mini --world flat --systems physics,ui
+src/Avatar/Excavator      quick  --excavatorcheck mini --world flat --systems physics,ui
+src/Avatar/MiniExcavator  quick  --excavatorcheck mini --world flat --systems physics,ui
+src/Avatar/MiniExcavator  quick  --excavatorcheck --world flat --systems physics,ui
+src/Player/FootPlayer.Exc quick  --excavatorcheck mini --world flat --systems physics,ui
+src/Avatar/MiniExcavator  net    tools/excavatornetcheck.sh
+# #612: the wheel loader: frame steering, work mode, the arm and the bucket (flat), and from a second peer (the excavator's script)
+src/Player/WheelLoader    quick  --loadercheck --world flat --systems physics,ui
+src/Avatar/WheelLoader    quick  --loadercheck --world flat --systems physics,ui
+src/Player/FootPlayer.Whe quick  --loadercheck --world flat --systems physics,ui
+src/Player/WheelLoader    net    tools/excavatornetcheck.sh
+src/Avatar/WheelLoader    net    tools/excavatornetcheck.sh
+# #616: a building site's machines are dormant vehicles: woken seamlessly, and from a second peer (generated world)
+src/Vehicles/DormantVehicles quick --wakecheck --wakekind site --generated on --at 2585292,1114432 --traffic 0
+src/Vehicles/VehicleSlot quick  --wakecheck --wakekind site --generated on --at 2585292,1114432 --traffic 0
+src/Vehicles/DormantVehicles net tools/sitemachinenetcheck.sh
+src/Vehicles/VehicleSlot net    tools/sitemachinenetcheck.sh
+src/Vehicles/ParkingNetProbe net tools/sitemachinenetcheck.sh
+src/Terrain/Construction/SitePlans net tools/sitemachinenetcheck.sh
+# #558 PR 3: the cars in an underground car park are vehicles asleep (the rule's tier-0 test is HallCarTests; slot geometry is --flatcheck)
+src/Interiors/HallCar    net    tools/hallcarnetcheck.sh
+src/Interiors/ParkedCars net    tools/hallcarnetcheck.sh
+src/Vehicles/DormantVehicles net tools/hallcarnetcheck.sh
+# the playtest suite (#751): scenarios well-formed, MCP over HTTP, the ledger; then every flat-course scenario set up
+src/Playtest/            quick  --playtestcheck
+src/Playtest/            quick  --playtest --playtest-smoke --world fixture --chunks fixture:flat
+src/Player/FootPlayer.Deck quick --playtest --playtest-smoke --world fixture --chunks fixture:flat

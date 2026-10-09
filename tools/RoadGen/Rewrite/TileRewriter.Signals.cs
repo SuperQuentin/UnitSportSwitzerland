@@ -28,7 +28,7 @@ public static partial class TileRewriter
     /// bike crossing there (#120, about 2 m) with a metre to spare. #292 moves it back behind a
     /// pedestrian crossing.
     /// </summary>
-    private const double SignalStopSetback = 4.5;
+    private const double SignalStopSetback = 3.6;
 
     /// <summary>
     /// Signal poles (#350) stand this far past the mouth along their arm, at the kerb plus
@@ -37,7 +37,7 @@ public static partial class TileRewriter
     /// <see cref="SignalStopSetback"/> back that leaves the 4 m a driver needs to see a roadside
     /// head (Kanton Bern Handbuch Markierung).
     /// </summary>
-    private const double PoleAlong = 0.6, PoleClear = 0.5, PoleStep = 0.4;
+    private const double PoleAlong = 0.4, PoleClear = 0.5, PoleStep = 0.4;
     private const int PoleTries = 6;
 
     /// <summary>A priority sign on a signal pole (#350) has its plate's top this high: below the heads' 2.35 m (SSV Art. 71).</summary>
@@ -75,7 +75,7 @@ public static partial class TileRewriter
         public int Junctions, Inferred, FromData, Arms, Approaches, LeftPockets, RightPockets, StopLines, Groups, TwoLensPedestrian, Invalid;
         /// <summary>Where OSM decides, what the inference rule would have said: both, rule only, OSM only (#348 tuning).</summary>
         public int RuleAndOsm, RuleOnly, OsmOnly, InternalArms;
-        public int Poles, PolesRejected, SignsOnPoles, BikeSignals;
+        public int Poles, PolesRejected, SignsOnPoles, BikeSignals, Crossings, PathStopLines;
         public readonly List<string> InvalidExamples = new();
         /// <summary>Where the first inferred junctions are (LV95), to look at them (#353).</summary>
         public readonly List<string> InferredAt = new();
@@ -129,7 +129,7 @@ public static partial class TileRewriter
     /// approach at its TLM line's end (the junction it stands before), one on a junction node at
     /// itself. Pedestrian-only signals (<c>crossing=traffic_signals</c>) do not make a junction.
     /// </summary>
-    private sealed class SignalSites
+    internal sealed class SignalSites
     {
         /// <summary>A line end or node this close to a junction's centre is that junction's.</summary>
         private const double Reach = 12.0, Cell = 50.0;
@@ -190,7 +190,8 @@ public static partial class TileRewriter
         Dictionary<TileId, List<RoadSignal>> signals, Cantons? cantons, UrbanField field, Footprints buildings,
         Dictionary<TileId, List<RoadAreaProp>> areas, Dictionary<TileId, List<RoadPointProp>> signs, SignalStats stats,
         Dictionary<TileId, List<RoadApproach>> approaches, Restrictions? restrictions, LaneStats laneStats,
-        Dictionary<(int Link, LinkEnd End), double> stopsAt, Dictionary<int, (SignalPlan Plan, int[] PlanArm)> plans)
+        Dictionary<(int Link, LinkEnd End), double> stopsAt, Dictionary<int, (SignalPlan Plan, int[] PlanArm)> plans,
+        Func<int, LinkEnd, bool, RoadSide> streetSideAt)
     {
         var net = result.Network;
         PriorityPlanner.Clearance? clearance = null;
@@ -205,6 +206,9 @@ public static partial class TileRewriter
             var kerbside = new List<(int Index, ApproachLayout Lanes)>();   // layout (a) bike lanes (#351)
             var stops = new List<float>();
             var wantPoles = new List<PoleWish>();
+            var islandPoles = new List<(byte Arm, Vec2 At, float Y, Vec2 Facing, Vec2 Across)>();   // #682
+            var leftGuides = new List<int>();   // arms with a left pocket: their left turn is guided where its exit has an island (#682)
+            var islandArms = new Dictionary<int, IslandExit>();   // arm -> where the lane after its exit island starts (#682)
             var approachArms = new List<(int Arm, int PlanArm, float[] Stop)>();   // their lane records (#353)
             var armInPlan = new int[junction.Arms.Count];   // each junction arm's index in the plan, -1 none (#406)
             Array.Fill(armInPlan, -1);
@@ -256,9 +260,32 @@ public static partial class TileRewriter
                 var sides = CrossSectionPlanner.Attributes(source.Line);
                 var rightSide = drawnRight ? sides.Right : sides.Left;
                 var leftSide = drawnRight ? sides.Left : sides.Right;
+                // the yellow crossing behind the stop line (#682), over the paths beside the carriageway too
+                bool crosswalk = false;   // the arm has a sidewalk or path: a crosswalk (#682)
+                if (!inside && block.Contains(source.Tile))
+                {
+                    var streetRight = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, drawnRight);
+                    var streetLeft = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
+                    if (crosswalk = streetRight.SidewalkDm > 0 || streetLeft.SidewalkDm > 0)   // a crosswalk only where there is a sidewalk (#682)
+                        EmitCrossing(paint, source, mid, u, right, MouthSkew(junction, arm) + SignalStopSetback, -(half + (pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0)), to, streetRight, streetLeft, areas, stats,
+                            pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } edgeWay, ExitFar: false } ? s => (edgeWay.OuterEdge(Math.Max(s, 0)).P - (mid + u * s)).Dot(right) : null);
+                }
                 // none on a link inside a junction of several nodes: its ends are the junction's own
                 var mainFlags = inside ? 0 : (approach ? SignalPoleFlags.Main : 0) | SignalPoleFlags.Pedestrian;
                 var secondFlags = inside ? 0 : (approach && (pocket || rightPocket) ? SignalPoleFlags.Second : 0) | SignalPoleFlags.Pedestrian;
+                if (!inside && approach) leftGuides.Add(i);   // a left pocket's lane, or the through lane's left edge where the left turn shares it
+                // the left repeater signal stands on a small island in the hatched median behind the stop line, not on the far kerb (#682)
+                if (!inside && approach && pocket && pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } exitWay, ExitFar: false })
+                {
+                    double stopAtArm = MouthSkew(junction, arm) + SignalStopSetback, zebraTo = stopAtArm - ZebraClear;
+                    if (exitWay.Islands(Get(areas, exitWay.Tile), stopAtArm, zebraTo - ZebraDepth, zebraTo, crosswalk) is { } island)
+                    {
+                        secondFlags &= ~SignalPoleFlags.Second;
+                        islandPoles.Add(((byte)arms.Count, island.Pole, island.Y, u, right));
+                        var exitSide = bikeSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
+                        islandArms[i] = new IslandExit(exitWay.HatchAtMouth, exitWay.ExitCar, exitSide.HasTrack || exitSide.HasLane);
+                    }
+                }
                 wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, right, to, u, -right,
                     rightSide.OuterDm > 0 ? rightSide.KerbCm / 100f : 0f, mainFlags, plan.Arms[i].LinkId));
                 // the left kerb stands out by the exit widening of the opposite approach's pocket (#123):
@@ -304,6 +331,13 @@ public static partial class TileRewriter
                     break;
                 }
             }
+            // a bike group that finds no phase (a T with a right pocket whose arrow always runs with the through lane) goes without its signal, not the junction without its plan (#682)
+            if (signalPlan.Validate().Any(e => e.Contains("(Bike arm")) && arms.Any(a => a.BikeSignal))
+            {
+                stats.BikeSignals -= arms.Count(a => a.BikeSignal);
+                for (int a = 0; a < arms.Count; a++) arms[a] = arms[a] with { BikeSignal = false };
+                signalPlan = SignalPlan.Build(arms, seed, amber);
+            }
             if (signalPlan.Validate() is { Count: > 0 } errors)
             {
                 stats.Invalid++;
@@ -337,6 +371,15 @@ public static partial class TileRewriter
                         };
                         stats.SignsOnPoles++;
                     }
+            }
+            // where the left turn exits beside an island it is guided through the junction: two dashed lines along its path (#682)
+            foreach (int gi in leftGuides)
+                EmitLeftGuides(paint, home, junction, gi, pockets.GetValueOrDefault((junction.NodeId, gi))?.Approach, anchors, islandArms);
+            foreach (var ip in islandPoles)
+            {
+                var local = Local(home, [ip.At], _ => ip.Y, 0f);
+                poles.Add(new SignalPole(local[0], local[1], local[2], Heading(ip.Facing), Heading(ip.Across), ip.Arm, SignalPoleFlags.Second));
+                stats.Poles++;
             }
             plans[junction.NodeId] = (signalPlan, armInPlan);   // the bike crossings' conflicts (#406)
             Get(signals, home).Add(new RoadSignal { X = centre[0], Y = centre[1], Z = centre[2], Stops = stops.ToArray(), Plan = signalPlan, Poles = poles });

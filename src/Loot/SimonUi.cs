@@ -228,7 +228,9 @@ public partial class SimonUi : CanvasLayer
             _ => "Opening…",
         };
         v.DrawString(font, new Vector2(panel.Position.X, y + 30), status, HorizontalAlignment.Center, panel.Size.X, 15, new Color(0.85f, 0.87f, 0.9f));
-        v.DrawString(font, new Vector2(panel.Position.X, y + 50), InputHints.Format("1-4, arrows / d-pad or click · {interact_mount} / Esc leave"),
+        v.DrawString(font, new Vector2(panel.Position.X, y + 50), (InputHints.Vr ? InputHints.Format("Point and pull · {interact_mount} / {ui_cancel} leave")
+            : InputHints.Pad ? InputHints.Format("{ui_up} {ui_right} {ui_down} {ui_left} · {interact_mount} / {ui_cancel} leave")
+            : InputHints.Format("1-4, arrows or click · {interact_mount} / {menu} leave")),
             HorizontalAlignment.Center, panel.Size.X, 12, new Color(0.6f, 0.62f, 0.66f));
     }
 }

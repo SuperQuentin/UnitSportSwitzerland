@@ -35,6 +35,8 @@ public static class PbfReader
         public required Func<double, double, bool> KeepNode { get; init; }
         public required Func<Dictionary<string, string>, bool> KeepWay { get; init; }
         public required IReadOnlySet<string> WayTags { get; init; }
+        /// <summary>Also keeps these ways whatever their tags (the untagged outlines of a multipolygon relation).</summary>
+        public Func<long, bool>? KeepWayId { get; init; }
         public Func<Dictionary<string, string>, bool>? KeepTaggedNode { get; init; }
         public IReadOnlySet<string> NodeTags { get; init; } = new HashSet<string>();
         public Func<Dictionary<string, string>, bool>? KeepRelation { get; init; }
@@ -229,7 +231,7 @@ public static class PbfReader
                             else if (wf == 8) wr.PackedSigned(refs);
                             else wr.Skip(ww);
                         var tags = Tags(keys, vals, filter.WayTags);
-                        if (!filter.KeepWay(tags)) break;
+                        if (!filter.KeepWay(tags) && filter.KeepWayId?.Invoke(id) != true) break;
                         var nd = new long[refs.Count];
                         long acc = 0;
                         for (int i = 0; i < refs.Count; i++) nd[i] = acc += refs[i];

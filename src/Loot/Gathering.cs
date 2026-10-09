@@ -28,9 +28,15 @@ namespace UnitSport.Loot;
 /// </summary>
 public partial class Gathering : Node, Core.IOriginShiftAware
 {
-    public enum Resource { None, Stone, Water, TreeWood, Deadwood, Pumpkin, Treat }
+    public enum Resource { None, Stone, Water, TreeWood, Deadwood, Pumpkin, Treat, Crop }
 
-    private const double RegrowSeconds = 20 * 60;
+    /// <summary>
+    /// A picked spot comes back half a day of environment time later (#579): berries and firewood
+    /// are a world process, so they regrow with the world rather than on the wall clock. At the
+    /// default 24 min a day that is about 12 real minutes at 1x, where the old value was 20 real
+    /// minutes flat.
+    /// </summary>
+    private const double RegrowSeconds = 12 * 3600;
     private const float TreeReach = 2.3f;
     private const float StreamReach = 1.6f;
     private const float CancelDistance = 0.9f;
@@ -61,6 +67,10 @@ public partial class Gathering : Node, Core.IOriginShiftAware
     private AudioStreamPlayer _sfx = null!;
     private readonly Random _rng = new();
 
+    // a ripe field cell ahead (#494): where it is and what grows there
+    private string _cropLabel = "";
+    private double _cropE, _cropN;
+
     public Gathering(ChunkManager chunks, WorldOrigin origin, ItemController items)
     {
         _chunks = chunks;
@@ -75,6 +85,30 @@ public partial class Gathering : Node, Core.IOriginShiftAware
 
     /// <summary>What the player can collect right now, for probes.</summary>
     public Resource Target => _target.Kind;
+    /// <summary>The prompt line as shown, "[G] Hold to harvest wheat", for probes.</summary>
+    public string Prompt => _prompt?.Text ?? "";
+
+    /// <summary>The one in the client world, for the fishing rod's stream test (#493).</summary>
+    public static Gathering? Instance { get; private set; }
+
+    public override void _EnterTree() => Instance = this;
+
+    public override void _ExitTree()
+    {
+        if (Instance == this) Instance = null;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="ground"/> (a point on the ground) lies in a mapped stream: a watercourse line
+    /// with no water surface to it (#493: a float cast into a brook). Loads the tile's streams on first use,
+    /// so the first cast at a new tile may miss.
+    /// </summary>
+    public bool StreamAt(Vector3 ground)
+    {
+        var tile = _origin.TileAt(ground);
+        EnsureLoaded(tile);
+        return NearStream(tile, ground, ground);
+    }
 
     public override void _Ready()
     {
@@ -105,6 +139,11 @@ public partial class Gathering : Node, Core.IOriginShiftAware
     // per frame
     // ------------------------------------------------------------------------------------
 
+    // what the prompt says now: rebuilt only when one of these changes
+    private Resource _shownKind;
+    private bool _shownDepleted;
+    private string? _shownWhat, _shownKey;
+
     public override void _Process(double delta)
     {
         var p = Eligible();
@@ -131,13 +170,18 @@ public partial class Gathering : Node, Core.IOriginShiftAware
             return;
         }
 
-        string what = _target.Kind == Resource.Treat
+        string what = _target.Kind == Resource.Crop ? _cropLabel : _target.Kind == Resource.Treat
             ? Occasions.OccasionHunt.Instance?.LabelFor(_target.Spot) ?? "it"
             : Label(_target.Kind);
         bool depleted = Remaining(_target) <= 0;
         _prompt.Visible = _progress <= 0;
-        string key = InputHints.Tag(PlayerInput.Gather);
-        _prompt.Text = depleted ? $"Nothing left to {Verb(_target.Kind)} here" : $"{key} Hold to {Verb(_target.Kind)} {what}";
+        // the line is built only when what it says changes (no string a frame, #221)
+        string key = InputHints.Label(PlayerInput.Gather);
+        if (_target.Kind != _shownKind || depleted != _shownDepleted || what != _shownWhat || !ReferenceEquals(key, _shownKey))
+        {
+            (_shownKind, _shownDepleted, _shownWhat, _shownKey) = (_target.Kind, depleted, what, key);
+            _prompt.Text = depleted ? $"Nothing left to {Verb(_target.Kind)} here" : $"[{key}] Hold to {Verb(_target.Kind)} {what}";
+        }
 
         if (!holding || depleted)
         {
@@ -182,6 +226,12 @@ public partial class Gathering : Node, Core.IOriginShiftAware
     {
         var target = _target;
         Cancel();
+        if (target.Kind == Resource.Crop)
+        {
+            // a ripe field cell (#494): the farm decides what it gives and turns it to stubble
+            if (Farming.HandFarming.Instance?.HarvestAt(_cropE, _cropN) is { Count: > 0 }) Play(SfxSynth.Chime, 1.3f);
+            return;
+        }
         if (target.Kind == Resource.Treat)
         {
             // an occasion hunt spot: claimed once per player per occasion, and the reward is its own
@@ -210,7 +260,8 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         _sfx.Play();
     }
 
-    private static double Now => Time.GetTicksMsec() / 1000.0;
+    /// <summary>Environment seconds (#579): regrowth keeps the world's pace.</summary>
+    private static double Now => World.WorldClock.EnvNow;
 
     // ------------------------------------------------------------------------------------
     // rules
@@ -222,6 +273,7 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         Resource.Water => "water",
         Resource.TreeWood => "firewood",
         Resource.Pumpkin => "a pumpkin",
+        Resource.Crop => "the crop",
         _ => "dead wood",
     };
 
@@ -230,6 +282,7 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         Resource.Water => "fill up with",
         Resource.TreeWood => "chop",
         Resource.Pumpkin => "pick",
+        Resource.Crop => "harvest",
         Resource.Treat => "take",
         _ => "gather",
     };
@@ -240,6 +293,7 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         Resource.Stone => 1.6,
         Resource.TreeWood => 2.2,
         Resource.Pumpkin => 1.0,
+        Resource.Crop => 1.4,
         Resource.Treat => 0.6,
         _ => 1.4,
     };
@@ -251,6 +305,7 @@ public partial class Gathering : Node, Core.IOriginShiftAware
         Resource.Stone => 4,
         Resource.TreeWood => 2,
         Resource.Pumpkin => 3,
+        Resource.Crop => int.MaxValue,   // the cell itself turns to stubble
         Resource.Treat => 1,
         _ => 2,
     };
@@ -320,6 +375,13 @@ public partial class Gathering : Node, Core.IOriginShiftAware
             return (Resource.Treat, hunt, CoverClass.Open);
         if (Occasions.OccasionDecor.Instance is { } decor && (decor.InPatch(ahead) || decor.InPatch(feet)))
             return (Resource.Pumpkin, Spot("pumpkin", ahead), CoverClass.Open);
+
+        // a ripe field cell ahead (#494): harvested by hand
+        if (Farming.HandFarming.Instance?.RipeAhead(p, out _cropE, out _cropN) is { } ripe)
+        {
+            _cropLabel = Farming.FarmRules.CropName(ripe.Crop).ToLowerInvariant();
+            return (Resource.Crop, Spot("crop", ahead), CoverClass.Open);
+        }
 
         // a tree in reach, the nearest one
         if (NearestTree(tile, feet, ahead) is { } tree)

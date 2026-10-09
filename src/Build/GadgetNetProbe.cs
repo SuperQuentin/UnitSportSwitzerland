@@ -116,8 +116,8 @@ public partial class GadgetNetProbe : Node
         {
             var start = body.GlobalPosition;
             float travelled = 0, highest = float.MinValue;
-            double end = Time.GetTicksMsec() / 1000.0 + 10;
-            while (Time.GetTicksMsec() / 1000.0 < end && !_heard.Any(l => l.Contains("GN A down")))
+            double end = GameClock.Now + 10;
+            while (GameClock.Now < end && !_heard.Any(l => l.Contains("GN A down")))
             {
                 travelled = Mathf.Max(travelled, new Vector2(body.GlobalPosition.X - start.X, body.GlobalPosition.Z - start.Z).Length());
                 highest = Mathf.Max(highest, body.GlobalPosition.Y);
@@ -152,10 +152,10 @@ public partial class GadgetNetProbe : Node
 
     private async Task<bool> Until(Func<bool> condition, double seconds)
     {
-        double end = Time.GetTicksMsec() / 1000.0 + seconds;
+        double end = GameClock.Now + seconds;
         while (!condition())
         {
-            if (Time.GetTicksMsec() / 1000.0 > end) return false;
+            if (GameClock.Now > end) return false;
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }
         return true;

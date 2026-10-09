@@ -32,7 +32,8 @@ public partial class GadgetTool : Node
     private Mode _mode;
     private PlacedObject? _riding;
     private float _along, _speed, _height, _t;
-    private ulong _nextBounceMs;
+    // simulation time (#579): a trampoline's re-arm is part of the world, so it slows with it
+    private double _nextBounceAt;
 
     public GadgetTool(ItemController items) => _items = items;
     public GadgetTool() : this(null!) { }
@@ -412,11 +413,11 @@ public partial class GadgetTool : Node
         else if (!Gadgets.KindOf.ContainsKey(_items.Inventory.HeldId)) _hint.Visible = false;
 
         // a trampoline: walking or landing onto its mat throws you up
-        if (Time.GetTicksMsec() < _nextBounceMs || p.Ride != RideKind.OnFoot) return;
+        if (Core.GameClock.Now < _nextBounceAt || p.Ride != RideKind.OnFoot) return;
         if (Nearest(p.GlobalPosition, 1.6f, k => k == PlacedKind.Trampoline) is not { } t || PlacedObjects.Instance is not { } placed) return;
         var mat = t.WorldTransform(placed.Origin).Origin + Vector3.Up * 0.46f;
         if (Flat(p.GlobalPosition - mat) > 1.1f || p.GlobalPosition.Y < mat.Y - 0.25f || p.GlobalPosition.Y > mat.Y + 0.4f || p.Velocity.Y > 0.5f) return;
-        _nextBounceMs = Time.GetTicksMsec() + 600;
+        _nextBounceAt = Core.GameClock.Now + 0.6;
         Bounces++;
         var flat = p.Velocity with { Y = 0 };
         p.Release(p.GlobalPosition + Vector3.Up * 0.15f, flat * 0.8f + Vector3.Up * BounceSpeed);

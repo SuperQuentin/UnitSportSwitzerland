@@ -1,0 +1,656 @@
+using System.Diagnostics;
+using System.Text;
+using System.Text.RegularExpressions;
+using UnitSport.Terrain.Format;
+using UnitSport.Tools.RoadGen.Rewrite;
+
+namespace UnitSport.Tools.Preprocessor;
+
+/// <summary>
+/// Sink for an in-process caller (the game, building terrain tiles with no .NET SDK and no
+/// subprocess) that wants progress without scraping it back out of stdout text, the way
+/// MapSetup's subprocess runner does today (tools/MapCore/Pipeline.cs: CounterLine/BatchLine).
+/// </summary>
+public interface IPreprocessorLog
+{
+    /// <summary>A line the tool would have printed.</summary>
+    void Line(string text);
+
+    /// <summary>Fraction of the current stage, 0..1, and what it is working on.</summary>
+    void Progress(string stage, double fraction);
+}
+
+/// <summary>
+/// Library entry point: runs the same argument-driven pipeline the CLI (<c>Program.cs</c>) runs,
+/// for the same argument strings, but in-process — with a <see cref="CancellationToken"/> the
+/// caller can cancel and an <see cref="IPreprocessorLog"/> it can read progress from instead of a
+/// subprocess's stdout. The CLI itself is now a thin wrapper around <see cref="RunAsync"/>, so
+/// there is exactly one definition of what each flag does and what exit code means success.
+/// </summary>
+public static partial class Preprocessor
+{
+    public static Task<int> RunAsync(IReadOnlyList<string> args, IPreprocessorLog? log = null, CancellationToken ct = default)
+    {
+        if (log == null) return RunCoreAsync(args, null, ct);
+        return RunWithLogAsync(args, log, ct);
+    }
+
+    private static async Task<int> RunWithLogAsync(IReadOnlyList<string> args, IPreprocessorLog log, CancellationToken ct)
+    {
+        // Every stage below (TerrainBuild, WaterStage, RoadStage, ...) still writes to
+        // Console.Out/Error directly, exactly as the CLI does — they are shared code, and there is
+        // one definition of what they print. Redirecting the console for the duration of this call
+        // is what turns those same lines into Line/Progress callbacks instead of text on a stream
+        // the caller does not own, without touching a single stage file. Console.Out/Error are
+        // process-wide, so this assumes the game does not call RunAsync with a non-null log
+        // concurrently from two threads at once; sequential calls are fine, since the previous
+        // writer is always restored before this returns.
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        var writer = new LogWriter(log);
+        Console.SetOut(writer);
+        Console.SetError(writer);
+        try
+        {
+            return await RunCoreAsync(args, writer, ct);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
+    }
+
+    // swissALTI3D XYZ zips -> .terr chunk files + manifest.json
+    // Usage:
+    //   dotnet run --project tools/TerrainPreprocessor -c Release -- --in <dir> [--in <dir> ...] --out terrain_chunks
+    //       [--temp <cache dir>] [--jobs N] [--io-jobs N] [--force] [--fresh] [--verify] [--dump-png <dir>]
+    //   ... --out terrain_chunks --photos [--tiles-file f] [--io-jobs N] [--force]   (SWISSIMAGE, PhotoStage)
+    // --in is searched recursively and may be repeated (sources can live on any drive); the build is
+    // incremental — see TerrainBuild.
+    private static async Task<int> RunCoreAsync(IReadOnlyList<string> args, LogWriter? writer, CancellationToken ct)
+    {
+        void SetStage(string stage) { if (writer != null) writer.Stage = stage; }
+
+        var inDirs = new List<string>();
+        string? outDir = null, tempDir = null, pngDir = null;
+        string? tlmGpkg = null, routeKeys = null, buildingsGpkg = null, gwrPath = null;
+        string? exportRouteKeysDir = null;
+        var buildingsGdb = new List<string>();
+        int? batchSizeArg = null;
+        bool verify = false;
+        bool roadsOnly = false, featuresOnly = false, doCover = false, doPlaces = false, placesOnly = false;
+        // --tiles-file: feature passes only touch these tiles ("E-N" in km per line), so adding one valley
+        // to a built country does not re-extract every road in it
+        string? tilesFile = null;
+        // hand-traced cover TLM lacks (see docs/notes/tools/land-cover.md); --cover-only skips the road
+        // stage and the network stage after it
+        string? coverOverrides = File.Exists("docs/data/cover_overrides.json") ? "docs/data/cover_overrides.json" : null;
+        bool coverOnly = false;
+        bool coarseOnly = false, horizonOnly = false, photosOnly = false;
+        // lake and river beds + the .water level layer (#298): standalone with --water, and after every
+        // cover pass; --bathy points at the swissBATHY3D zips (without it every bed is synthetic)
+        bool waterOnly = false;
+        string? bathyDir = null;
+        // boat landings and harbour jetties (#377): standalone with --landings, and after every water pass
+        // run with --tlm (the piers stand on the beds and the still water)
+        bool landingsOnly = false;
+        // --landings-file: write landings.json elsewhere (reading a live region without touching it)
+        string? landingsFile = null;
+        // airports (#422): stands and runways from swissTLM3D and OpenStreetMap (--osm <pbf>) over the built tiles
+        bool airportsOnly = false;
+        string? airportsFile = null, airportsOsm = null;
+        var pngCrops = new List<(double E, double N, int Size)>();
+        bool force = false, fresh = false;
+        string? franceBox = null;
+        // optional OpenStreetMap overlay (#118): a region-wide intermediate for the road network stage
+        string? osmPbf = null;
+        bool osmCheck = false;
+        // real farm fields (#494): federal LWB land use per canton from <dir>, OSM fallback for the gated cantons
+        string? fieldsDir = null, osmFieldsPbf = null;
+        bool fieldsCheck = false;
+        int jobs = Environment.ProcessorCount;
+        int ioJobs = 4;
+
+        for (int i = 0; i < args.Count; i++)
+        {
+            switch (args[i])
+            {
+                case "--in": inDirs.Add(args[++i]); break;
+                case "--out": outDir = args[++i]; break;
+                case "--temp": tempDir = args[++i]; break;
+                case "--dump-png": pngDir = args[++i]; break;
+                case "--tlm": tlmGpkg = args[++i]; break;
+                case "--route-keys": routeKeys = args[++i]; break;
+                // #537: build route_keys.sqlite from the ASTRA FileGDBs, with no GDAL
+                case "--export-route-keys": exportRouteKeysDir = args[++i]; break;
+                case "--buildings": buildingsGpkg = args[++i]; break;
+                // #537: read the swissBUILDINGS3D FileGDB zips directly, with no GDAL export first.
+                // Repeatable, and globs are expanded by the caller (one zip per map sheet).
+                case "--buildings-gdb": buildingsGdb.Add(args[++i]); break;
+                case "--batch-size": batchSizeArg = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); break;
+                case "--gwr": gwrPath = args[++i]; break;
+                case "--cover": doCover = true; break;
+                case "--cover-only": doCover = coverOnly = featuresOnly = true; break;
+                case "--cover-overrides": coverOverrides = args[++i]; break;
+                case "--places": doPlaces = true; break;
+                // the place index alone: --places with --tlm (for summits) would otherwise re-run roads
+                case "--places-only": doPlaces = placesOnly = true; featuresOnly = true; break;
+                case "--tiles-file": tilesFile = args[++i]; break;
+                case "--roads-only": roadsOnly = true; break;
+                case "--features-only": featuresOnly = true; break;
+                case "--coarse": coarseOnly = true; break;
+                case "--horizon": horizonOnly = true; break;
+                case "--water": waterOnly = true; break;
+                case "--landings": landingsOnly = true; break;
+                case "--landings-file": landingsFile = args[++i]; break;
+                case "--airports": airportsOnly = true; break;
+                case "--airports-file": airportsFile = args[++i]; break;
+                case "--osm": airportsOsm = args[++i]; break;
+                case "--bathy": bathyDir = args[++i]; break;
+                case "--png-crop":
+                {
+                    var p = args[++i].Split(',');
+                    pngCrops.Add((double.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture),
+                        double.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture),
+                        p.Length > 2 ? int.Parse(p[2]) : 1500));
+                    break;
+                }
+                case "--photos": photosOnly = true; break;
+                case "--verify": verify = true; break;
+                case "--france": franceBox = args[++i]; break;
+                case "--osm-overlay": osmPbf = args[++i]; break;
+                case "--osm-check": osmCheck = true; break;
+                case "--fields": fieldsDir = args[++i]; break;
+                case "--osm-pbf": osmFieldsPbf = args[++i]; break;
+                case "--fields-check": fieldsCheck = true; break;
+                case "--jobs": jobs = int.Parse(args[++i]); break;
+                case "--io-jobs": ioJobs = int.Parse(args[++i]); break;
+                case "--force": force = true; break;
+                case "--fresh": fresh = true; break;
+                default:
+                    Console.Error.WriteLine($"Unknown argument: {args[i]}");
+                    return 2;
+            }
+        }
+
+        if (osmCheck) return OsmOverlay.SelfCheck();
+        if (fieldsCheck) return FieldStage.SelfCheck();
+
+        // ---- farm fields (#494): fields_E_N.fld per manifest tile, standalone -------------------------
+        // --gwr (the GWR data.sqlite) tells which OSM fields lie in the cantons without freely published data
+        if (fieldsDir != null)
+        {
+            if (outDir == null)
+            {
+                Console.Error.WriteLine("--fields <lwb dir> requires --out <chunk dir> [--osm-pbf <file>] [--gwr <data.sqlite>] [--tiles-file f]");
+                return 2;
+            }
+            var manifestPath = Path.Combine(outDir, "manifest.json");
+            var region = tilesFile != null ? TileId.ReadList(tilesFile).ToHashSet()
+                : File.Exists(manifestPath) ? TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet()
+                : new HashSet<TileId>();
+            SetStage("fields");
+            return FieldStage.Run(fieldsDir, osmFieldsPbf, gwrPath, outDir, region, jobs);
+        }
+
+        // ---- airports: stands and runways (#422) ---------------------------------------------------
+        if (airportsOnly)
+        {
+            if (outDir == null || tlmGpkg == null || airportsOsm == null)
+            {
+                Console.Error.WriteLine("--airports requires --out <chunk dir>, --tlm <swisstlm3d .gpkg> and --osm <switzerland .osm.pbf>");
+                return 2;
+            }
+            return AirportStage.Run(outDir, tlmGpkg, airportsOsm, airportsFile, jobs);
+        }
+
+        // ---- OSM overlay: OSM attributes conflated onto TLM road lines, for the built tiles ----------
+        // Standalone and region-wide (not per batch), so it covers the whole region however the feature
+        // passes were split. Without --osm-overlay nothing here runs and no build output changes.
+        if (osmPbf != null)
+        {
+            if (outDir == null || tlmGpkg == null)
+            {
+                Console.Error.WriteLine("--osm-overlay <pbf> requires --out <chunk dir> and --tlm <gpkg>");
+                return 2;
+            }
+            var manifestPath = Path.Combine(outDir, "manifest.json");
+            var region = tilesFile != null ? TileId.ReadList(tilesFile).ToHashSet()
+                : File.Exists(manifestPath) ? TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet()
+                : new HashSet<TileId>();
+            SetStage("osm-overlay");
+            return OsmOverlay.Run(osmPbf, tlmGpkg, tempDir ?? outDir.TrimEnd('/', '\\') + "_temp", region, jobs);
+        }
+
+        // ---- SWISSIMAGE photos: one aerial JPEG per tile, for the realistic styles' terrain -------------
+        // Standalone: it needs only the manifest (or --tiles-file), and fetches what is missing.
+        if (photosOnly)
+        {
+            if (outDir == null)
+            {
+                Console.Error.WriteLine("--photos requires --out <chunk dir>");
+                return 2;
+            }
+            var manifestPath = Path.Combine(outDir, "manifest.json");
+            var region = tilesFile != null ? TileId.ReadList(tilesFile).ToHashSet()
+                : File.Exists(manifestPath) ? TerrainManifest.FromJson(File.ReadAllText(manifestPath)).Tiles.Select(t => t.Id).ToHashSet()
+                : new HashSet<TileId>();
+            SetStage("photos");
+            return await PhotoStage.Run(outDir, region, ioJobs, force, ct);
+        }
+
+        // ---- horizon: one region-wide 100 m lattice, from the tiles already built ------------------
+        if (horizonOnly)
+        {
+            if (outDir == null)
+            {
+                Console.Error.WriteLine("--horizon requires --out <chunk dir>");
+                return 2;
+            }
+            SetStage("horizon");
+            return HorizonStage.Run(outDir, jobs, ct);
+        }
+
+        // ---- water: beds into the .terr heights, the still level into .water ----------------------
+        if (waterOnly)
+        {
+            if (outDir == null)
+            {
+                Console.Error.WriteLine("--water requires --out <chunk dir>");
+                return 2;
+            }
+            SetStage("water");
+            int wrc = WaterStage.Run(outDir, WaterOptions(), ct);
+            return wrc != 0 || tlmGpkg == null ? wrc : LandingStage.Run(outDir, tlmGpkg);
+        }
+
+        // ---- landings: piers and jetties from swissTLM3D over the built beds and water -------------
+        if (landingsOnly)
+        {
+            if (outDir == null || tlmGpkg == null)
+            {
+                Console.Error.WriteLine("--landings requires --out <chunk dir> and --tlm <swisstlm3d .gpkg>");
+                return 2;
+            }
+            return LandingStage.Run(outDir, tlmGpkg, landingsFile);
+        }
+
+        // ---- route keys from the ASTRA FileGDBs (#537), standalone: nothing else is needed ------
+        if (exportRouteKeysDir != null)
+        {
+            SetStage("route keys");
+            return RouteKeyStage.Run(exportRouteKeysDir, tempDir ?? Path.Combine(exportRouteKeysDir, "_temp"),
+                Console.WriteLine);
+        }
+
+        WaterStage.Options WaterOptions() => new() { Jobs = jobs, BathyDir = bathyDir, PngDir = pngDir, Crops = pngCrops, TempDir = tempDir };
+
+        // ---- coarse companion tiles: decimate what is already built -----------------------------
+        // Standalone because it needs nothing but the .terr files themselves. A region built before
+        // .terrc existed gets its horizon tiles for 5 KB apiece without re-parsing a single XYZ zip.
+        if (coarseOnly)
+        {
+            if (outDir == null)
+            {
+                Console.Error.WriteLine("--coarse requires --out <chunk dir>");
+                return 2;
+            }
+
+            var coarseFiles = Directory.GetFiles(outDir, "chunk_*.terr");
+            if (coarseFiles.Length == 0)
+            {
+                Console.Error.WriteLine($"No .terr files in {outDir}");
+                return 2;
+            }
+
+            SetStage("coarse");
+            var coarseClock = Stopwatch.StartNew();
+            long readBytes = 0, wroteBytes = 0;
+            int written = 0;
+
+            Parallel.ForEach(coarseFiles, new ParallelOptions { MaxDegreeOfParallelism = jobs, CancellationToken = ct }, path =>
+            {
+                ChunkGrid grid;
+                using (var fs = File.OpenRead(path)) grid = ChunkCodec.Decode(fs);
+                if (grid.Stride != 1) return;   // already a companion; nothing to decimate
+
+                var coarse = grid.Decimate(ChunkFormat.CoarseStride);
+
+                // Construct then verify. The whole claim of this pass is that the horizon renders
+                // *identically* from the small file, and that claim rests on the mesh builder reading
+                // HeightAt(c * stride, r * stride) — so check exactly that, for every vertex the coarse
+                // grid holds and at both strides the LOD rings use. 2,601 comparisons a tile is nothing
+                // against having quietly reshaped the mountains.
+                foreach (int renderStride in new[] { ChunkFormat.CoarseStride, ChunkFormat.CoarseStride * 2 })
+                {
+                    int m = (ChunkFormat.GridSize - 1) / renderStride + 1;
+                    for (int r = 0; r < m; r++)
+                        for (int c = 0; c < m; c++)
+                        {
+                            int fc = c * renderStride, fr = r * renderStride;
+                            if (coarse.HeightAt(fc, fr) != grid.HeightAt(fc, fr))
+                                throw new InvalidDataException(
+                                    $"{grid.Id}: coarse tile differs at ({fc},{fr}) stride {renderStride}");
+                        }
+                }
+
+                string outPath = Path.Combine(outDir, ChunkFormat.CoarseFileName(grid.Id));
+                using (var fs = File.Create(outPath))
+                    ChunkCodec.Encode(coarse, fs);
+
+                // and that what lands on disk decodes back to what we checked
+                using (var fs = File.OpenRead(outPath))
+                {
+                    var reread = ChunkCodec.Decode(fs);
+                    if (reread.Stride != ChunkFormat.CoarseStride
+                        || !reread.Heights.AsSpan().SequenceEqual(coarse.Heights))
+                        throw new InvalidDataException($"{grid.Id}: coarse tile did not round-trip");
+                }
+
+                Interlocked.Add(ref readBytes, new FileInfo(path).Length);
+                Interlocked.Add(ref wroteBytes, new FileInfo(outPath).Length);
+                int n = Interlocked.Increment(ref written);
+                if (n % 500 == 0) Console.WriteLine($"  [{n}/{coarseFiles.Length}]");
+            });
+
+            Console.WriteLine($"Coarse pass: {written} tiles in {coarseClock.Elapsed.TotalSeconds:F1}s, "
+                + $"read {readBytes / 1048576.0:F0} MB -> wrote {wroteBytes / 1048576.0:F1} MB "
+                + $"({(double)readBytes / Math.Max(1, wroteBytes):F0}x smaller)");
+            // the horizon reads the companions just written, so a region gets both in one go
+            SetStage("horizon");
+            return HorizonStage.Run(outDir, jobs, ct);
+        }
+
+        // ---- French import: adds IGN BD TOPO features to tiles that already exist ---------------
+        if (franceBox != null)
+        {
+            if (outDir == null)
+            {
+                Console.Error.WriteLine("--france requires --out <chunk dir>");
+                return 2;
+            }
+            if (FranceStage.ParseBox(franceBox) is not { } box)
+            {
+                Console.Error.WriteLine("--france wants minLon,minLat,maxLon,maxLat in degrees");
+                return 2;
+            }
+            SetStage("france");
+            return await FranceStage.RunAsync(outDir, box.MinLon, box.MinLat, box.MaxLon, box.MaxLat);
+        }
+
+        if (outDir == null || (inDirs.Count == 0 && !roadsOnly && !featuresOnly))
+        {
+            Console.Error.WriteLine("Required: --in <source dir> --out <chunk dir>");
+            Console.Error.WriteLine("  (--in is not needed with --roads-only / --features-only)");
+            return 2;
+        }
+        tempDir ??= outDir.TrimEnd('/', '\\') + "_temp";
+        Directory.CreateDirectory(outDir);
+
+        // ---- feature-only passes: reuse the .terr chunks already in outDir ------------------
+        if (roadsOnly || featuresOnly)
+        {
+            if (tlmGpkg == null && buildingsGpkg == null && buildingsGdb.Count == 0 && !doPlaces)
+            {
+                Console.Error.WriteLine("Nothing to do: pass --tlm, --buildings, --buildings-gdb and/or --places");
+                return 2;
+            }
+            return RunFeatures(TerrainManifest.FromJson(File.ReadAllText(Path.Combine(outDir, "manifest.json"))));
+        }
+
+        // ---- terrain: sources -> .terr + .terrc, parsed and finished in one parallel pass -------
+        var sw = Stopwatch.StartNew();
+        var sources = TerrainBuild.Discover(inDirs);
+        if (sources.Count == 0)
+        {
+            Console.Error.WriteLine($"No swissalti3d 0.5 m *.xyz(.zip) files found under {string.Join(", ", inDirs)}");
+            return 1;
+        }
+        Console.WriteLine($"Found {sources.Count} source tiles: E {sources.Min(t => t.Id.E)}..{sources.Max(t => t.Id.E)}, "
+            + $"N {sources.Min(t => t.Id.N)}..{sources.Max(t => t.Id.N)}");
+
+        SetStage("terrain");
+        var manifest = TerrainBuild.Run(sources, outDir, tempDir, new TerrainBuild.Options
+        {
+            Jobs = jobs, IoJobs = ioJobs, Force = force, Fresh = fresh, Verify = verify,
+        }, ct);
+        if (manifest == null) return 1;
+        File.WriteAllText(Path.Combine(outDir, "manifest.json"), manifest.ToJson());
+        // the far horizon is cut from the same tiles, one file for the whole region
+        SetStage("horizon");
+        if (HorizonStage.Run(outDir, jobs, ct) is var hrc && hrc != 0) return hrc;
+        Console.WriteLine($"Terrain done in {sw.Elapsed.TotalSeconds:F1}s -> {manifest.Tiles.Count} chunks, " +
+                          $"heights {manifest.Tiles.Min(t => t.Min):F0}..{manifest.Tiles.Max(t => t.Max):F0} m");
+
+        if (verify)
+        {
+            SetStage("verify");
+            if (TerrainBuild.VerifySeams(outDir, manifest.Tiles.Select(t => t.Id), jobs, ct) > 0) return 1;
+        }
+
+        // ---- roads (optional, needs the terrain chunks for draping) ------------------------
+        if (tlmGpkg != null && RunFeatures(manifest) is var frc && frc != 0) return frc;
+
+        ChunkGrid LoadChunk(TileId id)
+        {
+            using var fs = File.OpenRead(Path.Combine(outDir, ChunkFormat.ChunkFileName(id)));
+            return ChunkCodec.Decode(fs);
+        }
+
+        if (pngDir != null)
+        {
+            sw.Restart();
+            Directory.CreateDirectory(pngDir);
+            int minE = manifest.Tiles.Min(t => t.E), maxE = manifest.Tiles.Max(t => t.E);
+            int minN = manifest.Tiles.Min(t => t.N), maxN = manifest.Tiles.Max(t => t.N);
+            int step = ChunkFormat.GridSize - 1; // 500 px per tile, shared edges overlap
+            int width = (maxE - minE + 1) * step + 1;
+            int height = (maxN - minN + 1) * step + 1;
+            var elev = new float[width * height];
+            var shadePix = new byte[width * height];
+            float globalMin = manifest.Tiles.Min(t => t.Min), globalMax = manifest.Tiles.Max(t => t.Max);
+
+            foreach (var t in manifest.Tiles)
+            {
+                var chunk = LoadChunk(t.Id);
+                int ox = (t.E - minE) * step, oy = (maxN - t.N) * step;
+                for (int r = 0; r < ChunkFormat.GridSize; r++)
+                    for (int c = 0; c < ChunkFormat.GridSize; c++)
+                        elev[(oy + r) * width + ox + c] = (float)chunk.HeightMetersAt(c, r);
+            }
+
+            var heightPix = new byte[width * height];
+            for (int i = 0; i < elev.Length; i++)
+                heightPix[i] = (byte)Math.Clamp((elev[i] - globalMin) / (globalMax - globalMin) * 255.0, 0, 255);
+
+            // hillshade, light from the northwest — makes any seam step brutally visible
+            (double lx, double ly, double lz) = (-0.5, 0.7, -0.5);
+            double ll = Math.Sqrt(lx * lx + ly * ly + lz * lz);
+            (lx, ly, lz) = (lx / ll, ly / ll, lz / ll);
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                {
+                    int xl = Math.Max(x - 1, 0), xr = Math.Min(x + 1, width - 1);
+                    int yu = Math.Max(y - 1, 0), yd = Math.Min(y + 1, height - 1);
+                    double dzdx = (elev[y * width + xr] - elev[y * width + xl]) / ((xr - xl) * ChunkFormat.SpacingM);
+                    double dzdy = (elev[yd * width + x] - elev[yu * width + x]) / ((yd - yu) * ChunkFormat.SpacingM);
+                    double nl = Math.Sqrt(dzdx * dzdx + 1 + dzdy * dzdy);
+                    double dot = (-dzdx * lx + ly + -dzdy * lz) / nl;
+                    shadePix[y * width + x] = (byte)Math.Clamp(dot * 255.0, 0, 255);
+                }
+
+            PngWriter.WriteGray8(Path.Combine(pngDir, "mosaic_height.png"), heightPix, width, height);
+            PngWriter.WriteGray8(Path.Combine(pngDir, "mosaic_shade.png"), shadePix, width, height);
+            Console.WriteLine($"PNG mosaics ({width}x{height}) written to {pngDir} in {sw.Elapsed.TotalSeconds:F1}s");
+        }
+
+        return 0;
+
+        // Batched: loading every chunk grid at once is ~2 MB x tile count (13 GB for the 6,699-tile
+        // import) before feature data is even extracted. Tiles are ordered by (E, N) so each batch is a
+        // compact strip and its bbox query stays tight.
+        int RunFeatures(TerrainManifest existing)
+        {
+            // the place index only needs tile coverage, so it runs before the heavy batches
+            if (doPlaces)
+            {
+                if (gwrPath == null)
+                {
+                    Console.Error.WriteLine("--places requires --gwr <gwr data.sqlite>");
+                    return 2;
+                }
+                SetStage("places");
+                int rc = PlaceStage.Run(gwrPath, outDir, existing.Tiles.Select(t => t.Id).ToHashSet(), tlmGpkg);
+                if (rc != 0) return rc;
+                if (placesOnly || (tlmGpkg == null && buildingsGpkg == null && buildingsGdb.Count == 0)) return 0;
+            }
+
+            // 400 tiles is ~800 MB of chunk grids held at once. --batch-size exists so a check can
+            // force several batches out of a small region (#570); it is not a tuning knob, because
+            // a building's terrain re-seat samples only the grids of its own batch, so moving the
+            // boundaries moves a few buildings at the seams by a few centimetres.
+            int batchSize = batchSizeArg ?? 400;
+            var ordered = existing.Tiles.OrderBy(t => t.E).ThenBy(t => t.N).ToList();
+            if (tilesFile != null)
+            {
+                var wanted = TileId.ReadList(tilesFile).ToHashSet();
+                ordered = ordered.Where(t => wanted.Contains(t.Id)).ToList();
+                Console.WriteLine($"--tiles-file: {ordered.Count} of {wanted.Count} listed tiles are built");
+                if (ordered.Count == 0) return 0;
+            }
+            int batches = (ordered.Count + batchSize - 1) / batchSize;
+
+            // Built once and reused by every batch below (#570). It carries the GWR cadastre —
+            // millions of records, seconds to load — and the per-sheet extents that let a batch
+            // skip the sheets it cannot possibly contain, so rebuilding it per batch turned a
+            // nationwide run from minutes into hours.
+            BuildingExtractor? buildings = null;
+            if (buildingsGdb.Count > 0)
+                buildings = BuildingStage.OpenGdb(buildingsGdb, Path.Combine(tempDir!, "buildgdb"), gwrPath);
+            else if (buildingsGpkg != null)
+                buildings = BuildingStage.OpenGeoPackage(buildingsGpkg, gwrPath);
+            if ((buildingsGdb.Count > 0 || buildingsGpkg != null) && buildings == null) return 1;
+
+            Dictionary<TileId, ChunkGrid> LoadBatch(int b, out List<ManifestTile> slice)
+            {
+                slice = ordered.Skip(b * batchSize).Take(batchSize).ToList();
+                var grids = new System.Collections.Concurrent.ConcurrentDictionary<TileId, ChunkGrid>();
+                Parallel.ForEach(slice, new ParallelOptions { MaxDegreeOfParallelism = jobs, CancellationToken = ct }, t =>
+                {
+                    using var fs = File.OpenRead(Path.Combine(outDir!, ChunkFormat.ChunkFileName(t.Id)));
+                    grids[t.Id] = ChunkCodec.Decode(fs);
+                });
+                return new Dictionary<TileId, ChunkGrid>(grids);
+            }
+
+            // roads and buildings first, every batch, then the network stage, which sees every batch at
+            // once (a junction on a batch seam needs both sides) and measures streets against the facades
+            // (#119); cover masks trees off the network stage's final lines
+            bool roads = tlmGpkg != null && !coverOnly;
+            if (roads)
+            {
+                SetStage("roads");
+                for (int b = 0; b < batches; b++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var batch = LoadBatch(b, out var slice);
+                    Console.WriteLine($"=== roads, batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
+                    int rc = RoadStage.Run(tlmGpkg!, routeKeys, outDir!, tempDir!, batch, coverOverrides);
+                    if (rc != 0) return rc;
+                    if (buildings != null)
+                    {
+                        rc = BuildingStage.Run(buildings, outDir!, batch);
+                        if (rc != 0) return rc;
+                    }
+                }
+                int nrc = RoadStage.RunNetwork(outDir!, tempDir!, ordered.Select(t => t.Id).ToList());
+                if (nrc != 0) return nrc;
+            }
+
+            if (!doCover && ((buildingsGpkg == null && buildingsGdb.Count == 0) || roads)) return 0;
+            if (doCover && tlmGpkg == null)
+            {
+                Console.Error.WriteLine("--cover requires --tlm <swisstlm3d .gpkg>");
+                return 2;
+            }
+            SetStage(doCover ? "cover" : "buildings");
+            for (int b = 0; b < batches; b++)
+            {
+                ct.ThrowIfCancellationRequested();
+                var batch = LoadBatch(b, out var slice);
+                Console.WriteLine($"=== batch {b + 1}/{batches}: {slice.Count} tiles, E {slice[0].E}..{slice[^1].E} ===");
+                if (doCover)
+                {
+                    int rc = CoverStage.Run(tlmGpkg!, outDir!, batch, coverOverrides, RawRoads.DirFor(tempDir!));
+                    if (rc != 0) return rc;
+                }
+                if ((buildingsGpkg != null || buildingsGdb.Count > 0) && !roads)
+                {
+                    int rc = buildings == null ? 1 : BuildingStage.Run(buildings, outDir!, batch);
+                    if (rc != 0) return rc;
+                }
+            }
+            // the cover says where the water is, so the beds follow every cover pass (whole region: the
+            // water bodies and their depths are region-wide)
+            if (doCover)
+            {
+                SetStage("water");
+                int wrc = WaterStage.Run(outDir!, WaterOptions(), ct);
+                return wrc != 0 ? wrc : LandingStage.Run(outDir!, tlmGpkg!);
+            }
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// Redirects Console.Out/Error into an <see cref="IPreprocessorLog"/> for the duration of a
+    /// <see cref="RunAsync"/> call. The stages themselves are unaware of it — they call
+    /// Console.WriteLine exactly as the CLI does — this is what lets an in-process caller get
+    /// progress without scraping text, and without a signature change to every stage.
+    ///
+    /// <para>
+    /// <see cref="Stage"/> names whatever pass is currently running (set by <see cref="RunCoreAsync"/>
+    /// right before it); every line is forwarded to <see cref="IPreprocessorLog.Line"/>, and a line
+    /// shaped like the counter lines MapSetup's own subprocess runner already parses — "[n/total]"
+    /// or "...batch n/total..." (tools/MapCore/Pipeline.cs: CounterLine/BatchLine) — also raises
+    /// <see cref="IPreprocessorLog.Progress"/>. Nothing here invents progress beyond what the CLI
+    /// already prints.
+    /// </para>
+    /// </summary>
+    private sealed partial class LogWriter : TextWriter
+    {
+        private readonly IPreprocessorLog _log;
+        public string Stage = "";
+
+        public LogWriter(IPreprocessorLog log) => _log = log;
+
+        public override Encoding Encoding => Encoding.UTF8;
+
+        // Only Console.WriteLine(string) / Console.Error.WriteLine(string) are used anywhere in this
+        // tool (no bare Console.Write), so WriteLine(string?) is the one override that matters; the
+        // others exist only to fulfil the TextWriter contract.
+        public override void Write(char value) => Write(value.ToString());
+
+        public override void Write(string? value)
+        {
+            if (!string.IsNullOrEmpty(value)) _log.Line(value);
+        }
+
+        public override void WriteLine(string? value)
+        {
+            value ??= "";
+            _log.Line(value);
+            var m = CounterLine().Match(value);
+            if (!m.Success) m = BatchLine().Match(value);
+            if (m.Success && double.TryParse(m.Groups[2].Value, out double total) && total > 0)
+                _log.Progress(Stage, double.Parse(m.Groups[1].Value) / total);
+        }
+
+        [GeneratedRegex(@"\[(\d+)/(\d+)\]")]
+        private static partial Regex CounterLine();
+
+        [GeneratedRegex(@"(?:batch|source) (\d+)/(\d+)")]
+        private static partial Regex BatchLine();
+    }
+}

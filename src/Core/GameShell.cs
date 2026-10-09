@@ -73,16 +73,22 @@ public partial class GameShell : Node
     /// probe or a tool. The list is of the harmless ones, so a new probe flag never lands on the
     /// title by accident — anything unknown boots straight into the world, as before.
     /// </summary>
+    private bool _meteredAsked;
+
+    /// <summary>The menus' size on a phone, over the desktop's (#63): 38 px buttons become about 7 mm on a 6" screen.</summary>
+    public const float MobileUiScale = 1.15f;
+
     public static bool UseTitle(string[] args)
     {
         string[] harmless =
         {
-            "--name", "--chunks", "--landings", "--cache", "--title", "--nocapture", "--rings", "--horizon", "--fog", "--detail",
-            "--generated", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--voice", "--time",
+            "--name", "--chunks", "--landings", "--cache", "--title", "--nocapture", "--rings", "--horizon", "--fog", "--detail", "--data",
+            "--generated", "--generated-roads", "--builds", "--commit", "--profile", "--vsync", "--perf", "--view", "--shoulder", "--voice", "--time",
             "--traffic", "--at", "--mirrors", "--tyrewear", "--brakewear", "--gearbox", "--airliner", "--perflog",
             "--origin", "--style", "--tree-lod", "--tree-near", "--systems", "--world",
-            "--menu", "--settings", "--licenses", "--controls", "--multiplayer", "--solo", "--uishot", "--menucheck", "--leavecheck",
-            "--leave-restart", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot",
+            "--menu", "--fakeversion", "--updatefeed", "--updateaccept", "--settings", "--licenses", "--controls", "--tutorial",
+            "--multiplayer", "--solo", "--map", "--landing", "--uishot", "--menucheck", "--mapcheck", "--leavecheck",
+            "--leave-restart", "--mobile", "--autostart", "--wheellock", "--fakewheel", "--ffblog", "--vr", "--xrsim", "--vrmonitor", "--xrheadshot", "--xrwrist", "--xrprofile", "--xrcab", "--xrhands",
         };
         foreach (string a in args)
             if (a.StartsWith("--") && Array.IndexOf(harmless, a) < 0) return false;
@@ -92,11 +98,15 @@ public partial class GameShell : Node
     public override void _Ready()
     {
         Instance = this;
+        // a phone: fingers, not a pointer, so every menu a size up (#63; the canvas shrinks to match,
+        // and the touch overlay lays out on what is left)
+        if (Platform.IsMobile) GetTree().Root.ContentScaleFactor = MobileUiScale;
         Audio.SfxBus.Ensure();
         PlayerInput.Install(GetParent());
         // VR (#186) before any menu or camera exists, so the title is in the headset too
         bool vr = XR.XrSession.TryStart(GetParent());
         AddChild(new DisplaySettings { Name = "Display" });
+        AddChild(new DataWatch { Name = "DataWatch" });
 
         // F1 over everything, menus included (layer 42)
         _help = ControlsHelp.Create();
@@ -117,7 +127,7 @@ public partial class GameShell : Node
         // "VR mode" saved on, launched from the desktop: start again with OpenXR (once: the
         // relaunch carries --vr, and a run with --vr never relaunches)
         if (!Direct && !vr && GameSettings.Current.VrMode && !CmdArgs.Has("--vr") && !CmdArgs.Has("--xrsim")
-            && DisplayServer.GetName() != "headless" && XR.XrSession.Relaunch(true))
+            && DisplayServer.GetName() != "headless" && Platform.CanSpawnProcesses && XR.XrSession.Relaunch(true))
         {
             Quit();
             return;
@@ -153,6 +163,8 @@ public partial class GameShell : Node
             }
             else if (CmdArgs.Has("--multiplayer")) Push(MultiplayerScreen.Create());
             else if (CmdArgs.Has("--solo")) Push(SoloScreen.Create());
+            else if (CmdArgs.Has("--map")) Push(Ui.MapScreen.Create());
+            else if (CmdArgs.Has("--landing")) LaunchVia(new WorldLaunch { Mode = GameMode.Explore });
             // "--autostart": straight into Explore through the loading screen, for screenshotting
             // it (and, with --menu, the pause menu once in)
             if (CmdArgs.Has("--autostart")) Callable.From(() => Launch(new WorldLaunch { Mode = GameMode.Explore })).CallDeferred();
@@ -160,6 +172,7 @@ public partial class GameShell : Node
         if (CmdArgs.Has("--controls")) GetTree().CreateTimer(1.5).Timeout += () => _help.Open();
         if (UiShot() is { } shot) GetTree().CreateTimer(shot.Seconds).Timeout += () => SaveShot(shot.Path);
         if (MenuCheck.Requested()) AddChild(new MenuCheck(this));
+        if (Ui.MapCheck.Requested()) AddChild(new Ui.MapCheck(this));
         if (LeaveCheck.Requested()) AddChild(new LeaveCheck(this));
     }
 
@@ -190,6 +203,8 @@ public partial class GameShell : Node
         if (Direct)
         {
             _state = State.InWorld;
+            // "--tutorial" with a probe that rides something (--ride car:0,8,out.png): the ride's intro card
+            if (CmdArgs.Has("--tutorial")) Callable.From(world.StartVehicleIntros).CallDeferred();
             // "--menu" / "--settings" open the pause menu over the world, for screenshotting it
             if (CmdArgs.Has("--menu") || CmdArgs.Has("--settings"))
                 Callable.From(() =>
@@ -250,7 +265,7 @@ public partial class GameShell : Node
     {
         c.Modulate = new Color(1, 1, 1, 0);
         c.Position = new Vector2(0, 12);
-        var tw = c.CreateTween().SetParallel().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
+        var tw = c.CreateTween().SetIgnoreTimeScale(true).SetParallel().SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
         tw.TweenProperty(c, "modulate:a", 1f, 0.18f);
         tw.TweenProperty(c, "position:y", 0f, 0.22f);
     }
@@ -305,6 +320,34 @@ public partial class GameShell : Node
 
     // ---- sessions -------------------------------------------------------------------------------
 
+    /// <summary>
+    /// Shows the map so the player picks where to land, then launches (#515). The marker starts
+    /// where they landed last, else Riddes. Skipped when the launch already names a landing (the
+    /// map has just been through), for a GPX replay (the track says where to be), and for any
+    /// command-line run, which must still boot straight into the world.
+    /// </summary>
+    public void LaunchVia(WorldLaunch launch)
+    {
+        if (launch.Landing != null || launch.FromCommandLine || Direct || launch.Mode == GameMode.GpxReplay)
+        {
+            Launch(launch);
+            return;
+        }
+
+        var settings = GameSettings.Current;
+        var start = settings.LastLandingE != 0 || settings.LastLandingN != 0
+            ? (settings.LastLandingE, settings.LastLandingN)
+            : (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
+
+        Push(Ui.MapScreen.CreateLanding(start, landing =>
+        {
+            GameSettings.Current.LastLandingE = landing.E;
+            GameSettings.Current.LastLandingN = landing.N;
+            GameSettings.Current.Save();
+            Launch(launch with { Landing = landing });
+        }));
+    }
+
     /// <summary>Builds a world for <paramref name="launch"/> behind the loading screen.</summary>
     public void Launch(WorldLaunch launch)
     {
@@ -327,9 +370,22 @@ public partial class GameShell : Node
 
     public void Join(string endpoint, string? serverName = null)
     {
+        // a metered connection (#63): say what streaming costs before it starts, once per session
+        if (GameSettings.Current.WarnMetered && DataWatch.Metered && !GameSettings.Current.LowDataActive && !_meteredAsked)
+        {
+            _meteredAsked = true;
+            Modal.Choose(_menuRoot, "Metered connection",
+                "You are on mobile data or a hotspot. The world streams from the server: about "
+                + $"{StreamEstimate.ArrivalMb} MB on arrival, and more as you travel. Low data streams "
+                + $"only the nearest tiles (about {StreamEstimate.ArrivalLowMb} MB on arrival).",
+                ("Use Low data", () => { GameSettings.Current.Data = DataPreset.Low; GameSettings.Current.Commit(); Join(endpoint, serverName); }),
+                ("Join anyway", () => Join(endpoint, serverName)),
+                ("Never ask", () => { GameSettings.Current.WarnMetered = false; GameSettings.Current.Commit(); Join(endpoint, serverName); }));
+            return;
+        }
         GameSettings.Current.LastHost = endpoint;
         GameSettings.Current.Save();
-        Launch(new WorldLaunch
+        LaunchVia(new WorldLaunch
         {
             Mode = GameMode.Multiplayer,
             Endpoint = endpoint,
@@ -380,7 +436,10 @@ public partial class GameShell : Node
         {
             _hostProbe.Dispose();
             _hostProbe = null;
-            Launch(new WorldLaunch
+            // The server is up; the map now asks where to land, as it does for any other world.
+            // Safe to push a page from here: the probe is already disposed, so this branch cannot
+            // be re-entered while the player is choosing.
+            LaunchVia(new WorldLaunch
             {
                 Mode = GameMode.Multiplayer,
                 Endpoint = endpoint,
@@ -425,6 +484,8 @@ public partial class GameShell : Node
         if (_launch is { Mode: GameMode.Multiplayer, Hosted: false } l)
             Book.NotePlayed(l.Endpoint, l.ServerName);
         if (CmdArgs.Has("--menu")) Callable.From(OpenPause).CallDeferred();
+        else if (Tutorial.Wanted(fromMenus: true)) _world?.StartTutorial();
+        _world?.StartVehicleIntros();
         GD.Print($"[shell] in world: {_launch?.Mode}");
     }
 

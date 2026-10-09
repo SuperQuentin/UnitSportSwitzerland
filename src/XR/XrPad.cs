@@ -10,8 +10,9 @@ namespace UnitSport.XR;
 /// <para>
 /// Layout (docs/notes/xr/controls.md):
 /// left stick = left stick, walking where the head looks on foot; A B X Y = A B X Y;
-/// left stick click = L3 (sprint); right stick left/right = snap turn (<see cref="XrRig"/>),
-/// up = D-pad up, down = D-pad right; right stick click = R3, held = recentre.
+/// left stick click = L3 (sprint); right stick on foot: left/right = snap turn (<see cref="XrRig"/>),
+/// up = D-pad up, down = D-pad right; mounted: the D-pad, each way its own (#436);
+/// right stick click = R3, held = recentre.
 /// Triggers are the triggers when mounted (throttle, brake) and the shoulders on foot (use and
 /// aim an item, the way a hand would); the grips are the shoulders. The left menu button is
 /// Start, held it is Back (the inventory).
@@ -21,7 +22,11 @@ internal sealed class XrPad
 {
     /// <summary>A device number no real pad gets; the bindings listen to every device.</summary>
     private const int Device = 7;
+    /// <summary>The virtual pad's device id, so other readers can tell it from a real pad.</summary>
+    public const int DeviceId = Device;
     private const float MenuHold = 0.5f;
+    /// <summary>The head this far below where it was calibrated, on foot, is a crouch: the slide / dive (#437), m.</summary>
+    private const float CrouchDrop = 0.35f;
 
     private readonly XRController3D _left, _right;
     private readonly Dictionary<JoyAxis, float> _axes = new();
@@ -31,7 +36,13 @@ internal sealed class XrPad
     private float _menuHeld;
     private bool _menuLong;
     private bool _r3Was;
-    private bool _dpadUpWas, _dpadDownWas;
+    private bool _dpadUpWas, _dpadDownWas, _dpadLeftWas, _dpadRightWas;
+
+    /// <summary>The teleport arc is up (#439): the left stick aims it and does not walk.</summary>
+    public bool SuppressMove { get; set; }
+
+    /// <summary>The arms flying (#438, <see cref="XrRig"/>): added to the left stick, up +y.</summary>
+    public Vector2 BodyStick { get; set; }
 
     /// <summary>Set by the rig while the right stick is held for a recentre: R3 is not sent then.</summary>
     public bool RecentreHeld { get; set; }
@@ -56,9 +67,17 @@ internal sealed class XrPad
         _pulses.Clear();
 
         bool onFoot = player == null || player.Ride == RideKind.OnFoot && player.RidingWith == 0;
+        // the pigeon (#217) drops on the right trigger, like using an item on foot; it flaps on A
+        bool shoulders = onFoot || player?.Ride == RideKind.Pigeon;
+        // the triggers change role on mounting: the prompts name them again (#435)
+        if (shoulders != TriggersAsShoulders)
+        {
+            TriggersAsShoulders = shoulders;
+            Core.PlayerInput.HintsChanged();
+        }
 
         // --- left stick: on foot, forward is where the head looks, not where the body faces ---
-        var stick = _left.GetVector2("primary");
+        var stick = SuppressMove ? Vector2.Zero : (_left.GetVector2("primary") + BodyStick).LimitLength(1f);
         if (onFoot && player != null)
         {
             float yaw = XrRig.YawOf(calibrated.Basis);
@@ -71,13 +90,13 @@ internal sealed class XrPad
         // --- triggers and grips ---
         float lt = _left.GetFloat("trigger"), rt = uiActive ? 0f : _right.GetFloat("trigger");
         float lg = LeftGripBusy ? 0f : _left.GetFloat("grip"), rg = RightGripBusy ? 0f : _right.GetFloat("grip");
-        // the pigeon (#217) drops on the right trigger, like using an item on foot; it flaps on A
-        if (onFoot || player?.Ride == RideKind.Pigeon)
+        if (shoulders)
         {
             Axis(JoyAxis.TriggerLeft, 0f);
             Axis(JoyAxis.TriggerRight, 0f);
-            Button(JoyButton.LeftShoulder, lt > 0.6f || lg > 0.6f);
-            Button(JoyButton.RightShoulder, rt > 0.6f || rg > 0.6f);
+            // the grips grab on foot (XrHands, #437): use and aim are the triggers' alone
+            Button(JoyButton.LeftShoulder, lt > 0.6f);
+            Button(JoyButton.RightShoulder, rt > 0.6f);
         }
         else
         {
@@ -89,16 +108,30 @@ internal sealed class XrPad
 
         // --- face buttons ---
         Button(JoyButton.A, _right.IsButtonPressed("ax_button"));
-        Button(JoyButton.B, _right.IsButtonPressed("by_button"));
+        // crouching for real slides (running) or dives (swimming), like B (#437); not while a menu
+        // is open, where B is back
+        bool crouched = onFoot && player != null && calibrated.Origin.Y < -CrouchDrop
+                        && Input.MouseMode == Input.MouseModeEnum.Captured;
+        RealCrouch = crouched;
+        RightB = _right.IsButtonPressed("by_button");
+        Button(JoyButton.B, RightB || crouched);
         Button(JoyButton.X, _left.IsButtonPressed("ax_button"));
         Button(JoyButton.Y, _left.IsButtonPressed("by_button"));
         Button(JoyButton.LeftStick, _left.IsButtonPressed("primary_click"));
 
-        // --- right stick up / down: the two D-pad directions that matter most ---
+        // --- right stick: on foot, up / down are the two D-pad directions that matter most (left /
+        // right snap-turn, XrRig); mounted, where the head is the look, it is the whole D-pad (#436):
+        // up engine, right lights, left roof / horn / couple / speedbrake, down tune ---
         var r = _right.GetVector2("primary");
-        bool up = Hysteresis(r.Y, ref _dpadUpWas), down = Hysteresis(-r.Y, ref _dpadDownWas);
+        // the stronger axis only, so a diagonal never presses two directions
+        bool vertical = Mathf.Abs(r.Y) >= Mathf.Abs(r.X);
+        bool up = Hysteresis(vertical ? r.Y : 0f, ref _dpadUpWas), down = Hysteresis(vertical ? -r.Y : 0f, ref _dpadDownWas);
+        bool left = Hysteresis(shoulders || vertical ? 0f : -r.X, ref _dpadLeftWas);
+        bool right = Hysteresis(shoulders || vertical ? 0f : r.X, ref _dpadRightWas);
         Button(JoyButton.DpadUp, up);
-        Button(JoyButton.DpadRight, down);
+        Button(JoyButton.DpadDown, !shoulders && down);
+        Button(JoyButton.DpadLeft, left);
+        Button(JoyButton.DpadRight, shoulders ? down : right);
 
         // --- R3: a tap is the view switch; a hold belongs to the rig's recentre ---
         bool r3 = _right.IsButtonPressed("primary_click");
@@ -121,6 +154,83 @@ internal sealed class XrPad
             _menuHeld = 0f;
             _menuLong = false;
         }
+    }
+
+    /// <summary>
+    /// The triggers act as the shoulders (on foot, the pigeon) rather than as the triggers
+    /// (mounted). Read by <see cref="Control"/>, which names what the prompts show.
+    /// </summary>
+    public static bool TriggersAsShoulders { get; private set; } = true;
+
+    /// <summary>
+    /// The head is down in a real crouch (it also sends B). A fist fight (#495) crouches on it and
+    /// guards on <see cref="RightB"/> alone, since there B is the guard and the crouch is the body's.
+    /// </summary>
+    public static bool RealCrouch { get; private set; }
+
+    /// <summary>The right controller's B button itself, without the real crouch folded in.</summary>
+    public static bool RightB { get; private set; }
+
+    /// <summary>
+    /// Names controls as in another context for a moment (the controls overlay lists the vehicle
+    /// groups as mounted while you stand): sets <see cref="TriggersAsShoulders"/>, returns what it was.
+    /// </summary>
+    public static bool AssumeShoulders(bool shoulders)
+    {
+        bool was = TriggersAsShoulders;
+        TriggersAsShoulders = shoulders;
+        return was;
+    }
+
+    /// <summary>
+    /// The controller input that <see cref="Update"/> replays as this pad event, right now; null
+    /// when none does (D-pad ← / ↓ on foot, Guide, the triggers' axes on foot). The reverse of the layout
+    /// above (#435): change the two together.
+    /// </summary>
+    public static XrControl? Control(InputEvent e) => e switch
+    {
+        InputEventJoypadButton b => b.ButtonIndex switch
+        {
+            JoyButton.A => XrControl.A,
+            JoyButton.B => XrControl.B,
+            JoyButton.X => XrControl.X,
+            JoyButton.Y => XrControl.Y,
+            // on foot the trigger and the grip both press the shoulder; the trigger is the one to name
+            JoyButton.LeftShoulder => TriggersAsShoulders ? XrControl.LeftTrigger : XrControl.LeftGrip,
+            JoyButton.RightShoulder => TriggersAsShoulders ? XrControl.RightTrigger : XrControl.RightGrip,
+            JoyButton.LeftStick => XrControl.LeftStickClick,
+            JoyButton.RightStick => XrControl.RightStickClick,
+            JoyButton.DpadUp => XrControl.RightStickUp,
+            JoyButton.DpadRight => TriggersAsShoulders ? XrControl.RightStickDown : XrControl.RightStickRight,
+            JoyButton.DpadDown when !TriggersAsShoulders => XrControl.RightStickDown,
+            JoyButton.DpadLeft when !TriggersAsShoulders => XrControl.RightStickLeft,
+            JoyButton.Start => XrControl.Menu,
+            JoyButton.Back => XrControl.MenuHold,
+            _ => null,
+        },
+        InputEventJoypadMotion m => m.Axis switch
+        {
+            JoyAxis.LeftX or JoyAxis.LeftY => XrControl.LeftStick,
+            JoyAxis.RightX or JoyAxis.RightY => XrControl.RightStick,
+            JoyAxis.TriggerLeft when !TriggersAsShoulders => XrControl.LeftTrigger,
+            JoyAxis.TriggerRight when !TriggersAsShoulders => XrControl.RightTrigger,
+            _ => null,
+        },
+        _ => null,
+    };
+
+    /// <summary>
+    /// Presses <paramref name="action"/> for one frame, as a key would: for the hands and the wrist
+    /// menu, whose gestures are actions with no pad button of their own.
+    /// </summary>
+    /// <summary>Holds <paramref name="action"/> down, or lets it go: for a gesture that lasts (#489).</summary>
+    public static void Press(string action, bool on) =>
+        Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = on, Strength = on ? 1f : 0f });
+
+    public static void Tap(string action)
+    {
+        Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = true });
+        Callable.From(() => Input.ParseInputEvent(new InputEventAction { Action = action, Pressed = false })).CallDeferred();
     }
 
     private static bool Hysteresis(float v, ref bool was) => was = was ? v > 0.4f : v > 0.75f;

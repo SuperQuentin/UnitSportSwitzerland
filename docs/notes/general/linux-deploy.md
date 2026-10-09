@@ -24,9 +24,22 @@
   `cron.log`; tiles in `DEPLOY_CHUNKS_DIR` (default `$DEPLOY_DIR/terrain_chunks`, point it at a data volume), passed as
   `UNITSPORT_CHUNKS`. Server state (`admins.json`, bank, placed items, CDs...) lives in `~/.local/share/godot/app_userdata/`
   and is never touched by a deploy.
+- **Tiles over HTTP** (#651, `TILES=1` by default, `net/http-tiles`): setup installs `caddy` and `acl`. It writes
+  `/etc/caddy/Caddyfile` from `tools/deploy/Caddyfile`, serving `/tiles/` = `DEPLOY_CHUNKS_DIR` with tile files only. The site is
+  `TILES_DOMAIN` (HTTPS via Let's Encrypt, HTTP/2; DNS must point at the host and 80/443 must be open) or `:80`. An ACL lets
+  the `caddy` user reach a chunk dir under a 0700 home. The chunk step then runs `tools/deploy/gzip-tiles.sh` on the host:
+  a `.gz` beside each changed tile file, about +25% disk, so leave room. `TILES_PRECOMPRESS=0` gzips on the fly instead.
+  The `.gz` files are left out of the compare and of `--prune`. The server starts with `--tiles-url`: `https://TILES_DOMAIN/tiles/`,
+  else `http://<DEPLOY_HOST without user@>/tiles/`. Set `TILES_URL` when `DEPLOY_HOST` is an ssh alias, or for a CDN.
+  Check: `curl -sI -H 'Accept-Encoding: gzip' <url>chunk_2593_1119.terr` shows `Content-Encoding: gzip`.
+- **Status page** (#740, `net/status-page`): the same Caddy serves `$DEPLOY_DIR/web` at `/`: `index.html` uploaded on
+  every start install, `status.json` written by the server (`--status-file`). Players, names, version and the latest
+  release's downloads at `http(s)://<host>/`. Needs `TILES=1`; a host set up before it needs `--setup` once.
 - **Server process:** a detached tmux session `unitsport`, so its stdin console still works:
   `ssh -t user@host tmux attach -t unitsport` (detach Ctrl-b d). A deploy kills the session (no graceful save exists) and
-  restarts it, then waits for the UDP port (about 30 s) and prints the log tail.
+  restarts it, then waits for the UDP port (about 30 s) and prints the log tail. **Ctrl-d in the console ends its stdin**:
+  the server keeps running but reads no more commands until a restart. Inside the session `start-server.sh run`
+  loops so the in-game `/update` can restart on a new release (`net/server-update`, `update-server.sh` installed beside it).
 - **Terrain chunks** (the real set is ~111 GB in ~246k files, one flat directory): the source is MapSetup's
   `terrain_location.json` `"chunks"`, else `terrain_chunks/`, else `CHUNKS_SRC=`; run from the main checkout (worktrees have no tiles).
   Files whose name, size or mtime differ are copied (`--checksum` compares md5 instead: reads every byte on both sides).
