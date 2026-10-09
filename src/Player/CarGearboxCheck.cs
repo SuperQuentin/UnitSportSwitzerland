@@ -352,5 +352,9 @@ public static class CarGearboxCheck
         var c = new Car(kart);
         c.SetGearbox(CarGearbox.Manual, 0f);
         Check(c.Gearbox == CarGearbox.Automatic && c.Gear == 1, $"{kart.Label}: a kart's centrifugal clutch stays automatic");
+        // FootPlayer gives a kart no selector; one set anyway must not stop it
+        var r = new Run1(new Car(kart), CarGearbox.Automatic);
+        r.For(3f, 1f);
+        Check(r.U > 3f, $"{kart.Label}: drives on the gas with no selector ({F(r.U * 3.6f)} km/h)");
     }
 }

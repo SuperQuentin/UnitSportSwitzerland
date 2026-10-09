@@ -35,8 +35,9 @@ public partial class FootPlayer
         car.ClutchHeld = driver && PlayerInput.HeldButton(PlayerInput.Clutch);
         car.ClutchFoot = driver ? PlayerInput.WheelPedal(PlayerInput.Clutch) : 0f;
         int? wheelLever = driver ? SteeringWheel.ShifterGate : null;
-        // on the automatic the H-shifter is the selector: P R N D
-        car.Selector = car.Gearbox == CarGearbox.Automatic && wheelLever is { } sel ? HeldShifter.Selector(sel) : DriveSelector.None;
+        // on the automatic the H-shifter is the selector: P R N D. Not a kart's: its centrifugal clutch
+        // has no selector and does not creep
+        car.Selector = car.Gearbox == CarGearbox.Automatic && !car.IsKart && wheelLever is { } sel ? HeldShifter.Selector(sel) : DriveSelector.None;
         if (car.Gearbox == CarGearbox.Manual && wheelLever is { } lever
             && _shifter.Step(lever, car.Gear, car.ClutchPedal, out bool retry) is { } gate)
         {
