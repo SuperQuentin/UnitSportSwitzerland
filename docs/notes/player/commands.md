@@ -5,10 +5,12 @@
   non-zero exit if the rider went nowhere or ended under the terrain. Riding is the one part
   that cannot be judged from a screenshot; add `--ridemenu [tab card]` (with `--shot`) to capture the picker (see the ui `travel-menu` note).
 - **Start in a ride, to play**: `--seat kart|car:N|truck:N|moto:N|bike|...` (the `--ride` names,
-  `RideProbe.KindNamed`) with `--at E,N` on a road and `--heading deg`: the session starts on foot
-  behind the loading screen (as the menus' Explore, `GroundStart`), then `Core/SeatStart` seats the
-  real player ("Getting you into the …" on the loading screen) before anything can be played; the
-  controls are the player's. A kart on a Geneva street: `--at 2500300,1118450 --heading 207 --seat kart`.
+  `RideProbe.KindNamed`) with `--at E,N` and `--heading deg`: `Core/SeatStart` puts up its own screen
+  (`SeatOverlay`: "Getting into the …", the step it is on; it swallows all input and holds the body
+  still), since a command-line run has no loading screen (`GameShell.Direct`); the body lands on open
+  ground (`GroundStart`), is stood on the nearest road (`RaceRoute`) facing along it (the way nearer
+  `--heading`), and is seated; the controls are then the player's. A kart on a Geneva street:
+  `--at 2500300,1118450 --heading 207 --seat kart`.
   `--ride` is the probe: its own body, the throttle held, then it quits.
 - Car gearbox (#290): `--cargearbox auto|seq|manual` sets it for one run; `--cargearcheck [trace]`
   (headless, no world) checks the sequential and manual boxes and the H-shifter's lever (`car-gearbox`).
