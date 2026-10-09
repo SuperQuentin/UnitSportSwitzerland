@@ -46,12 +46,11 @@ public partial class SignalLamps : Node3D
 
     private static Icon SymbolOf(SignalBuilder.Lens lens, SignalPlan plan) => lens.Shape switch
     {
-        SignalBuilder.Shape.LeftArrow => plan.ArrowPlates ? Icon.Round : Icon.LeftArrow,
-        SignalBuilder.Shape.RightArrow => plan.ArrowPlates ? Icon.Round : Icon.RightArrow,
+        SignalBuilder.Shape.LeftArrow => Icon.LeftArrow,
+        SignalBuilder.Shape.RightArrow => Icon.RightArrow,
         SignalBuilder.Shape.Square => lens.Role == SignalBuilder.Role.Red ? Icon.Standing : Icon.Walking,
         SignalBuilder.Shape.Bike => Icon.Bike,
-        // where the plate under the head carries the arrow, its lenses are balls
-        _ when lens.Role == SignalBuilder.Role.Flash || plan.ArrowPlates => Icon.Round,
+        _ when lens.Role == SignalBuilder.Role.Flash => Icon.Round,
         _ => SignalBuilder.ArrowMoves(plan, lens.Group) switch
         {
             SignalMoves.Through => Icon.Straight,

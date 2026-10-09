@@ -94,9 +94,9 @@ public sealed class SignalPlan
     /// <summary>Pedestrian heads have a yellow lens (3-lens canton heads, e.g. Vaud); else red after green (e.g. Geneva).</summary>
     public bool PedestrianAmber { get; set; } = true;
     /// <summary>
-    /// The canton's white plates run on below each car and bike head and carry its arrow, and its
-    /// bike heads stand on one too; elsewhere a bike head has a small arrow plate of its own and the
-    /// car lenses show the arrows (#759). Bit 1 of the byte that holds <see cref="PedestrianAmber"/>:
+    /// The canton's white plates run on below each car and bike head and carry its arrow (the lenses
+    /// keep theirs), and its bike heads stand on one too; elsewhere a bike head has a small arrow
+    /// plate of its own (#759). Bit 1 of the byte that holds <see cref="PedestrianAmber"/>:
     /// data written before reads false.
     /// </summary>
     public bool ArrowPlates { get; set; }
