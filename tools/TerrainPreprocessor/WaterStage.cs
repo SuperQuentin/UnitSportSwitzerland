@@ -103,8 +103,10 @@ public static class WaterStage
 
     /// <summary>
     /// The survey only counts in a body this large, at vertices within
-    /// <see cref="SurveyLevelToleranceM"/> of the body's mean level: swissBATHY3D's grid reaches up
-    /// the streams around Nyon, 2-10 m above the lake, where it would dig a 3 m pit in a brook.
+    /// <see cref="SurveyLevelToleranceM"/> of the body's most common level: swissBATHY3D's grid
+    /// reaches up the streams around Nyon, 2-10 m above the lake, where it would dig a 3 m pit in a
+    /// brook. Not the mean: nationwide a lake's body takes in its rivers (Léman the Rhône up the
+    /// Valais), which lifted Léman's mean 4 m off its 372.14 m surface and dropped the whole survey.
     /// </summary>
     private const double MinSurveyAreaM2 = 200_000, SurveyLevelToleranceM = 1.0;
 
@@ -145,7 +147,17 @@ public static class WaterStage
     private sealed class Body
     {
         public long Count;
-        public double LevelSum;
+        public readonly Dictionary<ushort, long> LevelCounts = new();   // quantized level -> vertices
+        public double SurveyLevel;   // ModeLevel(), once all tiles are summed
+
+        /// <summary>The most common level (a lake is flat; the lowest on a tie).</summary>
+        public double ModeLevel()
+        {
+            ushort best = 0; long n = -1;
+            foreach (var (q, k) in LevelCounts)
+                if (k > n || (k == n && q < best)) { best = q; n = k; }
+            return ChunkFormat.Dequantize(best);
+        }
         public int MinE = int.MaxValue, MaxE = int.MinValue, MinN = int.MaxValue, MaxN = int.MinValue;
         public double MaxDepth, AreaM2;
         // results
@@ -243,7 +255,7 @@ public static class WaterStage
                         int root = Find(parent, td.LabelBase + l);
                         if (!bodies.TryGetValue(root, out var b)) bodies[root] = b = new Body();
                         b.Count++;
-                        b.LevelSum += ChunkFormat.Dequantize(td.Surface[r * S + c]);
+                        b.LevelCounts[td.Surface[r * S + c]] = b.LevelCounts.GetValueOrDefault(td.Surface[r * S + c]) + 1;
                         int e = id.E * 1000 + c, nn = (id.N + 1) * 1000 - r;
                         if (e < b.MinE) b.MinE = e;
                         if (e > b.MaxE) b.MaxE = e;
@@ -256,6 +268,7 @@ public static class WaterStage
         {
             b.AreaM2 = b.Count * ChunkFormat.SpacingM * ChunkFormat.SpacingM;
             b.MaxDepth = WaterBed.MaxDepthForArea(b.AreaM2);
+            b.SurveyLevel = b.ModeLevel();
         }
         // per global label, read-only from here on (Find compresses paths, so not in parallel)
         var maxDepthOf = new double[total + 1];
@@ -270,7 +283,7 @@ public static class WaterStage
             {
                 maxDepthOf[i] = b.MaxDepth;
                 sqrtAreaOf[i] = Math.Sqrt(b.AreaM2);
-                if (b.AreaM2 >= MinSurveyAreaM2) surveyLevelOf[i] = b.LevelSum / b.Count;
+                if (b.AreaM2 >= MinSurveyAreaM2) surveyLevelOf[i] = b.SurveyLevel;
             }
             else maxDepthOf[i] = WaterBed.MinMaxDepthM;   // a body that only touches seams it does not own
         }
@@ -357,7 +370,7 @@ public static class WaterStage
             string name = lake.Length > 0 ? $"{lake} (swissBATHY3D)" : SyntheticName(b);
             string published = PublishedMaxDepth(lake);
             Console.WriteLine($"  {name,-28} {(b.MinE + b.MaxE) / 2000.0:F1},{(b.MinN + b.MaxN) / 2000.0:F1}".PadRight(48)
-                + $" {b.AreaM2 / 1e6,7:F2} {b.LevelSum / b.Count,8:F2} {b.OutMaxDepth,6:F1}m {(b.OutCount > 0 ? b.OutDepthSum / b.OutCount : 0),5:F1}m"
+                + $" {b.AreaM2 / 1e6,7:F2} {b.SurveyLevel,8:F2} {b.OutMaxDepth,6:F1}m {(b.OutCount > 0 ? b.OutDepthSum / b.OutCount : 0),5:F1}m"
                 + $" {100.0 * b.Surveyed / Math.Max(1, b.OutCount),6:F1}% {100.0 * b.Filled / Math.Max(1, b.OutCount),5:F1}%  {published}");
         }
         int small = bodies.Values.Count(b => b.AreaM2 < 20_000);
