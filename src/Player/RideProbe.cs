@@ -80,9 +80,25 @@ public partial class RideProbe : Node
             if (args[i] != "--ride") continue;
 
             var parts = args[i + 1].Split(',');
-            var name = parts[0].ToLowerInvariant();
-            var kind = name switch
-            {
+            var kind = KindNamed(parts[0]);
+            double seconds = 20;
+            if (parts.Length > 1) double.TryParse(parts[1],
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out seconds);
+            return (kind, seconds, parts.Length > 2 ? parts[2] : null);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// A ride by the name <c>--ride</c> and <c>--seat</c> take: bike, skis, r1, monster, kart, a320,
+    /// freighter, an124, the works machines, moto:N, truck:N, car:N. Anything else is on foot.
+    /// </summary>
+    public static RideKind KindNamed(string word)
+    {
+        var name = word.ToLowerInvariant();
+        return name switch
+        {
                 "bike" or "roadbike" => RideKind.RoadBike,
                 "skis" or "ski" => RideKind.Skis,
                 "r1" => (RideKind)MotorbikeCatalog.First,
@@ -111,13 +127,6 @@ public partial class RideProbe : Node
                     + (name.Length > 4 && int.TryParse(name[4..], out int n) ? n : 0)),
                 _ => RideKind.OnFoot,
             };
-            double seconds = 20;
-            if (parts.Length > 1) double.TryParse(parts[1],
-                System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out seconds);
-            return (kind, seconds, parts.Length > 2 ? parts[2] : null);
-        }
-        return null;
     }
 
     public override void _PhysicsProcess(double delta)

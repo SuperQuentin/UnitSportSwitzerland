@@ -960,7 +960,7 @@ public partial class PlayerFeel : Node3D
             else if (_player.Vehicle is Car c)
             {
                 sb.Append($"{speed * 3.6f:0} km/h    ");
-                if (c.Gear < 0) sb.Append('R'); else sb.Append(c.Gear);
+                sb.Append(c.GearText);
                 sb.Append($"    {c.Rpm:0} rpm").Append(wear);
             }
             else if (_player.Vehicle is Steamer steamer)

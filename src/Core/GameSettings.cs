@@ -171,6 +171,9 @@ public sealed class GameSettings
     /// <summary>How trucks and buses are shifted (#70): automatic, sequential, with the clutch, H-pattern.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public Player.HeavyShift HeavyGearbox { get; set; } = Player.HeavyShift.Automatic;
+    /// <summary>How cars are shifted (#290): automatic, sequential (auto clutch), or manual with the clutch pedal.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Player.CarGearbox CarGearbox { get; set; } = Player.CarGearbox.Automatic;
 
     // --- world ---
     /// <summary>Real minutes for a whole day; 0 stops the clock at <see cref="StartHour"/>.</summary>
@@ -516,6 +519,13 @@ public sealed class GameSettings
                         "seq" => Player.HeavyShift.Sequential, "seqclutch" => Player.HeavyShift.SequentialClutch,
                         "hsplit" => Player.HeavyShift.HPatternSplitter, "h" => Player.HeavyShift.HPattern,
                         _ => Player.HeavyShift.Automatic,
+                    };
+                    break;
+                case "--cargearbox":
+                    CarGearbox = v.ToLowerInvariant() switch
+                    {
+                        "seq" => Player.CarGearbox.Sequential, "manual" or "h" => Player.CarGearbox.Manual,
+                        _ => Player.CarGearbox.Automatic,
                     };
                     break;
                 case "--wheel": Wheel.Enabled = v is "on" or "1" or "true"; break;
