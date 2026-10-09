@@ -18,6 +18,8 @@ public sealed class PlaytestContext
     private readonly Action<string> _command;
     private readonly List<string> _vehicles = [];
     private readonly List<Node> _nodes = [];
+    /// <summary>The vehicles in the world before any scenario: everything else is a scenario's, however it came (a crash re-parks the ride as a new body).</summary>
+    private HashSet<VehicleBody>? _before;
     /// <summary>Numbers every placed vehicle of the session: a name never comes back while the last one is still being freed.</summary>
     private int _serial;
 
@@ -193,8 +195,13 @@ public sealed class PlaytestContext
     {
         if (Player is { } me) await Dismount(me);
         if (Vehicles is { } vehicles)
+        {
+            _before ??= vehicles.GetChildren().OfType<VehicleBody>().ToHashSet();
             foreach (string name in _vehicles)
                 vehicles.GetNodeOrNull<VehicleBody>(name)?.QueueFree();
+            foreach (var left in vehicles.GetChildren().OfType<VehicleBody>().Where(v => !_before.Contains(v)))
+                left.QueueFree();
+        }
         foreach (var node in _nodes)
             if (GodotObject.IsInstanceValid(node)) node.QueueFree();
         _vehicles.Clear();

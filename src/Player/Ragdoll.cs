@@ -53,9 +53,11 @@ public sealed class Ragdoll
     /// Contacts ignore vehicles this long: the body starts in the seat, inside the car's hull, and
     /// has to get out through the glass. Only for this long — after it, the car is solid again and
     /// the body lands on its bonnet or its roof. (Excluded for good, as it first was, the body
-    /// fell straight through the car it had come out of.)
+    /// fell straight through the car it had come out of.) 0.25 s stopped a bus driver against the
+    /// side of the bus they had hit; 0.5 s takes the body through its glass and in (#751 playtest).
     /// </summary>
-    private const float VehicleGrace = 0.25f;
+    [Core.Tunable("s the thrown body passes through vehicles: out of its own, through what it hit; 0.1-1")]
+    public static float VehicleGrace = 0.5f;
     /// <summary>
     /// Water drag on a submerged point, 1/s and 1/m (on its velocity relative to the water). A body
     /// going in at 15 m/s is down to a few m/s within a body length, as a plunge is.
@@ -79,7 +81,7 @@ public sealed class Ragdoll
     private readonly List<(int A, int B, float Length, float Stiffness)> _sticks = new();
     private readonly List<(int A, int B, float Min)> _floors = new();
     private readonly Godot.Collections.Array<Rid> _exclude = new();
-    private readonly List<Rid> _graced = new();
+    private readonly List<(Rid Rid, float Until)> _graced = new();
     private readonly PhysicsRayQueryParameters3D _ray = new();
     private float _accum, _still;
     private Vector3 _restAt;
@@ -101,6 +103,31 @@ public sealed class Ragdoll
 
     /// <summary>A point hit something at this speed into the surface (m/s): a thud, or a bone.</summary>
     public event Action<Vector3, float>? Struck;
+
+    /// <summary>A point broke into a vehicle while passing through it (<see cref="VehicleGrace"/>), at this velocity: its glass goes.</summary>
+    public event Action<Vector3, Vector3>? BrokeInto;
+
+    /// <summary>
+    /// The body stays in the vehicle it breaks into rather than going on through it: only the side
+    /// it came in by lets it through (<see cref="EntryDepth"/>), and the far side holds it.
+    /// </summary>
+    public bool StaysIn { get; init; }
+
+    /// <summary>How deep past where it broke in a vehicle's sides still let a body that <see cref="StaysIn"/> through, metres: its near wall, not its far one.</summary>
+    private const float EntryDepth = 0.6f;
+    /// <summary>A face this steep or steeper is a side (windscreen, window, panel) a thrown body breaks through; flatter is a roof or a floor, which holds it.</summary>
+    private const float SideFace = 0.5f;
+    /// <summary>Where the body first broke into each vehicle body, and that face's normal.</summary>
+    private readonly Dictionary<Rid, (Vector3 At, Vector3 Normal)> _entered = new();
+    /// <summary>The hulls of the vehicles it broke into, and their boxes: their roofs, which a ray from inside cannot see, hold the body in.</summary>
+    private readonly List<(Node3D Hull, Aabb Box)> _cabins = new();
+
+    /// <summary>How much of its speed into a vehicle's roof or side a body keeps, bounced off it (the world's surfaces: <see cref="Bounce"/>).</summary>
+    [Core.Tunable("share of the speed into a vehicle a thrown body bounces back with; 0-0.8")]
+    public static float VehicleBounce = 0.4f;
+    private bool _ownFound;
+
+    private readonly PhysicsPointQueryParameters3D _inside = new();
 
     /// <param name="joints">World joint positions in <see cref="Avatar.HumanMeshBuilder.Joint"/> order.</param>
     /// <param name="velocity">Launch velocity of the whole body.</param>
@@ -225,12 +252,7 @@ public sealed class Ragdoll
     private void Substeps(PhysicsDirectSpaceState3D space, Func<Vector3, float?> ground)
     {
         Age += Substep;
-        if (Age >= VehicleGrace && _graced.Count > 0)
-        {
-            foreach (var rid in _graced) _exclude.Remove(rid);
-            _graced.Clear();
-            _ray.Exclude = _exclude;
-        }
+        ReleaseGraced(space);
         float g = Gravity * Substep * Substep;
         for (int i = 0; i < _p.Length; i++)
         {
@@ -275,6 +297,7 @@ public sealed class Ragdoll
         for (int i = 0; i < _p.Length; i++)
         {
             Collide(i, space);
+            Ceilings(i);
             if (ground(_p[i]) is float h && _p[i].Y < h + _radius[i])
             {
                 float into = (_prev[i].Y - _p[i].Y) / Substep;
@@ -322,6 +345,100 @@ public sealed class Ragdoll
         _p[(int)mid] += bend.Normalized() * push;
     }
 
+    /// <summary>
+    /// What the body passes through is solid again once its time is up and no joint is inside it: a
+    /// body half through a wall when it turned solid stood stuck upright in it (#751 playtest).
+    /// </summary>
+    private void ReleaseGraced(PhysicsDirectSpaceState3D space)
+    {
+        if (!_ownFound)
+        {
+            // the vehicle it is thrown from: whatever holds the seated body when it starts
+            _ownFound = true;
+            _inside.CollisionMask = _ray.CollisionMask;
+            foreach (var p in _p)
+            {
+                _inside.Position = p;
+                foreach (var hit in space.IntersectPoint(_inside, 8))
+                    if (IsVehicle(hit["collider"].AsGodotObject()) && hit["rid"].AsRid() is var rid && !_exclude.Contains(rid))
+                    {
+                        _exclude.Add(rid);
+                        _graced.Add((rid, VehicleGrace));
+                    }
+            }
+            _ray.Exclude = _exclude;
+        }
+        bool due = false;
+        foreach (var g in _graced) due |= Age >= g.Until;
+        if (!due) return;
+        _held.Clear();
+        _inside.CollisionMask = _ray.CollisionMask;
+        foreach (var p in _p)
+        {
+            _inside.Position = p;
+            foreach (var hit in space.IntersectPoint(_inside, 8)) _held.Add(hit["rid"].AsRid());
+        }
+        for (int k = _graced.Count - 1; k >= 0; k--)
+        {
+            if (Age < _graced[k].Until || _held.Contains(_graced[k].Rid)) continue;
+            _exclude.Remove(_graced[k].Rid);
+            _graced.RemoveAt(k);
+            _ray.Exclude = _exclude;
+        }
+    }
+
+    private readonly HashSet<Rid> _held = new(), _broke = new();
+    private float _brokeAt = -1f;
+
+    /// <summary>A vehicle's hull, an articulated bus's rear section, or a vehicle's walkable deck (a bus's deck walls stopped the body between two buses).</summary>
+    private static bool IsVehicle(GodotObject? what) => what is Node n
+        && (n is Vehicles.VehicleBody || n.GetParent() is Vehicles.VehicleBody || n.IsInGroup(FootPlayer.DeckGroup));
+
+    /// <summary>
+    /// The point broke through this vehicle's face, within <see cref="VehicleGrace"/>: a side, and
+    /// for a body that <see cref="StaysIn"/> only the side it came in by. Face by face, never the
+    /// whole vehicle: excluded whole, a bus let the body out through its roof (#751 playtest).
+    /// </summary>
+    private bool BreaksThrough(GodotObject what, Rid rid, Vector3 at, Vector3 normal)
+    {
+        if (Mathf.Abs(normal.Y) > SideFace) return false;
+        // once in, its sides go on letting the body through after the grace: ended halfway, a body
+        // going through hung in the far wall, and one staying in left its legs outside (#751 playtest)
+        if (_entered.TryGetValue(rid, out var entry)) return !StaysIn || (at - entry.At).Dot(-entry.Normal) < EntryDepth;
+        if (Age >= VehicleGrace) return false;
+        _entered[rid] = (at, normal);
+        if (what is Node n && n.GetNodeOrNull<CollisionShape3D>("Hull") is { Shape: { } shape } hull)
+            _cabins.Add((hull, shape is BoxShape3D b ? new Aabb(-b.Size / 2, b.Size) : shape.GetDebugMesh().GetAabb()));
+        return true;
+    }
+
+    /// <summary>
+    /// A vehicle's roof from inside: a point under it and in its footprint that would rise through
+    /// it bounces off it instead. Inside the hull a ray sees none of the hull's faces, and a head
+    /// went up through a bus's roof and the body stood up on it (#751 playtest).
+    /// </summary>
+    private void Ceilings(int i)
+    {
+        foreach (var (hull, box) in _cabins)
+        {
+            if (!GodotObject.IsInstanceValid(hull)) continue;
+            var frame = hull.GlobalTransform;
+            var inv = frame.AffineInverse();
+            var local = inv * _p[i];
+            float top = box.End.Y - _radius[i];
+            if (local.Y <= top || (inv * _start[i]).Y > top + 0.05f
+                || local.X < box.Position.X || local.X > box.End.X || local.Z < box.Position.Z || local.Z > box.End.Z) continue;
+            float into = ((_p[i] - _prev[i]) / Substep).Dot(frame.Basis.Y.Normalized());
+            _p[i] = frame * (local with { Y = top });
+            var down = -frame.Basis.Y.Normalized();
+            var v = (_p[i] - _prev[i]) / Substep;
+            float vn = v.Dot(down);
+            var after = (v - down * vn) * Mathf.Max(0f, 1f - Friction * Substep) - down * Mathf.Min(vn, 0f) * VehicleBounce;
+            _prev[i] = _p[i] - after * Substep;
+            if (into > 3f) Struck?.Invoke(_p[i], into);
+        }
+    }
+
     /// <summary>The swept move of one point against the world: stopped a radius short of what it meets.</summary>
     private void Collide(int i, PhysicsDirectSpaceState3D space)
     {
@@ -331,23 +448,32 @@ public sealed class Ragdoll
         var dir = move.Normalized();
         _ray.From = _start[i];
         _ray.To = _p[i] + dir * _radius[i];
-        for (int attempt = 0; attempt < 3; attempt++)
+        for (int attempt = 0; attempt < 6; attempt++)
         {
             var hit = space.IntersectRay(_ray);
             if (hit.Count == 0) return;
             var what = hit["collider"].AsGodotObject();
-            // never other players' capsules; the car it came out of, until it is clear of it
-            bool graced = what is Vehicles.VehicleBody && Age < VehicleGrace;
-            if (what is FootPlayer || graced)
+            var normal = hit["normal"].AsVector3();
+            var at = hit["position"].AsVector3();
+            // never other players' capsules
+            if (what is FootPlayer)
             {
-                var rid = hit["rid"].AsRid();
-                _exclude.Add(rid);
-                if (graced) _graced.Add(rid);
+                _exclude.Add(hit["rid"].AsRid());
                 _ray.Exclude = _exclude;
                 continue;
             }
-            var normal = hit["normal"].AsVector3();
-            var at = hit["position"].AsVector3();
+            // through a vehicle's glass and panels: on from just past the face (a ray from inside a
+            // shape does not see it, so the point goes on until the next face that counts)
+            if (IsVehicle(what) && hit["rid"].AsRid() is var rid && BreaksThrough(what, rid, at, normal))
+            {
+                if (!_broke.Contains(rid) && _broke.Add(rid) && Age - _brokeAt > 0.15f)
+                {
+                    _brokeAt = Age;
+                    BrokeInto?.Invoke(at, (_p[i] - _prev[i]) / Substep);
+                }
+                _ray.From = at + dir * 0.01f;
+                continue;
+            }
             float into = -((_p[i] - _prev[i]) / Substep).Dot(normal);
             // Stopped on its own line of motion, a radius off the surface. Not the hit point plus
             // the normal: on a slope that shifts the point downhill by r·sinθ every substep, and a
@@ -356,18 +482,18 @@ public sealed class Ragdoll
             _p[i] = across < -0.15f
                 ? _start[i] + dir * Mathf.Max(0f, (_radius[i] + (at - _start[i]).Dot(normal)) / across)
                 : at + normal * _radius[i];
-            Contact(i, normal, into);
+            Contact(i, normal, into, IsVehicle(what) ? VehicleBounce : Bounce);
             return;
         }
     }
 
     /// <summary>A contact's velocity: into the surface mostly gone, along it mostly gone, a hard one reported.</summary>
-    private void Contact(int i, Vector3 normal, float into)
+    private void Contact(int i, Vector3 normal, float into, float bounce = Bounce)
     {
         var v = (_p[i] - _prev[i]) / Substep;
         float vn = v.Dot(normal);
         var tangent = v - normal * vn;
-        var after = tangent * Mathf.Max(0f, 1f - Friction * Substep) - normal * Mathf.Min(vn, 0f) * Bounce + normal * Mathf.Max(vn, 0f);
+        var after = tangent * Mathf.Max(0f, 1f - Friction * Substep) - normal * Mathf.Min(vn, 0f) * bounce + normal * Mathf.Max(vn, 0f);
         _prev[i] = _p[i] - after * Substep;
         if (into > 3f) Struck?.Invoke(_p[i], into);
     }

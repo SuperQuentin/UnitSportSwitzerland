@@ -28,6 +28,8 @@ public enum DamageCause { Other, Weapon, Blast, Fall, Crash, Zone, Drown }
 public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 {
     public const string Group = "players";
+    /// <summary>A vehicle's walkable deck (<c>FootPlayer.Deck.cs</c>): part of the vehicle to whatever passes through it (a thrown body).</summary>
+    public const string DeckGroup = "vehicle_decks";
 
     [Export] public float SimWalkSpeed { get; set; } = 1.6f;   // ~5.8 km/h, brisk walk
     [Export] public float SimRunSpeed { get; set; } = 4.6f;    // ~16.6 km/h, steady run
@@ -1756,7 +1758,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _seenSeatFrame = GlobalTransform * _visual.Transform * rig.DriverFrame;
             _seenSeatAt = GameClock.Now;
         }
-        else if (_visual is Avatar.HeavyRig heavyRig) heavyRig.DriverShown = SeatIndex == 0;
+        else if (_visual is Avatar.HeavyRig heavyRig)
+        {
+            heavyRig.DriverShown = SeatIndex == 0;
+            if (heavyRig.Driver is var (seat, frame))
+                (_seenSeat, _seenSeatFrame, _seenSeatAt) = (seat, GlobalTransform * _visual.Transform * frame, GameClock.Now);
+        }
         else if (_visual is Avatar.BoatRig boatRig) boatRig.DriverShown = SeatIndex == 0;
         else if (_visual is Avatar.SteamerRig steamerRig) steamerRig.DriverShown = SeatIndex == 0;
         else if (_visual is Avatar.AirlinerRig { Cockpit: { } deck })

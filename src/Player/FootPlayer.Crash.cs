@@ -60,7 +60,7 @@ public partial class FootPlayer
     private void ThrowFromVehicle(float hit, bool loopOut = false)
     {
         var fwd = (-GlobalTransform.Basis.Z with { Y = 0 }).Normalized();
-        bool car = _visual is CarRig;
+        bool car = _visual is CarRig or HeavyRig;
         // the joints before the visual goes with the ride
         var joints = SeatedJoints();
         var state = CaptureVehicle(wrecked: false) with { Velocity = Vector3.Zero };
@@ -117,10 +117,14 @@ public partial class FootPlayer
         _seenSeatFrame = shift.Apply(_seenSeatFrame);
     }
 
-    /// <summary>The figure as it sits in the vehicle, world space: the driver's seat in a car, a rider's crouch otherwise.</summary>
-    private Vector3[] SeatedJoints() => _visual is CarRig rig
-        ? DriverWorldJoints(rig.DriverSeat, GlobalTransform * _visual.Transform * rig.DriverFrame)
-        : PoseWorldJoints();
+    /// <summary>The figure as it sits in the vehicle, world space: the driver's seat in a car or a cab, a rider's crouch otherwise.</summary>
+    private Vector3[] SeatedJoints() => _visual switch
+    {
+        CarRig rig => DriverWorldJoints(rig.DriverSeat, GlobalTransform * _visual.Transform * rig.DriverFrame),
+        // a truck or bus: from its cab, not from the middle of an 18 m body (#751 playtest)
+        HeavyRig { Driver: var (seat, frame) } => DriverWorldJoints(seat, GlobalTransform * _visual.Transform * frame),
+        _ => PoseWorldJoints(),
+    };
 
     private static Vector3[] DriverWorldJoints(DriverSeat seat, Transform3D frame)
     {
@@ -139,13 +143,22 @@ public partial class FootPlayer
     /// <summary>Author space (+Z forward) to a node's (−Z forward), and back: a half turn about Y.</summary>
     private static Vector3 Flip(Vector3 v) => new(-v.X, v.Y, -v.Z);
 
+    private static bool StaysIn(Vector3 launch) => (Mathf.RoundToInt(launch.X * 1000f) & 1) == 0;
+
     private void StartRagdoll(Vector3[] joints, Vector3 launch, float spin, bool throughGlass)
     {
         // tumbling forward: head over heels about the axis square to the throw
         var axis = Vector3.Up.Cross(launch with { Y = 0 });
         if (axis.LengthSquared() < 1e-4f) axis = GlobalTransform.Basis.X;
-        _ragdoll = new Ragdoll(joints, launch, axis.Normalized() * spin, GetRid(), RagdollMask);
+        // half the crashes leave the body in the vehicle it breaks into, half send it on through: read
+        // from the launch, which every peer has (Anim), so every copy picks the same; the owner flips
+        // the coin and nudges the launch by a millimetre a second to say which (#751 playtest)
+        if (IsMultiplayerAuthority() && StaysIn(launch) != (_crashRng.Next(2) == 0)) launch.X += 0.001f;
+        bool staysIn = StaysIn(launch);
+        _ragdoll = new Ragdoll(joints, launch, axis.Normalized() * spin, GetRid(), RagdollMask) { StaysIn = staysIn };
+        if (IsMultiplayerAuthority()) GD.Print($"[crash] thrown at {launch.Length():0.0} m/s, {(staysIn ? "stays in" : "goes through")} what it breaks into");
         _ragdoll.Struck += OnRagdollStruck;
+        _ragdoll.BrokeInto += OnRagdollBrokeInto;
         _ragdollClock = 0f;
         _ragdollInWater = _ragdollAfloat = 0f;
         _ragdollWet = false;
@@ -243,6 +256,7 @@ public partial class FootPlayer
         var rag = _ragdoll;
         _ragdoll = null;
         rag.Struck -= OnRagdollStruck;
+        rag.BrokeInto -= OnRagdollBrokeInto;
         if (_ragdollMesh != null) _ragdollMesh.Visible = false;
         if (_walker != null) _walker.Visible = true;
         if (!IsMultiplayerAuthority()) return;
@@ -271,8 +285,18 @@ public partial class FootPlayer
         }
         PoseKind = PoseStride;
         Anim = default;
+        GD.Print($"[crash] at rest: pelvis {pelvis}, stood at {GlobalPosition}, {(up.Y > 0.45f ? "upright" : "lying")}");
+        GetTree().CreateTimer(0.5).Timeout += () => GD.Print($"[crash] 0.5 s later at {GlobalPosition}, aboard '{DeckOn}'");
         if (_bonesBroken > 0) Announced?.Invoke(_bonesBroken == 1 ? "1 BONE BROKEN" : $"{_bonesBroken} BONES BROKEN", false);
         EndCrashCamera();
+    }
+
+    /// <summary>The body broke into a vehicle on its way (the one it hit, a bus's side): its glass bursts there.</summary>
+    private void OnRagdollBrokeInto(Vector3 at, Vector3 velocity)
+    {
+        if (velocity.LengthSquared() < 9f) return;
+        PlayAt(at, Audio.SfxSynth.GlassBank, 2f);
+        SpawnGlass(at, velocity);
     }
 
     /// <summary>A point of the body hit something: a crack and real damage when hard, a thud when not.</summary>

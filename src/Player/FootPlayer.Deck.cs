@@ -392,6 +392,7 @@ public partial class FootPlayer
         foreach (var deck in ride.Decks)
         {
             var body = new StaticBody3D { Name = $"Deck_{key.Replace(':', '_')}_{deck.Section}", TopLevel = true, CollisionLayer = 0, CollisionMask = 0 };
+            body.AddToGroup(DeckGroup);
             // created where it stands: put there after entering the world, Jolt sweeps a body from the
             // origin to its place in the next step, and a deck's roof swept up through the player
             // standing in the aisle, who came out on top of it (#162)
