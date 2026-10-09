@@ -64,9 +64,9 @@ public static class TerrainShowcase
     [Showcase("Terrain", "Traffic light")]
     private static IEnumerable<(string, Func<Node3D>)> TrafficLights() =>
     [
-        ("Vaud", () => TrafficLight(pedestrianAmber: true)),
+        // Vaud: three-lens pedestrian heads, arrows on the plates; Geneva: neither (#759)
+        ("Vaud", () => TrafficLight(pedestrianAmber: true, arrowPlates: true)),
         ("Geneva", () => TrafficLight(pedestrianAmber: false)),
-        ("Arrow plates", () => TrafficLight(pedestrianAmber: true, arrowPlates: true)),
     ];
 
     private static Node3D TrafficLight(bool pedestrianAmber, bool arrowPlates = false)

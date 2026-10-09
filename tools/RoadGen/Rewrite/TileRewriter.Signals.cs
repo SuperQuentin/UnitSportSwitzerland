@@ -466,10 +466,11 @@ public static partial class TileRewriter
 
     /// <summary>
     /// Whether the canton's white plates run on below the car and bike heads with their arrows on
-    /// them, its bike heads on one too (<see cref="SignalPlan.ArrowPlates"/>): some cantons do, some
-    /// do not (#759). None is recorded yet, so none has it; add a canton's code here once it is known.
+    /// them, its bike heads on one too (<see cref="SignalPlan.ArrowPlates"/>): Vaud does, Geneva
+    /// does not (#759, the user, 2026-10-10). Cantons not checked yet do not; add a canton's code
+    /// here once it is known.
     /// </summary>
-    private static bool ArrowPlates(string? canton) => false;
+    private static bool ArrowPlates(string? canton) => canton == "VD";
 
     /// <summary>
     /// The canton of each kilometre tile, from MapSetup's committed <c>switzerland.bin</c>

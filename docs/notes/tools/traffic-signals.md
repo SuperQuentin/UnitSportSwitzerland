@@ -119,9 +119,9 @@
   aluminium after SN 640 836 (not public). Some cantons' plates run on below each car and bike
   head and carry its arrow (the lenses keep their arrows: user's review), their bike heads on a
   plate too: `SignalPlan.ArrowPlates` (bit 1 of the SGNL pedestrian byte, old data reads false), set by
-  RoadGen's `ArrowPlates(canton)`, false everywhere until a canton is known. Elsewhere a bike head
+  RoadGen's `ArrowPlates(canton)`: Vaud yes, Geneva no (user, 2026-10-10), others not checked (no). Elsewhere a bike head
   has a small arrow plate of its own below it (`ArrowPanel` 16 cm, the arrow `ArrowFill` of it). The plate arrows and the lens arrows share
-  `SignalGlyphs.Arrow(moves)`. The model viewer's "Arrow plates" pole shows such a canton. Pedestrian heads have
+  `SignalGlyphs.Arrow(moves)`. The model viewer's Vaud pole has them, its Geneva pole not. Pedestrian heads have
   no board at all (user's review). Geneva's pedestrian head (the two-lens one, `!PedestrianAmber`,
   after the user's photo) is a light grey housing with one dark window, the red standing figure
   left and the green walking one right, side by side at 1.45 times a lens (`Head.SideBySide`);
