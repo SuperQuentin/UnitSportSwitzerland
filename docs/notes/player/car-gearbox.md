@@ -55,3 +55,4 @@
 - **Check**: `--cargearcheck [trace]` (`CarGearboxCheck`, headless, no world): every car's clutch
   launch (slips at the bite, no stall) and a stall dropped in third; the manual and sequential boxes'
   rules; engine braking; the shifter's lever; a kart stays automatic.
+- **Hybrids stay automatic (#760)**: a car whose `CarSpec.Transmission` is `ECvt` (the XW20 / XW30 Prius) has no gears to pick; `SetGearbox` keeps it `Automatic` whatever the setting, and `--cargearcheck` launches only the stepped cars on the clutch and checks the hybrids pull away in Sequential and Manual as automatics.
