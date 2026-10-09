@@ -146,9 +146,15 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     /// <summary>How far from a car's side a player may be to work its doors, m.</summary>
     public const float DoorReach = 3f;
 
-    /// <summary>A vehicle someone could get into now: not burnt out, not a lone trailer, not being claimed.</summary>
+    /// <summary>A vehicle someone could get into now: not burnt out, not a lone trailer, not a boat strapped to its trailer, not being claimed.</summary>
     public bool Enterable(VehicleBody v) =>
-        IsInstanceValid(v) && v.GetParent() == this && !v.Wrecked && v.Trailer == null && !_claimed.Contains(v.Name);
+        IsInstanceValid(v) && v.GetParent() == this && !v.Wrecked && v.Trailer == null && !OnTrailer(v) && !_claimed.Contains(v.Name);
+
+    /// <summary>
+    /// A boat strapped to its trailer (#463): carried, launched only from the towing vehicle (or
+    /// winched aboard), never got into on the bunks.
+    /// </summary>
+    public static bool OnTrailer(VehicleBody v) => v.InHold && v.Ride is Player.Boat;
 
     /// <summary>The nearest drivable vehicle within reach of a point, or null.</summary>
     public VehicleBody? Nearest(Vector3 point, float reach)
@@ -156,7 +162,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         VehicleBody? best = null;
         float bestDist = reach;
         foreach (var node in GetChildren())
-            if (node is VehicleBody { Wrecked: false, Trailer: null } v && !_claimed.Contains(v.Name))
+            if (node is VehicleBody { Wrecked: false, Trailer: null } v && !OnTrailer(v) && !_claimed.Contains(v.Name))
             {
                 // measured to the door where there is one (a truck's cab, a bus's front door, metres
                 // from the middle), else to the box, roughly: a plane's cockpit is metres from its origin
@@ -164,6 +170,23 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
                 float d = entry != Vector3.Zero
                     ? v.ToGlobal(entry).DistanceTo(point)
                     : v.GlobalPosition.DistanceTo(point) - v.Ride.ParkedBox.Size.X * 0.25f;
+                if (d < bestDist) { bestDist = d; best = v; }
+            }
+        return best;
+    }
+
+    /// <summary>
+    /// The nearest free vehicle of one kind within <paramref name="reach"/> of a point, measured from
+    /// its origin: a boat floating behind its trailer, to winch aboard (#463).
+    /// </summary>
+    public VehicleBody? NearestOfKind(Vector3 point, float reach, Player.RideKind kind)
+    {
+        VehicleBody? best = null;
+        float bestDist = reach;
+        foreach (var node in GetChildren())
+            if (node is VehicleBody { Wrecked: false } v && v.Ride.Kind == kind && Enterable(v))
+            {
+                float d = v.GlobalPosition.DistanceTo(point);
                 if (d < bestDist) { bestDist = d; best = v; }
             }
         return best;
@@ -288,7 +311,7 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
     {
         if (!Multiplayer.IsServer()) return;
         long sender = Multiplayer.GetRemoteSenderId();
-        if (GetNodeOrNull<VehicleBody>(name) is not { Wrecked: false, Ride: Player.Car or Player.Truck { IsBus: true } or Player.Steamer or Player.Airliner } vehicle) return;
+        if (GetNodeOrNull<VehicleBody>(name) is not { Wrecked: false, Ride: Player.Car or Player.Truck { IsBus: true } or Player.Truck { CarDoors: true } or Player.Steamer or Player.Airliner } vehicle) return;
         // the server's copy of the asker: only someone standing at the car works its doors
         var asker = GetTree().GetNodesInGroup(Player.FootPlayer.Group).OfType<Player.FootPlayer>()
             .FirstOrDefault(p => p.Name == sender.ToString());
@@ -304,6 +327,25 @@ public partial class VehicleManager : Node3D, Core.IOriginContainer
         int authority = vehicle.GetMultiplayerAuthority();
         if (authority == 1) vehicle.ToggleDoor(bit);
         else RpcId(authority, MethodName.DoorToggled, name, bit);
+    }
+
+    /// <summary>
+    /// Server (or offline): puts a pallet into a parked tipper's body or mini dumper's skip (#615),
+    /// on the vehicle's authority, whose synchronizer hands it to everyone, as a door is worked.
+    /// <c>PalletService</c> has checked who asks.
+    /// </summary>
+    public void LoadBed(VehicleBody vehicle, int bedLoad)
+    {
+        int authority = vehicle.GetMultiplayerAuthority();
+        if (authority == 1 || !Multiplayer.HasMultiplayerPeer() || Multiplayer.MultiplayerPeer is OfflineMultiplayerPeer) vehicle.BedLoad = bedLoad;
+        else RpcId(authority, MethodName.BedLoadedOn, vehicle.Name, bedLoad);
+    }
+
+    /// <summary>On the vehicle's authority: the server let someone set a pallet in its body.</summary>
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void BedLoadedOn(string name, int bedLoad)
+    {
+        if (GetNodeOrNull<VehicleBody>(name) is { } vehicle && vehicle.IsMultiplayerAuthority()) vehicle.BedLoad = bedLoad;
     }
 
     /// <summary>On the car's authority: the server let someone else work one of its doors.</summary>

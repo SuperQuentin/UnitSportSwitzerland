@@ -46,8 +46,20 @@ public partial class Handshake : Node
     /// 22: RideKind.MiniExcavator, its blade in the pose's bucket float (#614).
     /// 23: RideKind.CompactRoller, its bend and its vibration in the pose (#614).
     /// 24: RideKind.Telehandler, its wheels, steering mode and boom in the pose (#614).
+    /// 25: RideKind.WheelLoaderForks; the telehandler's and the fork loader's pallet in their pose's lift float (#615).
+    /// 26: World/Sleepers (Challenge/Prove, Snapshot/Add/Remove, WakeAt) (#644).
+    /// 27: ChatManager HandOver/HandedOver/ReceiveInventory, /transfer (#649).
+    /// 28: the wheel loader's bucket carries a pallet, in its pose's lift float as the fork loader's (#615).
+    /// 29: the site tipper (104) and mixer (105); a mixer's pose has -1 for its rpm with the engine off (#613).
+    /// 30: RideKind.MiniDumper, its skip in the pose and the parked flags (#614).
+    /// 31: a pallet in a tipper's body or a mini dumper's skip (#615): in their pose and parked flags,
+    /// VehicleBody.BedLoad replicated, PalletService's AskBed / Bedded / BedLoaded.
+    /// 32: farming (#494): FarmField Subscribe/Work/Cells, AssetKind.Fields 14, FarmStands and FarmSales
+    /// nodes and RPCs, PassengerService auger offers, ShopService.RequestDeliver's door, PlacedKind.FarmStand
+    /// 11, ShopType.FarmCoop 12, items 300-340, HeavyCatalog 102-103, TrailerCatalog 6-9 and the boat
+    /// trailers it builds on (#463).
     /// </summary>
-    public const int Protocol = 24;
+    public const int Protocol = 32;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

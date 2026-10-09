@@ -1019,6 +1019,32 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     /// <summary>
+    /// True when every tile within <paramref name="rings"/> of <paramref name="eye"/> is finished as
+    /// the last ring evaluation wants it: its mesh at the wanted stride (not a coarse one standing in
+    /// for the fine one still to come), its roads, buildings and collision built and committed.
+    /// <see cref="SettledNear"/> is true as soon as each tile has some mesh, enough for a frame in
+    /// play; a film shot (the trailer, #706) waits for this instead, or the ground beside the camera
+    /// is still the coarse one when the actors arrive.
+    /// </summary>
+    public bool CompleteNear(Vector3 eye, int rings)
+    {
+        if (_origin == null) return Settled;
+        if (!_ready.IsEmpty) return false;
+        var centre = _origin.TileAt(eye);
+        foreach (var (id, want) in _ordered)
+        {
+            if (LodPolicy.Distance(id, centre) > rings) continue;
+            if (!_chunks.TryGetValue(id, out var state) || state.PendingStride >= 0 || state.Grid == null) return false;
+            if (BuildMeshes && state.ActiveStride != want.Stride) return false;
+            if (want.Roads && (!state.HasRoads || state.PendingRoads || state.QueuedRoadCells != null)) return false;
+            if (want.Buildings && (!state.HasBuildings || state.PendingBuildings || state.QueuedBuildingCells != null)) return false;
+            if (want.Collision && (!state.HasCollision || !state.HasBuildingCollision || state.PendingCollision || state.CollisionQueued))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
     /// How many of the tiles within <paramref name="rings"/> of <paramref name="eye"/> are built,
     /// of how many are wanted there: the loading screen's progress bar. Counted the way
     /// <see cref="SettledNear"/> decides, so done == total is the same moment it turns true.
@@ -1151,6 +1177,13 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         if (TryGetWaterLevel(worldPos, out float still) && still > height) height = still;
         return true;
     }
+
+    /// <summary>
+    /// The height grid a tile is drawn from now (full or decimated, roads blended), null when not
+    /// loaded. Main thread; the grid itself is never changed after it is published (a rebuild swaps
+    /// in a new one), so a worker may sample it (farm crops draped on the ground, #494).
+    /// </summary>
+    public ChunkGrid? GridAt(TileId id) => _chunks.TryGetValue(id, out var state) ? state.Grid : null;
 
     public bool TryGetHeight(Vector3 worldPos, out float height)
     {
@@ -2160,7 +2193,19 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                         }
                     }
                     if (wantCollision)
-                        buildingFaces = ChunkNode.SplitByCell(bTile != null ? BuildingMeshBuilder.BuildCollisionFaces(bTile) : []);
+                    {
+                        // a garage door's access road is drivable ground (#558): the tile's doors
+                        // say whether it has one, so a collision-only build computes them too
+                        var linkDoors = doors;
+                        if (linkDoors == null && bTile != null)
+                        {
+                            var linkRoads = roadTile ?? await source.LoadRoadsAsync(id, ct);
+                            ct.ThrowIfCancellationRequested();
+                            linkDoors = Interiors.BuildingFootprint.ComputeDoors(bTile, linkRoads, grid.Stride == 1 ? grid : null);
+                        }
+                        buildingFaces = ChunkNode.SplitByCell(bTile != null
+                            ? [.. BuildingMeshBuilder.BuildCollisionFaces(bTile), .. BuildingMeshBuilder.LinkFaces(linkDoors)] : []);
+                    }
                     Lap(StBldgMesh, stageMs, clock);
                 }
 

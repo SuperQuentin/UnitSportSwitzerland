@@ -36,7 +36,8 @@ public static class IslandBuilder
             // only a roundabout has the flush mini variant; a planter is always a raised kerbed bed
             bool mini = p.Type == AreaPropType.Island && p.Variant == 1;
             float lift = mini ? PaintLift : p.Height;
-            var top = mini ? paint : grass;
+            // variant 2: a traffic island at traffic lights (#682), paved like its kerb, not planted
+            var top = mini ? paint : p.Type == AreaPropType.Island && p.Variant == 2 ? kerb : grass;
             for (int t = 0; t + 2 < p.Indices.Length; t += 3)
                 Tri(vertices, colors, uvs, uv2s, indices, top,
                     At(p, p.Indices[t], lift), At(p, p.Indices[t + 1], lift), At(p, p.Indices[t + 2], lift));

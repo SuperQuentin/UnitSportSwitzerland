@@ -18,6 +18,9 @@
   Emoters do not count in the radio dance's crowd (`DancersAround` counts `DanceId == 1`).
 - **Catalog**: `HumanMeshBuilder.Emotes.cs`, `EmoteTable` (append only: the index is on the wire),
   `EmotePages` names the pages of `EmotesPerPage`. Moves: `docs/notes/avatar/dance-moves.md`.
+  Page 4 "Break & groove" (#748) holds the #728 moves; Windmill and Headspin loop the whole break set
+  (`EmoteMoveAt`: `BreakDown` then the power slot, two bars each, by the bar of the emote clock), so the
+  drawn `Move` of those two is a `BreakMoves` number, not `EmoteMoves + index`.
 - **Checks**: `--emotecheck` (every emote builds, moves, differs, at 32 phases standing and walking);
   `--emotewheelcheck --world fixture [--view third]` drives the wheel with input events (windowed:
   `test_output/emotewheel_*.png`); `tools/emotenetcheck.sh` (two clients: the remote copy dances the

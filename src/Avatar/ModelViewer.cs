@@ -40,6 +40,11 @@ public partial class ModelViewer : Node3D
     public override void _Ready()
     {
         _shots = CmdArgs.FlagWithShot("--models").Shot;
+        // --modelsyaw <deg>: the camera's turn round the model (0 behind, 180 in front) and --modelspitch <deg>, for a shot of its front
+        if (CmdArgs.Float("--modelsyaw") is { } yawDeg) _yaw = Mathf.DegToRad(yawDeg);
+        if (CmdArgs.Float("--modelspitch") is { } pitchDeg) _pitch = Mathf.DegToRad(pitchDeg);
+        // screenshots are stills: no face caught mid-blink (#657)
+        if (_shots != null) HumanMeshBuilder.FigureMaterial().SetShaderParameter(Face.FaceAnimator.IdleParam, 0f);
         AddChild(new DirectionalLight3D
         {
             Rotation = new Vector3(Mathf.DegToRad(-42), Mathf.DegToRad(-35), 0),
@@ -78,7 +83,10 @@ public partial class ModelViewer : Node3D
                         _covered.Add(Outermost(type));
             };
 
+        // --modelsonly <text>: just the models whose category or name holds it, for a quick look
+        string? only = CmdArgs.Value("--modelsonly");
         _categories = Discover()
+            .Where(e => only == null || $"{e.Category} {e.Name}".Contains(only, StringComparison.OrdinalIgnoreCase))
             .GroupBy(e => e.Category)
             .OrderBy(g => g.Key == Unlisted ? 1 : 0).ThenBy(g => g.Key, StringComparer.Ordinal)
             .Select(g => (g.Key, g.ToList()))

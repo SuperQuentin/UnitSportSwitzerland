@@ -8,7 +8,7 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 ## Architecture
 
 - `avatars` — Avatars: (`src/Avatar/`): procedural low-poly figures and a road bike, built from two primitives only — a tapered...
-- `dance-moves` — Dance moves: joint-level spec per style and move, crowd moves (#261), emotes at `EmoteMoves` + catalog index and the #404 moves (YMCA, chicken, cabbage patch, swim, wave, cheer, salute, shrug); `--emotecheck`
+- `dance-moves` — Dance moves: breakdance floor sets (Posed/Spun/OffTheFloor), section-aware DancePick, new moves and refinements, `--dancesheet` (#728); joint-level spec per style and move, crowd moves (#261), emotes at `EmoteMoves` + catalog index and the #404 moves (YMCA, chicken, cabbage patch, swim, wave, cheer, salute, shrug); `--emotecheck`
 - `riding-position-derived-from-bike` — A riding position is derived from the bike, never eyeballed
 - `model-viewer` — `--models`: every procedural model by category, found by reflection from `[Showcase]` builders (prefer a set over the area's registry); `--models,<dir>` screenshots all, names builders with no entry
 - `judge-model-proportions-long-lens` — Judge model proportions with a long lens: The avatar preview's focus camera sits 9 m back at 13° FOV,...
@@ -20,10 +20,9 @@ touches its topic; search with `grep -ril <word> docs/notes/avatar`.
 - `cockpit-kit` — Wheel, column, dials, needles, lamps, pedals and mirrors of cars and heavies come from `CockpitKit` + a per-vehicle `CockpitSpec`; never copy them into a cabin; no static field built from another partial's statics (#221)
 - `item-arm-poses` — Held items pose the arms (ItemArmPose, replicated ItemAction) and the held mesh follows the hand basis
 - `body-shape` — The figure's body (#394): builds (`Physique`), lofted trunk (`Torso`, spine 0-4) and head (`Head`), limb `Zones`/`LimbBand`, hands, boots, hair and `HairCover`; no allocation per rebuild; `--bodies` pages
-- `face-atlas` — Pixel faces (#394): `FaceAtlas` drawn as text, `FaceBand` UVs, finish id 11, magenta iris painted in the eye colour; every figure mesh needs `FigureMaterial`
+- `procedural-faces` — Pixel faces (#657, was the #394 atlas): `FaceGenome` in the band's UV2 (decode with round), SDF shader, blink in the shader, `FaceState` as instance uniforms via `FaceAnimator`; every figure mesh needs `FigureMaterial`
 - `appearance` — Who a figure is (#394): `Appearance` packed in `FootPlayer.AppearanceBits` from `GameSettings`, Body row in the inventory, `Register`/`ForRider` registry for rides, seeds for NPCs and ghosts
-- `cartoon-outline` — Cartoon's ink outline: a next pass on the figure material, round loft normals, `NoNormal` vertices left alone
-- `clothing` — Clothes (#251): Garments catalog, WearSlot, Outfit bits (OutfitBits), AppendDressed from the rig, open Skirt primitive, finishes in vertex alpha + FigureMaterial/avatar.gdshader; `--outfitcheck`, `--avatars … --outfits`
+- `clothing` — Clothes (#251): Garments catalog, WearSlot, Outfit bits (OutfitBits), AppendDressed from the rig, draped skirts (HangSkirt + MeshScratch.Drape, #671), finishes in vertex alpha + FigureMaterial/avatar.gdshader; `--outfitcheck`, `--avatars … --outfits`
 
 ## Gotchas
 

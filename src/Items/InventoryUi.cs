@@ -648,7 +648,7 @@ public partial class InventoryUi : CanvasLayer
         a = part switch
         {
             0 => a with { Build = (Avatar.BodyBuild)Mathf.PosMod((int)a.Build + by, Avatar.Appearance.Builds) },
-            1 => a with { Face = Mathf.PosMod(a.Face + by, Avatar.FaceAtlas.Count) },
+            1 => a with { Face = Mathf.PosMod(a.Face + by, Avatar.Face.FaceGenome.PresetCount) },
             2 => a with { Eyes = Mathf.PosMod(a.Eyes + by, Avatar.Appearance.EyeColours.Length) },
             3 => a with { Skin = Mathf.PosMod(a.Skin + by, Avatar.Appearance.SkinTones.Length) },
             4 => a with { Hair = (Avatar.HairStyle)Mathf.PosMod((int)a.Hair + by, Avatar.Appearance.HairStyles) },
@@ -663,7 +663,7 @@ public partial class InventoryUi : CanvasLayer
     {
         if (_bodyValues[0] == null) return;
         _bodyValues[0].Text = a.Build.ToString();
-        _bodyValues[1].Text = char.ToUpperInvariant(Avatar.FaceAtlas.Name(a.Face)[0]) + Avatar.FaceAtlas.Name(a.Face)[1..];
+        _bodyValues[1].Text = char.ToUpperInvariant(Avatar.Face.FaceGenome.PresetName(a.Face)[0]) + Avatar.Face.FaceGenome.PresetName(a.Face)[1..];
         _bodyValues[2].Text = EyeNames[Mathf.PosMod(a.Eyes, EyeNames.Length)];
         _bodyValues[3].Text = $"Tone {Mathf.PosMod(a.Skin, Avatar.Appearance.SkinTones.Length) + 1}";
         _bodyValues[4].Text = a.Hair.ToString();

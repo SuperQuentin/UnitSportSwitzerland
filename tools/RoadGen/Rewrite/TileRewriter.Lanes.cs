@@ -199,12 +199,12 @@ public static partial class TileRewriter
             // the pocket appears beside the through lane where the hatch closes (#123), or opens out
             // of the lane-wide hatch over the entry diagonal (#325)
             double full = p.Storage, opens = p.Merged ? p.Storage + TurnEntry : p.Storage;
-            bool box = p.Signal && lw.HasLeftBikeLane && lw.BikeBox;
+            bool box = p.Signal && lw.HasLeftBikeLane && lw.BikeBox, advanced = p.Signal && lw.HasLeftBikeLane && !lw.BikeBox;
             lanes.Add(new ApproachLane(O(layout.LeftPocketLane!.Value), D(full), D(opens), SignalMoves.Left, ApproachLaneKind.Car,
-                box ? (float)BikeBoxDepth : 0f));
+                box ? (float)BikeBoxDepth : advanced ? (float)AdvancedBikeLine : 0f));
             if (layout.LeftBikeLane is { } leftBike)   // the left-turn bike lane (#351): stops at the box's front line, or the advanced line
                 lanes.Add(new ApproachLane(O(leftBike), D(full), D(opens), SignalMoves.Left, ApproachLaneKind.Bike,
-                    box ? 0f : -(float)AdvancedBikeLine));
+                    0f));
             leftMove = p.Merged ? (D(lw.Length), D(lw.Length)) : (D(p.Storage), D(lw.Length + lw.Lead));
         }
         var rw = p.RightWay?.Way;

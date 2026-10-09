@@ -16,6 +16,9 @@ public sealed record CarParts(ArrayMesh Body, ArrayMesh Head, ArrayMesh Tail, Ar
     /// origin on the nose, where they fold down to lie as lids.
     /// </summary>
     public HingedPart? Flaps { get; init; }
+    /// <summary>A kart's front tyres, smaller than its rear ones (#715); null = <see cref="Wheel"/> on all four.</summary>
+    public ArrayMesh? FrontWheel { get; init; }
+    public float? FrontWheelRadius { get; init; }
 }
 
 /// <summary>A part that moves: its mesh (and lamp mesh, if it carries lights), origin on <see cref="Pivot"/> in node space.</summary>
@@ -106,6 +109,8 @@ public static partial class CarMeshBuilder
 
     public static CarParts Build(CarBody body, float wheelbase, CarGauges? gauges = null)
     {
+        // a kart is a tube frame with plastic round it, not a shell with a cabin: its own builder (#715)
+        if (body.Shape == BodyShape.Kart) return KartMeshBuilder.Build(body, wheelbase);
         var d = For(body, wheelbase);
         var paint = body.Paint;
         bool open = body.Shape == BodyShape.Roadster;

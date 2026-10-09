@@ -47,9 +47,31 @@ public partial class FlatTour : Node3D
                 AmbientLightColor = new Color(0.85f, 0.85f, 0.85f),
             },
         });
-        var tile = FlatCheck.Tile();
-        int index = Math.Max(0, FlatCheck.IndexOf(_block));
-        _l = InteriorGenerator.Generate(tile, index, null, null)!;
+        if (_block == "a garage block")
+        {
+            // an 80 x 18 m block whose key rolled an underground garage (#558): its ramp is the tour
+            var (garageTile, roads) = FlatCheck.RampTile();
+            int garage = BuildingFootprint.ComputeDoors(garageTile, roads, null).First(d => d.Link.Any).Index;
+            _l = InteriorGenerator.Generate(garageTile, garage, roads, null)!;
+        }
+        else if (_block.StartsWith("real:", StringComparison.Ordinal))
+        {
+            // a block of a real tile (#694): --block real:E_N_index --chunks <terrain_chunks>, planned with its streets as the game does
+            var p = _block[5..].Split('_');
+            var id = new Terrain.Format.TileId(int.Parse(p[0]), int.Parse(p[1]));
+            var src = new Terrain.LocalChunkSource(CmdArgs.Value("--chunks") ?? "terrain_chunks");
+            var realTile = src.LoadBuildingsAsync(id).GetAwaiter().GetResult()!;
+            var realRoads = src.LoadRoadsAsync(id).GetAwaiter().GetResult();
+            GarageRule.AlwaysRolls = true;
+            _l = InteriorGenerator.Generate(realTile, int.Parse(p[2]), realRoads, null)!;
+            GarageRule.AlwaysRolls = false;
+        }
+        else
+        {
+            var tile = FlatCheck.Tile();
+            int index = Math.Max(0, FlatCheck.IndexOf(_block));
+            _l = InteriorGenerator.Generate(tile, index, null, null)!;
+        }
         var material = Styles.StyleKit.Material(Styles.MaterialRole.Interior);
         AddChild(InteriorNode.Create(_l, InteriorMeshBuilder.Build(_l), material, Transform3D.Identity));
         _eye = new Camera3D { Name = "Eye", Fov = 75f, Near = 0.05f, Far = 400f };
@@ -67,6 +89,30 @@ public partial class FlatTour : Node3D
         Vector3 At(int floor, float x, float z, float up = eyeH) => new(x, _l.FloorY(floor) + up, z);
 
         var main = _l.AllEntrances()[0];
+        // the garage ramp (#558): from the doorway, from the top of the descent, half way down, from the
+        // car park looking back up, and the aisle at its foot
+        if (_l.Floors[Math.Max(0, ground - 1)].AllFlights().FirstOrDefault(f => f.Ramp) is { } ramp)
+        {
+            float cx = (ramp.X0 + ramp.X1) / 2, h = _l.StoreyHeight, len = RampProfile.Length(h);
+            float dir = ramp.RunDir;
+            // along the ramp's own run, whichever way it goes (square to the front wall or along the facade)
+            Vector3 OnRamp(float t, float up)
+            {
+                var (px, pz) = ramp.Point(cx, ramp.ZTop + dir * t);
+                return new(px, _l.FloorY(ground) - RampProfile.Drop(t, h) + up, pz);
+            }
+            Vector3 Past(float up, float across, float beyond)
+            {
+                var (px, pz) = ramp.Point(across, ramp.ZBottom + dir * beyond);
+                return new(px, _l.FloorY(ground - 1) + up, pz);
+            }
+            var way = _l.AllEntrances().First(e => e.Vehicle);
+            _views.Add(("ramp_door", At(ground, way.X, way.Z + 0.4f, 1.4f), OnRamp(Math.Min(9f, len - 1f), 0.2f)));
+            _views.Add(("ramp_top", OnRamp(0.5f, 1.6f), OnRamp(8f, 0.2f)));
+            _views.Add(("ramp_mid", OnRamp(5f, 1.5f), OnRamp(len, 0.5f)));
+            _views.Add(("ramp_foot", Past(1.6f, cx, 3.5f), OnRamp(3f, 0.3f)));
+            _views.Add(("ramp_aisle", Past(1.7f, ramp.X0 - 2f, 0.5f), Past(0.6f, cx + 8f, 2.5f)));
+        }
         _views.Add(("lobby", At(ground, main.X + 0.3f, main.Z + 0.5f), At(ground, main.X + 1.2f, main.Z + 5f, 1.2f)));
         // the stairwell (#571): up the stair from the front landing, from the half landing, and
         // down the well from the top floor
@@ -99,6 +145,11 @@ public partial class FlatTour : Node3D
             _views.Add(("hall", At(upper, dx + fx * 0.4f, dz + fz * 0.4f), At(upper, dx + fx * 5f, dz + fz * 5f, 1.3f)));
             var living = _l.Floors[upper].Rooms.FirstOrDefault(r => r.Unit == flat.Unit && r.Type == RoomType.Living);
             if (living != null) _views.Add(FromDoor("living", upper, living));
+            // from the sofa, to its TV (#680)
+            if (living != null
+                && _l.Furniture.FirstOrDefault(p => p.Floor == upper && p.Type == FurnitureType.Sofa && p.X > living.X0 && p.X < living.X1 && p.Z > living.Z0 && p.Z < living.Z1) is { } sofa
+                && _l.Furniture.FirstOrDefault(p => p.Floor == upper && p.Type == FurnitureType.Tv && p.X > living.X0 && p.X < living.X1 && p.Z > living.Z0 && p.Z < living.Z1) is { } tv)
+                _views.Add(("sofa_tv", At(upper, sofa.X, sofa.Z, 1.1f), At(upper, tv.X, tv.Z, 0.9f)));
             var bed = _l.Floors[upper].Rooms.FirstOrDefault(r => r.Unit == flat.Unit && r.Type == RoomType.Bedroom);
             if (bed != null) _views.Add(FromDoor("bedroom", upper, bed));
             var bath = _l.Floors[upper].Rooms.FirstOrDefault(r => r.Unit == flat.Unit && r.Type == RoomType.Bathroom);

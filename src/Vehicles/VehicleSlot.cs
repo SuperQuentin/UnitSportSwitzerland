@@ -295,16 +295,17 @@ public static class DormantSlots
     /// that machine exists; a van is the crew's car, one of <paramref name="cars"/>. The height is
     /// the site's base: the Godot side stands each on its own ground, as it does a yard's.
     /// </summary>
-    /// <param name="kindOf">The <c>RideKind</c> a role parks as, or null for none yet.</param>
+    /// <param name="kindOf">The <c>RideKind</c> a role parks as, or null for none yet, given the slot's
+    /// own roll (a variant: a loader with forks, #615).</param>
     public static void ForConstruction(TileId id, IReadOnlyList<ConstructionSite> sites,
-        Func<MachineRole, int?> kindOf, IReadOnlyList<int> cars, List<VehicleSlot> into)
+        Func<MachineRole, ulong, int?> kindOf, IReadOnlyList<int> cars, List<VehicleSlot> into)
     {
         foreach (var site in sites)
             foreach (var m in site.Machines)
             {
                 ulong h = Hash(Key((long)(m.At.X * 100), (long)(m.At.Y * 100)), 0xB0D5);
                 bool van = m.Role == MachineRole.Van;
-                int? kind = !van ? kindOf(m.Role) : cars.Count > 0 ? cars[(int)(h >> 20 & 0xFFFF) % cars.Count] : null;
+                int? kind = !van ? kindOf(m.Role, h) : cars.Count > 0 ? cars[(int)(h >> 20 & 0xFFFF) % cars.Count] : null;
                 if (kind is not { } k) continue;
                 into.Add(new VehicleSlot(site.Key, m.Ordinal, id.MinE + m.At.X, id.MaxN - m.At.Y, site.Base,
                     Wrap(m.Yaw), k, (byte)(h >> 36 & 3), van));

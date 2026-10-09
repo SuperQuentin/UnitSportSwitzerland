@@ -67,6 +67,9 @@ public partial class VehicleBody
         _drawnTilt = Tilt;
         // left at rest: moored where it lies (one left running moors where it comes to a stop)
         if (MathX.FlatLength(s.Velocity) < MoorBelow) Moor(s.Position, s.Yaw);
+        // a hull is never carried by what it rests on: a swimmer under it (on layer 1 like the
+        // ground) teleported away was a moving platform, and dragged a parked steamer 28 m with it (#738)
+        PlatformFloorLayers = 0;
         _hull = GetNodeOrNull<CollisionShape3D>("Hull");
         // where the shape was put in the level boat's frame: the box's centre, nothing for a shaped hull
         _hullCentre = _hull?.Position ?? Vector3.Zero;
@@ -122,6 +125,15 @@ public partial class VehicleBody
     private void DrawBoat(Boat boat, float dt)
     {
         if (_visual == null) return;
+        if (_inHold)
+        {
+            // strapped to its trailer (#463): level on the bunks, whatever the waves are doing, and dry
+            _visual.Transform = Transform3D.Identity;
+            Posed = true;
+            PoseHull();
+            if (_visual is BoatRig dry) dry.Water(0f, 0f, 0f, false);
+            return;
+        }
         float speed = Velocity.Length();
         if (IsMultiplayerAuthority())
         {

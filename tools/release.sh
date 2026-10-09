@@ -222,3 +222,7 @@ echo "Released v$V with ${#ASSETS[@]} asset(s)${SKIPPED[0]+, skipping ${SKIPPED[
 if [ -n "$last" ]; then
   (cd "$REPO" && tools/deltas.sh "$last" "v$V" --upload) || echo "Deltas failed; the release stands. Retry with: tools/deltas.sh $last v$V --upload"
 fi
+# On CI, a skipped platform is a run annotation, not only a log line: v0.28-v0.31.1 shipped no APK unnoticed
+if [ $CI = 1 ] && [ ${#SKIPPED[@]} -gt 0 ]; then
+  echo "::warning title=Release skipped platforms::v$V shipped without ${SKIPPED[*]} (see the export log above)"
+fi

@@ -308,8 +308,6 @@ public static class StyleKit
         m.RimTint = plain.RimTint;
     }
 
-    private static ShaderMaterial? _figureOutline;
-
     private static void Configure(ShaderMaterial m, MaterialRole role, VisualStyle style)
     {
         var (from, path) = Resolve(style, role);
@@ -335,14 +333,6 @@ public static class StyleKit
             // the water's own screen-space reflections (#299): where the style has Forward+'s effects
             case MaterialRole.Water when HasUniform(shader, "ssr_steps"):
                 m.SetShaderParameter("ssr_steps", Pick(style, l => l.Effects).Value && OnForwardPlus ? 24 : 0);
-                break;
-            // the figures' pixel faces (#394), in every style's avatar shader, and Cartoon's ink
-            // outline round them (a next pass: shaders/figure_outline.gdshader)
-            case MaterialRole.Figure:
-                if (HasUniform(shader, "face_atlas")) m.SetShaderParameter("face_atlas", Avatar.FaceAtlas.Texture);
-                m.NextPass = style == VisualStyle.Cartoon
-                    ? _figureOutline ??= new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/figure_outline.gdshader") }
-                    : null;
                 break;
         }
         // the realistic shaders' textures, wherever they are drawn (Realistic+ borrows them)

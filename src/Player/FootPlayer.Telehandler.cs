@@ -27,5 +27,7 @@ public partial class FootPlayer
             // curling tilts the forks back, as it rolls a bucket back
             PlayerInput.Strength(PlayerInput.ArmBucketCurl) - PlayerInput.Strength(PlayerInput.ArmBucketDump));
         boom.Work(dt);
+        // its forks lift pallets as a forklift's do (#615): no button, the boom is the interaction
+        Items.PalletService.Instance?.Tend(this, boom);
     }
 }

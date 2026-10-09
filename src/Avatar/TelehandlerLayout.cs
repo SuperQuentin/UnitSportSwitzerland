@@ -44,6 +44,11 @@ public static class TelehandlerLayout
     public const float RestLift = LiftMin, RestExtend = 0f, RestTilt = 0.05f;
     /// <summary>The forks: how far they reach out from the carriage's pin, and below it.</summary>
     public const float ForkLength = 1.2f, ForkDrop = 0.55f;
+    /// <summary>
+    /// The tines as the pallets see them (#615): their top face this far under the carriage's pin,
+    /// their heel this far ahead of it, half their span outside edge to outside edge.
+    /// </summary>
+    public const float ForkTop = ForkDrop - 0.05f, ForkFace = 0.15f, TineHalfSpan = 0.41f;
 
     /// <summary>The wheels' lock either way, rad, and how fast they turn to it, rad/s.</summary>
     public const float MaxSteer = 0.6f, SteerRate = 0.9f;
@@ -92,23 +97,38 @@ public static class TelehandlerLayout
         return new Vector2(BoomPivot.Z + Mathf.Cos(lift) * len, BoomPivot.Y + Mathf.Sin(lift) * len);
     }
 
+    /// <summary>The tines' top face over the ground, m, for a lift and an extension.</summary>
+    public static float ForkHeight(float lift, float extend) => Carriage(lift, extend).Y - ForkTop;
+
     /// <summary>
-    /// What a parked one keeps, in <c>VehicleState.Flags</c>: lift and extension eight bits each,
-    /// the tilt six, the steering mode two. Zero is "never set": the rest pose, front steering.
+    /// What a parked one keeps, in <c>VehicleState.Flags</c>: lift and extension seven bits each,
+    /// the tilt six, the steering mode two, and what is on the forks ten (<c>Pallets.Carried</c>,
+    /// #615). Zero is "never set": the rest pose, front steering, empty forks.
     /// </summary>
-    public static int Pack(float lift, float extend, float tilt, SteerMode mode)
+    public static int Pack(float lift, float extend, float tilt, SteerMode mode, int carrying = 0)
     {
-        static int Q(float v, float lo, float hi, int top) => Mathf.Clamp(Mathf.RoundToInt((v - lo) / (hi - lo) * top), 0, top) + 1;
-        return Q(lift, LiftMin, LiftMax, 254) | Q(extend, 0f, ExtendMax, 254) << 8 | Q(tilt, TiltMin, TiltMax, 62) << 16 | (int)mode << 22;
+        static uint Q(float v, float lo, float hi, int top) => (uint)(Mathf.Clamp(Mathf.RoundToInt((v - lo) / (hi - lo) * top), 0, top) + 1);
+        return unchecked((int)(Q(lift, LiftMin, LiftMax, 126) | Q(extend, 0f, ExtendMax, 126) << 7 | Q(tilt, TiltMin, TiltMax, 62) << 14
+            | (uint)mode << 20 | (uint)Mathf.Clamp(carrying, 0, 0x3FF) << 22));
     }
 
-    public static (float Lift, float Extend, float Tilt, SteerMode Mode) Unpack(int flags)
+    public static (float Lift, float Extend, float Tilt, SteerMode Mode, int Carrying) Unpack(int flags)
     {
-        if (flags == 0) return (RestLift, RestExtend, RestTilt, SteerMode.Front);
-        static float U(int q, float lo, float hi, int top) => lo + (Mathf.Clamp(q, 1, top + 1) - 1) / (float)top * (hi - lo);
-        int mode = flags >> 22 & 3;
-        return (U(flags & 0xFF, LiftMin, LiftMax, 254), U(flags >> 8 & 0xFF, 0f, ExtendMax, 254),
-            U(flags >> 16 & 0x3F, TiltMin, TiltMax, 62), (SteerMode)Mathf.Clamp(mode, 0, 2));
+        if (flags == 0) return (RestLift, RestExtend, RestTilt, SteerMode.Front, 0);
+        uint f = unchecked((uint)flags);
+        static float U(uint q, float lo, float hi, int top) => lo + (Mathf.Clamp((int)q, 1, top + 1) - 1) / (float)top * (hi - lo);
+        int mode = (int)(f >> 20 & 3);
+        return (U(f & 0x7F, LiftMin, LiftMax, 126), U(f >> 7 & 0x7F, 0f, ExtendMax, 126),
+            U(f >> 14 & 0x3F, TiltMin, TiltMax, 62), (SteerMode)Mathf.Clamp(mode, 0, 2), (int)(f >> 22 & 0x3FF));
+    }
+
+    /// <summary>The lift and what is on the forks in one float of the pose: the lift (never past ±2) plus 4 a step of carrying.</summary>
+    public static float PoseLift(float lift, int carrying) => lift + 4f * Mathf.Clamp(carrying, 0, 0x3FF);
+
+    public static (float Lift, int Carrying) FromPoseLift(float y)
+    {
+        int carrying = Mathf.Clamp(Mathf.FloorToInt((y + 2f) / 4f), 0, 0x3FF);
+        return (ClampLift(y - 4f * carrying), carrying);
     }
 
     /// <summary>The front wheels' angle and the mode in one float of the pose: the angle (never past ±1) plus 4 a mode.</summary>

@@ -121,6 +121,18 @@ public static class UpdateInfo
         return chain;
     }
 
+    /// <summary>
+    /// What a dedicated server's <c>/update</c> installs (#730): the newest stable release and its
+    /// archive for <paramref name="osName"/>, when it is newer than <paramref name="current"/>. An
+    /// unversioned build (<c>tools/deploy-linux.sh</c> exports one) counts as older than any release.
+    /// </summary>
+    public static (Release Release, Asset Archive)? ServerUpdate(IEnumerable<Release> releases, string? current, string osName)
+    {
+        if (Latest(releases) is not { } latest || AssetFor(latest, osName) is not { } archive) return null;
+        bool newer = ParseVersion(current) == null || IsNewer(latest.Tag, current);
+        return newer ? (latest, archive) : null;
+    }
+
     /// <summary>This platform's download in <paramref name="release"/>, or null (then the release page).</summary>
     public static Asset? AssetFor(Release release, string osName) =>
         SuffixFor(osName) is { } suffix

@@ -17,7 +17,7 @@ public enum RideKind
     // 8..63 are cars: CarCatalog.All[kind - CarCatalog.First]. The catalog is append-only.
     // 64..95 are motorbikes: MotorbikeCatalog.All[kind - MotorbikeCatalog.First], append-only too;
     // entries 32 onwards continue at 129..192 (MotorbikeCatalog.First2, #410).
-    // 96..119 are trucks and buses: HeavyCatalog.All[kind - HeavyCatalog.First], append-only too.
+    // 96..119 are trucks and buses (and the pickup, 101, #463): HeavyCatalog.All[kind - HeavyCatalog.First], append-only too.
     /// <summary>
     /// Not a mount: a trailer standing in the world on its own (<c>Vehicles.VehicleState.Train</c>
     /// says which). Nobody rides it; a truck backs under it and couples.
@@ -51,7 +51,11 @@ public enum RideKind
     CompactRoller = 197,
     /// <summary>A telehandler (#614): a <see cref="Player.Telehandler"/>, a telescopic boom with forks and three steering modes.</summary>
     Telehandler = 198,
-    // The next other mount is 199.
+    /// <summary>A wheel loader with a fork carriage instead of its bucket (#615): a <see cref="Player.WheelLoader"/> that lifts pallets.</summary>
+    WheelLoaderForks = 199,
+    /// <summary>A tracked mini dumper (#614): a <see cref="Player.MiniDumper"/>, a skip that tips forward.</summary>
+    MiniDumper = 200,
+    // The next other mount is 201.
 }
 
 /// <summary>
@@ -307,7 +311,16 @@ public abstract class Rideable
     /// </summary>
     public virtual Avatar.VehicleDeck[] Decks => System.Array.Empty<Avatar.VehicleDeck>();
 
-    public bool Walkable => Decks.Length > 0;
+    public bool Walkable
+    {
+        get
+        {
+            // a hold alone (a boat trailer's cradle, #463) is nothing to walk about in
+            foreach (var deck in Decks)
+                if (!deck.CargoOnly) return true;
+            return false;
+        }
+    }
 
     /// <summary>
     /// A walkable vehicle is driven from its wheel inside (#384, E from outside only with the
@@ -495,6 +508,8 @@ public abstract class Rideable
         RideKind.Excavator => new Excavator(),
         RideKind.MiniExcavator => new Excavator(mini: true),
         RideKind.WheelLoader => new WheelLoader(),
+        RideKind.WheelLoaderForks => new WheelLoader(forks: true),
+        RideKind.MiniDumper => new MiniDumper(),
         RideKind.CompactRoller => new CompactRoller(),
         RideKind.Telehandler => new Telehandler(),
         _ when CarCatalog.For(kind) is { } car => new Car(car),

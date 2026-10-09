@@ -105,7 +105,7 @@ public static class ItemDefs
         new(ItemId.Photo, "Photo", "A Polaroid you took. {use_item} to look at it; {aim_item} + {use_item} sticks it on a wall or the ground, {use_item} on it again takes it back.",
             ItemUse.Print, 1, new Color(0.96f, 0.95f, 0.90f), "PH"),
         // radio (#104): thrown into the world, plays burned CDs for whoever stands near
-        new(ItemId.Radio, "Radio", "{use_item} opens it in your hand; put away, it rides on your back and keeps playing. {aim_item} + {use_item} throws it (it hurts whoever it hits). Lying in the world: point at it, {use_item} takes it in hand, {interact_mount} opens it to play a CD.",
+        new(ItemId.Radio, "Radio", "Tap {use_item} to switch it on or off, hold {use_item} to open it; put away, it rides on your back and keeps playing. {aim_item} + {use_item} throws it, not far: it is heavy (and it hurts whoever it hits). Lying in the world: point at it, tap {interact_mount} on / off, hold {interact_mount} to open it, {use_item} takes it in hand.",
             ItemUse.Throw, 1, new Color(0.16f, 0.17f, 0.19f), "RD", 0, ItemCategory.Gear, 80f),
 
         // weapons (#178): they hurt players only while the server allows it (/pvp, a Battle Royale match)
@@ -185,7 +185,64 @@ public static class ItemDefs
         // {aim_item} + {use_item} throws it (ItemDefs.Throwable) — which is the whole point of one.
         new(ItemId.Blahaj, "Blåhaj", "A plush shark, 100 cm. {aim_item} + {use_item} throws it. Stacks of three, because nobody buys one.",
             ItemUse.Material, 3, new Color(0.49f, 0.78f, 0.94f), "BH", 0, ItemCategory.Cosmetic, 25f),
+        // farming (#494, docs/notes/farming/produce-economy.md): seeds are sown by hand, harvests are
+        // sacks (grain 50 kg, potatoes / beet / carrots 10 kg, peas 50 kg) and a 250 kg round bale of hay;
+        // Value is the producer price of one, which the farm co-op pays for a load
+        Seed(ItemId.WheatSeed, "Wheat seed", "#d8c070", "WS", 14),
+        Seed(ItemId.BarleySeed, "Barley seed", "#c8b060", "BS", 12),
+        Seed(ItemId.MaizeSeed, "Maize seed", "#e8c830", "MS", 12),
+        Seed(ItemId.SeedPotato, "Seed potatoes", "#b89868", "SP", 12),
+        Seed(ItemId.RapeSeed, "Rapeseed seed", "#b8c030", "RS", 14),
+        Seed(ItemId.SunflowerSeed, "Sunflower seed", "#e8a818", "SS", 13),
+        Seed(ItemId.SugarBeetSeed, "Sugar beet seed", "#d8d0c0", "BT", 6),
+        Seed(ItemId.VegetableSeeds, "Vegetable seeds", "#e07830", "VS", 10),
+        Seed(ItemId.PeaSeed, "Pea seed", "#70b040", "PS", 14),
+        Crop(ItemId.Wheat, "Wheat", "A 50 kg sack of wheat.", 10, "#d8b858", "WH", 25),
+        Crop(ItemId.Barley, "Barley", "A 50 kg sack of barley.", 10, "#c8aa50", "BA", 22),
+        Crop(ItemId.Maize, "Maize", "A 50 kg sack of maize.", 10, "#e8c020", "MZ", 22),
+        Crop(ItemId.Potato, "Potatoes", "A 10 kg sack of potatoes.", 10, "#b08c58", "PO", 5),
+        Crop(ItemId.Rapeseed, "Rapeseed", "A 50 kg sack of rapeseed.", 10, "#2a2a22", "RA", 42),
+        Crop(ItemId.SunflowerSeeds, "Sunflower seeds", "A 50 kg sack of sunflower seeds.", 10, "#4a4034", "SU", 38),
+        Crop(ItemId.SugarBeet, "Sugar beet", "A 10 kg sack of sugar beet.", 10, "#d8cdb8", "SB", 3),
+        Crop(ItemId.Carrot, "Carrots", "A 10 kg sack of carrots.", 10, "#e87a1c", "CA", 6),
+        Crop(ItemId.HayBale, "Hay bale", "A 250 kg round bale of hay.", 3, "#c8b448", "HB", 40),
+        Crop(ItemId.Peas, "Peas", "A 50 kg sack of dried peas.", 10, "#88b848", "PE", 28),
+        // milled at a workbench (a wheat sack = 4 flour): still produce, so the co-op buys them
+        Crop(ItemId.Flour, "Flour", "A bag of flour. Bread at a fire, with water.", 20, "#f0ead8", "FL", 7),
+        Crop(ItemId.RapeseedOil, "Rapeseed oil", "A bottle of rapeseed oil, for frying.", 10, "#e0c838", "OI", 7),
+        Crop(ItemId.Sugar, "Sugar", "A bag of sugar.", 20, "#f4f4f0", "SG", 3),
+        Crop(ItemId.MaizeMeal, "Maize meal", "Coarse maize meal, for polenta.", 20, "#e8c850", "MM", 8),
+        // cooked at a fire (Recipes): worth more than what went in
+        Eat(ItemId.BakedPotato, "Baked potato", 5, "#c89858", "BP", 25, ItemCategory.Food, 6),
+        Eat(ItemId.Roesti, "Rösti", 5, "#d8a838", "RO", 60, ItemCategory.Food, 20),
+        Eat(ItemId.Polenta, "Polenta", 5, "#e8c030", "PL", 45, ItemCategory.Food, 11),
+        Eat(ItemId.Popcorn, "Popcorn", 10, "#f4ecc8", "PC", 15, ItemCategory.Food, 8),
+        Eat(ItemId.VegetableSoup, "Vegetable soup", 5, "#c87838", "VS", 55, ItemCategory.Food, 14),
+        Eat(ItemId.Raclette, "Raclette", 3, "#f0d070", "RC", 75, ItemCategory.Food, 22),
+        new(ItemId.Hoe, "Hoe", "{use_item} tills the ground ahead: stubble or grass turns to ploughed soil, ready to sow by hand.",
+            ItemUse.Farm, 1, new Color("#8a6a40"), "HO", 0, ItemCategory.Gear, 25f),
+        new(ItemId.Fertiliser, "Fertiliser", "{use_item} on a sown field cell: the crop there ripens sooner.",
+            ItemUse.Farm, 20, new Color("#c8c8b0"), "FE", 0, ItemCategory.Produce, 12f),
+        new(ItemId.FarmStand, "Farm stand", "{use_item} sets it up where you look, by a road: a self-service stand with an honesty box. {interact_mount} at it stocks it with produce and takes the cash; passers-by and other players buy from it. Packed up empty with {use_item} and an empty hand.",
+            ItemUse.Place, 1, new Color("#8a5a30"), "FS", 0, ItemCategory.Gear, 30f),
+        // the barracks (#716, docs/notes/items/barracks-items.md): a night in the army. Cards and chips do nothing
+        // but look right in the hand (and fly when thrown); the beer is a drink like the others
+        new(ItemId.PlayingCards, "Playing cards", "A Jass deck: held, a fanned hand of five. A night in the barracks needs one.",
+            ItemUse.Material, 4, new Color("#ece6d6"), "PC", 0, ItemCategory.Cosmetic, 4f),
+        new(ItemId.PokerChips, "Poker chips", "A stack of chips in red, blue, green and white. Worth nothing but the bragging.",
+            ItemUse.Material, 50, new Color("#c82a2a"), "PK", 0, ItemCategory.Cosmetic, 12f),
+        Eat(ItemId.BeerBottle, "Beer", 6, "#7a4a1a", "BE", 10, ItemCategory.Water, 3),
+        new(ItemId.Gamelle, "Gamelle", "The army's three-part mess tin in olive aluminium: pot, dish and lid on a wire bail.",
+            ItemUse.Material, 2, new Color("#707a58"), "GA", 0, ItemCategory.Gear, 14f),
     };
+
+    private static ItemDef Seed(ItemId id, string name, string tint, string glyph, float value) =>
+        new(id, name, "{use_item} sows the ploughed field cell ahead: one bag covers about 800 m².",
+            ItemUse.Farm, 20, new Color(tint), glyph, 0, ItemCategory.Produce, value);
+
+    private static ItemDef Crop(ItemId id, string name, string blurb, int stack, string tint, string glyph, float value) =>
+        new(id, name, blurb + " Sell it at a farm co-op, or make something of it.",
+            ItemUse.Material, stack, new Color(tint), glyph, 0, ItemCategory.Produce, value);
 
     /// <summary>A fish's worth in CHF, roughly the Léman fishers' prices per kg times a typical catch (docs/notes/items/fishing.md).</summary>
     // a method, not a table: All (above) is built before any later static field is set
@@ -256,6 +313,7 @@ public static class ItemDefs
             GarmentStyle.Gothic => " Gothic.",
             GarmentStyle.Kawaii => " Kawaii.",
             GarmentStyle.Special => $" Rare: a {Garments.FinishName(g.Finish)} finish that moves.",
+            _ when g.Finish == Finish.Camo => " The army's TAZ 90 camouflage.",
             _ => "",
         };
         string covers = g.CoversBottom ? " One piece: it takes the bottom slot too." : "";
@@ -514,6 +572,18 @@ public static class ItemDefs
                 s.Box(new Vector3(0, 0.43f, 0), new Vector3(0.035f, 0.07f, 0.035f), new Color(1f, 0.88f, 0.35f));
                 break;
             }
+            case ItemId.PlayingCards:
+                BarracksMeshes.AppendCards(s);
+                break;
+            case ItemId.PokerChips:
+                BarracksMeshes.AppendChips(s);
+                break;
+            case ItemId.BeerBottle:
+                BarracksMeshes.AppendBeer(s);
+                break;
+            case ItemId.Gamelle:
+                BarracksMeshes.AppendGamelle(s);
+                break;
             case ItemId.Radio:
                 // the grip is the handle: the box hangs from the hand at its real 0.46 m
                 AppendRadio(s, new Vector3(0, -0.16f, 0));
@@ -626,6 +696,11 @@ public static class ItemDefs
             var node = ModelViewer.Shaded(HandMesh(id)!);
             if (HandMaterial(id, null) is { } material) node.MaterialOverride = material;
             if (id == ItemId.Shotgun) node.AddChild(ModelViewer.Shaded(ShotgunForeEnd()));
-            return node;
+            // a held mesh hangs from the grip at its origin (a mess tin hangs below it): lift it onto the viewer's floor,
+            // under a parent so the viewer's box and camera include the lift
+            var lifted = new Node3D();
+            lifted.AddChild(node);
+            node.Position = new Vector3(0, Mathf.Max(0f, -node.GetAabb().Position.Y), 0);
+            return lifted;
         })));
 }

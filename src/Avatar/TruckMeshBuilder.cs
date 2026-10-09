@@ -27,6 +27,8 @@ public static class TruckMeshBuilder
         var head = new MeshScratch();
         var tail = new MeshScratch();
         var rev = new MeshScratch();
+        ((ArrayMesh, Vector3, float) Tip, (ArrayMesh, Vector3) Tailgate)? tipper = null;
+        ((ArrayMesh, Vector3, float) Drum, (ArrayMesh, Vector3) Chute)? mixer = null;
         float front = cg;                 // authored z of the bumper
         float rear = cg - s.Length;       // and of the back
 
@@ -70,14 +72,15 @@ public static class TruckMeshBuilder
             Along(m, cg, cabLen - wall - bunk, cabLen - wall, floorY, floorY + 0.5f, inner * 2f, HeavyCabin.Dash);
             Along(m, cg, cabLen - wall - bunk, cabLen - wall, floorY + 0.5f, floorY + 0.62f, inner * 2f, Bunk);
         }
-        // roof: a tall deflector on the long-haul tractor, a low spoiler on the distribution truck
+        // roof: a tall deflector on the long-haul tractor, a low spoiler on the distribution truck, a bare roof on the army's
+        bool army = spec.Body == TruckBody.Canvas;
         if (tractor) Along(m, cg, 0.45f, cabLen, cabTop, 3.95f, s.Width - 0.15f, look.Paint);
-        else Along(m, cg, 0.9f, cabLen, cabTop, 3.55f, s.Width - 0.3f, look.Paint);
+        else if (!army) Along(m, cg, 0.9f, cabLen, cabTop, 3.55f, s.Width - 0.3f, look.Paint);
         // grille and sun visor on the face
         m.Box(new Vector3(0, 1.62f, front + 0.02f), new Vector3(s.Width - 0.45f, 0.62f, 0.04f), look.Accent);
         m.Box(new Vector3(0, 3.18f, front + 0.08f), new Vector3(s.Width - 0.2f, 0.07f, 0.2f), look.Accent);
-        // the belt stripe
-        Sides(m, cg, 0.05f, cabLen - 0.05f, 1.5f, 1.66f, s.Width - 0.05f, look.Accent);
+        // the belt stripe (the army's is plain)
+        if (!army) Sides(m, cg, 0.05f, cabLen - 0.05f, 1.5f, 1.66f, s.Width - 0.05f, look.Accent);
         // mirrors out on their arms: a main and a wide-angle each side, no wider than #70's boxes
         // (the hull is measured from the mesh)
         var mirrors = new List<(string, Vector3, Vector2)>();
@@ -97,10 +100,10 @@ public static class TruckMeshBuilder
         };
         var cockpit = HeavyCabin.Build(m, cab, HeavyCabin.GaugesFor(spec.LimiterKmh, spec.Redline),
             HeavyDriveline.AirLow, HeavyDriveline.AirMax, mirrors);
-        var seats = new[]
+        var seats = new List<SeatAnchor>
         {
-            new SeatAnchor(0, CarMeshBuilder.Turned(cockpit.Seat.Hip), cockpit.Seat.Recline, floorY),
-            new SeatAnchor(0, CarMeshBuilder.Turned(cockpit.Seat.Hip with { X = -cockpit.Seat.Hip.X }), cockpit.Seat.Recline, floorY),
+            new(0, CarMeshBuilder.Turned(cockpit.Seat.Hip), cockpit.Seat.Recline, floorY),
+            new(0, CarMeshBuilder.Turned(cockpit.Seat.Hip with { X = -cockpit.Seat.Hip.X }), cockpit.Seat.Recline, floorY),
         };
         // head lamps low in the bumper corners, amber indicators beside them
         foreach (float sx in new[] { -1f, 1f })
@@ -131,6 +134,43 @@ public static class TruckMeshBuilder
             // the air and electric lines coiled behind the cab
             Along(m, cg, cabLen + 0.05f, cabLen + 0.2f, 1.1f, 2.4f, 0.9f, Trim);
         }
+        else if (spec.Body == TruckBody.Tipper)
+        {
+            tipper = Tipper(s, cg, cabLen, load, look);
+            Sides(m, cg, cabLen + 0.3f, firstRear - 0.7f, 0.5f, 0.7f, s.Width - 0.2f, Steel);
+            // the subframe the body lies on, and the front ram's foot behind the cab
+            foreach (float sx in new[] { -1f, 1f })
+                Along(m, cg, cabLen + 0.2f, s.Length - 0.15f, 1.02f, 1.22f, 0.14f, Trim, sx * 0.5f);
+            m.Tube(new Vector3(0, 1.02f, cg - cabLen - 0.45f), new Vector3(0, 1.4f, cg - cabLen - 0.45f), 0.12f, Steel, 6);
+        }
+        else if (army)
+        {
+            // the army lorry's cargo body under its canvas tilt, a bench down each side (#714)
+            var body = new ArmyMeshBuilder.Canvas(cabLen + 0.2f, s.Length - 0.12f, 1.25f, 0.6f, 3.0f, s.Height, s.Width, false, 6);
+            seats.AddRange(ArmyMeshBuilder.CanvasBody(m, cg, body, look));
+            Sides(m, cg, cabLen + 0.3f, firstRear - 0.7f, 0.5f, 0.7f, s.Width - 0.2f, look.Lower);
+            // the spare wheel slung under the frame behind the cab, flat, opposite the fuel tank
+            m.Tube(new Vector3(-0.55f, 0.55f, cg - (cabLen + 1.4f)), new Vector3(-0.55f, 0.88f, cg - (cabLen + 1.4f)), 0.5f, Rubber, 12);
+            // the military plates: on the cab's face, and on a carrier board behind the tail
+            ArmyMeshBuilder.Plate(m, 0f, 0.8f, front, 1f, ArmyMeshBuilder.PlateNumber(spec.Kind));
+            Along(m, cg, s.Length - 0.1f, s.Length - 0.03f, 0.62f, 1.02f, 0.5f, Trim);
+            ArmyMeshBuilder.Plate(m, 0f, 0.82f, rear + 0.03f, -1f, ArmyMeshBuilder.PlateNumber(spec.Kind));
+        }
+        else if (spec.Body == TruckBody.Mixer)
+        {
+            mixer = Mixer(s, cg, cabLen, look);
+            Sides(m, cg, cabLen + 0.3f, firstRear - 0.7f, 0.5f, 0.7f, s.Width - 0.2f, Steel);
+            // the drum's two stands, the water tank behind the cab, the hopper over the drum's mouth,
+            // and the ladder up to it at the back
+            Along(m, cg, cabLen + 0.35f, cabLen + 0.65f, 1.02f, 2.3f, 1.2f, Trim);
+            Along(m, cg, s.Length - 1.2f, s.Length - 0.9f, 1.02f, 3.0f, 1.3f, Trim);
+            Along(m, cg, cabLen + 0.05f, cabLen + 0.35f, 1.1f, 2.5f, 1.6f, look.Accent);
+            m.Box(new Vector3(0, 3.35f, cg - s.Length + 0.75f), new Vector3(0.9f, 0.45f, 0.7f), Steel);
+            foreach (float sx in new[] { -1f, 1f })
+                m.Box(new Vector3(sx * 0.3f, 2.05f, cg - s.Length + 0.08f), new Vector3(0.05f, 2.1f, 0.05f), Steel);
+            for (int i = 0; i < 6; i++)
+                m.Box(new Vector3(0, 1.15f + i * 0.33f, cg - s.Length + 0.08f), new Vector3(0.6f, 0.04f, 0.05f), Steel);
+        }
         else
         {
             // the swap body on its frame
@@ -145,7 +185,7 @@ public static class TruckMeshBuilder
             Along(m, cg, s.HitchAt - 0.2f, s.HitchAt + 0.12f, s.HitchHeight - 0.12f, s.HitchHeight + 0.08f, 0.35f, Trim);
         }
         // the rear bumper bar and the lamps in it
-        Along(m, cg, s.Length - 0.12f, s.Length, 0.45f, 0.62f, s.Width - 0.2f, Steel);
+        Along(m, cg, s.Length - 0.12f, s.Length, 0.45f, 0.62f, s.Width - 0.2f, army ? look.Lower : Steel);
         foreach (float sx in new[] { -1f, 1f })
         {
             Lamp(tail, sx * (hw - 0.3f), 0.82f, rear - 0.02f, 0.4f, 0.16f, 0.04f, TailLamp);
@@ -155,7 +195,120 @@ public static class TruckMeshBuilder
         return new HeavyParts(m.Build(), head.Build(), tail.Build(), rev.Build(), Wheels(s, cg), System.Array.Empty<HeavyDoorLeaf>())
         {
             Cockpit = cockpit,
-            Seats = seats,
+            Seats = seats.ToArray(),
+            Tip = tipper?.Tip,
+            Tailgate = tipper?.Tailgate,
+            Bed = spec.Body == TruckBody.Tipper && section == 0 ? TipperBed(spec, load) : null,
+            Drum = mixer?.Drum,
+            Chute = mixer?.Chute,
         };
+    }
+
+    private static readonly Color Gravel = new(0.55f, 0.52f, 0.47f);
+    private static readonly Color DrumSteel = new(0.82f, 0.82f, 0.8f);
+
+    /// <summary>How far a tipper's body tips, rad: about 50°, as a rear tipper's front ram lifts it.</summary>
+    public const float TipAngle = 0.87f;
+
+    /// <summary>A tipper body's floor (its top face) and the top of its sides, m over the ground.</summary>
+    private const float TipFloor = 1.36f, TipTop = 2.85f;
+
+    /// <summary>A tipper body's hinge, authored: low at the back, a little in from the rear bumper.</summary>
+    private static Vector3 TipHinge(SectionSpec s, float cg) => new(0, 1.15f, cg - (s.Length - 0.25f));
+
+    /// <summary>
+    /// Where a tipper's body carries a pallet (#615), node space: on its floor, or on the gravel's
+    /// top where the truck is loaded; tipped out over the tailgate onto the ground clear of it.
+    /// </summary>
+    public static BedShape TipperBed(HeavySpec spec, float load)
+    {
+        var s = spec.Sections[0];
+        float cg = Cg(s, load);
+        float from = 2.25f + 0.25f, to = s.Length - 0.05f, w = s.Width - 0.06f;
+        float l = Mathf.Clamp(load, 0f, 1f);
+        // the gravel's flat top (Tipper), a pallet riding on it
+        float floor = l > 0.02f ? TipFloor + (TipTop - TipFloor) * 0.95f * l + 0.18f * l : TipFloor;
+        var hinge = CarMeshBuilder.Turned(TipHinge(s, cg));
+        return new BedShape(hinge, CarMeshBuilder.Turned(new Vector3(0, floor, cg - (from + to) * 0.5f)),
+            HalfWidth: w * 0.5f - 0.1f, HalfLength: (to - from) * 0.5f - 0.1f, TipAngle: TipAngle,
+            Spill: new Vector3(0, 0, hinge.Z + 1.7f));
+    }
+
+    /// <summary>
+    /// A rear-tipping body (#613) from behind the cab to the back, built about its hinge low at the
+    /// back: a floor, two sides, a headboard with a short canopy over the cab, and the load as a heap
+    /// as high as the truck is loaded. Its tailgate is separate, built about its top hinge.
+    /// </summary>
+    private static ((ArrayMesh, Vector3, float) Tip, (ArrayMesh, Vector3) Tailgate) Tipper(SectionSpec s, float cg, float cabLen, float load, HeavyLook look)
+    {
+        var bin = new MeshScratch();
+        float from = cabLen + 0.25f, to = s.Length - 0.05f, w = s.Width - 0.06f;
+        const float floor0 = 1.24f, floor1 = TipFloor, top = TipTop;
+        Along(bin, cg, from, to, floor0, floor1, w, look.Cargo);
+        foreach (float sx in new[] { -1f, 1f })
+        {
+            Along(bin, cg, from, to, floor1, top, 0.06f, look.Paint, sx * (w * 0.5f - 0.03f));
+            // the side's top rail and its stiffeners
+            Along(bin, cg, from, to, top - 0.1f, top, 0.1f, look.Accent, sx * (w * 0.5f - 0.03f));
+            for (float at = from + 0.9f; at < to - 0.3f; at += 1.2f)
+                Along(bin, cg, at, at + 0.08f, floor1, top, 0.1f, look.Accent, sx * (w * 0.5f));
+        }
+        Along(bin, cg, from, from + 0.08f, floor1, top + 0.25f, w, look.Paint);
+        Along(bin, cg, from - 0.45f, from + 0.08f, top + 0.15f, top + 0.25f, w - 0.2f, look.Paint);
+        if (load > 0.02f)
+        {
+            // the load: gravel heaped up the middle, as high as the truck is loaded
+            float h = floor1 + (top - floor1) * 0.95f * Mathf.Clamp(load, 0f, 1f);
+            Along(bin, cg, from + 0.1f, to - 0.1f, floor1, h, w - 0.14f, Gravel);
+            Along(bin, cg, from + 0.6f, to - 0.6f, h, h + 0.18f * load, w - 0.9f, Gravel);
+        }
+        // the hinge low at the back, a little in from the rear bumper
+        var hinge = TipHinge(s, cg);
+        var gate = new MeshScratch();
+        Along(gate, cg, to - 0.06f, to, floor1, top, w, look.Paint);
+        Along(gate, cg, to - 0.1f, to, floor1, floor1 + 0.12f, w, look.Accent);
+        var gatePivot = new Vector3(0, top, cg - to + 0.03f);
+        return ((bin.Build(hinge), CarMeshBuilder.Turned(hinge), TipAngle),
+            (gate.Build(gatePivot), CarMeshBuilder.Turned(gatePivot - hinge)));
+    }
+
+    /// <summary>
+    /// A concrete mixer's drum (#613), built about its axis along its length (the mouth at the back),
+    /// as rings of tubes with the spiral's welds striped round it so its turning shows; and its chute,
+    /// built about its top pivot under the mouth.
+    /// </summary>
+    private static ((ArrayMesh, Vector3, float) Drum, (ArrayMesh, Vector3) Chute) Mixer(SectionSpec s, float cg, float cabLen, HeavyLook look)
+    {
+        var drum = new MeshScratch();
+        // the profile from the closed front (+Z, by the cab) to the mouth at the back (−Z)
+        (float Z, float R)[] profile = { (2.75f, 0.55f), (2.2f, 0.95f), (1.2f, 1.15f), (-0.4f, 1.15f), (-1.6f, 0.95f), (-2.5f, 0.55f), (-2.85f, 0.38f) };
+        for (int i = 0; i + 1 < profile.Length; i++)
+        {
+            var (z0, r0) = profile[i];
+            var (z1, r1) = profile[i + 1];
+            drum.Tube(new Vector3(0, 0, z0), new Vector3(0, 0, z1), r0, r1, DrumSteel, 12);
+        }
+        // stripes round it, a little proud of the shell, turned a step apart along its length
+        for (int k = 0; k < 6; k++)
+        {
+            float a = k * Mathf.Tau / 6f;
+            for (int j = 0; j < 3; j++)
+            {
+                float z = 1.6f - j * 1.3f, r = 1.17f;
+                float aj = a + j * 0.5f;
+                drum.Box(new Vector3(Mathf.Cos(aj) * r, Mathf.Sin(aj) * r, z), new Vector3(0.12f, 0.12f, 1.1f), look.Accent,
+                    new Basis(Vector3.Back, aj));
+            }
+        }
+        float mid = cabLen + 0.75f + 2.85f;
+        var pivot = new Vector3(0, 2.45f, cg - mid);
+        var chute = new MeshScratch();
+        // a trough sloping down and back from under the mouth
+        chute.Box(new Vector3(0, -0.25f, -0.75f), new Vector3(0.5f, 0.08f, 1.5f), Steel, new Basis(Vector3.Right, -0.32f));
+        foreach (float sx in new[] { -1f, 1f })
+            chute.Box(new Vector3(sx * 0.25f, -0.15f, -0.75f), new Vector3(0.04f, 0.22f, 1.5f), Steel, new Basis(Vector3.Right, -0.32f));
+        var chutePivot = new Vector3(0, 2.15f, cg - s.Length + 0.25f);
+        return ((drum.Build(), CarMeshBuilder.Turned(pivot), 0.2f),
+            (chute.Build(), CarMeshBuilder.Turned(chutePivot)));
     }
 }

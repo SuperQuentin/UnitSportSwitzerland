@@ -29,6 +29,25 @@
 - Buildings export (needs GDAL, install: `gdal-setup`): `python tools/export_buildings.py --bbox 2578500 1108500 2586500 1115500`
 - Features: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --features-only --tlm <tlm.gpkg> --route-keys ressources/data/routes/route_keys.sqlite --cover --buildings ressources/data/buildings3d/buildings.gpkg --gwr ressources/data/gwr/data.sqlite`
 - Roads preprocessing: `dotnet run --project tools/TerrainPreprocessor -c Release -- --out terrain_chunks --roads-only --tlm ressources/data/tlm3d/SWISSTLM3D_2026_LV95_LN02.gpkg --route-keys ressources/data/routes/route_keys.sqlite`
+- Rebuild a built map, whole or an area, from the source data on disk:
+  `tools/rebuild-map.sh <what> [area] [--force] [--dry-run]` (VS Code: `data: rebuild all`,
+  `data: rebuild roads and signals`; bash, so Windows runs it through Git Bash). `what`: `all`
+  (terrain, OSM overlay, roads, buildings, cover, water, landings, places, airports), `roads`
+  (roads, then cover, trees, water, landings), `roads-only` (no cover pass), `osm` (the OSM overlay
+  first, then as `roads`). `area`: none = it asks (what the tasks do), `pick` = the map selector of
+  the region setup wizard (`MapSetup --pick-tiles FILE`: built tiles only, saves no MapSetup
+  state), `all`, a box `E0,N0,E1,N1` or a point `E,N,radiusKm`, in LV95 metres or km tile
+  numbers; it becomes a `--tiles-file` in `<chunks>_temp`. Paths come from
+  `terrain_location.json`, or `UNITSPORT_CHUNKS` / `UNITSPORT_DATA`. What it decides by itself:
+  - terrain is whole-map only (the source tiles decide what is built), incremental unless `--force`;
+  - the OSM overlay is **always for the whole map**: the file is replaced, so one made for an area
+    would drop OSM data everywhere else. `all` uses OSM (overlay, airports) only when a
+    `switzerland-*.osm.pbf` was downloaded, since OSM is opt-in (`osm-odbl-licence`);
+  - every cover pass gets `--bathy` when `<data>/bathy3d` exists: without it the water pass
+    replaces the surveyed lake beds with synthetic ones;
+  - buildings: `buildings_ch.gpkg`, else the sheet zips (newest flight per sheet), else
+    `mapsetup_selection.gpkg`;
+  - not rebuilt: photos, French features (it warns when `.road.swiss` files exist), route keys.
 - Road network stage (junctions + v3 attributes): runs by itself at the end of any road
   extraction. To rerun it alone (e.g. after a new OSM overlay), from the kept raw input:
   `dotnet run --project tools/RoadGen -c Release -- --rewrite --chunks terrain_chunks`
