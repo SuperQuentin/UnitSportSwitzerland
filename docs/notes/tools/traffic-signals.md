@@ -131,7 +131,7 @@
   when they are not every move its approach has (the union of the arm's Car, LeftArrow and
   RightArrow groups), else None: a ball. `SignalLamps` draws straight on, straight and left,
   straight and right, or the lone turn; left plus right with no straight on stays a ball, the
-  flasher stays round. A crossroads approach with both pockets shows straight on in its middle
+  flasher stays round (a head's spacing, 0.55 m, beside its head on a band of its own, held by a bracket from the head's housing, #771). A crossroads approach with both pockets shows straight on in its middle
   head. Tier 0 `MainHead_ABallOnlyWhereItGivesEveryMove_ElseItsArrow`. Red and yellow arrows are
   the inverse (user: "a coloured background with an inverted arrow"): the lens lit whole, the
   arrow dark in it, 2 mm in front (the `Mask` icons; its dark vertices keep their dimming in
