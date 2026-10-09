@@ -92,6 +92,11 @@
   (version 3; `Upgrade` gives it to saved settings still at the 20° default). At 20° a kart's ±99° lock
   was not felt on the G29 (7° past it: 0.54). `--ffbcheck` on the G29 at 6°: a 35% push into a 60° lock
   stops at 61-63° and settles in 0.3 s (65° at 20°).
+- **Forces only while the game has the focus** (#290): `NotificationApplicationFocusOut` closes the
+  haptic device at once (the log: `force feedback released`), so another window or G HUB gets the wheel;
+  `FocusIn` reopens it (a refused reopen retries every second) and remakes the effects 1.5 s later, when
+  G HUB has switched its profile. `--ffbcheck` holds the forces whatever the focus (a terminal-launched
+  window may never get it). Without this the forces broke when another window came up.
 - **Forces silent at launch until toggled** (G29, #290): something resets the wheel after the effects
   are made (G HUB switching profiles as the window comes to the front, or Godot's own SDL opening the
   device while the world loads, not proven which) and every update still succeeds, so `Send` has nothing

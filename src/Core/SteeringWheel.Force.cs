@@ -159,9 +159,21 @@ public partial class SteeringWheel
     private unsafe void UpdateForces(float dt)
     {
         var s = Settings;
-        bool want = s.ForceFeedback && _claimed;
-        if (want && !_hapticOpen && _hapticSdl && !_hapticFailed) OpenHaptic();
-        else if (!want && _hapticOpen) CloseHaptic();
+        // the forces only while the game has the focus: another window gets the wheel back at once
+        // (#290). --ffbcheck keeps them: launched from a terminal its window may never get the focus
+        bool want = s.ForceFeedback && _claimed && (_focused || Player.WheelProbe.ForceCheckRequested);
+        if (want && !_hapticOpen && _hapticSdl && !_hapticFailed)
+        {
+            OpenHaptic();
+            // G HUB switches its profile a moment after the game comes to the front, which can leave
+            // the fresh effects silent: made once more a little later
+            if (_hapticOpen) _remakeAt = Time.GetTicksMsec() / 1000.0 + 1.5;
+        }
+        else if (!want && _hapticOpen)
+        {
+            GD.Print("[wheel] force feedback released: the game window lost the focus");
+            CloseHaptic();
+        }
         if (!_hapticOpen) return;
         RecoverHaptic();
         if (!_hapticOpen) return;
@@ -170,9 +182,11 @@ public partial class SteeringWheel
         // made afresh: anything that reset the wheel meanwhile would have left them silent (#290)
         bool starting = _feelAge <= StaleSeconds && _wasIdle;
         _wasIdle = _feelAge > RefreshAfterIdle;
-        if (starting || _refreshOnFocus)
+        bool late = _remakeAt > 0 && Time.GetTicksMsec() / 1000.0 >= _remakeAt;
+        if (starting || late)
         {
-            Refresh(starting ? "a drive starts" : "the game window came to the front");
+            if (late) _remakeAt = 0;
+            Refresh(starting ? "a drive starts" : "the game came to the front a moment ago");
             if (!_hapticOpen) return;
         }
 
@@ -295,7 +309,11 @@ public partial class SteeringWheel
 
     /// <summary>Seconds without a vehicle's feel after which the next drive makes the effects afresh.</summary>
     private const float RefreshAfterIdle = 2f;
-    private bool _wasIdle = true, _refreshOnFocus;
+    private bool _wasIdle = true;
+    /// <summary>The game window has the focus; the forces are only held while it does.</summary>
+    private bool _focused = true;
+    /// <summary>When the effects are made once more after the game came to the front (0: not pending).</summary>
+    private double _remakeAt;
 
     /// <summary>
     /// The effects made afresh on the open device. Something can reset the wheel behind the game's
@@ -303,12 +321,11 @@ public partial class SteeringWheel
     /// the front, or another SDL (Godot's own joypad layer) opening the device while the world loads.
     /// The effects then go silent while every update still succeeds, so <see cref="Send"/> sees
     /// nothing to recover: forces off at launch until toggled (seen on a G29, #290). Done when a drive
-    /// starts and when the window comes to the front. The device stays open: closed and reopened at
-    /// once, Windows refuses the reopen (the G29 then had no forces at all).
+    /// starts and 1.5 s after the device is opened (the game came to the front). The device stays open:
+    /// closed and reopened at once, Windows refuses the reopen (the G29 then had no forces at all).
     /// </summary>
     private unsafe void Refresh(string why)
     {
-        _refreshOnFocus = false;
         if (!_hapticOpen) return;
         GD.Print($"[wheel] force feedback made afresh: {why}");
         SDL_StopHapticEffects(_haptic);
@@ -317,9 +334,11 @@ public partial class SteeringWheel
         MakeEffects();
     }
 
+    /// <summary>The focus decides whether the forces are held (<see cref="UpdateForces"/>): released on the way out, reopened on the way in.</summary>
     public override void _Notification(int what)
     {
-        if (what == NotificationApplicationFocusIn) _refreshOnFocus = _hapticOpen;
+        if (what == NotificationApplicationFocusIn) _focused = true;
+        else if (what == NotificationApplicationFocusOut) _focused = false;
     }
 
     /// <summary>Opens that failed in a row; after <see cref="OpenTries"/> the wheel is left without forces.</summary>
