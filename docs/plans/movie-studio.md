@@ -3,11 +3,11 @@
 
 # Movie studio: replay buffer, timeline, virtual cameras, VR and webcam performance capture
 
-Tracking: #637. Status: **planned**.
+Tracking: #637. Status: **milestone 1 built** (PR #642).
 
 | Milestone | State | Issue |
 |---|---|---|
-| 1 Replay buffer + clip editing | in progress | #638 |
+| 1 Replay buffer + clip editing | done: notes `movie/movie-studio`, `movie/movie-puppets` | #638 |
 | 1b Acted takes (layering) | planned | — |
 | 2 Virtual cameras, lenses, lock, cuts, export | planned | — |
 | 3 VR performance + VR handheld camera | planned | — |

@@ -67,6 +67,10 @@
     <Compile Include="..\..\src\Interiors\GarageLink.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\DoorKey.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\LiftRide.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\ActorTrack.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\ReplayRing.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\MovieProject.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\MovieFile.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\InnerDoorLock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Loot\ShopLedger.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\SaveQueue.cs" Link="Game\%(Filename)%(Extension)" />

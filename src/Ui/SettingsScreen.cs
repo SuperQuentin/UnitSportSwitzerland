@@ -116,6 +116,8 @@ public partial class SettingsScreen : Screen
                 v => GameSettings.Current.ScreenShake = (float)v, Percent);
             UiKit.ToggleRow(rows, "Pigeon flies tail first", s.TailFirstPigeon, on => GameSettings.Current.TailFirstPigeon = on,
                 "The backwards bird of old, kept as an option; drawing only, every pigeon on your screen");
+            UiKit.SliderRow(rows, "Replay buffer", 0, 15, 1, s.ReplayMinutes, v => GameSettings.Current.ReplayMinutes = (int)v,
+                v => v <= 0 ? "off" : $"{v:F0} min", "The last minutes of everyone in view, for the movie studio (F5 or Pause > Save clip)");
             UiKit.ToggleRow(rows, "Find servers on your network", s.LanDiscovery, on => GameSettings.Current.LanDiscovery = on,
                 "Lists LAN servers on the Multiplayer screen");
             // the first-run tutorial (#517): now if a world is up (it shows when the menus close), else in the next one
