@@ -37,3 +37,6 @@
 - Terrain samples (`src/Terrain/TerrainShowcase.cs`, buildings in `PortalDemo`) build one hand-made
   record each with the game's builders and materials. Without the world's fog and clock, smoke and
   night-only glows look different there than in game.
+- **`--style ps1|cartoon|real-|real+`** shades the viewer in that style (the header names it). It used to
+  start before `GameSettings.Load`, so every model showed in PS1 whatever the flag said (#760).
+  Cars are one procedural mesh in every style: PS1 and Cartoon differ in the material only.

@@ -22,3 +22,11 @@
   under 0.55 × `PeakRpm`; if first-to-second drops the revs under that, the car hunts 1-2 forever and
   tops out in first (the Yaris at 6,500 rpm did 43 km/h; check `Redline·0.94·g2/g1 > PeakRpm·0.55`).
   And `--driftcheck` Game wants every car to hold a drift: a 0.9 eco-tyre `Grip` did not (14° max).
+- **Gearbox and drive side (#760)**: `CarSpec.Gearbox` is `Stepped` (a lever and a clutch, shifted
+  by the automatic logic) or `ECvt` (the XW20 Prius). An e-CVT's `Gears` are the two ends of its
+  range; `Car.Step` holds the engine at `_cvtRpm` (just off idle at a light foot, `PeakRpm` floored,
+  swept at 4,000 rpm/s) and the ratio follows the road speed, clamped to the range; no shifts. Its
+  engine stops on the motor alone (`EngineAsleep`: reverse, off the pedal, or under 0.25 pedal and
+  13 m/s, waking over 0.35 or 15 m/s): `Rpm01` 0, silent in `PlayerFeel`, the tach at zero. The top
+  ratio sets the top speed (the redline caps it): 0.84 gave 184 km/h, +8% on the 170 published.
+  The Yaris and Prius are left-hand drive (`CarBody.LeftHandDrive`), the Japanese cars right-hand.
