@@ -82,6 +82,8 @@ public sealed record CarBody
     /// figures, the gear, READY, the lamps) and a touchscreen under it, as in the XW20 Prius (#760).
     /// </summary>
     public bool CentreDisplay { get; init; }
+    /// <summary>The speed reflected into the windscreen above the wheel, in the driver's line of sight (the XW30 Prius, #760).</summary>
+    public bool Hud { get; init; }
 
     // ---- garage parts (Player/CarTuning); the defaults are the catalog look ----
     /// <summary>Under the front bumper: 0 nothing, 1 a lip, 2 a splitter.</summary>
@@ -521,9 +523,11 @@ public partial class CarRig : Node3D, IHingedDoors, Items.IBeatReactive
             if (kmh != _kmhShown)
             {
                 _kmhShown = kmh;
-                for (int place = 0, div = 1; place < _speedDigits.Length; place++, div *= 10)
+                // readouts of CarCabin.SpeedPlaces places each, units first: the display, then the HUD
+                for (int place = 0; place < _speedDigits.Length; place++)
                 {
-                    _speedDigits[place].Visible = place == 0 || kmh >= div;
+                    int k = place % CarCabin.SpeedPlaces, div = k == 0 ? 1 : k == 1 ? 10 : 100;
+                    _speedDigits[place].Visible = k == 0 || kmh >= div;
                     _speedDigits[place].Mesh = figures[place][kmh / div % 10];
                 }
             }

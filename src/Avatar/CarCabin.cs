@@ -78,10 +78,14 @@ public sealed record CarCabin(
     CarMirror[] Mirrors, DriverSeat Seat, Vector3 Eye, SeatAnchor[] Seats)
 {
     /// <summary>
-    /// A digital speedometer's figures (<see cref="CarBody.CentreDisplay"/>, #760): per place, units
-    /// first, the meshes for 0..9. Null on a car with dials; its needles then draw nothing.
+    /// A digital speedometer's figures (<see cref="CarBody.CentreDisplay"/>, #760): per place, the
+    /// meshes for 0..9, in readouts of <see cref="SpeedPlaces"/> places, units first (the display,
+    /// then the windscreen's <see cref="CarBody.Hud"/>). Null on a car with dials; its needles then
+    /// draw nothing.
     /// </summary>
     public ArrayMesh[][]? SpeedDigits { get; init; }
+    /// <summary>Places in one speed readout: up to 999 km/h.</summary>
+    public const int SpeedPlaces = 3;
     /// <summary>Index into <see cref="GearDigits"/>: reverse, neutral, then 1..6.</summary>
     public static int DigitFor(int gear) => gear < 0 ? 0 : Mathf.Clamp(gear + 1, 1, 7);
     /// <summary>Indices into <see cref="Lamps"/>.</summary>
@@ -266,6 +270,7 @@ public static partial class CarMeshBuilder
         if (body.CentreDisplay)
         {
             (digits, lamps, speedDigits) = CentreDisplay(c, inst, eye, gearChars, lampColours, dashTop, dashBottom, dashRear, d.WsBase);
+            if (body.Hud) speedDigits = speedDigits.Concat(Hud(inst, eye, d)).ToArray();
             // no dials: needles that draw nothing, on pivots the rig can still turn
             tach = new CarNeedle(new ArrayMesh(), Turned(face), Turned(nd));
             speedo = tach;
@@ -316,6 +321,38 @@ public static partial class CarMeshBuilder
     private static readonly Color Readout = new(0.55f, 0.9f, 1f);
     private static readonly Color Ready = new(0.3f, 1f, 0.45f);
     private static readonly Color Touch = new(0.04f, 0.08f, 0.18f);
+    private static readonly Color HudGreen = new(0.45f, 1f, 0.75f);
+
+    /// <summary>
+    /// The XW30 Prius's head-up display (#760): the speed reflected into the windscreen where the
+    /// driver's line of sight, a few degrees under level, meets the glass, a centimetre in from it and
+    /// turned to the eye, with an eco bar under it. Its figures come back as one more readout of
+    /// <see cref="CarCabin.SpeedPlaces"/> places.
+    /// </summary>
+    private static IEnumerable<ArrayMesh[]> Hud(MeshScratch inst, Vector3 eye, Dims d)
+    {
+        // the windscreen as a line in (z, y): from its foot on the belt to its top under the roof
+        var foot = new Vector2(d.WsBase, d.Belt);
+        var top = new Vector2(d.WsTop, d.Roof - 0.05f);
+        var look = new Vector2(Mathf.Cos(0.11f), -Mathf.Sin(0.11f));   // 6° under level
+        var from = new Vector2(eye.Z, eye.Y);
+        // from + look·t on the glass: solve against foot + (top − foot)·s
+        var edge = top - foot;
+        float t = ((foot.X - from.X) * edge.Y - (foot.Y - from.Y) * edge.X) / (look.X * edge.Y - look.Y * edge.X);
+        var hit = from + look * t;
+        var at = new Vector3(eye.X, hit.Y, hit.X);
+        var n = (eye - at).Normalized();
+        at += n * 0.01f;
+        var up = (Vector3.Up - n * n.Dot(Vector3.Up)).Normalized();
+        var right = up.Cross(n);
+        for (int place = 0; place < CarCabin.SpeedPlaces; place++)
+        {
+            var digitAt = at + right * (0.012f - place * 0.025f);
+            yield return Enumerable.Range(0, 10).Select(k => SevenSegment(digitAt, up, right, n, (char)('0' + k), HudGreen)).ToArray();
+        }
+        for (int i = 0; i < 5; i++)
+            inst.Box(at + right * (-0.04f + i * 0.02f) - up * 0.03f, new Vector3(0.014f, 0.004f, 0.002f), HudGreen, new Basis(right, up, n));
+    }
 
     /// <summary>
     /// The XW20 Prius's instruments (#760), with no dials behind the wheel: a long black display in a

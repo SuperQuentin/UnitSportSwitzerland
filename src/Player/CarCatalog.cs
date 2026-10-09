@@ -671,6 +671,32 @@ public static class CarCatalog
             // no suspension: the tyres' sidewalls are all the travel it has, and every bump goes straight into the grip
             TyreType = KartTyre, Travel = 0.06f, Stiffness = 3f,
         },
+        // ---- 37: the next Prius (#760) ----
+        new CarSpec
+        {
+            Label = "XW30 Prius",
+            Style = DriveStyle.Grip,
+            Blurb = "2009 Toyota Prius: the third generation, a bigger 1.8 Atkinson four and a stronger motor through the e-CVT, and the speed shown in the windscreen. Quiet, smooth, front drive",
+            Body = new CarBody
+            {
+                Shape = BodyShape.Liftback, Length = 4.46f, Width = 1.745f, Height = 1.49f, WheelRadius = 0.32f,
+                Paint = new Color(0.18f, 0.35f, 0.62f), Rim = Silver, LeftHandDrive = true, CentreDisplay = true, Hud = true,
+            },
+            Engine = EngineLayout.Inline4,
+            // source: Toyota Prius (XW30, 2ZR-FXE 99 PS/5200 + 60 kW motor 207 Nm, system 136 PS, e-CVT, 195/65R15, kerb ~1380 kg, Cd 0.25); Toyota claims 0-100 10.4 s, 180 km/h. The torque curve is the system's at the crank: the motor's pull low down, the engine's on top
+            // Grip 1.04, a newer and wider tyre than the XW20's: at 1 its 100 kW pulled the nose straight out of the Game drift --driftcheck asks of every car (17° max)
+            Mass = 1455f, FrontAxle = 1.08f, RearAxle = 1.62f, CgHeight = 0.55f, Grip = 1.04f,
+            PeakKw = 100f, PeakRpm = 5200f, IdleRpm = 1000f, Redline = 5800f,
+            // the e-CVT: the ends of its range, the top end letting the redline cap it near 180 km/h
+            Gearbox = CarGearbox.ECvt,
+            Gears = new[] { 3.1f, 0.92f }, FinalDrive = 4.113f, Reverse = 3.0f,
+            Torque = new (float, float)[] { (1000f, 215f), (2000f, 205f), (3000f, 195f), (4000f, 190f), (5200f, 183.6f), (5800f, 160f) },
+            Tyre = "195/65R15", BrakeDecel = 9.3f, Diff = Differential.Open,
+            RefZeroTo100 = 10.4f, RefTopKmh = 180f,
+            Drive = Drivetrain.Front,
+            MaxSteer = 0.6f, DragArea = 0.56f,
+            LockTurns = 3.2f, // lock to lock, est.: electric power steering
+        },
     });
 
     /// <summary>The spec for a car kind, or null when the kind is not a car.</summary>
