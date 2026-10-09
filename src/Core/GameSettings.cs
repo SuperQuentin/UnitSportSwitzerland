@@ -28,6 +28,16 @@ public enum WindowMode
     Fullscreen = 2,
 }
 
+/// <summary>How the main view smooths its 3D edges (#768): none, FXAA, or MSAA with 2, 4 or 8 samples.</summary>
+public enum AntiAliasing
+{
+    Off = 0,
+    Fxaa = 1,
+    Msaa2x = 2,
+    Msaa4x = 3,
+    Msaa8x = 4,
+}
+
 /// <summary>What the on-screen performance overlay shows (F3 cycles it).</summary>
 public enum PerfOverlayMode
 {
@@ -107,6 +117,13 @@ public sealed class GameSettings
     public const float MinRenderScale = 0.25f, MaxRenderScale = 2f;
 
     public bool VSync { get; set; } = true;
+
+    /// <summary>
+    /// The main view's anti-aliasing in Cartoon and Realistic (#768); PS1 keeps its jagged
+    /// low-resolution edges, which are its look (<see cref="DisplaySettings"/>).
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public AntiAliasing AntiAliasing { get; set; } = AntiAliasing.Msaa4x;
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public PerfOverlayMode PerfOverlay { get; set; } = PerfOverlayMode.Off;
@@ -364,7 +381,7 @@ public sealed class GameSettings
         Current = loaded;
         GD.Print($"[settings] rings={loaded.RenderDistanceRings} horizon={loaded.HorizonKm}km "
             + $"detail={loaded.Detail} fog={loaded.Fog} builds={loaded.MaxConcurrentBuilds} "
-            + $"commit={loaded.CommitBudgetMs}ms scale={loaded.RenderScale} vsync={loaded.VSync} "
+            + $"commit={loaded.CommitBudgetMs}ms scale={loaded.RenderScale} aa={loaded.AntiAliasing} vsync={loaded.VSync} "
             + $"window={loaded.WindowMode} perf={loaded.PerfOverlay}");
     }
 
@@ -379,6 +396,7 @@ public sealed class GameSettings
         HorizonKm = 25;
         Detail = DetailPreset.Low;
         RenderScale = 0.6f;
+        AntiAliasing = AntiAliasing.Msaa2x;
         TrafficCars = 10;
         CockpitMirrors = false;
         CommitBudgetMs = 3;

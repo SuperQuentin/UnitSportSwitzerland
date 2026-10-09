@@ -66,6 +66,9 @@ public partial class SettingsScreen : Screen
                     (w, h) => (GameSettings.Current.WindowWidth, GameSettings.Current.WindowHeight) = (w, h));
             }
             ScaleRow(rows, "3D resolution", s.RenderScale, v => GameSettings.Current.RenderScale = v);
+            UiKit.OptionRow(rows, "Anti-aliasing", new[] { "Off", "FXAA", "MSAA 2x", "MSAA 4x", "MSAA 8x" },
+                (int)s.AntiAliasing, i => GameSettings.Current.AntiAliasing = (AntiAliasing)i,
+                "Smooths the edges of everything 3D, in Cartoon and Realistic: PS1 keeps its jagged ones");
             // Realistic+ needs Forward+ through a relaunch, which a phone cannot do (#63)
             var styles = Styles.StyleKit.MenuStyles.Where(v => Platform.CanSpawnProcesses || !Styles.StyleKit.NeedsForwardPlus(v)).ToArray();
             var styleOption = UiKit.OptionRow(rows, "Visual style", styles.Select(Styles.StyleKit.Label).ToArray(),
