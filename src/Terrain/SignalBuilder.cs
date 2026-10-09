@@ -26,10 +26,10 @@ public static class SignalBuilder
     public const float Pitch = 0.3f, LensRadius = 0.09f;
     private const float HeadWidth = 0.3f, HeadDepth = 0.22f, BoardMargin = 0.1f, BoardThickness = 0.02f;
     /// <summary>
-    /// A car head's backboard (#759, from a photo of a Swiss junction and the user's review): a
-    /// black plate, a narrow margin above and below the housing and at the sides half the gap to
-    /// the next head, so heads side by side share one; its white border is flush with the
-    /// housing's face and stops <see cref="BorderGap"/> short of the housing.
+    /// A car head's plate (#759, from a photo of a Swiss junction and the user's review): white in
+    /// front and black behind, flush with the housing's face and <see cref="BorderGap"/> clear of
+    /// it; a narrow margin above and below the housing and at the sides half the gap to the next
+    /// head, so heads side by side share one.
     /// </summary>
     private const float PlateMargin = 0.05f, PlateSide = (HeadSpacing - HeadWidth) * 0.5f, BorderGap = 0.02f;
     /// <summary>
@@ -38,8 +38,11 @@ public static class SignalBuilder
     /// </summary>
     private const float CornerRadius = 0.04f, VisorLength = 0.13f, VisorGap = 0.02f, RimWidth = 0.018f;
     private const int PoleSides = 12, VisorSegments = 6, RimSegments = 12;
-    /// <summary>The road shader's style for a prop that keeps its colour (no asphalt over the plates, #759).</summary>
-    private const float PropStyle = 7f;
+    /// <summary>
+    /// The road shader's styles for a prop that keeps its colour (no asphalt over it), and for a
+    /// plate that is its colour in front and black behind (#759).
+    /// </summary>
+    private const float PropStyle = 7f, PlateStyle = 8f;
     /// <summary>Head centre to head centre across a pole.</summary>
     private const float HeadSpacing = 0.55f;
     /// <summary>Lower edge of the car heads at the roadside, 2.35-3.50 m (SSV Art. 71): low alone, high above a pedestrian head.</summary>
@@ -95,27 +98,15 @@ public static class SignalBuilder
                     if (reach.Length() > PoleRadius * 2)
                         Tube(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(),
                             new Vector3(foot.X, h.Centre.Y, foot.Z), new Vector3(foot.X, h.Centre.Y, foot.Z) + reach, 0.025f);
-                    // the backboard (#759): a car head's black plate behind the housing, its white border
-                    // flush with the housing's face; a bike head's only in some cantons; a pedestrian head has none
+                    // the backboard (#759): a car head's plate flush with the housing's face, clear of it by
+                    // a hair, white in front and black behind (one face, PlateStyle); a bike head's only in
+                    // some cantons; a pedestrian head has none
                     if (h.Shape != Shape.Square && (h.Shape != Shape.Bike || signal.Plan.BikeBoard))
                     {
-                        var board = h.Centre - h.Front * (depth + BoardThickness * 0.5f);
-                        float outerW = w * 0.5f + PlateSide * h.Scale, outerH = half + PlateMargin * h.Scale;
-                        Plate(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(), board, h.Front, h.Right, outerW, outerH);
-                        float gap = BorderGap * h.Scale;
-                        BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), h.Centre - h.Front * 0.002f,
-                            h.Front, h.Right, outerW, outerH, w * 0.5f + gap, half + gap);
-                        // the board's edge, black, from the border back to the plate: a shallow tray, not a floating frame
                         var face = h.Centre - h.Front * 0.002f;
-                        Vector3 E(Vector3 at, float x, float y) => at + h.Right * x + Vector3.Up * y;
-                        (float X, float Y)[] c = [(-outerW, -outerH), (outerW, -outerH), (outerW, outerH), (-outerW, outerH)];
-                        for (int e = 0; e < 4; e++)
-                        {
-                            var (x0, y0) = c[e];
-                            var (x1, y1) = c[(e + 1) % 4];
-                            Polygon(vertices, colors, uvs, uv2s, indices, Housing.SrgbToLinear(),
-                                [E(board, x0, y0), E(board, x1, y1), E(face, x1, y1), E(face, x0, y0)]);
-                        }
+                        float outerW = w * 0.5f + PlateSide * h.Scale, outerH = half + PlateMargin * h.Scale, gap = BorderGap * h.Scale;
+                        BorderFrame(vertices, colors, uvs, uv2s, indices, WhitePlate.SrgbToLinear(), face,
+                            h.Front, h.Right, outerW, outerH, w * 0.5f + gap, half + gap);
                     }
                     RoundedHousing(vertices, colors, uvs, uv2s, indices, h.Centre - h.Front * (depth * 0.5f), h.Right, h.Front,
                         w * 0.5f, depth * 0.5f, half, CornerRadius * h.Scale);
@@ -404,11 +395,12 @@ public static class SignalBuilder
     private static void BorderFrame(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s, List<int> indices,
         Color colour, Vector3 centre, Vector3 front, Vector3 right, float outerW, float outerH, float innerW, float innerH)
     {
+        // wound clockwise as the viewer in front sees it: Godot's front face
         Vector3 Q(float x, float y) => centre + right * x + Vector3.Up * y;
-        Polygon(vertices, colors, uvs, uv2s, indices, colour, [Q(-outerW, innerH), Q(outerW, innerH), Q(outerW, outerH), Q(-outerW, outerH)]);
-        Polygon(vertices, colors, uvs, uv2s, indices, colour, [Q(-outerW, -outerH), Q(outerW, -outerH), Q(outerW, -innerH), Q(-outerW, -innerH)]);
-        Polygon(vertices, colors, uvs, uv2s, indices, colour, [Q(-outerW, -innerH), Q(-innerW, -innerH), Q(-innerW, innerH), Q(-outerW, innerH)]);
-        Polygon(vertices, colors, uvs, uv2s, indices, colour, [Q(innerW, -innerH), Q(outerW, -innerH), Q(outerW, innerH), Q(innerW, innerH)]);
+        Polygon(vertices, colors, uvs, uv2s, indices, colour, [Q(-outerW, outerH), Q(outerW, outerH), Q(outerW, innerH), Q(-outerW, innerH)], PlateStyle);
+        Polygon(vertices, colors, uvs, uv2s, indices, colour, [Q(-outerW, -innerH), Q(outerW, -innerH), Q(outerW, -outerH), Q(-outerW, -outerH)], PlateStyle);
+        Polygon(vertices, colors, uvs, uv2s, indices, colour, [Q(-outerW, innerH), Q(-innerW, innerH), Q(-innerW, -innerH), Q(-outerW, -innerH)], PlateStyle);
+        Polygon(vertices, colors, uvs, uv2s, indices, colour, [Q(innerW, innerH), Q(outerW, innerH), Q(outerW, -innerH), Q(innerW, -innerH)], PlateStyle);
     }
 
     /// <summary>A flat rectangle facing <paramref name="front"/>, both sides drawn (the road material is two-sided).</summary>
@@ -421,7 +413,7 @@ public static class SignalBuilder
     }
 
     private static void Polygon(List<Vector3> vertices, List<Color> colors, List<Vector2> uvs, List<Vector2> uv2s,
-        List<int> indices, Color color, Vector3[] ring)
+        List<int> indices, Color color, Vector3[] ring, float style = PropStyle)
     {
         int start = vertices.Count;
         foreach (var v in ring)
@@ -429,7 +421,7 @@ public static class SignalBuilder
             vertices.Add(v);
             colors.Add(color);
             uvs.Add(Vector2.Zero);
-            uv2s.Add(new Vector2(PropStyle, 0f));
+            uv2s.Add(new Vector2(style, 0f));
         }
         for (int i = 1; i + 1 < ring.Length; i++) { indices.Add(start); indices.Add(start + i); indices.Add(start + i + 1); }
     }

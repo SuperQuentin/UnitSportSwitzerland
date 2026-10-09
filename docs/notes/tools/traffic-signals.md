@@ -109,10 +109,11 @@
   minimum by day and 0.45 m / 5 px at night (`world_night`), strength 0.3 / 0.7, faded out by
   1 km (1.5 km at night) and off-axis (the cross street's heads do not glow down your road). 9 px
   at night blew every light into a disc and the next junction into a band. Car heads stand on a
-  black backboard (side margins of half the head gap, so a pole's heads share it) whose white
-  border (RAL 9016) is flush with the housings' faces, 2 cm clear of them, with black edges back
-  to the plate (user's review of a photo of a Swiss junction: "the real backplate is black",
-  "the border at the same depth as the box"); the Zürich
+  plate flush with the housings' faces, 2 cm clear of them (side margins of half the head gap, so
+  a pole's heads share it): white (RAL 9016) in front, black behind, one face drawn with the road
+  shader's style 8 (`FRONT_FACING` picks black; wound clockwise from the front, Godot's front
+  face). User's review of a photo of a Swiss junction: the black is the white plate's back; the
+  Zürich
   Wegleitung LSA only says the visible housing is matt RAL 9017 and the Kontrastblenden are
   aluminium after SN 640 836 (not public). Bike heads get the plate only in some cantons:
   `SignalPlan.BikeBoard` (bit 1 of the SGNL pedestrian byte, old data reads false), set by
@@ -124,7 +125,7 @@
   top and down the sides, open below, 0.13 m at the crown, flaring), a ring round each lens (a
   square frame round a pedestrian lens), a 12-sided pole with a cap and 6-sided brackets
   (collision stays the square column). The road shader's style 7 (`PropStyle`) keeps the props'
-  colours (no Real asphalt on the plates). `SignalLamps` picks the lens mesh per `Icon`, from
+  colours (no Real asphalt on them), style 8 (`PlateStyle`) the same with a black back face. `SignalLamps` picks the lens mesh per `Icon`, from
   shape and role, without touching `SignalBuilder.Shape`: a standing figure in the red pedestrian
   lens, a walking one in the green and the yellow, a bicycle in every bike lens (`Flat`: fans,
   round-ended strokes, rings, in lens radii). The white of plates and sign borders speckles at
