@@ -10,10 +10,12 @@
     and 16 beats expected) and laid on the timeline, where it must sound playing forwards and be silent
     backwards. The files are deleted after.
   - Then the camera (#669): a key aimed at the actor must look at it (within 0.06°), a cut must land on the next
-    key exactly with its lens, and cut all must cut every clip under the time. About 25 s of game time.
+    key exactly with its lens, and cut all must cut every clip under the time.
+  - Then several cameras (#675): the program shows Cam 1 before a cut and Cam 2 after it, the view at Cam 2's key
+    with its lens, every gizmo where its camera is, and all of them hidden while looking through. About 25 s of game time.
 - `--moviestudio <s> [t]` (any direct world launch): after s seconds, grabs the buffer and opens Pause > Movie
-  studio at movie time t. `--moviesong <file>` also imports a song there, `--moviekeys` sets three camera keys
-  and zooms in. Made for screenshots:
+  studio at movie time t. `--moviesong <file>` also imports a song there; `--moviekeys` sets keys on two cameras,
+  cuts between them and zooms in. Made for screenshots:
   `-- --world fixture --flycheck plane --moviestudio 13 9 --uishot test_output/studio.png 17`
   (`--flycheck` quits at ~20 s of flight, so open and shoot before that).
   - **These runs write into the real `user://movies/audio/`** (the song's copy, the grabbed game sound). Delete
