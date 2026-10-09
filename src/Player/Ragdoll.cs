@@ -113,6 +113,9 @@ public sealed class Ragdoll
     /// </summary>
     public bool StaysIn { get; init; }
 
+    /// <summary>Thrown out of a vehicle, so through glass. False for someone knocked over on foot: the vehicle that hit them is as solid as a wall.</summary>
+    public bool PassesVehicles { get; init; } = true;
+
     /// <summary>How deep past where it broke in a vehicle's sides still let a body that <see cref="StaysIn"/> through, metres: its near wall, not its far one.</summary>
     private const float EntryDepth = 0.6f;
     /// <summary>A face this steep or steeper is a side (windscreen, window, panel) a thrown body breaks through; flatter is a roof or a floor, which holds it.</summary>
@@ -351,7 +354,7 @@ public sealed class Ragdoll
     /// </summary>
     private void ReleaseGraced(PhysicsDirectSpaceState3D space)
     {
-        if (!_ownFound)
+        if (!_ownFound && PassesVehicles)
         {
             // the vehicle it is thrown from: whatever holds the seated body when it starts
             _ownFound = true;
@@ -401,7 +404,7 @@ public sealed class Ragdoll
     /// </summary>
     private bool BreaksThrough(GodotObject what, Rid rid, Vector3 at, Vector3 normal)
     {
-        if (Mathf.Abs(normal.Y) > SideFace) return false;
+        if (!PassesVehicles || Mathf.Abs(normal.Y) > SideFace) return false;
         // once in, its sides go on letting the body through after the grace: ended halfway, a body
         // going through hung in the far wall, and one staying in left its legs outside (#751 playtest)
         if (_entered.TryGetValue(rid, out var entry)) return !StaysIn || (at - entry.At).Dot(-entry.Normal) < EntryDepth;

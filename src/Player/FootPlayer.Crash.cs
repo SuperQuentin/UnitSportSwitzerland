@@ -86,6 +86,92 @@ public partial class FootPlayer
         TakeDamage(Mathf.Max(loopOut ? 10f : 0f, (hit - 8f) * 2f), 0, DamageCause.Crash);
     }
 
+    /// <summary>Speed (m/s) a vehicle has to be doing into someone on foot to knock them over: faster than a brisk walk.</summary>
+    [Core.Tunable("m/s a vehicle must be doing into someone on foot to knock them over; 1.5-6")]
+    public static float KnockSpeed = 2.5f;
+
+    private PhysicsShapeQueryParameters3D? _knockQuery;
+    // where each vehicle touching us was last step: a copy's motion, which its own Velocity does not carry
+    private readonly Dictionary<ulong, (Vector3 At, ulong Frame)> _knockSeen = new();
+    private float _knockCooldown, _knockLook;
+    private readonly PhysicsPointQueryParameters3D _lensPoint = new();
+
+    /// <summary>Half the width of the crash camera's frame round the body while it holds still, metres (was 1.6: too tight, #751 playtest).</summary>
+    [Core.Tunable("m either side of the body the crash camera frames while it holds; 1-5")]
+    public static float CrashFraming = 2.6f;
+    /// <summary>How far off the body the crash camera chases from, metres (was 5.5).</summary>
+    [Core.Tunable("m off the body the crash camera chases from; 4-12")]
+    public static float CrashChase = 7.5f;
+    private bool _knockNear;
+
+    /// <summary>
+    /// On foot, a vehicle driven or rolling into this body knocks it over (#751 playtest: a bus
+    /// rolling into a walker only shoved the capsule, which glitched inside it): limp, thrown on
+    /// a little faster than the vehicle and up, hurt by its speed. The owner judges it, from the
+    /// vehicles as it sees them, as with every other hit to its own body.
+    /// </summary>
+    private bool KnockedByVehicle(float dt)
+    {
+        if (_knockCooldown > 0f) { _knockCooldown -= dt; return false; }
+        if (!IsMultiplayerAuthority() || Aboard || _swimming || Npc) return false;
+        // the shape query only with a vehicle about: looked for four times a second, not every step
+        if ((_knockLook -= dt) <= 0f)
+        {
+            _knockLook = 0.25f;
+            _knockNear = false;
+            foreach (var p in PlayerSnapshot.Of(GetTree()))
+                _knockNear |= p.Player != this && p.Ride != RideKind.OnFoot && p.Pos.DistanceSquaredTo(GlobalPosition) < 15f * 15f;
+            if (!_knockNear && Vehicles is { } manager)
+                foreach (var child in manager.GetChildren())
+                    _knockNear |= child is UnitSport.Vehicles.VehicleBody vb && vb.GlobalPosition.DistanceSquaredTo(GlobalPosition) < 15f * 15f;
+        }
+        if (!_knockNear) return false;
+        _knockQuery ??= new PhysicsShapeQueryParameters3D { Shape = _capsule, Margin = 0.08f };
+        _knockQuery.CollisionMask = RagdollMask;
+        _knockQuery.Exclude = SelfExclude;
+        _knockQuery.Transform = _body.GlobalTransform;
+        var hits = GetWorld3D().DirectSpaceState.IntersectShape(_knockQuery, 6);
+        ulong frame = Engine.GetPhysicsFrames();
+        Vector3 worst = Vector3.Zero;
+        foreach (var hit in hits)
+        {
+            var what = hit["collider"].AsGodotObject();
+            if (what is Node3D { } n && n.GetParent() is UnitSport.Vehicles.VehicleBody section && n is not UnitSport.Vehicles.VehicleBody) what = section;
+            Vector3 v;
+            if (what is UnitSport.Vehicles.VehicleBody vb)
+            {
+                // a vehicle walked into or stood against at a stop is a wall, not a hit: only its own motion counts
+                ulong id = vb.GetInstanceId();
+                var at = vb.GlobalPosition;
+                v = vb.IsMultiplayerAuthority() ? vb.Velocity
+                    : _knockSeen.TryGetValue(id, out var seen) && frame - seen.Frame == 1 ? (at - seen.At) / dt : Vector3.Zero;
+                _knockSeen[id] = (at, frame);
+            }
+            else if (what is FootPlayer { Ride: not RideKind.OnFoot } driver && driver != this) v = driver.WorldVelocity;
+            else continue;
+            v = v with { Y = 0 };
+            var toMe = (GlobalPosition - ((Node3D)what).GlobalPosition) with { Y = 0 };
+            if (v.Length() > worst.Length() && v.Length() > KnockSpeed && v.Dot(toMe) > 0f) worst = v;
+        }
+        if (_knockSeen.Count > 16) _knockSeen.Clear();
+        if (worst == Vector3.Zero) return false;
+
+        float speed = worst.Length();
+        var fwd = worst / speed;
+        Announced?.Invoke("RUN OVER!", false);
+        GD.Print($"[crash] knocked over by a vehicle at {speed:0.0} m/s");
+        // on ahead of it, faster than it goes, so the body clears the front instead of going under
+        var launch = worst * 1.15f + Vector3.Up * (1.5f + speed * 0.12f);
+        Velocity = Vector3.Zero;
+        StartRagdoll(PoseWorldJoints(), launch, Mathf.Clamp(speed * 0.5f, 3f, 9f), false, passesVehicles: false);
+        BeginCrashCamera(fwd);
+        PlayAt(GlobalPosition + Vector3.Up, Audio.SfxSynth.ImpactBank, 0f);
+        PlayerInput.Rumble(1f, 1f, 0.3f);
+        TakeDamage(Mathf.Max(0f, (speed - 2f) * 4f), 0, DamageCause.Crash);
+        _knockCooldown = 1f;
+        return true;
+    }
+
     /// <summary>
     /// Probes (#380): thrown from <paramref name="at"/> as if off a bike that hit something, on foot,
     /// with <paramref name="launch"/>: the ragdoll, its replication and the crash camera as in a crash.
@@ -145,7 +231,7 @@ public partial class FootPlayer
 
     private static bool StaysIn(Vector3 launch) => (Mathf.RoundToInt(launch.X * 1000f) & 1) == 0;
 
-    private void StartRagdoll(Vector3[] joints, Vector3 launch, float spin, bool throughGlass)
+    private void StartRagdoll(Vector3[] joints, Vector3 launch, float spin, bool throughGlass, bool passesVehicles = true)
     {
         // tumbling forward: head over heels about the axis square to the throw
         var axis = Vector3.Up.Cross(launch with { Y = 0 });
@@ -155,7 +241,7 @@ public partial class FootPlayer
         // the coin and nudges the launch by a millimetre a second to say which (#751 playtest)
         if (IsMultiplayerAuthority() && StaysIn(launch) != (_crashRng.Next(2) == 0)) launch.X += 0.001f;
         bool staysIn = StaysIn(launch);
-        _ragdoll = new Ragdoll(joints, launch, axis.Normalized() * spin, GetRid(), RagdollMask) { StaysIn = staysIn };
+        _ragdoll = new Ragdoll(joints, launch, axis.Normalized() * spin, GetRid(), RagdollMask) { StaysIn = staysIn, PassesVehicles = passesVehicles };
         if (IsMultiplayerAuthority()) GD.Print($"[crash] thrown at {launch.Length():0.0} m/s, {(staysIn ? "stays in" : "goes through")} what it breaks into");
         _ragdoll.Struck += OnRagdollStruck;
         _ragdoll.BrokeInto += OnRagdollBrokeInto;
@@ -422,7 +508,7 @@ public partial class FootPlayer
         if (_crashTime < 1.8f && dist < 15f)
         {
             // held where it cut to, zooming to keep the body about two metres across the frame
-            fov = Mathf.Clamp(Mathf.RadToDeg(2f * Mathf.Atan(1.6f / Mathf.Max(dist, 0.5f))), 24f, 62f);
+            fov = Mathf.Clamp(Mathf.RadToDeg(2f * Mathf.Atan(CrashFraming / Mathf.Max(dist, 0.5f))), 24f, 70f);
         }
         else
         {
@@ -431,13 +517,13 @@ public partial class FootPlayer
             var side = (_crashAnchor - body) with { Y = 0 };
             side = side.LengthSquared() > 0.04f ? side.Normalized() : _crashSide;
             var from = body + Vector3.Up * 0.8f;
-            var wanted = CameraReach(GetWorld3D().DirectSpaceState, from, body + side * 5.5f + Vector3.Up * 2.2f);
+            var wanted = CameraReach(GetWorld3D().DirectSpaceState, from, body + side * CrashChase + Vector3.Up * 2.2f);
             var space = GetWorld3D().DirectSpaceState;
             if (wanted.DistanceTo(body) < 3f)
             {
                 // boxed in on this side (a wall, the car): swing round a quarter turn and try again
                 var round = new Vector3(-side.Z, 0, side.X);
-                wanted = CameraReach(space, from, body + round * 5.5f + Vector3.Up * 2.2f);
+                wanted = CameraReach(space, from, body + round * CrashChase + Vector3.Up * 2.2f);
             }
             // the body down behind something (the bonnet, a kerb): look down on it from higher up
             if (!Sees(space, wanted, body))
@@ -445,6 +531,14 @@ public partial class FootPlayer
             _crashAnchor = _crashAnchor.Lerp(wanted, MathX.Damp(2.5f, dt));
             fov = 55f;
         }
+        // the vehicle that threw or hit the body rolls on, through where the lens was held: never
+        // inside it (#751 playtest, the inside of a bus): up over the body instead
+        var physics = GetWorld3D().DirectSpaceState;
+        _lensPoint.Position = _crashAnchor;
+        _lensPoint.CollisionMask = RagdollMask;
+        _lensPoint.Exclude = SelfExclude;
+        if (physics.IntersectPoint(_lensPoint, 1).Count > 0)
+            _crashAnchor = CameraReach(physics, body + Vector3.Up * 0.8f, body + Vector3.Up * 6f + (_crashAnchor - body) with { Y = 0 });
         _camera.Fov = Mathf.Lerp(_camera.Fov, fov, MathX.Damp(5f, dt));
         var look = _crashLook - _crashAnchor;
         if (look.LengthSquared() > 0.01f && Mathf.Abs(look.Normalized().Y) < 0.99f)

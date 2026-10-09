@@ -3477,6 +3477,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
+        // a vehicle into this body on foot (#751 playtest): knocked over, limp from the next step
+        if (KnockedByVehicle(dt)) return;
+
         if (_mantling)
         {
             StepMantle(dt);
