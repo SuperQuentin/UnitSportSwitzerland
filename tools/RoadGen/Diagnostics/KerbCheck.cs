@@ -26,10 +26,22 @@ public static class KerbCheck
     private sealed class Surface(TileId id, RoadTile tile)
     {
         private readonly List<(double[] X, double[] Z, double[] Y, string What)> _raised = [];
+        /// <summary>When set, every surface the next <see cref="At"/> finds, with its height.</summary>
+        public List<(string What, double H)>? All;
         /// <summary>What the last <see cref="At"/> stood on.</summary>
         public string What = "";
         private readonly List<(RoadSegment Seg, float[] Frac, double X0, double X1, double Z0, double Z1)> _segs = [];
         private readonly List<(double[] X, double[] Z, double[] Y)> _caps = [];
+        /// <summary>What lies in each 4 m cell (indices into the lists above): a sample looks at its own cell only.</summary>
+        private readonly Dictionary<(int, int), (List<int> Raised, List<int> Segs, List<int> Caps)> _cells = [];
+        private const double Cell = 4.0;
+        private (List<int> Raised, List<int> Segs, List<int> Caps) CellAt(int i, int j) =>
+            _cells.TryGetValue((i, j), out var c) ? c : _cells[(i, j)] = ([], [], []);
+        private void Bucket(double x0, double x1, double z0, double z1, Action<(List<int> Raised, List<int> Segs, List<int> Caps)> add)
+        {
+            for (int i = (int)Math.Floor(x0 / Cell); i <= (int)Math.Floor(x1 / Cell); i++)
+                for (int j = (int)Math.Floor(z0 / Cell); j <= (int)Math.Floor(z1 / Cell); j++) add(CellAt(i, j));
+        }
         public TileId Id { get; } = id;
         public RoadTile Tile { get; } = tile;
 
@@ -46,7 +58,7 @@ public static class KerbCheck
                         int v = a.Indices[k + m] * 3;
                         (x[m], y[m], z[m]) = (a.Vertices[v], a.Vertices[v + 1] + a.Height, a.Vertices[v + 2]);
                     }
-                    _raised.Add((x, z, y, "area " + a.Type));
+                    _raised.Add((x, z, y, "area " + a.Type + (Environment.GetEnvironmentVariable("SEAMDBG") == "1" ? $" #{Tile.AreaProps.IndexOf(a)} v{a.Vertices.Length / 3} h{a.Height:F2}" : "")));
                 }
             }
             foreach (var j in Tile.Junctions)
@@ -73,6 +85,30 @@ public static class KerbCheck
                     }
                     _segs.Add((s, RoadStreetSection.Fractions(s), x0 - pad, x1 + pad, z0 - pad, z1 + pad));
                 }
+            for (int k = 0; k < _raised.Count; k++)
+            {
+                var (x, z, _, _) = _raised[k];
+                int kk = k;
+                Bucket(x.Min(), x.Max(), z.Min(), z.Max(), c => c.Raised.Add(kk));
+            }
+            for (int k = 0; k < _caps.Count; k++)
+            {
+                var (x, z, _) = _caps[k];
+                int kk = k;
+                Bucket(x.Min(), x.Max(), z.Min(), z.Max(), c => c.Caps.Add(kk));
+            }
+            for (int k = 0; k < _segs.Count; k++)
+            {
+                var sg = _segs[k];
+                var pts = sg.Seg.Points;
+                double pad = (sg.X1 - sg.X0 - (pts.Where((_, q) => q % 3 == 0).Max() - pts.Where((_, q) => q % 3 == 0).Min())) / 2;
+                int kk = k;
+                // each piece of the line, padded: a long segment's box would fill many cells
+                for (int i = 0; i + 1 < sg.Seg.PointCount; i++)
+                    Bucket(Math.Min(pts[i * 3], pts[i * 3 + 3]) - pad, Math.Max(pts[i * 3], pts[i * 3 + 3]) + pad,
+                        Math.Min(pts[i * 3 + 2], pts[i * 3 + 5]) - pad, Math.Max(pts[i * 3 + 2], pts[i * 3 + 5]) + pad,
+                        c => { if (c.Segs.Count == 0 || c.Segs[^1] != kk) c.Segs.Add(kk); });
+            }
             return this;
         }
 
@@ -94,10 +130,15 @@ public static class KerbCheck
         {
             double best = double.NaN;
             What = "";
-            void Take(double h, string what) { if (double.IsNaN(best) || h > best) { best = h; What = what; } }
-            foreach (var (x, z, y, what) in _raised)
+            void Take(double h, string what)
+            {
+                All?.Add((what, h));
+                if (double.IsNaN(best) || h > best) { best = h; What = what; }
+            }
+            if (!_cells.TryGetValue(((int)Math.Floor(px / Cell), (int)Math.Floor(pz / Cell)), out var cell)) return double.NaN;
+            foreach (var (x, z, y, what) in cell.Raised.Select(k => _raised[k]))
                 if (InTri(x, z, y, px, pz) is { } h) Take(h, what);
-            foreach (var (seg, frac, sx0, sx1, sz0, sz1) in _segs)
+            foreach (var (seg, frac, sx0, sx1, sz0, sz1) in cell.Segs.Distinct().Select(k => _segs[k]))
             {
                 if (px < sx0 || px > sx1 || pz < sz0 || pz > sz1) continue;
                 // nearest point of the centreline: lateral distance (right of travel positive), height, fraction along
@@ -130,10 +171,10 @@ public static class KerbCheck
                 while (k < prof.Count - 1 && prof.D[k] < d) k++;
                 double d0 = prof.D[k - 1], d1 = prof.D[k];
                 double h = d1 - d0 < 1e-6 ? prof.H[k] : prof.H[k - 1] + (prof.H[k] - prof.H[k - 1]) * (d - d0) / (d1 - d0);
-                Take(cy + h, $"side {(prof.Surface[Math.Min(k - 1, prof.Surface.Length - 1)])}{(seg.Attributes.Has(RoadAttrFlags.LoweredKerbs) ? " lowered" : "")}");
+                Take(cy + h, $"side {(prof.Surface[Math.Min(k - 1, prof.Surface.Length - 1)])}{(seg.Attributes.Has(RoadAttrFlags.LoweredKerbs) ? " lowered" : "")}{(Environment.GetEnvironmentVariable("SEAMDBG") == "1" ? $" seg#{Tile.Segments.IndexOf(seg)} {seg.Class} d{d:F2} cy{cy:F2}" : "")}");
             }
             if (double.IsNaN(best))
-                foreach (var (x, z, y) in _caps)
+                foreach (var (x, z, y) in cell.Caps.Select(k => _caps[k]))
                     if (InTri(x, z, y, px, pz) is { } h) { best = h; What = "cap"; break; }
             return best;
         }
@@ -208,6 +249,60 @@ public static class KerbCheck
         bool ok = steepZebras + steepBikes == 0;
         log(ok ? "[kerbcheck] RESULT: ok" : "[kerbcheck] RESULT: FAILED");
         return ok ? 0 : 2;
+    }
+
+    /// <summary>
+    /// Seams on the raised surfaces round a point (#711, the user's review: "height mismatches"): <c>RoadGen --seam-check E,N
+    /// [--size M] --chunks DIR</c> samples a grid every <see cref="Step"/> and reports every step of 1 cm or more between two
+    /// neighbouring samples that both stand on a raised surface (an area prop or a street side), merged into spots 0.5 m apart.
+    /// A kerb up from the road is no seam; a step between two raised surfaces always is (a sloped kerb rises 0.8 cm a step).
+    /// </summary>
+    public static int Seams(string chunks, double e, double n, double size, Action<string> log)
+    {
+        var c = CultureInfo.InvariantCulture;
+        var id = TileId.FromLv95(e, n);
+        string file = Path.Combine(chunks, RoadFormat.FileName(id));
+        if (!File.Exists(file)) { log("no tile there"); return 1; }
+        RoadTile tile;
+        using (var fs = File.OpenRead(file)) tile = RoadCodec.Decode(fs);
+        var surface = new Surface(id, tile).Build();
+        int cells = (int)(size / Step);
+        double x0 = e - id.MinE - size / 2, z0 = id.MaxN - n - size / 2;
+        var h = new double[cells + 1, cells + 1];
+        var raised = new bool[cells + 1, cells + 1];
+        var what = new string[cells + 1, cells + 1];
+        for (int i = 0; i <= cells; i++)
+            for (int j = 0; j <= cells; j++)
+            {
+                h[i, j] = surface.At(x0 + i * Step, z0 + j * Step);
+                what[i, j] = surface.What;
+                raised[i, j] = surface.What.StartsWith("area", StringComparison.Ordinal) || surface.What.StartsWith("side", StringComparison.Ordinal);
+            }
+        var spots = new List<(double E, double N, double Step, string What)>();
+        void Pair(int i, int j, int k, int l)
+        {
+            if (!raised[i, j] || !raised[k, l] || double.IsNaN(h[i, j]) || double.IsNaN(h[k, l])) return;
+            if (what[i, j] == what[k, l]) return;   // one surface is continuous: a step is where two meet
+            double d = Math.Abs(h[i, j] - h[k, l]);
+            if (d < 0.01) return;
+            double se = id.MinE + x0 + i * Step, sn = id.MaxN - (z0 + j * Step);
+            int near = spots.FindIndex(q => Math.Abs(q.E - se) < 0.5 && Math.Abs(q.N - sn) < 0.5);
+            string w = h[i, j] < h[k, l] ? $"{what[i, j]} -> {what[k, l]}" : $"{what[k, l]} -> {what[i, j]}";
+            if (near < 0) spots.Add((se, sn, d, w));
+            else if (d > spots[near].Step) spots[near] = (spots[near].E, spots[near].N, d, w);
+        }
+        for (int i = 0; i < cells; i++)
+            for (int j = 0; j < cells; j++) { Pair(i, j, i + 1, j); Pair(i, j, i, j + 1); }
+        foreach (var sp in spots.OrderByDescending(q => q.Step))
+        {
+            log(string.Create(c, $"  seam at LV95 {sp.E:F2},{sp.N:F2}: {sp.Step * 100:F1} cm, {sp.What}"));
+            surface.All = [];
+            double hh = surface.At(sp.E - id.MinE, id.MaxN - sp.N);
+            log("     here: " + string.Join(", ", surface.All.Select(a => string.Create(c, $"{a.What} {(a.H - hh) * 100:+0.0;-0.0} cm"))));
+            surface.All = null;
+        }
+        log(string.Create(c, $"[seamcheck] {spots.Count} seams of 1 cm or more within {size / 2:F0} m of LV95 {e:F0},{n:F0}"));
+        return spots.Count == 0 ? 0 : 2;
     }
 
     /// <summary>A zebra's bars (quads, tile-local x,z): centre, long axis (unit) and half its length; null when it is no zebra.</summary>

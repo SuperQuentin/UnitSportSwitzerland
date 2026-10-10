@@ -49,7 +49,8 @@ public static class CornerPlanner
         Debug is { } d && Math.Abs(id.MinE + p.X - d.E) < 15 && Math.Abs(id.MaxN + p.Y - d.N) < 15;
 
     /// <summary>One arm's sidewalk on the side facing a corner: kerb line from the node out to where the sidewalk starts.</summary>
-    private sealed record Chain(List<(Vec2 P, float Y)> Kerb, Vec2 Out, double Width, float Kerb_, Vec2 Inward, RoadSide Side = default, bool Lowered = false);
+    private sealed record Chain(List<(Vec2 P, float Y)> Kerb, Vec2 Out, double Width, float Kerb_, Vec2 Inward, RoadSide Side = default, bool Lowered = false,
+        List<(Vec2 P, float Y)>? SideEdge = null);
 
     /// <summary>
     /// A kerb arc round a widened corner (#682, #711), tile-local plan (x east, y = -z): the kerb line from arm A's
@@ -188,7 +189,9 @@ public static class CornerPlanner
             if (prop != null) props.Add(prop);
             if (_extra is { Count: > 0 } extra) { props.AddRange(extra); extra.Clear(); }   // a wedge laid in its sides' bands (#711)
             bool pieceAtCorner = stats.Squared > squaredBefore || stats.Gaps > gapsBefore;   // a corner piece reaching the block's corner
-            if (Fillet(id, segments, cap, facades, stats, ca, cb, carried, pieceAtCorner, out var filletWhy) is { } fillet) props.Add(fillet);
+            // (that piece rounds its own outside corner: a patch over it is only for a corner whose piece stops short of it)
+            string? filletWhy = "the corner piece rounds it";
+            if (!pieceAtCorner && Fillet(id, segments, cap, facades, stats, ca, cb, carried, pieceAtCorner, out filletWhy) is { } fillet) props.Add(fillet);
             if (Traced(id, node)) Console.WriteLine($"[corner]   outer corner: {filletWhy ?? "rounded"}");
             if (ordered.Count == 2 && ring == null)
             {
@@ -227,7 +230,7 @@ public static class CornerPlanner
                 // away from the carriageway: left of the outward direction for a left side
                 var across = left ? new Vec2(-dir.Y, dir.X) : new Vec2(dir.Y, -dir.X);
                 double w = side.OuterDm / 10.0;
-                return new Chain(kerb, edge[0].P + across * w, w, side.KerbCm / 100f, dir * -1, side, seg.Attributes.Has(RoadAttrFlags.LoweredKerbs));
+                return new Chain(kerb, edge[0].P + across * w, w, side.KerbCm / 100f, dir * -1, side, seg.Attributes.Has(RoadAttrFlags.LoweredKerbs), edge);
             }
             if (!IsStreet(seg)) return null;
             kerb.AddRange(kerb.Count == 0 ? edge : edge.Skip(1));
@@ -269,9 +272,15 @@ public static class CornerPlanner
         var whole = new List<(Vec2 P, float Y)>(poly);
         int wholeKerb = poly.Count;   // its kerb line first
         if (b.Width > 0) whole.Add((b.Out, b.Kerb[^1].Y));
+        int wholeCorner = -1;
         if (Meet(b.Out, b.Inward, a.Out, a.Inward) is { } wc && wc.DistanceTo(a.Out) < 8 && wc.DistanceTo(b.Out) < 8)
+        {
+            wholeCorner = whole.Count;
             whole.Add((wc, (a.Kerb[^1].Y + b.Kerb[^1].Y) * 0.5f));
+        }
         if (a.Width > 0 && whole[^1].P.DistanceTo(a.Out) > 0.1) whole.Add((a.Out, a.Kerb[^1].Y));
+        // the outside corner rounded (the user's rule, #711): the corner itself, no patch over it (a patch stood at its own heights)
+        if (wholeCorner >= 0) whole = RoundCorner(whole, wholeCorner);
         var (chainA, chainB) = (a, b);
         // (#711) beside a side carried on to the kerb the corner is laid in its sides' bands, round the carried ones and off any
         // road or footpath (the path runs on round the corner); else as before, from where the carried side meets the kerb
@@ -309,8 +318,10 @@ public static class CornerPlanner
         // (#711: an end narrowed to nothing has its outer point on the kerb already)
         var withCorner = new List<(Vec2 P, float Y)>(poly);
         if (b.Width > 0) withCorner.Add((b.Out, yb));
+        int cornerAt = withCorner.Count;
         if (squared) withCorner.Add((corner!.Value, (ya + yb) * 0.5f));
         if (a.Width > 0) withCorner.Add((a.Out, ya));
+        if (squared) withCorner = RoundCorner(withCorner, cornerAt);   // the outside corner rounded (#711)
         var chord = new List<(Vec2 P, float Y)>(poly);
         if (b.Width > 0) chord.Add((b.Out, yb));
         if (a.Width > 0) chord.Add((a.Out, ya));
@@ -410,17 +421,46 @@ public static class CornerPlanner
             var inB = chainB.Inward / Math.Max(chainB.Inward.Length, 1e-9);
             // (#711, the user's review: a corner on a slope was flat between its outline's points) the road edge's height at the
             // nearest kerb point is the ground a point's profile stands on, as a street's side stands on its edge across
-            (double D, double F, float Y) Field(Vec2 p)
+            // the kerb line in two halves, A's and B's (split half way along it): each a point's distance, height and foot
+            double kerbLength = 0;
+            for (int j = 0; j + 1 < kerbLine.Count; j++) kerbLength += kerbLine[j].P.DistanceTo(kerbLine[j + 1].P);
+            (double D, float Y, Vec2 Foot) Nearest(Vec2 p, bool firstHalf)
             {
-                double best = double.MaxValue;
+                double best = double.MaxValue, run = 0;
                 float y = kerbLine[0].Y;
+                Vec2 foot = kerbLine[0].P;
                 for (int j = 0; j + 1 < kerbLine.Count; j++)
                 {
                     Vec2 a = kerbLine[j].P, ab = kerbLine[j + 1].P - a;
-                    double len2 = ab.Dot(ab), t = len2 < 1e-12 ? 0 : Math.Clamp((p - a).Dot(ab) / len2, 0, 1);
+                    double len = ab.Length, len2 = len * len;
+                    // the part of this piece in the half asked for
+                    double t0 = Math.Clamp((kerbLength / 2 - run) / Math.Max(len, 1e-9), 0, 1);
+                    double lo = firstHalf ? 0 : t0, hi = firstHalf ? t0 : 1;
+                    run += len;
+                    if (hi - lo < 1e-9) continue;
+                    double t = len2 < 1e-12 ? lo : Math.Clamp((p - a).Dot(ab) / len2, lo, hi);
                     double d = p.DistanceTo(a + ab * t);
-                    if (d < best) { best = d; y = kerbLine[j].Y + (kerbLine[j + 1].Y - kerbLine[j].Y) * (float)t; }
+                    if (d < best) { best = d; y = kerbLine[j].Y + (kerbLine[j + 1].Y - kerbLine[j].Y) * (float)t; foot = a + ab * t; }
                 }
+                return (best, y, foot);
+            }
+            // (#711, the user's review) the distance is the smaller of the two halves', blended where they are alike: the bands
+            // round the corner's inside a little (a sharp corner where the kerb turns tighter than they are wide) wherever the
+            // two feet lie apart; the height blends over a wider stretch, so no step where the nearer half changes on a slope
+            (double D, double F, float Y) Field(Vec2 p)
+            {
+                var (dA1, yA, fA) = Nearest(p, true);
+                var (dB1, yB, fB) = Nearest(p, false);
+                double k = InnerRound * Math.Clamp(fA.DistanceTo(fB) / InnerRound, 0, 1);
+                double best;
+                if (k < 1e-6) best = Math.Min(dA1, dB1);
+                else
+                {
+                    double hd = Math.Clamp(0.5 + 0.5 * (dB1 - dA1) / k, 0, 1);
+                    best = dB1 + (dA1 - dB1) * hd - k * hd * (1 - hd);
+                }
+                double hy = Math.Clamp(0.5 + 0.5 * (dB1 - dA1) / HeightBlend, 0, 1);
+                float y = yB + (yA - yB) * (float)hy;
                 double dA = Math.Max(0, (p - kerbLine[0].P).Dot(inA)), dB = Math.Max(0, (p - kerbLine[^1].P).Dot(inB));
                 // near a side's end the distance is the street's own: straight across it from its kerb line, so the bands meet
                 // the street's at the joint, easing into the distance from the curved kerb over JointEase
@@ -929,14 +969,35 @@ public static class CornerPlanner
         double angle = Math.Acos(Math.Clamp(da.Dot(db), -1, 1));
         if (angle < 20 * Math.PI / 180 || angle > 160 * Math.PI / 180) { why = $"angle {angle * 180 / Math.PI:F0}"; return null; }
         double t = Math.Min(OuterRound / Math.Tan(angle / 2), 3.0);
-        float y = (a.Kerb[^1].Y + b.Kerb[^1].Y) * 0.5f;
-        var poly = new List<(Vec2 P, float Y)> { (x, y) };
+        // (#711, the user's review: on a slope the flat patch stood up to 9 cm off the sidewalks) each point at the kerb's height
+        // nearest it, as a street's side stands on its edge straight across
+        // (the kerbs on to the sides' own edges past where they start: the patch reaches along the streets)
+        // by the nearer outer edge (a kerb line's distance less its side's width): the patch meets the sidewalks' outer edges
+        var lines = new List<(List<(Vec2 P, float Y)> Line, double Width)> { (a.Kerb, a.Width), (b.Kerb, b.Width) };
+        if (a.SideEdge is { Count: >= 2 }) lines.Add((a.SideEdge, a.Width));
+        if (b.SideEdge is { Count: >= 2 }) lines.Add((b.SideEdge, b.Width));
+        float Y(Vec2 p)
+        {
+            double best = double.MaxValue;
+            float y0 = a.Kerb[^1].Y;
+            foreach (var (line, width) in lines)
+                for (int k = 0; k + 1 < line.Count; k++)
+                {
+                    Vec2 s0 = line[k].P, ab = line[k + 1].P - s0;
+                    double len2 = ab.Dot(ab), t = len2 < 1e-12 ? 0 : Math.Clamp((p - s0).Dot(ab) / len2, 0, 1);
+                    double d = Math.Abs(p.DistanceTo(s0 + ab * t) - width);
+                    if (d < best) { best = d; y0 = line[k].Y + (line[k + 1].Y - line[k].Y) * (float)t; }
+                }
+            return y0;
+        }
+        var poly = new List<(Vec2 P, float Y)> { (x, Y(x)) };
         Vec2 t1 = x + da * t, t2 = x + db * t;
         const int Steps = 8;
         for (int k = 0; k <= Steps; k++)
         {
             double s = (double)k / Steps, ms = 1 - s;
-            poly.Add((t1 * (ms * ms) + x * (2 * ms * s) + t2 * (s * s), y));   // the curve, the corner its control
+            var q = t1 * (ms * ms) + x * (2 * ms * s) + t2 * (s * s);   // the curve, the corner its control
+            poly.Add((q, Y(q)));
         }
         poly = Dedupe(poly);
         if (poly.Count < 4 || (why = Check(id, segments, poly, 0, cap, facades, minArea: 0.05)) != null) { why ??= "shape"; return null; }
@@ -966,6 +1027,42 @@ public static class CornerPlanner
 
     /// <summary>Over this far (m) into a corner from a side's end its bands ease from the street's straight profile into the curve (#711).</summary>
     private const double JointEase = 1.5;
+
+    /// <summary>
+    /// A polygon with its vertex <paramref name="i"/> rounded (#711): a curve tangent to its two edges, <see cref="OuterRound"/>
+    /// in radius, its tangent points at most 45 % along each edge; unchanged where an edge is too short or the corner nearly
+    /// straight. Heights interpolate along the edges.
+    /// </summary>
+    private static List<(Vec2 P, float Y)> RoundCorner(List<(Vec2 P, float Y)> poly, int i)
+    {
+        int n = poly.Count;
+        if (n < 3) return poly;
+        var (p, y) = poly[i];
+        var (prev, yp) = poly[(i + n - 1) % n];
+        var (next, yn) = poly[(i + 1) % n];
+        double lp = prev.DistanceTo(p), ln = next.DistanceTo(p);
+        if (lp < 0.2 || ln < 0.2) return poly;
+        Vec2 u1 = (prev - p) / lp, u2 = (next - p) / ln;
+        double angle = Math.Acos(Math.Clamp(u1.Dot(u2), -1, 1));
+        if (angle > 170 * Math.PI / 180 || angle < 10 * Math.PI / 180) return poly;
+        double t = Math.Min(OuterRound / Math.Tan(angle / 2), Math.Min(lp, ln) * 0.45);
+        Vec2 t1 = p + u1 * t, t2 = p + u2 * t;
+        float y1 = y + (yp - y) * (float)(t / lp), y2 = y + (yn - y) * (float)(t / ln);
+        var arc = new List<(Vec2 P, float Y)>();
+        const int Steps = 6;
+        for (int k = 0; k <= Steps; k++)
+        {
+            double s = (double)k / Steps, ms = 1 - s;
+            arc.Add((t1 * (ms * ms) + p * (2 * ms * s) + t2 * (s * s), (float)(y1 * ms * ms + y * 2 * ms * s + y2 * s * s)));
+        }
+        return [.. poly.Take(i), .. arc, .. poly.Skip(i + 1)];
+    }
+
+    /// <summary>The bands round the inside of a corner's turn with about this (m): where the kerb turns tighter than they are wide (#711).</summary>
+    private const double InnerRound = 1.0;
+
+    /// <summary>A corner's height blends between its two kerb halves over this (m) of distance difference: no step on a slope (#711).</summary>
+    private const double HeightBlend = 2.0;
 
     /// <summary>A corner laid in bands is cut into triangles no longer than this (m) on a side, so its band edges follow the kerb (#711).</summary>
     private const double CornerCell = 0.35;

@@ -126,6 +126,12 @@ else if (args.Contains("--plan-check"))
 {
     return UnitSport.Tools.RoadGen.Network.CrossSectionPlanner.SelfCheck(Console.WriteLine) ? 0 : 2;
 }
+else if (ArgValue("--seam-check") is { } seamAt)
+{
+    var sp = seamAt.Split(',');
+    return KerbCheck.Seams(ArgValue("--chunks") ?? "terrain_chunks", double.Parse(sp[0], System.Globalization.CultureInfo.InvariantCulture),
+        double.Parse(sp[1], System.Globalization.CultureInfo.InvariantCulture), double.Parse(ArgValue("--size") ?? "20", System.Globalization.CultureInfo.InvariantCulture), Console.WriteLine);
+}
 else if (args.Contains("--kerb-check"))
 {
     return KerbCheck.Run(ArgValue("--chunks") ?? "terrain_chunks", ArgValue("--at"), args.Contains("--list"), Console.WriteLine);

@@ -209,6 +209,16 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   - Left (33 on the Sion tiles): zebras beside tight corners at two-node junctions where a corner's outer edge, not its
     kerb, faces the crosswalk; height mismatches between different streets' pieces at a junction (10-60 cm, terrain);
     a few band/side seams of 4-13 cm. Tier 0 `Every_crossing_meets_only_sloped_kerbs` (the test region: 0 of 25; 6 before).
+- **Seams and the inner turn** (the user's review of the SW corner close-up): `RoadGen --seam-check E,N [--size M] --chunks
+  DIR` samples a grid every 2 cm and lists every step of 1 cm or more where two different raised surfaces meet (a street
+  side, an area prop; `SEAMDBG=1` names the prop and segment). Fixes: the corner fill's field takes each kerb half's
+  distance and blends them (`Field`, `InnerRound` 1 m: the bands round the inside of a tight turn instead of a right
+  angle; the height blends over `HeightBlend` 2 m: on a slope the nearer half switching left a 5 cm step); the outside
+  corner is rounded on the corner piece itself (`RoundCorner` on the fill's and the squared piece's outline), the
+  patch (`Fillet`) only where no piece reaches the block's corner (it stood at its own flat height over the fill, up to
+  9 cm off). SW corner of LV95 2506168,1137801: 12 seams -> 0. **Left**: other junctions still show seams where two
+  streets of different heights meet at a corner (e.g. 62 cm between the two streets at 2507355,1138482: the corner's
+  other pieces and the street sides beside it disagree by 10-40 cm). The kerb check got a 4 m cell index (2 min -> 2 s).
 - **The stop line and the centre line of an approach with more lanes in than out** (the user's review, Sion 2506148,1137808):
   lanes in place, the approach's centre line lies past the axis. The lights' stop line now starts there (`OwnLanes`), not at
   the axis (it left the left-turn lane without one), and `SolidToStop(centreAt:)` finds that centre line (it searched the
