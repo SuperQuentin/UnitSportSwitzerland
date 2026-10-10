@@ -11,11 +11,11 @@ a fixed point. The redesign is built **on that stack**: nothing reaches `main` u
 | Milestone | State | Issue / PR |
 |---|---|---|
 | 0 Replay buffer, clips, audio, camera keys, cut list (the first design) | built, draft | #642, #663, #670, #676 |
-| R1 Full recording (Record/Stop to disk, every world system) | planned | — |
-| R2 Shot model (rigs, moves, shake, beat links) and sequences | planned | — |
-| R3 Shots screen | planned | — |
-| R4 Sequences screen, transitions, auto-director | planned | — |
-| R5 Editor interaction pass (modes, icon + word buttons, sizes) | planned | — |
+| R1 Full recording (Record/Stop to disk, every world system) | planned | #775 |
+| R2 Shot model (rigs, moves, shake, beat links) and sequences | planned | #776 |
+| R3 Shots screen | planned | #777 |
+| R4 Sequences screen, transitions, auto-director | planned | #778 |
+| R5 Editor interaction pass (modes, icon + word buttons, sizes) | planned | #779 |
 | 6 Video export of a sequence | planned | — |
 | 7 VR performance + VR handheld camera | planned | — |
 | 8 Webcam/phone body tracking (VMC) | planned | — |
