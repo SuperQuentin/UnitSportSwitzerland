@@ -53,6 +53,11 @@ public partial class MovieStudio : Screen
     private const double HoldToCut = 0.4;
     private PopupMenu? _keyMenu;
     private ScrollContainer _timelineBox = null!;
+    // folded: only the transport row shows, the scene gets the screen back
+    private Control _editsRow = null!;
+    private Button _fold = null!;
+    /// <summary>Control height in the panel: smaller than the menus' 38 px, so the scene keeps the screen.</summary>
+    private const int ToolH = 28;
     private Button _fly = null!;
 
     private static readonly StringName Forward = PlayerInput.TriggerRight, Backward = PlayerInput.TriggerLeft;
@@ -129,12 +134,12 @@ public partial class MovieStudio : Screen
         AddChild(filePanel);
 
         var panel = new PanelContainer();
-        panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.86f, 14, 14));
+        panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.86f, 10, 8));
         panel.SetAnchorsPreset(LayoutPreset.BottomWide);
         panel.GrowVertical = GrowDirection.Begin;
-        panel.OffsetLeft = 16; panel.OffsetRight = -16; panel.OffsetBottom = -16;
+        panel.OffsetLeft = 10; panel.OffsetRight = -10; panel.OffsetBottom = -10;
         AddChild(panel);
-        var column = UiKit.VBox(8);
+        var column = UiKit.VBox(4);
         panel.AddChild(column);
 
         // rows that wrap rather than run off a narrow (or big-UI) screen
@@ -158,9 +163,12 @@ public partial class MovieStudio : Screen
         Tool(transport, "−", "Zoom out (− , the wheel on the timeline)", () => _timeline.ZoomBy(0.66f));
         Tool(transport, "Fit", "The whole movie in view", () => _timeline.Fit());
         Tool(transport, "+", "Zoom in (= , the wheel on the timeline)", () => _timeline.ZoomBy(1.5f));
+        transport.AddChild(UiKit.Spacer(w: 10));
+        _fold = Tool(transport, "Hide panel", "Fold the edits and the timeline away to see the scene (H); the same button brings them back", ToggleFold);
 
         var edits = Row();
         column.AddChild(edits);
+        _editsRow = edits;
         Tool(edits, "Split", "Cut the selected clip at the playhead, or every lane if it is not under it (S)", Split);
         Tool(edits, "Cut all", "Cut every clip under the playhead (Shift+S); Ctrl+click a clip cuts it there", CutAll);
         Tool(edits, "Duplicate", "A copy after it (Ctrl+D)", Duplicate);
@@ -209,13 +217,15 @@ public partial class MovieStudio : Screen
         _timeline.CameraMenuRequested += OpenCameraMenu;
         _timeline.PickedCameraChanged += RefreshCameras;
         _timeline.ViewChanged += SyncScroll;
-        var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(0, 170), HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
+        var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(0, MinTimeline), HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
         scroll.AddChild(_timeline);
         column.AddChild(scroll);
         _timelineBox = scroll;
         _scroll = new HScrollBar { Step = 0, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _scroll.ValueChanged += v => { if (!_syncingScroll) _timeline.Left = v; };
         column.AddChild(_scroll);
+        foreach (var row in new Control[] { transport, edits })
+            foreach (var c in row.GetChildren().OfType<BaseButton>()) Small(c);
         ShowKeyOptions();
 
         PlayerInput.DeviceChanged += ShowHints;
@@ -298,10 +308,10 @@ public partial class MovieStudio : Screen
         float shuttle = Input.GetActionStrength(Forward) - Input.GetActionStrength(Backward);
         if (_lookThrough.ButtonPressed) ShowThroughCamera();
         _gizmos.Hidden = _lookThrough.ButtonPressed;
-        // the timeline as tall as its rows, up to a third of the screen; past that it scrolls
-        float rows = Math.Min(_timeline.CustomMinimumSize.Y, GetViewportRect().Size.Y / 3f);
-        if (!Mathf.IsEqualApprox(_timelineBox.CustomMinimumSize.Y, Math.Max(170, rows)))
-            _timelineBox.CustomMinimumSize = new Vector2(0, Math.Max(170, rows));
+        // the timeline as tall as its rows, up to a quarter of the screen; past that it scrolls
+        float rows = Math.Min(_timeline.CustomMinimumSize.Y, GetViewportRect().Size.Y / 4f);
+        if (!Mathf.IsEqualApprox(_timelineBox.CustomMinimumSize.Y, Math.Max(MinTimeline, rows)))
+            _timelineBox.CustomMinimumSize = new Vector2(0, Math.Max(MinTimeline, rows));
         if (_camPicker.ItemCount != MovieSession.Project.Cameras.Count) RefreshCameras();
         // a pad's X held: cut to the picked camera (a tap splits, on release); a hold is real time, whatever the game does
         if (_xHeldSince >= 0 && !_xFired && RealClock.Now - _xHeldSince >= HoldToCut)
@@ -417,6 +427,7 @@ public partial class MovieStudio : Screen
                 case Key.C when !k.CtrlPressed: CutToPicked(); break;
                 case Key.D when k.CtrlPressed: Duplicate(); break;
                 case Key.Tab: NextActor(); break;
+                case Key.H: ToggleFold(); break;
                 case Key.F: _camera.SetFlying(true); break;
                 // flying: W A S D Q E belong to the view, not to the shortcuts above (S, D)
                 case Key.W or Key.A or Key.D or Key.Q or Key.E when _camera.Steering: break;
@@ -468,12 +479,39 @@ public partial class MovieStudio : Screen
 
     // ---- actions ---------------------------------------------------------------------------------
 
+    /// <summary>A control at the panel's smaller size: a smaller font, less padding. In the tree, so its theme is found.</summary>
+    private static void Small(Control c)
+    {
+        c.CustomMinimumSize = new Vector2(c.CustomMinimumSize.X, ToolH);
+        c.AddThemeFontSizeOverride("font_size", UiTheme.FontSmall);
+        foreach (var name in SmallStyles)
+        {
+            if (c.GetThemeStylebox(name)?.Duplicate() is not StyleBox box) continue;
+            box.ContentMarginTop = box.ContentMarginBottom = 2;
+            box.ContentMarginLeft = Math.Min(box.ContentMarginLeft, 10);
+            box.ContentMarginRight = Math.Min(box.ContentMarginRight, 10);
+            c.AddThemeStyleboxOverride(name, box);
+        }
+    }
+
+    private static readonly string[] SmallStyles = { "normal", "hover", "pressed", "hover_pressed", "focus", "disabled" };
+
     private static HFlowContainer Row()
     {
         var row = new HFlowContainer();
-        row.AddThemeConstantOverride("h_separation", 6);
-        row.AddThemeConstantOverride("v_separation", 6);
+        row.AddThemeConstantOverride("h_separation", 4);
+        row.AddThemeConstantOverride("v_separation", 4);
         return row;
+    }
+
+    private const float MinTimeline = 110;
+
+    /// <summary>The edits and the timeline folded away (or back): the transport stays, the scene gets the screen.</summary>
+    private void ToggleFold()
+    {
+        bool show = !_editsRow.Visible;
+        _editsRow.Visible = _timelineBox.Visible = _scroll.Visible = show;
+        _fold.Text = show ? "Hide panel" : "Show panel";
     }
 
     private static Button Tool(Container into, string text, string tip, Action pressed)

@@ -20,7 +20,7 @@ namespace UnitSport.Movie;
 /// </summary>
 public partial class TimelineView : Control
 {
-    private const float Ruler = 24, LaneH = 34, Labels = 120, Edge = 7, SnapPx = 8, HitPx = 6, KeyPx = 8;
+    private const float Ruler = 20, LaneH = 26, Labels = 120, Edge = 7, SnapPx = 8, HitPx = 6, KeyPx = 8;
     public const float MinZoom = 0.5f, MaxZoom = 2000f;
 
     private static readonly Color ActorClip = new(0.35f, 0.47f, 0.62f, 0.85f);
