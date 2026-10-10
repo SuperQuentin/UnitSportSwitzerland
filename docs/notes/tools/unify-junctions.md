@@ -184,6 +184,11 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   they fold where the kerb turns tighter than the corner is wide. A turning path keeps its straight strip to the kerb only
   across a verge (else it stuck out of the corner as a nose). The thin dark lines across the joints in game shots are the
   signal poles' shadows, not seams (measured: every joint vertex at its street's height).
+  **Heights on a slope** (the user's review): the corner's ground was the plane through its outline's few triangles, so on
+  a sloped kerb it missed the kerb's heights inside the corner (measured on the Sion tiles before the fix: up to 25 cm at
+  LV95 2507355,1138482, 5 cm at 2506168,1137801, 46 cm on the steepest corner). Now every point stands on the road edge's
+  height at its nearest kerb point (`Field` returns it; within `JointEase` of an end, the street's own end height), as a
+  street's side stands on its edge straight across.
 - **The stop line and the centre line of an approach with more lanes in than out** (the user's review, Sion 2506148,1137808):
   lanes in place, the approach's centre line lies past the axis. The lights' stop line now starts there (`OwnLanes`), not at
   the axis (it left the left-turn lane without one), and `SolidToStop(centreAt:)` finds that centre line (it searched the

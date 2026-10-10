@@ -404,14 +404,18 @@ public static class CornerPlanner
             // blend by the nearest kerb point drifted from the street's heights toward the corner's outside)
             var inA = chainA.Inward / Math.Max(chainA.Inward.Length, 1e-9);
             var inB = chainB.Inward / Math.Max(chainB.Inward.Length, 1e-9);
-            (double D, double F) Field(Vec2 p)
+            // (#711, the user's review: a corner on a slope was flat between its outline's points) the road edge's height at the
+            // nearest kerb point is the ground a point's profile stands on, as a street's side stands on its edge across
+            (double D, double F, float Y) Field(Vec2 p)
             {
                 double best = double.MaxValue;
+                float y = kerbLine[0].Y;
                 for (int j = 0; j + 1 < kerbLine.Count; j++)
                 {
                     Vec2 a = kerbLine[j].P, ab = kerbLine[j + 1].P - a;
                     double len2 = ab.Dot(ab), t = len2 < 1e-12 ? 0 : Math.Clamp((p - a).Dot(ab) / len2, 0, 1);
-                    best = Math.Min(best, p.DistanceTo(a + ab * t));
+                    double d = p.DistanceTo(a + ab * t);
+                    if (d < best) { best = d; y = kerbLine[j].Y + (kerbLine[j + 1].Y - kerbLine[j].Y) * (float)t; }
                 }
                 double dA = Math.Max(0, (p - kerbLine[0].P).Dot(inA)), dB = Math.Max(0, (p - kerbLine[^1].P).Dot(inB));
                 // near a side's end the distance is the street's own: straight across it from its kerb line, so the bands meet
@@ -420,7 +424,10 @@ public static class CornerPlanner
                 double across = best;
                 if (wA > 0) across += (Math.Abs((p - kerbLine[0].P).Cross(inA)) - across) * wA;
                 if (wB > 0) across += (Math.Abs((p - kerbLine[^1].P).Cross(inB)) - across) * wB;
-                return (across, dA + dB < 1e-9 ? 0.5 : dA / (dA + dB));
+                // and at a side's end its street's own height, straight across
+                y += (kerbLine[0].Y - y) * (float)wA;
+                y += (kerbLine[^1].Y - y) * (float)wB;
+                return (across, dA + dB < 1e-9 ? 0.5 : dA / (dA + dB), y);
             }
             int count = slotsA.Count;
             double Width(int s, double f) => slotsA[s].W + (slotsB[s].W - slotsA[s].W) * f;
@@ -451,13 +458,14 @@ public static class CornerPlanner
                 if (lmax <= CornerCell || depth > 12) { tris.Add(t); return; }
                 var (a, b, c) = (t[longest], t[(longest + 1) % 3], t[(longest + 2) % 3]);
                 var m = Mid(a, b, 0.5);
-                m = (m.P, m.Y, Field(m.P).D, Field(m.P).F);
+                var fm = Field(m.P);
+                m = (m.P, fm.Y, fm.D, fm.F);
                 Refine([a, m, c], depth + 1);
                 Refine([m, b, c], depth + 1);
             }
             foreach (var pc in laid)
             {
-                var pts = pc.Select(q => { var (d, f) = Field(q.P); return (q.P, q.Y, d, f); }).ToList();
+                var pts = pc.Select(q => { var (d, f, y) = Field(q.P); return (q.P, y, d, f); }).ToList();
                 for (int t = 1; t + 1 < pts.Count; t++) Refine([pts[0], pts[t], pts[t + 1]], 0);
             }
             // each triangle cut to each band: where the distance lies between the band's start and end (both moving with f)
