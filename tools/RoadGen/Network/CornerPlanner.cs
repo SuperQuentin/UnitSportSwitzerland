@@ -364,78 +364,128 @@ public static class CornerPlanner
             if (laid.Count == 0) return null;
             // in its sides' bands round the kerb (the user: the path runs on round the corner to the crossing): each inner band at its
             // offsets from the corner's kerb line, the outer one (the sidewalk) the rest; the side with a path gives the profile
-            var chain = chainA.Side.HasTrack || !chainB.Side.HasTrack ? chainA : chainB;
-            // only where both sides have a path does one turn the corner; else the corner is sidewalk (the sidewalk side's profile)
-            if (chainA.Side.HasTrack != chainB.Side.HasTrack) chain = chainA.Side.HasTrack ? chainB : chainA;
-            var profile = RoadStreetSection.For(chain.Side);
-            // the bands without their sloped kerb strips (inside the corner they edge nothing: the next band takes them)
-            var cut = new List<(double To, StreetSurface Surface, float Height)>();
-            if (profile is null) cut.Add((chain.Width, StreetSurface.Sidewalk, chain.Kerb_));
-            else
-                for (int b = 0; b + 1 < profile.Count; b++)
-                    if (profile.Surface[b] != StreetSurface.Kerb) cut.Add((profile.D[b + 1], profile.Surface[b], profile.H[b + 1]));
-            if (Traced(id, chainA.Out)) Console.WriteLine($"[corner]   wedge bands: {string.Join(" ", cut.Select(c => $"{c.Surface} to {c.To:F1} at {c.Height:F2}"))}");
+            // the corner continues both sides' profiles round the curve, blended from A's at its end to B's at its end (the user's
+            // playtest: one continuous surface, the only steps the kerb to the road; the path rises smoothly from one side's level
+            // to the other's). Where only one side has a path, the corner is the other side's sidewalk at both ends
+            var sideA = chainA.Side;
+            var sideB = chainB.Side;
+            if (sideA.HasTrack != sideB.HasTrack) sideA = sideB = sideA.HasTrack ? sideB : sideA;
+            var slotsA = Slots(RoadStreetSection.For(sideA), chainA);
+            var slotsB = Slots(RoadStreetSection.For(sideB), chainB);
+            if (Traced(id, chainA.Out)) Console.WriteLine($"[corner]   wedge bands: A {string.Join(" ", slotsA.Select(s => $"{s.W:F2}@{s.H0:F2}-{s.H1:F2}"))}; B {string.Join(" ", slotsB.Select(s => $"{s.W:F2}@{s.H0:F2}-{s.H1:F2}"))}");
             var kerbLine = whole.Take(wholeKerb).ToList();
-            var bands = new Dictionary<(AreaPropType Type, float Height, bool Kerb), (List<float> V, List<ushort> I)>();
-            void Lay(StreetSurface surface, float height, List<(Vec2 P, float Y)> part)
+            // one welded mesh per band (type, base height): vertices at one point are one vertex, so an edge two pieces share has
+            // no skirt; only the band's outline gets one. A band whose height varies carries the difference in its vertices
+            var bands = new Dictionary<(AreaPropType Type, float Height, bool Kerb), (List<float> V, List<ushort> I, Dictionary<(long, long, long), ushort> At)>();
+            void Lay(AreaPropType type, float height, List<(Vec2 P, float Y)> part)
             {
-                var type = surface switch
+                bool kerb = type == AreaPropType.Kerb;
+                if (!bands.TryGetValue((type, height, kerb), out var mesh)) bands[(type, height, kerb)] = mesh = ([], [], new());
+                if (mesh.V.Count / 3 + part.Count > ushort.MaxValue) return;
+                ushort Index((Vec2 P, float Y) q)
                 {
-                    StreetSurface.Track => AreaPropType.BikePath,
-                    StreetSurface.Verge or StreetSurface.Buffer => AreaPropType.Grass,
-                    _ => AreaPropType.Sidewalk,
-                };
-                if (!bands.TryGetValue((type, height, false), out var mesh)) bands[(type, height, false)] = mesh = ([], []);
-                int v0 = mesh.V.Count / 3;
-                foreach (var (q, y) in part) mesh.V.AddRange([(float)q.X, y, (float)-q.Y]);
-                for (int t = 1; t + 1 < part.Count; t++) mesh.I.AddRange([(ushort)v0, (ushort)(v0 + t), (ushort)(v0 + t + 1)]);   // convex: a fan
+                    var key = ((long)Math.Round(q.P.X * 1000), (long)Math.Round(q.P.Y * 1000), (long)Math.Round(q.Y * 1000));
+                    if (mesh.At.TryGetValue(key, out var i)) return i;
+                    i = (ushort)(mesh.V.Count / 3);
+                    mesh.V.AddRange([(float)q.P.X, q.Y, (float)-q.P.Y]);
+                    mesh.At[key] = i;
+                    return i;
+                }
+                var idx = part.Select(Index).ToList();
+                for (int t = 1; t + 1 < idx.Count; t++)
+                    if (idx[0] != idx[t] && idx[t] != idx[t + 1] && idx[0] != idx[t + 1]) mesh.I.AddRange([idx[0], idx[t], idx[t + 1]]);   // convex: a fan
             }
-            var inner = new List<(Vec2 A, Vec2 B, Vec2 C)>();
-            if (kerbLine.Count >= 2 && cut.Count > 1)
+            // the bands by distance from the kerb line (offset lines fold over where the kerb turns tighter than the corner is wide):
+            // the corner cut into small triangles, each split where its distance crosses a band's edge, every point's height the
+            // blended profile's at its distance, so the surface is continuous and only a real kerb (a jump in height) shows a face
+            if (kerbLine.Count < 2) return null;
+            // how far into the corner a point lies from each side's end (the line across that street where its side ends): the
+            // blend runs from one end to the other, so a whole end line has its street's profile exactly (the user's playtest: a
+            // blend by the nearest kerb point drifted from the street's heights toward the corner's outside)
+            var inA = chainA.Inward / Math.Max(chainA.Inward.Length, 1e-9);
+            var inB = chainB.Inward / Math.Max(chainB.Inward.Length, 1e-9);
+            (double D, double F) Field(Vec2 p)
             {
-                // out from the kerb line: the side the corner lies on, toward where A's sidewalk starts
-                var t0 = (kerbLine[1].P - kerbLine[0].P).Normalized();
-                double side = (chainA.Out - kerbLine[0].P).Dot(new Vec2(-t0.Y, t0.X)) >= 0 ? 1 : -1;
-                List<(Vec2 P, float Y)> Offset(double d)
+                double best = double.MaxValue;
+                for (int j = 0; j + 1 < kerbLine.Count; j++)
                 {
-                    var line = new List<(Vec2 P, float Y)>(kerbLine.Count);
-                    for (int j = 0; j < kerbLine.Count; j++)
-                    {
-                        Vec2 Normal(int s) { var t = (kerbLine[s + 1].P - kerbLine[s].P).Normalized(); return new Vec2(-t.Y, t.X) * side; }
-                        var np = j > 0 ? Normal(j - 1) : Normal(0);
-                        var nn = j + 1 < kerbLine.Count ? Normal(j) : Normal(j - 1);
-                        var m = (np + nn).Length < 1e-6 ? nn : (np + nn).Normalized();
-                        line.Add((kerbLine[j].P + m * (d / Math.Max(0.5, m.Dot(nn))), kerbLine[j].Y));
-                    }
-                    return line;
+                    Vec2 a = kerbLine[j].P, ab = kerbLine[j + 1].P - a;
+                    double len2 = ab.Dot(ab), t = len2 < 1e-12 ? 0 : Math.Clamp((p - a).Dot(ab) / len2, 0, 1);
+                    best = Math.Min(best, p.DistanceTo(a + ab * t));
                 }
-                for (int b = 0; b + 1 < cut.Count; b++)
-                {
-                    var (to, surface, height) = cut[b];
-                    var lo = Offset(b == 0 ? 0 : cut[b - 1].To);
-                    var hi = Offset(to);
-                    for (int j = 0; j + 1 < kerbLine.Count; j++)
-                        foreach (var tri in new[] { (lo[j], lo[j + 1], hi[j + 1]), (lo[j], hi[j + 1], hi[j]) })
-                        {
-                            inner.Add((tri.Item1.P, tri.Item2.P, tri.Item3.P));
-                            // within the corner: the triangle cut to each of the corner's own triangles
-                            var triPoly = new List<(Vec2 P, float Y)> { tri.Item1, tri.Item2, tri.Item3 };
-                            var parts = wholePieces.Select(wt => Into(triPoly, wt)).Where(pc => pc.Count >= 3).ToList();
-                            foreach (var cutTri in (_bandTris ?? []).Concat(RoadTriangles(segments, whole)))
-                                parts = [.. parts.SelectMany(pc => Subtract(pc, cutTri)).Select(Dedupe)
-                                    .Where(pc => pc.Count >= 3 && Math.Abs(SignedArea(pc.Select(p => p.P).ToList())) >= 0.002)];
-                            foreach (var part in parts)
-                                if (Check(id, segments, part, 0, cap, facades, minArea: 0.002, footpaths: false) == null) Lay(surface, height, part);
-                        }
-                }
+                double dA = Math.Max(0, (p - kerbLine[0].P).Dot(inA)), dB = Math.Max(0, (p - kerbLine[^1].P).Dot(inB));
+                // near a side's end the distance is the street's own: straight across it from its kerb line, so the bands meet
+                // the street's at the joint, easing into the distance from the curved kerb over JointEase
+                double wA = Math.Clamp(1 - dA / JointEase, 0, 1), wB = Math.Clamp(1 - dB / JointEase, 0, 1);
+                double across = best;
+                if (wA > 0) across += (Math.Abs((p - kerbLine[0].P).Cross(inA)) - across) * wA;
+                if (wB > 0) across += (Math.Abs((p - kerbLine[^1].P).Cross(inB)) - across) * wB;
+                return (across, dA + dB < 1e-9 ? 0.5 : dA / (dA + dB));
             }
-            // the outer band: what is left of the corner past the inner ones
-            var (_, outerSurface, outerHeight) = cut[^1];
-            var outer = laid;
-            foreach (var tri in inner)
-                outer = [.. outer.SelectMany(pc => Subtract(pc, tri)).Select(Dedupe)
-                    .Where(pc => pc.Count >= 3 && Math.Abs(SignedArea(pc.Select(p => p.P).ToList())) >= 0.002)];
-            foreach (var part in outer) Lay(outerSurface, outerHeight, part);
+            int count = slotsA.Count;
+            double Width(int s, double f) => slotsA[s].W + (slotsB[s].W - slotsA[s].W) * f;
+            double Start(int s, double f) { double c = 0; for (int k = 0; k < s; k++) c += Width(k, f); return c; }
+            float HeightAt(int s, double d, double f)
+            {
+                float h0 = (float)(slotsA[s].H0 + (slotsB[s].H0 - slotsA[s].H0) * f), h1 = (float)(slotsA[s].H1 + (slotsB[s].H1 - slotsA[s].H1) * f);
+                double w = Width(s, f);
+                return s == count - 1 || w < 1e-6 ? h1 : h0 + (h1 - h0) * (float)Math.Clamp((d - Start(s, f)) / w, 0, 1);
+            }
+            // a point of the corner: where it is, the ground under it, and its place in the field
+            static (Vec2 P, float Y, double D, double F) Mid((Vec2 P, float Y, double D, double F) a, (Vec2 P, float Y, double D, double F) b, double t)
+            {
+                // the same point from either side of a shared edge: interpolate from the lower endpoint
+                if (a.P.X > b.P.X || a.P.X == b.P.X && a.P.Y > b.P.Y) { (a, b) = (b, a); t = 1 - t; }
+                return (a.P + (b.P - a.P) * t, a.Y + (b.Y - a.Y) * (float)t, a.D + (b.D - a.D) * t, a.F + (b.F - a.F) * t);
+            }
+            var tris = new List<(Vec2 P, float Y, double D, double F)[]>();
+            void Refine((Vec2 P, float Y, double D, double F)[] t, int depth)
+            {
+                int longest = 0;
+                double lmax = 0;
+                for (int e = 0; e < 3; e++)
+                {
+                    double l = t[e].P.DistanceTo(t[(e + 1) % 3].P);
+                    if (l > lmax) { lmax = l; longest = e; }
+                }
+                if (lmax <= CornerCell || depth > 12) { tris.Add(t); return; }
+                var (a, b, c) = (t[longest], t[(longest + 1) % 3], t[(longest + 2) % 3]);
+                var m = Mid(a, b, 0.5);
+                m = (m.P, m.Y, Field(m.P).D, Field(m.P).F);
+                Refine([a, m, c], depth + 1);
+                Refine([m, b, c], depth + 1);
+            }
+            foreach (var pc in laid)
+            {
+                var pts = pc.Select(q => { var (d, f) = Field(q.P); return (q.P, q.Y, d, f); }).ToList();
+                for (int t = 1; t + 1 < pts.Count; t++) Refine([pts[0], pts[t], pts[t + 1]], 0);
+            }
+            // each triangle cut to each band: where the distance lies between the band's start and end (both moving with f)
+            List<(Vec2 P, float Y, double D, double F)> ClipBy(List<(Vec2 P, float Y, double D, double F)> poly, Func<(Vec2 P, float Y, double D, double F), double> g)
+            {
+                var r = new List<(Vec2 P, float Y, double D, double F)>();
+                for (int i = 0; i < poly.Count; i++)
+                {
+                    var p = poly[i];
+                    var q = poly[(i + 1) % poly.Count];
+                    double gp = g(p), gq = g(q);
+                    if (gp >= 0) r.Add(p);
+                    if ((gp >= 0) != (gq >= 0)) r.Add(Mid(p, q, gp / (gp - gq)));
+                }
+                return r;
+            }
+            foreach (var tri in tris)
+                for (int s = 0; s < count; s++)
+                {
+                    var part = tri.ToList();
+                    if (s > 0) part = ClipBy(part, v => v.D - Start(s, v.F));
+                    if (s + 1 < count && part.Count >= 3) part = ClipBy(part, v => Start(s + 1, v.F) - v.D - 1e-9);
+                    if (part.Count < 3 || Math.Abs(SignedArea(part.Select(v => v.P).ToList())) < 1e-5) continue;
+                    var type = slotsA[s].Type;
+                    // a raised band's own height is its lowest; what it rises above that is in its vertices
+                    float baseH = type == AreaPropType.Kerb ? 0f : MathF.Min(MathF.Min(slotsA[s].H0, slotsB[s].H0), MathF.Min(slotsA[s].H1, slotsB[s].H1));
+                    Lay(type, baseH, part.Select(v => (v.P, v.Y + HeightAt(s, v.D, v.F) - baseH)).ToList());
+                }
             if (bands.Count == 0) return null;
             stats.Gaps++;
             stats.Built++;
@@ -742,6 +792,63 @@ public static class CornerPlanner
         return null;
     }
 
+    /// <summary>
+    /// A side's profile in fixed slots, so two sides' blend band by band (#711): the sloped kerb at the road, verge, path, buffer,
+    /// the sloped kerb up to the sidewalk, the sidewalk; a slot the side lacks has no width and its neighbour's height.
+    /// </summary>
+    private static List<(AreaPropType Type, double W, float H0, float H1)> Slots(RoadStreetSection.Profile? profile, Chain chain)
+    {
+        var slots = new List<(AreaPropType Type, double W, float H0, float H1)>
+        {
+            (AreaPropType.Kerb, 0, float.NaN, float.NaN), (AreaPropType.Grass, 0, float.NaN, float.NaN), (AreaPropType.BikePath, 0, float.NaN, float.NaN),
+            (AreaPropType.Grass, 0, float.NaN, float.NaN), (AreaPropType.Kerb, 0, float.NaN, float.NaN), (AreaPropType.Sidewalk, 0, float.NaN, float.NaN),
+        };
+        if (profile is null) slots[5] = (AreaPropType.Sidewalk, chain.Width, chain.Kerb_, chain.Kerb_);
+        else
+        {
+            bool pastTrack = false;
+            for (int b = 0; b + 1 < profile.Count; b++)
+            {
+                double w = profile.D[b + 1] - profile.D[b];
+                if (w < 1e-4) continue;
+                var surface = profile.Surface[b];
+                int slot = surface switch
+                {
+                    StreetSurface.Kerb => pastTrack ? 4 : 0,
+                    StreetSurface.Verge => 1,
+                    StreetSurface.Track => 2,
+                    StreetSurface.Buffer => 3,
+                    _ => 5,
+                };
+                if (surface is StreetSurface.Track or StreetSurface.Buffer) pastTrack = true;
+                float h0 = surface == StreetSurface.Kerb ? profile.H[b] : profile.H[b + 1], h1 = profile.H[b + 1];
+                var old = slots[slot];
+                slots[slot] = (old.Type, old.W + w, float.IsNaN(old.H0) ? h0 : old.H0, h1);
+            }
+        }
+        // empty slots take the height the band before them ends at
+        float at = 0;
+        for (int s = 0; s < slots.Count; s++)
+        {
+            if (float.IsNaN(slots[s].H0)) slots[s] = (slots[s].Type, 0, at, at);
+            at = slots[s].H1;
+        }
+        return slots;
+    }
+
+    /// <summary>How far a point lies from a polygon's outline.</summary>
+    private static double DistanceToPolygon(List<Vec2> poly, Vec2 p)
+    {
+        double best = double.MaxValue;
+        for (int i = 0; i < poly.Count; i++)
+        {
+            Vec2 a = poly[i], b = poly[(i + 1) % poly.Count], ab = b - a;
+            double t = ab.Dot(ab) < 1e-12 ? 0 : Math.Clamp((p - a).Dot(ab) / ab.Dot(ab), 0, 1);
+            best = Math.Min(best, p.DistanceTo(a + ab * t));
+        }
+        return best;
+    }
+
     /// <summary>A convex polygon cut to a triangle (#711): clipped by each of its edges, inside.</summary>
     private static List<(Vec2 P, float Y)> Into(List<(Vec2 P, float Y)> poly, List<(Vec2 P, float Y)> tri)
     {
@@ -844,6 +951,12 @@ public static class CornerPlanner
 
     /// <summary>A kerb arc ends this close (m) to its cap's ring.</summary>
     private const double ArcReach = 4.0;
+
+    /// <summary>Over this far (m) into a corner from a side's end its bands ease from the street's straight profile into the curve (#711).</summary>
+    private const double JointEase = 1.5;
+
+    /// <summary>A corner laid in bands is cut into triangles no longer than this (m) on a side, so its band edges follow the kerb (#711).</summary>
+    private const double CornerCell = 0.35;
 
     /// <summary>A wedge before carried bands is laid only where both sidewalks start within this (m, along the kerb) of the corner (#711).</summary>
     private const double GapReach = 8.0;

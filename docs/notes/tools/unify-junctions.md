@@ -173,6 +173,17 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   A footpath arm no longer splits a junction's corner (`Corners`: corners between the streets only). Carried sides are laid
   after every junction (`carriedSides`); two that overlap are both left to the corner. `PAIRDBG=E,N` traces the pairs and
   each side's decision. Sion tiles: 22 sides turn; corners built 1,601 -> ~1,860 (footpath arms no longer split them).
+- **The corner as one continuous surface** (the user's playtest, Oct 10 2026: "many shapes jammed together"): `CornerPlanner`
+  `Gap` lays a corner beside a carried side as both sides' profiles blended round the curve (`Slots`: kerb at the road,
+  verge, path, buffer, kerb up to the sidewalk, sidewalk, a missing slot zero wide). The corner is cut into triangles of at
+  most `CornerCell` (0.35 m), each split where a point's distance from the kerb line crosses a band edge; every point's
+  height is the blended profile's at that distance, the blend running from one side's end line to the other's (so each
+  joint matches its street exactly; a blend by the nearest kerb point drifted toward the corner's outside), and within
+  `JointEase` (1.5 m) of an end the distance is measured straight across that street. One welded mesh per band (shared
+  vertices: no skirts inside), steps only where a band really jumps (the kerb to the road). Offset lines were tried first:
+  they fold where the kerb turns tighter than the corner is wide. A turning path keeps its straight strip to the kerb only
+  across a verge (else it stuck out of the corner as a nose). The thin dark lines across the joints in game shots are the
+  signal poles' shadows, not seams (measured: every joint vertex at its street's height).
 - **The stop line and the centre line of an approach with more lanes in than out** (the user's review, Sion 2506148,1137808):
   lanes in place, the approach's centre line lies past the axis. The lights' stop line now starts there (`OwnLanes`), not at
   the axis (it left the left-turn lane without one), and `SolidToStop(centreAt:)` finds that centre line (it searched the
