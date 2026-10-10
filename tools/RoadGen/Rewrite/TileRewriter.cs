@@ -422,6 +422,8 @@ public static partial class TileRewriter
             var rails = new RailRoadOverlap(lines, netStats.Rail);
             var output = new Dictionary<TileId, List<RoadSegment>>();
             var caps = new Dictionary<TileId, List<RoadJunction>>();
+            var kerbArcs = new Dictionary<TileId, List<CornerPlanner.KerbArc>>();   // sidewalk corners round a widening (#711)
+            var pathEnds = new Dictionary<TileId, List<CornerPlanner.PathEnd>>();   // sidewalk corners beside a path carried to the kerb (#711)
             var paint = new Dictionary<TileId, List<RoadPaint>>();
             var signs = new Dictionary<TileId, List<RoadPointProp>>();
             var signalRecords = new Dictionary<TileId, List<RoadSignal>>();   // traffic lights (#348)
@@ -623,10 +625,27 @@ public static partial class TileRewriter
                     var piece = end == LinkEnd.Start ? ends[0] : ends[^1];
                     return right ? piece.Attributes.Right : piece.Attributes.Left;
                 }
+                // ... as it will reach the mouth (#711): a path stopping within CrossingLookIn of it is carried on to it (PathsToMouth),
+                // so a crosswalk laid before that crosses it too
+                RoadSide StreetSideToMouth(int linkId, LinkEnd end, bool right)
+                {
+                    if (!segmentOf.TryGetValue(linkId, out var so)) return default;
+                    var ends = streetPieces.TryGetValue(so.Item1, out var cut) && cut.Count > 0 ? cut : [so.Item1];
+                    double gap = 0;
+                    for (int p = 0; p < ends.Count && gap <= CrossingLookIn; p++)
+                    {
+                        var piece = end == LinkEnd.Start ? ends[p] : ends[^(p + 1)];
+                        var side = right ? piece.Attributes.Right : piece.Attributes.Left;
+                        if (side.HasTrack) return p == 0 ? side : side with { ShiftStartCm = 0, ShiftEndCm = 0 };
+                        gap += RoadPaintGeometry.Length(piece.Points);
+                    }
+                    return StreetSideAt(linkId, end, right);
+                }
                 var openings = new List<PocketOpening>();
                 var townArcs = new Dictionary<(int Node, int Arm), CornerArc>();
+                var pendingGuides = new List<(TileId Home, RoadPaint Guide, Widening Exit, int Node, int ExitArm)>();   // through guides, drawn past an island only (#711)
                 var pockets = EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs,
-                    bikeBetween, stripOwners, netStats.TurnLanes, StreetSideAt, openings, townArcs, overlay, restrictions);
+                    bikeBetween, stripOwners, netStats.TurnLanes, StreetSideAt, openings, townArcs, overlay, restrictions, crossingNodes, pendingGuides);
                 var openingsOf = openings.GroupBy(o => o.Segment, ReferenceEqualityComparer.Instance)
                     .ToDictionary(g => (RoadSegment)g.Key!, g => g.ToList(), ReferenceEqualityComparer.Instance);
                 // the bike side of a link's end piece (#351): its separated path, else its painted lane
@@ -647,7 +666,11 @@ public static partial class TileRewriter
                 var signalPlans = new Dictionary<int, (SignalPlan Plan, int[] PlanArm)>();
                 EmitSignals(priority, result, pockets, BikeSideAt, block, wanted, paint, signalRecords, cantons, field, buildings, islands, signs, netStats.Signals,
                     approachRecords, restrictions, netStats.Lanes, stopsAt, signalPlans, StreetSideAt, crossingNodes);
-                netStats.Signals.DataCrossings += EmitDataCrossings(priority, result, pockets, crossingNodes, block, wanted, paint, islands, netStats.Signals, StreetSideAt);
+                netStats.Signals.DataCrossings += EmitDataCrossings(priority, result, pockets, crossingNodes, block, wanted, paint, islands, netStats.Signals, StreetSideToMouth);
+                // the islands are known now (the lights' and the refuges): a through guide only where it keeps off one (#711, the user's rule)
+                // ... and none where a left-turn guide already leads into the same exit (#711, the user's rule)
+                foreach (var (home, guide, exit, guideNode, exitArm) in pendingGuides)
+                    if (exit.HasIsland && !priority.LeftGuideInto.Contains((guideNode, exitArm))) { Get(paint, home).Add(guide); netStats.TurnLanes.ThroughGuides++; }
                 EmitRightLanes(pockets, paint, bikeBetween, netStats.TurnLanes);
                 EmitPocketApproaches(priority, result, pockets, approachRecords, restrictions, netStats.Lanes);
 
@@ -713,11 +736,20 @@ public static partial class TileRewriter
                         s += length;
                     }
                 }
+                // the crossings before the paths' paint: a side carried on to the kerb (#711) cuts back the joining road's side it covers
+                var cutBacks = new List<SideCut>();
+                _ramps ??= [];
+                EmitBikeCrossings(priority, result, segmentOf, finalPieces, pockets, block, wanted, paint, signs, bikeBridges, netStats.Bikes,
+                    stopsAt, signalPlans, townArcs, islands, pathEnds, cutBacks);
+                foreach (var cutBack in cutBacks) CutBack(cutBack, finalPieces, output, netStats.Bikes);
+                // the crossings' kerb ramps (#711), once the pieces are final
+                foreach (var ramp in _ramps)
+                    if (segmentOf.TryGetValue(ramp.LinkId, out var rampOn))
+                        Lower(rampOn.Item1, rampOn.Item2, ramp.Points, ramp.Margin, finalPieces, output, netStats.Bikes);
+                _ramps.Clear();
                 foreach (var (segment, tileId, start, end) in trackPaint)
                     EmitTrackPaint(finalPieces.TryGetValue(segment, out var pieces) ? pieces : [segment], start, end, Get(paint, tileId));
-                EmitBikeCrossings(priority, result, segmentOf, finalPieces, pockets, block, wanted, paint, signs, bikeBridges, netStats.Bikes,
-                    stopsAt, signalPlans, townArcs);
-                EmitTownCorners(priority, result.Network, segmentOf, finalPieces, townArcs, block, wanted, bikeBridges, paint, netStats.Bikes);
+                KerbArcs(priority, townArcs, kerbArcs);
             }
 
             // car parks (#499): one layout per lot, from the whole polygon, before the tiles are
@@ -758,7 +790,7 @@ public static partial class TileRewriter
                     Paint = paint.TryGetValue(id, out var p) ? p : new List<RoadPaint>(),
                     LinearProps = walls,
                     AreaProps = [.. islands.TryGetValue(id, out var isl) ? isl : [],
-                        .. Unbridged(id, CornerPlanner.Plan(id, segments, junctions, facades, cornerStats, isl), bridges, netStats.Bikes),   // sidewalk corners (#119)
+                        .. Unbridged(id, CornerPlanner.Plan(id, segments, junctions, facades, cornerStats, isl, kerbArcs.GetValueOrDefault(id), pathEnds.GetValueOrDefault(id), bridges.Select(x => x.Band)), bridges, netStats.Bikes),   // sidewalk corners (#119)
                         .. bridges.Select(x => x.Band),
                         .. parkAreas.TryGetValue(id, out var pa) ? pa : []],   // car park pad, islands, walks (#499)
                     PointProps = pointProps,
@@ -928,6 +960,169 @@ public static partial class TileRewriter
 
     /// <summary>How long the gap in the grass verge is (#352), along the road, just before the pocket opens.</summary>
     private const double VergeCutM = 4.0;
+
+    /// <summary>
+    /// A joining road's side cut back from a junction (#711): <c>Length</c> metres from the segment's end there
+    /// (<c>AtEnd</c>) on the drawing's right or left (<c>Right</c>), where a crossing road's side carried on to the kerb covers it.
+    /// </summary>
+    private sealed record SideCut(RoadSegment Whole, TileId Tile, bool AtEnd, bool Right, double Length, bool Path = false);
+
+    /// <summary>
+    /// A crossing's kerb ramp (#711, the user's rule: a walker or rider never meets a vertical kerb): the stretch of an arm's
+    /// street between two LV95 points on it whose kerbs are all sloped (<see cref="RoadAttrFlags.LoweredKerbs"/>).
+    /// </summary>
+    private sealed record KerbRamp(int LinkId, IReadOnlyList<Vec2> Points, double Margin);
+
+    /// <summary>The ramps the crossings ask for while a block is laid out, applied once its pieces are final (#711).</summary>
+    [ThreadStatic] private static List<KerbRamp>? _ramps;
+
+    /// <summary>
+    /// Lowers the kerbs of an arm's street over a ramp's stretch (#711): the final pieces are cut where the stretch starts and
+    /// ends (the points projected onto them) and the pieces between get <see cref="RoadAttrFlags.LoweredKerbs"/>; the shift
+    /// past a widening and the yield bits carry over, as <see cref="CutBack"/>.
+    /// </summary>
+    private static void Lower(RoadSegment whole, TileId tile, IReadOnlyList<Vec2> marks, double margin, Dictionary<RoadSegment, List<RoadSegment>> finalPieces,
+        Dictionary<TileId, List<RoadSegment>> output, BikePlanner.Stats stats)
+    {
+        if (!output.TryGetValue(tile, out var tileList)) return;
+        var pieces = finalPieces.TryGetValue(whole, out var list) && list.Count > 0 ? list : [whole];
+        int first = tileList.IndexOf(pieces[0]);
+        if (first < 0 || first + pieces.Count > tileList.Count || !ReferenceEquals(tileList[first + pieces.Count - 1], pieces[^1])) return;
+        // where the two points lie along the pieces (tile-local plan, x east, y north)
+        double Along(Vec2 p)
+        {
+            var q = new Vec2(p.X - tile.MinE, p.Y - tile.MaxN);
+            double best = double.MaxValue, at = 0, travelled = 0;
+            foreach (var piece in pieces)
+            {
+                var v = piece.Points;
+                for (int i = 0; i + 1 < piece.PointCount; i++)
+                {
+                    Vec2 s = new(v[i * 3], -v[i * 3 + 2]), e = new(v[i * 3 + 3], -v[i * 3 + 5]);
+                    var ab = e - s;
+                    double len = ab.Length, t = len < 1e-9 ? 0 : Math.Clamp((q - s).Dot(ab) / (len * len), 0, 1);
+                    double d = q.DistanceTo(s + ab * t);
+                    if (d < best) { best = d; at = travelled + t * len; }
+                    travelled += len;
+                }
+            }
+            return best < 25 ? at : double.NaN;
+        }
+        // the stretch the points project onto, and the margin either side
+        var at = marks.Select(Along).Where(x => !double.IsNaN(x)).ToList();
+        if (at.Count == 0) return;
+        double a0 = at.Min() - margin, a1 = at.Max() + margin;
+        var result = new List<RoadSegment>();
+        double start = 0;
+        bool lowered = false;
+        foreach (var piece in pieces)
+        {
+            double len = RoadPaintGeometry.Length(piece.Points), end = start + len;
+            double l0 = Math.Max(0, a0 - start), l1 = Math.Min(len, a1 - start);
+            bool sides = piece.Attributes.Left.OuterDm > 0 || piece.Attributes.Right.OuterDm > 0;
+            if (l1 - l0 < 0.05 || !sides || piece.Attributes.Has(RoadAttrFlags.LoweredKerbs))
+            {
+                result.Add(piece);
+                start = end;
+                continue;
+            }
+            var parts = new List<(double From, double To, bool Low)>();
+            if (l0 > 0.05) parts.Add((0, l0, false));
+            parts.Add((l0, len - l1 > 0.05 ? l1 : len, true));
+            if (len - l1 > 0.05) parts.Add((l1, len, false));
+            for (int k = 0; k < parts.Count; k++)
+            {
+                var (from, to, low) = parts[k];
+                var points = parts.Count == 1 ? piece.Points : StreetPlanner.Slice(piece, from, k + 1 == parts.Count ? double.PositiveInfinity : to);
+                if (points.Length < 6) continue;
+                var attrs = piece.Attributes;
+                var flags = attrs.Flags;
+                if (k > 0) flags &= ~RoadAttrFlags.YieldAtStart;
+                if (k + 1 < parts.Count) flags &= ~RoadAttrFlags.YieldAtEnd;
+                if (low) flags |= RoadAttrFlags.LoweredKerbs;
+                // where the walkers cross, the path takes the grass strips' width: the crosswalk cuts through them (#682), and
+                // the kerb to the road is the path's sloped one
+                RoadSide Part(RoadSide s) => (low && s.HasTrack
+                    ? s with { BikeDm = (byte)(s.BikeDm + s.VergeDm + s.BufferDm), VergeDm = 0, BufferDm = 0 } : s) with
+                {
+                    ShiftStartCm = (ushort)Math.Round(s.ShiftAt(from / len) * 100),
+                    ShiftEndCm = (ushort)Math.Round(s.ShiftAt(to / len) * 100),
+                };
+                result.Add(new RoadSegment
+                {
+                    Class = piece.Class, Surface = piece.Surface, Flags = piece.Flags, Width = piece.Width, Points = points,
+                    Attributes = attrs with { Flags = flags, Left = Part(attrs.Left), Right = Part(attrs.Right) },
+                });
+            }
+            lowered = true;
+            start = end;
+        }
+        if (!lowered) return;
+        tileList.RemoveRange(first, pieces.Count);
+        tileList.InsertRange(first, result);
+        finalPieces[whole] = result;
+        stats.KerbRamps++;
+    }
+
+    /// <summary>
+    /// Cuts a joining road's side back (#711, <see cref="SideCut"/>): over its first <c>Length</c> metres from the junction the
+    /// side keeps only a painted bike lane (on the carriageway); its grass, path and sidewalk start behind the carried side. The
+    /// piece the cut ends in is split there (the shift past a widening and the yield bits carry over, as <see cref="CutVerges"/>).
+    /// </summary>
+    private static void CutBack(SideCut cut, Dictionary<RoadSegment, List<RoadSegment>> finalPieces, Dictionary<TileId, List<RoadSegment>> output,
+        BikePlanner.Stats stats)
+    {
+        if (!output.TryGetValue(cut.Tile, out var tileList)) return;
+        var pieces = finalPieces.TryGetValue(cut.Whole, out var list) && list.Count > 0 ? list : [cut.Whole];
+        int first = tileList.IndexOf(pieces[0]);
+        if (first < 0 || first + pieces.Count > tileList.Count || !ReferenceEquals(tileList[first + pieces.Count - 1], pieces[^1])) return;
+        double total = pieces.Sum(p => RoadPaintGeometry.Length(p.Points));
+        double a0 = cut.AtEnd ? total - cut.Length : 0, a1 = cut.AtEnd ? total : cut.Length;
+        static RoadSide Bare(RoadSide s) => s.HasLane ? new RoadSide(Bike: s.Bike, BikeDm: s.BikeDm) : default;
+        var result = new List<RoadSegment>();
+        double start = 0;
+        foreach (var piece in pieces)
+        {
+            double len = RoadPaintGeometry.Length(piece.Points), end = start + len;
+            double l0 = Math.Max(0, a0 - start), l1 = Math.Min(len, a1 - start);
+            var side = cut.Right ? piece.Attributes.Right : piece.Attributes.Left;
+            if (l1 - l0 < 0.05 || side.OuterDm == 0)
+            {
+                result.Add(piece);
+                start = end;
+                continue;
+            }
+            var parts = new List<(double From, double To, bool Cut)>();
+            if (l0 > 0.05) parts.Add((0, l0, false));
+            parts.Add((l0, len - l1 > 0.05 ? l1 : len, true));
+            if (len - l1 > 0.05) parts.Add((l1, len, false));
+            for (int k = 0; k < parts.Count; k++)
+            {
+                var (from, to, isCut) = parts[k];
+                var points = parts.Count == 1 ? piece.Points : StreetPlanner.Slice(piece, from, k + 1 == parts.Count ? double.PositiveInfinity : to);
+                if (points.Length < 6) continue;
+                var a = piece.Attributes;
+                var flags = a.Flags;
+                if (k > 0) flags &= ~RoadAttrFlags.YieldAtStart;
+                if (k + 1 < parts.Count) flags &= ~RoadAttrFlags.YieldAtEnd;
+                RoadSide Part(RoadSide s, bool bare) => bare ? Bare(s) : s with
+                {
+                    ShiftStartCm = (ushort)Math.Round(s.ShiftAt(from / len) * 100),
+                    ShiftEndCm = (ushort)Math.Round(s.ShiftAt(to / len) * 100),
+                };
+                result.Add(new RoadSegment
+                {
+                    Class = piece.Class, Surface = piece.Surface, Flags = piece.Flags, Width = piece.Width, Points = points,
+                    Attributes = a with { Flags = flags, Left = Part(a.Left, isCut && !cut.Right), Right = Part(a.Right, isCut && cut.Right) },
+                });
+            }
+            start = end;
+        }
+        tileList.RemoveRange(first, pieces.Count);
+        tileList.InsertRange(first, result);
+        finalPieces[cut.Whole] = result;
+        stats.SidesCutBack++;
+    }
 
     /// <summary>
     /// Where a left-turn pocket opens beside a separated bike path behind a grass verge (#352; #120

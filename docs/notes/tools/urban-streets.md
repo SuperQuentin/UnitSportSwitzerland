@@ -25,6 +25,7 @@
   bare bends > 30°): walks up to 30 m along each arm for the sidewalk start; squared corner where
   compact, else a band following the kerb round the cap at the sidewalks' width (narrowed 0.2 m short
   of a wall), emitted as a strip of independently checked quads; rejected on a wall or carriageway.
+  Beside a widening the kerb goes round the turn-lane kerb arc instead of the cap (#711, `unify-junctions`).
 - **Approach roads** of a tunnel mouth (`TileRewriter.RampShoulders`): flush shoulders out to the
   bore's half width for 60 m, so the ground is levelled and the ramp walls line up with the bore.
 - **Cover** (`CoverStage`): `TownPaving` = TLM-uncovered ground within 8 m of a town street or round

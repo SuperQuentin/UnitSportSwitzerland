@@ -49,6 +49,7 @@ if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
           --priority-check      junction priority self-check: main road, Wartelinie, signs (#121)
           --street-check        urban streets self-check: sidewalk widths against synthetic houses (#119)
           --dump-street E,N     corner patches and segment ends near a point, with heights (--chunks DIR)
+          --kerb-check          every zebra and bike crossing meets only sloped kerbs (--chunks DIR [--at E,N] [--list], #711)
           --signal-check        validate every traffic-light plan of a region (--chunks DIR; --at E,N dumps the nearest)
           --test-region DIR     the traffic-lights test region (#386): flat tiles, designed junctions, OSM signal
                                  nodes, then the network stage; prints the junction table (--temp DIR: raw input,
@@ -124,6 +125,16 @@ else if (args.Contains("--street-check"))
 else if (args.Contains("--plan-check"))
 {
     return UnitSport.Tools.RoadGen.Network.CrossSectionPlanner.SelfCheck(Console.WriteLine) ? 0 : 2;
+}
+else if (ArgValue("--seam-check") is { } seamAt)
+{
+    var sp = seamAt.Split(',');
+    return KerbCheck.Seams(ArgValue("--chunks") ?? "terrain_chunks", double.Parse(sp[0], System.Globalization.CultureInfo.InvariantCulture),
+        double.Parse(sp[1], System.Globalization.CultureInfo.InvariantCulture), double.Parse(ArgValue("--size") ?? "20", System.Globalization.CultureInfo.InvariantCulture), Console.WriteLine);
+}
+else if (args.Contains("--kerb-check"))
+{
+    return KerbCheck.Run(ArgValue("--chunks") ?? "terrain_chunks", ArgValue("--at"), args.Contains("--list"), Console.WriteLine);
 }
 else if (args.Contains("--signal-check"))
 {

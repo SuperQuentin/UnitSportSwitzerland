@@ -60,6 +60,27 @@ public static partial class TileRewriter
     }
 
     /// <summary>
+    /// Whether OSM maps a crossing (marked or unmarked) on any arm of the lights junction <paramref name="j"/> is part of: it and the
+    /// signal nodes linked to it by links inside the junction (#711). Its crosswalks then follow the data.
+    /// </summary>
+    private static bool CrossingsMapped(Junction j, RoadNetwork net, HashSet<int> signalNodes, Dictionary<int, Junction> signalJunctions, CrossingNodes? crossings)
+    {
+        if (crossings is null) return false;
+        var seen = new HashSet<int> { j.NodeId };
+        var todo = new Stack<Junction>();
+        todo.Push(j);
+        while (todo.TryPop(out var node))
+            for (int i = 0; i < node.Arms.Count; i++)
+            {
+                if (crossings.OnArm(node, i, net, unmarked: true) is not null) return true;
+                var link = net.Links[node.Arms[i].LinkId];
+                int other = link.StartNode == node.NodeId ? link.EndNode : link.StartNode;
+                if (Internal(link, node.NodeId, signalNodes) && seen.Add(other) && signalJunctions.TryGetValue(other, out var next)) todo.Push(next);
+            }
+        return false;
+    }
+
+    /// <summary>
     /// How much further out than its middle a skewed mouth reaches along the arm: a stop line
     /// square to the road stands that much further back, so none of it lies in the junction (#348).
     /// </summary>
@@ -80,6 +101,12 @@ public static partial class TileRewriter
         public int PairGuides;
         /// <summary>Pedestrian crossings drawn from OSM crossing nodes (#700): at junctions without lights, and at lit arms with no sidewalk.</summary>
         public int DataCrossings;
+        /// <summary>Lights junctions where OSM maps a crossing, and arms with a sidewalk they leave without a crosswalk (#711).</summary>
+        public int CrossingsMapped, CrosswalksUnmapped;
+        /// <summary>Lit arms with no crosswalk: no pedestrian heads and no pedestrian group (#711).</summary>
+        public int ArmsWithoutPedestrians;
+        /// <summary>Where the first lights junctions are that leave an arm with a sidewalk without a crosswalk (LV95, #711).</summary>
+        public readonly List<string> UnmappedAt = new();
         public readonly List<string> InvalidExamples = new();
         /// <summary>Where the first inferred junctions are (LV95), to look at them (#353).</summary>
         public readonly List<string> InferredAt = new();
@@ -91,8 +118,8 @@ public static partial class TileRewriter
             var sb = new StringBuilder();
             sb.Append(c, $"    traffic lights (#348): {Junctions:N0} junctions ({Inferred:N0} inferred, {FromData:N0} from data), {Arms:N0} arms, {Approaches:N0} approaches, ");
             sb.Append(c, $"{LeftPockets:N0} with a left-turn pocket, {RightPockets:N0} with a right-turn pocket, {StopLines:N0} stop lines without a left pocket, {Groups:N0} signal groups, ");
-            sb.Append(c, $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key} x{kv.Value}"))}, invalid plans {Invalid:N0}, dashed lines through the junction between two lanes with the same turn {PairGuides:N0} (#700), crossings from OSM crossing nodes {DataCrossings:N0}, refuges where one crosses an exit hatch {Refuges:N0} (#700)").AppendLine();
-            sb.Append(c, $"      where OSM decides, the inference rule agrees on {RuleAndOsm:N0}, adds {RuleOnly:N0} OSM does not have, misses {OsmOnly:N0}; {InternalArms:N0} arms inside a junction of several nodes; inferred at LV95 {string.Join(" ", InferredAt)}").AppendLine();
+            sb.Append(c, $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key} x{kv.Value}"))}, invalid plans {Invalid:N0}, dashed lines through the junction between two lanes with the same turn {PairGuides:N0} (#700), crossings from OSM crossing nodes {DataCrossings:N0}, refuges where one crosses an exit hatch {Refuges:N0} (#700), junctions whose crosswalks follow OSM {CrossingsMapped:N0}, arms with a sidewalk and no mapped crossing there {CrosswalksUnmapped:N0}, arms without a pedestrian signal (no crosswalk) {ArmsWithoutPedestrians:N0} (#711)").AppendLine();
+            sb.Append(c, $"      where OSM decides, the inference rule agrees on {RuleAndOsm:N0}, adds {RuleOnly:N0} OSM does not have, misses {OsmOnly:N0}; {InternalArms:N0} arms inside a junction of several nodes; inferred at LV95 {string.Join(" ", InferredAt)}; crosswalks left out by OSM at LV95 {string.Join(" ", UnmappedAt)}").AppendLine();
             sb.Append(c, $"      poles (#350) {Poles:N0}, rejected (no clear spot) {PolesRejected:N0}, priority signs moved onto a pole {SignsOnPoles:N0}, approaches with a bike signal {BikeSignals:N0} (#351)").AppendLine();
             foreach (var x in InvalidExamples) sb.Append("      invalid: ").Append(x).AppendLine();
             return sb.ToString();
@@ -200,6 +227,7 @@ public static partial class TileRewriter
         var net = result.Network;
         PriorityPlanner.Clearance? clearance = null;
         var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
+        var signalJunctions = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).ToDictionary(p => p.Junction.NodeId, p => p.Junction);
         foreach (var (junction, plan) in priority.Plans)
         {
             if (plan.Kind != PriorityPlanner.Kind.Signal) continue;
@@ -213,11 +241,15 @@ public static partial class TileRewriter
             var islandPoles = new List<(byte Arm, Vec2 At, float Y, Vec2 Facing, Vec2 Across)>();   // #682
             var leftGuides = new List<int>();   // arms with a left pocket: their left turn is guided where its exit has an island (#682)
             var islandArms = new Dictionary<int, IslandExit>();   // arm -> where the lane after its exit island starts (#682)
+            var exitArms = new Dictionary<int, IslandExit>();   // arm -> where its exit lane starts at the mouth, no island (#711)
             var approachArms = new List<(int Arm, int PlanArm, float[] Stop)>();   // their lane records (#353)
             var armInPlan = new int[junction.Arms.Count];   // each junction arm's index in the plan, -1 none (#406)
             Array.Fill(armInPlan, -1);
             // 50 km/h inside a locality: the yellow lasts 3 s (#349)
             bool urban = field.Density(junction.Centre.X, junction.Centre.Y) >= UrbanField.UrbanAt;
+            // where OSM maps any crossing round the lights, crosswalks only on its mapped arms; none mapped: every arm with a sidewalk (#711)
+            bool crossingsMapped = CrossingsMapped(junction, net, signalNodes, signalJunctions, crossings);
+            if (crossingsMapped) stats.CrossingsMapped++;
             for (int i = 0; i < junction.Arms.Count && i < plan.Arms.Count; i++)
             {
                 var link = net.Links[plan.Arms[i].LinkId];
@@ -236,6 +268,9 @@ public static partial class TileRewriter
                 // edge, widened by its pockets (#351: the lanes' offsets come from their layout)
                 // (#700: a split lead-in moves the approach's centre line and lanes over by its Shift)
                 double from = info.Attributes.OneWay != 0 ? -half : -(layout?.Shift ?? 0), to = layout is null ? half : half + layout.EdgeOut;
+                // (#711) lanes in place, more toward the junction than away: the approach begins at its own centre line, past the axis
+                if (layout is null && info.Attributes.OneWay == 0 && OwnLanes(junction, i, net) is { Lanes: > 1 } own)
+                    from = Math.Min(from, own.Centre - own.LaneWidth * 0.5);
                 var bar = mid + u * (MouthSkew(junction, arm) + SignalStopSetback + SignalStopLine * 0.5);
                 if (approach && !pocket && block.Contains(source.Tile))
                 {
@@ -271,17 +306,25 @@ public static partial class TileRewriter
                 {
                     var streetRight = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, drawnRight);
                     var streetLeft = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
-                    // a crosswalk where there is a sidewalk (#682), or where OSM maps a marked crossing on the arm (#700)
-                    bool osmCrossing = crossings?.OnArm(junction, i, net) is not null;
-                    if (osmCrossing && streetRight.SidewalkDm == 0 && streetLeft.SidewalkDm == 0) stats.DataCrossings++;
-                    if (crosswalk = streetRight.SidewalkDm > 0 || streetLeft.SidewalkDm > 0 || osmCrossing)
+                    // a crosswalk where OSM maps a marked crossing on the arm (#700); where it maps none round the junction,
+                    // on every arm with a sidewalk (#682). An arm with a sidewalk the mapped junction leaves out has none (#711)
+                    bool osmCrossing = crossings?.OnArm(junction, i, net) is not null, sidewalk = streetRight.SidewalkDm > 0 || streetLeft.SidewalkDm > 0;
+                    if (osmCrossing && !sidewalk) stats.DataCrossings++;
+                    if (crossingsMapped && sidewalk && !osmCrossing && stats.CrosswalksUnmapped++ < 12)
+                        stats.UnmappedAt.Add(string.Create(CultureInfo.InvariantCulture, $"{junction.Centre.X:F0},{junction.Centre.Y:F0}"));
+                    if (crosswalk = osmCrossing || sidewalk && !crossingsMapped && JunctionRules.Lights.Has(JunctionRule.CrosswalkOnSidewalkArms))
                         EmitCrossing(paint, source, mid, u, right, MouthSkew(junction, arm) + SignalStopSetback, -(half + (pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0)), to, streetRight, streetLeft, areas, stats,
                             pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } edgeWay, ExitFar: false } ? s => (edgeWay.OuterEdge(Math.Max(s, 0)).P - (mid + u * s)).Dot(right) : null,
-                            insetLeft: junction.KerbInset.GetValueOrDefault((i, false)), insetRight: junction.KerbInset.GetValueOrDefault((i, true)));   // diagonal beside a tight corner (#700)
+                            insetLeft: junction.KerbInset.GetValueOrDefault((i, false)), insetRight: junction.KerbInset.GetValueOrDefault((i, true)),   // diagonal beside a tight corner (#700)
+                            linkId: plan.Arms[i].LinkId);
                 }
-                // none on a link inside a junction of several nodes: its ends are the junction's own
-                var mainFlags = inside ? 0 : (approach ? SignalPoleFlags.Main : 0) | SignalPoleFlags.Pedestrian;
-                var secondFlags = inside ? 0 : (approach && (pocket || rightPocket) ? SignalPoleFlags.Second : 0) | SignalPoleFlags.Pedestrian;
+                // none on a link inside a junction of several nodes: its ends are the junction's own. Pedestrian heads only
+                // where the arm has a crosswalk (#711); an arm whose street is in another block keeps them
+                bool pedestrians = inside || crosswalk || !block.Contains(source.Tile);
+                var pedFlag = pedestrians ? SignalPoleFlags.Pedestrian : 0;
+                if (!pedestrians) stats.ArmsWithoutPedestrians++;
+                var mainFlags = inside ? 0 : (approach ? SignalPoleFlags.Main : 0) | pedFlag;
+                var secondFlags = inside ? 0 : (approach && (pocket || rightPocket) ? SignalPoleFlags.Second : 0) | pedFlag;
                 if (!inside && approach) leftGuides.Add(i);   // a left pocket's lane, or the through lane's left edge where the left turn shares it
                 // the left repeater signal stands on a small island in the hatched median behind the stop line, not on the far kerb (#682)
                 if (!inside && approach && pocket && pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } exitWay, ExitFar: false })
@@ -290,10 +333,20 @@ public static partial class TileRewriter
                     if (exitWay.Islands(Get(areas, exitWay.Tile), stopAtArm, zebraTo - ZebraDepth, zebraTo, crosswalk) is { } island)
                     {
                         secondFlags &= ~SignalPoleFlags.Second;
+                        exitWay.HasIsland = true;   // the through guide passes it (#711)
                         islandPoles.Add(((byte)arms.Count, island.Pole, island.Y, u, right));
                         var exitSide = bikeSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
                         islandArms[i] = new IslandExit(exitWay.HatchAt(0) + exitWay.Frame0, exitWay.ExitCar, exitSide.HasTrack || exitSide.HasLane);   // from the axis (#700)
                     }
+                }
+                if (!inside && leaves)
+                {
+                    // the exit lane at the mouth (#711): past the exit's hatch where a pocket's through lane widened it, else from the centre line
+                    var exitSide = bikeSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
+                    double bikeLane = exitSide.HasLane ? exitSide.BikeDm / 10.0 : 0;
+                    exitArms[i] = pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } way, ExitFar: false }
+                        ? new IslandExit(way.HatchAt(0) + way.Frame0, way.ExitCar, exitSide.HasTrack || exitSide.HasLane)
+                        : new IslandExit(info.Attributes.OneWay != 0 ? -half : 0, info.Attributes.OneWay != 0 ? 2 * half - bikeLane : half - bikeLane, exitSide.HasTrack || exitSide.HasLane);
                 }
                 wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, right, to, u, -right,
                     rightSide.OuterDm > 0 ? rightSide.KerbCm / 100f : 0f, mainFlags, plan.Arms[i].LinkId));
@@ -313,7 +366,7 @@ public static partial class TileRewriter
                 armInPlan[i] = arms.Count;
                 // a lane of its own for the left turn (a pocket, or one of the carriageway's lanes OSM marks left only, #700) gets its own phase
                 bool leftLane = pocket || pockets.GetValueOrDefault((junction.NodeId, i))?.OwnMoves is { } ownMoves && ownMoves.Any(m => m == SignalMoves.Left);
-                arms.Add(new SignalArm(arm.OutwardHeading, approach, leaves, leftLane, rightPocket, Pedestrians: true,
+                arms.Add(new SignalArm(arm.OutwardHeading, approach, leaves, leftLane, rightPocket, Pedestrians: pedestrians,
                     BikeSignal: bikeSignal, SpeedKmh: urban ? 50 : 60, CrossingM: (float)(to - from + (info.Attributes.OneWay != 0 ? 0 : half)),
                     Rank: (byte)Math.Clamp(PriorityPlanner.Rank(info) / 4, 1, 255), Banned: approach ? BannedTurns(junction, i, net, pockets, restrictions) : SignalMoves.None));
                 stats.Arms++;
@@ -385,7 +438,8 @@ public static partial class TileRewriter
             }
             // where the left turn exits beside an island it is guided through the junction: two dashed lines along its path (#682)
             foreach (int gi in leftGuides)
-                EmitLeftGuides(paint, home, junction, gi, pockets.GetValueOrDefault((junction.NodeId, gi))?.Approach, anchors, islandArms);
+                if (EmitLeftGuides(paint, home, junction, gi, pockets.GetValueOrDefault((junction.NodeId, gi))?.Approach, anchors, islandArms, exitArms) is int into and >= 0)
+                    priority.LeftGuideInto.Add((junction.NodeId, into));   // a through guide to the same exit is left out (#711)
             foreach (var ip in islandPoles)
             {
                 var local = Local(home, [ip.At], _ => ip.Y, 0f);

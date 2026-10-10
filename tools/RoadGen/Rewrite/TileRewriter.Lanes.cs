@@ -171,7 +171,7 @@ public static partial class TileRewriter
     }
 
     /// <summary>
-    /// The lane records of #123 pockets at junctions without lights: their point is the middle of
+    /// The lane records of #123 pockets (and #711 right pockets alone) at junctions without lights: their point is the middle of
     /// the approach lanes at the pocket's stop bar, in the junction's home tile.
     /// </summary>
     private static void EmitPocketApproaches(PriorityResult priority, RoadGenResult result, Dictionary<(int Node, int Arm), ArmLanes> pockets,
@@ -181,10 +181,12 @@ public static partial class TileRewriter
         foreach (var (junction, _) in priority.Plans)
             for (int i = 0; i < junction.Arms.Count; i++)
             {
-                if (!pockets.TryGetValue((junction.NodeId, i), out var built) || built.Signal || built.LeftWay is not { } way) continue;
-                var (centre, lanes) = PocketLanes(built, PocketBarMiddle);
+                // a left pocket, or (#711) a right pocket alone: its lanes run on to the mouth, no bar
+                if (!pockets.TryGetValue((junction.NodeId, i), out var built) || built.Rules == JunctionRules.Lights || (built.LeftWay ?? built.RightWay?.Way) is not { } way) continue;
+                double stop = built.LeftWay is not null ? PocketBarMiddle : 0.1;
+                var (centre, lanes) = PocketLanes(built, stop);
                 double across = way.Half + way.FullWidth;   // the approach lanes, centre line to the widened edge
-                var at = way.At(built.Home, PocketBarMiddle, across * 0.5);
+                var at = way.At(built.Home, stop, across * 0.5);
                 var record = new RoadApproach
                 {
                     X = at[0], Y = at[1], Z = at[2], Heading = (float)junction.Arms[i].OutwardHeading,
@@ -256,7 +258,8 @@ public static partial class TileRewriter
             // of the lane-wide hatch over the entry diagonal (#325)
             // (#700: past the angled closing line, the pocket opens over its slant)
             double full = p.Storage, opens = p.Merged ? p.Storage + TurnEntry : p.Storage + lw.LeadSlant;
-            bool box = p.Signal && lw.HasLeftBikeLane && lw.BikeBox, advanced = p.Signal && lw.HasLeftBikeLane && !lw.BikeBox;
+            bool bikeBoxes = p.Rules.Has(JunctionRule.BikeBoxes);
+            bool box = bikeBoxes && lw.HasLeftBikeLane && lw.BikeBox, advanced = bikeBoxes && lw.HasLeftBikeLane && !lw.BikeBox;
             // the pocket's lanes, left to right (#700: a double left has two). Only the leftmost opens where the hatch ends;
             // the ones right of it carry the approach's own lane on, moving out over the taper as the through lane does
             for (int k = 0; k < layout.LeftLanes; k++)
