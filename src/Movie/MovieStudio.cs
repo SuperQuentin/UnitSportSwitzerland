@@ -266,6 +266,8 @@ public partial class MovieStudio : Screen
         _previousCamera = GetViewport().GetCamera3D();
         _camera.MakeCurrent();
         if (ReplayRecorder.Instance is { } recorder) recorder.Paused = true;
+        // the recorded world takes the live one's place (#775)
+        ReplayWatch.HideLive();
         if (_world.StudioPlayer is { } player)
         {
             _frozen = player;
@@ -282,6 +284,7 @@ public partial class MovieStudio : Screen
             _frozen.ProcessMode = _frozenMode;
             _frozen.Visible = true;
         }
+        ReplayWatch.ShowLive();
         if (_previousCamera != null && IsInstanceValid(_previousCamera)) _previousCamera.MakeCurrent();
         if (ReplayRecorder.Instance is { } recorder) recorder.Paused = false;
     }

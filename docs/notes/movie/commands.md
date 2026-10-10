@@ -13,6 +13,10 @@
     key exactly with its lens, and cut all must cut every clip under the time.
   - Then several cameras (#675): the program shows Cam 1 before a cut and Cam 2 after it, the view at Cam 2's key
     with its lens, every gizmo where its camera is, and all of them hidden while looking through. About 25 s of game time.
+- `--movieworldcheck --world flat` (quick tier, `src/Movie/World*`, `ReplayWatch`): a watched car drives a circle with a
+  wheel turning, a parked car, a bird hides at 1.5 s and a crate is freed at 2.5 s, the origin shifts at 2 s. The
+  ghosts must stand within 5 cm of the truth at seeks both ways, hidden and gone at the right times, then the same
+  after a save and load through the real look store (its files are deleted after). About 5 s.
 - `--moviestudio <s> [t]` (any direct world launch): after s seconds, grabs the buffer and opens Pause > Movie
   studio at movie time t. `--moviesong <file>` also imports a song there; `--moviekeys` sets keys on two cameras,
   cuts between them and zooms in. Made for screenshots:

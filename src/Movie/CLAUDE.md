@@ -10,6 +10,7 @@ touches its topic; search with `grep -ril <word> docs/notes/movie`.
 - `movie-studio` — replay buffer (what is recorded, the 30 Hz rings), grabs onto lanes, the studio over the live world, clip edits, `.usmovie` files, controls
 - `movie-sound` — songs (import, Godot decode, beat detection), game sound from a Master-bus capture, `AudioDeck` playback, ghost beats and kept markers, snapping, file v2 (#656)
 - `movie-camera` — camera track (smooth/linear/cut keys, lens, aim at an actor, v3), studio view orbit/free/track, timeline zoom, cut all and the blade (#669)
+- `movie-world` — the recorded world (#775): `ReplayWatch` one-line joins, groups and parts written only when they move, `WorldRing`/`WorldTrack`, the World row, `WorldGhosts`, the live world hidden, looks saved in `user://movies/looks/`
 - `movie-puppets` — `FootPlayer.Puppet`: no synchronizers, no interpolator, hiding with ProcessMode, `RidingWith` remapped to puppets
 
 ## Commands

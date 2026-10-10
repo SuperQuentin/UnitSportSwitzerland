@@ -46,12 +46,19 @@ public partial class ReplayRecorder : Node
     private bool _wasPaused;
     public const string GameSoundLane = "Game sound";
 
+    // the world as it is drawn (#775): cars, birds, doors, dropped items
+    private WorldRecorder? _world;
+    private double _worldGrabbed = double.NegativeInfinity;
+    /// <summary>Objects of the world being recorded now (for the checks and the pause menu).</summary>
+    public int WorldObjects => _world?.Live ?? 0;
+
     public ReplayRecorder() => Name = "ReplayRecorder";
 
     public override void _EnterTree()
     {
         Instance = this;
         _minutes = GameSettings.Current.ReplayMinutes;
+        _world = new WorldRecorder(_minutes * 60);
         GameSettings.Changed += OnSettings;
         _capture = new AudioEffectCapture { BufferLength = 0.5f };
         AudioServer.AddBusEffect(0, _capture);
@@ -75,6 +82,8 @@ public partial class ReplayRecorder : Node
         if (GameSettings.Current.ReplayMinutes == _minutes) return;
         _minutes = GameSettings.Current.ReplayMinutes;
         _actors.Clear();   // the rings are sized by it
+        _world?.Clear();
+        if (_world != null) _world.Ring.Window = _minutes * 60;
         MakeSoundRing();
     }
 
@@ -145,6 +154,7 @@ public partial class ReplayRecorder : Node
             actor.Ring.Append(now, _scratch);
             actor.LastSeen = now;
         }
+        if (_world != null && OriginNow() is { } origin) _world.Tick(now, origin);
 
         if (now >= _nextPrune)
         {
@@ -155,6 +165,9 @@ public partial class ReplayRecorder : Node
                 if (now - a.LastSeen > keep) _actors.Remove(id);
         }
     }
+
+    private Core.WorldOrigin? OriginNow() =>
+        GetParent() is ClientWorld w ? w.Chunks?.Origin ?? w.StudioPlayer?.Origin : null;
 
     /// <summary>
     /// Everything recorded since the last grab, as one clip per player on that player's lane, at the
@@ -167,13 +180,25 @@ public partial class ReplayRecorder : Node
             if (a.Ring.Slice(a.Grabbed, out double start) is { } track) slices.Add((a, track, start));
         // the earliest first: it anchors this session's clock on the timeline, the rest keep their spacing from it
         slices.Sort((x, y) => x.Start.CompareTo(y.Start));
+        double now = GameClock.Now;
+        double worldStart = 0;
+        var world = _world != null ? _world.Ring.Slice(_worldGrabbed, now, _world.Looks, out worldStart) : null;
+        if (world != null && (slices.Count == 0 || worldStart < slices[0].Start)) project.PlaceGrab(worldStart);
         foreach (var (a, track, start) in slices)
         {
             int lane = project.LaneFor(a.Key, a.Label, a.Peer);
             project.AddTrack(lane, track, project.PlaceGrab(start));
             a.Grabbed = a.Ring.Newest;
         }
-        return slices.Count + (GrabSound(project, slices.Count > 0 ? slices[0].Start : double.NegativeInfinity) ? 1 : 0);
+        if (world != null)
+        {
+            project.AddWorld(world, project.PlaceGrab(worldStart));
+            _worldGrabbed = now;
+            GD.Print($"[movie] grabbed the world: {world.Entities.Count(e => e.Parent < 0)} objects, "
+                + $"{world.Entities.Sum(e => e.Times.Length)} poses, {world.Looks.Length} looks, {world.Duration:F1} s");
+        }
+        return slices.Count + (world != null ? 1 : 0)
+            + (GrabSound(project, slices.Count > 0 ? slices[0].Start : double.NegativeInfinity) ? 1 : 0);
     }
 
     /// <summary>The game's sound since the last grab, from <paramref name="notBefore"/> on, on its own lane (#656).</summary>
@@ -197,6 +222,7 @@ public partial class ReplayRecorder : Node
     public void ForgetGrabs()
     {
         foreach (var a in _actors.Values) a.Grabbed = double.NegativeInfinity;
+        _worldGrabbed = double.NegativeInfinity;
         _soundGrabbed = double.NegativeInfinity;
     }
 }

@@ -74,6 +74,8 @@ public static class MovieSession
             p.Name = name.Trim().Length > 0 ? name.Trim() : "Untitled";
             p.Compact();
             DirAccess.MakeDirRecursiveAbsolute(Folder);
+            // the recorded world's meshes first: the file names them (#775)
+            WorldLookStore.Store(p);
             string path = ProjectSettings.GlobalizePath(PathOf(p.Name));
             using var file = File.Create(path);
             MovieFile.Write(p, file);
@@ -95,6 +97,8 @@ public static class MovieSession
             string path = ProjectSettings.GlobalizePath(PathOf(name));
             using var file = File.OpenRead(path);
             _project = MovieFile.Read(file, ActorIo.Names);
+            if (WorldLookStore.Resolve(_project) is > 0 and var missing)
+                GD.PushWarning($"[movie] {missing} meshes of the recorded world are missing from {WorldLookStore.Folder}");
             ReplayRecorder.Instance?.ForgetGrabs();
             GD.Print($"[movie] loaded {path}: {_project.Clips.Count} clips");
             return null;
