@@ -54,8 +54,14 @@ public partial class MovieStudio : Screen
     private PopupMenu? _keyMenu;
     private ScrollContainer _timelineBox = null!;
     // folded: only the transport row shows, the scene gets the screen back
-    private Control _editsRow = null!;
+    private Control _editsRow = null!, _sidePanel = null!;
     private Button _fold = null!;
+    // the preview player (#779)
+    private SubViewport _preview = null!;
+    private PreviewCamera _previewCamera = null!;
+    private Label _pausedLabel = null!;
+    private bool _pausedTree, _wasDisabled3D;
+    private ProcessModeEnum _shellMode, _chunksMode;
     /// <summary>Control height in the panel: smaller than the menus' 38 px, so the scene keeps the screen.</summary>
     private const int ToolH = 28;
     private Button _fly = null!;
@@ -74,12 +80,6 @@ public partial class MovieStudio : Screen
     /// <summary>The studio over <paramref name="world"/>; at movie time <paramref name="startAt"/>, else the newest clip's start.</summary>
     public static MovieStudio Create(ClientWorld world, double? startAt = null) => new(world, startAt) { Name = "MovieStudio" };
 
-    private static string Hints(InputDevice device) => device == InputDevice.KeyboardMouse
-        ? "Space play  ·  J / L back / forward  ·  ← → frame (Shift 1 s)  ·  S split, Shift+S cut all, Ctrl+click a clip: blade  ·  Del delete  ·  Ctrl+D duplicate  ·  "
-          + "M marker, Ctrl+← → between markers, double-click a beat  ·  wheel on the timeline zooms (Shift scrolls), = / − too  ·  "
-          + "F fly the camera (or right mouse + WASD), Tab follow an actor  ·  1-9 pick a camera, I its key, C cut to it, V look through, right-click a key, cut or camera: options  ·  drop a song on the window"
-        : "Y play  ·  LT / RT shuttle  ·  X split / cut all, hold X cut to the camera  ·  R3 marker on the beat  ·  L3 fly the camera  ·  View: camera key  ·  right stick turn, LB / RB zoom (on the timeline: zoom it)  ·  D-pad on the timeline: frame  ·  B back";
-
     public override void _Ready()
     {
         _chunks = _world.Chunks;
@@ -96,55 +96,67 @@ public partial class MovieStudio : Screen
             _fly.Text = _camera.Flying ? "✈ Flying (F)" : "✈ Fly";
             _hint.Text = _camera.Flying
                 ? "Flying: mouse to look  ·  W A S D move, Space / E up, Shift / Q down, Ctrl faster, wheel speed  ·  I camera key  ·  F or Esc: the cursor back"
-                : Hints(PlayerInput.HintDevice);
+                : "";
         };
         _world.AddChild(_camera);
         _chunks?.AddAnchor(_camera);
-        Freeze();
 
-        // the world shows through: a viewport catcher for orbit and zoom, then the panel along the bottom
-        var view = new Control { MouseFilter = MouseFilterEnum.Stop, FocusMode = FocusModeEnum.None };
-        view.SetAnchorsPreset(LayoutPreset.FullRect);
-        view.GuiInput += OnViewInput;
-        AddChild(view);
+        // full screen (#779): an editor of its own, the scene in a preview player rather than behind the panels
+        var backdrop = new Panel { MouseFilter = MouseFilterEnum.Stop };
+        backdrop.AddThemeStyleboxOverride("panel", new StyleBoxFlat { BgColor = new Color(0.07f, 0.075f, 0.085f) });
+        backdrop.SetAnchorsPreset(LayoutPreset.FullRect);
+        AddChild(backdrop);
+        var root = UiKit.VBox(6);
+        root.SetAnchorsPreset(LayoutPreset.FullRect);
+        root.OffsetLeft = 10; root.OffsetTop = 8; root.OffsetRight = -10; root.OffsetBottom = -8;
+        AddChild(root);
 
-        var top = UiKit.VBox(2);
-        top.SetAnchorsPreset(LayoutPreset.TopWide);
-        top.OffsetLeft = 28; top.OffsetTop = 22; top.OffsetRight = -380;
-        top.MouseFilter = MouseFilterEnum.Ignore;
-        _title = UiKit.Text("", 24, Colors.White, bold: true);
-        top.AddChild(_title);
+        // the movie as a whole along the top
+        var bar = UiKit.HBox(6);
+        root.AddChild(bar);
+        _title = UiKit.Text("", UiTheme.FontBody, Colors.White, bold: true);
+        bar.AddChild(_title);
+        bar.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill, MouseFilter = MouseFilterEnum.Ignore });
+        _pausedLabel = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
+        bar.AddChild(_pausedLabel);
+        Tool(bar, "New", "Start an empty movie", NewMovie);
+        Tool(bar, "Open", "Open a saved movie", OpenMovie);
+        Tool(bar, "Save", "Save this movie", SaveMovie);
+        Tool(bar, "Back to game", "Close the editor and play on where you were (Esc)", BackToGame);
+
+        // the player and the camera tools above, the timeline below; the divider drags
+        var split = new VSplitContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
+        root.AddChild(split);
+        var upper = UiKit.HBox(8);
+        upper.SizeFlagsVertical = SizeFlags.ExpandFill;
+        upper.SizeFlagsStretchRatio = 1.6f;
+        split.AddChild(upper);
+
+        var playerColumn = UiKit.VBox(4);
+        playerColumn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        upper.AddChild(playerColumn);
+        var aspect = new AspectRatioContainer
+        {
+            Ratio = 16f / 9f, StretchMode = AspectRatioContainer.StretchModeEnum.Fit,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        playerColumn.AddChild(aspect);
+        // the preview: the same world through a camera that follows the studio's; the mouse on it orbits and zooms
+        var screen = new SubViewportContainer { Stretch = true, MouseFilter = MouseFilterEnum.Stop, FocusMode = FocusModeEnum.None };
+        screen.GuiInput += OnViewInput;
+        aspect.AddChild(screen);
+        _preview = new SubViewport { HandleInputLocally = false };
+        screen.AddChild(_preview);
+        _previewCamera = new PreviewCamera(_camera);
+        _preview.AddChild(_previewCamera);
         _hint = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextDim);
-        _hint.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        top.AddChild(_hint);
-        AddChild(top);
+        _hint.HorizontalAlignment = HorizontalAlignment.Center;
+        playerColumn.AddChild(_hint);
 
-        // the movie as a whole, top right: out of the way of the transport and the edits below
-        var filePanel = new PanelContainer();
-        filePanel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.86f, 12, 8));
-        filePanel.SetAnchorsPreset(LayoutPreset.TopRight);
-        filePanel.GrowHorizontal = GrowDirection.Begin;
-        filePanel.OffsetRight = -16; filePanel.OffsetTop = 16;
-        var file = UiKit.HBox(6);
-        filePanel.AddChild(file);
-        Tool(file, "New", "Start an empty movie", NewMovie);
-        Tool(file, "Open", "Open a saved movie", OpenMovie);
-        Tool(file, "Save", "Save this movie", SaveMovie);
-        Tool(file, "Close", "Back to the game (Esc)", () => Shell.Back());
-        AddChild(filePanel);
-
-        var panel = new PanelContainer();
-        panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.86f, 10, 8));
-        panel.SetAnchorsPreset(LayoutPreset.BottomWide);
-        panel.GrowVertical = GrowDirection.Begin;
-        panel.OffsetLeft = 10; panel.OffsetRight = -10; panel.OffsetBottom = -10;
-        AddChild(panel);
-        var column = UiKit.VBox(4);
-        panel.AddChild(column);
-
-        // rows that wrap rather than run off a narrow (or big-UI) screen
+        // the transport, under the player
         var transport = Row();
-        column.AddChild(transport);
+        transport.Alignment = FlowContainer.AlignmentMode.Center;
+        playerColumn.AddChild(transport);
         Tool(transport, "|◀", "To the start (Home)", () => Seek(0));
         _reverse = Tool(transport, "◀", "Play backwards (J)", () => Play(-1));
         _play = Tool(transport, "▶", "Play / pause (Space)", () => Play(1));
@@ -157,56 +169,64 @@ public partial class MovieStudio : Screen
         transport.AddChild(_speed);
         _time = UiKit.Text("", UiTheme.FontBody, UiTheme.Amber, bold: true);
         _time.CustomMinimumSize = new Vector2(150, 0);
+        _time.HorizontalAlignment = HorizontalAlignment.Center;
         transport.AddChild(_time);
-        transport.AddChild(UiKit.Spacer(w: 10));
-        transport.AddChild(UiKit.Text("Zoom", UiTheme.FontSmall, UiTheme.TextDim));
-        Tool(transport, "−", "Zoom out (− , the wheel on the timeline)", () => _timeline.ZoomBy(0.66f));
-        Tool(transport, "Fit", "The whole movie in view", () => _timeline.Fit());
-        Tool(transport, "+", "Zoom in (= , the wheel on the timeline)", () => _timeline.ZoomBy(1.5f));
-        transport.AddChild(UiKit.Spacer(w: 10));
-        _fold = Tool(transport, "Hide panel", "Fold the edits and the timeline away to see the scene (H); the same button brings them back", ToggleFold);
+        _fold = Tool(transport, "Enlarge", "The player over the whole editor, to frame a shot (H); again to bring the panels back", ToggleFold);
 
+        // the cameras and the sound, beside the player
+        var side = Row();
+        side.CustomMinimumSize = new Vector2(300, 0);
+        upper.AddChild(side);
+        _sidePanel = side;
+        // the camera track: a key from the view, the view through the track, and the key's options
+        _fly = Tool(side, "✈ Fly", "Fly the camera freely: mouse to look, WASD, Space / Shift up and down, Ctrl faster, wheel speed; F or Esc for the cursor (pad: L3)", () => _camera.SetFlying(!_camera.Flying));
+        _camPicker = new OptionButton { TooltipText = "The camera keys go to (1-9; click a camera's name on the timeline)" };
+        _camPicker.ItemSelected += i => _timeline.Pick((int)i);
+        side.AddChild(_camPicker);
+        Tool(side, "+ Cam", "Another camera, its own keys and point of view", AddCamera);
+        Tool(side, "◆ Key", "A key of the picked camera from this view at the playhead (I, also while flying; pad View)", SetKey);
+        Tool(side, "✂ Cut to", "The movie cuts to the picked camera at the playhead (C; pad: hold X)", CutToPicked);
+        _lookThrough = new CheckButton { Text = "Look through", TooltipText = "Play the movie through the cameras (V); moving the view takes it over" };
+        side.AddChild(_lookThrough);
+        _viewSource = new OptionButton { TooltipText = "Look through the Program (the cut movie) or the picked camera" };
+        _viewSource.AddItem("Program");
+        _viewSource.AddItem("Picked camera");
+        side.AddChild(_viewSource);
+        _ease = new OptionButton { TooltipText = "How the camera goes on to the next key" };
+        foreach (var name in new[] { "Smooth", "Linear", "Cut" }) _ease.AddItem(name);
+        _ease.ItemSelected += i => { if (_timeline.SelectedKey is { } k) k.Ease = (KeyEase)(int)i; };
+        side.AddChild(_ease);
+        _aim = new OptionButton { TooltipText = "Keep the camera aimed at an actor from this key" };
+        _aim.ItemSelected += i => { if (_timeline.SelectedKey is { } k) k.LookAt = (int)i - 1; };
+        side.AddChild(_aim);
+        _lens = new HSlider { MinValue = CameraTrack.MinLens, MaxValue = CameraTrack.MaxLens, Step = 1, Value = 24, CustomMinimumSize = new Vector2(150, 0), TooltipText = "Lens, mm (the key's, or the view's)" };
+        _lens.ValueChanged += OnLens;
+        side.AddChild(_lens);
+        _lensLabel = UiKit.Text("24 mm", UiTheme.FontSmall, UiTheme.Text);
+        _lensLabel.CustomMinimumSize = new Vector2(52, 0);
+        side.AddChild(_lensLabel);
+        _deleteKey = Tool(side, "✕", "Delete this camera key", () => { if (_timeline.SelectedKey is { } k) DeleteKey(k); });
+        Tool(side, "Music…", "Add a song (.wav, .ogg, .mp3) at the playhead; or drop it on the window", PickMusic);
+        _worldSound = new CheckButton { Text = "World sound", ButtonPressed = true, TooltipText = "The puppets' live engines and steps; off when the recorded game sound plays instead" };
+        _worldSound.Toggled += WorldSound;
+        side.AddChild(_worldSound);
+
+        // the edits and the timeline
+        var lower = UiKit.VBox(4);
+        lower.SizeFlagsVertical = SizeFlags.ExpandFill;
+        split.AddChild(lower);
+        _editsRow = lower;
         var edits = Row();
-        column.AddChild(edits);
-        _editsRow = edits;
+        lower.AddChild(edits);
         Tool(edits, "Split", "Cut the selected clip at the playhead, or every lane if it is not under it (S)", Split);
         Tool(edits, "Cut all", "Cut every clip under the playhead (Shift+S); Ctrl+click a clip cuts it there", CutAll);
         Tool(edits, "Duplicate", "A copy after it (Ctrl+D)", Duplicate);
         Tool(edits, "Delete", "Remove the selected clip or camera key (Del)", Delete);
         edits.AddChild(UiKit.Spacer(w: 10));
-        Tool(edits, "Music…", "Add a song (.wav, .ogg, .mp3) at the playhead; or drop it on the window", PickMusic);
-        _worldSound = new CheckButton { Text = "World sound", ButtonPressed = true, TooltipText = "The puppets' live engines and steps; off when the recorded game sound plays instead" };
-        _worldSound.Toggled += WorldSound;
-        edits.AddChild(_worldSound);
-        edits.AddChild(UiKit.Spacer(w: 10));
-        // the camera track: a key from the view, the view through the track, and the key's options
-        _fly = Tool(edits, "✈ Fly", "Fly the camera freely: mouse to look, WASD, Space / Shift up and down, Ctrl faster, wheel speed; F or Esc for the cursor (pad: L3)", () => _camera.SetFlying(!_camera.Flying));
-        _camPicker = new OptionButton { TooltipText = "The camera keys go to (1-9; click a camera's name on the timeline)" };
-        _camPicker.ItemSelected += i => _timeline.Pick((int)i);
-        edits.AddChild(_camPicker);
-        Tool(edits, "+ Cam", "Another camera, its own keys and point of view", AddCamera);
-        Tool(edits, "◆ Key", "A key of the picked camera from this view at the playhead (I, also while flying; pad View)", SetKey);
-        Tool(edits, "✂ Cut to", "The movie cuts to the picked camera at the playhead (C; pad: hold X)", CutToPicked);
-        _lookThrough = new CheckButton { Text = "Look through", TooltipText = "Play the movie through the cameras (V); moving the view takes it over" };
-        edits.AddChild(_lookThrough);
-        _viewSource = new OptionButton { TooltipText = "Look through the Program (the cut movie) or the picked camera" };
-        _viewSource.AddItem("Program");
-        _viewSource.AddItem("Picked camera");
-        edits.AddChild(_viewSource);
-        _ease = new OptionButton { TooltipText = "How the camera goes on to the next key" };
-        foreach (var name in new[] { "Smooth", "Linear", "Cut" }) _ease.AddItem(name);
-        _ease.ItemSelected += i => { if (_timeline.SelectedKey is { } k) k.Ease = (KeyEase)(int)i; };
-        edits.AddChild(_ease);
-        _aim = new OptionButton { TooltipText = "Keep the camera aimed at an actor from this key" };
-        _aim.ItemSelected += i => { if (_timeline.SelectedKey is { } k) k.LookAt = (int)i - 1; };
-        edits.AddChild(_aim);
-        _lens = new HSlider { MinValue = CameraTrack.MinLens, MaxValue = CameraTrack.MaxLens, Step = 1, Value = 24, CustomMinimumSize = new Vector2(110, 0), TooltipText = "Lens, mm (the key's, or the view's)" };
-        _lens.ValueChanged += OnLens;
-        edits.AddChild(_lens);
-        _lensLabel = UiKit.Text("24 mm", UiTheme.FontSmall, UiTheme.Text);
-        _lensLabel.CustomMinimumSize = new Vector2(52, 0);
-        edits.AddChild(_lensLabel);
-        _deleteKey = Tool(edits, "✕", "Delete this camera key", () => { if (_timeline.SelectedKey is { } k) DeleteKey(k); });
+        edits.AddChild(UiKit.Text("Zoom", UiTheme.FontSmall, UiTheme.TextDim));
+        Tool(edits, "−", "Zoom out (− , the wheel on the timeline)", () => _timeline.ZoomBy(0.66f));
+        Tool(edits, "Fit", "The whole movie in view", () => _timeline.Fit());
+        Tool(edits, "+", "Zoom in (= , the wheel on the timeline)", () => _timeline.ZoomBy(1.5f));
 
         _timeline = new TimelineView(_stage);
         // picking a clip only picks it: the camera is the studio's own, it does not jump to the actor
@@ -217,16 +237,17 @@ public partial class MovieStudio : Screen
         _timeline.CameraMenuRequested += OpenCameraMenu;
         _timeline.PickedCameraChanged += RefreshCameras;
         _timeline.ViewChanged += SyncScroll;
-        var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(0, MinTimeline), HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
+        var scroll = new ScrollContainer { SizeFlagsVertical = SizeFlags.ExpandFill, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
         scroll.AddChild(_timeline);
-        column.AddChild(scroll);
+        lower.AddChild(scroll);
         _timelineBox = scroll;
         _scroll = new HScrollBar { Step = 0, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _scroll.ValueChanged += v => { if (!_syncingScroll) _timeline.Left = v; };
-        column.AddChild(_scroll);
-        foreach (var row in new Control[] { transport, edits })
+        lower.AddChild(_scroll);
+        foreach (var row in new Control[] { bar, transport, side, edits })
             foreach (var c in row.GetChildren().OfType<BaseButton>()) Small(c);
         ShowKeyOptions();
+        Freeze();
 
         PlayerInput.DeviceChanged += ShowHints;
         ShowHints();
@@ -278,17 +299,47 @@ public partial class MovieStudio : Screen
         if (ReplayRecorder.Instance is { } recorder) recorder.Paused = true;
         // the recorded world takes the live one's place (#775)
         ReplayWatch.HideLive();
+        // editing time (#779): offline the game stops until "Back to game"; online it cannot, and the
+        // player stays as it was left (it only goes out of the preview, where its puppet stands)
+        bool online = Net.NetLink.Online(this);
         if (_world.StudioPlayer is { } player)
         {
             _frozen = player;
             _frozenMode = player.ProcessMode;
-            player.ProcessMode = ProcessModeEnum.Disabled;
+            if (!online) player.ProcessMode = ProcessModeEnum.Disabled;
             player.Visible = false;
         }
+        if (!online)
+        {
+            _pausedTree = true;
+            ProcessMode = ProcessModeEnum.Always;
+            _stage.ProcessMode = _camera.ProcessMode = _gizmos.ProcessMode = ProcessModeEnum.Always;
+            _shellMode = Shell.ProcessMode;
+            Shell.ProcessMode = ProcessModeEnum.Always;   // the menus and their Esc
+            if (_chunks != null)
+            {
+                // the terrain keeps loading where the camera flies
+                _chunksMode = _chunks.ProcessMode;
+                _chunks.ProcessMode = ProcessModeEnum.Always;
+            }
+            GetTree().Paused = true;
+        }
+        _pausedLabel.Text = online ? "Online: the game goes on" : "Game paused";
+        // nothing draws the game's own view behind the editor: the preview is the only 3D drawn
+        _wasDisabled3D = GetTree().Root.Disable3D;
+        GetTree().Root.Disable3D = true;
     }
 
     private void Thaw()
     {
+        GetTree().Root.Disable3D = _wasDisabled3D;
+        if (_pausedTree)
+        {
+            _pausedTree = false;
+            GetTree().Paused = false;
+            if (IsInstanceValid(Shell)) Shell.ProcessMode = _shellMode;
+            if (_chunks != null && IsInstanceValid(_chunks)) _chunks.ProcessMode = _chunksMode;
+        }
         if (_frozen != null && IsInstanceValid(_frozen))
         {
             _frozen.ProcessMode = _frozenMode;
@@ -308,10 +359,6 @@ public partial class MovieStudio : Screen
         float shuttle = Input.GetActionStrength(Forward) - Input.GetActionStrength(Backward);
         if (_lookThrough.ButtonPressed) ShowThroughCamera();
         _gizmos.Hidden = _lookThrough.ButtonPressed;
-        // the timeline as tall as its rows, up to a quarter of the screen; past that it scrolls
-        float rows = Math.Min(_timeline.CustomMinimumSize.Y, GetViewportRect().Size.Y / 4f);
-        if (!Mathf.IsEqualApprox(_timelineBox.CustomMinimumSize.Y, Math.Max(MinTimeline, rows)))
-            _timelineBox.CustomMinimumSize = new Vector2(0, Math.Max(MinTimeline, rows));
         if (_camPicker.ItemCount != MovieSession.Project.Cameras.Count) RefreshCameras();
         // a pad's X held: cut to the picked camera (a tap splits, on release); a hold is real time, whatever the game does
         if (_xHeldSince >= 0 && !_xFired && RealClock.Now - _xHeldSince >= HoldToCut)
@@ -339,8 +386,8 @@ public partial class MovieStudio : Screen
         var p = MovieSession.Project;
         _title.Text = $"Movie studio  ·  {p.Name}";
         _hint.Text = p.Clips.Count == 0
-            ? "Nothing recorded yet: play, then press F5 (or Pause > Save clip) to keep the last minutes."
-            : Hints(PlayerInput.HintDevice);
+            ? "Nothing recorded yet: play, then press F5 (or Pause > Movie studio) to edit the last minutes."
+            : "";
     }
 
     /// <summary>The selected actor's puppet, or the first one on screen.</summary>
@@ -504,14 +551,23 @@ public partial class MovieStudio : Screen
         return row;
     }
 
-    private const float MinTimeline = 110;
-
-    /// <summary>The edits and the timeline folded away (or back): the transport stays, the scene gets the screen.</summary>
+    /// <summary>The player over the whole editor, to frame a shot, or the panels back (#779): the transport stays.</summary>
     private void ToggleFold()
     {
         bool show = !_editsRow.Visible;
-        _editsRow.Visible = _timelineBox.Visible = _scroll.Visible = show;
-        _fold.Text = show ? "Hide panel" : "Show panel";
+        _editsRow.Visible = _sidePanel.Visible = show;
+        _fold.Text = show ? "Enlarge" : "Shrink";
+    }
+
+    /// <summary>Out of the editor, straight back into the game where it was left.</summary>
+    private void BackToGame() => Shell.CloseAll();
+
+    /// <summary>Esc / B goes back to the game too, not to the pause menu it may have been opened from.</summary>
+    public override bool OnBack()
+    {
+        if (_camera.Flying) return false;
+        Callable.From(BackToGame).CallDeferred();
+        return false;
     }
 
     private static Button Tool(Container into, string text, string tip, Action pressed)

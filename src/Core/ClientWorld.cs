@@ -53,6 +53,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     /// <summary>Esc / Start with nothing else open: the shell shows the pause menu.</summary>
     public event Action? PauseRequested;
+    /// <summary>F5 / hold View: open the movie editor over the world (#779).</summary>
+    public event Action? MovieStudioRequested;
 
     /// <summary>The server dropped this client, or kicked it (the reason, for the menu to show).</summary>
     public event Action<string>? Disconnected;
@@ -1547,11 +1549,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return;
         }
 
-        // the replay buffer's last minutes into the movie studio (#638): anywhere, whatever you are doing
+        // the replay buffer's last minutes into the movie editor (#638, #779): anywhere, whatever you are doing
         if (@event.IsActionPressed(PlayerInput.SaveClip))
         {
             GetViewport().SetInputAsHandled();
-            Movie.MovieSession.SaveClip();
+            MovieStudioRequested?.Invoke();
             return;
         }
 
