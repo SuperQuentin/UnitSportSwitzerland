@@ -128,6 +128,7 @@ public enum RoadAttrFlags : ushort
     OnStreet = 1 << 8,     // railway: TLM auf_strasse, the track runs in a street (#124)
     Embedded = 1 << 9,     // railway piece inside a carriageway: no ballast, no raised rails, RailGroove paint (#124)
     PavedBed = 1 << 10,    // tram track in a town, outside any carriageway: a paved bed, no ballast, flush rails as RailGroove paint (#119)
+    LoweredKerbs = 1 << 11, // every kerb of this piece's sides is sloped: a crossing's kerb ramp (#711)
 }
 
 /// <summary>Bike provision on one side of a carriageway (#120).</summary>

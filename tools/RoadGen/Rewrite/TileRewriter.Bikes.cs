@@ -183,6 +183,45 @@ public static partial class TileRewriter
         List<SideCut> cutBacks)
     {
         var net = result.Network;
+        // an arm's street height at an LV95 point: its final pieces' centreline nearest it (#711)
+        Func<Vec2, float>? StreetHeight(int linkId)
+        {
+            if (!segmentOf.TryGetValue(linkId, out var so)) return null;
+            var pieces = finalPieces.TryGetValue(so.Segment, out var list) && list.Count > 0 ? list : [so.Segment];
+            var tile = so.Tile;
+            return p =>
+            {
+                var q = new Vec2(p.X - tile.MinE, p.Y - tile.MaxN);
+                double best = double.MaxValue;
+                float y = 0;
+                foreach (var piece in pieces)
+                {
+                    var v = piece.Points;
+                    for (int i = 0; i + 1 < piece.PointCount; i++)
+                    {
+                        Vec2 s0 = new(v[i * 3], -v[i * 3 + 2]), e0 = new(v[i * 3 + 3], -v[i * 3 + 5]);
+                        var ab = e0 - s0;
+                        double len2 = ab.Dot(ab), t = len2 < 1e-12 ? 0 : Math.Clamp((q - s0).Dot(ab) / len2, 0, 1);
+                        double dd = q.DistanceTo(s0 + ab * t);
+                        if (dd < best) { best = dd; y = v[i * 3 + 1] + (v[i * 3 + 4] - v[i * 3 + 1]) * (float)t; }
+                    }
+                }
+                return y;
+            };
+        }
+        // the road surface's height at an LV95 point by a junction: a joined arm's ribbon (its street's height), else the junction's
+        Func<Vec2, float> RoadHeight(Junction junction, List<int> joined, List<(Vec2 At, float Height)> anchors) => p =>
+        {
+            foreach (int j in joined)
+            {
+                var arm = junction.Arms[j];
+                var uj = Vec2.FromHeading(arm.OutwardHeading);
+                var m = (arm.Left + arm.Right) * 0.5;
+                if ((p - m).Dot(uj) > -0.5 && Math.Abs((p - m).Cross(uj)) <= arm.HalfWidth + 0.5 && StreetHeight(arm.LinkId) is { } street)
+                    return street(p);
+            }
+            return HeightAt(anchors, p);
+        };
         // the sides carried on to the kerb, each on its own: laid once every junction is done (#711)
         var carriedSides = new List<(TileId Home, List<(RoadAreaProp Band, List<Vec2> Ring)> Bands)>();
         bool IsCar(int linkId) => net.Links[linkId].Tag is Source s && PriorityPlanner.IsCarRoad(s.Segment.Class)
@@ -386,7 +425,7 @@ public static partial class TileRewriter
                         // carriageway is crossed: each band of the side straight on from the mouth to where it meets the kerb. At
                         // every junction (the lights too, the user's review: before, their bands went round the kerb arc)
                         if (PathsToKerb(home, junction, islands.GetValueOrDefault(home), joined, sa, sb, ca, da, ua, xa, cb, db, ub, xb, ca.DistanceTo(cb) + 5,
-                                p => HeightAt(anchors, p)) is { } toKerb)
+                                p => HeightAt(anchors, p), StreetHeight(a.LinkId), StreetHeight(b.LinkId), RoadHeight(junction, joined, anchors)) is { } toKerb)
                         {
 
                             Get(pathEnds, home).AddRange(toKerb.Ends);
@@ -896,7 +935,8 @@ public static partial class TileRewriter
     /// </summary>
     private static (List<(RoadAreaProp Band, List<Vec2> Ring)> Bands, int SplitAt, Func<double, Vec2> KerbA, Func<double, Vec2> KerbB, List<CornerPlanner.PathEnd> Ends)?
         PathsToKerb(TileId home, Junction junction, List<RoadAreaProp>? pavement, List<int> joined, RoadSide sa, RoadSide sb,
-            Vec2 ca, Vec2 da, Vec2 ua, double xa, Vec2 cb, Vec2 db, Vec2 ub, double xb, double reach, Func<Vec2, float> height)
+            Vec2 ca, Vec2 da, Vec2 ua, double xa, Vec2 cb, Vec2 db, Vec2 ub, double xb, double reach, Func<Vec2, float> junctionHeight,
+            Func<Vec2, float>? streetA = null, Func<Vec2, float>? streetB = null, Func<Vec2, float>? roadHeight = null)
     {
         var road = Carriageway(junction, home, pavement, joined);
 
@@ -917,15 +957,55 @@ public static partial class TileRewriter
         foreach (var (side, c, d, u, x, first) in new[] { (sa, ca, da, ua, xa, true), (sb, cb, db, ub, xb, false) })
         {
             if (!first) splitAt = bands.Count;   // side B's bands from here
+            // (#711) the bands start at their street's own height (its pieces are draped on their own) and ease to the junction's
+            // toward the carriageway: no step where the street's path runs on into the carried one
+            var street = first ? streetA : streetB;
+            double ease = Math.Max(1.0, (Run(c, d, u, side.OuterDm / 10.0 + x) ?? 0));
+            float startOff = street is null ? 0f : street(c) - junctionHeight(c);
+            Func<Vec2, float> height = street is null ? junctionHeight
+                : p => junctionHeight(p) + startOff * (float)Math.Clamp(1 - (c - p).Dot(u) / ease, 0, 1);
+            // the bands stop a sloped kerb short of the carriageway, and that kerb slopes down to it (#711, the user's rule: a
+            // rider or walker never meets a vertical kerb where they cross)
+            double run = RoadStreetSection.SlopedKerbRun;
             // a fixed count of points per line, so every band's lines pair up (BridgePath keeps the outer edge's samples)
             List<Vec2> Line(double o, double _)
             {
-                double length = Run(c, d, u, o + x) ?? 0;
+                double length = Math.Max(0, (Run(c, d, u, o + x) ?? 0) - run);
                 var p0 = c + d * (o + x);
                 return [.. Enumerable.Range(0, 6).Select(i => p0 - u * (length * i / 5))];
             }
             if (BridgePath(home, side, side, u, Vec2.Zero, Line, height, across: 0.2) is not { } part) return null;
             bands.AddRange(part);
+            float width = side.OuterDm / 10f;
+            int strips = Math.Max(1, (int)Math.Ceiling(width / 0.2));
+            var top = new List<Vec2>();
+            var foot = new List<Vec2>();
+            var lift = new List<float>();
+            for (int k = 0; k <= strips; k++)
+            {
+                double o = width * k / strips;
+                double length = Run(c, d, u, o + x) ?? 0;
+                var p0 = c + d * (o + x);
+                top.Add(p0 - u * Math.Max(0, length - run));
+                foot.Add(p0 - u * length);
+                lift.Add(RoadStreetSection.HeightAt(side, (float)Math.Max(o, 0.01)));
+            }
+            var verts = new List<float>();
+            for (int k = 0; k <= strips; k++)
+            {
+                var t = TileRewriter.Local(home, [top[k]], height, 0f);
+                verts.AddRange([t[0], t[1] + lift[k], t[2]]);
+            }
+            verts.AddRange(TileRewriter.Local(home, foot, roadHeight ?? junctionHeight, 0f));   // on the road it meets
+            var idx = new List<ushort>();
+            for (int k = 0; k < strips; k++)
+            {
+                ushort a = (ushort)k, b = (ushort)(k + 1), cc = (ushort)(strips + 2 + k), dd = (ushort)(strips + 1 + k);
+                idx.AddRange([a, b, cc, a, cc, dd]);
+            }
+            var ring = new List<Vec2>(top);
+            ring.AddRange(Enumerable.Reverse(foot));
+            bands.Add((new RoadAreaProp { Type = AreaPropType.Kerb, Flags = PropFlags.Solid, Height = 0f, Vertices = [.. verts], Indices = [.. idx] }, ring));
         }
         Vec2 Local(Vec2 p) => new(p.X - home.MinE, p.Y - home.MaxN);
         var ends = new List<CornerPlanner.PathEnd>

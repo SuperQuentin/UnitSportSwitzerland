@@ -46,6 +46,16 @@ public class JunctionRulesTests(SignalTestRegionFixture region) : IClassFixture<
     }
 
     [Fact]
+    public void Every_crossing_meets_only_sloped_kerbs()
+    {
+        // #711, the user's rule: a walker on a zebra or a rider on a bike crossing never meets a vertical kerb
+        var log = new List<string>();
+        int code = UnitSport.Tools.RoadGen.Diagnostics.KerbCheck.Run(region.Dir, null, true, log.Add);
+        Assert.True(code == 0, string.Join(" | ", log));
+        Assert.Contains(log, l => l.Contains("zebras") && !l.Contains("zebras 0,"));   // it checked some
+    }
+
+    [Fact]
     public void Every_rule_belongs_to_one_kind()
     {
         Assert.Empty(JunctionRules.Lights.Rules.Intersect(JunctionRules.NoLights.Rules));

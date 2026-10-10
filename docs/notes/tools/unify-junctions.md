@@ -189,6 +189,26 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   LV95 2507355,1138482, 5 cm at 2506168,1137801, 46 cm on the steepest corner). Now every point stands on the road edge's
   height at its nearest kerb point (`Field` returns it; within `JointEase` of an end, the street's own end height), as a
   street's side stands on its edge straight across.
+- **No vertical kerb where anyone crosses** (the user's rule, Oct 10 2026; kerb ramps were listed in #292). `RoadGen
+  --kerb-check --chunks DIR [--at E,N] [--list]` (`Diagnostics/KerbCheck`) walks every zebra (three lines through its bars,
+  1.5 m on past them) and every bike crossing (its red band, 2 m on past each end) over the built tiles' surface (raised
+  area props, street sides by their profile, carriageway) and reports each rise of 4 cm or more steeper than 1.25 (a sloped
+  kerb rises 0.4); smaller steps are counted as seams. Sion tiles: 367 crossings, 291 met a vertical kerb before, 33 after.
+  The fixes:
+  - `RoadAttrFlags.LoweredKerbs` (new bit, old tiles read as before): every kerb of the piece's sides sloped
+    (`RoadStreetSection.For(side, lowered)`, the game's `RoadStreetBuilder` too). `TileRewriter.Lower` cuts an arm's
+    final pieces over a crossing's stretch (`KerbRamp`: the zebra's bar corners, and the mouth when they start near it,
+    0.6 m on either way; asked for by `EmitCrossing`, applied after the cut-backs) and flags them; on those pieces the path
+    takes its verge's and buffer's width (the crosswalk's cut through the grass, which was a flat overlay with vertical
+    edges). A vertical-kerbed side next to a lowered one ends there (`RoadStreetBuilder.Continues`): its end face closes
+    the step between the two kerbs.
+  - Sides carried to the kerb (`PathsToKerb`): the bands stop a sloped kerb (0.3 m) short of the carriageway and a kerb
+    strip slopes down to the road (its foot on the joined arm's ribbon or the junction: `RoadHeight`); the bands start at
+    their street's own height and ease to the junction's (`StreetHeight`: they stood a few cm off the street's path).
+  - A corner beside a lowered piece is laid in bands (`Gap`) with a sloped kerb all round (`Chain.Lowered`).
+  - Left (33 on the Sion tiles): zebras beside tight corners at two-node junctions where a corner's outer edge, not its
+    kerb, faces the crosswalk; height mismatches between different streets' pieces at a junction (10-60 cm, terrain);
+    a few band/side seams of 4-13 cm. Tier 0 `Every_crossing_meets_only_sloped_kerbs` (the test region: 0 of 25; 6 before).
 - **The stop line and the centre line of an approach with more lanes in than out** (the user's review, Sion 2506148,1137808):
   lanes in place, the approach's centre line lies past the axis. The lights' stop line now starts there (`OwnLanes`), not at
   the axis (it left the left-turn lane without one), and `SolidToStop(centreAt:)` finds that centre line (it searched the

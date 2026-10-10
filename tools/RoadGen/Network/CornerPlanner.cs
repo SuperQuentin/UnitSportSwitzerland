@@ -49,7 +49,7 @@ public static class CornerPlanner
         Debug is { } d && Math.Abs(id.MinE + p.X - d.E) < 15 && Math.Abs(id.MaxN + p.Y - d.N) < 15;
 
     /// <summary>One arm's sidewalk on the side facing a corner: kerb line from the node out to where the sidewalk starts.</summary>
-    private sealed record Chain(List<(Vec2 P, float Y)> Kerb, Vec2 Out, double Width, float Kerb_, Vec2 Inward, RoadSide Side = default);
+    private sealed record Chain(List<(Vec2 P, float Y)> Kerb, Vec2 Out, double Width, float Kerb_, Vec2 Inward, RoadSide Side = default, bool Lowered = false);
 
     /// <summary>
     /// A kerb arc round a widened corner (#682, #711), tile-local plan (x east, y = -z): the kerb line from arm A's
@@ -227,7 +227,7 @@ public static class CornerPlanner
                 // away from the carriageway: left of the outward direction for a left side
                 var across = left ? new Vec2(-dir.Y, dir.X) : new Vec2(dir.Y, -dir.X);
                 double w = side.OuterDm / 10.0;
-                return new Chain(kerb, edge[0].P + across * w, w, side.KerbCm / 100f, dir * -1, side);
+                return new Chain(kerb, edge[0].P + across * w, w, side.KerbCm / 100f, dir * -1, side, seg.Attributes.Has(RoadAttrFlags.LoweredKerbs));
             }
             if (!IsStreet(seg)) return null;
             kerb.AddRange(kerb.Count == 0 ? edge : edge.Skip(1));
@@ -275,7 +275,8 @@ public static class CornerPlanner
         var (chainA, chainB) = (a, b);
         // (#711) beside a side carried on to the kerb the corner is laid in its sides' bands, round the carried ones and off any
         // road or footpath (the path runs on round the corner); else as before, from where the carried side meets the kerb
-        if ((ends.A ?? ends.B) != null)
+        // (#711) beside a crossing's kerb ramp too: the corner's kerb slopes on from the ramp, easing to the other side's kerb
+        if ((ends.A ?? ends.B) != null || a.Lowered || b.Lowered)
         {
             int gapsBefore = stats.Gaps;
             Gap(out covered);
@@ -370,8 +371,11 @@ public static class CornerPlanner
             var sideA = chainA.Side;
             var sideB = chainB.Side;
             if (sideA.HasTrack != sideB.HasTrack) sideA = sideB = sideA.HasTrack ? sideB : sideA;
-            var slotsA = Slots(RoadStreetSection.For(sideA), chainA);
-            var slotsB = Slots(RoadStreetSection.For(sideB), chainB);
+            // beside a crossing's kerb ramp the whole corner's kerb is sloped: a zebra beside a tight corner crosses it anywhere
+            // (#711); the street side it meets with a vertical kerb closes the step with its end face
+            bool lowered = chainA.Lowered || chainB.Lowered;
+            var slotsA = Slots(RoadStreetSection.For(sideA, lowered), chainA);
+            var slotsB = Slots(RoadStreetSection.For(sideB, lowered), chainB);
             if (Traced(id, chainA.Out)) Console.WriteLine($"[corner]   wedge bands: A {string.Join(" ", slotsA.Select(s => $"{s.W:F2}@{s.H0:F2}-{s.H1:F2}"))}; B {string.Join(" ", slotsB.Select(s => $"{s.W:F2}@{s.H0:F2}-{s.H1:F2}"))}");
             var kerbLine = whole.Take(wholeKerb).ToList();
             // one welded mesh per band (type, base height): vertices at one point are one vertex, so an edge two pieces share has

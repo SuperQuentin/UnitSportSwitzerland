@@ -126,7 +126,7 @@ public static partial class TileRewriter
                 EmitCrossing(paint, source, mid, u, right, far, lo, hi, streetRight, streetLeft, areas, stats,
                     insetLeft: atKerb ? junction.KerbInset.GetValueOrDefault((i, false)) : 0,
                     insetRight: atKerb ? junction.KerbInset.GetValueOrDefault((i, true)) : 0,
-                    gap: span is { } sp ? (-sp.Far, -sp.Near) : null);
+                    gap: span is { } sp ? (-sp.Far, -sp.Near) : null, linkId: arm.LinkId);
                 if (stats.Crossings > before)
                 {
                     drawn++;

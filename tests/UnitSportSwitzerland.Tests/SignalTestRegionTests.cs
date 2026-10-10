@@ -208,7 +208,8 @@ public class SignalTestRegionTests(SignalTestRegionFixture region) : IClassFixtu
         bool Touches(List<List<(double X, double Z)>> props, (double X, double Z) p, double within) =>
             props.Any(w => w.Any(q => Math.Abs(q.X - p.X) < within && Math.Abs(q.Z - p.Z) < within));
         var arc = kerbs.SelectMany(k => k).Where(p => Touches(walks, p, 0.02) || Touches(bands, p, 0.1)).Distinct().Count();
-        Assert.True(walks.Any(w => w.Count(p => Touches(kerbs, p, 0.02)) >= 2), "the north-west sidewalk corner does not start on the kerb arc");
+        // (#711: the corner is laid in its sides' bands, swept round the arc: one of them starts on it)
+        Assert.True(bands.Any(w => w.Count(p => Touches(kerbs, p, 0.02)) >= 2), "the north-west corner does not start on the kerb arc");
         Assert.True(arc >= 6, $"only {arc} points of the north-west kerb arc are lined by the sidewalk corner or the carried side");
     }
 

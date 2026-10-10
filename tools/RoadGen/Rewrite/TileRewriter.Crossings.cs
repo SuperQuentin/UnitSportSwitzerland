@@ -31,7 +31,7 @@ public static partial class TileRewriter
     /// </summary>
     private static void EmitCrossing(Dictionary<TileId, List<RoadPaint>> paint, Source source, Vec2 mid, Vec2 u, Vec2 right,
         double stopAt, double lo, double hi, RoadSide rightSide, RoadSide leftSide, Dictionary<TileId, List<RoadAreaProp>> areas, SignalStats stats, Func<double, double>? leftEdgeAt = null,
-        double insetLeft = 0, double insetRight = 0, (double From, double To)? gap = null)
+        double insetLeft = 0, double insetRight = 0, (double From, double To)? gap = null, int linkId = -1)
     {
         static double Strip(RoadSide s) => s.HasTrack ? (s.VergeDm + s.BikeDm + s.BufferDm) / 10.0 : 0;
         double pathR = Strip(rightSide), pathL = Strip(leftSide);
@@ -73,6 +73,15 @@ public static partial class TileRewriter
             Quad(s0 - shift, s1 - shift, l, l + ZebraBar, lift);
         }
         if (verts.Count == 0) return;
+        // the kerbs either side are sloped where the walkers cross (#711): the bars' stretch of the street, and the mouth when they
+        // start near it, half a metre on either way
+        if (linkId >= 0)
+        {
+            var at = new List<Vec2>();
+            for (int k = 0; k + 2 < verts.Count; k += 3) at.Add(new Vec2(source.Tile.MinE + verts[k], source.Tile.MaxN - verts[k + 2]));
+            if (s0 < 1.5) at.Add(mid);
+            (_ramps ??= []).Add(new KerbRamp(linkId, at, 0.6));
+        }
         Get(paint, source.Tile).Add(new RoadPaint
         {
             Shape = PaintShape.Triangles, Type = PaintType.YellowSolid, Rgba = PaintEmitter.Yellow, Vertices = verts.ToArray(), Indices = index.ToArray(),
@@ -96,8 +105,11 @@ public static partial class TileRewriter
                 });
             }
         }
-        Cut(rightSide, _ => hi, 1);
-        Cut(leftSide, LeftAt, -1);
+        if (linkId < 0)   // (#711: with a ramp the street's own path takes the grass strips' width there)
+        {
+            Cut(rightSide, _ => hi, 1);
+            Cut(leftSide, LeftAt, -1);
+        }
         // the approach's path stops before the bars: a yellow line across it, the cars' line's distance out
         if (rightSide.HasTrack && pathR > 0)
         {

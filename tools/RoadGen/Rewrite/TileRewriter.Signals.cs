@@ -315,7 +315,8 @@ public static partial class TileRewriter
                     if (crosswalk = osmCrossing || sidewalk && !crossingsMapped && JunctionRules.Lights.Has(JunctionRule.CrosswalkOnSidewalkArms))
                         EmitCrossing(paint, source, mid, u, right, MouthSkew(junction, arm) + SignalStopSetback, -(half + (pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0)), to, streetRight, streetLeft, areas, stats,
                             pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } edgeWay, ExitFar: false } ? s => (edgeWay.OuterEdge(Math.Max(s, 0)).P - (mid + u * s)).Dot(right) : null,
-                            insetLeft: junction.KerbInset.GetValueOrDefault((i, false)), insetRight: junction.KerbInset.GetValueOrDefault((i, true)));   // diagonal beside a tight corner (#700)
+                            insetLeft: junction.KerbInset.GetValueOrDefault((i, false)), insetRight: junction.KerbInset.GetValueOrDefault((i, true)),   // diagonal beside a tight corner (#700)
+                            linkId: plan.Arms[i].LinkId);
                 }
                 // none on a link inside a junction of several nodes: its ends are the junction's own. Pedestrian heads only
                 // where the arm has a crosswalk (#711); an arm whose street is in another block keeps them
