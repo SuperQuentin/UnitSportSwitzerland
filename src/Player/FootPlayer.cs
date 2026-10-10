@@ -1199,7 +1199,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         Terrain?.RemoveAnchor(this);
         Explosion.Blast -= OnBlast;
-        if (!IsMultiplayerAuthority() && !NetProxy)
+        if (!NetProxy && !Net.NetLink.Dropped(this) && !IsMultiplayerAuthority())
             GD.Print($"[net] player {Name} left view");
     }
 
@@ -1592,6 +1592,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public override void _Process(double delta)
     {
+        if (Net.NetLink.Dropped(this)) return;   // freed with the link a frame later
         TickWade((float)delta);   // wading's spray and strides, every peer (#380, FootPlayer.Wade.cs)
         _punch *= Mathf.Exp(-12f * (float)delta);
         _jolt *= Mathf.Exp(-9f * (float)delta);
@@ -3434,6 +3435,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     public override void _PhysicsProcess(double delta)
     {
+        if (Net.NetLink.Dropped(this)) return;   // freed with the link a frame later
         // held by the Battle Royale cargo plane (#207): it moves the body, nothing else does
         if (Carried()) return;
         // drop onto the terrain surface once its height data is available

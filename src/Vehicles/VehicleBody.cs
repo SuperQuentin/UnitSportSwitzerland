@@ -561,6 +561,7 @@ public partial class VehicleBody : CharacterBody3D
 
     public override void _Process(double delta)
     {
+        if (Net.NetLink.Dropped(this)) return;   // freed with the link a frame later
         float dt = (float)delta;
 
         if (Wrecked && !_wasWrecked)
