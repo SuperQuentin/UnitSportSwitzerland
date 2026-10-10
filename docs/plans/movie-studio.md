@@ -11,11 +11,11 @@ a fixed point. The redesign is built **on that stack**: nothing reaches `main` u
 | Milestone | State | Issue / PR |
 |---|---|---|
 | 0 Replay buffer, clips, audio, camera keys, cut list (the first design) | built, draft | #642, #663, #670, #676 |
-| R1 Full recording (Record/Stop to disk, every world system) | planned | #775 |
+| R1 Full recording (Record/Stop to disk, every world system) | in progress (#780) | #775 |
 | R2 Shot model (rigs, moves, shake, beat links) and sequences | planned | #776 |
 | R3 Shots screen | planned | #777 |
 | R4 Sequences screen, transitions, auto-director | planned | #778 |
-| R5 Editor interaction pass (modes, icon + word buttons, sizes) | planned | #779 |
+| R5 Editor interaction pass (modes, icon + word buttons, sizes) | in progress: full-screen editor first | #779 |
 | 6 Video export of a sequence | planned | — |
 | 7 VR performance + VR handheld camera | planned | — |
 | 8 Webcam/phone body tracking (VMC) | planned | — |
@@ -40,6 +40,12 @@ a fixed point. The redesign is built **on that stack**: nothing reaches `main` u
   **dragging shot cards** onto the sequence's shot track; an **auto-director** can lay out a first pass.
 - **Transitions:** a small library: hard cut, camera blend, crossfade, fade to black, plus a few effects
   (wipe, whip pan, zoom punch).
+- **Filming time, then editing time** (decided after trying the overlay): the editor is **full screen**, the
+  scene in a 16:9 **preview player** with the transport under it, the camera tools beside it and the timeline
+  below (a draggable divider). F5 / hold View or Pause > Movie studio opens it; "Back to game" (or Esc) resumes
+  exactly where the game was. **Offline the game is paused** while editing; online it goes on and the player is
+  left as it was (stopping somewhere safe first is the player's call). Shots are framed inside the player;
+  *Enlarge* (H) gives it the whole editor while framing.
 - **Buttons:** an icon **plus one word**, smaller than today; the full description and shortcut show on hover.
   The 11 px shortcut strip goes.
 
