@@ -20,6 +20,13 @@ Plan and later milestones (cameras, lenses, VR, webcam mocap): `docs/plans/movie
     player on that player's lane (lane key = node name).
   - `MovieProject.PlaceGrab` keeps one session's grabs at their real spacing on the timeline. The first grab after
     loading or restarting goes after everything else.
+- **The editor is full screen** (#779): the scene in a 16:9 preview player (`SubViewport` sharing the world, its
+  `PreviewCamera` copying the studio camera every frame; the root viewport's 3D is off meanwhile), the transport
+  under it, camera and sound tools beside it, edits and the timeline below a draggable divider. *Enlarge* (H) gives
+  the player the whole editor. F5 / hold View opens it (`ClientWorld.MovieStudioRequested`, grabbing first);
+  "Back to game" and Esc close every page (`GameShell.CloseAll`). **Offline the tree is paused** while it is open
+  (the studio, stage, camera, gizmos, `GameShell` and `ChunkManager` run `Always`); online nothing pauses and the
+  player keeps processing, only hidden from the preview.
 - **Studio** (`MovieStudio`, a `Ui/Screen`): opens over the live world.
   - The local player gets `ProcessMode.Disabled` and is hidden, the recorder is paused, and a `StudioCamera`
     becomes current and is a terrain anchor.
