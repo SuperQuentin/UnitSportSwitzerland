@@ -17,6 +17,7 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 `headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
 `worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand),
 `release-on-merge` (a merged PR releases on GitHub Actions; bursts coalesce into one release, at most one an hour),
+`feature-clips` (`/clip`, `tools/record-clip.sh`: GIFs of a feature, shown in the next release),
 `linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
 `twoclient-checks` (server + two-client `tools/*check.sh` go through `tools/lib/twoclient.sh`),
 `testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard),
