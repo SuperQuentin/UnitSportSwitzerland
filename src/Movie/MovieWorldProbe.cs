@@ -20,6 +20,7 @@ public partial class MovieWorldProbe : Node
     private readonly WorldOrigin _origin;
     private readonly WorldRecorder _recorder = new(300);
     private Node3D? _watched, _car, _wheel, _parked, _bird, _crate;
+    private OmniLight3D? _lamp;
     private readonly List<(double T, GlobalPos Car, float Wheel)> _truth = new();
     private double _t0 = double.NaN, _next;
     private bool _shifted, _done;
@@ -44,6 +45,9 @@ public partial class MovieWorldProbe : Node
         _wheel = Box(new Vector3(0.3f, 0.6f, 0.6f), Colors.Black);
         _wheel.Position = new Vector3(1, -0.4f, 1.3f);
         _car.AddChild(_wheel);
+        // a lamp that dims at 2 s: a light is recorded as a copy of itself, a new copy when it changes
+        _lamp = new OmniLight3D { LightEnergy = 2f, OmniRange = 12f, Position = new Vector3(0, 0.3f, -2.2f) };
+        _car.AddChild(_lamp);
         _parked = new Node3D { Name = "Parked" };
         _parked.AddChild(Box(new Vector3(1.8f, 1.2f, 4f), Colors.Blue));
         _bird = new Node3D { Name = "Bird" };
@@ -78,6 +82,7 @@ public partial class MovieWorldProbe : Node
             float wheel = (float)(t * 6);
             _wheel!.Rotation = new Vector3(wheel, 0, 0);
             if (t >= 1.5 && _bird!.Visible) _bird.Visible = false;
+            if (t >= 2.0) _lamp!.LightEnergy = 0.5f;
             if (t >= 2.5 && IsInstanceValid(_crate)) { _crate!.Free(); _crate = null; }
             if (t >= 2.0 && !_shifted)
             {
@@ -105,7 +110,7 @@ public partial class MovieWorldProbe : Node
         int moves = track.Entities.Sum(e => e.Times.Length);
         GD.Print($"[movieworldcheck] recorded {track.Entities.Length} objects and parts, {moves} poses, "
             + $"{track.Looks.Length} looks, {track.Duration:F2} s");
-        if (track.Entities.Length != 9) Fail($"expected 4 objects with 5 parts (the car has a wheel), got {track.Entities.Length}");
+        if (track.Entities.Length != 10) Fail($"expected 4 objects with 6 parts (the car has a wheel and a lamp), got {track.Entities.Length}");
         // the parked car and its body never moved: one pose each
         var still = track.Entities.Count(e => e.Times.Length == 1);
         if (still < 4) Fail($"objects that never moved should hold one pose, only {still} do");
@@ -154,6 +159,11 @@ public partial class MovieWorldProbe : Node
             worst = Math.Max(worst, carGhost.GlobalPosition.DistanceTo(want));
             var wheel = carGhost.GetChildren().OfType<MeshInstance3D>().FirstOrDefault(m => m.Mesh is BoxMesh { Size.X: 0.3f });
             if (wheel != null) worstWheel = Math.Max(worstWheel, Math.Abs(Mathf.AngleDifference(wheel.Rotation.X, (float)(t * 6))));
+            // the lamp: an OmniLight3D on the car's ghost, bright before 2 s and dim after
+            var lamp = carGhost.GetChildren().OfType<OmniLight3D>().FirstOrDefault(l => l.Visible);
+            float wantEnergy = t < 2.0 ? 2f : 0.5f;
+            if (Math.Abs(t - 2.0) > 0.6 && (lamp == null || !Mathf.IsEqualApprox(lamp.LightEnergy, wantEnergy)))
+                Fail($"{what} t {t:F2}: the lamp is {(lamp == null ? "missing" : $"at {lamp.LightEnergy:F1}")}, expected {wantEnergy:F1}");
             bool birdShown = Ghost(stage, track, 2) is { Visible: true } bird && bird.GetChildren().OfType<Node3D>().Any(c => c.Visible);
             bool crateShown = Ghost(stage, track, 3) is { Visible: true };
             bool birdRight = birdShown == t < 1.5 - 0.05 || Math.Abs(t - 1.5) < 0.05;

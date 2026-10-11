@@ -64,12 +64,26 @@ public partial class WorldGhosts : Node3D
             if (e.Parent < 0) continue;
             var group = _nodes[e.Parent];
             if (!e.AliveAt(t) || group == null || !group.Visible || !e.ShownAt(t)) { Hide(i); continue; }
-            var mesh = (MeshInstance3D)(_nodes[i] ??= MakePart(group));
             int look = e.LookAt(t);
-            if (look != _looks[i]) { Dress(mesh, look >= 0 ? track.Looks[look] : null); _looks[i] = look; }
+            var wears = look >= 0 ? track.Looks[look] : null;
+            if (look != _looks[i] || _nodes[i] == null)
+            {
+                // a light or emitter is its own copy, made again when its look changes; a mesh is re-dressed
+                if (_nodes[i] != null && (wears?.Template != null || _nodes[i] is not MeshInstance3D))
+                {
+                    // out of the scene now: freed at the frame's end, it would still draw this frame
+                    _nodes[i]!.GetParent()?.RemoveChild(_nodes[i]);
+                    _nodes[i]!.QueueFree();
+                    _nodes[i] = null;
+                }
+                _nodes[i] ??= MakePart(group, wears);
+                if (_nodes[i] is MeshInstance3D m) Dress(m, wears);
+                _looks[i] = look;
+            }
+            var part = _nodes[i]!;
             var p = e.PoseAt(t);
-            mesh.Transform = new Transform3D(new Basis(p.Rot).Scaled(p.Scale), new Vector3((float)p.X, (float)p.Y, (float)p.Z));
-            mesh.Visible = true;
+            part.Transform = new Transform3D(new Basis(p.Rot).Scaled(p.Scale), new Vector3((float)p.X, (float)p.Y, (float)p.Z));
+            part.Visible = true;
             Drawn++;
         }
     }
@@ -100,11 +114,11 @@ public partial class WorldGhosts : Node3D
         return n;
     }
 
-    private static MeshInstance3D MakePart(Node3D group)
+    private static Node3D MakePart(Node3D group, WorldLook? look)
     {
-        var m = new MeshInstance3D();
-        group.AddChild(m);
-        return m;
+        var n = look?.Template != null ? (Node3D)look.Template.Duplicate(0) : new MeshInstance3D();
+        group.AddChild(n);
+        return n;
     }
 
     private static void Dress(MeshInstance3D m, WorldLook? look)

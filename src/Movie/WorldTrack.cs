@@ -45,6 +45,8 @@ public sealed class WorldLook
     /// the one it was loaded from); null until then.
     /// </summary>
     public string? Asset;
+    /// <summary>A light or particle emitter (#775): a detached node a ghost duplicates, instead of a mesh.</summary>
+    public Node3D? Template;
     public Mesh? Mesh;
     public Material? Override;
     /// <summary>Per-surface override materials, null where the mesh's own is used.</summary>
