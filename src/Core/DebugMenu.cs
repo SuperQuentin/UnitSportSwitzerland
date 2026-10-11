@@ -26,6 +26,7 @@ namespace UnitSport.Core;
 public partial class DebugMenu : CanvasLayer
 {
     private const double ReadoutSeconds = 0.25;
+    private const double FlickerDelaySeconds = 30;
 
     /// <summary>The menu may be offered: alone, or as a server's admin, never in a Battle Royale match (hidden ground is a wallhack).</summary>
     public static bool Allowed => Permissions.AdminTools;
@@ -36,6 +37,7 @@ public partial class DebugMenu : CanvasLayer
     private readonly Action<string> _say;
     private readonly Action<double> _askSpeed;
     private DebugOverlay _overlay = null!;
+    private ZFightOverlay _zfight = null!;
 
     private Control _panel = null!;
     private Label _readout = null!;
@@ -79,6 +81,8 @@ public partial class DebugMenu : CanvasLayer
         _overlay = new DebugOverlay(_chunks, _origin);
         // the overlay draws in the world: it belongs under the world, not this canvas layer
         GetParent().CallDeferred(Node.MethodName.AddChild, _overlay);
+        _zfight = new ZFightOverlay(_origin);
+        GetParent().CallDeferred(Node.MethodName.AddChild, _zfight);
 
         var panel = new PanelContainer { Visible = false, Theme = UiTheme.Get() };
         panel.AddThemeStyleboxOverride("panel", UiTheme.GlassPanel(0.78f, 10, 10));
@@ -122,6 +126,10 @@ public partial class DebugMenu : CanvasLayer
         Switch(overlays, "origin", "World origin", false, on => _overlay.WorldOrigin = on,
             "The floating origin's mast (seen through the ground), its east (red) and north (blue)\n"
             + "axes, and the circle past which the camera moves it.");
+        Switch(overlays, "zfight", "Z-fighting", false, on => _zfight.On = on,
+            $"Faces that fight for the depth buffer within {ZFightOverlay.Radius:0} m of the camera, in magenta through\n"
+            + "everything: same-facing faces under 8 mm apart that overlap and can be seen (#788).\n"
+            + "Rescanned as the camera moves; the places are in the log. Flicker shot below catches the rest.");
 
         rows.AddChild(UiKit.Spacer(6));
         rows.AddChild(UiKit.Section("Terrain"));
@@ -170,6 +178,10 @@ public partial class DebugMenu : CanvasLayer
         buttons.AddChild(ActionButton("Rebuild tiles", _chunks.RebuildVisuals));
         buttons.AddChild(ActionButton("Copy position", CopyPosition));
         rows.AddChild(buttons);
+        var flicker = ActionButton("Flicker shot", () => _ = TakeFlickerShot());
+        flicker.TooltipText = "Hold still: 16 frames while the camera creeps a few millimetres, then a PNG with every\n"
+            + "pixel that flipped back and forth in magenta (z-fighting, PS1 snap, shimmering textures, #788).";
+        rows.AddChild(flicker);
 
         rows.AddChild(UiKit.Spacer(6));
         rows.AddChild(UiKit.Section("Camera"));
@@ -299,6 +311,32 @@ public partial class DebugMenu : CanvasLayer
         _timeScaled = scale != 1;
     }
 
+    /// <summary>
+    /// A <see cref="FlickerShot"/> of the view, the panel hidden meanwhile, saved under
+    /// <c>user://flicker/</c>; the share of the screen that flickers goes to the chat.
+    /// </summary>
+    private async Task TakeFlickerShot()
+    {
+        if (GetViewport().GetCamera3D() is not { } cam) return;
+        bool shown = _panel.Visible;
+        _panel.Visible = false;
+        try
+        {
+            // a mid-range creep, 4 mm a frame: enough to trade tied faces from a few metres to a few hundred
+            var shot = await FlickerShot.Take(this, cam, 20f);
+            DirAccess.MakeDirRecursiveAbsolute("user://flicker");
+            string path = ProjectSettings.GlobalizePath($"user://flicker/{DateTime.Now:yyyyMMdd-HHmmss}.png");
+            shot.Heat.SavePng(path);
+            string text = string.Create(CultureInfo.InvariantCulture, $"Flicker: {shot.Percent:0.00} % of the screen, {path}");
+            _say(text);
+            GD.Print($"[flicker] {text}");
+        }
+        finally
+        {
+            _panel.Visible = shown;
+        }
+    }
+
     private void CopyPosition()
     {
         if (GetViewport().GetCamera3D() is not { } cam) return;
@@ -314,6 +352,7 @@ public partial class DebugMenu : CanvasLayer
         foreach (var (key, box) in _toggles)
             if (key != "fill") box.SetPressedNoSignal(_defaults[key]);
         _overlay.Tiles = _overlay.Labels = _overlay.WorldOrigin = false;
+        _zfight.On = false;
         _hiddenLayers = TileLayers.None;
         _hideHorizon = _hideReal = _hideGenerated = false;
         ApplyHidden();
@@ -327,10 +366,11 @@ public partial class DebugMenu : CanvasLayer
 
     /// <summary>
     /// <c>--debugview</c>: a comma list of tools to turn on at boot. <c>open</c> shows the panel;
-    /// <c>tiles</c>, <c>labels</c>, <c>origin</c>, <c>freeze</c> switch those on; <c>no&lt;layer&gt;</c>
+    /// <c>tiles</c>, <c>labels</c>, <c>origin</c>, <c>zfight</c>, <c>freeze</c> switch those on; <c>no&lt;layer&gt;</c>
     /// hides one (<c>noground</c>, <c>noroads</c>, <c>nobuildings</c>, <c>notrees</c>, <c>nowater</c>,
     /// <c>nohorizon</c>, <c>noreal</c>, <c>nogenerated</c>); <c>wireframe</c>, <c>clay</c>,
-    /// <c>colours</c>, <c>overdraw</c> pick the view.
+    /// <c>colours</c>, <c>overdraw</c> pick the view; <c>flicker</c> takes a flicker shot after
+    /// <see cref="FlickerDelaySeconds"/> (hold the camera with <c>--shot-queue</c>).
     /// </summary>
     private void ApplyArgs()
     {
@@ -339,6 +379,8 @@ public partial class DebugMenu : CanvasLayer
         {
             string tool = raw.Trim().ToLowerInvariant();
             if (tool == "open") CallDeferred(MethodName.Open);
+            // a flicker shot once the world round the camera has streamed in (#788)
+            else if (tool == "flicker") GetTree().CreateTimer(FlickerDelaySeconds).Timeout += () => _ = TakeFlickerShot();
             else if (_toggles.TryGetValue(tool, out var on)) on.ButtonPressed = true;
             else if (tool.StartsWith("no") && _toggles.TryGetValue(tool[2..], out var off)) off.ButtonPressed = false;
             else if (Array.IndexOf(ViewNames, tool) is var view and > 0)
@@ -424,10 +466,11 @@ public partial class DebugMenu : CanvasLayer
         var shifter = OriginShifter.Instance;
         return string.Format(ci,
             "LV95   {0:F0} / {1:F0}  alt {2:F0} m\ntile   {3}  {4}  {5}\nground {6}  {7}\n"
-            + "origin {8:F0} / {9:F0}  shifts {10}\ntiles  {11} loaded{12}",
+            + "origin {8:F0} / {9:F0}  shifts {10}\ntiles  {11} loaded{12}{13}",
             e, n, pos.Y, tile, stride < 0 ? "not built" : $"stride {stride}",
             _chunks.IsGenerated(tile) ? "generated" : "real", ground, cover,
             _origin.E, _origin.N, shifter?.ShiftCount ?? 0,
-            _chunks.ActiveChunkCount, _chunks.FreezeRings ? "  FROZEN" : "");
+            _chunks.ActiveChunkCount, _chunks.FreezeRings ? "  FROZEN" : "",
+            _zfight.Status.Length > 0 ? "\nzfight " + _zfight.Status : "");
     }
 }
