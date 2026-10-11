@@ -312,7 +312,7 @@ public static class BusMeshBuilder
                 float hingeAt = i == 0 ? at - width * 0.5f : at + width * 0.5f;
                 float centreAt = i == 0 ? hingeAt + leafW * 0.5f : hingeAt - leafW * 0.5f;
                 var leaf = new MeshScratch();
-                float lx = -(hw + 0.01f);
+                float lx = -(hw + 0.03f);   // 3 cm out: at 1 cm the leaf lay 5 mm over the luggage-bay seams (#755)
                 // the frame round the glass, and the glass a pane you see through
                 float y0 = floor + 0.35f, y1 = doorTop - 0.12f, half = leafW * 0.5f - 0.08f;
                 float cz = cg - centreAt;
