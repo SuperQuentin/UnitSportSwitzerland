@@ -36,10 +36,11 @@ public partial class CameraGizmos : Node3D
         for (int i = 0; i < _gizmos.Count; i++)
         {
             var (root, name, paint) = _gizmos[i];
-            bool shown = !Hidden && i < cameras.Count && cameras[i].Sample(_stage.Time, out var pose);
+            // the shot as it would film (#776): its rig on its actor, its beat links, its shake
+            CameraPose pose = default;
+            bool shown = !Hidden && i < cameras.Count && _stage.Project.ShotPose(i, _stage.Time, _stage.Mount, out pose, out _);
             if (root.Visible != shown) root.Visible = shown;
             if (!shown) continue;
-            cameras[i].Sample(_stage.Time, out pose);
             root.GlobalTransform = StudioCamera.PoseTransform(_origin, pose, _actorAt);
             var color = TimelineView.CameraColor(i);
             if (paint.AlbedoColor != color) paint.AlbedoColor = color;

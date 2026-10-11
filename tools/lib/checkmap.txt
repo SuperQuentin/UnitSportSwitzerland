@@ -101,6 +101,7 @@ src/Player/              quick  --synccheck --world flat
 src/Player/FootPlayer.cs quick  --moviecheck --world flat
 src/Movie/               quick  --moviecheck --world flat
 src/Movie/               quick  --movieworldcheck --world flat
+src/Movie/               quick  --movieshotcheck --world flat
 src/Player/              quick  --hitboxcheck --world flat
 src/Avatar/              quick  --hitboxcheck --world flat
 src/Player/              quick  --ride bike,20 --world flat

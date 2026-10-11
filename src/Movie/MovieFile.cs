@@ -12,12 +12,14 @@ namespace UnitSport.Movie;
 /// (#675) several named cameras and the cut list; a version 3 camera becomes Cam 1. Version 5
 /// (#775) adds the recorded world: its tracks, before the clips, and a flag per clip. A look is
 /// stored by the name of its asset file (<see cref="WorldLook.Asset"/>), which the engine side
-/// writes and reads (<c>WorldLookStore</c>).
+/// writes and reads (<c>WorldLookStore</c>). Version 6 (#776) adds each camera's shot settings (rig,
+/// target, smoothing, shake, beat links) and named sequences in place of the one cut list; an older
+/// file's cuts become the sequence "Main".
 /// </summary>
 public static class MovieFile
 {
     private const uint Magic = 0x564D5355;   // "USMV"
-    private const int Version = 5;
+    private const int Version = 6;
 
     public static void Write(MovieProject p, Stream to) => Write(p, to, Version);
 
@@ -89,9 +91,74 @@ public static class MovieFile
         if (version >= 4)
         {
             w.Write(p.Cameras.Count);
-            foreach (var cam in p.Cameras) { w.Write(cam.Name); WriteKeys(w, cam); }
-            w.Write(p.Cuts.Count);
-            foreach (var c in p.Cuts) { w.Write(c.T); w.Write(c.Camera); }
+            foreach (var cam in p.Cameras)
+            {
+                w.Write(cam.Name);
+                WriteKeys(w, cam);
+                if (version >= 6) WriteShot(w, cam);
+            }
+            if (version >= 6)
+            {
+                w.Write(p.Sequences.Count);
+                foreach (var seq in p.Sequences)
+                {
+                    w.Write(seq.Name); w.Write(seq.In); w.Write(seq.Out);
+                    w.Write(seq.Cuts.Count);
+                    foreach (var c in seq.Cuts) { w.Write(c.T); w.Write(c.Camera); w.Write((byte)c.Transition); w.Write(c.Duration); }
+                }
+                w.Write(p.ActiveSequence);
+            }
+            else
+            {
+                var cuts = p.Sequences[0].Cuts;
+                w.Write(cuts.Count);
+                foreach (var c in cuts) { w.Write(c.T); w.Write(c.Camera); }
+            }
+        }
+    }
+
+    private static void WriteShot(BinaryWriter w, CameraTrack cam)
+    {
+        w.Write(cam.Group); w.Write((byte)cam.Rig); w.Write(cam.Target); w.Write((byte)cam.Part);
+        w.Write(cam.Smoothing); w.Write(cam.Seed);
+        var s = cam.Shake;
+        w.Write((byte)s.Style); w.Write(s.Strength); w.Write(s.Speed); w.Write(s.Turn); w.Write(s.Roll);
+        w.Write(cam.Links.Count);
+        foreach (var l in cam.Links)
+        {
+            w.Write((byte)l.Param); w.Write((byte)l.Shape); w.Write(l.Amount); w.Write(l.Every); w.Write(l.Phase);
+            w.Write(l.Steps.Length);
+            foreach (float v in l.Steps) w.Write(v);
+        }
+    }
+
+    private static void ReadShot(BinaryReader r, CameraTrack cam, int lanes)
+    {
+        cam.Group = r.ReadString();
+        cam.Rig = (ShotRig)Math.Min(r.ReadByte(), (byte)ShotRig.Mount);
+        cam.Target = r.ReadInt32();
+        if (cam.Target >= lanes) cam.Target = -1;
+        cam.Part = (TargetPart)Math.Min(r.ReadByte(), (byte)TargetPart.Ride);
+        cam.Smoothing = r.ReadSingle();
+        cam.Seed = r.ReadInt32();
+        cam.Shake = new ShakeSettings
+        {
+            Style = (ShakeStyle)Math.Min(r.ReadByte(), (byte)ShakeStyle.Impact),
+            Strength = r.ReadSingle(), Speed = r.ReadSingle(), Turn = r.ReadSingle(), Roll = r.ReadSingle(),
+        };
+        int links = r.ReadInt32();
+        for (int i = 0; i < links; i++)
+        {
+            var l = new BeatLink
+            {
+                Param = (BeatParam)Math.Min(r.ReadByte(), (byte)BeatParam.Fade),
+                Shape = (BeatShape)Math.Min(r.ReadByte(), (byte)BeatShape.Ramp),
+                Amount = r.ReadSingle(), Every = r.ReadInt32(), Phase = r.ReadSingle(),
+            };
+            var steps = new float[r.ReadInt32()];
+            for (int k = 0; k < steps.Length; k++) steps[k] = r.ReadSingle();
+            l.Steps = steps;
+            cam.Links.Add(l);
         }
     }
 
@@ -296,15 +363,38 @@ public static class MovieFile
             {
                 var cam = new CameraTrack { Name = r.ReadString() };
                 ReadKeys(r, cam, p.Lanes.Count);
+                if (version >= 6) ReadShot(r, cam, p.Lanes.Count);
                 p.Cameras.Add(cam);
             }
             if (p.Cameras.Count == 0) p.Cameras.Add(new CameraTrack { Name = "Cam 1" });
-            int cuts = r.ReadInt32();
-            for (int i = 0; i < cuts; i++)
+            if (version >= 6)
             {
-                double t = r.ReadDouble();
-                int cam = r.ReadInt32();
-                if (cam >= 0 && cam < p.Cameras.Count) p.CutTo(t, cam, -1);
+                int sequences = r.ReadInt32();
+                p.Sequences.Clear();
+                for (int i = 0; i < sequences; i++)
+                {
+                    var seq = new Sequence { Name = r.ReadString(), In = r.ReadDouble(), Out = r.ReadDouble() };
+                    int n = r.ReadInt32();
+                    for (int k = 0; k < n; k++)
+                    {
+                        var c = new CameraCut { T = r.ReadDouble(), Camera = r.ReadInt32(), Transition = (TransitionKind)Math.Min(r.ReadByte(), (byte)TransitionKind.ZoomPunch), Duration = r.ReadDouble() };
+                        if (c.Camera >= 0 && c.Camera < p.Cameras.Count) seq.Cuts.Add(c);
+                    }
+                    p.Sequences.Add(seq);
+                }
+                if (p.Sequences.Count == 0) p.Sequences.Add(new Sequence());
+                p.ActiveSequence = r.ReadInt32();
+            }
+            else
+            {
+                // before sequences (#776): the one cut list is the sequence "Main"
+                int cuts = r.ReadInt32();
+                for (int i = 0; i < cuts; i++)
+                {
+                    double t = r.ReadDouble();
+                    int cam = r.ReadInt32();
+                    if (cam >= 0 && cam < p.Cameras.Count) p.CutTo(t, cam, -1);
+                }
             }
         }
         return p;

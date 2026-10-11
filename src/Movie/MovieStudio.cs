@@ -58,6 +58,7 @@ public partial class MovieStudio : Screen
     private Button _fold = null!;
     // the preview player (#779)
     private SubViewport _preview = null!;
+    private ColorRect _fade = null!;
     private PreviewCamera _previewCamera = null!;
     private Label _pausedLabel = null!;
     private bool _pausedTree, _wasDisabled3D;
@@ -147,6 +148,10 @@ public partial class MovieStudio : Screen
         aspect.AddChild(screen);
         _preview = new SubViewport { HandleInputLocally = false };
         screen.AddChild(_preview);
+        // a fade to black over the player (#776): transitions and Fade beat links
+        _fade = new ColorRect { Color = new Color(0, 0, 0, 0), MouseFilter = MouseFilterEnum.Ignore, Visible = false };
+        _fade.SetAnchorsPreset(LayoutPreset.FullRect);
+        screen.AddChild(_fade);
         _previewCamera = new PreviewCamera(_camera);
         _preview.AddChild(_previewCamera);
         _hint = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextDim);
@@ -357,7 +362,7 @@ public partial class MovieStudio : Screen
         // a pad's triggers shuttle: the harder, the faster
         if (_import != null) StepImport();
         float shuttle = Input.GetActionStrength(Forward) - Input.GetActionStrength(Backward);
-        if (_lookThrough.ButtonPressed) ShowThroughCamera();
+        if (_lookThrough.ButtonPressed) ShowThroughCamera(); else SetFade(0);
         _gizmos.Hidden = _lookThrough.ButtonPressed;
         if (_camPicker.ItemCount != MovieSession.Project.Cameras.Count) RefreshCameras();
         // a pad's X held: cut to the picked camera (a tap splits, on release); a hold is real time, whatever the game does
@@ -879,9 +884,24 @@ public partial class MovieStudio : Screen
     private void ShowThroughCamera()
     {
         var p = MovieSession.Project;
-        // the program shows the camera of the last cut; "picked camera" the one being worked on
-        int cam = _viewSource.Selected == 0 ? p.ProgramCamera(_stage.Time) : _timeline.PickedCamera;
-        if (p.Cameras[cam].Sample(_stage.Time, out var pose)) _camera.ShowPose(pose, ActorAt);
+        // the program shows the sequence's cuts with their transitions (#776); "picked camera" the one being worked on
+        float fade = 0;
+        if (_viewSource.Selected == 0)
+        {
+            var view = p.Program(_stage.Time, _stage.Mount);
+            if (view.Ok) _camera.ShowPose(view.Pose, ActorAt);
+            fade = view.Fade;
+        }
+        else if (p.ShotPose(_timeline.PickedCamera, _stage.Time, _stage.Mount, out var pose, out fade)) _camera.ShowPose(pose, ActorAt);
+        SetFade(fade);
+    }
+
+    /// <summary>The preview player's black, for fades (#776); only while looking through.</summary>
+    private void SetFade(float alpha)
+    {
+        if (!Mathf.IsEqualApprox(_fade.Color.A, alpha)) _fade.Color = new Color(0, 0, 0, alpha);
+        bool on = alpha > 0.001f;
+        if (_fade.Visible != on) _fade.Visible = on;
     }
 
     /// <summary>The key strip shows the selected key's options; with none, the lens is the view's own.</summary>

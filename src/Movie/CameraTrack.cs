@@ -14,7 +14,9 @@ public enum KeyEase
 /// <summary>
 /// One keyframe of the movie's camera (#669): where it is (LV95, so origin shifts never move it),
 /// which way it looks (a world-space quaternion: shifts only translate) and its lens, plus how
-/// it moves on to the next key and, optionally, the actor it keeps aimed at.
+/// it moves on to the next key and, optionally, the actor it keeps aimed at. On a shot whose rig
+/// follows an actor (#776) the key is in the rig's frame instead: <see cref="E"/> holds x (right),
+/// <see cref="Alt"/> y (up) and <see cref="N"/> z (back), the rotation is the frame's.
 /// </summary>
 public sealed class CameraKey
 {
@@ -43,6 +45,24 @@ public sealed class CameraCut
 {
     public double T { get; set; }
     public int Camera { get; set; }
+    /// <summary>How the movie goes into this shot from the one before (#776).</summary>
+    public TransitionKind Transition { get; set; }
+    /// <summary>Seconds the transition takes, centred on <see cref="T"/>; a cut takes none.</summary>
+    public double Duration { get; set; } = 0.8;
+}
+
+/// <summary>
+/// A named stretch of the movie with its own shot track (#776): from <see cref="In"/> to <see cref="Out"/>
+/// on the timeline, the cuts saying which shot shows when. The finished movie plays the sequences
+/// one after another. Sequences may overlap: the same action filmed twice.
+/// </summary>
+public sealed class Sequence
+{
+    public string Name { get; set; } = "Main";
+    public double In { get; set; }
+    /// <summary>The end; infinity = the end of the movie.</summary>
+    public double Out { get; set; } = double.PositiveInfinity;
+    public List<CameraCut> Cuts { get; } = new();
 }
 
 /// <summary>A camera at one instant: what <see cref="CameraTrack.Sample"/> fills.</summary>
@@ -65,6 +85,24 @@ public sealed class CameraTrack
 
     /// <summary>What the timeline and the picker call it (#675): "Cam 2", or what the user renamed it to.</summary>
     public string Name { get; set; } = "Cam 1";
+
+    // ---- the shot it is (#776) ------------------------------------------------------------------
+
+    /// <summary>The library folder it is in ("Take-off", "Landing").</summary>
+    public string Group { get; set; } = "";
+    public ShotRig Rig { get; set; } = ShotRig.World;
+    /// <summary>The actor lane a Lead, Chase or Mount rig hangs from; -1 none (then it stays in the world).</summary>
+    public int Target { get; set; } = -1;
+    public TargetPart Part { get; set; } = TargetPart.Body;
+    /// <summary>Seconds the follow lags by (a Lead or Chase); 0 = rigid.</summary>
+    public float Smoothing { get; set; } = 0.4f;
+    public ShakeSettings Shake { get; set; } = new();
+    public List<BeatLink> Links { get; } = new();
+    /// <summary>Its noise seed: stable across saves, so its shake replays the same.</summary>
+    public int Seed { get; set; } = Random.Shared.Next();
+
+    /// <summary>Follows an actor: its keys are in the actor's frame.</summary>
+    public bool Relative => Rig != ShotRig.World && Target >= 0;
 
     public List<CameraKey> Keys { get; } = new();
 
@@ -148,6 +186,51 @@ public sealed class CameraTrack
         // aiming: the key being left decides; a look-at key keeps aiming until the next key takes over
         pose.LookAt = a.LookAt;
         return true;
+    }
+
+    /// <summary>
+    /// Where a following rig starts before it has a key of its own: a Lead 6 m ahead looking back, a Chase
+    /// 7 m behind and 2 m up looking forward and a little down, a Mount just over the target.
+    /// </summary>
+    public static CameraPose DefaultPose(ShotRig rig)
+    {
+        var p = new CameraPose { Lens = 35, LookAt = -1, Qw = 1 };
+        Godot.Quaternion q;
+        switch (rig)
+        {
+            case ShotRig.Lead:
+                p.E = 0; p.Alt = 0.6; p.N = -6;
+                q = new Godot.Quaternion(Godot.Vector3.Up, MathF.PI) * new Godot.Quaternion(Godot.Vector3.Right, -0.05f);
+                break;
+            case ShotRig.Chase:
+                p.E = 0; p.Alt = 2; p.N = 7;
+                q = new Godot.Quaternion(Godot.Vector3.Right, -0.2f);
+                p.Lens = 28;
+                break;
+            default:
+                p.E = 0; p.Alt = 0.9; p.N = 0.4;
+                q = Godot.Quaternion.Identity;
+                p.Lens = 24;
+                break;
+        }
+        p.Qx = q.X; p.Qy = q.Y; p.Qz = q.Z; p.Qw = q.W;
+        return p;
+    }
+
+    /// <summary>Between two camera poses at <paramref name="u"/>: position and lens straight, rotation the short way.</summary>
+    public static CameraPose Lerp(in CameraPose a, in CameraPose b, float u)
+    {
+        var q = new Godot.Quaternion(a.Qx, a.Qy, a.Qz, a.Qw).Normalized();
+        var r = new Godot.Quaternion(b.Qx, b.Qy, b.Qz, b.Qw).Normalized();
+        if (q.Dot(r) < 0) r = -r;
+        var s = q.Slerp(r, u);
+        return new CameraPose
+        {
+            E = a.E + (b.E - a.E) * u, N = a.N + (b.N - a.N) * u, Alt = a.Alt + (b.Alt - a.Alt) * u,
+            Qx = s.X, Qy = s.Y, Qz = s.Z, Qw = s.W,
+            Lens = a.Lens + (b.Lens - a.Lens) * u,
+            LookAt = u < 0.5f ? a.LookAt : b.LookAt,
+        };
     }
 
     private static void Take(CameraKey k, ref CameraPose p)

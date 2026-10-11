@@ -17,6 +17,8 @@
   wheel turning, a parked car, a bird hides at 1.5 s and a crate is freed at 2.5 s, the origin shifts at 2 s. The
   ghosts must stand within 5 cm of the truth at seeks both ways, hidden and gone at the right times, then the same
   after a save and load through the real look store (its files are deleted after). About 5 s.
+- `--movieshotcheck --world flat` (quick tier, `src/Movie/`): an actor walks north then west; a Lead must stay 6 m in
+  front of where the drawn puppet faces, a Chase 7 m behind, a Mount 0.4 m back, at seeks both ways. A few seconds.
 - `--movierecord <a> <b>` (any direct world launch): Record / Stop from a to b seconds of play, then the newest
   saved recording is loaded back: at least one actor clip, one world clip, one sound clip and the right length
   expected, `[movierecord] RESULT` printed. `-- --world fixture --flycheck plane --movierecord 4 12`, about 20 s.
