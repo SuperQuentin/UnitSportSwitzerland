@@ -618,7 +618,7 @@ public static class SteamerMeshBuilder
             for (int i = 0; i <= posts; i++)
             {
                 var p = a.Lerp(b, (float)i / posts);
-                m.Box(p with { Y = (UpperY + railTop) * 0.5f }, new Vector3(0.05f, railTop - UpperY, 0.05f), White);
+                m.Box(p with { Y = (UpperY + railTop - 0.03f) * 0.5f }, new Vector3(0.05f, railTop - 0.03f - UpperY, 0.05f), White);   // (#755) ends inside the handrail instead of 4 mm under its top
                 if (i < posts) dk.Hold(p.X, Bow - p.Z);
             }
             m.Tube(a with { Y = railTop }, b with { Y = railTop }, 0.04f, Varnish, 5);
@@ -673,7 +673,8 @@ public static class SteamerMeshBuilder
             m.Box(new Vector3(x, (UpperY + sill) * 0.5f, zc), new Vector3(0.08f, sill - UpperY, len), Varnish);
             m.Box(new Vector3(x, (head + HouseTop) * 0.5f, zc), new Vector3(0.08f, HouseTop - head, len), White);
             for (int i = 0; i <= 2; i++)
-                m.Box(new Vector3(x, (sill + head) * 0.5f, Mathf.Lerp(z0, z1, i / 2f)), new Vector3(0.09f, head - sill, 0.08f), Varnish);
+                // (#755) the back mullion is 2 cm thicker than the back wall it stands in, front and back: they shared its two faces
+                m.Box(new Vector3(x, (sill + head) * 0.5f, Mathf.Lerp(z0, z1, i / 2f)), new Vector3(0.09f, head - sill, i == 2 ? 0.12f : 0.08f), Varnish);
             m.Pane(new[] { new Vector3(x, sill, z0), new Vector3(x, sill, z1), new Vector3(x, head, z1), new Vector3(x, head, z0) }, Glass);
             dk.Along(HouseFrom, HouseTo, UpperY, HouseTop, 0.1f, x);
         }
@@ -770,7 +771,8 @@ public static class SteamerMeshBuilder
         float black = FunnelTop - 1.15f;
         var foot = new Vector3(0, UnderUpper, z);
         var band = new Vector3(0, black, z - 0.3f);
-        var top = new Vector3(0, FunnelTop, z - 0.42f);
+        // (#755) the black part keeps the buff part's rake (0.3 m back over 5.6 m up): at its own steeper one the two end caps met at a hair's angle and fought
+        var top = new Vector3(0, FunnelTop, z - 0.3f - 0.3f / (black - UnderUpper) * (FunnelTop - black));
         m.Tube(foot, band, FunnelRadius, FunnelRadius, Buff, 12);
         m.Tube(band, top, FunnelRadius, FunnelRadius, Boot, 12);
         m.Ring(top, Vector3.Up, FunnelRadius - 0.08f, FunnelRadius + 0.04f, 0.08f, Boot, 12);
@@ -856,8 +858,9 @@ public static class SteamerMeshBuilder
         var red = new Color(0.85f, 0.1f, 0.1f);
         var at2 = staff + new Vector3(0, 2.6f, -1.1f);
         m.Box(at2, new Vector3(0.03f, 0.9f, 0.9f), red);
-        m.Box(at2, new Vector3(0.04f, 0.56f, 0.16f), Colors.White);
-        m.Box(at2, new Vector3(0.04f, 0.16f, 0.56f), Colors.White);
+        // (#755) the cross stands 2.5 cm proud of the cloth on each side (it was 5 mm)
+        m.Box(at2, new Vector3(0.08f, 0.56f, 0.16f), Colors.White);
+        m.Box(at2, new Vector3(0.08f, 0.16f, 0.56f), Colors.White);
         // lifebuoys hung on the upper deck's rail
         foreach (float at in new[] { 20f, 52f })
             foreach (float side in new[] { 1f, -1f })

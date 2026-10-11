@@ -54,8 +54,9 @@ public static class ForkliftMeshBuilder
         // ---- chassis: a low box the whole length, the counterweight cast on the back of it ----
         m.Box(new Vector3(0, 0.26f, (L + mz) * 0.5f), new Vector3(W * 2f, 0.3f, mz - L), Dark);
         // the counterweight: taller and full width, the thing that stops it tipping over its forks
-        m.Box(new Vector3(0, (0.11f + bt) * 0.5f, L + 0.3f), new Vector3(W * 2f, bt - 0.11f, 0.6f), Body);
-        m.Box(new Vector3(0, bt - 0.02f, L + 0.3f), new Vector3(W * 2f - 0.06f, 0.04f, 0.56f), Body.Darkened(0.15f));
+        // (#755) 1 cm wider, lower and further back than the dark chassis it is cast on: no shared bottom, sides or back face
+        m.Box(new Vector3(0, (0.10f + bt) * 0.5f, L + 0.295f), new Vector3(W * 2f + 0.02f, bt - 0.10f, 0.61f), Body);
+        m.Box(new Vector3(0, bt - 0.01f, L + 0.3f), new Vector3(W * 2f - 0.06f, 0.04f, 0.56f), Body.Darkened(0.15f));   // (#755) top 1 cm proud of the counterweight's
         // the bonnet over the battery, between the seat and the counterweight, with the seat on it
         m.Box(new Vector3(0, (0.41f + bt) * 0.5f, L + 0.72f), new Vector3(W * 2f - 0.04f, bt - 0.41f, 0.3f), Body);
         // the footplate and its step on the left
@@ -64,17 +65,17 @@ public static class ForkliftMeshBuilder
         // the side panels, hazard-striped along the bottom as a works machine is
         foreach (int side in new[] { 1, -1 })
         {
-            m.Box(new Vector3(side * (W - 0.02f), 0.26f, (L + mz) * 0.5f), new Vector3(0.04f, 0.3f, mz - L), Body);
+            m.Box(new Vector3(side * (W - 0.01f), 0.26f, (L + mz) * 0.5f), new Vector3(0.04f, 0.28f, mz - L - 0.04f), Body);   // (#755) 1 cm proud of the chassis side, top, bottom and ends inside it
             for (int i = 0; i < 5; i++)
-                m.Box(new Vector3(side * (W + 0.005f), 0.14f, L + 0.2f + i * 0.4f), new Vector3(0.012f, 0.07f, 0.2f),
+                m.Box(new Vector3(side * (W + 0.02f), 0.14f, L + 0.2f + i * 0.4f), new Vector3(0.02f, 0.07f, 0.2f),
                     i % 2 == 0 ? Hazard : Dark);
         }
 
         // ---- the overhead guard: four posts and a slatted roof ----
         foreach (int side in new[] { 1, -1 })
             foreach (float z in new[] { 0.52f, -0.78f })
-                m.Box(new Vector3(side * (W - ForkliftLayout.Post * 0.5f), (bt + ForkliftLayout.GuardTop) * 0.5f, z),
-                    new Vector3(ForkliftLayout.Post, ForkliftLayout.GuardTop - bt, ForkliftLayout.Post), Body);
+                m.Box(new Vector3(side * (W - ForkliftLayout.Post * 0.5f + 0.01f), (bt + ForkliftLayout.GuardTop + 0.01f) * 0.5f, z),   // (#755) 1 cm outside and above the roof's rails and slats
+                    new Vector3(ForkliftLayout.Post, ForkliftLayout.GuardTop + 0.01f - bt, ForkliftLayout.Post), Body);
         for (int i = 0; i < 5; i++)
             m.Box(new Vector3(0, ForkliftLayout.GuardTop - 0.03f, -0.74f + i * 0.33f), new Vector3(W * 2f, 0.05f, 0.12f), Body.Darkened(0.1f));
         foreach (int side in new[] { 1, -1 })
@@ -84,8 +85,8 @@ public static class ForkliftMeshBuilder
         foreach (int side in new[] { 1, -1 })
         {
             HeavyMesh.Lamp(head, side * (W - 0.14f), ForkliftLayout.GuardTop - 0.1f, 0.56f, 0.14f, 0.1f, 0.04f, HeavyMesh.HeadLamp);
-            HeavyMesh.Lamp(tail, side * (W - 0.16f), 0.78f, L + 0.01f, 0.16f, 0.1f, 0.04f, HeavyMesh.TailLamp);
-            HeavyMesh.Lamp(reverse, side * (W - 0.38f), 0.78f, L + 0.01f, 0.1f, 0.1f, 0.04f, HeavyMesh.White);
+            HeavyMesh.Lamp(tail, side * (W - 0.16f), 0.78f, L - 0.01f, 0.16f, 0.1f, 0.04f, HeavyMesh.TailLamp);
+            HeavyMesh.Lamp(reverse, side * (W - 0.38f), 0.78f, L - 0.01f, 0.1f, 0.1f, 0.04f, HeavyMesh.White);
         }
 
         // ---- the outer mast: two channels either side of the driver's view, tied at the top ----
@@ -193,7 +194,7 @@ public static class ForkliftMeshBuilder
         {
             float x = side * ForkliftLayout.TineX;
             s.Box(new Vector3(x, 0.14f, mz + 0.09f), new Vector3(tw, 0.28f + tt, tt), Fork);
-            s.Box(new Vector3(x, -tt * 0.5f, mz + tl * 0.5f), new Vector3(tw, tt, tl), Fork);
+            s.Box(new Vector3(x, -tt * 0.5f, mz + (tl - 0.2f) * 0.5f), new Vector3(tw, tt, tl - 0.2f), Fork);   // (#755) the blade stops where the lighter tip begins
             // the tapered tip, as a thinner block: a tine you can actually slide into a pallet
             s.Box(new Vector3(x, -tt * 0.3f, mz + tl - 0.1f), new Vector3(tw, tt * 0.6f, 0.2f), Fork.Lightened(0.1f));
         }

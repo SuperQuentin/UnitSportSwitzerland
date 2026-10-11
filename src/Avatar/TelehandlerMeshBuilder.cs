@@ -40,7 +40,8 @@ public static class TelehandlerMeshBuilder
 
         // ---- the chassis: a low frame between the axles, the counterweight at the back ---------
         m.Box(new Vector3(0, 0.8f, (L.Nose + L.Tail) * 0.5f), new Vector3(0.9f, 0.5f, L.Nose - L.Tail), Dark);
-        m.Box(new Vector3(0, 0.95f, L.Tail + 0.35f), new Vector3(ch * 2f, 0.9f, 0.7f), Body.Darkened(0.15f));
+        // (#755) 2 cm further back and 2 cm wider on each side than the chassis frame and the engine beside it: no shared back or side faces
+        m.Box(new Vector3(0, 0.95f, L.Tail + 0.34f), new Vector3(ch * 2f + 0.04f, 0.9f, 0.72f), Body.Darkened(0.15f));
         foreach (int side in new[] { 1, -1 })
             foreach (float axle in new[] { L.FrontAxle, L.RearAxle })
                 m.Box(new Vector3(side * L.HalfTrack, L.WheelRadius * 2f + 0.05f, axle), new Vector3(L.WheelWidth + 0.12f, 0.05f, 1.15f), Body.Darkened(0.1f));
@@ -52,25 +53,25 @@ public static class TelehandlerMeshBuilder
         // the boom's mount at the back, between the cab and the engine
         m.Box(new Vector3(L.BoomPivot.X, (1.05f + L.BoomPivot.Y + 0.15f) * 0.5f, L.BoomPivot.Z), new Vector3(0.5f, L.BoomPivot.Y + 0.15f - 1.05f, 0.5f), Body.Darkened(0.2f));
         // the carriage's front frame between the front wheels, under where the forks come down
-        m.Box(new Vector3(0, 0.75f, L.Nose - 0.2f), new Vector3(1.2f, 0.4f, 0.4f), Body.Darkened(0.15f));
+        m.Box(new Vector3(0, 0.74f, L.Nose - 0.19f), new Vector3(1.2f, 0.42f, 0.44f), Body.Darkened(0.15f));   // (#755) 2 cm lower and 5 cm longer than the chassis it hangs from
 
         // ---- the cab: posts, roof, back wall, the door frame; the glass left open ----------------
         const float cl = L.CabLeft, cr = L.CabRight, cb = L.CabBack, cf = L.CabFront, fl = L.CabFloor, ct = L.CabTop;
         float cx = (cl + cr) * 0.5f, cw = cl - cr;
         m.Box(new Vector3(cx, (0.9f + fl) * 0.5f, (cb + cf) * 0.5f), new Vector3(cw, fl - 0.9f, cf - cb), Body);
         foreach (float x in new[] { cl - 0.04f, cr + 0.04f })
-            foreach (float z in new[] { cb + 0.04f, cf - 0.04f })
-                m.Box(new Vector3(x, (fl + ct) * 0.5f, z), new Vector3(0.07f, ct - fl, 0.07f), Dark);
+            foreach (float z in new[] { cb + 0.05f, cf - 0.04f })   // (#755) the back posts 1 cm forward; all posts end under the roof
+                m.Box(new Vector3(x, (fl + ct - 0.04f) * 0.5f, z), new Vector3(0.07f, ct - 0.04f - fl, 0.07f), Dark);
         m.Box(new Vector3(cx, ct - 0.04f, (cb + cf) * 0.5f), new Vector3(cw + 0.06f, 0.08f, cf - cb + 0.08f), Body);
-        m.Box(new Vector3(cx, (fl + ct) * 0.5f, cb + 0.03f), new Vector3(cw, ct - fl, 0.05f), Dark.Lightened(0.05f));
-        m.Box(new Vector3(cr + 0.02f, fl + 0.3f, (cb + cf) * 0.5f), new Vector3(0.04f, 0.6f, cf - cb - 0.1f), Body);
+        m.Box(new Vector3(cx, (fl + ct - 0.04f) * 0.5f, cb + 0.03f), new Vector3(cw - 0.04f, ct - 0.04f - fl, 0.05f), Dark.Lightened(0.05f));
+        m.Box(new Vector3(cr + 0.01f, fl + 0.3f, (cb + cf) * 0.5f), new Vector3(0.04f, 0.6f, cf - cb - 0.1f), Body);
         m.Tube(new Vector3(cx, ct, cb + 0.25f), new Vector3(cx, ct + 0.12f, cb + 0.25f), 0.07f, Beacon, 6);
         foreach (float x in new[] { cl - 0.12f, cr + 0.12f })
             HeavyMesh.Lamp(head, x, ct - 0.12f, cf + 0.03f, 0.12f, 0.09f, 0.04f, HeavyMesh.HeadLamp);
         foreach (int side in new[] { 1, -1 })
         {
-            HeavyMesh.Lamp(tail, side * (ch - 0.15f), 1.15f, L.Tail - 0.01f, 0.14f, 0.1f, 0.04f, HeavyMesh.TailLamp);
-            HeavyMesh.Lamp(reverse, side * (ch - 0.38f), 1.15f, L.Tail - 0.01f, 0.09f, 0.09f, 0.04f, HeavyMesh.White);
+            HeavyMesh.Lamp(tail, side * (ch - 0.15f), 1.15f, L.Tail - 0.03f, 0.14f, 0.1f, 0.04f, HeavyMesh.TailLamp);
+            HeavyMesh.Lamp(reverse, side * (ch - 0.38f), 1.15f, L.Tail - 0.03f, 0.09f, 0.09f, 0.04f, HeavyMesh.White);
         }
 
         var cockpit = HeavyCabin.Build(m, Frame, Gauges, 0f, 1f, System.Array.Empty<(string, Vector3, Vector2)>());

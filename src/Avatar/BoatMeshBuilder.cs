@@ -36,7 +36,7 @@ public static class BoatMeshBuilder
 
         // the footwell mats, either side of the saddle
         foreach (float x in new[] { 0.42f, -0.42f })
-            m.Box(new Vector3(x, deck + 0.04f, -0.55f), new Vector3(0.22f, 0.02f, 1.3f), black);
+            m.Box(new Vector3(x, deck + 0.035f, -0.55f), new Vector3(0.18f, 0.07f, 1.3f), black);   // (#755) a slab whose top stands 1.5 cm over the deck, not 4 mm
         // the saddle on its plinth
         float seatLen = JetSeatFront - JetSeatAft;
         m.Box(new Vector3(0, (deck + JetSeat.Y - 0.12f) * 0.5f + 0.02f, (JetSeatAft + JetSeatFront) * 0.5f),
@@ -122,11 +122,16 @@ public static class BoatMeshBuilder
 
         // the foredeck's pale caulking lines, and the engine hatch aft with its own
         float fore = s.Shape.Sheer(s.Depth, 0.8f);
+        // (#755) the lines lie along the foredeck's slope, 2 cm over it; flat they crossed the rising deck and fought it along the crossing
+        float lineT = (c1 + 1.3f + s.Shape.SternZ) / s.Length;
+        float lineY = s.Shape.Sheer(s.Depth, lineT) + 0.03f + 0.0075f;
+        var lineTilt = new Basis(Vector3.Right, -Mathf.Atan(s.Shape.SheerRise / s.Length));
         for (int i = -2; i <= 2; i++)
-            m.Box(new Vector3(i * 0.2f, fore + 0.035f, c1 + 1.3f), new Vector3(0.025f, 0.02f, 2.2f - Mathf.Abs(i) * 0.4f), Cream);
+            m.Box(new Vector3(i * 0.2f, lineY, c1 + 1.3f), new Vector3(0.025f, 0.025f, 2.2f - Mathf.Abs(i) * 0.4f), Cream, lineTilt);
         float aft = s.Shape.Sheer(s.Depth, 0.1f);
-        m.Box(new Vector3(0, aft + 0.04f, (c0 - s.Shape.SternZ) * 0.5f), new Vector3(1.4f, 0.08f, c0 + s.Shape.SternZ - 0.3f), Mahogany.Darkened(0.12f));
-        m.Box(new Vector3(0, aft + 0.085f, (c0 - s.Shape.SternZ) * 0.5f), new Vector3(0.03f, 0.02f, c0 + s.Shape.SternZ - 0.4f), Cream);
+        // (#755) the hatch stands 3 cm higher: the deck's slope along its length passed within a few mm of its top
+        m.Box(new Vector3(0, aft + 0.055f, (c0 - s.Shape.SternZ) * 0.5f), new Vector3(1.4f, 0.11f, c0 + s.Shape.SternZ - 0.3f), Mahogany.Darkened(0.12f));
+        m.Box(new Vector3(0, aft + 0.12f, (c0 - s.Shape.SternZ) * 0.5f), new Vector3(0.03f, 0.02f, c0 + s.Shape.SternZ - 0.4f), Cream);
         // the rubbing strake along the sheer, and a waterline stripe in the boat's colour
         Stripe(m, s, 0.98f, Chrome);
         Stripe(m, s, 0.34f, trim);
@@ -227,8 +232,9 @@ public static class BoatMeshBuilder
         var red = new Color(0.85f, 0.1f, 0.1f);
         var at = tip + new Vector3(0, -0.2f, -0.2f);
         m.Box(at, new Vector3(0.02f, 0.34f, 0.34f), red);
-        m.Box(at, new Vector3(0.03f, 0.21f, 0.06f), Colors.White);
-        m.Box(at, new Vector3(0.03f, 0.06f, 0.21f), Colors.White);
+        // (#755) the cross stands 2 cm proud of the cloth on each side (it was 5 mm)
+        m.Box(at, new Vector3(0.06f, 0.21f, 0.06f), Colors.White);
+        m.Box(at, new Vector3(0.06f, 0.06f, 0.21f), Colors.White);
         return m.Build();
     }
 
