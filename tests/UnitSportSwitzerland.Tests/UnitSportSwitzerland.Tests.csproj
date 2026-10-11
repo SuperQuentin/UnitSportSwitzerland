@@ -84,6 +84,7 @@
     <Compile Include="..\..\src\Core\SaveQueue.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\MathX.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Core\ZFight.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Core\Flicker.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Vehicles\CargoFit.cs" Link="Game\%(Filename)%(Extension)" />
     <!-- traffic-light heads (#350): the lens layout, Godot maths only -->
     <Compile Include="..\..\src\Terrain\SignalBuilder.cs" Link="Game\%(Filename)%(Extension)" />

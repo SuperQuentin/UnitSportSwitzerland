@@ -14,15 +14,16 @@ public class ZFightTests
         var b = new Vector3(x0 + size, y, z0);
         var c = new Vector3(x0 + size, y, z0 + size);
         var d = new Vector3(x0, y, z0 + size);
+        // Godot's front face: clockwise as seen from the side it faces
         if (down)
-        {
-            yield return new ZFight.Tri(a, b, c, look, look, depth, twoSided);
-            yield return new ZFight.Tri(a, c, d, look, look, depth, twoSided);
-        }
-        else
         {
             yield return new ZFight.Tri(a, c, b, look, look, depth, twoSided);
             yield return new ZFight.Tri(a, d, c, look, look, depth, twoSided);
+        }
+        else
+        {
+            yield return new ZFight.Tri(a, b, c, look, look, depth, twoSided);
+            yield return new ZFight.Tri(a, c, d, look, look, depth, twoSided);
         }
     }
 
@@ -89,7 +90,7 @@ public class ZFightTests
     public void A_huge_triangle_is_still_tested()
     {
         // ground-sized: past the grid's cell budget, tested against everything
-        var ground = new ZFight.Tri(new Vector3(-500, 0, -500), new Vector3(500, 0, 500), new Vector3(500, 0, -500), 0, 1);
+        var ground = new ZFight.Tri(new Vector3(-500, 0, -500), new Vector3(500, 0, -500), new Vector3(500, 0, 500), 0, 1);
         var hits = ZFight.Find(new[] { ground }.Concat(Square(3, 2, 0.1f, 0.001f, look: 2)).ToList());
         Assert.Equal(0.01f, hits.Sum(h => h.Area), 4);
     }
@@ -109,5 +110,26 @@ public class ZFightTests
     {
         var line = new ZFight.Tri(Vector3.Zero, Vector3.Right, Vector3.Right * 2, 0, 2);
         Assert.Empty(ZFight.Find(Square(0, 0, 1, 0, look: 1).Append(line).ToList()));
+    }
+
+    [Fact]
+    public void Visible_only_drops_a_fight_under_a_lid_but_not_under_glass()
+    {
+        var fight = Square(0, 0, 1, 0, look: 1).Concat(Square(0.25f, 0.25f, 0.5f, 0.002f, look: 2)).ToList();
+        // a 4 m lid 1 m over the fight, facing down: every ray, straight or at 50 degrees, meets it
+        var lid = Square(-1.5f, -1.5f, 4, 1, look: 3, down: true).ToList();
+        Assert.NotEmpty(ZFight.Find(fight, visibleOnly: true));
+        Assert.Empty(ZFight.Find(fight.Concat(lid).ToList(), visibleOnly: true));
+        Assert.NotEmpty(ZFight.Find(fight.Concat(lid).ToList()));
+        var glass = lid.Select(t => t with { Opaque = false });
+        Assert.NotEmpty(ZFight.Find(fight.Concat(glass).ToList(), visibleOnly: true));
+    }
+
+    [Fact]
+    public void Visible_only_sees_past_a_small_cover_at_an_angle()
+    {
+        var fight = Square(0, 0, 1, 0, look: 1).Concat(Square(0.25f, 0.25f, 0.5f, 0.002f, look: 2)).ToList();
+        var cap = Square(0.4f, 0.4f, 0.2f, 0.5f, look: 3, down: true);
+        Assert.NotEmpty(ZFight.Find(fight.Concat(cap).ToList(), visibleOnly: true));
     }
 }

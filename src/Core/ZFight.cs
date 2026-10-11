@@ -34,9 +34,11 @@ public static class ZFight
     /// they cannot flicker; the caller gives distinct looks to faces that differ. Faces in different
     /// <see cref="Depth"/> classes are pulled apart by their shader on purpose (a road over the
     /// ground, its paint over the road). <see cref="TwoSided"/>: drawn from both sides (no culling),
-    /// so a face turned the other way fights too.
+    /// so a face turned the other way fights too. <see cref="Opaque"/>: hides what is behind it
+    /// (glass does not), for <c>visibleOnly</c>.
     /// </summary>
-    public readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C, int Part = 0, int Look = 0, int Depth = 0, bool TwoSided = false);
+    public readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C, int Part = 0, int Look = 0, int Depth = 0, bool TwoSided = false,
+        bool Opaque = true);
 
     /// <summary>
     /// Two triangles (indices into the input) that fight: the area of the region where they lie
@@ -56,78 +58,194 @@ public static class ZFight
         }
     }
 
-    /// <summary>Every fighting pair, largest area first.</summary>
-    public static List<Hit> Find(IReadOnlyList<Tri> tris, float maxGap = MaxGap, float minArea = MinArea)
+    /// <summary>
+    /// Every fighting pair, largest area first. With <paramref name="visibleOnly"/>, only regions
+    /// that can be seen from outside: a few rays from the region out along its normal must not all
+    /// hit an opaque face (a floor under another floor, faces inside a closed body never flicker).
+    /// </summary>
+    public static List<Hit> Find(IReadOnlyList<Tri> tris, float maxGap = MaxGap, float minArea = MinArea, bool visibleOnly = false)
     {
         var hits = new List<Hit>();
-        int n = tris.Count;
-        var normals = new Vector3[n];
-        var lo = new Vector3[n];
-        var hi = new Vector3[n];
-        var ok = new bool[n];
-        var pad = new Vector3(maxGap, maxGap, maxGap);
-        double extent = 0;
-        int live = 0;
-        for (int i = 0; i < n; i++)
-        {
-            var t = tris[i];
-            var cross = (t.B - t.A).Cross(t.C - t.A);
-            float length = cross.Length();
-            if (!(length > 1e-9f)) continue;   // degenerate (or NaN)
-            normals[i] = cross / length;
-            lo[i] = t.A.Min(t.B).Min(t.C) - pad;
-            hi[i] = t.A.Max(t.B).Max(t.C) + pad;
-            var size = hi[i] - lo[i];
-            extent += Mathf.Max(size.X, Mathf.Max(size.Y, size.Z));
-            ok[i] = true;
-            live++;
-        }
-        if (live < 2) return hits;
-
-        // a uniform grid about twice the mean triangle; a pair is tested in the one cell that holds
-        // the low corner of the overlap of their boxes, so never twice
-        float cell = Mathf.Clamp((float)(extent / live) * 2f, 0.05f, 200f);
-        var grid = new Dictionary<(int, int, int), List<int>>();
-        var big = new List<int>();
-        var isBig = new bool[n];
-        for (int i = 0; i < n; i++)
-        {
-            if (!ok[i]) continue;
-            var a = Cell(lo[i], cell);
-            var b = Cell(hi[i], cell);
-            long cells = (long)(b.X - a.X + 1) * (b.Y - a.Y + 1) * (b.Z - a.Z + 1);
-            if (cells > MaxCells)
-            {
-                big.Add(i);
-                isBig[i] = true;
-                continue;
-            }
-            for (int x = a.X; x <= b.X; x++)
-                for (int y = a.Y; y <= b.Y; y++)
-                    for (int z = a.Z; z <= b.Z; z++)
-                    {
-                        if (!grid.TryGetValue((x, y, z), out var list)) grid[(x, y, z)] = list = new List<int>();
-                        list.Add(i);
-                    }
-        }
-
-        foreach (var (key, list) in grid)
-            for (int p = 0; p < list.Count; p++)
-                for (int q = p + 1; q < list.Count; q++)
-                {
-                    int i = list[p], j = list[q];
-                    if (!BoxesTouch(lo, hi, i, j)) continue;
-                    var owner = Cell(lo[i].Max(lo[j]), cell);
-                    if ((owner.X, owner.Y, owner.Z) != key) continue;
-                    Test(tris, normals, i, j, maxGap, minArea, hits);
-                }
-        foreach (int i in big)
-            for (int j = 0; j < n; j++)
-                if (ok[j] && j != i && (!isBig[j] || j > i) && BoxesTouch(lo, hi, i, j))
-                    Test(tris, normals, i, j, maxGap, minArea, hits);
-
+        var index = new Index(tris, maxGap);
+        if (index.Live < 2) return hits;
+        index.Pairs((i, j) => Test(tris, index.Normals, i, j, maxGap, minArea, hits));
+        if (visibleOnly) hits.RemoveAll(h => !index.Seen(h, maxGap));
         hits.Sort((x, y) => y.Area.CompareTo(x.Area));
         return hits;
+    }
+
+    /// <summary>
+    /// The triangles in a uniform grid about twice the mean triangle; a triangle whose box spans more
+    /// than <see cref="MaxCells"/> cells (the ground) is kept aside and tested against everything.
+    /// </summary>
+    private sealed class Index
+    {
+        private readonly IReadOnlyList<Tri> _tris;
+        public readonly Vector3[] Normals;
+        private readonly Vector3[] _lo, _hi;
+        private readonly bool[] _ok, _big;
+        private readonly List<int> _bigList = new();
+        private readonly Dictionary<(int, int, int), List<int>> _grid = new();
+        private readonly float _cell;
+        private Vector3I _cellLo = new(int.MaxValue, int.MaxValue, int.MaxValue), _cellHi = new(int.MinValue, int.MinValue, int.MinValue);
+        public readonly int Live;
+
+        public Index(IReadOnlyList<Tri> tris, float maxGap)
+        {
+            _tris = tris;
+            int n = tris.Count;
+            Normals = new Vector3[n];
+            _lo = new Vector3[n];
+            _hi = new Vector3[n];
+            _ok = new bool[n];
+            _big = new bool[n];
+            var pad = new Vector3(maxGap, maxGap, maxGap);
+            double extent = 0;
+            for (int i = 0; i < n; i++)
+            {
+                var t = tris[i];
+                var cross = (t.B - t.A).Cross(t.C - t.A);
+                float length = cross.Length();
+                if (!(length > 1e-9f)) continue;   // degenerate (or NaN)
+                Normals[i] = cross / length;
+                _lo[i] = t.A.Min(t.B).Min(t.C) - pad;
+                _hi[i] = t.A.Max(t.B).Max(t.C) + pad;
+                var size = _hi[i] - _lo[i];
+                extent += Mathf.Max(size.X, Mathf.Max(size.Y, size.Z));
+                _ok[i] = true;
+                Live++;
+            }
+            if (Live < 2) return;
+            _cell = Mathf.Clamp((float)(extent / Live) * 2f, 0.05f, 200f);
+            for (int i = 0; i < n; i++)
+            {
+                if (!_ok[i]) continue;
+                var a = Cell(_lo[i]);
+                var b = Cell(_hi[i]);
+                long cells = (long)(b.X - a.X + 1) * (b.Y - a.Y + 1) * (b.Z - a.Z + 1);
+                if (cells > MaxCells)
+                {
+                    _bigList.Add(i);
+                    _big[i] = true;
+                    continue;
+                }
+                _cellLo = _cellLo.Min(a);
+                _cellHi = _cellHi.Max(b);
+                for (int x = a.X; x <= b.X; x++)
+                    for (int y = a.Y; y <= b.Y; y++)
+                        for (int z = a.Z; z <= b.Z; z++)
+                        {
+                            if (!_grid.TryGetValue((x, y, z), out var list)) _grid[(x, y, z)] = list = new List<int>();
+                            list.Add(i);
+                        }
+            }
+        }
+
+        private Vector3I Cell(Vector3 p) =>
+            new(Mathf.FloorToInt(p.X / _cell), Mathf.FloorToInt(p.Y / _cell), Mathf.FloorToInt(p.Z / _cell));
+
+        private bool Touch(int i, int j) =>
+            _lo[i].X <= _hi[j].X && _lo[j].X <= _hi[i].X &&
+            _lo[i].Y <= _hi[j].Y && _lo[j].Y <= _hi[i].Y &&
+            _lo[i].Z <= _hi[j].Z && _lo[j].Z <= _hi[i].Z;
+
+        /// <summary>Every pair whose boxes touch, once: in the cell holding the low corner of their overlap.</summary>
+        public void Pairs(Action<int, int> test)
+        {
+            foreach (var (key, list) in _grid)
+                for (int p = 0; p < list.Count; p++)
+                    for (int q = p + 1; q < list.Count; q++)
+                    {
+                        int i = list[p], j = list[q];
+                        if (!Touch(i, j)) continue;
+                        var owner = Cell(_lo[i].Max(_lo[j]));
+                        if ((owner.X, owner.Y, owner.Z) != key) continue;
+                        test(i, j);
+                    }
+            foreach (int i in _bigList)
+                for (int j = 0; j < _ok.Length; j++)
+                    if (_ok[j] && j != i && (!_big[j] || j > i) && Touch(i, j))
+                        test(i, j);
+        }
+
+        /// <summary>
+        /// Rays from just over the region's centre (both sides for a two-sided pair), straight out and
+        /// tilted 50 degrees four ways: seen if any leaves the scene without meeting an opaque face.
+        /// </summary>
+        public bool Seen(Hit hit, float maxGap)
+        {
+            var n = Normals[hit.First];
+            var u = (_tris[hit.First].B - _tris[hit.First].A).Normalized();
+            var v = n.Cross(u);
+            bool twoSided = _tris[hit.First].TwoSided || _tris[hit.Second].TwoSided;
+            var centre = hit.At;
+            float tilt = Mathf.Tan(Mathf.DegToRad(50f));
+            // Godot's front face is clockwise from the front, so (B - A) x (C - A) points in: out is minus it
+            for (int side = -1; side <= (twoSided ? 1 : -1); side += 2)
+            {
+                var up = n * side;
+                var origin = centre + up * (maxGap * 1.5f);
+                if (Escapes(origin, up, hit) ||
+                    Escapes(origin, (up + u * tilt).Normalized(), hit) ||
+                    Escapes(origin, (up - u * tilt).Normalized(), hit) ||
+                    Escapes(origin, (up + v * tilt).Normalized(), hit) ||
+                    Escapes(origin, (up - v * tilt).Normalized(), hit))
+                    return true;
+            }
+            return false;
+        }
+
+        private bool Escapes(Vector3 origin, Vector3 dir, Hit hit)
+        {
+            foreach (int i in _bigList)
+                if (Blocks(i, origin, dir, hit)) return false;
+            // Amanatides-Woo through the grid until the ray leaves the cells in use
+            var c = Cell(origin);
+            int sx = dir.X > 0 ? 1 : -1, sy = dir.Y > 0 ? 1 : -1, sz = dir.Z > 0 ? 1 : -1;
+            float tx = Next(origin.X, dir.X, c.X, sx), ty = Next(origin.Y, dir.Y, c.Y, sy), tz = Next(origin.Z, dir.Z, c.Z, sz);
+            float dx = dir.X == 0 ? float.PositiveInfinity : _cell / Mathf.Abs(dir.X);
+            float dy = dir.Y == 0 ? float.PositiveInfinity : _cell / Mathf.Abs(dir.Y);
+            float dz = dir.Z == 0 ? float.PositiveInfinity : _cell / Mathf.Abs(dir.Z);
+            for (int guard = 0; guard < 100_000; guard++)
+            {
+                if (_grid.TryGetValue((c.X, c.Y, c.Z), out var list))
+                    foreach (int i in list)
+                        if (Blocks(i, origin, dir, hit)) return false;
+                if (tx <= ty && tx <= tz) { c.X += sx; tx += dx; }
+                else if (ty <= tz) { c.Y += sy; ty += dy; }
+                else { c.Z += sz; tz += dz; }
+                if ((sx > 0 ? c.X > _cellHi.X : c.X < _cellLo.X) ||
+                    (sy > 0 ? c.Y > _cellHi.Y : c.Y < _cellLo.Y) ||
+                    (sz > 0 ? c.Z > _cellHi.Z : c.Z < _cellLo.Z))
+                    return true;
+            }
+            return true;
+        }
+
+        /// <summary>The ray's distance to the next cell wall on one axis.</summary>
+        private float Next(float p, float d, int ci, int s) =>
+            d == 0 ? float.PositiveInfinity : ((ci + (s > 0 ? 1 : 0)) * _cell - p) / d;
+
+        /// <summary>Moller-Trumbore, either side: an opaque face other than the pair, ahead of the ray.</summary>
+        private bool Blocks(int i, Vector3 origin, Vector3 dir, Hit hit)
+        {
+            if (i == hit.First || i == hit.Second || !_ok[i]) return false;
+            var t = _tris[i];
+            if (!t.Opaque) return false;
+            var e1 = t.B - t.A;
+            var e2 = t.C - t.A;
+            var p = dir.Cross(e2);
+            float det = e1.Dot(p);
+            if (Mathf.Abs(det) < 1e-12f) return false;
+            float inv = 1f / det;
+            var s = origin - t.A;
+            float a = s.Dot(p) * inv;
+            if (a < 0 || a > 1) return false;
+            var q = s.Cross(e1);
+            float b = dir.Dot(q) * inv;
+            if (b < 0 || a + b > 1) return false;
+            return e2.Dot(q) * inv > 1e-5f;
+        }
     }
 
     /// <summary>The summed area of the hits, in cm².</summary>
@@ -137,14 +255,6 @@ public static class ZFight
         foreach (var h in hits) sum += h.Area;
         return sum * 1e4f;
     }
-
-    private static Vector3I Cell(Vector3 p, float cell) =>
-        new(Mathf.FloorToInt(p.X / cell), Mathf.FloorToInt(p.Y / cell), Mathf.FloorToInt(p.Z / cell));
-
-    private static bool BoxesTouch(Vector3[] lo, Vector3[] hi, int i, int j) =>
-        lo[i].X <= hi[j].X && lo[j].X <= hi[i].X &&
-        lo[i].Y <= hi[j].Y && lo[j].Y <= hi[i].Y &&
-        lo[i].Z <= hi[j].Z && lo[j].Z <= hi[i].Z;
 
     private static void Test(IReadOnlyList<Tri> tris, Vector3[] normals, int i, int j, float maxGap, float minArea, List<Hit> hits)
     {
@@ -166,7 +276,9 @@ public static class ZFight
     /// </summary>
     private static (float Area, float Gap, Vector3[] Points)? Overlap(in Tri ti, Vector3 n, in Tri tj, float maxGap)
     {
-        var origin = ti.A;
+        // measured from tj's first corner dropped onto ti's plane: near the overlap, so a ground-sized
+        // ti does not cost the small one its float precision
+        var origin = tj.A - n * (tj.A - ti.A).Dot(n);
         float hA = (tj.A - origin).Dot(n), hB = (tj.B - origin).Dot(n), hC = (tj.C - origin).Dot(n);
         if (Mathf.Min(hA, Mathf.Min(hB, hC)) > maxGap || Mathf.Max(hA, Mathf.Max(hB, hC)) < -maxGap) return null;
 

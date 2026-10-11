@@ -98,6 +98,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Has("--driftcheck"), Player.DriftCheck.Run),
         (() => Has("--tuningcheck"), Player.GarageProbe.Check),
         (() => Has("--meshcheck"), Avatar.MeshScratch.Check),
+        (() => Avatar.ZFightCheck.Requested, () => Avatar.ZFightCheck.Run(this)),
         (() => Has("--outfitcheck"), Avatar.OutfitCheck.Run),
         (() => Has("--emotecheck"), Avatar.EmoteCheck.Run),
         (() => Has("--cockpitcheck"), Player.CockpitCheck.Run),
