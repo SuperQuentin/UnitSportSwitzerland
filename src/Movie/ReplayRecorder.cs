@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using Godot;
 using UnitSport.Core;
 using UnitSport.Player;
@@ -12,8 +13,10 @@ namespace UnitSport.Movie;
 ///
 /// <para>
 /// Record / Stop (#775), like ReplayMod: <see cref="StartSession"/> opens a second
-/// <see cref="Recording"/>, as long as <see cref="SessionMinutes"/>, fed from the same reads;
-/// <see cref="StopSession"/> turns it into a project of its own. The buffer keeps running under it.
+/// <see cref="Recording"/>, fed from the same reads; <see cref="StopSession"/> turns it into a project
+/// of its own. The buffer keeps running under it. A session is streamed to disk (#782): a minute
+/// long in memory, emptied into a <see cref="SessionSpool"/> every <see cref="SpoolSeconds"/>, whose
+/// worker thread writes it and, at Stop, joins it, so it runs for hours.
 /// </para>
 ///
 /// <para>
@@ -27,14 +30,27 @@ public partial class ReplayRecorder : Node
 {
     public static ReplayRecorder? Instance { get; private set; }
 
-    /// <summary>The longest Record / Stop session, after which it stops by itself.</summary>
-    public const int SessionMinutes = 30;
-    public const string GameSoundLane = "Game sound";
+    /// <summary>How often a Record / Stop session is handed to its spool (<c>--moviespool s</c> for the checks).</summary>
+    public static double SpoolSeconds = 30;
+    /// <summary>What a session holds in memory: twice the spool's period, so nothing falls out before it is spooled.</summary>
+    private static double SessionWindow => Math.Max(60, 2 * SpoolSeconds);
 
     /// <summary>The studio is open: its puppets are not players, and the world it shows is not being played.</summary>
-    public bool Paused { get; set; }
+    public bool Paused
+    {
+        get => _paused;
+        set
+        {
+            // a session spooled as the studio opens: what came before is not lost to the window or the sound's break
+            if (value && !_paused && _session != null) Spool(GameClock.Now);
+            _paused = value;
+        }
+    }
+    private bool _paused;
 
     private Recording? _buffer, _session;
+    private SessionSpool? _spool;
+    private double _nextSpool;
     // the world as it is drawn (#775), read once a tick for the buffer and a session alike
     private readonly WorldRecorder _world = new();
     private RecordingBadge? _badge;
@@ -52,12 +68,21 @@ public partial class ReplayRecorder : Node
     public bool Recording => _session != null;
     /// <summary>Seconds the session has run.</summary>
     public double SessionSeconds => _session is { Started: var s } && !double.IsNaN(s) ? GameClock.Now - s : 0;
-    /// <summary>The session reached <see cref="SessionMinutes"/> and stopped: the project it left, for the world to save.</summary>
-    public event Action<MovieProject>? SessionFull;
+    /// <summary>
+    /// A stopped session is joined (on the main thread, maybe frames after <see cref="StopSession"/>):
+    /// its project, or null with an error, or null and no error when nothing was recorded.
+    /// </summary>
+    public event Action<MovieProject?, string?>? SessionStopped;
+    /// <summary>A stopped session is still being joined.</summary>
+    public bool Saving { get; private set; }
     /// <summary>Objects of the world being recorded now (for the checks and the pause menu).</summary>
     public int WorldObjects => _world.Live;
 
-    public ReplayRecorder() => Name = "ReplayRecorder";
+    public ReplayRecorder()
+    {
+        Name = "ReplayRecorder";
+        if (CmdArgs.Double("--moviespool") is { } spool) SpoolSeconds = spool;
+    }
 
     private int SoundRate => (int)AudioServer.GetMixRate() / 2;
 
@@ -95,28 +120,59 @@ public partial class ReplayRecorder : Node
 
     // ---- Record / Stop -------------------------------------------------------------------------
 
-    /// <summary>Starts a session: everything from now on, up to <see cref="SessionMinutes"/>. False if one runs.</summary>
+    /// <summary>Starts a session: everything from now on, for as long as it runs. False if one runs or is still being saved.</summary>
     public bool StartSession()
     {
-        if (_session != null) return false;
-        _session = new Recording(SessionMinutes * 60, SoundRate, _world, GameClock.Now);
+        if (_session != null || Saving) return false;
+        string temp = ProjectSettings.GlobalizePath($"{MovieSession.Folder}/.recording-{Guid.NewGuid():N}.spool");
+        try { _spool = new SessionSpool(temp, ProjectSettings.GlobalizePath(SoundImport.Folder), SoundRate); }
+        catch (Exception e)
+        {
+            GD.PushError($"[movie] cannot record: {e.Message}");
+            return false;
+        }
+        _session = new Recording(SessionWindow, SoundRate, _world, GameClock.Now);
+        _nextSpool = GameClock.Now + SpoolSeconds;
         AddChild(_badge = new RecordingBadge(this));
-        GD.Print("[movie] recording started");
+        GD.Print($"[movie] recording started, spooled every {SpoolSeconds:0.#} s to {temp}");
         return true;
     }
 
-    /// <summary>Stops the session: what it recorded as a project of its own, or null when nothing was.</summary>
-    public MovieProject? StopSession()
+    /// <summary>
+    /// Stops the session; false when none runs. Its last piece is spooled and the whole joined on the
+    /// spool's worker: <see cref="SessionStopped"/> hands the project over when it is.
+    /// </summary>
+    public bool StopSession()
     {
-        if (_session is not { } s) return null;
+        if (_session is not { } s || _spool is not { } spool) return false;
+        Spool(GameClock.Now);
         _session = null;
+        _spool = null;
         s.Close();
         _badge?.QueueFree();
         _badge = null;
-        var project = new MovieProject(ActorIo.Names) { Name = $"Recording {DateTime.Now:yyyy-MM-dd HH-mm}" };
-        int clips = s.Grab(project, GameClock.Now);
-        GD.Print($"[movie] recording stopped: {clips} clips from {s.Players} players, {project.Duration:F1} s");
-        return clips > 0 ? project : null;
+        Saving = true;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        // the looks the pieces index, as they stand now: the recorder goes on adding to its list
+        spool.Finish($"Recording {DateTime.Now:yyyy-MM-dd HH-mm}", ActorIo.Names, _world.Looks.ToArray())
+            .ContinueWith(t => Callable.From(() =>
+            {
+                Saving = false;
+                string? error = t.Exception?.GetBaseException().Message;
+                var project = t.IsCompletedSuccessfully ? t.Result : null;
+                GD.Print($"[movie] recording stopped: {spool.Pieces} pieces, {spool.Bytes / 1024} KB spooled, joined in {watch.ElapsedMilliseconds} ms: "
+                    + (project != null ? $"{project.Clips.Count} clips, {project.Duration:F1} s" : error ?? "nothing recorded"));
+                SessionStopped?.Invoke(project, error);
+            }).CallDeferred(), TaskScheduler.Default);
+        return true;
+    }
+
+    /// <summary>What the session recorded since its last piece, to its spool's worker.</summary>
+    private void Spool(double now)
+    {
+        if (_session == null || _spool == null) return;
+        _spool.Add(_session.Piece(now));
+        _nextSpool = now + SpoolSeconds;
     }
 
     // ---- recording -----------------------------------------------------------------------------
@@ -169,7 +225,7 @@ public partial class ReplayRecorder : Node
         _buffer?.Prune(now);
         _session?.Prune(now);
 
-        if (_session != null && SessionSeconds >= SessionMinutes * 60 && StopSession() is { } full) SessionFull?.Invoke(full);
+        if (_session != null && now >= _nextSpool) Spool(now);
     }
 
     private WorldOrigin? OriginNow() =>

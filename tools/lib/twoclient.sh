@@ -18,9 +18,12 @@
 #   tc_stop [pid]                    kill a server (default $SERVER) and every process under it, by PID
 #   tc_ok <n> <logs...>              true when the logs hold exactly n "RESULT: ok" lines
 # Every run goes through guard_run (timeout and RAM floor, tree kill by PID); the servers left at
-# exit are killed by the EXIT trap. A headless Godot may exit 139 after its result: read RESULT lines.
+# exit are killed by the EXIT trap. If the script's own RAM watchdog fires, it prints
+# "[<name>] RESULT: FAILED (stopped by a TERM ...)" and exits 143. A headless Godot may exit 139 after its result: read RESULT lines.
 _tc_name=${1:?usage: . lib/twoclient.sh <name>}
 . "$(dirname "${BASH_SOURCE[0]}")/guard.sh"
+# the RAM watchdog ends this script with a TERM, after its Godots: say so, so the run never reads as a pass
+trap 'trap "" TERM; echo "[$_tc_name] RESULT: FAILED (stopped by a TERM: RAM floor, see [guard] above)"; exit 143' TERM
 guard_watch $$ > /dev/null   # RAM watchdog for this script's own processes
 set -u
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
@@ -29,8 +32,8 @@ mkdir -p "$OUT"
 
 # the winget `godot` link hangs: on Windows default to the real console exe, as tools/test.sh does
 if [ -z "${GODOT:-}" ] && [ -n "${LOCALAPPDATA:-}" ]; then
-  for g in "$(cygpath -u "$LOCALAPPDATA" 2>/dev/null)"/Microsoft/WinGet/Packages/GodotEngine.GodotEngine.Mono_*/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe \
-           /c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.1-stable_mono_win64/godot_v4.7.1-stable_mono_win64_console.exe; do
+  for g in "$(cygpath -u "$LOCALAPPDATA" 2>/dev/null)"/Microsoft/WinGet/Packages/GodotEngine.GodotEngine.Mono_*/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe \
+           /c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.2-stable_mono_win64/godot_v4.7.2-stable_mono_win64_console.exe; do
     [ -f "$g" ] && { GODOT=$g; break; }
   done
 fi

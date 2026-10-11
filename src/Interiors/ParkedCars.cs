@@ -32,7 +32,7 @@ public partial class ParkedCars : Node3D
     {
         public VehicleSlot Slot;
         public DormantBody Body = null!;
-        public MultiMesh? Mm;
+        public MultiMeshInstance3D? Draw;
         public int Instance;
         public Transform3D Pose;
         public bool Shown = true;
@@ -83,13 +83,15 @@ public partial class ParkedCars : Node3D
                 Mesh = look.Mesh,
                 InstanceCount = bays.Count,
             };
+            var draw = new MultiMeshInstance3D { Name = $"Look{bays[0].Slot.KindId}", Multimesh = mm };
             for (int k = 0; k < bays.Count; k++)
             {
                 mm.SetInstanceTransform(k, bays[k].Pose);
-                bays[k].Mm = mm;
+                bays[k].Draw = draw;
                 bays[k].Instance = k;
             }
-            cars.AddChild(new MultiMeshInstance3D { Name = $"Look{bays[0].Slot.KindId}", Multimesh = mm });
+            cars.AddChild(draw);
+            Movie.ReplayWatch.Instanced(draw);   // recorded for the movie studio (#782)
         }
         return cars;
     }
@@ -135,7 +137,11 @@ public partial class ParkedCars : Node3D
         if (bay.Shown == shown) return;
         bay.Shown = shown;
         // a zero scale draws nothing; the instance's place is kept for when it comes back
-        bay.Mm?.SetInstanceTransform(bay.Instance, shown ? bay.Pose : new Transform3D(Basis.Identity.Scaled(Vector3.Zero), bay.Pose.Origin));
+        if (bay.Draw is { } draw)
+        {
+            draw.Multimesh.SetInstanceTransform(bay.Instance, shown ? bay.Pose : new Transform3D(Basis.Identity.Scaled(Vector3.Zero), bay.Pose.Origin));
+            Movie.ReplayWatch.Instanced(draw);   // the recording copies its instances again
+        }
         foreach (var child in bay.Body.GetChildren())
             if (child is CollisionShape3D shape) shape.SetDeferred(CollisionShape3D.PropertyName.Disabled, !shown);
     }

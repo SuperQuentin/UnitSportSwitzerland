@@ -27,7 +27,7 @@ namespace UnitSport.Items;
 /// CD dances in time with everyone else, in silence, until it arrives.
 /// </para>
 /// </summary>
-public partial class RadioBody : RigidBody3D, IOriginShiftAware
+public partial class RadioBody : RigidBody3D, IOriginShiftAware, IInterestEntity
 {
     public const string Group = "radios";
 
@@ -64,7 +64,14 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
     private WorldOrigin _origin = null!;
     /// <summary>The position on the wire (#185): published by whoever throws it, applied everywhere else.</summary>
     private NetPlace _place = null!;
-    private MultiplayerSynchronizer? _sync;
+    private MultiplayerSynchronizer? _sync, _relay;
+
+    // ---- entity interest (#689) ----
+    public GlobalPos InterestAt => _place.Global;
+    public float InterestRange(Interest.View view) => EntityInterestRules.RadioRange;
+    public bool InterestBig => false;
+    public void RefreshInterest(long peer) => EntityNet.Refresh(this, peer);
+    public void RelayRate(bool moving) { if (_relay != null) _relay.ReplicationInterval = Settled ? 2f : 0.05f; }
     private double _age, _restTime;
     private RadioSpeaker? _speaker;
     private Vector3 _lastPos, _lastVel;
@@ -116,7 +123,6 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
             ReplicationInterval = s.Settled ? 2f : 0.05f,
         };
         _sync.SetMultiplayerAuthority(GetMultiplayerAuthority());
-        AddChild(_sync);
 
         // what plays: the server's word, reliably on change, and with the spawn for late joiners
         var play = new SceneReplicationConfig();
@@ -127,7 +133,8 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
         }
         var state = new MultiplayerSynchronizer { Name = "State", RootPath = new NodePath(".."), ReplicationConfig = play };
         state.SetMultiplayerAuthority(1);
-        AddChild(state);
+        // only to the peers near enough to have it (#689), the fall relayed by the server
+        _relay = EntityNet.Add(this, _sync, s.Settled ? 2f : 0.05f, state);
 
         if (!IsMultiplayerAuthority() || s.Settled || NetworkManager.DedicatedServer)
         {
@@ -241,10 +248,13 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
     }
 
     /// <summary>The state to respawn it from: where it is now, what it plays.</summary>
-    public RadioState Capture() => new(Name, Owner, _place.Global, Rotation.Y, Vector3.Zero, CdId, StartedAt, Playing, Settled, Length, Volume);
+    public RadioState Capture() => new(Name, Owner, _place.Global, Rotation.Y, Vector3.Zero, CdId, StartedAt, Playing, Settled, Length, Volume, _initial.Oid);
 
     /// <summary>Its own volume, 0..1 (#734): the server's word, on the State synchronizer.</summary>
     [Export] public float Volume { get; set; } = RadioLoudness.Default;
+
+    /// <summary>Which radio this is to the object containers (#689); 0 = not persisted.</summary>
+    public long Oid => _initial.Oid;
 
     /// <summary>What it plays, as the item carries it when picked up; null when silent or finished.</summary>
     public RadioPlay? NowPlaying => Playing && WantedPosition < Length ? new RadioPlay(CdId, StartedAt, Length) : null;

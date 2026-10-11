@@ -42,6 +42,13 @@ public static class GroundQuery
         var from = p + Vector3.Up * 3f;
         var to = p + Vector3.Down * 6f;
         uint mask = collisionMask & ~TreeColliders.Layer;
+        // Under a ceiling, from just below it: an underground car park's storey is 2.7 m, and from
+        // 3 m up the ray began above the slab overhead and took its top for the ground. A car's tilt
+        // read the ceiling under one axle and the ramp under the other, its hull boxes tipped into
+        // the ramp and it never climbed out (#791). Looked for from 1 m up, so the floor's own
+        // underside under a point a hair inside it is never taken for a ceiling.
+        var ceiling = ray.Cast(space, p + Vector3.Up * 1f, from, mask, exclude);
+        if (ceiling.Count > 0) from = ceiling["position"].AsVector3() + Vector3.Down * 0.05f;
         var hit = ray.Cast(space, from, to, mask, exclude);
         if (hit.Count > 0 && Past(hit["collider"].AsGodotObject(), pastPlayers, pastVehicles))
         {

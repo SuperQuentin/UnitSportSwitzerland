@@ -127,3 +127,14 @@
   the old "until the mouse moves" hack is gone. `--radiopanelcheck --world fixture` (quick tier) also
   works the library (button, a row plays, Stop, back). `CarCdCheck.Press` opens the library when the
   row it wants is not shown.
+- **Several radios at once (#813)**: the radio loudest at this machine's ears plays at its own level,
+  every other music speaker ducks 12 dB under it, faded over a second. `RadioFocus` (pure,
+  `RadioFocusTests`) is the rule: level at the ears = the speaker's level before the duck (`SourceDb`:
+  base, its own volume, `Hearing`'s occlusion) minus the inverse-distance fall-off, heard only inside
+  `MaxDistance`; the focus holds until another is 3 dB louder, so halfway between two radios does not
+  flip. A radio one carries (hand or back) and the stereo of the car one sits in (`Hearing.Close`)
+  always win. `Audio.MusicFocus` picks once a frame over every `RadioSpeaker` (world, carried, church)
+  and `WebRadioSpeaker` (car stereo) in the tree (`IMusicSpeaker`); each adds its `DuckDb` to its
+  volume. Local ears only, nothing on the wire. Loudest, not nearest: a turned-down radio next to you
+  loses to a loud one across the square. Dancers still follow `RadioManager.NearestMusic`.
+  **Check:** `tools/radiofocuscheck.sh` (tier full, windowed: `--radiofocuscheck --world fixture`).

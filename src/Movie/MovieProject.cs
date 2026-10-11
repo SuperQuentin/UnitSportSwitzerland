@@ -65,6 +65,8 @@ public sealed class MovieProject
 {
     /// <summary>Shortest clip a trim or split leaves: below a few frames it cannot be grabbed again.</summary>
     public const double MinLength = 0.2;
+    /// <summary>The audio lane the game's own sound is recorded onto (#656).</summary>
+    public const string GameSoundLane = "Game sound";
 
     public string Name { get; set; } = "Untitled";
     /// <summary>The change-only properties' names, in the order every track stores them.</summary>

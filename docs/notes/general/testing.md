@@ -38,7 +38,7 @@ clients (6-10 GB): parallel agents ran the machine out of RAM. Measured now:
 | 3 full | all of the above for every area, plus the windowed two-client `tools/*check.sh` and `loadtest.sh` | `tools/test.sh full [area]` | not measured yet: needs real terrain (`CHUNKS=`) and a display |
 
 - `GODOT` must point at the editor executable. On Windows use the full path of
-  `Godot_v4.7.1-stable_mono_win64_console.exe` (the winget `godot` link hangs), see `godot-exe`.
+  `Godot_v4.7.2-stable_mono_win64_console.exe` (the winget `godot` link hangs), see `godot-exe`.
 - **The quick tier runs on game time** (`--fixed-fps 60`, #461): ~4.5x faster in all (38 -> 8.6 min
   for the 55 checks); the rules for timing in checks, `@realtime`, `TEST_REALTIME=1`: `fast-checks`.
   The measured times in the tables below are real time, from before.

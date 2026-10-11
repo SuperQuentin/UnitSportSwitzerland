@@ -43,7 +43,13 @@ Flickering faces have two causes, and each test catches what the other cannot.
   `[flicker] <model>: N px` line. Debug menu: **Flicker shot** button, or `--debugview flicker`
   (after 30 s, with a `--shot-queue` line holding the camera), PNG in `user://flicker/`.
 - Found: the Duro's bumper, Citaro stripes and skirt, the Setra's rear corners (#755); Riddes'
-  roofs in the real style speckle where their tile texture shows moiré (not a z-fight).
+  roofs (not a z-fight: clay view 0.04 %). Fixed in `roof_tiles` (#793): the ridge length that
+  seeds which tiles and where the moss is was an interpolated varying, and its last-bit wobble
+  through `hash()` (`sin * 43758`) flipped whole tiles; it is `flat` and rounded now. The lips'
+  2 cm bands are smoothed over a pixel and fade out by a 6 cm pixel (moiré on far faces).
+  **A hash seeded from an interpolated varying flickers: make it `flat` or round it.**
+- Left: shadow-map shimmer of the sun's cascades on ground and walls (a flicker shot at Riddes:
+  0.71 % of the screen with shadows, 0.32 % without).
 
 ## Fixing
 

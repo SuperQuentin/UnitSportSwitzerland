@@ -10,24 +10,23 @@
 # Defaults: ground at the Col du Mollendruz over 1500 m; air from Mont-la-Ville to Montricher.
 # Each client gets its own --cache (a loopback run leaves the server manifest in the cache).
 # CHUNKS=<dir> passes --chunks <dir> to every process (a worktree has no terrain_chunks of its own).
-. "$(dirname "$0")/lib/guard.sh"; guard_watch $$ > /dev/null  # RAM watchdog: kills this script's processes before Windows/WSL run out (testing note)
-set -u
-CHUNKARGS=(); [ -n "${CHUNKS:-}" ] && CHUNKARGS=(--chunks "$CHUNKS")
+. "$(dirname "$0")/lib/twoclient.sh" racecheck
 CLASS=${1:-car}
-OUT=test_output
 PORT=$((7790 + RANDOM % 100))
-cd "$(dirname "$0")/.."
-mkdir -p "$OUT"
-PIDS=()
-cleanup() { for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done; rm -rf "${CACHES[@]}" 2>/dev/null; }
-CACHES=()
+# the clients run in the background: kill them by PID tree at exit, then the lib's own cleanup (server, lock)
+PIDS=(); CACHES=()
+cleanup() {
+    local p
+    for p in ${PIDS[@]+"${PIDS[@]}"}; do _guard_kill_tree "$p"; done
+    [ ${#CACHES[@]} -gt 0 ] && rm -rf "${CACHES[@]}"
+    _tc_cleanup
+}
 trap cleanup EXIT
 
 client() {   # client <log> <args...>
     local log=$1; shift
     local cache; cache=$(mktemp -d); CACHES+=("$cache")
-    timeout 400 godot --headless --path . -- "${CHUNKARGS[@]}" --connect 127.0.0.1:$PORT --cache "$cache" --traffic 0 --raceauto "$@" \
-        > "$OUT/$log" 2>&1 &
+    tc_client 400 "$OUT/$log" ${CH[@]+"${CH[@]}"} --connect 127.0.0.1:$PORT --cache "$cache" --traffic 0 --raceauto "$@" &
     PIDS+=($!)
 }
 
@@ -52,9 +51,7 @@ case "$CLASS" in
     *) echo "unknown class $CLASS"; exit 2 ;;
 esac
 
-timeout 420 godot --headless --path . -- "${CHUNKARGS[@]}" --server --port $PORT > $OUT/racecheck_server.log 2>&1 &
-PIDS+=($!)
-sleep 6
+tc_server 420 120 $OUT/racecheck_server.log ${CH[@]+"${CH[@]}"} --server --port $PORT
 
 if [ "$CLASS" = two ]; then
     client racecheck_a.log --name Takumi --at 2518038,1167321 --racecmd "duel Keisuke 1500 car"

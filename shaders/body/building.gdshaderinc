@@ -258,6 +258,11 @@ float fine_detail(float size, float px) {
     return clamp(size / max(px, 1e-4) - 1.0, 0.0, 1.0);
 }
 
+// 0 below `edge`, 1 above, blended over `w` (a pixel in the same units) instead of a hard step
+float band(float edge, float x, float w) {
+    return smoothstep(edge - w * 0.5, edge + w * 0.5, x);
+}
+
 // --- roof relief -------------------------------------------------------------------------
 // BuildingMeshBuilder gives roofs a frame of their own in CUSTOM0.w (0 = none):
 // 1, a pitched roof: CUSTOM0.xyz the unit up-slope vector, UV.x metres along the eave, UV2 =
@@ -266,24 +271,30 @@ float fine_detail(float size, float px) {
 //    across it, the across direction's angle), UV.x / UV2.x metres along / across from its edge.
 varying float roof_kind;
 varying vec2 roof_uv;  // (along, up the slope) or (along, across)
-varying float roof_len; // eave to ridge, metres
+// flat: one value per face. Interpolated it wobbled by a last bit from pixel to pixel, and the
+// hash of it (which tiles, where the moss is) flipped whole tiles as the camera crept (#793)
+varying flat float roof_len; // eave to ridge, metres
 
 // Tile courses on a pitched roof: beaver tails (17 cm courses, half-offset, rounded ends) or
 // pantiles (33 cm courses with a wave across). Each course's butt edge stands proud, faces down
 // the slope and shades the course below; a gutter at the eave, capping along the ridge, a little
 // moss. q = (along, up from the eave), px = metres a pixel spans.
 vec3 roof_tiles(vec3 col, inout vec3 n, vec3 up, vec2 q, float ridge, float px) {
-    float kind = hash(vec2(ridge * 3.7, 1.3));
-    float shown = fine_detail(0.09, px);
+    float kind = hash(vec2(round(ridge * 20.0) * 0.185, 1.3));   // to 5 cm: a stable seed
+    // gone by a 6 cm pixel: its lips and shadow lines are 2-3 cm, and at full strength past that
+    // they turned to moire that crawled as the camera moved (#793). Each edge is also smoothed
+    // over one pixel (band(), w = a pixel in the pattern's own units).
+    float shown = fine_detail(0.06, px);
     if (q.y < 0.14) {
         return mix(col, vec3(0.30, 0.29, 0.27), fine_detail(0.14, px)); // the gutter
     }
     if (q.y > ridge - 0.24) {
         float joint = fract(q.x / 0.42);
-        return mix(col, col * (joint < 0.08 ? 0.62 : 0.9), fine_detail(0.2, px)); // ridge caps
+        float dark = 1.0 - band(0.08, joint, px / 0.42);
+        return mix(col, col * mix(0.9, 0.62, dark), fine_detail(0.07, px)); // ridge caps
     }
     vec3 c;
-    bool lip = false;
+    float lip = 0.0;   // how much of the pixel is a course's lip: its normal tilts by that much
     vec2 tile;
     if (kind < 0.55) {
         float k = floor(q.y / 0.17);
@@ -292,14 +303,12 @@ vec3 roof_tiles(vec3 col, inout vec3 n, vec3 up, vec2 q, float ridge, float px) 
         float fy = fract(q.y / 0.17);
         float edge = 0.38 * (1.0 - sqrt(max(0.0, 1.0 - fx * fx)));
         tile = vec2(floor(u), k);
-        if (fy < edge) {
-            c = col * 0.62; // the course beneath, in this one's shadow
-        } else if (fy < edge + 0.12) {
-            c = col * 1.12;
-            lip = true;
-        } else {
-            c = col * mix(1.04, 0.9, fy);
-        }
+        float w = px / 0.17;
+        float past = band(edge, fy, w);                  // out of the shadow of the course above
+        float on_lip = past * (1.0 - band(edge + 0.12, fy, w));
+        c = col * mix(mix(1.04, 0.9, fy), 1.12, on_lip);
+        c = mix(col * 0.62, c, past);                    // the course beneath, in this one's shadow
+        lip = on_lip;
     } else {
         float k = floor(q.y / 0.33);
         float fy = fract(q.y / 0.33);
@@ -308,20 +317,18 @@ vec3 roof_tiles(vec3 col, inout vec3 n, vec3 up, vec2 q, float ridge, float px) 
         n = normalize(n + along * wave * 0.35 * shown);
         tile = vec2(floor(q.x / 0.21), k);
         c = col * (1.0 + 0.1 * wave);
-        if (fy < 0.07) {
-            c *= 1.1;
-            lip = true;
-        } else if (fy > 0.9) {
-            c *= 0.7; // under the next course's edge
-        }
+        float w = px / 0.33;
+        float on_lip = 1.0 - band(0.07, fy, w);
+        float under = band(0.9, fy, w);                  // under the next course's edge
+        c *= mix(1.0, 1.1, on_lip) * mix(1.0, 0.7, under);
+        lip = on_lip;
     }
     c *= 0.93 + 0.14 * hash(tile + kind * 17.0);
     // moss and lichen: patches, thicker toward the damp eave
     float moss = step(0.86, hash(floor(q / 0.9) + kind * 5.0)) * 0.35 + 0.25 * clamp(1.0 - q.y / 1.5, 0.0, 1.0);
     c = mix(c, vec3(0.24, 0.29, 0.14) * (0.8 + 0.4 * hash(tile)), moss * hash(tile + 3.3));
-    if (lip) {
-        n = normalize(mix(n, normalize(n - up * 1.2), shown));
-    }
+    // weighted, not on/off: a lip's steep normal flipped whole pixels' light as the camera crept (#793)
+    n = normalize(mix(n, normalize(n - up * 1.2), shown * lip));
     return mix(col, c, shown);
 }
 

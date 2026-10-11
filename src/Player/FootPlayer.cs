@@ -69,7 +69,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     private const float Gravity = 9.81f;
     private const float EyeHeight = 1.68f;   // average adult eye level
-    private const float BaseFov = 68f;
+    public const float BaseFov = 68f;
     private const float RunFov = 76f;
     private const float SlideFov = 86f;
 
@@ -2118,8 +2118,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             _slidePose = null; _airPose = null; _poseOutfit = OutfitBits;
             _walkPalette = _walkPalette with { Outfit = new(OutfitBits) };
         }
-        if (PoseKind == PoseSwim) { ApplySwimFigure(); return; }
         float dt = (float)GetProcessDeltaTime();
+        // a swimmer's face lives too (#802): blinks, glances, a blow's grimace
+        if (PoseKind == PoseSwim) { ApplySwimFigure(); StepFace(dt); return; }
         StepArmPose(dt);
         var danced = StepDance(dt);
         // a fighter's pose (#495) over any dance, which eases out underneath

@@ -238,6 +238,10 @@ src/Net/ClockSync        net    tools/speednetcheck.sh
 src/Net/                 net    @netsmoke
 src/Net/Sleeper          net    tools/sleepercheck.sh
 src/Net/PlayerKey        net    tools/sleepercheck.sh
+src/Net/Arrival          net    tools/arrivalcheck.sh
+src/Core/Permissions     net    tools/arrivalcheck.sh
+src/Core/PlaceSearchUi   net    tools/arrivalcheck.sh
+src/Net/HostedServer     net    tools/arrivalcheck.sh
 src/Net/ChatManager      net    tools/transfercheck.sh
 src/Net/TransferProbe    net    tools/transfercheck.sh
 src/Core/ServerWorld     net    @netsmoke
@@ -328,6 +332,9 @@ src/Combat/              full   tools/pvpcheck.sh
 src/Items/Weapons        full   tools/pvpcheck.sh
 src/Items/               full   tools/gunshotcheck.sh
 src/Items/Radio          full   tools/sparklecheck.sh
+src/Items/Radio          full   tools/radiofocuscheck.sh
+src/Audio/MusicFocus     full   tools/radiofocuscheck.sh
+src/Audio/Live/WebRadioSpeaker full tools/radiofocuscheck.sh
 src/Items/Beat           full   tools/beatfieldcheck.sh
 src/Items/Radio          full   tools/beatfieldcheck.sh
 src/Items/               full   tools/placedcheck.sh
@@ -595,10 +602,40 @@ src/Vehicles/DormantVehicles net tools/sitemachinenetcheck.sh
 src/Vehicles/VehicleSlot net    tools/sitemachinenetcheck.sh
 src/Vehicles/ParkingNetProbe net tools/sitemachinenetcheck.sh
 src/Terrain/Construction/SitePlans net tools/sitemachinenetcheck.sh
+src/World/ObjectContainers net tools/containernetcheck.sh
+src/World/ContainerRules net tools/containernetcheck.sh
+src/World/ContainerNetProbe net tools/containernetcheck.sh
+src/Net/EntityInterest net tools/containernetcheck.sh
+src/Vehicles/DormantVehicles net tools/containernetcheck.sh
 # #558 PR 3: the cars in an underground car park are vehicles asleep (the rule's tier-0 test is HallCarTests; slot geometry is --flatcheck)
 src/Interiors/HallCar    net    tools/hallcarnetcheck.sh
 src/Interiors/ParkedCars net    tools/hallcarnetcheck.sh
 src/Vehicles/DormantVehicles net tools/hallcarnetcheck.sh
+
+# collision matrix (#699, docs/notes/general/collision-matrix.md): the whole catalog where it is
+# built (in two halves, each under the per-check timeout), the slice a collider change touches elsewhere
+src/Core/Collision/      quick  --collidecheck --world flat --targets Cars/,Motorbikes/,Bicycles/
+src/Core/Collision/      quick  --collidecheck --world flat --targets Trucks/,Boats/,Aircraft/,Machines/,Placed/,Build/,Props/,Doors/
+src/Player/Rideable      quick  --collidecheck --world flat --targets Cars/,Motorbikes/,Bicycles/
+src/Player/Rideable      quick  --collidecheck --world flat --targets Trucks/,Boats/,Aircraft/,Machines/,Placed/,Build/,Props/,Doors/
+src/Vehicles/VehicleBody quick  --collidecheck --world flat --targets Cars/,Motorbikes/,Bicycles/
+src/Vehicles/VehicleBody quick  --collidecheck --world flat --targets Trucks/,Boats/,Aircraft/,Machines/,Placed/,Build/,Props/,Doors/
+src/Avatar/MeshBounds    quick  --collidecheck --world flat --targets Cars/,Motorbikes/,Bicycles/
+src/Avatar/MeshBounds    quick  --collidecheck --world flat --targets Trucks/,Boats/,Aircraft/,Machines/,Placed/,Build/,Props/,Doors/
+src/Player/Excavator     quick  --collidecheck --world flat --targets machines/
+src/Player/WheelLoader   quick  --collidecheck --world flat --targets machines/
+src/Player/Telehandler   quick  --collidecheck --world flat --targets machines/
+src/Player/Flight        quick  --collidecheck --world flat --targets aircraft/
+src/Player/Airliner      quick  --collidecheck --world flat --targets aircraft/
+src/Player/Truck         quick  --collidecheck --world flat --targets trucks/
+src/Player/Boat          quick  --collidecheck --world flat --targets boats/
+src/Player/Steamer       quick  --collidecheck --world flat --targets boats/
+src/Build/               quick  --collidecheck --world flat --targets build/,placed/
+src/Items/PlacedObjects  quick  --collidecheck --world flat --targets placed/
+src/Items/PalletNode     quick  --collidecheck --world flat --targets props/
+src/Crafting/StationVisuals quick --collidecheck --world flat --targets placed/
+src/Interiors/DoorLeaf   quick  --collidecheck --world flat --targets doors/
+
 # the playtest suite (#751): scenarios well-formed, MCP over HTTP, the ledger; then every flat-course scenario set up
 src/Playtest/            quick  --playtestcheck
 src/Playtest/            quick  --playtest --playtest-smoke --world fixture --chunks fixture:flat

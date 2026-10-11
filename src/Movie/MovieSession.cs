@@ -86,24 +86,40 @@ public static class MovieSession
             Said?.Invoke("Nothing can be recorded here");
             return;
         }
-        if (!recorder.Recording)
+        if (recorder.Recording)
         {
-            recorder.SessionFull -= SaveRecording;
-            recorder.SessionFull += SaveRecording;
-            recorder.StartSession();
-            Said?.Invoke($"Recording (up to {ReplayRecorder.SessionMinutes} min): Shift+F5 or Pause > Stop recording to stop");
+            recorder.StopSession();
+            Said?.Invoke("Saving the recording…");
             return;
         }
-        if (recorder.StopSession() is { } project) SaveRecording(project);
-        else Said?.Invoke("Nothing was recorded");
+        if (recorder.Saving)
+        {
+            Said?.Invoke("The last recording is still being saved");
+            return;
+        }
+        recorder.SessionStopped -= SaveRecording;
+        recorder.SessionStopped += SaveRecording;
+        Said?.Invoke(recorder.StartSession()
+            ? "Recording: Shift+F5 or Pause > Stop recording to stop"
+            : "The recording could not start");
     }
 
-    private static void SaveRecording(MovieProject p)
+    /// <summary>A Record / Stop session saved under its own name (#775), or what went wrong (#782): the name, or null.</summary>
+    public static event Action<string?>? RecordingSaved;
+
+    private static void SaveRecording(MovieProject? p, string? spoolError)
     {
+        if (p == null)
+        {
+            Said?.Invoke(spoolError == null ? "Nothing was recorded" : $"The recording could not be saved: {spoolError}");
+            RecordingSaved?.Invoke(null);
+            return;
+        }
         string? error = Write(p);
         Said?.Invoke(error == null
             ? $"Saved \"{p.Name}\" ({Clock(p.Duration)}): open it in the movie studio"
             : $"The recording could not be saved: {error}");
+        RecordingSaved?.Invoke(error == null ? p.Name : null);
     }
 
     /// <summary>Writes <paramref name="p"/> under its name; an error message, or null.</summary>
