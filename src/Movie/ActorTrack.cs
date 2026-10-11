@@ -145,6 +145,18 @@ public sealed class ActorTrack
         yaw = LerpAngle(F[i * Channels.Stride + Channels.Yaw], F[j * Channels.Stride + Channels.Yaw], a);
     }
 
+    /// <summary>One change-only property's number at local time <paramref name="t"/>, without filling a whole frame.</summary>
+    public long NumAt(double t, int prop)
+    {
+        long v = BaseNum[prop];
+        foreach (var e in Events)
+        {
+            if (e.T > t) break;
+            if (e.Prop == prop) v = e.Num;
+        }
+        return v;
+    }
+
     /// <summary>The change-only properties at local time <paramref name="t"/>.</summary>
     public void ValuesAt(double t, long[] num, string[] str)
     {

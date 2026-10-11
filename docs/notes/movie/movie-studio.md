@@ -38,6 +38,8 @@ Plan and later milestones (cameras, lenses, VR, webcam mocap): `docs/plans/movie
   tracks and lanes, and renumbers.
 - **Files:** `user://movies/<name>.usmovie` (`MovieFile`, versioned little-endian binary). Change-only properties
   are stored by name, so a file from a build with more or fewer of them still loads.
+- **Keys reach the editor unless a text field has the focus** (`MovieStudio.Typing`). Never `UiFocus.TextEntryActive`:
+  every open menu page sets it, this editor included, and it once silenced every shortcut (Space, Del, S…).
 - **Controls** (studio only, no input-map actions, so they never collide with gameplay):
   - Keyboard: Space / J / K / L, ← → (Shift: 1 s), Home / End, S, Del, Ctrl+D, Tab; right-drag orbits, the wheel
     zooms, Ctrl+wheel zooms the timeline.

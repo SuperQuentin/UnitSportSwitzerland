@@ -38,6 +38,7 @@ public partial class MovieStage : Node3D
     {
         Name = "MovieStage";
         Project = project;
+        project.RigScale = RideScale;
         _origin = origin;
         // before the puppets (children, priority 0): they draw this frame what was written this frame
         ProcessPriority = -1;
@@ -49,6 +50,7 @@ public partial class MovieStage : Node3D
     public void Use(MovieProject project)
     {
         Project = project;
+        project.RigScale = RideScale;
         foreach (var p in _puppets)
         {
             // out of the tree now: the new puppets take the same names, which a passenger finds its host by
@@ -85,6 +87,31 @@ public partial class MovieStage : Node3D
     public Quaternion? MountFrame(int lane) => Puppet(lane) is { } p ? p.GlobalBasis.GetRotationQuaternion() : null;
     public Func<int, Quaternion?> Mount => _mount ??= MountFrame;
     private Func<int, Quaternion?>? _mount;
+
+    // a vehicle's length against a car's, per ride kind, measured once (#776)
+    private static readonly Dictionary<long, float> RideScales = new();
+
+    /// <summary>
+    /// How big lane <paramref name="lane"/>'s ride is at timeline time <paramref name="t"/> against a 4.5 m car:
+    /// the longer of its parked box's length and width, never under 1 (on foot, a bike, a car).
+    /// </summary>
+    public float RideScale(int lane, double t)
+    {
+        if (Project.ActiveClip(lane, t) is not { } clip) return 1;
+        long kind = Project.Tracks[clip.Track].NumAt(clip.Local(t), ActorIo.RideKind);
+        if (kind == 0) return 1;
+        if (!RideScales.TryGetValue(kind, out float scale))
+        {
+            scale = 1;
+            if (Rideable.Create((RideKind)kind) is { } ride)
+            {
+                var size = ride.ParkedBox.Size;
+                scale = Math.Max(1, Math.Max(size.X, size.Z) / 4.5f);
+            }
+            RideScales[kind] = scale;
+        }
+        return scale;
+    }
 
     /// <summary>The puppet of lane <paramref name="lane"/>, when it is on screen now.</summary>
     public FootPlayer? Puppet(int lane) =>

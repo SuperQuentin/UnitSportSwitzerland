@@ -407,6 +407,20 @@ public sealed class MovieProject
     /// of the target's vehicle (the engine knows it; null keeps the heading only). The fade a Fade link adds
     /// comes out in <paramref name="fade"/>. False when the shot has no keys and no target.
     /// </summary>
+    /// <summary>
+    /// How big actor lane <paramref name="lane"/>'s ride is at a time, against a car's (1 on foot): the engine
+    /// knows the vehicles' sizes and sets it (<c>MovieStage</c>). A following rig's default place scales by it.
+    /// </summary>
+    public Func<int, double, float>? RigScale { get; set; }
+
+    /// <summary>The default place of shot <paramref name="index"/>'s rig at <paramref name="t"/>, scaled to what its actor rides.</summary>
+    public CameraPose DefaultPose(int index, double t)
+    {
+        var cam = Cameras[Math.Clamp(index, 0, Cameras.Count - 1)];
+        float scale = cam.Target >= 0 && RigScale != null ? Math.Max(1, RigScale(cam.Target, t)) : 1;
+        return CameraTrack.DefaultPose(cam.Rig, scale);
+    }
+
     public bool ShotPose(int index, double t, Func<int, Godot.Quaternion?>? mount, out CameraPose pose, out float fade)
     {
         fade = 0;
@@ -415,7 +429,7 @@ public sealed class MovieProject
         if (!keyed)
         {
             if (!cam.Relative) return false;
-            pose = CameraTrack.DefaultPose(cam.Rig);
+            pose = DefaultPose(index, t);
         }
 
         // the beat links: everything they add, summed by what they move

@@ -9,6 +9,9 @@ The model only: the Shots screen that edits it is #777, the Sequences screen #77
   frame: `CameraKey.E` = x right, `Alt` = y up, `N` = z back; the rotation is the frame's), *Mount* (the same, in the
   full rotation of the target's puppet, `MovieStage.MountFrame`). With no keys a following rig uses
   `CameraTrack.DefaultPose`: Lead 6 m ahead looking back, Chase 7 m behind 2 m up, Mount just over the target.
+  The default scales with what the actor rides (`MovieProject.RigScale`, set by `MovieStage.RideScale`: the ride's
+  parked box, longer side, against a 4.5 m car, never under 1, measured once per kind): a plane's chase starts about
+  11 m back and 3 m up. The first key a slider makes takes the scaled default too.
   - The yaw is `FootPlayer.NetYaw` (= `Rotation.Y`, facing −Z): `--movieshotcheck` proves the rigs hang where the
     drawn puppet faces.
 - **Follow smoothing** (`ShotMath.Follow`): only the **heading** is smoothed, by a critically damped spring

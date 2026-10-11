@@ -190,9 +190,18 @@ public sealed class CameraTrack
 
     /// <summary>
     /// Where a following rig starts before it has a key of its own: a Lead 6 m ahead looking back, a Chase
-    /// 7 m behind and 2 m up looking forward and a little down, a Mount just over the target.
+    /// 7 m behind and 2 m up looking forward and a little down, a Mount just over the target, all times
+    /// <paramref name="scale"/>: the size of what the actor rides against a car's (a plane's chase hangs further
+    /// back and higher than a walker's, #776).
     /// </summary>
-    public static CameraPose DefaultPose(ShotRig rig)
+    public static CameraPose DefaultPose(ShotRig rig, float scale = 1)
+    {
+        var p = DefaultPoseAtScaleOne(rig);
+        p.E *= scale; p.N *= scale; p.Alt *= scale;
+        return p;
+    }
+
+    private static CameraPose DefaultPoseAtScaleOne(ShotRig rig)
     {
         var p = new CameraPose { Lens = 35, LookAt = -1, Qw = 1 };
         Godot.Quaternion q;
