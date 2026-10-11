@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 150 # up to 60m of gap + 50m of merge cap + the ~5-10m build
     env:
-      GODOT_VERSION: 4.7.1-stable
+      GODOT_VERSION: 4.7.2-stable
       GODOT: ${{ github.workspace }}/.godot-ci/godot
       QUIET_MINUTES: ${{ inputs.quiet_minutes || '3' }}
       MIN_GAP_MINUTES: ${{ inputs.min_gap_minutes || '60' }}

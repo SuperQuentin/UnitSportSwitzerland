@@ -32,8 +32,8 @@ mkdir -p "$OUT"
 
 # the winget `godot` link hangs: on Windows default to the real console exe, as tools/test.sh does
 if [ -z "${GODOT:-}" ] && [ -n "${LOCALAPPDATA:-}" ]; then
-  for g in "$(cygpath -u "$LOCALAPPDATA" 2>/dev/null)"/Microsoft/WinGet/Packages/GodotEngine.GodotEngine.Mono_*/Godot_v4.7.1-stable_mono_win64/Godot_v4.7.1-stable_mono_win64_console.exe \
-           /c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.1-stable_mono_win64/godot_v4.7.1-stable_mono_win64_console.exe; do
+  for g in "$(cygpath -u "$LOCALAPPDATA" 2>/dev/null)"/Microsoft/WinGet/Packages/GodotEngine.GodotEngine.Mono_*/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe \
+           /c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.2-stable_mono_win64/godot_v4.7.2-stable_mono_win64_console.exe; do
     [ -f "$g" ] && { GODOT=$g; break; }
   done
 fi

@@ -8,7 +8,7 @@ macOS and Linux.
 
 | Tool | Version | Needed for |
 |---|---|---|
-| **Godot, .NET edition** | **4.7.1** exactly | the editor and the game. It must be the *.NET / mono* build, and match `Godot.NET.Sdk/4.7.1` in `UnitSportSwitzerland.csproj` |
+| **Godot, .NET edition** | **4.7.2** exactly | the editor and the game. It must be the *.NET / mono* build, and match `Godot.NET.Sdk/4.7.2` in `UnitSportSwitzerland.csproj` |
 | **.NET SDK 8** | 8.0.x | the game assembly (`net8.0`) |
 | **.NET SDK 9** | 9.0.x | `tools/TerrainPreprocessor` (`net9.0`). The 9 SDK builds the net8 projects too, so strictly it is the only SDK you need |
 | Python | 3.10+ | *optional*, and no longer needed to build a region (#564): `tools/swiss_data.py` stays as a standalone downloader, and `tools/swiss_relief.py` rebuilds the embedded coarse heightmap |
@@ -19,7 +19,7 @@ A .NET **runtime** is not enough: `dotnet --list-sdks` must list both an 8.x and
 On Windows, from an **elevated** PowerShell:
 
 ```powershell
-choco install godot-mono --version 4.7.1 -y
+choco install godot-mono --version 4.7.2 -y
 winget install Microsoft.DotNet.SDK.8
 winget install Microsoft.DotNet.SDK.9
 winget install Python.Python.3.12 --scope user     # optional
@@ -28,11 +28,11 @@ winget install Python.Python.3.12 --scope user     # optional
 Chocolatey puts Godot where the commands in `CLAUDE.md` expect it:
 
 ```
-C:\ProgramData\chocolatey\lib\godot-mono\tools\godot_v4.7.1-stable_mono_win64\godot_v4.7.1-stable_mono_win64_console.exe
+C:\ProgramData\chocolatey\lib\godot-mono\tools\godot_v4.7.2-stable_mono_win64\godot_v4.7.2-stable_mono_win64_console.exe
 ```
 
 Use the `_console.exe` when running from a terminal: it prints the game's log. Without
-Chocolatey, download the **.NET** build of 4.7.1 from the Godot archive
+Chocolatey, download the **.NET** build of 4.7.2 from the Godot archive
 (`godotengine.org/download/archive`) and substitute its path wherever this guide says `godot`.
 
 ## 2. Build and open

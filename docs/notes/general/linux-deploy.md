@@ -9,7 +9,7 @@
 - **Export preset:** `export_presets.cfg` is gitignored and per machine; the script appends a `"Linux Server"` preset
   (`platform="Linux"`, `dedicated_server=true`, the Windows preset's `exclude_filter`) when it is missing. Output: `build/linux/`.
 - **.NET:** the local SDK must match the csproj `TargetFramework` (net8 -> SDK 8.x) and Godot must be the csproj's `Godot.NET.Sdk`
-  version (4.7.1 mono); both checked first. The export bundles the .NET runtime (`data_*/libcoreclr.so`), so the host needs none;
+  version (4.7.2 mono); both checked first. The export bundles the .NET runtime (`data_*/libcoreclr.so`), so the host needs none;
   if an export ever comes out framework-dependent, setup installs `dotnet-runtime-<major>.0` instead.
 - **Host setup** (`tools/deploy/remote-setup.sh`, run as root, idempotent, one OK/INSTALLED/FAIL line per item):
   - apt: `ffmpeg tmux avahi-daemon ufw cron curl ca-certificates tar unzip` + a `libicu` (.NET globalization).

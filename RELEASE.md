@@ -21,12 +21,12 @@ Deploying the dedicated Linux server is a separate step: [`docs/notes/general/li
 
 1. **Tools**: Git Bash (Windows) or WSL, `gh` logged in (`gh auth login`), the .NET SDK that matches the csproj
    `TargetFramework`, `curl`, `unzip`, `tar`, `xz`, and `zip` (PowerShell `Compress-Archive` is used when `zip` is missing).
-2. **Godot 4.7.1 mono**, the same version as the csproj's `Godot.NET.Sdk`. The script uses the Chocolatey install path by
+2. **Godot 4.7.2 mono**, the same version as the csproj's `Godot.NET.Sdk`. The script uses the Chocolatey install path by
    default; override it with `GODOT=/path/to/godot_console.exe` (on WSL: `GODOT=godot`). See
    [`docs/notes/general/godot-exe.md`](docs/notes/general/godot-exe.md).
-3. **Export templates** (mono, 4.7.1): Godot editor > *Editor > Manage Export Templates* > Download, or unzip
-   `Godot_v4.7.1-stable_mono_export_templates.tpz` so that `version.txt` and the `windows_*`, `linux_*` and `macos.zip`
-   templates land in `%APPDATA%/Godot/export_templates/4.7.1.stable.mono/`.
+3. **Export templates** (mono, 4.7.2): Godot editor > *Editor > Manage Export Templates* > Download, or unzip
+   `Godot_v4.7.2-stable_mono_export_templates.tpz` so that `version.txt` and the `windows_*`, `linux_*` and `macos.zip`
+   templates land in `%APPDATA%/Godot/export_templates/4.7.2.stable.mono/`.
 4. **`export_presets.cfg`** in the repo root. It is gitignored (one per machine). Create a **"Windows Desktop"** preset in
    *Project > Export* with:
    - the same `exclude_filter` as the Linux preset in `tools/deploy-linux.sh` (keeps data folders out of the build),
