@@ -42,7 +42,7 @@ a fixed point. The redesign is built **on that stack**: nothing reaches `main` u
   (wipe, whip pan, zoom punch).
 - **Filming time, then editing time** (decided after trying the overlay): the editor is **full screen**, the
   scene in a 16:9 **preview player** with the transport under it, the camera tools beside it and the timeline
-  below (a draggable divider). F5 / hold View or Pause > Movie studio opens it; "Back to game" (or Esc) resumes
+  below (a draggable divider). F5 (keyboard) or Pause > Movie studio (pad, VR) opens it; Shift+F5 or Pause > Record is Record / Stop; "Back to game" (or Esc) resumes
   exactly where the game was. **Offline the game is paused** while editing; online it goes on and the player is
   left as it was (stopping somewhere safe first is the player's call). Shots are framed inside the player;
   *Enlarge* (H) gives it the whole editor while framing.
