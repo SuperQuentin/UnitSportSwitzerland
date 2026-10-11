@@ -196,10 +196,11 @@ public sealed class WorldRecorder
         {
             var child = at.GetChild(i);
             if (child is FootPlayer) continue;
-            if (child is MeshInstance3D mesh && mesh.Mesh != null)
+            // what draws: meshes, and the lights and particles a car's lamps or a fire make
+            if (child is MeshInstance3D { Mesh: not null } or Light3D and not DirectionalLight3D or GpuParticles3D)
             {
                 group ??= AddGroup(root, now, origin);
-                Part(mesh, group, now, origin);
+                Part((Node3D)child, group, now, origin);
             }
             if (child.GetChildCount() > 0) WalkParts(root, child, ref group, now, origin);
         }
@@ -215,9 +216,9 @@ public sealed class WorldRecorder
         return e;
     }
 
-    private void Part(MeshInstance3D mesh, Ent group, double now, WorldOrigin origin)
+    private void Part(Node3D mesh, Ent group, double now, WorldOrigin origin)
     {
-        int look = LookOf(mesh);
+        int look = mesh is MeshInstance3D m ? LookOf(m) : TemplateLookOf(mesh);
         if (_byNode.TryGetValue(mesh.GetInstanceId(), out var e))
         {
             e.Seen = _pass;
@@ -252,6 +253,36 @@ public sealed class WorldRecorder
     {
         var scale = b.Scale;
         return new WorldPose { X = x, Y = y, Z = z, Rot = b.Orthonormalized().GetRotationQuaternion(), Scale = scale };
+    }
+
+    /// <summary>What a light or a particle emitter looks like now: the settings that show.</summary>
+    private readonly record struct TemplateKey(int Kind, Color Color, float Energy, float Range, float Angle, bool Shadow,
+        ulong Material, ulong Mesh, int Amount, bool Emitting);
+    private readonly Dictionary<TemplateKey, int> _templateIndex = new();
+
+    /// <summary>
+    /// A light or particle emitter's look: a detached copy of the node as it is now (no script, no
+    /// groups or signals), which a ghost duplicates. A new copy only when what shows changes (a lamp
+    /// switched on, smoke starting), checked on the walk.
+    /// </summary>
+    private int TemplateLookOf(Node3D node)
+    {
+        var key = node switch
+        {
+            OmniLight3D o => new TemplateKey(1, o.LightColor, o.LightEnergy, o.OmniRange, 0, o.ShadowEnabled, 0, 0, 0, false),
+            SpotLight3D sp => new TemplateKey(2, sp.LightColor, sp.LightEnergy, sp.SpotRange, sp.SpotAngle, sp.ShadowEnabled, 0, 0, 0, false),
+            GpuParticles3D g => new TemplateKey(3, default, (float)g.Lifetime, 0, 0, false,
+                g.ProcessMaterial?.GetInstanceId() ?? 0, g.DrawPass1?.GetInstanceId() ?? 0, g.Amount, g.Emitting),
+            Light3D l => new TemplateKey(4, l.LightColor, l.LightEnergy, 0, 0, l.ShadowEnabled, 0, 0, 0, false),
+            _ => default,
+        };
+        if (_templateIndex.TryGetValue(key, out int i)) return i;
+        var copy = (Node3D)node.Duplicate(0);
+        copy.Transform = Transform3D.Identity;
+        copy.Visible = true;
+        Looks.Add(new WorldLook { Template = copy });
+        _templateIndex[key] = Looks.Count - 1;
+        return Looks.Count - 1;
     }
 
     private int LookOf(MeshInstance3D m)

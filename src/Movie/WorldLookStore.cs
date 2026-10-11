@@ -20,11 +20,17 @@ public static class WorldLookStore
         foreach (var track in p.Worlds)
             foreach (var look in track.Looks)
             {
-                if (look.Asset != null || look.Mesh == null) continue;
+                if (look.Asset != null || (look.Mesh == null && look.Template == null)) continue;
                 DirAccess.MakeDirRecursiveAbsolute(Folder);
                 string name = $"{Guid.NewGuid():N}.scn";
-                var node = new MeshInstance3D();
-                Dress(node, look);
+                Node3D node;
+                if (look.Template != null) node = (Node3D)look.Template.Duplicate(0);
+                else
+                {
+                    var mesh = new MeshInstance3D();
+                    Dress(mesh, look);
+                    node = mesh;
+                }
                 var scene = new PackedScene();
                 var packed = scene.Pack(node);
                 node.Free();
@@ -48,11 +54,20 @@ public static class WorldLookStore
             for (int i = 0; i < track.Looks.Length; i++)
             {
                 var look = track.Looks[i];
-                if (look.Mesh != null || string.IsNullOrEmpty(look.Asset)) continue;
+                if (look.Mesh != null || look.Template != null || string.IsNullOrEmpty(look.Asset)) continue;
                 if (Loaded.TryGetValue(look.Asset, out var known)) { track.Looks[i] = known; continue; }
                 string path = $"{Folder}/{look.Asset}";
-                if (!ResourceLoader.Exists(path) || ResourceLoader.Load<PackedScene>(path)?.Instantiate() is not MeshInstance3D node)
+                var loaded = ResourceLoader.Exists(path) ? ResourceLoader.Load<PackedScene>(path)?.Instantiate() : null;
+                if (loaded is Node3D template and not MeshInstance3D)
                 {
+                    // a light or particle emitter: the node itself is the look
+                    look.Template = template;
+                    Loaded[look.Asset] = look;
+                    continue;
+                }
+                if (loaded is not MeshInstance3D node)
+                {
+                    loaded?.Free();
                     missing++;
                     continue;
                 }
