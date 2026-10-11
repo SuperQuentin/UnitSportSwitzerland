@@ -31,6 +31,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
     private Items.PlacedObjects? _placed;
     private Farming.FarmStands? _farmStands;
     private Net.Sleepers? _sleepers;
+    private Net.Arrival? _arrival;
     private Items.PalletService? _pallets;
     private Build.Structures? _structures;
     private Occasions.OccasionManager? _occasions;
@@ -248,6 +249,9 @@ public partial class ServerWorld : Node3D, IOriginContainer
         Items.PhotoTransfer.Create(this, server: true);
         _placed = Items.PlacedObjects.Create(this, origin, server: true);
         _placed.NameOf = _chat.NameOfPeer;
+        // where a new player starts, and whether players may teleport (#799): the server's call
+        _arrival = Net.Arrival.CreateServer(this);
+        _chat.Arrival = _arrival;
         // players who left, asleep where they were (#644)
         _sleepers = Net.Sleepers.Create(this, origin, server: true);
         _sleepers.GroundAt = (e, n) => _chunks != null && _chunks.TryGetHeight(origin.ToWorld(e, n, 0), out float h) ? h : null;
@@ -449,6 +453,7 @@ public partial class ServerWorld : Node3D, IOriginContainer
         var node = _spawner!.Spawn(id);
         if (node is Node3D player)
             _chunks!.AddAnchor(player);
+        _arrival?.SendTo(id);
         _interiors?.SendTableTo(id);
         _churchRadios?.SendTo(id);
         _passengers?.SendTo(id);

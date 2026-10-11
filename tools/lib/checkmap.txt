@@ -230,6 +230,10 @@ src/Net/ClockSync        net    tools/speednetcheck.sh
 src/Net/                 net    @netsmoke
 src/Net/Sleeper          net    tools/sleepercheck.sh
 src/Net/PlayerKey        net    tools/sleepercheck.sh
+src/Net/Arrival          net    tools/arrivalcheck.sh
+src/Core/Permissions     net    tools/arrivalcheck.sh
+src/Core/PlaceSearchUi   net    tools/arrivalcheck.sh
+src/Net/HostedServer     net    tools/arrivalcheck.sh
 src/Net/ChatManager      net    tools/transfercheck.sh
 src/Net/TransferProbe    net    tools/transfercheck.sh
 src/Core/ServerWorld     net    @netsmoke
