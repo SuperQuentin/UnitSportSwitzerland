@@ -50,4 +50,8 @@ Replaced the #394 face atlas (16×16 pixel faces drawn from text). Plan: `docs/p
   beams, the rat dance hearts), dancers a personality from their seed (singer, winker, blusher);
   breaking concentrates, the freeze smirks, a near-silent song rests the face. `FaceAnimator.Step`
   takes a `FaceState` for it. Preview: `--avatars 2 <png> --bodies dancefaces --view 180`.
+- **Wheel dances and frozen eyes (#802)**: a dance picked on the emote wheel (`FaceExpressions.FollowsMusic`:
+  emote 10+, not the rat dance) follows the music the same way; without music it is plain `Happy`. Never
+  hold special eyes (`Joy`'s arcs, `Wink`) for a whole dance: they replace the shader's blink and glances,
+  so the face looks dead. A swimmer's face is stepped too (`ApplyFootPose`'s swim branch).
 - **Bigger eyes (#728)**: the genome's eye size steps are 1.0 + 0.14 k (were 0.85 + 0.12 k).

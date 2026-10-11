@@ -44,12 +44,13 @@ public partial class FootPlayer
     }
 
     /// <summary>
-    /// Dancing to music with no emote picked (#728): the face follows the CD's analysis on the
-    /// shared clock (<see cref="DanceFace"/>), the same on every peer. Null otherwise.
+    /// Dancing to music (#728), the radio's dance or one picked on the wheel (#802): the face follows
+    /// the CD's analysis on the shared clock (<see cref="DanceFace"/>), the same on every peer. Null
+    /// otherwise, and for the wheel's gestures.
     /// </summary>
     private FaceState? DanceFaceNow()
     {
-        if (DanceId == 0 || Emote >= 0 || Down == 1 || Downed || DrawnDance is not { Weight: > 0.5f } d
+        if (DanceId == 0 || (Emote >= 0 && !FaceExpressions.FollowsMusic(Emote)) || Down == 1 || Downed || DrawnDance is not { Weight: > 0.5f } d
             || _danceMusic is not { } m || !IsInstanceValid(m.Source)) return null;
         var g = Items.RadioGroove.Of(m.CdId, m.StartedAt, Net.ClockSync.ServerNow);
         if (!g.Beating) return null;
