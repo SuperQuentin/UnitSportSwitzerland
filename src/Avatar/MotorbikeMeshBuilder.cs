@@ -230,7 +230,7 @@ public static class MotorbikeMeshBuilder
     {
         float width = cylinders * 0.1f;
         var crank = new Vector3(0, 0.38f, 0.1f);
-        s.Box(crank, new Vector3(width + 0.02f, 0.26f, 0.4f), Black);
+        s.Box(crank + new Vector3(0, 0.025f, 0), new Vector3(width + 0.02f, 0.21f, 0.4f), Black);   // underside lifted from 0.25 to 0.30 m: sump guards and skid plates sit at that height (#755)
         var tilt = new Basis(Vector3.Right, 0.5f);   // cylinders lean forward ~30 deg
         s.Box(crank + new Vector3(0, 0.2f, 0.1f), new Vector3(width, 0.26f, 0.2f), new Color(0.2f, 0.2f, 0.22f), tilt);
         // radiator ahead of the cylinders
@@ -341,7 +341,7 @@ public static class MotorbikeMeshBuilder
         foreach (float x in new[] { -1f, 1f })
         {
             s.Box(new Vector3(x * 0.1f, top.Y - 0.22f, top.Z - 0.12f), new Vector3(0.03f, 0.3f, 0.34f), k.Paint, new Basis(Vector3.Right, 0.35f));
-            s.Box(new Vector3(x * 0.116f, top.Y - 0.28f, top.Z - 0.1f), new Vector3(0.006f, 0.1f, 0.3f), k.Trim, new Basis(Vector3.Right, 0.35f));
+            s.Box(new Vector3(x * 0.121f, top.Y - 0.28f, top.Z - 0.1f), new Vector3(0.012f, 0.1f, 0.3f), k.Trim, new Basis(Vector3.Right, 0.35f));
         }
         // seat: long, flat and narrow, tank to tail
         s.Box(new Vector3(0, seat.Y - 0.025f, seat.Z - 0.12f), new Vector3(0.18f, 0.06f, 0.9f), k.SeatColor);
@@ -379,7 +379,7 @@ public static class MotorbikeMeshBuilder
         // --- floorboard, its skirts, the tunnel up between the rider's legs ---
         s.Box(new Vector3(0, floorY, floorMid), new Vector3(0.44f, 0.03f, floorLen), k.Trim);
         foreach (float x in new[] { -1f, 1f })
-            s.Box(new Vector3(x * 0.225f, floorY - 0.03f, floorMid), new Vector3(0.025f, 0.1f, floorLen), k.Paint);
+            s.Box(new Vector3(x * 0.225f, floorY - 0.025f, floorMid), new Vector3(0.025f, 0.11f, floorLen), k.Paint);   // skirt top 1.5 cm above the floorboard's (#755)
         var tunnelLow = new Vector3(0, floorY + 0.16f, floorFront - 0.06f);
         var tunnelHigh = new Vector3(0, seat.Y - 0.06f, seat.Z + 0.3f);
         s.Tube(tunnelLow, tunnelHigh, 0.085f, 0.09f, k.Paint, 6);
@@ -413,7 +413,7 @@ public static class MotorbikeMeshBuilder
         float bodyFront = seat.Z + 0.22f;
         float bodyBack = rear.Z - 0.2f;
         s.Box(new Vector3(0, (bodyLow + bodyTop) * 0.5f, (bodyFront + bodyBack) * 0.5f), new Vector3(0.34f, bodyTop - bodyLow, bodyFront - bodyBack), k.Paint);
-        s.Box(new Vector3(0, bodyLow + 0.02f, (bodyFront + bodyBack) * 0.5f), new Vector3(0.36f, 0.04f, bodyFront - bodyBack - 0.04f), k.Trim);
+        s.Box(new Vector3(0, bodyLow - 0.01f, (bodyFront + bodyBack) * 0.5f), new Vector3(0.36f, 0.04f, bodyFront - bodyBack - 0.04f), k.Trim);   // 3 cm below the body's underside, not flush with it (#755)
         var tailA = new Vector3(0, (bodyLow + bodyTop) * 0.5f + 0.02f, bodyBack + 0.02f);
         s.Tube(tailA, tailA + new Vector3(0, 0.0f, -0.18f), 0.14f, 0.07f, k.Paint, 8);
         s.Box(tailA + new Vector3(0, 0.03f, -0.19f), new Vector3(0.18f, 0.04f, 0.03f), new Color(0.8f, 0.05f, 0.05f));
@@ -426,7 +426,7 @@ public static class MotorbikeMeshBuilder
 
         // --- the engine / CVT housing low between floor and rear wheel, the silencer on the right (−X) ---
         s.Box(new Vector3(0, bodyLow - 0.14f, seat.Z + 0.1f), new Vector3(0.26f, 0.26f, 0.56f), Black);
-        s.Ring(new Vector3(0.14f, bodyLow - 0.14f, seat.Z + 0.08f), Vector3.Right, 0f, 0.13f, 0.03f, Metal, 12);
+        s.Ring(new Vector3(0.15f, bodyLow - 0.14f, seat.Z + 0.08f), Vector3.Right, 0f, 0.13f, 0.03f, Metal, 12);
         s.Tube(new Vector3(-0.19f, rear.Y + 0.02f, seat.Z + 0.2f), new Vector3(-0.2f, rear.Y + 0.08f, rear.Z - 0.2f), 0.065f, 0.07f, new Color(0.22f, 0.22f, 0.24f), 8);
     }
 
@@ -444,7 +444,7 @@ public static class MotorbikeMeshBuilder
         // screen, raked back over the clamps
         s.Box(new Vector3(0, top.Y + 0.02f, top.Z + 0.06f), new Vector3(0.26f, 0.01f, 0.24f), Glass, new Basis(Vector3.Right, 0.6f));
         // side panels down past the engine, and the belly pan
-        foreach (float x in new[] { -0.2f, 0.2f })
+        foreach (float x in new[] { -0.23f, 0.23f })   // 3 cm out: the panel stood 5 mm off the engine's side (#755)
             s.Box(new Vector3(x, 0.52f, 0.36f), new Vector3(0.03f, 0.26f, 0.5f), k.Paint, new Basis(Vector3.Right, 0.35f));
         s.Box(new Vector3(0, 0.22f, 0.15f), new Vector3(0.34f, 0.1f, 0.5f), k.Trim);
         // mirrors on stalks
@@ -563,13 +563,13 @@ public static class MotorbikeMeshBuilder
         {
             var shroud = new Vector3(x * (0.13f + 0.04f * girth), top.Y - 0.3f, top.Z - 0.2f);
             s.Box(shroud, new Vector3(0.03f, 0.3f, 0.36f), k.Paint, new Basis(Vector3.Right, 0.35f));
-            s.Box(shroud + new Vector3(x * 0.018f, -0.07f, -0.02f), new Vector3(0.006f, 0.12f, 0.3f), k.Trim, new Basis(Vector3.Right, 0.35f));
-            s.Box(shroud + new Vector3(x * 0.02f, 0.04f, 0.02f), new Vector3(0.006f, 0.035f, 0.28f), k.Accent, new Basis(Vector3.Right, 0.35f));
+            s.Box(shroud + new Vector3(x * 0.021f, -0.07f, -0.02f), new Vector3(0.012f, 0.12f, 0.3f), k.Trim, new Basis(Vector3.Right, 0.35f));   // 1.2 cm stripes, 1 cm proud of the shroud (#755)
+            s.Box(shroud + new Vector3(x * 0.021f, 0.04f, 0.02f), new Vector3(0.012f, 0.035f, 0.28f), k.Accent, new Basis(Vector3.Right, 0.35f));
         }
 
         // --- side covers under the seat, seat, tail, luggage rack ---
         s.Box(new Vector3(0, seat.Y - 0.17f, seat.Z - 0.12f), new Vector3(0.24f, 0.2f, 0.36f), k.Paint, new Basis(Vector3.Right, -0.15f));
-        s.Box(new Vector3(0, seat.Y - 0.2f, seat.Z - 0.1f), new Vector3(0.25f, 0.05f, 0.3f), k.Trim, new Basis(Vector3.Right, -0.15f));
+        s.Box(new Vector3(0, seat.Y - 0.2f, seat.Z - 0.1f), new Vector3(0.27f, 0.05f, 0.3f), k.Trim, new Basis(Vector3.Right, -0.15f));   // 1 cm proud of the 0.24 side covers (#755)
         s.Box(new Vector3(0, seat.Y - 0.025f, seat.Z - 0.12f), new Vector3(0.28f, 0.07f, 0.66f), k.SeatColor);
         var tailEnd = new Vector3(0, seat.Y + 0.0f, seat.Z - 0.78f);
         s.Tube(new Vector3(0, seat.Y - 0.06f, seat.Z - 0.3f), tailEnd, 0.11f, 0.05f, k.Paint, 6);
@@ -591,7 +591,7 @@ public static class MotorbikeMeshBuilder
         s.Tube(new Vector3(-0.15f, seat.Y - 0.3f, seat.Z - 0.3f), new Vector3(-0.17f, seat.Y - 0.2f, seat.Z - 0.64f), 0.075f, 0.065f, new Color(0.22f, 0.22f, 0.24f), 8);
 
         // --- sump guard at the ground clearance, its nose swept up in front of the engine ---
-        s.Box(new Vector3(0, gc + 0.015f, 0.12f), new Vector3(0.3f, 0.03f, 0.44f), Metal);
+        s.Box(new Vector3(0, gc - 0.005f, 0.12f), new Vector3(0.3f, 0.03f, 0.44f), Metal);   // 2 cm below the crankcase's underside, not sharing its plane (#755)
         s.Box(new Vector3(0, gc + 0.1f, 0.4f), new Vector3(0.3f, 0.03f, 0.22f), Metal, new Basis(Vector3.Right, -0.9f));
 
         // --- the front: cowl or fairing, lamps, screen ---
