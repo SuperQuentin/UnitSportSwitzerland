@@ -255,7 +255,7 @@ public partial class ShotInspector : ScrollContainer
     private CameraKey KeyHere(CameraTrack cam)
     {
         if (cam.Keys.Count > 0) return KeyAtOrBefore(cam);
-        var d = CameraTrack.DefaultPose(cam.Rig);
+        var d = _project().DefaultPose(Index, _time());
         var key = new CameraKey { T = 0, E = d.E, N = d.N, Alt = d.Alt, Qx = d.Qx, Qy = d.Qy, Qz = d.Qz, Qw = d.Qw, Lens = d.Lens };
         if (!cam.Relative) return key;   // a world shot is framed from the view, not from sliders
         cam.Keys.Add(key);
