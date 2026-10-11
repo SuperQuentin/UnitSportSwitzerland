@@ -2073,7 +2073,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     // Build returns null for a tile whose road segments are all watercourses
                     // (meshed separately, below) or aerial-only with nothing left to draw.
                     if (roadTile != null && roadMaterial != null
-                        && RoadMeshBuilder.Build(roadTile, grid) is { } roadData)
+                        && RoadMeshBuilder.Build(roadTile, grid, detail) is { } roadData)
                     {
                         ct.ThrowIfCancellationRequested();
                         roads = ChunkNode.ToArrayMesh(roadData, roadMaterial, RoadPaintBuilder.Build(roadTile));

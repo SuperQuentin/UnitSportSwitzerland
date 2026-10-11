@@ -31,6 +31,7 @@ public partial class FootPlayer
     private readonly List<CharacterBody3D> _sections = new();
     private int _visualTrailer;
     private float _truckPitch;
+    private float _carPitch, _carRoll;
     private readonly float[] _shownAngles = new float[Truck.MaxJoints];
 
     /// <summary>How close a hitch must come to a trailer's kingpin or drawbar eye to couple, m.</summary>
@@ -151,6 +152,27 @@ public partial class FootPlayer
         var r = ToGlobal(new Vector3(0, 0, -(cg - rear)));
         float target = Mathf.Atan2(GroundUnder(f, exclude) - GroundUnder(r, exclude), rear - front);
         _truckPitch = Mathf.Lerp(_truckPitch, Mathf.Clamp(target, -0.35f, 0.35f), 0.3f);
+    }
+
+    /// <summary>
+    /// A car's body on the ground under its four wheels, as <see cref="PitchCab"/> stands a bus: nose
+    /// up a climb, leaning across a camber. Without it a car stayed level on any slope, its nose in
+    /// the hill ahead. Held in the air, so a jump keeps the attitude it left the ramp with.
+    /// </summary>
+    private void TiltCar(Car car, float dt)
+    {
+        if (!IsOnFloor()) return;
+        var exclude = TrainRids();
+        float half = car.Spec.Wheelbase * 0.5f, track = car.Spec.Body.Width * 0.42f;
+        float fl = GroundUnder(ToGlobal(new Vector3(-track, 0, -half)), exclude);
+        float fr = GroundUnder(ToGlobal(new Vector3(track, 0, -half)), exclude);
+        float rl = GroundUnder(ToGlobal(new Vector3(-track, 0, half)), exclude);
+        float rr = GroundUnder(ToGlobal(new Vector3(track, 0, half)), exclude);
+        float pitch = Mathf.Atan2((fl + fr) - (rl + rr), 4f * half);    // + raises the nose
+        float roll = Mathf.Atan2((fr + rr) - (fl + rl), 4f * track);    // + raises the right side
+        float ease = MathX.Damp(12f, dt);
+        _carPitch = Mathf.Lerp(_carPitch, Mathf.Clamp(pitch, -0.45f, 0.45f), ease);
+        _carRoll = Mathf.Lerp(_carRoll, Mathf.Clamp(roll, -0.35f, 0.35f), ease);
     }
 
     /// <summary>
@@ -276,7 +298,22 @@ public partial class FootPlayer
     {
         // nobody at the wheel (#158): the engine only drags; idling in drive it would creep on for ever
         truck.EngineRunning = EngineOn && SeatIndex == 0;
-        truck.Box.ClutchHeld = !Npc && RideControls == null && PlayerInput.Held(PlayerInput.Clutch);
+        bool driver = !Npc && RideControls == null;
+        truck.Box.ClutchHeld = driver && PlayerInput.HeldButton(PlayerInput.Clutch);
+        // a wheel's clutch pedal is its travel, not held past half way (#290)
+        truck.Box.ClutchFoot = driver ? PlayerInput.WheelPedal(PlayerInput.Clutch) : 0f;
+        // a wheel's H-shifter: where the lever is, is the gate, out of the gate is neutral; on the
+        // automatic it is the selector, P R N D
+        int? wheelLever = driver ? SteeringWheel.ShifterGate : null;
+        bool automatic = truck.EffectiveMode == HeavyShift.Automatic;
+        truck.Selector = automatic && wheelLever is { } sel ? HeldShifter.Selector(sel) : DriveSelector.None;
+        if (!automatic && wheelLever is { } lever
+            && _shifter.Step(lever, truck.Box.Gate, truck.Box.ClutchPedal, out bool retry) is { } gate)
+        {
+            bool took = truck.Box.SelectGate(gate, _motion.Speed * Mathf.Cos(_motion.Slip));
+            _shifter.Took(took);
+            if (retry && !took) truck.Box.Event = null;
+        }
         SenseSoil(truck);
     }
 
@@ -289,13 +326,7 @@ public partial class FootPlayer
             EngineOn = false;
             EngineToggled?.Invoke(false);
         }
-        switch (truck.Box.Event)
-        {
-            case "stall": Announced?.Invoke("STALLED", false); break;
-            case "grind": Announced?.Invoke(InputHints.Format("GRIND — clutch ({clutch}) first"), false); break;
-            case "overrev": Announced?.Invoke("Too fast for that gear", false); break;
-            case "air": Announced?.Invoke("LOW AIR — SPRING BRAKES ON", false); break;
-        }
+        AnnounceBox(truck.Box.Event);
         truck.Box.Event = null;
         if (truck.Train.Rolling >= 0)
         {
@@ -317,6 +348,7 @@ public partial class FootPlayer
         if (e.IsActionPressed(PlayerInput.Couple)) { ToggleCouple(truck); return true; }
         if (e.IsActionPressed(PlayerInput.ShiftUp)) { box.ShiftUp(u); return true; }
         if (e.IsActionPressed(PlayerInput.ShiftDown)) { box.ShiftDown(u); return true; }
+        if (ShifterEvent(e)) return true;
         for (int g = 0; g < PlayerInput.Gates.Length; g++)
             if (e.IsActionPressed(PlayerInput.Gates[g])) { box.SelectGate(g + 1, u); return true; }
         if (e.IsActionPressed(PlayerInput.GearReverse)) { box.SelectGate(-1, u); return true; }
