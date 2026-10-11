@@ -376,14 +376,16 @@ public partial class GameShell : Node
     // ---- sessions -------------------------------------------------------------------------------
 
     /// <summary>
-    /// Shows the map so the player picks where to land, then launches (#515). The marker starts
-    /// where they landed last, else Riddes. Skipped when the launch already names a landing (the
-    /// map has just been through), for a GPX replay (the track says where to be), and for any
-    /// command-line run, which must still boot straight into the world.
+    /// Shows the map so the player picks where to start, then launches (#515). The marker starts
+    /// where they started last, else Riddes. Skipped when the launch already names a landing (the
+    /// map has just been through), for a GPX replay (the track says where to be), online (the
+    /// server says where everyone starts, <c>Net/Arrival</c>, #799), and for any command-line run,
+    /// which must still boot straight into the world.
     /// </summary>
     public void LaunchVia(WorldLaunch launch)
     {
-        if (launch.Landing != null || launch.FromCommandLine || Direct || launch.Mode == GameMode.GpxReplay)
+        if (launch.Landing != null || launch.FromCommandLine || Direct
+            || launch.Mode is GameMode.GpxReplay or GameMode.Multiplayer)
         {
             Launch(launch);
             return;
@@ -450,11 +452,13 @@ public partial class GameShell : Node
     }
 
     /// <summary>"Host a game": starts the server process, then joins it once it answers.</summary>
-    public void Host(string name, int port, bool lanVisible)
+    /// <param name="spawn">Where every player starts on it (#799), LV95 metres.</param>
+    /// <param name="teleport">Players who are not admins may teleport.</param>
+    public void Host(string name, int port, bool lanVisible, (double E, double N)? spawn = null, bool teleport = true)
     {
         if (_state != State.Title) return;
         _hosted = new HostedServer(name, port);
-        if (_hosted.Start(lanVisible) is { } err)
+        if (_hosted.Start(lanVisible, spawn, teleport) is { } err)
         {
             _hosted = null;
             Modal.Inform(_menuRoot, "Could not host", err);
@@ -491,9 +495,8 @@ public partial class GameShell : Node
         {
             _hostProbe.Dispose();
             _hostProbe = null;
-            // The server is up; the map now asks where to land, as it does for any other world.
-            // Safe to push a page from here: the probe is already disposed, so this branch cannot
-            // be re-entered while the player is choosing.
+            // The server is up: join it. Where the host starts is the server's, as for everyone
+            // (the start point was picked in the Host dialog, #799).
             LaunchVia(new WorldLaunch
             {
                 Mode = GameMode.Multiplayer,

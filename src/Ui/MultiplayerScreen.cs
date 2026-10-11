@@ -300,23 +300,79 @@ public partial class MultiplayerScreen : Screen
         address.TextChanged += _ => recheck();
     }
 
+    // the Host dialog's fields, kept while the map is open to pick the start point
+    private string? _hostName;
+    private string? _hostPort;
+    private bool _hostLan = true;
+
     private void HostDialog()
     {
         if (Shell.PlayerName.Length == 0) { AskName(mandatory: true); return; }
+        var settings = GameSettings.Current;
         var form = UiKit.VBox(8);
         form.AddChild(UiKit.Text("Server name", UiTheme.FontSmall, UiTheme.TextDim));
-        var name = new LineEdit { Text = $"{Shell.PlayerName}'s game", MaxLength = 40 };
+        var name = new LineEdit { Text = _hostName ?? $"{Shell.PlayerName}'s game", MaxLength = 40 };
         form.AddChild(name);
         form.AddChild(UiKit.Text("Port (UDP, and the next one for the server list)", UiTheme.FontSmall, UiTheme.TextDim));
-        var port = new LineEdit { Text = NetworkManager.DefaultPort.ToString(), MaxLength = 5 };
+        var port = new LineEdit { Text = _hostPort ?? NetworkManager.DefaultPort.ToString(), MaxLength = 5 };
         form.AddChild(port);
-        var lan = new CheckBox { Text = "Visible to players on your network", ButtonPressed = true };
+        var lan = new CheckBox { Text = "Visible to players on your network", ButtonPressed = _hostLan };
         form.AddChild(lan);
-        var (_, recheck) = Modal.Form(this, "Host a game",
+
+        // where everyone starts (#799): the server's choice, so it is made here and not on joining
+        var spawn = HostSpawn();
+        form.AddChild(UiKit.Text("Where players start", UiTheme.FontSmall, UiTheme.TextDim));
+        var spawnRow = UiKit.HBox(8);
+        var spawnName = UiKit.Text(MapScreen.PlaceNear(spawn.E, spawn.N), UiTheme.FontBody, UiTheme.Text);
+        spawnName.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        spawnRow.AddChild(spawnName);
+        var pick = UiKit.Button("Choose on the map…");
+        spawnRow.AddChild(pick);
+        form.AddChild(spawnRow);
+        var teleport = new CheckBox { Text = "Players can teleport anywhere (place search, fly camera)", ButtonPressed = settings.HostTeleport };
+        teleport.TooltipText = "Off: everyone starts at the start point and travels by walking, riding or flying. You, the host, still can.";
+        form.AddChild(teleport);
+
+        void Keep()
+        {
+            _hostName = name.Text;
+            _hostPort = port.Text;
+            _hostLan = lan.ButtonPressed;
+            settings.HostTeleport = teleport.ButtonPressed;
+        }
+
+        var (modal, recheck) = Modal.Form(this, "Host a game",
             "Your machine runs the server while you play. Leaving the game stops it for everyone.", form, "Start server",
             () => int.TryParse(port.Text, out int p) && p is >= 1024 and <= 65534 ? null : "Pick a port between 1024 and 65534.",
-            () => Shell.Host(name.Text.Trim().Length > 0 ? name.Text.Trim() : $"{Shell.PlayerName}'s game", int.Parse(port.Text), lan.ButtonPressed));
+            () =>
+            {
+                Keep();
+                settings.Save();
+                Shell.Host(name.Text.Trim().Length > 0 ? name.Text.Trim() : $"{Shell.PlayerName}'s game", int.Parse(port.Text),
+                    lan.ButtonPressed, HostSpawn(), teleport.ButtonPressed);
+            });
         port.TextChanged += _ => recheck();
+        pick.Pressed += () =>
+        {
+            Keep();
+            modal.CloseModal();
+            Shell.Push(MapScreen.CreateServerSpawn(HostSpawn(), at =>
+            {
+                settings.HostSpawnE = at.E;
+                settings.HostSpawnN = at.N;
+                settings.Save();
+                Shell.Back();
+                HostDialog();
+            }));
+        };
+    }
+
+    /// <summary>Where players start on a server hosted here: the last one picked, else Riddes.</summary>
+    private static (double E, double N) HostSpawn()
+    {
+        var s = GameSettings.Current;
+        return s.HostSpawnE != 0 || s.HostSpawnN != 0 ? (s.HostSpawnE, s.HostSpawnN)
+            : (SpawnPoint.DefaultLv95E, SpawnPoint.DefaultLv95N);
     }
 
     private PanelContainer Banner(string message)

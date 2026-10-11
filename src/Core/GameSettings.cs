@@ -292,6 +292,14 @@ public sealed class GameSettings
     public double LastLandingE { get; set; }
     public double LastLandingN { get; set; }
 
+    /// <summary>
+    /// Hosting from the menu (#799): where players start on this machine's server, LV95 metres (zero:
+    /// Riddes), and whether they may teleport. Remembered for the next game hosted.
+    /// </summary>
+    public double HostSpawnE { get; set; }
+    public double HostSpawnN { get; set; }
+    public bool HostTeleport { get; set; } = true;
+
     /// <summary>GPX files replayed recently, newest first (the Play solo track picker lists them).</summary>
     public List<string> RecentGpx { get; set; } = new();
 

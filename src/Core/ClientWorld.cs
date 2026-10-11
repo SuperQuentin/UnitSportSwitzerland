@@ -792,6 +792,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (World.ClockNetProbe.Role != null) AddChild(new World.ClockNetProbe(items));
         if (SpeedNetProbe.Role != null) AddChild(new SpeedNetProbe(items));
         if (Net.SleeperProbe.Role != null) AddChild(new Net.SleeperProbe(items));
+        if (Net.ArrivalProbe.Role != null) AddChild(new Net.ArrivalProbe(items));
         if (Net.TransferProbe.Role != null) AddChild(new Net.TransferProbe(items));
         if (Player.BoatNetProbe.Role != null) AddChild(new Player.BoatNetProbe(items));
         if (Player.SteamerNetProbe.Role != null) AddChild(new Player.SteamerNetProbe(items));
@@ -851,6 +852,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
         // players who left, asleep where they were, and waking at our own (#644)
         Net.Sleepers.Create(this, origin, server: false).Teleporter = _teleporter;
+        // online the server says where we start (#799): the loading screen holds until it has
+        if (Launch.Networked)
+        {
+            Net.Arrival.CreateClient(this).Told += OnServerSpawn;
+            _awaitingServerSpawn = SpawnPoint.ParseLv95("--at") == null;
+        }
         // pallets a forklift has moved (#583): the server keeps them for the session, offline this client does
         Items.PalletService.Create(this, origin, server: false).Source = () => _chunks?.Source;
         // built structures (#274): the server owns them, offline this client does
@@ -1084,6 +1091,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (SpawnPending)
             {
                 Report(LoadStage.PlacingYou, 0.25f);
+                if (_awaitingServerSpawn && _loadClock > 45) Fail("The server never said where to start.");
                 return;
             }
             if (LocalPlayer == null || !_onFoot)
@@ -1845,6 +1853,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (!_onFoot)
         {
             FootPlayer? player = LocalPlayer;
+            // a server without teleporting (#799): the fly camera looks around, it does not carry you
+            if (player != null && _networked && !Permissions.CanTeleport)
+            {
+                EnterFootMode(player, inPlace: true);
+                player.RequestReplacement();
+                Toast("This server does not allow teleporting: back where you were.");
+                return;
+            }
             if (player == null)
             {
                 if (_networked) return; // our player hasn't been spawned by the server yet
@@ -1876,7 +1892,26 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private SeatStart? _seatStart;
     private bool _seatAsked;
 
-    private bool SpawnPending => _spawn != null && IsInstanceValid(_spawn) && _spawn.IsInsideTree();
+    private bool SpawnPending => _awaitingServerSpawn || _spawn != null && IsInstanceValid(_spawn) && _spawn.IsInsideTree();
+
+    /// <summary>Online, before the server's <c>Net/Arrival</c> has said where this player starts (#799).</summary>
+    private bool _awaitingServerSpawn;
+
+    /// <summary>
+    /// The server's start point (#799): the fly camera goes there, and the body follows it down once
+    /// the ground is known (<see cref="EnterFootWhenGrounded"/>). Only the first word counts; a
+    /// <c>--at</c> on the command line, which every probe uses, keeps its own spot.
+    /// </summary>
+    private void OnServerSpawn(double e, double n)
+    {
+        if (!_awaitingServerSpawn || _spectator == null || _chunks == null || _worldOrigin == null) return;
+        _awaitingServerSpawn = false;
+        GD.Print($"[world] the server starts us at {e:F0}/{n:F0}");
+        if (_onFoot) { _teleporter?.TeleportTo(e, n); return; }
+        if (_spawn != null && IsInstanceValid(_spawn)) _spawn.QueueFree();
+        OriginShifter.Instance?.ShiftTo(e, n);
+        AddChild(_spawn = new SpawnPoint(_spectator, _chunks, _worldOrigin, e, n));
+    }
 
     private FootPlayer? _pendingFoot;
 
