@@ -3204,7 +3204,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _shutDriverIn = 0f;
         ShowroomYaw = null;
         TrailerCode = _ride is Truck fresh ? fresh.TrailerCode : 0;
-        _truckPitch = _carPitch = _carRoll = 0f;
+        _truckPitch = _carPitch = _carRoll = _carLift = 0f;
         // The pose travels with the kind, and each kind reads Anim its own way: left as it was, the
         // next update would hand a bike its rider's stride phase as a crank angle (seen: 0.93 rad).
         Anim = default;
@@ -4534,7 +4534,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         var pivot = Vector3.Up * (_bailTimer > 0 ? 0.3f : 0.9f);
         // a car stands on the ground under its wheels (TiltCar), tipped about its contact patch
         var ground = _ride is Car ? new Basis(Vector3.Right, _carPitch) * new Basis(Vector3.Back, _carRoll) : Basis.Identity;
-        _visual.Transform = new Transform3D(_holdTilt * ground, Vector3.Zero) * new Transform3D(basis, pivot - basis * pivot);
+        // and stands on them: lifted where they are higher than the ground under its middle (#791)
+        var lifted = _ride is Car ? Vector3.Up * _carLift : Vector3.Zero;
+        _visual.Transform = new Transform3D(_holdTilt * ground, lifted) * new Transform3D(basis, pivot - basis * pivot);
     }
 
     private void UpdateRideCamera(float dt)
