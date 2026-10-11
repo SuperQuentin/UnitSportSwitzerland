@@ -298,9 +298,26 @@ public partial class TimelineView : Control
             float x = X(cut.T);
             if (x < Labels || x > w) continue;
             bool sel = cut == SelectedCut;
+            // a transition (#778): its span across the cut, and its letter
+            if (cut.Transition != TransitionKind.Cut)
+            {
+                float half = (float)(cut.Duration / 2 * _pxPerSec);
+                DrawRect(new Rect2(Math.Max(Labels, x - half), top, Math.Min(w, x + half) - Math.Max(Labels, x - half), height), new Color(1, 1, 1, 0.22f));
+                DrawCircle(new Vector2(x, top + height / 2), 8, sel ? UiTheme.Amber : new Color(0.12f, 0.12f, 0.14f));
+                DrawString(UiTheme.Font, new Vector2(x - 4, top + height / 2 + 4), TransitionLetter(cut.Transition),
+                    HorizontalAlignment.Left, -1, UiTheme.FontTiny, sel ? Colors.Black : Colors.White);
+                continue;
+            }
             DrawLine(new Vector2(x, top - 3), new Vector2(x, top + height + 3), sel ? UiTheme.Amber : Colors.White, sel ? 3 : 2);
         }
     }
+
+    /// <summary>The letter a transition is drawn with on the shot row.</summary>
+    public static string TransitionLetter(TransitionKind kind) => kind switch
+    {
+        TransitionKind.Blend => "B", TransitionKind.Crossfade => "X", TransitionKind.FadeBlack => "F",
+        TransitionKind.Wipe => "W", TransitionKind.WhipPan => "P", TransitionKind.ZoomPunch => "Z", _ => "|",
+    };
 
     /// <summary>
     /// A camera's row: the path between keys (solid: smooth, thin: linear, dashed and a step:
@@ -410,6 +427,22 @@ public partial class TimelineView : Control
 
     /// <summary>The camera a key belongs to (0 if, somehow, none).</summary>
     private int CameraOf(CameraKey key) => Math.Max(0, Project.Cameras.FindIndex(c => c.Keys.Contains(key)));
+
+    /// <summary>A shot dragged from the library is welcome on the Program row (#778).</summary>
+    public override bool _CanDropData(Vector2 at, Variant data) =>
+        RowAt(at.Y) == 0 && at.X >= Labels && data.VariantType == Variant.Type.Dictionary && data.AsGodotDictionary().ContainsKey("shot");
+
+    /// <summary>Dropped there: the movie cuts to that shot where it landed, snapped to beats, markers and edges.</summary>
+    public override void _DropData(Vector2 at, Variant data)
+    {
+        int shot = data.AsGodotDictionary()["shot"].AsInt32();
+        if (shot < 0 || shot >= Project.Cameras.Count) return;
+        double t = Math.Max(0, Project.Snap(T(at.X), SnapPx / _pxPerSec));
+        var cut = Project.CutTo(t, shot, 1 / Channels.Rate);
+        Pick(shot);
+        SelectCut(cut);
+        QueueRedraw();
+    }
 
     public override void _GuiInput(InputEvent e)
     {

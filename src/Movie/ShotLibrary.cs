@@ -116,12 +116,22 @@ public partial class ShotLibrary : VBoxContainer
         line.AddChild(tag);
         row.AddChild(line);
         row.Pressed += () => Picked?.Invoke(index);
+        // dragged onto the timeline's shot row (#778): the movie cuts to it there
+        row.SetDragForwarding(Callable.From((Vector2 _) => DragShot(index, cam.Name)), Callable.From((Vector2 _, Variant _) => false), Callable.From((Vector2 _, Variant _) => { }));
         row.MouseEntered += () => Hover(index, row, cam.Name);
         row.MouseExited += () => Hover(-1, row, "");
         row.FocusEntered += () => Hover(index, row, cam.Name);
         row.FocusExited += () => Hover(-1, row, "");
         _rows.AddChild(row);
         return (row, still);
+    }
+
+    /// <summary>What a dragged row carries: the shot, and a label under the pointer.</summary>
+    private Variant DragShot(int index, string name)
+    {
+        var label = UiKit.Text($"Shot: {name}", UiTheme.FontSmall, UiTheme.Amber, bold: true);
+        SetDragPreview(label);
+        return new Godot.Collections.Dictionary { ["shot"] = index };
     }
 
     private void Hover(int index, Control row, string name)

@@ -76,6 +76,7 @@
     <Compile Include="..\..\src\Movie\SoundRing.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Movie\CameraTrack.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Movie\ShotMath.cs" Link="Game\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Movie\AutoDirector.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Movie\WorldTrack.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Interiors\InnerDoorLock.cs" Link="Game\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Loot\ShopLedger.cs" Link="Game\%(Filename)%(Extension)" />

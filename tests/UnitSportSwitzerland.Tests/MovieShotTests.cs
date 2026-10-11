@@ -198,6 +198,29 @@ public class MovieShotTests
         Assert.Equal(500 + ShotMath.PartHeight(TargetPart.Body) + 2, pose.Alt, 1);
     }
 
+    [Fact]
+    public void TheAutoDirectorCutsOnTheBarsWithoutRepeatingAShot()
+    {
+        var p = Walker(out int lane);
+        p.Camera.Set(Key(0, E0 + 30), -1);                       // a world shot
+        var chase = p.AddCamera(); chase.Rig = ShotRig.Chase; chase.Target = lane;
+        var lead = p.AddCamera(); lead.Rig = ShotRig.Lead; lead.Target = lane;
+        // no music: every 3 s
+        int made = AutoDirector.Apply(p, new[] { 0, 1, 2 }, 0, 10);
+        Assert.True(made >= 3);
+        Assert.Equal(0, p.Cuts[0].T, 6);
+        for (int i = 1; i < p.Cuts.Count; i++)
+        {
+            Assert.NotEqual(p.Cuts[i - 1].Camera, p.Cuts[i].Camera);
+            Assert.Equal(3.0 * i, p.Cuts[i].T, 6);
+        }
+        // with a beat: on the bars (120 BPM, 4 beats = 2 s)
+        var cuts = AutoDirector.CutTimes(Beats, 0, 8);
+        Assert.Equal(new[] { 0.0, 2.0, 4.0, 6.0 }, cuts);
+        // nothing to cut with: nothing made
+        Assert.Equal(0, AutoDirector.Apply(p, Array.Empty<int>(), 0, 10));
+    }
+
     private static CameraKey Key(double t, double e) => new() { T = t, E = e, N = N0, Alt = 500, Lens = 35, Ease = KeyEase.Cut };
 
     [Fact]

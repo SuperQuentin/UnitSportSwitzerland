@@ -64,6 +64,13 @@ public partial class MovieStudio : Screen
     private ShotThumbs _thumbs = null!;
     private Button _shotsTab = null!, _sequencesTab = null!;
     private bool _shotsMode;
+    // the Sequences screen (#778): a tab per sequence, the second picture for crossfades and wipes
+    private HBoxContainer _sequenceBar = null!;
+    private double _sequenceShape = double.NaN;
+    private SubViewport _previewB = null!;
+    private Camera3D _cameraB = null!;
+    private Control _mixClip = null!;
+    private TextureRect _mixPicture = null!;
     private int _inspected = -1;
     private ColorRect _fade = null!;
     private PreviewCamera _previewCamera = null!;
@@ -149,7 +156,7 @@ public partial class MovieStudio : Screen
 
         _thumbs = new ShotThumbs(_stage, origin, ActorAt);
         AddChild(_thumbs);
-        _library = new ShotLibrary(_thumbs) { Visible = false };
+        _library = new ShotLibrary(_thumbs);
         _library.Picked += i => { _timeline.Pick(i); RefreshCameras(); };
         _library.AddShot.Pressed += NewShot;
         _library.AddGroup.Pressed += NewGroup;
@@ -170,6 +177,16 @@ public partial class MovieStudio : Screen
         aspect.AddChild(screen);
         _preview = new SubViewport { HandleInputLocally = false };
         screen.AddChild(_preview);
+        // the incoming shot during a crossfade or a wipe (#778): a second viewport, drawn only then, shown
+        // over the player, faded in or uncovered from the left
+        _previewB = new SubViewport { HandleInputLocally = false, RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled };
+        _previewB.AddChild(_cameraB = new Camera3D { Current = true, Near = 0.1f, Far = GameSettings.Current.CameraFar });
+        AddChild(_previewB);
+        _mixClip = new Control { ClipContents = true, MouseFilter = MouseFilterEnum.Ignore, Visible = false };
+        _mixClip.SetAnchorsPreset(LayoutPreset.LeftWide);
+        _mixPicture = new TextureRect { Texture = _previewB.GetTexture(), StretchMode = TextureRect.StretchModeEnum.Scale, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, MouseFilter = MouseFilterEnum.Ignore };
+        _mixClip.AddChild(_mixPicture);
+        screen.AddChild(_mixClip);
         // a fade to black over the player (#776): transitions and Fade beat links
         _fade = new ColorRect { Color = new Color(0, 0, 0, 0), MouseFilter = MouseFilterEnum.Ignore, Visible = false };
         _fade.SetAnchorsPreset(LayoutPreset.FullRect);
@@ -248,12 +265,16 @@ public partial class MovieStudio : Screen
         lower.SizeFlagsVertical = SizeFlags.ExpandFill;
         split.AddChild(lower);
         _editsRow = lower;
+        // the sequences (#778): one tab each, + for another, and the auto-director
+        _sequenceBar = UiKit.HBox(4);
+        lower.AddChild(_sequenceBar);
         var edits = Row();
         lower.AddChild(edits);
         Tool(edits, "Split", "Cut the selected clip at the playhead, or every lane if it is not under it (S)", Split);
         Tool(edits, "Cut all", "Cut every clip under the playhead (Shift+S); Ctrl+click a clip cuts it there", CutAll);
         Tool(edits, "Duplicate", "A copy after it (Ctrl+D)", Duplicate);
         Tool(edits, "Delete", "Remove the selected clip or camera key (Del)", Delete);
+        Tool(edits, "Auto-direct", "Cut the sequence on the beats from the picked shot's group (all shots if it has none); edit it after", AutoDirect);
         edits.AddChild(UiKit.Spacer(w: 10));
         edits.AddChild(UiKit.Text("Zoom", UiTheme.FontSmall, UiTheme.TextDim));
         Tool(edits, "−", "Zoom out (− , the wheel on the timeline)", () => _timeline.ZoomBy(0.66f));
@@ -389,8 +410,9 @@ public partial class MovieStudio : Screen
         // a pad's triggers shuttle: the harder, the faster
         if (_import != null) StepImport();
         float shuttle = Input.GetActionStrength(Forward) - Input.GetActionStrength(Backward);
-        if (_lookThrough.ButtonPressed) ShowThroughCamera(); else SetFade(0);
+        if (_lookThrough.ButtonPressed) ShowThroughCamera(); else { SetFade(0); ShowMix(new MovieProject.ProgramView { To = -1 }); }
         if (_shotsMode) StepShots();
+        else { RefreshSequences(); _library.Refresh(MovieSession.Project, _timeline.PickedCamera); }
         _gizmos.Hidden = _lookThrough.ButtonPressed;
         if (_camPicker.ItemCount != MovieSession.Project.Cameras.Count) RefreshCameras();
         // a pad's X held: cut to the picked camera (a tap splits, on release); a hold is real time, whatever the game does
@@ -607,7 +629,9 @@ public partial class MovieStudio : Screen
         _shotsMode = shots;
         _shotsTab.SetPressedNoSignal(shots);
         _sequencesTab.SetPressedNoSignal(!shots);
-        _library.Visible = _inspector.Visible = shots;
+        _inspector.Visible = shots;
+        // the library stays in Sequences too: its shots are dragged onto the timeline (#778)
+        _library.Visible = true;
         _sidePanel.Visible = !shots;
         _editsRow.Visible = !shots;
         if (shots)
@@ -698,6 +722,89 @@ public partial class MovieStudio : Screen
         _thumbs.Invalidate();
         // back to looking through the shot, now framed
         _lookThrough.ButtonPressed = true;
+    }
+
+    // ---- the Sequences screen (#778) -----------------------------------------------------------
+
+    /// <summary>One tab per sequence, the active one lit, and +; made again only when the sequences change.</summary>
+    private void RefreshSequences()
+    {
+        var p = MovieSession.Project;
+        double shape = p.Sequences.Count * 1000 + p.ActiveSequence;
+        foreach (var s in p.Sequences) shape = shape * 1.0007 + s.Name.GetHashCode() * 1e-9;
+        if (shape == _sequenceShape) return;
+        _sequenceShape = shape;
+        foreach (var child in _sequenceBar.GetChildren()) child.QueueFree();
+        _sequenceBar.AddChild(UiKit.Text("Sequence", UiTheme.FontSmall, UiTheme.TextDim));
+        var group = new ButtonGroup();
+        for (int i = 0; i < p.Sequences.Count; i++)
+        {
+            int index = i;
+            var tab = Tool(_sequenceBar, p.Sequences[i].Name, "Edit this sequence's shots; right-click to rename, set where it starts and ends, or delete it", () => UseSequence(index));
+            tab.ToggleMode = true;
+            tab.ButtonGroup = group;
+            tab.ButtonPressed = i == p.ActiveSequence;
+            tab.GuiInput += e =>
+            {
+                if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right } m) OpenSequenceMenu(index, m.GlobalPosition);
+            };
+            Small(tab);
+        }
+        Small(Tool(_sequenceBar, "+", "A new sequence over the whole movie", () => UseSequence(p.AddSequence())));
+    }
+
+    private void UseSequence(int index)
+    {
+        MovieSession.Project.ActiveSequence = index;
+        _timeline.SelectCut(null);
+        _timeline.QueueRedraw();
+    }
+
+    /// <summary>Right-click on a sequence's tab: rename it, set its start or end at the playhead, or delete it.</summary>
+    private void OpenSequenceMenu(int index, Vector2 at)
+    {
+        _keyMenu?.QueueFree();
+        var p = MovieSession.Project;
+        var menu = new PopupMenu();
+        menu.AddItem("Rename…", 0);
+        menu.AddItem("Starts here (the playhead)", 1);
+        menu.AddItem("Ends here (the playhead)", 2);
+        menu.AddItem("Delete sequence", 3);
+        menu.SetItemDisabled(3, p.Sequences.Count <= 1);
+        menu.IdPressed += id =>
+        {
+            var seq = p.Sequences[index];
+            switch (id)
+            {
+                case 0:
+                    Modal.Prompt(this, "Rename sequence", null, seq.Name, "Name", n => n.Trim().Length == 0 ? "Give it a name" : null,
+                        n => { seq.Name = n.Trim(); _sequenceShape = double.NaN; });
+                    break;
+                case 1: seq.In = _stage.Time; break;
+                case 2: seq.Out = Math.Max(seq.In + MovieProject.MinLength, _stage.Time); break;
+                case 3:
+                    p.Sequences.RemoveAt(index);
+                    p.ActiveSequence = Math.Min(p.ActiveSequence, p.Sequences.Count - 1);
+                    _timeline.QueueRedraw();
+                    break;
+            }
+        };
+        AddChild(menu);
+        _keyMenu = menu;
+        menu.Popup(new Rect2I((Vector2I)at, Vector2I.Zero));
+    }
+
+    /// <summary>The auto-director (#778) over the active sequence, from the picked shot's group (or every shot).</summary>
+    private void AutoDirect()
+    {
+        var p = MovieSession.Project;
+        var seq = p.Sequences[p.ActiveSequence];
+        string group = _timeline.PickedCamera >= 0 && _timeline.PickedCamera < p.Cameras.Count ? p.Cameras[_timeline.PickedCamera].Group : "";
+        var shots = Enumerable.Range(0, p.Cameras.Count).Where(i => group.Length == 0 || p.Cameras[i].Group == group).ToList();
+        double to = Math.Min(seq.Out, p.Duration);
+        int made = AutoDirector.Apply(p, shots, seq.In, to);
+        if (made == 0) Modal.Inform(this, "Nothing to cut", "None of the shots can film this stretch: give them keys or an actor to follow.");
+        _timeline.QueueRedraw();
     }
 
     /// <summary>The Shots screen per frame: the library's rows, and the settings of the picked shot.</summary>
@@ -942,6 +1049,28 @@ public partial class MovieStudio : Screen
         ShowKeyOptions();
     }
 
+    /// <summary>
+    /// <c>--moviewipe</c>, for screenshots (#778): the keys of <see cref="ScreenshotKeys"/>, the cut to Cam 2 made a
+    /// 2 s wipe and the playhead in its middle, looking through the program, and a second sequence.
+    /// </summary>
+    public void ScreenshotWipe()
+    {
+        ScreenshotKeys();
+        var p = MovieSession.Project;
+        var cut = p.Cuts.OrderBy(c => c.T).Skip(1).First();
+        cut.Transition = TransitionKind.Wipe;
+        cut.Duration = 2;
+        // the incoming shot a lead on the actor, so the two halves of the wipe differ
+        var lead = p.Cameras[cut.Camera];
+        lead.Rig = ShotRig.Lead; lead.Target = 0; lead.Keys.Clear();
+        p.AddSequence();
+        _sequenceShape = double.NaN;
+        _viewSource.Selected = 0;
+        _lookThrough.ButtonPressed = true;
+        _stage.Seek(cut.T + 0.2);
+        _timeline.SelectCut(cut);
+    }
+
     // ---- several cameras (#675) --------------------------------------------------------------------
 
     private CameraTrack Picked => MovieSession.Project.Cameras[Math.Clamp(_timeline.PickedCamera, 0, MovieSession.Project.Cameras.Count - 1)];
@@ -980,12 +1109,30 @@ public partial class MovieStudio : Screen
             menu.AddRadioCheckItem($"Cut to {cameras[i].Name}", i);
             menu.SetItemChecked(i, cut.Camera == i);
         }
+        // how the movie goes into this shot (#778)
+        menu.AddSeparator("Transition");
+        string[] kinds = { "Cut", "Camera blend", "Crossfade", "Fade to black", "Wipe", "Whip pan", "Zoom punch" };
+        for (int k = 0; k < kinds.Length; k++)
+        {
+            menu.AddRadioCheckItem(kinds[k], 500 + k);
+            menu.SetItemChecked(menu.ItemCount - 1, (int)cut.Transition == k);
+        }
+        menu.AddSeparator("Length");
+        double[] lengths = { 0.3, 0.6, 1.0, 2.0 };
+        for (int l = 0; l < lengths.Length; l++)
+        {
+            menu.AddRadioCheckItem($"{lengths[l]:0.0} s", 600 + l);
+            menu.SetItemChecked(menu.ItemCount - 1, Math.Abs(cut.Duration - lengths[l]) < 1e-3);
+        }
         menu.AddSeparator();
         menu.AddItem("Delete cut", 999);
         menu.IdPressed += id =>
         {
             if (id == 999) { MovieSession.Project.RemoveCut(cut); _timeline.SelectCut(null); }
+            else if (id >= 600) cut.Duration = lengths[id - 600];
+            else if (id >= 500) cut.Transition = (TransitionKind)(id - 500);
             else cut.Camera = (int)id;
+            _timeline.QueueRedraw();
         };
         AddChild(menu);
         _keyMenu = menu;
@@ -1039,9 +1186,41 @@ public partial class MovieStudio : Screen
             var view = p.Program(_stage.Time, _stage.Mount);
             if (view.Ok) _camera.ShowPose(view.Pose, ActorAt);
             fade = view.Fade;
+            ShowMix(view);
         }
-        else if (p.ShotPose(_timeline.PickedCamera, _stage.Time, _stage.Mount, out var pose, out fade)) _camera.ShowPose(pose, ActorAt);
+        else
+        {
+            ShowMix(new MovieProject.ProgramView { To = -1 });
+            if (p.ShotPose(_timeline.PickedCamera, _stage.Time, _stage.Mount, out var pose, out fade)) _camera.ShowPose(pose, ActorAt);
+        }
         SetFade(fade);
+    }
+
+    /// <summary>
+    /// A crossfade or a wipe (#778): the outgoing shot stays in the player, the incoming one is drawn in the
+    /// second viewport and laid over it, faded in, or uncovered from the left edge.
+    /// </summary>
+    private void ShowMix(in MovieProject.ProgramView view)
+    {
+        bool mixing = view.To >= 0 && view.Kind is TransitionKind.Crossfade or TransitionKind.Wipe;
+        if (mixing && MovieSession.Project.ShotPose(view.To, _stage.Time, _stage.Mount, out var to, out _))
+        {
+            // the player keeps the outgoing shot whole through the transition
+            if (MovieSession.Project.ShotPose(view.From, _stage.Time, _stage.Mount, out var from, out _)) _camera.ShowPose(from, ActorAt);
+            _cameraB.GlobalTransform = StudioCamera.PoseTransform(_origin, to, ActorAt);
+            _cameraB.Fov = CameraTrack.Fov(to.Lens);
+            var size = (Vector2I)_preview.Size;
+            if (_previewB.Size != size) _previewB.Size = size;
+            var full = ((Control)_mixClip.GetParent()).Size;
+            _mixPicture.Size = full;
+            bool wipe = view.Kind == TransitionKind.Wipe;
+            _mixClip.Size = new Vector2(wipe ? full.X * view.Mix : full.X, full.Y);
+            _mixClip.Modulate = new Color(1, 1, 1, wipe ? 1 : view.Mix);
+        }
+        else mixing = false;
+        if (_mixClip.Visible != mixing) _mixClip.Visible = mixing;
+        var mode = mixing ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
+        if (_previewB.RenderTargetUpdateMode != mode) _previewB.RenderTargetUpdateMode = mode;
     }
 
     /// <summary>The preview player's black, for fades (#776); only while looking through.</summary>
