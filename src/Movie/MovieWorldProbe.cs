@@ -10,7 +10,9 @@ namespace UnitSport.Movie;
 /// shifts once. The grab goes onto a <see cref="MovieStage"/>, whose ghosts must stand where the
 /// objects really stood (kept here as the truth) at times sought forwards and backwards, hidden
 /// and gone where they were. Then the project is saved and loaded back through the real look store,
-/// and the loaded ghosts must stand in the same places wearing the same mesh.
+/// and the loaded ghosts must stand in the same places wearing the same mesh. An instancer (#782)
+/// stands for the dormant fleet: one of its three boxes undrawn in place at 1 s (a hall car woken),
+/// then the whole replaced by one of two boxes at 3 s (a car park redrawn after a wake).
 /// </summary>
 public partial class MovieWorldProbe : Node
 {
@@ -21,6 +23,10 @@ public partial class MovieWorldProbe : Node
     private readonly WorldRecorder _recorder = new(300);
     private Node3D? _watched, _car, _wheel, _parked, _bird, _crate;
     private OmniLight3D? _lamp;
+    private MultiMeshInstance3D? _fleet;
+    private bool _woke, _redrawn;
+    private readonly Dictionary<(string, int), ulong> _fleetCopies = new();
+    private static readonly Vector3 FleetAt = new(-25, 0, 10);   // from the spawn point, metres east, up, north
     private readonly List<(double T, GlobalPos Car, float Wheel)> _truth = new();
     private double _t0 = double.NaN, _next;
     private bool _shifted, _done;
@@ -58,6 +64,20 @@ public partial class MovieWorldProbe : Node
         _parked.GlobalPosition = _origin.ToWorld(e + 20, n, 500);
         _bird.GlobalPosition = _origin.ToWorld(e - 10, n, 530);
         _crate.GlobalPosition = _origin.ToWorld(e, n + 15, 500);
+        _fleet = Fleet(3);
+    }
+
+    /// <summary>A car park of <paramref name="count"/> boxes 3 m apart, drawn by one instancer that announces its changes.</summary>
+    private MultiMeshInstance3D Fleet(int count)
+    {
+        var mm = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = new BoxMesh { Size = new Vector3(1.8f, 1.2f, 4f) }, InstanceCount = count };
+        for (int i = 0; i < count; i++) mm.SetInstanceTransform(i, new Transform3D(Basis.Identity, new Vector3(3 * i, 0, 0)));
+        var node = new MultiMeshInstance3D { Name = "Fleet", Multimesh = mm };
+        ReplayWatch.Instanced(node);
+        AddChild(node);
+        var (e, n) = SpawnPoint.ParseTarget();
+        node.GlobalPosition = _origin.ToWorld(e + FleetAt.X, n + FleetAt.Z, 500 + FleetAt.Y);
+        return node;
     }
 
     private GlobalPos CarAt(double t)
@@ -84,13 +104,27 @@ public partial class MovieWorldProbe : Node
             if (t >= 1.5 && _bird!.Visible) _bird.Visible = false;
             if (t >= 2.0) _lamp!.LightEnergy = 0.5f;
             if (t >= 2.5 && IsInstanceValid(_crate)) { _crate!.Free(); _crate = null; }
+            if (t >= 1.0 && !_woke)
+            {
+                // a hall car woken: undrawn in place, and the recorder told
+                _woke = true;
+                _fleet!.Multimesh.SetInstanceTransform(1, new Transform3D(Basis.Identity.Scaled(Vector3.Zero), new Vector3(3, 0, 0)));
+                ReplayWatch.Instanced(_fleet);
+            }
+            if (t >= 3.0 && !_redrawn)
+            {
+                // a car park redrawn after a wake: a new instancer in place of the old
+                _redrawn = true;
+                _fleet!.Free();
+                _fleet = Fleet(2);
+            }
             if (t >= 2.0 && !_shifted)
             {
                 // an origin shift moves every node; the recording is in LV95 and must not notice
                 _shifted = true;
                 var (e, n) = SpawnPoint.ParseTarget();
                 var shift = _origin.MoveTo(e + 500, n + 500);
-                foreach (var o in new[] { _car, _parked, _bird }) o.GlobalTransform = shift.Transform * o.GlobalTransform;
+                foreach (var o in new Node3D[] { _car, _parked, _bird, _fleet! }) o.GlobalTransform = shift.Transform * o.GlobalTransform;
             }
             if (now + 1e-6 >= _next)
             {
@@ -110,7 +144,7 @@ public partial class MovieWorldProbe : Node
         int moves = track.Entities.Sum(e => e.Times.Length);
         GD.Print($"[movieworldcheck] recorded {track.Entities.Length} objects and parts, {moves} poses, "
             + $"{track.Looks.Length} looks, {track.Duration:F2} s");
-        if (track.Entities.Length != 10) Fail($"expected 4 objects with 6 parts (the car has a wheel and a lamp), got {track.Entities.Length}");
+        if (track.Entities.Length != 14) Fail($"expected 6 objects with 8 parts (the car has a wheel and a lamp, each instancer is its own part), got {track.Entities.Length}");
         // the parked car and its body never moved: one pose each
         var still = track.Entities.Count(e => e.Times.Length == 1);
         if (still < 4) Fail($"objects that never moved should hold one pose, only {still} do");
@@ -169,6 +203,7 @@ public partial class MovieWorldProbe : Node
             bool birdRight = birdShown == t < 1.5 - 0.05 || Math.Abs(t - 1.5) < 0.05;
             bool crateRight = crateShown == t < 2.5 - 0.05 || Math.Abs(t - 2.5) < 0.05;
             if (!birdRight) Fail($"{what} t {t:F2}: the bird is {(birdShown ? "shown" : "hidden")}");
+            Fleet(stage, t, what);
             if (!crateRight) Fail($"{what} t {t:F2}: the crate is {(crateShown ? "there" : "gone")}");
         }
         // 0.8 rad/s on a 30 m circle is 24 m/s: a tick is 0.8 m, so between ticks the chord error stays tiny
@@ -176,6 +211,38 @@ public partial class MovieWorldProbe : Node
         GD.Print($"[movieworldcheck] {what}: {times.Count} seeks, the car at worst {worst:F3} m off, the wheel {worstWheel:F3} rad "
             + $"{(ok ? "ok" : "WRONG")}");
         if (!ok) Fail($"{what}: the ghosts are not where the objects were");
+    }
+
+    /// <summary>
+    /// The instancer's ghost (#782): one drawn, where the fleet stood, with three boxes before 1 s, the
+    /// middle one undrawn after, and two after 3 s. A change is seen on the recorder's next walk, half a
+    /// second at most, so times that close to one are not judged. Headless, the renderer keeps no
+    /// instance transforms: there the copy shown after 1 s must only be another one than before.
+    /// </summary>
+    private void Fleet(MovieStage stage, double t, string what)
+    {
+        if (Math.Abs(t - 1.0) < 0.6 || Math.Abs(t - 3.0) < 0.6) return;
+        var drawn = stage.Ghosts.GetChildren().OfType<Node3D>().Where(g => g.Visible && !g.IsQueuedForDeletion())
+            .SelectMany(g => g.GetChildren()).OfType<MultiMeshInstance3D>().Where(m => m.Visible).ToList();
+        if (drawn.Count != 1) { Fail($"{what} t {t:F2}: {drawn.Count} instancers drawn, expected 1"); return; }
+        var mm = drawn[0].Multimesh;
+        int count = t < 3 ? 3 : 2, phase = t < 1 ? 0 : t < 3 ? 1 : 2;
+        if (mm.InstanceCount != count) Fail($"{what} t {t:F2}: the fleet has {mm.InstanceCount} boxes, expected {count}");
+        if (DisplayServer.GetName() != "headless")
+        {
+            bool middle = mm.InstanceCount > 1 && mm.GetInstanceTransform(1).Basis.Determinant() > 0.5f;
+            if (middle != (phase != 1)) Fail($"{what} t {t:F2}: the middle box is {(middle ? "drawn" : "undrawn")}");
+        }
+        // the ghost's copy of the instances: the same within a phase, another one in the next
+        var key = (what, phase);
+        ulong copy = mm.GetInstanceId();
+        if (_fleetCopies.TryGetValue(key, out ulong seen) && seen != copy) Fail($"{what} t {t:F2}: the fleet's look changed within a phase");
+        _fleetCopies[key] = copy;
+        if (_fleetCopies.TryGetValue((what, phase ^ 1), out ulong other) && phase < 2 && other == copy)
+            Fail($"{what} t {t:F2}: the fleet's look did not change when a box was undrawn");
+        var (e, n) = SpawnPoint.ParseTarget();
+        float off = drawn[0].GlobalPosition.DistanceTo(_origin.ToWorld(e + FleetAt.X, n + FleetAt.Z, 500 + FleetAt.Y));
+        if (off > 0.05f) Fail($"{what} t {t:F2}: the fleet is drawn {off:F2} m from where it stood");
     }
 
     /// <summary>The ghost of the <paramref name="n"/>th recorded group (in the order they were made).</summary>

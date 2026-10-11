@@ -236,10 +236,10 @@ public partial class GameShell : Node
                     playersAtStart = Player.PlayerSnapshot.Of(GetTree()).Count(x => !x.Player.Puppet);
                     Movie.MovieSession.ToggleRecording();
                 };
-                GetTree().CreateTimer(stopAt).Timeout += () =>
+                GetTree().CreateTimer(stopAt).Timeout += Movie.MovieSession.ToggleRecording;
+                // stopping hands the session to its spool's worker (#782): the file is read once it is saved
+                Movie.MovieSession.RecordingSaved += newest =>
                 {
-                    Movie.MovieSession.ToggleRecording();
-                    string? newest = Movie.MovieSession.Saved().FirstOrDefault(n => n.StartsWith("Recording "));
                     var p = newest != null && Movie.MovieSession.Load(newest) == null ? Movie.MovieSession.Project : null;
                     int actors = p?.Clips.Count(c => !c.Audio && !c.World) ?? 0, worlds = p?.Clips.Count(c => c.World) ?? 0;
                     int sounds = p?.Clips.Count(c => c.Audio) ?? 0;
@@ -248,7 +248,9 @@ public partial class GameShell : Node
                     var env = p?.Worlds.FirstOrDefault()?.Entities.FirstOrDefault(e => e.IsEnvironment);
                     double recordedHour = env?.EnvironmentAt(0).Hour ?? double.NaN;
                     bool sky = double.IsNaN(hourAtStart) || Math.Abs(recordedHour - hourAtStart) < 0.05;
-                    bool ok = actors >= Math.Min(1, playersAtStart) && worlds == 1 && sounds == 1 && Math.Abs(length - span) < 1.0 && sky;
+                    // with --moviespool shorter than the span it came in pieces: each player still one clip, one world, one sound
+                    bool joined = actors <= Math.Max(1, playersAtStart);
+                    bool ok = actors >= Math.Min(1, playersAtStart) && joined && worlds == 1 && sounds == 1 && Math.Abs(length - span) < 1.0 && sky;
                     GD.Print($"[movierecord] \"{newest}\": {actors} actor clips ({playersAtStart} players), {worlds} world, {sounds} sound, {length:F1} s of {span:F1} s, "
                         + $"the hour {recordedHour:F3} recorded at {hourAtStart:F3} {(sky ? "ok" : "WRONG")}");
                     GD.Print(ok ? "[movierecord] RESULT: ok" : "[movierecord] RESULT: FAILED");

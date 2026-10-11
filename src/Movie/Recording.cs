@@ -7,9 +7,9 @@ namespace UnitSport.Movie;
 /// <summary>
 /// One recording of the game (#638, #775): a ring per player, the world as it is drawn and the game's
 /// sound, all holding the last <see cref="Seconds"/>. The replay buffer is one, sized by the setting
-/// and always running; a Record / Stop session is another, sized to the longest session and dropped
-/// when it stops. <see cref="ReplayRecorder"/> reads the game once a tick and feeds both.
-/// Everything is allocated up front: nothing more while it records.
+/// and always running; a Record / Stop session is another, a minute long, emptied into a
+/// <see cref="SessionSpool"/> piece by piece (<see cref="Piece"/>, #782). <see cref="ReplayRecorder"/>
+/// reads the game once a tick and feeds both. Everything is allocated up front: nothing more while it records.
 /// </summary>
 public sealed class Recording
 {
@@ -18,6 +18,7 @@ public sealed class Recording
         public required ReplayRing Ring;
         public required string Key, Label;
         public long Peer;
+        public int Serial;
         public double LastSeen, Grabbed = double.NegativeInfinity;
     }
 
@@ -28,6 +29,7 @@ public sealed class Recording
     private readonly WorldRing _ring;
     private readonly SoundRing? _sound;
     private double _worldGrabbed = double.NegativeInfinity, _soundGrabbed = double.NegativeInfinity, _nextPrune;
+    private int _serials;
 
     public Recording(double seconds, int soundRate, WorldRecorder world, double now)
     {
@@ -72,6 +74,7 @@ public sealed class Recording
                 Key = key,
                 Label = p.IsMultiplayerAuthority() && !p.Npc ? "You" : p.Npc ? $"Racer {key}" : $"Player {key}",
                 Peer = FootPlayer.NetId(key) ?? 0,
+                Serial = ++_serials,
             };
             _actors[id] = actor;
         }
@@ -139,9 +142,28 @@ public sealed class Recording
             start = notBefore;
         }
         if (SoundImport.FromGame(samples, _sound.Rate) is not { } asset) return false;
-        project.AddAudio(project.AudioLaneFor(ReplayRecorder.GameSoundLane), asset, project.PlaceGrab(start));
+        project.AddAudio(project.AudioLaneFor(MovieProject.GameSoundLane), asset, project.PlaceGrab(start));
         _soundGrabbed = _sound.Newest;
         return true;
+    }
+
+    /// <summary>
+    /// A Record / Stop session's piece (#782): everything recorded since the last piece, the world
+    /// sliced raw (the recorder's ids and looks, for the join) and every sample of sound since.
+    /// </summary>
+    public SessionSpool.Piece Piece(double now)
+    {
+        var piece = new SessionSpool.Piece();
+        foreach (var a in _actors.Values)
+        {
+            if (a.Ring.Slice(a.Grabbed, out double start) is not { } track) continue;
+            piece.Actors.Add(new SessionSpool.ActorPiece(a.Serial, a.Key, a.Label, a.Peer, start, track));
+            a.Grabbed = a.Ring.Newest;
+        }
+        piece.World = _ring.Slice(_worldGrabbed, now, _world.Looks, out piece.WorldStart, raw: true);
+        if (piece.World != null) _worldGrabbed = now;
+        if (_sound is { Count: > 0 }) piece.Sound = _sound.Drain(out piece.SoundStart);
+        return piece;
     }
 
     /// <summary>A new or loaded project: the next grab hands it everything held again.</summary>

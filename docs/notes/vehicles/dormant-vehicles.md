@@ -178,3 +178,5 @@
 - **Not done**: waking on a collision or a shot (only the aim ray wakes one today); the fleets in
   the industrial yards (#496 phase 3's own provider); trailers and swap bodies as slot kinds — asked
   of #496 what a trailer needs that a car slot does not.
+- **Movie studio** (#782): every instancer `Instanced` makes calls `Movie.ReplayWatch.Instanced`, so the fleet is
+  recorded as drawn; a wake redraws the tile, which is the change the recording sees (`movie/movie-world`).

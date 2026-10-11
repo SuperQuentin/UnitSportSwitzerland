@@ -24,6 +24,29 @@ public static class ReplayWatch
     public static void Container(Node3D container) => Join(Containers, container);
     public static void Object(Node3D obj) => Join(Objects, obj);
 
+    private static readonly StringName Version = "replay_version";
+
+    /// <summary>
+    /// An instancer recorded as it is drawn (#782), a lone object of its own whose look is a copy of
+    /// its instances: the dormant fleet's car parks, a hall's parked cars. Called when it is made and
+    /// again every time its instances change (a parked car undrawn as it wakes), which is what tells
+    /// the recorder to copy them again. One the game sets every frame (critters, tracers) never calls
+    /// this and is not recorded: that would be a copy a frame.
+    /// </summary>
+    public static void Instanced(MultiMeshInstance3D node)
+    {
+        if (node.Multimesh is not { } mm) return;
+        int version = InstancedVersion(mm);
+        mm.SetMeta(Version, version + 1);
+        if (version > 0) return;
+        // joined each time it enters the tree, as a door leaf joins in its _EnterTree
+        node.TreeEntered += () => Object(node);
+        if (node.IsInsideTree()) Object(node);
+    }
+
+    /// <summary>How many times <see cref="Instanced"/> was called on <paramref name="mm"/>'s instancer: 0, not recorded.</summary>
+    public static int InstancedVersion(MultiMesh mm) => mm.GetMeta(Version, 0).AsInt32();
+
     private static void Join(List<Node3D> list, Node3D node)
     {
         if (list.Contains(node)) return;
