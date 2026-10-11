@@ -12,6 +12,8 @@ namespace UnitSport.Movie;
 /// if the recorder's property list drifts from what <see cref="FootPlayer"/> replicates. Then the
 /// sound (#656): a 120 BPM click track goes through the real import (copy, Godot's decoder, beat
 /// detection) and onto the timeline, where it must sound playing forwards and fall silent backwards.
+/// Last the camera track (#669): a key aimed at the actor must look at it while the movie plays, a
+/// cut must land exactly on the next key with its lens, and "cut all" must cut every lane.
 /// </summary>
 public partial class MovieProbe : Node
 {
@@ -30,6 +32,8 @@ public partial class MovieProbe : Node
     private SoundImport? _import;
     private Clip? _song;
     private string? _clicksPath, _songFile;
+    private StudioCamera? _cam;
+    private CameraKey? _cutTo;
     private int _seek = -1, _settle, _failures;
     private readonly List<(double T, string Why)> _seeks = new();
 
@@ -222,8 +226,55 @@ public partial class MovieProbe : Node
                     if (_songFile != null) System.IO.File.Delete(SoundImport.PathOf(_songFile));
                 }
                 catch (System.IO.IOException) { }
+                _soundPhase = 5;
+                return;
+            case 5:
+            {
+                // two keys round the actor at 2 s: the first aims at it, the second is a cut to a fixed view
+                _stage!.Playing = false;
+                _stage.Seek(2);
+                var actor = _origin.ToGlobal(_stage.Puppet(0)!.GlobalPosition);
+                _project!.Camera.Set(new CameraKey { T = 1, E = actor.E + 30, N = actor.N, Alt = actor.Alt + 8, Lens = 24, Ease = KeyEase.Cut, LookAt = 0 }, 0);
+                _cutTo = _project.Camera.Set(new CameraKey { T = 3, E = actor.E - 30, N = actor.N + 5, Alt = actor.Alt + 2, Lens = 85 }, 0);
+                _cam = new StudioCamera(_origin);
+                AddChild(_cam);
+                _soundFrames = 0;
+                _soundPhase = 6;
+                return;
+            }
+            case 6:
+            {
+                if (++_soundFrames < 3) return;
+                _project!.Camera.Sample(_stage!.Time, out var pose);
+                _cam!.ShowPose(pose, lane => _stage.Puppet(lane)?.GlobalPosition);
+                var head = _stage.Puppet(0)!.GlobalPosition + new Vector3(0, 1.2f, 0);
+                float aim = (-_cam.GlobalTransform.Basis.Z).Dot((head - _cam.GlobalPosition).Normalized());
+                GD.Print($"[moviecheck] camera key aimed at the actor: looking {Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(aim, -1, 1))):F2}° off it, "
+                    + $"fov {_cam.Fov:F1}° (24 mm: {CameraTrack.Fov(24):F1}°) {(aim > 0.999f ? "ok" : "WRONG")}");
+                if (aim <= 0.999f) Fail("a camera key aimed at an actor does not look at it");
+                _stage.Seek(3.2);   // past the cut
+                _soundFrames = 0;
+                _soundPhase = 7;
+                return;
+            }
+            case 7:
+            {
+                if (++_soundFrames < 3) return;
+                _project!.Camera.Sample(_stage!.Time, out var pose);
+                _cam!.ShowPose(pose, lane => _stage.Puppet(lane)?.GlobalPosition);
+                var want = _origin.ToWorld(new GlobalPos(_cutTo!.E, _cutTo.N, _cutTo.Alt));
+                float off = _cam.GlobalPosition.DistanceTo(want);
+                bool lens = Mathf.IsEqualApprox(_cam.Fov, CameraTrack.Fov(85), 0.01f);
+                GD.Print($"[moviecheck] after the cut: {off:F3} m from the next key, lens {_cam.Lens:F0} mm {(off < 0.01f && lens ? "ok" : "WRONG")}");
+                if (off >= 0.01f || !lens) Fail("a cut does not land on the next key with its lens");
+
+                int before = _project.Clips.Count, covering = _project.Clips.Count(c => c.Covers(1.5));
+                var made = _project.CutAll(1.5);
+                GD.Print($"[moviecheck] cut all at 1.5 s: {covering} clips under it, {made.Count} cut, {before} -> {_project.Clips.Count} clips");
+                if (made.Count != covering || _project.Clips.Count != before + covering) Fail("cut all missed a lane");
                 Finish();
                 return;
+            }
         }
     }
 

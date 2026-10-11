@@ -77,7 +77,8 @@ public sealed class SoundImport
 
     /// <summary>
     /// The game's own sound out of the replay buffer as an asset: written as a .wav, its waveform taken
-    /// from the samples themselves, no beat looked for. Null when there is under half a second.
+    /// from the samples themselves. Its beat (a radio or a car stereo playing) is found on a worker
+    /// thread afterwards (#669): the ghost markers appear when it is done. Null under half a second.
     /// </summary>
     public static AudioAsset? FromGame(short[] samples, int rate)
     {
@@ -87,10 +88,21 @@ public sealed class SoundImport
         using (var f = System.IO.File.Create(PathOf(file))) Pcm.WriteWav(f, samples, rate);
         var mono = new float[samples.Length];
         for (int i = 0; i < mono.Length; i++) mono[i] = samples[i] / 32768f;
-        return new AudioAsset
+        var asset = new AudioAsset
         {
             Name = "Game sound", File = file, Duration = (double)samples.Length / rate, Game = true,
             Peaks = Pcm.Peaks(mono, rate, AudioAsset.PeaksPerSecond),
         };
+        Task.Run(() =>
+        {
+            var low = Pcm.Decimate(mono, rate, 11025, out int lowRate);
+            var beat = BeatDetector.Detect(low, lowRate);
+            // an engine's drone or wind has a "tempo" too: only something rhythmic gets ghost markers
+            bool rhythmic = beat.Confidence >= BeatDetector.Rhythmic;
+            if (rhythmic) asset.Beat = beat;   // one reference written: the timeline sees it on its next frame
+            GD.Print($"[movie] game sound {file}: {beat.Bpm:F1} BPM, confidence {beat.Confidence:F2}, "
+                + (rhythmic ? $"{beat.Beats.Length} beats" : "not rhythmic: no beats"));
+        });
+        return asset;
     }
 }

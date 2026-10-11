@@ -48,7 +48,7 @@ public sealed class AudioAsset
     /// <summary>The loudest peak (at least 1): a waveform is drawn against it, so a quiet recording still shows its shape.</summary>
     public int PeakMax => _peakMax ??= Peaks.Length == 0 ? 1 : Math.Max(1, (int)Peaks.Max());
     private int? _peakMax;
-    /// <summary>Recorded from the game, not music: no beat is looked for in it.</summary>
+    /// <summary>Recorded from the game, not imported: drawn in its own colour, its beat found after the grab (#669).</summary>
     public bool Game { get; init; }
 }
 
@@ -72,6 +72,8 @@ public sealed class MovieProject
     public List<AudioAsset> Audio { get; } = new();
     /// <summary>Markers kept on the timeline (#656), sorted, in timeline seconds.</summary>
     public List<double> Markers { get; } = new();
+    /// <summary>The movie's camera, as keyframes (#669).</summary>
+    public CameraTrack Camera { get; } = new();
     private int _nextId = 1;
 
     // this run's recording clock against the timeline: grabs made in one session keep their real
@@ -80,7 +82,15 @@ public sealed class MovieProject
 
     public MovieProject(string[] discrete) => Discrete = discrete;
 
-    public double Duration => Clips.Count == 0 ? 0 : Clips.Max(c => c.End);
+    public double Duration
+    {
+        get
+        {
+            double d = Camera.Keys.Count == 0 ? 0 : Camera.Keys[^1].T;
+            foreach (var c in Clips) d = Math.Max(d, c.End);
+            return d;
+        }
+    }
 
     public Clip? Find(int id) => Clips.Find(c => c.Id == id);
 
@@ -172,6 +182,18 @@ public sealed class MovieProject
         return right;
     }
 
+    /// <summary>
+    /// Cuts every clip under timeline time <paramref name="t"/>, on every lane, actors and sound
+    /// alike (#669): a cut through the whole movie. The right halves made.
+    /// </summary>
+    public List<Clip> CutAll(double t)
+    {
+        var made = new List<Clip>();
+        foreach (var c in Clips.Where(c => c.Covers(t)).ToList())
+            if (Split(c.Id, t) is { } right) made.Add(right);
+        return made;
+    }
+
     /// <summary>Moves clip <paramref name="id"/>'s left edge to timeline time <paramref name="t"/>, within what was recorded.</summary>
     public void TrimStart(int id, double t)
     {
@@ -229,6 +251,8 @@ public sealed class MovieProject
         Audio.Clear(); Audio.AddRange(audio);
         AudioLanes.Clear(); AudioLanes.AddRange(audioLanes);
         Clips.Clear(); Clips.AddRange(clips);
+        // a camera aimed at an actor whose lane went no longer aims at anyone
+        foreach (var k in Camera.Keys) k.LookAt = k.LookAt >= 0 ? usedLanes.IndexOf(k.LookAt) : -1;
     }
 
     internal void SetNextId(int next) => _nextId = Math.Max(_nextId, next);

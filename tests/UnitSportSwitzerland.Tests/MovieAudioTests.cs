@@ -46,6 +46,23 @@ public class MovieAudioTests
     }
 
     [Fact]
+    public void MusicIsRhythmicNoiseAndADroneAreNot()
+    {
+        Assert.True(BeatDetector.Detect(Clicks(120, 20), Rate).Confidence > BeatDetector.Rhythmic);
+        var random = new Random(4);
+        var noise = new float[20 * Rate];
+        var drone = new float[20 * Rate];
+        for (int i = 0; i < noise.Length; i++)
+        {
+            noise[i] = (float)(random.NextDouble() - 0.5);
+            // an engine: a tone whose loudness swells slowly, a little hiss on it
+            drone[i] = (float)(Math.Sin(i * 0.3) * (0.6 + 0.4 * Math.Sin(i * 0.0009)) + (random.NextDouble() - 0.5) * 0.1);
+        }
+        Assert.True(BeatDetector.Detect(noise, Rate).Confidence < BeatDetector.Rhythmic);
+        Assert.True(BeatDetector.Detect(drone, Rate).Confidence < BeatDetector.Rhythmic);
+    }
+
+    [Fact]
     public void SilenceHasNoBeat()
     {
         Assert.Empty(BeatDetector.Detect(new float[Rate * 5], Rate).Beats);
