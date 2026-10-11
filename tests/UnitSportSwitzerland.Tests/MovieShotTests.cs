@@ -19,26 +19,24 @@ public class MovieShotTests
         (double t, out double e, out double n, out double alt, out float yaw) => { e = E0; n = N0 + speed * t; alt = 500; yaw = 0; return true; };
 
     [Fact]
-    public void ASmoothFollowKeepsUpWithASteadyTargetAndSoftensItsChanges()
+    public void AFollowKeepsTheTargetsPlaceAndSoftensItsTurns()
     {
-        var walk = North(50);   // a plane's speed
-        Assert.True(ShotMath.Follow(20, 0, walk, out _, out var n0, out _, out _));
-        Assert.Equal(N0 + 1000, n0, 6);
-        // led by its velocity, the spring does not trail a steady target, however fast
-        Assert.True(ShotMath.Follow(20, 0.5, walk, out _, out var n1, out _, out _));
-        Assert.InRange(N0 + 1000 - n1, -0.1, 0.1);
-        // a sudden jump of 10 m at 10 s comes through softened, then settles
-        ShotMath.TargetSampler jump = (double t, out double e, out double n, out double alt, out float yaw) =>
-        { e = E0; n = N0 + (t >= 10 ? 10 : 0); alt = 0; yaw = 0; return true; };
-        ShotMath.Follow(10.15, 0.5, jump, out _, out var during, out _, out _);
-        Assert.InRange(during - N0, 0.5, 9.5);
-        ShotMath.Follow(14, 0.5, jump, out _, out var after, out _, out _);
-        Assert.Equal(N0 + 10, after, 1);
-
-        // a pure function of time: asking twice, or in any order, gives the same
-        ShotMath.Follow(3, 0.5, walk, out _, out var a, out _, out _);
-        ShotMath.Follow(20, 0.5, walk, out _, out var b, out _, out _);
-        Assert.Equal(n1, b, 9);
+        var fly = North(50);   // a plane's speed
+        // the position is the target's, smoothing or not: the camera never falls behind or ahead
+        Assert.True(ShotMath.Follow(20, 0.5, fly, out var e, out var n, out _, out var yaw));
+        Assert.Equal((E0, N0 + 1000), (e, n));
+        Assert.Equal(0, yaw, 6);
+        // a quarter turn at 10 s: half a second later the heading is still on its way round, then settles
+        ShotMath.TargetSampler turn = (double t, out double te, out double tn, out double ta, out float ty) =>
+        { te = E0; tn = N0; ta = 0; ty = t >= 10 ? MathF.PI / 2 : 0; return true; };
+        ShotMath.Follow(10.3, 0.5, turn, out _, out _, out _, out var during);
+        Assert.InRange(during, 0.1f, 1.4f);
+        ShotMath.Follow(14, 0.5, turn, out _, out _, out _, out var after);
+        Assert.Equal(MathF.PI / 2, after, 2);
+        // a pure function of time: asking in any order gives the same
+        ShotMath.Follow(3, 0.5, turn, out _, out _, out _, out _);
+        ShotMath.Follow(10.3, 0.5, turn, out _, out _, out _, out var again);
+        Assert.Equal(during, again);
     }
 
     [Fact]

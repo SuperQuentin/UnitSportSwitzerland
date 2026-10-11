@@ -11,11 +11,11 @@ The model only: the Shots screen that edits it is #777, the Sequences screen #77
   `CameraTrack.DefaultPose`: Lead 6 m ahead looking back, Chase 7 m behind 2 m up, Mount just over the target.
   - The yaw is `FootPlayer.NetYaw` (= `Rotation.Y`, facing −Z): `--movieshotcheck` proves the rigs hang where the
     drawn puppet faces.
-- **Follow smoothing** (`ShotMath.Follow`): a critically damped spring on the target's frame (position and yaw, the
-  yaw the short way), integrated at 30 Hz from six time constants back. A pure function of time: no state, no cache,
-  the same frame forwards, backwards and in an export. The spring is fed the target led by its own (smoothed)
-  velocity × smoothing, so a steady motion is followed with no lag, however fast (a plane at 50 m/s with 0.5 s
-  once trailed 25 m and left the frame); only turns, braking and jolts come through softened.
+- **Follow smoothing** (`ShotMath.Follow`): only the **heading** is smoothed, by a critically damped spring
+  (the short way round), integrated at 30 Hz from six time constants back: a pure function of time, no state,
+  the same frame forwards, backwards and in an export. The position stays rigidly the target's: smoothing it
+  (even led by the velocity) threw a chase into a plane that slowed and climbed. On a turn the camera swings round
+  late and softly, as a chase car does.
   `ActorTrack.Frame` samples only position and yaw, so the spring can call it hundreds of times a frame.
 - **Shake** (`ShotMath.Shake`): presets Handheld 0.7 Hz, Walking 1.9 Hz (more vertical), Engine 17 Hz, Impact 5 Hz;
   strength, speed, turn/move mix, roll. Three octaves of sines at seeded frequencies and phases: replays identically.
