@@ -199,6 +199,7 @@ public partial class GameShell : Node
         _launch = world.Launch;
         world.MenuOpen = () => MenuOpen;
         world.PauseRequested += OpenPause;
+        world.MovieStudioRequested += OpenMovieStudio;
         world.Disconnected += OnDisconnected;
         if (Direct)
         {
@@ -295,6 +296,9 @@ public partial class GameShell : Node
         }
         UpdateMenuState();
     }
+
+    /// <summary>Every page closed at once: straight back into the game (the movie editor's "Back to game").</summary>
+    public void CloseAll() => ClearStack();
 
     private void ClearStack()
     {
@@ -537,6 +541,14 @@ public partial class GameShell : Node
     {
         if (_state == State.Starting) ReturnWithError(null);
         else if (_state == State.Loading) LeaveWorld(null);
+    }
+
+    /// <summary>F5 (#779): the last minutes into the movie editor, which opens full screen. A pad and VR use Pause > Movie studio.</summary>
+    private void OpenMovieStudio()
+    {
+        if (_state != State.InWorld || _stack.Count > 0 || _world == null) return;
+        Movie.MovieSession.SaveClip(quiet: true);
+        Push(Movie.MovieStudio.Create(_world));
     }
 
     private void OpenPause()
