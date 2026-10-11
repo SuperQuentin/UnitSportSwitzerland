@@ -47,7 +47,7 @@ public partial class WorldGhosts : Node3D
             var e = ents[i];
             if (e.IsEnvironment)
             {
-                if (e.AliveAt(t)) { var (hour, sea) = e.EnvironmentAt(t); MovieEnvironment.Show(hour, sea); }
+                if (e.AliveAt(t)) { var (hour, sea, snow) = e.EnvironmentAt(t); MovieEnvironment.Show(hour, sea, snow); }
                 continue;
             }
             if (e.Parent >= 0) continue;

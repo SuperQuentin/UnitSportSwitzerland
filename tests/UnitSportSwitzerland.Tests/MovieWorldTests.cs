@@ -110,7 +110,7 @@ public class MovieWorldTests
         Assert.True(env.IsEnvironment);
         Assert.False(env.IsGroup);
         Assert.True(track.Entities[1].IsGroup);
-        var (hour, sea) = env.EnvironmentAt(Dt / 2);
+        var (hour, sea, _) = env.EnvironmentAt(Dt / 2);
         Assert.True(hour > 23.99 || hour < 0.01, $"midnight is crossed the short way, got {hour}");
         Assert.Equal(0.3f, sea, 3);
         Assert.Equal(0.01, env.EnvironmentAt(0.5).Hour, 6);   // after the last change: holds
