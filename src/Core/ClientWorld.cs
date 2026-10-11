@@ -349,6 +349,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new World.WaterSurface { Name = "WaterSurface" });
         ApplyNearTrees();
         ApplyPhotos();
+        // the last minutes of everyone in view, for the movie studio (#638)
+        AddChild(new Movie.ReplayRecorder());
         // tap Alt: the mouse is free to click what is on screen, the game going on (#654)
         AddChild(new CursorToggle(() => MenuOpen?.Invoke() == true));
         Audio.Surfaces.Origin = origin;
@@ -792,6 +794,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             && Items.DropCheck.Requested && Items.DropCheck.Create(() => LocalPlayer, () => _players, items) is { } soloDrop)
             AddChild(soloDrop);
         Vehicles.VehicleManager.Refused += Toast;
+        Movie.MovieSession.Said += Toast;
         Vehicles.PassengerService.Said += Toast;
 
         // Chat exists from boot, not only once connected: offline it runs its commands itself
@@ -1280,6 +1283,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         StyleKit.Chosen -= OnStyleChosen;
         NearTrees.Forget();
         Vehicles.VehicleManager.Refused -= Toast;
+        Movie.MovieSession.Said -= Toast;
         Vehicles.PassengerService.Said -= Toast;
         if (_networked)
         {
@@ -1529,6 +1533,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Launch.FromCommandLine) GD.PushError($"[world] {reason}");
     }
 
+    /// <summary>The movie studio (#638): the player it freezes while open, and the terrain it streams round its camera.</summary>
+    public FootPlayer? StudioPlayer => LocalPlayer;
+    public ChunkManager? Chunks => _chunks;
+
     /// <summary>My own networked player node, once the server has spawned it.</summary>
     // not while the link is down: GetUniqueId on a dead peer logs an error, and this runs every frame (#211)
     private FootPlayer? GetLocalNetPlayer() =>
@@ -1552,6 +1560,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             GetViewport().SetInputAsHandled();
             PauseRequested?.Invoke();
+            return;
+        }
+
+        // the replay buffer's last minutes into the movie studio (#638): anywhere, whatever you are doing
+        if (@event.IsActionPressed(PlayerInput.SaveClip))
+        {
+            GetViewport().SetInputAsHandled();
+            Movie.MovieSession.SaveClip();
             return;
         }
 
