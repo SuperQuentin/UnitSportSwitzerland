@@ -222,7 +222,12 @@ public partial class GameShell : Node
             // read back: one actor clip, a world clip and the game's sound expected, RESULT printed
             if (CmdArgs.Double("--movierecord", 1) is { } recordAt && CmdArgs.Double("--movierecord", 2) is { } stopAt)
             {
-                GetTree().CreateTimer(recordAt).Timeout += Movie.MovieSession.ToggleRecording;
+                double hourAtStart = double.NaN;
+                GetTree().CreateTimer(recordAt).Timeout += () =>
+                {
+                    hourAtStart = UnitSport.World.DayNight.Instance?.Hour ?? double.NaN;
+                    Movie.MovieSession.ToggleRecording();
+                };
                 GetTree().CreateTimer(stopAt).Timeout += () =>
                 {
                     Movie.MovieSession.ToggleRecording();
@@ -231,8 +236,13 @@ public partial class GameShell : Node
                     int actors = p?.Clips.Count(c => !c.Audio && !c.World) ?? 0, worlds = p?.Clips.Count(c => c.World) ?? 0;
                     int sounds = p?.Clips.Count(c => c.Audio) ?? 0;
                     double span = stopAt - recordAt, length = p?.Duration ?? 0;
-                    bool ok = actors >= 1 && worlds == 1 && sounds == 1 && Math.Abs(length - span) < 1.0;
-                    GD.Print($"[movierecord] \"{newest}\": {actors} actor clips, {worlds} world, {sounds} sound, {length:F1} s of {span:F1} s");
+                    // the sky: the hour the recording began at, kept with it
+                    var env = p?.Worlds.FirstOrDefault()?.Entities.FirstOrDefault(e => e.IsEnvironment);
+                    double recordedHour = env?.EnvironmentAt(0).Hour ?? double.NaN;
+                    bool sky = double.IsNaN(hourAtStart) || Math.Abs(recordedHour - hourAtStart) < 0.05;
+                    bool ok = actors >= 1 && worlds == 1 && sounds == 1 && Math.Abs(length - span) < 1.0 && sky;
+                    GD.Print($"[movierecord] \"{newest}\": {actors} actor clips, {worlds} world, {sounds} sound, {length:F1} s of {span:F1} s, "
+                        + $"the hour {recordedHour:F3} recorded at {hourAtStart:F3} {(sky ? "ok" : "WRONG")}");
                     GD.Print(ok ? "[movierecord] RESULT: ok" : "[movierecord] RESULT: FAILED");
                     GetTree().Quit(ok ? 0 : 1);
                 };

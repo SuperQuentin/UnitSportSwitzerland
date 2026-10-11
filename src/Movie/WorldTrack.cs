@@ -60,8 +60,16 @@ public sealed class WorldLook
 /// </summary>
 public sealed class WorldEntity
 {
-    /// <summary>The group this part belongs to (an index into the track's entities), or -1 for a group.</summary>
+    /// <summary>
+    /// <see cref="Parent"/> of the one entity that is not drawn but is the world's state (#775): its
+    /// pose's <see cref="WorldPose.X"/> is the hour of the day, <see cref="WorldPose.Y"/> the sea state.
+    /// </summary>
+    public const int Environment = -2;
+
+    /// <summary>The group this part belongs to (an index into the track's entities), -1 for a group, or <see cref="Environment"/>.</summary>
     public int Parent = -1;
+    public bool IsGroup => Parent == -1;
+    public bool IsEnvironment => Parent == Environment;
     public double Born, Died = double.PositiveInfinity;
     public double[] Times = Array.Empty<double>();
     public WorldPose[] Poses = Array.Empty<WorldPose>();
@@ -86,6 +94,20 @@ public sealed class WorldEntity
         double gap = Times[i + 1] - Times[i];
         if (gap > WorldTrack.MaxGap) return Poses[i];
         return WorldPose.Lerp(Poses[i], Poses[i + 1], (float)Math.Clamp((t - Times[i]) / gap, 0, 1));
+    }
+
+    /// <summary>The environment's hour and sea state at <paramref name="t"/>: the hour the short way round midnight.</summary>
+    public (double Hour, float Sea) EnvironmentAt(double t)
+    {
+        int i = Last(Times, t);
+        if (i < 0) return (Poses[0].X, (float)Poses[0].Y);
+        if (i + 1 >= Times.Length || Times[i + 1] - Times[i] > WorldTrack.MaxGap) return (Poses[i].X, (float)Poses[i].Y);
+        double k = Math.Clamp((t - Times[i]) / (Times[i + 1] - Times[i]), 0, 1);
+        double a = Poses[i].X, b = Poses[i + 1].X;
+        if (b - a > 12) b -= 24;
+        else if (a - b > 12) b += 24;
+        double hour = (a + (b - a) * k + 24) % 24;
+        return (hour, (float)(Poses[i].Y + (Poses[i + 1].Y - Poses[i].Y) * k));
     }
 
     public bool ShownAt(double t)
@@ -287,7 +309,7 @@ public sealed class WorldRing
             var b = builders[ids[i]];
             entities[i] = new WorldEntity
             {
-                Parent = b.Parent >= 0 && index.TryGetValue(b.Parent, out int p) ? p : -1,
+                Parent = b.Parent < 0 ? b.Parent : index.TryGetValue(b.Parent, out int p) ? p : -1,
                 Born = b.Born,
                 Died = b.Died,
                 Times = b.Times.ToArray(),

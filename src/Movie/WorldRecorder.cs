@@ -41,6 +41,9 @@ public sealed class WorldRecorder
     private readonly Dictionary<(ulong Mesh, ulong Override, ulong Surfaces, float Range, int Shadow), int> _lookIndex = new();
     private int _nextId = 1, _pass;
     private double _nextWalk;
+    // the world's state (#775): the hour of the day and the sea state, as one undrawn entity
+    private int _environment;
+    private WorldPose _lastEnvironment;
 
     public WorldRecorder(double window) => Ring = new WorldRing(window);
 
@@ -50,6 +53,7 @@ public sealed class WorldRecorder
         _byNode.Clear();
         _ents.Clear();
         _nextWalk = 0;
+        _environment = 0;
     }
 
     /// <summary>One tick at <paramref name="now"/>: new and gone meshes every half second, every pose that moved.</summary>
@@ -72,6 +76,24 @@ public sealed class WorldRecorder
             }
         }
         Drop(now);
+        Environment(now);
+    }
+
+    private void Environment(double now)
+    {
+        if (World.DayNight.Instance is not { } sky) return;
+        var pose = WorldPose.Identity with { X = sky.Hour, Y = World.WaterField.SeaState };
+        if (_environment == 0)
+        {
+            _environment = _nextId++;
+            Ring.Spawn(now, _environment, WorldEntity.Environment, -1, pose, false);
+            _lastEnvironment = pose;
+        }
+        else if (pose.Moved(_lastEnvironment))
+        {
+            Ring.Move(now, _environment, pose);
+            _lastEnvironment = pose;
+        }
     }
 
     private void Drop(double now)

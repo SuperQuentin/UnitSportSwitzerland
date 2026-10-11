@@ -112,7 +112,7 @@ public sealed class Recording
         {
             project.AddWorld(world, project.PlaceGrab(worldStart));
             _worldGrabbed = now;
-            GD.Print($"[movie] grabbed the world: {world.Entities.Count(e => e.Parent < 0)} objects, "
+            GD.Print($"[movie] grabbed the world: {world.Entities.Count(e => e.IsGroup)} objects, "
                 + $"{world.Entities.Sum(e => e.Times.Length)} poses, {world.Looks.Length} looks, {world.Duration:F1} s");
         }
         return slices.Count + (world != null ? 1 : 0)

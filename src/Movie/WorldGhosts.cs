@@ -45,6 +45,11 @@ public partial class WorldGhosts : Node3D
         for (int i = 0; i < ents.Length; i++)
         {
             var e = ents[i];
+            if (e.IsEnvironment)
+            {
+                if (e.AliveAt(t)) { var (hour, sea) = e.EnvironmentAt(t); MovieEnvironment.Show(hour, sea); }
+                continue;
+            }
             if (e.Parent >= 0) continue;
             bool alive = e.AliveAt(t);
             if (!alive) { Hide(i); continue; }
@@ -74,8 +79,11 @@ public partial class WorldGhosts : Node3D
         if (_nodes[i] is { Visible: true } n) n.Visible = false;
     }
 
+    public override void _ExitTree() => MovieEnvironment.Restore();
+
     private void Use(WorldTrack? track)
     {
+        MovieEnvironment.Restore();
         foreach (var n in _nodes)
             if (n != null && n.GetParent() == this) n.QueueFree();
         _track = track;

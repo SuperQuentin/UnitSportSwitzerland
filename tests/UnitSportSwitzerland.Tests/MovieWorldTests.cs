@@ -99,6 +99,24 @@ public class MovieWorldTests
     }
 
     [Fact]
+    public void TheEnvironmentKeepsItsKindAndItsHourGoesTheShortWayRoundMidnight()
+    {
+        var ring = new WorldRing(300);
+        ring.Spawn(0, 1, WorldEntity.Environment, -1, WorldPose.Identity with { X = 23.99, Y = 0.2 }, false);
+        ring.Move(Dt, 1, WorldPose.Identity with { X = 0.01, Y = 0.4 });
+        ring.Spawn(0, 2, -1, -1, At(0), true);
+        var track = ring.Slice(double.NegativeInfinity, 1, Looks, out _)!;
+        var env = track.Entities[0];
+        Assert.True(env.IsEnvironment);
+        Assert.False(env.IsGroup);
+        Assert.True(track.Entities[1].IsGroup);
+        var (hour, sea) = env.EnvironmentAt(Dt / 2);
+        Assert.True(hour > 23.99 || hour < 0.01, $"midnight is crossed the short way, got {hour}");
+        Assert.Equal(0.3f, sea, 3);
+        Assert.Equal(0.01, env.EnvironmentAt(0.5).Hour, 6);   // after the last change: holds
+    }
+
+    [Fact]
     public void NothingRecordedGivesNoTrack()
     {
         var ring = new WorldRing(300);
