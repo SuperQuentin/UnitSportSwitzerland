@@ -49,7 +49,8 @@ public partial class ControlsHelp : CanvasLayer
             new("Aim (binoculars, camera, shotgun); with anything else, a throw", PlayerInput.AimItem),
             new("Throw: hold Aim, hold Use to wind up, let go", Keys: "{aim_item} + {use_item}", Pad: "{aim_item} + {use_item}"),
             new("Drop the item in hand (Ctrl: the whole stack)", PlayerInput.DropItem),
-            new("Pick up what you point at; a radio: open it", PlayerInput.InteractMount),
+            new("Pick up what you point at; a radio: tap to switch it on / off, hold to open it", PlayerInput.InteractMount),
+            new("Radio in hand: tap to switch it on / off, hold to open it; aim + hold to throw it", PlayerInput.UseItem),
             new("Take the radio you point at into your hand", PlayerInput.UseItem),
             new("Pick a hotbar slot", Keys: "1–6 / Wheel", Pad: "{next_item}"),
             new("Quick wheel (hold)", PlayerInput.QuickWheel),
@@ -92,11 +93,14 @@ public partial class ControlsHelp : CanvasLayer
             new("Steer", Keys: "{move_left} {move_right}", Pad: "{move_forward}"),
             new("Tuck / sprint effort; motorbike: pull a wheelie (tap on the gas: clutch pop)", PlayerInput.TuckBoost),
             new("Hop / handbrake", PlayerInput.Jump),
-            new("Trick in the air (hold + stick)", PlayerInput.Trick),
-            new("Boost", PlayerInput.Boost),
+            new("Trick in the air (hold + stick); not on the pad in a car you shift yourself", PlayerInput.Trick),
+            new("Boost; not on the pad in a car you shift yourself", PlayerInput.Boost),
             new("Look behind", PlayerInput.LookBehind),
             new("Engine on / off", PlayerInput.EngineToggle),
             new("Car: headlights / pop-ups", PlayerInput.LightsToggle),
+            new("Car, sequential or manual gearbox (Settings → Vehicles): shift up / down", Keys: "{shift_up} / {shift_down}", Pad: "{shift_up} / {shift_down}"),
+            new("Car, manual gearbox: clutch (hold)", PlayerInput.Clutch),
+            new("Car, manual gearbox: gates, reverse, neutral (or a wheel's H-shifter)", Keys: "1–6, ` , 0", Pad: "—"),
             new("Cruise control (car, truck, farm machine, motorbike): on at this speed / off; sped up or slowed, the new speed; the brake switches it off", Keys: "{cruise}", Pad: "{lights_toggle} (hold)"),
             new("Car radio: next station", PlayerInput.RadioNext),
             new("Car radio: previous station", PlayerInput.RadioPrev),
@@ -246,12 +250,17 @@ public partial class ControlsHelp : CanvasLayer
         ("Game", new Row[]
         {
             new("Map: search a place and go", PlayerInput.Teleport),
+            new("Keep the last minutes for the movie studio (also Pause > Save clip)", PlayerInput.SaveClip, Pad: "{menu}, then Save clip"),
+            new("Free the mouse cursor (tap; Alt again or click the world to look)", PlayerInput.FreeCursor, Pad: "—"),
             new("Battle Royale: ping for your team (also middle-click on the map)", PlayerInput.Ping),
             new("Menu", PlayerInput.Menu),
             new("Chat / command", Keys: "Enter or /", Pad: "—"),
             new("This screen", PlayerInput.Help),
             new("Performance overlay / log", Keys: "F3 / F4", Pad: "—"),
             new("Debug menu (offline or admin)", PlayerInput.DebugMenu),
+#if PLAYTEST
+            new("Playtest panel (--playtest, Debug builds)", Keys: "F10", Pad: "L3 + R3"),
+#endif
         }),
     };
 

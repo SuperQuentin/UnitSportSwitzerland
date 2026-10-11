@@ -43,4 +43,14 @@
     <PackageReference Include="ppy.SDL3-CS" Version="2026.722.0" />
   </ItemGroup>
 
+  <!-- The playtest suite (#751, docs/notes/general/playtest.md): an in-game MCP server Claude Code drives the
+       running game through (scenarios, tunables, screenshots, chat). A local control port, so it is compiled
+       only into the editor's Debug configuration: ExportDebug, ExportRelease and Android builds carry none of it. -->
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DefineConstants>$(DefineConstants);PLAYTEST</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition=" '$(Configuration)' != 'Debug' ">
+    <Compile Remove="src/Playtest/**" />
+  </ItemGroup>
+
 </Project>

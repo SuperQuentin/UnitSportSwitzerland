@@ -13,7 +13,7 @@ namespace UnitSport.Terrain.Fixture;
 /// <item><c>straight</c>: 3 km of straight 6 m road, flat: top speed, overtaking;</item>
 /// <item><c>hairpin</c>: a fast downhill with six 15 m-radius hairpins, 7 % down;</item>
 /// <item><c>narrow</c>: a winding 4 m road with a trunk every 5 m on both edges: no verge to use;</item>
-/// <item><c>junction</c>: a 9 m road through a T junction and a crossroads with 6 m side roads;</item>
+/// <item><c>junction</c>: a 9 m road through a T junction and a crossroads with 6 m side roads, 16 m kerb radii;</item>
 /// <item><c>verge</c>: two bends with 6 m of grass verge then a tree line on each side.</item>
 /// <item><c>lake</c> (#299): a 2.6 x 2 km lake east of the start, with a beach, a 150 m shelf, a
 /// drop-off to 25 m and a river coming in from the west; a slipway road runs into it.</item>
@@ -236,6 +236,15 @@ public sealed class FixtureCourse
         c.Road(RoadClass.Road, new Pen(700, 0, FlatHeight, 90, 0).Straight(600));      // T: north
         c.Road(RoadClass.Road, new Pen(1400, 0, FlatHeight, 90, 0).Straight(500));     // crossroads: north
         c.Road(RoadClass.Road, new Pen(1400, 0, FlatHeight, -90, 0).Straight(500));    // and south
+        // kerb radii on every corner, as the map's junctions have: square, an articulated bus could
+        // not turn into a 6 m side road (#751 playtest). Paved as a side road along the turn, 3 cm
+        // under the roads it joins so theirs is the surface where they overlap (level, they flickered).
+        const double R = 16, Under = 0.03;
+        foreach (var (x, north) in new[] { (700.0, 1), (1400.0, 1), (1400.0, -1) })
+        {
+            c.Road(RoadClass.Road, new Pen(x - R, 0, FlatHeight - Under, 0, 0).Arc(R, 90 * north));
+            c.Road(RoadClass.Road, new Pen(x + R, 0, FlatHeight - Under, 180, 0).Arc(R, -90 * north));
+        }
         return c;
     }
 

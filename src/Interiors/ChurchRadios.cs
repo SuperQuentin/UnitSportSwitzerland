@@ -65,6 +65,12 @@ public partial class ChurchRadios : Node
     public RadioPlay? PlayOf(string plan) =>
         _plays.TryGetValue(plan, out var play) && play.Sounding(ClockSync.ServerNow) ? play : null;
 
+    /// <summary>The CD it last played, sounding or not (#734): what a tap puts back on; 0 for none.</summary>
+    public int LastCdOf(string plan) => _lastCd.GetValueOrDefault(plan);
+
+    /// <summary>Each church's last CD on this peer (every peer sees every play go by), kept through a Stop.</summary>
+    private readonly Dictionary<string, int> _lastCd = new();
+
     /// <summary>Its mode: the playing CD's, else the one chosen, else repeat (the chess type beat loops).</summary>
     public RadioMode ModeOf(string plan) =>
         _plays.TryGetValue(plan, out var play) ? play.Mode : _modes.GetValueOrDefault(plan, RadioMode.Repeat);
@@ -108,13 +114,15 @@ public partial class ChurchRadios : Node
     public static bool TryOpen(FootPlayer p)
     {
         if (At(p) is not { } plan || RadioUi.Instance is not { } ui) return false;
-        ui.OpenChurch(plan);
+        // a tap of E switches it on or off, a hold opens its panel (#734), like a radio in the world
+        RadioTap.Begin(Core.PlayerInput.InteractMount, () => RadioTap.ToggleChurch(plan), () => ui.OpenChurch(plan),
+            () => IsInstanceValid(p) && At(p) == plan);
         return true;
     }
 
     /// <summary>The prompt at the church radio, or null.</summary>
     public static string? PromptFor(FootPlayer p) =>
-        At(p) == null ? null : $"{Core.InputHints.Tag(Core.PlayerInput.InteractMount)} Radio";
+        At(p) == null ? null : $"{Core.InputHints.Tag(Core.PlayerInput.InteractMount)} {RadioTap.Prompt}";
 
     // ---- client: asking --------------------------------------------------------------------------
 
@@ -128,6 +136,25 @@ public partial class ChurchRadios : Node
     {
         if (Online) RpcId(1, MethodName.AskStop, plan);
         else ServeStop(MyId, plan);
+    }
+
+    /// <summary>Moves church <paramref name="plan"/>'s song to <paramref name="at"/> seconds in (#734).</summary>
+    public void Seek(string plan, double at)
+    {
+        if (Online) RpcId(1, MethodName.AskSeek, plan, at);
+        else ServeSeek(MyId, plan, at);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    private void AskSeek(string plan, double at)
+    {
+        if (Multiplayer.IsServer()) ServeSeek(Multiplayer.GetRemoteSenderId(), plan, at);
+    }
+
+    private void ServeSeek(long peer, string plan, double at)
+    {
+        if (!Inside(peer, plan) || !_plays.TryGetValue(plan, out var play) || !double.IsFinite(at)) return;
+        Broadcast(plan, (play with { StartedAt = ClockSync.ServerNow - Math.Clamp(at, 0, play.Length - 0.5) }).Encode());
     }
 
     public void SetMode(string plan, RadioMode mode)
@@ -196,6 +223,7 @@ public partial class ChurchRadios : Node
         {
             _plays[plan] = p;
             _modes[plan] = p.Mode;
+            _lastCd[plan] = p.CdId;
         }
         else _plays.Remove(plan);
         Changed?.Invoke(plan);

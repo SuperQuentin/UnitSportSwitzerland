@@ -32,6 +32,20 @@ public partial class PauseScreen : Screen
         column.AddChild(UiKit.Spacer(26));
 
         _resume = Entry(column, "Resume", () => Shell.Back());
+        // the movie studio (#638): what a pad or VR player has instead of F5, and the way in
+        if (Shell.World is { } world && Movie.ReplayRecorder.Instance != null)
+        {
+            Entry(column, "Save clip", () => { Movie.MovieSession.SaveClip(); Shell.Back(); });
+            // Record / Stop (#775): Shift+F5 on a keyboard, this on a pad or in VR
+            var recorder = Movie.ReplayRecorder.Instance;
+            Entry(column, recorder.Recording ? $"Stop recording ({Movie.MovieSession.Clock(recorder.SessionSeconds)})" : "Record",
+                () => { Movie.MovieSession.ToggleRecording(); Shell.Back(); });
+            Entry(column, "Movie studio", () =>
+            {
+                Movie.MovieSession.SaveClip(quiet: true);
+                Shell.Push(Movie.MovieStudio.Create(world));
+            });
+        }
         Entry(column, "Settings", () => Shell.Push(SettingsScreen.Create()));
         Entry(column, "Controls", () => Shell.ShowControls());
         if (Tutorial.Current is { } tutorial)

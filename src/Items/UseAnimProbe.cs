@@ -52,6 +52,7 @@ public partial class UseAnimProbe : ChatProbe
         inv.Put(1, new ItemStack(ItemId.EnergyBar, 2));
         inv.Put(2, new ItemStack(ItemId.Gps, 1));
         inv.Put(3, new ItemStack(ItemId.WitchHat, 1));
+        inv.Put(5, new ItemStack(ItemId.BeerBottle, 2));   // two, so it is still held (and seen) when the first is drunk (#716)
         Expect(await Heard("B", "ready", 150), "B joined");
         me.Heal(FootPlayer.MaxHealth);   // a spawn fall may have hurt it: start full so 60 damage never knocks it out
         me.TakeDamage(60f);
@@ -65,6 +66,19 @@ public partial class UseAnimProbe : ChatProbe
         await Seconds(0.5);
         Expect(me.Health > hp, $"drinking healed ({hp:F0} -> {me.Health:F0})");
         Expect(inv[0].Count == 1, "one bottle was used up");
+
+        // the beer (#716): a drink like the others, so B must see the same Mouth arm pose with a beer in the hand
+        inv.Select(5);
+        await Seconds(0.8);
+        me.Heal(FootPlayer.MaxHealth);   // the later steps hurt it again: do not start them near knocked out
+        me.TakeDamage(30f);
+        float beerHp = me.Health;
+        _items.UseSlot(me, 5);
+        Say("beer");
+        await Burst("beer_1p", 6, 0.16);
+        await Seconds(0.8);
+        Expect(me.Health > beerHp, $"the beer healed ({beerHp:F0} -> {me.Health:F0})");
+        Expect(inv[5].Count == 1, "one beer was used up");
 
         inv.Select(1);
         await Seconds(0.8);
@@ -151,27 +165,32 @@ public partial class UseAnimProbe : ChatProbe
     {
         Say("ready");
         Expect(await Until(() => Other() != null, 30), "A is visible here");
-        var a = Other();
-        if (a == null) return;
+        if (Other() == null) return;
         me.LookPitch = -0.1f;
         bool saw = false;
         // the drink
-        Expect(await Until(() => a.DrawnArmPose == Avatar.ItemArmPose.Mouth && a.ItemAction == 2, 60), "A's drink is seen as ItemAction 2 / Mouth arm pose");
+        Expect(await Until(() => Other() is { } a && a.DrawnArmPose == Avatar.ItemArmPose.Mouth && a.ItemAction == 2, 60), "A's drink is seen as ItemAction 2 / Mouth arm pose");
         await Seconds(0.3);
         Shot("drink_3p_remote");
-        saw = await Until(() => a.ItemAction == 0, 5);
+        saw = await Until(() => Other() is { } a && a.ItemAction == 0, 5);
         Expect(saw, "ItemAction returns to 0 after the drink");
-        Expect(await Until(() => a.HeadwearId == (int)Avatar.Headwear.WitchHat, 60), "A's hat arrived as Headwear.WitchHat");
+        // the beer (#716)
+        Expect(await Until(() => Other() is { } a && a.DrawnArmPose == Avatar.ItemArmPose.Mouth && a.ItemAction == 2 && a.HeldItemId == (int)ItemId.BeerBottle, 30),
+            "A's beer is seen as ItemAction 2 / Mouth arm pose with a BeerBottle held");
+        await Seconds(0.3);
+        Shot("beer_3p_remote");
+        Expect(await Until(() => Other() is { } a && a.ItemAction == 0, 5), "ItemAction returns to 0 after the beer");
+        Expect(await Until(() => Other() is { } a && a.HeadwearId == (int)Avatar.Headwear.WitchHat, 60), "A's hat arrived as Headwear.WitchHat");
         await Seconds(0.5);
         Shot("hat_on_3p_remote");
         // the clothes (#251): one replicated long, drawn here from it
-        Expect(await Until(() => a.OutfitBits == Dressed.Bits, 60), "A's outfit arrived as OutfitBits");
-        Expect(await Until(() => a.AppearanceBits == Chosen, 60), "A's chosen figure arrived as AppearanceBits");
+        Expect(await Until(() => Other() is { } a && a.OutfitBits == Dressed.Bits, 60), "A's outfit arrived as OutfitBits");
+        Expect(await Until(() => Other() is { } a && a.AppearanceBits == Chosen, 60), "A's chosen figure arrived as AppearanceBits");
         await Seconds(0.8);
         Shot("outfit_3p_remote");
         Say("seen");
         // A gets on a bike (#251): the remote cyclist wears the outfit, drawn in the figure shader
-        Expect(await Until(() => a.RideKindId == (int)RideKind.RoadBike
+        Expect(await Until(() => Other() is { } a && a.RideKindId == (int)RideKind.RoadBike
             && a.FindChild("Rider", true, false) is MeshInstance3D { MaterialOverride: ShaderMaterial }, 60),
             "A's cyclist is drawn dressed");
         await Seconds(0.8);

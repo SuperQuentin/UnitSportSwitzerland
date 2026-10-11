@@ -29,6 +29,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | jump | Space / A | ok: A | keep |
 | crouch_slide | Ctrl, C / B | ok: B, or crouch for real (#437) | keep |
 | interact_mount | E / Y | ok: Y; grip a door, an item, a radio, or reach out and grip what E would act on (#437) | keep |
+| radio on / off (#725) | tap E (pointed) or tap Use (held) / tap Y or the Use button; hold either for the panel | ok: poke the radio's red key with a controller tip (`XrHands.PokeRadio`); grip still opens the panel | keep |
 | elevator call / floor list (#557) | E / Y at the call button or in the cabin | ok: Y, or grip the call button or the cabin's panel; the list is a pointable panel (`XrUi`) | keep |
 | flat door, its lock (#557) | E / Y at the door | ok: Y, or grip the door; the dial on the stick | keep |
 | ride_menu | R / Y with nothing near | ok: Y, wrist menu (#437) | keep |
@@ -82,6 +83,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | blade_raise / blade_lower (#614, mini excavator, hold, driving or digging) | Shift / Ctrl, RB / LB (the gear paddles, which a crawler has no use for) | ok: the **blade lever** low and outboard of the left joystick (`XrCabControls` "miniexcavator", `Kind.Hold`: aft raises) | keep |
 | arm_boom_up/down, arm_bucket_curl/dump (#611, hold) | ↑ ↓, ← → / R stick Y, X in dig mode | ok: the **right joystick** by hand, as two levers (aft raises the boom, side to side the bucket); the right stick itself stays R3's action pad | one two-axis grip per joystick |
 | gear 1-6, R, N | 1-6 ` 0 / — | ok: H-pattern lever by hand (#438) | keep |
+| car shift up / down, clutch (#290, sequential or manual car gearbox) | Shift Ctrl C / RB LB B (the shoulders, not trick and boost, in such a car) | ok: grips, B (they replay as the shoulders) | keep |
+| car gates 1-6, R, N (#290, manual car gearbox) | 1-6 ` 0 / — | gap: no gear lever in the car cockpit's VR controls | **grip the car's gear lever** and move it through the gate, as the trucks' H-pattern lever (#438) |
 | retarder | ' ; / — | ok: stalk by hand (#438) | keep |
 | bus kneel / destination | K N / L3 — | ok: dash pokes (#438) | keep |
 | farm: lower / raise the implement or header (#494) | K / L3 | ok: the kneel dash poke, or L3 | **grip the linkage lever** on the right console |
@@ -118,11 +121,15 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | menu | Esc / Start | ok: Menu tap | keep |
 | teleport (place search, BR map) | M / — | ok: wrist menu (#437), hand-held map with point and pull (#439) | keep |
 | help / debug | F1 F9 / — | help: wrist menu (#437); debug: gap | debug in the wrist menu for admins |
+| playtest_panel (Debug `--playtest`, #751) | F10 / L3 + R3 | ok: both stick clicks (XrPad), the panel on the XrUi screen; typing to Claude: gap (no keyboard) | the laser key grid planned for the chat |
 | fly camera up / down / boost | Space Ctrl… / A B L3 | ok: A B L3 | keep |
 | BR jump out / spectate | E, ←→ / Y, D-pad | ok | spectate on R stick ←/→ |
 | loot, shop, lock, Simon, vending | mouse + keys | ok: laser + trigger | lock dial by **wrist twist** |
 | chat | Enter, / | gap: no keyboard | laser key grid on the `XrUi` panel |
 | watch | — | ok: Swiss watch on the left wrist (#439) | keep |
+| save_clip: the replay buffer into the movie studio (#638) | F5 / Start > Save clip | ok: Menu tap > Save clip | a wrist-menu entry |
+| movie studio timeline (#638, markers #656, camera keys #669, cameras #675) | Space J K L, ← →, S, Del, M, I, V, 1-9, C / Y, LT RT, D-pad, X (hold: cut to camera), R3, View, L3, R stick, LB RB | ok: the same pad buttons through `XrPad`, the panel by laser | grip the playhead and scrub by hand; timeline on the `XrUi` panel (#637 milestone 3) |
+| free_cursor (#654) | tap Alt / — | n/a: VR points with the laser, a pad has no cursor | keep |
 | map screen: pan / zoom / draw / tool / search (#515) | arrows, drag, wheel, T, F / L stick, LB RB, A, Y, X | **gap, deferred on purpose**: the screen renders on the `XrPad` panel and says so, but the map itself is not pointable — a laser on a 2D map of a 3D country is the wrong answer to design in a hurry | a table-top relief map of Switzerland you reach into, grab to pan, pinch to zoom and paint tiles on with a finger (#535) |
 
 ## Coherence findings (what violated the rules)

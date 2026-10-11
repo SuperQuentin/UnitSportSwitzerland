@@ -18,6 +18,8 @@
 | Pop | 7 | OrangeJustice |
 | Pop | 8 | GangnamStyle |
 | Pop | 9 | Ymca (#404) |
+| Pop | 10 | BodyRoll (#728) |
+| Pop | 11 | Charleston (#728) |
 | Rock (MoveCount 7) | 0 | Headbang |
 | Rock | 1 | AirGuitar |
 | Rock | 2 | FistPump |
@@ -25,6 +27,8 @@
 | Rock | 4 | ClapBackbeat |
 | Rock | 5 | ArmWave |
 | Rock | 6 | Pogo |
+| Rock | 7 | Skank (#728) |
+| Rock | 8 | AirDrums (#728) |
 | Electronic (MoveCount 8) | 0 | Bounce |
 | Electronic | 1 | FistPump |
 | Electronic | 2 | RunningMan |
@@ -33,6 +37,8 @@
 | Electronic | 5 | Sprinkler |
 | Electronic | 6 | ArmWave |
 | Electronic | 7 | Pogo |
+| Electronic | 8 | Shuffle (#728) |
+| Electronic | 9 | Toprock (#728) |
 | HipHop (MoveCount 8) | 0 | Bounce |
 | HipHop | 1 | ShoulderLean |
 | HipHop | 2 | Twerk |
@@ -42,6 +48,9 @@
 | HipHop | 6 | RunningMan |
 | HipHop | 7 | Floss |
 | HipHop | 8 | CabbagePatch (#404) |
+| HipHop | 9 | Wop (#728) |
+| HipHop | 10 | Toprock (#728) |
+| HipHop | 11 | BodyRoll (#728) |
 | Chill (MoveCount 6) | 0 | Sway |
 | Chill | 1 | HipSway |
 | Chill | 2 | ArmWave |
@@ -49,6 +58,7 @@
 | Chill | 4 | Moonwalk |
 | Chill | 5 | Bounce |
 | Chill | 6 | SwimDance (#404) |
+| Chill | 7 | BodyRoll (#728) |
 | Folk (MoveCount 7) | 0 | FolkClap |
 | Folk | 1 | HandsOnHipsSkip |
 | Folk | 2 | SideStepClap |
@@ -57,6 +67,7 @@
 | Folk | 5 | Macarena |
 | Folk | 6 | GangnamStyle |
 | Folk | 7 | ChickenDance (#404) |
+| Folk | 8 | Charleston (#728) |
 
 | RatDance (MoveCount 4, #370) | 0 | RatSwing |
 | RatDance | 1 | RatArmPump |
@@ -66,7 +77,7 @@
 `RatDance` is never analysed: `RadioBody.BeatOf` reports it for the chess type beat
 (`docs/notes/items/church-radio.md`), and its crowd slot is `RatSwing`, not Pogo/JumpTogether.
 
-`MoveCount`: Pop 10, Rock 7, Electronic 8, HipHop 9, Chill 7, Folk 8, RatDance 4. Tempo coverage: Sway/HipSway 60-110, ArmWave 60-130, Bounce 70-200, Headbang 90-200, FistPump 110-200, everything else inside 70-170, so 60-200 BPM is covered.
+`MoveCount`: Pop 12, Rock 9, Electronic 10, HipHop 12, Chill 8, Folk 9, RatDance 4 (tables are append only: a move's index never changes). Tempo coverage: Sway/HipSway 60-110, ArmWave 60-130, Bounce 70-200, Headbang 90-200, FistPump 110-200, everything else inside 70-170, so 60-200 BPM is covered.
 
 Crowd moves (#261), outside the tables: `Move = HumanMeshBuilder.GroupPogo` (1000) is **Pogo**,
 `GroupJump` (1001) is **JumpTogether**.
@@ -74,16 +85,25 @@ Crowd moves (#261), outside the tables: `Move = HumanMeshBuilder.GroupPogo` (100
 Emotes (#404), outside the tables too: `Move = HumanMeshBuilder.EmoteMoves` (2000) + the index in
 `EmoteTable` (`HumanMeshBuilder.Emotes.cs`, append only) is that emote whatever the style. Four
 gestures are emote-only (`Wave`, `Cheer`, `Salute`, `Shrug`); the rest of the catalog reuses the
-moves above. The wheel and the free clock: `docs/notes/player/emote-wheel.md`.
+moves above (the #728 ones too, page 4, #748; the floor emotes run whole break sets). The wheel and the free clock: `docs/notes/player/emote-wheel.md`.
 
-## Picking, flowing and crowds (#261)
+## Picking, flowing and crowds (#261, #728)
 
-- **Who does what** (`FootPlayer.StepDance`): the move changes every `BarsPerMove` (2) bars. Each
-  dancer picks its own (`hash(slot, style) ^ seed`, the seed an FNV-1a of the node name: the same on
-  every peer, unlike `string.GetHashCode`), so a crowd is not a drill team. With two or more dancing
-  to the same music (counted twice a second within `DanceRadius * 1.3`), one slot in three
-  (`hash(slot, style) % 3 == 1`, no seed) is a crowd move, Pogo or JumpTogether, so everyone jumps
-  on the same beat. Peers can disagree on the count for half a second; harmless.
+- **Who does what** (`FootPlayer.StepDance` -> `DanceMoveAt` -> `Avatar.DancePick`, pure C#, tier 0
+  `DancePickTests`): the move changes every `BarsPerMove` (2) bars **and when the song moves into a
+  new section** (#728; the slot's hash has the section number in it). Each dancer picks its own
+  (`hash(slot, style, section) ^ seed`, the seed an FNV-1a of the node name: the same on every peer,
+  unlike `string.GetHashCode`), so a crowd is not a drill team. With two or more dancing to the same
+  music (counted twice a second within `DanceRadius * 1.3`), one slot in three (no seed in the hash)
+  is a crowd move, Pogo or JumpTogether, so everyone jumps on the same beat. Peers can disagree on
+  the count for half a second; harmless.
+- **By section (#728)**: every table move has an energy (`HumanMeshBuilder.EnergyOf`: 0 calm, 1
+  middle, 2 big). In a Calm section the pick keeps to energy 0-1, in a Peak or Chorus to 1-2, in a
+  Groove (or a CD with no sections) anything. Sections come from the CD's analysis
+  (`RadioBody.SectionOfBar`, `docs/notes/audio/cd-beat.md`).
+- **Bars on the real downbeat (#728)**: `RadioBody.BeatOf` counts beats from the bar's one the
+  analysis found (`CdAnalysis.Downbeat`), so a move, a crowd jump or a freeze lands on the bar the
+  song puts its weight on, not on whichever beat the grid started with.
 - **Flow**: `DanceParams.PrevMove` and `MoveBlend` (beats into the slot / 0.9): the first beat of a
   slot mixes the channels of the move before into the new one (`Mix(DanceCh)`), no cut.
 - **Groove** (every table move, not the jumps): the knees give 1.8 cm on each beat, the head nods
@@ -94,6 +114,47 @@ moves above. The wheel and the free clock: `docs/notes/player/emote-wheel.md`.
   beat 4 crouches 13 cm and jumps 34 cm with both arms thrown up, landing on the next bar's one.
 - **Music to dance to** (`RadioManager.NearestMusic`): a playing radio in the world, or a player
   carrying one that plays (hand or back); the beat from `RadioBody.BeatOf(cd, startedAt, clock)`.
+
+## Breakdance (#728, `HumanMeshBuilder.Break.cs`)
+
+- **Rare**: only for Electronic and HipHop, only in a Peak or Chorus that still runs for two whole
+  slots (4 bars), one eligible slot in `DancePick.BreakOdds` (5) per dancer. A set is two slots:
+  `BreakDown` (4000) then `BreakPowerWindmill` (4001) or `BreakPowerHeadspin` (4002); the slot after
+  a `BreakDown` is always a power slot (`DancePick` guarantees it, tested).
+- **BreakDown**: bar 1 toprock; beats 5-6 down into a crouch (`MixRigs`); 6-8 the six-step, one round
+  per three beats, the legs walking a 0.8 m circle round the hands, the hand on their side lifting.
+- **Power slot**: beats 1-3.7 the windmill (on the upper back, rolling back-shoulder-chest, legs in a
+  V sweeping round, a turn per two beats) or the headspin (on the crown, legs up in a V, a turn per
+  beat, the hands tripod then out); at 4 it hits the **chair freeze** (on the figure's right hand,
+  elbow in the hip, head low, one leg up and one folded) on the bar's one and holds it to 7; 7-8
+  back up into toprock.
+- **How a floor move is built**: not channels over the gait, which can only shift and lean a standing
+  figure. `Posed(hip, torso basis, nod, hand/foot targets, bend hints)` builds the whole rig with the
+  limbs solved to their targets (clamped to their reach), `Spun` turns it about the vertical,
+  `OffTheFloor` lifts the body just enough that no joint is inside the floor (each with its own
+  thickness: the torso box rolls, the hand hangs 10 cm past the wrist). `ApplyFloor` mixes it with
+  the move before and the gait rig like any move; walking, it only toprocks.
+- **Toprock** is also an ordinary move (Electronic, HipHop): one foot crossing in front on 1 and 3,
+  the body leaning into it, the arms in a loose guard swinging across.
+
+## The moves added in #728 (`HumanMeshBuilder.MoreMoves.cs`)
+
+- **BodyRoll**: a wave down the body every two beats, head first, then the chest, the hips after;
+  one hand sliding down the chest. **Charleston**: heels swivel in and out on every beat, one leg
+  kicking forward and back, straight arms swinging against it. **Skank**: running on the spot twice
+  a beat, knees high, fists punching forward in turn. **AirDrums**: hi-hat eighths, kick drum on the
+  right heel on 1 and 3, a crash up high on 4. **Shuffle**: a heel kicks out to the side each beat,
+  the other foot swivelling, both arms sweeping across flat. **Wop**: both arms swinging together
+  side to side at the waist, shoulders rolling, hips against them.
+- **Refined (#728)**, from the `--dancesheet` pictures: **Bounce** (was akimbo and almost still: the
+  fists now pump down into each beat at the chest), **ShoulderLean** (read the same as Bounce: a
+  real lean now, the low arm out, the high shoulder cocked), **Moonwalk** (arms swing with the glide),
+  **HipSway** (wider hips, hands up loose), **Floss** (a wider swing).
+- **Judge a move** with `<godot> --path . --resolution 1920x1080 -- --avatars 1.5 <png> --dancesheet <style|emotes|break>[,first,count] [--view deg]`:
+  a row per move, a frame a beat (each an eighth further into its beat). `--view -20` is near front;
+  a forward punch or drum hit only shows from the side (`--view 50`).
+- **Check**: `--emotecheck` (quick tier) also builds every style's moves and both halves of a break
+  set at 32 instants, standing and walking, flowing in: nothing at infinity, nothing through the floor.
 
 ## Notation (used by every move section)
 
@@ -485,4 +546,4 @@ Authored like the others, numbers against the bone lengths; joint values are in 
 
 - Sourced from pages read: Twerking, Dab, Floss, Orange Justice, Sprinkler, Running man, Robot, Headbanging, Air guitar, Melbourne Shuffle, Fist pump, Gangnam Style, Moonwalk, Macarena (song), the Carlton tutorial (steezy.co) and the Macarena/Griddy/Fortnite/moonwalk tutorial summaries returned by web search. Wikipedia pages on the dances are thin on joint-level detail, so joint numbers are authored against the bone lengths above, not measured.
 - **Not sourced beyond general knowledge:** the DiscoPoint pose (the Saturday Night Fever article does not describe it), ArmWave (Wikipedia page unreachable), the exact Macarena hand-to-hip and turn phase (omitted on purpose: no body yaw), the Griddy (only SEO-style tutorials found: counts and arm positions reconstructed), air-guitar windmill detail, and all generic base moves (SideStepClap, HipSway, ClapBackbeat, Bounce, ShoulderLean, Sway, FolkClap, HandsOnHipsSkip).
-- Not implementable in this rig: body turns (Macarena quarter turn, sprinkler's full sweep), floor moves (the worm), palm orientation, head yaw.
+- Not implementable in this rig with channels alone: body turns (Macarena quarter turn, sprinkler's full sweep), palm orientation, head yaw. Floor moves are, since #728, as whole rigs (`Posed`, `Spun`: see Breakdance); the worm is not done yet.

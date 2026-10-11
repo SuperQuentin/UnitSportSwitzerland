@@ -1,0 +1,28 @@
+{
+  "id": "collide-bus-bus-junction",
+  "title": "Bus into a bus at a crossroads",
+  "verdict": "validated",
+  "by": "Quentin Aellen",
+  "date": "2026-10-09T16:41Z",
+  "commit": "deeee0d3",
+  "coverHash": "200239982a31efa8",
+  "covers": [
+    "src/Vehicles/VehicleBody*.cs",
+    "src/Vehicles/VehicleManager.cs",
+    "src/Vehicles/Explosion.cs",
+    "src/Player/FootPlayer.Crash.cs",
+    "src/Player/Rideable.cs",
+    "!**/*Check.cs",
+    "!**/*Probe.cs",
+    "src/Player/Truck*.cs",
+    "src/Player/Heavy*.cs"
+  ],
+  "notes": [
+    {
+      "date": "2026-10-09T16:41Z",
+      "by": "Quentin Aellen",
+      "verdict": "validated",
+      "text": ""
+    }
+  ]
+}

@@ -83,6 +83,7 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
             Playing = state.Playing,
             Settled = state.Settled,
             Length = state.Length,
+            Volume = RadioLoudness.Clamp(state.Volume),
         };
         r.SetMultiplayerAuthority(state.Owner > 0 ? (int)state.Owner : 1);
         return r;
@@ -100,7 +101,9 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
         Position = _origin.ToWorld(s.Position);
         AddChild(_place = new NetPlace(_origin, s.Position));
         Rotation = new Vector3(0, s.Yaw, 0);
-        Mass = 3f;
+        // a heavy boombox (#725): it lands with a thud and stays, rather than skittering off
+        Mass = 7f;
+        PhysicsMaterialOverride = new PhysicsMaterial { Bounce = 0.05f, Friction = 1f, Rough = true };
         AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(BodyW, BodyH, BodyD) } });
 
         // the fall: whoever threw it simulates, the others move the box where they are told
@@ -117,7 +120,7 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
 
         // what plays: the server's word, reliably on change, and with the spawn for late joiners
         var play = new SceneReplicationConfig();
-        foreach (var prop in new[] { ".:CdId", ".:StartedAt", ".:Playing", ".:Length", ".:Mode" })
+        foreach (var prop in new[] { ".:CdId", ".:StartedAt", ".:Playing", ".:Length", ".:Mode", ".:Volume" })
         {
             play.AddProperty(prop);
             play.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
@@ -137,7 +140,7 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
         else
         {
             LinearVelocity = s.Velocity;
-            AngularVelocity = new Vector3(GD.Randf() * 6f - 3f, GD.Randf() * 2f - 1f, GD.Randf() * 6f - 3f);
+            AngularVelocity = new Vector3(GD.Randf() * 3f - 1.5f, GD.Randf() * 1f - 0.5f, GD.Randf() * 3f - 1.5f);
             ContactMonitor = false;
             ContinuousCd = true;
             _lastPos = _origin.ToWorld(s.Position);
@@ -188,19 +191,31 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
         _speaker.CdId = CdId;
         _speaker.StartedAt = StartedAt;
         _speaker.On = Playing;
+        _speaker.Volume = Volume;
         _speaker.Length = Length > 0 ? Length : Cd?.Duration ?? 0;
 
         // it bounces and sparkles to the music it is actually making (not while the CD is still downloading)
-        float phase = 0;
-        int beat = 0;
-        bool beating = _speaker.Playing && BeatAt(ClockSync.ServerNow, out phase, out beat, out _, out _);
-        _sparkles?.Step(_speaker.Playing, beating, phase, beat, (float)delta);
+        var groove = _speaker.Playing && Playing ? RadioGroove.Of(CdId, StartedAt, ClockSync.ServerNow) : RadioGroove.Silent;
+        bool beating = groove.Beating;
+        _sparkles?.Step(_speaker.Playing, groove, (float)delta);
         _visual ??= GetNodeOrNull<MeshInstance3D>("Visual");
         if (_visual == null) return;
-        _visual.Transform = beating ? Bounce(phase, beat, BodyH * 0.5f, 1f) : Transform3D.Identity;
+        var dance = beating ? Bounce(groove.Phase, groove.Beat, BodyH * 0.5f, groove.BounceScale) : Transform3D.Identity;
+        // switched on or off with a tap (#725): one big squash and hop
+        if (_poke >= 0f)
+        {
+            dance = Bounce(_poke / PokeTime, 0, BodyH * 0.5f, 1.6f) * dance;
+            if ((_poke += (float)delta) > PokeTime) _poke = -1f;
+        }
+        _visual.Transform = dance;
     }
 
     private MeshInstance3D? _visual;
+    private float _poke = -1f;
+    private const float PokeTime = 0.4f;
+
+    /// <summary>Its key was just pressed (#725): it jumps, here only (the music that follows is everyone's).</summary>
+    public void Poke() => _poke = 0f;
     private RadioSparkles? _sparkles;
 
     /// <summary>The glints round it while it plays, on peers that draw it. For the probes.</summary>
@@ -226,10 +241,29 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
     }
 
     /// <summary>The state to respawn it from: where it is now, what it plays.</summary>
-    public RadioState Capture() => new(Name, Owner, _place.Global, Rotation.Y, Vector3.Zero, CdId, StartedAt, Playing, Settled, Length);
+    public RadioState Capture() => new(Name, Owner, _place.Global, Rotation.Y, Vector3.Zero, CdId, StartedAt, Playing, Settled, Length, Volume);
+
+    /// <summary>Its own volume, 0..1 (#734): the server's word, on the State synchronizer.</summary>
+    [Export] public float Volume { get; set; } = RadioLoudness.Default;
 
     /// <summary>What it plays, as the item carries it when picked up; null when silent or finished.</summary>
     public RadioPlay? NowPlaying => Playing && WantedPosition < Length ? new RadioPlay(CdId, StartedAt, Length) : null;
+
+    /// <summary>
+    /// The stack data a pick-up carries into the hand (#732): what plays, else the CD it last played
+    /// switched off (<see cref="RadioPlay.Off"/>), so the next tap puts that one back on; null for a
+    /// radio that never had one.
+    /// </summary>
+    public string? CarriedData
+    {
+        get
+        {
+            var mode = RadioQueue.Clamp(Mode);
+            if (NowPlaying is { } p) return (p with { Mode = mode }).Encode();
+            float length = Length > 0 ? Length : Cd?.Duration ?? 0f;
+            return CdId != 0 && length > 0 ? RadioPlay.Off(new RadioPlay(CdId, 0, length, mode)) : null;
+        }
+    }
 
     /// <summary>
     /// The beat the CD is on, from the shared clock alone. False when nothing plays or the CD is
@@ -255,11 +289,41 @@ public partial class RadioBody : RigidBody3D, IOriginShiftAware
         double beat = t * cd.Bpm / 60.0;
         double floor = Math.Floor(beat);
         beatPhase = (float)(beat - floor);
-        beatIndex = (int)floor;
-        bar = (int)Math.Floor(floor / 4.0);
+        // counted from the bar's real one (#728): the analysis found which beat of the grid starts a bar
+        beatIndex = (int)floor - (cd.Analysis?.Downbeat ?? 0);
+        bar = (int)Math.Floor(beatIndex / 4.0);
         // the chess type beat is danced as the rat dance, whatever the analyser made of it (#370)
         style = CdLibrary.IsRatBeat(cdId) ? MusicStyle.RatDance : cd.Style;
         return true;
+    }
+
+    /// <summary>
+    /// The red key on its front, in the world: a VR fingertip poking it switches the radio on or
+    /// off (#725). Authored at (0.045, 0.06, front) facing +Z; the mesh build turns it to (−x, y, −z).
+    /// </summary>
+    public Vector3 KeyPosition => GlobalTransform * new Vector3(-0.045f, 0.06f, -(BodyD * 0.5f + 0.012f));
+
+    /// <summary>
+    /// The CD's section at bar <paramref name="bar"/> (counted as <see cref="BeatOf"/> counts them),
+    /// for picking dance moves (#728): its kind and number, whether it runs on through the two move
+    /// slots from <paramref name="slotStart"/>, and the bar it began on (<see cref="int.MinValue"/>
+    /// for the first). A CD with no sections is one long groove that never fits a break set.
+    /// </summary>
+    public static Avatar.DanceSlotMusic SectionOfBar(int cdId, int bar, int slotStart, out int sectionStart)
+    {
+        sectionStart = int.MinValue;
+        if (CdLibrary.Instance?.Find(cdId) is not { Bpm: >= 1f } cd || cd.Analysis is not { SectionStarts.Length: > 0 } a)
+            return new Avatar.DanceSlotMusic(1, 0, false);
+        double spb = 60.0 / cd.Bpm;
+        int down = a.Downbeat;
+        double barTime = cd.BeatOffset + (bar * 4 + down + 0.05) * spb;
+        var kind = CdAnalysisRuntime.SectionAt(cd, barTime, out int index);
+        // the analyser snaps section starts to bar starts: round to the bar
+        int BarOf(float t) => (int)Math.Round(((t - cd.BeatOffset) / spb - down) / 4.0);
+        if (index > 0) sectionStart = BarOf(a.SectionStarts[index]);
+        int end = index + 1 < a.SectionStarts.Length ? BarOf(a.SectionStarts[index + 1]) : int.MaxValue;
+        bool fits = sectionStart <= slotStart && end - slotStart >= 2 * Avatar.HumanMeshBuilder.BarsPerMove;
+        return new Avatar.DanceSlotMusic((int)kind, index, fits);
     }
 
     // ---- the look -------------------------------------------------------------------------------

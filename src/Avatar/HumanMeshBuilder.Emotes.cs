@@ -17,7 +17,7 @@ public static partial class HumanMeshBuilder
     public const int EmotesPerPage = 10;
 
     /// <summary>The wheel's pages, in catalog order: page p is emotes p*10 .. p*10+9.</summary>
-    public static readonly string[] EmotePages = { "Emotes", "Dances", "More dances" };
+    public static readonly string[] EmotePages = { "Emotes", "Dances", "More dances", "Break & groove" };
 
     /// <summary>The catalog. Append only: the index is replicated (<c>FootPlayer.DanceId</c> - 2).</summary>
     private static readonly (string Name, DanceMove Move)[] EmoteTable =
@@ -37,6 +37,10 @@ public static partial class HumanMeshBuilder
         ("Running man", DanceMove.RunningMan), ("Twerk", DanceMove.Twerk), ("Sprinkler", DanceMove.Sprinkler),
         ("Disco point", DanceMove.DiscoPoint), ("T-step", DanceMove.TStep),
         ("Shoulder lean", DanceMove.ShoulderLean), ("Pogo", DanceMove.Pogo), ("Rat dance", DanceMove.RatSwing),
+        // Break & groove (#748: the #728 moves)
+        ("Body roll", DanceMove.BodyRoll), ("Charleston", DanceMove.Charleston), ("Skank", DanceMove.Skank),
+        ("Air drums", DanceMove.AirDrums), ("Shuffle", DanceMove.Shuffle), ("Wop", DanceMove.Wop),
+        ("Toprock", DanceMove.Toprock), ("Windmill", DanceMove.BreakWindmill), ("Headspin", DanceMove.BreakHeadspin),
     };
 
     public static int EmoteCount => EmoteTable.Length;
@@ -46,6 +50,19 @@ public static partial class HumanMeshBuilder
 
     private static DanceMove EmoteMove(int index) =>
         EmoteTable[Mathf.PosMod(index, EmoteTable.Length)].Move;
+
+    /// <summary>
+    /// The <see cref="DanceParams.Move"/> emote <paramref name="index"/> draws at <paramref name="bar"/>:
+    /// its own number, but a floor emote runs the whole break set over and over (#748), the down
+    /// then its power move, two bars each, so it never drops from standing into a windmill.
+    /// </summary>
+    public static int EmoteMoveAt(int index, int bar)
+    {
+        var move = EmoteMove(index);
+        if (!IsFloor(move)) return EmoteMoves + index;
+        if ((bar >> 1 & 1) == 0) return BreakDown;
+        return move == DanceMove.BreakHeadspin ? BreakPowerHeadspin : BreakPowerWindmill;
+    }
 
     // ---- the #404 moves ----------------------------------------------------------------------
 

@@ -22,7 +22,8 @@ public readonly record struct RadioState(
     double StartedAt = 0,
     bool Playing = false,
     bool Settled = false,
-    float Length = 0)
+    float Length = 0,
+    float Volume = RadioLoudness.Default)
 {
     public Godot.Collections.Dictionary ToDict()
     {
@@ -37,6 +38,7 @@ public readonly record struct RadioState(
         ["playing"] = Playing,
         ["settled"] = Settled,
         ["len"] = Length,
+        ["vol"] = Volume,
         };
         Position.Write(d);
         return d;
@@ -52,5 +54,6 @@ public readonly record struct RadioState(
         d["at"].AsDouble(),
         d["playing"].AsBool(),
         d["settled"].AsBool(),
-        d.TryGetValue("len", out var len) ? len.AsSingle() : 0f);
+        d.TryGetValue("len", out var len) ? len.AsSingle() : 0f,
+        d.TryGetValue("vol", out var vol) ? RadioLoudness.Clamp(vol.AsSingle()) : RadioLoudness.Default);
 }

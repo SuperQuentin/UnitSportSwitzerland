@@ -76,7 +76,7 @@ public sealed record HeavyParts(ArrayMesh Body, ArrayMesh Head, ArrayMesh Tail, 
 /// under the section's centre of mass — the same point its physics body turns about — facing −Z
 /// like every node. The owner sets the properties; <c>_Process</c> applies them.
 /// </summary>
-public partial class HeavyRig : Node3D, IHingedDoors
+public partial class HeavyRig : Node3D, IHingedDoors, Items.IBeatReactive
 {
     public float SteerAngle { get; set; }
     public float WheelSpin { get; set; }
@@ -266,6 +266,8 @@ public partial class HeavyRig : Node3D, IHingedDoors
         {
             HeavyClass.Tractor or HeavyClass.Rigid => TruckMeshBuilder.Build(spec, section, load),
             HeavyClass.Pickup => PickupMeshBuilder.Build(spec, section, load),
+            HeavyClass.Offroader => ArmyMeshBuilder.GClass(spec, section, load),
+            HeavyClass.Transporter => ArmyMeshBuilder.Duro(spec, section, load),
             HeavyClass.FarmTractor => FarmMeshBuilder.Tractor(spec, section, load),
             HeavyClass.Combine => FarmMeshBuilder.Combine(spec, section, load),
             _ => BusMeshBuilder.Build(spec, section, load),
@@ -506,6 +508,9 @@ public partial class HeavyRig : Node3D, IHingedDoors
     public Transform3D EyeFrame => _cockpit == null ? Transform3D.Identity
         : _body.Transform * new Transform3D(Basis.Identity, _cockpit.Eye);
 
+    /// <summary>The driver's seat, author space, and the frame its figure is drawn in (as <see cref="CarRig.DriverSeat"/>); null on a section with no cockpit.</summary>
+    public (DriverSeat Seat, Transform3D Frame)? Driver => _cockpit is { } c ? (c.Seat, _body.Transform) : null;
+
     /// <summary>The steering wheel for VR hands (#243), as <see cref="CarRig.SteeringGrip"/>. Null on a section with no cockpit.</summary>
     public (Node3D Wheel, Vector3 Axis, float Radius)? SteeringGrip =>
         _cockpit is { } c ? (_wheel, c.ColumnAxis, c.Seat.WheelRadius) : null;
@@ -574,6 +579,15 @@ public partial class HeavyRig : Node3D, IHingedDoors
         _driverBody.Mesh = HumanMeshBuilder.DriverBody(_driverPoses, pose, palette, c.Seat);
     }
 
+    private float _beatDy, _beatRoll;
+
+    /// <summary>Music reaching the parked machine (#734): its cab sinks on the kick and rocks, drawing only.</summary>
+    public void OnBeat(float reach, in Items.RadioGroove groove)
+    {
+        _beatDy = -0.04f * reach * groove.Kick * groove.BounceScale;
+        _beatRoll = 0.015f * reach * groove.Level * Mathf.Sin(Mathf.Pi * ((groove.Beat & 1) + groove.Phase));
+    }
+
     public override void _Process(double delta)
     {
         if (_body == null) return;
@@ -581,8 +595,8 @@ public partial class HeavyRig : Node3D, IHingedDoors
         _kneel = Mathf.MoveToward(_kneel, Kneeling ? 1f : 0f, dt / KneelTime);
         // kneeling lowers the door side (the right, +X): down and rolled toward it
         float k = Mathf.SmoothStep(0f, 1f, _kneel);
-        _body.Position = new Vector3(0, -KneelDrop * 0.5f * k, 0);
-        _body.Rotation = new Vector3(0, 0, BodyRoll - k * KneelDrop / 1.25f);
+        _body.Position = new Vector3(0, -KneelDrop * 0.5f * k + _beatDy, 0);
+        _body.Rotation = new Vector3(0, 0, BodyRoll - k * KneelDrop / 1.25f + _beatRoll);
 
         for (int i = 0; i < _wheels.Count; i++)
         {

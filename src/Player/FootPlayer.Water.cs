@@ -31,6 +31,8 @@ public partial class FootPlayer
     {
         // a Raptor fords 0.8 m (#463)
         Truck { Spec.Class: HeavyClass.Pickup } => 0.8f,
+        // the army's G 300 CDI fords 600 mm by its data sheet (#714)
+        Truck { Spec.Class: HeavyClass.Offroader } => 0.6f,
         // a tractor or a combine to its axles' seals and the cab's step (#494)
         Truck { Spec.Farm: true } => 0.8f,
         Truck => 1.0f,

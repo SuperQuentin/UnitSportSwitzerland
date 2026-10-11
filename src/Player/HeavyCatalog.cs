@@ -14,8 +14,9 @@ namespace UnitSport.Player;
 /// vehicles own 96..119; <see cref="RideKind.Trailer"/> is 120. The first five (96..100) are
 /// numbered by their position here; <b>every later entry names its own</b> (<c>Kind = (RideKind)N</c>),
 /// so branches appending at the same time keep their numbers: 101 is the F-150 (#470), 102 and 103
-/// the farm tractor and the combine (#541), 104 the tipper and 105 the mixer (#613). A clash, or an
-/// unnamed entry past the fifth, throws at start-up.
+/// the farm tractor and the combine (#541), 104 the tipper and 105 the mixer (#613), 106 the Duro,
+/// 107 the G-Class and 108 the Trakker of the army (#714). A clash, or an unnamed entry past the
+/// fifth, throws at start-up.
 /// </para>
 ///
 /// <para>
@@ -42,6 +43,9 @@ public static class HeavyCatalog
     // invented site contractors (#613): colours only, as every operator here
     private static readonly Color ContractorRed = new(0.78f, 0.12f, 0.08f);
     private static readonly Color ContractorBlue = new(0.10f, 0.30f, 0.62f);
+    // the Swiss Army's matt olive and its canvas (#714): colours only, no insignia; black tyres, bumpers and steps
+    private static readonly Color ArmyOlive = new(0.25f, 0.28f, 0.17f);
+    private static readonly Color ArmyCanvas = new(0.29f, 0.32f, 0.20f);
 
     public static readonly IReadOnlyList<HeavySpec> All = Number(new[]
     {
@@ -436,6 +440,122 @@ public static class HeavyCatalog
             Gears = new[] { 14.93f, 11.67f, 9.02f, 7.06f, 5.61f, 4.39f, 3.40f, 2.66f, 2.11f, 1.65f, 1.28f, 1.00f },
             Reverse = 13.0f, FinalDrive = 3.91f, ShiftTime = 0.5f,
             MaxSteer = 0.70f, LimiterKmh = 85f,
+        },
+
+        // ---- 106: the army's troop transporter (#714) ----
+        new HeavySpec
+        {
+            Kind = (RideKind)106,
+            Label = "Mowag Duro II 4x4",
+            Blurb = "Swiss Army troop transporter, 6.5 L turbodiesel, 245 hp, 5-speed Allison automatic, 4x4. A short cab ({car_door}) and a canvas-covered bed with a bench down each side for ten",
+            Class = HeavyClass.Transporter,
+            Look = new HeavyLook { Paint = ArmyOlive, Accent = Black, Lower = Black, Cargo = ArmyCanvas, Operator = "Swiss Army" },
+            // source: Mowag Duro 4x4 (the family's data sheet): 5.70 x 2.16 x 2.65 m, wheelbase 3.53 m,
+            // 4,800 kg empty, 9,000 kg gross (4,200 kg payload), Allison five-speed automatic 3.51..0.74
+            // (reverse 4.80) with a high and a low range, permanent four-wheel drive, 100 km/h in the
+            // high range, 245 hp and 925 N·m. The 6.5 L displacement is the brief's; the rating is the
+            // family's. Assumed: 335/80R20 tyres, the 1.02 m front overhang, CG 2.55 m back and 1.0 m up,
+            // the torque curve between the published points (183 kW at 2,500 rpm), the 6.65 axle ratio
+            // (axle, hubs and high range together), the converter's stall, hydraulic brakes to 7 m/s²,
+            // a 1.78 m track, the bed's bench places.
+            Sections = new[]
+            {
+                new SectionSpec
+                {
+                    Name = "transporter", Length = 5.70f, Width = 2.16f, Height = 2.65f, Mass = 4800f, CgAt = 2.55f, CgHeight = 1.0f,
+                    Axles = new[]
+                    {
+                        new AxleSpec(1.02f, 0, Steer: 1f, Driven: true, Tyre: "335/80R20"),
+                        new AxleSpec(4.55f, 1, Driven: true, Tyre: "335/80R20"),
+                    },
+                    DragArea = 3.2f, Track = 1.78f,
+                    PayloadMax = 4200f, PayloadAt = 4.3f, PayloadHeight = 1.6f,
+                },
+            },
+            PeakKw = 183f, PeakRpm = 2500f, IdleRpm = 700f, Redline = 2800f,
+            Torque = new (float, float)[] { (700f, 380f), (1000f, 720f), (1300f, 900f), (1500f, 925f), (1800f, 890f), (2100f, 800f), (2500f, 699f), (2800f, 480f) },
+            EngineBrakeNm = 220f, EngineInertia = 0.9f, StallRpm = 1700f, AirBrakes = false,
+            Box = Transmission.TorqueConverter,
+            Gears = new[] { 3.51f, 1.91f, 1.43f, 1.00f, 0.74f },
+            Reverse = 4.80f, FinalDrive = 6.65f, ShiftTime = 0.3f,
+            MaxSteer = 0.55f, Grip = 0.9f, BrakeDecel = 7.0f, LimiterKmh = 100f, Passengers = 11,
+        },
+
+        // ---- 107: the army's estate (#714) ----
+        new HeavySpec
+        {
+            Kind = (RideKind)107,
+            Label = "Mercedes-Benz G 300 CDI",
+            Blurb = "Swiss Army G-Class estate, the Puch's successor: 3.0 L V6 diesel, 184 hp, 5-speed automatic, permanent 4x4 with three locks. Four doors ({car_door}), the spare wheel on the tailgate, four seats",
+            Class = HeavyClass.Offroader,
+            Look = new HeavyLook { Paint = ArmyOlive, Accent = Black, Lower = Black, Cargo = Black, Operator = "Swiss Army" },
+            // source: the army's G 300 CDI (W461 estate; Mercedes-Benz, 2013): OM 642 V6, 135 kW at 3,800 rpm,
+            // 400 N·m at 1,600-2,800 rpm, 5G-Tronic five-speed automatic 3.59/2.19/1.41/1.00/0.83 (reverse
+            // 3.16), permanent four-wheel drive with a reduction and three locks, 265/70R16, 160 km/h,
+            // 3,500 kg gross, 3.2 t braked towing, 210 mm clearance, 600 mm wading. Assumed: 4.50 x 1.76 x
+            // 1.97 m on a 2.85 m wheelbase, 2,550 kg empty with the driver and fuel, CG 2.15 m back and
+            // 0.85 m up, the torque curve between the published points, the 4.38 axle, the converter's
+            // stall, the engine's inertia and braking, hydraulic brakes to 8 m/s², a 1.47 m track.
+            Sections = new[]
+            {
+                new SectionSpec
+                {
+                    Name = "estate", Length = 4.50f, Width = 1.76f, Height = 1.97f, Mass = 2550f, CgAt = 2.15f, CgHeight = 0.85f,
+                    Axles = new[]
+                    {
+                        new AxleSpec(0.82f, 0, Steer: 1f, Driven: true, Tyre: "265/70R16"),
+                        new AxleSpec(3.67f, 1, Driven: true, Tyre: "265/70R16"),
+                    },
+                    DragArea = 1.6f, Track = 1.47f,
+                    PayloadMax = 450f, PayloadAt = 3.9f, PayloadHeight = 1.0f,
+                },
+            },
+            PeakKw = 135f, PeakRpm = 3800f, IdleRpm = 750f, Redline = 4500f,
+            Torque = new (float, float)[] { (750f, 170f), (1000f, 290f), (1300f, 380f), (1600f, 400f), (2800f, 400f), (3400f, 375f), (3800f, 339f), (4500f, 250f) },
+            EngineBrakeNm = 80f, EngineInertia = 0.35f, StallRpm = 2000f, AirBrakes = false,
+            Box = Transmission.TorqueConverter,
+            Gears = new[] { 3.59f, 2.19f, 1.41f, 1.00f, 0.83f },
+            Reverse = 3.16f, FinalDrive = 4.38f, ShiftTime = 0.25f,
+            MaxSteer = 0.5f, Grip = 0.9f, BrakeDecel = 8.0f, LimiterKmh = 160f, Passengers = 4,
+        },
+
+        // ---- 108: the army's cargo lorry (#714) ----
+        new HeavySpec
+        {
+            Kind = (RideKind)108,
+            Label = "Iveco Trakker 6x6 lorry",
+            Blurb = "Swiss Army cargo lorry, 12.9 L Cursor 13 diesel, 450 hp, 12-speed automated EuroTronic, 6x6. A cab-over and a canvas-covered cargo body with a bench down each side",
+            Class = HeavyClass.Rigid,
+            Body = TruckBody.Canvas,
+            Look = new HeavyLook { Paint = ArmyOlive, Accent = Black, Lower = Black, Cargo = ArmyCanvas, Operator = "Swiss Army" },
+            // source: Iveco Trakker 6x6 (AD380, the army's Euro 6 order of 2015: Cursor 13 engines, EuroTronic
+            // automated boxes, automatic drivetrain management): Cursor 13, 12.9 L, 330 kW (450 hp) at 1,900 rpm,
+            // 2,100 N·m at 1,000-1,500; 33 t chassis gross. Assumed: 8.0 x 2.5 x 3.4 m (under the tilt) on a
+            // 4.05 + 1.32 m wheelbase, 365/85R20 tyres, 11,500 kg empty with the cargo body split 5,200 /
+            // 6,300, a 9 t payload, CG height, the torque curve between the published points, the
+            // gearbox as a 12-speed ZF-type 14.94..1.00, the 4.13 axle (axle and hubs together), the
+            // reverse ratio, the engine brake, a 90 km/h limiter, air brakes as the other trucks.
+            Sections = new[]
+            {
+                new SectionSpec
+                {
+                    Name = "lorry", Length = 8.0f, Width = 2.5f, Height = 3.4f, Mass = 11500f, CgAt = 4.1f, CgHeight = 1.35f,
+                    Axles = new[]
+                    {
+                        new AxleSpec(1.40f, 0, Steer: 1f, Driven: true, Tyre: "365/85R20"),
+                        new AxleSpec(5.45f, 1, Driven: true, Tyre: "365/85R20"),
+                        new AxleSpec(6.77f, 1, Driven: true, Tyre: "365/85R20"),
+                    },
+                    DragArea = 6.2f, Track = 2.03f,
+                    PayloadMax = 9000f, PayloadAt = 5.2f, PayloadHeight = 2.1f,
+                },
+            },
+            PeakKw = 330f, PeakRpm = 1900f, IdleRpm = 600f, Redline = 2200f,
+            Torque = new (float, float)[] { (500f, 1000f), (800f, 1750f), (1000f, 2100f), (1500f, 2100f), (1700f, 1850f), (1900f, 1659f), (2100f, 1300f), (2200f, 1000f) },
+            EngineBrakeNm = 1400f, RetarderNm = 0f, RetarderKw = 0f,
+            Gears = new[] { 14.94f, 11.67f, 9.12f, 7.13f, 5.57f, 4.35f, 3.40f, 2.66f, 2.08f, 1.62f, 1.27f, 1.00f },
+            Reverse = 13.0f, FinalDrive = 4.13f, ShiftTime = 0.5f,
+            MaxSteer = 0.62f, Grip = 0.85f, LimiterKmh = 90f, Passengers = 12,
         },
     });
 

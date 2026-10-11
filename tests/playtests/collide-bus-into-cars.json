@@ -1,0 +1,28 @@
+{
+  "id": "collide-bus-into-cars",
+  "title": "Bus through a row of parked cars",
+  "verdict": "validated",
+  "by": "Quentin Aellen",
+  "date": "2026-10-09T18:48Z",
+  "commit": "062e5e42",
+  "coverHash": "d4c02396e92db78e",
+  "covers": [
+    "src/Vehicles/VehicleBody*.cs",
+    "src/Vehicles/VehicleManager.cs",
+    "src/Vehicles/Explosion.cs",
+    "src/Player/FootPlayer.Crash.cs",
+    "src/Player/Rideable.cs",
+    "!**/*Check.cs",
+    "!**/*Probe.cs",
+    "src/Player/Truck*.cs",
+    "src/Player/Heavy*.cs"
+  ],
+  "notes": [
+    {
+      "date": "2026-10-09T18:48Z",
+      "by": "Quentin Aellen",
+      "verdict": "validated",
+      "text": ""
+    }
+  ]
+}

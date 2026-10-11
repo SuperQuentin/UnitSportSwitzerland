@@ -47,26 +47,14 @@ public partial class RadioSpeaker : AudioStreamPlayer3D
     private int _pathFor, _fetching, _failed;
     private double _sinceSeek, _failedAt;
 
-    // ---- the listener's volume: the Music bus (#261) --------------------------------------------
-
-    /// <summary>
-    /// 0..1, the panel's slider and Settings → Audio → Music alike: the Music bus every radio, car
-    /// stereo and station plays on. Applied by the bus, never per speaker, so nothing scales twice.
-    /// </summary>
-    public static float UserVolume
-    {
-        get => Core.GameSettings.Current.MusicVolume;
-        set
-        {
-            Core.GameSettings.Current.MusicVolume = Mathf.Clamp(value, 0f, 1f);
-            SfxBus.ApplyVolumes();
-        }
-    }
-
-    /// <summary>Keeps the slider's value, and nothing else of this run's settings.</summary>
-    public static void SaveVolume() => Core.GameSettings.SaveOnly(nameof(Core.GameSettings.MusicVolume), UserVolume);
+    // the listener's own level is the Music bus (Settings -> Audio -> Music, #261), applied by the
+    // bus; this radio's own volume (#734) is its gain and reach below, the same for everyone
 
     private readonly Hearing _hearing = new(8000f);
+
+    /// <summary>The radio's own volume, 0..1, everyone's (#734): its gain and how far it reaches (<see cref="RadioLoudness"/>).</summary>
+    public float Volume { get; set; } = RadioLoudness.Default;
+    private float _rangeFor = float.NaN;
 
     /// <summary>The path the sound takes to this machine's ear: "open", "wall", "door", "walls". For the probes.</summary>
     public string HeardThrough => _hearing.Path;
@@ -93,7 +81,8 @@ public partial class RadioSpeaker : AudioStreamPlayer3D
     {
         // where it is heard from and how muffled: only worth the rays while it has something to play
         if (On && CdId != 0) _hearing.Step(this, (float)delta);
-        VolumeDb = BaseDb + _hearing.Db;
+        VolumeDb = BaseDb + RadioLoudness.Db(Volume) + _hearing.Db;
+        if (Volume != _rangeFor) { _rangeFor = Volume; MaxDistance = RadioLoudness.Radius(Volume); }
         _sinceSeek += delta;
         double want = WantedPosition;
         if (double.IsNaN(want) || want < 0 || want >= Length || CdId == 0)

@@ -17,6 +17,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private Audio.Ambience? _ambience;
     private SpectatorCamera? _spectator;
     private FootPlayer? _player;
+    /// <summary>The fixture course's start in LV95, on a fixture world (the playtest scenarios place things by course coordinates).</summary>
+    private (double E, double N)? _fixtureStart;
     private bool _onFoot;
     private bool _networked;
     private World.Traffic? _traffic;
@@ -51,6 +53,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     /// <summary>Esc / Start with nothing else open: the shell shows the pause menu.</summary>
     public event Action? PauseRequested;
+    /// <summary>F5: open the movie editor over the world (#779); a pad and VR use Pause > Movie studio.</summary>
+    public event Action? MovieStudioRequested;
 
     /// <summary>The server dropped this client, or kicked it (the reason, for the menu to show).</summary>
     public event Action<string>? Disconnected;
@@ -97,10 +101,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Has("--outfitcheck"), Avatar.OutfitCheck.Run),
         (() => Has("--emotecheck"), Avatar.EmoteCheck.Run),
         (() => Has("--cockpitcheck"), Player.CockpitCheck.Run),
+        (() => Has("--kartcheck"), Player.KartCheck.Run),
         (() => Has("--spincheck"), Player.DriftCheck.Spin),
         (() => Has("--setupcheck"), Player.CarSetups.Check),
         (() => Has("--motocheck"), Player.Motorbike.Check),
         (() => Has("--truckcheck"), Player.HeavyCheck.Run),
+        (() => Has("--cargearcheck"), Player.CarGearboxCheck.Run),
         (() => Items.IconSheet.Requested, Items.IconSheet.Run),
         (() => Loot.LootChanceCheck.Requested, Loot.LootChanceCheck.Run),
         (() => Loot.ShopCheck.Requested, Loot.ShopCheck.Run),
@@ -120,6 +126,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Has("--beatcheck"), () => Verdict("beatcheck", Audio.Cd.BeatAnalyzer.SelfCheck())),
         // a VR player's hands packed into the pose and back (#439)
         (() => Has("--vrposecheck"), () => Verdict("vrposecheck", Player.FootPlayer.VrPoseSelfCheck())),
+#if PLAYTEST
+        // the playtest suite's scenarios, MCP endpoint and ledger (#751)
+        (() => Playtest.PlaytestCheck.Requested, Playtest.PlaytestCheck.Run),
+        (() => Playtest.PlaytestCheck.ListRequested, Playtest.PlaytestCheck.List),
+#endif
     };
 
     public override async void _Ready()
@@ -213,6 +224,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (fixture)
         {
             var (fE, fN) = SpawnPoint.ParseTarget(Launch);
+            _fixtureStart = (fE, fN);
             source = Terrain.Fixture.FixtureChunkSource.Create(Systems.FixtureCourse!, fE, fN)
                 ?? throw new ArgumentException($"no fixture course '{Systems.FixtureCourse}' (known: {string.Join(", ", Terrain.Fixture.FixtureCourse.Names)})");
             GD.Print($"[world] fixture course {Systems.FixtureCourse}");
@@ -339,6 +351,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new World.WaterSurface { Name = "WaterSurface" });
         ApplyNearTrees();
         ApplyPhotos();
+        // the last minutes of everyone in view, for the movie studio (#638)
+        AddChild(new Movie.ReplayRecorder());
+        // tap Alt: the mouse is free to click what is on screen, the game going on (#654)
+        AddChild(new CursorToggle(() => MenuOpen?.Invoke() == true));
         Audio.Surfaces.Origin = origin;
         var chunksForAudio = _chunks;
         if (Systems.On(Systems.Audio))
@@ -387,6 +403,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return all;
         };
         Audio.Cd.CdLibrary.Create(this, server: false);
+        Audio.Cd.CdUpload.Create(this, server: false);   // a player's own file, scanned on the server (#736)
+        if (Audio.Cd.CdUploadProbe.Requested) AddChild(new Audio.Cd.CdUploadProbe());
         // the radio by the pastor rat in every church (#370)
         Interiors.ChurchRadios.Create(this);
         Net.ClockSync.Create(this);
@@ -601,6 +619,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 FreeSpectator();
                 return new StreetFlight(_spectator!, chunks, origin, speed, seconds);
             }),
+            // the trailer (#706): stages and films its shots, moving the spectator camera from place to place
+            new(() => Trailer.TrailerDirector.Requested, ToolAnchor.Own, _ =>
+            {
+                FreeSpectator();
+                return new Trailer.TrailerDirector(_spectator!, chunks, origin) { RunCommand = line => _chat?.Send(line) };
+            }),
             new(() => ShotRunner.ParseArgs() != null, ToolAnchor.Own, _ =>
             {
                 var shot = ShotRunner.ParseArgs()!;
@@ -680,6 +704,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.RadioPanelProbe.Requested) AddChild(new Items.RadioPanelProbe(() => LocalPlayer));
         if (Player.EmoteWheelProbe.Requested) AddChild(new Player.EmoteWheelProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
+        if (Items.BeatFieldProbe.Requested) AddChild(new Items.BeatFieldProbe(() => LocalPlayer));
         if (World.WaterCheck.Requested) AddChild(new World.WaterCheck(() => LocalPlayer));
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: false));
         if (Player.BoatCheck.Role is { } boatRole) AddChild(new Player.BoatCheck(boatRole, () => LocalPlayer));
@@ -771,6 +796,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             && Items.DropCheck.Requested && Items.DropCheck.Create(() => LocalPlayer, () => _players, items) is { } soloDrop)
             AddChild(soloDrop);
         Vehicles.VehicleManager.Refused += Toast;
+        Movie.MovieSession.Said += Toast;
         Vehicles.PassengerService.Said += Toast;
 
         // Chat exists from boot, not only once connected: offline it runs its commands itself
@@ -793,6 +819,11 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // the item catalogue types its commands into the chat, so the server checks them (#262)
         items.RunCommand = _chat.Send;
         _chat.CatalogueRequested += () => items.Catalogue.Open();
+#if PLAYTEST
+        // the playtest suite (#751, docs/notes/general/playtest.md): Debug builds with --playtest, offline
+        if (Playtest.PlaytestDirector.Requested && !Launch.Networked)
+            AddChild(new Playtest.PlaytestDirector(() => LocalPlayer, _chat.Send, _fixtureStart));
+#endif
 
         // bottom right: the controls that apply here (F1, every control, is the shell's)
         var prompts = PromptBar.Create();
@@ -1022,6 +1053,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// </summary>
     private void TrackLoading(double delta)
     {
+        // --seat puts its own screen up from the first moment there is a world (a command-line run
+        // has no loading screen), and keeps it until the seat is taken, Ready or not
+        if (_bootDone && !_seatAsked && Launch.Mode == GameMode.Explore && SeatStart.Requested is { } seatKind)
+        {
+            _seatAsked = true;
+            _seatStart = new SeatStart(this, seatKind);
+        }
+        if (_seatStart is { Done: false } seating && Stage is LoadStage.Ready or LoadStage.Failed) seating.Step(delta);
         if (!_bootDone || Stage is LoadStage.Ready or LoadStage.Failed || _chunks == null) return;
         _loadClock += delta;
 
@@ -1058,8 +1097,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return;
         }
 
-        // Explore from the menus starts on foot, on open ground (#517), behind this screen
-        if (Launch is { Mode: GameMode.Explore, FromCommandLine: false } && !_groundStarted)
+        // Explore from the menus starts on foot, on open ground (#517), behind this screen; so does
+        // a --seat run, which then takes its seat here too, so nothing is played before it is in
+        if ((Launch is { Mode: GameMode.Explore, FromCommandLine: false } || _seatStart != null) && !_groundStarted)
         {
             _groundStarted = true;
             if (!_onFoot && _player == null)
@@ -1067,11 +1107,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 AddChild(_player = new FootPlayer { Name = "Player", Terrain = _chunks });
                 EnterFootMode(_player);
                 _groundStart = new GroundStart(_chunks, _player);
+                if (_worldOrigin != null) _seatStart?.Attach(_player, _chunks, _worldOrigin);
             }
         }
         if (_groundStart is { Done: false } ground && !ground.Step(delta))
         {
             Report(LoadStage.PlacingYou, 0.34f);
+            return;
+        }
+        if (_seatStart is { Done: false } seated && !seated.Step(delta))
+        {
+            Report(LoadStage.PlacingYou, 0.35f);
             return;
         }
 
@@ -1239,6 +1285,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         StyleKit.Chosen -= OnStyleChosen;
         NearTrees.Forget();
         Vehicles.VehicleManager.Refused -= Toast;
+        Movie.MovieSession.Said -= Toast;
         Vehicles.PassengerService.Said -= Toast;
         if (_networked)
         {
@@ -1488,6 +1535,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Launch.FromCommandLine) GD.PushError($"[world] {reason}");
     }
 
+    /// <summary>The movie studio (#638): the player it freezes while open, and the terrain it streams round its camera.</summary>
+    public FootPlayer? StudioPlayer => LocalPlayer;
+    public ChunkManager? Chunks => _chunks;
+
     /// <summary>My own networked player node, once the server has spawned it.</summary>
     // not while the link is down: GetUniqueId on a dead peer logs an error, and this runs every frame (#211)
     private FootPlayer? GetLocalNetPlayer() =>
@@ -1511,6 +1562,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             GetViewport().SetInputAsHandled();
             PauseRequested?.Invoke();
+            return;
+        }
+
+        // the replay buffer's last minutes into the movie editor (#638, #779): anywhere, whatever you are doing
+        if (@event.IsActionPressed(PlayerInput.SaveClip))
+        {
+            GetViewport().SetInputAsHandled();
+            // Shift+F5: Record / Stop, the whole session from now on (#775); F5: the editor (#779)
+            if (@event is InputEventKey { ShiftPressed: true }) Movie.MovieSession.ToggleRecording();
+            else MovieStudioRequested?.Invoke();
             return;
         }
 
@@ -1674,6 +1735,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
                         break;
                 }
             }
+            else if (Items.ItemController.Instance is { Inventory.HeldId: Items.ItemId.Radio, Throw.Active: false, UsablePlayer: not null })
+            {
+                // the radio in hand (#725): tap it on or off, hold for its panel, aim to throw it
+                yield return (PlayerInput.UseItem, Items.RadioTap.Prompt);
+                yield return (PlayerInput.AimItem, "Aim a throw");
+            }
             else if (Items.ItemController.Instance?.Throw.Active == true)
             {
                 yield return (PlayerInput.UseItem, Items.ItemController.Instance.Throw.Charging ? "Let go to throw" : "Hold to wind up a throw");
@@ -1684,7 +1751,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             else if (Items.Highlight.Pointed is Items.RadioBody)
             {
                 if (Items.ItemController.Instance?.Inventory.Held.IsEmpty == true) yield return (PlayerInput.UseItem, "Take the radio");
-                yield return (PlayerInput.InteractMount, "Radio");
+                yield return (PlayerInput.InteractMount, Items.RadioTap.Prompt);
             }
             else if (Vehicles.VehicleReach.Current == null && Combat.FightManager.Client is { } fights
                      && NetLink.Online(this) && p.PointedFighter() is { } rival && FootPlayer.NetId(rival.Name) is { } rivalId)
@@ -1802,6 +1869,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// <summary>The spawn point has not found the ground under the spawn yet.</summary>
     private bool _groundStarted;
     private GroundStart? _groundStart;
+    /// <summary><c>--seat</c>: the ride taken behind its own screen, after <see cref="_groundStart"/>.</summary>
+    private SeatStart? _seatStart;
+    private bool _seatAsked;
 
     private bool SpawnPending => _spawn != null && IsInstanceValid(_spawn) && _spawn.IsInsideTree();
 

@@ -8,7 +8,8 @@
   only a merged PR does. `pull_request_target` rather than `pull_request` so the token can still write a release when
   the merged PR came from a fork; nothing from the PR branch is ever checked out, the job builds `main`'s tip.
 - **Free:** the repo is public, so standard runners cost nothing. Checkout is `lfs: false` (the `assets/**` LFS
-  patterns are style material, excluded from the export anyway), which keeps metered LFS bandwidth at zero.
+  patterns are style material, excluded from the export anyway), which keeps metered LFS bandwidth at zero. No LFS file is exported: `assets/audio/*` (the chess type
+  beat) is excluded too, and a release burns its default CDs from links (#718).
 - **Bursts coalesce, latest wins.** Six PRs merging in half an hour should give one release, not six. The job waits
   until `origin/main` has sat still for `quiet_minutes` (3 by default), restarting that clock on every new merge, and
   then releases whatever the tip is by then — so the release covers every PR in the burst. A 50-minute cap releases

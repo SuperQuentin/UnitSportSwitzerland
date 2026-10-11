@@ -1,0 +1,39 @@
+# Movie commands
+
+- `--moviecheck --world flat` (quick tier, `src/Movie/`, `src/Player/FootPlayer.cs`):
+  - A player walks, then takes a plane and climbs, while a 15 s ring records a 16 s run, so it wraps.
+  - The clip is then replayed through a real puppet at times sought forwards and backwards. The puppet must be within
+    1 cm of the recording, on the recorded ride.
+  - A split moved away leaves a hole where the puppet must be hidden.
+  - Also fails when `ActorIo.Names` drifts from `FootPlayer.OnChangeProperties`.
+  - Then the sound (#656): a 120 BPM click track is written, imported for real (copy, Godot decode, beats: 120 BPM
+    and 16 beats expected) and laid on the timeline, where it must sound playing forwards and be silent
+    backwards. The files are deleted after.
+  - Then the camera (#669): a key aimed at the actor must look at it (within 0.06°), a cut must land on the next
+    key exactly with its lens, and cut all must cut every clip under the time.
+  - Then several cameras (#675): the program shows Cam 1 before a cut and Cam 2 after it, the view at Cam 2's key
+    with its lens, every gizmo where its camera is, and all of them hidden while looking through. About 25 s of game time.
+- `--movieworldcheck --world flat` (quick tier, `src/Movie/World*`, `ReplayWatch`): a watched car drives a circle with a
+  wheel turning, a parked car, a bird hides at 1.5 s and a crate is freed at 2.5 s, the origin shifts at 2 s. The
+  ghosts must stand within 5 cm of the truth at seeks both ways, hidden and gone at the right times, then the same
+  after a save and load through the real look store (its files are deleted after). About 5 s.
+- `--movieshotcheck --world flat` (quick tier, `src/Movie/`): an actor walks north then west; a Lead must stay 6 m in
+  front of where the drawn puppet faces, a Chase 7 m behind, a Mount 0.4 m back, at seeks both ways. A few seconds.
+- `--movierecord <a> <b>` (any direct world launch): Record / Stop from a to b seconds of play, then the newest
+  saved recording is loaded back: at least one actor clip, one world clip, one sound clip and the right length
+  expected, `[movierecord] RESULT` printed. `-- --world fixture --flycheck plane --movierecord 4 12`, about 20 s.
+  **Writes into the real `user://movies/`** (the recording, its looks, its sound): delete them after, or use `-Scratch`.
+- `--movieeditcheck` (with `--moviestudio`): the newest clip picked and the Delete button pressed must remove it; Space
+  (with a button holding the keyboard focus) must play. `-- --world fixture --flycheck plane --moviestudio 13 9 --movieeditcheck`.
+- `--movieexport <s>` (with `--moviestudio`): exports the last s seconds and checks the frames and the sound with ffprobe (`movie-export`). `-- --world fixture --flycheck plane --moviestudio 13 9 --movieexport 2`, about 40 s.
+- `--moviewipe` (with `--moviestudio`): the Sequences screen in the middle of a 2 s wipe into a lead shot (`movie-sequences`).
+- `--movieshots` (with `--moviestudio`): the Shots screen with three example shots, for screenshots (`movie-shots-screen`).
+- `--moviestudio <s> [t]` (any direct world launch): after s seconds, grabs the buffer and opens Pause > Movie
+  studio at movie time t. `--moviesong <file>` also imports a song there; `--moviekeys` sets keys on two cameras,
+  cuts between them and zooms in. Made for screenshots:
+  `-- --world fixture --flycheck plane --moviestudio 13 9 --uishot test_output/studio.png 17`
+  (`--flycheck` quits at ~20 s of flight, so open and shoot before that).
+  - **These runs write into the real `user://movies/audio/`** (the song's copy, the grabbed game sound). Delete
+    what they made afterwards, or run them through `tools/wt.ps1 … -Scratch`.
+- Unit tests: `tools/test.sh unit` (`MovieTests`: ring wrap, sampling, clip edits, file round trip; `MovieAudioTests`:
+  beats of click tracks at 95/120/140 BPM within 25 ms, sound ring, markers, snapping, file v2 and v1).

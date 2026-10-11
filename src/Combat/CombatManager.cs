@@ -119,6 +119,7 @@ public partial class CombatManager : Node3D, Core.IOriginContainer, Core.IOrigin
 
     public override void _Ready()
     {
+        Movie.ReplayWatch.Container(this);   // recorded for the movie studio (#775)
         if (_server) return;
 
         var mesh = new BoxMesh

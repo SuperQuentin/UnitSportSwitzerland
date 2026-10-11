@@ -20,3 +20,7 @@
 - **Check**: `tools/sparklecheck.sh` (tier full), i.e. `<godot> --path . -- --sparklecheck --world fixture` (windowed: nothing is built
   headless): a radio stood before the camera plays the chess type beat; sparkles at full while
   playing, gone after Stop; writes `test_output/sparkles_beat.png` and `sparkles_offbeat.png`.
+- **Softer, and out with the music (#732)**: smaller (`size` 0.026), fewer (density 0.10-0.85 of the
+  quads, notes one in six), dimmer and with smaller kicks than #725's. They go out when the song is
+  nearly silent (envelope level under 0.08 for 0.4 s, back above 0.12) and when the CD has run out:
+  the hand and back radios count only a CD still `Sounding` as playing.

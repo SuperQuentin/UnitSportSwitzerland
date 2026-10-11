@@ -4,6 +4,17 @@
   index) from the *triangle* normal; the shader draws the window grid from those. Storey
   height comes from GWR `GASTW` (69% coverage), else wall height / 2.9 m. Barns, garages,
   tanks and anything under 3 m opt out with uv.y < 0.
+- **Columns fit each wall run (#742)**: `WallRuns` groups a building's wall triangles that share
+  a corner and face the same way within 3° (surveyed walls are not flat: comparing plane offsets
+  splits a wall far from the tile origin). u is measured from the run's start along its axis,
+  turned away from the plan's centre (never from the triangle's winding), and stretched so
+  `round(len / 3.2)` whole columns fit end to end; a run under 1.6 m gets UV2.y = 3
+  (`BlankWallFlag`): bands and plinth, no glass. Before, u was absolute: 64% of walls had a
+  window straddling an end or corner, curved walls were sliced at every facet, and a wall wound
+  both ways showed two halves of a window that disagreed. `WindowSpacing` must match the
+  shader's `window_spacing`. Festive lights and Realistic plaster ride the same u.
+- **Still open**: a front door is drawn over the grid, so a window can peek out beside it; the
+  per-house hash (shutters, lights) is a 24 m world cell, not the building.
 
 ## Rooms behind the glass
 
