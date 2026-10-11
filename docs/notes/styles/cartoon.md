@@ -14,8 +14,13 @@ pastel greens, a soft rim, strong aerial haze.
 - **The cel light** (`shaders/common/style.gdshaderinc`): one smoothstep terminator on N·L, the
   sun's shadow as the same band, a faint rim; the shade side is the environment's cool ambient.
   **Near the terminator the shadow term is faded out**: faces nearly edge-on to the sun
-  self-shadow in stripes (acne), which a hard band turns into hatching. The sun's shadows are
-  hard (`ShadowBlur` 0, the soft filter's noise also hatched) with more bias (0.2, normal 4).
+  self-shadow in stripes (acne), which a hard band turns into hatching. More bias (0.2, normal 4).
+  **The sun's shadows are filtered** (`ShadowBlur` 2 in cartoon, 3 in the real styles, #809): hard,
+  their edges' stair-steps crawled across the shadow map as the sun moves with the clock and
+  flickered along every shadow (flicker shot, still camera: real 0.72 % -> 0.12 %, cartoon 0.15 %
+  -> 0.09 %; `--time 14` freezes the sun: 0.02 %). At 2 and the default filter quality the cel
+  band still draws a crisp edge, no hatching. The blur is in texels: a bigger atlas sharpens the
+  edge and brings the shimmer back.
 - **Grade:** `style_grade` lifts colours toward pastel and greens toward olive-gold; the terrain
   adds a low-frequency painted mottling (`style_paint_noise`, on `pattern_xz` so the floating
   origin does not move it).
