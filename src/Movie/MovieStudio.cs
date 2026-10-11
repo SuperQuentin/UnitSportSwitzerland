@@ -64,6 +64,10 @@ public partial class MovieStudio : Screen
     private Control _chrome = null!, _backdrop = null!;
     private Gpx.VideoExporter? _exporter;
     private Action<bool, string>? _exportDone;
+    private static readonly Vector2I[] ExportSizes = { new(1280, 720), new(1920, 1080), new(2560, 1440), new(3840, 2160) };
+    private static readonly int[] ExportRates = { 24, 30, 60 };
+    private int _exportSize = 1, _exportRate = 1;
+    private PopupMenu? _exportMenu;
     // the Shots screen (#777): the library, the picked shot's settings, the stills
     private ShotLibrary _library = null!;
     private ShotInspector _inspector = null!;
@@ -153,7 +157,8 @@ public partial class MovieStudio : Screen
         Tool(bar, Icons.Plus, "New", "Start an empty movie", NewMovie);
         Tool(bar, Icons.Folder, "Open", "Open a saved movie", OpenMovie);
         Tool(bar, Icons.Save, "Save", "Save this movie", SaveMovie);
-        Tool(bar, Icons.Camera, "Export", "Render the sequence being edited to a video file with its sound, frame by frame (it waits for the terrain)", () => StartExport());
+        var export = Tool(bar, Icons.Camera, "Export", "Render the sequence being edited to a video file with its sound: pick the size and the frame rate, then Render", () => { });
+        export.Pressed += () => OpenExportMenu(export);
         Tool(bar, Icons.Back, "Game", "Close the editor and play on where you were (Esc)", BackToGame);
 
         // the player and the camera tools above, the timeline below; the divider drags
@@ -196,13 +201,16 @@ public partial class MovieStudio : Screen
         AddChild(_previewB);
         _mixClip = new Control { ClipContents = true, MouseFilter = MouseFilterEnum.Ignore, Visible = false };
         _mixClip.SetAnchorsPreset(LayoutPreset.LeftWide);
+        // the overlays live inside the player's viewport (#786): an export reads that viewport, at its own size
+        var overlays = new CanvasLayer { Name = "Overlays" };
+        _preview.AddChild(overlays);
         _mixPicture = new TextureRect { Texture = _previewB.GetTexture(), StretchMode = TextureRect.StretchModeEnum.Scale, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, MouseFilter = MouseFilterEnum.Ignore };
         _mixClip.AddChild(_mixPicture);
-        screen.AddChild(_mixClip);
+        overlays.AddChild(_mixClip);
         // a fade to black over the player (#776): transitions and Fade beat links
         _fade = new ColorRect { Color = new Color(0, 0, 0, 0), MouseFilter = MouseFilterEnum.Ignore, Visible = false };
         _fade.SetAnchorsPreset(LayoutPreset.FullRect);
-        screen.AddChild(_fade);
+        overlays.AddChild(_fade);
         _previewCamera = new PreviewCamera(_camera);
         _preview.AddChild(_previewCamera);
         _hint = UiKit.Text("", UiTheme.FontTiny, UiTheme.TextDim);
@@ -863,7 +871,47 @@ public partial class MovieStudio : Screen
     /// frame, waiting for the terrain at each. False when there is nothing to film or no terrain to wait on.
     /// <paramref name="done"/> hears whether a video came out and where.
     /// </summary>
-    public bool StartExport(int fps = 30, Action<bool, string>? done = null)
+    /// <summary>The export's choices (#786): the video's size and frame rate, then Render. Remembered while the editor is open.</summary>
+    private void OpenExportMenu(Control near)
+    {
+        _exportMenu?.QueueFree();
+        var menu = new PopupMenu { HideOnCheckableItemSelection = false };
+        menu.AddSeparator("Size");
+        for (int i = 0; i < ExportSizes.Length; i++)
+        {
+            menu.AddRadioCheckItem($"{ExportSizes[i].X} × {ExportSizes[i].Y}", 100 + i);
+            menu.SetItemChecked(menu.ItemCount - 1, i == _exportSize);
+        }
+        menu.AddSeparator("Frame rate");
+        for (int i = 0; i < ExportRates.Length; i++)
+        {
+            menu.AddRadioCheckItem($"{ExportRates[i]} fps", 200 + i);
+            menu.SetItemChecked(menu.ItemCount - 1, i == _exportRate);
+        }
+        menu.AddSeparator();
+        menu.AddItem("Render the sequence", 1);
+        menu.IdPressed += id =>
+        {
+            if (id >= 200) _exportRate = (int)id - 200;
+            else if (id >= 100) _exportSize = (int)id - 100;
+            else { menu.Hide(); StartExport(ExportRates[_exportRate], ExportSizes[_exportSize]); return; }
+            for (int i = 0; i < menu.ItemCount; i++)
+            {
+                int item = menu.GetItemId(i);
+                if (item is >= 100 and < 200) menu.SetItemChecked(i, item - 100 == _exportSize);
+                else if (item >= 200) menu.SetItemChecked(i, item - 200 == _exportRate);
+            }
+        };
+        AddChild(menu);
+        _exportMenu = menu;
+        var r = near.GetGlobalRect();
+        menu.Popup(new Rect2I(new Vector2I((int)r.Position.X, (int)r.End.Y), Vector2I.Zero));
+    }
+
+    /// <summary>The player's viewport, for the exporter to read the frames from.</summary>
+    public Viewport ExportViewport => _preview;
+
+    public bool StartExport(int fps = 30, Vector2I? size = null, Action<bool, string>? done = null)
     {
         var p = MovieSession.Project;
         if (_exporter is { Running: true }) return false;
@@ -875,7 +923,7 @@ public partial class MovieStudio : Screen
         string name = MovieSession.Safe($"{p.Name} {p.Sequences[p.ActiveSequence].Name} {DateTime.Now:yyyy-MM-dd HH-mm-ss}");
         string dir = ProjectSettings.GlobalizePath($"{MovieSession.Folder}/export/{name}");
         System.IO.Directory.CreateDirectory(dir);
-        var source = new MovieExportSource(this, _stage, _camera, dir);
+        var source = new MovieExportSource(this, _stage, _camera, dir, size ?? ExportSizes[1]);
         if (!source.HasContent)
         {
             Modal.Inform(this, "Nothing to export", "The sequence being edited is empty: record something, or set where it starts and ends.");
@@ -901,8 +949,11 @@ public partial class MovieStudio : Screen
     }
 
     /// <summary>The player alone over the whole window, the program through it, for the exporter to grab.</summary>
-    public void EnterExportView()
+    public void EnterExportView(Vector2I size)
     {
+        // the player at the video's size, whatever the window's
+        _screen.Stretch = false;
+        _preview.Size = size;
         _viewSource.Selected = 0;
         _lookThrough.ButtonPressed = true;
         _gizmos.Hidden = true;
@@ -917,6 +968,7 @@ public partial class MovieStudio : Screen
     {
         if (!IsInstanceValid(_screen)) return;
         _screen.Reparent(_screenHome, false);
+        _screen.Stretch = true;
         _chrome.Visible = true;
     }
 
@@ -937,12 +989,14 @@ public partial class MovieStudio : Screen
             p.Camera.Target = 0;
             p.Camera.Smoothing = 0.3f;
         }
-        bool started = StartExport(30, (ok, video) =>
+        bool started = StartExport(30, new Vector2I(1280, 720), (ok, video) =>
         {
             int frames = ok ? CountFrames(video) : -1, want = (int)Math.Ceiling(seconds * 30);
             bool sound = ok && HasSound(video);
             bool right = ok && Math.Abs(frames - want) <= 1;
-            GD.Print($"[movieexport] {video}: {frames} frames (want {want}), sound {(sound ? "yes" : "no")} {(right ? "ok" : "WRONG")}");
+            var dims = ok ? FrameSize(video) : "";
+            right &= dims == "1280x720";
+            GD.Print($"[movieexport] {video}: {frames} frames (want {want}) of {dims} (want 1280x720), sound {(sound ? "yes" : "no")} {(right ? "ok" : "WRONG")}");
             GD.Print(right ? "[movieexport] RESULT: ok" : "[movieexport] RESULT: FAILED");
             GetTree().Quit(right ? 0 : 1);
         });
@@ -955,6 +1009,13 @@ public partial class MovieStudio : Screen
         int code = OS.Execute(BundledTools.Resolve("ffprobe"), new[] { "-v", "error", "-count_frames", "-select_streams", "v:0",
             "-show_entries", "stream=nb_read_frames", "-of", "csv=p=0", video }, output);
         return code == 0 && output.Count > 0 && int.TryParse(output[0].AsString().Trim(), out int n) ? n : -1;
+    }
+
+    private static string FrameSize(string video)
+    {
+        var output = new Godot.Collections.Array();
+        int code = OS.Execute(BundledTools.Resolve("ffprobe"), new[] { "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=s=x:p=0", video }, output);
+        return code == 0 && output.Count > 0 ? output[0].AsString().Trim() : "";
     }
 
     private static bool HasSound(string video)
@@ -1366,7 +1427,7 @@ public partial class MovieStudio : Screen
             _cameraB.Fov = CameraTrack.Fov(to.Lens);
             var size = (Vector2I)_preview.Size;
             if (_previewB.Size != size) _previewB.Size = size;
-            var full = ((Control)_mixClip.GetParent()).Size;
+            var full = (Vector2)_preview.Size;
             _mixPicture.Size = full;
             bool wipe = view.Kind == TransitionKind.Wipe;
             _mixClip.Size = new Vector2(wipe ? full.X * view.Mix : full.X, full.Y);

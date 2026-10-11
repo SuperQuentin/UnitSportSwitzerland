@@ -18,8 +18,11 @@ public sealed class MovieExportSource : IExportSource
     private readonly double _from, _to;
     private readonly string _audio;
 
-    public MovieExportSource(MovieStudio studio, MovieStage stage, Camera3D camera, string directory)
+    private readonly Vector2I _size;
+
+    public MovieExportSource(MovieStudio studio, MovieStage stage, Camera3D camera, string directory, Vector2I size)
     {
+        _size = size;
         _studio = studio;
         _stage = stage;
         _camera = camera;
@@ -35,12 +38,14 @@ public sealed class MovieExportSource : IExportSource
     public double Speed => 1;
     public Vector3 CameraPosition => _camera.GlobalPosition;
     public string? AudioPath => System.IO.File.Exists(_audio) ? _audio : null;
+    /// <summary>The player's own viewport, made the export's size: fades and wipes are drawn inside it.</summary>
+    public Viewport? Frames => _studio.ExportViewport;
 
     public void Take()
     {
         _stage.Playing = false;
         WriteSound();
-        _studio.EnterExportView();
+        _studio.EnterExportView(_size);
     }
 
     public void StepTo(double t, double step, double screenStep) => _stage.Seek(_from + t);

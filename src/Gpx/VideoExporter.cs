@@ -220,7 +220,7 @@ public partial class VideoExporter : Node
         SetProcess(true);
 
         // frames are grabbed at the window's real size, not the UI canvas's
-        var size = GetWindow().Size;
+        var size = _source.Frames is SubViewport frames ? frames.Size : GetWindow().Size;
         GD.Print($"[export] {_total} frames at {_fps} fps ({_source.Duration / _clockSpeed:F0} s of video, "
                  + $"{_clockSpeed:0.##}x), {size.X:F0}x{size.Y:F0} -> {directory}");
         return true;
@@ -519,7 +519,7 @@ public partial class VideoExporter : Node
 
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
 
-        Image? image = _phase == Phase.Grabbing ? GetViewport().GetTexture().GetImage() : null;
+        Image? image = _phase == Phase.Grabbing ? (_source.Frames ?? GetViewport()).GetTexture().GetImage() : null;
         if (_overlay != null) _overlay.Visible = true;
         return image;
     }

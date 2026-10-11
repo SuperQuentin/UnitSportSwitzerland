@@ -20,6 +20,8 @@ public interface IExportSource
     Vector3 CameraPosition { get; }
     /// <summary>A sound track to put under the video (a .wav path), or null.</summary>
     string? AudioPath { get; }
+    /// <summary>The viewport the frames are read from (its size is the video's), or null for the window.</summary>
+    Viewport? Frames { get; }
 
     /// <summary>The exporter takes over: the source stops running on its own and shows its camera.</summary>
     void Take();
@@ -51,6 +53,7 @@ public sealed class RaceExportSource : IExportSource
     public double Speed => _race.Speed;
     public Vector3 CameraPosition => _camera.GlobalPosition;
     public string? AudioPath => null;
+    public Viewport? Frames => null;
 
     public void Take()
     {
