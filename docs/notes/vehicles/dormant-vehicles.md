@@ -89,6 +89,17 @@
   the other, for every peer, every time, with nothing in the parking check able to see it. `SlotOf`
   keys on the whole owner (two yards in one tile must not collide) and `Find` matches owner **and**
   ordinal, because ordinals start at 0 per owner. Found by #497 reading the code, not by a test.
+- **Woken outlives the session now (#689, `world/object-containers`).** A woken car far from
+  everyone becomes its slot's dormant copy again if it stands back in its bay as the slot left it
+  (`TryResleep`, `ContainerRules.BackInBay`: 0.3 m, 5°, the same kind, pristine). Otherwise it
+  sleeps in its tile's container on the server and comes back under its own name. The awake set is
+  written to `awake.json` with each slot's pose (`RestoreAwake`: woken within a week, or its car
+  asleep under the slot name), so a restart does not wake the same bay twice.
+  With entity interest a far peer never gets the node, so the server also sends the awake set
+  (`SendTo` on join, a `Woke` broadcast); a peer keeps the copy up to 1 s (3 s on join) waiting
+  for the node, then empties the bay (`net/entity-interest`). `ParkedForklift` asks `IsAwake` too.
+- **Re-sleeping, below, is now done (#689)** on exactly the strict condition this item asked
+  for, and only once nobody has been within 3 tiles for a minute.
 - **Once woken it stays a vehicle for the session.** Re-sleeping is deliberately out until it is
   measured, as the industrial plan says — and the thing that decides whether it is ever needed is
   the **trigger**, not the fleet size: waking on intent (an aim, a real impact, a shot) means a

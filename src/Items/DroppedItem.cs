@@ -19,7 +19,9 @@ public readonly record struct DropState(
     Vector3 Velocity,
     Vector3 Spin,
     bool Settled = false,
-    int Token = 0)
+    int Token = 0,
+    // which item this is to the object containers (#689): given by the server; 0 = not persisted
+    long Oid = 0)
 {
     public Godot.Collections.Dictionary ToDict()
     {
@@ -36,6 +38,7 @@ public readonly record struct DropState(
         ["settled"] = Settled,
         ["token"] = Token,
         };
+        if (Oid != 0) d["oid"] = Oid;
         Position.Write(d);
         return d;
     }
@@ -52,7 +55,8 @@ public readonly record struct DropState(
             d["vel"].AsVector3(),
             d["spin"].AsVector3(),
             d["settled"].AsBool(),
-            d.TryGetValue("token", out var token) ? token.AsInt32() : 0);
+            d.TryGetValue("token", out var token) ? token.AsInt32() : 0,
+            d.TryGetValue("oid", out var oid) ? oid.AsInt64() : 0);
     }
 }
 
@@ -69,7 +73,7 @@ public readonly record struct DropState(
 /// synchronizer when the dropper's first update comes in.
 /// </para>
 /// </summary>
-public partial class DroppedItem : RigidBody3D, IOriginShiftAware
+public partial class DroppedItem : RigidBody3D, IOriginShiftAware, IInterestEntity
 {
     public const string Group = "dropped_items";
 
@@ -100,7 +104,14 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware
     private WorldOrigin _origin = null!;
     /// <summary>The position on the wire (#185): published by whoever simulates the fall, applied everywhere else.</summary>
     private NetPlace _place = null!;
-    private MultiplayerSynchronizer? _sync;
+    private MultiplayerSynchronizer? _sync, _relay;
+
+    // ---- entity interest (#689) ----
+    public GlobalPos InterestAt => _place.Global;
+    public float InterestRange(Interest.View view) => EntityInterestRules.ItemRange;
+    public bool InterestBig => false;
+    public void RefreshInterest(long peer) => EntityNet.Refresh(this, peer);
+    public void RelayRate(bool moving) { if (_relay != null) _relay.ReplicationInterval = Settled ? 2f : 0.05f; }
     private double _age, _restTime;
     private bool _predicting;
     private ImpactFx? _impact;
@@ -166,7 +177,8 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware
             ReplicationInterval = s.Settled ? 2f : 0.05f,
         };
         _sync.SetMultiplayerAuthority(GetMultiplayerAuthority());
-        AddChild(_sync);
+        // only to the peers near enough to have it (#689), a thrower's fall relayed by the server
+        _relay = EntityNet.Add(this, _sync, s.Settled ? 2f : 0.05f);
 
         if (s.Settled || NetworkManager.DedicatedServer)
         {
@@ -182,6 +194,8 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware
             Simulate(s);
             _predicting = true;
             _sync.Synchronized += StopPredicting;
+            // a thrower's updates reach a third peer through the server's relay (#689)
+            if (_relay != null) _relay.Synchronized += StopPredicting;
         }
         AddVisual(mesh, size);
     }
@@ -334,5 +348,8 @@ public partial class DroppedItem : RigidBody3D, IOriginShiftAware
     }
 
     /// <summary>The state to respawn it from: where it lies now, what it is.</summary>
-    public DropState Capture() => new(Name, Owner, Stack, _place.Global, Rotation, Vector3.Zero, Vector3.Zero, Settled);
+    public DropState Capture() => new(Name, Owner, Stack, _place.Global, Rotation, Vector3.Zero, Vector3.Zero, Settled, Oid: _initial.Oid);
+
+    /// <summary>Which item this is to the object containers (#689); 0 = not persisted.</summary>
+    public long Oid => _initial.Oid;
 }
