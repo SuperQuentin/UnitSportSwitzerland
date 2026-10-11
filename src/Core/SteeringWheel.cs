@@ -122,6 +122,41 @@ public partial class SteeringWheel : Node
         };
     }
 
+    /// <summary>
+    /// The H-shifter's lever (#290): 1..6, −1 reverse, 0 neutral; null without a wheel or with no
+    /// wheel button bound to a gate. A shifter holds its gate's button down while in gear, so this is
+    /// where the lever is, not a press.
+    /// </summary>
+    public static int? ShifterGate
+    {
+        get
+        {
+            if (!Active || _instance is not { } w) return null;
+            bool bound = false;
+            int gate = 0;
+            foreach (var (button, action) in Settings.Buttons)
+            {
+                int g = GateOf(action);
+                if (g == int.MinValue) continue;
+                bound = true;
+                if (w._pressed.Contains(button)) gate = g;
+            }
+            return bound ? gate : null;
+        }
+    }
+
+    /// <summary>The gate a gear action stands for (−1 reverse, 0 neutral); <see cref="int.MinValue"/> for any other action.</summary>
+    public static int GateOf(string action)
+    {
+        if (action == PlayerInput.GearReverse) return -1;
+        if (action == PlayerInput.GearNeutral) return 0;
+        int i = Array.IndexOf(PlayerInput.Gates, action);
+        return i >= 0 ? i + 1 : int.MinValue;
+    }
+
+    /// <summary>The wheel is holding <paramref name="action"/> down: one of its buttons is bound to it and pressed.</summary>
+    public static bool Holds(string action) => _instance is { } w && w._held.Contains(action);
+
     /// <summary>Claims <paramref name="name"/> from now on, with its preset if its bindings were for another device.</summary>
     public static void Select(string name)
     {
@@ -270,6 +305,7 @@ public partial class SteeringWheel : Node
             WheelPresets.Reset(s, _name);
             GameSettings.Current.Commit();
         }
+        else if (WheelPresets.Upgrade(s)) GameSettings.Current.Commit();
         FixRestEnds(s);
         GD.Print($"[wheel] {_name}: {SDL_GetNumJoystickAxes(_joy)} axes, {SDL_GetNumJoystickButtons(_joy)} buttons, "
             + $"{SDL_GetNumJoystickHats(_joy)} hats, range {s.RangeDeg:F0}°"

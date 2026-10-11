@@ -198,7 +198,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
         float seen = cam.Fov < 20f ? 300f : SeenRange;
         _clock += delta;
         _localWho.Clear();
-        if (player != null) _localWho.Add(new Observer(player.GlobalPosition, player.Velocity, player.IsFlying, Multiplayer.GetUniqueId()));
+        if (player != null && !UnitSport.Net.NetLink.Dropped(this)) _localWho.Add(new Observer(player.GlobalPosition, player.Velocity, player.IsFlying, Multiplayer.GetUniqueId()));
         for (int i = _birds.Count - 1; i >= 0; i--)
         {
             var b = _birds[i];

@@ -169,6 +169,8 @@ public partial class ChunkStreamer : Node
     private void RefreshReachability() =>
         _serverReachable = !IsServing
             && Multiplayer.HasMultiplayerPeer()
+            // a dropped link: GetUniqueId would log an error every frame (NetLink)
+            && Multiplayer.MultiplayerPeer.GetConnectionStatus() != MultiplayerPeer.ConnectionStatus.Disconnected
             && Multiplayer.GetUniqueId() != 1;
 
     public Task<AssetResult> FetchAsync(AssetKind kind, TileId id, CancellationToken ct = default)
