@@ -250,6 +250,37 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
         return true;
     }
 
+    // ---- object containers (#689) --------------------------------------------------------------
+
+    /// <summary>Server: true for a radio the object containers keep (asleep far from everyone, never cleared as lonely).</summary>
+    public Func<RadioBody, bool>? Keeps { get; set; }
+
+    /// <summary>Server: a radio is about to leave the world for good (picked up): the containers write that down first.</summary>
+    public Action<RadioBody>? Removing { get; set; }
+
+    /// <summary>A pick-up is in flight for this radio: it must not be put to sleep under the picker.</summary>
+    public bool IsClaimedOnServer(string name) => _claimed.Contains(name);
+
+    private void Spawn(RadioState state, bool keepOid = false)
+    {
+        if (!keepOid || state.Oid == 0) state = state with { Oid = Vehicles.VehicleState.NewOid() };
+        _spawner!.Spawn(state.ToDict());
+    }
+
+    /// <summary>
+    /// Server: brings a radio back from a container (#689): standing where it was, silent (nobody
+    /// was there to hear it, and the shared clock it played by is not this run's), the server its
+    /// authority, its oid kept; under its own name unless something holds it now.
+    /// </summary>
+    public string? Restore(RadioState state)
+    {
+        if (!Multiplayer.IsServer() || _spawner == null) return null;
+        string name = state.Name;
+        if (string.IsNullOrEmpty(name) || HasNode(name)) name = $"radio_r_{++_counter}";
+        Spawn(state with { Owner = 0, Name = name, Settled = true, Velocity = Vector3.Zero, Playing = false, StartedAt = 0 }, keepOid: true);
+        return name;
+    }
+
     // ---- server side ---------------------------------------------------------------------------
 
     private static void StartOn(RadioBody radio, int cdId, float length)
@@ -291,7 +322,7 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
             Playing = length > 0 && double.IsFinite(thrown.StartedAt) && thrown.StartedAt <= ClockSync.ServerNow + 1,
             Length = Math.Max(length, 0),
         };
-        _spawner.Spawn(state.ToDict());
+        Spawn(state);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -304,6 +335,8 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
             RpcId(sender, MethodName.PickUpRefused);
             return;
         }
+        // off the containers' book before anyone has it (#689): a crash now must not bring it back
+        Removing?.Invoke(radio);
         radio.QueueFree();   // the spawner removes it on every client
         _claimed.Remove(name);
         RpcId(sender, MethodName.PickUpGranted);
@@ -359,7 +392,8 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
                 respawn.Add(r.Capture() with { Owner = 0, Name = $"radio_srv_{++_counter}", Settled = true });
                 r.QueueFree();
             }
-        foreach (var state in respawn) _spawner.Spawn(state.ToDict());
+        // the same radio (its oid kept): the containers follow it to its new name
+        foreach (var state in respawn) Spawn(state, keepOid: true);
     }
 
     /// <summary>
@@ -385,6 +419,8 @@ public partial class RadioManager : Node3D, Core.IOriginContainer
         {
             if (node is not RadioBody r) continue;
             if (r.Playing && r.WantedPosition >= r.Length) Ended(r);
+            // the object containers put it to sleep instead (#689)
+            if (Keeps?.Invoke(r) == true) { r.LonelyFor = 0; continue; }
             bool near = players.Count == 0 || players.Any(p => p.DistanceTo(r.GlobalPosition) < LonelyDistance);
             r.LonelyFor = near ? 0 : r.LonelyFor + step;
             if (r.LonelyFor > LonelyTime) r.QueueFree();

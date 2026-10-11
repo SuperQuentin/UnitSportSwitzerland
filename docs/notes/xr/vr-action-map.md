@@ -130,7 +130,7 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | save_clip: the replay buffer into the movie studio (#638) | F5 / Start > Save clip | ok: Menu tap > Save clip | a wrist-menu entry |
 | movie studio timeline (#638, markers #656, camera keys #669, cameras #675) | Space J K L, ← →, S, Del, M, I, V, 1-9, C / Y, LT RT, D-pad, X (hold: cut to camera), R3, View, L3, R stick, LB RB | ok: the same pad buttons through `XrPad`, the panel by laser | grip the playhead and scrub by hand; timeline on the `XrUi` panel (#637 milestone 3) |
 | free_cursor (#654) | tap Alt / — | n/a: VR points with the laser, a pad has no cursor | keep |
-| map screen: pan / zoom / draw / tool / search (#515) | arrows, drag, wheel, T, F / L stick, LB RB, A, Y, X | **gap, deferred on purpose**: the screen renders on the `XrPad` panel and says so, but the map itself is not pointable — a laser on a 2D map of a 3D country is the wrong answer to design in a hurry | a table-top relief map of Switzerland you reach into, grab to pan, pinch to zoom and paint tiles on with a finger (#535) |
+| map screen: pan / zoom / draw / tool / search (#515, #799) | arrows, drag, wheel, T, F / L stick, LB RB, A, Y, X | ok on the panel (#799): the ray is the pointer, trigger click puts the marker down, trigger drag pans, left stick pans, on-map + / − zoom (the shoulders are muted there: in VR they are the trigger), popular places instead of typing; draw tools pointable under Advanced | a table-top relief map you reach into (#535)
 
 ## Coherence findings (what violated the rules)
 

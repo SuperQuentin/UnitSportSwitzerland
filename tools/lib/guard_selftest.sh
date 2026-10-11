@@ -44,6 +44,14 @@ w=$(guard_watch "$victim" 999999999 2>/dev/null)
 wait "$victim" 2>/dev/null
 check "guard_watch killed its PID at the floor ($(( SECONDS - t0 ))s)" '[ $(( SECONDS - t0 )) -le 6 ]'
 kill "$w" 2>/dev/null; rm -f "$log"
+# a script watching itself ($$, as tools/lib/twoclient.sh does) loses its children, then exits 143:
+# killed outright it exited 0 with no RESULT line, which tools/test.sh read as a pass
+t0=$SECONDS
+out=$(GUARD_MIN_FREE_MB=999999999 bash -c '. tools/lib/guard.sh; guard_watch $$ > /dev/null; trap "echo trapped" TERM EXIT
+  sleep 51 & sleep 52; wait' 2>/dev/null); rc=$?
+check "guard_watch \$\$ ends its script 143 (rc $rc, $(( SECONDS - t0 ))s)" '[ "$rc" = 143 ] && [ $(( SECONDS - t0 )) -le 10 ]'
+check "with its traps run" '[[ $out == *trapped* ]]'
+check "and its children dead" '! ps -ef | grep -q "[s]leep 5[12]"'
 check "free RAM is read ($(guard_free_mb) MB)" '[ "$(guard_free_mb)" -gt 0 ]'
 
 _guard_drop_lock

@@ -15,6 +15,7 @@ touches its topic; search with `grep -ril <word> docs/notes/movie`.
 - `movie-shots-screen` — the Shots screen (#777): mode tabs, library rows with stills and a hover picture (`ShotThumbs`), the inspector (rig, follows, offsets, lens, shake, beat links), Frame from view (G), N
 - `movie-sequences` — the Sequences screen (#778): sequence tabs and their menu, shots dragged onto the Program row, the transition menu and how transitions are drawn, crossfade/wipe as two pictures, `AutoDirector`
 - `movie-export` — Export (#786): the active sequence through `Gpx.VideoExporter` behind `IExportSource`, the player filling the window while it renders, the sound clips mixed (`Soundtrack`) and muxed, `--movieexport`
+- `movie-session-spool` — Record / Stop streamed to disk (#782): a minute in memory, pieces every 30 s to a `SessionSpool` worker (temp file + a growing .wav), joined at Stop by player run and world ids
 - `movie-world` — the recorded world (#775): `ReplayWatch` one-line joins, groups and parts written only when they move, `WorldRing`/`WorldTrack`, the World row, `WorldGhosts`, the live world hidden, looks saved in `user://movies/looks/`
 - `movie-puppets` — `FootPlayer.Puppet`: no synchronizers, no interpolator, hiding with ProcessMode, `RidingWith` remapped to puppets
 

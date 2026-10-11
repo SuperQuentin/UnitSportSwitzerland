@@ -1305,7 +1305,28 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     /// <summary>
-    /// Cancels every build and waits, briefly, for the workers to let go.
+    /// Set by <see cref="ReleaseWorkers"/>: the world is being left in place and the engine lives
+    /// on, so <see cref="_ExitTree"/> does not wait for the workers.
+    /// </summary>
+    private bool _workersReleased;
+
+    /// <summary>
+    /// Leaving a world in place (<c>GameShell.Teardown</c>, #807): cancels every build and lets the
+    /// workers wind down on their own instead of holding the main thread for them in
+    /// <see cref="_ExitTree"/>. Safe because a worker only touches its own C# state (the
+    /// <c>_ready</c>/<c>_failedBuilds</c> queues of this manager, which nobody reads any more) and
+    /// Godot resources it made itself, never a node; the engine stays up, so an ArrayMesh made after
+    /// the cancel is just garbage. A next world has its own manager, queues and generations: no
+    /// result of this one can reach it.
+    /// </summary>
+    public void ReleaseWorkers()
+    {
+        _workersReleased = true;
+        foreach (var state in _chunks.Values) state.CancelPending();
+    }
+
+    /// <summary>
+    /// Cancels every build, and on quit waits, briefly, for the workers to let go.
     ///
     /// <para>
     /// A worker makes Godot objects as it goes (the ArrayMeshes and MultiMeshes it hands to the
@@ -1316,13 +1337,22 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// the cancel it either stops at that check or is already inside the call, and this wait
     /// lets that finish while the engine is still alive.
     /// </para>
+    /// <para>
+    /// Leaving to the menu is not quitting (<see cref="ReleaseWorkers"/>): that wait held the main
+    /// thread up to 3 s, the freeze on "Leave to main menu" (#807).
+    /// </para>
     /// </summary>
     public override void _ExitTree()
     {
         foreach (var state in _chunks.Values) state.CancelPending();
+        int inFlight = Volatile.Read(ref _buildsInFlight);
         var clock = System.Diagnostics.Stopwatch.StartNew();
-        while (Volatile.Read(ref _buildsInFlight) > 0 && clock.ElapsedMilliseconds < 3000)
-            Thread.Sleep(5);
+        if (!_workersReleased)
+            while (Volatile.Read(ref _buildsInFlight) > 0 && clock.ElapsedMilliseconds < 3000)
+                Thread.Sleep(5);
+        // finished results nobody will commit: their meshes go now rather than with the GC
+        while (_ready.TryDequeue(out var r)) Release(r);
+        GD.Print($"[terrain] exit: {inFlight} builds in flight, waited {clock.ElapsedMilliseconds} ms");
     }
 
     /// <summary>Returns how many results were committed, so the caller knows a slot freed.</summary>

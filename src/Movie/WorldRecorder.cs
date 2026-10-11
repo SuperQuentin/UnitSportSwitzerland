@@ -185,6 +185,12 @@ public sealed class WorldRecorder
     private void WalkGroup(Node3D node, double now, WorldOrigin origin)
     {
         Ent? group = _byNode.GetValueOrDefault(node.GetInstanceId());
+        // an instancer that announces its changes (#782) is drawn whole: the group and its one part
+        if (node is MultiMeshInstance3D { Multimesh: { } mm } && ReplayWatch.InstancedVersion(mm) > 0)
+        {
+            group ??= AddGroup(node, now, origin);
+            Part(node, group, now, origin);
+        }
         WalkParts(node, node, ref group, now, origin);
         if (group != null) group.Seen = _pass;
     }
@@ -218,14 +224,21 @@ public sealed class WorldRecorder
 
     private void Part(Node3D mesh, Ent group, double now, WorldOrigin origin)
     {
-        int look = mesh is MeshInstance3D m ? LookOf(m) : TemplateLookOf(mesh);
-        if (_byNode.TryGetValue(mesh.GetInstanceId(), out var e))
+        int look = mesh switch
+        {
+            MeshInstance3D m => LookOf(m),
+            MultiMeshInstance3D mm => InstancesLookOf(mm),
+            _ => TemplateLookOf(mesh),
+        };
+        // an instancer is its own group's part: the same node, told apart by its key
+        ulong key = mesh == group.Node ? ~mesh.GetInstanceId() : mesh.GetInstanceId();
+        if (_byNode.TryGetValue(key, out var e))
         {
             e.Seen = _pass;
             if (look != e.Look) { EmitLook(now, e.Id, look); e.Look = look; }
             return;
         }
-        e = new Ent { Id = _nextId++, Key = mesh.GetInstanceId(), Node = mesh, Group = group, Look = look, Seen = _pass, Shown = mesh.IsVisibleInTree() };
+        e = new Ent { Id = _nextId++, Key = key, Node = mesh, Group = group, Look = look, Seen = _pass, Shown = mesh.IsVisibleInTree() };
         e.Last = PoseOf(e, origin);
         EmitSpawn(now, e.Id, group.Id, look, e.Last, e.Shown);
         _byNode[e.Key] = e;
@@ -282,6 +295,47 @@ public sealed class WorldRecorder
         copy.Visible = true;
         Looks.Add(new WorldLook { Template = copy });
         _templateIndex[key] = Looks.Count - 1;
+        return Looks.Count - 1;
+    }
+
+    private readonly Dictionary<(ulong MultiMesh, int Version), int> _instancesIndex = new();
+
+    /// <summary>
+    /// An instancer's look (#782): a detached copy of it and of its instances as they are now, which a
+    /// ghost duplicates like a light's. A new copy each time its owner says the instances changed
+    /// (<see cref="ReplayWatch.Instanced"/>): the dormant fleet frees its instancers and the hall cars
+    /// undraw one car, so a copy is the only way to keep what was drawn before.
+    /// </summary>
+    private int InstancesLookOf(MultiMeshInstance3D node)
+    {
+        var src = node.Multimesh!;
+        var key = (src.GetInstanceId(), ReplayWatch.InstancedVersion(src));
+        if (_instancesIndex.TryGetValue(key, out int i)) return i;
+        var mm = new MultiMesh
+        {
+            TransformFormat = src.TransformFormat,
+            UseColors = src.UseColors,
+            UseCustomData = src.UseCustomData,
+            Mesh = src.Mesh,
+            InstanceCount = src.InstanceCount,
+        };
+        // one by one: a whole buffer is refused by the headless renderer, and a few dozen cars cost nothing
+        for (int k = 0; k < src.InstanceCount; k++)
+        {
+            mm.SetInstanceTransform(k, src.GetInstanceTransform(k));
+            if (src.UseColors) mm.SetInstanceColor(k, src.GetInstanceColor(k));
+            if (src.UseCustomData) mm.SetInstanceCustomData(k, src.GetInstanceCustomData(k));
+        }
+        mm.VisibleInstanceCount = src.VisibleInstanceCount;
+        var copy = new MultiMeshInstance3D
+        {
+            Multimesh = mm,
+            MaterialOverride = node.MaterialOverride,
+            VisibilityRangeEnd = node.VisibilityRangeEnd,
+            CastShadow = node.CastShadow,
+        };
+        Looks.Add(new WorldLook { Template = copy });
+        _instancesIndex[key] = Looks.Count - 1;
         return Looks.Count - 1;
     }
 

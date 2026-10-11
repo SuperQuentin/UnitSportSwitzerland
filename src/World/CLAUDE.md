@@ -8,6 +8,7 @@ touches its topic; search with `grep -ril <word> docs/notes/world`.
 ## Architecture
 
 - `day-night` — Day/night: (`World/DayNight`): four global shader uniforms declared in `project.godot` `[shader_globals]` —...; indoors: sky-coloured glass, room-lit cameras, open doors light the street at night (#134); `/time` set/add/speed (#202); online one server-owned `WorldClock` on `ServerNow`, game logic reads `WorldClock.CurrentHour` (#452)
+- `object-containers` — Server object containers (#689): a vehicle, item or radio nobody has been near sleeps in `user://containers/server/E_N.json` and wakes when a player returns or after a restart; stable oid + generation, write order keeps it exactly once through crashes (model-checked), awake slots kept, a woken car back in its bay becomes scenery again, `tools/containernetcheck.sh`
 - `traffic-trains` — Traffic and trains: (`World/Traffic`, `World/LaneGraph`): local and cosmetic per client (not replicated), but solid...
 - `traffic-and-races` — Traffic around a race (#85, #159): drivers react only to racers they can see, give way at junctions, no spawns in front of fast racers; racers sense traffic joining and across bridged junctions, pass standing traffic, retire when wrecked; before/after numbers
 - `trees-solid` — Trees are solid: (`World/TreeColliders`, issue #14): no per-tile tree collision — 100k+ trees a forest tile. A pool...

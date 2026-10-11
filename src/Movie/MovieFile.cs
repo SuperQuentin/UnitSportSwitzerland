@@ -38,16 +38,7 @@ public static class MovieFile
         foreach (var l in p.Lanes) { w.Write(l.Key); w.Write(l.Label); w.Write(l.PeerId); }
 
         w.Write(p.Tracks.Count);
-        foreach (var t in p.Tracks)
-        {
-            w.Write(t.Frames);
-            foreach (double v in t.Times) w.Write(v);
-            foreach (double v in t.Pos) w.Write(v);
-            foreach (float v in t.F) w.Write(v);
-            for (int i = 0; i < t.Discrete; i++) { w.Write(t.BaseNum[i]); w.Write(t.BaseStr[i]); }
-            w.Write(t.Events.Length);
-            foreach (var e in t.Events) { w.Write(e.T); w.Write(e.Prop); w.Write(e.Num); w.Write(e.Str); }
-        }
+        foreach (var t in p.Tracks) WriteTrack(w, t);
 
         if (version >= 2)
         {
@@ -117,6 +108,50 @@ public static class MovieFile
         }
     }
 
+    /// <summary>One player's track (also a Record / Stop session's pieces on disk, #782).</summary>
+    internal static void WriteTrack(BinaryWriter w, ActorTrack t)
+    {
+        w.Write(t.Frames);
+        foreach (double v in t.Times) w.Write(v);
+        foreach (double v in t.Pos) w.Write(v);
+        foreach (float v in t.F) w.Write(v);
+        for (int i = 0; i < t.Discrete; i++) { w.Write(t.BaseNum[i]); w.Write(t.BaseStr[i]); }
+        w.Write(t.Events.Length);
+        foreach (var e in t.Events) { w.Write(e.T); w.Write(e.Prop); w.Write(e.Num); w.Write(e.Str); }
+    }
+
+    /// <summary>A track written by <see cref="WriteTrack"/>, the file's property k mapped to <paramref name="map"/>[k] (-1: dropped).</summary>
+    internal static ActorTrack ReadTrack(BinaryReader r, int[] map, int discrete)
+    {
+        int n = r.ReadInt32();
+        var times = new double[n];
+        for (int k = 0; k < n; k++) times[k] = r.ReadDouble();
+        var pos = new double[n * 3];
+        for (int k = 0; k < pos.Length; k++) pos[k] = r.ReadDouble();
+        var f = new float[n * Channels.Stride];
+        for (int k = 0; k < f.Length; k++) f[k] = r.ReadSingle();
+        var num = new long[discrete];
+        var str = new string[discrete];
+        Array.Fill(str, "");
+        for (int k = 0; k < map.Length; k++)
+        {
+            long v = r.ReadInt64();
+            string s = r.ReadString();
+            if (map[k] >= 0) { num[map[k]] = v; str[map[k]] = s; }
+        }
+        int events = r.ReadInt32();
+        var list = new List<DiscreteEvent>(events);
+        for (int k = 0; k < events; k++)
+        {
+            double t = r.ReadDouble();
+            int prop = r.ReadInt32();
+            long v = r.ReadInt64();
+            string s = r.ReadString();
+            if (prop >= 0 && prop < map.Length && map[prop] >= 0) list.Add(new DiscreteEvent(t, map[prop], v, s));
+        }
+        return new ActorTrack(times, pos, f, num, str, list.ToArray());
+    }
+
     private static void WriteShot(BinaryWriter w, CameraTrack cam)
     {
         w.Write(cam.Group); w.Write((byte)cam.Rig); w.Write(cam.Target); w.Write((byte)cam.Part);
@@ -167,8 +202,14 @@ public static class MovieFile
         w.Write(t.Duration);
         w.Write(t.Looks.Length);
         foreach (var l in t.Looks) w.Write(l.Asset ?? "");
-        w.Write(t.Entities.Length);
-        foreach (var e in t.Entities)
+        WriteEntities(w, t.Entities);
+    }
+
+    /// <summary>A world track's objects (also a Record / Stop session's pieces on disk, #782).</summary>
+    internal static void WriteEntities(BinaryWriter w, WorldEntity[] entities)
+    {
+        w.Write(entities.Length);
+        foreach (var e in entities)
         {
             w.Write(e.Parent); w.Write(e.Born); w.Write(e.Died);
             w.Write(e.Times.Length);
@@ -191,6 +232,12 @@ public static class MovieFile
         double duration = r.ReadDouble();
         var looks = new WorldLook[r.ReadInt32()];
         for (int i = 0; i < looks.Length; i++) looks[i] = new WorldLook { Asset = r.ReadString() };
+        return new WorldTrack(ReadEntities(r, looks.Length), looks, duration);
+    }
+
+    /// <summary>Objects written by <see cref="WriteEntities"/>, a look outside <paramref name="looks"/> dropped.</summary>
+    internal static WorldEntity[] ReadEntities(BinaryReader r, int looks)
+    {
         var entities = new WorldEntity[r.ReadInt32()];
         for (int i = 0; i < entities.Length; i++)
         {
@@ -219,12 +266,12 @@ public static class MovieFile
             {
                 e.LookTimes[k] = r.ReadDouble();
                 int look = r.ReadInt32();
-                e.Looks[k] = look >= 0 && look < looks.Length ? look : -1;
+                e.Looks[k] = look >= 0 && look < looks ? look : -1;
             }
             if (e.Parent >= entities.Length || e.Parent < WorldEntity.Environment) e.Parent = -1;
             entities[i] = e;
         }
-        return new WorldTrack(entities, looks, duration);
+        return entities;
     }
 
     private static void WriteKeys(BinaryWriter w, CameraTrack cam)
@@ -275,36 +322,7 @@ public static class MovieFile
             p.Lanes.Add(new Lane { Key = r.ReadString(), Label = r.ReadString(), PeerId = r.ReadInt64() });
 
         int tracks = r.ReadInt32();
-        for (int i = 0; i < tracks; i++)
-        {
-            int n = r.ReadInt32();
-            var times = new double[n];
-            for (int k = 0; k < n; k++) times[k] = r.ReadDouble();
-            var pos = new double[n * 3];
-            for (int k = 0; k < pos.Length; k++) pos[k] = r.ReadDouble();
-            var f = new float[n * stride];
-            for (int k = 0; k < f.Length; k++) f[k] = r.ReadSingle();
-            var num = new long[discrete.Length];
-            var str = new string[discrete.Length];
-            Array.Fill(str, "");
-            for (int k = 0; k < fileNames.Length; k++)
-            {
-                long v = r.ReadInt64();
-                string s = r.ReadString();
-                if (map[k] >= 0) { num[map[k]] = v; str[map[k]] = s; }
-            }
-            int events = r.ReadInt32();
-            var list = new List<DiscreteEvent>(events);
-            for (int k = 0; k < events; k++)
-            {
-                double t = r.ReadDouble();
-                int prop = r.ReadInt32();
-                long v = r.ReadInt64();
-                string s = r.ReadString();
-                if (prop >= 0 && prop < map.Length && map[prop] >= 0) list.Add(new DiscreteEvent(t, map[prop], v, s));
-            }
-            p.Tracks.Add(new ActorTrack(times, pos, f, num, str, list.ToArray()));
-        }
+        for (int i = 0; i < tracks; i++) p.Tracks.Add(ReadTrack(r, map, discrete.Length));
 
         if (version >= 2)
         {

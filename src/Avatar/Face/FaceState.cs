@@ -102,8 +102,20 @@ public static class FaceExpressions
         9 => FaceExpression.Happy,      // arm wave
         29 => FaceExpression.Love,      // rat dance
         < 0 => FaceExpression.Neutral,
-        _ => index % 3 == 0 ? FaceExpression.Joy : index % 3 == 1 ? FaceExpression.Happy : FaceExpression.Wink,
+        // a dance lasts minutes: plain happy, whose eyes still blink and glance (#802: Joy's arcs and
+        // Wink's shut eye held for a whole dance froze them); with music near it follows the song instead
+        _ => FaceExpression.Happy,
     };
+
+    /// <summary>The wheel's first dance (page 2 onwards, <c>HumanMeshBuilder.EmotesPerPage</c>); below it the gestures.</summary>
+    public const int FirstDanceEmote = 10;
+
+    /// <summary>
+    /// Whether emote <paramref name="index"/> is a dance whose face follows the music near it
+    /// (<see cref="DanceFace"/>, #802), as the radio's own dance does: not the gestures, and not the
+    /// rat dance, which keeps its hearts.
+    /// </summary>
+    public static bool FollowsMusic(int index) => index >= FirstDanceEmote && index != 29;
 
     /// <summary>How long a hit's grimace lasts, s.</summary>
     public const float PainSeconds = 0.7f;

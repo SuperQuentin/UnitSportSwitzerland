@@ -219,14 +219,16 @@ public static class UiKit
         GameSettings.Current.Commit();
     }
 
-    public static OptionButton OptionRow(Container into, string name, string[] items, int selected, Action<int> set, string? hint = null)
+    /// <param name="commit">What applies the change; the default <see cref="GameSettings.Commit"/> saves every setting.</param>
+    public static OptionButton OptionRow(Container into, string name, string[] items, int selected, Action<int> set, string? hint = null,
+        Action? commit = null)
     {
         var row = Row(name, hint);
         var option = new OptionButton { CustomMinimumSize = new Vector2(ControlWidth, 36), FocusMode = Control.FocusModeEnum.All, FitToLongestItem = false };
         option.ClipText = true;
         foreach (string item in items) option.AddItem(item);
         option.Selected = selected;
-        option.ItemSelected += i => { set((int)i); GameSettings.Current.Commit(); };
+        option.ItemSelected += i => { set((int)i); (commit ?? GameSettings.Current.Commit)(); };
         row.AddChild(option);
         into.AddChild(row);
         return option;

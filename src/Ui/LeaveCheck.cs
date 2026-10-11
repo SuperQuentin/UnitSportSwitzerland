@@ -35,11 +35,20 @@ public partial class LeaveCheck : Node
 
     private int _hostedPid = -1;
 
+    /// <summary>The longest a leave may hold the main thread between two frames (wall clock): a freeze the player sees.</summary>
+    private const double MaxStallMs = 1000;
+    private ulong _leaveStartUs, _lastFrameUs;
+    private double _maxGapMs;
+
     public static bool Requested() => CmdArgs.Has("--leavecheck");
 
     public override void _Process(double delta)
     {
         if (_failed || _index >= _sessions.Count) return;
+        // wall clock, not delta: the quick tier runs on --fixed-fps, and a stall is real time
+        ulong now = Time.GetTicksUsec();
+        if (!_entering && _lastFrameUs > 0) _maxGapMs = Math.Max(_maxGapMs, (now - _lastFrameUs) / 1000.0);
+        _lastFrameUs = now;
         _wait += delta;
         if (_baselineNodes < 0)
         {
@@ -72,6 +81,8 @@ public partial class LeaveCheck : Node
                     GD.Print("[leavecheck] ok   the host is an admin");
                 }
                 GD.Print($"[leavecheck] in world {_index} ({_sessions[_index].Mode}), {Performance.GetMonitor(Performance.Monitor.ObjectNodeCount)} nodes");
+                _leaveStartUs = _lastFrameUs = Time.GetTicksUsec();
+                _maxGapMs = 0;
                 _shell.LeaveWorld(null);
                 _entering = false;
                 _wait = 0;
@@ -82,6 +93,13 @@ public partial class LeaveCheck : Node
 
         // leaving: wait for the title, then a little for the frees to land
         if (_shell.Top is not TitleScreen && _shell.Top is not MultiplayerScreen && _shell.Top is not SoloScreen) { if (_wait > 30) Fail("never got back to the title"); return; }
+        if (_leaveStartUs > 0)
+        {
+            double total = (Time.GetTicksUsec() - _leaveStartUs) / 1000.0;
+            _leaveStartUs = 0;
+            GD.Print($"[leavecheck] leave {_index}: title after {total:0} ms, longest frame {_maxGapMs:0} ms");
+            if (_maxGapMs > MaxStallMs) { Fail($"leave {_index} froze the main thread for {_maxGapMs:0} ms (over {MaxStallMs:0})"); return; }
+        }
         if (_wait < 2) return;
         Check();
         _index++;
