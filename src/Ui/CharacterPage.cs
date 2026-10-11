@@ -97,9 +97,9 @@ public static class CharacterPage
     /// <summary>The colour rows show their colour.</summary>
     private static void Tint(OptionButton[] options, Appearance a)
     {
-        options[2].AddThemeColorOverride("font_color", a.EyeColour.Lightened(0.2f));
-        options[3].AddThemeColorOverride("font_color", a.SkinColour);
-        options[5].AddThemeColorOverride("font_color", a.HairTint.Lightened(0.15f));
+        options[2].AddThemeColorOverride("font_color", a.EyeColour.Lerp(Colors.White, 0.35f));   // black eyes stay readable
+        options[3].AddThemeColorOverride("font_color", a.SkinColour.Lerp(Colors.White, 0.2f));
+        options[5].AddThemeColorOverride("font_color", a.HairTint.Lerp(Colors.White, 0.25f));
     }
 }
 
@@ -111,7 +111,7 @@ public static class CharacterPage
 public partial class FigurePreview : SubViewportContainer
 {
     private const float TurnSpeed = 0.6f;   // rad/s
-    private static readonly Vector2I Pixels = new(220, 300);
+    private static readonly Vector2I Pixels = new(250, 340);
 
     /// <summary>The figure to show when the preview (re)appears.</summary>
     public Func<Appearance>? Shown;
