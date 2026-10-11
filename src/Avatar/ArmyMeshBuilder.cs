@@ -49,12 +49,13 @@ public static class ArmyMeshBuilder
         Along(m, cg, c.From, c.To, c.Floor - 0.02f, c.Floor, c.Width - 0.1f, Plank);
         foreach (float sx in new[] { -1f, 1f })
         {
-            Along(m, cg, c.From, c.To, c.Floor, boardTop, 0.05f, look.Paint, sx * (half - 0.025f));
-            Along(m, cg, c.From, c.To, boardTop - 0.06f, boardTop, 0.09f, look.Accent, sx * (half - 0.045f));
+            // (#755) the side boards run between the end boards, and stop where their rail begins: no shared outer, end or top faces
+            Along(m, cg, c.From + 0.06f, c.To - 0.06f, c.Floor, boardTop - 0.06f, 0.05f, look.Paint, sx * (half - 0.025f));
+            Along(m, cg, c.From + 0.06f, c.To - 0.06f, boardTop - 0.06f, boardTop, 0.09f, look.Accent, sx * (half - 0.045f));
         }
         Along(m, cg, c.From, c.From + 0.06f, c.Floor, boardTop, c.Width, look.Paint);
         Along(m, cg, c.To - 0.06f, c.To, c.Floor, boardTop, c.Width, look.Paint);
-        Along(m, cg, c.To - 0.06f, c.To - 0.03f, boardTop - 0.08f, boardTop, 0.5f, look.Accent);
+        Along(m, cg, c.To - 0.07f, c.To - 0.06f, boardTop - 0.08f, boardTop - 0.01f, 0.5f, look.Accent);   // (#755) a plate 1 cm proud of the tailgate's front face
 
         // ---- the canvas: a half profile from the board up the wall, over the shoulder to the ridge ----
         float wallX = half - 0.02f;
@@ -219,7 +220,7 @@ public static class ArmyMeshBuilder
         float Z(float at) => cg - at;
         float xw = sx * (bodyW * 0.5f - wall * 0.5f), x = sx * bodyW * 0.5f;
         var leaf = new MeshScratch();
-        Along(leaf, cg, at0 + 0.01f, at1 - 0.01f, floor - 0.12f, belt + 0.04f, wall, look.Paint, xw);
+        Along(leaf, cg, at0 + 0.01f, at1 - 0.01f, floor - 0.12f, belt + 0.04f, wall + 0.01f, look.Paint, xw + sx * 0.005f);   // (#755) outer face 1 cm proud of the sill skirt
         Along(leaf, cg, at1 - 0.32f, at1 - 0.12f, belt - 0.12f, belt - 0.08f, 0.03f, look.Accent, x + sx * 0.015f);
         if (rear) SidePane(leaf, x, Z(at0 + 0.04f), Z(at1 - 0.04f), belt + 0.04f, glassTop);
         else
@@ -295,7 +296,7 @@ public static class ArmyMeshBuilder
         Along(m, cg, DuroWs + 0.1f, DuroBack - 0.1f, 0.5f, 0.56f, s.Width - 0.1f, Trim);   // the step
         // the cowl, the upright windscreen, its pillars, the roof and the headlining
         const float wsTopAt = DuroWs + 0.24f;
-        Along(m, cg, DuroWs - 0.04f, DuroWs + 0.14f, DuroFloor, DuroBelt + 0.03f, bodyW, look.Paint);
+        Along(m, cg, DuroWs - 0.04f, DuroWs + 0.14f, DuroFloor, DuroBelt + 0.045f, bodyW, look.Paint);   // (#755) 1.5 cm over the dash top (belt + 3 cm) it overlaps
         float half = bodyW * 0.5f - 0.1f;
         m.Pane(new[]
         {
@@ -342,21 +343,21 @@ public static class ArmyMeshBuilder
         }
 
         // ---- the bed: boards on the frame, the benches, the canvas over bows ----
-        Skirt(m, s, cg, DuroBedFrom, s.Length, 0.56f, DuroBedFloor, bodyW, look.Paint);
+        Skirt(m, s, cg, DuroBedFrom, s.Length, 0.56f, DuroBedFloor - 0.03f, bodyW, look.Paint);   // (#755) 3 cm under the deck plank, which would share its top face
         var bed = new Canvas(DuroBedFrom, s.Length - 0.12f, DuroBedFloor, 0.5f, 2.35f, 2.65f, bodyW, true, 5);
         seats.AddRange(CanvasBody(m, cg, bed, look));
         // the chassis between the wheels, the spare wheel hung flat under the tail, the rear bumper bar
         Along(m, cg, DuroBedFrom, s.Length - 0.1f, 0.62f, 0.82f, 0.9f, Trim);
         m.Tube(new Vector3(0, 0.6f, Z(5.12f)), new Vector3(0, 0.9f, Z(5.12f)), 0.5f, Rubber, 12);
         m.Tube(new Vector3(0, 0.9f, Z(5.12f)), new Vector3(0, 0.925f, Z(5.12f)), 0.34f, look.Paint, 10);
-        Along(m, cg, s.Length - 0.12f, s.Length, 0.5f, 0.72f, bodyW - 0.2f, look.Lower);
+        Along(m, cg, s.Length - 0.12f, s.Length + 0.02f, 0.5f, 0.72f, bodyW - 0.2f, look.Lower);   // (#755) 2 cm past the bed's rear face it was flush with
         foreach (float sx in new[] { -1f, 1f })
         {
             Lamp(tail, sx * (bodyW * 0.5f - 0.15f), 0.9f, rear - 0.02f, 0.3f, 0.16f, 0.04f, TailLamp);
             Lamp(rev, sx * (bodyW * 0.5f - 0.45f), 0.9f, rear - 0.02f, 0.14f, 0.12f, 0.04f, White);
         }
         Plate(m, 0f, 0.6f, front, 1f, PlateNumber(spec.Kind));
-        Plate(m, 0f, 0.62f, rear, -1f, PlateNumber(spec.Kind));
+        Plate(m, 0f, 0.62f, rear - 0.02f, -1f, PlateNumber(spec.Kind));   // (#755) clear of the bumper's rear face
 
         return new HeavyParts(m.Build(), head.Build(), tail.Build(), rev.Build(), Wheels(s, cg), leaves.ToArray())
         {
@@ -399,8 +400,8 @@ public static class ArmyMeshBuilder
         float wheelTop = 2f * r * 0.97f;
 
         // ---- the front: steel bumper, the upright grille, wings with their round lamps, the flat bonnet ----
-        Along(m, cg, 0f, 0.2f, GSill - 0.04f, 0.62f, bodyW, look.Lower);
-        Along(m, cg, 0.14f, 0.24f, 0.62f, 1.02f, bodyW - 0.6f, look.Accent);
+        Along(m, cg, 0f, 0.2f, GSill - 0.04f, 0.62f, bodyW + 0.02f, look.Lower);   // (#755) 1 cm wider each side than the wings it overlaps
+        Along(m, cg, 0.12f, 0.24f, 0.62f, 1.02f, bodyW - 0.6f, look.Accent);   // (#755) 2 cm proud of the wings' front face (at 0.14)
         Skirt(m, s, cg, 0.14f, GWs, GSill, wheelTop + 0.05f, bodyW, look.Paint);
         Along(m, cg, 0.14f, GWs, wheelTop + 0.05f, GWingTop, bodyW, look.Paint);
         Along(m, cg, 0.24f, GWs, GWingTop, GBelt + 0.03f, bodyW - 0.62f, look.Paint);
@@ -418,7 +419,7 @@ public static class ArmyMeshBuilder
         Skirt(m, s, cg, GWs, GBack, GSill, GFloor, bodyW, look.Lower);
         Along(m, cg, GWs + wall, GBack - wall, GFloor, GFloor + 0.01f, inner * 2f, HeavyCabin.FloorColour);
         const float wsTopAt = GWs + 0.36f;
-        Along(m, cg, GWs - 0.04f, GWs + 0.14f, GFloor, GBelt + 0.03f, bodyW, look.Paint);
+        Along(m, cg, GWs - 0.04f, GWs + 0.14f, GFloor, GBelt + 0.045f, bodyW, look.Paint);   // (#755) 1.5 cm over the dash top (belt + 3 cm)
         float half = bodyW * 0.5f - 0.1f;
         m.Pane(new[]
         {
