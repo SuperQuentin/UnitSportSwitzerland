@@ -808,12 +808,15 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             InstanceCount = at.Count,
         };
         for (int i = 0; i < at.Count; i++) mm.SetInstanceTransform(i, at[i]);
-        return new MultiMeshInstance3D
+        var node = new MultiMeshInstance3D
         {
             Multimesh = mm,
             VisibilityRangeEnd = DrawnM,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
         };
+        // recorded for the movie studio (#782): a wake redraws the tile, so a new instancer is the change
+        Movie.ReplayWatch.Instanced(node);
+        return node;
     }
 
 

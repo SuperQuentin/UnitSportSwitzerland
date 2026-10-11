@@ -8,7 +8,7 @@ namespace UnitSport.Movie;
 public sealed class SoundRing
 {
     private readonly short[] _samples;
-    private int _head, _count;
+    private int _head, _count, _fresh;
 
     public SoundRing(int seconds, int rate)
     {
@@ -31,14 +31,29 @@ public sealed class SoundRing
             _head = (_head + 1) % _samples.Length;
             if (_count < _samples.Length) _count++;
         }
+        _fresh = Math.Min(_fresh + mono.Length, _samples.Length);
         Newest = now;
     }
 
     /// <summary>A gap in the sound (the studio was open): what came before no longer lines up with the clock.</summary>
     public void Clear()
     {
-        _count = 0;
+        _count = _fresh = 0;
         Newest = double.NaN;
+    }
+
+    /// <summary>
+    /// Every sample appended since the last drain, in one piece with nothing lost or repeated (a Record /
+    /// Stop session streaming to disk, #782), and when the first of them was heard.
+    /// </summary>
+    public short[] Drain(out double start)
+    {
+        var o = new short[_fresh];
+        start = Newest - (double)_fresh / Rate;
+        int first = (_head - _fresh + _samples.Length) % _samples.Length;
+        for (int i = 0; i < o.Length; i++) o[i] = _samples[(first + i) % _samples.Length];
+        _fresh = 0;
+        return o;
     }
 
     /// <summary>The samples heard after <paramref name="after"/> (clock time), and when the first of them was.</summary>

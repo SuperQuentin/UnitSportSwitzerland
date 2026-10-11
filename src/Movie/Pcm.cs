@@ -41,12 +41,22 @@ public static class Pcm
     /// <summary>16-bit mono samples as a .wav file.</summary>
     public static void WriteWav(Stream to, ReadOnlySpan<short> samples, int rate)
     {
+        WriteWavHeader(to, samples.Length, rate);
         using var w = new BinaryWriter(to, Encoding.ASCII, leaveOpen: true);
-        int bytes = samples.Length * 2;
+        foreach (short s in samples) w.Write(s);
+    }
+
+    /// <summary>
+    /// The 44-byte header of a 16-bit mono .wav of <paramref name="samples"/> samples: written again
+    /// at the start once a wav streamed to disk is complete (#782).
+    /// </summary>
+    public static void WriteWavHeader(Stream to, long samples, int rate)
+    {
+        using var w = new BinaryWriter(to, Encoding.ASCII, leaveOpen: true);
+        int bytes = (int)Math.Min(samples * 2, int.MaxValue - 36);
         w.Write(Encoding.ASCII.GetBytes("RIFF")); w.Write(36 + bytes); w.Write(Encoding.ASCII.GetBytes("WAVE"));
         w.Write(Encoding.ASCII.GetBytes("fmt ")); w.Write(16); w.Write((short)1); w.Write((short)1);
         w.Write(rate); w.Write(rate * 2); w.Write((short)2); w.Write((short)16);
         w.Write(Encoding.ASCII.GetBytes("data")); w.Write(bytes);
-        foreach (short s in samples) w.Write(s);
     }
 }
