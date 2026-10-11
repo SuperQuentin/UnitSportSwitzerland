@@ -111,6 +111,10 @@ jobs:
         run: |
           echo "JAVA_HOME=$JAVA_HOME"; "$JAVA_HOME/bin/keytool" -version 2>&1 || true
           grep -h java_sdk_path ~/.config/godot/editor_settings-*.tres 2>/dev/null || echo "no editor settings yet (seeded at export)"
+          # Compare with `sha256sum <ks> | cut -c1-16` on the machine that holds the keystore
+          echo "keystore: $(wc -c < "$GODOT_ANDROID_KEYSTORE_RELEASE_PATH") bytes, sha256 $(sha256sum "$GODOT_ANDROID_KEYSTORE_RELEASE_PATH" | cut -c1-16)"
+          case "$KS_PASS" in *$'\r'*|*$'\n'*) echo "password: contains CR/LF";; *) echo "password: no CR/LF";; esac
+          if LC_ALL=C grep -q '[^ -~]' <<< "$KS_PASS"; then echo "password: has non-printable-ASCII characters"; else echo "password: printable ASCII only"; fi
           "$JAVA_HOME/bin/keytool" -list -keystore "$GODOT_ANDROID_KEYSTORE_RELEASE_PATH" -storepass "$KS_PASS" -alias "$KS_USER" 2>&1 | sed -E 's/([0-9A-F]{2}:){8,}[0-9A-F]{2}/<fingerprint>/' || true
           echo "--- all aliases:"; "$JAVA_HOME/bin/keytool" -list -keystore "$GODOT_ANDROID_KEYSTORE_RELEASE_PATH" -storepass "$KS_PASS" 2>&1 | grep -E 'Entry|error|Keystore type' || true
 
