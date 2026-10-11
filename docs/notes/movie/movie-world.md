@@ -3,7 +3,7 @@
 - **What is recorded:** every `MeshInstance3D`, `Light3D` (not the sun) and `GPUParticles3D` under a node `ReplayWatch` knows: a container joins with
   `Movie.ReplayWatch.Container(this)` (each child is one object), a lone object with `ReplayWatch.Object(this)`.
   Joined so far: `Traffic`, `BirdLife`, `VehicleManager`, `DroppedItems`, `CombatManager`, `BrCrates`,
-  `StructureVisuals`, `OccasionCreatures`. A new world system that draws moving things joins with one line.
+  `StructureVisuals`, `OccasionCreatures`, and each `DoorLeaf` as a lone object. A new world system that draws moving things joins with one line.
   - Players and anything under a `FootPlayer` are skipped: they come back as puppets (`movie-studio`).
 - **How** (`WorldRecorder`, ticked by `ReplayRecorder` at 30 Hz): an object is a group whose LV95 pose is kept; each
   mesh is a part whose pose is kept in the group's frame. A pose is written only when it moved (1 mm, ~0.05°),
@@ -35,5 +35,5 @@
   the sky there (`DayNight.HourOverride`, applied at once even paused), sets the sea state and holds the snow (`OccasionPrecip.SnowfallOverride`); leaving the clip or
   the studio gives the game's own back.
 - A command-line launch on the real map starts in the fly camera: no player body, so no actor clip (correct).
-- **Not yet:** doors (many and static: to measure first),
-  MultiMesh-drawn things (the dormant fleet stays live). Particles replay their emitting state, not their exact puffs.
+- **Not yet** (#782): MultiMesh-drawn things (the dormant fleet stays live: a car woken and driven off after the
+  recording is missing from it before its wake), and sessions streamed to disk instead of held in memory. Particles replay their emitting state, not their exact puffs.
