@@ -219,6 +219,7 @@ public partial class GameShell : Node
                     if (CmdArgs.Has("--moviekeys")) Callable.From(studio.ScreenshotKeys).CallDeferred();
                     if (CmdArgs.Double("--movieexport", 1) is { } exportSeconds)
                         GetTree().CreateTimer(1.0, processAlways: true).Timeout += () => studio.ExportForCheck(exportSeconds);
+                    if (CmdArgs.Has("--movieeditcheck")) GetTree().CreateTimer(1.0, processAlways: true).Timeout += studio.EditCheck;
                     if (CmdArgs.Has("--moviewipe")) GetTree().CreateTimer(0.5, processAlways: true).Timeout += studio.ScreenshotWipe;
                     if (CmdArgs.Has("--movieshots")) GetTree().CreateTimer(0.5, processAlways: true).Timeout += studio.ScreenshotShots;
                 };

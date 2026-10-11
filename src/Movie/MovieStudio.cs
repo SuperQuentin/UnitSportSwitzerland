@@ -64,10 +64,20 @@ public partial class MovieStudio : Screen
     private Control _chrome = null!, _backdrop = null!;
     private Gpx.VideoExporter? _exporter;
     private Action<bool, string>? _exportDone;
-    private static readonly Vector2I[] ExportSizes = { new(1280, 720), new(1920, 1080), new(2560, 1440), new(3840, 2160) };
+    // the screen's own size, or a share of it (#786): what the player sees, never a size it does not have
+    private static readonly (string Name, float Scale)[] ExportQualities = { ("Full", 1f), ("Three quarters", 0.75f), ("Half", 0.5f), ("Quarter", 0.25f) };
     private static readonly int[] ExportRates = { 24, 30, 60 };
-    private int _exportSize = 1, _exportRate = 1;
+    private int _exportSize = 0, _exportRate = 1;
+
+    /// <summary>The video size for quality <paramref name="q"/>: the screen's size times its share, even numbers for x264.</summary>
+    private Vector2I ExportSize(int q)
+    {
+        var screen = GetWindow().Size;
+        float s = ExportQualities[Math.Clamp(q, 0, ExportQualities.Length - 1)].Scale;
+        return new Vector2I(Math.Max(2, (int)(screen.X * s) / 2 * 2), Math.Max(2, (int)(screen.Y * s) / 2 * 2));
+    }
     private PopupMenu? _exportMenu;
+    private Button _deleteButton = null!;
     // the Shots screen (#777): the library, the picked shot's settings, the stills
     private ShotLibrary _library = null!;
     private ShotInspector _inspector = null!;
@@ -293,7 +303,7 @@ public partial class MovieStudio : Screen
         Tool(edits, Icons.Scissors, "Split", "Cut the selected clip at the playhead, or every lane if it is not under it (S)", Split);
         Tool(edits, Icons.Scissors, "All", "Cut every clip under the playhead (Shift+S); Ctrl+click a clip cuts it there", CutAll);
         Tool(edits, Icons.Copy, "Duplicate", "A copy after it (Ctrl+D)", Duplicate);
-        Tool(edits, Icons.Trash, "Delete", "Remove the selected clip or camera key (Del)", Delete);
+        _deleteButton = Tool(edits, Icons.Trash, "Delete", "Remove the selected clip or camera key (Del)", Delete);
         Tool(edits, Icons.Wand, "Auto", "Cut the sequence on the beats from the picked shot's group (all shots if it has none); edit it after", AutoDirect);
         edits.AddChild(UiKit.Spacer(w: 10));
         edits.AddChild(UiKit.Text("Zoom", UiTheme.FontSmall, UiTheme.TextDim));
@@ -521,9 +531,13 @@ public partial class MovieStudio : Screen
         }
     }
 
+    /// <summary>A text field of the editor has the keyboard (a shot's name, a group, step values): its keys are its own.</summary>
+    internal static bool Typing(Node node) => node.GetViewport()?.GuiGetFocusOwner() is LineEdit or TextEdit;
+
     public override void _Input(InputEvent e)
     {
-        if (Modal.Current != null || UiFocus.TextEntryActive || !Visible) return;
+        // UiFocus.TextEntryActive is set by every open menu page, this editor included: only real typing stops the keys
+        if (Modal.Current != null || Typing(this) || !Visible) return;
         if (_camera.Flying) { FlyingInput(e); return; }
         if (e is InputEventKey { Pressed: true } k)
         {
@@ -876,10 +890,11 @@ public partial class MovieStudio : Screen
     {
         _exportMenu?.QueueFree();
         var menu = new PopupMenu { HideOnCheckableItemSelection = false };
-        menu.AddSeparator("Size");
-        for (int i = 0; i < ExportSizes.Length; i++)
+        menu.AddSeparator("Quality (the screen's size)");
+        for (int i = 0; i < ExportQualities.Length; i++)
         {
-            menu.AddRadioCheckItem($"{ExportSizes[i].X} × {ExportSizes[i].Y}", 100 + i);
+            var size = ExportSize(i);
+            menu.AddRadioCheckItem($"{ExportQualities[i].Name}  ({size.X} × {size.Y})", 100 + i);
             menu.SetItemChecked(menu.ItemCount - 1, i == _exportSize);
         }
         menu.AddSeparator("Frame rate");
@@ -894,7 +909,7 @@ public partial class MovieStudio : Screen
         {
             if (id >= 200) _exportRate = (int)id - 200;
             else if (id >= 100) _exportSize = (int)id - 100;
-            else { menu.Hide(); StartExport(ExportRates[_exportRate], ExportSizes[_exportSize]); return; }
+            else { menu.Hide(); StartExport(ExportRates[_exportRate], ExportSize(_exportSize)); return; }
             for (int i = 0; i < menu.ItemCount; i++)
             {
                 int item = menu.GetItemId(i);
@@ -923,7 +938,7 @@ public partial class MovieStudio : Screen
         string name = MovieSession.Safe($"{p.Name} {p.Sequences[p.ActiveSequence].Name} {DateTime.Now:yyyy-MM-dd HH-mm-ss}");
         string dir = ProjectSettings.GlobalizePath($"{MovieSession.Folder}/export/{name}");
         System.IO.Directory.CreateDirectory(dir);
-        var source = new MovieExportSource(this, _stage, _camera, dir, size ?? ExportSizes[1]);
+        var source = new MovieExportSource(this, _stage, _camera, dir, size ?? ExportSize(0));
         if (!source.HasContent)
         {
             Modal.Inform(this, "Nothing to export", "The sequence being edited is empty: record something, or set where it starts and ends.");
@@ -989,18 +1004,53 @@ public partial class MovieStudio : Screen
             p.Camera.Target = 0;
             p.Camera.Smoothing = 0.3f;
         }
-        bool started = StartExport(30, new Vector2I(1280, 720), (ok, video) =>
+        var quarter = ExportSize(3);
+        bool started = StartExport(30, quarter, (ok, video) =>
         {
             int frames = ok ? CountFrames(video) : -1, want = (int)Math.Ceiling(seconds * 30);
             bool sound = ok && HasSound(video);
             bool right = ok && Math.Abs(frames - want) <= 1;
             var dims = ok ? FrameSize(video) : "";
-            right &= dims == "1280x720";
-            GD.Print($"[movieexport] {video}: {frames} frames (want {want}) of {dims} (want 1280x720), sound {(sound ? "yes" : "no")} {(right ? "ok" : "WRONG")}");
+            string wantDims = $"{quarter.X}x{quarter.Y}";
+            right &= dims == wantDims;
+            GD.Print($"[movieexport] {video}: {frames} frames (want {want}) of {dims} (want {wantDims}, a quarter of the screen), sound {(sound ? "yes" : "no")} {(right ? "ok" : "WRONG")}");
             GD.Print(right ? "[movieexport] RESULT: ok" : "[movieexport] RESULT: FAILED");
             GetTree().Quit(right ? 0 : 1);
         });
         if (!started) { GD.Print("[movieexport] RESULT: FAILED (did not start)"); GetTree().Quit(1); }
+    }
+
+    /// <summary>
+    /// <c>--movieeditcheck</c>: the editor's own controls, driven as a person would. The newest clip picked and the
+    /// Delete button pressed must take it away; a Space key press must start the movie playing. RESULT printed.
+    /// </summary>
+    public async void EditCheck()
+    {
+        var p = MovieSession.Project;
+        int failures = 0;
+        SetMode(false);
+        var last = p.Clips.MaxBy(c => c.Start);
+        if (last == null) { GD.Print("[movieeditcheck] RESULT: FAILED (no clip)"); GetTree().Quit(1); return; }
+        int before = p.Clips.Count;
+        _timeline.Select(last.Id);
+        _deleteButton.EmitSignal(BaseButton.SignalName.Pressed);
+        bool deleted = p.Clips.Count == before - 1 && p.Find(last.Id) == null;
+        GD.Print($"[movieeditcheck] Delete button: {before} clips -> {p.Clips.Count} {(deleted ? "ok" : "WRONG")}");
+        if (!deleted) failures++;
+
+        _stage.Playing = false;
+        _stage.Seek(0);
+        // the keyboard focus on a button, as after a click: Space must still play, not press the button
+        _deleteButton.GrabFocus();
+        Input.ParseInputEvent(new InputEventKey { PhysicalKeycode = Key.Space, Keycode = Key.Space, Pressed = true });
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        bool playing = _stage.Playing;
+        GD.Print($"[movieeditcheck] Space: {(playing ? "playing" : "NOT PLAYING")} {(playing ? "ok" : "WRONG")}");
+        if (!playing) failures++;
+        Input.ParseInputEvent(new InputEventKey { PhysicalKeycode = Key.Space, Keycode = Key.Space, Pressed = false });
+        GD.Print(failures == 0 ? "[movieeditcheck] RESULT: ok" : $"[movieeditcheck] RESULT: FAILED ({failures})");
+        GetTree().Quit(failures == 0 ? 0 : 1);
     }
 
     private static int CountFrames(string video)

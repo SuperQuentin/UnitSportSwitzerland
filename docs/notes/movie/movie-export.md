@@ -1,7 +1,8 @@
 # Exporting the movie to a video (#786)
 
-- **Export** (the editor's top bar) opens a menu: the size (1280×720, 1920×1080 by default, 2560×1440, 3840×2160)
-  and the frame rate (24, 30 by default, 60), then *Render the sequence*. It renders the **active sequence**, from its in to its out (or the movie's end), to
+- **Export** (the editor's top bar) opens a menu: the quality, a share of the screen's own size (Full by default,
+  Three quarters, Half, Quarter; even numbers for x264) and the frame rate (24, 30 by default, 60), then *Render the
+  sequence*. It renders the **active sequence**, from its in to its out (or the movie's end), to
   `user://movies/export/<movie> <sequence> <date time>/run.mp4`, with `sound.wav` beside it.
 - It is the GPX replay's exporter (`Gpx/VideoExporter`): frame-exact steps, each frame waiting for the terrain round
   the camera (`ChunkManager.SettledNear`), raw frames piped to ffmpeg (x264, CRF 18). It films anything behind

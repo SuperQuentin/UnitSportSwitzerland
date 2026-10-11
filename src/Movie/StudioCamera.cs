@@ -221,7 +221,7 @@ public partial class StudioCamera : Camera3D
         // the right mouse button held on the view: W A S D, Q E fly, as in an editor's viewport. The keys
         // are read raw: the studio holds the movement actions for its menus.
         if (Steering && !Input.IsMouseButtonPressed(MouseButton.Right)) Steering = false;
-        if (Steering && !UiFocus.TextEntryActive)
+        if (Steering && !MovieStudio.Typing(this))
         {
             var move = new Vector3(
                 Key(Godot.Key.D) - Key(Godot.Key.A),
