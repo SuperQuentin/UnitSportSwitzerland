@@ -13,6 +13,8 @@
 #   guard_watch <pid> [min_free_mb]    background RAM watchdog for a process you started yourself
 #                                      (not through guard_run): kills that PID's tree, and only it,
 #                                      when free RAM falls under the floor. Prints the watchdog's PID.
+#                                      `guard_watch $$` is safe: the script's children go, then the
+#                                      script gets a TERM (exit 143, traps run), never a silent exit 0.
 # RAM watchdog: free RAM is read every GUARD_MEM_EVERY (2) s from /proc/meminfo (Git Bash maps it
 # to Windows' free physical memory, ~30 ms); under GUARD_MIN_FREE_MB (1500) the run is killed
 # before Windows or WSL run out of memory and take everything else down with them.
@@ -208,15 +210,30 @@ guard_run() {
 guard_watch() {
   local target=$1 floor=${2:-$GUARD_MIN_FREE_MB}
   (
+    local me c
+    me=$(exec sh -c 'echo $PPID')   # this watchdog's own PID (no BASHPID in bash 3.2)
     while kill -0 "$target" 2>/dev/null; do
       free=$(guard_free_mb)
       if [ "$free" -lt "$floor" ]; then
         echo "[guard] only ${free} MB free (floor ${floor} MB): killing PID $target and its children" >&2
+        # a TERM, then its children, never this watchdog (target may be the script that started it, $$):
+        # a script dies 143 with its traps run, not killed outright with exit 0 and no RESULT line. Bash
+        # holds a trapped TERM until its foreground child ends, so the TERM goes first (else the script
+        # would run on past a killed child to its own verdict), and again each second for a child started
+        # since; killed outright only as a last resort
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+          kill -TERM "$target" 2>/dev/null
+          for c in $(ps -ef 2>/dev/null | awk -v p="$target" -v me="$me" 'NR > 1 && $3 == p && $2 != me { print $2 }'); do
+            _guard_kill_tree "$c"
+          done
+          sleep 1
+          kill -0 "$target" 2>/dev/null || exit 0
+        done
         _guard_kill_tree "$target"
         exit 0
       fi
       sleep "$GUARD_MEM_EVERY"
     done
-  ) > /dev/null 2>&1 &   # never hold the caller's $(...) pipe open, or `w=$(guard_watch ...)` hangs
+  ) > /dev/null &   # never hold the caller's $(...) pipe open, or `w=$(guard_watch ...)` hangs
   echo $!
 }

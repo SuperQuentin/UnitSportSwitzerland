@@ -591,6 +591,9 @@ public partial class ChatManager : Node
     /// <summary>Server: the Battle Royale mode, for /br (#177).</summary>
     public BattleRoyale.BrManager? BattleRoyale { get; set; }
 
+    /// <summary>Server: the spawn and teleport rule (#799); <c>/city</c> asks it.</summary>
+    public Arrival? Arrival { get; set; }
+
     /// <summary>For races: the place index (air courses to a town), a player by name, a private line.</summary>
     public PlaceIndex? Places => _places;
     public long PeerByName(string name) => _registry?.FindByName(name)?.PeerId ?? -1;
@@ -929,6 +932,11 @@ public partial class ChatManager : Node
         if (BattleRoyale?.Playing(sender) == true)
         {
             ReplyTo(sender, "No teleporting out of a Battle Royale. /br leave to give up.", ChatKind.Error);
+            return;
+        }
+        if (Arrival is { FreeTeleport: false } && !IsAdmin(sender))
+        {
+            ReplyTo(sender, "This server does not allow teleporting. Walk, ride or fly there.", ChatKind.Error);
             return;
         }
         if (query.Length == 0)

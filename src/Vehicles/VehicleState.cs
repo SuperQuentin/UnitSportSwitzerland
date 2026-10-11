@@ -47,7 +47,10 @@ public readonly record struct VehicleState(
     string Carrier = "",
     int CarrierSection = 0,
     Vector3 CarrierPos = default,
-    float CarrierYaw = 0f)
+    float CarrierYaw = 0f,
+    // which vehicle this is to the object containers (#689): given by the server when it first
+    // enters the world and kept through every sleep, wake and restart; 0 = not persisted
+    long Oid = 0)
 {
     /// <summary>The ride this state is: a car with its preset and parts, a truck with its trailer, a lone trailer.</summary>
     public Rideable? CreateRide()
@@ -110,6 +113,7 @@ public readonly record struct VehicleState(
         ["radio"] = Radio,
         ["cd"] = Cd,
         };
+        if (Oid != 0) d["oid"] = Oid;
         if (Carrier != "")
         {
             d["carrier"] = Carrier;
@@ -152,7 +156,8 @@ public readonly record struct VehicleState(
         d.TryGetValue("carrier", out var carrier) ? carrier.AsString() : "",
         d.TryGetValue("csec", out var csec) ? Mathf.Clamp(csec.AsInt32(), 0, 15) : 0,
         d.TryGetValue("cpos", out var cpos) ? cpos.AsVector3().LimitLength(100f) : default,
-        d.TryGetValue("cyaw", out var cyaw) ? cyaw.AsSingle() : 0f);
+        d.TryGetValue("cyaw", out var cyaw) ? cyaw.AsSingle() : 0f,
+        d.TryGetValue("oid", out var oid) ? oid.AsInt64() : 0);
 
     /// <summary>Parked in a hold (#418): carried by <see cref="Carrier"/>.</summary>
     public bool InHold => Carrier != "";
@@ -165,4 +170,7 @@ public readonly record struct VehicleState(
 
     /// <summary>The server's wall clock, which <c>SpawnedAt</c> is stamped by and read against on every peer (#452).</summary>
     public static double Now => Net.ClockSync.ServerUnixNow;
+
+    /// <summary>A fresh <see cref="Oid"/>: random 63 bits, so nothing has to be counted across restarts.</summary>
+    public static long NewOid() => Random.Shared.NextInt64(1, long.MaxValue);
 }

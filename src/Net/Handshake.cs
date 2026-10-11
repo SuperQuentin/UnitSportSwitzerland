@@ -58,8 +58,9 @@ public partial class Handshake : Node
     /// nodes and RPCs, PassengerService auger offers, ShopService.RequestDeliver's door, PlacedKind.FarmStand
     /// 11, ShopType.FarmCoop 12, items 300-340, HeavyCatalog 102-103, TrailerCatalog 6-9 and the boat
     /// trailers it builds on (#463).
+    /// 33: World/Arrival (Rules: the server's spawn point and teleport rule) (#799).
     /// </summary>
-    public const int Protocol = 32;
+    public const int Protocol = 33;
 
     /// <summary>How long either side waits for the other's half of the check.</summary>
     public const double WaitSeconds = 10;

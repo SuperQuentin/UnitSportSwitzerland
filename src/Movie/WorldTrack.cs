@@ -147,6 +147,11 @@ public sealed class WorldTrack
     public readonly WorldEntity[] Entities;
     public readonly WorldLook[] Looks;
     public readonly double Duration;
+    /// <summary>
+    /// The recorder's id of each entity, on a Record / Stop session's pieces only (#782): what joins one
+    /// piece's objects to the next one's. Their looks are then the recorder's own indices.
+    /// </summary>
+    public int[]? Ids { get; init; }
 
     public WorldTrack(WorldEntity[] entities, WorldLook[] looks, double duration)
     {
@@ -257,9 +262,10 @@ public sealed class WorldRing
     /// <summary>
     /// The world from just after <paramref name="after"/> (absolute time) to <paramref name="now"/>,
     /// as a track whose time 0 is <paramref name="start"/>; null when nothing was recorded then.
-    /// Allocates: it runs on a grab, never per frame.
+    /// Allocates: it runs on a grab, never per frame. <paramref name="raw"/> (a session's piece, #782)
+    /// keeps the recorder's ids (<see cref="WorldTrack.Ids"/>) and look indices, and no looks.
     /// </summary>
-    public WorldTrack? Slice(double after, double now, IReadOnlyList<WorldLook> looks, out double start)
+    public WorldTrack? Slice(double after, double now, IReadOnlyList<WorldLook> looks, out double start, bool raw = false)
     {
         start = Math.Max(after, Math.Max(_oldest, _first));
         if (double.IsNaN(_first) || now - start < MovieProject.MinLength) return null;
@@ -303,6 +309,7 @@ public sealed class WorldRing
         int Remap(int look)
         {
             if (look < 0 || look >= looks.Count) return -1;
+            if (raw) return look;
             if (!lookIndex.TryGetValue(look, out int i)) { i = usedLooks.Count; lookIndex[look] = i; usedLooks.Add(looks[look]); }
             return i;
         }
@@ -323,7 +330,7 @@ public sealed class WorldRing
                 Looks = b.Looks.Select(Remap).ToArray(),
             };
         }
-        return new WorldTrack(entities, usedLooks.ToArray(), now - start);
+        return new WorldTrack(entities, usedLooks.ToArray(), now - start) { Ids = raw ? ids.ToArray() : null };
     }
 
     private sealed class Builder

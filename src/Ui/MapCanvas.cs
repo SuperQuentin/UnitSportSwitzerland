@@ -23,6 +23,11 @@ public partial class MapCanvas : Control
     /// <summary>What a left-drag does. Shown as buttons in the panel, cycled with <c>map_tool</c>.</summary>
     public enum Tool
     {
+        /// <summary>
+        /// The default (#799), as on any web map: drag moves the map, a click puts the marker down.
+        /// Nothing is selected by accident.
+        /// </summary>
+        Move,
         /// <summary>Drag a rectangle; it is applied when the button comes up.</summary>
         Rectangle,
         /// <summary>Paint tiles under the pointer as it moves.</summary>
@@ -53,9 +58,15 @@ public partial class MapCanvas : Control
     private int _zoom = 0;
     private int PxPerKm => ZoomSteps[_zoom];
 
-    private Tool _tool = Tool.Rectangle;
+    private Tool _tool = Tool.Move;
     private TileId? _anchor;
     private bool _panning;
+    // the Move tool's left press: where it went down, and whether it has turned into a drag
+    private Vector2? _pressAt;
+    private bool _dragging;
+    // the last pointer position seen: a pan moves by the difference, not by Relative, which the VR
+    // panel's pointer (XR/XrUi) does not fill in
+    private Vector2 _lastPointer;
     private bool _painting;
     private TileId? _hovered;
 
@@ -93,12 +104,18 @@ public partial class MapCanvas : Control
         // Nearest, not linear: a selected tile has to read as a crisp 1 km square rather than a
         // blurred blob, and the hard edges suit the game's look anyway.
         TextureFilter = TextureFilterEnum.Nearest;
+        MouseDefaultCursorShape = CursorShape.PointingHand;
     }
 
     public Tool CurrentTool
     {
         get => _tool;
-        set { _tool = value; QueueRedraw(); }
+        set
+        {
+            _tool = value;
+            MouseDefaultCursorShape = value == Tool.Move ? CursorShape.PointingHand : CursorShape.Cross;
+            QueueRedraw();
+        }
     }
 
     /// <summary>The tile under the pointer, for the panel's read-out.</summary>
@@ -117,7 +134,31 @@ public partial class MapCanvas : Control
     {
         _font = UiTheme.Font;
         Resized += QueueRedraw;
+
+        // + and - on the map itself: the zoom a VR hand (no wheel, the shoulders are its trigger),
+        // a touchpad or a newcomer can find without being told
+        var zoom = UiKit.VBox(6);
+        zoom.MouseFilter = MouseFilterEnum.Ignore;   // only the buttons take a click; around them is still the map
+        zoom.AnchorLeft = zoom.AnchorRight = 1;
+        zoom.OffsetLeft = -56;
+        zoom.OffsetRight = -12;
+        zoom.OffsetTop = 12;
+        foreach (var (label, steps, tip) in new[] { ("+", +1, "Zoom in"), ("−", -1, "Zoom out") })
+        {
+            var button = UiKit.Button(label, minWidth: 44);
+            button.CustomMinimumSize = new Vector2(44, 44);
+            button.AddThemeFontSizeOverride("font_size", 22);
+            button.TooltipText = tip;
+            button.FocusMode = FocusModeEnum.None;   // the map keeps the keyboard and the stick
+            button.Pressed += () => Zoom(steps);
+            zoom.AddChild(button);
+        }
+        AddChild(zoom);
+        ZoomButtons = zoom;
     }
+
+    /// <summary>The on-map + and − buttons (for <c>--mapcheck</c>).</summary>
+    public Control? ZoomButtons { get; private set; }
 
     /// <summary>Centres the view on a point, optionally zooming in to it (a search result).</summary>
     public void FocusOn(double e, double n, int? pxPerKm = null)
@@ -363,21 +404,26 @@ public partial class MapCanvas : Control
         DrawRect(rect, _tool == Tool.Erase ? UiTheme.Bad : UiTheme.Amber, filled: false, width: 1.5f);
     }
 
+    /// <summary>A pin: a dot on the spot with a stem and a head above it, so it reads at a glance as "here".</summary>
     private void DrawLandingMarker()
     {
         if (Landing is not { } landing) return;
         var at = ToScreen(landing.E, landing.N);
-        DrawLine(at - new Vector2(0, 11), at + new Vector2(0, 11), new Color(0, 0, 0, 0.7f), 3.5f);
-        DrawLine(at - new Vector2(11, 0), at + new Vector2(11, 0), new Color(0, 0, 0, 0.7f), 3.5f);
-        DrawLine(at - new Vector2(0, 10), at + new Vector2(0, 10), UiTheme.Amber, 1.6f);
-        DrawLine(at - new Vector2(10, 0), at + new Vector2(10, 0), UiTheme.Amber, 1.6f);
-        DrawArc(at, 7, 0, Mathf.Tau, 24, UiTheme.Amber, 1.6f);
+        var head = at - new Vector2(0, 22);
+        var shadow = new Color(0, 0, 0, 0.7f);
+        DrawCircle(at, 4.5f, shadow);
+        DrawCircle(at, 3f, UiTheme.Amber);
+        DrawLine(at, head, shadow, 4f);
+        DrawLine(at, head, UiTheme.Amber, 2f);
+        DrawCircle(head, 9f, shadow);
+        DrawCircle(head, 7.5f, UiTheme.Amber);
+        DrawCircle(head, 3f, new Color(0.08f, 0.06f, 0.02f));
     }
 
     /// <summary>The tile under the pointer, outlined, so a click is never a guess.</summary>
     private void DrawHoverCell()
     {
-        if (_hovered is not { } t || _anchor != null) return;
+        if (_hovered is not { } t || _anchor != null || _tool == Tool.Move) return;
         var a = ToScreen(t.E * 1000.0, (t.N + 1) * 1000.0);
         var b = ToScreen((t.E + 1) * 1000.0, t.N * 1000.0);
         DrawRect(new Rect2(a, b - a), new Color(1, 1, 1, 0.55f), filled: false, width: 1.2f);
@@ -403,10 +449,14 @@ public partial class MapCanvas : Control
 
     private void OnMotion(InputEventMouseMotion motion)
     {
-        if (_panning)
+        var moved = motion.Position - _lastPointer;
+        _lastPointer = motion.Position;
+        // the Move tool: a press that travels more than a few pixels is a drag, not a click
+        if (_pressAt is { } down && !_dragging && motion.Position.DistanceTo(down) > 5) _dragging = true;
+        if (_panning || _dragging)
         {
-            _centreE -= motion.Relative.X / (double)PxPerKm * 1000.0;
-            _centreN += motion.Relative.Y / (double)PxPerKm * 1000.0;
+            _centreE -= moved.X / (double)PxPerKm * 1000.0;
+            _centreN += moved.Y / (double)PxPerKm * 1000.0;
             QueueRedraw();
             return;
         }
@@ -420,6 +470,7 @@ public partial class MapCanvas : Control
 
     private void OnButton(InputEventMouseButton button)
     {
+        _lastPointer = button.Position;
         switch (button.ButtonIndex)
         {
             case MouseButton.WheelUp when button.Pressed:
@@ -435,24 +486,27 @@ public partial class MapCanvas : Control
                 GrabFocus();
                 _hovered = TileAt(button.Position);
                 if (button.Pressed) StartLeft(button);
-                else FinishLeft();
+                else FinishLeft(button.Position);
                 break;
         }
     }
 
     /// <summary>
-    /// A left press: place the landing marker when this map is picking one and Shift is held,
-    /// otherwise start the current tool. Shift is what keeps "where do I land" from fighting
-    /// "what do I download" on the one map that does both.
+    /// A left press. The Move tool waits to see whether it is a click (the marker goes there, on
+    /// release) or a drag (the map moves). A drawing tool starts drawing, unless Shift is held, which
+    /// still puts the marker down without leaving the tool.
     /// </summary>
     private void StartLeft(InputEventMouseButton button)
     {
+        if (_tool == Tool.Move)
+        {
+            _pressAt = button.Position;
+            _dragging = false;
+            return;
+        }
         if (Landing != null && button.ShiftPressed)
         {
-            var (e, n) = ToWorld(button.Position);
-            Landing = (e, n);
-            LandingMoved?.Invoke(e, n);
-            QueueRedraw();
+            PlaceMarker(button.Position);
             return;
         }
 
@@ -468,8 +522,24 @@ public partial class MapCanvas : Control
         QueueRedraw();
     }
 
-    private void FinishLeft()
+    private void PlaceMarker(Vector2 at)
     {
+        if (Landing == null) return;
+        var (e, n) = ToWorld(at);
+        Landing = (e, n);
+        LandingMoved?.Invoke(e, n);
+        QueueRedraw();
+    }
+
+    private void FinishLeft(Vector2? at = null)
+    {
+        if (_pressAt is { } down)
+        {
+            if (!_dragging) PlaceMarker(at ?? down);
+            _pressAt = null;
+            _dragging = false;
+            return;
+        }
         if (_anchor is { } anchor && _hovered is { } to)
         {
             _selection.AddRect(anchor, to, remove: _tool == Tool.Erase);
@@ -532,14 +602,22 @@ public partial class MapCanvas : Control
             QueueRedraw();
         }
 
-        if (Input.IsActionJustPressed(PlayerInput.MapZoomIn)) ZoomAt(Size / 2, +1);
-        if (Input.IsActionJustPressed(PlayerInput.MapZoomOut)) ZoomAt(Size / 2, -1);
+        // in VR the triggers press the shoulders too, so every pointer click would zoom: + and - instead
+        if (!XR.XrSession.Active)
+        {
+            if (Input.IsActionJustPressed(PlayerInput.MapZoomIn)) ZoomAt(Size / 2, +1);
+            if (Input.IsActionJustPressed(PlayerInput.MapZoomOut)) ZoomAt(Size / 2, -1);
+        }
 
         if (Input.IsActionJustPressed("ui_accept"))
         {
-            // Enter / pad A: the centre tile, or close the rectangle a first press opened
+            // Enter / pad A: the marker on the centre, the centre tile, or close the rectangle a first press opened
             var centre = TileAt(Size / 2);
-            if (_tool == Tool.Rectangle)
+            if (_tool == Tool.Move)
+            {
+                PlaceMarker(Size / 2);
+            }
+            else if (_tool == Tool.Rectangle)
             {
                 if (_anchor == null) { _anchor = centre; _hovered = centre; }
                 else { _hovered = centre; FinishLeft(); }

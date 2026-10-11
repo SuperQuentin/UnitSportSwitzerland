@@ -705,6 +705,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Items.RadioPanelProbe.Requested) AddChild(new Items.RadioPanelProbe(() => LocalPlayer));
         if (Player.EmoteWheelProbe.Requested) AddChild(new Player.EmoteWheelProbe(() => LocalPlayer));
         if (Items.SparkleProbe.Requested) AddChild(new Items.SparkleProbe(() => LocalPlayer));
+        if (Items.RadioFocusProbe.Requested) AddChild(new Items.RadioFocusProbe(() => LocalPlayer));
         if (Items.BeatFieldProbe.Requested) AddChild(new Items.BeatFieldProbe(() => LocalPlayer));
         if (World.WaterCheck.Requested) AddChild(new World.WaterCheck(() => LocalPlayer));
         if (World.SignalNetProbe.Requested) AddChild(new World.SignalNetProbe(server: false));
@@ -729,6 +730,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             || Items.ShotgunProbe.Role != null || Items.PlantProbe.Role != null || Items.DropCheck.Requested
             || Items.PvpProbe.Role != null || BattleRoyale.BrProbe.Role != null || Items.InteractCheck.Requested || Items.RadioPanelProbe.Requested
             || Items.BonkCheck.Requested || Build.BuildProbe.Requested || Build.BuildNetProbe.Role != null || Build.GadgetProbe.Requested || Build.GadgetNetProbe.Role != null || BattleRoyale.PrefabProbe.Requested || Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null || Loot.ShopProbe.Role != null || Player.SwimCheck.Requested || Items.Fishing.FishProbe.Requested || Items.Fishing.FishNetProbe.Role != null || Player.SwimNetProbe.Role != null || Player.BoatNetProbe.Role != null || Player.SteamerNetProbe.Role != null || Vehicles.ParkingNetProbe.Mode() != null
+            || World.ContainerNetProbe.Role != null
             || Player.TractorNetProbe.Role != null || Farming.FarmProbe.Requested || Farming.HandFarmCheck.Requested || Farming.FarmNetProbe.Role != null || Farming.SellNetProbe.Role != null || Farming.CoopNetProbe.Role != null
             ? Items.Inventory.Scratch() : Items.Inventory.Load();
         if (Crafting.CampfireProbe.Requested || Crafting.CampfireNetProbe.Role != null) Crafting.CampfireProbe.Stock(inventory);
@@ -778,6 +780,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         // waking a dormant car over the network (#499), checked on the remote peer
         if (Vehicles.ParkingNetProbe.Mode() is { } parkingNet && _chunks.Origin is { } parkingOrigin)
             AddChild(new Vehicles.ParkingNetProbe(parkingNet, _chunks, parkingOrigin));
+        if (World.ContainerNetProbe.Role is { } containerNet && _chunks.Origin is { } containerOrigin)
+            AddChild(new World.ContainerNetProbe(containerNet, _chunks, containerOrigin));
         if (BattleRoyale.PrefabProbe.Requested) AddChild(new BattleRoyale.PrefabProbe());
         if (BattleRoyale.BrProbe.Role != null) AddChild(new BattleRoyale.BrProbe(items));
         if (Crafting.CampfireProbe.Requested) AddChild(new Crafting.CampfireProbe(items));
@@ -790,6 +794,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (World.ClockNetProbe.Role != null) AddChild(new World.ClockNetProbe(items));
         if (SpeedNetProbe.Role != null) AddChild(new SpeedNetProbe(items));
         if (Net.SleeperProbe.Role != null) AddChild(new Net.SleeperProbe(items));
+        if (Net.ArrivalProbe.Role != null) AddChild(new Net.ArrivalProbe(items));
         if (Net.TransferProbe.Role != null) AddChild(new Net.TransferProbe(items));
         if (Player.BoatNetProbe.Role != null) AddChild(new Player.BoatNetProbe(items));
         if (Player.SteamerNetProbe.Role != null) AddChild(new Player.SteamerNetProbe(items));
@@ -849,6 +854,12 @@ public partial class ClientWorld : Node3D, IOriginContainer
         Items.PlacedObjects.Create(this, origin, server: false, networked: Launch.Networked);
         // players who left, asleep where they were, and waking at our own (#644)
         Net.Sleepers.Create(this, origin, server: false).Teleporter = _teleporter;
+        // online the server says where we start (#799): the loading screen holds until it has
+        if (Launch.Networked)
+        {
+            Net.Arrival.CreateClient(this).Told += OnServerSpawn;
+            _awaitingServerSpawn = SpawnPoint.ParseLv95("--at") == null;
+        }
         // pallets a forklift has moved (#583): the server keeps them for the session, offline this client does
         Items.PalletService.Create(this, origin, server: false).Source = () => _chunks?.Source;
         // built structures (#274): the server owns them, offline this client does
@@ -1082,6 +1093,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             if (SpawnPending)
             {
                 Report(LoadStage.PlacingYou, 0.25f);
+                if (_awaitingServerSpawn && _loadClock > 45) Fail("The server never said where to start.");
                 return;
             }
             if (LocalPlayer == null || !_onFoot)
@@ -1171,6 +1183,21 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _chunks?.SetFallbackEnabled(GameSettings.Current.GeneratedFill);
         if (_ambience != null) _ambience.Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume);
         SetCameraFar(GameSettings.Current.CameraFar);
+        PublishAppearance();
+    }
+
+    private double _appearanceIn;
+
+    /// <summary>
+    /// The figure chosen in Settings → Character (#394, #806) onto this peer's own player, which
+    /// replicates it (<see cref="FootPlayer.AppearanceBits"/>). Right away on a settings change,
+    /// and every 0.25 s for a player that just spawned or respawned (or a probe's in-memory set).
+    /// </summary>
+    private void PublishAppearance()
+    {
+        if (LocalPlayer is not { } p || !IsInstanceValid(p) || !p.IsMultiplayerAuthority()) return;
+        int chosen = GameSettings.Current.AppearanceBits;
+        if (p.AppearanceBits != chosen) p.AppearanceBits = chosen;
     }
 
     /// <summary>
@@ -1794,6 +1821,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (_chunks != null && GetViewport().GetCamera3D() is { } cam)
             _chunks.SetView(cam);
         TrackLoading(delta);
+        if ((_appearanceIn -= delta) <= 0) { _appearanceIn = 0.25; PublishAppearance(); }
         if (GameClock.Fixed) GameClock.Pace(Stage != LoadStage.Ready || _chunks is { Settled: false });
         if (_pendingFoot != null && !SpawnPending)
         {
@@ -1843,6 +1871,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (!_onFoot)
         {
             FootPlayer? player = LocalPlayer;
+            // a server without teleporting (#799): the fly camera looks around, it does not carry you
+            if (player != null && _networked && !Permissions.CanTeleport)
+            {
+                EnterFootMode(player, inPlace: true);
+                player.RequestReplacement();
+                Toast("This server does not allow teleporting: back where you were.");
+                return;
+            }
             if (player == null)
             {
                 if (_networked) return; // our player hasn't been spawned by the server yet
@@ -1874,7 +1910,26 @@ public partial class ClientWorld : Node3D, IOriginContainer
     private SeatStart? _seatStart;
     private bool _seatAsked;
 
-    private bool SpawnPending => _spawn != null && IsInstanceValid(_spawn) && _spawn.IsInsideTree();
+    private bool SpawnPending => _awaitingServerSpawn || _spawn != null && IsInstanceValid(_spawn) && _spawn.IsInsideTree();
+
+    /// <summary>Online, before the server's <c>Net/Arrival</c> has said where this player starts (#799).</summary>
+    private bool _awaitingServerSpawn;
+
+    /// <summary>
+    /// The server's start point (#799): the fly camera goes there, and the body follows it down once
+    /// the ground is known (<see cref="EnterFootWhenGrounded"/>). Only the first word counts; a
+    /// <c>--at</c> on the command line, which every probe uses, keeps its own spot.
+    /// </summary>
+    private void OnServerSpawn(double e, double n)
+    {
+        if (!_awaitingServerSpawn || _spectator == null || _chunks == null || _worldOrigin == null) return;
+        _awaitingServerSpawn = false;
+        GD.Print($"[world] the server starts us at {e:F0}/{n:F0}");
+        if (_onFoot) { _teleporter?.TeleportTo(e, n); return; }
+        if (_spawn != null && IsInstanceValid(_spawn)) _spawn.QueueFree();
+        OriginShifter.Instance?.ShiftTo(e, n);
+        AddChild(_spawn = new SpawnPoint(_spectator, _chunks, _worldOrigin, e, n));
+    }
 
     private FootPlayer? _pendingFoot;
 

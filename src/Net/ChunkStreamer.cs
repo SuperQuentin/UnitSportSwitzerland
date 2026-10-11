@@ -237,7 +237,16 @@ public partial class ChunkStreamer : Node
         return pending.Completion.Task;
     }
 
-    public override void _ExitTree() => _shuttingDown = true;
+    public override void _ExitTree()
+    {
+        _shuttingDown = true;
+        // Every request still waiting gets its answer now (#807): its deferred RPC may never run on
+        // a freed node, and the pool threads blocked on it (the tile workers, DormantVehicles) would
+        // otherwise hang until their own cancellation, or for good if they passed none.
+        uint[] waiting;
+        lock (_pending) waiting = _pending.Keys.ToArray();
+        foreach (var id in waiting) Fail(id, "not connected: left the world", permanent: false);
+    }
 
     private void Fail(uint requestId, string why, bool permanent)
     {

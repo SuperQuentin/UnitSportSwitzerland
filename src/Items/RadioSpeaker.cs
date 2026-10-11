@@ -18,7 +18,7 @@ namespace UnitSport.Items;
 /// on the second CD's clock (#168).
 /// </para>
 /// </summary>
-public partial class RadioSpeaker : AudioStreamPlayer3D
+public partial class RadioSpeaker : AudioStreamPlayer3D, IMusicSpeaker
 {
     /// <summary>Under the engines and footsteps: a radio is background, not a PA system.</summary>
     private const float BaseDb = -8f;
@@ -65,6 +65,17 @@ public partial class RadioSpeaker : AudioStreamPlayer3D
     /// <summary>Where the sound comes from on the parent (its offset at _Ready). For the probes.</summary>
     public Vector3 SourceOffset => _hearing.Offset;
 
+    /// <summary>Its level before the duck, dB (#813).</summary>
+    public float SourceDb { get; private set; }
+
+    public bool Close => _hearing.Close;
+
+    /// <summary>How far it is ducked under the radio the ears follow, dB (0 or down to <see cref="RadioFocus.DuckDb"/>). For the probes.</summary>
+    public float DuckDb { get; private set; }
+
+    public override void _EnterTree() => MusicFocus.Add(this);
+    public override void _ExitTree() => MusicFocus.Remove(this);
+
     public override void _Ready()
     {
         SfxBus.Ensure();
@@ -81,7 +92,10 @@ public partial class RadioSpeaker : AudioStreamPlayer3D
     {
         // where it is heard from and how muffled: only worth the rays while it has something to play
         if (On && CdId != 0) _hearing.Step(this, (float)delta);
-        VolumeDb = BaseDb + RadioLoudness.Db(Volume) + _hearing.Db;
+        SourceDb = BaseDb + RadioLoudness.Db(Volume) + _hearing.Db;
+        // another radio louder at the ears: this one plays under it (#813)
+        DuckDb = RadioFocus.Step(DuckDb, MusicFocus.Full(this), (float)delta);
+        VolumeDb = SourceDb + DuckDb;
         if (Volume != _rangeFor) { _rangeFor = Volume; MaxDistance = RadioLoudness.Radius(Volume); }
         _sinceSeek += delta;
         double want = WantedPosition;

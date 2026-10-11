@@ -226,7 +226,12 @@ public partial class SteamerNetProbe : ChatProbe
         float fromShip = bb != null ? MathX.FlatDistance(bb.GlobalPosition, me.GlobalPosition) : -1f;
         WaterField.TryLevelAt(bb?.GlobalPosition ?? me.GlobalPosition, out float surface);
         Expect(swimming, F($"A sees B over the rail, swimming, off the deck ({fromShip:F0} m from the ship's middle, {(bb?.GlobalPosition.Y ?? 0) - surface:F2} m from the surface)"));
-        Expect(swimming && Mathf.Abs((bb?.GlobalPosition.Y ?? 0) - surface + 1.4f) < 1.5f, "in the water, not carried along on the deck");
+        // the copy takes the swim pose a few frames before its position has come down off the rail:
+        // give it a moment to settle (a copy carried along on the deck never does)
+        double settleFrom = GameClock.Now;
+        bool inWater = swimming && await Until(() => B() is { } s && WaterField.TryLevelAt(s.GlobalPosition, out float lvl)
+            && Mathf.Abs(s.GlobalPosition.Y - lvl + 1.4f) < 1.5f, 5);
+        Expect(inWater, F($"in the water, not carried along on the deck (after {GameClock.Now - settleFrom:F1} s)"));
 
         // back up the ladder on the hull, the ship going on (#384): A sees B climbing it, then aboard
         if (await Heard("B", "climbing", 40))

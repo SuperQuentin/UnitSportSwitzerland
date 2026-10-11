@@ -11,6 +11,11 @@
   a kill stops only the `timeout` wrapper and the server keeps the port until its timeout; the
   winget `godot` link hangs. The lib kills by PID tree (`guard.sh`) and finds the console exe.
 - Ports stay per script and passed in (`PORT=...`); keep them distinct from the other checks.
+- The script's own RAM watchdog (`guard_watch $$`) sends the script a TERM, then kills its
+  children: it prints `[<x>] RESULT: FAILED (stopped by a TERM ...)` and exits 143. Before #795 it
+  killed the script outright, which exited 0 with no RESULT line, and `tools/test.sh` read that as
+  PASS. The TERM goes first because bash holds a trapped signal until its foreground child ends,
+  and killing the child first let the script print its own `RESULT: ok`.
 - Clients are headless unless the script says `--windowed` (a speaker, drawn parked vehicles,
   screenshots) or `WINDOWED=1` is set.
 - `user://` (loot, bank, placed, birds, CDs) is a fresh `test_output/userdata_<x>` per run (Windows
@@ -33,6 +38,11 @@ user data. Before/after runs: see PR (each script fails or passes the same way a
   `tools/test.sh`), waits for 4 GB free RAM, and the `guard_watch $$` watchdog stays.
 - Trap: a check that needs state from an earlier run (an emptied loot epoch, a cracked safe) now
   starts clean every time; pass `USERDATA=<dir>` to reproduce an old state.
+- Since sleepers (#644) the real `user://` breaks a check outright: both clients share one
+  `identity.key`, the server keeps the last run's sleeper, and whichever client proves first wakes
+  at the old spot, off the course (`[sleepers] <name> wakes at` in the server log). That made
+  `boatnetcheck` pass every other run and `steamernetcheck` fail on `main` until #792 migrated them;
+  `campfirecheck`, `gadgetnetcheck` and `swimnetcheck` failed the same way in a row until #795.
 
 ## Migrating old code / open branches
 
@@ -40,8 +50,11 @@ user data. Before/after runs: see PR (each script fails or passes the same way a
   `OUT=`, `mkdir`, `CH=()/CHUNKARG=()` and `stop()` boilerplate by the source line above; replace
   `timeout N "$GODOT" --headless --path . -- --server ... > log 2>&1 &` + the wait loop by
   `tc_server N <wait> log --server ...`, each client by `tc_client`, `kill`/`stop $SERVER` by `tc_stop`.
-- Not converted yet: `tools/racecheck.sh` (four autopilot clients, own cleanup) and
-  `tools/buildnetcheck.sh` (#281, open). `tools/test.sh` keeps its own Godot finder (#269 edits it).
+- Background clients the script leaves running (`tc_client ... &`) are not the lib's to kill:
+  keep their PIDs and kill them in your own EXIT trap, which ends by calling `_tc_cleanup`
+  (`tools/racecheck.sh`: up to four `--raceauto` clients, each with its own `--cache`).
+- Not converted yet: `tools/buildnetcheck.sh` (#281, open). `tools/test.sh` keeps its own Godot
+  finder (#269 edits it).
 
 ## How to check
 

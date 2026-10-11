@@ -115,10 +115,16 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         if (CmdArgs.Float("--dormant-respawn") is { } respawn) RespawnSeconds = respawn;
         Landings.Changed += OnLandingsChanged;
         Watch();
+        // woken slots stay awake across a restart (#689)
+        if (World.ObjectContainers.Instance is { } containers) RestoreAwake(containers.LoadAwake(), containers.FiledNames);
     }
+
+    /// <summary>Cancelled as the node leaves (#807): a fleet still being read stops fetching tiles for a world that is gone.</summary>
+    private readonly CancellationTokenSource _leaving = new();
 
     public override void _ExitTree()
     {
+        _leaving.Cancel();
         Landings.Changed -= OnLandingsChanged;
         if (_watched is { } vm && IsInstanceValid(vm))
         {
@@ -172,13 +178,131 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         if (SlotOf(node.Name) is not { } key) return;
         _gone.Remove(key.Key);
         _asked.Remove(key.Key);
-        // a forklift asleep in a hall (#630) is no tile's slot: its own node undraws itself
-        ParkedForklift.Woke(key.Key);
-        // and so is a car in an underground car park's bay (#558): its own node undraws itself
-        ParkedCars.Woke(key.Key);
-        if (!_awake.Add(key.Key)) return;
-        Forget(key.Tile, key.Key);
+        bool fresh = !_awake.Contains(key.Key);
+        MarkAwake(key.Key);
+        if (fresh && Decides && World.ObjectContainers.Instance is { } containers)
+        {
+            // where it stood and what it was, while its tile is known here: for putting it back (#689)
+            int bar = key.Key.LastIndexOf('|');
+            _awakeInfo[key.Key] = Find(key.Key[..bar], int.Parse(key.Key[(bar + 1)..])) is { } s
+                ? new World.AwakeSlot(VehicleState.Now, s.E, s.N, s.Yaw, s.KindId, s.Train, s.Load)
+                : new World.AwakeSlot(VehicleState.Now);
+            containers.SaveAwake(_awakeInfo);
+        }
+        // every peer is told, near or not (#689): with entity interest a peer far away never gets
+        // the node, and its bay must still be empty when it comes; the fact is global, the car local
+        if (fresh && Online && Multiplayer.IsServer()) Rpc(MethodName.Woke, key.Key);
     }
+
+    /// <summary>A slot is awake here: its dormant copy goes, in a car park or a hall (#630).</summary>
+    private void MarkAwake(string key)
+    {
+        _awaiting.Remove(key);
+        // a forklift asleep in a hall (#630) is no tile's slot: its own node undraws itself
+        ParkedForklift.Woke(key);
+        // and so is a car in an underground car park's bay (#558): its own node undraws itself
+        ParkedCars.Woke(key);
+        if (!_awake.Add(key)) return;
+        int bar = key.LastIndexOf('|');
+        if (bar > 0 && TileOf(key[..bar]) is { } tile) Forget(tile, key);
+    }
+
+    // ---- the awake set on every peer (#689) ----------------------------------------------------
+
+    /// <summary>
+    /// Awake slots the server told of whose vehicle has not arrived here yet, and until when the
+    /// dormant copy waits for it. Within a client's interest the node is on its way, and the copy
+    /// stays until it lands rather than leave the bay empty for a frame (the spawn and the message
+    /// travel apart, #560); past the wait the vehicle is elsewhere and the bay is empty.
+    /// </summary>
+    private readonly Dictionary<string, double> _awaiting = new();
+
+    /// <summary>Seconds a copy waits for its woken vehicle; longer on joining, when the spawns come in budgets.</summary>
+    private const double AwaitNode = 1.0, AwaitNodeOnJoin = 3.0;
+
+    /// <summary>Whether a slot (<c>owner|ordinal</c>) is awake: its vehicle is somewhere in the world, or asleep in a container.</summary>
+    public bool IsAwake(string key) => _awake.Contains(key);
+
+    /// <summary>Server: when each slot woke (unix s) and where its car stood, kept across restarts by the containers (#689).</summary>
+    private readonly Dictionary<string, World.AwakeSlot> _awakeInfo = new();
+
+    /// <summary>
+    /// Server, starting: the slots the last run had woken stay awake (<see cref="World.ContainerRules.KeepAwake"/>):
+    /// those woken this past week, and any whose vehicle is asleep in a container under the slot's name.
+    /// </summary>
+    public void RestoreAwake(IReadOnlyDictionary<string, World.AwakeSlot> saved, IEnumerable<string> filedNames)
+    {
+        var filedSlots = new HashSet<string>();
+        foreach (var name in filedNames)
+            if (SlotOf(name) is { } key) filedSlots.Add(key.Key);
+        var keep = World.ContainerRules.KeepAwake(saved, VehicleState.Now, filedSlots.Contains);
+        foreach (var key in filedSlots) keep.TryAdd(key, new World.AwakeSlot(VehicleState.Now));
+        foreach (var (key, slot) in keep)
+        {
+            _awakeInfo[key] = slot;
+            MarkAwake(key);
+        }
+        if (keep.Count > 0) GD.Print($"[dormant] {keep.Count} slots stay awake from the last run");
+    }
+
+    /// <summary>
+    /// Server: puts <paramref name="vehicle"/> back to sleep as its slot's dormant copy, when it is
+    /// that slot's car standing back in its bay as the slot put it (<see cref="World.ContainerRules.BackInBay"/>):
+    /// the woken car itself, or one driven off and parked back under another name. The slot sleeps
+    /// on every peer (<see cref="Slept"/>) and the caller frees the node. A car anywhere else, or
+    /// changed, sleeps in its container instead (#689).
+    /// </summary>
+    public bool TryResleep(VehicleBody vehicle)
+    {
+        if (!Decides || _awakeInfo.Count == 0 || vehicle.Wrecked || vehicle.InHold) return false;
+        var s = vehicle.Capture();
+        bool pristine = s.Health >= vehicle.Ride.MaxHealth - 0.01f && s.Tuning == 0 && s.Setup == 0
+            && (s.DoorsOpen & 15) == 0 && s.Cd == "" && s.Radio == 0 && !s.EngineOn;
+        foreach (var (key, slot) in _awakeInfo)
+        {
+            if (!World.ContainerRules.BackInBay(slot, s.Position.E, s.Position.N, s.Yaw, (int)s.Kind, s.Train, s.Load, pristine)) continue;
+            int bar = key.LastIndexOf('|');
+            string owner = key[..bar];
+            int ordinal = int.Parse(key[(bar + 1)..]);
+            if (Online) Rpc(MethodName.Slept, owner, ordinal);
+            else Slept(owner, ordinal);
+            GD.Print($"[dormant] {vehicle.Name} is back in its bay: slot {key} dormant again");
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Server: a joining peer gets every awake slot, wherever its vehicle is.</summary>
+    public void SendTo(long peer)
+    {
+        if (_awake.Count > 0) RpcId(peer, MethodName.AwakeSet, _awake.ToArray());
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeerExtension.TransferModeEnum.Reliable)]
+    private void Woke(string key)
+    {
+        if (!_awake.Contains(key)) _awaiting.TryAdd(key, GameClock.Now + AwaitNode);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeerExtension.TransferModeEnum.Reliable)]
+    private void AwakeSet(string[] keys)
+    {
+        foreach (var key in keys)
+            if (!_awake.Contains(key)) _awaiting.TryAdd(key, GameClock.Now + AwaitNodeOnJoin);
+    }
+
+    /// <summary>The waits that ran out: those slots' vehicles are elsewhere, their bays empty.</summary>
+    private void AwaitedLong()
+    {
+        if (_awaiting.Count == 0) return;
+        double now = GameClock.Now;
+        _expiredWaits.Clear();
+        foreach (var (key, until) in _awaiting)
+            if (now >= until) _expiredWaits.Add(key);
+        foreach (var key in _expiredWaits) MarkAwake(key);
+    }
+
+    private readonly List<string> _expiredWaits = new();
 
     /// <summary>
     /// A woken slot's vehicle left the world (taken by a player, wrecked and cleared): where the slot
@@ -186,6 +310,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// </summary>
     private void OnVehicleRemoved(Node node)
     {
+        // gone to sleep in a container (#689), not gone: the slot is still that vehicle's
+        if (World.ObjectContainers.IsFiling(node)) return;
         if (SlotOf(node.Name) is not { } key || !_awake.Contains(key.Key)) return;
         _gone[key.Key] = GameClock.Now;
     }
@@ -266,6 +392,8 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     {
         string key = $"{owner}|{ordinal}";
         _gone.Remove(key);
+        _awaiting.Remove(key);
+        if (_awakeInfo.Remove(key) && Decides) World.ObjectContainers.Instance?.SaveAwake(_awakeInfo);
         // a bay car (#558): drawn again where its interior is built, on every peer
         if (HallCarRule.BuildingOf(owner) != null)
         {
@@ -360,6 +488,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         if (_sinceCheck < CheckEvery) return;
         _sinceCheck = 0;
         Restock();
+        AwaitedLong();
         if (_unposed.Count > 0)
         {
             _repose.Clear();
@@ -460,20 +589,22 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                 // the awake bookkeeping work off the record alone. An industrial yard (#496 phase 3)
                 // has no bay list at all — it derives its standing positions from the building's
                 // plan box and the cover around it — and joins by adding one call here.
+                var ct = _leaving.Token;
                 var (slots, pallets) = await Task.Run(() =>
                 {
-                    var roads = source.LoadRoadsAsync(id).GetAwaiter().GetResult();
+                    var roads = source.LoadRoadsAsync(id, ct).GetAwaiter().GetResult();
                     var list = new List<VehicleSlot>();
                     var stacks = new List<YardPallet>();
                     if (roads is { Parking.Count: > 0 })
                         DormantSlots.ForParking(id, roads.Parking, ParkedKinds, list);
-                    var buildings = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
-                    Yards(source, id, buildings, roads, list, stacks);
-                    Sites(source, id, buildings, roads, list, stacks);
-                    Marina(source, id, list);
+                    var buildings = source.LoadBuildingsAsync(id, ct).GetAwaiter().GetResult();
+                    Yards(source, id, buildings, roads, list, stacks, ct);
+                    Sites(source, id, buildings, roads, list, stacks, ct);
+                    Marina(source, id, list, ct);
                     return (list, stacks);
-                });
-                if (!IsInsideTree()) return;
+                }, ct);
+                // the world may have been left (and this node freed) while the worker read
+                if (!IsInstanceValid(this) || !IsInsideTree()) return;
                 // the anchors moved on while the worker read it
                 if (!Within(id, KeepRings)) continue;
 
@@ -487,6 +618,10 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                     Report();
                 }
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // the world was left mid-read
         }
         catch (Exception ex)
         {
@@ -512,12 +647,12 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// </summary>
     /// <param name="pallets">The pallets out on the sites' aprons (#583 phase 3), filled from the same
     /// fronts: drawn by <c>PalletService</c>, not by this layer.</param>
-    private static void Yards(IChunkSource source, TileId id, BuildingTile? tile, RoadTile? roads, List<VehicleSlot> into, List<YardPallet> pallets)
+    private static void Yards(IChunkSource source, TileId id, BuildingTile? tile, RoadTile? roads, List<VehicleSlot> into, List<YardPallet> pallets, CancellationToken ct)
     {
         // most tiles have buildings and no site: their height grid is 2 MB a streaming client
         // would download for nothing (#63)
         if (tile is not { Buildings.Count: > 0 } || !SiteYards.HasSite(tile)) return;
-        var grid = source.LoadChunkAsync(id).GetAwaiter().GetResult();
+        var grid = source.LoadChunkAsync(id, ct).GetAwaiter().GetResult();
         var fronts = SiteYards.Fronts(tile, roads, grid);
         if (fronts.Count == 0) return;
         var yards = fronts.Select(f => f.Yard).ToList();
@@ -552,14 +687,14 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// already kept the yard's places off the building, the roads and the neighbours.
     /// </summary>
     /// <param name="pallets">The sites' pallets of bricks and cement (#615), handed to <c>PalletService</c> with the yards' stacks.</param>
-    private static void Sites(IChunkSource source, TileId id, BuildingTile? tile, RoadTile? roads, List<VehicleSlot> into, List<YardPallet> pallets)
+    private static void Sites(IChunkSource source, TileId id, BuildingTile? tile, RoadTile? roads, List<VehicleSlot> into, List<YardPallet> pallets, CancellationToken ct)
     {
         if (tile is not { Buildings.Count: > 0 } || !SitePlans.HasSite(tile)) return;
         var sites = SitePlans.For(tile, roads);
         if (sites.Count == 0) return;
         int before = into.Count;
         DormantSlots.ForConstruction(id, sites, SiteKind, ParkedKinds, into);
-        var grid = source.LoadChunkAsync(id).GetAwaiter().GetResult();
+        var grid = source.LoadChunkAsync(id, ct).GetAwaiter().GetResult();
         // the materials' pallets stand on the ground the dressing is drawn on, as the server works them out
         foreach (var site in sites) pallets.AddRange(SitePlans.PalletsOf(tile, site, grid));
         if (grid == null) return;
@@ -613,7 +748,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// tile may not be built yet, and the server and every client must agree on which berths float.
     /// Worker thread, like the rest of <see cref="Fill"/>.
     /// </summary>
-    private static void Marina(IChunkSource source, TileId id, List<VehicleSlot> into)
+    private static void Marina(IChunkSource source, TileId id, List<VehicleSlot> into, CancellationToken ct)
     {
         var jetties = Landings.Current.Jetties;
         bool here = false;
@@ -623,9 +758,9 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             if (TileId.FromLv95(e, n) == id) { here = true; break; }
         }
         if (!here) return;
-        if (source.LoadChunkAsync(id).GetAwaiter().GetResult() is not { } grid) return;
-        var cover = source.LoadCoverAsync(id).GetAwaiter().GetResult();
-        if (ChunkManager.LoadWaterLayerAsync(source, id, grid, cover, default).GetAwaiter().GetResult() is not { } water) return;
+        if (source.LoadChunkAsync(id, ct).GetAwaiter().GetResult() is not { } grid) return;
+        var cover = source.LoadCoverAsync(id, ct).GetAwaiter().GetResult();
+        if (ChunkManager.LoadWaterLayerAsync(source, id, grid, cover, ct).GetAwaiter().GetResult() is not { } water) return;
         DormantSlots.ForMarina(id, jetties, (e, n) =>
         {
             // a berth a few metres across the tile's edge reads the edge's water
@@ -808,12 +943,15 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             InstanceCount = at.Count,
         };
         for (int i = 0; i < at.Count; i++) mm.SetInstanceTransform(i, at[i]);
-        return new MultiMeshInstance3D
+        var node = new MultiMeshInstance3D
         {
             Multimesh = mm,
             VisibilityRangeEnd = DrawnM,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
         };
+        // recorded for the movie studio (#782): a wake redraws the tile, so a new instancer is the change
+        Movie.ReplayWatch.Instanced(node);
+        return node;
     }
 
 
