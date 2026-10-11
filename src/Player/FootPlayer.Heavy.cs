@@ -32,13 +32,6 @@ public partial class FootPlayer
     private int _visualTrailer;
     private float _truckPitch;
     private float _carPitch, _carRoll;
-    /// <summary>
-    /// How far a car's body stands above the ground under its middle, m (#791): the mean of the
-    /// ground under its four wheels over that, never below it. Nothing on flat ground or an even
-    /// slope; half the front axle's rise where the front wheels are up a ramp and the rear ones are
-    /// still on the floor at its foot.
-    /// </summary>
-    private float _carLift;
     private readonly float[] _shownAngles = new float[Truck.MaxJoints];
 
     /// <summary>How close a hitch must come to a trailer's kingpin or drawbar eye to couple, m.</summary>
@@ -177,16 +170,9 @@ public partial class FootPlayer
         float rr = GroundUnder(ToGlobal(new Vector3(track, 0, half)), exclude);
         float pitch = Mathf.Atan2((fl + fr) - (rl + rr), 4f * half);    // + raises the nose
         float roll = Mathf.Atan2((fr + rr) - (fl + rl), 4f * track);    // + raises the right side
-        // Tipped about the point under its middle alone, a car with its front wheels up a ramp and its
-        // rear ones on the floor at the foot swung its tail into the floor: the tilted hull boxes
-        // (AlignHull) dug in, and the push out of the floor held it bouncing at the foot of an
-        // underground garage's ramp for good (#791). On its four wheels its middle is lifted by
-        // their mean height over the ground there.
-        float lift = Mathf.Clamp((fl + fr + rl + rr) * 0.25f - GlobalPosition.Y, 0f, 0.6f);
         float ease = MathX.Damp(12f, dt);
         _carPitch = Mathf.Lerp(_carPitch, Mathf.Clamp(pitch, -0.45f, 0.45f), ease);
         _carRoll = Mathf.Lerp(_carRoll, Mathf.Clamp(roll, -0.35f, 0.35f), ease);
-        _carLift = Mathf.Lerp(_carLift, lift, ease);
     }
 
     /// <summary>

@@ -21,7 +21,3 @@
   ramp, and `tools/hallcarnetcheck.sh`'s car bounced at the ramp's foot for good.
   - It now looks up first, from 1 m to 3 m above the point. A ceiling there and the ray starts just
     under it. Parked trains and dormant lorries in halls stand on the same query.
-  - On its four wheels, a car's middle is also lifted by their mean height over the ground there
-    (`_carLift`, 0 to 0.6 m). That is 0 on flat ground and on an even slope. At a ramp's foot, with
-    the front wheels up the ramp and the rear ones still on the floor, the tail no longer swings into
-    the floor.
