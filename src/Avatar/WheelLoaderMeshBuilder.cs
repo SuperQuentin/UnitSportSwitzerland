@@ -42,7 +42,8 @@ public static class WheelLoaderMeshBuilder
         m.Box(new Vector3(0, 1.1f, (L.Tail + 0.3f) * 0.5f), new Vector3(rh * 1.4f, 0.6f, -L.Tail + 0.3f), Dark);
         m.Box(new Vector3(0, (1.35f + L.EngineTop) * 0.5f, (L.Tail + L.CabBack) * 0.5f), new Vector3(rh * 2f, L.EngineTop - 1.35f, L.CabBack - L.Tail), Body);
         m.Box(new Vector3(0, L.EngineTop + 0.02f, (L.Tail + L.CabBack) * 0.5f), new Vector3(rh * 2f - 0.12f, 0.05f, L.CabBack - L.Tail - 0.2f), Body.Darkened(0.18f));
-        m.Box(new Vector3(0, 1.4f, L.Tail + 0.2f), new Vector3(rh * 2f, 1.0f, 0.4f), Dark.Lightened(0.08f));
+        // (#755) 2 cm wider and further back than the engine cover and chassis it sits behind: no shared sides or back face
+        m.Box(new Vector3(0, 1.4f, L.Tail + 0.19f), new Vector3(rh * 2f + 0.04f, 1.0f, 0.42f), Dark.Lightened(0.08f));
         m.Tube(new Vector3(-0.7f, L.EngineTop, -2.2f), new Vector3(-0.7f, L.EngineTop + 0.5f, -2.2f), 0.08f, Dark, 6);
         // the rear fenders over the wheels, the hinge's two plates
         foreach (int side in new[] { 1, -1 })
@@ -54,12 +55,12 @@ public static class WheelLoaderMeshBuilder
         const float c = L.CabHalf, cb = L.CabBack, cf = L.CabFront, fl = L.CabFloor, ct = L.CabTop;
         m.Box(new Vector3(0, (1.35f + fl) * 0.5f, (cb + cf) * 0.5f), new Vector3(c * 2f, fl - 1.35f, cf - cb), Body);
         foreach (int side in new[] { 1, -1 })
-            foreach (float z in new[] { cb + 0.05f, cf - 0.05f })
-                m.Box(new Vector3(side * (c - 0.05f), (fl + ct) * 0.5f, z), new Vector3(0.09f, ct - fl, 0.09f), Dark);
+            foreach (float z in new[] { cb + 0.06f, cf - 0.05f })   // (#755) posts end under the roof and clear of the wall's back and the panels' sides
+                m.Box(new Vector3(side * (c - 0.05f), (fl + ct - 0.1f) * 0.5f, z), new Vector3(0.09f, ct - 0.1f - fl, 0.09f), Dark);
         m.Box(new Vector3(0, ct - 0.05f, (cb + cf) * 0.5f), new Vector3(c * 2f + 0.1f, 0.1f, cf - cb + 0.12f), Body);
-        m.Box(new Vector3(0, (fl + ct) * 0.5f, cb + 0.03f), new Vector3(c * 2f, ct - fl, 0.06f), Dark.Lightened(0.05f));
+        m.Box(new Vector3(0, (fl + ct - 0.1f) * 0.5f, cb + 0.03f), new Vector3(c * 2f - 0.04f, ct - 0.1f - fl, 0.06f), Dark.Lightened(0.05f));
         foreach (int side in new[] { 1, -1 })
-            m.Box(new Vector3(side * (c - 0.02f), fl + 0.35f, (cb + cf) * 0.5f), new Vector3(0.04f, 0.7f, cf - cb - 0.1f), Body);
+            m.Box(new Vector3(side * (c - 0.01f), fl + 0.35f, (cb + cf) * 0.5f), new Vector3(0.04f, 0.7f, cf - cb - 0.1f), Body);
         // the ladder up to it behind the left front wheel
         for (int i = 0; i < 5; i++)
             m.Box(new Vector3(rh + 0.2f, 0.35f + i * 0.3f, -0.7f), new Vector3(0.3f, 0.04f, 0.18f), Steel);
@@ -67,8 +68,8 @@ public static class WheelLoaderMeshBuilder
         foreach (int side in new[] { 1, -1 })
         {
             HeavyMesh.Lamp(head, side * (c - 0.15f), ct - 0.15f, cf + 0.04f, 0.16f, 0.1f, 0.05f, HeavyMesh.HeadLamp);
-            HeavyMesh.Lamp(tail, side * (rh - 0.2f), 1.7f, L.Tail - 0.01f, 0.16f, 0.12f, 0.04f, HeavyMesh.TailLamp);
-            HeavyMesh.Lamp(reverse, side * (rh - 0.45f), 1.7f, L.Tail - 0.01f, 0.1f, 0.1f, 0.04f, HeavyMesh.White);
+            HeavyMesh.Lamp(tail, side * (rh - 0.2f), 1.7f, L.Tail - 0.03f, 0.16f, 0.12f, 0.04f, HeavyMesh.TailLamp);
+            HeavyMesh.Lamp(reverse, side * (rh - 0.45f), 1.7f, L.Tail - 0.03f, 0.1f, 0.1f, 0.04f, HeavyMesh.White);
         }
 
         var cockpit = HeavyCabin.Build(m, Frame, Gauges, 0f, 1f, System.Array.Empty<(string, Vector3, Vector2)>());
@@ -189,8 +190,8 @@ public static class WheelLoaderMeshBuilder
         s.Tube(new Vector3(-0.6f, 0, 0), new Vector3(0.6f, 0, 0), 0.1f, Dark, 8);
         foreach (int side in new[] { 1, -1 })
         {
-            float x = side * (L.TineHalfSpan - 0.07f);
-            s.Box(new Vector3(x, -(L.ForkTop - 0.05f) * 0.5f, L.ForkFace - 0.03f), new Vector3(0.14f, L.ForkTop - 0.05f + 0.3f, 0.06f), Steel.Darkened(0.2f));
+            float x = side * (L.TineHalfSpan - 0.07f);   // (#755) the upright 2 cm further forward: its face no longer lies in the carriage plate's
+            s.Box(new Vector3(x, -(L.ForkTop - 0.05f) * 0.5f, L.ForkFace - 0.01f), new Vector3(0.14f, L.ForkTop - 0.05f + 0.3f, 0.06f), Steel.Darkened(0.2f));
             s.Box(new Vector3(x, -L.ForkTop - 0.03f, L.ForkFace + L.ForkLength * 0.5f), new Vector3(0.14f, 0.06f, L.ForkLength), Steel.Darkened(0.2f));
         }
         return s.Build();

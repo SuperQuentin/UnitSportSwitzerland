@@ -42,32 +42,34 @@ public static class ExcavatorMeshBuilder
         var tail = new MeshScratch();
         var reverse = new MeshScratch();
         const float rt = L.RingTop, hh = L.HouseHalf;
+        // the house parts stand on the deck's top, not on its underside: bottoms and sides of the two would be coplanar (#755)
+        const float dk = rt + 0.24f;
 
         // ---- the house: a deck on the ring, the engine behind the cab, the counterweight behind that
         m.Box(new Vector3(0, rt + 0.12f, (L.HouseFront + L.HouseBack) * 0.5f), new Vector3(hh * 2f, 0.24f, L.HouseFront - L.HouseBack), Dark);
-        m.Box(new Vector3(0, (rt + L.HouseTop) * 0.5f, -0.8f), new Vector3(hh * 2f, L.HouseTop - rt, 1.6f), Body);
+        m.Box(new Vector3(0, (dk + L.HouseTop) * 0.5f, -0.8f), new Vector3(hh * 2f, L.HouseTop - dk, 1.6f), Body);
         m.Box(new Vector3(0, L.HouseTop + 0.02f, -0.8f), new Vector3(hh * 2f - 0.1f, 0.04f, 1.5f), Body.Darkened(0.2f));
         // the exhaust stack and a hand rail along the engine cover
         m.Tube(new Vector3(-0.9f, L.HouseTop, -0.4f), new Vector3(-0.9f, L.HouseTop + 0.45f, -0.4f), 0.07f, Dark, 6);
         m.Box(new Vector3(-hh + 0.05f, L.HouseTop + 0.25f, -0.8f), new Vector3(0.04f, 0.04f, 1.4f), Body);
         // the counterweight: dark, rounded at its back, the bulk that lets the arm reach out
-        m.Box(new Vector3(0, (rt + 2.25f) * 0.5f, (L.HouseBack - 1.6f) * 0.5f), new Vector3(hh * 2f, 2.25f - rt, -1.6f - L.HouseBack), Dark.Lightened(0.08f));
+        m.Box(new Vector3(0, (dk + 2.25f) * 0.5f, (L.HouseBack - 1.6f) * 0.5f), new Vector3(hh * 2f, 2.25f - dk, -1.6f - L.HouseBack), Dark.Lightened(0.08f));
         m.Tube(new Vector3(-hh, (rt + 2.25f) * 0.5f, L.HouseBack + 0.05f), new Vector3(hh, (rt + 2.25f) * 0.5f, L.HouseBack + 0.05f), 0.55f, Dark.Lightened(0.08f), 8);
         // the tank and toolbox left of the cab, the boom's foot right of it
-        m.Box(new Vector3(hh - 0.42f, (rt + 1.95f) * 0.5f, 0.65f), new Vector3(0.84f, 1.95f - rt, 1.3f), Body);
-        m.Box(new Vector3(L.BoomFoot.X, (rt + L.BoomFoot.Y + 0.2f) * 0.5f, L.BoomFoot.Z - 0.3f), new Vector3(0.62f, L.BoomFoot.Y + 0.2f - rt, 1.0f), Body.Darkened(0.12f));
+        m.Box(new Vector3(hh - 0.42f, (dk + 1.95f) * 0.5f, 0.65f), new Vector3(0.84f, 1.95f - dk, 1.3f), Body);
+        m.Box(new Vector3(L.BoomFoot.X, (dk + L.BoomFoot.Y + 0.2f) * 0.5f, L.BoomFoot.Z - 0.3f), new Vector3(0.62f, L.BoomFoot.Y + 0.2f - dk, 1.0f), Body.Darkened(0.12f));
 
         // ---- the cab: posts, roof, back wall and lower panels; the glass is left open to dig through
         const float c = L.CabHalf, cb = L.CabBack, cf = L.HouseFront, fl = L.CabFloor, ct = L.CabTop;
-        m.Box(new Vector3(0, (rt + fl) * 0.5f, (cb + cf) * 0.5f), new Vector3(c * 2f, fl - rt, cf - cb), Body);
+        m.Box(new Vector3(0, (dk + fl) * 0.5f, (cb + cf) * 0.5f), new Vector3(c * 2f, fl - dk, cf - cb), Body);
         foreach (int side in new[] { 1, -1 })
-            foreach (float z in new[] { cb + 0.04f, cf - 0.04f })
-                m.Box(new Vector3(side * (c - 0.04f), (fl + ct) * 0.5f, z), new Vector3(0.08f, ct - fl, 0.08f), Dark);
+            foreach (float z in new[] { cb + 0.05f, cf - 0.04f })   // (#755) the back posts 1 cm forward and all posts end under the roof: no shared back, side or top faces
+                m.Box(new Vector3(side * (c - 0.04f), (fl + ct - 0.04f) * 0.5f, z), new Vector3(0.08f, ct - 0.04f - fl, 0.08f), Dark);
         m.Box(new Vector3(0, ct - 0.04f, (cb + cf) * 0.5f), new Vector3(c * 2f + 0.06f, 0.08f, cf - cb + 0.06f), Body);
-        m.Box(new Vector3(0, (fl + ct) * 0.5f, cb + 0.03f), new Vector3(c * 2f, ct - fl, 0.06f), Dark.Lightened(0.05f));
+        m.Box(new Vector3(0, (fl + ct) * 0.5f, cb + 0.03f), new Vector3(c * 2f - 0.02f, ct - fl - 0.04f, 0.06f), Dark.Lightened(0.05f));
         foreach (int side in new[] { 1, -1 })
-            m.Box(new Vector3(side * (c - 0.02f), fl + 0.35f, (cb + cf) * 0.5f), new Vector3(0.04f, 0.7f, cf - cb - 0.1f), Body);
-        m.Box(new Vector3(0, fl + 0.2f, cf - 0.03f), new Vector3(c * 2f, 0.4f, 0.04f), Body);
+            m.Box(new Vector3(side * (c - 0.01f), fl + 0.35f, (cb + cf) * 0.5f), new Vector3(0.04f, 0.7f, cf - cb - 0.1f), Body);
+        m.Box(new Vector3(0, fl + 0.2f, cf - 0.03f), new Vector3(c * 2f - 0.02f, 0.4f, 0.04f), Body);
         // the beacon on the roof, work lamps along its front, tail lamps on the counterweight
         m.Tube(new Vector3(0.3f, ct, cb + 0.3f), new Vector3(0.3f, ct + 0.13f, cb + 0.3f), 0.075f, Beacon, 6);
         foreach (int side in new[] { 1, -1 })
@@ -183,9 +185,9 @@ public static class ExcavatorMeshBuilder
         foreach (int side in new[] { 1, -1 })
             s.Box(new Vector3(side * w, -0.4f, 0.8f), new Vector3(0.05f, 0.75f, 1.2f), Body.Darkened(0.1f));
         // the cutting lip and its teeth, at the edge the arm's reach is measured to
-        s.Box(new Vector3(0, -0.72f, len - 0.04f), new Vector3(w * 2f + 0.04f, 0.06f, 0.08f), Steel);
+        s.Box(new Vector3(0, -0.73f, len - 0.04f), new Vector3(w * 2f + 0.04f, 0.06f, 0.08f), Steel);   // (#755) 1 cm under the plate it ends, teeth 1 cm taller than the lip
         for (int i = -2; i <= 2; i++)
-            s.Box(new Vector3(i * 0.22f, -0.72f, len + 0.06f), new Vector3(0.08f, 0.06f, 0.16f), Steel.Lightened(0.1f));
+            s.Box(new Vector3(i * 0.22f, -0.73f, len + 0.06f), new Vector3(0.08f, 0.08f, 0.16f), Steel.Lightened(0.1f));
         return s.Build();
     }
 
