@@ -18,8 +18,8 @@ functional parts and only change the finish.
   `#ifndef`, so a body may include them in any order. The older functional includes
   (`portal_clip`, `door_light`, `world_occasion`, `world_origin`) stay in `shaders/`: moving them
   would touch every open branch's shaders for no gain.
-- **The retro switch.** `uniform bool retro` (default true) gates the vertex snap (`retro_snap`),
-  the stepped sun (`retro_steps`) and the Bayer posterize (`retro_posterize`). `StyleKit` sets it
+- **No vertex snap since #788**: `retro_snap` is a pass-through (it made faces cm apart z-fight, `general/zfight`).
+- **The retro switch.** `uniform bool retro` (default true) gates the stepped sun (`retro_steps`) and the Bayer posterize (`retro_posterize`). `StyleKit` sets it
   to true only in the PS1 style, so a PS1 shader that Cartoon or the realistic styles borrow
   draws smooth and undithered instead of retro. With it on, the arithmetic is the old inline
   code's: PS1 is pixel-identical to before (checked against `main` at the `style-shots`

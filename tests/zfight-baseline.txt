@@ -1,0 +1,1088 @@
+# --zfightcheck baseline (#788): cm² of fighting faces per model of the model viewer.
+# A model over its line (or a new one with any) fails the check. Lower it with --zfightcheck update.
+5559.2	Aircraft / Airbus A320
+5559.2	Aircraft / Airbus A320 (parked)
+8785.4	Aircraft / Antonov AN-124
+8785.4	Aircraft / Antonov AN-124 (parked)
+26800.9	Aircraft / Military cargo plane
+26800.9	Aircraft / Military cargo plane (parked)
+98979.2	Aircraft / Plane
+112	Battle royale / Military
+2088	Battle royale / Postauto stop
+5568.2	Battle royale / Prefab - army checkpoint
+9200.4	Battle royale / Prefab - avalanche barrier
+829.4	Battle royale / Prefab - lookout tower
+155852.4	Battle royale / Prefab - scaffolding
+276.5	Battle royale / Prefab - ski jump
+7364.1	Battle royale / Wreck
+7364.1	Battle royale / Wreck (open)
+27.3	Birds / Alpine Accentor
+56.4	Birds / Alpine Chough
+37.7	Birds / Alpine Swift
+100.3	Birds / Bar-tailed Godwit
+23.6	Birds / Barn Swallow
+18.1	Birds / Bearded Reedling
+313.1	Birds / Bearded Vulture
+85.8	Birds / Black Grouse
+142.3	Birds / Black Kite
+15.8	Birds / Black Redstart
+257.3	Birds / Black Stork
+54.4	Birds / Black Tern
+79.6	Birds / Black Woodpecker
+144.4	Birds / Black-crowned Night Heron
+115.4	Birds / Black-headed Gull
+126.5	Birds / Black-legged Kittiwake
+79	Birds / Black-necked Grebe
+103.7	Birds / Black-tailed Godwit
+72.4	Birds / Black-throated Loon
+87.9	Birds / Black-winged Stilt
+37.1	Birds / Blue Rock Thrush
+15.8	Birds / Bluethroat
+29.3	Birds / Bohemian Waxwing
+127.4	Birds / Booted Eagle
+116.8	Birds / Boreal Owl
+18.1	Birds / Brambling
+130.2	Birds / Caspian Gull
+15.8	Birds / Cetti's Warbler
+285.3	Birds / Cinereous Vulture
+20.6	Birds / Cirl Bunting
+9.2	Birds / Citril Finch
+6.8	Birds / Coal Tit
+10.7	Birds / Collared Flycatcher
+18.7	Birds / Common Blackbird
+123.9	Birds / Common Buzzard
+18.1	Birds / Common Chaffinch
+6.8	Birds / Common Chiffchaff
+347.3	Birds / Common Crane
+105	Birds / Common Cuckoo
+84.8	Birds / Common Eider
+3.2	Birds / Common Firecrest
+88.8	Birds / Common Goldeneye
+10.7	Birds / Common Grasshopper Warbler
+78.9	Birds / Common Greenshank
+129.8	Birds / Common Gull
+115.8	Birds / Common Kestrel
+20.6	Birds / Common Kingfisher
+10.7	Birds / Common Linnet
+22.1	Birds / Common Moorhen
+20.6	Birds / Common Nightingale
+134.1	Birds / Common Pheasant
+92.6	Birds / Common Pochard
+37.4	Birds / Common Quail
+63.8	Birds / Common Redshank
+15.8	Birds / Common Redstart
+18.1	Birds / Common Reed Bunting
+25.9	Birds / Common Ringed Plover
+34.7	Birds / Common Rock Thrush
+18.1	Birds / Common Rosefinch
+28.8	Birds / Common Sandpiper
+58.4	Birds / Common Scoter
+89.4	Birds / Common Shelduck
+52.8	Birds / Common Snipe
+42.7	Birds / Common Starling
+4.1	Birds / Common Swift
+96.1	Birds / Common Tern
+15.8	Birds / Common Whitethroat
+84.8	Birds / Common Wood Pigeon
+27.3	Birds / Corn Bunting
+62.3	Birds / Corn Crake
+28.8	Birds / Curlew Sandpiper
+23.3	Birds / Dunlin
+15.8	Birds / Dunnock
+124.5	Birds / Egyptian Goose
+137.1	Birds / Eurasian Bittern
+15.8	Birds / Eurasian Blackcap
+9.2	Birds / Eurasian Blue Tit
+20.6	Birds / Eurasian Bullfinch
+86.7	Birds / Eurasian Collared Dove
+103	Birds / Eurasian Coot
+14.5	Birds / Eurasian Crag Martin
+93.3	Birds / Eurasian Curlew
+36.6	Birds / Eurasian Dotterel
+430.9	Birds / Eurasian Eagle-Owl
+18.9	Birds / Eurasian Golden Oriole
+113.1	Birds / Eurasian Hobby
+78.7	Birds / Eurasian Hoopoe
+98.6	Birds / Eurasian Jay
+122.1	Birds / Eurasian Magpie
+15.8	Birds / Eurasian Nuthatch
+105.6	Birds / Eurasian Oystercatcher
+6.8	Birds / Eurasian Penduline Tit
+52.9	Birds / Eurasian Pygmy Owl
+10.7	Birds / Eurasian Reed Warbler
+20.6	Birds / Eurasian Rock Pipit
+72.6	Birds / Eurasian Scops Owl
+9.2	Birds / Eurasian Siskin
+27.3	Birds / Eurasian Skylark
+111.3	Birds / Eurasian Sparrowhawk
+159.8	Birds / Eurasian Spoonbill
+99	Birds / Eurasian Teal
+44.3	Birds / Eurasian Three-toed Woodpecker
+15.8	Birds / Eurasian Tree Sparrow
+9.2	Birds / Eurasian Treecreeper
+105.5	Birds / Eurasian Whimbrel
+87.4	Birds / Eurasian Wigeon
+84.6	Birds / Eurasian Woodcock
+4	Birds / Eurasian Wren
+21.8	Birds / Eurasian Wryneck
+85.9	Birds / European Bee-eater
+9.2	Birds / European Crested Tit
+59.8	Birds / European Golden Plover
+9.2	Birds / European Goldfinch
+98.4	Birds / European Green Woodpecker
+18.1	Birds / European Greenfinch
+131.6	Birds / European Honey Buzzard
+81.2	Birds / European Nightjar
+10.7	Birds / European Pied Flycatcher
+15.8	Birds / European Robin
+102.4	Birds / European Roller
+6.8	Birds / European Serin
+9.2	Birds / European Stonechat
+80.1	Birds / European Turtle Dove
+99.1	Birds / Ferruginous Duck
+62.8	Birds / Fieldfare
+74.5	Birds / Gadwall
+15.8	Birds / Garden Warbler
+100.6	Birds / Garganey
+137.1	Birds / Glossy Ibis
+3.2	Birds / Goldcrest
+336.9	Birds / Golden Eagle
+87.9	Birds / Goosander
+201.6	Birds / Great Cormorant
+85.9	Birds / Great Crested Grebe
+203.2	Birds / Great Egret
+56.7	Birds / Great Grey Shrike
+161.9	Birds / Great Northern Loon
+30.4	Birds / Great Reed Warbler
+48.9	Birds / Great Spotted Woodpecker
+15.8	Birds / Great Tit
+89.5	Birds / Greater Scaup
+132.3	Birds / Greater White-fronted Goose
+39.7	Birds / Green Sandpiper
+231.6	Birds / Grey Heron
+73.4	Birds / Grey Partridge
+65.7	Birds / Grey Plover
+30.4	Birds / Grey Wagtail
+71.2	Birds / Grey-headed Woodpecker
+181.6	Birds / Greylag Goose
+484.4	Birds / Griffon Vulture
+27.3	Birds / Hawfinch
+64	Birds / Hazel Grouse
+126.8	Birds / Hen Harrier
+123	Birds / Herring Gull
+138	Birds / Hooded Crow
+97	Birds / Horned Grebe
+18.1	Birds / House Sparrow
+10.7	Birds / Icterine Warbler
+18.1	Birds / Italian Sparrow
+25.9	Birds / Jack Snipe
+17.6	Birds / Kentish Plover
+128.1	Birds / Lesser Black-backed Gull
+9.2	Birds / Lesser Redpoll
+17	Birds / Lesser Spotted Woodpecker
+10.7	Birds / Lesser Whitethroat
+75.7	Birds / Little Bittern
+25.9	Birds / Little Crake
+82.2	Birds / Little Egret
+68.3	Birds / Little Grebe
+70.9	Birds / Little Gull
+97.8	Birds / Little Owl
+17.6	Birds / Little Ringed Plover
+7.4	Birds / Little Stint
+144.6	Birds / Long-eared Owl
+92.1	Birds / Long-tailed Duck
+15.8	Birds / Long-tailed Tit
+78.7	Birds / Mallard
+90.9	Birds / Mandarin Duck
+43.1	Birds / Marsh Sandpiper
+9.2	Birds / Marsh Tit
+10.7	Birds / Marsh Warbler
+15.8	Birds / Meadow Pipit
+121	Birds / Mediterranean Gull
+10.7	Birds / Melodious Warbler
+90.5	Birds / Merlin
+39.5	Birds / Middle Spotted Woodpecker
+85.9	Birds / Mistle Thrush
+128.9	Birds / Montagu's Harrier
+535.3	Birds / Mute Swan
+123.5	Birds / Northern Goshawk
+65.6	Birds / Northern Lapwing
+97.7	Birds / Northern Nutcracker
+83.2	Birds / Northern Pintail
+106	Birds / Northern Raven
+83.7	Birds / Northern Shoveler
+18.1	Birds / Northern Wheatear
+20.6	Birds / Ortolan Bunting
+21	Birds / Pallid Swift
+124.7	Birds / Peregrine Falcon
+43.2	Birds / Pied Avocet
+167.3	Birds / Purple Heron
+20.6	Birds / Red Crossbill
+196.6	Birds / Red Kite
+24.3	Birds / Red-backed Shrike
+61.2	Birds / Red-billed Chough
+67.8	Birds / Red-breasted Merganser
+71.2	Birds / Red-crested Pochard
+102.3	Birds / Red-footed Falcon
+97.3	Birds / Red-necked Grebe
+89.4	Birds / Red-throated Loon
+18.1	Birds / Red-throated Pipit
+41.6	Birds / Redwing
+62.8	Birds / Ring Ouzel
+20.6	Birds / Rock Bunting
+90.6	Birds / Rock Dove
+69.4	Birds / Rock Partridge
+69	Birds / Rock Ptarmigan
+77.4	Birds / Rook
+134.2	Birds / Rough-legged Buzzard
+105.9	Birds / Ruddy Shelduck
+42.7	Birds / Ruddy Turnstone
+53.9	Birds / Ruff
+8.6	Birds / Sand Martin
+28.8	Birds / Sanderling
+15.8	Birds / Savi's Warbler
+10.7	Birds / Sedge Warbler
+147.9	Birds / Short-eared Owl
+209.3	Birds / Short-toed Snake Eagle
+9.2	Birds / Short-toed Treecreeper
+37.4	Birds / Smew
+20.6	Birds / Snow Bunting
+47.7	Birds / Song Thrush
+34.8	Birds / Spotted Crake
+15.8	Birds / Spotted Flycatcher
+18.9	Birds / Spotted Redshank
+121.2	Birds / Squacco Heron
+77.6	Birds / Stock Dove
+147	Birds / Tawny Owl
+24.3	Birds / Tawny Pipit
+9.6	Birds / Temminck's Stint
+18.1	Birds / Tree Pipit
+95.1	Birds / Tufted Duck
+151.9	Birds / Tundra Bean Goose
+73.5	Birds / Velvet Scoter
+20.6	Birds / Wallcreeper
+20.6	Birds / Water Pipit
+48.6	Birds / Water Rail
+138.1	Birds / Western Barn Owl
+6.8	Birds / Western Bonelli's Warbler
+141.7	Birds / Western Capercaillie
+62.8	Birds / Western Cattle Egret
+10.1	Birds / Western House Martin
+102.9	Birds / Western Jackdaw
+126.4	Birds / Western Marsh Harrier
+74.6	Birds / Western Osprey
+20.6	Birds / Western Yellow Wagtail
+10.7	Birds / Whinchat
+58.9	Birds / Whiskered Tern
+256.5	Birds / White Stork
+27.3	Birds / White Wagtail
+57.9	Birds / White-backed Woodpecker
+345.2	Birds / White-tailed Eagle
+27.3	Birds / White-throated Dipper
+31.6	Birds / White-winged Snowfinch
+535.3	Birds / Whooper Swan
+9.2	Birds / Willow Tit
+6.8	Birds / Willow Warbler
+33.1	Birds / Wood Sandpiper
+9.2	Birds / Wood Warbler
+27.3	Birds / Woodchat Shrike
+18.1	Birds / Woodlark
+124.8	Birds / Yellow-legged Gull
+20.6	Birds / Yellowhammer
+1080.8	Boats / Jetski
+775.2	Boats / Jetski (parked)
+8682.4	Boats / Paddle steamer
+8393.9	Boats / Paddle steamer (parked)
+2050.4	Boats / Speedboat
+1142.6	Boats / Speedboat (parked)
+30.7	Build / CamoNet
+2016	Build / DoorWall - Metal
+3840	Build / Floor - Metal
+2300.1	Build / HalfWall - Metal
+864	Build / Pillar - Metal
+5594.2	Build / Roof - Metal
+5594.2	Build / Roof - Stone
+5594.2	Build / Roof - Wood
+589	Build / Rope ladder
+30013	Build / Stairs - Metal
+2300.1	Build / Wall - Metal
+2880	Build / WindowWall - Metal
+18447.8	Cars / AE85 Levin
+18133.5	Cars / AE85 Levin (parked)
+711.4	Cars / AE86 coupe
+502.5	Cars / AE86 coupe (parked)
+1101.3	Cars / AE86 hatch
+504.2	Cars / AE86 hatch (parked)
+21823.2	Cars / BNR32
+21197	Cars / BNR32 (parked)
+21999.6	Cars / BNR34
+21686.3	Cars / BNR34 (parked)
+18920	Cars / CE9A Evo III
+18597.8	Cars / CE9A Evo III (parked)
+19063.1	Cars / CN9A Evo IV
+18859.3	Cars / CN9A Evo IV (parked)
+17436.8	Cars / CT9A Evo VII
+17199.8	Cars / CT9A Evo VII (parked)
+17670.1	Cars / DC2 Type R
+17462.5	Cars / DC2 Type R (parked)
+12123.3	Cars / EG6 hatch
+11814.2	Cars / EG6 hatch (parked)
+13399.3	Cars / EK9 Type R
+13090.2	Cars / EK9 Type R (parked)
+19638.6	Cars / ER34 Skyline
+19425	Cars / ER34 Skyline (parked)
+20605.2	Cars / FC3S
+20368.4	Cars / FC3S (parked)
+24164	Cars / FD3S
+23841.9	Cars / FD3S (parked)
+22228	Cars / GC8 rally saloon
+21645	Cars / GC8 rally saloon (parked)
+23531.6	Cars / JZA80 Supra
+23220.6	Cars / JZA80 Supra (parked)
+25146.3	Cars / NA1 NSX
+24954.8	Cars / NA1 NSX (parked)
+16626.8	Cars / NA6CE Roadster
+16410.5	Cars / NA6CE Roadster (parked)
+16384.1	Cars / NB8C Roadster
+16141.3	Cars / NB8C Roadster (parked)
+19310.1	Cars / PS13 Sileighty
+19096.5	Cars / PS13 Sileighty (parked)
+19422.3	Cars / RPS13 180SX
+19096.5	Cars / RPS13 180SX (parked)
+1158.3	Cars / Rental kart
+726.3	Cars / Rental kart (parked)
+616.1	Cars / Rental kart - Army M 28 148
+1197.7	Cars / Rental kart - Army M 41 185
+729.3	Cars / Rental kart - Army M 54 222
+849.9	Cars / Rental kart - Blue no. 11
+1466.6	Cars / Rental kart - Cyan no. 46
+993.2	Cars / Rental kart - Green no. 25
+1543.7	Cars / Rental kart - Lime no. 60
+967.3	Cars / Rental kart - Orange no. 32
+993.6	Cars / Rental kart - Pink no. 53
+1099.7	Cars / Rental kart - Purple no. 39
+820.9	Cars / Rental kart - Red no. 4
+1052.2	Cars / Rental kart - White no. 67
+1472.1	Cars / Rental kart - Yellow no. 18
+1472.1	Cars / Rental kart - cornering on three wheels
+1099.7	Cars / Rental kart - tipped over
+19307.1	Cars / S13 Silvia
+19096.5	Cars / S13 Silvia (parked)
+18001.4	Cars / SW20 MR2
+17765.9	Cars / SW20 MR2 (parked)
+5710.5	Cars / XP90 Yaris
+5491.9	Cars / XP90 Yaris (parked)
+5237.3	Cars / XW20 Prius
+5053.6	Cars / XW20 Prius (parked)
+5263.8	Cars / XW30 Prius
+5093.8	Cars / XW30 Prius (parked)
+18021.1	Cars / Z33
+17811.7	Cars / Z33 (parked)
+2382.5	Cars / ZN6
+2058.4	Cars / ZN6 (parked)
+12886.9	Cars / ZZW30 MR-S
+12677.5	Cars / ZZW30 MR-S (parked)
+2234.4	Clothes / Bee stockings
+293.1	Clothes / Bell collar
+788.1	Clothes / Big pink bow
+461.8	Clothes / Black band tee
+455.1	Clothes / Black beanie
+508.9	Clothes / Black cargo pants
+304.2	Clothes / Black cat ears
+215.1	Clothes / Black face mask
+855.9	Clothes / Black gothic robe
+313.5	Clothes / Black headset
+290	Clothes / Black marcel
+385.1	Clothes / Black shades
+432	Clothes / Black shorts
+918.4	Clothes / Black slit maxi skirt
+346.8	Clothes / Black thigh-highs
+3093.1	Clothes / Black-white thigh-highs
+850.5	Clothes / Buckle corset
+304.1	Clothes / Bunny ears
+828.1	Clothes / Cat-ear headset
+432	Clothes / Chain crop top
+396.9	Clothes / Chain necklace
+570.3	Clothes / Combat boots
+396.9	Clothes / Devil horns
+432.3	Clothes / Disco platforms
+278.1	Clothes / Disco shades
+396.9	Clothes / Disco-ball top
+208.3	Clothes / Fang mask
+346.1	Clothes / Fingerless gloves
+6006	Clothes / Fishnets
+290	Clothes / Galaxy dress
+432	Clothes / Galaxy hoodie
+382	Clothes / Glitch tee
+276.6	Clothes / Gothic round shades
+568.1	Clothes / Green polo
+275	Clothes / Grey jogging shorts
+351.7	Clothes / Heart choker
+823.7	Clothes / Heart shades
+177.4	Clothes / Holo mask
+434.5	Clothes / Holo skirt
+284.4	Clothes / Industrial bar and nose ring
+948.5	Clothes / Jeans
+760.7	Clothes / Kawaii knee socks
+907.8	Clothes / Lace arm warmers
+313.5	Clothes / Lace headband
+396.9	Clothes / Lava tee
+301.3	Clothes / Mary Janes
+604.1	Clothes / Navy polo
+907.8	Clothes / Neon gloves
+779.8	Clothes / Neon headset
+907.8	Clothes / Olive army T-shirt
+360.5	Clothes / Pastel heart tee
+539.9	Clothes / Pastel hoodie
+320.1	Clothes / Pink cat ears
+224	Clothes / Pink cat mask
+458.5	Clothes / Pink crop top
+4148.7	Clothes / Pink lolita dress
+312.1	Clothes / Pink paw gloves
+434.6	Clothes / Pink pleated skirt
+486.2	Clothes / Pink sneakers
+3004.7	Clothes / Pink-white thigh-highs
+772.4	Clothes / Platform buckle boots
+4273.7	Clothes / Postal-doll jacket
+313.5	Clothes / Postal-doll skirt
+388.5	Clothes / Rainbow cat ears
+970	Clothes / Rainbow stockings
+290	Clothes / Rainbow tee
+432	Clothes / Red tartan skirt
+302	Clothes / Round glasses
+3264	Clothes / Ruffled black mini
+382	Clothes / Silver hoops
+290	Clothes / Silver studs
+341.6	Clothes / Skull mask
+313.5	Clothes / Spike piercings
+462.3	Clothes / Spiked choker
+411.4	Clothes / Star glasses
+290	Clothes / Star studs
+796.7	Clothes / Striped arm warmers
+2846.5	Clothes / Striped long-sleeve
+224.8	Clothes / Swirly A mask
+328.9	Clothes / Swirly OwO mask
+794	Clothes / TAZ 90 jacket
+371.5	Clothes / TAZ 90 trousers
+246.9	Clothes / Tongue-out mask
+308.9	Clothes / UwU mask
+313.5	Clothes / White T-shirt
+432	Clothes / White marcel
+470.2	Clothes / White sneakers
+866.6	Clothes / Witch robe
+7.8	Crafting / Ashes
+396.9	Emotes / Air drums
+826.6	Emotes / Air guitar
+396.9	Emotes / Arm wave
+290	Emotes / Body roll
+288.1	Emotes / Cabbage patch
+396.9	Emotes / Carlton
+382	Emotes / Charleston
+313.5	Emotes / Cheer
+396.9	Emotes / Chicken dance
+288.1	Emotes / Clap
+329.8	Emotes / Dab
+254.1	Emotes / Disco point
+788.3	Emotes / Fist pump
+788.3	Emotes / Floss
+275	Emotes / Gangnam style
+288.1	Emotes / Griddy
+313.5	Emotes / Headbang
+382	Emotes / Headspin
+313.5	Emotes / Macarena
+382	Emotes / Moonwalk
+313.5	Emotes / Orange justice
+288.1	Emotes / Pogo
+313.5	Emotes / Rat dance
+290	Emotes / Robot
+288.1	Emotes / Running man
+817.9	Emotes / Salute
+383.4	Emotes / Shoulder lean
+313.5	Emotes / Shrug
+290	Emotes / Shuffle
+288.1	Emotes / Skank
+318.5	Emotes / Sprinkler
+396.9	Emotes / Swim
+289.4	Emotes / T-step
+434.3	Emotes / Toprock
+396.9	Emotes / Twerk
+288.1	Emotes / Wave
+290	Emotes / Windmill
+313.5	Emotes / Wop
+817.9	Emotes / YMCA
+267.9	Faces / Expression - Angry
+267.9	Faces / Expression - Dizzy
+267.9	Faces / Expression - Focused
+267.9	Faces / Expression - Happy
+267.9	Faces / Expression - Joy
+267.9	Faces / Expression - Love
+267.9	Faces / Expression - Neutral
+267.9	Faces / Expression - Out
+267.9	Faces / Expression - Pain
+267.9	Faces / Expression - Rock
+267.9	Faces / Expression - Sad
+267.9	Faces / Expression - Sleepy
+267.9	Faces / Expression - Surprised
+267.9	Faces / Expression - Unsure
+267.9	Faces / Expression - Wink
+267.9	Faces / Preset - anime
+267.9	Faces / Preset - bold
+267.9	Faces / Preset - button
+267.9	Faces / Preset - calm
+267.9	Faces / Preset - cheeky
+267.9	Faces / Preset - cute
+267.9	Faces / Preset - dreamy
+267.9	Faces / Preset - freckles
+267.9	Faces / Preset - gloomy
+267.9	Faces / Preset - grin
+267.9	Faces / Preset - sharp
+267.9	Faces / Preset - sleepy
+267.9	Faces / Preset - sparkle
+267.9	Faces / Preset - startled
+267.9	Faces / Preset - stern
+267.9	Faces / Preset - stubble
+267.9	Faces / Seeded - seed 0
+267.9	Faces / Seeded - seed 1
+254	Faces / Seeded - seed 2
+267.9	Faces / Seeded - seed 3
+267.9	Faces / Seeded - seed 4
+254	Faces / Seeded - seed 5
+235.8	Faces / Seeded - seed 6
+267.9	Faces / Seeded - seed 7
+817.9	Fights / Move - Finisher
+313.5	Fights / Move - Jab
+387.7	Fights / Move - JumpKick
+809.5	Fights / Move - Kick
+313.5	Fights / Move - LowJab
+316.1	Fights / Move - StringKick
+288.1	Fights / Move - Sweep
+788.3	Fights / Move - Uppercut
+388.6	Fights / Stance - Air
+762.3	Fights / Stance - BlockStun
+339.5	Fights / Stance - Crouch
+817.9	Fights / Stance - Dazed
+342.6	Fights / Stance - Down
+804.5	Fights / Stance - GuardHigh
+317.5	Fights / Stance - GuardLow
+788.3	Fights / Stance - HitStun
+339.5	Fights / Stance - Stand
+396.9	Fights / Stance - Victory
+298.7	Figures / Build - Broad
+313.5	Figures / Build - Curvy
+298.7	Figures / Build - Lean
+313.5	Figures / Build - Slim
+281.1	Figures / Build - Stocky
+310.9	Figures / Hair - BluntBangs
+313.5	Figures / Hair - Bob
+432.3	Figures / Hair - Bun
+301.3	Figures / Hair - Long
+945.9	Figures / Hair - Mohawk
+267.9	Figures / Hair - None
+432	Figures / Hair - Ponytail
+936.8	Figures / Hair - Quiff
+363.2	Figures / Hair - Shaggy
+846	Figures / Hair - Short
+288.1	Figures / Hair - SideSwept
+389.4	Figures / Hair - Spiky
+432	Figures / Hair - Twintails
+270.5	Figures / Hat - ReindeerAntlers
+279.6	Figures / Hat - SantaHat
+319.5	Figures / Hat - WitchHat
+239.4	Figures / Helmet
+288.1	Figures / Holding - Hold
+313.5	Figures / Holding - Mouth
+288.1	Figures / Holding - Plant
+286.3	Figures / Holding - ShoulderAim
+788.3	Figures / Holding - ThrowRelease
+396.9	Figures / Holding - ThrowWindup
+817.9	Figures / Holding - TwoHandEye
+790	Figures / Pose - ClimbLeft
+315.5	Figures / Pose - ClimbRight
+433.5	Figures / Pose - Cycling
+396.9	Figures / Pose - Hanging
+313.4	Figures / Pose - Running
+287.9	Figures / Pose - Spread
+288.1	Figures / Pose - Standing
+315.5	Figures / Pose - Tucked
+817.9	Figures / Running
+396.9	Figures / Seated passenger
+316.1	Figures / Swim - Crawl
+312.7	Figures / Swim - Tread
+397.1	Figures / Swim - Under
+313.5	Figures / Walking
+2275	Furniture / Amplifier
+4000	Furniture / Armchair
+7327.9	Furniture / Banner
+7056	Furniture / BarrelStack
+29862	Furniture / Bathtub
+35448	Furniture / Bed
+512	Furniture / Bench
+1931.3	Furniture / BikeRack
+239.4	Furniture / BlahajBin
+2517.9	Furniture / Bookcase
+7100	Furniture / CarLift
+560	Furniture / ChurchRadio
+37700	Furniture / CinemaScreen
+99.5	Furniture / CoffeeTable
+4050	Furniture / Compressor
+400	Furniture / Conveyor
+18000	Furniture / Counter
+5000	Furniture / Dais
+100	Furniture / Desk
+17280	Furniture / DeskCounter
+3199.6	Furniture / DrumKit
+736.9	Furniture / Dryer
+2277.5	Furniture / FrontPew
+360	Furniture / GuitarStand
+3946.7	Furniture / GunLocker
+24	Furniture / IroningBoard
+99	Furniture / JerryCan
+48	Furniture / Keyboard
+21258	Furniture / Locker
+8028	Furniture / Machine
+8547.2	Furniture / Mailboxes
+5040	Furniture / Pallet
+1365.7	Furniture / PalletRack
+1175.6	Furniture / Pew
+9788.6	Furniture / Pillar
+900	Furniture / Plant
+5142.5	Furniture / Rack
+4402.2	Furniture / Safe
+888	Furniture / SafetySign
+1284.9	Furniture / Shelf
+12000	Furniture / ShopCounter
+7744	Furniture / ShowroomPlinth
+12048	Furniture / SingleBed
+7460	Furniture / Sofa
+4629.8	Furniture / StorageCage
+1936	Furniture / Stove
+100	Furniture / Table
+28800	Furniture / TellerDesk
+279.7	Furniture / TimeClock
+13719.9	Furniture / ToolChest
+4000	Furniture / ToyBox
+4207.8	Furniture / TruckProp
+768	Furniture / Tv
+4402.2	Furniture / VaultSafe
+7942.8	Furniture / VendingMachine
+736.9	Furniture / WashingMachine
+144	Furniture / WaterTank
+563.2	Furniture / Whiteboard
+100	Furniture / Workbench
+2.3	Items / Agone
+44.9	Items / Alphorn
+2.3	Items / ArcticChar
+3	Items / ArmyTee
+2.6	Items / Backpack
+2.3	Items / BakedPotato
+3	Items / BandTee
+13.4	Items / Bandage
+6.6	Items / Barbel
+7.1	Items / Barley
+12	Items / BarleySeed
+2.6	Items / BeeStockings
+200.8	Items / BeerBottle
+4.7	Items / BellCollar
+13.2	Items / BeltPouch
+16	Items / Biberli
+6.1	Items / BlackBeanie
+3	Items / BlackMarcel
+3.7	Items / BlackShorts
+2.6	Items / BlackStockings
+11.1	Items / Bread
+2.3	Items / BrookTrout
+2.3	Items / BrownTrout
+3	Items / BuckleCorset
+6.1	Items / BunnyEars
+6.6	Items / Burbot
+9.3	Items / Camera
+6.7	Items / CannedFood
+12.7	Items / CarBattery
+7.6	Items / CargoPants
+7.1	Items / Carrot
+6.1	Items / CatEarsBlack
+6.1	Items / CatEarsPink
+9.4	Items / CatHeadset
+3	Items / ChainCropTop
+4.7	Items / ChainNecklace
+11.4	Items / Cheese
+9	Items / Chocolate
+2.3	Items / Chub
+8.4	Items / Cloth
+2.6	Items / Coal
+6.7	Items / CombatBoots
+14.8	Items / CopperWire
+6.1	Items / DevilHorns
+6.7	Items / DiscoPlatforms
+2.9	Items / DiscoTop
+11.4	Items / Dogtag
+5.7	Items / DuctTape
+6.2	Items / Electronics
+29.6	Items / EnergyBar
+4.2	Items / EnginePart
+8.1	Items / FarmStand
+7.1	Items / Fertiliser
+26.5	Items / FieldWorkbench
+3	Items / FingerlessGloves
+4.5	Items / FirstAidKit
+3.5	Items / FishSoup
+2.6	Items / Fishnets
+7.1	Items / Flour
+2.7	Items / Fondue
+296.7	Items / FonduePot
+10.2	Items / Francs
+7.8	Items / FuelCan
+8.3	Items / GalaxyDress
+2.9	Items / GalaxyHoodie
+623.5	Items / Gamelle
+9.4	Items / GamerHeadset
+2.9	Items / GlitchTee
+6.2	Items / Gluehwein
+2.6	Items / GothStockings
+10.7	Items / GothicRobe
+50.6	Items / Gps
+2.3	Items / Grayling
+3	Items / GreenPolo
+5.9	Items / Hammer
+10.4	Items / Handbag
+2.3	Items / HayBale
+9.4	Items / HayHideout
+4.7	Items / HeartChoker
+11.6	Items / HikingPack
+2.3	Items / Hoe
+6	Items / HoloMask
+8.5	Items / HoloSkirt
+2.3	Items / IceTea
+2.3	Items / IsotonicDrink
+7.6	Items / Jeans
+3.7	Items / JoggingShorts
+2.6	Items / KneeSocks
+3	Items / LaceArmWarmers
+6.1	Items / LaceHeadband
+2.3	Items / LakeTrout
+2.9	Items / LavaTee
+10.7	Items / LolitaDress
+7.1	Items / Maize
+7.1	Items / MaizeMeal
+12	Items / MaizeSeed
+6.7	Items / MaryJanes
+6	Items / MaskBlack
+6	Items / MaskCat
+6	Items / MaskFang
+6	Items / MaskSkull
+6	Items / MaskSwirlA
+6	Items / MaskSwirlW
+6	Items / MaskTongue
+6	Items / MaskUwu
+2.3	Items / MineralWater
+4.1	Items / Namaycush
+3	Items / NavyPolo
+2.9	Items / NeonGloves
+9.4	Items / NeonHeadset
+3	Items / PastelHoodie
+3	Items / PastelTee
+3	Items / PawGloves
+12	Items / PeaSeed
+7.1	Items / Peas
+13.7	Items / PerchFillets
+4.1	Items / Pike
+6.1	Items / PinkBow
+3	Items / PinkCropTop
+9.8	Items / PinkPleated
+6.7	Items / PinkSneakers
+2.6	Items / PinkStockings
+7.1	Items / Plastic
+6.7	Items / PlatformBoots
+1489.7	Items / PlayingCards
+116	Items / PokerChips
+4.5	Items / Polenta
+3	Items / PostalJacket
+9.8	Items / PostalSkirt
+7.1	Items / Potato
+2.9	Items / Pumpkin
+3.1	Items / Raclette
+160.5	Items / Radio
+169.3	Items / Radio backpack
+8.8	Items / Radio backpack straps
+6.1	Items / RainbowCatEars
+2	Items / RainbowStockings
+6.1	Items / RainbowTee
+2.3	Items / RainbowTrout
+12	Items / RapeSeed
+7.1	Items / Rapeseed
+2.3	Items / RapeseedOil
+8.5	Items / Rifle
+2.3	Items / Roach
+3.1	Items / RockSalt
+2.3	Items / Roesti
+18.7	Items / RopeLadder
+2.3	Items / RoundGoby
+12.8	Items / Rubber
+2.3	Items / Rudd
+9.8	Items / RuffledMini
+12	Items / SeedPotato
+6.4	Items / Shotgun
+9.8	Items / SlitMaxiSkirt
+12	Items / SmartBinoculars
+7.9	Items / SmokeCanister
+4.7	Items / SpikedChoker
+3.1	Items / Stone
+3	Items / StripedArmWarmers
+3	Items / StripedLongsleeve
+7.1	Items / Sugar
+7.1	Items / SugarBeet
+12	Items / SugarBeetSeed
+12	Items / SunflowerSeed
+7.1	Items / SunflowerSeeds
+8	Items / SwissArmyKnife
+9.8	Items / TartanSkirt
+3.7	Items / TazTrousers
+12.5	Items / ToastedBread
+7	Items / Trampoline
+12	Items / VegetableSeeds
+2.3	Items / VegetableSoup
+6.6	Items / Wels
+7.1	Items / Wheat
+12	Items / WheatSeed
+3	Items / WhiteMarcel
+6.7	Items / WhiteSneakers
+3	Items / WhiteTee
+2.3	Items / Whitefish
+330.7	Items / WitchHat
+10.7	Items / WitchRobe
+5.6	Items / WoodPlanks
+6.6	Items / Zander
+1.5	Motorbikes / Honda CB500 (1994-03)
+1.5	Motorbikes / Honda CB500 Hornet (2024-26)
+1.5	Motorbikes / Honda CB500F (2013-15)
+1.5	Motorbikes / Honda CB500F (2019-21)
+728.2	Motorbikes / Honda CB500X (2019-21)
+1098.9	Motorbikes / Honda CB500X (2019-21) (parked)
+1663.8	Motorbikes / Honda CRF1000L Africa Twin (2016-17)
+2023.8	Motorbikes / Honda CRF1000L Africa Twin (2016-17) (parked)
+1667.6	Motorbikes / Honda CRF1000L Africa Twin (2018-19)
+2027.6	Motorbikes / Honda CRF1000L Africa Twin (2018-19) (parked)
+1667.6	Motorbikes / Honda CRF1000L Africa Twin ABS (2016-17)
+2027.6	Motorbikes / Honda CRF1000L Africa Twin ABS (2016-17) (parked)
+1667.6	Motorbikes / Honda CRF1000L Africa Twin DCT (2016-17)
+2027.6	Motorbikes / Honda CRF1000L Africa Twin DCT (2016-17) (parked)
+1667.6	Motorbikes / Honda CRF1000L Africa Twin DCT (2018-19)
+2027.6	Motorbikes / Honda CRF1000L Africa Twin DCT (2018-19) (parked)
+785	Motorbikes / Honda CRF1000L2 Africa Twin Adventure Sports (2018-19)
+1145	Motorbikes / Honda CRF1000L2 Africa Twin Adventure Sports (2018-19) (parked)
+855	Motorbikes / Honda CRF1000L2 Africa Twin Adventure Sports DCT (2018-19)
+1145	Motorbikes / Honda CRF1000L2 Africa Twin Adventure Sports DCT (2018-19) (parked)
+716.4	Motorbikes / Honda CRF1000L2 Africa Twin Adventure Sports Type LD (2018-19, Japan)
+1097	Motorbikes / Honda CRF1000L2 Africa Twin Adventure Sports Type LD (2018-19, Japan) (parked)
+1669.7	Motorbikes / Honda CRF1100L Africa Twin (2020-21)
+2029.7	Motorbikes / Honda CRF1100L Africa Twin (2020-21) (parked)
+1669.7	Motorbikes / Honda CRF1100L Africa Twin (2022-23)
+2029.7	Motorbikes / Honda CRF1100L Africa Twin (2022-23) (parked)
+1671.2	Motorbikes / Honda CRF1100L Africa Twin (2024-26)
+2029.7	Motorbikes / Honda CRF1100L Africa Twin (2024-26) (parked)
+1663.7	Motorbikes / Honda CRF1100L Africa Twin Adventure Sports (2020-23)
+2048.7	Motorbikes / Honda CRF1100L Africa Twin Adventure Sports (2020-23) (parked)
+1610.6	Motorbikes / Honda CRF1100L Africa Twin Adventure Sports DCT (2020-23)
+1970.6	Motorbikes / Honda CRF1100L Africa Twin Adventure Sports DCT (2020-23) (parked)
+1665.2	Motorbikes / Honda CRF1100L Africa Twin Adventure Sports ES (2020-23)
+2048.7	Motorbikes / Honda CRF1100L Africa Twin Adventure Sports ES (2020-23) (parked)
+727.6	Motorbikes / Honda CRF1100L Africa Twin Adventure Sports ES (2024-26)
+1099	Motorbikes / Honda CRF1100L Africa Twin Adventure Sports ES (2024-26) (parked)
+1663.7	Motorbikes / Honda CRF1100L Africa Twin Adventure Sports ES DCT (2020-23)
+2048.7	Motorbikes / Honda CRF1100L Africa Twin Adventure Sports ES DCT (2020-23) (parked)
+727.6	Motorbikes / Honda CRF1100L Africa Twin Adventure Sports ES DCT (2024-26)
+1105.7	Motorbikes / Honda CRF1100L Africa Twin Adventure Sports ES DCT (2024-26) (parked)
+1669.7	Motorbikes / Honda CRF1100L Africa Twin DCT (2020-21)
+2029.7	Motorbikes / Honda CRF1100L Africa Twin DCT (2020-21) (parked)
+1669.7	Motorbikes / Honda CRF1100L Africa Twin DCT (2022-23)
+2029.7	Motorbikes / Honda CRF1100L Africa Twin DCT (2022-23) (parked)
+1669.7	Motorbikes / Honda CRF1100L Africa Twin DCT (2024-26)
+2029.7	Motorbikes / Honda CRF1100L Africa Twin DCT (2024-26) (parked)
+1669.7	Motorbikes / Honda CRF1100L Africa Twin ES (2024-26)
+2029.7	Motorbikes / Honda CRF1100L Africa Twin ES (2024-26) (parked)
+1669.7	Motorbikes / Honda CRF1100L Africa Twin ES DCT (2024-26)
+2029.7	Motorbikes / Honda CRF1100L Africa Twin ES DCT (2024-26) (parked)
+787.2	Motorbikes / Honda XRV650 Africa Twin (RD03, 1988, Japan)
+1034.6	Motorbikes / Honda XRV650 Africa Twin (RD03, 1988, Japan) (parked)
+787.2	Motorbikes / Honda XRV650 Africa Twin (RD03, 1988-89)
+1034.6	Motorbikes / Honda XRV650 Africa Twin (RD03, 1988-89) (parked)
+788.2	Motorbikes / Honda XRV750 Africa Twin (RD04, 1990-92)
+1036	Motorbikes / Honda XRV750 Africa Twin (RD04, 1990-92) (parked)
+789.9	Motorbikes / Honda XRV750 Africa Twin (RD07, 1993-95)
+1037.1	Motorbikes / Honda XRV750 Africa Twin (RD07, 1993-95) (parked)
+790	Motorbikes / Honda XRV750 Africa Twin (RD07A, 1996-2003)
+1037.1	Motorbikes / Honda XRV750 Africa Twin (RD07A, 1996-2003) (parked)
+788.2	Motorbikes / Honda XRV750 Africa Twin 50 PS (RD04, 1990-92, Germany)
+1036	Motorbikes / Honda XRV750 Africa Twin 50 PS (RD04, 1990-92, Germany) (parked)
+1.5	Motorbikes / KTM 125 Duke (2011-16)
+1.5	Motorbikes / KTM 390 Duke (2017-23)
+1.5	Motorbikes / KTM 390 Duke (2024-26)
+1.5	Motorbikes / KTM 690 Duke / 690 Duke R (2016-19)
+581.5	Motorbikes / KTM 690 SMC (2008-11)
+581.5	Motorbikes / KTM 690 SMC (2008-11) (parked)
+581.5	Motorbikes / KTM 690 SMC R (2012-18)
+581.5	Motorbikes / KTM 690 SMC R (2012-18) (parked)
+581.5	Motorbikes / KTM 690 SMC R (2019-25)
+581.5	Motorbikes / KTM 690 SMC R (2019-25) (parked)
+1.5	Motorbikes / KTM 790 Duke (2018-20)
+1.5	Motorbikes / KTM 890 Duke R (2020-23)
+114.7	Motorbikes / Kawasaki Versys 650 (2007-09)
+113.2	Motorbikes / Kawasaki Versys 650 (2007-09) (parked)
+114.7	Motorbikes / Kawasaki Versys 650 (2010-14)
+113.2	Motorbikes / Kawasaki Versys 650 (2010-14) (parked)
+114.7	Motorbikes / Kawasaki Versys 650 (2015-21)
+113.2	Motorbikes / Kawasaki Versys 650 (2015-21) (parked)
+114.7	Motorbikes / Kawasaki Versys 650 (2022+)
+113.2	Motorbikes / Kawasaki Versys 650 (2022+) (parked)
+214.5	Motorbikes / Yamaha FZ1 Fazer (FZ1-S) (2006-15)
+214.5	Motorbikes / Yamaha FZ1 Fazer (FZ1-S) (2006-15) (parked)
+156.4	Motorbikes / Yamaha FZ6 Fazer (FZ6-S) (2004-06)
+156.4	Motorbikes / Yamaha FZ6 Fazer (FZ6-S) (2004-06) (parked)
+156.4	Motorbikes / Yamaha FZ6 Fazer S2 (2007-10)
+156.4	Motorbikes / Yamaha FZ6 Fazer S2 (2007-10) (parked)
+214.5	Motorbikes / Yamaha FZ8 / Fazer8 (2010-15)
+214.5	Motorbikes / Yamaha FZ8 / Fazer8 (2010-15) (parked)
+113.2	Motorbikes / Yamaha FZS1000 Fazer (2001-05)
+113.2	Motorbikes / Yamaha FZS1000 Fazer (2001-05) (parked)
+144.3	Motorbikes / Yamaha FZS600 Fazer (1998-01)
+144.3	Motorbikes / Yamaha FZS600 Fazer (1998-01) (parked)
+144.3	Motorbikes / Yamaha FZS600 Fazer (2002-03)
+144.3	Motorbikes / Yamaha FZS600 Fazer (2002-03) (parked)
+211.6	Motorbikes / Yamaha MT-09 Tracer (2015-17)
+211.6	Motorbikes / Yamaha MT-09 Tracer (2015-17) (parked)
+384.9	Motorbikes / Yamaha TMAX 500 (XP500) (2001-07)
+270.4	Motorbikes / Yamaha TMAX 500 (XP500) (2001-07) (parked)
+382.7	Motorbikes / Yamaha TMAX 500 (XP500) (2008-11)
+268	Motorbikes / Yamaha TMAX 500 (XP500) (2008-11) (parked)
+382.7	Motorbikes / Yamaha TMAX 530 (XP530) (2012-16)
+268	Motorbikes / Yamaha TMAX 530 (XP530) (2012-16) (parked)
+383.8	Motorbikes / Yamaha TMAX 530 SX / DX (XP530-A) (2017-19)
+269.1	Motorbikes / Yamaha TMAX 530 SX / DX (XP530-A) (2017-19) (parked)
+383	Motorbikes / Yamaha TMAX 560 (2020-21)
+268.2	Motorbikes / Yamaha TMAX 560 (2020-21) (parked)
+383	Motorbikes / Yamaha TMAX 560 (2022+)
+268.2	Motorbikes / Yamaha TMAX 560 (2022+) (parked)
+216.5	Motorbikes / Yamaha Tracer 7 (2020+)
+215	Motorbikes / Yamaha Tracer 7 (2020+) (parked)
+140.5	Motorbikes / Yamaha Tracer 700 (2016-19)
+139	Motorbikes / Yamaha Tracer 700 (2016-19) (parked)
+114.6	Motorbikes / Yamaha Tracer 9 (2021+)
+114.6	Motorbikes / Yamaha Tracer 9 (2021+) (parked)
+114.6	Motorbikes / Yamaha Tracer 9 GT (2021+)
+114.6	Motorbikes / Yamaha Tracer 9 GT (2021+) (parked)
+114.6	Motorbikes / Yamaha Tracer 9 GT+ (2023+)
+114.6	Motorbikes / Yamaha Tracer 9 GT+ (2023+) (parked)
+211.6	Motorbikes / Yamaha Tracer 900 (2018-20)
+211.6	Motorbikes / Yamaha Tracer 900 (2018-20) (parked)
+114.6	Motorbikes / Yamaha Tracer 900 GT (2018-20)
+114.6	Motorbikes / Yamaha Tracer 900 GT (2018-20) (parked)
+865.1	Motorbikes / Yamaha XT1200Z Super Ténéré (2010-13)
+1105.3	Motorbikes / Yamaha XT1200Z Super Ténéré (2010-13) (parked)
+795.1	Motorbikes / Yamaha XT1200Z Super Ténéré (2014-21)
+1105.3	Motorbikes / Yamaha XT1200Z Super Ténéré (2014-21) (parked)
+663.9	Motorbikes / Yamaha XT1200ZE Super Ténéré (2014-21)
+1044.2	Motorbikes / Yamaha XT1200ZE Super Ténéré (2014-21) (parked)
+660.1	Motorbikes / Yamaha YZF-R1 (2020+)
+660.1	Motorbikes / Yamaha YZF-R1 (2020+) (parked)
+306.7	Motorbikes / Yamaha YZF-R3 (2016)
+313.5	Motorbikes / Yamaha YZF-R3 (2016) (parked)
+1608	Occasions / Prop - GiftBlue
+1824	Occasions / Prop - GiftGreen
+1788	Occasions / Prop - GiftRed
+7.7	Occasions / Prop - TreatBowl
+41720.9	Pallets / On the forks
+82	Parts / Excavator boom
+1114.6	Parts / Excavator bucket
+670	Parts / Forklift fork carriage
+97	Parts / Mini dumper roller
+1030.9	Parts / Mini dumper skip
+2333.7	Parts / Mini excavator blade
+138.6	Parts / Mini excavator boom
+265.7	Parts / Mini excavator bucket
+3607.9	Parts / Mini excavator undercarriage
+83.3	Parts / Telehandler boom
+29.3	Parts / Wheel loader bucket
+1288	Parts / Wheel loader forks
+8622.4	Rides / Airstairs
+8101.6	Rides / Airstairs (parked)
+3736.4	Rides / Compact roller
+3413.1	Rides / Compact roller (parked)
+48699.1	Rides / Excavator
+48086.8	Rides / Excavator (parked)
+42141.4	Rides / Forklift
+41831.2	Rides / Forklift (parked)
+3239.1	Rides / Mini dumper
+2945.7	Rides / Mini dumper (parked)
+15494.8	Rides / Mini excavator
+14650.1	Rides / Mini excavator (parked)
+818.7	Rides / Parachute
+10636.7	Rides / Paraglider
+77.3	Rides / Pigeon
+174.3	Rides / Road bike
+3.5	Rides / Road bike (parked)
+908.4	Rides / Skis
+11527.2	Rides / Telehandler
+11304.5	Rides / Telehandler (parked)
+22348.8	Rides / Wheel loader
+23621.3	Rides / Wheel loader (forks)
+23377.8	Rides / Wheel loader (forks) (parked)
+22119	Rides / Wheel loader (parked)
+275.1	Rides / Wingsuit
+295727.7	Terrain / Building site - foundations, a block of four floors
+295727.7	Terrain / Building site - shell, a block of four floors
+907688.3	Terrain / Building site - topped out, a house
+2228374	Terrain / Building site - topped out, a six-floor block
+91640	Terrain / Garage door - Sidewalk
+493417	Terrain / Garage ramp
+7741.9	Terrain / Landing - Jetty
+22402.7	Terrain / Landing - Pier
+6072	Terrain / Road prop - CartShelter
+4983.5	Terrain / Road prop - MainRoadSign
+483.8	Terrain / Road prop - ParkingSign
+344	Terrain / Road prop - TicketBarrier 0
+520	Terrain / Road prop - TicketKiosk
+2439.4	Terrain / Road prop - YieldSign
+7753.3	Terrain / Traffic light - Geneva
+7262.4	Terrain / Traffic light - Vaud
+42303.3	Trailer / Drognens dormitory
+653.6	Trucks and buses / Arocs 3240 8x4 mixer
+61.8	Trucks and buses / Arocs 3240 8x4 mixer (parked)
+13104.3	Trucks and buses / Arocs 3245 8x4 tipper
+12849.3	Trucks and buses / Arocs 3245 8x4 tipper (parked)
+615.7	Trucks and buses / Citaro G articulated
+393.9	Trucks and buses / Citaro G articulated (parked)
+622.3	Trucks and buses / Citaro city bus
+361.9	Trucks and buses / Citaro city bus (parked)
+2745.3	Trucks and buses / Claas Lexion 6800
+2533.8	Trucks and buses / Claas Lexion 6800 (parked)
+835.7	Trucks and buses / Fendt 724 Vario
+537.8	Trucks and buses / Fendt 724 Vario (parked)
+537.8	Trucks and buses / Fendt 724 Vario + Disc mower 3 m
+537.8	Trucks and buses / Fendt 724 Vario + Reversible plough
+537.8	Trucks and buses / Fendt 724 Vario + Seed drill 3 m
+18320.7	Trucks and buses / Ford F-150 Raptor
+17751	Trucks and buses / Ford F-150 Raptor (parked)
+12010.1	Trucks and buses / Iveco Trakker 6x6 lorry
+11755	Trucks and buses / Iveco Trakker 6x6 lorry (parked)
+686.7	Trucks and buses / MAN TGS 26.440 rigid
+61.8	Trucks and buses / MAN TGS 26.440 rigid (parked)
+61.8	Trucks and buses / MAN TGS 26.440 rigid + Drawbar trailer
+61.8	Trucks and buses / MAN TGS 26.440 rigid + Jetski trailer
+61.8	Trucks and buses / MAN TGS 26.440 rigid + Speedboat trailer
+61.8	Trucks and buses / MAN TGS 26.440 rigid + Tipping trailer
+10094.8	Trucks and buses / Mercedes-Benz G 300 CDI
+9881.8	Trucks and buses / Mercedes-Benz G 300 CDI (parked)
+35965.8	Trucks and buses / Mowag Duro II 4x4
+35710.6	Trucks and buses / Mowag Duro II 4x4 (parked)
+1107	Trucks and buses / Scania R 450 tractor
+783	Trucks and buses / Scania R 450 tractor (parked)
+783	Trucks and buses / Scania R 450 tractor + Curtainsider 13.6 m
+783	Trucks and buses / Scania R 450 tractor + Fuel tanker
+783	Trucks and buses / Scania R 450 tractor + Timber trailer
+1465.4	Trucks and buses / Setra S 516 HD coach
+1077.8	Trucks and buses / Setra S 516 HD coach (parked)
+2.2	Unlisted / BoatMeshBuilder.RunaboutWheel
+28.3	Unlisted / FarmStandVisual.StandMesh
+160.5	Unlisted / RadioBody.Mesh
+4.3	Unlisted / SteamerMeshBuilder.LeverMesh
+408.9	Unlisted / SteamerMeshBuilder.WheelMesh

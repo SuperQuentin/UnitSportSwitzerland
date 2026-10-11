@@ -25,6 +25,8 @@ public static class BusMeshBuilder
     private const float Wall = 0.08f;
     /// <summary>Window pillars: their width, and the glass between them a bus is built with.</summary>
     private const float Pillar = 0.1f, WindowLength = 1.35f;
+    /// <summary>The end walls' depth: the face, the rear, each side of a joint.</summary>
+    private const float EndDepth = 0.06f;
 
     public static HeavyParts Build(HeavySpec spec, int section, float load)
     {
@@ -75,6 +77,9 @@ public static class BusMeshBuilder
         var doorCuts = doors.Select(d => (d.At - d.Width * 0.5f, d.At + d.Width * 0.5f)).ToList();
         var archCuts = s.Axles.Select(a => (a.At - Tyre.Radius(a.Tyre) - 0.12f, a.At + Tyre.Radius(a.Tyre) + 0.12f)).ToList();
         float archTop = s.Axles.Max(a => 2f * Tyre.Radius(a.Tyre)) + 0.1f;
+        // the wall's arch band stops at the belt: a city bus's arches reach over it, and the two bands
+        // overlapped there in two colours (#788)
+        float archBand = Mathf.Min(archTop, belt);
 
         // ---- the shell ----
         Along(m, cg, from, s.Length, roof, s.Height, s.Width - 0.04f, look.Paint);
@@ -85,19 +90,23 @@ public static class BusMeshBuilder
         // the walls: the left whole but for the arches, the right cut at every door too; the
         // window band is pillars with glass between them, none in a city bus's last metre (the engine)
         float glassTo = last && !coach ? s.Length - 1.2f : s.Length - 0.3f;
+        // the side walls stop where the end walls (full width, 6 cm deep) begin: their ends lay in
+        // the end walls' outer faces, two colours in one plane at every corner (#788)
+        float wallFrom = from + EndDepth, wallTo = s.Length - EndDepth;
         foreach (int side in new[] { 1, -1 })
         {
             float x = side * (hw - Wall * 0.5f);
             var lowCuts = side < 0 ? archCuts.Concat(doorCuts).ToList() : archCuts;
             var highCuts = side < 0 ? doorCuts : new List<(float, float)>();
-            Cut(m, cg, from, s.Length, floor, archTop, x, lowCuts, look.Lower);
-            Cut(m, cg, from, s.Length, archTop, belt, x, highCuts, coach ? look.Paint : look.Lower);
-            Cut(m, cg, from, s.Length, belt, winLow, x, highCuts, look.Paint);
-            Cut(m, cg, from, s.Length, winHigh, roof, x, highCuts, look.Accent);
+            Cut(m, cg, wallFrom, wallTo, floor, archBand, x, lowCuts, look.Lower);
+            Cut(m, cg, wallFrom, wallTo, archBand, belt, x, highCuts, coach ? look.Paint : look.Lower);
+            Cut(m, cg, wallFrom, wallTo, belt, winLow, x, highCuts, look.Paint);
+            Cut(m, cg, wallFrom, wallTo, winHigh, roof, x, highCuts, look.Accent);
             // the lining inside, below the windows
-            Cut(m, cg, from + Wall, s.Length - Wall, deck, winLow, side * (inner - 0.005f), highCuts, HeavyCabin.Lining, 0.01f);
-            Windows(m, cg, from, glassTo, winLow, winHigh, x, side * hw, highCuts, look.Paint);
-            if (glassTo < s.Length) Cut(m, cg, glassTo, s.Length, winLow, winHigh, x, highCuts, look.Paint);
+            // 1 cm clear of the wall's inner face, not on it (#788)
+            Cut(m, cg, from + Wall, s.Length - Wall, deck, winLow, side * (inner - 0.015f), highCuts, HeavyCabin.Lining, 0.01f);
+            Windows(m, cg, wallFrom, glassTo, winLow, winHigh, x, side * hw, highCuts, look.Paint);
+            if (glassTo < wallTo) Cut(m, cg, glassTo, wallTo, winLow, winHigh, x, highCuts, look.Paint);
             if (coach)
                 // the luggage bays' doors: a dark seam top and bottom
                 Cut(m, cg, from + 2.5f, s.Length - 3f, belt - 0.06f, belt, side * (hw + 0.005f), archCuts, Trim, 0.02f);
@@ -139,18 +148,21 @@ public static class BusMeshBuilder
 
         // ---- the saloon: floor, podiums over the wheels, a coach's high deck and its stairwells ----
         float saloonFrom = from + Wall, saloonTo = s.Length - Wall;
-        Along(m, cg, saloonFrom, saloonTo, floor, floor + 0.02f, inner * 2f, HeavyCabin.FloorColour);
+        // 3 cm deep under the floor line: what stands on the floor (seats, podiums, the driver's
+        // platform) starts at it, and its underside lay in the floor's (#788)
+        Along(m, cg, saloonFrom, saloonTo, floor - 0.03f, floor + 0.02f, inner * 2f, HeavyCabin.FloorColour);
         foreach (var (a0, a1) in archCuts)
             foreach (int side in new[] { 1, -1 })
             {
-                Along(m, cg, a0, a1, floor, archTop, 0.95f, HeavyCabin.Dash, side * (inner - 0.475f));
+                // 2 cm off the wall: the lining runs down behind it, and their tops were 6 mm apart (#788)
+                Along(m, cg, a0, a1, floor, archTop, 0.93f, HeavyCabin.Dash, side * (inner - 0.02f - 0.465f));
                 dk.Along(a0, a1, floor, archTop, 0.95f, side * (inner - 0.475f));
             }
         // a city bus's last section: the back raised over the engine, a ramp up the aisle to it
         float podiumFrom = last && !coach ? s.Length - 2.6f : float.MaxValue;
         if (podiumFrom < s.Length)
         {
-            Along(m, cg, podiumFrom, saloonTo, floor, floor + 0.3f, inner * 2f, HeavyCabin.Dash);
+            Along(m, cg, podiumFrom, saloonTo, floor, floor + 0.3f, (inner - 0.02f) * 2f, HeavyCabin.Dash);
             dk.Along(podiumFrom, saloonTo, floor, floor + 0.3f, inner * 2f);
             dk.RampAlong(podiumFrom - 0.7f, floor, podiumFrom, floor + 0.3f, 1.1f);
         }
@@ -257,10 +269,10 @@ public static class BusMeshBuilder
             // the face: wall up to the windscreen and above it, pillars at its sides, the display above
             float wsLow = coach ? 0.95f : 0.85f;
             float wsHigh = s.Height - 0.42f;
-            Along(m, cg, 0f, 0.06f, floor, wsLow, s.Width - 0.04f, look.Paint);
-            Along(m, cg, 0f, 0.06f, wsHigh, s.Height, s.Width - 0.04f, look.Paint);
+            Along(m, cg, 0f, EndDepth, floor, wsLow, s.Width, look.Paint);
+            Along(m, cg, 0f, EndDepth, wsHigh, s.Height, s.Width, look.Paint);
             foreach (float sx in new[] { -1f, 1f })
-                Along(m, cg, 0f, 0.06f, wsLow, wsHigh, 0.12f, look.Paint, sx * (hw - 0.08f));
+                Along(m, cg, 0f, EndDepth, wsLow, wsHigh, 0.14f, look.Paint, sx * (hw - 0.07f));
             FrontPane(m, front - 0.03f, hw - 0.14f, wsLow, wsHigh);
             float dispY = wsHigh + 0.16f;
             m.Box(new Vector3(0, dispY, front + 0.02f), new Vector3(s.Width - 0.5f, 0.24f, 0.04f), Trim);
@@ -271,11 +283,11 @@ public static class BusMeshBuilder
                 Lamp(m, sx * (hw - 0.07f), floor + 0.35f, front + 0.05f, 0.1f, 0.14f, 0.04f, Amber);
             }
         }
-        else EndWall(m, cg, from, from + 0.06f, floor, s.Height, s.Width - 0.04f, look.Paint, inner);
+        else EndWall(m, cg, from, from + EndDepth, floor, s.Height, s.Width, look.Paint, inner);
 
         if (last)
         {
-            Along(m, cg, s.Length - 0.06f, s.Length, floor, s.Height, s.Width - 0.04f, look.Paint);
+            Along(m, cg, s.Length - EndDepth, s.Length, floor, s.Height, s.Width, look.Paint);
             // the rear: a window on the coach, the engine's grille on a city bus
             if (coach) m.Box(new Vector3(0, 2.4f, rear - 0.02f), new Vector3(s.Width - 0.4f, 1.1f, 0.04f), Glass);
             else m.Box(new Vector3(0, 0.95f, rear - 0.02f), new Vector3(1.6f, 0.7f, 0.04f), Trim);
@@ -285,7 +297,7 @@ public static class BusMeshBuilder
                 Lamp(rev, sx * (hw - 0.35f), 0.7f, rear - 0.03f, 0.18f, 0.12f, 0.04f, White);
             }
         }
-        else EndWall(m, cg, s.Length - 0.06f, s.Length, floor, s.Height, s.Width - 0.04f, look.Paint, inner);
+        else EndWall(m, cg, s.Length - EndDepth, s.Length, floor, s.Height, s.Width, look.Paint, inner);
 
         // the door leaves: two per opening on a city bus, one on the coach, glass in a frame
         var leaves = new List<HeavyDoorLeaf>();
@@ -364,7 +376,9 @@ public static class BusMeshBuilder
         // the platform under the seat and pedals, from the face to behind the seat
         float behind = cg - cockpit.Seat.Hip.Z + 0.45f;
         float x1 = driverX - 0.55f;
-        m.Box(new Vector3((inner + x1) * 0.5f, (floor + platform) * 0.5f, cg - behind * 0.5f), new Vector3(inner - x1, platform - floor, behind - 0.06f), HeavyCabin.Dash);
+        // behind the face wall, not into it: its underside lay in the face's (#788)
+        m.Box(new Vector3((inner + x1) * 0.5f, (floor + platform) * 0.5f, cg - (EndDepth + behind) * 0.5f),
+            new Vector3(inner - x1, platform - floor, behind - EndDepth), HeavyCabin.Dash);
         if (!coach)
             // the cab's partition behind the driver: solid to the shoulder, nothing above
             m.Box(new Vector3((inner + x1) * 0.5f, platform + 0.55f, cg - behind), new Vector3(inner - x1, 1.1f, 0.04f), HeavyCabin.Dash);

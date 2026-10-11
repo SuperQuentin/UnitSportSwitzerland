@@ -23,6 +23,14 @@ src/Items/Radio          quick  --radiopanelcheck --world fixture
 src/Player/FootPlayer.Ears quick --earscheck --world fixture --view third
 src/Avatar/              quick  --meshcheck
 src/Avatar/              quick  --outfitcheck
+# #788: every model of the model viewer scanned for faces that z-fight, against tests/zfight-baseline.txt
+src/Avatar/              quick  --zfightcheck
+src/Build/               quick  --zfightcheck
+src/Items/               quick  --zfightcheck
+src/Interiors/           quick  --zfightcheck
+src/Terrain/BuildingMeshBuilder quick --zfightcheck
+src/Core/ZFight          quick  --zfightcheck
+tests/zfight-baseline    quick  --zfightcheck
 src/Avatar/              quick  --emotecheck
 src/Player/EmoteWheel    quick  --emotewheelcheck --world fixture
 src/Core/TouchControls   quick  --touchcheck --mobile --world fixture

@@ -82,8 +82,9 @@ public static class CockpitKit
         var side = Vector3.Up.Cross(normal).Normalized();
         var basis = new Basis(side, normal.Cross(side), normal);
         into.Box(at - normal * depth * 0.5f, new Vector3(size.X + k.MirrorRim, size.Y + k.MirrorRim, depth), housing, basis);
-        into.Box(at + normal * 0.001f, new Vector3(size.X, size.Y, 0.002f), MirrorFace, basis);
-        return new CarMirror(name, CarMeshBuilder.Turned(at + normal * 0.004f), CarMeshBuilder.Turned(normal), size);
+        // the glass 1 cm proud of the housing: 2 mm z-fought it at range (#788)
+        into.Box(at + normal * 0.005f, new Vector3(size.X, size.Y, 0.01f), MirrorFace, basis);
+        return new CarMirror(name, CarMeshBuilder.Turned(at + normal * 0.012f), CarMeshBuilder.Turned(normal), size);
     }
 
     /// <summary>A pedal per pad, each on its hinge (<see cref="DriverSeat.PedalHinge"/>); the first is the throttle.</summary>

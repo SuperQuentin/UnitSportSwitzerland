@@ -1,4 +1,7 @@
-// The PS1 finish: vertex snap to a 640x480 grid, the sun in steps, Bayer dither + posterize.
+// The PS1 finish: the sun in steps, Bayer dither + posterize. The vertex snap is gone (#788): it
+// moved each vertex up to half a snap pixel on screen, so faces centimetres apart traded places
+// at grazing angles (roofs, kerbs, overlays) and everything wobbled; the game is no longer
+// strictly PS1. retro_snap stays as a pass-through for the shaders that call it.
 // Behind one uniform, so a PS1 shader that another style borrows looks neutral there instead of
 // retro: Styles/StyleKit turns `retro` off on every material that resolves to a PS1 shader for
 // another style (docs/notes/styles/role-bodies.md). With it on, the results are exactly the old
@@ -9,21 +12,13 @@
 #ifndef COMMON_RETRO
 #define COMMON_RETRO
 uniform bool retro = true;
-// In a headset (#244, set by XR/XrSession): no vertex snap and no dither. Each eye snaps on its own
-// grid under its own projection, so the two eyes jitter apart; and dither is noise the Link video
-// encoder turns into blocks. The colour steps stay.
+// In a headset (#244, set by XR/XrSession): no dither, noise the Link video encoder turns into
+// blocks. The colour steps stay.
 global uniform bool xr_smooth;
-uniform vec2 snap_resolution = vec2(640.0, 480.0);
 uniform float color_levels = 16.0;
 
-// Clip-space position, snapped to the snap_resolution grid.
+// Clip-space position, unchanged: the PS1 vertex snap was dropped (#788, see above).
 vec4 retro_snap(vec4 clip) {
-    if (retro && !xr_smooth && clip.w > 0.0) {
-        vec2 half_res = snap_resolution * 0.5;
-        vec2 ndc = clip.xy / clip.w;
-        ndc = floor(ndc * half_res + 0.5) / half_res;
-        clip.xy = ndc * clip.w;
-    }
     return clip;
 }
 

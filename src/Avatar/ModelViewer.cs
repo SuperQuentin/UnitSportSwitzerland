@@ -21,7 +21,7 @@ namespace UnitSport.Avatar;
 /// </summary>
 public partial class ModelViewer : Node3D
 {
-    private sealed record Entry(string Category, string Name, Func<Node3D> Make);
+    internal sealed record Entry(string Category, string Name, Func<Node3D> Make);
 
     private const string Unlisted = "Unlisted";
 
@@ -33,6 +33,11 @@ public partial class ModelViewer : Node3D
     private Vector3 _target;
     private float _yaw = 0.6f, _pitch = -0.25f, _distance = 5f;
     private string? _shots;
+    // --zfight: the faces that fight for the depth buffer in magenta, their count in the header (#788)
+    private readonly bool _zfight = CmdArgs.Has("--zfight");
+    private MeshInstance3D? _patches;
+    // --flicker (with --models,<dir>): each PNG is a FlickerShot, flickering pixels in magenta (#788)
+    private readonly bool _flicker = CmdArgs.Has("--flicker");
     private readonly HashSet<Type> _covered = new();
 
     public static bool Requested() => CmdArgs.FlagWithShot("--models").Requested;
@@ -105,7 +110,8 @@ public partial class ModelViewer : Node3D
 
     // ---- discovery -------------------------------------------------------------------------
 
-    private static IEnumerable<Entry> Discover()
+    /// <summary>Every model the viewer shows, in its order (for <c>--zfightcheck</c>).</summary>
+    internal static IEnumerable<Entry> Discover()
     {
         var tagged = new HashSet<MethodInfo>();
         foreach (var method in StaticMethods())
@@ -224,11 +230,27 @@ public partial class ModelViewer : Node3D
         }
         _target = box.GetCenter();
         _distance = Fit(box);
+        string zfight = _zfight ? ZFightLine() : "";
 
         _label.Text = $"{_categories[_category].Name}  ({_category + 1}/{_categories.Count})   ›   " +
                       $"{entry.Name}  ({_index + 1}/{entries.Count})   " +
-                      $"{box.Size.X:0.00} x {box.Size.Y:0.00} x {box.Size.Z:0.00} m   {Styles.StyleKit.Style}{error}\n" +
+                      $"{box.Size.X:0.00} x {box.Size.Y:0.00} x {box.Size.Z:0.00} m   {Styles.StyleKit.Style}{zfight}{error}\n" +
                       "Left/Right: model   Up/Down: category   drag: orbit   wheel: zoom";
+    }
+
+    /// <summary>The model's fighting faces drawn in magenta over it; the header's count.</summary>
+    private string ZFightLine()
+    {
+        _patches?.QueueFree();
+        _patches = null;
+        if (_model == null) return "";
+        var scene = ZFightScan.Gather(_model, GlobalTransform.AffineInverse());
+        var hits = ZFight.Find(scene.Tris, visibleOnly: !CmdArgs.Has("--zfighthidden"));
+        if (hits.Count == 0) return "   z-fight: none";
+        _patches = new MeshInstance3D { Mesh = ZFightScan.Patches(hits), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+        AddChild(_patches);
+        GD.Print($"[zfight] {_categories[_category].Name} / {_categories[_category].Entries[_index].Name}: {ZFightScan.Describe(scene, hits)}");
+        return "   z-fight: " + ZFightScan.Summary(hits);
     }
 
     private static Aabb? Bounds(Node3D root)
@@ -285,7 +307,16 @@ public partial class ModelViewer : Node3D
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 var entry = _categories[c].Entries[i];
                 string file = $"{_shots}/{c:00}-{i:000}-{Slug(entry.Category)}-{Slug(entry.Name)}.png";
-                GetViewport().GetTexture().GetImage().SavePng(file);
+                if (_flicker)
+                {
+                    // the picture with its flickering pixels in magenta (#788)
+                    var shot = await FlickerShot.Take(this, _camera, _distance);
+                    shot.Heat.SavePng(file);
+                    GD.Print(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                        $"[flicker] {entry.Category} / {entry.Name}: {shot.Flickering} px ({shot.Percent:0.00} %)"));
+                }
+                else
+                    GetViewport().GetTexture().GetImage().SavePng(file);
                 count++;
             }
         ShowcaseTrace.Built = null;

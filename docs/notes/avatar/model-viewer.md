@@ -44,3 +44,4 @@
   game's `scaling_3d/scale` is 0.75, so a 1152x648 PNG used to be an 864x486 render); PS1 keeps
   its low resolution. For bigger PNGs give Godot the window size: `<godot> --path . --resolution
   1920x1080 -- --models,<dir> ...` (#759).
+- **`--zfight`** paints the model's z-fighting faces magenta; **`--flicker`** (PNG runs) saves flicker heat shots instead (`general/zfight`, #788).
