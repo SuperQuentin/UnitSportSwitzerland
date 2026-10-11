@@ -221,7 +221,7 @@ public static class An124MeshBuilder
                 if (z < NoseZ) Slab(m, sg, k, z, NoseZ, RowColour(k));
             }
         var tail = Section(TailZ);
-        m.Box(new Vector3(0, (tail.Bottom + tail.Top) * 0.5f, TailZ + 0.03f), new Vector3(tail.A * 2f, tail.Top - tail.Bottom, 0.06f), Edge);
+        m.Box(new Vector3(0, (tail.Bottom + tail.Top) * 0.5f, TailZ + 0.02f), new Vector3(tail.A * 2f, tail.Top - tail.Bottom, 0.06f), Edge);   // 1 cm proud of the skin's end faces instead of flush with them (#755)
     }
 
     /// <summary>Row <paramref name="k"/> of one side's skin between two stations, outer face and inner.</summary>
@@ -564,9 +564,30 @@ public static class An124MeshBuilder
             m.Loft(new[] { Ring(ElevatorFrom, ElevatorF), Ring(ElevatorTo, ElevatorF) }, edges, Edge);
             m.Loft(new[] { Ring(ElevatorTo, 1f), Ring(StabTipX, 1f) }, edges, Edge);
         }
-        // a blue band round the fin
+        // a blue band round the fin, 5 cm clear of the fixed fin and the rudder alike: the old box cut through the tapering skin (#755)
         float by = 16.5f;
-        m.Box(new Vector3(0, by, (FinFront(by) + FinRear(by)) * 0.5f), new Vector3(FinThick(by) * 0.62f, 1.2f, (FinRear(by) - FinFront(by)) * -0.62f), Stripe);
+        Vector3[] Band(float y)
+        {
+            Vector3 Out(float f, int v, float dx, float dz)
+            {
+                var p = FinPt(y, f, v);
+                return new Vector3(p.X + dx, p.Y, p.Z + dz);
+            }
+            const float o = 0.05f;
+            return new[]
+            {
+                Out(0f, 0, 0, o), Out(0.3f, 1, o, 0), Out(RudderF, 1, o, 0), Out(1f, 1, o, -o),
+                Out(1f, -1, -o, -o), Out(RudderF, -1, -o, 0), Out(0.3f, -1, -o, 0),
+            };
+        }
+        m.Loft(new[] { Band(by - 0.6f), Band(by + 0.6f) }, Rep(Stripe, 7), Stripe);
+    }
+
+    private static Color[] Rep(Color c, int n)
+    {
+        var a = new Color[n];
+        System.Array.Fill(a, c);
+        return a;
     }
 
     private static Node3D Rudder(Material bm, Material gm)

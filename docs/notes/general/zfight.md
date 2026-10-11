@@ -60,5 +60,18 @@ Flickering faces have two causes, and each test catches what the other cannot.
   its housing (`CockpitKit.Mirror`, every vehicle) is 1 cm. 49 000 -> 600 cm² on the Citaro,
   250 000 -> 1 500 on the Setra; flicker shots 3554 -> 121 px.
 
+- All vehicles (#755): 1.80 M -> 0.09 M cm² (cars 923 k -> 42 k, rides 368 k -> 13 k, trucks and
+  buses 196 k -> 15 k, aircraft 181 k -> 1 k, motorbikes 106 k -> 13 k, boats 22 k -> 3 k). The
+  same few causes everywhere: a panel's end in another panel's face (stop it where the other
+  starts), a slab's underside shared by what stands on it (sink the slab 3 cm), a box running
+  through a bulkhead (end it at the bulkhead), lamps/plates/stripes 2-6 mm proud (1-1.2 cm), a
+  tyre's face a few mm under the body side (cars' tyres at most 21.5 cm wide), the cars' splitter
+  5 mm under the bumper, alternating canopy cells of one size (paraglider). The airliner rig's
+  `Hinge()` used to set `Rotation`, dropping each surface's swept hinge basis: spoilers and flaps
+  sat yawed off the wing in game (`AirlinerRig.RestOf`).
+- The visibility rays start just past the nearer face of the pair (#755): a cover 1 cm over a
+  fight hides it; started further out, a ray could begin inside a part a few mm off and call a
+  visible fight hidden (the Setra's door leaves).
+
 Lift an overlay ~1 cm proud (`meshscratch-boxes-render-inside-out`), merge coplanar parts, or
 give one face the other's colour; rerun `--zfightcheck`, then `--zfightcheck update`.

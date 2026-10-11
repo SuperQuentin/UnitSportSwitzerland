@@ -182,7 +182,9 @@ public static partial class CarMeshBuilder
         c.Box(new Vector3(0, (FloorY + SillY1) * 0.5f, firewall - 0.015f), new Vector3(well * 2f, SillY1 - FloorY, 0.03f), Dash);
         c.Box(new Vector3(0, (SillY1 + d.Belt) * 0.5f, firewall - 0.015f), new Vector3(inner * 2f, d.Belt - SillY1 - 0.01f, 0.03f), Dash);
         c.Box(new Vector3(0, (FloorY + d.Belt) * 0.5f, back + 0.015f), new Vector3(inner * 2f, d.Belt - FloorY - 0.01f, 0.03f), Cabin);
-        c.Box(new Vector3(0, FloorY + 0.08f, mid), new Vector3(0.24f, 0.16f, len), Cabin);
+        // the tunnel between the bulkheads and on the carpet: through them, its ends lay in their
+        // outer faces and its underside in the floor's (#755)
+        c.Box(new Vector3(0, FloorY + 0.01f + 0.075f, mid), new Vector3(0.24f, 0.15f, len - 0.06f), Cabin);
 
         // ---- seats: the driver's and the passenger's the same, a bench behind if there is room ----
         // (each one a seat a player can take, #158: the driver's first)

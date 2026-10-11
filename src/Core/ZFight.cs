@@ -184,7 +184,9 @@ public static class ZFight
             for (int side = -1; side <= (twoSided ? 1 : -1); side += 2)
             {
                 var up = n * side;
-                var origin = centre + up * (maxGap * 1.5f);
+                // just past the nearer of the two faces (the region lies midway between them): from
+                // further out, a cover 1 cm over the fight was behind the ray's start and hid nothing
+                var origin = centre + up * (hit.Gap * 0.5f + 0.001f);
                 if (Escapes(origin, up, hit) ||
                     Escapes(origin, (up + u * tilt).Normalized(), hit) ||
                     Escapes(origin, (up - u * tilt).Normalized(), hit) ||

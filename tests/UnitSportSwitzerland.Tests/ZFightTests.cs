@@ -126,6 +126,14 @@ public class ZFightTests
     }
 
     [Fact]
+    public void Visible_only_counts_a_cover_a_centimetre_over_the_fight()
+    {
+        var fight = Square(0, 0, 1, 0, look: 1).Concat(Square(0.25f, 0.25f, 0.5f, 0.002f, look: 2)).ToList();
+        var cover = Square(-50, -50, 100, 0.012f, look: 3).ToList();   // a slab 1 cm over both, wider than any ray reaches
+        Assert.Empty(ZFight.Find(fight.Concat(cover).ToList(), visibleOnly: true));
+    }
+
+    [Fact]
     public void Visible_only_sees_past_a_small_cover_at_an_angle()
     {
         var fight = Square(0, 0, 1, 0, look: 1).Concat(Square(0.25f, 0.25f, 0.5f, 0.002f, look: 2)).ToList();

@@ -67,7 +67,7 @@ public static class PickupMeshBuilder
         // running boards under the doors
         Along(m, cg, WsFoot + 0.1f, CabBack - 0.1f, 0.36f, 0.42f, s.Width - 0.1f, Trim);
         // the cowl at the windscreen's foot (the doors are leaves of their own, below)
-        Along(m, cg, WsFoot - 0.05f, WsFoot + 0.12f, Floor, Belt + 0.03f, bodyW, look.Paint);
+        Along(m, cg, WsFoot - 0.05f, WsFoot + 0.12f, Floor, Belt + 0.045f, bodyW, look.Paint);   // (#755) 1.5 cm over the dash top (belt + 3 cm)
         // the raked windscreen, its pillars, the roof and the headlining
         const float wsTopAt = 2.5f, wsTop = 1.9f;
         float half = bodyW * 0.5f - 0.1f;
@@ -97,7 +97,7 @@ public static class PickupMeshBuilder
                 float at0 = rear ? BPillar + 0.05f : WsFoot + 0.12f, at1 = rear ? CabBack - 0.12f : BPillar - 0.05f;
                 float xw = sx * (bodyW * 0.5f - wall * 0.5f), x = sx * bodyW * 0.5f;
                 var leaf = new MeshScratch();
-                Along(leaf, cg, at0 + 0.01f, at1 - 0.01f, Floor - 0.12f, Belt + 0.04f, wall, look.Paint, xw);
+                Along(leaf, cg, at0 + 0.01f, at1 - 0.01f, Floor - 0.12f, Belt + 0.04f, wall + 0.01f, look.Paint, xw + sx * 0.005f);   // (#755) outer face 1 cm proud of the sill skirt
                 Along(leaf, cg, at1 - 0.32f, at1 - 0.12f, Belt - 0.12f, Belt - 0.08f, 0.03f, look.Accent, x + sx * 0.015f);
                 if (rear) SidePane(leaf, x, Z(at0 + 0.04f), Z(at1 - 0.04f), Belt + 0.04f, GlassTop);
                 else
@@ -158,7 +158,7 @@ public static class PickupMeshBuilder
             Lamp(m, x, 1.2f, front - 0.09f, 0.06f, 0.035f, 0.03f, Amber);
 
         // ---- the bed: its floor over the wheels, the outer walls, the wheel tubs, the tailgate ----
-        Skirt(m, s, cg, CabBack, Tailgate, Sill, BedFloor, bodyW, look.Paint);
+        Skirt(m, s, cg, CabBack, Tailgate, Sill, BedFloor - 0.04f, bodyW, look.Paint);   // (#755) up to the underside of the bed floor slab, which would share its top face
         Along(m, cg, CabBack, Tailgate, BedFloor - 0.04f, BedFloor, bodyW - 2f * wall, look.Cargo);
         foreach (float sx in new[] { -1f, 1f })
         {
@@ -177,8 +177,8 @@ public static class PickupMeshBuilder
         // the tail lamps up the bed's corners, the reversing lamps under them
         foreach (float sx in new[] { -1f, 1f })
         {
-            Lamp(tail, sx * (bodyW * 0.5f - 0.05f), 1.12f, Z(Tailgate + 0.04f), 0.1f, 0.3f, 0.04f, TailLamp);
-            Lamp(rev, sx * (bodyW * 0.5f - 0.05f), 0.9f, Z(Tailgate + 0.04f), 0.1f, 0.12f, 0.04f, White);
+            Lamp(tail, sx * (bodyW * 0.5f - 0.06f), 1.12f, Z(Tailgate + 0.04f), 0.1f, 0.3f, 0.04f, TailLamp);
+            Lamp(rev, sx * (bodyW * 0.5f - 0.06f), 0.9f, Z(Tailgate + 0.04f), 0.1f, 0.12f, 0.04f, White);
         }
 
         return new HeavyParts(m.Build(), head.Build(), tail.Build(), rev.Build(), Wheels(s, cg), leaves.ToArray())

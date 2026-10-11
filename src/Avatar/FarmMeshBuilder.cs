@@ -87,13 +87,13 @@ public static class FarmMeshBuilder
         // four corner pillars
         foreach (float sx in new[] { -1f, 1f })
             foreach (float at in new[] { TractorPane, TractorCabTo - 0.05f })
-                Along(m, cg, at - 0.05f, at + 0.05f, TractorFloor, TractorRoof - 0.14f, 0.07f, look.Lower, sx * (cabW * 0.5f - 0.035f));
+                Along(m, cg, at - 0.05f, at + (at > TractorPane ? 0.04f : 0.05f), TractorFloor, TractorRoof - 0.14f, 0.07f, look.Lower, sx * (cabW * 0.5f - 0.035f));   // (#755) the rear one ends 1 cm before the rear wall's back face
         // the windscreen down to the floor's front, the rear window
         FrontPane(m, Z(TractorPane), inner, TractorFloor + 0.1f, TractorRoof - 0.16f);
         FrontPane(m, Z(TractorCabTo - 0.05f), inner, TractorFloor + 0.45f, TractorRoof - 0.16f);
         // the cowl under the windscreen, the rear wall's foot
-        Along(m, cg, TractorPane - 0.12f, TractorPane, TractorFloor - 0.1f, TractorFloor + 0.1f, cabW, look.Paint);
-        Along(m, cg, TractorCabTo - 0.08f, TractorCabTo, TractorFloor, TractorFloor + 0.45f, cabW, look.Paint);
+        Along(m, cg, TractorPane - 0.12f, TractorPane, TractorFloor - 0.1f, TractorFloor + 0.1f, cabW - 0.02f, look.Paint);   // (#755) 1 cm inside the pillars' outer faces
+        Along(m, cg, TractorCabTo - 0.08f, TractorCabTo, TractorFloor, TractorFloor + 0.45f, cabW - 0.02f, look.Paint);   // (#755) as the cowl
         // a door each side: all glass in a dark frame, hinged at its front edge
         var leaves = new List<HeavyDoorLeaf>();
         foreach (float sx in new[] { -1f, 1f })
@@ -104,7 +104,7 @@ public static class FarmMeshBuilder
             Along(leaf, cg, at0, at1, TractorFloor, TractorFloor + 0.06f, 0.05f, look.Lower, x);
             Along(leaf, cg, at0, at1, TractorRoof - 0.2f, TractorRoof - 0.15f, 0.05f, look.Lower, x);
             Along(leaf, cg, at1 - 0.05f, at1, TractorFloor, TractorRoof - 0.15f, 0.05f, look.Lower, x);
-            Along(leaf, cg, at1 - 0.25f, at1 - 0.12f, 2.0f, 2.04f, 0.04f, Trim, x + sx * 0.025f);
+            Along(leaf, cg, at1 - 0.25f, at1 - 0.12f, 2.0f, 2.04f, 0.04f, Trim, x + sx * 0.03f);   // (#755) clear of the glass in the door's plane
             SidePane(leaf, x, Z(at0), Z(at1 - 0.05f), TractorFloor + 0.06f, TractorRoof - 0.2f);
             var pivot = new Vector3(x, 0f, Z(at0));
             leaves.Add(new HeavyDoorLeaf(DoorIndex(sx > 0), leaf.Build(pivot), new Vector3(-pivot.X, 0f, -pivot.Z), sx > 0 ? -1.2f : 1.2f)
@@ -195,11 +195,11 @@ public static class FarmMeshBuilder
         float half = HeaderWidth * 0.5f;
         Along(h, cg, 0.05f, HeaderTo - 0.3f, 0.06f, 0.18f, HeaderWidth - 0.1f, Steel);                       // the floor pan
         Along(h, cg, HeaderTo - 0.45f, HeaderTo - 0.3f, 0.18f, 1.15f, HeaderWidth - 0.1f, look.Paint);       // the back wall
-        Along(h, cg, 0.25f, 0.4f, 0.04f, 0.1f, HeaderWidth, Share);                                           // the cutter bar
+        Along(h, cg, 0.25f, 0.4f, 0.04f, 0.1f, HeaderWidth + 0.02f, Share);   // (#755) 1 cm wider than the end plates                                           // the cutter bar
         h.Tube(new Vector3(-half + 0.1f, 0.45f, Z(1.05f)), new Vector3(half - 0.1f, 0.45f, Z(1.05f)), 0.28f, look.Paint, 8);   // the cross auger
         foreach (float sx in new[] { -1f, 1f })
         {
-            Along(h, cg, 0.0f, HeaderTo - 0.3f, 0.06f, 0.95f, 0.08f, look.Paint, sx * (half - 0.04f));          // the end plates
+            Along(h, cg, 0.0f, HeaderTo - 0.3f, 0.05f, 0.95f, 0.08f, look.Paint, sx * (half - 0.04f));   // (#755) 1 cm under the floor pan, which shares its underside          // the end plates
             h.Tube(new Vector3(sx * (half - 0.04f), 0.1f, Z(-0.25f)), new Vector3(sx * (half - 0.04f), 0.7f, Z(0.6f)), 0.05f, look.Accent, 4);   // the crop dividers
             // the reel's arms back to the wall
             h.Tube(new Vector3(sx * (half - 0.25f), 1.35f, Z(0.75f)), new Vector3(sx * (half - 0.25f), 1.15f, Z(HeaderTo - 0.4f)), 0.05f, look.Lower, 5);
@@ -252,12 +252,12 @@ public static class FarmMeshBuilder
         Along(m, cg, CombineCabFrom - 0.1f, CombineCabTo + 0.05f, CombineRoof - 0.15f, CombineRoof, cabW + 0.2f, look.Accent);
         Along(m, cg, CombineCabFrom, CombineCabTo, CombineRoof - 0.16f, CombineRoof - 0.15f, inner * 2f, HeavyCabin.Lining);
         foreach (float sx in new[] { -1f, 1f })
-            foreach (float at in new[] { CombinePane, CombineCabTo - 0.05f })
+            foreach (float at in new[] { CombinePane, CombineCabTo - 0.1f })   // (#755) the rear pillar 5 cm forward: its back face lay in the back wall's
                 Along(m, cg, at - 0.05f, at + 0.05f, CombineFloor, CombineRoof - 0.15f, 0.07f, look.Lower, sx * (cabW * 0.5f - 0.035f));
         FrontPane(m, Z(CombinePane), inner, CombineFloor + 0.05f, CombineRoof - 0.17f);
-        Along(m, cg, CombineCabTo - 0.08f, CombineCabTo, CombineFloor, CombineRoof - 0.15f, cabW, look.Paint);
+        Along(m, cg, CombineCabTo - 0.08f, CombineCabTo, CombineFloor, CombineRoof - 0.15f, cabW - 0.02f, look.Paint);   // (#755) 1 cm inside the pillars' outer faces
         // the right side is fixed glass; the left is the door
-        SidePane(m, -cabW * 0.5f, Z(CombinePane + 0.06f), Z(CombineCabTo - 0.1f), CombineFloor + 0.05f, CombineRoof - 0.18f);
+        SidePane(m, -cabW * 0.5f, Z(CombinePane + 0.06f), Z(CombineCabTo - 0.15f), CombineFloor + 0.05f, CombineRoof - 0.18f);
         var leaves = new List<HeavyDoorLeaf>();
         {
             float at0 = CombinePane + 0.06f, at1 = CombineCabTo - 0.1f, x = cabW * 0.5f;
@@ -274,7 +274,7 @@ public static class FarmMeshBuilder
             });
         }
         // the platform and the ladder down the left, ahead of the drive wheel
-        Along(m, cg, CombineCabFrom, CombineCabTo, CombineFloor - 0.08f, CombineFloor, 0.5f, Trim, cabW * 0.5f + 0.25f);
+        Along(m, cg, CombineCabFrom - 0.01f, CombineCabTo + 0.01f, CombineFloor - 0.08f, CombineFloor + 0.015f, 0.5f, Trim, cabW * 0.5f + 0.25f);   // (#755) 1.5 cm over the cab floor slab it overlaps
         for (float y = 0.45f; y < CombineFloor - 0.1f; y += 0.3f)
             Along(m, cg, front - rf - 0.45f, front - rf - 0.1f, y, y + 0.04f, 0.4f, Trim, hw - 0.1f);
         foreach (float sx in new[] { -1f, 1f })

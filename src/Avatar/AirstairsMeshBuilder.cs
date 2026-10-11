@@ -121,12 +121,13 @@ public static class AirstairsMeshBuilder
         {
             HeavyMesh.Lamp(tail, side * (W - 0.25f), 0.72f, L - 0.12f, 0.2f, 0.1f, 0.04f, HeavyMesh.TailLamp);
             HeavyMesh.Lamp(reverse, side * (W - 0.5f), 0.72f, L - 0.12f, 0.12f, 0.1f, 0.04f, HeavyMesh.White);
-            HeavyMesh.Lamp(head, side * (W - 0.25f), 1.05f, F + 0.02f, 0.28f, 0.14f, 0.04f, HeavyMesh.HeadLamp);
+            HeavyMesh.Lamp(head, side * (W - 0.25f), 1.05f, F + 0.06f, 0.28f, 0.14f, 0.04f, HeavyMesh.HeadLamp);
         }
 
         // ---- the cab: hollow above its floor, glass you see through ----
         // under the floor: solid from the front axle's arch to the bumper
-        m.Box(new Vector3(0, (0.45f + fl) * 0.5f, (cr + 0.55f + F) * 0.5f), new Vector3(W * 2f, fl - 0.45f, F - cr - 0.55f), Cab);
+        // (#755) solid from the back wall (it used to start 55 cm on): the floor's underside there shared its plane with the seats' feet
+        m.Box(new Vector3(0, (0.45f + fl) * 0.5f, (cr + wall + F) * 0.5f), new Vector3(W * 2f, fl - 0.45f, F - cr - wall), Cab);
         m.Box(new Vector3(0, fl + 0.005f, (cr + F) * 0.5f), new Vector3((W - wall) * 2f, 0.01f, F - cr - 2f * wall), HeavyCabin.FloorColour);
         // the face: under the windscreen, over it, the two front pillars, the windscreen
         m.Box(new Vector3(0, (0.45f + wl) * 0.5f, F - wall * 0.5f), new Vector3(W * 2f, wl - 0.45f, wall), Cab);
@@ -158,8 +159,9 @@ public static class AirstairsMeshBuilder
             m.Box(new Vector3(x, (wl + wh) * 0.5f, cr + 0.12f), new Vector3(wall, wh - wl, 0.24f), Cab);
             HeavyMesh.SidePane(m, side * W, F - 0.12f, cr + 0.24f, wl, wh);
             // the door: its outline and its handle
-            m.Box(new Vector3(side * (W + 0.005f), (fl + wh) * 0.5f, cr + 0.26f), new Vector3(0.01f, wh - fl + 0.1f, 0.02f), Stripe);
-            m.Box(new Vector3(side * (W + 0.02f), 1.2f, cr + 0.4f), new Vector3(0.03f, 0.04f, 0.16f), Stripe);
+            // (#755) the outline and handle stand 1 cm clear of the door glass at the wall's face
+            m.Box(new Vector3(side * (W + 0.015f), (fl + wh) * 0.5f, cr + 0.26f), new Vector3(0.01f, wh - fl + 0.1f, 0.02f), Stripe);
+            m.Box(new Vector3(side * (W + 0.035f), 1.2f, cr + 0.4f), new Vector3(0.03f, 0.04f, 0.16f), Stripe);
         }
         // grille, bumper, beacon on the roof
         m.Box(new Vector3(0, 0.95f, F + 0.02f), new Vector3(W * 2f - 0.5f, 0.35f, 0.04f), Stripe);
@@ -248,8 +250,9 @@ public static class AirstairsMeshBuilder
         for (int i = 1; i <= steps; i++)
         {
             var at = foot + run * (i / (float)steps);
-            s.Box(at - new Vector3(0, 0.03f, tread * 0.5f), new Vector3(AirstairsLayout.FlightHalfWidth * 2f, 0.06f, tread + 0.04f), Tread);
-            s.Box(at - new Vector3(0, 0.005f, 0.02f), new Vector3(AirstairsLayout.FlightHalfWidth * 2f, 0.012f, 0.05f), Cab);   // nosing
+            // (#755) a tread ends at its nosing's line, not 2 cm past it, so the top one does not lie in the platform's edge
+            s.Box(at - new Vector3(0, 0.03f, tread * 0.5f + 0.01f), new Vector3(AirstairsLayout.FlightHalfWidth * 2f, 0.06f, tread + 0.02f), Tread);
+            s.Box(at + new Vector3(0, 0.005f, -0.005f), new Vector3(AirstairsLayout.FlightHalfWidth * 2f, 0.03f, 0.05f), Cab);   // nosing, (#755) 2 cm proud of the tread
         }
         // handrails on posts up the flight
         int posts = Mathf.Max(2, Mathf.CeilToInt(length / 1.4f));
