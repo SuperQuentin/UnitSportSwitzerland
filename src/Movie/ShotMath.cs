@@ -89,9 +89,11 @@ public static class ShotMath
 
     /// <summary>
     /// Where a smoothed rig's frame is at <paramref name="t"/>: the target's frame followed by a critically
-    /// damped spring of time constant <paramref name="smoothing"/> s. Integrated from six time constants
-    /// back (where the spring has forgotten where it started), at a fixed step: a pure function of time.
-    /// <paramref name="target"/> gives the target's (E, N, Alt, yaw) at a time, or false where it is absent.
+    /// damped spring of time constant <paramref name="smoothing"/> s. The spring is fed the target led by its
+    /// own velocity × smoothing, so a steady motion (a plane cruising, a car on a straight) is followed with no
+    /// lag at all and only the changes (a turn, braking, a bump) come through softened. Integrated from six
+    /// time constants back (where the spring has forgotten where it started), at a fixed step: a pure function
+    /// of time. <paramref name="target"/> gives the target's (E, N, Alt, yaw) at a time, or false where absent.
     /// </summary>
     public static bool Follow(double t, double smoothing, TargetSampler target,
         out double e, out double n, out double alt, out float yaw)
@@ -105,17 +107,30 @@ public static class ShotMath
         if (s >= t) return true;
         double xy = y0, ve = 0, vn = 0, va = 0, vy = 0;
         double omega = 2.0 / smoothing;
+        // the target one step back, for its velocity, itself smoothed (half the time constant) so a teleport
+        // or a jolt does not fling the camera; a steady motion still comes out exact
+        double pe = xe, pn = xn, pa = xa, py = y0, we = 0, wn = 0, wa = 0, wy = 0;
+        bool first = true;
         while (s < t)
         {
             double dt = Math.Min(FollowStep, t - s);
             s += dt;
             if (!target(s, out var te, out var tn, out var ta, out var ty)) continue;
             // the yaw unwrapped next to where the spring is, so it turns the short way
-            double tyu = xy + Wrap(ty - xy);
-            Spring(ref xe, ref ve, te, omega, dt);
-            Spring(ref xn, ref vn, tn, omega, dt);
-            Spring(ref xa, ref va, ta, omega, dt);
-            Spring(ref xy, ref vy, tyu, omega, dt);
+            double tyu = py + Wrap(ty - py);
+            double inv = 1 / Math.Max(dt, 1e-6);
+            double k = first ? 1 : 1 - Math.Exp(-dt / (0.5 * smoothing));
+            first = false;
+            we += ((te - pe) * inv - we) * k; wn += ((tn - pn) * inv - wn) * k;
+            wa += ((ta - pa) * inv - wa) * k; wy += ((tyu - py) * inv - wy) * k;
+            pe = te; pn = tn; pa = ta; py = tyu;
+            // the step holds the target over dt, which lags half a step: led by that much less
+            double lead = Math.Max(0, smoothing - 0.5 * dt);
+            double le = te + we * lead, ln = tn + wn * lead, la = ta + wa * lead, ly = tyu + wy * lead;
+            Spring(ref xe, ref ve, le, omega, dt);
+            Spring(ref xn, ref vn, ln, omega, dt);
+            Spring(ref xa, ref va, la, omega, dt);
+            Spring(ref xy, ref vy, xy + Wrap(ly - xy), omega, dt);
         }
         e = xe; n = xn; alt = xa; yaw = (float)Wrap(xy);
         return true;

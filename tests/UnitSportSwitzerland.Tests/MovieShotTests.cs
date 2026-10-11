@@ -19,14 +19,22 @@ public class MovieShotTests
         (double t, out double e, out double n, out double alt, out float yaw) => { e = E0; n = N0 + speed * t; alt = 500; yaw = 0; return true; };
 
     [Fact]
-    public void ARigidFollowIsTheTargetAndASmoothOneLagsBySpeedTimesSmoothing()
+    public void ASmoothFollowKeepsUpWithASteadyTargetAndSoftensItsChanges()
     {
-        var walk = North(10);
+        var walk = North(50);   // a plane's speed
         Assert.True(ShotMath.Follow(20, 0, walk, out _, out var n0, out _, out _));
-        Assert.Equal(N0 + 200, n0, 6);
-        // a critically damped spring trails a steady target by speed × time constant once it has settled
+        Assert.Equal(N0 + 1000, n0, 6);
+        // led by its velocity, the spring does not trail a steady target, however fast
         Assert.True(ShotMath.Follow(20, 0.5, walk, out _, out var n1, out _, out _));
-        Assert.InRange(N0 + 200 - n1, 0.5 * 10 * 0.95, 0.5 * 10 * 1.05);
+        Assert.InRange(N0 + 1000 - n1, -0.1, 0.1);
+        // a sudden jump of 10 m at 10 s comes through softened, then settles
+        ShotMath.TargetSampler jump = (double t, out double e, out double n, out double alt, out float yaw) =>
+        { e = E0; n = N0 + (t >= 10 ? 10 : 0); alt = 0; yaw = 0; return true; };
+        ShotMath.Follow(10.15, 0.5, jump, out _, out var during, out _, out _);
+        Assert.InRange(during - N0, 0.5, 9.5);
+        ShotMath.Follow(14, 0.5, jump, out _, out var after, out _, out _);
+        Assert.Equal(N0 + 10, after, 1);
+
         // a pure function of time: asking twice, or in any order, gives the same
         ShotMath.Follow(3, 0.5, walk, out _, out var a, out _, out _);
         ShotMath.Follow(20, 0.5, walk, out _, out var b, out _, out _);
