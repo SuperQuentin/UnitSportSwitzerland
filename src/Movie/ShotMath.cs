@@ -161,6 +161,20 @@ public static class ShotMath
         pose.Qx = r.X; pose.Qy = r.Y; pose.Qz = r.Z; pose.Qw = r.W;
     }
 
+    /// <summary>The inverse of <see cref="InFrame"/>: a world pose put into the rig's frame, for "Frame from view".</summary>
+    public static void ToFrame(ref CameraPose pose, double e, double n, double alt, float yaw, Quaternion? frame = null)
+    {
+        var q = frame ?? new Quaternion(Vector3.Up, yaw);
+        var inv = q.Inverse();
+        var world = new Vector3((float)(pose.E - e), (float)(pose.Alt - alt), (float)-(pose.N - n));
+        var local = inv * world;
+        pose.E = local.X;
+        pose.Alt = local.Y;
+        pose.N = local.Z;
+        var r = (inv * new Quaternion(pose.Qx, pose.Qy, pose.Qz, pose.Qw)).Normalized();
+        pose.Qx = r.X; pose.Qy = r.Y; pose.Qz = r.Z; pose.Qw = r.W;
+    }
+
     // ---- shake ---------------------------------------------------------------------------------
 
     /// <summary>

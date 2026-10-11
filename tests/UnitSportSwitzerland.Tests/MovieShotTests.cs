@@ -70,6 +70,40 @@ public class MovieShotTests
     }
 
     [Fact]
+    public void FrameFromViewKeepsTheViewInTheTargetsFrame()
+    {
+        var p = Walker(out int lane);
+        var cam = p.Camera;
+        cam.Rig = ShotRig.Chase; cam.Target = lane; cam.Smoothing = 0;
+        // the view 3 m east of the walker's body at 2 s, looking west
+        var look = new Quaternion(Vector3.Up, MathF.PI / 2);
+        double e = E0 + 3, n = N0 + 4, alt = 500 + ShotMath.PartHeight(TargetPart.Body);
+        var key = p.FrameFromView(0, 2, null, e, n, alt, look, 50)!;
+        Assert.Equal(3, key.E, 3);       // x right of a north-facing walker is east
+        Assert.Equal(0, key.Alt, 3);
+        Assert.Equal(0, key.N, 3);
+        // the shot films from there at 2 s, and keeps that side as the walker goes on
+        p.ShotPose(0, 2, null, out var at2, out _);
+        Assert.Equal((e, n, alt), (at2.E, at2.N, at2.Alt), new TupleNear(1e-3));
+        p.ShotPose(0, 7, null, out var at7, out _);
+        Assert.Equal(E0 + 3, at7.E, 3);
+        Assert.Equal(N0 + 14, at7.N, 3);
+        Assert.Equal(50, at7.Lens, 3);
+        Assert.Single(cam.Keys);         // a placement: one key, replaced, not added to
+        p.FrameFromView(0, 5, null, e, n, alt, look, 35);
+        Assert.Single(cam.Keys);
+    }
+
+    private sealed class TupleNear : IEqualityComparer<(double, double, double)>
+    {
+        private readonly double _eps;
+        public TupleNear(double eps) => _eps = eps;
+        public bool Equals((double, double, double) a, (double, double, double) b) =>
+            Math.Abs(a.Item1 - b.Item1) < _eps && Math.Abs(a.Item2 - b.Item2) < _eps && Math.Abs(a.Item3 - b.Item3) < _eps;
+        public int GetHashCode((double, double, double) obj) => 0;
+    }
+
+    [Fact]
     public void ShakeIsTheSameAtEveryReplayAndNothingWhenOff()
     {
         var hand = new ShakeSettings { Style = ShakeStyle.Handheld, Strength = 1 };

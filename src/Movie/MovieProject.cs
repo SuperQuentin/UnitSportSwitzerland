@@ -441,14 +441,7 @@ public sealed class MovieProject
 
         if (cam.Relative)
         {
-            int lane = cam.Target;
-            double smoothing = cam.Rig == ShotRig.Mount ? 0 : cam.Smoothing;
-            // one sampler made once, pointed at the lane: no closure a frame
-            _samplerLane = lane;
-            _sampler ??= (double s, out double e, out double n, out double a, out float y) => ActorFrame(_samplerLane, s, out e, out n, out a, out y);
-            if (!ShotMath.Follow(t, smoothing, _sampler, out var fe, out var fn, out var fa, out var fy)) return false;
-            fa += ShotMath.PartHeight(cam.Part);
-            var frame = cam.Rig == ShotRig.Mount ? mount?.Invoke(lane) : null;
+            if (!RigFrame(index, t, mount, out var fe, out var fn, out var fa, out var fy, out var frame)) return false;
             // orbiting turns the offset round the target; height lifts it
             pose.Alt += height;
             ShotMath.InFrame(ref pose, fe, fn, fa, fy + Godot.Mathf.DegToRad(orbit), frame);
@@ -465,6 +458,58 @@ public sealed class MovieProject
         pose.Lens = Math.Clamp(pose.Lens + lens, CameraTrack.MinLens, CameraTrack.MaxLens);
         fade = Math.Clamp(fade, 0, 1);
         return true;
+    }
+
+    /// <summary>
+    /// The frame a following shot <paramref name="index"/> hangs in at <paramref name="t"/>: the target's part,
+    /// smoothed by the shot's follow, facing its yaw, or the vehicle's full rotation in <paramref name="frame"/>
+    /// for a mount. False for a World shot, or where the target is absent.
+    /// </summary>
+    public bool RigFrame(int index, double t, Func<int, Godot.Quaternion?>? mount,
+        out double e, out double n, out double alt, out float yaw, out Godot.Quaternion? frame)
+    {
+        e = n = alt = 0; yaw = 0; frame = null;
+        var cam = Cameras[Math.Clamp(index, 0, Cameras.Count - 1)];
+        if (!cam.Relative) return false;
+        double smoothing = cam.Rig == ShotRig.Mount ? 0 : cam.Smoothing;
+        // one sampler made once, pointed at the lane: no closure a frame
+        _samplerLane = cam.Target;
+        _sampler ??= (double s, out double se, out double sn, out double sa, out float sy) => ActorFrame(_samplerLane, s, out se, out sn, out sa, out sy);
+        if (!ShotMath.Follow(t, smoothing, _sampler, out e, out n, out alt, out yaw)) return false;
+        alt += ShotMath.PartHeight(cam.Part);
+        if (cam.Rig == ShotRig.Mount) frame = mount?.Invoke(cam.Target);
+        return true;
+    }
+
+    /// <summary>
+    /// "Frame from view" (#777): shot <paramref name="index"/> keyed at <paramref name="t"/> to film from where
+    /// the view is now (LV95 <paramref name="e"/>, <paramref name="n"/>, <paramref name="alt"/>, world rotation
+    /// <paramref name="rotation"/>) with <paramref name="lens"/>. A World shot keeps the world pose; a following
+    /// one keeps it in its target's frame, so the camera then moves with the actor. A shot with a single key
+    /// (a placement) has that key replaced; one with a move gets a key at <paramref name="t"/>. The key, or null
+    /// when a following shot's target is absent there.
+    /// </summary>
+    public CameraKey? FrameFromView(int index, double t, Func<int, Godot.Quaternion?>? mount,
+        double e, double n, double alt, Godot.Quaternion rotation, float lens)
+    {
+        var cam = Cameras[Math.Clamp(index, 0, Cameras.Count - 1)];
+        var key = new CameraKey { T = t, E = e, N = n, Alt = alt, Qx = rotation.X, Qy = rotation.Y, Qz = rotation.Z, Qw = rotation.W, Lens = lens };
+        if (cam.Relative)
+        {
+            if (!RigFrame(index, t, mount, out var fe, out var fn, out var fa, out var fy, out var frame)) return null;
+            var pose = new CameraPose { E = e, N = n, Alt = alt, Qx = rotation.X, Qy = rotation.Y, Qz = rotation.Z, Qw = rotation.W, Lens = lens };
+            ShotMath.ToFrame(ref pose, fe, fn, fa, fy, frame);
+            key.E = pose.E; key.N = pose.N; key.Alt = pose.Alt;
+            key.Qx = pose.Qx; key.Qy = pose.Qy; key.Qz = pose.Qz; key.Qw = pose.Qw;
+        }
+        if (cam.Keys.Count <= 1)
+        {
+            if (cam.Keys.Count == 1) { key.T = cam.Keys[0].T; key.Ease = cam.Keys[0].Ease; key.LookAt = cam.Keys[0].LookAt; }
+            cam.Keys.Clear();
+            cam.Keys.Add(key);
+            return key;
+        }
+        return cam.Set(key, 1.0 / Channels.Rate);
     }
 
     private ShotMath.TargetSampler? _sampler;
