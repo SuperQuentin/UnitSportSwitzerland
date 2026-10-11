@@ -8,12 +8,13 @@ namespace UnitSport.Movie;
 /// change-only properties are stored by name: a file from a build with more or fewer of them
 /// loads, the unknown ones dropped and the new ones at their default. Version 2 (#656) adds the
 /// sound: audio lanes, the sounds (file name, beats, waveform), a flag per clip and the markers.
-/// Version 1 files still load, silent. Version 3 (#669) adds the camera's keyframes.
+/// Version 1 files still load, silent. Version 3 (#669) adds the camera's keyframes, version 4
+/// (#675) several named cameras and the cut list; a version 3 camera becomes Cam 1.
 /// </summary>
 public static class MovieFile
 {
     private const uint Magic = 0x564D5355;   // "USMV"
-    private const int Version = 3;
+    private const int Version = 4;
 
     public static void Write(MovieProject p, Stream to) => Write(p, to, Version);
 
@@ -74,15 +75,40 @@ public static class MovieFile
             foreach (double m in p.Markers) w.Write(m);
         }
 
-        if (version >= 3)
+        if (version == 3) WriteKeys(w, p.Camera);
+        if (version >= 4)
         {
-            w.Write(p.Camera.Keys.Count);
-            foreach (var k in p.Camera.Keys)
+            w.Write(p.Cameras.Count);
+            foreach (var cam in p.Cameras) { w.Write(cam.Name); WriteKeys(w, cam); }
+            w.Write(p.Cuts.Count);
+            foreach (var c in p.Cuts) { w.Write(c.T); w.Write(c.Camera); }
+        }
+    }
+
+    private static void WriteKeys(BinaryWriter w, CameraTrack cam)
+    {
+        w.Write(cam.Keys.Count);
+        foreach (var k in cam.Keys)
+        {
+            w.Write(k.T); w.Write(k.E); w.Write(k.N); w.Write(k.Alt);
+            w.Write(k.Qx); w.Write(k.Qy); w.Write(k.Qz); w.Write(k.Qw);
+            w.Write(k.Lens); w.Write((byte)k.Ease); w.Write(k.LookAt);
+        }
+    }
+
+    private static void ReadKeys(BinaryReader r, CameraTrack cam, int lanes)
+    {
+        int keys = r.ReadInt32();
+        for (int i = 0; i < keys; i++)
+        {
+            var k = new CameraKey
             {
-                w.Write(k.T); w.Write(k.E); w.Write(k.N); w.Write(k.Alt);
-                w.Write(k.Qx); w.Write(k.Qy); w.Write(k.Qz); w.Write(k.Qw);
-                w.Write(k.Lens); w.Write((byte)k.Ease); w.Write(k.LookAt);
-            }
+                T = r.ReadDouble(), E = r.ReadDouble(), N = r.ReadDouble(), Alt = r.ReadDouble(),
+                Qx = r.ReadSingle(), Qy = r.ReadSingle(), Qz = r.ReadSingle(), Qw = r.ReadSingle(),
+                Lens = r.ReadSingle(), Ease = (KeyEase)Math.Min(r.ReadByte(), (byte)KeyEase.Cut), LookAt = r.ReadInt32(),
+            };
+            if (k.LookAt >= lanes) k.LookAt = -1;
+            cam.Set(k, -1, replaceOptions: true);
         }
     }
 
@@ -178,19 +204,24 @@ public static class MovieFile
             for (int i = 0; i < markers; i++) p.AddMarker(r.ReadDouble());
         }
 
-        if (version >= 3)
+        if (version == 3) ReadKeys(r, p.Camera, p.Lanes.Count);
+        if (version >= 4)
         {
-            int keys = r.ReadInt32();
-            for (int i = 0; i < keys; i++)
+            int cameras = r.ReadInt32();
+            p.Cameras.Clear();
+            for (int i = 0; i < cameras; i++)
             {
-                var k = new CameraKey
-                {
-                    T = r.ReadDouble(), E = r.ReadDouble(), N = r.ReadDouble(), Alt = r.ReadDouble(),
-                    Qx = r.ReadSingle(), Qy = r.ReadSingle(), Qz = r.ReadSingle(), Qw = r.ReadSingle(),
-                    Lens = r.ReadSingle(), Ease = (KeyEase)Math.Min(r.ReadByte(), (byte)KeyEase.Cut), LookAt = r.ReadInt32(),
-                };
-                if (k.LookAt >= p.Lanes.Count) k.LookAt = -1;
-                p.Camera.Set(k, -1, replaceOptions: true);
+                var cam = new CameraTrack { Name = r.ReadString() };
+                ReadKeys(r, cam, p.Lanes.Count);
+                p.Cameras.Add(cam);
+            }
+            if (p.Cameras.Count == 0) p.Cameras.Add(new CameraTrack { Name = "Cam 1" });
+            int cuts = r.ReadInt32();
+            for (int i = 0; i < cuts; i++)
+            {
+                double t = r.ReadDouble();
+                int cam = r.ReadInt32();
+                if (cam >= 0 && cam < p.Cameras.Count) p.CutTo(t, cam, -1);
             }
         }
         return p;

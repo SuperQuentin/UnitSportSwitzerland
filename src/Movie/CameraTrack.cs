@@ -35,6 +35,16 @@ public sealed class CameraKey
     public CameraKey Copy() => (CameraKey)MemberwiseClone();
 }
 
+/// <summary>
+/// A cut in the movie's program (#675): from <see cref="T"/> on, the movie shows camera
+/// <see cref="Camera"/> (an index into <see cref="MovieProject.Cameras"/>), until the next cut.
+/// </summary>
+public sealed class CameraCut
+{
+    public double T { get; set; }
+    public int Camera { get; set; }
+}
+
 /// <summary>A camera at one instant: what <see cref="CameraTrack.Sample"/> fills.</summary>
 public struct CameraPose
 {
@@ -52,6 +62,9 @@ public struct CameraPose
 public sealed class CameraTrack
 {
     public const float MinLens = 14, MaxLens = 200;
+
+    /// <summary>What the timeline and the picker call it (#675): "Cam 2", or what the user renamed it to.</summary>
+    public string Name { get; set; } = "Cam 1";
 
     public List<CameraKey> Keys { get; } = new();
 

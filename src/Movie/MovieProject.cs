@@ -72,8 +72,12 @@ public sealed class MovieProject
     public List<AudioAsset> Audio { get; } = new();
     /// <summary>Markers kept on the timeline (#656), sorted, in timeline seconds.</summary>
     public List<double> Markers { get; } = new();
-    /// <summary>The movie's camera, as keyframes (#669).</summary>
-    public CameraTrack Camera { get; } = new();
+    /// <summary>The movie's cameras (#675), each its own keyframes (#669); never fewer than one.</summary>
+    public List<CameraTrack> Cameras { get; } = new() { new CameraTrack { Name = "Cam 1" } };
+    /// <summary>The first camera: the only one a version 3 file had.</summary>
+    public CameraTrack Camera => Cameras[0];
+    /// <summary>The program (#675): which camera the movie shows from when, sorted by time.</summary>
+    public List<CameraCut> Cuts { get; } = new();
     private int _nextId = 1;
 
     // this run's recording clock against the timeline: grabs made in one session keep their real
@@ -86,7 +90,10 @@ public sealed class MovieProject
     {
         get
         {
-            double d = Camera.Keys.Count == 0 ? 0 : Camera.Keys[^1].T;
+            double d = 0;
+            foreach (var cam in Cameras)
+                if (cam.Keys.Count > 0) d = Math.Max(d, cam.Keys[^1].T);
+            foreach (var cut in Cuts) d = Math.Max(d, cut.T);
             foreach (var c in Clips) d = Math.Max(d, c.End);
             return d;
         }
@@ -252,10 +259,80 @@ public sealed class MovieProject
         AudioLanes.Clear(); AudioLanes.AddRange(audioLanes);
         Clips.Clear(); Clips.AddRange(clips);
         // a camera aimed at an actor whose lane went no longer aims at anyone
-        foreach (var k in Camera.Keys) k.LookAt = k.LookAt >= 0 ? usedLanes.IndexOf(k.LookAt) : -1;
+        foreach (var cam in Cameras)
+            foreach (var k in cam.Keys) k.LookAt = k.LookAt >= 0 ? usedLanes.IndexOf(k.LookAt) : -1;
     }
 
     internal void SetNextId(int next) => _nextId = Math.Max(_nextId, next);
+
+    // ---- cameras and the program (#675) --------------------------------------------------------------
+
+    /// <summary>A new camera, "Cam N" with the first free N, after the others.</summary>
+    public CameraTrack AddCamera()
+    {
+        int n = 1;
+        while (Cameras.Exists(c => c.Name == $"Cam {n}")) n++;
+        var cam = new CameraTrack { Name = $"Cam {n}" };
+        Cameras.Add(cam);
+        return cam;
+    }
+
+    /// <summary>Drops camera <paramref name="index"/> and its cuts; the last camera stays. Whether it went.</summary>
+    public bool RemoveCamera(int index)
+    {
+        if (Cameras.Count <= 1 || index < 0 || index >= Cameras.Count) return false;
+        Cameras.RemoveAt(index);
+        Cuts.RemoveAll(c => c.Camera == index);
+        foreach (var c in Cuts)
+            if (c.Camera > index) c.Camera--;
+        return true;
+    }
+
+    /// <summary>
+    /// The movie cuts to camera <paramref name="camera"/> at <paramref name="t"/>; a cut within
+    /// <paramref name="within"/> seconds is changed instead of a second one made. The cut now there.
+    /// </summary>
+    public CameraCut CutTo(double t, int camera, double within)
+    {
+        t = Math.Max(0, t);
+        var near = Cuts.Find(c => Math.Abs(c.T - t) <= within);
+        if (near != null) { near.Camera = camera; return near; }
+        var cut = new CameraCut { T = t, Camera = camera };
+        int i = Cuts.FindIndex(c => c.T > t);
+        Cuts.Insert(i < 0 ? Cuts.Count : i, cut);
+        return cut;
+    }
+
+    public void RetimeCut(CameraCut cut, double t)
+    {
+        Cuts.Remove(cut);
+        cut.T = Math.Max(0, t);
+        int i = Cuts.FindIndex(c => c.T > cut.T);
+        Cuts.Insert(i < 0 ? Cuts.Count : i, cut);
+    }
+
+    public bool RemoveCut(CameraCut cut) => Cuts.Remove(cut);
+
+    /// <summary>The cut nearest <paramref name="t"/> within <paramref name="tolerance"/> s, or null.</summary>
+    public CameraCut? CutNear(double t, double tolerance)
+    {
+        CameraCut? best = null;
+        foreach (var c in Cuts)
+            if (Math.Abs(c.T - t) <= tolerance && (best == null || Math.Abs(c.T - t) < Math.Abs(best.T - t))) best = c;
+        return best;
+    }
+
+    /// <summary>The camera the movie shows at <paramref name="t"/>: the last cut's, the first camera before any. A loop: it runs every frame.</summary>
+    public int ProgramCamera(double t)
+    {
+        int cam = 0;
+        foreach (var c in Cuts)
+        {
+            if (c.T > t) break;
+            cam = c.Camera;
+        }
+        return Math.Clamp(cam, 0, Cameras.Count - 1);
+    }
 
     // ---- beats and markers (#656) ------------------------------------------------------------------
 

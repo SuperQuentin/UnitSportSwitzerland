@@ -153,14 +153,24 @@ public partial class StudioCamera : Camera3D
     /// </summary>
     public void ShowPose(in CameraPose pose, Func<int, Vector3?> actorAt)
     {
-        var at = _origin.ToWorld(new GlobalPos(pose.E, pose.N, pose.Alt));
-        var basis = new Basis(new Quaternion(pose.Qx, pose.Qy, pose.Qz, pose.Qw));
+        var xf = PoseTransform(_origin, pose, actorAt);
+        Show(xf.Origin, xf.Basis, pose.Lens);
+    }
+
+    /// <summary>
+    /// Where a camera track's pose is in this world and which way it looks: as keyed, or at the head
+    /// of the actor it aims at. Shared by the view and the cameras' gizmos (#675).
+    /// </summary>
+    public static Transform3D PoseTransform(WorldOrigin origin, in CameraPose pose, Func<int, Vector3?> actorAt)
+    {
+        var at = origin.ToWorld(new GlobalPos(pose.E, pose.N, pose.Alt));
+        var basis = new Basis(new Quaternion(pose.Qx, pose.Qy, pose.Qz, pose.Qw).Normalized());
         if (pose.LookAt >= 0 && actorAt(pose.LookAt) is { } target)
         {
             var to = target + new Vector3(0, 1.2f, 0) - at;
             if (to.LengthSquared() > 0.01f) basis = Basis.LookingAt(to, Vector3.Up);
         }
-        Show(at, basis, pose.Lens);
+        return new Transform3D(basis, at);
     }
 
     /// <summary>Leaves Track (or Orbit) for Free where the view is now.</summary>
