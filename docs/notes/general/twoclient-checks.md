@@ -50,8 +50,11 @@ user data. Before/after runs: see PR (each script fails or passes the same way a
   `OUT=`, `mkdir`, `CH=()/CHUNKARG=()` and `stop()` boilerplate by the source line above; replace
   `timeout N "$GODOT" --headless --path . -- --server ... > log 2>&1 &` + the wait loop by
   `tc_server N <wait> log --server ...`, each client by `tc_client`, `kill`/`stop $SERVER` by `tc_stop`.
-- Not converted yet: `tools/racecheck.sh` (four autopilot clients, own cleanup) and
-  `tools/buildnetcheck.sh` (#281, open). `tools/test.sh` keeps its own Godot finder (#269 edits it).
+- Background clients the script leaves running (`tc_client ... &`) are not the lib's to kill:
+  keep their PIDs and kill them in your own EXIT trap, which ends by calling `_tc_cleanup`
+  (`tools/racecheck.sh`: up to four `--raceauto` clients, each with its own `--cache`).
+- Not converted yet: `tools/buildnetcheck.sh` (#281, open). `tools/test.sh` keeps its own Godot
+  finder (#269 edits it).
 
 ## How to check
 
