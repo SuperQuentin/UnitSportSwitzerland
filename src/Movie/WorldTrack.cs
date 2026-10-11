@@ -64,7 +64,8 @@ public sealed class WorldEntity
 {
     /// <summary>
     /// <see cref="Parent"/> of the one entity that is not drawn but is the world's state (#775): its
-    /// pose's <see cref="WorldPose.X"/> is the hour of the day, <see cref="WorldPose.Y"/> the sea state.
+    /// pose's <see cref="WorldPose.X"/> is the hour of the day, <see cref="WorldPose.Y"/> the sea state,
+    /// <see cref="WorldPose.Z"/> the snowfall.
     /// </summary>
     public const int Environment = -2;
 
@@ -98,18 +99,18 @@ public sealed class WorldEntity
         return WorldPose.Lerp(Poses[i], Poses[i + 1], (float)Math.Clamp((t - Times[i]) / gap, 0, 1));
     }
 
-    /// <summary>The environment's hour and sea state at <paramref name="t"/>: the hour the short way round midnight.</summary>
-    public (double Hour, float Sea) EnvironmentAt(double t)
+    /// <summary>The environment's hour, sea state and snowfall at <paramref name="t"/>: the hour the short way round midnight.</summary>
+    public (double Hour, float Sea, float Snow) EnvironmentAt(double t)
     {
         int i = Last(Times, t);
-        if (i < 0) return (Poses[0].X, (float)Poses[0].Y);
-        if (i + 1 >= Times.Length || Times[i + 1] - Times[i] > WorldTrack.MaxGap) return (Poses[i].X, (float)Poses[i].Y);
+        if (i < 0) return (Poses[0].X, (float)Poses[0].Y, (float)Poses[0].Z);
+        if (i + 1 >= Times.Length || Times[i + 1] - Times[i] > WorldTrack.MaxGap) return (Poses[i].X, (float)Poses[i].Y, (float)Poses[i].Z);
         double k = Math.Clamp((t - Times[i]) / (Times[i + 1] - Times[i]), 0, 1);
         double a = Poses[i].X, b = Poses[i + 1].X;
         if (b - a > 12) b -= 24;
         else if (a - b > 12) b += 24;
         double hour = (a + (b - a) * k + 24) % 24;
-        return (hour, (float)(Poses[i].Y + (Poses[i + 1].Y - Poses[i].Y) * k));
+        return (hour, (float)(Poses[i].Y + (Poses[i + 1].Y - Poses[i].Y) * k), (float)(Poses[i].Z + (Poses[i + 1].Z - Poses[i].Z) * k));
     }
 
     public bool ShownAt(double t)

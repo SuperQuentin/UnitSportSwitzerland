@@ -135,7 +135,7 @@ public sealed class WorldRecorder
     private void Environment(double now)
     {
         if (World.DayNight.Instance is not { } sky) return;
-        var pose = WorldPose.Identity with { X = sky.Hour, Y = World.WaterField.SeaState };
+        var pose = WorldPose.Identity with { X = sky.Hour, Y = World.WaterField.SeaState, Z = Occasions.OccasionPrecip.Snowfall };
         if (_environment == 0)
         {
             _environment = _nextId++;

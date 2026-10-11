@@ -31,9 +31,9 @@
   A red "● REC m:ss" badge shows while it runs. It is held in memory, preallocated when it starts (about 86 MB of
   sound plus 8 MB per player for 30 min); streaming to disk is a follow-up.
 - **The world's state** (#775): one undrawn entity (`Parent = WorldEntity.Environment`, -2) holds the hour in its
-  pose's X and the sea state in Y, written when they change. While a world clip plays, `MovieEnvironment` holds
-  the sky there (`DayNight.HourOverride`, applied at once even paused) and sets the sea state; leaving the clip or
-  the studio gives the game's own back. Snowfall (occasions) is not recorded yet.
+  pose's X, the sea state in Y and the snowfall in Z (`OccasionPrecip.Snowfall`), written when they change. While a world clip plays, `MovieEnvironment` holds
+  the sky there (`DayNight.HourOverride`, applied at once even paused), sets the sea state and holds the snow (`OccasionPrecip.SnowfallOverride`); leaving the clip or
+  the studio gives the game's own back.
 - A command-line launch on the real map starts in the fly camera: no player body, so no actor clip (correct).
-- **Not yet:** snowfall, doors (many and static: to measure first),
+- **Not yet:** doors (many and static: to measure first),
   MultiMesh-drawn things (the dormant fleet stays live). Particles replay their emitting state, not their exact puffs.
