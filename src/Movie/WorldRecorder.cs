@@ -28,9 +28,24 @@ public sealed class WorldRecorder
         public bool Shown;
         public int Look = -1;
         public int Seen;
+        public int Still;   // ticks since it last moved or changed
     }
 
-    public WorldRing Ring { get; }
+    /// <summary>Ticks an object rests before it is looked at only every <see cref="RestEvery"/>th tick.</summary>
+    public const int RestAfter = 60, RestEvery = 4;
+
+    /// <summary>The first ring written to (the one the convenience constructor made).</summary>
+    public WorldRing Ring => _rings[0];
+    /// <summary>
+    /// Every ring the same reads go into (#775): the replay buffer's and a Record / Stop session's,
+    /// so the world is read once a tick however many recordings run.
+    /// </summary>
+    private readonly List<WorldRing> _rings = new();
+    /// <summary>Mean cost of a tick, µs, and the ticks it is over (for the logs and the checks).</summary>
+    public double TickMicros => _ticks == 0 ? 0 : _tickTime.Elapsed.TotalMilliseconds * 1000 / _ticks;
+    private readonly System.Diagnostics.Stopwatch _tickTime = new();
+    private long _ticks;
+    private int _tick;
     /// <summary>Every look recorded so far; tracks copy the ones they use.</summary>
     public List<WorldLook> Looks { get; } = new();
     public int Live => _ents.Count;
@@ -45,11 +60,35 @@ public sealed class WorldRecorder
     private int _environment;
     private WorldPose _lastEnvironment;
 
-    public WorldRecorder(double window) => Ring = new WorldRing(window);
+    public WorldRecorder() { }
+
+    /// <summary>A recorder writing into one ring of its own, <paramref name="window"/> seconds long.</summary>
+    public WorldRecorder(double window) => _rings.Add(new WorldRing(window));
+
+    /// <summary>
+    /// <paramref name="ring"/> written to from now on, starting with everything alive now, as it
+    /// stands, so it begins whole (a session starting mid-game).
+    /// </summary>
+    public void Attach(WorldRing ring, double now)
+    {
+        if (_rings.Contains(ring)) return;
+        _rings.Add(ring);
+        // made in order: a group always before its parts
+        foreach (var e in _ents) ring.Spawn(now, e.Id, e.Group?.Id ?? -1, e.Look, e.Last, e.Shown);
+        if (_environment != 0) ring.Spawn(now, _environment, WorldEntity.Environment, -1, _lastEnvironment, false);
+    }
+
+    public void Detach(WorldRing ring) => _rings.Remove(ring);
+
+    private void EmitSpawn(double t, int id, int parent, int look, in WorldPose pose, bool shown) { foreach (var r in _rings) r.Spawn(t, id, parent, look, pose, shown); }
+    private void EmitMove(double t, int id, in WorldPose pose) { foreach (var r in _rings) r.Move(t, id, pose); }
+    private void EmitShow(double t, int id, bool shown) { foreach (var r in _rings) r.Show(t, id, shown); }
+    private void EmitLook(double t, int id, int look) { foreach (var r in _rings) r.Look(t, id, look); }
+    private void EmitGone(double t, int id) { foreach (var r in _rings) r.Gone(t, id); }
 
     public void Clear()
     {
-        Ring.Clear();
+        foreach (var r in _rings) r.Clear();
         _byNode.Clear();
         _ents.Clear();
         _nextWalk = 0;
@@ -59,6 +98,9 @@ public sealed class WorldRecorder
     /// <summary>One tick at <paramref name="now"/>: new and gone meshes every half second, every pose that moved.</summary>
     public void Tick(double now, WorldOrigin origin)
     {
+        _tickTime.Start();
+        _ticks++;
+        _tick++;
         if (now >= _nextWalk)
         {
             _nextWalk = now + 0.5;
@@ -66,17 +108,28 @@ public sealed class WorldRecorder
         }
         foreach (var e in _ents)
         {
+            // at rest for two seconds: a look every few ticks (a parked car, a shut door, a wall)
+            if (e.Still >= RestAfter && (_tick + e.Id) % RestEvery != 0) continue;
             if (!GodotObject.IsInstanceValid(e.Node) || !e.Node.IsInsideTree()) { _gone.Add(e); continue; }
+            e.Still++;
             var pose = PoseOf(e, origin);
-            if (pose.Moved(e.Last)) { Ring.Move(now, e.Id, pose); e.Last = pose; }
+            if (pose.Moved(e.Last))
+            {
+                // waking from a rest: the last pose it held, a tick back, so it does not glide from long ago
+                if (e.Still > RestAfter) EmitMove(now - 1.0 / Channels.Rate, e.Id, e.Last);
+                EmitMove(now, e.Id, pose);
+                e.Last = pose;
+                e.Still = 0;
+            }
             if (e.Group != null)
             {
                 bool shown = e.Node.IsVisibleInTree();
-                if (shown != e.Shown) { Ring.Show(now, e.Id, shown); e.Shown = shown; }
+                if (shown != e.Shown) { EmitShow(now, e.Id, shown); e.Shown = shown; e.Still = 0; }
             }
         }
         Drop(now);
         Environment(now);
+        _tickTime.Stop();
     }
 
     private void Environment(double now)
@@ -86,12 +139,12 @@ public sealed class WorldRecorder
         if (_environment == 0)
         {
             _environment = _nextId++;
-            Ring.Spawn(now, _environment, WorldEntity.Environment, -1, pose, false);
+            EmitSpawn(now, _environment, WorldEntity.Environment, -1, pose, false);
             _lastEnvironment = pose;
         }
         else if (pose.Moved(_lastEnvironment))
         {
-            Ring.Move(now, _environment, pose);
+            EmitMove(now, _environment, pose);
             _lastEnvironment = pose;
         }
     }
@@ -101,7 +154,7 @@ public sealed class WorldRecorder
         foreach (var e in _gone)
         {
             if (!_ents.Remove(e)) continue;
-            Ring.Gone(now, e.Id);
+            EmitGone(now, e.Id);
             _byNode.Remove(e.Key);
         }
         _gone.Clear();
@@ -156,7 +209,7 @@ public sealed class WorldRecorder
     {
         var e = new Ent { Id = _nextId++, Key = node.GetInstanceId(), Node = node };
         e.Last = PoseOf(e, origin);
-        Ring.Spawn(now, e.Id, -1, -1, e.Last, true);
+        EmitSpawn(now, e.Id, -1, -1, e.Last, true);
         _byNode[e.Key] = e;
         _ents.Add(e);
         return e;
@@ -168,12 +221,12 @@ public sealed class WorldRecorder
         if (_byNode.TryGetValue(mesh.GetInstanceId(), out var e))
         {
             e.Seen = _pass;
-            if (look != e.Look) { Ring.Look(now, e.Id, look); e.Look = look; }
+            if (look != e.Look) { EmitLook(now, e.Id, look); e.Look = look; }
             return;
         }
         e = new Ent { Id = _nextId++, Key = mesh.GetInstanceId(), Node = mesh, Group = group, Look = look, Seen = _pass, Shown = mesh.IsVisibleInTree() };
         e.Last = PoseOf(e, origin);
-        Ring.Spawn(now, e.Id, group.Id, look, e.Last, e.Shown);
+        EmitSpawn(now, e.Id, group.Id, look, e.Last, e.Shown);
         _byNode[e.Key] = e;
         _ents.Add(e);
     }

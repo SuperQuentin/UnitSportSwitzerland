@@ -24,20 +24,26 @@ public sealed class Recording
     public double Seconds { get; }
     // by instance: a node's name is a StringName, and turning it into a string every frame allocates
     private readonly Dictionary<ulong, Tracked> _actors = new();
-    private readonly WorldRecorder _world;
+    private readonly WorldRecorder _world;   // shared by every recording: the world is read once
+    private readonly WorldRing _ring;
     private readonly SoundRing? _sound;
     private double _worldGrabbed = double.NegativeInfinity, _soundGrabbed = double.NegativeInfinity, _nextPrune;
 
-    public Recording(double seconds, int soundRate)
+    public Recording(double seconds, int soundRate, WorldRecorder world, double now)
     {
         Seconds = seconds;
-        _world = new WorldRecorder(seconds);
+        _world = world;
+        _ring = new WorldRing(seconds);
+        world.Attach(_ring, now);
         _sound = soundRate > 0 ? new SoundRing((int)Math.Ceiling(seconds), soundRate) : null;
     }
 
     /// <summary>When it began (game clock), NaN before the first tick.</summary>
     public double Started { get; private set; } = double.NaN;
     public int WorldObjects => _world.Live;
+
+    /// <summary>Its world ring no longer written to: the recording is over.</summary>
+    public void Close() => _world.Detach(_ring);
     public int Players => _actors.Count;
     private int Capacity => (int)(Seconds * Channels.Rate) + 1;
 
@@ -73,10 +79,9 @@ public sealed class Recording
         actor.LastSeen = now;
     }
 
-    /// <summary>The world this tick, and players long gone from view forgotten.</summary>
-    public void World(double now, WorldOrigin? origin)
+    /// <summary>Players long gone from view forgotten (the world itself is read by the shared recorder).</summary>
+    public void Prune(double now)
     {
-        if (origin != null) _world.Tick(now, origin);
         if (now < _nextPrune) return;
         // a player gone from view stays grabbable until its last frame is older than what is held
         _nextPrune = now + 10;
@@ -100,7 +105,7 @@ public sealed class Recording
             if (a.Ring.Slice(a.Grabbed, out double start) is { } track) slices.Add((a, track, start));
         // the earliest first: it anchors this session's clock on the timeline, the rest keep their spacing from it
         slices.Sort((x, y) => x.Start.CompareTo(y.Start));
-        var world = _world.Ring.Slice(_worldGrabbed, now, _world.Looks, out double worldStart);
+        var world = _ring.Slice(_worldGrabbed, now, _world.Looks, out double worldStart);
         if (world != null && (slices.Count == 0 || worldStart < slices[0].Start)) project.PlaceGrab(worldStart);
         foreach (var (a, track, start) in slices)
         {
@@ -112,11 +117,14 @@ public sealed class Recording
         {
             project.AddWorld(world, project.PlaceGrab(worldStart));
             _worldGrabbed = now;
-            GD.Print($"[movie] grabbed the world: {world.Entities.Count(e => e.IsGroup)} objects, "
+            GD.Print($"[movie] grabbed the world: {world.Entities.Count(e => e.IsGroup)} objects, {_world.Live} live, {_world.TickMicros:F0} µs a tick, "
                 + $"{world.Entities.Sum(e => e.Times.Length)} poses, {world.Looks.Length} looks, {world.Duration:F1} s");
         }
+        // the sound from where the pictures begin: a drain may hand over samples heard just before
+        double first = slices.Count > 0 ? slices[0].Start : double.PositiveInfinity;
+        if (world != null) first = Math.Min(first, worldStart);
         return slices.Count + (world != null ? 1 : 0)
-            + (GrabSound(project, slices.Count > 0 ? slices[0].Start : double.NegativeInfinity) ? 1 : 0);
+            + (GrabSound(project, double.IsPositiveInfinity(first) ? double.NegativeInfinity : first) ? 1 : 0);
     }
 
     /// <summary>The game's sound since the last grab, from <paramref name="notBefore"/> on, on its own lane (#656).</summary>

@@ -222,9 +222,12 @@ public partial class GameShell : Node
             if (CmdArgs.Double("--movierecord", 1) is { } recordAt && CmdArgs.Double("--movierecord", 2) is { } stopAt)
             {
                 double hourAtStart = double.NaN;
+                int playersAtStart = 0;
                 GetTree().CreateTimer(recordAt).Timeout += () =>
                 {
                     hourAtStart = UnitSport.World.DayNight.Instance?.Hour ?? double.NaN;
+                    // a command-line launch on the real map starts in the fly camera: no body to record
+                    playersAtStart = Player.PlayerSnapshot.Of(GetTree()).Count(x => !x.Player.Puppet);
                     Movie.MovieSession.ToggleRecording();
                 };
                 GetTree().CreateTimer(stopAt).Timeout += () =>
@@ -239,8 +242,8 @@ public partial class GameShell : Node
                     var env = p?.Worlds.FirstOrDefault()?.Entities.FirstOrDefault(e => e.IsEnvironment);
                     double recordedHour = env?.EnvironmentAt(0).Hour ?? double.NaN;
                     bool sky = double.IsNaN(hourAtStart) || Math.Abs(recordedHour - hourAtStart) < 0.05;
-                    bool ok = actors >= 1 && worlds == 1 && sounds == 1 && Math.Abs(length - span) < 1.0 && sky;
-                    GD.Print($"[movierecord] \"{newest}\": {actors} actor clips, {worlds} world, {sounds} sound, {length:F1} s of {span:F1} s, "
+                    bool ok = actors >= Math.Min(1, playersAtStart) && worlds == 1 && sounds == 1 && Math.Abs(length - span) < 1.0 && sky;
+                    GD.Print($"[movierecord] \"{newest}\": {actors} actor clips ({playersAtStart} players), {worlds} world, {sounds} sound, {length:F1} s of {span:F1} s, "
                         + $"the hour {recordedHour:F3} recorded at {hourAtStart:F3} {(sky ? "ok" : "WRONG")}");
                     GD.Print(ok ? "[movierecord] RESULT: ok" : "[movierecord] RESULT: FAILED");
                     GetTree().Quit(ok ? 0 : 1);

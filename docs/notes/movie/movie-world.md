@@ -7,7 +7,13 @@
   - Players and anything under a `FootPlayer` are skipped: they come back as puppets (`movie-studio`).
 - **How** (`WorldRecorder`, ticked by `ReplayRecorder` at 30 Hz): an object is a group whose LV95 pose is kept; each
   mesh is a part whose pose is kept in the group's frame. A pose is written only when it moved (1 mm, ~0.05°),
-  so a parked car costs one frame. The tree is walked twice a second for new and gone meshes.
+  so a parked car costs one frame. The tree is walked twice a second for new and gone meshes. Something that
+  has not moved for 2 s (`RestAfter`) is looked at only every 4th tick; waking, it writes the pose it rested at a
+  tick back so it does not glide from long ago.
+  - **One read, many rings:** `ReplayRecorder` owns the one `WorldRecorder`; the buffer's and a session's
+    `WorldRing`s are attached to it (`Attach` writes everything alive as it stands, so a late ring starts whole).
+  - Cost measured (`TickMicros`, logged on a grab): fixture 124 live, 166 µs a tick; Lausanne with `--traffic 80`
+    372 live, 374 µs a tick for buffer and session together.
   - Looks (mesh + materials, `WorldLook`) are shared by index: a thousand frames of a car hold one mesh.
   - `WorldRing`: the events of the last `ReplayMinutes`; older ones fold into the starting state, like
     `ReplayRing`'s change-only properties. `Slice` on a grab gives a `WorldTrack`.
@@ -26,5 +32,6 @@
   pose's X and the sea state in Y, written when they change. While a world clip plays, `MovieEnvironment` holds
   the sky there (`DayNight.HourOverride`, applied at once even paused) and sets the sea state; leaving the clip or
   the studio gives the game's own back. Snowfall (occasions) is not recorded yet.
+- A command-line launch on the real map starts in the fly camera: no player body, so no actor clip (correct).
 - **Not yet:** snowfall, doors (many and static: to measure first),
   MultiMesh-drawn things (the dormant fleet stays live), particles and lights.

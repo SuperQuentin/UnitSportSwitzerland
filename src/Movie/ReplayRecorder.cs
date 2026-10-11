@@ -35,6 +35,8 @@ public partial class ReplayRecorder : Node
     public bool Paused { get; set; }
 
     private Recording? _buffer, _session;
+    // the world as it is drawn (#775), read once a tick for the buffer and a session alike
+    private readonly WorldRecorder _world = new();
     private RecordingBadge? _badge;
     private readonly ActorState _scratch = new(ActorIo.Names.Length);
     private double _next;
@@ -53,7 +55,7 @@ public partial class ReplayRecorder : Node
     /// <summary>The session reached <see cref="SessionMinutes"/> and stopped: the project it left, for the world to save.</summary>
     public event Action<MovieProject>? SessionFull;
     /// <summary>Objects of the world being recorded now (for the checks and the pause menu).</summary>
-    public int WorldObjects => _buffer?.WorldObjects ?? _session?.WorldObjects ?? 0;
+    public int WorldObjects => _world.Live;
 
     public ReplayRecorder() => Name = "ReplayRecorder";
 
@@ -69,7 +71,11 @@ public partial class ReplayRecorder : Node
         AudioServer.AddBusEffect(0, _capture);
     }
 
-    private void MakeBuffer() => _buffer = _minutes > 0 ? new Recording(_minutes * 60, SoundRate) : null;
+    private void MakeBuffer()
+    {
+        _buffer?.Close();
+        _buffer = _minutes > 0 ? new Recording(_minutes * 60, SoundRate, _world, GameClock.Now) : null;
+    }
 
     public override void _ExitTree()
     {
@@ -93,7 +99,7 @@ public partial class ReplayRecorder : Node
     public bool StartSession()
     {
         if (_session != null) return false;
-        _session = new Recording(SessionMinutes * 60, SoundRate);
+        _session = new Recording(SessionMinutes * 60, SoundRate, _world, GameClock.Now);
         AddChild(_badge = new RecordingBadge(this));
         GD.Print("[movie] recording started");
         return true;
@@ -104,11 +110,12 @@ public partial class ReplayRecorder : Node
     {
         if (_session is not { } s) return null;
         _session = null;
+        s.Close();
         _badge?.QueueFree();
         _badge = null;
         var project = new MovieProject(ActorIo.Names) { Name = $"Recording {DateTime.Now:yyyy-MM-dd HH-mm}" };
         int clips = s.Grab(project, GameClock.Now);
-        GD.Print($"[movie] recording stopped: {clips} clips, {project.Duration:F1} s");
+        GD.Print($"[movie] recording stopped: {clips} clips from {s.Players} players, {project.Duration:F1} s");
         return clips > 0 ? project : null;
     }
 
@@ -158,9 +165,9 @@ public partial class ReplayRecorder : Node
             _buffer?.Actor(p, id, _scratch, now);
             _session?.Actor(p, id, _scratch, now);
         }
-        var origin = OriginNow();
-        _buffer?.World(now, origin);
-        _session?.World(now, origin);
+        if (OriginNow() is { } origin) _world.Tick(now, origin);
+        _buffer?.Prune(now);
+        _session?.Prune(now);
 
         if (_session != null && SessionSeconds >= SessionMinutes * 60 && StopSession() is { } full) SessionFull?.Invoke(full);
     }
