@@ -217,6 +217,7 @@ public partial class GameShell : Node
                     Push(studio);
                     if (CmdArgs.Value("--moviesong") is { } song) studio.Import(song);
                     if (CmdArgs.Has("--moviekeys")) Callable.From(studio.ScreenshotKeys).CallDeferred();
+                    if (CmdArgs.Has("--movieshots")) GetTree().CreateTimer(0.5, processAlways: true).Timeout += studio.ScreenshotShots;
                 };
             // "--movierecord <a> <b>": Record / Stop (#775) from a to b seconds of play, then the saved file
             // read back: one actor clip, a world clip and the game's sound expected, RESULT printed

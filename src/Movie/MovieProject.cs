@@ -490,7 +490,7 @@ public sealed class MovieProject
     /// when a following shot's target is absent there.
     /// </summary>
     public CameraKey? FrameFromView(int index, double t, Func<int, Godot.Quaternion?>? mount,
-        double e, double n, double alt, Godot.Quaternion rotation, float lens)
+        double e, double n, double alt, Godot.Quaternion rotation, float lens, bool add = false)
     {
         var cam = Cameras[Math.Clamp(index, 0, Cameras.Count - 1)];
         var key = new CameraKey { T = t, E = e, N = n, Alt = alt, Qx = rotation.X, Qy = rotation.Y, Qz = rotation.Z, Qw = rotation.W, Lens = lens };
@@ -502,7 +502,8 @@ public sealed class MovieProject
             key.E = pose.E; key.N = pose.N; key.Alt = pose.Alt;
             key.Qx = pose.Qx; key.Qy = pose.Qy; key.Qz = pose.Qz; key.Qw = pose.Qw;
         }
-        if (cam.Keys.Count <= 1)
+        // a placement (one key) is replaced; a move, or an explicit added key, goes in at the time
+        if (!add && cam.Keys.Count <= 1)
         {
             if (cam.Keys.Count == 1) { key.T = cam.Keys[0].T; key.Ease = cam.Keys[0].Ease; key.LookAt = cam.Keys[0].LookAt; }
             cam.Keys.Clear();
