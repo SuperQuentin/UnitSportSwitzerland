@@ -34,8 +34,9 @@ Plan and later milestones (cameras, lenses, VR, webcam mocap): `docs/plans/movie
 - **Controls** (studio only, no input-map actions, so they never collide with gameplay):
   - Keyboard: Space / J / K / L, ← → (Shift: 1 s), Home / End, S, Del, Ctrl+D, Tab; right-drag orbits, the wheel
     zooms, Ctrl+wheel zooms the timeline.
-  - Pad and VR (`XrPad` is a pad on device 7): Y play, X split, LT / RT shuttle, right stick orbit, LB / RB zoom,
-    D-pad on the focused timeline steps a frame. Read through the input map (`TriggerLeft/Right`, `Look*`,
+  - Pad and VR (`XrPad` is a pad on device 7): Y play, X split, R3 marker on the beat, LT / RT shuttle, right stick
+    orbit, LB / RB zoom, D-pad on the focused timeline steps a frame.
+  - Sound, beats and markers: `movie-sound`. Read through the input map (`TriggerLeft/Right`, `Look*`,
     `MapZoomIn/Out`), never `GetJoyAxis(0, …)`, which misses VR.
 - **Not yet:**
   - Puppets of players inside a building are hidden when you are outside it, like remote players

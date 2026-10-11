@@ -6,18 +6,23 @@ namespace UnitSport.Movie;
 /// A <see cref="MovieProject"/> on disk (#638), <c>user://movies/*.usmovie</c>: little-endian
 /// binary, doubles and floats as they are in memory, so nothing depends on the locale. The
 /// change-only properties are stored by name: a file from a build with more or fewer of them
-/// loads, the unknown ones dropped and the new ones at their default.
+/// loads, the unknown ones dropped and the new ones at their default. Version 2 (#656) adds the
+/// sound: audio lanes, the sounds (file name, beats, waveform), a flag per clip and the markers.
+/// Version 1 files still load, silent.
 /// </summary>
 public static class MovieFile
 {
     private const uint Magic = 0x564D5355;   // "USMV"
-    private const int Version = 1;
+    private const int Version = 2;
 
-    public static void Write(MovieProject p, Stream to)
+    public static void Write(MovieProject p, Stream to) => Write(p, to, Version);
+
+    /// <summary>Writes the given format version: older ones are for the checks that older files still load.</summary>
+    internal static void Write(MovieProject p, Stream to, int version)
     {
         using var w = new BinaryWriter(to, Encoding.UTF8, leaveOpen: true);
         w.Write(Magic);
-        w.Write(Version);
+        w.Write(version);
         w.Write(p.Name);
         w.Write(Channels.Stride);
         w.Write(p.Discrete.Length);
@@ -38,11 +43,35 @@ public static class MovieFile
             foreach (var e in t.Events) { w.Write(e.T); w.Write(e.Prop); w.Write(e.Num); w.Write(e.Str); }
         }
 
-        w.Write(p.Clips.Count);
-        foreach (var c in p.Clips)
+        if (version >= 2)
+        {
+            w.Write(p.AudioLanes.Count);
+            foreach (var name in p.AudioLanes) w.Write(name);
+            w.Write(p.Audio.Count);
+            foreach (var a in p.Audio)
+            {
+                w.Write(a.Name); w.Write(a.File); w.Write(a.Duration); w.Write(a.Game);
+                w.Write(a.Beat.Bpm);
+                w.Write(a.Beat.Beats.Length);
+                foreach (double b in a.Beat.Beats) w.Write(b);
+                w.Write(a.Peaks.Length);
+                w.Write(a.Peaks);
+            }
+        }
+
+        var clips = version >= 2 ? p.Clips : p.Clips.Where(c => !c.Audio).ToList();
+        w.Write(clips.Count);
+        foreach (var c in clips)
         {
             w.Write(c.Id); w.Write(c.Lane); w.Write(c.Track);
             w.Write(c.In); w.Write(c.Out); w.Write(c.Start);
+            if (version >= 2) w.Write(c.Audio);
+        }
+
+        if (version >= 2)
+        {
+            w.Write(p.Markers.Count);
+            foreach (double m in p.Markers) w.Write(m);
         }
     }
 
@@ -98,17 +127,45 @@ public static class MovieFile
             p.Tracks.Add(new ActorTrack(times, pos, f, num, str, list.ToArray()));
         }
 
+        if (version >= 2)
+        {
+            int audioLanes = r.ReadInt32();
+            for (int i = 0; i < audioLanes; i++) p.AudioLanes.Add(r.ReadString());
+            int sounds = r.ReadInt32();
+            for (int i = 0; i < sounds; i++)
+            {
+                string sound = r.ReadString(), file = r.ReadString();
+                double duration = r.ReadDouble();
+                bool game = r.ReadBoolean();
+                double bpm = r.ReadDouble();
+                var beats = new double[r.ReadInt32()];
+                for (int k = 0; k < beats.Length; k++) beats[k] = r.ReadDouble();
+                var peaks = r.ReadBytes(r.ReadInt32());
+                p.Audio.Add(new AudioAsset { Name = sound, File = file, Duration = duration, Game = game, Beat = new BeatGrid(bpm, beats), Peaks = peaks });
+            }
+        }
+
         int clips = r.ReadInt32();
         int maxId = 0;
         for (int i = 0; i < clips; i++)
         {
             int id = r.ReadInt32(), lane = r.ReadInt32(), track = r.ReadInt32();
             double inT = r.ReadDouble(), outT = r.ReadDouble(), start = r.ReadDouble();
-            if (lane < 0 || lane >= p.Lanes.Count || track < 0 || track >= p.Tracks.Count) continue;
-            p.Clips.Add(new Clip { Id = id, Lane = lane, Track = track, In = inT, Out = outT, Start = start });
+            bool audio = version >= 2 && r.ReadBoolean();
+            bool valid = audio
+                ? lane >= 0 && lane < p.AudioLanes.Count && track >= 0 && track < p.Audio.Count
+                : lane >= 0 && lane < p.Lanes.Count && track >= 0 && track < p.Tracks.Count;
+            if (!valid) continue;
+            p.Clips.Add(new Clip { Id = id, Audio = audio, Lane = lane, Track = track, In = inT, Out = outT, Start = start });
             maxId = Math.Max(maxId, id);
         }
         p.SetNextId(maxId + 1);
+
+        if (version >= 2)
+        {
+            int markers = r.ReadInt32();
+            for (int i = 0; i < markers; i++) p.AddMarker(r.ReadDouble());
+        }
         return p;
     }
 }
