@@ -600,12 +600,18 @@ public partial class GameShell : Node
         _loading.Begin("Back to the menu");
         _loading.Report("Leaving", 1, "");
         _error = error;
-        Callable.From(Teardown).CallDeferred();
+        Teardown();
     }
 
     private async void Teardown()
     {
+        // The "Leaving" screen draws first (#807): the frees below hold the main thread, and run in
+        // the same frame as the click they left the last world frame frozen on screen, menu gone.
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         string from = _returnTo;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        long removeMs = 0;
         try
         {
             var peer = Multiplayer.MultiplayerPeer;
@@ -616,9 +622,13 @@ public partial class GameShell : Node
 
             if (_world != null && IsInstanceValid(_world))
             {
-                // removed first so its _ExitTree runs now (the tile workers are waited for) and the
+                // removed first so its _ExitTree runs now and the
                 // name "World" is free for the next session; a sibling renamed "World2" would break RPC paths
+                long before = clock.ElapsedMilliseconds;
+                // the tile workers wind down on their own: the engine lives on (ChunkManager.ReleaseWorkers)
+                _world.Chunks?.ReleaseWorkers();
                 _world.GetParent()?.RemoveChild(_world);
+                removeMs = clock.ElapsedMilliseconds - before;
                 _world.QueueFree();
             }
             _world = null;
@@ -630,6 +640,7 @@ public partial class GameShell : Node
             HardRestart();
             return;
         }
+        GD.Print($"[shell] teardown {clock.ElapsedMilliseconds} ms (world out of the tree {removeMs} ms)");
         if (CmdArgs.Has("--leave-restart")) { HardRestart(); return; }
 
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

@@ -119,8 +119,12 @@ public partial class DormantVehicles : Node3D, IOriginContainer
         if (World.ObjectContainers.Instance is { } containers) RestoreAwake(containers.LoadAwake(), containers.FiledNames);
     }
 
+    /// <summary>Cancelled as the node leaves (#807): a fleet still being read stops fetching tiles for a world that is gone.</summary>
+    private readonly CancellationTokenSource _leaving = new();
+
     public override void _ExitTree()
     {
+        _leaving.Cancel();
         Landings.Changed -= OnLandingsChanged;
         if (_watched is { } vm && IsInstanceValid(vm))
         {
@@ -585,20 +589,22 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                 // the awake bookkeeping work off the record alone. An industrial yard (#496 phase 3)
                 // has no bay list at all — it derives its standing positions from the building's
                 // plan box and the cover around it — and joins by adding one call here.
+                var ct = _leaving.Token;
                 var (slots, pallets) = await Task.Run(() =>
                 {
-                    var roads = source.LoadRoadsAsync(id).GetAwaiter().GetResult();
+                    var roads = source.LoadRoadsAsync(id, ct).GetAwaiter().GetResult();
                     var list = new List<VehicleSlot>();
                     var stacks = new List<YardPallet>();
                     if (roads is { Parking.Count: > 0 })
                         DormantSlots.ForParking(id, roads.Parking, ParkedKinds, list);
-                    var buildings = source.LoadBuildingsAsync(id).GetAwaiter().GetResult();
-                    Yards(source, id, buildings, roads, list, stacks);
-                    Sites(source, id, buildings, roads, list, stacks);
-                    Marina(source, id, list);
+                    var buildings = source.LoadBuildingsAsync(id, ct).GetAwaiter().GetResult();
+                    Yards(source, id, buildings, roads, list, stacks, ct);
+                    Sites(source, id, buildings, roads, list, stacks, ct);
+                    Marina(source, id, list, ct);
                     return (list, stacks);
-                });
-                if (!IsInsideTree()) return;
+                }, ct);
+                // the world may have been left (and this node freed) while the worker read
+                if (!IsInstanceValid(this) || !IsInsideTree()) return;
                 // the anchors moved on while the worker read it
                 if (!Within(id, KeepRings)) continue;
 
@@ -612,6 +618,10 @@ public partial class DormantVehicles : Node3D, IOriginContainer
                     Report();
                 }
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // the world was left mid-read
         }
         catch (Exception ex)
         {
@@ -637,12 +647,12 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// </summary>
     /// <param name="pallets">The pallets out on the sites' aprons (#583 phase 3), filled from the same
     /// fronts: drawn by <c>PalletService</c>, not by this layer.</param>
-    private static void Yards(IChunkSource source, TileId id, BuildingTile? tile, RoadTile? roads, List<VehicleSlot> into, List<YardPallet> pallets)
+    private static void Yards(IChunkSource source, TileId id, BuildingTile? tile, RoadTile? roads, List<VehicleSlot> into, List<YardPallet> pallets, CancellationToken ct)
     {
         // most tiles have buildings and no site: their height grid is 2 MB a streaming client
         // would download for nothing (#63)
         if (tile is not { Buildings.Count: > 0 } || !SiteYards.HasSite(tile)) return;
-        var grid = source.LoadChunkAsync(id).GetAwaiter().GetResult();
+        var grid = source.LoadChunkAsync(id, ct).GetAwaiter().GetResult();
         var fronts = SiteYards.Fronts(tile, roads, grid);
         if (fronts.Count == 0) return;
         var yards = fronts.Select(f => f.Yard).ToList();
@@ -677,14 +687,14 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// already kept the yard's places off the building, the roads and the neighbours.
     /// </summary>
     /// <param name="pallets">The sites' pallets of bricks and cement (#615), handed to <c>PalletService</c> with the yards' stacks.</param>
-    private static void Sites(IChunkSource source, TileId id, BuildingTile? tile, RoadTile? roads, List<VehicleSlot> into, List<YardPallet> pallets)
+    private static void Sites(IChunkSource source, TileId id, BuildingTile? tile, RoadTile? roads, List<VehicleSlot> into, List<YardPallet> pallets, CancellationToken ct)
     {
         if (tile is not { Buildings.Count: > 0 } || !SitePlans.HasSite(tile)) return;
         var sites = SitePlans.For(tile, roads);
         if (sites.Count == 0) return;
         int before = into.Count;
         DormantSlots.ForConstruction(id, sites, SiteKind, ParkedKinds, into);
-        var grid = source.LoadChunkAsync(id).GetAwaiter().GetResult();
+        var grid = source.LoadChunkAsync(id, ct).GetAwaiter().GetResult();
         // the materials' pallets stand on the ground the dressing is drawn on, as the server works them out
         foreach (var site in sites) pallets.AddRange(SitePlans.PalletsOf(tile, site, grid));
         if (grid == null) return;
@@ -738,7 +748,7 @@ public partial class DormantVehicles : Node3D, IOriginContainer
     /// tile may not be built yet, and the server and every client must agree on which berths float.
     /// Worker thread, like the rest of <see cref="Fill"/>.
     /// </summary>
-    private static void Marina(IChunkSource source, TileId id, List<VehicleSlot> into)
+    private static void Marina(IChunkSource source, TileId id, List<VehicleSlot> into, CancellationToken ct)
     {
         var jetties = Landings.Current.Jetties;
         bool here = false;
@@ -748,9 +758,9 @@ public partial class DormantVehicles : Node3D, IOriginContainer
             if (TileId.FromLv95(e, n) == id) { here = true; break; }
         }
         if (!here) return;
-        if (source.LoadChunkAsync(id).GetAwaiter().GetResult() is not { } grid) return;
-        var cover = source.LoadCoverAsync(id).GetAwaiter().GetResult();
-        if (ChunkManager.LoadWaterLayerAsync(source, id, grid, cover, default).GetAwaiter().GetResult() is not { } water) return;
+        if (source.LoadChunkAsync(id, ct).GetAwaiter().GetResult() is not { } grid) return;
+        var cover = source.LoadCoverAsync(id, ct).GetAwaiter().GetResult();
+        if (ChunkManager.LoadWaterLayerAsync(source, id, grid, cover, ct).GetAwaiter().GetResult() is not { } water) return;
         DormantSlots.ForMarina(id, jetties, (e, n) =>
         {
             // a berth a few metres across the tile's edge reads the edge's water
