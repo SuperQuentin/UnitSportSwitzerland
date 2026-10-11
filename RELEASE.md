@@ -59,6 +59,10 @@ What happens:
   even uncommitted ones, are never touched.
 - The outputs (archives, `notes.md`) are in `test_output/release/`.
 - The GitHub release `vX.Y.Z` is created on that commit, with the changelog as notes and the three archives attached.
+- **Feature GIFs**: every `test_output/release/clips/*.gif` is attached too and shown first in the notes, under
+  `### Highlights` (caption: `<name>.txt` beside it, else the name). Record them with `tools/record-clip.sh` or `/clip`
+  in the chat ([`docs/notes/general/feature-clips.md`](docs/notes/general/feature-clips.md)); after the release they
+  move to `clips/released/vX.Y.Z/`.
 
 ## 3. Full release by hand
 
@@ -74,7 +78,9 @@ git log --no-merges --format='%s' "$last..HEAD"    # read the commits, apply the
 V=1.4.0                                            # example
 ```
 
-Write `test_output/release/notes.md` with three sections, each commit subject as one bullet without its gitmoji:
+Write `test_output/release/notes.md` with three sections (after an optional `### Highlights` of feature GIFs, each
+`![caption](https://github.com/SuperQuentin/UnitSportSwitzerland/releases/download/v$V/<name>.gif)`, the GIFs then
+passed to `gh release create` with the archives), each commit subject as one bullet without its gitmoji:
 `### Features and changes`, `### Fixes` (`:bug:` `:ambulance:`), `### Docs and maintenance`
 (`:memo:` `:wrench:` `:recycle:` `:art:` `:white_check_mark:`), then a last line
 `**Full diff:** https://github.com/SuperQuentin/UnitSportSwitzerland/compare/<last>...v$V`.

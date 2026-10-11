@@ -327,7 +327,7 @@ void fragment() {
     vec3 n = normalize((t_crown < t_trunk ? crown_n : trunk_n) / bb_scale);
 #else
     vec3 wpos = world_pos;
-    vec3 n = normalize(cross(dFdy(world_pos), dFdx(world_pos)));
+    vec3 n = facet_normal(VERTEX, INV_VIEW_MATRIX);
 #endif
     if (portal_clipped(wpos, CAMERA_POSITION_WORLD)) {
         discard;
