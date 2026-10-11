@@ -173,7 +173,7 @@ public partial class MovieWorldProbe : Node
     {
         int seen = -1;
         for (int i = 0; i < track.Entities.Length; i++)
-            if (track.Entities[i].Parent < 0 && ++seen == n) return stage.Ghosts.NodeOf(i);
+            if (track.Entities[i].IsGroup && ++seen == n) return stage.Ghosts.NodeOf(i);
         return null;
     }
 

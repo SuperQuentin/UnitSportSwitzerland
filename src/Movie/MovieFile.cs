@@ -154,7 +154,7 @@ public static class MovieFile
                 int look = r.ReadInt32();
                 e.Looks[k] = look >= 0 && look < looks.Length ? look : -1;
             }
-            if (e.Parent >= entities.Length) e.Parent = -1;
+            if (e.Parent >= entities.Length || e.Parent < WorldEntity.Environment) e.Parent = -1;
             entities[i] = e;
         }
         return new WorldTrack(entities, looks, duration);

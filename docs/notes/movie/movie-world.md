@@ -22,5 +22,9 @@
   saves by itself). Stopping saves it as its own movie, "Recording <date time>", which the studio's Open lists.
   A red "● REC m:ss" badge shows while it runs. It is held in memory, preallocated when it starts (about 86 MB of
   sound plus 8 MB per player for 30 min); streaming to disk is a follow-up.
-- **Not yet:** time of day and weather, doors (many and static: to measure first),
+- **The world's state** (#775): one undrawn entity (`Parent = WorldEntity.Environment`, -2) holds the hour in its
+  pose's X and the sea state in Y, written when they change. While a world clip plays, `MovieEnvironment` holds
+  the sky there (`DayNight.HourOverride`, applied at once even paused) and sets the sea state; leaving the clip or
+  the studio gives the game's own back. Snowfall (occasions) is not recorded yet.
+- **Not yet:** snowfall, doors (many and static: to measure first),
   MultiMesh-drawn things (the dormant fleet stays live), particles and lights.

@@ -183,9 +183,26 @@ public partial class DayNight : Node
         return TimeCommand.Wrap(world + _joinEase);
     }
 
+    /// <summary>
+    /// The movie studio replaying a recording (#775): the sky held at this hour instead of the clock's,
+    /// applied at once (the game may be paused). Null gives the clock back.
+    /// </summary>
+    public double? HourOverride
+    {
+        get => _hourOverride;
+        set
+        {
+            _hourOverride = value;
+            if (value is not { } h) return;
+            Hour = TimeCommand.Wrap(h);
+            Apply(0);
+        }
+    }
+    private double? _hourOverride;
+
     public override void _Process(double delta)
     {
-        Hour = Step(delta);
+        Hour = _hourOverride ?? Step(delta);
         Apply((float)delta);
         // The sun stays up while the camera is indoors (#388): a door portal's camera looking out
         // shares it, and the street it saw from a room was sunless, a night at noon. The rooms
