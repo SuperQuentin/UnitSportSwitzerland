@@ -11,6 +11,11 @@
   a kill stops only the `timeout` wrapper and the server keeps the port until its timeout; the
   winget `godot` link hangs. The lib kills by PID tree (`guard.sh`) and finds the console exe.
 - Ports stay per script and passed in (`PORT=...`); keep them distinct from the other checks.
+- The script's own RAM watchdog (`guard_watch $$`) sends the script a TERM, then kills its
+  children: it prints `[<x>] RESULT: FAILED (stopped by a TERM ...)` and exits 143. Before #795 it
+  killed the script outright, which exited 0 with no RESULT line, and `tools/test.sh` read that as
+  PASS. The TERM goes first because bash holds a trapped signal until its foreground child ends,
+  and killing the child first let the script print its own `RESULT: ok`.
 - Clients are headless unless the script says `--windowed` (a speaker, drawn parked vehicles,
   screenshots) or `WINDOWED=1` is set.
 - `user://` (loot, bank, placed, birds, CDs) is a fresh `test_output/userdata_<x>` per run (Windows

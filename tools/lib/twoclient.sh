@@ -18,9 +18,12 @@
 #   tc_stop [pid]                    kill a server (default $SERVER) and every process under it, by PID
 #   tc_ok <n> <logs...>              true when the logs hold exactly n "RESULT: ok" lines
 # Every run goes through guard_run (timeout and RAM floor, tree kill by PID); the servers left at
-# exit are killed by the EXIT trap. A headless Godot may exit 139 after its result: read RESULT lines.
+# exit are killed by the EXIT trap. If the script's own RAM watchdog fires, it prints
+# "[<name>] RESULT: FAILED (stopped by a TERM ...)" and exits 143. A headless Godot may exit 139 after its result: read RESULT lines.
 _tc_name=${1:?usage: . lib/twoclient.sh <name>}
 . "$(dirname "${BASH_SOURCE[0]}")/guard.sh"
+# the RAM watchdog ends this script with a TERM, after its Godots: say so, so the run never reads as a pass
+trap 'trap "" TERM; echo "[$_tc_name] RESULT: FAILED (stopped by a TERM: RAM floor, see [guard] above)"; exit 143' TERM
 guard_watch $$ > /dev/null   # RAM watchdog for this script's own processes
 set -u
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
