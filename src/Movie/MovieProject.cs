@@ -85,8 +85,13 @@ public sealed class MovieProject
     public List<CameraTrack> Cameras { get; } = new() { new CameraTrack { Name = "Cam 1" } };
     /// <summary>The first camera: the only one a version 3 file had.</summary>
     public CameraTrack Camera => Cameras[0];
-    /// <summary>The program (#675): which camera the movie shows from when, sorted by time.</summary>
-    public List<CameraCut> Cuts { get; } = new();
+    /// <summary>The named sequences (#776), each with its own shot track; never fewer than one.</summary>
+    public List<Sequence> Sequences { get; } = new() { new Sequence() };
+    /// <summary>The sequence being edited: the one <see cref="Cuts"/> and the Program row show.</summary>
+    public int ActiveSequence { get => Math.Clamp(_activeSequence, 0, Sequences.Count - 1); set => _activeSequence = value; }
+    private int _activeSequence;
+    /// <summary>The program (#675) of the sequence being edited: which camera shows from when, sorted by time.</summary>
+    public List<CameraCut> Cuts => Sequences[ActiveSequence].Cuts;
     private int _nextId = 1;
 
     // this run's recording clock against the timeline: grabs made in one session keep their real
@@ -102,7 +107,8 @@ public sealed class MovieProject
             double d = 0;
             foreach (var cam in Cameras)
                 if (cam.Keys.Count > 0) d = Math.Max(d, cam.Keys[^1].T);
-            foreach (var cut in Cuts) d = Math.Max(d, cut.T);
+            foreach (var seq in Sequences)
+                foreach (var cut in seq.Cuts) d = Math.Max(d, cut.T);
             foreach (var c in Clips) d = Math.Max(d, c.End);
             return d;
         }
@@ -290,9 +296,12 @@ public sealed class MovieProject
         Audio.Clear(); Audio.AddRange(audio);
         AudioLanes.Clear(); AudioLanes.AddRange(audioLanes);
         Clips.Clear(); Clips.AddRange(clips);
-        // a camera aimed at an actor whose lane went no longer aims at anyone
+        // a camera aimed at (or riding with) an actor whose lane went no longer aims at anyone
         foreach (var cam in Cameras)
+        {
             foreach (var k in cam.Keys) k.LookAt = k.LookAt >= 0 ? usedLanes.IndexOf(k.LookAt) : -1;
+            cam.Target = cam.Target >= 0 ? usedLanes.IndexOf(cam.Target) : -1;
+        }
     }
 
     internal void SetNextId(int next) => _nextId = Math.Max(_nextId, next);
@@ -314,9 +323,12 @@ public sealed class MovieProject
     {
         if (Cameras.Count <= 1 || index < 0 || index >= Cameras.Count) return false;
         Cameras.RemoveAt(index);
-        Cuts.RemoveAll(c => c.Camera == index);
-        foreach (var c in Cuts)
-            if (c.Camera > index) c.Camera--;
+        foreach (var seq in Sequences)
+        {
+            seq.Cuts.RemoveAll(c => c.Camera == index);
+            foreach (var c in seq.Cuts)
+                if (c.Camera > index) c.Camera--;
+        }
         return true;
     }
 
@@ -364,6 +376,235 @@ public sealed class MovieProject
             cam = c.Camera;
         }
         return Math.Clamp(cam, 0, Cameras.Count - 1);
+    }
+
+    // ---- shots and the program with transitions (#776) ----------------------------------------------
+
+    /// <summary>A new sequence, "Sequence N", over the whole movie. Its index.</summary>
+    public int AddSequence()
+    {
+        int n = Sequences.Count + 1;
+        while (Sequences.Exists(s => s.Name == $"Sequence {n}")) n++;
+        Sequences.Add(new Sequence { Name = $"Sequence {n}" });
+        return Sequences.Count - 1;
+    }
+
+    /// <summary>
+    /// Actor lane <paramref name="lane"/>'s frame at timeline time <paramref name="t"/>: its feet in LV95 and
+    /// the way it faces, from the clip playing there; false where none does. Pure, no engine.
+    /// </summary>
+    public bool ActorFrame(int lane, double t, out double e, out double n, out double alt, out float yaw)
+    {
+        if (ActiveClip(lane, t) is not { } clip) { e = n = alt = 0; yaw = 0; return false; }
+        Tracks[clip.Track].Frame(clip.Local(t), out e, out n, out alt, out yaw);
+        return true;
+    }
+
+    /// <summary>
+    /// Shot <paramref name="index"/> at timeline time <paramref name="t"/>, everything applied: its keys (or its
+    /// rig's default), the rig's frame on its target with the follow smoothing, the beat links (on the beats
+    /// and markers of the movie) and the shake. <paramref name="mount"/> gives a mounted rig the full rotation
+    /// of the target's vehicle (the engine knows it; null keeps the heading only). The fade a Fade link adds
+    /// comes out in <paramref name="fade"/>. False when the shot has no keys and no target.
+    /// </summary>
+    public bool ShotPose(int index, double t, Func<int, Godot.Quaternion?>? mount, out CameraPose pose, out float fade)
+    {
+        fade = 0;
+        var cam = Cameras[Math.Clamp(index, 0, Cameras.Count - 1)];
+        bool keyed = cam.Sample(t, out pose);
+        if (!keyed)
+        {
+            if (!cam.Relative) return false;
+            pose = CameraTrack.DefaultPose(cam.Rig);
+        }
+
+        // the beat links: everything they add, summed by what they move
+        float lens = 0, shake = 0, distance = 0, height = 0, roll = 0, orbit = 0;
+        if (cam.Links.Count > 0)
+        {
+            var beats = CachedBeats();
+            foreach (var link in cam.Links)
+            {
+                float v = ShotMath.Beat(link, t, beats, Markers);
+                switch (link.Param)
+                {
+                    case BeatParam.Lens: lens += v; break;
+                    case BeatParam.Shake: shake += v; break;
+                    case BeatParam.Distance: distance += v; break;
+                    case BeatParam.Height: height += v; break;
+                    case BeatParam.Roll: roll += v; break;
+                    case BeatParam.Orbit: orbit += v; break;
+                    case BeatParam.Fade: fade += v; break;
+                }
+            }
+        }
+
+        if (cam.Relative)
+        {
+            if (!RigFrame(index, t, mount, out var fe, out var fn, out var fa, out var fy, out var frame)) return false;
+            // orbiting turns the offset round the target; height lifts it
+            pose.Alt += height;
+            ShotMath.InFrame(ref pose, fe, fn, fa, fy + Godot.Mathf.DegToRad(orbit), frame);
+        }
+        else pose.Alt += height;
+
+        var q = new Godot.Quaternion(pose.Qx, pose.Qy, pose.Qz, pose.Qw).Normalized();
+        var (move, turn) = ShotMath.Shake(cam.Shake, cam.Seed, t, shake);
+        // the shake and a dolly along the view in the camera's own frame (z back)
+        var offset = q * (move + new Godot.Vector3(0, 0, distance));
+        pose.E += offset.X; pose.N -= offset.Z; pose.Alt += offset.Y;
+        q = (q * Godot.Quaternion.FromEuler(new Godot.Vector3(turn.X, turn.Y, turn.Z + Godot.Mathf.DegToRad(roll)))).Normalized();
+        pose.Qx = q.X; pose.Qy = q.Y; pose.Qz = q.Z; pose.Qw = q.W;
+        pose.Lens = Math.Clamp(pose.Lens + lens, CameraTrack.MinLens, CameraTrack.MaxLens);
+        fade = Math.Clamp(fade, 0, 1);
+        return true;
+    }
+
+    /// <summary>
+    /// The frame a following shot <paramref name="index"/> hangs in at <paramref name="t"/>: the target's part,
+    /// smoothed by the shot's follow, facing its yaw, or the vehicle's full rotation in <paramref name="frame"/>
+    /// for a mount. False for a World shot, or where the target is absent.
+    /// </summary>
+    public bool RigFrame(int index, double t, Func<int, Godot.Quaternion?>? mount,
+        out double e, out double n, out double alt, out float yaw, out Godot.Quaternion? frame)
+    {
+        e = n = alt = 0; yaw = 0; frame = null;
+        var cam = Cameras[Math.Clamp(index, 0, Cameras.Count - 1)];
+        if (!cam.Relative) return false;
+        double smoothing = cam.Rig == ShotRig.Mount ? 0 : cam.Smoothing;
+        // one sampler made once, pointed at the lane: no closure a frame
+        _samplerLane = cam.Target;
+        _sampler ??= (double s, out double se, out double sn, out double sa, out float sy) => ActorFrame(_samplerLane, s, out se, out sn, out sa, out sy);
+        if (!ShotMath.Follow(t, smoothing, _sampler, out e, out n, out alt, out yaw)) return false;
+        alt += ShotMath.PartHeight(cam.Part);
+        if (cam.Rig == ShotRig.Mount) frame = mount?.Invoke(cam.Target);
+        return true;
+    }
+
+    /// <summary>
+    /// "Frame from view" (#777): shot <paramref name="index"/> keyed at <paramref name="t"/> to film from where
+    /// the view is now (LV95 <paramref name="e"/>, <paramref name="n"/>, <paramref name="alt"/>, world rotation
+    /// <paramref name="rotation"/>) with <paramref name="lens"/>. A World shot keeps the world pose; a following
+    /// one keeps it in its target's frame, so the camera then moves with the actor. A shot with a single key
+    /// (a placement) has that key replaced; one with a move gets a key at <paramref name="t"/>. The key, or null
+    /// when a following shot's target is absent there.
+    /// </summary>
+    public CameraKey? FrameFromView(int index, double t, Func<int, Godot.Quaternion?>? mount,
+        double e, double n, double alt, Godot.Quaternion rotation, float lens)
+    {
+        var cam = Cameras[Math.Clamp(index, 0, Cameras.Count - 1)];
+        var key = new CameraKey { T = t, E = e, N = n, Alt = alt, Qx = rotation.X, Qy = rotation.Y, Qz = rotation.Z, Qw = rotation.W, Lens = lens };
+        if (cam.Relative)
+        {
+            if (!RigFrame(index, t, mount, out var fe, out var fn, out var fa, out var fy, out var frame)) return null;
+            var pose = new CameraPose { E = e, N = n, Alt = alt, Qx = rotation.X, Qy = rotation.Y, Qz = rotation.Z, Qw = rotation.W, Lens = lens };
+            ShotMath.ToFrame(ref pose, fe, fn, fa, fy, frame);
+            key.E = pose.E; key.N = pose.N; key.Alt = pose.Alt;
+            key.Qx = pose.Qx; key.Qy = pose.Qy; key.Qz = pose.Qz; key.Qw = pose.Qw;
+        }
+        if (cam.Keys.Count <= 1)
+        {
+            if (cam.Keys.Count == 1) { key.T = cam.Keys[0].T; key.Ease = cam.Keys[0].Ease; key.LookAt = cam.Keys[0].LookAt; }
+            cam.Keys.Clear();
+            cam.Keys.Add(key);
+            return key;
+        }
+        return cam.Set(key, 1.0 / Channels.Rate);
+    }
+
+    private ShotMath.TargetSampler? _sampler;
+    private int _samplerLane;
+    private List<(double T, bool Downbeat)>? _beats;
+    private double _beatsShape = double.NaN;
+
+    /// <summary>
+    /// <see cref="Beats"/>, made again only when the sound clips change: a beat link reads it every frame.
+    /// </summary>
+    public List<(double T, bool Downbeat)> CachedBeats()
+    {
+        double shape = 0;
+        foreach (var c in Clips)
+            if (c.Audio) shape = shape * 1.000173 + c.Start * 3.1 + c.In * 1.7 + c.Out * 0.9 + c.Track * 0.37 + Audio[c.Track].Beat.Beats.Length;
+        if (_beats == null || shape != _beatsShape) { _beats = Beats(); _beatsShape = shape; }
+        return _beats;
+    }
+
+    /// <summary>What the movie shows at a time (#776): the camera, how far through a transition, the fade.</summary>
+    public struct ProgramView
+    {
+        public CameraPose Pose;
+        /// <summary>0 clear .. 1 black: a fade to black, or a Fade beat link.</summary>
+        public float Fade;
+        /// <summary>The shot being left and the shot coming, and how far between them (0..1), during a transition.</summary>
+        public int From, To;
+        public float Mix;
+        public TransitionKind Kind;
+        public bool Ok;
+    }
+
+    /// <summary>
+    /// The active sequence's program at timeline time <paramref name="t"/>, transitions applied: a blend
+    /// eases the camera from one shot into the next, a fade goes through black at the cut, a zoom punch
+    /// pushes the lens in before it, a whip pan swings across fast. Crossfades and wipes need two pictures:
+    /// the engine mixes them (<see cref="ProgramView.Mix"/>); here they cut at the middle.
+    /// </summary>
+    public ProgramView Program(double t, Func<int, Godot.Quaternion?>? mount)
+    {
+        var view = new ProgramView { From = ProgramCamera(t), To = -1, Kind = TransitionKind.Cut };
+        var cuts = Cuts;
+        // the transition whose span holds t: centred on its cut
+        CameraCut? at = null;
+        int before = 0;
+        for (int i = 0; i < cuts.Count; i++)
+        {
+            var c = cuts[i];
+            if (c.Transition != TransitionKind.Cut && Math.Abs(t - c.T) < c.Duration / 2) { at = c; before = i > 0 ? cuts[i - 1].Camera : 0; break; }
+        }
+        if (at == null)
+        {
+            view.Ok = ShotPose(view.From, t, mount, out view.Pose, out view.Fade);
+            return view;
+        }
+        float u = (float)Math.Clamp((t - (at.T - at.Duration / 2)) / at.Duration, 0, 1);
+        view.From = Math.Clamp(before, 0, Cameras.Count - 1);
+        view.To = Math.Clamp(at.Camera, 0, Cameras.Count - 1);
+        view.Mix = u;
+        view.Kind = at.Transition;
+        bool a = ShotPose(view.From, t, mount, out var pa, out float fa);
+        bool b = ShotPose(view.To, t, mount, out var pb, out float fb);
+        view.Ok = a || b;
+        if (!a) pa = pb;
+        if (!b) pb = pa;
+        switch (at.Transition)
+        {
+            case TransitionKind.Blend:
+            case TransitionKind.WhipPan:
+            {
+                // a whip pan is a blend that waits, then swings across in a blur of a moment
+                float s = at.Transition == TransitionKind.WhipPan
+                    ? (float)(0.5 - 0.5 * Math.Cos(Math.PI * Math.Clamp((u - 0.35) / 0.3, 0, 1)))
+                    : u * u * (3 - 2 * u);
+                view.Pose = CameraTrack.Lerp(pa, pb, s);
+                view.Fade = fa + (fb - fa) * s;
+                break;
+            }
+            case TransitionKind.FadeBlack:
+                view.Pose = u < 0.5f ? pa : pb;
+                view.Fade = Math.Max(u < 0.5f ? fa : fb, 1 - Math.Abs(2 * u - 1));
+                break;
+            case TransitionKind.ZoomPunch:
+                view.Pose = u < 0.5f ? pa : pb;
+                // the lens pushes in towards the cut and springs back out after it
+                float punch = 1 - Math.Abs(2 * u - 1);
+                view.Pose.Lens = Math.Clamp(view.Pose.Lens * (1 + 1.2f * punch * punch), CameraTrack.MinLens, CameraTrack.MaxLens);
+                view.Fade = u < 0.5f ? fa : fb;
+                break;
+            default:
+                view.Pose = u < 0.5f ? pa : pb;
+                view.Fade = u < 0.5f ? fa : fb;
+                break;
+        }
+        return view;
     }
 
     // ---- beats and markers (#656) ------------------------------------------------------------------

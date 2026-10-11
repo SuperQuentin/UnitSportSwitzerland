@@ -53,6 +53,7 @@ public partial class TestWorld : Node3D
             : SyncProbe.Requested() ? new SyncProbe(null, origin)
             : Movie.MovieProbe.Requested() ? new Movie.MovieProbe(origin)
             : Movie.MovieWorldProbe.Requested() ? new Movie.MovieWorldProbe(origin)
+            : Movie.MovieShotProbe.Requested() ? new Movie.MovieShotProbe(origin)
             : ForkliftCheck.Requested ? new ForkliftCheck(origin)
             : ExcavatorCheck.Requested ? new ExcavatorCheck(origin)
             : LoaderCheck.Requested ? new LoaderCheck(origin)

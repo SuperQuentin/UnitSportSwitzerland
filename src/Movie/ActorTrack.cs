@@ -130,6 +130,21 @@ public sealed class ActorTrack
         ValuesAt(t, o.Num, o.Str);
     }
 
+    /// <summary>
+    /// Just where the player stands and faces at local time <paramref name="t"/> (#776): what a camera rig
+    /// follows, without the rest of a frame, so a follow spring can sample it hundreds of times a frame.
+    /// </summary>
+    public void Frame(double t, out double e, out double n, out double alt, out float yaw)
+    {
+        int i = FrameAt(t);
+        int j = Math.Min(i + 1, Times.Length - 1);
+        float a = j == i ? 0f : (float)Math.Clamp((t - Times[i]) / (Times[j] - Times[i]), 0, 1);
+        e = Lerp(Pos[i * 3], Pos[j * 3], a);
+        n = Lerp(Pos[i * 3 + 1], Pos[j * 3 + 1], a);
+        alt = Lerp(Pos[i * 3 + 2], Pos[j * 3 + 2], a);
+        yaw = LerpAngle(F[i * Channels.Stride + Channels.Yaw], F[j * Channels.Stride + Channels.Yaw], a);
+    }
+
     /// <summary>The change-only properties at local time <paramref name="t"/>.</summary>
     public void ValuesAt(double t, long[] num, string[] str)
     {

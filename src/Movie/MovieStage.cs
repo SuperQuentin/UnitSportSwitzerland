@@ -77,6 +77,15 @@ public partial class MovieStage : Node3D
         Playing = Duration > 0;
     }
 
+    /// <summary>
+    /// A mounted shot's frame (#776): the full rotation of lane <paramref name="lane"/>'s puppet (its
+    /// vehicle's, when it rides one), or null when it is not on screen. <see cref="Mount"/> is the same as
+    /// a delegate made once, so a shot evaluated every frame allocates nothing.
+    /// </summary>
+    public Quaternion? MountFrame(int lane) => Puppet(lane) is { } p ? p.GlobalBasis.GetRotationQuaternion() : null;
+    public Func<int, Quaternion?> Mount => _mount ??= MountFrame;
+    private Func<int, Quaternion?>? _mount;
+
     /// <summary>The puppet of lane <paramref name="lane"/>, when it is on screen now.</summary>
     public FootPlayer? Puppet(int lane) =>
         lane >= 0 && lane < _puppets.Count && lane < _active.Count && _active[lane] != null ? _puppets[lane] : null;
