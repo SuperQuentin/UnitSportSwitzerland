@@ -33,6 +33,7 @@ touches its topic; search with `grep -ril <word> docs/notes/net`.
 - `perf-player-snapshot-size` — `BodyPose`/`TrainPose` go as one `float[] NetPose` (quat + offset + squash, train angles only on a train); no Transform3D on the wire
 - `perf-relay-delta-interval` — `RelayNear`/`RelayFar` check their OnChange properties at 10 Hz (`DeltaInterval = 0.1f`); per-packet state stays `Always`
 - `perf-interest-round` — `InterestService.Evaluate` reads each target once per round (`_at`/`_agl`/`_ride`), `Together` once per pair, cached `_sight`; nothing per pair from a node
+- `arrival` — The server decides where a joining player starts (`--spawn E,N`) and whether players may teleport (`--no-teleport`): `World/Arrival.Rules` on accept, the client's loading screen waits for it; `--at` still wins; `tools/arrivalcheck.sh` (#799)
 - `sleepers` — A player who leaves lies asleep where they were (saved), and wakes there on return; identity is a per-install ECDSA key proven on join, never the name (#644)
 - `server-update` — `/update` (admin, never automatic): newest GitHub release fetched while players play, then kick all and quit; `start-server.sh run` switches `current` and restarts (#730)
 

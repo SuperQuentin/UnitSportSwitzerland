@@ -126,6 +126,8 @@ public partial class MultiplayerScreen : Screen
         if (GameSettings.Current.LanDiscovery) _mdns.Start();
         _nextBroadcastAt = _nextProbeAt = 0;   // ask again as soon as the screen is back
         if (Shell.PlayerName.Length == 0) AskName(mandatory: true);
+        // back from picking the start point, confirmed or not: the Host dialog again, as it was left
+        else if (_hostReopen) { _hostReopen = false; HostDialog(); }
         else if (_firstJoin != null && IsInstanceValid(_firstJoin)) _firstJoin.CallDeferred(Control.MethodName.GrabFocus);
         else _address.CallDeferred(Control.MethodName.GrabFocus);
     }
@@ -304,6 +306,7 @@ public partial class MultiplayerScreen : Screen
     private string? _hostName;
     private string? _hostPort;
     private bool _hostLan = true;
+    private bool _hostReopen;
 
     private void HostDialog()
     {
@@ -356,13 +359,13 @@ public partial class MultiplayerScreen : Screen
         {
             Keep();
             modal.CloseModal();
+            _hostReopen = true;
             Shell.Push(MapScreen.CreateServerSpawn(HostSpawn(), at =>
             {
                 settings.HostSpawnE = at.E;
                 settings.HostSpawnN = at.N;
                 settings.Save();
                 Shell.Back();
-                HostDialog();
             }));
         };
     }
