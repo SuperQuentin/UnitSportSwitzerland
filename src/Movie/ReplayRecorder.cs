@@ -7,66 +7,69 @@ namespace UnitSport.Movie;
 /// <summary>
 /// The replay buffer (#638): always records the last <see cref="GameSettings.ReplayMinutes"/> of
 /// every player in view, local and remote, at the network's own 30 Hz, from the same replicated
-/// state another peer draws them from. <see cref="Grab"/> hands what was recorded since the last
-/// grab to a movie project. One fixed ring per player: nothing is allocated while it records.
+/// state another peer draws them from, and the world as it is drawn (#775). <see cref="Grab"/> hands
+/// what was recorded since the last grab to a movie project.
+///
+/// <para>
+/// Record / Stop (#775), like ReplayMod: <see cref="StartSession"/> opens a second
+/// <see cref="Recording"/>, as long as <see cref="SessionMinutes"/>, fed from the same reads;
+/// <see cref="StopSession"/> turns it into a project of its own. The buffer keeps running under it.
+/// </para>
 ///
 /// <para>
 /// The game's own sound goes in too (#656): an <see cref="AudioEffectCapture"/> at the end of the
-/// Master bus, drained five times a second into a 16-bit mono <see cref="SoundRing"/> at half the
-/// mix rate (about 2.8 MB a minute). The capture hands over a new array on every drain; at 5 a
-/// second that is the one allocation this records with.
+/// Master bus, drained five times a second into 16-bit mono at half the mix rate (about 2.8 MB a
+/// minute). The capture hands over a new array on every drain; at 5 a second that is the one
+/// allocation this records with.
 /// </para>
 /// </summary>
 public partial class ReplayRecorder : Node
 {
     public static ReplayRecorder? Instance { get; private set; }
 
+    /// <summary>The longest Record / Stop session, after which it stops by itself.</summary>
+    public const int SessionMinutes = 30;
+    public const string GameSoundLane = "Game sound";
+
     /// <summary>The studio is open: its puppets are not players, and the world it shows is not being played.</summary>
     public bool Paused { get; set; }
 
-    private sealed class Actor
-    {
-        public required ReplayRing Ring;
-        public required string Key, Label;
-        public long Peer;
-        public double LastSeen, Grabbed = double.NegativeInfinity;
-    }
-
-    // by instance: a node's name is a StringName, and turning it into a string every frame allocates
-    private readonly Dictionary<ulong, Actor> _actors = new();
+    private Recording? _buffer, _session;
+    private RecordingBadge? _badge;
     private readonly ActorState _scratch = new(ActorIo.Names.Length);
-    private double _next, _nextPrune;
+    private double _next;
     private int _minutes;
 
     // the game's sound (#656)
     private AudioEffectCapture? _capture;
-    private SoundRing? _sound;
     private float[] _halved = Array.Empty<float>();
-    private double _nextDrain, _soundGrabbed = double.NegativeInfinity;
+    private double _nextDrain;
     private bool _wasPaused;
-    public const string GameSoundLane = "Game sound";
 
-    // the world as it is drawn (#775): cars, birds, doors, dropped items
-    private WorldRecorder? _world;
-    private double _worldGrabbed = double.NegativeInfinity;
+    /// <summary>A Record / Stop session is running.</summary>
+    public bool Recording => _session != null;
+    /// <summary>Seconds the session has run.</summary>
+    public double SessionSeconds => _session is { Started: var s } && !double.IsNaN(s) ? GameClock.Now - s : 0;
+    /// <summary>The session reached <see cref="SessionMinutes"/> and stopped: the project it left, for the world to save.</summary>
+    public event Action<MovieProject>? SessionFull;
     /// <summary>Objects of the world being recorded now (for the checks and the pause menu).</summary>
-    public int WorldObjects => _world?.Live ?? 0;
+    public int WorldObjects => _buffer?.WorldObjects ?? _session?.WorldObjects ?? 0;
 
     public ReplayRecorder() => Name = "ReplayRecorder";
+
+    private int SoundRate => (int)AudioServer.GetMixRate() / 2;
 
     public override void _EnterTree()
     {
         Instance = this;
         _minutes = GameSettings.Current.ReplayMinutes;
-        _world = new WorldRecorder(_minutes * 60);
+        MakeBuffer();
         GameSettings.Changed += OnSettings;
         _capture = new AudioEffectCapture { BufferLength = 0.5f };
         AudioServer.AddBusEffect(0, _capture);
-        MakeSoundRing();
     }
 
-    private void MakeSoundRing() =>
-        _sound = _minutes > 0 ? new SoundRing(_minutes * 60, (int)AudioServer.GetMixRate() / 2) : null;
+    private void MakeBuffer() => _buffer = _minutes > 0 ? new Recording(_minutes * 60, SoundRate) : null;
 
     public override void _ExitTree()
     {
@@ -81,11 +84,35 @@ public partial class ReplayRecorder : Node
     {
         if (GameSettings.Current.ReplayMinutes == _minutes) return;
         _minutes = GameSettings.Current.ReplayMinutes;
-        _actors.Clear();   // the rings are sized by it
-        _world?.Clear();
-        if (_world != null) _world.Ring.Window = _minutes * 60;
-        MakeSoundRing();
+        MakeBuffer();   // the rings are sized by it
     }
+
+    // ---- Record / Stop -------------------------------------------------------------------------
+
+    /// <summary>Starts a session: everything from now on, up to <see cref="SessionMinutes"/>. False if one runs.</summary>
+    public bool StartSession()
+    {
+        if (_session != null) return false;
+        _session = new Recording(SessionMinutes * 60, SoundRate);
+        AddChild(_badge = new RecordingBadge(this));
+        GD.Print("[movie] recording started");
+        return true;
+    }
+
+    /// <summary>Stops the session: what it recorded as a project of its own, or null when nothing was.</summary>
+    public MovieProject? StopSession()
+    {
+        if (_session is not { } s) return null;
+        _session = null;
+        _badge?.QueueFree();
+        _badge = null;
+        var project = new MovieProject(ActorIo.Names) { Name = $"Recording {DateTime.Now:yyyy-MM-dd HH-mm}" };
+        int clips = s.Grab(project, GameClock.Now);
+        GD.Print($"[movie] recording stopped: {clips} clips, {project.Duration:F1} s");
+        return clips > 0 ? project : null;
+    }
+
+    // ---- recording -----------------------------------------------------------------------------
 
     public override void _Process(double delta)
     {
@@ -98,8 +125,8 @@ public partial class ReplayRecorder : Node
         var frames = _capture.GetBuffer(n);
         // while the studio is open the sound is its own playback: dropped, and what was before no
         // longer runs on into what comes after
-        if (Paused || _sound == null) { _wasPaused = true; return; }
-        if (_wasPaused) { _sound.Clear(); _wasPaused = false; }
+        if (Paused) { _wasPaused = true; return; }
+        if (_wasPaused) { _buffer?.BreakSound(); _session?.BreakSound(); _wasPaused = false; }
         int half = frames.Length / 2;
         if (_halved.Length < half) _halved = new float[half];
         for (int i = 0; i < half; i++)
@@ -108,26 +135,16 @@ public partial class ReplayRecorder : Node
             var b = frames[2 * i + 1];
             _halved[i] = (a.X + a.Y + b.X + b.Y) * 0.25f;
         }
-        _sound.Append(_halved.AsSpan(0, half), now);
+        _buffer?.Sound(_halved.AsSpan(0, half), now);
+        _session?.Sound(_halved.AsSpan(0, half), now);
     }
 
-    private int Capacity => (int)(_minutes * 60 * Channels.Rate) + 1;
-
-    /// <summary>Seconds of the oldest frame still held, for the pause menu's "last 4:32".</summary>
-    public double Held
-    {
-        get
-        {
-            double held = 0;
-            foreach (var a in _actors.Values)
-                if (a.Ring.Count > 1) held = Math.Max(held, a.Ring.Newest - Math.Max(a.Ring.Oldest, a.Grabbed));
-            return held;
-        }
-    }
+    /// <summary>Seconds still held by the buffer since the last grab, for the pause menu's "last 4:32".</summary>
+    public double Held => _buffer?.Held ?? 0;
 
     public override void _PhysicsProcess(double delta)
     {
-        if (Paused || _minutes <= 0) return;
+        if (Paused || (_buffer == null && _session == null)) return;
         double now = GameClock.Now;
         if (now + 1e-6 < _next) return;
         _next = now + 1.0 / Channels.Rate;
@@ -137,92 +154,26 @@ public partial class ReplayRecorder : Node
             var p = sample.Player;
             if (p.Puppet || p.NetProxy) continue;
             ulong id = p.GetInstanceId();
-            if (!_actors.TryGetValue(id, out var actor))
-            {
-                string key = p.Name;
-                long peer = FootPlayer.NetId(key) ?? 0;
-                actor = new Actor
-                {
-                    Ring = new ReplayRing(Capacity, ActorIo.Names.Length),
-                    Key = key,
-                    Label = p.IsMultiplayerAuthority() && !p.Npc ? "You" : p.Npc ? $"Racer {key}" : $"Player {key}",
-                    Peer = peer,
-                };
-                _actors[id] = actor;
-            }
             ActorIo.Read(p, _scratch);
-            actor.Ring.Append(now, _scratch);
-            actor.LastSeen = now;
+            _buffer?.Actor(p, id, _scratch, now);
+            _session?.Actor(p, id, _scratch, now);
         }
-        if (_world != null && OriginNow() is { } origin) _world.Tick(now, origin);
+        var origin = OriginNow();
+        _buffer?.World(now, origin);
+        _session?.World(now, origin);
 
-        if (now >= _nextPrune)
-        {
-            // a player gone from view stays grabbable until its last frame is older than the buffer
-            _nextPrune = now + 10;
-            double keep = _minutes * 60;
-            foreach (var (id, a) in _actors.ToArray())
-                if (now - a.LastSeen > keep) _actors.Remove(id);
-        }
+        if (_session != null && SessionSeconds >= SessionMinutes * 60 && StopSession() is { } full) SessionFull?.Invoke(full);
     }
 
-    private Core.WorldOrigin? OriginNow() =>
+    private WorldOrigin? OriginNow() =>
         GetParent() is ClientWorld w ? w.Chunks?.Origin ?? w.StudioPlayer?.Origin : null;
 
     /// <summary>
-    /// Everything recorded since the last grab, as one clip per player on that player's lane, at the
-    /// timeline time it happened. The number of clips added.
+    /// Everything the buffer recorded since the last grab, as one clip per player on that player's
+    /// lane, the world and the sound, at the timeline time it happened. The number of clips added.
     /// </summary>
-    public int Grab(MovieProject project)
-    {
-        var slices = new List<(Actor Actor, ActorTrack Track, double Start)>();
-        foreach (var a in _actors.Values)
-            if (a.Ring.Slice(a.Grabbed, out double start) is { } track) slices.Add((a, track, start));
-        // the earliest first: it anchors this session's clock on the timeline, the rest keep their spacing from it
-        slices.Sort((x, y) => x.Start.CompareTo(y.Start));
-        double now = GameClock.Now;
-        double worldStart = 0;
-        var world = _world != null ? _world.Ring.Slice(_worldGrabbed, now, _world.Looks, out worldStart) : null;
-        if (world != null && (slices.Count == 0 || worldStart < slices[0].Start)) project.PlaceGrab(worldStart);
-        foreach (var (a, track, start) in slices)
-        {
-            int lane = project.LaneFor(a.Key, a.Label, a.Peer);
-            project.AddTrack(lane, track, project.PlaceGrab(start));
-            a.Grabbed = a.Ring.Newest;
-        }
-        if (world != null)
-        {
-            project.AddWorld(world, project.PlaceGrab(worldStart));
-            _worldGrabbed = now;
-            GD.Print($"[movie] grabbed the world: {world.Entities.Count(e => e.Parent < 0)} objects, "
-                + $"{world.Entities.Sum(e => e.Times.Length)} poses, {world.Looks.Length} looks, {world.Duration:F1} s");
-        }
-        return slices.Count + (world != null ? 1 : 0)
-            + (GrabSound(project, slices.Count > 0 ? slices[0].Start : double.NegativeInfinity) ? 1 : 0);
-    }
-
-    /// <summary>The game's sound since the last grab, from <paramref name="notBefore"/> on, on its own lane (#656).</summary>
-    private bool GrabSound(MovieProject project, double notBefore)
-    {
-        if (_sound == null || _sound.Count == 0) return false;
-        var samples = _sound.Slice(_soundGrabbed, out double start);
-        if (start < notBefore)
-        {
-            int skip = Math.Min(samples.Length, (int)Math.Round((notBefore - start) * _sound.Rate));
-            samples = samples[skip..];
-            start = notBefore;
-        }
-        if (SoundImport.FromGame(samples, _sound.Rate) is not { } asset) return false;
-        project.AddAudio(project.AudioLaneFor(GameSoundLane), asset, project.PlaceGrab(start));
-        _soundGrabbed = _sound.Newest;
-        return true;
-    }
+    public int Grab(MovieProject project) => _buffer?.Grab(project, GameClock.Now) ?? 0;
 
     /// <summary>A new or loaded project: the next grab hands it the whole buffer again.</summary>
-    public void ForgetGrabs()
-    {
-        foreach (var a in _actors.Values) a.Grabbed = double.NegativeInfinity;
-        _worldGrabbed = double.NegativeInfinity;
-        _soundGrabbed = double.NegativeInfinity;
-    }
+    public void ForgetGrabs() => _buffer?.ForgetGrabs();
 }

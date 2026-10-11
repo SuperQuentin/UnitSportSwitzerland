@@ -17,5 +17,10 @@
 - **The studio hides the live world** (`ReplayWatch.HideLive` in `Freeze`, `ShowLive` in `Thaw`).
 - **Files:** `.usmovie` v5 holds the world tracks; each look is saved once as a tiny packed scene in
   `user://movies/looks/<guid>.scn` (`WorldLookStore`), shared by every project. Loading resolves them.
-- **Not yet:** Record/Stop sessions to disk, time of day and weather, doors (many and static: to measure first),
+- **Record / Stop** (#775): Shift+F5, or Pause > Record / Stop recording (pad, VR). `ReplayRecorder` feeds a
+  second `Recording` (players, world, sound) beside the buffer, up to `SessionMinutes` (30; it then stops and
+  saves by itself). Stopping saves it as its own movie, "Recording <date time>", which the studio's Open lists.
+  A red "● REC m:ss" badge shows while it runs. It is held in memory, preallocated when it starts (about 86 MB of
+  sound plus 8 MB per player for 30 min); streaming to disk is a follow-up.
+- **Not yet:** time of day and weather, doors (many and static: to measure first),
   MultiMesh-drawn things (the dormant fleet stays live), particles and lights.
