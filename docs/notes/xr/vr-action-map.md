@@ -83,6 +83,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | blade_raise / blade_lower (#614, mini excavator, hold, driving or digging) | Shift / Ctrl, RB / LB (the gear paddles, which a crawler has no use for) | ok: the **blade lever** low and outboard of the left joystick (`XrCabControls` "miniexcavator", `Kind.Hold`: aft raises) | keep |
 | arm_boom_up/down, arm_bucket_curl/dump (#611, hold) | ↑ ↓, ← → / R stick Y, X in dig mode | ok: the **right joystick** by hand, as two levers (aft raises the boom, side to side the bucket); the right stick itself stays R3's action pad | one two-axis grip per joystick |
 | gear 1-6, R, N | 1-6 ` 0 / — | ok: H-pattern lever by hand (#438) | keep |
+| car shift up / down, clutch (#290, sequential or manual car gearbox) | Shift Ctrl C / RB LB B (the shoulders, not trick and boost, in such a car) | ok: grips, B (they replay as the shoulders) | keep |
+| car gates 1-6, R, N (#290, manual car gearbox) | 1-6 ` 0 / — | gap: no gear lever in the car cockpit's VR controls | **grip the car's gear lever** and move it through the gate, as the trucks' H-pattern lever (#438) |
 | retarder | ' ; / — | ok: stalk by hand (#438) | keep |
 | bus kneel / destination | K N / L3 — | ok: dash pokes (#438) | keep |
 | farm: lower / raise the implement or header (#494) | K / L3 | ok: the kneel dash poke, or L3 | **grip the linkage lever** on the right console |

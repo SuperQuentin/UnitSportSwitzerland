@@ -274,7 +274,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
         && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
 
-    private long MyId => Multiplayer.MultiplayerPeer is { } p and not OfflineMultiplayerPeer ? Multiplayer.GetUniqueId() : 1;
+    // not while the link is down: GetUniqueId on a dropped peer logs an error, and occupancy runs every frame
+    private long MyId => Online ? Multiplayer.GetUniqueId() : 1;
 
     /// <summary>This peer keeps the tables: the server, or a client playing offline.</summary>
     private bool Authoritative => !Online || Multiplayer.IsServer();

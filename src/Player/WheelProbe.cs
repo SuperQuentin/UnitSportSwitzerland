@@ -200,6 +200,13 @@ public partial class WheelProbe : Node
         expect(Mathf.IsEqualApprox(at, r900 / 2), "soft lock at the vehicle's lock");
         expect(SteeringWheel.SoftLock(at - 0.01f, at) == 0f && SteeringWheel.SoftLock(at + 0.2f, at) < -0.5f
             && SteeringWheel.SoftLock(-at - 0.5f, at) == 1f, "soft lock pushes back toward centre");
+        expect(SteeringWheel.SoftLock(at + Mathf.DegToRad(6f), at, Mathf.DegToRad(6f)) <= -0.999f
+            && SteeringWheel.SoftLock(at + Mathf.DegToRad(6f), at) > -0.5f, "a 6° ramp is a wall at 6° past the lock, the default 20° is not");
+        var firm = new WheelSettings { RangeDeg = 900f };
+        WheelPresets.Reset(firm, "Logitech G29 Driving Force Racing Wheel");
+        float kartLock = Mathf.DegToRad(198f), kartAt = SteeringWheel.SoftLockAt(kartLock, Mathf.DegToRad(900f));
+        expect(SteeringWheel.Compose(default, kartLock, kartAt + Mathf.DegToRad(7f), 0f, firm).Constant <= -0.99f,
+            "the G29's preset: a kart's lock is a full wall 7° past it");
         var s = new WheelSettings { RangeDeg = 1080f };
         var into = SteeringWheel.Compose(default, r900, at + 0.1f, 3f, s);
         var back = SteeringWheel.Compose(default, r900, at + 0.1f, -3f, s);

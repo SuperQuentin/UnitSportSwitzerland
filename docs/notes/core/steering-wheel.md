@@ -48,7 +48,19 @@
   gas/brake/clutch axes 1/2/3 resting at +1 and −1 fully pressed, right/left paddle buttons 4/5,
   shifter 1–6 and R buttons 12–18, **held while in gear and released in neutral**. `--ffbcheck` PASS:
   push right +34°, push left −50°, a 35% push into the 60° soft lock held at 65° (no overshoot).
-- Gearbox: the trucks (#70) shift from `shift_up`/`shift_down`/`gear_*`/`clutch` and a wheel pedal holds `clutch` past half way; binding paddles and the H-shifter, and an analog clutch, are a follow-up.
+- **Gearbox** (#290): the paddles are `shift_up`/`shift_down`, the H-shifter's gates `gear_1`..`gear_6`/`gear_r`
+  (G29 preset version 2; Settings → Wheel → Gearbox to assign them on any wheel). **The lever is the
+  gear**: `SteeringWheel.ShifterGate` is the gate whose bound button is held (0 none, null with no gate
+  bound), polled each step by `Player/HeldShifter` for the truck and the manual car: out of the gate is
+  neutral; a gate pushed without the clutch grinds once and goes in, silently, as the clutch goes down.
+  The wheel's raised `gear_*` events are swallowed (`FootPlayer.ShifterEvent`) so a gate is not picked
+  twice. **The clutch pedal is travel**, not held past half way: `PlayerInput.WheelPedal(clutch)` into
+  `HeavyDriveline.ClutchFoot` / `Car.ClutchFoot`, followed as it is; keys stay `HeldButton` with their
+  own pace. The cars' boxes: `player/car-gearbox`. **On an automatic** (car or truck) the lever is a
+  P R N D selector instead: gate 1 P, 3 and R reverse, out of a gate N, the rest D (`DriveSelector`).
+- **Preset versions**: `WheelPresets.Preset.Version`, saved as `WheelSettings.PresetVersion`. Bindings
+  saved from an older version gain each new button on the next claim (`WheelPresets.Upgrade`), unless
+  that button or that action is already bound elsewhere.
 - **Force feedback** (`SteeringWheel.Force.cs`, `WheelFeel`): SDL3 haptics on the claimed wheel. Each step
   `Car`/`Truck` set `Rideable.Feel`: **aligning torque** = steered axle's side force × trail (pneumatic
   0.035 m falling to 0 by 0.3 rad of slip, plus 0.02 m caster) over what that axle gives at its tarmac
@@ -75,6 +87,28 @@
 - **Low speed**: below 4 m/s the car blends to kinematic steering, and the feel blends with it (front
   mass × u × kinematic yaw rate, not the tyre curve at noise-sized slip angles): a parked wheel pulled
   back harder the further it turned, −0.5 at 2 m/s, and hid the soft lock. Now nothing to 1 m/s.
+- **Soft lock ramp per wheel** (#290): `WheelSettings.SoftLockRampDeg` (3–30°, Settings → Wheel), the
+  degrees past the lock to full force. The HORI keeps 20° (it bounced at 8°); the G29 preset sets 6°
+  (version 3; `Upgrade` gives it to saved settings still at the 20° default). At 20° a kart's ±99° lock
+  was not felt on the G29 (7° past it: 0.54). `--ffbcheck` on the G29 at 6°: a 35% push into a 60° lock
+  stops at 61-63° and settles in 0.3 s (65° at 20°).
+- **Forces only while the game has the focus** (#290): `NotificationApplicationFocusOut` closes the
+  haptic device at once (the log: `force feedback released`), so another window or G HUB gets the wheel;
+  `FocusIn` reopens it (a refused reopen retries every second) and remakes the effects 1.5 s later, when
+  G HUB has switched its profile. `--ffbcheck` holds the forces whatever the focus (a terminal-launched
+  window may never get it). Without this the forces broke when another window came up.
+- **No effect made = reopen** (#290): a remake while another program held the wheel failed for every
+  effect ("Unable to create effect") and left the wheel silent for good, nothing ever being sent to
+  fail. `MakeEffects` now schedules `RecoverHaptic` when the constant force could not be made; focus
+  coming back clears a given-up wheel (`_hapticFailed`) for a fresh round of tries.
+- **Forces silent at launch until toggled** (G29, #290): something resets the wheel after the effects
+  are made (G HUB switching profiles as the window comes to the front, or Godot's own SDL opening the
+  device while the world loads, not proven which) and every update still succeeds, so `Send` has nothing
+  to recover. `Refresh` destroys and remakes the effects **on the open device** when a drive starts after
+  2 s without a feel and on `NotificationApplicationFocusIn`; the log says `force feedback made afresh`.
+  **Never close and reopen at once**: Windows refuses the reopen ("SDL_SYS_HapticOpenFromJoystick
+  failed") and the wheel had no forces at all. A failed open now retries every second, 5 times
+  (`OpenHaptic`), which also covers `RecoverHaptic`'s reopen. `--ffbcheck` PASS with the refresh.
 - **Soft lock at full device force**, whatever `FfbStrength`: capped at 70% a hand pushed 121° through it.
 - **Engine** (`WheelFeel.EngineFrom`, added by `PlayerFeel`, which knows `EngineOn`): a sine at the
   crank's rate (rpm/60, 8–60 Hz), 0.15 at idle to 0.5 at the redline, gain `FfbEngine`. **Road** is

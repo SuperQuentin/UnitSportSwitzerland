@@ -413,7 +413,7 @@ void fragment() {
     if (portal_clipped(world_pos, CAMERA_POSITION_WORLD) || open_door_leaf(world_pos)) {
         discard;
     }
-    vec3 n = normalize(cross(dFdy(world_pos), dFdx(world_pos)));
+    vec3 n = facet_normal(VERTEX, INV_VIEW_MATRIX);
     // faces are not consistently wound in the source TINs, so orient toward the viewer
     if (!FRONT_FACING) {
         n = -n;
