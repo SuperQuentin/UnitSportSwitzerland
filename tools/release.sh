@@ -19,7 +19,7 @@ for a in "$@"; do case $a in
   --android-only) ANDROID_ONLY=1; NOUP=1 ;; # checks the APK build alone: no desktop exports, no release
   *) echo "Unknown option: $a"; exit 2 ;;
 esac; done
-GODOT=${GODOT:-'/c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.1-stable_mono_win64/godot_v4.7.1-stable_mono_win64_console.exe'}
+GODOT=${GODOT:-'/c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.2-stable_mono_win64/godot_v4.7.2-stable_mono_win64_console.exe'}
 OUT=test_output/release; mkdir -p "$OUT"
 # The exports run dotnet publish; reused MSBuild nodes outlive it holding Godot's console pipe, so the export never returns
 export MSBUILDDISABLENODEREUSE=1

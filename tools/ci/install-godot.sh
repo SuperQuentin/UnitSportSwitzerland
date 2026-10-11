@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Install Godot mono and its export templates on a CI runner. Used by .github/workflows/release.yml.
-# Env: GODOT_VERSION (4.7.1-stable), GODOT (where to put the binary: <dir>/godot).
-# The templates must land in <version>.<status>.mono ("4.7.1.stable.mono"), the name Godot looks for;
+# Env: GODOT_VERSION (4.7.2-stable), GODOT (where to put the binary: <dir>/godot).
+# The templates must land in <version>.<status>.mono ("4.7.2.stable.mono"), the name Godot looks for;
 # anything else and every export silently produces nothing.
 set -euo pipefail
-GODOT_VERSION=${GODOT_VERSION:-4.7.1-stable}
+GODOT_VERSION=${GODOT_VERSION:-4.7.2-stable}
 GODOT=${GODOT:?set GODOT to the path the binary should have}
 base=https://github.com/godotengine/godot-builds/releases/download/$GODOT_VERSION
 templates="$HOME/.local/share/godot/export_templates/${GODOT_VERSION/-/.}.mono"
