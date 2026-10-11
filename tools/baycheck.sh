@@ -12,40 +12,20 @@
 #
 # `--traffic 0`: a traffic car shoved the test car off a barn's door once (docs/notes/vehicles/
 # garage-buildings.md), and a bay is no wider.
-. "$(dirname "$0")/lib/guard.sh"
-set -u
-GODOT=${GODOT:-godot}
+. "$(dirname "$0")/lib/twoclient.sh" bay
 PORT=${BAY_PORT:-7866}
 PW=pw531
-OUT=test_output
-cd "$(dirname "$0")/.."
-mkdir -p "$OUT"
-SERVER=
-cleanup() { [ -n "$SERVER" ] && _guard_kill_tree "$SERVER"; [ -n "${GUARD_LOCK_HELD:-}" ] || guard_unlock; }
-trap cleanup EXIT
-# under tools/test.sh the runner already holds the lock (GUARD_LOCK_HELD): taking it again hangs
-[ -n "${GUARD_LOCK_HELD:-}" ] || guard_lock 1800 900 || exit 1
-guard_wait_ram 4 600 || exit 1
 
-"$GODOT" --headless --path . -- --server --port $PORT --generated-world --admin-password $PW \
-  > $OUT/bay_server.log 2>&1 < /dev/null &
-SERVER=$!
-guard_watch $SERVER > /dev/null
-for _ in $(seq 1 120); do
-  grep -q "server listening" $OUT/bay_server.log 2>/dev/null && break
-  kill -0 "$SERVER" 2>/dev/null || break
-  sleep 1
-done
+tc_server 1800 120 $OUT/bay_server.log --server --port $PORT --generated-world --admin-password $PW
 
 # B first, so it is already watching the door when A arrives at it
-guard_run 240 $OUT/bay_B.log "$GODOT" --headless --path . -- --connect 127.0.0.1:$PORT \
+tc_client 240 $OUT/bay_B.log --connect 127.0.0.1:$PORT \
   --generated-world --traffic 0 --name BayB --garagecheck watch --doorkind Industrial &
 B=$!
-guard_run 240 $OUT/bay_A.log "$GODOT" --headless --path . -- --connect 127.0.0.1:$PORT \
+tc_client 240 $OUT/bay_A.log --connect 127.0.0.1:$PORT \
   --generated-world --traffic 0 --name BayA --garagecheck drive $PW --doorkind Industrial
 A=$?
 wait $B
-
 code=0
 # A's verdict is its own RESULT line
 grep -a "RESULT" $OUT/bay_A.log | tail -1 | grep -q "RESULT: ok" || code=1
