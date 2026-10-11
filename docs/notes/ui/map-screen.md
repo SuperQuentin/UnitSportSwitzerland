@@ -18,8 +18,13 @@
   Brush and Erase draw; Shift-click still places the marker from a drawing tool. Right-drag or the
   stick pans, wheel or the shoulders zoom. `map_zoom_in/out`, `map_tool` and `map_search` are bound on
   **letters, not punctuation** — physical keycodes, and a symbol key is labelled differently on every
-  layout. `map_tool` cycles Move → Rectangle → Brush → Erase (and opens Advanced when picking). VR is
-  deferred: the screen renders on the `XrPad` panel but the map is not pointable yet.
+  layout. `map_tool` cycles Move → Rectangle → Brush → Erase (and opens Advanced when picking). On-map
+  **+ / −** buttons zoom for anyone without a wheel.
+- **VR** (#799): the screen is on the `XR/XrUi` panel and the right hand's ray is the mouse. Pans move
+  by the pointer's position difference, never `Relative` (XrUi leaves it at zero); `map_zoom_in/out`
+  are ignored while `XrSession.Active`, because the trigger also presses the shoulders; the footer
+  hint says the VR way. There is no VR keyboard: the popular places are the search. The table-top
+  relief map is still #535.
 - **The work is `tools/MapCore`**, shared with the terminal wizard (`tools/MapSetup`): `CountryData`
   (embedded `switzerland.bin`, read once per run by `MapScreen.SharedCountry`), `Selection`,
   `LocalState`, and `Planner`, whose estimates the panel shows and `DownloadJob` runs. The game builds

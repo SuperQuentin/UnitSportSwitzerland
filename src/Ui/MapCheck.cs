@@ -68,6 +68,19 @@ public partial class MapCheck : Node
             "erase takes it away again"),
 
         (() => Map!.Canvas.Zoom(+3), () => Map!.Canvas.Scale > 2, 1, "zooming in changes the scale"),
+        (() => _scale = Map!.Canvas.Scale, () => true, 1, "remember the scale"),
+        (() => ZoomButton(1).EmitSignal(BaseButton.SignalName.Pressed), () => Map!.Canvas.Scale < _scale, 1,
+            "the on-map - zooms out (VR has no wheel)"),
+        (() => ZoomButton(0).EmitSignal(BaseButton.SignalName.Pressed), () => Map!.Canvas.Scale == _scale, 1,
+            "and + zooms back in"),
+
+        // the VR panel's pointer (XR/XrUi) sends motion with no Relative: a trigger drag must still pan,
+        // and a trigger click must still place the marker
+        (() => { _marked = Map!.Canvas.Landing!.Value; _centre = Map.Canvas.ViewCentre; VrDrag(new(200, 200), new(320, 200)); },
+            () => Map!.Canvas.ViewCentre.E < _centre.E - 1 && Map.Canvas.Landing!.Value == _marked, 1,
+            "a pointer drag without Relative pans the map and leaves the marker"),
+        (() => VrDrag(new(240, 180), new(240, 180)), () => Map!.Canvas.Landing!.Value != _marked, 1,
+            "a pointer click puts the marker down"),
 
         (() => Map!.ClearSelection(), () => Picked!.Count == 0, 2, "clear empties the selection"),
         (Esc, () => _shell.Top is TitleScreen, 2, "Esc goes back to the title"),
@@ -104,6 +117,19 @@ public partial class MapCheck : Node
     };
 
     private (double E, double N)? _landed;
+    private int _scale;
+    private (double E, double N) _marked, _centre;
+
+    private Button ZoomButton(int i) => (Button)Map!.Canvas.ZoomButtons!.GetChild(i);
+
+    /// <summary>A press, a move and a release as XR/XrUi sends them: positions only, Relative left at zero.</summary>
+    private void VrDrag(Vector2 from, Vector2 to)
+    {
+        var canvas = Map!.Canvas;
+        canvas._GuiInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = from });
+        if (to != from) canvas._GuiInput(new InputEventMouseMotion { Position = to });
+        canvas._GuiInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = to });
+    }
     private (double E, double N)? _spawned;
 
     public override void _Process(double delta)

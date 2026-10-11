@@ -64,6 +64,9 @@ public partial class MapCanvas : Control
     // the Move tool's left press: where it went down, and whether it has turned into a drag
     private Vector2? _pressAt;
     private bool _dragging;
+    // the last pointer position seen: a pan moves by the difference, not by Relative, which the VR
+    // panel's pointer (XR/XrUi) does not fill in
+    private Vector2 _lastPointer;
     private bool _painting;
     private TileId? _hovered;
 
@@ -131,7 +134,31 @@ public partial class MapCanvas : Control
     {
         _font = UiTheme.Font;
         Resized += QueueRedraw;
+
+        // + and - on the map itself: the zoom a VR hand (no wheel, the shoulders are its trigger),
+        // a touchpad or a newcomer can find without being told
+        var zoom = UiKit.VBox(6);
+        zoom.MouseFilter = MouseFilterEnum.Ignore;   // only the buttons take a click; around them is still the map
+        zoom.AnchorLeft = zoom.AnchorRight = 1;
+        zoom.OffsetLeft = -56;
+        zoom.OffsetRight = -12;
+        zoom.OffsetTop = 12;
+        foreach (var (label, steps, tip) in new[] { ("+", +1, "Zoom in"), ("−", -1, "Zoom out") })
+        {
+            var button = UiKit.Button(label, minWidth: 44);
+            button.CustomMinimumSize = new Vector2(44, 44);
+            button.AddThemeFontSizeOverride("font_size", 22);
+            button.TooltipText = tip;
+            button.FocusMode = FocusModeEnum.None;   // the map keeps the keyboard and the stick
+            button.Pressed += () => Zoom(steps);
+            zoom.AddChild(button);
+        }
+        AddChild(zoom);
+        ZoomButtons = zoom;
     }
+
+    /// <summary>The on-map + and − buttons (for <c>--mapcheck</c>).</summary>
+    public Control? ZoomButtons { get; private set; }
 
     /// <summary>Centres the view on a point, optionally zooming in to it (a search result).</summary>
     public void FocusOn(double e, double n, int? pxPerKm = null)
@@ -422,12 +449,14 @@ public partial class MapCanvas : Control
 
     private void OnMotion(InputEventMouseMotion motion)
     {
+        var moved = motion.Position - _lastPointer;
+        _lastPointer = motion.Position;
         // the Move tool: a press that travels more than a few pixels is a drag, not a click
         if (_pressAt is { } down && !_dragging && motion.Position.DistanceTo(down) > 5) _dragging = true;
         if (_panning || _dragging)
         {
-            _centreE -= motion.Relative.X / (double)PxPerKm * 1000.0;
-            _centreN += motion.Relative.Y / (double)PxPerKm * 1000.0;
+            _centreE -= moved.X / (double)PxPerKm * 1000.0;
+            _centreN += moved.Y / (double)PxPerKm * 1000.0;
             QueueRedraw();
             return;
         }
@@ -441,6 +470,7 @@ public partial class MapCanvas : Control
 
     private void OnButton(InputEventMouseButton button)
     {
+        _lastPointer = button.Position;
         switch (button.ButtonIndex)
         {
             case MouseButton.WheelUp when button.Pressed:
@@ -572,8 +602,12 @@ public partial class MapCanvas : Control
             QueueRedraw();
         }
 
-        if (Input.IsActionJustPressed(PlayerInput.MapZoomIn)) ZoomAt(Size / 2, +1);
-        if (Input.IsActionJustPressed(PlayerInput.MapZoomOut)) ZoomAt(Size / 2, -1);
+        // in VR the triggers press the shoulders too, so every pointer click would zoom: + and - instead
+        if (!XR.XrSession.Active)
+        {
+            if (Input.IsActionJustPressed(PlayerInput.MapZoomIn)) ZoomAt(Size / 2, +1);
+            if (Input.IsActionJustPressed(PlayerInput.MapZoomOut)) ZoomAt(Size / 2, -1);
+        }
 
         if (Input.IsActionJustPressed("ui_accept"))
         {

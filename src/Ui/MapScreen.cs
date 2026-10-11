@@ -242,9 +242,13 @@ public partial class MapScreen : Screen
         // ---- the footer
         var footer = UiKit.HBox(10);
         body.AddChild(footer);
-        var hint = UiKit.Text(InputHints.Format(
-            "Click to put the marker down  ·  drag to move the map  ·  wheel or {map_zoom_in}/{map_zoom_out} to zoom"
-            + "  ·  {map_search} search"),
+        // VR (#799): the hand's ray is the pointer and its trigger the click (XR/XrUi); there is no wheel and no keyboard
+        var hint = UiKit.Text(XR.XrSession.Active
+                ? "Point and pull the trigger to put the marker down  ·  hold the trigger and move to drag the map"
+                  + "  ·  + and − to zoom  ·  left stick pans"
+                : InputHints.Format(
+                    "Click to put the marker down  ·  drag to move the map  ·  wheel, + and − or {map_zoom_in}/{map_zoom_out} to zoom"
+                    + "  ·  {map_search} search"),
             UiTheme.FontTiny, UiTheme.TextFaint);
         hint.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         footer.AddChild(hint);
