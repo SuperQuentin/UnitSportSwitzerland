@@ -68,10 +68,49 @@ public static class MovieSession
     /// <summary>Saves the project as <paramref name="name"/>; an error message, or null.</summary>
     public static string? Save(string name)
     {
+        var p = Project;
+        p.Name = name.Trim().Length > 0 ? name.Trim() : "Untitled";
+        return Write(p);
+    }
+
+    // ---- Record / Stop (#775) -------------------------------------------------------------------
+
+    /// <summary>
+    /// Shift+F5, or Pause > Record: starts a session, or stops the one running and saves it as a movie
+    /// of its own, which the studio's Open lists.
+    /// </summary>
+    public static void ToggleRecording()
+    {
+        if (ReplayRecorder.Instance is not { } recorder)
+        {
+            Said?.Invoke("Nothing can be recorded here");
+            return;
+        }
+        if (!recorder.Recording)
+        {
+            recorder.SessionFull -= SaveRecording;
+            recorder.SessionFull += SaveRecording;
+            recorder.StartSession();
+            Said?.Invoke($"Recording (up to {ReplayRecorder.SessionMinutes} min): Shift+F5 or Pause > Stop recording to stop");
+            return;
+        }
+        if (recorder.StopSession() is { } project) SaveRecording(project);
+        else Said?.Invoke("Nothing was recorded");
+    }
+
+    private static void SaveRecording(MovieProject p)
+    {
+        string? error = Write(p);
+        Said?.Invoke(error == null
+            ? $"Saved \"{p.Name}\" ({Clock(p.Duration)}): open it in the movie studio"
+            : $"The recording could not be saved: {error}");
+    }
+
+    /// <summary>Writes <paramref name="p"/> under its name; an error message, or null.</summary>
+    private static string? Write(MovieProject p)
+    {
         try
         {
-            var p = Project;
-            p.Name = name.Trim().Length > 0 ? name.Trim() : "Untitled";
             p.Compact();
             DirAccess.MakeDirRecursiveAbsolute(Folder);
             // the recorded world's meshes first: the file names them (#775)

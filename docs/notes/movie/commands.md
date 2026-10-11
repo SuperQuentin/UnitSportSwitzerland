@@ -17,6 +17,10 @@
   wheel turning, a parked car, a bird hides at 1.5 s and a crate is freed at 2.5 s, the origin shifts at 2 s. The
   ghosts must stand within 5 cm of the truth at seeks both ways, hidden and gone at the right times, then the same
   after a save and load through the real look store (its files are deleted after). About 5 s.
+- `--movierecord <a> <b>` (any direct world launch): Record / Stop from a to b seconds of play, then the newest
+  saved recording is loaded back: at least one actor clip, one world clip, one sound clip and the right length
+  expected, `[movierecord] RESULT` printed. `-- --world fixture --flycheck plane --movierecord 4 12`, about 20 s.
+  **Writes into the real `user://movies/`** (the recording, its looks, its sound): delete them after, or use `-Scratch`.
 - `--moviestudio <s> [t]` (any direct world launch): after s seconds, grabs the buffer and opens Pause > Movie
   studio at movie time t. `--moviesong <file>` also imports a song there; `--moviekeys` sets keys on two cameras,
   cuts between them and zooms in. Made for screenshots:

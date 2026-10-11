@@ -1551,7 +1551,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (@event.IsActionPressed(PlayerInput.SaveClip))
         {
             GetViewport().SetInputAsHandled();
-            Movie.MovieSession.SaveClip();
+            // Shift+F5: Record / Stop, the whole session from now on (#775)
+            if (@event is InputEventKey { ShiftPressed: true }) Movie.MovieSession.ToggleRecording();
+            else Movie.MovieSession.SaveClip();
             return;
         }
 

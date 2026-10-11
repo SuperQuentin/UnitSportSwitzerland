@@ -36,6 +36,10 @@ public partial class PauseScreen : Screen
         if (Shell.World is { } world && Movie.ReplayRecorder.Instance != null)
         {
             Entry(column, "Save clip", () => { Movie.MovieSession.SaveClip(); Shell.Back(); });
+            // Record / Stop (#775): Shift+F5 on a keyboard, this on a pad or in VR
+            var recorder = Movie.ReplayRecorder.Instance;
+            Entry(column, recorder.Recording ? $"Stop recording ({Movie.MovieSession.Clock(recorder.SessionSeconds)})" : "Record",
+                () => { Movie.MovieSession.ToggleRecording(); Shell.Back(); });
             Entry(column, "Movie studio", () =>
             {
                 Movie.MovieSession.SaveClip(quiet: true);

@@ -217,6 +217,25 @@ public partial class GameShell : Node
                     if (CmdArgs.Value("--moviesong") is { } song) studio.Import(song);
                     if (CmdArgs.Has("--moviekeys")) Callable.From(studio.ScreenshotKeys).CallDeferred();
                 };
+            // "--movierecord <a> <b>": Record / Stop (#775) from a to b seconds of play, then the saved file
+            // read back: one actor clip, a world clip and the game's sound expected, RESULT printed
+            if (CmdArgs.Double("--movierecord", 1) is { } recordAt && CmdArgs.Double("--movierecord", 2) is { } stopAt)
+            {
+                GetTree().CreateTimer(recordAt).Timeout += Movie.MovieSession.ToggleRecording;
+                GetTree().CreateTimer(stopAt).Timeout += () =>
+                {
+                    Movie.MovieSession.ToggleRecording();
+                    string? newest = Movie.MovieSession.Saved().FirstOrDefault(n => n.StartsWith("Recording "));
+                    var p = newest != null && Movie.MovieSession.Load(newest) == null ? Movie.MovieSession.Project : null;
+                    int actors = p?.Clips.Count(c => !c.Audio && !c.World) ?? 0, worlds = p?.Clips.Count(c => c.World) ?? 0;
+                    int sounds = p?.Clips.Count(c => c.Audio) ?? 0;
+                    double span = stopAt - recordAt, length = p?.Duration ?? 0;
+                    bool ok = actors >= 1 && worlds == 1 && sounds == 1 && Math.Abs(length - span) < 1.0;
+                    GD.Print($"[movierecord] \"{newest}\": {actors} actor clips, {worlds} world, {sounds} sound, {length:F1} s of {span:F1} s");
+                    GD.Print(ok ? "[movierecord] RESULT: ok" : "[movierecord] RESULT: FAILED");
+                    GetTree().Quit(ok ? 0 : 1);
+                };
+            }
             // "--menu" / "--settings" open the pause menu over the world, for screenshotting it
             if (CmdArgs.Has("--menu") || CmdArgs.Has("--settings"))
                 Callable.From(() =>
