@@ -9,7 +9,7 @@ on foot, mounted, driving or flying, over ENet multiplayer.
 Knowledge lives in ~180 micro notes, `docs/notes/<area>/<name>.md`, one topic each. Each code
 directory's `CLAUDE.md` (auto-loaded when you touch files there) is only an **index**: one line per
 note. Read a note only when the task needs it; find one with `grep -ril <word> docs/notes`.
-Areas: tools, terrain, net, player, vehicles, avatar, audio, gpx, world, combat, br, birds, items, crafting, build, loot, trailer,
+Areas: tools, terrain, net, player, vehicles, avatar, audio, gpx, movie, world, combat, br, birds, items, crafting, build, loot, trailer,
 occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new or existing note plus one index line — never in this file.
 
 `docs/notes/general/`: `subagents` (model choice, fan-out limits), `never-lookat-data-driven`,
@@ -17,6 +17,7 @@ occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new o
 `headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
 `worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand),
 `release-on-merge` (a merged PR releases on GitHub Actions; bursts coalesce into one release, at most one an hour),
+`feature-clips` (`/clip`, `tools/record-clip.sh`: GIFs of a feature, shown in the next release),
 `linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
 `twoclient-checks` (server + two-client `tools/*check.sh` go through `tools/lib/twoclient.sh`),
 `testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard),

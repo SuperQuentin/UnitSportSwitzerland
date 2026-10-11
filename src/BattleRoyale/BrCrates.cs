@@ -55,6 +55,9 @@ public sealed class Crate
 /// </summary>
 public partial class BrCrates : Node3D, IOriginContainer
 {
+    /// <summary>Recorded for the movie studio (#775).</summary>
+    public override void _EnterTree() => Movie.ReplayWatch.Container(this);
+
     public const string NodeName = "BrCrates";
     /// <summary>"No altitude: on the ground there".</summary>
     public const float Ground = -99999f;
