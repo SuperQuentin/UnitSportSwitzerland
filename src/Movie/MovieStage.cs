@@ -25,6 +25,8 @@ public partial class MovieStage : Node3D
     public double Duration => Project.Duration;
     /// <summary>The movie's sound clips (#656).</summary>
     public AudioDeck Deck { get; } = new();
+    /// <summary>The recorded world (#775).</summary>
+    public WorldGhosts Ghosts { get; }
 
     private readonly WorldOrigin _origin;
     private readonly List<FootPlayer> _puppets = new();
@@ -40,6 +42,7 @@ public partial class MovieStage : Node3D
         // before the puppets (children, priority 0): they draw this frame what was written this frame
         ProcessPriority = -1;
         AddChild(Deck);
+        AddChild(Ghosts = new WorldGhosts(origin));
     }
 
     /// <summary>Another project (loaded, or a new one): every puppet goes, the next frame makes the new ones.</summary>
@@ -53,6 +56,7 @@ public partial class MovieStage : Node3D
             p.QueueFree();
         }
         _puppets.Clear();
+        Ghosts.Clear();
         Deck.Reset();
         Seek(0);
     }
@@ -92,6 +96,9 @@ public partial class MovieStage : Node3D
     /// <summary>Every lane's puppet as it was at <see cref="Time"/>.</summary>
     public void Apply()
     {
+        var world = Project.ActiveWorld(Time);
+        Ghosts.Show(world != null ? Project.Worlds[world.Track] : null, world?.Local(Time) ?? 0);
+
         while (_puppets.Count < Project.Lanes.Count) AddPuppet(_puppets.Count);
         _active.Clear();
         for (int lane = 0; lane < Project.Lanes.Count; lane++) _active.Add(Project.ActiveClip(lane, Time));

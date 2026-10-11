@@ -20,12 +20,13 @@ namespace UnitSport.Movie;
 /// </summary>
 public partial class TimelineView : Control
 {
-    private const float Ruler = 24, LaneH = 34, Labels = 120, Edge = 7, SnapPx = 8, HitPx = 6, KeyPx = 8;
+    private const float Ruler = 20, LaneH = 26, Labels = 120, Edge = 7, SnapPx = 8, HitPx = 6, KeyPx = 8;
     public const float MinZoom = 0.5f, MaxZoom = 2000f;
 
     private static readonly Color ActorClip = new(0.35f, 0.47f, 0.62f, 0.85f);
     private static readonly Color SoundClip = new(0.18f, 0.5f, 0.46f, 0.85f);
     private static readonly Color GameSoundClip = new(0.42f, 0.4f, 0.55f, 0.85f);
+    private static readonly Color WorldClip = new(0.45f, 0.42f, 0.3f, 0.85f);
     private static readonly Color Wave = new(1, 1, 1, 0.45f);
     private static readonly Color Ghost = new(1, 1, 1, 0.13f), GhostDown = new(1, 1, 1, 0.28f);
     private static readonly Color Marker = new(1f, 0.45f, 0.25f, 0.95f);
@@ -88,11 +89,12 @@ public partial class TimelineView : Control
     private float Width0 => Size.X - Labels;
     private float X(double t) => Labels + (float)((t - _left) * _pxPerSec);
     private double T(float x) => _left + (x - Labels) / _pxPerSec;
-    // row 0 the program, then a row per camera, then the actors, then the sound
+    // row 0 the program, then a row per camera, then the actors, the recorded world (#775), then the sound
     private int CameraRows => Project.Cameras.Count;
     private int FirstActorRow => 1 + CameraRows;
-    private int Rows => FirstActorRow + Project.Lanes.Count + Project.AudioLanes.Count;
-    private int Row(Clip c) => FirstActorRow + (c.Audio ? Project.Lanes.Count + c.Lane : c.Lane);
+    private int WorldRows => Project.HasWorld ? 1 : 0;
+    private int Rows => FirstActorRow + Project.Lanes.Count + WorldRows + Project.AudioLanes.Count;
+    private int Row(Clip c) => FirstActorRow + (c.Audio ? Project.Lanes.Count + WorldRows + c.Lane : c.World ? Project.Lanes.Count : c.Lane);
     private static float RowY(int row) => Ruler + row * LaneH;
     private static int RowAt(float y) => y < Ruler ? -1 : (int)((y - Ruler) / LaneH);
 
@@ -206,23 +208,25 @@ public partial class TimelineView : Control
                 HorizontalAlignment.Left, -1, UiTheme.FontTiny, UiTheme.TextFaint);
         }
 
-        int actorLanes = Project.Lanes.Count;
+        int actorLanes = Project.Lanes.Count, worldRows = WorldRows;
         for (int row = 0; row < Rows; row++)
         {
             float y = RowY(row);
             int cam = row - 1;
-            bool camera = row >= 1 && row <= CameraRows, sound = row >= FirstActorRow + actorLanes;
+            bool camera = row >= 1 && row <= CameraRows, sound = row >= FirstActorRow + actorLanes + worldRows;
+            bool world = worldRows > 0 && row == FirstActorRow + actorLanes;
             if (camera && cam == PickedCamera) DrawRect(new Rect2(0, y, w, LaneH), new Color(CameraColor(cam), 0.1f));
             else if (row % 2 == 1) DrawRect(new Rect2(0, y, w, LaneH), new Color(1, 1, 1, 0.025f));
-            if (row == 1 || row == FirstActorRow || (sound && row == FirstActorRow + actorLanes))
+            if (row == 1 || row == FirstActorRow || world || (sound && row == FirstActorRow + actorLanes + worldRows))
                 DrawLine(new Vector2(0, y), new Vector2(w, y), UiTheme.Hairline);
             string label = row == 0 ? "Program"
                 : camera ? Project.Cameras[cam].Name
+                : world ? "World"
                 : !sound ? Project.Lanes[row - FirstActorRow].Label
-                : row - FirstActorRow - actorLanes < _soundLabels.Count ? _soundLabels[row - FirstActorRow - actorLanes]
-                : Project.AudioLanes[row - FirstActorRow - actorLanes];
+                : row - FirstActorRow - actorLanes - worldRows < _soundLabels.Count ? _soundLabels[row - FirstActorRow - actorLanes - worldRows]
+                : Project.AudioLanes[row - FirstActorRow - actorLanes - worldRows];
             var color = row == 0 ? UiTheme.Amber : camera ? CameraColor(cam)
-                : sound || _stage.Puppet(row - FirstActorRow) != null ? UiTheme.Text : UiTheme.TextDim;
+                : sound || world || _stage.Puppet(row - FirstActorRow) != null ? UiTheme.Text : UiTheme.TextDim;
             if (camera && cam == PickedCamera) DrawString(font, new Vector2(2, y + LaneH * 0.62f), "▸", HorizontalAlignment.Left, -1, UiTheme.FontSmall, color);
             DrawString(font, new Vector2(12, y + LaneH * 0.62f), label, HorizontalAlignment.Left, Labels - 18, UiTheme.FontSmall, color);
         }
@@ -236,7 +240,7 @@ public partial class TimelineView : Control
             if (x1 < Labels || x0 > w) continue;
             var r = new Rect2(x0, RowY(Row(c)) + 4, Math.Max(2, x1 - x0), LaneH - 8);
             bool sel = c.Id == Selected;
-            var fill = !c.Audio ? ActorClip : Project.Audio[c.Track].Game ? GameSoundClip : SoundClip;
+            var fill = c.World ? WorldClip : !c.Audio ? ActorClip : Project.Audio[c.Track].Game ? GameSoundClip : SoundClip;
             DrawRect(r, sel ? new Color(UiTheme.Amber, 0.85f) : fill);
             if (c.Audio) DrawWave(c, r);
             DrawRect(r, sel ? Colors.White : new Color(1, 1, 1, 0.25f), filled: false, width: sel ? 2 : 1);

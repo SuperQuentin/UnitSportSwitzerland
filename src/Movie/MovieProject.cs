@@ -18,6 +18,11 @@ public sealed class Clip
     public int Id { get; init; }
     /// <summary>A sound clip (#656): <see cref="Lane"/> is then an audio lane and <see cref="Track"/> an <see cref="AudioAsset"/>.</summary>
     public bool Audio { get; init; }
+    /// <summary>
+    /// A clip of the recorded world (#775): on the one World row, <see cref="Track"/> a
+    /// <see cref="WorldTrack"/>; <see cref="Lane"/> is unused.
+    /// </summary>
+    public bool World { get; init; }
     public int Lane { get; init; }
     public int Track { get; init; }
     public double In { get; set; }
@@ -66,6 +71,10 @@ public sealed class MovieProject
     public string[] Discrete { get; }
     public List<Lane> Lanes { get; } = new();
     public List<ActorTrack> Tracks { get; } = new();
+    /// <summary>The recorded world's tracks (#775), played by the clips flagged <see cref="Clip.World"/>.</summary>
+    public List<WorldTrack> Worlds { get; } = new();
+    /// <summary>Whether the timeline has a World row.</summary>
+    public bool HasWorld => Clips.Exists(c => c.World);
     public List<Clip> Clips { get; } = new();
     /// <summary>The sound lanes' names (#656), drawn under the actors' lanes.</summary>
     public List<string> AudioLanes { get; } = new();
@@ -136,7 +145,26 @@ public sealed class MovieProject
     }
 
     /// <summary>How long the recording or sound under clip <paramref name="c"/> is.</summary>
-    public double SourceLength(Clip c) => c.Audio ? Audio[c.Track].Duration : Tracks[c.Track].Duration;
+    public double SourceLength(Clip c) =>
+        c.Audio ? Audio[c.Track].Duration : c.World ? Worlds[c.Track].Duration : Tracks[c.Track].Duration;
+
+    /// <summary>A whole recording of the world on the World row, from timeline time <paramref name="start"/> (#775).</summary>
+    public Clip AddWorld(WorldTrack track, double start)
+    {
+        Worlds.Add(track);
+        var clip = new Clip { Id = _nextId++, World = true, Track = Worlds.Count - 1, In = 0, Out = track.Duration, Start = Math.Max(0, start) };
+        Clips.Add(clip);
+        return clip;
+    }
+
+    /// <summary>The world clip playing at <paramref name="t"/>: the latest-starting one, as on an actor's lane.</summary>
+    public Clip? ActiveWorld(double t)
+    {
+        Clip? best = null;
+        foreach (var c in Clips)
+            if (c.World && c.Covers(t) && (best == null || c.Start >= best.Start)) best = c;
+        return best;
+    }
 
     public int LaneFor(string key, string label, long peerId)
     {
@@ -162,7 +190,7 @@ public sealed class MovieProject
 
     private Clip CopyOf(Clip c, double inT, double outT, double start)
     {
-        var clip = new Clip { Id = _nextId++, Audio = c.Audio, Lane = c.Lane, Track = c.Track, In = inT, Out = outT, Start = Math.Max(0, start) };
+        var clip = new Clip { Id = _nextId++, Audio = c.Audio, World = c.World, Lane = c.Lane, Track = c.Track, In = inT, Out = outT, Start = Math.Max(0, start) };
         Clips.Add(clip);
         return clip;
     }
@@ -175,7 +203,7 @@ public sealed class MovieProject
     {
         Clip? best = null;
         foreach (var c in Clips)
-            if (!c.Audio && c.Lane == lane && c.Covers(t) && (best == null || c.Start >= best.Start)) best = c;
+            if (!c.Audio && !c.World && c.Lane == lane && c.Covers(t) && (best == null || c.Start >= best.Start)) best = c;
         return best;
     }
 
@@ -236,24 +264,28 @@ public sealed class MovieProject
     /// </summary>
     public void Compact()
     {
-        List<int> Used(bool audio, Func<Clip, int> of) =>
-            Clips.Where(c => c.Audio == audio).Select(of).Distinct().OrderBy(i => i).ToList();
-        var usedTracks = Used(false, c => c.Track);
-        var usedLanes = Used(false, c => c.Lane);
-        var usedAudio = Used(true, c => c.Track);
-        var usedAudioLanes = Used(true, c => c.Lane);
+        List<int> Used(Func<Clip, bool> kind, Func<Clip, int> of) =>
+            Clips.Where(kind).Select(of).Distinct().OrderBy(i => i).ToList();
+        static bool Actor(Clip c) => !c.Audio && !c.World;
+        var usedTracks = Used(Actor, c => c.Track);
+        var usedLanes = Used(Actor, c => c.Lane);
+        var usedAudio = Used(c => c.Audio, c => c.Track);
+        var usedAudioLanes = Used(c => c.Audio, c => c.Lane);
+        var usedWorlds = Used(c => c.World, c => c.Track);
+        var worlds = usedWorlds.Select(i => Worlds[i]).ToList();
         var tracks = usedTracks.Select(i => Tracks[i]).ToList();
         var lanes = usedLanes.Select(i => Lanes[i]).ToList();
         var audio = usedAudio.Select(i => Audio[i]).ToList();
         var audioLanes = usedAudioLanes.Select(i => AudioLanes[i]).ToList();
         var clips = Clips.Select(c => new Clip
         {
-            Id = c.Id, Audio = c.Audio,
-            Lane = c.Audio ? usedAudioLanes.IndexOf(c.Lane) : usedLanes.IndexOf(c.Lane),
-            Track = c.Audio ? usedAudio.IndexOf(c.Track) : usedTracks.IndexOf(c.Track),
+            Id = c.Id, Audio = c.Audio, World = c.World,
+            Lane = c.Audio ? usedAudioLanes.IndexOf(c.Lane) : c.World ? 0 : usedLanes.IndexOf(c.Lane),
+            Track = c.Audio ? usedAudio.IndexOf(c.Track) : c.World ? usedWorlds.IndexOf(c.Track) : usedTracks.IndexOf(c.Track),
             In = c.In, Out = c.Out, Start = c.Start,
         }).ToList();
         Tracks.Clear(); Tracks.AddRange(tracks);
+        Worlds.Clear(); Worlds.AddRange(worlds);
         Lanes.Clear(); Lanes.AddRange(lanes);
         Audio.Clear(); Audio.AddRange(audio);
         AudioLanes.Clear(); AudioLanes.AddRange(audioLanes);

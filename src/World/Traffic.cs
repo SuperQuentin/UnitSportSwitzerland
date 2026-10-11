@@ -145,7 +145,11 @@ public partial class Traffic : Node3D, Core.IOriginContainer, Core.IOriginShiftA
     /// Local and cosmetic like the traffic itself: a pilot reads it only on the peer simulating it.
     /// </summary>
     public static Traffic? Current { get; private set; }
-    public override void _EnterTree() => Current = this;
+    public override void _EnterTree()
+    {
+        Current = this;
+        Movie.ReplayWatch.Container(this);   // recorded for the movie studio (#775)
+    }
     public override void _ExitTree() { if (Current == this) Current = null; }
 
     /// <summary>

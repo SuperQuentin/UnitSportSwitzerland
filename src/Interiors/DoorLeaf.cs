@@ -12,6 +12,9 @@ namespace UnitSport.Interiors;
 /// </summary>
 public partial class DoorLeaf : Node3D
 {
+    /// <summary>Recorded for the movie studio (#775): the leaf as one object, its hinges as they swing.</summary>
+    public override void _EnterTree() => Movie.ReplayWatch.Object(this);
+
     /// <summary>
     /// How far an inward leaf swings when fully open, radians: square to the wall, no further. A
     /// house's door can stand 0.2 m from the stair core's side wall, and any more swings the leaf into it.

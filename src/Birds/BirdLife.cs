@@ -133,6 +133,7 @@ public partial class BirdLife : Node3D, Core.IOriginContainer, Core.IOriginShift
     {
         Name = "Birds";
         if (Headless) return;
+        Movie.ReplayWatch.Container(this);   // recorded for the movie studio (#775)
         Instance = this;
         Journal = new BirdJournal();
         AddChild(Journal);

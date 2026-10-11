@@ -9,12 +9,15 @@ namespace UnitSport.Movie;
 /// loads, the unknown ones dropped and the new ones at their default. Version 2 (#656) adds the
 /// sound: audio lanes, the sounds (file name, beats, waveform), a flag per clip and the markers.
 /// Version 1 files still load, silent. Version 3 (#669) adds the camera's keyframes, version 4
-/// (#675) several named cameras and the cut list; a version 3 camera becomes Cam 1.
+/// (#675) several named cameras and the cut list; a version 3 camera becomes Cam 1. Version 5
+/// (#775) adds the recorded world: its tracks, before the clips, and a flag per clip. A look is
+/// stored by the name of its asset file (<see cref="WorldLook.Asset"/>), which the engine side
+/// writes and reads (<c>WorldLookStore</c>).
 /// </summary>
 public static class MovieFile
 {
     private const uint Magic = 0x564D5355;   // "USMV"
-    private const int Version = 4;
+    private const int Version = 5;
 
     public static void Write(MovieProject p, Stream to) => Write(p, to, Version);
 
@@ -60,13 +63,20 @@ public static class MovieFile
             }
         }
 
-        var clips = version >= 2 ? p.Clips : p.Clips.Where(c => !c.Audio).ToList();
+        if (version >= 5)
+        {
+            w.Write(p.Worlds.Count);
+            foreach (var t in p.Worlds) WriteWorld(w, t);
+        }
+
+        var clips = p.Clips.Where(c => (version >= 2 || !c.Audio) && (version >= 5 || !c.World)).ToList();
         w.Write(clips.Count);
         foreach (var c in clips)
         {
             w.Write(c.Id); w.Write(c.Lane); w.Write(c.Track);
             w.Write(c.In); w.Write(c.Out); w.Write(c.Start);
             if (version >= 2) w.Write(c.Audio);
+            if (version >= 5) w.Write(c.World);
         }
 
         if (version >= 2)
@@ -83,6 +93,71 @@ public static class MovieFile
             w.Write(p.Cuts.Count);
             foreach (var c in p.Cuts) { w.Write(c.T); w.Write(c.Camera); }
         }
+    }
+
+    private static void WriteWorld(BinaryWriter w, WorldTrack t)
+    {
+        w.Write(t.Duration);
+        w.Write(t.Looks.Length);
+        foreach (var l in t.Looks) w.Write(l.Asset ?? "");
+        w.Write(t.Entities.Length);
+        foreach (var e in t.Entities)
+        {
+            w.Write(e.Parent); w.Write(e.Born); w.Write(e.Died);
+            w.Write(e.Times.Length);
+            for (int k = 0; k < e.Times.Length; k++)
+            {
+                var q = e.Poses[k];
+                w.Write(e.Times[k]); w.Write(q.X); w.Write(q.Y); w.Write(q.Z);
+                w.Write(q.Rot.X); w.Write(q.Rot.Y); w.Write(q.Rot.Z); w.Write(q.Rot.W);
+                w.Write(q.Scale.X); w.Write(q.Scale.Y); w.Write(q.Scale.Z);
+            }
+            w.Write(e.ShowTimes.Length);
+            for (int k = 0; k < e.ShowTimes.Length; k++) { w.Write(e.ShowTimes[k]); w.Write(e.Shown[k]); }
+            w.Write(e.LookTimes.Length);
+            for (int k = 0; k < e.LookTimes.Length; k++) { w.Write(e.LookTimes[k]); w.Write(e.Looks[k]); }
+        }
+    }
+
+    private static WorldTrack ReadWorld(BinaryReader r)
+    {
+        double duration = r.ReadDouble();
+        var looks = new WorldLook[r.ReadInt32()];
+        for (int i = 0; i < looks.Length; i++) looks[i] = new WorldLook { Asset = r.ReadString() };
+        var entities = new WorldEntity[r.ReadInt32()];
+        for (int i = 0; i < entities.Length; i++)
+        {
+            var e = new WorldEntity { Parent = r.ReadInt32(), Born = r.ReadDouble(), Died = r.ReadDouble() };
+            int n = r.ReadInt32();
+            e.Times = new double[n];
+            e.Poses = new WorldPose[n];
+            for (int k = 0; k < n; k++)
+            {
+                e.Times[k] = r.ReadDouble();
+                e.Poses[k] = new WorldPose
+                {
+                    X = r.ReadDouble(), Y = r.ReadDouble(), Z = r.ReadDouble(),
+                    Rot = new Godot.Quaternion(r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle()),
+                    Scale = new Godot.Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle()),
+                };
+            }
+            n = r.ReadInt32();
+            e.ShowTimes = new double[n];
+            e.Shown = new bool[n];
+            for (int k = 0; k < n; k++) { e.ShowTimes[k] = r.ReadDouble(); e.Shown[k] = r.ReadBoolean(); }
+            n = r.ReadInt32();
+            e.LookTimes = new double[n];
+            e.Looks = new int[n];
+            for (int k = 0; k < n; k++)
+            {
+                e.LookTimes[k] = r.ReadDouble();
+                int look = r.ReadInt32();
+                e.Looks[k] = look >= 0 && look < looks.Length ? look : -1;
+            }
+            if (e.Parent >= entities.Length || e.Parent < WorldEntity.Environment) e.Parent = -1;
+            entities[i] = e;
+        }
+        return new WorldTrack(entities, looks, duration);
     }
 
     private static void WriteKeys(BinaryWriter w, CameraTrack cam)
@@ -182,6 +257,12 @@ public static class MovieFile
             }
         }
 
+        if (version >= 5)
+        {
+            int worlds = r.ReadInt32();
+            for (int i = 0; i < worlds; i++) p.Worlds.Add(ReadWorld(r));
+        }
+
         int clips = r.ReadInt32();
         int maxId = 0;
         for (int i = 0; i < clips; i++)
@@ -189,11 +270,13 @@ public static class MovieFile
             int id = r.ReadInt32(), lane = r.ReadInt32(), track = r.ReadInt32();
             double inT = r.ReadDouble(), outT = r.ReadDouble(), start = r.ReadDouble();
             bool audio = version >= 2 && r.ReadBoolean();
+            bool world = version >= 5 && r.ReadBoolean();
             bool valid = audio
                 ? lane >= 0 && lane < p.AudioLanes.Count && track >= 0 && track < p.Audio.Count
+                : world ? track >= 0 && track < p.Worlds.Count
                 : lane >= 0 && lane < p.Lanes.Count && track >= 0 && track < p.Tracks.Count;
             if (!valid) continue;
-            p.Clips.Add(new Clip { Id = id, Audio = audio, Lane = lane, Track = track, In = inT, Out = outT, Start = start });
+            p.Clips.Add(new Clip { Id = id, Audio = audio, World = world, Lane = lane, Track = track, In = inT, Out = outT, Start = start });
             maxId = Math.Max(maxId, id);
         }
         p.SetNextId(maxId + 1);
