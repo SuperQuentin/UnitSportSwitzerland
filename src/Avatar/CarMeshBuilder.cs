@@ -159,8 +159,10 @@ public static partial class CarMeshBuilder
             BodyShape.Liftback => (0.64f, 0.48f, 0.72f),
             _ => (0.62f, 0.60f, 0.66f),
         };
+        // the tyre's outer face at least 1.2 cm inside the body's side: wider, its top (behind the
+        // wing) lay a few mm under the paint and z-fought it (#755)
         return new Dims(b.Length, b.Width, h, wheelbase, b.WheelRadius,
-            Mathf.Clamp(0.19f + (b.Width - 1.63f) * 0.33f, 0.18f, 0.27f), b.Width - 0.24f,
+            Mathf.Clamp(0.19f + (b.Width - 1.63f) * 0.33f, 0.18f, 0.215f), b.Width - 0.24f,
             h * belt, h * hood, h * deck, hl * wsB, hl * wsT, hl * rgT, hl * rgB)
         {
             RgFoot = h * (b.Shape == BodyShape.Liftback ? deck : belt),
@@ -245,9 +247,10 @@ public static partial class CarMeshBuilder
             float fbLen = hl - (axF + arch);
             s.Box(new Vector3(0, sillCy, axF + arch + fbLen * 0.5f), new Vector3(d.Width, sillH, fbLen), lower);
             s.Box(new Vector3(0, sillCy, axR - arch - fbLen * 0.5f), new Vector3(d.Width, sillH, fbLen), lower);
-            // dark splitter and diffuser under the bumpers
-            s.Box(new Vector3(0, SillY0 + 0.02f, hl - 0.25f), new Vector3(d.Width - 0.1f, 0.05f, 0.5f), Trim);
-            s.Box(new Vector3(0, SillY0 + 0.02f, -hl + 0.25f), new Vector3(d.Width - 0.1f, 0.05f, 0.5f), Trim);
+            // dark splitter and diffuser under the bumpers: 1 cm below them and 1 cm past their faces,
+            // not 5 mm under and flush, which z-fought at range (#755)
+            s.Box(new Vector3(0, SillY0 + 0.015f, hl - 0.24f), new Vector3(d.Width - 0.1f, 0.05f, 0.5f), Trim);
+            s.Box(new Vector3(0, SillY0 + 0.015f, -hl + 0.24f), new Vector3(d.Width - 0.1f, 0.05f, 0.5f), Trim);
         }
         // garage aero: a lip or a splitter with canards up front, fins in the diffuser, side skirts
         if (body.FrontAero == 1)
@@ -389,7 +392,7 @@ public static partial class CarMeshBuilder
         else if (round)
             FaceStrip(s, d, -0.45f, 0.45f, SillY1 - 0.17f, SillY1 - 0.03f, Trim);
         else
-            s.Box(new Vector3(0, SillY1 - 0.1f, hl - 0.03f), new Vector3(0.9f, 0.14f, 0.05f), Trim);   // grille intake
+            s.Box(new Vector3(0, SillY1 - 0.1f, hl - 0.015f), new Vector3(0.9f, 0.14f, 0.05f), Trim);   // grille intake, 1 cm proud of the bumper (it was 5 mm behind its face, #755)
 
         float wingZ = -hl + 0.55f;
         switch (body.Wing)
