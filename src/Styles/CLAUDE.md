@@ -10,6 +10,7 @@ touches its topic; search with `grep -ril <word> docs/notes/styles`.
 
 - `style-kit` — `VisualStyle` (client-only), `MaterialRole`, `StyleKit.Material(role)`, the fallback chain to PS1, `--style-report`, per-style looks (MeshDetail, finest stride, sun, environment), live `Restyle` + `RebuildVisuals`, `/style`; never load a `ps1_*` shader directly
 - `role-bodies` — shaders/body/ role bodies + thin per-style wrappers, shaders/common/ (world, retro, sightline, style), the `retro` uniform the kit turns off outside PS1, the STYLE_LIT path
+- `facet-normals-and-aa` — #768: facet normals from view-space `VERTEX` (`facet_normal`, world-space derivatives fuzzed faces the sun grazes), the main view's anti-aliasing setting (FXAA default, off in PS1, MSAA sparkles distant ground), `--aa`
 - `tree-lod` — 3D trees near, ray-traced billboards far (17 plane tests per pixel), complementary dither crossfade, per-tile range from the AABB incl. height, `world_cam_pos`, NearTrees (per-tree culling of heavy trees), Cartoon's traced shapes
 - `realistic` — Realistic−: real_* wrappers, textures tinting the cover colours, terrain by cover class + triplanar rock, EZ-Tree models through ModelCatalog, side/top impostors, the Realistic finish, night
 - `realistic-plus` — Realistic+: Effects/Photos look items, the Forward+ relaunch (settings, boot, guard flag), SSAO/SSR/volumetrics, --sdfgi, testing gotcha
