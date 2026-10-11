@@ -66,7 +66,8 @@ public static class AircraftMeshBuilder
             var centre = new Vector3(radius * Mathf.Sin(t), centreY + radius * Mathf.Cos(t), 0.2f);
             float width = 2 * radius * Mathf.Sin(cellAngle / 2) + 0.02f;   // no gaps between cells
             var basis = new Basis(Vector3.Back, -t);
-            s.Box(centre, new Vector3(width, 0.28f, chord), (i & 1) == 0 ? a : b, basis);
+            // odd cells 4 cm thicker and deeper, so neighbours no longer share top, bottom, front and back faces (#755)
+            s.Box(centre, (i & 1) == 0 ? new Vector3(width, 0.28f, chord) : new Vector3(width, 0.32f, chord + 0.04f), (i & 1) == 0 ? a : b, basis);
 
             // a line from each shoulder's side to every other cell; the rest would be clutter
             if (i % 2 == 0 || i == cells - 1)
@@ -134,9 +135,9 @@ public static class AircraftMeshBuilder
         s.Tube(new Vector3(0, 1.45f, 3.1f), new Vector3(0, 1.50f, 0.2f), 0.48f, 0.62f, paint, 8);
         s.Tube(new Vector3(0, 1.50f, 0.2f), new Vector3(0, 1.85f, -4.4f), 0.62f, 0.14f, paint, 8);
         s.Box(new Vector3(0, 1.95f, 1.2f), new Vector3(1.05f, 0.5f, 1.6f), glass);          // cabin windows
-        s.Box(new Vector3(0, 2.25f, 0.9f), new Vector3(11.0f, 0.14f, 1.55f), paint);        // wing
-        s.Box(new Vector3(-4.8f, 2.25f, 0.9f), new Vector3(1.4f, 0.15f, 1.56f), trim);      // wing tips
-        s.Box(new Vector3(4.8f, 2.25f, 0.9f), new Vector3(1.4f, 0.15f, 1.56f), trim);
+        s.Box(new Vector3(0, 2.25f, 0.9f), new Vector3(8.2f, 0.14f, 1.55f), paint);         // wing centre; the tips take over at |x| 4.1 instead of overlapping it (#755)
+        s.Box(new Vector3(-4.8f, 2.25f, 0.9f), new Vector3(1.4f, 0.14f, 1.55f), trim);      // wing tips, same thickness as the wing (#755)
+        s.Box(new Vector3(4.8f, 2.25f, 0.9f), new Vector3(1.4f, 0.14f, 1.55f), trim);
         s.Tube(new Vector3(-0.5f, 1.2f, 1.0f), new Vector3(-2.4f, 2.18f, 1.0f), 0.05f, dark, 4);   // struts
         s.Tube(new Vector3(0.5f, 1.2f, 1.0f), new Vector3(2.4f, 2.18f, 1.0f), 0.05f, dark, 4);
         s.Box(new Vector3(0, 1.85f, -4.2f), new Vector3(3.4f, 0.08f, 0.9f), paint);         // stabiliser
