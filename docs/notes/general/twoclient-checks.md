@@ -33,6 +33,10 @@ user data. Before/after runs: see PR (each script fails or passes the same way a
   `tools/test.sh`), waits for 4 GB free RAM, and the `guard_watch $$` watchdog stays.
 - Trap: a check that needs state from an earlier run (an emptied loot epoch, a cracked safe) now
   starts clean every time; pass `USERDATA=<dir>` to reproduce an old state.
+- Since sleepers (#644) the real `user://` breaks a check outright: both clients share one
+  `identity.key`, the server keeps the last run's sleeper, and whichever client proves first wakes
+  at the old spot, off the course (`[sleepers] <name> wakes at` in the server log). That made
+  `boatnetcheck` pass every other run and `steamernetcheck` fail on `main` until #792 migrated them.
 
 ## Migrating old code / open branches
 
@@ -40,8 +44,9 @@ user data. Before/after runs: see PR (each script fails or passes the same way a
   `OUT=`, `mkdir`, `CH=()/CHUNKARG=()` and `stop()` boilerplate by the source line above; replace
   `timeout N "$GODOT" --headless --path . -- --server ... > log 2>&1 &` + the wait loop by
   `tc_server N <wait> log --server ...`, each client by `tc_client`, `kill`/`stop $SERVER` by `tc_stop`.
-- Not converted yet: `tools/racecheck.sh` (four autopilot clients, own cleanup) and
-  `tools/buildnetcheck.sh` (#281, open). `tools/test.sh` keeps its own Godot finder (#269 edits it).
+- Not converted yet: `tools/racecheck.sh` (four autopilot clients, own cleanup),
+  `tools/buildnetcheck.sh` (#281, open), and `baycheck`, `campfirecheck`, `gadgetnetcheck`,
+  `parkingnetcheck`, `shopcheck`, `swimnetcheck`, `watercheck` (each open to the sleeper trap above). `tools/test.sh` keeps its own Godot finder (#269 edits it).
 
 ## How to check
 
