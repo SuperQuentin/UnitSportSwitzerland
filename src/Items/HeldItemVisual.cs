@@ -319,7 +319,7 @@ void fragment() {{
 
     public override void _Process(double delta)
     {
-        if (_player == null) return;
+        if (_player == null || Net.NetLink.Dropped(this)) return;
         float dt = (float)delta;
 
         var id = (ItemId)_player.HeldItemId;

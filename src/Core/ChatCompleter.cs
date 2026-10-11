@@ -52,6 +52,7 @@ public sealed class ChatCompleter
         ("seastate", false, true, "[0..1 | calm | chop | storm | gamey]"),
         ("water", false, true, "[E N]"),
         ("style", false, true, "[ps1 | cartoon | real- | real+ | rebuild]"),
+        ("clip", false, true, "start <name> [seconds] [delay] | stop"),
         ("spawn", true, true, "<item> [count]"),
         ("catalogue", true, true, ""),
         ("debug", true, true, ""),
@@ -236,6 +237,10 @@ public sealed class ChatCompleter
 
             case "style":
                 options = argIndex == 0 ? Styles.StyleCommand.Words : [];
+                break;
+
+            case "clip":
+                options = argIndex == 0 ? ClipRecorder.Words : [];
                 break;
 
             case "seastate":

@@ -83,11 +83,19 @@ public sealed class WheelSettings
     public float FfbKnocks { get; set; } = 0.8f;
     /// <summary>Damping, and the steering's weight when parked, 0..1.</summary>
     public float FfbWeight { get; set; } = 0.6f;
+    /// <summary>
+    /// Degrees past the vehicle's lock to the soft lock's full force: less is a harder wall. A wheel
+    /// that bounces off the lock wants more (the HORI 20°), a G29 takes 6° (#290).
+    /// </summary>
+    public float SoftLockRampDeg { get; set; } = DefaultSoftLockRampDeg;
+    public const float DefaultSoftLockRampDeg = 20f, MinSoftLockRampDeg = 3f, MaxSoftLockRampDeg = 30f;
     /// <summary>The device pushes the other way for a positive force: flips every force.</summary>
     public bool FfbInvert { get; set; }
 
     /// <summary>The preset these bindings started from, so a new device of the same kind is not re-preset.</summary>
     public string Preset { get; set; } = "";
+    /// <summary>The version of <see cref="Preset"/> these bindings have (<see cref="WheelPresets.Upgrade"/>); 0 for settings older than versions.</summary>
+    public int PresetVersion { get; set; }
 
     public void Clamp()
     {
@@ -98,6 +106,7 @@ public sealed class WheelSettings
         FfbEngine = Math.Clamp(FfbEngine, 0f, 1f);
         FfbKnocks = Math.Clamp(FfbKnocks, 0f, 1f);
         FfbWeight = Math.Clamp(FfbWeight, 0f, 1f);
+        SoftLockRampDeg = Math.Clamp(SoftLockRampDeg, MinSoftLockRampDeg, MaxSoftLockRampDeg);
         Device ??= "";
         Preset ??= "";
         Throttle ??= new();
