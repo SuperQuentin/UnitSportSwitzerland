@@ -9,6 +9,7 @@
 - `tools/release.sh --dry-run` prints the next version and changelog; `tools/release.sh` exports "Windows Desktop" (`-windows.zip`), "Linux" x86_64 (`-linux-x86_64.tar.gz`) and "macOS" universal (`-macos.tar.gz`, the `.app`) in one run and uploads all three with `gh release create vX.Y.Z`. The tarballs set Unix modes explicitly (NTFS has none): game binary and `bin/*` 0755. Godot writes macOS only as a `.zip` off a Mac, so the script unpacks it and repacks.
 - After the upload it runs `tools/deltas.sh <previous> v<new> --upload`: the delta files the game updates with (`tools/delta-updates`). Its failure does not undo the release.
 - Semver from gitmoji commits since the last `v*` tag: `BREAKING` anywhere = major; anything except fix/docs/chore/merge = minor; only `:bug:` `:ambulance:` `:recycle:` `:art:` `:white_check_mark:` = patch; only `:memo:` `:wrench:` merges = no release.
+- Feature GIFs in `test_output/release/clips/` go up as assets and lead the notes (`### Highlights`), then move to `clips/released/vX.Y.Z/` (`feature-clips`).
 - Stamps `config/version` into `project.godot` for the export, then restores the file. Output in `test_output/release/`.
 - Needs `gh` logged in, dotnet, Godot mono with export templates (`GODOT=` overrides the path, see `godot-exe`; `GODOT=godot` on WSL) and an `export_presets.cfg` ("Windows Desktop") in the repo root: it is gitignored, so the script copies it into its worktree. Zips with `zip` when present, else PowerShell.
 - The export has no `terrain_chunks/`, so the released build uses the generated fallback world.

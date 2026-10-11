@@ -15,6 +15,18 @@ vec3 style_view_normal(mat4 view, vec3 n_world) {
     return normalize((view * vec4(n_world, 0.0)).xyz);
 }
 
+// A flat face's world-space normal (unit, wound as cross(dFdy, dFdx) of the world position),
+// from the derivatives of the view-space position (VERTEX) and the inverse view matrix (#768).
+// Not from the world position: x and z reach 3 km before the floating origin shifts and y (the
+// altitude) never does, where a float steps in a fraction of a millimetre against a few
+// millimetres between pixels: the derivative across a face along a big axis is noise, the normal
+// tilts per pixel quad, and faces the sun grazes flicker across the cel terminator. View space
+// is centred on the camera, so it stays exact; a rotation keeps the cross product's sense.
+vec3 facet_normal(vec3 view_pos, mat4 inv_view) {
+    vec3 c = cross(dFdy(view_pos), dFdx(view_pos));
+    return length(c) > 1e-20 ? normalize((inv_view * vec4(c, 0.0)).xyz) : vec3(0.0, 1.0, 0.0);
+}
+
 #ifdef STYLE_CARTOON
 uniform float toon_edge = 0.08;   // width of the light/shade terminator, in N.L
 uniform float toon_rim = 0.22;    // rim strength on the lit side

@@ -84,7 +84,10 @@
   (`'` / `;`): 1 exhaust brake, 2–4 retarder thirds; the automatic blends it into the first third
   of the brake pedal. **Air**: chamber pressure lags the pedal (0.28 s on, 0.45 s off), each
   application draws the tank, the compressor refills it; under 4.5 bar the spring brakes come on.
-  Space holds the spring brakes. The automatic backs up on a press of the brake once the truck is at rest with the pedal let go (never on a brake held down to the stop), and a stopped truck holds itself on its brakes (hill hold) until the throttle goes down; with the clutch pedal both are the driver's job. Game: brakes instant, tank never drains, +15% grip, ABS at 80%,
+  A wheel's clutch pedal is its travel (`ClutchFoot`) and its H-shifter's lever is the gate,
+  out of it neutral (#290, `core/steering-wheel`); on the Automatic it is a P R N D selector
+  (`Truck.Selector`): N and P hold the box in neutral (`HeavyDriveline.HoldNeutral`), P sets the
+  spring brakes below 1.5 m/s, R is driven on the gas, D never backs up on the brake. Space holds the spring brakes. The automatic backs up on a press of the brake once the truck is at rest with the pedal let go (never on a brake held down to the stop), and a stopped truck holds itself on its brakes (hill hold) until the throttle goes down; with the clutch pedal both are the driver's job. Game: brakes instant, tank never drains, +15% grip, ABS at 80%,
   the retarder limited to 45% of the drive axle's grip, stretch braking and a fold damper on a
   folding pivot, a yaw assist; rollover threshold ×1.6. Sim has none of it.
 - **Rollover**: each section's steady lateral acceleration (speed × yaw rate, lagged 0.35 s as a
