@@ -119,8 +119,14 @@ public static partial class CarMeshBuilder
         return 0.07f * u * u;
     }
 
-    /// <summary>The front face's point at (x, y): where the bent nose is, a few millimetres proud.</summary>
-    internal static Vector3 OnFace(Dims d, float x, float y, float proud = 0.006f) =>
+    /// <summary>
+    /// What lies on the curved body (lamps, strips, badges) stands this far proud: 6 mm z-fought the
+    /// paint at range, the curve's facets eating into it (#755).
+    /// </summary>
+    internal const float Proud = 0.012f;
+
+    /// <summary>The front face's point at (x, y): where the bent nose is, <see cref="Proud"/> out.</summary>
+    internal static Vector3 OnFace(Dims d, float x, float y, float proud = Proud) =>
         Bent(d, new Vector3(x, y, d.Length * 0.5f + proud));
 
     /// <summary>A strip lying on the bent front face from x0 to x1 and y0 to y1: an intake, a grille's slot, the plate.</summary>
@@ -131,7 +137,7 @@ public static partial class CarMeshBuilder
         for (int i = 0; i <= n; i++)
         {
             float x = Mathf.Lerp(x0, x1, i / (float)n);
-            rings.Add(new[] { OnFace(d, x, y0, 0.001f), OnFace(d, x, y1, 0.001f), OnFace(d, x, y1, 0.008f), OnFace(d, x, y0, 0.008f) });
+            rings.Add(new[] { OnFace(d, x, y0, 0.001f), OnFace(d, x, y1, 0.001f), OnFace(d, x, y1, Proud), OnFace(d, x, y0, Proud) });
         }
         m.Loft(rings, new[] { colour, colour, colour, colour }, colour);
     }
@@ -304,7 +310,7 @@ public static partial class CarMeshBuilder
             var ring = new Vector3[8];
             for (int i = 0; i < 4; i++)
             {
-                ring[i] = Bent(d, on[i] + outward[i] * 0.006f);
+                ring[i] = Bent(d, on[i] + outward[i] * Proud);
                 ring[7 - i] = Bent(d, on[i] + outward[i] * 0.001f);
             }
             rings.Add(ring);
@@ -339,7 +345,7 @@ public static partial class CarMeshBuilder
             {
                 var along = path[Mathf.Min(i + 1, n - 1)] - path[Mathf.Max(i - 1, 0)];
                 var outward = new Vector3(along.Z, 0, -along.X).Normalized() * sx;
-                ring[i] = path[i] + outward * 0.006f;
+                ring[i] = path[i] + outward * Proud;
                 ring[2 * n - 1 - i] = path[i] + outward * 0.001f;
             }
             rings.Add(ring);

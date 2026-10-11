@@ -249,8 +249,10 @@ public static partial class CarMeshBuilder
             s.Box(new Vector3(0, sillCy, axR - arch - fbLen * 0.5f), new Vector3(d.Width, sillH, fbLen), lower);
             // dark splitter and diffuser under the bumpers: 1 cm below them and 1 cm past their faces,
             // not 5 mm under and flush, which z-fought at range (#755)
-            s.Box(new Vector3(0, SillY0 + 0.015f, hl - 0.24f), new Vector3(d.Width - 0.1f, 0.05f, 0.5f), Trim);
-            s.Box(new Vector3(0, SillY0 + 0.015f, -hl + 0.24f), new Vector3(d.Width - 0.1f, 0.05f, 0.5f), Trim);
+            // and ending 3 cm inside the bumper's back, which faces the wheel arch
+            float splitLen = Mathf.Min(0.5f, fbLen) - 0.03f;
+            s.Box(new Vector3(0, SillY0 + 0.015f, hl + 0.01f - splitLen * 0.5f), new Vector3(d.Width - 0.1f, 0.05f, splitLen), Trim);
+            s.Box(new Vector3(0, SillY0 + 0.015f, -hl - 0.01f + splitLen * 0.5f), new Vector3(d.Width - 0.1f, 0.05f, splitLen), Trim);
         }
         // garage aero: a lip or a splitter with canards up front, fins in the diffuser, side skirts
         if (body.FrontAero == 1)
@@ -453,7 +455,7 @@ public static partial class CarMeshBuilder
             // the Kamm tail: a spoiler across the top of the tailgate, and under it the second,
             // upright strip of rear glass between the lamps
             s.RoundedBox(new Vector3(0, d.Deck + 0.02f, -hl + 0.03f), new Vector3(tailHw * 2f - 0.1f, 0.05f, 0.14f), paint);
-            float gx = hw - 0.4f, gy0 = d.Deck - 0.2f, gy1 = d.Deck - 0.03f, gz = -hl - 0.004f;
+            float gx = hw - 0.4f, gy0 = d.Deck - 0.2f, gy1 = d.Deck - 0.03f, gz = -hl - 0.012f;   // 12 mm off the tailgate, not 4 (#755)
             s.Pane(stackalloc Vector3[] { new(-gx, gy0, gz), new(gx, gy0, gz), new(gx, gy1, gz), new(-gx, gy1, gz) }, Tinted(TailGlass));
         }
         s.Box(new Vector3(0, SillY1 + 0.03f, -hl - 0.005f), new Vector3(0.5f, 0.05f, 0.01f), Steel);   // number plate blanks
