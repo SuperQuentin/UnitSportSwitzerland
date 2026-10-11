@@ -101,4 +101,18 @@ public class FaceTests
         // the catalog has 30 emotes (HumanMeshBuilder.EmoteTable); more fall to the dance cycle
         for (int i = 0; i < 40; i++) Assert.NotEqual(FaceExpression.Neutral, FaceExpressions.ForEmote(i));
     }
+
+    [Fact]
+    public void A_dance_keeps_eyes_that_blink()
+    {
+        // #802: special eyes replace the shader's blink and glances; a dance lasts minutes
+        for (int i = FaceExpressions.FirstDanceEmote; i < 40; i++)
+        {
+            if (i == 29) continue;   // the rat dance's hearts, on purpose
+            Assert.Equal(FaceEyes.Normal, FaceExpressions.Of(FaceExpressions.ForEmote(i)).Special);
+            Assert.True(FaceExpressions.FollowsMusic(i));
+        }
+        Assert.False(FaceExpressions.FollowsMusic(1));    // cheer: a gesture
+        Assert.False(FaceExpressions.FollowsMusic(29));
+    }
 }
