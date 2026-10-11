@@ -324,6 +324,9 @@ src/Combat/              full   tools/pvpcheck.sh
 src/Items/Weapons        full   tools/pvpcheck.sh
 src/Items/               full   tools/gunshotcheck.sh
 src/Items/Radio          full   tools/sparklecheck.sh
+src/Items/Radio          full   tools/radiofocuscheck.sh
+src/Audio/MusicFocus     full   tools/radiofocuscheck.sh
+src/Audio/Live/WebRadioSpeaker full tools/radiofocuscheck.sh
 src/Items/Beat           full   tools/beatfieldcheck.sh
 src/Items/Radio          full   tools/beatfieldcheck.sh
 src/Items/               full   tools/placedcheck.sh
