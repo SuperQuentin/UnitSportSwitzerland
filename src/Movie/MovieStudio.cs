@@ -58,6 +58,13 @@ public partial class MovieStudio : Screen
     private Button _fold = null!;
     // the preview player (#779)
     private SubViewport _preview = null!;
+    // the Shots screen (#777): the library, the picked shot's settings, the stills
+    private ShotLibrary _library = null!;
+    private ShotInspector _inspector = null!;
+    private ShotThumbs _thumbs = null!;
+    private Button _shotsTab = null!, _sequencesTab = null!;
+    private bool _shotsMode;
+    private int _inspected = -1;
     private ColorRect _fade = null!;
     private PreviewCamera _previewCamera = null!;
     private Label _pausedLabel = null!;
@@ -117,6 +124,13 @@ public partial class MovieStudio : Screen
         root.AddChild(bar);
         _title = UiKit.Text("", UiTheme.FontBody, Colors.White, bold: true);
         bar.AddChild(_title);
+        // the modes (#777): set up shots, or cut them into sequences
+        bar.AddChild(UiKit.Spacer(w: 16));
+        var tabs = new ButtonGroup();
+        _shotsTab = Tool(bar, "Shots", "Set up the shots: rigs, framing, shake, beat links (Ctrl+1)", () => SetMode(true));
+        _sequencesTab = Tool(bar, "Sequences", "Cut the shots into the movie on the timeline (Ctrl+2)", () => SetMode(false));
+        foreach (var t in new[] { _shotsTab, _sequencesTab }) { t.ToggleMode = true; t.ButtonGroup = tabs; }
+        _sequencesTab.ButtonPressed = true;
         bar.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill, MouseFilter = MouseFilterEnum.Ignore });
         _pausedLabel = UiKit.Text("", UiTheme.FontSmall, UiTheme.TextDim);
         bar.AddChild(_pausedLabel);
@@ -132,6 +146,14 @@ public partial class MovieStudio : Screen
         upper.SizeFlagsVertical = SizeFlags.ExpandFill;
         upper.SizeFlagsStretchRatio = 1.6f;
         split.AddChild(upper);
+
+        _thumbs = new ShotThumbs(_stage, origin, ActorAt);
+        AddChild(_thumbs);
+        _library = new ShotLibrary(_thumbs) { Visible = false };
+        _library.Picked += i => { _timeline.Pick(i); RefreshCameras(); };
+        _library.AddShot.Pressed += NewShot;
+        _library.AddGroup.Pressed += NewGroup;
+        upper.AddChild(_library);
 
         var playerColumn = UiKit.VBox(4);
         playerColumn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
@@ -183,6 +205,11 @@ public partial class MovieStudio : Screen
         side.CustomMinimumSize = new Vector2(300, 0);
         upper.AddChild(side);
         _sidePanel = side;
+        _inspector = new ShotInspector(() => MovieSession.Project, () => _stage.Time) { Visible = false };
+        _inspector.FrameFromView += () => KeyFromView(add: false);
+        _inspector.AddMove += () => KeyFromView(add: true);
+        _inspector.Changed += () => { _thumbs.Invalidate(); _timeline.Resync(); };
+        upper.AddChild(_inspector);
         // the camera track: a key from the view, the view through the track, and the key's options
         _fly = Tool(side, "✈ Fly", "Fly the camera freely: mouse to look, WASD, Space / Shift up and down, Ctrl faster, wheel speed; F or Esc for the cursor (pad: L3)", () => _camera.SetFlying(!_camera.Flying));
         _camPicker = new OptionButton { TooltipText = "The camera keys go to (1-9; click a camera's name on the timeline)" };
@@ -363,6 +390,7 @@ public partial class MovieStudio : Screen
         if (_import != null) StepImport();
         float shuttle = Input.GetActionStrength(Forward) - Input.GetActionStrength(Backward);
         if (_lookThrough.ButtonPressed) ShowThroughCamera(); else SetFade(0);
+        if (_shotsMode) StepShots();
         _gizmos.Hidden = _lookThrough.ButtonPressed;
         if (_camPicker.ItemCount != MovieSession.Project.Cameras.Count) RefreshCameras();
         // a pad's X held: cut to the picked camera (a tap splits, on release); a hold is real time, whatever the game does
@@ -480,6 +508,10 @@ public partial class MovieStudio : Screen
                 case Key.D when k.CtrlPressed: Duplicate(); break;
                 case Key.Tab: NextActor(); break;
                 case Key.H: ToggleFold(); break;
+                case Key.Key1 when k.CtrlPressed: SetMode(true); break;
+                case Key.Key2 when k.CtrlPressed: SetMode(false); break;
+                case Key.N when _shotsMode: NewShot(); break;
+                case Key.G when _shotsMode: KeyFromView(add: false); break;
                 case Key.F: _camera.SetFlying(true); break;
                 // flying: W A S D Q E belong to the view, not to the shortcuts above (S, D)
                 case Key.W or Key.A or Key.D or Key.Q or Key.E when _camera.Steering: break;
@@ -562,6 +594,122 @@ public partial class MovieStudio : Screen
         bool show = !_editsRow.Visible;
         _editsRow.Visible = _sidePanel.Visible = show;
         _fold.Text = show ? "Enlarge" : "Shrink";
+    }
+
+    // ---- the Shots screen (#777) -----------------------------------------------------------------
+
+    /// <summary>
+    /// Shots (the library, the player looking through the picked shot, its settings) or Sequences (the
+    /// camera tools and the timeline). The player and the transport stay in both.
+    /// </summary>
+    private void SetMode(bool shots)
+    {
+        _shotsMode = shots;
+        _shotsTab.SetPressedNoSignal(shots);
+        _sequencesTab.SetPressedNoSignal(!shots);
+        _library.Visible = _inspector.Visible = shots;
+        _sidePanel.Visible = !shots;
+        _editsRow.Visible = !shots;
+        if (shots)
+        {
+            // the player films through the shot being set up, until the view is flown to frame it
+            _viewSource.Selected = 1;
+            _lookThrough.ButtonPressed = true;
+            _inspected = -1;
+            _thumbs.Invalidate();
+        }
+        else _thumbs.Hovered = -1;
+    }
+
+    /// <summary>A new shot from where the view is, at the playhead, picked and shown in the settings.</summary>
+    private void NewShot()
+    {
+        var p = MovieSession.Project;
+        var cam = p.AddCamera();
+        cam.Name = $"Shot {p.Cameras.Count}";
+        if (_timeline.PickedCamera >= 0 && _timeline.PickedCamera < p.Cameras.Count - 1) cam.Group = p.Cameras[_timeline.PickedCamera].Group;
+        _timeline.Pick(p.Cameras.Count - 1);
+        RefreshCameras();
+        SetKey();
+        _thumbs.Invalidate();
+    }
+
+    /// <summary>
+    /// <c>--movieshots</c>, for screenshots (#777): the Shots screen with a chase (engine shake, a lens beat
+    /// link) and a lead on the first actor, a wide world shot, in two groups, the chase picked and hovered.
+    /// </summary>
+    public void ScreenshotShots()
+    {
+        var p = MovieSession.Project;
+        if (p.Lanes.Count == 0) return;
+        SetMode(true);
+        var chase = p.Camera;
+        chase.Name = "Wing chase"; chase.Group = "Take-off"; chase.Rig = ShotRig.Chase; chase.Target = 0; chase.Smoothing = 0.5f;
+        chase.Keys.Clear();
+        chase.Shake = new ShakeSettings { Style = ShakeStyle.Engine, Strength = 0.4f };
+        chase.Links.Add(new BeatLink { Param = BeatParam.Lens, Shape = BeatShape.Pulse, Amount = 12, Every = 1 });
+        var lead = p.AddCamera();
+        lead.Name = "Lead low"; lead.Group = "Take-off"; lead.Rig = ShotRig.Lead; lead.Target = 0; lead.Smoothing = 0.3f;
+        var wide = p.AddCamera();
+        wide.Name = "Runway wide"; wide.Group = "Landing";
+        _timeline.Pick(2);
+        SetKey();
+        _timeline.Pick(0);
+        RefreshCameras();
+        _inspected = -1;
+        _thumbs.Invalidate();
+        Callable.From(() => _thumbs.Hovered = 1).CallDeferred();
+    }
+
+    /// <summary>The picked shot into a new group, named in a prompt.</summary>
+    private void NewGroup()
+    {
+        var p = MovieSession.Project;
+        int i = _timeline.PickedCamera;
+        if (i < 0 || i >= p.Cameras.Count) return;
+        Modal.Prompt(this, "New group", "The picked shot goes in it", "", "Take-off",
+            name => name.Trim().Length == 0 ? "Give it a name" : null, name =>
+        {
+            if (name.Trim().Length == 0) return;
+            p.Cameras[i].Group = name.Trim();
+            _inspected = -1;
+            _thumbs.Invalidate();
+        });
+    }
+
+    /// <summary>
+    /// "Frame from view" (or with <paramref name="add"/>, "Add move"): the picked shot keyed from the view
+    /// at the playhead, in its actor's frame if it follows one.
+    /// </summary>
+    private void KeyFromView(bool add)
+    {
+        var p = MovieSession.Project;
+        int i = _timeline.PickedCamera;
+        var at = _origin.ToGlobal(_camera.GlobalPosition);
+        var key = p.FrameFromView(i, _stage.Time, _stage.Mount, at.E, at.N, at.Alt, _camera.GlobalTransform.Basis.GetRotationQuaternion(), _camera.Lens, add);
+        if (key == null)
+        {
+            Modal.Inform(this, "Nothing to follow here", "The actor this shot follows has no clip at this time.");
+            return;
+        }
+        _timeline.SelectKey(key);
+        _timeline.Resync();
+        _inspected = -1;
+        _thumbs.Invalidate();
+        // back to looking through the shot, now framed
+        _lookThrough.ButtonPressed = true;
+    }
+
+    /// <summary>The Shots screen per frame: the library's rows, and the settings of the picked shot.</summary>
+    private void StepShots()
+    {
+        var p = MovieSession.Project;
+        _library.Refresh(p, _timeline.PickedCamera);
+        if (_inspected != _timeline.PickedCamera)
+        {
+            _inspected = _timeline.PickedCamera;
+            _inspector.Show(_inspected);
+        }
     }
 
     /// <summary>Out of the editor, straight back into the game where it was left.</summary>

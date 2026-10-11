@@ -12,6 +12,7 @@ touches its topic; search with `grep -ril <word> docs/notes/movie`.
 - `movie-camera` — camera track (smooth/linear/cut keys, lens, aim at an actor, v3), studio view orbit/free/track, timeline zoom, cut all and the blade (#669)
 - `movie-cameras` — several named cameras, the Program row of cuts, picking, live cutting (C, hold pad X), look through program or camera, gizmos, v4 (#675)
 - `movie-shots` — shots (#776): rigs World/Lead/Chase/Mount and their frames, the follow spring as a pure function of time, shake, beat links on the movie's beats, sequences, transitions, file v6
+- `movie-shots-screen` — the Shots screen (#777): mode tabs, library rows with stills and a hover picture (`ShotThumbs`), the inspector (rig, follows, offsets, lens, shake, beat links), Frame from view (G), N
 - `movie-world` — the recorded world (#775): `ReplayWatch` one-line joins, groups and parts written only when they move, `WorldRing`/`WorldTrack`, the World row, `WorldGhosts`, the live world hidden, looks saved in `user://movies/looks/`
 - `movie-puppets` — `FootPlayer.Puppet`: no synchronizers, no interpolator, hiding with ProcessMode, `RidingWith` remapped to puppets
 

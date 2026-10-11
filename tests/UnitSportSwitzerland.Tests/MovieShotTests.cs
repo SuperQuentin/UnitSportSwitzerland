@@ -185,6 +185,19 @@ public class MovieShotTests
         Assert.False(p.ShotPose(p.Cameras.IndexOf(p.AddCamera()), 5, null, out _, out _));
     }
 
+    [Fact]
+    public void ASmoothChaseStaysBehindAFastActor()
+    {
+        var p = Walker(out int lane);
+        var cam = p.Camera;
+        cam.Rig = ShotRig.Chase; cam.Target = lane; cam.Smoothing = 0.5f;
+        Assert.True(p.ShotPose(0, 9, null, out var pose, out _));
+        // the walker at N0 + 18 m at 9 s, the chase 7 m behind and 2 m up
+        Assert.Equal(N0 + 18 - 7, pose.N, 1);
+        Assert.Equal(E0, pose.E, 1);
+        Assert.Equal(500 + ShotMath.PartHeight(TargetPart.Body) + 2, pose.Alt, 1);
+    }
+
     private static CameraKey Key(double t, double e) => new() { T = t, E = e, N = N0, Alt = 500, Lens = 35, Ease = KeyEase.Cut };
 
     [Fact]
