@@ -61,3 +61,5 @@ numbers: nothing is sent, the server derives the slot from its own plan.
   in the street; B, at the far end of the car park, sees every sleeper drawn, then the sleeper go and the
   vehicle stand in its bay, the car climb the ramp and leave, and the bay refill after the respawn wait.
   Windowed (`WINDOWED=1`) both save `test_output/hallcar_*.png`.
+- **Movie studio** (#782): each look's instancer calls `Movie.ReplayWatch.Instanced` when made and again in `Show`,
+  so a recording copies the instances again when a car is undrawn or drawn back (`movie/movie-world`).
