@@ -307,48 +307,48 @@
 30013	Build / Stairs - Metal
 2300.1	Build / Wall - Metal
 2880	Build / WindowWall - Metal
-18743.8	Cars / AE85 Levin
-18429.5	Cars / AE85 Levin (parked)
-1006.1	Cars / AE86 coupe
-799.5	Cars / AE86 coupe (parked)
-1397.3	Cars / AE86 hatch
-800.2	Cars / AE86 hatch (parked)
-22119.2	Cars / BNR32
-21493	Cars / BNR32 (parked)
-22295.6	Cars / BNR34
-21982.3	Cars / BNR34 (parked)
-19216	Cars / CE9A Evo III
-18893.8	Cars / CE9A Evo III (parked)
-19359.1	Cars / CN9A Evo IV
-19155.3	Cars / CN9A Evo IV (parked)
-17524.4	Cars / CT9A Evo VII
-17289.8	Cars / CT9A Evo VII (parked)
-17963.8	Cars / DC2 Type R
-17758.5	Cars / DC2 Type R (parked)
-12419.2	Cars / EG6 hatch
-12110.2	Cars / EG6 hatch (parked)
-13695.3	Cars / EK9 Type R
-13386.2	Cars / EK9 Type R (parked)
-19932.3	Cars / ER34 Skyline
-19721	Cars / ER34 Skyline (parked)
-20898.8	Cars / FC3S
-20664.5	Cars / FC3S (parked)
-24461	Cars / FD3S
-24138.9	Cars / FD3S (parked)
-22525	Cars / GC8 rally saloon
-21942	Cars / GC8 rally saloon (parked)
-23782.6	Cars / JZA80 Supra
-23471.6	Cars / JZA80 Supra (parked)
-25440	Cars / NA1 NSX
-25250.8	Cars / NA1 NSX (parked)
-16919.5	Cars / NA6CE Roadster
-16705.5	Cars / NA6CE Roadster (parked)
-16677.8	Cars / NB8C Roadster
-16437.3	Cars / NB8C Roadster (parked)
-19603.8	Cars / PS13 Sileighty
-19392.5	Cars / PS13 Sileighty (parked)
-19718.3	Cars / RPS13 180SX
-19392.5	Cars / RPS13 180SX (parked)
+18447.8	Cars / AE85 Levin
+18133.5	Cars / AE85 Levin (parked)
+711.4	Cars / AE86 coupe
+502.5	Cars / AE86 coupe (parked)
+1101.3	Cars / AE86 hatch
+504.2	Cars / AE86 hatch (parked)
+21823.2	Cars / BNR32
+21197	Cars / BNR32 (parked)
+21999.6	Cars / BNR34
+21686.3	Cars / BNR34 (parked)
+18920	Cars / CE9A Evo III
+18597.8	Cars / CE9A Evo III (parked)
+19063.1	Cars / CN9A Evo IV
+18859.3	Cars / CN9A Evo IV (parked)
+17436.8	Cars / CT9A Evo VII
+17199.8	Cars / CT9A Evo VII (parked)
+17670.1	Cars / DC2 Type R
+17462.5	Cars / DC2 Type R (parked)
+12123.3	Cars / EG6 hatch
+11814.2	Cars / EG6 hatch (parked)
+13399.3	Cars / EK9 Type R
+13090.2	Cars / EK9 Type R (parked)
+19638.6	Cars / ER34 Skyline
+19425	Cars / ER34 Skyline (parked)
+20605.2	Cars / FC3S
+20368.4	Cars / FC3S (parked)
+24164	Cars / FD3S
+23841.9	Cars / FD3S (parked)
+22228	Cars / GC8 rally saloon
+21645	Cars / GC8 rally saloon (parked)
+23531.6	Cars / JZA80 Supra
+23220.6	Cars / JZA80 Supra (parked)
+25146.3	Cars / NA1 NSX
+24954.8	Cars / NA1 NSX (parked)
+16626.8	Cars / NA6CE Roadster
+16410.5	Cars / NA6CE Roadster (parked)
+16384.1	Cars / NB8C Roadster
+16141.3	Cars / NB8C Roadster (parked)
+19310.1	Cars / PS13 Sileighty
+19096.5	Cars / PS13 Sileighty (parked)
+19422.3	Cars / RPS13 180SX
+19096.5	Cars / RPS13 180SX (parked)
 1158.3	Cars / Rental kart
 726.3	Cars / Rental kart (parked)
 616.1	Cars / Rental kart - Army M 28 148
@@ -366,22 +366,22 @@
 1472.1	Cars / Rental kart - Yellow no. 18
 1472.1	Cars / Rental kart - cornering on three wheels
 1099.7	Cars / Rental kart - tipped over
-19600.8	Cars / S13 Silvia
-19392.5	Cars / S13 Silvia (parked)
-18296	Cars / SW20 MR2
-18062.9	Cars / SW20 MR2 (parked)
-6012.8	Cars / XP90 Yaris
-5794.2	Cars / XP90 Yaris (parked)
-5540.4	Cars / XW20 Prius
-5356.8	Cars / XW20 Prius (parked)
-5567	Cars / XW30 Prius
-5397.1	Cars / XW30 Prius (parked)
-18315.8	Cars / Z33
-18108.7	Cars / Z33 (parked)
-2677.5	Cars / ZN6
-2353.4	Cars / ZN6 (parked)
-13180.6	Cars / ZZW30 MR-S
-12973.5	Cars / ZZW30 MR-S (parked)
+19307.1	Cars / S13 Silvia
+19096.5	Cars / S13 Silvia (parked)
+18001.4	Cars / SW20 MR2
+17765.9	Cars / SW20 MR2 (parked)
+5710.5	Cars / XP90 Yaris
+5491.9	Cars / XP90 Yaris (parked)
+5237.3	Cars / XW20 Prius
+5053.6	Cars / XW20 Prius (parked)
+5263.8	Cars / XW30 Prius
+5093.8	Cars / XW30 Prius (parked)
+18021.1	Cars / Z33
+17811.7	Cars / Z33 (parked)
+2382.5	Cars / ZN6
+2058.4	Cars / ZN6 (parked)
+12886.9	Cars / ZZW30 MR-S
+12677.5	Cars / ZZW30 MR-S (parked)
 2234.4	Clothes / Bee stockings
 293.1	Clothes / Bell collar
 788.1	Clothes / Big pink bow
@@ -1003,8 +1003,8 @@
 83.3	Parts / Telehandler boom
 29.3	Parts / Wheel loader bucket
 1288	Parts / Wheel loader forks
-9582.4	Rides / Airstairs
-9061.6	Rides / Airstairs (parked)
+8622.4	Rides / Airstairs
+8101.6	Rides / Airstairs (parked)
 3736.4	Rides / Compact roller
 3413.1	Rides / Compact roller (parked)
 48699.1	Rides / Excavator
@@ -1045,42 +1045,42 @@
 7753.3	Terrain / Traffic light - Geneva
 7262.4	Terrain / Traffic light - Vaud
 42303.3	Trailer / Drognens dormitory
-2667	Trucks and buses / Arocs 3240 8x4 mixer
-2075.3	Trucks and buses / Arocs 3240 8x4 mixer (parked)
-15117.8	Trucks and buses / Arocs 3245 8x4 tipper
-14862.7	Trucks and buses / Arocs 3245 8x4 tipper (parked)
-43579	Trucks and buses / Citaro G articulated
-75668.6	Trucks and buses / Citaro G articulated (parked)
-49068.8	Trucks and buses / Citaro city bus
-48808.8	Trucks and buses / Citaro city bus (parked)
-3753.3	Trucks and buses / Claas Lexion 6800
-3541.8	Trucks and buses / Claas Lexion 6800 (parked)
-1843.7	Trucks and buses / Fendt 724 Vario
-1545.8	Trucks and buses / Fendt 724 Vario (parked)
-1545.8	Trucks and buses / Fendt 724 Vario + Disc mower 3 m
-1545.8	Trucks and buses / Fendt 724 Vario + Reversible plough
-1545.8	Trucks and buses / Fendt 724 Vario + Seed drill 3 m
-19280.7	Trucks and buses / Ford F-150 Raptor
-18711	Trucks and buses / Ford F-150 Raptor (parked)
-14023.5	Trucks and buses / Iveco Trakker 6x6 lorry
-13768.5	Trucks and buses / Iveco Trakker 6x6 lorry (parked)
-2700.1	Trucks and buses / MAN TGS 26.440 rigid
-2075.3	Trucks and buses / MAN TGS 26.440 rigid (parked)
-2075.3	Trucks and buses / MAN TGS 26.440 rigid + Drawbar trailer
-2075.3	Trucks and buses / MAN TGS 26.440 rigid + Jetski trailer
-2075.3	Trucks and buses / MAN TGS 26.440 rigid + Speedboat trailer
-2075.3	Trucks and buses / MAN TGS 26.440 rigid + Tipping trailer
-11134.8	Trucks and buses / Mercedes-Benz G 300 CDI
-10921.8	Trucks and buses / Mercedes-Benz G 300 CDI (parked)
-37325.8	Trucks and buses / Mowag Duro II 4x4
-37070.6	Trucks and buses / Mowag Duro II 4x4 (parked)
-3120.4	Trucks and buses / Scania R 450 tractor
-2796.4	Trucks and buses / Scania R 450 tractor (parked)
-2796.4	Trucks and buses / Scania R 450 tractor + Curtainsider 13.6 m
-2796.4	Trucks and buses / Scania R 450 tractor + Fuel tanker
-2796.4	Trucks and buses / Scania R 450 tractor + Timber trailer
-253784.2	Trucks and buses / Setra S 516 HD coach
-253396.6	Trucks and buses / Setra S 516 HD coach (parked)
+653.6	Trucks and buses / Arocs 3240 8x4 mixer
+61.8	Trucks and buses / Arocs 3240 8x4 mixer (parked)
+13104.3	Trucks and buses / Arocs 3245 8x4 tipper
+12849.3	Trucks and buses / Arocs 3245 8x4 tipper (parked)
+615.7	Trucks and buses / Citaro G articulated
+393.9	Trucks and buses / Citaro G articulated (parked)
+622.3	Trucks and buses / Citaro city bus
+361.9	Trucks and buses / Citaro city bus (parked)
+2745.3	Trucks and buses / Claas Lexion 6800
+2533.8	Trucks and buses / Claas Lexion 6800 (parked)
+835.7	Trucks and buses / Fendt 724 Vario
+537.8	Trucks and buses / Fendt 724 Vario (parked)
+537.8	Trucks and buses / Fendt 724 Vario + Disc mower 3 m
+537.8	Trucks and buses / Fendt 724 Vario + Reversible plough
+537.8	Trucks and buses / Fendt 724 Vario + Seed drill 3 m
+18320.7	Trucks and buses / Ford F-150 Raptor
+17751	Trucks and buses / Ford F-150 Raptor (parked)
+12010.1	Trucks and buses / Iveco Trakker 6x6 lorry
+11755	Trucks and buses / Iveco Trakker 6x6 lorry (parked)
+686.7	Trucks and buses / MAN TGS 26.440 rigid
+61.8	Trucks and buses / MAN TGS 26.440 rigid (parked)
+61.8	Trucks and buses / MAN TGS 26.440 rigid + Drawbar trailer
+61.8	Trucks and buses / MAN TGS 26.440 rigid + Jetski trailer
+61.8	Trucks and buses / MAN TGS 26.440 rigid + Speedboat trailer
+61.8	Trucks and buses / MAN TGS 26.440 rigid + Tipping trailer
+10094.8	Trucks and buses / Mercedes-Benz G 300 CDI
+9881.8	Trucks and buses / Mercedes-Benz G 300 CDI (parked)
+35965.8	Trucks and buses / Mowag Duro II 4x4
+35710.6	Trucks and buses / Mowag Duro II 4x4 (parked)
+1107	Trucks and buses / Scania R 450 tractor
+783	Trucks and buses / Scania R 450 tractor (parked)
+783	Trucks and buses / Scania R 450 tractor + Curtainsider 13.6 m
+783	Trucks and buses / Scania R 450 tractor + Fuel tanker
+783	Trucks and buses / Scania R 450 tractor + Timber trailer
+1465.4	Trucks and buses / Setra S 516 HD coach
+1077.8	Trucks and buses / Setra S 516 HD coach (parked)
 2.2	Unlisted / BoatMeshBuilder.RunaboutWheel
 28.3	Unlisted / FarmStandVisual.StandMesh
 160.5	Unlisted / RadioBody.Mesh

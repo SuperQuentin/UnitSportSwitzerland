@@ -7,10 +7,8 @@
   `ChunkFormat.SpacingM`, currently 1 m — see the road-collision-merge entry above for how it
   gets blended toward road height, and a second small `ConcavePolygonShape3D` body for bridge
   decks);
-  `shaders/ps1_terrain.gdshader` does vertex snap, flat shading via derivatives, palette
-  bands, Bayer dither, fog. Fidelity knobs: `rendering/scaling_3d/scale` (0.75) and the
-  per-shader `snap_resolution` (640x480) — lower both for a grittier PS1 look, raise for
-  crispness.
+  `shaders/ps1_terrain.gdshader` does flat shading via derivatives, palette
+  bands, Bayer dither, fog. Fidelity knobs: `rendering/scaling_3d/scale` (0.75) (lower for a grittier look). The vertex snap is gone (#788, `general/zfight`).
   **The 3D renders at the window's real pixels times `Scaling3DScale`; the UI lays out at a
   fixed 1152x648 and is scaled to the window** (`display/window/stretch/mode = "canvas_items"`,
   `aspect = "expand"`: a non-16:9 window gets a wider or taller view, no bars, no distortion).

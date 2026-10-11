@@ -74,7 +74,7 @@ public static class ZFightCheck
                 better++;
             }
             if (hits.Count > 0 || verdict.Length > 0)
-                GD.Print($"[{Tag}] {key}: {ZFightScan.Describe(scene, hits)}{verdict}");
+                GD.Print($"[{Tag}] {key}: {ZFightScan.Describe(scene, hits, CmdArgs.Int("--zfightplaces") ?? 3)}{verdict}");
         }
 
         GD.Print(string.Create(ci,
@@ -123,6 +123,6 @@ public static class ZFightCheck
             "# A model over its line (or a new one with any) fails the check. Lower it with --zfightcheck update.",
         };
         lines.AddRange(areas.Select(p => string.Create(CultureInfo.InvariantCulture, $"{p.Value:0.#}\t{p.Key}")));
-        File.WriteAllLines(ProjectSettings.GlobalizePath(BaselinePath), lines);
+        File.WriteAllText(ProjectSettings.GlobalizePath(BaselinePath), string.Join('\n', lines) + '\n');   // LF on every OS
     }
 }
