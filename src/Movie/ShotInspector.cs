@@ -165,13 +165,14 @@ public partial class ShotInspector : ScrollContainer
         var title = UiKit.Text("Beat links", UiTheme.FontSmall, UiTheme.Amber, bold: true);
         title.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         linksHead.AddChild(title);
-        var add = SmallButton("+ Link", "A camera setting that follows the beat of the sequence's music (or the markers)");
+        var add = SmallButton("Link", "A camera setting that follows the beat of the sequence's music (or the markers)");
         add.Pressed += () =>
         {
             cam.Links.Add(new BeatLink { Param = BeatParam.Lens, Shape = BeatShape.Pulse, Amount = 10, Every = 1 });
             Changed?.Invoke();
             Callable.From(() => Show(_index)).CallDeferred();
         };
+        add.Icon = Icons.Plus;
         linksHead.AddChild(add);
         _box.AddChild(linksHead);
         if (cam.Links.Count == 0)
@@ -188,7 +189,8 @@ public partial class ShotInspector : ScrollContainer
         var top = UiKit.HBox(3);
         top.AddChild(Options(Params, (int)link.Param, i => { link.Param = (BeatParam)i; Changed?.Invoke(); }, "What follows the beat"));
         top.AddChild(Options(Shapes, (int)link.Shape, i => { link.Shape = (BeatShape)i; Changed?.Invoke(); Callable.From(() => Show(_index)).CallDeferred(); }, "How it moves"));
-        var remove = SmallButton("✕", "Remove this beat link");
+        var remove = SmallButton("Remove", "Remove this beat link");
+        remove.Icon = Icons.Trash;
         remove.Pressed += () => { cam.Links.Remove(link); Changed?.Invoke(); Callable.From(() => Show(_index)).CallDeferred(); };
         top.AddChild(remove);
         box.AddChild(top);

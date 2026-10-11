@@ -21,3 +21,11 @@ The editor's second mode tab (Ctrl+2). The model: `movie-shots` (sequences, cuts
   cuts inside the stretch go; the new ones are plain cuts to edit.
 - Screenshots: `--moviestudio 13 9 --moviewipe --uishot <png> 17` (a 2 s wipe into a lead shot, the playhead in it,
   a second sequence tab).
+
+## The editor's buttons and keys (#779)
+
+- Every editor button is an icon and one word (`Tool(into, icon, word, tooltip, action)`); the icons are drawn in code
+  like the rest (`Ui/Icons`: SkipBack, PlayBack, Pause, StepBack/Forward, Scissors, Key, Camera, Fly, Music, Wand,
+  ZoomIn/Out, Fit, Folder, Save, Copy, Enlarge, Help). The tooltip carries the full description and the shortcut.
+- **Keys** (or `?`): the shortcut sheet for the keyboard and the pad (VR controllers play the pad through `XrPad`),
+  in place of the old 11 px strip of shortcuts.
