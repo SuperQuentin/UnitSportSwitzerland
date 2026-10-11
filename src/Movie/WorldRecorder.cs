@@ -319,7 +319,13 @@ public sealed class WorldRecorder
             Mesh = src.Mesh,
             InstanceCount = src.InstanceCount,
         };
-        if (src.InstanceCount > 0) mm.Buffer = src.Buffer;
+        // one by one: a whole buffer is refused by the headless renderer, and a few dozen cars cost nothing
+        for (int k = 0; k < src.InstanceCount; k++)
+        {
+            mm.SetInstanceTransform(k, src.GetInstanceTransform(k));
+            if (src.UseColors) mm.SetInstanceColor(k, src.GetInstanceColor(k));
+            if (src.UseCustomData) mm.SetInstanceCustomData(k, src.GetInstanceCustomData(k));
+        }
         mm.VisibleInstanceCount = src.VisibleInstanceCount;
         var copy = new MultiMeshInstance3D
         {
