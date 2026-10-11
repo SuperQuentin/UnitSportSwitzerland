@@ -168,6 +168,11 @@ public partial class PlayerInput : Node
     /// <summary>Hold on foot for the emote wheel (<see cref="Player.EmoteWheel"/>, #404): dances and gestures, any time.</summary>
     public const string EmoteWheel = "emote_wheel";
     /// <summary>
+    /// The replay buffer's last minutes into the movie studio (#638). Keyboard only: a pad and VR do it
+    /// from the pause menu (Save clip), which they reach with Start / the menu button.
+    /// </summary>
+    public const string SaveClip = "save_clip";
+    /// <summary>
     /// Tap Alt: the mouse is let go in game, MMO style (#654, <see cref="CursorToggle"/>, which reads the key
     /// itself to tell a tap from Alt+Enter). Bound for the hints and the help only. No pad or VR way: a pad
     /// has no cursor, VR points with the laser.
@@ -305,6 +310,15 @@ public partial class PlayerInput : Node
     /// <summary>Held, for buttons. For an axis-bound action it means past the deadzone (a wheel's pedal: half way).</summary>
     public static bool Held(string action) =>
         !Blocked && (Input.IsActionPressed(ActionName(action)) || SteeringWheel.Strength(action) > 0.5f);
+
+    /// <summary>
+    /// Held on a key or a button, leaving out a wheel's pedal: for a control that takes the pedal's
+    /// travel separately (<see cref="WheelPedal"/>), as the clutch does (#290).
+    /// </summary>
+    public static bool HeldButton(string action) => !Blocked && Input.IsActionPressed(ActionName(action));
+
+    /// <summary>A steering wheel's pedal behind <paramref name="action"/>, 0..1; 0 without one.</summary>
+    public static float WheelPedal(string action) => Blocked ? 0f : SteeringWheel.Strength(action);
 
     /// <summary>0..1 — a trigger's or a pedal's travel, or 1 for a pressed key.</summary>
     public static float Strength(string action) =>
@@ -620,6 +634,8 @@ public partial class PlayerInput : Node
         Bind(CarDoor, Keys(Key.G), Button(JoyButton.X));
         Bind(Help, Keys(Key.F1));
         Bind(DebugMenu, Keys(Key.F9));
+        // F5 is free everywhere: the quick-save key of other games, and this keeps the last minutes
+        Bind(SaveClip, Keys(Key.F5));
         Bind(FreeCursor, Keys(Key.Alt));
 #if PLAYTEST
         // a pad opens it with L3+R3 together (PlaytestPanel reads the chord): no single button is free

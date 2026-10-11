@@ -18,6 +18,9 @@ namespace UnitSport.Vehicles;
 /// </summary>
 public partial class VehicleManager : Node3D, Core.IOriginContainer
 {
+    /// <summary>Recorded for the movie studio (#775).</summary>
+    public override void _EnterTree() => Movie.ReplayWatch.Container(this);
+
     public const string NodeName = "Vehicles";
 
     public ChunkManager? Terrain { get; set; }

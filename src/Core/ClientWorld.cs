@@ -53,6 +53,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
 
     /// <summary>Esc / Start with nothing else open: the shell shows the pause menu.</summary>
     public event Action? PauseRequested;
+    /// <summary>F5: open the movie editor over the world (#779); a pad and VR use Pause > Movie studio.</summary>
+    public event Action? MovieStudioRequested;
 
     /// <summary>The server dropped this client, or kicked it (the reason, for the menu to show).</summary>
     public event Action<string>? Disconnected;
@@ -104,6 +106,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         (() => Has("--setupcheck"), Player.CarSetups.Check),
         (() => Has("--motocheck"), Player.Motorbike.Check),
         (() => Has("--truckcheck"), Player.HeavyCheck.Run),
+        (() => Has("--cargearcheck"), Player.CarGearboxCheck.Run),
         (() => Items.IconSheet.Requested, Items.IconSheet.Run),
         (() => Loot.LootChanceCheck.Requested, Loot.LootChanceCheck.Run),
         (() => Loot.ShopCheck.Requested, Loot.ShopCheck.Run),
@@ -348,6 +351,8 @@ public partial class ClientWorld : Node3D, IOriginContainer
         AddChild(new World.WaterSurface { Name = "WaterSurface" });
         ApplyNearTrees();
         ApplyPhotos();
+        // the last minutes of everyone in view, for the movie studio (#638)
+        AddChild(new Movie.ReplayRecorder());
         // tap Alt: the mouse is free to click what is on screen, the game going on (#654)
         AddChild(new CursorToggle(() => MenuOpen?.Invoke() == true));
         Audio.Surfaces.Origin = origin;
@@ -794,6 +799,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
             && Items.DropCheck.Requested && Items.DropCheck.Create(() => LocalPlayer, () => _players, items) is { } soloDrop)
             AddChild(soloDrop);
         Vehicles.VehicleManager.Refused += Toast;
+        Movie.MovieSession.Said += Toast;
         Vehicles.PassengerService.Said += Toast;
 
         // Chat exists from boot, not only once connected: offline it runs its commands itself
@@ -1050,6 +1056,14 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// </summary>
     private void TrackLoading(double delta)
     {
+        // --seat puts its own screen up from the first moment there is a world (a command-line run
+        // has no loading screen), and keeps it until the seat is taken, Ready or not
+        if (_bootDone && !_seatAsked && Launch.Mode == GameMode.Explore && SeatStart.Requested is { } seatKind)
+        {
+            _seatAsked = true;
+            _seatStart = new SeatStart(this, seatKind);
+        }
+        if (_seatStart is { Done: false } seating && Stage is LoadStage.Ready or LoadStage.Failed) seating.Step(delta);
         if (!_bootDone || Stage is LoadStage.Ready or LoadStage.Failed || _chunks == null) return;
         _loadClock += delta;
 
@@ -1086,8 +1100,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
             return;
         }
 
-        // Explore from the menus starts on foot, on open ground (#517), behind this screen
-        if (Launch is { Mode: GameMode.Explore, FromCommandLine: false } && !_groundStarted)
+        // Explore from the menus starts on foot, on open ground (#517), behind this screen; so does
+        // a --seat run, which then takes its seat here too, so nothing is played before it is in
+        if ((Launch is { Mode: GameMode.Explore, FromCommandLine: false } || _seatStart != null) && !_groundStarted)
         {
             _groundStarted = true;
             if (!_onFoot && _player == null)
@@ -1095,11 +1110,17 @@ public partial class ClientWorld : Node3D, IOriginContainer
                 AddChild(_player = new FootPlayer { Name = "Player", Terrain = _chunks });
                 EnterFootMode(_player);
                 _groundStart = new GroundStart(_chunks, _player);
+                if (_worldOrigin != null) _seatStart?.Attach(_player, _chunks, _worldOrigin);
             }
         }
         if (_groundStart is { Done: false } ground && !ground.Step(delta))
         {
             Report(LoadStage.PlacingYou, 0.34f);
+            return;
+        }
+        if (_seatStart is { Done: false } seated && !seated.Step(delta))
+        {
+            Report(LoadStage.PlacingYou, 0.35f);
             return;
         }
 
@@ -1267,6 +1288,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         StyleKit.Chosen -= OnStyleChosen;
         NearTrees.Forget();
         Vehicles.VehicleManager.Refused -= Toast;
+        Movie.MovieSession.Said -= Toast;
         Vehicles.PassengerService.Said -= Toast;
         if (_networked)
         {
@@ -1516,6 +1538,10 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (Launch.FromCommandLine) GD.PushError($"[world] {reason}");
     }
 
+    /// <summary>The movie studio (#638): the player it freezes while open, and the terrain it streams round its camera.</summary>
+    public FootPlayer? StudioPlayer => LocalPlayer;
+    public ChunkManager? Chunks => _chunks;
+
     /// <summary>My own networked player node, once the server has spawned it.</summary>
     // not while the link is down: GetUniqueId on a dead peer logs an error, and this runs every frame (#211)
     private FootPlayer? GetLocalNetPlayer() =>
@@ -1539,6 +1565,16 @@ public partial class ClientWorld : Node3D, IOriginContainer
         {
             GetViewport().SetInputAsHandled();
             PauseRequested?.Invoke();
+            return;
+        }
+
+        // the replay buffer's last minutes into the movie editor (#638, #779): anywhere, whatever you are doing
+        if (@event.IsActionPressed(PlayerInput.SaveClip))
+        {
+            GetViewport().SetInputAsHandled();
+            // Shift+F5: Record / Stop, the whole session from now on (#775); F5: the editor (#779)
+            if (@event is InputEventKey { ShiftPressed: true }) Movie.MovieSession.ToggleRecording();
+            else MovieStudioRequested?.Invoke();
             return;
         }
 
@@ -1836,6 +1872,9 @@ public partial class ClientWorld : Node3D, IOriginContainer
     /// <summary>The spawn point has not found the ground under the spawn yet.</summary>
     private bool _groundStarted;
     private GroundStart? _groundStart;
+    /// <summary><c>--seat</c>: the ride taken behind its own screen, after <see cref="_groundStart"/>.</summary>
+    private SeatStart? _seatStart;
+    private bool _seatAsked;
 
     private bool SpawnPending => _spawn != null && IsInstanceValid(_spawn) && _spawn.IsInsideTree();
 

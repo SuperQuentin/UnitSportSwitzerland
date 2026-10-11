@@ -12,6 +12,9 @@ namespace UnitSport.Build;
 /// </summary>
 public partial class StructureVisuals : Node3D, Core.IOriginContainer
 {
+    /// <summary>Recorded for the movie studio (#775).</summary>
+    public override void _EnterTree() => Movie.ReplayWatch.Container(this);
+
     private readonly Structures _owner;
     private readonly Dictionary<long, Node3D> _roots = new();
     private readonly Dictionary<(long, Slot), StaticBody3D> _pieces = new();

@@ -336,6 +336,13 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// <summary>The server's copy of a client's player: data only, never drawn or simulated.</summary>
     public bool NetProxy { get; private set; }
 
+    /// <summary>
+    /// A movie studio puppet (#638): a remote-style copy the studio drives straight from a recording.
+    /// No synchronizers, no interpolation (a recording jumps back in time when scrubbed), no body
+    /// to bump into. Set before it enters the tree.
+    /// </summary>
+    public bool Puppet { get; init; }
+
     private readonly Net.RemoteInterpolator _interp = new();
     private MultiplayerSynchronizer? _sync, _relayNear, _relayFar, _vis;
 
@@ -372,9 +379,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     private void OnNetState()
     {
-        if (!IsInsideTree() || NetProxy)
+        if (!IsInsideTree() || NetProxy || Puppet)
         {
-            // spawn state, or the server's proxy: exactly where the owner says, no smoothing
+            // spawn state, the server's proxy or a movie puppet: exactly where the owner says, no smoothing
             if (Origin is { } origin) Position = origin.ToWorld(NetGlobal);
             Rotation = new Vector3(0, NetYaw, 0);
             return;
@@ -659,6 +666,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     /// <summary>The replicated pose properties, in one place for the synchronizer and <c>--synccheck</c>.</summary>
     public static readonly string[] PoseProperties = { ".:NetPose", ".:PoseKind", ".:Anim" };
+
+    /// <summary>
+    /// The replicated properties sent only when they change (ride, seat, items, clothes, …). The movie
+    /// recorder (#638) keeps the same set as events: <c>--moviecheck</c> fails if the two drift apart.
+    /// </summary>
+    public static readonly string[] OnChangeProperties = { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:Down", ".:RadioVolume" };
 
     // --- figure animation ---
     private MeshInstance3D? _walker;
@@ -1199,7 +1212,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     {
         Terrain?.RemoveAnchor(this);
         Explosion.Blast -= OnBlast;
-        if (!IsMultiplayerAuthority() && !NetProxy)
+        if (!NetProxy && !Puppet && !Net.NetLink.Dropped(this) && !IsMultiplayerAuthority())
             GD.Print($"[net] player {Name} left view");
     }
 
@@ -1213,12 +1226,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     private uint CameraMask => (CollisionMask & ~World.TreeColliders.Layer) | Interiors.DoorLeaf.CameraOnlyLayer;
 
-    public override void _Ready()
+    /// <summary>
+    /// The synchronizers: the owner's state stream, the server's two relays of it and the spawn
+    /// decision. Split out of <see cref="_Ready"/> so a movie puppet (#638) can go without.
+    /// </summary>
+    private void SetUpNet()
     {
-        CollisionMask |= World.TreeColliders.Layer;   // trunks are solid (layer 2)
-        // and the decks of walkable vehicles (#162), which only exist on a walking player's own peer
-        CollisionMask |= DeckLayer;
-        _walkMask = CollisionMask;
         // authority pushes its transform to everyone else (server relays)
         var replication = new SceneReplicationConfig();
         replication.AddProperty(".:NetE");
@@ -1263,11 +1276,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         replication.AddProperty(".:DeckYaw");
         replication.AddProperty(".:NetTime");   // last: its setter consumes the whole state
         // integers change a few times a minute: sent reliably when they change, not 30 times a second
-        foreach (var prop in new[] { ".:RideKindId", ".:CarSetupId", ".:TuningBits", ".:DoorsOpen", ".:TrailerCode", ".:RidingWith", ".:SeatIndex", ".:DeckOn", ".:DeckSection", ".:HeldItemId", ".:ItemAction", ".:PoseKind", ".:HeadwearId", ".:OutfitBits", ".:AppearanceBits", ".:DanceId", ".:FightPose", ".:HeldRadio", ".:BackItemId", ".:CarRadio", ".:CarCd", ".:RadioVolume", ".:Down" })
+        foreach (var prop in OnChangeProperties)
             replication.PropertySetReplicationMode(prop, SceneReplicationConfig.ReplicationMode.OnChange);
-        Terrain ??= GetNodeOrNull<ChunkManager>("/root/Main/World/Terrain");
-        if (Origin is { } start) NetGlobal = start.ToGlobal(Position);
-        NetYaw = Rotation.Y;
         var sync = new MultiplayerSynchronizer
         {
             // deterministic name: replication matches nodes by path across peers, and
@@ -1343,6 +1353,19 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
                 && (peer == GetMultiplayerAuthority() || _interest?.ServerSees(peer, netId) != false)));
         AddChild(_vis);
         _netUp = true;
+    }
+
+    public override void _Ready()
+    {
+        CollisionMask |= World.TreeColliders.Layer;   // trunks are solid (layer 2)
+        // and the decks of walkable vehicles (#162), which only exist on a walking player's own peer
+        CollisionMask |= DeckLayer;
+        _walkMask = CollisionMask;
+        Terrain ??= GetNodeOrNull<ChunkManager>("/root/Main/World/Terrain");
+        if (Origin is { } start) NetGlobal = start.ToGlobal(Position);
+        NetYaw = Rotation.Y;
+        // a movie puppet (#638) is drawn here only: nothing to send, nothing to relay, no spawn to decide
+        if (!Puppet) SetUpNet();
 
         AddToGroup(Group);
         // drawn on both sides of a doorway it is stepping through
@@ -1412,7 +1435,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
 
-        if (!IsMultiplayerAuthority())
+        if (!IsMultiplayerAuthority() && !Puppet)
             GD.Print($"[net] player {Name} came into view at {GlobalPosition.Round()} ({Global})");
         // someone else walking past is heard, from their feet (#375)
         if (!IsMultiplayerAuthority() && DisplayServer.GetName() != "headless") AddChild(new Audio.BodySteps(this));
@@ -1592,6 +1615,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
     /// </summary>
     public override void _Process(double delta)
     {
+        if (Net.NetLink.Dropped(this)) return;   // freed with the link a frame later
         TickWade((float)delta);   // wading's spray and strides, every peer (#380, FootPlayer.Wade.cs)
         _punch *= Mathf.Exp(-12f * (float)delta);
         _jolt *= Mathf.Exp(-9f * (float)delta);
@@ -1686,7 +1710,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         bool silent = Core.RealClock.Now - LastNetState > SilentSeconds;
         // a passenger has no body of its own: it is in the vehicle; one walking about in it must not
         // be a wall the vehicle runs into on its driver's peer
-        bool off = silent || RidingWith != 0 || DeckOn != "";
+        bool off = silent || RidingWith != 0 || DeckOn != "" || Puppet;
         if (_body.Disabled != off) _body.Disabled = off;
 
         // off a deck, the spot it last stood on one is forgotten: the next is taken as it comes
@@ -1738,7 +1762,8 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         {
             if (limp) { SetRemoteEngine(null); return; }
             if (Anim.Y != _seenPhase) _stridePhase = _seenPhase = Anim.Y;
-            else if (PoseKind == PoseStride) _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, Anim.X, dt);
+            // a puppet is given its phase every frame; paused, its feet must stay where they are
+            else if (PoseKind == PoseStride && !Puppet) _stridePhase = Avatar.HumanMeshBuilder.AdvancePhase(_stridePhase, Anim.X, dt);
             ApplyFootPose();
             SetRemoteEngine(null);
             return;
@@ -3179,7 +3204,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         _shutDriverIn = 0f;
         ShowroomYaw = null;
         TrailerCode = _ride is Truck fresh ? fresh.TrailerCode : 0;
-        _truckPitch = 0f;
+        _truckPitch = _carPitch = _carRoll = 0f;
         // The pose travels with the kind, and each kind reads Anim its own way: left as it was, the
         // next update would hand a bike its rider's stride phase as a crank angle (seen: 0.93 rad).
         Anim = default;
@@ -3291,6 +3316,12 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         }
 
         if (_ride is Truck truck && HandleTruckInput(@event, truck))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (_ride is Car car && HandleCarGearInput(@event, car))
         {
             GetViewport().SetInputAsHandled();
             return;
@@ -3428,6 +3459,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
 
     public override void _PhysicsProcess(double delta)
     {
+        if (Net.NetLink.Dropped(this)) return;   // freed with the link a frame later
         // held by the Battle Royale cargo plane (#207): it moves the body, nothing else does
         if (Carried()) return;
         // drop onto the terrain surface once its height data is available
@@ -4216,7 +4248,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         if (!onFloor)
         {
             _rideAir += dt;
-            if (_rideAir > 0.15f && !Npc && PlayerInput.Held(PlayerInput.Trick))
+            if (_rideAir > 0.15f && !Npc && PlayerInput.Held(PlayerInput.Trick) && !ShouldersShift)
             {
                 _airPitch += stick.Y * FlipRate * dt;     // stick forward: nose down, a front flip
                 _airSpin -= stick.X * SpinRate * dt;      // stick right: clockwise from above
@@ -4250,6 +4282,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         Draft = onFloor && _ride is Car or Motorbike or Truck && _motion.Speed > 10f
             ? RideGround.DraftBehind(GlobalPosition, heading.Rotated(Vector3.Up, _motion.Slip), OtherVehicles()) : 0f;
         if (_ride is Truck driving) PrepareTruck(driving);
+        else if (_ride is Car shifting) PrepareCar(shifting);
         _ride!.Step(input, new RideGround(onFloor, grade, surface, Draft), dt, ref _motion);
         // a wheelie taken over the top (#410): the bike goes on its back, the rider off it
         if (_ride is Motorbike { LoopedOut: true })
@@ -4258,6 +4291,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
         if (_ride is Truck driven && AfterTruckStep(driven)) return;
+        if (_ride is Car shifted) AfterCarStep(shifted);
         // airstairs let go by an aircraft's door line up with it and raise the platform (#417)
         if (_ride is Airstairs stairs) DockStairs(stairs, input, dt);
         // the forklift's mast runs while a paddle is held (#583)
@@ -4288,7 +4322,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         // Boost: the reward for air and tricks, spent as raw acceleration on top of the model.
         // Game profile only; in Sim the watts are the rider's, and nothing else may add to them.
         Boosting = Rideable.Arcade && _ride is not Truck && _bailTimer <= 0 && BoostMeter > 0.01f
-            && !Npc && PlayerInput.Held(PlayerInput.Boost);
+            && !Npc && PlayerInput.Held(PlayerInput.Boost) && !ShouldersShift;
         if (Boosting)
         {
             _motion.Speed += BoostAccel * dt;
@@ -4327,6 +4361,7 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
         ShoveInto(dt, velocity with { Y = 0 });
         // the sections behind a truck's cab follow it, and report what they hit
         if (_ride is Truck train) StepSections(train, dt);
+        else if (_ride is Car car) TiltCar(car, dt);
         // a farm machine works the ground under its bar (#494, FootPlayer.Farm.cs)
         if (_ride is Truck { Spec.Farm: true } farm) StepFarm(farm, dt);
 
@@ -4497,7 +4532,9 @@ public partial class FootPlayer : CharacterBody3D, Core.IOriginShiftAware
             return;
         }
         var pivot = Vector3.Up * (_bailTimer > 0 ? 0.3f : 0.9f);
-        _visual.Transform = new Transform3D(_holdTilt, Vector3.Zero) * new Transform3D(basis, pivot - basis * pivot);
+        // a car stands on the ground under its wheels (TiltCar), tipped about its contact patch
+        var ground = _ride is Car ? new Basis(Vector3.Right, _carPitch) * new Basis(Vector3.Back, _carRoll) : Basis.Identity;
+        _visual.Transform = new Transform3D(_holdTilt * ground, Vector3.Zero) * new Transform3D(basis, pivot - basis * pivot);
     }
 
     private void UpdateRideCamera(float dt)

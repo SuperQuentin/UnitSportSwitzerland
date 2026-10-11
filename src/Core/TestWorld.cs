@@ -51,6 +51,9 @@ public partial class TestWorld : Node3D
 
         Node? probe = HitboxProbe.Requested() ? new HitboxProbe(null, origin)
             : SyncProbe.Requested() ? new SyncProbe(null, origin)
+            : Movie.MovieProbe.Requested() ? new Movie.MovieProbe(origin)
+            : Movie.MovieWorldProbe.Requested() ? new Movie.MovieWorldProbe(origin)
+            : Movie.MovieShotProbe.Requested() ? new Movie.MovieShotProbe(origin)
             : ForkliftCheck.Requested ? new ForkliftCheck(origin)
             : ExcavatorCheck.Requested ? new ExcavatorCheck(origin)
             : LoaderCheck.Requested ? new LoaderCheck(origin)
@@ -67,7 +70,7 @@ public partial class TestWorld : Node3D
             : null;
         if (probe == null)
         {
-            GD.PushError("[testworld] no probe here runs on --world flat (--hitboxcheck, --synccheck, --ride, --flycheck, --forkliftcheck, --palletcheck, --shellwalkcheck)");
+            GD.PushError("[testworld] no probe here runs on --world flat (--hitboxcheck, --synccheck, --moviecheck, --ride, --flycheck, --forkliftcheck, --palletcheck, --shellwalkcheck)");
             GetTree().Quit(2);
             return;
         }

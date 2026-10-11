@@ -16,6 +16,8 @@
   Add `--menu` to capture the pause menu over the world (the title screen: `--uishot`, `ui/screens`),
   `--settings` or `--licenses` (Settings on its About tab) for those pages. `--nohud` hides every
   `CanvasLayer` (chat, key hints, menus) in the picture.
+- Feature clip: `--clip name[,delay[,seconds]] [--clip-quit]` films the window to `test_output/clips/<name>.gif`
+  (+ `.mp4`); `/clip start|stop` in the chat; `tools/record-clip.sh` (`general/feature-clips`).
 - Many screenshots, one launch: `<godot> --path . -- --shot-queue shots.txt [--nohud]` boots like
   `--shot`, then watches the file: one shot per line in the `--shot` syntax, taken in order,
   lines appended later picked up within 0.5 s; blank lines and `#` comments skipped, `quit`

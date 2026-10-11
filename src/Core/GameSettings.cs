@@ -28,6 +28,16 @@ public enum WindowMode
     Fullscreen = 2,
 }
 
+/// <summary>How the main view smooths its 3D edges (#768): none, FXAA, or MSAA with 2, 4 or 8 samples.</summary>
+public enum AntiAliasing
+{
+    Off = 0,
+    Fxaa = 1,
+    Msaa2x = 2,
+    Msaa4x = 3,
+    Msaa8x = 4,
+}
+
 /// <summary>What the on-screen performance overlay shows (F3 cycles it).</summary>
 public enum PerfOverlayMode
 {
@@ -108,6 +118,16 @@ public sealed class GameSettings
 
     public bool VSync { get; set; } = true;
 
+    /// <summary>
+    /// The main view's anti-aliasing in Cartoon and Realistic (#768); PS1 keeps its jagged
+    /// low-resolution edges, which are its look (<see cref="DisplaySettings"/>). FXAA by default:
+    /// MSAA shades a pixel for any triangle covering one of its samples, with the vertex colours
+    /// extrapolated past the triangle (shaders have no centroid interpolation here), and the
+    /// distant ground's sub-pixel triangles then sparkle along the horizon.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public AntiAliasing AntiAliasing { get; set; } = AntiAliasing.Fxaa;
+
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public PerfOverlayMode PerfOverlay { get; set; } = PerfOverlayMode.Off;
 
@@ -171,6 +191,9 @@ public sealed class GameSettings
     /// <summary>How trucks and buses are shifted (#70): automatic, sequential, with the clutch, H-pattern.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public Player.HeavyShift HeavyGearbox { get; set; } = Player.HeavyShift.Automatic;
+    /// <summary>How cars are shifted (#290): automatic, sequential (auto clutch), or manual with the clutch pedal.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Player.CarGearbox CarGearbox { get; set; } = Player.CarGearbox.Automatic;
 
     // --- world ---
     /// <summary>Real minutes for a whole day; 0 stops the clock at <see cref="StartHour"/>.</summary>
@@ -228,6 +251,12 @@ public sealed class GameSettings
     // --- network ---
     /// <summary>List the dedicated servers found on the LAN over mDNS in the main menu (<see cref="Net.LanDiscovery"/>).</summary>
     public bool LanDiscovery { get; set; } = true;
+
+    /// <summary>
+    /// Minutes of everyone's movement the replay buffer keeps for the movie studio (#638), 0 = off.
+    /// About 1.4 MB a minute per player in view.
+    /// </summary>
+    public int ReplayMinutes { get; set; } = 5;
 
     /// <summary>The server last joined from the menu, so the field is not reset to localhost every launch.</summary>
     public string LastHost { get; set; } = "127.0.0.1";
@@ -361,7 +390,7 @@ public sealed class GameSettings
         Current = loaded;
         GD.Print($"[settings] rings={loaded.RenderDistanceRings} horizon={loaded.HorizonKm}km "
             + $"detail={loaded.Detail} fog={loaded.Fog} builds={loaded.MaxConcurrentBuilds} "
-            + $"commit={loaded.CommitBudgetMs}ms scale={loaded.RenderScale} vsync={loaded.VSync} "
+            + $"commit={loaded.CommitBudgetMs}ms scale={loaded.RenderScale} aa={loaded.AntiAliasing} vsync={loaded.VSync} "
             + $"window={loaded.WindowMode} perf={loaded.PerfOverlay}");
     }
 
@@ -459,6 +488,7 @@ public sealed class GameSettings
         StartHour = Math.Clamp(StartHour, 0f, 23.99f);
         TrafficCars = Math.Clamp(TrafficCars, 0, 150);
         ScreenShake = Math.Clamp(ScreenShake, 0f, 1f);
+        ReplayMinutes = Math.Clamp(ReplayMinutes, 0, 15);
         StickDeadzone = Math.Clamp(StickDeadzone, 0.05f, 0.5f);
         if (VrSnapDegrees is not (0 or 15 or 30 or 45)) VrSnapDegrees = 30;
         VrVignette = Math.Clamp(VrVignette, 0f, 1f);
@@ -516,6 +546,13 @@ public sealed class GameSettings
                         "seq" => Player.HeavyShift.Sequential, "seqclutch" => Player.HeavyShift.SequentialClutch,
                         "hsplit" => Player.HeavyShift.HPatternSplitter, "h" => Player.HeavyShift.HPattern,
                         _ => Player.HeavyShift.Automatic,
+                    };
+                    break;
+                case "--cargearbox":
+                    CarGearbox = v.ToLowerInvariant() switch
+                    {
+                        "seq" => Player.CarGearbox.Sequential, "manual" or "h" => Player.CarGearbox.Manual,
+                        _ => Player.CarGearbox.Automatic,
                     };
                     break;
                 case "--wheel": Wheel.Enabled = v is "on" or "1" or "true"; break;

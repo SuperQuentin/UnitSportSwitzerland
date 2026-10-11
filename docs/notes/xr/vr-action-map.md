@@ -83,6 +83,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | blade_raise / blade_lower (#614, mini excavator, hold, driving or digging) | Shift / Ctrl, RB / LB (the gear paddles, which a crawler has no use for) | ok: the **blade lever** low and outboard of the left joystick (`XrCabControls` "miniexcavator", `Kind.Hold`: aft raises) | keep |
 | arm_boom_up/down, arm_bucket_curl/dump (#611, hold) | ↑ ↓, ← → / R stick Y, X in dig mode | ok: the **right joystick** by hand, as two levers (aft raises the boom, side to side the bucket); the right stick itself stays R3's action pad | one two-axis grip per joystick |
 | gear 1-6, R, N | 1-6 ` 0 / — | ok: H-pattern lever by hand (#438) | keep |
+| car shift up / down, clutch (#290, sequential or manual car gearbox) | Shift Ctrl C / RB LB B (the shoulders, not trick and boost, in such a car) | ok: grips, B (they replay as the shoulders) | keep |
+| car gates 1-6, R, N (#290, manual car gearbox) | 1-6 ` 0 / — | gap: no gear lever in the car cockpit's VR controls | **grip the car's gear lever** and move it through the gate, as the trucks' H-pattern lever (#438) |
 | retarder | ' ; / — | ok: stalk by hand (#438) | keep |
 | bus kneel / destination | K N / L3 — | ok: dash pokes (#438) | keep |
 | farm: lower / raise the implement or header (#494) | K / L3 | ok: the kneel dash poke, or L3 | **grip the linkage lever** on the right console |
@@ -125,6 +127,8 @@ in VR, **new** planned VR-native way. The work is tracked in #440 (prompts #435,
 | loot, shop, lock, Simon, vending | mouse + keys | ok: laser + trigger | lock dial by **wrist twist** |
 | chat | Enter, / | gap: no keyboard | laser key grid on the `XrUi` panel |
 | watch | — | ok: Swiss watch on the left wrist (#439) | keep |
+| save_clip: the replay buffer into the movie studio (#638) | F5 / Start > Save clip | ok: Menu tap > Save clip | a wrist-menu entry |
+| movie studio timeline (#638, markers #656, camera keys #669, cameras #675) | Space J K L, ← →, S, Del, M, I, V, 1-9, C / Y, LT RT, D-pad, X (hold: cut to camera), R3, View, L3, R stick, LB RB | ok: the same pad buttons through `XrPad`, the panel by laser | grip the playhead and scrub by hand; timeline on the `XrUi` panel (#637 milestone 3) |
 | free_cursor (#654) | tap Alt / — | n/a: VR points with the laser, a pad has no cursor | keep |
 | map screen: pan / zoom / draw / tool / search (#515) | arrows, drag, wheel, T, F / L stick, LB RB, A, Y, X | **gap, deferred on purpose**: the screen renders on the `XrPad` panel and says so, but the map itself is not pointable — a laser on a 2D map of a 3D country is the wrong answer to design in a hurry | a table-top relief map of Switzerland you reach into, grab to pan, pinch to zoom and paint tiles on with a finger (#535) |
 

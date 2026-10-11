@@ -37,9 +37,39 @@ public partial class OccasionPrecip : Node3D, Core.IOriginContainer
 
     private static readonly StringName Density = "density";
 
-    public override void _Process(double delta)
+    private static OccasionPrecip? _instance;
+    private static float? _snowfallOverride;
+
+    /// <summary>The snowfall now: the top occasion's, or what the movie studio replays.</summary>
+    public static float Snowfall => _snowfallOverride ?? OccasionManager.Instance?.Atmosphere?.Atmosphere.Snowfall ?? 0f;
+
+    /// <summary>
+    /// The movie studio replaying a recording (#775): the snow held at this density, shown at once
+    /// (the game may be paused). Null gives the occasion its snow back.
+    /// </summary>
+    public static float? SnowfallOverride
     {
-        float snowfall = OccasionManager.Instance?.Atmosphere?.Atmosphere.Snowfall ?? 0f;
+        get => _snowfallOverride;
+        set
+        {
+            _snowfallOverride = value;
+            _instance?.Refresh();
+        }
+    }
+
+    public override void _EnterTree() => _instance = this;
+
+    public override void _ExitTree()
+    {
+        if (_instance == this) _instance = null;
+    }
+
+    public override void _Process(double delta) => Refresh();
+
+    private void Refresh()
+    {
+        if (_snow == null) return;
+        float snowfall = Snowfall;
         _snow.Visible = snowfall > 0f;
         if (_snow.Visible) _material.SetShaderParameter(Density, snowfall);
     }

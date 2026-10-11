@@ -30,8 +30,7 @@ public partial class VideoExporter : Node
 {
     private enum Phase { Idle, Warmup, Advance, Settle, Capture, Grabbing, Encoding, Finished }
 
-    private RacePlayback _race = null!;
-    private PlaybackCamera _camera = null!;
+    private IExportSource _source = null!;
     private ChunkManager _chunks = null!;
 
     private Phase _phase = Phase.Idle;
@@ -126,7 +125,7 @@ public partial class VideoExporter : Node
         Core.GameSettings.Current.RenderDistanceRings);
 
     /// <summary>Whether the visible world is complete, and how to say why it is not.</summary>
-    private bool WorldReady => _chunks.SettledNear(_camera.GlobalPosition, SettleRings);
+    private bool WorldReady => _chunks.SettledNear(_source.CameraPosition, SettleRings);
 
     public bool Running => _phase is not (Phase.Idle or Phase.Finished);
 
@@ -139,11 +138,14 @@ public partial class VideoExporter : Node
     public event Action? Completed;
 
     public static VideoExporter Create(RacePlayback race, PlaybackCamera camera, ChunkManager chunks) =>
+        Create(new RaceExportSource(race, camera), chunks);
+
+    /// <summary>An exporter of anything with a steppable clock and a camera (#786): a replay, a movie.</summary>
+    public static VideoExporter Create(IExportSource source, ChunkManager chunks) =>
         new()
         {
             Name = "VideoExporter",
-            _race = race,
-            _camera = camera,
+            _source = source,
             _chunks = chunks,
         };
 
@@ -165,7 +167,7 @@ public partial class VideoExporter : Node
     public bool Begin(string directory, int fps)
     {
         if (Running) return false;
-        if (_race.Runners.Count == 0)
+        if (!_source.HasContent)
         {
             Status = "nothing loaded to export";
             return false;
@@ -181,17 +183,14 @@ public partial class VideoExporter : Node
 
         _directory = directory;
         _fps = Math.Clamp(fps, 1, 120);
-        _clockSpeed = Math.Max(0.05, _race.Speed);
+        _clockSpeed = Math.Max(0.05, _source.Speed);
         _step = _clockSpeed / _fps;
-        _total = Math.Max(1, (int)Math.Ceiling(_race.Duration / _step));
+        _total = Math.Max(1, (int)Math.Ceiling(_source.Duration / _step));
         _frame = 0;
         _timeouts = 0;
 
         // the exporter owns the clock and the camera for the duration
-        _race.Playing = false;
-        _race.SetProcess(false);
-        _camera.SetProcess(false);
-        _camera.Current = true;
+        _source.Take();
 
         // Nobody is watching this render, so the budgets that keep a live frame smooth are pure
         // cost here — see ChunkManager.OfflineMode.
@@ -200,15 +199,11 @@ public partial class VideoExporter : Node
         // The route is known in full before frame one, so no frame should ever be the first to
         // ask for a tile. This reads the whole thing into the cache in route order while the
         // render works through it.
-        if (_race.Focused is { } focused && _chunks.Source != null)
-        {
-            _prefetch = ExportPrefetcher.Create(focused.Active, _chunks);
-            _prefetch.Start();
-        }
+        _prefetch = _source.Prefetch(_chunks);
+        _prefetch?.Start();
 
         // start from a clean state rather than wherever the player had scrubbed to
-        _race.StepTo(0, 0);
-        _camera.Step(0);
+        _source.StepTo(0, 0, 0);
 
         _pngFallback = !HasFfmpeg();
         if (_pngFallback)
@@ -225,8 +220,8 @@ public partial class VideoExporter : Node
         SetProcess(true);
 
         // frames are grabbed at the window's real size, not the UI canvas's
-        var size = GetWindow().Size;
-        GD.Print($"[export] {_total} frames at {_fps} fps ({_race.Duration / _clockSpeed:F0} s of video, "
+        var size = _source.Frames is SubViewport frames ? frames.Size : GetWindow().Size;
+        GD.Print($"[export] {_total} frames at {_fps} fps ({_source.Duration / _clockSpeed:F0} s of video, "
                  + $"{_clockSpeed:0.##}x), {size.X:F0}x{size.Y:F0} -> {directory}");
         return true;
     }
@@ -260,7 +255,7 @@ public partial class VideoExporter : Node
                 {
                     _lastReport = _waiting;
                     GD.Print($"[export] waiting for terrain ({_waiting:F0}s) — "
-                        + _chunks.SettleReport(_camera.GlobalPosition));
+                        + _chunks.SettleReport(_source.CameraPosition));
                     GD.Print($"[export]   worker time: {_chunks.BuildTimeReport()}");
                 }
 
@@ -277,7 +272,7 @@ public partial class VideoExporter : Node
             case Phase.Advance:
                 // The clock moves by exactly one video frame, never by how long the last one
                 // took to render. This is the line that makes the export deterministic.
-                _race.StepTo(_frame * _step, _step);
+                _source.StepTo(_frame * _step, _step, 1.0 / _fps);
 
                 // The clock advances by _step TRACK seconds; the camera advances by one frame of
                 // SCREEN time. They are different units and the camera wants the second one: every
@@ -285,7 +280,6 @@ public partial class VideoExporter : Node
                 // Cinema measures shot length in screen seconds too. Passing _step here applied
                 // the speed multiplier twice, so an export paced visibly differently from the
                 // preview the player had just set up at the same multiplier.
-                _camera.Step(1.0 / _fps);
                 _stableFrames = 0;
                 _waiting = 0;
                 _phase = Phase.Settle;
@@ -378,7 +372,7 @@ public partial class VideoExporter : Node
         string reference = System.IO.Path.Combine(_directory, "frame_00000.png");
         image.SavePng(reference);
 
-        GD.Print($"[export] first frame: camera {_camera.GlobalPosition:F0}, "
+        GD.Print($"[export] first frame: camera {_source.CameraPosition:F0}, "
             + $"prims={Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame)}, "
             + $"{_frameSize.X}x{_frameSize.Y}");
 
@@ -459,10 +453,15 @@ public partial class VideoExporter : Node
         "-video_size", $"{_frameSize.X}x{_frameSize.Y}",
         "-framerate", _fps.ToString(),
         "-i", "-",
+    }.Concat(_source.AudioPath is { } audio && System.IO.File.Exists(audio)
+        // the movie's sound (#786) under the pictures, ended with them
+        ? new[] { "-i", audio, "-map", "0:v", "-map", "1:a", "-c:a", "aac", "-b:a", "192k", "-shortest" }
+        : Array.Empty<string>()).Concat(new[]
+    {
         "-c:v", "libx264", "-preset", "slow", "-crf", "18",
         "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-pix_fmt", "yuv420p",
         _videoPath,
-    };
+    }).ToArray();
 
     /// <summary>
     /// Hands one frame to the sink.
@@ -520,7 +519,7 @@ public partial class VideoExporter : Node
 
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
 
-        Image? image = _phase == Phase.Grabbing ? GetViewport().GetTexture().GetImage() : null;
+        Image? image = _phase == Phase.Grabbing ? (_source.Frames ?? GetViewport()).GetTexture().GetImage() : null;
         if (_overlay != null) _overlay.Visible = true;
         return image;
     }
@@ -597,7 +596,7 @@ public partial class VideoExporter : Node
         if (_phase == Phase.Warmup)
         {
             _readout.Text = $"loading terrain… {_waiting:F0}s of {WarmupSeconds:F0}s "
-                + $"({_chunks.SettleReport(_camera.GlobalPosition)})";
+                + $"({_chunks.SettleReport(_source.CameraPosition)})";
             return;
         }
 
@@ -810,8 +809,7 @@ public partial class VideoExporter : Node
         _overlay = null;
         _bar = null;
         _readout = null;
-        _race.SetProcess(true);
-        _camera.SetProcess(true);
+        _source.Give();
         DisplayServer.WindowSetTitle("UnitSport Switzerland");
         Completed?.Invoke();
     }

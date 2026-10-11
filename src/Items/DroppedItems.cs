@@ -14,6 +14,9 @@ namespace UnitSport.Items;
 /// </summary>
 public partial class DroppedItems : Node3D, Core.IOriginContainer
 {
+    /// <summary>Recorded for the movie studio (#775).</summary>
+    public override void _EnterTree() => Movie.ReplayWatch.Container(this);
+
     public const string NodeName = "Dropped";
 
     /// <summary>How close to a dropped item to pick it up.</summary>
