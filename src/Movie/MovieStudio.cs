@@ -58,6 +58,12 @@ public partial class MovieStudio : Screen
     private Button _fold = null!;
     // the preview player (#779)
     private SubViewport _preview = null!;
+    // the export (#786): the player alone, filling the window, while the exporter films it
+    private SubViewportContainer _screen = null!;
+    private Container _screenHome = null!;
+    private Control _chrome = null!, _backdrop = null!;
+    private Gpx.VideoExporter? _exporter;
+    private Action<bool, string>? _exportDone;
     // the Shots screen (#777): the library, the picked shot's settings, the stills
     private ShotLibrary _library = null!;
     private ShotInspector _inspector = null!;
@@ -118,10 +124,12 @@ public partial class MovieStudio : Screen
 
         // full screen (#779): an editor of its own, the scene in a preview player rather than behind the panels
         var backdrop = new Panel { MouseFilter = MouseFilterEnum.Stop };
+        _backdrop = backdrop;
         backdrop.AddThemeStyleboxOverride("panel", new StyleBoxFlat { BgColor = new Color(0.07f, 0.075f, 0.085f) });
         backdrop.SetAnchorsPreset(LayoutPreset.FullRect);
         AddChild(backdrop);
         var root = UiKit.VBox(6);
+        _chrome = root;
         root.SetAnchorsPreset(LayoutPreset.FullRect);
         root.OffsetLeft = 10; root.OffsetTop = 8; root.OffsetRight = -10; root.OffsetBottom = -8;
         AddChild(root);
@@ -145,6 +153,7 @@ public partial class MovieStudio : Screen
         Tool(bar, Icons.Plus, "New", "Start an empty movie", NewMovie);
         Tool(bar, Icons.Folder, "Open", "Open a saved movie", OpenMovie);
         Tool(bar, Icons.Save, "Save", "Save this movie", SaveMovie);
+        Tool(bar, Icons.Camera, "Export", "Render the sequence being edited to a video file with its sound, frame by frame (it waits for the terrain)", () => StartExport());
         Tool(bar, Icons.Back, "Game", "Close the editor and play on where you were (Esc)", BackToGame);
 
         // the player and the camera tools above, the timeline below; the divider drags
@@ -174,6 +183,8 @@ public partial class MovieStudio : Screen
         playerColumn.AddChild(aspect);
         // the preview: the same world through a camera that follows the studio's; the mouse on it orbits and zooms
         var screen = new SubViewportContainer { Stretch = true, MouseFilter = MouseFilterEnum.Stop, FocusMode = FocusModeEnum.None };
+        _screen = screen;
+        _screenHome = aspect;
         screen.GuiInput += OnViewInput;
         aspect.AddChild(screen);
         _preview = new SubViewport { HandleInputLocally = false };
@@ -844,6 +855,114 @@ public partial class MovieStudio : Screen
         + "  Drag a shot from the library onto the Program row to cut to it there\n"
         + "  Pad: X split (hold: cut to the picked shot) · R3 marker on the beat · View a camera key\n\n"
         + "Esc or B: back to the game");
+
+    // ---- the export (#786) ------------------------------------------------------------------------
+
+    /// <summary>
+    /// Renders the active sequence to a video in <c>user://movies/export/</c>: through the program, frame by
+    /// frame, waiting for the terrain at each. False when there is nothing to film or no terrain to wait on.
+    /// <paramref name="done"/> hears whether a video came out and where.
+    /// </summary>
+    public bool StartExport(int fps = 30, Action<bool, string>? done = null)
+    {
+        var p = MovieSession.Project;
+        if (_exporter is { Running: true }) return false;
+        if (_chunks == null)
+        {
+            Modal.Inform(this, "Cannot export here", "The export waits for the terrain to load, and this world has none.");
+            return false;
+        }
+        string name = MovieSession.Safe($"{p.Name} {p.Sequences[p.ActiveSequence].Name} {DateTime.Now:yyyy-MM-dd HH-mm-ss}");
+        string dir = ProjectSettings.GlobalizePath($"{MovieSession.Folder}/export/{name}");
+        System.IO.Directory.CreateDirectory(dir);
+        var source = new MovieExportSource(this, _stage, _camera, dir);
+        if (!source.HasContent)
+        {
+            Modal.Inform(this, "Nothing to export", "The sequence being edited is empty: record something, or set where it starts and ends.");
+            return false;
+        }
+        _exporter?.QueueFree();
+        _exporter = Gpx.VideoExporter.Create(source, _chunks);
+        AddChild(_exporter);
+        _exportDone = done;
+        _exporter.Completed += () =>
+        {
+            string video = System.IO.Directory.Exists(dir) ? System.IO.Directory.GetFiles(dir, "*.mp4").FirstOrDefault() ?? "" : "";
+            bool ok = video.Length > 0;
+            if (_exportDone != null) _exportDone(ok, video);
+            else Modal.Inform(this, ok ? "Video written" : "The export did not finish", ok ? video : _exporter?.Status ?? "");
+        };
+        if (!_exporter.Begin(dir, fps))
+        {
+            Modal.Inform(this, "Cannot export", _exporter.Status);
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>The player alone over the whole window, the program through it, for the exporter to grab.</summary>
+    public void EnterExportView()
+    {
+        _viewSource.Selected = 0;
+        _lookThrough.ButtonPressed = true;
+        _gizmos.Hidden = true;
+        _chrome.Visible = false;
+        _screen.Reparent(this, false);
+        _screen.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        MoveChild(_screen, GetChildCount() - 1);
+    }
+
+    /// <summary>The editor back as it was after an export.</summary>
+    public void ExitExportView()
+    {
+        if (!IsInstanceValid(_screen)) return;
+        _screen.Reparent(_screenHome, false);
+        _chrome.Visible = true;
+    }
+
+    /// <summary>
+    /// <c>--movieexport &lt;s&gt;</c> (#786): the last <paramref name="seconds"/> of the movie exported at 30 fps, then
+    /// the video's frames counted with ffprobe; RESULT printed and the game quits.
+    /// </summary>
+    public void ExportForCheck(double seconds)
+    {
+        var p = MovieSession.Project;
+        var seq = p.Sequences[p.ActiveSequence];
+        seq.In = Math.Max(0, p.Duration - seconds - 0.5);
+        seq.Out = seq.In + seconds;
+        // a chase on the first actor, so every frame differs
+        if (p.Lanes.Count > 0 && p.Cameras.All(c => c.Keys.Count == 0 && !c.Relative))
+        {
+            p.Camera.Rig = ShotRig.Chase;
+            p.Camera.Target = 0;
+            p.Camera.Smoothing = 0.3f;
+        }
+        bool started = StartExport(30, (ok, video) =>
+        {
+            int frames = ok ? CountFrames(video) : -1, want = (int)Math.Ceiling(seconds * 30);
+            bool sound = ok && HasSound(video);
+            bool right = ok && Math.Abs(frames - want) <= 1;
+            GD.Print($"[movieexport] {video}: {frames} frames (want {want}), sound {(sound ? "yes" : "no")} {(right ? "ok" : "WRONG")}");
+            GD.Print(right ? "[movieexport] RESULT: ok" : "[movieexport] RESULT: FAILED");
+            GetTree().Quit(right ? 0 : 1);
+        });
+        if (!started) { GD.Print("[movieexport] RESULT: FAILED (did not start)"); GetTree().Quit(1); }
+    }
+
+    private static int CountFrames(string video)
+    {
+        var output = new Godot.Collections.Array();
+        int code = OS.Execute(BundledTools.Resolve("ffprobe"), new[] { "-v", "error", "-count_frames", "-select_streams", "v:0",
+            "-show_entries", "stream=nb_read_frames", "-of", "csv=p=0", video }, output);
+        return code == 0 && output.Count > 0 && int.TryParse(output[0].AsString().Trim(), out int n) ? n : -1;
+    }
+
+    private static bool HasSound(string video)
+    {
+        var output = new Godot.Collections.Array();
+        int code = OS.Execute(BundledTools.Resolve("ffprobe"), new[] { "-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_name", "-of", "csv=p=0", video }, output);
+        return code == 0 && output.Count > 0 && output[0].AsString().Trim().Length > 0;
+    }
 
     /// <summary>Out of the editor, straight back into the game where it was left.</summary>
     private void BackToGame() => Shell.CloseAll();

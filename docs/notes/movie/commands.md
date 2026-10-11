@@ -23,6 +23,7 @@
   saved recording is loaded back: at least one actor clip, one world clip, one sound clip and the right length
   expected, `[movierecord] RESULT` printed. `-- --world fixture --flycheck plane --movierecord 4 12`, about 20 s.
   **Writes into the real `user://movies/`** (the recording, its looks, its sound): delete them after, or use `-Scratch`.
+- `--movieexport <s>` (with `--moviestudio`): exports the last s seconds and checks the frames and the sound with ffprobe (`movie-export`). `-- --world fixture --flycheck plane --moviestudio 13 9 --movieexport 2`, about 40 s.
 - `--moviewipe` (with `--moviestudio`): the Sequences screen in the middle of a 2 s wipe into a lead shot (`movie-sequences`).
 - `--movieshots` (with `--moviestudio`): the Shots screen with three example shots, for screenshots (`movie-shots-screen`).
 - `--moviestudio <s> [t]` (any direct world launch): after s seconds, grabs the buffer and opens Pause > Movie

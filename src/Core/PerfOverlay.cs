@@ -52,6 +52,9 @@ public partial class PerfOverlay : CanvasLayer
 
     public override void _Ready()
     {
+        // it only reads numbers: it runs while the game is paused too, so it can hide itself from a
+        // movie export made in the paused editor (#786)
+        ProcessMode = ProcessModeEnum.Always;
         _panel = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
