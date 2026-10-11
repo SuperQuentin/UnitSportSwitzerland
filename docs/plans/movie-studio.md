@@ -15,8 +15,8 @@ a fixed point. The redesign is built **on that stack**: nothing reaches `main` u
 | R2 Shot model (rigs, moves, shake, beat links) and sequences | built, draft | #776, PR #783 |
 | R3 Shots screen | built, draft | #777, PR #784 |
 | R4 Sequences screen, transitions, auto-director | built, draft | #778, PR #785 |
-| R5 Editor interaction pass (modes, icon + word buttons, sizes) | full-screen editor in PR #781; icons, shortcut sheet in PR #785; VR panel to do | #779 |
-| 6 Video export of a sequence | planned | — |
+| R5 Editor interaction pass (modes, icon + word buttons, sizes) | full-screen editor in PR #781; icons, shortcut sheet in PR #785; the VR panel later (user, Oct 2026) | #779 |
+| 6 Video export of a sequence | built, draft (size 720p–4K and 24/30/60 fps chosen at export) | #786, PR #787 |
 | 7 VR performance + VR handheld camera | planned | — |
 | 8 Webcam/phone body tracking (VMC) | planned | — |
 
@@ -46,6 +46,10 @@ a fixed point. The redesign is built **on that stack**: nothing reaches `main` u
   exactly where the game was. **Offline the game is paused** while editing; online it goes on and the player is
   left as it was (stopping somewhere safe first is the player's call). Shots are framed inside the player;
   *Enlarge* (H) gives it the whole editor while framing.
+- **Answers of Oct 2026, after a night of building:** no Record tab in the editor (Record / Stop stays in the game:
+  Shift+F5, Pause > Record); the editor's VR panel comes later; streaming long sessions to disk and the dormant
+  fleet go to #782; Frame from view is G; a following rig's default distance scales with the vehicle; the export
+  offers a size and a frame rate.
 - **Buttons:** an icon **plus one word**, smaller than today; the full description and shortcut show on hover.
   The 11 px shortcut strip goes.
 
@@ -155,7 +159,7 @@ in a group "Imported", and the old cut list becomes a sequence "Main".
   a World shot on turns and stops, no shot twice in a row. The result is ordinary blocks to edit.
 
 ## R5 Editor interaction pass
-- A mode tab bar: **Record · Shots · Sequences**. Each mode shows only its own controls.
+- A mode tab bar: **Shots · Sequences** (no Record tab: recording is done in the game). Each mode shows only its own controls.
 - Every button: a Tabler-style icon **plus one word** ("Split", "Key", "Cut", "Play"), 26 px high, `FontSmall`.
   A tooltip gives the full description and its shortcut on keyboard, pad and VR (`InputHints`).
 - The shortcut strip is removed; `?` opens a shortcut sheet.
