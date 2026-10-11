@@ -1181,6 +1181,21 @@ public partial class ClientWorld : Node3D, IOriginContainer
         _chunks?.SetFallbackEnabled(GameSettings.Current.GeneratedFill);
         if (_ambience != null) _ambience.Volume = Audio.SfxBus.SliderGain(GameSettings.Current.AmbienceVolume);
         SetCameraFar(GameSettings.Current.CameraFar);
+        PublishAppearance();
+    }
+
+    private double _appearanceIn;
+
+    /// <summary>
+    /// The figure chosen in Settings → Character (#394, #806) onto this peer's own player, which
+    /// replicates it (<see cref="FootPlayer.AppearanceBits"/>). Right away on a settings change,
+    /// and every 0.25 s for a player that just spawned or respawned (or a probe's in-memory set).
+    /// </summary>
+    private void PublishAppearance()
+    {
+        if (LocalPlayer is not { } p || !IsInstanceValid(p) || !p.IsMultiplayerAuthority()) return;
+        int chosen = GameSettings.Current.AppearanceBits;
+        if (p.AppearanceBits != chosen) p.AppearanceBits = chosen;
     }
 
     /// <summary>
@@ -1804,6 +1819,7 @@ public partial class ClientWorld : Node3D, IOriginContainer
         if (_chunks != null && GetViewport().GetCamera3D() is { } cam)
             _chunks.SetView(cam);
         TrackLoading(delta);
+        if ((_appearanceIn -= delta) <= 0) { _appearanceIn = 0.25; PublishAppearance(); }
         if (GameClock.Fixed) GameClock.Pace(Stage != LoadStage.Ready || _chunks is { Settled: false });
         if (_pendingFoot != null && !SpawnPending)
         {
