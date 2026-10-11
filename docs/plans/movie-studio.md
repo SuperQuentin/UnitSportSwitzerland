@@ -3,20 +3,20 @@
 
 # Movie studio: full recording, a shot library, named sequences, VR and webcam capture
 
-Tracking: #637. Status: **redesign planned** (Oct 2026). The first design (git history of this file, `3434a1a1`)
+Tracking: #637. Status: **redesign merged** (Oct 2026); VR panel, #782, VR performance and webcam capture to come. The first design (git history of this file, `3434a1a1`)
 was built as the stacked draft PRs #642 → #663 → #670 → #676. After using it, the user asked for a redesign:
 not every object is recorded, the editor's symbol buttons are not understandable, and cameras can only stand at
 a fixed point. The redesign is built **on that stack**: nothing reaches `main` until the studio is finished.
 
 | Milestone | State | Issue / PR |
 |---|---|---|
-| 0 Replay buffer, clips, audio, camera keys, cut list (the first design) | built, draft | #642, #663, #670, #676 |
-| R1 Full recording (Record/Stop to disk, every world system) | built, draft (sessions in memory; disk streaming and the dormant fleet in #782) | #775, PR #780 |
-| R2 Shot model (rigs, moves, shake, beat links) and sequences | built, draft | #776, PR #783 |
-| R3 Shots screen | built, draft | #777, PR #784 |
-| R4 Sequences screen, transitions, auto-director | built, draft | #778, PR #785 |
-| R5 Editor interaction pass (modes, icon + word buttons, sizes) | full-screen editor in PR #781; icons, shortcut sheet in PR #785; the VR panel later (user, Oct 2026) | #779 |
-| 6 Video export of a sequence | built, draft (size 720p–4K and 24/30/60 fps chosen at export) | #786, PR #787 |
+| 0 Replay buffer, clips, audio, camera keys, cut list (the first design) | merged | #642, #663, #670, #676 |
+| R1 Full recording (Record/Stop to disk, every world system) | merged (sessions in memory; disk streaming and the dormant fleet in #782) | #775, PR #780 |
+| R2 Shot model (rigs, moves, shake, beat links) and sequences | merged | #776, PR #783 |
+| R3 Shots screen | merged | #777, PR #784 |
+| R4 Sequences screen, transitions, auto-director | merged | #778, PR #785 |
+| R5 Editor interaction pass (modes, icon + word buttons, sizes) | merged (#781, #785); the VR panel later | #779 |
+| 6 Video export of a sequence | merged (quality = a share of the screen, 24/30/60 fps) | #786, PR #787 |
 | 7 VR performance + VR handheld camera | planned | — |
 | 8 Webcam/phone body tracking (VMC) | planned | — |
 
