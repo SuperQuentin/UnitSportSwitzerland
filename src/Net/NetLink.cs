@@ -21,6 +21,14 @@ public static class NetLink
         node.IsInsideTree() && node.Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
         && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
 
+    /// <summary>
+    /// The server's link has just gone (not offline, not still connecting): the frame or two
+    /// before the spawner frees the networked nodes, whose per-frame code then skips.
+    /// </summary>
+    public static bool Dropped(Node node) =>
+        node.Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
+        && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Disconnected;
+
     /// <summary>This side owns the shared state: the server online, the game itself offline. False while the link is down.</summary>
     public static bool IsServer(Node node) => Ready(node) && node.Multiplayer.IsServer();
 }

@@ -36,3 +36,4 @@
   A server ignores all of it and keeps 2 rings of full grids around each player.
 - Also kept here: `TutorialDone` and `VehicleIntrosSeen` (the first-run tutorial and the rides' mini tutorials, `ui/tutorial`), `PlayerName` (asked the first time the Multiplayer screen opens), `LastHost`,
   `RecentGpx` (the track picker's recents). Saved servers are `user://servers.json` (`Net/ServerBook`).
+- Anti-aliasing (#768): `AntiAliasing` (Off / FXAA / MSAA 2x/4x/8x), Video tab under 3D resolution, FXAA by default, off and greyed out in PS1; why not MSAA, and `--aa`: `styles/facet-normals-and-aa`.
