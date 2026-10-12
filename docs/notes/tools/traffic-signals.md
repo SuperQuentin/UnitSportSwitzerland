@@ -78,6 +78,10 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   `PoleAlong` 0.6 m past the mouth, `PoleClear` 0.5 m out from the kerb, stepping 0.4 m out (6
   tries) until clear of carriageways and junctions (`PriorityPlanner.Clearance`), widening strips
   (`OnPavement`) and buildings; foot at the road height plus the kerb where there is a sidewalk.
+  Where the approach's separated path stops at its own line (it has a crosswalk), the main pole
+  stands right of the path, `PoleClear` out from its outer edge on the sidewalk, foot at the
+  profile's height there (the user's rule, #711: not between the waiting riders and the road; a
+  path with no stop line keeps it at the kerb, as a bike head on its own pole would). Sion: 11.
   The right pole of an approach is `Main` (main head, pocket arrows, flashers), the left one
   `Second` only when the approach has a pocket (main head and left arrow, never the right
   arrow); both carry the arm's pedestrian head, facing across. No pole on a link inside a
@@ -105,7 +109,7 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   3 s lead green, #349) on approaches with a separated path (read from the street's built end
   piece: the line's own sides do not know a street's paths), or a painted lane kerbside of a
   right pocket (layout (a)); its head is a half-size three-lens head (100 mm lenses,
-  `Shape.Bike`) on the main pole, lower edge 1.05 m, below the priority sign. Screenshots from
+  `Shape.Bike`) on the main pole, lower edge 1.2 m (middle lens at a rider's shoulder, #711; was 1.05), below the priority sign. Screenshots from
   above and from the driver's seat at LV95 2499901,1118599. #406: the left-turn bike lane's edges
   run on to its own line (box or advanced line), solid over the `TurnSolid` 10 m before the cars'
   line; where it has an advanced line the cars' stop line stops at its edges instead of crossing it.

@@ -39,9 +39,10 @@ public static class SignalBuilder
 
     /// <summary>
     /// A bike head (#351): 100 mm lenses (Stadt Zürich Velostandards LSA), half a car head, low on
-    /// the main pole below the priority sign, facing the approach.
+    /// the main pole below the priority sign, facing the approach; its middle lens at a rider's shoulder (the user's review,
+    /// #711: 1.05 m was below it).
     /// </summary>
-    private const float BikeScale = 0.5f, BikeLowerEdge = 1.05f;
+    private const float BikeScale = 0.5f, BikeLowerEdge = 1.2f;
 
     public enum Role : byte { Red, Amber, Green, Flash }
 
