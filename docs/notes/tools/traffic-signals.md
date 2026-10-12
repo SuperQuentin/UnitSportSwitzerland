@@ -114,8 +114,13 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   Sion: 24 of 63 approaches. A sign on a signal pole (`OnSignalPole`) stays there: the yielding
   arm's sign moved back with its teeth (`MoveYieldBack`), and `MoveSignsOffPaths`, left it.
   The right pole of an approach is `Main` (main head, pocket arrows, flashers), the left one
-  `Second` only when the approach has a pocket (main head and left arrow, never the right
-  arrow); both carry the arm's pedestrian head, facing across. No pole on a link inside a
+  `Second` only when the approach has more than one lane: a pocket, or lanes of its own from OSM's
+  lane data (#711: those had none) (main head and left arrow, never the right
+  arrow); both carry the arm's pedestrian head, facing across. Where no spot beside the kerb is
+  clear (another road, a widening strip), the pole is tried `PoleBackStep` 1.5 m further out
+  along the arm, up to 6 m (#711: 4 Sion approaches and one in the test region had no main
+  pole). `--signal-check` counts approaches without a main pole or second head and fails on
+  any (tier 0 `Every_approach_has_its_poles`). No pole on a link inside a
   junction. The approach's 3.02/3.03 (fallback) moves onto its main pole, plate top 2.25 m; where
   the pole carries a bike head (no room below), on top, 0.15 m above the car heads (the user's
   review, #711; `CarHeadsTop` mirrors `SignalBuilder`). Marked `PropFlags.OnSignalPole` (bit 1):

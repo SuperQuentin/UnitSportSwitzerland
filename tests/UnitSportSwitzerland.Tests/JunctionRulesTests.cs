@@ -56,6 +56,16 @@ public class JunctionRulesTests(SignalTestRegionFixture region) : IClassFixture<
     }
 
     [Fact]
+    public void Every_approach_has_its_poles()
+    {
+        // #711, the user's review: a main pole on every approach, a second head on every one with more than one lane
+        var log = new List<string>();
+        int code = UnitSport.Tools.RoadGen.Diagnostics.SignalCheck.Run(region.Dir, null, log.Add);
+        Assert.True(code == 0, string.Join(" | ", log.Where(l => l.Contains("pole") || l.Contains("RESULT"))));
+        Assert.Contains(log, l => l.Contains("0 without a main pole") && l.Contains("0 without its second head"));
+    }
+
+    [Fact]
     public void Every_rule_belongs_to_one_kind()
     {
         Assert.Empty(JunctionRules.Lights.Rules.Intersect(JunctionRules.NoLights.Rules));

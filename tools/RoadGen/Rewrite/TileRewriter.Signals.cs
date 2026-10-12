@@ -108,6 +108,9 @@ public static partial class TileRewriter
         back > 0 ? mouthSkew + SignalStopSetback - ZebraClear + PoleBehindCrosswalk + RiderLineBehindPole : mouthSkew + SignalStopSetback;
     private const int PoleTries = 6;
 
+    /// <summary>Where no spot beside the kerb is clear, the pole is tried this much further out along its arm, up to four times (#711).</summary>
+    private const double PoleBackStep = 1.5;
+
     /// <summary>A priority sign on a signal pole (#350) has its plate's top this high: below the heads' 2.35 m (SSV Art. 71).</summary>
     private const float SignOnPoleTop = 2.25f;
 
@@ -419,7 +422,10 @@ public static partial class TileRewriter
                 var pedFlag = pedestrians ? SignalPoleFlags.Pedestrian : 0;
                 if (!pedestrians) stats.ArmsWithoutPedestrians++;
                 var mainFlags = inside ? 0 : (approach ? SignalPoleFlags.Main : 0) | pedFlag;
-                var secondFlags = inside ? 0 : (approach && (pocket || rightPocket) ? SignalPoleFlags.Second : 0) | pedFlag;
+                // (#711, the user's review) the second head wherever the approach has more than one lane: a pocket, or lanes of its own
+                // from OSM's lane data (they had none)
+                bool lanesOwn = pockets.GetValueOrDefault((junction.NodeId, i))?.OwnMoves is { Length: > 1 };
+                var secondFlags = inside ? 0 : (approach && (pocket || rightPocket || lanesOwn) ? SignalPoleFlags.Second : 0) | pedFlag;
                 if (!inside && approach) leftGuides.Add(i);   // a left pocket's lane, or the through lane's left edge where the left turn shares it
                 // the left repeater signal stands on a small island in the hatched median behind the stop line, not on the far kerb (#682)
                 if (!inside && approach && pocket && pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } exitWay, ExitFar: false })
@@ -630,13 +636,16 @@ public static partial class TileRewriter
         if (wish.Flags == SignalPoleFlags.None) return null;
         var side = wish.Side;
         double r = RoadSigns.PoleDiameter * 0.5, pathFrom = side.VergeDm / 10.0, pathTo = (side.VergeDm + side.BikeDm) / 10.0;
+        // out from the kerb; where every spot there is taken (another road, a widening strip), a little further out along the arm
+        // (#711, the user's review: an approach was left without its pole)
+        foreach (double back in (ReadOnlySpan<double>)[0, PoleBackStep, 2 * PoleBackStep, 3 * PoleBackStep, 4 * PoleBackStep])
         for (int k = 0; k < PoleTries; k++)
         {
             double off = wish.Start + k * PoleStep;
             if (side.HasTrack && off + r > pathFrom && off - r < pathTo) continue;
-            var at = wish.Axis + wish.Out * (wish.Kerb + off);
+            var at = wish.Axis + wish.CarFacing * back + wish.Out * (wish.Kerb + off);
             if (!clearance.IsClear(at, RoadSigns.PoleDiameter) || buildings.Contains(at) || OnPavement(at, areas)) continue;
-            float road = wish.Source.SampleHeight(wish.Axis + wish.Out * wish.Kerb);
+            float road = wish.Source.SampleHeight(wish.Axis + wish.CarFacing * back + wish.Out * wish.Kerb);
             float foot = side.OuterDm > 0 ? RoadStreetSection.HeightAt(side, (float)off) : 0f;
             var local = Local(home, [at], _ => road + foot, 0f);
             return new SignalPole(local[0], local[1], local[2], Heading(wish.CarFacing), Heading(wish.PedFacing), wish.Arm, wish.Flags);
