@@ -1132,7 +1132,7 @@ public static partial class TileRewriter
             {
                 if (!signs.TryGetValue(tile, out var list) || index >= list.Count) continue;
                 var s = list[index];
-                if (s.Type != PointPropType.YieldSign) continue;
+                if (s.Type != PointPropType.YieldSign || OnSignalPole(s)) continue;
                 list[index] = s with { X = (float)(s.X + u.X * shift), Z = (float)(s.Z - u.Y * shift) };
                 stats.SignsMoved++;
             }
@@ -1147,6 +1147,7 @@ public static partial class TileRewriter
         for (int k = 0; k < props.Count; k++)
         {
             var prop = props[k];
+            if (OnSignalPole(prop)) continue;   // its pole stands clear of the path (#711)
             foreach (var seg in segments)
             {
                 if (!seg.Attributes.Left.HasTrack && !seg.Attributes.Right.HasTrack) continue;

@@ -31,6 +31,61 @@ public static partial class TileRewriter
     private const double SignalStopSetback = 3.6;
 
     /// <summary>
+    /// Behind a crosswalk the cars' stop line stands this much further back where the approach has room (the user's review,
+    /// #711: 0.3 m from the zebra was too close); the riders' lines stay by the crosswalk (they need no setback).
+    /// </summary>
+    private const double StopBehindCrosswalk = 2.0;
+
+    /// <summary>The approach keeps at least this much (m) behind the moved stop line, else the line stays (#711).</summary>
+    private const double StopBackRoom = 15.0;
+
+    /// <summary>Each lights approach's extra stop-line setback behind its crosswalk (#711), while a block is laid out.</summary>
+    [ThreadStatic] private static Dictionary<(int Node, int Arm), double>? _stopBack;
+
+    /// <summary>How much further back than <see cref="SignalStopSetback"/> the cars' stop line stands on an approach (#711).</summary>
+    private static double StopBack(int node, int arm) => _stopBack?.GetValueOrDefault((node, arm)) ?? 0;
+
+    /// <summary>
+    /// Whether a lights arm gets a crosswalk (#682, #700, #711): where OSM maps a marked crossing on it; where OSM maps none round
+    /// the junction, on every arm with a sidewalk. Also whether OSM maps one there and the arm has a sidewalk (the stats).
+    /// </summary>
+    private static (bool Crosswalk, bool Osm, bool Sidewalk) CrosswalkOn(Junction junction, int i, RoadNetwork net, CrossingNodes? crossings,
+        bool crossingsMapped, RoadSide streetRight, RoadSide streetLeft)
+    {
+        bool osm = crossings?.OnArm(junction, i, net) is not null, sidewalk = streetRight.SidewalkDm > 0 || streetLeft.SidewalkDm > 0;
+        return (osm || sidewalk && !crossingsMapped && JunctionRules.Lights.Has(JunctionRule.CrosswalkOnSidewalkArms), osm, sidewalk);
+    }
+
+    /// <summary>
+    /// The cars' stop line of every lights approach with a crosswalk moves <see cref="StopBehindCrosswalk"/> back where the
+    /// approach is long enough (#711), decided before the pockets are laid (their lines stand on it).
+    /// </summary>
+    private static void PlanStopBacks(PriorityResult priority, RoadNetwork net, Func<int, LinkEnd, bool, RoadSide> streetSideAt, CrossingNodes? crossings)
+    {
+        _stopBack = [];
+        var signalNodes = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).Select(p => p.Junction.NodeId).ToHashSet();
+        var signalJunctions = priority.Plans.Where(p => p.Plan.Kind == PriorityPlanner.Kind.Signal).ToDictionary(p => p.Junction.NodeId, p => p.Junction);
+        foreach (var (junction, plan) in priority.Plans)
+        {
+            if (plan.Kind != PriorityPlanner.Kind.Signal) continue;
+            bool crossingsMapped = CrossingsMapped(junction, net, signalNodes, signalJunctions, crossings);
+            for (int i = 0; i < junction.Arms.Count && i < plan.Arms.Count; i++)
+            {
+                var link = net.Links[plan.Arms[i].LinkId];
+                if (!plan.Arms[i].Approach || Internal(link, junction.NodeId, signalNodes)) continue;
+                bool drawnRight = plan.Arms[i].End == LinkEnd.End;
+                var right = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, drawnRight);
+                var left = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
+                if (!CrosswalkOn(junction, i, net, crossings, crossingsMapped, right, left).Crosswalk) continue;
+                double length = -(link.TrimStart + link.TrimEnd);
+                for (int k = 1; k < link.Centreline.Count; k++) length += link.Centreline[k].DistanceTo(link.Centreline[k - 1]);
+                if (length >= MouthSkew(junction, junction.Arms[i]) + SignalStopSetback + StopBehindCrosswalk + StopBackRoom)
+                    _stopBack[(junction.NodeId, i)] = StopBehindCrosswalk;
+            }
+        }
+    }
+
+    /// <summary>
     /// Signal poles (#350) stand this far past the mouth along their arm, at the kerb plus
     /// <see cref="PoleClear"/>, stepping out by <see cref="PoleStep"/> up to <see cref="PoleTries"/>
     /// times until clear of every carriageway, widening and building. With the stop line
@@ -38,10 +93,16 @@ public static partial class TileRewriter
     /// head (Kanton Bern Handbuch Markierung).
     /// </summary>
     private const double PoleAlong = 0.4, PoleClear = 0.5, PoleStep = 0.4;
+
+    /// <summary>Beside a crosswalk the poles stand this far behind its near edge (#711, the user's review).</summary>
+    private const double PoleBehindCrosswalk = 0.4;
     private const int PoleTries = 6;
 
     /// <summary>A priority sign on a signal pole (#350) has its plate's top this high: below the heads' 2.35 m (SSV Art. 71).</summary>
     private const float SignOnPoleTop = 2.25f;
+
+    /// <summary>Whether a sign was moved onto a signal pole (#350): its plate top is there, and later passes leave it (#711).</summary>
+    private static bool OnSignalPole(RoadPointProp sign) => sign.Height == SignOnPoleTop;
 
     /// <summary>
     /// A link this short between two signalised junction nodes is inside one junction (a large
@@ -96,7 +157,7 @@ public static partial class TileRewriter
         public int Junctions, Inferred, FromData, Arms, Approaches, LeftPockets, RightPockets, StopLines, Groups, TwoLensPedestrian, Invalid;
         /// <summary>Where OSM decides, what the inference rule would have said: both, rule only, OSM only (#348 tuning).</summary>
         public int RuleAndOsm, RuleOnly, OsmOnly, InternalArms;
-        public int Poles, PolesPastPath, PolesRejected, SignsOnPoles, BikeSignals, Crossings, PathStopLines, Refuges;
+        public int StopsBack, Poles, PolesPastPath, PolesRejected, SignsOnPoles, BikeSignals, Crossings, PathStopLines, Refuges;
         /// <summary>Dashed lines through a junction between two lanes with the same turn (#700).</summary>
         public int PairGuides;
         /// <summary>Pedestrian crossings drawn from OSM crossing nodes (#700): at junctions without lights, and at lit arms with no sidewalk.</summary>
@@ -120,7 +181,7 @@ public static partial class TileRewriter
             sb.Append(c, $"{LeftPockets:N0} with a left-turn pocket, {RightPockets:N0} with a right-turn pocket, {StopLines:N0} stop lines without a left pocket, {Groups:N0} signal groups, ");
             sb.Append(c, $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key} x{kv.Value}"))}, invalid plans {Invalid:N0}, dashed lines through the junction between two lanes with the same turn {PairGuides:N0} (#700), crossings from OSM crossing nodes {DataCrossings:N0}, refuges where one crosses an exit hatch {Refuges:N0} (#700), junctions whose crosswalks follow OSM {CrossingsMapped:N0}, arms with a sidewalk and no mapped crossing there {CrosswalksUnmapped:N0}, arms without a pedestrian signal (no crosswalk) {ArmsWithoutPedestrians:N0} (#711)").AppendLine();
             sb.Append(c, $"      where OSM decides, the inference rule agrees on {RuleAndOsm:N0}, adds {RuleOnly:N0} OSM does not have, misses {OsmOnly:N0}; {InternalArms:N0} arms inside a junction of several nodes; inferred at LV95 {string.Join(" ", InferredAt)}; crosswalks left out by OSM at LV95 {string.Join(" ", UnmappedAt)}").AppendLine();
-            sb.Append(c, $"      poles (#350) {Poles:N0} ({PolesPastPath:N0} main poles right of their path, #711), rejected (no clear spot) {PolesRejected:N0}, priority signs moved onto a pole {SignsOnPoles:N0}, approaches with a bike signal {BikeSignals:N0} (#351)").AppendLine();
+            sb.Append(c, $"      stop lines moved {StopBehindCrosswalk:F0} m behind their crosswalk {StopsBack:N0} (#711), poles (#350) {Poles:N0} ({PolesPastPath:N0} main poles right of their path, #711), rejected (no clear spot) {PolesRejected:N0}, priority signs moved onto a pole {SignsOnPoles:N0}, approaches with a bike signal {BikeSignals:N0} (#351)").AppendLine();
             foreach (var x in InvalidExamples) sb.Append("      invalid: ").Append(x).AppendLine();
             return sb.ToString();
         }
@@ -271,16 +332,30 @@ public static partial class TileRewriter
                 // (#711) lanes in place, more toward the junction than away: the approach begins at its own centre line, past the axis
                 if (layout is null && info.Attributes.OneWay == 0 && OwnLanes(junction, i, net) is { Lanes: > 1 } own)
                     from = Math.Min(from, own.Centre - own.LaneWidth * 0.5);
-                var bar = mid + u * (MouthSkew(junction, arm) + SignalStopSetback + SignalStopLine * 0.5);
+                double back = StopBack(junction.NodeId, i);   // behind a crosswalk, where there is room (#711)
+                if (back > 0 && approach) stats.StopsBack++;
+                var bar = mid + u * (MouthSkew(junction, arm) + SignalStopSetback + back + SignalStopLine * 0.5);
                 if (approach && !pocket && block.Contains(source.Tile))
                 {
                     // across the approach's own lane: a right pocket and the bike lane beside it have their own
                     double through = layout is null ? half : half + layout.Through().To - layout.Half - layout.Shift;
+                    // (#711) where the cars' line stands back, a kerbside bike lane keeps its riders' own line by the crosswalk
+                    var laneSide = bikeSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, plan.Arms[i].End == LinkEnd.End);
+                    double riders = back > 0 && layout is null && laneSide.HasLane ? laneSide.BikeDm / 10.0 : 0;
                     Get(paint, source.Tile).Add(new RoadPaint
                     {
                         Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.White, Width = SignalStopLine,
-                        Vertices = Local(source.Tile, [bar + right * (from + 0.1), bar + right * (through - 0.1)], source.SampleHeight, 0f),
+                        Vertices = Local(source.Tile, [bar + right * (from + 0.1), bar + right * (through - riders - 0.1)], source.SampleHeight, 0f),
                     });
+                    if (riders > 0)
+                    {
+                        var bikeBar = mid + u * (MouthSkew(junction, arm) + SignalStopSetback + BikeStopLine * 0.5);
+                        Get(paint, source.Tile).Add(new RoadPaint
+                        {
+                            Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.Yellow, Width = BikeStopLine,
+                            Vertices = Local(source.Tile, [bikeBar + right * (through - riders + 0.05), bikeBar + right * (through - 0.05)], source.SampleHeight, 0f),
+                        });
+                    }
                     stats.StopLines++;
                 }
                 var stop = bar + right * ((from + to) * 0.5);
@@ -308,11 +383,11 @@ public static partial class TileRewriter
                     var streetLeft = streetSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
                     // a crosswalk where OSM maps a marked crossing on the arm (#700); where it maps none round the junction,
                     // on every arm with a sidewalk (#682). An arm with a sidewalk the mapped junction leaves out has none (#711)
-                    bool osmCrossing = crossings?.OnArm(junction, i, net) is not null, sidewalk = streetRight.SidewalkDm > 0 || streetLeft.SidewalkDm > 0;
+                    (crosswalk, bool osmCrossing, bool sidewalk) = CrosswalkOn(junction, i, net, crossings, crossingsMapped, streetRight, streetLeft);
                     if (osmCrossing && !sidewalk) stats.DataCrossings++;
                     if (crossingsMapped && sidewalk && !osmCrossing && stats.CrosswalksUnmapped++ < 12)
                         stats.UnmappedAt.Add(string.Create(CultureInfo.InvariantCulture, $"{junction.Centre.X:F0},{junction.Centre.Y:F0}"));
-                    if (crosswalk = osmCrossing || sidewalk && !crossingsMapped && JunctionRules.Lights.Has(JunctionRule.CrosswalkOnSidewalkArms))
+                    if (crosswalk)
                         EmitCrossing(paint, source, mid, u, right, MouthSkew(junction, arm) + SignalStopSetback, -(half + (pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0)), to, streetRight, streetLeft, areas, stats,
                             pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } edgeWay, ExitFar: false } ? s => (edgeWay.OuterEdge(Math.Max(s, 0)).P - (mid + u * s)).Dot(right) : null,
                             insetLeft: junction.KerbInset.GetValueOrDefault((i, false)), insetRight: junction.KerbInset.GetValueOrDefault((i, true)),   // diagonal beside a tight corner (#700)
@@ -329,8 +404,8 @@ public static partial class TileRewriter
                 // the left repeater signal stands on a small island in the hatched median behind the stop line, not on the far kerb (#682)
                 if (!inside && approach && pocket && pockets.GetValueOrDefault((junction.NodeId, i)) is { ExitWay: { } exitWay, ExitFar: false })
                 {
-                    double stopAtArm = MouthSkew(junction, arm) + SignalStopSetback, zebraTo = stopAtArm - ZebraClear;
-                    if (exitWay.Islands(Get(areas, exitWay.Tile), stopAtArm, zebraTo - ZebraDepth, zebraTo, crosswalk) is { } island)
+                    double zebraAt = MouthSkew(junction, arm) + SignalStopSetback, zebraTo = zebraAt - ZebraClear;
+                    if (exitWay.Islands(Get(areas, exitWay.Tile), zebraAt + back, zebraTo - ZebraDepth, zebraTo, crosswalk) is { } island)
                     {
                         secondFlags &= ~SignalPoleFlags.Second;
                         exitWay.HasIsland = true;   // the through guide passes it (#711)
@@ -348,20 +423,23 @@ public static partial class TileRewriter
                         ? new IslandExit(way.HatchAt(0) + way.Frame0, way.ExitCar, exitSide.HasTrack || exitSide.HasLane)
                         : new IslandExit(info.Attributes.OneWay != 0 ? -half : 0, info.Attributes.OneWay != 0 ? 2 * half - bikeLane : half - bikeLane, exitSide.HasTrack || exitSide.HasLane);
                 }
+                // (#711, the user's review) beside a crosswalk the poles stand by it, on its near side (not by the cars' stop line)
+                double poleAlong = crosswalk ? MouthSkew(junction, arm) + SignalStopSetback - ZebraClear + PoleBehindCrosswalk : along;
                 // the main pole stands right of the approach's separated path where the path stops at its own line (the user's
                 // rule, #711: riders wait beside it, the pole is not between them and the road); a path with no line (no
                 // crosswalk) keeps it at the kerb. (The bike head is on this pole: a bike head on its own pole would keep it too.)
                 var pathSide = bikeSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, drawnRight);
-                double pastPath = crosswalk && pathSide.HasTrack ? (pathSide.VergeDm + pathSide.BikeDm + pathSide.BufferDm) / 10.0 : 0;
-                if (pastPath > 0) stats.PolesPastPath++;
-                wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, right, to + pastPath, u, -right,
-                    pastPath > 0 ? RoadStreetSection.HeightAt(pathSide, (float)(pastPath + PoleClear))
-                        : rightSide.OuterDm > 0 ? rightSide.KerbCm / 100f : 0f, mainFlags, plan.Arms[i].LinkId));
+                bool pastPath = crosswalk && pathSide.HasTrack;
+                if (pastPath) stats.PolesPastPath++;
+                wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * poleAlong, right, to, u, -right,
+                    pathSide.OuterDm > 0 ? pathSide : rightSide, pastPath ? (pathSide.VergeDm + pathSide.BikeDm) / 10.0 + PoleClear : PoleClear,
+                    mainFlags, plan.Arms[i].LinkId));
                 // the left kerb stands out by the exit widening of the opposite approach's pocket (#123):
                 // measured from the old edge, every spot tried was on that strip (#386)
                 double exitWidening = pockets.GetValueOrDefault((junction.NodeId, i))?.ExitWidening ?? 0;
-                wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * along, -right, half + exitWidening, u, right,
-                    leftSide.OuterDm > 0 ? leftSide.KerbCm / 100f : 0f, secondFlags, -1));
+                var exitPathSide = bikeSideAt(plan.Arms[i].LinkId, plan.Arms[i].End, !drawnRight);
+                wantPoles.Add(new PoleWish((byte)arms.Count, source, mid + u * poleAlong, -right, half + exitWidening, u, right,
+                    exitPathSide.OuterDm > 0 ? exitPathSide : leftSide, PoleClear, secondFlags, -1));
                 // a bike head (#351) beside a separated path, or a kerbside bike lane a right pocket's cars
                 // cross (layout (a)); a bike lane between the pocket and the through lane (b) goes with the
                 // cars. The path or lane as built at the arm's end (the line's own sides do not know a
@@ -482,23 +560,32 @@ public static partial class TileRewriter
     /// <summary>
     /// A pole wanted beside an arm (#350): the arm's plan index, its source line, the point on the
     /// arm's axis it stands beside, the way out to its kerb and the kerb's distance, the way its
-    /// car heads and its pedestrian head face (plan view), the kerb height, what it carries, and
-    /// the link whose priority sign moves onto it (-1 none).
+    /// car heads and its pedestrian head face (plan view), the street side it stands on and how far
+    /// out of the kerb it is first tried, what it carries, and the link whose priority sign moves
+    /// onto it (-1 none).
     /// </summary>
     private sealed record PoleWish(byte Arm, Source Source, Vec2 Axis, Vec2 Out, double Kerb, Vec2 CarFacing, Vec2 PedFacing,
-        float KerbHeight, SignalPoleFlags Flags, int SignLink);
+        RoadSide Side, double Start, SignalPoleFlags Flags, int SignLink);
 
-    /// <summary>The first spot out from the kerb that is clear of carriageways, widenings and buildings, in the home tile's frame; null when none is.</summary>
+    /// <summary>
+    /// The first spot out from the kerb that is clear of carriageways, widenings, buildings and the side's bike path (#711: a pole
+    /// stood on it), in the home tile's frame, its foot on the side's profile there; null when none is.
+    /// </summary>
     private static SignalPole? PlacePole(PoleWish wish, TileId home, PriorityPlanner.Clearance clearance, Footprints buildings,
         Dictionary<TileId, List<RoadAreaProp>> areas)
     {
         if (wish.Flags == SignalPoleFlags.None) return null;
+        var side = wish.Side;
+        double r = RoadSigns.PoleDiameter * 0.5, pathFrom = side.VergeDm / 10.0, pathTo = (side.VergeDm + side.BikeDm) / 10.0;
         for (int k = 0; k < PoleTries; k++)
         {
-            var at = wish.Axis + wish.Out * (wish.Kerb + PoleClear + k * PoleStep);
+            double off = wish.Start + k * PoleStep;
+            if (side.HasTrack && off + r > pathFrom && off - r < pathTo) continue;
+            var at = wish.Axis + wish.Out * (wish.Kerb + off);
             if (!clearance.IsClear(at, RoadSigns.PoleDiameter) || buildings.Contains(at) || OnPavement(at, areas)) continue;
             float road = wish.Source.SampleHeight(wish.Axis + wish.Out * wish.Kerb);
-            var local = Local(home, [at], _ => road + wish.KerbHeight, 0f);
+            float foot = side.OuterDm > 0 ? RoadStreetSection.HeightAt(side, (float)off) : 0f;
+            var local = Local(home, [at], _ => road + foot, 0f);
             return new SignalPole(local[0], local[1], local[2], Heading(wish.CarFacing), Heading(wish.PedFacing), wish.Arm, wish.Flags);
         }
         return null;

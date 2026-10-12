@@ -82,6 +82,20 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   stands right of the path, `PoleClear` out from its outer edge on the sidewalk, foot at the
   profile's height there (the user's rule, #711: not between the waiting riders and the road; a
   path with no stop line keeps it at the kerb, as a bike head on its own pole would). Sion: 11.
+  A pole never stands on its side's path (`PlacePole` skips it: one did, and the sign pass took
+  its priority sign off the pole); the foot is on the side's profile (`RoadStreetSection.HeightAt`).
+  Beside a crosswalk both poles stand by it on its near side, `PoleBehindCrosswalk` 0.4 m behind
+  its edge, not by the cars' stop line (the user's review, #711); with no crosswalk `PoleAlong`.
+- **The cars' stop line behind a crosswalk** (the user's review, #711: 0.3 m was too close):
+  `StopBehindCrosswalk` 2 m further back where the approach has a crosswalk and `StopBackRoom`
+  15 m left behind the moved line (`PlanStopBacks`, before the pockets; `StopBack(node, arm)`).
+  The crosswalk stays at `SignalStopSetback` and so do the riders' lines (the path's yellow line,
+  a left pocket's advanced line and bike box, a right pocket's layout (b) line); a kerbside bike
+  lane without a pocket gets its own yellow line there, the cars' bar stopping at its edge (an
+  advanced bike stop line, as SSV Art. 69a asks for bikes turning right on red). Pocket lines,
+  arrows, the lane records, the solid centre line and the exit's hatch follow the cars' line.
+  Sion: 24 of 63 approaches. A sign on a signal pole (`OnSignalPole`) stays there: the yielding
+  arm's sign moved back with its teeth (`MoveYieldBack`), and `MoveSignsOffPaths`, left it.
   The right pole of an approach is `Main` (main head, pocket arrows, flashers), the left one
   `Second` only when the approach has a pocket (main head and left arrow, never the right
   arrow); both carry the arm's pedestrian head, facing across. No pole on a link inside a

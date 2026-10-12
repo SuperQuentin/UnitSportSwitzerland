@@ -154,7 +154,8 @@ public static partial class TileRewriter
     private static double ExitStop(PocketPlan? exiting, PocketPlan? facing) =>
         exiting is not { ExitStopLine: true } p ? 0
         : SignalStopSetback + p.ExitSkew + SignalStopLine * 0.5
-          + (facing is { Dropped: false, In.ApproachWay.HasLeftBikeLane: true } ? (facing.BikeBox ? BikeBoxDepth : AdvancedBikeLine) : 0);
+          + Math.Max(facing is { Dropped: false, In.ApproachWay.HasLeftBikeLane: true } ? (facing.BikeBox ? BikeBoxDepth : AdvancedBikeLine) : 0,
+              facing is { Dropped: false } ? StopBack(facing.Node, facing.Arm) : 0);
 
     private static double Sq(double v) => v * v;
 
@@ -410,7 +411,7 @@ public static partial class TileRewriter
             double hatch = exitWay.BikeWidth <= 0 && layout.LeftPocketLane is { } own ? own.To + layout.LeftBike : exitWay.HatchAtMouth;
             double cp = shares[p] * p.In.ApproachWay!.FullAt(0), cq = shares.TryGetValue(q, out var sq) ? sq * q.In.ApproachWay!.FullAt(0) : 0;
             // where the island stands, behind the stop line (and an advanced bike line) and 2 m on, the hatch has closed that much
-            double islandAt = SignalStopSetback + AdvancedBikeLine + 2, open = Math.Max(0.2, 1 - islandAt / exitWay.Length);
+            double islandAt = SignalStopSetback + Math.Max(AdvancedBikeLine, StopBack(p.Node, p.Arm)) + 2, open = Math.Max(0.2, 1 - islandAt / exitWay.Length);
             double room = Math.Max(0, hatch - IslandKeepHatch / open);
             if (Environment.GetEnvironmentVariable("SPLITDBG") == "1") Console.WriteLine($"[split] node {p.Node} arm {p.Arm}->{p.ExitArm} hatch {hatch:F2} cp {cp:F2} cq {cq:F2} room {room:F2} exitMouth {exitWay.HatchAtMouth:F2}");
             if (cp + cq <= room) continue;
@@ -496,6 +497,7 @@ public static partial class TileRewriter
                 // with a right-turn pocket beside it, the through lane goes straight only
                 bool rightTurn = pocket.RightTurn && right is null;
                 approach.StopShift = pocket.Skew;
+                approach.StopBack = StopBack(pocket.Node, pocket.Arm);   // behind a crosswalk (#711)
                 approach.BikeBox = pocket.BikeBox;
                 // a merged strip's hatch runs to the junction before, up to its stop line there (#406)
                 if (inSlot.Merged) approach.Through(Get(paint, inSlot.Tile), inSlot.Storage, rightTurn, stats, pocket.Rules, StopBefore(inSlot.Exit));
@@ -530,6 +532,7 @@ public static partial class TileRewriter
             lanes.Approach ??= LanesOf(null, r, true);
             r.Way!.Emit(Get(paint, tile), Get(areas, tile), stripOwners);
             r.Way.StopShift = r.Skew;
+            r.Way.StopBack = StopBack(r.Node, r.Arm);
             r.Way.Layout = lanes.Approach;
             lanes.RightWay = r;   // its lanes are painted once the signal plan has settled layout (a) or (b)
             lanes.Rules = r.Rules;   // (#711: right pockets without lights too)
@@ -566,7 +569,8 @@ public static partial class TileRewriter
             // arrows only where the data restricts a lane: a lane of every turn the approach has shows none
             if (fit.Own.All(m => m == allowed) || count != fit.Own.Length) continue;
             var ownRules = JunctionRules.Of(plansByNode[node].Plan.Kind);
-            double stop = ownRules.StopAt(MouthSkew(plansByNode[node].Junction, plansByNode[node].Junction.Arms[arm]));
+            double stop = ownRules.StopAt(MouthSkew(plansByNode[node].Junction, plansByNode[node].Junction.Arms[arm]))
+                + (ownRules.Has(JunctionRule.StopLine) ? StopBack(node, arm) : 0);   // behind a crosswalk (#711)
             stats.WishArrows += OwnArrows(so.Segment, so.Painted, so.Tile, w.AtEnd, Get(paint, so.Tile), centre, laneWidth, fit.Own, stop, ownRules);
             if (fit.Own.Length > 1) solidDone.Add((node, arm));
         }
@@ -586,7 +590,7 @@ public static partial class TileRewriter
                     || !segmentOf.TryGetValue(arm.LinkId, out var so) || !block.Contains(so.Tile)) continue;
                 bool atEnd = arm.End == LinkEnd.End;
                 var way = new Widening(so.Segment, so.Painted, so.Tile, 0, atEnd, atEnd ? 1 : -1, 1, 0);
-                double stopEdge = MouthSkew(junction, junction.Arms[i]) + SignalStopSetback;
+                double stopEdge = MouthSkew(junction, junction.Arms[i]) + SignalStopSetback + StopBack(junction.NodeId, i);
                 // a core lane between bike lanes (no centre line of its own) gets one there; a road too narrow for one keeps none
                 var sides = so.Painted.Attributes;
                 if (way.SolidToStop(Get(paint, so.Tile), stopEdge, CentreSolidAtLights, centreOnly: true) > 0) stats.SolidCentres++;
@@ -1372,6 +1376,9 @@ public static partial class TileRewriter
         /// <summary>At traffic lights, the stop line's extra setback for a skewed mouth (#348).</summary>
         public double StopShift { get; set; }
 
+        /// <summary>At traffic lights, how much further back the cars' line stands behind a crosswalk (#711); the riders' stay.</summary>
+        public double StopBack { get; set; }
+
         /// <summary>The left-turn bike lane between the pocket and the through lane (#351), 0 none; and whether a bike box lies in front.</summary>
         private readonly double _bikeLeft;
         public bool BikeBox { get; set; }
@@ -1867,13 +1874,15 @@ public static partial class TileRewriter
             bool signal = rules.Has(JunctionRule.StopLine);
             float width = rules.StopWidth;
             double setback = rules.StopSetback + StopShift;
+            // (#711) the cars' line behind a crosswalk where it stands back; the riders' lines stay at setback
+            double cars = setback + (signal ? StopBack : 0);
             // the lanes across the approach (#351): pocket, left-turn bike lane, through lane
             var lanes = Layout ?? new ApproachLayout(_half, _bike, _pocket, _bikeLeft, FullWidth, false, 0);
             double pocket = lanes.LeftPocketLane?.To ?? lanes.LeftPocket, through = lanes.Through().From;   // #682: the equal lane widths, not the carriageway lane it was cut from
             bool box = _bikeLeft > 0 && BikeBox;
             // the pocket's arrows and its stop line stand behind a bike box (#351)
             bool advanced = _bikeLeft > 0 && !BikeBox;
-            double pocketBack = setback + (box ? BikeBoxDepth : advanced ? AdvancedBikeLine : 0);   // #682: the advanced line stands level with the through lane's, the cars' behind it
+            double pocketBack = Math.Max(cars, setback + (box ? BikeBoxDepth : advanced ? AdvancedBikeLine : 0));   // #682: the advanced line stands level with the through lane's, the cars' behind it
             if (_bikeLeft > 0)
             {
                 // the left-turn bike lane (#351): yellow lines both sides, from where the pocket opens
@@ -1898,8 +1907,8 @@ public static partial class TileRewriter
             else
             {
                 double offset = _side * pocket;
-                paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, offset, TurnSolid + setback - 0.1, dashedTo));
-                paint.Add(Line(PaintType.WhiteSolid, 0, 0, offset, signal ? setback : 0, TurnSolid + setback - 0.1));
+                paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, offset, TurnSolid + cars - 0.1, dashedTo));
+                paint.Add(Line(PaintType.WhiteSolid, 0, 0, offset, signal ? cars : 0, TurnSolid + cars - 0.1));
             }
 
             // the lines between the pocket's own lanes (#700): dashed, solid over the last stretch before the stop line
@@ -1923,7 +1932,7 @@ public static partial class TileRewriter
                 // in front, a bike symbol in it; the through lane's line where it was
                 // the cars' line only across the pocket: the left-turn bike lane reaches into the box (#682)
                 Bar(pocketBack, 0.1, pocket - 0.1, width, PaintEmitter.White);
-                Bar(setback, through + 0.1, lanes.Through().To - 0.1, width, PaintEmitter.White);
+                Bar(cars, through + 0.1, lanes.Through().To - 0.1, width, PaintEmitter.White);
                 Bar(setback, 0.1, through - 0.1, BikeStopLine, PaintEmitter.Yellow);
                 BikeSymbol(paint, through * 0.5, setback + BikeBoxDepth * 0.5 + BikePlanner.SymbolSize * 0.5);
                 stats.BikeBoxes++;
@@ -1934,12 +1943,12 @@ public static partial class TileRewriter
                 {
                     // the cars' line stops at the bike lane's edges (#406): riders go on to their own line
                     Bar(pocketBack, 0.1, pocket - 0.1, width, PaintEmitter.White);
-                    Bar(setback, through + 0.1, lanes.Through().To - 0.1, width, PaintEmitter.White);
+                    Bar(cars, through + 0.1, lanes.Through().To - 0.1, width, PaintEmitter.White);
                     // an advanced bike stop line across the bike lane, level with the through lane's; the pocket's cars stop behind it (#682)
                     Bar(setback, pocket + 0.05, through - 0.05, BikeStopLine, PaintEmitter.Yellow);
                     stats.AdvancedBikeLines++;
                 }
-                else Bar(setback, 0.1, (signal ? lanes.Through().To : pocket) - 0.1, width, PaintEmitter.White);
+                else Bar(cars, 0.1, (signal ? lanes.Through().To : pocket) - 0.1, width, PaintEmitter.White);
             }
             stats.StopBars++;
 
@@ -1949,7 +1958,7 @@ public static partial class TileRewriter
             double second = storage >= 20 + PaintEmitter.ArrowLength ? 20 : 13;
             foreach (double tip in (ReadOnlySpan<double>)[5 + PaintEmitter.ArrowLength, second + PaintEmitter.ArrowLength])
             {
-                double back = tip + setback - 0.1;   // from the stop line, wherever it stands
+                double back = tip + cars - 0.1;   // from the stop line, wherever it stands
                 var (x, y, z, sx, sz) = At(back);
                 // the through lane lies on the driver's right (sx, sz): their forward is that turned a quarter left
                 double fx = sz, fz = -sx;
@@ -1999,6 +2008,7 @@ public static partial class TileRewriter
             var lanes = Layout!;
             // (#711) without lights the main road's right turners give way to no one: no stop line, the lanes run on to the mouth
             double storage = _length - _taper, setback = rules.StopSetback + StopShift;
+            double cars = setback + (rules.Has(JunctionRule.StopLine) ? StopBack : 0);   // behind a crosswalk (#711); the riders' line stays
             double Open(double d) => Math.Clamp((_length - d) / Math.Max(_taper, 1e-6), 0, 1);
             var pocket = lanes.RightPocket()!.Value;
             double inner = lanes.Through().To;   // the through lane's right edge, along the storage
@@ -2028,13 +2038,13 @@ public static partial class TileRewriter
             }
             else
             {
-                paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, _side * inner, TurnSolid + setback, storage));
-                paint.Add(Line(PaintType.WhiteSolid, 0, 0, _side * inner, setback, TurnSolid + setback));
+                paint.Add(Line(PaintType.WhiteDashed, 3f, 3f, _side * inner, TurnSolid + cars, storage));
+                paint.Add(Line(PaintType.WhiteSolid, 0, 0, _side * inner, cars, TurnSolid + cars));
             }
             // the stop line across the pocket (layout (b): the riders' own yellow one across the bike lane before it, #700); at the lights only
             if (rules.Has(JunctionRule.StopLine))
             {
-                double bar = SignalStopLine * 0.5 + setback;
+                double bar = SignalStopLine * 0.5 + cars;
                 paint.Add(new RoadPaint
                 {
                     Shape = PaintShape.Polyline, Type = PaintType.StopLine, Rgba = PaintEmitter.White, Width = SignalStopLine,
@@ -2055,7 +2065,7 @@ public static partial class TileRewriter
             double second = storage >= 20 + PaintEmitter.ArrowLength ? 20 : 13;
             // the first arrow always: where a short storage behind a skewed line has no room for it 5 m
             // back, it moves up to 1 m from the line; the second only where the storage holds it
-            double first = Math.Clamp(storage + 1 - setback, 1 + PaintEmitter.ArrowLength, 5 + PaintEmitter.ArrowLength);
+            double first = Math.Clamp(storage + 1 - cars, 1 + PaintEmitter.ArrowLength, 5 + PaintEmitter.ArrowLength);
             foreach (double tip in (ReadOnlySpan<double>)[first, second + PaintEmitter.ArrowLength])
             {
                 double back = tip + setback;

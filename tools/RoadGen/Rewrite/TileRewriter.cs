@@ -644,6 +644,7 @@ public static partial class TileRewriter
                 var openings = new List<PocketOpening>();
                 var townArcs = new Dictionary<(int Node, int Arm), CornerArc>();
                 var pendingGuides = new List<(TileId Home, RoadPaint Guide, Widening Exit, int Node, int ExitArm)>();   // through guides, drawn past an island only (#711)
+                PlanStopBacks(priority, result.Network, StreetSideAt, crossingNodes);   // the cars' stop lines behind crosswalks (#711)
                 var pockets = EmitTurnLanes(priority, result, segmentOf, output, block, wanted, grids, buildings, paint, islands, signs,
                     bikeBetween, stripOwners, netStats.TurnLanes, StreetSideAt, openings, townArcs, overlay, restrictions, crossingNodes, pendingGuides);
                 var openingsOf = openings.GroupBy(o => o.Segment, ReferenceEqualityComparer.Instance)

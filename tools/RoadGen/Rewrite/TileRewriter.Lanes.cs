@@ -143,7 +143,7 @@ public static partial class TileRewriter
         float centre;
         List<ApproachLane> lanes;
         if (built is { Approach: not null })
-            (centre, lanes) = PocketLanes(built, MouthSkew(j, j.Arms[arm]) + SignalStopSetback + SignalStopLine * 0.5);
+            (centre, lanes) = PocketLanes(built, MouthSkew(j, j.Arms[arm]) + SignalStopSetback + StopBack(j.NodeId, arm) + SignalStopLine * 0.5);
         else
         {
             var moves = SignalMoves.None;
