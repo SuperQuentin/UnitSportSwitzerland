@@ -92,13 +92,25 @@ public partial class ThrowAim : Node3D, Core.IOriginShiftAware
         return player.GlobalPosition + Vector3.Up * 1.6f + right * 0.28f + ahead * 0.35f;
     }
 
-    /// <summary>The throw's velocity at <paramref name="power"/> 0..1: along the view, lofted, plus the player's own.</summary>
-    public static Vector3 Launch(FootPlayer player, float power)
+    /// <summary>
+    /// The throw's velocity at <paramref name="power"/> 0..1: along the view, lofted, plus the
+    /// player's own. <paramref name="heft"/> scales the arm's part: under 1 for a heavy thing.
+    /// </summary>
+    public static Vector3 Launch(FootPlayer player, float power, float heft = 1f)
     {
         var view = player.Camera.GlobalTransform.Basis;
         var dir = (-view.Z).Rotated(view.X.Normalized(), Loft).Normalized();
-        return dir * Mathf.Lerp(MinSpeed, MaxSpeed, power) + player.Velocity;
+        return dir * (Mathf.Lerp(MinSpeed, MaxSpeed, power) * heft) + player.Velocity;
     }
+
+    /// <summary>
+    /// How hard an item flies, 1 = anything light (#725): the boombox is heavy, it leaves at a
+    /// little over half the speed and takes longer to wind up.
+    /// </summary>
+    public static float HeftOf(ItemId id) => id == ItemId.Radio ? 0.55f : 1f;
+
+    /// <summary>The <see cref="HeftOf"/> of the item in hand, set every frame by <see cref="ItemController"/>.</summary>
+    public float Heft { get; set; } = 1f;
 
     /// <summary>
     /// Runs every frame from <see cref="ItemController"/>. <paramref name="aiming"/>: Aim held with a
@@ -119,7 +131,7 @@ public partial class ThrowAim : Node3D, Core.IOriginShiftAware
             Active = true;
             if (Charging)
             {
-                _charge = Mathf.Min(1f, _charge + dt / ChargeTime);
+                _charge = Mathf.Min(1f, _charge + dt / (ChargeTime * (2f - Heft)));   // a heavy thing winds up slower
                 Power = 1f - (1f - _charge) * (1f - _charge);   // ease out
                 if (_charge >= 1f && !_full)
                 {
@@ -228,7 +240,7 @@ public partial class ThrowAim : Node3D, Core.IOriginShiftAware
         float g = (float)ProjectSettings.GetSetting("physics/3d/default_gravity", 9.8f);
         float damp = (float)ProjectSettings.GetSetting("physics/3d/default_linear_damp", 0.1f);
         var p = Origin(player);
-        var v = Launch(player, power);
+        var v = Launch(player, power, Heft);
         var space = player.GetWorld3D().DirectSpaceState;
         var exclude = player.SelfExclude;
         _points.Add(p);

@@ -11,7 +11,11 @@
   HTTP mirror of the chunk directory that clients take tiles from first (`net/http-tiles`).
 - Status query (LAN lists, players, ping; `net/server-query`): `--server-name <n>` (default: the
   machine name), `--query-port N` (default port + 1), `--query-bind <ip>`, `--no-query`.
+  `--status-file <path>` (or `UNITSPORT_STATUS_FILE`): a JSON status for the web page (`net/status-page`).
   `--parent-pid <pid>`: quit when that process is gone (servers hosted from the menu, `net/hosting`).
+- Where players start and whether they may teleport (`net/arrival`, #799): `--spawn E,N` (LV95,
+  default Riddes), `--no-teleport` (only admins jump: no place search, no `/city`, the fly camera
+  brings you back to your body).
 - `--player-status`: one `[server] player <id> at <pos>, ground ...` line per player every 5 s
   (off by default: each `GD.Print` costs ms on Windows, see `net/load-testing`).
 - Deploying the server to a Linux host (tmux console, cron, firewall, mDNS): `general/linux-deploy`.

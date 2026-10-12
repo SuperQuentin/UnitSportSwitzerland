@@ -9,14 +9,15 @@ on foot, mounted, driving or flying, over ENet multiplayer.
 Knowledge lives in ~180 micro notes, `docs/notes/<area>/<name>.md`, one topic each. Each code
 directory's `CLAUDE.md` (auto-loaded when you touch files there) is only an **index**: one line per
 note. Read a note only when the task needs it; find one with `grep -ril <word> docs/notes`.
-Areas: tools, terrain, net, player, vehicles, avatar, audio, gpx, world, combat, br, birds, items, crafting, build, loot,
-occasions, core, ui, xr, styles, general. New knowledge goes in a new or existing note plus one index line — never in this file.
+Areas: tools, terrain, net, player, vehicles, avatar, audio, gpx, movie, world, combat, br, birds, items, crafting, build, loot, trailer,
+occasions, core, ui, xr, styles, farming, general. New knowledge goes in a new or existing note plus one index line — never in this file.
 
 `docs/notes/general/`: `subagents` (model choice, fan-out limits), `never-lookat-data-driven`,
 `invariant-culture-floats` (French locale), `gdignore-data-dirs`, `godot-ai-mcp-tips`,
 `headless-exit-139` (read the RESULT line), `godot-exe`, `graphify` (optional),
 `worktrees` (main checkout stays on `main`), `local-release` (`tools/release.sh` builds and uploads a release, run by hand),
 `release-on-merge` (a merged PR releases on GitHub Actions; bursts coalesce into one release, at most one an hour),
+`feature-clips` (`/clip`, `tools/record-clip.sh`: GIFs of a feature, shown in the next release),
 `linux-deploy` (`tools/deploy-linux.sh` builds and deploys the Linux server over SSH),
 `twoclient-checks` (server + two-client `tools/*check.sh` go through `tools/lib/twoclient.sh`),
 `testing` (test tiers, `tools/test.sh unit|quick|net|full`, path-to-check map, resource guard),
@@ -27,7 +28,11 @@ occasions, core, ui, xr, styles, general. New knowledge goes in a new or existin
 `perf-221-migration` (**read before merging main into a branch started before Oct 2026**: every #221 rule note and the rebase order),
 `new-action-three-devices` (every new key or interaction: keyboard, gamepad and VR decided together),
 `plans-on-main` (up-front plans commit on `main`; their status updates ride the feature branch),
-`uid-files` (commit a script's `.uid` with it; never `git add -A` after an import).
+`uid-files` (commit a script's `.uid` with it; never `git add -A` after an import),
+`dotnet-sdk-pin` (`global.json` pins SDK 9: C# 14 binds `array.Reverse()` to the void Span overload),
+`zfight` (`--zfightcheck` baseline, viewer `--zfight`/`--flicker`, F9 z-fight overlay and flicker shot),
+`playtest` (`tools/playtest.sh`: scenarios a person judges in one game, Claude live through the in-game MCP server, committed ledger in `tests/playtests/`),
+`collision-matrix` (`--collidecheck` rams every vehicle, prop, piece and door with a car and a walker; `--collidesandbox` to drive into them; the known-gaps table).
 
 ## Rules
 

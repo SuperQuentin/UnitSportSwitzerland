@@ -4,8 +4,10 @@
   any `ItemStack` lying in the world as a `RigidBody3D`, the `RadioManager` pattern (offline `AddChild`;
   online `RequestDrop` / `RequestPickUp`, one winner, spawner removes it everywhere). The dropper is the
   authority over the fall (`Sync`: position, rotation, `Settled`), then frozen. Spawn data `DropState`
-  carries the stack (id, count, `Data`), so a photo or a CD-carrying stack keeps its data. Not saved;
-  `MaxItems` 400 (oldest goes), cleared after 15 min with nobody within 3 km, `ForgetOwner` respawns
+  carries the stack (id, count, `Data`), so a photo or a CD-carrying stack keeps its data. On a server
+  with object containers (#689, `world/object-containers`) an item nobody is near sleeps in its tile and
+  comes back, for 24 h; without them it is cleared after 15 min with nobody within 3 km.
+  `MaxItems` 400 live (oldest goes), `ForgetOwner` respawns
   a leaver's items server-owned. Radios still go through `RadioManager` (they play); everything else here.
 - **No waiting on the network.** The dropper adds a local `Proxy` at once (token in `DropState.Token`);
   the server's spawn takes over from wherever it got to (`MultiplayerSpawner.Spawned` -> `TakeOver`).
@@ -28,7 +30,7 @@
   lines between sub-meshes, no normals (flat-shaded corners do not crack). Pulled 15 cm toward the eye so a
   flush car door's edge shows over the body (no more surface glow) while a hat in front still hides it.
   Stencil is read in the transparent pass only: both passes are transparent, ordered by render priority
-  100 / 101. Another stencil user must not take 77. Replaced the inverted hull (lumpy, outlined every part). E on a pointed radio opens its panel.
+  100 / 101. Another stencil user must not take 77. Replaced the inverted hull (lumpy, outlined every part). E on a pointed radio: a tap switches it on / off, a hold opens its panel (#725).
 - **Throw** (`ThrowAim.cs`): items with `ItemDefs.Throwable` (Throw, Consume, Material, Wear use) — Aim
   shows the arc, Use winds up (0..1 over 1 s, ease-out; hum `SfxSynth.ChargeHum` rising in pitch, chime +
   shake at full), letting go of Use throws (`ReleasePower`), letting go of Aim cancels. Velocity: view
@@ -62,3 +64,8 @@
   camera, frozen beyond, not drawn past 90 m (`VisibilityRangeEnd`). The pose is written in the body's
   local frame (it lies however it landed), so the origin shift needs nothing. The outline shader divides
   its push by the model scale so the rim keeps its width; `FlyToHand` starts from the blown-up scale.
+- **Heft (#725).** `ThrowAim.HeftOf(item)` scales the arm's part of `Launch` (the player's own
+  velocity is kept) and stretches the wind-up (`ChargeTime * (2 - heft)`): 1 for anything light,
+  0.55 for the radio (tops out near 11.5 m/s, 1.45 s to full). `ItemController` sets `ThrowAim.Heft`
+  every frame so the drawn arc matches; the pack panel's fixed throw uses it too. The radio body is
+  7 kg with a low-bounce, high-friction `PhysicsMaterial` and half the old spin: it thuds and stays.

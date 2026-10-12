@@ -210,7 +210,7 @@ public partial class AircraftCockpit : Node3D
         // side consoles for the sidesticks
         if (_k.Sidestick)
             foreach (float s in new[] { 1f, -1f })
-                fit.Box(new Vector3(s * (_k.Hip.X + 0.4f), _k.ConsoleTop - 0.01f, _k.Hip.Z + 0.2f), new Vector3(0.14f, 0.02f, 0.45f), Plate);
+                fit.Box(new Vector3(s * (_k.Hip.X + 0.4f), _k.ConsoleTop + 0.01f, _k.Hip.Z + 0.2f), new Vector3(0.14f, 0.02f, 0.45f), Plate);   // the plate stands on the console instead of sharing its top (#755)
         // the pedestal's lever quadrant
         fit.Box(new Vector3(0f, _k.PedestalTop + 0.01f, LeverZ), new Vector3(_k.PedestalHalf * 2f - 0.02f, 0.02f, 0.3f), Plate);
         var fitNode = new MeshInstance3D { Name = "CockpitFit", Mesh = fit.Build() };
@@ -345,7 +345,7 @@ public partial class AircraftCockpit : Node3D
         for (int i = 0; i < _screenSpots.Length; i++)
         {
             var (_, at, size) = _screenSpots[i];
-            _screens[i] = new MeshInstance3D { Name = $"Screen{i}", Mesh = new QuadMesh { Size = size }, Position = AircraftMeshBuilder.Flip(at), MaterialOverride = LampOff };
+            _screens[i] = new MeshInstance3D { Name = $"Screen{i}", Mesh = new QuadMesh { Size = size }, Position = AircraftMeshBuilder.Flip(at) + new Vector3(0, 0, 0.008f), MaterialOverride = LampOff };   // 1 cm in front of the panel, not 2 mm (#755)
             _model.AddChild(_screens[i]);
         }
         if (_k.Glass)
@@ -353,7 +353,7 @@ public partial class AircraftCockpit : Node3D
             _fcu = new MeshInstance3D
             {
                 Name = "Fcu", Mesh = new QuadMesh { Size = new Vector2(0.72f, 0.036f) },
-                Position = AircraftMeshBuilder.Flip(new Vector3(0f, _k.GlareY - 0.07f, _k.PanelZ - 0.061f)), MaterialOverride = LampOff,
+                Position = AircraftMeshBuilder.Flip(new Vector3(0f, _k.GlareY - 0.07f, _k.PanelZ - 0.07f)), MaterialOverride = LampOff,   // 1 cm clear of the FCU box's face, not 1 mm (#755)
             };
             _model.AddChild(_fcu);
         }

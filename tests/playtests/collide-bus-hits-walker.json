@@ -1,0 +1,28 @@
+{
+  "id": "collide-bus-hits-walker",
+  "title": "Rolling bus into a person on foot",
+  "verdict": "validated",
+  "by": "Quentin Aellen",
+  "date": "2026-10-09T17:44Z",
+  "commit": "db57cf82",
+  "coverHash": "f24d4ec66c8b7050",
+  "covers": [
+    "src/Vehicles/VehicleBody*.cs",
+    "src/Vehicles/VehicleManager.cs",
+    "src/Vehicles/Explosion.cs",
+    "src/Player/FootPlayer.Crash.cs",
+    "src/Player/Rideable.cs",
+    "!**/*Check.cs",
+    "!**/*Probe.cs",
+    "src/Player/Ragdoll*.cs",
+    "src/Combat/**"
+  ],
+  "notes": [
+    {
+      "date": "2026-10-09T17:44Z",
+      "by": "Quentin Aellen",
+      "verdict": "validated",
+      "text": ""
+    }
+  ]
+}

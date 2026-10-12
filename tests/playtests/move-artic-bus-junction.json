@@ -1,0 +1,24 @@
+{
+  "id": "move-artic-bus-junction",
+  "title": "Articulated bus through the junctions",
+  "verdict": "failed",
+  "by": "Quentin Aellen",
+  "date": "2026-10-09T16:56Z",
+  "commit": "deeee0d3",
+  "coverHash": "0a6e38816b7a9958",
+  "covers": [
+    "src/Player/Truck.cs",
+    "src/Player/HeavyTrain.cs",
+    "src/Player/HeavyDriveline.cs",
+    "src/Player/HeavyCatalog.cs",
+    "src/Avatar/HeavyRig.cs"
+  ],
+  "notes": [
+    {
+      "date": "2026-10-09T16:56Z",
+      "by": "Quentin Aellen",
+      "verdict": "failed",
+      "text": "road too narrow \u002B flicker"
+    }
+  ]
+}

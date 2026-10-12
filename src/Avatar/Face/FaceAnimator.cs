@@ -37,9 +37,16 @@ public sealed class FaceAnimator
     /// One frame: towards <paramref name="expression"/>, looking at <paramref name="look"/> (global;
     /// null: ahead) from a head <paramref name="headHeight"/> up the figure, which faces −Z.
     /// </summary>
-    public void Step(GeometryInstance3D node, FaceExpression expression, Vector3? look, float dt, float headHeight = 1.62f)
+    public void Step(GeometryInstance3D node, FaceExpression expression, Vector3? look, float dt, float headHeight = 1.62f) =>
+        Step(node, FaceExpressions.Of(expression), look, dt, headHeight);
+
+    /// <summary>
+    /// One frame towards a face worked out by the caller (a dancer following the music, #728,
+    /// <see cref="DanceFace"/>); a hit's grimace still wins over it.
+    /// </summary>
+    public void Step(GeometryInstance3D node, FaceState face, Vector3? look, float dt, float headHeight = 1.62f)
     {
-        var target = FaceExpressions.Of(_pain > 0f ? FaceExpression.Pain : expression);
+        var target = _pain > 0f ? FaceExpressions.Of(FaceExpression.Pain) : face;
         _pain = Mathf.Max(0f, _pain - dt);
         if (look is { } at)
         {

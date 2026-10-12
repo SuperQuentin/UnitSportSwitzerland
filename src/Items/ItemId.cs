@@ -169,10 +169,40 @@ public enum ItemId
     // ---- toys (#501) ----
     /// <summary>The plush shark, out of a bin at any of the nine IKEA stores (<c>Interiors.Landmarks</c>).</summary>
     Blahaj = 223,
+
+    // ---- farming (#494, docs/notes/farming/): seeds, harvests, what is made of them ----
+    /// <summary>Seeds: sown by hand on a ploughed cell or by a seed drill (<c>Farming.FarmTables.SeedFor</c>).</summary>
+    WheatSeed = 300, BarleySeed = 301, MaizeSeed = 302, SeedPotato = 303, RapeSeed = 304,
+    SunflowerSeed = 305, SugarBeetSeed = 306, VegetableSeeds = 307, PeaSeed = 308,
+    /// <summary>Harvests: a ripe cell by hand, or a combine / tractor's tank unloaded (<c>Farming.FarmTables.YieldOf</c>).</summary>
+    Wheat = 310, Barley = 311, Maize = 312, Potato = 313, Rapeseed = 314,
+    SunflowerSeeds = 315, SugarBeet = 316, Carrot = 317, HayBale = 318, Peas = 319,
+    /// <summary>Made from the harvests (<c>Crafting.Recipes</c>).</summary>
+    Flour = 320, RapeseedOil = 321, Sugar = 322, MaizeMeal = 323,
+    BakedPotato = 324, Roesti = 325, Polenta = 326, Popcorn = 327, VegetableSoup = 328, Raclette = 329,
+    /// <summary>Held: Use tills the cell ahead (plough by hand).</summary>
+    Hoe = 335,
+    /// <summary>Used on a sown cell (and the cells round it): the crop ripens sooner.</summary>
+    Fertiliser = 336,
+    /// <summary>Placed: a self-service farm stand with an honesty box (<c>PlacedKind.FarmStand</c>, <c>Farming.FarmStands</c>).</summary>
+    FarmStand = 340,
+
+    // ---- the barracks (#716, docs/notes/items/barracks-items.md): a night in the army, and the recruit's uniform ----
+    /// <summary>Held, a fanned hand of five; nothing to use, it just looks right (shops: kiosk).</summary>
+    PlayingCards = 350,
+    /// <summary>Held, a short stack of coloured chips.</summary>
+    PokerChips = 351,
+    /// <summary>A 33 cl brown bottle: drunk, it plays the mouth pose like the other drinks.</summary>
+    BeerBottle = 352,
+    /// <summary>The army's three-part mess tin.</summary>
+    Gamelle = 353,
+    /// <summary>Garments (Avatar.Garments): the Swiss camouflage TAZ 90, and an olive army T-shirt.</summary>
+    TazJacket = 354, TazTrousers = 355, ArmyTee = 356,
 }
 
 /// <summary>What an item is for, independent of what Use does: drives loot pools and, later, trade.</summary>
-public enum ItemCategory { Gear, Food, Water, Money, Medical, Scrap, Mineral, Part, Cosmetic, Clothing }
+/// <remarks>Append-only. <c>Produce</c> (#494): seeds and raw harvests, bought and sold at a farm co-op.</remarks>
+public enum ItemCategory { Gear, Food, Water, Money, Medical, Scrap, Mineral, Part, Cosmetic, Clothing, Produce }
 
 /// <summary>What pressing Use does with the item in hand.</summary>
 public enum ItemUse
@@ -219,4 +249,6 @@ public enum ItemUse
     Recall,
     /// <summary>Hold Use to cast, Use on a bite strikes, hold Use reels in, Aim winds in (<see cref="ItemId.FishingRod"/>, #493).</summary>
     Fish,
+    /// <summary>Use works the field cell ahead (#494, <c>Farming.HandFarming</c>): a hoe tills, a seed sows, fertiliser feeds a sown crop.</summary>
+    Farm,
 }

@@ -274,7 +274,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
     private bool Online => Multiplayer.MultiplayerPeer is { } peer and not OfflineMultiplayerPeer
         && peer.GetConnectionStatus() == MultiplayerPeer.ConnectionStatus.Connected;
 
-    private long MyId => Multiplayer.MultiplayerPeer is { } p and not OfflineMultiplayerPeer ? Multiplayer.GetUniqueId() : 1;
+    // not while the link is down: GetUniqueId on a dropped peer logs an error, and occupancy runs every frame
+    private long MyId => Online ? Multiplayer.GetUniqueId() : 1;
 
     /// <summary>This peer keeps the tables: the server, or a client playing offline.</summary>
     private bool Authoritative => !Online || Multiplayer.IsServer();
@@ -1068,6 +1069,8 @@ public partial class InteriorManager : Node3D, Core.IOriginContainer, Core.IOrig
                 if (door == null) text = InsidePrompt(p) ?? ChurchRadios.PromptFor(p) ?? Loot.LootService.Instance?.PromptFor(p);
             }
             else if (!p.Indoors) door = OutsideDoorInReach(p.GlobalPosition);
+            // outdoors: a farm stand at hand, a specialty buyer's yard (#494)
+            if (door == null && !p.Indoors) text = Farming.FarmSales.PromptFor(p);
             if (door != null)
                 text = InputHints.Prompt(PlayerInput.InteractMount, _doors.ContainsKey(door) ? "Close the door" : "Open the door");
             // a Battle Royale crate at your feet comes first, as E opens it first (#194)

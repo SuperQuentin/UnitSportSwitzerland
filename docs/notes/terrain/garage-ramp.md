@@ -164,8 +164,7 @@ roll changes that. Two fixes found on the way, both pre-existing and made visibl
 - **Known limits.** A grade of 27 % is steep for a real ramp (Swiss standards say 15 to 18 %) but a
   straight 18 % ramp would need 16 m plus the turn, more than most real blocks have; the profile's
   constants (`RampProfile.Slope/Bevel`, `GarageRule.RampApron/RampTurn`) are the one place to change it.
-  A ramp is only planned for a door on the front wall between two stairwells and for a block
-  planned as a whole (an L, U or courtyard block planned wing by wing has none: its door reads as locked). A car's hull box is flat, so a long wheelbase rides the crest on its rear edge for a
+  A ramp is only planned for a door on the front wall (of the block, or of the wing the main door is on, PR B and C). A car's hull box is flat, so a long wheelbase rides the crest on its rear edge for a
   moment (the bevels make it smooth, not perfect).
 - **Real data (PR 2).** `--garagelinks` now also plans each garage door as the server would and says
   whether a ramp came of it and why not (`InteriorGenerator.RampWhy`). Over Lausanne, Geneva, Nendaz and
@@ -209,7 +208,27 @@ About half of the real blocks of flats are not one box (an L, a U, a ring, a ben
 garage is planned in: the whole box, or **the wing of the outline that stands on the main door's wall** (its front edge within 2 m of the door's
 wall, stretching across the door; the largest if several). The footprint measures the garage door against that rectangle (its centre is the
 frame's origin, `wingX`), `GarageRule.RampFor` runs on the wing's own sides, the generator plans each wing as before (`TryWings`, the building's
-basement forced to one when it has a garage) and `TryBlock` plans the ramp in the wing whenever no other wing joins it and it is not entered
-from one (`o.Links` empty, not `Pinned`), whatever its `Free`/`Below` options. A wing that is joined by another has no ramp: its door reads as
-locked (about 1 % of the garage doors on the real tiles, 11 of 1192; the probe lists them). `--flatcheck` has L-shaped blocks (a 60 x 14 m wing
+basement forced to one when it has a garage) and `TryBlock` plans the ramp in the wing whenever it is not entered
+from one (not `Pinned`), whatever its `Free`/`Below` options. `--flatcheck` has L-shaped blocks (a 60 x 14 m wing
 on the street: along the facade; a 40 x 24 m one turned 31 degrees: square), each with the usual ramp checks.
+
+### No locked door: the planner decides (#694, PR C)
+
+13 of the 1192 doors of PR B (1.1 %) read as locked. Three causes, all fixed:
+
+- **A wing another wing joins off its side had no ramp** (`o.Links` non-empty). It has one now (`PlanRamp`): a corridor to an end wall runs
+  through the gap that holds the end wall's stairwell, so a **square** lane standing outside every stairwell on a side the next wing joins
+  would wall it off (`PlanRamp` says "the lane stands between the stairwells and the end wall the next wing joins"); an along-the-facade band
+  stops at the half landing wall (`ZM`), where the corridor starts, so it never conflicts. `linked` (the end-wall corridor) is only made for
+  the gap that reaches the wall, not for the part beside a lane.
+- **The garage door was given to no wing.** `TryWings` gives a door to the wing whose edge is within 2 m of it; a stepped facade can leave the
+  door's own wall 2 to 4 m off the wing's simplified edge (the main door measured within 2 m, the garage door did not): a vehicle door takes 4 m.
+- **A stairwell stands where the ramp's band does** (the door of a wing standing against this one's front wall is a stairwell). Not
+  predictable from the box and the road, so the footprint no longer predicts: **`BuildingFootprint.Compute` asks the planner itself**
+  (`InteriorGenerator.PlansGarageRamp`: `TryApartments` as `Generate` runs it, no furniture, and a ramp and a vehicle doorway in the result) for
+  every place it tries for the door; a place with no ramp behind it is skipped (`skipGarage`: the other end of the facade, then none). A block
+  `Generate` plans as an IKEA, a church or an industrial site (`type`, `SiteFor`) never gets one. The footprint and the plan cannot disagree
+  because it is the plan. Cost: one extra plan for each of the ~1.4 % of buildings with a candidate door (every roll passing), when their tile's doors are computed.
+
+Real tiles (626 tiles, every roll passing): **1188 doors, 1188 valid ramps, 0 locked, 0 invalid** (before: 1192 doors, 13 locked, 12 invalid).
+`--flatcheck` has 16 more blocks (an along and a square wing with another wing standing out toward the street at its end).

@@ -12,7 +12,7 @@ land cover, water and forest from swissTLM3D.
 
 ## Quick start
 
-**New to the project? Follow [SETUP.md](SETUP.md)**: toolchain versions (Godot 4.7.1 .NET,
+**New to the project? Follow [SETUP.md](SETUP.md)**: toolchain versions (Godot 4.7.2 .NET,
 .NET 8 + 9 SDKs), first build, a smoke test, and how to get a small region of terrain.
 
 ```bash
@@ -92,7 +92,7 @@ flat ground.
 The Godot binary used during development:
 
 ```
-C:\ProgramData\chocolatey\lib\godot-mono\tools\godot_v4.7.1-stable_mono_win64\godot_v4.7.1-stable_mono_win64_console.exe
+C:\ProgramData\chocolatey\lib\godot-mono\tools\godot_v4.7.2-stable_mono_win64\godot_v4.7.2-stable_mono_win64_console.exe
 ```
 
 ---

@@ -60,11 +60,12 @@ public static class CockpitKit
         var left = n.Cross(up);
         var wc = seat.WheelCentre;
         shell.Tube(wc - n * k.ColumnFrom, wc - n * k.ColumnTo, k.ColumnRadius, k.ColumnFoot, k.Column, 6);
-        var wheel = new MeshScratch();
+        // smooth with its cabin (a lit style's rounded car, #760): a round rim, a rounded hub
+        var wheel = new MeshScratch { Smooth = shell.Smooth };
         float r = seat.WheelRadius;
-        wheel.Ring(wc, n, r - k.RimIn, r + k.RimOut, k.RimDepth, k.Trim, k.RimSides);
+        wheel.Ring(wc, n, r - k.RimIn, r + k.RimOut, k.RimDepth, k.Trim, shell.Smooth ? Mathf.Max(k.RimSides, 32) : k.RimSides);
         var hubBasis = new Basis(-left, up, n);
-        wheel.Box(wc - n * k.HubBack, k.Hub, k.Trim, hubBasis);
+        wheel.RoundedBox(wc - n * k.HubBack, k.Hub, k.Trim, hubBasis);
         foreach (var dir in new[] { left, -left, -up })
             wheel.Tube(wc - n * k.SpokeBack, wc + dir * (r - k.SpokeShort), k.SpokeRadius, HeavyMesh.Steel, 4);
         wheel.Box(wc + up * r + n * 0.004f, k.Mark, HeavyMesh.Amber, hubBasis);
@@ -81,8 +82,9 @@ public static class CockpitKit
         var side = Vector3.Up.Cross(normal).Normalized();
         var basis = new Basis(side, normal.Cross(side), normal);
         into.Box(at - normal * depth * 0.5f, new Vector3(size.X + k.MirrorRim, size.Y + k.MirrorRim, depth), housing, basis);
-        into.Box(at + normal * 0.001f, new Vector3(size.X, size.Y, 0.002f), MirrorFace, basis);
-        return new CarMirror(name, CarMeshBuilder.Turned(at + normal * 0.004f), CarMeshBuilder.Turned(normal), size);
+        // the glass 1 cm proud of the housing: 2 mm z-fought it at range (#788)
+        into.Box(at + normal * 0.005f, new Vector3(size.X, size.Y, 0.01f), MirrorFace, basis);
+        return new CarMirror(name, CarMeshBuilder.Turned(at + normal * 0.012f), CarMeshBuilder.Turned(normal), size);
     }
 
     /// <summary>A pedal per pad, each on its hinge (<see cref="DriverSeat.PedalHinge"/>); the first is the throttle.</summary>

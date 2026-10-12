@@ -21,14 +21,22 @@ namespace UnitSport.Items;
 /// </summary>
 public partial class RadioSparkles : MeshInstance3D
 {
-    public const int Count = 40;
+    public const int Count = 56;
     public const float Range = 40f;
 
     private const float FadeIn = 2.5f, FadeOut = 1.5f;   // per second
 
-    private static readonly StringName UOn = "on", UPulse = "pulse", UBeat = "beat";
+    /// <summary>Below this loudness (0..1 of the song's own range) the glints go out (#732).</summary>
+    private const float QuietLevel = 0.08f;
+    /// <summary>Seconds that quiet before they go out.</summary>
+    private const float QuietHold = 0.4f;
 
-    private float _on, _shownOn = -1f, _shownPulse = -1f;
+    private float _quiet;
+
+    private static readonly StringName UOn = "on", UPulse = "pulse", UBeat = "beat",
+        ULevel = "level", UBar = "bar", UBurst = "burst", UPeak = "peak";
+
+    private float _on, _shownOn = -1f, _shownPulse = -1f, _shownLevel = -1f, _shownBar = -1f, _shownBurst = -1f, _shownPeak = -1f;
 
     /// <summary>How much shows, 0 (hidden) to 1. For the probes.</summary>
     public float Shown => _on;
@@ -49,16 +57,35 @@ public partial class RadioSparkles : MeshInstance3D
 
     /// <summary>
     /// Once a frame from the radio's owner node: <paramref name="playing"/> fades the glints in or
-    /// out; with a <paramref name="beat"/> (false while the CD is unknown here) they kick on it.
+    /// out; the <paramref name="groove"/> (#725) makes them as many and as lively as the music is loud,
+    /// kicks them out on its hits and on each bar, and bursts them at a new section.
     /// </summary>
-    public void Step(bool playing, bool hasBeat, float phase, int beat, float dt)
+    public void Step(bool playing, in RadioGroove groove, float dt)
+    {
+        // nearly silent for a moment (a fade-out, a quiet bridge, the CD run out) puts them out (#732);
+        // a dip between two hits does not: out after QuietHold below the level, back above 1.5x it
+        if (!groove.Beating) _quiet = QuietHold;
+        else if (groove.HasEnvelope)
+            _quiet = groove.Level < QuietLevel ? _quiet + dt : groove.Level > QuietLevel * 1.5f ? 0f : _quiet;
+        else _quiet = 0f;
+        playing &= _quiet < QuietHold;
+        Step(playing, groove.Beating, groove.Phase, groove.Beat, dt, groove.Kick);
+        if (!Visible) return;
+        Set(ULevel, groove.Beating ? groove.Level : 0.8f, ref _shownLevel);
+        Set(UBar, groove.BarKick, ref _shownBar);
+        Set(UBurst, groove.Burst, ref _shownBurst);
+        Set(UPeak, groove.Beating ? groove.Peak : 0.5f, ref _shownPeak);
+    }
+
+    /// <summary>The beat-grid only form (the church radio, the probes): <paramref name="kick"/> &lt; 0 takes it from the beat.</summary>
+    public void Step(bool playing, bool hasBeat, float phase, int beat, float dt, float kick = -1f)
     {
         _on = Mathf.MoveToward(_on, playing ? 1f : 0f, dt * (playing ? FadeIn : FadeOut));
         bool show = _on > 0f;
         if (Visible != show) Visible = show;
         if (!show) return;
         Set(UOn, _on, ref _shownOn);
-        Set(UPulse, hasBeat ? Mathf.Exp(-phase * 6f) : 0f, ref _shownPulse);
+        Set(UPulse, !hasBeat ? 0f : kick >= 0f ? kick : Mathf.Exp(-phase * 6f), ref _shownPulse);
         int b = hasBeat ? beat & 3 : 0;
         if (b != _shownBeat)
         {

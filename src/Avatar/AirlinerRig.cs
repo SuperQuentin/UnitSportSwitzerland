@@ -216,7 +216,7 @@ public partial class AirlinerRig : Node3D
         Hinge(_aileronL, _stick.X * 20f * Deg); Hinge(_aileronR, -_stick.X * 20f * Deg);
         Hinge(_elevatorL, -_stick.Y * 25f * Deg); Hinge(_elevatorR, -_stick.Y * 25f * Deg);
         Hinge(_spoilerL, -_spoilers * 45f * Deg); Hinge(_spoilerR, -_spoilers * 45f * Deg);
-        if (_rudder != null) _rudder.Rotation = new Vector3(0, _stick.X * 12f * Deg, 0);
+        if (_rudder != null) _rudder.Basis = RestOf(_rudder) * new Basis(Vector3.Up, _stick.X * 12f * Deg);   // about the fin's own hinge line (#755)
 
         float stow = 1f - _gear;
         float kneelAt = _kneelDoor >= 0 ? _doorAt[_kneelDoor] : 0f, kneel = kneelAt * _kneelDrop;
@@ -265,9 +265,20 @@ public partial class AirlinerRig : Node3D
     /// <summary>Door leaves open now, 0..1, for the deck (#416): a leaf half open is not a way in yet.</summary>
     public float DoorOpen(int door) => door >= 0 && door < _doorAt.Length ? _doorAt[door] : 0f;
 
-    private static void Hinge(Node3D? node, float angle)
+    /// <summary>The hinged parts' own bases as authored (turned to their swept hinge line), by node (#755).</summary>
+    private readonly Dictionary<Node3D, Basis> _rest = new();
+
+    private Basis RestOf(Node3D node)
     {
-        if (node != null) node.Rotation = new Vector3(angle, 0, 0);
+        if (!_rest.TryGetValue(node, out var rest)) _rest[node] = rest = node.Basis;
+        return rest;
+    }
+
+    // Turning about the part's own X (its hinge line). Setting Rotation instead dropped the authored
+    // basis, so every swept surface sat yawed off the wing it belongs to (#755).
+    private void Hinge(Node3D? node, float angle)
+    {
+        if (node != null) node.Basis = RestOf(node) * new Basis(Vector3.Right, angle);
     }
 
     private static void Lit(Node3D? node, bool on)

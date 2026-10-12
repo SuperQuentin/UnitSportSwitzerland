@@ -532,8 +532,16 @@ public static class A320MeshBuilder
             }
 
             // main gear bay doors: dark patches on the underside
+            // the patch hangs under the lowest point of the faceted underside below it (#755)
             var bayA = WPt(sg, MainGearX, 0.3f, -1);
-            m.Box(new Vector3(sg * MainGearX, bayA.Y, bayA.Z - 0.3f), new Vector3(0.9f, 0.05f, 1.6f), Dark);
+            float bayZ = bayA.Z - 0.3f, low = float.MaxValue;
+            foreach (float dx in new[] { -0.45f, 0f, 0.45f })
+                foreach (float dz in new[] { -0.8f, 0f, 0.8f })
+                {
+                    float xx = MainGearX + dx, zz = bayZ + dz;
+                    low = Mathf.Min(low, SurfaceY(xx, (zz - Le(xx)) / (Te(xx) - Le(xx)), -1));
+                }
+            m.Box(new Vector3(sg * MainGearX, low - 0.065f, bayZ), new Vector3(0.9f, 0.05f, 1.6f), Dark);
         }
     }
 

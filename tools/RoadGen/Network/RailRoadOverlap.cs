@@ -378,6 +378,8 @@ public sealed class RailRoadOverlap
             var v = paintLine.Segment is { } along
                 ? RoadPaintGeometry.Cut(RoadPaintGeometry.Offset(along, paintLine.Offset), paintLine.From, paintLine.To)
                 : paintLine.Vertices;
+            // an empty cut (From..To outside its segment) has no point to test or keep (#746)
+            if (v.Length < 3) continue;
             double length = Length(v);
             int samples = Math.Max(1, (int)Math.Ceiling(length / 0.25));
             var keep = new List<(double A, double B)>();

@@ -51,6 +51,22 @@ public class SignalBuilderTests
     }
 
     [Fact]
+    public void MainHead_ABallOnlyWhereItGivesEveryMove_ElseItsArrow()
+    {
+        // left and right pockets with their own arrows: the main head is straight on alone (#759)
+        var pockets = Lamps(left: true, right: true, pedAmber: true, SignalPoleFlags.Main);
+        var main = pockets.Lenses.First(l => l.Shape == SignalBuilder.Shape.Circle && l.Role != SignalBuilder.Role.Flash);
+        Assert.Equal(SignalMoves.Through, SignalBuilder.ArrowMoves(pockets.Plans[0], main.Group));
+        // no pockets: one head for every move, a ball
+        var single = Lamps(left: false, right: false, pedAmber: true, SignalPoleFlags.Main);
+        var ball = single.Lenses.First(l => l.Shape == SignalBuilder.Shape.Circle && l.Role != SignalBuilder.Role.Flash);
+        Assert.Equal(SignalMoves.None, SignalBuilder.ArrowMoves(single.Plans[0], ball.Group));
+        // the pockets' own arrow heads are not car groups: no second arrow drawn over theirs
+        var arrow = pockets.Lenses.First(l => l.Shape == SignalBuilder.Shape.LeftArrow);
+        Assert.Equal(SignalMoves.None, SignalBuilder.ArrowMoves(pockets.Plans[0], arrow.Group));
+    }
+
+    [Fact]
     public void SecondPole_NeverTheRightArrow()
     {
         var lamps = Lamps(left: true, right: true, pedAmber: true, SignalPoleFlags.Second);

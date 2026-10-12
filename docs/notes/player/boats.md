@@ -68,6 +68,10 @@
   centimetre (a boat asleep in a calm costs nothing). A level box let the bow rise through a
   swimmer's head and left a player standing on air beside a rolled hull. Swimmers under a hull or a
   flare are stroked out from under it (`swimming`, "Hulls overhead").
+- **Nothing it rests on carries it** (#738): a parked boat's `PlatformFloorLayers` is 0. Players
+  share layer 1 with the ground, and a swimmer under the hull teleported away (respawn, a probe's
+  `StartSwimmingAtSurface`) gave Godot a one-step platform velocity of ~1700 m/s: the steamer
+  jumped 28 m with the swimmer, and `--steamercheck`'s ladder step found no ladder.
 - **What others see** (`what-others-see-what-owner`): the owner sends `Anim = (rpm, thrust share,
   Heave, wet + 2·airborne)`. **`Heave` = the body's height over the mean surface under the hull's
   centreline** (`Boat.TrySurface`, three points). A remote copy (`FootPlayer._Process`,

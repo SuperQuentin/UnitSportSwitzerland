@@ -5,6 +5,7 @@
   Up/Down (W/S, D-pad) switch category, drag orbits, wheel zooms; the camera fits the model's box
   corners to the view. A dev tool: keyboard and pad only, no VR way (`src/Avatar/ModelViewer.cs`).
 - `--modelsonly <text>` keeps only the models whose category or name holds it (any case), for a quick look or shot.
+- `--modelsyaw <deg> [--modelspitch <deg>]` turns the viewer's camera round the model (0 behind it, 180 in front: `150`, `-15` shows a vehicle's nose in a PNG run).
 - `--models,<dir>` (e.g. `test_output/models`) writes one PNG per model, prints
   `[models] no viewer entry: <Class>` for builder classes that built nothing during the run, and a
   `[models] RESULT: ok` line (FAILED when a model throws). Run it windowed: headless renders nothing.
@@ -23,7 +24,7 @@
 - **Prefer a set read from the area's own registry or enum** over single entries, so new content
   shows by itself: `Rideable.Create` over every `RideKind` (every car, motorbike, truck, boat,
   aircraft), every `ItemId` with a held mesh, `BirdCatalog.All`, every `PropKind` field, every
-  `HumanPose`/`Headwear`/emote/fight pose, `BuildGrid.Allowed` pieces, `FurnitureType` at the
+  `HumanPose`/`Headwear`/emote/fight pose, every `Garments.All` look ("Clothes", #716), `BuildGrid.Allowed` pieces, `FurnitureType` at the
   generator's own sizes. Put the method next to the builder (a `*.Showcase.cs` partial for big
   partial classes): it reaches private builders, and nobody edits a central file.
 - Untagged parameterless static methods returning a mesh show under **Unlisted** by themselves.
@@ -36,3 +37,11 @@
 - Terrain samples (`src/Terrain/TerrainShowcase.cs`, buildings in `PortalDemo`) build one hand-made
   record each with the game's builders and materials. Without the world's fog and clock, smoke and
   night-only glows look different there than in game.
+- **`--style ps1|cartoon|real-|real+`** shades the viewer in that style (the header names it). It used to
+  start before `GameSettings.Load`, so every model showed in PS1 whatever the flag said (#760).
+  Cars are one procedural mesh in every style: PS1 and Cartoon differ in the material only.
+- **Resolution**: outside PS1 the viewer renders at the window's own pixels with 4x MSAA (the
+  game's `scaling_3d/scale` is 0.75, so a 1152x648 PNG used to be an 864x486 render); PS1 keeps
+  its low resolution. For bigger PNGs give Godot the window size: `<godot> --path . --resolution
+  1920x1080 -- --models,<dir> ...` (#759).
+- **`--zfight`** paints the model's z-fighting faces magenta; **`--flicker`** (PNG runs) saves flicker heat shots instead (`general/zfight`, #788).

@@ -328,6 +328,10 @@ public sealed partial class FallbackChunkSource : IChunkSource
 
     public Task<LandingIndex?> LoadLandingsAsync(CancellationToken ct = default) => _inner.LoadLandingsAsync(ct);
 
+    /// <summary>Farm fields (#494): the real tile's; a generated tile has none.</summary>
+    public Task<List<FieldPolygon>?> LoadFieldsAsync(TileId id, CancellationToken ct = default) =>
+        Covers(id) ? Task.FromResult<List<FieldPolygon>?>(null) : _inner.LoadFieldsAsync(id, ct);
+
     public async Task<HorizonIndex?> LoadHorizonAsync(CancellationToken ct = default)
     {
         var real = await _inner.LoadHorizonAsync(ct).ConfigureAwait(false);

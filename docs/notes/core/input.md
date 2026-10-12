@@ -20,7 +20,7 @@
   camera, X snap, RB next runner, LB hide UI, D-pad ←/→ seek 10 s, ↑/↓ speed; right stick looks
   in Free), read in `_Input` rather than `_UnhandledInput` because a HUD button left focused by a
   mouse click would otherwise swallow A and the D-pad.
-  **Trucks and buses (#70)**: `couple` H / D-pad ←, `kneel` K, `destination` N, `shift_up` / `shift_down` Shift / Ctrl and RB / LB (a truck has no tricks, boost or hop), `clutch` C / B (held), `gear_1`..`gear_6` the number keys (only hotbar slots on foot), `gear_r` `  `, `gear_n` 0, `retarder_up` / `retarder_down` ' / ;. Space is the spring brake, G the bus doors.
+  **Trucks and buses (#70)**: `couple` H / D-pad ←, `kneel` K / L3 (a farm machine's implement or header too, #494), `destination` N (a combine's auger or the co-op delivery; X on a pad, `farming/machines`), `shift_up` / `shift_down` Shift / Ctrl and RB / LB (a truck has no tricks, boost or hop), `clutch` C / B (held), `gear_1`..`gear_6` the number keys (only hotbar slots on foot), `gear_r` `  `, `gear_n` 0, `retarder_up` / `retarder_down` ' / ;. Space is the spring brake, G the bus doors.
   **Keyboard layout (issue #32)**: E only interacts (get in/out, search, door) — it used to fall
   back to the travel picker, which then popped up one step too far from a car; the picker is **R**.
   Inventory **I / Tab**, place search **M**, engine **Z**, controls **F1**. `PlayerInput.DeviceChanged`

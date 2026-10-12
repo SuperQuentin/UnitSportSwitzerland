@@ -59,6 +59,9 @@ public sealed class Hearing
     /// </summary>
     public string Path { get; private set; } = "open";
 
+    /// <summary>The ears are part of the source: the cabin's stereo, or a radio one carries (#813: it always has the focus).</summary>
+    public bool Close => Path is "cabin" or "own";
+
     /// <summary>Where the source sits on its parent, taken at <see cref="Attach"/>. For the probes.</summary>
     public Vector3 Offset => _offset;
 

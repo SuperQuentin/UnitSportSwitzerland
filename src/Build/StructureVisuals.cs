@@ -12,6 +12,9 @@ namespace UnitSport.Build;
 /// </summary>
 public partial class StructureVisuals : Node3D, Core.IOriginContainer
 {
+    /// <summary>Recorded for the movie studio (#775).</summary>
+    public override void _EnterTree() => Movie.ReplayWatch.Container(this);
+
     private readonly Structures _owner;
     private readonly Dictionary<long, Node3D> _roots = new();
     private readonly Dictionary<(long, Slot), StaticBody3D> _pieces = new();
@@ -51,6 +54,7 @@ public partial class StructureVisuals : Node3D, Core.IOriginContainer
         body.Transform = Structures.LocalTransform(p.Piece);
         var mesh = new MeshInstance3D { Name = "Mesh", Mesh = StructureMeshes.Mesh(p.Piece.Kind, p.Piece.Material), MaterialOverride = ItemDefs.Material };
         body.AddChild(mesh);
+        Items.BeatField.Add(mesh, 0.12f, 0.5f);   // near music, a faint pulse (#734); the colliders stay
         foreach (var (shape, at) in StructureMeshes.Colliders(p.Piece.Kind, p.Piece.Material))
             body.AddChild(new CollisionShape3D { Shape = shape, Transform = at });
         root.AddChild(body);

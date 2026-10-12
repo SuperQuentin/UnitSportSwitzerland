@@ -323,6 +323,14 @@ public partial class AvatarPreview : Node3D
             return;
         }
 
+        // "--dancesheet <style>[,first,count]": a contact sheet of a style's moves (#728), a row per
+        // move and eight moments across its two bars, to judge and compare them in one picture
+        if (CmdArgs.Value("--dancesheet") is { } sheet)
+        {
+            DanceSheet(sheet, material);
+            return;
+        }
+
         // "--dance <style>,<move>": one standing and one walking (1.4 m/s) figure dancing that move
         // at 120 BPM, rebuilt every frame in _Process. Judge it with --view 180 (front) and 90 (side).
         if (_dance is { } dance)
@@ -347,7 +355,8 @@ public partial class AvatarPreview : Node3D
             for (int i = 0; i < setups.Length; i++)
             {
                 var spec = setups[i].Apply(car);
-                var rig = CarRig.Create(spec.Body, spec.Wheelbase);
+                // as the game builds it: a kart wears its rider's colours (rider 1) or the army's skin (#715)
+                var rig = (CarRig)new Player.Car(spec).BuildParkedVisual(1);
                 rig.Rotation = new Vector3(0, Mathf.Pi - (_viewDegrees == 90 ? 0.6f : Mathf.DegToRad(_viewDegrees)), 0);
                 Place((i - (setups.Length - 1) * 0.5f) * 3.6f, rig);
                 GD.Print($"[carsetups] {i + 1}. {car.Label} {setups[i].Name}: lift {spec.Body.Lift:F2} m, wheel {spec.Body.WheelRadius:F2} m, "
@@ -441,6 +450,65 @@ public partial class AvatarPreview : Node3D
         camera.Current = true;
     }
 
+    /// <summary>
+    /// The dance contact sheet (#728): <c>style[,first,count]</c>, the style by name (pop, hiphop…,
+    /// or "emotes"), moves <c>first..first+count-1</c> of its table (4 by default), each a row of
+    /// figures at eight moments across two bars, turned by <c>--view</c> (180 = facing the camera),
+    /// with the move's name at the row's start. Static meshes: one screenshot shows it all.
+    /// </summary>
+    private void DanceSheet(string spec, Material material)
+    {
+        var parts = spec.Split(',');
+        bool emotes = parts[0].Equals("emotes", StringComparison.OrdinalIgnoreCase);
+        // "break": the two halves of a break set (both power moves) and toprock on its own
+        int[]? only = parts[0].Equals("break", StringComparison.OrdinalIgnoreCase)
+            ? new[] { HumanMeshBuilder.BreakDown, HumanMeshBuilder.BreakPowerWindmill, HumanMeshBuilder.BreakPowerHeadspin }
+            : null;
+        var style = Audio.Cd.MusicStyle.Pop;
+        if (!emotes && !Enum.TryParse(parts[0], ignoreCase: true, out style)) style = Audio.Cd.MusicStyle.Pop;
+        int total = only?.Length ?? (emotes ? HumanMeshBuilder.EmoteCount : HumanMeshBuilder.MoveCount(style));
+        int first = parts.Length > 1 && int.TryParse(parts[1], out int f) ? Mathf.Clamp(f, 0, total - 1) : 0;
+        int count = parts.Length > 2 && int.TryParse(parts[2], out int c) ? c : 4;
+        count = Mathf.Clamp(count, 1, total - first);
+        const int Cols = 8;
+        float Dx = only != null ? 1.7f : 1.05f;
+        const float Dy = 2.15f;
+        float yaw = Mathf.Pi - Mathf.DegToRad(_viewDegrees);
+        for (int row = 0; row < count; row++)
+        {
+            int move = only?[first + row] ?? (emotes ? HumanMeshBuilder.EmoteMoves : 0) + first + row;
+            float y = (count - 1 - row) * Dy;
+            AddChild(new Label3D
+            {
+                Text = HumanMeshBuilder.MoveName(style, move), FontSize = 64, PixelSize = 0.006f,
+                Position = new Vector3(-0.9f, y + 0.9f, 0), Modulate = Colors.Black, OutlineSize = 0,
+                HorizontalAlignment = HorizontalAlignment.Right,
+            });
+            for (int col = 0; col < Cols; col++)
+            {
+                // one frame a beat, each an eighth further into its beat: the sheet shows the hits and what is between
+                float bars = col * 1.125f / 4f;
+                var dance = new DanceParams(style, move, (bars * 4f) % 1f, bars % 1f, (int)bars, 1f);
+                AddChild(new MeshInstance3D
+                {
+                    Mesh = HumanMeshBuilder.BuildStride(HumanPalette.ForRider(row + 1), 0f, 0f, dance: dance),
+                    MaterialOverride = material,
+                    Position = new Vector3(col * Dx, y, 0),
+                    Rotation = new Vector3(0, yaw, 0),
+                });
+            }
+        }
+        float w = (Cols - 1) * Dx + 5.2f, h = count * Dy;
+        var cam = new Camera3D
+        {
+            Projection = Camera3D.ProjectionType.Orthogonal,
+            Size = Mathf.Max(h + 0.4f, w * 9f / 16f + 0.4f),
+            Position = new Vector3((Cols - 1) * Dx * 0.5f - 2.3f, (count - 1) * Dy * 0.5f + 0.95f, 12f),
+        };
+        AddChild(cam);
+        cam.Current = true;
+    }
+
     /// <summary>The dance figures at <paramref name="dt"/> further along a 120 BPM clock.</summary>
     private void UpdateDance(Audio.Cd.MusicStyle style, int move, float dt)
     {
@@ -480,6 +548,9 @@ public partial class AvatarPreview : Node3D
         (new[] { Items.ItemId.MaskCat, Items.ItemId.StripedLongsleeve, Items.ItemId.RuffledMini, Items.ItemId.GothStockings, Items.ItemId.PlatformBoots }, Headwear.None),
         (new[] { Items.ItemId.WhiteMarcel, Items.ItemId.Jeans, Items.ItemId.WhiteSneakers, Items.ItemId.SilverStuds }, Headwear.None),
         (new[] { Items.ItemId.GothicRobe, Items.ItemId.MaskBlack, Items.ItemId.ChainNecklace }, Headwear.None),
+        // #716: the recruit
+        (new[] { Items.ItemId.BlackBeanie, Items.ItemId.TazJacket, Items.ItemId.TazTrousers, Items.ItemId.CombatBoots }, Headwear.None),
+        (new[] { Items.ItemId.ArmyTee, Items.ItemId.TazTrousers, Items.ItemId.CombatBoots }, Headwear.None),
     };
 
     private void BuildOutfits()
@@ -664,6 +735,25 @@ public partial class AvatarPreview : Node3D
                 foreach (var e in Enum.GetValues<Face.FaceExpression>())
                     Add(e.ToString(), look, Face.FaceExpressions.Of(e));
                 Grid(5);
+                break;
+            }
+            case "dancefaces":
+            {
+                // #728: a dancer's face as the music goes (Face.DanceFace), pop then rock, hip-hop, chill
+                var look = looks[3].Look with { Face = 0, HairStyle = HairStyle.None };
+                var cases = new (string Name, int Section, float Level, float Kick, float Bar, float Burst, int Beat, int Floor)[]
+                {
+                    ("calm", 0, 0.3f, 0f, 0f, 0f, 1, 0), ("groove", 1, 0.6f, 0.2f, 0f, 0f, 1, 0),
+                    ("peak, a hit", 2, 0.9f, 1f, 1f, 0f, 0, 0), ("chorus: oh", 3, 0.9f, 0.6f, 0f, 0f, 0, 0),
+                    ("chorus: ee", 3, 0.9f, 0.6f, 0f, 0f, 1, 0), ("new section", 2, 0.9f, 0.3f, 0f, 1f, 0, 0),
+                    ("breaking", 2, 0.9f, 0.5f, 0f, 0f, 1, 1), ("freeze", 2, 0.9f, 0.5f, 0f, 0f, 1, 2),
+                    ("quiet", 1, 0.02f, 0f, 0f, 0f, 1, 0),
+                };
+                foreach (int style in new[] { 0, 1, 3, 4 })
+                    foreach (var c in cases)
+                        Add($"{(Audio.Cd.MusicStyle)style} {c.Name}", look,
+                            Face.DanceFace.Target(new Face.DanceHearing(style, c.Section, c.Level, c.Kick, c.Bar, c.Burst, c.Beat, 2, c.Floor), 0u));
+                Grid(9);
                 break;
             }
             case "seeded":

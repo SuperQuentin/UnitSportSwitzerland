@@ -12,7 +12,8 @@ namespace UnitSport.Player;
 /// <para>
 /// It collides as its parts, not as one box round everything: a semi's body from its floor up
 /// and its running gear, with nothing under the nose, so a tractor's fifth wheel slides in under
-/// it; a dolly only round its axle and turntable, so a truck backs up to the drawbar's eye.
+/// it; a dolly only round its axle and turntable, so a truck backs up to the drawbar's eye; a boat
+/// trailer from its winch post back, its A-frame free, so a tow ball reaches the coupler (#463).
 /// </para>
 /// </summary>
 public sealed class ParkedTrailer : Rideable
@@ -41,6 +42,9 @@ public sealed class ParkedTrailer : Rideable
     public override bool IsVehicle => true;
     public override float MaxHealth => 400f;
 
+    /// <summary>A boat trailer's cradle (#463): its boat, parked on it, rides it.</summary>
+    public override VehicleDeck[] Decks => Truck.TrailerDecks(Spec, Code);
+
     private float Load => TrailerCatalog.Load(Code);
 
     /// <summary>A semi's floor, m: the underside of its nose, over a fifth wheel.</summary>
@@ -58,6 +62,14 @@ public sealed class ParkedTrailer : Rideable
                 float axle = s.Axles[0].At;
                 return Box(cg, axle - 0.8f, axle + 0.8f, 0f, s.HitchHeight + 0.05f, s.Width);
             }
+            // a mounted implement (#494) on its stands, its headstock free for the linkage to reach
+            if (Spec.Mounted) return Box(cg, 0.35f, s.Length, 0.1f, s.Height, s.Width);
+            if (Spec.Boat != 0)
+            {
+                // the frame and its bunks, down to the tyres; not the A-frame ahead of the winch post. The
+                // boat on it is a boat of its own, with its own hull
+                return Box(cg, Spec.BowAt, s.Length, 0f, Spec.BoatKeel + 0.1f, s.Width);
+            }
             return Box(cg, 0f, s.Length, Floor - 0.1f, s.Height, s.Width);
         }
     }
@@ -69,6 +81,8 @@ public sealed class ParkedTrailer : Rideable
     public override Node3D BuildVisual(int riderIndex, Avatar.Outfit outfit = default)
     {
         var root = HeavyRig.CreateTrailer(Spec, 0, Load);
+        // a dropped implement stands on the ground (#494): its lift is the tractor's, and it has none
+        root.Lowered = Spec.Mounted;
         for (int k = 1; k < Spec.Sections.Length; k++)
         {
             var rig = HeavyRig.CreateTrailer(Spec, k, Load);
@@ -79,10 +93,13 @@ public sealed class ParkedTrailer : Rideable
         return root;
     }
 
+    /// <summary>A semi's running gear is its first extra box: a box apart from its body's (<see cref="ExtraBoxes"/>).</summary>
+    public bool HasGearBox => Spec.Sections[0].Pivot is not (Coupling.Drawbar or Coupling.Ball or Coupling.ThreePoint);
+
     public override IEnumerable<(Transform3D Pose, Vector3 Centre, Vector3 Size)> ExtraBoxes()
     {
         var s0 = Spec.Sections[0];
-        if (s0.Pivot != Coupling.Drawbar)
+        if (HasGearBox)
         {
             // a semi's running gear under its body, from ahead of the first axle to the back
             float first = s0.Axles.Min(a => a.At);

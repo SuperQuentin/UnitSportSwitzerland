@@ -58,7 +58,7 @@ Before, a block of flats was planned as one big house round a single stair core.
   read), `LiftPlan` (cabin rectangle, door side, floors served, the call button and panel
   positions), `InnerDoorPlan` (a flat's front door: floor, hall room, side, centre, `Locked`).
   New rooms `Elevator CarPark TechRoom Corridor`, pieces `Pillar StorageCage Mailboxes BikeRack`.
-  Plan version 17 (#501 took 16); 18 with #571 (half flights, landings, daylight); 19 went to #531 (loading bays); 20 with #576 (one door, wider corridors); 21 with #577 (wings); 23 with #558 (the garage ramp).
+  Plan version 17 (#501 took 16); 18 with #571 (half flights, landings, daylight); 19 went to #531 (loading bays); 20 with #576 (one door, wider corridors); 21 with #577 (wings); 23 with #558 (the garage ramp); 24 with #694 (ramp first); 25 with #694 (a studio's kitchenette).
 - **Validator**: reachability now runs from every street doorway through doorways, up and down
   every flight and along every elevator, over the whole building (a block's upper floors are
   stairwells that never meet); a hole must cover its flight; each elevator has a cabin with a
@@ -96,6 +96,13 @@ A Swiss *Treppenhaus*, not the house stair the first version reused.
 - Every living room and bedroom touches a facade with at least `WindowWall` (1.9 m) of it, so
   `AddWindows` gives it a window. A kitchen, bathroom or WC has one only when it happens to be on
   a facade (in the checks, about a third).
+- **A studio's kitchenette is at least 1.2 m deep** (#694). `StudioFlat`'s stacked layout (hall to one end, bathroom beside it, kitchenette
+  across the flat behind) cut the kitchenette at 35 % of what the bathroom band leaves, which is under the validator's 1 m for a flat shallower than
+  4.76 m: a 4.65 m deep studio had a 0.98 m kitchen, and 12 plans of 1192 garage blocks (5 of 1385 plain ones) were rejected as `Kitchen is 1.0x7.8 m`.
+  A flat under 5.7 m deep that cannot take its wet rooms side by side now takes the shallow layout (bathroom over kitchenette beside the hall).
+  `--flatcheck` sweeps 56 448 flat shapes (4.4 x 3.4 up to 21 x 9 m, a narrow flat's door at an end as `Flat` places it) for any room under 1 m.
+  Known: a flat narrower than 4.4 m and shallower than 4.6 m (hall 1.4 + wet rooms 2 m) can still get a zero-width bedroom; none on the real tiles.
+  `--rampfirst` writes the rooms of every invalid plan to `<out>.invalid.txt`.
 - `FlatRooms` draws up every layout that fits (T, spine, gallery, linear, studio) and scores each
   (`Score`): 1000 with no bed, kitchen or bathroom, 30 a dark living room, 12 a dark bedroom, 3 a room
   of the program left out, and for rooms shaped like corridors (aspect over 2.6, or over 8 m long).

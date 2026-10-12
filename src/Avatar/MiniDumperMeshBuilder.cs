@@ -53,7 +53,7 @@ public static class MiniDumperMeshBuilder
         // ---- the chassis and the engine hood under the seat --------------------------------------
         m.Box(new Vector3(0, (L.TrackHeight + L.DeckTop) * 0.5f, (L.Nose + L.Tail) * 0.5f), new Vector3(hw * 1.5f, L.DeckTop - L.TrackHeight, L.Nose - L.Tail - 0.3f), Dark);
         m.Box(new Vector3(0, (L.DeckTop + L.HoodTop) * 0.5f, (L.Tail + L.SkipBack - 0.15f) * 0.5f), new Vector3(hw * 2f, L.HoodTop - L.DeckTop, L.SkipBack - 0.15f - L.Tail), Body);
-        m.Box(new Vector3(0, L.HoodTop + 0.015f, (L.Tail + L.SkipBack - 0.15f) * 0.5f), new Vector3(hw * 2f - 0.08f, 0.03f, L.SkipBack - 0.25f - L.Tail), Body.Darkened(0.2f));
+        // (#755) no darker plate on the hood's top: it lay within a few mm of the seat's cushion under it and fought it
         // the skip's cradle and its ram's foot ahead of the hood
         m.Box(new Vector3(0, (L.DeckTop + L.SkipFloor) * 0.5f, (L.SkipBack + L.SkipFront) * 0.5f), new Vector3(0.6f, L.SkipFloor - L.DeckTop, L.SkipFront - L.SkipBack), Dark.Lightened(0.08f));
         m.Tube(new Vector3(0, L.DeckTop, L.SkipBack - 0.05f), new Vector3(0, L.SkipFloor + 0.05f, L.SkipBack + 0.25f), 0.05f, Steel, 6);
@@ -120,9 +120,10 @@ public static class MiniDumperMeshBuilder
         // the front slopes up to the lip, so a load slides out over it
         s.Box(new Vector3(0, floor + 0.25f, front - 0.15f), new Vector3(half * 2f, 0.06f, 0.6f), Body, new Basis(Vector3.Right, -0.85f));
         foreach (int side in new[] { 1, -1 })
-            s.Box(new Vector3(side * half, (floor + top) * 0.5f, (back + front) * 0.5f), new Vector3(0.05f, top - floor, front - back), Body.Darkened(0.08f));
+            // (#755) the sides 2 cm lower and 2 cm further back than the floor and back wall between them: no shared bottom or back face
+            s.Box(new Vector3(side * half, (floor - 0.02f + top) * 0.5f, (back - 0.02f + front) * 0.5f), new Vector3(0.05f, top - floor + 0.02f, front - back + 0.02f), Body.Darkened(0.08f));
         s.Box(new Vector3(0, (floor + top) * 0.5f, back + 0.03f), new Vector3(half * 2f, top - floor, 0.06f), Body);
-        s.Box(new Vector3(0, top - 0.02f, back + 0.03f), new Vector3(half * 2f + 0.06f, 0.06f, 0.1f), Dark);
+        s.Box(new Vector3(0, top - 0.02f, back + 0.01f), new Vector3(half * 2f + 0.12f, 0.06f, 0.14f), Dark);   // (#755) lip clear of the sides' outer and back faces
         return s.Build(L.Hinge);
     }
 

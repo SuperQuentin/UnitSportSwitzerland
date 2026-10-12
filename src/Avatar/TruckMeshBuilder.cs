@@ -72,14 +72,15 @@ public static class TruckMeshBuilder
             Along(m, cg, cabLen - wall - bunk, cabLen - wall, floorY, floorY + 0.5f, inner * 2f, HeavyCabin.Dash);
             Along(m, cg, cabLen - wall - bunk, cabLen - wall, floorY + 0.5f, floorY + 0.62f, inner * 2f, Bunk);
         }
-        // roof: a tall deflector on the long-haul tractor, a low spoiler on the distribution truck
+        // roof: a tall deflector on the long-haul tractor, a low spoiler on the distribution truck, a bare roof on the army's
+        bool army = spec.Body == TruckBody.Canvas;
         if (tractor) Along(m, cg, 0.45f, cabLen, cabTop, 3.95f, s.Width - 0.15f, look.Paint);
-        else Along(m, cg, 0.9f, cabLen, cabTop, 3.55f, s.Width - 0.3f, look.Paint);
+        else if (!army) Along(m, cg, 0.9f, cabLen, cabTop, 3.55f, s.Width - 0.3f, look.Paint);
         // grille and sun visor on the face
         m.Box(new Vector3(0, 1.62f, front + 0.02f), new Vector3(s.Width - 0.45f, 0.62f, 0.04f), look.Accent);
         m.Box(new Vector3(0, 3.18f, front + 0.08f), new Vector3(s.Width - 0.2f, 0.07f, 0.2f), look.Accent);
-        // the belt stripe
-        Sides(m, cg, 0.05f, cabLen - 0.05f, 1.5f, 1.66f, s.Width - 0.05f, look.Accent);
+        // the belt stripe (the army's is plain)
+        if (!army) Sides(m, cg, 0.05f, cabLen - 0.05f, 1.5f, 1.66f, s.Width - 0.05f, look.Accent);
         // mirrors out on their arms: a main and a wide-angle each side, no wider than #70's boxes
         // (the hull is measured from the mesh)
         var mirrors = new List<(string, Vector3, Vector2)>();
@@ -99,10 +100,10 @@ public static class TruckMeshBuilder
         };
         var cockpit = HeavyCabin.Build(m, cab, HeavyCabin.GaugesFor(spec.LimiterKmh, spec.Redline),
             HeavyDriveline.AirLow, HeavyDriveline.AirMax, mirrors);
-        var seats = new[]
+        var seats = new List<SeatAnchor>
         {
-            new SeatAnchor(0, CarMeshBuilder.Turned(cockpit.Seat.Hip), cockpit.Seat.Recline, floorY),
-            new SeatAnchor(0, CarMeshBuilder.Turned(cockpit.Seat.Hip with { X = -cockpit.Seat.Hip.X }), cockpit.Seat.Recline, floorY),
+            new(0, CarMeshBuilder.Turned(cockpit.Seat.Hip), cockpit.Seat.Recline, floorY),
+            new(0, CarMeshBuilder.Turned(cockpit.Seat.Hip with { X = -cockpit.Seat.Hip.X }), cockpit.Seat.Recline, floorY),
         };
         // head lamps low in the bumper corners, amber indicators beside them
         foreach (float sx in new[] { -1f, 1f })
@@ -113,7 +114,7 @@ public static class TruckMeshBuilder
 
         // ---- the chassis behind the cab ----
         foreach (float sx in new[] { -1f, 1f })
-            Along(m, cg, cabLen - 0.3f, s.Length - 0.05f, 0.72f, 1.02f, 0.12f, Trim, sx * 0.45f);
+            Along(m, cg, cabLen - 0.1f, s.Length - 0.05f, 0.72f, 1.02f, 0.12f, Trim, sx * 0.45f);   // (#755) starts well inside the cab skirt: its front face lay 6 mm from the wheel arch's cut face
         // mudguards over the axles behind the cab
         foreach (var a in s.Axles)
         {
@@ -141,6 +142,19 @@ public static class TruckMeshBuilder
             foreach (float sx in new[] { -1f, 1f })
                 Along(m, cg, cabLen + 0.2f, s.Length - 0.15f, 1.02f, 1.22f, 0.14f, Trim, sx * 0.5f);
             m.Tube(new Vector3(0, 1.02f, cg - cabLen - 0.45f), new Vector3(0, 1.4f, cg - cabLen - 0.45f), 0.12f, Steel, 6);
+        }
+        else if (army)
+        {
+            // the army lorry's cargo body under its canvas tilt, a bench down each side (#714)
+            var body = new ArmyMeshBuilder.Canvas(cabLen + 0.2f, s.Length - 0.12f, 1.25f, 0.6f, 3.0f, s.Height, s.Width, false, 6);
+            seats.AddRange(ArmyMeshBuilder.CanvasBody(m, cg, body, look));
+            Sides(m, cg, cabLen + 0.3f, firstRear - 0.7f, 0.5f, 0.7f, s.Width - 0.12f, look.Lower);   // (#755) clear of the fuel tank's outer and bottom faces (1.175 m out, 0.5 m up)
+            // the spare wheel slung under the frame behind the cab, flat, opposite the fuel tank
+            m.Tube(new Vector3(-0.55f, 0.55f, cg - (cabLen + 1.4f)), new Vector3(-0.55f, 0.88f, cg - (cabLen + 1.4f)), 0.5f, Rubber, 12);
+            // the military plates: on the cab's face, and on a carrier board behind the tail
+            ArmyMeshBuilder.Plate(m, 0f, 0.8f, front, 1f, ArmyMeshBuilder.PlateNumber(spec.Kind));
+            Along(m, cg, s.Length - 0.1f, s.Length - 0.03f, 0.62f, 1.02f, 0.5f, Trim);
+            ArmyMeshBuilder.Plate(m, 0f, 0.82f, rear + 0.03f, -1f, ArmyMeshBuilder.PlateNumber(spec.Kind));
         }
         else if (spec.Body == TruckBody.Mixer)
         {
@@ -171,7 +185,7 @@ public static class TruckMeshBuilder
             Along(m, cg, s.HitchAt - 0.2f, s.HitchAt + 0.12f, s.HitchHeight - 0.12f, s.HitchHeight + 0.08f, 0.35f, Trim);
         }
         // the rear bumper bar and the lamps in it
-        Along(m, cg, s.Length - 0.12f, s.Length, 0.45f, 0.62f, s.Width - 0.2f, Steel);
+        Along(m, cg, s.Length - 0.12f, s.Length, 0.45f, 0.62f, s.Width - 0.2f, army ? look.Lower : Steel);
         foreach (float sx in new[] { -1f, 1f })
         {
             Lamp(tail, sx * (hw - 0.3f), 0.82f, rear - 0.02f, 0.4f, 0.16f, 0.04f, TailLamp);
@@ -181,7 +195,7 @@ public static class TruckMeshBuilder
         return new HeavyParts(m.Build(), head.Build(), tail.Build(), rev.Build(), Wheels(s, cg), System.Array.Empty<HeavyDoorLeaf>())
         {
             Cockpit = cockpit,
-            Seats = seats,
+            Seats = seats.ToArray(),
             Tip = tipper?.Tip,
             Tailgate = tipper?.Tailgate,
             Bed = spec.Body == TruckBody.Tipper && section == 0 ? TipperBed(spec, load) : null,
@@ -233,9 +247,10 @@ public static class TruckMeshBuilder
         Along(bin, cg, from, to, floor0, floor1, w, look.Cargo);
         foreach (float sx in new[] { -1f, 1f })
         {
-            Along(bin, cg, from, to, floor1, top, 0.06f, look.Paint, sx * (w * 0.5f - 0.03f));
+            // (#755) the side runs between the headboard and the tailgate, and stops under its rail: no shared end or top faces
+            Along(bin, cg, from + 0.08f, to - 0.06f, floor1, top - 0.1f, 0.06f, look.Paint, sx * (w * 0.5f - 0.03f));
             // the side's top rail and its stiffeners
-            Along(bin, cg, from, to, top - 0.1f, top, 0.1f, look.Accent, sx * (w * 0.5f - 0.03f));
+            Along(bin, cg, from + 0.08f, to - 0.06f, top - 0.1f, top, 0.1f, look.Accent, sx * (w * 0.5f - 0.03f));
             for (float at = from + 0.9f; at < to - 0.3f; at += 1.2f)
                 Along(bin, cg, at, at + 0.08f, floor1, top, 0.1f, look.Accent, sx * (w * 0.5f));
         }
@@ -252,7 +267,7 @@ public static class TruckMeshBuilder
         var hinge = TipHinge(s, cg);
         var gate = new MeshScratch();
         Along(gate, cg, to - 0.06f, to, floor1, top, w, look.Paint);
-        Along(gate, cg, to - 0.1f, to, floor1, floor1 + 0.12f, w, look.Accent);
+        Along(gate, cg, to - 0.1f, to + 0.01f, floor1 - 0.01f, floor1 + 0.12f, w + 0.02f, look.Accent);   // (#755) 1 cm proud of the gate's back, sides and underside
         var gatePivot = new Vector3(0, top, cg - to + 0.03f);
         return ((bin.Build(hinge), CarMeshBuilder.Turned(hinge), TipAngle),
             (gate.Build(gatePivot), CarMeshBuilder.Turned(gatePivot - hinge)));

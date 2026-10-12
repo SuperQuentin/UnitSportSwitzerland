@@ -11,19 +11,20 @@
 # GODOT_ANDROID_KEYSTORE_RELEASE_PATH/_USER/_PASSWORD; without the keystore it is skipped.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-DRY=0; CI=0; NOUP=0
+DRY=0; CI=0; NOUP=0; ANDROID_ONLY=0
 for a in "$@"; do case $a in
   --dry-run) DRY=1 ;;
   --no-upload) NOUP=1 ;;
   --ci) CI=1 ;;
+  --android-only) ANDROID_ONLY=1; NOUP=1 ;; # checks the APK build alone: no desktop exports, no release
   *) echo "Unknown option: $a"; exit 2 ;;
 esac; done
-GODOT=${GODOT:-'/c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.1-stable_mono_win64/godot_v4.7.1-stable_mono_win64_console.exe'}
+GODOT=${GODOT:-'/c/ProgramData/chocolatey/lib/godot-mono/tools/godot_v4.7.2-stable_mono_win64/godot_v4.7.2-stable_mono_win64_console.exe'}
 OUT=test_output/release; mkdir -p "$OUT"
 # The exports run dotnet publish; reused MSBuild nodes outlive it holding Godot's console pipe, so the export never returns
 export MSBUILDDISABLENODEREUSE=1
 
-if [ $CI = 0 ]; then
+if [ $CI = 0 ] && [ $ANDROID_ONLY = 0 ]; then # an APK check builds any branch, it never releases
   [ "$(git branch --show-current)" = main ] || { echo "Not on main"; exit 1; }
   git fetch -q origin --tags
   [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || { echo "main is not in sync with origin/main (push or pull first)"; exit 1; }
@@ -39,6 +40,7 @@ git log --no-merges --format='%s' $range > "$OUT/subjects.txt"
 if git log --no-merges --format='%B' $range | grep -qE 'BREAKING'; then bump=major
 elif grep -qvE '^:(bug|ambulance|recycle|art|white_check_mark|memo|wrench|twisted_rightwards_arrows):' "$OUT/subjects.txt"; then bump=minor
 elif grep -qE '^:(bug|ambulance|recycle|art|white_check_mark):' "$OUT/subjects.txt"; then bump=patch
+elif [ $ANDROID_ONLY = 1 ]; then bump=patch
 else echo "Nothing releasable since ${last:-the start} (docs/chore only)."; exit 0; fi
 case $bump in
   major) MA=$((MA+1)); MI=0; PA=0 ;;
@@ -47,16 +49,29 @@ case $bump in
 esac
 V="$MA.$MI.$PA"
 
+REPO_URL=$(git remote get-url origin | sed -E 's#git@github.com:#https://github.com/#; s#\.git$##')
+# feature clips (#487, tools/record-clip.sh): every GIF in $OUT/clips/ is uploaded with the release and shown
+# at the top of its notes, captioned by <name>.txt beside it or else its name; moved to clips/released/ after
+shopt -s nullglob; CLIPS=("$PWD/$OUT"/clips/*.gif); shopt -u nullglob
+
 section() { # title, ERE on the leading emoji code
   local body; body=$(git log --no-merges --format='%s' $range | grep -E "$2" | sed -E 's/^:[a-z0-9_+-]+: *//; s/^/- /') || true
   if [ -n "$body" ]; then printf '### %s\n%s\n\n' "$1" "$body"; fi
 }
 {
+  if [ ${#CLIPS[@]} -gt 0 ]; then
+    echo '### Highlights'
+    for c in "${CLIPS[@]}"; do
+      n=$(basename "$c" .gif); cap=${n//[-_]/ }
+      if [ -s "${c%.gif}.txt" ]; then cap=$(head -1 "${c%.gif}.txt"); fi
+      printf '**%s**\n\n![%s](%s/releases/download/v%s/%s)\n\n' "$cap" "$cap" "$REPO_URL" "$V" "$n.gif"
+    done
+  fi
   f=$(git log --no-merges --format='%s' $range | grep -vE '^:(bug|ambulance|memo|wrench|recycle|art|white_check_mark|boom):' | sed -E 's/^:[a-z0-9_+-]+: *//; s/^/- /') || true
   if [ -n "$f" ]; then printf '### Features and changes\n%s\n\n' "$f"; fi
   section "Fixes" '^:(bug|ambulance):'
   section "Docs and maintenance" '^:(memo|wrench|recycle|art|white_check_mark):'
-  if [ -n "$last" ]; then echo "**Full diff:** $(git remote get-url origin | sed -E 's#git@github.com:#https://github.com/#; s#\.git$##')/compare/$last...v$V"; fi
+  if [ -n "$last" ]; then echo "**Full diff:** $REPO_URL/compare/$last...v$V"; fi
 } > "$OUT/notes.md"
 
 echo "Next version: v$V ($bump)"; cat "$OUT/notes.md"
@@ -164,7 +179,7 @@ dotnet build UnitSportSwitzerland.csproj -c Release
 rm -rf build; mkdir -p build/windows build/linux build/macos
 ASSETS=()
 
-if export_preset "Windows Desktop" build/windows/UnitSportSwitzerland.exe; then
+if [ $ANDROID_ONLY = 0 ] && export_preset "Windows Desktop" build/windows/UnitSportSwitzerland.exe; then
   fetch_tools windows build/windows/bin
   ZIP="$REPO/$OUT/UnitSportSwitzerland-v$V-windows.zip"; rm -f "$ZIP"
   if command -v zip >/dev/null; then (cd build/windows && zip -qr "$ZIP" .)
@@ -172,7 +187,7 @@ if export_preset "Windows Desktop" build/windows/UnitSportSwitzerland.exe; then
   ASSETS+=("$ZIP")
 fi
 
-if export_preset "Linux" build/linux/UnitSportSwitzerland.x86_64; then
+if [ $ANDROID_ONLY = 0 ] && export_preset "Linux" build/linux/UnitSportSwitzerland.x86_64; then
   fetch_tools linux build/linux/bin
   TGZ="$REPO/$OUT/UnitSportSwitzerland-v$V-linux-x86_64.tar.gz"
   tarball "$TGZ" build/linux UnitSportSwitzerland.x86_64 bin/yt-dlp bin/qjs bin/ffmpeg
@@ -181,7 +196,7 @@ fi
 
 # Godot can only write a macOS export as a .zip off a Mac; unpacked here so the tools go inside the bundle
 # (Contents/MacOS/bin, next to the executable) and the exec bits are set. Unsigned: first launch needs xattr -cr.
-if export_preset "macOS" build/macos.zip; then
+if [ $ANDROID_ONLY = 0 ] && export_preset "macOS" build/macos.zip; then
   unzip -qo build/macos.zip -d build/macos
   APP=$(cd build/macos && ls -d *.app | head -1)
   fetch_tools macos "build/macos/$APP/Contents/MacOS/bin"
@@ -215,10 +230,18 @@ if [ $NOUP = 1 ]; then
   exit 0
 fi
 
-gh release create "v$V" "${ASSETS[@]}" --target "$SHA" --title "v$V" --notes-file "$REPO/$OUT/notes.md"
+gh release create "v$V" "${ASSETS[@]}" "${CLIPS[@]}" --target "$SHA" --title "v$V" --notes-file "$REPO/$OUT/notes.md"
+if [ ${#CLIPS[@]} -gt 0 ]; then
+  mkdir -p "$REPO/$OUT/clips/released/v$V"
+  for c in "${CLIPS[@]}" "${CLIPS[@]/%.gif/.txt}"; do if [ -e "$c" ]; then mv "$c" "$REPO/$OUT/clips/released/v$V/"; fi; done
+fi
 echo "Released v$V with ${#ASSETS[@]} asset(s)${SKIPPED[0]+, skipping ${SKIPPED[*]}}"
 
 # delta updates (#532): the game updates from $last with these instead of the full archive
 if [ -n "$last" ]; then
   (cd "$REPO" && tools/deltas.sh "$last" "v$V" --upload) || echo "Deltas failed; the release stands. Retry with: tools/deltas.sh $last v$V --upload"
+fi
+# On CI, a skipped platform is a run annotation, not only a log line: v0.28-v0.31.1 shipped no APK unnoticed
+if [ $CI = 1 ] && [ ${#SKIPPED[@]} -gt 0 ]; then
+  echo "::warning title=Release skipped platforms::v$V shipped without ${SKIPPED[*]} (see the export log above)"
 fi

@@ -646,8 +646,11 @@ public static class StyleKit
             DirectionalShadowSplit1 = 0.025f,
             DirectionalShadowSplit2 = 0.1f,
             DirectionalShadowSplit3 = 0.35f,
-            // hard: the soft filter's noise turns into hatching under the cel band
-            ShadowBlur = 0f,
+            // filtered, not hard: the sun moves with the clock, and a hard edge's stair-steps crawled
+            // across the shadow map's texels, flickering along every shadow (#809). Real: 3; cartoon
+            // 2, its cel band still drawing a crisp edge (no hatching at the default filter quality).
+            // In texels, so a bigger atlas makes it sharper and shimmer again.
+            ShadowBlur = Applied is VisualStyle.Cartoon ? 2f : 3f,
             // the cel light reads attenuation as a hard band: any acne becomes stripes on the crowns
             ShadowBias = 0.2f,
             ShadowNormalBias = 4f,

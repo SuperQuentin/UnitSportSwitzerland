@@ -1,7 +1,7 @@
 {
     // Godot is taken from "godotTools.editorPath.godot4" in .vscode/settings.json (a Windows path);
     // on macOS each task's "osx" override runs /Applications/Godot_mono.app instead, and on
-    // Linux/WSL its "linux" override runs `godot` from PATH (the .NET build of 4.7.1).
+    // Linux/WSL its "linux" override runs `godot` from PATH (the .NET build of 4.7.2).
     // Every task that launches the game builds the C# first: launching Godot from the
     // command line does not compile the assembly the way F5 in the editor does.
     // Check and probe output goes to test_output/ (gitignored).

@@ -38,7 +38,7 @@ clients (6-10 GB): parallel agents ran the machine out of RAM. Measured now:
 | 3 full | all of the above for every area, plus the windowed two-client `tools/*check.sh` and `loadtest.sh` | `tools/test.sh full [area]` | not measured yet: needs real terrain (`CHUNKS=`) and a display |
 
 - `GODOT` must point at the editor executable. On Windows use the full path of
-  `Godot_v4.7.1-stable_mono_win64_console.exe` (the winget `godot` link hangs), see `godot-exe`.
+  `Godot_v4.7.2-stable_mono_win64_console.exe` (the winget `godot` link hangs), see `godot-exe`.
 - **The quick tier runs on game time** (`--fixed-fps 60`, #461): ~4.5x faster in all (38 -> 8.6 min
   for the 55 checks); the rules for timing in checks, `@realtime`, `TEST_REALTIME=1`: `fast-checks`.
   The measured times in the tables below are real time, from before.
@@ -60,7 +60,7 @@ fixture courses for driving, switchable systems, migrating a probe) are in `test
   no clock (the style's fixed sun); without `network` a connect fails. `ui` is the baseline (menus,
   HUD, chat, inventory screen are always built on a client). The server honours the fixture only.
 - `--world fixture` = every system but the map and the generated fill, on `--chunks fixture:<course>`
-  (`flat` by default). Courses (`Terrain/Fixture/FixtureCourse`): `flat`, `straight` (3 km),
+  (`flat` by default). Courses (`Terrain/Fixture/FixtureCourse`): `flat` (three fields, a 12 m paved strip at x 130 m and a 15 % ridge from x 170 m, `--tractorcheck`, #494), `straight` (3 km),
   `hairpin` (6 legs, 15 m hairpins, 7 % down), `narrow` (4 m, a trunk every 5 m on both edges),
   `junction` (9 m road, a T and a crossroads), `verge` (two bends, 6 m of grass, then trees), `lake`
   (#299: beach, shelf, drop-off, a river, a slipway; `--watercheck`). A

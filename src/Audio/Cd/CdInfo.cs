@@ -22,8 +22,9 @@ public enum MusicStyle { Pop = 0, Rock = 1, Electronic = 2, HipHop = 3, Chill = 
 /// <param name="BeatOffset">Seconds from the start of the file to the first beat.</param>
 /// <param name="Energy">0..1, loudness of the track overall.</param>
 /// <param name="Source">Where a CD the game burns itself comes from (<see cref="CdLibrary.RatBeatSource"/>), else empty.</param>
+/// <param name="Analysis">Envelope, downbeat and sections (#725); null on a CD burnt before it, until the backfill.</param>
 public sealed record CdInfo(int Id, string Title, float Duration, float Bpm, float BeatOffset, MusicStyle Style, float Energy,
-    string Source = "")
+    string Source = "", [property: JsonPropertyName("analysis")] CdAnalysis? Analysis = null)
 {
     internal static readonly JsonSerializerOptions Json = new()
     {
@@ -40,16 +41,23 @@ public sealed record CdInfo(int Id, string Title, float Duration, float Bpm, flo
     }
 
     /// <summary>For an RPC argument: everything as plain variants.</summary>
-    public Godot.Collections.Dictionary ToDict() => new()
+    public Godot.Collections.Dictionary ToDict()
     {
-        ["id"] = Id, ["title"] = Title, ["duration"] = Duration, ["bpm"] = Bpm,
-        ["offset"] = BeatOffset, ["style"] = (int)Style, ["energy"] = Energy, ["source"] = Source,
-    };
+        var d = new Godot.Collections.Dictionary
+        {
+            ["id"] = Id, ["title"] = Title, ["duration"] = Duration, ["bpm"] = Bpm,
+            ["offset"] = BeatOffset, ["style"] = (int)Style, ["energy"] = Energy, ["source"] = Source,
+        };
+        if (Analysis != null) d["analysis"] = Analysis.ToDict();
+        return d;
+    }
 
     public static CdInfo FromDict(Godot.Collections.Dictionary d) => new(
         d["id"].AsInt32(), d["title"].AsString(), d["duration"].AsSingle(), d["bpm"].AsSingle(),
         d["offset"].AsSingle(), (MusicStyle)d["style"].AsInt32(), d["energy"].AsSingle(),
-        d.TryGetValue("source", out var source) ? source.AsString() : "");
+        d.TryGetValue("source", out var source) ? source.AsString() : "",
+        d.TryGetValue("analysis", out var a) && a.VariantType == Godot.Variant.Type.Dictionary
+            ? CdAnalysis.FromDict(a.AsGodotDictionary()) : null);
 
     /// <summary>One line for the UI and the logs: "Title · 128 bpm · Electronic · 3:42".</summary>
     public string Describe() =>

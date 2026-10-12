@@ -8,7 +8,8 @@
   only a merged PR does. `pull_request_target` rather than `pull_request` so the token can still write a release when
   the merged PR came from a fork; nothing from the PR branch is ever checked out, the job builds `main`'s tip.
 - **Free:** the repo is public, so standard runners cost nothing. Checkout is `lfs: false` (the `assets/**` LFS
-  patterns are style material, excluded from the export anyway), which keeps metered LFS bandwidth at zero.
+  patterns are style material, excluded from the export anyway), which keeps metered LFS bandwidth at zero. No LFS file is exported: `assets/audio/*` (the chess type
+  beat) is excluded too, and a release burns its default CDs from links (#718).
 - **Bursts coalesce, latest wins.** Six PRs merging in half an hour should give one release, not six. The job waits
   until `origin/main` has sat still for `quiet_minutes` (3 by default), restarting that clock on every new merge, and
   then releases whatever the tip is by then — so the release covers every PR in the burst. A 50-minute cap releases
@@ -29,10 +30,10 @@
   `<last tag>..HEAD` is then empty, so it prints "Nothing releasable" and exits 0.
 - `concurrency: group: release` with **`cancel-in-progress: false`** on purpose: a cancellation could land between
   `gh release create` and the asset upload and leave a release with no downloads. Queue, never cancel.
-- **The runner's Godot:** `tools/ci/install-godot.sh` fetches 4.7.1 mono Linux from `godotengine/godot-builds`
+- **The runner's Godot:** `tools/ci/install-godot.sh` fetches 4.7.2 mono Linux from `godotengine/godot-builds`
   (editor 101 MB) plus the mono export templates (**1.15 GB**), both in one `actions/cache` entry keyed on the
   version — well inside the 10 GB free cache. The templates must land in **`<version>.<status>.mono`**
-  (`4.7.1.stable.mono`); get that name wrong and the editor installs fine while every export silently produces
+  (`4.7.2.stable.mono`); get that name wrong and the editor installs fine while every export silently produces
   nothing, so the script checks for `version.txt` and fails there instead. A cold run (download included) measured
   **4m49s** end to end on `ubuntu-latest`, with all three exports: windows.zip 170 MB, linux tar.gz 185 MB,
   macos tar.gz 215 MB. A failed job saves no cache, so a broken install cannot poison the next run.
@@ -56,5 +57,5 @@
   so a **macOS** host cannot run it even though CI can. See `local-release.md`.
 - **Android APK in CI (#544):** the runner image already has the Android SDK (`ANDROID_HOME`) and JDK 17, and a fresh
   editor settings file picks both up. `setup-dotnet` installs 8.0.x and 9.0.x (the Android publish targets net9.0). The
-  keystore comes from the repo secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_USER` and `ANDROID_KEYSTORE_PASSWORD`,
+  keystore comes from the repo secrets `ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD` plus the repo variable `ANDROID_KEYSTORE_USER` (the alias),
   decoded into `$RUNNER_TEMP`. Without them the release ships no APK and the notes say so. Details: `local-release`.

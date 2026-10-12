@@ -1019,6 +1019,32 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     /// <summary>
+    /// True when every tile within <paramref name="rings"/> of <paramref name="eye"/> is finished as
+    /// the last ring evaluation wants it: its mesh at the wanted stride (not a coarse one standing in
+    /// for the fine one still to come), its roads, buildings and collision built and committed.
+    /// <see cref="SettledNear"/> is true as soon as each tile has some mesh, enough for a frame in
+    /// play; a film shot (the trailer, #706) waits for this instead, or the ground beside the camera
+    /// is still the coarse one when the actors arrive.
+    /// </summary>
+    public bool CompleteNear(Vector3 eye, int rings)
+    {
+        if (_origin == null) return Settled;
+        if (!_ready.IsEmpty) return false;
+        var centre = _origin.TileAt(eye);
+        foreach (var (id, want) in _ordered)
+        {
+            if (LodPolicy.Distance(id, centre) > rings) continue;
+            if (!_chunks.TryGetValue(id, out var state) || state.PendingStride >= 0 || state.Grid == null) return false;
+            if (BuildMeshes && state.ActiveStride != want.Stride) return false;
+            if (want.Roads && (!state.HasRoads || state.PendingRoads || state.QueuedRoadCells != null)) return false;
+            if (want.Buildings && (!state.HasBuildings || state.PendingBuildings || state.QueuedBuildingCells != null)) return false;
+            if (want.Collision && (!state.HasCollision || !state.HasBuildingCollision || state.PendingCollision || state.CollisionQueued))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
     /// How many of the tiles within <paramref name="rings"/> of <paramref name="eye"/> are built,
     /// of how many are wanted there: the loading screen's progress bar. Counted the way
     /// <see cref="SettledNear"/> decides, so done == total is the same moment it turns true.
@@ -1152,6 +1178,13 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
         return true;
     }
 
+    /// <summary>
+    /// The height grid a tile is drawn from now (full or decimated, roads blended), null when not
+    /// loaded. Main thread; the grid itself is never changed after it is published (a rebuild swaps
+    /// in a new one), so a worker may sample it (farm crops draped on the ground, #494).
+    /// </summary>
+    public ChunkGrid? GridAt(TileId id) => _chunks.TryGetValue(id, out var state) ? state.Grid : null;
+
     public bool TryGetHeight(Vector3 worldPos, out float height)
     {
         height = 0f;
@@ -1272,7 +1305,28 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     }
 
     /// <summary>
-    /// Cancels every build and waits, briefly, for the workers to let go.
+    /// Set by <see cref="ReleaseWorkers"/>: the world is being left in place and the engine lives
+    /// on, so <see cref="_ExitTree"/> does not wait for the workers.
+    /// </summary>
+    private bool _workersReleased;
+
+    /// <summary>
+    /// Leaving a world in place (<c>GameShell.Teardown</c>, #807): cancels every build and lets the
+    /// workers wind down on their own instead of holding the main thread for them in
+    /// <see cref="_ExitTree"/>. Safe because a worker only touches its own C# state (the
+    /// <c>_ready</c>/<c>_failedBuilds</c> queues of this manager, which nobody reads any more) and
+    /// Godot resources it made itself, never a node; the engine stays up, so an ArrayMesh made after
+    /// the cancel is just garbage. A next world has its own manager, queues and generations: no
+    /// result of this one can reach it.
+    /// </summary>
+    public void ReleaseWorkers()
+    {
+        _workersReleased = true;
+        foreach (var state in _chunks.Values) state.CancelPending();
+    }
+
+    /// <summary>
+    /// Cancels every build, and on quit waits, briefly, for the workers to let go.
     ///
     /// <para>
     /// A worker makes Godot objects as it goes (the ArrayMeshes and MultiMeshes it hands to the
@@ -1283,13 +1337,22 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
     /// the cancel it either stops at that check or is already inside the call, and this wait
     /// lets that finish while the engine is still alive.
     /// </para>
+    /// <para>
+    /// Leaving to the menu is not quitting (<see cref="ReleaseWorkers"/>): that wait held the main
+    /// thread up to 3 s, the freeze on "Leave to main menu" (#807).
+    /// </para>
     /// </summary>
     public override void _ExitTree()
     {
         foreach (var state in _chunks.Values) state.CancelPending();
+        int inFlight = Volatile.Read(ref _buildsInFlight);
         var clock = System.Diagnostics.Stopwatch.StartNew();
-        while (Volatile.Read(ref _buildsInFlight) > 0 && clock.ElapsedMilliseconds < 3000)
-            Thread.Sleep(5);
+        if (!_workersReleased)
+            while (Volatile.Read(ref _buildsInFlight) > 0 && clock.ElapsedMilliseconds < 3000)
+                Thread.Sleep(5);
+        // finished results nobody will commit: their meshes go now rather than with the GC
+        while (_ready.TryDequeue(out var r)) Release(r);
+        GD.Print($"[terrain] exit: {inFlight} builds in flight, waited {clock.ElapsedMilliseconds} ms");
     }
 
     /// <summary>Returns how many results were committed, so the caller knows a slot freed.</summary>
@@ -2040,7 +2103,7 @@ public partial class ChunkManager : Node3D, IOriginContainer, IOriginShiftAware
                     // Build returns null for a tile whose road segments are all watercourses
                     // (meshed separately, below) or aerial-only with nothing left to draw.
                     if (roadTile != null && roadMaterial != null
-                        && RoadMeshBuilder.Build(roadTile, grid) is { } roadData)
+                        && RoadMeshBuilder.Build(roadTile, grid, detail) is { } roadData)
                     {
                         ct.ThrowIfCancellationRequested();
                         roads = ChunkNode.ToArrayMesh(roadData, roadMaterial, RoadPaintBuilder.Build(roadTile));

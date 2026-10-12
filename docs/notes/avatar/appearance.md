@@ -4,9 +4,14 @@
   `SkinTones`, `EyeColours`, `HairColours` and the `BodyBuild` / `HairStyle` enums: **append
   only**, a packed value must mean the same figure on every peer.
 - `Pack()` puts it in one int with bit 30 set ("chosen"); `Unpack(0)` is null = nobody chose.
-- The player picks it in the inventory's Body row (`InventoryUi.BuildBodyRows`, ‹ › per part),
-  saved as `GameSettings.AppearanceBits`. `Occasions.OccasionHats` (owner, every 0.25 s) writes it
-  to `FootPlayer.AppearanceBits`, replicated OnChange like `OutfitBits`. `RefreshVisual` rebuilds
+- The player picks it in **Settings → Character** (#806, `Ui/CharacterPage`: one option row per
+  part beside a turning preview, an own-world SubViewport built only while the tab is on screen;
+  it was the inventory's Body row before, whose ‹ › saved without telling anyone). A change sets
+  `GameSettings.AppearanceBits`, fires `GameSettings.Changed` and saves that key alone
+  (`SaveOnly`: no command-line override is saved). `ClientWorld.PublishAppearance` writes it to
+  the local `FootPlayer.AppearanceBits` on that event and every 0.25 s (a fresh spawn, a probe's
+  in-memory set), whatever systems run; `OccasionHats` no longer touches it. Replicated OnChange
+  like `OutfitBits`, relayed by the server unchanged. `RefreshVisual` rebuilds
   the visual when it changes (its early-out compares it); the passenger cache keys on it.
 - **Rides need no new parameter**: `FootPlayer.RefreshVisual` calls
   `Appearance.Register(rider, AppearanceBits)` (on every peer) before building, and

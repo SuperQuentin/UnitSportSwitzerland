@@ -11,7 +11,7 @@ namespace UnitSport.Audio.Live;
 /// When what it would play drifts from that by more than <see cref="DriftTolerance"/> it jumps
 /// back into line rather than chase.
 /// </summary>
-public partial class WebRadioSpeaker : AudioStreamPlayer3D
+public partial class WebRadioSpeaker : AudioStreamPlayer3D, IMusicSpeaker
 {
     /// <summary>Under the engine, like the boombox (<see cref="RadioSpeaker"/>).</summary>
     private const float BaseDb = -6f;
@@ -45,10 +45,29 @@ public partial class WebRadioSpeaker : AudioStreamPlayer3D
 
     private readonly Hearing _hearing = new(6000f);
 
+    /// <summary>Its level before the duck, dB (#813).</summary>
+    public float SourceDb { get; private set; }
+
+    public bool Close => _hearing.Close;
+
+    /// <summary>How far it is ducked under the radio the ears follow, dB. For the probes.</summary>
+    public float DuckDb { get; private set; }
+
+    public override void _EnterTree() => MusicFocus.Add(this);
+    public override void _ExitTree() => MusicFocus.Remove(this);
+
+    /// <summary>The stereo's own volume, 0..1, everyone's (#734): gain and reach (<see cref="Items.RadioLoudness"/>).</summary>
+    public float Volume { get; set; } = Items.RadioLoudness.Default;
+    private float _rangeFor = float.NaN;
+
     public override void _Process(double delta)
     {
         _hearing.Step(this, (float)delta);
-        VolumeDb = BaseDb + _hearing.Db;
+        SourceDb = BaseDb + Items.RadioLoudness.Db(Volume) + _hearing.Db;
+        // another radio louder at the ears: this one plays under it (#813)
+        DuckDb = Items.RadioFocus.Step(DuckDb, MusicFocus.Full(this), (float)delta);
+        VolumeDb = SourceDb + DuckDb;
+        if (Volume != _rangeFor) { _rangeFor = Volume; MaxDistance = Items.RadioLoudness.Radius(Volume); }
         var buffer = WebRadio.Instance?.Buffer(Station);
         if (buffer == null || buffer.End == 0)
         {

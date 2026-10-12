@@ -39,19 +39,21 @@ public static class MiniExcavatorMeshBuilder
         var tail = new MeshScratch();
         var reverse = new MeshScratch();
         const float rt = L.RingTop, hh = L.HouseHalf;
+        // the house parts stand on the deck's top, not on its underside: bottoms and sides of the two would be coplanar (#755)
+        const float dk = rt + 0.12f;
 
         // ---- the house: a deck on the ring, the engine hood behind the seat, a round tail -------
         m.Box(new Vector3(0, rt + 0.06f, (L.HouseFront + L.HouseBack) * 0.5f), new Vector3(hh * 2f, 0.12f, L.HouseFront - L.HouseBack), Dark);
         // (the seat's back reaches to about -0.5: the hood stays behind it)
-        m.Box(new Vector3(0, (rt + L.HouseTop) * 0.5f, -0.74f), new Vector3(hh * 2f, L.HouseTop - rt, 0.36f), Body);
+        m.Box(new Vector3(0, (dk + L.HouseTop) * 0.5f, -0.74f), new Vector3(hh * 2f, L.HouseTop - dk, 0.36f), Body);
         // the counterweight: the tail's dark curve, so the tail hardly swings past the tracks
         m.Tube(new Vector3(-hh + 0.05f, (rt + L.HouseTop) * 0.5f - 0.05f, L.HouseBack + 0.1f),
             new Vector3(hh - 0.05f, (rt + L.HouseTop) * 0.5f - 0.05f, L.HouseBack + 0.1f), (L.HouseTop - rt) * 0.5f - 0.05f, Dark.Lightened(0.08f), 10);
         m.Tube(new Vector3(-0.45f, L.HouseTop, -0.8f), new Vector3(-0.45f, L.HouseTop + 0.3f, -0.8f), 0.04f, Dark, 6);
         // the floor plate the operator sits on, and the step either side
-        m.Box(new Vector3(0, (rt + L.CabFloor) * 0.5f, 0.05f), new Vector3(hh * 2f, L.CabFloor - rt, 0.8f), Body.Darkened(0.1f));
+        // (#755) the floor plate is gone: the deck, 5 cm taller than it, covered it entirely and only shared its sides and underside
         // the swing bracket the boom stands on, in front of the floor
-        m.Box(new Vector3(0, (rt + L.BoomFoot.Y + 0.1f) * 0.5f, L.BoomFoot.Z - 0.12f), new Vector3(0.36f, L.BoomFoot.Y + 0.1f - rt, 0.42f), Body.Darkened(0.15f));
+        m.Box(new Vector3(0, (dk + L.BoomFoot.Y + 0.1f) * 0.5f, L.BoomFoot.Z - 0.12f), new Vector3(0.36f, L.BoomFoot.Y + 0.1f - dk, 0.42f), Body.Darkened(0.15f));
         m.Tube(new Vector3(0, rt, L.BoomFoot.Z - 0.15f), new Vector3(0, L.BoomFoot.Y + 0.15f, L.BoomFoot.Z - 0.15f), 0.07f, Steel, 6);
 
         // ---- the canopy: four posts and a roof, open all round ---------------------------------
@@ -61,7 +63,7 @@ public static class MiniExcavatorMeshBuilder
             {
                 // the back posts stand on the hood, the front ones on the floor plate
                 float foot = z < 0 ? L.HouseTop : fl;
-                m.Box(new Vector3(side * (c - 0.04f), (foot + ct) * 0.5f, z), new Vector3(0.07f, ct - foot, 0.07f), Dark);
+                m.Box(new Vector3(side * (c - 0.04f), (foot + ct - 0.06f) * 0.5f, z), new Vector3(0.07f, ct - 0.06f - foot, 0.07f), Dark);   // (#755) ends under the roof
             }
         m.Box(new Vector3(0, ct - 0.03f, (cb + cf) * 0.5f), new Vector3(c * 2f + 0.08f, 0.06f, cf - cb + 0.08f), Body);
         m.Box(new Vector3(0, ct - 0.08f, (cb + cf) * 0.5f), new Vector3(c * 2f - 0.1f, 0.04f, cf - cb - 0.1f), Dark.Lightened(0.05f));
@@ -122,7 +124,7 @@ public static class MiniExcavatorMeshBuilder
             {
                 var hub = new Vector3(x, r, end * (half - r));
                 s.Tube(hub - new Vector3(L.ShoeWidth * 0.5f, 0, 0), hub + new Vector3(L.ShoeWidth * 0.5f, 0, 0), r, Rubber, 10);
-                s.Tube(hub - new Vector3(L.ShoeWidth * 0.52f, 0, 0), hub + new Vector3(L.ShoeWidth * 0.52f, 0, 0), r * 0.6f, Steel.Darkened(0.3f), 8);
+                s.Tube(hub - new Vector3(L.ShoeWidth * 0.5f + 0.02f, 0, 0), hub + new Vector3(L.ShoeWidth * 0.5f + 0.02f, 0, 0), r * 0.6f, Steel.Darkened(0.3f), 8);
             }
         }
         // the lugs the blade's arms hang from, on the frame's front
@@ -182,9 +184,9 @@ public static class MiniExcavatorMeshBuilder
         s.Box(new Vector3(0, -0.3f, 0.48f), new Vector3(w * 2f, 0.05f, 0.26f), Dark.Lightened(0.1f));
         foreach (int side in new[] { 1, -1 })
             s.Box(new Vector3(side * w, -0.17f, 0.33f), new Vector3(0.03f, 0.34f, 0.5f), Body.Darkened(0.1f));
-        s.Box(new Vector3(0, -0.31f, len - 0.02f), new Vector3(w * 2f + 0.02f, 0.03f, 0.04f), Steel);
+        s.Box(new Vector3(0, -0.325f, len - 0.02f), new Vector3(w * 2f + 0.02f, 0.05f, 0.04f), Steel);   // (#755) 1.5 cm below the plate it ends at
         for (int i = -1; i <= 1; i++)
-            s.Box(new Vector3(i * 0.2f, -0.31f, len + 0.04f), new Vector3(0.05f, 0.03f, 0.08f), Steel.Lightened(0.1f));
+            s.Box(new Vector3(i * 0.2f, -0.325f, len + 0.04f), new Vector3(0.05f, 0.05f, 0.08f), Steel.Lightened(0.1f));
         return s.Build();
     }
 
@@ -212,9 +214,9 @@ public static class MiniExcavatorMeshBuilder
     internal static ArrayMesh BladeMesh()
     {
         var s = new MeshScratch();
-        s.Box(new Vector3(0, L.BladeHeight * 0.5f, 0.02f), new Vector3(L.BladeWidth, L.BladeHeight, 0.06f), Body);
-        s.Box(new Vector3(0, L.BladeHeight - 0.02f, -0.02f), new Vector3(L.BladeWidth, 0.04f, 0.1f), Body.Darkened(0.15f));
-        s.Box(new Vector3(0, 0.025f, 0.03f), new Vector3(L.BladeWidth, 0.05f, 0.07f), Steel);
+        s.Box(new Vector3(0, (L.BladeHeight + 0.03f) * 0.5f, 0.02f), new Vector3(L.BladeWidth, L.BladeHeight - 0.03f, 0.06f), Body);   // (#755) stands on the edge, not level with its underside
+        s.Box(new Vector3(0, L.BladeHeight - 0.005f, -0.02f), new Vector3(L.BladeWidth + 0.04f, 0.05f, 0.1f), Body.Darkened(0.15f));   // (#755) lip wider and 2 cm higher than the plate
+        s.Box(new Vector3(0, 0.025f, 0.02f), new Vector3(L.BladeWidth + 0.04f, 0.05f, 0.1f), Steel);   // (#755) its back 2 cm behind the plate's
         return s.Build();
     }
 }

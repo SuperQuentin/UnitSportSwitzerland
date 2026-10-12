@@ -39,6 +39,27 @@ public partial class FootPlayer
             if (dist > FaceDrawDistance) return;
             if (dist < FaceLookDistance) look = cam.GlobalPosition;
         }
-        _face.Step(walker, FaceMood, look, dt);
+        if (DanceFaceNow() is { } face) _face.Step(walker, face, look, dt);
+        else _face.Step(walker, FaceMood, look, dt);
+    }
+
+    /// <summary>
+    /// Dancing to music (#728), the radio's dance or one picked on the wheel (#802): the face follows
+    /// the CD's analysis on the shared clock (<see cref="DanceFace"/>), the same on every peer. Null
+    /// otherwise, and for the wheel's gestures.
+    /// </summary>
+    private FaceState? DanceFaceNow()
+    {
+        if (DanceId == 0 || (Emote >= 0 && !FaceExpressions.FollowsMusic(Emote)) || Down == 1 || Downed || DrawnDance is not { Weight: > 0.5f } d
+            || _danceMusic is not { } m || !IsInstanceValid(m.Source)) return null;
+        var g = Items.RadioGroove.Of(m.CdId, m.StartedAt, Net.ClockSync.ServerNow);
+        if (!g.Beating) return null;
+        // where a break set is: footwork and power moves concentrate, the freeze is cool
+        float beats = (d.Bar & 1) * 4f + (d.BarPhase - Mathf.Floor(d.BarPhase)) * 4f;
+        int floor = d.Move == Avatar.HumanMeshBuilder.BreakDown ? (beats >= 5f ? 1 : 0)
+            : Avatar.HumanMeshBuilder.IsBreakPower(d.Move) ? (beats < 3.7f ? 1 : beats < 7f ? 2 : 0)
+            : 0;
+        var hearing = new DanceHearing((int)d.Style, (int)g.Section, g.Level, g.Kick, g.BarKick, g.Burst, g.Beat, d.Bar, floor);
+        return DanceFace.Target(hearing, DanceSeed());
     }
 }

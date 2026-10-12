@@ -54,11 +54,12 @@ public partial class InteriorNode
             for (int f = lift.Bottom; f <= lift.Top && f < l.Floors.Count; f++)
             {
                 // in the wall, between the cabin's face and the landing's: slid open, a panel is inside it
+                // (a panel mesh is centred on its own origin: each leaf node sits at the middle of its half of the doorway)
                 var frame = new Node3D { Name = $"Lift{i}_{f}", Transform = new Transform3D(basis, lift.WallPoint(0, l.FloorY(f), 0)) };
                 var left = new Node3D { Name = "Left" };
-                left.AddChild(new MeshInstance3D { Mesh = panel, Position = new Vector3(-half / 2, 0, 0) });
+                left.AddChild(new MeshInstance3D { Mesh = panel });
                 var right = new Node3D { Name = "Right" };
-                right.AddChild(new MeshInstance3D { Mesh = panel, Position = new Vector3(-half / 2, 0, 0) });
+                right.AddChild(new MeshInstance3D { Mesh = panel });
                 frame.AddChild(left);
                 frame.AddChild(right);
                 var body = new StaticBody3D { Name = "Shut" };

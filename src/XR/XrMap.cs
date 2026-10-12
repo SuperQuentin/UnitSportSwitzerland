@@ -145,7 +145,7 @@ internal sealed partial class XrMap : Node3D
 
         bool trigger = _pointer.GetFloat("trigger") > 0.6f;
         if (trigger && !_triggerWas && _aim is { } go && BattleRoyale.BrManager.Instance?.InMatch != true
-            && Core.Teleporter.Instance is { } teleporter)
+            && Core.Permissions.CanTeleport && Core.Teleporter.Instance is { } teleporter)
         {
             // map metres to the ground: east is the map's +X, north its −Z, as the world's
             var g = player.Global;

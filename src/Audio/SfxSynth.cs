@@ -25,7 +25,7 @@ public static class SfxSynth
     public const int Rate = Dsp.Rate;
 
     private static AudioStreamWav? _hiss, _tyre, _scrape;
-    private static SfxBank? _stepsBank, _landingBank, _whooshBank, _tickBank, _impactBank, _chimeBank, _boomBank, _gulpBank, _crunchBank;
+    private static SfxBank? _stepsBank, _landingBank, _whooshBank, _tickBank, _clackBank, _impactBank, _chimeBank, _boomBank, _gulpBank, _crunchBank;
     private static SfxBank? _boneBreakBank, _glassBank;
 
     /// <summary>
@@ -216,6 +216,33 @@ public static class SfxSynth
         float hp = 0.4f * J(), dk = 350f * J();
         var s = HighPass(Noise(rng, n), hp);
         for (int i = 0; i < n; i++) s[i] *= 1.4f * Mathf.Exp(-dk * i / Rate);
+        return s;
+    });
+
+    /// <summary>
+    /// A boombox's big play key pressed down (#725): a plastic click, then the latch's dull chunk
+    /// 25 ms later. Tapping a radio on or off.
+    /// </summary>
+    public static AudioStreamWav Clack => ClackBank.Variants[0];
+
+    public static SfxBank ClackBank => _clackBank ??= SfxBank.Build("clack", 4, 0.09f, 725, (rng, n) =>
+    {
+        float J() => 1f + ((float)rng.NextDouble() * 2 - 1) * 0.1f;
+        var click = HighPass(Noise(rng, n), 0.35f * J());
+        var thud = LowPass(Noise(rng, n), 0.06f * J());
+        int late = (int)(0.025f * Rate * J());
+        float body = 180f * J();
+        var s = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / Rate;
+            s[i] = 1.1f * click[i] * Mathf.Exp(-t * 600f);
+            if (i >= late)
+            {
+                float u = (float)(i - late) / Rate;
+                s[i] += (2.2f * thud[i] + 0.5f * Mathf.Sin(Mathf.Tau * body * u)) * Mathf.Exp(-u * 70f);
+            }
+        }
         return s;
     });
 

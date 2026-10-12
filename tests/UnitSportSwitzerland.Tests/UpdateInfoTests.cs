@@ -44,4 +44,21 @@ public class UpdateInfoTests
     [InlineData("[]")]
     [InlineData("not json")]
     public void Parse_rejects_error_bodies(string body) => Assert.Empty(UpdateInfo.ParseList(body));
+
+    [Theory]
+    [InlineData("0.8.1", "https://e/l.tgz")]   // older release: the Linux archive
+    [InlineData("", "https://e/l.tgz")]        // a deploy-linux build has no version: any release is newer
+    [InlineData(null, "https://e/l.tgz")]
+    [InlineData("0.9.0", null)]                // up to date
+    [InlineData("0.10.0", null)]               // ahead of the latest release
+    public void Server_update_takes_the_newer_linux_archive(string? current, string? url)
+    {
+        var plan = UpdateInfo.ServerUpdate(UpdateInfo.ParseList(Json), current, "Linux");
+        Assert.Equal(url, plan?.Archive.Url);
+        if (plan is { } p) Assert.Equal("v0.9.0", p.Release.Tag);
+    }
+
+    [Fact]
+    public void Server_update_needs_an_archive_for_its_platform() =>
+        Assert.Null(UpdateInfo.ServerUpdate(UpdateInfo.ParseList(Json), "0.8.1", "Android"));
 }

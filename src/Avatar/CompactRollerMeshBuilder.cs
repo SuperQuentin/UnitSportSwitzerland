@@ -46,7 +46,7 @@ public static class CompactRollerMeshBuilder
         m.Box(new Vector3(0, (L.DrumRadius * 2f + 0.02f + L.HoodTop) * 0.5f, (L.Tail + L.RopsZ) * 0.5f),
             new Vector3(fh * 2f, L.HoodTop - L.DrumRadius * 2f - 0.02f, L.RopsZ - L.Tail), Body);
         m.Box(new Vector3(0, L.HoodTop + 0.02f, (L.Tail + L.RopsZ) * 0.5f), new Vector3(fh * 2f - 0.1f, 0.04f, L.RopsZ - L.Tail - 0.12f), Body.Darkened(0.2f));
-        m.Box(new Vector3(0, L.HoodTop * 0.6f, L.Tail + 0.04f), new Vector3(fh * 2f, L.HoodTop * 0.5f, 0.08f), Dark);
+        m.Box(new Vector3(0, L.HoodTop * 0.6f, L.Tail + 0.02f), new Vector3(fh * 2f + 0.04f, L.HoodTop * 0.5f, 0.1f), Dark);   // (#755) 2 cm wider and further back than the hood: no shared sides or back face
         m.Tube(new Vector3(-0.4f, L.HoodTop, -0.95f), new Vector3(-0.4f, L.HoodTop + 0.28f, -0.95f), 0.04f, Dark, 6);
         // the platform over the hinge, and the hinge's plates under it
         m.Box(new Vector3(0, L.Floor - 0.06f, -0.12f), new Vector3(fh * 2f + 0.06f, 0.12f, 1.0f), Dark.Lightened(0.05f));
@@ -61,8 +61,8 @@ public static class CompactRollerMeshBuilder
         foreach (int side in new[] { 1, -1 })
         {
             HeavyMesh.Lamp(head, side * (fh - 0.08f), L.RopsTop - 0.12f, L.RopsZ + 0.05f, 0.09f, 0.07f, 0.03f, HeavyMesh.HeadLamp);
-            HeavyMesh.Lamp(tail, side * (fh - 0.12f), L.HoodTop - 0.2f, L.Tail - 0.01f, 0.09f, 0.07f, 0.03f, HeavyMesh.TailLamp);
-            HeavyMesh.Lamp(reverse, side * (fh - 0.28f), L.HoodTop - 0.2f, L.Tail - 0.01f, 0.06f, 0.06f, 0.03f, HeavyMesh.White);
+            HeavyMesh.Lamp(tail, side * (fh - 0.12f), L.HoodTop - 0.2f, L.Tail - 0.04f, 0.09f, 0.07f, 0.03f, HeavyMesh.TailLamp);
+            HeavyMesh.Lamp(reverse, side * (fh - 0.28f), L.HoodTop - 0.2f, L.Tail - 0.04f, 0.06f, 0.06f, 0.03f, HeavyMesh.White);
         }
 
         var cockpit = HeavyCabin.Build(m, Frame, Gauges, 0f, 1f, System.Array.Empty<(string, Vector3, Vector2)>());
@@ -111,8 +111,8 @@ public static class CompactRollerMeshBuilder
         // the arm from the hinge to the front frame, under the platform
         s.Box(new Vector3(0, 0.6f, 0.3f), new Vector3(0.45f, 0.3f, 0.6f), Body.Darkened(0.1f));
         // the water tank over the drum, its filler cap, the spray bar along its foot
-        s.Box(new Vector3(0, (L.DrumRadius * 2f + 0.02f + L.TankTop) * 0.5f, (0.45f + L.Nose) * 0.5f),
-            new Vector3(fh * 2f, L.TankTop - L.DrumRadius * 2f - 0.02f, L.Nose - 0.45f), Body);
+        s.Box(new Vector3(0, (L.DrumRadius * 2f + 0.02f + L.TankTop) * 0.5f, (0.5f + L.Nose) * 0.5f),   // (#755) starts 5 cm further on, clear of the console's face
+            new Vector3(fh * 2f, L.TankTop - L.DrumRadius * 2f - 0.02f, L.Nose - 0.5f), Body);
         s.Tube(new Vector3(0.3f, L.TankTop, 0.8f), new Vector3(0.3f, L.TankTop + 0.05f, 0.8f), 0.07f, Dark, 8);
         s.Tube(new Vector3(-L.DrumHalf, L.DrumRadius * 2f - 0.02f, L.Nose - 0.05f), new Vector3(L.DrumHalf, L.DrumRadius * 2f - 0.02f, L.Nose - 0.05f), 0.02f, Steel, 6);
         // the scraper bar that keeps the drum clean
