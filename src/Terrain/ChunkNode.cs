@@ -900,22 +900,35 @@ public partial class ChunkNode : Node3D
         return new Rect2(cell % CellsPerSide * size, cell / CellsPerSide * size, size, size);
     }
 
+    /// <summary>
+    /// The side of a cell's height map: its 251 samples padded with holes to a power of two (256).
+    /// Jolt (5.5, Godot 4.7) rounds a height field to whole blocks and walks the padding past its
+    /// last row when samples / block size is not a power of two: motion queries read beyond its
+    /// edge flags, now and then into an unmapped page, a native crash in a parked vehicle's
+    /// <c>MoveAndSlide</c> (#812, docs/notes/terrain/heightfield-pow2.md).
+    /// </summary>
+    internal const int CollisionMapSide = 256;
+
     /// <summary>Builds (or replaces) one cell of the ground collision from the tile's full map.</summary>
     public void SetCollisionCell(float[] collisionMap, int cell)
     {
         const int side = CellQuads + 1;
+        const int map = CollisionMapSide;
         int cx = cell % CellsPerSide, cz = cell / CellsPerSide;
-        var data = new float[side * side];
+        // the cell's samples in the map's first rows and columns, holes (NaN: Jolt's "no
+        // collision") in the rest, which no triangle of the cell reaches
+        var data = new float[map * map];
+        Array.Fill(data, float.NaN);
         for (int r = 0; r < side; r++)
-            Array.Copy(collisionMap, (cz * CellQuads + r) * ChunkFormat.GridSize + cx * CellQuads, data, r * side, side);
+            Array.Copy(collisionMap, (cz * CellQuads + r) * ChunkFormat.GridSize + cx * CellQuads, data, r * map, side);
 
         float spacing = (float)ChunkFormat.SpacingM;
         var collisionShape = new CollisionShape3D
         {
-            Shape = new HeightMapShape3D { MapWidth = side, MapDepth = side, MapData = data },
-            // HeightMapShape3D cells are 1 unit and the shape is XZ-centred: scale to the grid
-            // spacing and move to the cell's centre
-            Position = new Vector3((cx * CellQuads + CellQuads / 2f) * spacing, 0f, (cz * CellQuads + CellQuads / 2f) * spacing),
+            Shape = new HeightMapShape3D { MapWidth = map, MapDepth = map, MapData = data },
+            // HeightMapShape3D cells are 1 unit and the shape is XZ-centred on the whole map: scale
+            // to the grid spacing and put the map's sample 0 on the cell's corner
+            Position = new Vector3((cx * CellQuads + (map - 1) / 2f) * spacing, 0f, (cz * CellQuads + (map - 1) / 2f) * spacing),
             Scale = new Vector3(spacing, 1f, spacing),
         };
 
