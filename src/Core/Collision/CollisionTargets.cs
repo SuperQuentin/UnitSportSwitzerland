@@ -96,6 +96,9 @@ public static class CollisionTargets
         ("Doors/Garage roll-up", "*", new[] { "*" }, "a facade leaf is never solid, the building's wall is"),
         // parked under the VehicleManager, as in the game
         ("Aircraft/Airbus A320", "walk", new[] { "end" }, "a walker goes through the parked nose"),
+        // seen since its flaps and spoilers are posed on their hinge lines (#755): before, they sat
+        // yawed off the wing, across the car's lane, and passed for what stopped it
+        ("Aircraft/Airbus A320", "car", new[] { "side" }, "the parked box is solid under the wing root, nothing drawn at a car's height"),
         ("Aircraft/Antonov AN-124", "car", new[] { "side", "end", "end-" }, "a car goes through the parked fuselage"),
         ("Aircraft/Antonov AN-124", "walk", new[] { "side", "end" }, "a walker goes through the parked fuselage"),
         // Excavator.ParkedBox: the tracks and the house, not the boom, stick and bucket
