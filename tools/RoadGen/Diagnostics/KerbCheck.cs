@@ -251,6 +251,9 @@ public static class KerbCheck
         return ok ? 0 : 2;
     }
 
+    /// <summary>The smallest step the seam check reports (m); <c>SEAMMIN</c> (cm) overrides it.</summary>
+    private static double SeamMin => Environment.GetEnvironmentVariable("SEAMMIN") is { } m ? double.Parse(m, CultureInfo.InvariantCulture) / 100 : 0.01;
+
     /// <summary>
     /// Seams on the raised surfaces round a point (#711, the user's review: "height mismatches"): <c>RoadGen --seam-check E,N
     /// [--size M] --chunks DIR</c> samples a grid every <see cref="Step"/> and reports every step of 1 cm or more between two
@@ -284,7 +287,7 @@ public static class KerbCheck
             if (!raised[i, j] || !raised[k, l] || double.IsNaN(h[i, j]) || double.IsNaN(h[k, l])) return;
             if (what[i, j] == what[k, l]) return;   // one surface is continuous: a step is where two meet
             double d = Math.Abs(h[i, j] - h[k, l]);
-            if (d < 0.01) return;
+            if (d < SeamMin) return;
             double se = id.MinE + x0 + i * Step, sn = id.MaxN - (z0 + j * Step);
             int near = spots.FindIndex(q => Math.Abs(q.E - se) < 0.5 && Math.Abs(q.N - sn) < 0.5);
             string w = h[i, j] < h[k, l] ? $"{what[i, j]} -> {what[k, l]}" : $"{what[k, l]} -> {what[i, j]}";
@@ -293,6 +296,29 @@ public static class KerbCheck
         }
         for (int i = 0; i < cells; i++)
             for (int j = 0; j < cells; j++) { Pair(i, j, i + 1, j); Pair(i, j, i, j + 1); }
+        // holes: a sample on no surface between two raised ones a few cm apart (a crack between two pieces)
+        for (int i = 2; i + 2 <= cells; i++)
+            for (int j = 2; j + 2 <= cells; j++)
+            {
+                if (!double.IsNaN(h[i, j]) && what[i, j] != "") continue;
+                if (raised[i - 2, j] && raised[i + 2, j] || raised[i, j - 2] && raised[i, j + 2])
+                {
+                    double se = id.MinE + x0 + i * Step, sn = id.MaxN - (z0 + j * Step);
+                    if (!spots.Any(q => Math.Abs(q.E - se) < 0.5 && Math.Abs(q.N - sn) < 0.5))
+                        spots.Add((se, sn, 0, $"a crack between {what[i - 2, j]} and {what[i + 2, j]} / {what[i, j - 2]} and {what[i, j + 2]}"));
+                }
+            }
+        if (Environment.GetEnvironmentVariable("CRACKDBG") is { } cd && cd.Split(',') is [var ce, var cn, var cdx, var cdz])
+        {
+            double px = double.Parse(ce, c) - id.MinE, pz = id.MaxN - double.Parse(cn, c), dx = double.Parse(cdx, c), dz = -double.Parse(cdz, c);
+            for (double t = -0.2; t <= 0.2; t += 0.01)
+            {
+                surface.All = [];
+                double hh = surface.At(px + dx * t, pz + dz * t);
+                log(string.Create(c, $"  {t:+0.00;-0.00} m: {(double.IsNaN(hh) ? "none" : string.Join(", ", surface.All.Select(a => $"{a.What} {a.H:F3}")))}"));
+            }
+            surface.All = null;
+        }
         foreach (var sp in spots.OrderByDescending(q => q.Step))
         {
             log(string.Create(c, $"  seam at LV95 {sp.E:F2},{sp.N:F2}: {sp.Step * 100:F1} cm, {sp.What}"));

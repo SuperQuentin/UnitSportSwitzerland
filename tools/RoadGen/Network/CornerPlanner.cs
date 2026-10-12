@@ -225,7 +225,11 @@ public static class CornerPlanner
             if (side.OuterDm > 0)   // the whole side: a bike path (#120) and its sidewalk
             {
                 if (kerb.Count == 0) kerb.Add(edge[0]);   // else the last piece ended there
-                var dir = edge.Count > 1 ? (edge[1].P - edge[0].P) : Outward(seg, cur.AtStart);
+                // (#711) the side's end runs square to the piece's own first stretch, as the game draws it (the kerb edge's first
+                // stretch leans by the bisector at its second point)
+                int i0 = cur.AtStart ? 0 : seg.PointCount - 1, i1 = cur.AtStart ? 1 : seg.PointCount - 2;
+                var dir = Plan(seg.Points, i1) - Plan(seg.Points, i0);
+                if (dir.Length < 1e-6) dir = edge.Count > 1 ? (edge[1].P - edge[0].P) : Outward(seg, cur.AtStart);
                 dir = dir / Math.Max(dir.Length, 1e-9);
                 // away from the carriageway: left of the outward direction for a left side
                 var across = left ? new Vec2(-dir.Y, dir.X) : new Vec2(dir.Y, -dir.X);
@@ -273,12 +277,15 @@ public static class CornerPlanner
         int wholeKerb = poly.Count;   // its kerb line first
         if (b.Width > 0) whole.Add((b.Out, b.Kerb[^1].Y));
         int wholeCorner = -1;
+        // (#711) each side's outer corner is kept exactly, so the corner's end lines are the street sides' own: where the outer
+        // edges meet within a few cm of one, that one is the corner (dropping it for the meeting point left a crack of up to that)
         if (Meet(b.Out, b.Inward, a.Out, a.Inward) is { } wc && wc.DistanceTo(a.Out) < 8 && wc.DistanceTo(b.Out) < 8)
         {
-            wholeCorner = whole.Count;
-            whole.Add((wc, (a.Kerb[^1].Y + b.Kerb[^1].Y) * 0.5f));
+            if (b.Width > 0 && wc.DistanceTo(b.Out) <= 0.1) wholeCorner = whole.Count - 1;
+            else if (!(a.Width > 0 && wc.DistanceTo(a.Out) <= 0.1)) whole.Add((wc, (a.Kerb[^1].Y + b.Kerb[^1].Y) * 0.5f));
+            if (wholeCorner < 0) wholeCorner = whole.Count - (a.Width > 0 && wc.DistanceTo(a.Out) <= 0.1 ? 0 : 1);
         }
-        if (a.Width > 0 && whole[^1].P.DistanceTo(a.Out) > 0.1) whole.Add((a.Out, a.Kerb[^1].Y));
+        if (a.Width > 0 && whole[^1].P.DistanceTo(a.Out) > 1e-6) whole.Add((a.Out, a.Kerb[^1].Y));
         // the outside corner rounded (the user's rule, #711): the corner itself, no patch over it (a patch stood at its own heights)
         if (wholeCorner >= 0) whole = RoundCorner(whole, wholeCorner);
         var (chainA, chainB) = (a, b);
@@ -465,12 +472,19 @@ public static class CornerPlanner
                 // near a side's end the distance is the street's own: straight across it from its kerb line, so the bands meet
                 // the street's at the joint, easing into the distance from the curved kerb over JointEase
                 double wA = Math.Clamp(1 - dA / JointEase, 0, 1), wB = Math.Clamp(1 - dB / JointEase, 0, 1);
+                // and at a side's end its street's own height, straight across. Near both ends (where the two sides' outer corners
+                // nearly meet) each end has its own street exactly: shared by how far a point is from the other end (#711, the
+                // user's review: one after the other, B's height leaked onto A's end line, a step against A's side)
                 double across = best;
-                if (wA > 0) across += (Math.Abs((p - kerbLine[0].P).Cross(inA)) - across) * wA;
-                if (wB > 0) across += (Math.Abs((p - kerbLine[^1].P).Cross(inB)) - across) * wB;
-                // and at a side's end its street's own height, straight across
-                y += (kerbLine[0].Y - y) * (float)wA;
-                y += (kerbLine[^1].Y - y) * (float)wB;
+                double w = 1 - (1 - wA) * (1 - wB);
+                if (w > 0)
+                {
+                    double sA = wA * dB, sB = wB * dA;
+                    double tA = sA + sB < 1e-12 ? (wA >= wB ? 1 : 0) : sA / (sA + sB);
+                    double crossA = Math.Abs((p - kerbLine[0].P).Cross(inA)), crossB = Math.Abs((p - kerbLine[^1].P).Cross(inB));
+                    across += (crossB + (crossA - crossB) * tA - across) * w;
+                    y += (kerbLine[^1].Y + (kerbLine[0].Y - kerbLine[^1].Y) * (float)tA - y) * (float)w;
+                }
                 return (across, dA + dB < 1e-9 ? 0.5 : dA / (dA + dB), y);
             }
             int count = slotsA.Count;

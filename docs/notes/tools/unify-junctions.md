@@ -219,6 +219,15 @@ lights), an island to avoid, or several lanes turning alike (`EmitPairGuides`, a
   9 cm off). SW corner of LV95 2506168,1137801: 12 seams -> 0. **Left**: other junctions still show seams where two
   streets of different heights meet at a corner (e.g. 62 cm between the two streets at 2507355,1138482: the corner's
   other pieces and the street sides beside it disagree by 10-40 cm). The kerb check got a 4 m cell index (2 min -> 2 s).
+- **The crack at a corner's end** (the user's review: a line between the height transition and the street's bike path and
+  sidewalk): where the two sidewalks' outer edges met within 10 cm of one side's outer corner, the fill's outline dropped
+  that corner for the meeting point, so its end line slanted off the street side's (a crack up to 4.5 cm, sky through it).
+  Each side's outer corner is now kept and is the rounded one. Near both ends at once (the outer corner) each end line takes
+  its own street's height and distance, shared by how far a point is from the other end (`Field`: applied one after the
+  other, B's height leaked onto A's end line, 10 cm). `--seam-check` also lists cracks (a sample on no surface between two
+  raised ones 4 cm apart; `CRACKDBG=E,N,dx,dy` scans across a line, `SEAMMIN` cm sets the step reported). SW corner: the
+  crack is closed, one step of 2 cm is left at the outer corner itself, where the two streets' sides stand 6 cm apart and
+  10 cm apart in height. The crack list still shows 0 cm "cracks" inside one mesh (samples on a shared edge): ignore those.
 - **The stop line and the centre line of an approach with more lanes in than out** (the user's review, Sion 2506148,1137808):
   lanes in place, the approach's centre line lies past the axis. The lights' stop line now starts there (`OwnLanes`), not at
   the axis (it left the left-turn lane without one), and `SolidToStop(centreAt:)` finds that centre line (it searched the
