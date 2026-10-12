@@ -103,7 +103,10 @@ Part names (approach, mouth, lead-in, closing line, storage, setback, ...): `int
   The right pole of an approach is `Main` (main head, pocket arrows, flashers), the left one
   `Second` only when the approach has a pocket (main head and left arrow, never the right
   arrow); both carry the arm's pedestrian head, facing across. No pole on a link inside a
-  junction. The approach's 3.02/3.03 (fallback) moves onto its main pole, plate top 2.25 m.
+  junction. The approach's 3.02/3.03 (fallback) moves onto its main pole, plate top 2.25 m; where
+  the pole carries a bike head (no room below), on top, 0.15 m above the car heads (the user's
+  review, #711; `CarHeadsTop` mirrors `SignalBuilder`). Marked `PropFlags.OnSignalPole` (bit 1):
+  later sign passes leave it. Sion: 5 of 29 on top.
   `SGNL` version 2 stores the poles (`SignalPole`, 22 B); version 1 still reads. Geneva: 1,489
   poles, 259 rejected (no clear spot), 390 signs moved. Runtime: `SignalBuilder` (worker) bakes
   RAL 7001 poles, RAL 9017 housings, black backboards with a white border and brackets into the

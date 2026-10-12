@@ -111,8 +111,17 @@ public static partial class TileRewriter
     /// <summary>A priority sign on a signal pole (#350) has its plate's top this high: below the heads' 2.35 m (SSV Art. 71).</summary>
     private const float SignOnPoleTop = 2.25f;
 
-    /// <summary>Whether a sign was moved onto a signal pole (#350): its plate top is there, and later passes leave it (#711).</summary>
-    private static bool OnSignalPole(RoadPointProp sign) => sign.Height == SignOnPoleTop;
+    /// <summary>Whether a sign was moved onto a signal pole (#350): later passes leave it there (#711).</summary>
+    private static bool OnSignalPole(RoadPointProp sign) => (sign.Flags & PropFlags.OnSignalPole) != 0;
+
+    /// <summary>
+    /// The top of a pole's car heads (#350): their lower edge (2.35 m, 3.35 m above a pedestrian head), three lenses
+    /// and the plate's margin, as <c>SignalBuilder</c> lays them.
+    /// </summary>
+    private const float CarHeadsTop = 2.35f + 3 * 0.3f + 0.1f, CarHeadsTopAbovePedestrian = 3.35f + 3 * 0.3f + 0.1f;
+
+    /// <summary>A priority sign above the heads (#711) stands this far clear of them.</summary>
+    private const float SignAboveHeads = 0.15f;
 
     /// <summary>
     /// A link this short between two signalised junction nodes is inside one junction (a large
@@ -167,7 +176,7 @@ public static partial class TileRewriter
         public int Junctions, Inferred, FromData, Arms, Approaches, LeftPockets, RightPockets, StopLines, Groups, TwoLensPedestrian, Invalid;
         /// <summary>Where OSM decides, what the inference rule would have said: both, rule only, OSM only (#348 tuning).</summary>
         public int RuleAndOsm, RuleOnly, OsmOnly, InternalArms;
-        public int StopsBack, Poles, PolesPastPath, PolesRejected, SignsOnPoles, BikeSignals, Crossings, PathStopLines, Refuges;
+        public int StopsBack, SignsAboveHeads, Poles, PolesPastPath, PolesRejected, SignsOnPoles, BikeSignals, Crossings, PathStopLines, Refuges;
         /// <summary>Dashed lines through a junction between two lanes with the same turn (#700).</summary>
         public int PairGuides;
         /// <summary>Pedestrian crossings drawn from OSM crossing nodes (#700): at junctions without lights, and at lit arms with no sidewalk.</summary>
@@ -191,7 +200,7 @@ public static partial class TileRewriter
             sb.Append(c, $"{LeftPockets:N0} with a left-turn pocket, {RightPockets:N0} with a right-turn pocket, {StopLines:N0} stop lines without a left pocket, {Groups:N0} signal groups, ");
             sb.Append(c, $"{TwoLensPedestrian:N0} with 2-lens pedestrian heads, cycles s: {string.Join(", ", Cycles.Select(kv => $"{kv.Key} x{kv.Value}"))}, invalid plans {Invalid:N0}, dashed lines through the junction between two lanes with the same turn {PairGuides:N0} (#700), crossings from OSM crossing nodes {DataCrossings:N0}, refuges where one crosses an exit hatch {Refuges:N0} (#700), junctions whose crosswalks follow OSM {CrossingsMapped:N0}, arms with a sidewalk and no mapped crossing there {CrosswalksUnmapped:N0}, arms without a pedestrian signal (no crosswalk) {ArmsWithoutPedestrians:N0} (#711)").AppendLine();
             sb.Append(c, $"      where OSM decides, the inference rule agrees on {RuleAndOsm:N0}, adds {RuleOnly:N0} OSM does not have, misses {OsmOnly:N0}; {InternalArms:N0} arms inside a junction of several nodes; inferred at LV95 {string.Join(" ", InferredAt)}; crosswalks left out by OSM at LV95 {string.Join(" ", UnmappedAt)}").AppendLine();
-            sb.Append(c, $"      stop lines moved {StopBehindCrosswalk:F0} m behind their crosswalk {StopsBack:N0} (#711), poles (#350) {Poles:N0} ({PolesPastPath:N0} main poles right of their path, #711), rejected (no clear spot) {PolesRejected:N0}, priority signs moved onto a pole {SignsOnPoles:N0}, approaches with a bike signal {BikeSignals:N0} (#351)").AppendLine();
+            sb.Append(c, $"      stop lines moved {StopBehindCrosswalk:F0} m behind their crosswalk {StopsBack:N0} (#711), poles (#350) {Poles:N0} ({PolesPastPath:N0} main poles right of their path, #711), rejected (no clear spot) {PolesRejected:N0}, priority signs moved onto a pole {SignsOnPoles:N0} ({SignsAboveHeads:N0} above the heads, beside a bike head, #711), approaches with a bike signal {BikeSignals:N0} (#351)").AppendLine();
             foreach (var x in InvalidExamples) sb.Append("      invalid: ").Append(x).AppendLine();
             return sb.ToString();
         }
@@ -518,7 +527,10 @@ public static partial class TileRewriter
                 if (PlacePole(wish, home, clearance, buildings, areas) is not { } pole) { stats.PolesRejected++; continue; }
                 poles.Add(pole);
                 stats.Poles++;
-                // the approach's priority sign (#121, for when the lights are off) on the main pole, below the heads
+                // the approach's priority sign (#121, for when the lights are off) on the main pole, below the heads; above them
+                // where a bike head takes the room below (#711, the user's review)
+                bool bikeHead = signalPlan.Groups.Any(g => g.Kind == SignalGroupKind.Bike && g.Arm == wish.Arm);
+                bool pedHead = (wish.Flags & SignalPoleFlags.Pedestrian) != 0 && signalPlan.Groups.Any(g => g.Kind == SignalGroupKind.Pedestrian && g.Arm == wish.Arm);
                 if (wish.SignLink >= 0 && priority.SignsOf.TryGetValue(wish.SignLink, out var signSpots))
                     foreach (var (signTile, index) in signSpots)
                     {
@@ -528,9 +540,12 @@ public static partial class TileRewriter
                         list[index] = sign with
                         {
                             X = (float)(pole.X + home.MinE - signTile.MinE), Y = pole.Y, Z = (float)(pole.Z + signTile.MaxN - home.MaxN),
-                            Height = SignOnPoleTop,
+                            Height = bikeHead ? (pedHead ? CarHeadsTopAbovePedestrian : CarHeadsTop) + SignAboveHeads + RoadSigns.PlateHeight(sign.Type, sign.Variant)
+                                : SignOnPoleTop,
+                            Flags = sign.Flags | PropFlags.OnSignalPole,
                         };
                         stats.SignsOnPoles++;
+                        if (bikeHead) stats.SignsAboveHeads++;
                     }
             }
             // where the left turn exits beside an island it is guided through the junction: two dashed lines along its path (#682)

@@ -340,6 +340,7 @@ public enum PropFlags : ushort
 {
     None = 0,
     Solid = 1 << 0,  // gets collision
+    OnSignalPole = 1 << 1,  // a priority sign moved onto a traffic signal's pole (#350, #711): later passes leave it there
 }
 
 /// <summary>
