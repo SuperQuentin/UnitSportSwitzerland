@@ -81,3 +81,4 @@ touches its topic; search with `grep -ril <word> docs/notes/terrain`.
 - `blend-convex-not-additive` — Blend two terrains with a convex mix, never an additive correction: the additive one dug a trench 150 m below the Rhône
 - `judge-terrain-blend-shaded-relief` — Judge a terrain blend by shaded relief, and turn what the eye finds into a BlendCheck number
 - `saved-max-builds-one-looks-broken` — A saved `maxConcurrentBuilds: 1` makes the loader look broken: check settings.json, pass `--builds 0` to probes
+- `heightfield-pow2` — ground collision cells are 256² height maps with NaN holes past the data: Jolt walked past a 251² one and crashed `MoveAndSlide` now and then (#812)
